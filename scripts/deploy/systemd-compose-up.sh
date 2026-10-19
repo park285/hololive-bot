@@ -38,6 +38,10 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   while IFS= read -r yml; do
     exec_tree+=("${yml}")
   done < <(find "${ROOT_DIR}/deploy/compose" -maxdepth 1 -type f -name 'docker-compose*.yml' 2>/dev/null | sort)
+  for profile_overlay in "${ROOT_DIR}"/artifacts/worker-profile/active/*.yml "${ROOT_DIR}"/artifacts/worker-profile/active/*.pair; do
+    [[ -e "$profile_overlay" || -L "$profile_overlay" ]] || continue
+    exec_tree+=("$profile_overlay")
+  done
 
   if ! "${verifier}" "${exec_tree[@]}"; then
     echo "[SECURITY] root-executed deploy tree is writable by a non-root user (03e6dca8)." >&2
@@ -110,4 +114,14 @@ base_files=(
   -f deploy/compose/docker-compose.live-compat.yml
 )
 
-./scripts/deploy/compose.sh "${base_files[@]}" up -d --no-build
+# 승인된 런타임 컨테이너만 기동하며 스키마 마이그레이션은 별도 명시 작업으로 남긴다.
+. ./scripts/deploy/lib/compose-env.sh
+runtime_services=(holo-postgres valkey-cache hololive-alarm-worker hololive-api
+  youtube-po-c docker-proxy deunhealth admin-dashboard-ingress)
+collector_disabled="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR)"
+case "$collector_disabled" in
+  ""|0) runtime_services+=(youtube-collector) ;;
+  1) ;;
+  *) echo 'HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR must be 0 or 1' >&2; exit 1 ;;
+esac
+./scripts/deploy/compose.sh "${base_files[@]}" up -d --no-build --no-deps "${runtime_services[@]}"

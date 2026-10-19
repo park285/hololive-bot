@@ -1,7 +1,10 @@
 hololive/hololive-api/VERSION
 hololive/hololive-alarm-worker/VERSION
 deploy/compose/docker-compose.prod.yml
+deploy/compose/docker-compose.collector.yml
 deploy/compose/docker-compose.live-compat.yml
 scripts/build/po-sandbox-manifest.py
 scripts/deploy/lib/po-sandbox-image.sh
 hololive/hololive-api/scripts/migrations/222_drop_youtube_job_lease_legacy_failure_trigger.sql
+scripts/deploy/lib/worker-profile-pair.py
+scripts/deploy/compose.sh

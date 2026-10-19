@@ -1,6 +1,10 @@
 package dbtest
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+)
 
 func TestTemplateRowVersionMigration(t *testing.T) {
 	pool := NewPool(t)
@@ -38,7 +42,7 @@ func TestTemplateRowVersionMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err = tx.Rollback(ctx); err != nil {
+	if err = pgxdb.Rollback(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
 

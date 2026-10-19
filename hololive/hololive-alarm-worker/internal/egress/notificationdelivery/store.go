@@ -10,7 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -45,7 +47,7 @@ func (r *Store) fetchReadyAndLock(ctx context.Context, workerID string, batchSiz
 		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, mustSQL("outbox_claim_ready.sql"), batchSize, workerID, positiveDurationMilliseconds(lease), activeRooms, processedIDs)
+	rows, err := r.pool.Query(ctx, claimReadySQL, batchSize, workerID, positiveDurationMilliseconds(lease), activeRooms, processedIDs)
 	if err != nil {
 		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
 	}
@@ -57,6 +59,20 @@ func (r *Store) fetchReadyAndLock(ctx context.Context, workerID string, batchSiz
 	}
 
 	return items, nil
+}
+
+// ReadySnapshot은 프로세스별 activeRooms/processedIDs 제외 목록이 빈 상태의 durable claimability다.
+func (r *Store) ReadySnapshot(ctx context.Context) (workercontract.QueueValues, error) {
+	var (
+		depth      int64
+		ageSeconds float64
+	)
+
+	if err := r.pool.QueryRow(ctx, readySnapshotSQL).Scan(&depth, &ageSeconds); err != nil {
+		return workercontract.QueueValues{}, fmt.Errorf("sample ready notification deliveries: %w", err)
+	}
+
+	return workercontract.QueueValues{Depth: depth, OldestQueuedAge: time.Duration(ageSeconds * float64(time.Second))}, nil
 }
 
 func (r *Store) MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error) {
@@ -188,7 +204,7 @@ func (r *Store) QuarantineStaleSending(ctx context.Context, olderThan time.Durat
 	}
 
 	if olderThan <= 0 {
-		olderThan = deliveryLease
+		olderThan = config.NotificationDeliveryLease
 	}
 
 	tag, err := r.pool.Exec(ctx,
@@ -230,7 +246,7 @@ func durationMilliseconds(value time.Duration) int64 {
 
 func positiveDurationMilliseconds(value time.Duration) int64 {
 	if value <= 0 {
-		value = deliveryLease
+		value = config.NotificationDeliveryLease
 	}
 
 	if milliseconds := durationMilliseconds(value); milliseconds > 0 {

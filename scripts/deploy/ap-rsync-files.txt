@@ -1,9 +1,13 @@
 ../shared-go/pkg/backoff/backoff.go
 ../shared-go/pkg/backoff/doc.go
+../shared-go/pkg/db/pgxdb/acquire.go
 ../shared-go/pkg/db/pgxdb/config.go
 ../shared-go/pkg/db/pgxdb/doc.go
 ../shared-go/pkg/db/pgxdb/errors.go
+../shared-go/pkg/db/pgxdb/metrics.go
 ../shared-go/pkg/db/pgxdb/pool.go
+../shared-go/pkg/db/pgxdb/scram.go
+../shared-go/pkg/db/pgxdb/scram_normalize.go
 ../shared-go/pkg/db/pgxdb/tx.go
 ../shared-go/pkg/envutil/dotenv.go
 ../shared-go/pkg/envutil/env.go
@@ -28,6 +32,7 @@
 ../shared-go/pkg/logging/attrs.go
 ../shared-go/pkg/logging/context.go
 ../shared-go/pkg/logging/doc.go
+../shared-go/pkg/logging/file_stats.go
 ../shared-go/pkg/logging/format.go
 ../shared-go/pkg/logging/id.go
 ../shared-go/pkg/logging/internal/archive/archive.go
@@ -40,6 +45,7 @@
 ../shared-go/pkg/logging/operation.go
 ../shared-go/pkg/logging/sanitize.go
 ../shared-go/pkg/logging/sanitize_handler.go
+../shared-go/pkg/logging/stdout_stats.go
 ../shared-go/pkg/netguard/doc.go
 ../shared-go/pkg/netguard/netguard.go
 ../shared-go/pkg/panicguard/panicguard.go
@@ -72,15 +78,18 @@
 ../shared-go/pkg/workercontract/profile.go
 ../shared-go/pkg/workercontract/profile_env.go
 ../shared-go/pkg/workercontract/profile_file.go
+../shared-go/pkg/workercontract/profile_open_unix.go
 ../shared-go/pkg/workercontract/registry.go
 ../shared-go/pkg/workercontract/sampler.go
 ../shared-go/pkg/workercontract/settings.go
 ../shared-go/pkg/workercontract/shape.go
 ../shared-go/pkg/workercontract/tracker.go
+deploy/compose/docker-compose.collector.yml
 deploy/compose/docker-compose.osaka.yml
 deploy/compose/docker-compose.osaka2.yml
 deploy/compose/docker-compose.prod.yml
 deploy/compose/docker-compose.seoul.yml
+deploy/topology/hosts.conf
 go.mod
 go.work
 go.work.sum
@@ -160,7 +169,6 @@ hololive/hololive-shared/pkg/domain/youtube_content_thumbnails.go
 hololive/hololive-shared/pkg/domain/youtube_delivery.go
 hololive/hololive-shared/pkg/domain/youtube_delivery_telemetry.go
 hololive/hololive-shared/pkg/observability/runtime.go
-hololive/hololive-shared/pkg/pgxutil/rollback.go
 hololive/hololive-shared/pkg/privacylog/cachekey.go
 hololive/hololive-shared/pkg/privacylog/privacylog.go
 hololive/hololive-shared/pkg/providers/modules/infra.go
@@ -476,3 +484,4 @@ hololive/hololive-youtube-collector/internal/runtime/collection/runner.go
 hololive/hololive-youtube-collector/internal/runtime/collection/sql.go
 hololive/hololive-youtube-collector/internal/runtime/collection/target_snapshot.go
 hololive/hololive-youtube-collector/internal/runtime/joblease/job_key.go
+scripts/deploy/lib/worker-profile-pair.py

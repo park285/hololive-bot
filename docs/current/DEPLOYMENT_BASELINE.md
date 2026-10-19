@@ -4,6 +4,25 @@
 
 현재 production은 중앙 호스트와 Seoul collector `b`의 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`의 host-native systemd로 운영합니다. 중앙은 `deploy/compose/docker-compose.prod.yml`과 `docker-compose.live-compat.yml`을 함께 사용합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
 
+### Prepared 11.0.0 worker/DB cutover — not activated
+
+After actual old-profile-compatible 10.2.0 acceptance, the 11.0.0 source prepares
+immutable worker profile pairs, the standalone `docker-compose.collector.yml` AP
+base, private Unix-socket migration, role-based TCP rejection, keepalive/logging/WAL
+command settings, and revised pool budgets.
+It does **not** establish that production has accepted those changes. Preserve the
+deployment facts below until an approved rollout records fresh image/profile,
+render, SQL transport/role, capacity and readiness evidence.
+
+Accept the pairing baseline before incompatible profile settings; the final binary
+has no legacy settings shim. Preserve the full upstream migration manifest through
+324 and already-applied stream-time work; this cutover adds no data migration.
+Master/manifest and password-file preparation, role/owner/HBA changes, server
+recreation, `postgresql.auto.conf` cleanup, retired-role deletion, and noeviction
+activation are separate approved operations. Only the rollout owner activates role
+limits after all four collectors are accepted at max 7. Keep actual source/runtime
+state distinct from the target configuration documented in the repository.
+
 ## Non-Goals
 
 - Docker Compose 절차 중복

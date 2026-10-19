@@ -36,10 +36,12 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
@@ -77,14 +79,10 @@ type deliveryRepository interface {
 	deliveryOutboxMaintainer
 }
 
-const (
-	deliveryLease              = 60 * time.Second
-	deliveryFinalizeTimeout    = 5 * time.Second
-	deliveryMaintenanceTimeout = 10 * time.Second
-)
+const deliveryMaintenanceTimeout = 10 * time.Second
 
-// DispatcherConfig의 값은 alarm-worker profile의 notification_delivery 항목이 정본이다. 생성자는 profile 로더가 양수를
-// 검증한다는 전제로 기본값으로 바꾸지 않고, 잘못된 값이면 생성 오류로 드러낸다.
+// DispatcherConfig의 값은 alarm-worker profile의 notification_delivery 항목이 정본이다.
+// 프로필 없이 호출하는 생성자도 잘못된 값을 거부하며 lease 관계는 config의 공통 정책으로 검증한다.
 type DispatcherConfig struct {
 	AttemptTimeout            time.Duration
 	BatchSize                 int
@@ -152,7 +150,6 @@ func (c *DispatcherConfig) validate() error {
 		name  string
 		valid bool
 	}{
-		{"attempt timeout", c.AttemptTimeout > 0},
 		{"batch size", c.BatchSize > 0},
 		{"max concurrent", c.MaxConcurrent > 0},
 		{"max retries", c.MaxRetries > 0},
@@ -160,7 +157,6 @@ func (c *DispatcherConfig) validate() error {
 		{"retry backoff", c.RetryBackoff > 0},
 		{"cleanup after", c.CleanupAfter > 0},
 		{"cleanup interval", c.CleanupInterval > 0},
-		{"stale sending after", c.StaleSendingAfter > 0},
 		{"stale sending sweep interval", c.StaleSendingSweepInterval > 0},
 		{"stale sending sweep limit", c.StaleSendingSweepLimit > 0},
 	}
@@ -177,14 +173,8 @@ func (c *DispatcherConfig) validate() error {
 		return fmt.Errorf("settings must be positive: %s", strings.Join(invalid, ", "))
 	}
 
-	if c.AttemptTimeout >= deliveryLease-deliveryFinalizeTimeout {
-		return fmt.Errorf("attempt timeout must leave finalization budget within %s lease", deliveryLease)
-	}
-
-	// stale SENDING sweep SQL은 sending_started_at 경과만 보고 lease 만료는 보지 않는다. 유지보수 loop가 발송과 동시에
-	// 돌므로 임계값이 SENDING lease보다 짧으면 진행 중인 자기 발송(attempt + finalize 예산 < lease)을 격리할 수 있다.
-	if c.StaleSendingAfter < deliveryLease {
-		return fmt.Errorf("stale sending after must be at least the %s sending lease", deliveryLease)
+	if err := workerconfig.ValidateNotificationDeliveryTiming(c.AttemptTimeout, c.StaleSendingAfter); err != nil {
+		return fmt.Errorf("validate delivery timing: %w", err)
 	}
 
 	return nil
@@ -281,7 +271,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 
 	// 전송 직전 취소는 부수효과가 없으므로 일반 실패로 회수할 수 있습니다.
 	if ctx.Err() != nil {
-		finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deliveryFinalizeTimeout)
+		finalCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), workerconfig.NotificationDeliveryFinalizeTimeout)
 		defer cancel()
 
 		d.markItemFailed(finalCtx, item, ctx.Err().Error())
@@ -325,7 +315,7 @@ func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationD
 
 func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, err error) {
 	// 부모 취소 뒤에도 결과를 저장하되 예산을 제한합니다. 저장 실패는 SENDING으로 남겨 sweep이 격리합니다.
-	finalCtx, finalizeCancel := context.WithTimeout(context.WithoutCancel(ctx), deliveryFinalizeTimeout)
+	finalCtx, finalizeCancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer finalizeCancel()
 
 	if err == nil {
@@ -352,6 +342,9 @@ func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDe
 }
 
 func (d *Dispatcher) markItemQuarantined(ctx context.Context, id int64, reason string) {
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
+	defer cancel()
+
 	fenced, err := d.repository.MarkQuarantined(ctx, id, d.workerID, reason)
 	if err != nil {
 		d.logger.Error("Failed to quarantine outbox item", slog.Int64("id", id), slog.Any("error", err))
@@ -377,7 +370,10 @@ func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
 }
 
 func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
-	fenced, err := d.repository.MarkSending(ctx, id, d.workerID, deliveryLease)
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
+	defer cancel()
+
+	fenced, err := d.repository.MarkSending(ctx, id, d.workerID, workerconfig.NotificationDeliveryLease)
 	if err != nil {
 		d.logger.Error("Failed to mark outbox item sending", slog.Int64("id", id), slog.Any("error", err))
 
@@ -411,6 +407,9 @@ func (d *Dispatcher) markItemSent(ctx context.Context, id int64) bool {
 }
 
 func (d *Dispatcher) markItemFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, reason string) {
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
+	defer cancel()
+
 	fenced, err := d.repository.MarkFailed(ctx, item.ID, d.workerID, item.AttemptCount, d.config.MaxRetries, d.config.RetryBackoff, reason)
 	if err != nil {
 		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", item.ID), slog.Any("error", err))

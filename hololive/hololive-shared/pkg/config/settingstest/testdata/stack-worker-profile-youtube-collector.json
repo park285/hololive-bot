@@ -1,0 +1,38 @@
+{
+  "contract_version": 1,
+  "service": "hololive",
+  "role": "youtube-collector",
+  "profile_id": "youtube-collector-c-test",
+  "workers": {
+    "collection": {
+      "executor": {
+        "enabled": true,
+        "configured_workers": 4,
+        "attempt_timeout": {"mode": "per_job", "milliseconds": null}
+      },
+      "queue": {
+        "capacity": {"mode": "bounded", "items": 16},
+        "max_age": {"mode": "fixed", "milliseconds": 3600000}
+      },
+      "settings": {
+        "acquisition_batch": 16,
+        "acquisition_cadence_ms": 1000,
+        "lease_ttl_ms": 60000,
+        "renew_interval_ms": 20000,
+        "renew_timeout_ms": 5000,
+        "db_timeout_ms": 5000,
+        "cleanup_timeout_ms": 5000,
+        "provider_admission_timeout_ms": 5000,
+        "collection_overhead_ms": 5000,
+        "publish_timeout_ms": 5000,
+        "retry_min_ms": 1000,
+        "retry_max_ms": 60000,
+        "release_jitter_min_ms": 100,
+        "release_jitter_max_ms": 1000,
+        "holodex_max_inflight": 4,
+        "official_max_inflight": 4,
+        "youtubejs_max_inflight": 4
+      }
+    }
+  }
+}

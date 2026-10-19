@@ -97,6 +97,44 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 
 한 세대의 마지막 배치가 1000행 미만이어도 다른 만료 세대가 남을 수 있으므로 이를 전체 backlog 종료로 해석하지 않습니다. 64배치는 유입 증가에 대한 무제한 처리 보장이 아니며, 신규 세대·target/reason 생성량과 실제 삭제량·tick 시간·DB 크기를 함께 확인합니다. 특히 TTL 안의 이력은 삭제하지 않으므로 배포 직후 파일 크기 감소나 기존 용량 절감 목표 달성을 보장하지 않습니다.
 
+## 동기 집계 정합 확인
+
+`scripts/maintenance/check-runtime-projections.sh`는 `youtube_collection_runtime_bundles`와
+`youtube_live_runtime_state`를 원본에서 재계산한 값과 비교합니다. dbtest와 같은 SQL 자산을 사용하며,
+bundle의 observation-to-job 매핑도 운영 view와 독립적으로 비교합니다.
+
+승인된 대상 DB의 libpq 접속 설정(`PGSERVICE` 또는 명시적 host·database·user와 기존 인증)을
+준비한 환경에서 아래 명령을 실행합니다. 대상 선택·인증·원격 실행은 `stack-platform-ops`를 따르며,
+스크립트는 비밀 파일을 직접 읽거나 권한을 변경하지 않습니다. 로컬 `psql`·Bash가 필요합니다.
+
+```bash
+bash scripts/maintenance/check-runtime-projections.sh
+```
+
+접속 후 `default_transaction_read_only=on`을 설정하고, `REPEATABLE READ READ ONLY` 트랜잭션에서
+`SET LOCAL`로 문장당 10초·잠금 1초·idle-in-transaction 15초를 적용합니다. 읽기 전용 및 시간 제한의
+유효값을 확인한 뒤 두 모델을 같은 snapshot에서 읽습니다. 연결 제한은 환경변수가 아닌 명시적
+`connect_timeout=5` 인자로 전달하므로 서비스 파일의 무제한 설정이 덮어쓰지 못합니다.
+[libpq 계약](https://www.postgresql.org/docs/18/libpq-connect.html#LIBPQ-CONNECT-CONNECT-TIMEOUT)에 따라
+연결 5초는 각 host/IP의 시도별 제한이며, 여러 대상 전체의 합산 제한은 아닙니다.
+서비스의 대상·인증과 다른 접속 옵션은 보존합니다. 원본·집계·영수증의 SELECT와 기존 영수증 조회 함수의
+EXECUTE 권한이 필요하며, 권한 오류에 다른 역할로 재접속하지 않습니다.
+
+출력은 모델별 `missing`·`extra`·`changed` 건수와 bundle의 `mapping_changed`뿐입니다.
+`mapping_changed`는 값 또는 행의 중복도가 다른 observation kind의 개수입니다. 값 변경의
+양방향 차이는 한 kind로 세며, 중복 행과 잘못된 NULL key도 검출합니다.
+식별자·제목·payload·전체 JSON을 출력하거나 집계표를 재작성하지 않습니다.
+
+| 종료 코드 | 의미 |
+|---|---|
+| 0 | 모든 비교가 완료됐고 불일치 없음 |
+| 1 | 비교 완료, 하나 이상의 불일치 발견 |
+| 2 | 접속·권한·timeout·guard·결과 형식 오류로 정합성을 확정할 수 없음 |
+
+원본 재계산 비용이 있으므로 기존 5초 metrics 조회에 넣지 않습니다. 수동 점검 도구이며 자동 주기·경보는
+설치하지 않습니다. 운영 데이터 규모에서 비용을 확인한 뒤 별도로 주기를 정하고, 실패를 0건으로 저장하지 않습니다.
+불일치가 있으면 원본·trigger·migration 상태를 조사하며 자동 복구나 제한 시간 증액을 하지 않습니다.
+
 ## YouTube 관측 저장 구조 전환
 
 Manifest의 **244 → 234–243** 순서와 API·collector fleet a/b/c/d·alarm-worker를 하나의 승인된 점검 창에서 전환합니다. 파일명 정렬로 적용하지 않습니다. **전체 backfill 동안 writer 정지가 필요하며**, 정지 시점과 같은 전체 복구본을 만들면 백업·복원 검증 시간도 중단 창에 포함됩니다. 온라인 backfill이나 짧은 중단을 보장하지 않습니다. 새 이미지·native artifact를 kapu에서 검증한 뒤에만 배포하며, 구현 완료와 운영 활성화를 구분합니다.

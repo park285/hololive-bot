@@ -1,22 +1,7 @@
 WITH candidate AS MATERIALIZED (
     SELECT candidate.id,
-           COALESCE(
-               candidate.attempts >= $3 + candidate.operator_replay_grants
-               OR candidate.first_attempt_at <= clock_timestamp() - ($4::bigint * INTERVAL '1 millisecond'),
-               false
-           ) AS safety_expired
-    FROM bot_reply_outbox AS candidate
-    WHERE candidate.status IN ('pending', 'retryable_pre_dispatch', 'outcome_unknown')
-      AND candidate.available_at <= clock_timestamp()
-      AND NOT EXISTS (
-          SELECT 1
-          FROM bot_reply_outbox AS predecessor
-          WHERE predecessor.room_id = candidate.room_id
-            AND predecessor.id < candidate.id
-            AND predecessor.status IN (
-                'pending', 'submitting', 'accepted', 'retryable_pre_dispatch', 'outcome_unknown'
-            )
-      )
+           {{safety_expired}} AS safety_expired
+    {{reply_ready_relation}}
     ORDER BY candidate.available_at ASC, candidate.id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED

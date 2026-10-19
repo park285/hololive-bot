@@ -18,6 +18,7 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
@@ -26,8 +27,6 @@ import (
 const (
 	communityConsumerName  = "hololive-api-youtube"
 	communityLeaseOwner    = "hololive-api"
-	scraperDatabaseRole    = "hololive_scraper"
-	runtimeDatabaseRole    = "hololive_runtime"
 	youtubeHealthComponent = "youtube"
 )
 
@@ -171,8 +170,8 @@ func validateBuildInputs(
 		return nil, nil, fmt.Errorf("build youtube plane: %w", err)
 	}
 
-	if strings.TrimSpace(postgresCopy.User) != runtimeDatabaseRole {
-		return nil, nil, fmt.Errorf("build youtube plane: requires POSTGRES_USER=%s", runtimeDatabaseRole)
+	if strings.TrimSpace(postgresCopy.User) != runtimepolicy.PostgresRuntimeRoleUser {
+		return nil, nil, fmt.Errorf("build youtube plane: requires POSTGRES_USER=%s", runtimepolicy.PostgresRuntimeRoleUser)
 	}
 
 	return &configCopy, &postgresCopy, nil
@@ -231,35 +230,18 @@ func newRuntime(
 		},
 	}
 
-	runtime.workerSampler = workercontract.NewQueueSampler(runtime.sampleReadyQueue)
+	runtime.workerSampler = workercontract.NewQueueSampler(func(ctx context.Context) (workercontract.QueueValues, error) {
+		return repo.ReadySnapshot(ctx, runtime.claim.Kinds, sourceobservation.MaxAttempts)
+	})
 
 	return runtime, nil
 }
 
-func (r *Runtime) sampleReadyQueue(ctx context.Context) (workercontract.QueueValues, error) {
-	if r == nil || r.pool == nil {
-		return workercontract.QueueValues{}, errors.New("source observation queue pool is not configured")
-	}
-
-	kinds := make([]string, 0, len(r.claim.Kinds))
-	for _, kind := range r.claim.Kinds {
-		kinds = append(kinds, string(kind))
-	}
-
-	var (
-		depth            int64
-		oldestAgeSeconds float64
-	)
-
-	if err := r.pool.QueryRow(ctx, mustSQL("worker_queue_snapshot.sql"), kinds, sourceobservation.MaxAttempts).
-		Scan(&depth, &oldestAgeSeconds); err != nil {
-		return workercontract.QueueValues{}, fmt.Errorf("snapshot source observation ready queue: %w", err)
-	}
-
-	return workercontract.QueueValues{Depth: depth, OldestQueuedAge: time.Duration(oldestAgeSeconds * float64(time.Second))}, nil
-}
-
 func (r *Runtime) prepare(ctx context.Context) error {
+	if !r.Config.Enabled {
+		return nil
+	}
+
 	if err := r.withDB(ctx, dbOperationProbe, func(ctx context.Context) error {
 		return r.claimer.ProbeClaim(ctx, r.claim)
 	}); err != nil {

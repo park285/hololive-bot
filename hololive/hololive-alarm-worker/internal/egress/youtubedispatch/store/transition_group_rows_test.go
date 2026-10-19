@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -28,7 +29,7 @@ func TestTransitionLogicalGroupRowsExcludeCrossCombinationsBeforeLimit(t *testin
 			tx, err := pool.Begin(t.Context())
 			require.NoError(t, err)
 
-			defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+			defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
 
 			_, err = tx.Exec(t.Context(), "SELECT set_config('plan_cache_mode', $1, true)", mode)
 			require.NoError(t, err)
@@ -48,7 +49,7 @@ func TestTransitionLogicalGroupRowsLocksOnlyRequestedTuples(t *testing.T) {
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
 
 	_, err = transition.loadLogicalGroupRows(t.Context(), tx, requested)
 	require.NoError(t, err)
@@ -56,7 +57,7 @@ func TestTransitionLogicalGroupRowsLocksOnlyRequestedTuples(t *testing.T) {
 	probe, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, probe.Rollback(t.Context())) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), probe)) }()
 
 	var lockedID int64
 
@@ -127,7 +128,7 @@ func TestTransitionLogicalGroupRowsPreservesIdentityCandidatesAndDirectIDs(t *te
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
 
 	rows, err := transition.loadLogicalGroupRows(t.Context(), tx, requested)
 	require.NoError(t, err)
@@ -172,7 +173,7 @@ func TestTransitionLogicalGroupRowsPreservesScanLimit(t *testing.T) {
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
 
 	rows, err := transition.loadLogicalGroupRows(t.Context(), tx, requested)
 	require.NoError(t, err)
@@ -181,7 +182,7 @@ func TestTransitionLogicalGroupRowsPreservesScanLimit(t *testing.T) {
 	probe, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, probe.Rollback(t.Context())) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), probe)) }()
 
 	var outsideLimit int64
 

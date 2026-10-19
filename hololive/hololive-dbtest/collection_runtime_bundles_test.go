@@ -2,40 +2,17 @@ package dbtest
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
 const collectionRuntimeBundlesMigration = "313_youtube_collection_runtime_bundles.sql"
-
-// 운영 view를 oracle에 쓰면 잘못된 매핑도 양쪽에서 같아지므로 기존 VALUES 계약을 독립적으로 보존한다.
-const collectionRuntimeKindsOracleSQL = `VALUES
-	('youtubejs_channel_live','live_snapshot',false),
-	('youtubejs_channel_live_check','channel_live_check',false),
-	('youtubejs_video_live','video_live_check',false),
-	('community_collect','community_page',false),
-	('youtubejs_content','video_list',true),
-	('youtubejs_content','shorts_list',true),
-	('youtubejs_channel_metadata','channel_profile',false),
-	('youtubejs_channel_metadata','channel_photo',false)`
-
-const collectionRuntimeBundlesOracleSQL = `WITH mapping(kind,observation_kind,rpc_per_kind) AS (` + collectionRuntimeKindsOracleSQL + `), expected AS (
-	SELECT target.projection_generation,mapping.kind COLLATE "C" AS kind,target.subject_key COLLATE "C" AS subject_key,
-	       CASE WHEN mapping.rpc_per_kind THEN count(target.observation_kind) ELSE 1 END AS rpc_calls,
-	       min(target.poll_interval_ms) AS interval_ms,min(target.created_at) AS created_at,
-	       min(coalesce(target.not_before,'-infinity'::timestamptz)) AS eligible_at
-	FROM youtube_collection_targets target
-	JOIN youtube_collection_projection_generations header ON header.generation=target.projection_generation
-	JOIN mapping USING(observation_kind)
-	WHERE target.enabled AND header.status IN ('CURRENT','STAGING')
-	GROUP BY target.projection_generation,mapping.kind COLLATE "C",target.subject_key COLLATE "C",mapping.rpc_per_kind
-)
-SELECT coalesce((SELECT jsonb_agg(to_jsonb(expected) ORDER BY projection_generation,kind COLLATE "C",subject_key COLLATE "C") FROM expected),'[]'::jsonb)::text,
-       coalesce((SELECT jsonb_agg(to_jsonb(bundle) ORDER BY projection_generation,kind COLLATE "C",subject_key COLLATE "C") FROM youtube_collection_runtime_bundles bundle),'[]'::jsonb)::text`
 
 type collectionBundleDB interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
@@ -49,13 +26,23 @@ func execCollectionBundleSQL(t *testing.T, db collectionBundleDB, query string) 
 	require.NoError(t, err)
 }
 
+func collectionRuntimeBundlesDrift(t *testing.T, db collectionBundleDB) [4]int64 {
+	t.Helper()
+
+	raw, err := os.ReadFile("../../scripts/maintenance/queries/collection_runtime_bundles_drift.sql")
+	require.NoError(t, err)
+
+	var drift [4]int64
+
+	require.NoError(t, db.QueryRow(t.Context(), string(raw)).Scan(&drift[0], &drift[1], &drift[2], &drift[3]))
+
+	return drift
+}
+
 func assertCollectionRuntimeBundles(t *testing.T, db collectionBundleDB) {
 	t.Helper()
 
-	var expected, actual string
-
-	require.NoError(t, db.QueryRow(t.Context(), collectionRuntimeBundlesOracleSQL).Scan(&expected, &actual))
-	require.JSONEq(t, expected, actual)
+	require.Equal(t, [4]int64{}, collectionRuntimeBundlesDrift(t, db), "누락·잉여·값 변경·매핑 불일치")
 }
 
 func seedCollectionBundleHeaders(t *testing.T, db collectionBundleDB) {
@@ -98,14 +85,37 @@ func TestCollectionRuntimeBundlesExactAggregation(t *testing.T) {
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)
 	assertCollectionRuntimeBundles(t, pool)
+}
 
-	var expected, actual string
+// 진단 SQL이 늘 0을 내면 운영 점검도 정상으로 오판하므로, 집계와 매핑을 직접 손상시켜 종류마다 한 건씩 세는지 확인한다.
+func TestCollectionRuntimeBundlesDriftCountsEachMismatch(t *testing.T) {
+	pool := NewPool(t)
+	seedCollectionBundleHeaders(t, pool)
+	seedCollectionBundleTargets(t, pool)
 
-	require.NoError(t, pool.QueryRow(t.Context(), `WITH expected(kind,observation_kind,rpc_per_kind) AS (`+
-		collectionRuntimeKindsOracleSQL+`) SELECT
-		(SELECT jsonb_agg(to_jsonb(expected) ORDER BY observation_kind COLLATE "C") FROM expected)::text,
-		(SELECT jsonb_agg(to_jsonb(mapping) ORDER BY observation_kind COLLATE "C") FROM youtube_collection_runtime_kinds mapping)::text`).Scan(&expected, &actual))
-	require.JSONEq(t, expected, actual)
+	tx, err := pool.Begin(t.Context())
+	require.NoError(t, err)
+
+	defer rollbackLiveReviewReceiptFactsTx(t, tx)
+
+	execCollectionBundleSQL(t, tx, `DELETE FROM youtube_collection_runtime_bundles
+		WHERE projection_generation=101 AND kind='youtubejs_channel_live' AND subject_key='channel';
+	UPDATE youtube_collection_runtime_bundles SET rpc_calls=rpc_calls+1
+		WHERE projection_generation=101 AND kind='youtubejs_content' AND subject_key='channel';
+	INSERT INTO youtube_collection_runtime_bundles(projection_generation,kind,subject_key,rpc_calls,interval_ms,created_at,eligible_at)
+		VALUES (101,'youtubejs_video_live','extra',1,1000,'2026-01-01','-infinity');
+	CREATE OR REPLACE VIEW youtube_collection_runtime_kinds (kind,observation_kind,rpc_per_kind) AS VALUES
+		('youtubejs_channel_live'::text,'live_snapshot'::text,false),
+		('youtubejs_channel_live_check','channel_live_check',false),
+		('youtubejs_video_live','video_live_check',false),
+		('community_collect','community_page',false),
+		('youtubejs_content','video_list',true),
+		('youtubejs_content','shorts_list',true),
+		('youtubejs_channel_metadata','channel_profile',false),
+		('youtubejs_channel_metadata','channel_photo',false),
+		('youtubejs_channel_metadata','channel_photo',false)`)
+
+	require.Equal(t, [4]int64{1, 1, 1, 1}, collectionRuntimeBundlesDrift(t, tx), "누락·잉여·값 변경·매핑 불일치")
 }
 
 func collectionBundleTupleSnapshot(t *testing.T, db collectionBundleDB) string {
@@ -187,7 +197,7 @@ func TestCollectionRuntimeBundlesImmediateChangesAndRollback(t *testing.T) {
 
 			execCollectionBundleSQL(t, tx, tc.sql)
 			assertCollectionRuntimeBundles(t, tx)
-			require.NoError(t, tx.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			require.Equal(t, before, collectionBundleTupleSnapshot(t, pool))
 		})
 	}

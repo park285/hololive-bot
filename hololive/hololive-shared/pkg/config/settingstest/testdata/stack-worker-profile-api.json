@@ -12,7 +12,7 @@
       },
       "queue": {
         "capacity": {"mode": "unbounded", "items": null},
-        "max_age": {"mode": "fixed", "milliseconds": 300000}
+        "max_age": {"mode": "none", "milliseconds": null}
       },
       "settings": {
         "max_body_bytes": 65536,
@@ -37,12 +37,11 @@
       },
       "queue": {
         "capacity": {"mode": "unbounded", "items": null},
-        "max_age": {"mode": "fixed", "milliseconds": 86400000}
+        "max_age": {"mode": "none", "milliseconds": null}
       },
       "settings": {
         "poll_interval_ms": 100,
         "claim_lease_ms": 120000,
-        "dispatch_budget_ms": 105000,
         "retry_after_ms": 1000,
         "max_attempts": 5,
         "maintenance_interval_ms": 15000,
@@ -58,14 +57,13 @@
       },
       "queue": {
         "capacity": {"mode": "unbounded", "items": null},
-        "max_age": {"mode": "fixed", "milliseconds": 86400000}
+        "max_age": {"mode": "none", "milliseconds": null}
       },
       "settings": {
         "db_operation_concurrency": 3,
         "claim_batch_size": 4,
         "claim_interval_ms": 2000,
         "claim_lease_ms": 60000,
-        "transaction_timeout_ms": 10000,
         "shutdown_timeout_ms": 30000
       }
     }

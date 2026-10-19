@@ -1,7 +1,6 @@
-# Install as:
-#   /etc/systemd/system/postgres-failover.service.d/apply.conf
-# only after postgres-failover.env contains reviewed fence and route hooks.
-# The controller still fails closed when either hook is absent or invalid.
+# 검토한 격리·라우트 훅을 postgres-failover.env에 설정한 뒤에만
+# /etc/systemd/system/postgres-failover.service.d/apply.conf로 설치한다.
+# 어느 훅이든 없거나 잘못되면 제어기는 실행을 거부한다.
 [Service]
 LoadCredential=fence-ssh-key:/etc/stack-secrets/hololive-bot/postgres-failover/id_ed25519
 LoadCredential=fence-known-hosts:/etc/stack-secrets/hololive-bot/postgres-failover/known_hosts

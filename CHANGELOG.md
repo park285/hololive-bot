@@ -8,6 +8,39 @@
 
 ## 미출시
 
+- **주석 정리:** 소스·테스트·배포 설정의 영어 설명을 한국어로 바꾸고 자명한 마이그레이션 이력 설명을 제거했습니다. NilAway 정본 사본을 동기화하며 실행 코드·설정값·체크섬 고정 마이그레이션은 보존합니다.
+- **SQL 시계 선택 검사:** 기존 SQL 소유권 검사에서 collector lease와 alarm의 잠금 후 fence는 wall clock, 후보·projection·live 조회는 statement clock을 요구합니다. 주석·문자열·인용 식별자를 구분하고 인자 없는 실제 함수 호출만 검사하여 CTE·별칭의 열 선언을 오인하지 않습니다. 범위 밖의 기록용 transaction clock과 기존 migration은 유지하며, 잠금 순서의 정확성은 기존 DB 경합 시험이 계속 검증합니다.
+- **동기 집계 정합 진단:** dbtest 오라클을 공유 SQL 자산으로 옮겨 bundle·live 모델의 누락·잉여·값 변경과 매핑의 값·중복도 불일치를 읽기 전용 RR snapshot에서 검사합니다. 서비스 파일과 무관하게 연결 제한을 명시적 인자로, 조회 제한을 SET LOCAL로 적용하고 유효값을 확인합니다. 식별자·원문 없이 건수만 반환하며 정상/불일치/확인 실패를 종료 코드 0/1/2로 구분합니다. dbtest는 집계와 매핑을 직접 손상시켰을 때 불일치 종류마다 한 건씩 세는지도 확인합니다. 새 migration·자동 복구·주기 실행·운영 적용은 없습니다.
+
+## v11.0.0 - 2026-10-19
+
+- **최종 워커·DB 계약 전환:** 10.2.1의 구 프로필 호환 baseline을 실제 운영에서 수용한 뒤 새 프로필을 활성화합니다. `source_observation`은 batch가 workers 이상이어야 하며 lease 하한은 `batch × attempt_timeout + 10000ms`입니다. eligible 큐·nullable 진단·공유 cache 수명·DB control reserve와 lease/attempt 정산을 함께 유지하며, 322–324와 방송 시각 확정·멤버십 아카이브 동작은 보존합니다.
+
+- **미전송 알림 lease 복구:** 직렬 발송의 뒤 그룹에서 아직 보내지 않은 claim이 만료되면 영구 격리하지 않고 기존 whole-unit recovery에 남깁니다. frozen request·generation·소유권 fence와 provider별 기한은 유지하며, 실제 DB에서 회수·재claim 후 두 발송 완료와 attempt 집계를 확인했습니다.
+- **paired rollback 복원성:** central은 이전 collector의 실행/정지 상태를 기록하고 정지된 writer를 자동 시작하지 않습니다. profile 게시 실패는 issuer 제거 전에 반환합니다. 호출별 임시 파일을 모두 준비한 뒤 개별 rename하여 남은 `.next` 파일이 복원을 막지 않게 하며, AP dry-run은 retained overlay를 바꾸지 않고 apply가 검사한 바이트를 게시합니다. 다중 파일 전체의 원자성이나 동시 배포 직렬화를 보장하는 변경은 아닙니다.
+- **준비 실패의 image tag 복원:** central의 issuer-absent 기준점과 AP의 최초 배포/issuer-absent 기준점에서 후보 `prod` 태그가 남아 다음 배포를 막던 경로를 수정했습니다. 기존 태그는 rollback reference로 돌리고 원래 없던 태그만 정확한 reference로 제거합니다. 조회/제거 실패는 복원 실패로 남기며 원래 종료 상태·live runtime·rollback archive/다른 태그는 보존합니다.
+- **DB 제어 용량(D09, 로컬):** runtime pool 전체에 5초 acquire 예산을 적용하고 bot·YouTube source·alarm-worker·collector만 짧은 lease 갱신/정산용 연결 하나를 남깁니다. provider/worker 전체를 우회시키지 않으며 admin·LLM은 reserve 0, maintenance/replay/migrator는 nil 정책입니다. max1을 거부하되 min0·collector admitted deadline·API 공유 cache 수명은 유지합니다. pgx Stat wait는 외부 gate 대기를 포함하지 않습니다. 격리 DB 경합·race·종료 경로를 검증했으며 운영 활성화는 하지 않았습니다.
+- **DB 배포 정책 준비(미활성):** AP collector/issuer Compose를 중앙 비밀·DB/cache 정의에서 분리하고 중앙 c만 DB 의존성을 추가합니다. 이전 Compose·이미지·프로필 rollback 짝과 전송 목록을 함께 보존합니다. migrator/admin bootstrap은 격리 Unix socket으로 전환하며, native primary/pool 값은 topology/capacity 정본에서 읽습니다. exporter 1·nightly 2를 포함한 collector max7 후보는 할당54/여유3입니다. 실제 격리 PG18에서 privileged TCP/replication 거부와 runtime·scraper·exporter TLS, socket migration을 확인했습니다. keepalive60/10/6·자격 SQL 비노출 로그·기존 WAL900s/2GB/lz4를 명시하되 auto.conf 정리·역할 제한·재기동·운영 배포는 별도 승인입니다.
+- **워커 프로필·기한:** 실제 age 폐기가 없는 워커는 `none`, YouTube 발송 freshness는 profile max_age 정본을 사용합니다. 중복 dispatch/transaction/send timeout을 제거하고 attempt·lease 관계에서 파생합니다. collector는 admission 때 확정한 kind별 budget/deadline을 보존하며 후속 실행에서 연장하지 않습니다. profile-only 사전 검사·immutable binary/profile 짝·source 변경 감지와 paired rollback을 함께 준비했습니다.
+- **공유 자원·실패 정산:** API 프로세스의 Valkey/member cache를 한 소유자로 통합하고 모든 borrower 종료 뒤 backing bot pool과 함께 정리합니다. 시작하지 않은 admin plane이 종료를 막던 경로와, 취소된 inbox claim context가 fenced release를 막던 경로를 수정했습니다. 유한 정리 예산·원래 fencing·불명 결과의 무재생은 유지합니다.
+- **SCRAM·역할 정본:** scraper/runtime 이름을 고정 계약으로 통일합니다. bootstrap은 UTF-8 입력의 PostgreSQL/pgx 준비 결과를 대조한 후 클라이언트 SCRAM verifier만 전송하며 불일치는 role 변경 전에 거부합니다. 원생 PostgreSQL·pgx·libpq의 Unicode/긴 결합문자 경계, 잘못된 자격 거부, 실패 SQL과 noisy server/client 로그의 비노출을 격리 환경에서 확인했습니다.
+- **비활성 워커 진단:** `source_observation`이 꺼져도 YouTube runtime과 durable 큐 sampler를 구성하여 depth를 보고합니다. 비활성 경로는 claim·projection 준비·maintenance를 실행하지 않습니다. bot inbox/outbox의 attempt 종료는 defer로 보장하여 panic 뒤 inFlight가 남지 않습니다.
+- **DB 연결·정리:** migrator의 pool·bootstrap 연결을 shared-go의 명시적 sslmode·비밀 보호 파싱으로 통일하며 `PGSSLMODE` 생략을 거부합니다. 기존 `pgxutil`을 제거하고 모든 rollback 소비자를 취소 독립 5초 공통 경로로 옮깁니다. 다섯 소비자는 provenance를 검증한 `shared-go/v2 v2.14.0`을 사용하며, source 통합만으로 운영 활성화·수용을 뜻하지는 않습니다.
+- **보존 backlog 측정:** kind별 제한된 후보에서 첫 비보호 행을 찾으면 보호 판정을 중단합니다. 실제 migration을 적용한 격리 DB에서 1,000개 후보의 보호 함수 호출이 첫 행 적격이면 1회, 보호 선두 3개이면 4회로 줄고 oldest·known은 유지됨을 확인했습니다. migration 315 삭제 경로는 별도로 측정했으며 잠금·커서·재검사 계약을 보존하기 위해 변경하지 않았습니다.
+- **회귀 검사의 오류 경계:** SCRAM 역할 실패의 원인·비밀 비노출 비교 전에 nil을 명시적으로 거부하고, source_observation의 정상·거절 입력을 별도 분기로 검사합니다. backlog 범위 검사도 실제 runtime처럼 필수 프로필을 적용한 뒤 설정을 검증합니다. 기본값·오류 문구·단순 로드 성공에만 의존한 단언은 제거하고 범위·파싱 실패 동작을 유지했습니다.
+
+## v10.2.1 - 2026-10-18
+
+- **프로필 짝의 유한 진단 조회:** loaded hash를 전체 `/metrics` 대신 인증된 `/diagnostics/workers`의 v1 `profile.hash`에서 확인합니다. unrelated metric 수가 늘어도 최초 capture·native 준비·배포 후 검증이 healthcheck 본문 상한을 넘지 않으며, 기존 응답 크기·시간 상한과 서비스별 인증키·프로세스/바이트 일치 검사는 유지합니다. 실제 운영의 Compose 네 슬롯과 native a/d 진단으로 확인했으며 자격 대체나 상한 완화는 없습니다.
+
+## v10.2.0 - 2026-10-18
+
+- **구 프로필 호환 pairing baseline:** API·alarm의 기존 settings와 fixed max_age, collector의 기존 per_job/bounded/fixed 스키마를 유지합니다. 실제 후보 CLI가 release profile을 검증하고 image/binary와 profile checksum을 함께 보존합니다. 인증된 loaded hash를 확인한 최초 도입만 허용하며, effective release와 desired source를 분리합니다. source 디렉터리 mount로 원자적 파일 교체도 관측하고 rollback은 secret mirror가 아니라 이전 artifact/profile 짝을 복원합니다.
+- **배포·복구 지속성:** Compose active pair는 sync·재부팅 뒤에도 유지하고, AP/central 준비 실패는 runtime을 다시 만들지 않고 source·image tag 기준점을 복원합니다. native 완료 검사는 실제 실행 binary와 인증된 loaded profile hash를 확인합니다. 비활성 source_observation도 sampler를 유지하되 claim·projection 준비·maintenance는 실행하지 않습니다. DB 역할·HBA·WAL·Valkey·capacity 정책과 새 settings 활성화는 이 baseline에 포함하지 않습니다.
+- **독립 릴리스:** provenance를 검증한 `shared-go/v2 v2.14.0`을 다섯 Go 소비자에 고정합니다. 이 기준본의 구 프로필 CLI·source drift·paired rollback을 실제 운영에서 먼저 수용한 뒤 비호환 프로필 이전을 진행합니다.
+- **프로필 인증:** API·alarm은 `API_SECRET_KEY`, collector는 `METRICS_API_KEY`로 loaded profile을 확인합니다. 서로 다른 키를 둔 실제 healthcheck·HTTP 실행에서 수정 전 API/alarm의 인증 거절과 수정 후 네 Compose 슬롯의 수용을 확인했습니다. 자격 대체 경로는 추가하지 않습니다.
+- **배포 영수증 충돌:** 초 단위 시각이 같은 연속 배포도 서로 다른 원자적 임시 디렉터리를 사용해 이전 profile pair를 덮어쓰지 않습니다. 실제 Compose 렌더링을 거치는 provenance fixture에서 충돌을 재현하고 수정 후 잘못된 image의 migration·cutover 거절을 확인했습니다.
+
 - **`!방송기록` 방송 길이와 `!라이브` 경과 시간:** `!방송기록`이 시작 시각을 기준으로 표시하고, 종료 시각이 마지막 LIVE 확인 시각과 5분 안에서 맞을 때만 종료 시각과 방송 길이를 함께 표시합니다. 종료를 확인할 수 없으면 시작 시각만 표시합니다. 시작 시각이 없거나 수명 추적 도입 전 기록(`lifecycle_origin='legacy_unknown'`)이면 저장된 종료·예정·마지막 확인 시각을 그 의미와 함께 표시합니다. 옛 기록의 `started_at`은 실제 시작과 수 시간씩 어긋나기 때문입니다. `!라이브` 템플릿 자료에 조회 시각 기준 경과 시간(`Elapsed`)을 추가하며, 템플릿 본문은 바꾸지 않습니다. 경과는 저장된 시작 시각 기준이라, 시작 시각 없이 처음 감지한 방송은 감지 시각부터 셉니다(보통 1분 안팎 짧음).
 - **`!라이브` 템플릿 경과 시간 (migration 322):** 220 표준 전역 `CMD_LIVE_STREAMS` 본문일 때만 방송명 줄 끝에 `⏱ 경과` 표기를 붙이는 CAS UPDATE입니다. 사용자 지정 본문과 채널 override는 보존합니다. 이전 바이너리에는 `.Elapsed`가 없어 `!라이브` 렌더링이 실패하므로, 경과 시간 자료를 내는 바이너리의 배포를 확인한 뒤에 적용합니다. 그보다 이전 버전으로 되돌릴 때는 전역 본문을 220 본문으로 먼저 복원합니다.
 - **방송 시작·종료 시각 확정 (migration 323):** 종료된 방송을 `video_live_check`로 한 번 더 확인해 YouTube 아카이브의 시작·종료 시각으로 바꾸고 `youtube_live_sessions.times_source`를 `provider`로 둡니다. 종료 판정과 reducer는 바꾸지 않으며, 저장 시각과 크게 어긋나는 응답은 `conflict`로 남기고 쓰지 않습니다. 시작 시각 없이 늦게 감지한 방송은 저장 시작이 감지 시각이라, 아카이브 시작이 저장 시작보다 이른 것은 충돌로 보지 않습니다. 확인할 수 없는 응답은 종료 관측 기준 3분·30분·3시간·24시간에 최대 4회, `request_failed`는 10분 간격 최대 12회 다시 확인한 뒤 `exhausted`로 끝냅니다(진행 기록 `youtube_live_time_finalizations`). 확정 확인은 priority 18로 LIVE·UPCOMING 확인보다 뒤에 두고, 기존 기록 보정 묶음 크기 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`의 기본값은 0입니다. 기존 기록 보정은 첫 확인을 한 번에 한 영상씩 열고, 재시도 중인 행과 합쳐 2,000개를 넘기지 않아 전체 수집 target 상한에 닿지 않습니다. `!방송기록`은 확정 시각이면 시작~종료와 길이를, 아카이브를 끝내 확인하지 못하면 `아카이브를 확인할 수 없어 종료 시각 미확인`을 표시합니다. migration 323을 이 바이너리보다 먼저 적용합니다.

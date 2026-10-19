@@ -23,7 +23,7 @@ func assertComposePostgresTLS(t *testing.T, cfg renderedCompose, stackName strin
 
 	assertHoloPostgresTLSCommand(t, cfg, stackName)
 	assertHoloPostgresTLSMount(t, cfg, stackName)
-	assertDBMigrateVerifyFullTLS(t, cfg, stackName)
+	assertDBMigrateSocketIsolation(t, cfg, stackName)
 }
 
 func assertHoloPostgresTLSCommand(t *testing.T, cfg renderedCompose, stackName string) {
@@ -69,21 +69,44 @@ func assertHoloPostgresTLSMount(t *testing.T, cfg renderedCompose, stackName str
 	}
 }
 
-func assertDBMigrateVerifyFullTLS(t *testing.T, cfg renderedCompose, stackName string) {
+func assertDBMigrateSocketIsolation(t *testing.T, cfg renderedCompose, stackName string) {
 	t.Helper()
 
-	migrateEnv := composeEnvironment(t, cfg, "hololive-db-migrate")
-	if migrateEnv["PGSSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
-		t.Fatalf("hololive-db-migrate PGSSLMODE = %q in %s, want verify-full", migrateEnv["PGSSLMODE"], stackName)
+	const migrator = "hololive-db-migrate"
+
+	service := composeService(t, cfg, migrator)
+
+	if mode := stringValue(service["network_mode"]); mode != "none" {
+		t.Fatalf("%s network_mode = %q in %s, want no network access", migrator, mode, stackName)
 	}
 
-	if migrateEnv["PGSSLROOTCERT"] != postgresCACertPath {
-		t.Fatalf("hololive-db-migrate PGSSLROOTCERT = %q in %s, want /run/hololive-bot/certs/postgres-ca.pem", migrateEnv["PGSSLROOTCERT"], stackName)
+	if len(composePorts(t, migrator, service)) != 0 {
+		t.Fatalf("%s publishes network ports in %s", migrator, stackName)
 	}
 
-	migrateTargets := strings.Join(composeVolumeTargets(t, cfg, "hololive-db-migrate"), "\n")
-	if !strings.Contains(migrateTargets, postgresCACertPath) {
-		t.Fatalf("hololive-db-migrate missing postgres-ca.pem mount in %s: %q", stackName, migrateTargets)
+	env := composeEnvironment(t, cfg, migrator)
+	if env["PGHOST"] != "/var/run/postgresql" || env["PGSSLMODE"] != "disable" {
+		t.Fatalf("%s must use the local admin socket without TLS in %s", migrator, stackName)
+	}
+
+	for name := range cfg.Services {
+		mounted := false
+
+		for _, volume := range composeVolumes(t, cfg, name) {
+			if volume.Source != "holo-pg-admin-socket" {
+				continue
+			}
+
+			mounted = true
+
+			if volume.Target != env["PGHOST"] || (name == migrator && !volume.ReadOnly) {
+				t.Fatalf("%s has unsafe admin socket mount %+v in %s", name, volume, stackName)
+			}
+		}
+
+		if mounted != (name == serviceHoloPostgres || name == migrator) {
+			t.Fatalf("%s admin socket access = %v in %s", name, mounted, stackName)
+		}
 	}
 }
 

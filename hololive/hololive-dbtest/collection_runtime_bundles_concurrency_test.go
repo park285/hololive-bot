@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,7 +125,7 @@ func TestCollectionRuntimeBundlesStaleFixedSnapshotFails(t *testing.T) {
 			pgErr, ok := errors.AsType[*pgconn.PgError](err)
 			require.True(t, ok, "fixed snapshot must fail with PostgreSQL error: %v", err)
 			require.Equal(t, "40001", pgErr.Code)
-			require.NoError(t, stale.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), stale))
 			assertCollectionRuntimeBundles(t, pool)
 
 			var count int

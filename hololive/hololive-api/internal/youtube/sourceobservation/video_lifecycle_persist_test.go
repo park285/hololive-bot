@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -400,7 +401,7 @@ func recordLifecycleReview(t *testing.T, pool *pgxpool.Pool, digest string) erro
 
 	_, err = tx.Exec(ctx, `SELECT record_youtube_live_review('10000000-0000-0000-0000-000000000001',$1,$2,'test-operator','검증된 UNKNOWN 검토 종료')`, testVideoID, digest)
 	if err != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			return errors.Join(err, rollbackErr)
 		}
 

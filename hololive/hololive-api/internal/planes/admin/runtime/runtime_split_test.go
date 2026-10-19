@@ -15,12 +15,12 @@ func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 
-	runtime, err := BuildAdminAPIRuntime(t.Context(), nil, logger)
+	runtime, err := BuildAdminAPIRuntime(t.Context(), nil, nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	require.ErrorContains(t, err, "config must not be nil")
 
-	runtime, err = BuildAdminAPIRuntime(t.Context(), &apiconfig.AdminPlaneConfig{}, nil)
+	runtime, err = BuildAdminAPIRuntime(t.Context(), &apiconfig.AdminPlaneConfig{}, nil, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	require.ErrorContains(t, err, "logger must not be nil")

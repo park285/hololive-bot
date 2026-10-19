@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -22,8 +23,8 @@ func testDispatcherConfig() DispatcherConfig {
 		CleanupAfter:              7 * 24 * time.Hour,
 		CleanupInterval:           time.Hour,
 		CleanupEnabled:            true,
-		StaleSendingAfter:         deliveryLease,
-		StaleSendingSweepInterval: deliveryLease,
+		StaleSendingAfter:         workerconfig.NotificationDeliveryLease,
+		StaleSendingSweepInterval: workerconfig.NotificationDeliveryLease,
 		StaleSendingSweepLimit:    defaultStaleSendingSweepLimit,
 	}
 }

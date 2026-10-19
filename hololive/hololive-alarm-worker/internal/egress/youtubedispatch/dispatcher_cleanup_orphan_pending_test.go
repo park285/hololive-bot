@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -102,4 +103,43 @@ func TestLifecycleCleanupRemovesOnlyUnclaimableOrphan(t *testing.T) {
 		"primary freshness window 안의 PENDING outbox는 보존")
 	assert.Equal(t, int64(0), outboxRowCount(t, db, pastFreshness.ID),
 		"primary가 다시 claim할 수 없는 delivery 없는 PENDING outbox는 정리")
+}
+
+func TestPendingExpiryCountsCommittedStaleBeforeProjectionFailure(t *testing.T) {
+	db := newDeliveryPool(t)
+	ctx := t.Context()
+	cm := cleanupTestClaimManager(t, db, &dispatchstate.Config{
+		BatchSize: 10, ClaimFreshnessWindow: 2 * time.Hour, LockTimeout: time.Minute,
+	})
+	totals := &workercontract.Counters{}
+	dispatcher := &Dispatcher{claim: cm}
+	dispatcher.SetWorkerInstrumentation(nil, totals)
+
+	var outboxID int64
+
+	require.NoError(t, db.QueryRow(ctx, `INSERT INTO youtube_notification_outbox
+		(kind,channel_id,content_id,payload,created_at)
+		VALUES ('NEW_VIDEO','expiry-channel','expiry-discard','{}',now()-INTERVAL '3 hours') RETURNING id`).Scan(&outboxID))
+
+	_, err := db.Exec(ctx, `INSERT INTO youtube_notification_delivery (outbox_id,room_id,status)
+		VALUES ($1,'expiry-room','PENDING')`, outboxID)
+	require.NoError(t, err)
+
+	_, err = db.Exec(ctx, `CREATE FUNCTION reject_expiry_projection() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'projection unavailable'; END $$;
+		CREATE TRIGGER reject_expiry_projection BEFORE UPDATE ON youtube_notification_outbox
+		FOR EACH ROW EXECUTE FUNCTION reject_expiry_projection()`)
+	require.NoError(t, err)
+	cm.expirePendingDeliveries(ctx)
+
+	var status string
+
+	require.NoError(t, db.QueryRow(ctx, `SELECT status FROM youtube_notification_delivery WHERE outbox_id=$1`, outboxID).Scan(&status))
+	require.Equal(t, "FAILED", status)
+
+	expected := &workercontract.Counters{}
+	expected.RecordDiscard(workercontract.DiscardStale)
+	require.Equal(t, expected.Snapshot(), totals.Snapshot())
+	cm.expirePendingDeliveries(ctx)
+	require.Equal(t, expected.Snapshot(), totals.Snapshot(), "repeat expiry does not double count")
 }

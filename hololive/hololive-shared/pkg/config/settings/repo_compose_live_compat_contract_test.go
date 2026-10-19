@@ -28,7 +28,7 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderAPComposeConfig(t, composeProdFile, renderableAPComposeFile(t, tt.file))
+			cfg := renderAPComposeConfig(t, tt.file)
 			assertAPComposeCertMountsAreMinimized(t, cfg, tt.file)
 			assertAPComposeDoesNotRequireCentralEgressEnvFiles(t, cfg, tt.file)
 
@@ -43,7 +43,6 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 	cfg := renderComposeConfig(t, composeProdFile, composeLiveCompatFile)
 
 	t.Run("isolation", func(t *testing.T) {
-		assertLiveCompatOverlayText(t, readRepoFile(t, composeLiveCompatFile))
 		assertLiveCompatRenderedPortsAndModes(t, cfg)
 		assertLiveCompatRenderedPostgres(t, cfg)
 		assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
@@ -52,7 +51,6 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 		assertLiveCompatRenderedRuntimeConfig(t, cfg)
 	})
 	t.Run("central_collector", func(t *testing.T) {
-		assertLiveCompatCollectorEnvFileText(t)
 		assertLiveCompatRenderedCollector(t, cfg)
 	})
 	t.Run("postgres_tls", func(t *testing.T) {
@@ -64,55 +62,10 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 	})
 }
 
-func assertLiveCompatOverlayText(t *testing.T, overlay string) {
-	t.Helper()
-
-	apiBlock := composeServiceBlock(t, overlay, serviceHololiveAPI)
-	if strings.Contains(apiBlock, "${HOLOLIVE_SHORT_LINK_ADDR") || !strings.Contains(apiBlock, `HOLOLIVE_SHORT_LINK_ADDR: ":30101"`) {
-		t.Fatal("live overlay must pin HOLOLIVE_SHORT_LINK_ADDR to the published ingress port")
-	}
-
-	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker} {
-		block := composeServiceBlock(t, overlay, service)
-		wantEnvFile := map[string]string{
-			serviceHololiveAPI: "${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}",
-			serviceAlarmWorker: "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}",
-		}[service]
-
-		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
-			t.Fatalf("live overlay must keep per-service env_file %q for %s", wantEnvFile, service)
-		}
-
-		if strings.Contains(block, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
-			t.Fatalf("live overlay must not restore monolithic env_file for %s", service)
-		}
-	}
-
-	for _, service := range []string{runtimepolicy.RuntimeYouTubeCollector} {
-		block := composeServiceBlock(t, overlay, service)
-		if strings.Contains(block, "env_file:") {
-			t.Fatalf("live overlay must keep nonEgress %s scoped without env_file", service)
-		}
-	}
-
-	valkeyBlock := composeServiceBlock(t, overlay, "valkey-cache")
-	if strings.Contains(valkeyBlock, "command:") {
-		t.Fatal("live overlay must inherit valkey command from prod")
-	}
-
-	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker} {
-		block := composeServiceBlock(t, overlay, service)
-		if !strings.Contains(block, "IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}") {
-			t.Fatalf("docker-compose.live-compat.yml missing IRIS_BASE_URL_ALLOWED_HOSTS default for %s", service)
-		}
-	}
-}
-
 func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	assertRenderedPortOnHost(t, cfg, "valkey-cache", "127.0.0.1", "6379", "6379", "tcp")
-	assertRenderedPort(t, cfg, serviceHoloPostgres, "5433", "5432", "tcp")
 	assertRenderedPort(t, cfg, serviceHololiveAPI, "30001", "30001", "tcp")
 	assertRenderedPort(t, cfg, serviceHololiveAPI, "30001", "30001", "udp")
 	assertRenderedPortOnHost(t, cfg, serviceHololiveAPI, "127.0.0.1", "30101", "30101", "tcp")
@@ -135,11 +88,6 @@ func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 
 func assertLiveCompatRenderedPostgres(t *testing.T, cfg renderedCompose) {
 	t.Helper()
-
-	migrationEnv := composeEnvironment(t, cfg, "hololive-db-migrate")
-	if migrationEnv["PGHOST"] != serviceHoloPostgres || migrationEnv["PGPORT"] != "5432" {
-		t.Fatalf("hololive-db-migrate PGHOST/PGPORT = %q/%q, want holo-postgres/5432", migrationEnv["PGHOST"], migrationEnv["PGPORT"])
-	}
 
 	postgresEnv := composeEnvironment(t, cfg, serviceHoloPostgres)
 	if postgresEnv["PGPORT"] != "5432" {
@@ -240,18 +188,6 @@ func assertLiveCompatRenderedRuntimeConfig(t *testing.T, cfg renderedCompose) {
 		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
 			t.Fatalf("%s IRIS_BASE_URL_ALLOWED_HOSTS = %q, want 100.100.1.5", service, env["IRIS_BASE_URL_ALLOWED_HOSTS"])
 		}
-	}
-}
-
-func assertLiveCompatCollectorEnvFileText(t *testing.T) {
-	t.Helper()
-
-	prod := readRepoFile(t, composeProdFile)
-
-	const collectorEnvFile = "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}"
-
-	if block := composeServiceBlock(t, prod, runtimepolicy.RuntimeYouTubeCollector); !strings.Contains(block, "env_file:") || !strings.Contains(block, collectorEnvFile) {
-		t.Fatalf("prod must give youtube-collector scoped env_file %q", collectorEnvFile)
 	}
 }
 

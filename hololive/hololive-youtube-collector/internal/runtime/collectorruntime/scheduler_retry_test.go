@@ -8,7 +8,6 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -17,7 +16,7 @@ import (
 func TestRetrySchedulePreservesExplicitCooldown(t *testing.T) {
 	t.Parallel()
 
-	cfg := collectorconfig.DefaultConfig()
+	cfg := fixtureCollectorConfig(t)
 	executor := &collectionExecutor{retryBounds: collection.RetryBounds{Minimum: cfg.RetryMin, Maximum: cfg.RetryMax}}
 	at := time.Now().UTC().Add(2 * time.Hour).Truncate(time.Second)
 
@@ -85,10 +84,10 @@ func TestFailedRunPersistsProviderRetryAfterBeyondMaximum(t *testing.T) {
 			}
 
 			executor, spec := newExecutorFixture(t, runner, &fatal)
-			cfg := collectorconfig.DefaultConfig()
+			cfg := fixtureCollectorConfig(t)
 
 			executor.retryBounds = collection.RetryBounds{Minimum: cfg.RetryMin, Maximum: cfg.RetryMax}
-			executor.runSpec(t.Context(), spec)
+			runAdmittedSpec(t.Context(), t, executor, spec)
 
 			var stored, databaseNow time.Time
 
@@ -116,7 +115,7 @@ func TestFailedRunPersistsProviderRetryAfterBeyondMaximum(t *testing.T) {
 func TestRetryScheduleKeepsOrdinaryAndInvalidHintsBounded(t *testing.T) {
 	t.Parallel()
 
-	cfg := collectorconfig.DefaultConfig()
+	cfg := fixtureCollectorConfig(t)
 	executor := &collectionExecutor{retryBounds: collection.RetryBounds{Minimum: cfg.RetryMin, Maximum: cfg.RetryMax}}
 
 	for _, header := range []string{"", " ", "0", "-1", "NaN", "Inf", "1.5", "2147483648", "999999999999999999999"} {

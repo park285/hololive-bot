@@ -2,11 +2,11 @@ package notificationdelivery
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -338,7 +338,7 @@ func waitForOutboxDatabaseTime(ctx context.Context, t *testing.T, repository *ou
 func rollbackTestTx(ctx context.Context, t *testing.T, tx pgx.Tx) {
 	t.Helper()
 
-	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		t.Errorf("rollback transaction: %v", err)
 	}
 }

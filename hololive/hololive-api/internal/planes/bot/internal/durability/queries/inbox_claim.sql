@@ -1,9 +1,6 @@
 WITH candidate AS MATERIALIZED (
     SELECT due.id
-    FROM bot_webhook_heads AS head
-    JOIN bot_webhook_inbox AS due ON due.message_id = head.message_id
-    WHERE due.status IN ('pending', 'retry')
-      AND due.available_at <= clock_timestamp()
+    {{inbox_ready_relation}}
     ORDER BY due.available_at ASC, due.id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED

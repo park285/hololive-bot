@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
@@ -24,21 +25,17 @@ func TestYouTubeReadySnapshotExcludesExpiredParents(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	var (
-		depth int64
-		age   float64
-	)
-
-	require.NoError(t, pool.QueryRow(ctx, youtubeDeliveryReadySnapshotSQL, time.Minute.Milliseconds(), (7*24*time.Hour).Milliseconds(), 100).Scan(&depth, &age))
-	require.EqualValues(t, 1, depth)
-	require.Less(t, age, 60.0)
+	values, err := store.ReadySnapshot(ctx, pool, time.Minute, 7*24*time.Hour, 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, values.Depth)
+	require.Less(t, values.OldestQueuedAge, time.Minute)
 
 	var expired int64
 
 	require.NoError(t, pool.QueryRow(ctx, youtubeDeliveryExpiredSnapshotSQL, (7*24*time.Hour).Milliseconds(), 100).Scan(&expired))
 	require.EqualValues(t, 1, expired)
 
-	_, err := pool.Exec(ctx, `INSERT INTO youtube_notification_delivery (outbox_id,room_id,status,next_attempt_at,created_at)
+	_, err = pool.Exec(ctx, `INSERT INTO youtube_notification_delivery (outbox_id,room_id,status,next_attempt_at,created_at)
         SELECT id,'second-expired-room','PENDING',created_at,created_at FROM youtube_notification_outbox WHERE content_id='expired'`)
 	require.NoError(t, err)
 	require.NoError(t, pool.QueryRow(ctx, youtubeDeliveryExpiredSnapshotSQL, (7*24*time.Hour).Milliseconds(), 1).Scan(&expired))
@@ -48,13 +45,17 @@ func TestYouTubeReadySnapshotExcludesExpiredParents(t *testing.T) {
 
 	_, err = pool.Exec(ctx, `UPDATE youtube_notification_delivery SET locked_at=clock_timestamp() WHERE outbox_id IN (SELECT id FROM youtube_notification_outbox WHERE content_id='fresh')`)
 	require.NoError(t, err)
-	require.NoError(t, pool.QueryRow(ctx, youtubeDeliveryReadySnapshotSQL, time.Minute.Milliseconds(), (7*24*time.Hour).Milliseconds(), 100).Scan(&depth, &age))
-	require.Zero(t, depth)
+
+	values, err = store.ReadySnapshot(ctx, pool, time.Minute, 7*24*time.Hour, 100)
+	require.NoError(t, err)
+	require.Zero(t, values.Depth)
 
 	_, err = pool.Exec(ctx, `UPDATE youtube_notification_delivery SET locked_at=NULL,next_attempt_at=clock_timestamp()+INTERVAL '1 hour' WHERE outbox_id IN (SELECT id FROM youtube_notification_outbox WHERE content_id='fresh')`)
 	require.NoError(t, err)
-	require.NoError(t, pool.QueryRow(ctx, youtubeDeliveryReadySnapshotSQL, time.Minute.Milliseconds(), (7*24*time.Hour).Milliseconds(), 100).Scan(&depth, &age))
-	require.Zero(t, depth)
+
+	values, err = store.ReadySnapshot(ctx, pool, time.Minute, 7*24*time.Hour, 100)
+	require.NoError(t, err)
+	require.Zero(t, values.Depth)
 }
 
 func TestYouTubeReadySnapshotRequiresCompleteFrozenGroup(t *testing.T) {
@@ -88,23 +89,26 @@ func TestYouTubeReadySnapshotRequiresCompleteFrozenGroup(t *testing.T) {
 		batch int
 		depth int64
 	}{{1, 1}, {2, 3}} {
-		var (
-			depth int64
-			age   float64
-		)
-
-		require.NoError(t, pool.QueryRow(ctx, youtubeDeliveryReadySnapshotSQL, time.Minute.Milliseconds(), (7*24*time.Hour).Milliseconds(), tc.batch).Scan(&depth, &age))
-		require.Equal(t, tc.depth, depth)
+		values, snapshotErr := store.ReadySnapshot(ctx, pool, time.Minute, 7*24*time.Hour, tc.batch)
+		require.NoError(t, snapshotErr)
+		require.Equal(t, tc.depth, values.Depth)
 	}
 
 	_, err = pool.Exec(ctx, `UPDATE youtube_notification_delivery SET next_attempt_at=clock_timestamp()+INTERVAL '1 hour' WHERE id=$1`, members[1])
 	require.NoError(t, err)
 
-	var (
-		depth int64
-		age   float64
-	)
+	values, err := store.ReadySnapshot(ctx, pool, time.Minute, 7*24*time.Hour, 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, values.Depth, "동일 request의 멤버 일부만 ready로 집계하지 않는다")
 
-	require.NoError(t, pool.QueryRow(ctx, youtubeDeliveryReadySnapshotSQL, time.Minute.Milliseconds(), (7*24*time.Hour).Milliseconds(), 100).Scan(&depth, &age))
-	require.EqualValues(t, 1, depth, "동일 request의 멤버 일부만 ready로 집계하지 않는다")
+	_, err = pool.Exec(ctx, `UPDATE youtube_notification_delivery SET next_attempt_at=clock_timestamp() WHERE id=$1`, members[1])
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `UPDATE youtube_notification_outbox SET created_at=clock_timestamp()-INTERVAL '8 days'
+		WHERE id=(SELECT outbox_id FROM youtube_notification_delivery WHERE id=$1)`, members[1])
+	require.NoError(t, err)
+
+	values, err = store.ReadySnapshot(ctx, pool, time.Minute, 7*24*time.Hour, 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, values.Depth, "one stale parent excludes the complete frozen group")
 }

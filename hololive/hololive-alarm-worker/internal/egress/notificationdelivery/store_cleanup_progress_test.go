@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,7 +134,7 @@ func TestCleanupCancellationPreservesCommittedBatches(t *testing.T) {
 	require.EqualValues(t, 2, got.deleted)
 	// client의 취소 반환은 server 중단 확인이 아니다. holder를 풀기 전에 실제 중단을 확인한다.
 	waitForCleanupBackendStop(ctx, t, repo, cleanupPID)
-	require.NoError(t, holder.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, holder))
 
 	var remainingID int64
 

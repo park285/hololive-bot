@@ -88,7 +88,7 @@ type leaseScheduler struct {
 	state                  SchedulerState
 	queued                 map[string]struct{}
 	queuedAt               map[string]time.Time
-	queue                  chan joblease.JobSpec
+	queue                  chan queuedJob
 	cancel                 context.CancelFunc
 	done                   chan struct{}
 	fatal                  chan error

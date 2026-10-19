@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
@@ -120,6 +122,12 @@ func (r *Runtime) withBudgetDB(ctx context.Context, operation dbOperation, fn fu
 	budgetCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
 
 	defer cancel()
+
+	// consume는 provider 호출 없이 claim 갱신과 한 canonical/finalize 트랜잭션만 수행한다.
+	// 기존 source 슬롯·예산은 유지하고, pool 전체의 일반 획득 제한에서만 정산을 분리한다.
+	if operation == dbOperationConsume || operation == dbOperationRetry || operation == dbOperationDeadLetter {
+		budgetCtx = pgxdb.WithControlAcquire(budgetCtx)
+	}
 
 	return r.withDB(budgetCtx, operation, fn)
 }

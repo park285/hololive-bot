@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -68,7 +69,7 @@ func transitionProjection(t *testing.T, pool *pgxpool.Pool, previous int64, chan
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("rollback projection transition: %v", rollbackErr)
 		}
 	}()
@@ -500,7 +501,7 @@ func TestGuardWaitersEvaluateFreshSnapshotAfterTransition(t *testing.T) {
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			t.Errorf("rollback projection transition: %v", rollbackErr)
 		}
 	}()

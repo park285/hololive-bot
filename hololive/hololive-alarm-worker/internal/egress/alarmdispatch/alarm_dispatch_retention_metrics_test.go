@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
@@ -140,7 +141,7 @@ func TestAlarmDispatchRetentionMetricsSkippedLock(t *testing.T) {
 	holder, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		if rollbackErr := holder.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(t.Context(), holder); rollbackErr != nil {
 			t.Errorf("rollback retention lock holder: %v", rollbackErr)
 		}
 	})

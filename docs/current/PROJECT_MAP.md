@@ -16,6 +16,7 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `shared-go` | Go 1.27 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
 | `iris-console` | Go gateway + Android Kotlin | `../iris-console/` (iris-stack submodule) | Unified Iris/ChatBotGo/Hololive app source with account scopes; this technology inventory does not assert deployment completion. Host control API `iris-admin` belongs to Iris | 8878 (loopback) |
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Central production Compose service definitions; used with the live-compat overlay | - |
+| `deploy/compose/docker-compose.collector.yml` | YAML | `deploy/compose/docker-compose.collector.yml` | Standalone AP collector/issuer base; central prod extends the collector and adds central dependencies | - |
 | `deploy/compose/docker-compose.live-compat.yml` | YAML | `deploy/compose/docker-compose.live-compat.yml` | Required central host wiring and shortlink ingress | - |
 | `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
@@ -26,6 +27,11 @@ It does not replace deployed-generation evidence: the previously recorded
 Node/React SSR generation has not been reverified here, and Go/Android runtime
 acceptance is unknown. Runtime/deployment records, staged acceptance gates, and
 rollback requirements remain authoritative and unchanged.
+
+The standalone AP Compose base and private migration socket are prepared 11.0.0
+source contracts, not evidence of live activation. Actual 10.2.0 pairing-baseline
+acceptance must precede the final settings cutover; the deployment baseline retains
+the recorded deployed layout until new rollout evidence replaces it.
 
 ## Runtime Operations Inventory
 
@@ -53,7 +59,7 @@ and single-primary fence.
 | Compose service | Role | Notes |
 |---|---|---|
 | `holo-postgres` | PostgreSQL data store | Bridge-networked PostgreSQL; live-compat explicitly publishes `<tailnet-central>:5433` to container `5432`; `ssl=on`; `iris-stack internal CA` server cert mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` at `/run/hololive-bot/postgres-tls/` |
-| `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start; `PGSSLMODE=verify-full` with `postgres-ca.pem` |
+| `hololive-db-migrate` | Migration bootstrap/apply job | Prepared path is `network_mode: none` with an isolated admin Unix socket; no TCP admin/migrator route. Production activation is recorded separately in the deployment baseline |
 | `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
 | `youtube-po-c` / `youtube-po-b` | Isolated PO issuer for central / Seoul collectors | Private Unix sockets; native Osaka/Osaka2 use `hololive-youtube-po.service` |
 | `admin-dashboard-ingress` | Central shortlink ingress (the web runs on iris-seoul) | Not part of the 3 app runtime set |
@@ -77,7 +83,7 @@ and single-primary fence.
 
 | Owner | Current source paths | Responsibility |
 |---|---|---|
-| API composition | `hololive/hololive-api/internal/config`, `internal/apifoundation` | API plane 설정(`BotPlaneConfig`·`AdminPlaneConfig`)·`APIWorkerProfile`과 plane별 공통 서비스 생성. 각 plane의 인스턴스·DB pool·transport 수명 유지 |
+| API composition | `hololive/hololive-api/internal/config`, `internal/apifoundation` | API plane 설정·profile, plane별 DB pool·transport 수명, process-owned Valkey/member cache의 생성·borrower join·최종 close |
 | API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream/OAuth/WebSocket handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
 | API common HTTP | `hololive/hololive-api/internal/httpapi` | bot·LLM이 사용하는 trigger handler와 route 조립 |
 | API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/canonicalwrite`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, transaction 전용 canonical persist, replay·retention 및 private reducer |
@@ -95,6 +101,12 @@ responsibilities.
 
 Alarm HTTP provider는 worker이며 API bot·admin plane은 `ALARM_INTERNAL_URL`의 client입니다. 내부 HTTP/H3 client는 시작 시 적재한 `BotPlaneConfig.InternalH3`·`AdminPlaneConfig.InternalH3` 옵션을 명시적으로 받고, transport와 timeout은 각 plane이 소유합니다. Iris URL 파일의 동적 reload는 별도 기존 경로를 유지합니다.
 
+API planes borrow one process-owned Valkey client and member cache. Their PostgreSQL
+pools remain separate. The shared member cache's backing bot pool stays alive until
+every borrower joins and the cache closes; a failed join does not authorize closing
+a resource still in use. Valkey timeout configuration belongs to `ValkeyConfig`,
+not a parallel MQ configuration type.
+
 ## Maintenance
 
 - Non-secret host addresses are owned by `deploy/topology/hosts.conf`. Explicit AP, Compose, Nginx,
@@ -107,5 +119,5 @@ Alarm HTTP provider는 worker이며 API bot·admin plane은 `ALARM_INTERNAL_URL`
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-collector AP fleet). `hololive-api` hosts the bot/admin/llm planes in one process on ports 30001/30003/30006.
 - Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` and starts `hololive-api`, `hololive-alarm-worker`, fleet member `c` (`youtube-collector`, 30025), its isolated issuer and central infra. Runtime hosts use verified images with no builds, following the release runbook.
-- Seoul `b` uses `docker-compose.prod.yml` + `docker-compose.seoul.yml`; the AP overlay keeps central app services in `central-only` and runs `youtube-collector-b` with `youtube-po-b`. Osaka `a` and Osaka2 `d` use the native systemd deployment path. [Deployment Baseline](DEPLOYMENT_BASELINE.md) owns the host-level summary.
+- Prepared Seoul/AP Compose uses `docker-compose.collector.yml` + the selected AP overlay, with no central service interpolation or dependencies. Osaka `a` and Osaka2 `d` retain native systemd execution. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`, `youtube-producer`.

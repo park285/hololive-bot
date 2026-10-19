@@ -10,40 +10,9 @@ x-seoul-ap-logging: &seoul-ap-logging
     max-file: "3"
 
 services:
-  hololive-api:
-    profiles: !override ["central-only"]
-    env_file: !override []
-
-  hololive-alarm-worker:
-    profiles: !override ["central-only"]
-    env_file: !override []
-
-  docker-proxy:
-    profiles: !override ["central-only"]
-
-  deunhealth:
-    profiles: !override ["central-only"]
-
-  youtube-collector:
-    profiles: !override ["central-only"]
-    env_file: !override
-      - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
-    environment:
-      <<: *seoul-ap-db-env
-      STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-b.json
-      YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
-    logging: *seoul-ap-logging
-    deploy:
-      resources:
-        limits:
-          memory: 1g
-
-  youtube-po-c:
-    profiles: !override ["central-only"]
-
   youtube-po-b:
     extends:
-      file: docker-compose.prod.yml
+      file: docker-compose.collector.yml
       service: youtube-po-c
     profiles: ["oracle"]
     container_name: hololive-youtube-po-b
@@ -52,7 +21,7 @@ services:
 
   youtube-collector-b:
     extends:
-      file: docker-compose.prod.yml
+      file: docker-compose.collector.yml
       service: youtube-collector
     profiles: ["oracle"]
     build:
@@ -69,6 +38,7 @@ services:
       # 상한(1g)은 Go 640MiB에 YouTube.js Node helper(관측 최대 176MiB) 몫 192MiB와 여유 32MiB를 더한 값보다 크게 둔다.
       GOMEMLIMIT: "640MiB"
       YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-b"
+      PGAPPNAME: youtube-collector-b
       YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-b.log"
       SERVER_PORT: 30015
       HOLOLIVE_H3_ADDR: ":30015"
@@ -83,7 +53,12 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-b.json:/run/hololive-bot/worker-profiles/youtube-collector-b.json:ro
+      - type: bind
+        source: /etc/stack-secrets/hololive-bot/worker-profiles
+        target: /run/hololive-bot/worker-profiles
+        read_only: true
+        bind:
+          create_host_path: false
       - youtube-po-b-socket:/run/hololive-youtube-po:ro
     healthcheck:
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30015/ready"]
@@ -95,3 +70,7 @@ services:
 
 volumes:
   youtube-po-b-socket:
+
+networks:
+  hololive-net:
+    driver: bridge

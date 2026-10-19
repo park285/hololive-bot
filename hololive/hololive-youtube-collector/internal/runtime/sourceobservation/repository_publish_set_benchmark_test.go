@@ -1,7 +1,6 @@
 package sourceobservation
 
 import (
-	"context"
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -66,7 +66,7 @@ func BenchmarkPublishSetLargeBatch(b *testing.B) {
 
 		result, _, err := publishObservationSet(ctx, tx, encoded, len(observations))
 		require.NoError(b, err)
-		require.NoError(b, tx.Rollback(ctx))
+		require.NoError(b, pgxdb.Rollback(ctx, tx))
 
 		if result.Results[0].Outcome != PublishDuplicate || result.Results[half].Outcome != PublishInserted {
 			b.Fatalf("outcomes = %s/%s, want duplicate/inserted", result.Results[0].Outcome, result.Results[half].Outcome)
@@ -91,7 +91,7 @@ func explainPublishSet(b *testing.B, pool *pgxpool.Pool, encoded []byte) (execut
 	tx, err := pool.Begin(ctx)
 	require.NoError(b, err)
 
-	defer func() { require.NoError(b, tx.Rollback(context.WithoutCancel(ctx))) }()
+	defer func() { require.NoError(b, pgxdb.Rollback(ctx, tx)) }()
 
 	var raw []byte
 

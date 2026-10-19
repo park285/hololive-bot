@@ -129,6 +129,8 @@ fi
 echo 'collector AP completion check passed'
 REMOTE
   } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT" "$PO_EXPECTED_PRESENCE"
+  "${AP_SSH[@]}" "sudo -n python3 - verify-native '$service' /opt/hololive-bot/youtube-collector/current 'hololive-youtube-collector@$service.service'" \
+    < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
 }
 
 if [[ "${AP_RUNTIME_MODE:-compose}" == "native" ]]; then
@@ -165,7 +167,7 @@ po_version=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.open
 socket_mount=\$(docker inspect -f '{{range .Mounts}}{{if eq .Destination \"/run/hololive-youtube-po\"}}{{.Source}}{{end}}{{end}}' hololive-youtube-po-b)
 [[ \$(sudo -n stat -c '%u:%g %a' \"\$socket_mount\") == '65532:1000 770' ]]
 docker exec hololive-youtube-po-b /app/bin/po-broker --healthcheck --socket /run/hololive-youtube-po/worker.sock
-sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
+sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' ps $services_list
 
 for container in $containers_list; do
   docker inspect \"\$container\" >/dev/null

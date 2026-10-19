@@ -16,6 +16,9 @@ import (
 	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 // Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go
@@ -32,8 +35,7 @@ type Runtime struct {
 	group      runtimeGroup
 	closeSteps []func(context.Context) error
 	closeInit  sync.Once
-	closeGate  chan struct{}
-	closeDone  []bool
+	closeDone  chan struct{}
 	closeMu    sync.Mutex
 	closeErr   error
 }
@@ -65,6 +67,7 @@ type apiPlanes struct {
 	admin   *adminruntime.AdminAPIRuntime
 	llm     *llmruntime.LLMSchedulerRuntime
 	youtube *youtuberuntime.Runtime
+	infra   *apiInfrastructure
 }
 
 func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, logger *slog.Logger) (planes apiPlanes, retErr error) {
@@ -83,17 +86,22 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 
 	var err error
 
-	planes.llm, err = llmruntime.BuildLLMSchedulerRuntime(ctx, appConfig.LLM, logger.With(slog.String("plane", "llm")))
+	planes.infra, err = buildAPIInfrastructure(ctx, appConfig, logger)
+	if err != nil {
+		return planes, fmt.Errorf("build process infrastructure: %w", err)
+	}
+
+	planes.llm, err = llmruntime.BuildLLMSchedulerRuntime(ctx, appConfig.LLM, planes.infra.llm, logger.With(slog.String("plane", "llm")))
 	if err != nil {
 		return planes, fmt.Errorf("build llm plane: %w", err)
 	}
 
-	planes.admin, err = adminruntime.BuildAdminAPIRuntime(ctx, appConfig.Admin, logger.With(slog.String("plane", "admin")))
+	planes.admin, err = adminruntime.BuildAdminAPIRuntime(ctx, appConfig.Admin, planes.infra.admin, logger.With(slog.String("plane", "admin")))
 	if err != nil {
 		return planes, fmt.Errorf("build admin plane: %w", err)
 	}
 
-	planes.bot, err = botruntime2.BuildRuntime(ctx, appConfig.Bot, logger.With(slog.String("plane", "bot")))
+	planes.bot, err = botruntime2.BuildRuntime(ctx, appConfig.Bot, planes.infra.bot, logger.With(slog.String("plane", "bot")))
 	if err != nil {
 		return planes, fmt.Errorf("build bot plane: %w", err)
 	}
@@ -101,12 +109,12 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	// 관리 plane이 바꾼 ACL을 같은 요청 안에서 봇 판정에 반영한다.
 	planes.bot.ACL.Follow(planes.admin.ACL)
 
-	youtubeResult := buildOptionalYouTubePlane(ctx, appConfig, logger)
-	if youtubeResult.err != nil {
-		return planes, fmt.Errorf("build youtube plane: %w", youtubeResult.err)
+	// 비활성 executor도 영속 큐 관측과 profile 진단의 수명을 소유한다.
+	planes.youtube, err = youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+	if err != nil {
+		return planes, fmt.Errorf("build youtube plane: %w", err)
 	}
 
-	planes.youtube = youtubeResult.runtime
 	if err := installAPIWorkerRegistry(ctx, appConfig, planes.bot, planes.youtube); err != nil {
 		return planes, fmt.Errorf("build worker registry: %w", err)
 	}
@@ -114,32 +122,9 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	return planes, nil
 }
 
-type optionalYouTubePlaneResult struct {
-	runtime *youtuberuntime.Runtime
-	err     error
-}
-
-func buildOptionalYouTubePlane(ctx context.Context, appConfig *apiconfig.RuntimeConfig, logger *slog.Logger) optionalYouTubePlaneResult {
-	if !appConfig.YouTube.Enabled {
-		return optionalYouTubePlaneResult{}
-	}
-
-	runtime, err := youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
-	if err != nil {
-		return optionalYouTubePlaneResult{err: fmt.Errorf("build youtube runtime: %w", err)}
-	}
-
-	return optionalYouTubePlaneResult{runtime: runtime}
-}
-
 func (p apiPlanes) closeContext(ctx context.Context) error {
-	var closeErr error
-
-	for _, closeStep := range apiPlaneCloseSteps(p) {
-		closeErr = errors.Join(closeErr, closeStep(ctx))
-	}
-
-	return closeErr
+	owner := &Runtime{closeSteps: apiPlaneCloseSteps(p)}
+	return owner.CloseContext(ctx)
 }
 
 func assembleAPIRuntime(appConfig *apiconfig.RuntimeConfig, logger *slog.Logger, planes apiPlanes) *Runtime {
@@ -181,6 +166,13 @@ func apiPlaneCloseSteps(planes apiPlanes) []func(context.Context) error {
 		planes.admin.CloseContext,
 		planes.llm.CloseContext,
 		planes.youtube.CloseContext,
+		func(ctx context.Context) error {
+			if !planes.bot.ResourceUsersJoined() || !planes.admin.ResourceUsersJoined() || !planes.llm.ResourceUsersJoined() {
+				return errors.New("shared infrastructure retained: plane resource users have not joined")
+			}
+
+			return planes.infra.CloseContext(ctx)
+		},
 	}
 }
 
@@ -219,46 +211,31 @@ func (r *Runtime) Close() {
 	}
 }
 
-// CloseContext는 모든 plane이 공유하는 남은 종료 예산을 전달하고 정리 오류를 보존한다.
-// 각 plane은 자신의 작업 종료를 확인한 뒤 자원을 해제하며 두 번째 정리를 병렬로 시작하지 않는다.
+// CloseContext는 호출자 대기 예산과 자원 소유자의 join 수명을 분리한다.
+// 한 번 시작한 정리는 모든 borrower가 끝난 뒤 backing pool과 Valkey를 닫는다.
 func (r *Runtime) CloseContext(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
 
 	r.closeInit.Do(func() {
-		r.closeGate = make(chan struct{}, 1)
-		r.closeDone = make([]bool, len(r.closeSteps))
+		r.closeDone = make(chan struct{})
+
+		go func() {
+			defer close(r.closeDone)
+
+			joinCtx := context.WithoutCancel(ctx)
+
+			for _, closeStep := range r.closeSteps {
+				if closeStep != nil {
+					r.recordCloseError(closeStep(joinCtx))
+				}
+			}
+		}()
 	})
 
 	select {
-	case r.closeGate <- struct{}{}:
-	case <-ctx.Done():
-		r.recordCloseError(fmt.Errorf("wait for aggregate resource cleanup: %w", ctx.Err()))
-
-		return r.closeError()
-	}
-
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		defer func() { <-r.closeGate }()
-
-		for i, closeStep := range r.closeSteps {
-			if closeStep == nil || r.closeDone[i] {
-				continue
-			}
-
-			err := closeStep(ctx)
-			// 과거 drain 오류는 실제 정리 완료와 다르다. 실패한 step은 같은 plane owner에 다시 합류한다.
-			r.closeDone[i] = err == nil
-			r.recordCloseError(err)
-		}
-	}()
-
-	select {
-	case <-done:
+	case <-r.closeDone:
 		return r.closeError()
 	case <-ctx.Done():
 		r.recordCloseError(fmt.Errorf("join aggregate resource cleanup: %w", ctx.Err()))
@@ -281,4 +258,70 @@ func (r *Runtime) closeError() error {
 	defer r.closeMu.Unlock()
 
 	return r.closeErr
+}
+
+// apiInfrastructure는 bot pool을 멤버 정본의 backing pool로 소유한다.
+// Plane에 전달한 모듈에는 종료 권한이 없고 모든 plane join 후 한 번만 정리한다.
+type apiInfrastructure struct {
+	bot, admin, llm *sharedmodules.InfraModule
+	closeResources  func()
+}
+
+func (r *apiInfrastructure) CloseContext(context.Context) error {
+	if r != nil && r.closeResources != nil {
+		r.closeResources()
+	}
+
+	return nil
+}
+
+func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig, logger *slog.Logger) (_ *apiInfrastructure, retErr error) {
+	if config == nil || config.Bot == nil || config.Admin == nil || config.LLM == nil {
+		return nil, errors.New("bot, admin and llm configs must not be nil")
+	}
+
+	bot, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: config.Bot.Valkey, Postgres: config.Bot.Postgres, PoolName: "bot"}, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build bot infrastructure: %w", err)
+	}
+
+	var cleanupAdmin, cleanupLLM func()
+
+	cleanup := sync.OnceFunc(func() {
+		// 공유 캐시를 먼저 join한 뒤 모든 pool과 Valkey를 닫는다.
+		bot.StopMemberCache()
+
+		if cleanupLLM != nil {
+			cleanupLLM()
+		}
+
+		if cleanupAdmin != nil {
+			cleanupAdmin()
+		}
+
+		bot.Cleanup()
+	})
+
+	defer func() {
+		if retErr != nil {
+			cleanup()
+		}
+	}()
+
+	admin, cleanupAdmin, err := databaseproviders.ProvideDatabaseResources(ctx, &config.Admin.Postgres, "admin", logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide admin database resources: %w", err)
+	}
+
+	llm, cleanupLLM, err := databaseproviders.ProvideDatabaseResources(ctx, &config.LLM.Postgres, "llm_scheduler", logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide llm database resources: %w", err)
+	}
+
+	return &apiInfrastructure{
+		bot:            &sharedmodules.InfraModule{Cache: bot.Cache, Postgres: bot.Postgres, MemberRepository: bot.MemberRepository, MemberCache: bot.MemberCache},
+		admin:          &sharedmodules.InfraModule{Cache: bot.Cache, Postgres: admin.Service, MemberRepository: member.NewMemberRepository(admin.Service, logger), MemberCache: bot.MemberCache},
+		llm:            &sharedmodules.InfraModule{Cache: bot.Cache, Postgres: llm.Service, MemberRepository: member.NewMemberRepository(llm.Service, logger), MemberCache: bot.MemberCache},
+		closeResources: cleanup,
+	}, nil
 }

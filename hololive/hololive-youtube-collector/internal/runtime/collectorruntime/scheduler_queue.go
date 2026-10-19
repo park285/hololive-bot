@@ -14,6 +14,66 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
+// queuedJob은 admission 시점의 종류별 실행 예산과 큐 만료 정책을 값으로 고정한다.
+// 큐 대기는 maxAge까지만 허용하고, 그 안에 시작한 작업에는 전체 실행 예산을 보장한다.
+type queuedJob struct {
+	joblease.JobSpec
+
+	registration RegisteredRunner
+	enqueuedAt   time.Time
+	maxAge       time.Duration
+	budget       time.Duration
+	deadline     time.Time
+}
+
+func (e *collectionExecutor) admit(spec *joblease.JobSpec, now time.Time, maxAge time.Duration) (queuedJob, bool) {
+	if e == nil || !validJobSpec(spec) || now.IsZero() || maxAge <= 0 {
+		return queuedJob{}, false
+	}
+
+	registration, ok := e.registry.Lookup(spec.Provider, spec.CollectionJobKind)
+	if !ok || registration.Runner() == nil || registration.Profile().Validate() != nil || spec.ValidateContract(registration.Contract()) != nil {
+		return queuedJob{}, false
+	}
+
+	// acquire와 두 input 조회는 각각 기존 DB 단계 예산을 보존한다.
+	// terminal은 publish 또는 empty-complete 중 하나이며 cleanup은 별도 bounded context다.
+	cfg := &e.collector
+	if cfg.DBTimeout <= 0 || cfg.ProviderAdmissionTimeout <= 0 || cfg.PublishTimeout <= 0 {
+		return queuedJob{}, false
+	}
+
+	budget, err := checkedAddDuration(cfg.DBTimeout, cfg.ProviderAdmissionTimeout,
+		cfg.DBTimeout, cfg.DBTimeout, registration.Profile().CollectTimeout(), max(cfg.PublishTimeout, cfg.DBTimeout))
+	if err != nil || budget <= 0 {
+		return queuedJob{}, false
+	}
+
+	lifetime, err := checkedAddDuration(maxAge, budget)
+	if err != nil {
+		return queuedJob{}, false
+	}
+
+	deadline := now.Add(lifetime)
+	if !deadline.After(now) || deadline.Sub(now) != lifetime {
+		return queuedJob{}, false
+	}
+
+	return queuedJob{JobSpec: *spec, registration: registration, enqueuedAt: now, maxAge: maxAge, budget: budget, deadline: deadline}, true
+}
+
+func (job *queuedJob) executionDeadline(started time.Time) time.Time {
+	return minTime(job.deadline, started.Add(job.budget))
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+
+	return b
+}
+
 func (s *leaseScheduler) enqueue(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
 	if !validJobSpec(spec) {
 		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
@@ -27,14 +87,21 @@ func (s *leaseScheduler) enqueue(ctx context.Context, spec *joblease.JobSpec) En
 		return EnqueueCanceled
 	}
 
-	result, marked := s.markQueued(spec.JobKey)
+	job, valid := s.executor.admit(spec, time.Now(), s.queueMaxAge)
+	if !valid {
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+
+		return EnqueueInvalid
+	}
+
+	result, marked := s.markQueued(&job)
 	if !marked {
 		s.recordEnqueueAdmission(result)
 
 		return result
 	}
 
-	result = s.sendQueued(ctx, spec)
+	result = s.sendQueued(ctx, &job)
 	s.recordEnqueueAdmission(result)
 
 	return result
@@ -63,7 +130,7 @@ func validJobSpec(spec *joblease.JobSpec) bool {
 	return trimmed != "" && spec.JobKey == trimmed
 }
 
-func (s *leaseScheduler) sendQueued(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
+func (s *leaseScheduler) sendQueued(ctx context.Context, spec *queuedJob) EnqueueResult {
 	select {
 	case s.queue <- *spec:
 		return EnqueueAccepted
@@ -93,12 +160,18 @@ func (s *leaseScheduler) worker(ctx context.Context) {
 	}
 }
 
-func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) {
+func (s *leaseScheduler) runQueued(ctx context.Context, spec *queuedJob) {
 	if spec == nil {
 		return
 	}
 
 	defer s.unmarkQueued(spec.JobKey)
+
+	if ctx.Err() != nil {
+		s.workerTotals.RecordDiscard(workercontract.DiscardShutdown)
+
+		return
+	}
 
 	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-job", func() error {
 		s.executor.runSpec(ctx, spec)
@@ -111,15 +184,15 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) 
 
 // nextSpec는 lease 획득 전에 만료 항목을 버리고 실행할 다음 항목을 반환합니다.
 // 반환값 false는 취소 또는 불변식 위반으로 worker가 종료됨을 뜻합니다.
-func (s *leaseScheduler) nextSpec(ctx context.Context) (joblease.JobSpec, bool) {
+func (s *leaseScheduler) nextSpec(ctx context.Context) (queuedJob, bool) {
 	for {
 		if ctx.Err() != nil {
-			return joblease.JobSpec{}, false
+			return queuedJob{}, false
 		}
 
 		select {
 		case <-ctx.Done():
-			return joblease.JobSpec{}, false
+			return queuedJob{}, false
 		case spec := <-s.queue:
 			switch s.acceptDequeued(ctx, &spec) {
 			case dequeueRun:
@@ -127,7 +200,7 @@ func (s *leaseScheduler) nextSpec(ctx context.Context) (joblease.JobSpec, bool) 
 			case dequeueStale:
 				continue
 			case dequeueStop:
-				return joblease.JobSpec{}, false
+				return queuedJob{}, false
 			}
 		}
 	}
@@ -142,22 +215,23 @@ const (
 )
 
 // acceptDequeued는 lease를 취득하지 않은 만료 항목을 DB terminal 없이 버립니다.
-func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobSpec) dequeueDecision {
+func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *queuedJob) dequeueDecision {
 	if spec == nil {
 		return dequeueStop
 	}
 
 	if ctx.Err() != nil {
 		s.unmarkQueued(spec.JobKey)
+		s.workerTotals.RecordDiscard(workercontract.DiscardShutdown)
 
 		return dequeueStop
 	}
 
-	maxAge := s.queueMaxAge
+	maxAge := spec.maxAge
 
 	s.queueMu.Lock()
 
-	enqueuedAt, tracked := s.queuedAt[spec.JobKey]
+	_, tracked := s.queuedAt[spec.JobKey]
 	if !tracked {
 		delete(s.queued, spec.JobKey)
 		s.queueMu.Unlock()
@@ -166,7 +240,7 @@ func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobS
 		return dequeueStop
 	}
 
-	age := time.Since(enqueuedAt)
+	age := time.Since(spec.enqueuedAt)
 	if age > maxAge {
 		delete(s.queued, spec.JobKey)
 		delete(s.queuedAt, spec.JobKey)
@@ -187,7 +261,9 @@ func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobS
 	return dequeueRun
 }
 
-func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
+func (s *leaseScheduler) markQueued(job *queuedJob) (EnqueueResult, bool) {
+	jobKey := job.JobKey
+
 	s.queueMu.Lock()
 
 	if _, exists := s.queued[jobKey]; exists {
@@ -205,7 +281,7 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 	}
 
 	s.queued[jobKey] = struct{}{}
-	s.queuedAt[jobKey] = time.Now()
+	s.queuedAt[jobKey] = job.enqueuedAt
 
 	overflow := len(s.queued) > s.queueCapacity
 
@@ -237,6 +313,7 @@ func (s *leaseScheduler) drainQueue() {
 		for len(s.queue) > 0 {
 			spec := <-s.queue
 			s.unmarkQueued(spec.JobKey)
+			s.workerTotals.RecordDiscard(workercontract.DiscardShutdown)
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,7 +93,7 @@ func explainDurablePrune(ctx context.Context, t *testing.T, pool *pgxpool.Pool, 
 	require.NoError(t, err)
 
 	// EXPLAIN ANALYZE는 실제로 삭제하므로 트랜잭션을 되돌려 다음 모드가 같은 데이터로 계획되게 한다.
-	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(ctx))) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)

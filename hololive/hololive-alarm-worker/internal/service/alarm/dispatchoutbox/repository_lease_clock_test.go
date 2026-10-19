@@ -2,15 +2,14 @@ package dispatchoutbox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -37,7 +36,7 @@ func TestRouteFailuresChecksExpiryAfterAllRowLocks(t *testing.T) {
 				require.NoError(t, err)
 
 				defer func() {
-					if rollbackErr := blocker.Rollback(t.Context()); !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+					if rollbackErr := pgxdb.Rollback(t.Context(), blocker); rollbackErr != nil {
 						require.NoError(t, rollbackErr)
 					}
 				}()

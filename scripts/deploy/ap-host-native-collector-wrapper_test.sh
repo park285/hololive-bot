@@ -51,12 +51,8 @@ credential_case "default scraper role" "hololive_scraper|hololive|scraper" \
   HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime DB_PASSWORD=legacy
 credential_case "explicit scraper role" "hololive_scraper|hololive|scraper" \
   POSTGRES_USER=hololive_scraper HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime
-credential_case "custom scraper role" "custom_scraper|hololive|scraper" \
-  HOLOLIVE_SCRAPER_USER=custom_scraper HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime
 credential_case "explicit password wins" "hololive_scraper|hololive|explicit" \
   POSTGRES_USER=hololive_scraper POSTGRES_PASSWORD=explicit HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime
-credential_case "runtime role uses database credential" "other|hololive|runtime" \
-  POSTGRES_USER=other HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime DB_PASSWORD=legacy
 # 역할별 비밀번호가 없으면 다른 역할이나 admin(DB_PASSWORD) 비밀번호로 내려가지 않고 실행 전에 실패한다.
 credential_rejected_case() {
   local name="$1"
@@ -66,6 +62,9 @@ credential_rejected_case() {
   fi
   pass "collector wrapper rejects unresolved role credential: $name"
 }
+
+credential_rejected_case "noncanonical role is not a collector credential" \
+  POSTGRES_USER=custom_scraper POSTGRES_PASSWORD=explicit HOLOLIVE_SCRAPER_PASSWORD=scraper
 
 credential_rejected_case "admin database password is not a role credential" \
   POSTGRES_USER=other DB_PASSWORD=legacy

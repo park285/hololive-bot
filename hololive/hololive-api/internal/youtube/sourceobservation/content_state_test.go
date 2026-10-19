@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/content"
@@ -188,7 +189,7 @@ func TestContentLoaderReplaysAbsenceSlotsInScheduledOrder(t *testing.T) {
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, tx.Rollback(context.WithoutCancel(ctx)))
+		require.NoError(t, pgxdb.Rollback(ctx, tx))
 	})
 
 	_, err = tx.Exec(ctx, `SET LOCAL enable_indexscan = off; SET LOCAL enable_indexonlyscan = off; SET LOCAL enable_bitmapscan = off`)

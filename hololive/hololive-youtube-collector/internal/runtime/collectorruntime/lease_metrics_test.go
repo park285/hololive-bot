@@ -56,7 +56,7 @@ func TestPublishFenceLossIsCountedOnceAsPublish(t *testing.T) {
 
 	var fatal []error
 
-	executor := newRunErrorExecutor(&fatal)
+	executor := newRunErrorExecutor(t, &fatal)
 	registerer := prometheus.NewPedanticRegistry()
 
 	executor.metrics = NewMetrics(registerer)
@@ -87,7 +87,7 @@ func TestRenewFenceLossIsCountedAsRenew(t *testing.T) {
 
 	var fatal []error
 
-	executor := newRunErrorExecutor(&fatal)
+	executor := newRunErrorExecutor(t, &fatal)
 	registerer := prometheus.NewPedanticRegistry()
 
 	executor.metrics = NewMetrics(registerer)
@@ -112,7 +112,7 @@ func TestRenewSupersededIsHandledWithoutLeaseLossOrSecondRelease(t *testing.T) {
 
 	var fatal []error
 
-	executor := newRunErrorExecutor(&fatal)
+	executor := newRunErrorExecutor(t, &fatal)
 	registerer := prometheus.NewPedanticRegistry()
 
 	executor.metrics = NewMetrics(registerer)

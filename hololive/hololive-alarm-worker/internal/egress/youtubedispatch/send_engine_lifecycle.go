@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
@@ -32,7 +33,7 @@ const (
 const deliveryStateTimeout = 5 * time.Second
 
 func deliveryStateContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), deliveryStateTimeout)
+	return context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), deliveryStateTimeout)
 }
 
 func (d *SendEngine) beginLifecycleOperation(
@@ -41,6 +42,9 @@ func (d *SendEngine) beginLifecycleOperation(
 	outboxes []domain.YouTubeNotificationOutbox,
 	result *deliveryDispatchResult,
 ) (store.StartedOperation, bool) {
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), deliveryStateTimeout)
+	defer cancel()
+
 	operation, applied, err := d.transition.BeginSending(ctx, rows, outboxMap(outboxes))
 	observeLifecycleApply("begin_sending", applied, err, len(rows))
 
@@ -64,6 +68,9 @@ func (d *SendEngine) applyPreparedLifecycleFailure(
 	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) bool {
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), deliveryStateTimeout)
+	defer cancel()
+
 	applied, err := d.transition.ApplyPreparedFailure(ctx, rows, outboxMap(outboxes), kind, reason, 0, mode)
 	observeLifecycleApply("prepared_failure", applied, err, len(rows))
 

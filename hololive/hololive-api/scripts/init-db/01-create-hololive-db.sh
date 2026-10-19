@@ -20,14 +20,26 @@
 # SOFTWARE.
 
 set -eu
+set +x
+
+# Fresh-PGDATA-only bootstrap uses psql role SQL. Never log those credential-bearing
+# statements, even when production slow/error logging is enabled on the server.
+# The ordinary Go migrator separately generates SCRAM verifiers client-side.
+PGOPTIONS="${PGOPTIONS:+$PGOPTIONS }-c log_statement=none -c log_min_duration_statement=-1 \
+-c log_min_duration_sample=-1 -c log_transaction_sample_rate=0 \
+-c log_min_error_statement=panic -c log_min_messages=panic \
+-c log_parameter_max_length=0 -c log_parameter_max_length_on_error=0 \
+-c debug_print_parse=off -c debug_print_rewritten=off -c debug_print_plan=off \
+-c auto_explain.log_min_duration=-1 -c pg_stat_statements.track=none \
+-c track_activities=off -c password_encryption=scram-sha-256 -c client_encoding=UTF8"
+export PGOPTIONS
+export PGAPPNAME=hololive-init-db
 
 POSTGRES_ADMIN_USER="${POSTGRES_ADMIN_USER:-postgres_admin}"
 POSTGRES_ADMIN_PASSWORD="${POSTGRES_ADMIN_PASSWORD:-${POSTGRES_PASSWORD:-}}"
 
 HOLOLIVE_DB_NAME="${HOLOLIVE_DB_NAME:-hololive}"
-HOLOLIVE_DB_USER="${HOLOLIVE_DB_USER:-hololive_runtime}"
 HOLOLIVE_MIGRATOR_USER="${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}"
-HOLOLIVE_SCRAPER_USER="${HOLOLIVE_SCRAPER_USER:-hololive_scraper}"
 
 # 역할별 비밀번호는 모두 필수다. 비어 있을 때 admin DB_PASSWORD로 역할을 만들던 폴백은 역할 분리를 깨므로
 # 두지 않는다(stack audit 2026-09-26, T18에서 중앙 compose.env에 세 키 확인).
@@ -37,6 +49,8 @@ HOLOLIVE_SCRAPER_PASSWORD="${HOLOLIVE_SCRAPER_PASSWORD:-}"
 
 HOLOLIVE_REPLICATOR_USER="${HOLOLIVE_REPLICATOR_USER:-hololive_replicator}"
 HOLOLIVE_REPLICATOR_PASSWORD="${HOLOLIVE_REPLICATOR_PASSWORD:-}"
+export POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
+export HOLOLIVE_SCRAPER_PASSWORD HOLOLIVE_REPLICATOR_PASSWORD
 
 require_role_password() {
   if [ -z "$2" ]; then
@@ -56,18 +70,19 @@ fi
 
 echo "Initializing hololive Postgres roles/databases with least privilege..."
 
-psql -v ON_ERROR_STOP=1 \
+psql -X -v ON_ERROR_STOP=1 -v ECHO=none -v ECHO_HIDDEN=off -v VERBOSITY=sqlstate \
   --username "${POSTGRES_USER}" \
   --dbname "postgres" \
   --set=postgres_admin_user="${POSTGRES_ADMIN_USER}" \
-  --set=postgres_admin_password="${POSTGRES_ADMIN_PASSWORD}" \
   --set=hololive_db="${HOLOLIVE_DB_NAME}" \
-  --set=hololive_user="${HOLOLIVE_DB_USER}" \
-  --set=hololive_user_password="${HOLOLIVE_DB_PASSWORD}" \
+  --set=hololive_user=hololive_runtime \
   --set=hololive_migrator="${HOLOLIVE_MIGRATOR_USER}" \
-  --set=hololive_migrator_password="${HOLOLIVE_MIGRATOR_PASSWORD}" \
-  --set=hololive_scraper="${HOLOLIVE_SCRAPER_USER}" \
-  --set=hololive_scraper_password="${HOLOLIVE_SCRAPER_PASSWORD}" <<'EOSQL'
+  --set=hololive_scraper=hololive_scraper <<'EOSQL'
+\getenv postgres_admin_password POSTGRES_ADMIN_PASSWORD
+\getenv hololive_user_password HOLOLIVE_DB_PASSWORD
+\getenv hololive_migrator_password HOLOLIVE_MIGRATOR_PASSWORD
+\getenv hololive_scraper_password HOLOLIVE_SCRAPER_PASSWORD
+
 SELECT format(
   'CREATE ROLE %I LOGIN SUPERUSER CREATEDB CREATEROLE INHERIT PASSWORD %L',
   :'postgres_admin_user',
@@ -104,6 +119,12 @@ SELECT format(
   'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
   :'hololive_scraper', :'hololive_scraper_password'
 ) \gexec
+
+-- Aggregate role limits, not per-process limits; runtime includes 3 control slots.
+-- Keep aligned with scripts/ci/postgres-capacity-policy.tsv and role-limits.sql.
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 25', :'hololive_user') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 1', :'hololive_migrator') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 28', :'hololive_scraper') \gexec
 
 SELECT format('CREATE DATABASE %I OWNER %I', :'hololive_db', :'hololive_migrator')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'hololive_db') \gexec
@@ -158,12 +179,13 @@ SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT EXECU
 EOSQL
 
 if [ -n "${HOLOLIVE_REPLICATOR_PASSWORD}" ]; then
-  psql -v ON_ERROR_STOP=1 \
+  psql -X -v ON_ERROR_STOP=1 -v ECHO=none -v ECHO_HIDDEN=off -v VERBOSITY=sqlstate \
     --username "${POSTGRES_USER}" \
     --dbname "postgres" \
     --set=hololive_db="${HOLOLIVE_DB_NAME}" \
-    --set=hololive_replicator="${HOLOLIVE_REPLICATOR_USER}" \
-    --set=hololive_replicator_password="${HOLOLIVE_REPLICATOR_PASSWORD}" <<'EOSQL'
+    --set=hololive_replicator="${HOLOLIVE_REPLICATOR_USER}" <<'EOSQL'
+\getenv hololive_replicator_password HOLOLIVE_REPLICATOR_PASSWORD
+
 SELECT format('CREATE ROLE %I LOGIN REPLICATION PASSWORD %L', :'hololive_replicator', :'hololive_replicator_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_replicator') \gexec
 

@@ -234,13 +234,12 @@ func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 func TestProfileShapedDispatcherConfigsPassValidation(t *testing.T) {
 	config, _ := alarmWorkerTestConfig(t)
 
-	youtubeConfig, err := youtubeDispatchConfig(config)
-	require.NoError(t, err)
+	youtubeConfig := youtubeDispatchConfig(config)
 	require.NoError(t, youtubeConfig.Validate())
 
 	deliveryConfig := notificationDeliveryDispatcherConfig(config)
 
-	_, err = notificationdelivery.NewDispatcher(&notificationdelivery.Store{}, egress.NewIrisMessageSender(nil), nil, &deliveryConfig)
+	_, err := notificationdelivery.NewDispatcher(&notificationdelivery.Store{}, egress.NewIrisMessageSender(nil), nil, &deliveryConfig)
 	require.NoError(t, err)
 }
 

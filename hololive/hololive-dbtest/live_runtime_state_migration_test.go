@@ -8,38 +8,53 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
 const liveRuntimeStateMigration = "312_youtube_live_runtime_state.sql"
 
-// 저장된 검토 시각뿐 아니라 소비자가 읽는 모든 scalar를 기존 원본+영수증 함수와 비교한다.
-const liveRuntimeStateOracleSQL = `WITH expected AS (
-	SELECT coalesce(session.video_id,head.video_id)::text AS video_id,session.channel_id::text,
-	       session.status AS session_status,head.status AS head_status,session.scheduled_start_time,session.lifecycle_origin,
-	       head.last_live_positive_at,head.last_live_positive_seen_at,head.last_upcoming_positive_at,head.last_upcoming_positive_seen_at,
-	       availability.effective_at AS availability_at,availability.observed_at AS availability_seen_at,
-	       head.unresolvable_since,review.reviewed_at
-	FROM youtube_live_sessions session
-	FULL JOIN youtube_live_reconciliation_heads head USING(video_id)
-	LEFT JOIN youtube_video_availability availability ON availability.video_id=coalesce(session.video_id,head.video_id)
-	CROSS JOIN LATERAL youtube_live_review_current_receipt(coalesce(session.video_id,head.video_id)) review
-	WHERE session.status IN ('LIVE','UPCOMING') OR head.status IN ('LIVE','UPCOMING')
-)
-SELECT coalesce((SELECT jsonb_agg(to_jsonb(expected) ORDER BY video_id COLLATE "C") FROM expected),'[]'::jsonb)::text,
-       coalesce((SELECT jsonb_agg(to_jsonb(state) ORDER BY video_id COLLATE "C") FROM youtube_live_runtime_state state),'[]'::jsonb)::text`
-
 type liveRuntimeStateQuerier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func liveRuntimeStateDrift(t *testing.T, db liveRuntimeStateQuerier) [3]int64 {
+	t.Helper()
+
+	raw, err := os.ReadFile("../../scripts/maintenance/queries/live_runtime_state_drift.sql")
+	require.NoError(t, err)
+
+	var drift [3]int64
+
+	require.NoError(t, db.QueryRow(t.Context(), string(raw)).Scan(&drift[0], &drift[1], &drift[2]))
+
+	return drift
 }
 
 func assertLiveRuntimeState(t *testing.T, db liveRuntimeStateQuerier) {
 	t.Helper()
 
-	var expected, actual string
+	require.Equal(t, [3]int64{}, liveRuntimeStateDrift(t, db), "누락·잉여·값 변경")
+}
 
-	require.NoError(t, db.QueryRow(t.Context(), liveRuntimeStateOracleSQL).Scan(&expected, &actual))
-	require.JSONEq(t, expected, actual)
+// 진단 SQL이 늘 0을 내면 운영 점검도 정상으로 오판하므로, 집계를 직접 손상시켜 종류마다 한 건씩 세는지 확인한다.
+func TestLiveRuntimeStateDriftCountsEachMismatch(t *testing.T) {
+	pool := NewPool(t)
+
+	tx, err := pool.Begin(t.Context())
+	require.NoError(t, err)
+
+	defer rollbackLiveReviewReceiptFactsTx(t, tx)
+
+	_, err = tx.Exec(t.Context(), `SELECT lock_youtube_live_runtime_state();
+		INSERT INTO youtube_live_sessions(video_id,channel_id,status)
+		VALUES ('drift-missing','drift-channel','LIVE'),('drift-changed','drift-channel','LIVE');
+		DELETE FROM youtube_live_runtime_state WHERE video_id='drift-missing';
+		UPDATE youtube_live_runtime_state SET channel_id='corrupted' WHERE video_id='drift-changed';
+		INSERT INTO youtube_live_runtime_state(video_id,channel_id,session_status) VALUES ('drift-extra','drift-channel','LIVE')`)
+	require.NoError(t, err)
+
+	require.Equal(t, [3]int64{1, 1, 1}, liveRuntimeStateDrift(t, tx), "누락·잉여·값 변경")
 }
 
 func TestLiveRuntimeStateMigrationBackfillAndReapply(t *testing.T) {
@@ -113,7 +128,7 @@ func TestLiveRuntimeStateImmediateChangesAndRollback(t *testing.T) {
 			_, err = tx.Exec(t.Context(), tc.sql)
 			require.NoError(t, err)
 			assertLiveRuntimeState(t, tx)
-			require.NoError(t, tx.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			assertLiveRuntimeState(t, pool)
 		})
 	}
@@ -149,7 +164,7 @@ func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
 
 	_, err = tx.Exec(ctx, `UPDATE youtube_live_review_receipt_facts SET facts='{}' WHERE video_id='none'`)
 	require.ErrorContains(t, err, "append-only")
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 	assertLiveRuntimeState(t, pool)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT reviewed_at IS NOT NULL FROM youtube_live_runtime_state WHERE video_id='none'`).Scan(&reviewed))
 	require.False(t, reviewed)
@@ -353,7 +368,7 @@ func TestLiveRuntimeStateRecordingValidationAndCAS(t *testing.T) {
 
 			_, err = tx.Exec(t.Context(), `SELECT record_youtube_live_review(gen_random_uuid(),$1,repeat('0',64),$2,'검토')`, tc.video, tc.operator)
 			require.ErrorContains(t, err, tc.want)
-			require.NoError(t, tx.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			assertLiveRuntimeState(t, pool)
 		})
 	}

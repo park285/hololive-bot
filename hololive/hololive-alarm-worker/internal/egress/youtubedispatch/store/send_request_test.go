@@ -10,6 +10,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
 const testFrozenTextRoute = "text"
@@ -75,6 +76,7 @@ func TestExpiredPendingConvergesWithoutLedgerAndCannotRevive(t *testing.T) {
 	expired, err := transition.ExpirePending(ctx, 0, 10)
 	require.NoError(t, err)
 	require.Equal(t, 2, expired.Expired)
+	require.Equal(t, 2, expired.StaleExpired)
 
 	for _, id := range []int64{older, newer} {
 		var (
@@ -95,6 +97,7 @@ func TestExpiredPendingConvergesWithoutLedgerAndCannotRevive(t *testing.T) {
 	again, err := transition.ExpirePending(ctx, 0, 10)
 	require.NoError(t, err)
 	require.Zero(t, again.Expired)
+	require.Zero(t, again.StaleExpired)
 
 	revived, err := transition.ReviveFailedLogicalGroups(ctx, 30*24*time.Hour, 10)
 	require.NoError(t, err)
@@ -125,11 +128,59 @@ func TestExpiredPendingPreservesInFlightLogicalSibling(t *testing.T) {
 	expired, err := transition.ExpirePending(ctx, 0, 10)
 	require.NoError(t, err)
 	require.Zero(t, expired.Expired)
+	require.Zero(t, expired.StaleExpired)
 
 	var status string
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM youtube_notification_delivery WHERE id=$1`, newer).Scan(&status))
 	require.Equal(t, "PENDING", status)
+}
+
+func TestExpiredPendingReconciliationIsNotStaleDiscard(t *testing.T) {
+	for _, ledgerStatus := range []LedgerStatus{LedgerStatusSent, LedgerStatusQuarantined} {
+		t.Run(string(ledgerStatus), func(t *testing.T) {
+			pool := dbtest.NewPool(t)
+			ctx := t.Context()
+			owner, _ := seedTransitionLogicalGroup(t, pool, "expiry-reconciled", "expiry-room")
+			_, err := pool.Exec(ctx, `UPDATE youtube_notification_outbox SET created_at=now()-interval '10 days'`)
+			require.NoError(t, err)
+			require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, ledgerStatus, []LedgerWrite{{
+				Key:        ytcontentid.LogicalKey{Kind: domain.OutboxKindNewVideo, LogicalID: "expiry-reconciled", RoomID: "expiry-room"},
+				ObservedAt: time.Now(), SourceDeliveryID: owner,
+			}}))
+
+			result, err := newTestTransitionStore(t, pool).ExpirePending(ctx, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, ApplyApplied, result.Outcome)
+			require.Equal(t, 2, result.Expired)
+			require.Zero(t, result.StaleExpired)
+		})
+	}
+}
+
+func TestExpiredPendingCommitResponseLossDoesNotReportCommittedStale(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+	seedTransitionLogicalGroup(t, pool, "expiry-commit-loss", "expiry-room")
+
+	_, err := pool.Exec(ctx, `UPDATE youtube_notification_outbox SET created_at=now()-interval '10 days'`)
+	require.NoError(t, err)
+
+	transition := newTestTransitionStore(t, pool)
+	responseLost := errors.New("expiry commit response lost")
+
+	transition.afterCommit = func(string) error { return responseLost }
+
+	result, err := transition.ExpirePending(ctx, 0, 10)
+	require.ErrorIs(t, err, responseLost)
+	require.Equal(t, ApplyIndeterminate, result.Outcome)
+	require.Zero(t, result.StaleExpired)
+
+	transition.afterCommit = nil
+	result, err = transition.ExpirePending(ctx, 0, 10)
+	require.NoError(t, err)
+	require.Zero(t, result.Expired)
+	require.Zero(t, result.StaleExpired, "repeated sweep must not count an uncertain prior commit")
 }
 
 func TestFrozenGroupedClaimIsAtomicUnderContentionAndRespectsBatchBudget(t *testing.T) {

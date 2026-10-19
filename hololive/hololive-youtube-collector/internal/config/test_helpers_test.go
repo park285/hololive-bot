@@ -27,3 +27,24 @@ func mustLoadCollectorWorkerProfile(t *testing.T) *WorkerProfile {
 
 	return profile
 }
+
+func fixtureCollectorConfig(t *testing.T) Config {
+	t.Helper()
+
+	identity, err := workercontract.KnownIdentity("hololive", "youtube-collector")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := workercontract.LoadProfileFile(collectorProfileFixture, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	profile, err := DecodeWorkerProfile(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return profile.Config()
+}

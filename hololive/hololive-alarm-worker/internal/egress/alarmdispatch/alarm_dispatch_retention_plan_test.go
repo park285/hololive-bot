@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -96,7 +97,7 @@ func explainAlarmDispatchRetentionDelete(
 	require.NoError(t, err)
 
 	// EXPLAIN ANALYZE는 행을 실제로 지우므로 다음 상태·모드가 같은 이력으로 계획되게 되돌린다.
-	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(ctx))) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)

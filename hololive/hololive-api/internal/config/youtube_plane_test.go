@@ -12,7 +12,7 @@ import (
 func TestDefaultYouTubePlaneConfigValidates(t *testing.T) {
 	t.Parallel()
 
-	cfg := DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 
 	if cfg.LiveUnresolvableGrace != 10*time.Minute {
 		t.Fatalf("default live unresolvable grace = %s", cfg.LiveUnresolvableGrace)
@@ -77,39 +77,6 @@ func youTubePlanePoolBudgetValidateCases() []youTubePlaneValidateCase {
 			mutate:  func(c *YouTubePlaneConfig) { c.DBOperationConcurrency = 4 },
 			wantErr: "leave one pool connection reserved",
 		},
-		{
-			name: "workers exceed db budget",
-			mutate: func(c *YouTubePlaneConfig) {
-				c.ConsumerWorkers = 3
-				c.DBOperationConcurrency = 2
-			},
-			wantErr: "consumers exceed the shared DB operation budget",
-		},
-	}
-}
-
-func youTubePlaneTimeoutValidateCases() []youTubePlaneValidateCase {
-	return []youTubePlaneValidateCase{
-		{
-			name:    "lease too short",
-			mutate:  func(c *YouTubePlaneConfig) { c.ClaimLease = 40 * time.Second },
-			wantErr: "claim lease must be at least",
-		},
-		{
-			name:    "zero transaction timeout",
-			mutate:  func(c *YouTubePlaneConfig) { c.TransactionTimeout = 0 },
-			wantErr: "transaction timeout must be positive",
-		},
-		{
-			name:    "transaction timeout exceeds repository contract",
-			mutate:  func(c *YouTubePlaneConfig) { c.TransactionTimeout = 61 * time.Second },
-			wantErr: "transaction timeout must be between 1s and 1m",
-		},
-		{
-			name:    "shutdown cannot cover release",
-			mutate:  func(c *YouTubePlaneConfig) { c.ShutdownTimeout = 15 * time.Second },
-			wantErr: "shutdown timeout must cover transaction and claim release timeouts",
-		},
 	}
 }
 
@@ -156,14 +123,13 @@ func TestYouTubePlaneConfigValidateFailsClosed(t *testing.T) {
 
 	tests := slices.Concat(
 		youTubePlanePoolBudgetValidateCases(),
-		youTubePlaneTimeoutValidateCases(),
 		youTubePlaneRetentionValidateCases(),
 	)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := DefaultYouTubePlaneConfig()
+			cfg := testYouTubePlaneConfig(t)
 			tt.mutate(&cfg)
 
 			err := cfg.Validate()
@@ -242,7 +208,7 @@ func TestLoadYouTubePlaneConfigContentAbsenceGraceOverride(t *testing.T) {
 func TestYouTubePlaneConfigRejectsInvalidContentAbsenceGrace(t *testing.T) {
 	t.Parallel()
 
-	cfg := DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 
 	cfg.ContentAbsenceGrace = 25 * time.Hour
 
@@ -352,7 +318,7 @@ func TestLoadYouTubePlaneConfigRetentionOverride(t *testing.T) {
 }
 
 func TestYouTubePlaneProductionRetentionRequiresApprovedBoundedPolicy(t *testing.T) {
-	cfg := DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 	if err := cfg.validateProductionRetention("development"); err != nil {
 		t.Fatalf("development retention validation: %v", err)
 	}
@@ -424,7 +390,7 @@ func TestYouTubePlaneLiveCheckRetentionBounds(t *testing.T) {
 		"video live check":   func(r *YouTubePlaneRetentionConfig, age time.Duration) { r.VideoLiveCheckAge = age },
 	} {
 		for _, age := range []time.Duration{-24 * time.Hour, 3651 * 24 * time.Hour} {
-			cfg := DefaultYouTubePlaneConfig()
+			cfg := testYouTubePlaneConfig(t)
 			set(&cfg.Retention, age)
 
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), name) {
@@ -432,7 +398,7 @@ func TestYouTubePlaneLiveCheckRetentionBounds(t *testing.T) {
 			}
 		}
 
-		cfg := DefaultYouTubePlaneConfig()
+		cfg := testYouTubePlaneConfig(t)
 		set(&cfg.Retention, 3650*24*time.Hour)
 
 		if err := cfg.Validate(); err != nil {
@@ -444,7 +410,7 @@ func TestYouTubePlaneLiveCheckRetentionBounds(t *testing.T) {
 func TestYouTubePlaneReplayAuditMustCoverLiveCheckRetention(t *testing.T) {
 	t.Parallel()
 
-	cfg := DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 
 	cfg.Retention.Enabled = true
 	cfg.Retention.VideoLiveCheckAge = cfg.Retention.ChannelProfileAge + 24*time.Hour
@@ -531,7 +497,7 @@ func TestLoadYouTubePlaneConfigLiveUnresolvableGraceOverride(t *testing.T) {
 func TestYouTubePlaneConfigRejectsInvalidLiveUnresolvableGrace(t *testing.T) {
 	t.Parallel()
 
-	cfg := DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 
 	cfg.LiveUnresolvableGrace = 25 * time.Hour
 
@@ -545,7 +511,7 @@ func TestYouTubePlaneConfigRejectsInvalidLiveUnresolvableGrace(t *testing.T) {
 func TestYouTubePlaneConfigRejectsInvalidLiveEndGrace(t *testing.T) {
 	t.Parallel()
 
-	cfg := DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 
 	cfg.LiveEndGrace = 25 * time.Hour
 
@@ -559,7 +525,7 @@ func TestYouTubePlaneConfigRejectsInvalidLiveEndGrace(t *testing.T) {
 func TestDefaultYouTubePlaneConfigDisablesUnapprovedProfilePhotoStability(t *testing.T) {
 	t.Parallel()
 
-	cfg := DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 	if cfg.ProfileClearMinObservations != 0 || cfg.ProfileClearStability != 0 {
 		t.Fatalf("unapproved profile clear defaults = %d %s", cfg.ProfileClearMinObservations, cfg.ProfileClearStability)
 	}
@@ -631,7 +597,7 @@ func TestYouTubePlaneConfigRejectsInvalidProfilePhotoStability(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := DefaultYouTubePlaneConfig()
+			cfg := testYouTubePlaneConfig(t)
 			tt.mutate(&cfg)
 
 			err := cfg.Validate()

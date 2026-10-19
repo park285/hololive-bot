@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
@@ -52,6 +53,9 @@ type PostgresConfig struct {
 	QueryExecMode string
 	PoolMinConns  int
 	PoolMaxConns  int
+	RuntimeParams map[string]string
+	CancelRequest *pgxdb.CancelRequestConfig
+	AcquirePolicy *pgxdb.AcquirePolicy
 }
 
 func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
@@ -82,11 +86,15 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		SSLRootCert:   config.SSLRootCert,
 		QueryExecMode: config.QueryExecMode,
 	}, pgxdb.Options{
-		Logger: logger,
+		Logger:        logger,
+		RuntimeParams: config.RuntimeParams,
+		CancelRequest: config.CancelRequest,
+		AcquirePolicy: config.AcquirePolicy,
 		Pool: pgxdb.PoolConfig{
 			MinConns:        minConns,
 			MaxConns:        maxConns,
 			ConnMaxLifetime: constants.DatabaseConfig.ConnMaxLifetime,
+			PingTimeout:     time.Second,
 		},
 		Ping: pgxdb.PingConfig{
 			PingTimeout: constants.RequestTimeout.DatabasePing,
@@ -105,8 +113,7 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 // resolvePoolConns는 pgxdb에 넘길 풀 크기를 정한다.
 // MinConns=0은 plane 검증(validatePlanePool·validatePool)이 허용하는 "idle 연결 없음" 선택이고
 // pgxdb도 0을 그대로 pgx에 넘기는 계약이므로 기본값으로 바꾸지 않는다. 미설정 기본값은
-// env loader(LoadPostgresConfig)가 이미 채운다. 음수는 pgxdb가 0으로 조용히 흡수하므로
-// 여기서 거부해 설정 오류를 기동 시점에 드러낸다.
+// LoadPostgresConfig가 이미 채운다. 잘못된 범위는 연결 전에 거부한다.
 func resolvePoolConns(config *PostgresConfig) (minConns, maxConns int, err error) {
 	if config.PoolMinConns < 0 {
 		return 0, 0, fmt.Errorf("postgres pool min conns must not be negative: %d", config.PoolMinConns)
@@ -114,7 +121,11 @@ func resolvePoolConns(config *PostgresConfig) (minConns, maxConns int, err error
 
 	maxConns = config.PoolMaxConns
 	if maxConns <= 0 {
-		maxConns = constants.DatabaseConfig.MaxOpenConns
+		return 0, 0, fmt.Errorf("postgres pool max conns must be positive: %d", maxConns)
+	}
+
+	if config.PoolMinConns > maxConns {
+		return 0, 0, fmt.Errorf("postgres pool min conns %d exceeds max conns %d", config.PoolMinConns, maxConns)
 	}
 
 	return config.PoolMinConns, maxConns, nil

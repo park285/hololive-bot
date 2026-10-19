@@ -2,13 +2,13 @@
 
 ## Role
 
-현재 운영 결정은 중앙 primary(`hololive-osaka` / `100.100.1.8`) 하나만 사용하는
+현재 운영 결정은 중앙 primary(`hololive-seoul` / `100.100.1.8`) 하나만 사용하는
 single-primary 구성입니다. Seoul AP 호스트(`iris-seoul` / `100.100.1.5`)의
 `holo-postgres-standby`, 복제 슬롯과 failover controller는 2026-09-08 사용자 결정에 따라
 제거했습니다.
 
 이 문서의 Bootstrap 이하 물리 복제와 failover 절차는 재활성화 참고 자료입니다. 다시
-사용하려면 명시적 승인을 새로 받고 당시 Osaka primary에서 새 `pg_basebackup`으로 Seoul을
+사용하려면 명시적 승인을 새로 받고 당시 Seoul primary에서 새 `pg_basebackup`으로 standby를
 재시딩해야 합니다. `deploy/compose/docker-compose.standby.yml`과 controller 코드는 그
 재검토를 위해 저장소에 유지하며 현재 production 활성 구성을 뜻하지 않습니다.
 
@@ -45,36 +45,35 @@ Seoul 복제 재구축이나 보존 자료 삭제는 각 대상과 영향에 대
 
 ## Current single-primary decision
 
-2026-09-08 제거와 검증을 마친 운영 기준은 다음과 같습니다.
+The current authority is `hololive-seoul` / `100.100.1.8`, owned by
+`deploy/topology/hosts.conf`. Only its `holo-postgres` is a read/write primary.
+The old Osaka disk is not a synchronized standby or an automatic recovery target.
+The removed iris-seoul standby/container/slot/controller must not be inferred from
+the retained reference files. Any reactivation needs fresh approval, a new base backup,
+explicit replication TLS/HBA routing, slot capacity/alerts and fencing acceptance.
 
-- Osaka `holo-postgres`만 권위 read/write primary입니다.
-- 모든 production consumer의 권위 DB endpoint는 Osaka primary로 해석되어야 합니다.
-- Seoul에는 standby container·PGDATA volume·활성 failover timer/controller가 없어야 합니다.
-- Osaka primary에는 폐기한 Seoul standby용 physical replication slot이 없어야 합니다.
-- PostgreSQL 자동 승격과 동기화된 standby 복구는 제공하지 않습니다.
+API, alarm worker and collector `c` use `holo-postgres:5432`; remote collectors `a/b/d`
+use the current Seoul primary `100.100.1.8:5433`, all with TLS `verify-full`.
+The prepared 11.0.0 migrator/bootstrap uses the central-only shared Unix socket,
+with explicit local `sslmode=disable`; its HBA denies admin/migrator TCP before
+network allows. This target is not live acceptance evidence. Operator and nightly
+`docker exec` sockets remain supported; never mount that socket in runtime/AP
+containers. The recorded active primary has no physical replication slots.
 
-single-primary 전환을 완료하려면 primary read/write와 TLS, 모든 runtime readiness, collector
-fleet의 DB 연결, Seoul의 standby/container/volume 부재, Osaka의 replication slot 부재를
-함께 확인합니다. 하나라도 확인하지 못하면 제거 완료로 간주하지 않습니다.
+The central credential/config master owner is `hosts/hololive-seoul/hololive-bot/compose.env`.
+The AP `ap-compose.env` endpoint is `100.100.1.8:5433`; native host.env is generated from
+the non-secret topology owner, with pool maximum from the capacity policy. The
+11.0.0 AP Compose target uses only its standalone collector/issuer host file,
+not the central production file; verify the actual deployed layout at cutover.
+The workstation `.3` is not a PostgreSQL fallback. A route rollback needs explicit
+authorization and all affected consumers/certificates; binary rollback alone is not
+authorization to reinstate retired DNS routes.
 
-API, alarm worker와 중앙 collector `c`는 Docker network의 `holo-postgres:5432`, 원격
-collector `a/b/d`는 Osaka Tailscale IP `100.100.1.8:5433`에 직접 연결합니다. 모든 연결은
-TLS `verify-full`을 사용하며 Osaka와 Seoul의 DB용 Tailscale Service 중계 route는 없습니다.
-Seoul의 failover timer와
-service는 `not-found/inactive`이고 apply drop-in도 없으며, standby container와 전용 PGDATA
-volume을 제거했습니다. Osaka의 `iris_seoul_standby` physical slot도 제거해 남은 replication
-slot은 0개입니다. primary는 재시작하지 않았으며 접속 설정을 반영한 consumer만 순차
-재기동했습니다.
-
-중앙 endpoint는 `hosts/hololive-osaka/hololive-bot/compose.env`의
-`HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres`, `HOLOLIVE_CENTRAL_POSTGRES_PORT=5432`가
-소유합니다. AP의 `ap-compose.env`는 host `100.100.1.8`, port `5433`을 사용합니다.
-host-native AP의 실제 실행 설정은 `/etc/hololive-bot/youtube-collector-host.env`이며,
-`ap-host-native-deploy.sh`도 같은 직접 연결 기본값을 생성합니다.
-
-이전 endpoint로 되돌릴 때는 먼저 Osaka의 service route를 복원하고 연결을 검증한 뒤
-consumer 설정을 순차 복원해야 합니다. 보존된 이전 release의 host env에는 폐기한 service
-DNS가 있을 수 있으므로 바이너리 rollback만으로 현재 접속 설정을 덮어쓰지 않습니다.
+Prepared WAL settings are command-line `checkpoint_timeout=900s`, `max_wal_size=2GB`,
+`wal_compression=lz4` in both production and inactive standby. No source edit cleans
+existing `postgresql.auto.conf`; that exact cleanup, role-limit changes, HBA installation,
+DB recreation and refreshed-session acceptance remain separate approved operations.
+Capture old values/sources and preserve matching WAL flags when rolling back old Compose.
 
 ## Inactive HA reference: safety model
 
@@ -109,7 +108,7 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
 
 | 대상 | 내용 |
 |---|---|
-| primary `pg_hba.conf` | `deploy/compose/postgres/pg_hba.conf`. `hostssl replication hololive_replicator <standby-ip>/32`가 필요합니다. `host all all all`은 `replication` 유사 데이터베이스를 매치하지 않습니다. |
+| primary `pg_hba.conf` | `deploy/compose/postgres/pg_hba.conf` has no active replication TCP allow rule. Reactivation requires a separately approved `hostssl replication hololive_replicator <standby-ip>/32` rule before the replication reject, with the actual transport/source validated. The retired `.5` rule is not retained as an inactive allow. `host all all all` does not match the physical `replication` pseudo-database. |
 | primary 복제 역할 | `hololive_replicator`. init-db가 `HOLOLIVE_REPLICATOR_PASSWORD`가 있을 때만 만듭니다. |
 | failover DB 권한 | `hololive_replicator`에 `hololive` CONNECT와 `pg_catalog.pg_promote(boolean, integer)` EXECUTE만 부여합니다. OS controller에 admin/superuser 자격을 주지 않습니다. |
 | primary 복제 슬롯 | `iris_seoul_standby` physical slot. standby가 오래 끊기면 슬롯이 WAL을 보존해 primary 디스크가 찰 수 있습니다. 재활성 전에 아래 [slot WAL 보존 상한](#reactivation-prerequisite-slot-wal-retention-bound)을 먼저 갖춥니다. |

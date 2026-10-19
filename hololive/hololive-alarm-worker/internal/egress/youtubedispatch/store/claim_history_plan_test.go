@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -21,7 +22,7 @@ const (
 
 type claimIndexPlanCase struct {
 	name     string
-	sqlFile  string
+	sql      string
 	params   string
 	relation string
 }
@@ -30,19 +31,19 @@ type claimIndexPlanCase struct {
 // idx_ynd_pending_due_created_id, idx_ynd_sending_stale)를 증명하도록 쓴 claim SQL이다.
 var claimIndexPlanCases = []claimIndexPlanCase{
 	{
-		name: "fanout claim", sqlFile: "fanout_claim.sql",
+		name: "fanout claim", sql: mustSQL("fanout_claim.sql"),
 		params: fmt.Sprintf("'PENDING', NOW() - INTERVAL '1 minute', NOW(), NOW() - INTERVAL '1 hour', %d, NOW()",
 			claimPlanBatchSize),
 		relation: "youtube_notification_outbox",
 	},
 	{
-		name: "claim pending", sqlFile: "transition_claim_pending.sql",
+		name: "claim pending", sql: claimPendingSQL,
 		params: fmt.Sprintf("'PENDING', NOW() - INTERVAL '1 minute', NOW(), NOW() - INTERVAL '1 hour', %d, NOW()",
 			claimPlanBatchSize),
 		relation: "youtube_notification_delivery",
 	},
 	{
-		name: "stale sending", sqlFile: "transition_stale_sending.sql",
+		name: "stale sending", sql: mustSQL("transition_stale_sending.sql"),
 		params:   fmt.Sprintf("'SENDING', NOW() - INTERVAL '1 hour', %d", claimPlanBatchSize),
 		relation: "youtube_notification_delivery",
 	},
@@ -138,12 +139,12 @@ func explainClaimSQL(
 	require.NoError(t, err)
 
 	// EXPLAIN ANALYZE는 후보를 실제로 잠그고 갱신하므로 트랜잭션을 되돌려 다음 모드가 같은 데이터로 계획되게 한다.
-	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(ctx))) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(ctx, "PREPARE claim_index_plan AS "+mustSQL(tc.sqlFile))
+	_, err = tx.Exec(ctx, "PREPARE claim_index_plan AS "+tc.sql)
 	require.NoError(t, err)
 
 	// prepared statement는 rollback 뒤에도 연결에 남으므로 풀에 돌려주기 전에 지운다.

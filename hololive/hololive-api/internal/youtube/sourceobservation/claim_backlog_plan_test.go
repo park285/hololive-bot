@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -148,7 +149,7 @@ func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode, budget s
 		defer cancel()
 
 		if tx != nil {
-			if rollbackErr := tx.Rollback(cleanupCtx); rollbackErr != nil {
+			if rollbackErr := pgxdb.Rollback(cleanupCtx, tx); rollbackErr != nil {
 				err = errors.Join(err, fmt.Errorf("rollback explain: %w", rollbackErr))
 			}
 		}

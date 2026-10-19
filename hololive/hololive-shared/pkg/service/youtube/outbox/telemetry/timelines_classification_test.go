@@ -3,13 +3,12 @@ package telemetry
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -252,7 +251,7 @@ func TestPersistPostLatencyClassificationsInTransactionSeesCurrentAttemptAndRoll
 	require.NoError(t, err)
 
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			require.NoError(t, rollbackErr)
 		}
 	}()
@@ -280,7 +279,7 @@ func TestPersistPostLatencyClassificationsInTransactionSeesCurrentAttemptAndRoll
 		loadStoredClassifications(ctx, t, tx, domain.OutboxKindCommunityPost, "tx-post"),
 	)
 
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 
 	require.Equal(t,
 		[]storedClassification{{}},

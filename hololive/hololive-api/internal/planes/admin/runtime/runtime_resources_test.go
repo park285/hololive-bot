@@ -53,7 +53,8 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 				config.CORS.AllowedOrigins = []string{testAllowedOrigin}
 			}
 
-			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, resources.infra, nil, &server.Handler{}, resources.Close, slog.New(slog.DiscardHandler))
+			infra := &sharedmodules.InfraModule{Cache: sharedtestutil.NewTestCacheService(t.Context(), t), Postgres: &databasemocks.Client{}}
+			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, infra, nil, &server.Handler{}, resources.Close, slog.New(slog.DiscardHandler))
 			require.Nil(t, runtime)
 			require.ErrorIs(t, err, closeErr)
 
@@ -64,7 +65,7 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 			}
 
 			require.ErrorIs(t, resources.Close(), closeErr)
-			assert.Equal(t, []string{"members", "holodex", "rooms", "collector", "trigger", "alarm", "infra"}, calls)
+			assert.Equal(t, []string{"holodex", "rooms", "collector", "trigger", "alarm"}, calls)
 		})
 	}
 }
@@ -77,11 +78,6 @@ func newAdminResourceFixture(t *testing.T, calls *[]string, closeErr error) *adm
 	}
 
 	return &adminRuntimeResources{
-		infra: &sharedmodules.InfraModule{
-			Cache: sharedtestutil.NewTestCacheService(t.Context(), t), Postgres: &databasemocks.Client{},
-			StopMemberCache: func() { *calls = append(*calls, "members") },
-			Cleanup:         func() { *calls = append(*calls, "infra") },
-		},
 		holodex: stopFunc(func() { *calls = append(*calls, "holodex") }),
 		alarm:   closer("alarm", nil), trigger: closer("trigger", closeErr),
 		collector: closer("collector", nil), rooms: closer("rooms", nil),
@@ -106,6 +102,7 @@ func TestAdminCloseBeforeStartTransfersOwnerExactlyOnce(t *testing.T) {
 
 	callers.Wait()
 	runtime.Start(t.Context(), nil)
+	assert.True(t, runtime.ResourceUsersJoined())
 	assert.Equal(t, int32(1), cleanups.Load())
 	assert.Zero(t, starts.Load())
 }

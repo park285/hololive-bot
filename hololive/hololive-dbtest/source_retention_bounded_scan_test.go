@@ -2,12 +2,12 @@ package dbtest
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,7 +60,7 @@ func TestSourceRetentionBoundsProtectionChecksAndRollsBackCursor(t *testing.T) {
 	require.EqualValues(t, 1000, calls, "only the bounded window may undergo protection checks")
 	require.NoError(t, tx.QueryRow(t.Context(), `SELECT cursor_id FROM source_observation_retention_state`).Scan(&cursor))
 	require.Positive(t, cursor)
-	require.NoError(t, tx.Rollback(t.Context()))
+	require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT cursor_id FROM source_observation_retention_state`).Scan(&cursor))
 	require.Zero(t, cursor, "rollback must not lose the uncommitted scan window")
 	requireRetentionCount(t, pool, 11000)
@@ -88,7 +88,7 @@ func TestSourceRetentionBoundsLockedWindowAndRevisits(t *testing.T) {
 	kinds, cutoffs := []string{communityPageKind}, []time.Time{base.Add(time.Hour)}
 	require.Empty(t, deleteRetentionBatchContext(ctx, t, pool, kinds, cutoffs, 1))
 	require.Len(t, deleteRetentionBatchContext(ctx, t, pool, kinds, cutoffs, 1), 1)
-	require.NoError(t, holder.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, holder))
 	require.Len(t, deleteRetentionBatchContext(ctx, t, pool, kinds, cutoffs, 1000), 1000)
 	requireRetentionCount(t, pool, 0)
 }
@@ -131,7 +131,7 @@ func TestSourceRetentionChildCascadeIsAtomic(t *testing.T) {
 	require.Equal(t, 1, deleted)
 	require.NoError(t, tx.QueryRow(t.Context(), `SELECT count(*) FROM source_observation_applications`).Scan(&children))
 	require.Zero(t, children)
-	require.NoError(t, tx.Rollback(t.Context()))
+	require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 	requireRetentionCount(t, pool, 1)
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM source_observation_applications`).Scan(&children))
 	require.Equal(t, 10000, children)
@@ -206,7 +206,7 @@ func rollbackRetentionTransaction(t *testing.T, tx pgx.Tx) {
 
 	defer cancel()
 
-	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		t.Errorf("rollback retention transaction: %v", err)
 	}
 }

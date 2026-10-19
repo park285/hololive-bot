@@ -121,7 +121,7 @@ func TestDelayedWorkerDoesNotRegisterReleasedClaim(t *testing.T) {
 
 	var retries atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
@@ -178,7 +178,7 @@ func newClaimRegistrationFixture(t *testing.T, settle func(context.Context) erro
 		SubjectKey:      "UC_LATE",
 	}}
 
-	f.runtime = newTestRuntime(fakeClaimer{
+	f.runtime = newTestRuntime(t, fakeClaimer{
 		claim: func(ctx context.Context, _ sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			f.claims.Add(1)
 

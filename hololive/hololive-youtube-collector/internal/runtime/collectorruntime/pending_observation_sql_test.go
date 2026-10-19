@@ -1,11 +1,10 @@
 package collectorruntime
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 )
@@ -55,7 +54,7 @@ func TestPendingObservationCountPlanUsesBothPartialIndexes(t *testing.T) {
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			t.Errorf("rollback plan transaction: %v", rollbackErr)
 		}
 	}()

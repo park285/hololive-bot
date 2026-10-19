@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/retry"
 
@@ -308,7 +309,7 @@ func (r *durableRuntime) heartbeatAttempt(ctx context.Context, messageID, token 
 		budget = 5 * time.Second
 	}
 
-	attemptCtx, cancel := context.WithTimeout(ctx, budget)
+	attemptCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), budget)
 
 	defer cancel()
 

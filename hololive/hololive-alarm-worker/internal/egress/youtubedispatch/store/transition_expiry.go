@@ -19,7 +19,9 @@ type ExpiryResult struct {
 	Examined int
 	NextID   int64
 	Expired  int
-	Blocked  []BlockedLogicalGroup
+	// StaleExpired는 expiredPendingReason으로 종료한 행만 센다. 정산/reconciliation은 제외한다.
+	StaleExpired int
+	Blocked      []BlockedLogicalGroup
 }
 
 // ExpirePending은 claim 신선도를 지난 미발송 행을 기존 논리 증거와 fence로 종료한다.
@@ -37,6 +39,8 @@ func (s *TransitionStore) ExpirePending(ctx context.Context, afterID int64, limi
 	})
 	if err != nil {
 		result.Outcome = ApplyIndeterminate
+		result.StaleExpired = 0
+
 		return result, fmt.Errorf("expire pending: transaction: %w", err)
 	}
 
@@ -75,6 +79,11 @@ func (s *TransitionStore) expirePendingInTx(ctx context.Context, tx dbx.Querier,
 	}
 
 	result.Expired = len(changes)
+	for i := range changes {
+		if changes[i].after.Error == expiredPendingReason {
+			result.StaleExpired++
+		}
+	}
 
 	return nil
 }

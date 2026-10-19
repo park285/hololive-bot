@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -126,6 +128,9 @@ func (r *Store) reissueFailedRequest(ctx context.Context, id int64, workerID str
 }
 
 func (d *Dispatcher) markItemTerminalFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, reason string) {
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
+	defer cancel()
+
 	if _, err := d.repository.MarkFailed(ctx, item.ID, d.workerID, item.AttemptCount, 1, d.config.RetryBackoff, reason); err != nil {
 		d.logger.Error("Failed to finish exhausted delivery request", "id", item.ID, "error", err)
 	}

@@ -6,7 +6,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 cat >"${tmp}/unsafe.env" <<'ENV'
 BOT_POSTGRES_POOL_MAX_CONNS=50
-YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=8
+YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=7
 ENV
 : >"${tmp}/default.env"
 mkdir -p "${tmp}/shared-go" "${tmp}/iris-client-go" "${tmp}/bin"
@@ -25,11 +25,20 @@ if postgres_capacity_assert_target "${root}" "${tmp}/unsafe.env" >"${tmp}/out" 2
     echo "common PostgreSQL capacity gate accepted unsafe target overrides" >&2
     exit 1
 fi
-grep -q 'connection budget exhausted' "${tmp}/out"
+grep -q 'aggregate pools exceed role limit' "${tmp}/out"
 if grep -Eq 'BOT_POSTGRES_POOL_MAX_CONNS=|YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=' "${tmp}/out"; then
     echo "common PostgreSQL capacity gate printed target values" >&2
     exit 1
 fi
+postgres_capacity_assert_target "${root}" "${tmp}/default.env" >"${tmp}/out"
+grep -q 'allocated=54 reserve=3' "${tmp}/out"
+# 런타임 역할 한도 이내여도 제어 슬롯 하나를 소비하면 실패해야 한다.
+printf 'BOT_POSTGRES_POOL_MAX_CONNS=5\n' >"${tmp}/control.env"
+if postgres_capacity_assert_target "${root}" "${tmp}/control.env" >"${tmp}/out" 2>&1; then
+    echo 'capacity accepted consumption of the control reserve' >&2
+    exit 1
+fi
+grep -q 'connection budget exhausted' "${tmp}/out"
 
 assert_entrypoint_blocked() {
     local label="$1"
@@ -56,16 +65,15 @@ assert_entrypoint_blocked() {
 }
 
 assert_entrypoint_blocked "compose wrapper" \
-    "${tmp}/unsafe.env" 'connection budget exhausted' \
+    "${tmp}/unsafe.env" 'aggregate pools exceed role limit' \
     "${root}/scripts/deploy/compose.sh" -f deploy/compose/docker-compose.prod.yml up -d hololive-api
 for scale_args in \
     'up -d --scale youtube-collector=2 youtube-collector' \
     'up -d youtube-collector --scale=youtube-collector=2'; do
     read -r -a args <<<"${scale_args}"
     assert_entrypoint_blocked "compose wrapper scale ${scale_args}" \
-        "${tmp}/default.env" 'connection budget exhausted' \
+        "${tmp}/default.env" 'aggregate pools exceed role limit' \
         "${root}/scripts/deploy/compose.sh" -f deploy/compose/docker-compose.prod.yml "${args[@]}"
-    grep -q 'max=60 superuser_reserved=3 allocated=63 reserve=-6' "${tmp}/out"
 done
 
 for scale_case in \
@@ -81,10 +89,10 @@ for scale_case in \
         "${root}/scripts/deploy/compose.sh" -f deploy/compose/docker-compose.prod.yml "${args[@]}"
 done
 assert_entrypoint_blocked "build-all --no-bump" \
-    "${tmp}/unsafe.env" 'connection budget exhausted' \
+    "${tmp}/unsafe.env" 'aggregate pools exceed role limit' \
     "${root}/build-all.sh" --no-bump --skip-local-ci
 assert_entrypoint_blocked "compose redeploy" \
-    "${tmp}/unsafe.env" 'connection budget exhausted' \
+    "${tmp}/unsafe.env" 'aggregate pools exceed role limit' \
     "${root}/scripts/deploy/compose-redeploy-service.sh" hololive-api
 
 echo "ok: every standard production mutation entrypoint owns the common target capacity preflight"

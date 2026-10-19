@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -84,7 +83,7 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 
 			oversized, body = communityBoundaryInputs(t, pool, tc.extra, tc.publish)
 
-			executor.runSpec(t.Context(), spec)
+			runAdmittedSpec(t.Context(), t, executor, spec)
 
 			require.Empty(t, fatal)
 			require.EqualValues(t, 1, calls.Load())
@@ -104,7 +103,7 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 func newPayloadBoundaryRepository(t *testing.T, pool *pgxpool.Pool) *joblease.Repository {
 	t.Helper()
 
-	cfg := collectorconfig.DefaultConfig()
+	cfg := fixtureCollectorConfig(t)
 
 	lease, err := leaseConfigFrom(&cfg)
 	require.NoError(t, err)

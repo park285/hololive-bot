@@ -11,14 +11,23 @@ rollback_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$HOME/hololive-bot"
 . "$rollback_root/scripts/deploy/lib/ap-prechange-config.sh"
 . "$rollback_root/scripts/deploy/lib/po-sandbox-image.sh"
-prod_file="deploy/compose/docker-compose.prod.yml"
-old_prod="$backup/$prod_file.prechange"
-old_ap="$backup/$ap_file.prechange"
+pair_tool="$rollback_root/scripts/deploy/lib/worker-profile-pair.py"
+profile_pair="$HOME/hololive-bot/$backup/worker-profile-previous"
 prod_source="$(cat "$backup/prod-compose-source-path")"
 ap_source="$(cat "$backup/ap-compose-source-path")"
-# compose 파일은 deploy/compose에서 읽는다.
-[[ "$prod_source" == "$prod_file" && "$ap_source" == "$ap_file" ]] || exit 2
+# 기록된 배치는 이전 이미지·프로필·소스 조합의 일부다.
+case "$prod_source" in
+  deploy/compose/docker-compose.prod.yml|deploy/compose/docker-compose.collector.yml) ;;
+  *) exit 2 ;;
+esac
+[[ "$ap_source" == "$ap_file" ]] || exit 2
+old_prod="$backup/$prod_source.prechange"
+old_ap="$backup/$ap_file.prechange"
 compose=("$rollback_root/scripts/deploy/compose.sh" --project-directory "$HOME/hololive-bot/$(dirname "$prod_source")")
+restore_files=(-f "$HOME/hololive-bot/$ap_source")
+if [[ "$prod_source" == deploy/compose/docker-compose.prod.yml ]]; then
+  restore_files=(-f "$HOME/hololive-bot/$prod_source" "${restore_files[@]}")
+fi
 old_collector_tag=''
 old_po_tag=''
 po_state="$(cat "$backup/po-sandbox-prechange.state")"
@@ -35,6 +44,7 @@ old_revision="$(sudo -n docker image inspect -f '{{index .Config.Labels "org.ope
 [[ "$old_revision" =~ ^[0-9a-f]{40}$ ]] || exit 1
 python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["source_revision"] == sys.argv[2] and m["go"]["goarch"] == "arm64" and m["image_id"] == sys.argv[3]' "$backup/collector-prechange-manifest.json" "$old_revision" "$(cat "$backup/collector-prechange.image-id")"
 [[ "$(sudo -n docker image inspect -f '{{.Id}}' "$old_collector_tag")" == "$(cat "$backup/collector-prechange.image-id")" ]]
+sudo -n python3 "$pair_tool" verify "$service" "$profile_pair" "$old_collector_tag"
 collector_state="$(cat "$backup/collector-prechange.state")"
 [[ "$collector_state" == running || "$collector_state" == stopped ]] || exit 1
 if [[ "$po_state" == present ]]; then
@@ -51,11 +61,17 @@ test -w /var/run/docker.sock || groups | grep -qw docker
 preflight="$(mktemp -d)"
 trap 'rm -rf "$preflight"' EXIT
 mkdir -p "$preflight/deploy/compose"
-cp "$old_prod" "$preflight/deploy/compose/docker-compose.prod.yml"
+cp "$old_prod" "$preflight/deploy/compose/$(basename "$prod_source")"
 cp "$old_ap" "$preflight/deploy/compose/$(basename "$ap_file")"
-ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-  "${compose[@]}" -f "$preflight/deploy/compose/docker-compose.prod.yml" \
-  -f "$preflight/deploy/compose/$(basename "$ap_file")" config --quiet
+preflight_files=(-f "$preflight/deploy/compose/$(basename "$ap_file")")
+if [[ "$prod_source" == deploy/compose/docker-compose.prod.yml ]]; then
+  preflight_files=(-f "$preflight/deploy/compose/$(basename "$prod_source")" "${preflight_files[@]}")
+fi
+ap_prechange_config sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+  "${compose[@]}" "${preflight_files[@]}" config --format json \
+  | sudo -n python3 "$pair_tool" rollback "$service" "$profile_pair" "$preflight/worker-profile.yml"
+sudo -n env WORKER_PROFILE_OVERRIDE_FILE="$preflight/worker-profile.yml" COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+  "${compose[@]}" "${preflight_files[@]}" run --rm --no-deps --pull never "$service" --check-worker-profile
 if [[ "$mode" == check ]]; then
   echo "AP rollback verified: backup=$backup collector=$old_collector_tag collector_state=$collector_state issuer=${old_po_tag:-absent}"
   exit 0
@@ -64,7 +80,10 @@ fi
 # 두 서비스를 바꾸기 전에 이전 산출물과 설정을 모두 검증한다.
 # 이전 VERSION과 실행 스크립트를 먼저 복원합니다. 후보 checkout의 버전으로 이전 이미지를 렌더링하지 않습니다.
 python3 "$rollback_root/scripts/deploy/lib/ap-source-snapshot.py" restore "$HOME" "$HOME/hololive-bot/$backup"
-compose=("$HOME/hololive-bot/scripts/deploy/compose.sh")
+# 재부팅도 같은 pair를 읽도록 검토된 wrapper를 유지한다. secret mirror는 복원하지 않는다.
+sudo -n install -m 0755 "$rollback_root/scripts/deploy/compose.sh" "$HOME/hololive-bot/scripts/deploy/compose.sh"
+compose=(env WORKER_PROFILE_OVERRIDE_FILE="$profile_pair/compose.yml" "$HOME/hololive-bot/scripts/deploy/compose.sh")
+sudo -n python3 "$pair_tool" activate "$service" "$profile_pair" "$HOME/hololive-bot" "$preflight/worker-profile.yml"
 cmp -s "$old_prod" "$prod_source"
 cmp -s "$old_ap" "$ap_source"
 sudo -n docker tag "$old_collector_tag" hololive-youtube-collector:prod
@@ -84,7 +103,7 @@ sudo -n docker rm -f hololive-youtube-po-b >/dev/null 2>&1 || true
 if [[ "$po_state" == present ]]; then
   sudo -n docker tag "$old_po_tag" hololive-youtube-po-sandbox:prod
   sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-    "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up -d --no-build --no-deps youtube-po-b
+    "${compose[@]}" "${restore_files[@]}" up -d --no-build --no-deps youtube-po-b
   for _ in $(seq 1 30); do
     [[ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' hololive-youtube-po-b)" == healthy ]] && break
     sleep 2
@@ -102,11 +121,11 @@ fi
 restore_previous_collector() {
   if [[ "$collector_state" == stopped ]]; then
     sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-      "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up --no-start --no-build --no-deps --force-recreate "$service"
+      "${compose[@]}" "${restore_files[@]}" up --no-start --no-build --no-deps --force-recreate "$service"
     [[ "$(docker inspect -f '{{.State.Status}}' "$container")" == created ]]
   else
     sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-      "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up -d --no-build --no-deps --force-recreate "$service"
+      "${compose[@]}" "${restore_files[@]}" up -d --no-build --no-deps --force-recreate "$service"
     for _ in $(seq 1 30); do
       [[ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")" == healthy ]] && break
       sleep 2

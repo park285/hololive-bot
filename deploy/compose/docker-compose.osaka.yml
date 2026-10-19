@@ -11,7 +11,7 @@ x-osaka-ap-logging: &osaka-ap-logging
 
 x-osaka-ap-service: &osaka-ap-service
   extends:
-    file: docker-compose.prod.yml
+    file: docker-compose.collector.yml
     service: youtube-collector
   profiles: ["oracle"]
   env_file:
@@ -22,7 +22,13 @@ x-osaka-ap-service: &osaka-ap-service
     - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
     - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-    - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-a.json:/run/hololive-bot/worker-profiles/youtube-collector-a.json:ro
+    - type: bind
+      source: /etc/stack-secrets/hololive-bot/worker-profiles
+      target: /run/hololive-bot/worker-profiles
+      read_only: true
+      bind:
+        create_host_path: false
+    - youtube-po-a-socket:/run/hololive-youtube-po:ro
   logging: *osaka-ap-logging
   deploy:
     resources:
@@ -37,36 +43,14 @@ x-osaka-ap-env-common: &osaka-ap-env-common
   GOMEMLIMIT: "640MiB"
 
 services:
-  hololive-api:
-    profiles: !override ["central-only"]
-    env_file: !override []
-
-  hololive-alarm-worker:
-    profiles: !override ["central-only"]
-    env_file: !override []
-
-  docker-proxy:
-    profiles: !override ["central-only"]
-
-  deunhealth:
-    profiles: !override ["central-only"]
-
-  youtube-collector:
-    profiles: !override ["central-only"]
-    env_file: !override
-      - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
-    environment:
-      <<: *osaka-ap-db-env
-      YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
+  youtube-po-a:
+    extends:
+      file: docker-compose.collector.yml
+      service: youtube-po-c
+    profiles: ["oracle"]
+    container_name: hololive-youtube-po-a
     volumes: !override
-      - ../../data:/app/data
-      - ../../logs:/app/logs
-      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-    logging: *osaka-ap-logging
-    deploy:
-      resources:
-        limits:
-          memory: 1g
+      - youtube-po-a-socket:/run/hololive-youtube-po
 
   youtube-collector-a:
     <<: *osaka-ap-service
@@ -75,6 +59,7 @@ services:
       <<: *osaka-ap-env-common
       STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-a.json
       YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-a"
+      PGAPPNAME: youtube-collector-a
       YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-a.log"
       SERVER_PORT: 30005
       HOLOLIVE_H3_ADDR: ":30005"
@@ -85,3 +70,10 @@ services:
       - "100.100.1.6:30096:30096"
     healthcheck:
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30005/ready"]
+
+networks:
+  hololive-net:
+    driver: bridge
+
+volumes:
+  youtube-po-a-socket:

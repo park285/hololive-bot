@@ -147,6 +147,18 @@ compose_env_assert_shell_matches_all_file_keys() {
 }
 
 compose_env_list_interpolation_keys_from_files() {
+    local file collector_base
+    local -a inputs=("$@")
+    # 수집기 기본 파일은 AP의 -f가 아닌 extends로 읽는다.
+    # central-c 서비스를 선택하지 않고 치환 키만 포함한다.
+    for file in "$@"; do
+        case "${file##*/}" in
+            docker-compose.prod.yml|docker-compose.seoul.yml|docker-compose.osaka.yml|docker-compose.osaka2.yml)
+                collector_base="$(dirname "$file")/docker-compose.collector.yml"
+                [[ ! -f "$collector_base" ]] || inputs+=("$collector_base")
+                ;;
+        esac
+    done
     awk '
         {
             line = $0
@@ -156,7 +168,7 @@ compose_env_list_interpolation_keys_from_files() {
                 line = substr(line, RSTART + RLENGTH)
             }
         }
-    ' "$@" | sort -u
+    ' "${inputs[@]}" | sort -u
 }
 
 compose_env_key_exists_in_file() {

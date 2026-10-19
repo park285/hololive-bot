@@ -27,6 +27,8 @@ CACHE_PASSWORD=fixture
 DB_PASSWORD=fixture
 HOLOLIVE_DB_PASSWORD=fixture
 HOLOLIVE_SCRAPER_PASSWORD=fixture
+HOLOLIVE_MIGRATOR_PASSWORD=fixture
+POSTGRES_PORT_BIND_IP=100.100.1.8
 HOLO_API_VERSION=fixture
 HOLOLIVE_OTLP_GRPC_ENDPOINT=100.100.1.2:4317
 HOLO_ALARM_WORKER_VERSION=fixture
@@ -40,8 +42,16 @@ HOLOLIVE_CENTRAL_POSTGRES_PORT=15432
 EOF
 cp "${endpoint_root}/override.env" "${endpoint_root}/default.env"
 sed -i '/HOLOLIVE_CENTRAL_/d' "${endpoint_root}/default.env"
-cp "${endpoint_root}/override.env" "${endpoint_root}/ap-default.env"
-sed -i '/HOLOLIVE_CENTRAL_POSTGRES_PORT/d' "${endpoint_root}/ap-default.env"
+# AP 렌더링에는 중앙 관리·런타임·캐시 비밀이 필요 없어야 한다.
+"${CI_PYTHON_BIN}" - "${endpoint_root}" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+excluded = {"CACHE_PASSWORD", "DB_PASSWORD", "HOLOLIVE_DB_PASSWORD", "HOLOLIVE_MIGRATOR_PASSWORD", "HOLO_ALARM_WORKER_VERSION", "HOLOLIVE_API_ENV_FILE", "HOLOLIVE_ALARM_WORKER_ENV_FILE"}
+lines = [line for line in (root / "override.env").read_text().splitlines() if line.split("=", 1)[0] not in excluded]
+(root / "ap.env").write_text("\n".join(lines) + "\n")
+(root / "ap-default.env").write_text("\n".join(line for line in lines if not line.startswith("HOLOLIVE_CENTRAL_POSTGRES_PORT=")) + "\n")
+PY
 prod=(-f deploy/compose/docker-compose.prod.yml)
 live=("${prod[@]}" -f deploy/compose/docker-compose.live-compat.yml)
 render() {
@@ -60,13 +70,10 @@ render oracle "${endpoint_root}/override.env" "${endpoint_root}/central.json" "$
 render oracle "${endpoint_root}/override.env" "${endpoint_root}/live.json" "${live[@]}"
 for endpoint_spec in "a deploy/compose/docker-compose.osaka.yml" "b deploy/compose/docker-compose.seoul.yml" "d deploy/compose/docker-compose.osaka2.yml"; do
     set -- ${endpoint_spec}
-    render oracle "${endpoint_root}/override.env" "${endpoint_root}/${1}.json" "${prod[@]}" -f "${2}"
-    quiet oracle "${endpoint_root}/override.env" "${prod[@]}" -f "${2}"
+    render oracle "${endpoint_root}/ap.env" "${endpoint_root}/${1}.json" -f "${2}"
+    quiet oracle "${endpoint_root}/ap.env" -f "${2}"
 done
-render oracle "${endpoint_root}/ap-default.env" "${endpoint_root}/ap-default.json" "${prod[@]}" -f deploy/compose/docker-compose.osaka.yml
-cp "${endpoint_root}/override.env" "${endpoint_root}/ap-nocache.env"
-sed -i '/HOLOLIVE_CENTRAL_CACHE_HOST/d' "${endpoint_root}/ap-nocache.env"
-quiet oracle "${endpoint_root}/ap-nocache.env" "${prod[@]}" -f deploy/compose/docker-compose.osaka.yml
+render oracle "${endpoint_root}/ap-default.env" "${endpoint_root}/ap-default.json" -f deploy/compose/docker-compose.osaka.yml
 quiet default "${endpoint_root}/default.env" "${prod[@]}"
 quiet oracle "${endpoint_root}/override.env" "${prod[@]}"
 
@@ -117,10 +124,10 @@ for args in [
     (default, "hololive-api", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central API default"),
     (default, "hololive-alarm-worker", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central worker default"),
     (default, "youtube-collector", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central collector default"),
-    (default, "hololive-db-migrate", "holo-postgres", "5432", ("PGHOST", "PGPORT"), "central migrate default"),
+    (default, "hololive-db-migrate", "/var/run/postgresql", "5432", ("PGHOST", "PGPORT"), "central migrate socket"),
     (live_default, "hololive-api", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "live API default"),
     (live_default, "youtube-collector", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "live collector default"),
-    (live_default, "hololive-db-migrate", "holo-postgres", "5432", ("PGHOST", "PGPORT"), "live migrate default"),
+    (live_default, "hololive-db-migrate", "/var/run/postgresql", "5432", ("PGHOST", "PGPORT"), "live migrate socket"),
 ]:
     check(*args)
 expected = ("postgres.service.fixture", "15432")
@@ -128,10 +135,10 @@ for args in [
     (central, "hololive-api", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "central API override"),
     (central, "hololive-alarm-worker", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "central worker override"),
     (central, "youtube-collector", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "central collector override"),
-    (central, "hololive-db-migrate", *expected, ("PGHOST", "PGPORT"), "central migrate override"),
+    (central, "hololive-db-migrate", "/var/run/postgresql", "5432", ("PGHOST", "PGPORT"), "central migrate ignores TCP override"),
     (live, "hololive-api", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live API override"),
     (live, "youtube-collector", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live collector override"),
-    (live, "hololive-db-migrate", *expected, ("PGHOST", "PGPORT"), "live migrate override"),
+    (live, "hololive-db-migrate", "/var/run/postgresql", "5432", ("PGHOST", "PGPORT"), "live migrate ignores TCP override"),
     (osaka, "youtube-collector-a", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka producer-a override"),
     (seoul, "youtube-collector-b", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Seoul producer-b override"),
     (osaka2, "youtube-collector-d", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka2 producer-d override"),
@@ -141,7 +148,6 @@ for services, name, label in [
     (central, "hololive-api", "central API uses tailnet DNS"),
     (central, "hololive-alarm-worker", "central worker uses tailnet DNS"),
     (central, "youtube-collector", "central collector uses tailnet DNS"),
-    (central, "hololive-db-migrate", "central migrate uses tailnet DNS"),
     (live, "youtube-collector", "live collector uses tailnet DNS"),
     (osaka, "youtube-collector-a", "Osaka producer-a uses tailnet DNS"),
     (seoul, "youtube-collector-b", "Seoul producer-b uses tailnet DNS"),
@@ -161,6 +167,21 @@ for services, name, label in [
 ]:
     check_no_cache(services, name, label)
     check_no_scraper_poll(services, name, label.replace("no Valkey", "has no SCRAPER_POLL_/SCRAPER_FETCHER_ENGINE"))
+for services, slot in [(osaka, "a"), (seoul, "b"), (osaka2, "d")]:
+    if set(services) != {f"youtube-collector-{slot}", f"youtube-po-{slot}"}:
+        raise SystemExit(f"[FAIL] AP {slot} contains central services")
+    collector = services[f"youtube-collector-{slot}"]
+    if collector.get("depends_on"):
+        raise SystemExit(f"[FAIL] AP {slot} has central dependencies")
+    if collector["environment"].get("PGAPPNAME") != f"youtube-collector-{slot}":
+        raise SystemExit(f"[FAIL] AP {slot} lacks process identity")
+for services in [default, live_default, central, live]:
+    migrator = services["hololive-db-migrate"]
+    if migrator.get("network_mode") != "none" or migrator["environment"].get("PGSSLMODE") != "disable":
+        raise SystemExit("[FAIL] migrator must use isolated local transport")
+    holders = {name for name, service in services.items() if any(v.get("target") == "/var/run/postgresql" for v in service.get("volumes", []))}
+    if holders != {"holo-postgres", "hololive-db-migrate"}:
+        raise SystemExit(f"[FAIL] privileged socket exposed to {holders}")
 postgres = env(central, "holo-postgres")
 healthcheck = str((central["holo-postgres"].get("healthcheck") or {}).get("test") or [])
 if postgres.get("PGPORT") != "5432" or "-p 5432" not in healthcheck:

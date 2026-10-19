@@ -77,7 +77,7 @@ func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
 
 	port, portErr := sharedenv.IntE("LLM_SCHEDULER_PORT", defaultLLMPort)
 	valkey, valkeyErr := settings.LoadValkeyConfig()
-	postgres, postgresErr := settings.LoadPostgresConfig()
+	postgres, postgresErr := settings.LoadPostgresEndpointConfig()
 	logging, loggingErr := settings.LoadLoggingConfig()
 	cliproxy, cliproxyErr := settings.LoadCliproxyConfig()
 	gemini, geminiErr := settings.LoadGeminiConfig()

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -124,16 +125,7 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 
 	batchSpan.SetAttributes(attribute.Int("dispatch.envelopes", len(envelopes)))
 
-	attemptCtx := ctx
-	cancel := func() {}
-
-	if r.attemptTimeout > 0 {
-		attemptCtx, cancel = context.WithTimeout(ctx, r.attemptTimeout)
-	}
-
-	defer cancel()
-
-	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForDelivery(envelopes))
+	err = r.dispatchGroups(ctx, groupAlarmDispatchEnvelopesForDelivery(envelopes))
 	if err != nil {
 		batchSpan.SetStatus(codes.Error, "batch settlement failed")
 
@@ -165,8 +157,8 @@ func dispatchAttemptOutcome(err error) workercontract.AttemptOutcome {
 
 func (r *Runner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup) error {
 	for _, group := range groups {
-		// 만료된 attempt로 남은 그룹을 계속 보내면 즉시 실패한 미발송 행이 sending으로 전이돼
-		// 재시도 대신 quarantine으로 굳는다. 남은 그룹은 leased로 두고 다음 드레인에 맡긴다.
+		// 부모 종료 시 남은 그룹은 leased로 둔다. 각 그룹의 MarkSending은
+		// 만료된 소유권을 거부하고 성공한 경우에만 기존 SENDING lease를 부여한다.
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("dispatch alarm groups: %w", err)
 		}
@@ -184,7 +176,7 @@ const alarmDispatchStateTimeout = 5 * time.Second
 // 상태 기록과 실패 라우팅은 발송 attempt가 끝난 뒤에도 완료돼야 한다. 이 attempt의 deadline이나
 // 종료 신호로 같이 끊기면 드레인된 행이 sending으로 남아 terminal quarantine으로 굳는다.
 func (r *Runner) withStateContext(ctx context.Context, fn func(context.Context) error) error {
-	stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), alarmDispatchStateTimeout)
+	stateCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), alarmDispatchStateTimeout)
 	defer cancel()
 
 	return fn(stateCtx)
@@ -265,6 +257,11 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 
 	request, err := r.prepareGroupRequest(ctx, group)
 	if err != nil {
+		if errors.Is(err, dispatchoutbox.ErrSendRequestLeaseExpired) {
+			// 미발송 만료 claim은 전체 send-unit 복구가 맡으며 여기서 terminal 전이하지 않는다.
+			return nil
+		}
+
 		if errors.Is(err, dispatchoutbox.ErrSendRequestFence) {
 			return r.withStateContext(ctx, func(stateCtx context.Context) error {
 				return r.consumer.Quarantine(stateCtx, group.envelopes, err)
@@ -349,6 +346,14 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 
 // 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다.
 func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (err error) {
+	if r.attemptTimeout > 0 {
+		var cancel context.CancelFunc
+
+		ctx, cancel = context.WithTimeout(ctx, r.attemptTimeout)
+
+		defer cancel()
+	}
+
 	ctx, span := otel.Tracer("hololive/alarm").Start(ctx, "iris.reply.send")
 	id := r.workerTracker.BeginAttempt(time.Now())
 	completed := false

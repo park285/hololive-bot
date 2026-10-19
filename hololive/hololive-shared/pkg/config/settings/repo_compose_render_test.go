@@ -28,29 +28,6 @@ type renderedPort struct {
 	Protocol  string
 }
 
-func topLevelYAMLBlock(t *testing.T, content, headerPrefix string) string {
-	t.Helper()
-
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		if strings.HasPrefix(line, headerPrefix) {
-			end := len(lines)
-			for j := i + 1; j < len(lines); j++ {
-				if lines[j] != "" && lines[j][0] != ' ' && lines[j][0] != '-' {
-					end = j
-					break
-				}
-			}
-
-			return strings.Join(lines[i:end], "\n")
-		}
-	}
-
-	t.Fatalf("top-level YAML block %s not found", headerPrefix)
-
-	return ""
-}
-
 func composeServiceBlock(t *testing.T, content, service string) string {
 	t.Helper()
 
@@ -123,6 +100,7 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"LIVE_LOGS_PATH=/srv/hololive-logs-dummy",
 		"HOLOLIVE_OTLP_GRPC_ENDPOINT=100.100.1.2:4317",
 		"HOLOLIVE_RUNTIME_GID=1002",
+		"POSTGRES_PORT_BIND_IP=100.100.1.2",
 		"HOLO_API_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-api/VERSION")),
 		"HOLO_ALARM_WORKER_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-alarm-worker/VERSION")),
 	)
@@ -180,6 +158,12 @@ func dockerComposeConfigCommand(ctx context.Context, t *testing.T, files []strin
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "config")
 	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.live-compat.yml":
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "-f", composeLiveCompatFile, "config")
+	case "deploy/compose/docker-compose.osaka.yml":
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.osaka.yml", "config")
+	case "deploy/compose/docker-compose.osaka2.yml":
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.osaka2.yml", "config")
+	case "deploy/compose/docker-compose.seoul.yml":
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.seoul.yml", "config")
 	default:
 		t.Fatalf("unsupported compose file set: %v", files)
 
@@ -197,7 +181,7 @@ func dockerComposeConfigContext(t *testing.T) (context.Context, context.CancelFu
 	return context.WithTimeout(t.Context(), 30*time.Second)
 }
 
-func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
+func renderAPComposeConfig(t *testing.T, file string) renderedCompose {
 	t.Helper()
 
 	if _, err := exec.LookPath("docker"); err != nil {
@@ -207,7 +191,7 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 	ctx, cancel := dockerComposeConfigContext(t)
 	defer cancel()
 
-	cmd := dockerAPComposeConfigCommand(ctx, t, files)
+	cmd := dockerComposeConfigCommand(ctx, t, []string{file})
 	repoRoot := repoRootFromConfigTest(t)
 
 	cmd.Dir = repoRoot
@@ -247,23 +231,6 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 	return cfg
 }
 
-func dockerAPComposeConfigCommand(ctx context.Context, t *testing.T, files []string) *exec.Cmd {
-	t.Helper()
-
-	switch strings.Join(files, "\x00") {
-	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.osaka.yml":
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "-f", "deploy/compose/docker-compose.osaka.yml", "config")
-	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.osaka2.yml":
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "-f", "deploy/compose/docker-compose.osaka2.yml", "config")
-	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.seoul.yml":
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "-f", "deploy/compose/docker-compose.seoul.yml", "config")
-	default:
-		t.Fatalf("unsupported AP compose file set: %v", files)
-
-		return nil
-	}
-}
-
 func writeCentralComposeEnvFile(t *testing.T) string {
 	t.Helper()
 
@@ -301,28 +268,6 @@ func writeAPComposeEnvFile(t *testing.T) string {
 		"HOLOLIVE_CENTRAL_POSTGRES_HOST=dummy",
 		"SESSION_SECRET=dummy",
 	})
-}
-
-func renderableAPComposeFile(t *testing.T, relativePath string) string {
-	t.Helper()
-
-	return writeRenderableAPComposeFile(t, relativePath, readRepoFile(t, relativePath))
-}
-
-func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) string {
-	t.Helper()
-
-	if strings.Contains(content, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(content, "COMPOSE_ENV_FILE") {
-		t.Fatalf("%s must not reference monolithic hololive env file", sourceName)
-	}
-
-	const collectorEnvFile = "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}"
-
-	if !strings.Contains(content, collectorEnvFile) {
-		t.Fatalf("%s missing AP youtube-collector env_file path %s", sourceName, collectorEnvFile)
-	}
-
-	return sourceName
 }
 
 // writeCollectorEnvFile은 youtube-collector가 읽는 설정만 담는다.

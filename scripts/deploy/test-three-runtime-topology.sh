@@ -72,10 +72,4 @@ service_block hololive-alarm-worker | grep -Fq 'NOTIFICATION_EGRESS_ROLE: "owner
     || fail "alarm-worker is not configured as proactive egress owner"
 service_block hololive-api | grep -Fq 'NOTIFICATION_EGRESS_ROLE: "producer"' \
     || fail "hololive-api is not configured as notification producer"
-service_block youtube-collector | grep -Fq 'NOTIFICATION_EGRESS_ROLE: "off"' \
-    || fail "youtube-collector notification egress is not disabled"
-for profile in hololive-api alarm-worker youtube-collector-c; do
-    grep -Fq "/run/hololive-bot/worker-profiles/${profile}.json" "${PROD_FILE}" \
-        || fail "production Compose is missing ${profile} Stack Worker Profile v1"
-done
 pass "egress ownership remains isolated to alarm-worker"

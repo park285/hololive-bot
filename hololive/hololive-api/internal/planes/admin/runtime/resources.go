@@ -6,14 +6,12 @@ import (
 	"log/slog"
 	"sync"
 
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 // adminRuntimeResources는 획득 즉시 등록한 자원을 실패 rollback과 정상 종료에서 같은 owner로 해제한다.
 type adminRuntimeResources struct {
 	once      sync.Once
-	infra     *sharedmodules.InfraModule
 	holodex   interface{ Stop() }
 	alarm     io.Closer
 	trigger   io.Closer
@@ -25,10 +23,6 @@ type adminRuntimeResources struct {
 
 func (r *adminRuntimeResources) Close() error {
 	r.once.Do(func() {
-		if r.infra != nil && r.infra.StopMemberCache != nil {
-			r.infra.StopMemberCache()
-		}
-
 		if r.holodex != nil {
 			r.holodex.Stop()
 		}
@@ -39,10 +33,6 @@ func (r *adminRuntimeResources) Close() error {
 			if r.logger != nil {
 				r.logger.Warn("admin_internal_client_close_failed", slog.Any("error", err))
 			}
-		}
-
-		if r.infra != nil && r.infra.Cleanup != nil {
-			r.infra.Cleanup()
 		}
 	})
 

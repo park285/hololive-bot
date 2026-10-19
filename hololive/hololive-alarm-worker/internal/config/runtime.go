@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -164,6 +165,18 @@ func validateEgressInputs(rooms []string, iris *settings.IrisConfig, holodexAPIK
 }
 
 func (c *RuntimeConfig) validate() error {
+	if c.Postgres.PoolMaxConns < 2 {
+		return errors.New("POSTGRES_POOL_MAX_CONNS must be at least 2 to reserve alarm control capacity")
+	}
+
+	if c.Postgres.PoolMinConns < 0 || c.Postgres.PoolMinConns > c.Postgres.PoolMaxConns {
+		return errors.New("POSTGRES_POOL_MIN_CONNS must be nonnegative and not exceed POSTGRES_POOL_MAX_CONNS")
+	}
+
+	if strings.TrimSpace(c.Postgres.User) != runtimepolicy.PostgresRuntimeRoleUser {
+		return fmt.Errorf("alarm-worker requires POSTGRES_USER=%s", runtimepolicy.PostgresRuntimeRoleUser)
+	}
+
 	if err := settings.ValidateServerRuntime(c.Environment, &c.Server); err != nil {
 		return fmt.Errorf("validate server runtime: %w", err)
 	}

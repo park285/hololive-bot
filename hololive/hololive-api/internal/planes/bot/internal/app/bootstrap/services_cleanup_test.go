@@ -16,14 +16,12 @@ func (c *fakeCleanupCloser) Close() error {
 	return nil
 }
 
-func TestBotInfrastructureOwnerClosesClientsAndInfraOnce(t *testing.T) {
+func TestBotInfrastructureOwnerClosesClientsOnce(t *testing.T) {
 	t.Parallel()
 
 	irisClient := &fakeCleanupCloser{}
 	alarmClient := &fakeCleanupCloser{}
-	infraClosed := 0
 	owner := &botInfrastructureOwner{
-		infraCleanup:    func() { infraClosed++ },
 		irisClient:      irisClient,
 		internalClients: []io.Closer{alarmClient, nil},
 	}
@@ -37,9 +35,5 @@ func TestBotInfrastructureOwnerClosesClientsAndInfraOnce(t *testing.T) {
 
 	if alarmClient.closed != 1 {
 		t.Fatalf("internal client close count = %d, want 1", alarmClient.closed)
-	}
-
-	if infraClosed != 1 {
-		t.Fatalf("infra close count = %d, want 1", infraClosed)
 	}
 }

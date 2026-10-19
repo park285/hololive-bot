@@ -10,6 +10,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 )
 
 //go:embed queries/youtube_delivery_expired_snapshot.sql
@@ -22,12 +24,8 @@ var youtubeExpiredPending = promauto.NewGauge(prometheus.GaugeOpts{
 
 func newYouTubeQueueSampler(pool *pgxpool.Pool, lockTimeout, freshness time.Duration, batchSize int) *workercontract.QueueSampler {
 	return workercontract.NewQueueSampler(func(ctx context.Context) (workercontract.QueueValues, error) {
-		var (
-			depth            int64
-			oldestAgeSeconds float64
-		)
-
-		if err := pool.QueryRow(ctx, youtubeDeliveryReadySnapshotSQL, lockTimeout.Milliseconds(), freshness.Milliseconds(), batchSize).Scan(&depth, &oldestAgeSeconds); err != nil {
+		values, err := store.ReadySnapshot(ctx, pool, lockTimeout, freshness, batchSize)
+		if err != nil {
 			return workercontract.QueueValues{}, fmt.Errorf("sample ready youtube deliveries: %w", err)
 		}
 
@@ -39,6 +37,6 @@ func newYouTubeQueueSampler(pool *pgxpool.Pool, lockTimeout, freshness time.Dura
 
 		youtubeExpiredPending.Set(float64(expired))
 
-		return workercontract.QueueValues{Depth: depth, OldestQueuedAge: time.Duration(oldestAgeSeconds * float64(time.Second))}, nil
+		return values, nil
 	})
 }

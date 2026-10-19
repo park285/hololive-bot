@@ -32,6 +32,25 @@ source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, 
 `PATCH`는 하위 호환 수정과 보안·운영 안정화에 사용합니다. 버전 관리 도입 전 이력은
 `CHANGELOG.md`의 실제 날짜·commit SHA 기준점을 유지하며 추정 버전을 소급하지 않습니다.
 
+### 11.0.0 worker/DB cutover
+
+먼저 구 API/alarm settings·mode를 받는 **10.2.1 호환 baseline을 실제 운영에서 수용**합니다.
+구 프로필 CLI·인증된 loaded hash·atomic source drift·paired rollback 증거 없이 새 settings를
+활성화하지 않습니다. 준비 receipt나 source 통합은 이 수용을 대신하지 않습니다.
+[Compose cutover 절차](../../../deploy/compose/README.md#worker-settings-cutover-1100)는
+11.0.0의 단일 strict schema, 최초 capture, no-build 후보 검사와 복구 bundle을 정의합니다.
+다섯 genuine shared-go v2.14.0 pin/sum과 전체 upstream migration manifest 324까지를 유지하며
+stream-duration·time-finalization·membership·Node·issuer 산출물을 함께 보존합니다.
+이 worker/DB 운영 변경에 data migration을 추가하거나 구 321 manifest를 실행하지 않습니다.
+
+11.0.0의 API/alarm·collector pair와 standalone Seoul 구성을 검증한 뒤 승인된 순서로 교체합니다.
+privileged migrator는 전용 Unix socket·network-none이고 network consumer는 TLS verify-full입니다.
+role limit SQL은 배포 wrapper가 실행하지 않습니다. rollout 소유자가 collector 네 곳 모두 max 7
+수용을 확인한 **뒤에만** 승인된 admin socket으로 적용합니다. HBA/WAL/server 재생성과
+persisted 설정 정리도 각 승인·증거를 남깁니다. Valkey noeviction은 별도 선행 관측이 없으면
+활성화하지 않습니다. 이 문서는 새 운영 적용 증거를 주장하지 않습니다.
+
+
 ## Compose service 재배포
 
 빌드 호스트와 중앙 런타임 호스트는 서로 다른 머신입니다. 중앙 런타임 호스트에서는

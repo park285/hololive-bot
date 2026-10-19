@@ -2,17 +2,15 @@ package joblease
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
@@ -116,10 +114,10 @@ func waitForLeaseQueryLock(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 	}, time.Second, 10*time.Millisecond)
 }
 
-func rollbackTestLease(ctx context.Context, t *testing.T, tx pgxutil.Rollbacker) {
+func rollbackTestLease(ctx context.Context, t *testing.T, tx pgxdb.Rollbacker) {
 	t.Helper()
 
-	if err := pgxutil.Rollback(ctx, tx); !errors.Is(err, pgx.ErrTxClosed) {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		require.NoError(t, err)
 	}
 }

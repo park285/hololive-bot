@@ -96,6 +96,7 @@ unit=hololive-youtube-collector@youtube-collector-a.service
 collector_prechange_running="${PRECHANGE_RUNNING:-true}" collector_prechange_enabled="${PRECHANGE_ENABLED:-true}" collector_prechange_state=inactive
 po_service=hololive-youtube-po.service po_socket=hololive-youtube-po.socket
 native_previous_link_restore() { printf 'previous restored\\n' >> "$CASE/calls"; }
+native_rollback_validate() { test -d "$1/rollback-contract"; }
 po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"; }
 ''' + functions + '\nnative_cutover_claim "$release_dir"\narm_native_cutover_restore\n' + action + '\n')
     env = dict(os.environ, CASE=str(case), INITIAL=str(initial).lower(), MODE=mode, PATH=f'{case / "bin"}:{os.environ["PATH"]}',
@@ -105,7 +106,7 @@ po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"
         if target:
             await_file(case / ('restoring' if target.startswith('restore') else 'entered'), proc)
             if target.endswith('group'):
-                # The owner creates a separate job process group for its mutation worker.
+                # 변경 워커는 소유자가 만든 별도 작업 프로세스 그룹에서 실행된다.
                 worker = int((case / 'recovery/worker-pid').read_text())
                 assert os.getpgid(int((case/'command.pid').read_text())) == worker if (case/'command.pid').exists() else True
                 os.killpg(worker, signo)
@@ -139,10 +140,14 @@ case, actual = run_case('known-failure', 'native_cutover_run failed bash -c "exi
 assert actual == 7 and (case/'restored').exists() and not (case/'recovery').exists()
 # 변경 전 상태 기록 본문을 가짜 systemctl로 실행합니다. 재시작 대기는 실행 중, 실패·정지는 멈춘 상태로 기록합니다.
 record_block = source[source.index('collector_prechange_enabled=false\n'):source.index('\nstop_collector_unit_and_require_inactive()')]
+for profile_name in ('desired-profile.json', 'worker-profile.json'):
+    (work / profile_name).write_text('{}\n')
 for active_state, enabled, want_running in [('active', True, 'true'), ('activating', True, 'true'), ('reloading', False, 'true'),
                                              ('failed', True, 'false'), ('inactive', False, 'false'), ('', False, 'false')]:
     probe = f'''set -Eeuo pipefail
 unit=hololive-youtube-collector@youtube-collector-a.service
+worker_profile="{work / 'desired-profile.json'}" release_dir="{work}"
+sudo() {{ [[ "$1" != -n ]] || shift; "$@"; }}
 systemctl() {{
   case "$1" in
     show) printf '%s\\n' "{active_state}" ;;

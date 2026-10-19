@@ -9,9 +9,9 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 type eventInsert struct {
@@ -325,8 +325,8 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 
 func finishDispatchBatch(ctx context.Context, tx pgx.Tx, err error, panicValue any) error {
 	if panicValue != nil {
-		rollbackErr := pgxutil.Rollback(ctx, tx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		rollbackErr := pgxdb.Rollback(ctx, tx)
+		if rollbackErr != nil {
 			slog.Default().Warn("dispatch batch rollback after panic failed", slog.Any("error", rollbackErr))
 		}
 
@@ -345,7 +345,7 @@ func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err error) err
 		return nil
 	}
 
-	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+	if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 		return errors.Join(err, fmt.Errorf("rollback dispatch batch: %w", rollbackErr))
 	}
 

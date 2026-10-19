@@ -22,7 +22,7 @@ type botOwnerCloser func() error
 
 func (f botOwnerCloser) Close() error { return f() }
 
-func TestBotInfrastructureOwnerJoinsMemberCacheBeforeClosingClientsAndDatabase(t *testing.T) {
+func TestBotInfrastructureOwnerJoinsHolodexBeforeClosingClients(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		entered := make(chan struct{})
 		release := make(chan struct{})
@@ -35,9 +35,8 @@ func TestBotInfrastructureOwnerJoinsMemberCacheBeforeClosingClientsAndDatabase(t
 		var order []string
 
 		owner := &botInfrastructureOwner{
-			stopHolodex: func() { order = append(order, "holodex") },
-			stopMemberCache: func() {
-				order = append(order, "member-cache")
+			stopHolodex: func() {
+				order = append(order, "holodex")
 
 				close(entered)
 				<-release
@@ -54,7 +53,6 @@ func TestBotInfrastructureOwnerJoinsMemberCacheBeforeClosingClientsAndDatabase(t
 
 				return nil
 			}),
-			infraCleanup: func() { order = append(order, "database-cache") },
 		}
 		closed := make(chan error, 1)
 
@@ -63,7 +61,7 @@ func TestBotInfrastructureOwnerJoinsMemberCacheBeforeClosingClientsAndDatabase(t
 		<-entered
 
 		if got := resourceCloses.Load(); got != 0 {
-			t.Fatalf("client closed while member cache is alive=%d want=0", got)
+			t.Fatalf("client closed while Holodex is alive=%d want=0", got)
 		}
 
 		finish()
@@ -72,7 +70,7 @@ func TestBotInfrastructureOwnerJoinsMemberCacheBeforeClosingClientsAndDatabase(t
 			t.Fatal(err)
 		}
 
-		if want := []string{"holodex", "member-cache", "internal-client", "iris", "database-cache"}; !slices.Equal(order, want) {
+		if want := []string{"holodex", "internal-client", "iris"}; !slices.Equal(order, want) {
 			t.Fatalf("cleanup order=%v want=%v", order, want)
 		}
 	})
@@ -82,12 +80,11 @@ func TestBotInfrastructureOwnerPartialBuildClosesAcquiredResourcesAndPreservesEr
 	clientErr := errors.New("client close failed")
 	irisErr := errors.New("Iris close failed")
 
-	var internalCloses, irisCloses, infraCloses int
+	var internalCloses, irisCloses int
 
 	owner := &botInfrastructureOwner{
 		internalClients: []io.Closer{botOwnerCloser(func() error { internalCloses++; return clientErr })},
 		irisClient:      botOwnerCloser(func() error { irisCloses++; return irisErr }),
-		infraCleanup:    func() { infraCloses++ },
 	}
 
 	for range 2 {
@@ -97,8 +94,8 @@ func TestBotInfrastructureOwnerPartialBuildClosesAcquiredResourcesAndPreservesEr
 		}
 	}
 
-	if internalCloses != 1 || irisCloses != 1 || infraCloses != 1 {
-		t.Fatalf("cleanup counts client/Iris/infra=%d/%d/%d want=1/1/1", internalCloses, irisCloses, infraCloses)
+	if internalCloses != 1 || irisCloses != 1 {
+		t.Fatalf("cleanup counts client/Iris=%d/%d want=1/1", internalCloses, irisCloses)
 	}
 }
 

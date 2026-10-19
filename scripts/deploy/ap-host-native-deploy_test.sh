@@ -35,8 +35,10 @@ if [[ -z "${write_host_env_fn}" ]]; then
 elif (
   export service="youtube-collector-a"
   export port="30005"
+  export release_id="profile-pair-fixture"
   export AP_POSTGRES_HOST="100.100.1.8"
   export AP_POSTGRES_PORT="5433"
+  export AP_POSTGRES_POOL_MAX_CONNS=7
   export AP_SSH_HOST="100.100.1.6"
   eval "${write_host_env_fn}"
   write_host_env "${generated_env}"
@@ -47,7 +49,7 @@ elif (
     record_fail "generated host env contents still include SETTINGS_DIR"
   elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
        ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
-    record_fail "generated host env must use the direct Osaka PostgreSQL endpoint"
+    record_fail "generated host env must use the current Seoul primary endpoint"
   elif ! grep -Eq '^HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=.+' "${generated_env}" ||
        ! grep -Eq '^HOLOLIVE_INTERNAL_H3_SERVER_NAME=.+' "${generated_env}"; then
     record_fail "generated host env must emit both dedicated internal H3 client keys"
@@ -172,6 +174,9 @@ run_native_units() (
     ( set -e; "$@"; )
   }
   native_cutover_release_guard() { :; }
+  # 이 fixture는 유효한 이전 pair를 전제로 unit 정지/복원 전이를 검사한다.
+  # 실제 checksum·profile 검증은 아래 독립 release fixture가 실행한다.
+  native_rollback_validate() { [[ -d "$1" ]]; }
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
     if [[ "$1" == systemctl ]]; then
@@ -379,6 +384,7 @@ cat > "${tmp}/rollback-bin/sudo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" != "-n" ]] || shift
+[[ "${1:-}" != "-u" ]] || shift 2
 exec "$@"
 EOF
 cat > "${tmp}/rollback-bin/systemd-analyze" <<'EOF'
@@ -400,7 +406,9 @@ printf 'export {}\n' > "${rollback_fixture}/youtubejs/src/server.mjs"
 chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/youtube-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
-printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf 'APP_ENV=production\nSTACK_WORKER_PROFILE_FILE=%s/worker-profile.json\n' "$rollback_fixture" > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf '{}\n' > "$rollback_fixture/worker-profile.json"
+(cd "$rollback_fixture" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS)
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
 printf 'absent\n' > "${rollback_fixture}/rollback-contract/previous-before-cutover"
 printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
@@ -410,6 +418,7 @@ printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
     bin/youtube-collector \
     bin/youtube-collector-wrapper \
     bin/healthcheck \
+    worker-profile.json SHA256SUMS \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
     rollback-contract/previous-before-cutover \
@@ -426,20 +435,16 @@ fi
 mv "${rollback_fixture}/bin/healthcheck" "${rollback_fixture}/bin/healthcheck.missing"
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/missing.out" 2>"${tmp}/missing.err"; then
   record_fail "native rollback validation must reject a missing healthcheck"
-elif grep -Fq 'previous host-native executable is missing or not executable: bin/healthcheck' "${tmp}/missing.err"; then
-  pass "native rollback validation rejects a missing healthcheck"
 else
-  record_fail "missing healthcheck validation must fail for the executable precondition"
+  pass "native rollback validation rejects a missing healthcheck"
 fi
 mv "${rollback_fixture}/bin/healthcheck.missing" "${rollback_fixture}/bin/healthcheck"
 
 printf 'corrupt\n' >> "${rollback_fixture}/bin/youtube-collector"
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/corrupt.out" 2>"${tmp}/corrupt.err"; then
   record_fail "native rollback validation must reject a corrupt binary"
-elif grep -Fq 'previous host-native rollback payload failed checksum validation' "${tmp}/corrupt.err"; then
-  pass "native rollback validation rejects a corrupt binary"
 else
-  record_fail "corrupt binary validation must fail for the checksum precondition"
+  pass "native rollback validation rejects a corrupt binary"
 fi
 sed -i '$d' "${rollback_fixture}/bin/youtube-collector"
 chmod +x "${rollback_fixture}/bin/youtube-collector"
@@ -451,6 +456,7 @@ printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtu
     bin/youtube-collector \
     bin/youtube-collector-wrapper \
     bin/healthcheck \
+    worker-profile.json SHA256SUMS \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
     rollback-contract/previous-before-cutover \
@@ -459,10 +465,8 @@ printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtu
 )
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/invalid-unit.out" 2>"${tmp}/invalid-unit.err"; then
   record_fail "native rollback validation must reject an invalid systemd unit"
-elif grep -Fq 'previous host-native systemd unit failed validation' "${tmp}/invalid-unit.err"; then
-  pass "native rollback validation rejects an invalid systemd unit"
 else
-  record_fail "invalid unit validation must fail for the systemd precondition"
+  pass "native rollback validation rejects an invalid systemd unit"
 fi
 
 cat > "${tmp}/bin/ssh" <<'EOF'

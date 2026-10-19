@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -93,17 +93,17 @@ func LoadRuntime() (*RuntimeConfig, error) {
 }
 
 func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *APIWorkerProfile) {
-	worker := profile.Loaded.Profile.Workers["source_observation"]
+	worker := profile.Loaded.Profile.Workers[WorkerSourceObservation]
 	observation := profile.SourceObservation
 
 	config.Enabled = worker.Executor.Enabled
 	config.ConsumerWorkers = worker.Executor.ConfiguredWorkers
 	config.DBOperationConcurrency = observation.DBOperationConcurrency
 	config.ClaimBatchSize = observation.ClaimBatchSize
-	config.ClaimInterval = time.Duration(observation.ClaimIntervalMS) * time.Millisecond
-	config.ClaimLease = time.Duration(observation.ClaimLeaseMS) * time.Millisecond
-	config.TransactionTimeout = time.Duration(observation.TransactionTimeoutMS) * time.Millisecond
-	config.ShutdownTimeout = time.Duration(observation.ShutdownTimeoutMS) * time.Millisecond
+	config.ClaimInterval = workercontract.Milliseconds(observation.ClaimIntervalMS)
+	config.ClaimLease = workercontract.Milliseconds(observation.ClaimLeaseMS)
+	config.TransactionTimeout, _ = worker.Executor.AttemptTimeout.FixedDuration()
+	config.ShutdownTimeout = workercontract.Milliseconds(observation.ShutdownTimeoutMS)
 }
 
 func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig, llmConfig *LLMSchedulerConfig) error {
@@ -305,16 +305,29 @@ func validateYouTubePlaneDatabaseRole(user string) error {
 }
 
 func validatePlanePool(plane string, config *settings.PostgresConfig) error {
+	prefix := "BOT"
+
+	switch plane {
+	case "admin":
+		prefix = "ADMIN_API"
+	case "llm":
+		prefix = "LLM_SCHEDULER"
+	}
+
 	if config.PoolMinConns < 0 {
-		return fmt.Errorf("%s POSTGRES_POOL_MIN_CONNS must be >= 0", plane)
+		return fmt.Errorf("%s_POSTGRES_POOL_MIN_CONNS must be >= 0", prefix)
 	}
 
 	if config.PoolMaxConns <= 0 {
-		return fmt.Errorf("%s POSTGRES_POOL_MAX_CONNS must be positive", plane)
+		return fmt.Errorf("%s_POSTGRES_POOL_MAX_CONNS must be positive", prefix)
+	}
+
+	if plane == "bot" && config.PoolMaxConns < 2 {
+		return errors.New("BOT_POSTGRES_POOL_MAX_CONNS must be at least 2 to reserve control capacity")
 	}
 
 	if config.PoolMinConns > config.PoolMaxConns {
-		return fmt.Errorf("%s POSTGRES_POOL_MIN_CONNS must be <= POSTGRES_POOL_MAX_CONNS", plane)
+		return fmt.Errorf("%s_POSTGRES_POOL_MIN_CONNS must be <= %s_POSTGRES_POOL_MAX_CONNS", prefix, prefix)
 	}
 
 	return nil

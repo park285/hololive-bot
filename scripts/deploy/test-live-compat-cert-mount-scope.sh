@@ -218,8 +218,8 @@ expected = {
 
 violations = []
 for service, filename in expected.items():
-    source = f"/etc/stack-secrets/hololive-bot/worker-profiles/{filename}"
-    target = f"/run/hololive-bot/worker-profiles/{filename}"
+    source = "/etc/stack-secrets/hololive-bot/worker-profiles"
+    target = "/run/hololive-bot/worker-profiles"
     mounts = services.get(service, {}).get("volumes", []) or []
     matched = False
     for mount in mounts:
@@ -229,12 +229,16 @@ for service, filename in expected.items():
                 and mount.get("source") == source
                 and mount.get("target") == target
                 and mount.get("read_only") is True
+                and mount.get("bind", {}).get("create_host_path", False) is False
             )
         else:
             matched = str(mount) == f"{source}:{target}:ro"
         if matched:
             break
-    if not matched:
+    env = services.get(service, {}).get("environment", {}) or {}
+    if isinstance(env, list):
+        env = dict(item.split("=", 1) for item in env if "=" in item)
+    if not matched or env.get("STACK_WORKER_PROFILE_FILE") != f"{target}/{filename}":
         violations.append((service, source, target))
 
 if violations:

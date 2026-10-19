@@ -31,6 +31,7 @@ func TestShortsWindowClaimsCannotOvertakePendingOrProcessingBaseline(t *testing.
 	second := publishShortWindow(t, repo, &proof, "known", "new")
 	_, err := pool.Exec(ctx, `UPDATE source_observation_queue SET available_at = NOW() + INTERVAL '1 hour' WHERE observation_id = $1`, first)
 	require.NoError(t, err)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 0)
 
 	blocked, err := repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
@@ -43,16 +44,19 @@ func TestShortsWindowClaimsCannotOvertakePendingOrProcessingBaseline(t *testing.
 
 	_, err = pool.Exec(ctx, `UPDATE source_observation_queue SET available_at = NOW() - INTERVAL '1 second' WHERE observation_id = $1`, first)
 	require.NoError(t, err)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 1)
 
 	batch, err := repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
 	require.Len(t, batch.Claims, 1)
 	require.Equal(t, first, batch.Claims[0].ObservationID)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 0)
 
 	blocked, err = repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
 	require.Empty(t, blocked.Claims)
 	expireObservationClaim(t, pool, first)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 1)
 
 	reclaimed, err := repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
@@ -209,6 +213,7 @@ func TestShortsWindowOrderingIsChannelScopedAndTerminalDoesNotBlock(t *testing.T
 
 	other, err := publishkit.NewPublisher(repo.pool).PublishBatch(ctx, publishInput(&prepared))
 	require.NoError(t, err)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 1)
 
 	batch, err := repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
@@ -218,6 +223,7 @@ func TestShortsWindowOrderingIsChannelScopedAndTerminalDoesNotBlock(t *testing.T
 
 	_, err = pool.Exec(ctx, `UPDATE source_observation_queue SET attempt_count = $2, available_at = NOW() - INTERVAL '1 second' WHERE observation_id = $1`, first, MaxAttempts)
 	require.NoError(t, err)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 0)
 
 	_, err = repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
@@ -226,6 +232,7 @@ func TestShortsWindowOrderingIsChannelScopedAndTerminalDoesNotBlock(t *testing.T
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM source_observation_queue WHERE observation_id = $1`, first).Scan(&status))
 	require.Equal(t, "DEAD_LETTER", status)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 1)
 
 	batch, err = repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
@@ -293,6 +300,7 @@ func TestShortsWindowExpiredReplayCannotBlockEligibleObservation(t *testing.T) {
 
 	_, err = pool.Exec(ctx, `INSERT INTO source_observation_replay_epoch (cutoff_received_at, activated_by, reason) VALUES (NOW() - INTERVAL '1 hour', 'test', 'exclude pre-epoch predecessor')`)
 	require.NoError(t, err)
+	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 1)
 
 	batch, err := repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)

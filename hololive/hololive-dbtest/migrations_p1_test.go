@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
@@ -694,7 +695,7 @@ func runObservationRoleQueries(
 		}
 	}
 
-	if err := tx.Rollback(t.Context()); err != nil {
+	if err := pgxdb.Rollback(t.Context(), tx); err != nil {
 		t.Fatalf("rollback observation lock API check for %s: %v", role, err)
 	}
 }
@@ -720,7 +721,7 @@ func execObservationRoleQuery(ctx context.Context, tx pgx.Tx, query string, args
 func rollbackObservationRoleTx(t *testing.T, tx pgx.Tx, role, stage string) {
 	t.Helper()
 
-	if err := tx.Rollback(t.Context()); err != nil {
+	if err := pgxdb.Rollback(t.Context(), tx); err != nil {
 		t.Errorf("rollback observation lock API %s for %s: %v", stage, role, err)
 	}
 }
@@ -761,7 +762,7 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 	}
 
 	if _, err := tx.Exec(t.Context(), "SET LOCAL ROLE "+pgx.Identifier{roles.runtime}.Sanitize()); err != nil {
-		if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("rollback runtime retention role setup: %v", rollbackErr)
 		}
 
@@ -777,7 +778,7 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 	} {
 		rows, queryErr := tx.Query(t.Context(), query)
 		if queryErr != nil {
-			if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil {
+			if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 				t.Errorf("rollback runtime retention API query: %v", rollbackErr)
 			}
 
@@ -787,7 +788,7 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		rows.Close()
 	}
 
-	if err := tx.Rollback(t.Context()); err != nil {
+	if err := pgxdb.Rollback(t.Context(), tx); err != nil {
 		t.Fatalf("rollback runtime retention API check: %v", err)
 	}
 }
@@ -820,7 +821,7 @@ func assertScheduleCollaboConstraintAccess(t *testing.T, pool *pgxpool.Pool, rol
 	}
 
 	if _, err := tx.Exec(t.Context(), "SET LOCAL ROLE "+pgx.Identifier{roles.runtime}.Sanitize()); err != nil {
-		if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("rollback schedule collabo constraint role setup: %v", rollbackErr)
 		}
 
@@ -832,14 +833,14 @@ func assertScheduleCollaboConstraintAccess(t *testing.T, pool *pgxpool.Pool, rol
 			group_key, provider, external_id, title, scheduled_at, collabo_talent_names
 		) VALUES ('grant-check', 'hololive_official', 'grant-check', 'grant-check', clock_timestamp(), ARRAY['Guest'])
 	`); err != nil {
-		if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("rollback schedule collabo constraint runtime insert: %v", rollbackErr)
 		}
 
 		t.Fatalf("insert schedule item through collabo constraint as runtime role: %v", err)
 	}
 
-	if err := tx.Rollback(t.Context()); err != nil {
+	if err := pgxdb.Rollback(t.Context(), tx); err != nil {
 		t.Fatalf("rollback schedule collabo constraint runtime check: %v", err)
 	}
 }
@@ -967,7 +968,7 @@ func assertScraperCollectionMembership(t *testing.T, pool *pgxpool.Pool, role, r
 
 	assertScraperProjectionGuardDenied(t, tx, role)
 
-	if err := tx.Rollback(ctx); err != nil {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		t.Fatalf("rollback scraper collection membership check: %v", err)
 	}
 }
@@ -1071,7 +1072,7 @@ func assertRuntimeProjectionGuardAccess(t *testing.T, pool *pgxpool.Pool, role, 
 		}
 	}
 
-	if err := tx.Rollback(ctx); err != nil {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		t.Fatalf("rollback runtime projection guard check: %v", err)
 	}
 }

@@ -1,8 +1,6 @@
 package migrationrunner
 
 import (
-	"context"
-	"errors"
 	"slices"
 	"testing"
 	"testing/fstest"
@@ -10,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -227,7 +226,7 @@ func TestInvalidIndexesExcludesInProgressConcurrentBuild(t *testing.T) {
 
 	conn.Release()
 
-	if err := snapshotTx.Rollback(ctx); err != nil {
+	if err := pgxdb.Rollback(ctx, snapshotTx); err != nil {
 		t.Fatalf("release snapshot: %v", err)
 	}
 
@@ -259,8 +258,8 @@ func startBlockedConcurrentIndexBuild(t *testing.T, pool *pgxpool.Pool) (pgx.Tx,
 
 	// t.Context()는 Cleanup 직전에 취소되므로, rollback ctx는 취소에서 분리해야 한다.
 	t.Cleanup(func() {
-		rollbackErr := snapshotTx.Rollback(context.WithoutCancel(ctx))
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		rollbackErr := pgxdb.Rollback(ctx, snapshotTx)
+		if rollbackErr != nil {
 			t.Errorf("rollback snapshot tx: %v", rollbackErr)
 		}
 	})

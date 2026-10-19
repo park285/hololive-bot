@@ -217,12 +217,12 @@ func TestDiscoveryRecordsFailureWhileAdvancingCursor(t *testing.T) {
 	source := &runnerFailureSource{stubCandidateSource: newEmptyCandidateStub(t), failedID: ids[0], cause: localCandidateFailure()}
 
 	for _, id := range ids[1:] {
-		source.pages[id] = joblease.CandidatePage{Jobs: []joblease.JobSpec{{JobKey: id}}}
+		source.pages[id] = joblease.CandidatePage{Jobs: []joblease.JobSpec{queueTestSpec(id)}}
 	}
 
 	scheduler.candidates = source
 	scheduler.queueCapacity = len(ids)
-	scheduler.queue = make(chan joblease.JobSpec, len(ids))
+	scheduler.queue = make(chan queuedJob, len(ids))
 	scheduler.discoverOnce(t.Context())
 
 	if scheduler.rotationCursor == 0 || scheduler.Snapshot().LastCycleOperationCode != collecterr.OperationCandidateLoadFailed {
