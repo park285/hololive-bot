@@ -54,9 +54,11 @@ type deliveryOutboxClaimer interface {
 	fetchReadyAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration, activeRooms []string, processedIDs []int64) ([]domain.NotificationDeliveryOutbox, error)
 }
 
+// deliveryRequestStore의 두 요청 갱신은 fence가 맞지 않으면 *requestFenceMissError를 돌려준다.
 type deliveryRequestStore interface {
-	reissueFailedRequest(context.Context, int64, string, int, *deliverypayload.Request, *deliverypayload.Request, int, time.Duration, string) (bool, error)
-	saveRequest(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) (bool, error)
+	reissueFailedRequest(context.Context, int64, string, int, *deliverypayload.Request, *deliverypayload.Request, int, time.Duration, string) error
+	saveRequest(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) error
+	markRequestExhausted(ctx context.Context, id int64, workerID string, attemptCount int, errMsg string) (bool, error)
 }
 
 type deliveryOutboxTransitioner interface {

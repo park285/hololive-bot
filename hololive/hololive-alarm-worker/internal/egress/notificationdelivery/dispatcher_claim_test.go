@@ -69,7 +69,7 @@ func TestDispatcherClaimsOnlyWhenDeliveryCanStart(t *testing.T) {
 
 				var expired, sent atomic.Int32
 
-				repo.saveRequestFn = func(_ context.Context, id int64, _ string, _, _ *deliverypayload.Request) (bool, error) {
+				repo.saveRequestFn = func(_ context.Context, id int64, _ string, _, _ *deliverypayload.Request) error {
 					repo.mu.Lock()
 
 					valid := repo.expires[id].After(time.Now())
@@ -77,9 +77,11 @@ func TestDispatcherClaimsOnlyWhenDeliveryCanStart(t *testing.T) {
 
 					if !valid {
 						expired.Add(1)
+
+						return &requestFenceMissError{Operation: requestFenceSave, Cause: requestFenceLeaseExpired, Status: domain.DeliveryStatusPending}
 					}
 
-					return valid, nil
+					return nil
 				}
 
 				sender := &mockSender{sendFn: func(context.Context, string, string) error {

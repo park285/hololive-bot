@@ -19,6 +19,11 @@ SET attempt_count = o.attempt_count + 1,
 		WHEN $9 THEN eligible.transitioned_at + ($3::double precision * INTERVAL '1 millisecond')
 		ELSE o.next_attempt_at
 	END,
+	-- 종료 실패에서 저장된 요청을 소진으로 표시해 producer rearm이 같은 요청을 되살리지 않게 한다.
+	payload = CASE
+		WHEN $10 THEN jsonb_set(o.payload, '{request,exhausted}', 'true'::jsonb)
+		ELSE o.payload
+	END,
 	locked_at = NULL,
 	locked_by = NULL,
 	lock_expires_at = NULL,

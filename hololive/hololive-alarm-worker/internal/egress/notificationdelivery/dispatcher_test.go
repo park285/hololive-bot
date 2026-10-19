@@ -47,7 +47,7 @@ const (
 
 // mockDeliveryRepository: deliveryRepository mock 구현.
 type mockDeliveryRepository struct {
-	saveRequestFn            func(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) (bool, error)
+	saveRequestFn            func(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) error
 	fetchAndLockFn           func(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
 	markSendingFn            func(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
 	markQuarantinedFn        func(context.Context, int64, string, string) (bool, error)
@@ -59,21 +59,33 @@ type mockDeliveryRepository struct {
 	claimedIDs               map[int64]struct{}
 }
 
-func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, attemptCount int, previous, next *deliverypayload.Request, maxRetries int, backoff time.Duration, reason string) (bool, error) {
-	saved, err := m.saveRequest(ctx, id, worker, previous, next)
-	if err != nil || !saved {
-		return saved, err
+func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, attemptCount int, previous, next *deliverypayload.Request, maxRetries int, backoff time.Duration, reason string) error {
+	if err := m.saveRequest(ctx, id, worker, previous, next); err != nil {
+		return err
 	}
 
-	return m.MarkFailed(ctx, id, worker, attemptCount, maxRetries, backoff, reason)
+	failed, err := m.MarkFailed(ctx, id, worker, attemptCount, maxRetries, backoff, reason)
+	if err != nil {
+		return err
+	}
+
+	if !failed {
+		return &requestFenceMissError{Operation: requestFenceReissue, Cause: requestFenceOwnerChanged}
+	}
+
+	return nil
 }
 
-func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, previous, next *deliverypayload.Request) (bool, error) {
+func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, previous, next *deliverypayload.Request) error {
 	if m.saveRequestFn != nil {
 		return m.saveRequestFn(ctx, id, worker, previous, next)
 	}
 
-	return true, nil
+	return nil
+}
+
+func (m *mockDeliveryRepository) markRequestExhausted(ctx context.Context, id int64, worker string, attemptCount int, reason string) (bool, error) {
+	return m.MarkFailed(ctx, id, worker, attemptCount, 1, 0, reason)
 }
 
 func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
