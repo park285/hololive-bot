@@ -48,6 +48,8 @@ func execLiveReviewStatements(t *testing.T, pool *pgxpool.Pool, videoID string, 
 		_, err := pool.Exec(t.Context(), statement, videoID)
 		require.NoError(t, err)
 	}
+
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
 // insertLegacyFormatReceipt는 운영의 기존 27건처럼 246 형식 전체 원본을 다른 시간대 세션에서 기록한다.
@@ -74,10 +76,11 @@ func insertLegacyFormatReceipt(t *testing.T, pool *pgxpool.Pool, receiptID, vide
 		) full_snapshot`, videoID, receiptID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
 func recordLiveReview(ctx context.Context, pool *pgxpool.Pool, receiptID, videoID, digest string) error {
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
@@ -117,6 +120,7 @@ func TestLiveReviewSurvivesTechnicalRefreshAndReopensOnFacts(t *testing.T) {
 
 	_, err := pool.Exec(ctx, collectionTargetFixture)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	const videoID = "review-legacy"
 
@@ -268,6 +272,7 @@ func TestFutureLegacyUpcomingStaysUnknownButNotActionable(t *testing.T) {
 
 	_, err := pool.Exec(ctx, collectionTargetFixture)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	before := observeLifecycleMetrics(t, pool)
 
@@ -279,6 +284,7 @@ func TestFutureLegacyUpcomingStaysUnknownButNotActionable(t *testing.T) {
 		       ('legacy-unscheduled','fresh','UPCOMING','',NULL,'legacy_unknown');
 		INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('future-conflict','LIVE')`)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	after := observeLifecycleMetrics(t, pool)
 	delta := func(m func(*collectionTargetMetrics) float64) float64 { return m(after) - m(before) }

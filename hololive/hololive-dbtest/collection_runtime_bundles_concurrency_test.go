@@ -85,7 +85,7 @@ func runCollectionBundleBlockedWriter(t *testing.T, pool *pgxpool.Pool, firstSQL
 		<-done
 	}()
 
-	waitLiveRuntimeGuard(ctx, t, pool, first, second)
+	waitSecondTxBlockedByFirst(ctx, t, pool, first, second)
 
 	if blocked != nil {
 		blocked(first)

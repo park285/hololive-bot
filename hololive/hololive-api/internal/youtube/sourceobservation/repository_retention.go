@@ -321,7 +321,7 @@ func (r *Repository) deleteEvidenceBatch(ctx context.Context, cfg RetentionConfi
 		return 0, nil
 	}
 
-	// DB 함수가 live guard → 커서 → 원본 순서를 소유하며 삭제와 진행을 함께 커밋한다.
+	// DB 함수가 exclusive live 전역 잠금 → 커서 → 원본 순서를 소유하며 삭제와 진행을 함께 커밋한다.
 	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (int64, error) {
 		tag, err := tx.Exec(ctx, mustSQL("repository_retention_delete_evidence_0079_79.sql"), kinds, cutoffs, cfg.BatchSize)
 		if err != nil {

@@ -2,18 +2,15 @@ package dbtest
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
-// 서로 다른 표를 쓰는 두 트랜잭션도 같은 영상의 합성 상태를 잃지 않고 대기 전 snapshot을 재사용하지 않는다.
+// 서로 다른 표를 쓰는 두 트랜잭션은 같은 영상 갱신에서 직렬화되고, 뒤 갱신이 앞 커밋을 읽어 합성 상태를 잃지 않는다.
 func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		name := "absent_upserts"
@@ -32,6 +29,7 @@ func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 				_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('concurrent','old-channel','LIVE');
 					INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('concurrent','UPCOMING')`)
 				require.NoError(t, err)
+				RefreshAllLiveRuntimeState(t, pool)
 			}
 
 			first, err := pool.Begin(ctx)
@@ -45,9 +43,15 @@ func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 			defer rollbackLiveReviewReceiptFactsTx(t, second)
 
 			_, err = first.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status)
-				VALUES ('concurrent','first-writer','LIVE') ON CONFLICT(video_id) DO UPDATE SET channel_id=excluded.channel_id`)
+				VALUES ('concurrent','first-writer','LIVE') ON CONFLICT(video_id) DO UPDATE SET channel_id=excluded.channel_id;
+				SELECT refresh_youtube_live_runtime_state(ARRAY['concurrent'])`)
 			require.NoError(t, err)
 			assertLiveRuntimeState(t, first)
+
+			_, err = second.Exec(ctx, `INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at)
+				VALUES ('concurrent','LIVE','2026-10-12','2026-10-13') ON CONFLICT(video_id) DO UPDATE SET
+				status=excluded.status,last_live_positive_at=excluded.last_live_positive_at,last_live_positive_seen_at=excluded.last_live_positive_seen_at`)
+			require.NoError(t, err, "다른 표의 원본 쓰기는 전역 guard 없이 진행됩니다")
 
 			result := make(chan error, 1)
 			done := make(chan struct{})
@@ -55,10 +59,8 @@ func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 			go func() {
 				defer close(done)
 
-				_, writeErr := second.Exec(ctx, `INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at)
-					VALUES ('concurrent','LIVE','2026-10-12','2026-10-13') ON CONFLICT(video_id) DO UPDATE SET
-					status=excluded.status,last_live_positive_at=excluded.last_live_positive_at,last_live_positive_seen_at=excluded.last_live_positive_seen_at`)
-				result <- writeErr
+				_, refreshErr := second.Exec(ctx, `SELECT refresh_youtube_live_runtime_state(ARRAY['concurrent'])`)
+				result <- refreshErr
 			}()
 
 			defer func() {
@@ -67,18 +69,17 @@ func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 				<-done
 			}()
 
-			waitLiveRuntimeGuard(ctx, t, pool, first, second)
+			waitSecondTxBlockedByFirst(ctx, t, pool, first, second)
 			require.NoError(t, first.Commit(ctx))
 
 			select {
 			case err = <-result:
 				require.NoError(t, err)
 			case <-time.After(5 * time.Second):
-				t.Fatal("second source writer did not finish after guard release")
+				t.Fatal("second refresh did not finish after video lock release")
 			}
 
 			assertLiveRuntimeState(t, second)
-
 			assertCombinedLiveRuntimeState(ctx, t, second)
 			require.NoError(t, second.Commit(ctx))
 			assertLiveRuntimeState(t, pool)
@@ -86,46 +87,12 @@ func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 	}
 }
 
-// 오래된 고정 snapshot은 새 원본과 섞인 모델을 커밋하지 않고 SQLSTATE 40001로 끝나야 한다.
-func TestLiveRuntimeStateStaleFixedSnapshotFails(t *testing.T) {
-	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
-		t.Run(string(isolation), func(t *testing.T) {
-			pool := NewPool(t)
-			ctx := t.Context()
-			stale, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation})
-			require.NoError(t, err)
-
-			defer rollbackLiveReviewReceiptFactsTx(t, stale)
-
-			var before int
-
-			require.NoError(t, stale.QueryRow(ctx, `SELECT count(*) FROM youtube_live_runtime_state`).Scan(&before))
-
-			_, err = pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('fixed-snapshot','new-source','LIVE')`)
-			require.NoError(t, err)
-
-			_, err = stale.Exec(ctx, `INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('fixed-snapshot','UPCOMING')`)
-
-			pgErr, ok := errors.AsType[*pgconn.PgError](err)
-			require.True(t, ok, "stale snapshot must fail with PostgreSQL serialization error: %v", err)
-			require.Equal(t, "40001", pgErr.Code)
-			require.NoError(t, pgxdb.Rollback(ctx, stale))
-			assertLiveRuntimeState(t, pool)
-
-			var hasHead bool
-
-			require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM youtube_live_reconciliation_heads WHERE video_id='fixed-snapshot')`).Scan(&hasHead))
-			require.False(t, hasHead)
-		})
-	}
-}
-
-func waitLiveRuntimeGuard(ctx context.Context, t *testing.T, pool *pgxpool.Pool, first, second pgx.Tx) {
+func waitSecondTxBlockedByFirst(ctx context.Context, t *testing.T, pool *pgxpool.Pool, first, second pgx.Tx) {
 	t.Helper()
 
 	firstPID := first.Conn().PgConn().PID()
 	secondPID := second.Conn().PgConn().PID()
-	// 시간 지연으로 겹침을 추정하지 않고 실제 guard 잠금 대기를 확인한 뒤 첫 쓰기를 커밋한다.
+	// 시간 지연으로 겹침을 추정하지 않고 second가 first의 잠금을 실제로 기다리는지 확인한다.
 	require.Eventually(t, func() bool {
 		var blocked bool
 

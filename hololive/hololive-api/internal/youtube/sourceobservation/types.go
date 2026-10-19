@@ -170,13 +170,12 @@ type Application struct {
 type ReconcileResult struct {
 	Applications []Application
 	// LiveRuntimeVideoIDs는 이 관측 저장이 youtube_live_runtime_state 입력을 바꿨을 수 있는 영상 key다.
+	// Finalize가 같은 트랜잭션 끝에 이 key로 수명 모델을 갱신하므로, 원본을 쓰는 writer는 빠짐없이 채워야 한다.
 	// 실제 변경 key의 상위집합이며 중복을 허용한다.
 	LiveRuntimeVideoIDs []string
 	Unsupported         bool
 	EffectiveAt         time.Time
 	SourceEventFallback bool
-	// liveRuntimeKeyAudit는 finalizeTx가 채우고 Finalize가 커밋 뒤 지표로 남긴다.
-	liveRuntimeKeyAudit liveRuntimeKeyAudit
 }
 
 type RetryInput struct {
