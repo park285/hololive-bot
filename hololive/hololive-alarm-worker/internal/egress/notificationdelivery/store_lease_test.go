@@ -87,6 +87,8 @@ func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("fetch len = %d, want 1", len(items))
 	}
 
+	markOutboxSending(ctx, t, repository, &items[0])
+
 	tx, err := repository.pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin row lock: %v", err)

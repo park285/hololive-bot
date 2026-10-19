@@ -176,7 +176,7 @@ func TestFetchReadyAndLock_OrdersDueBeforeCreatedAt(t *testing.T) {
 	}
 }
 
-func TestMarkSent(t *testing.T) {
+func TestMarkSent_RejectsOwnedPendingRow(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
@@ -189,13 +189,50 @@ func TestMarkSent(t *testing.T) {
 		t.Fatal("no items fetched")
 	}
 
-	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
+	ok, err := repository.MarkSent(ctx, items[0].ID, testWorkerA)
+	if err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
-	cnt := countByStatus(ctx, t, repository, domain.DeliveryStatusSent)
-	if cnt != 1 {
-		t.Fatalf("expected 1 sent, got %d", cnt)
+	if ok {
+		t.Fatal("MarkSent must not settle a PENDING row that never entered SENDING")
+	}
+
+	var (
+		status        domain.DeliveryOutboxStatus
+		lockedBy      *string
+		lockExpiresAt *time.Time
+		sentAt        *time.Time
+	)
+
+	if scanErr := repository.pool.QueryRow(ctx,
+		"SELECT status, locked_by, lock_expires_at, sent_at FROM notification_delivery_outbox WHERE id = $1",
+		items[0].ID,
+	).Scan(&status, &lockedBy, &lockExpiresAt, &sentAt); scanErr != nil {
+		t.Fatalf("load row: %v", scanErr)
+	}
+
+	if status != domain.DeliveryStatusPending {
+		t.Fatalf("status = %s, want PENDING", status)
+	}
+
+	if lockedBy == nil || *lockedBy != testWorkerA || lockExpiresAt == nil {
+		t.Fatalf("claim lease must stay with worker A, locked_by=%v lock_expires_at=%v", lockedBy, lockExpiresAt)
+	}
+
+	if sentAt != nil {
+		t.Fatalf("sent_at = %s, want NULL", *sentAt)
+	}
+
+	markOutboxSending(ctx, t, repository, &items[0])
+
+	ok, err = repository.MarkSent(ctx, items[0].ID, testWorkerA)
+	if err != nil {
+		t.Fatalf("mark sent after sending: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("the same owner must settle after entering SENDING")
 	}
 }
 
@@ -248,6 +285,8 @@ func TestMarkSent_ClearsLock(t *testing.T) {
 	if !items[0].LockedAt.Valid {
 		t.Fatal("expected locked_at set after claim")
 	}
+
+	markOutboxSending(ctx, t, repository, &items[0])
 
 	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
 		t.Fatalf("mark sent: %v", err)
@@ -405,6 +444,8 @@ func TestCleanup(t *testing.T) {
 		t.Fatal("no items fetched")
 	}
 
+	markOutboxSending(ctx, t, repository, &items[0])
+
 	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
@@ -528,6 +569,10 @@ func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 
 	reclaimByWorkerB(ctx, t, repository, id)
 
+	if started, err := repository.MarkSending(ctx, id, testWorkerB, testLease); err != nil || !started {
+		t.Fatalf("worker B mark sending: started=%v err=%v", started, err)
+	}
+
 	fenced, err := repository.MarkSent(ctx, id, testWorkerA)
 	if err != nil {
 		t.Fatalf("stale worker A mark sent: %v", err)
@@ -541,8 +586,8 @@ func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 		t.Fatalf("stale MarkSent must not mark SENT, sent=%d", sent)
 	}
 
-	if pending := countByStatus(ctx, t, repository, domain.DeliveryStatusPending); pending != 1 {
-		t.Fatalf("row must stay PENDING under B's lease, pending=%d", pending)
+	if sending := countByStatus(ctx, t, repository, deliveryStatusSending); sending != 1 {
+		t.Fatalf("row must stay SENDING under B's ownership, sending=%d", sending)
 	}
 
 	okFenced, err := repository.MarkSent(ctx, id, testWorkerB)
@@ -613,6 +658,8 @@ func TestMarkSent_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 	}
 
 	id := itemsA[0].ID
+
+	markOutboxSending(ctx, t, repository, &itemsA[0])
 
 	fenced, err := repository.MarkSent(ctx, id, testWorkerB)
 	if err != nil {
