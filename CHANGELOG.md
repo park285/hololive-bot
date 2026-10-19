@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **Live 세션 정책 AP 일원화:** live 세션의 status·관측 시각·메타데이터 병합을 SQL CASE에서 reducer로 옮기고, 잠금 안에서 읽은 행 그대로일 때만 적용되는 조건부 INSERT/UPDATE로 저장합니다. 0행 적용은 영상 단위 충돌 오류로 보고되어 트랜잭션 전체를 재시도하며, 저장된 채널과 `ended_at`을 유지하는 규칙을 reducer에 더했습니다. claim의 replay epoch 만료·시도 소진 DEAD_LETTER 판정은 Go 재시도 정책이 정하고 같은 트랜잭션의 집합 UPDATE 한 번으로 기록하며, live 경로별 잠금 순서표를 hololive-api 문서에 정리했습니다.
 - **SQL 시계 선택 검사:** 기존 SQL 소유권 검사에서 collector lease와 alarm의 잠금 후 fence는 wall clock, 후보·projection·live 조회는 statement clock을 요구합니다. 주석·문자열·인용 식별자를 구분하고 인자 없는 실제 함수 호출만 검사하여 CTE·별칭의 열 선언을 오인하지 않습니다. 범위 밖의 기록용 transaction clock과 기존 migration은 유지하며, 잠금 순서의 정확성은 기존 DB 경합 시험이 계속 검증합니다.
 - **동기 집계 정합 진단:** dbtest 오라클을 공유 SQL 자산으로 옮겨 bundle·live 모델의 누락·잉여·값 변경과 매핑의 값·중복도 불일치를 읽기 전용 RR snapshot에서 검사합니다. 서비스 파일과 무관하게 연결 제한을 명시적 인자로, 조회 제한을 SET LOCAL로 적용하고 유효값을 확인합니다. 식별자·원문 없이 건수만 반환하며 정상/불일치/확인 실패를 종료 코드 0/1/2로 구분합니다. dbtest는 집계와 매핑을 직접 손상시켰을 때 불일치 종류마다 한 건씩 세는지도 확인합니다. 새 migration·자동 복구·주기 실행·운영 적용은 없습니다.
 

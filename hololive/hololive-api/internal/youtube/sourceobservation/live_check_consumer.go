@@ -157,7 +157,7 @@ func (c *Consumer) reduceVideoLiveCheck(
 		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
-	if persistErr := persistLiveDecision(ctx, tx, &decision); persistErr != nil {
+	if persistErr := persistLiveDecision(ctx, tx, state.Sessions, &decision); persistErr != nil {
 		return ReconcileResult{}, fmt.Errorf("persist live decision: %w", persistErr)
 	}
 

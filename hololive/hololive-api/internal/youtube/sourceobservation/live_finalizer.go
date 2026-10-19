@@ -68,7 +68,7 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 	}
 
 	decision := live.FinalizeDue(state, dbNow, grace)
-	if err := persistLiveDecision(ctx, tx, &decision); err != nil {
+	if err := persistLiveDecision(ctx, tx, state.Sessions, &decision); err != nil {
 		return false, fmt.Errorf("persist live decision: %w", err)
 	}
 

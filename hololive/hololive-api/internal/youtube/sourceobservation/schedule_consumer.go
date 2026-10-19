@@ -24,7 +24,7 @@ func (c *Consumer) reconcileSchedule(
 		return ReconcileResult{}, fmt.Errorf("lock schedule subject: %w", lockErr)
 	}
 
-	state, err := loadScheduleState(ctx, tx, evidence.Items)
+	state, stored, err := loadScheduleState(ctx, tx, evidence.Items)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("load schedule state: %w", err)
 	}
@@ -34,7 +34,7 @@ func (c *Consumer) reconcileSchedule(
 		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
-	if persistErr := persistScheduleDecision(ctx, tx, claimed, &decision); persistErr != nil {
+	if persistErr := persistScheduleDecision(ctx, tx, claimed, stored, &decision); persistErr != nil {
 		return ReconcileResult{}, fmt.Errorf("persist schedule decision: %w", persistErr)
 	}
 

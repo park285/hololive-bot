@@ -65,7 +65,7 @@ func reconcileScheduleBenchmark(ctx context.Context, tx dbx.Tx, observation *Obs
 		return err
 	}
 
-	state, err := loadScheduleState(ctx, tx, evidence.Items)
+	state, stored, err := loadScheduleState(ctx, tx, evidence.Items)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func reconcileScheduleBenchmark(ctx context.Context, tx dbx.Tx, observation *Obs
 		return fmt.Errorf("reduce schedule benchmark: %w", err)
 	}
 
-	return persistScheduleDecision(ctx, tx, observation, &decision)
+	return persistScheduleDecision(ctx, tx, observation, stored, &decision)
 }
 
 func advanceScheduleBenchmark(observation *Observation, evidence *schedule.Evidence) {

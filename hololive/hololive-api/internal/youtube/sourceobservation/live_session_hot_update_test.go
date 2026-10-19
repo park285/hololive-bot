@@ -32,7 +32,7 @@ func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
 		TitleObservedAt:    new(observed),
 	}
 
-	insert := liveSessionStatement(session, false)
+	insert, _ := liveSessionWrite(nil, session)
 	_, err := pool.Exec(ctx, insert.SQL, insert.Args...)
 	require.NoError(t, err)
 
@@ -43,16 +43,25 @@ func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
 
 	const refreshes = 5
 
+	stored := *session
+
+	stored.Present = true
+
 	for i := range refreshes {
 		seen := observed.Add(time.Duration(i+1) * time.Minute)
+		next := stored
 
-		session.LastSeenAt = seen
-		session.StatusObservedAt = new(seen)
+		next.LastSeenAt = seen
+		next.StatusObservedAt = new(seen)
 
-		statement := liveSessionStatement(session, false)
+		statement, write := liveSessionWrite(map[string]live.SessionState{stored.VideoID: stored}, &next)
+		require.True(t, write)
+
 		tag, execErr := tx.Exec(ctx, statement.SQL, statement.Args...)
 		require.NoError(t, execErr)
 		require.EqualValues(t, 1, tag.RowsAffected(), "refresh %d must update the session", i)
+
+		stored = next
 	}
 
 	var updated, hot int64

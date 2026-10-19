@@ -41,7 +41,12 @@ func TestLifecycleOriginMetadataMergePreservesObservedAndLegacy(t *testing.T) {
 			}
 
 			if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-				return persistScheduleDecision(ctx, tx, &Observation{}, &schedule.Decision{Sessions: []schedule.Session{{
+				_, stored, loadErr := loadScheduleState(ctx, tx, []schedule.Item{{VideoID: testVideoID}})
+				if loadErr != nil {
+					return loadErr
+				}
+
+				return persistScheduleDecision(ctx, tx, &Observation{}, stored, &schedule.Decision{Sessions: []schedule.Session{{
 					VideoID: testVideoID, ChannelID: testChannelID, Status: domain.LiveStatusUpcoming,
 					Title: "new schedule", LastSeenAt: seen.Add(time.Hour),
 				}}})

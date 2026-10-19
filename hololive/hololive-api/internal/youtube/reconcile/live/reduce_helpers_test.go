@@ -14,6 +14,7 @@ import (
 const (
 	testLiveStatus = "LIVE"
 	testVideoID    = "vid-a"
+	testChannelID  = "UC_TEST"
 )
 
 func emptyState() *State {
@@ -22,14 +23,14 @@ func emptyState() *State {
 
 func channelCoverage() contract.GlobalChannelCoverageV1 {
 	return contract.GlobalChannelCoverageV1{
-		RequestedChannelIDs: []string{"UC_TEST"},
+		RequestedChannelIDs: []string{testChannelID},
 		Filters:             contract.LiveFiltersV1{Statuses: []string{"UPCOMING", testLiveStatus, "ENDED", "CANCELLED"}}, //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
 	}
 }
 
 func sessionFact(status string) SessionFact {
 	return SessionFact{
-		VideoID: testVideoID, ChannelID: "UC_TEST", Status: status,
+		VideoID: testVideoID, ChannelID: testChannelID, Status: status,
 		LiveStartConfirmed: status == testLiveStatus,
 	}
 }
