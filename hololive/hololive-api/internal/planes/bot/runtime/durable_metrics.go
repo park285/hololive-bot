@@ -18,9 +18,10 @@ var (
 		Name: "bot_durable_command_outcome_unknown_total",
 		Help: "Durable command executions closed without a confirmed side-effect outcome.",
 	})
+	// 이전 바이너리가 lease를 남긴 채 기록한 accepted만 센다. Lease 없는 accepted는 handoff reconciler가 맡는다.
 	replyOutboxAcceptedReclaimedTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "bot_reply_outbox_accepted_reclaimed_total",
-		Help: "Accepted reply outbox leases moved to manual review after expiry.",
+		Help: "Legacy leased accepted reply outbox rows moved to manual review after lease expiry.",
 	})
 	replyOutboxManualReviewBacklog = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "bot_reply_outbox_manual_review_backlog",
