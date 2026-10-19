@@ -174,7 +174,7 @@
   - 완료 (2026-10-18): `runtime/queries/time_finalization_videos.sql`, `runtime/roster.go` `TimeFinalizationVideos`, `targetprojection/types.go` `appendTimeFinalizationVideos`, 설정 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`, 지표 `runtime/time_finalization_metrics.go`. 시험 `targetprojection/time_finalization_test.go`, `runtime/time_finalization_projection_test.go`(후보 제외, 재시도 사이 generation 유지, 묶음 교체·분산·K=0, 10,350행 조회 예산), `runtime/time_finalization_metrics_test.go`, `config/youtube_plane_time_finalization_test.go`.
 - [x] 4. 표시: 설계 8로 바꾼다. 조회문에 `times_source`와 확정 결과를 추가한다. 0·1에 의존한다.
   - 완료 (2026-10-18): 조회문 두 개에 `s.times_source`, `f.outcome`, `f.reason`(LEFT JOIN). `handler_broadcast_history.go`의 판정과 formatter `ArchiveUnavailable`. handler 16개 사례와 formatter 사례를 `kakaoformat.Render` 결과로, DB 시험으로 LEFT JOIN NULL과 목록·단건 일치를 확인한다.
-- [ ] 5. 단계적 활성화 (`hololive-bot-ops` 배포)
+- [x] 5. 단계적 활성화 (`hololive-bot-ops` 배포)
   - 처음에는 신규 종료만 넣고 backlog는 K=0으로 둔다. 1~2일 관찰한다.
   - 통과 기준:
     - 신규 공개 아카이브의 97% 이상이 종료 1시간 안에 `finalized`
@@ -192,6 +192,13 @@
     - 기준 3 충족: 수집기 교체 뒤(05:19Z~) p99 `channel_live_check` 4.65초, `live_snapshot` 5.49초(기준 2배 10초 이하). 배포 때 2분 동안 `video_live_check` 163건(분당 약 80건)이 몰렸을 때도 11.0~11.5초였다. backlog 첫 시도는 6초에 하나(분당 10건 이하)라 그 8분의 1 이하다.
     - 기준 1 일부: 확정 가능률은 신 lifecycle 첫 시도 161/162(99.4%)다. "종료 1시간 안" 부분의 근거인 종료 직후 아카이브 준비 시간은 표본이 적다(종료 1시간 안 시도 2/2, 조사 때 종료 전후 영상 확인 6/6). 이 불확실성은 신규 종료 경로에만 해당하고, backlog와 같은 성격인 종료 6시간 이상 지난 아카이브는 151/152가 확정됐다.
     - 남은 판정: 기준 1은 배포 뒤 신규 종료 30건으로 6단계와 병행해 판정한다. 06:00Z에 3건이고, 최근 3일 시간대별 종료 수로 보면 오늘 UTC 13~14시 무렵 30건이 된다. 종료는 UTC 12~17시에 몰리므로 그 시간대 수집 지연은 6단계 중단 조건으로 감시한다.
+  - 네 번째 세션 판정 방법 보완 (07:23Z): 배포 뒤 `lifecycle_origin='observed'`인 실제 신규 종료를 `status_observed_at,video_id`순으로 고정하고 취소·시작/LIVE 근거 없는 행·migration 324의 legacy 정리 행은 제외한다. 진행 행은 LEFT JOIN하여 아직 확인하지 않은 행도 분모에 남긴다. 최초 30건 각각의 종료 관측 후 1시간이 지나야 판정하며, 공개 여부 미확인은 별도로 집계한다. 성공 여부는 관측 종료→확정과 provider 종료→확정을 구분해 기록한다. 07:23Z에는 후보 5건·관찰 창 종료 3건으로, 아직 기준 1을 판정하지 않는다.
+  - 기준 1 최종 표본 판정 (2026-10-18 14:28~14:32Z):
+    - 04:30Z 이후 실제 신규 종료 최초 30건의 마지막 1시간 관찰 창은 14:23:37Z에 닫혔고 14:27:51Z 집계에서 30/30을 확인했다. 공개 26건·멤버십 1건·identity_missing 3건이다.
+    - 공개 아카이브는 26/26(100%)이 관측 종료와 provider 종료 양쪽 기준으로 1시간 안에 finalized되어 **표본 기준 통과**다. 공개 최대 지연은 관측 종료 기준 30.029분, provider 종료 기준 34.499분이다. 멤버십 1건도 양쪽 기준 시간 내 확정했다.
+    - 미확정 3건은 별도 공개 watch 조회 3회로 비공개 2건(LOGIN_REQUIRED)·삭제 1건(ERROR)을 확인했다. 식별자·제목·payload는 기록하지 않았다. 이 3건을 공개 아카이브 성공률의 분모에서 제외하지만 전체 표본에서는 남긴다. 전체 종료 30건의 시간 내 확정률은 27/30(90%)로 별도 보고한다.
+    - 기준 2·3도 유지된다. 14:32Z 신규 queue 209건은 finalized 204·pending 4·exhausted 1·conflict 0이다. 05:19Z 이후 실제 수집 지연 p99는 channel_live_check 4.641초(32,919건)·live_snapshot 4.934초(38,108건)다.
+    - 한계: 공개 26건의 관측 표본에 대한 판정이며 장기 모집단의 97%를 통계적으로 보장하지 않는다. 비공개·삭제는 응용 프로그램의 identity_missing 계약을 그대로 유지하고, 공개 페이지 조사 결과로 운영 사유를 덮어쓰지 않았다.
 - [ ] 6. 기존 기록 보정 (backlog)
   - 5단계 기준 2·3의 데이터 판정 뒤 K를 올려 최근 종료부터 처리한다(2026-10-18 사용자 결정, 기준 1은 병행 판정).
   - 약 9,700건이다. 첫 시도는 직전 결과 6초 뒤에 하나씩 열려 분당 10건이 상한이고, 수집·정산 지연을 더하면 분당 약 5~8건, 하루 안팎으로 본다(추정).
@@ -205,6 +212,45 @@
     - `reverted`는 대기열에서 빠지는 최종 상태다.
     - 운영 실행에는 별도 승인이 필요하다.
   - 멈춤: K를 0으로 두고 API를 재시작하면 다음 projection에서 backlog 대상이 빠진다. 진행 행은 그대로 남아 K를 다시 올리면 이어진다.
+  - 실행 (2026-10-18 07:20~07:23Z):
+    - 기존 `f089d9a64136f1b5322d1a96fee4d68412433cee` arm64 image를 유지한 채 K=200으로 API만 07:20:46Z 재생성했다. healthy·재시작 0, bot/admin health·LLM readiness 통과, 다른 컨테이너 ID 불변을 확인했다.
+    - `compose.env` 마스터를 먼저 수정하고 scoped sync의 dry-run·apply·마스터/미러 일치·root:hololive-runtime 0640을 확인했다. 설정 복구본은 인계 문서 "I5 실행·감시 기록"에 적었다.
+    - 07:21:26~30Z 아래 투입 SQL을 1,000건 9회·745건 1회 실행했다. 매회 읽기 전용 사전 count와 별도 `BEGIN READ WRITE; SET LOCAL lock_timeout='3s'` 트랜잭션을 사용했고, 각 COMMIT을 확인했다. 삽입 합계 9,745건, 미투입 후보 0건이다. 시각 롤백·멤버십 재투입 SQL은 실행하지 않았다.
+    - 사전 30분 실제 수집 지연(`observed_at-scheduled_for`) p99는 `channel_live_check` 4.508초·`live_snapshot` 4.765초였다. 07:22:51Z 직전 5분은 3.938초·4.616초, backlog 확정 10건·pending 9,735건이다. 완료 검증과 혼동하지 않는다.
+    - 부모가 kapu의 임시 감시 프로세스로 60초마다 집계한다. 현재 사용자 승인 중단 기준은 5분 p99 >10초, request_failed 3건 이상·5% 이상, 이전 48시간 공개 확인 집합의 5분 identity_missing 3건 이상·5% 이상, **직전 30분 최종 결과 대비 conflict ≥0.5%이면서 3건 이상**이다. conflict만 최초 5분·단발 중단에서 두 번째 재개 때 조정했다. 작은 이상 징후의 중단은 늦어질 수 있으나 단발 충돌은 계속 terminal 격리되며 제품의 시각·identity 검증은 바꾸지 않았다. 공개 이력 없는 UNKNOWN은 봇 확인으로 단정하지 않는다.
+    - 중단·조회 실패·최대 48시간·backlog 전량 최종 상태 중 먼저 발생하는 때 감시가 부모에게 결과를 전달한다. K=0 복귀는 다음 projection에서 backlog 첫 시도·재시도를 제거하지만 신규 종료·이미 발행된 관측 정산은 멈추지 않는다. 진행 행과 확정한 시각은 유지한다.
+  - 중단·재개 승인 (08:02~08:17Z):
+    - `conflict(channel_mismatch)` 1건이 직전 5분 최종 결과 49건의 2.04%여서 K=0으로 복귀했다. API만 08:02:45Z 재생성했고 health/readiness·재시작 0·같은 image·현재 backlog target 0건을 확인했다. 당시 p99 4.615초·4.685초, request_failed 0건이다.
+    - 08:03Z 분포는 확정 259·충돌 1·pending 9,485건(미시도 9,416·identity_missing 69)이다. 충돌은 공개 응답의 영상 identity는 맞지만 채널이 저장 채널과 다른 경우이며, 해당 세션의 시각·observed 출처가 그대로 보존되었다. 과거 채널 귀속 경위는 보존된 관측만으로 확정하지 못했다.
+    - 사용자는 충돌 행을 terminal 상태로 격리한 채 나머지를 재개하는 것을 승인했다. 중단 지표의 정상 범위 복귀를 확인한 뒤 K=200·API 단독 재생성하며 동일 중단 조건을 유지한다. 채널 수정·conflict 재큐잉·시각 롤백은 하지 않는다.
+  - 재개 (08:17~08:18Z): 사용자 승인 후 직전 5분 conflict 0건·p99 4.632초/4.585초를 확인했다. 마스터 K=200·scoped sync·08:17:50Z API 단독 재생성 뒤 health/readiness·재시작 0·동일 image·다른 컨테이너 불변을 확인했다. 새 SQL 투입은 없다. 08:18:06Z 확정 296·격리 충돌 1·pending 9,448건이며 p99 4.840초/4.688초·request_failed/새 conflict 0건이다. 같은 감시 조건을 유지한다.
+  - 두 번째 중단·기준 조정·재개 (10:21~11:11Z):
+    - 10:21Z `start_mismatch` 1건이 5분 최종 결과 52건의 1.92%여서 K=0·10:22:20Z API 단독 재생성을 실행했다. health/readiness·재시작 0·backlog target 0건을 확인했다. 확정 1,275·격리 충돌 2·pending 8,468건을 보존했다.
+    - 새 충돌은 영상·채널·종료 시각이 일치하지만 provider 시작이 저장값보다 28.464분 늦어 허용폭 15분을 넘는 `observed`·`EXPLICIT_END` 사례다. 원래 시각은 바뀌지 않았다. 시각 검증 완화·채널 수정·재큐잉은 하지 않았다.
+    - 사용자가 conflict 중단만 30분 창·3건 이상·0.5% 이상으로 조정하고 K=200 재개하는 것을 승인했다. 사전 p99 4.223초/4.766초·30분 conflict 0건을 확인한 뒤 마스터·미러 sync와 11:11:00Z API 단독 재생성을 완료했다. 동일 image·K=200·health/readiness·재시작 0·다른 컨테이너 불변을 확인했다.
+    - 11:11:11Z 확정 1,288·격리 충돌 2·pending 8,455건, p99 4.701초/4.798초, request_failed·30분 새 conflict 0건이다. I4는 신규 후보 14건 모두 1시간을 관찰했지만 30건에 못 미쳐 계속 대기한다.
+  - 세 번째 중단·동일 기준 재개 (13:57~14:29Z):
+    - 직전 30분 최종 결과 203건 중 conflict 3건(1.48%)으로 K=0·13:58:09Z API 단독 재생성을 실행했다. 동일 image·health/readiness·재시작 0·다른 컨테이너 불변·현재 backlog target 0을 확인했다.
+    - 중단 뒤 확정 2,536·충돌 8·pending 7,201건이다. 채널 불일치 2건·시작 불일치 6건 모두 원래 시각이 보존되었다. 시작 불일치 6건의 provider 시작 차이는 +16.217~+97.206분이다. 누적 최종 결과 충돌률 8/2,544(0.31%)와 30분 집중률을 구분해 보고했다.
+    - 사용자는 **현재 기준으로 재개**를 선택했다. conflict 기준을 누적률로 바꾸지 않았다. 14:28Z 30분 conflict 0건·p99 4.586초/4.565초를 확인하고 scoped sync·14:29:35Z API 단독 재생성을 완료했다. K=200·동일 image·health/readiness·재시작 0·다른 컨테이너 불변·마스터/미러 일치를 확인했다.
+    - 14:29:47Z 재개 표본은 확정 2,552·충돌 9·pending 7,184건, p99 4.701초/4.958초, request_failed 0·30분 새 conflict 1건이다. 재개 때 기존 재시도에서 start_mismatch 1건이 추가로 격리되었으며 30분·3건 중단 조건은 충족하지 않는다.
+  - 네 번째 중단·조건부 반복 재개 승인 (14:32~14:35Z):
+    - 30분 conflict 3/57(5.26%), p99 5.582초/5.749초로 K=0·14:34:21Z API 단독 재생성을 완료했다. 건강·준비 상태·재시작 0·동일 image·다른 컨테이너 불변·현재 backlog target 0을 확인했다. 확정 2,596·충돌 12·pending 7,137건을 보존했고 충돌 12/12의 원래 시각이 유지되었다.
+    - 사용자가 이번 9,745건에 한해 최대 8회·2026-10-20 14:35:50Z까지 조건부 반복 재개를 승인했다. 같은 start_mismatch·channel_mismatch뿐이고 원래 시각 보존·현재 backlog target 0·수집 지표 정상·30분 새 conflict 0을 확인한 뒤 K=200·API 단독 재생성한다. 다른 사유·지연·요청 실패·감시 실패는 재개하지 않는다. 30분·3건·0.5% 중단 기준은 바꾸지 않는다. 승인된 재개 사용 횟수는 5/8이다.
+  - 조건부 재개 1/8 (15:05Z): 허용 외 충돌 사유·원래 시각 변경·신규 queue conflict·현재 backlog target·30분 새 conflict가 모두 0이고 p99 4.656초/4.835초·request_failed 0임을 확인했다. K=0·기존 revision 확인 뒤 마스터 K=200·scoped sync·15:05:08Z API 단독 재생성을 완료했다. 건강·준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치가 확인됐다. 재개 표본은 확정 2,600·충돌 12·pending 7,133건이다.
+  - 다섯 번째 중단 (15:25~15:26Z): 30분 conflict 3/164(1.83%)로 K=0·15:26:30Z API 단독 재생성을 실행했다. 동일 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치·backlog target 0을 확인했다. 확정 2,765·충돌 15·pending 6,965건이며 허용 외 사유·원래 시각 변경·신규 queue conflict가 모두 0이다. 조건부 재개 사용 1/8을 유지하고 15:54:32Z 이후 새 사전 검증으로 2회차를 판단한다.
+  - 조건부 재개 2/8 (15:55Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.629초/4.395초·request_failed 0, K=0·동일 revision을 확인했다. scoped sync·15:55:11Z API 단독 재생성 뒤 같은 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치가 확인됐다. 재개 표본은 확정 2,765·충돌 15·pending 6,965건이다.
+  - 여섯 번째 중단 (16:15~16:16Z): 30분 conflict 3/158(1.90%)로 K=0·16:16:13Z API 단독 재생성을 완료했다. 동일 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치·backlog target 0을 확인했다. 확정 2,918·충돌 18·pending 6,809건이며 허용 외 사유·원래 시각 변경·신규 queue conflict는 0이다. 사용 2/8, 16:44:55Z 이후 새 사전 검증으로 3회차를 판단한다.
+  - 조건부 재개 3/8 (16:45Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.625초/4.415초·request_failed 0, K=0·동일 revision 확인 뒤 scoped sync·16:45:19Z API 단독 재생성을 완료했다. 같은 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치를 확인했다. 재개 표본은 확정 2,923·충돌 18·pending 6,804건이다.
+  - 종료 집중 시간대 확인(UTC 12~17시, 17:46Z 집계): channel_live_check p99 4.640초(17,850건), live_snapshot p99 4.972초(20,976건), video_live_check 1,967회 중 request_failed 0회다. 이 구간에는 K=0 중단 시간도 포함되며 연속 K=200 관찰로 해석하지 않는다. 17:46Z backlog는 확정 3,345·충돌 21·pending 6,379건, 조건부 재개 사용 3/8이다.
+  - 일곱 번째 중단 (18:21Z): 30분 conflict 3/271(1.11%)로 K=0·18:21:31Z API 단독 재생성을 완료했다. 동일 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치·backlog target 0을 확인했다. 확정 3,639·충돌 25·pending 6,081건이며 허용 외 사유·원래 시각 변경·신규 queue conflict는 0이다. 사용 3/8, 18:50:16Z 이후 4회차 사전 조건을 판단한다.
+  - 조건부 재개 4/8 (18:50Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 3.806초/4.287초·request_failed 0, K=0·동일 revision 확인 뒤 scoped sync·18:50:34Z API 단독 재생성을 완료했다. 같은 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치를 확인했다. 재개 표본은 확정 3,648·충돌 25·pending 6,072건이다.
+  - 여덟 번째 중단 (19:23~19:24Z): 30분 conflict 3/242(1.24%)로 K=0·19:24:21Z API 단독 재생성을 완료했다. 동일 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치·backlog target 0을 확인했다. 확정 3,902·충돌 28·pending 5,815건이며 허용 외 사유·원래 시각 변경·신규 queue conflict는 0이다. 사용 4/8, 19:53:00Z 이후 5회차 사전 조건을 판단한다.
+  - 조건부 재개 5/8 (19:53Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.011초/4.671초·request_failed 0, K=0·동일 revision 확인 뒤 scoped sync·19:53:24Z API 단독 재생성과 공통 검증을 완료했다. 재개 표본은 확정 3,907·충돌 28·pending 5,810건이다.
+  - 신 lifecycle 첫 확인 완료(22:25Z): observed 4,209건 모두 첫 확인을 마쳤다. 전체 확정 5,082(observed 4,101·legacy 981)·충돌 31·pending 4,632건이며, 미시도 4,529건은 모두 legacy이고 재시도는 103건이다. 마지막 재시도까지 최종 결과가 필요하므로 첫 확인 완료를 I5 완료로 처리하지 않는다. 조건부 재개 사용 5/8이다.
+  - 사용자 요청 인계 중단(2026-10-19 00:14Z): "핸드오프해서 다른세션에서 진행하자"에 따라 무감시 처리를 막도록 K=0·00:14:14Z API 단독 재생성을 완료했다. 같은 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치·0640·backlog target 0을 확인했다. 이후 세션 감시 프로세스를 종료했다.
+    - 00:14:22Z 확정 5,856·충돌 31(start_mismatch 23·channel_mismatch 8)·pending 3,858건이다. 미시도 3,689·재시도 169(identity_missing 159·login_required_unclassified 9·end_time_missing 1)이며 충돌 31/31의 원래 시각이 보존되었다. 신규 queue conflict 0, p99 4.621초/4.745초, request_failed·30분 새 conflict 0이다.
+    - 조건부 재개 사용 5/8·잔여 3회·기한 2026-10-20 14:35:50Z를 유지한다. 인계 중단은 재개 횟수를 소비하지 않았다. 다음 세션은 자기 소유 감시와 동일 검증 조건을 갖춘 뒤 기존 승인 범위에서 K=200으로 이어가며 재투입 SQL은 실행하지 않는다. 20건 대조와 표시 비율은 전량 최종 상태 뒤에 수행한다. 제품 재시도·fallback 변경은 없다.
 - [x] 7. 멤버십 영상 시각 출처 (독립)
   - InnerTube 다른 client나 watch 페이지 `microformat`에서 시각을 얻을 수 있는지 수집기에서 시험한다.
   - 얻을 수 있으면 `members_only`를 다시 대기열에 넣는다.
@@ -214,11 +260,11 @@
   - 수집기 배포 뒤 `members_only` 행을 다시 대기열에 넣는다(아래 SQL, 승인 필요). 조사 때 MEMBERS_ONLY 가용성이고 후보 조건을 만족하는 세션은 34건(최근 30일 31건)이었다.
   - 배포 (2026-10-18 05:10~05:18Z, #655): 그때 `members_only` 행이 0건이라 재확정 SQL은 실행하지 않았다("배포 결과").
 
-## 운영 SQL 초안 (실행하지 않음, 각각 승인 필요)
+## 운영 SQL (backlog 투입은 2026-10-18 실행, 나머지는 미실행·별도 승인 필요)
 
 모두 `SET LOCAL lock_timeout='3s'` 트랜잭션에서 실행하고, 먼저 같은 조건의 `count(*)`를 확인한다.
 
-- backlog 투입(단계 6): 1,000행씩 반복한다. 신규 창(48시간) 안의 종료는 넣지 않는다. 첫 시도는 한 번에 하나씩 열리므로 K를 켜기 전후 어느 때 투입해도 된다.
+- backlog 투입(단계 6): 1,000행씩 반복한다. 신규 창(48시간) 안의 종료는 넣지 않는다. 첫 시도는 한 번에 하나씩 열리므로 K를 켜기 전후 어느 때 투입해도 된다. 2026-10-18 07:21Z 실행 결과는 6단계에 기록했다.
 
   ```sql
   INSERT INTO youtube_live_time_finalizations (video_id, queue, outcome, observed_started_at, observed_ended_at)
@@ -335,10 +381,10 @@
 
 ## 남은 일
 
-- 5단계 기준 1: 배포 뒤 신규 종료 30건이 모이면 종료 1시간 안 확정률(≥97%)을 판정한다. 6단계와 병행한다.
-- 6단계 backlog (2026-10-18 사용자 결정, 다음 세션에서 실행): 중앙 compose(#653 이후 `docker-compose.prod.yml`, 수집기 배포 때 설치됨)는 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`를 전달한다. `/etc/stack-secrets/hololive-bot/compose.env`(root:hololive-runtime 0640, 06:00Z에 키 없음)에 `=200`을 넣고(`stack-platform-ops` 범위) `hololive-api`만 recreate한 뒤 "운영 SQL 초안"의 투입 SQL을 1,000행씩 실행한다. 06:00Z 기준 투입 대상은 9,745건(그중 `legacy_unknown` 5,536건, 멤버십 33건)이다. 진행 중에는 6단계 중단 조건을 감시한다.
-- backlog 완료 뒤: 무작위 20건 대조, `!방송기록` 표시 비율 재계산.
-- 실제 카카오톡 화면 확인: `MESSAGE_STYLE_GUIDE`대로 승인된 시험 방에서만 한다. 시험 방이 지정되지 않아 하지 않았다.
+- 5단계는 신규 종료 30건 판정으로 완료했다. 공개 26/26의 시간 내 확정, 비공개 2·삭제 1·멤버십 1의 별도 분류와 표본 한계는 5단계에 기록했다.
+- 6단계 backlog: 사용자 요청으로 2026-10-19 00:14Z K=0 인계 중단했다. 9,745건 중 확정 5,856·격리 충돌 31·pending 3,858건이다. 다음 세션은 인계 문서 8·9절에 따라 감시·승인 횟수·기한·재개 조건을 인수하고 K=200으로 이어간다. 재투입하지 않는다.
+- backlog 완료 뒤: 같은 투입 cohort의 finalized·provider 행에서 무작위 20건을 한 번 뽑아 공개 watch의 양쪽 시각과 대조한다. 조회 실패 표본을 교체하지 않는다. 최근 30일 ENDED 전체를 분모로 실제 handler의 길이 표시 조건을 분자로 계산한다. 이 두 검증은 아직 실행하지 않았다.
+- 실제 카카오톡 화면: 네 번째 세션에서 사용자가 I8 **보류**를 선택했다. 방 접근·발송·화면 열기는 하지 않으며 문자열 시험을 실제 화면 검증으로 대체하지 않는다.
 
 ## 관련 문제
 
