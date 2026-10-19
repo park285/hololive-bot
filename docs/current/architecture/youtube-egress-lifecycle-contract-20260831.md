@@ -92,6 +92,8 @@ Operation membership과 provider request는 최초 `BeginSending` 전에 `youtub
 
 Iris 202는 durable admission만 증명합니다. `CompleteSent`는 고정 요청을 멤버보다 먼저 잠그고 세대·고정 멤버가 이번 발송과 같을 때만, SENT 전이와 같은 트랜잭션에서 고정 요청에 Iris requestId(`handoff_request_id`)와 첫 handoff 확인 시각(`handoff_next_check_at` = SENT 전이 시각 + min(5s, `youtube_delivery` executor `attempt_timeout`))을 기록합니다(migration 336·339). 요청이 다르거나 requestId가 비면 전이하지 않고 SENDING으로 남깁니다. `youtube-delivery-handoff-reconciler`가 `handoffcheck` 판정으로 지평까지 `/reply-status`를 확인합니다. `failed`는 세대 < 2이고 시도 예산(attempt + 1 < `max_retries`)이 남으면 논리 그룹의 SENT 행 전원(고정 멤버 밖 follower 포함)을 `retry_backoff_ms` 뒤 PENDING으로 되돌리고 요청 세대를 올려 같은 본문을 다음 세대 ID로 다시 보내며, 아니면 FAILED입니다. 결과 불명·404·지평 미확인은 QUARANTINED입니다. 세 경우 모두 그 owner를 출처로 한 SENT ledger만 같은 트랜잭션에서 지우고(격리는 같은 출처의 QUARANTINED ledger), 바뀐 delivery의 부모 outbox 집계도 그 트랜잭션 끝에서 canonical 집계 문장으로 다시 계산합니다. 정산의 잠금 순서는 고정 요청 → 영향 부모 outbox(id 순서, 그룹 잠금과 같은 후보 조건으로 미리 읽음) → 논리 그룹 delivery → ledger이고, 집계는 이미 잠근 부모에 다시 잠그지 않고 실행합니다. 정산 도중 같은 논리 키의 follower·outbox가 들어와 부모 집합이 늘면 새 부모를 잠그지 않고 아무것도 바꾸지 않은 `membership_changed` fence 미스로 끝내며 확인을 닫지 않으므로, soft claim 뒤 다음 확인이 늘어난 집합으로 정산합니다. 집계가 실패하면 정산 전체가 rollback되고 soft claim 뒤 다음 확인이 다시 정산합니다. 집계는 outbox `sent_at`을 지우지 않으며, 아래 post 단위 tracking 표시도 되돌리지 않습니다. 인라인 polling 제거는 4a-3 범위입니다.
 
+그룹 조회의 전역 행 한도는 `요청 수 × (LogicalGroupLimit + 2)`이며, 이 한도에 닿으면 창 밖 형제의 유무를 증명하지 못합니다. 다른 키로 풀리는 별칭 후보도 이 창을 차지하므로, 반환된 행의 키별 개수가 작거나 owner가 잠겼다는 사실만으로 완전성을 판단하지 않습니다. claim 기반 그룹 해석과 stale sweep은 불완전한 창을 원장 조회 전에 오류로 거부합니다. handoff 정산은 부모 집합 증가 미스를 먼저 판정한 뒤, 불완전한 창의 멤버 전원을 membership 거부로 처리해 행·원장·세대 변경 없이 확인만 닫습니다. 빈 요청은 완전한 빈 집합입니다.
+
 ### Tracking requirement
 
 Community/Shorts의 post-level tracking은 room별 delivery와 수명이 다릅니다. 발송 전에 post 단위 상태를 선점하지 않으며, 같은 post의 room delivery는 room별 claim·send fence와 logical group gate로만 직렬화합니다.
@@ -222,7 +224,7 @@ Claim 이후 mutation은 `id + expected status + expected locked_by + expected r
 
 ### I-006. Durable logical gate
 
-Post-level cached `Proceed`를 포함한 모든 candidate는 ledger를 먼저 읽고 retained logical group resolution을 수행해야 합니다.
+모든 발송 candidate는 retained logical group을 먼저 잠그고 조회 창의 완전성과 claim fence를 확인한 뒤 ledger를 읽어 logical group resolution을 수행해야 합니다.
 
 ### I-007. External-effect ordering
 
@@ -236,7 +238,7 @@ Provider 처리 여부가 불명확하면 즉시 state write, claim release, fal
 
 Same-logical ledger `SENT` evidence가 생기면 `PENDING`, `FAILED`, `QUARANTINED` follower를 provider 호출 없이 `SENT`로 reconcile할 수 있습니다. 이는 resend가 아니라 logical fulfillment의 단조 수렴입니다.
 
-`SENT -> *`는 존재하지 않습니다. `QUARANTINED -> PENDING/FAILED`와 `FAILED -> PENDING` 일반 전이는 금지합니다.
+일반 발송 경로에는 `SENT -> *` 전이가 없습니다. 예외는 아직 handoff 확인 중인 고정 요청의 fenced 재발급·소진·격리 정산이며, 위 handoff 규약을 따릅니다. `QUARANTINED -> PENDING/FAILED`와 `FAILED -> PENDING` 일반 전이는 금지합니다.
 
 ### I-010. Tracking is idempotent terminal state
 
@@ -248,7 +250,7 @@ Provider operation의 `BeginSending`, grouped success, grouped known failure는 
 
 ### I-012. Aggregate writer ownership
 
-Child가 존재하는 outbox status와 `terminal_at`은 aggregate projector만 계산합니다.
+Child가 존재하는 outbox status와 `terminal_at`은 canonical aggregate 문장만 계산합니다. 일반 projector와 handoff 실패 정산의 트랜잭션 내 집계가 같은 문장을 사용합니다.
 
 ### I-013. Commit ambiguity is first-class
 
@@ -312,10 +314,9 @@ SET locked_at = (SELECT at FROM clock),
 
 ### Candidate loading
 
-Current claimed row의 logical key를 만든 뒤 ledger를 batch load하고, ledger가 absent인 key의 retained physical row를 bounded batch query로 로드합니다.
+Current claimed row의 logical key를 만든 뒤 retained physical row를 bounded batch query로 잠그고, 조회 창의 완전성·키별 행 한도·claim fence를 확인한 다음 ledger를 batch load합니다.
 
-- Community/Shorts는 kind, room, relevant status를 SQL에서 제한하고 canonical resolver로 post ID를 비교합니다.
-- 기타 kind는 outbox join으로 `(kind, outbox.content_id, room_id)`를 조회합니다.
+- 모든 kind의 후보는 kind·room 등가와 `btrim(content_id)` 또는 payload의 `canonical_post_id` 후보 등가로 조회합니다. Canonical resolver가 최종 논리 키를 확정하며, 다른 키로 풀리는 SQL 후보도 전역 조회 한도를 소비합니다.
 - Current batch member는 한 번에 resolve합니다. Per-row N+1 query를 기본 구현으로 사용하지 않습니다.
 - Overflow는 fail-closed preparation error이며 provider를 호출하지 않습니다.
 - Ledger schema version과 backfill completion marker가 지원되지 않거나 미완료이면 새 writer는 시작하지 않습니다.

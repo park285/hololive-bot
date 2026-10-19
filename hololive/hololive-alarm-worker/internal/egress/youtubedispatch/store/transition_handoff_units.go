@@ -29,10 +29,11 @@ type handoffMembers struct {
 }
 
 // handoffGroup은 고정 멤버의 논리 그룹을 잠근 결과다. 필드 parentIDs는 사전 잠근 부모 outbox id(오름차순)이고 rows는
-// 잠근 그룹 delivery다.
+// 잠근 그룹 delivery다. 필드 complete가 거짓이면 조회 창 밖 형제의 유무를 증명하지 못한다.
 type handoffGroup struct {
 	parentIDs []int64
 	rows      []transitionRow
+	complete  bool
 }
 
 // lockHandoffUnits는 고정 멤버의 논리 그룹이 걸친 부모 outbox와 그 그룹 delivery를 잠그고(lockHandoffGroup) 멤버마다
@@ -68,7 +69,7 @@ func (s *TransitionStore) lockHandoffUnits(
 		return nil, nil, miss
 	}
 
-	units, observed := s.observeHandoffUnits(claim, members, group.rows)
+	units, observed := s.observeHandoffUnits(claim, members, group.rows, group.complete)
 
 	if handoffObservationsMatch(claim, observed) {
 		if observeErr := observeHandoffLedger(ctx, tx, units, observed); observeErr != nil {
@@ -141,7 +142,10 @@ func (s *TransitionStore) lockHandoffGroup(ctx context.Context, tx dbx.Querier, 
 		return handoffGroup{}, fmt.Errorf("lock logical group rows: %w", err)
 	}
 
-	return handoffGroup{parentIDs: parentIDs, rows: rows}, nil
+	return handoffGroup{
+		parentIDs: parentIDs, rows: rows,
+		complete: s.logicalGroupWindowComplete(len(requested), len(rows)),
+	}, nil
 }
 
 // lockHandoffParents는 논리 그룹 delivery를 잠그기 전에 그 그룹이 걸친 부모 outbox id를 그룹 잠금과 같은 후보 조각·인자
@@ -223,6 +227,7 @@ func (s *TransitionStore) observeHandoffUnits(
 	claim *HandoffClaim,
 	members handoffMembers,
 	locked []transitionRow,
+	complete bool,
 ) ([]handoffUnit, []sendfence.Observation) {
 	rowsByID, rowsByKey := indexHandoffGroupRows(locked, members.ownersByKey)
 	units := make([]handoffUnit, 0, len(claim.MemberIDs))
@@ -230,8 +235,10 @@ func (s *TransitionStore) observeHandoffUnits(
 
 	for _, id := range claim.MemberIDs {
 		row, ok := rowsByID[id]
+		rowLocked := ok
+
 		if !ok {
-			// 논리 키를 풀 수 없는 멤버는 그룹 잠금에 들지 않는다. 읽은 행으로 관측해 membership 미스로 남긴다.
+			// 잠금 창에서 빠진 멤버는 읽은 행으로 미스 관측만 남기며, 이 정보로 정산을 허용하지 않는다.
 			if row, ok = members.byID[id]; !ok {
 				continue
 			}
@@ -245,7 +252,7 @@ func (s *TransitionStore) observeHandoffUnits(
 			ID: id, Status: string(row.Status),
 			StatusMatches: row.Status == lifecycle.StatusSent, OwnerMatches: true,
 			VersionMatches: sent && row.RowVersion == version, LeaseValid: true,
-			MembershipMatches: keyed && members.ownersByKey[key] == 1 && len(unitRows) <= s.config.LogicalGroupLimit &&
+			MembershipMatches: complete && rowLocked && keyed && members.ownersByKey[key] == 1 && len(unitRows) <= s.config.LogicalGroupLimit &&
 				!slices.ContainsFunc(unitRows, unresolvedOrInFlight),
 			MembersNonTerminal: true, RequestMatches: true,
 		})
