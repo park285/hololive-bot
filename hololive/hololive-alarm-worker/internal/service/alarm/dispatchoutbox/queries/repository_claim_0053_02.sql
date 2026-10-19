@@ -16,7 +16,7 @@
 					SELECT count(d.id)
 					FROM alarm_dispatch_deliveries d
 					WHERE d.send_unit_id = u.id
-					  AND /* ready_predicate */
+					  AND d.status IN ('pending', 'retry')
 				) AS delivery_count
 			FROM unit_candidates candidate
 			JOIN alarm_dispatch_send_units u ON u.id = candidate.id
@@ -36,7 +36,7 @@
 			SELECT d.id
 			FROM alarm_dispatch_deliveries d
 			WHERE d.send_unit_id IN (SELECT id FROM next_units)
-			  AND /* ready_predicate */
+			  AND d.status IN ('pending', 'retry')
 		), updated AS (
 			UPDATE alarm_dispatch_deliveries d
 			SET status = 'leased',
