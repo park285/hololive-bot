@@ -26,6 +26,8 @@ func (r *PgxRepository) findByDedupeKey(ctx context.Context, dedupeKey string) (
 	return record, nil
 }
 
+// ClaimDue는 ready 멤버가 하나라도 있는 send unit을 골라 그 unit의 대기(pending·retry) 멤버 전원을 함께 lease한다.
+// 멤버마다 따로 계산된 next_attempt_at이 어긋나도 발송 fence가 요구하는 전체 membership을 한 번에 넘긴다.
 func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int, lease time.Duration) ([]*Record, error) {
 	if limit <= 0 {
 		return nil, errors.New("claim due dispatch deliveries: limit must be positive")

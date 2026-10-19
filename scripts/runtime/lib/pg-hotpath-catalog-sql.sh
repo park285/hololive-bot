@@ -345,7 +345,6 @@ WITH due_window AS MATERIALIZED (
             FROM alarm_dispatch_deliveries due
             WHERE due.send_unit_id = u.id
               AND due.status IN ('pending', 'retry')
-              AND due.next_attempt_at <= NOW()
         ) AS delivery_count
     FROM unit_candidates candidate
     JOIN alarm_dispatch_send_units u ON u.id = candidate.id
@@ -366,7 +365,6 @@ WITH due_window AS MATERIALIZED (
     FROM alarm_dispatch_deliveries d
     WHERE d.send_unit_id IN (SELECT id FROM next_units)
       AND d.status IN ('pending', 'retry')
-      AND d.next_attempt_at <= NOW()
 ), updated AS (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'leased',

@@ -17,6 +17,6 @@ var (
 	sqlRouteFailures        = mustSQL("repository_transitions_0160_06.sql")
 	sqlRouteSendingFailures = mustSQL("repository_transitions_0170_07.sql")
 	sqlRequeuePreSend       = mustSQL("repository_transitions_0185_08.sql")
-	sqlClaimDue             = strings.ReplaceAll(mustSQL("repository_claim_0053_02.sql"), "/* ready_predicate */", mustSQL("delivery_ready_predicate.sql"))
+	sqlClaimDue             = strings.Replace(mustSQL("repository_claim_0053_02.sql"), "/* ready_predicate */", mustSQL("delivery_ready_predicate.sql"), 1)
 	sqlReadySnapshot        = strings.Replace(mustSQL("delivery_ready_snapshot.sql"), "/* ready_predicate */", mustSQL("delivery_ready_predicate.sql"), 1)
 )
