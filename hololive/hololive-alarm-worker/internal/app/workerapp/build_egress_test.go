@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
-	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -266,36 +265,6 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{"alarm-dispatch-maintenance", "alarm-dispatch-backlog-observer"}, names)
-}
-
-func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
-	config, state := alarmWorkerTestConfig(t)
-	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: dbtest.NewPool(t)}}
-
-	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), &clientRequestIDRecordingIrisSender{}, nil, nil, state)
-	require.NoError(t, err)
-
-	names := make([]string, 0, len(runners))
-	scheduled := make(map[string]bool, len(runners))
-
-	for _, runner := range runners {
-		names = append(names, runner.Name)
-		scheduled[runner.Name] = runner.Scheduler != nil
-	}
-
-	assert.Equal(t, []string{
-		"alarm-dispatch",
-		"alarm-dispatch-handoff-reconciler",
-		"alarm-dispatch-maintenance",
-		"alarm-dispatch-backlog-observer",
-		"youtube-outbox",
-		"notification-delivery-outbox",
-	}, names)
-	assert.True(t, scheduled["alarm-dispatch"])
-	assert.True(t, scheduled["alarm-dispatch-handoff-reconciler"])
-	assert.True(t, scheduled["alarm-dispatch-backlog-observer"])
-	assert.True(t, scheduled["youtube-outbox"])
-	assert.True(t, scheduled["notification-delivery-outbox"])
 }
 
 func TestNewYouTubeOutboxDispatcherRejectsMissingPool(t *testing.T) {

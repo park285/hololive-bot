@@ -185,3 +185,5 @@
 185 324_youtube_live_orphaned_legacy_live_end.sql
 186 329_alarm_send_unit_handoff_check.sql
 187 337_alarm_send_unit_handoff_due_index.sql
+188 330_notification_delivery_handoff_check.sql
+189 338_notification_delivery_handoff_due_index.sql

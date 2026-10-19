@@ -33,7 +33,7 @@ type RequestConsumer interface {
 type QueueConsumer interface {
 	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error
+	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error
 	ReleaseLeased(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
 }
@@ -210,8 +210,8 @@ func (r *Runner) markSending(ctx context.Context, group alarmDispatchGroup) (pro
 
 // routePreSendMiss는 외부 호출 전(Load·Pin·Begin) fence 미스를 처리한다. 이 문장들은 단위 전원이 함께 전이하므로 미스면
 // 그룹의 어떤 행도 바뀌지 않았다. 모든 원인이 소유권을 남길 때만 이 claim의 행에 후속 전이를 쓴다.
-//   - member_terminal: 고정 멤버가 종료돼 단위를 다시 모을 수 없으므로 격리한다. 같은 요청 ID로 이미 나간 메시지에
-//     포함됐을 수 있어 운영 검토 대상이다. 반환하면 claim과 반환이 끝없이 반복된다.
+//   - member_terminal: 미고정 단위까지 포함해 현재 멤버가 종료됐거나 고정 멤버가 사라져 단위를 다시 모을 수 없으므로
+//     격리한다. 고정 요청은 이미 발송됐을 수도 있어 운영 검토 대상이다. 반환하면 claim과 반환이 끝없이 반복된다.
 //   - membership_changed: 미발송 claim이므로 격리하지 않고 반환해 다음 claim이 단위 전원을 다시 모으게 한다.
 //   - 그 밖(lease 만료, 상태·소유자·attempt 변경, 요청 변경): 회수 경로나 현재 소유자의 몫이므로 손대지 않는다.
 func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup, miss *sendfence.MissError) error {
@@ -250,9 +250,10 @@ func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup,
 	}
 }
 
+// markDispatched는 발송 성공을 정산한다. 정산의 handoff 지평은 handoff reconciler와 같은 발송 attempt timeout이다.
 func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
-		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID); err != nil {
+		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID, r.attemptTimeout); err != nil {
 			return fmt.Errorf("mark alarm dispatch sent: %w", err)
 		}
 

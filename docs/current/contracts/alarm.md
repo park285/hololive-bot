@@ -86,8 +86,9 @@ rule as the bot plane text path, because the Iris contract does not define the t
 to every text send through the shared sender (alarm dispatch, YouTube, notification). A Markdown 202 still needs
 `success`, `delivery=queued` and a request ID. Anything less is `sendoutcome.ErrHandoffOutcomeUnknown`. `MarkSent` stores
 the ID on the send unit (`handoff_request_id`) in the same
-statement that moves every member to `sent`, and schedules the first check (`handoff_next_check_at`) 5s after
-admission on that statement's database clock. When `MarkSent` does not apply to every member, the unit records no check.
+statement that moves every member to `sent`, and schedules the first check (`handoff_next_check_at`) min(5s, horizon)
+after admission on that statement's database clock, so even a horizon shorter than 5s is never passed by the first
+check. When `MarkSent` does not apply to every member, the unit records no check.
 
 `alarm-dispatch-handoff-reconciler` claims due units with `FOR UPDATE SKIP LOCKED` and moves `handoff_next_check_at`
 15s ahead as a soft-claim token. It queries `/reply-status` outside any transaction, then applies the observation in
@@ -111,6 +112,35 @@ and the reconciler logs `check closed without transition` at error level with th
 (`dispatchoutbox.ErrHandoffCheckClosed`). A settlement that runs out of its 5s budget is abandoned; the next check
 after the soft claim decides again under the token CAS, so it is logged as a warning. Readers of `sent` deliveries
 may see a unit whose handoff is still unconfirmed for up to the horizon.
+
+Notification delivery keeps the same check on its own ledger, `notification_delivery_outbox` (migrations 330 and
+338); it is not merged into alarm dispatch. `MarkSent` stores the 202 Iris request ID in `handoff_request_id` and
+schedules `handoff_next_check_at` min(5s, `notification_delivery` executor `attempt_timeout`) after `sent_at` in the
+statement that moves the row `SENDING → SENT`, on that statement's database clock. An empty request ID applies
+nothing; the row stays `SENDING` for the stale sweep.
+`notification-delivery-handoff-reconciler` runs only when the `notification_delivery` executor is enabled and uses
+the same soft claim, outside-transaction status query, budgets, ladder, and decision as alarm dispatch, with the
+`notification_delivery` executor `attempt_timeout` as the horizon. Each settlement is one statement that locks the
+row and rechecks status `SENT`, the soft-claim token, `handoff_request_id`, and the pinned request generation (owner
+and lease are not part of this fence; a miss is `version_changed`, `request_changed`, or `status_changed` and
+applies nothing). Outcomes:
+
+| Observation | Notification ledger action |
+|---|---|
+| `handoff_completed` | close the check (`handoff_checked_at`); the row stays `SENT` |
+| pending state, or a query error other than 404, before the horizon | next check on the ladder, never after `sent_at` + horizon |
+| `failed` with request generation < 2 and `notification_delivery.max_retries` attempt budget left (same rule as a send failure) | `PENDING`, attempt + 1, `next_attempt_at` = clock + `retry_backoff_ms`, request generation + 1, `sent_at` and handoff columns cleared; the next claim resends the pinned body with the next SDK request ID (`:r1`/`:r2`) |
+| `failed` otherwise | `FAILED`, attempt + 1, pinned request `exhausted=true` so producer rearm does not revive it |
+| outcome unknown, unrecognized, empty or mismatched state, 404, pending at the horizon | `QUARANTINED` |
+
+The ledger has no `last_error_code`; `error` starts with the same handoff code followed by `: ` and the detail
+(`handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, `handoff_unconfirmed`). Room order: a `SENT`
+row whose handoff is unconfirmed (`handoff_request_id` set, `handoff_checked_at` null) holds later rows of the same
+room like a `SENDING` row until its check ends. The migration 330 CHECK makes such a row exactly a row with a
+non-null `handoff_next_check_at`, so the hold cannot be orphaned and the claim predicate tests that column, the same
+predicate as the migration 338 partial index; the horizon bounds the hold. A reissued row re-enters the existing
+`(next_attempt_at, created_at, id)` room order by its new `next_attempt_at`, like a retried send failure; a later row
+of the same room that is already due may therefore go first, so strict creation order is not guaranteed.
 
 Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
 microsecond precision). Event detection, creation and next-attempt timestamps do

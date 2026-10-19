@@ -19,7 +19,7 @@ func TestOutboxSettlementCannotOverwriteConcurrentQuarantine(t *testing.T) {
 		settle func(context.Context, *outboxFixture, int64) error
 	}{
 		{name: "sent", action: actionMarkSent, settle: func(ctx context.Context, repo *outboxFixture, id int64) error {
-			return repo.MarkSent(ctx, id, testWorkerA, 0)
+			return repo.MarkSent(ctx, id, testWorkerA, 0, testIrisRequestID, testNotificationHandoffHorizon)
 		}},
 		{name: "failed", action: actionMarkFailed, settle: func(ctx context.Context, repo *outboxFixture, id int64) error {
 			return repo.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Second, "late known failure")
@@ -138,7 +138,7 @@ func TestStaleOwnerTransitionsLeaveReclaimedSendingRowUntouched(t *testing.T) {
 		err    error
 	}{
 		{actionMarkSending, repo.MarkSending(ctx, stale.ID, testWorkerA, stale.AttemptCount, testLease)},
-		{actionMarkSent, repo.MarkSent(ctx, stale.ID, testWorkerA, stale.AttemptCount)},
+		{actionMarkSent, repo.MarkSent(ctx, stale.ID, testWorkerA, stale.AttemptCount, testIrisRequestID, testNotificationHandoffHorizon)},
 		{actionMarkFailed, repo.MarkFailed(ctx, stale.ID, testWorkerA, stale.AttemptCount, 3, time.Second, "stale failure")},
 		{actionMarkQuarantined, repo.MarkQuarantined(ctx, stale.ID, testWorkerA, stale.AttemptCount, "stale unknown")},
 		{actionReissueRequest, repo.reissueFailedRequest(ctx, stale.ID, testWorkerA, stale.AttemptCount, 0, false, 3, time.Second, "stale conflict")},
@@ -154,5 +154,5 @@ func TestStaleOwnerTransitionsLeaveReclaimedSendingRowUntouched(t *testing.T) {
 
 	require.Equal(t, before, readOwnerRow(ctx, t, repo, stale.ID))
 	require.Zero(t, storedRequest(ctx, t, repo, stale.ID).Generation)
-	require.NoError(t, repo.MarkSent(ctx, stale.ID, testWorkerB, stale.AttemptCount))
+	require.NoError(t, repo.MarkSent(ctx, stale.ID, testWorkerB, stale.AttemptCount, testIrisRequestID, testNotificationHandoffHorizon))
 }

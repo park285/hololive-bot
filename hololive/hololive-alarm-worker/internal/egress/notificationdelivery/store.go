@@ -12,6 +12,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -21,8 +22,10 @@ import (
 // request)를 계약으로 공유한다. 모든 전이가 단일 SQL 문장이라 두 저장소에 걸친 트랜잭션은 없고,
 // 적재 rearm(FAILED 전용)과 이 저장소의 전이는 행 잠금과 status·locked_by·attempt_count 조건으로만 직렬화된다. 적재
 // rearm은 attempt_count를 0으로 되돌리므로 같은 workerID의 claim 세대는 attempt_count만으로 구분되지 않는다. 그래서
-// Dispatcher.processReady가 한 poll의 모든 항목 처리를 join한 뒤에만 다음 poll이 claim한다는 직렬성이 이전 claim의 늦은
-// 전이를 막는 불변식이다.
+// 이전 claim의 늦은 전이를 막는 불변식은 Dispatcher.processReady의 직렬성 두 가지다. 한 poll 안에서는 이미 처리한 ID
+// (processedIDs)를 claim에서 빼므로 같은 poll이 같은 행을 다시 claim하지 않고, poll 사이에서는 한 poll의 모든 항목
+// 처리를 join한 뒤에만 다음 poll이 claim한다. 확인 대기 SENT 행의 handoff 전이는 소유자 없이 soft claim 토큰과 요청
+// ID로 직렬화된다.
 type Store struct {
 	pool *pgxpool.Pool
 }
@@ -130,8 +133,22 @@ func (r *Store) MarkSending(ctx context.Context, id int64, workerID string, atte
 
 // MarkSent는 현재 worker가 claim 당시 시도 횟수로 소유한 SENDING 행만 SENT로 확정한다. 발송이 lease를 넘겨도 성공
 // 결과를 잃지 않도록 lease 만료는 보지 않는다. PENDING 행은 발송 전이를 거치지 않았으므로 소유자가 같아도 전이하지 않는다.
-func (r *Store) MarkSent(ctx context.Context, id int64, workerID string, attemptCount int) error {
-	return r.applyFenced(ctx, actionMarkSent, id, mustSQL("outbox_repository_0189_05.sql"), id, workerID, attemptCount)
+// 같은 문장에서 Iris가 admission을 증명한 requestId와 첫 handoff 확인 시각(DB 시각 + min(handoffcheck.FirstCheckDelay,
+// handoffHorizon))을 기록하며, 확인이 끝날 때까지 같은 방의 후행 행은 claim되지 않는다. 지평 handoffHorizon은 handoff
+// reconciler와 같은 executor attempt_timeout이라 첫 확인도 admission + 지평을 넘지 않는다. 확인할 requestId가
+// 없거나 지평이 양수가 아니면 전이하지 않고 오류다.
+func (r *Store) MarkSent(ctx context.Context, id int64, workerID string, attemptCount int, irisRequestID string, handoffHorizon time.Duration) error {
+	if irisRequestID == "" {
+		return fmt.Errorf("%s: iris request id is required", actionMarkSent)
+	}
+
+	firstCheckMS, err := positiveMilliseconds("handoff horizon", min(handoffcheck.FirstCheckDelay, handoffHorizon))
+	if err != nil {
+		return fmt.Errorf("%s: %w", actionMarkSent, err)
+	}
+
+	return r.applyFenced(ctx, actionMarkSent, id, mustSQL("outbox_repository_0189_05.sql"),
+		id, workerID, attemptCount, irisRequestID, firstCheckMS)
 }
 
 // MarkQuarantined는 현재 worker의 같은 claim인 SENDING만 격리하며 자동 재발송 가능한 FAILED로 되돌리지 않습니다.

@@ -63,6 +63,7 @@ CLOCK_QUERY_POLICIES = (
     (f"{ALARM_DISPATCH_QUERIES}/send_request_*.sql", "clock_timestamp"),
     (f"{NOTIFICATION_DELIVERY_QUERIES}/outbox_repository_0279_09.sql", "statement_timestamp"),
     (f"{NOTIFICATION_DELIVERY_QUERIES}/outbox_*.sql", "clock_timestamp"),
+    (f"{NOTIFICATION_DELIVERY_QUERIES}/handoff_*.sql", "clock_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_candidates*.sql", "statement_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_target_*.sql", "statement_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_projection_current_*.sql", "statement_timestamp"),

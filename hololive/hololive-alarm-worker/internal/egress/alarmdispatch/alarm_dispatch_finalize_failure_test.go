@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +50,7 @@ func (c *finalizeFailureRecordingConsumer) MarkSending(context.Context, []domain
 	return nil
 }
 
-func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []domain.AlarmQueueEnvelope, string) error {
+func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []domain.AlarmQueueEnvelope, string, time.Duration) error {
 	return nil
 }
 

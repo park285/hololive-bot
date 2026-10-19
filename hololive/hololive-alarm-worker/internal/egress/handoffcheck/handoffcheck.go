@@ -14,7 +14,8 @@ import (
 )
 
 // FirstCheckDelay는 admission부터 첫 확인까지의 간격이다. Iris 같은 ID 재시도 창(약 2초)보다 길게 두어 첫 확인에서
-// failed가 아직 queued로 보이는 경우를 bridge 지연이 그 창을 넘을 때로 줄인다.
+// failed가 아직 queued로 보이는 경우를 bridge 지연이 그 창을 넘을 때로 줄인다. 원장은 첫 확인을
+// min(FirstCheckDelay, 지평) 뒤로 예약해 지평이 더 짧아도 admission + 지평을 넘기지 않는다.
 const FirstCheckDelay = 5 * time.Second
 
 // checkSteps는 첫 확인 뒤의 간격이다. 마지막 간격을 지평까지 반복한다. 예정 확인 시각은 admission 기준

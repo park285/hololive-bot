@@ -151,7 +151,7 @@ func (m *mockDeliveryRepository) MarkSending(ctx context.Context, id int64, work
 	return nil
 }
 
-func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string, attemptCount int) error {
+func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string, attemptCount int, _ string, _ time.Duration) error {
 	if m.markSentFn != nil {
 		return m.markSentFn(ctx, id, workerID, attemptCount)
 	}
@@ -808,6 +808,11 @@ func (m *mockSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 	return body, "text", nil
 }
 
+// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
 func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
-	return "", m.SendMessageWithClientRequestID(ctx, room, body, id)
+	if err := m.SendMessageWithClientRequestID(ctx, room, body, id); err != nil {
+		return "", err
+	}
+
+	return "iris-" + id, nil
 }

@@ -49,6 +49,7 @@ Consumer behavior:
 - Replay of `dlq`/`quarantined` deliveries uses the audited requeue in `runbooks/admin-dispatch-operations.md`.
 - The retired Redis queue keys `alarm:dispatch:queue`, `alarm:dispatch:retry`, and `alarm:dispatch:dlq` have no reader or writer; their reserved constants were removed in stack-audit 2026-09-26 T11.
 - The `last_error_code` vocabulary (send error classes, recovery codes, and Iris handoff reconciliation codes) is defined once in `contracts/alarm.md` under "Timeout and retry policy".
+- `notification_delivery_outbox` keeps its own Iris handoff check (`handoff_request_id`, `handoff_next_check_at`, `handoff_checked_at`; migrations 330 and 338). It has no `last_error_code`; the handoff codes prefix `error` instead. The contract is in `contracts/alarm.md` under "Iris handoff reconciliation".
 
 ## X 스페이스 시작 알림
 

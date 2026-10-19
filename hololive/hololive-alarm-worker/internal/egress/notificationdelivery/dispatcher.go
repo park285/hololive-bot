@@ -65,7 +65,7 @@ type deliveryRequestStore interface {
 
 type deliveryOutboxTransitioner interface {
 	MarkSending(ctx context.Context, id int64, workerID string, attemptCount int, lease time.Duration) error
-	MarkSent(ctx context.Context, id int64, workerID string, attemptCount int) error
+	MarkSent(ctx context.Context, id int64, workerID string, attemptCount int, irisRequestID string, handoffHorizon time.Duration) error
 	MarkQuarantined(ctx context.Context, id int64, workerID string, attemptCount int, reason string) error
 	MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) error
 }
@@ -283,11 +283,12 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
-	err := d.attemptSend(ctx, item, request)
-	d.finishSend(ctx, item, request, err)
+	irisRequestID, err := d.attemptSend(ctx, item, request)
+	d.finishSend(ctx, item, request, irisRequestID, err)
 }
 
-func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) error {
+// attemptSend는 외부 발송 한 번을 attempt로 기록하고, 성공이면 Iris가 admission을 증명한 requestId를 돌려준다.
+func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) (string, error) {
 	attemptCtx, cancel := context.WithTimeout(ctx, d.config.AttemptTimeout)
 
 	defer cancel()
@@ -310,20 +311,20 @@ func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationD
 		}
 	}()
 
-	err := d.sendPrepared(attemptCtx, item, request)
+	irisRequestID, err := d.sendPrepared(attemptCtx, item, request)
 
 	outcome = deliveryProviderOutcome(err)
 
-	return err
+	return irisRequestID, err
 }
 
-func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, err error) {
+func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, irisRequestID string, err error) {
 	// 부모 취소 뒤에도 결과를 저장하되 예산을 제한합니다. 저장 실패는 SENDING으로 남겨 sweep이 격리합니다.
 	finalCtx, finalizeCancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer finalizeCancel()
 
 	if err == nil {
-		d.markItemSent(finalCtx, item)
+		d.markItemSent(finalCtx, item, irisRequestID)
 
 		return
 	}
@@ -381,8 +382,10 @@ func (d *Dispatcher) markItemSending(ctx context.Context, item *domain.Notificat
 	return true
 }
 
-func (d *Dispatcher) markItemSent(ctx context.Context, item *domain.NotificationDeliveryOutbox) {
-	if err := d.repository.MarkSent(ctx, item.ID, d.workerID, item.AttemptCount); err != nil {
+// markItemSent는 발송 성공과 Iris requestId를 함께 기록해 handoff 확인을 예약한다. 지평은 handoff reconciler와 같은
+// attempt timeout이다.
+func (d *Dispatcher) markItemSent(ctx context.Context, item *domain.NotificationDeliveryOutbox, irisRequestID string) {
+	if err := d.repository.MarkSent(ctx, item.ID, d.workerID, item.AttemptCount, irisRequestID, d.config.AttemptTimeout); err != nil {
 		d.reportTransitionError(item.ID, err, "Failed to mark outbox item as sent")
 	}
 }

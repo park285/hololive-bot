@@ -170,6 +170,45 @@ func TestHandoffMarkSentRecordsCheckOnUnit(t *testing.T) {
 	require.Equal(t, []string{string(StatusSent), string(StatusSent)}, memberStatuses(t, pool, unit))
 }
 
+// 첫 확인 간격보다 짧은 지평도 허용되므로 발송 성공 정산은 첫 확인을 admission + 지평에서 자른다. 지평이 더 길면 첫
+// 확인은 handoffcheck.FirstCheckDelay 뒤다.
+func TestConsumerMarkDispatchedClipsFirstCheckToHorizon(t *testing.T) {
+	cases := []struct {
+		name    string
+		horizon time.Duration
+		want    time.Duration
+	}{
+		{name: "horizon shorter than first check", horizon: 1500 * time.Millisecond, want: 1500 * time.Millisecond},
+		{name: "horizon longer than first check", horizon: 10 * time.Minute, want: handoffcheck.FirstCheckDelay},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pool := dbtest.NewPool(t)
+			repo := NewPgxRepositoryFromPool(pool, nil)
+			records := claimSendingUnits(t, repo, "handoff-first-check")[0]
+			unit := records[0].SendUnitID
+
+			envelopes := make([]domain.AlarmQueueEnvelope, len(records))
+			for i, record := range records {
+				attachRecordMetadata(&envelopes[i], record)
+			}
+
+			consumer := mustNewConsumer(t, repo, nil, nil, WithWorkerID(handoffTestOwner))
+			require.NoError(t, consumer.MarkDispatched(t.Context(), envelopes, "iris-request", tc.horizon))
+
+			var delayMS int64
+
+			require.NoError(t, pool.QueryRow(t.Context(), `SELECT (EXTRACT(EPOCH FROM (u.handoff_next_check_at - max(d.sent_at))) * 1000)::BIGINT
+				FROM alarm_dispatch_send_units u JOIN alarm_dispatch_deliveries d ON d.send_unit_id = u.id
+				WHERE u.id = $1 GROUP BY u.id`, unit).Scan(&delayMS))
+			require.Equal(t, tc.want.Milliseconds(), delayMS)
+			require.Equal(t, new("iris-request"), loadHandoffUnit(t, pool, unit).irisRequestID)
+			require.Equal(t, []string{string(StatusSent), string(StatusSent)}, memberStatuses(t, pool, unit))
+		})
+	}
+}
+
 // 멤버 일부만 sent가 된 기록은 미스이며 단위에 handoff 확인을 남기지 않는다.
 func TestHandoffPartialMarkSentRecordsNoCheck(t *testing.T) {
 	pool := dbtest.NewPool(t)

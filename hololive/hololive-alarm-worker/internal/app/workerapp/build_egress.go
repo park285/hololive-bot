@@ -117,7 +117,7 @@ func buildEgressRunners(
 		logWorkerDisabled(logger, "YouTube outbox dispatcher disabled")
 	}
 
-	runners, err = appendNotificationDeliveryRunner(runners, appConfig, infra, irisSender, logger, workerState)
+	runners, err = appendNotificationDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append notification delivery runner: %w", err)
 	}
@@ -190,11 +190,14 @@ func buildAlarmDispatchHandoffReconciler(
 	return reconciler, nil
 }
 
+// appendNotificationDeliveryRunner는 notification delivery가 활성일 때 발송 dispatcher와 Iris handoff reconciler를 함께
+// 등록한다.
 func appendNotificationDeliveryRunner(
 	runners []workerruntime.NamedScheduler,
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	statusClient notificationdelivery.ReplyStatusClient,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
@@ -209,10 +212,50 @@ func appendNotificationDeliveryRunner(
 		return nil, fmt.Errorf("build delivery outbox dispatcher: %w", err)
 	}
 
-	return append(runners, workerruntime.NamedScheduler{
-		Name:      "notification-delivery-outbox",
-		Scheduler: workerState.wrap(workerconfig.WorkerNotificationDelivery, dispatcher),
-	}), nil
+	reconciler, err := buildNotificationDeliveryHandoffReconciler(appConfig, infra, statusClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build notification delivery handoff reconciler: %w", err)
+	}
+
+	return append(runners,
+		workerruntime.NamedScheduler{
+			Name:      "notification-delivery-outbox",
+			Scheduler: workerState.wrap(workerconfig.WorkerNotificationDelivery, dispatcher),
+		},
+		workerruntime.NamedScheduler{
+			Name:      "notification-delivery-handoff-reconciler",
+			Scheduler: reconciler,
+		},
+	), nil
+}
+
+// buildNotificationDeliveryHandoffReconciler의 지평은 notification_delivery executor attempt timeout이고, idle 주기와
+// failed 재발급의 시도 예산·지연은 dispatcher와 같은 notification_delivery profile 값이다. PostgreSQL 확인은 먼저 만든
+// dispatcher가 한다.
+func buildNotificationDeliveryHandoffReconciler(
+	appConfig *workerconfig.RuntimeConfig,
+	infra *sharedmodules.InfraModule,
+	statusClient notificationdelivery.ReplyStatusClient,
+	logger *slog.Logger,
+) (*notificationdelivery.HandoffReconciler, error) {
+	dispatcherConfig := notificationDeliveryDispatcherConfig(appConfig)
+
+	reconciler, err := notificationdelivery.NewHandoffReconciler(
+		notificationdelivery.NewStore(infra.Postgres.GetPool()),
+		statusClient,
+		notificationdelivery.HandoffReconcilerConfig{
+			Horizon:      dispatcherConfig.AttemptTimeout,
+			PollInterval: dispatcherConfig.PollInterval,
+			MaxRetries:   dispatcherConfig.MaxRetries,
+			RetryBackoff: dispatcherConfig.RetryBackoff,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new notification delivery handoff reconciler: %w", err)
+	}
+
+	return reconciler, nil
 }
 
 func alarmWorkerExecutorEnabled(appConfig *workerconfig.RuntimeConfig, workerID string) bool {

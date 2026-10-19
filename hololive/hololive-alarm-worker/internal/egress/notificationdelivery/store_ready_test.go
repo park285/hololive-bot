@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/config"
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -41,6 +42,8 @@ func TestFetchReadyAndLockPreservesRoomOrderAcrossWorkers(t *testing.T) {
 		if item.RoomID == testRoomA {
 			a1 = item.ID
 			require.Equal(t, testFirstPeriod, item.PeriodKey)
+			require.NoError(t, r.saveRequest(ctx, item.ID, testWorkerA, item.AttemptCount,
+				&deliverypayload.Request{Body: testPinnedBody, Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&item)}))
 		}
 	}
 
@@ -60,15 +63,14 @@ func TestFetchReadyAndLockPreservesRoomOrderAcrossWorkers(t *testing.T) {
 	_, err = r.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET lock_expires_at=clock_timestamp()-INTERVAL '1 second' WHERE id=$1", a1)
 	require.NoError(t, err)
 
-	snapshot, err = r.ReadySnapshot(ctx)
-	require.NoError(t, err)
-	require.Zero(t, snapshot.Depth, "SENDING fences the room even after lease expiry")
+	requireNotificationRoomHeld(t, r)
 
-	whileSending, err := r.fetchReadyAndLock(ctx, testWorkerB, 10, config.NotificationDeliveryLease, nil, nil)
-	require.NoError(t, err)
-	require.Empty(t, whileSending)
+	require.NoError(t, r.MarkSent(ctx, a1, testWorkerA, 0, testIrisRequestID, testNotificationHandoffHorizon))
 
-	require.NoError(t, r.MarkSent(ctx, a1, testWorkerA, 0))
+	requireNotificationRoomHeld(t, r)
+
+	claim := claimDueHandoff(t, r, a1)
+	require.NoError(t, r.CompleteHandoff(ctx, &claim))
 
 	snapshot, err = r.ReadySnapshot(ctx)
 	require.NoError(t, err)
@@ -79,6 +81,19 @@ func TestFetchReadyAndLockPreservesRoomOrderAcrossWorkers(t *testing.T) {
 	require.Len(t, next, 1)
 	require.Equal(t, testRoomA, next[0].RoomID)
 	require.Equal(t, "second", next[0].PeriodKey)
+}
+
+// 발송 중이거나 handoff 확인 대기인 선행 행은 ready 관측과 실제 claim 양쪽에서 같은 방을 막는다.
+func requireNotificationRoomHeld(t *testing.T, repo *outboxFixture) {
+	t.Helper()
+
+	snapshot, err := repo.ReadySnapshot(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, snapshot.Depth)
+
+	claimed, err := repo.fetchReadyAndLock(t.Context(), testWorkerB, 10, config.NotificationDeliveryLease, nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, claimed)
 }
 
 func TestFetchReadyAndLockDoesNotSkipLockedPredecessor(t *testing.T) {

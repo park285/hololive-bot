@@ -226,15 +226,18 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueu
 	return nil
 }
 
-// MarkDispatched는 그룹 전체 send unit의 Iris admission을 sent로 정산하고 Iris requestId의 handoff 확인을
-// handoffcheck.FirstCheckDelay 뒤로 예약한다. 미스는 *sendfence.MissError로 돌려준다.
-func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
+// MarkDispatched는 그룹 전체 send unit의 Iris admission을 sent로 정산하고 Iris requestId의 첫 handoff 확인을
+// min(handoffcheck.FirstCheckDelay, handoffHorizon) 뒤로 예약한다. 지평 handoffHorizon은 handoff reconciler와 같은
+// alarm_dispatch executor attempt_timeout이라 첫 확인도 admission + 지평을 넘지 않는다. 미스는
+// *sendfence.MissError로 돌려준다.
+func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
 	claims := claimsFromEnvelopes(envelopes)
 	if len(claims) == 0 {
 		return nil
 	}
 
-	if err := c.repository.MarkSent(ctx, envelopes[0].SendUnitID, claims, c.workerID, irisRequestID, handoffcheck.FirstCheckDelay); err != nil {
+	firstCheck := min(handoffcheck.FirstCheckDelay, handoffHorizon)
+	if err := c.repository.MarkSent(ctx, envelopes[0].SendUnitID, claims, c.workerID, irisRequestID, firstCheck); err != nil {
 		observePGMarkSentFailure()
 
 		return fmt.Errorf("mark sent: %w", err)

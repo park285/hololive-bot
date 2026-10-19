@@ -35,9 +35,15 @@ func deliveryFailureStatus(attemptCount, maxRetries int) (domain.DeliveryOutboxS
 		return "", errors.New("invalid delivery attempt count or retry limit")
 	}
 
-	if attemptCount >= maxRetries-1 {
+	if !retryBudgetLeft(attemptCount, maxRetries) {
 		return domain.DeliveryStatusFailed, nil
 	}
 
 	return domain.DeliveryStatusPending, nil
+}
+
+// retryBudgetLeft는 claim 당시 attemptCount인 행이 실패를 한 번 더 기록한 뒤에도 다시 시도할 수 있는지 보고한다.
+// 실패 전이·409 재발급·handoff failed 재발급이 모두 attempt_count를 1 올리고 이 기준으로 재시도와 종료를 가른다.
+func retryBudgetLeft(attemptCount, maxRetries int) bool {
+	return attemptCount < maxRetries-1
 }

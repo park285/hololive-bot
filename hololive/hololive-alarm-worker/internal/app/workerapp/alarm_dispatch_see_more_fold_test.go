@@ -50,7 +50,7 @@ func (*seeMoreFoldConsumer) MarkSending(context.Context, []domain.AlarmQueueEnve
 	return nil
 }
 
-func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, _ string) error {
+func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, _ string, _ time.Duration) error {
 	c.dispatched += len(envelopes)
 	return nil
 }

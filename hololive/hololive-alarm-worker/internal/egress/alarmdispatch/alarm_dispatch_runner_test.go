@@ -90,7 +90,7 @@ func (c *alarmDispatchRunnerTestConsumer) MarkSending(_ context.Context, envelop
 	return c.markSendingErr
 }
 
-func (c *alarmDispatchRunnerTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
+func (c *alarmDispatchRunnerTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, _ time.Duration) error {
 	c.markDispatched = append(c.markDispatched, envelopes...)
 	c.markDispatchedRequestIDs = append(c.markDispatchedRequestIDs, irisRequestID)
 
@@ -742,13 +742,13 @@ func (c *alarmDispatchRunnerContextConsumer) MarkSending(ctx context.Context, en
 	return nil
 }
 
-func (c *alarmDispatchRunnerContextConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
+func (c *alarmDispatchRunnerContextConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
 	c.markDispatchedCtxErr = ctx.Err()
 	if c.markDispatchedCtxErr != nil {
 		return fmt.Errorf("mark alarm dispatch sent: %w", c.markDispatchedCtxErr)
 	}
 
-	if err := c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes, irisRequestID); err != nil {
+	if err := c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes, irisRequestID, handoffHorizon); err != nil {
 		return fmt.Errorf("mark dispatched: %w", err)
 	}
 

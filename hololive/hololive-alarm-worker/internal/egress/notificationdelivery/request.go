@@ -57,22 +57,24 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 	return request, true
 }
 
-func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) error {
+// sendPrepared는 고정 요청을 세대에 맞는 client request ID로 보내고, 성공이면 Iris requestId를 돌려준다.
+func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) (string, error) {
 	requestID := request.BaseID
 	if request.Generation > 0 {
 		id, err := iris.ReissuedClientRequestID(request.BaseID, request.Generation)
 		if err != nil {
-			return fmt.Errorf("resolve delivery request ID: %w", err)
+			return "", fmt.Errorf("resolve delivery request ID: %w", err)
 		}
 
 		requestID = id
 	}
 
-	if _, err := d.sender.SendPreparedMessage(ctx, item.RoomID, request.Body, request.Route, requestID); err != nil {
-		return fmt.Errorf("send prepared delivery: %w", err)
+	irisRequestID, err := d.sender.SendPreparedMessage(ctx, item.RoomID, request.Body, request.Route, requestID)
+	if err != nil {
+		return "", fmt.Errorf("send prepared delivery: %w", err)
 	}
 
-	return nil
+	return irisRequestID, nil
 }
 
 func (d *Dispatcher) reissueRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, cause error) {

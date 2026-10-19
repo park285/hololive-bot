@@ -1,8 +1,8 @@
 -- 요청 읽기·고정(Load·Pin) 전 send unit fence다. 호출자는 같은 트랜잭션에서 send_request_lock.sql로 단위를 먼저 잠근다.
 -- 단위 멤버 전원을 id 순서로 잠근 뒤 clock 하나로 lease를 판정하고, 행·단위 조건을 sendfence 관측 열로 돌려준다.
 -- 갱신하지 않는 읽기 fence라 단위 멤버 전원의 조건이 참일 때만 applied다.
--- membership은 현재 멤버 집합 = 호출 claim 집합 = 고정 멤버 집합(고정 뒤)이다. 고정 멤버가 종료됐거나 보존 정리로
--- 사라졌으면 단위를 다시 모을 수 없으므로 members_non_terminal이 거짓이다.
+-- membership은 현재 멤버 집합 = 호출 claim 집합 = 고정 멤버 집합(고정 뒤)이다. 미고정 단위까지 포함해 현재 멤버가
+-- 종료됐거나 고정 멤버가 보존 정리로 사라졌으면 단위를 다시 모을 수 없으므로 members_non_terminal이 거짓이다.
 WITH input AS MATERIALIZED (
     SELECT input.id, input.attempt_count
     FROM jsonb_to_recordset($2::jsonb) AS input(id BIGINT, attempt_count INT)

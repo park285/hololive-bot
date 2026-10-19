@@ -90,7 +90,7 @@ func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
 	resultCh := make(chan error, 1)
 
 	go func() {
-		resultCh <- repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount)
+		resultCh <- repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, testIrisRequestID, testNotificationHandoffHorizon)
 	}()
 
 	time.Sleep(250 * time.Millisecond)

@@ -505,9 +505,14 @@ TABLE notification_delivery_outbox
   COLUMN locked_by text
   COLUMN lock_expires_at timestamp with time zone
   COLUMN sending_started_at timestamp with time zone
+  COLUMN handoff_request_id text
+  COLUMN handoff_next_check_at timestamp with time zone
+  COLUMN handoff_checked_at timestamp with time zone
+  CONSTRAINT chk_notification_delivery_outbox_handoff_shape CHECK ((((handoff_request_id IS NULL) OR ((length(handoff_request_id) >= 1) AND (length(handoff_request_id) <= 256))) AND ((handoff_next_check_at IS NULL) OR ((status = 'SENT'::text) AND (handoff_request_id IS NOT NULL) AND (handoff_checked_at IS NULL))) AND ((handoff_checked_at IS NULL) OR (handoff_request_id IS NOT NULL)) AND ((status <> 'SENT'::text) OR (handoff_request_id IS NULL) OR (handoff_checked_at IS NOT NULL) OR (handoff_next_check_at IS NOT NULL))))
   CONSTRAINT chk_notification_delivery_outbox_kind_vocab CHECK ((kind = ANY (ARRAY['MAJOR_EVENT_WEEKLY'::text, 'MAJOR_EVENT_MONTHLY'::text, 'MEMBER_NEWS_WEEKLY'::text, 'MEMBER_NEWS_MONTHLY'::text])))
   CONSTRAINT chk_notification_delivery_outbox_status_vocab CHECK ((status = ANY (ARRAY['PENDING'::text, 'SENDING'::text, 'SENT'::text, 'FAILED'::text, 'QUARANTINED'::text])))
   CONSTRAINT notification_delivery_outbox_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_ndo_handoff_due ON public.notification_delivery_outbox USING btree (handoff_next_check_at, id) WHERE (handoff_next_check_at IS NOT NULL)
   INDEX CREATE UNIQUE INDEX idx_ndo_kind_content ON public.notification_delivery_outbox USING btree (kind, content_id)
   INDEX CREATE INDEX idx_ndo_pending_due_created_id ON public.notification_delivery_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_ndo_sending_stale ON public.notification_delivery_outbox USING btree (sending_started_at, id) WHERE (status = 'SENDING'::text)

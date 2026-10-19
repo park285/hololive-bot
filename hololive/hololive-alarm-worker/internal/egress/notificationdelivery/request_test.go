@@ -44,6 +44,7 @@ func (s *preparedSenderSpy) PrepareMessageRequest(context.Context, string, strin
 	return s.body, s.route, s.prepareErr
 }
 
+// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
 func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, route, id string) (string, error) {
 	s.ids = append(s.ids, id)
 	s.bodies = append(s.bodies, body)
@@ -53,7 +54,15 @@ func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, rout
 		s.onSend()
 	}
 
-	return "", s.err
+	if s.err != nil {
+		return "", s.err
+	}
+
+	return preparedSpyIrisRequestID(id), nil
+}
+
+func preparedSpyIrisRequestID(clientRequestID string) string {
+	return "iris-" + clientRequestID
 }
 
 func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
@@ -94,7 +103,7 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", "source"))
 
-	sender := &preparedSenderSpy{body: "pinned body", route: testPreparedText, err: errors.New("known failure")}
+	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText, err: errors.New("known failure")}
 	cfg := testDispatcherConfig()
 
 	cfg.MaxRetries = 1
@@ -111,7 +120,7 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	d.processReady(ctx)
 	require.Len(t, sender.ids, 2)
 	require.Equal(t, sender.ids[0], sender.ids[1])
-	require.Equal(t, []string{"pinned body", "pinned body"}, sender.bodies)
+	require.Equal(t, []string{testPinnedBody, testPinnedBody}, sender.bodies)
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, domain.DeliveryStatusSent))
 }
 
@@ -276,7 +285,7 @@ func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
 	// content_id는 period_key와 room_id의 연결이므로 두 입력이 같은 conflict key를 만들 수 있습니다.
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "period:part", "room", "source"))
 
-	sender := &preparedSenderSpy{body: "pinned body", route: testPreparedText, err: errors.New("known failure")}
+	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText, err: errors.New("known failure")}
 	cfg := testDispatcherConfig()
 
 	cfg.MaxRetries = 1

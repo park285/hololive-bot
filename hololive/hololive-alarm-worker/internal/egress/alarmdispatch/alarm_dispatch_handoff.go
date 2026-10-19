@@ -28,8 +28,8 @@ const (
 	alarmDispatchHandoffSoftClaim     = 15 * time.Second
 	alarmDispatchHandoffStatusTimeout = 5 * time.Second
 	// 정산은 일반 연결 획득으로 단일 문장 하나씩이다. 동시에 쓰는 연결을 이 수로 묶어 batch 정산이 alarm_worker 풀
-	// (기본 8, control 예약 1)의 일반 용량을 독점하지 않게 한다. 문장은 단위 하나의 잠금·갱신이라 짧아서 32건도
-	// 정산 예산 안에 끝난다.
+	// (기본 8, control 예약 1)의 일반 용량을 독점하지 않게 한다. 슬롯 대기까지 포함해 정산 예산을 넘긴 정산은 적용하지
+	// 않고, soft claim 뒤 다음 확인이 다시 판정한다.
 	alarmDispatchHandoffSettleConcurrency = 2
 )
 
