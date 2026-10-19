@@ -78,9 +78,6 @@ func TestNewPool_RestoresBaseSchema(t *testing.T) {
 		}
 	}
 
-	// base 컬럼(006이 생성) + 이후 migration이 ADD한 컬럼이 모두 존재해야 한다.
-	// members: aliases(006 base) + photo(009) + org(016) + twitch_user_id(018).
-	// alarms: room_id(006 base) + alarm_types(010).
 	wantColumns := map[string][]string{
 		"members": {"id", "slug", "channel_id", "english_name", "aliases", "photo", "org", "sync_source", "twitch_user_id"},
 		"alarms":  {"id", "room_id", "user_id", "channel_id", "created_at", "alarm_types"},

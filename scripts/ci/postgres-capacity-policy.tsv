@@ -1,7 +1,7 @@
-# owner|compose service (empty for external allocation)|service env key|source key|instances|max default|database role
+# 소유자|Compose 서비스(외부 할당은 빈 값)|서비스 환경 키|소스 키|인스턴스 수|기본 최대값|DB 역할
 @server-limit|60
 @superuser-reserved|3
-# Runtime limit includes three ordinary control slots, not extra app pools.
+# 런타임 한도에는 별도 앱 풀이 아닌 일반 제어 슬롯 셋이 포함된다.
 @role-limit|hololive_runtime|25
 @role-limit|hololive_scraper|28
 @role-limit|hololive_migrator|1

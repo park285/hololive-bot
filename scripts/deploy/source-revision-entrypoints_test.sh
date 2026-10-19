@@ -108,7 +108,7 @@ cat >"${repo}/scripts/deploy/lib/postgres-capacity.sh" <<'EOF'
 postgres_capacity_assert_target() { :; }
 EOF
 
-# Profile admission is an independent boundary; these fixtures exercise image provenance.
+# 프로필 허용은 독립된 경계이며 이 테스트는 이미지 출처를 검증한다.
 cat >"${repo}/scripts/deploy/lib/worker-profile-pair.py" <<'EOF'
 import json
 import sys
@@ -134,7 +134,7 @@ if [[ "${1:-}" == compose && "${2:-}" == version ]]; then
     exit 0
 fi
 if [[ "${1:-}" == compose ]]; then
-    # Render with the real Compose CLI, without building images or contacting a daemon.
+    # 이미지 빌드·데몬 접속 없이 실제 Compose CLI로 렌더링한다.
     if [[ " $* " == *" config --format json "* ]]; then
         exec "${FAKE_REAL_DOCKER}" "$@"
     fi
