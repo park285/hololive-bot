@@ -155,14 +155,12 @@ func seedCleanupRearm(ctx context.Context, t *testing.T, repo *outboxFixture, te
 			BaseID:    notificationDeliveryClientRequestID(item),
 			Exhausted: test.exhausted,
 		}
-		require.NoError(t, repo.saveRequest(ctx, item.ID, testWorkerA, nil, request))
+		require.NoError(t, repo.saveRequest(ctx, item.ID, testWorkerA, item.AttemptCount, request))
 	}
 
-	ok, err := repo.MarkFailed(ctx, item.ID, testWorkerA, item.AttemptCount, 1, time.Second, "known failure")
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.NoError(t, repo.MarkFailed(ctx, item.ID, testWorkerA, item.AttemptCount, 1, time.Second, "known failure"))
 
-	_, err = repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET created_at=clock_timestamp()-INTERVAL '90 days' WHERE id=$1`, item.ID)
+	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET created_at=clock_timestamp()-INTERVAL '90 days' WHERE id=$1`, item.ID)
 	require.NoError(t, err)
 
 	var originalPayload string
@@ -239,9 +237,38 @@ func TestCleanupConcurrentTerminalTimestampRefresh(t *testing.T) {
 			require.Equal(t, test.status, status)
 			require.True(t, recent)
 
-			deleted, err := repo.cleanupInBatches(ctx, time.Now().Add(24*time.Hour), cleanupBatchSize)
+			_, err = repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox
+				SET created_at=clock_timestamp()-INTERVAL '31 days',
+					sent_at=CASE WHEN status='SENT' THEN clock_timestamp()-INTERVAL '31 days' ELSE NULL END
+				WHERE id=$1`, id)
+			require.NoError(t, err)
+
+			deleted, err := repo.Cleanup(ctx, 30*24*time.Hour)
 			require.NoError(t, err)
 			require.EqualValues(t, 1, deleted, "terminal rows must still be removed once the cutoff passes")
 		})
 	}
+}
+
+// 보존 기간 경계의 직전·직후에 둔 종료 행 중 기한을 넘긴 행만 지운다.
+func TestCleanupRetentionBoundaryDeletesOnlyExpiredRows(t *testing.T) {
+	repo := testRepository(t)
+	ctx := t.Context()
+
+	for _, room := range []string{"expired-room", "retained-room"} {
+		require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "retention-boundary", room, "message"))
+	}
+
+	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET status='FAILED',
+		created_at=clock_timestamp()-CASE WHEN room_id='expired-room' THEN INTERVAL '7 days 1 minute' ELSE INTERVAL '7 days' - INTERVAL '1 minute' END`)
+	require.NoError(t, err)
+
+	deleted, err := repo.Cleanup(ctx, 7*24*time.Hour)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+
+	var remaining string
+
+	require.NoError(t, repo.pool.QueryRow(ctx, `SELECT room_id FROM notification_delivery_outbox`).Scan(&remaining))
+	require.Equal(t, "retained-room", remaining)
 }

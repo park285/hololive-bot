@@ -55,9 +55,7 @@ func TestFetchReadyAndLockPreservesRoomOrderAcrossWorkers(t *testing.T) {
 	require.Len(t, other, 1)
 	require.Equal(t, "room-c", other[0].RoomID)
 
-	started, err := r.MarkSending(ctx, a1, testWorkerA, config.NotificationDeliveryLease)
-	require.NoError(t, err)
-	require.True(t, started)
+	require.NoError(t, r.MarkSending(ctx, a1, testWorkerA, 0, config.NotificationDeliveryLease))
 
 	_, err = r.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET lock_expires_at=clock_timestamp()-INTERVAL '1 second' WHERE id=$1", a1)
 	require.NoError(t, err)
@@ -70,9 +68,7 @@ func TestFetchReadyAndLockPreservesRoomOrderAcrossWorkers(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, whileSending)
 
-	finished, err := r.MarkSent(ctx, a1, testWorkerA)
-	require.NoError(t, err)
-	require.True(t, finished)
+	require.NoError(t, r.MarkSent(ctx, a1, testWorkerA, 0))
 
 	snapshot, err = r.ReadySnapshot(ctx)
 	require.NoError(t, err)
@@ -120,9 +116,7 @@ func TestFetchReadyAndLockSkipsAlreadyProcessedIDs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, first, 1)
 
-	ok, err := r.MarkFailed(ctx, first[0].ID, testWorkerA, first[0].AttemptCount, 3, time.Millisecond, "retry soon")
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.NoError(t, r.MarkFailed(ctx, first[0].ID, testWorkerA, first[0].AttemptCount, 3, time.Millisecond, "retry soon"))
 
 	_, err = r.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET next_attempt_at=clock_timestamp()-INTERVAL '1 second' WHERE id=$1", first[0].ID)
 	require.NoError(t, err)

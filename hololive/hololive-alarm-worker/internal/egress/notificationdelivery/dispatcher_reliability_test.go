@@ -21,18 +21,18 @@ func TestDispatcherQuarantinesUnknownWithoutRetry(t *testing.T) {
 		for _, saveError := range []error{nil, errors.New("db unavailable")} {
 			failed, quarantined := 0, 0
 			repo := &mockDeliveryRepository{
-				markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) (bool, error) {
+				markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) error {
 					failed++
-					return true, nil
+					return nil
 				},
-				markQuarantinedFn: func(ctx context.Context, _ int64, _, _ string) (bool, error) {
+				markQuarantinedFn: func(ctx context.Context, _ int64, _ string, _ int, _ string) error {
 					quarantined++
 
 					if ctx.Err() != nil {
 						t.Fatal(ctx.Err())
 					}
 
-					return saveError == nil, saveError
+					return saveError
 				},
 			}
 			d := mustNewDispatcher(t, repo, &mockSender{sendFn: func(context.Context, string, string) error { return cause }}, dispatcherLogger(), nil)
@@ -60,18 +60,18 @@ func TestDispatcherAttemptDeadlineAndParentCancellation(t *testing.T) {
 				}
 
 				quarantined := false
-				repo := &mockDeliveryRepository{markQuarantinedFn: func(ctx context.Context, _ int64, _, _ string) (bool, error) {
+				repo := &mockDeliveryRepository{markQuarantinedFn: func(ctx context.Context, _ int64, _ string, _ int, _ string) error {
 					if ctx.Err() != nil {
 						t.Fatal("finalization inherited expired deadline")
 					}
 
 					quarantined = true
 
-					return true, nil
-				}, markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) (bool, error) {
+					return nil
+				}, markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) error {
 					t.Fatal("ambiguous timeout retried")
 
-					return false, nil
+					return nil
 				}}
 
 				sender := &mockSender{sendFn: func(ctx context.Context, _, _ string) error {
@@ -111,10 +111,10 @@ func TestDispatcherCanceledBeforeSenderDoesNotSend(t *testing.T) {
 }
 
 func TestDispatcherSuccessfulSendDBFailureRemainsUnretried(t *testing.T) {
-	repo := &mockDeliveryRepository{markSentFn: func(context.Context, int64, string) (bool, error) { return false, errors.New("commit response lost") }, markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) (bool, error) {
+	repo := &mockDeliveryRepository{markSentFn: func(context.Context, int64, string, int) error { return errors.New("commit response lost") }, markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) error {
 		t.Fatal("successful send returned to pending")
 
-		return false, nil
+		return nil
 	}}
 	d := mustNewDispatcher(t, repo, &mockSender{}, dispatcherLogger(), nil)
 	d.processItem(t.Context(), &domain.NotificationDeliveryOutbox{ID: 1, Payload: makePayload(t, "hello")})
@@ -176,7 +176,7 @@ func TestDispatcherStaleSendingThresholdMustCoverSendingLease(t *testing.T) {
 func TestGenericProviderAttemptEndsBeforeFinalizationPanic(t *testing.T) {
 	tracker := workercontract.NewExecutorTracker()
 	totals := &workercontract.Counters{}
-	repo := &mockDeliveryRepository{markSentFn: func(context.Context, int64, string) (bool, error) {
+	repo := &mockDeliveryRepository{markSentFn: func(context.Context, int64, string, int) error {
 		require.Zero(t, tracker.Snapshot(time.Now()).InFlight)
 		require.EqualValues(t, 1, totals.Snapshot().Attempts.Success)
 		panic("database finalization panic")

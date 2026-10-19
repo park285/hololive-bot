@@ -22,11 +22,14 @@ package notificationdelivery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -91,13 +94,22 @@ func fetchAndLockItems(ctx context.Context, t *testing.T, repository *outboxFixt
 func markOutboxSending(ctx context.Context, t *testing.T, repository *outboxFixture, item *domain.NotificationDeliveryOutbox) {
 	t.Helper()
 
-	ok, err := repository.MarkSending(ctx, item.ID, testWorkerA, testLease)
-	if err != nil {
+	if err := repository.MarkSending(ctx, item.ID, testWorkerA, item.AttemptCount, testLease); err != nil {
 		t.Fatalf("mark sending: %v", err)
 	}
+}
 
+// requireFenceMiss는 err가 action 전이의 단일 행 fence 미스이고 관측 원인이 reason인지 확인한다.
+func requireFenceMiss(t *testing.T, err error, action string, reason sendfence.Reason) {
+	t.Helper()
+
+	miss, ok := errors.AsType[*sendfence.MissError](err)
 	if !ok {
-		t.Fatal("mark sending fenced unexpectedly")
+		t.Fatalf("%s error = %v, want *sendfence.MissError", action, err)
+	}
+
+	if miss.Action != action || len(miss.Rows) != 1 || miss.Rows[0].Reason != reason {
+		t.Fatalf("%s miss = %+v, want one row with reason %s", action, miss, reason)
 	}
 }
 
@@ -189,14 +201,7 @@ func TestMarkSent_RejectsOwnedPendingRow(t *testing.T) {
 		t.Fatal("no items fetched")
 	}
 
-	ok, err := repository.MarkSent(ctx, items[0].ID, testWorkerA)
-	if err != nil {
-		t.Fatalf("mark sent: %v", err)
-	}
-
-	if ok {
-		t.Fatal("MarkSent must not settle a PENDING row that never entered SENDING")
-	}
+	requireFenceMiss(t, repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount), actionMarkSent, sendfence.ReasonStatusChanged)
 
 	var (
 		status        domain.DeliveryOutboxStatus
@@ -226,13 +231,8 @@ func TestMarkSent_RejectsOwnedPendingRow(t *testing.T) {
 
 	markOutboxSending(ctx, t, repository, &items[0])
 
-	ok, err = repository.MarkSent(ctx, items[0].ID, testWorkerA)
-	if err != nil {
-		t.Fatalf("mark sent after sending: %v", err)
-	}
-
-	if !ok {
-		t.Fatal("the same owner must settle after entering SENDING")
+	if err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount); err != nil {
+		t.Fatalf("the same owner must settle after entering SENDING: %v", err)
 	}
 }
 
@@ -251,13 +251,8 @@ func TestMarkSent_FromSending(t *testing.T) {
 
 	markOutboxSending(ctx, t, repository, &items[0])
 
-	ok, err := repository.MarkSent(ctx, items[0].ID, testWorkerA)
-	if err != nil {
-		t.Fatalf("mark sent: %v", err)
-	}
-
-	if !ok {
-		t.Fatal("MarkSent must accept SENDING owner transition")
+	if err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount); err != nil {
+		t.Fatalf("MarkSent must accept SENDING owner transition: %v", err)
 	}
 
 	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 1 {
@@ -288,7 +283,7 @@ func TestMarkSent_ClearsLock(t *testing.T) {
 
 	markOutboxSending(ctx, t, repository, &items[0])
 
-	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
+	if err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
@@ -327,9 +322,7 @@ func TestMarkSent_DoesNotResurrectFailedRow(t *testing.T) {
 		t.Fatalf("force failed: %v", err)
 	}
 
-	if _, err := repository.MarkSent(ctx, id, testWorkerA); err != nil {
-		t.Fatalf("mark sent: %v", err)
-	}
+	requireFenceMiss(t, repository.MarkSent(ctx, id, testWorkerA, items[0].AttemptCount), actionMarkSent, sendfence.ReasonStatusChanged)
 
 	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 0 {
 		t.Fatalf("late MarkSent must not resurrect a FAILED row to SENT, sent=%d", sent)
@@ -361,9 +354,7 @@ func TestMarkFailed_DoesNotResurrectSentRow(t *testing.T) {
 		t.Fatalf("force sent: %v", err)
 	}
 
-	if _, err := repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "late failure"); err != nil {
-		t.Fatalf("mark failed: %v", err)
-	}
+	requireFenceMiss(t, repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "late failure"), actionMarkFailed, sendfence.ReasonStatusChanged)
 
 	if failed := countByStatus(ctx, t, repository, domain.DeliveryStatusFailed); failed != 0 {
 		t.Fatalf("late MarkFailed must not resurrect a SENT row, failed=%d", failed)
@@ -388,7 +379,7 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 	}
 
 	// maxRetries=3, 첫 실패 → 아직 PENDING 유지
-	if _, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error"); err != nil {
+	if err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error"); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
 
@@ -413,13 +404,8 @@ func TestMarkFailed_FromSending(t *testing.T) {
 
 	markOutboxSending(ctx, t, repository, &items[0])
 
-	ok, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error")
-	if err != nil {
-		t.Fatalf("mark failed: %v", err)
-	}
-
-	if !ok {
-		t.Fatal("MarkFailed must accept SENDING owner transition")
+	if err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error"); err != nil {
+		t.Fatalf("MarkFailed must accept SENDING owner transition: %v", err)
 	}
 
 	if pending := countByStatus(ctx, t, repository, domain.DeliveryStatusPending); pending != 1 {
@@ -446,12 +432,12 @@ func TestCleanup(t *testing.T) {
 
 	markOutboxSending(ctx, t, repository, &items[0])
 
-	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
+	if err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
-	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET sent_at = $1 WHERE id = $2",
-		time.Now().Add(-10*24*time.Hour), items[0].ID); err != nil {
+	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET sent_at = clock_timestamp() - INTERVAL '10 days' WHERE id = $1",
+		items[0].ID); err != nil {
 		t.Fatalf("backdate sent_at: %v", err)
 	}
 
@@ -474,8 +460,8 @@ func TestCleanup_FailedItems(t *testing.T) {
 	}
 
 	_, err := repository.pool.Exec(ctx,
-		"UPDATE notification_delivery_outbox SET status = 'FAILED', created_at = $1 WHERE content_id = $2",
-		time.Now().Add(-10*24*time.Hour), "2026-W08:room-fail",
+		"UPDATE notification_delivery_outbox SET status = 'FAILED', created_at = clock_timestamp() - INTERVAL '10 days' WHERE content_id = $1",
+		"2026-W08:room-fail",
 	)
 	if err != nil {
 		t.Fatalf("set old failed status: %v", err)
@@ -520,8 +506,8 @@ func expireLease(ctx context.Context, t *testing.T, repository *outboxFixture, i
 	t.Helper()
 
 	if _, err := repository.pool.Exec(ctx,
-		"UPDATE notification_delivery_outbox SET lock_expires_at = $1 WHERE id = $2",
-		time.Now().Add(-time.Minute), id,
+		"UPDATE notification_delivery_outbox SET lock_expires_at = clock_timestamp() - INTERVAL '1 minute' WHERE id = $1",
+		id,
 	); err != nil {
 		t.Fatalf("expire lease: %v", err)
 	}
@@ -569,18 +555,11 @@ func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 
 	reclaimByWorkerB(ctx, t, repository, id)
 
-	if started, err := repository.MarkSending(ctx, id, testWorkerB, testLease); err != nil || !started {
-		t.Fatalf("worker B mark sending: started=%v err=%v", started, err)
+	if err := repository.MarkSending(ctx, id, testWorkerB, 0, testLease); err != nil {
+		t.Fatalf("worker B mark sending: %v", err)
 	}
 
-	fenced, err := repository.MarkSent(ctx, id, testWorkerA)
-	if err != nil {
-		t.Fatalf("stale worker A mark sent: %v", err)
-	}
-
-	if fenced {
-		t.Fatal("stale MarkSent must be fenced off after reclaim")
-	}
+	requireFenceMiss(t, repository.MarkSent(ctx, id, testWorkerA, itemsA[0].AttemptCount), actionMarkSent, sendfence.ReasonOwnerChanged)
 
 	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 0 {
 		t.Fatalf("stale MarkSent must not mark SENT, sent=%d", sent)
@@ -590,13 +569,8 @@ func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 		t.Fatalf("row must stay SENDING under B's ownership, sending=%d", sending)
 	}
 
-	okFenced, err := repository.MarkSent(ctx, id, testWorkerB)
-	if err != nil {
-		t.Fatalf("worker B mark sent: %v", err)
-	}
-
-	if !okFenced {
-		t.Fatal("current lease holder B MarkSent must succeed")
+	if err := repository.MarkSent(ctx, id, testWorkerB, 0); err != nil {
+		t.Fatalf("current lease holder B MarkSent must succeed: %v", err)
 	}
 
 	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 1 {
@@ -622,14 +596,7 @@ func TestMarkFailed_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 	expireLease(ctx, t, repository, id)
 	reclaimByWorkerB(ctx, t, repository, id)
 
-	fenced, err := repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "stale worker A failure")
-	if err != nil {
-		t.Fatalf("stale worker A mark failed: %v", err)
-	}
-
-	if fenced {
-		t.Fatal("stale MarkFailed must be fenced off after reclaim")
-	}
+	requireFenceMiss(t, repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "stale worker A failure"), actionMarkFailed, sendfence.ReasonOwnerChanged)
 
 	var attemptCount int
 
@@ -661,26 +628,14 @@ func TestMarkSent_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 
 	markOutboxSending(ctx, t, repository, &itemsA[0])
 
-	fenced, err := repository.MarkSent(ctx, id, testWorkerB)
-	if err != nil {
-		t.Fatalf("foreign worker mark sent: %v", err)
-	}
-
-	if fenced {
-		t.Fatal("foreign worker MarkSent must be fenced even with a matching locked_at")
-	}
+	requireFenceMiss(t, repository.MarkSent(ctx, id, testWorkerB, itemsA[0].AttemptCount), actionMarkSent, sendfence.ReasonOwnerChanged)
 
 	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 0 {
 		t.Fatalf("foreign MarkSent must not mark SENT, sent=%d", sent)
 	}
 
-	okFenced, err := repository.MarkSent(ctx, id, testWorkerA)
-	if err != nil {
-		t.Fatalf("owner mark sent: %v", err)
-	}
-
-	if !okFenced {
-		t.Fatal("owner A MarkSent must succeed")
+	if err := repository.MarkSent(ctx, id, testWorkerA, itemsA[0].AttemptCount); err != nil {
+		t.Fatalf("owner A MarkSent must succeed: %v", err)
 	}
 }
 
@@ -699,14 +654,7 @@ func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 
 	id := itemsA[0].ID
 
-	fenced, err := repository.MarkFailed(ctx, id, testWorkerB, 0, 3, time.Minute, "foreign failure")
-	if err != nil {
-		t.Fatalf("foreign worker mark failed: %v", err)
-	}
-
-	if fenced {
-		t.Fatal("foreign worker MarkFailed must be fenced even with a matching locked_at")
-	}
+	requireFenceMiss(t, repository.MarkFailed(ctx, id, testWorkerB, 0, 3, time.Minute, "foreign failure"), actionMarkFailed, sendfence.ReasonOwnerChanged)
 
 	var attemptCount int
 
@@ -721,47 +669,31 @@ func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 	}
 }
 
+// TestMarkSending_Fenced는 발송 전이의 각 fence 조건을 하나씩 어긋나게 하고 관측 원인을 확인한다. 각 경우의 mutate는
+// claim한 행에 적용하는 SQL이며 빈 값이면 행을 그대로 둔다.
 func TestMarkSending_Fenced(t *testing.T) {
 	tests := []struct {
 		name   string
 		worker string
-		mutate func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox)
+		mutate string
+		reason sendfence.Reason
 	}{
+		{name: "foreign worker locked_by", worker: testWorkerB, reason: sendfence.ReasonOwnerChanged},
 		{
-			name:   "foreign worker locked_by",
-			worker: testWorkerB,
-			mutate: func(*testing.T, *outboxFixture, context.Context, *domain.NotificationDeliveryOutbox) {},
+			name: "expired lease", worker: testWorkerA, reason: sendfence.ReasonLeaseExpired,
+			mutate: "UPDATE notification_delivery_outbox SET lock_expires_at = clock_timestamp() - INTERVAL '1 minute' WHERE id = $1",
 		},
 		{
-			name:   "expired lease",
-			worker: testWorkerA,
-			mutate: func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
-				t.Helper()
-
-				expireLease(ctx, t, repository, item.ID)
-			},
+			name: "non-pending sending", worker: testWorkerA, reason: sendfence.ReasonStatusChanged,
+			mutate: "UPDATE notification_delivery_outbox SET status = 'SENDING', sending_started_at = clock_timestamp() WHERE id = $1",
 		},
 		{
-			name:   "non-pending sending",
-			worker: testWorkerA,
-			mutate: func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
-				t.Helper()
-
-				markOutboxSending(ctx, t, repository, item)
-			},
+			name: "non-pending failed", worker: testWorkerA, reason: sendfence.ReasonStatusChanged,
+			mutate: "UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE id = $1",
 		},
 		{
-			name:   "non-pending failed",
-			worker: testWorkerA,
-			mutate: func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
-				t.Helper()
-
-				if _, err := repository.pool.Exec(ctx,
-					"UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE id = $1", item.ID,
-				); err != nil {
-					t.Fatalf("force failed: %v", err)
-				}
-			},
+			name: "other claim attempt", worker: testWorkerA, reason: sendfence.ReasonVersionChanged,
+			mutate: "UPDATE notification_delivery_outbox SET attempt_count = attempt_count + 1 WHERE id = $1",
 		},
 	}
 
@@ -774,21 +706,15 @@ func TestMarkSending_Fenced(t *testing.T) {
 				t.Fatalf("enqueue: %v", err)
 			}
 
-			items := fetchAndLockItems(ctx, t, repository)
-			if len(items) == 0 {
-				t.Fatal("no items fetched")
+			item := fetchAndLockItems(ctx, t, repository)[0]
+
+			if tc.mutate != "" {
+				if _, err := repository.pool.Exec(ctx, tc.mutate, item.ID); err != nil {
+					t.Fatalf("mutate claimed row: %v", err)
+				}
 			}
 
-			tc.mutate(t, repository, ctx, &items[0])
-
-			ok, err := repository.MarkSending(ctx, items[0].ID, tc.worker, testLease)
-			if err != nil {
-				t.Fatalf("mark sending: %v", err)
-			}
-
-			if ok {
-				t.Fatalf("MarkSending must be fenced for %q", tc.name)
-			}
+			requireFenceMiss(t, repository.MarkSending(ctx, item.ID, tc.worker, item.AttemptCount, testLease), actionMarkSending, tc.reason)
 		})
 	}
 }
@@ -844,5 +770,64 @@ func TestFetchReadyAndLock_DoesNotReclaimSendingAfterLeaseExpiry(t *testing.T) {
 
 	if sending := countByStatus(ctx, t, repository, deliveryStatusSending); sending != 1 {
 		t.Fatalf("row must remain SENDING, sending=%d", sending)
+	}
+}
+
+type ownerRow struct {
+	status   string
+	attempts int
+	lockedBy *string
+	errText  *string
+}
+
+func readOwnerRow(ctx context.Context, t *testing.T, repository *outboxFixture, id int64) ownerRow {
+	t.Helper()
+
+	var row ownerRow
+
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT status, attempt_count, locked_by, error FROM notification_delivery_outbox WHERE id = $1", id,
+	).Scan(&row.status, &row.attempts, &row.lockedBy, &row.errText); err != nil {
+		t.Fatalf("read owner row: %v", err)
+	}
+
+	return row
+}
+
+// 같은 worker 이름이 재시도 뒤 다시 claim한 행에서 이전 claim 세대(attempt_count)의 전이는 소유자가 같아도 적용되지 않는다.
+func TestPreviousAttemptTransitionsRejectedAfterSameOwnerReclaim(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	first := fetchAndLockItems(ctx, t, repository)[0]
+	markOutboxSending(ctx, t, repository, &first)
+
+	if err := repository.MarkFailed(ctx, first.ID, testWorkerA, first.AttemptCount, 3, 0, "retry"); err != nil {
+		t.Fatalf("first attempt failure: %v", err)
+	}
+
+	second := fetchAndLockItems(ctx, t, repository)[0]
+	if second.ID != first.ID || second.AttemptCount != first.AttemptCount+1 {
+		t.Fatalf("second claim = id %d attempt %d, want id %d attempt %d", second.ID, second.AttemptCount, first.ID, first.AttemptCount+1)
+	}
+
+	requireFenceMiss(t, repository.MarkSending(ctx, first.ID, testWorkerA, first.AttemptCount, testLease), actionMarkSending, sendfence.ReasonVersionChanged)
+	markOutboxSending(ctx, t, repository, &second)
+
+	before := readOwnerRow(ctx, t, repository, first.ID)
+	requireFenceMiss(t, repository.MarkSent(ctx, first.ID, testWorkerA, first.AttemptCount), actionMarkSent, sendfence.ReasonVersionChanged)
+	requireFenceMiss(t, repository.MarkFailed(ctx, first.ID, testWorkerA, first.AttemptCount, 3, time.Minute, "stale failure"), actionMarkFailed, sendfence.ReasonVersionChanged)
+	requireFenceMiss(t, repository.MarkQuarantined(ctx, first.ID, testWorkerA, first.AttemptCount, "stale unknown"), actionMarkQuarantined, sendfence.ReasonVersionChanged)
+
+	if after := readOwnerRow(ctx, t, repository, first.ID); !reflect.DeepEqual(after, before) {
+		t.Fatalf("stale attempt transitions changed the row: before %+v after %+v", before, after)
+	}
+
+	if err := repository.MarkSent(ctx, second.ID, testWorkerA, second.AttemptCount); err != nil {
+		t.Fatalf("current attempt MarkSent: %v", err)
 	}
 }
