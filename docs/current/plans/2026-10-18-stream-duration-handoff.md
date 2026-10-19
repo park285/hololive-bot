@@ -1,11 +1,11 @@
 # 방송 시간 표시와 방송 시각 확정 인계 - 2026-10-18
 
-**상태** (2026-10-18 네 번째 세션, 19:53Z I4 완료·I5 조건부 재개 5/8)
-- PR #657(`427eebc19`)을 기준으로 I5 실행을 이어받았습니다. 원 checkout의 다른 작업은 건드리지 않고 `hololive-bot-stream-duration`을 사용합니다.
-- 운영 `hololive-api`는 같은 `f089d9a64` image를 유지합니다. 여덟 번째 중단 뒤 모든 재개 조건을 확인하고 19:53:24Z K=200으로 API만 재생성했습니다. healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치를 확인했습니다.
-- I5는 재개 표본에서 확정 3,907건·격리 충돌 28건·pending 5,810건입니다. 조건부 반복 재개 사용 횟수는 **5/8**이며 승인 기한과 중단·제품 검증 기준을 유지합니다.
-- I4는 판정 완료했습니다. 최초 신규 종료 30건 모두 1시간 관찰을 마쳤고 공개 아카이브 26/26이 시간 내 확정되어 표본 기준 통과했습니다. 멤버십 1건도 시간 내 확정했고, 미확정 3건은 공개 페이지에서 비공개 2·삭제 1로 확인했습니다.
-- I8은 이번 세션에서 사용자가 **보류**를 선택했습니다. 카카오 방 접근·명령 발송·화면 열기는 수행하지 않습니다.
+**상태** (2026-10-19 00:14Z, 사용자 요청으로 다음 세션 인계)
+- 사용자가 "핸드오프해서 다른세션에서 진행하자"고 지시하여 I5를 안전하게 일시 중단했습니다. **현재 K=0**이며 00:14:14Z에 `hololive-api`만 재생성했습니다. 같은 `f089d9a64` image·healthy·재시작 0·health/readiness·현재 backlog target 0을 확인했습니다.
+- 투입한 9,745건 중 **확정 5,856·충돌 31·pending 3,858건**입니다. pending은 미시도 3,689·재시도 169건이며, 충돌 31건 모두 원래 시각이 보존되었습니다. 처리 완료와 완료 후 20건 대조·표시 비율 판정은 남았습니다.
+- 조건부 재개는 **5/8회 사용, 잔여 3회, 기한 2026-10-20 14:35:50Z**입니다. 이번 인계 중단은 재개 횟수를 소비하지 않았습니다. 다음 세션이 감시 소유권과 기존 조건을 확인한 뒤 재개합니다.
+- I4는 완료했습니다. 최초 신규 종료 30건을 관찰해 공개 26/26이 시간 내 확정되어 표본 기준 통과했고, 멤버십 1건도 시간 내 확정했습니다. 미확정 3건은 공개 페이지에서 비공개 2·삭제 1로 확인했습니다.
+- I8은 사용자 선택으로 보류합니다. 카카오 방 접근·명령 발송·화면 열기는 하지 않았습니다. 이 세션의 감시 프로세스는 K=0 검증 후 종료했습니다.
 
 ## 1. 승인 범위
 
@@ -31,16 +31,17 @@
   - 이 결정으로 승인된 것: `compose.env`에 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200` 추가, `hololive-api` recreate, 계획 "운영 SQL 초안"의 backlog 투입 SQL(약 9,700행)과 이에 따른 YouTube 영상 확인 증가. 중단 조건에서 K=0으로 되돌리는 것도 포함합니다.
   - 별도 보고·승인이 필요한 것: 시각 롤백 SQL 실행, 계획에 없는 운영 데이터 쓰기, 카카오 방 사용.
 - 2026-10-18 네 번째 세션: 사용자가 위 인계 작업의 실행과 docs PR squash 병합을 다시 요청했습니다. I8 선택 질문에는 **보류**를 선택했습니다. 이는 I5·I4 승인 철회가 아니며 카카오 화면만 제외합니다.
+- 2026-10-19 00:14Z 인계 지시: "핸드오프해서 다른세션에서 진행하자". 무감시 처리를 피하도록 K=0으로 일시 중단하고 확정값·진행 행을 보존했습니다. 다음 세션은 남은 I5와 완료 후 검증만 이어갑니다. 조건부 반복 재개 승인(7절)은 5/8 사용·잔여 3회·동일 기한이며 초기화하지 않습니다.
 
 ## 2. 작업 트리 상태
 
 | 항목 | 값 |
 |---|---|
 | worktree | `/home/kapu/work/iris-stack/hololive-bot-stream-duration` |
-| branch / HEAD | `feat/stream-duration`. 생성 시 `6ecd2ed44`에서 시작했습니다. 세 번째 세션에서 병합된 main(`7e60b2061`) 위로 rebase해, 남은 로컬 커밋은 문서 커밋뿐입니다. 게시한 코드는 PR #651~#655입니다. 아래 릴리스 A·B 목록은 #651·#652의 내용입니다. |
-| 원 checkout | `/home/kapu/work/iris-stack/hololive-bot` (`main` `6ecd2ed44`). 다른 작업의 미커밋 변경이 약 100개 있습니다(`CHANGELOG.md`, alarm-worker 시험 등). 이 작업과 무관하므로 건드리지 않습니다. |
-| 다른 worktree | `hololive-bot-build`, `-dead-audit`, `-docs2`, `-remaining-limits`. 모두 다른 작업 소유이므로 건드리지 않습니다. |
-| 임시 자원 | 게시 gate·image build는 `/tmp/stream-duration-scratch/gate/`의 격리 작업 공간(detached worktree, `shared-go` `6ed91f9`·`iris-client-go` `9621f18` clone)에서 실행했고, 작업이 끝난 뒤 제거합니다. dbtest PostgreSQL 컨테이너 잔여는 없습니다. |
+| branch / HEAD | `feat/stream-duration`. 이번 세션은 PR #657(`427eebc19`)에서 시작했고 이후 변경은 이 문서와 계획 문서뿐입니다. 실행 기록은 docs PR #658에 게시합니다. 원격 squash SHA와 로컬 문서 커밋 SHA는 다를 수 있으므로 다음 세션에서 실제 ref·clean 상태를 확인합니다. |
+| 원 checkout | `/home/kapu/work/iris-stack/hololive-bot`. 이번 세션 시작 시 main `6ecd2ed44`, 다른 작업의 tracked 변경 295개·untracked 29개를 관찰했습니다. 이후 상태를 추정하지 않으며 이동·stash·reset·pull로 건드리지 않습니다. |
+| 다른 worktree | `hololive-bot-build`, `-dead-audit`, `-docs2`, `-remaining-limits`. 모두 다른 작업 소유입니다. |
+| 인계용 임시 자원 | `/tmp/stream-duration-i5-validation-vffun_ii/hololive-bot`는 게시 전용 clone(`docs/stream-duration-i5`)입니다. 형제 clone은 `shared-go` `6ed91f9`·`iris-client-go` `9621f18`로 고정했습니다. 원 checkout의 형제 미커밋 변경 때문에 gate가 실패하여 격리했으며 관련 작업은 변경하지 않았습니다. 읽기 전용 감시 코드 `/tmp/stream-duration-i5-watch-20261018.py`와 시각 알림 `/tmp/stream-duration-i5-resume-window-next.py`는 다음 세션 참고용으로 보존합니다. 실행 중인 감시 프로세스는 없습니다. |
 
 변경 파일은 경로 접두어 `hololive/hololive-api/internal/planes/bot/internal/`을 `bot/`로 줄여 적습니다.
 
@@ -163,7 +164,7 @@
   - unresolvable 추적에 들어가지 못하는 이유(`live.UnresolvableTrackable`)
 - 수정 방향은 조사 뒤에 정합니다. 기존 9건 정리는 운영 데이터 쓰기이므로 승인 필요입니다. 정리 결과도 계획의 확정 경로(`exhausted(identity_missing)`)와 맞아야 합니다.
 
-**진행 상태 (2026-10-18 네 번째 세션, 19:53Z)**
+**진행 상태 (2026-10-19 00:14Z 인계)**
 
 | # | 상태 | 근거·남은 일 |
 |---|---|---|
@@ -171,7 +172,7 @@
 | I2 | 완료·배포 | #651 A → `hololive-api` 03:35Z, #652 B → migration 322 적용·04:03Z. 전역 본문 md5 `abab0db8…` 확인. 게시마다 push hook의 `pre-push-gate.sh`가 격리 작업 공간에서 통과했고 CI 11개 check가 모두 통과했습니다. |
 | I3 | 완료·배포 | 적대적 검토(5개 영역) 지적 3건(backlog 재시도 누적으로 target 상한 초과, 중지 뒤 묶음 일괄 due, 늦게 감지한 방송의 시작 충돌)을 반영한 뒤 #653(`7bd38b05b`)으로 병합, migration 323 적용·04:30Z 배포. |
 | I4 | 완료·표본 기준 통과 | 최초 신규 종료 30건의 1시간 관찰 완료 후 공개 26/26(100%)이 관측 종료·provider 종료 양쪽 기준 시간 내 확정됐습니다. provider 종료 기준 최대 지연 34.499분입니다. 멤버십 1건도 확정, 미확정 3건은 공개 페이지로 비공개 2·삭제 1을 확인했습니다. 전체 표본 확정률 27/30(90%)과 구분합니다. 신규 queue conflict 0, 05:19Z 이후 p99 4.641초·4.934초입니다. 장기 모집단 97%의 통계적 보장은 아닙니다. |
-| I5 | 조건부 재개 5/8·감시 중 | 19:53Z 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, 정상 지표·K=0·동일 revision을 확인한 뒤 19:53:24Z API만 K=200으로 재생성했습니다. 확정 3,907·충돌 28·pending 5,810건입니다. 전량 완료와 후속 검증은 아직입니다. |
+| I5 | 사용자 요청으로 K=0 인계 중단 | 9,745건 투입 중 확정 5,856·격리 충돌 31·pending 3,858건입니다. 미시도 3,689·재시도 169건, 허용 외 충돌 사유·원래 시각 변경·신규 queue conflict는 0입니다. 00:14:14Z API만 K=0으로 재생성해 healthy·재시작 0·backlog target 0을 확인했습니다. 조건부 재개 사용 5/8·잔여 3회입니다. 전량 완료와 후속 검증은 다음 세션에 인계합니다. |
 | I6 | 완료·배포 | #655(`7e60b2061`), 수집기 c·b·a·d 05:10~05:18Z. `members_only` 행이 0건이라 재확정 SQL은 실행하지 않았고, 멤버십 종료 세션 33건은 I5 backlog에서 새 수집기로 처음 확인합니다. |
 | I7 | 완료·배포 | #654(`f089d9a64`), migration 324 적용·04:56Z. 9건 `ENDED` → 5분 안에 8건 `finalized`, 1건 `pending(identity_missing)`(조사 때 `LOGIN_REQUIRED`였던 1건으로 보임, 24시간 일정 뒤 `exhausted` 예상). roster 밖 head 없는 legacy LIVE는 0건입니다. |
 | I8 | 사용자 선택으로 보류 | worker 프로필 값과 템플릿 안내 확인은 완료 상태를 유지합니다. 현재 시험 방 승인이 없음을 확인하고 선택 질문을 했으며, 사용자가 카카오 화면 검증 보류를 선택했습니다. 방 접근·발송·읽음 변경을 하지 않았습니다. |
@@ -213,6 +214,10 @@
 - 여덟 번째 중단(조건부 재개 4회 뒤, 19:23~19:24Z): 30분 conflict 3/242(1.24%), p99 4.640초/4.683초, request_failed 0건입니다. 19:24:21Z K=0·API 단독 재생성 뒤 공통 검증(동일 image·healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치·backlog target 0)을 통과했습니다. 확정 3,902·충돌 28·pending 5,815건을 보존했고 허용 외 사유·원래 시각 변경·신규 queue conflict는 0입니다. 사용 4/8, 다음 창 해소는 19:53:00Z입니다.
 - 조건부 재개 5/8 (19:53Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.011초/4.671초·요청 실패 0, K=0·동일 revision을 확인했습니다. scoped sync·19:53:24Z API 단독 재생성과 공통 검증을 완료했습니다. 재개 표본은 확정 3,907·충돌 28·pending 5,810건입니다.
 - 신 lifecycle 첫 확인 완료·legacy 처리 전환(22:25Z): 확정 5,082건(observed 4,101·legacy_unknown 981), 충돌 31건(observed 29·legacy 2), pending 4,632건입니다. 미시도 4,529건은 모두 legacy이며 재시도는 103건입니다. observed 4,209건은 모두 첫 확인을 마쳤습니다. 첫 확인 완료와 최종 상태 완료를 구분하며 기존 3분·30분·3시간·24시간 재시도 일정을 바꾸지 않습니다. 조건부 재개 사용 5/8을 유지합니다.
+- 사용자 요청 인계 중단(2026-10-19 00:14Z): 중단 지표 이상이 아니라 세션 이관 때문에 K=0으로 멈췄습니다. 마스터 수정·scoped sync 후 00:14:14Z API만 재생성했고 동일 image·healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치·root:hololive-runtime 0640·backlog target 0을 확인했습니다.
+- 최종 집계(00:14:22Z): 확정 5,856·충돌 31(start_mismatch 23·channel_mismatch 8)·pending 3,858건입니다. pending은 미시도 3,689·identity_missing 159·login_required_unclassified 9·end_time_missing 1건이며 재시도 합계는 169건입니다. 충돌 31/31은 원래 observed 시각을 보존했고 허용 외 사유·신규 queue conflict는 0입니다.
+- 인계 직전 5분 p99는 channel_live_check 4.621초·live_snapshot 4.745초, request_failed·이전 공개 확인 대상 identity_missing·30분 새 conflict는 0건입니다. K=0은 backlog 첫 시도·재시도를 다음 projection에서 빼지만 신규 종료와 이미 발행된 관측 정산은 계속됩니다. 시각 롤백 SQL·채널 수정·conflict 재큐잉은 하지 않았습니다.
+- `stream-duration-i5-watch-bounded5-20261018` 감시는 K=0 검증 뒤 명시적으로 종료했습니다. 다음 세션은 기존 프로세스나 eval 상태가 살아 있다고 가정하지 말고, 읽기 전용 감시를 자기 소유로 시작합니다. 조건부 재개 사용 횟수는 5/8 그대로이며 제품 재시도·fallback 변경은 없습니다.
 
 **커밋 운용** (로컬 커밋 승인됨, 1절)
 
@@ -253,44 +258,46 @@
 
 게시·배포(I1~I3, I6, I7)와 I4 신규 종료 30건 판정은 완료했습니다(7절, 계획 5단계). 남은 순서입니다.
 
-1. I5 처리 감시: K=200 활성화와 9,745건 투입은 07:21Z 완료했습니다. 재투입하지 말고 현재 진행 분포와 감시 소유자를 먼저 확인합니다. 7절의 중단 수치에 해당하면 마스터 K=0 → scoped sync → API 단독 recreate → 다음 projection의 backlog 대상 제거를 확인합니다. UTC 12~17시도 같은 조건으로 감시합니다.
-2. I4는 완료된 표본 판정을 유지합니다. 공개 26/26과 전체 27/30을 혼동하거나 비공개·삭제 3건을 성공으로 바꾸지 않습니다.
-3. I5의 모든 행이 최종 상태가 된 뒤 무작위 확정 20건을 대조하고 최근 30일 `!방송기록` 표시 비율을 계산합니다. 표본 조회 실패를 교체 표본으로 숨기지 않습니다.
-4. I8은 사용자 선택으로 보류합니다. 새 요청·승인 전에는 시험 방을 찾거나 카카오 화면을 열지 않습니다.
-5. 각 단계가 끝나면 이 문서의 7절 표와 계획 문서의 체크박스·검증 결과를 갱신합니다.
+1. 현재 K=0·같은 운영 revision·healthy·backlog target 0·마스터/미러 일치와 진행 분포를 확인합니다. 기존 9,745건을 다시 투입하지 않습니다. 원 checkout의 다른 작업은 건드리지 않습니다.
+2. 다음 세션의 감시 소유자·60초 주기·중단 처리를 준비합니다. 7절의 조건부 재개 검증과 기한을 충족하면 기존 승인 범위에서 K=200·API 단독 재생성으로 이어갑니다. 횟수는 5/8에서 이어서 기록합니다. 다른 사유·지연·요청 실패·감시 실패, 8회 소진 또는 기한 경과는 재개하지 말고 별도 승인 범위를 확인합니다.
+3. 중단 기준은 5분 p99 >10초, 5분 request_failed 3건 이상·5% 이상, 이전 48시간 공개 확인 집합의 5분 identity_missing 3건 이상·5% 이상, 30분 최종 결과 중 conflict 3건 이상·0.5% 이상입니다. 이미 조사한 start_mismatch·channel_mismatch도 terminal 격리하며 시각을 강제로 확정하지 않습니다.
+4. I5의 모든 행이 최종 상태가 된 뒤 같은 투입 cohort의 finalized·provider 행에서 무작위 20건을 한 번 뽑아 공개 watch의 양쪽 시각을 대조합니다. 조회 실패 표본을 교체하지 않습니다. 최근 30일 ENDED 전체를 분모로 실제 handler의 길이 표시 조건을 적용합니다. 첫 조회 완료만으로 I5 완료로 처리하지 않습니다.
+5. I4 완료 판정과 I8 보류를 유지합니다. 단계마다 7절과 계획 6단계에 결과를 갱신하고 승인된 docs PR squash 병합으로 게시합니다. 비밀 파일 전체·주변 문맥을 출력하지 말고 설정 키만 제한적으로 확인합니다.
 
 ## 9. 인계 프롬프트
 
-세션이 예기치 않게 중단되었을 때만 사용하는 재개 지침입니다. 7절의 최신 실행 상태를 먼저 확인합니다.
+다음 세션에 붙여 넣을 실행 지침입니다.
 
 ```text
-hololive-bot 방송 시각 확정의 진행 중인 I5를 이어받아 주십시오. I4 최초 신규 종료 30건 판정은 완료했고 I8 카카오 화면은 사용자가 보류했습니다. 모든 보고는 한국어 합쇼체로 작성합니다.
+ultracode로 hololive-bot 방송 시각 확정의 남은 I5 처리와 완료 후 검증을 이어받아 주십시오. 모든 보고는 한국어 합쇼체로 작성합니다.
 
 먼저 읽을 것:
-- /home/kapu/work/iris-stack/AGENTS.md, /home/kapu/work/iris-stack/hololive-bot/AGENTS.md
-- /home/kapu/work/iris-stack/.agents/workflows.md (Git writes, Failure paths, Validation)
-- 인계 문서: hololive-bot/docs/current/plans/2026-10-18-stream-duration-handoff.md (7절 "진행 상태", 8절)
-- 계획: 같은 디렉터리의 2026-10-18-broadcast-time-finalization.md (5·6단계, "운영 SQL", "배포 결과", "남은 일")
-- 배포·재시작은 hololive-bot-ops, 운영 DB 조회와 compose.env는 stack-platform-ops 스킬
+- /home/kapu/work/iris-stack/AGENTS.md
+- /home/kapu/work/iris-stack/hololive-bot/AGENTS.md
+- /home/kapu/work/iris-stack/.agents/workflows.md
+- /home/kapu/work/iris-stack/hololive-bot-stream-duration/docs/current/plans/2026-10-18-stream-duration-handoff.md (1·2·7·8절)
+- 같은 디렉터리의 2026-10-18-broadcast-time-finalization.md (5·6단계, 운영 SQL, 남은 일)
+- 운영 DB·compose.env는 stack-platform-ops, 재생성은 hololive-bot-ops를 따릅니다.
 
-현재 운영 상태 (2026-10-18):
-- hololive-api f089d9a64 (migration 322·323·324 적용), 07:20:46Z K=200 API 단독 재생성. 07:21Z backlog 9,745건 투입 완료. 이후 중단 여부는 반드시 최신 기록과 실제 K 값으로 확인합니다.
-- 확정 진행 표 youtube_live_time_finalizations, 지표 hololive_youtube_collection_time_finalization_*.
-- I4는 최초 신규 종료 30건의 관찰 후 공개 26/26의 시간 내 확정으로 표본 기준 통과했습니다. 전체 27/30이며 나머지는 공개 페이지에서 비공개 2·삭제 1로 확인했습니다.
+현재 상태(2026-10-19 00:14Z):
+- 사용자 인계 요청으로 K=0·hololive-api 단독 재생성 후 안전하게 중단했습니다.
+- hololive-api f089d9a64, 같은 image, healthy·재시작 0, backlog target 0, 감시 프로세스 종료.
+- 투입 9,745건: finalized 5,856, conflict 31, pending 3,858.
+- pending: 미시도 3,689, 재시도 169(identity_missing 159·login_required_unclassified 9·end_time_missing 1).
+- conflict: start_mismatch 23·channel_mismatch 8, 전부 원래 시각 보존.
+- I4 완료: 최초 신규 종료 30건 중 공개 26/26 시간 내 확정. 전체 27/30이며 나머지는 비공개 2·삭제 1, 멤버십 1은 확정입니다.
+- I8 카카오 화면은 사용자 선택으로 보류합니다. 방 접근·발송·화면 열기 금지입니다.
 
-승인 범위: K=200 활성화, 9,745건 backlog 투입과 외부 조회 증가, 중단 조건 시 K=0 복귀, docs PR squash 병합은 승인되었습니다. 활성화와 투입은 이미 실행했으므로 반복하지 않습니다. 시각 롤백 SQL·계획 밖 데이터 쓰기는 별도 승인 사항입니다.
-조건부 반복 재개는 7절의 현재 횟수·기한·검증 조건만큼 승인되었습니다. 사용 횟수를 초기화하지 말고, 같은 두 충돌 사유 외에는 자동으로 재개하지 않습니다.
+승인과 재개:
+- K=200, API 단독 recreate, 기존 backlog 처리와 외부 확인 증가, 중단 시 K=0, docs push·PR·squash 병합은 승인되었습니다. 재투입 SQL은 실행하지 않습니다.
+- 조건부 반복 재개는 최대 8회 중 5회 사용, 잔여 3회, 기한 2026-10-20 14:35:50Z입니다. 횟수를 초기화하지 않습니다.
+- 재개 전 같은 두 충돌 사유뿐인지, 원래 시각 보존·신규 queue conflict 0·backlog target 0·수집 지표 정상·30분 새 conflict 0·K=0·같은 revision을 확인하고 감시 소유권을 인수합니다.
+- 마스터 compose.env K=200 → scoped sync dry-run/apply → hololive-api만 --no-build --no-deps --pull never로 재생성 → K·health/readiness·같은 image·다른 컨테이너 불변 확인 → 60초 감시 순서입니다.
+- 중단: 5분 p99 >10초, 5분 request_failed 3건 이상·5% 이상, 이전 48시간 공개 확인 집합의 5분 identity_missing 3건 이상·5% 이상, 30분 최종 결과 중 conflict 3건 이상·0.5% 이상.
+- 조건 충족 시 K=0·API 단독 재생성·backlog target 0을 확인합니다. 같은 두 사유의 재개만 남은 횟수·기한·검증 조건 내에서 허용됩니다. 다른 사유·지연·요청 실패·감시 실패는 재개하지 말고 보고합니다.
 
-진행 순서 (인계 문서 8절):
-1. I5: 감시 소유자·실제 K·진행 분포를 확인하고 6단계 중단 조건 감시를 이어갑니다. 중단 조건이면 K=0 복귀·API 단독 recreate 뒤 backlog projection 제거를 확인합니다.
-2. I4 완료 판정은 유지합니다. 공개 26/26과 전체 27/30, 표본 한계를 구분합니다.
-3. I5 전량 최종 상태 뒤 무작위 확정 20건을 공개 watch 시각과 대조하고 최근 30일 !방송기록 표시 비율을 계산합니다.
-4. I8은 보류를 유지하며 카카오 방 접근·발송·화면 열기를 하지 않습니다.
-
-진행 기록: 단계마다 인계 문서 7절 표와 계획 문서 5·6단계에 결과를 남기고, 문서 변경은 docs PR(squash 병합)로 게시합니다. push·PR·병합은 승인되었습니다.
-
-별도 보고·승인이 필요한 것: 시각 롤백 SQL 실행, 계획에 없는 운영 데이터 쓰기, 카카오 방 사용.
-운영 DB 조회는 읽기 전용 보호를 증명한 뒤 집계만 하고, 영상 ID·제목·payload 내용은 보고와 문서에 넣지 마십시오.
-
-보고 내용: 이슈별 상태, 실행한 검증과 결과, 실행하지 못한 검증과 이유, 필요한 승인, 남은 한계.
+완료 뒤 같은 투입 cohort에서 무작위 확정 20건의 공개 watch 시각을 대조하고 최근 30일 !방송기록 표시 비율을 계산하십시오. 미확정·충돌을 성공으로 바꾸거나 조회 실패 표본을 교체하지 않습니다.
+시각 롤백 SQL·채널 수정·conflict 재큐잉·계획 밖 운영 데이터 쓰기·카카오 방 사용은 별도 승인 사항입니다.
+운영 조회는 세션마다 읽기 전용 보호를 증명하고 보고·문서는 집계만 남깁니다. 영상 ID·제목·payload·비밀값을 출력하지 마십시오.
+원 checkout의 미커밋 작업은 건드리지 말고 기존 작업 공간과 인계 2절의 격리 게시 환경을 확인하십시오. 마지막 결과·한계·남은 승인을 문서와 최종 보고에 남기십시오.
 ```
