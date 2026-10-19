@@ -424,9 +424,9 @@ func (d *Dispatcher) markItemFailed(ctx context.Context, item *domain.Notificati
 	}
 }
 
-// 이 결정적 ID는 Iris reply admission store의 멱등 키라, 재전송돼도 카톡 중복 송출이 막힌다.
-// 단 이 안전망은 Iris admission retention(168h) > outbox lease(lock_expires_at, 60s)일 때만 성립하며,
-// 대소가 뒤집히면 재전송분이 dedup window 밖이라 사용자에게 중복 알림이 간다.
+// 이 결정적 ID는 Iris reply admission의 멱등 키다. 발송 전 claim만 lease(NotificationDeliveryLease) 만료로
+// 회수되고 결과 불명 발송과 stale SENDING은 격리되므로, 이 경로의 lease는 Iris admission 보존 기간과
+// 묶이지 않는다. Iris 자동 재발송 지평에 대한 lease 회수 지연 검사는 alarm_dispatch 프로필 검증이 소유한다.
 func notificationDeliveryClientRequestID(item *domain.NotificationDeliveryOutbox) string {
 	kind := ""
 	contentID := ""
