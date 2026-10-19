@@ -44,14 +44,23 @@ func (s *alarmDispatchRunnerTestSender) PrepareMessageRequest(_ context.Context,
 	return message, dispatchoutbox.SendRouteText, nil
 }
 
-func (s *alarmDispatchRunnerTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
-	return s.SendMessageWithClientRequestID(ctx, room, body, id)
+func (s *alarmDispatchRunnerTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return alarmTestAdmission(id, s.SendMessageWithClientRequestID(ctx, room, body, id))
 }
 
 func (s *alarmDispatchRunnerBlockingSender) PrepareMessageRequest(_ context.Context, _, message string) (string, string, error) {
 	return message, dispatchoutbox.SendRouteText, nil
 }
 
-func (s *alarmDispatchRunnerBlockingSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *alarmDispatchRunnerBlockingSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return alarmTestAdmission(id, s.SendMessage(ctx, room, body))
+}
+
+// alarmTestAdmission은 가짜 Iris가 발송 성공 때 202로 돌려주는 requestId다.
+func alarmTestAdmission(clientRequestID string, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+
+	return "iris:" + clientRequestID, nil
 }

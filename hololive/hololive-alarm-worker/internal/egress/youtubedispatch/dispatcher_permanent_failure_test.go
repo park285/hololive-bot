@@ -223,8 +223,8 @@ func (s sentinelFailureSender) PrepareMessageRequest(_ context.Context, _, body 
 	return body, testPreparedTextRoute, nil
 }
 
-func (s sentinelFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s sentinelFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }
 
 func deliveryFailureReasonIsPermanent(reason string) bool {

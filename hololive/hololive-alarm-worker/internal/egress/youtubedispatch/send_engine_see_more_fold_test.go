@@ -26,10 +26,10 @@ type seeMoreFoldEgressClient struct {
 	texts []string
 }
 
-func (c *seeMoreFoldEgressClient) SendMessage(_ context.Context, _, message string, _ ...iris.SendOption) error {
+func (c *seeMoreFoldEgressClient) SendMessageAccepted(_ context.Context, _, message string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.texts = append(c.texts, message)
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "see-more-request"}, nil
 }
 
 func (*seeMoreFoldEgressClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -129,6 +129,8 @@ func (c *seeMoreFoldEgressClient) PrepareMessageRequest(_ context.Context, _, bo
 	return body, testPreparedTextRoute, nil
 }
 
-func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return c.SendMessage(ctx, room, body)
+func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	_, err := c.SendMessageAccepted(ctx, room, body)
+
+	return "", err
 }

@@ -19,7 +19,7 @@ func sendPreparedWorkerTestMessage(ctx context.Context, sender *egress.IrisMessa
 		return fmt.Errorf("prepare test message: %w", err)
 	}
 
-	if err := sender.SendPreparedMessage(ctx, room, body, route, id); err != nil {
+	if _, err := sender.SendPreparedMessage(ctx, room, body, route, id); err != nil {
 		return fmt.Errorf("send test message: %w", err)
 	}
 

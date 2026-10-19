@@ -30,16 +30,21 @@ type irisSenderTestClient struct {
 	textCalls           []irisSenderTestCall
 	markdownCalls       []irisSenderTestCall
 	statusCalls         int
-	textErr             error
+	textAccepted        *iris.ReplyAcceptedResponse
+	textAcceptedSet     bool
 	markdownErr         error
 	markdownAccepted    *iris.ReplyAcceptedResponse
 	markdownAcceptedSet bool
 	getStatus           func(int, string) (*iris.ReplyStatusSnapshot, error)
 }
 
-func (c *irisSenderTestClient) SendMessage(_ context.Context, roomID, message string, opts ...iris.SendOption) error {
+func (c *irisSenderTestClient) SendMessageAccepted(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.textCalls = append(c.textCalls, irisSenderTestCall{roomID: roomID, message: message, opts: len(opts)})
-	return c.textErr
+	if c.textAcceptedSet {
+		return c.textAccepted, nil
+	}
+
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: irisSenderQueued, RequestID: "text-request-1"}, nil
 }
 
 func (c *irisSenderTestClient) SendMarkdown(_ context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {

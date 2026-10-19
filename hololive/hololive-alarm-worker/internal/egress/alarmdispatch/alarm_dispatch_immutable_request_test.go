@@ -30,9 +30,9 @@ func (s *immutableRequestSender) PrepareMessageRequest(_ context.Context, _, mes
 	return message, s.route, nil
 }
 
-func (s *immutableRequestSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) error {
+func (s *immutableRequestSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) (string, error) {
 	s.routes = append(s.routes, route)
-	return s.SendMessageWithClientRequestID(ctx, room, body, id)
+	return alarmTestAdmission(id, s.SendMessageWithClientRequestID(ctx, room, body, id))
 }
 
 func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {

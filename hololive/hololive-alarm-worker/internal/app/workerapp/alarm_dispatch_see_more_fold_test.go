@@ -50,7 +50,7 @@ func (*seeMoreFoldConsumer) MarkSending(context.Context, []domain.AlarmQueueEnve
 	return nil
 }
 
-func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, _ string) error {
 	c.dispatched += len(envelopes)
 	return nil
 }
@@ -122,10 +122,10 @@ type seeMoreFoldIrisClient struct {
 	texts []string
 }
 
-func (c *seeMoreFoldIrisClient) SendMessage(_ context.Context, _, message string, _ ...iris.SendOption) error {
+func (c *seeMoreFoldIrisClient) SendMessageAccepted(_ context.Context, _, message string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.texts = append(c.texts, message)
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "see-more-request"}, nil
 }
 
 func (*seeMoreFoldIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {

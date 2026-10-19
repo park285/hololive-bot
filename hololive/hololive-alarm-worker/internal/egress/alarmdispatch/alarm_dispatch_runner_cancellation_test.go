@@ -65,13 +65,15 @@ type alarmDispatchCancellationIrisClient struct {
 	onSend   func(context.Context) error
 }
 
-func (c *alarmDispatchCancellationIrisClient) SendMessage(ctx context.Context, _, _ string, _ ...iris.SendOption) error {
+func (c *alarmDispatchCancellationIrisClient) SendMessageAccepted(ctx context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.handoffs++
 	if c.onSend != nil {
-		return c.onSend(ctx)
+		if err := c.onSend(ctx); err != nil {
+			return nil, err
+		}
 	}
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "cancellation-request"}, nil
 }
 
 func (*alarmDispatchCancellationIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {

@@ -1008,6 +1008,6 @@ func (s *claimGateTestSender) PrepareMessageRequest(_ context.Context, _, body s
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *claimGateTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *claimGateTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }

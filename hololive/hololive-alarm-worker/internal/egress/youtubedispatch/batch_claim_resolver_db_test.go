@@ -293,6 +293,6 @@ func (s *batchFollowerSender) PrepareMessageRequest(_ context.Context, _, body s
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *batchFollowerSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
-	return s.SendMessageWithClientRequestID(ctx, room, body, id)
+func (s *batchFollowerSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return "", s.SendMessageWithClientRequestID(ctx, room, body, id)
 }

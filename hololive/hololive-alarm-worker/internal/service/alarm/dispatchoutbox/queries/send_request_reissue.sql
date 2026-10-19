@@ -1,7 +1,8 @@
 -- 확정된 pre-handoff 실패를 새 요청 세대와 멤버 전원의 retry 전이로 한 문장에 기록한다. 단위→멤버 순서로 잠근다.
 -- 외부 호출 뒤 정산이라 lease는 보지 않는다. 입력 attempt_count는 전이 뒤 값이라 claim attempt + 1이어야 한다.
 -- 요청 조건은 호출자가 고정 요청에서 본 client_request_id($4)·세대($5) 등가이며, 단위 멤버 전원의 조건이 참일 때만
--- 멤버 전원을 같은 clock 기준 next_attempt_at으로 retry에 두고 단위를 새 ID($6)·세대 $5 + 1로 바꾼다.
+-- 멤버 전원을 같은 clock 기준 next_attempt_at으로 retry에 두고 단위를 새 ID($6)·세대 $5 + 1로 바꾼다. 이전 세대의
+-- handoff 확인 상태는 새 세대에 맞지 않으므로 함께 비운다.
 WITH unit AS MATERIALIZED (
     SELECT u.id, u.client_request_id, u.request_body_hash, u.request_delivery_ids, u.request_generation
     FROM alarm_dispatch_send_units u
@@ -69,7 +70,10 @@ WITH unit AS MATERIALIZED (
 ), unit_updated AS (
     UPDATE alarm_dispatch_send_units u
     SET client_request_id = $6,
-        request_generation = $5 + 1
+        request_generation = $5 + 1,
+        handoff_request_id = NULL,
+        handoff_next_check_at = NULL,
+        handoff_checked_at = NULL
     FROM passed
     WHERE u.id = $1 AND passed.value
 )

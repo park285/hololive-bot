@@ -808,6 +808,6 @@ func (m *mockSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 	return body, "text", nil
 }
 
-func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
-	return m.SendMessageWithClientRequestID(ctx, room, body, id)
+func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return "", m.SendMessageWithClientRequestID(ctx, room, body, id)
 }

@@ -164,7 +164,7 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	defer func() { finish(sendErr, completed) }()
 
-	err := d.sender.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
+	_, err := d.sender.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
 
 	completed = true
 

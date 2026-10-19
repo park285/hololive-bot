@@ -27,7 +27,16 @@ type ClaimKeyReleaser interface {
 // ReleaseClaimKeys는 소유권이 확인된 DLQ/drop 전이 후 미발송 delivery의 dedup claim을 삭제합니다.
 // 성공·retry·결과 불명에는 호출하지 않습니다. 삭제를 맡을 releaser가 없으면 오류를 반환합니다.
 func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
-	if c == nil || c.claimReleaser == nil {
+	if c == nil {
+		return errors.New("release claim keys: claim key releaser is not configured")
+	}
+
+	return releaseClaimKeys(ctx, c.claimReleaser, claimKeys)
+}
+
+// releaseClaimKeys는 허용 prefix의 dedup claim 키만 releaser로 삭제한다. 삭제를 맡을 releaser가 없으면 오류다.
+func releaseClaimKeys(ctx context.Context, releaser ClaimKeyReleaser, claimKeys []string) error {
+	if releaser == nil {
 		return errors.New("release claim keys: claim key releaser is not configured")
 	}
 
@@ -43,7 +52,7 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 		return nil
 	}
 
-	if _, err := c.claimReleaser.DelMany(ctx, filtered); err != nil {
+	if _, err := releaser.DelMany(ctx, filtered); err != nil {
 		return fmt.Errorf("release claim keys: del filtered keys: %w", err)
 	}
 

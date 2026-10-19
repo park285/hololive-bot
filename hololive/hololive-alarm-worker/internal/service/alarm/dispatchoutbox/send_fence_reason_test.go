@@ -53,7 +53,7 @@ func TestOwnerTransitionsRejectAttemptMismatch(t *testing.T) {
 	assertRequestClockLeased(t.Context(), t, pool, ids)
 
 	require.NoError(t, repo.BeginSendRequest(t.Context(), unit, claims, requestClockOwner, request.ClientRequestID, time.Minute))
-	requireVersionMiss(t, repo.MarkSent(t.Context(), attemptClaims(1, ids...), requestClockOwner))
+	requireVersionMiss(t, repo.MarkSent(t.Context(), unit, attemptClaims(1, ids...), requestClockOwner, "iris-request", time.Second))
 
 	var sending int
 

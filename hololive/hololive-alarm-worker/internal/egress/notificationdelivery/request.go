@@ -68,7 +68,7 @@ func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.Notification
 		requestID = id
 	}
 
-	if err := d.sender.SendPreparedMessage(ctx, item.RoomID, request.Body, request.Route, requestID); err != nil {
+	if _, err := d.sender.SendPreparedMessage(ctx, item.RoomID, request.Body, request.Route, requestID); err != nil {
 		return fmt.Errorf("send prepared delivery: %w", err)
 	}
 

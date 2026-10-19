@@ -33,7 +33,7 @@ type RequestConsumer interface {
 type QueueConsumer interface {
 	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error
 	ReleaseLeased(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
 }
@@ -250,9 +250,9 @@ func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup,
 	}
 }
 
-func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
-		if err := r.consumer.MarkDispatched(stateCtx, envelopes); err != nil {
+		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID); err != nil {
 			return fmt.Errorf("mark alarm dispatch sent: %w", err)
 		}
 
@@ -379,16 +379,18 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 		})
 	}
 
-	if sendErr := r.sendPreparedRequest(ctx, request); sendErr != nil {
+	irisRequestID, sendErr := r.sendPreparedRequest(ctx, request)
+	if sendErr != nil {
 		group.request = request
 		return r.routePostSendingFailure(ctx, group, sendErr)
 	}
 
-	return r.markDispatched(ctx, group.envelopes)
+	return r.markDispatched(ctx, group.envelopes, irisRequestID)
 }
 
-// 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다.
-func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (err error) {
+// 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다. 성공이면 Iris가
+// admission을 증명한 requestId를 돌려준다.
+func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (irisRequestID string, err error) {
 	if r.attemptTimeout > 0 {
 		var cancel context.CancelFunc
 
@@ -426,12 +428,12 @@ func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbo
 		span.End()
 	}()
 
-	err = r.sender.SendPreparedMessage(ctx, request.RoomID, request.Body, request.Route, request.ClientRequestID)
+	irisRequestID, err = r.sender.SendPreparedMessage(ctx, request.RoomID, request.Body, request.Route, request.ClientRequestID)
 	completed = true
 
 	if err != nil {
-		return fmt.Errorf("send prepared alarm request: %w", err)
+		return "", fmt.Errorf("send prepared alarm request: %w", err)
 	}
 
-	return nil
+	return irisRequestID, nil
 }

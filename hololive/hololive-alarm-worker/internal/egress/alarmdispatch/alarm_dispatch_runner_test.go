@@ -28,24 +28,25 @@ var errAlarmDispatchRunnerTestSend = errors.New("send failed")
 type alarmDispatchRunnerTestConsumer struct {
 	alarmRequestTestStore
 
-	batches               [][]domain.AlarmQueueEnvelope
-	drainErr              error
-	onDrain               func()
-	markSending           []domain.AlarmQueueEnvelope
-	markDispatched        []domain.AlarmQueueEnvelope
-	quarantined           []domain.AlarmQueueEnvelope
-	quarantineReason      string
-	scheduledRetry        []domain.AlarmQueueEnvelope
-	scheduledSendingRetry []domain.AlarmQueueEnvelope
-	preSendRequeued       []domain.AlarmQueueEnvelope
-	movedDLQ              []domain.AlarmQueueEnvelope
-	requeued              []domain.AlarmQueueEnvelope
-	released              []domain.AlarmQueueEnvelope
-	releasedClaims        []string
-	markSendingErr        error
-	markDispatchedErr     error
-	quarantineErr         error
-	routeFailuresErr      error
+	batches                  [][]domain.AlarmQueueEnvelope
+	drainErr                 error
+	onDrain                  func()
+	markSending              []domain.AlarmQueueEnvelope
+	markDispatched           []domain.AlarmQueueEnvelope
+	markDispatchedRequestIDs []string
+	quarantined              []domain.AlarmQueueEnvelope
+	quarantineReason         string
+	scheduledRetry           []domain.AlarmQueueEnvelope
+	scheduledSendingRetry    []domain.AlarmQueueEnvelope
+	preSendRequeued          []domain.AlarmQueueEnvelope
+	movedDLQ                 []domain.AlarmQueueEnvelope
+	requeued                 []domain.AlarmQueueEnvelope
+	released                 []domain.AlarmQueueEnvelope
+	releasedClaims           []string
+	markSendingErr           error
+	markDispatchedErr        error
+	quarantineErr            error
+	routeFailuresErr         error
 }
 
 func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
@@ -89,8 +90,10 @@ func (c *alarmDispatchRunnerTestConsumer) MarkSending(_ context.Context, envelop
 	return c.markSendingErr
 }
 
-func (c *alarmDispatchRunnerTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *alarmDispatchRunnerTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	c.markDispatched = append(c.markDispatched, envelopes...)
+	c.markDispatchedRequestIDs = append(c.markDispatchedRequestIDs, irisRequestID)
+
 	return c.markDispatchedErr
 }
 
@@ -739,13 +742,13 @@ func (c *alarmDispatchRunnerContextConsumer) MarkSending(ctx context.Context, en
 	return nil
 }
 
-func (c *alarmDispatchRunnerContextConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *alarmDispatchRunnerContextConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	c.markDispatchedCtxErr = ctx.Err()
 	if c.markDispatchedCtxErr != nil {
 		return fmt.Errorf("mark alarm dispatch sent: %w", c.markDispatchedCtxErr)
 	}
 
-	if err := c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes); err != nil {
+	if err := c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes, irisRequestID); err != nil {
 		return fmt.Errorf("mark dispatched: %w", err)
 	}
 

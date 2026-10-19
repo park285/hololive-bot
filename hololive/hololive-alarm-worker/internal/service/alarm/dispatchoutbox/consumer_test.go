@@ -14,6 +14,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -266,16 +267,17 @@ func TestConsumerDrainBatch_SendingRecoveryFailureUsesFailureLabelAndStillClaims
 	}
 }
 
-func TestConsumerMarkDispatchedPassesClaimAttempt(t *testing.T) {
+// MarkDispatched는 claim attempt와 함께 단위·Iris requestId·첫 handoff 확인 간격을 저장소에 넘긴다.
+func TestConsumerMarkDispatchedPassesClaimAttemptAndHandoff(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{
-		{DispatchOutboxID: 42},
-		{DispatchOutboxID: 43, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 2}},
-	})
+		{DispatchOutboxID: 42, SendUnitID: 7},
+		{DispatchOutboxID: 43, SendUnitID: 7, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 2}},
+	}, "iris-request-1")
 	if err != nil {
 		t.Fatalf("MarkDispatched() error = %v", err)
 	}
@@ -283,6 +285,11 @@ func TestConsumerMarkDispatchedPassesClaimAttempt(t *testing.T) {
 	want := []DeliveryClaim{{ID: 42, AttemptCount: 0}, {ID: 43, AttemptCount: 2}}
 	if repository.markSentWorkerID != "worker-1" || !slices.Equal(repository.markSentClaims, want) {
 		t.Fatalf("MarkSent = %q %+v, want worker-1 %+v", repository.markSentWorkerID, repository.markSentClaims, want)
+	}
+
+	wantCall := consumerMarkSentCall{unitID: 7, irisRequestID: "iris-request-1", firstCheck: handoffcheck.FirstCheckDelay}
+	if repository.markSent != wantCall {
+		t.Fatalf("MarkSent handoff = %+v, want %+v", repository.markSent, wantCall)
 	}
 }
 
@@ -297,7 +304,7 @@ func TestConsumerMarkDispatchedPropagatesPostSendOwnershipChange(t *testing.T) {
 	}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
-	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
+	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}}, "iris-request-1")
 	if !errors.Is(err, miss) {
 		t.Fatalf("MarkDispatched() error = %v, want %v", err, miss)
 	}
@@ -456,6 +463,13 @@ type consumerTestRepository struct {
 	beginSendRequest            consumerBeginSendRequestCall
 	markSentWorkerID            string
 	markSentClaims              []DeliveryClaim
+	markSent                    consumerMarkSentCall
+}
+
+type consumerMarkSentCall struct {
+	unitID        int64
+	irisRequestID string
+	firstCheck    time.Duration
 }
 
 type consumerBeginSendRequestCall struct {
@@ -509,9 +523,10 @@ func (r *consumerTestRepository) BeginSendRequest(ctx context.Context, unitID in
 	return nil
 }
 
-func (r *consumerTestRepository) MarkSent(ctx context.Context, claims []DeliveryClaim, workerID string) error {
+func (r *consumerTestRepository) MarkSent(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, irisRequestID string, firstCheck time.Duration) error {
 	r.markSentWorkerID = workerID
 	r.markSentClaims = claims
+	r.markSent = consumerMarkSentCall{unitID: unitID, irisRequestID: irisRequestID, firstCheck: firstCheck}
 
 	if r.markSentFunc != nil {
 		if err := r.markSentFunc(ctx, claims, workerID); err != nil {

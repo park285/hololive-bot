@@ -60,7 +60,7 @@ func buildNotificationEgress(
 		return nil, fmt.Errorf("load egress message strings: %w", err)
 	}
 
-	runners, err := buildEgressRunners(appConfig, infra, irisSender, messageStrings, logger, workerState)
+	runners, err := buildEgressRunners(appConfig, infra, irisSender, irisClient, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("build egress runners: %w", err)
 	}
@@ -81,11 +81,12 @@ func buildEgressRunners(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	statusClient alarmdispatch.ReplyStatusClient,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
-	runners, err := appendAlarmDispatchRunner(nil, appConfig, infra, irisSender, messageStrings, logger, workerState)
+	runners, err := appendAlarmDispatchRunner(nil, appConfig, infra, irisSender, statusClient, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append alarm dispatch runner: %w", err)
 	}
@@ -124,11 +125,13 @@ func buildEgressRunners(
 	return runners, nil
 }
 
+// appendAlarmDispatchRunner는 alarm-dispatch가 활성일 때 발송 runner와 Iris handoff reconciler를 함께 등록한다.
 func appendAlarmDispatchRunner(
 	runners []workerruntime.NamedScheduler,
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	statusClient alarmdispatch.ReplyStatusClient,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -144,10 +147,47 @@ func appendAlarmDispatchRunner(
 		return nil, fmt.Errorf("build alarm dispatch runner: %w", err)
 	}
 
-	return append(runners, workerruntime.NamedScheduler{
-		Name:      "alarm-dispatch",
-		Scheduler: workerState.wrap(workerconfig.WorkerAlarmDispatch, runner),
-	}), nil
+	reconciler, err := buildAlarmDispatchHandoffReconciler(appConfig, infra, statusClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build alarm dispatch handoff reconciler: %w", err)
+	}
+
+	return append(runners,
+		workerruntime.NamedScheduler{
+			Name:      "alarm-dispatch",
+			Scheduler: workerState.wrap(workerconfig.WorkerAlarmDispatch, runner),
+		},
+		workerruntime.NamedScheduler{
+			Name:      "alarm-dispatch-handoff-reconciler",
+			Scheduler: reconciler,
+		},
+	), nil
+}
+
+// buildAlarmDispatchHandoffReconciler의 지평은 alarm_dispatch executor attempt timeout이고 idle 주기는 alarm_dispatch
+// poll 주기다. DLQ 뒤 dedup claim 키는 발송 runner와 같은 cache로 해제한다.
+func buildAlarmDispatchHandoffReconciler(
+	appConfig *workerconfig.RuntimeConfig,
+	infra *sharedmodules.InfraModule,
+	statusClient alarmdispatch.ReplyStatusClient,
+	logger *slog.Logger,
+) (*alarmdispatch.HandoffReconciler, error) {
+	consumer, err := dispatchoutbox.NewHandoffConsumer(dispatchoutbox.NewPgxRepository(infra.Postgres, logger), infra.Cache)
+	if err != nil {
+		return nil, fmt.Errorf("new alarm dispatch handoff consumer: %w", err)
+	}
+
+	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerAlarmDispatch]
+
+	reconciler, err := alarmdispatch.NewHandoffReconciler(consumer, statusClient, alarmdispatch.HandoffReconcilerConfig{
+		Horizon:      workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),
+		PollInterval: workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.PollIntervalMS),
+	}, logger)
+	if err != nil {
+		return nil, fmt.Errorf("new alarm dispatch handoff reconciler: %w", err)
+	}
+
+	return reconciler, nil
 }
 
 func appendNotificationDeliveryRunner(

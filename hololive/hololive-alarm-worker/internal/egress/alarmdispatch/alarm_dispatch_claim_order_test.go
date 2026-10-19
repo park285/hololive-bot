@@ -28,10 +28,10 @@ func (c *alarmDispatchOrderConsumer) MarkSending(ctx context.Context, envelopes 
 	return c.alarmDispatchRunnerTestConsumer.MarkSending(ctx, envelopes)
 }
 
-func (c *alarmDispatchOrderConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *alarmDispatchOrderConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	c.ops = append(c.ops, "mark-sent")
 
-	return c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes)
+	return c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes, irisRequestID)
 }
 
 // 같은 worker ID가 같은 attempt의 행을 다시 claim하지 않는 근거는 직렬 루프다. 한 배치의 모든 그룹이 정산된 뒤에만

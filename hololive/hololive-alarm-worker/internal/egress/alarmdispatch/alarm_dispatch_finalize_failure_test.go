@@ -49,7 +49,7 @@ func (c *finalizeFailureRecordingConsumer) MarkSending(context.Context, []domain
 	return nil
 }
 
-func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []domain.AlarmQueueEnvelope) error {
+func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []domain.AlarmQueueEnvelope, string) error {
 	return nil
 }
 

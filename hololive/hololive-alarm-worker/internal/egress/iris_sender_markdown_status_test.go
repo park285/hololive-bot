@@ -54,20 +54,3 @@ func TestMarkdownAdmissionWaitsForExactHandoffOutcome(t *testing.T) {
 		})
 	}
 }
-
-func TestMarkdownMalformedAdmissionCannotReportSuccess(t *testing.T) {
-	for _, accepted := range []*iris.ReplyAcceptedResponse{
-		nil,
-		{Success: false, Delivery: irisSenderQueued, RequestID: "request"},
-		{Success: true, Delivery: "sent", RequestID: "request"},
-		{Success: true, Delivery: irisSenderQueued},
-	} {
-		client := &irisSenderTestClient{markdownAccepted: accepted, markdownAcceptedSet: true}
-		sender := NewIrisMessageSender(client, WithMarkdownReplies(true),
-			WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
-		err := sendPreparedTestMessage(t.Context(), sender, "synthetic markdown")
-		require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
-		require.Zero(t, client.statusCalls)
-		require.Len(t, client.markdownCalls, 1)
-	}
-}

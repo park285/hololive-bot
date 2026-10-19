@@ -66,16 +66,31 @@ func NewPgxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *PgxRepos
 // 대상별 원인을 지표·로그로 남기고 *sendfence.MissError를 그대로 돌려준다. 적용되지 않은 대상은 이 문장이 바꾸지
 // 않았으므로 호출자는 소유권이 남은 원인(sendfence.Reason.OwnershipHeld)일 때만 그 행에 후속 전이를 쓸 수 있다.
 func (r *PgxRepository) applyFenced(ctx context.Context, querier fencedQuerier, action, query string, want []int64, args ...any) error {
+	observed, err := queryFenceObservations(ctx, querier, action, query, args...)
+	if err != nil {
+		return err
+	}
+
+	return r.checkFenced(action, want, observed)
+}
+
+// queryFenceObservations는 sendfence 관측 열을 돌려주는 전이 문장을 실행하고 관측 행을 읽는다.
+func queryFenceObservations(ctx context.Context, querier fencedQuerier, action, query string, args ...any) ([]sendfence.Observation, error) {
 	rows, err := querier.Query(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", action, err)
+		return nil, fmt.Errorf("%s: %w", action, err)
 	}
 
 	observed, err := pgx.CollectRows(rows, sendfence.ScanObservation)
 	if err != nil {
-		return fmt.Errorf("%s: %w", action, err)
+		return nil, fmt.Errorf("%s: %w", action, err)
 	}
 
+	return observed, nil
+}
+
+// checkFenced는 want 대상 전원이 적용됐는지 확인하고, 미스면 대상별 원인을 지표·로그로 남긴다.
+func (r *PgxRepository) checkFenced(action string, want []int64, observed []sendfence.Observation) error {
 	checkErr := sendfence.Check(action, want, observed)
 	if checkErr == nil {
 		return nil

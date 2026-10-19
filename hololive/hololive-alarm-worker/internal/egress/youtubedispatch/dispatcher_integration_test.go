@@ -934,6 +934,6 @@ func (f *fakeSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 	return body, "text", nil
 }
 
-func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return f.SendMessage(ctx, room, body)
+func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", f.SendMessage(ctx, room, body)
 }

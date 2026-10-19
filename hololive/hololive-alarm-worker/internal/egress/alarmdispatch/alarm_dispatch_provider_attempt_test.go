@@ -22,7 +22,7 @@ type alarmAttemptSender struct {
 	sawInFlight bool
 }
 
-func (s *alarmAttemptSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) error {
+func (s *alarmAttemptSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) (string, error) {
 	s.sawInFlight = s.tracker.Snapshot(time.Now()).InFlight == 1
 	if s.panicValue {
 		panic("provider panic")

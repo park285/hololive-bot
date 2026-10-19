@@ -48,7 +48,7 @@ Consumer behavior:
 - Retry returns the delivery to `retry` with `next_attempt_at`; the claimed envelope carries `attempt`, `last_error`, and optional `last_error_code` from the delivery row.
 - Replay of `dlq`/`quarantined` deliveries uses the audited requeue in `runbooks/admin-dispatch-operations.md`.
 - The retired Redis queue keys `alarm:dispatch:queue`, `alarm:dispatch:retry`, and `alarm:dispatch:dlq` have no reader or writer; their reserved constants were removed in stack-audit 2026-09-26 T11.
-- `last_error_code` values are `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, `lease_expired`, `stale_sending`, and `lease_released`.
+- The `last_error_code` vocabulary (send error classes, recovery codes, and Iris handoff reconciliation codes) is defined once in `contracts/alarm.md` under "Timeout and retry policy".
 
 ## X 스페이스 시작 알림
 

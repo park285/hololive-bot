@@ -73,6 +73,8 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 		"hololive/hololive-api/scripts/migrations/142_alarm_dispatch_send_unit_due_index.sql",
 		"hololive/hololive-api/scripts/migrations/143_alarm_dispatch_send_unit_index.sql",
 		"hololive/hololive-api/scripts/migrations/248_alarm_dispatch_immutable_request.sql",
+		"hololive/hololive-api/scripts/migrations/329_alarm_send_unit_handoff_check.sql",
+		"hololive/hololive-api/scripts/migrations/337_alarm_send_unit_handoff_due_index.sql",
 	} {
 		sql := readRepoMigration(t, migration)
 		if _, err := pool.Exec(ctx, sql); err != nil {
@@ -882,18 +884,18 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, claimed, 2)
 
-	var sentID, quarantinedID int64
+	var sentID, sentUnit, quarantinedID int64
 	for _, r := range claimed {
 		switch r.RoomID {
 		case "room-sent":
-			sentID = r.ID
+			sentID, sentUnit = r.ID, r.SendUnitID
 		case "room-quarantined":
 			quarantinedID = r.ID
 		}
 	}
 
 	beginSendingFixture(t, repository, workerID, claimed...)
-	require.NoError(t, repository.MarkSent(ctx, attemptClaims(0, sentID), workerID))
+	require.NoError(t, repository.MarkSent(ctx, sentUnit, attemptClaims(0, sentID), workerID, "iris-request", time.Second))
 	require.NoError(t, repository.Quarantine(ctx, []TerminalUpdate{{ID: quarantinedID, Error: "hard fail"}}, workerID))
 
 	err = repository.RouteSendingFailures(ctx, []FailureUpdate{
@@ -1007,7 +1009,7 @@ func TestPgxRepositoryMarkSent_ExpiredLeaseStillTransitions(t *testing.T) {
 		WHERE id = $1`, id)
 	require.NoError(t, err)
 
-	require.NoError(t, repository.MarkSent(ctx, recordClaims(claimed[0]), workerID))
+	require.NoError(t, repository.MarkSent(ctx, claimed[0].SendUnitID, recordClaims(claimed[0]), workerID, "iris-request", time.Second))
 
 	var status string
 	var lockedBy *string
@@ -1044,7 +1046,7 @@ func TestPgxRepositoryMarkSent_RequiresOwner(t *testing.T) {
 
 	id := claimed[0].ID
 	beginSendingFixture(t, repository, "worker-owner", claimed[0])
-	err = repository.MarkSent(ctx, recordClaims(claimed[0]), "worker-intruder")
+	err = repository.MarkSent(ctx, claimed[0].SendUnitID, recordClaims(claimed[0]), "worker-intruder", "iris-request", time.Second)
 	miss := requireFenceMiss(t, err, sendfence.ReasonOwnerChanged)
 	require.Zero(t, miss.Applied)
 	require.Equal(t, 1, miss.Expected)
@@ -1087,7 +1089,7 @@ func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsFenceMiss(t *te
 	require.NoError(t, err)
 	require.Equal(t, 1, quarantined)
 
-	err = repository.MarkSent(ctx, recordClaims(claimed[0]), workerID)
+	err = repository.MarkSent(ctx, claimed[0].SendUnitID, recordClaims(claimed[0]), workerID, "iris-request", time.Second)
 	miss := requireFenceMiss(t, err, sendfence.ReasonStatusChanged)
 	require.Zero(t, miss.Applied)
 	require.Equal(t, 1, miss.Expected)

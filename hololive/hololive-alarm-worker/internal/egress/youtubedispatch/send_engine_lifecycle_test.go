@@ -273,8 +273,8 @@ func (s *lifecycleTestSender) PrepareMessageRequest(_ context.Context, _, body s
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *lifecycleTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *lifecycleTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }
 
 const testPreparedTextRoute = "text"

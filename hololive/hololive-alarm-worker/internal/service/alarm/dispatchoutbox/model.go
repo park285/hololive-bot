@@ -171,7 +171,7 @@ type EventLoader interface {
 // DeliveryProgressWriter의 전이는 fence가 맞지 않은 대상을 바꾸지 않고 *sendfence.MissError로 보고한다.
 type DeliveryProgressWriter interface {
 	BeginSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string, lease time.Duration) error
-	MarkSent(ctx context.Context, claims []DeliveryClaim, workerID string) error
+	MarkSent(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, irisRequestID string, firstCheck time.Duration) error
 	RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
 	RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
 	RequeuePreSend(ctx context.Context, updates []FailureUpdate, workerID string) error

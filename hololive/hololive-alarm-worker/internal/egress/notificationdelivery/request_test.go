@@ -44,7 +44,7 @@ func (s *preparedSenderSpy) PrepareMessageRequest(context.Context, string, strin
 	return s.body, s.route, s.prepareErr
 }
 
-func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, route, id string) error {
+func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, route, id string) (string, error) {
 	s.ids = append(s.ids, id)
 	s.bodies = append(s.bodies, body)
 	s.routes = append(s.routes, route)
@@ -53,7 +53,7 @@ func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, rout
 		s.onSend()
 	}
 
-	return s.err
+	return "", s.err
 }
 
 func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {

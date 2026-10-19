@@ -55,6 +55,7 @@ NOTIFICATION_DELIVERY_QUERIES = "hololive/hololive-alarm-worker/internal/egress/
 CLOCK_QUERY_POLICIES = (
     (f"{COLLECTOR_LEASE_QUERIES}/repository_lease_*.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/delivery_ready_*.sql", "clock_timestamp"),
+    (f"{ALARM_DISPATCH_QUERIES}/handoff_*.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/repository_claim_*.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/repository_maintenance_*.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/repository_terminal_*.sql", "clock_timestamp"),

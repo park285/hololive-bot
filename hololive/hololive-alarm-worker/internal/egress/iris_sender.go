@@ -13,10 +13,10 @@ import (
 
 const replyStatusPollInterval = 250 * time.Millisecond
 
-// IrisClient는 alarm-worker가 알림 전송과 Markdown handoff 확인에 사용하는 Iris 계약입니다.
-// Karing template은 보내지 않습니다.
+// IrisClient는 alarm-worker가 알림 전송과 Markdown handoff 확인에 사용하는 Iris 계약입니다. 텍스트와 Markdown
+// 모두 202 응답의 requestId를 받습니다. Karing template은 보내지 않습니다.
 type IrisClient interface {
-	SendMessage(ctx context.Context, roomID, message string, opts ...iris.SendOption) error
+	SendMessageAccepted(ctx context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendMarkdown(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
 }
@@ -68,26 +68,48 @@ func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *I
 	return sender
 }
 
-func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
-	accepted, err := s.client.SendMarkdown(ctx, roomID, message, opts...)
+// sendText는 텍스트 202의 requestId를 돌려준다. 운영 중인 bot plane 텍스트 경로(acceptStoredReply)와 같이 응답과
+// requestId만 요구하고 success·delivery 값은 보지 않는다. Iris 계약은 텍스트 202의 delivery 값을 정하지 않는다.
+func (s *IrisMessageSender) sendText(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
+	accepted, err := s.client.SendMessageAccepted(ctx, roomID, message, opts...)
 	if err != nil {
-		return fmt.Errorf("iris send message: %w", err)
+		return "", fmt.Errorf("iris send message: %w", err)
 	}
 
 	if accepted == nil {
-		return fmt.Errorf("%w: markdown admission response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
+		return "", fmt.Errorf("%w: text admission response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
+	}
+
+	requestID, err := admissionRequestID(accepted.RequestID)
+	if err != nil {
+		return "", fmt.Errorf("validate iris text admission: %w", err)
+	}
+
+	return requestID, nil
+}
+
+// sendMarkdown은 Markdown 202가 성공·queued·requestId를 모두 갖출 때만 handoff 완료까지 상태를 조회하고 그
+// requestId를 돌려준다.
+func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
+	accepted, err := s.client.SendMarkdown(ctx, roomID, message, opts...)
+	if err != nil {
+		return "", fmt.Errorf("iris send message: %w", err)
+	}
+
+	if accepted == nil {
+		return "", fmt.Errorf("%w: markdown admission response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
 	requestID, err := acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
 	if err != nil {
-		return fmt.Errorf("validate iris markdown admission: %w", err)
+		return "", fmt.Errorf("validate iris markdown admission: %w", err)
 	}
 
 	if err := s.waitForReplyHandoff(ctx, requestID); err != nil {
-		return fmt.Errorf("confirm iris markdown handoff: %w", err)
+		return "", fmt.Errorf("confirm iris markdown handoff: %w", err)
 	}
 
-	return nil
+	return requestID, nil
 }
 
 func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool {
@@ -99,6 +121,11 @@ func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string
 		return "", fmt.Errorf("%w: admission response is not queued", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
+	return admissionRequestID(rawRequestID)
+}
+
+// admissionRequestID는 202의 requestId를 공백을 걷어 돌려준다. 비어 있으면 확인할 대상이 없어 결과 불명이다.
+func admissionRequestID(rawRequestID string) (string, error) {
 	requestID := strings.TrimSpace(rawRequestID)
 	if requestID == "" {
 		return "", fmt.Errorf("%w: admission response has no request id", sendoutcome.ErrHandoffOutcomeUnknown)

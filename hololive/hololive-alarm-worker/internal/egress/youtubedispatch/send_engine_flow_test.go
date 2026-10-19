@@ -290,6 +290,6 @@ func (s *flowTestSender) PrepareMessageRequest(_ context.Context, _, body string
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *flowTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *flowTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }

@@ -265,6 +265,11 @@ func alarmDispatchMaxAttemptsForCause(cause error) int {
 	return alarmDispatchMaxAttempts
 }
 
+// alarmDispatchRetryBackoff는 attempt번째 시도 뒤 다음 시도까지의 선형 backoff(attempt*5s)다.
+func alarmDispatchRetryBackoff(attempt int) time.Duration {
+	return time.Duration(attempt) * 5 * time.Second
+}
+
 func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) {
 	retryEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
 	dlqEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
@@ -327,7 +332,7 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 	retry.LastError = cause.Error()
 	retry.LastErrorCode = dispatchoutbox.ClassifyErrorCode(cause)
 
-	retryAfter := time.Duration(retry.Attempt) * 5 * time.Second
+	retryAfter := alarmDispatchRetryBackoff(retry.Attempt)
 
 	if httpErr, ok := errors.AsType[*iris.HTTPError](cause); ok && httpErr.RetryAfter > retryAfter {
 		hint := httpErr.RetryAfter

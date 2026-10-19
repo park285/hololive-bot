@@ -183,3 +183,5 @@
 183 322_live_streams_elapsed.sql
 184 323_youtube_live_time_finalization.sql
 185 324_youtube_live_orphaned_legacy_live_end.sql
+186 329_alarm_send_unit_handoff_check.sql
+187 337_alarm_send_unit_handoff_due_index.sql

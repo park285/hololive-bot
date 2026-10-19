@@ -193,6 +193,10 @@ Diagnosis:
 - Raw `requestId`를 로그나 응답에 복사하지 않고 bounded alarm-worker/Iris 로그에서 status state와 오류 class만 확인합니다.
 - `queued`, `preparing`, `prepared`, `sending`이 caller deadline까지 계속되었는지, `failed` 또는 `outcome_unknown`으로 끝났는지 확인합니다.
 - `handoff_completed`가 없는데 DB row만 수동으로 `sent` 처리하지 않습니다.
+- alarm dispatch의 `sent` 단위는 `alarm-dispatch-handoff-reconciler`가 `alarm_dispatch_send_units.handoff_next_check_at`마다 `/reply-status`를 확인합니다. 확인 대기 단위는 `handoff_request_id`가 있고 `handoff_checked_at`이 없는 행입니다. 지평(`alarm_dispatch` executor `attempt_timeout`)을 넘긴 단위가 남아 있으면 reconciler 로그와 Iris 상태 조회 오류를 먼저 확인합니다.
+- 확인 결과 코드는 `last_error_code`의 `handoff_failed`(세대·시도 예산 안이면 `:r1`/`:r2` 재발송, 아니면 DLQ), `handoff_outcome_unknown`, `handoff_status_missing`(404), `handoff_unconfirmed`(지평 미확인)입니다. 뒤의 세 코드는 격리이며 재발송하지 않습니다.
+- `alarm dispatch handoff check closed without transition` 오류 로그는 토큰·요청은 맞지만 운영 SQL·관리 조치·retention 삭제로 멤버가 더 이상 모두 `sent`가 아니어서(멤버가 모두 지워진 단위 포함) 확인이 영구히 닫힌 단위입니다. 다시 확인하지 않으므로 로그의 `observed_action`·`reason`(관측한 Iris 결과)과 멤버 상태를 맞춰 보고 수동 처리를 정합니다. `lost its claim or send unit` 경고는 다음 확인이나 다른 정산이 이어받는 소유 상실이고, `settlement exceeded its budget` 경고는 정산 슬롯 대기·연결 획득·문장이 정산 예산 5s를 넘겨 soft claim 뒤 다음 확인이 다시 판정하는 지연이라 조치가 필요 없습니다. 같은 경고가 주기마다 이어지면 DB 지연을 먼저 봅니다.
+- `alarm dispatch handoff check failed` 오류 로그의 오류가 `handoff dlq committed but claim keys not released`를 담으면 DLQ 전이는 기록됐지만 미발송 멤버의 dedup claim 키 해제(정산과 별도인 예산 5s)가 실패한 단위입니다. 확인이 닫혀 다시 해제하지 않으므로 키는 TTL까지 남습니다. Valkey 상태를 먼저 확인합니다.
 
 Mitigation:
 - Iris reply delivery worker와 Kakao bridge를 먼저 복구합니다.

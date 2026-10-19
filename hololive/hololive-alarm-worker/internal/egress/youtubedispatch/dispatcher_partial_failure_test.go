@@ -395,14 +395,14 @@ func (s *testSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *testSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
-	return s.SendMessageWithClientRequestID(ctx, room, body, id)
+func (s *testSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return "", s.SendMessageWithClientRequestID(ctx, room, body, id)
 }
 
 func (s *failFirstSendTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *failFirstSendTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *failFirstSendTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }

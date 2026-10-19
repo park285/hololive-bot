@@ -188,12 +188,13 @@ func (s *settlementSender) PrepareMessageRequest(ctx context.Context, room, mess
 	return s.frozenProviderSender.PrepareMessageRequest(ctx, room, message)
 }
 
-func (s *settlementSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) error {
-	if err := s.frozenProviderSender.SendPreparedMessage(ctx, room, body, route, id); err != nil {
-		return fmt.Errorf("send prepared settlement message: %w", err)
+func (s *settlementSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) (string, error) {
+	requestID, err := s.frozenProviderSender.SendPreparedMessage(ctx, room, body, route, id)
+	if err != nil {
+		return "", fmt.Errorf("send prepared settlement message: %w", err)
 	}
 
-	return s.beforeReturn(ctx, len(s.ids))
+	return requestID, s.beforeReturn(ctx, len(s.ids))
 }
 
 type settlementClaims struct {

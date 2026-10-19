@@ -75,9 +75,42 @@ Alarm dispatch pins each send unit's final body, text/markdown route, membership
 base ID and generation before `BeginSending`. Retries and restarts reuse that request.
 Transport ambiguity may retry with the stored ID and identical request for every
 source kind; structured `OUTCOME_UNKNOWN` and unknown handoff remain quarantined.
-Only confirmed pre-handoff `CLIENT_REQUEST_ID_FAILED` permits atomic generation/retry
-advance to SDK r1/r2 within the existing retry budget. Past Karing `SENDING`/`outcome_unknown` rows keep the existing
-quarantine and stale-sweeper contract (T18 2026-09-26: 0 non-terminal rows).
+Only confirmed pre-handoff `CLIENT_REQUEST_ID_FAILED` or a reconciled `failed` reply status (see below) permits
+atomic generation/retry advance to SDK r1/r2 within the existing retry budget. Past Karing `SENDING`/`outcome_unknown`
+rows keep the existing quarantine and stale-sweeper contract (T18 2026-09-26: 0 non-terminal rows).
+
+### Iris handoff reconciliation
+
+Text and Markdown admission both retain the 202 Iris request ID. A text 202 needs only a non-empty request ID, the same
+rule as the bot plane text path, because the Iris contract does not define the text 202 `delivery` value; this applies
+to every text send through the shared sender (alarm dispatch, YouTube, notification). A Markdown 202 still needs
+`success`, `delivery=queued` and a request ID. Anything less is `sendoutcome.ErrHandoffOutcomeUnknown`. `MarkSent` stores
+the ID on the send unit (`handoff_request_id`) in the same
+statement that moves every member to `sent`, and schedules the first check (`handoff_next_check_at`) 5s after
+admission on that statement's database clock. When `MarkSent` does not apply to every member, the unit records no check.
+
+`alarm-dispatch-handoff-reconciler` claims due units with `FOR UPDATE SKIP LOCKED` and moves `handoff_next_check_at`
+15s ahead as a soft-claim token. It queries `/reply-status` outside any transaction, then applies the observation in
+one statement that locks the unit before its members and rechecks the token, `client_request_id`,
+`handoff_request_id` and that every pinned member is still `sent`. The horizon is the `alarm_dispatch` executor
+`attempt_timeout`.
+
+| Observation | Ledger action |
+|---|---|
+| `handoff_completed` | close the check (`handoff_checked_at`); members stay `sent` |
+| pending state, or a query error other than 404 | next check 15s, then 60s, then every 5 min, never after admission + horizon |
+| `failed`, generation < 2 and retry budget left | members `retry` (attempt + 1, `sent_at` cleared, `handoff_failed`); unit advances to the next SDK request ID (`:r1`/`:r2`) with cleared handoff columns, in one statement |
+| `failed`, otherwise | members `dlq` (attempt + 1, `handoff_failed`); dedup claim keys released after commit under a separate 5s budget, not the settlement budget |
+| `outcome_unknown`, unrecognized state, empty or mismatched response | members `quarantined` (`handoff_outcome_unknown`) |
+| 404 | members `quarantined` (`handoff_status_missing`) |
+| still pending at the horizon | members `quarantined` (`handoff_unconfirmed`) |
+
+A replaced token or request ID applies nothing. If the token and request IDs still match but a member is no longer
+`sent` (including a unit whose members were all deleted), members are left unchanged, the check is closed for good,
+and the reconciler logs `check closed without transition` at error level with the observed action and code
+(`dispatchoutbox.ErrHandoffCheckClosed`). A settlement that runs out of its 5s budget is abandoned; the next check
+after the soft claim decides again under the token CAS, so it is logged as a warning. Readers of `sent` deliveries
+may see a unit whose handoff is still unconfirmed for up to the horizon.
 
 Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
 microsecond precision). Event detection, creation and next-attempt timestamps do
@@ -348,7 +381,7 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - HTTP/H3 options are passed explicitly from the consuming plane's loaded `BotPlaneConfig.InternalH3` or `AdminPlaneConfig.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
 - Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
 - Retry: a failed delivery returns to `retry` with `next_attempt_at` set from the transition's single database clock plus `retry_after_ms` (members of one send unit share it); the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
-- `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, or the recovery codes `lease_expired`, `stale_sending`, and `lease_released`. Existing consumers may ignore this optional field.
+- `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, the recovery codes `lease_expired`, `stale_sending`, and `lease_released`, or the handoff reconciliation codes `handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, and `handoff_unconfirmed`. Existing consumers may ignore this optional field.
 - DLQ and quarantine are delivery states (`dlq`, `quarantined`) in `alarm_dispatch_deliveries`; the event payload stays in `alarm_dispatch_events`. Replay uses the audited requeue in [admin dispatch operations](../runbooks/admin-dispatch-operations.md).
 
 ## Compatibility policy

@@ -1886,22 +1886,22 @@ func (s *groupedPermanentFailureSender) PrepareMessageRequest(_ context.Context,
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *groupedPermanentFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *groupedPermanentFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }
 
 func (s *blockingSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *blockingSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *blockingSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }
 
 func (s *parentDeadlineBeforeReturnSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *parentDeadlineBeforeReturnSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *parentDeadlineBeforeReturnSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }

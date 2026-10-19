@@ -18,10 +18,30 @@ func leaseMilliseconds(d time.Duration) (int64, error) {
 }
 
 // MarkSent는 외부 발송 성공을 정산한다. 그룹 발송이 lease를 넘겨도 성공 발송은 sent로 확정해야 하므로(lease 조건이
-// 있으면 격리 뒤 재발송 중복) lease 만료는 보지 않는다. 미스는 외부 성공을 되돌리지 않고 *sendfence.MissError로
-// 보고하며, 행은 stale 격리·회수 경로가 소유한다.
-func (r *PgxRepository) MarkSent(ctx context.Context, claims []DeliveryClaim, workerID string) error {
-	return r.applyClaims(ctx, fenceActionMarkSent, sqlMarkSent, claims, workerID)
+// 있으면 격리 뒤 재발송 중복) lease 만료는 보지 않는다. 입력 전원이 sent가 되면 같은 문장에서 단위에 Iris
+// requestId와 첫 handoff 확인 시각(firstCheck 뒤)을 기록한다. 미스는 외부 성공을 되돌리지 않고 *sendfence.MissError로
+// 보고하며, 그때 단위의 handoff 확인은 예약되지 않고 행은 stale 격리·회수 경로가 소유한다.
+func (r *PgxRepository) MarkSent(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, irisRequestID string, firstCheck time.Duration) error {
+	if len(claims) == 0 {
+		return nil
+	}
+
+	if irisRequestID == "" {
+		return fmt.Errorf("%s: iris request id is required", fenceActionMarkSent)
+	}
+
+	firstCheckMS, err := leaseMilliseconds(firstCheck)
+	if err != nil {
+		return fmt.Errorf("%s: first handoff check: %w", fenceActionMarkSent, err)
+	}
+
+	raw, err := jsonv2.Marshal(claims)
+	if err != nil {
+		return fmt.Errorf("%s: marshal claims: %w", fenceActionMarkSent, err)
+	}
+
+	return r.applyFenced(ctx, r.pool, fenceActionMarkSent, sqlMarkSent, fencedTargetIDs(claims),
+		jsonbRecordsetParam(raw), workerID, unitID, irisRequestID, firstCheckMS)
 }
 
 // ReleaseLeased는 발송 전 claim을 같은 attempt의 retry로 반환한다.

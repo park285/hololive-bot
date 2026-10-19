@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -225,13 +226,15 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueu
 	return nil
 }
 
-func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+// MarkDispatched는 그룹 전체 send unit의 Iris admission을 sent로 정산하고 Iris requestId의 handoff 확인을
+// handoffcheck.FirstCheckDelay 뒤로 예약한다. 미스는 *sendfence.MissError로 돌려준다.
+func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	claims := claimsFromEnvelopes(envelopes)
 	if len(claims) == 0 {
 		return nil
 	}
 
-	if err := c.repository.MarkSent(ctx, claims, c.workerID); err != nil {
+	if err := c.repository.MarkSent(ctx, envelopes[0].SendUnitID, claims, c.workerID, irisRequestID, handoffcheck.FirstCheckDelay); err != nil {
 		observePGMarkSentFailure()
 
 		return fmt.Errorf("mark sent: %w", err)

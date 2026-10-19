@@ -44,12 +44,12 @@ type clientRequestIDRecordingIrisSender struct {
 	markdownOpts    int
 }
 
-func (s *clientRequestIDRecordingIrisSender) SendMessage(_ context.Context, roomID, message string, opts ...iris.SendOption) error {
+func (s *clientRequestIDRecordingIrisSender) SendMessageAccepted(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	s.roomID = roomID
 	s.message = message
 	s.opts = len(opts)
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
 }
 
 func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -257,7 +257,7 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
+	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), &clientRequestIDRecordingIrisSender{}, nil, nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))
@@ -272,7 +272,7 @@ func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: dbtest.NewPool(t)}}
 
-	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
+	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), &clientRequestIDRecordingIrisSender{}, nil, nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))
@@ -285,12 +285,14 @@ func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
 
 	assert.Equal(t, []string{
 		"alarm-dispatch",
+		"alarm-dispatch-handoff-reconciler",
 		"alarm-dispatch-maintenance",
 		"alarm-dispatch-backlog-observer",
 		"youtube-outbox",
 		"notification-delivery-outbox",
 	}, names)
 	assert.True(t, scheduled["alarm-dispatch"])
+	assert.True(t, scheduled["alarm-dispatch-handoff-reconciler"])
 	assert.True(t, scheduled["alarm-dispatch-backlog-observer"])
 	assert.True(t, scheduled["youtube-outbox"])
 	assert.True(t, scheduled["notification-delivery-outbox"])

@@ -485,6 +485,6 @@ func (s *postSendFinalizeFailureSender) PrepareMessageRequest(_ context.Context,
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *postSendFinalizeFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *postSendFinalizeFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+	return "", s.SendMessage(ctx, room, body)
 }
