@@ -1,17 +1,14 @@
 package youtubedispatch
 
 import (
-	"context"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -49,7 +46,7 @@ func newDispatcherForTest(
 	return newDispatcherWithDepsForTest(tb, db, Dependencies{Cache: cacheClient, Sender: sender, Renderer: renderer}, logger, config)
 }
 
-// newDispatcherWithDepsForTest는 db가 nil이면 실제 seed DB와 단위 claim/transition 대역으로 dispatcher를 만든다.
+// newDispatcherWithDepsForTest는 db가 nil이면 실제 seed DB와 단위 transition 대역으로 dispatcher를 만든다.
 func newDispatcherWithDepsForTest(
 	tb testing.TB,
 	db *pgxpool.Pool,
@@ -83,44 +80,8 @@ func newDispatcherWithDepsForTest(
 
 	if unitTransition {
 		dispatcher.send.transition = &lifecycleTransitionSpy{complete: store.ApplyResult{Outcome: store.ApplyApplied}}
-		dispatcher.send.claims = unitClaimResolver{logger: dispatcher.logger}
 		dispatcher.audit.telemetry = nil
 	}
 
 	return dispatcher
-}
-
-// unitClaimResolver는 순수 발송 단위 테스트에서 claim 입출력만 명시적으로 제공한다.
-// 영속 claim과 version fence는 실제 PostgreSQL 통합 테스트가 검증한다.
-type unitClaimResolver struct{ logger *slog.Logger }
-
-func (resolver unitClaimResolver) selectClaimedDeliveries(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	_ *claimDecisionCache,
-) deliveryClaimSelection {
-	selection := deliveryClaimSelection{}
-
-	for i := range min(len(rows), len(outboxes)) {
-		row, outbox := rows[i], outboxes[i]
-
-		if err := validateDeliveryLogicalIdentity(&row, &outbox); err != nil {
-			resolver.logger.Log(ctx, slog.LevelWarn, "Failed to resolve delivery logical identity before send",
-				deliveryClaimLogAttrs(&row, &outbox, slog.Any("error", err))...)
-
-			selection.retryMembers = append(selection.retryMembers, claimedDelivery{row: row, outbox: outbox})
-
-			continue
-		}
-
-		token := dispatchstate.ClaimToken{Kind: outbox.Kind, PostID: outbox.ContentID, AuthorizedAt: time.Now().UTC()}
-
-		selection.members = append(selection.members, claimedDelivery{row: row, outbox: outbox, claimTokens: []dispatchstate.ClaimToken{token}})
-	}
-
-	return selection
-}
-
-func (unitClaimResolver) releaseDeliveryClaimsWithWarning(context.Context, []dispatchstate.ClaimToken, string, ...any) {
 }

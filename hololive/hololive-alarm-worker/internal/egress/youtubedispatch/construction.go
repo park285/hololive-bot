@@ -132,12 +132,9 @@ func assembleDispatcher(
 	grouper := newOutboxGrouper(deps.DB, deps.Cache, logger, &config)
 	formatter := format.NewMessageFormatter(deps.Renderer, deps.MemberNames, deps.MessageStrings)
 
-	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, nil, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al)
-	sendEngine := newSendEngine(
-		deps.Sender, formatter, logger, &config, claimManager, al, metricsRecorder, transitionStore,
-	)
-	claimManager.setExecutor(sendEngine)
+	sendEngine := newSendEngine(deps.Sender, formatter, logger, &config, al, metricsRecorder, transitionStore)
+	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, sendEngine, grouper, al)
 
 	return &Dispatcher{
 		claim:           claimManager,

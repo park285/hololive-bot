@@ -79,7 +79,7 @@ Provider 호출이 시작된 뒤 DB 오류가 발생해도 provider를 다시 �
 
 ### A-006. Tracking terminal idempotency
 
-Tracking requirement가 exact claim token을 요구하더라도 primary state가 이미 sent이면 정상 terminal 상태로 수용할 수 있습니다. Token 소비와 already-sent는 둘 다 requirement 충족입니다.
+Community/Shorts 성공 전이는 post 단위 발송 표시를 기록합니다. 다른 room이 먼저 기록해 primary state가 이미 sent이면 정상 terminal 상태로 수용하고 가장 이른 발송 시각을 유지합니다.
 
 ### A-007. Mixed state is not partial success
 
@@ -238,21 +238,18 @@ Follower가 reconciliation 대상이면 follower pre-state가 `PENDING/FAILED/QU
 
 #### Tracking
 
-Requirement별로 다음 중 하나를 만족해야 합니다.
+Community/Shorts owner의 canonical post마다 다음을 만족해야 합니다.
 
 ```text
-NoTracking
+Community/Shorts가 아닌 kind
     -> 검사 없음
 
-RequireClaimOrAlreadySent
-    -> exact authorized_at token이 소비되고 sent 상태
-       또는 primary tracking이 이미 sent
-
-RequireAlreadySent
-    -> primary tracking이 sent
+COMMUNITY_POST·NEW_SHORT
+    -> post 단위 알람 상태 또는 primary tracking이 sent
+       (alarm_sent_at은 기존 값과 이번 전이 시각 중 이른 값)
 ```
 
-여러 room success가 같은 token을 공유할 때 첫 transaction만 token을 소비하고 후속 transaction은 already-sent로 수용할 수 있습니다.
+여러 room success가 같은 post를 기록할 때 첫 transaction이 발송 시각을 정하고 후속 transaction은 그 값을 유지합니다.
 
 #### Logical ledger
 
@@ -270,29 +267,19 @@ Existing `SENT`의 최초 `sent_at`과 source reference를 보존하는 monotoni
 
 #### Confirmed committed
 
-Owner/follower 전체, tracking requirement, ledger `SENT`가 exact post-state입니다. `Applied`입니다.
+Owner/follower 전체, post 단위 sent 표시, ledger `SENT`가 exact post-state입니다. `Applied`입니다.
 
 #### Confirmed not committed
 
 Owner/follower/tracking/ledger가 command의 exact pre-state입니다. 같은 immutable DB finalization만 retry할 수 있습니다. Provider send는 재호출하지 않습니다.
 
-Tracking pre-state는 requirement에 따라 다음을 포함합니다.
-
-```text
-RequireClaimOrAlreadySent:
-    exact active token 또는 already-sent
-
-RequireAlreadySent:
-    already-sent
-```
-
-Tracking이 already-sent였던 requirement는 pre/post 양쪽에서 sent일 수 있습니다. Delivery/follower state로 transaction 적용 여부를 함께 판정합니다.
+Post 단위 기록은 다른 room success 때문에 pre-state에서도 sent일 수 있습니다. 이때는 delivery/follower state로 transaction 적용 여부를 판정합니다.
 
 #### Tracking mismatch
 
 다음은 atomicity breach입니다.
 
-- Delivery owner/follower는 exact `SENT`인데 requirement가 neither token-consumed nor already-sent
+- Delivery owner/follower는 exact `SENT`인데 post 단위 sent 표시가 없음
 - Delivery는 exact pre-state인데 이 command만 만들 수 있는 tracking transition만 commit
 - Same logical group follower 일부만 `SENT`
 
@@ -342,7 +329,6 @@ next_attempt_at = owner와 같은 지연  -- 판정 비교 대상 아님
 - 전체 exact pre-state: 같은 DB retry command만 재시도
 - Mixed owner/follower: atomicity breach
 - Provider 재호출 금지
-- Alarm claim release는 durable retry commit 확인 뒤 수행
 
 ## Terminal failure ambiguity
 
@@ -564,7 +550,7 @@ provider_effect_confirmed
 3. Server commit 후 client response loss
 4. Commit response 수신 후 read-back 오류
 5. Owner/follower 한 건의 concurrent mutation
-6. Exact claim token이 다른 room success로 먼저 소비됨
+6. 같은 post의 발송 표시를 다른 room success가 먼저 기록함
 7. Tracking write 오류
 8. Ledger write 오류 또는 wrong-key write
 9. Logical follower projection 일부 누락
@@ -595,7 +581,7 @@ TestCleanupUnknownDoesNotShortenRetentionCutoff
 ```text
 if commitErr != nil { retryWholeHandler() }
 if finalizationErr != nil { sender.Send(...) }
-if trackingTokenConflict { failDelivery() }
+if postAlreadySent { failDelivery() }
 UPDATE ... WHERE id IN (...) AND status='SENDING' without fence
 Store가 callback/provider를 자동 반복
 Read replica로 commit 여부 판정
@@ -610,8 +596,8 @@ Aggregate failure 때문에 provider operation rollback 또는 resend
 1. Effect 인접 store 결과가 `Indeterminate`를 표현합니다.
 2. `BeginSending` exact post-state 확인 전 provider call은 0회입니다.
 3. Provider success 이후 어떤 DB 오류에서도 provider 재호출은 0회입니다.
-4. Owner, follower, tracking requirement, ledger를 함께 read-back합니다.
-5. 다른 room이 claim token을 먼저 소비한 already-sent tracking을 정상 terminal로 수용합니다.
+4. Owner, follower, post 단위 sent 표시, ledger를 함께 read-back합니다.
+5. 다른 room이 먼저 기록한 post 단위 sent 표시를 정상 terminal로 수용합니다.
 6. Mixed logical projection, tracking mismatch, ledger mismatch를 atomicity breach로 분류합니다.
 7. Aggregate projection은 terminal envelope와 분리되며 실패해도 provider를 재호출하지 않습니다.
 8. Primary read-back fault-injection test가 통과합니다.

@@ -251,16 +251,14 @@ func duplicatePollCommunityPostCase() duplicatePollClaimCase {
 				NextAttemptAt: authorizedAt,
 				CreatedAt:     authorizedAt,
 			})
-			seedAlarmState(t, pool, &domain.YouTubeCommunityShortsAlarmState{
+			seedLegacyAuthorizedAlarmState(t, pool, &domain.YouTubeCommunityShortsAlarmState{
 				Kind:              domain.OutboxKindCommunityPost,
 				PostID:            canonicalPostID,
 				ContentID:         testDuplicatePostID,
 				ChannelID:         testChannelID,
 				ActualPublishedAt: &publishedAt,
 				DetectedAt:        detectedAt,
-				AuthorizedAt:      &authorizedAt,
-				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
-			})
+			}, authorizedAt)
 		},
 		persist: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) error {
 			t.Helper()
@@ -314,16 +312,14 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 				NextAttemptAt: authorizedAt,
 				CreatedAt:     authorizedAt,
 			})
-			seedAlarmState(t, pool, &domain.YouTubeCommunityShortsAlarmState{
+			seedLegacyAuthorizedAlarmState(t, pool, &domain.YouTubeCommunityShortsAlarmState{
 				Kind:              domain.OutboxKindNewShort,
 				PostID:            testDuplicateShortContentID,
 				ContentID:         testDuplicateShortContentID,
 				ChannelID:         testChannelID,
 				ActualPublishedAt: &publishedAt,
 				DetectedAt:        detectedAt,
-				AuthorizedAt:      &authorizedAt,
-				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
-			})
+			}, authorizedAt)
 		},
 		persist: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) error {
 			t.Helper()
@@ -347,7 +343,9 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 	}
 }
 
-func TestPersistCommunityShortsDuplicatePollKeepsExistingClaimState(t *testing.T) {
+// 중복 poll의 upsert는 post 단위 상태를 하나로 유지하고, 구 워커가 발송 중 남긴 authorized_at을 지우지 않는다.
+// 상태 값은 alarm_sent_at만으로 계산하므로 미발송 행의 delivery_status는 DETECTED가 된다.
+func TestPersistCommunityShortsDuplicatePollPreservesLegacyAuthorization(t *testing.T) {
 	for _, tc := range []duplicatePollClaimCase{duplicatePollCommunityPostCase(), duplicatePollShortCase()} {
 		t.Run(tc.name, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
@@ -370,10 +368,16 @@ func TestPersistCommunityShortsDuplicatePollKeepsExistingClaimState(t *testing.T
 			require.Len(t, stateRows, 1)
 			require.Equal(t, tc.postID, stateRows[0].PostID)
 			require.Equal(t, tc.contentID, stateRows[0].ContentID)
-			require.NotNil(t, stateRows[0].AuthorizedAt)
-			require.Equal(t, authorizedAt, stateRows[0].AuthorizedAt.UTC())
 			require.Nil(t, stateRows[0].AlarmSentAt)
-			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, stateRows[0].DeliveryStatus)
+			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, stateRows[0].DeliveryStatus)
+			require.Equal(t, detectedAt, stateRows[0].DetectedAt.UTC())
+
+			var legacyAuthorizedAt time.Time
+
+			require.NoError(t, pool.QueryRow(t.Context(),
+				`SELECT authorized_at FROM youtube_community_shorts_alarm_states WHERE kind = $1 AND post_id = $2`,
+				tc.kind, tc.postID).Scan(&legacyAuthorizedAt))
+			require.Equal(t, authorizedAt, legacyAuthorizedAt.UTC())
 		})
 	}
 }

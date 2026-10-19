@@ -13,7 +13,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -114,7 +113,6 @@ func (s *lifecycleTransitionSpy) ApplyStartedFailure(
 func (s *lifecycleTransitionSpy) CompleteSent(
 	_ context.Context,
 	_ store.StartedOperation,
-	_ []dispatchstate.ClaimToken,
 	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
 	s.completeCalls.Add(1)
@@ -146,7 +144,7 @@ func TestDispatchClaimedDeliveryRequiresConfirmedBeginAndCompletion(t *testing.T
 			t.Parallel()
 
 			sender := &lifecycleTestSender{}
-			engine, _ := newOutcomeUnknownTestEngine(sender, nil, time.Second)
+			engine := newOutcomeUnknownTestEngine(sender, nil, time.Second)
 
 			transition := &lifecycleTransitionSpy{
 				beginErr: tc.beginErr,
@@ -184,7 +182,7 @@ func TestDispatchClaimedDeliveryResponseLostAfterProviderSuccessDoesNotResend(t 
 	t.Parallel()
 
 	sender := &lifecycleTestSender{}
-	engine, claims := newOutcomeUnknownTestEngine(sender, nil, time.Second)
+	engine := newOutcomeUnknownTestEngine(sender, nil, time.Second)
 	transition := &lifecycleTransitionSpy{
 		complete:    store.ApplyResult{Outcome: store.ApplyIndeterminate},
 		completeErr: errors.New("commit response unavailable"),
@@ -225,10 +223,6 @@ func TestDispatchClaimedDeliveryResponseLostAfterProviderSuccessDoesNotResend(t 
 
 	if len(result.SuccessDeliveryIDs) != 0 || result.FailedDeliveries != 0 {
 		t.Fatalf("result = %#v, want no inferred terminal outcome", result.DispatchResult)
-	}
-
-	if got := claims.releaseCalls.Load(); got != 0 {
-		t.Fatalf("claim release calls = %d, want 0", got)
 	}
 }
 

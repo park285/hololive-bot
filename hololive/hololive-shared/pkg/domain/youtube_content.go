@@ -138,7 +138,6 @@ type YouTubeCommunityShortsAlarmState struct {
 	ChannelID         string                                 `db:"channel_id" json:"channel_id"`
 	ActualPublishedAt *time.Time                             `json:"actual_published_at,omitempty"`
 	DetectedAt        time.Time                              `db:"detected_at" json:"detected_at"`
-	AuthorizedAt      *time.Time                             `db:"authorized_at" json:"authorized_at,omitempty"`
 	AlarmSentAt       *time.Time                             `db:"alarm_sent_at" json:"alarm_sent_at,omitempty"`
 	DeliveryStatus    YouTubeCommunityShortsAlarmStateStatus `db:"delivery_status" json:"delivery_status"`
 	CreatedAt         time.Time                              `db:"created_at" json:"created_at"`
@@ -153,17 +152,12 @@ type YouTubeCommunityShortsAlarmStateStatus string
 
 const (
 	YouTubeCommunityShortsAlarmStateStatusDetected YouTubeCommunityShortsAlarmStateStatus = "DETECTED"
-	YouTubeCommunityShortsAlarmStateStatusEnqueued YouTubeCommunityShortsAlarmStateStatus = "ENQUEUED"
 	YouTubeCommunityShortsAlarmStateStatusSent     YouTubeCommunityShortsAlarmStateStatus = "SENT"
 )
 
-func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt, alarmSentAt *time.Time) YouTubeCommunityShortsAlarmStateStatus {
+func ResolveYouTubeCommunityShortsAlarmStateStatus(alarmSentAt *time.Time) YouTubeCommunityShortsAlarmStateStatus {
 	if alarmSentAt != nil && !alarmSentAt.IsZero() {
 		return YouTubeCommunityShortsAlarmStateStatusSent
-	}
-
-	if authorizedAt != nil && !authorizedAt.IsZero() {
-		return YouTubeCommunityShortsAlarmStateStatusEnqueued
 	}
 
 	return YouTubeCommunityShortsAlarmStateStatusDetected

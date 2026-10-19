@@ -126,7 +126,7 @@ func TestSettlementAfterSendingIgnoresExpiredLease(t *testing.T) {
 		{
 			name: "complete sent",
 			settle: func(ctx context.Context, transition *TransitionStore, operation StartedOperation) (ApplyResult, error) {
-				return transition.CompleteSent(ctx, operation, nil, DeliveryModePerRoom)
+				return transition.CompleteSent(ctx, operation, DeliveryModePerRoom)
 			},
 			status: domain.OutboxStatusSent,
 		},

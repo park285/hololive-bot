@@ -40,7 +40,7 @@ func TestTransitionLogicalGroupCompleteSentIsVersionFencedAndAtomic(t *testing.T
 	require.Equal(t, ApplyApplied, begin.Outcome)
 	require.True(t, operation.Valid())
 
-	completed, err := transition.CompleteSent(ctx, operation, nil, DeliveryModePerRoom)
+	completed, err := transition.CompleteSent(ctx, operation, DeliveryModePerRoom)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 	require.ElementsMatch(t, []int64{claimed[0].OutboxID, claimed[1].OutboxID}, completed.TouchedOutboxIDs)
@@ -90,7 +90,7 @@ func TestTransitionCompleteSentConfirmsLostCommitResponse(t *testing.T) {
 		return nil
 	}
 
-	completed, err := transition.CompleteSent(ctx, operation, nil, DeliveryModePerRoom)
+	completed, err := transition.CompleteSent(ctx, operation, DeliveryModePerRoom)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 	assertTransitionDelivery(t, pool, deliveryID, domain.OutboxStatusSent, 3, true)
@@ -343,7 +343,7 @@ func TestTransitionCleanupDeletesPhysicalRowsAndRetainsLogicalLedger(t *testing.
 	operation, _, err := transition.BeginSending(ctx, prepared.ActiveRows, outboxes)
 	require.NoError(t, err)
 
-	_, err = transition.CompleteSent(ctx, operation, nil, DeliveryModePerRoom)
+	_, err = transition.CompleteSent(ctx, operation, DeliveryModePerRoom)
 	require.NoError(t, err)
 
 	terminalAt := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)

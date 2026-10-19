@@ -615,9 +615,9 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 	for i := range rows {
 		rows[i].RowVersion = 1
 		rows[i].LockedAt = &claimedAt
-		require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{
+		require.NoError(t, updateDeliveryTestRowByID(db, &domain.YouTubeNotificationDelivery{}, map[string]any{
 			"row_version": 1, "locked_at": claimedAt,
-		}, "id = $1", rows[i].ID).Error)
+		}, rows[i].ID).Error)
 	}
 
 	startedBefore := groupedSendFallbackCount(groupedSendFallbackResultStarted)
@@ -1735,65 +1735,36 @@ func TestNewDispatcherRejectsMissingOrInvalidConfig(t *testing.T) {
 	}
 }
 
-type outcomeUnknownClaimSpy struct {
-	releaseCalls atomic.Int32
-}
-
-func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ *claimDecisionCache) deliveryClaimSelection {
-	selection := deliveryClaimSelection{members: make([]claimedDelivery, 0, len(rows))}
-	for i := range rows {
-		token := outcomeUnknownClaimToken(&outboxes[i])
-
-		selection.members = append(selection.members, claimedDelivery{row: rows[i], outbox: outboxes[i], claimTokens: []dispatchstate.ClaimToken{token}})
-	}
-
-	return selection
-}
-
-func (s *outcomeUnknownClaimSpy) releaseDeliveryClaimsWithWarning(context.Context, []dispatchstate.ClaimToken, string, ...any) {
-	s.releaseCalls.Add(1)
-}
-
-func outcomeUnknownClaimToken(outbox *domain.YouTubeNotificationOutbox) dispatchstate.ClaimToken {
-	return dispatchstate.ClaimToken{Kind: outbox.Kind, PostID: outbox.ContentID, AuthorizedAt: time.Now().UTC()}
-}
-
-func newOutcomeUnknownTestEngine(sender messagedelivery.PreparedMessageSender, renderer *template.Renderer, timeout time.Duration) (*SendEngine, *outcomeUnknownClaimSpy) {
+func newOutcomeUnknownTestEngine(sender messagedelivery.PreparedMessageSender, renderer *template.Renderer, timeout time.Duration) *SendEngine {
 	logger := slog.New(slog.DiscardHandler)
 	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
-	spy := &outcomeUnknownClaimSpy{}
 	auditLogger := newAuditLogger(nil, nil, logger, cfg)
 	formatter := format.NewMessageFormatter(renderer, staticMemberNames{}, nil)
-	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger), &lifecycleTransitionSpy{})
 
-	return engine, spy
+	return newSendEngine(sender, formatter, logger, cfg, auditLogger, newMetricsRecorder(logger, auditLogger), &lifecycleTransitionSpy{})
 }
 
-func assertOutcomeUnknownHold(t *testing.T, result *dispatchstate.DispatchResult, spy *outcomeUnknownClaimSpy) {
+func assertOutcomeUnknownHold(t *testing.T, result *dispatchstate.DispatchResult) {
 	t.Helper()
 
 	if result.FailedDeliveries != 0 || len(result.FailureBuckets) != 0 {
 		t.Fatalf("failedDeliveries = %d, failureBuckets = %#v, want none (row must stay SENDING for stale quarantine)", result.FailedDeliveries, result.FailureBuckets)
 	}
 
-	if len(result.SuccessDeliveryIDs) != 0 || len(result.SuccessClaimTokens) != 0 {
-		t.Fatalf("successDeliveryIDs = %#v, successClaimTokens = %#v, want none", result.SuccessDeliveryIDs, result.SuccessClaimTokens)
+	if len(result.SuccessDeliveryIDs) != 0 {
+		t.Fatalf("successDeliveryIDs = %#v, want none", result.SuccessDeliveryIDs)
 	}
 
 	if len(result.TouchedOutboxIDs) != 0 {
 		t.Fatalf("touchedOutboxIDs = %#v, want none", result.TouchedOutboxIDs)
 	}
-
-	if got := spy.releaseCalls.Load(); got != 0 {
-		t.Fatalf("claim release calls = %d, want 0 (claim must be held)", got)
-	}
 }
 
-func TestDispatchDeliveryRows_PerRoomOutcomeUnknownHoldsClaim(t *testing.T) {
+func TestDispatchDeliveryRows_PerRoomOutcomeUnknownHoldsSending(t *testing.T) {
 	t.Parallel()
 
 	sender := &flowTestSender{}
-	engine, spy := newOutcomeUnknownTestEngine(sender, newSendTestRenderer(t), 5*time.Millisecond)
+	engine := newOutcomeUnknownTestEngine(sender, newSendTestRenderer(t), 5*time.Millisecond)
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
 	}
@@ -1805,23 +1776,22 @@ func TestDispatchDeliveryRows_PerRoomOutcomeUnknownHoldsClaim(t *testing.T) {
 		t.Fatalf("sender calls = %d, want 1", got)
 	}
 
-	assertOutcomeUnknownHold(t, &result, spy)
+	assertOutcomeUnknownHold(t, &result)
 }
 
-func TestDispatchClaimedDeliveryRow_PreSendCancelReleasesClaimAndBucketsRetry(t *testing.T) {
+func TestDispatchClaimedDeliveryRow_PreSendCancelBucketsRetry(t *testing.T) {
 	t.Parallel()
 
 	sender := &flowTestSender{}
-	engine, spy := newOutcomeUnknownTestEngine(sender, nil, time.Second)
+	engine := newOutcomeUnknownTestEngine(sender, nil, time.Second)
 	row := domain.YouTubeNotificationDelivery{ID: 101, OutboxID: 1, RoomID: testRoom1}
 	outbox := domain.YouTubeNotificationOutbox{ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne}
-	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&outbox)}
 	result := newDeliveryDispatchResult(1)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	attempt := newDeliveryAttempt([]claimedDelivery{{row: row, outbox: outbox, claimTokens: claimTokens}})
+	attempt := newDeliveryAttempt([]claimedDelivery{{row: row, outbox: outbox}})
 	engine.dispatchClaimedDeliveryRow(ctx, &attempt, map[int64]string{1: testMessageHello}, map[int64]bool{}, &result)
 
 	if got := sender.calls.Load(); got != 0 {
@@ -1839,17 +1809,13 @@ func TestDispatchClaimedDeliveryRow_PreSendCancelReleasesClaimAndBucketsRetry(t 
 	if got := result.TouchedOutboxIDs; len(got) != 1 || got[0] != 1 {
 		t.Fatalf("touchedOutboxIDs = %#v, want [1]", got)
 	}
-
-	if got := spy.releaseCalls.Load(); got != 1 {
-		t.Fatalf("claim release calls = %d, want 1", got)
-	}
 }
 
 func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testing.T) {
 	t.Parallel()
 
 	sender := &flowTestSender{}
-	engine, spy := newOutcomeUnknownTestEngine(sender, nil, 5*time.Millisecond)
+	engine := newOutcomeUnknownTestEngine(sender, nil, 5*time.Millisecond)
 	group := &deliveryGroup{roomID: testRoom1, channelID: testChannelCh1, kind: domain.OutboxKindNewShort}
 	validOutboxes := []domain.YouTubeNotificationOutbox{
 		{ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
@@ -1859,10 +1825,9 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 		{ID: 101, OutboxID: 1, RoomID: testRoom1},
 		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
-	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&validOutboxes[0]), outcomeUnknownClaimToken(&validOutboxes[1])}
 	attempt := newDeliveryAttempt([]claimedDelivery{
-		{row: validRows[0], outbox: validOutboxes[0], claimTokens: claimTokens[:1]},
-		{row: validRows[1], outbox: validOutboxes[1], claimTokens: claimTokens[1:]},
+		{row: validRows[0], outbox: validOutboxes[0]},
+		{row: validRows[1], outbox: validOutboxes[1]},
 	})
 	formatted := map[int64]string{1: "쇼츠1", 2: "쇼츠2"}
 	result := newDeliveryDispatchResult(len(validRows))
@@ -1873,7 +1838,7 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 		t.Fatalf("sender calls = %d, want 1 grouped attempt without per-room fallback", got)
 	}
 
-	assertOutcomeUnknownHold(t, &result.DispatchResult, spy)
+	assertOutcomeUnknownHold(t, &result.DispatchResult)
 }
 
 func groupedSendFallbackCount(result string) float64 {

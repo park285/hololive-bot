@@ -56,10 +56,10 @@ func (s *settlementTransition) boundary() {
 	s.db.armed = true
 }
 
-func (s *settlementTransition) CompleteSent(ctx context.Context, op store.StartedOperation, tokens []dispatchstate.ClaimToken, mode store.DeliveryMode) (store.ApplyResult, error) {
+func (s *settlementTransition) CompleteSent(ctx context.Context, op store.StartedOperation, mode store.DeliveryMode) (store.ApplyResult, error) {
 	s.boundary()
 
-	result, err := s.TransitionStore.CompleteSent(ctx, op, tokens, mode)
+	result, err := s.TransitionStore.CompleteSent(ctx, op, mode)
 
 	s.results = append(s.results, result)
 
@@ -196,28 +196,12 @@ func (s *settlementSender) SendPreparedMessage(ctx context.Context, room, body, 
 	return s.beforeReturn(ctx, len(s.ids))
 }
 
-type settlementClaims struct {
-	outcomeUnknownClaimSpy
-
-	tokens []dispatchstate.ClaimToken
-}
-
-func (s *settlementClaims) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ *claimDecisionCache) deliveryClaimSelection {
-	selection := deliveryClaimSelection{members: make([]claimedDelivery, 0, len(rows))}
-	for i := range rows {
-		selection.members = append(selection.members, claimedDelivery{row: rows[i], outbox: outboxes[i], claimTokens: s.tokens[i : i+1]})
-	}
-
-	return selection
-}
-
 type settlementFixture struct {
 	pool       *pgxpool.Pool
 	db         *settlementDB
 	transition *settlementTransition
 	engine     *SendEngine
 	sender     *settlementSender
-	claims     *settlementClaims
 	rows       []domain.YouTubeNotificationDelivery
 	outboxes   []domain.YouTubeNotificationOutbox
 	messages   map[int64]string
@@ -230,7 +214,7 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 	pool := newDeliveryPool(t)
 	db := &settlementDB{Pool: pool}
 	sender := &settlementSender{body: "immutable final body", route: "markdown"}
-	engine, _ := newOutcomeUnknownTestEngine(sender, nil, time.Minute)
+	engine := newOutcomeUnknownTestEngine(sender, nil, time.Minute)
 
 	engine.config.MaxRetries = 3
 	engine.config.RetryBackoff = time.Minute
@@ -240,13 +224,12 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 
 	t.Cleanup(cancel)
 
-	f := &settlementFixture{pool: pool, db: db, engine: engine, sender: sender, claims: &settlementClaims{}, cancel: cancel, messages: make(map[int64]string)}
+	f := &settlementFixture{pool: pool, db: db, engine: engine, sender: sender, cancel: cancel, messages: make(map[int64]string)}
 
 	f.transition = &settlementTransition{TransitionStore: transition, db: db, cancel: cancel, cancelAt: 1}
 	engine.transition = f.transition
-	engine.claims = f.claims
 
-	authorized := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+	detectedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
 	byID := make(map[int64]domain.YouTubeNotificationOutbox)
 
 	for i := range count {
@@ -257,14 +240,13 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 		row := domain.YouTubeNotificationDelivery{OutboxID: outbox.ID, RoomID: "settlement-room"}
 		require.NoError(t, insertDeliveryTestRows(pool, &row).Error)
 		require.NoError(t, observation.NewRepository(pool).Upsert(t.Context(), &domain.YouTubeContentAlarmTracking{
-			Kind: outbox.Kind, ContentID: contentID, ChannelID: outbox.ChannelID, DetectedAt: authorized,
+			Kind: outbox.Kind, ContentID: contentID, ChannelID: outbox.ChannelID, DetectedAt: detectedAt,
 		}))
 
-		state := domain.YouTubeCommunityShortsAlarmState{Kind: outbox.Kind, PostID: "short:" + contentID, ContentID: contentID, ChannelID: outbox.ChannelID, AuthorizedAt: &authorized}
+		state := domain.YouTubeCommunityShortsAlarmState{Kind: outbox.Kind, PostID: "short:" + contentID, ContentID: contentID, ChannelID: outbox.ChannelID, DetectedAt: detectedAt}
 		_, stateErr := insertDomainAlarmState(t.Context(), pool, &state)
 		require.NoError(t, stateErr)
 
-		f.claims.tokens = append(f.claims.tokens, dispatchstate.ClaimToken{Kind: outbox.Kind, PostID: state.PostID, AuthorizedAt: authorized})
 		f.outboxes = append(f.outboxes, outbox)
 		f.messages[outbox.ID] = "template body"
 		byID[outbox.ID] = outbox
@@ -289,8 +271,13 @@ func (f *settlementFixture) dispatch(ctx context.Context, t *testing.T, path str
 
 	result := newDeliveryDispatchResult(len(f.rows))
 	group := &deliveryGroup{roomID: f.rows[0].RoomID, channelID: f.outboxes[0].ChannelID, kind: f.outboxes[0].Kind, rows: f.rows, outboxes: f.outboxes}
-	selection := f.claims.selectClaimedDeliveries(ctx, f.rows, f.outboxes, nil)
-	attempt := newDeliveryAttempt(selection.members)
+	members := make([]claimedDelivery, len(f.rows))
+
+	for i := range f.rows {
+		members[i] = claimedDelivery{row: f.rows[i], outbox: f.outboxes[i]}
+	}
+
+	attempt := newDeliveryAttempt(members)
 
 	switch path {
 	case settlementPathPerRoom:
@@ -304,7 +291,7 @@ func (f *settlementFixture) dispatch(ctx context.Context, t *testing.T, path str
 
 		group.frozen = attempt.request.frozen
 		f.sender.body, f.sender.route = "changed template", "text"
-		f.engine.dispatchFrozenGroup(ctx, group, f.messages, nil, newClaimDecisionCache(), &result)
+		f.engine.dispatchFrozenGroup(ctx, group, f.messages, nil, &result)
 	default:
 		f.engine.dispatchGroupedClaimedRows(ctx, group, &attempt, "group template", f.messages, nil, &result)
 	}
@@ -518,7 +505,6 @@ func assertSettlementEffects(t *testing.T, f *settlementFixture, path string, su
 	}
 
 	require.Len(t, result.SuccessDeliveryIDs, wantSuccess)
-	require.Len(t, result.SuccessClaimTokens, wantSuccess)
 	require.Equal(t, wantTelemetry, telemetry)
 
 	if !success && !unknown {
@@ -527,7 +513,6 @@ func assertSettlementEffects(t *testing.T, f *settlementFixture, path string, su
 
 	if unknown {
 		require.Zero(t, result.FailedDeliveries)
-		require.Zero(t, f.claims.releaseCalls.Load())
 	}
 
 	if !unknown {
@@ -860,7 +845,7 @@ func runCanceledReissueCommitLoss(t *testing.T, path string, count int) {
 
 	preparations := f.sender.prepareCalls
 	result := newDeliveryDispatchResult(count)
-	f.engine.dispatchFrozenGroup(t.Context(), group, f.messages, nil, newClaimDecisionCache(), &result)
+	f.engine.dispatchFrozenGroup(t.Context(), group, f.messages, nil, &result)
 	require.Equal(t, preparations, f.sender.prepareCalls)
 	assertReissuedSettlementSent(t, f, &request, result.DispatchResult)
 }
@@ -873,7 +858,6 @@ func assertReissueCommitLossPending(t *testing.T, f *settlementFixture, result d
 	require.Empty(t, f.transition.results)
 	require.Empty(t, result.SuccessDeliveryIDs)
 	require.Zero(t, result.FailedDeliveries)
-	require.Zero(t, f.claims.releaseCalls.Load())
 	assertSettlementRows(t, f, settlementOutcomeReissue, false, false)
 	assertSettlementBudgets(t, f, settlementOutcomeReissue)
 

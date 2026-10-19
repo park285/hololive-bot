@@ -276,7 +276,7 @@ func completeAggregateProjectionDelivery(
 	require.Equal(t, store.ApplyApplied, begin.Outcome)
 	require.True(t, operation.Valid())
 
-	completed, err := transition.CompleteSent(ctx, operation, nil, store.DeliveryModePerRoom)
+	completed, err := transition.CompleteSent(ctx, operation, store.DeliveryModePerRoom)
 	require.NoError(t, err)
 	require.Equal(t, store.ApplyApplied, completed.Outcome)
 	require.Equal(t, []int64{item.ID}, completed.TouchedOutboxIDs)

@@ -57,11 +57,10 @@ func (d *SendEngine) dispatchRowsIndividually(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache *claimDecisionCache,
 	result *deliveryDispatchResult,
 ) {
 	for i := range rows {
-		d.dispatchDeliveryRow(ctx, &rows[i], outboxByID, formattedMessages, formatFailures, reuseCache, result)
+		d.dispatchDeliveryRow(ctx, &rows[i], outboxByID, formattedMessages, formatFailures, result)
 	}
 }
 

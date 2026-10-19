@@ -178,7 +178,6 @@ func assertRecoverySelectiveSendTracking(
 	var updatedPendingState domain.YouTubeCommunityShortsAlarmState
 
 	require.NoError(t, firstDeliveryTestRow(db, &updatedPendingState, "kind = $1 AND post_id = $2", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
-	assert.Nil(t, updatedPendingState.AuthorizedAt)
 	require.NotNil(t, updatedPendingState.AlarmSentAt)
 	assert.WithinDuration(t, fixedSentAt, updatedPendingState.AlarmSentAt.UTC(), 2*time.Minute)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedPendingState.DeliveryStatus)

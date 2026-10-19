@@ -54,7 +54,7 @@ Community/Shorts:
 
 Community/Shorts의 `canonical_post_id`는 claim, telemetry, sibling 조회가 같은 resolver를 사용해야 합니다. Payload와 `content_id` 해석을 package별로 복제해서는 안 됩니다.
 
-현재 상태: 모든 소비자가 `contentid.ResolveDeliveryLogicalID`(room 없는 logical ID, `contentid.ResolveDeliveryKey`의 앞 단계) 하나를 씁니다. 시도 telemetry의 `post_id`는 전이 트랜잭션이 검증한 logical key이고, alarm-worker claim의 alarm state 조회 키·claim identity·같은 방 SENT sibling 판정은 같은 resolver 결과를 쓰며 누락·파싱 실패·불일치는 오류(claim은 retry later)로 드러냅니다. attempt started·claim 이슈·`outbox_final_result` 감사 로그의 `post_id`는 `telemetry.PostIDLogValue`가 같은 resolver 값을 쓰고, invalid identity는 대체 ID 없이 `invalid:<kind>:<reason>` 라벨로 남깁니다. telemetry 버퍼 적재는 `post_id`를 `content_id`로 채우지 않고 빈 값을 오류로 거절합니다. NEW_VIDEO·LIVE_STREAM·MILESTONE은 payload `canonical_post_id`를 보지 않고 `content_id`만 씁니다. 과거의 `canonical_post_id → content_id → video_id/post_id` 폴백(감사 행 `holo-youtube-telemetry-post-id-fallback`)은 삭제했습니다. 삭제 전 운영 DB 읽기 전용 측정: COMMUNITY_POST 23건·NEW_SHORT 36건 모두 canonical_post_id가 있고 문자열 타입이었습니다(NEW_VIDEO 3건은 canonical_post_id가 없지만 content_id 계약이라 영향 없음).
+현재 상태: 모든 소비자가 `contentid.ResolveDeliveryLogicalID`(room 없는 logical ID, `contentid.ResolveDeliveryKey`의 앞 단계) 하나를 씁니다. 시도 telemetry의 `post_id`는 전이 트랜잭션이 검증한 logical key이고, alarm-worker 발송 전 선택의 logical identity 검증·같은 방 SENT sibling 판정은 같은 resolver 결과를 쓰며 누락·파싱 실패·불일치는 오류(발송 전 retry 실패)로 드러냅니다. attempt started·발송 전 식별자 오류·`outbox_final_result` 감사 로그의 `post_id`는 `telemetry.PostIDLogValue`가 같은 resolver 값을 쓰고, invalid identity는 대체 ID 없이 `invalid:<kind>:<reason>` 라벨로 남깁니다. telemetry 버퍼 적재는 `post_id`를 `content_id`로 채우지 않고 빈 값을 오류로 거절합니다. NEW_VIDEO·LIVE_STREAM·MILESTONE은 payload `canonical_post_id`를 보지 않고 `content_id`만 씁니다. 과거의 `canonical_post_id → content_id → video_id/post_id` 폴백(감사 행 `holo-youtube-telemetry-post-id-fallback`)은 삭제했습니다. 삭제 전 운영 DB 읽기 전용 측정: COMMUNITY_POST 23건·NEW_SHORT 36건 모두 canonical_post_id가 있고 문자열 타입이었습니다(NEW_VIDEO 3건은 canonical_post_id가 없지만 content_id 계약이라 영향 없음).
 
 같은 감사 행의 빈 `delivery_path` 대체도 제거했습니다. 기록 주체는 `CommunityShortsDeliveryPath`를 명시하며 버퍼 적재는 빈 경로를 batch 전체의 오류로 반환합니다. 방출 로그는 저장된 경로를 trim해서 쓰되 비어 있는 과거 값을 정상 경로로 꾸미지 않습니다. 삭제 전 guarded 운영 조회에서 telemetry 9행의 빈 `post_id`·빈 `delivery_path`는 각각 0건이었으므로 과거 row 호환 변환은 하지 않습니다. 기존 non-empty 값의 trim은 유지합니다.
 
@@ -92,30 +92,14 @@ Operation membership과 provider request는 최초 `BeginSending` 전에 `youtub
 
 ### Tracking requirement
 
-Community/Shorts의 post-level tracking은 room별 delivery와 수명이 다릅니다. Provider operation은 다음 requirement 중 하나를 가집니다.
+Community/Shorts의 post-level tracking은 room별 delivery와 수명이 다릅니다. 발송 전에 post 단위 상태를 선점하지 않으며, 같은 post의 room delivery는 room별 claim·send fence와 logical group gate로만 직렬화합니다.
 
-```go
-type TrackingRequirement interface {
-    trackingRequirement()
-}
+- 성공 전이(`CompleteSent`)는 같은 트랜잭션에서 `MarkAlarmSentBatch`로 owner logical key의 tracking 행과 기존 `youtube_community_shorts_alarm_states` 행에 발송 시각을 기록합니다. 알람 상태 행이 없으면 tracking 행으로부터 만들고, 이미 SENT면 더 이른 시각만 남깁니다. tracking 행과 알람 상태 행이 모두 없으면 post 단위 표시는 남지 않습니다. 운영에서는 API canonicalwrite가 outbox와 같은 트랜잭션에서 tracking 행을 만듭니다.
+- 정상 경로 트랜잭션은 기록 뒤 post 단위 표시를 다시 확인하지 않습니다. commit 응답 유실 판정이 `Applied`로 끝난 뒤의 read-back에서 post마다 알람 상태나 tracking 중 하나가 SENT인지 확인하고, 둘 다 아니면 `AtomicityBreachError`와 함께 `Indeterminate`(atomicity breach)로 분류합니다. 이미 commit된 뒤이므로 rollback하지 않습니다.
+- Community/Shorts가 아닌 delivery에는 post-level 기록이 없습니다.
+- 알람 상태 upsert, `delivery_status` 계산, 발송 시각 기록은 `authorized_at` 열을 읽거나 쓰지 않습니다. 구 워커 claim이 남긴 미발송 `ENQUEUED` 행은 발송 시각 기록에서 SENT가 되고, 발송되지 않으면 다음 upsert에서 `DETECTED`로 다시 계산됩니다. 남은 `authorized_at` 값과 `ENQUEUED` 어휘는 열 삭제 migration이 정리합니다.
 
-type NoTracking struct{}
-
-type RequireClaimOrAlreadySent struct {
-    Token AlarmClaimToken
-}
-
-type RequireAlreadySent struct {
-    Kind   OutboxKind
-    PostID string
-}
-```
-
-- `RequireClaimOrAlreadySent`: preparation에서 active claim을 획득했습니다. Finalize 시 exact token이 유효하면 tracking을 sent로 전이하고, 이미 sent면 성공으로 수용합니다.
-- `RequireAlreadySent`: preparation 시 post tracking이 이미 sent였습니다. Finalize 시 여전히 sent인지 확인하되 tracking을 변경하지 않습니다.
-- `NoTracking`: Community/Shorts가 아닌 delivery입니다.
-
-여러 room operation이 같은 post token을 공유할 수 있습니다. 첫 성공이 token을 소비한 뒤 후속 성공은 `already sent`로 수용되어야 하며 delivery success를 rollback해서는 안 됩니다.
+여러 room이 같은 post를 발송할 수 있습니다. 첫 성공이 post 발송 시각을 정하고 후속 성공은 그 시각을 유지하며 delivery success를 rollback하지 않습니다. 한 room의 결과 불명은 같은 post의 다른 room 발송을 미루지 않습니다.
 
 ## 상태와 저장 필드
 
@@ -254,7 +238,7 @@ Same-logical ledger `SENT` evidence가 생기면 `PENDING`, `FAILED`, `QUARANTIN
 
 ### I-010. Tracking is idempotent terminal state
 
-Exact claim token이 이미 소비됐더라도 post tracking이 durable sent이면 후속 room delivery success를 수용합니다. Tracking token conflict를 delivery failure로 오판해서는 안 됩니다.
+Post tracking이 이미 durable sent이면 후속 room delivery success를 수용하고 post 발송 시각은 가장 이른 값을 유지합니다. 이미 sent인 post를 delivery failure로 오판해서는 안 됩니다.
 
 ### I-011. Operation atomicity
 
@@ -300,21 +284,6 @@ Claim 결과 행의 `(id, row_version, locked_by)`입니다. `PENDING + locked_a
 ### Send fence
 
 `BeginSending`이 만든 owner 행의 `(id, row_version, locked_by)`입니다. `SENDING + locked_at` row만 나타냅니다. 발송 뒤 정산(`CompleteSent`, 실패 전이, 요청 세대 전진, grouped fallback 고정)은 이 값으로 fence하며 lease 만료를 보지 않습니다. 외부 성공을 DB 정산 실패로 되돌리지 않기 위해서입니다.
-
-### Alarm claim token
-
-```go
-type AlarmClaimToken struct {
-    Kind         OutboxKind
-    PostID       string
-    AuthorizedAt time.Time
-}
-```
-
-- Preparation/known-not-delivered failure는 durable failure commit 뒤 해제를 요청합니다. 같은 post token을 공유하는 배치의 모든 방 처리가 끝나고, 그 token을 사용한 모든 소비자가 확정 실패로 해제를 요청했을 때만 새 claim을 release합니다. 다른 방의 성공·결과 불명·미정산 소비자가 있으면 완료 증명을 보존합니다.
-- Success finalization은 exact token 또는 durable already-sent state를 요구합니다.
-- Outcome unknown과 `Indeterminate`에서는 claim release를 추정하지 않습니다.
-- Claim timeout 뒤 same-room resend는 durable logical group gate가 차단합니다.
 
 ## Claim protocol
 
@@ -439,18 +408,13 @@ LogicalInFlight
 LogicalOwnerPendingElsewhere
 LogicalFailed
 LogicalInvariantBreach
-ClaimDeferred
 PreparationRetryableFailure
 PreparationPermanentFailure
 ```
 
 ### `ReadyToSend`
 
-Owner의 payload, rendering, route, stable client request ID, tracking requirement, immutable request가 확정됐습니다.
-
-### `ClaimDeferred`
-
-Post-level claim을 다른 execution이 보유합니다. Attempt 없이 defer합니다.
+Owner의 payload, rendering, route, stable client request ID, immutable request가 확정됐습니다.
 
 ### Preparation failure
 
@@ -572,13 +536,11 @@ Success transaction:
 1. Operation owner 전체 exact `SENDING + SendFence` 확인
 2. Owner를 `SENT`, `sent_at = clock`(전이 문장이 돌려준 DB 시계), lock clear, version +1
 3. Same-logical follower `PENDING/FAILED/QUARANTINED`를 `SENT`로 reconcile, attempt 유지, version +1
-4. Tracking requirement를 canonical post별로 deduplicate
-5. `RequireClaimOrAlreadySent`는 exact token으로 mark-sent를 시도하고, 이미 sent면 수용
-6. `RequireAlreadySent`는 durable sent를 확인
-7. Owner logical key마다 ledger `RecordSent`(관측 시각은 같은 전이 시각)
-8. Latency classification과 tracking mutation commit
+4. Community/Shorts owner logical key마다 tracking과 post 단위 알람 상태에 발송 시각을 기록(이미 SENT면 더 이른 시각 유지)
+5. Owner logical key마다 ledger `RecordSent`(관측 시각은 같은 전이 시각)
+6. Latency classification과 tracking mutation commit
 
-Tracking이 neither exact-token nor already-sent이면 rollback합니다. Provider는 다시 호출하지 않습니다.
+정상 경로 트랜잭션은 기록 뒤 post 단위 SENT 표시를 다시 확인하지 않습니다. commit 응답 유실 판정의 read-back에서 post 단위 SENT 표시(알람 상태 또는 tracking)가 없으면 atomicity breach(`Indeterminate`)로 분류합니다. Provider는 다시 호출하지 않습니다.
 
 Transaction은 touched outbox ID를 반환합니다. Commit이 확인된 뒤 aggregate projector를 즉시 실행하고 background projector가 current child state에서 재수렴합니다. Aggregate 실패는 committed delivery/tracking/ledger를 rollback하지 않습니다.
 
@@ -876,11 +838,13 @@ TestLedgerQuarantineEvidenceBlocksProviderCall
 ### Tracking
 
 ```text
-TestFirstRoomSuccessConsumesClaimToken
-TestLaterRoomSuccessAcceptsAlreadySentTracking
-TestAlreadySentPreparationFinalizesWithoutClaimMutation
-TestTrackingNeitherClaimNorSentRollsBackDeliverySuccess
-TestTrackingRequirementDeduplicatesSamePostInGroupedBatch
+TestCompleteSentMarksPostSentWithoutClaim
+TestOutcomeUnknownInOneRoomDoesNotDeferOtherRoomOfSamePost
+TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
+TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce
+TestRepositoryDuplicateAlarmMarksFinalizeOnePostLevelSentState
+TestRepositoryMarkAlarmSentBatchRepairsMissingAlarmStateForAlreadySentTracking
+TestMarkAlarmSentBatchConvergesLegacyEnqueuedState
 ```
 
 ### CAS/operation
