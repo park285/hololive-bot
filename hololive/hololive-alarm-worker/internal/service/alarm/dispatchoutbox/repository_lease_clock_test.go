@@ -12,6 +12,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -47,7 +48,7 @@ func TestRouteFailuresChecksExpiryAfterAllRowLocks(t *testing.T) {
 
 				updates := make([]FailureUpdate, len(ids))
 				for i, id := range ids {
-					updates[i] = FailureUpdate{ID: id, AttemptCount: 1, TargetStatus: target, NextAttemptAt: time.Now().UTC().Add(time.Minute)}
+					updates[i] = FailureUpdate{ID: id, AttemptCount: 1, TargetStatus: target, RetryAfter: time.Minute}
 				}
 
 				done := make(chan error, 1)
@@ -67,11 +68,9 @@ func TestRouteFailuresChecksExpiryAfterAllRowLocks(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, blocker.Commit(ctx))
 
-				var partial *PartialTransitionError
-
-				require.ErrorAs(t, <-done, &partial)
-				require.Equal(t, int64(size-1), partial.Updated)
-				require.Equal(t, []int64{ids[0]}, partial.UnappliedIDs)
+				miss := requireFenceMiss(t, <-done, sendfence.ReasonLeaseExpired)
+				require.Equal(t, size-1, miss.Applied)
+				require.Equal(t, []int64{ids[0]}, miss.UnappliedDeliveryIDs())
 				assertFailureClockRows(ctx, t, pool, ids, target)
 			})
 		}

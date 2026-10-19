@@ -3,6 +3,7 @@ package alarmdispatch
 import (
 	"context"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -33,9 +34,10 @@ func (c *alarmRequestTestStore) PinSendRequest(_ context.Context, envelopes []do
 	return &request, nil
 }
 
-func (c *alarmRequestTestStore) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, string) (bool, error) {
+// ReissueSendRequest는 재발급 세대가 남지 않은 저장소처럼 동작해 실패 경로가 격리로 끝나게 한다.
+func (c *alarmRequestTestStore) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
 	c.reissueCalls++
-	return false, nil
+	return sendfence.ErrGenerationExhausted
 }
 
 func (s *alarmDispatchRunnerTestSender) PrepareMessageRequest(_ context.Context, _, message string) (string, string, error) {

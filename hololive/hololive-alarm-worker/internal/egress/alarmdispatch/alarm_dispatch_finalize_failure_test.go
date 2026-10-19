@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -19,6 +19,7 @@ const (
 	finalizeOpRequeue              = "Requeue"
 	finalizeOpRequeuePreSend       = "RequeuePreSend"
 	finalizeOpQuarantine           = "Quarantine"
+	finalizeOpReleaseLeased        = "ReleaseLeased"
 )
 
 type finalizeFailureCall struct {
@@ -55,6 +56,11 @@ func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []dom
 func (c *finalizeFailureRecordingConsumer) ReleaseClaimKeys(_ context.Context, claimKeys []string) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpReleaseClaimKeys, claimKeys: claimKeys})
 	return c.releaseClaimErr
+}
+
+func (c *finalizeFailureRecordingConsumer) ReleaseLeased(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpReleaseLeased, envelopes: envelopes})
+	return nil
 }
 
 func (c *finalizeFailureRecordingConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
@@ -217,11 +223,11 @@ func TestPersistSendingRetryFallbackRequeueFailureWrapPinned(t *testing.T) {
 }
 
 func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *testing.T) {
-	partialErr := &dispatchoutbox.PartialTransitionError{
-		Action:       "route dispatch delivery sending failures",
-		Updated:      1,
-		Expected:     2,
-		UnappliedIDs: []int64{finalizeFailureRetryDeliveryID},
+	partialErr := &sendfence.MissError{
+		Action:   "route_sending_failures",
+		Expected: 2,
+		Applied:  1,
+		Rows:     []sendfence.RowMiss{{ID: finalizeFailureRetryDeliveryID, Reason: sendfence.ReasonOwnerChanged, Status: "retry"}},
 	}
 	consumer := &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{partialErr}}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}

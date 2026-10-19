@@ -164,7 +164,6 @@ type AlarmQueueEnvelope struct {
 type AlarmQueueRetryMetadata struct {
     Attempt       int    `json:"attempt,omitempty"`
     RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
-    NextVisibleAt string `json:"next_visible_at,omitempty"`
     LastError     string `json:"last_error,omitempty"`
     LastErrorCode string `json:"last_error_code,omitempty"`
 }
@@ -348,7 +347,7 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - HTTP client timeout: 10 seconds for alarm client.
 - HTTP/H3 options are passed explicitly from the consuming plane's loaded `BotPlaneConfig.InternalH3` or `AdminPlaneConfig.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
 - Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
-- Retry: a failed delivery returns to `retry` with `next_attempt_at`; the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
+- Retry: a failed delivery returns to `retry` with `next_attempt_at` set from the transition's single database clock plus `retry_after_ms` (members of one send unit share it); the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
 - `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, or the recovery codes `lease_expired`, `stale_sending`, and `lease_released`. Existing consumers may ignore this optional field.
 - DLQ and quarantine are delivery states (`dlq`, `quarantined`) in `alarm_dispatch_deliveries`; the event payload stays in `alarm_dispatch_events`. Replay uses the audited requeue in [admin dispatch operations](../runbooks/admin-dispatch-operations.md).
 

@@ -2,6 +2,7 @@ package alarmdispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -135,11 +137,14 @@ func runAlarmLeaseClockScenario(t *testing.T, phase string) {
 
 	expireAlarmLeaseDuringUnitWait(ctx, t, pool, &envelopes[0], consumer, done)
 	require.NoError(t, <-done)
-	require.ErrorIs(t, consumer.fenceErr, dispatchoutbox.ErrSendRequestLeaseExpired)
+
+	miss, ok := errors.AsType[*sendfence.MissError](consumer.fenceErr)
+	require.True(t, ok, "want lease fence miss, got %v", consumer.fenceErr)
+	require.True(t, miss.Has(sendfence.ReasonLeaseExpired), "want lease_expired, got %v", miss)
 	require.Empty(t, sender.messages)
 	require.Empty(t, sender.routes)
 	require.Empty(t, sender.clientRequestIDs)
-	assertAlarmLeaseClockRouting(ctx, t, pool, phase, &envelopes[0])
+	assertAlarmLeaseClockRouting(ctx, t, pool, &envelopes[0])
 }
 
 func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpool.Pool, phase string) (*alarmLeaseClockConsumer, []domain.AlarmQueueEnvelope) {
@@ -203,7 +208,8 @@ func expireAlarmLeaseDuringUnitWait(ctx context.Context, t *testing.T, pool *pgx
 	require.NoError(t, blocker.Commit(ctx))
 }
 
-func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpool.Pool, phase string, envelope *domain.AlarmQueueEnvelope) {
+// lease가 만료된 미발송 claim은 Load·Pin·Begin 어느 단계에서 막혀도 행을 바꾸지 않고 만료 lease 회수에 맡긴다.
+func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpool.Pool, envelope *domain.AlarmQueueEnvelope) {
 	t.Helper()
 
 	var (
@@ -217,13 +223,8 @@ func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpo
 		FROM alarm_dispatch_deliveries d JOIN alarm_dispatch_send_units u ON u.id=d.send_unit_id WHERE d.id=$1`, envelope.DispatchOutboxID).
 		Scan(&status, &attempts, &notSending, &unowned, &requestID, &generation))
 
-	if phase == "begin" {
-		require.Equal(t, "retry", status, "Begin expiry keeps same-attempt RequeuePreSend")
-		require.True(t, unowned)
-	} else {
-		require.Equal(t, "leased", status, "expired unsent Load/Pin claims remain recoverable")
-		require.False(t, unowned)
-	}
+	require.Equal(t, "leased", status, "expired unsent claims remain recoverable")
+	require.False(t, unowned)
 
 	require.Equal(t, 2, attempts)
 	require.True(t, notSending)

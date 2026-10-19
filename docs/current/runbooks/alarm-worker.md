@@ -90,6 +90,7 @@ Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-buil
 - `alarm_dispatch_pg_oldest_unreviewed_quarantined_age_seconds`: 검토가 필요한 격리 중 가장 오래된 격리 시점부터의 경과.
 - `alarm_dispatch_pg_backlog_snapshot_success`: 마지막 발송·격리 집계 조회의 성공 여부. receipt 조회 실패도 실패이며, 0이면 건수·경과의 이전 값을 현재 상태로 해석하지 않는다.
 - `alarm_dispatch_pg_backlog_snapshot_last_success_timestamp_seconds`: 마지막으로 성공한 발송·격리 집계 조회의 Unix 시각. 실패하면 갱신하지 않으므로, 경과가 관측 주기보다 크게 벌어지면 건수·경과를 현재 상태로 해석하지 않는다.
+- `alarm_dispatch_pg_transition_partial_total{action,reason}`: alarm dispatch 소유자 전이가 일부 또는 전체 대상에서 fence 미스로 끝난 횟수. `action`은 `begin_send_request`·`mark_sent`·`route_failures`·`route_sending_failures`·`requeue_pre_send`·`release_leased`·`move_to_dlq`·`quarantine`·`load_send_request`·`pin_send_request`·`reissue_send_request`, `reason`은 `sendfence` 원인이며 한 문장에서 원인마다 한 번 센다. `mark_sent`의 증가는 외부 발송 뒤 행이 이미 다른 상태라는 뜻이므로 격리 검토 대상이다.
 - `hololive_db_pool_*{pool="alarm_worker"}`: DB pool의 획득 횟수·대기·빈 pool 대기와 상태별 연결 수, 최대 연결 수. 이름과 해석은 [hololive-api runbook](hololive-api.md#db-poolyoutube-plane-db-슬롯-지표)과 같다.
 - `hololive_http_client_requests_total{client="holodex"}`, `hololive_http_client_request_duration_seconds{client="holodex"}`: Holodex HTTP 요청의 상태 코드별 수(응답 없음은 `code="error"`)와 응답 헤더까지의 지연. 해석은 [hololive-api runbook](hololive-api.md#외부-http-호출-지표)과 같다.
 

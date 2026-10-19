@@ -4,99 +4,64 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"fmt"
-	"log/slog"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
-// wholeSeconds는 SQL interval 인자로 넘길 초 단위 값을 만든다. 1초 미만은 설정 오류라 기본값으로 바꾸지 않고
-// 오류로 돌려준다. 전이마다 같은 lease가 되도록 claim·발송 진입·quarantine이 이 변환을 함께 쓴다.
-func wholeSeconds(d time.Duration) (int, error) {
-	if d < time.Second {
-		return 0, fmt.Errorf("duration must be at least 1s: %s", d)
+// leaseMilliseconds는 SQL에 넘길 밀리초 정수를 만든다. 1ms 미만은 설정 오류라 기본값으로 바꾸지 않고 오류로
+// 돌려준다. 모든 claim·발송 진입·stale 격리가 같은 단위를 쓰도록 이 변환을 함께 쓴다.
+func leaseMilliseconds(d time.Duration) (int64, error) {
+	if d < time.Millisecond {
+		return 0, fmt.Errorf("duration must be at least 1ms: %s", d)
 	}
 
-	return int(d.Seconds()), nil
+	return d.Milliseconds(), nil
 }
 
-func (r *PgxRepository) MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error {
-	if len(ids) == 0 {
+// MarkSent는 외부 발송 성공을 정산한다. 그룹 발송이 lease를 넘겨도 성공 발송은 sent로 확정해야 하므로(lease 조건이
+// 있으면 격리 뒤 재발송 중복) lease 만료는 보지 않는다. 미스는 외부 성공을 되돌리지 않고 *sendfence.MissError로
+// 보고하며, 행은 stale 격리·회수 경로가 소유한다.
+func (r *PgxRepository) MarkSent(ctx context.Context, claims []DeliveryClaim, workerID string) error {
+	return r.applyClaims(ctx, fenceActionMarkSent, sqlMarkSent, claims, workerID)
+}
+
+// ReleaseLeased는 발송 전 claim을 같은 attempt의 retry로 반환한다.
+func (r *PgxRepository) ReleaseLeased(ctx context.Context, claims []DeliveryClaim, workerID string) error {
+	return r.applyClaims(ctx, fenceActionReleaseLeased, sqlReleaseLeased, claims, workerID)
+}
+
+func (r *PgxRepository) applyClaims(ctx context.Context, action, query string, claims []DeliveryClaim, workerID string) error {
+	if len(claims) == 0 {
 		return nil
 	}
 
-	seconds, err := wholeSeconds(extendLease)
+	raw, err := jsonv2.Marshal(claims)
 	if err != nil {
-		return fmt.Errorf("mark dispatch deliveries sending: lease: %w", err)
+		return fmt.Errorf("%s: marshal claims: %w", action, err)
 	}
 
-	tag, err := r.pool.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, seconds, workerID, nil)
-	if err != nil {
-		return fmt.Errorf("mark dispatch deliveries sending: %w", err)
-	}
-
-	if err := expectRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries sending"); err != nil {
-		return fmt.Errorf("expect rows affected: %w", err)
-	}
-
-	return nil
+	return r.applyFenced(ctx, r.pool, action, query, fencedTargetIDs(claims), jsonbRecordsetParam(raw), workerID)
 }
 
-// MarkSent의 fence는 status='sending' AND locked_by만 본다. 그룹 발송이 lease를
-// 초과해도 성공 발송은 sent로 확정돼야 하고(P0-2: lease 조건이 있으면 quarantine →
-// replay 중복 발송), QuarantineStaleSending이 'sending' 회수 시 locked_by를 NULL로
-// 지우므로 locked_by 일치만으로 소유권이 보장된다(RouteSendingFailures와 동형).
-func (r *PgxRepository) MarkSent(ctx context.Context, ids []int64, workerID string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-
-	tag, err := r.pool.Exec(ctx, mustSQL("repository_transitions_0040_02.sql"), ids, workerID)
-	if err != nil {
-		return fmt.Errorf("mark dispatch deliveries sent: %w", err)
-	}
-
-	if err := validatePostSendRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries sent", r.logger); err != nil {
-		return fmt.Errorf("validate post send rows affected: %w", err)
-	}
-
-	return nil
-}
-
+// RouteFailures는 발송 전 실패를 retry·dlq로 정산한다. 잠금 뒤 clock 기준으로 lease가 유효한 소유 claim만 바꾼다.
 func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	if err := r.routeFailureUpdates(ctx, updates, workerID, sqlRouteFailures, "route dispatch delivery failures"); err != nil {
-		return fmt.Errorf("route failure updates: %w", err)
-	}
-
-	return nil
+	return r.routeFailureUpdates(ctx, updates, workerID, sqlRouteFailures, fenceActionRouteFailures)
 }
 
-// RouteSendingFailures는 post-send failure에서 row가 이미 'sending' 상태일 때 쓴다.
-// RouteFailures의 AND status='leased' 조건과 달리 AND status IN ('leased','sending')을
-// 사용하고, lock_expires_at 조건을 제거한다. 소유권은 locked_by=$2 + status IN('leased','sending')이
-// 보장하므로 만료된 lease에서도 소유 worker의 보상 전이는 안전하다.
-// RecoverExpiredLeased는 'leased'만 접촉하고 'sending'은 QuarantineStaleSending이
-// 담당하므로 다른 worker의 선점 경쟁이 없다. 종료(terminal) 상태는 status 조건으로 보호된다.
+// RouteSendingFailures는 외부 호출 뒤 실패를 retry·dlq로 정산한다. 상태는 leased·sending을 받고 lease 만료는 보지 않는다.
+// 만료 회수는 leased만, stale 격리는 sending의 locked_by를 비우므로 소유자·attempt 일치가 소유권 증명이다.
 func (r *PgxRepository) RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	if err := r.routeFailureUpdates(ctx, updates, workerID, sqlRouteSendingFailures, "route dispatch delivery sending failures"); err != nil {
-		return fmt.Errorf("route failure updates: %w", err)
-	}
-
-	return nil
+	return r.routeFailureUpdates(ctx, updates, workerID, sqlRouteSendingFailures, fenceActionRouteSendingFailures)
 }
 
+// RequeuePreSend는 외부 호출 전에 멈춘 claim을 같은 attempt의 retry로 되돌린다.
 func (r *PgxRepository) RequeuePreSend(ctx context.Context, updates []FailureUpdate, workerID string) error {
 	for i := range updates {
 		if updates[i].TargetStatus != StatusRetry {
-			return fmt.Errorf("requeue pre-send dispatch deliveries: unsupported target status %q for delivery %d", updates[i].TargetStatus, updates[i].ID)
+			return fmt.Errorf("%s: unsupported target status %q for delivery %d", fenceActionRequeuePreSend, updates[i].TargetStatus, updates[i].ID)
 		}
 	}
 
-	if err := r.routeFailureUpdates(ctx, updates, workerID, sqlRequeuePreSend, "requeue pre-send dispatch deliveries"); err != nil {
-		return fmt.Errorf("route failure updates: %w", err)
-	}
-
-	return nil
+	return r.routeFailureUpdates(ctx, updates, workerID, sqlRequeuePreSend, fenceActionRequeuePreSend)
 }
 
 func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, query, action string) error {
@@ -105,19 +70,15 @@ func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []Failu
 	}
 
 	if err := validateFailureUpdates(updates, action); err != nil {
-		return fmt.Errorf("validate failure updates: %w", err)
+		return err
 	}
 
-	applied, err := r.applyFailureUpdates(ctx, updates, workerID, query, action)
+	raw, err := jsonv2.Marshal(prepareFailureUpdates(updates))
 	if err != nil {
-		return fmt.Errorf("apply failure updates: %w", err)
+		return fmt.Errorf("%s: marshal batch: %w", action, err)
 	}
 
-	if len(applied) == len(updates) {
-		return nil
-	}
-
-	return r.partialFailureRoutingError(updates, applied, action)
+	return r.applyFenced(ctx, r.pool, action, query, fencedTargetIDs(updates), jsonbRecordsetParam(raw), workerID)
 }
 
 func validateFailureUpdates(updates []FailureUpdate, action string) error {
@@ -131,6 +92,10 @@ func validateFailureUpdates(updates []FailureUpdate, action string) error {
 		if updates[i].TargetStatus != StatusRetry && updates[i].TargetStatus != StatusDLQ {
 			return fmt.Errorf("%s: unsupported target status %q for delivery %d", action, updates[i].TargetStatus, updates[i].ID)
 		}
+
+		if updates[i].RetryAfter < 0 {
+			return fmt.Errorf("%s: negative retry delay %s for delivery %d", action, updates[i].RetryAfter, updates[i].ID)
+		}
 	}
 
 	return nil
@@ -139,11 +104,12 @@ func validateFailureUpdates(updates []FailureUpdate, action string) error {
 type failureRouteInput struct {
 	*FailureUpdate
 
-	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
-	MarkDLQ       bool       `json:"mark_dlq,omitzero"`
+	RetryAfterMS *int64 `json:"retry_after_ms,omitempty"`
+	MarkDLQ      bool   `json:"mark_dlq,omitzero"`
 }
 
-// 상태에 따른 필드 갱신 정책은 코드에서 정한다. SQL의 분기는 DB 시각을 적용하는 저장 연산뿐이다.
+// 상태에 따른 필드 갱신 정책은 코드에서 정한다. SQL은 잠금 뒤 clock에 retry_after_ms를 더하는 저장 연산만 한다.
+// 입력에 retry_after_ms가 없는 dlq 행은 next_attempt_at을 그대로 둔다.
 func prepareFailureUpdates(updates []FailureUpdate) []failureRouteInput {
 	inputs := make([]failureRouteInput, len(updates))
 	for i := range updates {
@@ -152,119 +118,32 @@ func prepareFailureUpdates(updates []FailureUpdate) []failureRouteInput {
 		inputs[i] = failureRouteInput{FailureUpdate: update, MarkDLQ: update.TargetStatus == StatusDLQ}
 
 		if update.TargetStatus == StatusRetry {
-			inputs[i].NextAttemptAt = &update.NextAttemptAt
+			inputs[i].RetryAfterMS = new(update.RetryAfter.Milliseconds())
 		}
 	}
 
 	return inputs
 }
 
-func (r *PgxRepository) applyFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, query, action string) ([]int64, error) {
-	raw, err := jsonv2.Marshal(prepareFailureUpdates(updates))
-	if err != nil {
-		return nil, fmt.Errorf("%s: marshal batch: %w", action, err)
-	}
-
-	rows, err := r.pool.Query(ctx, query, jsonbRecordsetParam(raw), workerID)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", action, err)
-	}
-
-	applied, err := pgx.CollectRows(rows, pgx.RowTo[int64])
-	if err != nil {
-		return nil, fmt.Errorf("%s: collect applied ids: %w", action, err)
-	}
-
-	return applied, nil
-}
-
-func (r *PgxRepository) partialFailureRoutingError(updates []FailureUpdate, applied []int64, action string) error {
-	unapplied := unappliedFailureIDs(updates, applied)
-
-	observePGTransitionPartial()
-
-	if r.logger != nil {
-		r.logger.Warn("dispatch delivery partial failure routing",
-			slog.String("action", action),
-			slog.Int("rows_applied", len(applied)),
-			slog.Int("rows_expected", len(updates)),
-			slog.Any("unapplied_ids", unapplied),
-		)
-	}
-
-	return &PartialTransitionError{
-		Action:       action,
-		Updated:      int64(len(applied)),
-		Expected:     int64(len(updates)),
-		UnappliedIDs: unapplied,
-	}
-}
-
-func unappliedFailureIDs(updates []FailureUpdate, applied []int64) []int64 {
-	appliedSet := make(map[int64]struct{}, len(applied))
-	for _, id := range applied {
-		appliedSet[id] = struct{}{}
-	}
-
-	unapplied := make([]int64, 0, len(updates)-len(applied))
-	for i := range updates {
-		if _, ok := appliedSet[updates[i].ID]; !ok {
-			unapplied = append(unapplied, updates[i].ID)
-		}
-	}
-
-	return unapplied
-}
-
+// MoveToDLQ는 소유한 leased·sending claim을 같은 attempt에서 dlq로 끝낸다.
 func (r *PgxRepository) MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error {
-	if err := r.terminalUpdates(ctx, updates, StatusDLQ, workerID); err != nil {
-		return fmt.Errorf("terminal updates: %w", err)
-	}
-
-	return nil
+	return r.terminalUpdates(ctx, fenceActionMoveToDLQ, sqlMoveToDLQ, updates, workerID)
 }
 
+// Quarantine은 소유한 leased·sending claim을 같은 attempt에서 quarantined로 끝낸다.
 func (r *PgxRepository) Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error {
-	if err := r.terminalUpdates(ctx, updates, StatusQuarantined, workerID); err != nil {
-		return fmt.Errorf("terminal updates: %w", err)
-	}
-
-	return nil
+	return r.terminalUpdates(ctx, fenceActionQuarantine, sqlQuarantine, updates, workerID)
 }
 
-func (r *PgxRepository) ReleaseLeased(ctx context.Context, ids []int64, workerID string) error {
-	if len(ids) == 0 {
+func (r *PgxRepository) terminalUpdates(ctx context.Context, action, query string, updates []TerminalUpdate, workerID string) error {
+	if len(updates) == 0 {
 		return nil
 	}
 
-	tag, err := r.pool.Exec(ctx, mustSQL("repository_transitions_0152_05.sql"), ids, workerID)
+	raw, err := jsonv2.Marshal(updates)
 	if err != nil {
-		return fmt.Errorf("release dispatch deliveries: %w", err)
+		return fmt.Errorf("%s: marshal batch: %w", action, err)
 	}
 
-	if err := expectRowsAffected(tag.RowsAffected(), len(ids), "release dispatch deliveries"); err != nil {
-		return fmt.Errorf("expect rows affected: %w", err)
-	}
-
-	return nil
-}
-
-// validatePostSendRowsAffected는 외부 발송 뒤 ownership 변경을 관측 가능한 오류로
-// 반환한다. 호출자는 이미 완료된 외부 발송을 retry로 되돌리지 않고 오류만 보고해야 한다.
-func validatePostSendRowsAffected(got int64, want int, action string, logger *slog.Logger) error {
-	if got == int64(want) {
-		return nil
-	}
-
-	observePGTransitionPartial()
-
-	if logger != nil {
-		logger.Warn("dispatch delivery partial update",
-			slog.String("action", action),
-			slog.Int64("rows_affected", got),
-			slog.Int("rows_expected", want),
-		)
-	}
-
-	return &PartialTransitionError{Action: action, Updated: got, Expected: int64(want)}
+	return r.applyFenced(ctx, r.pool, action, query, fencedTargetIDs(updates), jsonbRecordsetParam(raw), workerID)
 }

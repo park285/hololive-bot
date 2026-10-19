@@ -12,6 +12,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -42,7 +43,8 @@ func runRequestClockScenario(t *testing.T, operation, lock string, expired bool)
 
 	pool := dbtest.NewPool(t)
 	repo := NewPgxRepositoryFromPool(pool, nil)
-	unit, ids := seedRequestClockUnit(t, repo)
+	unit, ids, requestID := seedRequestClockUnit(t, repo)
+	claims := attemptClaims(0, ids...)
 	candidate := SendRequest{Body: "frozen body", Route: SendRouteMarkdown}
 
 	var pinned *SendRequest
@@ -50,7 +52,7 @@ func runRequestClockScenario(t *testing.T, operation, lock string, expired bool)
 	if operation != requestClockPin && operation != requestClockLoadUnpinned {
 		var err error
 
-		pinned, err = repo.PinSendRequest(t.Context(), unit, ids, requestClockOwner, candidate)
+		pinned, err = repo.PinSendRequest(t.Context(), unit, claims, requestClockOwner, requestID, candidate)
 		require.NoError(t, err)
 	}
 
@@ -66,11 +68,11 @@ func runRequestClockScenario(t *testing.T, operation, lock string, expired bool)
 
 		switch operation {
 		case requestClockBegin:
-			return repo.BeginSendRequest(callCtx, unit, ids, requestClockOwner, pinned.ClientRequestID, 7900*time.Millisecond)
+			return repo.BeginSendRequest(callCtx, unit, claims, requestClockOwner, pinned.ClientRequestID, 7900*time.Millisecond)
 		case requestClockLoad, requestClockLoadUnpinned:
-			loaded, err = repo.LoadSendRequest(callCtx, unit, ids, requestClockOwner)
+			loaded, err = repo.LoadSendRequest(callCtx, unit, claims, requestClockOwner, requestID)
 		case requestClockPin, requestClockPinExisting:
-			loaded, err = repo.PinSendRequest(callCtx, unit, ids, requestClockOwner, candidate)
+			loaded, err = repo.PinSendRequest(callCtx, unit, claims, requestClockOwner, requestID, candidate)
 		default:
 			return fmt.Errorf("unsupported request clock operation %q", operation)
 		}
@@ -111,7 +113,7 @@ func assertRequestClockPersistedState(ctx context.Context, t *testing.T, pool *p
 	t.Helper()
 
 	if operation == requestClockBegin && !expired {
-		assertRequestClockSending(ctx, t, pool, ids, releasedAt, 7*time.Second)
+		assertRequestClockSending(ctx, t, pool, ids, releasedAt, 7900*time.Millisecond)
 	} else {
 		assertRequestClockLeased(ctx, t, pool, ids)
 
@@ -133,7 +135,8 @@ func assertRequestClockOutcome(t *testing.T, operation string, expired bool, cal
 	t.Helper()
 
 	if expired {
-		require.ErrorIs(t, callErr, ErrSendRequestLeaseExpired)
+		miss := requireFenceMiss(t, callErr, sendfence.ReasonLeaseExpired)
+		require.Zero(t, miss.Applied)
 		require.Nil(t, loaded)
 
 		return
@@ -155,7 +158,8 @@ func assertRequestClockOutcome(t *testing.T, operation string, expired bool, cal
 	}
 }
 
-func seedRequestClockUnit(t *testing.T, repo *PgxRepository) (int64, []int64) {
+// seedRequestClockUnit은 두 멤버 send unit을 claim하고 unit ID, 정렬한 멤버 ID, claim에서 본 요청 ID를 돌려준다.
+func seedRequestClockUnit(t *testing.T, repo *PgxRepository) (int64, []int64, string) {
 	t.Helper()
 
 	first := receiptEnvelope("clock-request-room", "first")
@@ -174,7 +178,7 @@ func seedRequestClockUnit(t *testing.T, repo *PgxRepository) (int64, []int64) {
 	ids := []int64{claimed[0].ID, claimed[1].ID}
 	slices.Sort(ids)
 
-	return claimed[0].SendUnitID, ids
+	return claimed[0].SendUnitID, ids, claimed[0].ClientRequestID
 }
 
 // 실제 PostgreSQL 대기를 확인한 뒤 잠금을 풀어 transaction/statement 시작 시각과 구별한다.
@@ -235,7 +239,7 @@ func assertRequestClockLeased(ctx context.Context, t *testing.T, pool *pgxpool.P
 
 	var count int
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM alarm_dispatch_deliveries
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(id) FROM alarm_dispatch_deliveries
 		WHERE id=ANY($1) AND status='leased' AND sending_started_at IS NULL
 		AND locked_by=$2 AND attempt_count=0`, ids, requestClockOwner).Scan(&count))
 	require.Equal(t, len(ids), count)
@@ -268,93 +272,47 @@ func assertRequestClockSending(ctx context.Context, t *testing.T, pool *pgxpool.
 	}
 }
 
-func TestMarkSendingPostLockClockPreservesPartialRows(t *testing.T) {
-	for _, expired := range []bool{false, true} {
-		t.Run(fmt.Sprintf("expired=%t", expired), func(t *testing.T) {
-			pool := dbtest.NewPool(t)
-			repo := NewPgxRepositoryFromPool(pool, nil)
-			unit, ids := seedRequestClockUnit(t, repo)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-
-			defer cancel()
-
-			var expires time.Time
-
-			if expired {
-				require.NoError(t, pool.QueryRow(ctx, `UPDATE alarm_dispatch_deliveries
-					SET lock_expires_at=clock_timestamp()+interval '1 second' WHERE id=$1 RETURNING lock_expires_at`, ids[0]).Scan(&expires))
-			}
-
-			releasedAt, err := runRequestClockBlocked(ctx, t, pool, "last-member", unit, ids[1], expires, func(callCtx context.Context) error {
-				return repo.MarkSending(callCtx, ids, requestClockOwner, 7900*time.Millisecond)
-			})
-
-			if expired {
-				require.Error(t, err)
-				assertRequestClockLeased(ctx, t, pool, ids[:1])
-				assertRequestClockSending(ctx, t, pool, ids[1:], releasedAt, 7*time.Second)
-			} else {
-				require.NoError(t, err)
-				assertRequestClockSending(ctx, t, pool, ids, releasedAt, 7*time.Second)
-			}
-		})
-	}
-}
-
-func TestSendingTransitionExpiryBoundaryUsesSuppliedClock(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
-	_, ids := seedRequestClockUnit(t, repo)
-	ctx := t.Context()
-
-	var checkedAt time.Time
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&checkedAt))
-
-	_, err := pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET lock_expires_at=$2::timestamptz
-		+CASE WHEN id=$3 THEN interval '1 microsecond' ELSE interval '0' END WHERE id=ANY($1)`, ids, checkedAt, ids[1])
-	require.NoError(t, err)
-
-	tag, err := pool.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, 9, requestClockOwner, checkedAt)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), tag.RowsAffected())
-	assertRequestClockLeased(ctx, t, pool, ids[:1])
-	assertRequestClockSending(ctx, t, pool, ids[1:], checkedAt, 9*time.Second)
-
-	var started time.Time
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT sending_started_at FROM alarm_dispatch_deliveries WHERE id=$1`, ids[1]).Scan(&started))
-	require.True(t, checkedAt.Equal(started), "prepared fence clock must not be sampled again")
-}
-
+// BeginSendRequest는 한 문장에서 단위 전원의 fence를 확인하므로, 어느 조건이 어긋나도 아무 멤버도 바꾸지 않고
+// 대상마다 원인을 돌려준다.
 func TestBeginSendRequestRejectsChangedFencesAtomically(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewPgxRepositoryFromPool(pool, nil)
-	unit, ids := seedRequestClockUnit(t, repo)
-	request, err := repo.PinSendRequest(t.Context(), unit, ids, requestClockOwner, SendRequest{Body: "body", Route: SendRouteText})
+	unit, ids, requestID := seedRequestClockUnit(t, repo)
+	claims := attemptClaims(0, ids...)
+	request, err := repo.PinSendRequest(t.Context(), unit, claims, requestClockOwner, requestID, SendRequest{Body: "body", Route: SendRouteText})
 	require.NoError(t, err)
 
 	for _, tc := range []struct {
 		name      string
-		ids       []int64
+		claims    []DeliveryClaim
 		worker    string
 		requestID string
+		reason    sendfence.Reason
 	}{
-		{name: "owner", ids: ids, worker: "foreign", requestID: request.ClientRequestID},
-		{name: "partial-membership", ids: ids[:1], worker: requestClockOwner, requestID: request.ClientRequestID},
-		{name: "duplicate-membership", ids: []int64{ids[0], ids[0]}, worker: requestClockOwner, requestID: request.ClientRequestID},
-		{name: "empty-membership", worker: requestClockOwner, requestID: request.ClientRequestID},
-		{name: "request", ids: ids, worker: requestClockOwner, requestID: request.ClientRequestID + ":wrong"},
+		{name: "owner", claims: claims, worker: "foreign", requestID: request.ClientRequestID, reason: sendfence.ReasonOwnerChanged},
+		{name: "stale-attempt", claims: attemptClaims(1, ids...), worker: requestClockOwner, requestID: request.ClientRequestID, reason: sendfence.ReasonVersionChanged},
+		{name: "partial-membership", claims: claims[:1], worker: requestClockOwner, requestID: request.ClientRequestID, reason: sendfence.ReasonMembershipChanged},
+		{name: "request", claims: claims, worker: requestClockOwner, requestID: request.ClientRequestID + ":wrong", reason: sendfence.ReasonRequestChanged},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.ErrorIs(t, repo.BeginSendRequest(t.Context(), unit, tc.ids, tc.worker, tc.requestID, time.Minute), ErrSendRequestFence)
+			miss := requireFenceMiss(t, repo.BeginSendRequest(t.Context(), unit, tc.claims, tc.worker, tc.requestID, time.Minute), tc.reason)
+			require.Zero(t, miss.Applied)
 			assertRequestClockLeased(t.Context(), t, pool, ids)
 		})
 	}
 
+	require.Error(t, repo.BeginSendRequest(t.Context(), unit, nil, requestClockOwner, request.ClientRequestID, time.Minute))
+	assertRequestClockLeased(t.Context(), t, pool, ids)
+
+	// 멤버 하나가 다른 소유자에게 넘어가면 그 멤버는 owner_changed, 나머지는 함께 막힌 peer_missed다.
 	_, err = pool.Exec(t.Context(), `UPDATE alarm_dispatch_deliveries SET locked_by='foreign' WHERE id=$1`, ids[1])
 	require.NoError(t, err)
-	require.ErrorIs(t, repo.BeginSendRequest(t.Context(), unit, ids, requestClockOwner, request.ClientRequestID, time.Minute), ErrSendRequestFence)
+
+	miss := requireFenceMiss(t, repo.BeginSendRequest(t.Context(), unit, claims, requestClockOwner, request.ClientRequestID, time.Minute), sendfence.ReasonOwnerChanged)
+	require.Equal(t, []sendfence.RowMiss{
+		{ID: ids[0], Reason: sendfence.ReasonPeerMissed, Status: string(StatusLeased)},
+		{ID: ids[1], Reason: sendfence.ReasonOwnerChanged, Status: string(StatusLeased)},
+	}, miss.Rows)
 	assertRequestClockLeased(t.Context(), t, pool, ids[:1])
 
 	var untouched bool

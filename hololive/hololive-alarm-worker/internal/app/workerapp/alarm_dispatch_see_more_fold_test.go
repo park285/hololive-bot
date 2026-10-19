@@ -59,6 +59,10 @@ func (*seeMoreFoldConsumer) ReleaseClaimKeys(context.Context, []string) error {
 	return nil
 }
 
+func (c *seeMoreFoldConsumer) ReleaseLeased(context.Context, []domain.AlarmQueueEnvelope) error {
+	return c.unexpected("release leased")
+}
+
 func (c *seeMoreFoldConsumer) unexpected(route string) error {
 	c.failures = append(c.failures, route)
 	c.cancel()
@@ -426,6 +430,6 @@ func (*seeMoreFoldConsumer) PinSendRequest(_ context.Context, envelopes []domain
 	return &request, nil
 }
 
-func (c *seeMoreFoldConsumer) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, string) (bool, error) {
-	return false, c.unexpected("reissue")
+func (c *seeMoreFoldConsumer) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
+	return c.unexpected("reissue")
 }

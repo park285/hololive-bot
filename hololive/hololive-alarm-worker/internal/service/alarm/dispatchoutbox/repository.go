@@ -1,6 +1,8 @@
 package dispatchoutbox
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -8,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
@@ -20,26 +23,23 @@ type PgxRepository struct {
 	logger *slog.Logger
 }
 
-// PartialTransitionError는 ownership fence 또는 attempt CAS가 일부 행과 일치하지
-// 않았음을 나타낸다. UnappliedIDs의 행은 recovery/quarantine 경로 소유이므로
-// 호출자가 재시도하거나 덮어쓰면 안 된다.
-type PartialTransitionError struct {
-	Action       string
-	Updated      int64
-	Expected     int64
-	UnappliedIDs []int64
-}
+// fence 미스 오류의 Action이자 지표 action 라벨이다.
+const (
+	fenceActionLoadSendRequest      = "load_send_request"
+	fenceActionPinSendRequest       = "pin_send_request"
+	fenceActionBeginSendRequest     = "begin_send_request"
+	fenceActionReissueSendRequest   = "reissue_send_request"
+	fenceActionMarkSent             = "mark_sent"
+	fenceActionRouteFailures        = "route_failures"
+	fenceActionRouteSendingFailures = "route_sending_failures"
+	fenceActionRequeuePreSend       = "requeue_pre_send"
+	fenceActionReleaseLeased        = "release_leased"
+	fenceActionMoveToDLQ            = "move_to_dlq"
+	fenceActionQuarantine           = "quarantine"
+)
 
-func (e *PartialTransitionError) Error() string {
-	if len(e.UnappliedIDs) > 0 {
-		return fmt.Sprintf("%s: partial transition: updated %d of %d rows, unapplied ids %v", e.Action, e.Updated, e.Expected, e.UnappliedIDs)
-	}
-
-	return fmt.Sprintf("%s: ownership changed after external send: updated %d of %d rows", e.Action, e.Updated, e.Expected)
-}
-
-func (e *PartialTransitionError) UnappliedDeliveryIDs() []int64 {
-	return e.UnappliedIDs
+type fencedQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 func NewPgxRepository(postgres database.Client, logger *slog.Logger) *PgxRepository {
@@ -62,12 +62,54 @@ func NewPgxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *PgxRepos
 	return &PgxRepository{pool: pool, now: time.Now, logger: logger}
 }
 
-func expectRowsAffected(got int64, want int, action string) error {
-	if got == int64(want) {
+// applyFenced는 sendfence 관측 열을 돌려주는 전이 문장을 실행하고 want 대상 전원이 적용됐는지 확인한다. 미스는
+// 대상별 원인을 지표·로그로 남기고 *sendfence.MissError를 그대로 돌려준다. 적용되지 않은 대상은 이 문장이 바꾸지
+// 않았으므로 호출자는 소유권이 남은 원인(sendfence.Reason.OwnershipHeld)일 때만 그 행에 후속 전이를 쓸 수 있다.
+func (r *PgxRepository) applyFenced(ctx context.Context, querier fencedQuerier, action, query string, want []int64, args ...any) error {
+	rows, err := querier.Query(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+
+	observed, err := pgx.CollectRows(rows, sendfence.ScanObservation)
+	if err != nil {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+
+	checkErr := sendfence.Check(action, want, observed)
+	if checkErr == nil {
 		return nil
 	}
 
-	return fmt.Errorf("%s: ownership mismatch: updated %d of %d rows", action, got, want)
+	if miss, ok := errors.AsType[*sendfence.MissError](checkErr); ok {
+		observePGFenceMiss(miss)
+		r.logger.Warn("dispatch delivery send fence miss",
+			slog.String("action", action),
+			slog.Int("rows_applied", miss.Applied),
+			slog.Int("rows_expected", miss.Expected),
+			slog.Any("error", miss),
+		)
+	}
+
+	return fmt.Errorf("apply fenced dispatch transition: %w", checkErr)
+}
+
+type fencedTarget interface {
+	deliveryID() int64
+}
+
+func (c DeliveryClaim) deliveryID() int64  { return c.ID }
+func (u FailureUpdate) deliveryID() int64  { return u.ID }
+func (u TerminalUpdate) deliveryID() int64 { return u.ID }
+
+// fencedTargetIDs는 전이 입력의 delivery ID를 입력 순서로 돌려준다.
+func fencedTargetIDs[T fencedTarget](targets []T) []int64 {
+	ids := make([]int64, 0, len(targets))
+	for i := range targets {
+		ids = append(ids, targets[i].deliveryID())
+	}
+
+	return ids
 }
 
 func scanDeliveryRecord(row pgx.Row) (*Record, error) {
@@ -126,13 +168,23 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 	return &record, nil
 }
 
-func idsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []int64 {
-	ids := make([]int64, 0, len(envelopes))
+// claimsFromEnvelopes는 drain이 복원한 envelope의 claim을 돌려준다. 각 attempt는 claim 시 행의 attempt_count이며
+// attachRecordMetadata가 0보다 클 때만 Retry로 옮겨 둔다.
+func claimsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []DeliveryClaim {
+	claims := make([]DeliveryClaim, 0, len(envelopes))
 	for i := range envelopes {
 		if envelopes[i].DispatchOutboxID > 0 {
-			ids = append(ids, envelopes[i].DispatchOutboxID)
+			claims = append(claims, DeliveryClaim{ID: envelopes[i].DispatchOutboxID, AttemptCount: envelopeAttempt(&envelopes[i])})
 		}
 	}
 
-	return ids
+	return claims
+}
+
+func envelopeAttempt(envelope *domain.AlarmQueueEnvelope) int {
+	if envelope.Retry == nil {
+		return 0
+	}
+
+	return envelope.Retry.Attempt
 }

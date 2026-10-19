@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -230,9 +231,9 @@ func TestAlarmDispatchRunnerCancellationCompensationPreservesOwnerAndAttemptFenc
 			err := runner.dispatchPreparedMessageGroup(ctx, group, request)
 
 			if tc.wantPartial {
-				partial, ok := errors.AsType[*dispatchoutbox.PartialTransitionError](err)
+				miss, ok := errors.AsType[*sendfence.MissError](err)
 				require.True(t, ok, "compensation must surface the ownership/attempt fence failure: %v", err)
-				require.Equal(t, []int64{group.envelopes[0].DispatchOutboxID}, partial.UnappliedIDs)
+				require.Equal(t, []int64{group.envelopes[0].DispatchOutboxID}, miss.UnappliedDeliveryIDs())
 			} else {
 				require.NoError(t, err)
 			}

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -39,6 +40,7 @@ type alarmDispatchRunnerTestConsumer struct {
 	preSendRequeued       []domain.AlarmQueueEnvelope
 	movedDLQ              []domain.AlarmQueueEnvelope
 	requeued              []domain.AlarmQueueEnvelope
+	released              []domain.AlarmQueueEnvelope
 	releasedClaims        []string
 	markSendingErr        error
 	markDispatchedErr     error
@@ -104,6 +106,11 @@ func (c *alarmDispatchRunnerTestConsumer) Quarantine(_ context.Context, envelope
 
 func (c *alarmDispatchRunnerTestConsumer) ReleaseClaimKeys(_ context.Context, claimKeys []string) error {
 	c.releasedClaims = append(c.releasedClaims, claimKeys...)
+	return nil
+}
+
+func (c *alarmDispatchRunnerTestConsumer) ReleaseLeased(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.released = append(c.released, envelopes...)
 	return nil
 }
 
@@ -293,8 +300,9 @@ func TestAlarmDispatchRunnerConsumesAttemptForRenderFailureBeforeMarkSending(t *
 }
 
 func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testing.T) {
-	markErr := &dispatchoutbox.PartialTransitionError{
-		Action: "mark dispatch deliveries sent", Updated: 0, Expected: 1,
+	markErr := &sendfence.MissError{
+		Action: "mark_sent", Expected: 1,
+		Rows: []sendfence.RowMiss{{ID: 1, Reason: sendfence.ReasonStatusChanged, Status: string(dispatchoutbox.StatusQuarantined)}},
 	}
 	consumer := &alarmDispatchRunnerTestConsumer{
 		batches:           [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},

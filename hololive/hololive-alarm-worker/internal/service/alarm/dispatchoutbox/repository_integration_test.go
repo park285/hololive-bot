@@ -4,7 +4,6 @@ package dispatchoutbox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -626,7 +626,7 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 	if len(claimed) != 1 {
 		t.Fatalf("ClaimDue() rows = %d, want 1", len(claimed))
 	}
-	if err := repository.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-1"); err != nil {
+	if err := repository.ReleaseLeased(ctx, recordClaims(claimed[0]), "worker-1"); err != nil {
 		t.Fatalf("ReleaseLeased() error = %v", err)
 	}
 
@@ -693,15 +693,14 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 	require.NotZero(t, retryID)
 	require.NotZero(t, dlqID)
 
-	nextAttemptAt := time.Now().UTC().Add(3 * time.Minute)
 	require.NoError(t, repository.RouteFailures(ctx, []FailureUpdate{
 		{
-			ID:            retryID,
-			AttemptCount:  1,
-			NextAttemptAt: nextAttemptAt,
-			Error:         "jsonb retry test",
-			ErrorCode:     ErrorCodeTimeout,
-			TargetStatus:  StatusRetry,
+			ID:           retryID,
+			AttemptCount: 1,
+			RetryAfter:   3 * time.Minute,
+			Error:        "jsonb retry test",
+			ErrorCode:    ErrorCodeTimeout,
+			TargetStatus: StatusRetry,
 		},
 	}, workerID))
 
@@ -769,7 +768,7 @@ func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
 	require.Len(t, claimed, 1)
 
 	id := claimed[0].ID
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	beginSendingFixture(t, repository, workerID, claimed[0])
 	require.NoError(t, repository.Quarantine(ctx, []TerminalUpdate{
 		{
 			ID:        id,
@@ -818,21 +817,20 @@ func TestPgxRepositoryRouteSendingFailures_TransitionsSendingToRetry(t *testing.
 	require.Len(t, claimed, 1)
 
 	id := claimed[0].ID
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	beginSendingFixture(t, repository, workerID, claimed[0])
 
 	var statusAfterSending string
 	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", id).Scan(&statusAfterSending))
 	require.Equal(t, string(StatusSending), statusAfterSending, "row must be 'sending' before RouteSendingFailures")
 
-	nextAttemptAt := time.Now().UTC().Add(5 * time.Second)
 	require.NoError(t, repository.RouteSendingFailures(ctx, []FailureUpdate{
 		{
-			ID:            id,
-			AttemptCount:  1,
-			NextAttemptAt: nextAttemptAt,
-			Error:         "502 bad gateway",
-			ErrorCode:     ErrorCodeHTTP5xx,
-			TargetStatus:  StatusRetry,
+			ID:           id,
+			AttemptCount: 1,
+			RetryAfter:   5 * time.Second,
+			Error:        "502 bad gateway",
+			ErrorCode:    ErrorCodeHTTP5xx,
+			TargetStatus: StatusRetry,
 		},
 	}, workerID))
 
@@ -894,19 +892,17 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 		}
 	}
 
-	require.NoError(t, repository.MarkSending(ctx, []int64{sentID, quarantinedID}, workerID, time.Minute))
-	require.NoError(t, repository.MarkSent(ctx, []int64{sentID}, workerID))
+	beginSendingFixture(t, repository, workerID, claimed...)
+	require.NoError(t, repository.MarkSent(ctx, attemptClaims(0, sentID), workerID))
 	require.NoError(t, repository.Quarantine(ctx, []TerminalUpdate{{ID: quarantinedID, Error: "hard fail"}}, workerID))
 
-	nextAttemptAt := time.Now().UTC().Add(5 * time.Second)
 	err = repository.RouteSendingFailures(ctx, []FailureUpdate{
-		{ID: sentID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "ignored", TargetStatus: StatusRetry},
-		{ID: quarantinedID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "ignored", TargetStatus: StatusRetry},
+		{ID: sentID, AttemptCount: 1, RetryAfter: 5 * time.Second, Error: "ignored", TargetStatus: StatusRetry},
+		{ID: quarantinedID, AttemptCount: 1, RetryAfter: 5 * time.Second, Error: "ignored", TargetStatus: StatusRetry},
 	}, workerID)
-	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
-	require.True(t, partialOK, "terminal rows must surface PartialTransitionError, got %v", err)
-	require.Equal(t, int64(0), partialErr.Updated)
-	require.ElementsMatch(t, []int64{sentID, quarantinedID}, partialErr.UnappliedIDs)
+	miss := requireFenceMiss(t, err, sendfence.ReasonStatusChanged)
+	require.Zero(t, miss.Applied)
+	require.ElementsMatch(t, []int64{sentID, quarantinedID}, miss.UnappliedDeliveryIDs())
 
 	var sentStatus, quarantinedStatus string
 	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", sentID).Scan(&sentStatus))
@@ -942,7 +938,7 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseStillTransitions(t *testi
 	require.Len(t, claimed, 1)
 
 	id := claimed[0].ID
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	beginSendingFixture(t, repository, workerID, claimed[0])
 
 	_, err = pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
@@ -958,14 +954,13 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseStillTransitions(t *testi
 	).Scan(&statusBeforeRetry, &expiresAt))
 	require.Equal(t, string(StatusSending), statusBeforeRetry, "row must be 'sending' with expired lease")
 
-	nextAttemptAt := time.Now().UTC().Add(5 * time.Second)
 	err = repository.RouteSendingFailures(ctx, []FailureUpdate{
 		{
-			ID:            id,
-			AttemptCount:  1,
-			NextAttemptAt: nextAttemptAt,
-			Error:         "502 expired lease retry",
-			TargetStatus:  StatusRetry,
+			ID:           id,
+			AttemptCount: 1,
+			RetryAfter:   5 * time.Second,
+			Error:        "502 expired lease retry",
+			TargetStatus: StatusRetry,
 		},
 	}, workerID)
 	require.NoError(t, err, "RouteSendingFailures must succeed for 'sending' row with expired lease owned by same worker")
@@ -1004,7 +999,7 @@ func TestPgxRepositoryMarkSent_ExpiredLeaseStillTransitions(t *testing.T) {
 	require.Len(t, claimed, 1)
 
 	id := claimed[0].ID
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	beginSendingFixture(t, repository, workerID, claimed[0])
 
 	_, err = pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
@@ -1012,7 +1007,7 @@ func TestPgxRepositoryMarkSent_ExpiredLeaseStillTransitions(t *testing.T) {
 		WHERE id = $1`, id)
 	require.NoError(t, err)
 
-	require.NoError(t, repository.MarkSent(ctx, []int64{id}, workerID))
+	require.NoError(t, repository.MarkSent(ctx, recordClaims(claimed[0]), workerID))
 
 	var status string
 	var lockedBy *string
@@ -1048,19 +1043,18 @@ func TestPgxRepositoryMarkSent_RequiresOwner(t *testing.T) {
 	require.Len(t, claimed, 1)
 
 	id := claimed[0].ID
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, "worker-owner", time.Minute))
-	err = repository.MarkSent(ctx, []int64{id}, "worker-intruder")
-	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
-	require.True(t, partialOK, "non-owner MarkSent must return PartialTransitionError")
-	require.Equal(t, int64(0), partialErr.Updated)
-	require.Equal(t, int64(1), partialErr.Expected)
+	beginSendingFixture(t, repository, "worker-owner", claimed[0])
+	err = repository.MarkSent(ctx, recordClaims(claimed[0]), "worker-intruder")
+	miss := requireFenceMiss(t, err, sendfence.ReasonOwnerChanged)
+	require.Zero(t, miss.Applied)
+	require.Equal(t, 1, miss.Expected)
 
 	var status string
 	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", id).Scan(&status))
 	require.Equal(t, string(StatusSending), status, "non-owner MarkSent must not transition the row")
 }
 
-func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsPartialError(t *testing.T) {
+func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsFenceMiss(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	workerID := "worker-quarantine-race"
@@ -1082,7 +1076,7 @@ func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsPartialError(t 
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 	id := claimed[0].ID
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	beginSendingFixture(t, repository, workerID, claimed[0])
 
 	_, err = pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
@@ -1093,11 +1087,10 @@ func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsPartialError(t 
 	require.NoError(t, err)
 	require.Equal(t, 1, quarantined)
 
-	err = repository.MarkSent(ctx, []int64{id}, workerID)
-	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
-	require.True(t, partialOK, "post-quarantine MarkSent must return PartialTransitionError")
-	require.Equal(t, int64(0), partialErr.Updated)
-	require.Equal(t, int64(1), partialErr.Expected)
+	err = repository.MarkSent(ctx, recordClaims(claimed[0]), workerID)
+	miss := requireFenceMiss(t, err, sendfence.ReasonStatusChanged)
+	require.Zero(t, miss.Applied)
+	require.Equal(t, 1, miss.Expected)
 
 	var status string
 	var lockedBy *string
@@ -1132,9 +1125,8 @@ func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
 	if len(claimed) != 1 {
 		t.Fatalf("ClaimDue() rows = %d, want 1", len(claimed))
 	}
-	if err := repository.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-2"); err == nil {
-		t.Fatal("ReleaseLeased() error = nil, want owner mismatch error")
-	}
+	err = repository.ReleaseLeased(ctx, recordClaims(claimed[0]), "worker-2")
+	requireFenceMiss(t, err, sendfence.ReasonOwnerChanged)
 
 	var status string
 	var lockedBy string
@@ -1334,6 +1326,12 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersKeepOneCanonicalGroupAtomic(t *t
 
 func insertAndClaimRoutingRow(t *testing.T, repository *PgxRepository, workerID, roomID, streamID string) int64 {
 	t.Helper()
+
+	return insertAndClaimRoutingRecord(t, repository, workerID, roomID, streamID).ID
+}
+
+func insertAndClaimRoutingRecord(t *testing.T, repository *PgxRepository, workerID, roomID, streamID string) *Record {
+	t.Helper()
 	ctx := context.Background()
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	envelope := domain.AlarmQueueEnvelope{
@@ -1351,7 +1349,7 @@ func insertAndClaimRoutingRow(t *testing.T, repository *PgxRepository, workerID,
 	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
-	return claimed[0].ID
+	return claimed[0]
 }
 
 func TestPgxRepositoryRouteFailures_AttemptCASRejectsStaleAndSkippedInputs(t *testing.T) {
@@ -1359,15 +1357,13 @@ func TestPgxRepositoryRouteFailures_AttemptCASRejectsStaleAndSkippedInputs(t *te
 	ctx := context.Background()
 	workerID := "worker-cas"
 	id := insertAndClaimRoutingRow(t, repository, workerID, "room-cas", "stream-cas")
-	nextAttemptAt := time.Now().UTC().Add(time.Minute)
 
 	for _, badAttempt := range []int{0, 2} {
 		err := repository.RouteFailures(ctx, []FailureUpdate{
-			{ID: id, AttemptCount: badAttempt, NextAttemptAt: nextAttemptAt, Error: "cas mismatch", TargetStatus: StatusRetry},
+			{ID: id, AttemptCount: badAttempt, RetryAfter: time.Minute, Error: "cas mismatch", TargetStatus: StatusRetry},
 		}, workerID)
-		partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
-		require.True(t, partialOK, "attempt %d must fail CAS, got %v", badAttempt, err)
-		require.Equal(t, []int64{id}, partialErr.UnappliedIDs)
+		miss := requireFenceMiss(t, err, sendfence.ReasonVersionChanged)
+		require.Equal(t, []int64{id}, miss.UnappliedDeliveryIDs())
 
 		var status string
 		var attemptCount int
@@ -1382,7 +1378,7 @@ func TestPgxRepositoryRouteFailures_AttemptCASRejectsStaleAndSkippedInputs(t *te
 	}
 
 	require.NoError(t, repository.RouteFailures(ctx, []FailureUpdate{
-		{ID: id, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "cas ok", TargetStatus: StatusRetry},
+		{ID: id, AttemptCount: 1, RetryAfter: time.Minute, Error: "cas ok", TargetStatus: StatusRetry},
 	}, workerID))
 	var status string
 	var attemptCount int
@@ -1403,10 +1399,9 @@ func TestPgxRepositoryRouteFailures_MixedRetryAndDLQBatchSingleCall(t *testing.T
 	_, err := pool.Exec(ctx, "UPDATE alarm_dispatch_deliveries SET attempt_count=2 WHERE id=$1", dlqID)
 	require.NoError(t, err)
 
-	nextAttemptAt := time.Now().UTC().Add(2 * time.Minute)
 	require.NoError(t, repository.RouteFailures(ctx, []FailureUpdate{
-		{ID: retryID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "retry me", TargetStatus: StatusRetry},
-		{ID: dlqID, AttemptCount: 3, NextAttemptAt: nextAttemptAt, Error: "exhausted", TargetStatus: StatusDLQ},
+		{ID: retryID, AttemptCount: 1, RetryAfter: 2 * time.Minute, Error: "retry me", TargetStatus: StatusRetry},
+		{ID: dlqID, AttemptCount: 3, RetryAfter: 2 * time.Minute, Error: "exhausted", TargetStatus: StatusDLQ},
 	}, workerID))
 
 	var retryStatus, retryError string
@@ -1445,16 +1440,14 @@ func TestPgxRepositoryRouteFailures_PartialBatchAppliesMatchingRowsOnly(t *testi
 	appliedID := insertAndClaimRoutingRow(t, repository, workerID, "room-partial-ok", "stream-partial-ok")
 	staleID := insertAndClaimRoutingRow(t, repository, workerID, "room-partial-stale", "stream-partial-stale")
 
-	nextAttemptAt := time.Now().UTC().Add(time.Minute)
 	err := repository.RouteFailures(ctx, []FailureUpdate{
-		{ID: appliedID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "applied", TargetStatus: StatusRetry},
-		{ID: staleID, AttemptCount: 3, NextAttemptAt: nextAttemptAt, Error: "stale", TargetStatus: StatusDLQ},
+		{ID: appliedID, AttemptCount: 1, RetryAfter: time.Minute, Error: "applied", TargetStatus: StatusRetry},
+		{ID: staleID, AttemptCount: 3, RetryAfter: time.Minute, Error: "stale", TargetStatus: StatusDLQ},
 	}, workerID)
 
-	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
-	require.True(t, partialOK, "mixed CAS batch must return PartialTransitionError, got %v", err)
-	require.Equal(t, int64(1), partialErr.Updated)
-	require.Equal(t, []int64{staleID}, partialErr.UnappliedIDs)
+	miss := requireFenceMiss(t, err, sendfence.ReasonVersionChanged)
+	require.Equal(t, 1, miss.Applied)
+	require.Equal(t, []int64{staleID}, miss.UnappliedDeliveryIDs())
 
 	var appliedStatus, staleStatus string
 	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", appliedID).Scan(&appliedStatus))
@@ -1476,11 +1469,10 @@ func TestPgxRepositoryRouteFailures_ExpiredLeaseRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	err = repository.RouteFailures(ctx, []FailureUpdate{
-		{ID: id, AttemptCount: 1, NextAttemptAt: time.Now().UTC(), Error: "expired", TargetStatus: StatusRetry},
+		{ID: id, AttemptCount: 1, Error: "expired", TargetStatus: StatusRetry},
 	}, workerID)
-	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
-	require.True(t, partialOK, "pre-send variant must reject expired lease, got %v", err)
-	require.Equal(t, []int64{id}, partialErr.UnappliedIDs)
+	miss := requireFenceMiss(t, err, sendfence.ReasonLeaseExpired)
+	require.Equal(t, []int64{id}, miss.UnappliedDeliveryIDs())
 
 	var status string
 	var attemptCount int
@@ -1498,7 +1490,7 @@ func TestPgxRepositoryRouteSendingFailures_AppliesToLeasedRows(t *testing.T) {
 	id := insertAndClaimRoutingRow(t, repository, workerID, "room-postsend-leased", "stream-postsend-leased")
 
 	require.NoError(t, repository.RouteSendingFailures(ctx, []FailureUpdate{
-		{ID: id, AttemptCount: 1, NextAttemptAt: time.Now().UTC().Add(time.Minute), Error: "mark sending failed", TargetStatus: StatusRetry},
+		{ID: id, AttemptCount: 1, RetryAfter: time.Minute, Error: "mark sending failed", TargetStatus: StatusRetry},
 	}, workerID))
 
 	var status string
@@ -1514,8 +1506,9 @@ func TestPgxRepositoryRouteSendingFailures_QuarantinePreemptedRowNotOverwritten(
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	workerID := "worker-quarantine-preempt"
-	id := insertAndClaimRoutingRow(t, repository, workerID, "room-quarantine-preempt", "stream-quarantine-preempt")
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	record := insertAndClaimRoutingRecord(t, repository, workerID, "room-quarantine-preempt", "stream-quarantine-preempt")
+	id := record.ID
+	beginSendingFixture(t, repository, workerID, record)
 
 	_, err := pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
@@ -1527,11 +1520,10 @@ func TestPgxRepositoryRouteSendingFailures_QuarantinePreemptedRowNotOverwritten(
 	require.Equal(t, 1, quarantined)
 
 	err = repository.RouteSendingFailures(ctx, []FailureUpdate{
-		{ID: id, AttemptCount: 1, NextAttemptAt: time.Now().UTC(), Error: "must not overwrite", TargetStatus: StatusRetry},
+		{ID: id, AttemptCount: 1, Error: "must not overwrite", TargetStatus: StatusRetry},
 	}, workerID)
-	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
-	require.True(t, partialOK, "quarantine-preempted row must surface PartialTransitionError, got %v", err)
-	require.Equal(t, []int64{id}, partialErr.UnappliedIDs)
+	miss := requireFenceMiss(t, err, sendfence.ReasonStatusChanged)
+	require.Equal(t, []int64{id}, miss.UnappliedDeliveryIDs())
 
 	var status, lastError, lastErrorCode string
 	var lockedBy *string
@@ -1549,7 +1541,7 @@ func TestPgxRepositoryRouteFailures_RejectsUnsupportedTargetStatus(t *testing.T)
 	ctx := context.Background()
 
 	err := repository.RouteFailures(ctx, []FailureUpdate{
-		{ID: 1, AttemptCount: 1, NextAttemptAt: time.Now().UTC(), TargetStatus: StatusSent},
+		{ID: 1, AttemptCount: 1, TargetStatus: StatusSent},
 	}, "worker-any")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported target status")
@@ -1559,8 +1551,9 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseSendingToDLQRecordsTermin
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	workerID := "worker-sending-dlq"
-	id := insertAndClaimRoutingRow(t, repository, workerID, "room-sending-dlq", "stream-sending-dlq")
-	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	record := insertAndClaimRoutingRecord(t, repository, workerID, "room-sending-dlq", "stream-sending-dlq")
+	id := record.ID
+	beginSendingFixture(t, repository, workerID, record)
 
 	_, err := pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
@@ -1575,7 +1568,7 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseSendingToDLQRecordsTermin
 	).Scan(&nextAttemptBefore))
 
 	require.NoError(t, repository.RouteSendingFailures(ctx, []FailureUpdate{
-		{ID: id, AttemptCount: 3, NextAttemptAt: time.Now().UTC().Add(time.Hour), Error: "sending retry exhausted", TargetStatus: StatusDLQ},
+		{ID: id, AttemptCount: 3, RetryAfter: time.Hour, Error: "sending retry exhausted", TargetStatus: StatusDLQ},
 	}, workerID), "소유 worker의 sending→dlq 전이는 만료된 lease에서도 적용돼야 한다")
 
 	var status, lastError string
@@ -1590,7 +1583,7 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseSendingToDLQRecordsTermin
 	require.Equal(t, string(StatusDLQ), status)
 	require.Equal(t, "sending retry exhausted", lastError)
 	require.Equal(t, 3, attemptCount, "DLQ terminal row must record the final attempt count")
-	require.NotNil(t, dlqAt, "dlq_at=NOW() must be recorded by the dlq CASE branch")
+	require.NotNil(t, dlqAt, "dlq_at must be recorded by the dlq CASE branch")
 	require.Nil(t, lockedBy)
 	require.True(t, nextAttemptAfter.Equal(nextAttemptBefore),
 		"dlq branch must keep next_attempt_at untouched (input value applies to retry rows only)")
@@ -1631,9 +1624,9 @@ func TestConsumerRouteFailures_ChokepointTruncatesSanitizesAndRecordsCode(t *tes
 		DispatchOutboxID: id,
 		Retry: &domain.AlarmQueueRetryMetadata{
 			Attempt:       1,
+			RetryAfterMS:  int64(time.Minute / time.Millisecond),
 			LastError:     "Bearer secret-token-value " + strings.Repeat("한", 900),
 			LastErrorCode: ErrorCodeHTTP5xx,
-			NextVisibleAt: time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
 		},
 	}
 	require.NoError(t, consumer.RouteFailures(ctx, []domain.AlarmQueueEnvelope{envelope}, nil))

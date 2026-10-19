@@ -139,7 +139,7 @@ cleanup의 반복 종료는 실제 삭제 수가 아니라 해당 statement에�
 
 세 발송 경로는 최초 외부 발송 전에 최종 본문·경로·요청 ID 관계를 저장하고 재시도에서 재사용합니다. alarm과 YouTube의 묶음은 membership도 고정합니다. `CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK의 결정적 r1/r2 generation을 허용하며, 기존 attempt·시간 상한을 유지합니다. unknown·payload mismatch·already exists·code 없는 409·transport 오류에는 새 ID를 발급하지 않습니다.
 
-Alarm의 leased request Load/Pin/Begin은 send-unit와 전체 member 행 잠금을 얻은 뒤 채취한 단일 `clock_timestamp()`로 fence를 검사합니다. Begin의 sending 시각과 연장 기한도 이 시각을 사용하여 잠금 대기 중 만료를 허용하지 않습니다. 하나라도 fence를 잃으면 묶음 전체의 sending 전이가 rollback됩니다. standalone MarkSending의 부분-row 처리와 sending 상태 Reissue의 만료 면제는 유지하며, Load/Pin 실패의 Quarantine과 Begin 실패의 same-attempt Requeue 정책도 바꾸지 않습니다.
+Alarm dispatch의 모든 소유자 전이(Load/Pin/Begin, MarkSent, 실패 정산, 같은 attempt 재대기, 반환, DLQ·격리, 세대 재발급)는 행 tuple `(status, locked_by, attempt_count)`를 claim과 맞추는 한 SQL 문장입니다. 문장은 대상 행을 ID 순으로 잠근 뒤 단일 `clock_timestamp()`를 채취해 lease 판정과 `next_attempt_at`·`sending_started_at`·`updated_at`을 모두 그 시각으로 기록합니다. 재시도 지연은 Go가 시각이 아니라 `retry_after_ms`로 넘기므로 같은 unit 멤버는 같은 `next_attempt_at`을 받습니다. lease와 stale 격리 기준은 밀리초로 넘기며 1ms 미만은 설정 오류입니다. 어긋난 행은 대상별 원인(`missing`·`status_changed`·`owner_changed`·`version_changed`·`lease_expired`·`member_terminal`·`membership_changed`·`request_changed`·`peer_missed`)을 담은 `*sendfence.MissError`로 돌아옵니다. Begin과 재발급은 unit 전원이 통과할 때만 바뀌는 단일 문장입니다. 발송 전 미스는 외부 호출을 하지 않고, 소유권이 남은 `member_terminal`만 격리하며 `membership_changed`는 claim을 반환합니다. lease 만료·소유자·attempt 변경은 행을 건드리지 않고 만료 회수와 현재 소유자에게 맡깁니다. 외부 호출 뒤의 MarkSent 미스는 행을 되돌리지 않고 오류로 남기며, 재발급 세대를 모두 쓰면 격리합니다.
 
 YouTube의 freshness를 지난 known-unsent PENDING은 bounded sweep에서 ledger·logical owner·row version을 확인한 뒤 명시적 만료 사유로 FAILED 종료합니다. SENT/QUARANTINED 및 진행 중인 SENDING 증거를 우선하며, 만료로 unknown을 재발송 가능 상태로 바꾸지 않습니다. 부모 aggregate·terminal retention을 거쳐 정리하고 만료 행은 revive하지 않습니다.
 
@@ -159,7 +159,7 @@ request snapshot/generation을 보존하지 못하는 구버전 바이너리로 
 - Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority.
 - Metrics: alarm-dispatch backlog/retention metrics (the v3 handoff metrics were removed with the handoff)
 - YouTube 공통 attempt counter는 실제 provider operation을 집계하며 grouped 호출 1회와 방별 delivery 결과를 구분합니다. 준비·claim·이미 충족된 행은 provider success로 세지 않습니다. provider 성공과 DB finalization 실패도 별도로 유지합니다.
-- Alarm retention의 기존 7개 status label은 advisory lock 안의 삭제 transaction이 commit된 뒤 계상합니다. rollback·lock 미획득·commit 응답 불명은 계상하지 않으며, commit 직후 process 종료까지 보장하는 감사 원장은 아닙니다. `alarm_dispatch_pg_mark_sending_failed_total`은 immutable/fallback 양쪽 operation 실패당 한 번 증가하고 빈 입력·성공에는 증가하지 않습니다.
+- Alarm retention의 기존 7개 status label은 advisory lock 안의 삭제 transaction이 commit된 뒤 계상합니다. rollback·lock 미획득·commit 응답 불명은 계상하지 않으며, commit 직후 process 종료까지 보장하는 감사 원장은 아닙니다. `alarm_dispatch_pg_mark_sending_failed_total`은 발송 진입(Begin) 실패당 한 번 증가하고 빈 입력·성공에는 증가하지 않습니다. `alarm_dispatch_pg_transition_partial_total{action,reason}`은 소유자 전이 미스마다 원인별로 한 번 증가합니다.
 - YouTube ready snapshot은 부모 created_at freshness·due·lock 조건을 실제 claim과 맞춥니다. `hololive_youtube_delivery_expired_pending_bounded`는 만료 대기 PENDING 수를 기존 batch size까지만 보여 주므로 전체 backlog 총수가 아닙니다.
 - `hololive_notification_delivery_request_fence_miss_total{operation,cause,result}`는 notification 요청 고정 갱신의 fence 미스마다 한 번 증가합니다. `operation`은 `save_request`·`reissue_request`, `result`는 소유권이 남아 실패 전이가 적용된 `failed`, 행을 건드리지 않은 `fence_lost`, 실패 전이가 DB 오류로 끝난 `transition_error`입니다.
 

@@ -214,7 +214,7 @@ func TestUpcomingCandidatesDoNotReopenUnknownDeliveryAtExpiry(t *testing.T) {
 	claimed, err := repository.ClaimDue(t.Context(), "unknown-worker", 1, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
-	require.NoError(t, repository.MarkSending(t.Context(), []int64{claimed[0].ID}, "unknown-worker", time.Minute))
+	beginSendingFixture(t, repository, "unknown-worker", claimed[0])
 	require.NoError(t, repository.Quarantine(t.Context(), []TerminalUpdate{{ID: claimed[0].ID, ErrorCode: "OUTCOME_UNKNOWN", Error: "ambiguous provider result"}}, "unknown-worker"))
 
 	pending, err := store.Pending(t.Context(), now.Add(6*time.Minute))
