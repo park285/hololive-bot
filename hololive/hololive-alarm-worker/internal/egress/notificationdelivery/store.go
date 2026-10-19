@@ -92,6 +92,9 @@ func (r *Store) MarkSending(ctx context.Context, id int64, workerID string, leas
 	return tag.RowsAffected() > 0, nil
 }
 
+// MarkSent는 현재 worker가 소유한 SENDING 행만 SENT로 확정한다. 발송이 lease를 넘겨도 성공 결과를 잃지 않도록
+// lease 만료는 보지 않는다. 오래된 SENDING 격리는 상태를 QUARANTINED로 바꾸고 locked_by를 비우므로 늦은 정산은 0행이 된다.
+// PENDING 행은 발송 전이를 거치지 않았으므로 소유자가 같아도 전이하지 않고 false를 돌려준다.
 func (r *Store) MarkSent(ctx context.Context, id int64, workerID string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, err
@@ -99,7 +102,7 @@ func (r *Store) MarkSent(ctx context.Context, id int64, workerID string) (bool, 
 
 	tag, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0189_05.sql"),
-		domain.DeliveryStatusSent, id, domain.DeliveryStatusPending, deliveryStatusSending, workerID,
+		domain.DeliveryStatusSent, id, deliveryStatusSending, workerID,
 	)
 	if err != nil {
 		return false, fmt.Errorf("exec: %w", err)
