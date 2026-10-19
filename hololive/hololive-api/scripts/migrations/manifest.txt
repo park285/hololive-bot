@@ -185,3 +185,6 @@
 185 324_youtube_live_orphaned_legacy_live_end.sql
 186 326_bot_reply_outbox_unleased_accepted.sql
 187 333_bot_reply_outbox_handoff_due_index.sql
+188 332_bot_reply_outbox_accepted_strict.sql
+189 334_bot_reply_outbox_submitting_lease_index.sql
+190 335_bot_reply_outbox_drop_legacy_lease_index.sql

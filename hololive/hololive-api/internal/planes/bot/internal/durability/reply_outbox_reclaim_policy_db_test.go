@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReplyReclaimPreservesAcceptedSafetyGrantsAndLockedRows(t *testing.T) {
+func TestReplyReclaimPreservesSafetyGrantsAndLockedRows(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
@@ -19,7 +19,6 @@ func TestReplyReclaimPreservesAcceptedSafetyGrantsAndLockedRows(t *testing.T) {
 		attempts, grants   int32
 		age                int64
 	}{
-		{name: "accepted", status: ReplyOutboxAccepted, attempts: 1, age: 1, want: ReplyOutboxManualReview},
 		{name: "retry", status: replyOutboxStatusSubmitting, attempts: 4, age: 1, want: replyOutboxStatusPending},
 		{name: "exhausted", status: replyOutboxStatusSubmitting, attempts: 5, age: 1, want: ReplyOutboxManualReview},
 		{name: "grant", status: replyOutboxStatusSubmitting, attempts: 5, grants: 1, age: 1, want: replyOutboxStatusPending},
@@ -37,7 +36,6 @@ func TestReplyReclaimPreservesAcceptedSafetyGrantsAndLockedRows(t *testing.T) {
 
 		_, err = pool.Exec(ctx, `UPDATE bot_reply_outbox SET status=$2,attempts=$3,operator_replay_grants=$4,
 			first_attempt_at=clock_timestamp()-($5::bigint*interval '1 hour'),
-			iris_request_id=CASE WHEN $2='accepted' THEN 'iris-accepted' ELSE '' END,
 			claim_token='reclaim-owner',lease_until=clock_timestamp()-interval '1 second' WHERE message_id=$1`,
 			entry.MessageID, c.status, c.attempts, c.grants, c.age)
 		require.NoError(t, err)
@@ -48,17 +46,17 @@ func TestReplyReclaimPreservesAcceptedSafetyGrantsAndLockedRows(t *testing.T) {
 
 	defer func() { require.NoError(t, rollbackInboxTx(ctx, locker)) }()
 
-	_, err = locker.Exec(ctx, `SELECT id FROM bot_reply_outbox WHERE message_id='message:reclaim-accepted' FOR UPDATE`)
+	_, err = locker.Exec(ctx, `SELECT id FROM bot_reply_outbox WHERE message_id='message:reclaim-retry' FOR UPDATE`)
 	require.NoError(t, err)
 
 	result, err := repo.ReclaimExpired(ctx, 100)
 	require.NoError(t, err)
-	require.Equal(t, ReplyOutboxReclaim{Requeued: 2, SafetyManualReview: 2}, result)
+	require.Equal(t, ReplyOutboxReclaim{Requeued: 1, SafetyManualReview: 2}, result)
 	require.NoError(t, locker.Commit(ctx))
 
 	result, err = repo.ReclaimExpired(ctx, 100)
 	require.NoError(t, err)
-	require.Equal(t, ReplyOutboxReclaim{AcceptedManualReview: 1}, result)
+	require.Equal(t, ReplyOutboxReclaim{Requeued: 1}, result)
 
 	for _, c := range cases {
 		var (

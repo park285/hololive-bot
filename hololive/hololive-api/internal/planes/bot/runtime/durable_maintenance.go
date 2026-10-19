@@ -60,18 +60,13 @@ func (r *durableRuntime) observeExpiredCommands(expired int64) {
 }
 
 func (r *durableRuntime) observeReplyOutboxReclaim(reclaim durability.ReplyOutboxReclaim) {
-	total := reclaim.AcceptedManualReview + reclaim.SafetyManualReview
-	if total <= 0 {
+	if reclaim.SafetyManualReview <= 0 {
 		return
 	}
 
-	replyOutboxAcceptedReclaimedTotal.Add(float64(reclaim.AcceptedManualReview))
-
 	if r.logger != nil {
 		r.logger.Error("reply leases moved to manual review",
-			slog.Int64("rows", total),
-			slog.Int64("accepted_rows", reclaim.AcceptedManualReview),
-			slog.Int64("safety_boundary_rows", reclaim.SafetyManualReview),
+			slog.Int64("rows", reclaim.SafetyManualReview),
 			slog.String("action", "inspect bot_reply_outbox status=manual_review before replay decision"))
 	}
 }

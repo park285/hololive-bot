@@ -12,17 +12,16 @@ var replyOutboxReclaimCandidatesSQL = mustSQL("reply_outbox_reclaim_candidates.s
 
 const replyOutboxStatusPending = "pending"
 
+// replyReclaimCandidate는 lease가 만료된 submitting 행이다.
 type replyReclaimCandidate struct {
 	ID                   int64
-	Status               string
 	Attempts             int32
 	OperatorReplayGrants int32
 	HorizonExpired       bool
 }
 
 // ReclaimExpired는 잠긴 만료 lease 행의 사실로 Go에서 전이를 결정합니다. 재시도 지평이 저장 전에 끝나면
-// 배치 전체를 롤백합니다. Accepted 후보는 이전 바이너리가 lease를 남긴 채 기록한 행뿐이고, 재발송하지 않고
-// manual_review로 옮깁니다. Lease 없는 accepted의 재발송 여부는 handoff reconciler가 Iris 상태로 정합니다.
+// 배치 전체를 롤백합니다. 후보는 submitting뿐이며, accepted의 재발송 여부는 handoff reconciler가 Iris 상태로 정합니다.
 func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize int32) (ReplyOutboxReclaim, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return ReplyOutboxReclaim{}, err
@@ -70,44 +69,36 @@ func lockedReplyReclaimCandidates(ctx context.Context, tx pgx.Tx, batchSize int3
 }
 
 type replyReclaimMutation struct {
-	ids                      []int64
-	sources, targets, errors []string
-	retry                    []bool
-	result                   ReplyOutboxReclaim
+	ids             []int64
+	targets, errors []string
+	retry           []bool
+	result          ReplyOutboxReclaim
 }
 
-func newReplyReclaimMutation(candidates []replyReclaimCandidate, maxAttempts int32) (replyReclaimMutation, error) {
+func newReplyReclaimMutation(candidates []replyReclaimCandidate, maxAttempts int32) replyReclaimMutation {
 	mutation := replyReclaimMutation{
-		ids: make([]int64, 0, len(candidates)), sources: make([]string, 0, len(candidates)),
-		targets: make([]string, 0, len(candidates)), errors: make([]string, 0, len(candidates)),
-		retry: make([]bool, 0, len(candidates)),
+		ids: make([]int64, 0, len(candidates)), targets: make([]string, 0, len(candidates)),
+		errors: make([]string, 0, len(candidates)), retry: make([]bool, 0, len(candidates)),
 	}
 	for _, candidate := range candidates {
-		retry := candidate.Status == replyOutboxStatusSubmitting && !candidate.HorizonExpired &&
+		retry := !candidate.HorizonExpired &&
 			int64(candidate.Attempts) < int64(maxAttempts)+int64(candidate.OperatorReplayGrants)
 		target, reason := ReplyOutboxManualReview, "automatic replay safety boundary reached"
 
-		switch {
-		case candidate.Status == ReplyOutboxAccepted:
-			reason = "legacy accepted lease expired before handoff confirmation"
-			mutation.result.AcceptedManualReview++
-		case retry:
+		if retry {
 			target, reason = replyOutboxStatusPending, "submit lease expired"
 			mutation.result.Requeued++
-		case candidate.Status == replyOutboxStatusSubmitting:
+		} else {
 			mutation.result.SafetyManualReview++
-		default:
-			return replyReclaimMutation{}, errors.New("unexpected reply reclaim source state")
 		}
 
 		mutation.ids = append(mutation.ids, candidate.ID)
-		mutation.sources = append(mutation.sources, candidate.Status)
 		mutation.targets = append(mutation.targets, target)
 		mutation.errors = append(mutation.errors, reason)
 		mutation.retry = append(mutation.retry, retry)
 	}
 
-	return mutation, nil
+	return mutation
 }
 
 // 호출자의 트랜잭션이 후보 행의 잠금을 유지해야 합니다.
@@ -116,13 +107,10 @@ func applyReplyReclaim(ctx context.Context, tx pgx.Tx, candidates []replyReclaim
 		return ReplyOutboxReclaim{}, nil
 	}
 
-	mutation, err := newReplyReclaimMutation(candidates, maxAttempts)
-	if err != nil {
-		return ReplyOutboxReclaim{}, err
-	}
+	mutation := newReplyReclaimMutation(candidates, maxAttempts)
 
-	tag, err := tx.Exec(ctx, replyOutboxReclaimExpiredSQL, mutation.ids, mutation.sources,
-		mutation.targets, mutation.errors, mutation.retry, horizonMS)
+	tag, err := tx.Exec(ctx, replyOutboxReclaimExpiredSQL, mutation.ids, mutation.targets,
+		mutation.errors, mutation.retry, horizonMS)
 	if err != nil {
 		return ReplyOutboxReclaim{}, fmt.Errorf("apply reply reclaim: %w", err)
 	}
