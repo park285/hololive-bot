@@ -71,8 +71,7 @@ func TestSourceRetentionBacklogCombinesKindsAndCutoffs(t *testing.T) {
 	sql := readRetentionBacklogSQL(t)
 	tx := beginRetentionMeasurement(t, pool)
 
-	// One saturated protected kind makes the combined result unknown, even when
-	// another kind has a known oldest row. Empty kinds do not change that result.
+	// 보호 대상 종류 하나라도 포화되면 다른 종류의 관측값·빈 상태와 무관하게 전체 결과는 미확정이다.
 	got, calls := measureRetentionBacklog(t, tx, sql,
 		[]string{communityPageKind, retentionLiveSnapshotKind, "live_check"},
 		[]time.Time{base.Add(time.Hour), base.Add(time.Hour), base.Add(time.Hour)}, 4)
@@ -81,8 +80,7 @@ func TestSourceRetentionBacklogCombinesKindsAndCutoffs(t *testing.T) {
 	require.Equal(t, new(false), got.known)
 	require.EqualValues(t, 5, calls)
 
-	// The cutoff is exclusive: an otherwise eligible row at exactly the cutoff
-	// is not evidence of a backlog, nor does it fill the bounded window.
+	// 경계 시각과 같은 행은 적체 근거·제한된 탐색 범위에 포함하지 않는다.
 	got, calls = measureRetentionBacklog(t, tx, sql,
 		[]string{retentionLiveSnapshotKind}, []time.Time{base.Add(-time.Hour)}, 1)
 	require.Nil(t, got.oldest)
@@ -94,7 +92,6 @@ func TestSourceRetentionBacklogCombinesKindsAndCutoffs(t *testing.T) {
 	require.Nil(t, got.known, "empty policy aggregation preserves SQL NULL")
 	require.Zero(t, calls)
 
-	// Duplicate policy inputs retain the original per-kind aggregate count.
 	got, _ = measureRetentionBacklog(t, tx, sql,
 		[]string{communityPageKind, communityPageKind},
 		[]time.Time{base.Add(time.Hour), base.Add(time.Hour)}, 5)

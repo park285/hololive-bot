@@ -64,7 +64,7 @@ func TestAdmissionRejectsInvalidBudgetBeforeQueueOrLease(t *testing.T) {
 				t.Fatal("invalid job consumed queue admission")
 			}
 
-			// The fixture repository has no pool: any lease mutation would fail before this assertion.
+			// 테스트 저장소에는 풀이 없으므로 임대를 변경하면 이 검증 전에 실패한다.
 			totals := scheduler.workerTotals.Snapshot()
 			if totals.Admissions.Rejected != 1 || totals.Attempts != (workercontract.AttemptTotals{}) {
 				t.Fatalf("totals = %+v", totals)

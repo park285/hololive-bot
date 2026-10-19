@@ -106,7 +106,7 @@ po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"
         if target:
             await_file(case / ('restoring' if target.startswith('restore') else 'entered'), proc)
             if target.endswith('group'):
-                # The owner creates a separate job process group for its mutation worker.
+                # 변경 워커는 소유자가 만든 별도 작업 프로세스 그룹에서 실행된다.
                 worker = int((case / 'recovery/worker-pid').read_text())
                 assert os.getpgid(int((case/'command.pid').read_text())) == worker if (case/'command.pid').exists() else True
                 os.killpg(worker, signo)

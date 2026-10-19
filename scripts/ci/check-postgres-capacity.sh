@@ -177,8 +177,8 @@ if unknown_scaled_services:
     )
 
 # reserve는 비슈퍼유저 역할이 실제로 접속 거부당하기 전까지 남는 슬롯이다(PG 거부 조건과 같은 기준).
-# Keep three ordinary slots for bounded control/maintenance work, separately from
-# the inventoried exporter and nightly jobs. Never treat sampled high-water as a cap.
+# exporter·야간 작업과 별개로 제어·유지보수용 일반 슬롯 셋을 남긴다.
+# 관측된 최대 사용량을 용량 상한으로 간주하지 않는다.
 min_reserve = 3
 reserve = server_limit - superuser_reserved - used
 if reserve < min_reserve:

@@ -15,7 +15,7 @@ pair_tool="$rollback_root/scripts/deploy/lib/worker-profile-pair.py"
 profile_pair="$HOME/hololive-bot/$backup/worker-profile-previous"
 prod_source="$(cat "$backup/prod-compose-source-path")"
 ap_source="$(cat "$backup/ap-compose-source-path")"
-# The recorded layout is part of the previous image/profile/source pair.
+# 기록된 배치는 이전 이미지·프로필·소스 조합의 일부다.
 case "$prod_source" in
   deploy/compose/docker-compose.prod.yml|deploy/compose/docker-compose.collector.yml) ;;
   *) exit 2 ;;

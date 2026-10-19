@@ -375,9 +375,9 @@ func buildLLMSchedulerRouter(
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}
 
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
+	//nolint:contextcheck // gin 핸들러는 c.Request.Context()로 요청별 컨텍스트를 사용한다.
 	registerMajorEventInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, majorEventRepository)
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
+	//nolint:contextcheck // gin 핸들러는 c.Request.Context()로 요청별 컨텍스트를 사용한다.
 	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
 
 	return router, nil

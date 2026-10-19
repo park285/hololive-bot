@@ -215,7 +215,7 @@ func (s *Service) executeOfficialScheduleAPIRequest(req *http.Request) ([]byte, 
 		return nil, fmt.Errorf("official schedule source error: %w", sourceErr)
 	}
 
-	resp, err := s.httpClient.Do(req) //nolint:bodyclose // downstream helpers own every non-nil response body path
+	resp, err := s.httpClient.Do(req) //nolint:bodyclose // 하위 도우미가 모든 non-nil 응답 본문을 정리한다.
 	if err != nil {
 		return nil, fmt.Errorf("official schedule request failure: %w", officialScheduleRequestFailure(resp, err))
 	}
