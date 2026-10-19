@@ -38,7 +38,10 @@ func (c *Consumer) reconcileSchedule(
 		return ReconcileResult{}, fmt.Errorf("persist schedule decision: %w", persistErr)
 	}
 
-	return ReconcileResult{Applications: mapScheduleApplications(decision.Applications)}, nil
+	return ReconcileResult{
+		Applications:        mapScheduleApplications(decision.Applications),
+		LiveRuntimeVideoIDs: scheduleDecisionRuntimeVideoIDs(&decision),
+	}, nil
 }
 
 func scheduleEvidenceFromObservation(observation *Observation) (schedule.Evidence, error) {

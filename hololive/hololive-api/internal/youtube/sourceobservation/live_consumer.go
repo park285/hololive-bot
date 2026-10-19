@@ -42,7 +42,10 @@ func (c *Consumer) reconcileLive(
 		return ReconcileResult{}, fmt.Errorf("persist live decision: %w", persistErr)
 	}
 
-	return ReconcileResult{Applications: mapLiveApplications(decision.Applications)}, nil
+	return ReconcileResult{
+		Applications:        mapLiveApplications(decision.Applications),
+		LiveRuntimeVideoIDs: liveDecisionRuntimeVideoIDs(&decision),
+	}, nil
 }
 
 func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error) {

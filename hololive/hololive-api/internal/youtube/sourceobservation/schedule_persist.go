@@ -172,6 +172,17 @@ func persistScheduleDecision(
 	return nil
 }
 
+// scheduleDecisionRuntimeVideoIDs는 persistScheduleDecision이 수명 모델 입력을 바꿀 수 있는 영상 key를 돌려준다.
+// 수명 모델 입력이 아닌 schedule item 표는 빼고 세션 저장 대상만 포함한다.
+func scheduleDecisionRuntimeVideoIDs(decision *schedule.Decision) []string {
+	videoIDs := make([]string, len(decision.Sessions))
+	for i := range decision.Sessions {
+		videoIDs[i] = decision.Sessions[i].VideoID
+	}
+
+	return videoIDs
+}
+
 func scheduleItemStatement(observation *Observation, item *schedule.Item) dbx.Statement {
 	return dbx.Statement{
 		Operation: "upsert schedule item",

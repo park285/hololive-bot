@@ -55,6 +55,21 @@ func persistLiveDecision(ctx context.Context, tx dbx.Tx, stored map[string]live.
 	return nil
 }
 
+// liveDecisionRuntimeVideoIDs는 persistLiveDecision이 수명 모델 입력을 바꿀 수 있는 영상 key를 돌려준다. 세션·head
+// 저장과 pending 삭제는 decision.Sessions, pending 저장은 decision.PendingEnds 안에 있다. 쓰지 않은 행의 key도 포함한다.
+func liveDecisionRuntimeVideoIDs(decision *live.Decision) []string {
+	videoIDs := make([]string, 0, len(decision.Sessions)+len(decision.PendingEnds))
+	for i := range decision.Sessions {
+		videoIDs = append(videoIDs, decision.Sessions[i].VideoID)
+	}
+
+	for i := range decision.PendingEnds {
+		videoIDs = append(videoIDs, decision.PendingEnds[i].VideoID)
+	}
+
+	return videoIDs
+}
+
 func persistLiveSessions(ctx context.Context, tx dbx.Tx, stored map[string]live.SessionState, sessions []live.SessionState) error {
 	// 전송뿐 아니라 인자 배열 구성도 최대 64세션/128문장으로 제한한다.
 	for start := 0; start < len(sessions); start += liveSessionBatchSize {

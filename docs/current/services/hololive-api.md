@@ -186,6 +186,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 - migration 316은 `youtube_live_runtime_state`의 동기 UPDATE refresh를 실제 소비·검토 입력이 달라진 video로 제한합니다. session의 관측 시계·thumbnail, head의 다음 검사 시각·ignored-history 등 원본 사실은 계속 저장하지만 모델 재조회와 행 잠금은 생략합니다. title/topic/premiere와 reviewability, availability 시각, old/new identity, NULL·orphan은 계속 반영합니다. INSERT/DELETE/TRUNCATE·영수증·FK 경로와 문장별 동기 visibility는 유지합니다.
 - refresh를 생략해도 BEFORE MVCC guard와 오래된 REPEATABLE READ/SERIALIZABLE snapshot의 거절은 유지됩니다. 316은 guard를 먼저 잡고 기존 함수를 원자적으로 교체하며 backfill·권한 확장·새 index/cache/retry는 없습니다. guard-first API와 호환되지만 316을 모르는 이전 migration runner는 새 ledger에 실행하지 않습니다. 운영 적용·배포는 별도 승인 대상입니다.
+- migration 325는 316의 문장 트리거 함수를 같은 갱신 의미로 다시 정의하고, refresh한 video key를 트랜잭션 설정 `hololive.live_runtime_trigger_keys`(정렬·중복 제거한 `text[]` 리터럴)에 누적합니다. `set_config(..., true)`라 커밋·롤백·savepoint 롤백과 함께 사라지고, 트리거 함수의 `SET search_path` 절은 이 값을 되돌리지 않습니다. `finalizeTx`의 적용 경로(거절·dead letter 분기 제외)와 종료 finalizer는 원본 쓰기를 마친 같은 트랜잭션에서 writer가 모은 key(`ReconcileResult.LiveRuntimeVideoIDs`, finalizer는 decision의 세션·pending key)와 이 값을 비교하고, `Finalize`·`FinalizeNextDueLiveEnd`가 커밋에 성공한 뒤에만 `hololive_youtube_live_runtime_key_audit_*` 지표(trigger_keys·missing·extra)와 누락 로그를 남깁니다. 명시 갱신 전환 merge 조건은 runbook의 해당 지표 절(전환 대상 path마다 trigger_keys 증가 > 0, 전 path missing 증가 0)을 따릅니다. 325는 guard를 먼저 잡고 함수만 교체하므로 이전 API와 호환됩니다.
 
 ## Observation storage and retention
 
