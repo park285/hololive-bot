@@ -732,6 +732,9 @@ Full outbox/delivery row와 compact terminal evidence의 retention을 분리합�
 - Same-logical nonterminal row가 있으면 terminal owner/follower를 삭제하지 않습니다.
 - Cleanup retry가 cutoff를 더 최신 시각으로 앞당기면 안 됩니다.
 - Candidate selection, ledger verification, sibling guard, delete는 bounded transaction입니다.
+- Candidate 부모를 잠근 cleanup은 경쟁 트랜잭션이 잠근 자식·same-logical 행을 기다리지 않고(`SKIP LOCKED`) 건너뛴 행을 관측 누락 증거로 돌려받습니다. 후보를 쥔 채 기다리면 같은 그룹을 잠그는 stale SENDING sweep과 교착합니다.
+- Same-logical 조회 한도는 batch 전체가 나눠 쓰지 않고 요청 논리 키마다 `LogicalGroupScanLimit+1`행입니다. 키의 identity 조합(room·kind·identity 후보)이 찾은 행은 그 조합을 만든 키의 한도를 쓰고, 반환 행은 최대 `자식 수 + 요청 키 수 × (LogicalGroupScanLimit+1)`입니다. 한도에 닿은 키는 조합이 찾은 행이 다른 키로 풀리더라도 불완전 관측으로 봅니다.
+- 자식이나 same-logical 행을 모두 잠가 관측하지 못한 후보(경쟁 잠금, 같은 논리 키 행의 `LogicalGroupScanLimit` 초과, 그 키의 조회 한도 도달)는 삭제하지 않고 `incomplete_logical_group` guard로 셉니다. 보존은 그 키에 속한 후보에만 적용되어, 과대·잠긴 그룹이 있어도 같은 batch에서 완전 관측한 다른 논리 키의 후보는 그대로 판정·삭제합니다. Cursor는 보존한 후보 뒤로 진행하고 다음 cleanup 주기가 처음부터 다시 검사하므로, 그룹이 한도 안으로 줄거나 경쟁 잠금이 풀리기 전까지 그 후보는 매 주기 보존됩니다. Ledger는 완전 관측한 논리 키만 조회합니다.
 - Ledger는 초기 범위에서 자동 삭제하지 않습니다.
 - 참조 delivery가 모두 정리된 request 본문만 기존 retention cutoff와 batch 상한으로 삭제합니다.
 
