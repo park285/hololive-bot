@@ -1,6 +1,7 @@
 package youtubedispatch
 
 import (
+	"log/slog"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 type recoverySelectiveSendCase struct {
@@ -47,7 +49,7 @@ func runRetrySelectiveSendCase(t *testing.T, tc recoverySelectiveSendCase, fixed
 	fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newFixedClockDispatcherForTest(t, db, sender, fixedSentAt, &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -176,7 +178,6 @@ func assertRecoverySelectiveSendTracking(
 	var updatedPendingState domain.YouTubeCommunityShortsAlarmState
 
 	require.NoError(t, firstDeliveryTestRow(db, &updatedPendingState, "kind = $1 AND post_id = $2", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
-	assert.Nil(t, updatedPendingState.AuthorizedAt)
 	require.NotNil(t, updatedPendingState.AlarmSentAt)
 	assert.WithinDuration(t, fixedSentAt, updatedPendingState.AlarmSentAt.UTC(), 2*time.Minute)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedPendingState.DeliveryStatus)

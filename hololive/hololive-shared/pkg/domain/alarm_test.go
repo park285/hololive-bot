@@ -44,10 +44,9 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 		EnqueuedAt: "2026-02-25T13:00:00Z",
 		Version:    1,
 		Retry: &domain.AlarmQueueRetryMetadata{
-			Attempt:       2,
-			RetryAfterMS:  1500,
-			NextVisibleAt: "2026-02-25T13:00:01.500Z",
-			LastError:     "temporary upstream timeout",
+			Attempt:      2,
+			RetryAfterMS: 1500,
+			LastError:    "temporary upstream timeout",
 		},
 	}
 
@@ -88,10 +87,6 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 
 	if decoded.Retry.RetryAfterMS != 1500 {
 		t.Errorf("Retry.RetryAfterMS = %d, want 1500", decoded.Retry.RetryAfterMS)
-	}
-
-	if decoded.Retry.NextVisibleAt != "2026-02-25T13:00:01.500Z" {
-		t.Errorf("Retry.NextVisibleAt = %q, want %q", decoded.Retry.NextVisibleAt, "2026-02-25T13:00:01.500Z")
 	}
 
 	if decoded.Retry.LastError != "temporary upstream timeout" {

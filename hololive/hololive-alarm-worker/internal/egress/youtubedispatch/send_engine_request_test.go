@@ -32,12 +32,12 @@ func (s *frozenProviderSender) PrepareMessageRequest(context.Context, string, st
 	return s.body, s.route, nil
 }
 
-func (s *frozenProviderSender) SendPreparedMessage(_ context.Context, _, body, route, id string) error {
+func (s *frozenProviderSender) SendPreparedMessage(_ context.Context, _, body, route, id string) (string, error) {
 	s.ids = append(s.ids, id)
 	s.routes = append(s.routes, route)
 	s.bodies = append(s.bodies, body)
 
-	return s.err
+	return testAdmission(id, s.err)
 }
 
 func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
@@ -48,7 +48,7 @@ func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 	config.MaxRetries = 3
 	config.RetryBackoff = time.Millisecond
 
-	transition, err := store.NewTransitionStore(pool, slog.Default(), store.TransitionConfig{MaxRetries: 3, RetryBackoff: time.Millisecond, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
+	transition, err := store.NewTransitionStore(pool, slog.Default(), store.TransitionConfig{Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Millisecond, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
 	require.NoError(t, err)
 
 	sender := &frozenProviderSender{body: "final body", route: frozenProviderMarkdownRoute, err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}

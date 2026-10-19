@@ -35,10 +35,10 @@ func (r *batchCleanupPgxRepository) MoveToDLQ(ctx context.Context, updates []Ter
 	return r.PgxRepository.MoveToDLQ(ctx, updates, owner)
 }
 
-func (r *batchCleanupPgxRepository) ReleaseLeased(ctx context.Context, ids []int64, owner string) error {
+func (r *batchCleanupPgxRepository) ReleaseLeased(ctx context.Context, claims []DeliveryClaim, owner string) error {
 	r.releaseCalls++
 
-	return r.PgxRepository.ReleaseLeased(ctx, ids, owner)
+	return r.PgxRepository.ReleaseLeased(ctx, claims, owner)
 }
 
 type batchCleanupIntegrationSnapshot struct {

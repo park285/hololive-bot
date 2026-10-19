@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -34,56 +36,48 @@ func TestConsumerDrainBatch_QuarantinesStaleSendingBeforeClaiming(t *testing.T) 
 		t.Fatalf("QuarantineStaleSending calls = %d, want 1", repository.quarantineStaleSendingCalls)
 	}
 
-	if repository.quarantineOlderThan != 90*time.Second {
-		t.Fatalf("QuarantineStaleSending olderThan = %v, want 90s (3x lease default)", repository.quarantineOlderThan)
+	if repository.quarantineOlderThan != testConsumerQuarantineThreshold {
+		t.Fatalf("QuarantineStaleSending olderThan = %v, want configured threshold %v rather than the lease", repository.quarantineOlderThan, testConsumerQuarantineThreshold)
 	}
 }
 
-func TestConsumerQuarantineThresholdSeparatedFromLease(t *testing.T) {
+// 격리 기준은 lease 이상이어야 한다. 생략·0·음수도 기본값으로 바꾸지 않고 거부하며,
+// option 순서와 무관하게 모든 option을 적용한 뒤 판정한다.
+func TestNewConsumerRequiresQuarantineThresholdAtLeastLease(t *testing.T) {
 	t.Parallel()
 
+	const lease = time.Minute
+
 	tests := []struct {
-		name string
-		opts []ConsumerOption
-		want time.Duration
+		name  string
+		opts  []ConsumerOption
+		valid bool
 	}{
-		{
-			name: "default is 3x lease",
-			opts: []ConsumerOption{WithLease(45 * time.Second)},
-			want: 135 * time.Second,
-		},
-		{
-			name: "explicit threshold overrides default",
-			opts: []ConsumerOption{WithLease(60 * time.Second), WithQuarantineThreshold(5 * time.Minute)},
-			want: 5 * time.Minute,
-		},
-		{
-			name: "threshold below lease is clamped to lease",
-			opts: []ConsumerOption{WithLease(60 * time.Second), WithQuarantineThreshold(10 * time.Second)},
-			want: 60 * time.Second,
-		},
-		{
-			name: "option order does not matter",
-			opts: []ConsumerOption{WithQuarantineThreshold(4 * time.Minute), WithLease(30 * time.Second)},
-			want: 4 * time.Minute,
-		},
+		{name: "omitted"},
+		{name: "zero", opts: []ConsumerOption{WithQuarantineThreshold(0)}},
+		{name: "negative", opts: []ConsumerOption{WithQuarantineThreshold(-lease)}},
+		{name: "one millisecond below lease", opts: []ConsumerOption{WithQuarantineThreshold(lease - time.Millisecond)}},
+		{name: "lease raised after threshold", opts: []ConsumerOption{WithQuarantineThreshold(lease), WithLease(2 * lease)}},
+		{name: "equal to lease", opts: []ConsumerOption{WithQuarantineThreshold(lease)}, valid: true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			repository := &consumerTestRepository{}
+			opts := append([]ConsumerOption{WithWorkerID("worker-1"), WithLease(lease)}, tc.opts...)
+			consumer, err := NewConsumer(&consumerTestRepository{}, nil, slog.Default(), opts...)
 
-			opts := append([]ConsumerOption{WithWorkerID("worker-1")}, tc.opts...)
-			consumer := mustNewConsumer(t, repository, nil, slog.Default(), opts...)
+			if tc.valid {
+				if err != nil || consumer == nil {
+					t.Fatalf("NewConsumer() = %v, %v; want consumer", consumer, err)
+				}
 
-			if _, err := consumer.DrainBatch(t.Context(), 10); err != nil {
-				t.Fatalf("DrainBatch() error = %v", err)
+				return
 			}
 
-			if repository.quarantineOlderThan != tc.want {
-				t.Fatalf("QuarantineStaleSending olderThan = %v, want %v", repository.quarantineOlderThan, tc.want)
+			if err == nil || consumer != nil {
+				t.Fatalf("NewConsumer() = %v, %v; want quarantine threshold error", consumer, err)
 			}
 		})
 	}
@@ -163,11 +157,7 @@ func TestConsumerDrainBatch_RecoveryRowsUseLeasedAndSendingMetricLabels(t *testi
 
 			return 2, nil
 		},
-		quarantineStaleSendingFunc: func(_ context.Context, olderThan time.Duration, limit int) (int, error) {
-			if olderThan != 135*time.Second {
-				t.Fatalf("QuarantineStaleSending olderThan = %v, want 135s (3x lease default)", olderThan)
-			}
-
+		quarantineStaleSendingFunc: func(_ context.Context, _ time.Duration, limit int) (int, error) {
 			if limit != 7 {
 				t.Fatalf("QuarantineStaleSending limit = %d, want 7", limit)
 			}
@@ -264,52 +254,42 @@ func TestConsumerDrainBatch_SendingRecoveryFailureUsesFailureLabelAndStillClaims
 	}
 }
 
-func TestConsumerMarkDispatchedPassesWorkerID(t *testing.T) {
-	t.Parallel()
-
-	repository := &consumerTestRepository{}
-	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-
-	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
-	if err != nil {
-		t.Fatalf("MarkDispatched() error = %v", err)
-	}
-
-	if repository.markSentWorkerID != "worker-1" {
-		t.Fatalf("MarkSent workerID = %q, want worker-1", repository.markSentWorkerID)
-	}
-}
-
 func TestConsumerMarkDispatchedPropagatesPostSendOwnershipChange(t *testing.T) {
 	t.Parallel()
 
-	partialErr := &PartialTransitionError{Action: "mark sent", Updated: 0, Expected: 1}
+	miss := &sendfence.MissError{Action: fenceActionMarkSent, Expected: 1, Rows: []sendfence.RowMiss{{ID: 42, Reason: sendfence.ReasonStatusChanged}}}
 	repository := &consumerTestRepository{
-		markSentFunc: func(context.Context, []int64, string) error {
-			return partialErr
+		markSentFunc: func(context.Context, []DeliveryClaim, string) error {
+			return miss
 		},
 	}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
-	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
-	if !errors.Is(err, partialErr) {
-		t.Fatalf("MarkDispatched() error = %v, want %v", err, partialErr)
+	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}}, "iris-request-1", time.Minute)
+	if !errors.Is(err, miss) {
+		t.Fatalf("MarkDispatched() error = %v, want %v", err, miss)
 	}
 }
 
-func TestConsumerMarkSendingPassesWorkerID(t *testing.T) {
+func TestConsumerMarkSendingBeginsWholeUnitWithClaimAttempt(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"), WithLease(1500*time.Millisecond))
 
-	err := consumer.MarkSending(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
+	err := consumer.MarkSending(t.Context(), []domain.AlarmQueueEnvelope{
+		{DispatchOutboxID: 42, SendUnitID: 7, ClientRequestID: "request-7", Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}},
+		{DispatchOutboxID: 43, SendUnitID: 7, ClientRequestID: "request-7", Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}},
+	})
 	if err != nil {
 		t.Fatalf("MarkSending() error = %v", err)
 	}
 
-	if repository.markSendingWorkerID != "worker-1" {
-		t.Fatalf("MarkSending workerID = %q, want worker-1", repository.markSendingWorkerID)
+	got := repository.beginSendRequest
+	want := []DeliveryClaim{{ID: 42, AttemptCount: 1}, {ID: 43, AttemptCount: 1}}
+
+	if got.unitID != 7 || got.workerID != "worker-1" || got.expectedID != "request-7" || got.lease != 1500*time.Millisecond || !slices.Equal(got.claims, want) {
+		t.Fatalf("BeginSendRequest = %+v, want unit 7 worker-1 request-7 1.5s %+v", got, want)
 	}
 }
 
@@ -421,8 +401,8 @@ func mustMarshalTestEnvelope(t *testing.T, envelope *domain.AlarmQueueEnvelope) 
 
 type consumerTestRepository struct {
 	claimDueFunc                func(ctx context.Context, workerID string, limit int, lease time.Duration) ([]*Record, error)
-	markSendingFunc             func(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error
-	markSentFunc                func(ctx context.Context, ids []int64, workerID string) error
+	beginSendRequestFunc        func(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string, lease time.Duration) error
+	markSentFunc                func(ctx context.Context, claims []DeliveryClaim, workerID string) error
 	recoverExpiredLeasedFunc    func(context.Context, int) (int, error)
 	quarantineStaleSendingFunc  func(context.Context, time.Duration, int) (int, error)
 	routeFailuresFunc           func(context.Context, []FailureUpdate, string) error
@@ -441,8 +421,15 @@ type consumerTestRepository struct {
 	recoverExpiredLeasedCalls   int
 	quarantineStaleSendingCalls int
 	quarantineOlderThan         time.Duration
-	markSendingWorkerID         string
-	markSentWorkerID            string
+	beginSendRequest            consumerBeginSendRequestCall
+}
+
+type consumerBeginSendRequestCall struct {
+	unitID     int64
+	claims     []DeliveryClaim
+	workerID   string
+	expectedID string
+	lease      time.Duration
 }
 
 func (r *consumerTestRepository) InsertPending(context.Context, *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
@@ -477,27 +464,22 @@ func (r *consumerTestRepository) LoadEventsByID(_ context.Context, eventIDs []in
 	return r.events, nil
 }
 
-func (r *consumerTestRepository) MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error {
-	r.markSendingWorkerID = workerID
-	if r.markSendingFunc != nil {
-		if err := r.markSendingFunc(ctx, ids, workerID, extendLease); err != nil {
-			return fmt.Errorf("mark sending func: %w", err)
+func (r *consumerTestRepository) BeginSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string, lease time.Duration) error {
+	r.beginSendRequest = consumerBeginSendRequestCall{unitID: unitID, claims: claims, workerID: workerID, expectedID: expectedID, lease: lease}
+	if r.beginSendRequestFunc != nil {
+		if err := r.beginSendRequestFunc(ctx, unitID, claims, workerID, expectedID, lease); err != nil {
+			return fmt.Errorf("begin send request func: %w", err)
 		}
-
-		return nil
 	}
 
 	return nil
 }
 
-func (r *consumerTestRepository) MarkSent(ctx context.Context, ids []int64, workerID string) error {
-	r.markSentWorkerID = workerID
+func (r *consumerTestRepository) MarkSent(ctx context.Context, _ int64, claims []DeliveryClaim, workerID, _ string, _ time.Duration) error {
 	if r.markSentFunc != nil {
-		if err := r.markSentFunc(ctx, ids, workerID); err != nil {
+		if err := r.markSentFunc(ctx, claims, workerID); err != nil {
 			return fmt.Errorf("mark sent func: %w", err)
 		}
-
-		return nil
 	}
 
 	return nil
@@ -561,7 +543,7 @@ func (r *consumerTestRepository) Quarantine(_ context.Context, updates []Termina
 	return nil
 }
 
-func (r *consumerTestRepository) ReleaseLeased(context.Context, []int64, string) error {
+func (r *consumerTestRepository) ReleaseLeased(context.Context, []DeliveryClaim, string) error {
 	return nil
 }
 
@@ -601,13 +583,12 @@ func TestConsumerRouteFailuresConvertsEnvelopesToTargetedUpdates(t *testing.T) {
 
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	nextVisible := time.Date(2026, time.July, 30, 10, 0, 0, 0, time.UTC)
 	retryEnvelope := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
 		Retry: &domain.AlarmQueueRetryMetadata{
-			Attempt:       1,
-			LastError:     "send failed",
-			NextVisibleAt: nextVisible.Format(time.RFC3339Nano),
+			Attempt:      1,
+			RetryAfterMS: 7500,
+			LastError:    "send failed",
 		},
 	}
 	dlqEnvelope := domain.AlarmQueueEnvelope{
@@ -633,8 +614,8 @@ func TestConsumerRouteFailuresConvertsEnvelopesToTargetedUpdates(t *testing.T) {
 		t.Fatalf("retry update = %+v, want id=11 target=retry attempt=1", updates[0])
 	}
 
-	if !updates[0].NextAttemptAt.Equal(nextVisible) {
-		t.Fatalf("retry NextAttemptAt = %v, want %v", updates[0].NextAttemptAt, nextVisible)
+	if updates[0].RetryAfter != 7500*time.Millisecond {
+		t.Fatalf("retry RetryAfter = %v, want 7.5s", updates[0].RetryAfter)
 	}
 
 	if updates[1].ID != 22 || updates[1].TargetStatus != StatusDLQ || updates[1].AttemptCount != 3 {
@@ -650,23 +631,22 @@ func TestConsumerRouteFailuresPartialObservesAppliedSubsets(t *testing.T) {
 	repository := &consumerTestRepository{}
 
 	repository.routeFailuresFunc = func(context.Context, []FailureUpdate, string) error {
-		return &PartialTransitionError{
-			Action:       "route dispatch delivery failures",
-			Updated:      2,
-			Expected:     3,
-			UnappliedIDs: []int64{22},
+		return &sendfence.MissError{
+			Action:   fenceActionRouteFailures,
+			Applied:  2,
+			Expected: 3,
+			Rows:     []sendfence.RowMiss{{ID: 22, Reason: sendfence.ReasonLeaseExpired, Status: string(StatusLeased)}},
 		}
 	}
 
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	nextVisible := time.Date(2026, time.July, 30, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
 	retryApplied := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom", NextVisibleAt: nextVisible},
+		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
 	}
 	retryUnapplied := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 22,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom", NextVisibleAt: nextVisible},
+		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
 	}
 	dlqApplied := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 33,
@@ -679,8 +659,8 @@ func TestConsumerRouteFailuresPartialObservesAppliedSubsets(t *testing.T) {
 	err := consumer.RouteFailures(t.Context(),
 		[]domain.AlarmQueueEnvelope{retryApplied, retryUnapplied},
 		[]domain.AlarmQueueEnvelope{dlqApplied})
-	if _, ok := errors.AsType[*PartialTransitionError](err); !ok {
-		t.Fatalf("RouteFailures() error = %T %v, want *PartialTransitionError", err, err)
+	if _, ok := errors.AsType[*sendfence.MissError](err); !ok {
+		t.Fatalf("RouteFailures() error = %T %v, want *sendfence.MissError", err, err)
 	}
 
 	if got := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal); got != retryBefore+1 {

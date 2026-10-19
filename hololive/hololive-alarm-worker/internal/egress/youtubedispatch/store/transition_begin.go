@@ -23,15 +23,10 @@ func (s *TransitionStore) BeginSending(
 		return StartedOperation{}, newApplyResult(ApplyConflict, nil), errors.New("begin sending: rows are empty")
 	}
 
-	startedAt, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return StartedOperation{}, newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("begin sending: started at: %w", err)
-	}
-
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		started, transitions, touched, applyErr := s.beginSendingOnce(ctx, rows, outboxByID, startedAt)
+		started, transitions, touched, applyErr := s.beginSendingOnce(ctx, rows, outboxByID)
 		if applyErr == nil {
 			result := newApplyResult(ApplyApplied, touched)
 
@@ -70,7 +65,6 @@ func (s *TransitionStore) beginSendingOnce(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-	startedAt time.Time,
 ) (StartedOperation, []rowTransition, []int64, error) {
 	var (
 		started     StartedOperation
@@ -81,7 +75,7 @@ func (s *TransitionStore) beginSendingOnce(
 	err := s.executeTx(ctx, "begin sending", func(tx dbx.Querier) error {
 		var txErr error
 
-		started, transitions, touched, txErr = s.beginSendingTx(ctx, tx, rows, outboxByID, startedAt)
+		started, transitions, touched, txErr = s.beginSendingTx(ctx, tx, rows, outboxByID)
 		if txErr != nil {
 			return fmt.Errorf("begin sending: transaction body: %w", txErr)
 		}
@@ -95,21 +89,22 @@ func (s *TransitionStore) beginSendingOnce(
 	return started, transitions, touched, nil
 }
 
+// beginSendingTx는 owner를 SENDING으로 전이하고, 전이 문장이 잠근 뒤 채취한 DB 시계를 owner의 locked_at(발송 시작
+// 시각)으로 StartedOperation에 싣는다.
 func (s *TransitionStore) beginSendingTx(
 	ctx context.Context,
 	tx dbx.Querier,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-	startedAt time.Time,
 ) (StartedOperation, []rowTransition, []int64, error) {
-	resolved, err := s.resolveClaimedGroups(ctx, tx, rows, outboxByID, startedAt)
+	resolved, err := s.resolveClaimedGroups(ctx, tx, "begin sending", rows, outboxByID)
 	if err != nil {
 		return StartedOperation{}, nil, nil, fmt.Errorf("begin sending: resolve groups: %w", err)
 	}
 
 	requestedIDs := deliveryIDSet(rows)
 
-	groups, transitions, err := buildStartedGroups(resolved, requestedIDs, startedAt)
+	groups, transitions, err := buildStartedGroups(resolved, requestedIDs)
 	if err != nil {
 		return StartedOperation{}, transitions, nil, fmt.Errorf("begin sending: build groups: %w", err)
 	}
@@ -123,12 +118,16 @@ func (s *TransitionStore) beginSendingTx(
 
 	sortTransitionsByID(transitions)
 
-	touched, err := applyRowTransitions(ctx, tx, "begin sending", transitions)
+	touched, startedAt, err := applySendingTransitions(ctx, tx, "begin sending", transitions, s.config.LockTimeout)
 	if err != nil {
 		return StartedOperation{}, transitions, nil, fmt.Errorf("begin sending: apply rows: %w", err)
 	}
 
-	return StartedOperation{groups: groups, startedAt: startedAt}, transitions, touched, nil
+	for i := range groups {
+		groups[i].ownerAfter.LockedAt = new(startedAt)
+	}
+
+	return StartedOperation{groups: groups}, transitions, touched, nil
 }
 
 func deliveryIDSet(rows []domain.YouTubeNotificationDelivery) map[int64]struct{} {
@@ -143,13 +142,12 @@ func deliveryIDSet(rows []domain.YouTubeNotificationDelivery) map[int64]struct{}
 func buildStartedGroups(
 	resolved resolvedLogicalGroups,
 	requestedIDs map[int64]struct{},
-	startedAt time.Time,
 ) ([]startedLogicalGroup, []rowTransition, error) {
 	groups := make([]startedLogicalGroup, 0, len(resolved.resolutions))
 	transitions := make([]rowTransition, 0, len(resolved.resolutions))
 
 	for i := range resolved.resolutions {
-		group, transition, err := buildStartedGroup(resolved.resolutions[i], resolved, requestedIDs, startedAt)
+		group, transition, err := buildStartedGroup(resolved.resolutions[i], resolved, requestedIDs)
 		if err != nil {
 			return nil, transitions, fmt.Errorf("begin sending: build logical group: %w", err)
 		}
@@ -165,7 +163,6 @@ func buildStartedGroup(
 	resolution preparation.Resolution,
 	resolved resolvedLogicalGroups,
 	requestedIDs map[int64]struct{},
-	startedAt time.Time,
 ) (startedLogicalGroup, rowTransition, error) {
 	if resolution.Kind() != preparation.LogicalActive {
 		return startedLogicalGroup{}, rowTransition{}, &transitionConflictError{
@@ -186,24 +183,18 @@ func buildStartedGroup(
 		return startedLogicalGroup{}, rowTransition{}, fmt.Errorf("begin sending: owner: %w", err)
 	}
 
-	if before.Status != lifecycle.StatusPending || before.LockedAt == nil || before.RowVersion <= 0 {
-		return startedLogicalGroup{}, rowTransition{}, &transitionConflictError{
-			operation: "begin sending", detail: fmt.Sprintf("owner %d has no valid preparation fence", before.ID),
-		}
-	}
-
 	followers, err := startedFollowers(resolution, resolved.rowsByID)
 	if err != nil {
 		return startedLogicalGroup{}, rowTransition{}, fmt.Errorf("begin sending: load followers: %w", err)
 	}
 
-	after := sendingTransitionRow(before, startedAt)
+	after := sendingTransitionRow(before)
 	group := startedLogicalGroup{
 		key: resolution.Key(), ownerBefore: before, ownerAfter: after,
 		followers: followers, ledgerBefore: ledgerRecordPointer(resolved.ledgerByKey, resolution), providerOwner: true,
 	}
 
-	return group, rowTransition{before: before, after: after}, nil
+	return group, rowTransition{before: before, after: after, lockFromClock: true}, nil
 }
 
 func startedFollowers(
@@ -225,13 +216,15 @@ func startedFollowers(
 	return followers, nil
 }
 
-func sendingTransitionRow(before transitionRow, startedAt time.Time) transitionRow {
+// sendingTransitionRow는 claim 소유자(locked_by)를 유지한 채 SENDING으로 올린다. 발송 시작 시각(locked_at)은 전이
+// 문장의 DB 시계로 기록한다.
+func sendingTransitionRow(before transitionRow) transitionRow {
 	after := before
 
 	after.Status = lifecycle.StatusSending
 	after.RowVersion++
 
-	after.LockedAt = &startedAt
+	after.LockedAt = nil
 	after.SentAt = nil
 	after.Error = ""
 
@@ -339,15 +332,15 @@ func deliverysqlSelectTransitionRows(
 	return nil
 }
 
+// sameTransitionState는 commit 판정용 상태 등가다. 모든 쓰기가 row_version을 올리므로 시각 열(next_attempt_at·
+// locked_at·sent_at)은 비교하지 않으며, 이 값들은 전이 문장의 DB 시계가 정해 호출자가 미리 알 수 없다.
 func sameTransitionState(actual, expected transitionRow) bool {
 	return actual.ID == expected.ID &&
 		actual.OutboxID == expected.OutboxID &&
 		actual.Status == expected.Status &&
 		actual.AttemptCount == expected.AttemptCount &&
 		actual.RowVersion == expected.RowVersion &&
-		timesEqual(actual.LockedAt, expected.LockedAt) &&
-		timesEqual(actual.SentAt, expected.SentAt) &&
-		actual.NextAttemptAt.Equal(expected.NextAttemptAt) &&
+		sameOwner(actual.LockedBy, expected.LockedBy) &&
 		actual.Error == expected.Error
 }
 

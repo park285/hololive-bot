@@ -5,6 +5,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 )
 
 const (
@@ -22,7 +24,7 @@ var (
 	alarmDispatchPGQuarantinedTotal           prometheus.Counter
 	alarmDispatchPGDLQTotal                   prometheus.Counter
 	alarmDispatchPGRetryScheduledTotal        prometheus.Counter
-	alarmDispatchPGTransitionPartialTotal     prometheus.Counter
+	alarmDispatchPGTransitionPartialTotal     *prometheus.CounterVec
 	alarmDispatchPGClaimReleasedTotal         prometheus.Counter
 )
 
@@ -91,11 +93,12 @@ func registerPGDispatchMetrics() {
 			Help: "Total PG dispatch rows scheduled for retry.",
 		},
 	)
-	alarmDispatchPGTransitionPartialTotal = promauto.NewCounter(
+	alarmDispatchPGTransitionPartialTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_pg_transition_partial_total",
-			Help: "Total PG dispatch mark-sent/route-failures/route-sending-failures operations where applied rows < expected (concurrent worker overlap or recovery preemption).",
+			Help: "Total PG dispatch transitions that left at least one target unchanged by a send fence miss, by action and observed miss reason.",
 		},
+		[]string{"action", "reason"},
 	)
 	alarmDispatchPGClaimReleasedTotal = promauto.NewCounter(
 		prometheus.CounterOpts{
@@ -171,12 +174,21 @@ func observePGRetryScheduled(rows int) {
 	alarmDispatchPGRetryScheduledTotal.Add(float64(rows))
 }
 
-func observePGTransitionPartial() {
+// observePGFenceMiss는 한 전이 문장의 미스를 원인마다 한 번 센다.
+func observePGFenceMiss(miss *sendfence.MissError) {
 	if alarmDispatchPGTransitionPartialTotal == nil {
 		return
 	}
 
-	alarmDispatchPGTransitionPartialTotal.Inc()
+	seen := make(map[sendfence.Reason]struct{}, len(miss.Rows))
+	for _, row := range miss.Rows {
+		if _, ok := seen[row.Reason]; ok {
+			continue
+		}
+
+		seen[row.Reason] = struct{}{}
+		alarmDispatchPGTransitionPartialTotal.WithLabelValues(miss.Action, string(row.Reason)).Inc()
+	}
 }
 
 func observePGClaimReleased(keys int) {

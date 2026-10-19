@@ -1,2 +1,2 @@
 SELECT COALESCE(send_request_id, '') FROM youtube_notification_delivery
-WHERE id = $1 AND status = 'SENDING' AND row_version = $2 FOR UPDATE;
+WHERE id = $1 AND status = 'SENDING' AND row_version = $2 AND locked_by IS NOT DISTINCT FROM $3::text FOR UPDATE;

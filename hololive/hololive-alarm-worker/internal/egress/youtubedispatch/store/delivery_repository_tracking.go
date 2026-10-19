@@ -22,12 +22,9 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
@@ -42,119 +39,32 @@ type deliveryAlarmSentTarget struct {
 	ContentID string            `db:"content_id"`
 }
 
-func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]observation.AlarmSentMark, error) {
-	out, err := loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, nil)
-	if err != nil {
-		return out, fmt.Errorf("load alarm sent marks for delivery IDs with status: %w", err)
-	}
-
-	return out, nil
-}
-
-func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken, status *domain.OutboxStatus) ([]observation.AlarmSentMark, error) {
+// LoadAlarmSentMarksForDeliveryIDs는 community/shorts 발송 행마다 같은 발송 시각의 tracking 발송 표시를 만든다.
+func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time) ([]observation.AlarmSentMark, error) {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil, nil
-	}
-
-	claimTokensByIdentity, err := collectClaimTokensByIdentity(claimTokens)
-	if err != nil {
-		return nil, fmt.Errorf("collect claim tokens by identity: %w", err)
 	}
 
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 
 	var targets []deliveryAlarmSentTarget
 
-	query := mustSQL("delivery_repository_tracking_0066_01.sql")
-	args := []any{uniqueIDs, deliverysql.Texts(postKinds)}
-
-	if status != nil {
-		query += "\t\t  AND d.status = $3\n"
-
-		args = append(args, *status)
-	}
-
-	if err := dbx.SelectSQL(ctx, db, &targets, "query delivery alarm sent targets", query, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, db, &targets, "query delivery alarm sent targets",
+		mustSQL("delivery_repository_tracking_0066_01.sql"), uniqueIDs, deliverysql.Texts(postKinds)); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)
 	}
 
 	marks := make([]observation.AlarmSentMark, 0, len(targets))
 	for i := range targets {
-		mark := observation.AlarmSentMark{
+		marks = append(marks, observation.AlarmSentMark{
 			Kind:        targets[i].Kind,
 			ContentID:   targets[i].ContentID,
 			AlarmSentAt: sentAt,
-		}
-
-		canonicalPostID, err := CanonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID)
-		if err != nil {
-			return nil, fmt.Errorf("canonical delivery post id: %w", err)
-		}
-
-		claimIdentity := DeliveryClaimIdentityKey(targets[i].Kind, canonicalPostID)
-
-		if authorizedAt, ok := claimTokensByIdentity[claimIdentity]; ok {
-			authorizedAtCopy := authorizedAt
-
-			mark.AuthorizedAt = &authorizedAtCopy
-		}
-
-		marks = append(marks, mark)
+		})
 	}
 
 	return marks, nil
-}
-
-func collectClaimTokensByIdentity(claimTokens []dispatchstate.ClaimToken) (map[string]time.Time, error) {
-	if len(claimTokens) == 0 {
-		return map[string]time.Time{}, nil
-	}
-
-	collected := make(map[string]time.Time, len(claimTokens))
-	for i := range claimTokens {
-		identity, authorizedAt, err := claimTokenIdentityAndAuthorizedAt(claimTokens[i], i)
-		if err != nil {
-			return nil, fmt.Errorf("claim token identity and authorized at: %w", err)
-		}
-
-		if err := collectClaimTokenAuthorizedAt(collected, identity, authorizedAt); err != nil {
-			return nil, fmt.Errorf("collect claim token authorized at: %w", err)
-		}
-	}
-
-	return collected, nil
-}
-
-func claimTokenIdentityAndAuthorizedAt(claimToken dispatchstate.ClaimToken, index int) (string, time.Time, error) {
-	postID := strings.TrimSpace(claimToken.PostID)
-	if postID == "" {
-		return "", time.Time{}, fmt.Errorf("collect claim tokens: post id is empty at index %d", index)
-	}
-
-	if claimToken.AuthorizedAt.IsZero() {
-		return "", time.Time{}, fmt.Errorf("collect claim tokens: authorized_at is empty at index %d", index)
-	}
-
-	return DeliveryClaimIdentityKey(claimToken.Kind, postID), claimToken.AuthorizedAt.UTC(), nil
-}
-
-func collectClaimTokenAuthorizedAt(collected map[string]time.Time, identity string, authorizedAt time.Time) error {
-	existingAuthorizedAt, ok := collected[identity]
-	if !ok {
-		collected[identity] = authorizedAt
-		return nil
-	}
-
-	if !existingAuthorizedAt.Equal(authorizedAt) {
-		return errors.New("collect claim tokens: conflicting authorized_at for logical identity")
-	}
-
-	return nil
-}
-
-func DeliveryClaimIdentityKey(kind domain.OutboxKind, postID string) string {
-	return string(kind) + "\x00" + strings.TrimSpace(postID)
 }
 
 func CanonicalDeliveryPostID(kind domain.OutboxKind, contentID string) (string, error) {

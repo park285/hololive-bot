@@ -101,7 +101,7 @@ func sortedCommunityShortsAlarmStates(rowsByKey map[string]*domain.YouTubeCommun
 			continue
 		}
 
-		row.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(row.AuthorizedAt, row.AlarmSentAt)
+		row.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(row.AlarmSentAt)
 		rows = append(rows, row)
 	}
 

@@ -51,7 +51,7 @@ func claimOrderTransitionStore(t *testing.T, pool *pgxpool.Pool) *store.Transiti
 	t.Helper()
 
 	transition, err := store.NewTransitionStore(pool, nil, store.TransitionConfig{
-		MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: time.Minute,
+		Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: time.Minute,
 		ClaimFreshnessWindow: 2 * time.Hour, LogicalGroupLimit: 100,
 	})
 	require.NoError(t, err)

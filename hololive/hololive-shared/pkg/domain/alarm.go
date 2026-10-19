@@ -246,7 +246,6 @@ type AlarmQueueEnvelope struct {
 type AlarmQueueRetryMetadata struct {
 	Attempt       int    `json:"attempt"`
 	RetryAfterMS  int64  `json:"retry_after_ms"`
-	NextVisibleAt string `json:"next_visible_at,omitempty"`
 	LastError     string `json:"last_error,omitempty"`
 	LastErrorCode string `json:"last_error_code,omitempty"`
 }

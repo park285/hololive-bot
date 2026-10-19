@@ -25,17 +25,16 @@ func TestClassifyPreservesDeliveryEvidence(t *testing.T) {
 		want Kind
 	}{
 		{"success", nil, Success},
-		{"handoff unknown dominates timeout", errors.Join(ErrHandoffOutcomeUnknown, context.DeadlineExceeded), OutcomeUnknown},
+		{"admission unknown dominates timeout", errors.Join(ErrAdmissionOutcomeUnknown, context.DeadlineExceeded), OutcomeUnknown},
 		{"structured unknown", testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`), OutcomeUnknown},
-		{"handoff failed", ErrHandoffFailed, Failed},
 		{"later structured unknown dominates failed", errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`)), OutcomeUnknown},
 		{"timeout", context.DeadlineExceeded, TransportAmbiguous},
-		{"joined timeout dominates failure", errors.Join(ErrHandoffFailed, context.DeadlineExceeded), TransportAmbiguous},
+		{"joined timeout dominates failure", errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), context.DeadlineExceeded), TransportAmbiguous},
 		{"canceled after invocation", context.Canceled, TransportAmbiguous},
 		{"post response lost", &iris.TransportError{Op: testPostOperation, Err: io.ErrUnexpectedEOF}, TransportAmbiguous},
 		{"dial rejected", &iris.TransportError{Op: testPostOperation, Err: &net.OpError{Op: testDialOperation, Err: errors.New("refused")}}, Failed},
 		{"dns rejected", &iris.TransportError{Op: testPostOperation, Err: &net.DNSError{Err: "no host"}}, Failed},
-		{"joined handoff failure preserves lost response", errors.Join(ErrHandoffFailed, &iris.TransportError{Op: testPostOperation, Err: io.ErrUnexpectedEOF}), TransportAmbiguous},
+		{"joined confirmed failure preserves lost response", errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), &iris.TransportError{Op: testPostOperation, Err: io.ErrUnexpectedEOF}), TransportAmbiguous},
 		{"joined dial failure preserves read ambiguity", errors.Join(
 			&iris.TransportError{Op: testPostOperation, Err: &net.OpError{Op: testDialOperation, Err: errors.New("refused")}},
 			&iris.TransportError{Op: testPostOperation, Err: &net.OpError{Op: "read", Err: io.ErrUnexpectedEOF}},

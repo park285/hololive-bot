@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
@@ -31,10 +32,47 @@ func TestTransitionLogicalGroupRowsPreparedPlanBoundsRequestScans(t *testing.T) 
 	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
 		for _, count := range []int{1, 50, 100} {
 			t.Run(fmt.Sprintf("%s/tuples-%d", mode, count), func(t *testing.T) {
-				assertGroupQueryPreparedPlan(t, pool, mode, count)
+				assertGroupQueryPreparedPlan(t, pool, transitionGroupRowsSQL, mode, count, assertGroupRowsResult)
 			})
 		}
 	}
+}
+
+// handoff 부모 사전 조회는 그룹 잠금과 같은 후보 조각이라 요청 관계를 한 번만 평가하고, 그룹 행의 부모 집합을 그대로
+// 돌려줘야 한다.
+func TestHandoffGroupParentsPreparedPlanBoundsRequestScans(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	seedGroupQueryPlanRows(t, pool)
+
+	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+		for _, count := range []int{1, 50, 100} {
+			t.Run(fmt.Sprintf("%s/tuples-%d", mode, count), func(t *testing.T) {
+				assertGroupQueryPreparedPlan(t, pool, handoffGroupParentsSQL, mode, count, assertGroupParentsResult)
+			})
+		}
+	}
+}
+
+// assertGroupRowsResult는 계획의 row 수만으로 동등성을 주장하지 않고 실제 정렬된 ID 전체를 확인한다.
+func assertGroupRowsResult(t *testing.T, tx pgx.Tx, execute string, wanted []int64) {
+	t.Helper()
+
+	var rows []transitionRow
+
+	require.NoError(t, dbx.SelectSQL(t.Context(), tx, &rows, "prepared group SQL result", execute))
+	require.Equal(t, wanted, groupQueryRowIDs(rows))
+}
+
+// assertGroupParentsResult는 부모 사전 조회가 기대 그룹 행의 부모 id 집합을 오름차순으로 돌려주는지 확인한다.
+func assertGroupParentsResult(t *testing.T, tx pgx.Tx, execute string, wanted []int64) {
+	t.Helper()
+
+	var want, parents []int64
+
+	require.NoError(t, dbx.SelectSQL(t.Context(), tx, &want, "expected group parents",
+		`SELECT DISTINCT outbox_id FROM youtube_notification_delivery WHERE id = ANY($1::BIGINT[]) ORDER BY outbox_id`, wanted))
+	require.NoError(t, dbx.SelectSQL(t.Context(), tx, &parents, "prepared group parents result", execute))
+	require.Equal(t, want, parents)
 }
 
 func seedGroupQueryPlanRows(t *testing.T, pool *pgxpool.Pool) {
@@ -61,7 +99,13 @@ func seedGroupQueryPlanRows(t *testing.T, pool *pgxpool.Pool) {
 	require.NoError(t, err)
 }
 
-func assertGroupQueryPreparedPlan(t *testing.T, pool *pgxpool.Pool, mode string, count int) {
+func assertGroupQueryPreparedPlan(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	query, mode string,
+	count int,
+	assertResult func(t *testing.T, tx pgx.Tx, execute string, wanted []int64),
+) {
 	t.Helper()
 
 	execute, wanted := groupQueryExecuteFixture(t, pool, count)
@@ -74,7 +118,7 @@ func assertGroupQueryPreparedPlan(t *testing.T, pool *pgxpool.Pool, mode string,
 	require.NoError(t, err)
 
 	// EXPLAIN 자체의 bind가 아니라 실제 SELECT를 PREPARE해야 generic 계획도 검증한다.
-	_, err = tx.Exec(t.Context(), "PREPARE group_rows_plan(bigint[], text[], text[], text[], bigint) AS "+mustSQL("transition_group_rows.sql"))
+	_, err = tx.Exec(t.Context(), "PREPARE group_rows_plan(bigint[], text[], text[], text[], bigint) AS "+query)
 	require.NoError(t, err)
 
 	defer func() {
@@ -95,13 +139,7 @@ func assertGroupQueryPreparedPlan(t *testing.T, pool *pgxpool.Pool, mode string,
 	require.NoError(t, jsonv2.Unmarshal(raw, &documents))
 	require.Len(t, documents, 1)
 	assertGroupQueryRequestScans(t, documents[0].Plan)
-
-	// 계획의 row 수만으로 동등성을 주장하지 않고 실제 정렬된 ID 전체를 확인한다.
-	var rows []transitionRow
-
-	err = dbx.SelectSQL(t.Context(), tx, &rows, "prepared group SQL result", execute)
-	require.NoError(t, err)
-	require.Equal(t, wanted, groupQueryRowIDs(rows))
+	assertResult(t, tx, execute, wanted)
 	t.Logf("prepared %s: tuples=%d tuple-only=%d direct-only=1 ids=%d/order match; execution=%.3fms",
 		mode, count, count, len(wanted), documents[0].ExecutionTime)
 }

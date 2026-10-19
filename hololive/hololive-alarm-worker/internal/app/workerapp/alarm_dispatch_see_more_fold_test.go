@@ -50,13 +50,17 @@ func (*seeMoreFoldConsumer) MarkSending(context.Context, []domain.AlarmQueueEnve
 	return nil
 }
 
-func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, _ string, _ time.Duration) error {
 	c.dispatched += len(envelopes)
 	return nil
 }
 
 func (*seeMoreFoldConsumer) ReleaseClaimKeys(context.Context, []string) error {
 	return nil
+}
+
+func (c *seeMoreFoldConsumer) ReleaseLeased(context.Context, []domain.AlarmQueueEnvelope) error {
+	return c.unexpected("release leased")
 }
 
 func (c *seeMoreFoldConsumer) unexpected(route string) error {
@@ -118,18 +122,14 @@ type seeMoreFoldIrisClient struct {
 	texts []string
 }
 
-func (c *seeMoreFoldIrisClient) SendMessage(_ context.Context, _, message string, _ ...iris.SendOption) error {
+func (c *seeMoreFoldIrisClient) SendMessageAccepted(_ context.Context, _, message string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.texts = append(c.texts, message)
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "see-more-request"}, nil
 }
 
 func (*seeMoreFoldIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, errors.New("markdown lane is not configured")
-}
-
-func (*seeMoreFoldIrisClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, errors.New("reply status is not used by the text lane")
 }
 
 func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]string) (*template.Renderer, *messagestrings.Store) {
@@ -426,6 +426,6 @@ func (*seeMoreFoldConsumer) PinSendRequest(_ context.Context, envelopes []domain
 	return &request, nil
 }
 
-func (c *seeMoreFoldConsumer) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, string) (bool, error) {
-	return false, c.unexpected("reissue")
+func (c *seeMoreFoldConsumer) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
+	return c.unexpected("reissue")
 }

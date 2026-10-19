@@ -62,10 +62,15 @@ Gateway는 운영자 ID를 인증 세션에서 결합합니다. `dlq`·`quaranti
 
 ### Iris Markdown admission
 
-Markdown admission retains the exact Iris request ID and polls its reply status.
-Only `handoff_completed` succeeds; confirmed failure (`sendoutcome.ErrHandoffFailed`) and
-an unknown or timed-out outcome (`sendoutcome.ErrHandoffOutcomeUnknown`) retain their
-distinct failure/claim semantics.
+공유 sender는 Markdown·텍스트 모두 Iris `202`가 durable admission을 증명하면 바로 반환하며 `/reply-status`를 조회하지
+않습니다. 따라서 sender 성공(`sendoutcome.Success`)은 durable admission만 뜻하고, 돌려준 Iris request ID가 이후
+handoff 확인 대상입니다. Markdown `202`는 `success`, `delivery=queued`, 비어 있지 않은 request ID를 모두 갖춰야 하고,
+텍스트 `202`는 비어 있지 않은 request ID만 요구합니다(아래 참고). admission을 증명하지 못한 `202`는
+`sendoutcome.ErrAdmissionOutcomeUnknown`이며 구조화된 `409 CLIENT_REQUEST_ID_OUTCOME_UNKNOWN`과 같은
+`OutcomeUnknown`입니다. alarm dispatch는 격리하고, YouTube는 결과 불명으로 행을 `SENDING`에 두며, notification은 행을
+`QUARANTINED`로 옮깁니다. handoff 결과(`handoff_completed`, `failed`, `outcome_unknown`, 진행 중)는 아래 세 handoff
+reconciler만 각자의 원장(alarm dispatch send unit, notification delivery 행, YouTube 고정 요청)에서 관측하며, 발송
+경로는 handoff 결과를 갖지 않습니다.
 
 Alarm-worker does not send Karing templates
 (`DEC-20260926-hololive-karing-egress-disposition`, superseding
@@ -75,9 +80,112 @@ Alarm dispatch pins each send unit's final body, text/markdown route, membership
 base ID and generation before `BeginSending`. Retries and restarts reuse that request.
 Transport ambiguity may retry with the stored ID and identical request for every
 source kind; structured `OUTCOME_UNKNOWN` and unknown handoff remain quarantined.
-Only confirmed pre-handoff `CLIENT_REQUEST_ID_FAILED` permits atomic generation/retry
-advance to SDK r1/r2 within the existing retry budget. Past Karing `SENDING`/`outcome_unknown` rows keep the existing
-quarantine and stale-sweeper contract (T18 2026-09-26: 0 non-terminal rows).
+Only confirmed pre-handoff `CLIENT_REQUEST_ID_FAILED` or a reconciled `failed` reply status (see below) permits
+atomic generation/retry advance to SDK r1/r2 within the existing retry budget. Past Karing `SENDING`/`outcome_unknown`
+rows keep the existing quarantine and stale-sweeper contract (T18 2026-09-26: 0 non-terminal rows).
+
+### Iris handoff reconciliation
+
+Text and Markdown admission both retain the 202 Iris request ID. A text 202 needs only a non-empty request ID, the same
+rule as the bot plane text path, because the Iris contract does not define the text 202 `delivery` value; this applies
+to every text send through the shared sender (alarm dispatch, YouTube, notification). A Markdown 202 still needs
+`success`, `delivery=queued` and a request ID. Anything less is `sendoutcome.ErrAdmissionOutcomeUnknown`. `MarkSent` stores
+the ID on the send unit (`handoff_request_id`) in the same
+statement that moves every member to `sent`, and schedules the first check (`handoff_next_check_at`) min(5s, horizon)
+after admission on that statement's database clock, so even a horizon shorter than 5s is never passed by the first
+check. When `MarkSent` does not apply to every member, the unit records no check.
+
+`alarm-dispatch-handoff-reconciler` claims due units with `FOR UPDATE SKIP LOCKED` and moves `handoff_next_check_at`
+15s ahead as a soft-claim token. It queries `/reply-status` outside any transaction, then applies the observation in
+one statement that locks the unit before its members and rechecks the token, `client_request_id`,
+`handoff_request_id` and that every pinned member is still `sent`. The horizon is the `alarm_dispatch` executor
+`attempt_timeout`.
+
+| Observation | Ledger action |
+|---|---|
+| `handoff_completed` | close the check (`handoff_checked_at`); members stay `sent` |
+| pending state, or a query error other than 404 | next check 15s, then 60s, then every 5 min, never after admission + horizon |
+| `failed`, generation < 2 and retry budget left | members `retry` (attempt + 1, `sent_at` cleared, `handoff_failed`); unit advances to the next SDK request ID (`:r1`/`:r2`) with cleared handoff columns, in one statement |
+| `failed`, otherwise | members `dlq` (attempt + 1, `handoff_failed`); dedup claim keys released after commit under a separate 5s budget, not the settlement budget |
+| `outcome_unknown`, unrecognized state, empty or mismatched response | members `quarantined` (`handoff_outcome_unknown`) |
+| 404 | members `quarantined` (`handoff_status_missing`) |
+| still pending at the horizon | members `quarantined` (`handoff_unconfirmed`) |
+
+A replaced token or request ID applies nothing. If the token and request IDs still match but a member is no longer
+`sent` (including a unit whose members were all deleted), members are left unchanged, the check is closed for good,
+and the reconciler logs `check closed without transition` at error level with the observed action and code
+(`dispatchoutbox.ErrHandoffCheckClosed`). A settlement that runs out of its 5s budget is abandoned; the next check
+after the soft claim decides again under the token CAS, so it is logged as a warning. Readers of `sent` deliveries
+may see a unit whose handoff is still unconfirmed for up to the horizon.
+
+Notification delivery keeps the same check on its own ledger, `notification_delivery_outbox` (migrations 330 and
+338); it is not merged into alarm dispatch. `MarkSent` stores the 202 Iris request ID in `handoff_request_id` and
+schedules `handoff_next_check_at` min(5s, `notification_delivery` executor `attempt_timeout`) after `sent_at` in the
+statement that moves the row `SENDING → SENT`, on that statement's database clock. An empty request ID applies
+nothing; the row stays `SENDING` for the stale sweep.
+`notification-delivery-handoff-reconciler` runs only when the `notification_delivery` executor is enabled and uses
+the same soft claim, outside-transaction status query, budgets, ladder, and decision as alarm dispatch, with the
+`notification_delivery` executor `attempt_timeout` as the horizon. Each settlement is one statement that locks the
+row and rechecks status `SENT`, the soft-claim token, `handoff_request_id`, and the pinned request generation (owner
+and lease are not part of this fence; a miss is `version_changed`, `request_changed`, or `status_changed` and
+applies nothing). Outcomes:
+
+| Observation | Notification ledger action |
+|---|---|
+| `handoff_completed` | close the check (`handoff_checked_at`); the row stays `SENT` |
+| pending state, or a query error other than 404, before the horizon | next check on the ladder, never after `sent_at` + horizon |
+| `failed` with request generation < 2 and `notification_delivery.max_retries` attempt budget left (same rule as a send failure) | `PENDING`, attempt + 1, `next_attempt_at` = clock + `retry_backoff_ms`, request generation + 1, `sent_at` and handoff columns cleared; the next claim resends the pinned body with the next SDK request ID (`:r1`/`:r2`) |
+| `failed` otherwise | `FAILED`, attempt + 1, pinned request `exhausted=true` so producer rearm does not revive it |
+| outcome unknown, unrecognized, empty or mismatched state, 404, pending at the horizon | `QUARANTINED` |
+
+The ledger has no `last_error_code`; `error` starts with the same handoff code followed by `: ` and the detail
+(`handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, `handoff_unconfirmed`). Room order: a `SENT`
+row whose handoff is unconfirmed (`handoff_request_id` set, `handoff_checked_at` null) holds later rows of the same
+room like a `SENDING` row until its check ends. The migration 330 CHECK makes such a row exactly a row with a
+non-null `handoff_next_check_at`, so the hold cannot be orphaned and the claim predicate tests that column, the same
+predicate as the migration 338 partial index; the horizon bounds the hold. A reissued row re-enters the existing
+`(next_attempt_at, created_at, id)` room order by its new `next_attempt_at`, like a retried send failure; a later row
+of the same room that is already due may therefore go first, so strict creation order is not guaranteed.
+
+YouTube delivery keeps the check on its pinned request, `youtube_notification_send_request` (migrations 336 and
+339), because one Iris request carries every pinned member of a room. `CompleteSent` locks the pinned request before
+its member deliveries (the claim order), requires the request generation and member set to equal the started
+owners, and in the same transaction as the `SENT` transition, tracking marks, telemetry and the `SENT` ledger stores
+the 202 Iris request ID in `handoff_request_id` and schedules `handoff_next_check_at` min(5s, `youtube_delivery`
+executor `attempt_timeout`) after the owners' `sent_at`, on the transition's database clock. A mismatched request or
+an empty request ID applies nothing; the rows stay `SENDING` for the stale sweep.
+`youtube-delivery-handoff-reconciler` runs only when the `youtube_delivery` executor is enabled and uses the same
+soft claim, outside-transaction status query, budgets, ladder, and decision, with that `attempt_timeout` as the
+horizon. A settlement is one transaction that locks the pinned request, then the parent `youtube_notification_outbox`
+rows of the members' logical groups (ascending id, with the outbox projector's lock statement), then the logical group
+deliveries, then the ledger, and rechecks the soft-claim token, `handoff_request_id`, generation, body hash, pinned
+members and each member's `row_version` from the claim. Parents are read before the group lock with the same candidate
+predicate and arguments as the group lock, so the order matches retention cleanup and fanout (parent before child) and
+no child lock is held while waiting for a parent. If a locked group row has a parent outside that pre-locked set (a
+follower or outbox of the same logical key arrived in between), the settlement does not lock the new parent; it rolls
+back with nothing changed and returns a `membership_changed` fence miss that does not close the check, so the next
+check after the soft claim settles the grown set. A reissue, exhaustion or quarantine then recomputes the aggregate
+status of the already locked parents of the changed rows with the outbox projector's aggregate statement, inside that
+transaction and without relocking them. If the aggregate fails, the whole settlement rolls back and keeps the claim
+token, so the next check after the soft claim settles it again; there is no post-commit projection or repair scan.
+The aggregate never clears an outbox `sent_at`, so a parent that was `SENT` keeps its first `sent_at` when it becomes
+`FAILED` or `PENDING`. Outcomes:
+
+| Observation | YouTube ledger action |
+|---|---|
+| `handoff_completed` | close the check (`handoff_checked_at`); rows and ledger stay `SENT` |
+| pending state, or a query error other than 404, before the horizon | next check on the ladder, never after the earliest member `sent_at` + horizon |
+| `failed` with generation < 2 and `youtube_delivery.max_retries` attempt budget left | every `SENT` row of each member's logical group, including duplicate rows outside the pinned members, `PENDING` (owner attempt + 1, `next_attempt_at` = clock + `retry_backoff_ms`, `sent_at` cleared); the `SENT` ledger row sourced by that owner is deleted; request generation + 1 with cleared handoff columns, so the next claim resends the pinned body with `:r1`/`:r2` |
+| `failed` otherwise | the same rows `FAILED` (owner attempt + 1); the owner-sourced `SENT` ledger row is deleted (`FAILED` keeps no ledger) |
+| outcome unknown, unrecognized, empty or mismatched state, 404, pending at the horizon | the same rows `QUARANTINED`; the owner-sourced `SENT` ledger row becomes `QUARANTINED` with the same source |
+
+`error` starts with the handoff code followed by `: ` and the detail. A replaced token or request applies nothing
+(`version_changed`/`request_changed`). If the claim still holds but a member is no longer the same `SENT` row, the
+logical group is in flight, quarantined or over the group limit, or the key's ledger row is not `SENT` with that owner
+as `source_delivery_id`, nothing is transitioned, ledger rows from other sources are untouched, the check is closed
+for good and the reconciler logs an error (`store.ErrHandoffCheckClosed`). Post-level tracking and alarm-sent marks
+(`youtube_content_alarm_tracking`, community/shorts alarm state) are not reverted by a reissue, exhaustion or
+quarantine: another room may have delivered the same post.
 
 Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
 microsecond precision). Event detection, creation and next-attempt timestamps do
@@ -164,7 +272,6 @@ type AlarmQueueEnvelope struct {
 type AlarmQueueRetryMetadata struct {
     Attempt       int    `json:"attempt,omitempty"`
     RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
-    NextVisibleAt string `json:"next_visible_at,omitempty"`
     LastError     string `json:"last_error,omitempty"`
     LastErrorCode string `json:"last_error_code,omitempty"`
 }
@@ -348,8 +455,11 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - HTTP client timeout: 10 seconds for alarm client.
 - HTTP/H3 options are passed explicitly from the consuming plane's loaded `BotPlaneConfig.InternalH3` or `AdminPlaneConfig.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
 - Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
-- Retry: a failed delivery returns to `retry` with `next_attempt_at`; the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
-- `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, or the recovery codes `lease_expired`, `stale_sending`, and `lease_released`. Existing consumers may ignore this optional field.
+- 발송 시도: `alarm_dispatch` executor `attempt_timeout`은 Iris admission 호출(SDK admission 재시도 포함)에만 걸립니다. `lease_ms`보다 짧아야 하며 handoff 확인 지평으로도 쓰입니다.
+- handoff 확인: handoff를 확인하지 못한 `sent` 단위는 `alarm-dispatch-handoff-reconciler`가 [Iris handoff reconciliation](#iris-handoff-reconciliation) 규칙으로 확인합니다. sender는 handoff를 기다리지 않습니다.
+- stale `sending` 격리: `quarantine_threshold_ms`는 `lease_ms` 이상이어야 합니다. 프로필 검증이 더 작은 값을 기동 시 거부하고, dispatch consumer도 생략·0·음수를 포함해 lease보다 작은 기준을 lease에서 계산한 값으로 바꾸지 않고 생성 오류로 거부합니다.
+- Retry: a failed delivery returns to `retry` with `next_attempt_at` set from the transition's single database clock plus `retry_after_ms` (members of one send unit share it); the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
+- `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, the recovery codes `lease_expired`, `stale_sending`, and `lease_released`, or the handoff reconciliation codes `handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, and `handoff_unconfirmed`. Existing consumers may ignore this optional field.
 - DLQ and quarantine are delivery states (`dlq`, `quarantined`) in `alarm_dispatch_deliveries`; the event payload stays in `alarm_dispatch_events`. Replay uses the audited requeue in [admin dispatch operations](../runbooks/admin-dispatch-operations.md).
 
 ## Compatibility policy

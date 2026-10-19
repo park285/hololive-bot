@@ -35,6 +35,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -47,33 +48,42 @@ const (
 
 // mockDeliveryRepository: deliveryRepository mock 구현.
 type mockDeliveryRepository struct {
-	saveRequestFn            func(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) (bool, error)
+	saveRequestFn            func(ctx context.Context, id int64, workerID string, attemptCount int, request *deliverypayload.Request) error
+	reissueFn                func(ctx context.Context, id int64, workerID string, attemptCount, generation int, exhaust bool) error
 	fetchAndLockFn           func(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
-	markSendingFn            func(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
-	markQuarantinedFn        func(context.Context, int64, string, string) (bool, error)
-	markSentFn               func(ctx context.Context, id int64, workerID string) (bool, error)
-	markFailedFn             func(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	markSendingFn            func(ctx context.Context, id int64, workerID string, attemptCount int, lease time.Duration) error
+	markQuarantinedFn        func(ctx context.Context, id int64, workerID string, attemptCount int, reason string) error
+	markSentFn               func(ctx context.Context, id int64, workerID string, attemptCount int) error
+	markFailedFn             func(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) error
 	quarantineStaleSendingFn func(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
 	countFailedFn            func(ctx context.Context) (int64, error)
 	cleanupFn                func(ctx context.Context, olderThan time.Duration) (int64, error)
 	claimedIDs               map[int64]struct{}
 }
 
-func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, attemptCount int, previous, next *deliverypayload.Request, maxRetries int, backoff time.Duration, reason string) (bool, error) {
-	saved, err := m.saveRequest(ctx, id, worker, previous, next)
-	if err != nil || !saved {
-		return saved, err
+// fenceMiss는 Store가 단일 행 전이에서 돌려주는 것과 같은 모양의 fence 미스다.
+func fenceMiss(action string, id int64, reason sendfence.Reason, status domain.DeliveryOutboxStatus) error {
+	return &sendfence.MissError{Action: action, Expected: 1, Rows: []sendfence.RowMiss{{ID: id, Reason: reason, Status: string(status)}}}
+}
+
+func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, attemptCount, generation int, exhaust bool, maxRetries int, backoff time.Duration, reason string) error {
+	if m.reissueFn != nil {
+		return m.reissueFn(ctx, id, worker, attemptCount, generation, exhaust)
 	}
 
 	return m.MarkFailed(ctx, id, worker, attemptCount, maxRetries, backoff, reason)
 }
 
-func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, previous, next *deliverypayload.Request) (bool, error) {
+func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, attemptCount int, request *deliverypayload.Request) error {
 	if m.saveRequestFn != nil {
-		return m.saveRequestFn(ctx, id, worker, previous, next)
+		return m.saveRequestFn(ctx, id, worker, attemptCount, request)
 	}
 
-	return true, nil
+	return nil
+}
+
+func (m *mockDeliveryRepository) markRequestExhausted(ctx context.Context, id int64, worker string, attemptCount int, reason string) error {
+	return m.MarkFailed(ctx, id, worker, attemptCount, 1, 0, reason)
 }
 
 func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
@@ -133,51 +143,36 @@ func (m *mockDeliveryRepository) fetchReadyAndLock(ctx context.Context, workerID
 	return ready, nil
 }
 
-func (m *mockDeliveryRepository) MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error) {
+func (m *mockDeliveryRepository) MarkSending(ctx context.Context, id int64, workerID string, attemptCount int, lease time.Duration) error {
 	if m.markSendingFn != nil {
-		out, err := m.markSendingFn(ctx, id, workerID, lease)
-		if err != nil {
-			return out, fmt.Errorf("mark sending fn: %w", err)
-		}
-
-		return out, nil
+		return m.markSendingFn(ctx, id, workerID, attemptCount, lease)
 	}
 
-	return true, nil
+	return nil
 }
 
-func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string) (bool, error) {
+func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string, attemptCount int, _ string, _ time.Duration) error {
 	if m.markSentFn != nil {
-		out, err := m.markSentFn(ctx, id, workerID)
-		if err != nil {
-			return out, fmt.Errorf("mark sent fn: %w", err)
-		}
-
-		return out, nil
+		return m.markSentFn(ctx, id, workerID, attemptCount)
 	}
 
-	return true, nil
+	return nil
 }
 
-func (m *mockDeliveryRepository) MarkQuarantined(ctx context.Context, id int64, workerID, reason string) (bool, error) {
+func (m *mockDeliveryRepository) MarkQuarantined(ctx context.Context, id int64, workerID string, attemptCount int, reason string) error {
 	if m.markQuarantinedFn != nil {
-		return m.markQuarantinedFn(ctx, id, workerID, reason)
+		return m.markQuarantinedFn(ctx, id, workerID, attemptCount, reason)
 	}
 
-	return true, nil
+	return nil
 }
 
-func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
+func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) error {
 	if m.markFailedFn != nil {
-		out, err := m.markFailedFn(ctx, id, workerID, attemptCount, maxRetries, backoff, errMsg)
-		if err != nil {
-			return out, fmt.Errorf("mark failed fn: %w", err)
-		}
-
-		return out, nil
+		return m.markFailedFn(ctx, id, workerID, attemptCount, maxRetries, backoff, errMsg)
 	}
 
-	return true, nil
+	return nil
 }
 
 func (m *mockDeliveryRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error) {
@@ -326,13 +321,13 @@ func TestProcessOnce_E2E(t *testing.T) {
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, id int64, _ string) (bool, error) {
+		markSentFn: func(_ context.Context, id int64, _ string, _ int) error {
 			mu.Lock()
 			defer mu.Unlock()
 
 			sentIDs = append(sentIDs, id)
 
-			return true, nil
+			return nil
 		},
 		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
@@ -379,11 +374,11 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 				{ID: 10, RoomID: "room-x", Payload: "invalid-json{{{"},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ string, _, _ int, _ time.Duration, errMsg string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _, _ int, _ time.Duration, errMsg string) error {
 			failedID = id
 			failedMsg = errMsg
 
-			return true, nil
+			return nil
 		},
 		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
@@ -418,9 +413,9 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 				{ID: 20, RoomID: "room-y", Payload: makePayload(t, "hello")},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ string, _, _ int, _ time.Duration, _ string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _, _ int, _ time.Duration, _ string) error {
 			failedID = id
-			return true, nil
+			return nil
 		},
 		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
@@ -454,16 +449,16 @@ func TestProcessItem_MarkSendingFenceSkipsSend(t *testing.T) {
 	)
 
 	repository := &mockDeliveryRepository{
-		markSendingFn: func(_ context.Context, _ int64, _ string, _ time.Duration) (bool, error) {
-			return false, nil
+		markSendingFn: func(_ context.Context, id int64, _ string, _ int, _ time.Duration) error {
+			return fenceMiss(actionMarkSending, id, sendfence.ReasonLeaseExpired, domain.DeliveryStatusPending)
 		},
-		markSentFn: func(_ context.Context, _ int64, _ string) (bool, error) {
+		markSentFn: func(context.Context, int64, string, int) error {
 			markSentCalled = true
-			return true, nil
+			return nil
 		},
-		markFailedFn: func(_ context.Context, _ int64, _ string, _, _ int, _ time.Duration, _ string) (bool, error) {
+		markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) error {
 			markFailedCalled = true
-			return true, nil
+			return nil
 		},
 	}
 	sender := &mockSender{
@@ -700,10 +695,10 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 				{ID: 4, RoomID: "room-d", Payload: makePayload(t, "hello-d")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, _ int64, _ string) (bool, error) {
+		markSentFn: func(context.Context, int64, string, int) error {
 			sentCount.Add(1)
 
-			return true, nil
+			return nil
 		},
 		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
@@ -813,6 +808,11 @@ func (m *mockSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 	return body, "text", nil
 }
 
-func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
-	return m.SendMessageWithClientRequestID(ctx, room, body, id)
+// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
+func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	if err := m.SendMessageWithClientRequestID(ctx, room, body, id); err != nil {
+		return "", err
+	}
+
+	return "iris-" + id, nil
 }
