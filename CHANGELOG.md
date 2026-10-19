@@ -8,7 +8,7 @@
 
 ## 미출시
 
-## v11.0.0 - 2026-10-18
+## v11.0.0 - 2026-10-19
 
 - **최종 워커·DB 계약 전환:** 10.2.1의 구 프로필 호환 baseline을 실제 운영에서 수용한 뒤 새 프로필을 활성화합니다. `source_observation`은 batch가 workers 이상이어야 하며 lease 하한은 `batch × attempt_timeout + 10000ms`입니다. eligible 큐·nullable 진단·공유 cache 수명·DB control reserve와 lease/attempt 정산을 함께 유지하며, 322–324와 방송 시각 확정·멤버십 아카이브 동작은 보존합니다.
 
@@ -23,7 +23,7 @@
 - **비활성 워커 진단:** `source_observation`이 꺼져도 YouTube runtime과 durable 큐 sampler를 구성하여 depth를 보고합니다. 비활성 경로는 claim·projection 준비·maintenance를 실행하지 않습니다. bot inbox/outbox의 attempt 종료는 defer로 보장하여 panic 뒤 inFlight가 남지 않습니다.
 - **DB 연결·정리:** migrator의 pool·bootstrap 연결을 shared-go의 명시적 sslmode·비밀 보호 파싱으로 통일하며 `PGSSLMODE` 생략을 거부합니다. 기존 `pgxutil`을 제거하고 모든 rollback 소비자를 취소 독립 5초 공통 경로로 옮깁니다. 다섯 소비자는 provenance를 검증한 `shared-go/v2 v2.14.0`을 사용하며, source 통합만으로 운영 활성화·수용을 뜻하지는 않습니다.
 - **보존 backlog 측정:** kind별 제한된 후보에서 첫 비보호 행을 찾으면 보호 판정을 중단합니다. 실제 migration을 적용한 격리 DB에서 1,000개 후보의 보호 함수 호출이 첫 행 적격이면 1회, 보호 선두 3개이면 4회로 줄고 oldest·known은 유지됨을 확인했습니다. migration 315 삭제 경로는 별도로 측정했으며 잠금·커서·재검사 계약을 보존하기 위해 변경하지 않았습니다.
-- **회귀 검사의 오류 경계:** SCRAM 역할 실패의 원인·비밀 비노출 비교 전에 nil을 명시적으로 거부하고, source_observation의 정상·거절 입력을 별도 분기로 검사합니다. 두 경로의 실제 회귀 검사를 유지하면서 NilAway가 오류 성공 경계를 추적할 수 있도록 했습니다.
+- **회귀 검사의 오류 경계:** SCRAM 역할 실패의 원인·비밀 비노출 비교 전에 nil을 명시적으로 거부하고, source_observation의 정상·거절 입력을 별도 분기로 검사합니다. backlog 범위 검사도 실제 runtime처럼 필수 프로필을 적용한 뒤 설정을 검증합니다. 기본값·오류 문구·단순 로드 성공에만 의존한 단언은 제거하고 범위·파싱 실패 동작을 유지했습니다.
 
 ## v10.2.1 - 2026-10-18
 

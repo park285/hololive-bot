@@ -12,14 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
-func TestStackWorkerProfileLoadsExactAPIRoleSettings(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
-
-	if _, err := LoadAPIWorkerProfile(); err != nil {
-		t.Fatalf("LoadAPIWorkerProfile() error = %v", err)
-	}
-}
-
 func TestDisabledSourceObservationProfileRemainsValid(t *testing.T) {
 	loaded := settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")
 	worker := loaded.Profile.Workers["source_observation"]
