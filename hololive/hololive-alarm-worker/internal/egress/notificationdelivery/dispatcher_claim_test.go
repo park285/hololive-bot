@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -69,7 +70,7 @@ func TestDispatcherClaimsOnlyWhenDeliveryCanStart(t *testing.T) {
 
 				var expired, sent atomic.Int32
 
-				repo.saveRequestFn = func(_ context.Context, id int64, _ string, _, _ *deliverypayload.Request) error {
+				repo.saveRequestFn = func(_ context.Context, id int64, _ string, _ int, _ *deliverypayload.Request) error {
 					repo.mu.Lock()
 
 					valid := repo.expires[id].After(time.Now())
@@ -78,7 +79,7 @@ func TestDispatcherClaimsOnlyWhenDeliveryCanStart(t *testing.T) {
 					if !valid {
 						expired.Add(1)
 
-						return &requestFenceMissError{Operation: requestFenceSave, Cause: requestFenceLeaseExpired, Status: domain.DeliveryStatusPending}
+						return fenceMiss(actionSaveRequest, id, sendfence.ReasonLeaseExpired, domain.DeliveryStatusPending)
 					}
 
 					return nil
