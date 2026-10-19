@@ -38,6 +38,10 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   while IFS= read -r yml; do
     exec_tree+=("${yml}")
   done < <(find "${ROOT_DIR}/deploy/compose" -maxdepth 1 -type f -name 'docker-compose*.yml' 2>/dev/null | sort)
+  for profile_overlay in "${ROOT_DIR}"/artifacts/worker-profile/active/*.yml "${ROOT_DIR}"/artifacts/worker-profile/active/*.pair; do
+    [[ -e "$profile_overlay" || -L "$profile_overlay" ]] || continue
+    exec_tree+=("$profile_overlay")
+  done
 
   if ! "${verifier}" "${exec_tree[@]}"; then
     echo "[SECURITY] root-executed deploy tree is writable by a non-root user (03e6dca8)." >&2

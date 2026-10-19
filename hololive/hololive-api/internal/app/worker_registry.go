@@ -54,29 +54,13 @@ func validateAPIWorkerRegistryInputs(config *apiconfig.RuntimeConfig, bot *botru
 }
 
 func registerYouTubeWorker(registry *workercontract.Registry, youtube *youtuberuntime.Runtime) error {
-	if youtube != nil {
-		registration := youtube.WorkerRegistration()
-		if err := registry.Register(registration); err != nil {
-			return fmt.Errorf("register %s worker: %w", registration.WorkerID, err)
-		}
-
-		return nil
+	if youtube == nil {
+		return errors.New("source observation runtime is required")
 	}
 
-	code := workercontract.QueueNotSampled
-	registration := workercontract.Registration{
-		WorkerID:          "source_observation",
-		Runtime:           workercontract.RuntimeGo,
-		QueueBackend:      workercontract.QueuePostgres,
-		QueueScope:        workercontract.QueueScopeShared,
-		SettingsValidated: true,
-		QueueSnapshot: func() workercontract.QueueSnapshot {
-			return workercontract.QueueSnapshot{Status: workercontract.QueueSnapshotUnavailable, ErrorCode: &code}
-		},
-	}
-
+	registration := youtube.WorkerRegistration()
 	if err := registry.Register(registration); err != nil {
-		return fmt.Errorf("register unavailable source_observation worker: %w", err)
+		return fmt.Errorf("register %s worker: %w", registration.WorkerID, err)
 	}
 
 	return nil

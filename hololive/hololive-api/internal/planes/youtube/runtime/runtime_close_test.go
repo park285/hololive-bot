@@ -16,6 +16,14 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
+func TestDisabledPrepareDoesNotRequireMutationDependencies(t *testing.T) {
+	// 비활성 executor는 claim probe나 projection 준비를 호출하지 않는다.
+	runtime := &Runtime{}
+	if err := runtime.prepare(t.Context()); err != nil {
+		t.Fatalf("prepare disabled source observation: %v", err)
+	}
+}
+
 func TestCloseBeforeStartReleasesPoolOnceAndPreventsTasks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var closes, samples atomic.Int64

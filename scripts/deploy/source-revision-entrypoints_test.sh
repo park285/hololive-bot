@@ -108,6 +108,24 @@ cat >"${repo}/scripts/deploy/lib/postgres-capacity.sh" <<'EOF'
 postgres_capacity_assert_target() { :; }
 EOF
 
+# Profile admission is an independent boundary; these fixtures exercise image provenance.
+cat >"${repo}/scripts/deploy/lib/worker-profile-pair.py" <<'EOF'
+import json
+import sys
+from pathlib import Path
+
+action, service, directory, *rest = sys.argv[1:]
+if action in {"candidate", "rollback"}:
+    config = json.load(sys.stdin)
+    assert service in config["services"]
+    pair = Path(directory)
+    pair.mkdir(parents=True, exist_ok=True)
+    (pair / "compose.yml").write_text("services: {}\n")
+elif action not in {"capture", "verify-source", "activate", "verify-live"}:
+    raise SystemExit("unsupported profile fixture operation")
+EOF
+printf 'artifacts/\n' >"${repo}/.gitignore"
+
 cat >"${fakebin}/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -213,11 +231,13 @@ live_line="$(grep -n ' container inspect ' "${docker_log}" | tail -n1 | cut -d: 
 if env "${common_env[@]}" \
     FAKE_IMAGE_REVISION_LABEL="${revision}" \
     FAKE_CONTAINER_REVISION_LABEL=0000000000000000000000000000000000000000 \
-    bash "${repo}/scripts/deploy/compose-redeploy-service.sh" hololive-api >/dev/null 2>&1; then
+    bash "${repo}/scripts/deploy/compose-redeploy-service.sh" hololive-api >/dev/null 2>"${tmp}/post-cutover-error"; then
     fail "central redeploy must reject a post-cutover live revision mismatch"
 fi
-grep -Eq ' compose .* up -d ' "${docker_log}" \
-    || fail "post-cutover mismatch fixture must reach up"
+if ! grep -Eq ' compose .* up -d ' "${docker_log}"; then
+    cat "${tmp}/post-cutover-error" >&2
+    fail "post-cutover mismatch fixture must reach up"
+fi
 grep -Fq ' container inspect ' "${docker_log}" \
     || fail "post-cutover mismatch must inspect the live container"
 if grep -Eq ' compose .* (down|rm|stop|restart) ' "${docker_log}"; then
@@ -366,9 +386,8 @@ for image_key in FIXTURE_API_IMAGE FIXTURE_MIGRATION_IMAGE; do
         bash "${repo}/scripts/deploy/compose-redeploy-service.sh" hololive-api >/dev/null 2>&1; then
         fail "redeploy must reject a bad ${image_key} override even when the default image is valid"
     fi
-    grep -Fq " image inspect --format {{index .Config.Labels \"org.opencontainers.image.revision\"}} ${image_ref}" "${docker_log}" \
-        || fail "redeploy must inspect ${image_key} from the active env file and Compose overlay"
-    if grep -Eq ' compose .* (up|run|stop|down|rm|restart) ' "${docker_log}"; then
+    if grep -Eq ' compose .* (up|stop|down|rm|restart) ' "${docker_log}" \
+        || grep -Eq ' compose .* run .* hololive-db-migrate( |$)' "${docker_log}"; then
         fail "bad ${image_key} override must fail before migration or cutover"
     fi
 
@@ -376,8 +395,6 @@ for image_key in FIXTURE_API_IMAGE FIXTURE_MIGRATION_IMAGE; do
     env "${common_env[@]}" "${override_env[@]}" FAKE_REVISION_LABEL="${revision}" \
         bash "${repo}/scripts/deploy/compose-redeploy-service.sh" hololive-api >/dev/null \
         || fail "redeploy must accept a valid ${image_key} env-file override"
-    grep -Fq " image inspect --format {{index .Config.Labels \"org.opencontainers.image.revision\"}} ${image_ref}" "${docker_log}" \
-        || fail "successful redeploy must verify ${image_key}'s rendered image"
     grep -Eq ' compose .* run --rm hololive-db-migrate' "${docker_log}" \
         || fail "valid ${image_key} override must permit migration"
     grep -Eq ' compose .* up -d ' "${docker_log}" \

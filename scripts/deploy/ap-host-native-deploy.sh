@@ -10,9 +10,9 @@ AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-100.100.1.8}"
 AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
 
 case "$MODE" in
-  --dry-run|--apply) ;;
+  --dry-run|--apply|--prepare-profile) ;;
   *)
-    echo "Usage: $0 <ap-host> [--dry-run|--apply]" >&2
+    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile]" >&2
     exit 2
     ;;
 esac
@@ -52,9 +52,15 @@ if [[ ${#AP_SERVICES[@]} -ne 1 || ${#AP_PORTS[@]} -ne 1 ]]; then
   exit 2
 fi
 
-if [[ "$MODE" == "--apply" && "${!AP_APPROVE_DEPLOY_VAR:-}" != "true" ]]; then
+if [[ "$MODE" != "--dry-run" && "${!AP_APPROVE_DEPLOY_VAR:-}" != "true" ]]; then
   echo "Refusing apply without $AP_APPROVE_DEPLOY_VAR=true" >&2
   exit 2
+fi
+if [[ "$MODE" == --prepare-profile ]]; then
+  service="${AP_SERVICES[0]}"
+  "${AP_SSH[@]}" "sudo -n python3 - prepare-native '$service' /opt/hololive-bot/youtube-collector/current /etc/hololive-bot/youtube-collector-host.env 'hololive-youtube-collector@$service.service'" \
+    < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
+  exit 0
 fi
 
 release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)-$AP_NAME}"
@@ -85,7 +91,8 @@ write_host_env() {
     printf 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true\n'
     printf 'YOUTUBE_COLLECTOR_INSTANCE_ID=%s\n' "$service"
     printf 'YOUTUBE_COLLECTOR_LOG_FILE_NAME=%s.log\n' "$service"
-    printf 'STACK_WORKER_PROFILE_FILE=/etc/stack-secrets/hololive-bot/worker-profiles/%s.json\n' "$service"
+    printf 'STACK_WORKER_PROFILE_FILE=/opt/hololive-bot/youtube-collector/releases/%s/worker-profile.json\n' "$release_id"
+    printf 'STACK_WORKER_PROFILE_SOURCE_FILE=/etc/stack-secrets/hololive-bot/worker-profiles/%s.json\n' "$service"
     printf 'SERVER_PORT=%s\n' "$port"
     printf 'HOLOLIVE_HTTP_TRANSPORTS=h3\n'
     printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"
@@ -129,6 +136,8 @@ artifact_dir="$(cd "$artifact_dir" && pwd)"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh" "$artifact_dir/bin/ap-host-native-po.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh" "$artifact_dir/bin/ap-host-native-cutover.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh" "$artifact_dir/bin/ap-host-native-rollback-check.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py" "$artifact_dir/bin/worker-profile-pair.py"
 
 native_revision="$(deploy_source_revision "$REPO_ROOT")"
 sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
@@ -187,6 +196,7 @@ REMOTE
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
+  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh"
   cat "$NODE_VERSION_LIB"
   cat "$READINESS_LIB"
   cat "$REMOTE_APPLY_LIB"

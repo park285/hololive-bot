@@ -313,6 +313,12 @@ test -w /var/run/docker.sock || groups | grep -qw docker
 $(declare -f ap_prechange_config)
 ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet
 echo backup_dir='$backup_dir'"
+# 사전 mirror sync 전에 보존한 pair 또는 실행 중 loaded hash로 입증한 bytes만 백업한다.
+profile_container="$(remote "sudo -n docker ps -aq --no-trunc --filter 'name=^/hololive-youtube-collector-b$'")"
+if [[ "$AP_COLLECTOR_MAINTENANCE_STOPPED" == true || -n "$profile_container" ]]; then
+  "${AP_SSH[@]}" "sudo -n python3 - capture youtube-collector-b \"\$HOME/$REMOTE_REPO_DIR/$backup_dir/worker-profile-previous\" hololive-youtube-collector-b \"\$HOME/$REMOTE_REPO_DIR\"" \
+    < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
+fi
 # rollback 기준점은 ap-rollback.sh와 같은 파일(rollback-image-tag)로 판정하고, trap을 걸기 전에 값을 확정한다.
 rollback_available="$(
   remote "cd ~/hololive-bot && if [[ -r '$backup_dir/rollback-image-tag' ]]; then printf '%s\n' true; else printf '%s\n' false; fi"
@@ -353,6 +359,22 @@ restore_after_failed_deploy() {
   elif [[ "$source_armed" == true ]]; then
     "${AP_SSH[@]}" "python3 - restore \"\$HOME\" \"\$HOME/$REMOTE_REPO_DIR/$backup_dir\"" < "$source_snapshot"
     restore_status="$?"
+    remote "set -euo pipefail
+cd ~/hololive-bot
+issuer_state=\$(cat '$backup_dir/po-sandbox-prechange.state')
+case \"\$issuer_state\" in present|absent) ;; *) echo 'AP issuer baseline state invalid' >&2; exit 1 ;; esac
+if [[ '$rollback_available' == true ]]; then
+  sudo -n docker tag '$rollback_image_tag' '$IMAGE_REF'
+else
+  image_id=\$(sudo -n docker image ls --quiet --filter 'reference=$IMAGE_REF')
+  if [[ -n \"\$image_id\" ]]; then sudo -n docker image rm '$IMAGE_REF' >/dev/null; fi
+fi
+if [[ \"\$issuer_state\" == present ]]; then
+  sudo -n docker tag '$rollback_po_image_tag' '$PO_IMAGE_REF'
+else
+  image_id=\$(sudo -n docker image ls --quiet --filter 'reference=$PO_IMAGE_REF')
+  if [[ -n \"\$image_id\" ]]; then sudo -n docker image rm '$PO_IMAGE_REF' >/dev/null; fi
+fi" || restore_status="$?"
   fi
   if [[ "$restore_status" -ne 0 ]]; then
     echo "AP deployment rollback failed; preserve and recover from $backup_dir" >&2
@@ -385,7 +407,10 @@ for image in '$IMAGE_REF' '$PO_IMAGE_REF'; do
     sudo -n docker image rm \"\$image\" >/dev/null
   fi
 done
-rm -f -- '$po_manifest_active' '$po_image_id_active'" || {
+rm -f -- '$po_manifest_active' '$po_image_id_active'
+if [[ -r artifacts/worker-profile/active/youtube-collector-b.pair && \$(cat artifacts/worker-profile/active/youtube-collector-b.pair) == \"\$PWD/$backup_dir/worker-profile-candidate\" ]]; then
+  sudo -n rm artifacts/worker-profile/active/youtube-collector-b.yml artifacts/worker-profile/active/youtube-collector-b.pair
+fi" || {
     echo "AP first deploy cleanup failed on $AP_NAME; preserve and inspect $backup_dir before fixing forward" >&2
     return 1
   }
@@ -414,7 +439,7 @@ rsync -ai "$issuer_build_root/issuer/image-id" \
   -e "$RSYNC_RSH" "$(ap_rsync_target "./$po_remote_dir/po-sandbox-candidate.image-id")"
 
 
-# 실행 중인 pair를 바꾸기 전의 읽기 전용 검증이다. 여기서 실패하면 source만 되돌리고 pair는 다시 만들지 않는다.
+# 실행 중인 pair를 바꾸기 전의 검증이다. 실패하면 source·image tag 기준점만 복원하고 runtime은 다시 만들지 않는다.
 remote "set -euo pipefail
 cd ~/hololive-bot
 . scripts/deploy/lib/po-sandbox-image.sh
@@ -424,9 +449,11 @@ if [[ \$(cat '$backup_dir/po-sandbox-prechange.state') == present ]]; then
 fi
 (cd '$backup_dir' && sha256sum --check --strict image.tar.sha256)
 [[ \$(sha256sum '$backup_dir/hololive-youtube-collector-prod.tar' | cut -d' ' -f1) == '$collector_archive_sha' ]]"
+if [[ "$rollback_available" == true ]]; then
+  BACKUP_DIR="$backup_dir" "$REPO_ROOT/scripts/deploy/ap-rollback.sh" "$AP_NAME" --dry-run
+fi
 
 # cutover 실패 시 이전 collector·issuer를 함께 복원한다. 첫 배포 실패는 stop_failed_first_deploy가 처리한다.
-cutover_armed=true
 remote "set -euo pipefail
 cd ~/hololive-bot
 . scripts/deploy/lib/po-sandbox-image.sh
@@ -442,6 +469,18 @@ loaded_platform=\$(sudo -n docker image inspect -f '{{.Os}}/{{.Architecture}}{{i
 [[ \"\$loaded_platform\" == '$TARGET_PLATFORM' ]]
 po_image_id_matches \"\$(sudo -n docker image inspect -f '{{.Id}}' '$IMAGE_REF')\" '$collector_image_id'
 [[ \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$IMAGE_REF') == '$HOLO_API_VERSION' ]]"
+
+remote "set -euo pipefail
+cd ~/hololive-bot
+pair_tool=scripts/deploy/lib/worker-profile-pair.py
+sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --format json \
+  | sudo -n python3 \"\$pair_tool\" candidate youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\"
+sudo -n env WORKER_PROFILE_OVERRIDE_FILE=\"\$PWD/$backup_dir/worker-profile-candidate/compose.yml\" HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' run --rm --no-deps --pull never youtube-collector-b --check-worker-profile
+sudo -n python3 \"\$pair_tool\" verify-source youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\""
+cutover_armed=true
+remote "set -euo pipefail
+cd ~/hololive-bot
+sudo -n python3 scripts/deploy/lib/worker-profile-pair.py activate youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\" \"\$PWD\""
 
 change_started_at="$(
   remote 'date -u +%Y-%m-%dT%H:%M:%SZ'
@@ -501,7 +540,8 @@ for container in $containers_list; do
   if docker logs --since \"\$since\" \"\$container\" 2>&1 | grep -E 'ERR|panic|permission denied|x509|no such file'; then
     exit 1
   fi
-done"
+done
+sudo -n python3 scripts/deploy/lib/worker-profile-pair.py verify-live youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\" hololive-youtube-collector-b"
 
 "$REPO_ROOT/scripts/logs/ap-smoke.sh" "$AP_NAME"
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

@@ -32,7 +32,7 @@ if [[ -d "$OPT_CURRENT" ]]; then
   BACKUP="${OPT_CURRENT}.bak-${HEAD_SHA}"
   rm -rf "$BACKUP"
   mkdir -p "$BACKUP"
-  rsync -a --delete --exclude=/data --exclude=/logs --exclude=/backups "$OPT_CURRENT/" "$BACKUP/"
+  rsync -a --delete --exclude=/data --exclude=/logs --exclude=/backups --exclude=/artifacts/worker-profile "$OPT_CURRENT/" "$BACKUP/"
   ls -dt "${OPT_CURRENT}".bak-* 2>/dev/null | tail -n +4 | xargs -r rm -rf
   log "backup -> $BACKUP (exec tree only, latest 3 kept)"
 fi
@@ -62,7 +62,7 @@ done
 # 명시적으로 제외한다.
 mkdir -p "$OPT_CURRENT"
 rsync -a --delete \
-  --exclude=/data --exclude=/logs --exclude=/backups --exclude=/runtime-config \
+  --exclude=/data --exclude=/logs --exclude=/backups --exclude=/runtime-config --exclude=/artifacts/worker-profile \
   "$STAGING/" "$OPT_CURRENT/"
 
 # runtime-config 는 tracked 템플릿과 gitignored 런타임 설정(iris_base_url, iris-ca.pem)이 섞여
@@ -128,6 +128,10 @@ exec_tree=(
 while IFS= read -r yml; do
   exec_tree+=("$yml")
 done < <(find "$OPT_CURRENT/deploy/compose" -maxdepth 1 -type f -name 'docker-compose*.yml' | sort)
+for profile_overlay in "$OPT_CURRENT"/artifacts/worker-profile/active/*.yml "$OPT_CURRENT"/artifacts/worker-profile/active/*.pair; do
+  [[ -e "$profile_overlay" || -L "$profile_overlay" ]] || continue
+  exec_tree+=("$profile_overlay")
+done
 bash "$verifier" "${exec_tree[@]}" || die "exec-tree ownership verification failed"
 log "exec-tree ownership verified"
 

@@ -149,10 +149,14 @@ sudo -n tar -xf "$release_dir/po-sandbox/rootfs.tar" -C "$po_install_root" --no-
 sudo -n chown -R -P root:root "$po_install_root"
 po_validate_release "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-collector-wrapper"
-sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$worker_profile" \
+# 검증한 사본만 release에 고정한다. mirror 갱신은 실행 중인 binary/profile pair를 바꾸지 않는다.
+sudo -n install -m 0444 -o root -g root "$worker_profile" "$release_dir/worker-profile.json"
+sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$release_dir/worker-profile.json" \
   "$release_dir/bin/youtube-collector" --check-worker-profile
+sudo -n sh -c 'cd "$1" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
 
 if [[ -n "$old_target" && -d "$old_target" ]]; then
+  native_profile_pair_validate "$old_target" "$host_env"
   sudo -n test -r "$host_env"
   sudo -n test -r "$unit_file"
   sudo -n test -x "$old_target/bin/youtube-collector"
@@ -174,6 +178,8 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
         bin/youtube-collector \
         bin/youtube-collector-wrapper \
         bin/healthcheck \
+        worker-profile.json \
+        SHA256SUMS \
         rollback-contract/youtube-collector-host.env \
         rollback-contract/hololive-youtube-collector@.service
       find youtubejs/src -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
@@ -198,6 +204,11 @@ fi
 case "$collector_prechange_state" in
   active | activating | reloading) collector_prechange_running=true ;;
 esac
+
+sudo -n cmp -s "$worker_profile" "$release_dir/worker-profile.json" || {
+  echo 'candidate source changed during profile validation; writer unchanged' >&2
+  exit 1
+}
 
 stop_collector_unit_and_require_inactive() {
   command -v systemctl >/dev/null 2>&1 || return 0
@@ -230,6 +241,7 @@ native_restore_recorded_runtime() {
   stop_native_units_and_require_inactive
   if [[ -n "$old_target" && -d "$old_target" ]]; then
     rollback_contract_dir="$old_target/rollback-contract"
+    native_rollback_validate "$old_target"
     sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
     sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
     sudo -n ln -sfn "$old_target" "$current_link"
@@ -350,6 +362,7 @@ collector_readiness_fetch() {
 ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
+sudo -n python3 "$release_dir/bin/worker-profile-pair.py" verify-native "$service" "$release_dir" "$unit"
 
 native_post_cutover_log_check() {
 local journal_since journal_output grep_status=0

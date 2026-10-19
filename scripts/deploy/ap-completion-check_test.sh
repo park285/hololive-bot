@@ -29,6 +29,7 @@ cp "$ROOT_DIR/scripts/deploy/lib/ap-host.sh" "$fixture_root/scripts/deploy/lib/a
 cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scripts/deploy/lib/youtubejs-node-version.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-collector-readiness.sh" "$fixture_root/scripts/deploy/lib/ap-collector-readiness.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host-native-po.sh" "$fixture_root/scripts/deploy/lib/ap-host-native-po.sh"
+cp "$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py" "$fixture_root/scripts/deploy/lib/worker-profile-pair.py"
 # 기존 collector readiness 사례는 issuer 도입 전 release로의 명시적 rollback을 검증한다.
 export PO_EXPECTED_PRESENCE=absent
 # 원격 fake의 재시도 횟수는 그대로 실행하고 대기만 기록해 실제 6분 경과에 의존하지 않는다.
@@ -75,6 +76,11 @@ cat > "$fakebin/ssh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 remote_cmd="${@: -1}"
+# Pair identity/authentication is admitted separately; this fixture owns readiness and issuer state.
+if [[ "$remote_cmd" == sudo\ -n\ python3\ -\ verify-native\ * ]]; then
+  cat >/dev/null
+  exit 0
+fi
 [[ "$remote_cmd" == bash\ -s\ --* ]] || { echo "unexpected ssh command: $remote_cmd" >&2; exit 99; }
 args="${remote_cmd#bash -s --}"
 eval "set -- $args"
@@ -174,6 +180,7 @@ chmod +x "$fakebin/journalctl"
 if ! PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
   "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka > "$tmp/completion.out" 2>&1; then
+  cat "$tmp/completion.out" >&2
   fail 'a ready collector with a recorded issuer-absent rollback must pass completion'
 fi
 
