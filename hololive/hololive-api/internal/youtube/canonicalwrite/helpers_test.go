@@ -165,16 +165,16 @@ func seedDelivery(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeNotificat
 	require.NoError(t, err)
 }
 
-// seedLegacyAuthorizedAlarmState는 구 워커가 발송 전 claim으로 남긴 ENQUEUED 행을 만든다.
-func seedLegacyAuthorizedAlarmState(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeCommunityShortsAlarmState, authorizedAt time.Time) {
+// seedAlarmState는 row의 알람 상태와 발송 시각으로 post 단위 알람 상태 행을 만든다.
+func seedAlarmState(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeCommunityShortsAlarmState) {
 	t.Helper()
 
 	now := time.Now()
 
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_community_shorts_alarm_states
-			(kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, 'ENQUEUED', $8, $9)`,
-		row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, authorizedAt, now, now)
+			(kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AlarmSentAt, row.DeliveryStatus, now, now)
 	require.NoError(t, err)
 }

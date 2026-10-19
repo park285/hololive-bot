@@ -1126,15 +1126,13 @@ TABLE youtube_community_shorts_alarm_states
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN actual_published_at timestamp with time zone
   COLUMN detected_at timestamp with time zone NOT NULL
-  COLUMN authorized_at timestamp with time zone
   COLUMN alarm_sent_at timestamp with time zone
   COLUMN delivery_status text NOT NULL DEFAULT 'DETECTED'::character varying
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_community_shorts_alarm_states_delivery_status_vocab CHECK ((delivery_status = ANY (ARRAY[('DETECTED'::character varying)::text, ('ENQUEUED'::character varying)::text, ('SENT'::character varying)::text])))
+  CONSTRAINT chk_youtube_community_shorts_alarm_states_delivery_status_vocab CHECK ((delivery_status = ANY (ARRAY['DETECTED'::text, 'SENT'::text])))
   CONSTRAINT chk_youtube_community_shorts_alarm_states_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text])))
   CONSTRAINT youtube_community_shorts_alarm_states_pkey PRIMARY KEY (kind, post_id)
-  INDEX CREATE INDEX idx_ycsas_authorized_at ON public.youtube_community_shorts_alarm_states USING btree (authorized_at DESC) WHERE (authorized_at IS NOT NULL)
   INDEX CREATE UNIQUE INDEX idx_ycsas_kind_content ON public.youtube_community_shorts_alarm_states USING btree (kind, content_id)
 
 TABLE youtube_community_shorts_source_posts

@@ -273,66 +273,6 @@ func TestRepositoryMarkAlarmSentBatchUpdatesAlarmState(t *testing.T) {
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, record.DeliveryStatus)
 }
 
-// 구 워커 claim이 남긴 미발송 ENQUEUED 행은 발송 표시로 SENT가 되고, 이미 발송된 행은 가장 이른 발송 시각을 유지한다.
-func TestMarkAlarmSentBatchConvergesLegacyEnqueuedState(t *testing.T) {
-	db := newTrackingTestDB(t)
-	repository := NewRepository(db)
-	ctx := t.Context()
-	actualPublishedAt := time.Date(2026, time.April, 10, 1, 2, 3, 0, time.UTC)
-	detectedAt := time.Date(2026, time.April, 10, 1, 4, 0, 0, time.UTC)
-	earlierSentAt := time.Date(2026, time.April, 10, 1, 4, 45, 0, time.UTC)
-	alarmSentAt := time.Date(2026, time.April, 10, 1, 5, 0, 0, time.UTC)
-
-	testCases := []struct {
-		contentID   string
-		status      string
-		existingAt  *time.Time
-		wantAlarmAt time.Time
-	}{
-		{contentID: "post-legacy-enqueued", status: "ENQUEUED", wantAlarmAt: alarmSentAt},
-		{contentID: "post-legacy-sent", status: "SENT", existingAt: &earlierSentAt, wantAlarmAt: earlierSentAt},
-	}
-
-	marks := make([]AlarmSentMark, 0, len(testCases))
-
-	for _, tc := range testCases {
-		require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
-			Kind:              domain.OutboxKindCommunityPost,
-			ContentID:         tc.contentID,
-			ChannelID:         testChannelID,
-			ActualPublishedAt: &actualPublishedAt,
-			DetectedAt:        detectedAt,
-		}))
-
-		_, err := db.Exec(ctx, `
-			INSERT INTO youtube_community_shorts_alarm_states
-				(kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $6, $6)`,
-			domain.OutboxKindCommunityPost, "community:"+tc.contentID, tc.contentID, testChannelID, actualPublishedAt, detectedAt,
-			tc.existingAt, tc.status)
-		require.NoError(t, err)
-
-		marks = append(marks, AlarmSentMark{Kind: domain.OutboxKindCommunityPost, ContentID: tc.contentID, AlarmSentAt: alarmSentAt})
-	}
-
-	require.NoError(t, repository.MarkAlarmSentBatch(ctx, marks))
-
-	for _, tc := range testCases {
-		var (
-			gotAlarmSentAt time.Time
-			gotStatus      string
-		)
-
-		require.NoError(t, db.QueryRow(ctx, `
-			SELECT alarm_sent_at, delivery_status
-			FROM youtube_community_shorts_alarm_states
-			WHERE kind = $1 AND post_id = $2`,
-			domain.OutboxKindCommunityPost, "community:"+tc.contentID).Scan(&gotAlarmSentAt, &gotStatus))
-		require.Equal(t, tc.wantAlarmAt, gotAlarmSentAt.UTC(), tc.contentID)
-		require.Equal(t, string(domain.YouTubeCommunityShortsAlarmStateStatusSent), gotStatus, tc.contentID)
-	}
-}
-
 func requireDuplicateDeliveryFinalized(
 	t *testing.T,
 	db trackingDB,

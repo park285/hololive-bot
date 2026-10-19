@@ -101,6 +101,32 @@ Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-buil
 
 v1 YouTube 알림(`youtube_delivery`, `youtube_notification_delivery`)과 v2 digest(`notification_delivery`, `notification_delivery_outbox`)는 v3 alarm-dispatch ledger로 넘기지 않는 정본 파이프라인이고 각 executor가 direct egress를 소유합니다(`DEC-20260926-hololive-outbox-v3-convergence`). v3 handoff(`off`/`shadow`/`cutover`), 비교 전용 `shadowed` 상태, handoff metric은 삭제했습니다.
 
+### YouTube 알람 상태 선점 열 삭제(migration 331)
+
+migration 331은 `youtube_community_shorts_alarm_states`의 발송 전 선점 열 `authorized_at`, 그 부분 색인
+`idx_ycsas_authorized_at`, `delivery_status`의 `ENQUEUED` 어휘를 지우고, 남은 `ENQUEUED` 행을 `alarm_sent_at`에
+따라 `DETECTED`·`SENT`로 맞춥니다. 이 표를 쓰는 binary는 `hololive-api`(canonicalwrite upsert)와
+`hololive-alarm-worker`(발송 성공 전이의 발송 표시)입니다. 열이 사라지면 이 열을 참조하는 binary의 문장이 실패합니다.
+
+| binary | `authorized_at` 참조 | 331 뒤 |
+|---|---|---|
+| post 단위 claim 제거 이전 API·worker | upsert 열 목록, claim 획득·해제, 발송 표시 | upsert·발송이 실패 |
+| claim 제거 릴리스(CHANGELOG "YouTube community·shorts 발송 전 post 단위 claim 제거")의 API·worker | 없음 | 정상 |
+| 331을 포함한 릴리스의 API·worker | 없음 | 정상 |
+
+`db-migrate`는 앱 교체보다 먼저 돌기 때문에 331을 claim 제거와 같은 릴리스에 넣지 않습니다.
+
+- 적용 조건: claim 제거 릴리스가 `hololive-api`와 `hololive-alarm-worker` 모두에 운영 반영되고, 그 이전 image로
+  도는 컨테이너가 0개일 때만 별도 승인을 받아 적용합니다.
+- 순서: [릴리즈 runbook](release.md#3-런타임-호스트-no-build-cutover)의 일반 순서를 따릅니다. (1) 331을 포함한
+  manifest로 `hololive-db-migrate` one-shot을 실행하고 종료 코드 0을 확인합니다. (2) 331을 포함한 릴리스의 worker와
+  API를 `up -d --no-deps`로 올립니다. migrate가 실패하면 새 image를 올려 계속하지 않고, 원인을 확인한 뒤 migrate부터
+  다시 실행합니다. migrate와 앱 교체 사이에 도는 claim 제거 릴리스의 API·worker는 이 열을 참조하지 않으므로 정상
+  동작합니다.
+- 331은 표를 3초 `lock_timeout`으로 잠그는 짧은 트랜잭션 뒤에 어휘 CHECK 검증을 별도 문장으로 실행합니다. 어느
+  단계에서 실패해도 적용 기록이 남지 않으므로 같은 파일을 다시 적용할 수 있고, 재적용은 행을 바꾸지 않습니다.
+- rollback: 331 적용 뒤에는 worker·API 모두 claim 제거 릴리스까지 되돌릴 수 있습니다. 그보다 이전이 필요하면
+  fix-forward합니다.
 
 ## Common failure modes
 

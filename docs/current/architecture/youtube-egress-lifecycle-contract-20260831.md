@@ -97,7 +97,7 @@ Community/Shorts의 post-level tracking은 room별 delivery와 수명이 다릅�
 - 성공 전이(`CompleteSent`)는 같은 트랜잭션에서 `MarkAlarmSentBatch`로 owner logical key의 tracking 행과 기존 `youtube_community_shorts_alarm_states` 행에 발송 시각을 기록합니다. 알람 상태 행이 없으면 tracking 행으로부터 만들고, 이미 SENT면 더 이른 시각만 남깁니다. tracking 행과 알람 상태 행이 모두 없으면 post 단위 표시는 남지 않습니다. 운영에서는 API canonicalwrite가 outbox와 같은 트랜잭션에서 tracking 행을 만듭니다.
 - 정상 경로 트랜잭션은 기록 뒤 post 단위 표시를 다시 확인하지 않습니다. commit 응답 유실 판정이 `Applied`로 끝난 뒤의 read-back에서 post마다 알람 상태나 tracking 중 하나가 SENT인지 확인하고, 둘 다 아니면 `AtomicityBreachError`와 함께 `Indeterminate`(atomicity breach)로 분류합니다. 이미 commit된 뒤이므로 rollback하지 않습니다.
 - Community/Shorts가 아닌 delivery에는 post-level 기록이 없습니다.
-- 알람 상태 upsert, `delivery_status` 계산, 발송 시각 기록은 `authorized_at` 열을 읽거나 쓰지 않습니다. 구 워커 claim이 남긴 미발송 `ENQUEUED` 행은 발송 시각 기록에서 SENT가 되고, 발송되지 않으면 다음 upsert에서 `DETECTED`로 다시 계산됩니다. 남은 `authorized_at` 값과 `ENQUEUED` 어휘는 열 삭제 migration이 정리합니다.
+- 알람 상태의 `delivery_status`는 `alarm_sent_at`만으로 `DETECTED`·`SENT`를 정합니다. 구 워커의 발송 전 선점 열 `authorized_at`과 `ENQUEUED` 상태는 migration 331이 지웠고, 남은 `ENQUEUED` 행은 같은 규칙으로 `DETECTED`·`SENT`로 맞췄습니다.
 
 여러 room이 같은 post를 발송할 수 있습니다. 첫 성공이 post 발송 시각을 정하고 후속 성공은 그 시각을 유지하며 delivery success를 rollback하지 않습니다. 한 room의 결과 불명은 같은 post의 다른 room 발송을 미루지 않습니다.
 
@@ -844,7 +844,6 @@ TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce
 TestRepositoryDuplicateAlarmMarksFinalizeOnePostLevelSentState
 TestRepositoryMarkAlarmSentBatchRepairsMissingAlarmStateForAlreadySentTracking
-TestMarkAlarmSentBatchConvergesLegacyEnqueuedState
 ```
 
 ### CAS/operation
