@@ -8,6 +8,9 @@
 
 ## 미출시
 
+- **SQL 시계 선택 검사:** 기존 SQL 소유권 검사에서 collector lease와 alarm의 잠금 후 fence는 wall clock, 후보·projection·live 조회는 statement clock을 요구합니다. 주석·문자열·인용 식별자를 구분하고 인자 없는 실제 함수 호출만 검사하여 CTE·별칭의 열 선언을 오인하지 않습니다. 범위 밖의 기록용 transaction clock과 기존 migration은 유지하며, 잠금 순서의 정확성은 기존 DB 경합 시험이 계속 검증합니다.
+- **동기 집계 정합 진단:** dbtest 오라클을 공유 SQL 자산으로 옮겨 bundle·live 모델의 누락·잉여·값 변경과 매핑의 값·중복도 불일치를 읽기 전용 RR snapshot에서 검사합니다. 서비스 파일과 무관하게 연결 제한을 명시적 인자로, 조회 제한을 SET LOCAL로 적용하고 유효값을 확인합니다. 식별자·원문 없이 건수만 반환하며 정상/불일치/확인 실패를 종료 코드 0/1/2로 구분합니다. dbtest는 집계와 매핑을 직접 손상시켰을 때 불일치 종류마다 한 건씩 세는지도 확인합니다. 새 migration·자동 복구·주기 실행·운영 적용은 없습니다.
+
 ## v11.0.0 - 2026-10-19
 
 - **최종 워커·DB 계약 전환:** 10.2.1의 구 프로필 호환 baseline을 실제 운영에서 수용한 뒤 새 프로필을 활성화합니다. `source_observation`은 batch가 workers 이상이어야 하며 lease 하한은 `batch × attempt_timeout + 10000ms`입니다. eligible 큐·nullable 진단·공유 cache 수명·DB control reserve와 lease/attempt 정산을 함께 유지하며, 322–324와 방송 시각 확정·멤버십 아카이브 동작은 보존합니다.

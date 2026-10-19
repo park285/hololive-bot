@@ -76,6 +76,16 @@ go test ../shared-go/... \
   ```
 * 로컬 통합 품질 게이트: `./scripts/ci/local-ci.sh`
 
+`scripts/architecture/check-sql-ownership.sh`는 SQL 소유권과 함께 지정 경로의 시계 선택을 검사합니다.
+Collector `joblease/queries/repository_lease_*`와 alarm의 member fence·sending·실패 전이는
+`clock_timestamp()`를, collector 후보·target·현재 projection 및 API의 collection/live-check/time-finalization
+조회는 `statement_timestamp()`를 사용합니다. 정확한 경로 규칙은 검사기의 `CLOCK_QUERY_POLICIES`가 소유합니다.
+주석·문자열은 제외하며, 그 밖의 기록용 `NOW()`나 기존 migration을 일괄 금지하지 않습니다.
+이 검사는 DB 경합 시험이 다루는 잠금 완료·시각 채취 순서나 호출자 트랜잭션을 증명하지 않습니다.
+
+트리거 집계와 원본의 운영 정합 확인은 [API runbook](docs/current/runbooks/hololive-api.md#동기-집계-정합-확인)을 따릅니다.
+dbtest와 진단은 `scripts/maintenance/queries/*_drift.sql`의 독립 오라클을 공유합니다.
+
 `hololive-dbtest`와 로컬 CI가 생성하는 임시 PostgreSQL은 `/var/lib/postgresql`을 tmpfs에 두고
 `fsync`·`synchronous_commit`·`full_page_writes`를 끕니다. 빌드 호스트의 디스크 쓰기를 줄이는
 테스트 전용 설정이며, 컨테이너 중지 시 데이터가 사라지고 crash durability 검증에는 사용할 수 없습니다.
