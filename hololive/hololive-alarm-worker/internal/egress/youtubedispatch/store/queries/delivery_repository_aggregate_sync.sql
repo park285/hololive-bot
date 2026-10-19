@@ -1,13 +1,19 @@
+-- 같은 트랜잭션의 앞 문장(delivery_repository_aggregate_lock.sql)이 부모를 잠근 뒤 실행되므로 clock은 부모 잠금
+-- 이후의 DB 시계다. 새로 기록하는 sent_at·terminal_at은 이 clock 하나로 정한다.
+-- $1 outbox id 배열, $2 PENDING, $3 SENDING, $4 FAILED, $5 QUARANTINED, $6 SENT, $7 실패 사유.
+WITH clock AS MATERIALIZED (
+    SELECT clock_timestamp() AS at
+)
 UPDATE youtube_notification_outbox o
 		SET status = agg.next_status,
 		    locked_at = NULL,
-		    sent_at = CASE WHEN agg.next_status = $6::text AND o.sent_at IS NULL THEN $7 ELSE o.sent_at END,
+		    sent_at = CASE WHEN agg.next_status = $6::text AND o.sent_at IS NULL THEN (SELECT at FROM clock) ELSE o.sent_at END,
 		    terminal_at = CASE
 		        WHEN agg.next_status NOT IN ($4::text, $6::text) THEN NULL
-		        WHEN o.status IS DISTINCT FROM agg.next_status OR o.terminal_at IS NULL THEN $7
+		        WHEN o.status IS DISTINCT FROM agg.next_status OR o.terminal_at IS NULL THEN (SELECT at FROM clock)
 		        ELSE o.terminal_at
 		    END,
-		    error = CASE WHEN agg.next_status = $4::text THEN $8::text ELSE '' END
+		    error = CASE WHEN agg.next_status = $4::text THEN $7::text ELSE '' END
 		FROM (
 		    SELECT ids.id,
 		        CASE

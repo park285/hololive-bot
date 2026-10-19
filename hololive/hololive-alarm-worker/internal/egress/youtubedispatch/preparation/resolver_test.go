@@ -23,7 +23,7 @@ func TestLogicalKeyUsesCanonicalPostAndRoom(t *testing.T) {
 	row.Payload = `{"post_id":"UgkxPost123","canonical_post_id":"community:UgkxPost123"}`
 	row.RoomID = " room-1 "
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{row}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{row}, nil, nil)
 	require.Len(t, result, 1)
 	require.Equal(t, LogicalActive, result[0].Kind())
 	require.Equal(t, "community:UgkxPost123", result[0].Key().LogicalID)
@@ -37,7 +37,7 @@ func TestSameBatchSelectsDeterministicOwner(t *testing.T) {
 	earlierHigherID := testDelivery(t, 8, lifecycle.StatusPending, resolverTestNow, true)
 	earlierLowerID := testDelivery(t, 2, lifecycle.StatusPending, resolverTestNow, true)
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{later, earlierHigherID, earlierLowerID}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{later, earlierHigherID, earlierLowerID}, nil, nil)
 	require.Len(t, result, 1)
 	require.Equal(t, int64(2), result[0].Owner().DeliveryID)
 	require.Len(t, result[0].Followers(), 2)
@@ -54,7 +54,7 @@ func TestFollowerCannotUseIndependentAttemptBudget(t *testing.T) {
 
 	follower.AttemptCount = 0
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{follower, owner}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{follower, owner}, nil, nil)
 	require.Equal(t, LogicalOwnerPendingElsewhere, result[0].Kind())
 	require.Equal(t, int64(1), result[0].Owner().DeliveryID)
 	require.False(t, result[0].ProviderAllowed())
@@ -69,9 +69,9 @@ func TestPendingOwnerDefersFollowerToOwnerDue(t *testing.T) {
 
 	follower := testDelivery(t, 2, lifecycle.StatusPending, resolverTestNow.Add(time.Minute), true)
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{owner, follower}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{owner, follower}, nil, nil)
 	require.Equal(t, LogicalOwnerPendingElsewhere, result[0].Kind())
-	require.Equal(t, owner.NextAttemptAt, result[0].Due())
+	require.Equal(t, owner.NextAttemptAt, result[0].DueFloor())
 }
 
 func TestFailedOwnerMirrorsFollowerFailed(t *testing.T) {
@@ -80,7 +80,7 @@ func TestFailedOwnerMirrorsFollowerFailed(t *testing.T) {
 	owner := testDelivery(t, 1, lifecycle.StatusFailed, resolverTestNow, false)
 	follower := testDelivery(t, 2, lifecycle.StatusPending, resolverTestNow.Add(time.Minute), true)
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{owner, follower}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{owner, follower}, nil, nil)
 	require.Equal(t, LogicalFailed, result[0].Kind())
 	require.Equal(t, int64(1), result[0].Owner().DeliveryID)
 	require.False(t, result[0].ProviderAllowed())
@@ -97,7 +97,6 @@ func TestSentEvidenceReconcilesFailedAndQuarantinedFollowers(t *testing.T) {
 		[]DeliverySnapshot{failed, quarantined},
 		[]LedgerEvidence{{Key: key, Status: lifecycle.LedgerSent, RecordedAt: resolverTestNow}},
 		nil,
-		resolverTestNow,
 	)
 	require.Equal(t, LogicalFulfilled, result[0].Kind())
 	require.Len(t, result[0].Members(), 2)
@@ -112,7 +111,6 @@ func TestQuarantinedEvidenceBlocksProviderCall(t *testing.T) {
 		[]DeliverySnapshot{row},
 		[]LedgerEvidence{{Key: key, Status: lifecycle.LedgerQuarantined}},
 		nil,
-		resolverTestNow,
 	)
 	require.Equal(t, LogicalUnresolved, result[0].Kind())
 	require.False(t, result[0].ProviderAllowed())
@@ -127,7 +125,6 @@ func TestQuarantinedEvidenceAcceptsRetainedQuarantinedRow(t *testing.T) {
 		[]DeliverySnapshot{row},
 		[]LedgerEvidence{{Key: key, Status: lifecycle.LedgerQuarantined}},
 		nil,
-		resolverTestNow,
 	)
 	require.Equal(t, LogicalUnresolved, result[0].Kind())
 	require.False(t, result[0].ProviderAllowed())
@@ -142,9 +139,9 @@ func TestSendingEvidenceDefersProviderCall(t *testing.T) {
 
 	pending := testDelivery(t, 2, lifecycle.StatusPending, resolverTestNow.Add(time.Minute), true)
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{sending, pending}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{sending, pending}, nil, nil)
 	require.Equal(t, LogicalInFlight, result[0].Kind())
-	require.Equal(t, resolverTestNow.Add(90*time.Second), result[0].Due())
+	require.Equal(t, sending.LockedAt.Add(2*time.Minute), result[0].DueFloor(), "in-flight floor is the sending lease expiry")
 	require.False(t, result[0].ProviderAllowed())
 }
 
@@ -154,7 +151,7 @@ func TestQuarantineAndSendingMixedStateIsBreach(t *testing.T) {
 	sending := testDelivery(t, 1, lifecycle.StatusSending, resolverTestNow, false)
 	quarantined := testDelivery(t, 2, lifecycle.StatusQuarantined, resolverTestNow.Add(time.Minute), false)
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{sending, quarantined}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{sending, quarantined}, nil, nil)
 	require.Equal(t, LogicalInvariantBreach, result[0].Kind())
 	require.Equal(t, InvariantQuarantinedAndSending, result[0].InvariantReason())
 }
@@ -165,7 +162,7 @@ func TestMultipleSendingRowsIsBreach(t *testing.T) {
 	first := testDelivery(t, 1, lifecycle.StatusSending, resolverTestNow, false)
 	second := testDelivery(t, 2, lifecycle.StatusSending, resolverTestNow.Add(time.Minute), false)
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{first, second}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{first, second}, nil, nil)
 	require.Equal(t, LogicalInvariantBreach, result[0].Kind())
 	require.Equal(t, InvariantMultipleSending, result[0].InvariantReason())
 }
@@ -176,7 +173,7 @@ func TestLogicalGroupOverflowFailsClosed(t *testing.T) {
 	first := testDelivery(t, 1, lifecycle.StatusPending, resolverTestNow, true)
 	second := testDelivery(t, 2, lifecycle.StatusPending, resolverTestNow.Add(time.Minute), false)
 
-	result := testResolver(t, 1).ResolveGroups([]DeliverySnapshot{first, second}, nil, nil, resolverTestNow)
+	result := testResolver(t, 1).ResolveGroups([]DeliverySnapshot{first, second}, nil, nil)
 	require.Equal(t, LogicalInvariantBreach, result[0].Kind())
 	require.Equal(t, InvariantGroupScanOverflow, result[0].InvariantReason())
 }
@@ -190,7 +187,7 @@ func TestInvalidLogicalIdentityFailsBeforeProviderCall(t *testing.T) {
 	row.ContentID = "short:video-a"
 	row.Payload = `{"canonical_post_id":"short:video-b"}`
 
-	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{row}, nil, nil, resolverTestNow)
+	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{row}, nil, nil)
 	require.Equal(t, LogicalInvariantBreach, result[0].Kind())
 	require.Equal(t, InvariantInvalidLogicalIdentity, result[0].InvariantReason())
 	require.False(t, result[0].ProviderAllowed())
@@ -206,7 +203,6 @@ func TestLedgerSentEvidenceReconcilesCleanedPhysicalRows(t *testing.T) {
 		nil,
 		[]LedgerEvidence{{Key: key, Status: lifecycle.LedgerSent}},
 		[]ytcontentid.LogicalKey{key},
-		resolverTestNow,
 	)
 	require.Len(t, result, 1)
 	require.Equal(t, LogicalFulfilled, result[0].Kind())
@@ -222,7 +218,6 @@ func TestLedgerQuarantineEvidenceBlocksProviderCall(t *testing.T) {
 		nil,
 		[]LedgerEvidence{{Key: key, Status: lifecycle.LedgerQuarantined}},
 		[]ytcontentid.LogicalKey{key},
-		resolverTestNow,
 	)
 	require.Equal(t, LogicalUnresolved, result[0].Kind())
 	require.False(t, result[0].ProviderAllowed())
@@ -233,7 +228,6 @@ func testResolver(t *testing.T, limit int) Resolver {
 
 	resolver, err := NewResolver(ResolverConfig{
 		LogicalGroupScanLimit: limit,
-		RetryBackoff:          time.Minute,
 		LockTimeout:           2 * time.Minute,
 		RequireTerminalLedger: true,
 	})

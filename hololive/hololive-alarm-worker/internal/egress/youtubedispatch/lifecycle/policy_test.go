@@ -17,20 +17,19 @@ func TestFailurePolicyUsesOnlyOwnerAttemptBudget(t *testing.T) {
 	owner := testRow(1, StatusSending, 1, now.Add(-time.Hour))
 	follower := testRow(2, StatusPending, 8, now.Add(-time.Minute))
 
-	decision, err := EvaluateFailure(policy, owner, []RowSnapshot{follower}, FailureRetryable, now, 2*time.Minute)
+	decision, err := EvaluateFailure(policy, owner, []RowSnapshot{follower}, FailureRetryable, 2*time.Minute)
 	require.NoError(t, err)
 
 	retry, ok := decision.(RetryLogicalGroupDecision)
 	require.True(t, ok)
 	require.Equal(t, RuleRetryScheduled, retry.RuleID())
-	require.Equal(t, now.UTC().Truncate(time.Microsecond), retry.At())
 
 	mutations := retry.Mutations()
 	require.Len(t, mutations, 2)
 	require.Equal(t, 2, mutations[0].NextAttempt())
 	require.Equal(t, 8, mutations[1].NextAttempt(), "follower must not spend an independent attempt")
-	require.Equal(t, now.UTC().Truncate(time.Microsecond).Add(2*time.Minute), mutations[0].NextAttemptAt())
-	require.Equal(t, mutations[0].NextAttemptAt(), mutations[1].NextAttemptAt())
+	require.Equal(t, DelayedDue(2*time.Minute, time.Time{}), mutations[0].Due(), "retry-after above backoff must win")
+	require.Equal(t, mutations[0].Due(), mutations[1].Due())
 }
 
 func TestFailurePolicyExhaustsOwnerAndMirrorsFollower(t *testing.T) {
@@ -46,7 +45,6 @@ func TestFailurePolicyExhaustsOwnerAndMirrorsFollower(t *testing.T) {
 		testRow(1, StatusPending, 1, now.Add(-time.Hour)),
 		[]RowSnapshot{testRow(2, StatusPending, 0, now.Add(-time.Minute))},
 		FailureRetryable,
-		now,
 		0,
 	)
 	require.NoError(t, err)
@@ -63,6 +61,8 @@ func TestFailurePolicyExhaustsOwnerAndMirrorsFollower(t *testing.T) {
 	require.Equal(t, StatusFailed, mutations[0].NextStatus())
 	require.Equal(t, StatusFailed, mutations[1].NextStatus())
 	require.Equal(t, 0, mutations[1].NextAttempt())
+	require.Equal(t, DueKeep, mutations[0].Due().Mode, "terminal failure keeps next_attempt_at")
+	require.Equal(t, DueKeep, mutations[1].Due().Mode, "terminal failure keeps next_attempt_at")
 }
 
 func TestOutcomeUnknownProducesNoStateDecision(t *testing.T) {
@@ -72,7 +72,7 @@ func TestOutcomeUnknownProducesNoStateDecision(t *testing.T) {
 	require.NoError(t, err)
 
 	now := time.Date(2026, time.August, 31, 3, 0, 0, 0, time.UTC)
-	decision, err := EvaluateFailure(policy, testRow(1, StatusSending, 0, now), nil, FailureOutcomeUnknown, now, 0)
+	decision, err := EvaluateFailure(policy, testRow(1, StatusSending, 0, now), nil, FailureOutcomeUnknown, 0)
 	require.Error(t, err)
 	require.Nil(t, decision)
 }
@@ -96,8 +96,7 @@ func TestReviveResetsLogicalOwnerAndFollowers(t *testing.T) {
 	for _, mutation := range decision.Mutations() {
 		require.Equal(t, StatusPending, mutation.NextStatus())
 		require.Zero(t, mutation.NextAttempt())
-		require.Equal(t, now, mutation.NextAttemptAt())
-		require.True(t, mutation.ClearsLock())
+		require.Equal(t, DelayedDue(0, time.Time{}), mutation.Due())
 	}
 }
 

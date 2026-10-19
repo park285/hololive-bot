@@ -224,7 +224,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 		return FrozenRequest{}, errors.New("advance request generation: invalid operation or exhausted generations")
 	}
 
-	transitions, _, at, _, err := s.prepareFailureTransitions("advance request generation", operation, lifecycle.FailureRetryable, "provider_transport", 0)
+	transitions, _, _, err := s.prepareFailureTransitions("advance request generation", operation, lifecycle.FailureRetryable, "provider_transport", 0)
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("advance request generation: failure transition: %w", err)
 	}
@@ -236,7 +236,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 	}
 
 	err = s.executeTx(ctx, "advance request generation", func(tx dbx.Querier) error {
-		return advanceRequestGenerationInTx(ctx, tx, operation, request, transitions, at)
+		return advanceRequestGenerationInTx(ctx, tx, operation, request, transitions)
 	})
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("advance youtube request generation: %w", err)
@@ -247,7 +247,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 	return request, nil
 }
 
-func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation StartedOperation, request FrozenRequest, transitions []rowTransition, at time.Time) error {
+func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation StartedOperation, request FrozenRequest, transitions []rowTransition) error {
 	if err := verifyStartedRequestOwners(ctx, tx, operation, request.BaseID); err != nil {
 		return err
 	}
@@ -261,7 +261,8 @@ func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation
 		return errors.New("advance request generation: generation fence changed")
 	}
 
-	if _, err := applyRowTransitions(ctx, tx, "advance request generation", transitions); err != nil {
+	_, failedAt, err := applyRowTransitions(ctx, tx, "advance request generation", transitions)
+	if err != nil {
 		return fmt.Errorf("advance request generation: retry transition: %w", err)
 	}
 
@@ -271,7 +272,7 @@ func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation
 		mode = DeliveryModeGrouped
 	}
 
-	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultFailure, "provider_transport"), at); err != nil {
+	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultFailure, "provider_transport"), failedAt); err != nil {
 		return fmt.Errorf("advance request generation: telemetry: %w", err)
 	}
 

@@ -85,3 +85,25 @@ func CanonicalTime(value time.Time) (time.Time, error) {
 
 	return value.UTC().Truncate(time.Microsecond), nil
 }
+
+// DueMode는 전이가 next_attempt_at을 정하는 방식이다. 0 값은 기존 값을 유지한다.
+type DueMode uint8
+
+const (
+	DueKeep DueMode = iota
+	DueDelay
+)
+
+// DueSpec은 next_attempt_at을 절대 시각 대신 DB 시계 기준 지연으로 표현한다. 전이 SQL이
+// GREATEST(clock + Delay, Floor)로 계산하며, Floor는 DB 행에서 온 시각(owner next_attempt_at, in-flight lease 만료)만
+// 쓴다. 0 값 Floor는 하한이 없다는 뜻이다.
+type DueSpec struct {
+	Mode  DueMode
+	Delay time.Duration
+	Floor time.Time
+}
+
+// DelayedDue는 DB 시계에서 delay 뒤이면서 floor보다 이르지 않은 next_attempt_at을 요구한다.
+func DelayedDue(delay time.Duration, floor time.Time) DueSpec {
+	return DueSpec{Mode: DueDelay, Delay: delay, Floor: floor}
+}

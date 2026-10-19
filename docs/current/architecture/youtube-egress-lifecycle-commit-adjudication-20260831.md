@@ -55,13 +55,13 @@ Effect 인접 command는 실행 전에 다음 envelope를 완성해야 합니다
 operation ID
 logical owner ID와 follower ID 집합
 각 row의 expected pre-state/version/attempt/lock
-각 row의 exact expected post-state/version/attempt/lock/timestamp
+각 row의 exact expected post-state/version/attempt/lock owner
 tracking requirement와 canonical post identity
 logical ledger key와 exact expected pre/post state
 provider effect started/confirmed 여부
 ```
 
-Command 실행 뒤 member나 expected timestamp를 다시 계산하지 않습니다.
+Command 실행 뒤 member를 다시 계산하지 않습니다. 시각 열(`locked_at`·`sent_at`·`next_attempt_at`·`terminal_at`)은 전이 문장이 대상 행을 잠근 뒤 채취한 DB 시계로 정하므로 envelope에 기대값이 없습니다. Delivery post-state는 `(id, outbox_id, status, row_version, attempt_count, locked_by, error)`로 식별합니다. 모든 쓰기가 `row_version`을 올리므로 같은 pre-version에서 이 모양으로 이긴 전이는 같은 의미이고, BeginSending post-state는 `locked_by = 호출자`를 포함해 소유자 고유입니다. Pre-state 판정 뒤 retry는 같은 command(기대 pre-state·지연·시각 action)를 그대로 다시 보냅니다.
 
 ### A-003. Group-complete evidence
 
@@ -96,7 +96,7 @@ Claim 또는 Send fence 결과를 받지 못하면 caller가 ID와 현재 DB 값
 ```text
 PENDING unlocked/stale
     -> PENDING leased
-locked_at = claimAt
+locked_at = 문장 첫머리에서 채취한 DB 시계
 locked_by = worker instance
 row_version = pre + 1
 attempt 유지
@@ -125,7 +125,7 @@ PENDING
 attempt 유지
 lock clear (locked_at, locked_by = NULL)
 version + 1
-next_attempt_at = canonical defer due
+next_attempt_at = GREATEST(DB 시계 + RetryBackoff, DB 유래 floor)  -- 판정 비교 대상 아님
 ```
 
 Exact pre-state면 같은 DB command를 retry할 수 있습니다. 다른 state면 conflict입니다.
@@ -139,7 +139,7 @@ SENT
 attempt 유지
 lock clear
 version + 1
-sent_at = canonical reconciliationAt
+sent_at = ledger SENT의 sent_at
 ```
 
 Envelope의 same-key ledger가 `SENT`인지 같은 transaction과 read-back에서 확인합니다. 일부 follower만 `SENT`거나 ledger evidence가 다르면 atomicity breach입니다. Provider call은 없습니다.
@@ -186,7 +186,7 @@ status = SENDING
 version = pre + 1
 attempt 유지
 locked_by 유지
-locked_at = canonical sendStartedAt
+locked_at = 전이 문장의 DB 시계  -- 판정 비교 대상 아님
 ```
 
 Follower projection은 `BeginSending`이 변경하지 않으므로 envelope의 member가 아닙니다.
@@ -217,7 +217,7 @@ Success command는 다음을 포함합니다.
 
 - Provider operation owner와 exact Send fence
 - Same-logical follower projection ID와 pre-state
-- Canonical `sentAt`
+- `sent_at`은 SENT 전이 문장이 돌려준 DB 시계이며, 같은 transaction의 tracking·ledger·telemetry가 그 값을 씁니다
 - Canonical post별 deduplicated tracking requirement
 - `(kind, logical_id, room_id)` ledger key와 expected pre-state
 - Expected latency/tracking identities
@@ -231,7 +231,7 @@ status = SENT
 version = pre + 1
 attempt 유지
 locked_at = NULL
-sent_at = canonical sentAt
+sent_at = 전이 문장의 DB 시계  -- 판정 비교 대상 아님
 ```
 
 Follower가 reconciliation 대상이면 follower pre-state가 `PENDING/FAILED/QUARANTINED` 중 command에 기록된 값과 일치해야 합니다.
@@ -260,7 +260,7 @@ RequireAlreadySent
 
 ```text
 status = SENT
-sent_at = canonical sentAt
+sent_at = SENT 전이 문장의 DB 시계
 source_delivery_id = envelope의 owner 또는 지정된 evidence delivery
 ```
 
@@ -323,7 +323,7 @@ PENDING
 attempt = pre + 1
 version = pre + 1
 lock clear
-next_attempt_at = canonical due
+next_attempt_at = DB 시계 + max(RetryBackoff, RetryAfter)  -- 판정 비교 대상 아님
 ```
 
 Follower projection:
@@ -333,7 +333,7 @@ PENDING
 attempt 유지
 version = pre + 1 when command changes it
 lock clear
-next_attempt_at = owner due
+next_attempt_at = owner와 같은 지연  -- 판정 비교 대상 아님
 ```
 
 ### 판정
@@ -409,7 +409,7 @@ Ledger exact post-state:
 ```text
 (kind, logical_id, room_id) = envelope key
 status = QUARANTINED
-quarantined_at = canonical quarantineAt
+quarantined_at = 격리 전이 문장의 DB 시계
 ```
 
 ### 판정
@@ -442,7 +442,7 @@ owner/follower = PENDING
 attempt = 0
 version = pre + 1
 lock/error clear
-next_attempt_at = canonical reviveAt
+next_attempt_at = 전이 문장의 DB 시계  -- 판정 비교 대상 아님
 ```
 
 Selection transaction은 같은 logical key의 ledger가 absent임을 확인합니다. Ledger `SENT/QUARANTINED`가 있으면 revive 대상이 아닙니다.
@@ -479,12 +479,15 @@ Exact pre-state:
 Exact post-state:
 
 - Outbox `SENT`
-- Canonical `sent_at`
-- `terminal_at = canonical sent_at`
+- `sent_at = terminal_at = DB 시계`
 - Lock clear
 - Child 없음
 
 Child가 생겼으면 direct writer conflict이며 aggregate projector가 소유합니다.
+
+### Fanout failure
+
+Exact post-state는 `status`·`attempt_count`·`error`, lock clear, `sent_at IS NULL`, 종결 여부(`terminal_at` 유무)로 식별합니다. `next_attempt_at = DB 시계 + RetryBackoff × attempt`와 `terminal_at`의 값은 문장이 정하므로 비교하지 않습니다.
 
 ## Aggregate ambiguity
 

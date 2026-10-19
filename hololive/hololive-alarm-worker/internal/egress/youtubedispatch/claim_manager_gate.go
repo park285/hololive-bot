@@ -187,14 +187,8 @@ func (d *ClaimManager) deferDeliveryClaim(ctx context.Context, row *domain.YouTu
 		return false, nil
 	}
 
-	nextAttemptAt := time.Now().UTC()
-
-	if d.config.RetryBackoff > 0 {
-		nextAttemptAt = nextAttemptAt.Add(d.config.RetryBackoff)
-	}
-
 	result, err := d.transition.DeferFollower(ctx, store.DeferCommand{
-		Delivery: *row, NextAttemptAt: nextAttemptAt,
+		Delivery: *row, Delay: max(d.config.RetryBackoff, 0),
 	})
 	observeLifecycleApply("defer_follower", result, err, 1)
 

@@ -57,7 +57,7 @@ CLOCK_QUERY_POLICIES = (
     (f"{ALARM_DISPATCH_QUERIES}/send_request_members.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/repository_transitions_0020_01.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/repository_transitions_0160_06.sql", "clock_timestamp"),
-    (f"{YOUTUBE_DELIVERY_QUERIES}/transition_apply_rows.sql", "clock_timestamp"),
+    (f"{YOUTUBE_DELIVERY_QUERIES}/*.sql", "clock_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_candidates*.sql", "statement_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_target_*.sql", "statement_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_projection_current_*.sql", "statement_timestamp"),

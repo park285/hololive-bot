@@ -57,11 +57,8 @@ func runAggregateProjectionCompletionRace(t *testing.T, pending bool) {
 
 	parentTx := holdAggregateProjectionParent(ctx, t, pool, item)
 
-	projectedAt := time.Now().UTC().Truncate(time.Microsecond)
-	newer := newOutboxAggregateProjector(store.NewDeliveryRepository(
-		aggregateProjectionTransaction{Tx: parentTx}, logger, func() time.Time { return projectedAt }))
-	older := newOutboxAggregateProjector(store.NewDeliveryRepository(
-		conn, logger, func() time.Time { return projectedAt.Add(-time.Minute) }))
+	newer := newOutboxAggregateProjector(store.NewDeliveryRepository(aggregateProjectionTransaction{Tx: parentTx}, logger))
+	older := newOutboxAggregateProjector(store.NewDeliveryRepository(conn, logger))
 
 	var (
 		projectionErr error
@@ -90,6 +87,8 @@ func runAggregateProjectionCompletionRace(t *testing.T, pending bool) {
 	waitAggregateProjectionLock(ctx, t, pool, parentTx, conn)
 
 	frozen := reviveCompleteAndProject(ctx, t, transition, newer, item)
+	// 이전 projector는 commit 뒤 더 늦은 DB 시계로 집계하므로, 완료된 발송을 덮어쓰면 아래 시각이 달라진다.
+	completed := readAggregateProjectionTimes(ctx, t, parentTx, item.ID)
 	require.NoError(t, parentTx.Commit(ctx))
 
 	select {
@@ -103,7 +102,7 @@ func runAggregateProjectionCompletionRace(t *testing.T, pending bool) {
 		require.Equal(t, []int64{item.ID}, projectedIDs)
 	}
 
-	assertAggregateProjectionCompleted(ctx, t, pool, item, delivery, projectedAt)
+	assertAggregateProjectionCompleted(ctx, t, pool, item, delivery, completed)
 
 	requests, err := transition.LoadFrozenRequests(ctx, []int64{delivery.ID})
 	require.NoError(t, err)
@@ -168,13 +167,31 @@ func holdAggregateProjectionParent(ctx context.Context, t *testing.T, pool *pgxp
 	return parentTx
 }
 
+// aggregateProjectionTimes는 집계가 SENT로 확정하며 기록한 outbox 시각이다.
+type aggregateProjectionTimes struct {
+	sentAt     time.Time
+	terminalAt time.Time
+}
+
+// readAggregateProjectionTimes는 부모 잠금을 쥔 transaction 안에서 newer projection이 기록한 시각을 읽는다.
+func readAggregateProjectionTimes(ctx context.Context, t *testing.T, tx pgx.Tx, outboxID int64) aggregateProjectionTimes {
+	t.Helper()
+
+	var times aggregateProjectionTimes
+
+	require.NoError(t, tx.QueryRow(ctx, `SELECT sent_at, terminal_at FROM youtube_notification_outbox WHERE id = $1`, outboxID).
+		Scan(&times.sentAt, &times.terminalAt))
+
+	return times
+}
+
 func assertAggregateProjectionCompleted(
 	ctx context.Context,
 	t *testing.T,
 	pool *pgxpool.Pool,
 	item domain.YouTubeNotificationOutbox,
 	delivery domain.YouTubeNotificationDelivery,
-	projectedAt time.Time,
+	completed aggregateProjectionTimes,
 ) {
 	t.Helper()
 
@@ -192,8 +209,9 @@ func assertAggregateProjectionCompleted(
 		WHERE d.id = $1`, delivery.ID).Scan(&parentStatus, &childStatus, &sentAt, &terminalAt, &lockedAt, &errorText))
 	require.Equal(t, domain.OutboxStatusSent, parentStatus)
 	require.Equal(t, domain.OutboxStatusSent, childStatus)
-	require.True(t, sentAt.Equal(projectedAt))
-	require.True(t, terminalAt.Equal(projectedAt))
+	require.True(t, sentAt.Equal(completed.sentAt), "sent_at %s must stay at the completed projection %s", sentAt, completed.sentAt)
+	require.True(t, terminalAt.Equal(completed.terminalAt),
+		"terminal_at %s must stay at the completed projection %s", terminalAt, completed.terminalAt)
 	require.Nil(t, lockedAt)
 	require.Empty(t, errorText)
 

@@ -28,12 +28,7 @@ func (s *TransitionStore) CompleteSent(
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("complete sent: %w", err)
 	}
 
-	sentAt, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("complete sent: sent at: %w", err)
-	}
-
-	transitions, err := completeSentTransitions(operation, sentAt)
+	transitions, err := completeSentTransitions(operation)
 	if err != nil {
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("complete sent: build transitions: %w", err)
 	}
@@ -41,7 +36,7 @@ func (s *TransitionStore) CompleteSent(
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, claimTokens, sentAt, mode)
+		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, claimTokens, mode)
 		if applyErr == nil {
 			result := newApplyResult(ApplyApplied, touched)
 
@@ -96,7 +91,8 @@ func (s *TransitionStore) confirmSentPostState(
 	return result, nil
 }
 
-func completeSentTransitions(operation StartedOperation, sentAt time.Time) ([]rowTransition, error) {
+// completeSentTransitions는 owner와 follower를 SENT로 올리며, sent_at은 전이 문장의 DB 시계로 기록한다.
+func completeSentTransitions(operation StartedOperation) ([]rowTransition, error) {
 	groups := sortedStartedGroups(operation.groups)
 	transitions := make([]rowTransition, 0, len(groups))
 	seen := make(map[int64]struct{})
@@ -118,9 +114,9 @@ func completeSentTransitions(operation StartedOperation, sentAt time.Time) ([]ro
 
 		after.LockedAt = nil
 		after.LockedBy = nil
-		after.SentAt = &sentAt
+		after.SentAt = nil
 		after.Error = ""
-		transitions = append(transitions, rowTransition{before: before, after: after})
+		transitions = append(transitions, rowTransition{before: before, after: after, sentFromClock: true})
 
 		return nil
 	}
@@ -146,12 +142,12 @@ func completeSentTransitions(operation StartedOperation, sentAt time.Time) ([]ro
 	return transitions, nil
 }
 
+// completeSentOnce는 SENT 전이가 기록한 DB 시계를 tracking 발송 표시·telemetry·ledger의 발송 시각으로 함께 쓴다.
 func (s *TransitionStore) completeSentOnce(
 	ctx context.Context,
 	operation StartedOperation,
 	transitions []rowTransition,
 	claimTokens []dispatchstate.ClaimToken,
-	sentAt time.Time,
 	mode DeliveryMode,
 ) ([]int64, error) {
 	var touched []int64
@@ -161,9 +157,12 @@ func (s *TransitionStore) completeSentOnce(
 			return fmt.Errorf("complete sent: validate tracking: %w", err)
 		}
 
-		var err error
+		var (
+			sentAt time.Time
+			err    error
+		)
 
-		touched, err = applyRowTransitions(ctx, tx, "complete sent", transitions)
+		touched, sentAt, err = applyRowTransitions(ctx, tx, "complete sent", transitions)
 		if err != nil {
 			return fmt.Errorf("complete sent: apply rows: %w", err)
 		}

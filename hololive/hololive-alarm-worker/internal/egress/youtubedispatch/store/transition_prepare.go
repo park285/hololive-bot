@@ -29,17 +29,12 @@ func (s *TransitionStore) PrepareClaimed(
 		return PrepareClaimsResult{}, nil
 	}
 
-	at, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return PrepareClaimsResult{}, fmt.Errorf("prepare claimed: at: %w", err)
-	}
-
 	var prepared preparedClaims
 
-	err = s.executeTx(ctx, "prepare claimed", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "prepare claimed", func(tx dbx.Querier) error {
 		var prepareErr error
 
-		prepared, prepareErr = s.prepareClaimedTx(ctx, tx, claimed, outboxByID, at)
+		prepared, prepareErr = s.prepareClaimedTx(ctx, tx, claimed, outboxByID)
 		if prepareErr != nil {
 			return fmt.Errorf("prepare claimed: transaction body: %w", prepareErr)
 		}
@@ -71,9 +66,8 @@ func (s *TransitionStore) prepareClaimedTx(
 	tx dbx.Querier,
 	claimed []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-	at time.Time,
 ) (preparedClaims, error) {
-	resolved, err := s.resolveClaimedGroups(ctx, tx, "prepare claimed", claimed, outboxByID, at)
+	resolved, err := s.resolveClaimedGroups(ctx, tx, "prepare claimed", claimed, outboxByID)
 	if err != nil {
 		return preparedClaims{}, fmt.Errorf("prepare claimed: resolve groups: %w", err)
 	}
@@ -83,12 +77,12 @@ func (s *TransitionStore) prepareClaimedTx(
 	}
 
 	for i := range resolved.resolutions {
-		if resolutionErr := s.prepareResolution(&prepared, resolved.resolutions[i], resolved, at); resolutionErr != nil {
+		if resolutionErr := s.prepareResolution(&prepared, resolved.resolutions[i], resolved); resolutionErr != nil {
 			return preparedClaims{}, fmt.Errorf("prepare claimed: resolution %d: %w", i, resolutionErr)
 		}
 	}
 
-	prepared.touched, err = applyRowTransitions(ctx, tx, "prepare claimed", prepared.transitions)
+	prepared.touched, _, err = applyRowTransitions(ctx, tx, "prepare claimed", prepared.transitions)
 	if err != nil {
 		return preparedClaims{}, fmt.Errorf("prepare claimed: apply resolution: %w", err)
 	}
@@ -100,7 +94,6 @@ func (s *TransitionStore) prepareResolution(
 	prepared *preparedClaims,
 	resolution preparation.Resolution,
 	resolved resolvedLogicalGroups,
-	at time.Time,
 ) error {
 	prepared.kinds = append(prepared.kinds, resolution.Kind())
 
@@ -108,13 +101,13 @@ func (s *TransitionStore) prepareResolution(
 
 	switch resolution.Kind() {
 	case preparation.LogicalActive:
-		err = s.prepareActiveResolution(prepared, resolution, resolved.rowsByID, at)
+		err = s.prepareActiveResolution(prepared, resolution, resolved.rowsByID)
 	case preparation.LogicalFulfilled:
 		err = prepareFulfilledResolution(prepared, resolution, resolved)
 	case preparation.LogicalUnresolved:
 		err = prepareUnresolvedResolution(prepared, resolution, resolved)
 	case preparation.LogicalInFlight, preparation.LogicalOwnerPendingElsewhere:
-		err = s.prepareDeferredResolution(prepared, resolution, resolved.rowsByID, at)
+		err = s.prepareDeferredResolution(prepared, resolution, resolved.rowsByID)
 	case preparation.LogicalFailed:
 		err = prepareFailedResolution(prepared, resolution, resolved.rowsByID)
 	case preparation.LogicalInvariantBreach:
@@ -134,11 +127,12 @@ func (s *TransitionStore) prepareResolution(
 	return nil
 }
 
+// prepareActiveResolution은 claim batch의 active follower를 owner 뒤로 미루며, 보류 시각은 DB 시계 + RetryBackoff이고
+// owner의 next_attempt_at보다 이르지 않다.
 func (s *TransitionStore) prepareActiveResolution(
 	prepared *preparedClaims,
 	resolution preparation.Resolution,
 	rowsByID map[int64]transitionRow,
-	at time.Time,
 ) error {
 	owner := resolution.Owner()
 	if _, current := prepared.currentIDs[owner.DeliveryID]; !current {
@@ -149,9 +143,9 @@ func (s *TransitionStore) prepareActiveResolution(
 
 	prepared.activeIDs = append(prepared.activeIDs, owner.DeliveryID)
 
-	deferAt := maxCanonicalTime(at.Add(s.config.RetryBackoff), owner.NextAttemptAt)
+	due := lifecycle.DelayedDue(s.config.RetryBackoff, owner.NextAttemptAt)
 
-	transitions, err := currentDeferredTransitions(resolution.Followers(), rowsByID, prepared.currentIDs, deferAt)
+	transitions, err := currentDeferredTransitions(resolution.Followers(), rowsByID, prepared.currentIDs, due)
 	if err != nil {
 		return fmt.Errorf("prepare claimed: active follower: %w", err)
 	}
@@ -205,18 +199,16 @@ func prepareUnresolvedResolution(
 	return nil
 }
 
+// prepareDeferredResolution은 in-flight·다른 batch owner 그룹의 claim 행을 DB 시계 + RetryBackoff 뒤로 미루며,
+// resolver가 준 DB 유래 하한(owner due 또는 in-flight lease 만료)보다 이르지 않게 한다.
 func (s *TransitionStore) prepareDeferredResolution(
 	prepared *preparedClaims,
 	resolution preparation.Resolution,
 	rowsByID map[int64]transitionRow,
-	at time.Time,
 ) error {
-	deferAt := resolution.Due()
-	if deferAt.IsZero() {
-		deferAt = at.Add(s.config.RetryBackoff)
-	}
+	due := lifecycle.DelayedDue(s.config.RetryBackoff, resolution.DueFloor())
 
-	transitions, err := currentDeferredTransitions(resolution.Members(), rowsByID, prepared.currentIDs, deferAt)
+	transitions, err := currentDeferredTransitions(resolution.Members(), rowsByID, prepared.currentIDs, due)
 	if err != nil {
 		return fmt.Errorf("prepare claimed: defer member: %w", err)
 	}
@@ -253,7 +245,7 @@ func currentDeferredTransitions(
 	members []preparation.DeliverySnapshot,
 	rowsByID map[int64]transitionRow,
 	currentIDs map[int64]struct{},
-	deferAt time.Time,
+	due lifecycle.DueSpec,
 ) ([]rowTransition, error) {
 	transitions := make([]rowTransition, 0, len(members))
 	for i := range members {
@@ -267,7 +259,7 @@ func currentDeferredTransitions(
 			return nil, fmt.Errorf("defer claimed member: %w", err)
 		}
 
-		transitions = append(transitions, deferTransition(row, deferAt))
+		transitions = append(transitions, deferTransition(row, due))
 	}
 
 	return transitions, nil
@@ -293,19 +285,18 @@ func activeClaimedRows(
 	return active
 }
 
-func deferTransition(row transitionRow, due time.Time) rowTransition {
+func deferTransition(row transitionRow, due lifecycle.DueSpec) rowTransition {
 	after := row
 
 	after.Status = lifecycle.StatusPending
 	after.RowVersion++
 
-	after.NextAttemptAt = due.UTC().Truncate(time.Microsecond)
 	after.LockedAt = nil
 	after.LockedBy = nil
 	after.Error = ""
 	after.SentAt = nil
 
-	return rowTransition{before: row, after: after}
+	return rowTransition{before: row, after: after, due: due}
 }
 
 func fulfilledTransitions(
@@ -401,18 +392,10 @@ func failedFollowerTransition(row transitionRow) rowTransition {
 	return rowTransition{before: row, after: after}
 }
 
-func maxCanonicalTime(left, right time.Time) time.Time {
-	value := left
-	if right.After(value) {
-		value = right
-	}
-
-	return value.UTC().Truncate(time.Microsecond)
-}
-
+// DeferCommand는 claim한 follower 한 행을 DB 시계에서 Delay 뒤로 미룬다.
 type DeferCommand struct {
-	Delivery      domain.YouTubeNotificationDelivery
-	NextAttemptAt time.Time
+	Delivery domain.YouTubeNotificationDelivery
+	Delay    time.Duration
 }
 
 func (s *TransitionStore) DeferFollower(ctx context.Context, command DeferCommand) (ApplyResult, error) {
@@ -420,9 +403,8 @@ func (s *TransitionStore) DeferFollower(ctx context.Context, command DeferComman
 		return newApplyResult(ApplyConflict, nil), errors.New("defer follower: invalid preparation fence")
 	}
 
-	due, err := lifecycle.CanonicalTime(command.NextAttemptAt)
-	if err != nil {
-		return newApplyResult(ApplyConflict, nil), fmt.Errorf("defer follower: due: %w", err)
+	if command.Delay < 0 {
+		return newApplyResult(ApplyConflict, nil), errors.New("defer follower: delay is negative")
 	}
 
 	before := transitionRow{
@@ -434,14 +416,14 @@ func (s *TransitionStore) DeferFollower(ctx context.Context, command DeferComman
 		SentAt:   cloneTimePtr(command.Delivery.SentAt), Error: command.Delivery.Error,
 		RowVersion: command.Delivery.RowVersion,
 	}
-	transition := deferTransition(before, due)
+	transition := deferTransition(before, lifecycle.DelayedDue(command.Delay, time.Time{}))
 
 	var touched []int64
 
 	if err := s.executeTx(ctx, "defer follower", func(tx dbx.Querier) error {
 		var applyErr error
 
-		touched, applyErr = applyRowTransitions(ctx, tx, "defer follower", []rowTransition{transition})
+		touched, _, applyErr = applyRowTransitions(ctx, tx, "defer follower", []rowTransition{transition})
 		if applyErr != nil {
 			return fmt.Errorf("defer follower: apply row: %w", applyErr)
 		}

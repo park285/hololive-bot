@@ -30,8 +30,8 @@ func TestTransitionClaimPendingSQLPreparedModesPreservePendingGuard(t *testing.T
 			run := func(status any) []domain.YouTubeNotificationDelivery {
 				t.Helper()
 
-				rows, err := tx.Query(t.Context(), "claim_pending_sql_v1", status, at.Add(-time.Minute),
-					at, at.Add(-time.Hour), 10, at, "youtube-dispatcher:test")
+				rows, err := tx.Query(t.Context(), "claim_pending_sql_v1", status, time.Minute.Milliseconds(),
+					time.Hour.Milliseconds(), 10, "youtube-dispatcher:test")
 				require.NoError(t, err)
 
 				claimed, err := pgx.CollectRows(rows, scanTransitionDelivery)
@@ -75,7 +75,7 @@ func TestTransitionStaleSendingSQLPreparedModesPreserveSendingGuard(t *testing.T
 			run := func(status any) []int64 {
 				t.Helper()
 
-				rows, err := tx.Query(t.Context(), "stale_sending_sql_v1", status, at.Add(-time.Hour), 10)
+				rows, err := tx.Query(t.Context(), "stale_sending_sql_v1", status, time.Hour.Milliseconds(), 10)
 				require.NoError(t, err)
 
 				ids, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (int64, error) {

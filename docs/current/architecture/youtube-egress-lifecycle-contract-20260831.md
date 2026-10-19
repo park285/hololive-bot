@@ -201,9 +201,16 @@ locked_by text NULL
 
 Claim한 워커 인스턴스 ID(`youtube-dispatcher:<hostname>:<pid>`)입니다. Claim이 기록하고 `SENDING` 전이가 유지하며, 잠금을 비우는 전이는 `locked_at`과 함께 비웁니다. 컨테이너 이름이 고정이라 재시작한 프로세스가 같은 ID를 가질 수 있으므로 claim 세대는 `row_version`이 구분하고 `locked_by`만으로 fence하지 않습니다. 이 열을 모르는 이전 워커가 남긴 행은 NULL이거나 이전 값이며, 전이 fence는 다시 읽은 값과 비교하므로 그대로 처리합니다.
 
-### 시간 정규화
+### 시간원
 
-Application service는 operation 또는 batch 시각을 한 번 읽고 repository 경계에서 UTC microsecond precision으로 정규화합니다. 하나의 atomic operation 안에서 서로 다른 `time.Now()` 값을 혼용하지 않습니다.
+claim·만료·신선도 판정과 `locked_at`·`sent_at`·`next_attempt_at`·`terminal_at` 기록은 모두 PostgreSQL 시계가 정합니다. 각 SQL 문장은 `clock AS MATERIALIZED (SELECT clock_timestamp() AS at)`에서 시계를 한 번 채취하고, 조건에서는 `(SELECT at FROM clock)` 스칼라 하위 질의로 참조해 PENDING·SENDING 부분 인덱스 조건으로 쓰이게 합니다. Go는 시각 대신 `lease_ms`·`freshness_ms`·지연(`delay_ms`)과 DB에서 읽은 하한만 넘깁니다.
+
+- 전이 문장(`transition_apply_rows.sql`)은 대상 행을 잠근 뒤 시계를 채취하고, 그 값을 전이 시각으로 돌려줍니다. 같은 트랜잭션의 ledger 관측 시각·tracking 발송 표시·시도 telemetry는 이 값을 씁니다. fanout 실패 문장(`fanout_fail.sql`)도 claim fence를 통과한 outbox 행을 잠근 뒤 시계를 채취합니다.
+- 집계 문장(`delivery_repository_aggregate_sync.sql`)은 같은 트랜잭션의 앞 문장이 부모 outbox를 ID 순서로 잠근 뒤 실행되므로, 새로 기록하는 outbox `sent_at`·`terminal_at`도 부모 잠금 뒤의 DB 시계 하나로 정합니다.
+- 후보 문장(claim·stale SENDING·만료 PENDING·revive)은 행을 잠그기 전에 시계를 채취합니다. 만료 판정은 실제 잠금 시점보다 보수적이고, claim이 기록한 lease도 그만큼 일찍 끝납니다. 후보 문장은 판정 시계를 `checked_at`으로 돌려주고 Go의 그룹 재확인은 이 값만 씁니다.
+- `next_attempt_at`은 `GREATEST(clock + delay, floor)`입니다. floor는 owner `next_attempt_at` 또는 in-flight `locked_at + LockTimeout`처럼 DB 행에서 온 값만 씁니다.
+
+보존 삭제 cutoff(`CleanupTerminalOutboxes`, `CleanupOrphanRequests`)는 상태 전이·소유권 판정이 아닌 일 단위 보존 창이라 Go 시각을 씁니다.
 
 ## 핵심 불변식
 
@@ -311,23 +318,24 @@ type AlarmClaimToken struct {
 
 ## Claim protocol
 
-대상 조건:
+대상 조건(`clock`은 문장 첫머리에서 한 번 채취한 DB 시계):
 
 ```text
 status = PENDING
-next_attempt_at <= now
-locked_at IS NULL OR locked_at < now - LockTimeout
+next_attempt_at <= clock
+locked_at IS NULL OR locked_at < clock - LockTimeout
+outbox.created_at >= clock - ClaimFreshnessWindow
 ```
 
 Claim SQL:
 
 ```sql
-SET locked_at = $now,
+SET locked_at = (SELECT at FROM clock),
     locked_by = $owner,
     row_version = row_version + 1
 ```
 
-반환된 exact version·`locked_by`만 Claim fence입니다. Statement 결과를 받지 못하면 caller는 claim을 소유하지 않습니다.
+반환된 exact version·`locked_by`만 Claim fence입니다. Statement 결과를 받지 못하면 caller는 claim을 소유하지 않습니다. `ReadySnapshot`은 같은 predicate와 같은 방식의 시계로 claim 가능 행을 셉니다.
 
 ## Logical group resolution
 
@@ -384,7 +392,7 @@ Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 - Provider를 호출하지 않습니다.
 - Ledger `SENT`를 transaction 안에서 다시 확인하고 current/follower `PENDING`, `FAILED`, `QUARANTINED`를 `SENT`로 reconcile합니다.
 - Attempt는 유지합니다.
-- `sent_at`은 reconciliation 시각입니다.
+- `sent_at`은 ledger `SENT`의 `sent_at`을 그대로 씁니다.
 - Tracking을 새로 추정하지 않습니다.
 
 #### `LogicalUnresolved`
@@ -398,12 +406,12 @@ Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 
 - Provider를 호출하지 않습니다.
 - Current/follower `PENDING`을 attempt 없이 defer합니다.
-- Due는 `max(now + RetryBackoff, inFlight.locked_at + LockTimeout)`입니다.
+- Due는 `GREATEST(clock + RetryBackoff, inFlight.locked_at + LockTimeout)`입니다.
 
 #### `LogicalActive`
 
 - Deterministic owner만 preparation/send를 계속합니다.
-- Follower `PENDING`은 attempt 없이 owner due에 맞춰 defer합니다.
+- Follower `PENDING`은 attempt 없이 `GREATEST(clock + RetryBackoff, owner.next_attempt_at)`로 defer합니다.
 - Owner가 current batch에 없더라도 follower가 owner를 대체하지 않습니다.
 
 #### `LogicalFailed`
@@ -477,16 +485,16 @@ Owner member 전체가 Claim fence를 만족하고 claim lease가 살아 있을 
 
 ```sql
 SET status = 'SENDING',
-    locked_at = $send_started_at,
+    locked_at = clock,  -- 대상 행을 잠근 뒤 채취한 DB 시계
     row_version = row_version + 1
 WHERE id = $id
   AND status = 'PENDING'
   AND row_version = $claim_version
   AND locked_by IS NOT DISTINCT FROM $claim_owner
-  AND locked_at + $lease_ms * INTERVAL '1 millisecond' > clock_timestamp()
+  AND locked_at + $lease_ms * INTERVAL '1 millisecond' > clock
 ```
 
-Lease 조건(`lease_expired`)은 정지했던 소유자가 lease 밖에서 외부 부수효과를 시작하지 않게 합니다. `locked_by`는 유지합니다. 한 owner라도 미스면 전체 rollback하고 provider를 호출하지 않습니다.
+Lease 조건(`lease_expired`)은 정지했던 소유자가 lease 밖에서 외부 부수효과를 시작하지 않게 합니다. `locked_by`는 유지합니다. 한 owner라도 미스면 전체 rollback하고 provider를 호출하지 않습니다. 새 `locked_at`은 문장이 돌려준 전이 시각이며, 정산 단계의 시도 시작 시각으로도 쓰입니다.
 
 Commit response loss는 provider call 전에 primary exact read-back으로 판정합니다. Exact post-state만 provider call 권한을 만듭니다.
 
@@ -541,14 +549,14 @@ Grouped 포맷 실패는 이 fallback의 trigger가 아닙니다. 묶음 메시�
 
 ### Owner retry
 
-- Owner: `SENDING/PENDING leased -> PENDING`, attempt +1, due 설정, lock clear, version +1
-- Follower `PENDING`: attempt 유지, due owner와 정렬, lock clear, version +1
+- Owner: `SENDING/PENDING leased -> PENDING`, attempt +1, `next_attempt_at = clock + max(RetryBackoff, RetryAfter)`, lock clear, version +1
+- Follower `PENDING`: attempt 유지, owner와 같은 지연으로 due 설정, lock clear, version +1
 - Terminal/in-flight mixed follower는 conflict 또는 invariant breach
 
 ### Owner terminal failure
 
-- Owner: `FAILED`, attempt +1, lock clear, version +1
-- Follower `PENDING`: `FAILED`, attempt 유지, lock clear, version +1
+- Owner: `FAILED`, attempt +1, `next_attempt_at` 유지, lock clear, version +1
+- Follower `PENDING`: `FAILED`, attempt 유지, 자기 `next_attempt_at` 유지, lock clear, version +1
 - Provider는 재호출하지 않습니다.
 
 ### Owner quarantine
@@ -562,12 +570,12 @@ Grouped 포맷 실패는 이 fallback의 trigger가 아닙니다. 묶음 메시�
 Success transaction:
 
 1. Operation owner 전체 exact `SENDING + SendFence` 확인
-2. Owner를 `SENT`, canonical `sent_at`, lock clear, version +1
+2. Owner를 `SENT`, `sent_at = clock`(전이 문장이 돌려준 DB 시계), lock clear, version +1
 3. Same-logical follower `PENDING/FAILED/QUARANTINED`를 `SENT`로 reconcile, attempt 유지, version +1
 4. Tracking requirement를 canonical post별로 deduplicate
 5. `RequireClaimOrAlreadySent`는 exact token으로 mark-sent를 시도하고, 이미 sent면 수용
 6. `RequireAlreadySent`는 durable sent를 확인
-7. Owner logical key마다 ledger `RecordSent`
+7. Owner logical key마다 ledger `RecordSent`(관측 시각은 같은 전이 시각)
 8. Latency classification과 tracking mutation commit
 
 Tracking이 neither exact-token nor already-sent이면 rollback합니다. Provider는 다시 호출하지 않습니다.
@@ -590,7 +598,6 @@ type DecisionContext struct {
     ExpectedStatus   DeliveryStatus
     ExpectedVersion  int64
     ExpectedLockedBy *string
-    At               time.Time
 }
 ```
 
@@ -687,7 +694,7 @@ Revive는 logical group 단위로 판정합니다.
 
 적용:
 
-- Owner/follower: `PENDING`, attempt 0, due 정렬, lock/error clear, version +1
+- Owner/follower: `PENDING`, attempt 0, `next_attempt_at = clock`, lock/error clear, version +1
 - Commit 뒤 touched outbox: 표준 aggregate projector
 
 Commit `Indeterminate`에서는 stale selected ID set을 반복하지 않고 eligibility selection부터 다시 수행합니다.
@@ -696,7 +703,7 @@ Commit `Indeterminate`에서는 stale selected ID set을 반복하지 않고 eli
 
 ### `CompleteWithoutTargets`
 
-Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `SENT`, canonical `sent_at`, 같은 시각의 `terminal_at`, lock clear를 적용합니다.
+Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `SENT`, `sent_at = terminal_at = clock`, lock clear를 적용합니다.
 
 ### `MaterializeFanout`
 
@@ -704,7 +711,7 @@ Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `S
 
 1. Active outbox claim 확인
 2. Target room canonicalize/dedupe
-3. `(outbox_id,room_id)` idempotent insert
+3. `(outbox_id,room_id)` idempotent insert, 첫 `next_attempt_at = clock`
 4. Outbox lock clear
 5. Status `PENDING` 유지
 
@@ -738,8 +745,8 @@ Logical group transition은 touched outbox ID 전체를 반환하고 projector�
 
 ```text
 next=PENDING              -> NULL
-PENDING -> SENT/FAILED    -> canonical projectionAt
-FAILED -> SENT            -> canonical projectionAt
+PENDING -> SENT/FAILED    -> 집계 문장의 clock
+FAILED -> SENT            -> 집계 문장의 clock
 terminal -> same terminal -> existing terminal_at 보존
 ```
 

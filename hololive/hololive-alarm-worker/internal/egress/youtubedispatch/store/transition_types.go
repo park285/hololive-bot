@@ -217,6 +217,28 @@ func transitionRowFromSnapshot(snapshot preparation.DeliverySnapshot, byID map[i
 	return row, nil
 }
 
+// checkedTransitionRow는 후보 SQL이 돌려준 행과 그 문장이 만료·신선도 판정에 쓴 DB 시계(checked_at)다.
+type checkedTransitionRow struct {
+	transitionRow
+
+	CheckedAt time.Time
+}
+
+// splitCheckedTransitionRows는 후보 행과 판정 시계를 나눈다. 한 문장의 clock은 한 번만 채취하므로 모든 행의
+// checked_at이 같고, 행이 없으면 0 값 시계를 돌려준다.
+func splitCheckedTransitionRows(checked []checkedTransitionRow) ([]transitionRow, time.Time) {
+	if len(checked) == 0 {
+		return nil, time.Time{}
+	}
+
+	rows := make([]transitionRow, 0, len(checked))
+	for i := range checked {
+		rows = append(rows, checked[i].transitionRow)
+	}
+
+	return rows, checked[0].CheckedAt.UTC()
+}
+
 type startedLogicalGroup struct {
 	key           ytcontentid.LogicalKey
 	ownerBefore   transitionRow
@@ -227,12 +249,11 @@ type startedLogicalGroup struct {
 }
 
 type StartedOperation struct {
-	groups    []startedLogicalGroup
-	startedAt time.Time
+	groups []startedLogicalGroup
 }
 
 func (o StartedOperation) Valid() bool {
-	return len(o.groups) > 0 && !o.startedAt.IsZero()
+	return len(o.groups) > 0
 }
 
 func (o StartedOperation) OwnerCount() int {
@@ -246,7 +267,7 @@ func (o StartedOperation) ForOwner(deliveryID int64) (StartedOperation, error) {
 
 	for i := range o.groups {
 		if o.groups[i].ownerAfter.ID == deliveryID {
-			return StartedOperation{groups: []startedLogicalGroup{o.groups[i]}, startedAt: o.startedAt}, nil
+			return StartedOperation{groups: []startedLogicalGroup{o.groups[i]}}, nil
 		}
 	}
 

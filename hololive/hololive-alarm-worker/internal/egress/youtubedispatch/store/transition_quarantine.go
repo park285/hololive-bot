@@ -26,17 +26,10 @@ func (s *TransitionStore) QuarantineStaleLogicalGroups(ctx context.Context, limi
 		return QuarantineResult{ApplyResult: newApplyResult(ApplyConflict, nil)}, errors.New("quarantine stale logical groups: limit must be positive")
 	}
 
-	at, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return QuarantineResult{ApplyResult: newApplyResult(ApplyIndeterminate, nil)}, fmt.Errorf("quarantine stale logical groups: at: %w", err)
-	}
-
-	cutoff := at.Add(-s.config.LockTimeout)
-
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		result, transitions, writes, applyErr := s.quarantineStaleOnce(ctx, at, cutoff, limit)
+		result, transitions, writes, applyErr := s.quarantineStaleOnce(ctx, limit)
 		if applyErr == nil {
 			result.CommitAdjudication = priorAdjudication
 
@@ -93,8 +86,6 @@ func confirmQuarantinePostState(
 
 func (s *TransitionStore) quarantineStaleOnce(
 	ctx context.Context,
-	at time.Time,
-	cutoff time.Time,
 	limit int,
 ) (QuarantineResult, []rowTransition, []LedgerWrite, error) {
 	var (
@@ -106,7 +97,7 @@ func (s *TransitionStore) quarantineStaleOnce(
 	err := s.executeTx(ctx, "quarantine logical groups", func(tx dbx.Querier) error {
 		var txErr error
 
-		result, transitions, writes, txErr = s.quarantineStaleTx(ctx, tx, at, cutoff, limit)
+		result, transitions, writes, txErr = s.quarantineStaleTx(ctx, tx, limit)
 		if txErr != nil {
 			return fmt.Errorf("quarantine logical groups: transaction body: %w", txErr)
 		}
@@ -120,14 +111,14 @@ func (s *TransitionStore) quarantineStaleOnce(
 	return result, transitions, writes, nil
 }
 
+// quarantineStaleTx는 lease가 끝난 SENDING 그룹을 격리한다. 만료 판정은 후보 SQL의 DB 시계(checked_at)로, ledger
+// 관측 시각과 결과 불명 시도의 종료 시각은 격리 전이 문장의 DB 시계로 기록한다.
 func (s *TransitionStore) quarantineStaleTx(
 	ctx context.Context,
 	tx dbx.Querier,
-	at time.Time,
-	cutoff time.Time,
 	limit int,
 ) (QuarantineResult, []rowTransition, []LedgerWrite, error) {
-	candidates, err := loadStaleSendingCandidates(ctx, tx, cutoff, limit)
+	candidates, checkedAt, err := loadStaleSendingCandidates(ctx, tx, s.config.LockTimeout, limit)
 	if err != nil {
 		return QuarantineResult{}, nil, nil, fmt.Errorf("quarantine logical groups: load candidates: %w", err)
 	}
@@ -136,21 +127,27 @@ func (s *TransitionStore) quarantineStaleTx(
 		return QuarantineResult{ApplyResult: newApplyResult(ApplyApplied, nil)}, nil, nil, nil
 	}
 
-	resolved, err := s.resolveStaleSendingGroups(ctx, tx, candidates, at)
+	resolved, err := s.resolveStaleSendingGroups(ctx, tx, candidates)
 	if err != nil {
 		return QuarantineResult{}, nil, nil, fmt.Errorf("quarantine logical groups: resolve candidates: %w", err)
 	}
 
-	result, transitions, writes, attempts, err := buildQuarantineChanges(resolved, transitionRowIDSet(candidates), at, cutoff)
+	cutoff := checkedAt.Add(-s.config.LockTimeout)
+
+	result, transitions, writes, attempts, err := buildQuarantineChanges(resolved, transitionRowIDSet(candidates), cutoff)
 	if err != nil {
 		return QuarantineResult{}, transitions, writes, fmt.Errorf("quarantine logical groups: build changes: %w", err)
 	}
 
 	sortTransitionsByID(transitions)
 
-	touched, err := applyRowTransitions(ctx, tx, "quarantine logical groups", transitions)
+	touched, quarantinedAt, err := applyRowTransitions(ctx, tx, "quarantine logical groups", transitions)
 	if err != nil {
 		return result, transitions, writes, fmt.Errorf("quarantine logical groups: apply rows: %w", err)
+	}
+
+	for i := range writes {
+		writes[i].ObservedAt = quarantinedAt
 	}
 
 	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusQuarantined, writes); err != nil {
@@ -158,7 +155,7 @@ func (s *TransitionStore) quarantineStaleTx(
 	}
 
 	// 결과 불명으로 격리한 owner 시도는 공백으로 두지 않고 같은 트랜잭션에서 outcome_unknown으로 기록한다.
-	if err := recordAttemptTelemetry(ctx, tx, deliveryModeStaleSweep, attempts, at); err != nil {
+	if err := recordAttemptTelemetry(ctx, tx, deliveryModeStaleSweep, attempts, quarantinedAt); err != nil {
 		return result, transitions, writes, fmt.Errorf("quarantine logical groups: record telemetry: %w", err)
 	}
 
@@ -180,7 +177,6 @@ func transitionRowIDSet(rows []transitionRow) map[int64]struct{} {
 func buildQuarantineChanges(
 	resolved resolvedLogicalGroups,
 	candidateIDs map[int64]struct{},
-	at time.Time,
 	cutoff time.Time,
 ) (QuarantineResult, []rowTransition, []LedgerWrite, []deliveryAttempt, error) {
 	var (
@@ -192,7 +188,7 @@ func buildQuarantineChanges(
 
 	for i := range resolved.resolutions {
 		change, err := quarantineResolution(
-			resolved.resolutions[i], resolved, candidateIDs, at, cutoff,
+			resolved.resolutions[i], resolved, candidateIDs, cutoff,
 		)
 		if err != nil {
 			return result, transitions, writes, attempts, fmt.Errorf("quarantine logical groups: resolution %d: %w", i, err)
@@ -228,12 +224,11 @@ func quarantineResolution(
 	resolution preparation.Resolution,
 	resolved resolvedLogicalGroups,
 	candidateIDs map[int64]struct{},
-	at time.Time,
 	cutoff time.Time,
 ) (quarantineResolutionChange, error) {
 	switch resolution.Kind() {
 	case preparation.LogicalInFlight:
-		change, err := quarantineInFlightResolution(resolution, resolved.rowsByID, candidateIDs, at, cutoff)
+		change, err := quarantineInFlightResolution(resolution, resolved.rowsByID, candidateIDs, cutoff)
 		if err != nil {
 			return quarantineResolutionChange{}, fmt.Errorf("quarantine logical groups: in-flight resolution: %w", err)
 		}
@@ -260,11 +255,12 @@ func quarantineResolution(
 	return quarantineResolutionChange{}, fmt.Errorf("quarantine logical groups: unsupported resolution kind %d", resolution.Kind())
 }
 
+// quarantineInFlightResolution은 후보로 잠근 owner의 lease가 cutoff(후보 SQL의 DB 시계 - LockTimeout) 전에 끝났을 때만
+// 그룹을 격리하고, ledger 관측 시각은 전이 뒤에 채운다.
 func quarantineInFlightResolution(
 	resolution preparation.Resolution,
 	rowsByID map[int64]transitionRow,
 	candidateIDs map[int64]struct{},
-	at time.Time,
 	cutoff time.Time,
 ) (quarantineResolutionChange, error) {
 	owner := resolution.Owner()
@@ -291,7 +287,7 @@ func quarantineInFlightResolution(
 		return quarantineResolutionChange{}, fmt.Errorf("quarantine logical groups: owner row: %w", err)
 	}
 
-	write := &LedgerWrite{Key: resolution.Key(), ObservedAt: at, SourceDeliveryID: owner.DeliveryID}
+	write := &LedgerWrite{Key: resolution.Key(), SourceDeliveryID: owner.DeliveryID}
 	attempt := &deliveryAttempt{
 		group:  startedLogicalGroup{key: resolution.Key(), ownerBefore: ownerRow, ownerAfter: ownerRow},
 		result: attemptResultOutcomeUnknown,
@@ -318,30 +314,37 @@ func quarantineFulfilledResolution(
 	return transitions, nil
 }
 
-func loadStaleSendingCandidates(ctx context.Context, db dbx.Querier, cutoff time.Time, limit int) ([]transitionRow, error) {
-	var candidates []transitionRow
+// loadStaleSendingCandidates는 lease가 끝난 SENDING 행을 잠그고, 판정에 쓴 DB 시계를 함께 돌려준다.
+func loadStaleSendingCandidates(
+	ctx context.Context,
+	db dbx.Querier,
+	lease time.Duration,
+	limit int,
+) ([]transitionRow, time.Time, error) {
+	var checked []checkedTransitionRow
 
 	if err := dbx.SelectSQL(
 		ctx,
 		db,
-		&candidates,
+		&checked,
 		"load stale sending transition rows",
 		mustSQL("transition_stale_sending.sql"),
 		lifecycle.StatusSending,
-		cutoff,
+		lease.Milliseconds(),
 		limit,
 	); err != nil {
-		return nil, fmt.Errorf("load stale sending transition rows: %w", err)
+		return nil, time.Time{}, fmt.Errorf("load stale sending transition rows: %w", err)
 	}
 
-	return candidates, nil
+	candidates, checkedAt := splitCheckedTransitionRows(checked)
+
+	return candidates, checkedAt, nil
 }
 
 func (s *TransitionStore) resolveStaleSendingGroups(
 	ctx context.Context,
 	db dbx.Querier,
 	candidates []transitionRow,
-	at time.Time,
 ) (resolvedLogicalGroups, error) {
 	requested, requestedKeys, err := staleRequestedLogicalGroups(candidates)
 	if err != nil {
@@ -365,7 +368,6 @@ func (s *TransitionStore) resolveStaleSendingGroups(
 
 	resolver, err := preparation.NewResolver(preparation.ResolverConfig{
 		LogicalGroupScanLimit: s.config.LogicalGroupLimit,
-		RetryBackoff:          s.config.RetryBackoff,
 		LockTimeout:           s.config.LockTimeout,
 		RequireTerminalLedger: true,
 	})
@@ -374,7 +376,7 @@ func (s *TransitionStore) resolveStaleSendingGroups(
 	}
 
 	return resolvedLogicalGroups{
-		resolutions: resolver.ResolveGroups(snapshots, evidence, requestedKeys, at),
+		resolutions: resolver.ResolveGroups(snapshots, evidence, requestedKeys),
 		rowsByID:    rowsByID, ledgerByKey: ledgerByKey,
 	}, nil
 }

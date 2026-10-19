@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
 
@@ -208,7 +207,7 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 func (d *SendEngine) deferIncompleteFrozenGroup(ctx context.Context, rows []domain.YouTubeNotificationDelivery) {
 	for i := range rows {
 		row := &rows[i]
-		result, err := d.transition.DeferFollower(ctx, store.DeferCommand{Delivery: *row, NextAttemptAt: time.Now().Add(d.config.RetryBackoff)})
+		result, err := d.transition.DeferFollower(ctx, store.DeferCommand{Delivery: *row, Delay: d.config.RetryBackoff})
 		observeLifecycleApply("defer_follower", result, err, 1)
 
 		if err != nil || result.Outcome != store.ApplyApplied {

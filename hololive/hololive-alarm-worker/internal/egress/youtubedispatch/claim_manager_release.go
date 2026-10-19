@@ -72,24 +72,20 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 }
 
-// cutoff가 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가
-// config invariant로 보장되지 않으므로, max로 삭제 대상을 항상 created_at < now-ClaimFreshnessWindow로
-// 묶어 primary claim(dispatcher_claim.go의 created_at >= now-ClaimFreshnessWindow)에서 다시 claim될 수
-// 없음을 보장한다. ClaimFreshnessWindow<=0이면 claim에 신선도 하한이 없어 안전한 cutoff가 없으므로 skip.
+// 보존 기간이 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가 config invariant로
+// 보장되지 않으므로, 삭제 대상을 항상 fanout claim의 신선도 하한(DB 시계 - ClaimFreshnessWindow)보다 오래된 outbox로
+// 묶어 다시 claim될 수 없게 한다. 보존 기간과 lease 만료는 claim과 같은 DB 시계로 판정한다.
+// ClaimFreshnessWindow<=0이면 claim에 신선도 하한이 없어 안전한 기준이 없으므로 건너뛴다.
 // NOT EXISTS delivery 가드는 ON DELETE CASCADE로 인한 delivery/telemetry 동반 삭제를 막는다.
 func (d *ClaimManager) cleanupExpiredFanoutOutboxes(ctx context.Context) {
 	if d.config.ClaimFreshnessWindow <= 0 {
 		return
 	}
 
-	now := time.Now().UTC()
-	pendingCutoff := now.Add(-d.orphanPendingCutoff())
-	lockExpiry := now.Add(-d.config.LockTimeout)
-
 	var total int
 
 	for {
-		deleted, err := d.transition.CleanupExpiredFanoutOutboxes(ctx, pendingCutoff, lockExpiry, outboxCleanupBatchSize)
+		deleted, err := d.transition.CleanupExpiredFanoutOutboxes(ctx, d.orphanPendingCutoff(), outboxCleanupBatchSize)
 		if err != nil {
 			d.logger.Warn("Failed to cleanup expired fanout outbox items", slog.Any("error", err))
 
