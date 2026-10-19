@@ -39,15 +39,15 @@ func TestPgxRepositoryRejectsSubMillisecondDurationsBeforeDatabase(t *testing.T)
 	}
 }
 
+// 격리 기준은 유효하게 두어 lease 하한만으로 거부되는지 본다. 1ms 이상이면 초 단위가 아니어도 허용한다.
 func TestNewConsumerRejectsSubMillisecondLease(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewConsumer(&consumerTestRepository{}, nil, nil, WithWorkerID("worker-1"), WithLease(500*time.Microsecond))
+	_, err := NewConsumer(&consumerTestRepository{}, nil, nil, WithWorkerID("worker-1"), WithLease(500*time.Microsecond), WithQuarantineThreshold(time.Minute))
 	require.ErrorContains(t, err, "lease must be at least 1ms")
 
-	consumer, err := NewConsumer(&consumerTestRepository{}, nil, nil, WithWorkerID("worker-1"), WithLease(1500*time.Millisecond))
+	_, err = NewConsumer(&consumerTestRepository{}, nil, nil, WithWorkerID("worker-1"), WithLease(1500*time.Millisecond), WithQuarantineThreshold(time.Minute))
 	require.NoError(t, err)
-	require.Equal(t, 1500*time.Millisecond, consumer.lease)
 }
 
 // claim과 발송 진입 lease, stale 격리 기준은 초로 절사하지 않고 밀리초 그대로 DB 시각에 적용된다.

@@ -59,10 +59,6 @@ func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roo
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
 }
 
-func (*clientRequestIDRecordingIrisSender) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
-	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: "handoff_completed"}, nil
-}
-
 type workerappEgressTestPostgres struct{ pool *pgxpool.Pool }
 
 func alarmWorkerTestConfig(t *testing.T) (*workerconfig.RuntimeConfig, *alarmWorkerRegistryState) {
@@ -148,15 +144,6 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 	var requestBody string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == "/reply-status/reply-1" {
-			w.Header().Set("Content-Type", "application/json")
-
-			_, err := io.WriteString(w, `{"requestId":"reply-1","state":"handoff_completed"}`)
-			assert.NoError(t, err)
-
-			return
-		}
-
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("read request body: %v", err)
@@ -256,7 +243,7 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), &clientRequestIDRecordingIrisSender{}, nil, nil, state)
+	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), nil, nil, nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))

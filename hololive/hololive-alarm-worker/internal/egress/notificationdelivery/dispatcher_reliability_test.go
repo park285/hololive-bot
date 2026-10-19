@@ -17,7 +17,7 @@ import (
 )
 
 func TestDispatcherQuarantinesUnknownWithoutRetry(t *testing.T) {
-	for _, cause := range []error{sendoutcome.ErrHandoffOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`)} {
+	for _, cause := range []error{sendoutcome.ErrAdmissionOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`)} {
 		for _, saveError := range []error{nil, errors.New("db unavailable")} {
 			failed, quarantined := 0, 0
 			repo := &mockDeliveryRepository{

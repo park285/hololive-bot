@@ -44,11 +44,11 @@ func WithLease(lease time.Duration) ConsumerOption {
 	}
 }
 
+// WithQuarantineThreshold는 stale sending 격리 기준이다. 값을 바꾸지 않고 그대로 두므로 생략·0·음수는 NewConsumer가
+// lease 미만 오류로 거부한다.
 func WithQuarantineThreshold(threshold time.Duration) ConsumerOption {
 	return func(c *Consumer) {
-		if threshold > 0 {
-			c.quarantineThreshold = threshold
-		}
+		c.quarantineThreshold = threshold
 	}
 }
 
@@ -70,6 +70,7 @@ func WithRecoveryBatchSize(size int) ConsumerOption {
 
 // NewConsumer는 WithWorkerID가 없으면 "dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면
 // 다른 이름으로 바꾸지 않고 생성 오류다. SQL이 lease를 밀리초 정수로 받으므로 lease가 1ms 미만이어도 생성 오류다.
+// 격리 기준은 lease 이상이어야 하며, 생략·0·음수를 포함해 lease보다 작으면 기본값으로 바꾸지 않고 생성 오류다.
 func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *slog.Logger, opts ...ConsumerOption) (*Consumer, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -93,6 +94,10 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 		return nil, fmt.Errorf("new dispatch outbox consumer: lease must be at least 1ms: %s", consumer.lease)
 	}
 
+	if consumer.quarantineThreshold < consumer.lease {
+		return nil, fmt.Errorf("new dispatch outbox consumer: quarantine threshold %s must be at least lease %s", consumer.quarantineThreshold, consumer.lease)
+	}
+
 	if consumer.workerID == "" {
 		workerID, err := leaseowner.InstanceID("dispatcher")
 		if err != nil {
@@ -100,16 +105,6 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 		}
 
 		consumer.workerID = workerID
-	}
-
-	// 그룹 발송(Markdown handoff 상태 polling 포함)이 lease를 초과할 수 있어, threshold가
-	// lease와 같으면 진행 중인 발송을 quarantine으로 회수해 버린다.
-	if consumer.quarantineThreshold <= 0 {
-		consumer.quarantineThreshold = 3 * consumer.lease
-	}
-
-	if consumer.quarantineThreshold < consumer.lease {
-		consumer.quarantineThreshold = consumer.lease
 	}
 
 	return consumer, nil

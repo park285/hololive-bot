@@ -132,10 +132,6 @@ func (*seeMoreFoldIrisClient) SendMarkdown(context.Context, string, string, ...i
 	return nil, errors.New("markdown lane is not configured")
 }
 
-func (*seeMoreFoldIrisClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, errors.New("reply status is not used by the text lane")
-}
-
 func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]string) (*template.Renderer, *messagestrings.Store) {
 	t.Helper()
 

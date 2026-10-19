@@ -80,10 +80,6 @@ func (*alarmDispatchCancellationIrisClient) SendMarkdown(context.Context, string
 	return nil, errors.New("unexpected markdown send")
 }
 
-func (*alarmDispatchCancellationIrisClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, errors.New("unexpected reply status lookup")
-}
-
 func alarmDispatchCancellationRequest(attempt int) (alarmDispatchGroup, *dispatchoutbox.SendRequest) {
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{
 		alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: attempt}),
@@ -181,7 +177,7 @@ func TestAlarmDispatchRunnerCancellationAfterHandoffKeepsQuarantine(t *testing.T
 				cancel()
 
 				if unknown {
-					return errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, sendCtx.Err())
+					return errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, sendCtx.Err())
 				}
 
 				return sendCtx.Err()
@@ -260,7 +256,7 @@ func TestAlarmDispatchLaterSerialGroupCannotSendAfterLeaseExpiry(t *testing.T) {
 		SET created_at=clock_timestamp()-INTERVAL '1 day', next_attempt_at=clock_timestamp()-INTERVAL '1 second'`)
 	require.NoError(t, err)
 
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("serial-owner"))
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("serial-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	groups, requests := claimFrozenAlarmDispatchSerialGroups(t, pool, consumer)
@@ -354,7 +350,7 @@ func alarmDispatchCancellationPersistedRequest(t *testing.T, pool *pgxpool.Pool)
 	_, err = pool.Exec(t.Context(), "UPDATE alarm_dispatch_deliveries SET attempt_count=2")
 	require.NoError(t, err)
 
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("cancel-owner"))
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("cancel-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	envelopes, err := consumer.DrainBatch(t.Context(), 10)

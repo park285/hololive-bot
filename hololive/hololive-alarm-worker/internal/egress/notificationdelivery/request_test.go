@@ -324,9 +324,9 @@ func TestGenericPreparationFailureRetriesWithoutSending(t *testing.T) {
 
 func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 	for _, unknown := range []error{
-		sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded, context.Canceled,
+		sendoutcome.ErrAdmissionOutcomeUnknown, context.DeadlineExceeded, context.Canceled,
 		testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`),
-		errors.Join(sendoutcome.ErrHandoffFailed, &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}),
+		errors.Join(iris.ErrPermanent, &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}),
 	} {
 		t.Run(unknown.Error(), func(t *testing.T) {
 			repo := testRepository(t)

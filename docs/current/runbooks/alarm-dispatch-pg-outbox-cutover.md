@@ -20,12 +20,12 @@ ALARM_DISPATCH_WAKEUP_ENABLED=true|false
 ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH=1000
 ```
 
-Dispatcher (steady-state):
+Dispatcher 설정 이력(현재 설정은 [alarm-worker runbook](alarm-worker.md)의 worker profile 사용):
 
 ```text
 ALARM_DISPATCH_MAX_BATCH=50
 ALARM_DISPATCH_LEASE_SECONDS=60
-ALARM_DISPATCH_QUARANTINE_THRESHOLD_SECONDS=180  # 미설정 시 3×lease, lease 미만은 lease로 clamp
+ALARM_DISPATCH_QUARANTINE_THRESHOLD_SECONDS=180
 ALARM_DISPATCH_POLL_INTERVAL_MS=1000
 ALARM_DISPATCH_MAX_BATCHES_PER_WAKE=20
 ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS=250
@@ -38,6 +38,9 @@ ALARM_DISPATCH_RETENTION_INTERVAL_MS=3600000
 ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS=30000
 ALARM_DISPATCH_RETENTION_LIMIT=1000
 ```
+
+현재 worker profile의 `alarm_dispatch`는 `quarantine_threshold_ms ≥ lease_ms`를 요구한다.
+미설정·0·음수·lease 미만이면 기동을 거부하며, `3×lease` 기본값이나 자동 보정은 없다.
 
 Former mode matrix (REMOVED — historical only):
 

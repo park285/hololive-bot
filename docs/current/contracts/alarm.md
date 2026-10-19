@@ -62,10 +62,15 @@ Gateway는 운영자 ID를 인증 세션에서 결합합니다. `dlq`·`quaranti
 
 ### Iris Markdown admission
 
-Markdown admission retains the exact Iris request ID and polls its reply status.
-Only `handoff_completed` succeeds; confirmed failure (`sendoutcome.ErrHandoffFailed`) and
-an unknown or timed-out outcome (`sendoutcome.ErrHandoffOutcomeUnknown`) retain their
-distinct failure/claim semantics.
+공유 sender는 Markdown·텍스트 모두 Iris `202`가 durable admission을 증명하면 바로 반환하며 `/reply-status`를 조회하지
+않습니다. 따라서 sender 성공(`sendoutcome.Success`)은 durable admission만 뜻하고, 돌려준 Iris request ID가 이후
+handoff 확인 대상입니다. Markdown `202`는 `success`, `delivery=queued`, 비어 있지 않은 request ID를 모두 갖춰야 하고,
+텍스트 `202`는 비어 있지 않은 request ID만 요구합니다(아래 참고). admission을 증명하지 못한 `202`는
+`sendoutcome.ErrAdmissionOutcomeUnknown`이며 구조화된 `409 CLIENT_REQUEST_ID_OUTCOME_UNKNOWN`과 같은
+`OutcomeUnknown`입니다. alarm dispatch는 격리하고, YouTube는 결과 불명으로 행을 `SENDING`에 두며, notification은 행을
+`QUARANTINED`로 옮깁니다. handoff 결과(`handoff_completed`, `failed`, `outcome_unknown`, 진행 중)는 아래 세 handoff
+reconciler만 각자의 원장(alarm dispatch send unit, notification delivery 행, YouTube 고정 요청)에서 관측하며, 발송
+경로는 handoff 결과를 갖지 않습니다.
 
 Alarm-worker does not send Karing templates
 (`DEC-20260926-hololive-karing-egress-disposition`, superseding
@@ -84,7 +89,7 @@ rows keep the existing quarantine and stale-sweeper contract (T18 2026-09-26: 0 
 Text and Markdown admission both retain the 202 Iris request ID. A text 202 needs only a non-empty request ID, the same
 rule as the bot plane text path, because the Iris contract does not define the text 202 `delivery` value; this applies
 to every text send through the shared sender (alarm dispatch, YouTube, notification). A Markdown 202 still needs
-`success`, `delivery=queued` and a request ID. Anything less is `sendoutcome.ErrHandoffOutcomeUnknown`. `MarkSent` stores
+`success`, `delivery=queued` and a request ID. Anything less is `sendoutcome.ErrAdmissionOutcomeUnknown`. `MarkSent` stores
 the ID on the send unit (`handoff_request_id`) in the same
 statement that moves every member to `sent`, and schedules the first check (`handoff_next_check_at`) min(5s, horizon)
 after admission on that statement's database clock, so even a horizon shorter than 5s is never passed by the first
@@ -180,7 +185,7 @@ logical group is in flight, quarantined or over the group limit, or the key's le
 as `source_delivery_id`, nothing is transitioned, ledger rows from other sources are untouched, the check is closed
 for good and the reconciler logs an error (`store.ErrHandoffCheckClosed`). Post-level tracking and alarm-sent marks
 (`youtube_content_alarm_tracking`, community/shorts alarm state) are not reverted by a reissue, exhaustion or
-quarantine: another room may have delivered the same post. Inline Markdown polling stays until 4a-3.
+quarantine: another room may have delivered the same post.
 
 Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
 microsecond precision). Event detection, creation and next-attempt timestamps do
@@ -450,6 +455,9 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - HTTP client timeout: 10 seconds for alarm client.
 - HTTP/H3 options are passed explicitly from the consuming plane's loaded `BotPlaneConfig.InternalH3` or `AdminPlaneConfig.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
 - Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
+- 발송 시도: `alarm_dispatch` executor `attempt_timeout`은 Iris admission 호출(SDK admission 재시도 포함)에만 걸립니다. `lease_ms`보다 짧아야 하며 handoff 확인 지평으로도 쓰입니다.
+- handoff 확인: handoff를 확인하지 못한 `sent` 단위는 `alarm-dispatch-handoff-reconciler`가 [Iris handoff reconciliation](#iris-handoff-reconciliation) 규칙으로 확인합니다. sender는 handoff를 기다리지 않습니다.
+- stale `sending` 격리: `quarantine_threshold_ms`는 `lease_ms` 이상이어야 합니다. 프로필 검증이 더 작은 값을 기동 시 거부하고, dispatch consumer도 생략·0·음수를 포함해 lease보다 작은 기준을 lease에서 계산한 값으로 바꾸지 않고 생성 오류로 거부합니다.
 - Retry: a failed delivery returns to `retry` with `next_attempt_at` set from the transition's single database clock plus `retry_after_ms` (members of one send unit share it); the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
 - `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, the recovery codes `lease_expired`, `stale_sending`, and `lease_released`, or the handoff reconciliation codes `handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, and `handoff_unconfirmed`. Existing consumers may ignore this optional field.
 - DLQ and quarantine are delivery states (`dlq`, `quarantined`) in `alarm_dispatch_deliveries`; the event payload stays in `alarm_dispatch_events`. Replay uses the audited requeue in [admin dispatch operations](../runbooks/admin-dispatch-operations.md).

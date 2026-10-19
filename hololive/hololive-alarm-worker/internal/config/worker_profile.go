@@ -120,6 +120,12 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 		problems = append(problems, "alarm_dispatch attempt_timeout must be less than lease_ms")
 	}
 
+	// stale sending 격리 기준이 lease보다 짧으면 lease가 살아 있는 진행 중 발송을 격리한다. dispatch consumer도 같은 관계를
+	// 생성 시 강제하지만, 프로필 검증이 기동 전에 키 이름으로 먼저 드러낸다.
+	if profile.AlarmDispatch.QuarantineThresholdMS < profile.AlarmDispatch.LeaseMS {
+		problems = append(problems, "alarm_dispatch quarantine_threshold_ms must be at least lease_ms")
+	}
+
 	if alarmDispatchRecoveryExceedsReplayHorizon(profile.AlarmDispatch) {
 		problems = append(problems, "alarm_dispatch lease_ms plus recovery_interval_ms must be less than the Iris automatic replay horizon")
 	}

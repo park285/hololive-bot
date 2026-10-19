@@ -258,10 +258,6 @@ func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.R
 		return ytlifecycle.FailurePermanent, ytlifecycle.Reason(errRequestGenerationsExhausted.Error()), 0
 	}
 
-	if errors.Is(err, sendoutcome.ErrHandoffFailed) {
-		return ytlifecycle.FailurePermanent, defaultReason, 0
-	}
-
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return ytlifecycle.FailureRetryable, lifecycleReasonTransport, 0
 	}

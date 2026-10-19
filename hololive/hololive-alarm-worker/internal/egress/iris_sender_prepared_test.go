@@ -34,7 +34,8 @@ func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing
 	require.Equal(t, plain, client.textCalls[0].message)
 }
 
-// 두 경로 모두 202가 증명한 Iris requestId를 돌려준다. 이 값이 handoff 확인 대상이다.
+// 두 경로 모두 202가 증명한 Iris requestId를 handoff 결과와 무관하게 바로 돌려준다. 이 값이 reconciler의 handoff
+// 확인 대상이다.
 func TestPreparedMessageReturnsAdmittedRequestIDOnBothLanes(t *testing.T) {
 	for _, route := range []string{"text", "markdown"} {
 		t.Run(route, func(t *testing.T) {
@@ -51,8 +52,7 @@ func TestPreparedMessageReturnsAdmittedRequestIDOnBothLanes(t *testing.T) {
 	}
 }
 
-// Markdown 202가 durable admission(성공·queued·requestId)을 증명하지 못하면 성공으로 보고하지 않고 결과 불명이며
-// 상태 조회도 하지 않는다.
+// Markdown 202가 durable admission(성공·queued·requestId)을 증명하지 못하면 성공으로 보고하지 않고 결과 불명이다.
 func TestPreparedMarkdownMalformedAdmissionIsOutcomeUnknown(t *testing.T) {
 	for _, accepted := range []*iris.ReplyAcceptedResponse{
 		nil,
@@ -63,9 +63,8 @@ func TestPreparedMarkdownMalformedAdmissionIsOutcomeUnknown(t *testing.T) {
 		client := &irisSenderTestClient{markdownAccepted: accepted, markdownAcceptedSet: true}
 
 		requestID, err := NewIrisMessageSender(client).SendPreparedMessage(t.Context(), testIrisSenderRoomID, "body", "markdown", preparedTestRequestID)
-		require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown, "%+v", accepted)
+		require.ErrorIs(t, err, sendoutcome.ErrAdmissionOutcomeUnknown, "%+v", accepted)
 		require.Empty(t, requestID)
-		require.Zero(t, client.statusCalls, "markdown admission failure must not query reply status")
 		require.Len(t, client.markdownCalls, 1)
 	}
 }
@@ -89,14 +88,13 @@ func TestPreparedTextAdmissionRequiresOnlyRequestID(t *testing.T) {
 			requestID, err := NewIrisMessageSender(client).SendPreparedMessage(t.Context(), testIrisSenderRoomID, "body", "text", preparedTestRequestID)
 
 			if tc.want == "" {
-				require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
+				require.ErrorIs(t, err, sendoutcome.ErrAdmissionOutcomeUnknown)
 			} else {
 				require.NoError(t, err)
 			}
 
 			require.Equal(t, tc.want, requestID)
 			require.Len(t, client.textCalls, 1)
-			require.Zero(t, client.statusCalls, "text admission must not query reply status")
 		})
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -18,17 +17,6 @@ import (
 
 type lifecycleTestSender struct {
 	calls atomic.Int32
-}
-
-// Markdown handoff 실패 확정은 전송 불명이 아니라 알려진 영구 실패다.
-func TestLifecycleProviderFailureTreatsReplyHandoffFailureAsKnown(t *testing.T) {
-	t.Parallel()
-
-	kind, reason, retryAfter := lifecycleProviderFailure(sendoutcome.ErrHandoffFailed)
-
-	if kind != ytlifecycle.FailurePermanent || reason != lifecycleReasonUnknownError || retryAfter != 0 {
-		t.Fatalf("lifecycleProviderFailure() = %v, %q, %s; want permanent, %q, 0", kind, reason, retryAfter, lifecycleReasonUnknownError)
-	}
 }
 
 func (s *lifecycleTestSender) SendMessage(context.Context, string, string) error {

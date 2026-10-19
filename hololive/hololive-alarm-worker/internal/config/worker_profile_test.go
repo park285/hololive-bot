@@ -138,6 +138,7 @@ func TestValidateWorkerProfileAlarmRecoveryDelayWithinReplayHorizon(t *testing.T
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			profile.AlarmDispatch.LeaseMS = tc.leaseMS
+			profile.AlarmDispatch.QuarantineThresholdMS = tc.leaseMS
 			profile.AlarmDispatch.RecoveryIntervalMS = tc.recoveryMS
 
 			err := validateWorkerProfile(profile)
@@ -147,6 +148,45 @@ func TestValidateWorkerProfileAlarmRecoveryDelayWithinReplayHorizon(t *testing.T
 
 			if !tc.valid && (err == nil || !strings.Contains(err.Error(), "alarm_dispatch lease_ms plus recovery_interval_ms")) {
 				t.Fatalf("validateWorkerProfile() error = %v, want recovery delay reaching replay horizon rejected", err)
+			}
+		})
+	}
+}
+
+// 격리 기준이 lease보다 짧으면 기동을 거부한다. 기준이 lease와 같은 값이면 허용하며, 기준이나 lease 어느 쪽이
+// 바뀌어도 같은 경계를 쓴다.
+func TestValidateWorkerProfileAlarmQuarantineThresholdCoversLease(t *testing.T) {
+	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+
+	profile, err := LoadWorkerProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lease := profile.AlarmDispatch.LeaseMS
+	threshold := profile.AlarmDispatch.QuarantineThresholdMS
+
+	for _, tc := range []struct {
+		name        string
+		leaseMS     int64
+		thresholdMS int64
+		valid       bool
+	}{
+		{name: "threshold equals lease", leaseMS: lease, thresholdMS: lease, valid: true},
+		{name: "threshold one millisecond below lease", leaseMS: lease, thresholdMS: lease - 1},
+		{name: "lease one millisecond above threshold", leaseMS: threshold + 1, thresholdMS: threshold},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile.AlarmDispatch.LeaseMS = tc.leaseMS
+			profile.AlarmDispatch.QuarantineThresholdMS = tc.thresholdMS
+
+			err := validateWorkerProfile(profile)
+			if tc.valid && err != nil {
+				t.Fatalf("validateWorkerProfile() error = %v, want threshold covering lease accepted", err)
+			}
+
+			if !tc.valid && err == nil {
+				t.Fatalf("validateWorkerProfile() error = %v, want threshold below lease rejected", err)
 			}
 		})
 	}

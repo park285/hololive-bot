@@ -161,7 +161,7 @@ func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpoo
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET attempt_count=2`)
 	require.NoError(t, err)
 
-	base, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("lease-clock-owner"))
+	base, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("lease-clock-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	envelopes, err := base.DrainBatch(ctx, 10)

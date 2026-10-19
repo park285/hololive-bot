@@ -19,7 +19,7 @@ func TestDefaultRecoveryPreservesImmutableSendUnitMembership(t *testing.T) {
 	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
 	seedExpiredPinnedRecoveryUnits(t, pool, repo)
 
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("new-owner"))
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("new-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText}

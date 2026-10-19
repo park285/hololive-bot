@@ -36,10 +36,6 @@ func (*seeMoreFoldEgressClient) SendMarkdown(context.Context, string, string, ..
 	return nil, errors.New("markdown lane is not configured")
 }
 
-func (*seeMoreFoldEgressClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, errors.New("reply status is not used by the text lane")
-}
-
 // 사용자 첨부 화면처럼 한 방에 쇼츠 10개가 한 번에 묶여 나가는 v1 직접 발송 경로다.
 func runDirectGroupedShortsFinalPayload(t *testing.T, count int, renderer *template.Renderer) string {
 	t.Helper()

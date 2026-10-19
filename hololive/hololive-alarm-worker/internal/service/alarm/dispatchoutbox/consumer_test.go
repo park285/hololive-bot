@@ -36,56 +36,48 @@ func TestConsumerDrainBatch_QuarantinesStaleSendingBeforeClaiming(t *testing.T) 
 		t.Fatalf("QuarantineStaleSending calls = %d, want 1", repository.quarantineStaleSendingCalls)
 	}
 
-	if repository.quarantineOlderThan != 90*time.Second {
-		t.Fatalf("QuarantineStaleSending olderThan = %v, want 90s (3x lease default)", repository.quarantineOlderThan)
+	if repository.quarantineOlderThan != testConsumerQuarantineThreshold {
+		t.Fatalf("QuarantineStaleSending olderThan = %v, want configured threshold %v rather than the lease", repository.quarantineOlderThan, testConsumerQuarantineThreshold)
 	}
 }
 
-func TestConsumerQuarantineThresholdSeparatedFromLease(t *testing.T) {
+// 격리 기준은 lease 이상이어야 한다. 생략·0·음수도 기본값으로 바꾸지 않고 거부하며,
+// option 순서와 무관하게 모든 option을 적용한 뒤 판정한다.
+func TestNewConsumerRequiresQuarantineThresholdAtLeastLease(t *testing.T) {
 	t.Parallel()
 
+	const lease = time.Minute
+
 	tests := []struct {
-		name string
-		opts []ConsumerOption
-		want time.Duration
+		name  string
+		opts  []ConsumerOption
+		valid bool
 	}{
-		{
-			name: "default is 3x lease",
-			opts: []ConsumerOption{WithLease(45 * time.Second)},
-			want: 135 * time.Second,
-		},
-		{
-			name: "explicit threshold overrides default",
-			opts: []ConsumerOption{WithLease(60 * time.Second), WithQuarantineThreshold(5 * time.Minute)},
-			want: 5 * time.Minute,
-		},
-		{
-			name: "threshold below lease is clamped to lease",
-			opts: []ConsumerOption{WithLease(60 * time.Second), WithQuarantineThreshold(10 * time.Second)},
-			want: 60 * time.Second,
-		},
-		{
-			name: "option order does not matter",
-			opts: []ConsumerOption{WithQuarantineThreshold(4 * time.Minute), WithLease(30 * time.Second)},
-			want: 4 * time.Minute,
-		},
+		{name: "omitted"},
+		{name: "zero", opts: []ConsumerOption{WithQuarantineThreshold(0)}},
+		{name: "negative", opts: []ConsumerOption{WithQuarantineThreshold(-lease)}},
+		{name: "one millisecond below lease", opts: []ConsumerOption{WithQuarantineThreshold(lease - time.Millisecond)}},
+		{name: "lease raised after threshold", opts: []ConsumerOption{WithQuarantineThreshold(lease), WithLease(2 * lease)}},
+		{name: "equal to lease", opts: []ConsumerOption{WithQuarantineThreshold(lease)}, valid: true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			repository := &consumerTestRepository{}
+			opts := append([]ConsumerOption{WithWorkerID("worker-1"), WithLease(lease)}, tc.opts...)
+			consumer, err := NewConsumer(&consumerTestRepository{}, nil, slog.Default(), opts...)
 
-			opts := append([]ConsumerOption{WithWorkerID("worker-1")}, tc.opts...)
-			consumer := mustNewConsumer(t, repository, nil, slog.Default(), opts...)
+			if tc.valid {
+				if err != nil || consumer == nil {
+					t.Fatalf("NewConsumer() = %v, %v; want consumer", consumer, err)
+				}
 
-			if _, err := consumer.DrainBatch(t.Context(), 10); err != nil {
-				t.Fatalf("DrainBatch() error = %v", err)
+				return
 			}
 
-			if repository.quarantineOlderThan != tc.want {
-				t.Fatalf("QuarantineStaleSending olderThan = %v, want %v", repository.quarantineOlderThan, tc.want)
+			if err == nil || consumer != nil {
+				t.Fatalf("NewConsumer() = %v, %v; want quarantine threshold error", consumer, err)
 			}
 		})
 	}
@@ -165,11 +157,7 @@ func TestConsumerDrainBatch_RecoveryRowsUseLeasedAndSendingMetricLabels(t *testi
 
 			return 2, nil
 		},
-		quarantineStaleSendingFunc: func(_ context.Context, olderThan time.Duration, limit int) (int, error) {
-			if olderThan != 135*time.Second {
-				t.Fatalf("QuarantineStaleSending olderThan = %v, want 135s (3x lease default)", olderThan)
-			}
-
+		quarantineStaleSendingFunc: func(_ context.Context, _ time.Duration, limit int) (int, error) {
 			if limit != 7 {
 				t.Fatalf("QuarantineStaleSending limit = %d, want 7", limit)
 			}

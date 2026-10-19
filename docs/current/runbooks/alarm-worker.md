@@ -30,7 +30,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 |---|---|---|
 | `SERVER_PORT` | HTTP health port | yes |
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
-| `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
+| `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery`. `alarm_dispatch.quarantine_threshold_ms`가 `lease_ms`보다 작으면 기동에 실패하므로 배포 전에 운영 프로필 값을 확인합니다 | yes |
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 카카오 네이티브 Markdown 전송 여부; 기본값 `false`. 명령 응답과 알림에 공통 적용 | no |
 | `BOT_SEE_MORE_FOLD` | worker 렌더에는 쓰지 않음. 공통 설정 로딩이 bool로 검증하므로 잘못된 값이면 worker도 기동 실패; 기본 `true` | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
@@ -54,7 +54,7 @@ Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kaka
 | 방 유형 미확인 | 일반 텍스트 |
 | celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
 
-일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown resolver는 오픈채팅 여부만 제공합니다. Karing 선택 분기, chunk planner, Karing sender는 삭제했고, Markdown lane이 쓰는 handoff 확인(`sendoutcome.ErrHandoffOutcomeUnknown`, `sendoutcome.ErrHandoffFailed`)만 남아 있습니다.
+일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown resolver는 오픈채팅 여부만 제공합니다. Karing 선택 분기, chunk planner, Karing sender는 삭제했습니다. 텍스트·Markdown sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·notification·youtube handoff reconciler만 합니다.
 
 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
@@ -183,15 +183,15 @@ Mitigation:
 Rollback:
 - `ALARM_SHORT_LINK_BASE_URL`을 비우고 alarm-worker를 재기동합니다. 이미 발송된 URL을 위해 listener와 양쪽 ingress는 유지합니다.
 
-### 4. Markdown admission 이후 delivery가 완료되지 않음
+### 4. Iris admission 이후 handoff가 확인되지 않음
 
 Symptoms:
-- Iris Markdown 발송은 `202 Accepted`를 반환했지만 alarm delivery가 `sent`로 전이되지 않습니다.
-- 로그에 reply handoff failure 또는 outcome unknown이 있고 alarm dispatch는 quarantine되거나 YouTube delivery가 `SENDING`에 남습니다.
+- Iris `202`로 admission된 alarm dispatch 단위가 `sent`인데 `alarm_dispatch_send_units.handoff_next_check_at`이 지평(`alarm_dispatch` executor `attempt_timeout`)을 넘겨 남아 있거나, 멤버가 `handoff_*` 코드로 격리·DLQ됩니다. notification·youtube도 같은 확인 대기 열이 남거나 `error`가 `handoff_*`로 시작합니다.
+- `202`가 admission을 증명하지 못한 결과 불명(`iris reply admission outcome unknown`)이 로그에 있고 alarm dispatch는 quarantine되거나, notification이 `QUARANTINED`가 되거나, YouTube delivery가 `SENDING`에 남습니다.
 
 Diagnosis:
 - Raw `requestId`를 로그나 응답에 복사하지 않고 bounded alarm-worker/Iris 로그에서 status state와 오류 class만 확인합니다.
-- `queued`, `preparing`, `prepared`, `sending`이 caller deadline까지 계속되었는지, `failed` 또는 `outcome_unknown`으로 끝났는지 확인합니다.
+- `queued`, `preparing`, `prepared`, `sending`이 확인 지평까지 계속되었는지, `failed` 또는 `outcome_unknown`으로 끝났는지 확인합니다.
 - `handoff_completed`가 없는데 DB row만 수동으로 `sent` 처리하지 않습니다.
 - alarm dispatch의 `sent` 단위는 `alarm-dispatch-handoff-reconciler`가 `alarm_dispatch_send_units.handoff_next_check_at`마다 `/reply-status`를 확인합니다. 확인 대기 단위는 `handoff_request_id`가 있고 `handoff_checked_at`이 없는 행입니다. 지평(`alarm_dispatch` executor `attempt_timeout`)을 넘긴 단위가 남아 있으면 reconciler 로그와 Iris 상태 조회 오류를 먼저 확인합니다.
 - 확인 결과 코드는 `last_error_code`의 `handoff_failed`(세대·시도 예산 안이면 `:r1`/`:r2` 재발송, 아니면 DLQ), `handoff_outcome_unknown`, `handoff_status_missing`(404), `handoff_unconfirmed`(지평 미확인)입니다. 뒤의 세 코드는 격리이며 재발송하지 않습니다.

@@ -208,7 +208,7 @@ func TestAlarmDispatchRunnerQuarantinesReplyHandoffOutcomeUnknownWithoutRetry(t 
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{
-		messageErr: errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded),
+		messageErr: errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.DeadlineExceeded),
 	}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 

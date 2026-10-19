@@ -38,7 +38,7 @@ func (s *claimGateTestSender) SendMessage(_ context.Context, roomID, message str
 	}
 
 	if s.unknownRoom[roomID] {
-		return fmt.Errorf("%s: %w", testSendFailedMessage, sendoutcome.ErrHandoffOutcomeUnknown)
+		return fmt.Errorf("%s: %w", testSendFailedMessage, sendoutcome.ErrAdmissionOutcomeUnknown)
 	}
 
 	s.messages = append(s.messages, roomID+":"+message)

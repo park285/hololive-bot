@@ -45,7 +45,7 @@ func TestProviderAttemptTracksActualResultAndPanic(t *testing.T) {
 	}{
 		{name: "success", outcome: workercontract.AttemptSuccess},
 		{name: "failed", err: iris.ErrPermanent, outcome: workercontract.AttemptFailed},
-		{name: "unknown", err: sendoutcome.ErrHandoffOutcomeUnknown, outcome: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown", err: sendoutcome.ErrAdmissionOutcomeUnknown, outcome: workercontract.AttemptOutcomeUnknown},
 		{name: "timeout", err: context.DeadlineExceeded, outcome: workercontract.AttemptTimeout},
 		{name: "canceled", err: context.Canceled, outcome: workercontract.AttemptCanceled},
 		{name: "panic", panics: true, outcome: workercontract.AttemptPanic},
@@ -107,7 +107,7 @@ func TestReissueWaitsForNextDeliveryAttempt(t *testing.T) {
 }
 
 func TestReissueRejectsMixedUnknownAndPreHandoffFailure(t *testing.T) {
-	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))}
+	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))}
 	d := newTestDispatcherForSend(t, &testSender{})
 
 	d.send.sender = sender
