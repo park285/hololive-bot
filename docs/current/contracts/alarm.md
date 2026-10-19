@@ -142,6 +142,46 @@ predicate as the migration 338 partial index; the horizon bounds the hold. A rei
 `(next_attempt_at, created_at, id)` room order by its new `next_attempt_at`, like a retried send failure; a later row
 of the same room that is already due may therefore go first, so strict creation order is not guaranteed.
 
+YouTube delivery keeps the check on its pinned request, `youtube_notification_send_request` (migrations 336 and
+339), because one Iris request carries every pinned member of a room. `CompleteSent` locks the pinned request before
+its member deliveries (the claim order), requires the request generation and member set to equal the started
+owners, and in the same transaction as the `SENT` transition, tracking marks, telemetry and the `SENT` ledger stores
+the 202 Iris request ID in `handoff_request_id` and schedules `handoff_next_check_at` min(5s, `youtube_delivery`
+executor `attempt_timeout`) after the owners' `sent_at`, on the transition's database clock. A mismatched request or
+an empty request ID applies nothing; the rows stay `SENDING` for the stale sweep.
+`youtube-delivery-handoff-reconciler` runs only when the `youtube_delivery` executor is enabled and uses the same
+soft claim, outside-transaction status query, budgets, ladder, and decision, with that `attempt_timeout` as the
+horizon. A settlement is one transaction that locks the pinned request, then the parent `youtube_notification_outbox`
+rows of the members' logical groups (ascending id, with the outbox projector's lock statement), then the logical group
+deliveries, then the ledger, and rechecks the soft-claim token, `handoff_request_id`, generation, body hash, pinned
+members and each member's `row_version` from the claim. Parents are read before the group lock with the same candidate
+predicate and arguments as the group lock, so the order matches retention cleanup and fanout (parent before child) and
+no child lock is held while waiting for a parent. If a locked group row has a parent outside that pre-locked set (a
+follower or outbox of the same logical key arrived in between), the settlement does not lock the new parent; it rolls
+back with nothing changed and returns a `membership_changed` fence miss that does not close the check, so the next
+check after the soft claim settles the grown set. A reissue, exhaustion or quarantine then recomputes the aggregate
+status of the already locked parents of the changed rows with the outbox projector's aggregate statement, inside that
+transaction and without relocking them. If the aggregate fails, the whole settlement rolls back and keeps the claim
+token, so the next check after the soft claim settles it again; there is no post-commit projection or repair scan.
+The aggregate never clears an outbox `sent_at`, so a parent that was `SENT` keeps its first `sent_at` when it becomes
+`FAILED` or `PENDING`. Outcomes:
+
+| Observation | YouTube ledger action |
+|---|---|
+| `handoff_completed` | close the check (`handoff_checked_at`); rows and ledger stay `SENT` |
+| pending state, or a query error other than 404, before the horizon | next check on the ladder, never after the earliest member `sent_at` + horizon |
+| `failed` with generation < 2 and `youtube_delivery.max_retries` attempt budget left | every `SENT` row of each member's logical group, including duplicate rows outside the pinned members, `PENDING` (owner attempt + 1, `next_attempt_at` = clock + `retry_backoff_ms`, `sent_at` cleared); the `SENT` ledger row sourced by that owner is deleted; request generation + 1 with cleared handoff columns, so the next claim resends the pinned body with `:r1`/`:r2` |
+| `failed` otherwise | the same rows `FAILED` (owner attempt + 1); the owner-sourced `SENT` ledger row is deleted (`FAILED` keeps no ledger) |
+| outcome unknown, unrecognized, empty or mismatched state, 404, pending at the horizon | the same rows `QUARANTINED`; the owner-sourced `SENT` ledger row becomes `QUARANTINED` with the same source |
+
+`error` starts with the handoff code followed by `: ` and the detail. A replaced token or request applies nothing
+(`version_changed`/`request_changed`). If the claim still holds but a member is no longer the same `SENT` row, the
+logical group is in flight, quarantined or over the group limit, or the key's ledger row is not `SENT` with that owner
+as `source_delivery_id`, nothing is transitioned, ledger rows from other sources are untouched, the check is closed
+for good and the reconciler logs an error (`store.ErrHandoffCheckClosed`). Post-level tracking and alarm-sent marks
+(`youtube_content_alarm_tracking`, community/shorts alarm state) are not reverted by a reissue, exhaustion or
+quarantine: another room may have delivered the same post. Inline Markdown polling stays until 4a-3.
+
 Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
 microsecond precision). Event detection, creation and next-attempt timestamps do
 not determine the lease epoch. Stale recovery releases only the exact old token.

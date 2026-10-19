@@ -396,13 +396,13 @@ func (s *testSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 }
 
 func (s *testSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
-	return "", s.SendMessageWithClientRequestID(ctx, room, body, id)
+	return testAdmission(id, s.SendMessageWithClientRequestID(ctx, room, body, id))
 }
 
 func (s *failFirstSendTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *failFirstSendTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
-	return "", s.SendMessage(ctx, room, body)
+func (s *failFirstSendTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }

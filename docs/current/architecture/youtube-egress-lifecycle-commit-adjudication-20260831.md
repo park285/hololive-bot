@@ -67,7 +67,7 @@ Command 실행 뒤 member를 다시 계산하지 않습니다. 시각 열(`locke
 
 Logical group operation은 owner만 확인해서는 안 됩니다. Command가 변경하기로 한 follower projection, tracking state, logical ledger state까지 exact post-state에 포함합니다.
 
-Outbox aggregate와 `terminal_at` projection은 terminal envelope와 별도 transaction입니다. Aggregate는 provider-adjacent commit 판정의 pre/post state에 포함하지 않습니다.
+Outbox aggregate와 `terminal_at` projection은 terminal envelope와 별도 transaction입니다. Aggregate는 provider-adjacent commit 판정의 pre/post state에 포함하지 않습니다. 예외는 handoff 실패 정산으로, 아래 "Handoff settlement ambiguity"처럼 같은 canonical 집계 문장을 정산 transaction 안에서 실행합니다.
 
 ### A-004. No callback replay
 
@@ -263,6 +263,18 @@ source_delivery_id = envelope의 owner 또는 지정된 evidence delivery
 
 Existing `SENT`의 최초 `sent_at`과 source reference를 보존하는 monotonic upsert인 경우 envelope는 그 보존값을 exact post-state로 기록합니다.
 
+#### Handoff admission
+
+고정 요청이 다음을 만족해야 합니다.
+
+```text
+handoff_request_id = 이번 202의 Iris requestId
+generation = envelope의 요청 세대
+handoff_next_check_at IS NOT NULL 또는 handoff_checked_at IS NOT NULL
+```
+
+commit 뒤 reconciler가 이미 확인을 닫았을 수 있으므로 확인 시각은 비교하지 않습니다. 없으면 ledger mismatch와 같은 atomicity breach(`Indeterminate`)입니다.
+
 ### Commit 오류 후 판정
 
 #### Confirmed committed
@@ -298,6 +310,14 @@ Unsafe ledger 보정이나 provider 재호출을 실행하지 않고 `Indetermin
 #### Conflict 또는 Indeterminate
 
 Provider success는 이미 확정됐으므로 provider를 다시 호출하지 않습니다. ID-only `SENDING -> SENT` recovery를 실행하지 않습니다. Durable evidence가 부족하면 owner는 stale `SENDING`으로 남아 quarantine될 수 있습니다.
+
+## Handoff settlement ambiguity
+
+`youtube-delivery-handoff-reconciler`의 완료·재예약은 고정 요청 한 행의 단일 문장이며, commit 응답을 잃으면 다음 확인이 soft claim 토큰 CAS로 다시 판정합니다. 재발급·소진·격리는 고정 요청·논리 그룹 delivery·ledger를 바꾸고 마지막에 바뀐 delivery의 부모 outbox 집계를 canonical 집계 문장으로 다시 계산하는 한 트랜잭션이고, commit 오류 뒤 고정 요청을 primary에서 다시 읽어 판정합니다. 요청 갱신이 delivery·ledger 전이·부모 집계와 같은 트랜잭션이므로 요청의 post-state가 전체 commit의 증거입니다. 집계가 실패하면 정산 전체가 rollback되어 claim 토큰이 남고, soft claim 뒤 다음 확인이 다시 정산합니다. 정산 도중 논리 그룹의 부모 집합이 늘어 끝난 `membership_changed` fence 미스도 commit 전에 rollback되어 claim 토큰이 남으므로 commit 판정 대상이 아니며 다음 확인이 다시 정산합니다. Commit 뒤 별도 projector는 실행하지 않습니다.
+
+- 요청이 claim 토큰(`handoff_next_check_at`)·requestId·세대를 그대로 가지고 확인이 끝나지 않았으면 confirmed not committed입니다. 같은 DB 정산만 한 번 다시 실행하고, 그래도 확인하지 못하면 `Conflict`(`confirmed_pre`)입니다.
+- 재발급은 세대 + 1이고 handoff 열이 모두 비었으면, 소진·격리·확인 종료는 같은 세대·requestId에서 `handoff_next_check_at IS NULL`이고 `handoff_checked_at IS NOT NULL`이면 `Applied`(`confirmed_post`)입니다.
+- 요청이 없으면 `Missing`, 그 밖의 상태는 `Indeterminate`입니다. Iris 상태 조회나 provider 발송은 다시 하지 않습니다.
 
 ## Known-not-delivered retry ambiguity
 

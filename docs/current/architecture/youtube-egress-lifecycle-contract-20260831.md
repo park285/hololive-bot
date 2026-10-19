@@ -90,6 +90,8 @@ Operation membership과 provider request는 최초 `BeginSending` 전에 `youtub
 
 기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 249는 `request_snapshot_allowed=false`로 기존 행을 구분했습니다. 2026-10-02 운영 조회에서 이 표시를 가진 67행이 모두 `SENT`·`FAILED`(2026-05-17, revive 신선도 창 밖)였으므로 dispatcher의 구분 검사(`ErrLegacyRequestEvidence`)는 지웠습니다. migration 256이 열을 지웠습니다. 표시가 `false`인데 아직 끝나지 않은(`PENDING`·`SENDING`·`QUARANTINED`) 행이 있으면 이 migration은 열을 남기고 실패합니다.
 
+Iris 202는 durable admission만 증명합니다. `CompleteSent`는 고정 요청을 멤버보다 먼저 잠그고 세대·고정 멤버가 이번 발송과 같을 때만, SENT 전이와 같은 트랜잭션에서 고정 요청에 Iris requestId(`handoff_request_id`)와 첫 handoff 확인 시각(`handoff_next_check_at` = SENT 전이 시각 + min(5s, `youtube_delivery` executor `attempt_timeout`))을 기록합니다(migration 336·339). 요청이 다르거나 requestId가 비면 전이하지 않고 SENDING으로 남깁니다. `youtube-delivery-handoff-reconciler`가 `handoffcheck` 판정으로 지평까지 `/reply-status`를 확인합니다. `failed`는 세대 < 2이고 시도 예산(attempt + 1 < `max_retries`)이 남으면 논리 그룹의 SENT 행 전원(고정 멤버 밖 follower 포함)을 `retry_backoff_ms` 뒤 PENDING으로 되돌리고 요청 세대를 올려 같은 본문을 다음 세대 ID로 다시 보내며, 아니면 FAILED입니다. 결과 불명·404·지평 미확인은 QUARANTINED입니다. 세 경우 모두 그 owner를 출처로 한 SENT ledger만 같은 트랜잭션에서 지우고(격리는 같은 출처의 QUARANTINED ledger), 바뀐 delivery의 부모 outbox 집계도 그 트랜잭션 끝에서 canonical 집계 문장으로 다시 계산합니다. 정산의 잠금 순서는 고정 요청 → 영향 부모 outbox(id 순서, 그룹 잠금과 같은 후보 조건으로 미리 읽음) → 논리 그룹 delivery → ledger이고, 집계는 이미 잠근 부모에 다시 잠그지 않고 실행합니다. 정산 도중 같은 논리 키의 follower·outbox가 들어와 부모 집합이 늘면 새 부모를 잠그지 않고 아무것도 바꾸지 않은 `membership_changed` fence 미스로 끝내며 확인을 닫지 않으므로, soft claim 뒤 다음 확인이 늘어난 집합으로 정산합니다. 집계가 실패하면 정산 전체가 rollback되고 soft claim 뒤 다음 확인이 다시 정산합니다. 집계는 outbox `sent_at`을 지우지 않으며, 아래 post 단위 tracking 표시도 되돌리지 않습니다. 인라인 polling 제거는 4a-3 범위입니다.
+
 ### Tracking requirement
 
 Community/Shorts의 post-level tracking은 room별 delivery와 수명이 다릅니다. 발송 전에 post 단위 상태를 선점하지 않으며, 같은 post의 room delivery는 room별 claim·send fence와 logical group gate로만 직렬화합니다.
@@ -264,7 +266,7 @@ Outcome unknown, logical unresolved, commit indeterminate에서는 자동 resend
 
 ### I-016. Terminal evidence atomicity
 
-Provider success의 delivery/tracking과 ledger `SENT`, stale outcome unknown의 delivery group과 ledger `QUARANTINED`는 각각 같은 transaction입니다. Aggregate projection은 이 transaction 밖의 별도 recoverable projection이며 transition commit 판정에 포함하지 않습니다.
+Provider success의 delivery/tracking과 ledger `SENT`, stale outcome unknown의 delivery group과 ledger `QUARANTINED`는 각각 같은 transaction입니다. Aggregate projection은 이 transaction 밖의 별도 recoverable projection이며 transition commit 판정에 포함하지 않습니다. Handoff 실패 정산(재발급·소진·격리)만 예외로, SENT였던 부모를 되돌리는 집계를 정산 transaction 안에서 함께 commit하거나 rollback합니다.
 
 ## Token 계약
 
@@ -712,7 +714,7 @@ FAILED -> SENT            -> 집계 문장의 clock
 terminal -> same terminal -> existing terminal_at 보존
 ```
 
-Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 telemetry와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다.
+Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 telemetry와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다. 예외인 handoff 실패 정산은 같은 lock·sync 문장을 정산 transaction 끝에서 실행하므로 집계 실패가 정산 전체를 rollback하고, 다음 handoff 확인이 정산을 다시 시도합니다.
 
 ## 만료 대기 종료
 

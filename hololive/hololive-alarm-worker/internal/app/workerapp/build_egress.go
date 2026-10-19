@@ -103,18 +103,9 @@ func buildEgressRunners(
 	)
 
 	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다.
-	if alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerYouTubeDelivery) {
-		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig, infra, irisSender, messageStrings, logger, workerState)
-		if buildErr != nil {
-			return nil, fmt.Errorf("build youtube outbox dispatcher: %w", buildErr)
-		}
-
-		runners = append(runners, workerruntime.NamedScheduler{
-			Name:      "youtube-outbox",
-			Scheduler: workerState.wrap(workerconfig.WorkerYouTubeDelivery, dispatcher),
-		})
-	} else {
-		logWorkerDisabled(logger, "YouTube outbox dispatcher disabled")
+	runners, err = appendYouTubeDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, messageStrings, logger, workerState)
+	if err != nil {
+		return nil, fmt.Errorf("append youtube delivery runner: %w", err)
 	}
 
 	runners, err = appendNotificationDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, logger, workerState)
@@ -123,6 +114,48 @@ func buildEgressRunners(
 	}
 
 	return runners, nil
+}
+
+// appendYouTubeDeliveryRunner는 youtube_delivery가 활성일 때 발송 runner와 고정 요청 Iris handoff reconciler를 함께
+// 등록한다.
+func appendYouTubeDeliveryRunner(
+	runners []workerruntime.NamedScheduler,
+	appConfig *workerconfig.RuntimeConfig,
+	infra *sharedmodules.InfraModule,
+	irisSender *egress.IrisMessageSender,
+	statusClient youtubedispatch.ReplyStatusClient,
+	messageStrings *messagestrings.Store,
+	logger *slog.Logger,
+	workerState *alarmWorkerRegistryState,
+) ([]workerruntime.NamedScheduler, error) {
+	if !alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerYouTubeDelivery) {
+		logWorkerDisabled(logger, "YouTube outbox dispatcher disabled")
+
+		return runners, nil
+	}
+
+	dispatcher, err := buildYouTubeOutboxDispatcher(appConfig, infra, irisSender, messageStrings, logger, workerState)
+	if err != nil {
+		return nil, fmt.Errorf("build youtube outbox dispatcher: %w", err)
+	}
+
+	dispatchConfig := youtubeDispatchConfig(appConfig)
+
+	reconciler, err := youtubedispatch.NewHandoffReconciler(infra.Postgres.GetPool(), statusClient, logger, &dispatchConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build youtube delivery handoff reconciler: %w", err)
+	}
+
+	return append(runners,
+		workerruntime.NamedScheduler{
+			Name:      "youtube-outbox",
+			Scheduler: workerState.wrap(workerconfig.WorkerYouTubeDelivery, dispatcher),
+		},
+		workerruntime.NamedScheduler{
+			Name:      "youtube-delivery-handoff-reconciler",
+			Scheduler: reconciler,
+		},
+	), nil
 }
 
 // appendAlarmDispatchRunner는 alarm-dispatch가 활성일 때 발송 runner와 Iris handoff reconciler를 함께 등록한다.

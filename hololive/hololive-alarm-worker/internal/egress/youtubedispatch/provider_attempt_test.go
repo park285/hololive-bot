@@ -64,7 +64,7 @@ func TestProviderAttemptTracksActualResultAndPanic(t *testing.T) {
 			var err error
 
 			call := func() {
-				err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
+				_, err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
 			}
 
 			if tc.panics {
@@ -128,7 +128,7 @@ func TestProviderAttemptSkipsUnsupportedStoredRoute(t *testing.T) {
 	totals := &workercontract.Counters{}
 	d.SetWorkerInstrumentation(tracker, totals)
 
-	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}, frozen: &store.FrozenRequest{Route: "sender"}})
+	_, err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}, frozen: &store.FrozenRequest{Route: "sender"}})
 	require.ErrorContains(t, err, "stored text or markdown request required")
 	require.False(t, sender.seen)
 	require.Zero(t, tracker.Snapshot(time.Now()).InFlight)
@@ -139,6 +139,6 @@ func (s *providerAttemptSender) PrepareMessageRequest(_ context.Context, _, body
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *providerAttemptSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
-	return "", s.SendMessage(ctx, room, body)
+func (s *providerAttemptSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }

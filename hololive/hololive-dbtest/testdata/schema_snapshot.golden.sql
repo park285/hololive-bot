@@ -1565,11 +1565,16 @@ TABLE youtube_notification_send_request
   COLUMN member_ids bigint[] NOT NULL
   COLUMN generation integer NOT NULL DEFAULT 0
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN handoff_request_id text
+  COLUMN handoff_next_check_at timestamp with time zone
+  COLUMN handoff_checked_at timestamp with time zone
+  CONSTRAINT chk_youtube_send_request_handoff_shape CHECK ((((handoff_request_id IS NULL) OR ((length(handoff_request_id) >= 1) AND (length(handoff_request_id) <= 256))) AND ((handoff_next_check_at IS NULL) OR ((handoff_request_id IS NOT NULL) AND (handoff_checked_at IS NULL))) AND ((handoff_checked_at IS NULL) OR (handoff_request_id IS NOT NULL)) AND ((handoff_request_id IS NULL) OR (handoff_checked_at IS NOT NULL) OR (handoff_next_check_at IS NOT NULL))))
   CONSTRAINT youtube_notification_send_request_dedupe_keys_check CHECK ((cardinality(dedupe_keys) > 0))
   CONSTRAINT youtube_notification_send_request_generation_check CHECK (((generation >= 0) AND (generation <= 2)))
   CONSTRAINT youtube_notification_send_request_member_ids_check CHECK ((cardinality(member_ids) > 0))
   CONSTRAINT youtube_notification_send_request_route_check CHECK ((route = ANY (ARRAY['text'::text, 'markdown'::text, 'sender'::text])))
   CONSTRAINT youtube_notification_send_request_pkey PRIMARY KEY (base_id)
+  INDEX CREATE INDEX idx_youtube_send_request_handoff_due ON public.youtube_notification_send_request USING btree (handoff_next_check_at, base_id) WHERE (handoff_next_check_at IS NOT NULL)
 
 TABLE youtube_schedule_items
   COLUMN group_key text NOT NULL

@@ -195,6 +195,12 @@ DeferFollowers
 ScheduleLogicalRetry
 FailLogicalGroup
 CompleteSent
+ClaimHandoffDue
+CompleteHandoff
+RescheduleHandoff
+ReissueAfterHandoff
+ExhaustAfterHandoff
+QuarantineAfterHandoff
 QuarantineStaleSending
 ReviveFailedLogicalGroups
 ```
@@ -216,6 +222,8 @@ Mixed pre/post member는 partial success가 아니라 atomicity breach입니다.
 Community/Shorts tracking은 post 전역, delivery는 room별입니다. 발송 전에 post 단위 상태를 선점하지 않으므로 같은 post의 여러 room이 서로를 기다리지 않습니다.
 
 성공 전이(`CompleteSent`)가 같은 트랜잭션에서 `MarkAlarmSentBatch`로 tracking과 post 단위 알람 상태에 발송 시각을 기록합니다. 알람 상태 행이 없으면 tracking 행으로부터 만듭니다. 첫 room success가 시각을 정하고, 후속 room success는 이미 sent인 상태를 정상 terminal 상태로 수용하며 더 이른 시각만 남깁니다. 정상 경로 트랜잭션은 기록 뒤 post 단위 sent 표시를 다시 확인하지 않습니다. commit 응답 유실 판정의 read-back에서 post 단위 sent 표시(알람 상태 또는 tracking)가 없으면 atomicity breach(`Indeterminate`)로 분류합니다. 이미 sent인 post라는 이유로 provider-success delivery를 실패시키지 않습니다.
+
+Handoff 확인 정산(`ReissueAfterHandoff`·`ExhaustAfterHandoff`·`QuarantineAfterHandoff`)은 논리 그룹 delivery와 그 owner를 출처로 한 SENT ledger만 되돌리고 tracking·post 단위 알람 상태의 발송 시각은 되돌리지 않습니다. 같은 post를 다른 room이 이미 발송했을 수 있고, post 단위 표시는 발송 증거의 최솟값만 남기는 규칙이기 때문입니다. 바뀐 delivery의 부모 outbox 집계는 D-015의 같은 atomic aggregate SQL을 나눠, 부모 잠금 문장을 논리 그룹 delivery 잠금 전에(보존 정리·fanout과 같은 부모 → 자식 순서), 집계 문장을 정산 transaction 끝에서 실행해 함께 commit하거나 rollback하며, 그 SQL은 outbox `sent_at`을 지우지 않습니다.
 
 ### D-013. DB commit ambiguity를 일급 결과로 다룬다
 

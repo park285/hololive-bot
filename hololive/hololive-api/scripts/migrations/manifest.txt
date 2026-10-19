@@ -188,3 +188,5 @@
 188 330_notification_delivery_handoff_check.sql
 189 338_notification_delivery_handoff_due_index.sql
 190 327_youtube_delivery_locked_by.sql
+191 336_youtube_send_request_handoff_check.sql
+192 339_youtube_send_request_handoff_due_index.sql

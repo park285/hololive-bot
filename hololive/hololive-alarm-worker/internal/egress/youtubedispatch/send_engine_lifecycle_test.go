@@ -114,6 +114,7 @@ func (s *lifecycleTransitionSpy) CompleteSent(
 	_ context.Context,
 	_ store.StartedOperation,
 	mode store.DeliveryMode,
+	_ store.HandoffAdmission,
 ) (store.ApplyResult, error) {
 	s.completeCalls.Add(1)
 	s.recordMode("complete_sent", mode)
@@ -267,8 +268,8 @@ func (s *lifecycleTestSender) PrepareMessageRequest(_ context.Context, _, body s
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *lifecycleTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
-	return "", s.SendMessage(ctx, room, body)
+func (s *lifecycleTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }
 
 const testPreparedTextRoute = "text"

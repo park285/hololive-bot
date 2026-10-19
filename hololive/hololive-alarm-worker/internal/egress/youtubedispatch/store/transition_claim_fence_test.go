@@ -119,20 +119,20 @@ func TestBeginSendingRejectsExpiredClaimLease(t *testing.T) {
 func TestSettlementAfterSendingIgnoresExpiredLease(t *testing.T) {
 	tests := []struct {
 		name    string
-		settle  func(context.Context, *TransitionStore, StartedOperation) (ApplyResult, error)
+		settle  func(context.Context, *TransitionStore, StartedOperation, HandoffAdmission) (ApplyResult, error)
 		status  domain.OutboxStatus
 		attempt int
 	}{
 		{
 			name: "complete sent",
-			settle: func(ctx context.Context, transition *TransitionStore, operation StartedOperation) (ApplyResult, error) {
-				return transition.CompleteSent(ctx, operation, DeliveryModePerRoom)
+			settle: func(ctx context.Context, transition *TransitionStore, operation StartedOperation, admission HandoffAdmission) (ApplyResult, error) {
+				return transition.CompleteSent(ctx, operation, DeliveryModePerRoom, admission)
 			},
 			status: domain.OutboxStatusSent,
 		},
 		{
 			name: "retryable provider failure",
-			settle: func(ctx context.Context, transition *TransitionStore, operation StartedOperation) (ApplyResult, error) {
+			settle: func(ctx context.Context, transition *TransitionStore, operation StartedOperation, _ HandoffAdmission) (ApplyResult, error) {
 				return transition.ApplyStartedFailure(
 					ctx, operation, lifecycle.FailureRetryable, lifecycle.Reason("provider_transport"), 0, DeliveryModePerRoom,
 				)
@@ -149,13 +149,15 @@ func TestSettlementAfterSendingIgnoresExpiredLease(t *testing.T) {
 			transition := newTestTransitionStore(t, pool)
 			claim := claimAndPrepare(t, pool, transition)
 
+			admission := freezeTestAdmission(t, transition, claim.rows, "youtube:claim-fence-settle", time.Minute)
+
 			operation, begin, err := transition.BeginSending(t.Context(), claim.rows, claim.outboxes)
 			require.NoError(t, err)
 			require.Equal(t, ApplyApplied, begin.Outcome)
 
 			expireTransitionClaimLease(t, pool, deliveryID)
 
-			result, err := tc.settle(t.Context(), transition, operation)
+			result, err := tc.settle(t.Context(), transition, operation, admission)
 			require.NoError(t, err)
 			require.Equal(t, ApplyApplied, result.Outcome)
 

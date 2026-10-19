@@ -129,8 +129,8 @@ func (c *seeMoreFoldEgressClient) PrepareMessageRequest(_ context.Context, _, bo
 	return body, testPreparedTextRoute, nil
 }
 
-func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, _ string) (string, error) {
+func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	_, err := c.SendMessageAccepted(ctx, room, body)
 
-	return "", err
+	return testAdmission(id, err)
 }

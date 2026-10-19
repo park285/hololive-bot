@@ -373,6 +373,23 @@ func (s *TransitionStore) loadLogicalGroupRows(
 		return nil, nil
 	}
 
+	return queryLogicalGroupRows(ctx, db, s.logicalGroupArgs(requested))
+}
+
+// queryLogicalGroupRows는 logicalGroupArgs로 만든 인자로 논리 그룹 delivery를 transition_group_rows.sql 순서로 잠근다.
+func queryLogicalGroupRows(ctx context.Context, db dbx.Querier, args []any) ([]transitionRow, error) {
+	var rows []transitionRow
+
+	if err := dbx.SelectSQL(ctx, db, &rows, "load transition logical group rows", transitionGroupRowsSQL, args...); err != nil {
+		return nil, fmt.Errorf("load transition logical group rows: %w", err)
+	}
+
+	return rows, nil
+}
+
+// logicalGroupArgs는 transition_group_candidates.sql 조각을 쓰는 문장의 $1..$5(직접 id, 요청 조합 배열 셋, 행 한도)다.
+// 그룹 잠금과 handoff 부모 사전 조회가 같은 값을 쓰도록 한 곳에서 만든다.
+func (s *TransitionStore) logicalGroupArgs(requested []requestedLogicalGroup) []any {
 	ids := make([]int64, 0, len(requested))
 	roomIDs := make([]string, 0, len(requested)*3)
 	kinds := make([]string, 0, len(requested)*3)
@@ -390,24 +407,7 @@ func (s *TransitionStore) loadLogicalGroupRows(
 
 	limit := len(requested)*(s.config.LogicalGroupLimit+1) + len(ids)
 
-	var rows []transitionRow
-
-	if err := dbx.SelectSQL(
-		ctx,
-		db,
-		&rows,
-		"load transition logical group rows",
-		mustSQL("transition_group_rows.sql"),
-		ids,
-		roomIDs,
-		kinds,
-		candidates,
-		limit,
-	); err != nil {
-		return nil, fmt.Errorf("load transition logical group rows: %w", err)
-	}
-
-	return rows, nil
+	return []any{ids, roomIDs, kinds, candidates, limit}
 }
 
 func loadTransitionLedger(

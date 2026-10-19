@@ -56,10 +56,10 @@ func (s *settlementTransition) boundary() {
 	s.db.armed = true
 }
 
-func (s *settlementTransition) CompleteSent(ctx context.Context, op store.StartedOperation, mode store.DeliveryMode) (store.ApplyResult, error) {
+func (s *settlementTransition) CompleteSent(ctx context.Context, op store.StartedOperation, mode store.DeliveryMode, admission store.HandoffAdmission) (store.ApplyResult, error) {
 	s.boundary()
 
-	result, err := s.TransitionStore.CompleteSent(ctx, op, mode)
+	result, err := s.TransitionStore.CompleteSent(ctx, op, mode, admission)
 
 	s.results = append(s.results, result)
 

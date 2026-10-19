@@ -502,14 +502,31 @@ Batch API를 사용하며 per-row N+1 lookup을 기본 경로로 사용하지 �
 
 `CompleteSent` transaction:
 
-1. Owner/follower send fence와 pre-state를 확인합니다.
-2. Delivery group을 `SENT`로 전이합니다.
-3. Tracking requirement를 충족합니다.
-4. Ledger `RecordSent`를 적용합니다.
-5. Commit합니다.
-6. Touched outbox ID를 별도 aggregate projector에 전달합니다.
+1. 고정 요청(`youtube_notification_send_request`)을 잠그고 세대·고정 멤버가 이번 발송과 같은지 확인합니다(claim과 같은 요청 → 멤버 순서).
+2. Owner/follower send fence와 pre-state를 확인합니다.
+3. Delivery group을 `SENT`로 전이합니다.
+4. Tracking requirement를 충족합니다.
+5. Ledger `RecordSent`를 적용합니다.
+6. 고정 요청에 Iris requestId와 첫 handoff 확인 시각(SENT 전이 시각 + min(5s, attempt_timeout))을 기록합니다.
+7. Commit합니다.
+8. Touched outbox ID를 별도 aggregate projector에 전달합니다.
 
-Commit read-back은 owner/follower/tracking뿐 아니라 ledger `SENT`도 확인합니다. Aggregate는 이 adjudication envelope에 포함하지 않습니다.
+Commit read-back은 owner/follower/tracking뿐 아니라 ledger `SENT`와 고정 요청의 handoff admission도 확인합니다. Aggregate는 이 adjudication envelope에 포함하지 않습니다.
+
+### Handoff failure settlement
+
+`youtube-delivery-handoff-reconciler`의 재발급·소진·격리는 고정 요청 → 영향 부모 outbox(id 순서) → 논리 그룹 delivery → ledger 순서로 잠근 한 트랜잭션입니다. 부모를 자식보다 먼저 잠그므로 보존 정리(`CleanupTerminalOutboxes`: outbox → 자식 delivery)·fanout(outbox → 자식)과 같은 부모 → 자식 순서이고, 부모를 기다리는 동안 자식 잠금을 쥐지 않습니다.
+
+1. 고정 요청의 soft claim 토큰·requestId·세대·본문 해시·고정 멤버를 확인합니다. 어긋나면 outbox·delivery를 잠그지 않고 끝냅니다.
+2. 고정 멤버의 논리 identity로 그룹 잠금과 같은 후보 조건·인자(`transition_group_candidates.sql` 조각, 같은 행 한도)로 그룹이 걸친 부모 outbox id를 잠그지 않고 읽고, canonical 집계 잠금(`delivery_repository_aggregate_lock.sql`, id 순서 `FOR NO KEY UPDATE`)으로 잠급니다.
+3. 고정 멤버마다 논리 그룹 delivery를 잠급니다. 잠근 행의 부모가 2의 집합 밖이면(그 사이 같은 논리 키의 follower·outbox가 들어옴) 자식 잠금을 쥔 채 새 부모를 더 잠그지 않습니다. 아무것도 바꾸지 않고 정산 전체를 rollback하며 그 키의 고정 멤버를 `membership_changed`로 담은 fence 미스를 돌려줍니다. 이 미스는 확인을 닫지 않으므로(`ErrHandoffCheckClosed` 아님) claim이 미룬 soft claim(15s) 뒤 다음 확인이 늘어난 집합으로 다시 정산합니다.
+4. 잠긴 delivery에서 멤버 존재·claim 때의 row_version·`SENT` 상태·논리 키별 단일 owner·그룹 행 한도·`SENDING`/`QUARANTINED` 형제 부재를 먼저 확인합니다. 하나라도 어긋나면 ledger를 잠그지 않고 확인만 영구히 닫으며 delivery·ledger는 바꾸지 않습니다. 모두 맞을 때만 ledger를 잠가 각 키가 해당 owner를 `source_delivery_id`로 한 `SENT`인지 확인합니다. 원장 조건이 어긋나도 delivery·ledger를 바꾸지 않고 확인만 닫습니다.
+5. 각 논리 그룹의 `SENT` 행 전원(고정 멤버 밖 follower 포함)을 `PENDING`(재발급)·`FAILED`(소진)·`QUARANTINED`(격리)로 전이합니다.
+6. 그 owner를 출처로 한 `SENT` ledger 행만 삭제합니다. 다른 출처의 ledger 행은 건드리지 않습니다. 격리는 같은 출처로 `RecordQuarantined`를 적용합니다(`SENT`를 덮어쓰지 않는 규칙 때문에 삭제가 먼저입니다).
+7. 재발급은 요청 세대를 올리고 handoff 열을 비우며, 소진·격리는 확인을 닫습니다.
+8. 같은 트랜잭션 끝에서 2에서 이미 잠근 부모 중 바뀐 delivery의 부모 집계를 별도 projector와 같은 canonical 집계 문장(`delivery_repository_aggregate_sync.sql`)으로 다시 계산하며 부모를 다시 잠그지 않습니다. 집계가 실패하면 delivery·ledger·요청 갱신이 함께 rollback되고 claim 토큰이 남아 soft claim 뒤 다음 확인이 다시 정산합니다. Commit 뒤 별도 projector 호출은 없습니다.
+
+Commit 응답 유실은 고정 요청의 post-state(세대 + 1과 빈 handoff 열, 또는 같은 세대의 닫힌 확인)로 판정합니다. 요청 갱신은 delivery·ledger 전이와 부모 집계와 같은 트랜잭션이므로 이 post-state가 전체 commit의 증거입니다. 부모 집계는 기존대로 outbox `sent_at`을 지우지 않습니다. Post 단위 tracking·알람 발송 표시는 다른 방 발송의 결과일 수 있으므로 되돌리지 않습니다.
 
 ### Quarantine
 

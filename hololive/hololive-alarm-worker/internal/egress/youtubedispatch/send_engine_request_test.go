@@ -37,7 +37,7 @@ func (s *frozenProviderSender) SendPreparedMessage(_ context.Context, _, body, r
 	s.routes = append(s.routes, route)
 	s.bodies = append(s.bodies, body)
 
-	return "", s.err
+	return testAdmission(id, s.err)
 }
 
 func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
