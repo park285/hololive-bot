@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
@@ -37,29 +36,12 @@ import (
 
 const serviceNameIris = "iris"
 
-const (
-	replyStatusPollInterval   = 250 * time.Millisecond
-	replyAdmissionMaxAttempts = 2
-)
-
-type replyStatusGetter interface {
-	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
-}
-
-type acceptedMessageSender interface {
-	SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-	replyStatusGetter
-}
+const replyAdmissionMaxAttempts = 2
 
 type (
 	replySendFunc      func(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	replyAdmissionFunc func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 )
-
-type replyLane struct {
-	send   replySendFunc
-	getter replyStatusGetter
-}
 
 type CommandTransport struct {
 	irisClient      iris.BotClient
@@ -151,39 +133,31 @@ func (t *CommandTransport) recordTextReply(
 }
 
 func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestID string, useMarkdown bool, opts ...iris.SendOption) error {
+	send := t.irisClient.SendMessageAccepted
+
 	if useMarkdown {
-		lane := replyLane{send: t.irisClient.SendMarkdown, getter: t.irisClient}
-		if err := sendReply(ctx, lane, room, message, clientRequestID, opts); err != nil {
-			return fmt.Errorf("send reply: %w", err)
-		}
-
-		return nil
+		send = t.irisClient.SendMarkdown
 	}
 
-	acceptedSender, ok := t.irisClient.(acceptedMessageSender)
-	if !ok {
-		return fmt.Errorf("send reply: iris client %T cannot report reply admission or status", t.irisClient)
-	}
-
-	lane := replyLane{send: acceptedSender.SendMessageAccepted, getter: acceptedSender}
-
-	if err := sendReply(ctx, lane, room, message, clientRequestID, opts); err != nil {
+	if err := sendReply(ctx, send, room, message, clientRequestID, opts); err != nil {
 		return fmt.Errorf("send reply: %w", err)
 	}
 
 	return nil
 }
 
-func sendReply(ctx context.Context, lane replyLane, room, message, clientRequestID string, opts []iris.SendOption) error {
+// sendReply는 Iris durable admission(202와 requestId)까지만 확인한다. Handoff 결과는 이 경로에서
+// 기다리지 않는다.
+func sendReply(ctx context.Context, send replySendFunc, room, message, clientRequestID string, opts []iris.SendOption) error {
 	accepted, err := postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
-		return postReply(ctx, lane.send, room, message, generationID, appendReplyClientRequestID(opts, generationID))
+		return postReply(ctx, send, room, message, generationID, appendReplyClientRequestID(opts, generationID))
 	})
 	if err != nil {
 		return fmt.Errorf("post reply with reissue: %w", err)
 	}
 
-	if err := waitForAcceptedReplyHandoff(ctx, lane.getter, accepted); err != nil {
-		return fmt.Errorf("wait for accepted reply handoff: %w", err)
+	if _, err := acceptedReplyRequestID(accepted); err != nil {
+		return fmt.Errorf("accepted reply request id: %w", err)
 	}
 
 	return nil
@@ -363,7 +337,7 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	if err != nil {
 		err = classifyAdmissionError(err)
 	} else {
-		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
+		_, err = acceptedReplyRequestID(accepted)
 	}
 
 	if err != nil {
@@ -417,7 +391,7 @@ func (t *CommandTransport) sendMultipleImages(ctx context.Context, room string, 
 	if err != nil {
 		err = classifyAdmissionError(err)
 	} else {
-		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
+		_, err = acceptedReplyRequestID(accepted)
 	}
 
 	if err != nil {

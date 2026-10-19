@@ -19,17 +19,19 @@ func replyOutboxRetryAfterWithBase(status string, attempts int32, base time.Dura
 	return backoff.ComputeExponentialBackoff(max(int(attempts)-1, 0), base, time.Minute, base/2)
 }
 
-func replyOutboxSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAttempts int32, err error) string {
+// replyOutboxSettlementStatusWithMaxAttempts는 한 번의 admission 시도 결과를 outbox 상태로 바꾼다. 오류가
+// 없으면 Iris가 202와 requestId로 durable admission을 증명한 것이고 handoff는 reconciler가 확인한다.
+func replyOutboxSettlementStatusWithMaxAttempts(attempts, maxAttempts int32, err error) string {
 	if err == nil {
-		return durability.ReplyOutboxHandoffCompleted
+		return durability.ReplyOutboxAccepted
 	}
 
-	if transport.IsReplyStatusFailed(err) {
-		return durability.ReplyOutboxDead
-	}
+	if transport.IsReplyOutcomeUnknown(err) {
+		if attempts >= maxAttempts {
+			return durability.ReplyOutboxManualReview
+		}
 
-	if status, ok := replyUncertainSettlementStatusWithMaxAttempts(accepted, attempts, maxAttempts, err); ok {
-		return status
+		return durability.ReplyOutboxOutcomeUnknown
 	}
 
 	if errors.Is(err, transport.ErrStoredReplyInvalid) {
@@ -45,22 +47,4 @@ func replyOutboxSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAtte
 	}
 
 	return durability.ReplyOutboxRetryablePreDispatch
-}
-
-func replyUncertainSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAttempts int32, err error) (string, bool) {
-	// Iris가 수리한 응답은 자동 재발송 큐로 돌리지 않는다. 관측 실패도 즉시 정산해
-	// lease 만료까지 같은 방의 후속 응답을 막지 않고 수동 확인 대상으로 남긴다.
-	if accepted {
-		return durability.ReplyOutboxManualReview, true
-	}
-
-	if !transport.IsReplyOutcomeUnknown(err) {
-		return "", false
-	}
-
-	if attempts >= maxAttempts {
-		return durability.ReplyOutboxManualReview, true
-	}
-
-	return durability.ReplyOutboxOutcomeUnknown, true
 }

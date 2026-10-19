@@ -281,6 +281,8 @@ TABLE bot_reply_outbox
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN available_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN operator_replay_grants integer NOT NULL DEFAULT 0
+  COLUMN accepted_at timestamp with time zone
+  COLUMN handoff_next_check_at timestamp with time zone
   CONSTRAINT chk_bot_reply_outbox_attempts CHECK ((attempts >= 0))
   CONSTRAINT chk_bot_reply_outbox_client_request_id CHECK ((client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text))
   CONSTRAINT chk_bot_reply_outbox_iris_request_id_size CHECK ((length(iris_request_id) <= 256))
@@ -291,13 +293,14 @@ TABLE bot_reply_outbox
   CONSTRAINT chk_bot_reply_outbox_payload_hash CHECK ((payload_hash ~ '^[0-9a-f]{64}$'::text))
   CONSTRAINT chk_bot_reply_outbox_phase_size CHECK (((length(phase) > 0) AND (length(phase) <= 32)))
   CONSTRAINT chk_bot_reply_outbox_room_id_size CHECK (((length(room_id) > 0) AND (length(room_id) <= 256)))
-  CONSTRAINT chk_bot_reply_outbox_state_shape CHECK ((((status <> ALL (ARRAY['submitting'::text, 'accepted'::text])) OR ((claim_token IS NOT NULL) AND (lease_until IS NOT NULL) AND (first_attempt_at IS NOT NULL))) AND ((status <> 'accepted'::text) OR (length(iris_request_id) > 0)) AND ((status = ANY (ARRAY['handoff_completed'::text, 'dead'::text, 'permanent_conflict'::text, 'discarded'::text])) OR (payload IS NOT NULL))))
+  CONSTRAINT chk_bot_reply_outbox_state_shape CHECK ((((status <> 'submitting'::text) OR ((claim_token IS NOT NULL) AND (lease_until IS NOT NULL) AND (first_attempt_at IS NOT NULL))) AND ((status <> 'accepted'::text) OR ((length(iris_request_id) > 0) AND (((claim_token IS NOT NULL) AND (lease_until IS NOT NULL) AND (first_attempt_at IS NOT NULL)) OR ((claim_token IS NULL) AND (lease_until IS NULL) AND (accepted_at IS NOT NULL) AND (handoff_next_check_at IS NOT NULL))))) AND ((status = 'accepted'::text) OR (handoff_next_check_at IS NULL)) AND ((status = ANY (ARRAY['handoff_completed'::text, 'dead'::text, 'permanent_conflict'::text, 'discarded'::text])) OR (payload IS NOT NULL))))
   CONSTRAINT chk_bot_reply_outbox_status_vocab CHECK ((status = ANY (ARRAY['pending'::text, 'submitting'::text, 'accepted'::text, 'handoff_completed'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text, 'dead'::text, 'permanent_conflict'::text, 'manual_review'::text, 'discarded'::text])))
   CONSTRAINT bot_reply_outbox_pkey PRIMARY KEY (id)
   CONSTRAINT bot_reply_outbox_client_request_id_key UNIQUE (client_request_id)
   CONSTRAINT bot_reply_outbox_message_id_phase_ordinal_key UNIQUE (message_id, phase, ordinal)
   INDEX CREATE INDEX idx_bot_reply_outbox_discarded_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = 'discarded'::text)
   INDEX CREATE INDEX idx_bot_reply_outbox_due_available ON public.bot_reply_outbox USING btree (available_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
+  INDEX CREATE INDEX idx_bot_reply_outbox_handoff_due ON public.bot_reply_outbox USING btree (handoff_next_check_at, id) WHERE ((status = 'accepted'::text) AND (claim_token IS NULL))
   INDEX CREATE INDEX idx_bot_reply_outbox_lease_expiry ON public.bot_reply_outbox USING btree (lease_until, id) WHERE (status = ANY (ARRAY['submitting'::text, 'accepted'::text]))
   INDEX CREATE INDEX idx_bot_reply_outbox_manual_review_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = 'manual_review'::text)
   INDEX CREATE INDEX idx_bot_reply_outbox_message ON public.bot_reply_outbox USING btree (message_id, ordinal)
