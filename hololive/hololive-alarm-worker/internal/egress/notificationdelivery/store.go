@@ -125,6 +125,16 @@ func (r *Store) MarkQuarantined(ctx context.Context, id int64, workerID, reason 
 // MarkFailed는 claim 당시 횟수로 실패 정책을 정하고 동일 횟수·소유권인 행에만 적용합니다.
 // 발송 전 lease 만료는 거부하며 발송 후 확정 실패는 기존 SENDING 소유자가 정산할 수 있습니다.
 func (r *Store) MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
+	return r.markFailed(ctx, id, workerID, attemptCount, maxRetries, backoff, errMsg, false)
+}
+
+// markRequestExhausted는 MarkFailed와 같은 소유자·시도 횟수 fence로 행을 종료 FAILED로 끝내고, 같은 문장에서 저장된
+// 요청에 exhausted를 세워 producer rearm이 다시 PENDING으로 되살리지 않게 합니다.
+func (r *Store) markRequestExhausted(ctx context.Context, id int64, workerID string, attemptCount int, errMsg string) (bool, error) {
+	return r.markFailed(ctx, id, workerID, attemptCount, 1, 0, errMsg, true)
+}
+
+func (r *Store) markFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string, exhaustRequest bool) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, err
 	}
@@ -137,6 +147,7 @@ func (r *Store) MarkFailed(ctx context.Context, id int64, workerID string, attem
 	tag, err := r.pool.Exec(ctx, markFailedSQL,
 		errMsg, status, durationMilliseconds(backoff), id,
 		domain.DeliveryStatusPending, deliveryStatusSending, workerID, attemptCount, status == domain.DeliveryStatusPending,
+		exhaustRequest,
 	)
 	if err != nil {
 		return false, fmt.Errorf("exec: %w", err)

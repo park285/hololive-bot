@@ -3,13 +3,30 @@ package notificationdelivery
 import (
 	"errors"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 var (
 	markFailedSQL    = mustSQL("outbox_repository_0209_06.sql")
 	reissueFailedSQL = mustSQL("outbox_reissue_failed_request.sql")
+	saveRequestSQL   = mustSQL("outbox_save_request.sql")
 )
+
+// 요청 고정 fence 미스의 처리 결과다. 각 값은 소유자 fence가 걸린 실패 전이 적용(failed), 행을 건드리지 않음
+// (fence_lost), 실패 전이 자체의 DB 오류(transition_error)를 뜻한다.
+const (
+	requestFenceResultFailed          = "failed"
+	requestFenceResultFenceLost       = "fence_lost"
+	requestFenceResultTransitionError = "transition_error"
+)
+
+var notificationDeliveryRequestFenceMissTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "hololive_notification_delivery_request_fence_miss_total",
+	Help: "Notification delivery request snapshot updates rejected by the row fence, by operation, observed cause, and settlement result.",
+}, []string{"operation", "cause", "result"})
 
 // claim 당시 횟수로 정책을 결정하고 저장 시 동일 횟수와 소유권을 함께 검증합니다.
 // 모든 DB의 attempt_count가 migration 275부터 bigint이므로 int4 범위 상한을 따로 두지 않습니다.

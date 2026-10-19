@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **notification 재발급 fence 미스 처리:** notification-delivery의 요청 고정 저장과 409 `CLIENT_REQUEST_ID_FAILED` 세대 재발급이 0행이면 bool을 버리지 않고, 같은 문장의 행 잠금 아래에서 관측한 원인(행 없음·상태 변경·소유자 변경·lease 만료·시도 횟수 변경·요청 변경)을 typed error로 올립니다. 소유권이 남은 요청 변경만 소유자·시도 횟수 fence가 걸린 실패 전이로 끝냅니다. 재발급은 같은 문장에서 저장된 요청에 `exhausted`를 세운 종료 FAILED라 producer rearm이 되살리지 않고, 발송 전 저장은 일반 재시도 정책을 따릅니다. 소유권을 잃은 행은 건드리지 않습니다. 확정된 pre-handoff 충돌이 SENDING에 남아 stale sweep에서 결과 불명으로 격리되던 경로가 없어지고, 모든 미스는 `hololive_notification_delivery_request_fence_miss_total`(operation·cause·result)과 로그로 남습니다. migration 변경은 없습니다.
 - **SQL 시계 선택 검사:** 기존 SQL 소유권 검사에서 collector lease와 alarm의 잠금 후 fence는 wall clock, 후보·projection·live 조회는 statement clock을 요구합니다. 주석·문자열·인용 식별자를 구분하고 인자 없는 실제 함수 호출만 검사하여 CTE·별칭의 열 선언을 오인하지 않습니다. 범위 밖의 기록용 transaction clock과 기존 migration은 유지하며, 잠금 순서의 정확성은 기존 DB 경합 시험이 계속 검증합니다.
 - **동기 집계 정합 진단:** dbtest 오라클을 공유 SQL 자산으로 옮겨 bundle·live 모델의 누락·잉여·값 변경과 매핑의 값·중복도 불일치를 읽기 전용 RR snapshot에서 검사합니다. 서비스 파일과 무관하게 연결 제한을 명시적 인자로, 조회 제한을 SET LOCAL로 적용하고 유효값을 확인합니다. 식별자·원문 없이 건수만 반환하며 정상/불일치/확인 실패를 종료 코드 0/1/2로 구분합니다. dbtest는 집계와 매핑을 직접 손상시켰을 때 불일치 종류마다 한 건씩 세는지도 확인합니다. 새 migration·자동 복구·주기 실행·운영 적용은 없습니다.
 

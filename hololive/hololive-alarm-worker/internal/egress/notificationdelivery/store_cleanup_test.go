@@ -155,9 +155,7 @@ func seedCleanupRearm(ctx context.Context, t *testing.T, repo *outboxFixture, te
 			BaseID:    notificationDeliveryClientRequestID(item),
 			Exhausted: test.exhausted,
 		}
-		ok, err := repo.saveRequest(ctx, item.ID, testWorkerA, nil, request)
-		require.NoError(t, err)
-		require.True(t, ok)
+		require.NoError(t, repo.saveRequest(ctx, item.ID, testWorkerA, nil, request))
 	}
 
 	ok, err := repo.MarkFailed(ctx, item.ID, testWorkerA, item.AttemptCount, 1, time.Second, "known failure")

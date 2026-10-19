@@ -85,22 +85,15 @@ func TestDeliveryReissuePreservesRequestOnStaleAttemptAndExhaustsGeneration(t *t
 
 	item := &items[0]
 	previous := &deliverypayload.Request{Body: "immutable request body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(item)}
-	ok, err := repo.saveRequest(ctx, item.ID, testWorkerA, nil, previous)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.NoError(t, repo.saveRequest(ctx, item.ID, testWorkerA, nil, previous))
 	markOutboxSending(ctx, t, repo, item)
 
 	next := *previous
 
 	next.Exhausted = true
 
-	ok, err = repo.reissueFailedRequest(ctx, item.ID, testWorkerA, 1, previous, &next, 3, time.Hour, "rejected")
-	require.NoError(t, err)
-	require.False(t, ok)
-
-	ok, err = repo.reissueFailedRequest(ctx, item.ID, testWorkerA, item.AttemptCount, previous, &next, 3, time.Hour, "rejected")
-	require.NoError(t, err)
-	require.True(t, ok)
+	requireRequestFenceMiss(t, repo.reissueFailedRequest(ctx, item.ID, testWorkerA, 1, previous, &next, 3, time.Hour, "rejected"), requestFenceAttemptChanged)
+	require.NoError(t, repo.reissueFailedRequest(ctx, item.ID, testWorkerA, item.AttemptCount, previous, &next, 3, time.Hour, "rejected"))
 
 	var (
 		status, reason string
