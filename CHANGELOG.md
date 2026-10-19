@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **alarm 발송 lease와 Iris 자동 재발송 지평 검증:** alarm-worker 프로필 검증이 `alarm_dispatch`의 `lease_ms + recovery_interval_ms`가 Iris 자동 재발송 지평(`irisdurable.AutomaticReplayHorizon`, admission 보존 168h − 여유 24h = 144h)보다 짧은지 확인하고, 같거나 길면 기동을 거부합니다. 결과 불명 발송을 같은 client request ID로 다시 보내는 dedup은 Iris가 그 ID를 기억하는 동안에만 유효하므로, 최소 회수 지연이 지평 안에 있어야 한다는 필요조건입니다. 실제 재발송 창에 더해지는 backoff·attempt timeout·claim 주기는 24h 여유가 흡수합니다. `notification_delivery`의 lease는 발송 전 claim만 회수하고 `youtube_delivery`의 만료 SENDING은 격리되므로 두 경로에는 적용하지 않습니다. 설정 키·스키마·fixture는 바꾸지 않습니다.
 - **SQL 시계 선택 검사:** 기존 SQL 소유권 검사에서 collector lease와 alarm의 잠금 후 fence는 wall clock, 후보·projection·live 조회는 statement clock을 요구합니다. 주석·문자열·인용 식별자를 구분하고 인자 없는 실제 함수 호출만 검사하여 CTE·별칭의 열 선언을 오인하지 않습니다. 범위 밖의 기록용 transaction clock과 기존 migration은 유지하며, 잠금 순서의 정확성은 기존 DB 경합 시험이 계속 검증합니다.
 - **동기 집계 정합 진단:** dbtest 오라클을 공유 SQL 자산으로 옮겨 bundle·live 모델의 누락·잉여·값 변경과 매핑의 값·중복도 불일치를 읽기 전용 RR snapshot에서 검사합니다. 서비스 파일과 무관하게 연결 제한을 명시적 인자로, 조회 제한을 SET LOCAL로 적용하고 유효값을 확인합니다. 식별자·원문 없이 건수만 반환하며 정상/불일치/확인 실패를 종료 코드 0/1/2로 구분합니다. dbtest는 집계와 매핑을 직접 손상시켰을 때 불일치 종류마다 한 건씩 세는지도 확인합니다. 새 migration·자동 복구·주기 실행·운영 적용은 없습니다.
 
