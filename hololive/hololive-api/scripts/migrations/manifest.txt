@@ -194,3 +194,6 @@
 194 336_youtube_send_request_handoff_check.sql
 195 339_youtube_send_request_handoff_due_index.sql
 196 331_drop_youtube_alarm_state_authorization.sql
+197 332_bot_reply_outbox_accepted_strict.sql
+198 334_bot_reply_outbox_submitting_lease_index.sql
+199 335_bot_reply_outbox_drop_legacy_lease_index.sql

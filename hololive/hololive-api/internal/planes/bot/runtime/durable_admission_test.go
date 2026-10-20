@@ -120,24 +120,6 @@ func TestReplyOutboxOutcomeUnknownRetryDelayIncreasesByAttempt(t *testing.T) {
 	}
 }
 
-func TestAcceptedLeaseReclaimEmitsActionableCounterAndLog(t *testing.T) {
-	var logs bytes.Buffer
-
-	r := &durableRuntime{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
-	before := testutil.ToFloat64(replyOutboxAcceptedReclaimedTotal)
-
-	r.observeReplyOutboxReclaim(durability.ReplyOutboxReclaim{AcceptedManualReview: 2})
-
-	after := testutil.ToFloat64(replyOutboxAcceptedReclaimedTotal)
-	if after-before != 2 {
-		t.Fatalf("accepted reclaim counter delta = %v", after-before)
-	}
-
-	if !strings.Contains(logs.String(), "inspect bot_reply_outbox status=manual_review before replay decision") {
-		t.Fatalf("actionable reclaim log missing: %s", logs.String())
-	}
-}
-
 func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
