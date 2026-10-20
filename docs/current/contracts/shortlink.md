@@ -50,7 +50,7 @@ alarm-worker의 grouped message path는 방 유형과 무관하게 YouTube 원�
 
 - 활성 값은 `https://short.holoshi.com`이며 trailing slash 하나는 같은 origin으로 정규화합니다.
 - 빈 값은 기능을 비활성화하고 기존 YouTube 원본 URL을 유지합니다.
-- 단일 알림, Twitch-only, Chzzk-only, celebration과 YouTube outbox source renderer는 기존 링크를 유지합니다.
+- 단일 알림, Twitch-only, Chzzk-only, celebration source renderer는 기존 링크를 유지합니다.
 - Integrated 알림은 message path에서 YouTube 부분만 단축하고 Chzzk 보조 링크를 유지합니다.
 
 ## Deployment

@@ -22,22 +22,15 @@ func benchPreparedDedupeInput() DedupeInput {
 			},
 			MinutesUntil: 10,
 		},
-		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
-		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			Kind:      domain.OutboxKindNewVideo,
-			AlarmType: domain.AlarmTypeLive,
-			ChannelID: "UC1DCedRgGHBdm81E1llLhOQ",
-			Items: []domain.YouTubeOutboxItem{{
-				ContentID: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-				Payload:   `{}`,
-			}},
+		SourceKind: domain.AlarmDispatchSourceKindDeliveryDigest,
+		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{
+			Kind:               domain.DeliveryKindMajorEventWeekly,
+			PeriodKey:          "2026-W24",
+			PreRenderedMessage: "【歌枠】こんやも うたう よ～！ SINGING STREAM",
 		},
 	}
-	input := EnvelopeDedupeInput(&envelope)
 
-	input.SourceOutboxKind = ""
-
-	return input
+	return EnvelopeDedupeInput(&envelope)
 }
 
 func TestBuildDedupeKeyAllocationBudget(t *testing.T) {

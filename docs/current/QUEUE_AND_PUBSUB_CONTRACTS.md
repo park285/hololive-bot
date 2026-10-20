@@ -28,7 +28,6 @@ type AlarmQueueEnvelope struct {
     Retry         *AlarmQueueRetryMetadata             `json:"retry,omitempty"`
     SourcePayload string                               `json:"source_payload,omitempty"`
     SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
-    YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
     XSpace       *domain.XSpaceDispatchPayload        `json:"x_space,omitempty"`
 }
 

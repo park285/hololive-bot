@@ -108,30 +108,13 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 	}
 }
 
-func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *testing.T) {
+func TestPublisherPublishDispatchBatchAcceptsDeliveryDigestContentEnvelope(t *testing.T) {
 	t.Parallel()
 
 	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger(), WithWakeupEnabled(false), WithOutbox(&fakeOutboxRepository{}))
-	envelope := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{
-			AlarmType: domain.AlarmTypeShorts,
-			RoomID:    "room-canonical",
-		},
-		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
-		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs: []int64{1},
-			Kind:      domain.OutboxKindNewShort,
-			AlarmType: domain.AlarmTypeShorts,
-			ChannelID: "UC_test",
-			Items: []domain.YouTubeOutboxItem{{
-				OutboxID:  1,
-				ContentID: "short:abc",
-				Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
-			}},
-		},
-		ClaimKeys: []string{"youtube-notification:NEW_SHORT:short:abc:room-canonical"},
-		Version:   contractsalarm.QueueEnvelopeVersionV1,
-	}
+	envelope := queueTestDeliveryDigestEnvelope("room-canonical")
+
+	envelope.Version = contractsalarm.QueueEnvelopeVersionV1
 
 	result, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})
 	require.NoError(t, err)
@@ -143,24 +126,22 @@ func TestPublisherPublishDispatchBatchRejectsMissingEnvelopeVersion(t *testing.T
 
 	outbox := &fakeOutboxRepository{}
 	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger(), WithWakeupEnabled(false), WithOutbox(outbox))
-	envelope := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeShorts, RoomID: "room-versionless"},
-		SourceKind:   domain.AlarmDispatchSourceKindYouTubeOutbox,
-		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs: []int64{1},
-			Kind:      domain.OutboxKindNewShort,
-			AlarmType: domain.AlarmTypeShorts,
-			ChannelID: "UC_test",
-			Items: []domain.YouTubeOutboxItem{{
-				OutboxID:  1,
-				ContentID: "short:abc",
-				Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
-			}},
-		},
-		ClaimKeys: []string{"youtube-notification:NEW_SHORT:short:abc:room-versionless"},
-	}
+	envelope := queueTestDeliveryDigestEnvelope("room-versionless")
 
 	_, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "envelope version 0 is unsupported")
+}
+
+func queueTestDeliveryDigestEnvelope(roomID string) domain.AlarmQueueEnvelope {
+	return domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: roomID},
+		SourceKind:   domain.AlarmDispatchSourceKindDeliveryDigest,
+		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{
+			Kind:               domain.DeliveryKindMemberNewsWeekly,
+			PeriodKey:          "2026-W20",
+			PreRenderedMessage: "테스트 다이제스트",
+		},
+		ClaimKeys: []string{"delivery-digest:MEMBER_NEWS_WEEKLY:2026-W20:" + roomID},
+	}
 }

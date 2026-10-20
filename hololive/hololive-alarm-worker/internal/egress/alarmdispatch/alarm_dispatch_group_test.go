@@ -82,29 +82,12 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 
 	start := time.Date(2026, time.May, 14, 10, 0, 30, 0, time.FixedZone("KST", 9*60*60))
 	minuteBucket := start.UTC().Unix() / 60
-	youtubeOutbox := alarmDispatchGroupTestEnvelope(domain.AlarmTypeShorts, 0)
-
-	youtubeOutbox.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
-	youtubeOutbox.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
-		Kind:      domain.OutboxKindNewShort,
-		AlarmType: domain.AlarmTypeShorts,
-		ChannelID: testAlarmChannelID,
-		Items: []domain.YouTubeOutboxItem{
-			{ContentID: "short-b", Payload: `{"video_id":"short-b"}`},
-			{ContentID: "short-a", Payload: `{"video_id":"short-a"}`},
-		},
-	}
 
 	testCases := []struct {
 		name     string
 		envelope domain.AlarmQueueEnvelope
 		want     string
 	}{
-		{
-			name:     "youtube outbox source kind",
-			envelope: youtubeOutbox,
-			want:     "room-1|source|youtube_outbox|UCtest|NEW_SHORT|" + youtubeOutbox.YouTubeOutbox.Identity(),
-		},
 		{
 			name:     "scheduled stream with StartScheduled",
 			envelope: alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 10, start),

@@ -61,7 +61,7 @@ func (e *AlarmQueueEnvelope) validateXSpaceDispatch() error {
 		return errors.New("x space dispatch requires LIVE subscription without a stream payload")
 	}
 
-	if e.YouTubeOutbox != nil || e.Celebration != nil || e.DeliveryDigest != nil {
+	if e.Celebration != nil || e.DeliveryDigest != nil {
 		return errors.New("x space dispatch contains another source payload")
 	}
 
