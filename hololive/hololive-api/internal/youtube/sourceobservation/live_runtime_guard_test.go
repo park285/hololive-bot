@@ -193,7 +193,7 @@ func seedRuntimeGuardRetention(ctx context.Context, t *testing.T, pool *pgxpool.
 		FROM source_observations;
 	`)
 	require.NoError(t, err)
-	dbtest.RefreshAllLiveRuntimeState(t, pool)
+	dbtest.RefreshAllLiveRuntimeStateContext(ctx, t, pool)
 
 	return ids[0]
 }
