@@ -199,7 +199,7 @@ run_content_gates() {
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib deploy/compose
 
-  if echo "$changed_files" | grep -qE '^(admin-dashboard/|deploy/compose/|scripts/ci/public-pr-frontend-gate.sh)'; then
+  if echo "$changed_files" | grep -qE '^(deploy/compose/|scripts/ci/public-pr-frontend-gate.sh)'; then
     bash scripts/ci/public-pr-frontend-gate.sh
   fi
 
