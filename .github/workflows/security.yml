@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: bfd5eebba1c7aee7f8cca645f6e9975ae8c0bfba # v2.13.0
+          ref: c31907d766a65ab6f759ba585e562ebbc01f6b96 # v2.14.0
           path: shared-go
           persist-credentials: false
 
@@ -149,6 +149,11 @@ jobs:
           tar -xzf "${archive}" -C "${extract_dir}" trivy
           install -m 0755 "${extract_dir}/trivy" "${bin_dir}/trivy"
           echo "${bin_dir}" >>"${GITHUB_PATH}"
+
+      # 표준 runner에는 arm64 binfmt가 없어 arm64 최종 image의 RUN이 exec format error로 끝난다.
+      - name: Register arm64 emulation
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: docker run --rm --privileged tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install arm64
 
       - name: Build final production images
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
