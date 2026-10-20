@@ -124,6 +124,15 @@ members 시드의 arbiter는 `idx_members_slug`(UNIQUE, 097 복원)다.
 주기 삭제는 배치 루프(위 keyset)로, 대량·정기 보존은 파티셔닝(파티션 DROP은 O(1))을 검토한다
 — `docs/history/architecture/outbox-v3-convergence-roadmap-20260703.md`의 Phase 3 참고.
 
+### 라이브 원본 데이터 변경 — 전역 잠금 뒤 변경 key로 수명 모델 갱신
+
+`youtube_live_runtime_state`는 트리거가 아니라 writer가 같은 트랜잭션에서 명시적으로 갱신한다(328). 따라서
+`youtube_live_sessions`·`youtube_live_reconciliation_heads`·`youtube_live_pending_ends`·`youtube_video_availability`·
+`youtube_live_review_receipts`·`youtube_live_review_receipt_facts`의 행을 바꾸는 migration은 원본 잠금보다 먼저
+`SELECT public.lock_youtube_live_runtime_state();`(exclusive)를 잡고, 마지막에 바꾼 이전·새 `video_id`를 모두 넣어
+`SELECT public.refresh_youtube_live_runtime_state(ARRAY[...]);`를 호출한다. 러너의 READ COMMITTED 트랜잭션에서만 성공하며,
+key를 빠뜨리면 `scripts/maintenance/queries/live_runtime_state_drift.sql`이 누락·값 변경으로 센다.
+
 ## 스키마 문서
 
 통합 스키마 문서는 생성물이다. `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`

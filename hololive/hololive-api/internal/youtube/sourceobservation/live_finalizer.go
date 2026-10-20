@@ -17,27 +17,19 @@ func (r *Repository) FinalizeNextDueLiveEnd(ctx context.Context, grace time.Dura
 		return false, fmt.Errorf("validate: %w", err)
 	}
 
-	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (liveEndFinalization, error) {
+	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (bool, error) {
 		return finalizeNextDueLiveEndTx(ctx, tx, grace)
 	})
 	if err != nil {
-		return out.processed, fmt.Errorf("in pgx tx with result: %w", err)
+		return out, fmt.Errorf("in pgx tx with result: %w", err)
 	}
 
-	out.liveRuntimeKeyAudit.record(ctx)
-
-	return out.processed, nil
+	return out, nil
 }
 
-// liveEndFinalization은 due 종료 후보 하나의 처리 여부와, 커밋 뒤 지표로 남길 key 비교 결과다.
-type liveEndFinalization struct {
-	processed           bool
-	liveRuntimeKeyAudit liveRuntimeKeyAudit
-}
-
-func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duration) (liveEndFinalization, error) {
+func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duration) (bool, error) {
 	if err := lockLiveRuntimeState(ctx, tx); err != nil {
-		return liveEndFinalization{}, err
+		return false, err
 	}
 
 	var (
@@ -45,45 +37,44 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 		dbNow   time.Time
 	)
 
-	// NOW()는 guard 대기 전 트랜잭션 시작 시각이다. 대기 중 새로 due가 된 항목은
+	// NOW()는 전역·session 행 잠금 대기 전 트랜잭션 시작 시각이다. 대기 중 새로 due가 된 항목은
 	// 다음 호출로 남기고, 이번 후보 조회·재확인·FinalizeDue에는 같은 시각을 쓴다.
 	err := tx.QueryRow(ctx, mustSQL("repository_live_due_one_0049_49.sql")).Scan(&videoID, &dbNow)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return liveEndFinalization{}, nil
+		return false, nil
 	}
 
 	if err != nil {
-		return liveEndFinalization{}, fmt.Errorf("claim due live end: %w", err)
+		return false, fmt.Errorf("claim due live end: %w", err)
 	}
 
 	// due 조회에서는 head를 선잠그지 않는다. consumer와 같은 session→head→evidence
 	// 순서로 잠근 뒤 최신 candidate와 due 조건을 다시 확인한다.
 	state, err := loadLiveState(ctx, tx, nil, []string{videoID})
 	if err != nil {
-		return liveEndFinalization{}, fmt.Errorf("load live state: %w", err)
+		return false, fmt.Errorf("load live state: %w", err)
 	}
 
 	session, ok := state.Sessions[videoID]
 	if !ok || session.Clock.EndCandidateObservationID == nil ||
 		session.Clock.NextEndCheckAt == nil || session.Clock.NextEndCheckAt.After(dbNow) {
-		return liveEndFinalization{}, nil
+		return false, nil
 	}
 
 	pending, ok := state.PendingEnds[videoID]
 	if !ok || pending.ObservationID != *session.Clock.EndCandidateObservationID {
-		return liveEndFinalization{}, errors.New("live end candidate evidence is missing or inconsistent")
+		return false, errors.New("live end candidate evidence is missing or inconsistent")
 	}
 
 	decision := live.FinalizeDue(state, dbNow, grace)
 	if err := persistLiveDecision(ctx, tx, state.Sessions, &decision); err != nil {
-		return liveEndFinalization{}, fmt.Errorf("persist live decision: %w", err)
+		return false, fmt.Errorf("persist live decision: %w", err)
 	}
 
-	audit, auditErr := auditLiveRuntimeKeys(ctx, tx, liveEndFinalizerKeyAuditPath, liveDecisionRuntimeVideoIDs(&decision))
-	if auditErr != nil {
-		return liveEndFinalization{}, auditErr
+	if err := refreshLiveRuntimeState(ctx, tx, liveDecisionRuntimeVideoIDs(&decision)); err != nil {
+		return false, err
 	}
 
-	return liveEndFinalization{processed: true, liveRuntimeKeyAudit: audit}, nil
+	return true, nil
 }

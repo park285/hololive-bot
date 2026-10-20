@@ -5,6 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 )
 
 type liveReviewTypedCase struct {
@@ -170,6 +172,7 @@ func TestLiveReviewTypedReceiptsPreserveJSONBConsumerSemantics(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, 1, tag.RowsAffected())
 
+				dbtest.RefreshAllLiveRuntimeState(t, tx)
 				assertLiveReviewQuerySemanticEquivalence(t, tx, []string{"fresh"}, tc.wantClosed)
 				assertLiveReviewFunctionSemanticEquivalence(t, tx)
 			})

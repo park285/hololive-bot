@@ -95,6 +95,7 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
         VALUES ('stale-tracking','UPCOMING',now() - interval '2 hours',now() - interval '1 hour',now() - interval '1 hour');
     `)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	rows, err := pool.Query(ctx, mustSQL("live_check_videos.sql"), []string{"review-channel"}, 10)
 	require.NoError(t, err)
@@ -150,6 +151,7 @@ func TestLiveCheckOverflowPreservesLastGoodProjection(t *testing.T) {
 
 	_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id, channel_id, status) VALUES ('overflow-0000', 'UC_tp_stale_ops', 'LIVE')`)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	refresher, err := targetprojection.NewRefresher(pool, time.Hour)
 	require.NoError(t, err)
@@ -168,6 +170,7 @@ func TestLiveCheckOverflowPreservesLastGoodProjection(t *testing.T) {
 
 	_, err = pool.Exec(ctx, `UPDATE youtube_live_sessions SET scheduled_start_time = statement_timestamp() - INTERVAL '1 hour' WHERE status = 'UPCOMING'`)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	_, err = refresher.Refresh(ctx, builder, time.Now())
 	require.ErrorIs(t, err, targetprojection.ErrInputRead)
@@ -211,6 +214,7 @@ func seedCollectionLifecyclePopulation(t *testing.T, pool *pgxpool.Pool) {
         ANALYZE youtube_live_review_receipts;
     `)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
 func seedCollectionLifecycleReceipts(t *testing.T, pool *pgxpool.Pool) {
@@ -226,7 +230,7 @@ func seedCollectionLifecycleReceipts(t *testing.T, pool *pgxpool.Pool) {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(t.Context(), `
-        BEGIN ISOLATION LEVEL SERIALIZABLE;
+        BEGIN ISOLATION LEVEL READ COMMITTED;
         SELECT record_youtube_live_review(md5('current-'||n)::uuid,'load-'||n,snapshot.snapshot_sha256,
                    'test-operator','현재 snapshot 검토')
         FROM generate_series(1,500) n

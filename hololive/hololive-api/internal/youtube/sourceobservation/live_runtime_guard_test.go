@@ -16,6 +16,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
+// 배제 경로가 exclusive 전역 잠금을 쥔 동안 관측 writer는 claim보다 먼저 shared 잠금에서 기다리고,
+// 원본과 수명 모델 갱신은 함께 커밋되거나 함께 되돌려진다.
 func TestFinalizeRuntimeGuardPrecedesClaimAndRollsBackProjection(t *testing.T) {
 	for _, rollback := range []bool{false, true} {
 		t.Run(fmt.Sprintf("rollback=%t", rollback), func(t *testing.T) {
@@ -31,7 +33,8 @@ func TestFinalizeRuntimeGuardPrecedesClaimAndRollsBackProjection(t *testing.T) {
 
 			defer rollbackPublishTestTx(t.Context(), t, holder, "runtime guard holder")
 
-			require.NoError(t, lockLiveRuntimeState(ctx, holder))
+			_, err = holder.Exec(ctx, `SELECT lock_youtube_live_runtime_state()`)
+			require.NoError(t, err)
 
 			rejected := errors.New("reject canonical transaction after projection refresh")
 			done := make(chan error, 1)
@@ -50,7 +53,7 @@ func TestFinalizeRuntimeGuardPrecedesClaimAndRollsBackProjection(t *testing.T) {
 
 			waitObservationSettlementLock(ctx, t, pool, holder.Conn().PgConn().PID(), done)
 
-			// guard 대기자가 claim을 먼저 잡았다면 NOWAIT가 실패한다.
+			// 전역 잠금 대기자가 claim을 먼저 잡았다면 NOWAIT가 실패한다.
 			_, err = holder.Exec(ctx, `SELECT observation_id FROM source_observation_queue
 				WHERE observation_id=$1 FOR UPDATE NOWAIT`, work.ObservationID)
 			require.NoError(t, err)
@@ -70,14 +73,17 @@ func TestFinalizeRuntimeGuardPrecedesClaimAndRollsBackProjection(t *testing.T) {
 				assertQueueStatus(t, pool, work.ObservationID, string(contract.StatusProcessed))
 			}
 
-			// 성공과 롤백 모두 다음 writer가 같은 guard를 다시 획득할 수 있어야 한다.
-			require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-				return lockLiveRuntimeState(ctx, tx)
-			}))
+			require.Equal(t, [3]int64{}, dbtest.LiveRuntimeStateDrift(t, pool))
+
+			// 성공과 롤백 모두 다음 배제 경로가 같은 전역 잠금을 다시 획득할 수 있어야 한다.
+			_, err = pool.Exec(ctx, `SELECT lock_youtube_live_runtime_state()`)
+			require.NoError(t, err)
 		})
 	}
 }
 
+// 관측 writer가 shared 전역 잠금을 쥔 동안 retention은 exclusive 잠금에서 후보를 잠그기 전에 기다리고,
+// 증거 FK 해제는 수명 모델 입력이 아니므로 갱신 없이도 모델이 오라클과 일치한다.
 func TestEvidenceRetentionGuardsBeforeCandidateAndPreservesAvailability(t *testing.T) {
 	for _, rollback := range []bool{false, true} {
 		t.Run(fmt.Sprintf("rollback=%t", rollback), func(t *testing.T) {
@@ -148,6 +154,7 @@ func TestEvidenceRetentionGuardsBeforeCandidateAndPreservesAvailability(t *testi
 
 			require.NoError(t, pool.QueryRow(ctx, `SELECT to_jsonb(s)::text FROM youtube_live_runtime_state s WHERE video_id='vid-a'`).Scan(&after))
 			require.Equal(t, before, after, "retention must not erase retained availability clocks")
+			require.Equal(t, [3]int64{}, dbtest.LiveRuntimeStateDrift(t, pool))
 		})
 	}
 }
@@ -159,21 +166,11 @@ func runtimeProjectionWrite(rollback bool, rejected error) ReconcileWrite {
 			return ReconcileResult{}, fmt.Errorf("insert live session: %w", err)
 		}
 
-		var status string
-
-		if err := tx.QueryRow(ctx, `SELECT session_status FROM youtube_live_runtime_state WHERE video_id=$1`, testVideoID).Scan(&status); err != nil {
-			return ReconcileResult{}, fmt.Errorf("read synchronous live state: %w", err)
-		}
-
-		if status != "LIVE" {
-			return ReconcileResult{}, fmt.Errorf("runtime status = %q, want LIVE", status)
-		}
-
 		if rollback {
 			return ReconcileResult{}, rejected
 		}
 
-		return ReconcileResult{}, nil
+		return ReconcileResult{LiveRuntimeVideoIDs: []string{testVideoID}}, nil
 	}
 }
 
@@ -196,6 +193,7 @@ func seedRuntimeGuardRetention(ctx context.Context, t *testing.T, pool *pgxpool.
 		FROM source_observations;
 	`)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	return ids[0]
 }

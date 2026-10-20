@@ -24,10 +24,10 @@ for ((i=0;i<60;i++)); do
 done
 [[ "$ready" == true ]]
 psql_test() { docker exec -i "$cid" psql -U postgres -d hololive -X -qAt -v ON_ERROR_STOP=1 "$@"; }
-# 운영과 같은 runner로 guard·transition trigger·FK를 적용한다. loopback trust DB의 비밀번호는 사용되지 않는다.
+# 운영과 같은 runner로 전역 잠금·수명 모델 갱신 함수·FK를 적용한다. 컨테이너 내부 Unix socket의 trust 인증이라 TLS와 비밀번호는 쓰지 않는다.
 (cd "$repo_root" && CGO_ENABLED=0 go build -trimpath -o "$work/db-migrate" ./hololive/hololive-api/cmd/db-migrate)
 docker cp "$work/db-migrate" "$cid:/tmp/db-migrate"
-docker exec -e PGHOST=127.0.0.1 -e PGPORT=5432 -e PGDATABASE=hololive -e PGUSER=postgres \
+docker exec -e PGHOST=/var/run/postgresql -e PGPORT=5432 -e PGDATABASE=hololive -e PGUSER=postgres \
   -e PGPASSWORD=unused-local-trust -e PGSSLMODE=disable "$cid" /tmp/db-migrate >"$work/migration.log" 2>&1 || {
   cat "$work/migration.log" >&2
   exit 1
@@ -52,6 +52,8 @@ VALUES('candidate','repair-channel','EXPLICIT_END',1,'2026-08-16','2026-08-16','
 UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-18' WHERE video_id='conflict';
 UPDATE youtube_live_reconciliation_heads SET updated_at='2026-09-01' WHERE video_id='recent';
 UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='EXPLICIT_END',end_candidate_observation_id=1,next_end_check_at='2026-08-16' WHERE video_id='candidate';
+-- fixture는 원본을 직접 썼으므로 writer처럼 바꾼 key로 수명 모델을 맞춘다.
+SELECT refresh_youtube_live_runtime_state(ARRAY(SELECT video_id FROM youtube_live_sessions));
 SQL
 psql_test <"$maintenance_dir/preview-terminal-live-heads.sql" >"$work/preview.json"
 read -r count digest < <(python3 - "$work/preview.json" <<'PY'
@@ -63,13 +65,15 @@ PY
 )
 baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")
 runtime_baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(s) ORDER BY video_id)::text) FROM youtube_live_runtime_state s")
-# 검토된 함수라도 등록 이름이 다른 trigger까지 포괄 허용해서는 안 된다.
-psql_test -c 'CREATE TRIGGER unreviewed_runtime_guard BEFORE UPDATE ON youtube_live_reconciliation_heads FOR EACH STATEMENT EXECUTE FUNCTION public.guard_youtube_live_runtime_state()'
+test "$(psql_test -c "SELECT count(*) FROM youtube_live_runtime_state WHERE video_id IN('a','b')")" = 2
+# 복구 표에 사용자 trigger가 하나라도 있으면 아무 것도 바꾸지 않고 거절한다.
+psql_test -c 'CREATE FUNCTION unreviewed_repair_trigger() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$'
+psql_test -c 'CREATE TRIGGER unreviewed_runtime_guard BEFORE UPDATE ON youtube_live_reconciliation_heads FOR EACH STATEMENT EXECUTE FUNCTION unreviewed_repair_trigger()'
 if psql_test -v expected_count="$count" -v expected_digest="$digest" \
   <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'unreviewed trigger was accepted' >&2; exit 1
 fi
-psql_test -c 'DROP TRIGGER unreviewed_runtime_guard ON youtube_live_reconciliation_heads'
+psql_test -c 'DROP TRIGGER unreviewed_runtime_guard ON youtube_live_reconciliation_heads; DROP FUNCTION unreviewed_repair_trigger()'
 test "$baseline" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")"
 if psql_test -v expected_count=2 -v expected_digest=00000000000000000000000000000000 \
   <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then

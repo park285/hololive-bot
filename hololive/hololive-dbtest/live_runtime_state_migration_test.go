@@ -1,7 +1,6 @@
 package dbtest
 
 import (
-	"context"
 	"io/fs"
 	"os"
 	"strings"
@@ -12,29 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const liveRuntimeStateMigration = "312_youtube_live_runtime_state.sql"
+const (
+	liveRuntimeStateMigration = "312_youtube_live_runtime_state.sql"
+	// 현재 일치 영수증과 함께 seedLiveReviewComparison이 만드는 영상이다.
+	liveRuntimeReviewedVideo = "array"
+)
 
-type liveRuntimeStateQuerier interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
-}
-
-func liveRuntimeStateDrift(t *testing.T, db liveRuntimeStateQuerier) [3]int64 {
+func assertLiveRuntimeState(t *testing.T, db LiveRuntimeStateReader) {
 	t.Helper()
 
-	raw, err := os.ReadFile("../../scripts/maintenance/queries/live_runtime_state_drift.sql")
-	require.NoError(t, err)
-
-	var drift [3]int64
-
-	require.NoError(t, db.QueryRow(t.Context(), string(raw)).Scan(&drift[0], &drift[1], &drift[2]))
-
-	return drift
-}
-
-func assertLiveRuntimeState(t *testing.T, db liveRuntimeStateQuerier) {
-	t.Helper()
-
-	require.Equal(t, [3]int64{}, liveRuntimeStateDrift(t, db), "누락·잉여·값 변경")
+	require.Equal(t, [3]int64{}, LiveRuntimeStateDrift(t, db), "누락·잉여·값 변경")
 }
 
 // 진단 SQL이 늘 0을 내면 운영 점검도 정상으로 오판하므로, 집계를 직접 손상시켜 종류마다 한 건씩 세는지 확인한다.
@@ -46,15 +32,15 @@ func TestLiveRuntimeStateDriftCountsEachMismatch(t *testing.T) {
 
 	defer rollbackLiveReviewReceiptFactsTx(t, tx)
 
-	_, err = tx.Exec(t.Context(), `SELECT lock_youtube_live_runtime_state();
-		INSERT INTO youtube_live_sessions(video_id,channel_id,status)
+	_, err = tx.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status)
 		VALUES ('drift-missing','drift-channel','LIVE'),('drift-changed','drift-channel','LIVE');
+		SELECT refresh_youtube_live_runtime_state(ARRAY['drift-missing','drift-changed']);
 		DELETE FROM youtube_live_runtime_state WHERE video_id='drift-missing';
 		UPDATE youtube_live_runtime_state SET channel_id='corrupted' WHERE video_id='drift-changed';
 		INSERT INTO youtube_live_runtime_state(video_id,channel_id,session_status) VALUES ('drift-extra','drift-channel','LIVE')`)
 	require.NoError(t, err)
 
-	require.Equal(t, [3]int64{1, 1, 1}, liveRuntimeStateDrift(t, tx), "누락·잉여·값 변경")
+	require.Equal(t, [3]int64{1, 1, 1}, LiveRuntimeStateDrift(t, tx), "누락·잉여·값 변경")
 }
 
 func TestLiveRuntimeStateMigrationBackfillAndReapply(t *testing.T) {
@@ -88,36 +74,34 @@ func TestLiveRuntimeStateMigrationBackfillAndReapply(t *testing.T) {
 	}
 }
 
-func TestLiveRuntimeStateImmediateChangesAndRollback(t *testing.T) {
+// 원본 변경마다 바뀐 이전·새 key로 갱신하면 같은 트랜잭션에서 오라클과 일치하고, rollback은 갱신도 함께 되돌린다.
+func TestLiveRuntimeStateRefreshAppliesSourceChangesAndRollsBack(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
 	seedRecordedLiveReviews(t, pool)
+	RefreshAllLiveRuntimeState(t, pool)
+	assertLiveRuntimeState(t, pool)
 
 	for _, tc := range []struct {
 		name string
 		sql  string
+		keys []string
 	}{
-		{"session_semantic", `UPDATE youtube_live_sessions SET title='changed' WHERE video_id='array'`},
-		{"session_move", `UPDATE youtube_live_sessions SET video_id='moved-session' WHERE video_id='array'`},
-		{"head_move", `UPDATE youtube_live_reconciliation_heads SET video_id='moved-head' WHERE video_id='array'`},
-		{"availability_move", `UPDATE youtube_video_availability SET video_id='moved-availability' WHERE video_id='array'`},
-		{"pending_move", `UPDATE youtube_live_pending_ends SET video_id='headless' WHERE video_id='recorded'`},
-		{"pending_semantic", `UPDATE youtube_live_pending_ends SET negative_eligible=false WHERE video_id='recorded'`},
-		{"positive", `UPDATE youtube_live_reconciliation_heads SET last_upcoming_positive_at='2026-10-10',last_upcoming_positive_seen_at='2026-10-11' WHERE video_id='array'`},
-		{"availability_clock", `UPDATE youtube_video_availability SET scheduled_for='2026-08-01',effective_at='2026-08-01',observed_at='2026-08-02' WHERE video_id='recorded'`},
-		{"session_delete", `DELETE FROM youtube_live_sessions WHERE video_id='array'`},
-		{"head_delete", `DELETE FROM youtube_live_reconciliation_heads WHERE video_id='array'`},
-		{"pending_delete", `DELETE FROM youtube_live_pending_ends WHERE video_id='recorded'`},
-		{"availability_delete", `DELETE FROM youtube_video_availability WHERE video_id='array'`},
-		{"inactive_delete", `UPDATE youtube_live_sessions SET status='ENDED' WHERE video_id='array'; UPDATE youtube_live_reconciliation_heads SET status='ENDED' WHERE video_id='array'`},
-		{"absent_session_upsert", `INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('absent','runtime-channel','LIVE') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`},
-		{"absent_head_upsert", `INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('absent','UPCOMING') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`},
-		{"sessions_truncate", `TRUNCATE youtube_live_sessions CASCADE`},
-		{"heads_truncate", `TRUNCATE youtube_live_reconciliation_heads`},
-		{"pending_truncate", `TRUNCATE youtube_live_pending_ends CASCADE`},
-		{"availability_truncate", `TRUNCATE youtube_video_availability`},
-		{"facts_truncate", `TRUNCATE youtube_live_review_receipt_facts`},
-		{"receipts_truncate", `TRUNCATE youtube_live_review_receipts CASCADE`},
+		{"session_semantic", `UPDATE youtube_live_sessions SET title='changed' WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
+		{"session_move", `UPDATE youtube_live_sessions SET video_id='moved-session' WHERE video_id='array'`, []string{liveRuntimeReviewedVideo, "moved-session"}},
+		{"head_move", `UPDATE youtube_live_reconciliation_heads SET video_id='moved-head' WHERE video_id='array'`, []string{liveRuntimeReviewedVideo, "moved-head"}},
+		{"availability_move", `UPDATE youtube_video_availability SET video_id='moved-availability' WHERE video_id='array'`, []string{liveRuntimeReviewedVideo, "moved-availability"}},
+		{"pending_move", `UPDATE youtube_live_pending_ends SET video_id='headless' WHERE video_id='recorded'`, []string{"recorded", "headless"}},
+		{"pending_semantic", `UPDATE youtube_live_pending_ends SET negative_eligible=false WHERE video_id='recorded'`, []string{"recorded"}},
+		{"positive", `UPDATE youtube_live_reconciliation_heads SET last_upcoming_positive_at='2026-10-10',last_upcoming_positive_seen_at='2026-10-11' WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
+		{"availability_clock", `UPDATE youtube_video_availability SET scheduled_for='2026-08-01',effective_at='2026-08-01',observed_at='2026-08-02' WHERE video_id='recorded'`, []string{"recorded"}},
+		{"session_delete", `DELETE FROM youtube_live_sessions WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
+		{"head_delete", `DELETE FROM youtube_live_reconciliation_heads WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
+		{"pending_delete", `DELETE FROM youtube_live_pending_ends WHERE video_id='recorded'`, []string{"recorded"}},
+		{"availability_delete", `DELETE FROM youtube_video_availability WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
+		{"inactive_delete", `UPDATE youtube_live_sessions SET status='ENDED' WHERE video_id='array'; UPDATE youtube_live_reconciliation_heads SET status='ENDED' WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
+		{"absent_session_upsert", `INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('absent','runtime-channel','LIVE') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`, []string{"absent"}},
+		{"absent_head_upsert", `INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('absent','UPCOMING') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`, []string{"absent"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tx, err := pool.Begin(t.Context())
@@ -126,6 +110,9 @@ func TestLiveRuntimeStateImmediateChangesAndRollback(t *testing.T) {
 			defer rollbackLiveReviewReceiptFactsTx(t, tx)
 
 			_, err = tx.Exec(t.Context(), tc.sql)
+			require.NoError(t, err)
+
+			_, err = tx.Exec(t.Context(), `SELECT refresh_youtube_live_runtime_state($1::text[])`, tc.keys)
 			require.NoError(t, err)
 			assertLiveRuntimeState(t, tx)
 			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
@@ -137,9 +124,10 @@ func TestLiveRuntimeStateImmediateChangesAndRollback(t *testing.T) {
 func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
+	RefreshAllLiveRuntimeState(t, pool)
 
 	ctx := t.Context()
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	require.NoError(t, err)
 
 	defer rollbackLiveReviewReceiptFactsTx(t, tx)
@@ -157,6 +145,9 @@ func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
 	for _, title := range []string{"changed", "legacy"} {
 		_, err = tx.Exec(ctx, `UPDATE youtube_live_sessions SET title=$1 WHERE video_id='none'`, title)
 		require.NoError(t, err)
+
+		_, err = tx.Exec(ctx, `SELECT refresh_youtube_live_runtime_state(ARRAY['none'])`)
+		require.NoError(t, err)
 		assertLiveRuntimeState(t, tx)
 		require.NoError(t, tx.QueryRow(ctx, `SELECT reviewed_at IS NOT NULL FROM youtube_live_runtime_state WHERE video_id='none'`).Scan(&reviewed))
 		require.Equal(t, title == "legacy", reviewed)
@@ -170,38 +161,29 @@ func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
 	require.False(t, reviewed)
 }
 
-func TestLiveRuntimeStateTechnicalWritesAndGuardReseed(t *testing.T) {
+// 소비자 의미가 같은 기술적 쓰기 뒤 갱신은 행 버전을 새로 만들지 않아 읽기 모델의 불필요한 쓰기를 늘리지 않는다.
+func TestLiveRuntimeStateRefreshKeepsUnchangedRow(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
+	RefreshAllLiveRuntimeState(t, pool)
 
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
 	defer rollbackLiveReviewReceiptFactsTx(t, tx)
 
-	_, err = tx.Exec(t.Context(), `SELECT lock_youtube_live_runtime_state()`)
-	require.NoError(t, err)
+	var stateBefore, stateAfter string
 
-	var stateBefore, guardBefore, stateAfter, guardAfter string
-
-	require.NoError(t, tx.QueryRow(t.Context(), `SELECT (SELECT ctid::text FROM youtube_live_runtime_state WHERE video_id='array'),
-		(SELECT ctid::text FROM youtube_live_runtime_state_guard)`).Scan(&stateBefore, &guardBefore))
+	require.NoError(t, tx.QueryRow(t.Context(), `SELECT ctid::text FROM youtube_live_runtime_state WHERE video_id='array'`).Scan(&stateBefore))
 
 	_, err = tx.Exec(t.Context(), `
-		SELECT lock_youtube_live_runtime_state();
 		UPDATE youtube_live_reconciliation_heads SET ignored_absence_scheduled_for=array_append(ignored_absence_scheduled_for,now()) WHERE video_id='array';
 		UPDATE youtube_live_sessions SET last_seen_at=now() WHERE video_id='array';
-		UPDATE youtube_video_availability SET received_at=now() WHERE video_id='array'`)
+		UPDATE youtube_video_availability SET received_at=now() WHERE video_id='array';
+		SELECT refresh_youtube_live_runtime_state(ARRAY['array','array'])`)
 	require.NoError(t, err)
-	require.NoError(t, tx.QueryRow(t.Context(), `SELECT (SELECT ctid::text FROM youtube_live_runtime_state WHERE video_id='array'),
-		(SELECT ctid::text FROM youtube_live_runtime_state_guard)`).Scan(&stateAfter, &guardAfter))
+	require.NoError(t, tx.QueryRow(t.Context(), `SELECT ctid::text FROM youtube_live_runtime_state WHERE video_id='array'`).Scan(&stateAfter))
 	require.Equal(t, stateBefore, stateAfter, "기술적 쓰기는 동일한 소비자 행을 다시 쓰지 않습니다")
-	require.Equal(t, guardBefore, guardAfter, "재진입은 같은 guard 행 버전을 유지합니다")
-	assertLiveRuntimeState(t, tx)
-
-	_, err = tx.Exec(t.Context(), `TRUNCATE youtube_live_runtime_state_guard; SELECT lock_youtube_live_runtime_state();
-		UPDATE youtube_live_sessions SET channel_id='reseeded' WHERE video_id='array'`)
-	require.NoError(t, err)
 	assertLiveRuntimeState(t, tx)
 }
 
@@ -276,9 +258,11 @@ func TestLiveRuntimeStateMigrationPrivilegesAndRecordingACL(t *testing.T) {
 	require.ErrorContains(t, err, "permission denied")
 }
 
-func TestLiveRuntimeStateObservationDeleteAndFactsReseed(t *testing.T) {
+// 증거 FK의 SET NULL은 수명 모델 입력이 아니므로 retention 삭제는 갱신 key 없이도 오라클과 일치한다.
+func TestLiveRuntimeStateObservationDeleteKeepsState(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
+	RefreshAllLiveRuntimeState(t, pool)
 
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `WITH payload AS (
@@ -310,15 +294,6 @@ func TestLiveRuntimeStateObservationDeleteAndFactsReseed(t *testing.T) {
 	require.True(t, cleared)
 	require.NoError(t, tx.QueryRow(ctx, `SELECT reviewed_at IS NOT NULL FROM youtube_live_runtime_state WHERE video_id='array'`).Scan(&reviewed))
 	require.True(t, reviewed, "증거 FK 제거는 가용성 의미 사실을 바꾸지 않습니다")
-
-	_, err = tx.Exec(ctx, `TRUNCATE youtube_live_review_receipt_facts;
-		INSERT INTO youtube_live_review_receipt_facts(receipt_id,video_id,recorded_at,facts)
-		SELECT receipt_id,video_id,recorded_at,youtube_live_review_receipt_semantic_facts(original_snapshot)
-		FROM youtube_live_review_receipts`)
-	require.NoError(t, err)
-	assertLiveRuntimeState(t, tx)
-	require.NoError(t, tx.QueryRow(ctx, `SELECT reviewed_at IS NOT NULL FROM youtube_live_runtime_state WHERE video_id='array'`).Scan(&reviewed))
-	require.True(t, reviewed)
 }
 
 func TestLiveRuntimeStateMigrationFailureIsAtomic(t *testing.T) {
@@ -347,6 +322,7 @@ func TestLiveRuntimeStateMigrationFailureIsAtomic(t *testing.T) {
 func TestLiveRuntimeStateRecordingValidationAndCAS(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
+	RefreshAllLiveRuntimeState(t, pool)
 
 	for _, tc := range []struct {
 		name      string
@@ -355,10 +331,10 @@ func TestLiveRuntimeStateRecordingValidationAndCAS(t *testing.T) {
 		operator  string
 		want      string
 	}{
-		{"isolation", pgx.ReadCommitted, "array", "operator", "requires serializable"},
-		{"validation", pgx.Serializable, "array", " operator", "invalid live review request"},
-		{"missing", pgx.Serializable, "missing", "operator", "reviewed live session missing"},
-		{"cas", pgx.Serializable, "array", "operator", "snapshot changed or is not unresolved"},
+		{"isolation", pgx.Serializable, liveRuntimeReviewedVideo, "operator", "requires read committed"},
+		{"validation", pgx.ReadCommitted, liveRuntimeReviewedVideo, " operator", "invalid live review request"},
+		{"missing", pgx.ReadCommitted, "missing", "operator", "reviewed live session missing"},
+		{"cas", pgx.ReadCommitted, liveRuntimeReviewedVideo, "operator", "snapshot changed or is not unresolved"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: tc.isolation})
@@ -370,6 +346,23 @@ func TestLiveRuntimeStateRecordingValidationAndCAS(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			assertLiveRuntimeState(t, pool)
+		})
+	}
+}
+
+// 고정 snapshot은 잠금 대기 중 커밋된 원본을 놓치므로 refresh가 READ COMMITTED 밖에서 거부되어야 한다.
+func TestLiveRuntimeStateRefreshRejectsSnapshotIsolation(t *testing.T) {
+	pool := NewPool(t)
+
+	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
+		t.Run(string(isolation), func(t *testing.T) {
+			tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: isolation})
+			require.NoError(t, err)
+
+			defer rollbackLiveReviewReceiptFactsTx(t, tx)
+
+			_, err = tx.Exec(t.Context(), `SELECT refresh_youtube_live_runtime_state(ARRAY['any'])`)
+			require.ErrorContains(t, err, "live runtime refresh requires read committed transaction")
 		})
 	}
 }

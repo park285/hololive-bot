@@ -211,7 +211,7 @@ func recordLiveReviewInSeoul(t *testing.T, pool *pgxpool.Pool, receiptID, videoI
 	t.Helper()
 
 	ctx := t.Context()
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: liveReviewRecordIsolation(t, pool)})
 	require.NoError(t, err)
 
 	defer rollbackLiveReviewReceiptFactsTx(t, tx)
@@ -224,6 +224,23 @@ func recordLiveReviewInSeoul(t *testing.T, pool *pgxpool.Pool, receiptID, videoI
 		FROM youtube_live_review_snapshot($2) snapshot`, receiptID, videoID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
+}
+
+// liveReviewRecordIsolation은 적용된 기록 함수 판이 요구하는 격리 수준이다.
+// 328부터는 잠금 뒤 최신 커밋을 읽도록 READ COMMITTED를, 그 이전 판은 SERIALIZABLE을 요구한다.
+func liveReviewRecordIsolation(t *testing.T, pool *pgxpool.Pool) pgx.TxIsoLevel {
+	t.Helper()
+
+	var explicitRefresh bool
+
+	require.NoError(t, pool.QueryRow(t.Context(),
+		`SELECT to_regprocedure('public.lock_youtube_live_runtime_state_shared()') IS NOT NULL`).Scan(&explicitRefresh))
+
+	if explicitRefresh {
+		return pgx.ReadCommitted
+	}
+
+	return pgx.Serializable
 }
 
 // assertLiveReviewReceiptFactsMatchReceipts는 영수증마다 저장 사실이 하나 있고 270 영수증 쪽 식과 같은지 확인한다.

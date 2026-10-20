@@ -136,6 +136,7 @@ func TestLiveReviewQueriesShareSourcesWithoutSemanticDrift(t *testing.T) {
 					require.NoError(t, execErr)
 				}
 
+				dbtest.RefreshAllLiveRuntimeState(t, tx)
 				assertLiveReviewQuerySemanticEquivalence(t, tx, []string{"fresh"}, tc.wantClosed)
 			})
 		}

@@ -23,6 +23,8 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 		t.Fatal(err)
 	}
 
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
+
 	rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
