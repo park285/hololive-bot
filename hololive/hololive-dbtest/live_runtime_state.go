@@ -49,8 +49,14 @@ func LiveRuntimeStateDrift(tb testing.TB, db LiveRuntimeStateReader) [3]int64 {
 // 운영 writer는 변경 key만 갱신하므로 이 함수는 시험 seed 전용이며 READ COMMITTED에서만 성공한다.
 func RefreshAllLiveRuntimeState(tb testing.TB, db LiveRuntimeStateWriter) {
 	tb.Helper()
+	RefreshAllLiveRuntimeStateContext(tb.Context(), tb, db)
+}
 
-	if _, err := db.Exec(tb.Context(), `SELECT refresh_youtube_live_runtime_state(ARRAY(
+// RefreshAllLiveRuntimeStateContext는 RefreshAllLiveRuntimeState와 같지만, seed helper가 받은 ctx의 시한 안에서 재계산한다.
+func RefreshAllLiveRuntimeStateContext(ctx context.Context, tb testing.TB, db LiveRuntimeStateWriter) {
+	tb.Helper()
+
+	if _, err := db.Exec(ctx, `SELECT refresh_youtube_live_runtime_state(ARRAY(
 		SELECT video_id FROM youtube_live_runtime_state
 		UNION SELECT video_id FROM youtube_live_sessions
 		UNION SELECT video_id FROM youtube_live_reconciliation_heads))`); err != nil {
