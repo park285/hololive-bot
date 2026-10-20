@@ -74,11 +74,15 @@ func readOutboxTerminalAt(ctx context.Context, t *testing.T, db *pgxpool.Pool, o
 func TestUpdateOutboxAggregateStatuses_AllSentMarksSentOnce(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-sent", domain.OutboxStatusPending,
 		[]domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusSent})
 
+	var before, after time.Time
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&before))
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&after))
 
 	status, sentAt, lockedAt, errText := readOutboxAggregateRow(ctx, t, pool, outboxID)
 	require.Equal(t, domain.OutboxStatusSent, status)
@@ -86,8 +90,12 @@ func TestUpdateOutboxAggregateStatuses_AllSentMarksSentOnce(t *testing.T) {
 	require.Nil(t, lockedAt)
 	require.Empty(t, errText)
 
+	// sent_at·terminal_at은 집계 문장이 한 번 채취한 DB 시계라 같은 값이고 호출 구간 안에 있다.
 	terminalAt := readOutboxTerminalAt(ctx, t, pool, outboxID)
 	require.NotNil(t, terminalAt)
+	require.True(t, sentAt.Equal(*terminalAt), "sent_at %s and terminal_at %s must share one clock", sentAt, terminalAt)
+	require.False(t, sentAt.Before(before), "sent_at %s precedes projection start %s", sentAt, before)
+	require.False(t, sentAt.After(after), "sent_at %s follows projection end %s", sentAt, after)
 
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
 	require.Equal(t, terminalAt, readOutboxTerminalAt(ctx, t, pool, outboxID))
@@ -96,7 +104,7 @@ func TestUpdateOutboxAggregateStatuses_AllSentMarksSentOnce(t *testing.T) {
 func TestUpdateOutboxAggregateStatuses_DoesNotRewriteExistingSentAt(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-sent-keep", domain.OutboxStatusSent,
 		[]domain.OutboxStatus{domain.OutboxStatusSent})
 
@@ -116,7 +124,7 @@ func TestUpdateOutboxAggregateStatuses_DoesNotRewriteExistingSentAt(t *testing.T
 func TestUpdateOutboxAggregateStatuses_FailedWinsOverSent(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-failed", domain.OutboxStatusPending,
 		[]domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusFailed})
 
@@ -131,7 +139,7 @@ func TestUpdateOutboxAggregateStatuses_FailedWinsOverSent(t *testing.T) {
 func TestUpdateOutboxAggregateStatuses_PendingDeliveryKeepsOutboxPending(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-pending", domain.OutboxStatusSent,
 		[]domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusPending})
 
@@ -145,7 +153,7 @@ func TestUpdateOutboxAggregateStatuses_PendingDeliveryKeepsOutboxPending(t *test
 func TestUpdateOutboxAggregateStatuses_TerminalTransitionRefreshesTerminalAt(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-terminal-transition", domain.OutboxStatusSent,
 		[]domain.OutboxStatus{domain.OutboxStatusFailed})
 	oldTerminalAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -166,7 +174,7 @@ func TestUpdateOutboxAggregateStatuses_TerminalTransitionRefreshesTerminalAt(t *
 func TestUpdateOutboxAggregateStatuses_BackfillsMissingTerminalAtWithoutStatusChange(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-terminal-at-missing", domain.OutboxStatusFailed,
 		[]domain.OutboxStatus{domain.OutboxStatusFailed})
 
@@ -181,7 +189,7 @@ func TestUpdateOutboxAggregateStatuses_BackfillsMissingTerminalAtWithoutStatusCh
 func TestUpdateOutboxAggregateStatuses_NoDeliveriesDefaultsToPending(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-empty", domain.OutboxStatusSent, nil)
 
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
@@ -195,7 +203,7 @@ func TestUpdateOutboxAggregateStatuses_UnchangedStatusIsNoOpWrite(t *testing.T) 
 		t.Run(string(status), func(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
-			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 			outboxID := seedAggregateOutbox(ctx, t, pool, "agg-noop", status, []domain.OutboxStatus{status})
 			require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
 
@@ -243,7 +251,7 @@ func TestUpdateOutboxAggregateStatuses_MixedStatusPrecedence(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
-			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 			outboxID := seedAggregateOutbox(ctx, t, pool, "agg-mixed", domain.OutboxStatusSent, tt.children)
 
 			require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
@@ -279,7 +287,7 @@ const legacyAggregateSyncCandidateSQL = `
 func TestFindPendingOutboxIDsForAggregateSync_MatchesGroupedCandidateSet(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
 
 	allSent := seedAggregateOutbox(ctx, t, pool, "agg-sync-all-sent", domain.OutboxStatusPending,
 		[]domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusSent})

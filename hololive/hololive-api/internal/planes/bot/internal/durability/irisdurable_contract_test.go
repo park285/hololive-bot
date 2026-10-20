@@ -224,9 +224,9 @@ func (o *contractReplyOutbox) Settle(ctx context.Context, attempt irisdurable.Re
 
 	switch outcome.Status {
 	case irisdurable.ReplyStatusAccepted:
-		applied, err = o.repo.MarkAccepted(ctx, id, attempt.ClaimToken, outcome.IrisRequestID)
+		applied, err = o.repo.SettleAccepted(ctx, id, attempt.ClaimToken, outcome.IrisRequestID, time.Minute)
 		if err != nil {
-			return fmt.Errorf("mark accepted: %w", err)
+			return fmt.Errorf("settle accepted: %w", err)
 		}
 	case irisdurable.ReplyStatusOutcomeUnknown, irisdurable.ReplyStatusRetryablePreDispatch,
 		irisdurable.ReplyStatusDead, irisdurable.ReplyStatusPermanentConflict:

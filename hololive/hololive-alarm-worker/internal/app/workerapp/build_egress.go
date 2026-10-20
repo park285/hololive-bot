@@ -60,7 +60,7 @@ func buildNotificationEgress(
 		return nil, fmt.Errorf("load egress message strings: %w", err)
 	}
 
-	runners, err := buildEgressRunners(appConfig, infra, irisSender, messageStrings, logger, workerState)
+	runners, err := buildEgressRunners(appConfig, infra, irisSender, irisClient, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("build egress runners: %w", err)
 	}
@@ -81,11 +81,12 @@ func buildEgressRunners(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	statusClient alarmdispatch.ReplyStatusClient,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
-	runners, err := appendAlarmDispatchRunner(nil, appConfig, infra, irisSender, messageStrings, logger, workerState)
+	runners, err := appendAlarmDispatchRunner(nil, appConfig, infra, irisSender, statusClient, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append alarm dispatch runner: %w", err)
 	}
@@ -102,21 +103,12 @@ func buildEgressRunners(
 	)
 
 	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다.
-	if alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerYouTubeDelivery) {
-		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig, infra, irisSender, messageStrings, logger, workerState)
-		if buildErr != nil {
-			return nil, fmt.Errorf("build youtube outbox dispatcher: %w", buildErr)
-		}
-
-		runners = append(runners, workerruntime.NamedScheduler{
-			Name:      "youtube-outbox",
-			Scheduler: workerState.wrap(workerconfig.WorkerYouTubeDelivery, dispatcher),
-		})
-	} else {
-		logWorkerDisabled(logger, "YouTube outbox dispatcher disabled")
+	runners, err = appendYouTubeDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, messageStrings, logger, workerState)
+	if err != nil {
+		return nil, fmt.Errorf("append youtube delivery runner: %w", err)
 	}
 
-	runners, err = appendNotificationDeliveryRunner(runners, appConfig, infra, irisSender, logger, workerState)
+	runners, err = appendNotificationDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append notification delivery runner: %w", err)
 	}
@@ -124,11 +116,55 @@ func buildEgressRunners(
 	return runners, nil
 }
 
+// appendYouTubeDeliveryRunner는 youtube_delivery가 활성일 때 발송 runner와 고정 요청 Iris handoff reconciler를 함께
+// 등록한다.
+func appendYouTubeDeliveryRunner(
+	runners []workerruntime.NamedScheduler,
+	appConfig *workerconfig.RuntimeConfig,
+	infra *sharedmodules.InfraModule,
+	irisSender *egress.IrisMessageSender,
+	statusClient youtubedispatch.ReplyStatusClient,
+	messageStrings *messagestrings.Store,
+	logger *slog.Logger,
+	workerState *alarmWorkerRegistryState,
+) ([]workerruntime.NamedScheduler, error) {
+	if !alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerYouTubeDelivery) {
+		logWorkerDisabled(logger, "YouTube outbox dispatcher disabled")
+
+		return runners, nil
+	}
+
+	dispatcher, err := buildYouTubeOutboxDispatcher(appConfig, infra, irisSender, messageStrings, logger, workerState)
+	if err != nil {
+		return nil, fmt.Errorf("build youtube outbox dispatcher: %w", err)
+	}
+
+	dispatchConfig := youtubeDispatchConfig(appConfig)
+
+	reconciler, err := youtubedispatch.NewHandoffReconciler(infra.Postgres.GetPool(), statusClient, logger, &dispatchConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build youtube delivery handoff reconciler: %w", err)
+	}
+
+	return append(runners,
+		workerruntime.NamedScheduler{
+			Name:      "youtube-outbox",
+			Scheduler: workerState.wrap(workerconfig.WorkerYouTubeDelivery, dispatcher),
+		},
+		workerruntime.NamedScheduler{
+			Name:      "youtube-delivery-handoff-reconciler",
+			Scheduler: reconciler,
+		},
+	), nil
+}
+
+// appendAlarmDispatchRunner는 alarm-dispatch가 활성일 때 발송 runner와 Iris handoff reconciler를 함께 등록한다.
 func appendAlarmDispatchRunner(
 	runners []workerruntime.NamedScheduler,
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	statusClient alarmdispatch.ReplyStatusClient,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -144,17 +180,57 @@ func appendAlarmDispatchRunner(
 		return nil, fmt.Errorf("build alarm dispatch runner: %w", err)
 	}
 
-	return append(runners, workerruntime.NamedScheduler{
-		Name:      "alarm-dispatch",
-		Scheduler: workerState.wrap(workerconfig.WorkerAlarmDispatch, runner),
-	}), nil
+	reconciler, err := buildAlarmDispatchHandoffReconciler(appConfig, infra, statusClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build alarm dispatch handoff reconciler: %w", err)
+	}
+
+	return append(runners,
+		workerruntime.NamedScheduler{
+			Name:      "alarm-dispatch",
+			Scheduler: workerState.wrap(workerconfig.WorkerAlarmDispatch, runner),
+		},
+		workerruntime.NamedScheduler{
+			Name:      "alarm-dispatch-handoff-reconciler",
+			Scheduler: reconciler,
+		},
+	), nil
 }
 
+// buildAlarmDispatchHandoffReconciler의 지평은 alarm_dispatch executor attempt timeout이고 idle 주기는 alarm_dispatch
+// poll 주기다. DLQ 뒤 dedup claim 키는 발송 runner와 같은 cache로 해제한다.
+func buildAlarmDispatchHandoffReconciler(
+	appConfig *workerconfig.RuntimeConfig,
+	infra *sharedmodules.InfraModule,
+	statusClient alarmdispatch.ReplyStatusClient,
+	logger *slog.Logger,
+) (*alarmdispatch.HandoffReconciler, error) {
+	consumer, err := dispatchoutbox.NewHandoffConsumer(dispatchoutbox.NewPgxRepository(infra.Postgres, logger), infra.Cache)
+	if err != nil {
+		return nil, fmt.Errorf("new alarm dispatch handoff consumer: %w", err)
+	}
+
+	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerAlarmDispatch]
+
+	reconciler, err := alarmdispatch.NewHandoffReconciler(consumer, statusClient, alarmdispatch.HandoffReconcilerConfig{
+		Horizon:      workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),
+		PollInterval: workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.PollIntervalMS),
+	}, logger)
+	if err != nil {
+		return nil, fmt.Errorf("new alarm dispatch handoff reconciler: %w", err)
+	}
+
+	return reconciler, nil
+}
+
+// appendNotificationDeliveryRunner는 notification delivery가 활성일 때 발송 dispatcher와 Iris handoff reconciler를 함께
+// 등록한다.
 func appendNotificationDeliveryRunner(
 	runners []workerruntime.NamedScheduler,
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	statusClient notificationdelivery.ReplyStatusClient,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
@@ -169,10 +245,50 @@ func appendNotificationDeliveryRunner(
 		return nil, fmt.Errorf("build delivery outbox dispatcher: %w", err)
 	}
 
-	return append(runners, workerruntime.NamedScheduler{
-		Name:      "notification-delivery-outbox",
-		Scheduler: workerState.wrap(workerconfig.WorkerNotificationDelivery, dispatcher),
-	}), nil
+	reconciler, err := buildNotificationDeliveryHandoffReconciler(appConfig, infra, statusClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build notification delivery handoff reconciler: %w", err)
+	}
+
+	return append(runners,
+		workerruntime.NamedScheduler{
+			Name:      "notification-delivery-outbox",
+			Scheduler: workerState.wrap(workerconfig.WorkerNotificationDelivery, dispatcher),
+		},
+		workerruntime.NamedScheduler{
+			Name:      "notification-delivery-handoff-reconciler",
+			Scheduler: reconciler,
+		},
+	), nil
+}
+
+// buildNotificationDeliveryHandoffReconciler의 지평은 notification_delivery executor attempt timeout이고, idle 주기와
+// failed 재발급의 시도 예산·지연은 dispatcher와 같은 notification_delivery profile 값이다. PostgreSQL 확인은 먼저 만든
+// dispatcher가 한다.
+func buildNotificationDeliveryHandoffReconciler(
+	appConfig *workerconfig.RuntimeConfig,
+	infra *sharedmodules.InfraModule,
+	statusClient notificationdelivery.ReplyStatusClient,
+	logger *slog.Logger,
+) (*notificationdelivery.HandoffReconciler, error) {
+	dispatcherConfig := notificationDeliveryDispatcherConfig(appConfig)
+
+	reconciler, err := notificationdelivery.NewHandoffReconciler(
+		notificationdelivery.NewStore(infra.Postgres.GetPool()),
+		statusClient,
+		notificationdelivery.HandoffReconcilerConfig{
+			Horizon:      dispatcherConfig.AttemptTimeout,
+			PollInterval: dispatcherConfig.PollInterval,
+			MaxRetries:   dispatcherConfig.MaxRetries,
+			RetryBackoff: dispatcherConfig.RetryBackoff,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new notification delivery handoff reconciler: %w", err)
+	}
+
+	return reconciler, nil
 }
 
 func alarmWorkerExecutorEnabled(appConfig *workerconfig.RuntimeConfig, workerID string) bool {

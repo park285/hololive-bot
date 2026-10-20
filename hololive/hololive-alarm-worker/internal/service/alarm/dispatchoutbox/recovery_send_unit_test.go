@@ -64,9 +64,12 @@ func TestExpiredLeaseRecoveryKeepsSendUnitAtomic(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, claimed, 2)
 
-			ids := []int64{claimed[0].ID, claimed[1].ID}
+			claims := []dispatchoutbox.DeliveryClaim{
+				{ID: claimed[0].ID, AttemptCount: claimed[0].AttemptCount},
+				{ID: claimed[1].ID, AttemptCount: claimed[1].AttemptCount},
+			}
 
-			_, err = repo.PinSendRequest(ctx, claimed[0].SendUnitID, ids, "new-owner", dispatchoutbox.SendRequest{Body: "both members", Route: dispatchoutbox.SendRouteText})
+			_, err = repo.PinSendRequest(ctx, claimed[0].SendUnitID, claims, "new-owner", claimed[0].ClientRequestID, dispatchoutbox.SendRequest{Body: "both members", Route: dispatchoutbox.SendRouteText})
 			require.NoError(t, err)
 		})
 	}

@@ -27,7 +27,7 @@ func (r *alarmStateRepository) FindAlarmStateByPostID(ctx context.Context, kind 
 	}
 
 	if !found {
-		//nolint:nilnil // 미존재는 오류가 아니며, alarm-worker의 claim_manager가 state == nil 자체로 분기한다. sentinel 오류로 바꾸려면 이 패키지 밖 호출자 3곳을 함께 고쳐야 한다.
+		//nolint:nilnil // 미존재는 오류가 아니며, alarm-worker의 CompleteSent post-state 확인이 state == nil 자체로 분기한다.
 		return nil, nil
 	}
 

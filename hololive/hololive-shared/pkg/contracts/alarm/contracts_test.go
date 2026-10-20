@@ -120,10 +120,9 @@ func TestAlarmQueueEnvelopeContract(t *testing.T) {
 		ClaimKeys:  []string{"notified:claim:room-contract"},
 		EnqueuedAt: "2026-02-25T13:00:00Z",
 		Retry: &domain.AlarmQueueRetryMetadata{
-			Attempt:       3,
-			RetryAfterMS:  2500,
-			NextVisibleAt: "2026-02-25T13:00:02.500Z",
-			LastError:     "dispatcher unavailable",
+			Attempt:      3,
+			RetryAfterMS: 2500,
+			LastError:    "dispatcher unavailable",
 		},
 	}
 
@@ -267,10 +266,6 @@ func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
 
 	if retry.Attempt != 2 {
 		t.Fatalf("attempt = %d, want 2", retry.Attempt)
-	}
-
-	if retry.NextVisibleAt != "2026-02-25T13:00:30Z" {
-		t.Fatalf("next_visible_at = %q, want 2026-02-25T13:00:30Z", retry.NextVisibleAt)
 	}
 }
 

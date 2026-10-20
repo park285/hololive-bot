@@ -154,6 +154,8 @@ type durableRuntime struct {
 	outboxWake             chan struct{}
 	inboxPollSlot          chan struct{}
 	outboxPollSlot         chan struct{}
+	handoffWake            chan struct{}
+	handoffPollSlot        chan struct{}
 	cancel                 context.CancelFunc
 	wg                     sync.WaitGroup
 	lifecycleMu            sync.Mutex
@@ -221,8 +223,9 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 		inboxWorkers: inboxProfile.Executor.ConfiguredWorkers, outboxWorkers: outboxProfile.Executor.ConfiguredWorkers,
 		inboxEnabled: inboxProfile.Executor.Enabled, outboxEnabled: outboxProfile.Executor.Enabled,
 		handlerTimeout: handlerTimeout,
-		inboxWake:      make(chan struct{}, 1), outboxWake: make(chan struct{}, 1),
-		inboxPollSlot: newDurablePollSlot(), outboxPollSlot: newDurablePollSlot(),
+		inboxWake:      make(chan struct{}, 1), outboxWake: make(chan struct{}, 1), handoffWake: make(chan struct{}, 1),
+		inboxPollSlot: newDurablePollSlot(), outboxPollSlot: newDurablePollSlot(), handoffPollSlot: newDurablePollSlot(),
+		// bot_reply_outbox attempt timeout은 admission 예산이자 handoff 확인 지평이다.
 		dispatchBudget:        dispatchBudget,
 		outboxClaimLease:      workercontract.Milliseconds(profile.BotReplyOutbox.ClaimLeaseMS),
 		heartbeatEvery:        workercontract.Milliseconds(profile.BotWebhookInbox.HeartbeatIntervalMS),

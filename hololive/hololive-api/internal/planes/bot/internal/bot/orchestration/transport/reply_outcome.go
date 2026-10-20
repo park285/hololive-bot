@@ -22,75 +22,18 @@ package transport
 
 import (
 	"errors"
-	"fmt"
-	"strings"
 )
 
-const (
-	replyStateQueued           = "queued"
-	replyStatePreparing        = "preparing"
-	replyStatePrepared         = "prepared"
-	replyStateSending          = "sending"
-	replyStateHandoffCompleted = "handoff_completed"
-	replyStateFailed           = "failed"
-	replyStateOutcomeUnknown   = "outcome_unknown"
-)
+var ErrReplyOutcomeUnknown = errors.New("iris reply outcome unknown")
 
-type replyOutcome int
-
-const (
-	replyOutcomeUnknown replyOutcome = iota
-	replyOutcomeInFlight
-	replyOutcomeHandoffCompleted
-	replyOutcomeFailed
-)
-
-func classifyReplyState(state string) replyOutcome {
-	switch strings.ToLower(strings.TrimSpace(state)) {
-	case replyStateHandoffCompleted:
-		return replyOutcomeHandoffCompleted
-	case replyStateFailed:
-		return replyOutcomeFailed
-	case replyStateOutcomeUnknown:
-		return replyOutcomeUnknown
-	default:
-		return classifyNonterminalReplyState(state)
-	}
-}
-
-func classifyNonterminalReplyState(state string) replyOutcome {
-	switch strings.ToLower(strings.TrimSpace(state)) {
-	case replyStateQueued, replyStatePreparing, replyStatePrepared, replyStateSending:
-		return replyOutcomeInFlight
-	default:
-		return replyOutcomeUnknown
-	}
-}
-
-var (
-	ErrReplyOutcomeUnknown = errors.New("iris reply outcome unknown")
-	ErrReplyStatusFailed   = errors.New("iris reply failed")
-)
-
+// replyOutcomeUnknownError는 admission 응답이 유실됐거나 durable admission을 증명하지 못한 경우다.
 type replyOutcomeUnknownError struct {
-	requestID string
-	reason    string
-	detail    string
-	cause     error
+	reason string
+	cause  error
 }
 
 func (e replyOutcomeUnknownError) Error() string {
-	target := "iris reply"
-
-	if id := strings.TrimSpace(e.requestID); id != "" {
-		target = "iris reply " + id
-	}
-
-	message := fmt.Sprintf("%s outcome unknown: %s", target, e.reason)
-	if detail := strings.TrimSpace(e.detail); detail != "" {
-		message += ": " + detail
-	}
-
+	message := "iris reply outcome unknown: " + e.reason
 	if e.cause != nil {
 		message += ": " + e.cause.Error()
 	}
@@ -101,25 +44,6 @@ func (e replyOutcomeUnknownError) Error() string {
 func (e replyOutcomeUnknownError) Unwrap() error { return e.cause }
 
 func (e replyOutcomeUnknownError) Is(target error) bool { return target == ErrReplyOutcomeUnknown }
-
-type replyStatusFailedError struct {
-	requestID string
-	detail    string
-}
-
-func (e replyStatusFailedError) Error() string {
-	if strings.TrimSpace(e.detail) == "" {
-		return fmt.Sprintf("iris reply %s failed", e.requestID)
-	}
-
-	return fmt.Sprintf("iris reply %s failed: %s", e.requestID, e.detail)
-}
-
-func (e replyStatusFailedError) Is(target error) bool { return target == ErrReplyStatusFailed }
-
-func IsReplyStatusFailed(err error) bool {
-	return errors.Is(err, ErrReplyStatusFailed)
-}
 
 // IsReplyOutcomeUnknown은 Iris 전달 또는 영속 응답 저장의 결과가 불명인지 판정한다.
 // 저장 응답이 유실돼도 outbox 행은 커밋됐을 수 있으므로 추가 응답을 보내면 안 된다.

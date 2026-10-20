@@ -17,7 +17,7 @@ type appendResultSite struct {
 	container *types.Var
 }
 
-// Scalar and value-struct elements cannot be nil; retain modeling for unknown generic elements.
+// nil이 될 수 없는 값 요소는 제외하되, 타입이 불명확한 제네릭 요소는 계속 추적한다.
 func needsSliceElementModel(typ types.Type) bool {
 	slice, ok := typ.Underlying().(*types.Slice)
 	if !ok {
@@ -67,7 +67,7 @@ func (r *RootAssertionNode) bindSliceLiteralInputs(literal *ast.CompositeLit) {
 	}
 }
 
-// Preserve element facts through local slice assignments as well as indexed writes.
+// 인덱스 쓰기뿐 아니라 지역 슬라이스 대입에서도 요소 정보를 보존한다.
 func (r *RootAssertionNode) bindAssignedSliceInputs(lhs, rhs []ast.Expr) {
 	for i, left := range lhs {
 		ident, ok := ast.Unparen(left).(*ast.Ident)
@@ -89,7 +89,7 @@ func (r *RootAssertionNode) bindAssignedSliceInputs(lhs, rhs []ast.Expr) {
 		}
 		_, values := r.ParseExprAsProducer(expression, true)
 		if result < len(values) && values[result].GetDeep() != nil {
-			// Reuse indexed-write classification for local, parameter and global element sites.
+			// 지역 변수·매개변수·전역 변수의 요소 분류에 인덱스 쓰기 처리를 재사용한다.
 			consumer, err := exprAsAssignmentConsumer(r, &ast.IndexExpr{
 				X: left, Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
 			}, expression)
@@ -130,7 +130,7 @@ func (r *RootAssertionNode) appendProducer(call *ast.CallExpr) producer.ParsedPr
 	site := r.appendSite(call)
 	shallow := &annotation.ProduceTrigger{Annotation: &annotation.ProduceTriggerNever{}, Expr: call}
 	if call.Ellipsis.IsValid() {
-		// The original slice is a conservative nilness source when no element is guaranteed added.
+		// 추가 요소가 없을 수 있으므로 원본 슬라이스의 nil 가능성도 반영한다.
 		shallow = appendSiteProducer(site.container, call)
 	}
 	if !needsSliceElementModel(r.Pass().TypesInfo.TypeOf(call)) {
@@ -139,7 +139,7 @@ func (r *RootAssertionNode) appendProducer(call *ast.CallExpr) producer.ParsedPr
 	return producer.DeepParsedProducer{ShallowProducer: shallow, DeepProducer: appendSiteProducer(site.elements, call)}
 }
 
-// Bind after assignment propagation so append(dst, value) reads the old dst, not its result.
+// append(dst, value)가 대입 결과가 아닌 기존 dst를 읽도록 대입 전파 뒤에 연결한다.
 func (r *RootAssertionNode) bindAppendInputs(call *ast.CallExpr) {
 	if len(call.Args) == 1 {
 		return

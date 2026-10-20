@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact, symlink-safe inventory of every file shipped in the isolated issuer rootfs."""
+"""격리 발급자 rootfs의 모든 배포 파일을 심볼릭 링크 우회 없이 열거한다."""
 import hashlib
 import json
 import os

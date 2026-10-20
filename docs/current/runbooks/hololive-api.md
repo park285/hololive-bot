@@ -284,9 +284,22 @@ Rollback:
 
 ### 3. Durable webhook or reply backlog grows
 
-`bot_webhook_inbox`의 `pending`/`retry`와 `bot_reply_outbox`의 `pending`/`retryable_pre_dispatch`가 지속 증가하면 PostgreSQL, command handler, Iris 상태를 함께 확인합니다. `dead`는 poison payload 또는 bounded retry 소진, `outcome_unknown`은 부수 효과 결과를 확정할 수 없어 자동 재실행하지 않은 상태입니다. lease heartbeat가 살아 있는 command는 reclaim 대상이 아닙니다.
+`bot_webhook_inbox`의 `pending`/`retry`와 `bot_reply_outbox`의 `pending`/`retryable_pre_dispatch`가 지속 증가하면 PostgreSQL, command handler, Iris 상태를 함께 확인합니다. `dead`는 poison payload 또는 bounded retry 소진, `outcome_unknown`은 부수 효과 결과를 확정할 수 없어 자동 재실행하지 않은 상태입니다. `accepted`는 Iris `202` admission과 `requestId` 저장을 마치고 lease 없이 handoff 확인을 기다리는 상태입니다. lease heartbeat가 살아 있는 command는 reclaim 대상이 아닙니다.
 
-Reply outbox의 `outcome_unknown`은 같은 `client_request_id`로 최대 5회, 최초 dispatch인 `first_attempt_at`부터 144시간 미만인 동안에만 durable backoff 후 재확인합니다. attempt 또는 시간 경계에 도달한 행과 accepted lease가 만료된 행은 자동 발송 없이 payload를 보존한 `manual_review`로 이동합니다. `bot_reply_outbox_accepted_reclaimed_total`, `bot_reply_outbox_manual_review_backlog`, `bot_reply_outbox_manual_review_oldest_age_seconds`를 확인하고 Iris 수리 여부와 같은 `client_request_id`의 처리 이력을 조사합니다. 두 manual review 값은 durable maintenance 주기마다 갱신하며, 조회가 실패하면 마지막 성공 값을 유지한 채 `bot_reply_outbox_manual_review_snapshot_success`가 0이 되고 `bot_reply_outbox_manual_review_snapshot_last_success_timestamp_seconds`는 마지막 성공 시각에 머뭅니다. success가 0이거나 마지막 성공 시각이 오래됐으면 건수·경과를 현재 상태로 해석하지 않습니다.
+Reply 발송은 admission(`202`)에서 끝나고 `/reply-status`를 polling하지 않습니다. 같은 API process의 `durable-reply-handoff-reconciler`가 `accepted` 행을 `FOR UPDATE SKIP LOCKED` batch로 골라 저장된 `iris_request_id`의 `/reply-status`를 조회합니다. 확인 간격은 봇 전용 250ms→500ms→1s→2s→5s→15s→60s이며 지평은 `bot_reply_outbox` executor `attempt_timeout`입니다(새 설정 key 없음). 알림 워커의 5s→15s→60s→5min과 다른 이유는 같은 방 순서(`accepted` 선행 행이 후속 응답을 막는 권고안 A)를 유지하기 때문입니다. 5초부터 확인하면 대화형 후속 응답이 매번 최소 5초 막힙니다. 결과는 다음과 같습니다.
+
+| Iris 관측 | 전이 | `last_error` |
+|---|---|---|
+| `handoff_completed` | `handoff_completed`(payload 제거) | 빈 값 |
+| `failed`, attempt·144시간 예산 남음 | `retryable_pre_dispatch`. 다음 발송의 SDK ladder가 409 `CLIENT_REQUEST_ID_FAILED`를 지나 `:r1`/`:r2`로 보내며 세대 상한 2를 넘지 않음. 세 세대 모두 409이면 `permanent_conflict` | `handoff_failed` |
+| `failed`, 예산 소진 | `dead`(payload 제거) | `handoff_failed` |
+| `outcome_unknown`, 알 수 없는 상태, 빈 응답, 다른 `requestId` | `manual_review`(payload 보존) | `handoff_outcome_unknown` |
+| `404` | `manual_review`(payload 보존) | `handoff_status_missing` |
+| 진행 중 상태, 지평 전 | 전이 없이 다음 확인 예약 | 변경 없음 |
+| 진행 중 상태 또는 조회 오류, 지평 도달 | `manual_review`(payload 보존) | `handoff_unconfirmed` |
+| 조회 오류(timeout·5xx 등), 지평 전 | 전이 없이 다음 확인 예약 | 변경 없음 |
+
+Reply outbox의 `outcome_unknown`은 같은 `client_request_id`로 최대 5회, 최초 dispatch인 `first_attempt_at`부터 144시간 미만인 동안에만 durable backoff 후 재확인합니다. attempt 또는 시간 경계에 도달한 행과 위 표의 확인 불가 행은 자동 발송 없이 payload를 보존한 `manual_review`로 이동합니다. `bot_reply_outbox_accepted_reclaimed_total`은 이전 binary가 남긴 lease 있는 `accepted` 행이 lease 만료로 `manual_review`가 된 횟수만 셉니다(다음 엄격 CHECK 릴리스에서 삭제). Reply outbox의 attempt `success`는 Iris admission(`202`) 완료를 뜻하며 handoff 완료를 뜻하지 않습니다. handoff 완료를 세는 지표는 없습니다. reconciler 결과는 `reply handoff failed; requeued for reissue`(WARN), `reply handoff reached non-success terminal state`(ERROR, `status`·`reason` 포함), `reply handoff status query deferred`(WARN) 로그와 `bot_reply_outbox_manual_review_backlog`·`bot_reply_outbox_manual_review_oldest_age_seconds`, `status = 'accepted'` 행 수로 관측합니다. `queue="reply_handoff"` label은 빈 claim 횟수(`bot_durable_claim_idle_total`)에만 붙습니다. Manual review는 Iris 수리 여부와 같은 `client_request_id`의 처리 이력을 조사합니다. 두 manual review 값은 durable maintenance 주기마다 갱신하며, 조회가 실패하면 마지막 성공 값을 유지한 채 `bot_reply_outbox_manual_review_snapshot_success`가 0이 되고 `bot_reply_outbox_manual_review_snapshot_last_success_timestamp_seconds`는 마지막 성공 시각에 머뭅니다. success가 0이거나 마지막 성공 시각이 오래됐으면 건수·경과를 현재 상태로 해석하지 않습니다.
 
 Command claim이 만료되어 `outcome_unknown`으로 닫히면 `bot_durable_command_outcome_unknown_total`이 증가하고 `inspect bot_command_executions status=outcome_unknown` action log가 기록됩니다. 자동 재실행하지 말고 해당 시점의 부수 효과를 조사합니다. Inbox reclaim이 아직 살아 있는 command claim과 만난 경우에는 inbox payload를 완료·scrub하지 않고 command stale cutoff 이후로 미룹니다.
 
@@ -378,6 +391,8 @@ Fx v1.24.0은 `hololive-api` 한 바이너리의 process signal과 `Start`/`Wait
   sudo -n ./scripts/runtime/db-maintenance-exec.sh \
     bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
   ```
+
+- Migration 326 이후 binary를 그 이전 binary로 되돌리면 lease 없는 `accepted` 행은 이전 reclaim(`lease_until <= now`)에 걸리지 않아 같은 방의 후속 응답을 영구히 막습니다. Ingress를 quiesce한 뒤 `bot_reply_outbox` executor `attempt_timeout` 지평 동안 reconciler가 `accepted`를 0으로 배수하면 위 preflight가 통과합니다. Preflight는 `accepted`가 남은 rollback을 막습니다.
 
 - Preflight 성공과 ingress quiescence를 같은 maintenance window에서 유지한 경우에만 이전 image를 재배포합니다. Schema rollback은 계속 [`Migration ordering`](#3-durable-webhook-or-reply-backlog-grows)의 writer quiescence 규칙을 따릅니다.
 - Recheck Iris webhook/reply, scheduler-dependent commands, manual triggers, and dashboard health after rollback.

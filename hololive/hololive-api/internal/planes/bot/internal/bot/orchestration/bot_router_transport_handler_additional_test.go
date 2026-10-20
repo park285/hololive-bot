@@ -86,14 +86,6 @@ type acceptedTestIrisClient struct {
 	testIrisClient
 
 	acceptedCalls int
-	statuses      []*iris.ReplyStatusSnapshot
-}
-
-type acceptedImageTestIrisClient struct {
-	acceptedTestIrisClient
-
-	imageAcceptedCalls          int
-	multipleImagesAcceptedCalls int
 }
 
 func (c *testIrisClient) SendMessage(_ context.Context, room, message string, _ ...iris.SendOption) error {
@@ -174,36 +166,6 @@ func (c *acceptedTestIrisClient) SendMessageAccepted(ctx context.Context, room, 
 	}
 
 	return &iris.ReplyAcceptedResponse{RequestID: "reply-1", Delivery: testDeliveryQueued, Room: room, Type: "text"}, nil
-}
-
-func (c *acceptedTestIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
-	if len(c.statuses) == 0 {
-		return &iris.ReplyStatusSnapshot{State: "handoff_completed"}, nil
-	}
-
-	status := c.statuses[0]
-
-	c.statuses = c.statuses[1:]
-
-	return status, nil
-}
-
-func (c *acceptedImageTestIrisClient) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	c.imageAcceptedCalls++
-	if _, err := c.testIrisClient.SendImage(ctx, room, imageData, opts...); err != nil {
-		return nil, fmt.Errorf("send image: %w", err)
-	}
-
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-image-1", Delivery: testDeliveryQueued, Room: room, Type: "image"}, nil
-}
-
-func (c *acceptedImageTestIrisClient) SendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	c.multipleImagesAcceptedCalls++
-	if _, err := c.testIrisClient.SendMultipleImages(ctx, room, images, opts...); err != nil {
-		return nil, fmt.Errorf("send multiple images: %w", err)
-	}
-
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-1", Delivery: testDeliveryQueued, Room: room, Type: "image_multiple"}, nil
 }
 
 func (c *testIrisClient) Ping(context.Context) bool { return true }
@@ -381,25 +343,6 @@ func TestCommandTransportSendMessageMethods(t *testing.T) {
 		assert.Equal(t, 0, client.acceptedCalls)
 		assert.Equal(t, "hello", client.lastMessage)
 	})
-
-	t.Run("send message treats a failed accepted reply as terminal", func(t *testing.T) {
-		t.Parallel()
-
-		failedDetail := "callback failed"
-		client := &acceptedTestIrisClient{
-			statuses: []*iris.ReplyStatusSnapshot{
-				{State: "failed", Detail: &failedDetail},
-				{State: "handoff_completed"},
-			},
-		}
-		transport := bottransport.NewCommandTransport(client, nil)
-
-		err := transport.SendMessage(ctx, "room", "hello")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "callback failed")
-		assert.Equal(t, 1, client.acceptedCalls, "explicit iris failure must not be re-posted")
-		assert.Equal(t, "hello", client.lastMessage)
-	})
 }
 
 func TestCommandTransportSendImageMethods(t *testing.T) {
@@ -416,22 +359,6 @@ func TestCommandTransportSendImageMethods(t *testing.T) {
 		err := transport.SendImage(ctx, "room", []byte("img"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send image: ")
-	})
-
-	t.Run("send image returns failed reply status", func(t *testing.T) {
-		t.Parallel()
-
-		failedDetail := "image bridge send failed: image lease last modified mismatch"
-		client := &acceptedImageTestIrisClient{
-			statuses: []*iris.ReplyStatusSnapshot{{State: "failed", Detail: &failedDetail}},
-		}
-		transport := bottransport.NewCommandTransport(client, nil)
-
-		err := transport.SendImage(ctx, "room", []byte("img"))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send image: ")
-		assert.Contains(t, err.Error(), "image lease last modified mismatch")
-		assert.Equal(t, 1, client.imageAcceptedCalls)
 	})
 
 	t.Run("send image forwards byte data to client", func(t *testing.T) {

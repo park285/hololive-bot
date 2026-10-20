@@ -61,6 +61,8 @@ func TestAlarmDispatchTextPathSendsPersistedSendUnitClientRequestID(t *testing.T
 			require.Equal(t, []string{testRetryClientRequestID}, sender.clientRequestIDs,
 				"text 경로는 send unit 크기와 무관하게 저장된 client_request_id를 보내야 한다")
 			require.Len(t, consumer.markDispatched, count)
+			require.Equal(t, []string{"iris:" + testRetryClientRequestID}, consumer.markDispatchedRequestIDs,
+				"sent 기록은 202가 돌려준 Iris requestId를 handoff 확인 대상으로 넘겨야 한다")
 		})
 	}
 }

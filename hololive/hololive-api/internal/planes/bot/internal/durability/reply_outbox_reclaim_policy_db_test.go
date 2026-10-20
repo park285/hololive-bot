@@ -19,7 +19,7 @@ func TestReplyReclaimPreservesAcceptedSafetyGrantsAndLockedRows(t *testing.T) {
 		attempts, grants   int32
 		age                int64
 	}{
-		{name: "accepted", status: replyOutboxStatusAccepted, attempts: 1, age: 1, want: ReplyOutboxManualReview},
+		{name: "accepted", status: ReplyOutboxAccepted, attempts: 1, age: 1, want: ReplyOutboxManualReview},
 		{name: "retry", status: replyOutboxStatusSubmitting, attempts: 4, age: 1, want: replyOutboxStatusPending},
 		{name: "exhausted", status: replyOutboxStatusSubmitting, attempts: 5, age: 1, want: ReplyOutboxManualReview},
 		{name: "grant", status: replyOutboxStatusSubmitting, attempts: 5, grants: 1, age: 1, want: replyOutboxStatusPending},

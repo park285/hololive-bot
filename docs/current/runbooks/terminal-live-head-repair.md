@@ -27,6 +27,6 @@
    ```
 
 5. 성공 exit와 commit 완료를 확인한 후 같은 ID의 head/정본을 새 읽기 전용 연결에서 조회합니다. 정확한 세 필드의 변경, 정본 종료 시각, 비대상과 dispatch 상태를 확인합니다. 전후 snapshot을 함께 보존합니다.
-6. 오류/연결 단절은 재실행 근거가 아닙니다. 현재 행과 receipt로 commit 여부를 먼저 확인합니다. 복구가 필요하면 적용 후 스냅샷 전체가 아직 일치하는지 잠금 아래 CAS 검증한 뒤 보존된 원본의 세 필드만 돌립니다. 후속 변경을 덮지 않으며 별도 승인·검증 없이 즉시 rollback하지 않습니다.
+6. 오류/연결 단절은 재실행 근거가 아닙니다. 현재 행과 receipt로 commit 여부를 먼저 확인합니다. 복구가 필요하면 `lock_youtube_live_runtime_state()` exclusive 전역 잠금을 얻고 적용 후 스냅샷 전체가 아직 일치하는지 CAS 검증한 뒤, 보존된 원본의 세 필드만 돌립니다. 같은 READ COMMITTED transaction에서 복원한 video_id 목록으로 `refresh_youtube_live_runtime_state(ARRAY[...])`를 호출해 수명 모델도 맞춘 뒤 commit합니다. 후속 변경을 덮지 않으며 별도 승인·검증 없이 즉시 rollback하지 않습니다.
 
 2026-09-28 적용 후 mismatch는 27→3이었습니다. 남은 3건은 head 없는 과거 UPCOMING이며 이 도구의 대상이 아닙니다. 예정 시각 경과만으로 ENDED를 만들지 않습니다. Fallback delta: none.

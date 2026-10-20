@@ -245,7 +245,7 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 			entry := newReplyOutboxEntry("message:m-"+status, 0, `{"body":"delivered"}`)
 			claim := claimOne(ctx, t, repo, entry)
 
-			accepted, err := repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-req-1")
+			accepted, err := repo.SettleAccepted(ctx, claim.ID, testClaimToken, "iris-req-1", time.Minute)
 			require.NoError(t, err)
 			require.True(t, accepted)
 
@@ -260,7 +260,7 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 				"Iris가 수리한 뒤 재발송 가능 status로 정산되면 admission TTL이 지난 시점에 중복 발화가 된다")
 
 			rowStatus, _, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-			assert.Equal(t, replyOutboxStatusAccepted, rowStatus)
+			assert.Equal(t, ReplyOutboxAccepted, rowStatus)
 
 			resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 			require.NoError(t, err)
@@ -268,10 +268,10 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 		})
 	}
 
-	t.Run("lease expiry absorbs the accepted row instead of resending it", func(t *testing.T) {
+	t.Run("lease reclaim leaves an unleased accepted row to the handoff reconciler", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
-		entry := newReplyOutboxEntry("message:m-absorbed", 0, `{"body":"delivered"}`)
+		entry := newReplyOutboxEntry("message:m-unleased", 0, `{"body":"delivered"}`)
 		inserted, err := repo.Insert(ctx, entry)
 		require.NoError(t, err)
 		require.Equal(t, ReplyOutboxInserted, inserted)
@@ -280,19 +280,19 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, claim)
 
-		accepted, err := repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-req-1")
+		accepted, err := repo.SettleAccepted(ctx, claim.ID, testClaimToken, "iris-req-1", time.Minute)
 		require.NoError(t, err)
 		require.True(t, accepted)
 		time.Sleep(20 * time.Millisecond)
 
 		reclaim, err := repo.ReclaimExpired(ctx, 100)
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), reclaim.AcceptedManualReview)
-		assert.Equal(t, int64(0), reclaim.Requeued)
+		assert.Equal(t, ReplyOutboxReclaim{}, reclaim)
 
-		status, payload, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-		assert.Equal(t, ReplyOutboxManualReview, status)
-		assert.NotNil(t, payload)
+		status, payload, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+		assert.Equal(t, ReplyOutboxAccepted, status)
+		assert.NotNil(t, payload, "failed 재발송에 쓸 payload는 handoff 확인 전까지 남는다")
+		assert.Nil(t, token)
 	})
 }
 

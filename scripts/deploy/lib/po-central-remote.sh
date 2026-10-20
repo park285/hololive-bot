@@ -158,7 +158,7 @@ require_collector_lease_migration() {
   expected="$(sha256sum "$staging/hololive/hololive-api/scripts/migrations/$migration")"
   expected="${expected%% *}"
   [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || return 1
-  # Prove the collector targets this primary before inspecting its ledger via the isolated socket.
+  # 격리 소켓으로 원장을 보기 전에 수집기가 이 주 서버를 가리키는지 확인한다.
   observed="$(compose config --format json | python3 -c '
 import json, os, subprocess, sys, uuid
 config = json.load(sys.stdin)

@@ -543,7 +543,6 @@ func TestPersistCommunityPostsTxUpsertsAlarmState(t *testing.T) {
 	require.NotNil(t, state.ActualPublishedAt)
 	require.Equal(t, publishedAt, state.ActualPublishedAt.UTC())
 	require.Equal(t, detectedAt, state.DetectedAt.UTC())
-	require.Nil(t, state.AuthorizedAt)
 	require.Nil(t, state.AlarmSentAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, state.DeliveryStatus)
 }

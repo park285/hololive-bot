@@ -172,14 +172,19 @@ TABLE alarm_dispatch_send_units
   COLUMN request_delivery_ids bigint[]
   COLUMN base_client_request_id text
   COLUMN request_generation integer NOT NULL DEFAULT 0
+  COLUMN handoff_request_id text
+  COLUMN handoff_next_check_at timestamp with time zone
+  COLUMN handoff_checked_at timestamp with time zone
   CONSTRAINT alarm_dispatch_send_units_client_request_id_check CHECK ((client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text))
   CONSTRAINT alarm_dispatch_send_units_group_key_check CHECK (((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768)))
   CONSTRAINT alarm_dispatch_send_units_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
   CONSTRAINT alarm_dispatch_send_units_unit_key_check CHECK ((unit_key ~ '^[0-9a-f]{64}$'::text))
   CONSTRAINT chk_alarm_send_request_shape CHECK ((((request_generation >= 0) AND (request_generation <= 2)) AND (((request_body IS NULL) AND (request_route IS NULL) AND (request_body_hash IS NULL) AND (request_delivery_ids IS NULL) AND (base_client_request_id IS NULL) AND (request_generation = 0)) OR ((request_body IS NOT NULL) AND (request_route IS NOT NULL) AND (request_route = ANY (ARRAY['text'::text, 'markdown'::text])) AND (request_body_hash IS NOT NULL) AND (request_body_hash ~ '^[0-9a-f]{64}$'::text) AND (request_delivery_ids IS NOT NULL) AND ((cardinality(request_delivery_ids) >= 1) AND (cardinality(request_delivery_ids) <= 10)) AND (base_client_request_id IS NOT NULL) AND (base_client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text)))))
+  CONSTRAINT chk_alarm_send_unit_handoff_shape CHECK ((((handoff_request_id IS NULL) OR ((length(handoff_request_id) >= 1) AND (length(handoff_request_id) <= 256))) AND ((handoff_request_id IS NULL) OR (request_body_hash IS NOT NULL)) AND ((handoff_next_check_at IS NULL) OR ((handoff_request_id IS NOT NULL) AND (handoff_checked_at IS NULL))) AND ((handoff_checked_at IS NULL) OR (handoff_request_id IS NOT NULL))))
   CONSTRAINT alarm_dispatch_send_units_pkey PRIMARY KEY (id)
   CONSTRAINT alarm_dispatch_send_units_client_request_id_key UNIQUE (client_request_id)
   CONSTRAINT alarm_dispatch_send_units_unit_key_key UNIQUE (unit_key)
+  INDEX CREATE INDEX idx_alarm_dispatch_send_units_handoff_due ON public.alarm_dispatch_send_units USING btree (handoff_next_check_at, id) WHERE (handoff_next_check_at IS NOT NULL)
 
 TABLE alarm_room_display_names
   COLUMN room_id character varying(100) NOT NULL
@@ -281,6 +286,8 @@ TABLE bot_reply_outbox
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN available_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN operator_replay_grants integer NOT NULL DEFAULT 0
+  COLUMN accepted_at timestamp with time zone
+  COLUMN handoff_next_check_at timestamp with time zone
   CONSTRAINT chk_bot_reply_outbox_attempts CHECK ((attempts >= 0))
   CONSTRAINT chk_bot_reply_outbox_client_request_id CHECK ((client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text))
   CONSTRAINT chk_bot_reply_outbox_iris_request_id_size CHECK ((length(iris_request_id) <= 256))
@@ -291,13 +298,14 @@ TABLE bot_reply_outbox
   CONSTRAINT chk_bot_reply_outbox_payload_hash CHECK ((payload_hash ~ '^[0-9a-f]{64}$'::text))
   CONSTRAINT chk_bot_reply_outbox_phase_size CHECK (((length(phase) > 0) AND (length(phase) <= 32)))
   CONSTRAINT chk_bot_reply_outbox_room_id_size CHECK (((length(room_id) > 0) AND (length(room_id) <= 256)))
-  CONSTRAINT chk_bot_reply_outbox_state_shape CHECK ((((status <> ALL (ARRAY['submitting'::text, 'accepted'::text])) OR ((claim_token IS NOT NULL) AND (lease_until IS NOT NULL) AND (first_attempt_at IS NOT NULL))) AND ((status <> 'accepted'::text) OR (length(iris_request_id) > 0)) AND ((status = ANY (ARRAY['handoff_completed'::text, 'dead'::text, 'permanent_conflict'::text, 'discarded'::text])) OR (payload IS NOT NULL))))
+  CONSTRAINT chk_bot_reply_outbox_state_shape CHECK ((((status <> 'submitting'::text) OR ((claim_token IS NOT NULL) AND (lease_until IS NOT NULL) AND (first_attempt_at IS NOT NULL))) AND ((status <> 'accepted'::text) OR ((length(iris_request_id) > 0) AND (((claim_token IS NOT NULL) AND (lease_until IS NOT NULL) AND (first_attempt_at IS NOT NULL)) OR ((claim_token IS NULL) AND (lease_until IS NULL) AND (accepted_at IS NOT NULL) AND (handoff_next_check_at IS NOT NULL))))) AND ((status = 'accepted'::text) OR (handoff_next_check_at IS NULL)) AND ((status = ANY (ARRAY['handoff_completed'::text, 'dead'::text, 'permanent_conflict'::text, 'discarded'::text])) OR (payload IS NOT NULL))))
   CONSTRAINT chk_bot_reply_outbox_status_vocab CHECK ((status = ANY (ARRAY['pending'::text, 'submitting'::text, 'accepted'::text, 'handoff_completed'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text, 'dead'::text, 'permanent_conflict'::text, 'manual_review'::text, 'discarded'::text])))
   CONSTRAINT bot_reply_outbox_pkey PRIMARY KEY (id)
   CONSTRAINT bot_reply_outbox_client_request_id_key UNIQUE (client_request_id)
   CONSTRAINT bot_reply_outbox_message_id_phase_ordinal_key UNIQUE (message_id, phase, ordinal)
   INDEX CREATE INDEX idx_bot_reply_outbox_discarded_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = 'discarded'::text)
   INDEX CREATE INDEX idx_bot_reply_outbox_due_available ON public.bot_reply_outbox USING btree (available_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
+  INDEX CREATE INDEX idx_bot_reply_outbox_handoff_due ON public.bot_reply_outbox USING btree (handoff_next_check_at, id) WHERE ((status = 'accepted'::text) AND (claim_token IS NULL))
   INDEX CREATE INDEX idx_bot_reply_outbox_lease_expiry ON public.bot_reply_outbox USING btree (lease_until, id) WHERE (status = ANY (ARRAY['submitting'::text, 'accepted'::text]))
   INDEX CREATE INDEX idx_bot_reply_outbox_manual_review_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = 'manual_review'::text)
   INDEX CREATE INDEX idx_bot_reply_outbox_message ON public.bot_reply_outbox USING btree (message_id, ordinal)
@@ -500,9 +508,14 @@ TABLE notification_delivery_outbox
   COLUMN locked_by text
   COLUMN lock_expires_at timestamp with time zone
   COLUMN sending_started_at timestamp with time zone
+  COLUMN handoff_request_id text
+  COLUMN handoff_next_check_at timestamp with time zone
+  COLUMN handoff_checked_at timestamp with time zone
+  CONSTRAINT chk_notification_delivery_outbox_handoff_shape CHECK ((((handoff_request_id IS NULL) OR ((length(handoff_request_id) >= 1) AND (length(handoff_request_id) <= 256))) AND ((handoff_next_check_at IS NULL) OR ((status = 'SENT'::text) AND (handoff_request_id IS NOT NULL) AND (handoff_checked_at IS NULL))) AND ((handoff_checked_at IS NULL) OR (handoff_request_id IS NOT NULL)) AND ((status <> 'SENT'::text) OR (handoff_request_id IS NULL) OR (handoff_checked_at IS NOT NULL) OR (handoff_next_check_at IS NOT NULL))))
   CONSTRAINT chk_notification_delivery_outbox_kind_vocab CHECK ((kind = ANY (ARRAY['MAJOR_EVENT_WEEKLY'::text, 'MAJOR_EVENT_MONTHLY'::text, 'MEMBER_NEWS_WEEKLY'::text, 'MEMBER_NEWS_MONTHLY'::text])))
   CONSTRAINT chk_notification_delivery_outbox_status_vocab CHECK ((status = ANY (ARRAY['PENDING'::text, 'SENDING'::text, 'SENT'::text, 'FAILED'::text, 'QUARANTINED'::text])))
   CONSTRAINT notification_delivery_outbox_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_ndo_handoff_due ON public.notification_delivery_outbox USING btree (handoff_next_check_at, id) WHERE (handoff_next_check_at IS NOT NULL)
   INDEX CREATE UNIQUE INDEX idx_ndo_kind_content ON public.notification_delivery_outbox USING btree (kind, content_id)
   INDEX CREATE INDEX idx_ndo_pending_due_created_id ON public.notification_delivery_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_ndo_sending_stale ON public.notification_delivery_outbox USING btree (sending_started_at, id) WHERE (status = 'SENDING'::text)
@@ -1427,6 +1440,7 @@ TABLE youtube_notification_delivery
   COLUMN error text
   COLUMN row_version bigint NOT NULL DEFAULT 0
   COLUMN send_request_id text
+  COLUMN locked_by text
   CONSTRAINT chk_youtube_notification_delivery_row_version CHECK (((row_version IS NOT NULL) AND (row_version >= 0)))
   CONSTRAINT chk_youtube_notification_delivery_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text, ('QUARANTINED'::character varying)::text])))
   CONSTRAINT youtube_notification_delivery_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES youtube_notification_outbox(id) ON DELETE CASCADE
@@ -1522,11 +1536,16 @@ TABLE youtube_notification_send_request
   COLUMN member_ids bigint[] NOT NULL
   COLUMN generation integer NOT NULL DEFAULT 0
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN handoff_request_id text
+  COLUMN handoff_next_check_at timestamp with time zone
+  COLUMN handoff_checked_at timestamp with time zone
+  CONSTRAINT chk_youtube_send_request_handoff_shape CHECK ((((handoff_request_id IS NULL) OR ((length(handoff_request_id) >= 1) AND (length(handoff_request_id) <= 256))) AND ((handoff_next_check_at IS NULL) OR ((handoff_request_id IS NOT NULL) AND (handoff_checked_at IS NULL))) AND ((handoff_checked_at IS NULL) OR (handoff_request_id IS NOT NULL)) AND ((handoff_request_id IS NULL) OR (handoff_checked_at IS NOT NULL) OR (handoff_next_check_at IS NOT NULL))))
   CONSTRAINT youtube_notification_send_request_dedupe_keys_check CHECK ((cardinality(dedupe_keys) > 0))
   CONSTRAINT youtube_notification_send_request_generation_check CHECK (((generation >= 0) AND (generation <= 2)))
   CONSTRAINT youtube_notification_send_request_member_ids_check CHECK ((cardinality(member_ids) > 0))
   CONSTRAINT youtube_notification_send_request_route_check CHECK ((route = ANY (ARRAY['text'::text, 'markdown'::text, 'sender'::text])))
   CONSTRAINT youtube_notification_send_request_pkey PRIMARY KEY (base_id)
+  INDEX CREATE INDEX idx_youtube_send_request_handoff_due ON public.youtube_notification_send_request USING btree (handoff_next_check_at, base_id) WHERE (handoff_next_check_at IS NOT NULL)
 
 TABLE youtube_schedule_items
   COLUMN group_key text NOT NULL

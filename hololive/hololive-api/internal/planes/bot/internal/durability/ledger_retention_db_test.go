@@ -68,16 +68,12 @@ func seedTerminalAndManualReviewOutbox(ctx context.Context, t *testing.T, pool *
 
 	entry := newReplyOutboxEntry("message:retention-reply", 0, `{"kind":"text","message":"answer"}`)
 	claimReply := claimOne(ctx, t, outbox, entry)
-	settled, err := outbox.Settle(ctx, ReplyOutboxSettlement{
-		ID: claimReply.ID, ClaimToken: testClaimToken, Status: ReplyOutboxHandoffCompleted,
-	})
-	require.NoError(t, err)
-	require.True(t, settled)
+	completeReplyHandoff(ctx, t, outbox, claimReply)
 
 	manual := newReplyOutboxEntry("message:retention-manual", 0, `{"kind":"text","message":"review"}`)
 	manualClaim := claimOne(ctx, t, outbox, manual)
 
-	settled, err = outbox.Settle(ctx, ReplyOutboxSettlement{
+	settled, err := outbox.Settle(ctx, ReplyOutboxSettlement{
 		ID: manualClaim.ID, ClaimToken: testClaimToken, Status: ReplyOutboxManualReview,
 	})
 	require.NoError(t, err)

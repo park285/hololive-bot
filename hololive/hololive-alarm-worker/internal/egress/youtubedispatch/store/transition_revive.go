@@ -34,15 +34,10 @@ func (s *TransitionStore) ReviveFailedLogicalGroups(
 		return ReviveResult{ApplyResult: newApplyResult(ApplyConflict, nil)}, errors.New("revive failed logical groups: limit must be positive")
 	}
 
-	at, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return ReviveResult{ApplyResult: newApplyResult(ApplyIndeterminate, nil)}, fmt.Errorf("revive failed logical groups: at: %w", err)
-	}
-
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		result, transitions, applyErr := s.reviveFailedOnce(ctx, policy, at, limit)
+		result, transitions, applyErr := s.reviveFailedOnce(ctx, policy, limit)
 		if applyErr == nil {
 			result.CommitAdjudication = priorAdjudication
 
@@ -76,7 +71,6 @@ func (s *TransitionStore) ReviveFailedLogicalGroups(
 func (s *TransitionStore) reviveFailedOnce(
 	ctx context.Context,
 	policy lifecycle.RevivePolicy,
-	at time.Time,
 	limit int,
 ) (ReviveResult, []rowTransition, error) {
 	var (
@@ -87,7 +81,7 @@ func (s *TransitionStore) reviveFailedOnce(
 	err := s.executeTx(ctx, "revive failed logical groups", func(tx dbx.Querier) error {
 		var txErr error
 
-		result, transitions, txErr = s.reviveFailedTx(ctx, tx, policy, at, limit)
+		result, transitions, txErr = s.reviveFailedTx(ctx, tx, policy, limit)
 		if txErr != nil {
 			return fmt.Errorf("revive failed logical groups: transaction body: %w", txErr)
 		}
@@ -101,16 +95,15 @@ func (s *TransitionStore) reviveFailedOnce(
 	return result, transitions, nil
 }
 
+// reviveFailedTx는 lease 만료·신선도를 후보 SQL의 DB 시계(checked_at)로 판정하고, 되살린 행의 next_attempt_at은
+// 전이 문장의 DB 시계로 정한다.
 func (s *TransitionStore) reviveFailedTx(
 	ctx context.Context,
 	tx dbx.Querier,
 	policy lifecycle.RevivePolicy,
-	at time.Time,
 	limit int,
 ) (ReviveResult, []rowTransition, error) {
-	candidates, err := loadReviveCandidates(
-		ctx, tx, at.Add(-s.config.LockTimeout), at.Add(-policy.FreshnessWindow()), limit,
-	)
+	candidates, checkedAt, err := loadReviveCandidates(ctx, tx, s.config.LockTimeout, policy.FreshnessWindow(), limit)
 	if err != nil {
 		return ReviveResult{}, nil, fmt.Errorf("revive failed logical groups: load candidates: %w", err)
 	}
@@ -119,19 +112,19 @@ func (s *TransitionStore) reviveFailedTx(
 		return ReviveResult{ApplyResult: newApplyResult(ApplyApplied, nil)}, nil, nil
 	}
 
-	resolved, err := s.resolveStaleSendingGroups(ctx, tx, candidates, at)
+	resolved, err := s.resolveStaleSendingGroups(ctx, tx, candidates)
 	if err != nil {
 		return ReviveResult{}, nil, fmt.Errorf("revive failed logical groups: resolve: %w", err)
 	}
 
-	result, transitions, rules, err := s.buildReviveChanges(resolved, candidates, policy, at)
+	result, transitions, rules, err := s.buildReviveChanges(resolved, candidates, policy, checkedAt)
 	if err != nil {
 		return result, transitions, fmt.Errorf("revive failed logical groups: build changes: %w", err)
 	}
 
 	sortTransitionsByID(transitions)
 
-	touched, err := applyRowTransitions(ctx, tx, "revive failed logical groups", transitions)
+	touched, _, err := applyRowTransitions(ctx, tx, "revive failed logical groups", transitions)
 	if err != nil {
 		return result, transitions, fmt.Errorf("revive failed logical groups: apply rows: %w", err)
 	}
@@ -333,11 +326,11 @@ func reviveDecisionTransitions(
 		after.Status = mutation.NextStatus()
 		after.RowVersion = mutation.NextVersion()
 		after.AttemptCount = mutation.NextAttempt()
-		after.NextAttemptAt = mutation.NextAttemptAt()
 		after.LockedAt = nil
+		after.LockedBy = nil
 		after.SentAt = nil
 		after.Error = ""
-		transitions = append(transitions, rowTransition{before: before, after: after})
+		transitions = append(transitions, rowTransition{before: before, after: after, due: mutation.Due()})
 	}
 
 	return transitions, nil
@@ -357,30 +350,33 @@ func transitionRowKeySet(rows []transitionRow) (map[ytcontentid.LogicalKey]struc
 	return keys, nil
 }
 
+// loadReviveCandidates는 lease가 끝났고 신선한 FAILED 행을 잠그고, 판정에 쓴 DB 시계를 함께 돌려준다.
 func loadReviveCandidates(
 	ctx context.Context,
 	db dbx.Querier,
-	lockCutoff time.Time,
-	freshCutoff time.Time,
+	lease time.Duration,
+	freshness time.Duration,
 	limit int,
-) ([]transitionRow, error) {
-	var candidates []transitionRow
+) ([]transitionRow, time.Time, error) {
+	var checked []checkedTransitionRow
 
 	if err := dbx.SelectSQL(
 		ctx,
 		db,
-		&candidates,
+		&checked,
 		"load failed logical group revive candidates",
 		mustSQL("transition_revive_candidates.sql"),
 		lifecycle.StatusFailed,
-		lockCutoff,
-		freshCutoff,
+		lease.Milliseconds(),
+		freshness.Milliseconds(),
 		limit,
 	); err != nil {
-		return nil, fmt.Errorf("load failed logical group revive candidates: %w", err)
+		return nil, time.Time{}, fmt.Errorf("load failed logical group revive candidates: %w", err)
 	}
 
-	return candidates, nil
+	candidates, checkedAt := splitCheckedTransitionRows(checked)
+
+	return candidates, checkedAt, nil
 }
 
 func activeLogicalGroupLock(row transitionRow, at time.Time, timeout time.Duration) bool {

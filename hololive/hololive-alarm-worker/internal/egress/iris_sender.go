@@ -4,21 +4,18 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
-const replyStatusPollInterval = 250 * time.Millisecond
-
-// IrisClient는 alarm-worker가 알림 전송과 Markdown handoff 확인에 사용하는 Iris 계약입니다.
-// Karing template은 보내지 않습니다.
+// IrisClient는 alarm-worker가 알림 admission에 사용하는 Iris 계약입니다. 텍스트와 Markdown 모두 202 응답의
+// requestId를 받고, handoff 확인은 이 계약이 아니라 각 원장의 handoff reconciler가 맡습니다. Karing template은
+// 보내지 않습니다.
 type IrisClient interface {
-	SendMessage(ctx context.Context, roomID, message string, opts ...iris.SendOption) error
+	SendMessageAccepted(ctx context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendMarkdown(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
 }
 
 // OpenChat은 Markdown lane을 결정하는 확인된 Kakao 오픈채팅 여부를 제공합니다.
@@ -29,10 +26,9 @@ type OpenChat interface {
 // IrisMessageSender는 방 유형별 message를 Iris로 전송합니다. 오픈채팅은 BOT_MARKDOWN_REPLIES에 따라 Markdown,
 // 그 밖의 방은 일반 텍스트 경로를 씁니다.
 type IrisMessageSender struct {
-	client                  IrisClient
-	markdownReplies         bool
-	markdownRooms           OpenChat
-	replyStatusPollInterval time.Duration
+	client          IrisClient
+	markdownReplies bool
+	markdownRooms   OpenChat
 }
 
 // IrisMessageSenderOption은 alarm-worker message lane 구성을 적용합니다.
@@ -54,10 +50,7 @@ func WithMarkdownRoomChat(rooms OpenChat) IrisMessageSenderOption {
 
 // NewIrisMessageSender는 typed Iris client로 alarm-worker 전송기를 만듭니다.
 func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *IrisMessageSender {
-	sender := &IrisMessageSender{
-		client:                  client,
-		replyStatusPollInterval: replyStatusPollInterval,
-	}
+	sender := &IrisMessageSender{client: client}
 
 	for _, option := range opts {
 		if option != nil {
@@ -68,26 +61,44 @@ func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *I
 	return sender
 }
 
-func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
-	accepted, err := s.client.SendMarkdown(ctx, roomID, message, opts...)
+// sendText는 텍스트 202의 requestId를 돌려준다. 운영 중인 bot plane 텍스트 경로(acceptStoredReply)와 같이 응답과
+// requestId만 요구하고 success·delivery 값은 보지 않는다. Iris 계약은 텍스트 202의 delivery 값을 정하지 않는다.
+func (s *IrisMessageSender) sendText(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
+	accepted, err := s.client.SendMessageAccepted(ctx, roomID, message, opts...)
 	if err != nil {
-		return fmt.Errorf("iris send message: %w", err)
+		return "", fmt.Errorf("iris send message: %w", err)
 	}
 
 	if accepted == nil {
-		return fmt.Errorf("%w: markdown admission response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
+		return "", fmt.Errorf("%w: text admission response is empty", sendoutcome.ErrAdmissionOutcomeUnknown)
+	}
+
+	requestID, err := admissionRequestID(accepted.RequestID)
+	if err != nil {
+		return "", fmt.Errorf("validate iris text admission: %w", err)
+	}
+
+	return requestID, nil
+}
+
+// sendMarkdown은 Markdown 202가 성공·queued·requestId를 모두 갖추면 handoff를 기다리지 않고 그 requestId를
+// 돌려준다.
+func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
+	accepted, err := s.client.SendMarkdown(ctx, roomID, message, opts...)
+	if err != nil {
+		return "", fmt.Errorf("iris send message: %w", err)
+	}
+
+	if accepted == nil {
+		return "", fmt.Errorf("%w: markdown admission response is empty", sendoutcome.ErrAdmissionOutcomeUnknown)
 	}
 
 	requestID, err := acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
 	if err != nil {
-		return fmt.Errorf("validate iris markdown admission: %w", err)
+		return "", fmt.Errorf("validate iris markdown admission: %w", err)
 	}
 
-	if err := s.waitForReplyHandoff(ctx, requestID); err != nil {
-		return fmt.Errorf("confirm iris markdown handoff: %w", err)
-	}
-
-	return nil
+	return requestID, nil
 }
 
 func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool {
@@ -96,92 +107,18 @@ func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool
 
 func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string, error) {
 	if !success || !strings.EqualFold(strings.TrimSpace(delivery), "queued") {
-		return "", fmt.Errorf("%w: admission response is not queued", sendoutcome.ErrHandoffOutcomeUnknown)
+		return "", fmt.Errorf("%w: admission response is not queued", sendoutcome.ErrAdmissionOutcomeUnknown)
 	}
 
+	return admissionRequestID(rawRequestID)
+}
+
+// admissionRequestID는 202의 requestId를 공백을 걷어 돌려준다. 비어 있으면 확인할 대상이 없어 결과 불명이다.
+func admissionRequestID(rawRequestID string) (string, error) {
 	requestID := strings.TrimSpace(rawRequestID)
 	if requestID == "" {
-		return "", fmt.Errorf("%w: admission response has no request id", sendoutcome.ErrHandoffOutcomeUnknown)
+		return "", fmt.Errorf("%w: admission response has no request id", sendoutcome.ErrAdmissionOutcomeUnknown)
 	}
 
 	return requestID, nil
-}
-
-func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID string) error {
-	interval := s.replyStatusPollInterval
-	if interval <= 0 {
-		interval = replyStatusPollInterval
-	}
-
-	ticks := time.Tick(interval)
-
-	// 상태 조회 실패는 handoff 실패가 아니므로 bounded context까지 재조회하고,
-	// polling이 끝나면 마지막 조회 오류를 진단 문맥으로 남긴다.
-	var lastPollErr error
-
-	for {
-		status, pollErr := s.client.GetReplyStatus(ctx, requestID)
-		if pollErr != nil {
-			lastPollErr = pollErr
-		} else {
-			complete, statusErr := assessReplyHandoffPoll(requestID, status)
-			if statusErr != nil {
-				return statusErr
-			}
-
-			if complete {
-				return nil
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return replyPollingEndedError(ctx.Err(), requestID, lastPollErr)
-		case <-ticks:
-		}
-	}
-}
-
-// 조회 오류는 %v로만 붙여 errors.Is 분류를 ErrHandoffOutcomeUnknown과 ctx 오류로 유지한다.
-// 반환 오류에는 request id를 남기지 않는 계약이라 조회 오류 문구 속 request id도 가린다.
-func replyPollingEndedError(ctxErr error, requestID string, lastPollErr error) error {
-	if lastPollErr == nil {
-		return fmt.Errorf("%w: status polling ended before handoff: %w", sendoutcome.ErrHandoffOutcomeUnknown, ctxErr)
-	}
-
-	lastPollDetail := strings.ReplaceAll(lastPollErr.Error(), requestID, "<request_id>")
-
-	return fmt.Errorf(
-		"%w: status polling ended before handoff: %w (last status query error: %v)",
-		sendoutcome.ErrHandoffOutcomeUnknown,
-		ctxErr,
-		lastPollDetail,
-	)
-}
-
-func assessReplyHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot) (bool, error) {
-	if status == nil {
-		return false, fmt.Errorf("%w: reply status response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
-	}
-
-	if strings.TrimSpace(status.RequestID) != requestID {
-		return false, fmt.Errorf("%w: reply status request id does not match", sendoutcome.ErrHandoffOutcomeUnknown)
-	}
-
-	// 대소문자·공백 허용은 기존 bot 정책이며 SDK의 정확한 wire 분류와 분리한다.
-	state := strings.ToLower(strings.TrimSpace(status.State))
-	switch iris.ClassifyReplyStatus(state) {
-	case iris.ReplyStatusPending:
-		return false, nil
-	case iris.ReplyStatusHandoffCompleted:
-		return true, nil
-	case iris.ReplyStatusFailed:
-		return false, sendoutcome.ErrHandoffFailed
-	case iris.ReplyStatusUnknown:
-		if state == "outcome_unknown" {
-			return false, sendoutcome.ErrHandoffOutcomeUnknown
-		}
-	}
-
-	return false, fmt.Errorf("%w: reply status state is not recognized", sendoutcome.ErrHandoffOutcomeUnknown)
 }

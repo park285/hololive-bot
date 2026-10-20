@@ -24,8 +24,8 @@ func markStaleSending(ctx context.Context, t *testing.T, repository *outboxFixtu
 	markOutboxSending(ctx, t, repository, &items[0])
 
 	if _, err := repository.pool.Exec(ctx,
-		"UPDATE notification_delivery_outbox SET sending_started_at = $1 WHERE id = $2",
-		time.Now().Add(-2*time.Minute), items[0].ID,
+		"UPDATE notification_delivery_outbox SET sending_started_at = clock_timestamp() - INTERVAL '2 minutes' WHERE id = $1",
+		items[0].ID,
 	); err != nil {
 		t.Fatalf("backdate sending_started_at: %v", err)
 	}
@@ -113,8 +113,8 @@ func TestCleanup_QuarantinedItems(t *testing.T) {
 	}
 
 	if _, err := repository.pool.Exec(ctx,
-		"UPDATE notification_delivery_outbox SET created_at = $1 WHERE id = $2",
-		time.Now().Add(-10*24*time.Hour), id,
+		"UPDATE notification_delivery_outbox SET created_at = clock_timestamp() - INTERVAL '10 days' WHERE id = $1",
+		id,
 	); err != nil {
 		t.Fatalf("backdate created_at: %v", err)
 	}
@@ -138,13 +138,12 @@ func TestCleanup_DeletesInBatches(t *testing.T) {
 	}
 
 	if _, err := repository.pool.Exec(ctx,
-		"UPDATE notification_delivery_outbox SET status = 'SENT', sent_at = $1",
-		time.Now().Add(-10*24*time.Hour),
+		"UPDATE notification_delivery_outbox SET status = 'SENT', sent_at = clock_timestamp() - INTERVAL '10 days'",
 	); err != nil {
 		t.Fatalf("backdate sent rows: %v", err)
 	}
 
-	cleaned, err := repository.cleanupInBatches(ctx, time.Now().Add(-7*24*time.Hour), 1)
+	cleaned, err := repository.cleanupInBatches(ctx, (7 * 24 * time.Hour).Milliseconds(), 1)
 	if err != nil {
 		t.Fatalf("cleanup in batches: %v", err)
 	}

@@ -570,6 +570,6 @@ func (s *finalResultTestSender) PrepareMessageRequest(_ context.Context, _, body
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *finalResultTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *finalResultTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }

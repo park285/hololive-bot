@@ -22,19 +22,6 @@ WHERE status IN ('pending', 'retry', 'leased', 'sending')
 GROUP BY status
 ORDER BY rows DESC;
 
-\echo 'community/shorts stuck claim states'
-SELECT
-    kind,
-    delivery_status,
-    count(post_id) AS rows,
-    min(authorized_at) AS oldest_authorized_at,
-    max(updated_at) AS newest_updated_at
-FROM youtube_community_shorts_alarm_states
-WHERE authorized_at IS NOT NULL
-  AND alarm_sent_at IS NULL
-GROUP BY kind, delivery_status
-ORDER BY rows DESC;
-
 \echo 'sent tracking rows missing canonical alarm state'
 SELECT
     t.kind,

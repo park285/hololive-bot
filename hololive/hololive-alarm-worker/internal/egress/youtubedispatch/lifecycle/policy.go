@@ -85,46 +85,35 @@ func (r RowSnapshot) Validate() error {
 	return nil
 }
 
-// RowMutation은 예상 상태에서 다음 상태로의 확정된 전이다. 저장소가 재시도·후속 처리 정책을 재계산하면 안 된다.
+// RowMutation은 한 행의 확정된 다음 상태다. 저장소가 재시도·후속 처리 정책을 재계산하면 안 되며, 전이 전 상태 fence는
+// 저장소가 잠가 다시 읽은 행으로 건다. 다음 시도 시각은 DB 시계 기준 DueSpec이고, 모든 결정은 claim(locked_at·
+// locked_by)을 해제한다.
 type RowMutation struct {
-	deliveryID       int64
-	expectedStatus   DeliveryStatus
-	expectedVersion  int64
-	expectedAttempt  int
-	expectedLockedAt time.Time
-	nextStatus       DeliveryStatus
-	nextVersion      int64
-	nextAttempt      int
-	nextAttemptAt    time.Time
-	clearLock        bool
+	deliveryID  int64
+	nextStatus  DeliveryStatus
+	nextVersion int64
+	nextAttempt int
+	due         DueSpec
 }
 
-func (m RowMutation) DeliveryID() int64              { return m.deliveryID }
-func (m RowMutation) ExpectedStatus() DeliveryStatus { return m.expectedStatus }
-func (m RowMutation) ExpectedVersion() int64         { return m.expectedVersion }
-func (m RowMutation) ExpectedAttempt() int           { return m.expectedAttempt }
-func (m RowMutation) ExpectedLockedAt() time.Time    { return m.expectedLockedAt }
-func (m RowMutation) NextStatus() DeliveryStatus     { return m.nextStatus }
-func (m RowMutation) NextVersion() int64             { return m.nextVersion }
-func (m RowMutation) NextAttempt() int               { return m.nextAttempt }
-func (m RowMutation) NextAttemptAt() time.Time       { return m.nextAttemptAt }
-func (m RowMutation) ClearsLock() bool               { return m.clearLock }
+func (m RowMutation) DeliveryID() int64          { return m.deliveryID }
+func (m RowMutation) NextStatus() DeliveryStatus { return m.nextStatus }
+func (m RowMutation) NextVersion() int64         { return m.nextVersion }
+func (m RowMutation) NextAttempt() int           { return m.nextAttempt }
+func (m RowMutation) Due() DueSpec               { return m.due }
 
 type Decision interface {
 	RuleID() RuleID
-	At() time.Time
 	Mutations() []RowMutation
 	decision()
 }
 
 type decisionBase struct {
 	ruleID    RuleID
-	at        time.Time
 	mutations []RowMutation
 }
 
 func (d decisionBase) RuleID() RuleID           { return d.ruleID }
-func (d decisionBase) At() time.Time            { return d.at }
 func (d decisionBase) Mutations() []RowMutation { return slices.Clone(d.mutations) }
 func (decisionBase) decision()                  {}
 
@@ -134,13 +123,13 @@ type (
 	ReviveLogicalGroupDecision struct{ decisionBase }
 )
 
-// EvaluateFailure는 결정된 소유자의 시도 한도만 소비한다.
+// EvaluateFailure는 결정된 소유자의 시도 한도만 소비한다. 재시도는 owner와 follower 모두 DB 시계에서
+// max(backoff, retryAfter) 뒤로 미루고, 종결 실패는 각 행의 next_attempt_at을 유지한다.
 func EvaluateFailure(
 	policy RetryPolicy,
 	owner RowSnapshot,
 	followers []RowSnapshot,
 	kind FailureKind,
-	at time.Time,
 	retryAfter time.Duration,
 ) (Decision, error) {
 	if policy.maxRetries <= 0 || policy.retryBackoff <= 0 {
@@ -163,28 +152,21 @@ func EvaluateFailure(
 		return nil, errors.New("evaluate failure: retry after is negative")
 	}
 
-	canonicalAt, err := CanonicalTime(at)
-	if err != nil {
-		return nil, fmt.Errorf("evaluate failure: at: %w", err)
-	}
-
 	nextOwnerAttempt := owner.AttemptCount + 1
 	terminal := kind == FailurePermanent || nextOwnerAttempt >= policy.maxRetries
 	ruleID := RuleRetryScheduled
 	nextStatus := StatusPending
-	due := canonicalAt.Add(max(policy.retryBackoff, retryAfter))
+	due := DelayedDue(max(policy.retryBackoff, retryAfter), time.Time{})
 
 	if terminal {
 		nextStatus = StatusFailed
-		due = owner.NextAttemptAt
+		due = DueSpec{}
 		ruleID = RuleRetryExhausted
 
 		if kind == FailurePermanent {
 			ruleID = RulePermanentFailure
 		}
 	}
-
-	due = due.UTC().Truncate(time.Microsecond)
 
 	mutations := make([]RowMutation, 0, len(followers)+1)
 
@@ -195,10 +177,10 @@ func EvaluateFailure(
 	}
 
 	if terminal {
-		return FailLogicalGroupDecision{ruleID: ruleID, at: canonicalAt, mutations: mutations}, nil
+		return FailLogicalGroupDecision{decisionBase{ruleID: ruleID, mutations: mutations}}, nil
 	}
 
-	return RetryLogicalGroupDecision{ruleID: ruleID, at: canonicalAt, mutations: mutations}, nil
+	return RetryLogicalGroupDecision{decisionBase{ruleID: ruleID, mutations: mutations}}, nil
 }
 
 func validateFailureGroup(owner RowSnapshot, followers []RowSnapshot) error {
@@ -231,12 +213,10 @@ func validateFailureGroup(owner RowSnapshot, followers []RowSnapshot) error {
 	return nil
 }
 
-func failureMutation(row RowSnapshot, status DeliveryStatus, attempt int, due time.Time) RowMutation {
+func failureMutation(row RowSnapshot, status DeliveryStatus, attempt int, due DueSpec) RowMutation {
 	return RowMutation{
-		deliveryID: row.DeliveryID, expectedStatus: row.Status, expectedVersion: row.RowVersion,
-		expectedAttempt: row.AttemptCount, expectedLockedAt: row.LockedAt,
-		nextStatus: status, nextVersion: row.RowVersion + 1, nextAttempt: attempt,
-		nextAttemptAt: due, clearLock: true,
+		deliveryID: row.DeliveryID, nextStatus: status, nextVersion: row.RowVersion + 1,
+		nextAttempt: attempt, due: due,
 	}
 }
 
@@ -249,47 +229,47 @@ type ReviveInput struct {
 	HasActiveLock    bool
 }
 
-func EvaluateRevive(policy RevivePolicy, input ReviveInput, at time.Time) (ReviveLogicalGroupDecision, error) {
-	canonicalAt, rows, err := validateRevive(policy, input, at)
+// EvaluateRevive는 checkedAt(후보 SQL이 돌려준 DB 시계)으로 원본 신선도를 확인하고, 되살린 행을 전이 시점의
+// DB 시계에 바로 재시도하도록 만든다.
+func EvaluateRevive(policy RevivePolicy, input ReviveInput, checkedAt time.Time) (ReviveLogicalGroupDecision, error) {
+	rows, err := validateRevive(policy, input, checkedAt)
 	if err != nil {
 		return ReviveLogicalGroupDecision{}, fmt.Errorf("evaluate revive: validate input: %w", err)
 	}
 
-	mutations, err := buildReviveMutations(rows, canonicalAt)
+	mutations, err := buildReviveMutations(rows)
 	if err != nil {
 		return ReviveLogicalGroupDecision{}, fmt.Errorf("evaluate revive: build mutations: %w", err)
 	}
 
-	return ReviveLogicalGroupDecision{
-		ruleID: RuleLogicalGroupRevived, at: canonicalAt, mutations: mutations,
-	}, nil
+	return ReviveLogicalGroupDecision{decisionBase{ruleID: RuleLogicalGroupRevived, mutations: mutations}}, nil
 }
 
-func validateRevive(policy RevivePolicy, input ReviveInput, at time.Time) (time.Time, []RowSnapshot, error) {
+func validateRevive(policy RevivePolicy, input ReviveInput, checkedAt time.Time) ([]RowSnapshot, error) {
 	if !policy.enabled {
-		return time.Time{}, nil, errors.New("evaluate revive: revive is disabled")
+		return nil, errors.New("evaluate revive: revive is disabled")
 	}
 
 	if policy.freshnessWindow <= 0 || policy.batchLimit <= 0 {
-		return time.Time{}, nil, errors.New("evaluate revive: invalid revive policy")
+		return nil, errors.New("evaluate revive: invalid revive policy")
 	}
 
 	if err := validateReviveEligibility(input); err != nil {
-		return time.Time{}, nil, fmt.Errorf("validate revive: eligibility: %w", err)
+		return nil, fmt.Errorf("validate revive: eligibility: %w", err)
 	}
 
-	canonicalAt, err := CanonicalTime(at)
+	canonicalAt, err := CanonicalTime(checkedAt)
 	if err != nil {
-		return time.Time{}, nil, fmt.Errorf("evaluate revive: at: %w", err)
+		return nil, fmt.Errorf("evaluate revive: checked at: %w", err)
 	}
 
 	observedAt, err := CanonicalTime(input.SourceObservedAt)
 	if err != nil {
-		return time.Time{}, nil, fmt.Errorf("evaluate revive: source observed at: %w", err)
+		return nil, fmt.Errorf("evaluate revive: source observed at: %w", err)
 	}
 
 	if observedAt.Before(canonicalAt.Add(-policy.freshnessWindow)) || observedAt.After(canonicalAt) {
-		return time.Time{}, nil, errors.New("evaluate revive: source is outside freshness window")
+		return nil, errors.New("evaluate revive: source is outside freshness window")
 	}
 
 	rows := make([]RowSnapshot, 0, len(input.Followers)+1)
@@ -298,10 +278,10 @@ func validateRevive(policy RevivePolicy, input ReviveInput, at time.Time) (time.
 	rows = append(rows, input.Followers...)
 
 	if len(rows) > policy.batchLimit {
-		return time.Time{}, nil, errors.New("evaluate revive: logical group exceeds batch limit")
+		return nil, errors.New("evaluate revive: logical group exceeds batch limit")
 	}
 
-	return canonicalAt, rows, nil
+	return rows, nil
 }
 
 func validateReviveEligibility(input ReviveInput) error {
@@ -328,7 +308,7 @@ func validateReviveEligibility(input ReviveInput) error {
 	return nil
 }
 
-func buildReviveMutations(rows []RowSnapshot, at time.Time) ([]RowMutation, error) {
+func buildReviveMutations(rows []RowSnapshot) ([]RowMutation, error) {
 	mutations := make([]RowMutation, 0, len(rows))
 	seen := make(map[int64]struct{}, len(rows))
 
@@ -347,11 +327,9 @@ func buildReviveMutations(rows []RowSnapshot, at time.Time) ([]RowMutation, erro
 
 		seen[rows[i].DeliveryID] = struct{}{}
 		mutations = append(mutations, RowMutation{
-			deliveryID: rows[i].DeliveryID, expectedStatus: rows[i].Status,
-			expectedVersion: rows[i].RowVersion, expectedAttempt: rows[i].AttemptCount,
-			expectedLockedAt: rows[i].LockedAt, nextStatus: StatusPending,
+			deliveryID: rows[i].DeliveryID, nextStatus: StatusPending,
 			nextVersion: rows[i].RowVersion + 1, nextAttempt: 0,
-			nextAttemptAt: at, clearLock: true,
+			due: DelayedDue(0, time.Time{}),
 		})
 	}
 

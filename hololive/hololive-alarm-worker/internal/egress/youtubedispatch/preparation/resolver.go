@@ -29,7 +29,6 @@ type DeliverySnapshot struct {
 	LockedAt       time.Time
 	RowVersion     int64
 	InCurrentBatch bool
-	Lease          lifecycle.PreparationLease
 }
 
 func (d DeliverySnapshot) validate() error {
@@ -39,12 +38,6 @@ func (d DeliverySnapshot) validate() error {
 
 	if d.Status == lifecycle.StatusSending && d.LockedAt.IsZero() {
 		return errors.New("sending delivery is missing locked at")
-	}
-
-	if d.InCurrentBatch {
-		if err := d.validateCurrentLease(); err != nil {
-			return fmt.Errorf("validate current delivery lease: %w", err)
-		}
 	}
 
 	return nil
@@ -73,22 +66,6 @@ func (d DeliverySnapshot) validateFields() error {
 
 	if d.CreatedAt.IsZero() {
 		return errors.New("created at is zero")
-	}
-
-	return nil
-}
-
-func (d DeliverySnapshot) validateCurrentLease() error {
-	if !d.Lease.Valid() {
-		return errors.New("current batch delivery is missing preparation lease")
-	}
-
-	if d.Lease.DeliveryID() != d.DeliveryID || d.Lease.RowVersion() != d.RowVersion || !d.Lease.LockedAt().Equal(d.LockedAt) {
-		return errors.New("current batch preparation lease does not match snapshot")
-	}
-
-	if d.Status != lifecycle.StatusPending {
-		return errors.New("current batch delivery is not pending")
 	}
 
 	return nil
@@ -163,24 +140,26 @@ type Resolution struct {
 	owner     DeliverySnapshot
 	followers []DeliverySnapshot
 	members   []DeliverySnapshot
-	due       time.Time
+	dueFloor  time.Time
 	reason    InvariantReason
 	detail    string
 }
 
-func (r Resolution) Key() ytcontentid.LogicalKey      { return r.key }
-func (r Resolution) Kind() ResolutionKind             { return r.kind }
-func (r Resolution) Owner() DeliverySnapshot          { return r.owner }
-func (r Resolution) Followers() []DeliverySnapshot    { return slices.Clone(r.followers) }
-func (r Resolution) Members() []DeliverySnapshot      { return slices.Clone(r.members) }
-func (r Resolution) Due() time.Time                   { return r.due }
+func (r Resolution) Key() ytcontentid.LogicalKey   { return r.key }
+func (r Resolution) Kind() ResolutionKind          { return r.kind }
+func (r Resolution) Owner() DeliverySnapshot       { return r.owner }
+func (r Resolution) Followers() []DeliverySnapshot { return slices.Clone(r.followers) }
+func (r Resolution) Members() []DeliverySnapshot   { return slices.Clone(r.members) }
+
+// DueFloor는 보류 전이가 next_attempt_at에 거는 DB 유래 하한으로, 다른 batch owner의 next_attempt_at 또는 in-flight
+// SENDING 행의 lease 만료(locked_at + LockTimeout)이며 하한이 없으면 0 값이다.
+func (r Resolution) DueFloor() time.Time              { return r.dueFloor }
 func (r Resolution) InvariantReason() InvariantReason { return r.reason }
 func (r Resolution) Detail() string                   { return r.detail }
 func (r Resolution) ProviderAllowed() bool            { return r.kind == LogicalActive }
 
 type ResolverConfig struct {
 	LogicalGroupScanLimit int
-	RetryBackoff          time.Duration
 	LockTimeout           time.Duration
 	RequireTerminalLedger bool
 }
@@ -194,10 +173,6 @@ func NewResolver(config ResolverConfig) (Resolver, error) {
 		return Resolver{}, errors.New("new logical resolver: scan limit must be positive")
 	}
 
-	if config.RetryBackoff <= 0 {
-		return Resolver{}, errors.New("new logical resolver: retry backoff must be positive")
-	}
-
 	if config.LockTimeout <= 0 {
 		return Resolver{}, errors.New("new logical resolver: lock timeout must be positive")
 	}
@@ -206,18 +181,12 @@ func NewResolver(config ResolverConfig) (Resolver, error) {
 }
 
 // ResolveGroups는 ledger를 우선해 제한된 범위에서 논리 상태를 확인한다.
-// 호출자가 일괄 조회한 ledger와 보존 행을 전달하며 함수 자체는 I/O를 수행하지 않는다.
+// 호출자가 일괄 조회한 ledger와 보존 행을 전달하며 함수 자체는 I/O와 시계 읽기를 수행하지 않는다.
 func (r Resolver) ResolveGroups(
 	rows []DeliverySnapshot,
 	ledger []LedgerEvidence,
 	requestedKeys []ytcontentid.LogicalKey,
-	at time.Time,
 ) []Resolution {
-	canonicalAt, err := lifecycle.CanonicalTime(at)
-	if err != nil {
-		return []Resolution{breach(ytcontentid.LogicalKey{}, nil, InvariantInvalidSnapshot, err.Error())}
-	}
-
 	ledgerByKey, invalidLedger := indexLedgerEvidence(ledger)
 	if invalidLedger != nil {
 		return []Resolution{*invalidLedger}
@@ -236,7 +205,7 @@ func (r Resolver) ResolveGroups(
 		members := groups[key]
 		slices.SortFunc(members, compareDeliveryOwner)
 
-		result = append(result, r.resolveGroup(key, members, ledgerByKey[key], canonicalAt))
+		result = append(result, r.resolveGroup(key, members, ledgerByKey[key]))
 	}
 
 	return result
@@ -363,9 +332,7 @@ func mergeSameSnapshot(a, b DeliverySnapshot) (DeliverySnapshot, bool) {
 	right := b
 
 	left.InCurrentBatch = false
-	left.Lease = lifecycle.PreparationLease{}
 	right.InCurrentBatch = false
-	right.Lease = lifecycle.PreparationLease{}
 
 	if left != right {
 		return DeliverySnapshot{}, false
@@ -373,7 +340,6 @@ func mergeSameSnapshot(a, b DeliverySnapshot) (DeliverySnapshot, bool) {
 
 	if b.InCurrentBatch {
 		a.InCurrentBatch = true
-		a.Lease = b.Lease
 	}
 
 	return a, true
@@ -383,7 +349,6 @@ func (r Resolver) resolveGroup(
 	key ytcontentid.LogicalKey,
 	members []DeliverySnapshot,
 	ledger LedgerEvidence,
-	at time.Time,
 ) Resolution {
 	if len(members) > r.config.LogicalGroupScanLimit {
 		return breach(key, members, InvariantGroupScanOverflow, "logical group exceeds scan limit")
@@ -403,9 +368,9 @@ func (r Resolver) resolveGroup(
 	}
 
 	if sending, sendingIndex, ok := findDeliveryStatus(members, lifecycle.StatusSending); ok {
-		due := maxTime(at.Add(r.config.RetryBackoff), sending.LockedAt.Add(r.config.LockTimeout))
+		floor := sending.LockedAt.Add(r.config.LockTimeout).UTC().Truncate(time.Microsecond)
 
-		return newResolution(key, LogicalInFlight, sending, followersOf(members, sendingIndex), due)
+		return newResolution(key, LogicalInFlight, sending, followersOf(members, sendingIndex), floor)
 	}
 
 	return resolveActiveOwner(key, members)
@@ -514,7 +479,7 @@ func findActiveOwner(members []DeliverySnapshot) (DeliverySnapshot, int, bool) {
 	return DeliverySnapshot{}, 0, false
 }
 
-func newResolution(key ytcontentid.LogicalKey, kind ResolutionKind, owner DeliverySnapshot, followers []DeliverySnapshot, due time.Time) Resolution {
+func newResolution(key ytcontentid.LogicalKey, kind ResolutionKind, owner DeliverySnapshot, followers []DeliverySnapshot, dueFloor time.Time) Resolution {
 	members := slices.Clone(followers)
 
 	if owner.DeliveryID != 0 {
@@ -522,7 +487,7 @@ func newResolution(key ytcontentid.LogicalKey, kind ResolutionKind, owner Delive
 		slices.SortFunc(members, compareDeliveryOwner)
 	}
 
-	return Resolution{key: key, kind: kind, owner: owner, followers: slices.Clone(followers), members: members, due: due}
+	return Resolution{key: key, kind: kind, owner: owner, followers: slices.Clone(followers), members: members, dueFloor: dueFloor}
 }
 
 func breach(key ytcontentid.LogicalKey, members []DeliverySnapshot, reason InvariantReason, detail string) Resolution {
@@ -558,12 +523,4 @@ func compareLogicalKey(a, b ytcontentid.LogicalKey) int {
 	}
 
 	return cmp.Compare(a.RoomID, b.RoomID)
-}
-
-func maxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a.UTC().Truncate(time.Microsecond)
-	}
-
-	return b.UTC().Truncate(time.Microsecond)
 }

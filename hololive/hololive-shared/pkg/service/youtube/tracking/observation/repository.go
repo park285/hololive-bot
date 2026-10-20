@@ -59,10 +59,9 @@ type PgxRepository struct {
 }
 
 type AlarmSentMark struct {
-	Kind         domain.OutboxKind
-	ContentID    string
-	AlarmSentAt  time.Time
-	AuthorizedAt *time.Time
+	Kind        domain.OutboxKind
+	ContentID   string
+	AlarmSentAt time.Time
 }
 
 func NewRepository(db trackingDB) *PgxRepository {
@@ -109,24 +108,6 @@ func (r *PgxRepository) UpsertAlarmStateBatch(ctx context.Context, records []*do
 	}
 
 	return nil
-}
-
-func (r *PgxRepository) TryClaimAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) (bool, error) {
-	out, err := r.alarm.TryClaimAlarmState(ctx, record)
-	if err != nil {
-		return out, fmt.Errorf("try claim alarm state: %w", err)
-	}
-
-	return out, nil
-}
-
-func (r *PgxRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {
-	out, err := r.alarm.ReleaseAlarmStateClaim(ctx, kind, postID, authorizedAt)
-	if err != nil {
-		return out, fmt.Errorf("release alarm state claim: %w", err)
-	}
-
-	return out, nil
 }
 
 // --- 위임: DeliveryState ---

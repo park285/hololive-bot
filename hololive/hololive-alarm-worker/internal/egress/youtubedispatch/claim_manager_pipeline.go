@@ -173,7 +173,6 @@ func (d *ClaimManager) processPendingDeliveriesWithLifecycle(ctx context.Context
 	result := dispatchstate.DispatchResult{
 		SuccessDeliveryIDs: make([]int64, 0, len(prepared.ActiveRows)),
 		TouchedOutboxIDs:   append([]int64(nil), prepared.TouchedOutboxIDs...),
-		SuccessClaimTokens: make([]dispatchstate.ClaimToken, 0, len(prepared.ActiveRows)),
 		FailureBuckets:     make(map[string][]int64),
 	}
 	if len(prepared.ActiveRows) > 0 {

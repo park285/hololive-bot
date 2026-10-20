@@ -159,14 +159,11 @@ func TestDispatchStoredReplyReissuesFailedConflictWithStoredPayload(t *testing.T
 	client := &storedReplyReissueClient{acceptErrors: []error{failed, nil}}
 	payload := []byte(`{"kind":"text","message":"persisted payload"}`)
 	originalPayload := append([]byte(nil), payload...)
-	acceptedRequestID := ""
 
-	err := DispatchStoredReply(t.Context(), client, "room-1", payload, "hololive:v1:message:m-1:reply:0", func(_ context.Context, requestID string) error {
-		acceptedRequestID = requestID
-		return nil
-	})
+	acceptedRequestID, err := DispatchStoredReply(t.Context(), client, "room-1", payload, "hololive:v1:message:m-1:reply:0")
 	require.NoError(t, err)
 	assert.Equal(t, "iris-reissued", acceptedRequestID)
+	assert.Zero(t, client.statusCalls, "admission ends the dispatch; handoff is the reconciler's job")
 	assert.Equal(t, originalPayload, payload)
 	assert.Equal(t, []string{"persisted payload", "persisted payload"}, client.messages)
 	require.Len(t, client.optsByAttempt, 2)

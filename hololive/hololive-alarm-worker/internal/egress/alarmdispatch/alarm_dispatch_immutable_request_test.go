@@ -30,9 +30,9 @@ func (s *immutableRequestSender) PrepareMessageRequest(_ context.Context, _, mes
 	return message, s.route, nil
 }
 
-func (s *immutableRequestSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) error {
+func (s *immutableRequestSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) (string, error) {
 	s.routes = append(s.routes, route)
-	return s.SendMessageWithClientRequestID(ctx, room, body, id)
+	return alarmTestAdmission(id, s.SendMessageWithClientRequestID(ctx, room, body, id))
 }
 
 func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
@@ -46,7 +46,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("pin-owner"))
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("pin-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteMarkdown, messageErr: context.DeadlineExceeded}
@@ -59,13 +59,13 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE notification_templates SET body='CHANGED TEMPLATE'; UPDATE alarm_dispatch_deliveries SET next_attempt_at=NOW()`)
 	require.NoError(t, err)
 
-	consumer, err = dispatchoutbox.NewConsumer(dispatchoutbox.NewPgxRepositoryFromPool(pool, nil), requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("restarted-owner"))
+	consumer, err = dispatchoutbox.NewConsumer(dispatchoutbox.NewPgxRepositoryFromPool(pool, nil), requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("restarted-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	sender.route = dispatchoutbox.SendRouteText
 	sender.messageErr = nil
 
-	restarted := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 10, shortLinkBaseURL: "https://changed.example"}
+	restarted := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 10, shortLinkBaseURL: "https://changed.example", attemptTimeout: testHandoffHorizon}
 
 	_, err = restarted.runOnce(ctx)
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {
 			_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
 			require.NoError(t, err)
 
-			consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("reissue-owner"))
+			consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("reissue-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 			require.NoError(t, err)
 
 			sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText, messageErr: testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, fmt.Sprintf(`{"code":%q}`, code))}
@@ -141,7 +141,7 @@ func TestAlarmRequestUnknownEvidencePreventsReissueOfJoinedConflict(t *testing.T
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes, request: &dispatchoutbox.SendRequest{ClientRequestID: envelopes[0].ClientRequestID}}
-	cause := errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))
+	cause := errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))
 	require.NoError(t, runner.persistPostSendingFailure(t.Context(), group, cause))
 	require.Zero(t, consumer.reissueCalls)
 	require.Len(t, consumer.quarantined, 1)
