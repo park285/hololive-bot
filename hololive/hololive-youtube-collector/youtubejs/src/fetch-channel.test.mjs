@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Utils } from "youtubei.js";
 
-import { fetchChannelFeed, mapLiveSessions, mapPhoto, mapProfile } from "./fetch-channel.mjs";
+import { fetchChannelFeed, liveSessionRows, mapPhoto, mapProfile } from "./fetch-channel.mjs";
 import { handleChannelRequest } from "./rpc-boundary.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 
@@ -85,10 +85,10 @@ test("restricted filtering never hides a conflicting duplicate or foreign channe
   }
 });
 
-test("mapLiveSessions fail-closes on unknown statuses", () => {
+test("liveSessionRows fail-closes on unknown statuses", () => {
   assert.throws(
     () =>
-      mapLiveSessions(
+      Array.from(liveSessionRows(
         {
           videos: [
             { id: "live-1", is_live: true },
@@ -96,13 +96,13 @@ test("mapLiveSessions fail-closes on unknown statuses", () => {
           ],
         },
         "UC_TEST",
-      ),
+      )),
     (err) => err.code === "parser_drift",
   );
 });
 
-test("mapLiveSessions maps current YouTube.js LockupView rows", () => {
-  const sessions = mapLiveSessions(
+test("liveSessionRows maps current YouTube.js LockupView rows", () => {
+  const sessions = Array.from(liveSessionRows(
     {
       videos: [
         {
@@ -119,7 +119,7 @@ test("mapLiveSessions maps current YouTube.js LockupView rows", () => {
       ],
     },
     "UC_TEST",
-  );
+  ));
   assert.deepEqual(sessions.map((item) => [item.video_id, item.status]), [
     ["upcoming-1", "UPCOMING"],
     ["ended-1", "ENDED"],

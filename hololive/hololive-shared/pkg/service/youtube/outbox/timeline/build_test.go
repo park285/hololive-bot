@@ -404,8 +404,9 @@ func TestClassifyPostLatencyClassificationStatus(t *testing.T) {
 func TestBuildPostLatencyClassification_NilRow(t *testing.T) {
 	t.Parallel()
 
-	result := BuildPostLatencyClassification(nil)
+	result := buildPostLatencyClassification(nil)
 	require.Equal(t, PostLatencyClassificationStatusInsufficientEvidence, result.Status)
+	require.Equal(t, "insufficient_evidence", string(result.Status), "wire value")
 	require.Equal(t, PostLatencyExceededThresholdMillis, result.ThresholdMillis)
 	require.Equal(t, PostDelaySourceNone, result.DelaySource)
 	require.Equal(t, PostInternalDelayCauseNone, result.InternalDelayCause)
@@ -416,7 +417,7 @@ func TestBuildPostLatencyClassification_NilRow(t *testing.T) {
 func TestBuildPostLatencyClassification_CarriesRowSourcesAndDefaultsEmptyStrings(t *testing.T) {
 	t.Parallel()
 
-	result := BuildPostLatencyClassification(&PostDeliveryTimeline{
+	result := buildPostLatencyClassification(&PostDeliveryTimeline{
 		AlarmLatencyExceeded: new(true),
 		DelaySource:          PostDelaySourceExternalCollection,
 		InternalDelayCause:   PostInternalDelayCauseQueueWait,
@@ -425,7 +426,7 @@ func TestBuildPostLatencyClassification_CarriesRowSourcesAndDefaultsEmptyStrings
 	require.Equal(t, PostDelaySourceExternalCollection, result.DelaySource)
 	require.Equal(t, PostInternalDelayCauseQueueWait, result.InternalDelayCause)
 
-	defaults := BuildPostLatencyClassification(&PostDeliveryTimeline{})
+	defaults := buildPostLatencyClassification(&PostDeliveryTimeline{})
 	require.Equal(t, PostDelaySourceNone, defaults.DelaySource)
 	require.Equal(t, PostInternalDelayCauseNone, defaults.InternalDelayCause)
 }

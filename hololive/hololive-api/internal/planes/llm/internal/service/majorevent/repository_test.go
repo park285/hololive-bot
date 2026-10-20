@@ -21,24 +21,11 @@
 package majorevent
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-func TestRepository_Interface(t *testing.T) {
-	t.Run("repository methods exist", func(t *testing.T) {
-		var _ interface {
-			Subscribe(ctx context.Context, roomID, roomName string) error
-			Unsubscribe(ctx context.Context, roomID string) error
-			IsSubscribed(ctx context.Context, roomID string) (bool, error)
-		}
-
-		t.Log("Repository interface verified")
-	})
-}
 
 func TestRepository_NilPoolGuards(t *testing.T) {
 	repository := &Repository{}

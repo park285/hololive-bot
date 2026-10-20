@@ -139,18 +139,3 @@ function mapAttachment(attachment) {
     : thumbnailsOf(attachment.image || attachment.images || attachment.thumbnails);
   return { images, videoId };
 }
-
-export function mapPosts(posts, maxResults) {
-  const limit = Number.isFinite(maxResults) && maxResults > 0 ? Math.trunc(maxResults) : 10;
-  const mapped = [];
-  for (const post of Array.isArray(posts) ? posts : []) {
-    if (mapped.length >= limit) {
-      break;
-    }
-    const mappedPost = mapPost(post);
-    if (mappedPost != null) {
-      mapped.push(mappedPost);
-    }
-  }
-  return mapped;
-}

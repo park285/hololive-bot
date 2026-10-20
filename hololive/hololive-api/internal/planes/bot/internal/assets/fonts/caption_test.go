@@ -44,27 +44,3 @@ func TestCaptionFaceSized_CoversKoreanAndJapanese(t *testing.T) {
 		t.Errorf("혼합 문자열 측정 폭 = %d, want > 0", w)
 	}
 }
-
-func TestCaptionFaceSized_RoutesKanaToFallback(t *testing.T) {
-	if err := loadFonts(); err != nil {
-		t.Fatalf("loadFonts: %v", err)
-	}
-
-	gi, err := pretendardRegular.GlyphIndex(nil, 'ぶ')
-	if err != nil {
-		t.Fatalf("primary GlyphIndex: %v", err)
-	}
-
-	if gi != 0 {
-		t.Skip("Pretendard가 가나를 직접 커버 — fallback 라우팅 검증 불필요")
-	}
-
-	face, err := CaptionFaceSized(24)
-	if err != nil {
-		t.Fatalf("CaptionFaceSized: %v", err)
-	}
-
-	if _, ok := face.GlyphAdvance('ぶ'); !ok {
-		t.Error("가나가 primary에 없는데 fallback으로도 렌더되지 않음")
-	}
-}

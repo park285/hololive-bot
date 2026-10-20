@@ -31,13 +31,14 @@ import (
 )
 
 type memberNewsRunNowStub struct {
-	calls int
-	err   error
+	calls  int
+	err    error
+	result triggercontracts.Result
 }
 
 func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) (triggercontracts.Result, error) {
 	s.calls++
-	return triggercontracts.NewResult(1, 0, 0), s.err
+	return s.result, s.err
 }
 
 func TestNormalizeRuntimeBuildInputsDefaultsTODOContext(t *testing.T) {
@@ -237,6 +238,25 @@ func TestBotSettingsApplierMemberNewsRunNowPaths(t *testing.T) {
 
 	if failedResult.Error != "trigger failed" {
 		t.Fatalf("failed error = %q", failedResult.Error)
+	}
+}
+
+// 부분 실패나 전부 skip인 trigger 결과도 적용된 실행으로 보고하고 원래 집계를 그대로 전달한다.
+func TestBotSettingsApplierRunNowPreservesPartialAndSkippedResults(t *testing.T) {
+	t.Parallel()
+
+	base := sharedsettings.NewLocalSettingsApplier(nil)
+
+	for _, outcome := range []triggercontracts.Result{
+		triggercontracts.NewResult(2, 0, 1),
+		triggercontracts.NewResult(0, 3, 0),
+	} {
+		trigger := &memberNewsRunNowStub{result: outcome}
+		result := newBotSettingsApplier(base, trigger, slog.New(slog.DiscardHandler)).ApplyMemberNewsWeeklyRunNow(t.Context())
+
+		if !result.Applied || result.Trigger == nil || *result.Trigger != outcome || trigger.calls != 1 {
+			t.Fatalf("run-now result = %+v (calls=%d), want applied with trigger %+v", result, trigger.calls, outcome)
+		}
 	}
 }
 

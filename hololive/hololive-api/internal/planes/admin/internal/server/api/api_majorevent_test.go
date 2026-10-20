@@ -56,15 +56,6 @@ func (f monthlyMajorEventSchedulerFunc) SendMonthlyNotification(ctx context.Cont
 	return triggercontracts.NewResult(1, 0, 0), nil
 }
 
-func TestMajorEventHandler_HandlerSignatures(t *testing.T) {
-	t.Parallel()
-
-	var (
-		_ gin.HandlerFunc = (&MajorEventHandler{}).TriggerMajorEventNotification
-		_ gin.HandlerFunc = (&MajorEventHandler{}).TriggerMajorEventMonthlyNotification
-	)
-}
-
 func TestMajorEventHandler_WeeklyNotificationDependencyErrors(t *testing.T) {
 	t.Parallel()
 

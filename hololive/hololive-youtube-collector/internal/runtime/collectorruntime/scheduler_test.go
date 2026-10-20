@@ -111,8 +111,10 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	retryAt := time.Now().UTC().Add(200 * time.Millisecond)
 	failing := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
+	cooldown := cooldownAt(t, "limited", retryAt)
+
 	failing.collect = func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
-		return collection.CollectResult{}, collecterr.CooldownUntil("limited", retryAt)
+		return collection.CollectResult{}, cooldown
 	}
 
 	registry, err := newTestRegistry(withOverride(failing)...)

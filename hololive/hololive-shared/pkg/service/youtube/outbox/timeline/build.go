@@ -230,10 +230,6 @@ func internalDelayCandidateBeatsSelected(candidate, selected PostInternalDelayCa
 		(*candidate.Millis == *selected.Millis && candidate.Priority > selected.Priority)
 }
 
-func BuildPostLatencyClassification(row *PostDeliveryTimeline) PostLatencyClassificationResult {
-	return buildPostLatencyClassification(row)
-}
-
 func buildPostLatencyClassification(row *PostDeliveryTimeline) PostLatencyClassificationResult {
 	delaySource := PostDelaySourceNone
 	internalDelayCause := PostInternalDelayCauseNone

@@ -186,11 +186,7 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
   return [...unavailable.values()];
 }
 
-export function mapLiveSessions(feed, channelId) {
-  return Array.from(liveSessionRows(feed, channelId));
-}
-
-function* liveSessionRows(feed, channelId) {
+export function* liveSessionRows(feed, channelId) {
   let rows;
   const videos = readUpstream(() => feed?.videos);
   if (Array.isArray(videos)) {

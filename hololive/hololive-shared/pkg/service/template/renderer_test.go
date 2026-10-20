@@ -21,7 +21,6 @@
 package template
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"text/template"
@@ -192,9 +191,3 @@ func TestTemplateFuncs_FormatNumberFuncs_AcceptInt(t *testing.T) {
 		t.Errorf("template output = %q, expected %q", result, expected)
 	}
 }
-
-func TestRender_WithMockDB(t *testing.T) {
-	t.Skip("requires database mock - covered by integration tests")
-}
-
-var _ = context.Background

@@ -4,7 +4,6 @@ import test from "node:test";
 
 import {
   fetchCommunityFeed,
-  fetchCommunityPosts,
   listBackstagePosts,
 } from "./fetch-community.mjs";
 
@@ -62,7 +61,7 @@ test("PAG-011 fetchCommunityFeed recognizes a complete raw list without the post
   assert.deepEqual(result.posts, []);
 });
 
-test("fetchCommunityPosts returns empty when the posts tab is missing", async () => {
+test("fetchCommunityFeed returns empty posts without loading a missing posts tab", async () => {
   const innertube = {
     getChannel: async () => channelFixture({
       getCommunity: async () => {
@@ -70,8 +69,8 @@ test("fetchCommunityPosts returns empty when the posts tab is missing", async ()
       },
     }, ["featured"]),
   };
-  const posts = await fetchCommunityPosts({ channelId: "UC_NONE", innertube });
-  assert.deepEqual(posts, []);
+  const result = await fetchCommunityFeed({ channelId: "UC_NONE", innertube });
+  assert.deepEqual(result.posts, []);
 });
 
 test("fetchCommunityFeed fail-closes on Innertube errors", async () => {

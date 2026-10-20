@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
 type RetryHintKind string
@@ -108,19 +106,6 @@ func (h RetryHint) validateAfter() error {
 func (h RetryHint) validateAt() error {
 	if h.at.IsZero() || h.at.Location() != time.UTC || h.after != 0 {
 		return errors.New("validate retry hint: AT requires a UTC timestamp")
-	}
-
-	return nil
-}
-
-func CooldownUntil(message string, retryAt time.Time) error {
-	hint, err := NewRetryAtHint(retryAt)
-	if err != nil {
-		return New(contract.ErrorCooldown, contract.ClassCooldown, message)
-	}
-
-	if err := WithRetry(New(contract.ErrorCooldown, contract.ClassCooldown, message), hint); err != nil {
-		return fmt.Errorf("with retry: %w", err)
 	}
 
 	return nil

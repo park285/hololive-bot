@@ -197,19 +197,6 @@ func TestStoredReplyKindsStayDispatchable(t *testing.T) {
 	}
 }
 
-func TestExportedReplyClientRequestIDIsDeterministic(t *testing.T) {
-	t.Parallel()
-
-	const identity = "message:m-1"
-
-	for ordinal := range uint64(4) {
-		first, second := ReplyClientRequestID(identity, ordinal), ReplyClientRequestID(identity, ordinal)
-
-		assert.Equal(t, first, second)
-		assert.Equal(t, replyClientRequestID(identity, ordinal), ReplyClientRequestID(identity, ordinal))
-	}
-}
-
 func TestConcurrentSendsRecordDistinctOrdinalsMatchingClientRequestIDs(t *testing.T) {
 	t.Parallel()
 

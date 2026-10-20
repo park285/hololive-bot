@@ -258,7 +258,15 @@ func TestMemberCreateConcurrentIdenticalRequestsHaveOneRowAndActivity(t *testing
 		wg.Go(func() {
 			<-start
 
-			results[i], errs[i] = h.service.Create(t.Context(), CreateMemberRequest{Name: "Concurrent Member"})
+			// AddMember와 같은 순서로 요청을 검증·변환한 뒤 저장한다. create가 m.ID를 채우므로 호출마다 새 값을 만든다.
+			m, err := CreateMemberRequest{Name: "Concurrent Member"}.member()
+			if err != nil {
+				errs[i] = err
+
+				return
+			}
+
+			results[i], errs[i] = h.service.create(t.Context(), m)
 		})
 	}
 

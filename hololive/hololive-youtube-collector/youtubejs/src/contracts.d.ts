@@ -7,33 +7,6 @@ export type RuntimeState =
   | "STOPPED"
   | "FAULTED";
 
-export interface BootstrapLimits {
-  request_body_bytes: number;
-  response_body_bytes: number;
-  max_inflight: number;
-}
-
-export interface BootstrapRequest {
-  protocol_version: number;
-  limits: BootstrapLimits;
-}
-
-export interface BootstrapResponse {
-  protocol_version: number;
-  state: RuntimeState;
-  request_body_bytes: number;
-  response_body_bytes: number;
-  max_inflight: number;
-}
-
-export interface HealthResponse {
-  protocol_version: number;
-  state: RuntimeState;
-  inflight: number;
-  max_inflight: number;
-  proof?: ProofStatus;
-}
-
 export type ProofState = "COLD" | "WARMING" | "READY" | "EXPIRED" | "UNAVAILABLE" | "STOPPED";
 
 export interface ProofStatus {
@@ -148,8 +121,6 @@ export interface FetcherSet {
   proofStatus?: () => ProofStatus | undefined;
   close?: () => Awaitable<void>;
 }
-
-export type RpcFetchers = FetcherSet;
 
 export interface RpcEndpoint<Request, Response> {
   validateRequest: (value: unknown) => Request;

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -24,11 +25,36 @@ func (f *failedMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Me
 
 func TestMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing.T) {
 	cause := errors.New("member repository unavailable")
+	replies := 0
+	deps := &handlercore.Dependencies{
+		Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: cause}, nil, slog.New(slog.DiscardHandler)),
+		Formatter: formatter.NewResponseFormatter("!", nil),
+		SendMessage: func(context.Context, string, string) error {
+			replies++
+			return nil
+		},
+		SendError: func(context.Context, string, string) error { replies++; return nil },
+	}
 
-	for _, withCandidates := range []bool{false, true} {
-		t.Run(map[bool]string{false: "best match", true: "candidates"}[withCandidates], func(t *testing.T) {
+	_, err := handlercore.FindMemberWithCandidatesOrError(t.Context(), deps, testRoomID, "미코", "일정")
+	if !errors.Is(err, cause) || errors.Is(err, handlercore.ErrMemberLookupHandled) {
+		t.Fatalf("member lookup error = %v, want backend cause", err)
+	}
+
+	if replies != 0 {
+		t.Fatalf("backend failure produced %d member-not-found replies", replies)
+	}
+}
+
+// !알람도 matcher 원천 장애를 "멤버 없음" 응답으로 바꾸지 않고 원인 오류로 돌려준다.
+func TestAlarmMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing.T) {
+	cause := errors.New("member repository unavailable")
+
+	for _, action := range []string{testActionAdd, "remove"} {
+		t.Run(action, func(t *testing.T) {
 			replies := 0
 			deps := &handlercore.Dependencies{
+				Alarm:     &alarmListViewerStub{},
 				Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: cause}, nil, slog.New(slog.DiscardHandler)),
 				Formatter: formatter.NewResponseFormatter("!", nil),
 				SendMessage: func(context.Context, string, string) error {
@@ -36,22 +62,19 @@ func TestMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing.T) {
 					return nil
 				},
 				SendError: func(context.Context, string, string) error { replies++; return nil },
+				Logger:    slog.New(slog.DiscardHandler),
 			}
 
-			var err error
-
-			if withCandidates {
-				_, err = handlercore.FindMemberWithCandidatesOrError(t.Context(), deps, testRoomID, "미코", "일정")
-			} else {
-				_, err = handlercore.FindMemberOrError(t.Context(), deps, testRoomID, "미코")
-			}
-
+			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+				testParamAction: action,
+				paramMember:     "미코",
+			})
 			if !errors.Is(err, cause) || errors.Is(err, handlercore.ErrMemberLookupHandled) {
-				t.Fatalf("member lookup error = %v, want backend cause", err)
+				t.Fatalf("alarm %s error = %v, want backend cause", action, err)
 			}
 
 			if replies != 0 {
-				t.Fatalf("backend failure produced %d member-not-found replies", replies)
+				t.Fatalf("backend failure produced %d alarm replies", replies)
 			}
 		})
 	}
@@ -90,8 +113,8 @@ func TestGraduationCheckPropagatesMemberLookupFailure(t *testing.T) {
 		},
 	}
 
-	channel, err := handlercore.FindActiveMemberOrError(t.Context(), deps, testRoomID, testMemberAqua)
+	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(t.Context(), deps, testRoomID, testMemberAqua, "일정")
 	if !errors.Is(err, cause) || channel != nil {
-		t.Fatalf("FindActiveMemberOrError() = %+v, %v; want lookup failure", channel, err)
+		t.Fatalf("FindActiveMemberWithCandidatesOrError() = %+v, %v; want lookup failure", channel, err)
 	}
 }

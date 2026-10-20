@@ -44,22 +44,8 @@ class InvalidRequestError extends Error {}
 class RequestTimeoutError extends Error {}
 
 /**
- * @param {Partial<FetcherSet>} [overrides]
- * @returns {import("node:http").Server}
- */
-export function createHelperServer(overrides = {}) {
-  const runtime = createHelperRuntime({
-    createFetchers: (fetchImpl, singleAttemptFetchImpl) => ({
-      ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }),
-      ...overrides,
-    }),
-  });
-  return attachHelperServer(runtime, 30_000);
-}
-
-/**
  * @param {string} socketPath
- * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
+ * @param {{ stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
  * @returns {Promise<import("node:http").Server>}
  */
 export async function listenUnix(socketPath, options = {}) {
@@ -383,17 +369,9 @@ function disarmPipeUnlink(server) {
 }
 
 /**
- * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
+ * @param {{ stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
  */
 function normalizeListenOptions(options) {
-  if (options && typeof options === "object" && "fetchCommunity" in options) {
-    return {
-      stub: false,
-      requestReadTimeoutMs: 30_000,
-      fetchers: options,
-      manageProcess: false,
-    };
-  }
   const record = options && typeof options === "object" ? options : {};
   return {
     stub: Boolean("stub" in record && record.stub),

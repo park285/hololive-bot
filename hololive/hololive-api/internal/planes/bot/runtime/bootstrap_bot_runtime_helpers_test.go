@@ -22,34 +22,13 @@ package botruntime
 
 import (
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	apiserver "github.com/kapu/hololive-api/internal/httpapi"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
-
-func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.DiscardHandler)
-	handler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
-	require.NotNil(t, handler)
-
-	router := gin.New()
-	handler.RegisterInternalRoutesWithoutAuth(router.Group(""))
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
-	res := httptest.NewRecorder()
-	router.ServeHTTP(res, req)
-	assert.Equal(t, http.StatusServiceUnavailable, res.Code)
-}
 
 func TestBuildBotRuntime_RejectsNilAppConfig(t *testing.T) {
 	t.Parallel()

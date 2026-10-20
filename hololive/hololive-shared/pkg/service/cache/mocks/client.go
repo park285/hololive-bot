@@ -22,7 +22,6 @@ package mocks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -78,8 +77,6 @@ var (
 	_ cache.ConnectionManager = (*Client)(nil)
 	_ cache.LowLevelCache     = (*Client)(nil)
 )
-
-var ErrUnimplemented = errors.New("cache mock: method not configured")
 
 func NewStrictClient() *Client {
 	return &Client{}
