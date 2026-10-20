@@ -1,6 +1,6 @@
 # 전체 변경 main 합류 마무리 인계 - 2026-10-16
 
-**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 PR #641(squash)로 원격 `main`(`848fb2792`)에 발행했습니다(6절). 운영 중앙·AP a/b/c/d에 적용하고 수용 검사를 마쳤습니다(7절). 배포 뒤 발견한 alarm 결함의 근본 수정, Seoul 점검 창 배포 절차 수정, 중앙 issuer c 정렬과 이전 버전 정리는 PR #643·#644와 운영 적용으로 마쳤습니다(8절).** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
+**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 PR #641(squash)로 원격 `main`(`848fb2792`)에 발행했습니다(6절). 운영 중앙·AP a/b/c/d에 적용하고 수용 검사를 마쳤습니다(7절). 배포 뒤 발견한 alarm 결함의 근본 수정, Seoul 점검 창 배포 절차 수정, 중앙 issuer c 정렬과 이전 버전 정리는 PR #643·#644와 운영 적용으로 마쳤습니다(8절). 남은 한계 보완(PR #646)과 worker 재배포, 추가 정리는 9절에 있습니다.** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
 
 ## 1. 승인 범위
 
@@ -124,7 +124,7 @@
   - 10-14 09:52Z에 시작해 42시간 넘게 이어진 live가 있었고, 이 방송의 catchup은 10-14 09:57Z에 SENT되었습니다.
   - catchup·guardrail의 "이미 알린 방" 근거 하한이 평가 시각 − 24시간이었습니다. 그래서 10-15 09:58Z부터 최초 SENT가 창 밖으로 밀렸고, 같은 방에 catchup을 매분 다시 만들었습니다.
   - canonical event payload에 `stream.viewer_count`가 들어 있어 재발행이 `duplicate_sent` 대신 `rejected_collision`이 되었습니다.
-  - 결과: hash conflict WARN, scheduler ERROR, `missing_dispatch` WARN이 매분 났고, collision 행이 297건까지 늘었습니다.
+  - 결과: hash conflict WARN, scheduler ERROR, `missing_dispatch` WARN이 매분 났고, collision 행이 298건까지 늘었습니다(교체 전 측정 297건, 교체 직전까지 1건 추가).
 - **수정 (PR #643, `3951da83d`):**
   - 근거 하한을 방송별 실제 시작 시각 − 24시간으로 바꿨습니다. 실제 시작 시각이 없거나 미래이면 평가 시각을 기준으로 하고, 예정 시각은 쓰지 않습니다.
   - event payload identity에서 `viewer_count`를 뺐습니다.
@@ -153,10 +153,71 @@
   - osaka·osaka2: 이전 release 3개씩과 `previous` link를 지웠습니다. native rollback은 기준점이 없어 거절하므로, 문제가 생기면 fix-forward합니다.
   - kapu: 앱 repo 4개에서 848 이전 tag 146개를 지우고 dangling image를 prune했습니다. image 사용량은 72GB에서 49GB로 줄었습니다. DB image, 호스트 이전 snapshot(`hololive-migration/*`), 보조 image는 남겼습니다. 이 중에는 현재 중앙 postgres·deunhealth image의 원본도 있습니다.
 - **남은 한계:**
-  - 실제 시작 시각 없이 24시간을 넘긴 방송은 이전처럼 catchup을 다시 시도할 수 있습니다. 확인 시점의 LIVE 세션 중 `started_at`이 빈 경우는 0건이었습니다.
-  - 그 방의 catchup delivery가 DLQ·QUARANTINED·CANCELLED이면, catchup이 허용되는 동안 재발행이 `rejected_terminal`로 반복될 수 있습니다. 이번 변경 범위 밖의 기존 동작입니다.
-  - 기존 collision 297행은 남아 있습니다. 사라지려면 SENT 보존 기간(90일)을 넘겨야 하며, 90일을 넘는 live는 근거를 잃는 경계 사례입니다.
-  - host-native a/d 배포에는 점검 정지 mode가 없어, 실패하면 `previous` release를 다시 시작합니다(runbook 명시).
+  - 실제 시작 시각 없이 24시간을 넘긴 방송은 이전처럼 catchup을 다시 시도할 수 있습니다. 확인 시점의 LIVE 세션 중 `started_at`이 빈 경우는 0건이었습니다. (9절: 첫 LIVE 관측 시각을 기준으로 쓰도록 보완)
+  - 그 방의 catchup delivery가 DLQ·QUARANTINED·CANCELLED이면, catchup이 허용되는 동안 재발행이 `rejected_terminal`로 반복될 수 있습니다. 이번 변경 범위 밖의 기존 동작입니다. (9절: 보완)
+  - 기존 collision 298행은 남아 있습니다. 사라지려면 SENT 보존 기간(90일)을 넘겨야 하며, 90일을 넘는 live는 근거를 잃는 경계 사례입니다.
+  - host-native a/d 배포에는 점검 정지 mode가 없어, 실패하면 `previous` release를 다시 시작합니다(runbook 명시). (9절: 변경 전 실행 상태를 복원하도록 보완)
   - Seoul 배포에서 읽기 전용 블록이 `cutover_armed=true` 앞에 있다는 순서 자체는 테스트로 검증하지 않습니다.
+
+## 9. 남은 한계 보완과 추가 정리 (2026-10-16 오후)
+
+- **수정 (PR #646, `ab68fa10e`):**
+  - live catchup은 자기 catchup event(`live_catchup`) delivery가 DLQ·QUARANTINED·CANCELLED로 끝난 방을 근거로 인정합니다. 이런 방에는 `rejected_terminal`로 거절될 재발행을 매분 만들지 않습니다.
+  - guardrail은 그런 방을 경고 대신 `terminal_delivery` 지표로 구분합니다. N분 전 알림이 실패한 경우에는 catchup을 막지 않습니다.
+  - 근거 하한은 실제 시작 시각이 없으면 첫 LIVE 관측 시각(`live_first_seen_at`)을 기준으로 씁니다.
+  - host-native AP 배포는 변경 전 collector unit의 실행·활성화 상태를 기록합니다. 실패 복원은 실행 중이던 unit만 다시 시작하고, 멈춰 있거나 실패해 있던 unit은 시작하지 않습니다.
+  - 적대적 리뷰는 2회 받았습니다. 1회차에서 중요 지적 1건이 나왔습니다. 같은 방송의 N분 전 알림 DLQ까지 근거로 보아 시작 알림이 조용히 누락될 수 있다는 내용이었고, 반영했습니다. 2회차에서는 차단·중요 지적이 없었습니다.
+  - 각 수정은 변이 실험으로 테스트가 결함을 잡는 것을 확인했습니다.
+- **측정 (운영 읽기 전용):**
+  - 지난 30일 LIVE delivery는 sent 524건, cancelled 3건이었습니다. cancelled 3건은 모두 방송이 끝난 며칠 뒤에 취소되었습니다.
+  - 지난 60일 세션 4,114개 가운데 `started_at` 없이 LIVE가 관측된 세션은 0건이었습니다.
+  - 따라서 보완한 두 alarm 경로는 지금 운영에서 재현되지 않습니다. 원래 결함과 같은 증상이 다시 나올 수 있는 경로를 미리 닫은 것입니다.
+- **worker 재배포:**
+  - 빌드: arm64 image `05f5550380e4`(revision `ab68fa10e`, 10.1.0).
+  - kapu의 다른 세션이 `shared-go`·`iris-client-go`에서 의존성 변경을 커밋하지 않은 채 진행 중이었습니다. 이 때문에 local CI를 포함한 빌드는 `go.work.sum`을 바꿔 revision을 `unknown`으로 기록했습니다.
+  - 같은 tree는 local CI 전체, pre-push gate 2회, GitHub CI를 통과했습니다. 그래서 승인을 받아 새 worktree에서 `--skip-local-ci`로 다시 빌드했습니다. image에는 `GOWORK=off`와 go.mod에 고정된 의존성만 들어갑니다.
+  - 미발행 upcoming 후보 0건, 진행 중 delivery 0건을 확인한 뒤 07:03Z에 worker만 build 없이 교체했습니다.
+  - rollback point는 `hololive-alarm-worker:rollback-remaining-limits-20261016T070318Z`(`3951da83d`)입니다.
+- **worker 수용:**
+  - 교체 뒤 7분 동안 오류·경고·hash conflict·not accepted·collision이 모두 0건이었습니다.
+  - category 조건이 들어간 새 근거 쿼리가 7회 호출되었습니다.
+  - health는 healthy, 재시작은 0회입니다.
+  - 실제 신규 발송: 07:54:00Z에 구독 채널의 5분 전 알림(LIVE, category `5`) 1건이 만들어졌고, 같은 시각 SENT로 발송되었습니다.
+  - 그 방송은 08:06:13Z에 LIVE가 되었습니다. 3분 뒤까지 같은 방에 catchup이 새로 만들어지지 않았고 guardrail 경고도 없었습니다. 교체 뒤 08:09Z까지 오류·경고·collision은 모두 0건입니다.
+- **Seoul 점검 정지 mode 운영 확인 (읽기 전용):**
+  - 실행 중인 b에 `AP_PREFLIGHT_ALLOW_STOPPED=true` 사전 검사를 돌리면 `is not stopped for maintenance: running`으로 거절합니다.
+  - 일반 mode에서는 통과합니다.
+- **추가 정리:** 1차 정리에서 빠진 이전 버전 산출물과 작업 파일입니다.
+  - osaka·osaka2(각 16개 경로, 각각 2GB·2.5GB 회수):
+    - 더 이상 참조하지 않는 `releases/first-cutover-producer.state`
+    - 10-01~10-04 staging·rollback·warnings 디렉터리
+    - 퇴역한 `/opt/hololive-bot/youtube-producer`
+    - home의 배포 payload 9개와 `.hololive-stack-ops-*`
+  - Seoul: 8~9월 `hololive-bot.bak-*` 3개, `hololive-bot-rollback-*` 2개
+  - 중앙: `/tmp`의 10-11·10-14 배포 tar 5개
+  - kapu:
+    - `artifacts/ap-host-native` 62개(5.2GB, 공식 `prune-ap-artifacts.sh`로 정리)
+    - SQL 배포 산출물 2개
+    - 쓰지 않는 app image tag 11개(candidate, 퇴역 producer, 일회성 remediation·migrate, X login 이전 빌드)
+- **남긴 것:**
+  - Seoul의 failover staging 4개와 launch script: 플랫폼 소유입니다. Seoul에 PostgreSQL failover controller(`/usr/local/libexec/hololive-postgres-failover`)가 설치되어 있습니다.
+  - Seoul `postgres-standby-bind-20260828T181820Z`: 문서가 보존을 요구하는 DB 설정 백업입니다.
+  - kapu의 DB image(`hololive-postgres*`)와 10-07 호스트 이전 snapshot(`hololive-migration/*`): 플랫폼 소유입니다.
+  - kapu `artifacts`의 다른 작업 산출물(155MB)
+  - 중앙 worker rollback tag 2개
+- **발견 사항 (이 세션에서는 미수정):**
+  - 중앙 DB에 `lifecycle_origin=legacy_unknown`인 LIVE 세션 9개가 남아 있었습니다(마지막 관측 05-24~06-03).
+    - live 목록은 신선도 조건으로, 방송 이력은 ENDED 조건으로 제외하므로 노출되지는 않았습니다. 대신 이 9개 방송은 이력에서 빠졌습니다.
+    - 고치려면 운영 데이터를 바꿔야 하므로 별도 승인이 필요했습니다.
+    - 후속: 2026-10-18 04:56Z에 migration 324(PR #654)를 적용해 9건을 `ENDED`로 정리했습니다. 결과는 [방송 시각 확정 계획](2026-10-18-broadcast-time-finalization.md)의 배포 기록에 있습니다.
+  - 빌드 중 간헐 실패가 두 번 있었습니다.
+    - collector `TestCommunityRPCPayloadStorageBoundaryAndScheduler/one_over_at_publisher`: 예상하지 않은 `GET /` 요청이 들어왔습니다. 단독으로 8회 반복하면 모두 통과합니다.
+    - `shared-go` `TestClientRetryAttemptsAreOwnedByOption`: 요청 수가 기대보다 많았고, 단독 10회 반복에서도 실패가 재현됩니다.
+    - 둘 다 이번 변경과 무관합니다. 다른 세션이 커밋하지 않은 의존성 변경과의 관계는 확인하지 못했습니다.
+- **남은 한계:**
+  - 시작 시각과 첫 관측 시각이 모두 없는 채로 24시간을 넘긴 방송만 평가 시각 창으로 돌아갑니다.
+  - native 상태 기록이 정지 단계보다 먼저 실행된다는 순서는 테스트로 검증하지 않습니다. Seoul 읽기 전용 블록의 순서도 마찬가지입니다.
+  - 수동 `ap-host-native-rollback.sh`는 변경 전 상태를 쓰지 않고 collector를 시작합니다(runbook 명시).
+  - native AP에는 이전 release가 없어 문제가 생기면 fix-forward로 대응합니다.
 
 **Fallback delta: none. Retry delta: none.**
