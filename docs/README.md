@@ -48,4 +48,4 @@
 | `agent-workflows/` | history + 진행 중 plan | agent 주도 plan/note 작업 공간. 완료된 plan/note는 history 층 기록으로 취급하되, `docs/current/` 문서들이 경로를 참조하므로 제자리 유지. |
 | `handoff/` | history | 완료된 refactor handoff 기록(P1-P4 split, youtube-producer multi-worker). 새 handoff/closeout 문서는 `history/`에 작성. |
 | `review/` | history | 날짜 붙은 review snapshot. 새 review 기록은 `history/`에 작성. |
-| `../admin-dashboard/docs/` (저장소 루트) | history | 퇴역 admin-dashboard BFF의 설계·bigbang 전환 증거. 웹은 Iris Admin이 소유하고 이 저장소에는 웹 소스가 없다. `DEC-20260909-hololive-admin-bigbang-replacement`·`DEC-20260910-*`의 evidence와 retirement allowlist가 경로를 참조하므로 제자리 유지(stack-audit 2026-09-26 T19, `DEC-20260926-hololive-retired-rollback-tooling`). 새 문서를 추가하지 않는다. |
+| `../admin-dashboard/docs/` (삭제) | history | 퇴역 admin-dashboard BFF의 설계·bigbang 전환 증거였다. 디렉터리는 삭제했으며 `DEC-20260909-hololive-admin-bigbang-replacement`·`DEC-20260910-*`가 가리키는 파일은 `git show f258dc645:admin-dashboard/docs/<path>`로 조회한다. 웹은 Iris Console이 소유한다. |

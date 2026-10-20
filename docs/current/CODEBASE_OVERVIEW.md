@@ -16,7 +16,6 @@
 │   ├── hololive-youtube-collector/  # AP-fleet YouTube collector module
 │   ├── hololive-shared/            # shared domain, config, providers, contracts, services
 │   └── hololive-dbtest/            # PostgreSQL test harness and migration replay
-├── admin-dashboard/                # web ownership boundary guidance
 ├── docs/current/                   # current architecture, service, contract, runbook docs
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
 └── deploy/compose/                 # Docker Compose baselines and overlays
@@ -27,7 +26,7 @@
     └── docker-compose.osaka2.yml   # native Osaka2 d configuration/path validation
 ```
 
-`go.work` ties the root module, the Go runtime/shared/dbtest modules under `hololive/`, and sibling modules `../shared-go` and `../iris-client-go` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`; `admin-dashboard/` contains the Hololive web boundary guidance.
+`go.work` ties the root module, the Go runtime/shared/dbtest modules under `hololive/`, and sibling modules `../shared-go` and `../iris-client-go` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
 
 ## Runtime Services
 
@@ -160,7 +159,7 @@ Current operational details live in `docs/current/services/youtube-collector.md`
 | Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change final notification delivery | `docs/current/contracts/alarm.md`, `docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md`, `docs/current/runbooks/alarm-worker.md`, `docs/current/runbooks/dlq-replay.md`, `hololive/hololive-alarm-worker/` |
 | Change command handling | `hololive/hololive-api/internal/planes/bot/` |
-| Change Hololive admin API / web | API: `hololive/hololive-api/internal/planes/admin/`; web: `../iris-console/`; boundary: `admin-dashboard/AGENTS.md`, `docs/current/runbooks/admin-dashboard.md` |
+| Change Hololive admin API / web | API: `hololive/hololive-api/internal/planes/admin/`; web: `../iris-console/`; operations: `docs/current/runbooks/admin-dashboard.md` |
 | Run architecture checks | `scripts/architecture/` |
 | Run deploy/status checks | `scripts/deploy/`, `scripts/logs/` |
 

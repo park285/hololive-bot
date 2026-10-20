@@ -17,7 +17,7 @@ Allowed at root:
 - Build entry script: `build-all.sh`
 - Canonical env sample: `.env.example` (region- and host-specific `.env.*.example` live beside their compose files under `deploy/compose/`)
 - Reserved local-runtime placeholders: `logs/`, `runtime-config/`, `artifacts/` (see §Local Runtime Data and §Artifacts)
-- Module and content directories: `.github/`, `hololive/`, `admin-dashboard/`, `deploy/`, `docs/`, `scripts/`, `internal/`
+- Module and content directories: `.github/`, `hololive/`, `deploy/`, `docs/`, `scripts/`, `internal/`
 
 Not at root — these were relocated and must not return:
 

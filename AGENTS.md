@@ -10,4 +10,4 @@
 - Korean public contracts/side effects and reason comments; masked slog, fmt.Errorf("action: context: %w", err), context.Context first.
 - Fix causes before suppressing findings; existing debt needs scoped fix or command/finding report. Bypasses require named false positive or approved emergency, smallest scope/reason/linter, nolintlint and retained regression check. Never hide directories/classes/test files; existing generated/third-party exclusions may remain.
 - Stage 3/prerequisites and applicable NilAway/race stay blocking. Gate changes read stage configuration; never weaken product checks.
-- Dashboard: [boundary](admin-dashboard/AGENTS.md); migrations: [conventions](hololive/hololive-api/scripts/migrations/CONVENTIONS.md).
+- Migrations: [conventions](hololive/hololive-api/scripts/migrations/CONVENTIONS.md).
