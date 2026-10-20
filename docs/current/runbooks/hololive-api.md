@@ -203,6 +203,10 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(docker exec hololive-api
 - `hololive_youtube_plane_db_slot_wait_seconds{operation}`, `hololive_youtube_plane_db_slot_hold_seconds{operation}`: YouTube plane 앱 DB 슬롯(`DBOperationConcurrency`)의 대기와 보유 시간입니다. operation은 `probe`, `claim`, `consume`, `retry`, `dead_letter`, `live_end`, `projection_refresh`, `replay`, `retention_source`, `retention_projection`, `queue_snapshot`, `collection_snapshot`입니다. 대기는 획득에 실패한 경우(`acquire DB slot: context deadline exceeded`)도 포함하고, 보유는 획득한 작업만 기록합니다. 전용 pool의 최대 연결 수가 슬롯 수보다 커서 슬롯 포화는 `pool="youtube_plane"` 지표에 드러나지 않으므로, 슬롯 고갈은 이 두 지표의 operation별 분포로 진단합니다.
 - 슬롯을 잡는 claim·consume·retry·dead letter·live end·projection refresh·replay·retention은 슬롯 대기와 실행을 합쳐 `TransactionTimeout`(기본 10초) 안에 끝나야 합니다. 넘으면 슬롯을 돌려주고 `context deadline exceeded` 오류를 남기며, 각 loop는 기존 분류대로 오류 로그를 남기고 다음 주기를 계속합니다. 기동 중 첫 projection refresh가 이 시한을 넘으면 YouTube plane 생성이 실패합니다. startup claim probe와 queue·collection 관측 조회는 이 시한을 쓰지 않습니다.
 - `hololive_youtube_plane_consume_total{result}`, `hololive_youtube_plane_retention_errors_total{table}`, `hololive_youtube_plane_retention_deleted_total{table}`는 알려진 라벨 값을 기동 때 0으로 노출하므로, 재시작 뒤 첫 retry·dead letter·retention 실패도 `increase()`에 잡힙니다.
+- `youtube_live_runtime_state`는 writer가 같은 트랜잭션 끝에서 명시적으로 갱신합니다(migration 328). 정합성 점검은 `scripts/maintenance/queries/live_runtime_state_drift.sql`(누락·잉여·값 변경 행 수)이며 정상값은 모두 0입니다. 0이 아니면 해당 영상 key를 빠뜨린 writer 경로가 있다는 뜻이므로 exclusive 전역 잠금 아래 변경 key로 `refresh_youtube_live_runtime_state`를 호출해 맞추고 경로를 고칩니다.
+  - **328 merge·배포 조건:** 운영에서 325의 key 비교 지표(`hololive_youtube_live_runtime_key_audit_{trigger_keys,missing}_total{path}`, 325 포함 이전 이미지)로 관찰 창 안에 `live_snapshot`·`schedule_snapshot`·`video_list`·`video_live_check`·`live_end_finalizer` 각각의 trigger_keys 증가 > 0, 전 path missing 증가 0이 확인되고, 같은 시점의 `bash scripts/maintenance/check-runtime-projections.sh` 결과가 `live_runtime_state missing=0 extra=0 changed=0`이기 전에는 328 전환을 merge·배포하지 않습니다. 328 이미지에는 이 지표가 없습니다. `video_list`는 새 예정 Premiere의 첫 분류에서만 key를 내므로 관찰 기간에 자연 입력이 없을 수 있습니다. 이 path는 격리 PostgreSQL에서 실제 publisher·consumer로 같은 경로를 트리거한 검증으로 대체합니다. 대체 검증은 325 schema의 trigger_keys 증가·missing 0, 328 schema의 drift 0, refresh 누락 음성 대조입니다.
+  - 배포 순서는 API 정지 → `hololive-db-migrate`(328) → 새 API 시작 → `bash scripts/maintenance/check-runtime-projections.sh`에서 `live_runtime_state missing=0 extra=0 changed=0` 확인입니다. 328은 트리거 DROP(ACCESS EXCLUSIVE)부터 전체 재계산·COMMIT까지 `source_observations`와 라이브 원본 표 잠금을 유지하므로, migration 동안 원격 collector의 source 관측 INSERT와 worker·bot의 세션 읽기도 일시 대기할 수 있습니다. 328 뒤 이전 API 이미지만 되돌리는 롤백은 지원하지 않으며(트리거가 없어 수명 모델이 갱신되지 않음) 복구는 수정 이미지로 전진합니다.
+  - 수동 검토 영수증(`record_youtube_live_review`)은 READ COMMITTED 트랜잭션에서 실행합니다. SERIALIZABLE·REPEATABLE READ에서는 `live review requires read committed transaction`으로 거절됩니다.
 
 ### 외부 HTTP 호출 지표
 
@@ -280,9 +284,30 @@ Rollback:
 
 ### 3. Durable webhook or reply backlog grows
 
-`bot_webhook_inbox`의 `pending`/`retry`와 `bot_reply_outbox`의 `pending`/`retryable_pre_dispatch`가 지속 증가하면 PostgreSQL, command handler, Iris 상태를 함께 확인합니다. `dead`는 poison payload 또는 bounded retry 소진, `outcome_unknown`은 부수 효과 결과를 확정할 수 없어 자동 재실행하지 않은 상태입니다. lease heartbeat가 살아 있는 command는 reclaim 대상이 아닙니다.
+`bot_webhook_inbox`의 `pending`/`retry`와 `bot_reply_outbox`의 `pending`/`retryable_pre_dispatch`가 지속 증가하면 PostgreSQL, command handler, Iris 상태를 함께 확인합니다. `dead`는 poison payload 또는 bounded retry 소진, `outcome_unknown`은 부수 효과 결과를 확정할 수 없어 자동 재실행하지 않은 상태입니다. `accepted`는 Iris `202` admission과 `requestId` 저장을 마치고 lease 없이 handoff 확인을 기다리는 상태입니다. lease heartbeat가 살아 있는 command는 reclaim 대상이 아닙니다.
 
-Reply outbox의 `outcome_unknown`은 같은 `client_request_id`로 최대 5회, 최초 dispatch인 `first_attempt_at`부터 144시간 미만인 동안에만 durable backoff 후 재확인합니다. attempt 또는 시간 경계에 도달한 행과 accepted lease가 만료된 행은 자동 발송 없이 payload를 보존한 `manual_review`로 이동합니다. `bot_reply_outbox_accepted_reclaimed_total`, `bot_reply_outbox_manual_review_backlog`, `bot_reply_outbox_manual_review_oldest_age_seconds`를 확인하고 Iris 수리 여부와 같은 `client_request_id`의 처리 이력을 조사합니다. 두 manual review 값은 durable maintenance 주기마다 갱신하며, 조회가 실패하면 마지막 성공 값을 유지한 채 `bot_reply_outbox_manual_review_snapshot_success`가 0이 되고 `bot_reply_outbox_manual_review_snapshot_last_success_timestamp_seconds`는 마지막 성공 시각에 머뭅니다. success가 0이거나 마지막 성공 시각이 오래됐으면 건수·경과를 현재 상태로 해석하지 않습니다.
+Reply 발송은 admission(`202`)에서 끝나고 `/reply-status`를 polling하지 않습니다. 같은 API process의 `durable-reply-handoff-reconciler`가 `accepted` 행을 `FOR UPDATE SKIP LOCKED` batch로 골라 저장된 `iris_request_id`의 `/reply-status`를 조회합니다. 확인 간격은 봇 전용 250ms→500ms→1s→2s→5s→15s→60s이며 지평은 `bot_reply_outbox` executor `attempt_timeout`입니다(새 설정 key 없음). 알림 워커의 5s→15s→60s→5min과 다른 이유는 같은 방 순서(`accepted` 선행 행이 후속 응답을 막는 권고안 A)를 유지하기 때문입니다. 5초부터 확인하면 대화형 후속 응답이 매번 최소 5초 막힙니다. 결과는 다음과 같습니다.
+
+| Iris 관측 | 전이 | `last_error` |
+|---|---|---|
+| `handoff_completed` | `handoff_completed`(payload 제거) | 빈 값 |
+| `failed`, attempt·144시간 예산 남음 | `retryable_pre_dispatch`. 다음 발송의 SDK ladder가 409 `CLIENT_REQUEST_ID_FAILED`를 지나 `:r1`/`:r2`로 보내며 세대 상한 2를 넘지 않음. 세 세대 모두 409이면 `permanent_conflict` | `handoff_failed` |
+| `failed`, 예산 소진 | `dead`(payload 제거) | `handoff_failed` |
+| `outcome_unknown`, 알 수 없는 상태, 빈 응답, 다른 `requestId` | `manual_review`(payload 보존) | `handoff_outcome_unknown` |
+| `404` | `manual_review`(payload 보존) | `handoff_status_missing` |
+| 진행 중 상태, 지평 전 | 전이 없이 다음 확인 예약 | 변경 없음 |
+| 진행 중 상태 또는 조회 오류, 지평 도달 | `manual_review`(payload 보존) | `handoff_unconfirmed` |
+| 조회 오류(timeout·5xx 등), 지평 전 | 전이 없이 다음 확인 예약 | 변경 없음 |
+
+Reply outbox의 `outcome_unknown`은 같은 `client_request_id`로 최대 5회, 최초 dispatch인 `first_attempt_at`부터 144시간 미만인 동안에만 durable backoff 후 재확인합니다. attempt 또는 시간 경계에 도달한 행과 위 표의 확인 불가 행은 자동 발송 없이 payload를 보존한 `manual_review`로 이동합니다. 만료 lease reclaim은 `submitting`만 다루며 attempt·시간 경계에 닿은 행만 `manual_review`로 옮깁니다. Reply outbox의 attempt `success`는 Iris admission(`202`) 완료를 뜻하며 handoff 완료를 뜻하지 않습니다. handoff 완료를 세는 지표는 없습니다. reconciler 결과는 `reply handoff failed; requeued for reissue`(WARN), `reply handoff reached non-success terminal state`(ERROR, `status`·`reason` 포함), `reply handoff status query deferred`(WARN) 로그와 `bot_reply_outbox_manual_review_backlog`·`bot_reply_outbox_manual_review_oldest_age_seconds`, `status = 'accepted'` 행 수로 관측합니다. `queue="reply_handoff"` label은 빈 claim 횟수(`bot_durable_claim_idle_total`)에만 붙습니다. Manual review는 Iris 수리 여부와 같은 `client_request_id`의 처리 이력을 조사합니다. 두 manual review 값은 durable maintenance 주기마다 갱신하며, 조회가 실패하면 마지막 성공 값을 유지한 채 `bot_reply_outbox_manual_review_snapshot_success`가 0이 되고 `bot_reply_outbox_manual_review_snapshot_last_success_timestamp_seconds`는 마지막 성공 시각에 머뭅니다. success가 0이거나 마지막 성공 시각이 오래됐으면 건수·경과를 현재 상태로 해석하지 않습니다. `bot_reply_outbox_accepted_reclaimed_total`은 엄격 CHECK 릴리스에서 삭제됐으므로 이 지표를 쓰는 대시보드·alert는 지웁니다.
+
+엄격 shape CHECK 릴리스(migration 332·334·335)는 326·333과 handoff reconciler를 포함한 직전 릴리스가 운영에서 돈 뒤에만 적용합니다. 직전 릴리스의 lease reclaim이 이전 binary의 lease 있는 `accepted`를 `manual_review`로 옮기므로, 적용 전에 아래 결과가 0인지 확인합니다. 0이 아니면 직전 릴리스를 유지한 채 lease 만료와 maintenance 주기를 기다립니다. 332는 표를 잠근 뒤 남은 행이 있으면 SQLSTATE `55000`으로 중단하고 제약을 바꾸지 않습니다. 이전 실행이 남긴 `chk_bot_reply_outbox_state_shape_next`가 있으면 재실행은 VALIDATE·교체부터 이어 갑니다. 이 제약은 사전 조회를 통과한 같은 트랜잭션에서 추가돼 새 INSERT·UPDATE에도 적용되므로, 정상 runner 순서에서는 재검증할 위반 행이 남지 않습니다. 잠금 대기(`55P03`)나 statement timeout(`57014`)으로 중단됐다면 경합·실행 시간을 확인하고 원인을 해소한 뒤 db-migrate를 다시 실행합니다.
+
+```sql
+SELECT count(*) FROM bot_reply_outbox WHERE status = 'accepted' AND claim_token IS NOT NULL;
+```
+
+순서는 manifest대로 332(엄격 CHECK, NOT VALID → VALIDATE → 교체) → 334(`idx_bot_reply_outbox_submitting_lease_expiry` CONCURRENTLY 생성) → 335(`idx_bot_reply_outbox_lease_expiry` CONCURRENTLY 삭제) → 새 API binary입니다. 334가 실패하면 runner가 그 invalid index를 지우고 멈추므로, 원인을 해소한 뒤 db-migrate를 다시 실행합니다.
 
 Command claim이 만료되어 `outcome_unknown`으로 닫히면 `bot_durable_command_outcome_unknown_total`이 증가하고 `inspect bot_command_executions status=outcome_unknown` action log가 기록됩니다. 자동 재실행하지 말고 해당 시점의 부수 효과를 조사합니다. Inbox reclaim이 아직 살아 있는 command claim과 만난 경우에는 inbox payload를 완료·scrub하지 않고 command stale cutoff 이후로 미룹니다.
 
@@ -374,6 +399,8 @@ Fx v1.24.0은 `hololive-api` 한 바이너리의 process signal과 `Start`/`Wait
   sudo -n ./scripts/runtime/db-maintenance-exec.sh \
     bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
   ```
+
+- Migration 326 이후 binary를 그 이전 binary로 되돌리면 lease 없는 `accepted` 행은 이전 reclaim(`lease_until <= now`)에 걸리지 않아 같은 방의 후속 응답을 영구히 막습니다. Ingress를 quiesce한 뒤 `bot_reply_outbox` executor `attempt_timeout` 지평 동안 reconciler가 `accepted`를 0으로 배수하면 위 preflight가 통과합니다. Preflight는 `accepted`가 남은 rollback을 막습니다. Migration 332 이후에는 326 이전 binary가 쓰는 lease 있는 `accepted`를 엄격 CHECK가 거부하므로 그 binary로는 되돌리지 않고, 326·333을 포함한 직전 릴리스까지만 되돌립니다.
 
 - Preflight 성공과 ingress quiescence를 같은 maintenance window에서 유지한 경우에만 이전 image를 재배포합니다. Schema rollback은 계속 [`Migration ordering`](#3-durable-webhook-or-reply-backlog-grows)의 writer quiescence 규칙을 따릅니다.
 - Recheck Iris webhook/reply, scheduler-dependent commands, manual triggers, and dashboard health after rollback.

@@ -33,6 +33,8 @@ func TestLifecycleDiagnosticsSeparateMissingHeadsAndExactReview(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
+
 	before := observeLifecycleMetrics(t, pool)
 	if got := testutil.ToFloat64(before.liveReview.WithLabelValues("state_mismatch")); got != 5 {
 		t.Fatalf("actual defects = %v, want 5 including missing LIVE/observed UPCOMING", got)
@@ -51,6 +53,8 @@ func TestLifecycleDiagnosticsSeparateMissingHeadsAndExactReview(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE youtube_live_sessions SET title='new metadata' WHERE video_id='diag-legacy'`); err != nil {
 		t.Fatal(err)
 	}
+
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	changed := observeLifecycleMetrics(t, pool)
 	if testutil.ToFloat64(changed.lifecycleRecords.WithLabelValues("closed_unresolved")) != 0 ||
@@ -94,7 +98,7 @@ func recordDiagnosticReview(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 
-	tx, beginErr := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	tx, beginErr := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if beginErr != nil {
 		t.Fatal(beginErr)
 	}

@@ -36,18 +36,15 @@ func TestScheduleBatchesPreserveItemBeforeSessionAndDuplicateOrder(t *testing.T)
 
 	// 같은 시각의 중복은 최초 항목을 유지한다. 중복을 bulk upsert 한 문장으로 합치면
 	// PostgreSQL cardinality 오류가 나므로 실제 저장 결과로 순차 문장 계약을 확인한다.
+	// 세션은 reducer가 영상마다 최종 상태 하나만 내므로 채널 없는 세션만 더한다.
 	duplicate := decision.Items[0]
 
 	duplicate.Title = "must not replace first"
 	decision.Items = append(decision.Items, duplicate)
-
-	duplicateSession := decision.Sessions[0]
-
-	duplicateSession.Title = duplicate.Title
-	decision.Sessions = append(decision.Sessions, duplicateSession, schedule.Session{VideoID: "no-channel"})
+	decision.Sessions = append(decision.Sessions, schedule.Session{VideoID: "no-channel"})
 
 	require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-		return persistScheduleDecision(ctx, tx, &observation, &decision)
+		return persistScheduleDecision(ctx, tx, &observation, nil, &decision)
 	}))
 	assertTableCount(t, pool, "youtube_schedule_items", 129)
 	assertTableCount(t, pool, "youtube_live_sessions", 129)
@@ -99,7 +96,7 @@ func TestScheduleBatchFailureRollsBackAllItemsAndSessions(t *testing.T) {
 			require.NoError(t, err)
 
 			err = dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-				return persistScheduleDecision(ctx, tx, &observation, &decision)
+				return persistScheduleDecision(ctx, tx, &observation, nil, &decision)
 			})
 
 			var pgErr *pgconn.PgError
@@ -112,7 +109,7 @@ func TestScheduleBatchFailureRollsBackAllItemsAndSessions(t *testing.T) {
 			_, err = pool.Exec(ctx, "DROP TRIGGER reject_schedule_batch ON "+target)
 			require.NoError(t, err)
 			require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-				return persistScheduleDecision(ctx, tx, &observation, &decision)
+				return persistScheduleDecision(ctx, tx, &observation, nil, &decision)
 			}))
 			assertTableCount(t, pool, "youtube_schedule_items", 260)
 			assertTableCount(t, pool, "youtube_live_sessions", 260)

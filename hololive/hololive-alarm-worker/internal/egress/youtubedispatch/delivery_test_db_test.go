@@ -116,8 +116,8 @@ func countDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, dest *int64, wher
 	return deliveryTestSQLResult{Error: err}
 }
 
-// updateDeliveryTestRowsWhere의 where는 args를 $1..$n으로 참조한다. SET 값은 그 뒤 $n+1부터 컬럼 이름 순서로 붙는다.
-func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[string]any, where string, args ...any) deliveryTestSQLResult {
+// updateDeliveryTestRowByID는 id가 일치하는 행의 컬럼을 갱신한다. SET 값은 $2부터 컬럼 이름 순서로 붙는다.
+func updateDeliveryTestRowByID(pool *pgxpool.Pool, model any, values map[string]any, id int64) deliveryTestSQLResult {
 	table := deliveryTestTableForModel(model)
 	if table == "" {
 		return deliveryTestSQLResult{Error: fmt.Errorf("update rows: unsupported model %T", model)}
@@ -130,20 +130,16 @@ func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[strin
 	keys := slices.Sorted(maps.Keys(values))
 
 	assignments := make([]string, 0, len(keys))
-	queryArgs := make([]any, 0, len(values)+len(args))
+	queryArgs := make([]any, 0, len(values)+1)
 
-	queryArgs = append(queryArgs, args...)
+	queryArgs = append(queryArgs, id)
 
 	for _, key := range keys {
 		queryArgs = append(queryArgs, values[key])
 		assignments = append(assignments, deliveryTestUpdateAssignment(key, len(queryArgs)))
 	}
 
-	query := "UPDATE " + table + " SET " + strings.Join(assignments, ", ")
-
-	if strings.TrimSpace(where) != "" {
-		query += " WHERE " + where
-	}
+	query := "UPDATE " + table + " SET " + strings.Join(assignments, ", ") + " WHERE id = $1"
 
 	tag, err := pool.Exec(context.Background(), query, queryArgs...)
 
@@ -645,14 +641,13 @@ func insertDomainAlarmState(ctx context.Context, pool *pgxpool.Pool, row *domain
 	row.UpdatedAt = normalizeRequiredTime(row.UpdatedAt, now)
 	row.DetectedAt = normalizeRequiredTime(row.DetectedAt, now)
 	row.ActualPublishedAt = normalizeTimePtr(row.ActualPublishedAt)
-	row.AuthorizedAt = normalizeTimePtr(row.AuthorizedAt)
 	row.AlarmSentAt = normalizeTimePtr(row.AlarmSentAt)
 
 	if row.DeliveryStatus == "" {
-		row.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(row.AuthorizedAt, row.AlarmSentAt)
+		row.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(row.AlarmSentAt)
 	}
 
-	tag, err := pool.Exec(ctx, `INSERT INTO youtube_community_shorts_alarm_states (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AuthorizedAt, row.AlarmSentAt, row.DeliveryStatus, row.CreatedAt, row.UpdatedAt)
+	tag, err := pool.Exec(ctx, `INSERT INTO youtube_community_shorts_alarm_states (kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AlarmSentAt, row.DeliveryStatus, row.CreatedAt, row.UpdatedAt)
 
 	return tag.RowsAffected(), err
 }
@@ -751,7 +746,7 @@ func deliveryTestTableForModel(model any) string {
 
 func deliveryTestUpdateAssignment(column string, ordinal int) string {
 	switch column {
-	case "actual_published_at", "alarm_sent_at", "attempt_finished_at", "attempt_started_at", "authorized_at", "created_at", "detected_at", "event_at", "locked_at", "logged_at", "next_attempt_at", "sent_at", "updated_at":
+	case "actual_published_at", "alarm_sent_at", "attempt_finished_at", "attempt_started_at", "created_at", "detected_at", "event_at", "locked_at", "logged_at", "next_attempt_at", "sent_at", "updated_at":
 		return fmt.Sprintf("%s = $%d::timestamptz", column, ordinal)
 	default:
 		return fmt.Sprintf("%s = $%d", column, ordinal)
@@ -767,7 +762,7 @@ func deliveryTestSelectColumns(table string) string {
 	case testTableContentAlarmTracking:
 		return "kind, content_id, COALESCE(canonical_content_id, '') AS canonical_content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, alarm_latency_millis, alarm_latency_exceeded, COALESCE(delivery_status, '') AS delivery_status, COALESCE(latency_classification_status, '') AS latency_classification_status, COALESCE(delay_source, '') AS delay_source, COALESCE(internal_delay_cause, '') AS internal_delay_cause, created_at, updated_at"
 	case "youtube_community_shorts_alarm_states":
-		return "kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at"
+		return "kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at"
 	case testTableDeliveryTelemetry:
 		return "id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, COALESCE(post_id, '') AS post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, COALESCE(dedupe_key, '') AS dedupe_key, COALESCE(delivery_path, '') AS delivery_path, COALESCE(delivery_mode, '') AS delivery_mode, COALESCE(send_result, '') AS send_result, COALESCE(failure_reason, '') AS failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, COALESCE(error, '') AS error"
 	default:

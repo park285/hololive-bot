@@ -12,6 +12,18 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
+func (r *alarmStateRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
+	if record == nil {
+		return errors.New("upsert alarm state: record is nil")
+	}
+
+	if err := r.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{record}); err != nil {
+		return fmt.Errorf("upsert alarm state batch: %w", err)
+	}
+
+	return nil
+}
+
 func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsAlarmState) error {
 	if len(records) == 0 {
 		return nil
@@ -27,20 +39,13 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
 	}
 
 	now := yttimestamp.Normalize(time.Now())
-	finalAuthorizedExpr := `CASE
-                WHEN youtube_community_shorts_alarm_states.authorized_at IS NULL THEN EXCLUDED.authorized_at
-                WHEN EXCLUDED.authorized_at IS NULL THEN youtube_community_shorts_alarm_states.authorized_at
-                WHEN EXCLUDED.authorized_at < youtube_community_shorts_alarm_states.authorized_at THEN EXCLUDED.authorized_at
-                ELSE youtube_community_shorts_alarm_states.authorized_at
-            END`
 	finalAlarmSentExpr := `CASE
                 WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
                 WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_community_shorts_alarm_states.alarm_sent_at
                 WHEN EXCLUDED.alarm_sent_at < youtube_community_shorts_alarm_states.alarm_sent_at THEN EXCLUDED.alarm_sent_at
                 ELSE youtube_community_shorts_alarm_states.alarm_sent_at
             END`
-	deliveryStatusExpr := buildAlarmStateDeliveryStatusExpr(finalAuthorizedExpr, finalAlarmSentExpr)
-	query, args := buildAlarmStateUpsertQuery(normalized, now, finalAuthorizedExpr, finalAlarmSentExpr, deliveryStatusExpr)
+	query, args := buildAlarmStateUpsertQuery(normalized, now, finalAlarmSentExpr)
 
 	if _, err := dbx.ExecSQL(ctx, r.db, "upsert alarm state batch: exec query", query, args...); err != nil {
 		return fmt.Errorf("exec SQL: %w", err)
@@ -59,11 +64,9 @@ func normalizeAlarmStateBatchRecords(records []*domain.YouTubeCommunityShortsAla
 func buildAlarmStateUpsertQuery(
 	normalized []*domain.YouTubeCommunityShortsAlarmState,
 	now time.Time,
-	finalAuthorizedExpr string,
 	finalAlarmSentExpr string,
-	deliveryStatusExpr string,
 ) (string, []any) {
-	const columnsPerRow = 11
+	const columnsPerRow = 10
 
 	args := make([]any, 0, len(normalized)*columnsPerRow)
 
@@ -85,7 +88,6 @@ func buildAlarmStateUpsertQuery(
 			record.ChannelID,
 			record.ActualPublishedAt,
 			record.DetectedAt,
-			record.AuthorizedAt,
 			record.AlarmSentAt,
 			record.DeliveryStatus,
 			now,
@@ -94,50 +96,15 @@ func buildAlarmStateUpsertQuery(
 	}
 
 	sb.WriteString(mustSQL("alarm_state_repository_upsert_0108_02.sql"))
-	sb.WriteString(finalAuthorizedExpr)
-	sb.WriteString(`,
-            alarm_sent_at = `)
 	sb.WriteString(finalAlarmSentExpr)
 	sb.WriteString(`,
             delivery_status = `)
-	sb.WriteString(deliveryStatusExpr)
+	sb.WriteString(buildAlarmStateDeliveryStatusExpr(finalAlarmSentExpr))
 	sb.WriteString(`,
             updated_at = EXCLUDED.updated_at
     `)
 
 	return sb.String(), args
-}
-
-func normalizeAlarmStateClaim(record *domain.YouTubeCommunityShortsAlarmState) (*domain.YouTubeCommunityShortsAlarmState, error) {
-	normalizedRecord, err := normalizeAlarmState(record)
-	if err != nil {
-		return nil, fmt.Errorf("normalize alarm state: %w", err)
-	}
-
-	expectedPostID, err := canonicalTrackingIdentity(normalizedRecord.Kind, normalizedRecord.ContentID)
-	if err != nil {
-		return nil, fmt.Errorf("canonical tracking identity: %w", err)
-	}
-
-	if expectedPostID != normalizedRecord.PostID {
-		return nil, errors.New("post id/content id mismatch")
-	}
-
-	if normalizedRecord.AuthorizedAt == nil || normalizedRecord.AuthorizedAt.IsZero() {
-		return nil, errors.New("authorized_at is empty")
-	}
-
-	if normalizedRecord.AlarmSentAt != nil && !normalizedRecord.AlarmSentAt.IsZero() {
-		return nil, errors.New("alarm_sent_at must be empty")
-	}
-
-	authorizedAt := normalizeDatabaseTimestamp(*normalizedRecord.AuthorizedAt)
-
-	normalizedRecord.AuthorizedAt = &authorizedAt
-	normalizedRecord.AlarmSentAt = nil
-	normalizedRecord.DeliveryStatus = domain.YouTubeCommunityShortsAlarmStateStatusEnqueued
-
-	return normalizedRecord, nil
 }
 
 func normalizeAlarmState(record *domain.YouTubeCommunityShortsAlarmState) (*domain.YouTubeCommunityShortsAlarmState, error) {
@@ -165,7 +132,6 @@ func normalizeAlarmState(record *domain.YouTubeCommunityShortsAlarmState) (*doma
 	}
 
 	actualPublishedAt := yttimestamp.NormalizePtr(record.ActualPublishedAt)
-	authorizedAt := yttimestamp.NormalizePtr(record.AuthorizedAt)
 	alarmSentAt := yttimestamp.NormalizePtr(record.AlarmSentAt)
 
 	return &domain.YouTubeCommunityShortsAlarmState{
@@ -175,14 +141,9 @@ func normalizeAlarmState(record *domain.YouTubeCommunityShortsAlarmState) (*doma
 		ChannelID:         normalizedChannelID,
 		ActualPublishedAt: actualPublishedAt,
 		DetectedAt:        yttimestamp.Normalize(record.DetectedAt),
-		AuthorizedAt:      authorizedAt,
 		AlarmSentAt:       alarmSentAt,
-		DeliveryStatus:    domain.ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt, alarmSentAt),
+		DeliveryStatus:    domain.ResolveYouTubeCommunityShortsAlarmStateStatus(alarmSentAt),
 	}, nil
-}
-
-func normalizeDatabaseTimestamp(value time.Time) time.Time {
-	return value.UTC().Truncate(time.Microsecond)
 }
 
 func alarmStateCanonicalKey(kind domain.OutboxKind, postID string) string {
@@ -216,9 +177,8 @@ func mergeNormalizedAlarmState(existing, next *domain.YouTubeCommunityShortsAlar
 		merged.DetectedAt = next.DetectedAt
 	}
 
-	merged.AuthorizedAt = earliestAlarmStateTimestamp(merged.AuthorizedAt, next.AuthorizedAt)
 	merged.AlarmSentAt = earliestAlarmStateTimestamp(merged.AlarmSentAt, next.AlarmSentAt)
-	merged.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(merged.AuthorizedAt, merged.AlarmSentAt)
+	merged.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(merged.AlarmSentAt)
 
 	return &merged
 }
@@ -235,16 +195,14 @@ func earliestAlarmStateTimestamp(existing, next *time.Time) *time.Time {
 	return existing
 }
 
-func buildAlarmStateDeliveryStatusExpr(authorizedExpr, alarmSentExpr string) string {
+// buildAlarmStateDeliveryStatusExpr는 병합된 alarm_sent_at 하나로 delivery_status를 계산하는 SQL 식을 만든다.
+func buildAlarmStateDeliveryStatusExpr(alarmSentExpr string) string {
 	return fmt.Sprintf(`CASE
-                WHEN (%s) IS NOT NULL THEN '%s'
                 WHEN (%s) IS NOT NULL THEN '%s'
                 ELSE '%s'
             END`,
 		alarmSentExpr,
 		domain.YouTubeCommunityShortsAlarmStateStatusSent,
-		authorizedExpr,
-		domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
 		domain.YouTubeCommunityShortsAlarmStateStatusDetected,
 	)
 }

@@ -54,7 +54,7 @@ Community/Shorts:
 
 Community/Shorts의 `canonical_post_id`는 claim, telemetry, sibling 조회가 같은 resolver를 사용해야 합니다. Payload와 `content_id` 해석을 package별로 복제해서는 안 됩니다.
 
-현재 상태: 모든 소비자가 `contentid.ResolveDeliveryLogicalID`(room 없는 logical ID, `contentid.ResolveDeliveryKey`의 앞 단계) 하나를 씁니다. 시도 telemetry의 `post_id`는 전이 트랜잭션이 검증한 logical key이고, alarm-worker claim의 alarm state 조회 키·claim identity·같은 방 SENT sibling 판정은 같은 resolver 결과를 쓰며 누락·파싱 실패·불일치는 오류(claim은 retry later)로 드러냅니다. attempt started·claim 이슈·`outbox_final_result` 감사 로그의 `post_id`는 `telemetry.PostIDLogValue`가 같은 resolver 값을 쓰고, invalid identity는 대체 ID 없이 `invalid:<kind>:<reason>` 라벨로 남깁니다. telemetry 버퍼 적재는 `post_id`를 `content_id`로 채우지 않고 빈 값을 오류로 거절합니다. NEW_VIDEO·LIVE_STREAM·MILESTONE은 payload `canonical_post_id`를 보지 않고 `content_id`만 씁니다. 과거의 `canonical_post_id → content_id → video_id/post_id` 폴백(감사 행 `holo-youtube-telemetry-post-id-fallback`)은 삭제했습니다. 삭제 전 운영 DB 읽기 전용 측정: COMMUNITY_POST 23건·NEW_SHORT 36건 모두 canonical_post_id가 있고 문자열 타입이었습니다(NEW_VIDEO 3건은 canonical_post_id가 없지만 content_id 계약이라 영향 없음).
+현재 상태: 모든 소비자가 `contentid.ResolveDeliveryLogicalID`(room 없는 logical ID, `contentid.ResolveDeliveryKey`의 앞 단계) 하나를 씁니다. 시도 telemetry의 `post_id`는 전이 트랜잭션이 검증한 logical key이고, alarm-worker 발송 전 선택의 logical identity 검증·같은 방 SENT sibling 판정은 같은 resolver 결과를 쓰며 누락·파싱 실패·불일치는 오류(발송 전 retry 실패)로 드러냅니다. attempt started·발송 전 식별자 오류·`outbox_final_result` 감사 로그의 `post_id`는 `telemetry.PostIDLogValue`가 같은 resolver 값을 쓰고, invalid identity는 대체 ID 없이 `invalid:<kind>:<reason>` 라벨로 남깁니다. telemetry 버퍼 적재는 `post_id`를 `content_id`로 채우지 않고 빈 값을 오류로 거절합니다. NEW_VIDEO·LIVE_STREAM·MILESTONE은 payload `canonical_post_id`를 보지 않고 `content_id`만 씁니다. 과거의 `canonical_post_id → content_id → video_id/post_id` 폴백(감사 행 `holo-youtube-telemetry-post-id-fallback`)은 삭제했습니다. 삭제 전 운영 DB 읽기 전용 측정: COMMUNITY_POST 23건·NEW_SHORT 36건 모두 canonical_post_id가 있고 문자열 타입이었습니다(NEW_VIDEO 3건은 canonical_post_id가 없지만 content_id 계약이라 영향 없음).
 
 같은 감사 행의 빈 `delivery_path` 대체도 제거했습니다. 기록 주체는 `CommunityShortsDeliveryPath`를 명시하며 버퍼 적재는 빈 경로를 batch 전체의 오류로 반환합니다. 방출 로그는 저장된 경로를 trim해서 쓰되 비어 있는 과거 값을 정상 경로로 꾸미지 않습니다. 삭제 전 guarded 운영 조회에서 telemetry 9행의 빈 `post_id`·빈 `delivery_path`는 각각 0건이었으므로 과거 row 호환 변환은 하지 않습니다. 기존 non-empty 값의 trim은 유지합니다.
 
@@ -90,32 +90,20 @@ Operation membership과 provider request는 최초 `BeginSending` 전에 `youtub
 
 기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 249는 `request_snapshot_allowed=false`로 기존 행을 구분했습니다. 2026-10-02 운영 조회에서 이 표시를 가진 67행이 모두 `SENT`·`FAILED`(2026-05-17, revive 신선도 창 밖)였으므로 dispatcher의 구분 검사(`ErrLegacyRequestEvidence`)는 지웠습니다. migration 256이 열을 지웠습니다. 표시가 `false`인데 아직 끝나지 않은(`PENDING`·`SENDING`·`QUARANTINED`) 행이 있으면 이 migration은 열을 남기고 실패합니다.
 
+Iris 202는 durable admission만 증명합니다. `CompleteSent`는 고정 요청을 멤버보다 먼저 잠그고 세대·고정 멤버가 이번 발송과 같을 때만, SENT 전이와 같은 트랜잭션에서 고정 요청에 Iris requestId(`handoff_request_id`)와 첫 handoff 확인 시각(`handoff_next_check_at` = SENT 전이 시각 + min(5s, `youtube_delivery` executor `attempt_timeout`))을 기록합니다(migration 336·339). 요청이 다르거나 requestId가 비면 전이하지 않고 SENDING으로 남깁니다. `youtube-delivery-handoff-reconciler`가 `handoffcheck` 판정으로 지평까지 `/reply-status`를 확인합니다. `failed`는 세대 < 2이고 시도 예산(attempt + 1 < `max_retries`)이 남으면 논리 그룹의 SENT 행 전원(고정 멤버 밖 follower 포함)을 `retry_backoff_ms` 뒤 PENDING으로 되돌리고 요청 세대를 올려 같은 본문을 다음 세대 ID로 다시 보내며, 아니면 FAILED입니다. 결과 불명·404·지평 미확인은 QUARANTINED입니다. 세 경우 모두 그 owner를 출처로 한 SENT ledger만 같은 트랜잭션에서 지우고(격리는 같은 출처의 QUARANTINED ledger), 바뀐 delivery의 부모 outbox 집계도 그 트랜잭션 끝에서 canonical 집계 문장으로 다시 계산합니다. 정산의 잠금 순서는 고정 요청 → 영향 부모 outbox(id 순서, 그룹 잠금과 같은 후보 조건으로 미리 읽음) → 논리 그룹 delivery → ledger이고, 집계는 이미 잠근 부모에 다시 잠그지 않고 실행합니다. 정산 도중 같은 논리 키의 follower·outbox가 들어와 부모 집합이 늘면 새 부모를 잠그지 않고 아무것도 바꾸지 않은 `membership_changed` fence 미스로 끝내며 확인을 닫지 않으므로, soft claim 뒤 다음 확인이 늘어난 집합으로 정산합니다. 집계가 실패하면 정산 전체가 rollback되고 soft claim 뒤 다음 확인이 다시 정산합니다. 집계는 outbox `sent_at`을 지우지 않으며, 아래 post 단위 tracking 표시도 되돌리지 않습니다. 발송 경로는 202 admission만 확인하고 handoff를 기다리지 않으므로, handoff 결과는 이 reconciler만 정산합니다.
+
+그룹 조회의 전역 행 한도는 `요청 수 × (LogicalGroupLimit + 2)`이며, 이 한도에 닿으면 창 밖 형제의 유무를 증명하지 못합니다. 다른 키로 풀리는 별칭 후보도 이 창을 차지하므로, 반환된 행의 키별 개수가 작거나 owner가 잠겼다는 사실만으로 완전성을 판단하지 않습니다. claim 기반 그룹 해석과 stale sweep은 불완전한 창을 원장 조회 전에 오류로 거부합니다. handoff 정산은 부모 집합 증가 미스를 먼저 판정한 뒤, 불완전한 창의 멤버 전원을 membership 거부로 처리해 행·원장·세대 변경 없이 확인만 닫습니다. 빈 요청은 완전한 빈 집합입니다.
+
 ### Tracking requirement
 
-Community/Shorts의 post-level tracking은 room별 delivery와 수명이 다릅니다. Provider operation은 다음 requirement 중 하나를 가집니다.
+Community/Shorts의 post-level tracking은 room별 delivery와 수명이 다릅니다. 발송 전에 post 단위 상태를 선점하지 않으며, 같은 post의 room delivery는 room별 claim·send fence와 logical group gate로만 직렬화합니다.
 
-```go
-type TrackingRequirement interface {
-    trackingRequirement()
-}
+- 성공 전이(`CompleteSent`)는 같은 트랜잭션에서 `MarkAlarmSentBatch`로 owner logical key의 tracking 행과 기존 `youtube_community_shorts_alarm_states` 행에 발송 시각을 기록합니다. 알람 상태 행이 없으면 tracking 행으로부터 만들고, 이미 SENT면 더 이른 시각만 남깁니다. tracking 행과 알람 상태 행이 모두 없으면 post 단위 표시는 남지 않습니다. 운영에서는 API canonicalwrite가 outbox와 같은 트랜잭션에서 tracking 행을 만듭니다.
+- 정상 경로 트랜잭션은 기록 뒤 post 단위 표시를 다시 확인하지 않습니다. commit 응답 유실 판정이 `Applied`로 끝난 뒤의 read-back에서 post마다 알람 상태나 tracking 중 하나가 SENT인지 확인하고, 둘 다 아니면 `AtomicityBreachError`와 함께 `Indeterminate`(atomicity breach)로 분류합니다. 이미 commit된 뒤이므로 rollback하지 않습니다.
+- Community/Shorts가 아닌 delivery에는 post-level 기록이 없습니다.
+- 알람 상태의 `delivery_status`는 `alarm_sent_at`만으로 `DETECTED`·`SENT`를 정합니다. 구 워커의 발송 전 선점 열 `authorized_at`과 `ENQUEUED` 상태는 migration 331이 지웠고, 남은 `ENQUEUED` 행은 같은 규칙으로 `DETECTED`·`SENT`로 맞췄습니다.
 
-type NoTracking struct{}
-
-type RequireClaimOrAlreadySent struct {
-    Token AlarmClaimToken
-}
-
-type RequireAlreadySent struct {
-    Kind   OutboxKind
-    PostID string
-}
-```
-
-- `RequireClaimOrAlreadySent`: preparation에서 active claim을 획득했습니다. Finalize 시 exact token이 유효하면 tracking을 sent로 전이하고, 이미 sent면 성공으로 수용합니다.
-- `RequireAlreadySent`: preparation 시 post tracking이 이미 sent였습니다. Finalize 시 여전히 sent인지 확인하되 tracking을 변경하지 않습니다.
-- `NoTracking`: Community/Shorts가 아닌 delivery입니다.
-
-여러 room operation이 같은 post token을 공유할 수 있습니다. 첫 성공이 token을 소비한 뒤 후속 성공은 `already sent`로 수용되어야 하며 delivery success를 rollback해서는 안 됩니다.
+여러 room이 같은 post를 발송할 수 있습니다. 첫 성공이 post 발송 시각을 정하고 후속 성공은 그 시각을 유지하며 delivery success를 rollback하지 않습니다. 한 room의 결과 불명은 같은 post의 다른 room 발송을 미루지 않습니다.
 
 ## 상태와 저장 필드
 
@@ -146,7 +134,7 @@ QUARANTINED
 
 | 상태 | 규범 의미 |
 |---|---|
-| `PENDING` | Provider 호출 전이거나 logical owner의 known-not-delivered retry 대기입니다. `locked_at`이 있으면 preparation lease를 보유합니다. |
+| `PENDING` | Provider 호출 전이거나 logical owner의 known-not-delivered retry 대기입니다. `locked_at`이 있으면 `locked_by` 소유자가 그 `row_version` 세대의 claim을 보유합니다. |
 | `SENDING` | Exact provider operation이 durable하게 commit됐고 provider 호출이 시작될 수 있습니다. Provider 수신을 증명하지는 않습니다. |
 | `SENT` | Logical delivery가 충족됐음을 local transaction으로 확정했습니다. Provider success 또는 same-logical `SENT` evidence가 근거입니다. |
 | `FAILED` | Logical owner의 retry가 소진됐거나 permanent known failure입니다. Group revive만 허용합니다. |
@@ -191,11 +179,26 @@ Group revive는 owner와 follower attempt를 0으로 재설정합니다.
 row_version bigint NOT NULL DEFAULT 0 CHECK (row_version >= 0)
 ```
 
-Claim과 모든 physical row mutation은 version을 1 증가시킵니다. Version은 인덱싱하지 않습니다.
+Claim과 모든 physical row mutation은 version을 1 증가시킵니다. Version은 인덱싱하지 않습니다. 그래서 `row_version`이 같으면 `status`·`attempt_count`·`locked_at`·`locked_by`도 같습니다.
 
-### 시간 정규화
+### `locked_by`
 
-Application service는 operation 또는 batch 시각을 한 번 읽고 repository 경계에서 UTC microsecond precision으로 정규화합니다. 하나의 atomic operation 안에서 서로 다른 `time.Now()` 값을 혼용하지 않습니다.
+```sql
+locked_by text NULL
+```
+
+Claim한 워커 인스턴스 ID(`youtube-dispatcher:<hostname>:<pid>`)입니다. Claim이 기록하고 `SENDING` 전이가 유지하며, 잠금을 비우는 전이는 `locked_at`과 함께 비웁니다. 컨테이너 이름이 고정이라 재시작한 프로세스가 같은 ID를 가질 수 있으므로 claim 세대는 `row_version`이 구분하고 `locked_by`만으로 fence하지 않습니다. 이 열을 모르는 이전 워커가 남긴 행은 NULL이거나 이전 값이며, 전이 fence는 다시 읽은 값과 비교하므로 그대로 처리합니다.
+
+### 시간원
+
+claim·만료·신선도 판정과 `locked_at`·`sent_at`·`next_attempt_at`·`terminal_at` 기록은 모두 PostgreSQL 시계가 정합니다. 각 SQL 문장은 `clock AS MATERIALIZED (SELECT clock_timestamp() AS at)`에서 시계를 한 번 채취하고, 조건에서는 `(SELECT at FROM clock)` 스칼라 하위 질의로 참조해 PENDING·SENDING 부분 인덱스 조건으로 쓰이게 합니다. Go는 시각 대신 `lease_ms`·`freshness_ms`·지연(`delay_ms`)과 DB에서 읽은 하한만 넘깁니다.
+
+- 전이 문장(`transition_apply_rows.sql`)은 대상 행을 잠근 뒤 시계를 채취하고, 그 값을 전이 시각으로 돌려줍니다. 같은 트랜잭션의 ledger 관측 시각·tracking 발송 표시·시도 telemetry는 이 값을 씁니다. fanout 실패 문장(`fanout_fail.sql`)도 claim fence를 통과한 outbox 행을 잠근 뒤 시계를 채취합니다.
+- 집계 문장(`delivery_repository_aggregate_sync.sql`)은 같은 트랜잭션의 앞 문장이 부모 outbox를 ID 순서로 잠근 뒤 실행되므로, 새로 기록하는 outbox `sent_at`·`terminal_at`도 부모 잠금 뒤의 DB 시계 하나로 정합니다.
+- 후보 문장(claim·stale SENDING·만료 PENDING·revive)은 행을 잠그기 전에 시계를 채취합니다. 만료 판정은 실제 잠금 시점보다 보수적이고, claim이 기록한 lease도 그만큼 일찍 끝납니다. 후보 문장은 판정 시계를 `checked_at`으로 돌려주고 Go의 그룹 재확인은 이 값만 씁니다.
+- `next_attempt_at`은 `GREATEST(clock + delay, floor)`입니다. floor는 owner `next_attempt_at` 또는 in-flight `locked_at + LockTimeout`처럼 DB 행에서 온 값만 씁니다.
+
+보존 삭제 cutoff(`CleanupTerminalOutboxes`, `CleanupOrphanRequests`)는 상태 전이·소유권 판정이 아닌 일 단위 보존 창이라 Go 시각을 씁니다.
 
 ## 핵심 불변식
 
@@ -209,7 +212,7 @@ Retry 소진, preparation/send failure, revive는 lifecycle policy가 한 번만
 
 ### I-003. Fenced mutation
 
-Claim 이후 mutation은 `id + expected status + expected version + expected attempt + expected locked_at`을 검사해야 합니다.
+Claim 이후 mutation은 `id + expected status + expected locked_by + expected row_version`을 같은 문장에서 잠근 행과 비교해야 합니다. `attempt_count`와 `locked_at` 등가는 `row_version` 등가에 함의되므로 따로 비교하지 않습니다. 한 command의 대상은 전원이 fence를 통과할 때만 함께 전이하고, 미스는 대상별 원인을 담은 `sendfence.MissError`로 돌려줍니다.
 
 ### I-004. One logical retry owner
 
@@ -221,7 +224,7 @@ Claim 이후 mutation은 `id + expected status + expected version + expected att
 
 ### I-006. Durable logical gate
 
-Post-level cached `Proceed`를 포함한 모든 candidate는 ledger를 먼저 읽고 retained logical group resolution을 수행해야 합니다.
+모든 발송 candidate는 retained logical group을 먼저 잠그고 조회 창의 완전성과 claim fence를 확인한 뒤 ledger를 읽어 logical group resolution을 수행해야 합니다.
 
 ### I-007. External-effect ordering
 
@@ -235,11 +238,11 @@ Provider 처리 여부가 불명확하면 즉시 state write, claim release, fal
 
 Same-logical ledger `SENT` evidence가 생기면 `PENDING`, `FAILED`, `QUARANTINED` follower를 provider 호출 없이 `SENT`로 reconcile할 수 있습니다. 이는 resend가 아니라 logical fulfillment의 단조 수렴입니다.
 
-`SENT -> *`는 존재하지 않습니다. `QUARANTINED -> PENDING/FAILED`와 `FAILED -> PENDING` 일반 전이는 금지합니다.
+일반 발송 경로에는 `SENT -> *` 전이가 없습니다. 예외는 아직 handoff 확인 중인 고정 요청의 fenced 재발급·소진·격리 정산이며, 위 handoff 규약을 따릅니다. `QUARANTINED -> PENDING/FAILED`와 `FAILED -> PENDING` 일반 전이는 금지합니다.
 
 ### I-010. Tracking is idempotent terminal state
 
-Exact claim token이 이미 소비됐더라도 post tracking이 durable sent이면 후속 room delivery success를 수용합니다. Tracking token conflict를 delivery failure로 오판해서는 안 됩니다.
+Post tracking이 이미 durable sent이면 후속 room delivery success를 수용하고 post 발송 시각은 가장 이른 값을 유지합니다. 이미 sent인 post를 delivery failure로 오판해서는 안 됩니다.
 
 ### I-011. Operation atomicity
 
@@ -247,7 +250,7 @@ Provider operation의 `BeginSending`, grouped success, grouped known failure는 
 
 ### I-012. Aggregate writer ownership
 
-Child가 존재하는 outbox status와 `terminal_at`은 aggregate projector만 계산합니다.
+Child가 존재하는 outbox status와 `terminal_at`은 canonical aggregate 문장만 계산합니다. 일반 projector와 handoff 실패 정산의 트랜잭션 내 집계가 같은 문장을 사용합니다.
 
 ### I-013. Commit ambiguity is first-class
 
@@ -265,76 +268,55 @@ Outcome unknown, logical unresolved, commit indeterminate에서는 자동 resend
 
 ### I-016. Terminal evidence atomicity
 
-Provider success의 delivery/tracking과 ledger `SENT`, stale outcome unknown의 delivery group과 ledger `QUARANTINED`는 각각 같은 transaction입니다. Aggregate projection은 이 transaction 밖의 별도 recoverable projection이며 transition commit 판정에 포함하지 않습니다.
+Provider success의 delivery/tracking과 ledger `SENT`, stale outcome unknown의 delivery group과 ledger `QUARANTINED`는 각각 같은 transaction입니다. Aggregate projection은 이 transaction 밖의 별도 recoverable projection이며 transition commit 판정에 포함하지 않습니다. Handoff 실패 정산(재발급·소진·격리)만 예외로, SENT였던 부모를 되돌리는 집계를 정산 transaction 안에서 함께 commit하거나 rollback합니다.
 
 ## Token 계약
 
-### Preparation lease
+### Claim fence
 
-```go
-type PreparationLease struct {
-    DeliveryID int64
-    RowVersion int64
-    LockedAt   time.Time
-}
-```
+Claim 결과 행의 `(id, row_version, locked_by)`입니다. `PENDING + locked_at` row만 나타냅니다. `PrepareClaimed`, `BeginSending`, `ApplyPreparedFailure`는 같은 transaction에서 logical group을 `FOR UPDATE`로 다시 읽은 뒤 caller claim 행마다 다음을 확인하고, 하나라도 어긋나면 아무 행도 바꾸지 않고 `sendfence.MissError`를 돌려줍니다.
 
-`PENDING + locked_at` row만 나타냅니다.
+| 관측 | 미스 원인 |
+|---|---|
+| 다시 읽은 행이 없음 | `missing` |
+| `status <> PENDING` | `status_changed` |
+| `locked_by`가 caller claim과 다름 | `owner_changed` |
+| `row_version`이 caller claim과 다름 | `version_changed` |
+
+조건이 맞은 다른 대상은 `peer_missed`로 함께 보고합니다. Fence 미스는 `ApplyConflict`(대상 전원이 `missing`이면 `ApplyMissing`)와 오류를 함께 반환하므로 caller가 버릴 수 없습니다.
 
 ### Send fence
 
-```go
-type SendFence struct {
-    DeliveryID int64
-    RowVersion int64
-    LockedAt   time.Time
-}
-```
-
-`SENDING + locked_at` row만 나타냅니다. Preparation lease와 별도 Go type이어야 합니다.
-
-### Alarm claim token
-
-```go
-type AlarmClaimToken struct {
-    Kind         OutboxKind
-    PostID       string
-    AuthorizedAt time.Time
-}
-```
-
-- Preparation/known-not-delivered failure는 durable failure commit 뒤 해제를 요청합니다. 같은 post token을 공유하는 배치의 모든 방 처리가 끝나고, 그 token을 사용한 모든 소비자가 확정 실패로 해제를 요청했을 때만 새 claim을 release합니다. 다른 방의 성공·결과 불명·미정산 소비자가 있으면 완료 증명을 보존합니다.
-- Success finalization은 exact token 또는 durable already-sent state를 요구합니다.
-- Outcome unknown과 `Indeterminate`에서는 claim release를 추정하지 않습니다.
-- Claim timeout 뒤 same-room resend는 durable logical group gate가 차단합니다.
+`BeginSending`이 만든 owner 행의 `(id, row_version, locked_by)`입니다. `SENDING + locked_at` row만 나타냅니다. 발송 뒤 정산(`CompleteSent`, 실패 전이, 요청 세대 전진, grouped fallback 고정)은 이 값으로 fence하며 lease 만료를 보지 않습니다. 외부 성공을 DB 정산 실패로 되돌리지 않기 위해서입니다.
 
 ## Claim protocol
 
-대상 조건:
+대상 조건(`clock`은 문장 첫머리에서 한 번 채취한 DB 시계):
 
 ```text
 status = PENDING
-next_attempt_at <= now
-locked_at IS NULL OR locked_at < now - LockTimeout
+next_attempt_at <= clock
+locked_at IS NULL OR locked_at < clock - LockTimeout
+outbox.created_at >= clock - ClaimFreshnessWindow
 ```
 
 Claim SQL:
 
 ```sql
-SET locked_at = $now,
+SET locked_at = (SELECT at FROM clock),
+    locked_by = $owner,
     row_version = row_version + 1
 ```
 
-반환된 exact version과 `locked_at`만 Preparation lease입니다. Statement 결과를 받지 못하면 caller는 lease를 소유하지 않습니다.
+반환된 exact version·`locked_by`만 Claim fence입니다. Statement 결과를 받지 못하면 caller는 claim을 소유하지 않습니다. `ReadySnapshot`은 같은 predicate와 같은 방식의 시계로 claim 가능 행을 셉니다.
 
 ## Logical group resolution
 
 ### Candidate loading
 
-Current claimed row의 logical key를 만든 뒤 ledger를 batch load하고, ledger가 absent인 key의 retained physical row를 bounded batch query로 로드합니다.
+Current claimed row의 logical key를 만든 뒤 retained physical row를 bounded batch query로 잠그고, 조회 창의 완전성·키별 행 한도·claim fence를 확인한 다음 ledger를 batch load합니다.
 
-- Community/Shorts는 kind, room, relevant status를 SQL에서 제한하고 canonical resolver로 post ID를 비교합니다.
-- 기타 kind는 outbox join으로 `(kind, outbox.content_id, room_id)`를 조회합니다.
+- 모든 kind의 후보는 kind·room 등가와 `btrim(content_id)` 또는 payload의 `canonical_post_id` 후보 등가로 조회합니다. Canonical resolver가 최종 논리 키를 확정하며, 다른 키로 풀리는 SQL 후보도 전역 조회 한도를 소비합니다.
 - Current batch member는 한 번에 resolve합니다. Per-row N+1 query를 기본 구현으로 사용하지 않습니다.
 - Overflow는 fail-closed preparation error이며 provider를 호출하지 않습니다.
 - Ledger schema version과 backfill completion marker가 지원되지 않거나 미완료이면 새 writer는 시작하지 않습니다.
@@ -382,7 +364,7 @@ Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 - Provider를 호출하지 않습니다.
 - Ledger `SENT`를 transaction 안에서 다시 확인하고 current/follower `PENDING`, `FAILED`, `QUARANTINED`를 `SENT`로 reconcile합니다.
 - Attempt는 유지합니다.
-- `sent_at`은 reconciliation 시각입니다.
+- `sent_at`은 ledger `SENT`의 `sent_at`을 그대로 씁니다.
 - Tracking을 새로 추정하지 않습니다.
 
 #### `LogicalUnresolved`
@@ -396,12 +378,12 @@ Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 
 - Provider를 호출하지 않습니다.
 - Current/follower `PENDING`을 attempt 없이 defer합니다.
-- Due는 `max(now + RetryBackoff, inFlight.locked_at + LockTimeout)`입니다.
+- Due는 `GREATEST(clock + RetryBackoff, inFlight.locked_at + LockTimeout)`입니다.
 
 #### `LogicalActive`
 
 - Deterministic owner만 preparation/send를 계속합니다.
-- Follower `PENDING`은 attempt 없이 owner due에 맞춰 defer합니다.
+- Follower `PENDING`은 attempt 없이 `GREATEST(clock + RetryBackoff, owner.next_attempt_at)`로 defer합니다.
 - Owner가 current batch에 없더라도 follower가 owner를 대체하지 않습니다.
 
 #### `LogicalFailed`
@@ -429,18 +411,13 @@ LogicalInFlight
 LogicalOwnerPendingElsewhere
 LogicalFailed
 LogicalInvariantBreach
-ClaimDeferred
 PreparationRetryableFailure
 PreparationPermanentFailure
 ```
 
 ### `ReadyToSend`
 
-Owner의 payload, rendering, route, stable client request ID, tracking requirement, immutable request가 확정됐습니다.
-
-### `ClaimDeferred`
-
-Post-level claim을 다른 execution이 보유합니다. Attempt 없이 defer합니다.
+Owner의 payload, rendering, route, stable client request ID, immutable request가 확정됐습니다.
 
 ### Preparation failure
 
@@ -471,20 +448,20 @@ type PreparedSendOperation struct {
 
 ### `BeginSending`
 
-Owner member 전체가 exact `PENDING + PreparationLease`를 만족할 때만 전체를 `SENDING`으로 변경합니다.
+Owner member 전체가 Claim fence를 만족하고 claim lease가 살아 있을 때만 전체를 `SENDING`으로 변경합니다.
 
 ```sql
 SET status = 'SENDING',
-    locked_at = $send_started_at,
+    locked_at = clock,  -- 대상 행을 잠근 뒤 채취한 DB 시계
     row_version = row_version + 1
 WHERE id = $id
   AND status = 'PENDING'
-  AND row_version = $expected_version
-  AND attempt_count = $expected_attempt
-  AND locked_at = $expected_locked_at
+  AND row_version = $claim_version
+  AND locked_by IS NOT DISTINCT FROM $claim_owner
+  AND locked_at + $lease_ms * INTERVAL '1 millisecond' > clock
 ```
 
-한 owner라도 conflict/missing이면 전체 rollback하고 provider를 호출하지 않습니다.
+Lease 조건(`lease_expired`)은 정지했던 소유자가 lease 밖에서 외부 부수효과를 시작하지 않게 합니다. `locked_by`는 유지합니다. 한 owner라도 미스면 전체 rollback하고 provider를 호출하지 않습니다. 새 `locked_at`은 문장이 돌려준 전이 시각이며, 정산 단계의 시도 시작 시각으로도 쓰입니다.
 
 Commit response loss는 provider call 전에 primary exact read-back으로 판정합니다. Exact post-state만 provider call 권한을 만듭니다.
 
@@ -539,14 +516,14 @@ Grouped 포맷 실패는 이 fallback의 trigger가 아닙니다. 묶음 메시�
 
 ### Owner retry
 
-- Owner: `SENDING/PENDING leased -> PENDING`, attempt +1, due 설정, lock clear, version +1
-- Follower `PENDING`: attempt 유지, due owner와 정렬, lock clear, version +1
+- Owner: `SENDING/PENDING leased -> PENDING`, attempt +1, `next_attempt_at = clock + max(RetryBackoff, RetryAfter)`, lock clear, version +1
+- Follower `PENDING`: attempt 유지, owner와 같은 지연으로 due 설정, lock clear, version +1
 - Terminal/in-flight mixed follower는 conflict 또는 invariant breach
 
 ### Owner terminal failure
 
-- Owner: `FAILED`, attempt +1, lock clear, version +1
-- Follower `PENDING`: `FAILED`, attempt 유지, lock clear, version +1
+- Owner: `FAILED`, attempt +1, `next_attempt_at` 유지, lock clear, version +1
+- Follower `PENDING`: `FAILED`, attempt 유지, 자기 `next_attempt_at` 유지, lock clear, version +1
 - Provider는 재호출하지 않습니다.
 
 ### Owner quarantine
@@ -560,15 +537,13 @@ Grouped 포맷 실패는 이 fallback의 trigger가 아닙니다. 묶음 메시�
 Success transaction:
 
 1. Operation owner 전체 exact `SENDING + SendFence` 확인
-2. Owner를 `SENT`, canonical `sent_at`, lock clear, version +1
+2. Owner를 `SENT`, `sent_at = clock`(전이 문장이 돌려준 DB 시계), lock clear, version +1
 3. Same-logical follower `PENDING/FAILED/QUARANTINED`를 `SENT`로 reconcile, attempt 유지, version +1
-4. Tracking requirement를 canonical post별로 deduplicate
-5. `RequireClaimOrAlreadySent`는 exact token으로 mark-sent를 시도하고, 이미 sent면 수용
-6. `RequireAlreadySent`는 durable sent를 확인
-7. Owner logical key마다 ledger `RecordSent`
-8. Latency classification과 tracking mutation commit
+4. Community/Shorts owner logical key마다 tracking과 post 단위 알람 상태에 발송 시각을 기록(이미 SENT면 더 이른 시각 유지)
+5. Owner logical key마다 ledger `RecordSent`(관측 시각은 같은 전이 시각)
+6. Latency classification과 tracking mutation commit
 
-Tracking이 neither exact-token nor already-sent이면 rollback합니다. Provider는 다시 호출하지 않습니다.
+정상 경로 트랜잭션은 기록 뒤 post 단위 SENT 표시를 다시 확인하지 않습니다. commit 응답 유실 판정의 read-back에서 post 단위 SENT 표시(알람 상태 또는 tracking)가 없으면 atomicity breach(`Indeterminate`)로 분류합니다. Provider는 다시 호출하지 않습니다.
 
 Transaction은 touched outbox ID를 반환합니다. Commit이 확인된 뒤 aggregate projector를 즉시 실행하고 background projector가 current child state에서 재수렴합니다. Aggregate 실패는 committed delivery/tracking/ledger를 rollback하지 않습니다.
 
@@ -582,14 +557,12 @@ Policy는 nullable patch map이 아니라 sealed concrete decision을 반환합�
 
 ```go
 type DecisionContext struct {
-    RuleID               RuleID
-    LogicalKeyHash       string
-    OwnerID              int64
-    ExpectedStatus       DeliveryStatus
-    ExpectedVersion      int64
-    ExpectedAttemptCount int
-    ExpectedLockedAt     time.Time
-    At                   time.Time
+    RuleID           RuleID
+    LogicalKeyHash   string
+    OwnerID          int64
+    ExpectedStatus   DeliveryStatus
+    ExpectedVersion  int64
+    ExpectedLockedBy *string
 }
 ```
 
@@ -686,7 +659,7 @@ Revive는 logical group 단위로 판정합니다.
 
 적용:
 
-- Owner/follower: `PENDING`, attempt 0, due 정렬, lock/error clear, version +1
+- Owner/follower: `PENDING`, attempt 0, `next_attempt_at = clock`, lock/error clear, version +1
 - Commit 뒤 touched outbox: 표준 aggregate projector
 
 Commit `Indeterminate`에서는 stale selected ID set을 반복하지 않고 eligibility selection부터 다시 수행합니다.
@@ -695,7 +668,7 @@ Commit `Indeterminate`에서는 stale selected ID set을 반복하지 않고 eli
 
 ### `CompleteWithoutTargets`
 
-Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `SENT`, canonical `sent_at`, 같은 시각의 `terminal_at`, lock clear를 적용합니다.
+Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `SENT`, `sent_at = terminal_at = clock`, lock clear를 적용합니다.
 
 ### `MaterializeFanout`
 
@@ -703,7 +676,7 @@ Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `S
 
 1. Active outbox claim 확인
 2. Target room canonicalize/dedupe
-3. `(outbox_id,room_id)` idempotent insert
+3. `(outbox_id,room_id)` idempotent insert, 첫 `next_attempt_at = clock`
 4. Outbox lock clear
 5. Status `PENDING` 유지
 
@@ -737,12 +710,12 @@ Logical group transition은 touched outbox ID 전체를 반환하고 projector�
 
 ```text
 next=PENDING              -> NULL
-PENDING -> SENT/FAILED    -> canonical projectionAt
-FAILED -> SENT            -> canonical projectionAt
+PENDING -> SENT/FAILED    -> 집계 문장의 clock
+FAILED -> SENT            -> 집계 문장의 clock
 terminal -> same terminal -> existing terminal_at 보존
 ```
 
-Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 telemetry와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다.
+Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 telemetry와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다. 예외인 handoff 실패 정산은 같은 lock·sync 문장을 정산 transaction 끝에서 실행하므로 집계 실패가 정산 전체를 rollback하고, 다음 handoff 확인이 정산을 다시 시도합니다.
 
 ## 만료 대기 종료
 
@@ -759,6 +732,9 @@ Full outbox/delivery row와 compact terminal evidence의 retention을 분리합�
 - Same-logical nonterminal row가 있으면 terminal owner/follower를 삭제하지 않습니다.
 - Cleanup retry가 cutoff를 더 최신 시각으로 앞당기면 안 됩니다.
 - Candidate selection, ledger verification, sibling guard, delete는 bounded transaction입니다.
+- Candidate 부모를 잠근 cleanup은 경쟁 트랜잭션이 잠근 자식·same-logical 행을 기다리지 않고(`SKIP LOCKED`) 건너뛴 행을 관측 누락 증거로 돌려받습니다. 후보를 쥔 채 기다리면 같은 그룹을 잠그는 stale SENDING sweep과 교착합니다.
+- Same-logical 조회 한도는 batch 전체가 나눠 쓰지 않고 요청 논리 키마다 `LogicalGroupScanLimit+1`행입니다. 키의 identity 조합(room·kind·identity 후보)이 찾은 행은 그 조합을 만든 키의 한도를 쓰고, 반환 행은 최대 `자식 수 + 요청 키 수 × (LogicalGroupScanLimit+1)`입니다. 한도에 닿은 키는 조합이 찾은 행이 다른 키로 풀리더라도 불완전 관측으로 봅니다.
+- 자식이나 same-logical 행을 모두 잠가 관측하지 못한 후보(경쟁 잠금, 같은 논리 키 행의 `LogicalGroupScanLimit` 초과, 그 키의 조회 한도 도달)는 삭제하지 않고 `incomplete_logical_group` guard로 셉니다. 보존은 그 키에 속한 후보에만 적용되어, 과대·잠긴 그룹이 있어도 같은 batch에서 완전 관측한 다른 논리 키의 후보는 그대로 판정·삭제합니다. Cursor는 보존한 후보 뒤로 진행하고 다음 cleanup 주기가 처음부터 다시 검사하므로, 그룹이 한도 안으로 줄거나 경쟁 잠금이 풀리기 전까지 그 후보는 매 주기 보존됩니다. Ledger는 완전 관측한 논리 키만 조회합니다.
 - Ledger는 초기 범위에서 자동 삭제하지 않습니다.
 - 참조 delivery가 모두 정리된 request 본문만 기존 retention cutoff와 batch 상한으로 삭제합니다.
 
@@ -868,11 +844,12 @@ TestLedgerQuarantineEvidenceBlocksProviderCall
 ### Tracking
 
 ```text
-TestFirstRoomSuccessConsumesClaimToken
-TestLaterRoomSuccessAcceptsAlreadySentTracking
-TestAlreadySentPreparationFinalizesWithoutClaimMutation
-TestTrackingNeitherClaimNorSentRollsBackDeliverySuccess
-TestTrackingRequirementDeduplicatesSamePostInGroupedBatch
+TestCompleteSentMarksPostSentWithoutClaim
+TestOutcomeUnknownInOneRoomDoesNotDeferOtherRoomOfSamePost
+TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
+TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce
+TestRepositoryDuplicateAlarmMarksFinalizeOnePostLevelSentState
+TestRepositoryMarkAlarmSentBatchRepairsMissingAlarmStateForAlreadySentTracking
 ```
 
 ### CAS/operation

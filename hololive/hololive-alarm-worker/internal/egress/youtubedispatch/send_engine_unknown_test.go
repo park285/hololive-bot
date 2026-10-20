@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/park285/iris-client-go/v3/iris"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
@@ -14,7 +16,7 @@ import (
 
 func TestProviderFailurePreservesUnknownBeforeKnownFailure(t *testing.T) {
 	engine := &SendEngine{}
-	source := errors.Join(sendoutcome.ErrHandoffFailed, sendoutcome.ErrHandoffOutcomeUnknown)
+	source := errors.Join(iris.ErrPermanent, sendoutcome.ErrAdmissionOutcomeUnknown)
 
 	for _, err := range []error{source, engine.wrapDeliverySendError(t.Context(), source)} {
 		kind, _, _ := lifecycleProviderFailure(err)
@@ -24,13 +26,13 @@ func TestProviderFailurePreservesUnknownBeforeKnownFailure(t *testing.T) {
 	}
 }
 
-func TestTimedOutHandoffFailureDoesNotPersistKnownFailure(t *testing.T) {
+func TestTimedOutKnownFailureDoesNotPersistKnownFailure(t *testing.T) {
 	transition := &lifecycleTransitionSpy{}
 	engine := &SendEngine{transition: transition, logger: slog.New(slog.DiscardHandler)}
 	ctx, cancel := context.WithCancelCause(t.Context())
 	cancel(errDeliverySendTimeout)
 
-	err := engine.wrapDeliverySendError(ctx, sendoutcome.ErrHandoffFailed)
+	err := engine.wrapDeliverySendError(ctx, iris.ErrPermanent)
 	result := &deliveryDispatchResult{}
 
 	engine.applyPerRoomLifecycleFailure(t.Context(), store.StartedOperation{}, &domain.YouTubeNotificationDelivery{}, deliverySendRequest{}, err, result)

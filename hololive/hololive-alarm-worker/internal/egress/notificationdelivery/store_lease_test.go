@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -45,16 +46,10 @@ func TestMarkSendingChecksLeaseAtDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("lock row: %v", err)
 	}
 
-	type result struct {
-		ok  bool
-		err error
-	}
-
-	resultCh := make(chan result, 1)
+	resultCh := make(chan error, 1)
 
 	go func() {
-		ok, markErr := repository.MarkSending(ctx, items[0].ID, testWorkerA, testLease)
-		resultCh <- result{ok: ok, err: markErr}
+		resultCh <- repository.MarkSending(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, testLease)
 	}()
 
 	waitForOutboxQueryLock(ctx, t, repository, tx)
@@ -64,14 +59,7 @@ func TestMarkSendingChecksLeaseAtDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("release row lock: %v", err)
 	}
 
-	got := <-resultCh
-	if got.err != nil {
-		t.Fatalf("mark sending: %v", got.err)
-	}
-
-	if got.ok {
-		t.Fatal("lease that expired while waiting for the database row lock must be fenced")
-	}
+	requireFenceMiss(t, <-resultCh, actionMarkSending, sendfence.ReasonLeaseExpired)
 }
 
 func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
@@ -87,6 +75,8 @@ func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("fetch len = %d, want 1", len(items))
 	}
 
+	markOutboxSending(ctx, t, repository, &items[0])
+
 	tx, err := repository.pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin row lock: %v", err)
@@ -97,16 +87,10 @@ func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("lock row: %v", err)
 	}
 
-	type result struct {
-		ok  bool
-		err error
-	}
-
-	resultCh := make(chan result, 1)
+	resultCh := make(chan error, 1)
 
 	go func() {
-		ok, markErr := repository.MarkSent(ctx, items[0].ID, testWorkerA)
-		resultCh <- result{ok: ok, err: markErr}
+		resultCh <- repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, testIrisRequestID, testNotificationHandoffHorizon)
 	}()
 
 	time.Sleep(250 * time.Millisecond)
@@ -117,13 +101,8 @@ func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("release row lock: %v", err)
 	}
 
-	got := <-resultCh
-	if got.err != nil {
-		t.Fatalf("mark sent: %v", got.err)
-	}
-
-	if !got.ok {
-		t.Fatal("mark sent was fenced unexpectedly")
+	if err := <-resultCh; err != nil {
+		t.Fatalf("mark sent: %v", err)
 	}
 
 	var sentAt time.Time
@@ -160,16 +139,10 @@ func TestMarkFailedSchedulesRetryFromDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("lock row: %v", err)
 	}
 
-	type result struct {
-		ok  bool
-		err error
-	}
-
-	resultCh := make(chan result, 1)
+	resultCh := make(chan error, 1)
 
 	go func() {
-		ok, markErr := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Second, "retry")
-		resultCh <- result{ok: ok, err: markErr}
+		resultCh <- repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Second, "retry")
 	}()
 
 	time.Sleep(250 * time.Millisecond)
@@ -180,13 +153,8 @@ func TestMarkFailedSchedulesRetryFromDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("release row lock: %v", err)
 	}
 
-	got := <-resultCh
-	if got.err != nil {
-		t.Fatalf("mark failed: %v", got.err)
-	}
-
-	if !got.ok {
-		t.Fatal("mark failed was fenced unexpectedly")
+	if err := <-resultCh; err != nil {
+		t.Fatalf("mark failed: %v", err)
 	}
 
 	var nextAttemptAt time.Time
@@ -230,6 +198,40 @@ func TestFetchReadyAndLockRoundsPositiveSubMillisecondLeaseUp(t *testing.T) {
 	if leaseMicroseconds < 1000 {
 		t.Fatalf("lease duration = %dµs, want at least 1000µs", leaseMicroseconds)
 	}
+}
+
+// lease·보존·격리 임계값은 설정 검증이 양수를 보장하므로 저장소는 0 이하를 기본값으로 바꾸지 않고 오류로 거절한다.
+func TestStoreRejectsNonPositiveDurationsWithoutTouchingRows(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W37", "non-positive-room", "message"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	if _, err := repository.fetchReadyAndLock(ctx, testWorkerA, 1, 0, nil, nil); err == nil {
+		t.Fatal("zero claim lease accepted")
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	require.Len(t, items, 1)
+	require.Error(t, repository.MarkSending(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, 0))
+	require.Equal(t, int64(1), countByStatus(ctx, t, repository, domain.DeliveryStatusPending))
+
+	markOutboxSending(ctx, t, repository, &items[0])
+
+	_, err := repository.QuarantineStaleSending(ctx, 0, 10)
+	require.Error(t, err)
+
+	_, err = repository.QuarantineStaleSending(ctx, -time.Minute, 10)
+	require.Error(t, err)
+
+	_, err = repository.QuarantineStaleSending(ctx, time.Nanosecond, 0)
+	require.Error(t, err)
+	require.Equal(t, int64(1), countByStatus(ctx, t, repository, deliveryStatusSending))
+
+	_, err = repository.Cleanup(ctx, 0)
+	require.Error(t, err)
 }
 
 func TestQuarantineStaleSendingUsesDatabaseExecutionTime(t *testing.T) {

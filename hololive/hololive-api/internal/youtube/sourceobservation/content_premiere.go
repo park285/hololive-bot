@@ -10,36 +10,42 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
+// mergeContentPremieres는 확정된 최초공개를 세션에 반영하고 적용 결정과 수명 모델 입력을 바꿀 수 있는 영상 key를 돌려준다.
 func mergeContentPremieres(
 	ctx context.Context,
 	tx dbx.Tx,
 	observation *Observation,
 	evidence *content.Evidence,
-) ([]Application, error) {
+) ([]Application, []string, error) {
 	if evidence.Kind != contract.KindVideoList {
-		return []Application{}, nil
+		return []Application{}, nil, nil
 	}
 
 	facts := confirmedPremiereFacts(evidence)
 	if len(facts) == 0 {
-		return []Application{}, nil
+		return []Application{}, nil, nil
 	}
 
 	if err := lockLiveSubject(ctx, tx, observation.SubjectKey); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	state := live.State{Sessions: map[string]live.SessionState{}}
 	if err := loadLiveSessions(ctx, tx, &state, nil, premiereVideoIDs(facts)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	decision := live.MergeConfirmedPremieres(state, facts)
 	if err := persistPremiereDecision(ctx, tx, observation, &decision); err != nil {
-		return nil, fmt.Errorf("persist Premiere decision: %w", err)
+		return nil, nil, fmt.Errorf("persist Premiere decision: %w", err)
 	}
 
-	return mapLiveApplications(decision.Applications), nil
+	videoIDs := make([]string, len(decision.Sessions))
+	for i := range decision.Sessions {
+		videoIDs[i] = decision.Sessions[i].VideoID
+	}
+
+	return mapLiveApplications(decision.Applications), videoIDs, nil
 }
 
 func confirmedPremiereFacts(evidence *content.Evidence) []live.ConfirmedPremiereFact {

@@ -7,4 +7,4 @@ SET status = $3,
     updated_at = clock_timestamp()
 WHERE id = $1
   AND claim_token = $2
-  AND status = ANY($5::text[])
+  AND status = 'submitting'

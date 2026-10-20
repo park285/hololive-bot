@@ -42,7 +42,7 @@ const (
 	postColumns       = "post_id, published_at, like_count, comment_count"
 	watermarkColumns  = "channel_id, watermark_type, last_content_id"
 	sourcePostColumns = "kind, post_id, channel_id, actual_published_at, detected_at"
-	alarmStateColumns = "kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status"
+	alarmStateColumns = "kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status"
 )
 
 // commitVideos는 source observation Finalize처럼 트랜잭션 하나에서 PersistVideosTx를 실행하고, 오류면 롤백한다.
@@ -165,6 +165,7 @@ func seedDelivery(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeNotificat
 	require.NoError(t, err)
 }
 
+// seedAlarmState는 row의 알람 상태와 발송 시각으로 post 단위 알람 상태 행을 만든다.
 func seedAlarmState(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeCommunityShortsAlarmState) {
 	t.Helper()
 
@@ -172,8 +173,8 @@ func seedAlarmState(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeCommuni
 
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_community_shorts_alarm_states
-			(kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AuthorizedAt, row.AlarmSentAt, row.DeliveryStatus, now, now)
+			(kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AlarmSentAt, row.DeliveryStatus, now, now)
 	require.NoError(t, err)
 }

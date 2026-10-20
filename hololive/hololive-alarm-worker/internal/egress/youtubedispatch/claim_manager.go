@@ -16,11 +16,6 @@ type DeliveryExecutor interface {
 	dispatchDeliveryRows(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxByID map[int64]domain.YouTubeNotificationOutbox) dispatchstate.DispatchResult
 }
 
-type ClaimResolver interface {
-	selectClaimedDeliveries(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, reuseCache *claimDecisionCache) deliveryClaimSelection
-	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
-}
-
 type ClaimManager struct {
 	db           deliverysql.DeliveryDB
 	config       dispatchstate.Config
@@ -64,11 +59,6 @@ func newClaimManager(
 	manager.projector = newOutboxAggregateProjector(deliveryRepo)
 
 	return manager
-}
-
-// setExecutor는 SendEngine과 ClaimManager의 상호 참조 때문에 assembleDispatcher가 생성 직후 한 번 호출한다.
-func (d *ClaimManager) setExecutor(executor DeliveryExecutor) {
-	d.executor = executor
 }
 
 func (d *ClaimManager) dispatchDeliveryRows(

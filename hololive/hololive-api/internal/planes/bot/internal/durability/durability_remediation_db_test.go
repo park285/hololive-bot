@@ -51,7 +51,7 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 		entry := newReplyOutboxEntry("message:m-accepted", 0, `{"body":"x"}`)
 		claim := claimOne(ctx, t, repo, entry)
 
-		accepted, err := repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-req-1")
+		accepted, err := repo.SettleAccepted(ctx, claim.ID, testClaimToken, "iris-req-1", time.Minute)
 		require.NoError(t, err)
 		require.True(t, accepted)
 
@@ -93,25 +93,41 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 		require.NotNil(t, reclaimed)
 		assert.Equal(t, int32(2), reclaimed.Attempts)
 	})
+}
 
-	t.Run("terminal settlements still apply from accepted", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+func TestOnlyTheHandoffReconcilerMovesAnAcceptedReplyToATerminalState(t *testing.T) {
+	pool := newDurabilityPool(t)
+	repo := newTestReplyOutboxRepository(pool)
+	ctx := t.Context()
+	truncateDurabilityTables(ctx, t, pool)
 
-		entry := newReplyOutboxEntry("message:m-terminal", 0, `{"body":"x"}`)
-		claim := claimOne(ctx, t, repo, entry)
+	entry := newReplyOutboxEntry("message:m-terminal", 0, `{"body":"x"}`)
+	claim := claimOne(ctx, t, repo, entry)
 
-		accepted, err := repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-req-1")
-		require.NoError(t, err)
-		require.True(t, accepted)
+	accepted, err := repo.SettleAccepted(ctx, claim.ID, testClaimToken, "iris-req-1", time.Millisecond)
+	require.NoError(t, err)
+	require.True(t, accepted)
 
-		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
-			ID:         claim.ID,
-			ClaimToken: testClaimToken,
-			Status:     ReplyOutboxHandoffCompleted,
-		})
-		require.NoError(t, err)
-		assert.True(t, applied)
+	applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
+		ID:         claim.ID,
+		ClaimToken: testClaimToken,
+		Status:     ReplyOutboxDead,
 	})
+	require.NoError(t, err)
+	assert.False(t, applied, "accepted 뒤에는 발송 claim token이 남지 않는다")
+
+	_, err = repo.Settle(ctx, ReplyOutboxSettlement{ID: claim.ID, ClaimToken: testClaimToken, Status: ReplyOutboxHandoffCompleted})
+	require.ErrorIs(t, err, ErrInvalidArgument, "발송 정산은 handoff 완료를 기록하지 않는다")
+
+	due := claimOneHandoffDue(ctx, t, repo)
+
+	applied, err = repo.SettleHandoff(ctx, ReplyHandoffSettlement{Claim: due, Status: ReplyOutboxHandoffCompleted})
+	require.NoError(t, err)
+	assert.True(t, applied)
+
+	status, payload, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+	assert.Equal(t, ReplyOutboxHandoffCompleted, status)
+	assert.Nil(t, payload)
 }
 
 func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) {

@@ -326,17 +326,28 @@ func assertReplyOutboxAcceptIsFenced(
 
 	claim := claimOne(ctx, t, repo, entry)
 
-	applied, err := repo.MarkAccepted(ctx, claim.ID, "token-stale", "iris-1")
+	applied, err := repo.SettleAccepted(ctx, claim.ID, "token-stale", "iris-1", time.Second)
 	require.NoError(t, err)
 	assert.False(t, applied, "stale token must transition zero rows")
 
-	applied, err = repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-1")
+	applied, err = repo.SettleAccepted(ctx, claim.ID, testClaimToken, "iris-1", time.Second)
 	require.NoError(t, err)
 	assert.True(t, applied)
 
-	status, _, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-	assert.Equal(t, "accepted", status)
-	require.NotNil(t, token)
+	var (
+		status, irisRequestID string
+		leaseReleased         bool
+		firstCheckMS          float64
+	)
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT status, iris_request_id,
+			claim_token IS NULL AND lease_until IS NULL AND accepted_at IS NOT NULL,
+			EXTRACT(EPOCH FROM handoff_next_check_at - accepted_at) * 1000
+		FROM bot_reply_outbox WHERE id = $1`, claim.ID).Scan(&status, &irisRequestID, &leaseReleased, &firstCheckMS))
+	assert.Equal(t, ReplyOutboxAccepted, status)
+	assert.Equal(t, "iris-1", irisRequestID)
+	assert.True(t, leaseReleased, "accepted는 발송 lease 없이 handoff 확인을 기다린다")
+	assert.InDelta(t, 1000, firstCheckMS, 1, "첫 handoff 확인은 admission 정산 시각 기준이다")
 }
 
 func assertReplyOutboxConflictSettlesTerminally(

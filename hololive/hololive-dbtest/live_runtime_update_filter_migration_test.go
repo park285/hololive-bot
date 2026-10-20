@@ -1,12 +1,10 @@
 package dbtest
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +30,7 @@ func TestLiveRuntimeUpdateFilterMigrationPreservesDataAndPrivileges(t *testing.T
 	}
 }
 
-func liveRuntimeRefreshSecurity(t *testing.T, db liveRuntimeStateQuerier) string {
+func liveRuntimeRefreshSecurity(t *testing.T, db LiveRuntimeStateReader) string {
 	t.Helper()
 
 	var security string
@@ -46,6 +44,7 @@ func liveRuntimeRefreshSecurity(t *testing.T, db liveRuntimeStateQuerier) string
 func TestLiveRuntimeUpdateFilterInvalidatesCandidateReceiptFields(t *testing.T) {
 	pool := NewPool(t)
 	seedRecordedLiveReviews(t, pool)
+	RefreshAllLiveRuntimeState(t, pool)
 
 	for _, scenario := range []struct{ name, change, restore string }{
 		{"kind", `UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='EXPLICIT_END' WHERE video_id='recorded'`, `UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='SCOPED_ABSENCE' WHERE video_id='recorded'`},
@@ -53,7 +52,7 @@ func TestLiveRuntimeUpdateFilterInvalidatesCandidateReceiptFields(t *testing.T) 
 		{"observation", `UPDATE youtube_live_reconciliation_heads SET end_candidate_observation_id=8 WHERE video_id='recorded'`, `UPDATE youtube_live_reconciliation_heads SET end_candidate_observation_id=7 WHERE video_id='recorded'`},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: pgx.Serializable})
+			tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 			require.NoError(t, err)
 
 			defer rollbackLiveReviewReceiptFactsTx(t, tx)
@@ -62,12 +61,14 @@ func TestLiveRuntimeUpdateFilterInvalidatesCandidateReceiptFields(t *testing.T) 
 			tag, err := tx.Exec(t.Context(), scenario.change)
 			require.NoError(t, err)
 			require.Equal(t, int64(1), tag.RowsAffected())
+			refreshRecordedLiveRuntimeState(t, tx)
 			assertLiveRuntimeState(t, tx)
 			require.Nil(t, candidateFieldReviewedAt(t, tx))
 
 			tag, err = tx.Exec(t.Context(), scenario.restore)
 			require.NoError(t, err)
 			require.Equal(t, int64(1), tag.RowsAffected())
+			refreshRecordedLiveRuntimeState(t, tx)
 			assertLiveRuntimeState(t, tx)
 			require.Equal(t, reviewedAt, candidateFieldReviewedAt(t, tx))
 			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
@@ -83,6 +84,7 @@ func seedCandidateFieldReceipt(t *testing.T, tx pgx.Tx) *time.Time {
  SET end_candidate_kind='SCOPED_ABSENCE',end_candidate_observation_id=7,next_end_check_at='2026-09-04'
  WHERE video_id='recorded'`)
 	require.NoError(t, err)
+	refreshRecordedLiveRuntimeState(t, tx)
 	assertLiveRuntimeState(t, tx)
 
 	_, err = tx.Exec(t.Context(), `SELECT record_youtube_live_review(gen_random_uuid(),'recorded',snapshot.snapshot_sha256,'test-operator','후보 입력 검증')
@@ -96,7 +98,14 @@ func seedCandidateFieldReceipt(t *testing.T, tx pgx.Tx) *time.Time {
 	return reviewedAt
 }
 
-func candidateFieldReviewedAt(t *testing.T, db liveRuntimeStateQuerier) *time.Time {
+func refreshRecordedLiveRuntimeState(t *testing.T, tx pgx.Tx) {
+	t.Helper()
+
+	_, err := tx.Exec(t.Context(), `SELECT refresh_youtube_live_runtime_state(ARRAY['recorded'])`)
+	require.NoError(t, err)
+}
+
+func candidateFieldReviewedAt(t *testing.T, db LiveRuntimeStateReader) *time.Time {
 	t.Helper()
 
 	var reviewedAt *time.Time
@@ -104,38 +113,4 @@ func candidateFieldReviewedAt(t *testing.T, db liveRuntimeStateQuerier) *time.Ti
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT reviewed_at FROM youtube_live_runtime_state WHERE video_id='recorded'`).Scan(&reviewedAt))
 
 	return reviewedAt
-}
-
-// 기술적 UPDATE는 refresh를 생략해도 BEFORE guard의 고정 snapshot 거절을 우회할 수 없다.
-func TestLiveRuntimeUpdateFilterStaleTechnicalWriterFails(t *testing.T) {
-	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
-		t.Run(string(isolation), func(t *testing.T) {
-			pool := NewPool(t)
-			_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,last_seen_at)
-    VALUES('technical-snapshot','runtime-channel','UPCOMING','2026-10-01')`)
-			require.NoError(t, err)
-
-			stale, err := pool.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: isolation})
-			require.NoError(t, err)
-
-			defer rollbackLiveReviewReceiptFactsTx(t, stale)
-
-			var before, after time.Time
-
-			require.NoError(t, stale.QueryRow(t.Context(), `SELECT last_seen_at FROM youtube_live_sessions WHERE video_id='technical-snapshot'`).Scan(&before))
-
-			_, err = pool.Exec(t.Context(), `SELECT lock_youtube_live_runtime_state()`)
-			require.NoError(t, err)
-
-			_, err = stale.Exec(t.Context(), `UPDATE youtube_live_sessions SET last_seen_at='2026-10-02' WHERE video_id='technical-snapshot'`)
-
-			pgErr, ok := errors.AsType[*pgconn.PgError](err)
-			require.True(t, ok, "stale technical write must preserve serialization failure: %v", err)
-			require.Equal(t, "40001", pgErr.Code)
-			require.NoError(t, pgxdb.Rollback(t.Context(), stale))
-			require.NoError(t, pool.QueryRow(t.Context(), `SELECT last_seen_at FROM youtube_live_sessions WHERE video_id='technical-snapshot'`).Scan(&after))
-			require.Equal(t, before, after)
-			assertLiveRuntimeState(t, pool)
-		})
-	}
 }

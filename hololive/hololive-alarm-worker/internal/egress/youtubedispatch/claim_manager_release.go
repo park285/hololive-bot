@@ -2,22 +2,13 @@ package youtubedispatch
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
 const outboxCleanupBatchSize = 1000
@@ -72,24 +63,20 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 }
 
-// cutoff가 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가
-// config invariant로 보장되지 않으므로, max로 삭제 대상을 항상 created_at < now-ClaimFreshnessWindow로
-// 묶어 primary claim(dispatcher_claim.go의 created_at >= now-ClaimFreshnessWindow)에서 다시 claim될 수
-// 없음을 보장한다. ClaimFreshnessWindow<=0이면 claim에 신선도 하한이 없어 안전한 cutoff가 없으므로 skip.
+// 보존 기간이 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가 config invariant로
+// 보장되지 않으므로, 삭제 대상을 항상 fanout claim의 신선도 하한(DB 시계 - ClaimFreshnessWindow)보다 오래된 outbox로
+// 묶어 다시 claim될 수 없게 한다. 보존 기간과 lease 만료는 claim과 같은 DB 시계로 판정한다.
+// ClaimFreshnessWindow<=0이면 claim에 신선도 하한이 없어 안전한 기준이 없으므로 건너뛴다.
 // NOT EXISTS delivery 가드는 ON DELETE CASCADE로 인한 delivery/telemetry 동반 삭제를 막는다.
 func (d *ClaimManager) cleanupExpiredFanoutOutboxes(ctx context.Context) {
 	if d.config.ClaimFreshnessWindow <= 0 {
 		return
 	}
 
-	now := time.Now().UTC()
-	pendingCutoff := now.Add(-d.orphanPendingCutoff())
-	lockExpiry := now.Add(-d.config.LockTimeout)
-
 	var total int
 
 	for {
-		deleted, err := d.transition.CleanupExpiredFanoutOutboxes(ctx, pendingCutoff, lockExpiry, outboxCleanupBatchSize)
+		deleted, err := d.transition.CleanupExpiredFanoutOutboxes(ctx, d.orphanPendingCutoff(), outboxCleanupBatchSize)
 		if err != nil {
 			d.logger.Warn("Failed to cleanup expired fanout outbox items", slog.Any("error", err))
 
@@ -157,97 +144,6 @@ func (d *ClaimManager) quarantineStaleLogicalGroups(ctx context.Context) {
 		slog.Int("delivery_count", result.QuarantinedDeliveries),
 		slog.Int("outbox_count", len(result.TouchedOutboxIDs)),
 		slog.Duration("older_than", d.config.LockTimeout))
-}
-
-func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error {
-	if len(claims) == 0 {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), deliveryStateTimeout)
-	defer cancel()
-
-	repository := observation.NewRepositoryContext(ctx, d.db)
-
-	for i := range claims {
-		if claims[i].Reused {
-			continue
-		}
-
-		if _, err := repository.ReleaseAlarmStateClaim(ctx, claims[i].Kind, claims[i].PostID, claims[i].AuthorizedAt); err != nil {
-			return fmt.Errorf("release claim at index %d: %w", i, err)
-		}
-	}
-
-	return nil
-}
-
-func (d *ClaimManager) releaseDeliveryClaimsWithWarning(
-	ctx context.Context,
-	claims []dispatchstate.ClaimToken,
-	message string,
-	attrs ...any,
-) {
-	if releaseErr := d.releaseDeliveryClaims(ctx, claims); releaseErr != nil && d.logger != nil {
-		d.logger.Warn(message, append(attrs, slog.Any("error", releaseErr))...)
-	}
-}
-
-func (d *ClaimManager) deliveryClaimTimeout() time.Duration {
-	claimTimeout := maxCommunityShortsClaimHold
-	if d != nil && d.config.LockTimeout > 0 && d.config.LockTimeout < claimTimeout {
-		claimTimeout = d.config.LockTimeout
-	}
-
-	if claimTimeout <= 0 {
-		return maxCommunityShortsClaimHold
-	}
-
-	return claimTimeout
-}
-
-func (d *ClaimManager) logClaimIssue(
-	message string,
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-	level slog.Level,
-	attrs ...any,
-) {
-	baseAttrs := deliveryClaimLogAttrs(row, outbox, attrs...)
-	logClaimIssueAtLevel(d.logger, level, message, baseAttrs...)
-}
-
-func deliveryClaimLogAttrs(
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-	attrs ...any,
-) []any {
-	baseAttrs := make([]any, 0, 7+len(attrs))
-
-	baseAttrs = append(baseAttrs,
-		slog.Int64(logschema.FieldDeliveryID, row.ID),
-		slog.Int64(logschema.FieldOutboxID, outbox.ID),
-		privacylog.RoomIDAttr(row.RoomID),
-		slog.String(logschema.FieldChannelID, outbox.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
-		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
-		slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
-	)
-
-	return append(baseAttrs, attrs...)
-}
-
-func logClaimIssueAtLevel(logger *slog.Logger, level slog.Level, message string, attrs ...any) {
-	switch level {
-	case slog.LevelDebug, slog.LevelInfo:
-		logger.Info(message, attrs...)
-	case slog.LevelWarn:
-		logger.Warn(message, attrs...)
-	case slog.LevelError:
-		logger.Error(message, attrs...)
-	default:
-		logger.Info(message, attrs...)
-	}
 }
 
 func (d *ClaimManager) expirePendingDeliveries(ctx context.Context) {

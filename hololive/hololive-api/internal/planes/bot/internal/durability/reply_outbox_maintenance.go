@@ -70,9 +70,8 @@ func (r *ReplyOutboxRepository) ManualReviewStats(ctx context.Context) (ReplyOut
 }
 
 type ReplyOutboxReclaim struct {
-	Requeued             int64
-	AcceptedManualReview int64
-	SafetyManualReview   int64
+	Requeued           int64
+	SafetyManualReview int64
 }
 
 func normalizeReplyOutboxEntry(entry *ReplyOutboxEntry) (ReplyOutboxEntry, error) {

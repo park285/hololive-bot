@@ -22,7 +22,7 @@ type alarmAttemptSender struct {
 	sawInFlight bool
 }
 
-func (s *alarmAttemptSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) error {
+func (s *alarmAttemptSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) (string, error) {
 	s.sawInFlight = s.tracker.Snapshot(time.Now()).InFlight == 1
 	if s.panicValue {
 		panic("provider panic")
@@ -40,7 +40,7 @@ func TestAlarmProviderAttemptsRecordProviderResultBeforePersistence(t *testing.T
 	}{
 		{name: "success", want: workercontract.AttemptSuccess},
 		{name: "failed", err: errors.New("provider failed"), want: workercontract.AttemptFailed},
-		{name: "unknown", err: sendoutcome.ErrHandoffOutcomeUnknown, want: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown", err: sendoutcome.ErrAdmissionOutcomeUnknown, want: workercontract.AttemptOutcomeUnknown},
 		{name: "timeout", err: context.DeadlineExceeded, want: workercontract.AttemptTimeout},
 		{name: "canceled", err: context.Canceled, want: workercontract.AttemptCanceled},
 		{name: "panic", panics: true, want: workercontract.AttemptPanic},

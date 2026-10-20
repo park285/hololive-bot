@@ -120,6 +120,12 @@ func (r *Repository) finalizeTx(
 		return ReconcileResult{}, fmt.Errorf("complete finalize observation: %w", err)
 	}
 
+	// 수명 모델 갱신을 트랜잭션의 마지막 공유 쓰기로 둔다. 영상 잠금을 보유한 뒤에는 다른 행 잠금을 기다리지 않는다.
+	// 거절 분기는 원본을 쓰지 않으므로 갱신할 key가 없다.
+	if refreshErr := refreshLiveRuntimeState(ctx, tx, result.LiveRuntimeVideoIDs); refreshErr != nil {
+		return ReconcileResult{}, refreshErr
+	}
+
 	result.EffectiveAt = observation.EffectiveAt
 	result.SourceEventFallback = observation.SourceEventFallback
 

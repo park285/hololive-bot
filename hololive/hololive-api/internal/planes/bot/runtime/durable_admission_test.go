@@ -77,12 +77,11 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 
 	cases := []struct {
 		name     string
-		accepted bool
 		err      error
 		attempts int32
 		want     string
 	}{
-		{name: "handoff", want: durability.ReplyOutboxHandoffCompleted},
+		{name: "durable admission", want: durability.ReplyOutboxAccepted},
 		{name: "pre-dispatch", attempts: 1, err: iris.ErrRetryable, want: durability.ReplyOutboxRetryablePreDispatch},
 		{name: "unknown local error", err: errors.New("bug"), want: durability.ReplyOutboxDead},
 		{name: "invalid stored payload", err: transport.ErrStoredReplyInvalid, want: durability.ReplyOutboxManualReview},
@@ -90,15 +89,12 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 		{name: "retry exhausted", attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
 		{name: "unknown", err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxOutcomeUnknown},
 		{name: "unknown exhausted", attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},
-		{name: "accepted observation failure", accepted: true, err: errors.New("status unavailable"), want: durability.ReplyOutboxManualReview},
-		{name: "accepted observation exhausted", accepted: true, attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: errors.New("status unavailable"), want: durability.ReplyOutboxManualReview},
-		{name: "explicit failure after acceptance", accepted: true, err: transport.ErrReplyStatusFailed, want: durability.ReplyOutboxDead},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := replyOutboxSettlementStatusWithMaxAttempts(tc.accepted, tc.attempts, durability.ReplyOutboxMaxAttempts, tc.err); got != tc.want {
+			if got := replyOutboxSettlementStatusWithMaxAttempts(tc.attempts, durability.ReplyOutboxMaxAttempts, tc.err); got != tc.want {
 				t.Fatalf("replyOutboxSettlementStatusWithMaxAttempts() = %q, want %q", got, tc.want)
 			}
 		})
@@ -121,24 +117,6 @@ func TestReplyOutboxOutcomeUnknownRetryDelayIncreasesByAttempt(t *testing.T) {
 
 	if got := replyOutboxRetryAfterWithBase(durability.ReplyOutboxManualReview, testDurableProfile(t).BotReplyOutbox.MaxAttempts, time.Second); got != 0 {
 		t.Fatalf("manual review retry delay = %s, want 0", got)
-	}
-}
-
-func TestAcceptedLeaseReclaimEmitsActionableCounterAndLog(t *testing.T) {
-	var logs bytes.Buffer
-
-	r := &durableRuntime{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
-	before := testutil.ToFloat64(replyOutboxAcceptedReclaimedTotal)
-
-	r.observeReplyOutboxReclaim(durability.ReplyOutboxReclaim{AcceptedManualReview: 2})
-
-	after := testutil.ToFloat64(replyOutboxAcceptedReclaimedTotal)
-	if after-before != 2 {
-		t.Fatalf("accepted reclaim counter delta = %v", after-before)
-	}
-
-	if !strings.Contains(logs.String(), "inspect bot_reply_outbox status=manual_review before replay decision") {
-		t.Fatalf("actionable reclaim log missing: %s", logs.String())
 	}
 }
 

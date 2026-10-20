@@ -14,32 +14,24 @@ func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (in
 		return 0, errors.New("recover expired leased dispatch deliveries: limit must be positive")
 	}
 
-	out, err := r.recoverWithQuery(ctx, mustSQL("repository_maintenance_0010_01.sql"), limit, maxDeliveriesPerSendUnit)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_maintenance_0010_01.sql"), limit, maxDeliveriesPerSendUnit)
 	if err != nil {
-		return out, fmt.Errorf("recover with query: %w", err)
+		return 0, fmt.Errorf("recover expired leased dispatch deliveries: %w", err)
 	}
 
-	return out, nil
+	return int(tag.RowsAffected()), nil
 }
 
+// QuarantineStaleSending은 sending_started_at이 olderThan보다 오래된 sending을 결과 불명으로 격리한다.
 func (r *PgxRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int, error) {
-	seconds, err := wholeSeconds(olderThan)
+	olderThanMS, err := leaseMilliseconds(olderThan)
 	if err != nil {
 		return 0, fmt.Errorf("quarantine stale sending dispatch deliveries: older than: %w", err)
 	}
 
-	out, err := r.recoverWithQuery(ctx, mustSQL("repository_maintenance_0035_02.sql"), limit, seconds)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_maintenance_0035_02.sql"), limit, olderThanMS)
 	if err != nil {
-		return out, fmt.Errorf("recover with query: %w", err)
-	}
-
-	return out, nil
-}
-
-func (r *PgxRepository) recoverWithQuery(ctx context.Context, query string, limit, seconds int) (int, error) {
-	tag, err := r.pool.Exec(ctx, query, limit, seconds)
-	if err != nil {
-		return 0, fmt.Errorf("recover dispatch deliveries: %w", err)
+		return 0, fmt.Errorf("quarantine stale sending dispatch deliveries: %w", err)
 	}
 
 	return int(tag.RowsAffected()), nil

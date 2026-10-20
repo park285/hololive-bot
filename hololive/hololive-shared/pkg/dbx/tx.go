@@ -117,10 +117,31 @@ const maxHotpathBatchStatements = 128
 
 // Statement는 같은 트랜잭션 안에서 순서대로 실행할 SQL이다.
 // Operation은 오류 위치를 식별하는 고정 문자열이며 사용자 데이터나 인자를 넣지 않는다.
+// RequireRow가 참이면 행에 적용되지 않은 실행을 *NoRowsError로 실패시킨다.
 type Statement struct {
-	SQL       string
-	Args      []any
+	SQL        string
+	Args       []any
+	Operation  string
+	RequireRow bool
+}
+
+// NoRowsError는 RequireRow 문장이 어떤 행에도 적용되지 않았음을 뜻한다.
+// Index는 ExecStatements에 전달한 statements 안의 위치다.
+type NoRowsError struct {
 	Operation string
+	Index     int
+}
+
+func (e *NoRowsError) Error() string {
+	return fmt.Sprintf("execute statement %d (%s): no rows affected", e.Index, e.Operation)
+}
+
+func requireStatementRow(statement *Statement, index int, tag pgconn.CommandTag) error {
+	if statement.RequireRow && tag.RowsAffected() == 0 {
+		return &NoRowsError{Index: index, Operation: statement.Operation}
+	}
+
+	return nil
 }
 
 type statementBatchSender interface {
@@ -155,8 +176,14 @@ func ExecStatements(ctx context.Context, tx Tx, statements []Statement) error {
 		}
 
 		statement := &statements[i]
-		if _, err := tx.Exec(ctx, statement.SQL, statement.Args...); err != nil {
+
+		tag, err := tx.Exec(ctx, statement.SQL, statement.Args...)
+		if err != nil {
 			return fmt.Errorf("execute statement %d (%s): %w", i, statement.Operation, err)
+		}
+
+		if err := requireStatementRow(statement, i, tag); err != nil {
+			return err
 		}
 	}
 
@@ -198,8 +225,13 @@ func execStatementBatch(ctx context.Context, sender statementBatchSender, statem
 	}()
 
 	for i := range statements {
-		if _, executeErr := results.Exec(); executeErr != nil {
+		tag, executeErr := results.Exec()
+		if executeErr != nil {
 			return fmt.Errorf("execute statement %d (%s): %w", offset+i, statements[i].Operation, executeErr)
+		}
+
+		if rowErr := requireStatementRow(&statements[i], offset+i, tag); rowErr != nil {
+			return rowErr
 		}
 	}
 

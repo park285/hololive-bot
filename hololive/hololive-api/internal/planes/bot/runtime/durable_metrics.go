@@ -18,10 +18,6 @@ var (
 		Name: "bot_durable_command_outcome_unknown_total",
 		Help: "Durable command executions closed without a confirmed side-effect outcome.",
 	})
-	replyOutboxAcceptedReclaimedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "bot_reply_outbox_accepted_reclaimed_total",
-		Help: "Accepted reply outbox leases moved to manual review after expiry.",
-	})
 	replyOutboxManualReviewBacklog = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "bot_reply_outbox_manual_review_backlog",
 		Help: "Reply outbox rows requiring manual review.",

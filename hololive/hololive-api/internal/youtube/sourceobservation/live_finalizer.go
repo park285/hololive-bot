@@ -37,7 +37,7 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 		dbNow   time.Time
 	)
 
-	// NOW()는 guard 대기 전 트랜잭션 시작 시각이다. 대기 중 새로 due가 된 항목은
+	// NOW()는 전역·session 행 잠금 대기 전 트랜잭션 시작 시각이다. 대기 중 새로 due가 된 항목은
 	// 다음 호출로 남기고, 이번 후보 조회·재확인·FinalizeDue에는 같은 시각을 쓴다.
 	err := tx.QueryRow(ctx, mustSQL("repository_live_due_one_0049_49.sql")).Scan(&videoID, &dbNow)
 
@@ -68,8 +68,12 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 	}
 
 	decision := live.FinalizeDue(state, dbNow, grace)
-	if err := persistLiveDecision(ctx, tx, &decision); err != nil {
+	if err := persistLiveDecision(ctx, tx, state.Sessions, &decision); err != nil {
 		return false, fmt.Errorf("persist live decision: %w", err)
+	}
+
+	if err := refreshLiveRuntimeState(ctx, tx, liveDecisionRuntimeVideoIDs(&decision)); err != nil {
+		return false, err
 	}
 
 	return true, nil

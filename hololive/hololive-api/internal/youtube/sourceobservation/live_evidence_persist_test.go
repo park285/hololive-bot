@@ -393,6 +393,7 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// consumer 대역은 shared 전역 잠금 뒤 정본 session 행을 먼저 잠근다. finalizer도 같은 순서로 session에서 기다려야 한다.
 	consumerTx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 
@@ -400,12 +401,14 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 
 	require.NoError(t, lockLiveRuntimeState(ctx, consumerTx))
 
+	_, err = consumerTx.Exec(ctx, `SELECT video_id FROM youtube_live_sessions WHERE video_id=$1 FOR UPDATE`, testVideoID)
+	require.NoError(t, err)
+
 	finalizerTx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 
 	defer rollbackPublishTestTx(ctx, t, finalizerTx, "live finalizer")
 
-	pid := finalizerTx.Conn().PgConn().PID()
 	done := make(chan error, 1)
 
 	var processed bool
@@ -418,42 +421,19 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 		done <- finalizeErr
 	}()
 
-	ticker := time.NewTicker(5 * time.Millisecond)
+	waitObservationSettlementLock(ctx, t, pool, consumerTx.Conn().PgConn().PID(), done)
 
-	defer ticker.Stop()
-
-	for {
-		var waiting bool
-
-		require.NoError(t, pool.QueryRow(ctx, "SELECT cardinality(pg_blocking_pids($1)) > 0", pid).Scan(&waiting))
-
-		if waiting {
-			break
-		}
-
-		select {
-		case finalizeErr := <-done:
-			t.Fatalf("finalizer did not wait for runtime guard: %v", finalizeErr)
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case <-ticker.C:
-		}
-	}
-
-	// guard 대기 중에는 finalizer가 session이나 후보 head를 선잠그지 않아야 한다.
-	_, err = consumerTx.Exec(ctx, `SELECT video_id FROM youtube_live_sessions WHERE video_id=$1 FOR UPDATE NOWAIT`, testVideoID)
-	require.NoError(t, err)
-
+	// session 행 대기 중에는 finalizer가 후보 head를 선잠그지 않아야 한다.
 	_, err = consumerTx.Exec(ctx, `SELECT video_id FROM youtube_live_reconciliation_heads WHERE video_id=$1 FOR UPDATE NOWAIT`, testVideoID)
 	require.NoError(t, err)
 
-	// guard 대기 중 due가 된 항목은 트랜잭션 시작 시각 기준으로 다음 호출까지 남긴다.
+	// 잠금 대기 중 due가 된 항목은 트랜잭션 시작 시각 기준으로 다음 호출까지 남긴다.
 	_, err = consumerTx.Exec(ctx, `UPDATE youtube_live_reconciliation_heads SET next_end_check_at=clock_timestamp() WHERE video_id=$1`, testVideoID)
 	require.NoError(t, err)
 
 	require.NoError(t, consumerTx.Commit(ctx))
 	require.NoError(t, <-done)
-	require.False(t, processed, "finalizer included a candidate that became due during the guard wait")
+	require.False(t, processed, "finalizer included a candidate that became due during the lock wait")
 	require.NoError(t, finalizerTx.Commit(ctx))
 }
 

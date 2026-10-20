@@ -35,12 +35,14 @@ func TestTransitionLogicalGroupCompleteSentIsVersionFencedAndAtomic(t *testing.T
 	require.Len(t, prepared.ActiveRows, 1)
 	require.Equal(t, olderID, prepared.ActiveRows[0].ID)
 
+	admission := freezeTestAdmission(t, transition, prepared.ActiveRows, "youtube:transition-atomic", time.Minute)
+
 	operation, begin, err := transition.BeginSending(ctx, prepared.ActiveRows, outboxes)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, begin.Outcome)
 	require.True(t, operation.Valid())
 
-	completed, err := transition.CompleteSent(ctx, operation, nil, DeliveryModePerRoom)
+	completed, err := transition.CompleteSent(ctx, operation, DeliveryModePerRoom, admission)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 	require.ElementsMatch(t, []int64{claimed[0].OutboxID, claimed[1].OutboxID}, completed.TouchedOutboxIDs)
@@ -62,6 +64,26 @@ func TestTransitionLogicalGroupCompleteSentIsVersionFencedAndAtomic(t *testing.T
 	require.Equal(t, olderID, sourceDeliveryID)
 }
 
+// freezeTestAdmission은 준비된 행을 새 고정 요청에 묶고, 그 요청을 202로 보낸 것처럼 handoff admission을 돌려준다.
+func freezeTestAdmission(
+	t *testing.T,
+	transition *TransitionStore,
+	rows []domain.YouTubeNotificationDelivery,
+	baseID string,
+	horizon time.Duration,
+) HandoffAdmission {
+	t.Helper()
+
+	frozen, err := transition.FreezeRequest(t.Context(), rows, FrozenRequest{
+		BaseID: baseID, RoomID: rows[0].RoomID, Message: "frozen body " + baseID, Route: "text", DedupeKeys: []string{baseID},
+	})
+	require.NoError(t, err)
+
+	return HandoffAdmission{
+		RequestBaseID: frozen.BaseID, RequestGeneration: frozen.Generation, IrisRequestID: "iris:" + baseID, Horizon: horizon,
+	}
+}
+
 func TestTransitionCompleteSentConfirmsLostCommitResponse(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -75,6 +97,8 @@ func TestTransitionCompleteSentConfirmsLostCommitResponse(t *testing.T) {
 	outboxes := loadTransitionTestOutboxes(t, pool, claimed)
 	prepared, err := transition.PrepareClaimed(ctx, claimed, outboxes)
 	require.NoError(t, err)
+
+	admission := freezeTestAdmission(t, transition, prepared.ActiveRows, "youtube:transition-response-lost", time.Minute)
 
 	operation, result, err := transition.BeginSending(ctx, prepared.ActiveRows, outboxes)
 	require.NoError(t, err)
@@ -90,7 +114,7 @@ func TestTransitionCompleteSentConfirmsLostCommitResponse(t *testing.T) {
 		return nil
 	}
 
-	completed, err := transition.CompleteSent(ctx, operation, nil, DeliveryModePerRoom)
+	completed, err := transition.CompleteSent(ctx, operation, DeliveryModePerRoom, admission)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 	assertTransitionDelivery(t, pool, deliveryID, domain.OutboxStatusSent, 3, true)
@@ -340,10 +364,12 @@ func TestTransitionCleanupDeletesPhysicalRowsAndRetainsLogicalLedger(t *testing.
 	prepared, err := transition.PrepareClaimed(ctx, claimed, outboxes)
 	require.NoError(t, err)
 
+	admission := freezeTestAdmission(t, transition, prepared.ActiveRows, "youtube:transition-cleanup", time.Minute)
+
 	operation, _, err := transition.BeginSending(ctx, prepared.ActiveRows, outboxes)
 	require.NoError(t, err)
 
-	_, err = transition.CompleteSent(ctx, operation, nil, DeliveryModePerRoom)
+	_, err = transition.CompleteSent(ctx, operation, DeliveryModePerRoom, admission)
 	require.NoError(t, err)
 
 	terminalAt := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)
@@ -641,8 +667,14 @@ func markTransitionDeliveriesTerminalFailed(
 func newTestTransitionStore(t *testing.T, pool *pgxpool.Pool) *TransitionStore {
 	t.Helper()
 
+	return newOwnedTestTransitionStore(t, pool, "youtube-dispatcher:test")
+}
+
+func newOwnedTestTransitionStore(t *testing.T, pool *pgxpool.Pool, owner string) *TransitionStore {
+	t.Helper()
+
 	transition, err := NewTransitionStore(pool, slog.New(slog.DiscardHandler), TransitionConfig{
-		MaxRetries: 3, RetryBackoff: time.Second, LockTimeout: time.Minute,
+		Owner: owner, MaxRetries: 3, RetryBackoff: time.Second, LockTimeout: time.Minute,
 		ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10,
 	})
 	require.NoError(t, err)

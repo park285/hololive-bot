@@ -84,6 +84,57 @@ func TestReplayEpochDeadLettersPreEpochAutomaticClaim(t *testing.T) {
 	assertReplayEpochDeadLetter(t, pool, secondObservationID)
 }
 
+// 시도를 모두 쓴 epoch 이전 자동 claim은 replay epoch 사유로 끝나고, claim 트랜잭션 시각에 lease 없이 기록된다.
+func TestReplayEpochDeadLetterTakesPrecedenceOverExhaustedAttempts(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	observationID := publishOne(ctx, t, repo, &proof, "pre-epoch-exhausted")
+
+	if _, err := pool.Exec(ctx, "UPDATE source_observation_queue SET attempt_count = $2 WHERE observation_id = $1",
+		observationID, MaxAttempts); err != nil {
+		t.Fatalf("exhaust attempts: %v", err)
+	}
+
+	activateReplayEpoch(t, repo)
+
+	var before time.Time
+
+	if err := pool.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&before); err != nil {
+		t.Fatalf("load clock: %v", err)
+	}
+
+	batch, err := repo.ClaimBatch(ctx, claimOptions())
+	if err != nil {
+		t.Fatalf("claim exhausted pre-epoch work: %v", err)
+	}
+
+	if len(batch.Claims) != 0 {
+		t.Fatalf("claims = %#v, want none", batch.Claims)
+	}
+
+	assertReplayEpochDeadLetter(t, pool, observationID)
+
+	var (
+		attempts          int
+		leased, detailSet bool
+		deadLetteredAt    time.Time
+	)
+
+	err = pool.QueryRow(ctx, `
+		SELECT attempt_count, lease_token IS NOT NULL, last_error_detail IS NOT NULL, dead_lettered_at
+		FROM source_observation_queue WHERE observation_id = $1
+	`, observationID).Scan(&attempts, &leased, &detailSet, &deadLetteredAt)
+	if err != nil {
+		t.Fatalf("load dead letter: %v", err)
+	}
+
+	if attempts != MaxAttempts || leased || detailSet || deadLetteredAt.Before(before) {
+		t.Fatalf("attempts=%d leased=%t detail=%t dead_lettered_at=%s before=%s", attempts, leased, detailSet, deadLetteredAt, before)
+	}
+}
+
 func TestReplayEpochFencesPreEpochObservationAlreadyClaimed(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

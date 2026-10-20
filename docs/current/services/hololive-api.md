@@ -93,7 +93,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 ## Source fallback retirement
 
 - 영속 reply INSERT의 접수 결과 불명(`ErrReplyStagingFailed`)과 Iris 전송 결과 불명은 같은 추가 응답 억제 규칙을 따릅니다. 도움말·달력 이미지 실패의 대체 텍스트나 공통 오류 응답을 추가하지 않고 명령 결과 불명을 보존합니다.
-- Iris가 접수한 reply의 handoff 결과를 확정하지 못하면 자동 재발송하지 않는 `manual_review`로 정산합니다. 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다.
+- Reply 발송은 Iris `202` admission과 `requestId` 저장에서 끝나고 행은 lease 없는 `accepted`가 됩니다. handoff 확인은 bot plane의 reply handoff reconciler가 맡으며 `failed`는 같은 행의 `:r1`/`:r2` 재발급(세대 상한 2, 예산 소진 시 `dead`), `outcome_unknown`·`404`·지평 미확인은 자동 재발송 없는 `manual_review`로 정산합니다. `last_error` 어휘는 `handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, `handoff_unconfirmed`입니다. 발송 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다. Reply outbox attempt `success`는 admission 완료를 뜻하고 handoff 완료 지표는 없으며 reconciler 결과는 로그와 manual review backlog로 관측합니다. 엄격 shape CHECK(migration 332)는 lease 있는 `accepted`를 거부하고, 만료 lease reclaim은 `submitting`만 다룹니다. `bot_reply_outbox_accepted_reclaimed_total`은 삭제했습니다. 확인 간격·전이표·관측·적용 전제·rollback 조건은 [API runbook](../runbooks/hololive-api.md#3-durable-webhook-or-reply-backlog-grows)을 따릅니다.
 - 멤버 조회 backend 오류는 미발견 응답으로 바꾸지 않습니다. 달력 cache miss의 공유 조회는 기존 bot 명령 시간 예산으로 제한하고, 각 대기 요청은 자신의 context 취소에 따라 반환합니다. shared member cache의 epoch 구독·재조회 작업은 각 plane의 DB·Valkey 정리 전에 종료합니다.
 - bot·worker의 공유 방 Catalog는 같은 인스턴스에서 겹친 전체 HTTP 조회와 per-room 저장 순회를 공유합니다. owner의 전체 예산은 기존 `QueryTimeout.Default` 5초이며 initiator/follower는 각자 취소할 수 있습니다. owner가 저장 중 만료돼도 살아 있는 waiter는 이미 확보한 방 정보를 사용합니다. 완료 뒤의 miss는 새 조회가 가능하고 negative cache는 없습니다. DB 조회 오류의 HTTP fallback 금지, 명시적 webhook metadata 우선, unknown의 plain 처리와 동일 metadata의 `Observe` 저장 재시도는 유지합니다.
 
@@ -163,21 +163,47 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - IDLE 대상의 관측 due는 scheduler와 같은 `LEAST(next_due_at, scheduled_for + 현재 bundle cadence)`이며 `eligible_at`보다 앞당기지 않습니다. cadence 연장 때 이미 도래한 slot을 늦추지 않고 ACTIVE 만료·DEFERRED 재시도·projection 만료의 의미는 유지합니다.
 - 259/260은 이미 적용된 migration이며 수정·재적용하지 않습니다. **261은 rolling 호환 변경이 아닙니다.** 별도 운영 승인 아래 구 API(모든 plane)와 모든 collector를 drain·정지한 상태에서 새 migration을 적용하고, 새 API가 유효한 완전 projection을 만든 뒤 같은 계약의 fleet을 재개해야 합니다. 구 binary만 재시작하는 rollback은 지원하지 않으며 schema와 binary의 호환 복구가 필요합니다. 로컬 구현은 운영 activation·보존 단축 승인이 아닙니다.
 
-- canonical live session의 다섯 writer는 부재 행의 동시 INSERT와 부분 schedule DTO 병합을 위해 기존 `0047` SQL conflict merge를 유지합니다. `0048` head 저장은 18개 mutable 필드 전체의 `IS DISTINCT FROM`으로 같은 근거의 tuple rewrite를 피하며 `updated_at`·review snapshot을 유지합니다. 실제 사실 시계·ignored-absence 변화는 계속 저장합니다. 이는 canonical 정책의 AP 이관이나 no-op SQL/잠금 제거를 뜻하지 않습니다.
-- migration 316은 `youtube_live_runtime_state`의 동기 UPDATE refresh를 실제 소비·검토 입력이 달라진 video로 제한합니다. session의 관측 시계·thumbnail, head의 다음 검사 시각·ignored-history 등 원본 사실은 계속 저장하지만 모델 재조회와 행 잠금은 생략합니다. title/topic/premiere와 reviewability, availability 시각, old/new identity, NULL·orphan은 계속 반영합니다. INSERT/DELETE/TRUNCATE·영수증·FK 경로와 문장별 동기 visibility는 유지합니다.
-- refresh를 생략해도 BEFORE MVCC guard와 오래된 REPEATABLE READ/SERIALIZABLE snapshot의 거절은 유지됩니다. 316은 guard를 먼저 잡고 기존 함수를 원자적으로 교체하며 backfill·권한 확장·새 index/cache/retry는 없습니다. guard-first API와 호환되지만 316을 모르는 이전 migration runner는 새 ledger에 실행하지 않습니다. 운영 적용·배포는 별도 승인 대상입니다.
+## Live canonical 저장과 잠금 순서
+
+- `youtube_live_sessions`·`youtube_live_reconciliation_heads`·`youtube_live_pending_ends`·`youtube_video_availability`의 writer는 `internal/youtube/sourceobservation` 하나입니다. worker·collector의 참조는 읽기 SQL입니다.
+- 세션의 status·관측 시각·메타데이터 정책(ENDED 유지, LIVE→UPCOMING 후퇴 방지, 필드별 관측 시각 우선순위, 저장된 채널·`ended_at` 유지)은 `live.Reduce`·`live.FinalizeDue`와 `schedule.Reduce`가 정합니다. 저장은 잠금 안에서 읽은 행과 결과를 비교해 바뀐 행만 씁니다. 읽은 행이 있으면 그 행 전체가 그대로일 때만 적용되는 `UPDATE`(`repository_live_session_update.sql`), 없으면 `INSERT … ON CONFLICT DO NOTHING`(`repository_live_session_insert.sql`)이며 SQL은 값을 병합하지 않습니다. 0행 적용은 `LiveSessionConflictError`로 보고하고 트랜잭션을 되돌리며, YouTube plane은 이를 40001과 같은 재시도 대상으로 분류합니다. 최초공개 분류는 `is_premiere`가 NULL일 때만 채우는 별도 SQL을 유지합니다.
+- `0048` head 저장은 18개 mutable 필드 전체의 `IS DISTINCT FROM`으로 같은 근거의 tuple rewrite를 피하며 `updated_at`·review snapshot을 유지합니다. 실제 사실 시계·ignored-absence 변화는 계속 저장합니다.
+- `youtube_live_runtime_state`는 원본 트리거가 아니라 writer가 같은 READ COMMITTED 트랜잭션 끝에서 `refresh_youtube_live_runtime_state(text[])`를 한 번 호출해 갱신합니다(migration 328). 관측 writer는 `ReconcileResult.LiveRuntimeVideoIDs`(finalizer는 decision의 세션·pending key)를 넘기며 빈 key는 DB를 호출하지 않습니다. 함수는 READ COMMITTED가 아니면 `live runtime refresh requires read committed transaction`으로 거절하고, 영상 key를 1024개 bucket으로 접은 advisory 잠금을 bucket 순으로 잡은 뒤(같은 영상은 커밋까지 직렬화, 전체 재계산도 잠금 표를 고갈시키지 않음) 문장별 새 snapshot으로 원본을 다시 읽어 행을 지우거나 바뀐 행만 upsert합니다.
+- 전역 잠금은 같은 advisory key의 두 모드입니다. 관측 writer는 `lock_youtube_live_runtime_state_shared()`, 증거 retention·수동 영수증(`record_youtube_live_review`)·terminal head 복구·라이브 원본을 바꾸는 data migration은 `lock_youtube_live_runtime_state()`(exclusive)를 원본 잠금보다 먼저 잡습니다. 관측 writer끼리는 원본 행 잠금과 영상 잠금으로만 직렬화되며, 그 사이의 40001·40P01·55P03과 `LiveSessionConflictError`는 YouTube plane의 관측 재시도로 처리합니다.
+- 아래 표는 경로별로 잡는 잠금을 앞에서 뒤 순서로 적습니다. "갱신"은 트랜잭션의 마지막 공유 쓰기인 `refresh_youtube_live_runtime_state`이며 영상 잠금을 잡은 뒤에는 다른 행 잠금을 기다리지 않습니다.
+
+| 경로 | 트랜잭션 | 전역 잠금 | 잠금·쓰기 순서 |
+|---|---|---|---|
+| 관측 소비: `live_snapshot` (`reconcileLive`) | `Repository.Finalize` | `finalizeTx` 첫 문장, shared | 전역 → queue 행 `FOR UPDATE`(claim lock) → advisory `live_subject_head`(subject key) → `youtube_live_sessions` `FOR UPDATE`(payload 영상, 채널의 UPCOMING·LIVE·후보 남은 ENDED; video_id 순) → heads `FOR UPDATE`(video_id 순) → pending ends `FOR UPDATE`(동결 ENDED 제외) → 부재 이력·slot 읽기 → 세션 A → head A → 세션 B → head B(video_id 순) → pending upsert → pending 삭제 → absence slot insert → application insert → queue 완료 → 갱신 |
+| 관측 소비: `schedule_snapshot` (`reconcileSchedule`) | `Repository.Finalize` | `finalizeTx` 첫 문장, shared | 전역 → queue 행 → advisory `live_subject_head`(`schedule:` group key) → 요청 영상 세션 `FOR UPDATE`(video_id 순) → 세션 없는 영상의 head `FOR UPDATE` → schedule item upsert → 세션 저장 → application → queue 완료 → 갱신 |
+| live check: `video_live_check` (`reconcileVideoLiveCheck`) | `Repository.Finalize` | `finalizeTx` 첫 문장, shared | 전역 → queue 행 → 요청 영상 1개의 세션 → head → pending `FOR UPDATE`(동결 ENDED 제외) → availability upsert → ENDED면 시각 확정 행으로, 아니면 reducer 결과를 세션 → head → pending 순으로 저장 → application → queue 완료 → 갱신 |
+| live check: `channel_live_check` | `Repository.Finalize` | `finalizeTx` 첫 문장, shared | 전역 → queue 행 → `youtube_channel_live_checks` upsert. live 표 행은 잠그지 않고 갱신 key도 없음 |
+| finalizer (`FinalizeNextDueLiveEnd`) | 단독 | `finalizeNextDueLiveEndTx` 첫 문장, shared | 전역 → due head 1건 조회(잠금 없음, 트랜잭션 시각) → 세션 → head → pending `FOR UPDATE` → due 재확인 → `FinalizeDue` 결과를 세션 → head → pending 순으로 저장 → 갱신 |
+| 최초공개 (`mergeContentPremieres`) | `Repository.Finalize`(`video_list`) | `finalizeTx` 첫 문장, shared | 전역 → queue 행 → advisory `content_subject_head` → content 행 잠금·저장 → advisory `live_subject_head`(subject key) → 확정 최초공개 영상 세션 `FOR UPDATE`(video_id 순) → 분류 upsert → 충돌 감사 insert → queue 완료 → 갱신 |
+| 시각 확정 (`reconcileEndedVideoTimes`) | `video_live_check`와 같은 트랜잭션 | `finalizeTx` 첫 문장, shared | (video live check의 세션 → head → pending(동결 ENDED 제외) 잠금 뒤) `youtube_live_time_finalizations` `FOR UPDATE` → 한 문장에서 진행 행 → 세션 시각 → head `ended_at` 순으로 저장 → (video live check와 함께) 갱신 |
+| 수동 검토 영수증 (`record_youtube_live_review`) | 운영자 READ COMMITTED 트랜잭션 | DB 함수, exclusive | 전역 → 세션 → head → pending → availability `FOR UPDATE` → snapshot CAS → 영수증·사실 insert → 갱신(해당 영상) |
+| maintenance: terminal head 복구 (`reconcile-terminal-live-heads.sql`) | 단독 | 스크립트 첫 잠금, exclusive | 전역 → 세션 → head `FOR UPDATE`(video_id 순) → head 갱신 → 갱신(복구 영상) |
+| maintenance: 원본 retention (`delete_source_observation_retention_batch`) | 단독 | DB 함수 첫 문장, exclusive | 전역 → retention 커서 singleton `FOR UPDATE` → 원본 후보 잠금·삭제(FK `SET NULL`·`CASCADE`). 수명 모델 입력이 아니므로 갱신 없음 |
+| maintenance: queue·collision·replay 감사·payload·absence slot·checkpoint retention | 단계별 단독 | 없음 | 각 표의 제한된 DELETE. 라이브 원본 표를 쓰지 않음 |
+| maintenance: replay 처리 (`ProcessNextReplay`) | 단독 | 없음 | replay 요청 `FOR UPDATE SKIP LOCKED` → `lock_source_observation` → queue 행 `FOR UPDATE` → queue 재활성 또는 요청 거절. live 표를 쓰지 않음 |
+| claim (`ClaimBatch`) | 단독 | 없음 | due queue 행 `FOR UPDATE SKIP LOCKED`(replay epoch 이전·시도 소진 후보와 선점 후보) → 같은 트랜잭션에서 종료 후보 DEAD_LETTER 집합 갱신 |
+
+- migration 328은 기존 guard를 잡은 뒤 316·325의 원본 문장 트리거, `refresh_youtube_live_runtime_state_statement()`, `guard_youtube_live_runtime_state()`, `youtube_live_runtime_state_guard` 표를 제거하고, 잠금 함수 본문을 advisory로 바꾸며 기록 함수를 READ COMMITTED 요구로 다시 정의합니다. runtime 역할은 수명 모델 표 SELECT만 유지하고 refresh·shared 잠금 EXECUTE를 받습니다. 기록 함수 실행 권한이 있는 역할은 refresh EXECUTE를 받고 scraper는 shared 잠금 권한이 없습니다. 마지막에 기존 모델·세션·head의 전체 key로 재계산해 drift 0에서 시작합니다. 328 이후 신설하는 기록 역할에는 기존 의존 권한에 더해 `refresh_youtube_live_runtime_state(text[])` 실행 권한도 부여합니다.
+- **328은 rolling 호환 변경이 아닙니다.** API를 정지하고 db-migrate(328)를 적용한 뒤 새 API를 시작합니다. 트리거가 없어 구 API 이미지만 되돌리면 수명 모델이 갱신되지 않으므로 이미지만 되돌리는 rollback은 지원하지 않으며 복구는 forward-only입니다. 이 전환의 merge 조건은 운영에서 325 비교 지표가 확인된 것이며, 자연 입력이 없던 `video_list`는 격리 PostgreSQL 트리거 검증으로 대체합니다(runbook 참고).
+- 수동 검토 영수증은 READ COMMITTED 트랜잭션(psql 기본)에서 기록합니다. 기존 `BEGIN ISOLATION LEVEL SERIALIZABLE` 절차는 `live review requires read committed transaction`으로 거절됩니다.
 
 ## Observation storage and retention
 
 - 채널 수치 통계·구독자 수 명령·통계 알림은 제거합니다. 채널 profile/photo, 방송·일정과 알림 구독은 유지합니다.
 - 각 successful collection slot의 관측은 독립 저장합니다. payload만 kind/schema/canonical profile과 전체 32바이트 SHA-256으로 공유하며, JSONB의 PostgreSQL LZ4 압축을 사용합니다. identity와 외부 hex hash 계약은 바꾸지 않습니다.
 - claim/replay는 같은 SQL에서 payload를 조회합니다. 참조 누락·kind/schema 불일치·hash 손상은 오류이며 구 저장 경로로 되돌아가지 않습니다. GC는 참조가 없는 payload만 잠금 후 새 snapshot으로 확인하여 제한된 수만 삭제합니다.
+- claim SQL은 due 행 중 replay epoch 이전 자동 claim과 시도 소진 행을 다른 선점 후보와 함께 잠그기만 합니다. DEAD_LETTER 여부와 사유(`replay_epoch_expired`가 `attempts_exhausted`보다 우선)는 Go 재시도 정책이 정하고, 같은 claim 트랜잭션의 집합 UPDATE 한 번으로 claim 트랜잭션 시각·NULL 상세와 함께 기록합니다. claim 시점 DEAD_LETTER는 지표를 남기지 않습니다.
 - application은 entity별 멱등·CANONICALIZED 결과를 한 INSERT로 저장하며 원본의 `ON DELETE CASCADE` 수명을 따릅니다. 고아 유예·별도 감사 retention은 없습니다. provider/kind/subject/hash/effective clock은 원본에서 읽고 감사 행에 중복 저장하지 않습니다.
 - 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/replay/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
 - 원본 retention은 큐·pending replay·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.
 - migration 315의 원본 정리는 보호 판정 전에 최대 1,000개 ID를 materialize합니다. kind별 인덱스 후보 반환은 최대 1,000개(정책 최대 16개), 최초 보호 검사는 합계 최대 1,000개이며 삭제·최종 보호 재검사는 `BatchSize`(최대 1,000) 이내입니다. 이 상한은 물리 I/O·보호 함수 내부의 자식 조회량·FK 쓰기량·실행 시간의 상한이 아닙니다.
 - `(received_at,id)` 진행 커서와 고정된 순회 상한을 DB singleton에 보존합니다. 새 유입이 계속되어도 순회 끝에서 앞쪽을 재방문하고, 잠긴 후보는 건너뛴 뒤 다음 순회에서 다시 봅니다. 모든 kind가 같은 시간/ID 순서를 공유하며 보호 해제·늦게 삽입된 앞쪽 원본도 재방문합니다. 커서와 원본/application 삭제는 같은 transaction으로 확정·롤백하므로 재시작 때 처음부터 훑지 않습니다.
-- DB 함수가 live guard → 커서 → 원본 잠금을 소유합니다. 전부 보호된 창도 성공한 tick이며 payload·absence·checkpoint 정리는 계속 실행됩니다. 앞 단계의 별도 commit 수량과 `BacklogKnown=false`의 미확정 의미는 유지합니다. runtime·scraper는 커서 표에 직접 접근하지 않습니다.
+- DB 함수가 exclusive live 전역 잠금 → 커서 → 원본 잠금을 소유합니다. 전부 보호된 창도 성공한 tick이며 payload·absence·checkpoint 정리는 계속 실행됩니다. 앞 단계의 별도 commit 수량과 `BacklogKnown=false`의 미확정 의미는 유지합니다. runtime·scraper는 커서 표에 직접 접근하지 않습니다.
 - **현재 API·collector는 315–321을 먼저 적용해야 합니다.** 315의 retention 함수 signature/EXECUTE 권한은 유지하지만, 새 publish·claim·application SQL은 317–321의 provenance/어휘 사전과 bytea 키를 요구합니다. 315만 적용한 DB나 구 binary와 혼합 운용하지 않습니다. 새 ledger를 모르는 이전 migration runner도 실행하지 않습니다.
 - 317·318은 기존 text를 보존하며 5,000행 단위 backfill을 확정한 뒤 제약 검증·cutover를 수행합니다. 317의 전체 heap/index 재작성, 318–321 이후 감사 표 공간 회수에는 별도 점검 창·백업·용량 확인이 필요합니다. [압축 인계의 적용 경계](../plans/2026-10-16-sql-compaction-handoff.md#4-다음-단계와-승인-경계)를 따르며 로컬 검증은 운영 DDL·배포 승인이 아닙니다.
 - RETIRED projection 기본 보존은 2일이며 reasons+targets 합계를 batch 상한 이하로 제한하고 CURRENT/STAGING, lease 참조 generation을 보호합니다. 호출 timeout은 8초입니다.

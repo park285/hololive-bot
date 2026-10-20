@@ -55,19 +55,19 @@ Effect 인접 command는 실행 전에 다음 envelope를 완성해야 합니다
 operation ID
 logical owner ID와 follower ID 집합
 각 row의 expected pre-state/version/attempt/lock
-각 row의 exact expected post-state/version/attempt/lock/timestamp
+각 row의 exact expected post-state/version/attempt/lock owner
 tracking requirement와 canonical post identity
 logical ledger key와 exact expected pre/post state
 provider effect started/confirmed 여부
 ```
 
-Command 실행 뒤 member나 expected timestamp를 다시 계산하지 않습니다.
+Command 실행 뒤 member를 다시 계산하지 않습니다. 시각 열(`locked_at`·`sent_at`·`next_attempt_at`·`terminal_at`)은 전이 문장이 대상 행을 잠근 뒤 채취한 DB 시계로 정하므로 envelope에 기대값이 없습니다. Delivery post-state는 `(id, outbox_id, status, row_version, attempt_count, locked_by, error)`로 식별합니다. 모든 쓰기가 `row_version`을 올리므로 같은 pre-version에서 이 모양으로 이긴 전이는 같은 의미이고, BeginSending post-state는 `locked_by = 호출자`를 포함해 소유자 고유입니다. Pre-state 판정 뒤 retry는 같은 command(기대 pre-state·지연·시각 action)를 그대로 다시 보냅니다.
 
 ### A-003. Group-complete evidence
 
 Logical group operation은 owner만 확인해서는 안 됩니다. Command가 변경하기로 한 follower projection, tracking state, logical ledger state까지 exact post-state에 포함합니다.
 
-Outbox aggregate와 `terminal_at` projection은 terminal envelope와 별도 transaction입니다. Aggregate는 provider-adjacent commit 판정의 pre/post state에 포함하지 않습니다.
+Outbox aggregate와 `terminal_at` projection은 terminal envelope와 별도 transaction입니다. Aggregate는 provider-adjacent commit 판정의 pre/post state에 포함하지 않습니다. 예외는 handoff 실패 정산으로, 아래 "Handoff settlement ambiguity"처럼 같은 canonical 집계 문장을 정산 transaction 안에서 실행합니다.
 
 ### A-004. No callback replay
 
@@ -79,7 +79,7 @@ Provider 호출이 시작된 뒤 DB 오류가 발생해도 provider를 다시 �
 
 ### A-006. Tracking terminal idempotency
 
-Tracking requirement가 exact claim token을 요구하더라도 primary state가 이미 sent이면 정상 terminal 상태로 수용할 수 있습니다. Token 소비와 already-sent는 둘 다 requirement 충족입니다.
+Community/Shorts 성공 전이는 post 단위 발송 표시를 기록합니다. 다른 room이 먼저 기록해 primary state가 이미 sent이면 정상 terminal 상태로 수용하고 가장 이른 발송 시각을 유지합니다.
 
 ### A-007. Mixed state is not partial success
 
@@ -96,12 +96,15 @@ Claim 또는 Send fence 결과를 받지 못하면 caller가 ID와 현재 DB 값
 ```text
 PENDING unlocked/stale
     -> PENDING leased
-locked_at = claimAt
+locked_at = 문장 첫머리에서 채취한 DB 시계
+locked_by = worker instance
 row_version = pre + 1
 attempt 유지
 ```
 
-Statement/connection 오류로 반환 row를 받지 못하면 caller는 Preparation lease를 소유하지 않습니다. Row가 실제 claim됐더라도 처리하지 않고 timeout 후 재claim에 맡깁니다.
+Statement/connection 오류로 반환 row를 받지 못하면 caller는 Claim fence를 소유하지 않습니다. Row가 실제 claim됐더라도 처리하지 않고 timeout 후 재claim에 맡깁니다.
+
+Claim fence·행 fence 미스(`sendfence.MissError`)는 commit 응답 유실이 아닙니다. 문장이 아무 행도 바꾸지 않은 채 rollback됐으므로 read-back 없이 `Conflict`(전원 `missing`이면 `Missing`)로 판정하고 같은 command를 재시도하지 않습니다.
 
 금지:
 
@@ -120,9 +123,9 @@ Exact post-state:
 ```text
 PENDING
 attempt 유지
-lock clear
+lock clear (locked_at, locked_by = NULL)
 version + 1
-next_attempt_at = canonical defer due
+next_attempt_at = GREATEST(DB 시계 + RetryBackoff, DB 유래 floor)  -- 판정 비교 대상 아님
 ```
 
 Exact pre-state면 같은 DB command를 retry할 수 있습니다. 다른 state면 conflict입니다.
@@ -136,7 +139,7 @@ SENT
 attempt 유지
 lock clear
 version + 1
-sent_at = canonical reconciliationAt
+sent_at = ledger SENT의 sent_at
 ```
 
 Envelope의 same-key ledger가 `SENT`인지 같은 transaction과 read-back에서 확인합니다. 일부 follower만 `SENT`거나 ledger evidence가 다르면 atomicity breach입니다. Provider call은 없습니다.
@@ -168,10 +171,11 @@ Provider operation owner 전체가 다음을 만족합니다.
 
 ```text
 status = PENDING
-version = expected preparation version
-attempt = expected attempt
-locked_at = preparation lock
+version = caller claim version
+locked_by = caller claim owner
 ```
+
+`attempt`와 `locked_at`은 version 등가에 함의됩니다.
 
 ### Exact post-state
 
@@ -181,7 +185,8 @@ Owner 전체가 다음을 만족합니다.
 status = SENDING
 version = pre + 1
 attempt 유지
-locked_at = canonical sendStartedAt
+locked_by 유지
+locked_at = 전이 문장의 DB 시계  -- 판정 비교 대상 아님
 ```
 
 Follower projection은 `BeginSending`이 변경하지 않으므로 envelope의 member가 아닙니다.
@@ -212,7 +217,7 @@ Success command는 다음을 포함합니다.
 
 - Provider operation owner와 exact Send fence
 - Same-logical follower projection ID와 pre-state
-- Canonical `sentAt`
+- `sent_at`은 SENT 전이 문장이 돌려준 DB 시계이며, 같은 transaction의 tracking·ledger·telemetry가 그 값을 씁니다
 - Canonical post별 deduplicated tracking requirement
 - `(kind, logical_id, room_id)` ledger key와 expected pre-state
 - Expected latency/tracking identities
@@ -226,28 +231,25 @@ status = SENT
 version = pre + 1
 attempt 유지
 locked_at = NULL
-sent_at = canonical sentAt
+sent_at = 전이 문장의 DB 시계  -- 판정 비교 대상 아님
 ```
 
 Follower가 reconciliation 대상이면 follower pre-state가 `PENDING/FAILED/QUARANTINED` 중 command에 기록된 값과 일치해야 합니다.
 
 #### Tracking
 
-Requirement별로 다음 중 하나를 만족해야 합니다.
+Community/Shorts owner의 canonical post마다 다음을 만족해야 합니다.
 
 ```text
-NoTracking
+Community/Shorts가 아닌 kind
     -> 검사 없음
 
-RequireClaimOrAlreadySent
-    -> exact authorized_at token이 소비되고 sent 상태
-       또는 primary tracking이 이미 sent
-
-RequireAlreadySent
-    -> primary tracking이 sent
+COMMUNITY_POST·NEW_SHORT
+    -> post 단위 알람 상태 또는 primary tracking이 sent
+       (alarm_sent_at은 기존 값과 이번 전이 시각 중 이른 값)
 ```
 
-여러 room success가 같은 token을 공유할 때 첫 transaction만 token을 소비하고 후속 transaction은 already-sent로 수용할 수 있습니다.
+여러 room success가 같은 post를 기록할 때 첫 transaction이 발송 시각을 정하고 후속 transaction은 그 값을 유지합니다.
 
 #### Logical ledger
 
@@ -255,39 +257,41 @@ RequireAlreadySent
 
 ```text
 status = SENT
-sent_at = canonical sentAt
+sent_at = SENT 전이 문장의 DB 시계
 source_delivery_id = envelope의 owner 또는 지정된 evidence delivery
 ```
 
 Existing `SENT`의 최초 `sent_at`과 source reference를 보존하는 monotonic upsert인 경우 envelope는 그 보존값을 exact post-state로 기록합니다.
 
+#### Handoff admission
+
+고정 요청이 다음을 만족해야 합니다.
+
+```text
+handoff_request_id = 이번 202의 Iris requestId
+generation = envelope의 요청 세대
+handoff_next_check_at IS NOT NULL 또는 handoff_checked_at IS NOT NULL
+```
+
+commit 뒤 reconciler가 이미 확인을 닫았을 수 있으므로 확인 시각은 비교하지 않습니다. 없으면 ledger mismatch와 같은 atomicity breach(`Indeterminate`)입니다.
+
 ### Commit 오류 후 판정
 
 #### Confirmed committed
 
-Owner/follower 전체, tracking requirement, ledger `SENT`가 exact post-state입니다. `Applied`입니다.
+Owner/follower 전체, post 단위 sent 표시, ledger `SENT`가 exact post-state입니다. `Applied`입니다.
 
 #### Confirmed not committed
 
 Owner/follower/tracking/ledger가 command의 exact pre-state입니다. 같은 immutable DB finalization만 retry할 수 있습니다. Provider send는 재호출하지 않습니다.
 
-Tracking pre-state는 requirement에 따라 다음을 포함합니다.
-
-```text
-RequireClaimOrAlreadySent:
-    exact active token 또는 already-sent
-
-RequireAlreadySent:
-    already-sent
-```
-
-Tracking이 already-sent였던 requirement는 pre/post 양쪽에서 sent일 수 있습니다. Delivery/follower state로 transaction 적용 여부를 함께 판정합니다.
+Post 단위 기록은 다른 room success 때문에 pre-state에서도 sent일 수 있습니다. 이때는 delivery/follower state로 transaction 적용 여부를 판정합니다.
 
 #### Tracking mismatch
 
 다음은 atomicity breach입니다.
 
-- Delivery owner/follower는 exact `SENT`인데 requirement가 neither token-consumed nor already-sent
+- Delivery owner/follower는 exact `SENT`인데 post 단위 sent 표시가 없음
 - Delivery는 exact pre-state인데 이 command만 만들 수 있는 tracking transition만 commit
 - Same logical group follower 일부만 `SENT`
 
@@ -307,6 +311,14 @@ Unsafe ledger 보정이나 provider 재호출을 실행하지 않고 `Indetermin
 
 Provider success는 이미 확정됐으므로 provider를 다시 호출하지 않습니다. ID-only `SENDING -> SENT` recovery를 실행하지 않습니다. Durable evidence가 부족하면 owner는 stale `SENDING`으로 남아 quarantine될 수 있습니다.
 
+## Handoff settlement ambiguity
+
+`youtube-delivery-handoff-reconciler`의 완료·재예약은 고정 요청 한 행의 단일 문장이며, commit 응답을 잃으면 다음 확인이 soft claim 토큰 CAS로 다시 판정합니다. 재발급·소진·격리는 고정 요청·논리 그룹 delivery·ledger를 바꾸고 마지막에 바뀐 delivery의 부모 outbox 집계를 canonical 집계 문장으로 다시 계산하는 한 트랜잭션이고, commit 오류 뒤 고정 요청을 primary에서 다시 읽어 판정합니다. 요청 갱신이 delivery·ledger 전이·부모 집계와 같은 트랜잭션이므로 요청의 post-state가 전체 commit의 증거입니다. 집계가 실패하면 정산 전체가 rollback되어 claim 토큰이 남고, soft claim 뒤 다음 확인이 다시 정산합니다. 정산 도중 논리 그룹의 부모 집합이 늘어 끝난 `membership_changed` fence 미스도 commit 전에 rollback되어 claim 토큰이 남으므로 commit 판정 대상이 아니며 다음 확인이 다시 정산합니다. Commit 뒤 별도 projector는 실행하지 않습니다.
+
+- 요청이 claim 토큰(`handoff_next_check_at`)·requestId·세대를 그대로 가지고 확인이 끝나지 않았으면 confirmed not committed입니다. 같은 DB 정산만 한 번 다시 실행하고, 그래도 확인하지 못하면 `Conflict`(`confirmed_pre`)입니다.
+- 재발급은 세대 + 1이고 handoff 열이 모두 비었으면, 소진·격리·확인 종료는 같은 세대·requestId에서 `handoff_next_check_at IS NULL`이고 `handoff_checked_at IS NOT NULL`이면 `Applied`(`confirmed_post`)입니다.
+- 요청이 없으면 `Missing`, 그 밖의 상태는 `Indeterminate`입니다. Iris 상태 조회나 provider 발송은 다시 하지 않습니다.
+
 ## Known-not-delivered retry ambiguity
 
 ### Exact post-state
@@ -318,7 +330,7 @@ PENDING
 attempt = pre + 1
 version = pre + 1
 lock clear
-next_attempt_at = canonical due
+next_attempt_at = DB 시계 + max(RetryBackoff, RetryAfter)  -- 판정 비교 대상 아님
 ```
 
 Follower projection:
@@ -328,7 +340,7 @@ PENDING
 attempt 유지
 version = pre + 1 when command changes it
 lock clear
-next_attempt_at = owner due
+next_attempt_at = owner와 같은 지연  -- 판정 비교 대상 아님
 ```
 
 ### 판정
@@ -337,7 +349,6 @@ next_attempt_at = owner due
 - 전체 exact pre-state: 같은 DB retry command만 재시도
 - Mixed owner/follower: atomicity breach
 - Provider 재호출 금지
-- Alarm claim release는 durable retry commit 확인 뒤 수행
 
 ## Terminal failure ambiguity
 
@@ -404,7 +415,7 @@ Ledger exact post-state:
 ```text
 (kind, logical_id, room_id) = envelope key
 status = QUARANTINED
-quarantined_at = canonical quarantineAt
+quarantined_at = 격리 전이 문장의 DB 시계
 ```
 
 ### 판정
@@ -437,7 +448,7 @@ owner/follower = PENDING
 attempt = 0
 version = pre + 1
 lock/error clear
-next_attempt_at = canonical reviveAt
+next_attempt_at = 전이 문장의 DB 시계  -- 판정 비교 대상 아님
 ```
 
 Selection transaction은 같은 logical key의 ledger가 absent임을 확인합니다. Ledger `SENT/QUARANTINED`가 있으면 revive 대상이 아닙니다.
@@ -474,12 +485,15 @@ Exact pre-state:
 Exact post-state:
 
 - Outbox `SENT`
-- Canonical `sent_at`
-- `terminal_at = canonical sent_at`
+- `sent_at = terminal_at = DB 시계`
 - Lock clear
 - Child 없음
 
 Child가 생겼으면 direct writer conflict이며 aggregate projector가 소유합니다.
+
+### Fanout failure
+
+Exact post-state는 `status`·`attempt_count`·`error`, lock clear, `sent_at IS NULL`, 종결 여부(`terminal_at` 유무)로 식별합니다. `next_attempt_at = DB 시계 + RetryBackoff × attempt`와 `terminal_at`의 값은 문장이 정하므로 비교하지 않습니다.
 
 ## Aggregate ambiguity
 
@@ -556,7 +570,7 @@ provider_effect_confirmed
 3. Server commit 후 client response loss
 4. Commit response 수신 후 read-back 오류
 5. Owner/follower 한 건의 concurrent mutation
-6. Exact claim token이 다른 room success로 먼저 소비됨
+6. 같은 post의 발송 표시를 다른 room success가 먼저 기록함
 7. Tracking write 오류
 8. Ledger write 오류 또는 wrong-key write
 9. Logical follower projection 일부 누락
@@ -587,7 +601,7 @@ TestCleanupUnknownDoesNotShortenRetentionCutoff
 ```text
 if commitErr != nil { retryWholeHandler() }
 if finalizationErr != nil { sender.Send(...) }
-if trackingTokenConflict { failDelivery() }
+if postAlreadySent { failDelivery() }
 UPDATE ... WHERE id IN (...) AND status='SENDING' without fence
 Store가 callback/provider를 자동 반복
 Read replica로 commit 여부 판정
@@ -602,8 +616,8 @@ Aggregate failure 때문에 provider operation rollback 또는 resend
 1. Effect 인접 store 결과가 `Indeterminate`를 표현합니다.
 2. `BeginSending` exact post-state 확인 전 provider call은 0회입니다.
 3. Provider success 이후 어떤 DB 오류에서도 provider 재호출은 0회입니다.
-4. Owner, follower, tracking requirement, ledger를 함께 read-back합니다.
-5. 다른 room이 claim token을 먼저 소비한 already-sent tracking을 정상 terminal로 수용합니다.
+4. Owner, follower, post 단위 sent 표시, ledger를 함께 read-back합니다.
+5. 다른 room이 먼저 기록한 post 단위 sent 표시를 정상 terminal로 수용합니다.
 6. Mixed logical projection, tracking mismatch, ledger mismatch를 atomicity breach로 분류합니다.
 7. Aggregate projection은 terminal envelope와 분리되며 실패해도 provider를 재호출하지 않습니다.
 8. Primary read-back fault-injection test가 통과합니다.

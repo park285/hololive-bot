@@ -42,6 +42,7 @@ func newCollectionGuardLoad(t *testing.T) (*pgxpool.Pool, *targetprojection.Refr
 		SELECT video_id,status FROM youtube_live_sessions;
 	`)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 	seedCollectionLifecycleReceipts(t, pool)
 
 	_, err = pool.Exec(t.Context(), `ANALYZE members; ANALYZE alarms; ANALYZE youtube_live_sessions;

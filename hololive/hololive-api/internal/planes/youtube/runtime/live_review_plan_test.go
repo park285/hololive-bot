@@ -234,4 +234,5 @@ func seedLiveReviewPlanPopulation(t *testing.T, pool *pgxpool.Pool) {
 		ANALYZE youtube_live_review_receipt_facts;
 	`)
 	require.NoError(t, err)
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }

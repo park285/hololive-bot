@@ -221,24 +221,24 @@ func TestPersistVideosTxRejectsBlankNotificationContentID(t *testing.T) {
 	require.Zero(t, countRows(t, pool, `SELECT COUNT(*) FROM youtube_notification_outbox`))
 }
 
-type duplicatePollClaimCase struct {
+type duplicatePollCase struct {
 	name      string
 	kind      domain.OutboxKind
 	postID    string
 	contentID string
-	seed      func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt, authorizedAt time.Time)
+	seed      func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time)
 	persist   func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) error
 }
 
-func duplicatePollCommunityPostCase() duplicatePollClaimCase {
+func duplicatePollCommunityPostCase() duplicatePollCase {
 	const canonicalPostID = "community:post-duplicate"
 
-	return duplicatePollClaimCase{
+	return duplicatePollCase{
 		name:      "community post",
 		kind:      domain.OutboxKindCommunityPost,
 		postID:    canonicalPostID,
 		contentID: testDuplicatePostID,
-		seed: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt, authorizedAt time.Time) {
+		seed: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) {
 			t.Helper()
 
 			post := communityTestPost(testDuplicatePostID, &publishedAt, 10, 2)
@@ -248,8 +248,8 @@ func duplicatePollCommunityPostCase() duplicatePollClaimCase {
 				ContentID:     testDuplicatePostID,
 				Payload:       communityPayload(t, post, testDuplicatePostID, canonicalPostID),
 				Status:        domain.OutboxStatusPending,
-				NextAttemptAt: authorizedAt,
-				CreatedAt:     authorizedAt,
+				NextAttemptAt: detectedAt,
+				CreatedAt:     detectedAt,
 			})
 			seedAlarmState(t, pool, &domain.YouTubeCommunityShortsAlarmState{
 				Kind:              domain.OutboxKindCommunityPost,
@@ -258,8 +258,7 @@ func duplicatePollCommunityPostCase() duplicatePollClaimCase {
 				ChannelID:         testChannelID,
 				ActualPublishedAt: &publishedAt,
 				DetectedAt:        detectedAt,
-				AuthorizedAt:      &authorizedAt,
-				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusDetected,
 			})
 		},
 		persist: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) error {
@@ -295,13 +294,13 @@ func duplicatePollShortVideo(publishedAt time.Time) *domain.YouTubeVideo {
 	}
 }
 
-func duplicatePollShortCase() duplicatePollClaimCase {
-	return duplicatePollClaimCase{
+func duplicatePollShortCase() duplicatePollCase {
+	return duplicatePollCase{
 		name:      "short",
 		kind:      domain.OutboxKindNewShort,
 		postID:    testDuplicateShortContentID,
 		contentID: testDuplicateShortContentID,
-		seed: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt, authorizedAt time.Time) {
+		seed: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) {
 			t.Helper()
 
 			// NEW_SHORT 행은 canonical content_id로 저장된다.
@@ -311,8 +310,8 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 				ContentID:     testDuplicateShortContentID,
 				Payload:       shortPayload(t, duplicatePollShortVideo(publishedAt), testDuplicateShortContentID),
 				Status:        domain.OutboxStatusPending,
-				NextAttemptAt: authorizedAt,
-				CreatedAt:     authorizedAt,
+				NextAttemptAt: detectedAt,
+				CreatedAt:     detectedAt,
 			})
 			seedAlarmState(t, pool, &domain.YouTubeCommunityShortsAlarmState{
 				Kind:              domain.OutboxKindNewShort,
@@ -321,8 +320,7 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 				ChannelID:         testChannelID,
 				ActualPublishedAt: &publishedAt,
 				DetectedAt:        detectedAt,
-				AuthorizedAt:      &authorizedAt,
-				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusDetected,
 			})
 		},
 		persist: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) error {
@@ -347,15 +345,15 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 	}
 }
 
-func TestPersistCommunityShortsDuplicatePollKeepsExistingClaimState(t *testing.T) {
-	for _, tc := range []duplicatePollClaimCase{duplicatePollCommunityPostCase(), duplicatePollShortCase()} {
+// 중복 poll의 upsert는 outbox와 post 단위 알람 상태를 하나로 유지하고, 최초 감지 시각과 미발송 상태를 보존한다.
+func TestPersistCommunityShortsDuplicatePollKeepsSinglePostState(t *testing.T) {
+	for _, tc := range []duplicatePollCase{duplicatePollCommunityPostCase(), duplicatePollShortCase()} {
 		t.Run(tc.name, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
 			publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 			detectedAt := publishedAt.Add(20 * time.Second)
-			authorizedAt := detectedAt.Add(30 * time.Second)
 
-			tc.seed(t, pool, publishedAt, detectedAt, authorizedAt)
+			tc.seed(t, pool, publishedAt, detectedAt)
 			require.NoError(t, tc.persist(t, pool, publishedAt, detectedAt))
 
 			require.EqualValues(t, 1, countRows(t, pool,
@@ -370,10 +368,9 @@ func TestPersistCommunityShortsDuplicatePollKeepsExistingClaimState(t *testing.T
 			require.Len(t, stateRows, 1)
 			require.Equal(t, tc.postID, stateRows[0].PostID)
 			require.Equal(t, tc.contentID, stateRows[0].ContentID)
-			require.NotNil(t, stateRows[0].AuthorizedAt)
-			require.Equal(t, authorizedAt, stateRows[0].AuthorizedAt.UTC())
 			require.Nil(t, stateRows[0].AlarmSentAt)
-			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, stateRows[0].DeliveryStatus)
+			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, stateRows[0].DeliveryStatus)
+			require.Equal(t, detectedAt, stateRows[0].DetectedAt.UTC())
 		})
 	}
 }

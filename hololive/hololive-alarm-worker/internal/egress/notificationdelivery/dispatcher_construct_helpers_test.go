@@ -25,7 +25,7 @@ func testDispatcherConfig() DispatcherConfig {
 		CleanupEnabled:            true,
 		StaleSendingAfter:         workerconfig.NotificationDeliveryLease,
 		StaleSendingSweepInterval: workerconfig.NotificationDeliveryLease,
-		StaleSendingSweepLimit:    defaultStaleSendingSweepLimit,
+		StaleSendingSweepLimit:    100,
 	}
 }
 

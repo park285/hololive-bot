@@ -124,10 +124,10 @@ func seedReviveStaleFailedOutboxFixture(t *testing.T, db *pgxpool.Pool) reviveSt
 	}).Error)
 
 	deliveredVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-delivered", freshCreatedAt)
-	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"sent_at": sentAt}, "id = $1", deliveredVideo.ID).Error)
+	require.NoError(t, updateDeliveryTestRowByID(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"sent_at": sentAt}, deliveredVideo.ID).Error)
 
 	lockedVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-locked", freshCreatedAt)
-	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"locked_at": recentLock}, "id = $1", lockedVideo.ID).Error)
+	require.NoError(t, updateDeliveryTestRowByID(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"locked_at": recentLock}, lockedVideo.ID).Error)
 
 	return reviveStaleFixture{
 		oldNextAttempt:   oldNextAttempt,

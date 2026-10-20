@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -63,7 +62,6 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []dispatchstate.ClaimToken,
 	result *deliveryDispatchResult,
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
@@ -84,7 +82,6 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, validRows[i].OutboxID)
 	}
 
-	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
 	result.mu.Unlock()
 }
 

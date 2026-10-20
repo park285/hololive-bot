@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
 
@@ -65,10 +64,17 @@ func deliveryRequestFromFrozen(frozen store.FrozenRequest) (deliverySendRequest,
 }
 
 // 확정 pre-handoff 실패도 한 번의 delivery attempt를 소비한다. 새 세대는 다음
-// 정규 retry에서 보내므로 기존 backoff·최대 시도·신선도 예산을 우회하지 않는다.
+// 정규 retry에서 보내므로 기존 backoff·최대 시도·신선도 예산을 우회하지 않는다. 성공하면 202의 Iris requestId를
+// attempt에 남겨 CompleteSent가 handoff admission으로 기록하게 한다.
 func (d *SendEngine) sendFrozenDelivery(ctx context.Context, attempt *deliveryAttempt) error {
 	req, operation := attempt.request, attempt.operation
-	err := d.sendDeliveryMessage(ctx, req)
+
+	irisRequestID, err := d.sendDeliveryMessage(ctx, req)
+	if err == nil {
+		attempt.irisRequestID = irisRequestID
+
+		return nil
+	}
 
 	if errors.Is(err, errDeliverySendOutcomeUnknown) || !iris.IsPreHandoffClientRequestIDConflict(err) {
 		return err
@@ -138,17 +144,14 @@ func (d *SendEngine) frozenDeliveryGroups(ctx context.Context, rows []domain.You
 	return groups, remaining, nil
 }
 
-func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]string, formatFailures map[int64]bool, reuseCache *claimDecisionCache, result *deliveryDispatchResult) {
+func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]string, formatFailures map[int64]bool, result *deliveryDispatchResult) {
 	if len(group.rows) != len(group.frozen.MemberIDs) {
 		d.deferIncompleteFrozenGroup(ctx, group.rows)
 
 		return
 	}
 
-	selection := d.claims.selectClaimedDeliveries(ctx, group.rows, group.outboxes, reuseCache)
-	d.applyLifecycleClaimSelection(ctx, &selection, store.DeliveryModeGrouped, result)
-
-	attempt := newDeliveryAttempt(selection.members)
+	attempt := newDeliveryAttempt(d.selectDeliverableMembers(ctx, group.rows, group.outboxes, store.DeliveryModeGrouped, result))
 	selected := collectDeliveryIDs(attempt.rows)
 	slices.Sort(selected)
 
@@ -194,7 +197,7 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 		return
 	}
 
-	if !d.completeLifecycleSent(ctx, attempt.operation, attempt.claimTokens, mode, result) {
+	if !d.completeLifecycleSent(ctx, &attempt, mode, result) {
 		return
 	}
 
@@ -208,8 +211,14 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 func (d *SendEngine) deferIncompleteFrozenGroup(ctx context.Context, rows []domain.YouTubeNotificationDelivery) {
 	for i := range rows {
 		row := &rows[i]
-		if _, err := d.transition.DeferFollower(ctx, store.DeferCommand{Delivery: *row, NextAttemptAt: time.Now().Add(d.config.RetryBackoff)}); err != nil {
-			d.logger.Warn("Failed to defer incomplete frozen request", slog.Any("error", err))
+		result, err := d.transition.DeferFollower(ctx, store.DeferCommand{Delivery: *row, Delay: d.config.RetryBackoff})
+		observeLifecycleApply("defer_follower", result, err, 1)
+
+		if err != nil || result.Outcome != store.ApplyApplied {
+			d.logger.Warn("Failed to defer incomplete frozen request",
+				slog.Int64("delivery_id", row.ID),
+				slog.String("outcome", result.Outcome.String()),
+				slog.Any("error", err))
 		}
 	}
 }

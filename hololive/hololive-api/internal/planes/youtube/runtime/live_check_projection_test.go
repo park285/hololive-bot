@@ -104,6 +104,8 @@ func seedLiveCheckVideoFixtures(t *testing.T, pool *pgxpool.Pool, budget time.Du
 	`); err != nil {
 		t.Fatal(err)
 	}
+
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
 // classifyLiveCheckVideos는 운영 roster 채널만 담겼는지 확인하고 영상별 not_before를 queried 기준으로 분류한다.
@@ -219,6 +221,8 @@ func newLatencyProjection(t *testing.T) (*pgxpool.Pool, projectionRefresh) {
 		t.Fatal(err)
 	}
 
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
+
 	refresh := func(at time.Time, label string) targetprojection.Result {
 		t.Helper()
 
@@ -245,6 +249,8 @@ func setLatencyPositiveAge(t *testing.T, pool *pgxpool.Pool, age time.Duration) 
 	`, age.Milliseconds()); err != nil {
 		t.Fatal(err)
 	}
+
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
 // TestProjectionRefreshKeepsLiveVideoMembershipAcrossFreshness는 positive 신선도의 출입이
@@ -301,6 +307,8 @@ func endLatencySession(t *testing.T, pool *pgxpool.Pool) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
 // liveSnapshotMemberSince는 generation의 운영 채널 live_snapshot target membership 시작 generation을 돌려준다.
@@ -348,6 +356,8 @@ func TestProjectionRefreshJudgesPositiveCommittedAfterRefreshClock(t *testing.T)
 	if !afterCapture {
 		t.Fatal("positive was not committed after the refresh clock")
 	}
+
+	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
 	refresh(captured, "positive committed after refresh clock")
 

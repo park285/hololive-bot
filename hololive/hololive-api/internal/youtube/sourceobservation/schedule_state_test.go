@@ -36,7 +36,7 @@ func TestScheduleStateDoesNotWaitForUnusedHead(t *testing.T) {
 			return fmt.Errorf("set schedule lock timeout: %w", execErr)
 		}
 
-		state, loadErr := loadScheduleState(ctx, tx, []schedule.Item{{VideoID: "schedule-existing"}})
+		state, _, loadErr := loadScheduleState(ctx, tx, []schedule.Item{{VideoID: "schedule-existing"}})
 		if loadErr != nil {
 			return loadErr
 		}
@@ -67,7 +67,7 @@ func TestScheduleStateRetainsStatusFromHeadWithoutSession(t *testing.T) {
 	}
 
 	err = dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-		state, loadErr := loadScheduleState(ctx, tx, items)
+		state, _, loadErr := loadScheduleState(ctx, tx, items)
 		if loadErr != nil {
 			return loadErr
 		}

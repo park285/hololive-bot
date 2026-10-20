@@ -43,40 +43,20 @@ func (r *durableRuntime) processNextOutbox(ctx context.Context, claimed func()) 
 	return true
 }
 
+// dispatchOutboxClaim은 admission까지만 발송 예산(dispatchBudget) 안에서 기다린다. Handoff 확인은 accepted
+// 정산 뒤 reconciler가 lease 없이 이어 받는다.
 func (r *durableRuntime) dispatchOutboxClaim(ctx context.Context, claim *durability.ReplyOutboxClaim, token string) {
-	accepted := false
 	dispatchCtx, cancel := context.WithTimeout(ctx, r.dispatchBudget)
-	err := transport.DispatchStoredReply(dispatchCtx, r.irisClient, claim.RoomID, claim.Payload, claim.ClientRequestID,
-		r.acceptanceHook(claim.ID, token, &accepted))
+	requestID, err := transport.DispatchStoredReply(dispatchCtx, r.irisClient, claim.RoomID, claim.Payload, claim.ClientRequestID)
 
 	cancel()
 
-	applied, settleErr := r.settleOutboxDispatch(ctx, claim, token, accepted, err)
-	r.finishOutboxSettlement(claim, accepted, err, applied, settleErr)
+	status := replyOutboxSettlementStatusWithMaxAttempts(claim.Attempts, r.outboxMaxAttempts, err)
+	applied, settleErr := r.settleOutboxDispatch(ctx, claim, token, status, requestID, err)
+	r.finishOutboxSettlement(claim, status, err, applied, settleErr)
 }
 
-func (r *durableRuntime) acceptanceHook(id int64, token string, accepted *bool) transport.ReplyAcceptedHook {
-	return func(ctx context.Context, requestID string) error {
-		*accepted = true
-
-		ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
-
-		defer cancel()
-
-		applied, err := r.outbox.MarkAccepted(ctx, id, token, requestID)
-		if err != nil {
-			return fmt.Errorf("mark accepted: %w", err)
-		}
-
-		if !applied {
-			return errors.New("reply outbox acceptance lost its claim")
-		}
-
-		return nil
-	}
-}
-
-func (r *durableRuntime) finishOutboxSettlement(claim *durability.ReplyOutboxClaim, accepted bool, dispatchErr error, applied bool, settleErr error) {
+func (r *durableRuntime) finishOutboxSettlement(claim *durability.ReplyOutboxClaim, status string, dispatchErr error, applied bool, settleErr error) {
 	outcome := workercontract.AttemptFailed
 
 	switch {
@@ -89,7 +69,6 @@ func (r *durableRuntime) finishOutboxSettlement(claim *durability.ReplyOutboxCla
 
 		outcome = workercontract.AttemptOutcomeUnknown
 	case applied:
-		status := replyOutboxSettlementStatusWithMaxAttempts(accepted, claim.Attempts, r.outboxMaxAttempts, dispatchErr)
 		r.observeOutboxSettlement(claim, status)
 
 		outcome = outboxAttemptOutcome(status, dispatchErr)
@@ -99,7 +78,7 @@ func (r *durableRuntime) finishOutboxSettlement(claim *durability.ReplyOutboxCla
 }
 
 func outboxAttemptOutcome(status string, err error) workercontract.AttemptOutcome {
-	if status == durability.ReplyOutboxHandoffCompleted {
+	if status == durability.ReplyOutboxAccepted {
 		return workercontract.AttemptSuccess
 	}
 
@@ -111,7 +90,7 @@ func outboxAttemptOutcome(status string, err error) workercontract.AttemptOutcom
 }
 
 func (r *durableRuntime) observeOutboxSettlement(claim *durability.ReplyOutboxClaim, status string) {
-	if r.logger == nil || status == durability.ReplyOutboxHandoffCompleted {
+	if r.logger == nil || status == durability.ReplyOutboxAccepted {
 		return
 	}
 
@@ -125,13 +104,32 @@ func (r *durableRuntime) observeOutboxSettlement(claim *durability.ReplyOutboxCl
 	r.logger.Error("reply outbox dispatch reached non-success terminal state", attrs...)
 }
 
-func (r *durableRuntime) settleOutboxDispatch(ctx context.Context, claim *durability.ReplyOutboxClaim, token string, accepted bool, dispatchErr error) (bool, error) {
+func (r *durableRuntime) settleOutboxDispatch(
+	ctx context.Context,
+	claim *durability.ReplyOutboxClaim,
+	token, status, irisRequestID string,
+	dispatchErr error,
+) (bool, error) {
 	// shutdown 취소 뒤에도 이미 관측한 전달 결과를 token fencing 아래 정산한다.
 	// inbox와 같은 유한 예산을 사용해 후속 plane의 종료 시간을 남긴다.
 	settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancel()
 
-	status := replyOutboxSettlementStatusWithMaxAttempts(accepted, claim.Attempts, r.outboxMaxAttempts, dispatchErr)
+	if status == durability.ReplyOutboxAccepted {
+		firstCheck := replyHandoffFirstCheck()
+
+		applied, err := r.outbox.SettleAccepted(settleCtx, claim.ID, token, irisRequestID, firstCheck)
+		if err != nil {
+			return applied, fmt.Errorf("settle accepted: %w", err)
+		}
+
+		if applied {
+			r.scheduleReplyHandoffWake(firstCheck)
+		}
+
+		return applied, nil
+	}
+
 	retryAfter := replyOutboxRetryAfterWithBase(status, claim.Attempts, r.outboxRetryAfter)
 
 	out, err := r.outbox.Settle(settleCtx, durability.ReplyOutboxSettlement{

@@ -7,8 +7,6 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
-
-	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
 // Provider 호출 하나를 추적한다. Grouped의 방별 결과 및 DB finalization과 분리한다.
@@ -36,7 +34,7 @@ func providerAttemptOutcome(err error, completed bool) workercontract.AttemptOut
 		return workercontract.AttemptCanceled
 	case errors.Is(err, errDeliverySendOutcomeUnknown):
 		return workercontract.AttemptOutcomeUnknown
-	case errors.Is(err, iris.ErrPermanent), errors.Is(err, iris.ErrAuthFailed), errors.Is(err, iris.ErrRateLimited), errors.Is(err, iris.ErrTransport), errors.Is(err, sendoutcome.ErrHandoffFailed), iris.IsPreHandoffClientRequestIDConflict(err):
+	case errors.Is(err, iris.ErrPermanent), errors.Is(err, iris.ErrAuthFailed), errors.Is(err, iris.ErrRateLimited), errors.Is(err, iris.ErrTransport), iris.IsPreHandoffClientRequestIDConflict(err):
 		return workercontract.AttemptFailed
 	default:
 		return workercontract.AttemptOutcomeUnknown

@@ -119,7 +119,7 @@ func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events 
 }
 
 func (c *Consumer) moveRecordToDLQ(ctx context.Context, record *Record, terminalError, action string) error {
-	update := TerminalUpdate{ID: record.ID, Error: sanitizeStoredError(terminalError), ErrorCode: ErrorCodePayload}
+	update := TerminalUpdate{ID: record.ID, AttemptCount: record.AttemptCount, Error: sanitizeStoredError(terminalError), ErrorCode: ErrorCodePayload}
 	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{update}, c.workerID); err != nil {
 		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
 	}

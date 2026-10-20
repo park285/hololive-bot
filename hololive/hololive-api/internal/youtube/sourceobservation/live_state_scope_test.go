@@ -382,7 +382,7 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, channelVideoIDs []
 	requireSameLiveDecision(t, &full, fullDecision, narrowedDecision, omitted)
 
 	// due candidate 정리로 저장되는 ENDED는 생략한 이력도 비운다.
-	require.NoError(t, persistLiveDecision(ctx, tx, &narrowedDecision))
+	require.NoError(t, persistLiveDecision(ctx, tx, narrowed.Sessions, &narrowedDecision))
 
 	// 읽지 않은 동결 pending은 삭제 keep-list에 없어도 그 세션이 dirty가 아니므로 남는다.
 	for _, videoID := range scenario.frozenPending {
@@ -729,7 +729,7 @@ func fullyLoadedPartialDecision(t *testing.T, pool *pgxpool.Pool, evidence *live
 
 	decision, err := live.Reduce(full, *evidence, 0, evidence.ReceivedAt)
 	require.NoError(t, err)
-	require.NoError(t, persistLiveDecision(ctx, tx, &decision))
+	require.NoError(t, persistLiveDecision(ctx, tx, full.Sessions, &decision))
 
 	want, err := loadUnscopedLiveState(ctx, tx, ids)
 	require.NoError(t, err)

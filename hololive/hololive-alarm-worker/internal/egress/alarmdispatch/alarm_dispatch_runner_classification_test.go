@@ -117,7 +117,7 @@ func alarmDispatchRetryableTransportCases() []alarmDispatchRetryableCase {
 		},
 		{
 			name: "confirmed outcome unknown stays non-retryable",
-			err:  errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded),
+			err:  errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.DeadlineExceeded),
 			want: false,
 		},
 		{

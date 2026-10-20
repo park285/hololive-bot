@@ -18,7 +18,7 @@ func sendPreparedTestMessage(ctx context.Context, sender *IrisMessageSender, mes
 		return fmt.Errorf("prepare test message: %w", err)
 	}
 
-	if err := sender.SendPreparedMessage(ctx, testIrisSenderRoomID, body, route, id); err != nil {
+	if _, err := sender.SendPreparedMessage(ctx, testIrisSenderRoomID, body, route, id); err != nil {
 		return fmt.Errorf("send test message: %w", err)
 	}
 

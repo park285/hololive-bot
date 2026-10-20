@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -64,21 +65,19 @@ type alarmDispatchCancellationIrisClient struct {
 	onSend   func(context.Context) error
 }
 
-func (c *alarmDispatchCancellationIrisClient) SendMessage(ctx context.Context, _, _ string, _ ...iris.SendOption) error {
+func (c *alarmDispatchCancellationIrisClient) SendMessageAccepted(ctx context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.handoffs++
 	if c.onSend != nil {
-		return c.onSend(ctx)
+		if err := c.onSend(ctx); err != nil {
+			return nil, err
+		}
 	}
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "cancellation-request"}, nil
 }
 
 func (*alarmDispatchCancellationIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, errors.New("unexpected markdown send")
-}
-
-func (*alarmDispatchCancellationIrisClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, errors.New("unexpected reply status lookup")
 }
 
 func alarmDispatchCancellationRequest(attempt int) (alarmDispatchGroup, *dispatchoutbox.SendRequest) {
@@ -178,7 +177,7 @@ func TestAlarmDispatchRunnerCancellationAfterHandoffKeepsQuarantine(t *testing.T
 				cancel()
 
 				if unknown {
-					return errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, sendCtx.Err())
+					return errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, sendCtx.Err())
 				}
 
 				return sendCtx.Err()
@@ -230,9 +229,9 @@ func TestAlarmDispatchRunnerCancellationCompensationPreservesOwnerAndAttemptFenc
 			err := runner.dispatchPreparedMessageGroup(ctx, group, request)
 
 			if tc.wantPartial {
-				partial, ok := errors.AsType[*dispatchoutbox.PartialTransitionError](err)
+				miss, ok := errors.AsType[*sendfence.MissError](err)
 				require.True(t, ok, "compensation must surface the ownership/attempt fence failure: %v", err)
-				require.Equal(t, []int64{group.envelopes[0].DispatchOutboxID}, partial.UnappliedIDs)
+				require.Equal(t, []int64{group.envelopes[0].DispatchOutboxID}, miss.UnappliedDeliveryIDs())
 			} else {
 				require.NoError(t, err)
 			}
@@ -257,7 +256,7 @@ func TestAlarmDispatchLaterSerialGroupCannotSendAfterLeaseExpiry(t *testing.T) {
 		SET created_at=clock_timestamp()-INTERVAL '1 day', next_attempt_at=clock_timestamp()-INTERVAL '1 second'`)
 	require.NoError(t, err)
 
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("serial-owner"))
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("serial-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	groups, requests := claimFrozenAlarmDispatchSerialGroups(t, pool, consumer)
@@ -351,7 +350,7 @@ func alarmDispatchCancellationPersistedRequest(t *testing.T, pool *pgxpool.Pool)
 	_, err = pool.Exec(t.Context(), "UPDATE alarm_dispatch_deliveries SET attempt_count=2")
 	require.NoError(t, err)
 
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("cancel-owner"))
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("cancel-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	envelopes, err := consumer.DrainBatch(t.Context(), 10)

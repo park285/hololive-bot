@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -82,17 +83,12 @@ func (s *TransitionStore) ApplyPreparedFailure(
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("apply prepared failure: %w", err)
 	}
 
-	at, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("apply prepared failure: at: %w", err)
-	}
-
 	var operation StartedOperation
 
-	err = s.executeTx(ctx, "load prepared failure envelope", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "load prepared failure envelope", func(tx dbx.Querier) error {
 		var loadErr error
 
-		operation, loadErr = s.loadPreparedFailureOperation(ctx, tx, rows, outboxByID, at)
+		operation, loadErr = s.loadPreparedFailureOperation(ctx, tx, rows, outboxByID)
 		if loadErr != nil {
 			return fmt.Errorf("load prepared failure envelope: transaction body: %w", loadErr)
 		}
@@ -100,6 +96,10 @@ func (s *TransitionStore) ApplyPreparedFailure(
 		return nil
 	})
 	if err != nil {
+		if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
+			return newApplyResult(fenceMissOutcome(miss), nil), fmt.Errorf("apply prepared failure: load envelope: %w", err)
+		}
+
 		if _, ok := errors.AsType[*transitionConflictError](err); ok {
 			return newApplyResult(ApplyConflict, nil), nil
 		}
@@ -120,9 +120,8 @@ func (s *TransitionStore) loadPreparedFailureOperation(
 	tx dbx.Querier,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-	at time.Time,
 ) (StartedOperation, error) {
-	resolved, err := s.resolveClaimedGroups(ctx, tx, rows, outboxByID, at)
+	resolved, err := s.resolveClaimedGroups(ctx, tx, "apply prepared failure", rows, outboxByID)
 	if err != nil {
 		return StartedOperation{}, fmt.Errorf("apply prepared failure: resolve groups: %w", err)
 	}
@@ -139,7 +138,7 @@ func (s *TransitionStore) loadPreparedFailureOperation(
 		groups = append(groups, group)
 	}
 
-	return StartedOperation{groups: groups, startedAt: at}, nil
+	return StartedOperation{groups: groups}, nil
 }
 
 func preparedFailureGroup(
@@ -185,7 +184,7 @@ func (s *TransitionStore) applyFailure(
 	retryAfter time.Duration,
 	mode DeliveryMode,
 ) (ApplyResult, error) {
-	transitions, rules, at, errorOutcome, err := s.prepareFailureTransitions(
+	transitions, rules, errorOutcome, err := s.prepareFailureTransitions(
 		operationName, operation, kind, reason, retryAfter,
 	)
 	if err != nil {
@@ -195,7 +194,7 @@ func (s *TransitionStore) applyFailure(
 	// 실패 전이는 owner의 provider 실패와 prepared failure(message_missing, pre_send_claim 포함)를 모두 시도로 기록한다.
 	attempts := ownerAttempts(operation.groups, attemptResultFailure, reason)
 
-	result, err := s.applyFailureTransitions(ctx, operationName, transitions, rules, attempts, mode, at)
+	result, err := s.applyFailureTransitions(ctx, operationName, transitions, rules, attempts, mode)
 	if err != nil {
 		return result, fmt.Errorf("%s: apply transition: %w", operationName, err)
 	}
@@ -209,31 +208,28 @@ func (s *TransitionStore) prepareFailureTransitions(
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
-) ([]rowTransition, []lifecycle.RuleID, time.Time, ApplyOutcome, error) {
+) ([]rowTransition, []lifecycle.RuleID, ApplyOutcome, error) {
 	if kind == lifecycle.FailureOutcomeUnknown {
-		return nil, nil, time.Time{}, ApplyIndeterminate, errors.New("apply failure: outcome unknown has no transition")
-	}
-
-	at, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return nil, nil, time.Time{}, ApplyIndeterminate, fmt.Errorf("%s: at: %w", operationName, err)
+		return nil, nil, ApplyIndeterminate, errors.New("apply failure: outcome unknown has no transition")
 	}
 
 	policy, err := lifecycle.NewRetryPolicy(s.config.MaxRetries, s.config.RetryBackoff)
 	if err != nil {
-		return nil, nil, time.Time{}, ApplyIndeterminate, fmt.Errorf("%s: retry policy: %w", operationName, err)
+		return nil, nil, ApplyIndeterminate, fmt.Errorf("%s: retry policy: %w", operationName, err)
 	}
 
-	transitions, rules, err := buildFailureTransitions(operationName, operation, policy, kind, reason, at, retryAfter)
+	transitions, rules, err := buildFailureTransitions(operationName, operation, policy, kind, reason, retryAfter)
 	if err != nil {
-		return nil, nil, time.Time{}, ApplyConflict, fmt.Errorf("%s: build transitions: %w", operationName, err)
+		return nil, nil, ApplyConflict, fmt.Errorf("%s: build transitions: %w", operationName, err)
 	}
 
 	sortTransitionsByID(transitions)
 
-	return transitions, rules, at, ApplyApplied, nil
+	return transitions, rules, ApplyApplied, nil
 }
 
+// applyFailureTransitions는 실패 전이와 owner 시도 telemetry를 한 트랜잭션에 기록한다. 시도 종료 시각은 전이 문장의
+// DB 시계다.
 func (s *TransitionStore) applyFailureTransitions(
 	ctx context.Context,
 	operationName string,
@@ -241,7 +237,6 @@ func (s *TransitionStore) applyFailureTransitions(
 	rules []lifecycle.RuleID,
 	attempts []deliveryAttempt,
 	mode DeliveryMode,
-	at time.Time,
 ) (ApplyResult, error) {
 	var priorAdjudication CommitAdjudication
 
@@ -249,14 +244,17 @@ func (s *TransitionStore) applyFailureTransitions(
 		var touched []int64
 
 		applyErr := s.executeTx(ctx, operationName, func(tx dbx.Querier) error {
-			var err error
+			var (
+				failedAt time.Time
+				err      error
+			)
 
-			touched, err = applyRowTransitions(ctx, tx, operationName, transitions)
+			touched, failedAt, err = applyRowTransitions(ctx, tx, operationName, transitions)
 			if err != nil {
 				return fmt.Errorf("%s: apply rows: %w", operationName, err)
 			}
 
-			if err := recordAttemptTelemetry(ctx, tx, mode, attempts, at); err != nil {
+			if err := recordAttemptTelemetry(ctx, tx, mode, attempts, failedAt); err != nil {
 				return fmt.Errorf("%s: record telemetry: %w", operationName, err)
 			}
 
@@ -298,7 +296,6 @@ func buildFailureTransitions(
 	policy lifecycle.RetryPolicy,
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
-	at time.Time,
 	retryAfter time.Duration,
 ) ([]rowTransition, []lifecycle.RuleID, error) {
 	transitions := make([]rowTransition, 0)
@@ -306,7 +303,7 @@ func buildFailureTransitions(
 
 	for i := range operation.groups {
 		groupTransitions, rule, err := failureGroupTransitions(
-			operationName, operation.groups[i], policy, kind, reason, at, retryAfter,
+			operationName, operation.groups[i], policy, kind, reason, retryAfter,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s: build group transitions: %w", operationName, err)
@@ -327,13 +324,12 @@ func failureGroupTransitions(
 	policy lifecycle.RetryPolicy,
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
-	at time.Time,
 	retryAfter time.Duration,
 ) ([]rowTransition, lifecycle.RuleID, error) {
 	owner := transitionLifecycleSnapshot(group.ownerAfter)
 	followers := lifecycleSnapshots(group.followers)
 
-	decision, err := lifecycle.EvaluateFailure(policy, owner, followers, kind, at, retryAfter)
+	decision, err := lifecycle.EvaluateFailure(policy, owner, followers, kind, retryAfter)
 	if err != nil {
 		return nil, "", fmt.Errorf("%s: evaluate logical group: %w", operationName, err)
 	}
@@ -403,16 +399,12 @@ func failureMutationTransition(
 	after.Status = mutation.NextStatus()
 	after.RowVersion = mutation.NextVersion()
 	after.AttemptCount = mutation.NextAttempt()
-	after.NextAttemptAt = mutation.NextAttemptAt()
-
-	if mutation.ClearsLock() {
-		after.LockedAt = nil
-	}
-
+	after.LockedAt = nil
+	after.LockedBy = nil
 	after.SentAt = nil
 	after.Error = string(reason)
 
-	return rowTransition{before: before, after: after}
+	return rowTransition{before: before, after: after, due: mutation.Due()}
 }
 
 func transitionLifecycleSnapshot(row transitionRow) lifecycle.RowSnapshot {

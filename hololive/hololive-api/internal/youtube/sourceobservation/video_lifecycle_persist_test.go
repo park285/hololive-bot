@@ -394,7 +394,7 @@ func recordLifecycleReview(t *testing.T, pool *pgxpool.Pool, digest string) erro
 
 	ctx := t.Context()
 
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}

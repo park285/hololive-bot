@@ -296,30 +296,6 @@ func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
 		assert.Equal(t, entry.ClientRequestID, resend.ClientRequestID)
 		assert.JSONEq(t, `{"body":"answer"}`, string(resend.Payload))
 	})
-
-	t.Run("an expired accepted lease requires manual review", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-
-		entry := newReplyOutboxEntry("message:m-accepted-expired", 0, `{"body":"answer"}`)
-		claim := claimOneWithLease(ctx, t, repo, entry, time.Millisecond)
-
-		accepted, err := repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-req-1")
-		require.NoError(t, err)
-		require.True(t, accepted)
-		time.Sleep(20 * time.Millisecond)
-
-		reclaim, err := repo.ReclaimExpired(ctx, 100)
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), reclaim.AcceptedManualReview)
-		assert.Equal(t, int64(0), reclaim.Requeued)
-
-		status, _, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-		assert.Equal(t, ReplyOutboxManualReview, status)
-
-		resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
-		require.NoError(t, err)
-		assert.Nil(t, resend, "Iris가 수리한 응답을 다시 보내면 중복 발화다")
-	})
 }
 
 func TestReplyOutboxTerminalSettlementDropsTheBody(t *testing.T) {
@@ -333,13 +309,7 @@ func TestReplyOutboxTerminalSettlementDropsTheBody(t *testing.T) {
 		entry := newReplyOutboxEntry("message:m-retention", 0, `{"body":"사용자 원문이 섞인 응답"}`)
 		claim := claimOne(ctx, t, repo, entry)
 
-		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
-			ID:         claim.ID,
-			ClaimToken: testClaimToken,
-			Status:     ReplyOutboxHandoffCompleted,
-		})
-		require.NoError(t, err)
-		require.True(t, applied)
+		completeReplyHandoff(ctx, t, repo, claim)
 
 		var (
 			payload         []byte
@@ -394,18 +364,4 @@ func TestReplyOutboxTerminalSettlementDropsTheBody(t *testing.T) {
 			"SELECT payload FROM bot_reply_outbox WHERE id = $1", claim.ID).Scan(&payload))
 		assert.NotNil(t, payload)
 	})
-}
-
-func claimOneWithLease(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, entry *ReplyOutboxEntry, lease time.Duration) *ReplyOutboxClaim {
-	t.Helper()
-
-	outcome, err := repo.Insert(ctx, entry)
-	require.NoError(t, err)
-	require.Equal(t, ReplyOutboxInserted, outcome)
-
-	claim, err := repo.Claim(ctx, testClaimToken, lease)
-	require.NoError(t, err)
-	require.NotNil(t, claim)
-
-	return claim
 }

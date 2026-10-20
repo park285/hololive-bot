@@ -22,7 +22,7 @@ func TestFanoutClaimDeclaresPendingPartialIndexPredicate(t *testing.T) {
 		"outbox.status = 'PENDING'",
 		"FOR UPDATE OF outbox SKIP LOCKED",
 		"ORDER BY outbox.next_attempt_at, outbox.created_at, outbox.id",
-		"LIMIT $5",
+		"LIMIT $4",
 	} {
 		if !strings.Contains(claim, predicate) {
 			t.Errorf("fanout claim is missing %q", predicate)

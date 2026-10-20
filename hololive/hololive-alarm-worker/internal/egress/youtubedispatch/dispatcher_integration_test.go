@@ -41,6 +41,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
 var errSendFailed = errors.Join(iris.ErrRateLimited, errors.New("synthetic request rejection before dispatch"))
@@ -645,6 +646,8 @@ func runConcurrentAlarmCase(t *testing.T, tc concurrentAlarmCase) {
 	assertConcurrentAlarmSentOnce(t, dbPrimary, tc, item, contentID, postID)
 }
 
+// seedConcurrentAlarmRows는 API canonicalwrite와 같은 저장소 호출로 outbox·delivery와 함께
+// 미발송 tracking 행과 DETECTED 알람 상태 행(post 단위)을 만든다.
 func seedConcurrentAlarmRows(
 	t *testing.T,
 	db *pgxpool.Pool,
@@ -676,9 +679,30 @@ func seedConcurrentAlarmRows(
 
 	t.Cleanup(func() {
 		deleteDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, "kind = $1 AND post_id = $2", tc.kind, postID)
+		deleteDeliveryTestRowsWhere(db, &domain.YouTubeContentAlarmTracking{}, "kind = $1 AND canonical_content_id = $2", tc.kind, postID)
 		deleteDeliveryTestRows(t, db, delivery)
 		deleteDeliveryTestRows(t, db, item)
 	})
+
+	detectedAt := publishedAt.Add(time.Minute)
+	repository := observation.NewRepository(db)
+
+	require.NoError(t, repository.UpsertBatch(t.Context(), []*domain.YouTubeContentAlarmTracking{{
+		Kind:               tc.kind,
+		ContentID:          contentID,
+		CanonicalContentID: postID,
+		ChannelID:          tc.channelID,
+		ActualPublishedAt:  &publishedAt,
+		DetectedAt:         detectedAt,
+	}}))
+	require.NoError(t, repository.UpsertAlarmStateBatch(t.Context(), []*domain.YouTubeCommunityShortsAlarmState{{
+		Kind:              tc.kind,
+		PostID:            postID,
+		ContentID:         contentID,
+		ChannelID:         tc.channelID,
+		ActualPublishedAt: &publishedAt,
+		DetectedAt:        detectedAt,
+	}}))
 
 	return item
 }
@@ -703,14 +727,24 @@ func assertConcurrentAlarmSentOnce(
 	require.Equal(t, domain.OutboxStatusSent, deliveries[0].Status)
 	require.NotNil(t, deliveries[0].SentAt)
 
+	sentAt := deliveries[0].SentAt.UTC()
+
+	tracking, err := observation.NewRepository(db).FindByIdentity(t.Context(), tc.kind, contentID)
+	require.NoError(t, err)
+	require.NotNil(t, tracking)
+	require.Equal(t, postID, tracking.CanonicalContentID)
+	require.Equal(t, domain.YouTubeContentAlarmDeliveryStatusSent, tracking.DeliveryStatus)
+	require.NotNil(t, tracking.AlarmSentAt)
+	require.Equal(t, sentAt, tracking.AlarmSentAt.UTC())
+
 	var state domain.YouTubeCommunityShortsAlarmState
 
 	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", tc.kind, postID).Error)
 	require.Equal(t, postID, state.PostID)
 	require.Equal(t, contentID, state.ContentID)
-	require.NotNil(t, state.AlarmSentAt)
-	require.Nil(t, state.AuthorizedAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, state.DeliveryStatus)
+	require.NotNil(t, state.AlarmSentAt)
+	require.Equal(t, sentAt, state.AlarmSentAt.UTC())
 }
 
 func TestDispatcher_CompatibilityCleanupPreservesOldFailedRows(t *testing.T) {
@@ -934,6 +968,11 @@ func (f *fakeSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 	return body, "text", nil
 }
 
-func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return f.SendMessage(ctx, room, body)
+// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
+func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	if err := f.SendMessage(ctx, room, body); err != nil {
+		return "", err
+	}
+
+	return "iris-test:" + id, nil
 }

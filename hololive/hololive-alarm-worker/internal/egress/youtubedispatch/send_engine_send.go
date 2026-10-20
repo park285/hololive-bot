@@ -41,18 +41,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) dispatchstate.DispatchResult {
-	claims := newBatchClaimResolver(d.claims)
-	batch := *d
-
-	// 실패 기록 wrapper가 d.claims로 해제를 요청하므로 배치 resolver로 바꾸면 해제가 배치 종료까지 모인다.
-	batch.claims = claims
-	d = &batch
-
-	defer claims.releaseFinished(ctx)
-
 	result := newDeliveryDispatchResult(len(rows))
-
-	reuseCache := newClaimDecisionCache()
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
 
@@ -80,7 +69,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 		eg.Go(func() error {
 			return panicguard.RunE(d.logger, panicguard.BackgroundTask, "youtube-outbox-delivery-group", func() error {
-				d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result)
+				d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, &result)
 
 				return nil
 			})
@@ -99,11 +88,10 @@ func (d *SendEngine) dispatchGroup(
 	group *deliveryGroup,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache *claimDecisionCache,
 	result *deliveryDispatchResult,
 ) {
 	if group.frozen != nil {
-		d.dispatchFrozenGroup(ctx, group, formattedMessages, formatFailures, reuseCache, result)
+		d.dispatchFrozenGroup(ctx, group, formattedMessages, formatFailures, result)
 
 		return
 	}
@@ -115,29 +103,27 @@ func (d *SendEngine) dispatchGroup(
 
 	// 단건 그룹: 기존 개별 dispatch 경로
 	if len(group.rows) == 1 {
-		d.dispatchDeliveryRow(ctx, &group.rows[0], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result)
+		d.dispatchDeliveryRow(ctx, &group.rows[0], groupOutboxByID, formattedMessages, formatFailures, result)
 
 		return
 	}
 
 	validRows, validOutboxes, invalidRows := partitionGroupedDeliveries(group)
-	d.dispatchRowsIndividually(ctx, invalidRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result)
+	d.dispatchRowsIndividually(ctx, invalidRows, groupOutboxByID, formattedMessages, formatFailures, result)
 
 	// 검증 후 1건 이하 -> 개별 dispatch
 	if len(validRows) <= 1 {
-		d.dispatchRowsIndividually(ctx, validRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result)
+		d.dispatchRowsIndividually(ctx, validRows, groupOutboxByID, formattedMessages, formatFailures, result)
 
 		return
 	}
 
-	claimSelection := d.claims.selectClaimedDeliveries(ctx, validRows, validOutboxes, reuseCache)
-	d.applyLifecycleClaimSelection(ctx, &claimSelection, store.DeliveryModeGrouped, result)
-
-	if len(claimSelection.members) == 0 {
+	members := d.selectDeliverableMembers(ctx, validRows, validOutboxes, store.DeliveryModeGrouped, result)
+	if len(members) == 0 {
 		return
 	}
 
-	attempt := newDeliveryAttempt(claimSelection.members)
+	attempt := newDeliveryAttempt(members)
 	d.dispatchClaimedGroup(ctx, group, &attempt, formattedMessages, formatFailures, result)
 }
 
@@ -158,7 +144,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 	message, err := d.formatGroupedMessage(ctx, group, attempt.outboxes)
 	if err != nil {
 		if d.applyPreparedLifecycleFailure(ctx, attempt.rows, attempt.outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped, result) {
-			d.recordGroupedFormatFailure(ctx, group, attempt, err, result)
+			d.recordGroupedFormatFailure(group, attempt, err, result)
 		}
 
 		return
@@ -173,7 +159,6 @@ func (d *SendEngine) dispatchDeliveryRow(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache *claimDecisionCache,
 	result *deliveryDispatchResult,
 ) {
 	outbox, ok := outboxByID[row.OutboxID]
@@ -183,14 +168,12 @@ func (d *SendEngine) dispatchDeliveryRow(
 		return
 	}
 
-	claimSelection := d.claims.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
-	d.applyLifecycleClaimSelection(ctx, &claimSelection, store.DeliveryModePerRoom, result)
-
-	if len(claimSelection.members) == 0 {
+	members := d.selectDeliverableMembers(ctx, []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{outbox}, store.DeliveryModePerRoom, result)
+	if len(members) == 0 {
 		return
 	}
 
-	attempt := newDeliveryAttempt(claimSelection.members)
+	attempt := newDeliveryAttempt(members)
 	d.dispatchClaimedDeliveryRow(ctx, &attempt, formattedMessages, formatFailures, result)
 }
 
@@ -225,7 +208,7 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 		return
 	}
 
-	if d.completeLifecycleSent(ctx, attempt.operation, attempt.claimTokens, store.DeliveryModePerRoom, result) {
+	if d.completeLifecycleSent(ctx, attempt, store.DeliveryModePerRoom, result) {
 		d.recordPerRoomSuccess(attempt, result)
 	}
 }
@@ -242,7 +225,7 @@ func (d *SendEngine) preparePerRoomSend(
 
 	if formatFailures[row.OutboxID] {
 		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModePerRoom, result) {
-			d.recordPerRoomFormatFailure(ctx, attempt, result)
+			d.recordPerRoomFormatFailure(attempt, result)
 		}
 
 		return deliverySendRequest{}, false
@@ -251,7 +234,7 @@ func (d *SendEngine) preparePerRoomSend(
 	message, ok := formattedMessages[row.OutboxID]
 	if !ok {
 		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonMessage, store.DeliveryModePerRoom, result) {
-			d.recordPerRoomMissingMessage(ctx, attempt, result)
+			d.recordPerRoomMissingMessage(attempt, result)
 		}
 
 		return deliverySendRequest{}, false
@@ -260,7 +243,7 @@ func (d *SendEngine) preparePerRoomSend(
 	sendReq, err := buildDeliverySendRequest(row.RoomID, message, outboxes)
 	if err != nil {
 		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModePerRoom, result) {
-			d.recordPerRoomRequestBuildFailure(ctx, attempt, err, result)
+			d.recordPerRoomRequestBuildFailure(attempt, err, result)
 		}
 
 		return deliverySendRequest{}, false
@@ -286,7 +269,7 @@ func (d *SendEngine) handlePerRoomSendFailure(
 		return
 	}
 
-	d.recordPerRoomSendFailure(ctx, attempt, sendErr, result)
+	d.recordPerRoomSendFailure(attempt, sendErr, result)
 }
 
 func (d *SendEngine) applyPerRoomLifecycleFailure(
@@ -346,7 +329,7 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 		return
 	}
 
-	if d.completeLifecycleSent(ctx, attempt.operation, attempt.claimTokens, store.DeliveryModeGrouped, result) {
+	if d.completeLifecycleSent(ctx, attempt, store.DeliveryModeGrouped, result) {
 		d.recordGroupedSuccess(group, attempt, result)
 	}
 }
@@ -366,7 +349,7 @@ func (d *SendEngine) prepareGroupedSend(
 	}
 
 	if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModeGrouped, result) {
-		d.recordGroupedRequestBuildFailure(ctx, group, attempt, err, result)
+		d.recordGroupedRequestBuildFailure(group, attempt, err, result)
 	}
 
 	return deliverySendRequest{}, false
@@ -386,7 +369,7 @@ func (d *SendEngine) handleGroupedSendFailure(
 
 	if errors.Is(sendErr, errRequestReissued) {
 		appendLifecycleTouched(result, operation.TouchedOutboxIDs())
-		d.recordGroupedSendFailure(ctx, group, attempt, sendErr, result)
+		d.recordGroupedSendFailure(group, attempt, sendErr, result)
 
 		return
 	}
@@ -409,7 +392,7 @@ func (d *SendEngine) handleGroupedSendFailure(
 		return
 	}
 
-	d.recordGroupedSendFailure(ctx, group, attempt, sendErr, result)
+	d.recordGroupedSendFailure(group, attempt, sendErr, result)
 }
 
 func (d *SendEngine) logGroupedSendFallback(
@@ -484,7 +467,7 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 			continue
 		}
 
-		if d.completeLifecycleSent(ctx, singleton.operation, singleton.claimTokens, store.DeliveryModePerRoom, result) {
+		if d.completeLifecycleSent(ctx, &singleton, store.DeliveryModePerRoom, result) {
 			d.recordPerRoomSuccess(&singleton, result)
 		}
 	}
