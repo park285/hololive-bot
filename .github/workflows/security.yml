@@ -150,6 +150,11 @@ jobs:
           install -m 0755 "${extract_dir}/trivy" "${bin_dir}/trivy"
           echo "${bin_dir}" >>"${GITHUB_PATH}"
 
+      # 표준 runner에는 arm64 binfmt가 없어 arm64 최종 image의 RUN이 exec format error로 끝난다.
+      - name: Register arm64 emulation
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: docker run --rm --privileged tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install arm64
+
       - name: Build final production images
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
