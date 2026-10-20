@@ -232,7 +232,6 @@ type AlarmQueueEnvelope struct {
 	ClientRequestID  string                         `json:"client_request_id,omitempty"`
 	Notification     AlarmNotification              `json:"notification"`
 	SourceKind       AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	YouTubeOutbox    *YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
 	Celebration      *CelebrationDispatchPayload    `json:"celebration,omitempty"`
 	DeliveryDigest   *DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
 	XSpace           *XSpaceDispatchPayload         `json:"x_space,omitempty"`
@@ -265,7 +264,6 @@ type alarmQueueEnvelopeWire struct {
 	DispatchOutboxID int64                              `json:"dispatch_outbox_id"`
 	Notification     alarmQueueEnvelopeNotificationWire `json:"notification"`
 	SourceKind       AlarmDispatchSourceKind            `json:"source_kind,omitempty"`
-	YouTubeOutbox    *YouTubeOutboxDispatchPayload      `json:"youtube_outbox,omitempty"`
 	Celebration      *CelebrationDispatchPayload        `json:"celebration,omitempty"`
 	DeliveryDigest   *DeliveryDigestDispatchPayload     `json:"delivery_digest,omitempty"`
 	XSpace           *XSpaceDispatchPayload             `json:"x_space,omitempty"`
@@ -310,7 +308,6 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 			ScheduleChangePreviousStart: wire.Notification.ScheduleChangePreviousStart,
 		},
 		SourceKind:       wire.SourceKind,
-		YouTubeOutbox:    wire.YouTubeOutbox,
 		Celebration:      wire.Celebration,
 		DeliveryDigest:   wire.DeliveryDigest,
 		XSpace:           wire.XSpace,

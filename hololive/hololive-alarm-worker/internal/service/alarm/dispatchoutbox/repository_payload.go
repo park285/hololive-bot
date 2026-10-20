@@ -16,7 +16,6 @@ import (
 type eventPayloadEnvelope struct {
 	Notification   eventPayloadNotification              `json:"notification"`
 	SourceKind     domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	YouTubeOutbox  *domain.YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
 	Celebration    *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
 	DeliveryDigest *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
 	XSpace         *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
@@ -39,11 +38,6 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope) (eventInsert, delivery
 
 	dedupeInput := EnvelopeDedupeInput(envelope)
 	input := &dedupeInput
-
-	if err := validateSourceIdentity(input); err != nil {
-		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch ledger rows: %w", err)
-	}
-
 	alarmType := input.AlarmType
 	eventKey := BuildEventKey(input)
 	dedupeKey := buildDedupeKey(input.RoomID, eventKey)
@@ -126,7 +120,6 @@ func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
 			ScheduleChangePreviousStart: envelope.Notification.ScheduleChangePreviousStart,
 		},
 		SourceKind:     envelope.SourceKind,
-		YouTubeOutbox:  envelope.YouTubeOutbox,
 		Celebration:    envelope.Celebration,
 		DeliveryDigest: envelope.DeliveryDigest,
 		XSpace:         envelope.XSpace,

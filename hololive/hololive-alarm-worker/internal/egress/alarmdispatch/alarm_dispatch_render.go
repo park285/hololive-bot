@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -67,12 +66,6 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 			action: "render celebration message",
 			run:    func() (string, error) { return renderCelebrationMessage(ctx, renderer, envelope) },
 		},
-		domain.AlarmDispatchSourceKindYouTubeOutbox: {
-			action: "render alarm dispatch youtube outbox",
-			run: func() (string, error) {
-				return renderAlarmDispatchYouTubeOutbox(ctx, renderer, messageStrings, envelope)
-			},
-		},
 		domain.AlarmDispatchSourceKindDeliveryDigest: {
 			action: "render delivery digest dispatch",
 			run:    func() (string, error) { return renderAlarmDispatchDeliveryDigest(envelope) },
@@ -98,19 +91,6 @@ func renderAlarmDispatchDeliveryDigest(envelope *domain.AlarmQueueEnvelope) (str
 	}
 
 	return envelope.DeliveryDigest.PreRenderedMessage, nil
-}
-
-func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) (string, error) {
-	if envelope.YouTubeOutbox == nil {
-		return "", errors.New("render youtube outbox dispatch: payload is nil")
-	}
-
-	out, err := format.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
-	if err != nil {
-		return out, fmt.Errorf("format youtube outbox payload: %w", err)
-	}
-
-	return out, nil
 }
 
 type alarmDispatchItemView struct {
