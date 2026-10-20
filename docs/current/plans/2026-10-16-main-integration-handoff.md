@@ -205,10 +205,11 @@
   - kapu의 DB image(`hololive-postgres*`)와 10-07 호스트 이전 snapshot(`hololive-migration/*`): 플랫폼 소유입니다.
   - kapu `artifacts`의 다른 작업 산출물(155MB)
   - 중앙 worker rollback tag 2개
-- **발견 사항 (미수정):**
-  - 중앙 DB에 `lifecycle_origin=legacy_unknown`인 LIVE 세션 9개가 남아 있습니다(마지막 관측 05-24~06-03).
-    - live 목록은 신선도 조건으로, 방송 이력은 ENDED 조건으로 제외하므로 노출되지는 않습니다. 대신 이 9개 방송은 이력에서 빠집니다.
-    - 고치려면 운영 데이터를 바꿔야 하므로 별도 승인이 필요합니다.
+- **발견 사항 (이 세션에서는 미수정):**
+  - 중앙 DB에 `lifecycle_origin=legacy_unknown`인 LIVE 세션 9개가 남아 있었습니다(마지막 관측 05-24~06-03).
+    - live 목록은 신선도 조건으로, 방송 이력은 ENDED 조건으로 제외하므로 노출되지는 않았습니다. 대신 이 9개 방송은 이력에서 빠졌습니다.
+    - 고치려면 운영 데이터를 바꿔야 하므로 별도 승인이 필요했습니다.
+    - 후속: 2026-10-18 04:56Z에 migration 324(PR #654)를 적용해 9건을 `ENDED`로 정리했습니다. 결과는 [방송 시각 확정 계획](2026-10-18-broadcast-time-finalization.md)의 배포 기록에 있습니다.
   - 빌드 중 간헐 실패가 두 번 있었습니다.
     - collector `TestCommunityRPCPayloadStorageBoundaryAndScheduler/one_over_at_publisher`: 예상하지 않은 `GET /` 요청이 들어왔습니다. 단독으로 8회 반복하면 모두 통과합니다.
     - `shared-go` `TestClientRetryAttemptsAreOwnedByOption`: 요청 수가 기대보다 많았고, 단독 10회 반복에서도 실패가 재현됩니다.
