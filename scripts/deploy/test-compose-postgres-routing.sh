@@ -42,7 +42,7 @@ HOLOLIVE_CENTRAL_POSTGRES_PORT=15432
 EOF
 cp "${endpoint_root}/override.env" "${endpoint_root}/default.env"
 sed -i '/HOLOLIVE_CENTRAL_/d' "${endpoint_root}/default.env"
-# AP renders must succeed with no central administration, runtime or cache secrets.
+# AP 렌더링에는 중앙 관리·런타임·캐시 비밀이 필요 없어야 한다.
 "${CI_PYTHON_BIN}" - "${endpoint_root}" <<'PY'
 from pathlib import Path
 import sys

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retain validated profile bytes with an image; never restore into the secret mirror."""
+"""검증한 프로필 바이트를 이미지와 보관하며 비밀 미러에는 복원하지 않는다."""
 import hashlib
 import json
 import os
@@ -31,7 +31,7 @@ def inspect(kind, name):
     return json.loads(run(CLI, kind, "inspect", name))[0]
 
 def loaded_hash(diagnostics):
-    # Profile identity must not depend on the cardinality of unrelated metrics.
+    # 프로필 식별은 무관한 메트릭의 개수에 의존하지 않는다.
     envelope = json.loads(diagnostics)
     if not isinstance(envelope, dict) or envelope.get("contractVersion") != 1:
         raise ValueError("loaded profile identity unavailable")
@@ -210,7 +210,7 @@ def atomic_publish(files):
             with os.fdopen(fd, "wb") as output:
                 output.write(contents)
             temporary.chmod(0o444)
-        # Stage every file first; each rename is atomic, not the whole bundle.
+        # 모두 준비한 뒤 교체한다. 이름 변경 각각만 원자적이며 묶음 전체는 아니다.
         for temporary, path in staged:
             os.replace(temporary, path)
     finally:
@@ -270,7 +270,7 @@ def capture(container, service, directory, root):
             raise ValueError("running process differs from its retained profile pair")
         (directory / "profile.json").write_bytes(profile_bytes(prior / "profile.json"))
     else:
-        # First adoption is permitted only while the old process can prove its loaded bytes.
+        # 첫 도입은 기존 프로세스가 로드한 바이트를 증명할 수 있을 때만 허용한다.
         if not before["State"]["Running"]:
             raise ValueError("prepare the previous profile pair before entering maintenance-stopped mode")
         env = dict(item.split("=", 1) for item in before["Config"]["Env"])

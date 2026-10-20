@@ -114,7 +114,7 @@ base_files=(
   -f deploy/compose/docker-compose.live-compat.yml
 )
 
-# Boot only approved runtime containers; schema migration is an explicit operation.
+# 승인된 런타임 컨테이너만 기동하며 스키마 마이그레이션은 별도 명시 작업으로 남긴다.
 . ./scripts/deploy/lib/compose-env.sh
 runtime_services=(holo-postgres valkey-cache hololive-alarm-worker hololive-api
   youtube-po-c docker-proxy deunhealth admin-dashboard-ingress)

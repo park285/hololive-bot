@@ -9,6 +9,7 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -208,18 +209,15 @@ func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) [
 	return claimKeys
 }
 
-type partialFailureRouting interface {
-	error
-	UnappliedDeliveryIDs() []int64
-}
-
+// unappliedFailureRoutingIDs는 fence 미스로 바뀌지 않은 대상을 돌려준다. 이 행들은 현재 소유자·회수 경로의 것이므로
+// 재시도하거나 claim key를 해제하지 않는다.
 func unappliedFailureRoutingIDs(err error) ([]int64, bool) {
-	partial, ok := errors.AsType[partialFailureRouting](err)
+	miss, ok := errors.AsType[*sendfence.MissError](err)
 	if !ok {
 		return nil, false
 	}
 
-	return partial.UnappliedDeliveryIDs(), true
+	return miss.UnappliedDeliveryIDs(), true
 }
 
 func combineEnvelopes(a, b []domain.AlarmQueueEnvelope) []domain.AlarmQueueEnvelope {
@@ -267,6 +265,11 @@ func alarmDispatchMaxAttemptsForCause(cause error) int {
 	return alarmDispatchMaxAttempts
 }
 
+// alarmDispatchRetryBackoff는 attempt번째 시도 뒤 다음 시도까지의 선형 backoff(attempt*5s)다.
+func alarmDispatchRetryBackoff(attempt int) time.Duration {
+	return time.Duration(attempt) * 5 * time.Second
+}
+
 func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) {
 	retryEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
 	dlqEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
@@ -311,7 +314,6 @@ func sameAttemptAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause er
 	retry.LastError = cause.Error()
 	retry.LastErrorCode = dispatchoutbox.ClassifyErrorCode(cause)
 	retry.RetryAfterMS = int64((5 * time.Second) / time.Millisecond)
-	retry.NextVisibleAt = time.Now().UTC().Add(5 * time.Second).Format(time.RFC3339Nano)
 
 	return retry
 }
@@ -330,7 +332,7 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 	retry.LastError = cause.Error()
 	retry.LastErrorCode = dispatchoutbox.ClassifyErrorCode(cause)
 
-	retryAfter := time.Duration(retry.Attempt) * 5 * time.Second
+	retryAfter := alarmDispatchRetryBackoff(retry.Attempt)
 
 	if httpErr, ok := errors.AsType[*iris.HTTPError](cause); ok && httpErr.RetryAfter > retryAfter {
 		hint := httpErr.RetryAfter
@@ -344,21 +346,22 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 	}
 
 	retry.RetryAfterMS = int64(retryAfter / time.Millisecond)
-	retry.NextVisibleAt = time.Now().UTC().Add(retryAfter).Format(time.RFC3339Nano)
 
 	return retry
 }
 
+// reissueFailedRequest는 pre-handoff 실패를 새 요청 세대로 다시 대기시킨다. 세대를 모두 썼거나 예산이 끝난 멤버가
+// 있으면 결과 검토를 위해 격리한다. 그 밖의 미스는 외부 호출 뒤라 행을 되돌리지 않고 오류로 보고한다.
 func (r *Runner) reissueFailedRequest(ctx context.Context, group alarmDispatchGroup, cause error) error {
 	retry, terminal := prepareDispatchFailure(group.envelopes, cause)
 	if len(terminal) == 0 {
-		reissued, err := r.consumer.ReissueSendRequest(ctx, retry, group.request.ClientRequestID)
-		if err != nil {
-			return fmt.Errorf("persist reissued alarm request: %w", err)
+		err := r.consumer.ReissueSendRequest(ctx, retry, group.request)
+		if err == nil {
+			return nil
 		}
 
-		if reissued {
-			return nil
+		if !errors.Is(err, sendfence.ErrGenerationExhausted) {
+			return fmt.Errorf("persist reissued alarm request: %w", err)
 		}
 	}
 

@@ -24,18 +24,17 @@ type ExpiryResult struct {
 	Blocked      []BlockedLogicalGroup
 }
 
-// ExpirePending은 claim 신선도를 지난 미발송 행을 기존 논리 증거와 fence로 종료한다.
-// Keyset cursor로 격리 대기 중인 오래된 그룹이 뒤의 만료 행을 가로막지 않는다.
+// ExpirePending은 claim 신선도를 지난 미발송 행을 기존 논리 증거와 fence로 종료한다. 신선도와 lease 만료는 후보 SQL의
+// DB 시계(checked_at)로 판정한다. Keyset cursor로 격리 대기 중인 오래된 그룹이 뒤의 만료 행을 가로막지 않는다.
 func (s *TransitionStore) ExpirePending(ctx context.Context, afterID int64, limit int) (ExpiryResult, error) {
 	if limit <= 0 || afterID < 0 {
 		return ExpiryResult{}, errors.New("expire pending: invalid scan bounds")
 	}
 
-	at := time.Now().UTC().Truncate(time.Microsecond)
 	result := ExpiryResult{ApplyResult: newApplyResult(ApplyApplied, nil)}
 
 	err := s.executeTx(ctx, "expire pending", func(tx dbx.Querier) error {
-		return s.expirePendingInTx(ctx, tx, afterID, limit, at, &result)
+		return s.expirePendingInTx(ctx, tx, afterID, limit, &result)
 	})
 	if err != nil {
 		result.Outcome = ApplyIndeterminate
@@ -47,12 +46,17 @@ func (s *TransitionStore) ExpirePending(ctx context.Context, afterID int64, limi
 	return result, nil
 }
 
-func (s *TransitionStore) expirePendingInTx(ctx context.Context, tx dbx.Querier, afterID int64, limit int, at time.Time, result *ExpiryResult) error {
-	var candidates []transitionRow
+func (s *TransitionStore) expirePendingInTx(ctx context.Context, tx dbx.Querier, afterID int64, limit int, result *ExpiryResult) error {
+	var checked []checkedTransitionRow
 
-	if err := dbx.SelectSQL(ctx, tx, &candidates, "load expired pending", mustSQL("transition_expired_pending.sql"), at.Add(-s.config.ClaimFreshnessWindow), at.Add(-s.config.LockTimeout), afterID, limit); err != nil {
+	if err := dbx.SelectSQL(
+		ctx, tx, &checked, "load expired pending", mustSQL("transition_expired_pending.sql"),
+		s.config.ClaimFreshnessWindow.Milliseconds(), s.config.LockTimeout.Milliseconds(), afterID, limit,
+	); err != nil {
 		return fmt.Errorf("expire pending: candidates: %w", err)
 	}
+
+	candidates, checkedAt := splitCheckedTransitionRows(checked)
 
 	result.Examined = len(candidates)
 	if len(candidates) == 0 {
@@ -61,19 +65,19 @@ func (s *TransitionStore) expirePendingInTx(ctx context.Context, tx dbx.Querier,
 
 	result.NextID = candidates[len(candidates)-1].ID
 
-	resolved, err := s.resolveStaleSendingGroups(ctx, tx, candidates, at)
+	resolved, err := s.resolveStaleSendingGroups(ctx, tx, candidates)
 	if err != nil {
 		return fmt.Errorf("expire pending: resolve logical groups: %w", err)
 	}
 
-	changes, err := s.collectExpiredTransitions(resolved, at, result)
+	changes, err := s.collectExpiredTransitions(resolved, checkedAt, result)
 	if err != nil {
 		return err
 	}
 
 	sortTransitionsByID(changes)
 
-	result.TouchedOutboxIDs, err = applyRowTransitions(ctx, tx, "expire pending", changes)
+	result.TouchedOutboxIDs, _, err = applyRowTransitions(ctx, tx, "expire pending", changes)
 	if err != nil {
 		return fmt.Errorf("expire pending: apply rows: %w", err)
 	}

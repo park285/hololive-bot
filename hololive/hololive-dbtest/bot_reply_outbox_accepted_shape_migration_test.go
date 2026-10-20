@@ -69,8 +69,8 @@ func TestBotReplyOutboxAcceptedShape(t *testing.T) {
 		},
 	}
 
-	for _, attempt := range []string{"applied", "reapplied"} {
-		if attempt == "reapplied" {
+	for application, attempt := range []string{"applied", "reapplied"} {
+		if application > 0 {
 			require.NoError(t, applyMigrationFile(ctx, pool, dir, botReplyOutboxUnleasedAcceptedMigration))
 			require.NoError(t, applyMigrationFile(ctx, pool, dir, botReplyOutboxAcceptedStrictMigration))
 		}

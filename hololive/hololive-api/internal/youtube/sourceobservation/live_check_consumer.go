@@ -116,12 +116,23 @@ func (c *Consumer) reconcileVideoLiveCheck(
 		return ReconcileResult{Applications: applications}, nil
 	}
 
+	var result ReconcileResult
+
 	// ENDED는 reducer에 보내지 않는다. 종료 판정은 끝났고 남은 일은 시각 확정뿐이다.
 	if session.Status == domain.LiveStatusEnded {
-		return reconcileEndedVideoTimes(ctx, tx, claimed, &payload, &session, applications)
+		result, err = reconcileEndedVideoTimes(ctx, tx, claimed, &payload, &session, applications)
+	} else {
+		result, err = c.reduceVideoLiveCheck(ctx, tx, claimed, &payload, &state, &session, applications)
 	}
 
-	return c.reduceVideoLiveCheck(ctx, tx, claimed, &payload, &state, &session, applications)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+
+	// 적용된 가용성 저장과 ENDED 시각 확정은 요청 영상의 원본만 쓴다.
+	result.LiveRuntimeVideoIDs = append(result.LiveRuntimeVideoIDs, payload.VideoID)
+
+	return result, nil
 }
 
 // reduceVideoLiveCheck는 활성 세션의 영상 확인을 수명 사실로 바꿔 reducer에 보낸다.
@@ -157,11 +168,14 @@ func (c *Consumer) reduceVideoLiveCheck(
 		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
-	if persistErr := persistLiveDecision(ctx, tx, &decision); persistErr != nil {
+	if persistErr := persistLiveDecision(ctx, tx, state.Sessions, &decision); persistErr != nil {
 		return ReconcileResult{}, fmt.Errorf("persist live decision: %w", persistErr)
 	}
 
-	return ReconcileResult{Applications: append(applications, mapLiveApplications(decision.Applications)...)}, nil
+	return ReconcileResult{
+		Applications:        append(applications, mapLiveApplications(decision.Applications)...),
+		LiveRuntimeVideoIDs: liveDecisionRuntimeVideoIDs(&decision),
+	}, nil
 }
 
 func persistVideoAvailability(ctx context.Context, tx dbx.Tx, claimed *Observation, payload *contract.VideoLiveCheckV1, channelID string) (bool, error) {

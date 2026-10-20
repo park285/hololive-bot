@@ -45,7 +45,7 @@ postgres_capacity_assert_policy_target() {
     local pipes effective_instances capacity reserve
     local server_limit="" server_limit_rows=0 used=0
     local superuser_reserved="" superuser_reserved_rows=0
-    # Three ordinary control slots remain after exporter and nightly allocations.
+    # exporter·야간 작업 할당 뒤에도 일반 제어 슬롯 셋을 남긴다.
     local min_reserve=3
     local -A scale_overrides=() scaled_services_seen=() seen_owners=() role_limits=() role_used=()
     shift 2

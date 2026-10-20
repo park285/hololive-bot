@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
-	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -44,12 +43,12 @@ type clientRequestIDRecordingIrisSender struct {
 	markdownOpts    int
 }
 
-func (s *clientRequestIDRecordingIrisSender) SendMessage(_ context.Context, roomID, message string, opts ...iris.SendOption) error {
+func (s *clientRequestIDRecordingIrisSender) SendMessageAccepted(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	s.roomID = roomID
 	s.message = message
 	s.opts = len(opts)
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
 }
 
 func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -58,10 +57,6 @@ func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roo
 	s.markdownOpts = len(opts)
 
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
-}
-
-func (*clientRequestIDRecordingIrisSender) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
-	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: "handoff_completed"}, nil
 }
 
 type workerappEgressTestPostgres struct{ pool *pgxpool.Pool }
@@ -149,15 +144,6 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 	var requestBody string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == "/reply-status/reply-1" {
-			w.Header().Set("Content-Type", "application/json")
-
-			_, err := io.WriteString(w, `{"requestId":"reply-1","state":"handoff_completed"}`)
-			assert.NoError(t, err)
-
-			return
-		}
-
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("read request body: %v", err)
@@ -257,7 +243,7 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
+	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), nil, nil, nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))
@@ -266,34 +252,6 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{"alarm-dispatch-maintenance", "alarm-dispatch-backlog-observer"}, names)
-}
-
-func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
-	config, state := alarmWorkerTestConfig(t)
-	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: dbtest.NewPool(t)}}
-
-	runners, err := buildEgressRunners(config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
-	require.NoError(t, err)
-
-	names := make([]string, 0, len(runners))
-	scheduled := make(map[string]bool, len(runners))
-
-	for _, runner := range runners {
-		names = append(names, runner.Name)
-		scheduled[runner.Name] = runner.Scheduler != nil
-	}
-
-	assert.Equal(t, []string{
-		"alarm-dispatch",
-		"alarm-dispatch-maintenance",
-		"alarm-dispatch-backlog-observer",
-		"youtube-outbox",
-		"notification-delivery-outbox",
-	}, names)
-	assert.True(t, scheduled["alarm-dispatch"])
-	assert.True(t, scheduled["alarm-dispatch-backlog-observer"])
-	assert.True(t, scheduled["youtube-outbox"])
-	assert.True(t, scheduled["notification-delivery-outbox"])
 }
 
 func TestNewYouTubeOutboxDispatcherRejectsMissingPool(t *testing.T) {

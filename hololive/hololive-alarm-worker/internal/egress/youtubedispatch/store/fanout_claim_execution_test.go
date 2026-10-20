@@ -41,18 +41,17 @@ func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
 
 			id := seedTransitionFanoutOutbox(t, pool, "video-sql-plan")
 			tx := preparePlanModeSQLTest(t, pool, mode, "fanout_sql_v2", mustSQL("fanout_claim.sql"))
-			at := time.Now().UTC().Truncate(time.Microsecond)
 
 			for _, rejected := range []any{domain.OutboxStatusFailed, domain.OutboxStatusSent, nil, "PENDING' OR 1=1 --"} {
-				rows := runFanoutSQLTest(t, tx, rejected, at)
+				rows := runFanoutSQLTest(t, tx, rejected)
 				require.Empty(t, rows)
 			}
 
-			claimed := runFanoutSQLTest(t, tx, domain.OutboxStatusPending, at)
+			claimed := runFanoutSQLTest(t, tx, domain.OutboxStatusPending)
 			require.Len(t, claimed, 1)
 			require.Equal(t, id, claimed[0].ID)
 			require.NotNil(t, claimed[0].LockedAt)
-			require.Empty(t, runFanoutSQLTest(t, tx, domain.OutboxStatusPending, at))
+			require.Empty(t, runFanoutSQLTest(t, tx, domain.OutboxStatusPending))
 
 			requirePreparedPlanMode(t, tx, "fanout_sql_v2", mode)
 		})
@@ -137,11 +136,10 @@ func requirePreparedPlanMode(t *testing.T, tx pgx.Tx, name, mode string) {
 	}
 }
 
-func runFanoutSQLTest(t *testing.T, tx pgx.Tx, status any, at time.Time) []domain.YouTubeNotificationOutbox {
+func runFanoutSQLTest(t *testing.T, tx pgx.Tx, status any) []domain.YouTubeNotificationOutbox {
 	t.Helper()
 
-	rows, err := tx.Query(t.Context(), "fanout_sql_v2", status, at.Add(-time.Minute),
-		at, at.Add(-time.Hour), 1, at)
+	rows, err := tx.Query(t.Context(), "fanout_sql_v2", status, time.Minute.Milliseconds(), time.Hour.Milliseconds(), 1)
 	require.NoError(t, err)
 
 	claimed, err := pgx.CollectRows(rows, deliverysql.ScanOutboxRow)

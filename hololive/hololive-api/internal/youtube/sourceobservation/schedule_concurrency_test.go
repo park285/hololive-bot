@@ -2,11 +2,13 @@ package sourceobservation
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
@@ -16,7 +18,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestScheduleBatchPreservesConcurrentLiveInsertion(t *testing.T) {
+// Schedule이 행이 없다고 읽은 영상을 다른 writer가 먼저 만들면, schedule은 그 행을 덮어쓰거나 병합하지 않고
+// 충돌로 보고한다. 다른 writer의 행은 그대로 남는다.
+func TestScheduleReportsConflictWithConcurrentLiveInsertion(t *testing.T) {
 	for _, status := range []domain.LiveStatus{domain.LiveStatusLive, domain.LiveStatusEnded} {
 		t.Run(string(status), func(t *testing.T) {
 			pool := dbtest.NewPool(t)
@@ -30,7 +34,7 @@ func TestScheduleBatchPreservesConcurrentLiveInsertion(t *testing.T) {
 
 			defer rollbackPublishTestTx(ctx, t, scheduleTx, "concurrent schedule")
 
-			state, err := loadScheduleState(ctx, scheduleTx, fixture.Items)
+			state, stored, err := loadScheduleState(ctx, scheduleTx, fixture.Items)
 			require.NoError(t, err)
 			require.Empty(t, state.Sessions)
 
@@ -53,7 +57,7 @@ func TestScheduleBatchPreservesConcurrentLiveInsertion(t *testing.T) {
 				ScheduledStartTime: new(newer), LastSeenAt: newer, IsPremiere: new(true),
 				LifecycleOrigin: live.OriginObserved, StatusObservedAt: new(newer),
 			}
-			statement := liveSessionStatement(&session, false)
+			statement, _ := liveSessionWrite(nil, &session)
 
 			_, err = liveTx.Exec(ctx, statement.SQL, statement.Args...)
 			require.NoError(t, err)
@@ -63,7 +67,7 @@ func TestScheduleBatchPreservesConcurrentLiveInsertion(t *testing.T) {
 
 			var writers sync.WaitGroup
 
-			writers.Go(func() { done <- persistScheduleDecision(ctx, scheduleTx, &observation, &decision) })
+			writers.Go(func() { done <- persistScheduleDecision(ctx, scheduleTx, &observation, stored, &decision) })
 
 			defer func() {
 				cancel()
@@ -72,11 +76,14 @@ func TestScheduleBatchPreservesConcurrentLiveInsertion(t *testing.T) {
 
 			waitScheduleInsertionLock(ctx, t, pool, pid, done)
 			require.NoError(t, liveTx.Commit(ctx))
-			require.NoError(t, <-done)
-			require.NoError(t, scheduleTx.Commit(ctx))
+
+			conflict, ok := errors.AsType[*LiveSessionConflictError](<-done)
+			require.True(t, ok, "schedule must report the concurrent insertion as a conflict")
+			require.Equal(t, session.VideoID, conflict.VideoID)
+			require.NoError(t, pgxdb.Rollback(ctx, scheduleTx))
 
 			assertScheduleConcurrentSession(t, pool, &session)
-			assertTableCount(t, pool, "youtube_schedule_items", 1)
+			assertTableCount(t, pool, "youtube_schedule_items", 0)
 		})
 	}
 }
@@ -134,7 +141,7 @@ func TestScheduleStateKeepsSessionLockedUntilPersistence(t *testing.T) {
 	observation, decision := scheduleBatchFixture(1)
 
 	require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-		return persistScheduleDecision(ctx, tx, &observation, &decision)
+		return persistScheduleDecision(ctx, tx, &observation, nil, &decision)
 	}))
 
 	tx, err := pool.Begin(ctx)
@@ -142,7 +149,7 @@ func TestScheduleStateKeepsSessionLockedUntilPersistence(t *testing.T) {
 
 	defer rollbackPublishTestTx(ctx, t, tx, "schedule snapshot")
 
-	state, err := loadScheduleState(ctx, tx, decision.Items)
+	state, stored, err := loadScheduleState(ctx, tx, decision.Items)
 	require.NoError(t, err)
 	require.Len(t, state.Sessions, 1)
 
@@ -153,6 +160,6 @@ func TestScheduleStateKeepsSessionLockedUntilPersistence(t *testing.T) {
 		SELECT count(*) FROM (SELECT video_id FROM youtube_live_sessions FOR UPDATE SKIP LOCKED) available
 	`).Scan(&unlocked))
 	require.Zero(t, unlocked)
-	require.NoError(t, persistScheduleDecision(ctx, tx, &observation, &decision))
+	require.NoError(t, persistScheduleDecision(ctx, tx, &observation, stored, &decision))
 	require.NoError(t, tx.Commit(ctx))
 }

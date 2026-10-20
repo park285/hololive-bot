@@ -1,7 +1,6 @@
 package dispatchoutbox
 
 import (
-	"embed"
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"testing"
@@ -12,44 +11,23 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
 
-// 이전 SQL과 같은 fixture를 각각 새 DB에서 실행해 분기 이관의 전체 호출 비용을 비교한다.
-//
-//go:embed testdata/failure_routing_sql_policy.sql
-var failureRoutingSQLPolicyAssets embed.FS
-
-var failureRoutingSQLPolicy = sqlassets.MustReader(failureRoutingSQLPolicyAssets, "testdata")
-
+// 같은 fixture를 새 DB에서 실행해 실패 정산 한 번의 전체 호출 비용(직렬화·전송·관측 수집)을 잰다.
 func BenchmarkFailureRoutingPolicy(b *testing.B) {
 	for _, size := range []int{1, 64, 512} {
-		for _, sqlPolicy := range []bool{true, false} {
-			name := "go_policy"
-
-			if sqlPolicy {
-				name = "sql_case"
-			}
-
-			b.Run(fmt.Sprintf("rows_%d/%s", size, name), func(b *testing.B) {
-				runFailureRoutingBenchmark(b, size, sqlPolicy)
-			})
-		}
+		b.Run(fmt.Sprintf("rows_%d", size), func(b *testing.B) {
+			runFailureRoutingBenchmark(b, size)
+		})
 	}
 }
 
-func runFailureRoutingBenchmark(b *testing.B, size int, sqlPolicy bool) {
+func runFailureRoutingBenchmark(b *testing.B, size int) {
 	b.Helper()
 
 	pool, repo, updates := prepareFailureRoutingBenchmark(b, size)
 
-	var payload any = updates
-
-	if !sqlPolicy {
-		payload = prepareFailureUpdates(updates)
-	}
-
-	encoded, err := jsonv2.Marshal(payload)
+	encoded, err := jsonv2.Marshal(prepareFailureUpdates(updates))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -65,43 +43,12 @@ func runFailureRoutingBenchmark(b *testing.B, size int, sqlPolicy bool) {
 
 		b.StartTimer()
 
-		if sqlPolicy {
-			applyFailureSQLBenchmark(b, pool, updates)
-		} else if err := repo.RouteFailures(b.Context(), updates, "bench-worker"); err != nil {
+		if err := repo.RouteFailures(b.Context(), updates, "bench-worker"); err != nil {
 			b.Fatal(err)
 		}
 	}
 
 	b.ReportMetric(float64(len(encoded)), "payload-B/op")
-}
-
-func applyFailureSQLBenchmark(b *testing.B, pool *pgxpool.Pool, updates []FailureUpdate) {
-	b.Helper()
-
-	for i := range updates {
-		if updates[i].TargetStatus != StatusRetry && updates[i].TargetStatus != StatusDLQ {
-			b.Fatalf("unsupported target status %q", updates[i].TargetStatus)
-		}
-	}
-
-	raw, err := jsonv2.Marshal(updates)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	rows, err := pool.Query(b.Context(), failureRoutingSQLPolicy("failure_routing_sql_policy.sql"), jsonbRecordsetParam(raw), "bench-worker")
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	if len(ids) != len(updates) {
-		b.Fatalf("applied %d, want %d", len(ids), len(updates))
-	}
 }
 
 func prepareFailureRoutingBenchmark(b *testing.B, size int) (*pgxpool.Pool, *PgxRepository, []FailureUpdate) {
@@ -142,7 +89,7 @@ func prepareFailureRoutingBenchmark(b *testing.B, size int) (*pgxpool.Pool, *Pgx
 			status = StatusDLQ
 		}
 
-		updates[i] = FailureUpdate{ID: id, AttemptCount: 1, NextAttemptAt: now.Add(time.Minute), Error: "benchmark provider failure", ErrorCode: "PROVIDER_FAILED", TargetStatus: status}
+		updates[i] = FailureUpdate{ID: id, AttemptCount: 1, RetryAfter: time.Minute, Error: "benchmark provider failure", ErrorCode: "PROVIDER_FAILED", TargetStatus: status}
 	}
 
 	return pool, repo, updates

@@ -39,7 +39,6 @@ It includes:
 
 - terminal `alarm_dispatch_deliveries` counts using lowercase status literals
 - active alarm dispatch backlog
-- stuck community/shorts claim states
 - sent tracking rows missing canonical alarm state
 - `pg_stat_statements` hot query review for YouTube/alarm tables
 

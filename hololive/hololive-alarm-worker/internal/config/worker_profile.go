@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/irisdurable"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -119,6 +120,16 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 		problems = append(problems, "alarm_dispatch attempt_timeout must be less than lease_ms")
 	}
 
+	// stale sending 격리 기준이 lease보다 짧으면 lease가 살아 있는 진행 중 발송을 격리한다. dispatch consumer도 같은 관계를
+	// 생성 시 강제하지만, 프로필 검증이 기동 전에 키 이름으로 먼저 드러낸다.
+	if profile.AlarmDispatch.QuarantineThresholdMS < profile.AlarmDispatch.LeaseMS {
+		problems = append(problems, "alarm_dispatch quarantine_threshold_ms must be at least lease_ms")
+	}
+
+	if alarmDispatchRecoveryExceedsReplayHorizon(profile.AlarmDispatch) {
+		problems = append(problems, "alarm_dispatch lease_ms plus recovery_interval_ms must be less than the Iris automatic replay horizon")
+	}
+
 	notificationTimeout := workers[WorkerNotificationDelivery].Executor.AttemptTimeout.Milliseconds
 	if notificationTimeout != nil {
 		if err := ValidateNotificationDeliveryTiming(
@@ -130,6 +141,26 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 	}
 
 	return problems
+}
+
+// alarmDispatchRecoveryExceedsReplayHorizon은 lease 회수 지연이 Iris 자동 재발송 지평에 닿는지 판정한다.
+//
+// 결과 불명(transport ambiguity) 발송 뒤 alarm_dispatch는 send unit에 고정한 client request ID로
+// 다시 보내고, 중복 송출 방지를 Iris reply admission dedup에 맡긴다. 그 행을 claim한 worker가
+// 발송 전에 멈추면 행은 lease_ms 만료 뒤 다음 recovery tick(recovery_interval_ms)에서야 재발송
+// 대상이 된다. 이 합은 재발송까지의 최소 회수 지연일 뿐이며, 실제 창에는 첫 admission 뒤의 retry
+// backoff·attempt timeout·DrainBatch 주기가 더해진다. 따라서 이 검사는 필요조건이다. 기준은 Iris
+// admission 보존 기간에서 그 차이를 흡수할 여유를 뺀 irisdurable.AutomaticReplayHorizon이며,
+// 지평과 같은 값도 여유를 잠식하므로 거부한다.
+//
+// 다른 두 경로의 lease는 이 지평과 묶이지 않는다. 발송 전 claim만 회수하는 notification_delivery의
+// lease는 profile 값이 아니며, youtube_delivery의 lock_timeout_ms가 만료한 SENDING 행은 격리된다.
+func alarmDispatchRecoveryExceedsReplayHorizon(settings AlarmDispatchWorkerSettings) bool {
+	horizon := irisdurable.AutomaticReplayHorizon.Milliseconds()
+	lease, recovery := settings.LeaseMS, settings.RecoveryIntervalMS
+
+	// 양수가 아닌 값은 positiveValueProblems가 보고한다. 양수 lease에서는 뺄셈이 넘치지 않는다.
+	return lease > 0 && recovery > 0 && recovery >= horizon-lease
 }
 
 // ValidateNotificationDeliveryTiming은 프로필 사전 검사와 프로필 없이 생성하는 dispatcher가

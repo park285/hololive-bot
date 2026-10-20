@@ -15,14 +15,14 @@ func TestReplyReclaimPreservesSafetyGrantsAndLockedRows(t *testing.T) {
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	cases := []struct {
-		name, status, want string
-		attempts, grants   int32
-		age                int64
+		name, want       string
+		attempts, grants int32
+		age              int64
 	}{
-		{name: "retry", status: replyOutboxStatusSubmitting, attempts: 4, age: 1, want: replyOutboxStatusPending},
-		{name: "exhausted", status: replyOutboxStatusSubmitting, attempts: 5, age: 1, want: ReplyOutboxManualReview},
-		{name: "grant", status: replyOutboxStatusSubmitting, attempts: 5, grants: 1, age: 1, want: replyOutboxStatusPending},
-		{name: "horizon", status: replyOutboxStatusSubmitting, attempts: 1, age: 144, want: ReplyOutboxManualReview},
+		{name: "retry", attempts: 4, age: 1, want: replyOutboxStatusPending},
+		{name: "exhausted", attempts: 5, age: 1, want: ReplyOutboxManualReview},
+		{name: "grant", attempts: 5, grants: 1, age: 1, want: replyOutboxStatusPending},
+		{name: "horizon", attempts: 1, age: 144, want: ReplyOutboxManualReview},
 	}
 
 	for _, c := range cases {
@@ -34,10 +34,10 @@ func TestReplyReclaimPreservesSafetyGrantsAndLockedRows(t *testing.T) {
 			grantReclaimReplay(ctx, t, pool, repo, entry.MessageID)
 		}
 
-		_, err = pool.Exec(ctx, `UPDATE bot_reply_outbox SET status=$2,attempts=$3,operator_replay_grants=$4,
-			first_attempt_at=clock_timestamp()-($5::bigint*interval '1 hour'),
+		_, err = pool.Exec(ctx, `UPDATE bot_reply_outbox SET status='submitting',attempts=$2,operator_replay_grants=$3,
+			first_attempt_at=clock_timestamp()-($4::bigint*interval '1 hour'),
 			claim_token='reclaim-owner',lease_until=clock_timestamp()-interval '1 second' WHERE message_id=$1`,
-			entry.MessageID, c.status, c.attempts, c.grants, c.age)
+			entry.MessageID, c.attempts, c.grants, c.age)
 		require.NoError(t, err)
 	}
 

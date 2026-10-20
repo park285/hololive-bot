@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 )
 
@@ -28,8 +29,9 @@ func (s *TransitionStore) adjudicateRowApply(
 		return rowApplyAdjudication{result: applyResultWithRules(ApplyConflict, nil, rules)}
 	}
 
-	if _, ok := errors.AsType[*transitionMissingError](applyErr); ok {
-		return rowApplyAdjudication{result: applyResultWithRules(ApplyMissing, nil, rules)}
+	// fence 미스는 다른 실행·회수 경로가 행을 가져갔다는 증거라 호출자가 버릴 수 없게 오류로도 돌려준다.
+	if miss, ok := errors.AsType[*sendfence.MissError](applyErr); ok {
+		return rowApplyAdjudication{result: applyResultWithRules(fenceMissOutcome(miss), nil, rules), err: applyErr}
 	}
 
 	if len(transitions) == 0 {
@@ -111,4 +113,15 @@ func applyResultWithRules(outcome ApplyOutcome, outboxIDs []int64, rules []lifec
 	}
 
 	return newApplyResultWithRules(outcome, outboxIDs, rules)
+}
+
+// fenceMissOutcome은 대상이 모두 사라진 미스만 ApplyMissing으로, 나머지는 ApplyConflict로 보고한다.
+func fenceMissOutcome(miss *sendfence.MissError) ApplyOutcome {
+	for _, row := range miss.Rows {
+		if row.Reason != sendfence.ReasonMissing {
+			return ApplyConflict
+		}
+	}
+
+	return ApplyMissing
 }

@@ -38,7 +38,7 @@ func (c *Consumer) reconcileContent(
 		return ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
 	}
 
-	premiereApplications, err := mergeContentPremieres(ctx, tx, claimed, &evidence)
+	premiereApplications, premiereRuntimeVideoIDs, err := mergeContentPremieres(ctx, tx, claimed, &evidence)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
 	}
@@ -49,7 +49,7 @@ func (c *Consumer) reconcileContent(
 
 	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
 
-	return ReconcileResult{Applications: applications}, nil
+	return ReconcileResult{Applications: applications, LiveRuntimeVideoIDs: premiereRuntimeVideoIDs}, nil
 }
 
 func mergeContentApplications(contentApplications, premiereApplications []Application) []Application {

@@ -103,7 +103,7 @@ func TestExpiredPendingConvergesWithoutLedgerAndCannotRevive(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, revived.RevivedDeliveries)
 
-	repository := NewDeliveryRepository(pool, nil, time.Now)
+	repository := NewDeliveryRepository(pool, nil)
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, expired.TouchedOutboxIDs))
 
 	_, err = pool.Exec(ctx, `UPDATE youtube_notification_outbox SET terminal_at=now()-interval '10 days'`)

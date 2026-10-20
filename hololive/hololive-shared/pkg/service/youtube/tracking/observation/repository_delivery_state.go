@@ -47,30 +47,23 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 	updatedAt := yttimestamp.Normalize(time.Now())
 
 	var (
-		trackingUpdated         int64
-		claimedStateFinalized   int64
-		authorizationMismatches int64
-		existingStateUpdated    int64
-		missingStateInserted    int64
+		trackingUpdated      int64
+		existingStateUpdated int64
+		missingStateInserted int64
 	)
 
-	if err := r.db.QueryRow(ctx, bulkApplyAlarmSentMarksSQL, inputs.kinds, inputs.canonicalContentIDs, inputs.alarmSentAts, inputs.authorizedAts, updatedAt, alarmLatencyExceededThresholdMillis).Scan(
+	if err := r.db.QueryRow(ctx, bulkApplyAlarmSentMarksSQL, inputs.kinds, inputs.canonicalContentIDs, inputs.alarmSentAts, updatedAt, alarmLatencyExceededThresholdMillis).Scan(
 		&trackingUpdated,
-		&claimedStateFinalized,
-		&authorizationMismatches,
 		&existingStateUpdated,
 		&missingStateInserted,
 	); err != nil {
 		return fmt.Errorf("bulk mark alarm sent: %w", err)
 	}
 
-	if authorizationMismatches > 0 {
-		return fmt.Errorf("bulk mark alarm sent: claim authorization mismatch count=%d", authorizationMismatches)
-	}
-
 	return nil
 }
 
+// normalizeAlarmSentMarks는 같은 정본 식별자의 표시를 하나로 합치고 가장 이른 발송 시각을 남긴다.
 func normalizeAlarmSentMarks(marks []AlarmSentMark) ([]AlarmSentMark, error) {
 	normalized := make([]AlarmSentMark, 0, len(marks))
 	indexByIdentity := make(map[string]int, len(marks))
@@ -82,8 +75,8 @@ func normalizeAlarmSentMarks(marks []AlarmSentMark) ([]AlarmSentMark, error) {
 		}
 
 		if existingIndex, ok := indexByIdentity[identity]; ok {
-			if err := mergeAlarmSentMark(&normalized[existingIndex], normalizedMark, i); err != nil {
-				return nil, fmt.Errorf("merge alarm sent mark: %w", err)
+			if normalizedMark.AlarmSentAt.Before(normalized[existingIndex].AlarmSentAt) {
+				normalized[existingIndex].AlarmSentAt = normalizedMark.AlarmSentAt
 			}
 
 			continue
@@ -106,20 +99,10 @@ func normalizeAlarmSentMark(index int, mark AlarmSentMark) (AlarmSentMark, strin
 		return AlarmSentMark{}, "", fmt.Errorf("normalize mark at index %d: alarm sent at is empty", index)
 	}
 
-	var normalizedAuthorizedAt *time.Time
-
-	if mark.AuthorizedAt != nil {
-		normalizedAuthorizedAt, err = normalizeAlarmSentAuthorizedAt(index, *mark.AuthorizedAt)
-		if err != nil {
-			return AlarmSentMark{}, "", fmt.Errorf("normalize alarm sent authorized at: %w", err)
-		}
-	}
-
 	normalizedMark := AlarmSentMark{
-		Kind:         normalizedKind,
-		ContentID:    normalizedContentID,
-		AlarmSentAt:  yttimestamp.Normalize(mark.AlarmSentAt),
-		AuthorizedAt: normalizedAuthorizedAt,
+		Kind:        normalizedKind,
+		ContentID:   normalizedContentID,
+		AlarmSentAt: yttimestamp.Normalize(mark.AlarmSentAt),
 	}
 
 	canonicalContentID, err := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
@@ -130,37 +113,6 @@ func normalizeAlarmSentMark(index int, mark AlarmSentMark) (AlarmSentMark, strin
 	return normalizedMark, alarmSentMarkIdentity(normalizedKind, canonicalContentID), nil
 }
 
-func normalizeAlarmSentAuthorizedAt(index int, authorizedAt time.Time) (*time.Time, error) {
-	if authorizedAt.IsZero() {
-		return nil, fmt.Errorf("normalize mark at index %d: authorized at is empty", index)
-	}
-
-	normalized := yttimestamp.Normalize(authorizedAt)
-
-	return &normalized, nil
-}
-
 func alarmSentMarkIdentity(kind domain.OutboxKind, contentID string) string {
 	return string(kind) + "\x00" + contentID
-}
-
-func mergeAlarmSentMark(existing *AlarmSentMark, next AlarmSentMark, index int) error {
-	if next.AlarmSentAt.Before(existing.AlarmSentAt) {
-		existing.AlarmSentAt = next.AlarmSentAt
-	}
-
-	if existing.AuthorizedAt == nil {
-		existing.AuthorizedAt = next.AuthorizedAt
-		return nil
-	}
-
-	if next.AuthorizedAt == nil {
-		return nil
-	}
-
-	if !existing.AuthorizedAt.Equal(*next.AuthorizedAt) {
-		return fmt.Errorf("normalize mark at index %d: conflicting authorized_at for logical identity", index)
-	}
-
-	return nil
 }

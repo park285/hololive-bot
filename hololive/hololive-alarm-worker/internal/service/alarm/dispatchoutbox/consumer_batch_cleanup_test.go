@@ -18,6 +18,7 @@ type batchCleanupRepository struct {
 	loadErr, terminalErr, releaseErr error
 	releaseCalls                     int
 	releasedIDs                      []int64
+	releasedAttempts                 []int
 	releasedOwner                    string
 	releaseContext                   func(context.Context)
 }
@@ -38,10 +39,16 @@ func (r *batchCleanupRepository) MoveToDLQ(ctx context.Context, updates []Termin
 	return r.consumerTestRepository.MoveToDLQ(ctx, updates, owner)
 }
 
-func (r *batchCleanupRepository) ReleaseLeased(ctx context.Context, ids []int64, owner string) error {
+func (r *batchCleanupRepository) ReleaseLeased(ctx context.Context, claims []DeliveryClaim, owner string) error {
 	r.releaseCalls++
 
-	r.releasedIDs = slices.Clone(ids)
+	r.releasedIDs = fencedTargetIDs(claims)
+	r.releasedAttempts = make([]int, 0, len(claims))
+
+	for _, claim := range claims {
+		r.releasedAttempts = append(r.releasedAttempts, claim.AttemptCount)
+	}
+
 	r.releasedOwner = owner
 
 	if r.releaseContext != nil {
@@ -106,6 +113,7 @@ func assertBatchCleanupResult(
 		require.Error(t, err)
 		require.Equal(t, 1, repo.releaseCalls)
 		require.Equal(t, tt.wantIDs, repo.releasedIDs)
+		require.Equal(t, slices.Repeat([]int{4}, len(tt.wantIDs)), repo.releasedAttempts, "release must fence the claimed attempt")
 		require.Equal(t, "batch-owner", repo.releasedOwner)
 		require.NotNil(t, cleanupDone)
 

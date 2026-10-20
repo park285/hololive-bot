@@ -34,22 +34,19 @@ type fanoutOutboxState struct {
 	errorText     string
 }
 
+// ClaimOutboxesForFanout은 fanout 대기 outbox를 잠그며, lease 만료·due·신선도 판정과 새 locked_at을 DB 시계로 정한다.
 func (s *TransitionStore) ClaimOutboxesForFanout(ctx context.Context, batchSize int) ([]domain.YouTubeNotificationOutbox, error) {
 	if batchSize <= 0 {
 		return nil, errors.New("claim outboxes for fanout: batch size must be positive")
 	}
 
-	claimedAt := time.Now().UTC().Truncate(time.Microsecond)
-
 	rows, err := s.db.Query(
 		ctx,
 		mustSQL("fanout_claim.sql"),
 		domain.OutboxStatusPending,
-		claimedAt.Add(-s.config.LockTimeout),
-		claimedAt,
-		claimedAt.Add(-s.config.ClaimFreshnessWindow),
+		s.config.LockTimeout.Milliseconds(),
+		s.config.ClaimFreshnessWindow.Milliseconds(),
 		batchSize,
-		claimedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("claim outboxes for fanout: %w", err)
@@ -78,12 +75,10 @@ func (s *TransitionStore) MaterializeFanout(
 		return FanoutResult{ApplyResult: newApplyResult(ApplyConflict, nil)}, fmt.Errorf("materialize fanout: canonical targets: %w", err)
 	}
 
-	completedAt := time.Now().UTC().Truncate(time.Microsecond)
-
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		result, applyErr := s.materializeFanoutOnce(ctx, outbox, targets, completedAt)
+		result, applyErr := s.materializeFanoutOnce(ctx, outbox, targets)
 		if applyErr == nil {
 			result.CommitAdjudication = priorAdjudication
 
@@ -174,6 +169,8 @@ func adjudicateFanoutPre(applyErr error, prior CommitAdjudication, attempt int) 
 	return fanoutAdjudication{result: FanoutResult{ApplyResult: result}, err: applyErr, prior: prior}
 }
 
+// ReviveFailedFanoutOutboxes는 신선한 FAILED outbox를 되살린다. 신선도·lease 만료 판정과 새 next_attempt_at은 DB
+// 시계로 정한다.
 func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 	ctx context.Context,
 	freshnessWindow time.Duration,
@@ -183,17 +180,14 @@ func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 		return newApplyResult(ApplyConflict, nil), 0, errors.New("revive failed fanout outboxes: invalid bounds")
 	}
 
-	at := time.Now().UTC().Truncate(time.Microsecond)
-
 	rows, err := s.db.Query(
 		ctx,
 		mustSQL("fanout_revive_failed.sql"),
 		domain.OutboxStatusFailed,
-		at.Add(-freshnessWindow),
-		at.Add(-s.config.LockTimeout),
+		freshnessWindow.Milliseconds(),
+		s.config.LockTimeout.Milliseconds(),
 		limit,
 		domain.OutboxStatusPending,
-		at,
 	)
 	if err != nil {
 		return newApplyResult(ApplyIndeterminate, nil), 0, fmt.Errorf("revive failed fanout outboxes: %w", err)
@@ -208,6 +202,8 @@ func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 	return newApplyResult(ApplyApplied, ids), len(ids), nil
 }
 
+// ApplyFanoutFailure는 정확한 claim을 fence로 fanout 실패를 기록한다. 다음 시도는 outbox 행을 잠근 뒤의 DB 시계에서
+// RetryBackoff × 다음 시도 횟수 뒤이고, 종결 실패의 terminal_at도 같은 DB 시계다.
 func (s *TransitionStore) ApplyFanoutFailure(
 	ctx context.Context,
 	outbox domain.YouTubeNotificationOutbox,
@@ -217,27 +213,24 @@ func (s *TransitionStore) ApplyFanoutFailure(
 		return newApplyResult(ApplyConflict, nil), errors.New("apply fanout failure: exact outbox fence is invalid")
 	}
 
-	at := time.Now().UTC().Truncate(time.Microsecond)
-	nextAttempt := outbox.AttemptCount + 1
-	nextStatus := domain.OutboxStatusPending
-	nextAttemptAt := at.Add(s.config.RetryBackoff * time.Duration(nextAttempt)).Truncate(time.Microsecond)
-
-	var terminalAt *time.Time
-
-	if nextAttempt >= s.config.MaxRetries {
-		nextStatus = domain.OutboxStatusFailed
-		terminalAt = &at
+	next := fanoutFailureState{
+		status:  domain.OutboxStatusPending,
+		attempt: outbox.AttemptCount + 1,
+		reason:  deliverysql.TruncateString(reason, 500),
 	}
 
-	truncatedReason := deliverysql.TruncateString(reason, 500)
+	next.delay = s.config.RetryBackoff * time.Duration(next.attempt)
+
+	if next.attempt >= s.config.MaxRetries {
+		next.status = domain.OutboxStatusFailed
+		next.terminal = true
+	}
 
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
 		applyErr := s.executeTx(ctx, "apply fanout failure", func(tx dbx.Querier) error {
-			return applyFanoutFailureTx(
-				ctx, tx, outbox, nextStatus, nextAttempt, nextAttemptAt, terminalAt, truncatedReason,
-			)
+			return applyFanoutFailureTx(ctx, tx, outbox, next)
 		})
 		if applyErr == nil {
 			result := newApplyResult(ApplyApplied, []int64{outbox.ID})
@@ -256,9 +249,7 @@ func (s *TransitionStore) ApplyFanoutFailure(
 			return adjudicated(newApplyResult(ApplyIndeterminate, nil), applyErr, CommitIndeterminate), errors.Join(applyErr, stateErr)
 		}
 
-		envelope := classifyFanoutFailureEnvelope(
-			state, children, found, outbox, nextStatus, nextAttempt, nextAttemptAt, terminalAt, truncatedReason,
-		)
+		envelope := classifyFanoutFailureEnvelope(state, children, found, outbox, next)
 		decision := adjudicateFanoutFailure(envelope, outbox.ID, applyErr, priorAdjudication, attempt)
 
 		if decision.retry {
@@ -273,24 +264,29 @@ func (s *TransitionStore) ApplyFanoutFailure(
 	return newApplyResult(ApplyIndeterminate, nil), errors.New("apply fanout failure: retry loop exhausted")
 }
 
+// fanoutFailureState는 fanout 실패 전이의 다음 상태다. 시각 열은 DB 시계가 정하므로 지연과 종결 여부만 담는다.
+type fanoutFailureState struct {
+	status   domain.OutboxStatus
+	attempt  int
+	delay    time.Duration
+	terminal bool
+	reason   string
+}
+
 func applyFanoutFailureTx(
 	ctx context.Context,
 	tx dbx.Querier,
 	outbox domain.YouTubeNotificationOutbox,
-	nextStatus domain.OutboxStatus,
-	nextAttempt int,
-	nextAttemptAt time.Time,
-	terminalAt *time.Time,
-	reason string,
+	next fanoutFailureState,
 ) error {
 	rows, err := tx.Query(
 		ctx,
 		mustSQL("fanout_fail.sql"),
-		nextStatus,
-		nextAttempt,
-		nextAttemptAt,
-		terminalAt,
-		reason,
+		next.status,
+		next.attempt,
+		next.delay.Milliseconds(),
+		next.terminal,
+		next.reason,
 		outbox.ID,
 		domain.OutboxStatusPending,
 		outbox.AttemptCount,
@@ -344,11 +340,12 @@ func adjudicateFanoutFailure(
 	}
 }
 
+// materializeFanoutOnce는 claim한 outbox의 자식 delivery를 만들거나 대상 없음으로 완료한다. 자식의 첫 시도 시각과
+// 대상 없음 완료 시각은 DB 시계로 기록한다.
 func (s *TransitionStore) materializeFanoutOnce(
 	ctx context.Context,
 	outbox domain.YouTubeNotificationOutbox,
 	targets []string,
-	completedAt time.Time,
 ) (FanoutResult, error) {
 	result := FanoutResult{DeliveryCount: len(targets), NoTargets: len(targets) == 0}
 
@@ -358,10 +355,10 @@ func (s *TransitionStore) materializeFanoutOnce(
 		}
 
 		if len(targets) == 0 {
-			if err := completeNoTargetFanout(ctx, tx, outbox, completedAt); err != nil {
+			if err := completeNoTargetFanout(ctx, tx, outbox); err != nil {
 				return fmt.Errorf("materialize fanout: complete no-target claim: %w", err)
 			}
-		} else if err := materializeFanoutTargets(ctx, tx, outbox, targets, completedAt); err != nil {
+		} else if err := materializeFanoutTargets(ctx, tx, outbox, targets); err != nil {
 			return fmt.Errorf("materialize fanout: materialize targets: %w", err)
 		}
 
@@ -401,13 +398,11 @@ func completeNoTargetFanout(
 	ctx context.Context,
 	tx dbx.Querier,
 	outbox domain.YouTubeNotificationOutbox,
-	completedAt time.Time,
 ) error {
 	tag, err := tx.Exec(
 		ctx,
 		mustSQL("fanout_complete_no_targets.sql"),
 		domain.OutboxStatusSent,
-		completedAt,
 		outbox.ID,
 		domain.OutboxStatusPending,
 		*outbox.LockedAt,
@@ -428,14 +423,12 @@ func materializeFanoutTargets(
 	tx dbx.Querier,
 	outbox domain.YouTubeNotificationOutbox,
 	targets []string,
-	completedAt time.Time,
 ) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("fanout_insert_children.sql"),
 		outbox.ID,
 		domain.OutboxStatusPending,
-		completedAt,
 		targets,
 	); err != nil {
 		return fmt.Errorf("materialize fanout: insert children: %w", err)
@@ -519,16 +512,14 @@ func loadFanoutState(
 	return state, children, true, nil
 }
 
+// classifyFanoutFailureEnvelope은 실패 전이의 commit 결과를 판정한다. 시각 열은 DB 시계가 정해 호출자가 미리 알 수
+// 없으므로 종결 여부(terminal_at 유무)만 비교한다.
 func classifyFanoutFailureEnvelope(
 	state fanoutOutboxState,
 	children []string,
 	found bool,
 	outbox domain.YouTubeNotificationOutbox,
-	nextStatus domain.OutboxStatus,
-	nextAttempt int,
-	nextAttemptAt time.Time,
-	terminalAt *time.Time,
-	reason string,
+	next fanoutFailureState,
 ) envelopeState {
 	if !found {
 		return envelopeMissing
@@ -538,9 +529,9 @@ func classifyFanoutFailureEnvelope(
 		return envelopeConflict
 	}
 
-	if state.status == nextStatus && state.attemptCount == nextAttempt &&
+	if state.status == next.status && state.attemptCount == next.attempt &&
 		state.lockedAt == nil && state.sentAt == nil &&
-		state.nextAttemptAt.Equal(nextAttemptAt) && timesEqual(state.terminalAt, terminalAt) && state.errorText == reason {
+		(state.terminalAt != nil) == next.terminal && state.errorText == next.reason {
 		return envelopePost
 	}
 

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -42,11 +44,11 @@ func WithLease(lease time.Duration) ConsumerOption {
 	}
 }
 
+// WithQuarantineThreshold는 stale sending 격리 기준이다. 값을 바꾸지 않고 그대로 두므로 생략·0·음수는 NewConsumer가
+// lease 미만 오류로 거부한다.
 func WithQuarantineThreshold(threshold time.Duration) ConsumerOption {
 	return func(c *Consumer) {
-		if threshold > 0 {
-			c.quarantineThreshold = threshold
-		}
+		c.quarantineThreshold = threshold
 	}
 }
 
@@ -67,7 +69,8 @@ func WithRecoveryBatchSize(size int) ConsumerOption {
 }
 
 // NewConsumer는 WithWorkerID가 없으면 "dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면
-// 다른 이름으로 바꾸지 않고 생성 오류다. SQL interval이 초 단위만 쓰므로 lease가 1초 미만이어도 생성 오류다.
+// 다른 이름으로 바꾸지 않고 생성 오류다. SQL이 lease를 밀리초 정수로 받으므로 lease가 1ms 미만이어도 생성 오류다.
+// 격리 기준은 lease 이상이어야 하며, 생략·0·음수를 포함해 lease보다 작으면 기본값으로 바꾸지 않고 생성 오류다.
 func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *slog.Logger, opts ...ConsumerOption) (*Consumer, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -87,8 +90,12 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 		opt(consumer)
 	}
 
-	if consumer.lease < time.Second {
-		return nil, fmt.Errorf("new dispatch outbox consumer: lease must be at least 1s: %s", consumer.lease)
+	if consumer.lease < time.Millisecond {
+		return nil, fmt.Errorf("new dispatch outbox consumer: lease must be at least 1ms: %s", consumer.lease)
+	}
+
+	if consumer.quarantineThreshold < consumer.lease {
+		return nil, fmt.Errorf("new dispatch outbox consumer: quarantine threshold %s must be at least lease %s", consumer.quarantineThreshold, consumer.lease)
 	}
 
 	if consumer.workerID == "" {
@@ -98,16 +105,6 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 		}
 
 		consumer.workerID = workerID
-	}
-
-	// 그룹 발송(Markdown handoff 상태 polling 포함)이 lease를 초과할 수 있어, threshold가
-	// lease와 같으면 진행 중인 발송을 quarantine으로 회수해 버린다.
-	if consumer.quarantineThreshold <= 0 {
-		consumer.quarantineThreshold = 3 * consumer.lease
-	}
-
-	if consumer.quarantineThreshold < consumer.lease {
-		consumer.quarantineThreshold = consumer.lease
 	}
 
 	return consumer, nil
@@ -144,23 +141,23 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 }
 
 func (c *Consumer) releaseFailedBatch(ctx context.Context, records []*Record, cause error) error {
-	ids := make([]int64, 0, len(records))
+	claims := make([]DeliveryClaim, 0, len(records))
 	for _, record := range records {
 		if record.Status != StatusDLQ {
-			ids = append(ids, record.ID)
+			claims = append(claims, DeliveryClaim{ID: record.ID, AttemptCount: record.AttemptCount})
 		}
 	}
 
-	if len(ids) == 0 {
+	if len(claims) == 0 {
 		return cause
 	}
 
 	// send-unit의 일부만 반환하면 안 되므로 복원 전후의 미발송 claim을 함께 반환합니다.
-	// 확정 여부가 불명확한 전이는 저장소의 leased/worker fence로 보호합니다.
+	// 확정 여부가 불명확한 전이는 저장소의 leased·소유자·attempt fence로 보호합니다.
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 
-	if err := c.repository.ReleaseLeased(cleanupCtx, ids, c.workerID); err != nil {
+	if err := c.repository.ReleaseLeased(cleanupCtx, claims, c.workerID); err != nil {
 		return errors.Join(cause, fmt.Errorf("release failed outbox batch: %w", err))
 	}
 
@@ -207,43 +204,47 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	}
 }
 
+// MarkSending은 그룹 전체 send unit을 고정 요청으로 발송 상태에 넣는다. 미스는 *sendfence.MissError로 돌려준다.
 func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	if repository, ok := c.repository.(interface {
-		BeginSendRequest(context.Context, int64, []int64, string, string, time.Duration) error
-	}); ok && len(envelopes) > 0 {
-		if err := repository.BeginSendRequest(ctx, envelopes[0].SendUnitID, idsFromEnvelopes(envelopes), c.workerID, envelopes[0].ClientRequestID, c.lease); err != nil {
-			observePGMarkSendingFailure()
-
-			return fmt.Errorf("begin immutable alarm send: %w", err)
-		}
-
+	claims := claimsFromEnvelopes(envelopes)
+	if len(claims) == 0 || len(envelopes) == 0 {
 		return nil
 	}
 
-	ids := idsFromEnvelopes(envelopes)
-	if len(ids) == 0 {
-		return nil
-	}
-
-	if err := c.repository.MarkSending(ctx, ids, c.workerID, c.lease); err != nil {
+	unit := &envelopes[0]
+	if err := c.repository.BeginSendRequest(ctx, unit.SendUnitID, claims, c.workerID, unit.ClientRequestID, c.lease); err != nil {
 		observePGMarkSendingFailure()
 
-		return fmt.Errorf("mark sending: %w", err)
+		return fmt.Errorf("begin immutable alarm send: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	ids := idsFromEnvelopes(envelopes)
-	if len(ids) == 0 {
+// MarkDispatched는 그룹 전체 send unit의 Iris admission을 sent로 정산하고 Iris requestId의 첫 handoff 확인을
+// min(handoffcheck.FirstCheckDelay, handoffHorizon) 뒤로 예약한다. 지평 handoffHorizon은 handoff reconciler와 같은
+// alarm_dispatch executor attempt_timeout이라 첫 확인도 admission + 지평을 넘지 않는다. 미스는
+// *sendfence.MissError로 돌려준다.
+func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
+	claims := claimsFromEnvelopes(envelopes)
+	if len(claims) == 0 {
 		return nil
 	}
 
-	if err := c.repository.MarkSent(ctx, ids, c.workerID); err != nil {
+	firstCheck := min(handoffcheck.FirstCheckDelay, handoffHorizon)
+	if err := c.repository.MarkSent(ctx, envelopes[0].SendUnitID, claims, c.workerID, irisRequestID, firstCheck); err != nil {
 		observePGMarkSentFailure()
 
 		return fmt.Errorf("mark sent: %w", err)
+	}
+
+	return nil
+}
+
+// ReleaseLeased는 발송 전 claim을 같은 attempt로 반환해 다음 claim이 send unit 전원을 다시 모으게 한다.
+func (c *Consumer) ReleaseLeased(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if err := c.repository.ReleaseLeased(ctx, claimsFromEnvelopes(envelopes), c.workerID); err != nil {
+		return fmt.Errorf("release leased: %w", err)
 	}
 
 	return nil
@@ -284,8 +285,8 @@ func observeRoutedFailures(err error, updates []FailureUpdate, retryCount, dlqCo
 		return nil
 	}
 
-	if partial, ok := errors.AsType[*PartialTransitionError](err); ok {
-		retryApplied, dlqApplied := appliedFailureCounts(updates, partial.UnappliedIDs)
+	if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
+		retryApplied, dlqApplied := appliedFailureCounts(updates, miss.UnappliedDeliveryIDs())
 		observePGRetryScheduled(retryApplied)
 		observePGDLQ(dlqApplied)
 	}
@@ -315,19 +316,17 @@ func appliedFailureCounts(updates []FailureUpdate, unappliedIDs []int64) (retryA
 }
 
 func failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) (updates []FailureUpdate, retryCount, dlqCount int) {
-	now := time.Now().UTC()
-
 	updates = make([]FailureUpdate, 0, len(retryEnvelopes)+len(dlqEnvelopes))
-	updates = appendFailureUpdates(updates, retryEnvelopes, StatusRetry, now)
+	updates = appendFailureUpdates(updates, retryEnvelopes, StatusRetry)
 	retryCount = len(updates)
-	updates = appendFailureUpdates(updates, dlqEnvelopes, StatusDLQ, now)
+	updates = appendFailureUpdates(updates, dlqEnvelopes, StatusDLQ)
 
 	return updates, retryCount, len(updates) - retryCount
 }
 
-func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueueEnvelope, target Status, now time.Time) []FailureUpdate {
+func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueueEnvelope, target Status) []FailureUpdate {
 	for i := range envelopes {
-		update, ok := failureUpdateFromEnvelope(&envelopes[i], now, target)
+		update, ok := failureUpdateFromEnvelope(&envelopes[i], target)
 		if !ok {
 			continue
 		}
@@ -338,23 +337,22 @@ func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueue
 	return updates
 }
 
-func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, now time.Time, target Status) (FailureUpdate, bool) {
+// failureUpdateFromEnvelope은 runner가 정한 attempt·오류·지연을 옮긴다. 다음 시도 시각은 SQL이 잠금 뒤 채취한 clock에
+// RetryAfter를 더해 정하므로 한 문장에서 정산되는 멤버는 같은 기준 시각을 쓴다.
+func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, target Status) (FailureUpdate, bool) {
 	if envelope.DispatchOutboxID <= 0 {
 		return FailureUpdate{}, false
 	}
 
-	update := FailureUpdate{ID: envelope.DispatchOutboxID, NextAttemptAt: now, TargetStatus: target}
+	update := FailureUpdate{ID: envelope.DispatchOutboxID, TargetStatus: target}
 	if envelope.Retry == nil {
 		return update, true
 	}
 
 	update.AttemptCount = envelope.Retry.Attempt
+	update.RetryAfter = time.Duration(envelope.Retry.RetryAfterMS) * time.Millisecond
 	update.Error = sanitizeStoredError(envelope.Retry.LastError)
 	update.ErrorCode = envelope.Retry.LastErrorCode
-
-	if parsed, err := time.Parse(time.RFC3339Nano, envelope.Retry.NextVisibleAt); err == nil {
-		update.NextAttemptAt = parsed.UTC()
-	}
 
 	return update, true
 }
@@ -374,7 +372,7 @@ func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueue
 	for i := range envelopes {
 		envelope := &envelopes[i]
 		if envelope.DispatchOutboxID > 0 {
-			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: message, ErrorCode: code})
+			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, AttemptCount: envelopeAttempt(envelope), Error: message, ErrorCode: code})
 		}
 	}
 

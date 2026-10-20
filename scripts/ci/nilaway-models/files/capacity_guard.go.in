@@ -18,7 +18,7 @@ func (r *RootAssertionNode) capacityProofBody() *ast.BlockStmt {
 	return nil
 }
 
-// Only a direct guarded return/assignment is accepted; intervening writes invalidate the bound.
+// 중간 쓰기는 경계 조건을 무효화하므로 검사 직후의 반환·대입만 인정한다.
 func (r *RootAssertionNode) isDirectCapacityGuardedSlice(expr *ast.SliceExpr) bool {
 	if !typeshelper.IsDeeplyType[*types.Slice](r.Pass().TypesInfo.TypeOf(expr.X)) ||
 		(expr.Low != nil && !r.Pass().IsZero(expr.Low)) || expr.High == nil || expr.Max != nil {

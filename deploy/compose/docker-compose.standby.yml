@@ -1,7 +1,7 @@
-# INACTIVE reference only. Current primary is hololive-seoul (hosts.conf central).
-# No running/synchronized standby is implied by a retained Osaka disk.
-# New standby bootstrap, HBA route, slot and failover require separate approval.
-# Procedure: docs/current/runbooks/postgres-replication.md.
+# 비활성 참고 설정이다. 현재 주 서버는 hosts.conf의 central이며
+# 남은 Osaka 디스크가 실행·동기화 중인 대기 서버를 뜻하지 않는다.
+# 새 대기 서버 준비·HBA·슬롯·장애 전환은 별도 승인이 필요하다.
+# 절차: docs/current/runbooks/postgres-replication.md.
 #
 #   docker compose --env-file /etc/stack-secrets/hololive-bot/ap-compose.env \
 #     -f deploy/compose/docker-compose.standby.yml up -d holo-postgres-standby

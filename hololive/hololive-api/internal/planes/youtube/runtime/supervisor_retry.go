@@ -167,6 +167,11 @@ func retryableObservationError(err error) bool {
 		return true
 	}
 
+	// 잠금 뒤 행이 바뀐 충돌은 트랜잭션 전체를 되돌렸으므로 40001처럼 최신 행으로 다시 판정한다.
+	if _, ok := errors.AsType[*sourceobservation.LiveSessionConflictError](err); ok {
+		return true
+	}
+
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
 	if !ok {
 		return false

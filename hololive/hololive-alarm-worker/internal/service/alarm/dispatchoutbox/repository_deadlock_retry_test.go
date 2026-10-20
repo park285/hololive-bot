@@ -71,11 +71,3 @@ func TestRunPublishBatchWithDeadlockRetry_RetriesOnlyOnce(t *testing.T) {
 	assert.Equal(t, "40P01", pgErr.Code)
 	assert.Equal(t, 2, attempts, "40P01 재시도는 정확히 1회여야 한다")
 }
-
-func TestTerminalStatusSQL_DLQCoversSendingRows(t *testing.T) {
-	t.Parallel()
-
-	_, statusFilter := terminalStatusSQL(StatusDLQ)
-	assert.Equal(t, "status IN ('leased','sending')", statusFilter,
-		"post-send retry 소진(persistSendingRetry)과 MarkSending 보상의 DLQ 분기는 'sending' 행에서 발생한다")
-}

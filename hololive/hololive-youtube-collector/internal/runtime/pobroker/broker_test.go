@@ -21,7 +21,7 @@ func fakeNode(t *testing.T, name, script string) string {
 
 	path := filepath.Join(t.TempDir(), name)
 	// startWorker가 VM 실행 파일로 직접 실행한다.
-	//nolint:gosec // G306: the fixture needs owner execute and lives in this test's private t.TempDir.
+	//nolint:gosec // G306: 전용 t.TempDir의 테스트 파일에 소유자 실행 권한이 필요하다.
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}

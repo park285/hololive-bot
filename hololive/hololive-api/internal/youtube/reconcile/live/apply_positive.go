@@ -163,7 +163,8 @@ func newSession(fact *SessionFact, status domain.LiveStatus, evidence *Evidence)
 func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Evidence) SessionState {
 	merged := *existing
 
-	if fact.ChannelID != "" {
+	// 저장된 세션의 채널은 바꾸지 않는다. head만 있던 영상은 첫 positive의 채널로 세션을 만든다.
+	if fact.ChannelID != "" && merged.ChannelID == "" {
 		merged.ChannelID = fact.ChannelID
 	}
 

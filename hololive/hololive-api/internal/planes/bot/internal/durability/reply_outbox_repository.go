@@ -73,8 +73,6 @@ func (o ReplyOutboxInsertOutcome) String() string {
 }
 
 const (
-	replyOutboxStatusSubmitting = "submitting"
-
 	ReplyOutboxMaxAttempts = int32(5)
 	// 자동 replay 지평은 스택 공통 irisdurable 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
 	ReplyOutboxAutomaticReplayHorizon = irisdurable.AutomaticReplayHorizon

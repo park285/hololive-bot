@@ -1,12 +1,14 @@
 package notificationdelivery
 
 import (
+	jsonv2 "encoding/json/v2"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -22,18 +24,14 @@ func TestDeliveryFailureUsesClaimedAttemptAndPreservesTerminalSchedule(t *testin
 	id := items[0].ID
 
 	// 소유자가 같아도 오래된 claim 횟수로 다른 시도를 확정하지 않습니다.
-	ok, err := repo.MarkFailed(ctx, id, testWorkerA, 2, 3, time.Hour, "stale count")
-	require.NoError(t, err)
-	require.False(t, ok)
+	requireFenceMiss(t, repo.MarkFailed(ctx, id, testWorkerA, 2, 3, time.Hour, "stale count"), actionMarkFailed, sendfence.ReasonVersionChanged)
 
 	var nextAttemptAt time.Time
 
-	err = repo.pool.QueryRow(ctx, `UPDATE notification_delivery_outbox SET attempt_count=2 WHERE id=$1 RETURNING next_attempt_at`, id).Scan(&nextAttemptAt)
+	err := repo.pool.QueryRow(ctx, `UPDATE notification_delivery_outbox SET attempt_count=2 WHERE id=$1 RETURNING next_attempt_at`, id).Scan(&nextAttemptAt)
 	require.NoError(t, err)
 
-	ok, err = repo.MarkFailed(ctx, id, testWorkerA, 2, 3, time.Hour, "exhausted")
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.NoError(t, repo.MarkFailed(ctx, id, testWorkerA, 2, 3, time.Hour, "exhausted"))
 
 	var (
 		status    string
@@ -61,9 +59,7 @@ func TestDeliveryFailureSettlesAttemptCountBeyondInt4Range(t *testing.T) {
 	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET attempt_count=$2 WHERE id=$1`, id, math.MaxInt32)
 	require.NoError(t, err)
 
-	ok, err := repo.MarkFailed(ctx, id, testWorkerA, math.MaxInt32, 3, time.Hour, "int4 boundary")
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.NoError(t, repo.MarkFailed(ctx, id, testWorkerA, math.MaxInt32, 3, time.Hour, "int4 boundary"))
 
 	var (
 		status   string
@@ -85,32 +81,31 @@ func TestDeliveryReissuePreservesRequestOnStaleAttemptAndExhaustsGeneration(t *t
 
 	item := &items[0]
 	previous := &deliverypayload.Request{Body: "immutable request body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(item)}
-	ok, err := repo.saveRequest(ctx, item.ID, testWorkerA, nil, previous)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.NoError(t, repo.saveRequest(ctx, item.ID, testWorkerA, item.AttemptCount, previous))
 	markOutboxSending(ctx, t, repo, item)
 
-	next := *previous
-
-	next.Exhausted = true
-
-	ok, err = repo.reissueFailedRequest(ctx, item.ID, testWorkerA, 1, previous, &next, 3, time.Hour, "rejected")
-	require.NoError(t, err)
-	require.False(t, ok)
-
-	ok, err = repo.reissueFailedRequest(ctx, item.ID, testWorkerA, item.AttemptCount, previous, &next, 3, time.Hour, "rejected")
-	require.NoError(t, err)
-	require.True(t, ok)
+	requireFenceMiss(t, repo.reissueFailedRequest(ctx, item.ID, testWorkerA, 1, 0, true, 3, time.Hour, "rejected"), actionReissueRequest, sendfence.ReasonVersionChanged)
+	require.NoError(t, repo.reissueFailedRequest(ctx, item.ID, testWorkerA, item.AttemptCount, 0, true, 3, time.Hour, "rejected"))
 
 	var (
 		status, reason string
 		attempts       int
 		scheduled      time.Time
+		raw            []byte
 	)
 
-	require.NoError(t, repo.pool.QueryRow(ctx, `SELECT status,attempt_count,next_attempt_at,error FROM notification_delivery_outbox WHERE id=$1`, item.ID).Scan(&status, &attempts, &scheduled, &reason))
+	require.NoError(t, repo.pool.QueryRow(ctx, `SELECT status,attempt_count,next_attempt_at,error,payload->'request' FROM notification_delivery_outbox WHERE id=$1`, item.ID).Scan(&status, &attempts, &scheduled, &reason, &raw))
 	require.Equal(t, "FAILED", status)
 	require.Equal(t, 1, attempts)
 	require.Equal(t, item.NextAttemptAt, scheduled)
 	require.Equal(t, "client request ID generations exhausted: rejected", reason)
+
+	var stored deliverypayload.Request
+
+	require.NoError(t, jsonv2.Unmarshal(raw, &stored))
+
+	exhausted := *previous
+
+	exhausted.Exhausted = true
+	require.Equal(t, exhausted, stored, "reissue may only mark the pinned request exhausted")
 }

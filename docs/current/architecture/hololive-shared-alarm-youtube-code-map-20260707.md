@@ -782,7 +782,7 @@ SendMessage / SendMessageWithClientRequestID
 MarkDispatched
 ```
 
-Markdown lane은 Iris 202 Accepted의 requestId를 검증하고 `/reply-status/{requestId}`를 polling해 `handoff_completed`를 확인한 뒤에만 성공으로 봅니다.
+텍스트·Markdown lane은 Iris 202 Accepted가 durable admission을 증명하면 `/reply-status`를 기다리지 않고 requestId를 돌려주며, 성공은 admission만 뜻합니다. `handoff_completed` 확인은 `alarm-dispatch-handoff-reconciler`가 합니다([alarm 계약](../contracts/alarm.md#iris-handoff-reconciliation)).
 
 `sendAlarmDispatchMessage`는 sender가 `SendMessageWithClientRequestID`를 지원하면 client request ID를 붙여 보낸다. 이 값은 다운스트림 멱등성 키 역할을 한다.
 
@@ -800,7 +800,7 @@ admission 전 HTTP 429/502/503
   -> RouteSendingFailures
 저장된 send-unit ClientRequestID로 보낸 bounded transport/deadline failure
   -> RouteSendingFailures
-Markdown handoff outcome_unknown 또는 status 확인 불가
+202 admission 미증명 또는 구조화된 OUTCOME_UNKNOWN
   -> Quarantine (같은 알림 재post 없음)
 기타 post-send failure
   -> Quarantine

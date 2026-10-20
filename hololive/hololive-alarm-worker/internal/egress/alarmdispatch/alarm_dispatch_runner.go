@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -22,16 +23,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
+// RequestConsumer의 fence 미스는 *sendfence.MissError이고, 재발급 세대 소진은 sendfence.ErrGenerationExhausted다.
 type RequestConsumer interface {
 	LoadSendRequest(context.Context, []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error)
 	PinSendRequest(context.Context, []domain.AlarmQueueEnvelope, dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error)
-	ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, string) (bool, error)
+	ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error
 }
 
 type QueueConsumer interface {
 	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error
+	ReleaseLeased(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
 }
 
@@ -182,16 +185,22 @@ func (r *Runner) withStateContext(ctx context.Context, fn func(context.Context) 
 	return fn(stateCtx)
 }
 
-func (r *Runner) markSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (proceed bool, err error) {
+// markSending은 그룹을 발송 상태에 넣는다. 미스는 routePreSendMiss가 처리하고, 그 밖의 실패는 같은 attempt로
+// 재대기시킨다. 반환값 proceed가 참일 때만 외부 호출을 한다.
+func (r *Runner) markSending(ctx context.Context, group alarmDispatchGroup) (proceed bool, err error) {
 	markErr := r.withStateContext(ctx, func(stateCtx context.Context) error {
-		return r.consumer.MarkSending(stateCtx, envelopes)
+		return r.consumer.MarkSending(stateCtx, group.envelopes)
 	})
 	if markErr == nil {
 		return true, nil
 	}
 
+	if miss, ok := errors.AsType[*sendfence.MissError](markErr); ok {
+		return false, r.routePreSendMiss(ctx, group, miss)
+	}
+
 	if err := r.withStateContext(ctx, func(stateCtx context.Context) error {
-		return r.persistMarkSendingFailure(stateCtx, envelopes, markErr)
+		return r.persistMarkSendingFailure(stateCtx, group.envelopes, markErr)
 	}); err != nil {
 		return false, err
 	}
@@ -199,9 +208,52 @@ func (r *Runner) markSending(ctx context.Context, envelopes []domain.AlarmQueueE
 	return false, nil
 }
 
-func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+// routePreSendMiss는 외부 호출 전(Load·Pin·Begin) fence 미스를 처리한다. 이 문장들은 단위 전원이 함께 전이하므로 미스면
+// 그룹의 어떤 행도 바뀌지 않았다. 모든 원인이 소유권을 남길 때만 이 claim의 행에 후속 전이를 쓴다.
+//   - member_terminal: 미고정 단위까지 포함해 현재 멤버가 종료됐거나 고정 멤버가 사라져 단위를 다시 모을 수 없으므로
+//     격리한다. 고정 요청은 이미 발송됐을 수도 있어 운영 검토 대상이다. 반환하면 claim과 반환이 끝없이 반복된다.
+//   - membership_changed: 미발송 claim이므로 격리하지 않고 반환해 다음 claim이 단위 전원을 다시 모으게 한다.
+//   - 그 밖(lease 만료, 상태·소유자·attempt 변경, 요청 변경): 회수 경로나 현재 소유자의 몫이므로 손대지 않는다.
+func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup, miss *sendfence.MissError) error {
+	ownershipHeld := true
+
+	for _, row := range miss.Rows {
+		ownershipHeld = ownershipHeld && row.Reason.OwnershipHeld()
+	}
+
+	switch {
+	case ownershipHeld && miss.Has(sendfence.ReasonMemberTerminal):
+		return r.withStateContext(ctx, func(stateCtx context.Context) error {
+			if err := r.consumer.Quarantine(stateCtx, group.envelopes, miss); err != nil {
+				return fmt.Errorf("quarantine alarm dispatch with terminal send unit member: %w", err)
+			}
+
+			return nil
+		})
+	case ownershipHeld && miss.Has(sendfence.ReasonMembershipChanged):
+		return r.withStateContext(ctx, func(stateCtx context.Context) error {
+			if err := r.consumer.ReleaseLeased(stateCtx, group.envelopes); err != nil {
+				return fmt.Errorf("release alarm dispatch with changed send unit membership: %w", err)
+			}
+
+			return nil
+		})
+	default:
+		if r.logger != nil {
+			r.logger.Warn("alarm dispatch claim lost before send; leaving rows to their owner",
+				privacylog.RoomIDAttr(group.roomID),
+				slog.Int("envelopes", len(group.envelopes)),
+				slog.Any("error", miss))
+		}
+
+		return nil
+	}
+}
+
+// markDispatched는 발송 성공을 정산한다. 정산의 handoff 지평은 handoff reconciler와 같은 발송 attempt timeout이다.
+func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
-		if err := r.consumer.MarkDispatched(stateCtx, envelopes); err != nil {
+		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID, r.attemptTimeout); err != nil {
 			return fmt.Errorf("mark alarm dispatch sent: %w", err)
 		}
 
@@ -238,8 +290,7 @@ func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) er
 }
 
 func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
-	clientRequestID, err := alarmDispatchClientRequestID(group)
-	if err != nil {
+	if _, err := alarmDispatchClientRequestID(group); err != nil {
 		// 드레인 종단이 아니라 위반 표시다. 운영에서 보이면 저장된 send-unit 식별자가 비었거나 섞인 그룹이 claim됐다는 뜻이다.
 		if r.logger != nil {
 			r.logger.Error("alarm dispatch group lacks a persisted send unit; not sending",
@@ -255,25 +306,18 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 		return nil
 	}
 
+	// 요청 읽기·고정 fence는 claim에서 본 client_request_id까지 확인하므로 다른 세대를 보내지 않는다.
 	request, err := r.prepareGroupRequest(ctx, group)
 	if err != nil {
-		if errors.Is(err, dispatchoutbox.ErrSendRequestLeaseExpired) {
-			// 미발송 만료 claim은 전체 send-unit 복구가 맡으며 여기서 terminal 전이하지 않는다.
-			return nil
-		}
-
-		if errors.Is(err, dispatchoutbox.ErrSendRequestFence) {
-			return r.withStateContext(ctx, func(stateCtx context.Context) error {
-				return r.consumer.Quarantine(stateCtx, group.envelopes, err)
-			})
+		if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
+			return r.routePreSendMiss(ctx, group, miss)
 		}
 
 		return r.routePreSendFailure(ctx, group.envelopes, err)
 	}
 
-	// claim 이후 다른 세대를 보내지 않도록 저장된 ID를 다시 확인한다.
-	if request.ClientRequestID != clientRequestID || request.RoomID != group.roomID {
-		return fmt.Errorf("prepare alarm request: %w", dispatchoutbox.ErrSendRequestFence)
+	if request.RoomID != group.roomID {
+		return errors.New("prepare alarm request: stored send unit room differs from the claimed group")
 	}
 
 	return r.dispatchPreparedMessageGroup(ctx, group, request)
@@ -324,7 +368,7 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 		return fmt.Errorf("before alarm send: %w", err)
 	}
 
-	if proceed, markErr := r.markSending(ctx, group.envelopes); !proceed {
+	if proceed, markErr := r.markSending(ctx, group); !proceed {
 		return markErr
 	}
 
@@ -336,16 +380,18 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 		})
 	}
 
-	if sendErr := r.sendPreparedRequest(ctx, request); sendErr != nil {
+	irisRequestID, sendErr := r.sendPreparedRequest(ctx, request)
+	if sendErr != nil {
 		group.request = request
 		return r.routePostSendingFailure(ctx, group, sendErr)
 	}
 
-	return r.markDispatched(ctx, group.envelopes)
+	return r.markDispatched(ctx, group.envelopes, irisRequestID)
 }
 
-// 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다.
-func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (err error) {
+// 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다. 성공이면 Iris가
+// admission을 증명한 requestId를 돌려준다.
+func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (irisRequestID string, err error) {
 	if r.attemptTimeout > 0 {
 		var cancel context.CancelFunc
 
@@ -383,12 +429,12 @@ func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbo
 		span.End()
 	}()
 
-	err = r.sender.SendPreparedMessage(ctx, request.RoomID, request.Body, request.Route, request.ClientRequestID)
+	irisRequestID, err = r.sender.SendPreparedMessage(ctx, request.RoomID, request.Body, request.Route, request.ClientRequestID)
 	completed = true
 
 	if err != nil {
-		return fmt.Errorf("send prepared alarm request: %w", err)
+		return "", fmt.Errorf("send prepared alarm request: %w", err)
 	}
 
-	return nil
+	return irisRequestID, nil
 }

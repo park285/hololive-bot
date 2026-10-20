@@ -43,7 +43,7 @@
 |---|---|---|
 | `PROJECT_MAP.md` | current | `current/PROJECT_MAP.md`로의 compatibility bridge. 유지. |
 | `architecture/` | current + history | gate asset(`*.txt` threshold/allowlist)은 current 층 — `scripts/architecture/*`가 경로를 참조하므로 이동 금지. 날짜 붙은 분석 `.md`는 5-runtime 시절 historical 기록이며 각 파일 상단 historical 배너로 구분. |
-| `runbook_execution/` | current | 배포/릴리스 runbook 실행 기록. `.github/pull_request_template.md`, `scripts/architecture/render-release-notes.sh`, `current/DEPLOYMENT_BASELINE.md`가 참조하므로 유지. 새 운영 runbook은 `current/runbooks/`에 작성. |
+| `runbook_execution/` | current | 배포/릴리스 runbook 실행 기록. `scripts/architecture/render-release-notes.sh`, `current/DEPLOYMENT_BASELINE.md`가 참조하므로 유지. 새 운영 runbook은 `current/runbooks/`에 작성. |
 | `superpowers/` | design + history | `specs/`는 design 층, `plans/`는 완료된 구현 plan 기록. `scripts/architecture/check-removed-runtime-regressions.sh`가 참조하므로 유지. |
 | `agent-workflows/` | history + 진행 중 plan | agent 주도 plan/note 작업 공간. 완료된 plan/note는 history 층 기록으로 취급하되, `docs/current/` 문서들이 경로를 참조하므로 제자리 유지. |
 | `handoff/` | history | 완료된 refactor handoff 기록(P1-P4 split, youtube-producer multi-worker). 새 handoff/closeout 문서는 `history/`에 작성. |

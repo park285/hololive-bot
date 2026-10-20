@@ -7,4 +7,4 @@
                 WHEN EXCLUDED.detected_at < youtube_community_shorts_alarm_states.detected_at THEN EXCLUDED.detected_at
                 ELSE youtube_community_shorts_alarm_states.detected_at
             END,
-            authorized_at = 
+            alarm_sent_at = 

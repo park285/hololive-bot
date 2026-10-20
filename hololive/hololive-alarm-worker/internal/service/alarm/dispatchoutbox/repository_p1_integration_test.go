@@ -42,7 +42,7 @@ func TestPgxRepositoryMoveToDLQ_AcceptsSendingRows(t *testing.T) {
 	workerID := "worker-dlq"
 
 	record := insertClaimedEnvelope(t, repository, workerID)
-	require.NoError(t, repository.MarkSending(ctx, []int64{record.ID}, workerID, time.Minute))
+	beginSendingFixture(t, repository, workerID, record)
 
 	err := repository.MoveToDLQ(ctx, []TerminalUpdate{{ID: record.ID, Error: "sending retry exhausted"}}, workerID)
 
@@ -60,7 +60,7 @@ func TestPgxRepositoryMoveToDLQ_StillRejectsForeignWorkerSendingRows(t *testing.
 	ctx := context.Background()
 
 	record := insertClaimedEnvelope(t, repository, "worker-owner")
-	require.NoError(t, repository.MarkSending(ctx, []int64{record.ID}, "worker-owner", time.Minute))
+	beginSendingFixture(t, repository, "worker-owner", record)
 
 	err := repository.MoveToDLQ(ctx, []TerminalUpdate{{ID: record.ID, Error: "foreign"}}, "worker-foreign")
 

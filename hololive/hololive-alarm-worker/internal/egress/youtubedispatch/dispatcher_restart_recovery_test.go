@@ -190,7 +190,7 @@ func runRestartAlreadySentCase(t *testing.T, tc restartAlreadySentCase, fixedSen
 	item, delivery, postID := seedRestartAlreadySentFixture(t, db, tc)
 
 	firstSender := &testSender{failRoom: map[string]bool{}}
-	firstDispatcher := newFixedClockDispatcherForTest(t, db, firstSender, fixedSentAt, &dispatchstate.Config{
+	firstDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -211,7 +211,7 @@ func runRestartAlreadySentCase(t *testing.T, tc restartAlreadySentCase, fixedSen
 	assertCommunityShortsSentAt(t, assertCommunityShortsPostSent(t, db, item, delivery.ID, postID), fixedSentAt)
 
 	secondSender := &testSender{failRoom: map[string]bool{}}
-	secondDispatcher := newFixedClockDispatcherForTest(t, db, secondSender, fixedSentAt, &dispatchstate.Config{
+	secondDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -306,7 +306,7 @@ func runRestartRecoverySelectiveCase(t *testing.T, tc recoverySelectiveSendCase,
 	fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 	firstSender := &testSender{failRoom: map[string]bool{}}
-	firstDispatcher := newFixedClockDispatcherForTest(t, db, firstSender, fixedSentAt, &dispatchstate.Config{
+	firstDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -327,7 +327,7 @@ func runRestartRecoverySelectiveCase(t *testing.T, tc recoverySelectiveSendCase,
 	assert.NotContains(t, firstMessages[0], tc.sentMarker)
 
 	secondSender := &testSender{failRoom: map[string]bool{}}
-	secondDispatcher := newFixedClockDispatcherForTest(t, db, secondSender, fixedSentAt, &dispatchstate.Config{
+	secondDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

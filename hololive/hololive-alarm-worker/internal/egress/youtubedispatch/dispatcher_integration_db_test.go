@@ -283,14 +283,13 @@ func insertDeliveryIntegrationAlarmState(ctx context.Context, pool *pgxpool.Pool
 	row.UpdatedAt = deliveryIntegrationRequiredTime(row.UpdatedAt, now)
 	row.DetectedAt = deliveryIntegrationRequiredTime(row.DetectedAt, now)
 	row.ActualPublishedAt = deliveryIntegrationNormalizeTimePtr(row.ActualPublishedAt)
-	row.AuthorizedAt = deliveryIntegrationNormalizeTimePtr(row.AuthorizedAt)
 	row.AlarmSentAt = deliveryIntegrationNormalizeTimePtr(row.AlarmSentAt)
 
 	if row.DeliveryStatus == "" {
-		row.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(row.AuthorizedAt, row.AlarmSentAt)
+		row.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(row.AlarmSentAt)
 	}
 
-	tag, err := pool.Exec(ctx, `INSERT INTO youtube_community_shorts_alarm_states (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AuthorizedAt, row.AlarmSentAt, row.DeliveryStatus, row.CreatedAt, row.UpdatedAt)
+	tag, err := pool.Exec(ctx, `INSERT INTO youtube_community_shorts_alarm_states (kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AlarmSentAt, row.DeliveryStatus, row.CreatedAt, row.UpdatedAt)
 
 	return tag.RowsAffected(), err
 }
@@ -314,6 +313,8 @@ func deliveryIntegrationTableForDest(dest any) string {
 		return "youtube_notification_delivery"
 	case *domain.YouTubeCommunityShortsAlarmState, *[]domain.YouTubeCommunityShortsAlarmState:
 		return "youtube_community_shorts_alarm_states"
+	case *domain.YouTubeContentAlarmTracking:
+		return "youtube_content_alarm_tracking"
 	default:
 		return ""
 	}
@@ -339,7 +340,7 @@ func deliveryIntegrationSelectColumns(table string) string {
 	case "youtube_notification_delivery":
 		return "id, outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error"
 	case "youtube_community_shorts_alarm_states":
-		return "kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at"
+		return "kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at"
 	default:
 		return "*"
 	}

@@ -58,8 +58,7 @@ func ensureScraperRole(ctx context.Context, connString, scraperUser, scraperPass
 		return fmt.Errorf("bootstrap: parse admin config: %w", err)
 	}
 
-	// Verifiers are credentials too: protect this privileged session before any
-	// credential-bearing SQL reaches error, sample, plan or activity reporting.
+	// 검증자도 자격 증명이므로 SQL이 오류·샘플·실행 계획·활동 보고에 노출되기 전에 세션을 보호한다.
 	protectCredentialSession(config)
 
 	conn, err := pgx.ConnectConfig(ctx, config)

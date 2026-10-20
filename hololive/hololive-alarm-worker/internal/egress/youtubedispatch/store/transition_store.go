@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -42,6 +43,10 @@ func NewTransitionStore(db any, logger *slog.Logger, config TransitionConfig) (*
 		logger = slog.Default()
 	}
 
+	if strings.TrimSpace(config.Owner) == "" {
+		return nil, errors.New("new transition store: owner is required")
+	}
+
 	if config.MaxRetries <= 0 {
 		return nil, errors.New("new transition store: max retries must be positive")
 	}
@@ -65,28 +70,21 @@ func NewTransitionStore(db any, logger *slog.Logger, config TransitionConfig) (*
 	return &TransitionStore{db: deliveryDB, logger: logger, config: config}, nil
 }
 
+// ClaimPending은 claim 가능한 PENDING 행을 이 인스턴스 소유로 잠그며, lease 만료·due·신선도 판정과 새 locked_at을
+// 모두 DB 시계로 정한다.
 func (s *TransitionStore) ClaimPending(ctx context.Context, batchSize int) ([]domain.YouTubeNotificationDelivery, error) {
 	if batchSize <= 0 {
 		return nil, errors.New("claim pending: batch size must be positive")
 	}
 
-	claimedAt, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return nil, fmt.Errorf("claim pending: claim at: %w", err)
-	}
-
-	lockCutoff := claimedAt.Add(-s.config.LockTimeout)
-	freshCutoff := claimedAt.Add(-s.config.ClaimFreshnessWindow)
-
 	rows, err := s.db.Query(
 		ctx,
 		claimPendingSQL,
 		lifecycle.StatusPending,
-		lockCutoff,
-		claimedAt,
-		freshCutoff,
+		s.config.LockTimeout.Milliseconds(),
+		s.config.ClaimFreshnessWindow.Milliseconds(),
 		batchSize,
-		claimedAt,
+		s.config.Owner,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("claim pending: update rows: %w", err)
@@ -113,6 +111,7 @@ func scanTransitionDelivery(row pgx.CollectableRow) (domain.YouTubeNotificationD
 		&delivery.NextAttemptAt,
 		&delivery.CreatedAt,
 		&delivery.LockedAt,
+		&delivery.LockedBy,
 		&delivery.SentAt,
 		&delivery.Error,
 		&delivery.RowVersion,
@@ -136,12 +135,14 @@ type resolvedLogicalGroups struct {
 	ledgerByKey map[ytcontentid.LogicalKey]DeliveryLedgerRecord
 }
 
+// resolveClaimedGroups는 호출자 claim 행의 논리 그룹을 같은 트랜잭션에서 잠가 다시 읽고 해석한다. 다시 읽은 행이 호출자
+// claim과 다르면 해석 전에 operation 이름의 *sendfence.MissError를 돌려준다.
 func (s *TransitionStore) resolveClaimedGroups(
 	ctx context.Context,
 	db dbx.Querier,
+	operation string,
 	claimed []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-	at time.Time,
 ) (resolvedLogicalGroups, error) {
 	requested, err := buildRequestedLogicalGroups(claimed, outboxByID)
 	if err != nil {
@@ -153,16 +154,21 @@ func (s *TransitionStore) resolveClaimedGroups(
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: load rows: %w", err)
 	}
 
+	if !s.logicalGroupWindowComplete(len(requested), len(rows)) {
+		return resolvedLogicalGroups{}, errors.New("resolve claimed groups: logical group window is incomplete")
+	}
+
 	currentIDs := deliveryIDSet(claimed)
 	requestedKeys, requestedSet := requestedLogicalKeys(requested)
 
+	// 조회 창의 완전성을 확인한 뒤 키별 행 한도를 검사한다. 다른 키의 별칭 후보가 창을 채운 경우도 앞에서 거부한다.
 	rowsByID, snapshots, err := s.claimedResolutionSnapshots(rows, currentIDs, requestedSet)
 	if err != nil {
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: build snapshots: %w", err)
 	}
 
-	if validationErr := validateClaimedRowsPresent(currentIDs, rowsByID); validationErr != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: validate current rows: %w", validationErr)
+	if fenceErr := checkClaimFence(operation, claimed, rows); fenceErr != nil {
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: claim fence: %w", fenceErr)
 	}
 
 	ledgerByKey, evidence, err := loadTransitionLedger(ctx, db, requestedKeys)
@@ -172,7 +178,6 @@ func (s *TransitionStore) resolveClaimedGroups(
 
 	resolver, err := preparation.NewResolver(preparation.ResolverConfig{
 		LogicalGroupScanLimit: s.config.LogicalGroupLimit,
-		RetryBackoff:          s.config.RetryBackoff,
 		LockTimeout:           s.config.LockTimeout,
 		RequireTerminalLedger: true,
 	})
@@ -181,7 +186,7 @@ func (s *TransitionStore) resolveClaimedGroups(
 	}
 
 	return resolvedLogicalGroups{
-		resolutions: resolver.ResolveGroups(snapshots, evidence, requestedKeys, at),
+		resolutions: resolver.ResolveGroups(snapshots, evidence, requestedKeys),
 		rowsByID:    rowsByID,
 		ledgerByKey: ledgerByKey,
 	}, nil
@@ -257,27 +262,67 @@ func claimedResolutionSnapshot(
 		return ytcontentid.LogicalKey{}, preparation.DeliverySnapshot{}, false, nil
 	}
 
-	snapshot, err := row.snapshot(current)
-	if err != nil {
-		return ytcontentid.LogicalKey{}, preparation.DeliverySnapshot{}, false, fmt.Errorf("resolve claimed groups: snapshot: %w", err)
-	}
-
-	return key, snapshot, true, nil
+	return key, row.snapshot(current), true, nil
 }
 
-func validateClaimedRowsPresent(
-	currentIDs map[int64]struct{},
-	rowsByID map[int64]transitionRow,
-) error {
-	for id := range currentIDs {
-		if _, ok := rowsByID[id]; !ok {
-			return &transitionMissingError{
-				operation: "resolve claimed groups", detail: fmt.Sprintf("claimed delivery %d is absent", id),
-			}
+// checkClaimFence는 잠가 다시 읽은 행이 호출자 claim과 같은 세대인지 본다. 상태를 PENDING으로 둔 채 소유자와 row_version을
+// 바꾸는 것이 claim이므로 셋이 모두 같아야 호출자가 아직 그 행을 소유한다. 하나라도 어긋나면 대상 전원을 미적용으로 담은
+// 미스를 돌려주며, 호출자는 이 트랜잭션에서 아무 행도 바꾸지 않는다.
+func checkClaimFence(operation string, claimed []domain.YouTubeNotificationDelivery, rows []transitionRow) error {
+	loaded := make(map[int64]transitionRow, len(rows))
+	for i := range rows {
+		loaded[rows[i].ID] = rows[i]
+	}
+
+	want := make([]int64, 0, len(claimed))
+	observed := make([]sendfence.Observation, 0, len(claimed))
+	seen := make(map[int64]struct{}, len(claimed))
+
+	for i := range claimed {
+		if _, duplicate := seen[claimed[i].ID]; duplicate {
+			continue
+		}
+
+		seen[claimed[i].ID] = struct{}{}
+		want = append(want, claimed[i].ID)
+
+		if row, ok := loaded[claimed[i].ID]; ok {
+			observed = append(observed, claimObservation(claimed[i], row))
+		}
+	}
+
+	held := len(observed) == len(want) && !slices.ContainsFunc(observed, func(observation sendfence.Observation) bool {
+		return !observation.StatusMatches || !observation.OwnerMatches || !observation.VersionMatches
+	})
+	if !held {
+		return fmt.Errorf("check claim fence: %w", sendfence.Check(operation, want, observed))
+	}
+
+	for i := range observed {
+		if row := loaded[observed[i].ID]; row.LockedAt == nil || row.RowVersion <= 0 {
+			return fmt.Errorf("%s: delivery %d was not claimed", operation, row.ID)
 		}
 	}
 
 	return nil
+}
+
+func claimObservation(claim domain.YouTubeNotificationDelivery, row transitionRow) sendfence.Observation {
+	return sendfence.Observation{
+		ID: row.ID, Status: string(row.Status),
+		StatusMatches:  row.Status == lifecycle.StatusPending,
+		OwnerMatches:   sameOwner(row.LockedBy, claim.LockedBy),
+		VersionMatches: row.RowVersion == claim.RowVersion,
+		LeaseValid:     true, MembershipMatches: true, MembersNonTerminal: true, RequestMatches: true,
+	}
+}
+
+func sameOwner(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+
+	return *left == *right
 }
 
 func buildRequestedLogicalGroups(
@@ -331,6 +376,23 @@ func (s *TransitionStore) loadLogicalGroupRows(
 		return nil, nil
 	}
 
+	return queryLogicalGroupRows(ctx, db, s.logicalGroupArgs(requested))
+}
+
+// queryLogicalGroupRows는 logicalGroupArgs로 만든 인자로 논리 그룹 delivery를 transition_group_rows.sql 순서로 잠근다.
+func queryLogicalGroupRows(ctx context.Context, db dbx.Querier, args []any) ([]transitionRow, error) {
+	var rows []transitionRow
+
+	if err := dbx.SelectSQL(ctx, db, &rows, "load transition logical group rows", transitionGroupRowsSQL, args...); err != nil {
+		return nil, fmt.Errorf("load transition logical group rows: %w", err)
+	}
+
+	return rows, nil
+}
+
+// logicalGroupArgs는 transition_group_candidates.sql 조각을 쓰는 문장의 $1..$5(직접 id, 요청 조합 배열 셋, 행 한도)다.
+// 그룹 잠금과 handoff 부모 사전 조회가 같은 값을 쓰도록 한 곳에서 만든다.
+func (s *TransitionStore) logicalGroupArgs(requested []requestedLogicalGroup) []any {
 	ids := make([]int64, 0, len(requested))
 	roomIDs := make([]string, 0, len(requested)*3)
 	kinds := make([]string, 0, len(requested)*3)
@@ -346,26 +408,20 @@ func (s *TransitionStore) loadLogicalGroupRows(
 		}
 	}
 
-	limit := len(requested)*(s.config.LogicalGroupLimit+1) + len(ids)
+	limit := s.logicalGroupWindowLimit(len(requested))
 
-	var rows []transitionRow
+	return []any{ids, roomIDs, kinds, candidates, limit}
+}
 
-	if err := dbx.SelectSQL(
-		ctx,
-		db,
-		&rows,
-		"load transition logical group rows",
-		mustSQL("transition_group_rows.sql"),
-		ids,
-		roomIDs,
-		kinds,
-		candidates,
-		limit,
-	); err != nil {
-		return nil, fmt.Errorf("load transition logical group rows: %w", err)
-	}
+// logicalGroupWindowLimit는 요청마다 직접 id 하나와 키별 한도 초과를 관측할 여분 한 행을 배정한다.
+func (s *TransitionStore) logicalGroupWindowLimit(requestedCount int) int {
+	return requestedCount * (s.config.LogicalGroupLimit + 2)
+}
 
-	return rows, nil
+// logicalGroupWindowComplete는 다른 키의 별칭까지 포함한 조회 창이 잘리지 않았음을 확인한다.
+// 한도에 닿으면 창 밖 형제의 유무를 증명할 수 없으므로 불완전하며, 빈 요청은 완전한 빈 집합이다.
+func (s *TransitionStore) logicalGroupWindowComplete(requestedCount, observedCount int) bool {
+	return requestedCount == 0 || observedCount < s.logicalGroupWindowLimit(requestedCount)
 }
 
 func loadTransitionLedger(
@@ -421,34 +477,71 @@ func loadTransitionLedger(
 	return ledgerByKey, evidence, nil
 }
 
+// rowTransition의 after는 시각 열을 뺀 다음 상태다. 시각 열은 전이 문장이 대상을 잠근 뒤 채취한 DB 시계로 정하며,
+// next_attempt_at은 due를, locked_at은 lockFromClock이면 그 시계를 아니면 NULL을, sent_at은 sentFromClock이면 그
+// 시계를 아니면 after.SentAt(DB에서 읽은 ledger sent_at 또는 nil)을 쓴다.
 type rowTransition struct {
-	before transitionRow
-	after  transitionRow
+	before        transitionRow
+	after         transitionRow
+	due           lifecycle.DueSpec
+	lockFromClock bool
+	sentFromClock bool
 }
 
 type transitionVectors struct {
 	ids              []int64
 	expectedStatuses []string
 	expectedVersions []int64
-	expectedAttempts []int32
-	expectedLocks    []*time.Time
+	expectedOwners   []*string
 	nextStatuses     []string
 	nextVersions     []int64
 	nextAttempts     []int32
-	nextAttemptAts   []time.Time
-	nextLocks        []*time.Time
+	dueDelaysMS      []*int64
+	dueFloors        []*time.Time
+	locksFromClock   []bool
+	nextOwners       []*string
+	sentsFromClock   []bool
 	nextSentAts      []*time.Time
 	nextErrors       []string
 }
 
-func applyRowTransitions(ctx context.Context, db dbx.Querier, operation string, transitions []rowTransition) ([]int64, error) {
+// applyRowTransitions는 before의 (status, locked_by, row_version) fence로 대상 전원을 함께 전이한다. 한 대상이라도
+// fence가 어긋나면 아무 행도 바꾸지 않고 *sendfence.MissError를 돌려준다. 성공하면 전이 시각(DB 시계)을 함께 돌려준다.
+func applyRowTransitions(
+	ctx context.Context,
+	db dbx.Querier,
+	operation string,
+	transitions []rowTransition,
+) ([]int64, time.Time, error) {
+	return applyFencedRowTransitions(ctx, db, operation, transitions, nil)
+}
+
+// applySendingTransitions는 외부 발송 권한을 만드는 전이를 적용한다. 정지했던 소유자가 lease 밖에서 발송을 시작하지
+// 않도록 행 fence에 더해 claim lease(locked_at + lease)가 DB 시계 기준으로 살아 있어야 한다.
+func applySendingTransitions(
+	ctx context.Context,
+	db dbx.Querier,
+	operation string,
+	transitions []rowTransition,
+	lease time.Duration,
+) ([]int64, time.Time, error) {
+	return applyFencedRowTransitions(ctx, db, operation, transitions, new(lease.Milliseconds()))
+}
+
+func applyFencedRowTransitions(
+	ctx context.Context,
+	db dbx.Querier,
+	operation string,
+	transitions []rowTransition,
+	claimLeaseMS *int64,
+) ([]int64, time.Time, error) {
 	if len(transitions) == 0 {
-		return nil, nil
+		return nil, time.Time{}, nil
 	}
 
 	vectors, err := buildTransitionVectors(operation, transitions)
 	if err != nil {
-		return nil, fmt.Errorf("%s: build transition vectors: %w", operation, err)
+		return nil, time.Time{}, fmt.Errorf("%s: build transition vectors: %w", operation, err)
 	}
 
 	rows, err := db.Query(
@@ -457,51 +550,75 @@ func applyRowTransitions(ctx context.Context, db dbx.Querier, operation string, 
 		vectors.ids,
 		vectors.expectedStatuses,
 		vectors.expectedVersions,
-		vectors.expectedAttempts,
-		vectors.expectedLocks,
+		vectors.expectedOwners,
 		vectors.nextStatuses,
 		vectors.nextVersions,
 		vectors.nextAttempts,
-		vectors.nextAttemptAts,
-		vectors.nextLocks,
+		vectors.dueDelaysMS,
+		vectors.dueFloors,
+		vectors.locksFromClock,
+		vectors.nextOwners,
+		vectors.sentsFromClock,
 		vectors.nextSentAts,
 		vectors.nextErrors,
+		claimLeaseMS,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%s: update rows: %w", operation, err)
+		return nil, time.Time{}, fmt.Errorf("%s: update rows: %w", operation, err)
 	}
-	defer rows.Close()
 
-	updatedIDs, outboxIDs, err := collectAppliedTransitions(rows, operation, len(transitions))
+	scanned, err := pgx.CollectRows(rows, scanTransitionObservation)
 	if err != nil {
-		return nil, fmt.Errorf("%s: collect applied transitions: %w", operation, err)
+		return nil, time.Time{}, fmt.Errorf("%s: collect fence observations: %w", operation, err)
 	}
 
-	if !equalSortedIDs(updatedIDs, vectors.ids) {
-		return nil, &transitionConflictError{
-			operation: operation,
-			detail:    fmt.Sprintf("updated ids %v do not match expected ids %v", updatedIDs, vectors.ids),
-		}
+	observed := make([]sendfence.Observation, 0, len(scanned))
+	for i := range scanned {
+		observed = append(observed, scanned[i].observation)
 	}
 
-	return uniqueSortedInt64s(outboxIDs), nil
+	if err := sendfence.Check(operation, vectors.ids, observed); err != nil {
+		return nil, time.Time{}, fmt.Errorf("%s: row fence: %w", operation, err)
+	}
+
+	// fence를 통과했으면 대상 전원이 관측되었으므로 첫 행의 전이 시각이 문장 전체의 시계다.
+	return transitionOutboxIDs(transitions), scanned[0].transitionedAt.UTC(), nil
+}
+
+// transitionObservation은 전이 SQL 한 행의 sendfence 관측 열과 그 뒤에 붙은 전이 시각이다.
+type transitionObservation struct {
+	observation    sendfence.Observation
+	transitionedAt time.Time
+}
+
+func scanTransitionObservation(row pgx.CollectableRow) (transitionObservation, error) {
+	var (
+		scanned transitionObservation
+		o       = &scanned.observation
+	)
+
+	if err := row.Scan(
+		&o.ID, &o.Status,
+		&o.StatusMatches, &o.OwnerMatches, &o.VersionMatches, &o.LeaseValid,
+		&o.MembershipMatches, &o.MembersNonTerminal, &o.RequestMatches, &o.Applied,
+		&scanned.transitionedAt,
+	); err != nil {
+		return transitionObservation{}, fmt.Errorf("scan transition observation: %w", err)
+	}
+
+	return scanned, nil
 }
 
 func buildTransitionVectors(operation string, transitions []rowTransition) (transitionVectors, error) {
 	vectors := newTransitionVectors(len(transitions))
 
 	for i := range transitions {
-		expectedAttempt, err := checkedTransitionAttempt(operation, transitions[i].before)
-		if err != nil {
-			return transitionVectors{}, fmt.Errorf("%s: validate expected attempt: %w", operation, err)
-		}
-
 		nextAttempt, err := checkedTransitionAttempt(operation, transitions[i].after)
 		if err != nil {
 			return transitionVectors{}, fmt.Errorf("%s: validate next attempt: %w", operation, err)
 		}
 
-		vectors.appendTransition(transitions[i], expectedAttempt, nextAttempt)
+		vectors.appendTransition(transitions[i], nextAttempt)
 	}
 
 	return vectors, nil
@@ -510,27 +627,46 @@ func buildTransitionVectors(operation string, transitions []rowTransition) (tran
 func newTransitionVectors(capacity int) transitionVectors {
 	return transitionVectors{
 		ids: make([]int64, 0, capacity), expectedStatuses: make([]string, 0, capacity),
-		expectedVersions: make([]int64, 0, capacity), expectedAttempts: make([]int32, 0, capacity),
-		expectedLocks: make([]*time.Time, 0, capacity), nextStatuses: make([]string, 0, capacity),
-		nextVersions: make([]int64, 0, capacity), nextAttempts: make([]int32, 0, capacity),
-		nextAttemptAts: make([]time.Time, 0, capacity), nextLocks: make([]*time.Time, 0, capacity),
+		expectedVersions: make([]int64, 0, capacity), expectedOwners: make([]*string, 0, capacity),
+		nextStatuses: make([]string, 0, capacity), nextVersions: make([]int64, 0, capacity),
+		nextAttempts: make([]int32, 0, capacity), dueDelaysMS: make([]*int64, 0, capacity),
+		dueFloors: make([]*time.Time, 0, capacity), locksFromClock: make([]bool, 0, capacity),
+		nextOwners: make([]*string, 0, capacity), sentsFromClock: make([]bool, 0, capacity),
 		nextSentAts: make([]*time.Time, 0, capacity), nextErrors: make([]string, 0, capacity),
 	}
 }
 
-func (v *transitionVectors) appendTransition(transition rowTransition, expectedAttempt, nextAttempt int32) {
+func (v *transitionVectors) appendTransition(transition rowTransition, nextAttempt int32) {
+	delayMS, floor := dueVectorValues(transition.due)
+
 	v.ids = append(v.ids, transition.before.ID)
 	v.expectedStatuses = append(v.expectedStatuses, string(transition.before.Status))
 	v.expectedVersions = append(v.expectedVersions, transition.before.RowVersion)
-	v.expectedAttempts = append(v.expectedAttempts, expectedAttempt)
-	v.expectedLocks = append(v.expectedLocks, cloneTimePtr(transition.before.LockedAt))
+	v.expectedOwners = append(v.expectedOwners, cloneStringPtr(transition.before.LockedBy))
 	v.nextStatuses = append(v.nextStatuses, string(transition.after.Status))
 	v.nextVersions = append(v.nextVersions, transition.after.RowVersion)
 	v.nextAttempts = append(v.nextAttempts, nextAttempt)
-	v.nextAttemptAts = append(v.nextAttemptAts, transition.after.NextAttemptAt.UTC())
-	v.nextLocks = append(v.nextLocks, cloneTimePtr(transition.after.LockedAt))
+	v.dueDelaysMS = append(v.dueDelaysMS, delayMS)
+	v.dueFloors = append(v.dueFloors, floor)
+	v.locksFromClock = append(v.locksFromClock, transition.lockFromClock)
+	v.nextOwners = append(v.nextOwners, cloneStringPtr(transition.after.LockedBy))
+	v.sentsFromClock = append(v.sentsFromClock, transition.sentFromClock)
 	v.nextSentAts = append(v.nextSentAts, cloneTimePtr(transition.after.SentAt))
 	v.nextErrors = append(v.nextErrors, deliverysql.TruncateString(transition.after.Error, 500))
+}
+
+// dueVectorValues는 DueSpec을 전이 SQL의 (지연 ms, 하한) 쌍으로 바꾼다. 유지는 지연 NULL, 하한이 없으면 하한 NULL이다.
+func dueVectorValues(due lifecycle.DueSpec) (*int64, *time.Time) {
+	if due.Mode != lifecycle.DueDelay {
+		return nil, nil
+	}
+
+	delayMS := new(due.Delay.Milliseconds())
+	if due.Floor.IsZero() {
+		return delayMS, nil
+	}
+
+	return delayMS, new(due.Floor.UTC())
 }
 
 func checkedTransitionAttempt(operation string, row transitionRow) (int32, error) {
@@ -539,37 +675,6 @@ func checkedTransitionAttempt(operation string, row transitionRow) (int32, error
 	}
 
 	return int32(row.AttemptCount), nil
-}
-
-func collectAppliedTransitions(rows pgx.Rows, operation string, capacity int) ([]int64, []int64, error) {
-	updatedIDs := make([]int64, 0, capacity)
-	outboxIDs := make([]int64, 0, capacity)
-
-	for rows.Next() {
-		var deliveryID, outboxID int64
-
-		if err := rows.Scan(&deliveryID, &outboxID); err != nil {
-			return nil, nil, fmt.Errorf("%s: scan updated row: %w", operation, err)
-		}
-
-		updatedIDs = append(updatedIDs, deliveryID)
-		outboxIDs = append(outboxIDs, outboxID)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("%s: iterate updated rows: %w", operation, err)
-	}
-
-	return updatedIDs, outboxIDs, nil
-}
-
-func equalSortedIDs(actual, expected []int64) bool {
-	slices.Sort(actual)
-
-	expected = slices.Clone(expected)
-	slices.Sort(expected)
-
-	return slices.Equal(actual, expected)
 }
 
 func (s *TransitionStore) executeTx(
