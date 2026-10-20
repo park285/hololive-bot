@@ -41,7 +41,7 @@ func TestCleanupContinuesPastRearmedFullBatch(t *testing.T) {
 	done := make(chan result, 1)
 
 	go func() {
-		deleted, cleanupErr := repo.cleanupInBatches(ctx, time.Now().Add(-30*24*time.Hour), 1)
+		deleted, cleanupErr := repo.cleanupInBatches(ctx, (30 * 24 * time.Hour).Milliseconds(), 1)
 		done <- result{deleted, cleanupErr}
 	}()
 
@@ -76,7 +76,7 @@ func TestCleanupPreservesCommittedCountOnLaterBatchFailure(t *testing.T) {
 		FOR EACH ROW EXECUTE FUNCTION reject_later_cleanup()`)
 	require.NoError(t, err)
 
-	deleted, err := repo.cleanupInBatches(ctx, time.Now().Add(-30*24*time.Hour), 1)
+	deleted, err := repo.cleanupInBatches(ctx, (30 * 24 * time.Hour).Milliseconds(), 1)
 	require.Error(t, err)
 	require.EqualValues(t, 1, deleted)
 
@@ -115,7 +115,7 @@ func TestCleanupCancellationPreservesCommittedBatches(t *testing.T) {
 	done := make(chan result, 1)
 
 	go func() {
-		deleted, cleanupErr := repo.cleanupInBatches(cleanupCtx, time.Now().Add(-30*24*time.Hour), 2)
+		deleted, cleanupErr := repo.cleanupInBatches(cleanupCtx, (30 * 24 * time.Hour).Milliseconds(), 2)
 		done <- result{deleted, cleanupErr}
 	}()
 

@@ -1,5 +1,5 @@
--- 같은 트랜잭션의 앞 문장(delivery_repository_aggregate_lock.sql)이 부모를 잠근 뒤 실행되므로 clock은 부모 잠금
--- 이후의 DB 시계다. 새로 기록하는 sent_at·terminal_at은 이 clock 하나로 정한다.
+-- 같은 트랜잭션에서 앞서 실행한 delivery_repository_aggregate_lock.sql이 부모를 잠근 뒤의 statement이므로 clock은 부모
+-- 잠금 이후의 DB 시계이고 이 문장은 부모를 다시 잠그지 않는다. 새로 기록하는 sent_at·terminal_at은 이 clock 하나로 정한다.
 -- $1 outbox id 배열, $2 PENDING, $3 SENDING, $4 FAILED, $5 QUARANTINED, $6 SENT, $7 실패 사유.
 WITH clock AS MATERIALIZED (
     SELECT clock_timestamp() AS at

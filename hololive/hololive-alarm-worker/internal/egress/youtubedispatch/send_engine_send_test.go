@@ -403,7 +403,7 @@ func TestSendDeliveryMessageRejectsMissingDedupeKeysWithoutSending(t *testing.T)
 	sender := &testSender{failRoom: map[string]bool{}}
 	d := newTestDispatcherForSend(t, sender)
 
-	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testRoom1, message: "message"})
+	_, err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testRoom1, message: "message"})
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want error")
 	}
@@ -426,7 +426,7 @@ func TestSendDeliveryMessageRejectsBlankDedupeKeyWithoutSending(t *testing.T) {
 	sender := &testSender{failRoom: map[string]bool{}}
 	d := newTestDispatcherForSend(t, sender)
 
-	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
+	_, err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
 		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     testRoom1,
 		message:    "message",
@@ -460,11 +460,11 @@ func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 		dedupeKeys: []string{testDedupeKeyShortOne},
 	}
 
-	if err := dispatcher.send.sendDeliveryMessage(t.Context(), req); err != nil {
+	if _, err := dispatcher.send.sendDeliveryMessage(t.Context(), req); err != nil {
 		t.Fatalf("sendDeliveryMessage() error = %v", err)
 	}
 
-	if err := dispatcher.send.sendDeliveryMessage(t.Context(), req); err != nil {
+	if _, err := dispatcher.send.sendDeliveryMessage(t.Context(), req); err != nil {
 		t.Fatalf("sendDeliveryMessage() repeat error = %v", err)
 	}
 
@@ -472,7 +472,7 @@ func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 
 	otherRoomReq.roomID = testRoom2
 
-	if err := dispatcher.send.sendDeliveryMessage(t.Context(), otherRoomReq); err != nil {
+	if _, err := dispatcher.send.sendDeliveryMessage(t.Context(), otherRoomReq); err != nil {
 		t.Fatalf("sendDeliveryMessage() other room error = %v", err)
 	}
 
@@ -1620,7 +1620,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
-	err := dispatcher.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
+	_, err := dispatcher.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
 		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     "room-timeout",
 		message:    testMessageHello,
@@ -1652,7 +1652,7 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 	parentCtx, cancel := context.WithTimeout(t.Context(), 5*time.Millisecond)
 	defer cancel()
 
-	err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
+	_, err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
 		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     "room-parent-timeout",
 		message:    testMessageHello,
@@ -1688,7 +1688,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 
 		sender.parentDone = parentCtx.Done()
 
-		err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
+		_, err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
 			frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 			roomID:     "room-child-timeout-first",
 			message:    testMessageHello,
@@ -1851,22 +1851,22 @@ func (s *groupedPermanentFailureSender) PrepareMessageRequest(_ context.Context,
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *groupedPermanentFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *groupedPermanentFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }
 
 func (s *blockingSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *blockingSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *blockingSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }
 
 func (s *parentDeadlineBeforeReturnSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *parentDeadlineBeforeReturnSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *parentDeadlineBeforeReturnSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }

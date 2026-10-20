@@ -26,18 +26,14 @@ type seeMoreFoldEgressClient struct {
 	texts []string
 }
 
-func (c *seeMoreFoldEgressClient) SendMessage(_ context.Context, _, message string, _ ...iris.SendOption) error {
+func (c *seeMoreFoldEgressClient) SendMessageAccepted(_ context.Context, _, message string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.texts = append(c.texts, message)
 
-	return nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "see-more-request"}, nil
 }
 
 func (*seeMoreFoldEgressClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, errors.New("markdown lane is not configured")
-}
-
-func (*seeMoreFoldEgressClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, errors.New("reply status is not used by the text lane")
 }
 
 // 사용자 첨부 화면처럼 한 방에 쇼츠 10개가 한 번에 묶여 나가는 v1 직접 발송 경로다.
@@ -129,6 +125,8 @@ func (c *seeMoreFoldEgressClient) PrepareMessageRequest(_ context.Context, _, bo
 	return body, testPreparedTextRoute, nil
 }
 
-func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return c.SendMessage(ctx, room, body)
+func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	_, err := c.SendMessageAccepted(ctx, room, body)
+
+	return testAdmission(id, err)
 }

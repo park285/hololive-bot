@@ -297,15 +297,16 @@ func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
 		assert.JSONEq(t, `{"body":"answer"}`, string(resend.Payload))
 	})
 
-	t.Run("an expired accepted lease requires manual review", func(t *testing.T) {
+	t.Run("an expired legacy accepted lease requires manual review", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
 		entry := newReplyOutboxEntry("message:m-accepted-expired", 0, `{"body":"answer"}`)
 		claim := claimOneWithLease(ctx, t, repo, entry, time.Millisecond)
 
-		accepted, err := repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-req-1")
+		// 이전 바이너리는 claim lease를 쥔 채 accepted를 기록했다. 완화 shape CHECK가 그 모양을 아직 허용한다.
+		_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET status = 'accepted', iris_request_id = 'iris-req-1'
+			WHERE id = $1 AND claim_token = $2`, claim.ID, testClaimToken)
 		require.NoError(t, err)
-		require.True(t, accepted)
 		time.Sleep(20 * time.Millisecond)
 
 		reclaim, err := repo.ReclaimExpired(ctx, 100)
@@ -333,13 +334,7 @@ func TestReplyOutboxTerminalSettlementDropsTheBody(t *testing.T) {
 		entry := newReplyOutboxEntry("message:m-retention", 0, `{"body":"사용자 원문이 섞인 응답"}`)
 		claim := claimOne(ctx, t, repo, entry)
 
-		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
-			ID:         claim.ID,
-			ClaimToken: testClaimToken,
-			Status:     ReplyOutboxHandoffCompleted,
-		})
-		require.NoError(t, err)
-		require.True(t, applied)
+		completeReplyHandoff(ctx, t, repo, claim)
 
 		var (
 			payload         []byte

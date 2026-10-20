@@ -309,7 +309,7 @@ services:
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
       POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       # 역할별 전용 비밀번호는 필수이며 init-db는 비어 있으면 실패한다(admin DB_PASSWORD 폴백 없음).
-      # Central-only credentials are never interpolated by the AP collector base.
+      # AP 수집기 기본 설정은 중앙 전용 자격 증명을 치환하지 않는다.
       HOLOLIVE_DB_PASSWORD: ${HOLOLIVE_DB_PASSWORD:?HOLOLIVE_DB_PASSWORD is required}
       HOLOLIVE_MIGRATOR_USER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
       HOLOLIVE_MIGRATOR_PASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-}
@@ -402,7 +402,7 @@ services:
       PGPORT: "5432"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
-      # Mandatory at db-migrate startup; build-only renders do not need credentials.
+      # db-migrate 시작 시 필수이며 빌드 전용 렌더링에는 자격 증명이 필요 없다.
       PGPASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-}
       PGSSLMODE: disable
       PGAPPNAME: hololive-db-migrate
@@ -691,7 +691,7 @@ services:
 
 volumes:
   holo-pg-data:
-  # Only postgres and the one-shot migrator mount this privileged transport.
+  # postgres와 일회성 마이그레이터만 이 권한 있는 전송 경로를 마운트한다.
   holo-pg-admin-socket:
     driver: local
     driver_opts:

@@ -42,6 +42,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
@@ -54,18 +55,19 @@ type deliveryOutboxClaimer interface {
 	fetchReadyAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration, activeRooms []string, processedIDs []int64) ([]domain.NotificationDeliveryOutbox, error)
 }
 
-// deliveryRequestStore의 두 요청 갱신은 fence가 맞지 않으면 *requestFenceMissError를 돌려준다.
+// deliveryRequestStore와 deliveryOutboxTransitioner의 소유자 전이는 claim 당시 attemptCount를 함께 받고, fence가
+// 맞지 않으면 행을 바꾸지 않은 채 *sendfence.MissError를 돌려준다.
 type deliveryRequestStore interface {
-	reissueFailedRequest(context.Context, int64, string, int, *deliverypayload.Request, *deliverypayload.Request, int, time.Duration, string) error
-	saveRequest(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) error
-	markRequestExhausted(ctx context.Context, id int64, workerID string, attemptCount int, errMsg string) (bool, error)
+	reissueFailedRequest(ctx context.Context, id int64, workerID string, attemptCount, generation int, exhaust bool, maxRetries int, backoff time.Duration, reason string) error
+	saveRequest(ctx context.Context, id int64, workerID string, attemptCount int, request *deliverypayload.Request) error
+	markRequestExhausted(ctx context.Context, id int64, workerID string, attemptCount int, errMsg string) error
 }
 
 type deliveryOutboxTransitioner interface {
-	MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
-	MarkSent(ctx context.Context, id int64, workerID string) (bool, error)
-	MarkQuarantined(ctx context.Context, id int64, workerID, reason string) (bool, error)
-	MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	MarkSending(ctx context.Context, id int64, workerID string, attemptCount int, lease time.Duration) error
+	MarkSent(ctx context.Context, id int64, workerID string, attemptCount int, irisRequestID string, handoffHorizon time.Duration) error
+	MarkQuarantined(ctx context.Context, id int64, workerID string, attemptCount int, reason string) error
+	MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) error
 }
 
 type deliveryOutboxMaintainer interface {
@@ -267,7 +269,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
-	if !d.markItemSending(ctx, item.ID) {
+	if !d.markItemSending(ctx, item) {
 		return
 	}
 
@@ -281,11 +283,12 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
-	err := d.attemptSend(ctx, item, request)
-	d.finishSend(ctx, item, request, err)
+	irisRequestID, err := d.attemptSend(ctx, item, request)
+	d.finishSend(ctx, item, request, irisRequestID, err)
 }
 
-func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) error {
+// attemptSend는 외부 발송 한 번을 attempt로 기록하고, 성공이면 Iris가 admission을 증명한 requestId를 돌려준다.
+func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) (string, error) {
 	attemptCtx, cancel := context.WithTimeout(ctx, d.config.AttemptTimeout)
 
 	defer cancel()
@@ -308,20 +311,20 @@ func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationD
 		}
 	}()
 
-	err := d.sendPrepared(attemptCtx, item, request)
+	irisRequestID, err := d.sendPrepared(attemptCtx, item, request)
 
 	outcome = deliveryProviderOutcome(err)
 
-	return err
+	return irisRequestID, err
 }
 
-func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, err error) {
+func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, irisRequestID string, err error) {
 	// 부모 취소 뒤에도 결과를 저장하되 예산을 제한합니다. 저장 실패는 SENDING으로 남겨 sweep이 격리합니다.
 	finalCtx, finalizeCancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer finalizeCancel()
 
 	if err == nil {
-		d.markItemSent(finalCtx, item.ID)
+		d.markItemSent(finalCtx, item, irisRequestID)
 
 		return
 	}
@@ -336,26 +339,19 @@ func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDe
 
 	switch sendoutcome.Classify(err) {
 	case sendoutcome.OutcomeUnknown, sendoutcome.TransportAmbiguous:
-		d.markItemQuarantined(finalCtx, item.ID, err.Error())
+		d.markItemQuarantined(finalCtx, item, err.Error())
 	case sendoutcome.Failed:
 		d.markItemFailed(finalCtx, item, err.Error())
 	case sendoutcome.Success:
 	}
 }
 
-func (d *Dispatcher) markItemQuarantined(ctx context.Context, id int64, reason string) {
+func (d *Dispatcher) markItemQuarantined(ctx context.Context, item *domain.NotificationDeliveryOutbox, reason string) {
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer cancel()
 
-	fenced, err := d.repository.MarkQuarantined(ctx, id, d.workerID, reason)
-	if err != nil {
-		d.logger.Error("Failed to quarantine outbox item", slog.Int64("id", id), slog.Any("error", err))
-
-		return
-	}
-
-	if !fenced {
-		d.logger.Warn("Outbox item fence skipped quarantine", slog.Int64("id", id))
+	if err := d.repository.MarkQuarantined(ctx, item.ID, d.workerID, item.AttemptCount, reason); err != nil {
+		d.reportTransitionError(item.ID, err, "Failed to quarantine outbox item")
 	}
 }
 
@@ -371,19 +367,14 @@ func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
 	return workercontract.AttemptFailed
 }
 
-func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
+// markItemSending은 발송 전 claim을 SENDING으로 옮기고 외부 발송을 시작해도 되는지 보고한다. 미스가 난 행은 현재
+// 소유자·회수 경로의 것이므로 발송하지 않는다.
+func (d *Dispatcher) markItemSending(ctx context.Context, item *domain.NotificationDeliveryOutbox) bool {
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer cancel()
 
-	fenced, err := d.repository.MarkSending(ctx, id, d.workerID, workerconfig.NotificationDeliveryLease)
-	if err != nil {
-		d.logger.Error("Failed to mark outbox item sending", slog.Int64("id", id), slog.Any("error", err))
-
-		return false
-	}
-
-	if !fenced {
-		d.logger.Warn("Outbox item fence skipped sending transition", slog.Int64("id", id))
+	if err := d.repository.MarkSending(ctx, item.ID, d.workerID, item.AttemptCount, workerconfig.NotificationDeliveryLease); err != nil {
+		d.reportTransitionError(item.ID, err, "Failed to mark outbox item sending")
 
 		return false
 	}
@@ -391,36 +382,56 @@ func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
 	return true
 }
 
-func (d *Dispatcher) markItemSent(ctx context.Context, id int64) bool {
-	fenced, err := d.repository.MarkSent(ctx, id, d.workerID)
-	if err != nil {
-		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.Any("error", err))
-
-		return false
+// markItemSent는 발송 성공과 Iris requestId를 함께 기록해 handoff 확인을 예약한다. 지평은 handoff reconciler와 같은
+// attempt timeout이다.
+func (d *Dispatcher) markItemSent(ctx context.Context, item *domain.NotificationDeliveryOutbox, irisRequestID string) {
+	if err := d.repository.MarkSent(ctx, item.ID, d.workerID, item.AttemptCount, irisRequestID, d.config.AttemptTimeout); err != nil {
+		d.reportTransitionError(item.ID, err, "Failed to mark outbox item as sent")
 	}
-
-	if !fenced {
-		d.logger.Warn("Outbox item re-claimed before mark sent; fence skipped transition", slog.Int64("id", id))
-
-		return false
-	}
-
-	return true
 }
 
 func (d *Dispatcher) markItemFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, reason string) {
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer cancel()
 
-	fenced, err := d.repository.MarkFailed(ctx, item.ID, d.workerID, item.AttemptCount, d.config.MaxRetries, d.config.RetryBackoff, reason)
-	if err != nil {
-		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", item.ID), slog.Any("error", err))
+	if err := d.repository.MarkFailed(ctx, item.ID, d.workerID, item.AttemptCount, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
+		d.reportTransitionError(item.ID, err, "Failed to mark outbox item failed")
+	}
+}
+
+// reportTransitionError는 소유자 전이 오류를 남긴다. 미스가 난 행은 현재 소유자·회수 경로에 맡기고 지표와 로그만
+// 남기며, 그 밖의 오류는 commit 여부를 모르는 DB 오류로 기록한다.
+func (d *Dispatcher) reportTransitionError(id int64, err error, message string) {
+	if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
+		d.recordFenceMiss(id, miss, fenceMissResultFenceLost, nil)
 
 		return
 	}
 
-	if !fenced {
-		d.logger.Warn("Outbox item re-claimed before mark failed; fence skipped transition", slog.Int64("id", item.ID))
+	d.logger.Error(message, slog.Int64("id", id), slog.Any("error", err))
+}
+
+// recordFenceMiss는 미스 행마다 지표를 올리고 로그를 남긴다. 발송 성공을 기록하지 못한 mark_sent 미스는 외부 결과가
+// 원장에 남지 않으므로 오류로, 그 밖의 미스는 경고로 남긴다.
+func (d *Dispatcher) recordFenceMiss(id int64, miss *sendfence.MissError, result string, transitionErr error) {
+	for _, row := range miss.Rows {
+		notificationDeliveryFenceMissTotal.WithLabelValues(miss.Action, string(row.Reason), result).Inc()
+
+		attrs := []any{
+			slog.Int64("id", id), slog.String("action", miss.Action), slog.String("reason", string(row.Reason)),
+			slog.String("observed_status", row.Status), slog.String("result", result),
+		}
+
+		switch {
+		case transitionErr != nil:
+			d.logger.Error("Failed to settle delivery fence miss", append(attrs, slog.Any("error", transitionErr))...)
+		case result == fenceMissResultFailed:
+			d.logger.Warn("Delivery fence miss settled as failure", attrs...)
+		case miss.Action == actionMarkSent:
+			d.logger.Error("Delivery send succeeded but fence lost before recording it; row left to its current owner", attrs...)
+		default:
+			d.logger.Warn("Delivery fence lost; row left to its current owner", attrs...)
+		}
 	}
 }
 

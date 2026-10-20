@@ -95,11 +95,13 @@ func completeTransitionPostSentRoom(
 ) time.Time {
 	t.Helper()
 
+	admission := freezeTestAdmission(t, transition, []domain.YouTubeNotificationDelivery{row}, "youtube:post-sent:"+row.RoomID, time.Minute)
+
 	operation, begin, err := transition.BeginSending(t.Context(), []domain.YouTubeNotificationDelivery{row}, outboxes)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, begin.Outcome)
 
-	completed, err := transition.CompleteSent(t.Context(), operation, DeliveryModePerRoom)
+	completed, err := transition.CompleteSent(t.Context(), operation, DeliveryModePerRoom, admission)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 

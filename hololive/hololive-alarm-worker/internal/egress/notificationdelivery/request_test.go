@@ -12,6 +12,7 @@ import (
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -43,7 +44,8 @@ func (s *preparedSenderSpy) PrepareMessageRequest(context.Context, string, strin
 	return s.body, s.route, s.prepareErr
 }
 
-func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, route, id string) error {
+// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
+func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, route, id string) (string, error) {
 	s.ids = append(s.ids, id)
 	s.bodies = append(s.bodies, body)
 	s.routes = append(s.routes, route)
@@ -52,7 +54,15 @@ func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, rout
 		s.onSend()
 	}
 
-	return s.err
+	if s.err != nil {
+		return "", s.err
+	}
+
+	return preparedSpyIrisRequestID(id), nil
+}
+
+func preparedSpyIrisRequestID(clientRequestID string) string {
+	return "iris-" + clientRequestID
 }
 
 func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
@@ -93,7 +103,7 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", "source"))
 
-	sender := &preparedSenderSpy{body: "pinned body", route: testPreparedText, err: errors.New("known failure")}
+	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText, err: errors.New("known failure")}
 	cfg := testDispatcherConfig()
 
 	cfg.MaxRetries = 1
@@ -110,16 +120,8 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	d.processReady(ctx)
 	require.Len(t, sender.ids, 2)
 	require.Equal(t, sender.ids[0], sender.ids[1])
-	require.Equal(t, []string{"pinned body", "pinned body"}, sender.bodies)
+	require.Equal(t, []string{testPinnedBody, testPinnedBody}, sender.bodies)
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, domain.DeliveryStatusSent))
-}
-
-func requireRequestFenceMiss(t *testing.T, err error, cause requestFenceCause) {
-	t.Helper()
-
-	miss, ok := errors.AsType[*requestFenceMissError](err)
-	require.Truef(t, ok, "want request fence miss, got %v", err)
-	require.Equal(t, cause, miss.Cause)
 }
 
 func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
@@ -130,28 +132,20 @@ func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
 
-	id := items[0].ID
+	id, attempt := items[0].ID, items[0].AttemptCount
 	request := &deliverypayload.Request{Body: "pinned", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
-	requireRequestFenceMiss(t, repo.saveRequest(ctx, id, testWorkerB, nil, request), requestFenceOwnerChanged)
-	require.NoError(t, repo.saveRequest(ctx, id, testWorkerA, nil, request))
+	requireFenceMiss(t, repo.saveRequest(ctx, id, testWorkerB, attempt, request), actionSaveRequest, sendfence.ReasonOwnerChanged)
+	require.NoError(t, repo.saveRequest(ctx, id, testWorkerA, attempt, request))
 
 	changed := *request
 
 	changed.Body = "racing body"
-	requireRequestFenceMiss(t, repo.saveRequest(ctx, id, testWorkerA, nil, &changed), requestFenceRequestChanged)
+	requireFenceMiss(t, repo.saveRequest(ctx, id, testWorkerA, attempt, &changed), actionSaveRequest, sendfence.ReasonRequestChanged)
 	markOutboxSending(ctx, t, repo, &items[0])
 
-	saved, err := repo.MarkQuarantined(ctx, id, testWorkerB, "foreign")
-	require.NoError(t, err)
-	require.False(t, saved)
-
-	saved, err = repo.MarkQuarantined(ctx, id, testWorkerA, "unknown")
-	require.NoError(t, err)
-	require.True(t, saved)
-
-	saved, err = repo.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "late failure")
-	require.NoError(t, err)
-	require.False(t, saved)
+	requireFenceMiss(t, repo.MarkQuarantined(ctx, id, testWorkerB, attempt, "foreign"), actionMarkQuarantined, sendfence.ReasonOwnerChanged)
+	require.NoError(t, repo.MarkQuarantined(ctx, id, testWorkerA, attempt, "unknown"))
+	requireFenceMiss(t, repo.MarkFailed(ctx, id, testWorkerA, attempt, 3, time.Minute, "late failure"), actionMarkFailed, sendfence.ReasonStatusChanged)
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cas", "room", "changed"))
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, deliveryStatusQuarantined))
 }
@@ -165,13 +159,9 @@ func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
 	require.Len(t, items, 1)
 
 	previous := &deliverypayload.Request{Body: "pinned", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
-	require.NoError(t, repo.saveRequest(ctx, items[0].ID, testWorkerA, nil, previous))
+	require.NoError(t, repo.saveRequest(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, previous))
 	markOutboxSending(ctx, t, repo, &items[0])
-
-	next := *previous
-
-	next.Generation = 1
-	require.NoError(t, repo.reissueFailedRequest(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, previous, &next, 3, 0, "pre-handoff failure"))
+	require.NoError(t, repo.reissueFailedRequest(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, previous.Generation, false, 3, 0, "pre-handoff failure"))
 
 	// 별도 MarkFailed 호출 없이 새 dispatcher가 commit된 세대와 retry 상태를 복구합니다.
 
@@ -183,20 +173,59 @@ func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
 }
 
 func TestGenericPayloadMismatchDoesNotReissue(t *testing.T) {
-	var snapshots []*deliverypayload.Request
+	var (
+		pinned   []*deliverypayload.Request
+		reissued int
+	)
 
-	repo := &mockDeliveryRepository{saveRequestFn: func(_ context.Context, _ int64, _ string, _, next *deliverypayload.Request) error {
-		snapshots = append(snapshots, next)
-		return nil
-	}}
+	repo := &mockDeliveryRepository{
+		saveRequestFn: func(_ context.Context, _ int64, _ string, _ int, request *deliverypayload.Request) error {
+			pinned = append(pinned, request)
+			return nil
+		},
+		reissueFn: func(context.Context, int64, string, int, int, bool) error {
+			reissued++
+			return nil
+		},
+	}
 	sender := &preparedSenderSpy{body: "body", route: testPreparedText, err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH"}`)}
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 	d.processItem(t.Context(), &domain.NotificationDeliveryOutbox{ID: 1, Payload: makePayload(t, "source")})
-	require.Len(t, snapshots, 1)
-	require.Equal(t, 0, snapshots[0].Generation)
+	require.Len(t, pinned, 1)
+	require.Zero(t, pinned[0].Generation)
+	require.Zero(t, reissued, "payload mismatch must not advance the request generation")
+	require.Len(t, sender.ids, 1)
 }
 
-func TestGenericRequestGenerationCASRejectsStaleWriter(t *testing.T) {
+// 다른 writer가 세대를 먼저 기록했으면 이전 세대를 기대한 재발급은 행을 바꾸지 않고 request_changed가 된다.
+func TestGenericRequestGenerationFenceRejectsStaleGeneration(t *testing.T) {
+	repo := testRepository(t)
+	ctx := t.Context()
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "generation-fence", "room", "source"))
+
+	items := fetchAndLockItems(ctx, t, repo)
+	require.Len(t, items, 1)
+
+	id, attempt := items[0].ID, items[0].AttemptCount
+	request := &deliverypayload.Request{Body: "body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
+	require.NoError(t, repo.saveRequest(ctx, id, testWorkerA, attempt, request))
+	markOutboxSending(ctx, t, repo, &items[0])
+
+	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET payload = jsonb_set(payload, '{request,generation}', '1'::jsonb) WHERE id = $1`, id)
+	require.NoError(t, err)
+
+	before := readOwnerRow(ctx, t, repo, id)
+	requireFenceMiss(t, repo.reissueFailedRequest(ctx, id, testWorkerA, attempt, 0, false, 3, time.Minute, "stale generation"), actionReissueRequest, sendfence.ReasonRequestChanged)
+	require.Equal(t, before, readOwnerRow(ctx, t, repo, id))
+	require.Equal(t, 1, storedRequest(ctx, t, repo, id).Generation)
+
+	// 같은 세대를 기대한 두 재발급이 겹쳐도 세대는 한 번만 오른다. 늦은 쪽은 앞선 전이가 SENDING을 끝낸 행을 본다.
+	require.NoError(t, repo.reissueFailedRequest(ctx, id, testWorkerA, attempt, 1, false, 3, time.Minute, "first"))
+	requireFenceMiss(t, repo.reissueFailedRequest(ctx, id, testWorkerA, attempt, 1, false, 3, time.Minute, "second"), actionReissueRequest, sendfence.ReasonStatusChanged)
+	require.Equal(t, 2, storedRequest(ctx, t, repo, id).Generation)
+}
+
+func TestGenericConcurrentReissueAdvancesGenerationOnce(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "generation-cas", "room", "source"))
@@ -204,20 +233,16 @@ func TestGenericRequestGenerationCASRejectsStaleWriter(t *testing.T) {
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
 
-	id := items[0].ID
-	previous := &deliverypayload.Request{Body: "body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
-	require.NoError(t, repo.saveRequest(ctx, id, testWorkerA, nil, previous))
+	id, attempt := items[0].ID, items[0].AttemptCount
+	request := &deliverypayload.Request{Body: "body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
+	require.NoError(t, repo.saveRequest(ctx, id, testWorkerA, attempt, request))
 	markOutboxSending(ctx, t, repo, &items[0])
-
-	next := *previous
-
-	next.Generation = 1
 
 	results := make(chan error, 2)
 
 	for range 2 {
 		go func() {
-			results <- repo.saveRequest(ctx, id, testWorkerA, previous, &next)
+			results <- repo.reissueFailedRequest(ctx, id, testWorkerA, attempt, 0, false, 3, time.Minute, "conflict")
 		}()
 	}
 
@@ -235,7 +260,12 @@ func TestGenericRequestGenerationCASRejectsStaleWriter(t *testing.T) {
 	}
 
 	require.Equal(t, 1, applied)
-	requireRequestFenceMiss(t, missed, requestFenceRequestChanged)
+	requireFenceMiss(t, missed, actionReissueRequest, sendfence.ReasonStatusChanged)
+	require.Equal(t, 1, storedRequest(ctx, t, repo, id).Generation)
+}
+
+func storedRequest(ctx context.Context, t *testing.T, repo *outboxFixture, id int64) deliverypayload.Request {
+	t.Helper()
 
 	var raw []byte
 
@@ -244,7 +274,9 @@ func TestGenericRequestGenerationCASRejectsStaleWriter(t *testing.T) {
 	var p deliverypayload.Payload
 
 	require.NoError(t, jsonv2.Unmarshal(raw, &p))
-	require.Equal(t, 1, p.Request.Generation)
+	require.NotNil(t, p.Request)
+
+	return *p.Request
 }
 
 func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
@@ -253,7 +285,7 @@ func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
 	// content_id는 period_key와 room_id의 연결이므로 두 입력이 같은 conflict key를 만들 수 있습니다.
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "period:part", "room", "source"))
 
-	sender := &preparedSenderSpy{body: "pinned body", route: testPreparedText, err: errors.New("known failure")}
+	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText, err: errors.New("known failure")}
 	cfg := testDispatcherConfig()
 
 	cfg.MaxRetries = 1
@@ -292,9 +324,9 @@ func TestGenericPreparationFailureRetriesWithoutSending(t *testing.T) {
 
 func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 	for _, unknown := range []error{
-		sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded, context.Canceled,
+		sendoutcome.ErrAdmissionOutcomeUnknown, context.DeadlineExceeded, context.Canceled,
 		testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`),
-		errors.Join(sendoutcome.ErrHandoffFailed, &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}),
+		errors.Join(iris.ErrPermanent, &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}),
 	} {
 		t.Run(unknown.Error(), func(t *testing.T) {
 			repo := testRepository(t)
@@ -316,36 +348,43 @@ func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 	}
 }
 
-// 저장된 요청을 Go가 다시 인코딩하면 다른 jsonb가 되는 표현으로 고정해, 디코딩한 요청은 같지만 재발급 CAS의 요청 비교만
-// 어긋나게 한다. 소유자·상태·시도 횟수는 그대로라 dispatcher가 아직 행을 소유한다.
-func pinDriftedRequest(ctx context.Context, t *testing.T, repo *outboxFixture, periodKey string) string {
+// pinForeignRequest는 다른 writer가 이 worker보다 먼저 요청을 고정한 상태를 만든다. 소유자·상태·시도 횟수는 그대로라
+// dispatcher가 아직 행을 소유한다.
+func pinForeignRequest(ctx context.Context, t *testing.T, repo *outboxFixture, periodKey string) {
 	t.Helper()
 
 	baseID := notificationDeliveryClientRequestID(&domain.NotificationDeliveryOutbox{ID: 1})
 	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox
-		SET payload = jsonb_set(payload, '{request}', jsonb_build_object('body', 'pinned', 'route', $2::text, 'base_id', $3::text, 'generation', 0, 'exhausted', false))
+		SET payload = jsonb_set(payload, '{request}', jsonb_build_object('body', 'pinned', 'route', $2::text, 'base_id', $3::text, 'generation', 0))
 		WHERE period_key = $1`, periodKey, testPreparedText, baseID)
 	require.NoError(t, err)
-
-	return baseID
 }
 
-func requestFenceMissCount(operation requestFenceOperation, cause requestFenceCause, result string) float64 {
-	return promtestutil.ToFloat64(notificationDeliveryRequestFenceMissTotal.WithLabelValues(string(operation), string(cause), result))
+func fenceMissCount(action string, reason sendfence.Reason, result string) float64 {
+	return promtestutil.ToFloat64(notificationDeliveryFenceMissTotal.WithLabelValues(action, string(reason), result))
 }
 
+// 발송 중 다른 writer가 세대를 앞서 기록했으면 409 재발급은 새 세대를 쓰지 못한다. 소유권은 남았으므로 같은 ID 반복
+// 충돌을 피하려고 저장된 요청을 소진으로 표시한 종료 FAILED로 끝내며 SENDING을 남기지 않는다.
 func TestGenericReissueFenceMissWithHeldOwnershipFailsWithoutSendingResidue(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue-fence-held", "room", "source"))
 
-	baseID := pinDriftedRequest(ctx, t, repo, "reissue-fence-held")
-	sender := &preparedSenderSpy{err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
-	before := requestFenceMissCount(requestFenceReissue, requestFenceRequestChanged, requestFenceResultFailed)
+	sender := &preparedSenderSpy{
+		body: "held body", route: testPreparedText,
+		err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`),
+		onSend: func() {
+			_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET payload = jsonb_set(payload, '{request,generation}', '2'::jsonb)
+				WHERE period_key = 'reissue-fence-held'`)
+			require.NoError(t, err)
+		},
+	}
+	before := fenceMissCount(actionReissueRequest, sendfence.ReasonRequestChanged, fenceMissResultFailed)
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 	d.processReady(ctx)
-	require.Equal(t, []string{baseID}, sender.ids)
-	require.InDelta(t, before+1, requestFenceMissCount(requestFenceReissue, requestFenceRequestChanged, requestFenceResultFailed), 0)
+	require.Len(t, sender.ids, 1)
+	require.InDelta(t, before+1, fenceMissCount(actionReissueRequest, sendfence.ReasonRequestChanged, fenceMissResultFailed), 0)
 
 	var (
 		status     string
@@ -367,7 +406,7 @@ func TestGenericReissueFenceMissWithHeldOwnershipFailsWithoutSendingResidue(t *t
 	require.Equal(t, string(domain.DeliveryStatusFailed), status)
 	require.Equal(t, 1, attempts)
 	require.Nil(t, lockedBy)
-	require.Zero(t, generation, "a missed reissue must not persist the next generation")
+	require.Equal(t, 2, generation, "a missed reissue must not persist its own next generation")
 	require.True(t, exhausted)
 	require.Zero(t, countByStatus(ctx, t, repo, deliveryStatusSending))
 
@@ -384,10 +423,10 @@ func TestGenericReissueFenceMissLeavesForeignTakeoverUntouched(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		takeover func(context.Context, *testing.T, *outboxFixture, string)
-		cause    requestFenceCause
+		reason   sendfence.Reason
 		status   domain.DeliveryOutboxStatus
 		lockedBy *string
-		reason   *string
+		errText  *string
 	}{
 		{
 			name: "stale_sweep",
@@ -401,9 +440,9 @@ func TestGenericReissueFenceMissLeavesForeignTakeoverUntouched(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, 1, swept)
 			},
-			cause:  requestFenceStatusChanged,
-			status: deliveryStatusQuarantined,
-			reason: new(staleSendingFailureReason),
+			reason:  sendfence.ReasonStatusChanged,
+			status:  deliveryStatusQuarantined,
+			errText: new(staleSendingFailureReason),
 		},
 		{
 			name: "foreign_owner",
@@ -413,7 +452,7 @@ func TestGenericReissueFenceMissLeavesForeignTakeoverUntouched(t *testing.T) {
 				_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET locked_by = $2 WHERE period_key = $1`, periodKey, testWorkerB)
 				require.NoError(t, err)
 			},
-			cause:    requestFenceOwnerChanged,
+			reason:   sendfence.ReasonOwnerChanged,
 			status:   deliveryStatusSending,
 			lockedBy: new(testWorkerB),
 		},
@@ -430,27 +469,27 @@ func TestGenericReissueFenceMissLeavesForeignTakeoverUntouched(t *testing.T) {
 				onSend: func() { tc.takeover(ctx, t, repo, periodKey) },
 			}
 
-			before := requestFenceMissCount(requestFenceReissue, tc.cause, requestFenceResultFenceLost)
+			before := fenceMissCount(actionReissueRequest, tc.reason, fenceMissResultFenceLost)
 
 			d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 			d.processReady(ctx)
 			require.Len(t, sender.ids, 1)
-			require.InDelta(t, before+1, requestFenceMissCount(requestFenceReissue, tc.cause, requestFenceResultFenceLost), 0)
+			require.InDelta(t, before+1, fenceMissCount(actionReissueRequest, tc.reason, fenceMissResultFenceLost), 0)
 
 			var (
 				status     string
 				attempts   int
 				lockedBy   *string
-				reason     *string
+				errText    *string
 				generation int
 			)
 
 			require.NoError(t, repo.pool.QueryRow(ctx, `SELECT status, attempt_count, locked_by, error, (payload->'request'->>'generation')::int
-				FROM notification_delivery_outbox WHERE period_key = $1`, periodKey).Scan(&status, &attempts, &lockedBy, &reason, &generation))
+				FROM notification_delivery_outbox WHERE period_key = $1`, periodKey).Scan(&status, &attempts, &lockedBy, &errText, &generation))
 			require.Equal(t, string(tc.status), status)
 			require.Zero(t, attempts)
 			require.Equal(t, tc.lockedBy, lockedBy)
-			require.Equal(t, tc.reason, reason)
+			require.Equal(t, tc.errText, errText)
 			require.Zero(t, generation)
 		})
 	}
@@ -462,7 +501,7 @@ func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing
 	for _, tc := range []struct {
 		name      string
 		interfere func(context.Context, *testing.T, *outboxFixture, string)
-		cause     requestFenceCause
+		reason    sendfence.Reason
 		result    string
 		lockedBy  *string
 		attempts  int
@@ -476,8 +515,8 @@ func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing
 				require.NoError(t, err)
 				require.Len(t, claimItems(ctx, t, repo, testWorkerB, 1), 1)
 			},
-			cause:    requestFenceOwnerChanged,
-			result:   requestFenceResultFenceLost,
+			reason:   sendfence.ReasonOwnerChanged,
+			result:   fenceMissResultFenceLost,
 			lockedBy: new(testWorkerB),
 		},
 		{
@@ -485,10 +524,10 @@ func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing
 			interfere: func(ctx context.Context, t *testing.T, repo *outboxFixture, periodKey string) {
 				t.Helper()
 
-				pinDriftedRequest(ctx, t, repo, periodKey)
+				pinForeignRequest(ctx, t, repo, periodKey)
 			},
-			cause:    requestFenceRequestChanged,
-			result:   requestFenceResultFailed,
+			reason:   sendfence.ReasonRequestChanged,
+			result:   fenceMissResultFailed,
 			attempts: 1,
 		},
 	} {
@@ -500,12 +539,12 @@ func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing
 
 			sender := &preparedSenderSpy{body: "rendered", route: testPreparedText, onPrepare: func() { tc.interfere(ctx, t, repo, periodKey) }}
 
-			before := requestFenceMissCount(requestFenceSave, tc.cause, tc.result)
+			before := fenceMissCount(actionSaveRequest, tc.reason, tc.result)
 
 			d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 			d.processReady(ctx)
 			require.Empty(t, sender.ids)
-			require.InDelta(t, before+1, requestFenceMissCount(requestFenceSave, tc.cause, tc.result), 0)
+			require.InDelta(t, before+1, fenceMissCount(actionSaveRequest, tc.reason, tc.result), 0)
 
 			var (
 				status   string
@@ -524,7 +563,7 @@ func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing
 	}
 }
 
-func TestRequestFenceMissReportsObservedCause(t *testing.T) {
+func TestRequestFenceMissReportsObservedReason(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "fence-cause", "room", "source"))
@@ -535,31 +574,25 @@ func TestRequestFenceMissReportsObservedCause(t *testing.T) {
 	id := items[0].ID
 	request := &deliverypayload.Request{Body: "fenced", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
 
-	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET lock_expires_at = clock_timestamp() - INTERVAL '1 second' WHERE id = $1`, id)
-	require.NoError(t, err)
-	requireRequestFenceMiss(t, repo.saveRequest(ctx, id, testWorkerA, nil, request), requestFenceLeaseExpired)
+	expireLease(ctx, t, repo, id)
+	requireFenceMiss(t, repo.saveRequest(ctx, id, testWorkerA, items[0].AttemptCount, request), actionSaveRequest, sendfence.ReasonLeaseExpired)
 
 	reclaimed := claimItems(ctx, t, repo, testWorkerB, 1)
 	require.Len(t, reclaimed, 1)
-	requireRequestFenceMiss(t, repo.saveRequest(ctx, id, testWorkerA, nil, request), requestFenceOwnerChanged)
+	requireFenceMiss(t, repo.saveRequest(ctx, id, testWorkerA, items[0].AttemptCount, request), actionSaveRequest, sendfence.ReasonOwnerChanged)
 
-	require.NoError(t, repo.saveRequest(ctx, id, testWorkerB, nil, request))
+	attempt := reclaimed[0].AttemptCount
+	require.NoError(t, repo.saveRequest(ctx, id, testWorkerB, attempt, request))
+	require.NoError(t, repo.MarkSending(ctx, id, testWorkerB, attempt, testLease))
 
-	ok, err := repo.MarkSending(ctx, id, testWorkerB, testLease)
-	require.NoError(t, err)
-	require.True(t, ok)
-
-	next := *request
-
-	next.Generation = 1
-	_, err = repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET sending_started_at = sending_started_at - INTERVAL '1 hour' WHERE id = $1`, id)
+	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET sending_started_at = sending_started_at - INTERVAL '1 hour' WHERE id = $1`, id)
 	require.NoError(t, err)
 
 	_, err = repo.QuarantineStaleSending(ctx, time.Minute, 10)
 	require.NoError(t, err)
-	requireRequestFenceMiss(t, repo.reissueFailedRequest(ctx, id, testWorkerB, reclaimed[0].AttemptCount, request, &next, 1, time.Minute, "rejected"), requestFenceStatusChanged)
+	requireFenceMiss(t, repo.reissueFailedRequest(ctx, id, testWorkerB, attempt, 0, false, 1, time.Minute, "rejected"), actionReissueRequest, sendfence.ReasonStatusChanged)
 
 	_, err = repo.pool.Exec(ctx, `DELETE FROM notification_delivery_outbox WHERE id = $1`, id)
 	require.NoError(t, err)
-	requireRequestFenceMiss(t, repo.reissueFailedRequest(ctx, id, testWorkerB, reclaimed[0].AttemptCount, request, &next, 1, time.Minute, "rejected"), requestFenceRowMissing)
+	requireFenceMiss(t, repo.reissueFailedRequest(ctx, id, testWorkerB, attempt, 0, false, 1, time.Minute, "rejected"), actionReissueRequest, sendfence.ReasonMissing)
 }

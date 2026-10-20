@@ -24,8 +24,8 @@
 //     그 원장이 재claim 직렬성을 따로 보장한다.
 //   - lease_valid는 원장이 만료를 계산한다(lock_expires_at > clock 또는 locked_at + lease_ms > clock). 외부 발송 뒤
 //     정산처럼 외부 결과를 lease 만료로 되돌리지 않는 전이는 TRUE다.
-//   - membership_matches는 고정된 단위 멤버 집합과 현재 멤버·호출 대상 집합의 등가, members_non_terminal은 고정 멤버
-//     중 종료 상태가 없음이다. 단일 행 원장은 둘 다 TRUE다.
+//   - membership_matches는 고정된 단위 멤버 집합과 현재 멤버·호출 대상 집합의 등가다. members_non_terminal은
+//     미고정 단위까지 포함해 현재 멤버 중 종료 상태가 없고, 고정 멤버가 사라지지 않았다는 뜻이다. 단일 행 원장은 둘 다 TRUE다.
 //   - request_matches는 고정 요청의 세대·식별자 등가다. 요청 본문 전체 JSON 등가는 쓰지 않는다.
 package sendfence
 
@@ -54,7 +54,7 @@ const (
 	ReasonVersionChanged Reason = "version_changed"
 	// ReasonLeaseExpired는 발송 전 claim의 lease가 만료됐다는 뜻이다. 아직 재claim되지 않았어도 회수 경로가 가져간다.
 	ReasonLeaseExpired Reason = "lease_expired"
-	// ReasonMemberTerminal은 고정 단위 멤버 중 종료 상태가 있어 단위를 다시 모을 수 없다는 뜻이다.
+	// ReasonMemberTerminal은 현재 단위 멤버가 종료됐거나 고정 멤버가 사라져 단위를 다시 모을 수 없다는 뜻이다.
 	ReasonMemberTerminal Reason = "member_terminal"
 	// ReasonMembershipChanged는 고정 단위 멤버 집합과 현재 멤버·호출 대상 집합이 다르다는 뜻이다.
 	ReasonMembershipChanged Reason = "membership_changed"

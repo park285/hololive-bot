@@ -92,10 +92,11 @@ run_go_package_step() {
 }
 
 owned_go_package_patterns() {
+    # 상위 workspace의 외부 모듈은 자체 lint 설정을 쓰므로 worktree 이름과 무관하게 제외한다.
     local package_pattern
     for package_pattern in "${GO_PACKAGES[@]}"; do
         case "${package_pattern}" in
-            ./../shared-go/...|../shared-go/...|./../iris-client-go/...|../iris-client-go/...)
+            ./../*|../*)
                 continue
                 ;;
         esac

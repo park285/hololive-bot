@@ -356,6 +356,10 @@ func (s *TransitionStore) resolveStaleSendingGroups(
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: load rows: %w", err)
 	}
 
+	if !s.logicalGroupWindowComplete(len(requested), len(rows)) {
+		return resolvedLogicalGroups{}, errors.New("resolve stale sending groups: logical group window is incomplete")
+	}
+
 	rowsByID, snapshots, err := staleResolutionSnapshots(rows, requestedKeys, s.config.LogicalGroupLimit)
 	if err != nil {
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: build snapshots: %w", err)

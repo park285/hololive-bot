@@ -6,7 +6,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
-# Read the non-secret primary owner, never a second address default.
+# 별도 주소 기본값 없이 비밀이 아닌 주 서버 소유 정보만 읽는다.
 AP_POSTGRES_HOST=""
 while IFS='=' read -r host_name host_address; do
   if [[ "$host_name" == central ]]; then AP_POSTGRES_HOST="$host_address"; fi

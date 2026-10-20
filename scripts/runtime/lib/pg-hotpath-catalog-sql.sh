@@ -325,12 +325,14 @@ alarm_claim_sql() {
 BEGIN;
 SET LOCAL statement_timeout = '5s';
 EXPLAIN (ANALYZE, BUFFERS)
-WITH due_window AS MATERIALIZED (
+WITH clock AS MATERIALIZED (
+    SELECT clock_timestamp() AS now
+), due_window AS MATERIALIZED (
     SELECT d.send_unit_id, d.next_attempt_at, d.id AS delivery_id
     FROM alarm_dispatch_deliveries d
     WHERE d.send_unit_id IS NOT NULL
       AND d.status IN ('pending', 'retry')
-      AND d.next_attempt_at <= NOW()
+      AND d.next_attempt_at <= (SELECT clock.now FROM clock)
     ORDER BY d.next_attempt_at ASC, d.id ASC
     LIMIT 500
 ), unit_candidates AS (
@@ -341,7 +343,7 @@ WITH due_window AS MATERIALIZED (
 ), locked_units AS (
     SELECT u.id, candidate.next_attempt_at, candidate.delivery_id,
         (
-            SELECT count(*)
+            SELECT count(due.id)
             FROM alarm_dispatch_deliveries due
             WHERE due.send_unit_id = u.id
               AND due.status IN ('pending', 'retry')
@@ -369,10 +371,10 @@ WITH due_window AS MATERIALIZED (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'leased',
         locked_by = 'pg-hotpath-explain',
-        locked_at = NOW(),
-        lock_expires_at = NOW() + INTERVAL '60 seconds',
-        updated_at = NOW()
-    FROM picked
+        locked_at = clock.now,
+        lock_expires_at = clock.now + (60000::BIGINT * INTERVAL '1 millisecond'),
+        updated_at = clock.now
+    FROM picked CROSS JOIN clock
     WHERE d.id = picked.id
     RETURNING d.id, d.event_id, d.room_id, d.dedupe_key, d.claim_keys, d.delivery_context,
         d.dispatch_group_key, d.send_unit_id, d.status, d.attempt_count, d.next_attempt_at,

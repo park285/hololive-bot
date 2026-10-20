@@ -1,5 +1,4 @@
-# Evaluate often; the controller independently requires consecutive failures and
-# a minimum outage duration before it can enter the fencing path.
+# 빈번히 점검하되 제어기는 연속 실패·최소 장애 시간을 충족해야 격리 경로에 진입한다.
 [Unit]
 Description=Evaluate Hololive PostgreSQL failover every 15 seconds
 

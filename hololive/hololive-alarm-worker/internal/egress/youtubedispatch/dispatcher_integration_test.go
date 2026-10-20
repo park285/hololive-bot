@@ -968,6 +968,11 @@ func (f *fakeSender) PrepareMessageRequest(_ context.Context, _, body string) (s
 	return body, "text", nil
 }
 
-func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return f.SendMessage(ctx, room, body)
+// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
+func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	if err := f.SendMessage(ctx, room, body); err != nil {
+		return "", err
+	}
+
+	return "iris-test:" + id, nil
 }

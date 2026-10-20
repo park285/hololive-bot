@@ -16,10 +16,12 @@ type claimedDelivery struct {
 
 // deliveryAttempt의 요청은 모든 members가 공유한다. 고정 뒤에는 저장된 요청만
 // 사용하고, singleton fallback은 원래 member와 그 소유권으로 별도 시도를 만든다.
+// 필드 irisRequestID는 발송이 성공했을 때 Iris 202가 돌려준 requestId이며 로그에 남기지 않는다.
 type deliveryAttempt struct {
-	members   []claimedDelivery
-	request   deliverySendRequest
-	operation store.StartedOperation
+	members       []claimedDelivery
+	request       deliverySendRequest
+	operation     store.StartedOperation
+	irisRequestID string
 
 	// 기존 영속 전이·formatter·audit API에 넘기는 읽기 전용 투영이다.
 	// 생성 때 한 번 만들고 singleton은 같은 backing array를 사용한다.

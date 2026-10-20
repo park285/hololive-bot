@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Product test: disposable PG18.6 only; no published ports, production env or data.
+# 일회용 PG18.6 제품 검사. 포트 공개·운영 환경·운영 데이터를 사용하지 않는다.
 set -euo pipefail
 if [[ -n "${DOCKER_HOST:-}${DOCKER_CONTEXT:-}${DOCKER_CONFIG:-}" ]] || [[ "$(docker context show)" != default ]]; then
   echo 'policy test requires the local default Docker context without overrides' >&2
@@ -22,14 +22,14 @@ cleanup() {
   rm -rf "$fixture"
 }
 trap cleanup EXIT
-# Reuse the already-built pinned repository PostgreSQL image, never pull/build here.
+# 이미 빌드된 고정 PostgreSQL 이미지만 재사용하며 내려받거나 빌드하지 않는다.
 docker image inspect "$image" >/dev/null
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=holo-postgres \
   -addext subjectAltName=DNS:holo-postgres \
   -keyout "$fixture/server.key" -out "$fixture/server.crt" >/dev/null 2>&1
 chmod 0755 "$fixture"
 chmod 0644 "$fixture/server.crt"
-# The server entrypoint copies these synthetic fixtures to its private data tmpfs.
+# 서버 진입점이 합성 테스트 파일을 전용 데이터 tmpfs로 복사한다.
 chmod 0644 "$fixture/server.key"
 docker network create --internal --subnet 172.31.249.0/24 "$network" >/dev/null
 docker volume create --driver local --opt type=tmpfs --opt device=tmpfs \
@@ -92,7 +92,7 @@ for role in postgres_admin hololive_migrator iris_db_nightly hololive_replicator
   fi
 done
 [[ "$(client postgres_exporter verify-full postgres)" == t ]]
-# The migration transport works without any network and through a read-only socket mount.
+# 마이그레이션은 네트워크 없이 읽기 전용 소켓 마운트로 실행 가능해야 한다.
 docker run --rm --pull never --network none \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql,readonly" \
   --entrypoint psql "$image" \

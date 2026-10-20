@@ -32,12 +32,12 @@ func (s *frozenProviderSender) PrepareMessageRequest(context.Context, string, st
 	return s.body, s.route, nil
 }
 
-func (s *frozenProviderSender) SendPreparedMessage(_ context.Context, _, body, route, id string) error {
+func (s *frozenProviderSender) SendPreparedMessage(_ context.Context, _, body, route, id string) (string, error) {
 	s.ids = append(s.ids, id)
 	s.routes = append(s.routes, route)
 	s.bodies = append(s.bodies, body)
 
-	return s.err
+	return testAdmission(id, s.err)
 }
 
 func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {

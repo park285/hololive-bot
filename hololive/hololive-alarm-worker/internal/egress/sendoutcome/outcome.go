@@ -10,7 +10,9 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 )
 
-// Kind는 발송 결과의 증거를 나타냅니다. 재시도 허용은 각 저장소 정책이 결정합니다.
+// Kind는 발송 결과의 증거를 나타냅니다. 재시도 허용은 각 저장소 정책이 결정합니다. Success는 Iris durable
+// admission까지만 뜻하고 handoff 결과는 각 원장의 handoff reconciler가 확인합니다. OutcomeUnknown은 Iris 쪽 결과
+// 불명 증거(409 `CLIENT_REQUEST_ID_OUTCOME_UNKNOWN` 또는 admission을 증명하지 못한 202)입니다.
 type Kind uint8
 
 const (
@@ -20,12 +22,9 @@ const (
 	TransportAmbiguous
 )
 
-var (
-	// ErrHandoffOutcomeUnknown은 접수 이후 handoff 결과를 확정할 수 없음을 나타냅니다.
-	ErrHandoffOutcomeUnknown = errors.New("iris reply handoff outcome unknown")
-	// ErrHandoffFailed는 Iris가 handoff 실패를 확정했음을 나타냅니다.
-	ErrHandoffFailed = errors.New("iris reply handoff failed")
-)
+// ErrAdmissionOutcomeUnknown은 202 응답이 durable admission을 증명하지 못했음(빈 응답, Markdown의 success·queued
+// 누락, requestId 없음)을 나타냅니다.
+var ErrAdmissionOutcomeUnknown = errors.New("iris reply admission outcome unknown")
 
 // Classify는 sender 호출 이후 결과를 분류합니다. 호출 전 취소는 호출자가 먼저 검사해야 합니다.
 // TransportAmbiguous는 동일한 저장 request의 재시도 정책을 적용할 수 있도록 확정 unknown과 구분합니다.
@@ -34,7 +33,7 @@ func Classify(err error) Kind {
 		return Success
 	}
 
-	if errors.Is(err, ErrHandoffOutcomeUnknown) || containsStructuredUnknown(err) {
+	if errors.Is(err, ErrAdmissionOutcomeUnknown) || containsStructuredUnknown(err) {
 		return OutcomeUnknown
 	}
 
@@ -50,10 +49,6 @@ func Classify(err error) Kind {
 		return Classify(cause) == TransportAmbiguous
 	}) {
 		return TransportAmbiguous
-	}
-
-	if errors.Is(err, ErrHandoffFailed) {
-		return Failed
 	}
 
 	if errors.Is(err, iris.ErrTransport) {

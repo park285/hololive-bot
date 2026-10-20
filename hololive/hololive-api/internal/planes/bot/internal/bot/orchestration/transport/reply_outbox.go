@@ -55,17 +55,17 @@ type ReplyOutboxEntry struct {
 	ClientRequestID string
 }
 
-type ReplyAcceptedHook func(context.Context, string) error
-
-func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string, payload []byte, clientRequestID string, acceptedHook ReplyAcceptedHook) error {
+// DispatchStoredReply는 저장된 응답을 Iris에 보내고 durable admission이 증명한 Iris requestId를 돌려준다.
+// Handoff 결과는 기다리지 않는다. 그 확인은 outbox의 accepted 행을 읽는 reconciler가 맡는다.
+func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string, payload []byte, clientRequestID string) (string, error) {
 	if client == nil {
-		return errors.New("dispatch stored reply: iris client is nil")
+		return "", errors.New("dispatch stored reply: iris client is nil")
 	}
 
 	var reply StoredReply
 
 	if err := jsonv2.Unmarshal(payload, &reply); err != nil {
-		return fmt.Errorf("%w: decode: %w", ErrStoredReplyInvalid, err)
+		return "", fmt.Errorf("%w: decode: %w", ErrStoredReplyInvalid, err)
 	}
 
 	opts := storedReplyOptions(&reply)
@@ -74,23 +74,15 @@ func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string
 		return postStoredReply(ctx, client, room, &reply, appendReplyClientRequestID(opts, generationID))
 	})
 	if err != nil {
-		if classified := classifyAdmissionError(err); classified != nil {
-			return fmt.Errorf("classify admission error: %w", classified)
-		}
-
-		return nil
+		return "", fmt.Errorf("classify admission error: %w", classifyAdmissionError(err))
 	}
 
-	requestID, err := acceptStoredReply(ctx, accepted, acceptedHook)
+	requestID, err := acceptedReplyRequestID(accepted)
 	if err != nil {
-		return fmt.Errorf("accept stored reply: %w", err)
+		return "", fmt.Errorf("accepted reply request id: %w", err)
 	}
 
-	if err := waitForReplyHandoff(ctx, client, requestID); err != nil {
-		return fmt.Errorf("wait for reply handoff: %w", err)
-	}
-
-	return nil
+	return requestID, nil
 }
 
 func storedReplyOptions(reply *StoredReply) []iris.SendOption {
@@ -107,20 +99,16 @@ func storedReplyOptions(reply *StoredReply) []iris.SendOption {
 	return opts
 }
 
-func acceptStoredReply(ctx context.Context, accepted *iris.ReplyAcceptedResponse, acceptedHook ReplyAcceptedHook) (string, error) {
+// acceptedReplyRequestID는 202 응답이 durable admission을 증명하는지 확인한다. 응답이나 requestId가
+// 없으면 admission 결과가 불명이므로 같은 clientRequestId 재확인 대상으로 남긴다.
+func acceptedReplyRequestID(accepted *iris.ReplyAcceptedResponse) (string, error) {
 	if accepted == nil {
-		return "", replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
+		return "", replyOutcomeUnknownError{reason: "iris returned no admission response"}
 	}
 
 	requestID := strings.TrimSpace(accepted.RequestID)
 	if requestID == "" {
 		return "", replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
-	}
-
-	if acceptedHook != nil {
-		if err := acceptedHook(ctx, requestID); err != nil {
-			return "", fmt.Errorf("persist accepted reply: %w", err)
-		}
 	}
 
 	return requestID, nil
@@ -142,12 +130,7 @@ func postStoredReply(ctx context.Context, client iris.BotClient, room string, re
 	}
 
 	if reply.Kind == StoredReplyKindText {
-		sender, ok := client.(acceptedMessageSender)
-		if !ok {
-			return nil, fmt.Errorf("%w: iris client %T cannot report text admission", ErrStoredReplyInvalid, client)
-		}
-
-		out, err := sender.SendMessageAccepted(ctx, room, reply.Message, opts...)
+		out, err := client.SendMessageAccepted(ctx, room, reply.Message, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("send message accepted: %w", err)
 		}

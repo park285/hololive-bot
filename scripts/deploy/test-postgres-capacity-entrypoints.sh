@@ -32,7 +32,7 @@ if grep -Eq 'BOT_POSTGRES_POOL_MAX_CONNS=|YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CO
 fi
 postgres_capacity_assert_target "${root}" "${tmp}/default.env" >"${tmp}/out"
 grep -q 'allocated=54 reserve=3' "${tmp}/out"
-# Consuming even one control slot must fail even while the runtime role limit fits.
+# 런타임 역할 한도 이내여도 제어 슬롯 하나를 소비하면 실패해야 한다.
 printf 'BOT_POSTGRES_POOL_MAX_CONNS=5\n' >"${tmp}/control.env"
 if postgres_capacity_assert_target "${root}" "${tmp}/control.env" >"${tmp}/out" 2>&1; then
     echo 'capacity accepted consumption of the control reserve' >&2

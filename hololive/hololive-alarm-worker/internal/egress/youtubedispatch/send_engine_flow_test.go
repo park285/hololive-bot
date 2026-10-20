@@ -97,7 +97,7 @@ func TestDeliverySendOutcomeUnknown_Classification(t *testing.T) {
 		{"send-timeout", fmt.Errorf("wrap: %w", errDeliverySendTimeout), true},
 		{"deadline", fmt.Errorf("wrap: %w", context.DeadlineExceeded), true},
 		{"canceled", context.Canceled, true},
-		{"reply-handoff-status-unknown", fmt.Errorf("wrap: %w", sendoutcome.ErrHandoffOutcomeUnknown), true},
+		{"reply-admission-unknown", fmt.Errorf("wrap: %w", sendoutcome.ErrAdmissionOutcomeUnknown), true},
 		{"transport-post", fmt.Errorf("wrap: %w", &iris.TransportError{Op: testTransportOpPost, Err: io.ErrUnexpectedEOF}), true},
 		{"transport-dial", &iris.TransportError{Op: testTransportOpPost, Err: &net.OpError{Op: "dial", Err: errors.New("connection refused")}}, false},
 		{"transport-dns", &iris.TransportError{Op: testTransportOpPost, Err: &net.DNSError{Err: "no such host", IsNotFound: true}}, false},
@@ -166,7 +166,7 @@ func TestSendDeliveryMessageTimeoutIsOutcomeUnknown(t *testing.T) {
 	sender := &flowTestSender{}
 	engine := newFlowTestSendEngine(sender, 5*time.Millisecond)
 
-	err := engine.sendDeliveryMessage(t.Context(), flowTestSendRequest("room-timeout"))
+	_, err := engine.sendDeliveryMessage(t.Context(), flowTestSendRequest("room-timeout"))
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want timeout")
 	}
@@ -192,7 +192,7 @@ func TestSendDeliveryMessageCanceledBeforeRequestStaysRetryable(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := engine.sendDeliveryMessage(ctx, flowTestSendRequest("room-pre-send-cancel"))
+	_, err := engine.sendDeliveryMessage(ctx, flowTestSendRequest("room-pre-send-cancel"))
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want pre-send cancellation")
 	}
@@ -223,7 +223,7 @@ func TestSendDeliveryMessageCanceledDuringRequestIsOutcomeUnknown(t *testing.T) 
 	sender := &flowTestSender{onCall: cancel}
 	engine := newFlowTestSendEngine(sender, time.Second)
 
-	err := engine.sendDeliveryMessage(ctx, flowTestSendRequest("room-in-flight-cancel"))
+	_, err := engine.sendDeliveryMessage(ctx, flowTestSendRequest("room-in-flight-cancel"))
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want cancellation")
 	}
@@ -243,7 +243,7 @@ func TestSendDeliveryMessageDialFailureStaysRetryable(t *testing.T) {
 	sender := &flowTestSender{err: &iris.TransportError{Op: testTransportOpPost, Err: &net.OpError{Op: "dial", Err: errors.New("connection refused")}}}
 	engine := newFlowTestSendEngine(sender, time.Second)
 
-	err := engine.sendDeliveryMessage(t.Context(), flowTestSendRequest("room-dial"))
+	_, err := engine.sendDeliveryMessage(t.Context(), flowTestSendRequest("room-dial"))
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want dial failure")
 	}
@@ -263,7 +263,7 @@ func TestSendDeliveryMessagePostSendTransportFailureIsOutcomeUnknown(t *testing.
 	sender := &flowTestSender{err: &iris.TransportError{Op: testTransportOpPost, Err: io.ErrUnexpectedEOF}}
 	engine := newFlowTestSendEngine(sender, time.Second)
 
-	err := engine.sendDeliveryMessage(t.Context(), flowTestSendRequest("room-eof"))
+	_, err := engine.sendDeliveryMessage(t.Context(), flowTestSendRequest("room-eof"))
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want transport failure")
 	}
@@ -290,6 +290,6 @@ func (s *flowTestSender) PrepareMessageRequest(_ context.Context, _, body string
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *flowTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *flowTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }

@@ -33,12 +33,12 @@ func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int
 		return nil, errors.New("claim due dispatch deliveries: limit must be positive")
 	}
 
-	leaseSeconds, err := wholeSeconds(lease)
+	leaseMS, err := leaseMilliseconds(lease)
 	if err != nil {
 		return nil, fmt.Errorf("claim due dispatch deliveries: lease: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, sqlClaimDue, limit, workerID, leaseSeconds, maxDeliveriesPerSendUnit)
+	rows, err := r.pool.Query(ctx, sqlClaimDue, limit, workerID, leaseMS, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return nil, fmt.Errorf("claim due dispatch deliveries: %w", err)
 	}

@@ -1,5 +1,7 @@
+-- 종료 후보(replay epoch 이전 관측, 시도 소진 행)는 잠그기만 하고 사실을 돌려준다. DEAD_LETTER 판정과 사유는
+-- Go 재시도 정책이 정하며 같은 트랜잭션의 repository_claim_dead_letter.sql이 잠근 행에 기록한다.
 WITH {{ready_relation}}, replay_expired_candidates AS MATERIALIZED (
-    SELECT queue.observation_id
+    SELECT queue.observation_id, queue.attempt_count
     FROM source_observation_queue AS queue
     JOIN source_observations AS observation
       ON observation.id = queue.observation_id
@@ -14,25 +16,11 @@ WITH {{ready_relation}}, replay_expired_candidates AS MATERIALIZED (
     ORDER BY queue.available_at, queue.observation_id
     LIMIT $2
     FOR UPDATE OF queue SKIP LOCKED
-), replay_expired AS (
-    UPDATE source_observation_queue AS queue
-    SET status = 'DEAD_LETTER',
-        lease_owner = NULL,
-        lease_token = NULL,
-        lease_expires_at = NULL,
-        processed_at = NULL,
-        dead_lettered_at = NOW(),
-        last_error_code = 'replay_epoch_expired',
-        last_error_detail = NULL,
-        updated_at = NOW()
-    FROM replay_expired_candidates
-    WHERE queue.observation_id = replay_expired_candidates.observation_id
-    RETURNING queue.observation_id
 ), exhausted_candidates AS MATERIALIZED (
     -- 시도를 소진한 due 행도 활성 pass에서 고른다. queue를 따로 읽으면 활성 backlog가 클 때 planner가 queue
     -- seq scan으로 보존 이력까지 읽는다. 잠금은 candidates와 같이 정렬된 후보마다 queue PK로 요청하고,
     -- 잠근 최신 버전에 조건을 다시 적용한다.
-    SELECT locked.observation_id
+    SELECT locked.observation_id, locked.attempt_count
     FROM (
         SELECT active.observation_id, active.available_at
         FROM active_backlog AS active
@@ -41,7 +29,7 @@ WITH {{ready_relation}}, replay_expired_candidates AS MATERIALIZED (
         ORDER BY active.available_at, active.observation_id
     ) AS ordered
     CROSS JOIN LATERAL (
-        SELECT queue.observation_id
+        SELECT queue.observation_id, queue.attempt_count
         FROM source_observation_queue AS queue
         WHERE queue.observation_id = ordered.observation_id
           AND queue.attempt_count >= $6
@@ -54,20 +42,6 @@ WITH {{ready_relation}}, replay_expired_candidates AS MATERIALIZED (
     ) AS locked
     ORDER BY ordered.available_at, ordered.observation_id
     LIMIT $2
-), exhausted AS (
-    UPDATE source_observation_queue AS queue
-    SET status = 'DEAD_LETTER',
-        lease_owner = NULL,
-        lease_token = NULL,
-        lease_expires_at = NULL,
-        processed_at = NULL,
-        dead_lettered_at = NOW(),
-        last_error_code = 'attempts_exhausted',
-        last_error_detail = NULL,
-        updated_at = NOW()
-    FROM exhausted_candidates
-    WHERE queue.observation_id = exhausted_candidates.observation_id
-    RETURNING queue.observation_id
 ), candidates AS MATERIALIZED (
     -- 후보를 (available_at, observation_id) 순서로 정렬한 뒤 앞에서부터 한 행씩 queue PK로 잠근다.
     -- FOR UPDATE가 든 LATERAL 하위 질의는 평탄화되지 않으므로 잠금은 정렬된 후보마다 요청 시점에만 일어나고,
@@ -114,11 +88,19 @@ WITH {{ready_relation}}, replay_expired_candidates AS MATERIALIZED (
               queue.lease_expires_at
 )
 SELECT observation.id,
+       TRUE AS claimed,
        claimed.lease_token,
        observation.observation_kind,
        observation.subject_key,
-       claimed.attempt_count
+       claimed.attempt_count,
+       FALSE AS replay_epoch_rejected
 FROM claimed
 JOIN source_observations AS observation
   ON observation.id = claimed.observation_id
-ORDER BY observation.id
+UNION ALL
+SELECT replay.observation_id, FALSE, NULL, NULL, NULL, replay.attempt_count, TRUE
+FROM replay_expired_candidates AS replay
+UNION ALL
+SELECT exhausted.observation_id, FALSE, NULL, NULL, NULL, exhausted.attempt_count, FALSE
+FROM exhausted_candidates AS exhausted
+ORDER BY 1

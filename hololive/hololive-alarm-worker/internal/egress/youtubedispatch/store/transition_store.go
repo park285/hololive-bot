@@ -154,11 +154,14 @@ func (s *TransitionStore) resolveClaimedGroups(
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: load rows: %w", err)
 	}
 
+	if !s.logicalGroupWindowComplete(len(requested), len(rows)) {
+		return resolvedLogicalGroups{}, errors.New("resolve claimed groups: logical group window is incomplete")
+	}
+
 	currentIDs := deliveryIDSet(claimed)
 	requestedKeys, requestedSet := requestedLogicalKeys(requested)
 
-	// 그룹 행 조회의 LIMIT에 claim 행이 잘리면 그 그룹은 반드시 키당 한도를 넘으므로, 누락(missing)으로 오판하지 않게
-	// 한도 검사를 fence보다 먼저 한다.
+	// 조회 창의 완전성을 확인한 뒤 키별 행 한도를 검사한다. 다른 키의 별칭 후보가 창을 채운 경우도 앞에서 거부한다.
 	rowsByID, snapshots, err := s.claimedResolutionSnapshots(rows, currentIDs, requestedSet)
 	if err != nil {
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: build snapshots: %w", err)
@@ -373,6 +376,23 @@ func (s *TransitionStore) loadLogicalGroupRows(
 		return nil, nil
 	}
 
+	return queryLogicalGroupRows(ctx, db, s.logicalGroupArgs(requested))
+}
+
+// queryLogicalGroupRows는 logicalGroupArgs로 만든 인자로 논리 그룹 delivery를 transition_group_rows.sql 순서로 잠근다.
+func queryLogicalGroupRows(ctx context.Context, db dbx.Querier, args []any) ([]transitionRow, error) {
+	var rows []transitionRow
+
+	if err := dbx.SelectSQL(ctx, db, &rows, "load transition logical group rows", transitionGroupRowsSQL, args...); err != nil {
+		return nil, fmt.Errorf("load transition logical group rows: %w", err)
+	}
+
+	return rows, nil
+}
+
+// logicalGroupArgs는 transition_group_candidates.sql 조각을 쓰는 문장의 $1..$5(직접 id, 요청 조합 배열 셋, 행 한도)다.
+// 그룹 잠금과 handoff 부모 사전 조회가 같은 값을 쓰도록 한 곳에서 만든다.
+func (s *TransitionStore) logicalGroupArgs(requested []requestedLogicalGroup) []any {
 	ids := make([]int64, 0, len(requested))
 	roomIDs := make([]string, 0, len(requested)*3)
 	kinds := make([]string, 0, len(requested)*3)
@@ -388,26 +408,20 @@ func (s *TransitionStore) loadLogicalGroupRows(
 		}
 	}
 
-	limit := len(requested)*(s.config.LogicalGroupLimit+1) + len(ids)
+	limit := s.logicalGroupWindowLimit(len(requested))
 
-	var rows []transitionRow
+	return []any{ids, roomIDs, kinds, candidates, limit}
+}
 
-	if err := dbx.SelectSQL(
-		ctx,
-		db,
-		&rows,
-		"load transition logical group rows",
-		mustSQL("transition_group_rows.sql"),
-		ids,
-		roomIDs,
-		kinds,
-		candidates,
-		limit,
-	); err != nil {
-		return nil, fmt.Errorf("load transition logical group rows: %w", err)
-	}
+// logicalGroupWindowLimit는 요청마다 직접 id 하나와 키별 한도 초과를 관측할 여분 한 행을 배정한다.
+func (s *TransitionStore) logicalGroupWindowLimit(requestedCount int) int {
+	return requestedCount * (s.config.LogicalGroupLimit + 2)
+}
 
-	return rows, nil
+// logicalGroupWindowComplete는 다른 키의 별칭까지 포함한 조회 창이 잘리지 않았음을 확인한다.
+// 한도에 닿으면 창 밖 형제의 유무를 증명할 수 없으므로 불완전하며, 빈 요청은 완전한 빈 집합이다.
+func (s *TransitionStore) logicalGroupWindowComplete(requestedCount, observedCount int) bool {
+	return requestedCount == 0 || observedCount < s.logicalGroupWindowLimit(requestedCount)
 }
 
 func loadTransitionLedger(

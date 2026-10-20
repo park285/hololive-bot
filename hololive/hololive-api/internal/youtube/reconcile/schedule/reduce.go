@@ -20,6 +20,9 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 
 	items := make([]Item, 0, len(workingEvidence.Items))
 	sessions := make([]Session, 0)
+	// Decision.Sessions는 영상마다 이 관측을 모두 반영한 최종 상태 하나다. 저장은 잠금 안에서 읽은 행을
+	// 기준으로 영상당 한 번만 조건부로 쓴다.
+	sessionIndex := map[string]int{}
 	applications := make([]Application, 0, len(workingEvidence.Items))
 
 	for i := range workingEvidence.Items {
@@ -37,7 +40,14 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 
 		if session, ok := mergeSession(&current, item, &workingEvidence); ok {
 			current.Sessions[session.VideoID] = session
-			sessions = append(sessions, session)
+
+			if index, emitted := sessionIndex[session.VideoID]; emitted {
+				sessions[index] = session
+			} else {
+				sessionIndex[session.VideoID] = len(sessions)
+				sessions = append(sessions, session)
+			}
+
 			applications = append(applications, Application{
 				EntityKind: "youtube_live_session", EntityKey: session.VideoID, Decision: "SCHEDULE_MERGED",
 			})

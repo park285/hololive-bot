@@ -136,13 +136,14 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	return messages, failures
 }
 
-func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) (sendErr error) {
+// sendDeliveryMessage는 고정 요청을 보내고 202가 증명한 Iris requestId를 돌려준다.
+func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) (irisRequestID string, sendErr error) {
 	if err := validateDeliverySendRequest(req); err != nil {
-		return fmt.Errorf("validate delivery send request: %w", err)
+		return "", fmt.Errorf("validate delivery send request: %w", err)
 	}
 
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("send delivery message before request: %w", err)
+		return "", fmt.Errorf("send delivery message before request: %w", err)
 	}
 
 	sendCtx := ctx
@@ -155,7 +156,7 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 	defer cancel()
 
 	if req.frozen == nil || (req.frozen.Route != "text" && req.frozen.Route != "markdown") {
-		return errors.New("send frozen delivery: stored text or markdown request required")
+		return "", errors.New("send frozen delivery: stored text or markdown request required")
 	}
 
 	finish := d.beginProviderAttempt()
@@ -163,15 +164,15 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	defer func() { finish(sendErr, completed) }()
 
-	err := d.sender.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
+	irisRequestID, err := d.sender.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
 
 	completed = true
 
 	if err != nil {
-		return d.wrapDeliverySendError(sendCtx, err)
+		return "", d.wrapDeliverySendError(sendCtx, err)
 	}
 
-	return nil
+	return irisRequestID, nil
 }
 
 func (d *SendEngine) wrapDeliverySendError(sendCtx context.Context, err error) error {

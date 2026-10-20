@@ -208,7 +208,7 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 		return
 	}
 
-	if d.completeLifecycleSent(ctx, attempt.operation, store.DeliveryModePerRoom, result) {
+	if d.completeLifecycleSent(ctx, attempt, store.DeliveryModePerRoom, result) {
 		d.recordPerRoomSuccess(attempt, result)
 	}
 }
@@ -329,7 +329,7 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 		return
 	}
 
-	if d.completeLifecycleSent(ctx, attempt.operation, store.DeliveryModeGrouped, result) {
+	if d.completeLifecycleSent(ctx, attempt, store.DeliveryModeGrouped, result) {
 		d.recordGroupedSuccess(group, attempt, result)
 	}
 }
@@ -467,7 +467,7 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 			continue
 		}
 
-		if d.completeLifecycleSent(ctx, singleton.operation, store.DeliveryModePerRoom, result) {
+		if d.completeLifecycleSent(ctx, &singleton, store.DeliveryModePerRoom, result) {
 			d.recordPerRoomSuccess(&singleton, result)
 		}
 	}

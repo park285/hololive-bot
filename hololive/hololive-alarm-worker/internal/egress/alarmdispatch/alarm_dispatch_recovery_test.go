@@ -19,11 +19,11 @@ func TestDefaultRecoveryPreservesImmutableSendUnitMembership(t *testing.T) {
 	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
 	seedExpiredPinnedRecoveryUnits(t, pool, repo)
 
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("new-owner"))
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("new-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText}
-	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 50}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 50, attemptTimeout: testHandoffHorizon}
 
 	for range 2 {
 		_, err = runner.runOnce(ctx)
@@ -77,16 +77,18 @@ func seedExpiredPinnedRecoveryUnits(t *testing.T, pool *pgxpool.Pool, repo *disp
 	require.NoError(t, err)
 	require.Len(t, rows, 101)
 
-	units := map[int64][]int64{}
+	units := map[int64][]dispatchoutbox.DeliveryClaim{}
+	requestIDs := map[int64]string{}
 
 	for _, row := range rows {
-		units[row.SendUnitID] = append(units[row.SendUnitID], row.ID)
+		units[row.SendUnitID] = append(units[row.SendUnitID], dispatchoutbox.DeliveryClaim{ID: row.ID, AttemptCount: row.AttemptCount})
+		requestIDs[row.SendUnitID] = row.ClientRequestID
 	}
 
 	require.Len(t, units, 100)
 
-	for unit, ids := range units {
-		_, err = repo.PinSendRequest(ctx, unit, ids, "old-owner", dispatchoutbox.SendRequest{Body: "never sent", Route: dispatchoutbox.SendRouteText})
+	for unit, claims := range units {
+		_, err = repo.PinSendRequest(ctx, unit, claims, "old-owner", requestIDs[unit], dispatchoutbox.SendRequest{Body: "never sent", Route: dispatchoutbox.SendRouteText})
 		require.NoError(t, err)
 	}
 

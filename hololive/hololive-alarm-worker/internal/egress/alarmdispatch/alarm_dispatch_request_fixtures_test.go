@@ -3,6 +3,7 @@ package alarmdispatch
 import (
 	"context"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -33,23 +34,33 @@ func (c *alarmRequestTestStore) PinSendRequest(_ context.Context, envelopes []do
 	return &request, nil
 }
 
-func (c *alarmRequestTestStore) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, string) (bool, error) {
+// ReissueSendRequest는 재발급 세대가 남지 않은 저장소처럼 동작해 실패 경로가 격리로 끝나게 한다.
+func (c *alarmRequestTestStore) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
 	c.reissueCalls++
-	return false, nil
+	return sendfence.ErrGenerationExhausted
 }
 
 func (s *alarmDispatchRunnerTestSender) PrepareMessageRequest(_ context.Context, _, message string) (string, string, error) {
 	return message, dispatchoutbox.SendRouteText, nil
 }
 
-func (s *alarmDispatchRunnerTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
-	return s.SendMessageWithClientRequestID(ctx, room, body, id)
+func (s *alarmDispatchRunnerTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return alarmTestAdmission(id, s.SendMessageWithClientRequestID(ctx, room, body, id))
 }
 
 func (s *alarmDispatchRunnerBlockingSender) PrepareMessageRequest(_ context.Context, _, message string) (string, string, error) {
 	return message, dispatchoutbox.SendRouteText, nil
 }
 
-func (s *alarmDispatchRunnerBlockingSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *alarmDispatchRunnerBlockingSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return alarmTestAdmission(id, s.SendMessage(ctx, room, body))
+}
+
+// alarmTestAdmission은 가짜 Iris가 발송 성공 때 202로 돌려주는 requestId다.
+func alarmTestAdmission(clientRequestID string, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+
+	return "iris:" + clientRequestID, nil
 }

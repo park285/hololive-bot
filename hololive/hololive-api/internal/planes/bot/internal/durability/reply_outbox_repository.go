@@ -38,7 +38,6 @@ var (
 	replyOutboxInsertSQL             = mustSQL("reply_outbox_insert.sql")
 	replyOutboxConflictSQL           = mustSQL("reply_outbox_conflict.sql")
 	replyOutboxClaimSQL              = mustSQL("reply_outbox_claim.sql")
-	replyOutboxMarkAcceptedSQL       = mustSQL("reply_outbox_mark_accepted.sql")
 	replyOutboxSettleSQL             = mustSQL("reply_outbox_settle.sql")
 	replyOutboxSettleRetrySQL        = mustSQL("reply_outbox_settle_retry.sql")
 	replyOutboxSettleTerminalSQL     = mustSQL("reply_outbox_settle_terminal.sql")
@@ -75,7 +74,6 @@ func (o ReplyOutboxInsertOutcome) String() string {
 
 const (
 	replyOutboxStatusSubmitting = "submitting"
-	replyOutboxStatusAccepted   = "accepted"
 
 	ReplyOutboxMaxAttempts = int32(5)
 	// 자동 replay 지평은 스택 공통 irisdurable 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
@@ -83,6 +81,8 @@ const (
 )
 
 const (
+	// ReplyOutboxAccepted는 Iris durable admission이 끝나고 handoff 확인을 기다리는 lease 없는 상태다.
+	ReplyOutboxAccepted             = "accepted"
 	ReplyOutboxHandoffCompleted     = "handoff_completed"
 	ReplyOutboxRetryablePreDispatch = "retryable_pre_dispatch"
 	ReplyOutboxOutcomeUnknown       = "outcome_unknown"
@@ -92,22 +92,19 @@ const (
 	ReplyOutboxDiscarded            = "discarded"
 )
 
-// accepted는 Iris가 이미 수리한 뒤라 그 행을 claim 큐로 되돌리면 admission idempotency TTL이 지난
-// 시점에 중복 발화가 된다. 그래서 accepted에서 갈 수 있는 곳은 재발송 불가한 종단뿐이고, 정산이 없으면
-// reclaim_expired가 흡수한다.
+// 발송 정산은 lease를 쥔 submitting 행만 바꾼다. Accepted는 Iris가 이미 수리한 뒤라 발송 경로가 다시
+// 쓰지 않고, handoff reconciler만 확인 결과로 전이한다(reply_outbox_handoff.go).
 type replyOutboxSettlementPolicy struct {
-	sources []string
-	sql     string
-	retry   bool
+	sql   string
+	retry bool
 }
 
 var replyOutboxSettlementPolicies = map[string]replyOutboxSettlementPolicy{
-	ReplyOutboxHandoffCompleted:     {sources: []string{replyOutboxStatusSubmitting, replyOutboxStatusAccepted}, sql: replyOutboxSettleTerminalSQL},
-	ReplyOutboxRetryablePreDispatch: {sources: []string{replyOutboxStatusSubmitting}, sql: replyOutboxSettleRetrySQL, retry: true},
-	ReplyOutboxOutcomeUnknown:       {sources: []string{replyOutboxStatusSubmitting}, sql: replyOutboxSettleRetrySQL, retry: true},
-	ReplyOutboxDead:                 {sources: []string{replyOutboxStatusSubmitting, replyOutboxStatusAccepted}, sql: replyOutboxSettleTerminalSQL},
-	ReplyOutboxPermanentConflict:    {sources: []string{replyOutboxStatusSubmitting, replyOutboxStatusAccepted}, sql: replyOutboxSettleTerminalSQL},
-	ReplyOutboxManualReview:         {sources: []string{replyOutboxStatusSubmitting, replyOutboxStatusAccepted}, sql: replyOutboxSettleSQL},
+	ReplyOutboxRetryablePreDispatch: {sql: replyOutboxSettleRetrySQL, retry: true},
+	ReplyOutboxOutcomeUnknown:       {sql: replyOutboxSettleRetrySQL, retry: true},
+	ReplyOutboxDead:                 {sql: replyOutboxSettleTerminalSQL},
+	ReplyOutboxPermanentConflict:    {sql: replyOutboxSettleTerminalSQL},
+	ReplyOutboxManualReview:         {sql: replyOutboxSettleSQL},
 }
 
 type ReplyOutboxEntry struct {
@@ -281,29 +278,6 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 	return &claim, nil
 }
 
-func (r *ReplyOutboxRepository) MarkAccepted(ctx context.Context, id int64, claimToken, irisRequestID string) (bool, error) {
-	if err := ensurePool(r.pool); err != nil {
-		return false, err
-	}
-
-	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
-	if err != nil {
-		return false, err
-	}
-
-	requestID, err := requireIdentity("iris request id", irisRequestID)
-	if err != nil {
-		return false, err
-	}
-
-	tag, err := r.pool.Exec(ctx, replyOutboxMarkAcceptedSQL, id, token, requestID)
-	if err != nil {
-		return false, fmt.Errorf("mark reply outbox row %d accepted: %w", id, err)
-	}
-
-	return tag.RowsAffected() == 1, nil
-}
-
 func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutboxSettlement) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return false, err
@@ -319,10 +293,8 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 		return false, errors.Join(ErrInvalidArgument, fmt.Errorf("unsupported reply outbox settle status %q", settlement.Status))
 	}
 
-	args := []any{
-		settlement.ID, token, settlement.Status,
-		clampColumnText(settlement.LastError, lastErrorByteLimit), policy.sources,
-	}
+	args := []any{settlement.ID, token, settlement.Status, clampColumnText(settlement.LastError, lastErrorByteLimit)}
+
 	if policy.retry {
 		retryMS, retryErr := replyOutboxRetryMilliseconds(settlement.RetryAfter)
 		if retryErr != nil {

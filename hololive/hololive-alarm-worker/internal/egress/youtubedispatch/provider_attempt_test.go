@@ -45,7 +45,7 @@ func TestProviderAttemptTracksActualResultAndPanic(t *testing.T) {
 	}{
 		{name: "success", outcome: workercontract.AttemptSuccess},
 		{name: "failed", err: iris.ErrPermanent, outcome: workercontract.AttemptFailed},
-		{name: "unknown", err: sendoutcome.ErrHandoffOutcomeUnknown, outcome: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown", err: sendoutcome.ErrAdmissionOutcomeUnknown, outcome: workercontract.AttemptOutcomeUnknown},
 		{name: "timeout", err: context.DeadlineExceeded, outcome: workercontract.AttemptTimeout},
 		{name: "canceled", err: context.Canceled, outcome: workercontract.AttemptCanceled},
 		{name: "panic", panics: true, outcome: workercontract.AttemptPanic},
@@ -64,7 +64,7 @@ func TestProviderAttemptTracksActualResultAndPanic(t *testing.T) {
 			var err error
 
 			call := func() {
-				err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
+				_, err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
 			}
 
 			if tc.panics {
@@ -107,7 +107,7 @@ func TestReissueWaitsForNextDeliveryAttempt(t *testing.T) {
 }
 
 func TestReissueRejectsMixedUnknownAndPreHandoffFailure(t *testing.T) {
-	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))}
+	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))}
 	d := newTestDispatcherForSend(t, &testSender{})
 
 	d.send.sender = sender
@@ -128,7 +128,7 @@ func TestProviderAttemptSkipsUnsupportedStoredRoute(t *testing.T) {
 	totals := &workercontract.Counters{}
 	d.SetWorkerInstrumentation(tracker, totals)
 
-	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}, frozen: &store.FrozenRequest{Route: "sender"}})
+	_, err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}, frozen: &store.FrozenRequest{Route: "sender"}})
 	require.ErrorContains(t, err, "stored text or markdown request required")
 	require.False(t, sender.seen)
 	require.Zero(t, tracker.Snapshot(time.Now()).InFlight)
@@ -139,6 +139,6 @@ func (s *providerAttemptSender) PrepareMessageRequest(_ context.Context, _, body
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *providerAttemptSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *providerAttemptSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }

@@ -28,6 +28,11 @@ const (
 	CleanupGuardLedgerMissing      CleanupGuardReason = "ledger_missing"
 	CleanupGuardLedgerMismatch     CleanupGuardReason = "ledger_mismatch"
 	CleanupGuardActiveLogicalGroup CleanupGuardReason = "active_logical_group"
+
+	// CleanupGuardIncompleteLogicalGroup은 경쟁 트랜잭션이 잠근 행, LogicalGroupLimit 초과, 논리 키별 조회 한도 도달
+	// 때문에 후보의 자식이나 같은 논리 그룹을 모두 잠가 관측하지 못한 후보다. 기다리지 않고 이번 batch에서 보존하며,
+	// 같은 batch의 다른 논리 키 후보 판정에는 영향을 주지 않는다.
+	CleanupGuardIncompleteLogicalGroup CleanupGuardReason = "incomplete_logical_group"
 )
 
 // CleanupCursor는 보호된 outbox를 넘어 진행해 오래된 그룹이 후속 정리를 막지 않게 한다.
@@ -266,8 +271,16 @@ func loadCleanupCandidates(
 	return candidates, nil
 }
 
-func loadCleanupChildren(ctx context.Context, db dbx.Querier, outboxIDs []int64) ([]transitionRow, error) {
-	var rows []transitionRow
+// cleanupObservedRow는 cleanup이 기다리지 않고 잠그려 한 행이다. Locked가 false면 경쟁 트랜잭션이 잠가 건너뛴 행이고,
+// 값은 문장 snapshot이라 상태 판정에 쓰지 않으며 소속 outbox와 논리 키로 불완전 관측을 표시하는 데만 쓴다.
+type cleanupObservedRow struct {
+	transitionRow
+
+	Locked bool
+}
+
+func loadCleanupChildren(ctx context.Context, db dbx.Querier, outboxIDs []int64) ([]cleanupObservedRow, error) {
+	var rows []cleanupObservedRow
 
 	if err := dbx.SelectSQL(
 		ctx,
@@ -283,38 +296,63 @@ func loadCleanupChildren(ctx context.Context, db dbx.Querier, outboxIDs []int64)
 	return rows, nil
 }
 
+// cleanupEligibleOutboxes는 자식과 같은 논리 그룹을 모두 잠가 관측한 후보만 ledger·sibling guard로 판정한다.
+// 후보 부모·자식을 쥔 채 경쟁 트랜잭션의 행을 기다리지 않으므로, 불완전 관측 후보는 삭제하지 않고 보호로 센다.
 func (s *TransitionStore) cleanupEligibleOutboxes(
 	ctx context.Context,
 	db dbx.Querier,
 	candidates []cleanupCandidate,
-	children []transitionRow,
+	children []cleanupObservedRow,
 ) ([]int64, map[CleanupGuardReason]int, error) {
-	childrenByOutbox, requested, keys, err := cleanupLogicalInputs(children, len(candidates))
+	inputs, err := cleanupLogicalInputs(children, len(candidates))
 	if err != nil {
 		return nil, nil, fmt.Errorf("cleanup terminal outboxes: build logical inputs: %w", err)
 	}
 
-	ledger, _, err := loadTransitionLedger(ctx, db, keys)
+	var (
+		siblings   []transitionRow
+		incomplete map[ytcontentid.LogicalKey]struct{}
+	)
+
+	if len(inputs.requested) > 0 {
+		siblings, incomplete, err = s.loadCleanupSiblings(ctx, db, inputs.requested)
+		if err != nil {
+			return nil, nil, fmt.Errorf("cleanup terminal outboxes: load siblings: %w", err)
+		}
+	}
+
+	guards := make(map[CleanupGuardReason]int)
+	covered := make([]int64, 0, len(candidates))
+	keys := make([]ytcontentid.LogicalKey, 0, len(inputs.requested))
+
+	for i := range candidates {
+		if !inputs.covers(candidates[i].ID, incomplete) {
+			guards[CleanupGuardIncompleteLogicalGroup]++
+
+			continue
+		}
+
+		covered = append(covered, candidates[i].ID)
+		keys = append(keys, inputs.keysByOutbox[candidates[i].ID]...)
+	}
+
+	// 완전 관측한 논리 키의 delivery 행은 모두 이 트랜잭션이 잠갔다. ledger writer(발송 완료·격리)는 같은 키의
+	// delivery 행을 먼저 잠근 뒤 ledger를 잠그므로, 완전 관측한 키만 조회하면 그 writer를 기다리지 않는다.
+	ledger, _, err := loadTransitionLedger(ctx, db, uniqueLogicalKeys(keys))
 	if err != nil {
 		return nil, nil, fmt.Errorf("cleanup terminal outboxes: load ledger: %w", err)
 	}
 
-	siblings, err := s.loadLogicalGroupRows(ctx, db, requested)
-	if err != nil {
-		return nil, nil, fmt.Errorf("cleanup terminal outboxes: load siblings: %w", err)
-	}
+	eligible := make([]int64, 0, len(covered))
 
-	eligible := make([]int64, 0, len(candidates))
-	guards := make(map[CleanupGuardReason]int)
-
-	for i := range candidates {
-		guard, guardErr := cleanupCandidateGuard(childrenByOutbox[candidates[i].ID], ledger, siblings)
+	for _, outboxID := range covered {
+		guard, guardErr := cleanupCandidateGuard(inputs.childrenByOutbox[outboxID], ledger, siblings)
 		if guardErr != nil {
-			return nil, nil, fmt.Errorf("cleanup terminal outboxes: evaluate candidate %d: %w", candidates[i].ID, guardErr)
+			return nil, nil, fmt.Errorf("cleanup terminal outboxes: evaluate candidate %d: %w", outboxID, guardErr)
 		}
 
 		if guard == "" {
-			eligible = append(eligible, candidates[i].ID)
+			eligible = append(eligible, outboxID)
 		} else {
 			guards[guard]++
 		}
@@ -323,31 +361,203 @@ func (s *TransitionStore) cleanupEligibleOutboxes(
 	return eligible, guards, nil
 }
 
-func cleanupLogicalInputs(
-	children []transitionRow,
-	candidateCount int,
-) (map[int64][]transitionRow, []requestedLogicalGroup, []ytcontentid.LogicalKey, error) {
-	childrenByOutbox := make(map[int64][]transitionRow, candidateCount)
-	requested := make([]requestedLogicalGroup, 0, len(children))
-	keys := make([]ytcontentid.LogicalKey, 0, len(children))
+// cleanupInputs는 자식을 모두 잠근 후보의 자식만 논리 그룹 요청으로 만든 결과다. 잠그지 못한 자식이 있는 후보는
+// uncovered에만 남고 sibling·ledger 조회에서 빠진다.
+type cleanupInputs struct {
+	childrenByOutbox map[int64][]transitionRow
+	keysByOutbox     map[int64][]ytcontentid.LogicalKey
+	uncovered        map[int64]struct{}
+	requested        []requestedLogicalGroup
+}
 
-	for i := range children {
-		key, err := children[i].logicalKey()
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("cleanup terminal outboxes: child identity: %w", err)
-		}
-
-		outbox := children[i].domainOutbox()
-
-		requested = append(requested, requestedLogicalGroup{
-			key: key, delivery: children[i].domainDelivery(), outbox: outbox,
-			candidate: logicalIdentityCandidates(key, outbox),
-		})
-		keys = append(keys, key)
-		childrenByOutbox[children[i].OutboxID] = append(childrenByOutbox[children[i].OutboxID], children[i])
+func cleanupLogicalInputs(children []cleanupObservedRow, candidateCount int) (cleanupInputs, error) {
+	inputs := cleanupInputs{
+		childrenByOutbox: make(map[int64][]transitionRow, candidateCount),
+		keysByOutbox:     make(map[int64][]ytcontentid.LogicalKey, candidateCount),
+		uncovered:        make(map[int64]struct{}),
+		requested:        make([]requestedLogicalGroup, 0, len(children)),
 	}
 
-	return childrenByOutbox, requested, uniqueLogicalKeys(keys), nil
+	for i := range children {
+		if !children[i].Locked {
+			inputs.uncovered[children[i].OutboxID] = struct{}{}
+		}
+	}
+
+	for i := range children {
+		child := children[i].transitionRow
+		if _, skipped := inputs.uncovered[child.OutboxID]; skipped {
+			continue
+		}
+
+		key, err := child.logicalKey()
+		if err != nil {
+			return cleanupInputs{}, fmt.Errorf("cleanup terminal outboxes: child identity: %w", err)
+		}
+
+		outbox := child.domainOutbox()
+
+		inputs.requested = append(inputs.requested, requestedLogicalGroup{
+			key: key, delivery: child.domainDelivery(), outbox: outbox,
+			candidate: logicalIdentityCandidates(key, outbox),
+		})
+		inputs.childrenByOutbox[child.OutboxID] = append(inputs.childrenByOutbox[child.OutboxID], child)
+		inputs.keysByOutbox[child.OutboxID] = append(inputs.keysByOutbox[child.OutboxID], key)
+	}
+
+	return inputs, nil
+}
+
+// covers는 후보의 자식과 그 자식들의 논리 그룹을 모두 잠가 관측했는지 답한다. 필드 incomplete는 잠그지 못한 행,
+// LogicalGroupLimit 초과, 논리 키별 조회 한도 도달이 있는 논리 키다. 자식이 없는 후보는 판정할 논리 그룹이 없다.
+func (inputs cleanupInputs) covers(outboxID int64, incomplete map[ytcontentid.LogicalKey]struct{}) bool {
+	if _, skipped := inputs.uncovered[outboxID]; skipped {
+		return false
+	}
+
+	for _, key := range inputs.keysByOutbox[outboxID] {
+		if _, ok := incomplete[key]; ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+// cleanupGroupRow는 transition_cleanup_group_rows.sql 행이다. SaturatedKeys는 이 행을 한도번째 행으로 남긴 논리 키
+// 번호(1부터)이고, 그 키의 identity 조합에는 한도 밖 행이 더 있을 수 있다.
+type cleanupGroupRow struct {
+	cleanupObservedRow
+
+	SaturatedKeys []int64
+}
+
+// cleanupIdentityRequest는 요청 identity 후보를 그 후보를 만든 논리 키 번호에 묶는다. 후보 값이 같아도 키가 다르면
+// 다른 요청으로 보내, 찾은 행이 그 후보를 만든 키의 한도를 쓰게 한다.
+type cleanupIdentityRequest struct {
+	keyNo     int64
+	candidate string
+}
+
+// cleanupGroupArgs는 transition_cleanup_group_rows.sql의 bind 값이다. 필드 roomIDs·kinds·candidates·keyNos의 같은 위치가
+// 한 요청 identity 조합과 그 조합을 만든 논리 키 번호다. 키 번호 n은 keys[n-1]이고 keyNoByKey는 그 역방향이다.
+type cleanupGroupArgs struct {
+	ids        []int64
+	roomIDs    []string
+	kinds      []string
+	candidates []string
+	keyNos     []int64
+	keys       []ytcontentid.LogicalKey
+	keyNoByKey map[ytcontentid.LogicalKey]int64
+}
+
+// newCleanupGroupArgs는 요청 논리 키마다 번호를 붙이고, logicalIdentityCandidates가 만든 조합은 (키 번호, 후보)마다
+// 한 번씩만 보낸다. 같은 키의 자식이 여럿이면 조합이 겹치므로, 중복을 빼야 같은 조합을 다시 훑지 않는다.
+func newCleanupGroupArgs(requested []requestedLogicalGroup) cleanupGroupArgs {
+	args := cleanupGroupArgs{
+		ids:        make([]int64, 0, len(requested)),
+		roomIDs:    make([]string, 0, len(requested)*3),
+		kinds:      make([]string, 0, len(requested)*3),
+		candidates: make([]string, 0, len(requested)*3),
+		keyNos:     make([]int64, 0, len(requested)*3),
+		keys:       make([]ytcontentid.LogicalKey, 0, len(requested)),
+		keyNoByKey: make(map[ytcontentid.LogicalKey]int64, len(requested)),
+	}
+	seen := make(map[cleanupIdentityRequest]struct{}, len(requested)*3)
+
+	for i := range requested {
+		key := requested[i].key
+
+		args.ids = append(args.ids, requested[i].delivery.ID)
+
+		keyNo, ok := args.keyNoByKey[key]
+		if !ok {
+			args.keys = append(args.keys, key)
+			keyNo = int64(len(args.keys))
+			args.keyNoByKey[key] = keyNo
+		}
+
+		for _, candidate := range requested[i].candidate {
+			request := cleanupIdentityRequest{keyNo: keyNo, candidate: candidate}
+			if _, dup := seen[request]; dup {
+				continue
+			}
+
+			seen[request] = struct{}{}
+
+			args.roomIDs = append(args.roomIDs, key.RoomID)
+			args.kinds = append(args.kinds, string(key.Kind))
+			args.candidates = append(args.candidates, candidate)
+			args.keyNos = append(args.keyNos, keyNo)
+		}
+	}
+
+	return args
+}
+
+// loadCleanupSiblings는 요청 논리 그룹 행을 경쟁 잠금을 기다리지 않고 잠근다. 조회 한도는 batch 전체가 아니라 요청 논리
+// 키마다 LogicalGroupLimit+1행이고, 반환 행은 최대 len(requested) + 요청 키 수×(LogicalGroupLimit+1)행이다. 잠근 요청
+// 키 행만 sibling 판정에 돌려준다. 잠그지 못한 행·LogicalGroupLimit 초과 행이 있는 키와 한도에 닿은 키는 그 키만
+// incomplete로 돌려, 다른 요청 키의 판정은 막지 않는다. 키의 조합이 다른 키로 풀리는 행을 찾아 한도에 닿아도 그 조합을
+// 만든 키를 막는다. 논리 키를 풀 수 없는 행은 기존 sibling 판정처럼 어느 요청 그룹에도 속하지 않는다.
+func (s *TransitionStore) loadCleanupSiblings(
+	ctx context.Context,
+	db dbx.Querier,
+	requested []requestedLogicalGroup,
+) ([]transitionRow, map[ytcontentid.LogicalKey]struct{}, error) {
+	args := newCleanupGroupArgs(requested)
+
+	var observed []cleanupGroupRow
+
+	if err := dbx.SelectSQL(
+		ctx,
+		db,
+		&observed,
+		"load terminal outbox cleanup siblings",
+		mustSQL("transition_cleanup_group_rows.sql"),
+		args.ids,
+		args.roomIDs,
+		args.kinds,
+		args.candidates,
+		args.keyNos,
+		s.config.LogicalGroupLimit+1,
+	); err != nil {
+		return nil, nil, fmt.Errorf("load terminal outbox cleanup siblings: %w", err)
+	}
+
+	incomplete := make(map[ytcontentid.LogicalKey]struct{})
+	counts := make(map[ytcontentid.LogicalKey]int, len(args.keys))
+	siblings := make([]transitionRow, 0, len(observed))
+
+	for i := range observed {
+		for _, keyNo := range observed[i].SaturatedKeys {
+			if keyNo < 1 || keyNo > int64(len(args.keys)) {
+				return nil, nil, fmt.Errorf("load terminal outbox cleanup siblings: key number %d out of range", keyNo)
+			}
+
+			incomplete[args.keys[keyNo-1]] = struct{}{}
+		}
+
+		key, err := observed[i].logicalKey()
+		if err != nil {
+			continue
+		}
+
+		if _, ok := args.keyNoByKey[key]; !ok {
+			continue
+		}
+
+		counts[key]++
+		if !observed[i].Locked || counts[key] > s.config.LogicalGroupLimit {
+			incomplete[key] = struct{}{}
+
+			continue
+		}
+
+		siblings = append(siblings, observed[i].transitionRow)
+	}
+
+	return siblings, incomplete, nil
 }
 
 func cleanupCandidateGuard(

@@ -3,8 +3,8 @@ import { JSDOM } from 'jsdom';
 import { BotGuardClient } from 'bgutils-js/botguard';
 import { WebPoMinter } from 'bgutils-js/webpo';
 
-// This process has no network namespace, credentials, or writable application tree.
-// In particular, interpreter code never runs in the HTTP broker's address space.
+// 이 프로세스에는 네트워크 네임스페이스·자격 증명·쓰기 가능한 앱 트리가 없다.
+// 인터프리터 코드는 HTTP 브로커의 주소 공간에서 실행하지 않는다.
 for (const method of ['log', 'info', 'warn', 'error', 'debug', 'trace']) {
   console[method] = () => {};
 }
@@ -72,7 +72,7 @@ try {
     }
   }
 } catch {
-  // The broker treats any worker failure as fatal and retires the whole service.
+  // 브로커는 모든 워커 실패를 치명적으로 처리하고 서비스 전체를 종료한다.
   reply({ type: 'error' });
   process.exitCode = 1;
 } finally {

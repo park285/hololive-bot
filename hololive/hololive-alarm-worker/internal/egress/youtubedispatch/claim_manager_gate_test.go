@@ -38,7 +38,7 @@ func (s *claimGateTestSender) SendMessage(_ context.Context, roomID, message str
 	}
 
 	if s.unknownRoom[roomID] {
-		return fmt.Errorf("%s: %w", testSendFailedMessage, sendoutcome.ErrHandoffOutcomeUnknown)
+		return fmt.Errorf("%s: %w", testSendFailedMessage, sendoutcome.ErrAdmissionOutcomeUnknown)
 	}
 
 	s.messages = append(s.messages, roomID+":"+message)
@@ -595,6 +595,6 @@ func (s *claimGateTestSender) PrepareMessageRequest(_ context.Context, _, body s
 	return body, testPreparedTextRoute, nil
 }
 
-func (s *claimGateTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
-	return s.SendMessage(ctx, room, body)
+func (s *claimGateTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
+	return testAdmission(id, s.SendMessage(ctx, room, body))
 }

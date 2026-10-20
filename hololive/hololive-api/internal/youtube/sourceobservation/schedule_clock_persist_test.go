@@ -80,14 +80,14 @@ func TestScheduleItemUnknownAndEqualObservationClocks(t *testing.T) {
 	observation := Observation{Provider: contract.ProviderHololiveOfficial, EffectiveAt: observed}
 
 	require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-		return persistScheduleDecision(ctx, tx, &observation, &schedule.Decision{Items: []schedule.Item{item}})
+		return persistScheduleDecision(ctx, tx, &observation, nil, &schedule.Decision{Items: []schedule.Item{item}})
 	}))
 
 	item.Title = "Equal-time conflict"
 	item.CollaboTalentNames = []string{"Conflicting guest"}
 
 	require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-		return persistScheduleDecision(ctx, tx, &observation, &schedule.Decision{Items: []schedule.Item{item}})
+		return persistScheduleDecision(ctx, tx, &observation, nil, &schedule.Decision{Items: []schedule.Item{item}})
 	}))
 
 	var (

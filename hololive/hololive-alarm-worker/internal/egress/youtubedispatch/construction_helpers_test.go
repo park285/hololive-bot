@@ -18,6 +18,19 @@ import (
 // testTransitionOwner는 시험이 직접 만든 전이 저장소의 claim 소유자 ID다.
 const testTransitionOwner = "youtube-dispatcher:test"
 
+// testIrisRequestPrefix는 시험 sender가 202 성공 때 돌려주는 Iris requestId의 접두어다.
+const testIrisRequestPrefix = "iris-test:"
+
+// testAdmission은 시험 sender의 발송 결과를 Iris 202 admission으로 바꾼다. 성공이면 client request ID에서 만든
+// 비지 않은 requestId를, 실패면 빈 requestId와 그 오류를 돌려준다.
+func testAdmission(clientRequestID string, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+
+	return testIrisRequestPrefix + clientRequestID, nil
+}
+
 func TestNewDispatcherRejectsTypedNilDatabase(t *testing.T) {
 	var pool *pgxpool.Pool
 

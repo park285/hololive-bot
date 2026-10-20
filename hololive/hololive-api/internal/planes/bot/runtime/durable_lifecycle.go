@@ -69,6 +69,10 @@ func (r *durableRuntime) Start(ctx context.Context) {
 				panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
 			})
 		}
+
+		r.wg.Go(func() {
+			panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-reply-handoff-reconciler", func() { r.runReplyHandoffReconciler(runCtx) })
+		})
 	}
 
 	r.wg.Go(func() {

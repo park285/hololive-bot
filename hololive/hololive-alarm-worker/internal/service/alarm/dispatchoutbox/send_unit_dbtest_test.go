@@ -124,8 +124,8 @@ func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 	require.Len(t, claimed, 3)
 }
 
-// 봉투마다 계산한 재시도 시각처럼 같은 unit 멤버의 next_attempt_at이 1µs 갈리고 DB 시각이 그 사이에 있어도
-// claim은 unit 전체를 가져가고 발송 fence를 통과해야 한다. 일부만 leased되면 fence가 unit을 격리한다.
+// 같은 unit 멤버의 next_attempt_at이 1µs 갈리고 DB 시각이 그 사이에 있어도 claim은 unit 전체를 가져가고 발송
+// fence를 통과해야 한다. 일부만 leased되면 fence가 unit을 격리한다.
 func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -151,19 +151,19 @@ func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 	require.NotEmpty(t, claimed)
 
 	unitID := claimed[0].SendUnitID
-	ids := make([]int64, 0, len(claimed))
+	claims := make([]dispatchoutbox.DeliveryClaim, 0, len(claimed))
 
 	for _, record := range claimed {
 		require.Equal(t, unitID, record.SendUnitID)
 
-		ids = append(ids, record.ID)
+		claims = append(claims, dispatchoutbox.DeliveryClaim{ID: record.ID, AttemptCount: record.AttemptCount})
 	}
 
-	require.Len(t, ids, 2)
+	require.Len(t, claims, 2)
 
-	request, err := repository.PinSendRequest(ctx, unitID, ids, worker, dispatchoutbox.SendRequest{Body: "body", Route: dispatchoutbox.SendRouteText, RoomID: "room-skew"})
+	request, err := repository.PinSendRequest(ctx, unitID, claims, worker, claimed[0].ClientRequestID, dispatchoutbox.SendRequest{Body: "body", Route: dispatchoutbox.SendRouteText, RoomID: "room-skew"})
 	require.NoError(t, err)
-	require.NoError(t, repository.BeginSendRequest(ctx, unitID, ids, worker, request.ClientRequestID, time.Minute))
+	require.NoError(t, repository.BeginSendRequest(ctx, unitID, claims, worker, request.ClientRequestID, time.Minute))
 
 	var sending int
 
@@ -217,15 +217,16 @@ func TestAlarmDispatchClaimLeavesTerminalUnitMembers(t *testing.T) {
 	require.Equal(t, "dlq", status)
 }
 
-// fixedNowPool은 NOW()가 at을 반환하는 연결 pool을 만든다. 검색 경로에서 pg_catalog보다 앞선 schema의 now()가
-// 내장 함수를 가리므로 claim의 ready 판정 시각을 µs 단위로 결정할 수 있다. 실제 시각인 clock_timestamp()는 그대로다.
+// fixedNowPool은 now()와 clock_timestamp()가 모두 at을 돌려주는 연결 pool을 만든다. 검색 경로에서 pg_catalog보다
+// 앞선 schema의 함수가 내장 함수를 가리므로 claim의 ready 판정과 fence 시각을 µs 단위로 결정할 수 있다.
 func fixedNowPool(t *testing.T, pool *pgxpool.Pool, at time.Time) *pgxpool.Pool {
 	t.Helper()
 
 	_, err := pool.Exec(t.Context(), `
 		CREATE SCHEMA fixed_clock;
 		CREATE TABLE fixed_clock.instant (at TIMESTAMPTZ NOT NULL);
-		CREATE FUNCTION fixed_clock.now() RETURNS TIMESTAMPTZ LANGUAGE sql STABLE AS 'SELECT at FROM fixed_clock.instant'`)
+		CREATE FUNCTION fixed_clock.now() RETURNS TIMESTAMPTZ LANGUAGE sql STABLE AS 'SELECT at FROM fixed_clock.instant';
+		CREATE FUNCTION fixed_clock.clock_timestamp() RETURNS TIMESTAMPTZ LANGUAGE sql VOLATILE AS 'SELECT at FROM fixed_clock.instant'`)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(t.Context(), `INSERT INTO fixed_clock.instant (at) VALUES ($1)`, at)
