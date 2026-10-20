@@ -26,7 +26,6 @@ func TestDedupeInputPublicShape(t *testing.T) {
 		{name: "Category", typeOf: reflect.TypeFor[string]()},
 		{name: "SourceKind", typeOf: reflect.TypeFor[domain.AlarmDispatchSourceKind]()},
 		{name: "SourceIdentity", typeOf: reflect.TypeFor[string]()},
-		{name: "SourceOutboxKind", typeOf: reflect.TypeFor[domain.OutboxKind]()},
 	}
 
 	typeOf := reflect.TypeFor[DedupeInput]()

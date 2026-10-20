@@ -120,16 +120,6 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 		return alarmDispatchCelebrationGroupKey(envelope), true
 	}
 
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
-		return fmt.Sprintf("%s|source|%s|%s|%s|%s",
-			envelope.Notification.RoomID,
-			envelope.SourceKind,
-			envelope.YouTubeOutbox.ChannelID,
-			envelope.YouTubeOutbox.Kind,
-			envelope.YouTubeOutbox.Identity(),
-		), true
-	}
-
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
 		return fmt.Sprintf("%s|source|%s|%s|%s",
 			envelope.Notification.RoomID,
@@ -172,25 +162,10 @@ func alarmDispatchEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
 	switch envelope.SourceKind {
 	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindDeliveryDigest, domain.AlarmDispatchSourceKindXSpace:
 		return nil
-	case domain.AlarmDispatchSourceKindYouTubeOutbox:
-		return alarmDispatchYouTubeOutboxEnvelopeError(envelope)
 	case "":
 		return alarmDispatchStreamEnvelopeError(envelope)
 	default:
 		return fmt.Errorf("alarm dispatch source kind %q has no egress path", envelope.SourceKind)
-	}
-}
-
-func alarmDispatchYouTubeOutboxEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
-	if envelope.YouTubeOutbox == nil {
-		return errors.New("youtube outbox dispatch payload is nil")
-	}
-
-	switch envelope.YouTubeOutbox.Kind {
-	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost:
-		return nil
-	default:
-		return fmt.Errorf("youtube outbox kind %q has no egress path", envelope.YouTubeOutbox.Kind)
 	}
 }
 

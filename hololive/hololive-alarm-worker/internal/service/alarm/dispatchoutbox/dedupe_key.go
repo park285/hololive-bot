@@ -24,7 +24,6 @@ type DedupeInput struct {
 	Category                    string
 	SourceKind                  domain.AlarmDispatchSourceKind
 	SourceIdentity              string
-	SourceOutboxKind            domain.OutboxKind
 }
 
 func BuildDedupeKey(input *DedupeInput) string {
@@ -62,11 +61,6 @@ func buildRawEventKey(input *DedupeInput) string {
 
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return "celebration:" + input.SourceIdentity
-	}
-
-	// YouTube source identity는 payload에서 다시 계산한 CanonicalIdentity(sha256:<64hex>)만 허용한다.
-	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + input.SourceIdentity
 	}
 
 	if input.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest {
@@ -107,37 +101,6 @@ func buildRawEventKey(input *DedupeInput) string {
 	)
 }
 
-// validateSourceIdentity는 저장할 key의 YouTube outbox source identity가 CanonicalIdentity 형식(sha256:<64 lowercase hex>)인지
-// 확인한다. 예전에는 비정규 식별자를 해시로 감싸 받았지만, 이제 저장 전에 오류로 거절해 서로 다른 잘못된 입력이
-// 같은 key로 겹치거나 raw 식별자가 key에 들어가지 않게 한다. 식별자 값은 오류에 넣지 않는다.
-func validateSourceIdentity(input *DedupeInput) error {
-	if input.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return nil
-	}
-
-	if !isCanonicalSHA256Identity(input.SourceIdentity) {
-		return fmt.Errorf("youtube outbox source identity is not canonical sha256:<64 lowercase hex> (%d bytes)", len(input.SourceIdentity))
-	}
-
-	return nil
-}
-
-func isCanonicalSHA256Identity(identity string) bool {
-	const prefix = "sha256:"
-
-	if len(identity) != len(prefix)+sha256.Size*2 || !strings.HasPrefix(identity, prefix) {
-		return false
-	}
-
-	for _, char := range identity[len(prefix):] {
-		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
-			return false
-		}
-	}
-
-	return true
-}
-
 func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
 	input := envelopeNotificationDedupeInput(&envelope.Notification)
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
@@ -149,8 +112,6 @@ func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
 	}
 
 	applyCelebrationDedupeSource(&input, envelope)
-
-	applyYouTubeOutboxDedupeSource(&input, envelope)
 	applyDeliveryDigestDedupeSource(&input, envelope)
 
 	return input
@@ -217,17 +178,6 @@ func applyCelebrationDedupeSource(input *DedupeInput, envelope *domain.AlarmQueu
 		input.SourceIdentity = envelope.Celebration.Identity()
 		input.ChannelID = envelope.Celebration.ChannelID
 		input.AlarmType = envelope.Notification.AlarmType
-		input.Category = string(envelope.SourceKind)
-	}
-}
-
-func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) {
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
-		input.SourceKind = envelope.SourceKind
-		input.SourceIdentity = envelope.YouTubeOutbox.Identity()
-		input.SourceOutboxKind = envelope.YouTubeOutbox.Kind
-		input.ChannelID = strings.TrimSpace(envelope.YouTubeOutbox.ChannelID)
-		input.AlarmType = envelope.YouTubeOutbox.AlarmType
 		input.Category = string(envelope.SourceKind)
 	}
 }

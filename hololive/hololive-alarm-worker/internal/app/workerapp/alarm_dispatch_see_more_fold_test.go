@@ -2,7 +2,6 @@ package workerapp
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -172,122 +171,12 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 	return client.texts[0]
 }
 
-func seeMoreFoldPadding() string {
-	return strings.Repeat(kakaotext.ZeroWidthSpace, 500)
-}
-
 // requireNoAutoPadding은 접기 패딩 판정과 같은 기준(연속 ZWSP)으로 확인해, 길이가 다른 패딩이 다시 생겨도 잡는다.
 // 템플릿의 단발 ZWSP(제목 Markdown 해석 방지)는 허용한다.
 func requireNoAutoPadding(t *testing.T, final string) {
 	t.Helper()
 
 	require.NotContains(t, final, kakaotext.ZeroWidthSpace+kakaotext.ZeroWidthSpace)
-}
-
-func seeMoreFoldVideoPayload(t *testing.T, videoID, title string) string {
-	t.Helper()
-
-	payload, err := json.Marshal(map[string]string{"video_id": videoID, "title": title})
-	require.NoError(t, err)
-
-	return string(payload)
-}
-
-func seeMoreFoldCommunityPayload(t *testing.T, postID, text string) string {
-	t.Helper()
-
-	payload, err := json.Marshal(map[string]string{"post_id": postID, "content_text": text})
-	require.NoError(t, err)
-
-	return string(payload)
-}
-
-func seeMoreFoldOutboxEnvelope(kind domain.OutboxKind, payloads []string) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	ids := make([]int64, len(payloads))
-	items := make([]domain.YouTubeOutboxItem, len(payloads))
-
-	for i := range payloads {
-		ids[i] = int64(i + 1)
-		items[i] = domain.YouTubeOutboxItem{OutboxID: ids[i], ContentID: fmt.Sprintf("content-%02d", i+1), Payload: payloads[i]}
-	}
-
-	envelope.Notification.AlarmType = kind.ToAlarmType()
-	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
-	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
-		OutboxIDs:  ids,
-		Kind:       kind,
-		AlarmType:  kind.ToAlarmType(),
-		ChannelID:  testAlarmChannelID,
-		MemberName: "리오나",
-		Items:      items,
-	}
-
-	return envelope
-}
-
-// seeMoreFoldScreenshotShortPayloads는 사용자 첨부 화면의 쇼츠 10개 묶음과 같은 형태의 payload다.
-func seeMoreFoldScreenshotShortPayloads(t *testing.T) []string {
-	t.Helper()
-
-	shorts := []struct{ id, title string }{
-		{"eIrXBWTz3rk", "[Announcement] Liona does not have athlete's foot. #vtuber #shorts #hololive"},
-		{"1OaBQ8SOdSI", "Keep listening to my stories from now on too 🎧 #vtuber #shorts #hololive"},
-		{"FuAABGoRcUI", "Marine-senpai's cute dance cover ♡ #vtuber #shorts #dance"},
-		{"KX0m-fAbc12", "I'm out of breath from dancing so much 🤣 #vtuber #hololive #dance"},
-		{"Q7mR2xLp9sA", "Morning routine speedrun with Liona #vtuber #shorts"},
-		{"Zt4Kq8Wn3eB", "Can Liona guess the anime from one frame? #vtuber #shorts #quiz"},
-		{"Hn6Vd2Jc5uC", "Trying the viral lemon challenge 🍋 #vtuber #shorts"},
-		{"Pw9Ls1Xa7rD", "When chat asks for one more song #vtuber #shorts #singing"},
-		{"Bg3Ty8Mk2qE", "Behind the scenes of my first 3D rehearsal #vtuber #hololive"},
-		{"Rc5Nf4Hs6wF", "Thank you for 1 million views!! #vtuber #shorts #thankyou"},
-	}
-	payloads := make([]string, 0, len(shorts))
-
-	for _, short := range shorts {
-		payloads = append(payloads, seeMoreFoldVideoPayload(t, short.id, short.title))
-	}
-
-	return payloads
-}
-
-func TestAlarmDispatchRunnerKeepsLongGroupedOutboxUnfoldedAtFinalPayload(t *testing.T) {
-	t.Parallel()
-
-	renderer, store := newSeeMoreFoldRendering(t, nil)
-
-	videos := seeMoreFoldScreenshotShortPayloads(t)
-	posts := make([]string, 0, 6)
-
-	for i := range 6 {
-		posts = append(posts, seeMoreFoldCommunityPayload(t, fmt.Sprintf("Ugkx%02d", i), fmt.Sprintf("커뮤니티 공지 %d번입니다. 이번 주 방송 일정과 굿즈 안내를 함께 확인해 주세요.", i+1)))
-	}
-
-	for _, tc := range []struct {
-		name      string
-		kind      domain.OutboxKind
-		payloads  []string
-		urlPrefix string
-	}{
-		{name: "screenshot shorts 10", kind: domain.OutboxKindNewShort, payloads: videos, urlPrefix: "https://www.youtube.com/shorts/"},
-		{name: "video group", kind: domain.OutboxKindNewVideo, payloads: videos, urlPrefix: "https://youtu.be/"},
-		{name: "community group", kind: domain.OutboxKindCommunityPost, payloads: posts, urlPrefix: "https://www.youtube.com/post/"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			envelope := seeMoreFoldOutboxEnvelope(tc.kind, tc.payloads)
-
-			final := runSeeMoreFoldFinalPayload(t, renderer, store, envelope)
-
-			head, _, _ := strings.Cut(final, "\n")
-			require.True(t, strings.HasPrefix(final[len(head):], "\n\n"), "count header and body must stay separated: %q", final)
-			require.Contains(t, head, fmt.Sprintf("· %d개", len(tc.payloads)))
-			requireNoAutoPadding(t, final)
-
-			require.Equal(t, len(tc.payloads), strings.Count(final, tc.urlPrefix), "every item URL must stay in the expanded body")
-		})
-	}
 }
 
 func TestAlarmDispatchRunnerKeepsLongAlarmNotificationGroupUnfoldedAtFinalPayload(t *testing.T) {
@@ -321,11 +210,7 @@ func TestAlarmDispatchRunnerKeepsLongAlarmNotificationGroupUnfoldedAtFinalPayloa
 func TestAlarmDispatchRunnerKeepsSingleShortAndPreRenderedMessagesUnpadded(t *testing.T) {
 	t.Parallel()
 
-	longText := strings.Repeat("단일 공지 본문이 길게 이어집니다. ", 12)
-	renderer, store := newSeeMoreFoldRendering(t, map[domain.TemplateKey]string{
-		// 저장된 채널 override는 seed의 100자 제한 없이 단일 공지를 전문으로 보낸다.
-		domain.TemplateKeyOutboxCommunity: "{{.MemberName}} 공지\n\n{{.ContentText}}\n{{.URL}}",
-	})
+	renderer, store := newSeeMoreFoldRendering(t, nil)
 
 	digest := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
@@ -342,18 +227,6 @@ func TestAlarmDispatchRunnerKeepsSingleShortAndPreRenderedMessagesUnpadded(t *te
 		envelope domain.AlarmQueueEnvelope
 		long     bool
 	}{
-		{
-			name:     "single long custom community",
-			envelope: seeMoreFoldOutboxEnvelope(domain.OutboxKindCommunityPost, []string{seeMoreFoldCommunityPayload(t, "UgkxSingle", longText)}),
-			long:     true,
-		},
-		{
-			name: "short grouped shorts",
-			envelope: seeMoreFoldOutboxEnvelope(domain.OutboxKindNewShort, []string{
-				seeMoreFoldVideoPayload(t, "short-a", "짧은 쇼츠"),
-				seeMoreFoldVideoPayload(t, "short-b", "또 쇼츠"),
-			}),
-		},
 		{name: "pre-rendered digest", envelope: digest, long: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -382,39 +255,6 @@ func TestAlarmDispatchRunnerKeepsSingleShortAndPreRenderedMessagesUnpadded(t *te
 			}
 		})
 	}
-}
-
-func TestAlarmDispatchRunnerPreservesCustomGroupTemplatePadding(t *testing.T) {
-	t.Parallel()
-
-	envelope := seeMoreFoldOutboxEnvelope(domain.OutboxKindNewShort, seeMoreFoldScreenshotShortPayloads(t))
-
-	t.Run("override without blank line stays unfolded", func(t *testing.T) {
-		t.Parallel()
-
-		renderer, store := newSeeMoreFoldRendering(t, map[domain.TemplateKey]string{
-			domain.TemplateKeyOutboxShortsGroup: "{{.MemberName}} 쇼츠 {{.Count}}개\n{{range .Items}}{{.Title}}\n{{.URL}}\n{{end}}",
-		})
-
-		final := runSeeMoreFoldFinalPayload(t, renderer, store, envelope)
-
-		requireNoAutoPadding(t, final)
-
-		require.True(t, strings.HasPrefix(final, "리오나 쇼츠 10개\n"))
-	})
-
-	t.Run("override already folded stays single padded", func(t *testing.T) {
-		t.Parallel()
-
-		renderer, store := newSeeMoreFoldRendering(t, map[domain.TemplateKey]string{
-			domain.TemplateKeyOutboxShortsGroup: "{{.MemberName}} 쇼츠 {{.Count}}개" + seeMoreFoldPadding() + "\n\n{{range .Items}}{{.Title}}\n{{.URL}}\n{{end}}",
-		})
-
-		final := runSeeMoreFoldFinalPayload(t, renderer, store, envelope)
-
-		require.Equal(t, 1, strings.Count(final, seeMoreFoldPadding()))
-		require.True(t, strings.HasPrefix(final, "리오나 쇼츠 10개"+seeMoreFoldPadding()+"\n\n"))
-	})
 }
 
 func (*seeMoreFoldConsumer) LoadSendRequest(context.Context, []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {

@@ -104,17 +104,11 @@ func TestAlarmQueueEnvelopeContract(t *testing.T) {
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-contract",
 		},
-		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
-		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs: []int64{99},
-			Kind:      domain.OutboxKindNewVideo,
-			AlarmType: domain.AlarmTypeLive,
-			ChannelID: "UC_contract",
-			Items: []domain.YouTubeOutboxItem{{
-				OutboxID:  99,
-				ContentID: "video:contract",
-				Payload:   `{"video_id":"contract"}`,
-			}},
+		SourceKind: domain.AlarmDispatchSourceKindDeliveryDigest,
+		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{
+			Kind:               domain.DeliveryKindMajorEventWeekly,
+			PeriodKey:          "2026-W09",
+			PreRenderedMessage: "contract digest",
 		},
 		Version:    contractsalarm.QueueEnvelopeVersionV1,
 		ClaimKeys:  []string{"notified:claim:room-contract"},
@@ -138,12 +132,12 @@ func TestAlarmQueueEnvelopeContract(t *testing.T) {
 		t.Fatalf("dispatch_outbox_id = %d, want 99", env.DispatchOutboxID)
 	}
 
-	if env.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
-		t.Fatalf("source_kind = %q, want %q", env.SourceKind, domain.AlarmDispatchSourceKindYouTubeOutbox)
+	if env.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest {
+		t.Fatalf("source_kind = %q, want %q", env.SourceKind, domain.AlarmDispatchSourceKindDeliveryDigest)
 	}
 
-	if env.YouTubeOutbox == nil {
-		t.Fatal("youtube_outbox should be set")
+	if env.DeliveryDigest == nil {
+		t.Fatal("delivery_digest should be set")
 	}
 }
 
@@ -182,16 +176,16 @@ func TestAlarmQueueEnvelopeV1FixtureFields(t *testing.T) {
 		t.Fatalf("dispatch_outbox_id = %d, want 42", envelope.DispatchOutboxID)
 	}
 
-	if envelope.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
-		t.Fatalf("source_kind = %q, want %q", envelope.SourceKind, domain.AlarmDispatchSourceKindYouTubeOutbox)
+	if envelope.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest {
+		t.Fatalf("source_kind = %q, want %q", envelope.SourceKind, domain.AlarmDispatchSourceKindDeliveryDigest)
 	}
 
-	if envelope.YouTubeOutbox == nil {
-		t.Fatal("youtube_outbox should be non-nil")
+	if envelope.DeliveryDigest == nil {
+		t.Fatal("delivery_digest should be non-nil")
 	}
 
-	if envelope.YouTubeOutbox.ChannelID != "UC_fixture" {
-		t.Fatalf("youtube_outbox.channel_id = %q, want UC_fixture", envelope.YouTubeOutbox.ChannelID)
+	if envelope.DeliveryDigest.PeriodKey != "2026-W09" {
+		t.Fatalf("delivery_digest.period_key = %q, want 2026-W09", envelope.DeliveryDigest.PeriodKey)
 	}
 
 	if envelope.SourcePayload() != `{"version":1}` {
@@ -231,8 +225,8 @@ func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
 		t.Fatalf("roundTrip source_kind = %q, want %q", roundTrip.SourceKind, envelope.SourceKind)
 	}
 
-	if roundTrip.YouTubeOutbox == nil || roundTrip.YouTubeOutbox.ChannelID != envelope.YouTubeOutbox.ChannelID {
-		t.Fatal("roundTrip youtube_outbox mismatch")
+	if roundTrip.DeliveryDigest == nil || *roundTrip.DeliveryDigest != *envelope.DeliveryDigest {
+		t.Fatal("roundTrip delivery_digest mismatch")
 	}
 
 	if roundTrip.SourcePayload() != envelope.SourcePayload() {

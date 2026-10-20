@@ -281,8 +281,8 @@ func TestAlarmDispatchRunnerReturnsErrorWhenPostSendQuarantineFails(t *testing.T
 func TestAlarmDispatchRunnerConsumesAttemptForRenderFailureBeforeMarkSending(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
-	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
-	envelope.YouTubeOutbox = nil
+	envelope.SourceKind = domain.AlarmDispatchSourceKindDeliveryDigest
+	envelope.DeliveryDigest = nil
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
