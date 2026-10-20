@@ -302,6 +302,30 @@ func TestAlarmDispatchRunnerConsumesAttemptForRenderFailureBeforeMarkSending(t *
 	assert.Empty(t, sender.messages)
 }
 
+// 퇴역한 youtube_outbox 출처의 행은 발송 경로가 없어 렌더 전에 발송 전 실패로 넘어가야 한다.
+func TestAlarmDispatchRunnerRoutesRetiredSourceKindBeforeMarkSending(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
+	envelope.SourceKind = domain.AlarmDispatchSourceKind("youtube_outbox")
+
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, consumer.scheduledRetry, 1)
+	require.NotNil(t, consumer.scheduledRetry[0].Retry)
+	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, `source kind "youtube_outbox" has no egress path`)
+	assert.Empty(t, consumer.preSendRequeued)
+	assert.Empty(t, consumer.movedDLQ)
+	assert.Empty(t, consumer.markSending)
+	assert.Empty(t, consumer.quarantined)
+	assert.Empty(t, sender.messages)
+}
+
 func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testing.T) {
 	markErr := &sendfence.MissError{
 		Action: "mark_sent", Expected: 1,

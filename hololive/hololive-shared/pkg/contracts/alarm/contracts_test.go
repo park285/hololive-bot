@@ -101,7 +101,7 @@ func TestAlarmQueueEnvelopeContract(t *testing.T) {
 	env := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 99,
 		Notification: domain.AlarmNotification{
-			AlarmType: domain.AlarmTypeLive,
+			AlarmType: domain.AlarmTypeCommunity,
 			RoomID:    "room-contract",
 		},
 		SourceKind: domain.AlarmDispatchSourceKindDeliveryDigest,

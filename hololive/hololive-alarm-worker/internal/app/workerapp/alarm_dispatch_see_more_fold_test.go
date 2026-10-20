@@ -207,7 +207,7 @@ func TestAlarmDispatchRunnerKeepsLongAlarmNotificationGroupUnfoldedAtFinalPayloa
 	require.Equal(t, len(envelopes), strings.Count(final, "https://youtube.com/watch?v="))
 }
 
-func TestAlarmDispatchRunnerKeepsSingleShortAndPreRenderedMessagesUnpadded(t *testing.T) {
+func TestAlarmDispatchRunnerKeepsPreRenderedDigestUnpadded(t *testing.T) {
 	t.Parallel()
 
 	renderer, store := newSeeMoreFoldRendering(t, nil)
@@ -222,39 +222,15 @@ func TestAlarmDispatchRunnerKeepsSingleShortAndPreRenderedMessagesUnpadded(t *te
 		PreRenderedMessage: "주간 멤버 뉴스\n\n" + strings.Repeat("- 멤버 소식 항목이 이어집니다\n", 20),
 	}
 
-	for _, tc := range []struct {
-		name     string
-		envelope domain.AlarmQueueEnvelope
-		long     bool
-	}{
-		{name: "pre-rendered digest", envelope: digest, long: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	storedMessage := digest.DeliveryDigest.PreRenderedMessage
 
-			var storedMessage string
+	final := runSeeMoreFoldFinalPayload(t, renderer, store, digest)
 
-			if tc.envelope.DeliveryDigest != nil {
-				storedMessage = tc.envelope.DeliveryDigest.PreRenderedMessage
-			}
-
-			final := runSeeMoreFoldFinalPayload(t, renderer, store, tc.envelope)
-
-			if tc.long {
-				require.Greater(t, utf8.RuneCountInString(final), 250, "exercise a long message")
-			} else {
-				require.LessOrEqual(t, utf8.RuneCountInString(final), 250)
-			}
-
-			requireNoAutoPadding(t, final)
-
-			if tc.envelope.DeliveryDigest != nil {
-				// 저장 본문은 그대로 두고, 최종 text lane의 기존 Markdown 변환만 허용한다.
-				require.Equal(t, storedMessage, tc.envelope.DeliveryDigest.PreRenderedMessage)
-				require.Equal(t, kakaoformat.Render(storedMessage), final)
-			}
-		})
-	}
+	require.Greater(t, utf8.RuneCountInString(final), 250, "exercise a long message")
+	requireNoAutoPadding(t, final)
+	// 저장 본문은 그대로 두고, 최종 text lane의 기존 Markdown 변환만 허용한다.
+	require.Equal(t, storedMessage, digest.DeliveryDigest.PreRenderedMessage)
+	require.Equal(t, kakaoformat.Render(storedMessage), final)
 }
 
 func (*seeMoreFoldConsumer) LoadSendRequest(context.Context, []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
