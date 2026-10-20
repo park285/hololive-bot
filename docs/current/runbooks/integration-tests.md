@@ -18,7 +18,7 @@ RUN_INTEGRATION_TESTS=true bash scripts/ci/local-ci.sh --integration-tests-only
 
 기존 Valkey를 사용할 때는 `TEST_VALKEY_ADDR=host:port`를 설정합니다. YouTube delivery dispatcher는 이 주소를 우선 사용하며, 이전 호환 입력인 `TEST_VALKEY_HOST`만 설정하면 해당 host의 `6379` 포트를 사용합니다.
 
-LLM integration 테스트는 `CLIPROXY_API_KEY`가 없으면 skip합니다. 실행할 때는 `CLIPROXY_TEST_BASE_URL` 또는 `CLIPROXY_BASE_URL`, 필요하면 `CLIPROXY_TEST_MODEL`과 `HOLOLIVE_API_ENV_FILE`을 설정합니다. 테스트는 `HOLOLIVE_API_ENV_FILE`로 지정한 파일만 읽으며, 이미 설정된 프로세스 env 값은 덮어쓰지 않습니다. 지정한 파일을 읽지 못하면(없음, 권한, 디렉터리 밖을 가리키는 심볼릭 링크) skip하지 않고 실패합니다. 상대 경로는 `go test`가 실행하는 패키지 디렉터리 기준이므로 절대 경로로 지정합니다. 이 경로는 외부 호출 비용이 발생할 수 있으므로 예약 작업의 승인 범위와 호출량을 먼저 확인합니다.
+LLM integration 테스트는 `CLIPROXY_API_KEY`가 없으면 skip합니다. 실행할 때는 `CLIPROXY_TEST_BASE_URL` 또는 `CLIPROXY_BASE_URL`, 필요하면 `CLIPROXY_TEST_MODEL`과 `HOLOLIVE_API_ENV_FILE`을 설정합니다. 테스트는 `HOLOLIVE_API_ENV_FILE`로 지정한 파일만 읽으며, 비어 있지 않은 프로세스 env 값은 덮어쓰지 않고, 비어 있거나 없는 키만 파일 값으로 채웁니다. 지정한 파일을 읽지 못하면(없음, 권한, 디렉터리 밖을 가리키는 심볼릭 링크) skip하지 않고 실패합니다. 상대 경로는 `go test`가 실행하는 패키지 디렉터리 기준이므로 절대 경로로 지정합니다. 이 경로는 외부 호출 비용이 발생할 수 있으므로 예약 작업의 승인 범위와 호출량을 먼저 확인합니다.
 
 기본 local CI는 integration 테스트를 실행하지 않지만, 태그 대상의 컴파일 퇴행은 다음 단계로 항상 검사합니다.
 

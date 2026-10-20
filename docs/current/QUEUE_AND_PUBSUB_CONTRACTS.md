@@ -21,19 +21,25 @@ Current envelope:
 
 ```go
 type AlarmQueueEnvelope struct {
-    Notification  domain.AlarmNotification             `json:"notification"`
-    ClaimKeys     []string                             `json:"claim_keys"`
-    EnqueuedAt    string                               `json:"enqueued_at"`
-    Version       uint8                                `json:"version"`
-    Retry         *AlarmQueueRetryMetadata             `json:"retry,omitempty"`
-    SourcePayload string                               `json:"source_payload,omitempty"`
-    SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
-    XSpace       *domain.XSpaceDispatchPayload        `json:"x_space,omitempty"`
+    DispatchOutboxID int64                                 `json:"dispatch_outbox_id"`
+    DispatchGroupKey string                                `json:"dispatch_group_key,omitempty"`
+    SendUnitID       int64                                 `json:"send_unit_id"`
+    ClientRequestID  string                                `json:"client_request_id,omitempty"`
+    Notification     domain.AlarmNotification              `json:"notification"`
+    SourceKind       domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
+    Celebration      *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
+    DeliveryDigest   *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
+    XSpace           *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
+    ClaimKeys        []string                              `json:"claim_keys"`
+    EnqueuedAt       string                                `json:"enqueued_at"`
+    Version          uint8                                 `json:"version"`
+    Retry            *AlarmQueueRetryMetadata              `json:"retry,omitempty"`
+    SourcePayloadRaw string                                `json:"source_payload,omitempty"`
 }
 
 type AlarmQueueRetryMetadata struct {
-    Attempt       int    `json:"attempt,omitempty"`
-    RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
+    Attempt       int    `json:"attempt"`
+    RetryAfterMS  int64  `json:"retry_after_ms"`
     LastError     string `json:"last_error,omitempty"`
     LastErrorCode string `json:"last_error_code,omitempty"`
 }
