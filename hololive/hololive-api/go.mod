@@ -16,7 +16,7 @@ require (
 	github.com/mmcdole/gofeed v1.5.0
 	github.com/openai/openai-go/v3 v3.78.0
 	github.com/park285/iris-client-go/v3 v3.1.0
-	github.com/park285/shared-go/v2 v2.15.0
+	github.com/park285/shared-go/v2 v2.16.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.64.0
 	github.com/shirou/gopsutil/v4 v4.26.9
