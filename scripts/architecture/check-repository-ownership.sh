@@ -30,10 +30,6 @@ check_no_imports() {
   fi
 }
 
-check_no_imports "youtube-collector write-capable alarm repository" \
-  "hololive/hololive-youtube-collector" \
-  'hololive-shared/pkg/service/alarm"|alarm\.NewRepository'
-
 # API process와 저장 template 실행기는 native process/plugin 실행 권한을 갖지 않는다.
 check_no_imports "hololive-api native execution capability" \
   "hololive/hololive-api" \

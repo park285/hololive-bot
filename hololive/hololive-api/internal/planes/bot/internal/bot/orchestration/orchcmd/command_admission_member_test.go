@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func TestCommandAdmissionMemberIsDerivedFromMessageID(t *testing.T) {
@@ -72,7 +72,7 @@ func TestCommandAdmissionMemberFailsClosedWithoutMessageID(t *testing.T) {
 
 func TestCommandAdmissionRejectsExpensiveCommandWithoutMessageID(t *testing.T) {
 	policy, _, _ := newTestCommandAdmissionPolicy(t)
-	cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID}
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID}
 
 	err := policy.Admit(t.Context(), cmdCtx, "broadcast_history")
 	if !errors.Is(err, errCommandAdmissionUnavailable) {
@@ -83,7 +83,7 @@ func TestCommandAdmissionRejectsExpensiveCommandWithoutMessageID(t *testing.T) {
 func TestCommandAdmissionReplayDoesNotConsumeQuotaTwice(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	ctx := t.Context()
-	cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
 
 	for range expensiveHistoryUserLimit + 2 {
 		if err := policy.Admit(ctx, cmdCtx, "broadcast_history"); err != nil {
@@ -103,13 +103,13 @@ func TestCommandAdmissionDistinctMessagesStillConsumeQuota(t *testing.T) {
 	ctx := t.Context()
 
 	for i := range expensiveHistoryUserLimit {
-		cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: messageIDForIndex(i)}
+		cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: messageIDForIndex(i)}
 		if err := policy.Admit(ctx, cmdCtx, "broadcast_history"); err != nil {
 			t.Fatalf("admission %d error = %v", i, err)
 		}
 	}
 
-	overLimit := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: "message:overflow"}
+	overLimit := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: "message:overflow"}
 	if err := policy.Admit(ctx, overLimit, "broadcast_history"); !errors.Is(err, errCommandRateLimited) {
 		t.Fatalf("over-limit admission error = %v, want rate limit", err)
 	}
@@ -118,7 +118,7 @@ func TestCommandAdmissionDistinctMessagesStillConsumeQuota(t *testing.T) {
 func TestCommandAdmissionPassesTheDerivedMemberToTheLimiter(t *testing.T) {
 	limiter := &stubCommandRateLimiter{}
 	policy := &commandAdmissionPolicy{limiter: limiter}
-	cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
 
 	if err := policy.Admit(t.Context(), cmdCtx, "broadcast_history"); err != nil {
 		t.Fatalf("Admit() error = %v", err)

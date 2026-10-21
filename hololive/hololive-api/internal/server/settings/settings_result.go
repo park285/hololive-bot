@@ -20,7 +20,7 @@
 
 package settings
 
-import triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+import triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 
 type AlarmAdvanceMinutesApplyResult struct {
 	AlarmRequestedAdvanceMinutes int    `json:"alarm_requested_advance_minutes"`

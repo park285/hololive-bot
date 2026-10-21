@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
@@ -32,14 +30,14 @@ type AuditLogger struct {
 	telemetry *telemetry.Repository
 	delivery  *store.DeliveryRepository
 	logger    *slog.Logger
-	config    dispatchstate.Config
+	config    Config
 }
 
 func newAuditLogger(
 	telemetryRepo *telemetry.Repository,
 	deliveryRepo *store.DeliveryRepository,
 	logger *slog.Logger,
-	config *dispatchstate.Config,
+	config *Config,
 ) *AuditLogger {
 	return &AuditLogger{
 		telemetry: telemetryRepo,
@@ -72,19 +70,19 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 			continue
 		}
 
-		al.logger.Info(deliveryAttemptStartedLogMessage,
-			slog.Int64(logschema.FieldDeliveryID, limitedRows[i].ID),
-			slog.Int64(logschema.FieldOutboxID, outbox.ID),
+		al.logger.Info(CommunityShortsDeliveryAttemptMessage,
+			slog.Int64(FieldDeliveryID, limitedRows[i].ID),
+			slog.Int64(FieldOutboxID, outbox.ID),
 			privacylog.RoomIDAttr(limitedRows[i].RoomID),
-			slog.String(logschema.FieldChannelID, outbox.ChannelID),
-			slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
-			slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
-			slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
-			slog.Time(deliveryAttemptStartedAtLogField, attemptStartedAt),
-			slog.Int(logschema.FieldAttemptOrdinal, deliveryAttemptOrdinal(&limitedRows[i])),
-			slog.String(deliveryAuditPathLogField, deliveryPath),
-			slog.String(deliveryAuditModeLogField, deliveryMode),
-			slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(&outbox)),
+			slog.String(FieldChannelID, outbox.ChannelID),
+			slog.String(FieldPostID, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
+			slog.String(FieldContentID, strings.TrimSpace(outbox.ContentID)),
+			slog.String(FieldAlarmType, string(outbox.Kind.ToAlarmType())),
+			slog.Time(FieldAttemptStartedAt, attemptStartedAt),
+			slog.Int(FieldAttemptOrdinal, deliveryAttemptOrdinal(&limitedRows[i])),
+			slog.String(FieldDeliveryPath, deliveryPath),
+			slog.String(FieldDeliveryMode, deliveryMode),
+			slog.String(FieldDedupeKey, telemetry.DedupeKeyLogValue(&outbox)),
 		)
 	}
 }
@@ -119,18 +117,18 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 	successfulAlarmCount, failedAlarmCount, successfulRoomCount, failedRoomCount := deliveryResultCounts(sendResult, summary.alarmCount, roomCount)
 
 	attrs := []any{
-		slog.String(logschema.FieldChannelID, summary.channelID),
-		slog.String(deliveryAuditAlarmTypeLogField, string(summary.alarmType)),
-		slog.Time(deliveryAuditSentAtLogField, sentAt),
-		slog.String(deliveryAuditSendResultLogField, sendResult),
-		slog.String(deliveryAuditPathLogField, deliveryPath),
-		slog.String(deliveryAuditModeLogField, deliveryMode),
-		slog.Int(logschema.FieldTargetAlarmCount, summary.alarmCount),
-		slog.Int(logschema.FieldSuccessfulAlarmCount, successfulAlarmCount),
-		slog.Int(logschema.FieldFailedAlarmCount, failedAlarmCount),
-		slog.Int(logschema.FieldTargetRoomCount, roomCount),
-		slog.Int(logschema.FieldSuccessfulRoomCount, successfulRoomCount),
-		slog.Int(logschema.FieldFailedRoomCount, failedRoomCount),
+		slog.String(FieldChannelID, summary.channelID),
+		slog.String(FieldAlarmType, string(summary.alarmType)),
+		slog.Time(FieldSentAt, sentAt),
+		slog.String(FieldSendResult, sendResult),
+		slog.String(FieldDeliveryPath, deliveryPath),
+		slog.String(FieldDeliveryMode, deliveryMode),
+		slog.Int(FieldTargetAlarmCount, summary.alarmCount),
+		slog.Int(FieldSuccessfulAlarmCount, successfulAlarmCount),
+		slog.Int(FieldFailedAlarmCount, failedAlarmCount),
+		slog.Int(FieldTargetRoomCount, roomCount),
+		slog.Int(FieldSuccessfulRoomCount, successfulRoomCount),
+		slog.Int(FieldFailedRoomCount, failedRoomCount),
 	}
 	if roomCount == 1 {
 		for roomID := range summary.uniqueRooms {
@@ -140,10 +138,10 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 	}
 
 	if trimmedReason := strings.TrimSpace(failureReason); trimmedReason != "" {
-		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, deliverysql.TruncateString(trimmedReason, 100)))
+		attrs = append(attrs, slog.String(FieldFailureReason, deliverysql.TruncateString(trimmedReason, 100)))
 	}
 
-	al.logger.Info(deliveryResultLogMessage, attrs...)
+	al.logger.Info(CommunityShortsDeliveryResultMessage, attrs...)
 }
 
 func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) error {
@@ -240,29 +238,29 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 	}
 
 	attrs := []any{
-		slog.Int64(logschema.FieldOutboxID, result.OutboxID),
-		slog.String(logschema.FieldChannelID, result.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(result.Kind, result.ContentID, result.Payload)),
-		slog.String(deliveryAuditContentIDLogField, result.ContentID),
-		slog.String(deliveryAuditAlarmTypeLogField, string(result.Kind.ToAlarmType())),
-		slog.Time(deliveryAuditSentAtLogField, eventAt),
-		slog.String(deliveryAuditSendResultLogField, sendResult),
-		slog.String(deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath),
-		slog.String(deliveryAuditModeLogField, logschema.DeliveryModeFinalResult),
-		slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(&outbox)),
-		slog.String(logschema.FieldTelemetrySource, logschema.TelemetrySourceOutboxFinalResult),
-		slog.Int(logschema.FieldTargetRoomCount, result.TargetRoomCount),
-		slog.Int(logschema.FieldSuccessfulRoomCount, result.SuccessfulRoomCount),
-		slog.Int(logschema.FieldFailedRoomCount, result.FailedRoomCount),
+		slog.Int64(FieldOutboxID, result.OutboxID),
+		slog.String(FieldChannelID, result.ChannelID),
+		slog.String(FieldPostID, telemetry.PostIDLogValue(result.Kind, result.ContentID, result.Payload)),
+		slog.String(FieldContentID, result.ContentID),
+		slog.String(FieldAlarmType, string(result.Kind.ToAlarmType())),
+		slog.Time(FieldSentAt, eventAt),
+		slog.String(FieldSendResult, sendResult),
+		slog.String(FieldDeliveryPath, telemetry.CommunityShortsDeliveryPath),
+		slog.String(FieldDeliveryMode, DeliveryModeFinalResult),
+		slog.String(FieldDedupeKey, telemetry.DedupeKeyLogValue(&outbox)),
+		slog.String(FieldTelemetrySource, TelemetrySourceOutboxFinalResult),
+		slog.Int(FieldTargetRoomCount, result.TargetRoomCount),
+		slog.Int(FieldSuccessfulRoomCount, result.SuccessfulRoomCount),
+		slog.Int(FieldFailedRoomCount, result.FailedRoomCount),
 	}
 
 	attrs = appendCommunityShortsAlarmTimingLogAttrs(attrs, timing)
 
 	if result.AggregatedFailReason != "" {
-		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, result.AggregatedFailReason))
+		attrs = append(attrs, slog.String(FieldFailureReason, result.AggregatedFailReason))
 	}
 
 	attrs = appendLatencyClassificationLogAttr(attrs, &result.LatencyClassification)
 
-	al.logger.Info(deliveryAuditLogMessage, attrs...)
+	al.logger.Info(CommunityShortsDeliveryAuditMessage, attrs...)
 }

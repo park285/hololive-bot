@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -46,7 +45,7 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 
 	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{
 		failRoom: map[string]bool{"room-fail": true},
-	}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &Config{
 		DeliveryParallelism: 1,
 	})
 

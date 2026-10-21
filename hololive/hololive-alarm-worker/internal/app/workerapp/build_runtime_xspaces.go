@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	xspacesworker "github.com/kapu/hololive-alarm-worker/internal/service/xspaces"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -37,8 +37,8 @@ func buildXSpacesRunner(infra *sharedmodules.InfraModule, foundation *alarmFound
 		return optionalRuntimeSchedulerResult{err: errors.New("x spaces config requires X_SPACES_KEY_FILE")}
 	}
 
-	pub := queue.NewPublisher(infra.Cache, logger, queue.WithOutbox(foundation.Outbox), queue.WithWakeupEnabled(publishConfig.WakeupEnabled), queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch))
-	resolver := sharedalarm.NewSubscriberResolver(infra.Cache, infra.Postgres.GetPool())
+	pub := queue.NewPublisher(infra.Cache, logger, queue.WithOutbox(foundation.Outbox), queue.WithPublishConfig(publishConfig))
+	resolver := alarmstore.NewSubscriberResolver(infra.Cache, infra.Postgres.GetPool())
 
 	runner, err := xspacesworker.NewRunner(*config, store, xspacesworker.StartStore{Pool: infra.Postgres.GetPool()},
 		xspacesworker.ProcessCollector{}, pub,

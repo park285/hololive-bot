@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -15,14 +14,14 @@ type OutboxFanoutService struct {
 	transition *store.TransitionStore
 	grouper    *OutboxGrouper
 	logger     *slog.Logger
-	config     dispatchstate.Config
+	config     Config
 }
 
 func newOutboxFanoutService(
 	transition *store.TransitionStore,
 	grouper *OutboxGrouper,
 	logger *slog.Logger,
-	config *dispatchstate.Config,
+	config *Config,
 ) *OutboxFanoutService {
 	if transition == nil {
 		return nil

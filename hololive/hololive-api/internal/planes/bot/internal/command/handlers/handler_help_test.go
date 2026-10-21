@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -102,7 +103,7 @@ func TestHelpCommand_Execute_GoldenPathSendsImageAlbum(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
+	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -145,7 +146,7 @@ func TestHelpCommand_Execute_ImageProviderFailureFallsBackToText(t *testing.T) {
 
 	before := imageTextFallbackCount("help", imageTextFallbackReasonRenderFailed)
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
+	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -182,7 +183,7 @@ func TestHelpCommand_Execute_AlbumFailureFallsBackToText(t *testing.T) {
 
 	before := imageTextFallbackCount("help", imageTextFallbackReasonSendFailed)
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
+	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -214,7 +215,7 @@ func TestHelpCommand_Execute_AlbumOutcomeUnknownSuppressesTextFallback(t *testin
 				Logger: slog.New(slog.DiscardHandler),
 			}
 			before := imageTextFallbackCount("help", imageTextFallbackReasonOutcomeUnknown)
-			err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+			err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
 
 			if !errors.Is(err, imageErr) {
 				t.Fatalf("Execute() error = %v, want preserved outcome uncertainty", err)
@@ -246,7 +247,7 @@ func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+	err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
 	if !errors.Is(err, imageErr) || !errors.Is(err, textErr) {
 		t.Fatalf("Execute error = %v, want joined failures", err)
 	}
@@ -265,7 +266,7 @@ func TestHelpCommand_Execute_MissingImageCapabilityReturnsError(t *testing.T) {
 	}
 
 	// 운영 조립은 이미지 provider와 album 전송을 항상 연결하므로, 없으면 텍스트로 조용히 바꾸지 않고 설정 오류를 돌려준다.
-	err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+	err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
 	if err == nil || !strings.Contains(err.Error(), "help image capability not configured") {
 		t.Fatalf("Execute error = %v, want help image capability not configured", err)
 	}
@@ -276,7 +277,7 @@ func TestHelpCommand_Execute_MissingImageCapabilityReturnsError(t *testing.T) {
 }
 
 func TestHelpCommand_Execute_NilDependencies(t *testing.T) {
-	if err := NewHelpCommand(nil).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err == nil {
+	if err := NewHelpCommand(nil).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err == nil {
 		t.Fatal("expected error for nil deps")
 	}
 }
@@ -287,7 +288,7 @@ func TestHelpCommand_Execute_NilSendMessage(t *testing.T) {
 	}
 	cmd := NewHelpCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
 	if err == nil {
 		t.Fatal("expected error for nil SendMessage")
 	}
@@ -299,7 +300,7 @@ func TestHelpCommand_Execute_NilFormatter(t *testing.T) {
 	}
 	cmd := NewHelpCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
 	if err == nil {
 		t.Fatal("expected error for nil Formatter")
 	}
@@ -316,7 +317,7 @@ func TestHelpCommand_Execute_NilContexts(t *testing.T) {
 
 	var cmd *HelpCommand
 
-	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err == nil {
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err == nil {
 		t.Fatal("expected error for nil receiver")
 	}
 }

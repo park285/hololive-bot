@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
@@ -272,7 +271,7 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &Config{
 		LockTimeout:         time.Minute,
 		TelemetryFlushBatch: 10,
 	})
@@ -285,7 +284,7 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].LoggedAt)
 	require.Equal(t, "short-emit", rows[0].PostID)
-	require.Contains(t, logBuffer.String(), deliveryAuditLogMessage)
+	require.Contains(t, logBuffer.String(), CommunityShortsDeliveryAuditMessage)
 	require.Contains(t, logBuffer.String(), "\"delivery_path\":\""+telemetry.CommunityShortsDeliveryPath+"\"")
 	require.Contains(t, logBuffer.String(), "\"post_id\":\"short-emit\"")
 	require.Contains(t, logBuffer.String(), "\"actual_published_at\":")

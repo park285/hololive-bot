@@ -9,7 +9,6 @@ import (
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -26,7 +25,7 @@ func buildAdminAPISettings(
 	alarmMode *alarmModeComponents,
 	logger *slog.Logger,
 ) (adminAPISettings, error) {
-	service, err := sharedmodules.BuildSettingsService(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, logger)
+	service, err := sharedsettings.BuildSettingsService(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, logger)
 	if err != nil {
 		return adminAPISettings{}, fmt.Errorf("settings service: %w", err)
 	}

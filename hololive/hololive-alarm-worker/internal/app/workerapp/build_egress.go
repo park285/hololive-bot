@@ -12,17 +12,16 @@ import (
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	irisproviders "github.com/kapu/hololive-shared/pkg/providers/iris"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -81,7 +80,7 @@ func buildEgressRunners(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
-	statusClient alarmdispatch.ReplyStatusClient,
+	statusClient handoffcheck.ReplyStatusClient,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -123,7 +122,7 @@ func appendYouTubeDeliveryRunner(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
-	statusClient youtubedispatch.ReplyStatusClient,
+	statusClient handoffcheck.ReplyStatusClient,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -164,7 +163,7 @@ func appendAlarmDispatchRunner(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
-	statusClient alarmdispatch.ReplyStatusClient,
+	statusClient handoffcheck.ReplyStatusClient,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -202,7 +201,7 @@ func appendAlarmDispatchRunner(
 func buildAlarmDispatchHandoffReconciler(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
-	statusClient alarmdispatch.ReplyStatusClient,
+	statusClient handoffcheck.ReplyStatusClient,
 	logger *slog.Logger,
 ) (*alarmdispatch.HandoffReconciler, error) {
 	consumer, err := dispatchoutbox.NewHandoffConsumer(dispatchoutbox.NewPgxRepository(infra.Postgres, logger), infra.Cache)
@@ -230,7 +229,7 @@ func appendNotificationDeliveryRunner(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
-	statusClient notificationdelivery.ReplyStatusClient,
+	statusClient handoffcheck.ReplyStatusClient,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
@@ -268,7 +267,7 @@ func appendNotificationDeliveryRunner(
 func buildNotificationDeliveryHandoffReconciler(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
-	statusClient notificationdelivery.ReplyStatusClient,
+	statusClient handoffcheck.ReplyStatusClient,
 	logger *slog.Logger,
 ) (*notificationdelivery.HandoffReconciler, error) {
 	dispatcherConfig := notificationDeliveryDispatcherConfig(appConfig)
@@ -382,7 +381,7 @@ func buildAlarmDispatchRunner(
 	config.WorkerTotals = workerState.totals[workerconfig.WorkerAlarmDispatch]
 
 	if infra.MemberCache != nil {
-		config.Members = member.NewMemberServiceAdapter(infra.MemberCache)
+		config.Members = infra.MemberCache
 	}
 
 	wakeupWaiter, err := alarmdispatch.NewWakeupWaiterWithConfig(infra.Cache, logger, alarmdispatch.WakeupConfig{
@@ -507,7 +506,7 @@ func newYouTubeOutboxDispatcher(
 		DB: pool, Cache: infra.Cache, Sender: sender,
 		Renderer: template.NewRenderer(pool, logger), MessageStrings: messageStrings,
 		// 표시명은 PostgreSQL members 정본에서 읽어 Valkey 장애가 알림 이름과 발송을 막지 않게 한다.
-		MemberNames: sharedalarm.NewRepository(infra.Postgres, logger),
+		MemberNames: alarmstore.NewRepository(infra.Postgres, logger),
 	}, logger, &dispatchConfig)
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube outbox dispatcher dependencies: %w", err)
@@ -518,14 +517,14 @@ func newYouTubeOutboxDispatcher(
 
 // youtubeDispatchConfig는 worker profile의 youtube_delivery 항목을 그대로 옮긴다. 생성자가 기본값을 채우지 않으므로
 // 모든 필드를 profile에서 받는다.
-func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) dispatchstate.Config {
+func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) youtubedispatch.Config {
 	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerYouTubeDelivery]
 	attemptTimeout, _ := worker.Executor.AttemptTimeout.FixedDuration()
 	// 신선도는 delivery 생성 시각이 아니라 부모 outbox.created_at에서 계산한다.
 	freshness, _ := worker.Queue.MaxAge.FixedDuration()
 
-	return dispatchstate.Config{
+	return youtubedispatch.Config{
 		BatchSize:                   profile.BatchSize,
 		LockTimeout:                 workercontract.Milliseconds(profile.LockTimeoutMS),
 		PollInterval:                workercontract.Milliseconds(profile.PollIntervalMS),

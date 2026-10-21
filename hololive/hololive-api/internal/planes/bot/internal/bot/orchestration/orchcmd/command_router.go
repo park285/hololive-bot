@@ -31,8 +31,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -55,7 +55,7 @@ func NewCommandRouter(registry *handlers.Registry, logger *slog.Logger, sendMess
 	}
 }
 
-func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
+func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, cmdType botcommand.CommandType, params map[string]any) error {
 	if r.registry == nil {
 		return errors.New("command registry is not initialized")
 	}
@@ -101,7 +101,7 @@ type registeredCommandResult struct {
 
 func (r *CommandRouter) executeRegisteredCommand(
 	ctx context.Context,
-	cmdCtx *domain.CommandContext,
+	cmdCtx *botcommand.CommandContext,
 	key string,
 	params map[string]any,
 	started time.Time,
@@ -148,7 +148,7 @@ func (r *CommandRouter) logExecutionFailure(ctx context.Context, err error, attr
 	sharedlog.Error(ctx, r.logger, EventBotCommandExecuteFailed, "command execution failed", attrs...)
 }
 
-func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *domain.CommandContext, err error) error {
+func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *botcommand.CommandContext, err error) error {
 	if !errors.Is(err, errCommandRateLimited) {
 		return fmt.Errorf("admit command: %w", err)
 	}
@@ -165,6 +165,6 @@ func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *domain
 }
 
 // NormalizeCommand 명령어 타입과 파라미터를 정규화합니다.
-func (r *CommandRouter) NormalizeCommand(cmdType domain.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
+func (r *CommandRouter) NormalizeCommand(cmdType botcommand.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
 	return NormalizeCommandKey(cmdType, params)
 }

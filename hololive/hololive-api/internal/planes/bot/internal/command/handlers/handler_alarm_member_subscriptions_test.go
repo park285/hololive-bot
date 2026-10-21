@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -69,7 +70,7 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 
 		return nil
 	})
-	cmdCtx := &domain.CommandContext{Room: testRoomID}
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID}
 
 	for _, name := range []string{"미라", "네온"} {
 		require.NoError(t, command.Execute(t.Context(), cmdCtx, map[string]any{"action": testActionAdd, "member": name}))

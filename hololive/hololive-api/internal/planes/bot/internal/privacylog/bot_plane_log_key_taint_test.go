@@ -30,26 +30,9 @@ func checkIdentifierBearingLogValues(t *testing.T, fileSet *token.FileSet, sourc
 
 	taint := analyzeKeyTaint(sources)
 
-	for _, seed := range []string{"BuildNotifyClaimKey", "BuildUpcomingEventKey", "BuildLogicalEventClaimKey"} {
-		if !hasCallableNamed(taint.builders, seed) {
-			t.Fatalf("%q was not recognized as an identifier-bearing key builder; "+
-				"the analysis is not reading the keys package", seed)
-		}
-	}
-
 	for _, report := range taint.violations(fileSet, sources) {
 		t.Error(report)
 	}
-}
-
-func hasCallableNamed(callables map[string]struct{}, name string) bool {
-	for callable := range callables {
-		if strings.HasSuffix(callable, "."+name) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func analyzeKeyTaint(sources scannedSources) keyTaint {

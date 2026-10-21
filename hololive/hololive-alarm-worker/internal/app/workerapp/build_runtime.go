@@ -12,30 +12,27 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
-	"github.com/kapu/hololive-alarm-worker/internal/readiness"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/config/envload"
-	"github.com/kapu/hololive-shared/pkg/domain"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	holodexproviders "github.com/kapu/hololive-shared/pkg/providers/holodex"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 const (
 	notificationSchedulerRoleEnv = "NOTIFICATION_SCHEDULER_ROLE"
-	runtimeRoleBot               = "bot"
 	runtimeRoleWorker            = "worker"
-	schedulerRoleOff             = "off"
 )
 
 type alarmFoundation struct {
@@ -62,7 +59,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *workerconfig.Runtim
 		return nil, errors.New("config must not be nil")
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres, PoolName: "alarm_worker"}, logger)
+	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres, Pool: databaseproviders.RuntimePool{Name: "alarm_worker", ReservedConns: 1}}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build alarm worker runtime: build infra module: %w", err)
 	}
@@ -91,7 +88,12 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "worker registry", err)
 	}
 
-	schedulerResult := buildOptionalRuntimeScheduler(appConfig, infra, foundation, logger)
+	publishConfig, err := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
+	if err != nil {
+		return nil, failAlarmWorkerBuild(infra, "publish config", err)
+	}
+
+	schedulerResult := buildOptionalRuntimeScheduler(appConfig, infra, foundation, publishConfig, logger)
 	if schedulerResult.err != nil {
 		return nil, failAlarmWorkerBuild(infra, "scheduler", schedulerResult.err)
 	}
@@ -101,7 +103,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
-	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
+	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, publishConfig, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, stage, err)
 	}
@@ -170,15 +172,25 @@ func buildOptionalRuntimeScheduler(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
+	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
 ) optionalRuntimeSchedulerResult {
-	if runtimeSchedulerDisabled(runtimeRoleWorker, envutil.String(notificationSchedulerRoleEnv, ""), logger) {
+	if runtimeSchedulerDisabled(envutil.String(notificationSchedulerRoleEnv, ""), logger) {
 		return optionalRuntimeSchedulerResult{}
 	}
 
-	scheduler, err := buildRuntimeScheduler(appConfig, infra, foundation, logger)
+	scheduler, err := alarmscheduler.NewRuntimeScheduler(alarmscheduler.Dependencies{
+		Cache:          infra.Cache,
+		HolodexService: foundation.HolodexService,
+		AlarmState:     foundation.AlarmService,
+		Postgres:       infra.Postgres,
+		Notification:   appConfig.Notification,
+		Outbox:         foundation.Outbox,
+		Publish:        publishConfig,
+		Logger:         logger,
+	})
 	if err != nil {
-		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build runtime scheduler: %w", err)}
+		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build runtime scheduler: new alarm worker runtime scheduler: %w", err)}
 	}
 
 	return optionalRuntimeSchedulerResult{scheduler: scheduler}
@@ -195,15 +207,16 @@ func buildAlarmWorkerHTTPRuntime(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
+	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
 ) (servers *sharedserver.RuntimeHTTPServers, runners alarmWorkerBackgroundRunners, stage string, err error) {
 	readyProbe := newAlarmWorkerReadyProbe(infra)
 
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:                 appConfig.Server.APIKey,
-		ReadyResponder:         readiness.PublicGinHandler(ctx, readyProbe),
-		InternalReadyResponder: readiness.InternalGinHandler(ctx, readyProbe),
-		RegisterRoutes: sharedalarm.NewInternalRouteRegistrar(
+		ReadyResponder:         publicReadyHandler(ctx, readyProbe),
+		InternalReadyResponder: internalReadyHandler(ctx, readyProbe),
+		RegisterRoutes: alarmhttp.NewInternalRouteRegistrar(
 			appConfig.Server.APIKey,
 			foundation.AlarmService,
 			logger,
@@ -211,11 +224,6 @@ func buildAlarmWorkerHTTPRuntime(
 	})
 	if err != nil {
 		return nil, alarmWorkerBackgroundRunners{}, "router", fmt.Errorf("runtime router: %w", err)
-	}
-
-	publishConfig, err := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
-	if err != nil {
-		return nil, alarmWorkerBackgroundRunners{}, "publish config", err
 	}
 
 	xSpaces := buildXSpacesRunner(infra, foundation, publishConfig, logger)
@@ -266,79 +274,22 @@ func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness
 	)
 }
 
-func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
+// alarmSchedulerEnabled는 값이 없거나 worker일 때만 이 worker가 scheduler를 소유한다고 본다. 허용값 검증은 config가 기동 때 한다.
+func alarmSchedulerEnabled(configuredRole string) bool {
 	role := strings.ToLower(strings.TrimSpace(configuredRole))
-	if role == "" {
-		role = strings.ToLower(strings.TrimSpace(runtimeRole))
-	}
 
-	switch role {
-	case schedulerRoleOff:
-		return false
-	case runtimeRoleBot, runtimeRoleWorker:
-		return strings.ToLower(strings.TrimSpace(runtimeRole)) == role
-	default:
-		return false
-	}
+	return role == "" || role == runtimeRoleWorker
 }
 
-func buildRuntimeScheduler(
-	appConfig *workerconfig.RuntimeConfig,
-	infra *sharedmodules.InfraModule,
-	foundation *alarmFoundation,
-	logger *slog.Logger,
-) (workerruntime.Scheduler, error) {
-	if appConfig == nil {
-		return nil, errors.New("validate runtime scheduler inputs: config is required")
-	}
-
-	if foundation == nil {
-		return nil, errors.New("validate runtime scheduler inputs: alarm foundation is required")
-	}
-
-	if foundation.AlarmService == nil {
-		return nil, errors.New("validate runtime scheduler inputs: alarm service is required")
-	}
-
-	if infra == nil {
-		return nil, errors.New("validate runtime scheduler inputs: infrastructure is required")
-	}
-
-	if appConfig.AlarmWorkerProfile == nil {
-		return nil, errors.New("validate runtime scheduler inputs: alarm worker profile is required")
-	}
-
-	publishConfig, err := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
-	if err != nil {
-		return nil, err
-	}
-
-	scheduler, err := alarmscheduler.NewRuntimeScheduler(alarmscheduler.Dependencies{
-		Cache:          infra.Cache,
-		HolodexService: foundation.HolodexService,
-		AlarmState:     foundation.AlarmService,
-		Postgres:       infra.Postgres,
-		Notification:   appConfig.Notification,
-		Outbox:         foundation.Outbox,
-		Publish:        publishConfig,
-		Logger:         logger,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("new alarm worker runtime scheduler: %w", err)
-	}
-
-	return scheduler, nil
-}
-
-func runtimeSchedulerDisabled(runtimeRole, configuredRole string, logger *slog.Logger) bool {
-	if runtimeAllowsAlarmScheduler(runtimeRole, configuredRole) {
+func runtimeSchedulerDisabled(configuredRole string, logger *slog.Logger) bool {
+	if alarmSchedulerEnabled(configuredRole) {
 		return false
 	}
 
 	if logger != nil {
 		logger.Info(
 			"Alarm runtime scheduler disabled for this runtime",
-			slog.String("runtime_role", runtimeRole),
+			slog.String("runtime_role", runtimeRoleWorker),
 			slog.String("configured_role", strings.TrimSpace(configuredRole)),
 		)
 	}
@@ -352,17 +303,17 @@ func buildAlarmFoundation(
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
-	memberData := member.NewMemberServiceAdapter(infra.MemberCache)
+	memberData := infra.MemberCache
 
-	holodexService, err := buildAlarmHolodexService(ctx, appConfig, infra, memberData, logger)
+	holodexService, err := buildAlarmHolodexService(appConfig, infra, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
+	alarmRepository := alarmstore.NewRepository(infra.Postgres, logger)
 	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
 
-	resolved, err := sharedmodules.ResolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, logger)
+	resolved, err := resolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, logger)
 	if err != nil {
 		return nil, fmt.Errorf("resolve alarm target minutes: %w", err)
 	}
@@ -381,25 +332,14 @@ func buildAlarmFoundation(
 	}, nil
 }
 
-// buildAlarmHolodexService는 runtime이 읽은 공식 일정·Holodex 설정으로 공식 일정 서비스와 Holodex 서비스를 만든다.
+// buildAlarmHolodexService는 채널 live 상태 조회용 Holodex client를 만든다. 공식 일정 폴백을 쓰지 않으므로 멤버
+// identity 색인을 적재하는 scraper 없이 만든다.
 func buildAlarmHolodexService(
-	ctx context.Context,
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
-	memberData domain.MemberDataProvider,
 	logger *slog.Logger,
 ) (*holodexprovider.Service, error) {
-	scraperService, err := holodexproviders.ProvideScraperService(
-		ctx,
-		memberData,
-		logger,
-		appConfig.OfficialSchedule,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("provide scraper service: %w", err)
-	}
-
-	holodexService, err := holodexproviders.ProvideHolodexService(&appConfig.Holodex, infra.Cache, scraperService, logger)
+	holodexService, err := holodexproviders.ProvideHolodexService(&appConfig.Holodex, infra.Cache, nil, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}

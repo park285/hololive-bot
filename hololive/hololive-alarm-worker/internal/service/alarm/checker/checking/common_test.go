@@ -21,20 +21,15 @@
 package checking
 
 import (
-	"context"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func TestRoomNotificationsWithScheduleChanges(t *testing.T) {
@@ -115,47 +110,4 @@ func TestScheduleChangeNotificationHelpers(t *testing.T) {
 	message, previousScheduled = ScheduleChangeNotificationDetails(nil)
 	assert.Empty(t, message)
 	assert.Empty(t, previousScheduled)
-}
-
-func TestLoadSubscriberRoomsByChannelFallsBackToSequentialLookup(t *testing.T) {
-	t.Parallel()
-
-	var (
-		mu         sync.Mutex
-		calledKeys []string
-	)
-
-	cacheClient := &cachemocks.Client{
-		GetClientFunc: func() valkey.Client {
-			return nil
-		},
-		SMembersFunc: func(_ context.Context, key string) ([]string, error) {
-			mu.Lock()
-
-			calledKeys = append(calledKeys, key)
-			mu.Unlock()
-
-			switch key {
-			case alarmkeys.ChannelSubscribersKeyPrefix + testChannelID1:
-				return []string{testRoomID1, testRoomID2}, nil
-			case alarmkeys.ChannelSubscribersKeyPrefix + testChannelID2:
-				return []string{testRoomID3}, nil
-			default:
-				return nil, nil
-			}
-		},
-	}
-
-	got, err := LoadSubscriberRoomsByChannel(t.Context(), cacheClient, sharedalarm.NewSubscriberResolver(cacheClient, nil), []string{testChannelID1, testChannelID2, testChannelID1})
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{testRoomID1, testRoomID2}, got[testChannelID1])
-	assert.ElementsMatch(t, []string{testRoomID3}, got[testChannelID2])
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	assert.ElementsMatch(t, []string{
-		alarmkeys.ChannelSubscribersKeyPrefix + testChannelID1,
-		alarmkeys.ChannelSubscribersKeyPrefix + testChannelID2,
-	}, calledKeys)
 }

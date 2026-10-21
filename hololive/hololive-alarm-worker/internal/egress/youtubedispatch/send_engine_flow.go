@@ -14,7 +14,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -25,22 +24,6 @@ type deliverySendRequest struct {
 	message         string
 	dedupeKeys      []string
 }
-
-const (
-	deliveryDedupeKeyLogField          = logschema.FieldDedupeKey
-	deliveryAttemptStartedLogMessage   = logschema.CommunityShortsDeliveryAttemptMessage
-	deliveryAttemptStartedAtLogField   = logschema.FieldAttemptStartedAt
-	deliveryResultLogMessage           = logschema.CommunityShortsDeliveryResultMessage
-	deliveryAuditLogMessage            = logschema.CommunityShortsDeliveryAuditMessage
-	deliveryAuditPostIDLogField        = logschema.FieldPostID
-	deliveryAuditContentIDLogField     = logschema.FieldContentID
-	deliveryAuditAlarmTypeLogField     = logschema.FieldAlarmType
-	deliveryAuditSentAtLogField        = logschema.FieldSentAt
-	deliveryAuditSendResultLogField    = logschema.FieldSendResult
-	deliveryAuditFailureReasonLogField = logschema.FieldFailureReason
-	deliveryAuditModeLogField          = logschema.FieldDeliveryMode
-	deliveryAuditPathLogField          = logschema.FieldDeliveryPath
-)
 
 var (
 	ErrDeliveryDedupeKeyRequired  = errors.New("delivery dedupe key is required")
@@ -108,7 +91,7 @@ func dedupeKeyLogAttr(dedupeKeys []string) slog.Attr {
 		cloned = append(cloned, strings.TrimSpace(dedupeKeys[i]))
 	}
 
-	return slog.Any(deliveryDedupeKeyLogField, cloned)
+	return slog.Any(FieldDedupeKey, cloned)
 }
 
 func validateDeliverySendRequest(req deliverySendRequest) error {

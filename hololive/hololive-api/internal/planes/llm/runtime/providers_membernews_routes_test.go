@@ -34,11 +34,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )

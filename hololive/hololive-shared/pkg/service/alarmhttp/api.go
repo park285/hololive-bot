@@ -1,0 +1,326 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package alarmhttp
+
+import (
+	"context"
+	jsonv2 "encoding/json/v2"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
+)
+
+type alarmHTTPWriter interface {
+	AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error)
+	RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error)
+	RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error)
+	ClearRoomAlarms(context.Context, string) (int, error)
+}
+
+type alarmHTTPReader interface {
+	GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error)
+	ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error)
+	GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error)
+	CountAlarmEntries(context.Context) (int, error)
+}
+
+// AlarmHTTPService는 실제 알림 HTTP route가 호출하는 작업만 요구한다.
+type AlarmHTTPService interface {
+	alarmHTTPWriter
+	alarmHTTPReader
+	UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error)
+	SetRoomName(context.Context, string, string) error
+}
+
+type Handler struct {
+	alarm  AlarmHTTPService
+	logger *slog.Logger
+}
+
+func decodeAlarmRequest(c *gin.Context, destination any) error {
+	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
+		return fmt.Errorf("unmarshal read: %w", err)
+	}
+
+	if binding.Validator == nil {
+		return nil
+	}
+
+	if err := binding.Validator.ValidateStruct(destination); err != nil {
+		return fmt.Errorf("validate struct: %w", err)
+	}
+
+	return nil
+}
+
+func NewHandler(alarm AlarmHTTPService, logger *slog.Logger) *Handler {
+	return &Handler{
+		alarm:  alarm,
+		logger: logger,
+	}
+}
+
+func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
+	internal := rg.Group(contractsalarm.BasePath)
+	internal.POST(contractsalarm.AddRoute, h.AddAlarm)
+	internal.POST(contractsalarm.RemoveRoute, h.RemoveAlarm)
+	internal.GET(contractsalarm.RoomRoute, h.GetRoomAlarmsWithTypes)
+	internal.GET(contractsalarm.RoomViewRoute, h.GetRoomAlarmsView)
+	internal.POST(contractsalarm.ClearRoute, h.ClearRoomAlarms)
+	internal.PUT(contractsalarm.SettingsRoute, h.UpdateAlarmAdvanceMinutes)
+	internal.PUT(contractsalarm.RoomNameRoute, h.SetRoomName)
+	internal.GET(contractsalarm.KeysRoute, h.GetAllAlarmKeys)
+	internal.GET(contractsalarm.CountRoute, h.CountAlarmEntries)
+}
+
+func (h *Handler) CountAlarmEntries(c *gin.Context) {
+	count, err := h.alarm.CountAlarmEntries(c.Request.Context())
+	if err != nil {
+		h.logger.Error("알람 개수 조회 실패", slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("count_alarm_entries_failed", "count alarm entries failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: contractsalarm.EntryCount{Count: new(count)}})
+}
+
+// AddAlarm은 선택적인 host_id로 채팅방의 채널 또는 멤버 구독을 등록한다.
+func (h *Handler) AddAlarm(c *gin.Context) {
+	var req AddAlarmRequest
+
+	if err := decodeAlarmRequest(c, &req); err != nil {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	if !validAlarmHost(req.ChannelID, req.HostID) {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_host_id", "invalid member subscription target"))
+
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	alarmTypes := make(domain.AlarmTypes, 0, len(req.AlarmTypes))
+	for _, t := range req.AlarmTypes {
+		alarmTypes = append(alarmTypes, domain.AlarmType(t))
+	}
+
+	domainReq := domain.AddAlarmRequest{
+		RoomID:     req.RoomID,
+		UserID:     req.UserID,
+		ChannelID:  req.ChannelID,
+		HostID:     req.HostID,
+		RoomName:   req.RoomName,
+		UserName:   req.UserName,
+		AlarmTypes: alarmTypes,
+	}
+
+	added, err := h.alarm.AddAlarm(ctx, &domainReq)
+	if err != nil {
+		h.logger.Error("알람 추가 실패", slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("alarm_add_failed", "alarm add failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"added": added}})
+}
+
+// RemoveAlarm은 host_id가 있으면 해당 멤버만, 없으면 전체 채널 구독만 해지한다.
+func (h *Handler) RemoveAlarm(c *gin.Context) {
+	var req RemoveAlarmRequest
+
+	if err := decodeAlarmRequest(c, &req); err != nil {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	if !validAlarmHost(req.ChannelID, req.HostID) {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_host_id", "invalid member subscription target"))
+
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	alarmTypes := make(domain.AlarmTypes, 0, len(req.AlarmTypes))
+	for _, t := range req.AlarmTypes {
+		alarmTypes = append(alarmTypes, domain.AlarmType(t))
+	}
+
+	var (
+		removed bool
+		err     error
+	)
+
+	if req.HostID == "" {
+		removed, err = h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, alarmTypes)
+	} else {
+		removed, err = h.alarm.RemoveHostAlarm(ctx, req.RoomID, req.ChannelID, req.HostID, alarmTypes)
+	}
+
+	if err != nil {
+		h.logger.Error("알람 제거 실패", slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("alarm_remove_failed", "alarm remove failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"removed": removed}})
+}
+
+func validAlarmHost(channelID, hostID string) bool {
+	if hostID == "" {
+		return true
+	}
+
+	_, ok := mekparkhost.SubscriptionMember(strings.TrimSpace(channelID), strings.TrimSpace(hostID))
+
+	return ok
+}
+
+func (h *Handler) GetRoomAlarmsWithTypes(c *gin.Context) {
+	roomID := c.Param("id")
+	ctx := c.Request.Context()
+
+	alarms, err := h.alarm.GetRoomAlarmsWithTypes(ctx, roomID)
+	if err != nil {
+		h.logger.Error("방 알람 조회 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_room_alarms_failed", "get room alarms failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: alarms})
+}
+
+func (h *Handler) GetRoomAlarmsView(c *gin.Context) {
+	roomID := c.Param("id")
+	ctx := c.Request.Context()
+
+	entries, err := h.alarm.ListRoomAlarmsView(ctx, roomID)
+	if err != nil {
+		h.logger.Error("방 알람 표시 조회 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_room_alarms_view_failed", "get room alarms view failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: entries})
+}
+
+func (h *Handler) ClearRoomAlarms(c *gin.Context) {
+	var req ClearAlarmsRequest
+
+	if err := decodeAlarmRequest(c, &req); err != nil {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	count, err := h.alarm.ClearRoomAlarms(ctx, req.RoomID)
+	if err != nil {
+		h.logger.Error("방 알람 전체 삭제 실패", privacylog.RoomIDAttr(req.RoomID), slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("clear_room_alarms_failed", "clear room alarms failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"deleted": count}})
+}
+
+func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
+	var req UpdateAdvanceMinutesRequest
+
+	if err := decodeAlarmRequest(c, &req); err != nil {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	result, err := h.alarm.UpdateAlarmAdvanceMinutes(c.Request.Context(), req.Minutes)
+	if err != nil || result.Outcome != domain.ApplyConfirmed || !validAdvanceTargets(result.TargetMinutes) {
+		h.logger.Error("알람 사전 알림 시점 적용 실패", slog.String("outcome", string(result.Outcome)), slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("alarm_advance_update_failed", "alarm advance update failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": result.TargetMinutes}})
+}
+
+func (h *Handler) SetRoomName(c *gin.Context) {
+	var req SetRoomNameRequest
+
+	if err := decodeAlarmRequest(c, &req); err != nil {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	roomID, roomName, err := contractsalarm.NormalizeRoomName(req.RoomID, *req.RoomName)
+	if err != nil {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	if err := h.alarm.SetRoomName(ctx, roomID, roomName); err != nil {
+		h.logger.Error("방 이름 설정 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("set_room_name_failed", "set room name failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true})
+}
+
+func (h *Handler) GetAllAlarmKeys(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	keys, err := h.alarm.GetAllAlarmKeys(ctx)
+	if err != nil {
+		h.logger.Error("알람 키 전체 조회 실패", slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_all_alarm_keys_failed", "get all alarm keys failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: keys})
+}

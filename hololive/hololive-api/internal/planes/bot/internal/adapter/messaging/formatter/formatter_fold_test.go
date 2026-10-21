@@ -29,9 +29,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	dbtest "github.com/kapu/hololive-dbtest"
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )

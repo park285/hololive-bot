@@ -7,7 +7,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 )
 
 type lifetimeLocker struct {
@@ -66,7 +66,7 @@ func TestRunDigestCancelsBeforeLockTTLAndPreservesShorterDeadline(t *testing.T) 
 					t.Fatalf("elapsed=%v error=%v", time.Since(started), err)
 				}
 
-				if locker.ttl != delivery.DefaultExecutionLockTTL || !locker.released || locker.releaseErr != nil {
+				if locker.ttl != executionlock.DefaultTTL || !locker.released || locker.releaseErr != nil {
 					t.Fatalf("lock TTL/release = %+v", locker)
 				}
 			})

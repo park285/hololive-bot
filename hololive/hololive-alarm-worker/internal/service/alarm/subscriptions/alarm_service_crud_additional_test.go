@@ -29,9 +29,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -46,7 +46,7 @@ func TestNewAlarmServiceValidatesRepositoryAndNormalizesTargets(t *testing.T) {
 	service, err := NewAlarmService(
 		cacheClient,
 		nil,
-		&sharedalarm.Repository{},
+		&alarmstore.Repository{},
 		newDiscardAlarmLogger(),
 		[]int{10, 3, 1, 3},
 	)
@@ -144,7 +144,7 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, alarms)
 
-	channelRegistry, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelRegistry, err := as.cache.SMembers(ctx, alarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.Empty(t, channelRegistry)
 }
@@ -155,13 +155,13 @@ func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 	original := rebuildSubscriberCacheFromRepository
 	rebuildCalled := false
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheClient cache.Client, repository *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheClient cache.Client, repository *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
 		rebuildCalled = true
 
 		assert.Same(t, as.cache, cacheClient)
 		assert.Same(t, as.alarmRepository, repository)
 
-		return sharedalarm.CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, nil
+		return alarmstore.CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, nil
 	}
 
 	t.Cleanup(func() {
@@ -179,11 +179,11 @@ func TestWarmCacheFromDBSerializesCacheMutations(t *testing.T) {
 	rebuildStarted := make(chan struct{})
 	releaseRebuild := make(chan struct{})
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
 		close(rebuildStarted)
 		<-releaseRebuild
 
-		return sharedalarm.CacheWarmSummary{}, nil
+		return alarmstore.CacheWarmSummary{}, nil
 	}
 
 	t.Cleanup(func() {
@@ -226,8 +226,8 @@ func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 
 	original := rebuildSubscriberCacheFromRepository
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
-		return sharedalarm.CacheWarmSummary{}, errors.New("repo load failed")
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
+		return alarmstore.CacheWarmSummary{}, errors.New("repo load failed")
 	}
 
 	t.Cleanup(func() {
@@ -252,8 +252,8 @@ func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
 
 	original := rebuildSubscriberCacheFromRepository
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
-		return sharedalarm.CacheWarmSummary{
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
+		return alarmstore.CacheWarmSummary{
 			AlarmCount:   5,
 			RoomCount:    3,
 			ChannelCount: 2,

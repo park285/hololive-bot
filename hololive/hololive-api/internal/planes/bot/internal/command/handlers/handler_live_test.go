@@ -28,6 +28,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -80,7 +81,7 @@ func TestLiveCommand_Execute_AllLiveSendsText(t *testing.T) {
 
 	deps.LiveQuery = &liveQueryStub{result: livequery.Result{Status: livequery.Complete, Items: []livequery.Item{{VideoID: "video-x", ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"}}}}
 
-	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
+	err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -118,7 +119,7 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 
 	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "live-propagation")
 
-	err := NewLiveCommand(deps).Execute(ctx, &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := NewLiveCommand(deps).Execute(ctx, &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: testMemberAqua,
 	})
 	if err != nil {

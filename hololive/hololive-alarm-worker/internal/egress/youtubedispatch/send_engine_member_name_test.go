@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
@@ -42,7 +41,7 @@ func TestDispatchDeliveryRows_GroupedFormatFailureRetriesWholeGroup(t *testing.T
 
 			d := newDispatcherWithDepsForTest(t, nil, Dependencies{
 				Cache: cachemocks.NewLenientClient(), Sender: sender, Renderer: renderer, MemberNames: tc.memberNames,
-			}, slog.New(slog.DiscardHandler), &dispatchstate.Config{BatchSize: 10, DeliveryParallelism: 2})
+			}, slog.New(slog.DiscardHandler), &Config{BatchSize: 10, DeliveryParallelism: 2})
 
 			outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 				1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
@@ -82,14 +81,14 @@ func TestDispatchDeliveryRows_GroupedFormatFailureRetriesWholeGroup(t *testing.T
 }
 
 // dispatchOnePerRoomShort는 표시명 원천만 바꿔 쇼츠 한 건을 한 방에 개별 발송하고, 보낸 메시지와 결과를 돌려준다.
-func dispatchOnePerRoomShort(t *testing.T, memberNames format.MemberNameSource) (*Dispatcher, []string, dispatchstate.DispatchResult) {
+func dispatchOnePerRoomShort(t *testing.T, memberNames format.MemberNameSource) (*Dispatcher, []string, DispatchResult) {
 	t.Helper()
 
 	sender := &testSender{failRoom: map[string]bool{}}
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShorts, "{{.MemberName}}|{{.URL}}")
 	d := newDispatcherWithDepsForTest(t, nil, Dependencies{
 		Cache: cachemocks.NewLenientClient(), Sender: sender, Renderer: renderer, MemberNames: memberNames,
-	}, slog.New(slog.DiscardHandler), &dispatchstate.Config{BatchSize: 10, DeliveryParallelism: 2})
+	}, slog.New(slog.DiscardHandler), &Config{BatchSize: 10, DeliveryParallelism: 2})
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},

@@ -42,7 +42,7 @@ func notificationStatus(state string) func(string) (*iris.ReplyStatusSnapshot, e
 	}
 }
 
-func newNotificationHandoffReconciler(t *testing.T, store HandoffStore, client ReplyStatusClient) *HandoffReconciler {
+func newNotificationHandoffReconciler(t *testing.T, store HandoffStore, client handoffcheck.ReplyStatusClient) *HandoffReconciler {
 	t.Helper()
 
 	reconciler, err := NewHandoffReconciler(store, client, HandoffReconcilerConfig{

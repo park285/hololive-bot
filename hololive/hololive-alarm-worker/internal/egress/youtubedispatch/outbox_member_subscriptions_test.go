@@ -11,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
@@ -29,7 +29,7 @@ const (
 func TestOutboxMemberSubscriptionsSeparateTitlesInOneBatch(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
-	repo := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repo := alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
 
 	for _, alarm := range []*domain.Alarm{
 		{RoomID: outboxWholeRoom, ChannelID: outboxUnitBChannel},

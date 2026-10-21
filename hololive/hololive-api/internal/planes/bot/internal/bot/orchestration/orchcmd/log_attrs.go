@@ -4,11 +4,11 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func commandExecutionAttrs(cmdCtx *domain.CommandContext, commandKey string, cmdType domain.CommandType) []slog.Attr {
+func commandExecutionAttrs(cmdCtx *botcommand.CommandContext, commandKey string, cmdType botcommand.CommandType) []slog.Attr {
 	attrs := commandContextAttrs(cmdCtx, commandKey)
 
 	attrs = append(attrs, slog.String("command_type", cmdType.String()))
@@ -16,7 +16,7 @@ func commandExecutionAttrs(cmdCtx *domain.CommandContext, commandKey string, cmd
 	return attrs
 }
 
-func commandContextAttrs(cmdCtx *domain.CommandContext, commandKey string) []slog.Attr {
+func commandContextAttrs(cmdCtx *botcommand.CommandContext, commandKey string) []slog.Attr {
 	attrs := []slog.Attr{
 		slog.String("command", strings.TrimSpace(commandKey)),
 	}

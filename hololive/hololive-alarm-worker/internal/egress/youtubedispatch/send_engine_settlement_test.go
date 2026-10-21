@@ -19,7 +19,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 	"github.com/kapu/hololive-shared/pkg/testutil"
@@ -267,7 +266,7 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 	return f
 }
 
-func (f *settlementFixture) dispatch(ctx context.Context, t *testing.T, path string) dispatchstate.DispatchResult {
+func (f *settlementFixture) dispatch(ctx context.Context, t *testing.T, path string) DispatchResult {
 	t.Helper()
 
 	result := newDeliveryDispatchResult(len(f.rows))
@@ -424,7 +423,7 @@ func assertSettlementBudgets(t *testing.T, f *settlementFixture, outcome string)
 	}
 }
 
-func assertSettlementState(t *testing.T, f *settlementFixture, path, outcome string, result dispatchstate.DispatchResult) {
+func assertSettlementState(t *testing.T, f *settlementFixture, path, outcome string, result DispatchResult) {
 	t.Helper()
 
 	success := outcome == sendResultSuccess || outcome == settlementOutcomeCommitLost
@@ -475,7 +474,7 @@ func assertSettlementRows(t *testing.T, f *settlementFixture, outcome string, su
 	}
 }
 
-func assertSettlementEffects(t *testing.T, f *settlementFixture, path string, success, unknown bool, result dispatchstate.DispatchResult) {
+func assertSettlementEffects(t *testing.T, f *settlementFixture, path string, success, unknown bool, result DispatchResult) {
 	t.Helper()
 
 	var ledger, alarmTracking, telemetry int
@@ -851,7 +850,7 @@ func runCanceledReissueCommitLoss(t *testing.T, path string, count int) {
 	assertReissuedSettlementSent(t, f, &request, result.DispatchResult)
 }
 
-func assertReissueCommitLossPending(t *testing.T, f *settlementFixture, result dispatchstate.DispatchResult) store.FrozenRequest {
+func assertReissueCommitLossPending(t *testing.T, f *settlementFixture, result DispatchResult) store.FrozenRequest {
 	t.Helper()
 	require.Len(t, f.sender.ids, 1)
 	require.Equal(t, 1, f.transition.calls, "ambiguous reissue must not trigger another settlement")
@@ -911,7 +910,7 @@ func reclaimReissuedSettlement(t *testing.T, f *settlementFixture) *deliveryGrou
 	return &groups[0]
 }
 
-func assertReissuedSettlementSent(t *testing.T, f *settlementFixture, request *store.FrozenRequest, result dispatchstate.DispatchResult) {
+func assertReissuedSettlementSent(t *testing.T, f *settlementFixture, request *store.FrozenRequest, result DispatchResult) {
 	t.Helper()
 
 	nextID, err := request.ClientRequestID()

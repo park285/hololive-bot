@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 

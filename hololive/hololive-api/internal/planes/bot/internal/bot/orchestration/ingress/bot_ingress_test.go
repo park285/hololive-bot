@@ -29,7 +29,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 const (
@@ -113,8 +113,8 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 		t.Fatalf("user name = %q, want %q", envelope.UserName, "사용자")
 	}
 
-	if envelope.CommandType != domain.CommandHelp.String() {
-		t.Fatalf("command type = %q, want %q", envelope.CommandType, domain.CommandHelp.String())
+	if envelope.CommandType != botcommand.CommandHelp.String() {
+		t.Fatalf("command type = %q, want %q", envelope.CommandType, botcommand.CommandHelp.String())
 	}
 }
 

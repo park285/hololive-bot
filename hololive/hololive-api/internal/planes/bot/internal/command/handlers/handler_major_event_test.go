@@ -28,8 +28,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestMajorEventCommand_Name(t *testing.T) {
@@ -86,7 +86,7 @@ func TestMajorEventCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
 
 	cmd := NewMajorEventCommand(newMajorEventErrorDeps(&sentError), nil)
 
-	if err := cmd.ensureMajorEventReady(t.Context(), &domain.CommandContext{Room: "room-a"}); err != nil {
+	if err := cmd.ensureMajorEventReady(t.Context(), &botcommand.CommandContext{Room: "room-a"}); err != nil {
 		t.Fatalf("ensureMajorEventReady returned error: %v", err)
 	}
 
@@ -96,7 +96,7 @@ func TestMajorEventCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
 }
 
 func TestMajorEventCommand_RepositoryErrorPathsUseSendError(t *testing.T) {
-	cmdCtx := &domain.CommandContext{Room: "room-a", RoomName: "room-name"}
+	cmdCtx := &botcommand.CommandContext{Room: "room-a", RoomName: "room-name"}
 
 	tests := []struct {
 		name       string

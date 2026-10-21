@@ -44,7 +44,7 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	person, err := cache.FindByAlias(ctx, "개인")
+	person, err := cache.FindMemberByAlias(ctx, "개인")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 		t.Fatalf("individual lookup=%s", person.Name)
 	}
 
-	got, err := cache.GetByChannelID(ctx, sharedReviewChannel)
+	got, err := cache.FindMemberByChannelID(ctx, sharedReviewChannel)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,15 +92,15 @@ func TestColdIndividualLookupsDoNotClaimSharedChannel(t *testing.T) {
 
 	cache := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
 
-	if person, err := cache.GetByName(ctx, "A Person"); err != nil || person.Name != "A Person" {
+	if person, err := cache.FindMemberByName(ctx, "A Person"); err != nil || person.Name != "A Person" {
 		t.Fatalf("GetByName() = %+v, %v", person, err)
 	}
 
-	if person, err := cache.FindByAlias(ctx, "개인"); err != nil || person.Name != "A Person" {
+	if person, err := cache.FindMemberByAlias(ctx, "개인"); err != nil || person.Name != "A Person" {
 		t.Fatalf("FindByAlias() = %+v, %v", person, err)
 	}
 
-	got, err := cache.GetByChannelID(ctx, sharedReviewChannel)
+	got, err := cache.FindMemberByChannelID(ctx, sharedReviewChannel)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,25 +156,25 @@ func (e *pointLookupExpectations) assert(t *testing.T, label string, cache *Cach
 	ctx := t.Context()
 
 	for _, alias := range e.aliases {
-		got, err := cache.FindByAlias(ctx, alias)
+		got, err := cache.FindMemberByAlias(ctx, alias)
 		if err != nil || got.ID != e.wantAlias[alias] {
 			t.Fatalf("%s FindByAlias(%q) = %+v, %v; want ID %d", label, alias, got, err, e.wantAlias[alias])
 		}
 	}
 
 	for _, channelID := range e.channels {
-		got, err := cache.GetByChannelID(ctx, channelID)
+		got, err := cache.FindMemberByChannelID(ctx, channelID)
 		if err != nil || got.ID != e.wantChannel[channelID] {
 			t.Fatalf("%s GetByChannelID(%q) = %+v, %v; want ID %d", label, channelID, got, err, e.wantChannel[channelID])
 		}
 	}
 
-	got, err := cache.GetByName(ctx, "Twin Name")
+	got, err := cache.FindMemberByName(ctx, "Twin Name")
 	if err != nil || got.Name != "Twin Name" {
 		t.Fatalf("%s GetByName(Twin Name) = %+v, %v", label, got, err)
 	}
 
-	if _, err := cache.FindByAlias(ctx, "없는별칭"); !errors.Is(err, domain.ErrMemberNotFound) {
+	if _, err := cache.FindMemberByAlias(ctx, "없는별칭"); !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Fatalf("%s FindByAlias(missing) error = %v, want domain.ErrMemberNotFound", label, err)
 	}
 }
@@ -215,16 +215,16 @@ func TestPointLookupsMatchRepositoryWithAndWithoutSnapshot(t *testing.T) {
 	expectations.assert(t, "warm", warm)
 }
 
-// 어댑터 단건 조회는 미존재를 domain.ErrMemberNotFound로, PostgreSQL 실패를 그와 다른 오류로 돌려준다. 미존재는
+// Cache 단건 조회는 미존재를 domain.ErrMemberNotFound로, PostgreSQL 실패를 그와 다른 오류로 돌려준다. 미존재는
 // 캐시하지 않으므로 나중에 생긴 행은 곧바로 보인다.
-func TestServiceAdapterSeparatesNotFoundFromRepositoryFailure(t *testing.T) {
+func TestCacheFindersSeparateNotFoundFromRepositoryFailure(t *testing.T) {
 	repo, pool := newPGXRepository(t)
 	ctx := t.Context()
-	adapter := NewMemberServiceAdapter(withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{})))
+	finder := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
 
-	_, channelErr := adapter.FindMemberByChannelID(ctx, "UC-missing")
-	_, nameErr := adapter.FindMemberByName(ctx, "Missing")
-	_, aliasErr := adapter.FindMemberByAlias(ctx, "없음")
+	_, channelErr := finder.FindMemberByChannelID(ctx, "UC-missing")
+	_, nameErr := finder.FindMemberByName(ctx, "Missing")
+	_, aliasErr := finder.FindMemberByAlias(ctx, "없음")
 
 	for label, err := range map[string]error{"channel": channelErr, "name": nameErr, "alias": aliasErr} {
 		if !errors.Is(err, domain.ErrMemberNotFound) {
@@ -237,13 +237,13 @@ func TestServiceAdapterSeparatesNotFoundFromRepositoryFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, err := adapter.FindMemberByChannelID(ctx, "UC-missing"); err != nil || got.Name != "Missing" {
+	if got, err := finder.FindMemberByChannelID(ctx, "UC-missing"); err != nil || got.Name != "Missing" {
 		t.Fatalf("late row lookup = %+v, %v; want negative result not cached", got, err)
 	}
 
 	pool.Close()
 
-	_, failure := adapter.FindMemberByAlias(ctx, "없음")
+	_, failure := finder.FindMemberByAlias(ctx, "없음")
 	if failure == nil || errors.Is(failure, domain.ErrMemberNotFound) {
 		t.Fatalf("closed pool alias error = %v, want repository failure distinct from not-found", failure)
 	}
@@ -284,13 +284,13 @@ func TestDuplicateNameLookupsAgreeOnSmallestID(t *testing.T) {
 
 	cold := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
 
-	got, err = cold.GetByName(ctx, "Dup Name")
+	got, err = cold.FindMemberByName(ctx, "Dup Name")
 	assertName("cold", got, err)
 
 	bypass := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
 	bypass.authorityHealthy.Store(false)
 
-	got, err = bypass.GetByName(ctx, "Dup Name")
+	got, err = bypass.FindMemberByName(ctx, "Dup Name")
 	assertName("bypass", got, err)
 
 	warm := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
@@ -302,6 +302,6 @@ func TestDuplicateNameLookupsAgreeOnSmallestID(t *testing.T) {
 		t.Fatal(deleteErr)
 	}
 
-	got, err = warm.GetByName(ctx, "Dup Name")
+	got, err = warm.FindMemberByName(ctx, "Dup Name")
 	assertName("warm snapshot", got, err)
 }

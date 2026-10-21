@@ -27,7 +27,7 @@ import (
 	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 type MessageAdapter struct {
@@ -112,7 +112,7 @@ func NewMessageAdapter(prefix, mentionPrefix string) *MessageAdapter {
 }
 
 type ParsedCommand struct {
-	Type       domain.CommandType
+	Type       botcommand.CommandType
 	Params     map[string]any
 	RawMessage string
 }
@@ -173,7 +173,7 @@ func (ma *MessageAdapter) parseKnownCommand(command string, args []string, text 
 
 func (ma *MessageAdapter) createUnknownCommand(text string) *ParsedCommand {
 	return &ParsedCommand{
-		Type:       domain.CommandUnknown,
+		Type:       botcommand.CommandUnknown,
 		Params:     make(map[string]any),
 		RawMessage: text,
 	}

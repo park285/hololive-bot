@@ -32,7 +32,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -47,7 +46,7 @@ type Dispatcher struct {
 	metrics   *MetricsRecorder
 	grouper   *OutboxGrouper
 	logger    *slog.Logger
-	config    dispatchstate.Config
+	config    Config
 	// cleanupInterval은 cleanupLoop 주기다. assembleDispatcher가 outboxCleanupLoopInterval로 채운다.
 	cleanupInterval time.Duration
 	started         atomic.Bool

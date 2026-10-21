@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 

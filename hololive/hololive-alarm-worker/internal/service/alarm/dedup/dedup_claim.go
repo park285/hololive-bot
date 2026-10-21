@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 // 두 키를 한 pipeline으로 SetNX하면 경쟁자끼리 키를 나눠 잡은 뒤 서로 release해

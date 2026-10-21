@@ -25,8 +25,10 @@ import (
 	stdErrors "errors"
 	"fmt"
 
+	"github.com/valkey-io/valkey-go"
+
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 // 채널 registry가 유실되면 일부 채널만으로 재생성하지 않고 먼저 DB 전체를 복구한다.
@@ -36,6 +38,9 @@ if redis.call('EXISTS', KEYS[1]) == 0 then
 end
 return redis.call('SADD', KEYS[1], ARGV[1])
 `
+
+// addToExistingChannelRegistryLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
+var addToExistingChannelRegistryLua = valkey.NewLuaScript(addToExistingChannelRegistryScript)
 
 func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) error {
 	if record == nil {
@@ -71,7 +76,7 @@ func (as *AlarmService) cacheAlarmChannelRegistry(ctx context.Context, channelID
 	}
 
 	if summary.ChannelCount == 0 {
-		if _, addErr := as.cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID}); addErr != nil {
+		if _, addErr := as.cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID}); addErr != nil {
 			return fmt.Errorf("initialize empty channel registry: %w", addErr)
 		}
 
@@ -91,15 +96,8 @@ func (as *AlarmService) cacheAlarmChannelRegistry(ctx context.Context, channelID
 }
 
 func (as *AlarmService) addToExistingChannelRegistry(ctx context.Context, channelID string) (bool, error) {
-	command := as.cache.Builder().Eval().Script(addToExistingChannelRegistryScript).
-		Numkeys(1).Key(sharedalarmkeys.AlarmChannelRegistryKey).Arg(channelID).Build()
-	results := as.cache.DoMulti(ctx, command)
-
-	if len(results) != 1 {
-		return false, fmt.Errorf("update channel registry: unexpected result count: %d", len(results))
-	}
-
-	added, err := results[0].AsInt64()
+	added, err := addToExistingChannelRegistryLua.Exec(ctx, as.cache.GetClient(),
+		[]string{alarmkeys.AlarmChannelRegistryKey}, []string{channelID}).AsInt64()
 	if err != nil {
 		return false, fmt.Errorf("update channel registry: %w", err)
 	}
@@ -109,7 +107,7 @@ func (as *AlarmService) addToExistingChannelRegistry(ctx context.Context, channe
 
 // markAlarmCacheChanged는 구독 변경 뒤 빈 cache 표식을 지워 target 조회가 subscriber set을 다시 읽게 한다.
 func (as *AlarmService) markAlarmCacheChanged(ctx context.Context) error {
-	if err := as.cache.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
+	if err := as.cache.Del(ctx, alarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
 		return fmt.Errorf("clear empty subscriber cache marker: %w", err)
 	}
 

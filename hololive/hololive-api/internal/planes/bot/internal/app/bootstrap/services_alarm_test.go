@@ -29,7 +29,7 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )
 
 // alarm provider URL이 없으면 in-process AlarmService로 대신하지 않고 기동을 실패시킨다.
@@ -55,6 +55,6 @@ func TestInitAlarmModeComponentsUsesAlarmWorkerClient(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, components)
-	assert.IsType(t, &alarm.Client{}, components.AlarmCRUD)
+	assert.IsType(t, &alarmhttp.Client{}, components.AlarmCRUD)
 	assert.Same(t, memberProvider, components.MemberDataSource)
 }

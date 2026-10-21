@@ -27,8 +27,8 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type HelpCommand struct {
@@ -47,7 +47,7 @@ func (c *HelpCommand) Description() string {
 	return "도움말을 표시합니다"
 }
 
-func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
 	if c == nil {
 		return errors.New("help command dependencies not configured")
 	}

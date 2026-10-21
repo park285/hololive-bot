@@ -24,8 +24,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type stubCommand struct {
@@ -37,7 +37,7 @@ func (s *stubCommand) Name() string { return s.name }
 
 func (s *stubCommand) Description() string { return "stub" }
 
-func (s *stubCommand) Execute(_ context.Context, _ *domain.CommandContext, _ map[string]any) error {
+func (s *stubCommand) Execute(_ context.Context, _ *botcommand.CommandContext, _ map[string]any) error {
 	s.executed++
 	return nil
 }
@@ -51,7 +51,7 @@ func TestSequentialDispatcherPublishRequiresConfiguration(t *testing.T) {
 		t.Fatal("expected error for nil dispatcher")
 	}
 
-	noRegistry := &sequentialDispatcher{normalize: func(_ domain.CommandType, p map[string]any) (string, map[string]any) {
+	noRegistry := &sequentialDispatcher{normalize: func(_ botcommand.CommandType, p map[string]any) (string, map[string]any) {
 		return "help", p
 	}}
 	if _, err := noRegistry.Publish(ctx, nil); err == nil {
@@ -71,13 +71,13 @@ func TestSequentialDispatcherPublishExecutesEvents(t *testing.T) {
 
 	dispatcher := NewSequentialDispatcher(
 		registry,
-		func(_ domain.CommandType, p map[string]any) (string, map[string]any) {
+		func(_ botcommand.CommandType, p map[string]any) (string, map[string]any) {
 			return "help", p
 		},
 	)
 
-	executed, err := dispatcher.Publish(t.Context(), &domain.CommandContext{}, handlercore.Event{
-		Type:   domain.CommandHelp,
+	executed, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{}, handlercore.Event{
+		Type:   botcommand.CommandHelp,
 		Params: map[string]any{"foo": "bar"},
 	})
 	if err != nil {

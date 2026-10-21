@@ -30,9 +30,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 const (
@@ -241,7 +241,7 @@ func (m *mockEventRepository) MarkEventsAsMonthlyNotified(_ context.Context, eve
 	return m.markMonthlyErr
 }
 
-func newTestScheduler(repository EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *Scheduler {
+func newTestScheduler(repository EventRepository, outbox outboxEnqueuer, locker executionlock.Locker) *Scheduler {
 	return NewScheduler(
 		repository,
 		&mockFormatter{message: "test message"},
@@ -390,7 +390,7 @@ func TestSendWeeklyNotification_NoRooms_ReturnsNil(t *testing.T) {
 	}
 }
 
-func newTestMonthlyScheduler(repository EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *MonthlyScheduler {
+func newTestMonthlyScheduler(repository EventRepository, outbox outboxEnqueuer, locker executionlock.Locker) *MonthlyScheduler {
 	return NewMonthlyScheduler(
 		repository,
 		&mockFormatter{message: "monthly message"},

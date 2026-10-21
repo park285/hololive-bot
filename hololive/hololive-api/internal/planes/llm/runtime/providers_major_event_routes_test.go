@@ -32,9 +32,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	majoreventcontracts "github.com/kapu/hololive-api/internal/contracts/majorevent"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
-	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 )
 
 func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {

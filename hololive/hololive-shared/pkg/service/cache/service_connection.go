@@ -146,10 +146,6 @@ func (c *Service) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valke
 	return c.client.DoMulti(ctx, cmds...)
 }
 
-func (c *Service) Builder() valkey.Builder {
-	return c.client.B()
-}
-
 // B: 명령 빌더를 반환합니다.
 func (c *Service) B() valkey.Builder {
 	return c.client.B()

@@ -9,10 +9,11 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -88,13 +89,13 @@ func runStagedUpcomingCandidateCheck(
 
 	cacheClient := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	provider, err := holodexprovider.NewHolodexService(server.URL, "test-key", cacheClient, nil, logger)
+	provider, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cacheClient, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cacheClient, provider, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, []int{5}, logger), []int{5}, 0, newPgYouTubeLiveSessionSource(pool, PgYouTubeLiveSessionSourceOptions{}), pool, logger)
 	require.NoError(t, err)
 
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{stream.ChannelID})
+	_, err = cacheClient.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{stream.ChannelID})
 	require.NoError(t, err)
 
 	recovered, err := checker.Check(ctx)

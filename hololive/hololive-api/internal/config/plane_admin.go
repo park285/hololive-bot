@@ -29,7 +29,7 @@ type AdminPlaneConfig struct {
 	Notification     settings.NotificationConfig
 	CORS             settings.CORSConfig
 	Ingestion        settings.IngestionConfig
-	Services         settings.ServicesConfig
+	Services         ServicesConfig
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath string
 	LLMSchedulerURL  string
@@ -69,7 +69,7 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 		Notification:     notification,
 		CORS:             cors,
 		Ingestion:        ingestion,
-		Services:         settings.LoadServicesConfig(),
+		Services:         loadServicesConfig(),
 		SettingsFilePath: settings.LoadSettingsFilePath(),
 		LLMSchedulerURL:  sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		AlarmServiceURL:  sharedenv.String("ALARM_INTERNAL_URL", ""),
@@ -115,4 +115,19 @@ func (c *AdminPlaneConfig) Validate() error {
 	}
 
 	return nil
+}
+
+// ServicesConfig는 운영 화면이 조회하는 외부 서비스 health URL이다.
+type ServicesConfig struct {
+	LLMSchedulerHealthURL   string
+	GameBotTwentyQHealthURL string
+	GameBotTurtleHealthURL  string
+}
+
+func loadServicesConfig() ServicesConfig {
+	return ServicesConfig{
+		LLMSchedulerHealthURL:   sharedenv.String("SERVICES_LLM_SCHEDULER_HEALTH_URL", ""),
+		GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
+		GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+	}
 }

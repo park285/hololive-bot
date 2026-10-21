@@ -23,7 +23,7 @@ package messaging
 import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func (ma *MessageAdapter) isMajorEventCommand(cmd string) bool {
@@ -37,7 +37,7 @@ func (ma *MessageAdapter) tryMajorEventCommand(command string, args []string, ra
 
 	params := map[string]any{paramAction: majorEventAction(args)}
 
-	return &ParsedCommand{Type: domain.CommandMajorEvent, Params: params, RawMessage: raw}, true
+	return &ParsedCommand{Type: botcommand.CommandMajorEvent, Params: params, RawMessage: raw}, true
 }
 
 var majorEventActions = map[string]string{

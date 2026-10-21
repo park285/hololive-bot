@@ -64,7 +64,7 @@ func TestCacheAllMembers_ReusesSnapshotAcrossCalls(t *testing.T) {
 	}
 
 	for i := range 5 {
-		got, err := c.AllMembers(t.Context())
+		got, err := c.LoadAllMembers(t.Context())
 		if err != nil {
 			t.Fatalf("AllMembers() call %d error = %v", i, err)
 		}
@@ -101,7 +101,7 @@ func TestCacheAllMembers_ReloadsAfterInvalidateAll(t *testing.T) {
 		},
 	}
 
-	if _, err := c.AllMembers(t.Context()); err != nil {
+	if _, err := c.LoadAllMembers(t.Context()); err != nil {
 		t.Fatalf("first AllMembers() error = %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestCacheAllMembers_ReloadsAfterInvalidateAll(t *testing.T) {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
 
-	if _, err := c.AllMembers(t.Context()); err != nil {
+	if _, err := c.LoadAllMembers(t.Context()); err != nil {
 		t.Fatalf("second AllMembers() error = %v", err)
 	}
 
@@ -135,7 +135,7 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 
 	c.allMembersSnapshot.Store(newAllMembersState(testMembers(), 0, time.Now().Add(-2*time.Minute)))
 
-	if _, err := c.AllMembers(t.Context()); err != nil {
+	if _, err := c.LoadAllMembers(t.Context()); err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
 
@@ -143,7 +143,7 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 		t.Fatalf("loader called %d times, want 1 (expired snapshot must reload)", n)
 	}
 
-	if _, err := c.AllMembers(t.Context()); err != nil {
+	if _, err := c.LoadAllMembers(t.Context()); err != nil {
 		t.Fatalf("second AllMembers() error = %v", err)
 	}
 
@@ -181,7 +181,7 @@ func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 		wg.Go(func() {
 			<-start
 
-			results[i], errs[i] = c.AllMembers(t.Context())
+			results[i], errs[i] = c.LoadAllMembers(t.Context())
 		})
 	}
 
@@ -214,7 +214,7 @@ func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 		}
 	}
 
-	cached, err := c.AllMembers(t.Context())
+	cached, err := c.LoadAllMembers(t.Context())
 	if err != nil || cached[0] != firstMember {
 		t.Fatalf("caller mutated cached snapshot: members=%v error=%v", cached, err)
 	}
@@ -238,7 +238,7 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 	}
 	c.allMembersSnapshot.Store(newAllMembersState(stale, 0, time.Now().Add(-2*time.Minute)))
 
-	got, err := c.AllMembers(t.Context())
+	got, err := c.LoadAllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v, want nil (must serve stale snapshot on reload failure)", err)
 	}
@@ -302,7 +302,7 @@ func startAllMembers(ctx context.Context, c *Cache) <-chan error {
 	done := make(chan error, 1)
 
 	go func() {
-		members, err := c.AllMembers(ctx)
+		members, err := c.LoadAllMembers(ctx)
 		if err == nil && len(members) != len(testMembers()) {
 			err = errors.New("waiter received an incomplete snapshot")
 		}
@@ -351,7 +351,7 @@ func TestCacheAllMembers_CanceledWaiterLeavesSharedLoadRunning(t *testing.T) {
 		t.Fatalf("shared load canceled=%d calls=%d, want one uncanceled load", loader.canceledLoads.Load(), loader.calls.Load())
 	}
 
-	if _, err := c.AllMembers(t.Context()); err != nil || loader.calls.Load() != 1 {
+	if _, err := c.LoadAllMembers(t.Context()); err != nil || loader.calls.Load() != 1 {
 		t.Fatalf("snapshot after canceled waiter = err %v calls %d, want published snapshot reuse", err, loader.calls.Load())
 	}
 }
@@ -374,7 +374,7 @@ func TestCacheAllMembers_PreCanceledCallerDoesNotStartLoad(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	if _, err := c.AllMembers(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := c.LoadAllMembers(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("AllMembers() error = %v, want context.Canceled", err)
 	}
 
@@ -388,7 +388,7 @@ func TestCacheAllMembers_NilRepositoryReturnsError(t *testing.T) {
 
 	c := &Cache{logger: slog.New(slog.DiscardHandler)}
 
-	_, err := c.AllMembers(t.Context())
+	_, err := c.LoadAllMembers(t.Context())
 	if err == nil {
 		t.Fatal("AllMembers() error = nil, want non-nil")
 	}
@@ -408,14 +408,14 @@ func TestCacheAllMembers_ReturnsClonedSlice(t *testing.T) {
 		},
 	}
 
-	first, err := c.AllMembers(t.Context())
+	first, err := c.LoadAllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
 
 	first[0] = nil
 
-	second, err := c.AllMembers(t.Context())
+	second, err := c.LoadAllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
@@ -448,7 +448,7 @@ func TestCacheInvalidateAllRacesWithSnapshotReload(t *testing.T) {
 			default:
 			}
 
-			if _, err := c.AllMembers(t.Context()); err != nil {
+			if _, err := c.LoadAllMembers(t.Context()); err != nil {
 				t.Errorf("AllMembers() error = %v", err)
 
 				return

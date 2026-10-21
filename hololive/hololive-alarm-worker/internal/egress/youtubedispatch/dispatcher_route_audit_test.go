@@ -14,9 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -166,7 +165,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	// subscriber cache rebuild가 쓰는 타입별 구독 set을 그대로 채운다.
 	for _, alarm := range alarms {
 		for _, alarmType := range alarm.AlarmTypes {
-			cacheStore.addSetMembers(sharedalarmkeys.BuildChannelSubscriberKey(alarm.ChannelID, alarmType), []string{alarm.RoomID})
+			cacheStore.addSetMembers(alarmkeys.BuildChannelSubscriberKey(alarm.ChannelID, alarmType), []string{alarm.RoomID})
 		}
 	}
 
@@ -175,7 +174,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 
 	items := seedRouteAuditOutboxRows(t, db, expectedTargets)
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cache, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -197,7 +196,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.Equal(t, totalRouteAuditDeliveries(expectedTargets), dispatcher.claim.processPendingDeliveries(ctx))
 
 	require.ElementsMatch(t, expectedRouteAuditLookupKeys(expectedTargets), cacheStore.lookupKeys())
-	require.NotContains(t, cacheStore.lookupKeys(), sharedalarmkeys.BuildChannelSubscriberKey("UC_LIVE_ONLY", domain.AlarmTypeLive))
+	require.NotContains(t, cacheStore.lookupKeys(), alarmkeys.BuildChannelSubscriberKey("UC_LIVE_ONLY", domain.AlarmTypeLive))
 
 	assertRouteAuditPersistedRows(t, db, items, expectedTargets)
 	require.ElementsMatch(t, expectedRouteAuditSentRooms(expectedTargets), senderRoomIDs(sender.messages))
@@ -361,7 +360,7 @@ func expectedRouteAuditLookupKeys(targets map[routeAuditTarget][]string) []strin
 	keys := make([]string, 0, len(sortedTargets))
 
 	for _, target := range sortedTargets {
-		keys = append(keys, sharedalarmkeys.BuildChannelSubscriberKey(target.channelID, target.alarmType))
+		keys = append(keys, alarmkeys.BuildChannelSubscriberKey(target.channelID, target.alarmType))
 	}
 
 	return keys

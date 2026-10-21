@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -54,7 +54,7 @@ func TestHandleInvalidAlwaysAnswersWithTheUsageError(t *testing.T) {
 			t.Parallel()
 
 			command, sent, _ := newInvalidAlarmCommand(t)
-			cmdCtx := &domain.CommandContext{Room: "123456789", RoomName: "룸제목-" + alarmPrivacySentinel}
+			cmdCtx := &botcommand.CommandContext{Room: "123456789", RoomName: "룸제목-" + alarmPrivacySentinel}
 
 			if err := command.handleInvalid(t.Context(), cmdCtx, params); err != nil {
 				t.Fatalf("handleInvalid() error = %v", err)
@@ -79,7 +79,7 @@ func TestHandleInvalidLogKeepsRoomIDWithoutUserInput(t *testing.T) {
 	t.Parallel()
 
 	command, _, logs := newInvalidAlarmCommand(t)
-	cmdCtx := &domain.CommandContext{
+	cmdCtx := &botcommand.CommandContext{
 		Room:     "123456789",
 		RoomName: "룸제목-" + alarmPrivacySentinel,
 		UserName: "닉네임-" + alarmPrivacySentinel,

@@ -10,9 +10,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type blockedRuntimeDigest struct{ entered, release chan struct{} }
@@ -127,4 +127,4 @@ func TestLLMCloseContextWaitsForSameCleanupAfterTimeout(t *testing.T) {
 	}
 }
 
-var _ delivery.NotificationLocker = runtimeDigestLocker{}
+var _ executionlock.Locker = runtimeDigestLocker{}

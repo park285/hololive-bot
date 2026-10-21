@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -44,7 +45,7 @@ func TestLiveCommand_YouTubeQueryFailureIsNotEmpty(t *testing.T) {
 				params[paramMember] = testMemberAqua
 			}
 
-			err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, params)
+			err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, params)
 			if sendFails && !errors.Is(err, sendErr) || !sendFails && err != nil {
 				t.Fatalf("Execute(member=%t, sendFails=%t)=%v", member, sendFails, err)
 			}
@@ -79,7 +80,7 @@ func TestLiveCommand_LogsBlockingAndNonblockingDiagnostics(t *testing.T) {
 					{ChannelID: "ch-y", Reason: reason, Diagnostics: livequery.Diagnostics{RetainedOrphanEnds: 2, EndedPendingEnds: 4, EndedHeadMismatches: 1}},
 				},
 			}}
-			if err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
+			if err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
 				t.Fatal(err)
 			}
 

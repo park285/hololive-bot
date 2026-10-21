@@ -28,11 +28,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	dbtest "github.com/kapu/hololive-dbtest"
 	targetpolicy "github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -103,7 +103,7 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	pool := dbtest.NewPool(t)
-	repository := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repository := alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
 
 	service := &AlarmService{
 		cache:           cacheClient,

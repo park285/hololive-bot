@@ -13,16 +13,15 @@ import (
 // RuntimeConfig는 alarm-worker가 소비하는 설정만 담는다. 공통 env 형식 검증은 shared settings 정책을 다시 쓰고,
 // 역할 조립과 검증(worker profile, notification 소유권, dispatch retention)은 이 패키지가 소유한다.
 type RuntimeConfig struct {
-	Environment      string
-	Server           settings.ServerConfig
-	Iris             settings.IrisConfig
-	Holodex          settings.HolodexConfig
-	OfficialSchedule settings.OfficialScheduleRuntimeConfig
-	Valkey           settings.ValkeyConfig
-	Postgres         settings.PostgresConfig
-	Notification     settings.NotificationConfig
-	Logging          settings.LoggingConfig
-	Tracing          settings.TracingConfig
+	Environment  string
+	Server       settings.ServerConfig
+	Iris         settings.IrisConfig
+	Holodex      settings.HolodexConfig
+	Valkey       settings.ValkeyConfig
+	Postgres     settings.PostgresConfig
+	Notification settings.NotificationConfig
+	Logging      settings.LoggingConfig
+	Tracing      settings.TracingConfig
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath string
 	// MarkdownReplies: BOT_MARKDOWN_REPLIES. 예약 알림 본문도 bot 응답과 같은 Markdown 표시 정책을 쓴다.
@@ -97,7 +96,6 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 func loadRuntimeSections() (*RuntimeConfig, error) {
 	server, serverErr := settings.LoadServerConfig()
 	holodex, holodexErr := settings.LoadHolodexConfig()
-	officialSchedule, officialScheduleErr := settings.LoadOfficialScheduleRuntimeConfig()
 	valkey, valkeyErr := settings.LoadValkeyConfig()
 	postgres, postgresErr := settings.LoadPostgresConfig()
 	notification, notificationErr := settings.LoadNotificationConfig()
@@ -106,7 +104,7 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	cors, corsErr := settings.LoadCORSConfig(alarmWorkerCORSDefaultEnforce)
 
 	if err := errors.Join(
-		serverErr, holodexErr, officialScheduleErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr, corsErr,
+		serverErr, holodexErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr, corsErr,
 	); err != nil {
 		return nil, fmt.Errorf("load alarm-worker sections: %w", err)
 	}
@@ -120,7 +118,6 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 		Environment:      environment,
 		Server:           server,
 		Holodex:          holodex,
-		OfficialSchedule: officialSchedule,
 		Valkey:           valkey,
 		Postgres:         postgres,
 		Notification:     notification,
@@ -191,10 +188,6 @@ func (c *RuntimeConfig) validate() error {
 
 	if err := settings.ValidateHolodexConfig(&c.Holodex); err != nil {
 		return fmt.Errorf("validate holodex config: %w", err)
-	}
-
-	if err := settings.ValidateOfficialScheduleRuntimeConfig(c.OfficialSchedule); err != nil {
-		return fmt.Errorf("validate official schedule config: %w", err)
 	}
 
 	if c.AlarmWorkerProfile == nil {

@@ -31,7 +31,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -40,7 +39,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-) dispatchstate.DispatchResult {
+) DispatchResult {
 	result := newDeliveryDispatchResult(len(rows))
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)

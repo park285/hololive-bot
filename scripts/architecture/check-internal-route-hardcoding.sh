@@ -35,13 +35,13 @@ check_route() {
 missing=0
 
 check_route "membernews" "/internal/membernews" \
-  'hololive-shared/pkg/contracts/membernews/routes.go|_test\.go' || missing=1
+  'hololive-api/internal/contracts/membernews/routes.go|_test\.go' || missing=1
 
 check_route "majorevent" "/internal/majorevent" \
-  'hololive-shared/pkg/contracts/majorevent/routes.go|_test\.go' || missing=1
+  'hololive-api/internal/contracts/majorevent/routes.go|_test\.go' || missing=1
 
 check_route "trigger" "/internal/trigger" \
-  'hololive-shared/pkg/contracts/trigger/routes.go|_test\.go' || missing=1
+  'hololive-api/internal/contracts/trigger/routes.go|_test\.go' || missing=1
 
 check_route "alarm" "/internal/alarm" \
   'hololive-shared/pkg/contracts/alarm/contracts\.go|_test\.go' || missing=1

@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 	"github.com/park285/shared-go/v2/pkg/retry"
@@ -16,7 +15,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
@@ -33,11 +31,6 @@ const (
 	// alarm_worker 풀의 일반 용량을 독점하지 않게 한다.
 	youtubeHandoffSettleConcurrency = 2
 )
-
-// ReplyStatusClient는 Iris /reply-status 조회다.
-type ReplyStatusClient interface {
-	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
-}
 
 // handoffStore는 youtube 고정 요청 handoff 확인의 claim과 정산이다.
 type handoffStore interface {
@@ -74,7 +67,7 @@ type handoffReconcilerConfig struct {
 // 때만 요청 하나의 트랜잭션으로 적용한다. 판정 규칙과 확인 간격은 notification·alarm dispatch와 같은 handoffcheck다.
 type HandoffReconciler struct {
 	store        handoffStore
-	client       ReplyStatusClient
+	client       handoffcheck.ReplyStatusClient
 	horizon      time.Duration
 	pollInterval time.Duration
 	maxRetries   int
@@ -85,9 +78,9 @@ type HandoffReconciler struct {
 // NewHandoffReconciler는 youtube_delivery dispatcher와 같은 설정으로 전이 저장소를 만든다. 지평은 DeliverySendTimeout이다.
 func NewHandoffReconciler(
 	db deliverysql.DeliveryDB,
-	client ReplyStatusClient,
+	client handoffcheck.ReplyStatusClient,
 	logger *slog.Logger,
-	config *dispatchstate.Config,
+	config *Config,
 ) (*HandoffReconciler, error) {
 	if db == nil || reflectutil.IsNil(db) {
 		return nil, errors.New("new youtube handoff reconciler: db is required")
@@ -123,7 +116,7 @@ func NewHandoffReconciler(
 
 func newHandoffReconciler(
 	handoffs handoffStore,
-	client ReplyStatusClient,
+	client handoffcheck.ReplyStatusClient,
 	config handoffReconcilerConfig,
 	logger *slog.Logger,
 ) (*HandoffReconciler, error) {

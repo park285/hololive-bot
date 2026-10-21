@@ -5,7 +5,7 @@ import (
 
 	"github.com/park285/iris-client-go/v3/webhook"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func TestParseMessage_BroadcastHistory(t *testing.T) {
@@ -17,7 +17,7 @@ func TestParseMessage_BroadcastHistory(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -51,7 +51,7 @@ func TestParseMessage_BroadcastHistoryCategoryAlias(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -73,7 +73,7 @@ func TestParseMessage_BroadcastHistoryMembershipTypeAlias(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -114,7 +114,7 @@ func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
 				t.Fatal("expected parsed command, got nil")
 			}
 
-			if result.Type != domain.CommandBroadcastHistory {
+			if result.Type != botcommand.CommandBroadcastHistory {
 				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 			}
 
@@ -146,7 +146,7 @@ func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -176,7 +176,7 @@ func TestParseMessage_BroadcastHistoryExplicitLimitFilter(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -198,7 +198,7 @@ func TestParseMessage_BroadcastHistoryLegacyLimitBeforeDays(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -241,7 +241,7 @@ func TestParseMessage_BroadcastHistoryAliasVariants(t *testing.T) {
 				t.Fatal("expected parsed command, got nil")
 			}
 
-			if result.Type != domain.CommandBroadcastHistory {
+			if result.Type != botcommand.CommandBroadcastHistory {
 				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 			}
 
@@ -265,7 +265,7 @@ func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -320,7 +320,7 @@ func TestParseMessage_BroadcastHistoryAttachedMemberFilterConsumesNameUntilType(
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -342,7 +342,7 @@ func TestParseMessage_BroadcastHistoryExplicitMemberFilterWinsOverTrailingBareTo
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastHistory {
+	if result.Type != botcommand.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
@@ -364,7 +364,7 @@ func TestParseMessage_BroadcastThumbnail(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastThumbnail {
+	if result.Type != botcommand.CommandBroadcastThumbnail {
 		t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 	}
 
@@ -382,7 +382,7 @@ func TestParseMessage_StandaloneBroadcastThumbnail(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandBroadcastThumbnail {
+	if result.Type != botcommand.CommandBroadcastThumbnail {
 		t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 	}
 
@@ -416,7 +416,7 @@ func TestParseMessage_StandaloneBroadcastThumbnailYouTubeURL(t *testing.T) {
 				t.Fatal("expected parsed command, got nil")
 			}
 
-			if result.Type != domain.CommandBroadcastThumbnail {
+			if result.Type != botcommand.CommandBroadcastThumbnail {
 				t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 			}
 

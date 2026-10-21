@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -128,7 +127,7 @@ func TestDispatcherTelemetryLoopDoesNotWarnWhenContextCanceled(t *testing.T) {
 func newCanceledTickerDispatcher(t *testing.T, logger *slog.Logger) *Dispatcher {
 	t.Helper()
 
-	dispatcher := newDispatcherForTest(t, openDispatcherStartTestDB(t, "dispatcher_cancel_log"), cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, openDispatcherStartTestDB(t, "dispatcher_cancel_log"), cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, logger, &Config{
 		BatchSize:             10,
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,

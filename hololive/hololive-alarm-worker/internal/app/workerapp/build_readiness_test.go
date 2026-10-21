@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	workerreadiness "github.com/kapu/hololive-alarm-worker/internal/readiness"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -22,7 +21,7 @@ func TestAlarmWorkerReadyProbeRequiresPostgres(t *testing.T) {
 		Cache:    &cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }},
 	}
 
-	rec := serveAlarmWorkerReady(t, workerreadiness.InternalGinHandler(t.Context(), newAlarmWorkerReadyProbe(infra)))
+	rec := serveAlarmWorkerReady(t, internalReadyHandler(t.Context(), newAlarmWorkerReadyProbe(infra)))
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("/internal/ready status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
@@ -42,7 +41,7 @@ func TestAlarmWorkerReadyProbeReportsReadyWhenDependenciesAndFlagsReady(t *testi
 		Cache:    &cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }},
 	}
 
-	rec := serveAlarmWorkerReady(t, workerreadiness.InternalGinHandler(t.Context(), newAlarmWorkerReadyProbe(infra)))
+	rec := serveAlarmWorkerReady(t, internalReadyHandler(t.Context(), newAlarmWorkerReadyProbe(infra)))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/internal/ready status = %d, want %d", rec.Code, http.StatusOK)

@@ -237,15 +237,6 @@ func LoadIngestionConfig() (IngestionConfig, error) {
 	return IngestionConfig{PhotoSyncEnabled: photoSyncEnabled}, nil
 }
 
-// LoadServicesConfig는 운영 화면이 조회하는 외부 서비스 health URL을 읽는다.
-func LoadServicesConfig() ServicesConfig {
-	return ServicesConfig{
-		LLMSchedulerHealthURL:   sharedenv.String("SERVICES_LLM_SCHEDULER_HEALTH_URL", ""),
-		GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-		GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
-	}
-}
-
 const (
 	seeMoreFoldEnv     = "BOT_SEE_MORE_FOLD"
 	seeMoreFoldDefault = true

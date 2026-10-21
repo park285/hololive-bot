@@ -4,6 +4,7 @@
 package handoffcheck
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -165,4 +166,9 @@ func QueryErrorDetail(err error) string {
 	}
 
 	return "iris reply status query failed"
+}
+
+// ReplyStatusClient는 세 원장의 handoff 확인이 함께 쓰는 Iris /reply-status 조회다.
+type ReplyStatusClient interface {
+	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
 }

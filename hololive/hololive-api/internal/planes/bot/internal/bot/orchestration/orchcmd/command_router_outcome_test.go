@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestCommandRouterLogsUncertainReplyAsUnknown(t *testing.T) {
@@ -34,10 +34,10 @@ func TestCommandRouterLogsUncertainReplyAsUnknown(t *testing.T) {
 
 			logger := slog.New(slog.NewJSONHandler(&output, nil))
 			registry := command.NewRegistry()
-			registry.Register(&failingRouterCommand{name: string(domain.CommandHelp), err: testCase.cause})
+			registry.Register(&failingRouterCommand{name: string(botcommand.CommandHelp), err: testCase.cause})
 
 			router := NewCommandRouter(registry, logger, func(context.Context, string, string) error { return nil }, nil, nil)
-			err := router.Execute(t.Context(), newPrivacyCommandContext(), domain.CommandHelp, nil)
+			err := router.Execute(t.Context(), newPrivacyCommandContext(), botcommand.CommandHelp, nil)
 			require.ErrorIs(t, err, testCase.cause)
 
 			found := false

@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"time"
 
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -88,7 +88,7 @@ func (s *RuntimeScheduler) recoverAlarmCacheIfRegistryEmpty(ctx context.Context,
 		return nil
 	}
 
-	registryExists, err := s.cacheClient.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	registryExists, err := s.cacheClient.Exists(ctx, alarmkeys.AlarmChannelRegistryKey)
 	if err != nil {
 		return fmt.Errorf("recover alarm cache: check channel registry: %w", err)
 	}
@@ -97,7 +97,7 @@ func (s *RuntimeScheduler) recoverAlarmCacheIfRegistryEmpty(ctx context.Context,
 		return nil
 	}
 
-	emptyCache, err := s.cacheClient.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	emptyCache, err := s.cacheClient.Exists(ctx, alarmkeys.AlarmSubscriberCacheEmptyKey)
 	if err != nil {
 		return fmt.Errorf("recover alarm cache: check empty marker: %w", err)
 	}
@@ -124,7 +124,7 @@ func (s *RuntimeScheduler) recoverAlarmCacheFromDB(ctx context.Context, reason s
 
 	s.logger.Info("Alarm cache recovered from DB",
 		slog.String("reason", reason),
-		slog.String("missing_key", sharedalarmkeys.AlarmChannelRegistryKey),
+		slog.String("missing_key", alarmkeys.AlarmChannelRegistryKey),
 	)
 
 	return nil

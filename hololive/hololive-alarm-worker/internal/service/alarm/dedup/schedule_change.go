@@ -26,10 +26,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 type ScheduleChange struct {
@@ -59,19 +60,40 @@ func (s *Service) DetectScheduleChange(ctx context.Context, streamID string, cur
 	return change.Message, nil
 }
 
-func (s *Service) DetectNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream) (*ScheduleChange, error) {
-	change, ok, err := s.detectNotificationScheduleChange(ctx, roomID, channelID, stream)
+// DetectNotificationScheduleChanges는 방별 일정 변경을 찾는다. 방과 무관한 stream 단위 notified hash는 한 번만 읽고,
+// 거기서 변경이 확정되지 않을 때만 방별 logical schedule index를 읽는다.
+func (s *Service) DetectNotificationScheduleChanges(ctx context.Context, roomIDs []string, channelID string, stream *domain.Stream) (map[string]*ScheduleChange, error) {
+	changes := make(map[string]*ScheduleChange)
+
+	if len(roomIDs) == 0 || stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
+		return changes, nil
+	}
+
+	streamChange, streamChanged, err := s.detectStreamScheduleChange(ctx, stream.ID, *stream.StartScheduled)
 	if err != nil {
-		return nil, fmt.Errorf("detect notification schedule change: %w", err)
+		return nil, fmt.Errorf("detect notification schedule changes: %w", err)
 	}
 
-	var detected *ScheduleChange
+	for _, roomID := range roomIDs {
+		if streamChanged {
+			change := streamChange
 
-	if ok {
-		detected = &change
+			changes[roomID] = &change
+
+			continue
+		}
+
+		change, roomChanged, err := s.detectLogicalScheduleChange(ctx, roomID, channelID, stream)
+		if err != nil {
+			return nil, fmt.Errorf("detect notification schedule changes: room %s: %w", privacylog.IdentifierToken(roomID), err)
+		}
+
+		if roomChanged {
+			changes[roomID] = &change
+		}
 	}
 
-	return detected, nil
+	return changes, nil
 }
 
 func (s *Service) detectNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream) (ScheduleChange, bool, error) {

@@ -34,8 +34,8 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type replyIdentityProbeCommand struct {
@@ -45,7 +45,7 @@ type replyIdentityProbeCommand struct {
 func (c *replyIdentityProbeCommand) Name() string        { return testHelpCommandName }
 func (c *replyIdentityProbeCommand) Description() string { return testHelpCommandName }
 
-func (c *replyIdentityProbeCommand) Execute(context.Context, *domain.CommandContext, map[string]any) error {
+func (c *replyIdentityProbeCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
 	c.calls.Add(1)
 
 	return nil
@@ -116,7 +116,7 @@ func TestProcessMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 func TestCommandRequestContextUsesTheCommandContextMessageID(t *testing.T) {
 	t.Parallel()
 
-	cmdCtx := &domain.CommandContext{Room: testRoomID, MessageID: "message:canonical"}
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, MessageID: "message:canonical"}
 	reqCtx := commandRequestContext(t.Context(), cmdCtx)
 
 	identity, ok := transport.ReplyIdentityFromContext(reqCtx)

@@ -16,7 +16,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
@@ -63,7 +62,7 @@ func (s *claimGateTestSender) allMessages() []string {
 	return cloned
 }
 
-func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config *dispatchstate.Config) (*Dispatcher, *pgxpool.Pool) {
+func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config *Config) (*Dispatcher, *pgxpool.Pool) {
 	t.Helper()
 
 	if config.BatchSize <= 0 {
@@ -163,7 +162,7 @@ func newShortClaimGateFixture(now time.Time, suffix string) (domain.YouTubeNotif
 func newPendingClaimGateDispatcher(t *testing.T, sender *claimGateTestSender) (*Dispatcher, *pgxpool.Pool) {
 	t.Helper()
 
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{DeliveryParallelism: 1})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{DeliveryParallelism: 1})
 
 	dispatcher.send.transition = dispatcher.claim.transition
 
@@ -490,7 +489,7 @@ func TestProcessPendingDeliveriesSendsPostToEveryRoomAcrossBatches(t *testing.T)
 	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{BatchSize: 1, DeliveryParallelism: 1})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{BatchSize: 1, DeliveryParallelism: 1})
 
 	dispatcher.send.transition = dispatcher.claim.transition
 
@@ -550,7 +549,7 @@ func TestOutcomeUnknownInOneRoomDoesNotDeferOtherRoomOfSamePost(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	unknownRoom, nextRoom := "room-unknown-a", "room-unknown-b"
 	sender := &claimGateTestSender{unknownRoom: map[string]bool{unknownRoom: true}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{BatchSize: 1, DeliveryParallelism: 1})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{BatchSize: 1, DeliveryParallelism: 1})
 
 	dispatcher.send.transition = dispatcher.claim.transition
 

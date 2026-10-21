@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func TestChannelSubscribersKeyByType(t *testing.T) {
@@ -44,25 +44,25 @@ func TestChannelSubscribersKeyByType(t *testing.T) {
 			name:      "live uses default prefix",
 			channelID: "UC_live",
 			alarmType: domain.AlarmTypeLive,
-			want:      sharedalarmkeys.ChannelSubscribersKeyPrefix + "UC_live",
+			want:      alarmkeys.ChannelSubscribersKeyPrefix + "UC_live",
 		},
 		{
 			name:      "community uses dedicated prefix",
 			channelID: "UC_community",
 			alarmType: domain.AlarmTypeCommunity,
-			want:      sharedalarmkeys.ChannelSubscribersCommunityPrefix + "UC_community",
+			want:      alarmkeys.ChannelSubscribersCommunityPrefix + "UC_community",
 		},
 		{
 			name:      "shorts uses dedicated prefix",
 			channelID: "UC_shorts",
 			alarmType: domain.AlarmTypeShorts,
-			want:      sharedalarmkeys.ChannelSubscribersShortsPrefix + "UC_shorts",
+			want:      alarmkeys.ChannelSubscribersShortsPrefix + "UC_shorts",
 		},
 		{
 			name:      "unknown type falls back to default",
 			channelID: "UC_unknown",
 			alarmType: domain.AlarmType("UNKNOWN"),
-			want:      sharedalarmkeys.ChannelSubscribersKeyPrefix + "UC_unknown",
+			want:      alarmkeys.ChannelSubscribersKeyPrefix + "UC_unknown",
 		},
 	}
 
@@ -95,18 +95,18 @@ func TestBuildTitleFingerprint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := sharedalarmkeys.BuildTitleFingerprint(tt.title, tt.streamID)
+			got := alarmkeys.BuildTitleFingerprint(tt.title, tt.streamID)
 			if len(got) != tt.wantLen {
-				t.Fatalf("sharedalarmkeys.BuildTitleFingerprint() len = %d, want %d", len(got), tt.wantLen)
+				t.Fatalf("alarmkeys.BuildTitleFingerprint() len = %d, want %d", len(got), tt.wantLen)
 			}
 		})
 	}
 
-	if got1, got2 := sharedalarmkeys.BuildTitleFingerprint("같은 제목", "a"), sharedalarmkeys.BuildTitleFingerprint("같은 제목", "b"); got1 != got2 {
+	if got1, got2 := alarmkeys.BuildTitleFingerprint("같은 제목", "a"), alarmkeys.BuildTitleFingerprint("같은 제목", "b"); got1 != got2 {
 		t.Fatalf("expected same fingerprint for same normalized title, got %q and %q", got1, got2)
 	}
 
-	if got1, got2 := sharedalarmkeys.BuildTitleFingerprint("", "stream-a"), sharedalarmkeys.BuildTitleFingerprint("", "stream-b"); got1 == got2 {
+	if got1, got2 := alarmkeys.BuildTitleFingerprint("", "stream-a"), alarmkeys.BuildTitleFingerprint("", "stream-b"); got1 == got2 {
 		t.Fatalf("expected different fingerprints for different stream id fallback, got same %q", got1)
 	}
 }
@@ -114,8 +114,8 @@ func TestBuildTitleFingerprint(t *testing.T) {
 func TestBuildTitleFingerprint_FullWidthEquivalence(t *testing.T) {
 	t.Parallel()
 
-	fpA := sharedalarmkeys.BuildTitleFingerprint("クリアする!そして", "s1")
-	fpB := sharedalarmkeys.BuildTitleFingerprint("クリアする！そして", "s1")
+	fpA := alarmkeys.BuildTitleFingerprint("クリアする!そして", "s1")
+	fpB := alarmkeys.BuildTitleFingerprint("クリアする！そして", "s1")
 
 	if fpA != fpB {
 		t.Errorf("alarm_cache fingerprints differ for half/full-width: %q != %q", fpA, fpB)
@@ -128,7 +128,7 @@ func TestGetMemberNamesBatch(t *testing.T) {
 	as := newTestAlarmService(t)
 	ctx := t.Context()
 
-	require.NoError(t, as.cache.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_ok", "미코"))
+	require.NoError(t, as.cache.HSet(ctx, alarmkeys.MemberNameKey, "UC_ok", "미코"))
 
 	names, err := as.getMemberNamesBatch(ctx, []string{"UC_ok", "UC_missing"})
 	require.NoError(t, err)

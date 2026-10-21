@@ -31,11 +31,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func cleanupTestClaimManager(t *testing.T, db *pgxpool.Pool, cfg *dispatchstate.Config) *ClaimManager {
+func cleanupTestClaimManager(t *testing.T, db *pgxpool.Pool, cfg *Config) *ClaimManager {
 	t.Helper()
 
 	logger := slog.Default()
@@ -72,7 +71,7 @@ func outboxRowCount(t *testing.T, db *pgxpool.Pool, id int64) int64 {
 
 func TestLifecycleCleanupRemovesOnlyUnclaimableOrphan(t *testing.T) {
 	db := newDeliveryPool(t)
-	cm := cleanupTestClaimManager(t, db, &dispatchstate.Config{
+	cm := cleanupTestClaimManager(t, db, &Config{
 		CleanupAfter:         1 * time.Hour,
 		ClaimFreshnessWindow: 2 * time.Hour,
 		LockTimeout:          5 * time.Minute,
@@ -108,7 +107,7 @@ func TestLifecycleCleanupRemovesOnlyUnclaimableOrphan(t *testing.T) {
 func TestPendingExpiryCountsCommittedStaleBeforeProjectionFailure(t *testing.T) {
 	db := newDeliveryPool(t)
 	ctx := t.Context()
-	cm := cleanupTestClaimManager(t, db, &dispatchstate.Config{
+	cm := cleanupTestClaimManager(t, db, &Config{
 		BatchSize: 10, ClaimFreshnessWindow: 2 * time.Hour, LockTimeout: time.Minute,
 	})
 	totals := &workercontract.Counters{}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -102,7 +103,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -138,7 +139,7 @@ func TestUpcomingCommand_Execute_DisplayNameLookupError(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	if err := NewUpcomingCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{}); err != nil {
+	if err := NewUpcomingCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -171,7 +172,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_WithOverflow(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		testParamLimit: 5,
 	})
 	if err != nil {
@@ -206,7 +207,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_QueryError(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "미코",
 	})
 	if err != nil {
@@ -285,7 +286,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "미코",
 	})
 	if err != nil {
@@ -325,7 +326,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "미코",
 	})
 	if err != nil {
@@ -357,7 +358,7 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "존재하지않는멤버",
 	}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -371,7 +372,7 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 func TestUpcomingCommand_Execute_NilDeps(t *testing.T) {
 	cmd := NewUpcomingCommand(nil)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
 	if err == nil {
 		t.Fatal("expected error for nil deps")
 	}

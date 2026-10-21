@@ -23,18 +23,26 @@ type DatabaseResources struct {
 	Close   func()
 }
 
+// RuntimePool은 runtime pool의 통계 라벨과 control 예약 연결 수다. 소유권 갱신·정산 lease를 쓰는 runtime은 1을 두어
+// batch 작업이 일반 연결을 모두 잡아도 lease 갱신이 연결을 얻게 한다. 제한 대상은 worker 수가 아니라 실제 DB lease다.
+type RuntimePool struct {
+	Name          string
+	ReservedConns int32
+}
+
 // ProvideDatabaseResources는 PostgreSQL pool을 열고 정리 함수를 함께 돌려준다.
-// 빈 문자열이 아닌 poolName은 pool 통계를 hololive_db_pool_*{pool=poolName}으로 기본 registry에 등록하고 정리 때 해제한다.
+// 빈 문자열이 아닌 pool.Name은 pool 통계를 hololive_db_pool_*{pool=pool.Name}으로 기본 registry에 등록하고 정리 때 해제한다.
 // 한 프로세스의 pool마다 다른 이름을 써야 하며, 이름이 겹치면 생성이 실패한다.
 func ProvideDatabaseResources(
 	ctx context.Context,
 	postgresConfig *settings.PostgresConfig,
-	poolName string,
+	pool RuntimePool,
 	logger *slog.Logger,
 ) (*DatabaseResources, func(), error) {
-	return provideDatabaseResources(ctx, postgresConfig, poolName,
-		map[string]string{"statement_timeout": "30000", "application_name": runtimeApplicationName(poolName)},
-		&pgxdb.CancelRequestConfig{CancelRequestDelay: 0, DeadlineDelay: time.Second}, runtimeAcquirePolicy(poolName), logger)
+	return provideDatabaseResources(ctx, postgresConfig, pool.Name,
+		map[string]string{"statement_timeout": "30000", "application_name": runtimeApplicationName(pool.Name)},
+		&pgxdb.CancelRequestConfig{CancelRequestDelay: 0, DeadlineDelay: time.Second},
+		&pgxdb.AcquirePolicy{Timeout: 5 * time.Second, ReservedConns: pool.ReservedConns}, logger)
 }
 
 // ProvideMaintenanceDatabaseResources는 runtime statement/cancel 정책을 상속하지 않는다.
@@ -84,18 +92,6 @@ func provideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 	}
 
 	return resources, resources.Close, nil
-}
-
-// 소유권 갱신·정산이 있는 pool만 한 연결을 남긴다. Worker 수가 아니라 실제 DB lease를 제한한다.
-func runtimeAcquirePolicy(poolName string) *pgxdb.AcquirePolicy {
-	policy := &pgxdb.AcquirePolicy{Timeout: 5 * time.Second}
-
-	switch poolName {
-	case "bot", "youtube_plane", "alarm_worker", "collector":
-		policy.ReservedConns = 1
-	}
-
-	return policy
 }
 
 func runtimeApplicationName(poolName string) string {

@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"strings"
 
-	keyspkg "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 )
 
 // claimKeyPrefixes는 dispatch envelope에 보존되는 알림 및 일정 변경 dedup 마커의 SSOT prefix다.
 // 이 prefix만 삭제 대상으로 허용해, dispatch claim 등
 // 다른 키가 잘못 해제되는 것을 막는다.
 var claimKeyPrefixes = [...]string{
-	keyspkg.NotifyClaimKeyPrefix,
-	keyspkg.RoomScheduleTransitionKeyPrefix,
-	keyspkg.LogicalScheduleTransitionKeyPrefix,
+	alarmkeys.NotifyClaimKeyPrefix,
+	alarmkeys.RoomScheduleTransitionKeyPrefix,
+	alarmkeys.LogicalScheduleTransitionKeyPrefix,
 }
 
 // ClaimKeyReleaser는 Consumer가 dedup claim 키를 삭제할 때 의존하는 narrow interface다.

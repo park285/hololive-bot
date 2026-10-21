@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/retry"
 
@@ -44,11 +43,6 @@ type HandoffConsumer interface {
 
 var _ HandoffConsumer = (*dispatchoutbox.HandoffConsumer)(nil)
 
-// ReplyStatusClient는 Iris /reply-status 조회다.
-type ReplyStatusClient interface {
-	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
-}
-
 // HandoffReconcilerConfig의 Horizon은 alarm_dispatch executor attempt timeout이고 PollInterval은 alarm_dispatch
 // poll 주기다.
 type HandoffReconcilerConfig struct {
@@ -60,7 +54,7 @@ type HandoffReconcilerConfig struct {
 // 조회는 트랜잭션 밖에서 하고, 정산은 claim 토큰과 요청 ID가 그대로일 때만 단위 하나의 단일 문장으로 적용한다.
 type HandoffReconciler struct {
 	consumer     HandoffConsumer
-	client       ReplyStatusClient
+	client       handoffcheck.ReplyStatusClient
 	horizon      time.Duration
 	pollInterval time.Duration
 	settleSlots  chan struct{}
@@ -68,7 +62,7 @@ type HandoffReconciler struct {
 }
 
 // NewHandoffReconciler는 지평과 poll 주기가 1ms 이상이어야 만든다.
-func NewHandoffReconciler(consumer HandoffConsumer, client ReplyStatusClient, config HandoffReconcilerConfig, logger *slog.Logger) (*HandoffReconciler, error) {
+func NewHandoffReconciler(consumer HandoffConsumer, client handoffcheck.ReplyStatusClient, config HandoffReconcilerConfig, logger *slog.Logger) (*HandoffReconciler, error) {
 	if consumer == nil || client == nil {
 		return nil, errors.New("new alarm dispatch handoff reconciler: consumer and reply status client are required")
 	}

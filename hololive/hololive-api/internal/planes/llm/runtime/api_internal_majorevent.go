@@ -31,9 +31,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
+	majoreventcontracts "github.com/kapu/hololive-api/internal/contracts/majorevent"
+	"github.com/kapu/hololive-api/internal/contracts/subscription"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
-	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
-	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )

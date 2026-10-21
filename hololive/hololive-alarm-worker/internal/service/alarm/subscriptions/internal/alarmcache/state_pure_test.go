@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 )
 
 func TestFirstMemberName(t *testing.T) {
@@ -33,9 +33,9 @@ func TestFirstMemberName(t *testing.T) {
 func TestBuildTitleFingerprint(t *testing.T) {
 	t.Parallel()
 
-	first := sharedalarmkeys.BuildTitleFingerprint("title", "vid1")
-	repeated := sharedalarmkeys.BuildTitleFingerprint("title", "vid1")
+	first := alarmkeys.BuildTitleFingerprint("title", "vid1")
+	repeated := alarmkeys.BuildTitleFingerprint("title", "vid1")
 
 	require.Equal(t, first, repeated)
-	require.NotEqual(t, sharedalarmkeys.BuildTitleFingerprint("title-a", "vid1"), sharedalarmkeys.BuildTitleFingerprint("title-b", "vid1"))
+	require.NotEqual(t, alarmkeys.BuildTitleFingerprint("title-a", "vid1"), alarmkeys.BuildTitleFingerprint("title-b", "vid1"))
 }

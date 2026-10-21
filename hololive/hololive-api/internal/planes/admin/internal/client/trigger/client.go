@@ -30,7 +30,7 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 

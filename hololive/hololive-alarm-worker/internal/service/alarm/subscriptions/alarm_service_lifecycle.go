@@ -27,10 +27,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -42,7 +42,7 @@ const (
 func NewAlarmService(
 	cacheClient cache.Client,
 	memberData domain.MemberDataProvider,
-	alarmRepository *alarm.Repository,
+	alarmRepository *alarmstore.Repository,
 	logger *slog.Logger,
 	advanceMinutes []int,
 ) (*AlarmService, error) {

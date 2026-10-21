@@ -7,7 +7,6 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
-	"github.com/kapu/hololive-alarm-worker/internal/cleanupctx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -46,7 +45,7 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 		return 0, fmt.Errorf("delete room alarms before cache clear: %w", deleteErr)
 	}
 
-	cacheCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+	cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheCleanupTimeout)
 	defer cancel()
 
 	if err := as.clearRoomAlarmsCacheMutation(cacheCtx, channelIDs); err != nil {

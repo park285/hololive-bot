@@ -34,9 +34,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -370,7 +370,7 @@ func TestService_DetectScheduleChange(t *testing.T) {
 	assert.Empty(t, message, "분 단위가 같으면 변경으로 보지 않음")
 }
 
-func TestService_DetectNotificationScheduleChange_LogicalWaitingRoomReplacement(t *testing.T) {
+func TestService_DetectNotificationScheduleChanges_LogicalWaitingRoomReplacement(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
@@ -389,15 +389,14 @@ func TestService_DetectNotificationScheduleChange_LogicalWaitingRoomReplacement(
 
 	require.NoError(t, service.MarkUpcomingEventNotified(t.Context(), "room-1", "UC_TEST", previousStream))
 
-	change, err := service.DetectNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", currentStream)
+	changes, err := service.DetectNotificationScheduleChanges(t.Context(), []string{"room-1", "room-2"}, "UC_TEST", currentStream)
 	require.NoError(t, err)
+
+	change := changes["room-1"]
 	require.NotNil(t, change)
 	assert.Equal(t, "일정이 늦춰졌습니다.", change.Message)
 	assert.Equal(t, keys.FormatScheduled(previousScheduled), change.PreviousScheduledString())
-
-	change, err = service.DetectNotificationScheduleChange(t.Context(), "room-2", "UC_TEST", currentStream)
-	require.NoError(t, err)
-	assert.Nil(t, change, "이전 알림을 받지 않은 방에는 교체 지연을 만들지 않음")
+	assert.NotContains(t, changes, "room-2", "이전 알림을 받지 않은 방에는 교체 지연을 만들지 않음")
 }
 
 func TestService_TryClaimNotificationScheduleChange_PerRoomDedup(t *testing.T) {

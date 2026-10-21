@@ -29,7 +29,7 @@ type UpcomingCandidate struct {
 type UpcomingCandidateStore interface {
 	Stage(context.Context, string, time.Time, []*domain.AlarmNotification) error
 	Pending(context.Context, time.Time) ([]UpcomingCandidate, error)
-	Finish(context.Context, string, string, time.Time) error
+	Finish(context.Context, map[string][]string, time.Time) error
 }
 
 // UpcomingCandidates는 dispatch ledger와 같은 PostgreSQL의 선정 후보 저장소다.
@@ -139,10 +139,17 @@ func (s *UpcomingCandidates) stageChunks(ctx context.Context, channelID string, 
 	return nil
 }
 
-// Finish는 pending만 종료하며 기존 delivery·claim·불명 전송 증거를 수정하지 않는다.
-func (s *UpcomingCandidates) Finish(ctx context.Context, key, outcome string, now time.Time) error {
-	if _, err := s.db.Exec(ctx, mustSQL("upcoming_candidates_finish.sql"), key, outcome, now); err != nil {
-		return fmt.Errorf("finish upcoming candidate: %w", err)
+// Finish는 outcome별 key 묶음을 한 UPDATE씩 종료한다. 상태가 pending인 행만 바꾸며 기존 delivery·claim·불명 전송
+// 증거를 수정하지 않는다.
+func (s *UpcomingCandidates) Finish(ctx context.Context, keysByOutcome map[string][]string, now time.Time) error {
+	for outcome, keys := range keysByOutcome {
+		if len(keys) == 0 {
+			continue
+		}
+
+		if _, err := s.db.Exec(ctx, mustSQL("upcoming_candidates_apply.sql"), keys, outcome, &now, now); err != nil {
+			return fmt.Errorf("finish upcoming candidates: outcome %s: %w", outcome, err)
+		}
 	}
 
 	return nil

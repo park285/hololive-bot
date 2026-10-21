@@ -10,8 +10,8 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
+	irisroomscontracts "github.com/kapu/hololive-api/internal/contracts/irisrooms"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
-	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 )
 
 func TestClientGetRoomsSuccess(t *testing.T) {

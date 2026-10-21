@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -29,9 +29,9 @@ func TestOutboxGrouperCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.
 		lookedUpKeysMu.Unlock()
 
 		switch key {
-		case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
+		case alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
 			return []string{testRoomShorts}, nil
-		case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
+		case alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
 			return []string{testRoomCommunity}, nil
 		default:
 			return nil, nil
@@ -52,8 +52,8 @@ func TestOutboxGrouperCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.
 
 	require.Len(t, recordedKeys, 2)
 	require.True(t, sameStrings(recordedKeys, []string{
-		sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts),
-		sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity),
+		alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts),
+		alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity),
 	}))
 
 	targets, ok := roomsByChannel[testChannelTarget]

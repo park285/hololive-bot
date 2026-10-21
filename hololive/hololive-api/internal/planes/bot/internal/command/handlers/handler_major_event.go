@@ -26,8 +26,8 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type MajorEventCommand struct {
@@ -51,7 +51,7 @@ func (c *MajorEventCommand) Description() string {
 	return "행사 알림 관리"
 }
 
-func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureMajorEventReady(ctx, cmdCtx); err != nil {
 		return fmt.Errorf("ensure major event ready: %w", err)
 	}
@@ -63,7 +63,7 @@ func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	return nil
 }
 
-func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
@@ -88,7 +88,7 @@ func majorEventAction(params map[string]any) string {
 	return action
 }
 
-func (c *MajorEventCommand) dispatchMajorEventAction(ctx context.Context, cmdCtx *domain.CommandContext, action string) error {
+func (c *MajorEventCommand) dispatchMajorEventAction(ctx context.Context, cmdCtx *botcommand.CommandContext, action string) error {
 	handler := c.majorEventActionHandler(action)
 	if err := handler(ctx, cmdCtx); err != nil {
 		return fmt.Errorf("handle major event action: %w", err)
@@ -97,8 +97,8 @@ func (c *MajorEventCommand) dispatchMajorEventAction(ctx context.Context, cmdCtx
 	return nil
 }
 
-func (c *MajorEventCommand) majorEventActionHandler(action string) func(context.Context, *domain.CommandContext) error {
-	handlers := map[string]func(context.Context, *domain.CommandContext) error{
+func (c *MajorEventCommand) majorEventActionHandler(action string) func(context.Context, *botcommand.CommandContext) error {
+	handlers := map[string]func(context.Context, *botcommand.CommandContext) error{
 		"on":     c.handleSubscribe,
 		"켜기":     c.handleSubscribe,
 		"off":    c.handleUnsubscribe,
@@ -114,7 +114,7 @@ func (c *MajorEventCommand) majorEventActionHandler(action string) func(context.
 	return c.handleUsage
 }
 
-func (c *MajorEventCommand) handleUsage(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MajorEventCommand) handleUsage(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventUsage(ctx)); err != nil {
 		return fmt.Errorf("send message: %w", err)
 	}
@@ -122,7 +122,7 @@ func (c *MajorEventCommand) handleUsage(ctx context.Context, cmdCtx *domain.Comm
 	return nil
 }
 
-func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
+func (c *MajorEventCommand) subscriptionFlow(cmdCtx *botcommand.CommandContext) handlercore.SubscriptionFlow {
 	return handlercore.NewSubscriptionFlow(&handlercore.SubscriptionFlowConfig{
 		Port: c.repository,
 		OnCheckError: func(ctx context.Context, err error) error {
@@ -158,7 +158,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 	})
 }
 
-func (c *MajorEventCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MajorEventCommand) handleSubscribe(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
@@ -166,7 +166,7 @@ func (c *MajorEventCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.
 	return nil
 }
 
-func (c *MajorEventCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MajorEventCommand) handleUnsubscribe(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room); err != nil {
 		return fmt.Errorf("unsubscribe: %w", err)
 	}
@@ -174,7 +174,7 @@ func (c *MajorEventCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domai
 	return nil
 }
 
-func (c *MajorEventCommand) handleStatus(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MajorEventCommand) handleStatus(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room); err != nil {
 		return fmt.Errorf("status: %w", err)
 	}

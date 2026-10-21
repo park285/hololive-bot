@@ -30,8 +30,8 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 func TestClientSendWeeklyNotificationSuccess(t *testing.T) {

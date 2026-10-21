@@ -34,7 +34,7 @@ Community/shorts 수집 evidence는 `youtube-collector` observation, canonical c
 
 ## 기준 코드
 
-- typed key SSOT: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
+- typed key SSOT: `hololive/hololive-alarm-worker/internal/service/alarm/keys/keys.go`
 - delivery path SSOT: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/classifiers.go`
 - 최종 egress owner: `alarm-worker`
 - Community/shorts canonical consume: `hololive-api` YouTube plane
@@ -51,5 +51,5 @@ Community/shorts 수집 evidence는 `youtube-collector` observation, canonical c
 
 로컬 검증 명령:
 
-- `go test ./hololive/hololive-shared/pkg/service/alarm/keys`
+- `go test ./hololive/hololive-alarm-worker/internal/service/alarm/keys`
 - `go test ./hololive/hololive-shared/pkg/service/youtube/outbox/...`

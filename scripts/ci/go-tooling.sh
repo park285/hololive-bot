@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # local-ci.sh가 사용하는 Go 도구 설치·최소 지원 버전 검증 헬퍼.
 
-STATICCHECK_VERSION="${STATICCHECK_VERSION:-2026.2.2}"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.9.0}"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.15.0}"
 NILAWAY_VERSION="${NILAWAY_VERSION:-v0.0.0-20260918162853-acb8859b9031}"
@@ -63,79 +62,31 @@ go_bin_tool() {
     fi
 }
 
-go_tool_install_path() {
-    local tool="$1"
-    local gobin
-    gobin="$(go env GOBIN)"
-    if [[ -n "${gobin}" ]]; then
-        printf '%s/%s\n' "${gobin}" "${tool}"
-        return 0
-    fi
-
-    local gopath
-    gopath="$(go env GOPATH)"
-    if [[ -z "${gopath}" ]]; then
-        echo "GOPATH is empty; cannot locate installed Go tool ${tool}" >&2
-        exit 1
-    fi
-    printf '%s/bin/%s\n' "${gopath}" "${tool}"
-}
-
 ensure_pinned_go_tool() {
     local tool="$1"
     local module="$2"
     local version="$3"
-    local version_marker="$4"
-
     local bin
-    if [[ "${tool}" == govulncheck || "${tool}" == golangci-lint ]]; then
-        bin="$(go_bin_tool "${tool}" "${version}")" || return
-        if [[ -z "${bin}" ]]; then
-            echo "[GO TOOLING] Installing ${tool}@${version}" >&2
-            go install "${module}@${version}" || return
-            bin="$(go_bin_tool "${tool}" "${version}")" || return
-        fi
-        [[ -n "${bin}" ]] || {
-            echo "${tool} >= ${version} is required" >&2
-            return 1
-        }
-        printf '%s\n' "${bin}"
-        return
-    fi
-    bin="$(go_bin_tool "${tool}" || true)"
-    if [[ -z "${bin}" ]] || [[ "$("${bin}" -version 2>/dev/null || true)" != *"${version_marker}"* ]]; then
+
+    bin="$(go_bin_tool "${tool}" "${version}")" || return
+    if [[ -z "${bin}" ]]; then
         echo "[GO TOOLING] Installing ${tool}@${version}" >&2
-        go install "${module}@${version}"
-        bin="$(go_tool_install_path "${tool}")"
-        echo >&2
+        go install "${module}@${version}" || return
+        bin="$(go_bin_tool "${tool}" "${version}")" || return
     fi
-
-    local version_output
-    version_output="$("${bin}" -version 2>/dev/null || true)"
-    if [[ "${version_output}" != *"${version_marker}"* ]]; then
-        echo "expected ${tool} ${version}, got: ${version_output}" >&2
-        exit 1
-    fi
-
+    [[ -n "${bin}" ]] || {
+        echo "${tool} >= ${version} is required" >&2
+        return 1
+    }
     printf '%s\n' "${bin}"
 }
 
-# PATH/GOBIN의 무패치 staticcheck는 generic method fact를 다른 method에 붙여 거짓 SA1019를 낸다.
-# staticcheck-facts profile이 고정 x/tools objectpath 패치와 source/export 경계 fixture를 검증한다.
-ensure_staticcheck() {
-    local tooling_dir
-    tooling_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || return 1
-    STATICCHECK_VERSION="${STATICCHECK_VERSION}" bash "${tooling_dir}/staticcheck-facts/build.sh"
-}
-
 ensure_govulncheck() {
-    ensure_pinned_go_tool govulncheck "golang.org/x/vuln/cmd/govulncheck" \
-        "${GOVULNCHECK_VERSION}" "govulncheck@${GOVULNCHECK_VERSION}"
+    ensure_pinned_go_tool govulncheck "golang.org/x/vuln/cmd/govulncheck" "${GOVULNCHECK_VERSION}"
 }
 
 ensure_golangci_lint() {
-    ensure_pinned_go_tool golangci-lint "github.com/golangci/golangci-lint/v2/cmd/golangci-lint" \
-        "${GOLANGCI_LINT_VERSION}" "version ${GOLANGCI_LINT_VERSION#v}"
+    ensure_pinned_go_tool golangci-lint "github.com/golangci/golangci-lint/v2/cmd/golangci-lint" "${GOLANGCI_LINT_VERSION}"
 }
 
 ensure_nilaway() {

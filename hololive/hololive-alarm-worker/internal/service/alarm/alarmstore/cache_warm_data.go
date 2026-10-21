@@ -1,0 +1,58 @@
+package alarmstore
+
+import (
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+type subscriberCacheWarmData struct {
+	summary            CacheWarmSummary
+	rooms              map[string]struct{}
+	channels           map[string]struct{}
+	channelSubscribers map[string][]string
+	memberNames        map[string]string
+	channelRegistry    []string
+}
+
+func newSubscriberCacheWarmData(alarms []*domain.Alarm) *subscriberCacheWarmData {
+	return &subscriberCacheWarmData{
+		rooms:              make(map[string]struct{}, len(alarms)),
+		channels:           make(map[string]struct{}, len(alarms)),
+		channelSubscribers: make(map[string][]string, len(alarms)),
+		channelRegistry:    make([]string, 0, len(alarms)),
+	}
+}
+
+func (data *subscriberCacheWarmData) addAlarm(alarmRecord *domain.Alarm) {
+	roomID, channelID, ok := normalizedWarmAlarmIdentity(alarmRecord)
+	if !ok {
+		return
+	}
+
+	data.channelRegistry = append(data.channelRegistry, channelID)
+	data.addChannelSubscribers(channelID, alarmRecord.RegistryKey(), alarmRecord.AlarmTypes)
+
+	data.summary.AlarmCount++
+
+	data.rooms[roomID] = struct{}{}
+	data.channels[channelID] = struct{}{}
+}
+
+func (data *subscriberCacheWarmData) addChannelSubscribers(channelID, registryKey string, alarmTypes domain.AlarmTypes) {
+	if len(alarmTypes) == 0 {
+		alarmTypes = domain.DefaultAlarmTypes
+	}
+
+	for _, alarmType := range alarmTypes {
+		key := alarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
+
+		data.channelSubscribers[key] = append(data.channelSubscribers[key], registryKey)
+	}
+}
+
+func (data *subscriberCacheWarmData) finish() CacheWarmSummary {
+	data.summary.RoomCount = len(data.rooms)
+	data.summary.ChannelCount = len(data.channels)
+
+	return data.summary
+}

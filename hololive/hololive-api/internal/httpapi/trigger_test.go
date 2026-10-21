@@ -31,8 +31,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 const (

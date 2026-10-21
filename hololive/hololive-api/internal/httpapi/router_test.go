@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 func TestNewTriggerRuntimeRouter(t *testing.T) {

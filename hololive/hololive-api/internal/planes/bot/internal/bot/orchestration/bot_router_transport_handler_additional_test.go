@@ -39,20 +39,20 @@ import (
 	appErrors "github.com/kapu/hololive-api/internal/planes/bot/internal/apperrors"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	bottransport "github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type testCommand struct {
 	name    string
-	execute func(context.Context, *domain.CommandContext, map[string]any) error
+	execute func(context.Context, *botcommand.CommandContext, map[string]any) error
 }
 
 func (c *testCommand) Name() string        { return c.name }
 func (c *testCommand) Description() string { return "test" }
-func (c *testCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *testCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if c.execute == nil {
 		return nil
 	}
@@ -205,13 +205,13 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cmdCtx := domain.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
+	cmdCtx := botcommand.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
 
 	t.Run("nil registry", func(t *testing.T) {
 		t.Parallel()
 
 		router := orchcmd.NewCommandRouter(nil, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
-		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
+		err := router.Execute(ctx, cmdCtx, botcommand.CommandHelp, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "command registry is not initialized")
 	})
@@ -222,14 +222,14 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 		registry := command.NewRegistry()
 		registry.Register(&testCommand{
 			name: testHelpCommandName,
-			execute: func(context.Context, *domain.CommandContext, map[string]any) error {
+			execute: func(context.Context, *botcommand.CommandContext, map[string]any) error {
 				return errors.New("handler failed")
 			},
 		})
 
 		router := orchcmd.NewCommandRouter(registry, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
 
-		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
+		err := router.Execute(ctx, cmdCtx, botcommand.CommandHelp, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "execute command")
 	})
@@ -238,7 +238,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 		t.Parallel()
 
 		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
-		key, params := router.NormalizeCommand(domain.CommandAlarmAdd, map[string]any{"member": "miko"})
+		key, params := router.NormalizeCommand(botcommand.CommandAlarmAdd, map[string]any{"member": "miko"})
 		assert.Equal(t, orchcmd.CommandKeyAlarm, key)
 		assert.Equal(t, "add", params["action"])
 		assert.Equal(t, "miko", params["member"])
@@ -250,7 +250,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 	t.Parallel()
 
-	cmdCtx := domain.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
+	cmdCtx := botcommand.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
 
 	t.Run("unknown command sends seeded message", func(t *testing.T) {
 		t.Parallel()
@@ -264,7 +264,7 @@ func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 			return nil
 		}, loadSeededBotMessageStrings(t), nil)
 
-		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
+		err := router.Execute(t.Context(), cmdCtx, botcommand.CommandHelp, nil)
 		require.NoError(t, err)
 		assert.Equal(t, testRoomID, gotRoom)
 		assert.Equal(t, seedUnknownCommandMessage, gotMessage)
@@ -280,7 +280,7 @@ func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 			return nil
 		}, nil, nil)
 
-		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
+		err := router.Execute(t.Context(), cmdCtx, botcommand.CommandHelp, nil)
 		require.Error(t, err)
 		assert.False(t, sent, "empty unknown command message must not be sent")
 	})
@@ -292,7 +292,7 @@ func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 			return errors.New("send failed")
 		}, loadSeededBotMessageStrings(t), nil)
 
-		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
+		err := router.Execute(t.Context(), cmdCtx, botcommand.CommandHelp, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send unknown command message")
 	})
@@ -516,7 +516,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	registry := command.NewRegistry()
 	registry.Register(&testCommand{
 		name: testHelpCommandName,
-		execute: func(context.Context, *domain.CommandContext, map[string]any) error {
+		execute: func(context.Context, *botcommand.CommandContext, map[string]any) error {
 			return errors.New("boom")
 		},
 	})

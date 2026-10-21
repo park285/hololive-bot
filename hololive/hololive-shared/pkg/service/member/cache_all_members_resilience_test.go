@@ -38,7 +38,7 @@ func TestCacheAllMembers_SharedLoadHasOwnedDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	defer cancel()
 
-	if _, err := c.AllMembers(ctx); err != nil {
+	if _, err := c.LoadAllMembers(ctx); err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestCacheAllMembers_InvalidateSeparatesInFlightGeneration(t *testing.T) {
 	firstDone := make(chan error, 1)
 
 	go func() {
-		_, err := c.AllMembers(t.Context())
+		_, err := c.LoadAllMembers(t.Context())
 		firstDone <- err
 	}()
 
@@ -81,7 +81,7 @@ func TestCacheAllMembers_InvalidateSeparatesInFlightGeneration(t *testing.T) {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
 
-	second, err := c.AllMembers(t.Context())
+	second, err := c.LoadAllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("post-invalidate AllMembers() error = %v", err)
 	}
@@ -155,8 +155,8 @@ func TestCacheAllMembers_ColdFailureBackoffReturnsSameError(t *testing.T) {
 		},
 	}
 
-	firstMembers, firstErr := c.AllMembers(t.Context())
-	secondMembers, secondErr := c.AllMembers(t.Context())
+	firstMembers, firstErr := c.LoadAllMembers(t.Context())
+	secondMembers, secondErr := c.LoadAllMembers(t.Context())
 
 	if firstMembers != nil || secondMembers != nil {
 		t.Fatalf("cold members = (%v, %v), want nil while no snapshot is available", firstMembers, secondMembers)
@@ -207,7 +207,7 @@ func TestCacheWarmUp_UsesBoundedCanonicalSnapshotOnce(t *testing.T) {
 		t.Fatalf("WarmUpCache() error = %v", err)
 	}
 
-	if _, err := c.AllMembers(t.Context()); err != nil {
+	if _, err := c.LoadAllMembers(t.Context()); err != nil {
 		t.Fatalf("AllMembers() after warmup error = %v", err)
 	}
 
@@ -267,7 +267,7 @@ func TestCacheAllMembers_StaleFallbackDefersRepeatedReloads(t *testing.T) {
 	c.allMembersSnapshot.Store(newAllMembersState(stale, 0, time.Now().Add(-2*time.Minute)))
 
 	for attempt := range 2 {
-		got, err := c.AllMembers(t.Context())
+		got, err := c.LoadAllMembers(t.Context())
 		if err != nil {
 			t.Fatalf("AllMembers() attempt %d error = %v", attempt+1, err)
 		}
@@ -304,7 +304,7 @@ func TestCacheAllMembers_ReloadsAfterRetryBoundaryAndClearsBackoff(t *testing.T)
 	expired.retryAfter = time.Now().Add(-time.Second)
 	c.allMembersSnapshot.Store(expired)
 
-	got, err := c.AllMembers(t.Context())
+	got, err := c.LoadAllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
@@ -360,7 +360,7 @@ func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		_, err := c.AllMembers(t.Context())
+		_, err := c.LoadAllMembers(t.Context())
 		errs <- err
 	})
 
@@ -368,7 +368,7 @@ func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 
 	for range waiters - 1 {
 		wg.Go(func() {
-			_, err := c.MembersByName(t.Context(), testMemberNameOld)
+			_, err := c.FindMembersByName(t.Context(), testMemberNameOld)
 			errs <- err
 		})
 	}
@@ -393,7 +393,7 @@ func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 
 	healthy.Store(true)
 
-	got, err := c.AllMembers(t.Context())
+	got, err := c.LoadAllMembers(t.Context())
 	if err != nil || len(got) != 1 || got[0].Name != testMemberNameNew {
 		t.Fatalf("AllMembers() after panic = %+v, %v; want recovered reload", got, err)
 	}

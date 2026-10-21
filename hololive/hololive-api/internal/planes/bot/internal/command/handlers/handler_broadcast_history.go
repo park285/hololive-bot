@@ -29,9 +29,9 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
@@ -69,7 +69,7 @@ func (c *BroadcastHistoryCommand) Description() string {
 	return "종료된 방송 이력 조회"
 }
 
-func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)
 	}
@@ -109,7 +109,7 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.Co
 	return nil
 }
 
-func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) (*handlercore.BroadcastHistoryQuery, *formatter.BroadcastHistoryFilter, error) {
+func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) (*handlercore.BroadcastHistoryQuery, *formatter.BroadcastHistoryFilter, error) {
 	query, filter := newBroadcastHistoryQuery(params)
 	if err := c.applyBroadcastHistoryType(ctx, cmdCtx, params, &query, &filter); err != nil {
 		return nil, nil, fmt.Errorf("apply broadcast history type: %w", err)
@@ -143,7 +143,7 @@ func newBroadcastHistoryQuery(params map[string]any) (query handlercore.Broadcas
 	}
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
 	rawType := stringParam(params, "type")
 	if rawType == "" {
 		return nil
@@ -164,7 +164,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context,
 	return nil
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
 	memberName := stringParam(params, paramMember)
 	if memberName == "" {
 		return nil
@@ -213,7 +213,7 @@ func (c *BroadcastThumbnailCommand) Description() string {
 	return "종료된 방송 썸네일 다운로드"
 }
 
-func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)
 	}
@@ -234,7 +234,7 @@ func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *domain.
 	return nil
 }
 
-func (c *BroadcastThumbnailCommand) sendBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, videoID string) error {
+func (c *BroadcastThumbnailCommand) sendBroadcastThumbnail(ctx context.Context, cmdCtx *botcommand.CommandContext, videoID string) error {
 	entry, err := c.lookupBroadcastThumbnailEntry(ctx, cmdCtx, videoID)
 	if errors.Is(err, errBroadcastHistoryHandled) {
 		return nil
@@ -260,7 +260,7 @@ func (c *BroadcastThumbnailCommand) sendBroadcastThumbnail(ctx context.Context, 
 	return nil
 }
 
-func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Context, cmdCtx *domain.CommandContext, videoID string) (*handlercore.BroadcastHistoryEntry, error) {
+func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Context, cmdCtx *botcommand.CommandContext, videoID string) (*handlercore.BroadcastHistoryEntry, error) {
 	entry, err := c.Deps().BroadcastHistory.GetEndedBroadcast(ctx, handlercore.BroadcastThumbnailQuery{VideoID: videoID})
 	if err != nil && !errors.Is(err, handlercore.ErrBroadcastNotFound) {
 		c.Deps().Logger.Error("broadcast thumbnail lookup failed", slog.String("video_id", videoID), slog.Any("error", err))
@@ -283,7 +283,7 @@ func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Co
 	return entry, nil
 }
 
-func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, entry *handlercore.BroadcastHistoryEntry) ([]byte, string, error) {
+func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *botcommand.CommandContext, entry *handlercore.BroadcastHistoryEntry) ([]byte, string, error) {
 	if entry == nil {
 		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, broadcastThumbnailNotFoundMessage); sendErr != nil {
 			return nil, "", fmt.Errorf("send message: %w", sendErr)

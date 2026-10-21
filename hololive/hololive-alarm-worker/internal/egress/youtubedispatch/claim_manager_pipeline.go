@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
@@ -170,7 +169,7 @@ func (d *ClaimManager) processPendingDeliveriesWithLifecycle(ctx context.Context
 			slog.String("invariant_reason", string(prepared.Blocked[i].Reason)))
 	}
 
-	result := dispatchstate.DispatchResult{
+	result := DispatchResult{
 		SuccessDeliveryIDs: make([]int64, 0, len(prepared.ActiveRows)),
 		TouchedOutboxIDs:   append([]int64(nil), prepared.TouchedOutboxIDs...),
 		FailureBuckets:     make(map[string][]int64),
@@ -206,7 +205,7 @@ func (d *ClaimManager) reconcileTouchedOutboxes(ctx context.Context, touchedOutb
 
 func (d *ClaimManager) recordOutboxDispatchResult(
 	claimed int,
-	result *dispatchstate.DispatchResult,
+	result *DispatchResult,
 	touchedOutboxIDs []int64,
 	aggregateFailures int,
 ) {

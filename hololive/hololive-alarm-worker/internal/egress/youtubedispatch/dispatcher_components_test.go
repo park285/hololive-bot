@@ -7,14 +7,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func TestDispatcherWiresClaimManagerAndSendEngine(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := newDispatcherForTest(t, newDeliveryPool(t), cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, newDeliveryPool(t), cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		DeliveryParallelism: 2,

@@ -21,10 +21,10 @@ import (
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
@@ -318,7 +318,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	alarmMode := &alarmModeComponents{}
 	settingsApplier := sharedsettings.NewLocalSettingsApplier(nil)
 
-	settingsService, err := sharedmodules.BuildSettingsService(filepath.Join(t.TempDir(), "settings.json"), nil, logger)
+	settingsService, err := sharedsettings.BuildSettingsService(filepath.Join(t.TempDir(), "settings.json"), nil, logger)
 	if err != nil {
 		t.Fatalf("BuildSettingsService() error = %v", err)
 	}

@@ -26,10 +26,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -49,7 +49,7 @@ func (c *MemberNewsCommand) Description() string {
 	return "구독 멤버 뉴스 조회"
 }
 
-func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base deps: %w", err)
 	}

@@ -22,26 +22,18 @@ package checking
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
-	"sync"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/valkey-io/valkey-go"
-	"golang.org/x/sync/errgroup"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-)
-
-const (
-	DefaultLookupConcurrency = 16
 )
 
 func UniqueStrings(values []string) []string {
@@ -208,16 +200,12 @@ func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (message, p
 	return change.Message, change.PreviousScheduledString()
 }
 
-// ErrBatchedSubscriberRoomsUnavailable: DoMulti 파이프라인을 쓸 수 없어 순차 조회로 되돌려야 함을 알리는 sentinel.
-// 조회 실패가 아니라 경로 전환 신호이므로 호출자는 이 오류를 밖으로 전파하지 않는다.
-var ErrBatchedSubscriberRoomsUnavailable = errors.New("batched subscriber rooms unavailable")
-
 // LoadSubscriberRoomsByChannel은 채널별 LIVE 구독 방을 반환한다. 구독자가 있는 채널만 결과 map에 담는다.
 // Cache set이 비어 있는 채널은 subscribers resolver의 empty marker와 구독 DB로 확정한다.
 func LoadSubscriberRoomsByChannel(
 	ctx context.Context,
 	cacheClient cache.Client,
-	subscribers *sharedalarm.SubscriberResolver,
+	subscribers *alarmstore.SubscriberResolver,
 	channelIDs []string,
 ) (map[string][]string, error) {
 	uniqueChannelIDs := UniqueStrings(channelIDs)
@@ -258,56 +246,17 @@ func loadCachedSubscriberRoomsByChannel(
 	cacheClient cache.Client,
 	uniqueChannelIDs []string,
 ) (map[string][]string, error) {
-	result, err := TryLoadSubscriberRoomsByChannelBatched(ctx, cacheClient, uniqueChannelIDs)
-	if err == nil {
-		return result, nil
-	}
-
-	if !errors.Is(err, ErrBatchedSubscriberRoomsUnavailable) {
-		return nil, fmt.Errorf("load subscriber rooms by channel batched: %w", err)
-	}
-
-	out, sequentialErr := LoadSubscriberRoomsByChannelSequential(ctx, cacheClient, uniqueChannelIDs)
-	if sequentialErr != nil {
-		return nil, fmt.Errorf("load subscriber rooms by channel sequential: %w", sequentialErr)
-	}
-
-	return out, nil
-}
-
-func TryLoadSubscriberRoomsByChannelBatched(
-	ctx context.Context,
-	cacheClient cache.Client,
-	uniqueChannelIDs []string,
-) (result map[string][]string, err error) {
-	defer func() {
-		// DoMulti 파이프라인이 panic 하면 순차 조회로 되돌려야 하므로 sentinel 로 바꿔 전파한다.
-		if recovered := recover(); recovered != nil {
-			result, err = nil, ErrBatchedSubscriberRoomsUnavailable
-		}
-	}()
-
-	client := cacheClient.GetClient()
-	if client == nil {
-		return nil, ErrBatchedSubscriberRoomsUnavailable
-	}
-
 	cmds := make([]valkey.Completed, 0, len(uniqueChannelIDs))
 	for _, channelID := range uniqueChannelIDs {
-		cmds = append(cmds, client.B().Smembers().Key(sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID).Build())
+		cmds = append(cmds, cacheClient.B().Smembers().Key(alarmkeys.ChannelSubscribersKeyPrefix+channelID).Build())
 	}
 
 	results := cacheClient.DoMulti(ctx, cmds...)
 	if len(results) != len(uniqueChannelIDs) {
-		return nil, ErrBatchedSubscriberRoomsUnavailable
+		return nil, fmt.Errorf("load subscriber rooms by channel: unexpected result count %d for %d channels", len(results), len(uniqueChannelIDs))
 	}
 
-	collected, collectErr := CollectBatchedSubscriberRooms(results, uniqueChannelIDs)
-	if collectErr != nil {
-		return nil, fmt.Errorf("collect batched subscriber rooms: %w", collectErr)
-	}
-
-	return collected, nil
+	return CollectBatchedSubscriberRooms(results, uniqueChannelIDs)
 }
 
 func CollectBatchedSubscriberRooms(
@@ -324,47 +273,6 @@ func CollectBatchedSubscriberRooms(
 		if len(rooms) > 0 {
 			result[channelID] = rooms
 		}
-	}
-
-	return result, nil
-}
-
-func LoadSubscriberRoomsByChannelSequential(
-	ctx context.Context,
-	cacheClient cache.Client,
-	uniqueChannelIDs []string,
-) (map[string][]string, error) {
-	result := make(map[string][]string, len(uniqueChannelIDs))
-
-	var mu sync.Mutex
-
-	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(DefaultLookupConcurrency)
-
-	for _, channelID := range uniqueChannelIDs {
-		eg.Go(func() error {
-			return panicguard.RunE(nil, panicguard.BackgroundTask, "subscriber-room-lookup", func() error {
-				rooms, err := cacheClient.SMembers(egCtx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID)
-				if err != nil {
-					return fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
-				}
-
-				if len(rooms) == 0 {
-					return nil
-				}
-
-				mu.Lock()
-
-				result[channelID] = rooms
-				mu.Unlock()
-
-				return nil
-			})
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		return nil, fmt.Errorf("load subscriber rooms by channel: wait workers: %w", err)
 	}
 
 	return result, nil

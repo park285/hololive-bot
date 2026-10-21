@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -45,7 +46,7 @@ type alarmTarget struct {
 	Name      string
 }
 
-type alarmActionHandler func(context.Context, *domain.CommandContext, map[string]any) error
+type alarmActionHandler func(context.Context, *botcommand.CommandContext, map[string]any) error
 
 func NewAlarmCommand(deps *handlercore.Dependencies) *AlarmCommand {
 	return &AlarmCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
@@ -59,7 +60,7 @@ func (c *AlarmCommand) Description() string {
 	return "방송 알람 관리"
 }
 
-func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)
 	}
@@ -88,7 +89,7 @@ func alarmAction(params map[string]any) string {
 	return action
 }
 
-func (c *AlarmCommand) executeAction(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, action string) error {
+func (c *AlarmCommand) executeAction(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, action string) error {
 	handler, ok := c.alarmActionHandlers()[action]
 	if !ok {
 		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatHelp(ctx)); err != nil {
@@ -117,7 +118,7 @@ func (c *AlarmCommand) alarmActionHandlers() map[string]alarmActionHandler {
 	}
 }
 
-func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
 	c.Deps().Logger.Debug("Alarm list requested")
 
 	if err := c.handleList(ctx, cmdCtx); err != nil {
@@ -127,7 +128,7 @@ func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *domain.Comm
 	return nil
 }
 
-func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
 	if err := c.handleClear(ctx, cmdCtx); err != nil {
 		return fmt.Errorf("handle clear: %w", err)
 	}
@@ -135,7 +136,7 @@ func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *domain.Com
 	return nil
 }
 
-func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
 	c.Deps().Logger.Info("Invalid alarm command received",
 		sharedprivacylog.RoomIDAttr(cmdCtx.Room),
 	)
@@ -164,10 +165,10 @@ type alarmMutation struct {
 	needMemberNameMessage string
 	requestedLog          string
 	resolve               func(ctx context.Context, room, memberName string) (*alarmTarget, error)
-	apply                 func(ctx context.Context, cmdCtx *domain.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error
+	apply                 func(ctx context.Context, cmdCtx *botcommand.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error
 }
 
-func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	return c.handleAlarmMutation(ctx, cmdCtx, params, alarmMutation{
 		needMemberNameMessage: messaging.ErrAlarmNeedMemberNameAdd,
 		requestedLog:          "Alarm add requested",
@@ -176,7 +177,7 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 	})
 }
 
-func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	return c.handleAlarmMutation(ctx, cmdCtx, params, alarmMutation{
 		needMemberNameMessage: messaging.ErrAlarmNeedMemberNameRemove,
 		requestedLog:          "Alarm remove requested",
@@ -185,7 +186,7 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 	})
 }
 
-func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, mutation alarmMutation) error {
+func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, mutation alarmMutation) error {
 	memberName, err := c.requiredAlarmMemberName(ctx, cmdCtx.Room, params, mutation.needMemberNameMessage)
 	if err != nil {
 		return fmt.Errorf("require alarm member name: %w", err)
@@ -260,7 +261,7 @@ func (c *AlarmCommand) resolveAlarmAddMember(ctx context.Context, room, memberNa
 	return nil, handlercore.ErrMemberLookupHandled
 }
 
-func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {
+func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *botcommand.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {
 	added, err := c.Deps().Alarm.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     cmdCtx.Room,
 		ChannelID:  channel.ChannelID,
@@ -357,7 +358,7 @@ func (c *AlarmCommand) isGraduatedMember(ctx context.Context, channelID string) 
 	return member.IsGraduated, nil
 }
 
-func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {
+func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *botcommand.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {
 	var (
 		removed bool
 		err     error
@@ -391,7 +392,7 @@ func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *domain.C
 	return nil
 }
 
-func (c *AlarmCommand) handleList(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *AlarmCommand) handleList(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	entries, err := c.Deps().Alarm.ListRoomAlarmsView(ctx, cmdCtx.Room)
 	if err != nil {
 		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrAlarmListFailed); err != nil {
@@ -418,7 +419,7 @@ func (c *AlarmCommand) handleList(ctx context.Context, cmdCtx *domain.CommandCon
 	return nil
 }
 
-func (c *AlarmCommand) handleClear(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *AlarmCommand) handleClear(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	count, err := c.Deps().Alarm.ClearRoomAlarms(ctx, cmdCtx.Room)
 	if err != nil {
 		c.Deps().Logger.Error("Failed to clear alarms", slog.Any("error", err))

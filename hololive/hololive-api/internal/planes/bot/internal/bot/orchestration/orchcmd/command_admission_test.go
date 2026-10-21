@@ -33,8 +33,8 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -86,7 +86,7 @@ type trackedRouterCommand struct {
 
 func (c *trackedRouterCommand) Name() string        { return c.name }
 func (c *trackedRouterCommand) Description() string { return c.name }
-func (c *trackedRouterCommand) Execute(context.Context, *domain.CommandContext, map[string]any) error {
+func (c *trackedRouterCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
 	c.executed++
 	return nil
 }
@@ -101,7 +101,7 @@ func TestCommandRouterAppliesUserAndRoomAdmissionToExpensiveHistory(t *testing.T
 
 	router.admission = &commandAdmissionPolicy{limiter: limiter}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, botcommand.CommandBroadcastHistory, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -145,7 +145,7 @@ func TestCommandRouterRejectsRateLimitedHistoryWithoutExecutingHandler(t *testin
 
 	router.admission = &commandAdmissionPolicy{limiter: limiter}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, botcommand.CommandBroadcastHistory, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -162,7 +162,7 @@ func TestCommandRouterRejectsRateLimitedHistoryWithoutExecutingHandler(t *testin
 func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	ctx := t.Context()
-	attacker := &domain.CommandContext{Room: testRoomID, UserID: "attacker"}
+	attacker := &botcommand.CommandContext{Room: testRoomID, UserID: "attacker"}
 
 	for index := range expensiveHistoryUserLimit {
 		attacker.MessageID = messageIDForIndex(index)
@@ -187,7 +187,7 @@ func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 	assertSortedSetSize(t, mini, roomKey, expensiveHistoryUserLimit)
 	assertSortedSetSize(t, mini, userKey, expensiveHistoryUserLimit)
 
-	victim := &domain.CommandContext{Room: attacker.Room, UserID: "victim", MessageID: "message:victim"}
+	victim := &botcommand.CommandContext{Room: attacker.Room, UserID: "victim", MessageID: "message:victim"}
 	if err := policy.Admit(ctx, victim, "broadcast_thumbnail"); err != nil {
 		t.Fatalf("victim admission error = %v, want allowed", err)
 	}
@@ -199,13 +199,13 @@ func TestCommandAdmissionRoomDenialDoesNotConsumeUserQuota(t *testing.T) {
 	room := testRoomID
 
 	for i := range expensiveHistoryRoomLimit {
-		cmdCtx := &domain.CommandContext{Room: room, UserID: "user-" + strconv.Itoa(i), MessageID: "message:m-" + strconv.Itoa(i)}
+		cmdCtx := &botcommand.CommandContext{Room: room, UserID: "user-" + strconv.Itoa(i), MessageID: "message:m-" + strconv.Itoa(i)}
 		if err := policy.Admit(ctx, cmdCtx, "broadcast_history"); err != nil {
 			t.Fatalf("room admission %d error = %v", i, err)
 		}
 	}
 
-	denied := &domain.CommandContext{Room: room, UserID: "room-denied-user", MessageID: "message:room-denied"}
+	denied := &botcommand.CommandContext{Room: room, UserID: "room-denied-user", MessageID: "message:room-denied"}
 	err := policy.Admit(ctx, denied, "broadcast_history")
 
 	if !errors.Is(err, errCommandRateLimited) {
@@ -222,7 +222,7 @@ func TestCommandAdmissionUserDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 
 	limiter.now = func() time.Time { return now }
 
-	cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
 	roomKey := limiter.cacheKey(commandAdmissionBucket("history:room", cmdCtx.Room))
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID))
 
@@ -247,7 +247,7 @@ func TestCommandAdmissionRoomDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 
 	limiter.now = func() time.Time { return now }
 
-	cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
 	roomKey := limiter.cacheKey(commandAdmissionBucket("history:room", cmdCtx.Room))
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID))
 
@@ -272,7 +272,7 @@ func TestCommandAdmissionRejectsUnstableUserIdentityBeforeLimiter(t *testing.T) 
 			limiter := &stubCommandRateLimiter{}
 			policy := &commandAdmissionPolicy{limiter: limiter}
 
-			err := policy.Admit(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: userID, MessageID: "message:" + userID}, "broadcast_history")
+			err := policy.Admit(t.Context(), &botcommand.CommandContext{Room: testRoomID, UserID: userID, MessageID: "message:" + userID}, "broadcast_history")
 			if !errors.Is(err, errCommandAdmissionUnavailable) {
 				t.Fatalf("Admit() error = %v, want admission unavailable", err)
 			}
@@ -386,7 +386,7 @@ func TestCommandRouterFailsClosedWhenHistoryAdmissionIsUnavailable(t *testing.T)
 
 	router.admission = &commandAdmissionPolicy{limiter: &stubCommandRateLimiter{err: errors.New("cache down")}}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, botcommand.CommandBroadcastHistory, nil)
 	if !errors.Is(err, errCommandAdmissionUnavailable) {
 		t.Fatalf("Execute() error = %v, want admission unavailable", err)
 	}
@@ -403,7 +403,7 @@ func TestCommandRouterDoesNotRateLimitUnrelatedCommands(t *testing.T) {
 
 	router := NewCommandRouter(registry, nil, func(context.Context, string, string) error { return nil }, nil, nil)
 
-	err := router.Execute(t.Context(), &domain.CommandContext{}, domain.CommandHelp, nil)
+	err := router.Execute(t.Context(), &botcommand.CommandContext{}, botcommand.CommandHelp, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

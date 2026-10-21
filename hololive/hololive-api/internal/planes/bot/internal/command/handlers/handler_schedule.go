@@ -29,8 +29,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type ScheduleCommand struct {
@@ -49,7 +49,7 @@ func (c *ScheduleCommand) Description() string {
 	return "특정 멤버 일정 조회"
 }
 
-func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)
 	}
@@ -172,7 +172,7 @@ func (c *ScheduleCommand) ensureDeps() error {
 	return nil
 }
 
-func shouldSuppressSchedulePrompt(cmdCtx *domain.CommandContext, rawToken string) bool {
+func shouldSuppressSchedulePrompt(cmdCtx *botcommand.CommandContext, rawToken string) bool {
 	if normalized := stringutil.Normalize(rawToken); normalized == "멤버" || normalized == "member" {
 		return true
 	}

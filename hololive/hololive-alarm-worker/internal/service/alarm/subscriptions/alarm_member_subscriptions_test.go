@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 const memberSubscriptionChannel = "UC3OH5FKQ3qtl4uRme_vZTgA"
@@ -50,7 +50,7 @@ func requireMemberSubscriptionCache(t *testing.T, as *AlarmService, wantTypes do
 		}
 	}
 
-	registered, err := as.cache.SIsMember(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey, memberSubscriptionChannel)
+	registered, err := as.cache.SIsMember(t.Context(), alarmkeys.AlarmChannelRegistryKey, memberSubscriptionChannel)
 	require.NoError(t, err)
 	require.Equal(t, len(wantTypes) > 0, registered)
 }

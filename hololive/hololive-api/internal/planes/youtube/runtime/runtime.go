@@ -118,7 +118,7 @@ func Build(ctx context.Context, plane *apiconfig.YouTubePlaneConfig, postgresCon
 	postgres.PoolMinConns = config.PostgresPoolMinConns
 	postgres.PoolMaxConns = config.PostgresPoolMaxConns
 
-	resources, cleanup, err := databaseproviders.ProvideDatabaseResources(ctx, postgres, "youtube_plane", logger)
+	resources, cleanup, err := databaseproviders.ProvideDatabaseResources(ctx, postgres, databaseproviders.RuntimePool{Name: "youtube_plane", ReservedConns: 1}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: dedicated pool: %w", err)
 	}

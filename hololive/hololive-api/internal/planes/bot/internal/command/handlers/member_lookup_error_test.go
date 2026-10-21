@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -65,7 +66,7 @@ func TestAlarmMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing
 				Logger:    slog.New(slog.DiscardHandler),
 			}
 
-			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 				testParamAction: action,
 				paramMember:     "미코",
 			})

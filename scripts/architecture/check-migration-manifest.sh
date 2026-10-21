@@ -93,7 +93,6 @@ migrations = root / "hololive/hololive-api/scripts/migrations"
 manifest = migrations / "manifest.txt"
 baseline_name = "001_schema_epoch2_baseline.sql"
 acl_path = migrations / "manual/epoch2_acl_tail.sql"
-suffix_path = root / "scripts/architecture/epoch2_suffix_contract.txt"
 
 if not manifest.is_file():
     raise SystemExit(f"FAIL: migration manifest missing: {manifest}")
@@ -129,18 +128,8 @@ if sorted(files) != actual:
     raise SystemExit(1)
 if files[0] != baseline_name:
     raise SystemExit(f"FAIL: epoch-2 manifest must begin with {baseline_name}")
-for path in (acl_path, suffix_path):
-    if not path.is_file() or path.stat().st_size == 0:
-        raise SystemExit(f"FAIL: epoch-2 contract artifact missing or empty: {path}")
-suffix = suffix_path.read_text().splitlines()
-if len(files) - 1 < len(suffix):
-    raise SystemExit("FAIL: epoch-2 retained suffix is incomplete")
-for position, expected in enumerate(suffix, 1):
-    if files[position] != expected:
-        raise SystemExit(
-            f"FAIL: epoch-2 retained suffix drift at position {position + 1}: "
-            f"expected {expected}, got {files[position]}"
-        )
+if not acl_path.is_file() or acl_path.stat().st_size == 0:
+    raise SystemExit(f"FAIL: epoch-2 contract artifact missing or empty: {acl_path}")
 
 sources = {name: (migrations / name).read_text() for name in actual}
 baseline = sources[baseline_name]

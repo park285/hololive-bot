@@ -27,10 +27,11 @@ import (
 	"slices"
 	"testing"
 
+	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -87,7 +88,7 @@ func (s *stubCommandInitMemberNewsService) IsRoomSubscribed(context.Context, str
 
 type stubCommandInitCommand struct {
 	name     string
-	exec     func(context.Context, *domain.CommandContext, map[string]any) error
+	exec     func(context.Context, *botcommand.CommandContext, map[string]any) error
 	executed int
 }
 
@@ -99,7 +100,7 @@ func (s *stubCommandInitCommand) Description() string {
 	return "stub"
 }
 
-func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	s.executed++
 
 	if s.exec != nil {
@@ -212,7 +213,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 
 func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testing.T) {
 	registry := handlers.NewRegistry()
-	targetName := domain.CommandType("external_target")
+	targetName := botcommand.CommandType("external_target")
 	target := &stubCommandInitCommand{name: string(targetName)}
 	registry.Register(target)
 
@@ -223,7 +224,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 
 		return &stubCommandInitCommand{
 			name: testExternalCommandName,
-			exec: func(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+			exec: func(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
 				if _, err := deps.Dispatcher.Publish(ctx, cmdCtx, handlercore.Event{Type: targetName}); err != nil {
 					return fmt.Errorf("publish dispatcher event: %w", err)
 				}
@@ -266,7 +267,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 		t.Fatal("external builder dispatcher was not initialized")
 	}
 
-	if err := external.Execute(t.Context(), &domain.CommandContext{}, nil); err != nil {
+	if err := external.Execute(t.Context(), &botcommand.CommandContext{}, nil); err != nil {
 		t.Fatalf("external command execute failed: %v", err)
 	}
 

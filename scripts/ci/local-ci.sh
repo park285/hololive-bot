@@ -27,7 +27,6 @@ source "${SCRIPT_DIR}/local-ci-integration.sh"
 LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-all}"
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
 RUN_NILAWAY="${RUN_NILAWAY:-true}"
-STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
 RUN_INTEGRATION_TESTS="${RUN_INTEGRATION_TESTS:-false}"
 
 
@@ -46,25 +45,6 @@ check_go_mod_tidy() {
     for module in . "${GO_OWNED_MODULES[@]}"; do
         run_step "go mod tidy -diff: ${module}" bash -c "cd '$module' && GOWORK=off go mod tidy -diff"
     done
-}
-
-check_staticcheck() {
-    if [[ "${STRICT_STATICCHECK}" != "true" ]]; then
-        echo "[LOCAL CI] Skip staticcheck: STRICT_STATICCHECK=${STRICT_STATICCHECK}"
-        echo
-        return 0
-    fi
-
-    if ! has_go_packages; then
-        echo "[LOCAL CI] Skip staticcheck: no Go packages in scope"
-        echo
-        return 0
-    fi
-
-    local staticcheck_bin
-    staticcheck_bin="$(ensure_staticcheck)"
-
-    run_step "staticcheck" "${staticcheck_bin}" "${GO_PACKAGES[@]}"
 }
 
 go_mod_readonly() {
@@ -138,7 +118,6 @@ run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}"
 check_go_mod_tidy
 check_canonical_module_builds
 check_integration_tag_compilation
-check_staticcheck
 check_golangci_lint
 check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build

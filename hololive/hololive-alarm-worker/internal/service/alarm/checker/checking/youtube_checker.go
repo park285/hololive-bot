@@ -31,13 +31,13 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
@@ -62,9 +62,9 @@ type YouTubeChecker struct {
 	dedupService        *dedup.Service
 	persistedLiveSource YouTubeLiveSessionSource
 	// subscribers는 구독 cache와 구독 DB에 묶인 checker 수명 resolver다. 같은 채널·종류의 동시 DB 조회를 합친다.
-	subscribers *sharedalarm.SubscriberResolver
+	subscribers *alarmstore.SubscriberResolver
 	// pendingSubscribers는 cache를 거치지 않고 구독 DB 사실만 읽는 resolver로, 예약 후보 취소 판단에 쓴다.
-	pendingSubscribers  *sharedalarm.SubscriberResolver
+	pendingSubscribers  *alarmstore.SubscriberResolver
 	lookupSubscribers   func(context.Context, string, string, domain.AlarmType) ([]string, error)
 	upcomingCandidates  dispatchoutbox.UpcomingCandidateStore
 	unstagedMu          sync.Mutex
@@ -110,7 +110,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 
 	initCheckerMetrics()
 
-	subscribers := sharedalarm.NewSubscriberResolver(cacheClient, subscriptionDB)
+	subscribers := alarmstore.NewSubscriberResolver(cacheClient, subscriptionDB)
 	checker := &YouTubeChecker{
 		cacheClient:         cacheClient,
 		holodexService:      holodexService,
@@ -119,7 +119,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		dedupService:        dedupService,
 		persistedLiveSource: persistedLiveSource,
 		subscribers:         subscribers,
-		pendingSubscribers:  sharedalarm.NewSubscriberResolver(nil, subscriptionDB),
+		pendingSubscribers:  alarmstore.NewSubscriberResolver(nil, subscriptionDB),
 		lookupSubscribers:   subscribers.ResolveEventSubscribers,
 		targetPolicy:        targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,

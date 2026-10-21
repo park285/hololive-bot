@@ -30,8 +30,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // irisMessageTypeText: Iris 프로토콜에서 일반 텍스트 메시지를 나타내는 타입 값.
@@ -204,7 +204,7 @@ func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Mess
 		return nil
 	}
 
-	if parsed.Type == domain.CommandUnknown {
+	if parsed.Type == botcommand.CommandUnknown {
 		summaryAttrs := messageSummaryAttrs(message.Msg)
 		attrs := make([]slog.Attr, 0, 1+len(summaryAttrs))
 

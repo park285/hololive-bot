@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/alarmtestkit"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
@@ -64,8 +63,7 @@ func TestSettingsAPIHandlerAppliedThenResponseLostPreservesSavedSettings(t *test
 func newSettingsResponseLossWorker(t *testing.T) (*httptest.Server, func() []int, *atomic.Int32) {
 	t.Helper()
 
-	worker, targetMinutes, err := alarmtestkit.NewWorker([]int{5, 3, 1})
-	require.NoError(t, err)
+	worker, targetMinutes := newAlarmSettingsWorker(t, []int{5, 3, 1})
 
 	var puts atomic.Int32
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )
 
 // Alarm 데이터 원천은 alarm-worker HTTP provider 하나다(hololive-api bot·admin plane 공통).
@@ -22,7 +22,7 @@ func buildAlarmModeComponents(
 		return nil, errors.New("alarm provider URL (ALARM_INTERNAL_URL) is required")
 	}
 
-	alarmClient, err := sharedalarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger, appConfig.InternalH3)
+	alarmClient, err := alarmhttp.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger, appConfig.InternalH3)
 	if err != nil {
 		return nil, fmt.Errorf("configure alarm worker client: %w", err)
 	}

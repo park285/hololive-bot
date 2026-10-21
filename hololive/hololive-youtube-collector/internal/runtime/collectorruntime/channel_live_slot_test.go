@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 
-	consumekit "github.com/kapu/hololive-api/testkit/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -23,10 +22,10 @@ import (
 const channelLiveSlotRounds = 3
 
 // 방송 탭 snapshot이 같은 슬롯에서 계속 실패·DEFERRED여도 채널 확인 job은 cadence마다 자기 슬롯을 완료하고
-// 새 scheduled_for·observation key로 발행되어 canonical 채널 확인을 신선하게 갱신한다.
+// 새 scheduled_for·observation key로 발행한다. 발행된 확인의 canonical 반영은 API consumer 테스트가 검증한다.
 func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 	ctx := t.Context()
-	pool, executor, consumer, client := newChannelLiveSlotFixture(t)
+	pool, executor, client := newChannelLiveSlotFixture(t)
 	snapshotSpec := channelLiveSlotSpec("youtubejs_channel_live")
 	checkSpec := channelLiveSlotSpec("youtubejs_channel_live_check")
 
@@ -41,17 +40,9 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 		waitLeaseDue(t, pool, checkSpec.JobKey)
 		runAdmittedSpec(ctx, t, executor, &checkSpec)
 
-		if err := consumer.Consume(ctx, consumekit.ClaimOptions{
-			ConsumerName: "youtube-live-processor", LeaseOwner: "api-a",
-			Kinds: []contract.ObservationKind{contract.KindChannelLiveCheck}, Limit: 10, LeaseDuration: 30 * time.Second,
-		}); err != nil {
-			t.Fatalf("round %d consume: %v", round, err)
-		}
-
 		snapshot := loadChannelLiveSlot(t, pool, snapshotSpec.JobKey)
 		check := loadChannelLiveSlot(t, pool, checkSpec.JobKey)
 		published := loadLatestChannelLiveCheckObservation(t, pool)
-		canonical := loadCanonicalChannelLiveCheck(t, pool)
 
 		t.Logf("round %d snapshot lease: state=%s scheduled_for=%s fence=%d completed=%s failure=%s",
 			round, snapshot.state, snapshot.scheduledFor.Format(time.RFC3339Nano), snapshot.fenceEpoch, optionalTime(snapshot.lastCompletedAt), snapshot.failureCode)
@@ -59,15 +50,13 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 			round, check.state, check.scheduledFor.Format(time.RFC3339Nano), check.fenceEpoch, optionalTime(check.lastCompletedAt))
 		t.Logf("round %d observation: count=%d id=%d key=%s scheduled_for=%s",
 			round, published.count, published.id, published.key, published.scheduledFor.Format(time.RFC3339Nano))
-		t.Logf("round %d canonical: outcome=%s observation_id=%d effective_at=%s received_age=%s",
-			round, canonical.outcome, canonical.observationID, canonical.effectiveAt.Format(time.RFC3339Nano), canonical.receivedAge)
 
 		if round == 1 {
 			snapshotSlot = snapshot.scheduledFor
 		}
 
 		assertIndependentLeaseStates(t, round, &snapshot, &check, snapshotSlot, previousCheckSlot)
-		assertCanonicalCheck(t, round, check.scheduledFor, &published, &canonical, keys)
+		assertPublishedCheck(t, round, check.scheduledFor, &published, keys)
 
 		previousCheckSlot = check.scheduledFor
 	}
@@ -85,7 +74,7 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 	}
 }
 
-func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor, *consumekit.Consumer, *splitChannelLiveClient) {
+func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor, *splitChannelLiveClient) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
@@ -118,9 +107,8 @@ func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor
 		collector: fixtureCollectorConfig(t),
 		gates:     defaultProviderGates(t),
 	}
-	consumer := consumekit.NewConsumer(pool, 0, 0)
 
-	return pool, executor, consumer, client
+	return pool, executor, client
 }
 
 func assertIndependentLeaseStates(t *testing.T, round int, snapshot, check *channelLiveSlot, snapshotSlot, previousCheckSlot time.Time) {
@@ -139,7 +127,7 @@ func assertIndependentLeaseStates(t *testing.T, round int, snapshot, check *chan
 	}
 }
 
-func assertCanonicalCheck(t *testing.T, round int, slot time.Time, published *channelLiveCheckObservation, canonical *canonicalChannelLiveCheck, keys map[string]struct{}) {
+func assertPublishedCheck(t *testing.T, round int, slot time.Time, published *channelLiveCheckObservation, keys map[string]struct{}) {
 	t.Helper()
 
 	if _, seen := keys[published.key]; seen || published.count != int64(round) || !published.scheduledFor.Equal(slot) {
@@ -147,13 +135,6 @@ func assertCanonicalCheck(t *testing.T, round int, slot time.Time, published *ch
 	}
 
 	keys[published.key] = struct{}{}
-
-	// canonical은 이번 슬롯의 음성 확인이며 DB 기준 신선하다.
-	if canonical.outcome != string(contract.ChannelLiveCheckChannelPage) || canonical.observationID != published.id ||
-		!canonical.scheduledFor.Equal(slot) || !canonical.effectiveAt.Equal(slot) ||
-		canonical.receivedAge < 0 || canonical.receivedAge > 5*time.Second {
-		t.Fatalf("round %d canonical channel live check = %+v, want fresh slot %s observation %d", round, canonical, slot, published.id)
-	}
 }
 
 func channelLiveSlotSpec(jobKind string) joblease.JobSpec {
@@ -251,35 +232,6 @@ func loadLatestChannelLiveCheckObservation(t *testing.T, pool *pgxpool.Pool) cha
 	}
 
 	return observation
-}
-
-type canonicalChannelLiveCheck struct {
-	outcome       string
-	observationID int64
-	scheduledFor  time.Time
-	effectiveAt   time.Time
-	receivedAge   time.Duration
-}
-
-func loadCanonicalChannelLiveCheck(t *testing.T, pool *pgxpool.Pool) canonicalChannelLiveCheck {
-	t.Helper()
-
-	var (
-		row         canonicalChannelLiveCheck
-		receivedAge float64
-	)
-
-	if err := pool.QueryRow(t.Context(), `
-		SELECT outcome, observation_id, scheduled_for, effective_at,
-		       EXTRACT(EPOCH FROM statement_timestamp() - received_at)::double precision
-		FROM youtube_channel_live_checks WHERE channel_id = $1
-	`, testSubjectKey).Scan(&row.outcome, &row.observationID, &row.scheduledFor, &row.effectiveAt, &receivedAge); err != nil {
-		t.Fatalf("load canonical channel live check: %v", err)
-	}
-
-	row.receivedAge = time.Duration(receivedAge * float64(time.Second))
-
-	return row
 }
 
 // splitChannelLiveClient는 방송 탭 조회를 항상 실패시키고 채널 /live 확인은 요청 채널의 채널 페이지로 응답한다.

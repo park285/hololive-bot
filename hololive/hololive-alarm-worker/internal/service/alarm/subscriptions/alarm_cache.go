@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+// cacheCleanupTimeout은 DB 반영 뒤 요청 취소와 분리해 cache를 맞추는 작업의 상한이다.
+const cacheCleanupTimeout = 5 * time.Second
 
 func (as *AlarmService) CacheMemberName(ctx context.Context, channelID, memberName string) error {
 	if err := as.cacheState.CacheMemberName(ctx, channelID, memberName); err != nil {

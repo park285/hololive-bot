@@ -66,10 +66,8 @@ func TestBuildAlarmHolodexServiceUsesRuntimeHolodexConfig(t *testing.T) {
 	appConfig.Holodex.DistributedRateLimit.Enabled = false
 
 	holodexService, err := buildAlarmHolodexService(
-		t.Context(),
 		appConfig,
 		&sharedmodules.InfraModule{Cache: cachemocks.NewLenientClient()},
-		nil,
 		slog.New(slog.DiscardHandler),
 	)
 	require.NoError(t, err)

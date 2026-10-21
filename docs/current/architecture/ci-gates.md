@@ -9,12 +9,13 @@ stack AGENTS.md의 기준에 따라 checker 자체 테스트, 문서 동기화�
 ## 실행 순서
 
 `scripts/architecture/ci-boundary-gate.sh`는 shared-go 경계·패키지 allowlist, 추적된 로컬 산출물,
-alarm 계약값·route 하드코딩, migration manifest, SQL 소유권, runtime import 경계,
+내부 route 하드코딩, migration manifest, SQL 소유권, runtime import 경계,
 notification egress 소유권, topology 설정 일치를 검사한 뒤 배포·Compose·로그·failover
 스크립트의 실제 동작 테스트를 실행합니다.
 
 Go 파일·함수 크기는 golangci-lint의 `revive` `file-length-limit`(비테스트 파일 800줄)과
 `funlen`(함수 120줄)이 검사합니다. 복잡도는 설정된 린터가 맡으며 별도 구조 예산 검사는 없습니다.
+staticcheck도 golangci-lint에 포함된 판본으로 한 번만 실행하며 별도 staticcheck 실행은 두지 않습니다.
 
 로컬 Go 검증과 PR matrix는 race 테스트를 실행합니다. `scripts/ci/go-test-nonrace.sh`가
 일반·race 빌드의 테스트 파일을 비교해 race 빌드에서 빠지는 테스트 함수만 추가 실행합니다.

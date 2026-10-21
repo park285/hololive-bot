@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
+	"github.com/kapu/hololive-api/internal/contracts/subscription"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 

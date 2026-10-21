@@ -32,7 +32,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -83,6 +83,9 @@ end
 return {1, 0}
 `
 
+// commandAdmissionLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
+var commandAdmissionLua = valkey.NewLuaScript(commandAdmissionScript)
+
 type commandAdmissionLimiter interface {
 	Admit(ctx context.Context, member string, checks []commandAdmissionCheck) (commandAdmissionDecision, error)
 }
@@ -112,7 +115,7 @@ func newCommandAdmissionPolicy(cacheClient cache.LowLevelCache) *commandAdmissio
 	return &commandAdmissionPolicy{limiter: limiter, initErr: err}
 }
 
-func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *domain.CommandContext, commandKey string) error {
+func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *botcommand.CommandContext, commandKey string) error {
 	if !isExpensiveHistoryCommand(commandKey) {
 		return nil
 	}
@@ -143,7 +146,7 @@ func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *domain.Comma
 	return nil
 }
 
-func (p *commandAdmissionPolicy) validateExpensiveHistoryAdmission(cmdCtx *domain.CommandContext) error {
+func (p *commandAdmissionPolicy) validateExpensiveHistoryAdmission(cmdCtx *botcommand.CommandContext) error {
 	if p == nil || p.initErr != nil || p.limiter == nil {
 		return fmt.Errorf("%w: limiter is not configured", errCommandAdmissionUnavailable)
 	}
@@ -178,30 +181,21 @@ func (l *atomicCommandAdmissionLimiter) Admit(ctx context.Context, member string
 	}
 
 	now := l.nowFunc()()
-	cmd := l.cacheClient.B().Eval().
-		Script(commandAdmissionScript).
-		Numkeys(2).
-		Key(l.cacheKey(checks[0].bucket), l.cacheKey(checks[1].bucket)).
-		Arg(
-			strconv.FormatInt(now.UnixMilli(), 10),
-			strconv.FormatInt(expensiveHistoryWindow.Milliseconds(), 10),
-			strconv.Itoa(checks[0].limit),
-			strconv.Itoa(checks[1].limit),
-			member,
-			strconv.FormatInt(commandAdmissionTTLSeconds(), 10),
-		).
-		Build()
-	results := l.cacheClient.DoMulti(ctx, cmd)
+	keys := []string{l.cacheKey(checks[0].bucket), l.cacheKey(checks[1].bucket)}
+	result := commandAdmissionLua.Exec(ctx, l.cacheClient.GetClient(), keys, []string{
+		strconv.FormatInt(now.UnixMilli(), 10),
+		strconv.FormatInt(expensiveHistoryWindow.Milliseconds(), 10),
+		strconv.Itoa(checks[0].limit),
+		strconv.Itoa(checks[1].limit),
+		member,
+		strconv.FormatInt(commandAdmissionTTLSeconds(), 10),
+	})
 
-	if len(results) != 1 {
-		return commandAdmissionDecision{}, fmt.Errorf("evaluate admission script: unexpected result count: %d", len(results))
-	}
-
-	if err := results[0].Error(); err != nil {
+	if err := result.Error(); err != nil {
 		return commandAdmissionDecision{}, fmt.Errorf("evaluate admission script: %w", err)
 	}
 
-	out, err := parseCommandAdmissionResult(results[0])
+	out, err := parseCommandAdmissionResult(result)
 	if err != nil {
 		return out, fmt.Errorf("parse command admission result: %w", err)
 	}

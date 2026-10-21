@@ -20,7 +20,7 @@ func TestNewHolodexServiceRejectsInvalidConcurrency(t *testing.T) {
 
 			cfg.Concurrency.MaxConcurrentRequests = concurrency
 
-			service, err := NewHolodexServiceWithConfig(&cfg, "https://holodex.example", "test-key", nil, nil, slog.Default())
+			service, err := NewHolodexService(&cfg, "https://holodex.example", "test-key", nil, nil, slog.Default())
 
 			if service != nil {
 				service.Stop()
@@ -42,7 +42,7 @@ func TestNewHolodexServiceAcceptsValidRequestConfig(t *testing.T) {
 	cfg.DistributedRateLimit.Enabled = false
 	cfg.MaxRetryAttempts = 0
 
-	service, err := NewHolodexServiceWithConfig(&cfg, "https://holodex.example", "test-key", nil, nil, slog.Default())
+	service, err := NewHolodexService(&cfg, "https://holodex.example", "test-key", nil, nil, slog.Default())
 	if err != nil {
 		t.Fatalf("constructor error = %v", err)
 	}

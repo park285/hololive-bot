@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v3/iris"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -56,7 +55,7 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				}
 			}()
 
-			dispatcher := newDispatcherForTest(t, nil, cache, sentinelFailureSender{err: tt.err}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
+			dispatcher := newDispatcherForTest(t, nil, cache, sentinelFailureSender{err: tt.err}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &Config{
 				DeliveryParallelism: 1,
 			})
 			rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
@@ -137,7 +136,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	}()
 
 	outbox, delivery := seedAuthSentinelFailureRows(t, db)
-	dispatcher := newDispatcherForTest(t, db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		MaxRetries:          3,

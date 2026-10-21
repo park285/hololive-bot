@@ -29,6 +29,5 @@ import (
 type LowLevelCache interface {
 	GetClient() valkey.Client
 	DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult
-	Builder() valkey.Builder
 	B() valkey.Builder
 }

@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -239,7 +238,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	config := dispatchstate.Config{
+	config := youtubedispatch.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -421,7 +420,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	config := dispatchstate.Config{
+	config := youtubedispatch.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -925,8 +924,8 @@ func newIntegrationTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-func newIntegrationDispatchConfig(retryBackoff time.Duration) dispatchstate.Config {
-	return dispatchstate.Config{
+func newIntegrationDispatchConfig(retryBackoff time.Duration) youtubedispatch.Config {
+	return youtubedispatch.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -935,7 +934,7 @@ func newIntegrationDispatchConfig(retryBackoff time.Duration) dispatchstate.Conf
 	}
 }
 
-func newDispatcherIntegrationEnv(t *testing.T, config dispatchstate.Config) dispatcherIntegrationEnv {
+func newDispatcherIntegrationEnv(t *testing.T, config youtubedispatch.Config) dispatcherIntegrationEnv {
 	t.Helper()
 	requireIntegrationEnv(t)
 

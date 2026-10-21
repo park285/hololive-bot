@@ -8,7 +8,6 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
-	"github.com/kapu/hololive-alarm-worker/internal/cleanupctx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
@@ -53,7 +52,7 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 	}
 
 	if persistErr := as.persistAddAlarmMutation(ctx, &mutation); persistErr != nil {
-		cleanupCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheCleanupTimeout)
 		defer cancel()
 
 		// commit 결과가 불명확해도 DB를 다시 쓰지 않고 registry만 실제 구독에 맞춘다.
@@ -62,7 +61,7 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		return false, fmt.Errorf("persist add alarm mutation: %w", opErr)
 	}
 
-	cacheCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+	cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheCleanupTimeout)
 	defer cancel()
 
 	if err := as.cacheAddAlarmMutation(cacheCtx, &mutation); err != nil {

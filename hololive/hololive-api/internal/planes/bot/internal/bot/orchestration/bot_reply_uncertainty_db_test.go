@@ -12,9 +12,9 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type lostReplyReceiptWriter struct {
@@ -52,7 +52,7 @@ func TestBotCommittedReplyWithLostReceiptDoesNotStageErrorResponse(t *testing.T)
 	bot.SetReplyOutboxWriter(writer)
 	registry.Register(&testCommand{
 		name: testHelpCommandName,
-		execute: func(ctx context.Context, commandContext *domain.CommandContext, _ map[string]any) error {
+		execute: func(ctx context.Context, commandContext *botcommand.CommandContext, _ map[string]any) error {
 			return bot.sendMessage(ctx, commandContext.Room, "answer")
 		},
 	})

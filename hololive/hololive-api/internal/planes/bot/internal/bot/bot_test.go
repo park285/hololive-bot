@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type stubBotCommand struct {
@@ -20,7 +20,7 @@ type stubBotCommand struct {
 func (c *stubBotCommand) Name() string        { return c.name }
 func (c *stubBotCommand) Description() string { return c.name }
 
-func (c *stubBotCommand) Execute(context.Context, *domain.CommandContext, map[string]any) error {
+func (c *stubBotCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
 	c.calls++
 	return nil
 }
@@ -62,7 +62,7 @@ func TestCloneCommandBuildersProducesIndependentSlice(t *testing.T) {
 func TestCommandRouterExecuteWithoutRegistryFails(t *testing.T) {
 	router := orchcmd.NewCommandRouter(nil, discardLogger(), nil, nil, nil)
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil)
+	err := router.Execute(t.Context(), &botcommand.CommandContext{Room: "room-1"}, botcommand.CommandHelp, nil)
 	if err == nil {
 		t.Fatal("expected error for missing registry, got nil")
 	}
@@ -76,7 +76,7 @@ func TestCommandRouterExecutesRegisteredCommand(t *testing.T) {
 	registry := handlers.NewRegistry()
 	router := orchcmd.NewCommandRouter(registry, discardLogger(), nil, nil, nil)
 
-	key, _ := router.NormalizeCommand(domain.CommandHelp, nil)
+	key, _ := router.NormalizeCommand(botcommand.CommandHelp, nil)
 	if key == "" {
 		t.Fatal("NormalizeCommand returned empty key for CommandHelp")
 	}
@@ -84,7 +84,7 @@ func TestCommandRouterExecutesRegisteredCommand(t *testing.T) {
 	stub := &stubBotCommand{name: key}
 	registry.Register(stub)
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1"}, domain.CommandHelp, nil)
+	err := router.Execute(t.Context(), &botcommand.CommandContext{Room: "room-1", UserID: "user-1"}, botcommand.CommandHelp, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

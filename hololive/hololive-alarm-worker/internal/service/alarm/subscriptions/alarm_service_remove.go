@@ -9,7 +9,6 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
-	"github.com/kapu/hololive-alarm-worker/internal/cleanupctx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
@@ -66,7 +65,7 @@ func (as *AlarmService) removeAlarm(ctx context.Context, roomID, channelID, host
 		return false, fmt.Errorf("persist remove alarm mutation: %w", persistErr)
 	}
 
-	cacheCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+	cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheCleanupTimeout)
 	defer cancel()
 
 	if err := as.removeAlarmCacheMutation(cacheCtx, channelID); err != nil {

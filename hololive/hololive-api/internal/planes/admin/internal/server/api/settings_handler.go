@@ -11,11 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 
+	contractssettings "github.com/kapu/hololive-api/internal/contracts/settings"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
-	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"

@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -60,7 +59,7 @@ func runDirectGroupedShortsFinalPayload(t *testing.T, count int, renderer *templ
 		Renderer: renderer,
 		Cache:    cachemocks.NewLenientClient(),
 		Sender:   egress.NewIrisMessageSender(client),
-	}, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	}, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

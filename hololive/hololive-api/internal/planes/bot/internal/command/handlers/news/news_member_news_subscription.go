@@ -26,8 +26,8 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -47,7 +47,7 @@ func (c *MemberNewsSubscriptionCommand) Description() string {
 	return "뉴스 알림 구독 제어"
 }
 
-func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base deps: %w", err)
 	}
@@ -68,8 +68,8 @@ func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *dom
 	return nil
 }
 
-func (c *MemberNewsSubscriptionCommand) memberNewsSubscriptionHandler(action string) func(context.Context, *domain.CommandContext) error {
-	handlers := map[string]func(context.Context, *domain.CommandContext) error{
+func (c *MemberNewsSubscriptionCommand) memberNewsSubscriptionHandler(action string) func(context.Context, *botcommand.CommandContext) error {
+	handlers := map[string]func(context.Context, *botcommand.CommandContext) error{
 		"on":  c.handleSubscribe,
 		"켜기":  c.handleSubscribe,
 		"구독":  c.handleSubscribe,
@@ -122,7 +122,7 @@ func (p memberNewsSubscriptionPort) Unsubscribe(ctx context.Context, roomID stri
 	return nil
 }
 
-func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
+func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *botcommand.CommandContext) handlercore.SubscriptionFlow {
 	return handlercore.NewSubscriptionFlow(&handlercore.SubscriptionFlowConfig{
 		Port: memberNewsSubscriptionPort{service: c.Deps().MemberNews},
 		OnCheckError: func(ctx context.Context, _ error) error {
@@ -162,7 +162,7 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 	})
 }
 
-func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
@@ -170,7 +170,7 @@ func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmd
 	return nil
 }
 
-func (c *MemberNewsSubscriptionCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MemberNewsSubscriptionCommand) handleUnsubscribe(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room); err != nil {
 		return fmt.Errorf("unsubscribe: %w", err)
 	}
@@ -178,7 +178,7 @@ func (c *MemberNewsSubscriptionCommand) handleUnsubscribe(ctx context.Context, c
 	return nil
 }
 
-func (c *MemberNewsSubscriptionCommand) handleStatus(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MemberNewsSubscriptionCommand) handleStatus(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	if err := c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room); err != nil {
 		return fmt.Errorf("status: %w", err)
 	}

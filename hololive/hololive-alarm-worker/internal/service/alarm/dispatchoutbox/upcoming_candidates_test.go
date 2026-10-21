@@ -188,7 +188,7 @@ func TestUpcomingCandidatesCleanupPreservesPending(t *testing.T) {
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now.Add(-72*time.Hour), notifications))
 
 	key := BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: *notifications[0]})
-	require.NoError(t, store.Finish(t.Context(), key, "subscription_removed", now.Add(-48*time.Hour)))
+	require.NoError(t, store.Finish(t.Context(), map[string][]string{"subscription_removed": {key}}, now.Add(-48*time.Hour)))
 
 	deleted, err := store.Cleanup(t.Context(), 1, 1)
 	require.NoError(t, err)

@@ -34,12 +34,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -155,7 +156,7 @@ func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	tests := map[string]struct {
@@ -210,7 +211,7 @@ func TestYouTubeCheckerCheck_EmptyChannelRegistry(t *testing.T) {
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -289,7 +290,7 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -297,10 +298,10 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 
 	setupCtx := t.Context()
 
-	_, err = cache.SAdd(setupCtx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(setupCtx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(setupCtx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(setupCtx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	if tc.preMarkDedup {
@@ -432,7 +433,7 @@ func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *tes
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -440,10 +441,10 @@ func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *tes
 
 	ctx := t.Context()
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	notifications, err := checker.Check(ctx)
@@ -483,7 +484,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	startActual := time.Now().UTC().Truncate(time.Second).Add(-30 * time.Minute)
@@ -508,10 +509,10 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 
 	ctx := t.Context()
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	notifications, err := checker.Check(ctx)
@@ -548,7 +549,7 @@ func TestYouTubeCheckerCheck_DoesNotRepeatLiveCatchupForLongRunningStream(t *tes
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -575,10 +576,10 @@ func TestYouTubeCheckerCheck_DoesNotRepeatLiveCatchupForLongRunningStream(t *tes
 
 	ctx := t.Context()
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	notifications, err := checker.Check(ctx)
@@ -608,16 +609,16 @@ func persistedLiveCatchupCheck(t *testing.T, channelID string, source *fakeYouTu
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tier.NewTieredScheduler(logger), dedupService, []int{5, 3, 1}, 0, source, nil, logger)
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(t.Context(), alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(t.Context(), sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(t.Context(), alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	notifications, err := checker.Check(t.Context())
@@ -724,7 +725,7 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -736,10 +737,10 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 
 	ctx := t.Context()
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	first, err := checker.Check(ctx)
@@ -792,7 +793,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	startActual := time.Now().UTC().Truncate(time.Second).Add(-20 * time.Minute)
@@ -817,10 +818,10 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 
 	ctx := t.Context()
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	initCheckerMetrics()
@@ -870,7 +871,7 @@ func checkYouTubeUpcomingWithConfirmedPremieres(t *testing.T, confirmedPremiereI
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(
@@ -888,10 +889,10 @@ func checkYouTubeUpcomingWithConfirmedPremieres(t *testing.T, confirmedPremiereI
 
 	ctx := t.Context()
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
 	notifications, err := checker.Check(ctx)
@@ -907,7 +908,7 @@ func TestYouTubeChecker_RecoversRecentCappedFiveMinuteAlarm(t *testing.T) {
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 75*time.Second, nil, nil, logger)
@@ -940,7 +941,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_FallsBackToThreeMinuteTarget(
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -971,7 +972,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_PrefersRecoveredFiveMinuteTar
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -1003,7 +1004,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DoesNotInventThreeMinuteTarge
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 1}, 0, nil, nil, logger)
@@ -1033,7 +1034,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_SendsScheduleDelayOnNonTarget
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -1069,7 +1070,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_TargetReminderDoesNotCarrySch
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -1106,7 +1107,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DetectsReplacedWaitingRoomSch
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -1151,7 +1152,7 @@ func TestYouTubeChecker_DetectRoomScheduleChangesDeduplicatesRoomsAndUsesChannel
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
@@ -1349,13 +1350,13 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 	cache := newCheckerTestCacheClient(t)
 	ctx := t.Context()
 
-	_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{"r1", "r2"})
+	_, err := cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{"r1", "r2"})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort2, []string{"r3"})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+testChIDShort2, []string{"r3"})
 	require.NoError(t, err)
 
-	require.NoError(t, cache.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("unknown", domain.AlarmTypeLive), "1", time.Minute))
+	require.NoError(t, cache.Set(ctx, alarmkeys.BuildChannelSubscriberEmptyKey("unknown", domain.AlarmTypeLive), "1", time.Minute))
 
 	tests := map[string]struct {
 		channelIDs []string
@@ -1371,7 +1372,7 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, sharedalarm.NewSubscriberResolver(cache, nil), tc.channelIDs)
+			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, alarmstore.NewSubscriberResolver(cache, nil), tc.channelIDs)
 			require.NoError(t, loadErr)
 			assert.Len(t, got, tc.wantLen)
 		})
@@ -1472,7 +1473,7 @@ func TestYouTubeCheckerCheck_HolodexHangLeavesBudgetForPersistedSessions(t *test
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	startActual := time.Now().UTC().Truncate(time.Second).Add(-20 * time.Minute)
@@ -1496,10 +1497,10 @@ func TestYouTubeCheckerCheck_HolodexHangLeavesBudgetForPersistedSessions(t *test
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	_, err = cache.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{testRoomID1})
+	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{testRoomID1})
 	require.NoError(t, err)
 
 	notifications, err := checker.Check(ctx)

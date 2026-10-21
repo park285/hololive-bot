@@ -10,9 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -21,11 +20,11 @@ func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 
 	// DB fixture의 실제 IO와 수명은 가상 시계 bubble 밖에서 소유한다.
 	cache := cachemocks.NewStrictClient()
-	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{})
 
 	synctest.Test(t, func(t *testing.T) {
-		shortsKey := sharedalarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeShorts)
-		communityKey := sharedalarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeCommunity)
+		shortsKey := alarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeShorts)
+		communityKey := alarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeCommunity)
 		shortsStarted := make(chan struct{})
 		communityStarted := make(chan struct{})
 		release := make(chan struct{})
@@ -98,12 +97,12 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
 	cache := cachemocks.NewLenientClient()
 
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		require.Equal(t, sharedalarmkeys.BuildChannelSubscriberKey("UCfallback", domain.AlarmTypeShorts), key)
+		require.Equal(t, alarmkeys.BuildChannelSubscriberKey("UCfallback", domain.AlarmTypeShorts), key)
 
 		return nil, nil
 	}
 
-	dispatcher := newDispatcherForTest(t, db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback", Kind: domain.OutboxKindNewShort},
 	})
@@ -125,12 +124,12 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 	cache := cachemocks.NewLenientClient()
 
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		require.Equal(t, sharedalarmkeys.BuildChannelSubscriberKey("UCfallback-error", domain.AlarmTypeCommunity), key)
+		require.Equal(t, alarmkeys.BuildChannelSubscriberKey("UCfallback-error", domain.AlarmTypeCommunity), key)
 
 		return nil, errors.New("cache unavailable")
 	}
 
-	dispatcher := newDispatcherForTest(t, db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback-error", Kind: domain.OutboxKindCommunityPost},
 	})

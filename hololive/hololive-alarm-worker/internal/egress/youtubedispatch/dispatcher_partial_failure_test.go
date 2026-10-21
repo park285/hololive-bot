@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -166,7 +165,7 @@ func TestFanoutMaterialization_SubscriberLookupFailureSchedulesRetryBackoff(t *t
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, nil, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -215,7 +214,7 @@ func TestFanoutMaterialization_NoSubscribersMarksSent(t *testing.T) {
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, nil, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -269,7 +268,7 @@ func TestFanoutMaterialization_UsesAlarmTypeSpecificRoomsForSameChannel(t *testi
 	require.NoError(t, insertDeliveryTestRows(db, &communityItem).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, nil, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -338,7 +337,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, cacheClient, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cacheClient, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

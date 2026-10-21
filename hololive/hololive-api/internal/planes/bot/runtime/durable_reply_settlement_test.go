@@ -131,7 +131,7 @@ func TestReplySettlementUsesRuntimeReserveWhileOrdinaryTransactionHeld(t *testin
 	resources, closePool, err := databaseproviders.ProvideDatabaseResources(t.Context(), &settings.PostgresConfig{
 		Host: db.Host, Port: int(db.Port), User: db.User, Password: db.Password,
 		Database: db.Database, SSLMode: "disable", PoolMinConns: 0, PoolMaxConns: 2,
-	}, "bot", slog.New(slog.DiscardHandler))
+	}, databaseproviders.RuntimePool{Name: "bot", ReservedConns: 1}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 	t.Cleanup(closePool)
 

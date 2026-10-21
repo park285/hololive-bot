@@ -9,7 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
 func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -28,30 +29,26 @@ func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
 	assert.Equal(t, "normalize runtime build inputs: logger must not be nil", err.Error())
 }
 
-func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
+func TestAlarmSchedulerEnabled(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name        string
-		runtimeRole string
 		configValue string
 		want        bool
 	}{
-		{name: "default bot role", runtimeRole: runtimeRoleBot, configValue: "", want: true},
-		{name: "default worker role", runtimeRole: runtimeRoleWorker, configValue: "", want: true},
-		{name: "bot explicitly enabled", runtimeRole: runtimeRoleBot, configValue: runtimeRoleBot, want: true},
-		{name: "worker explicitly enabled", runtimeRole: runtimeRoleWorker, configValue: runtimeRoleWorker, want: true},
-		{name: "bot disabled when worker owns scheduler", runtimeRole: runtimeRoleBot, configValue: runtimeRoleWorker, want: false},
-		{name: "worker disabled when bot owns scheduler", runtimeRole: runtimeRoleWorker, configValue: runtimeRoleBot, want: false},
-		{name: "off disables all", runtimeRole: runtimeRoleBot, configValue: schedulerRoleOff, want: false},
-		{name: "unknown disables", runtimeRole: runtimeRoleWorker, configValue: "mystery", want: false},
+		{name: "default worker role", configValue: "", want: true},
+		{name: "worker explicitly enabled", configValue: " Worker ", want: true},
+		{name: "off disables", configValue: "off", want: false},
+		{name: "retired bot role disables", configValue: "bot", want: false},
+		{name: "unknown disables", configValue: "mystery", want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, runtimeAllowsAlarmScheduler(tt.runtimeRole, tt.configValue))
+			assert.Equal(t, tt.want, alarmSchedulerEnabled(tt.configValue))
 		})
 	}
 }
@@ -80,21 +77,12 @@ func TestLoadAlarmDispatchPublishConfigRejectsInvalidMaxDeliveries(t *testing.T)
 	}
 }
 
-func TestRuntimeSchedulerRejectsMissingServiceBeforeInterfaceConversion(t *testing.T) {
-	_, err := buildRuntimeScheduler(&workerconfig.RuntimeConfig{}, nil, &alarmFoundation{}, nil)
-	require.ErrorContains(t, err, "alarm service is required")
-}
-
 func TestRuntimeSchedulerDisabledSkipsDependencyConstruction(t *testing.T) {
-	t.Setenv(notificationSchedulerRoleEnv, schedulerRoleOff)
+	t.Setenv(notificationSchedulerRoleEnv, "off")
 
-	result := buildOptionalRuntimeScheduler(nil, nil, nil, nil)
+	result := buildOptionalRuntimeScheduler(
+		&workerconfig.RuntimeConfig{}, &sharedmodules.InfraModule{}, &alarmFoundation{}, queue.PublishConfig{}, slog.New(slog.DiscardHandler),
+	)
 	require.NoError(t, result.err)
 	require.Nil(t, result.scheduler)
-}
-
-func TestRuntimeSchedulerRejectsMissingInfrastructure(t *testing.T) {
-	config := &workerconfig.RuntimeConfig{AlarmWorkerProfile: &workerconfig.AlarmWorkerProfile{}}
-	_, err := buildRuntimeScheduler(config, nil, &alarmFoundation{AlarmService: &subscriptions.AlarmService{}}, nil)
-	require.ErrorContains(t, err, "infrastructure is required")
 }

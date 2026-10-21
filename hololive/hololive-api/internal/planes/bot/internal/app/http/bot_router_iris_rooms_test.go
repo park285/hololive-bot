@@ -12,9 +12,9 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	irisroomscontracts "github.com/kapu/hololive-api/internal/contracts/irisrooms"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
-	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 )
 
 type stubIrisRoomLister struct {

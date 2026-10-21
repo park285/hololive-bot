@@ -25,7 +25,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -40,7 +40,7 @@ func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, ra
 		params["query"] = query
 	}
 
-	return &ParsedCommand{Type: domain.CommandMemberInfo, Params: params, RawMessage: raw}, true
+	return &ParsedCommand{Type: botcommand.CommandMemberInfo, Params: params, RawMessage: raw}, true
 }
 
 func (ma *MessageAdapter) isMemberInfoCommand(cmd string) bool {
@@ -55,7 +55,7 @@ func (ma *MessageAdapter) tryMemberNewsSubscriptionCommand(command string, args 
 	action := memberNewsSubscriptionAction(args)
 
 	return &ParsedCommand{
-		Type:       domain.CommandMemberNewsSubscription,
+		Type:       botcommand.CommandMemberNewsSubscription,
 		Params:     map[string]any{paramAction: action},
 		RawMessage: raw,
 	}, true
@@ -88,7 +88,7 @@ func (ma *MessageAdapter) tryMemberNewsCommand(command string, args []string, ra
 	}
 
 	return &ParsedCommand{
-		Type:       domain.CommandMemberNews,
+		Type:       botcommand.CommandMemberNews,
 		Params:     map[string]any{"period": memberNewsPeriod(args)},
 		RawMessage: raw,
 	}, true

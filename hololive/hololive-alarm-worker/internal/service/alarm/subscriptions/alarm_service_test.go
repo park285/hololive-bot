@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 // members에 표시명이 없으면 빈 표시명을 캐시한다. 알림 표시 단계가 종단 문구를 쓴다.
@@ -56,11 +56,11 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{testAltRoomID}, subscribers)
 
-	channelReg, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelReg, err := as.cache.SMembers(ctx, alarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.Contains(t, channelReg, testUCChannelID)
 
-	name, err := as.cache.HGet(ctx, sharedalarmkeys.MemberNameKey, testUCChannelID)
+	name, err := as.cache.HGet(ctx, alarmkeys.MemberNameKey, testUCChannelID)
 	require.NoError(t, err)
 	assert.Empty(t, name)
 }
@@ -87,7 +87,7 @@ func TestAddAlarm_CacheWriteUsesShortKoreanMemberName(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, added)
 
-	name, err := as.cache.HGet(t.Context(), sharedalarmkeys.MemberNameKey, testUCChannelID)
+	name, err := as.cache.HGet(t.Context(), alarmkeys.MemberNameKey, testUCChannelID)
 	require.NoError(t, err)
 	assert.Equal(t, "라덴", name)
 }
@@ -100,7 +100,7 @@ func TestAddAlarm_ClearsEmptySubscriberCacheMarker(t *testing.T) {
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
 
 	ctx := t.Context()
-	require.NoError(t, as.cache.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
+	require.NoError(t, as.cache.Set(ctx, alarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
 
 	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:    testAltRoomID,
@@ -110,7 +110,7 @@ func TestAddAlarm_ClearsEmptySubscriberCacheMarker(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, added)
 
-	emptyMarkerExists, err := as.cache.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	emptyMarkerExists, err := as.cache.Exists(ctx, alarmkeys.AlarmSubscriberCacheEmptyKey)
 	require.NoError(t, err)
 	assert.False(t, emptyMarkerExists)
 }

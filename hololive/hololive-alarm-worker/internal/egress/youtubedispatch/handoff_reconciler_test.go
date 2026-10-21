@@ -134,7 +134,7 @@ func (f youtubeHandoffFixture) makeDue(t *testing.T, age time.Duration) {
 	require.NoError(t, err)
 }
 
-func (f youtubeHandoffFixture) reconciler(t *testing.T, client ReplyStatusClient, maxRetries int) *HandoffReconciler {
+func (f youtubeHandoffFixture) reconciler(t *testing.T, client handoffcheck.ReplyStatusClient, maxRetries int) *HandoffReconciler {
 	t.Helper()
 
 	reconciler, err := newHandoffReconciler(

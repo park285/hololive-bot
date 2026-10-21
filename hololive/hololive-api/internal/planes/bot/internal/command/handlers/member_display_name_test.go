@@ -8,6 +8,7 @@ import (
 	"time"
 
 	responseformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
@@ -79,8 +80,8 @@ func assertCanonicalDisplayName(t *testing.T, message string) {
 	}
 }
 
-func displayNameCommandContext() *domain.CommandContext {
-	return &domain.CommandContext{Room: testRoomID}
+func displayNameCommandContext() *botcommand.CommandContext {
+	return &botcommand.CommandContext{Room: testRoomID}
 }
 
 func TestLiveMemberQueryUsesCanonicalDisplayName(t *testing.T) {

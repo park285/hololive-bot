@@ -8,9 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -23,7 +22,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	cache := cachemocks.NewLenientClient()
 
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		if key == sharedalarmkeys.BuildChannelSubscriberKey("UCdrain", domain.AlarmTypeLive) {
+		if key == alarmkeys.BuildChannelSubscriberKey("UCdrain", domain.AlarmTypeLive) {
 			return []string{"room-drain"}, nil
 		}
 
@@ -31,7 +30,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cache, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -75,7 +74,7 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	db := newDeliveryPool(t)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -101,6 +100,6 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 func TestDispatcher_ProcessAvailableWithoutWorkerInstrumentation(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := newDispatcherForTest(t, nil, nil, nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, nil, nil, nil, nil, slog.New(slog.DiscardHandler), &Config{})
 	dispatcher.processClaimedOrPendingDeliveries(t.Context(), nil, 0)
 }

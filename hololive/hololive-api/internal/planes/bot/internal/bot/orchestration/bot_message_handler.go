@@ -32,9 +32,9 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -117,8 +117,8 @@ func (b *Bot) AcceptsMessage(ctx context.Context, message *webhook.Message) bool
 	return b.ensureIngress().Accepts(ctx, message)
 }
 
-func newCommandContextFromIngress(envelope *ingress.Envelope) *domain.CommandContext {
-	return domain.NewCommandContext(
+func newCommandContextFromIngress(envelope *ingress.Envelope) *botcommand.CommandContext {
+	return botcommand.NewCommandContext(
 		envelope.ChatID,
 		envelope.RoomName,
 		envelope.UserID,
@@ -141,7 +141,7 @@ func messageThreadID(message *webhook.Message) *string {
 	return &trimmed
 }
 
-func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext) context.Context {
+func commandRequestContext(ctx context.Context, cmdCtx *botcommand.CommandContext) context.Context {
 	ctx = transport.WithReplyIdentity(ctx, cmdCtx.MessageID)
 	if cmdCtx.ThreadID != nil {
 		ctx = transport.WithThreadID(ctx, *cmdCtx.ThreadID)

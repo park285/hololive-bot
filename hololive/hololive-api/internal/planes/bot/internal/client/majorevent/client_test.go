@@ -29,9 +29,9 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
+	majoreventcontracts "github.com/kapu/hololive-api/internal/contracts/majorevent"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
-	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 

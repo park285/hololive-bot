@@ -20,12 +20,10 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -44,7 +42,7 @@ func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 	cache := cachemocks.NewLenientClient()
 
 	// 기본 renderer는 dispatcher의 seed DB를 함께 사용해 같은 테스트의 중복 DB를 만들지 않는다.
-	return newDispatcherForTest(t, nil, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	return newDispatcherForTest(t, nil, cache, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -94,16 +92,16 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 		lookedUpKeysMu.Unlock()
 
 		switch key {
-		case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
+		case alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
 			return []string{testRoomShorts}, nil
-		case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
+		case alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
 			return []string{testRoomCommunity}, nil
 		default:
 			return nil, nil
 		}
 	}
 
-	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: testChannelTarget, Kind: domain.OutboxKindNewShort},
 		{ChannelID: testChannelTarget, Kind: domain.OutboxKindCommunityPost},
@@ -120,8 +118,8 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 	}
 
 	if !sameStrings(recordedKeys, []string{
-		sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts),
-		sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity),
+		alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts),
+		alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity),
 	}) {
 		t.Fatalf("lookedUpKeys = %#v", recordedKeys)
 	}
@@ -145,9 +143,9 @@ func (g *subscriberLookupGate) lookup(_ context.Context, key string) ([]string, 
 	}
 
 	switch key {
-	case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
+	case alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
 		return []string{testRoomShorts}, nil
-	case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
+	case alarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
 		return []string{testRoomCommunity}, nil
 	default:
 		return nil, nil
@@ -183,7 +181,7 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 
 	cache.SMembersFunc = gate.lookup
 
-	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		SubscriberLookupParallelism: 1,
 	})
 
@@ -501,7 +499,7 @@ func TestDispatchDeliveryRows_GroupedFormatFailureDoesNotSend(t *testing.T) {
 
 	sender := &testSender{failRoom: map[string]bool{}}
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShorts, "{{.Title}}\n{{.URL}}")
-	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -545,7 +543,7 @@ func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T
 
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}")
 	sender := &failFirstSendTestSender{}
-	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -583,7 +581,7 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 	renderer := newShortsGroupAndSingleTemplateRenderer(t)
 	sender := &groupedPermanentFailureSender{}
 	db := newDeliveryPool(t)
-	d := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	d := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -1007,7 +1005,7 @@ func TestDispatchDeliveryRows_InvalidLogicalIdentityLogsPreSendFailure(t *testin
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, "Failed to resolve delivery logical identity before send")
-	assertSendLogStringField(t, entry, deliveryAuditContentIDLogField, "")
+	assertSendLogStringField(t, entry, FieldContentID, "")
 }
 
 func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAttemptStarted(t *testing.T) {
@@ -1028,17 +1026,17 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAttemptStarted(t 
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
-	entry := findLogEntryByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
-	assertSendLogStringField(t, entry, deliveryAuditContentIDLogField, testShortOne)
-	assertSendLogStringField(t, entry, deliveryAuditPostIDLogField, "short:"+testShortOne)
-	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
-	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
-	assertSendLogStringField(t, entry, deliveryDedupeKeyLogField, testDedupeKeyShortOne)
+	entry := findLogEntryByMessage(t, logBuffer, CommunityShortsDeliveryAttemptMessage)
+	assertSendLogStringField(t, entry, FieldContentID, testShortOne)
+	assertSendLogStringField(t, entry, FieldPostID, "short:"+testShortOne)
+	assertSendLogStringField(t, entry, FieldAlarmType, string(domain.AlarmTypeShorts))
+	assertSendLogStringField(t, entry, FieldDeliveryPath, telemetry.CommunityShortsDeliveryPath)
+	assertSendLogStringField(t, entry, FieldDeliveryMode, deliveryModePerRoom)
+	assertSendLogStringField(t, entry, FieldDedupeKey, testDedupeKeyShortOne)
 	assertLogRoomIDPseudonymized(t, entry)
-	assertSendLogIntField(t, entry, logschema.FieldAttemptOrdinal, 3)
+	assertSendLogIntField(t, entry, FieldAttemptOrdinal, 3)
 
-	startedAt := readSendLogTimeField(t, entry, deliveryAttemptStartedAtLogField)
+	startedAt := readSendLogTimeField(t, entry, FieldAttemptStartedAt)
 	if !startedAt.After(lockedAt) {
 		t.Fatalf("attempt_started_at = %s, want after locked_at %s", startedAt.Format(time.RFC3339Nano), lockedAt.Format(time.RFC3339Nano))
 	}
@@ -1067,7 +1065,7 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
-	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
+	entries := findAllSendLogEntriesByMessage(t, logBuffer, CommunityShortsDeliveryAttemptMessage)
 	if len(entries) != 2 {
 		t.Fatalf("attempt start entry count = %d, want 2", len(entries))
 	}
@@ -1084,20 +1082,20 @@ func assertGroupedAttemptStartedEntries(t *testing.T, entries []map[string]any, 
 	modes := make([]string, 0, len(entries))
 
 	for i := range entries {
-		assertSendLogStringField(t, entries[i], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
+		assertSendLogStringField(t, entries[i], FieldAlarmType, string(domain.AlarmTypeCommunity))
+		assertSendLogStringField(t, entries[i], FieldDeliveryPath, telemetry.CommunityShortsDeliveryPath)
 		assertLogRoomIDPseudonymized(t, entries[i])
-		assertSendLogIntField(t, entries[i], logschema.FieldAttemptOrdinal, 2)
+		assertSendLogIntField(t, entries[i], FieldAttemptOrdinal, 2)
 
-		startedAt := readSendLogTimeField(t, entries[i], deliveryAttemptStartedAtLogField)
+		startedAt := readSendLogTimeField(t, entries[i], FieldAttemptStartedAt)
 		if !startedAt.After(lockedAt) {
 			t.Fatalf("attempt_started_at = %s, want after locked_at %s", startedAt.Format(time.RFC3339Nano), lockedAt.Format(time.RFC3339Nano))
 		}
 
-		contentIDs = append(contentIDs, readSendLogStringField(t, entries[i], deliveryAuditContentIDLogField))
-		postIDs = append(postIDs, readSendLogStringField(t, entries[i], deliveryAuditPostIDLogField))
-		dedupeKeys = append(dedupeKeys, readSendLogStringField(t, entries[i], deliveryDedupeKeyLogField))
-		modes = append(modes, readSendLogStringField(t, entries[i], deliveryAuditModeLogField))
+		contentIDs = append(contentIDs, readSendLogStringField(t, entries[i], FieldContentID))
+		postIDs = append(postIDs, readSendLogStringField(t, entries[i], FieldPostID))
+		dedupeKeys = append(dedupeKeys, readSendLogStringField(t, entries[i], FieldDedupeKey))
+		modes = append(modes, readSendLogStringField(t, entries[i], FieldDeliveryMode))
 	}
 
 	if !sameStrings(contentIDs, []string{testPostOne, testPostTwo}) {
@@ -1137,7 +1135,7 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsAttemptStarted(t *te
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
-	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
+	entries := findAllSendLogEntriesByMessage(t, logBuffer, CommunityShortsDeliveryAttemptMessage)
 	if len(entries) != 0 {
 		t.Fatalf("attempt start entry count = %d, want 0", len(entries))
 	}
@@ -1165,19 +1163,19 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsCommunityShortsResult(t *testing
 		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
 
-	entry := findLogEntryByMessage(t, logBuffer, deliveryResultLogMessage)
-	assertSendLogStringField(t, entry, logschema.FieldChannelID, testChannelCh1)
-	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
-	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
-	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModeGrouped)
+	entry := findLogEntryByMessage(t, logBuffer, CommunityShortsDeliveryResultMessage)
+	assertSendLogStringField(t, entry, FieldChannelID, testChannelCh1)
+	assertSendLogStringField(t, entry, FieldAlarmType, string(domain.AlarmTypeShorts))
+	assertSendLogStringField(t, entry, FieldSendResult, sendResultSuccess)
+	assertSendLogStringField(t, entry, FieldDeliveryPath, telemetry.CommunityShortsDeliveryPath)
+	assertSendLogStringField(t, entry, FieldDeliveryMode, deliveryModeGrouped)
 	assertLogRoomIDPseudonymized(t, entry)
-	assertSendLogIntField(t, entry, logschema.FieldTargetAlarmCount, 2)
-	assertSendLogIntField(t, entry, logschema.FieldSuccessfulAlarmCount, 2)
-	assertSendLogIntField(t, entry, logschema.FieldFailedAlarmCount, 0)
-	assertSendLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
-	assertSendLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
-	assertSendLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
+	assertSendLogIntField(t, entry, FieldTargetAlarmCount, 2)
+	assertSendLogIntField(t, entry, FieldSuccessfulAlarmCount, 2)
+	assertSendLogIntField(t, entry, FieldFailedAlarmCount, 0)
+	assertSendLogIntField(t, entry, FieldTargetRoomCount, 1)
+	assertSendLogIntField(t, entry, FieldSuccessfulRoomCount, 1)
+	assertSendLogIntField(t, entry, FieldFailedRoomCount, 0)
 	assertSendLogSentAtField(t, entry)
 }
 
@@ -1198,20 +1196,20 @@ func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	entry := findLogEntryByMessage(t, logBuffer, deliveryResultLogMessage)
-	assertSendLogStringField(t, entry, logschema.FieldChannelID, testChannelCh1)
-	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultFailure)
-	assertSendLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonRateLimited)
-	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
+	entry := findLogEntryByMessage(t, logBuffer, CommunityShortsDeliveryResultMessage)
+	assertSendLogStringField(t, entry, FieldChannelID, testChannelCh1)
+	assertSendLogStringField(t, entry, FieldAlarmType, string(domain.AlarmTypeCommunity))
+	assertSendLogStringField(t, entry, FieldSendResult, sendResultFailure)
+	assertSendLogStringField(t, entry, FieldFailureReason, deliveryReasonRateLimited)
+	assertSendLogStringField(t, entry, FieldDeliveryPath, telemetry.CommunityShortsDeliveryPath)
+	assertSendLogStringField(t, entry, FieldDeliveryMode, deliveryModePerRoom)
 	assertLogRoomIDPseudonymized(t, entry)
-	assertSendLogIntField(t, entry, logschema.FieldTargetAlarmCount, 1)
-	assertSendLogIntField(t, entry, logschema.FieldSuccessfulAlarmCount, 0)
-	assertSendLogIntField(t, entry, logschema.FieldFailedAlarmCount, 1)
-	assertSendLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
-	assertSendLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 0)
-	assertSendLogIntField(t, entry, logschema.FieldFailedRoomCount, 1)
+	assertSendLogIntField(t, entry, FieldTargetAlarmCount, 1)
+	assertSendLogIntField(t, entry, FieldSuccessfulAlarmCount, 0)
+	assertSendLogIntField(t, entry, FieldFailedAlarmCount, 1)
+	assertSendLogIntField(t, entry, FieldTargetRoomCount, 1)
+	assertSendLogIntField(t, entry, FieldSuccessfulRoomCount, 0)
+	assertSendLogIntField(t, entry, FieldFailedRoomCount, 1)
 	assertSendLogSentAtField(t, entry)
 }
 
@@ -1232,7 +1230,7 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsResult(t *testing.T)
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
-	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryResultLogMessage)
+	entries := findAllSendLogEntriesByMessage(t, logBuffer, CommunityShortsDeliveryResultMessage)
 	if len(entries) != 0 {
 		t.Fatalf("delivery result entry count = %d, want 0", len(entries))
 	}
@@ -1266,7 +1264,7 @@ func TestDispatchDeliveryRows_PerRoomSuccessPassesPerRoomModeToTransition(t *tes
 		t.Fatalf("transition modes = %#v, want complete_sent:%s", got, deliveryModePerRoom)
 	}
 
-	if entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage); len(entries) != 0 {
+	if entries := findAllSendLogEntriesByMessage(t, logBuffer, CommunityShortsDeliveryAuditMessage); len(entries) != 0 {
 		t.Fatalf("send-time audit entry count = %d, want 0 (telemetry is emitted from the persisted buffer)", len(entries))
 	}
 }
@@ -1302,7 +1300,7 @@ func TestDispatchDeliveryRows_GroupedFailurePassesGroupedModeToTransition(t *tes
 		t.Fatalf("transition modes = %#v, want started_failure:%s", got, deliveryModeGrouped)
 	}
 
-	if entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage); len(entries) != 0 {
+	if entries := findAllSendLogEntriesByMessage(t, logBuffer, CommunityShortsDeliveryAuditMessage); len(entries) != 0 {
 		t.Fatalf("send-time audit entry count = %d, want 0 (telemetry is emitted from the persisted buffer)", len(entries))
 	}
 }
@@ -1324,7 +1322,7 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsAudit(t *testing.T) 
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
-	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)
+	entries := findAllSendLogEntriesByMessage(t, logBuffer, CommunityShortsDeliveryAuditMessage)
 	if len(entries) != 0 {
 		t.Fatalf("audit entry count = %d, want 0", len(entries))
 	}
@@ -1371,7 +1369,7 @@ func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *
 	logBuffer := &safeBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	return newDispatcherForTest(t, nil, cache, sender, renderer, logger, &dispatchstate.Config{
+	return newDispatcherForTest(t, nil, cache, sender, renderer, logger, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -1536,7 +1534,7 @@ func assertSendLogStringField(t *testing.T, entry map[string]any, field, want st
 func assertSendLogSentAtField(t *testing.T, entry map[string]any) {
 	t.Helper()
 
-	_ = readSendLogTimeField(t, entry, deliveryAuditSentAtLogField)
+	_ = readSendLogTimeField(t, entry, FieldSentAt)
 }
 
 func assertSendLogIntField(t *testing.T, entry map[string]any, field string, want int) {
@@ -1550,9 +1548,9 @@ func assertSendLogIntField(t *testing.T, entry map[string]any, field string, wan
 func assertLogDedupeKeys(t *testing.T, entry map[string]any, want []string) {
 	t.Helper()
 
-	raw, ok := entry[deliveryDedupeKeyLogField]
+	raw, ok := entry[FieldDedupeKey]
 	if !ok {
-		t.Fatalf("log entry missing %q: %#v", deliveryDedupeKeyLogField, entry)
+		t.Fatalf("log entry missing %q: %#v", FieldDedupeKey, entry)
 	}
 
 	values, ok := raw.([]any)
@@ -1617,7 +1615,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
-		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
+		slog.New(slog.DiscardHandler), &Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
 	_, err := dispatcher.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
@@ -1646,7 +1644,7 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
-		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 100 * time.Millisecond},
+		slog.New(slog.DiscardHandler), &Config{DeliverySendTimeout: 100 * time.Millisecond},
 	)
 
 	parentCtx, cancel := context.WithTimeout(t.Context(), 5*time.Millisecond)
@@ -1679,7 +1677,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
-		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
+		slog.New(slog.DiscardHandler), &Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
 	synctest.Test(t, func(t *testing.T) {
@@ -1737,14 +1735,14 @@ func TestNewDispatcherRejectsMissingOrInvalidConfig(t *testing.T) {
 
 func newOutcomeUnknownTestEngine(sender messagedelivery.PreparedMessageSender, renderer *template.Renderer, timeout time.Duration) *SendEngine {
 	logger := slog.New(slog.DiscardHandler)
-	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
+	cfg := &Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
 	auditLogger := newAuditLogger(nil, nil, logger, cfg)
 	formatter := format.NewMessageFormatter(renderer, staticMemberNames{}, nil)
 
 	return newSendEngine(sender, formatter, logger, cfg, auditLogger, newMetricsRecorder(logger, auditLogger), &lifecycleTransitionSpy{})
 }
 
-func assertOutcomeUnknownHold(t *testing.T, result *dispatchstate.DispatchResult) {
+func assertOutcomeUnknownHold(t *testing.T, result *DispatchResult) {
 	t.Helper()
 
 	if result.FailedDeliveries != 0 || len(result.FailureBuckets) != 0 {

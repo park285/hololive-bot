@@ -29,11 +29,11 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -63,7 +63,7 @@ func WithMonthlyOutputGuard(guard *outputguard.Guard) MonthlySchedulerOption {
 func NewMonthlyScheduler(
 	service model.DigestService,
 	formatter model.DigestFormatter,
-	locker delivery.NotificationLocker,
+	locker executionlock.Locker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 	opts ...MonthlySchedulerOption,

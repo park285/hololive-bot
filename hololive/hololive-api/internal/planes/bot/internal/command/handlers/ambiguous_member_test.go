@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -68,7 +69,7 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) str
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		testParamAction: testActionAdd,
 		paramMember:     testMemberAqua,
 	})
@@ -101,7 +102,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
@@ -132,7 +133,7 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewScheduleCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := NewScheduleCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
@@ -163,7 +164,7 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewUpcomingCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := NewUpcomingCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)

@@ -19,7 +19,7 @@ func TestAlarmDispatchRetentionIncludesTerminatedCandidates(t *testing.T) {
 	require.NoError(t, candidates.Stage(t.Context(), "cleanup-channel", start.Add(-time.Hour), []*domain.AlarmNotification{n}))
 
 	key := dispatchoutbox.BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: *n})
-	require.NoError(t, candidates.Finish(t.Context(), key, "subscription_removed", start.Add(-72*time.Hour)))
+	require.NoError(t, candidates.Finish(t.Context(), map[string][]string{"subscription_removed": {key}}, start.Add(-72*time.Hour)))
 
 	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
 	before := alarmDispatchRetentionMetricValues(t)

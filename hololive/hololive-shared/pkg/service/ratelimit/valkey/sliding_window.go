@@ -69,6 +69,9 @@ redis.call('EXPIRE', key, ttl_sec)
 return {1, count + 1, 0}
 `
 
+// allowLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
+var allowLua = valkeygo.NewLuaScript(allowScript)
+
 type SlidingWindowLimiter struct {
 	cacheClient cache.LowLevelCache
 	keyPrefix   string
@@ -168,30 +171,18 @@ func (l *SlidingWindowLimiter) allowByScript(
 	member string,
 	ttlSeconds int64,
 ) (bool, int, time.Duration, error) {
-	cmd := l.cacheClient.B().
-		Eval().
-		Script(allowScript).
-		Numkeys(1).
-		Key(key).
-		Arg(
-			strconv.FormatInt(nowMS, 10),
-			strconv.FormatInt(windowMS, 10),
-			strconv.Itoa(limit),
-			member,
-			strconv.FormatInt(ttlSeconds, 10),
-		).
-		Build()
-	results := l.cacheClient.DoMulti(ctx, cmd)
-
-	if len(results) != 1 {
-		return false, 0, 0, fmt.Errorf("eval allow script: unexpected result count: %d", len(results))
+	result := allowLua.Exec(ctx, l.cacheClient.GetClient(), []string{key}, []string{
+		strconv.FormatInt(nowMS, 10),
+		strconv.FormatInt(windowMS, 10),
+		strconv.Itoa(limit),
+		member,
+		strconv.FormatInt(ttlSeconds, 10),
+	})
+	if err := result.Error(); err != nil {
+		return false, 0, 0, fmt.Errorf("eval allow script: %w", err)
 	}
 
-	if results[0].Error() != nil {
-		return false, 0, 0, fmt.Errorf("eval allow script: %w", results[0].Error())
-	}
-
-	out1, out2, out3, err := parseAllowScriptResult(results[0])
+	out1, out2, out3, err := parseAllowScriptResult(result)
 	if err != nil {
 		return out1, out2, out3, fmt.Errorf("parse allow script result: %w", err)
 	}

@@ -27,6 +27,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -49,7 +50,7 @@ func (c *LiveCommand) Description() string {
 }
 
 // 특정 멤버 이름이 파라미터로 주어진 경우, 해당 멤버의 방송만 필터링한다.
-func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)
 	}
@@ -70,7 +71,7 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	return nil
 }
 
-func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.CommandContext, memberName string) error {
+func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *botcommand.CommandContext, memberName string) error {
 	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "라이브")
 	if memberLookupHandled(err) {
 		return nil
@@ -95,7 +96,7 @@ func (c *LiveCommand) sendMemberLiveStreams(ctx context.Context, room string, ch
 	return c.sendLiveQuery(ctx, room, livequery.Request{Scope: livequery.Member, ChannelID: channel.ID, MemberName: channel.Name, Limit: livequery.MaxItems})
 }
 
-func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	return c.sendLiveQuery(ctx, cmdCtx.Room, livequery.Request{Scope: livequery.All, Limit: livequery.MaxItems})
 }
 

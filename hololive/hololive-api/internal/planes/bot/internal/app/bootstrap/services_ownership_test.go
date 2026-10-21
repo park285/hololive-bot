@@ -108,7 +108,7 @@ func TestInitAlarmYouTubeStackStillRejectsMalformedSettingsFile(t *testing.T) {
 	stack, err := InitAlarmYouTubeStack(&apiconfig.BotPlaneConfig{
 		AlarmServiceURL: "http://127.0.0.1:8081", SettingsFilePath: path,
 		Notification: settings.NotificationConfig{AdvanceMinutes: []int{10, 5, 1}},
-	}, &apifoundation.ScraperHolodexFoundation{MemberServiceAdapter: &membermocks.DataProvider{}}, slog.New(slog.DiscardHandler))
+	}, &apifoundation.ScraperHolodexFoundation{MemberData: &membermocks.DataProvider{}}, slog.New(slog.DiscardHandler))
 	if err == nil || stack != nil {
 		t.Fatalf("malformed settings startup=(%+v, %v) want=(nil, error)", stack, err)
 	}

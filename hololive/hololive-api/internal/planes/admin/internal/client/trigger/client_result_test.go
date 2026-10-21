@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 )
 
 func TestClientPreservesEnqueueResultsWithoutRetry(t *testing.T) {

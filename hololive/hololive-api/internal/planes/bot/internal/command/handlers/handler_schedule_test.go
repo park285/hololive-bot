@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -98,7 +99,7 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "미코",
 	})
 	if err != nil {
@@ -129,7 +130,7 @@ func TestScheduleCommand_Execute_NoMemberName(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -158,7 +159,7 @@ func TestScheduleCommand_Execute_NoMemberName_SuppressedByMemberToken(t *testing
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		"_raw_command": "멤버",
 	})
 	if err != nil {
@@ -198,7 +199,7 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "미코",
 	})
 	if err != nil {
@@ -230,7 +231,7 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 	}
 
 	cmd := NewScheduleCommand(deps)
-	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "존재하지않는멤버",
 	}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -269,7 +270,7 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "미코",
 		"days":      14,
 	})
@@ -285,7 +286,7 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 func TestScheduleCommand_Execute_NilDeps(t *testing.T) {
 	cmd := NewScheduleCommand(nil)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
 	if err == nil {
 		t.Fatal("expected error for nil deps")
 	}

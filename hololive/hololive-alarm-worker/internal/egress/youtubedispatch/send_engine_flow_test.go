@@ -16,7 +16,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -146,7 +145,7 @@ func (s *flowTestSender) SendMessage(ctx context.Context, _, _ string) error {
 }
 
 func newFlowTestSendEngine(sender *flowTestSender, timeout time.Duration) *SendEngine {
-	return newSendEngine(sender, &format.MessageFormatter{}, slog.New(slog.DiscardHandler), withTestDispatchConfigDefaults(&dispatchstate.Config{
+	return newSendEngine(sender, &format.MessageFormatter{}, slog.New(slog.DiscardHandler), withTestDispatchConfigDefaults(&Config{
 		DeliverySendTimeout: timeout,
 	}), nil, nil, &lifecycleTransitionSpy{})
 }

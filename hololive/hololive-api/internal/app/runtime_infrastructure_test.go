@@ -91,7 +91,7 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 		require.Equal(t, time.Second, pools[i].Config().PingTimeout)
 	}
 
-	_, err = infra.llm.MemberCache.AllMembers(t.Context())
+	_, err = infra.llm.MemberCache.LoadAllMembers(t.Context())
 	require.NoError(t, err)
 
 	maintenance, cleanup, err := databaseproviders.ProvideMaintenanceDatabaseResources(t.Context(), &config.Bot.Postgres, slog.New(slog.DiscardHandler))

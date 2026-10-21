@@ -21,7 +21,10 @@
 package notifier
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,9 +32,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 func TestNotifierPublishBatchAndMarkEmpty(t *testing.T) {
@@ -173,4 +178,105 @@ func newNotifierPublishTestItem(
 		},
 		claimKeys: claimKeys,
 	}
+}
+
+// 같은 stream을 여러 방에 발행해도 stream 단위 notified hash는 한 번만 쓰고, 방별 upcoming 표식은 방마다 남긴다.
+func TestNotifierPublishBatchAndMarkWritesStreamMarkOncePerSchedule(t *testing.T) {
+	t.Parallel()
+
+	cache := &hmsetCountingCache{Client: newCheckerTestCacheClient(t), calls: map[string]int{}}
+	logger := newCheckerTestLogger()
+	dedupService := dedup.NewService(cache, []int{10}, logger)
+	notifier, err := NewNotifier(
+		dedupService,
+		queue.NewPublisher(cache, logger,
+			queue.WithOutbox(&notifierBatchOutbox{}),
+			queue.WithWakeupEnabled(false),
+		),
+		tier.NewTieredScheduler(logger),
+		logger,
+	)
+	require.NoError(t, err)
+
+	start := time.Date(2026, time.May, 24, 10, 10, 0, 0, time.UTC)
+	items := []claimedSend{
+		newNotifierPublishTestItem("room-a", "stream-shared", "channel-shared", start, 10, []string{"claim-a"}),
+		newNotifierPublishTestItem("room-b", "stream-shared", "channel-shared", start, 10, []string{"claim-b"}),
+	}
+
+	processed, err := notifier.publishBatchAndMark(t.Context(), items)
+	require.NoError(t, err)
+	assert.Equal(t, 2, processed)
+	assert.Equal(t, 1, cache.hmsetCalls(alarmkeys.NotifiedKey("stream-shared")))
+
+	for _, room := range []string{"room-a", "room-b"} {
+		upcomingNotified, err := dedupService.WasUpcomingEventNotifiedRecently(
+			t.Context(), room, "channel-shared", items[0].payload.notification.Stream, time.Hour)
+		require.NoError(t, err)
+		assert.True(t, upcomingNotified, room)
+	}
+}
+
+// 같은 stream에 다른 예정 시각이 끼면 MarkAsNotified가 hash를 비우므로, 앞서 기록한 예정 시각도 다시 써서 마지막
+// 발행 순서의 예정 시각이 남아야 한다.
+func TestNotifierPublishBatchAndMarkRewritesStreamMarkAfterScheduleChange(t *testing.T) {
+	t.Parallel()
+
+	cache := &hmsetCountingCache{Client: newCheckerTestCacheClient(t), calls: map[string]int{}}
+	logger := newCheckerTestLogger()
+	dedupService := dedup.NewService(cache, []int{10}, logger)
+	notifier, err := NewNotifier(
+		dedupService,
+		queue.NewPublisher(cache, logger,
+			queue.WithOutbox(&notifierBatchOutbox{}),
+			queue.WithWakeupEnabled(false),
+		),
+		tier.NewTieredScheduler(logger),
+		logger,
+	)
+	require.NoError(t, err)
+
+	start := time.Date(2026, time.May, 24, 10, 10, 0, 0, time.UTC)
+	moved := start.Add(30 * time.Minute)
+	items := []claimedSend{
+		newNotifierPublishTestItem("room-a", "stream-moved", "channel-moved", start, 10, []string{"claim-a"}),
+		newNotifierPublishTestItem("room-b", "stream-moved", "channel-moved", moved, 10, []string{"claim-b"}),
+		newNotifierPublishTestItem("room-c", "stream-moved", "channel-moved", start, 10, []string{"claim-c"}),
+	}
+
+	processed, err := notifier.publishBatchAndMark(t.Context(), items)
+	require.NoError(t, err)
+	assert.Equal(t, 3, processed)
+	assert.Equal(t, 3, cache.hmsetCalls(alarmkeys.NotifiedKey("stream-moved")))
+
+	notified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-moved", start, 10)
+	require.NoError(t, err)
+	assert.True(t, notified)
+}
+
+type hmsetCountingCache struct {
+	sharedcache.Client
+
+	mu    sync.Mutex
+	calls map[string]int
+}
+
+func (c *hmsetCountingCache) HMSet(ctx context.Context, key string, values map[string]any) error {
+	c.mu.Lock()
+
+	c.calls[key]++
+	c.mu.Unlock()
+
+	if err := c.Client.HMSet(ctx, key, values); err != nil {
+		return fmt.Errorf("count hmset: %w", err)
+	}
+
+	return nil
+}
+
+func (c *hmsetCountingCache) hmsetCalls(key string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.calls[key]
 }

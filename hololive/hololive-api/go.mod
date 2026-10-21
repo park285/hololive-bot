@@ -9,7 +9,6 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/kapu/hololive-alarm-worker v0.0.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/kapu/hololive-youtube-collector v0.0.0
@@ -143,7 +142,5 @@ require (
 replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
 
 replace github.com/kapu/hololive-shared => ../hololive-shared
-
-replace github.com/kapu/hololive-alarm-worker => ../hololive-alarm-worker
 
 replace github.com/kapu/hololive-youtube-collector => ../hololive-youtube-collector

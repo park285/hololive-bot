@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	apisettings "github.com/kapu/hololive-api/internal/server/settings"
 )
 
 type AlarmYouTubeStackComponents struct {
@@ -21,7 +21,7 @@ func InitAlarmYouTubeStack(
 	foundation *apifoundation.ScraperHolodexFoundation,
 	logger *slog.Logger,
 ) (_ *AlarmYouTubeStackComponents, retErr error) {
-	alarmMode, err := InitAlarmModeComponents(appConfig, foundation.MemberServiceAdapter, logger)
+	alarmMode, err := InitAlarmModeComponents(appConfig, foundation.MemberData, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm mode components: %w", err)
 	}
@@ -37,7 +37,7 @@ func InitAlarmYouTubeStack(
 	memberMatcher := ProvideMatcher(alarmMode.MemberDataSource, logger)
 
 	// orchestration에 전달하지 않아도 settings 파일 기동 검증은 유지한다.
-	_, err = sharedmodules.BuildSettingsService(
+	_, err = apisettings.BuildSettingsService(
 		appConfig.SettingsFilePath,
 		appConfig.Notification.AdvanceMinutes,
 		logger,

@@ -193,8 +193,7 @@ func buildLLMSchedulerComponents(
 		return nil, fmt.Errorf("build LLM guards: %w", err)
 	}
 
-	memberServiceAdapter := member.NewMemberServiceAdapter(memberCache)
-	memberDataProvider := memberServiceAdapter
+	memberDataProvider := memberCache
 
 	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger, schedulerConfig.Bot.SeeMoreFold)

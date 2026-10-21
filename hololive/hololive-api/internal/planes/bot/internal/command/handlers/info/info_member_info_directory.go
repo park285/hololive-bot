@@ -29,10 +29,11 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *domain.CommandContext) error {
+func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
 	message, errorMessage, err := c.memberDirectoryMessage(ctx)
 	if err != nil {
 		return fmt.Errorf("render member directory: %w", err)

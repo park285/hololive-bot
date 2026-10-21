@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
@@ -45,7 +44,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          50 * time.Millisecond,
 		TelemetryPollInterval: 20 * time.Millisecond,
@@ -85,7 +84,7 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          10 * time.Millisecond,
 		TelemetryPollInterval: 10 * time.Millisecond,
@@ -117,7 +116,7 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 		telemetryLoopTestRow(703, 803, "short-loop-immediate", "room-loop-immediate"),
 	}))
 
-	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: 20 * time.Millisecond,
@@ -159,7 +158,7 @@ func TestDispatcherTelemetryLoop_StopsOnContextCancelBeforeNextTick(t *testing.T
 
 	db := openTelemetryLoopTestDB(t)
 
-	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: time.Hour,

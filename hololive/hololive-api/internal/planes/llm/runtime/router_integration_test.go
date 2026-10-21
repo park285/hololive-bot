@@ -28,9 +28,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 func TestBuildTriggerRouter_Integration(t *testing.T) {

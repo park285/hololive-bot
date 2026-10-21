@@ -410,8 +410,8 @@ func TestService_DoMulti(t *testing.T) {
 	}
 
 	cmds := []valkey.Completed{
-		service.Builder().Set().Key("multi1").Value("val1").Build(),
-		service.Builder().Set().Key("multi2").Value("val2").Build(),
+		service.B().Set().Key("multi1").Value("val1").Build(),
+		service.B().Set().Key("multi2").Value("val2").Build(),
 	}
 	results := service.DoMulti(ctx, cmds...)
 
@@ -425,7 +425,7 @@ func TestService_DoMulti(t *testing.T) {
 		}
 	}
 
-	val1, err := service.GetClient().Do(ctx, service.Builder().Get().Key("multi1").Build()).ToString()
+	val1, err := service.GetClient().Do(ctx, service.B().Get().Key("multi1").Build()).ToString()
 	requireNoError(t, err)
 
 	if val1 != "val1" {
@@ -435,7 +435,7 @@ func TestService_DoMulti(t *testing.T) {
 
 func TestService_Builder(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	builder := service.Builder()
+	builder := service.B()
 
 	cmd := builder.Ping().Build()
 	if cmd.Commands()[0] != "PING" {

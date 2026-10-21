@@ -71,12 +71,6 @@ type BotConfig struct {
 	MarkdownReplies       bool
 }
 
-type ServicesConfig struct {
-	LLMSchedulerHealthURL   string
-	GameBotTwentyQHealthURL string
-	GameBotTurtleHealthURL  string
-}
-
 type CORSConfig struct {
 	AllowedOrigins      []string
 	Enforce             bool

@@ -21,10 +21,10 @@
 package subscriptions
 
 import (
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func (as *AlarmService) channelSubscribersKeyByType(channelID string, alarmType domain.AlarmType) string {
-	return sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
+	return alarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
 }

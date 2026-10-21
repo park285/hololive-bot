@@ -28,10 +28,11 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
+	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -39,16 +40,16 @@ import (
 type Command interface {
 	Name() string
 	Description() string
-	Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error
+	Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error
 }
 
 type Event struct {
-	Type   domain.CommandType
+	Type   botcommand.CommandType
 	Params map[string]any
 }
 
 type Dispatcher interface {
-	Publish(ctx context.Context, cmdCtx *domain.CommandContext, events ...Event) (int, error)
+	Publish(ctx context.Context, cmdCtx *botcommand.CommandContext, events ...Event) (int, error)
 }
 
 type MemberNewsService interface {
@@ -158,4 +159,4 @@ type Dependencies struct {
 	Logger              *slog.Logger
 }
 
-type NormalizeFunc func(domain.CommandType, map[string]any) (string, map[string]any)
+type NormalizeFunc func(botcommand.CommandType, map[string]any) (string, map[string]any)

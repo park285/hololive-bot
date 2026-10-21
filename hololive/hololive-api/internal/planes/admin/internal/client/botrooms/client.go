@@ -13,7 +13,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
-	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
+	irisroomscontracts "github.com/kapu/hololive-api/internal/contracts/irisrooms"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 

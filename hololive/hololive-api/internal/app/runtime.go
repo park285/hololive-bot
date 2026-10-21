@@ -280,7 +280,7 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 		return nil, errors.New("bot, admin and llm configs must not be nil")
 	}
 
-	bot, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: config.Bot.Valkey, Postgres: config.Bot.Postgres, PoolName: "bot"}, logger)
+	bot, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: config.Bot.Valkey, Postgres: config.Bot.Postgres, Pool: databaseproviders.RuntimePool{Name: "bot", ReservedConns: 1}}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build bot infrastructure: %w", err)
 	}
@@ -308,12 +308,12 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 		}
 	}()
 
-	admin, cleanupAdmin, err := databaseproviders.ProvideDatabaseResources(ctx, &config.Admin.Postgres, "admin", logger)
+	admin, cleanupAdmin, err := databaseproviders.ProvideDatabaseResources(ctx, &config.Admin.Postgres, databaseproviders.RuntimePool{Name: "admin"}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide admin database resources: %w", err)
 	}
 
-	llm, cleanupLLM, err := databaseproviders.ProvideDatabaseResources(ctx, &config.LLM.Postgres, "llm_scheduler", logger)
+	llm, cleanupLLM, err := databaseproviders.ProvideDatabaseResources(ctx, &config.LLM.Postgres, databaseproviders.RuntimePool{Name: "llm_scheduler"}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide llm database resources: %w", err)
 	}

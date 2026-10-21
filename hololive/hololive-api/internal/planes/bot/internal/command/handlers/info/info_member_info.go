@@ -29,6 +29,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -43,7 +44,7 @@ func NewMemberInfoCommand(deps *handlercore.Dependencies) *MemberInfoCommand {
 }
 
 func (c *MemberInfoCommand) Name() string {
-	return string(domain.CommandMemberInfo)
+	return string(botcommand.CommandMemberInfo)
 }
 
 func (c *MemberInfoCommand) Description() string {
@@ -51,7 +52,7 @@ func (c *MemberInfoCommand) Description() string {
 }
 
 // 쿼리가 없으면 멤버 디렉터리를, 있으면 개별 기본 정보를 표시합니다.
-func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)
 	}

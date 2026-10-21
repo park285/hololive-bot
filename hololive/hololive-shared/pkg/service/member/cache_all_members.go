@@ -67,9 +67,9 @@ func newAllMembersState(members []*domain.Member, generation uint64, loadedAt ti
 
 var errAllMembersGenerationChanged = errors.New("member snapshot generation changed")
 
-// AllMembers는 전체 멤버 목록을 돌려준다. 돌려준 slice는 호출자 소유다. 공유 적재는 호출자 취소와 분리된 상한 안에서
+// LoadAllMembers는 전체 멤버 목록을 돌려준다. 돌려준 slice는 호출자 소유다. 공유 적재는 호출자 취소와 분리된 상한 안에서
 // 끝까지 진행하고, 기다리던 호출자만 자기 ctx가 끝나면 즉시 ctx 오류로 빠진다.
-func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
+func (c *Cache) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	snap, err := c.membersSnapshot(ctx, "all_members")
 	if err != nil {
 		return nil, err

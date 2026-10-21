@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -34,7 +35,7 @@ func TestSeedHelpCommandsCopyRoundTrip(t *testing.T) {
 			}
 
 			parsed := NewMessageAdapter(prefix, "").ParseMessage(&webhook.Message{Msg: command})
-			if parsed == nil || parsed.Type != domain.CommandHelp {
+			if parsed == nil || parsed.Type != botcommand.CommandHelp {
 				t.Errorf("copy command %q failed: %#v", command, parsed)
 			}
 		})
@@ -60,7 +61,7 @@ func TestAmbiguousMemberExampleCopyPreservesArgument(t *testing.T) {
 			}
 
 			parsed := NewMessageAdapter("#", "").ParseMessage(&webhook.Message{Msg: command})
-			if parsed == nil || parsed.Type != domain.CommandLive || parsed.Params[paramMember] != member.QualifiedName() {
+			if parsed == nil || parsed.Type != botcommand.CommandLive || parsed.Params[paramMember] != member.QualifiedName() {
 				t.Errorf("copy example changed member argument: command=%q parsed=%#v", command, parsed)
 			}
 		})

@@ -35,9 +35,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/health"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	irisroomscontracts "github.com/kapu/hololive-api/internal/contracts/irisrooms"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/readiness"
-	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"

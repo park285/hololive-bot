@@ -7,18 +7,17 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 type DeliveryExecutor interface {
-	dispatchDeliveryRows(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxByID map[int64]domain.YouTubeNotificationOutbox) dispatchstate.DispatchResult
+	dispatchDeliveryRows(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxByID map[int64]domain.YouTubeNotificationOutbox) DispatchResult
 }
 
 type ClaimManager struct {
 	db           deliverysql.DeliveryDB
-	config       dispatchstate.Config
+	config       Config
 	logger       *slog.Logger
 	delivery     *store.DeliveryRepository
 	transition   *store.TransitionStore
@@ -33,7 +32,7 @@ type ClaimManager struct {
 func newClaimManager(
 	db deliverysql.DeliveryDB,
 	logger *slog.Logger,
-	config *dispatchstate.Config,
+	config *Config,
 	deliveryRepo *store.DeliveryRepository,
 	transitionStore *store.TransitionStore,
 	executor DeliveryExecutor,
@@ -65,6 +64,6 @@ func (d *ClaimManager) dispatchDeliveryRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-) dispatchstate.DispatchResult {
+) DispatchResult {
 	return d.executor.dispatchDeliveryRows(ctx, rows, outboxByID)
 }

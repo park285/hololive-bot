@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/alarmtestkit"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -304,10 +303,8 @@ func TestSettingsAPIHandlerCanceledQueuedGetAndUpdateDoNotReadOrWrite(t *testing
 	})
 }
 
-func TestSettingsAPIHandlerSaveApplyOrderingWithActualWorker(t *testing.T) {
-	worker, targets, err := alarmtestkit.NewWorker([]int{5, 3, 1})
-
-	require.NoError(t, err)
+func TestSettingsAPIHandlerSaveApplyOrderingWithWorkerHTTP(t *testing.T) {
+	worker, targets := newAlarmSettingsWorker(t, []int{5, 3, 1})
 
 	server := httptest.NewServer(worker)
 

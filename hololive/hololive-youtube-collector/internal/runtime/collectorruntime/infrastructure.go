@@ -34,7 +34,7 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 		return nil, errors.New("build collector infra: config is nil")
 	}
 
-	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, "collector", logger)
+	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, databaseproviders.RuntimePool{Name: "collector", ReservedConns: 1}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build collector infra: %w", err)
 	}

@@ -26,7 +26,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 const (
@@ -34,7 +34,7 @@ const (
 	CommandKeyNewsSubscription = "news_subscription"
 )
 
-func NormalizeCommandKey(cmdType domain.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
+func NormalizeCommandKey(cmdType botcommand.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
 	typeStr := stringutil.Normalize(cmdType.String())
 
 	if after, ok := strings.CutPrefix(typeStr, "alarm_"); ok {

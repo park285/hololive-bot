@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
@@ -45,7 +44,7 @@ func reviveTestClaimManager(t *testing.T, db *pgxpool.Pool) *ClaimManager {
 		&testSender{failRoom: map[string]bool{}},
 		nil,
 		slog.New(slog.DiscardHandler),
-		&dispatchstate.Config{
+		&Config{
 			BatchSize:            50,
 			MaxRetries:           3,
 			RetryBackoff:         time.Minute,
@@ -196,7 +195,7 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 
 	sender := &testSender{failRoom: map[string]bool{}}
 	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil,
-		slog.New(slog.DiscardHandler), &dispatchstate.Config{
+		slog.New(slog.DiscardHandler), &Config{
 			BatchSize:             10,
 			LockTimeout:           time.Minute,
 			PollInterval:          time.Second,

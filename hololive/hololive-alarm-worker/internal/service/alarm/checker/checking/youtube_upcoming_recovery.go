@@ -2,6 +2,7 @@ package checking
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -33,6 +34,8 @@ func (c *YouTubeChecker) recoverUpcomingCandidates(ctx context.Context, streams 
 
 	result := make([]*domain.AlarmNotification, 0, len(pending))
 	subscriptions := make(map[upcomingSubscriptionKey][]string)
+	// 종료 판정은 outcome별로 모아 한 UPDATE씩 보낸다. 중간 조회가 실패해도 그때까지 판정한 종료는 반영한다.
+	finished := make(map[string][]string)
 
 	for i := range pending {
 		candidate := &pending[i]
@@ -42,14 +45,12 @@ func (c *YouTubeChecker) recoverUpcomingCandidates(ctx context.Context, streams 
 		if reason == "" {
 			reason, err = c.upcomingSubscriptionTermination(ctx, candidate, subscriptions)
 			if err != nil {
-				return nil, err
+				return nil, errors.Join(err, c.finishUpcomingCandidates(ctx, finished, now))
 			}
 		}
 
 		if reason != "" {
-			if err := c.upcomingCandidates.Finish(ctx, candidate.DedupeKey, reason, now); err != nil {
-				return nil, fmt.Errorf("terminate pending: %w", err)
-			}
+			finished[reason] = append(finished[reason], candidate.DedupeKey)
 
 			continue
 		}
@@ -57,7 +58,23 @@ func (c *YouTubeChecker) recoverUpcomingCandidates(ctx context.Context, streams 
 		result = append(result, &notification)
 	}
 
+	if err := c.finishUpcomingCandidates(ctx, finished, now); err != nil {
+		return nil, err
+	}
+
 	return result, nil
+}
+
+func (c *YouTubeChecker) finishUpcomingCandidates(ctx context.Context, finished map[string][]string, now time.Time) error {
+	if len(finished) == 0 {
+		return nil
+	}
+
+	if err := c.upcomingCandidates.Finish(ctx, finished, now); err != nil {
+		return fmt.Errorf("terminate pending: %w", err)
+	}
+
+	return nil
 }
 
 func (c *YouTubeChecker) upcomingSubscriptionTermination(ctx context.Context, candidate *dispatchoutbox.UpcomingCandidate, subscriptions map[upcomingSubscriptionKey][]string) (string, error) {

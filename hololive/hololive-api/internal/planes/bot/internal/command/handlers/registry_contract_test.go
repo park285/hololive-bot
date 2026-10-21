@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type recordingCommand struct {
@@ -22,7 +22,7 @@ type recordingCommand struct {
 func (c *recordingCommand) Name() string        { return c.name }
 func (c *recordingCommand) Description() string { return c.name }
 
-func (c *recordingCommand) Execute(_ context.Context, _ *domain.CommandContext, params map[string]any) error {
+func (c *recordingCommand) Execute(_ context.Context, _ *botcommand.CommandContext, params map[string]any) error {
 	c.calls++
 
 	for key := range params {
@@ -39,7 +39,7 @@ func (c *recordingCommand) Execute(_ context.Context, _ *domain.CommandContext, 
 func TestRegistryExecuteUnknownKeyReturnsErrUnknownCommand(t *testing.T) {
 	registry := handlers.NewRegistry()
 
-	err := registry.Execute(t.Context(), &domain.CommandContext{}, "missing", nil)
+	err := registry.Execute(t.Context(), &botcommand.CommandContext{}, "missing", nil)
 	if err == nil {
 		t.Fatal("expected error for unregistered command, got nil")
 	}
@@ -59,7 +59,7 @@ func TestRegistryExecuteNormalizesRegisteredCommandName(t *testing.T) {
 	}
 
 	for _, key := range []string{"help", "HELP", " help "} {
-		if err := registry.Execute(t.Context(), &domain.CommandContext{}, key, nil); err != nil {
+		if err := registry.Execute(t.Context(), &botcommand.CommandContext{}, key, nil); err != nil {
 			t.Fatalf("Execute(%q) error = %v", key, err)
 		}
 	}
@@ -74,7 +74,7 @@ func TestRegistryExecuteWrapsHandlerFailure(t *testing.T) {
 	registry := handlers.NewRegistry()
 	registry.Register(&recordingCommand{name: "live", err: sentinel})
 
-	err := registry.Execute(t.Context(), &domain.CommandContext{}, "live", nil)
+	err := registry.Execute(t.Context(), &botcommand.CommandContext{}, "live", nil)
 	if err == nil {
 		t.Fatal("expected wrapped handler error, got nil")
 	}
@@ -88,7 +88,7 @@ func TestRegistryExecuteWrapsHandlerFailure(t *testing.T) {
 	}
 }
 
-func passthroughNormalize(cmdType domain.CommandType, params map[string]any) (key string, normalized map[string]any) {
+func passthroughNormalize(cmdType botcommand.CommandType, params map[string]any) (key string, normalized map[string]any) {
 	return string(cmdType), params
 }
 
@@ -99,9 +99,9 @@ func TestSequentialDispatcherPublishSkipsUnknownEvents(t *testing.T) {
 
 	dispatcher := handlers.NewSequentialDispatcher(registry, passthroughNormalize)
 
-	executed, err := dispatcher.Publish(t.Context(), &domain.CommandContext{},
-		handlercore.Event{Type: domain.CommandUnknown},
-		handlercore.Event{Type: domain.CommandHelp},
+	executed, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
+		handlercore.Event{Type: botcommand.CommandUnknown},
+		handlercore.Event{Type: botcommand.CommandHelp},
 	)
 	if err != nil {
 		t.Fatalf("Publish() error = %v", err)
@@ -125,7 +125,7 @@ func TestSequentialDispatcherPublishStopsAtFirstFailure(t *testing.T) {
 	registry.Register(failing)
 	registry.Register(untouched)
 
-	normalize := func(_ domain.CommandType, params map[string]any) (key string, normalized map[string]any) {
+	normalize := func(_ botcommand.CommandType, params map[string]any) (key string, normalized map[string]any) {
 		key, ok := params["key"].(string)
 		if !ok {
 			return "", params
@@ -135,9 +135,9 @@ func TestSequentialDispatcherPublishStopsAtFirstFailure(t *testing.T) {
 	}
 
 	dispatcher := handlers.NewSequentialDispatcher(registry, normalize)
-	executed, err := dispatcher.Publish(t.Context(), &domain.CommandContext{},
-		handlercore.Event{Type: domain.CommandHelp, Params: map[string]any{"key": "first"}},
-		handlercore.Event{Type: domain.CommandHelp, Params: map[string]any{"key": "second"}},
+	executed, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
+		handlercore.Event{Type: botcommand.CommandHelp, Params: map[string]any{"key": "first"}},
+		handlercore.Event{Type: botcommand.CommandHelp, Params: map[string]any{"key": "second"}},
 	)
 
 	if !errors.Is(err, sentinel) {
@@ -160,8 +160,8 @@ func TestSequentialDispatcherPublishClonesEventParams(t *testing.T) {
 	original := map[string]any{"member": "미즈미야"}
 	dispatcher := handlers.NewSequentialDispatcher(registry, passthroughNormalize)
 
-	if _, err := dispatcher.Publish(t.Context(), &domain.CommandContext{},
-		handlercore.Event{Type: domain.CommandHelp, Params: original},
+	if _, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
+		handlercore.Event{Type: botcommand.CommandHelp, Params: original},
 	); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
@@ -178,8 +178,8 @@ func TestSequentialDispatcherPublishClonesEventParams(t *testing.T) {
 func TestSequentialDispatcherWithoutNormalizeFuncFails(t *testing.T) {
 	dispatcher := handlers.NewSequentialDispatcher(handlers.NewRegistry(), nil)
 
-	executed, err := dispatcher.Publish(t.Context(), &domain.CommandContext{},
-		handlercore.Event{Type: domain.CommandHelp},
+	executed, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
+		handlercore.Event{Type: botcommand.CommandHelp},
 	)
 	if err == nil {
 		t.Fatal("expected configuration error, got nil")

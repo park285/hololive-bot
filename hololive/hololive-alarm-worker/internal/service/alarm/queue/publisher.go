@@ -75,6 +75,14 @@ func WithMaxDeliveriesPerBatch(limit int) PublisherOption {
 	}
 }
 
+// WithPublishConfig는 worker profile에서 읽은 발행 설정을 한 번에 적용한다. 0 이하 batch 한도는 기본값을 유지한다.
+func WithPublishConfig(config PublishConfig) PublisherOption {
+	return func(p *Publisher) {
+		WithWakeupEnabled(config.WakeupEnabled)(p)
+		WithMaxDeliveriesPerBatch(config.MaxDeliveriesPerBatch)(p)
+	}
+}
+
 func NewPublisher(c cache.Client, logger *slog.Logger, opts ...PublisherOption) *Publisher {
 	if logger == nil {
 		logger = slog.Default()

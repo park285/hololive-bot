@@ -28,19 +28,10 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	keyspkg "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func TestAlarmQueueContractConstants(t *testing.T) {
 	t.Parallel()
-
-	if keyspkg.NotifyClaimKeyPrefix != "notified:claim:" {
-		t.Fatalf("NotifyClaimKeyPrefix = %q", keyspkg.NotifyClaimKeyPrefix)
-	}
-
-	if keyspkg.NotifyLogicalClaimKeyPrefix != "notified:claim:event:" {
-		t.Fatalf("NotifyLogicalClaimKeyPrefix = %q", keyspkg.NotifyLogicalClaimKeyPrefix)
-	}
 
 	if contractsalarm.QueueEnvelopeVersionV1 != 1 {
 		t.Fatalf("QueueEnvelopeVersionV1 = %d", contractsalarm.QueueEnvelopeVersionV1)

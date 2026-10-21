@@ -10,8 +10,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
@@ -20,29 +18,29 @@ import (
 
 func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificationDeliveryTelemetry, classification *timeline.PostLatencyClassificationResult) []any {
 	attrs := []any{
-		slog.Int64(logschema.FieldDeliveryID, row.DeliveryID),
-		slog.Int64(logschema.FieldOutboxID, row.OutboxID),
+		slog.Int64(FieldDeliveryID, row.DeliveryID),
+		slog.Int64(FieldOutboxID, row.OutboxID),
 		privacylog.RoomIDAttr(row.RoomID),
-		slog.String(logschema.FieldChannelID, row.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, row.PostID),
-		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(row.ContentID)),
-		slog.String(deliveryAuditAlarmTypeLogField, string(row.AlarmType)),
-		slog.Time(deliveryAuditSentAtLogField, row.EventAt.UTC()),
-		slog.String(deliveryAuditSendResultLogField, row.SendResult),
-		slog.String(deliveryAuditPathLogField, strings.TrimSpace(row.DeliveryPath)),
-		slog.String(deliveryAuditModeLogField, row.DeliveryMode),
-		slog.String(deliveryDedupeKeyLogField, row.DedupeKey),
-		slog.Int(logschema.FieldAttemptOrdinal, row.AttemptOrdinal),
+		slog.String(FieldChannelID, row.ChannelID),
+		slog.String(FieldPostID, row.PostID),
+		slog.String(FieldContentID, strings.TrimSpace(row.ContentID)),
+		slog.String(FieldAlarmType, string(row.AlarmType)),
+		slog.Time(FieldSentAt, row.EventAt.UTC()),
+		slog.String(FieldSendResult, row.SendResult),
+		slog.String(FieldDeliveryPath, strings.TrimSpace(row.DeliveryPath)),
+		slog.String(FieldDeliveryMode, row.DeliveryMode),
+		slog.String(FieldDedupeKey, row.DedupeKey),
+		slog.Int(FieldAttemptOrdinal, row.AttemptOrdinal),
 	}
 
 	attrs = appendCommunityShortsAlarmTimingLogAttrs(attrs, telemetry.CommunityShortsAlarmTimingForTelemetryRow(row))
 
 	if row.DetectedAt != nil {
-		attrs = append(attrs, slog.Time(logschema.FieldDetectedAt, row.DetectedAt.UTC()))
+		attrs = append(attrs, slog.Time(FieldDetectedAt, row.DetectedAt.UTC()))
 	}
 
 	if strings.TrimSpace(row.FailureReason) != "" {
-		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, row.FailureReason))
+		attrs = append(attrs, slog.String(FieldFailureReason, row.FailureReason))
 	}
 
 	attrs = appendLatencyClassificationLogAttr(attrs, classification)
@@ -53,10 +51,10 @@ func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificatio
 type TelemetryProcessor struct {
 	telemetry *telemetry.Repository
 	logger    *slog.Logger
-	config    dispatchstate.Config
+	config    Config
 }
 
-func newTelemetryProcessor(telemetryRepo *telemetry.Repository, logger *slog.Logger, config *dispatchstate.Config) *TelemetryProcessor {
+func newTelemetryProcessor(telemetryRepo *telemetry.Repository, logger *slog.Logger, config *Config) *TelemetryProcessor {
 	return &TelemetryProcessor{
 		telemetry: telemetryRepo,
 		logger:    logger,
@@ -201,8 +199,8 @@ func (tp *TelemetryProcessor) emitDeliveryTelemetry(
 
 	attrs := buildDeliveryAuditLogAttrsWithClassification(row, classification)
 
-	attrs = append(attrs, slog.String(logschema.FieldTelemetrySource, logschema.TelemetrySourcePersistentBuffer))
-	tp.logger.Info(deliveryAuditLogMessage, attrs...)
+	attrs = append(attrs, slog.String(FieldTelemetrySource, TelemetrySourcePersistentBuffer))
+	tp.logger.Info(CommunityShortsDeliveryAuditMessage, attrs...)
 
 	return nil
 }

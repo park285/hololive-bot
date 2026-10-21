@@ -201,7 +201,7 @@ func seedAlarmDispatchRetentionMetrics(t *testing.T, pool *pgxpool.Pool) {
 		require.NoError(t, candidates.Stage(t.Context(), "retention-metric-channel", start.Add(-time.Hour), []*domain.AlarmNotification{notification}))
 
 		key := dispatchoutbox.BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: *notification})
-		require.NoError(t, candidates.Finish(t.Context(), key, "subscription_removed", old))
+		require.NoError(t, candidates.Finish(t.Context(), map[string][]string{"subscription_removed": {key}}, old))
 	}
 
 	assertAlarmDispatchRetentionFixtureRows(t, pool, 4, 4, 1, 2)

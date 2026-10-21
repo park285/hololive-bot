@@ -20,8 +20,6 @@
 
 package delivery
 
-import "time"
-
 type SendResult struct {
 	Attempted   int      // 적재 처리 대상 room 수 (취소로 시작하지 못한 실패 포함)
 	Sent        int      // intent 적재 수락 수; 멱등 no-op 포함, 발송·handoff 증거가 아님
@@ -40,6 +38,3 @@ func (r *SendResult) Merge(child SendResult) {
 		r.FailedRooms = append(r.FailedRooms, child.FailedRooms...)
 	}
 }
-
-// DefaultExecutionLockTTL은 digest 실행 분산 락 TTL이다.
-const DefaultExecutionLockTTL = 15 * time.Minute

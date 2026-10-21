@@ -5,7 +5,6 @@ go 1.27.3
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/kapu/hololive-api v0.0.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/shared-go/v2 v2.16.0
@@ -121,7 +120,3 @@ require (
 replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
 
 replace github.com/kapu/hololive-shared => ../hololive-shared
-
-replace github.com/kapu/hololive-api => ../hololive-api
-
-replace github.com/kapu/hololive-alarm-worker => ../hololive-alarm-worker

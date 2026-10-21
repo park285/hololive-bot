@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -63,7 +64,7 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 		t.Helper()
 
 		for range 2 {
-			require.NoError(t, command.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil))
+			require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil))
 		}
 
 		require.Zero(t, provider.calls)
@@ -89,10 +90,10 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	require.ErrorIs(t, command.Execute(ctx, &domain.CommandContext{Room: testRoomID}, nil), context.Canceled)
+	require.ErrorIs(t, command.Execute(ctx, &botcommand.CommandContext{Room: testRoomID}, nil), context.Canceled)
 	require.Zero(t, errorsSent)
 	pool.Close()
-	require.NoError(t, command.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil))
+	require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil))
 	require.Equal(t, 1, errorsSent)
 	require.Zero(t, provider.calls)
 	t.Log("actual command/repository/template: cold/warm upstream=0; unknown, partial without diagnostics, confirmed-empty, cancellation and DB error preserved")

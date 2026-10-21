@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -52,7 +51,7 @@ func newDispatcherForTest(
 	sender delivery.PreparedMessageSender,
 	renderer *template.Renderer,
 	logger *slog.Logger,
-	config *dispatchstate.Config,
+	config *Config,
 ) *Dispatcher {
 	tb.Helper()
 
@@ -65,7 +64,7 @@ func newDispatcherWithDepsForTest(
 	db *pgxpool.Pool,
 	deps Dependencies,
 	logger *slog.Logger,
-	config *dispatchstate.Config,
+	config *Config,
 ) *Dispatcher {
 	tb.Helper()
 

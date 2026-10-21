@@ -13,7 +13,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
@@ -227,13 +226,13 @@ func deliveryLogAttrs(
 	baseAttrs := make([]any, 0, 7+len(attrs))
 
 	baseAttrs = append(baseAttrs,
-		slog.Int64(logschema.FieldDeliveryID, row.ID),
-		slog.Int64(logschema.FieldOutboxID, outbox.ID),
+		slog.Int64(FieldDeliveryID, row.ID),
+		slog.Int64(FieldOutboxID, outbox.ID),
 		privacylog.RoomIDAttr(row.RoomID),
-		slog.String(logschema.FieldChannelID, outbox.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
-		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
-		slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
+		slog.String(FieldChannelID, outbox.ChannelID),
+		slog.String(FieldPostID, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
+		slog.String(FieldContentID, strings.TrimSpace(outbox.ContentID)),
+		slog.String(FieldAlarmType, string(outbox.Kind.ToAlarmType())),
 	)
 
 	return append(baseAttrs, attrs...)

@@ -7,11 +7,11 @@ import (
 
 	envutil "github.com/park285/shared-go/v2/pkg/envutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/celebration"
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
@@ -45,13 +45,12 @@ func buildCelebrationRunnerScheduler(
 	}
 
 	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
-	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
+	alarmRepo := alarmstore.NewRepository(infra.Postgres, logger)
 	publisher := queue.NewPublisher(
 		infra.Cache,
 		logger,
 		queue.WithOutbox(foundation.Outbox),
-		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
-		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
+		queue.WithPublishConfig(publishConfig),
 	)
 
 	return optionalRuntimeSchedulerResult{scheduler: celebration.NewRunner(memberRepo, alarmRepo, publisher, logger, config)}
@@ -105,8 +104,7 @@ func buildBirthdayStreamRunnerScheduler(
 		infra.Cache,
 		logger,
 		queue.WithOutbox(foundation.Outbox),
-		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
-		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
+		queue.WithPublishConfig(publishConfig),
 	)
 
 	return optionalRuntimeSchedulerResult{scheduler: celebration.NewBirthdayStreamRunner(

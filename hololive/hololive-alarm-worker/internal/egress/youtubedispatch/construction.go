@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -53,7 +52,7 @@ type Dependencies struct {
 }
 
 // NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
-func NewDispatcher(deps Dependencies, logger *slog.Logger, config *dispatchstate.Config) (*Dispatcher, error) {
+func NewDispatcher(deps Dependencies, logger *slog.Logger, config *Config) (*Dispatcher, error) {
 	if deps.DB == nil || reflectutil.IsNil(deps.DB) {
 		return nil, errors.New("initialize youtube dispatcher: db is required")
 	}
@@ -99,7 +98,7 @@ func dispatcherLogger(logger *slog.Logger) *slog.Logger {
 func newDispatcherTransitionStore(
 	db deliverysql.DeliveryDB,
 	logger *slog.Logger,
-	config dispatchstate.Config,
+	config Config,
 ) (*store.TransitionStore, error) {
 	owner, err := leaseowner.InstanceID("youtube-dispatcher")
 	if err != nil {
@@ -121,7 +120,7 @@ func newDispatcherTransitionStore(
 func assembleDispatcher(
 	deps Dependencies,
 	logger *slog.Logger,
-	config dispatchstate.Config,
+	config Config,
 	telemetryRepository *telemetry.Repository,
 	transitionStore *store.TransitionStore,
 ) *Dispatcher {

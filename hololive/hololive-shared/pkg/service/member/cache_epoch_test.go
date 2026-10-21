@@ -181,7 +181,7 @@ func TestCacheEpoch_InFlightOldLoaderCannotPublishAfterRemoteBump(t *testing.T) 
 	done := make(chan loadResult, 1)
 
 	go func() {
-		members, err := c.AllMembers(t.Context())
+		members, err := c.LoadAllMembers(t.Context())
 		done <- loadResult{members: members, err: err}
 	}()
 
@@ -221,7 +221,7 @@ func TestCacheEpoch_RemoteBumpRejectsStaleFallbackAfterReloadFailure(t *testing.
 		return nil, wantErr
 	}
 
-	members, err := c.AllMembers(t.Context())
+	members, err := c.LoadAllMembers(t.Context())
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("AllMembers() error = %v, want %v", err, wantErr)
 	}
@@ -368,7 +368,7 @@ func TestCacheEpoch_UnavailableBypassesStaleSnapshot(t *testing.T) {
 		t.Fatal("reconcileEpoch() error = nil, want failure")
 	}
 
-	got, err := c.AllMembers(t.Context())
+	got, err := c.LoadAllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
@@ -407,7 +407,7 @@ func TestCacheEpoch_RegressionInvalidatesAndKeepsCacheEnabled(t *testing.T) {
 	}
 
 	for range 2 {
-		got, err := c.AllMembers(t.Context())
+		got, err := c.LoadAllMembers(t.Context())
 		if err != nil || len(got) != 1 || got[0].Name != "Database" {
 			t.Fatalf("AllMembers() = %+v, %v; want reloaded Database snapshot", got, err)
 		}
@@ -510,7 +510,7 @@ func (topology *epochTestTopology) converged(epoch uint64, name string) func() b
 				return false
 			}
 
-			members, err := process.AllMembers(context.Background())
+			members, err := process.LoadAllMembers(context.Background())
 			if err != nil || len(members) != 1 || members[0].Name != name {
 				return false
 			}
@@ -556,9 +556,9 @@ func TestCacheEpoch_MemberDataNeverWrittenToValkey(t *testing.T) {
 		t.Fatalf("WarmUpCache() error = %v", err)
 	}
 
-	byChannel, channelErr := c.GetByChannelID(t.Context(), "UC-epoch")
-	byName, nameErr := c.GetByName(t.Context(), "Epoch")
-	byAlias, aliasErr := c.FindByAlias(t.Context(), "에포크")
+	byChannel, channelErr := c.FindMemberByChannelID(t.Context(), "UC-epoch")
+	byName, nameErr := c.FindMemberByName(t.Context(), "Epoch")
+	byAlias, aliasErr := c.FindMemberByAlias(t.Context(), "에포크")
 
 	if channelErr != nil || nameErr != nil || aliasErr != nil || byChannel.ID != 1 || byName.ID != 1 || byAlias.ID != 1 {
 		t.Fatalf("snapshot lookups = %+v/%v, %+v/%v, %+v/%v", byChannel, channelErr, byName, nameErr, byAlias, aliasErr)

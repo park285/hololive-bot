@@ -32,6 +32,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
@@ -214,7 +215,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		Logger: newCommandTestLogger(),
 	})
 
-	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(reqCtx, &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		testParamAction: testActionAdd,
 		paramMember:     testMemberAqua,
 	})
@@ -263,7 +264,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		Logger: newCommandTestLogger(),
 	})
 
-	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := cmd.Execute(reqCtx, &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)

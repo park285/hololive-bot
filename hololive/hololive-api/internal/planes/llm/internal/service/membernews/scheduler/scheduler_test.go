@@ -96,7 +96,7 @@ func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Dig
 	return digest.Headline, nil
 }
 
-// mockNotificationLocker: delivery.NotificationLocker 구현.
+// mockNotificationLocker: executionlock.Locker 구현.
 type mockNotificationLocker struct {
 	acquireToken    string
 	acquireAcquired bool

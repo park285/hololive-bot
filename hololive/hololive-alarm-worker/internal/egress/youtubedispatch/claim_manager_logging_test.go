@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 )
 
 func TestEnqueueDeliveries_DoesNotLogZeroWorkAtInfo(t *testing.T) {
@@ -15,7 +13,7 @@ func TestEnqueueDeliveries_DoesNotLogZeroWorkAtInfo(t *testing.T) {
 	var logBuffer bytes.Buffer
 
 	logger := slog.New(slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dispatcher := newDispatcherForTest(t, nil, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, nil, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &Config{})
 
 	dispatcher.claim.recordOutboxEnqueueStats(0, outboxEnqueueStats{})
 

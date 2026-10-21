@@ -28,7 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 

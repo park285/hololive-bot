@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 type DedupeInput struct {
@@ -155,7 +155,7 @@ func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) Ded
 	category := ""
 
 	if notification.IsLiveCatchup() {
-		category = sharedalarmkeys.NotificationCategoryLiveCatchup
+		category = alarmkeys.NotificationCategoryLiveCatchup
 		scheduled = time.Time{}
 	}
 

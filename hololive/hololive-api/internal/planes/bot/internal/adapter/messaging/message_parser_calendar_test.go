@@ -3,7 +3,7 @@ package messaging
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func TestTryCelebrationCalendarCommand(t *testing.T) {
@@ -44,8 +44,8 @@ func TestTryCelebrationCalendarCommand(t *testing.T) {
 				return
 			}
 
-			if cmd.Type != domain.CommandCalendar {
-				t.Errorf("Type = %v, want %v", cmd.Type, domain.CommandCalendar)
+			if cmd.Type != botcommand.CommandCalendar {
+				t.Errorf("Type = %v, want %v", cmd.Type, botcommand.CommandCalendar)
 			}
 
 			assertMonthParam(t, cmd.Params, tt.month)

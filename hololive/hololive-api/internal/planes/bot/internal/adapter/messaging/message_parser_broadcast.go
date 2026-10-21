@@ -27,8 +27,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const maxParsedBroadcastHistoryDays = 365
@@ -46,7 +46,7 @@ func (ma *MessageAdapter) tryBroadcastHistoryCommand(command string, args []stri
 		return broadcastThumbnailCommand(args[1:], raw), true
 	}
 
-	return &ParsedCommand{Type: domain.CommandBroadcastHistory, Params: parseBroadcastHistoryArgs(args), RawMessage: raw}, true
+	return &ParsedCommand{Type: botcommand.CommandBroadcastHistory, Params: parseBroadcastHistoryArgs(args), RawMessage: raw}, true
 }
 
 func (ma *MessageAdapter) isBroadcastHistoryCommand(cmd string) bool {
@@ -64,7 +64,7 @@ func broadcastThumbnailCommand(args []string, raw string) *ParsedCommand {
 		params["video_id"] = parseBroadcastThumbnailVideoID(args[0])
 	}
 
-	return &ParsedCommand{Type: domain.CommandBroadcastThumbnail, Params: params, RawMessage: raw}
+	return &ParsedCommand{Type: botcommand.CommandBroadcastThumbnail, Params: params, RawMessage: raw}
 }
 
 func parseBroadcastThumbnailVideoID(raw string) string {

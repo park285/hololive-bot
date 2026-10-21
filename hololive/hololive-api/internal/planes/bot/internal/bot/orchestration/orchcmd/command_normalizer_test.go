@@ -24,12 +24,12 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 type normalizeCommandKeyTestCase struct {
 	name           string
-	cmdType        domain.CommandType
+	cmdType        botcommand.CommandType
 	params         map[string]any
 	wantKey        string
 	wantAction     string
@@ -40,49 +40,49 @@ func normalizeCommandKeyTestCases() []normalizeCommandKeyTestCase {
 	return []normalizeCommandKeyTestCase{
 		{
 			name:       "alarm_list → alarm 키 + action=list",
-			cmdType:    domain.CommandAlarmList,
+			cmdType:    botcommand.CommandAlarmList,
 			params:     map[string]any{},
 			wantKey:    CommandKeyAlarm,
 			wantAction: "list",
 		},
 		{
 			name:       "alarm_add → alarm 키 + action=add",
-			cmdType:    domain.CommandAlarmAdd,
+			cmdType:    botcommand.CommandAlarmAdd,
 			params:     map[string]any{"channel": "pekora"},
 			wantKey:    CommandKeyAlarm,
 			wantAction: "add",
 		},
 		{
 			name:       "alarm_remove → alarm 키 + action=remove",
-			cmdType:    domain.CommandAlarmRemove,
+			cmdType:    botcommand.CommandAlarmRemove,
 			params:     map[string]any{"channel": "aqua"},
 			wantKey:    CommandKeyAlarm,
 			wantAction: "remove",
 		},
 		{
 			name:       "alarm_clear → alarm 키 + action=clear",
-			cmdType:    domain.CommandAlarmClear,
+			cmdType:    botcommand.CommandAlarmClear,
 			params:     map[string]any{},
 			wantKey:    CommandKeyAlarm,
 			wantAction: "clear",
 		},
 		{
 			name:       "alarm_invalid → alarm 키 + action=invalid",
-			cmdType:    domain.CommandAlarmInvalid,
+			cmdType:    botcommand.CommandAlarmInvalid,
 			params:     map[string]any{},
 			wantKey:    CommandKeyAlarm,
 			wantAction: "invalid",
 		},
 		{
 			name:       "alarm(action 없음) → alarm 키 + 기본 action=list",
-			cmdType:    domain.CommandType("alarm"),
+			cmdType:    botcommand.CommandType("alarm"),
 			params:     map[string]any{},
 			wantKey:    CommandKeyAlarm,
 			wantAction: "list",
 		},
 		{
 			name:           "alarm(action 있음) → alarm 키 + 기존 action 유지",
-			cmdType:        domain.CommandType("alarm"),
+			cmdType:        botcommand.CommandType("alarm"),
 			params:         map[string]any{"action": "custom"},
 			wantKey:        CommandKeyAlarm,
 			wantAction:     "custom",
@@ -90,27 +90,27 @@ func normalizeCommandKeyTestCases() []normalizeCommandKeyTestCase {
 		},
 		{
 			name:       "news_subscription(action 없음) → news_subscription 키 + 기본 action=status",
-			cmdType:    domain.CommandMemberNewsSubscription,
+			cmdType:    botcommand.CommandMemberNewsSubscription,
 			params:     map[string]any{},
 			wantKey:    CommandKeyNewsSubscription,
 			wantAction: "status",
 		},
 		{
 			name:       "news_subscription_toggle → news_subscription 키 + action=toggle",
-			cmdType:    domain.CommandType("news_subscription_toggle"),
+			cmdType:    botcommand.CommandType("news_subscription_toggle"),
 			params:     map[string]any{},
 			wantKey:    CommandKeyNewsSubscription,
 			wantAction: "toggle",
 		},
 		{
 			name:    "live → 변환 없이 live 키 반환",
-			cmdType: domain.CommandLive,
+			cmdType: botcommand.CommandLive,
 			params:  map[string]any{"foo": "bar"},
 			wantKey: "live",
 		},
 		{
 			name:    "help → 변환 없이 help 키 반환",
-			cmdType: domain.CommandHelp,
+			cmdType: botcommand.CommandHelp,
 			params:  map[string]any{},
 			wantKey: "help",
 		},

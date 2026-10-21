@@ -6,7 +6,7 @@ import (
 	"github.com/park285/iris-client-go/v3/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func TestMessageAdapterParsesHelpCommand(t *testing.T) {
@@ -27,7 +27,7 @@ func TestMessageAdapterParsesHelpCommand(t *testing.T) {
 				t.Fatal("ParseMessage returned nil")
 			}
 
-			if parsed.Type != domain.CommandHelp {
+			if parsed.Type != botcommand.CommandHelp {
 				t.Fatalf("Type = %q, want CommandHelp", parsed.Type)
 			}
 
@@ -60,7 +60,7 @@ func TestMessageAdapterReturnsUnknownForNonCommandInput(t *testing.T) {
 				t.Fatal("ParseMessage returned nil")
 			}
 
-			if parsed.Type != domain.CommandUnknown {
+			if parsed.Type != botcommand.CommandUnknown {
 				t.Fatalf("Type = %q, want CommandUnknown", parsed.Type)
 			}
 		})
@@ -71,7 +71,7 @@ func TestMessageAdapterBlankPrefixDefaultsToExclamation(t *testing.T) {
 	messageAdapter := messaging.NewMessageAdapter("   ", "")
 
 	parsed := messageAdapter.ParseMessage(&webhook.Message{Msg: "!help"})
-	if parsed.Type != domain.CommandHelp {
+	if parsed.Type != botcommand.CommandHelp {
 		t.Fatalf("Type = %q, want CommandHelp via default prefix", parsed.Type)
 	}
 }

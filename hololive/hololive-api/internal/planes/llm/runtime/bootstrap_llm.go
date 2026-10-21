@@ -26,6 +26,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scheduler"
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
@@ -40,7 +41,7 @@ func buildMajorEventComponents(
 	majorEventRepository *majorevent.Repository,
 	formatter mescheduler.Formatter,
 	summarizer *mesummarizer.EventSummarizer,
-	locker delivery.NotificationLocker,
+	locker executionlock.Locker,
 	outboxRepository *delivery.OutboxRepository,
 	guards *llmGuards,
 	logger *slog.Logger,
@@ -88,7 +89,7 @@ func buildMajorEventComponents(
 func buildMemberNewsComponents(
 	memberNews *membernews.Service,
 	formatter model.DigestFormatter,
-	locker delivery.NotificationLocker,
+	locker executionlock.Locker,
 	outboxRepository *delivery.OutboxRepository,
 	outputGuard *outputguard.Guard,
 	logger *slog.Logger,

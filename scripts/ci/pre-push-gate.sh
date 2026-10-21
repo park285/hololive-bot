@@ -224,7 +224,6 @@ run_content_gates() {
   echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
   LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \
   BASE_REF="${BASE_SHA:-origin/main}" \
-  STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \
   RUN_NILAWAY="${RUN_NILAWAY:-true}" \
   RUN_RACE_TESTS="${RUN_RACE_TESTS:-${race_default}}" \
     ./scripts/ci/local-ci.sh

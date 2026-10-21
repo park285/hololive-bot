@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -250,7 +251,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 		paramMember:     "설정123",
 	}
 
-	ctx := &domain.CommandContext{
+	ctx := &botcommand.CommandContext{
 		Room:     testRoomID,
 		UserName: "user-1",
 	}
@@ -293,7 +294,7 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 
 	cmd := alarmcmd.NewAlarmCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{testParamAction: "list"})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{testParamAction: "list"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -330,7 +331,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 
 	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "alarm-propagation")
 
-	err := alarmcmd.NewAlarmCommand(deps).Execute(ctx, &domain.CommandContext{
+	err := alarmcmd.NewAlarmCommand(deps).Execute(ctx, &botcommand.CommandContext{
 		Room:     testRoomID,
 		RoomName: "room-name",
 		UserID:   "user-1",
@@ -370,7 +371,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{
+	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{
 		Room:     testRoomID,
 		RoomName: "room-name",
 		UserID:   "user-1",

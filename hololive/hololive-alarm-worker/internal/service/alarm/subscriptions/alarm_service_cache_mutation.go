@@ -7,16 +7,16 @@ import (
 	"log/slog"
 	"strings"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 // 호출자는 mutation mutex를 보유한다. 빈 구독 표식을 먼저 지워 positive 삭제 뒤
 // 기존 DB read-through가 가려지지 않게 하고, 모두 성공한 뒤에만 DB 변경을 시작한다.
 func (as *AlarmService) invalidateChannelSubscribers(ctx context.Context, channelID string, alarmTypes domain.AlarmTypes) error {
 	for _, alarmType := range alarmTypes {
-		if err := as.cache.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {
+		if err := as.cache.Del(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {
 			return fmt.Errorf("invalidate subscriber empty marker: type %s: %w", alarmType, err)
 		}
 	}
@@ -199,7 +199,7 @@ func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, chann
 		return as.cacheAlarmChannelRegistry(ctx, channelID)
 	}
 
-	if _, err := as.cache.SRem(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID}); err != nil {
+	if _, err := as.cache.SRem(ctx, alarmkeys.AlarmChannelRegistryKey, []string{channelID}); err != nil {
 		return fmt.Errorf("cleanup channel registry: remove channel registry entry: %w", err)
 	}
 

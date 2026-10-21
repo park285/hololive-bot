@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -53,7 +52,7 @@ func (a *deliveryAttempt) singleton(i int) deliveryAttempt {
 
 // 결과와 그 잠금은 같은 배치에 속하며 작업 goroutine 종료 뒤에만 결과를 반환한다.
 type deliveryDispatchResult struct {
-	dispatchstate.DispatchResult
+	DispatchResult
 
 	mu sync.Mutex
 }

@@ -21,8 +21,7 @@ func TestCleanupChannelRegistryIfEmpty_ReturnsErrorWhenRemovingRegistryEntryFail
 	removeErr := errors.New("remove failed")
 
 	as.cache = &cachemocks.Client{
-		BuilderFunc: cache.Builder,
-		BFunc:       cache.B,
+		BFunc: cache.B,
 		GetClientFunc: func() valkey.Client {
 			return cache.GetClient()
 		},

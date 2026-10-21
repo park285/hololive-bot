@@ -24,13 +24,14 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type DeliveryModule struct {
-	Locker     delivery.NotificationLocker
+	Locker     executionlock.Locker
 	Repository *delivery.OutboxRepository
 }
 
@@ -40,7 +41,7 @@ func BuildDeliveryModule(
 	postgres database.Client,
 	logger *slog.Logger,
 ) (*DeliveryModule, error) {
-	locker, err := delivery.NewLocker(cacheClient, logger)
+	locker, err := executionlock.New(cacheClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build delivery module: %w", err)
 	}

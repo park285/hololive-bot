@@ -32,6 +32,6 @@ type CacheProvider interface {
 }
 
 var (
-	_ domain.MemberDataProvider = (*ServiceAdapter)(nil)
+	_ domain.MemberDataProvider = (*Cache)(nil)
 	_ CacheProvider             = (*Cache)(nil)
 )

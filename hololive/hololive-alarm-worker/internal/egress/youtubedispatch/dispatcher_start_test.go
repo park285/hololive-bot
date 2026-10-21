@@ -11,9 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -47,7 +46,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	cache := cachemocks.NewLenientClient()
 
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		if key == sharedalarmkeys.BuildChannelSubscriberKey("UCstart", domain.AlarmTypeLive) {
+		if key == alarmkeys.BuildChannelSubscriberKey("UCstart", domain.AlarmTypeLive) {
 			return []string{"room-start"}, nil
 		}
 
@@ -55,7 +54,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cache, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -95,7 +94,7 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_run_tick")
 
-	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        10 * time.Millisecond,
@@ -138,7 +137,7 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_aggregate_tick")
 
-	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:             10,
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
@@ -178,7 +177,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(1)
 	db := openDispatcherStartTestDB(t, "dispatcher_cleanup_tick")
 
-	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:      10,
 		LockTimeout:    time.Minute,
 		PollInterval:   time.Hour,
@@ -217,7 +216,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 }
 
 func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
-	dispatcher := newDispatcherForTest(t, nil, nil, nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, nil, nil, nil, slog.New(slog.DiscardHandler), &Config{
 		PollInterval:          time.Hour,
 		AggregateSyncInterval: time.Hour,
 		TelemetryPollInterval: time.Hour,

@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
@@ -26,7 +26,7 @@ const (
 )
 
 type commitHookRepository struct {
-	*sharedalarm.Repository
+	*alarmstore.Repository
 
 	afterCommit func()
 }
@@ -121,7 +121,7 @@ func newCommitBoundaryService(t *testing.T) (*AlarmService, *pgxpool.Pool, *cach
 
 	pool := dbtest.NewPool(t)
 	logger := newDiscardAlarmLogger()
-	repository := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repository := alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
 	cacheClient, _ := newLenientAlarmCacheMock(t.Context(), t, nil)
 	service, err := NewAlarmService(cacheClient, nil, repository, logger, []int{5})
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestSubscriptionCommitBoundaryPreservesRecipients(t *testing.T) {
 func assertCommittedRecipients(t *testing.T, service *AlarmService, pool *pgxpool.Pool, mutation commitMutationCase) {
 	t.Helper()
 
-	resolver := sharedalarm.NewSubscriberResolver(service.cache, pool)
+	resolver := alarmstore.NewSubscriberResolver(service.cache, pool)
 
 	for kind, expected := range map[domain.AlarmType][]string{
 		domain.AlarmTypeLive: mutation.wantLive, domain.AlarmTypeCommunity: mutation.wantCommunity, domain.AlarmTypeShorts: mutation.wantShorts,
@@ -208,7 +208,7 @@ func assertCommittedRecipients(t *testing.T, service *AlarmService, pool *pgxpoo
 	require.ElementsMatch(t, mutation.wantNew, rooms)
 
 	if len(mutation.wantNew) > 0 {
-		channels, err := service.cache.SMembers(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey)
+		channels, err := service.cache.SMembers(t.Context(), alarmkeys.AlarmChannelRegistryKey)
 		require.NoError(t, err)
 		require.ElementsMatch(t, []string{testChannelID, "new-channel"}, channels)
 	}
@@ -217,7 +217,7 @@ func assertCommittedRecipients(t *testing.T, service *AlarmService, pool *pgxpoo
 func TestFailedNegativeInvalidationLeavesDatabaseAndRecipientsUnchanged(t *testing.T) {
 	service, pool, client := newCommitBoundaryService(t)
 	ctx := t.Context()
-	emptyKey := sharedalarmkeys.BuildChannelSubscriberEmptyKey(testChannelID, domain.AlarmTypeLive)
+	emptyKey := alarmkeys.BuildChannelSubscriberEmptyKey(testChannelID, domain.AlarmTypeLive)
 	require.NoError(t, client.Set(ctx, emptyKey, "1", time.Minute))
 
 	originalDel := client.DelFunc
@@ -239,7 +239,7 @@ func TestFailedNegativeInvalidationLeavesDatabaseAndRecipientsUnchanged(t *testi
 	require.NoError(t, err)
 	require.Empty(t, alarms)
 
-	rooms, err := sharedalarm.NewSubscriberResolver(client, pool).ResolveEventSubscribers(ctx, testChannelID, "", domain.AlarmTypeLive)
+	rooms, err := alarmstore.NewSubscriberResolver(client, pool).ResolveEventSubscribers(ctx, testChannelID, "", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{testExistingRoomA, testExistingRoomB}, rooms)
 }

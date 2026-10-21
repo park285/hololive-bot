@@ -62,7 +62,6 @@ type Client struct {
 	GetClientFunc func() valkey.Client
 	SetNXFunc     func(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	DoMultiFunc   func(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult
-	BuilderFunc   func() valkey.Builder
 	BFunc         func() valkey.Builder
 
 	CompareAndDeleteFunc func(ctx context.Context, key, expectedValue string) (bool, error)
@@ -427,16 +426,6 @@ func (m *Client) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey
 	m.panicIfUnset("DoMultiFunc")
 
 	return nil
-}
-
-func (m *Client) Builder() valkey.Builder {
-	if m.BuilderFunc != nil {
-		return m.BuilderFunc()
-	}
-
-	m.panicIfUnset("BuilderFunc")
-
-	return valkey.Builder{}
 }
 
 func (m *Client) B() valkey.Builder {

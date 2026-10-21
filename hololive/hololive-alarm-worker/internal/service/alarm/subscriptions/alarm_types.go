@@ -25,10 +25,10 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	targetpolicy "github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -42,7 +42,7 @@ type alarmWriter interface {
 type AlarmService struct {
 	cache           cache.Client
 	memberData      domain.MemberDataProvider
-	alarmRepository *alarm.Repository
+	alarmRepository *alarmstore.Repository
 	alarmWriter     alarmWriter
 	logger          *slog.Logger
 	targetPolicy    targetpolicy.TargetMinutePolicy

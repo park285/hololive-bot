@@ -9,12 +9,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
 func TestUpcomingCandidateVirtualTimePreservesSelectedCategoryUntilStart(t *testing.T) {
@@ -55,7 +55,8 @@ func (failedCandidateStore) Stage(context.Context, string, time.Time, []*domain.
 func (failedCandidateStore) Pending(context.Context, time.Time) ([]dispatchoutbox.UpcomingCandidate, error) {
 	return nil, nil
 }
-func (failedCandidateStore) Finish(context.Context, string, string, time.Time) error { return nil }
+
+func (failedCandidateStore) Finish(context.Context, map[string][]string, time.Time) error { return nil }
 
 func TestYouTubeCandidateStagingFailureDoesNotAdvanceEvaluation(t *testing.T) {
 	scheduler := tier.NewTieredScheduler(newCheckerTestLogger())
@@ -73,7 +74,7 @@ func TestUpcomingRecoveryTerminatesRemovedSubscription(t *testing.T) {
 	notification := domain.NewAlarmNotification("removed-room", &domain.Channel{ID: "removed-channel"}, &domain.Stream{ID: "removed-stream", ChannelID: "removed-channel", Status: domain.StreamStatusUpcoming, StartScheduled: &start}, 5, nil, "")
 	require.NoError(t, store.Stage(t.Context(), "removed-channel", now, []*domain.AlarmNotification{notification}))
 
-	checker := &YouTubeChecker{pendingSubscribers: sharedalarm.NewSubscriberResolver(nil, pool), upcomingCandidates: store}
+	checker := &YouTubeChecker{pendingSubscribers: alarmstore.NewSubscriberResolver(nil, pool), upcomingCandidates: store}
 	result, err := checker.recoverUpcomingCandidates(t.Context(), nil, now.Add(65*time.Second))
 	require.NoError(t, err)
 	require.Empty(t, result)
@@ -130,7 +131,7 @@ func TestUpcomingRecoveryPersistsScheduleChangeTermination(t *testing.T) {
 	notification := domain.NewAlarmNotification("changed-room", &domain.Channel{ID: "changed-channel"}, &domain.Stream{ID: "changed-stream", ChannelID: "changed-channel", Status: domain.StreamStatusUpcoming, StartScheduled: &start}, 5, nil, "")
 	require.NoError(t, store.Stage(t.Context(), "changed-channel", now, []*domain.AlarmNotification{notification}))
 
-	checker := &YouTubeChecker{pendingSubscribers: sharedalarm.NewSubscriberResolver(nil, pool), upcomingCandidates: store}
+	checker := &YouTubeChecker{pendingSubscribers: alarmstore.NewSubscriberResolver(nil, pool), upcomingCandidates: store}
 	result, err := checker.recoverUpcomingCandidates(t.Context(), map[string][]*domain.Stream{"changed-channel": {{ID: "changed-stream", Status: domain.StreamStatusUpcoming, StartScheduled: new(start.Add(time.Minute))}}}, now.Add(65*time.Second))
 	require.NoError(t, err)
 	require.Empty(t, result)

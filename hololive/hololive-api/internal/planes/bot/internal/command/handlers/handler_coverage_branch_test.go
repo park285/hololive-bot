@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -199,7 +200,7 @@ func TestParseUpcomingOptions(t *testing.T) {
 func TestShouldSuppressSchedulePrompt(t *testing.T) {
 	tests := []struct {
 		name     string
-		cmdCtx   *domain.CommandContext
+		cmdCtx   *botcommand.CommandContext
 		rawToken string
 		want     bool
 	}{
@@ -220,22 +221,22 @@ func TestShouldSuppressSchedulePrompt(t *testing.T) {
 		},
 		{
 			name:   "message with prefix and english member",
-			cmdCtx: &domain.CommandContext{Message: "!member"},
+			cmdCtx: &botcommand.CommandContext{Message: "!member"},
 			want:   true,
 		},
 		{
 			name:   "message with prefix and korean member",
-			cmdCtx: &domain.CommandContext{Message: " / 멤버 "},
+			cmdCtx: &botcommand.CommandContext{Message: " / 멤버 "},
 			want:   true,
 		},
 		{
 			name:   "empty message",
-			cmdCtx: &domain.CommandContext{Message: "   "},
+			cmdCtx: &botcommand.CommandContext{Message: "   "},
 			want:   false,
 		},
 		{
 			name:   "non member message",
-			cmdCtx: &domain.CommandContext{Message: "!일정"},
+			cmdCtx: &botcommand.CommandContext{Message: "!일정"},
 			want:   false,
 		},
 	}

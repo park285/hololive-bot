@@ -1,0 +1,586 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package alarmhttp
+
+import (
+	"bytes"
+	"context"
+	jsonv2 "encoding/json/v2"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+// 실제 HTTP route의 알림 포트 mock.
+type mockAlarmCRUD struct {
+	countAlarmEntriesFn         func(context.Context) (int, error)
+	addAlarmFn                  func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
+	removeAlarmFn               func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
+	removeHostAlarmFn           func(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error)
+	getRoomAlarmsWithTypesFn    func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
+	listRoomAlarmsViewFn        func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
+	clearRoomAlarmsFn           func(ctx context.Context, roomID string) (int, error)
+	updateAlarmAdvanceMinutesFn func(minutes int) (domain.AdvanceMinutesResult, error)
+	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
+	getAllAlarmKeysFn           func(ctx context.Context) ([]*domain.AlarmEntry, error)
+}
+
+func (m *mockAlarmCRUD) CountAlarmEntries(ctx context.Context) (int, error) {
+	if m.countAlarmEntriesFn == nil {
+		return 0, nil
+	}
+
+	return m.countAlarmEntriesFn(ctx)
+}
+
+func (m *mockAlarmCRUD) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
+	out, err := m.addAlarmFn(ctx, *req)
+	if err != nil {
+		return out, fmt.Errorf("add alarm fn: %w", err)
+	}
+
+	return out, nil
+}
+
+func (m *mockAlarmCRUD) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	out, err := m.removeAlarmFn(ctx, roomID, channelID, alarmTypes)
+	if err != nil {
+		return out, fmt.Errorf("remove alarm fn: %w", err)
+	}
+
+	return out, nil
+}
+
+func (m *mockAlarmCRUD) RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	out, err := m.removeHostAlarmFn(ctx, roomID, channelID, hostID, alarmTypes)
+	if err != nil {
+		return out, fmt.Errorf("remove host alarm fn: %w", err)
+	}
+
+	return out, nil
+}
+
+func (m *mockAlarmCRUD) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
+	out, err := m.getRoomAlarmsWithTypesFn(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("get room alarms with types fn: %w", err)
+	}
+
+	return out, nil
+}
+
+func (m *mockAlarmCRUD) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
+	out, err := m.listRoomAlarmsViewFn(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("list room alarms view fn: %w", err)
+	}
+
+	return out, nil
+}
+
+func (m *mockAlarmCRUD) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
+	out, err := m.clearRoomAlarmsFn(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("clear room alarms fn: %w", err)
+	}
+
+	return out, nil
+}
+
+func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) (domain.AdvanceMinutesResult, error) {
+	return m.updateAlarmAdvanceMinutesFn(minutes)
+}
+
+func (m *mockAlarmCRUD) SetRoomName(ctx context.Context, roomID, roomName string) error {
+	if err := m.setRoomNameFn(ctx, roomID, roomName); err != nil {
+		return fmt.Errorf("set room name fn: %w", err)
+	}
+
+	return nil
+}
+
+func (m *mockAlarmCRUD) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
+	out, err := m.getAllAlarmKeysFn(ctx)
+	if err != nil {
+		return out, fmt.Errorf("get all alarm keys fn: %w", err)
+	}
+
+	return out, nil
+}
+
+// newTestHandler: 테스트용 핸들러와 gin.Engine을 생성합니다.
+func newTestHandler(t *testing.T, mock *mockAlarmCRUD) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	logger := slog.New(slog.DiscardHandler)
+	h := NewHandler(mock, logger)
+
+	r := gin.New()
+	h.RegisterInternalRoutes(&r.RouterGroup)
+
+	return r
+}
+
+// jsonBody: 구조체를 JSON 바이트 버퍼로 변환합니다.
+func jsonBody(t *testing.T, v any) *bytes.Buffer {
+	t.Helper()
+
+	b, err := jsonv2.Marshal(v)
+	require.NoError(t, err)
+
+	return bytes.NewBuffer(b)
+}
+
+// decodeResponse: 응답 바디를 APIResponse로 디코딩합니다.
+func decodeResponse(t *testing.T, body *bytes.Buffer) APIResponse {
+	t.Helper()
+
+	var resp APIResponse
+
+	if err := jsonv2.UnmarshalRead(body, &resp); err != nil {
+		t.Fatalf("응답 디코딩 실패: %v", err)
+	}
+
+	return resp
+}
+
+func TestAddAlarm(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       any
+		mockFn     func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
+		wantStatus int
+		wantOK     bool
+		wantError  string
+	}{
+		{
+			name: "성공",
+			body: AddAlarmRequest{
+				RoomID:    testRoomID,
+				ChannelID: testChannelID,
+			},
+			mockFn: func(_ context.Context, _ domain.AddAlarmRequest) (bool, error) {
+				return true, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+		{
+			name:       "binding 실패: room_id 누락",
+			body:       AddAlarmRequest{ChannelID: testChannelID},
+			mockFn:     nil,
+			wantStatus: http.StatusBadRequest,
+			wantOK:     false,
+			wantError:  "invalid_request_body",
+		},
+		{
+			name: "서비스 에러",
+			body: AddAlarmRequest{
+				RoomID:    testRoomID,
+				ChannelID: testChannelID,
+			},
+			mockFn: func(_ context.Context, _ domain.AddAlarmRequest) (bool, error) {
+				return false, errors.New("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
+			wantOK:     false,
+			wantError:  "alarm_add_failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{}
+
+			if tt.mockFn != nil {
+				mock.addAlarmFn = tt.mockFn
+			}
+
+			r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/add", jsonBody(t, tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+
+			if resp.Error != tt.wantError {
+				t.Errorf("error = %q, want %q", resp.Error, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestRemoveAlarm(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       any
+		mockFn     func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
+		wantStatus int
+		wantOK     bool
+	}{
+		{
+			name: "성공",
+			body: RemoveAlarmRequest{RoomID: testRoomID, ChannelID: testChannelID},
+			mockFn: func(_ context.Context, _, _ string, _ domain.AlarmTypes) (bool, error) {
+				return true, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+		{
+			name:       "binding 실패: channel_id 누락",
+			body:       RemoveAlarmRequest{RoomID: testRoomID},
+			wantStatus: http.StatusBadRequest,
+			wantOK:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{}
+
+			if tt.mockFn != nil {
+				mock.removeAlarmFn = tt.mockFn
+			}
+
+			r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/remove", jsonBody(t, tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestGetRoomAlarmsWithTypes(t *testing.T) {
+	tests := []struct {
+		name       string
+		roomID     string
+		mockFn     func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
+		wantStatus int
+		wantOK     bool
+	}{
+		{
+			name:   "성공",
+			roomID: testRoomID,
+			mockFn: func(_ context.Context, _ string) ([]*domain.Alarm, error) {
+				return []*domain.Alarm{
+					{RoomID: testRoomID, ChannelID: testChannelID},
+				}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+		{
+			name:   "서비스 에러",
+			roomID: "room2",
+			mockFn: func(_ context.Context, _ string) ([]*domain.Alarm, error) {
+				return nil, errors.New("cache miss")
+			},
+			wantStatus: http.StatusInternalServerError,
+			wantOK:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{getRoomAlarmsWithTypesFn: tt.mockFn}
+			r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/room/"+tt.roomID, http.NoBody)
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestGetRoomAlarmsView(t *testing.T) {
+	tests := []struct {
+		name       string
+		roomID     string
+		mockFn     func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
+		wantStatus int
+		wantOK     bool
+	}{
+		{
+			name:   "성공",
+			roomID: testRoomID,
+			mockFn: func(_ context.Context, _ string) ([]domain.AlarmListView, error) {
+				return []domain.AlarmListView{{
+					ChannelID:  testChannelID,
+					MemberName: "Pekora",
+					AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				}}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+		{
+			name:   "서비스 에러",
+			roomID: "room2",
+			mockFn: func(_ context.Context, _ string) ([]domain.AlarmListView, error) {
+				return nil, errors.New("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
+			wantOK:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{listRoomAlarmsViewFn: tt.mockFn}
+			r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/room/"+tt.roomID+"/view", http.NoBody)
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestClearRoomAlarms(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       any
+		mockFn     func(ctx context.Context, roomID string) (int, error)
+		wantStatus int
+		wantOK     bool
+	}{
+		{
+			name: "성공",
+			body: ClearAlarmsRequest{RoomID: testRoomID},
+			mockFn: func(_ context.Context, _ string) (int, error) {
+				return 3, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{clearRoomAlarmsFn: tt.mockFn}
+			r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/clear", jsonBody(t, tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       any
+		mockFn     func(minutes int) (domain.AdvanceMinutesResult, error)
+		wantStatus int
+		wantOK     bool
+	}{
+		{
+			name: "성공",
+			body: UpdateAdvanceMinutesRequest{Minutes: 10},
+			mockFn: func(minutes int) (domain.AdvanceMinutesResult, error) {
+				return domain.AdvanceMinutesResult{RequestedMinutes: minutes, Outcome: domain.ApplyConfirmed, TargetMinutes: []int{5, 10}}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+		{
+			name:       "binding 실패: minutes=0 (min=1 위반)",
+			body:       UpdateAdvanceMinutesRequest{Minutes: 0},
+			mockFn:     nil,
+			wantStatus: http.StatusBadRequest,
+			wantOK:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{}
+
+			if tt.mockFn != nil {
+				mock.updateAlarmAdvanceMinutesFn = tt.mockFn
+			}
+
+			r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/internal/alarm/settings", jsonBody(t, tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}
+
+// room_name 필드는 필수지만 빈 값은 관리자 지정 이름 해제 요청이라 서비스까지 그대로 전달해야 한다.
+// 앞뒤 공백은 제거해 넘기고, PG 저장 폭(room_id 100자, 이름 255자)을 넘는 요청은 서비스 호출 없이 400으로 거절한다.
+func TestSetRoomNameNormalizesBoundsAndForwardsBlankNameAsClear(t *testing.T) {
+	maxRoomID := strings.Repeat("r", contractsalarm.MaxRoomIDLength)
+	maxRoomName := strings.Repeat("가", contractsalarm.MaxRoomNameLength)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCalls  []string
+	}{
+		{name: "이름 지정은 공백 제거", body: `{"room_id":" ` + testRoomID + ` ","room_name":" 관리 방 "}`, wantStatus: http.StatusOK, wantCalls: []string{testRoomID + "|관리 방"}},
+		{name: "빈 이름은 해제", body: `{"room_id":"` + testRoomID + `","room_name":"  "}`, wantStatus: http.StatusOK, wantCalls: []string{testRoomID + "|"}},
+		{name: "경계 폭은 허용", body: `{"room_id":"` + maxRoomID + `","room_name":" ` + maxRoomName + ` "}`, wantStatus: http.StatusOK, wantCalls: []string{maxRoomID + "|" + maxRoomName}},
+		{name: "이름 256자 거절", body: `{"room_id":"` + testRoomID + `","room_name":"` + maxRoomName + `가"}`, wantStatus: http.StatusBadRequest},
+		{name: "room_id 101자 거절", body: `{"room_id":"` + maxRoomID + `r","room_name":"관리 방"}`, wantStatus: http.StatusBadRequest},
+		{name: "공백 room_id 거절", body: `{"room_id":"  ","room_name":"관리 방"}`, wantStatus: http.StatusBadRequest},
+		{name: "room_name 누락", body: `{"room_id":"` + testRoomID + `"}`, wantStatus: http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls []string
+
+			mock := &mockAlarmCRUD{setRoomNameFn: func(_ context.Context, roomID, roomName string) error {
+				calls = append(calls, roomID+"|"+roomName)
+
+				return nil
+			}}
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/internal/alarm/room-name", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			newTestHandler(t, mock).ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Equal(t, tt.wantCalls, calls)
+
+			if tt.wantStatus == http.StatusBadRequest {
+				assert.Equal(t, "invalid_request_body", decodeResponse(t, rec.Body).Error)
+			}
+		})
+	}
+}
+
+func TestGetAllAlarmKeys(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(ctx context.Context) ([]*domain.AlarmEntry, error)
+		wantStatus int
+		wantOK     bool
+	}{
+		{
+			name: "성공",
+			mockFn: func(_ context.Context) ([]*domain.AlarmEntry, error) {
+				return []*domain.AlarmEntry{
+					{RoomID: testRoomID, ChannelID: testChannelID, MemberName: "아쿠아"},
+				}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{getAllAlarmKeysFn: tt.mockFn}
+			r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/keys", http.NoBody)
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}

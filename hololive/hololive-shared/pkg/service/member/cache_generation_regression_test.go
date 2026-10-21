@@ -43,7 +43,7 @@ func TestCacheAllMembers_InvalidateDuringFailedReloadDoesNotReturnOldSnapshot(t 
 	done := make(chan result, 1)
 
 	go func() {
-		members, err := c.AllMembers(t.Context())
+		members, err := c.LoadAllMembers(t.Context())
 		done <- result{members: members, err: err}
 	}()
 

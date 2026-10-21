@@ -268,46 +268,10 @@ func acquireAlarmDispatchLock(ctx context.Context, tx dbx.Tx, key int64) (bool, 
 }
 
 func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {
-	snapshot := alarmDispatchBacklogSnapshot{RowsByStatus: map[dispatchoutbox.Status]int64{}}
-	if err := s.loadBacklogRows(ctx, snapshot.RowsByStatus); err != nil {
-		return snapshot, fmt.Errorf("load backlog rows: %w", err)
-	}
+	snapshot := alarmDispatchBacklogSnapshot{}
 
-	if err := s.loadOldestAges(ctx, &snapshot); err != nil {
-		return snapshot, fmt.Errorf("load oldest ages: %w", err)
-	}
+	var pendingRows, retryRows, leasedRows, sendingRows int64
 
-	return snapshot, nil
-}
-
-func (s alarmDispatchMaintenancePgxStore) loadBacklogRows(ctx context.Context, out map[dispatchoutbox.Status]int64) error {
-	rows, err := s.db.Query(ctx, mustSQL("alarm_dispatch_maintenance_0304_02.sql"))
-	if err != nil {
-		return fmt.Errorf("query: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var (
-			status string
-			count  int64
-		)
-
-		if err := rows.Scan(&status, &count); err != nil {
-			return fmt.Errorf("scan: %w", err)
-		}
-
-		out[dispatchoutbox.Status(status)] = count
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate rows: %w", err)
-	}
-
-	return nil
-}
-
-func (s alarmDispatchMaintenancePgxStore) loadOldestAges(ctx context.Context, snapshot *alarmDispatchBacklogSnapshot) error {
 	if err := s.db.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0325_03.sql")).
 		Scan(
 			&snapshot.OldestPendingAgeSeconds,
@@ -317,11 +281,22 @@ func (s alarmDispatchMaintenancePgxStore) loadOldestAges(ctx context.Context, sn
 			&snapshot.OldestQuarantinedAgeSeconds,
 			&snapshot.UnreviewedQuarantinedRows,
 			&snapshot.OldestUnreviewedQuarantinedAgeSeconds,
+			&pendingRows,
+			&retryRows,
+			&leasedRows,
+			&sendingRows,
 		); err != nil {
-		return fmt.Errorf("scan: %w", err)
+		return snapshot, fmt.Errorf("load backlog snapshot: scan: %w", err)
 	}
 
-	return nil
+	snapshot.RowsByStatus = map[dispatchoutbox.Status]int64{
+		dispatchoutbox.StatusPending: pendingRows,
+		dispatchoutbox.StatusRetry:   retryRows,
+		dispatchoutbox.StatusLeased:  leasedRows,
+		dispatchoutbox.StatusSending: sendingRows,
+	}
+
+	return snapshot, nil
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(

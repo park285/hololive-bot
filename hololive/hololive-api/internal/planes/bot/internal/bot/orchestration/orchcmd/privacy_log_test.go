@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -181,10 +181,10 @@ func assertNoLogAttrKey(t *testing.T, records []capturedLogRecord, key string) {
 	}
 }
 
-func newPrivacyCommandContext() *domain.CommandContext {
+func newPrivacyCommandContext() *botcommand.CommandContext {
 	threadID := "thread-1"
 
-	return &domain.CommandContext{
+	return &botcommand.CommandContext{
 		Room:     "123456789",
 		RoomName: "룸이름-" + privacySentinel,
 		UserID:   testUserID,
@@ -217,7 +217,7 @@ func TestCommandRouterExecutionLogsKeepEventsWithoutContentOrNickname(t *testing
 	logger, snapshot := newCapturingLogger()
 	router := NewCommandRouter(registry, logger, func(context.Context, string, string) error { return nil }, nil, nil)
 
-	if err := router.Execute(t.Context(), newPrivacyCommandContext(), domain.CommandHelp, nil); err != nil {
+	if err := router.Execute(t.Context(), newPrivacyCommandContext(), botcommand.CommandHelp, nil); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -238,7 +238,7 @@ func TestCommandRouterFailureLogKeepsEventWithoutContentOrNickname(t *testing.T)
 	logger, snapshot := newCapturingLogger()
 	router := NewCommandRouter(registry, logger, func(context.Context, string, string) error { return nil }, nil, nil)
 
-	err := router.Execute(t.Context(), newPrivacyCommandContext(), domain.CommandHelp, nil)
+	err := router.Execute(t.Context(), newPrivacyCommandContext(), botcommand.CommandHelp, nil)
 	if err == nil {
 		t.Fatal("Execute() error = nil, want handler failure")
 	}
@@ -263,7 +263,7 @@ type failingRouterCommand struct {
 
 func (c *failingRouterCommand) Name() string        { return c.name }
 func (c *failingRouterCommand) Description() string { return c.name }
-func (c *failingRouterCommand) Execute(context.Context, *domain.CommandContext, map[string]any) error {
+func (c *failingRouterCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
 	return c.err
 }
 
@@ -272,7 +272,7 @@ func TestCommandContextAttrsKeepTheIngressRoomToken(t *testing.T) {
 
 	const roomName = "상대방닉네임 님과의 대화"
 
-	cmdCtx := domain.NewCommandContext("", roomName, testUserID, "닉네임", "!알람", false)
+	cmdCtx := botcommand.NewCommandContext("", roomName, testUserID, "닉네임", "!알람", false)
 	attrs := commandContextAttrs(cmdCtx, "alarm")
 
 	var roomToken string

@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -37,7 +37,7 @@ func TestCacheAlarmDistinguishesMissingMemberFromLookupFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			client := sharedtestutil.NewTestCacheService(ctx, t)
-			require.NoError(t, client.HSet(ctx, sharedalarmkeys.MemberNameKey, testChannelID, "기존 이름"))
+			require.NoError(t, client.HSet(ctx, alarmkeys.MemberNameKey, testChannelID, "기존 이름"))
 
 			provider := failedCacheNameProvider{err: tc.err}
 			service := &AlarmService{
@@ -52,7 +52,7 @@ func TestCacheAlarmDistinguishesMissingMemberFromLookupFailure(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			name, err := client.HGet(ctx, sharedalarmkeys.MemberNameKey, testChannelID)
+			name, err := client.HGet(ctx, alarmkeys.MemberNameKey, testChannelID)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantName, name)
 		})

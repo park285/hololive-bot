@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 type youtubeLiveCheckEvidence struct {
@@ -22,7 +22,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 	ctx context.Context,
 	now time.Time,
 ) (dueChannels []string, streamsByChannel map[string][]*domain.Stream, liveEvidence youtubeLiveCheckEvidence, subscriberMap map[string][]string, err error) {
-	channelIDs, err := c.cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelIDs, err := c.cacheClient.SMembers(ctx, alarmkeys.AlarmChannelRegistryKey)
 	if err != nil {
 		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
 	}

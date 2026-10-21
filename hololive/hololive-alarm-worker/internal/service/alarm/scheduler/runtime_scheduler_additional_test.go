@@ -32,11 +32,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -220,7 +220,7 @@ func testYouTubeIterationSyncsTargetMinutes(t *testing.T) {
 func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 	t.Parallel()
 
-	alarmService, err := subscriptions.NewAlarmService(cachemocks.NewLenientClient(), nil, &sharedalarm.Repository{}, testSchedulerLogger(), []int{5, 3, 1})
+	alarmService, err := subscriptions.NewAlarmService(cachemocks.NewLenientClient(), nil, &alarmstore.Repository{}, testSchedulerLogger(), []int{5, 3, 1})
 	require.NoError(t, err)
 
 	youtubeUpdater := &targetMinutesUpdaterStub{}
@@ -260,14 +260,14 @@ func testYouTubeIterationCacheFailureRecovery(t *testing.T) {
 		return nil
 	}
 	cache.ExistsFunc = alarmCacheExistsFunc(t, map[string]bool{
-		sharedalarmkeys.AlarmChannelRegistryKey:      false,
-		sharedalarmkeys.AlarmSubscriberCacheEmptyKey: false,
+		alarmkeys.AlarmChannelRegistryKey:      false,
+		alarmkeys.AlarmSubscriberCacheEmptyKey: false,
 	})
 
 	s := &RuntimeScheduler{
 		youtubeChecker: &runnerFunc{
 			check: func(context.Context) ([]*domain.AlarmNotification, error) {
-				return nil, sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
+				return nil, sharedcache.NewCacheError("smembers", alarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
 			},
 		},
 		cacheClient:      cache,
@@ -289,9 +289,9 @@ type recoverAlarmCacheCase struct {
 
 func recoverAlarmCacheCases() []recoverAlarmCacheCase {
 	return []recoverAlarmCacheCase{
-		{name: "rebuilds missing subscriber cache", existsByKey: map[string]bool{sharedalarmkeys.AlarmChannelRegistryKey: false, sharedalarmkeys.AlarmSubscriberCacheEmptyKey: false}, wantWarmCalls: 1},
-		{name: "confirmed empty subscriber cache", existsByKey: map[string]bool{sharedalarmkeys.AlarmChannelRegistryKey: false, sharedalarmkeys.AlarmSubscriberCacheEmptyKey: true}},
-		{name: "existing registry needs no platform mappings", existsByKey: map[string]bool{sharedalarmkeys.AlarmChannelRegistryKey: true}},
+		{name: "rebuilds missing subscriber cache", existsByKey: map[string]bool{alarmkeys.AlarmChannelRegistryKey: false, alarmkeys.AlarmSubscriberCacheEmptyKey: false}, wantWarmCalls: 1},
+		{name: "confirmed empty subscriber cache", existsByKey: map[string]bool{alarmkeys.AlarmChannelRegistryKey: false, alarmkeys.AlarmSubscriberCacheEmptyKey: true}},
+		{name: "existing registry needs no platform mappings", existsByKey: map[string]bool{alarmkeys.AlarmChannelRegistryKey: true}},
 	}
 }
 
@@ -349,8 +349,8 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t
 		require.True(t, ok)
 
 		switch key {
-		case sharedalarmkeys.AlarmChannelRegistryKey,
-			sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
+		case alarmkeys.AlarmChannelRegistryKey,
+			alarmkeys.AlarmSubscriberCacheEmptyKey:
 		default:
 			t.Fatalf("unexpected key: %s", key)
 		}
@@ -366,7 +366,7 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t
 
 	err := s.recoverAlarmCacheAfterCheckFailure(
 		t.Context(),
-		sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF")),
+		sharedcache.NewCacheError("smembers", alarmkeys.AlarmChannelRegistryKey, errors.New("EOF")),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), warmer.calls.Load())

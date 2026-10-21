@@ -46,7 +46,7 @@ func ProvideHolodexService(
 		return nil, errors.New("holodex config is nil")
 	}
 
-	service, err := holodexprovider.NewHolodexServiceWithConfig(holodexCfg, holodexCfg.BaseURL, holodexCfg.APIKey, cacheClient, scraperService, logger)
+	service, err := holodexprovider.NewHolodexService(holodexCfg, holodexCfg.BaseURL, holodexCfg.APIKey, cacheClient, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create holodex service: %w", err)
 	}

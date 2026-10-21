@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -48,10 +49,15 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 	accepted, terminal := publishReceiptResults(result.Receipts, len(items))
 
 	published := 0
+	marked := make(notifiedWrites, len(items))
 
 	for i, item := range items {
 		if accepted[i] {
-			n.markPublishedBestEffort(ctx, item.payload)
+			if marked.claim(item.payload.streamID, item.payload.startScheduled, item.payload.notification.MinutesUntil) {
+				n.markNotifiedBestEffort(ctx, item.payload)
+			}
+
+			n.markUpcomingEventBestEffort(ctx, item.payload)
 
 			if n.tierScheduler != nil {
 				n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
@@ -91,7 +97,34 @@ func publishReceiptResults(receipts []dispatchoutbox.PublishReceipt, itemCount i
 	return accepted, terminal
 }
 
-func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInput) {
+// notifiedWrites는 batch 안에서 stream별로 이미 기록한 notified hash 필드다. 같은 stream·예정 시각·분이면 방이 달라도
+// 같은 필드를 쓰므로 한 번만 기록한다. MarkAsNotified는 예정 시각이 바뀌면 hash를 비우므로, 다른 예정 시각이 오면
+// 그 stream의 기록을 새로 세어 방마다 기록하던 때와 같은 최종 hash를 남긴다.
+type notifiedWrites map[string]notifiedSchedule
+
+type notifiedSchedule struct {
+	startScheduled time.Time
+	minutes        map[int]struct{}
+}
+
+// claim은 이 기록이 hash를 바꿀 수 있으면 기록한 것으로 세고 true를 돌려준다.
+func (w notifiedWrites) claim(streamID string, startScheduled time.Time, minutesUntil int) bool {
+	schedule, ok := w[streamID]
+	if !ok || !schedule.startScheduled.Equal(startScheduled) {
+		schedule = notifiedSchedule{startScheduled: startScheduled, minutes: map[int]struct{}{}}
+		w[streamID] = schedule
+	}
+
+	if _, done := schedule.minutes[minutesUntil]; done {
+		return false
+	}
+
+	schedule.minutes[minutesUntil] = struct{}{}
+
+	return true
+}
+
+func (n *Notifier) markNotifiedBestEffort(ctx context.Context, payload *sendInput) {
 	if err := n.dedupService.MarkAsNotified(
 		ctx,
 		payload.streamID,
@@ -104,7 +137,9 @@ func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInp
 			slog.Any("error", err),
 		)
 	}
+}
 
+func (n *Notifier) markUpcomingEventBestEffort(ctx context.Context, payload *sendInput) {
 	if err := n.dedupService.MarkUpcomingEventNotified(
 		ctx,
 		payload.notification.RoomID,

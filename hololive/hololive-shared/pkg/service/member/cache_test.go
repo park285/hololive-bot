@@ -81,7 +81,7 @@ func TestCacheSearchOverlayAndInvalidationRace(t *testing.T) {
 	for range 4 {
 		wg.Go(func() {
 			for range 200 {
-				got, err := c.MembersByName(t.Context(), " MIKO ")
+				got, err := c.FindMembersByName(t.Context(), " MIKO ")
 				if err != nil || len(got) != 2 {
 					t.Errorf("MembersByName() = %+v, %v; want both same-name members", got, err)
 

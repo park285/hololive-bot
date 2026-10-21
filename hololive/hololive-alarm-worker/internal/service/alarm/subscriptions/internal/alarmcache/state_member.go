@@ -7,12 +7,12 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func (s *State) CacheMemberName(ctx context.Context, channelID, memberName string) error {
-	if err := s.Cache.HSet(ctx, sharedalarmkeys.MemberNameKey, channelID, memberName); err != nil {
+	if err := s.Cache.HSet(ctx, alarmkeys.MemberNameKey, channelID, memberName); err != nil {
 		return fmt.Errorf("cache member name: %w", err)
 	}
 
@@ -20,7 +20,7 @@ func (s *State) CacheMemberName(ctx context.Context, channelID, memberName strin
 }
 
 func (s *State) GetMemberName(ctx context.Context, channelID string) (string, error) {
-	name, err := s.Cache.HGet(ctx, sharedalarmkeys.MemberNameKey, channelID)
+	name, err := s.Cache.HGet(ctx, alarmkeys.MemberNameKey, channelID)
 	if err != nil {
 		return "", fmt.Errorf("get member name: %w", err)
 	}
@@ -61,7 +61,7 @@ func (s *State) GetMemberNamesBatch(ctx context.Context, channelIDs []string) (m
 		return map[string]string{}, nil
 	}
 
-	out, err := s.Cache.BatchHGet(ctx, sharedalarmkeys.MemberNameKey, channelIDs)
+	out, err := s.Cache.BatchHGet(ctx, alarmkeys.MemberNameKey, channelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("batch h get: %w", err)
 	}

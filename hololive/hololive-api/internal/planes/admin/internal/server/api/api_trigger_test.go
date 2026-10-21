@@ -23,7 +23,7 @@ package api
 import (
 	"context"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 )
 
 type stubMajorEventScheduler struct {

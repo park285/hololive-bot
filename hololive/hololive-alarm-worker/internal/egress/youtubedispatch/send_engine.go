@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -21,7 +20,7 @@ type SendEngine struct {
 	sender          messagedelivery.PreparedMessageSender
 	formatter       *format.MessageFormatter
 	logger          *slog.Logger
-	config          dispatchstate.Config
+	config          Config
 	auditLogger     *AuditLogger
 	metricsRecorder *MetricsRecorder
 	transition      deliveryTransition
@@ -52,7 +51,7 @@ func newSendEngine(
 	sender messagedelivery.PreparedMessageSender,
 	formatter *format.MessageFormatter,
 	logger *slog.Logger,
-	config *dispatchstate.Config,
+	config *Config,
 	auditLogger *AuditLogger,
 	metricsRecorder *MetricsRecorder,
 	transition deliveryTransition,

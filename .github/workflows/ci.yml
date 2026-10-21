@@ -53,12 +53,14 @@ jobs:
 
   go-modules:
     name: go-${{ matrix.module }}
-    needs: policy
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      GOWORK: "off"
+      GOMAXPROCS: "2"
+      GOMEMLIMIT: 5GiB
     strategy:
       fail-fast: false
-      max-parallel: 3
       matrix:
         module:
           - "."
@@ -101,29 +103,16 @@ jobs:
         uses: ./.github/actions/docker-compose
 
       - name: Module tidy drift
-        env:
-          GOWORK: "off"
-          GOMAXPROCS: "2"
-          GOMEMLIMIT: 5GiB
         run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" tidy
 
       - name: Module vet
-        env:
-          GOWORK: "off"
-          GOMAXPROCS: "2"
-          GOMEMLIMIT: 5GiB
         run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" vet
 
       - name: Module race tests
-        env:
-          GOWORK: "off"
-          GOMAXPROCS: "2"
-          GOMEMLIMIT: 5GiB
         run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" race
 
   frontend:
     name: frontend
-    needs: policy
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -144,7 +133,6 @@ jobs:
 
   collector-helper:
     name: collector-helper
-    needs: policy
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:

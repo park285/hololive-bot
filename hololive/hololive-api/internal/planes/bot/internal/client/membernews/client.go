@@ -12,8 +12,8 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
+	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/service/subscriptionclient"
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 

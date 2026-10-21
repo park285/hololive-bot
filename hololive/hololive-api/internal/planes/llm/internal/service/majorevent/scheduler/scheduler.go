@@ -29,12 +29,12 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -98,7 +98,7 @@ func NewScheduler(
 	repository EventRepository,
 	formatter Formatter,
 	summarizer *mesummarizer.EventSummarizer,
-	locker delivery.NotificationLocker,
+	locker executionlock.Locker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 	opts ...SchedulerOption,

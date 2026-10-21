@@ -23,7 +23,7 @@ package messaging
 import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func (ma *MessageAdapter) tryHelpCommand(command, raw string) (*ParsedCommand, bool) {
@@ -31,7 +31,7 @@ func (ma *MessageAdapter) tryHelpCommand(command, raw string) (*ParsedCommand, b
 		return nil, false
 	}
 
-	return &ParsedCommand{Type: domain.CommandHelp, Params: make(map[string]any), RawMessage: raw}, true
+	return &ParsedCommand{Type: botcommand.CommandHelp, Params: make(map[string]any), RawMessage: raw}, true
 }
 
 func (ma *MessageAdapter) isHelpCommand(cmd string) bool {

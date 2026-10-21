@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 type alarmCacheScenario struct {
@@ -63,7 +63,7 @@ func alarmAddRegistryScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScen
 				require.NoError(t, err)
 				assert.Equal(t, []string{baseReq.ChannelID}, roomChannels)
 
-				channels, err := service.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+				channels, err := service.cache.SMembers(ctx, alarmkeys.AlarmChannelRegistryKey)
 				require.NoError(t, err)
 				assert.Contains(t, channels, baseReq.ChannelID)
 			},
@@ -163,7 +163,7 @@ func alarmRemovePartialScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheSc
 				require.NoError(t, err)
 				assert.ElementsMatch(t, []string{"UC_TEST_2"}, roomChannels)
 
-				channelRegistry, err := service.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+				channelRegistry, err := service.cache.SMembers(ctx, alarmkeys.AlarmChannelRegistryKey)
 				require.NoError(t, err)
 				assert.NotContains(t, channelRegistry, baseReq.ChannelID)
 				assert.Contains(t, channelRegistry, "UC_TEST_2")

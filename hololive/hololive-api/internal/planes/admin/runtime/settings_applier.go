@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 type memberNewsWeeklyRunNowTrigger interface {

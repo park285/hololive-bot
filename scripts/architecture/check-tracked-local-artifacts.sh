@@ -34,10 +34,6 @@ is_allowed_exception() {
     scripts/ci/nilaway-models/models.patch)
       return 0
       ;;
-    # 검증된 입력 목록과 SHA256SUMS로 고정된 staticcheck x/tools objectpath 패치다.
-    scripts/ci/staticcheck-facts/objectpath.patch)
-      return 0
-      ;;
     logs/.gitkeep|\
     runtime-config/.gitkeep|\
     runtime-config/README.md|\
@@ -93,7 +89,8 @@ while IFS= read -r path; do
 done < <(
   {
     git -C "${ROOT_DIR}" ls-files -s | sed -E $'s/^[0-9]+ [0-9a-f]+ [0-9]+\t//'
-    git -C "${ROOT_DIR}" diff --cached --name-only --no-renames
+    # 삭제를 stage한 금지 산출물은 제거 중이므로 위반으로 세지 않는다.
+    git -C "${ROOT_DIR}" diff --cached --name-only --no-renames --diff-filter=d
   } | sort -u
 )
 

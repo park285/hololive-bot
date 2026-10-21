@@ -9,12 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
@@ -35,7 +36,7 @@ func newMemberSubscriptionChecker(t *testing.T) *YouTubeChecker {
 	pool := dbtest.NewPool(t)
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	repo := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repo := alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
 
 	for _, alarm := range []*domain.Alarm{
 		{RoomID: checkerWholeRoom, ChannelID: checkerUnitBChannel},
@@ -47,7 +48,7 @@ func newMemberSubscriptionChecker(t *testing.T) *YouTubeChecker {
 		require.NoError(t, repo.Add(ctx, alarm))
 	}
 
-	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), "http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(

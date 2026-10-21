@@ -82,7 +82,7 @@ func TestRuntimeControlPoolsRejectMaxOneBeforeDial(t *testing.T) {
 			resources, cleanup, err := ProvideDatabaseResources(t.Context(), &settings.PostgresConfig{
 				Host: "127.0.0.1", Port: 1, User: "test", Database: "test", SSLMode: "disable",
 				PoolMinConns: 0, PoolMaxConns: 1,
-			}, name, nil)
+			}, RuntimePool{Name: name, ReservedConns: 1}, nil)
 			require.ErrorContains(t, err, "acquire policy")
 			require.Nil(t, resources)
 			require.Nil(t, cleanup)

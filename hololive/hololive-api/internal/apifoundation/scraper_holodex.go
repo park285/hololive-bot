@@ -20,8 +20,8 @@ type ScraperHolodexOptions struct {
 }
 
 type ScraperHolodexFoundation struct {
-	HolodexService       *holodexprovider.Service
-	MemberServiceAdapter domain.MemberDataProvider
+	HolodexService *holodexprovider.Service
+	MemberData     domain.MemberDataProvider
 }
 
 // BuildScraperHolodex는 적재한 설정과 plane별 cache로 별개의 foundation을 만든다.
@@ -32,11 +32,9 @@ func BuildScraperHolodex(
 	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*ScraperHolodexFoundation, error) {
-	memberServiceAdapter := member.NewMemberServiceAdapter(memberCache)
-
 	scraperService, err := holodexproviders.ProvideScraperService(
 		ctx,
-		memberServiceAdapter,
+		memberCache,
 		logger,
 		options.OfficialSchedule,
 	)
@@ -50,7 +48,7 @@ func BuildScraperHolodex(
 	}
 
 	return &ScraperHolodexFoundation{
-		HolodexService:       holodexService,
-		MemberServiceAdapter: memberServiceAdapter,
+		HolodexService: holodexService,
+		MemberData:     memberCache,
 	}, nil
 }

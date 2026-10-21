@@ -27,13 +27,13 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
 var (
-	rebuildSubscriberCacheFromRepository = sharedalarm.RebuildSubscriberCacheFromRepository
-	findRoomAlarmsFromRepository         = func(ctx context.Context, repository *sharedalarm.Repository, roomID string) ([]*domain.Alarm, error) {
+	rebuildSubscriberCacheFromRepository = alarmstore.RebuildSubscriberCacheFromRepository
+	findRoomAlarmsFromRepository         = func(ctx context.Context, repository *alarmstore.Repository, roomID string) ([]*domain.Alarm, error) {
 		return repository.FindByRoom(ctx, roomID)
 	}
 )
@@ -163,7 +163,7 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 
 	var (
 		rebuildErr error
-		summary    sharedalarm.CacheWarmSummary
+		summary    alarmstore.CacheWarmSummary
 	)
 
 	defer func() {

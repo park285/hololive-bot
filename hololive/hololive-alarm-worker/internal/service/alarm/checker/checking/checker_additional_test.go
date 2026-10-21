@@ -31,12 +31,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -228,13 +228,13 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		cacheClient := newCheckerTestCacheClient(t)
 		ctx := t.Context()
 
-		_, err := cacheClient.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{testRoomShort1, testRoomShort2})
+		_, err := cacheClient.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{testRoomShort1, testRoomShort2})
 		require.NoError(t, err)
 
 		// 구독 0이 확정된 채널은 empty marker로 표시되어 DB 없이도 결과에서 빠진다.
-		require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(testChIDShort2, domain.AlarmTypeLive), "1", time.Minute))
+		require.NoError(t, cacheClient.Set(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(testChIDShort2, domain.AlarmTypeLive), "1", time.Minute))
 
-		result, err := LoadSubscriberRoomsByChannel(ctx, cacheClient, sharedalarm.NewSubscriberResolver(cacheClient, nil), []string{testChIDShort1, testChIDShort1, testChIDShort2})
+		result, err := LoadSubscriberRoomsByChannel(ctx, cacheClient, alarmstore.NewSubscriberResolver(cacheClient, nil), []string{testChIDShort1, testChIDShort1, testChIDShort2})
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		assert.ElementsMatch(t, []string{testRoomShort1, testRoomShort2}, result[testChIDShort1])
@@ -244,7 +244,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		t.Parallel()
 
 		emptyCache := cachemocks.NewStrictClient()
-		result, err := LoadSubscriberRoomsByChannel(t.Context(), emptyCache, sharedalarm.NewSubscriberResolver(emptyCache, nil), nil)
+		result, err := LoadSubscriberRoomsByChannel(t.Context(), emptyCache, alarmstore.NewSubscriberResolver(emptyCache, nil), nil)
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
@@ -252,12 +252,19 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 	t.Run("cache error", func(t *testing.T) {
 		t.Parallel()
 
+		baseCache := newCheckerTestCacheClient(t)
 		mockCache := &cachemocks.Client{
-			SMembersFunc: func(context.Context, string) ([]string, error) {
-				return nil, errors.New("smembers failed")
+			BFunc: baseCache.B,
+			DoMultiFunc: func(_ context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
+				results := make([]valkey.ValkeyResult, len(cmds))
+				for i := range results {
+					results[i] = valkey.NewErrorResult(errors.New("smembers failed"))
+				}
+
+				return results
 			},
 		}
-		_, err := LoadSubscriberRoomsByChannel(t.Context(), mockCache, sharedalarm.NewSubscriberResolver(mockCache, nil), []string{testChIDShort1})
+		_, err := LoadSubscriberRoomsByChannel(t.Context(), mockCache, alarmstore.NewSubscriberResolver(mockCache, nil), []string{testChIDShort1})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "smembers channel ch1")
 	})
@@ -269,13 +276,13 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		countingCache := &countingCheckerCacheClient{Client: baseCache}
 		ctx := t.Context()
 
-		_, err := countingCache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{testRoomShort1, testRoomShort2})
+		_, err := countingCache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{testRoomShort1, testRoomShort2})
 		require.NoError(t, err)
 
-		_, err = countingCache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort2, []string{"room3"})
+		_, err = countingCache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+testChIDShort2, []string{"room3"})
 		require.NoError(t, err)
 
-		result, err := LoadSubscriberRoomsByChannel(ctx, countingCache, sharedalarm.NewSubscriberResolver(countingCache, nil), []string{testChIDShort1, testChIDShort2, testChIDShort1})
+		result, err := LoadSubscriberRoomsByChannel(ctx, countingCache, alarmstore.NewSubscriberResolver(countingCache, nil), []string{testChIDShort1, testChIDShort2, testChIDShort1})
 		require.NoError(t, err)
 		require.Len(t, result, 2)
 		assert.ElementsMatch(t, []string{testRoomShort1, testRoomShort2}, result[testChIDShort1])

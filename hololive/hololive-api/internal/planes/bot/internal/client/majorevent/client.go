@@ -6,8 +6,8 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
+	majoreventcontracts "github.com/kapu/hololive-api/internal/contracts/majorevent"
 	"github.com/kapu/hololive-api/internal/service/subscriptionclient"
-	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 

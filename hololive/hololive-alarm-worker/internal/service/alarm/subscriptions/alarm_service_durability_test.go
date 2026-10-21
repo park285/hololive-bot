@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
@@ -80,7 +80,6 @@ func newLenientAlarmCacheMock(
 	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 	cacheMock := cachemocks.NewLenientClient()
 
-	cacheMock.BuilderFunc = cacheClient.Builder
 	cacheMock.BFunc = cacheClient.B
 	cacheMock.GetClientFunc = cacheClient.GetClient
 	cacheMock.DoMultiFunc = cacheClient.DoMulti
@@ -157,7 +156,7 @@ func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, liveSubscribers)
 
-	memberName, err := as.cache.HGet(ctx, sharedalarmkeys.MemberNameKey, testChannelID)
+	memberName, err := as.cache.HGet(ctx, alarmkeys.MemberNameKey, testChannelID)
 	require.NoError(t, err)
 	assert.Empty(t, memberName)
 }
@@ -327,7 +326,7 @@ func TestClearRoomAlarms_UsesRepositoryAsAuthority(t *testing.T) {
 
 	originalFindRoomAlarms := findRoomAlarmsFromRepository
 
-	findRoomAlarmsFromRepository = func(context.Context, *sharedalarm.Repository, string) ([]*domain.Alarm, error) {
+	findRoomAlarmsFromRepository = func(context.Context, *alarmstore.Repository, string) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
 			{RoomID: testRoomID, ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 			{RoomID: testRoomID, ChannelID: testOtherChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},

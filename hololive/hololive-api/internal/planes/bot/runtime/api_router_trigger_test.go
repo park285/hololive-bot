@@ -26,8 +26,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 func serveTriggerRouterRequest(t *testing.T, router http.Handler, method, path, apiKey string) int {

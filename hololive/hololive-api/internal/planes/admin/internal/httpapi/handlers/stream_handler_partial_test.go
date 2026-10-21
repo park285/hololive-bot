@@ -13,6 +13,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -27,7 +28,7 @@ func TestGetStreamsOrgAllPartialFailureRespondsInternalErrorWithoutPartialBody(t
 
 	mini := miniredis.RunT(t)
 
-	service, err := holodexprovider.NewHolodexService(newPartialOrgUpstream(t).URL, "test-key", newMiniredisCache(t, mini), nil, slog.New(slog.DiscardHandler))
+	service, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), newPartialOrgUpstream(t).URL, "test-key", newMiniredisCache(t, mini), nil, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NewHolodexService() error = %v", err)
 	}

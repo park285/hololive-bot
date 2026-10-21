@@ -13,8 +13,6 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
@@ -124,7 +122,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &dispatchstate.Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -136,20 +134,20 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	dispatcher.claim.processPendingDeliveries(ctx)
 
 	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
-	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "short-final-success")
-	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "short:short-final-success")
-	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
-	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
-	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
-	assertLogTimeField(t, entry, logschema.FieldActualPublishedAt, actualPublishedAt)
-	assertLogStringField(t, entry, deliveryDedupeKeyLogField, "youtube-notification:NEW_SHORT:short-final-success")
-	assertLogTimeField(t, entry, logschema.FieldAlarmSentAt)
-	assertLogBoolField(t, entry, logschema.FieldAlarmLatencyExceeded, true)
-	require.GreaterOrEqual(t, readLogIntField(t, entry, logschema.FieldAlarmLatencyMillis), 190000)
-	assertLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
-	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
-	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
-	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
+	assertLogStringField(t, entry, FieldContentID, "short-final-success")
+	assertLogStringField(t, entry, FieldPostID, "short:short-final-success")
+	assertLogStringField(t, entry, FieldAlarmType, string(domain.AlarmTypeShorts))
+	assertLogStringField(t, entry, FieldSendResult, sendResultSuccess)
+	assertLogStringField(t, entry, FieldDeliveryMode, DeliveryModeFinalResult)
+	assertLogTimeField(t, entry, FieldActualPublishedAt, actualPublishedAt)
+	assertLogStringField(t, entry, FieldDedupeKey, "youtube-notification:NEW_SHORT:short-final-success")
+	assertLogTimeField(t, entry, FieldAlarmSentAt)
+	assertLogBoolField(t, entry, FieldAlarmLatencyExceeded, true)
+	require.GreaterOrEqual(t, readLogIntField(t, entry, FieldAlarmLatencyMillis), 190000)
+	assertLogIntField(t, entry, FieldTargetRoomCount, 1)
+	assertLogIntField(t, entry, FieldSuccessfulRoomCount, 1)
+	assertLogIntField(t, entry, FieldFailedRoomCount, 0)
+	assertLogTimeField(t, entry, FieldSentAt)
 
 	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
@@ -191,7 +189,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &dispatchstate.Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -203,19 +201,19 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	dispatcher.claim.processPendingDeliveries(ctx)
 
 	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
-	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-community-success")
-	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "community:post-final-community-success")
-	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
-	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
-	assertLogTimeField(t, entry, logschema.FieldActualPublishedAt, actualPublishedAt)
-	assertLogStringField(t, entry, deliveryDedupeKeyLogField, "youtube-notification:COMMUNITY_POST:post-final-community-success")
-	assertLogTimeField(t, entry, logschema.FieldAlarmSentAt)
-	require.GreaterOrEqual(t, readLogIntField(t, entry, logschema.FieldAlarmLatencyMillis), 190000)
-	assertLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
-	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
-	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
-	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
+	assertLogStringField(t, entry, FieldContentID, "post-final-community-success")
+	assertLogStringField(t, entry, FieldPostID, "community:post-final-community-success")
+	assertLogStringField(t, entry, FieldAlarmType, string(domain.AlarmTypeCommunity))
+	assertLogStringField(t, entry, FieldSendResult, sendResultSuccess)
+	assertLogStringField(t, entry, FieldDeliveryMode, DeliveryModeFinalResult)
+	assertLogTimeField(t, entry, FieldActualPublishedAt, actualPublishedAt)
+	assertLogStringField(t, entry, FieldDedupeKey, "youtube-notification:COMMUNITY_POST:post-final-community-success")
+	assertLogTimeField(t, entry, FieldAlarmSentAt)
+	require.GreaterOrEqual(t, readLogIntField(t, entry, FieldAlarmLatencyMillis), 190000)
+	assertLogIntField(t, entry, FieldTargetRoomCount, 1)
+	assertLogIntField(t, entry, FieldSuccessfulRoomCount, 1)
+	assertLogIntField(t, entry, FieldFailedRoomCount, 0)
+	assertLogTimeField(t, entry, FieldSentAt)
 
 	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
@@ -257,7 +255,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &dispatchstate.Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -308,7 +306,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{"room-failure": true}}, &dispatchstate.Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{"room-failure": true}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -320,17 +318,17 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	dispatcher.claim.processPendingDeliveries(ctx)
 
 	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
-	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-failure")
-	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "community:post-final-failure")
-	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultFailure)
-	assertLogStringField(t, entry, deliveryAuditFailureReasonLogField, string(lifecycleReasonPermanent))
-	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
-	assertLogTimeField(t, entry, logschema.FieldActualPublishedAt, actualPublishedAt)
-	assertLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
-	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 0)
-	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 1)
-	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
+	assertLogStringField(t, entry, FieldContentID, "post-final-failure")
+	assertLogStringField(t, entry, FieldPostID, "community:post-final-failure")
+	assertLogStringField(t, entry, FieldAlarmType, string(domain.AlarmTypeCommunity))
+	assertLogStringField(t, entry, FieldSendResult, sendResultFailure)
+	assertLogStringField(t, entry, FieldFailureReason, string(lifecycleReasonPermanent))
+	assertLogStringField(t, entry, FieldDeliveryMode, DeliveryModeFinalResult)
+	assertLogTimeField(t, entry, FieldActualPublishedAt, actualPublishedAt)
+	assertLogIntField(t, entry, FieldTargetRoomCount, 1)
+	assertLogIntField(t, entry, FieldSuccessfulRoomCount, 0)
+	assertLogIntField(t, entry, FieldFailedRoomCount, 1)
+	assertLogTimeField(t, entry, FieldSentAt)
 
 	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
@@ -340,7 +338,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogObjectStringField(t, classification, "reason_code", string(timeline.PostLatencyReasonCodeJobFailure))
 }
 
-func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *pgxpool.Pool, sender *finalResultTestSender, config *dispatchstate.Config) (*Dispatcher, *bytes.Buffer) {
+func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *pgxpool.Pool, sender *finalResultTestSender, config *Config) (*Dispatcher, *bytes.Buffer) {
 	t.Helper()
 
 	logBuffer := &bytes.Buffer{}
@@ -353,9 +351,9 @@ func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *pgxpool.Pool,
 func findOutboxFinalResultAuditLogEntry(t *testing.T, logBuffer *bytes.Buffer) map[string]any {
 	t.Helper()
 
-	entries := findAllLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)
+	entries := findAllLogEntriesByMessage(t, logBuffer, CommunityShortsDeliveryAuditMessage)
 	for i := range entries {
-		raw, ok := entries[i][logschema.FieldTelemetrySource]
+		raw, ok := entries[i][FieldTelemetrySource]
 		if !ok {
 			continue
 		}
@@ -365,12 +363,12 @@ func findOutboxFinalResultAuditLogEntry(t *testing.T, logBuffer *bytes.Buffer) m
 			t.Fatalf("telemetry_source type = %T, want string", raw)
 		}
 
-		if value == logschema.TelemetrySourceOutboxFinalResult {
+		if value == TelemetrySourceOutboxFinalResult {
 			return entries[i]
 		}
 	}
 
-	t.Fatalf("audit log with telemetry_source=%q not found in %s", logschema.TelemetrySourceOutboxFinalResult, logBuffer.String())
+	t.Fatalf("audit log with telemetry_source=%q not found in %s", TelemetrySourceOutboxFinalResult, logBuffer.String())
 
 	return nil
 }
@@ -417,7 +415,7 @@ func readLogStringField(t *testing.T, entry map[string]any, field string) string
 func readLatencyClassificationField(t *testing.T, entry map[string]any) map[string]any {
 	t.Helper()
 
-	field := logschema.FieldLatencyClassification
+	field := FieldLatencyClassification
 	raw, ok := entry[field]
 
 	if !ok {

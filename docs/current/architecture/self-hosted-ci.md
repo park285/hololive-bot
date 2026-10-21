@@ -34,11 +34,11 @@ executes attacker-modifiable repository scripts.
 The local pre-push gate provides the repository-level closeout gate and runs in
 one pass:
 
-- Content gates: release policy, the `scripts/**` shell-syntax sweep,
-  deploy/runtime script tests (run only when the test or its target changed in
-  the pushed range; always in `PRE_PUSH_MODE=full`), and
+- Content gates: release policy, deploy/runtime script tests (run only when the
+  test or its target changed in the pushed range; always in
+  `PRE_PUSH_MODE=full`), and
   `scripts/ci/local-ci.sh` for architecture contracts, Go toolchain pinning,
-  `go mod tidy` drift, `go vet`, `staticcheck`, golangci-lint (formatters and
+  `go mod tidy` drift, `go vet`, golangci-lint (staticcheck, formatters and
   modernize included), NilAway, build, unit and race tests, and PostgreSQL
   integration.
 - Dependency hygiene: `go list -m -u` and `govulncheck` for the root module and

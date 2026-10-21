@@ -25,7 +25,7 @@ import (
 
 	"github.com/park285/iris-client-go/v3/webhook"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func TestParseMessage_CompactAlarmAdd(t *testing.T) {
@@ -37,7 +37,7 @@ func TestParseMessage_CompactAlarmAdd(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandAlarmAdd {
+	if result.Type != botcommand.CommandAlarmAdd {
 		t.Fatalf("expected CommandAlarmAdd, got %s", result.Type)
 	}
 
@@ -60,7 +60,7 @@ func TestParseMessage_CompactAlarmList(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandAlarmList {
+	if result.Type != botcommand.CommandAlarmList {
 		t.Fatalf("expected CommandAlarmList, got %s", result.Type)
 	}
 }
@@ -74,7 +74,7 @@ func TestParseMessage_InvalidAlarmCommand(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandAlarmInvalid {
+	if result.Type != botcommand.CommandAlarmInvalid {
 		t.Fatalf("expected CommandAlarmInvalid, got %s", result.Type)
 	}
 
@@ -93,7 +93,7 @@ func TestParseMessage_UsesConfiguredPrefixOnly(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandUnknown {
+	if result.Type != botcommand.CommandUnknown {
 		t.Fatalf("expected CommandUnknown, got %s", result.Type)
 	}
 }
@@ -107,7 +107,7 @@ func TestParseMessage_LeadingZeroWidthBeforePrefix(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandHelp {
+	if result.Type != botcommand.CommandHelp {
 		t.Fatalf("expected CommandHelp, got %s", result.Type)
 	}
 }
@@ -121,7 +121,7 @@ func TestParseMessage_UpcomingAll(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandUpcoming {
+	if result.Type != botcommand.CommandUpcoming {
 		t.Fatalf("expected CommandUpcoming, got %s", result.Type)
 	}
 
@@ -144,7 +144,7 @@ func TestParseMessage_UpcomingLimit(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandUpcoming {
+	if result.Type != botcommand.CommandUpcoming {
 		t.Fatalf("expected CommandUpcoming, got %s", result.Type)
 	}
 
@@ -163,7 +163,7 @@ func TestParseMessage_UpcomingLimitAndMember(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandUpcoming {
+	if result.Type != botcommand.CommandUpcoming {
 		t.Fatalf("expected CommandUpcoming, got %s", result.Type)
 	}
 
@@ -187,7 +187,7 @@ func TestParseMessage_MemberNewsDefaultPeriod(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMemberNews {
+	if result.Type != botcommand.CommandMemberNews {
 		t.Fatalf("expected CommandMemberNews, got %s", result.Type)
 	}
 
@@ -206,7 +206,7 @@ func TestParseMessage_MemberNewsMonthlyPeriod(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMemberNews {
+	if result.Type != botcommand.CommandMemberNews {
 		t.Fatalf("expected CommandMemberNews, got %s", result.Type)
 	}
 
@@ -225,7 +225,7 @@ func TestParseMessage_MemberNewsSubscriptionOn(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMemberNewsSubscription {
+	if result.Type != botcommand.CommandMemberNewsSubscription {
 		t.Fatalf("expected CommandMemberNewsSubscription, got %s", result.Type)
 	}
 
@@ -244,7 +244,7 @@ func TestParseMessage_MemberNewsSubscriptionOff(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMemberNewsSubscription {
+	if result.Type != botcommand.CommandMemberNewsSubscription {
 		t.Fatalf("expected CommandMemberNewsSubscription, got %s", result.Type)
 	}
 
@@ -263,7 +263,7 @@ func TestParseMessage_MemberNewsSubscriptionStatus(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMemberNewsSubscription {
+	if result.Type != botcommand.CommandMemberNewsSubscription {
 		t.Fatalf("expected CommandMemberNewsSubscription, got %s", result.Type)
 	}
 
@@ -282,7 +282,7 @@ func TestParseMessage_MajorEventNotMisclassifiedAsNews(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMajorEvent {
+	if result.Type != botcommand.CommandMajorEvent {
 		t.Fatalf("expected CommandMajorEvent, got %s", result.Type)
 	}
 }
@@ -310,7 +310,7 @@ func TestParseMessage_MemberNewsMonthlyWithSpace(t *testing.T) {
 			t.Fatalf("input %q: expected parsed command, got nil", tt.input)
 		}
 
-		if result.Type != domain.CommandMemberNews {
+		if result.Type != botcommand.CommandMemberNews {
 			t.Fatalf("input %q: expected CommandMemberNews, got %s", tt.input, result.Type)
 		}
 
@@ -330,7 +330,7 @@ func TestParseMessage_ParserPriority_MemberInfoOverScheduleWhenNoArgs(t *testing
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMemberInfo {
+	if result.Type != botcommand.CommandMemberInfo {
 		t.Fatalf("expected CommandMemberInfo, got %s", result.Type)
 	}
 }
@@ -344,7 +344,7 @@ func TestParseMessage_ParserPriority_NewsSubscriptionOverNews(t *testing.T) {
 		t.Fatal("expected parsed command, got nil")
 	}
 
-	if result.Type != domain.CommandMemberNewsSubscription {
+	if result.Type != botcommand.CommandMemberNewsSubscription {
 		t.Fatalf("expected CommandMemberNewsSubscription, got %s", result.Type)
 	}
 
@@ -373,7 +373,7 @@ func TestParseMessage_SettlementCommandsIgnoredByMainBot(t *testing.T) {
 				t.Fatal("expected parsed command, got nil")
 			}
 
-			if result.Type != domain.CommandUnknown {
+			if result.Type != botcommand.CommandUnknown {
 				t.Fatalf("expected CommandUnknown, got %s", result.Type)
 			}
 		})

@@ -13,13 +13,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -67,7 +68,7 @@ func newSubscriberRecoveryChecker(t *testing.T, subscriptionDB dbx.Querier) (*Yo
 
 	cacheClient := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cacheClient, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cacheClient, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(
@@ -76,7 +77,7 @@ func newSubscriberRecoveryChecker(t *testing.T, subscriptionDB dbx.Querier) (*Yo
 	)
 	require.NoError(t, err)
 
-	_, err = cacheClient.SAdd(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey, []string{recoveryChannelID})
+	_, err = cacheClient.SAdd(t.Context(), alarmkeys.AlarmChannelRegistryKey, []string{recoveryChannelID})
 	require.NoError(t, err)
 
 	return checker, cacheClient
@@ -86,7 +87,7 @@ func TestYouTubeCheckerCheck_RecoversEvictedSubscriberSetFromDB(t *testing.T) {
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
-	repo := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, newCheckerTestLogger())
+	repo := alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, newCheckerTestLogger())
 
 	for _, alarm := range []*domain.Alarm{
 		{RoomID: testRoomID1, ChannelID: recoveryChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
@@ -104,7 +105,7 @@ func TestYouTubeCheckerCheck_RecoversEvictedSubscriberSetFromDB(t *testing.T) {
 	require.Equal(t, testRoomID1, notifications[0].RoomID)
 
 	// read-through: PG 결과는 이번 cycle에만 쓰고, 동시 구독 해지와 경합하지 않도록 set을 다시 채우지 않는다.
-	warmed, err := cacheClient.SMembers(t.Context(), sharedalarmkeys.BuildChannelSubscriberKey(recoveryChannelID, domain.AlarmTypeLive))
+	warmed, err := cacheClient.SMembers(t.Context(), alarmkeys.BuildChannelSubscriberKey(recoveryChannelID, domain.AlarmTypeLive))
 	require.NoError(t, err)
 	require.Empty(t, warmed)
 }
@@ -115,7 +116,7 @@ func TestYouTubeCheckerCheck_EmptySubscriberMarkerDoesNotHidePendingDBFailure(t 
 	checker, cacheClient := newSubscriberRecoveryChecker(t, failingSubscriberDB{})
 	require.NoError(t, cacheClient.Set(
 		t.Context(),
-		sharedalarmkeys.BuildChannelSubscriberEmptyKey(recoveryChannelID, domain.AlarmTypeLive),
+		alarmkeys.BuildChannelSubscriberEmptyKey(recoveryChannelID, domain.AlarmTypeLive),
 		"1",
 		time.Minute,
 	))
@@ -138,7 +139,7 @@ func TestYouTubeCheckerCheck_SubscriberDBErrorFailsCheck(t *testing.T) {
 	require.Nil(t, notifications)
 
 	// DB 오류로 확정하지 못한 채널을 구독 0으로 기록하면 다음 주기까지 알림이 계속 빠진다.
-	knownEmpty, err := cacheClient.Exists(t.Context(), sharedalarmkeys.BuildChannelSubscriberEmptyKey(recoveryChannelID, domain.AlarmTypeLive))
+	knownEmpty, err := cacheClient.Exists(t.Context(), alarmkeys.BuildChannelSubscriberEmptyKey(recoveryChannelID, domain.AlarmTypeLive))
 	require.NoError(t, err)
 	require.False(t, knownEmpty)
 }
@@ -157,7 +158,7 @@ func TestYouTubeCheckerIncludesObservationReceivedDuringFailedProviderRequest(t 
 	}})
 
 	logger := newCheckerTestLogger()
-	repo := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repo := alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
 	require.NoError(t, repo.Add(ctx, &domain.Alarm{RoomID: testRoomID1, ChannelID: recoveryChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}}))
 
 	updateErrors := make(chan error, 16)
@@ -170,10 +171,10 @@ func TestYouTubeCheckerIncludesObservationReceivedDuringFailedProviderRequest(t 
 	t.Cleanup(server.Close)
 
 	cacheClient := newCheckerTestCacheClient(t)
-	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{recoveryChannelID})
+	_, err := cacheClient.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{recoveryChannelID})
 	require.NoError(t, err)
 
-	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cacheClient, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cacheClient, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(

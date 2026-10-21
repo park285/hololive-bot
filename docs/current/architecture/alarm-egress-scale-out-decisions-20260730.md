@@ -49,9 +49,9 @@ lease 삭제와 scheduler role 완화의 결과로, **validator는 더 이상 �
 
 ### deploy 계층 단언
 
-deploy 계층에서는 `scripts/architecture/ci-notification-egress-gate.sh`가 alarm-worker compose 블록에 대해 다음을 단언합니다.
+deploy 계층에서는 `scripts/architecture/ci-notification-egress-gate.sh`가 prod·live-compat을 병합한 compose 렌더의 alarm-worker 서비스에 대해 다음을 단언합니다.
 
-- `NOTIFICATION_SCHEDULER_ROLE: "worker"` 리터럴을 고정할 것. validator가 `off`를 허용하게 되었으므로, 이 리터럴이 유일 인스턴스를 감지기 없이 기동시키는 오배포를 막는 deploy 계층 방어선입니다.
+- `NOTIFICATION_SCHEDULER_ROLE`을 `worker`로 고정할 것. validator가 `off`를 허용하게 되었으므로, 이 값이 유일 인스턴스를 감지기 없이 기동시키는 오배포를 막는 deploy 계층 방어선입니다.
 - `container_name`과 고정 loopback 호스트 포트를 유지하고 `replicas`를 선언하지 않을 것. 이 셋이 단일 인스턴스를 보장합니다.
 
 ### 코드 위치

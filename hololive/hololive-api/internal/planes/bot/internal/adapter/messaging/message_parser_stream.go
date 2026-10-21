@@ -26,7 +26,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -43,7 +43,7 @@ func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw stri
 		}
 	}
 
-	return &ParsedCommand{Type: domain.CommandLive, Params: params, RawMessage: raw}, true
+	return &ParsedCommand{Type: botcommand.CommandLive, Params: params, RawMessage: raw}, true
 }
 
 func (ma *MessageAdapter) isLiveCommand(cmd string) bool {
@@ -56,7 +56,7 @@ func (ma *MessageAdapter) tryUpcomingCommand(command string, args []string, raw 
 	}
 
 	return &ParsedCommand{
-		Type:       domain.CommandUpcoming,
+		Type:       botcommand.CommandUpcoming,
 		Params:     ma.parseUpcomingArgs(args),
 		RawMessage: raw,
 	}, true
@@ -144,7 +144,7 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 	params["_raw_command"] = command
 
 	return &ParsedCommand{
-		Type:       domain.CommandSchedule,
+		Type:       botcommand.CommandSchedule,
 		Params:     params,
 		RawMessage: raw,
 	}, true

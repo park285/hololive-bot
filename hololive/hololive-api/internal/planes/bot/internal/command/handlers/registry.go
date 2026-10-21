@@ -28,8 +28,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 var ErrUnknownCommand = errors.New("unknown command")
@@ -58,7 +58,7 @@ func (r *Registry) Register(handler handlercore.Command) {
 	r.handlers[name] = handler
 }
 
-func (r *Registry) Execute(ctx context.Context, cmdCtx *domain.CommandContext, key string, params map[string]any) error {
+func (r *Registry) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, key string, params map[string]any) error {
 	if r == nil {
 		return errors.New("command registry is nil")
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -100,7 +101,7 @@ func TestCalendarCommand_Execute_RequiresImageRenderer(t *testing.T) {
 
 	// 운영 조립은 renderer를 항상 연결하므로, 없으면 텍스트로 조용히 바꾸지 않고 설정 오류를 돌려준다.
 	cmd := NewCalendarCommand(deps, repo, nil)
-	cmdCtx := &domain.CommandContext{Room: testCalendarRoom}
+	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 
 	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 6})
 	if err == nil || !strings.Contains(err.Error(), "image renderer not configured") {
@@ -134,7 +135,7 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 	renderer := &calendarImageRendererStub{data: []byte("png-data")}
 
 	cmd := NewCalendarCommand(deps, repo, renderer)
-	cmdCtx := &domain.CommandContext{Room: testCalendarRoom}
+	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 
 	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 6})
 	if err != nil {
@@ -161,7 +162,7 @@ func TestCalendarCommand_Execute_NextMonthAcrossYear(t *testing.T) {
 		return time.Date(2026, time.December, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
 	}
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testCalendarRoom}, map[string]any{"monthOffset": 1})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, map[string]any{"monthOffset": 1})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -190,7 +191,7 @@ func TestCalendarCommand_Execute_PreviousMonthAcrossYear(t *testing.T) {
 		return time.Date(2026, time.January, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
 	}
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testCalendarRoom}, map[string]any{"monthOffset": -1})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, map[string]any{"monthOffset": -1})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -322,7 +323,7 @@ func TestCalendarCommand_Execute_ImageFailureFallsBackToText(t *testing.T) {
 	renderer := &calendarImageRendererStub{err: errors.New("font load failed")}
 
 	cmd := NewCalendarCommand(deps, repo, renderer)
-	cmdCtx := &domain.CommandContext{Room: testCalendarRoom}
+	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 	before := imageTextFallbackCount("calendar", imageTextFallbackReasonRenderFailed)
 
 	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 3})
@@ -363,7 +364,7 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 	renderer := &calendarImageRendererStub{data: []byte("png-data")}
 
 	cmd := NewCalendarCommand(deps, repo, renderer)
-	cmdCtx := &domain.CommandContext{Room: testCalendarRoom}
+	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 	before := imageTextFallbackCount("calendar", imageTextFallbackReasonSendFailed)
 
 	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 3})
@@ -396,7 +397,7 @@ func TestCalendarCommand_Execute_ImageOutcomeUnknownSuppressesTextFallback(t *te
 			repo := &calendarRepoStub{entries: []domain.CalendarEntry{{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5}}}
 			command := NewCalendarCommand(deps, repo, &calendarImageRendererStub{data: []byte("png-data")})
 			before := imageTextFallbackCount("calendar", imageTextFallbackReasonOutcomeUnknown)
-			err := command.Execute(t.Context(), &domain.CommandContext{Room: testCalendarRoom}, map[string]any{testParamMonth: 3})
+			err := command.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, map[string]any{testParamMonth: 3})
 
 			if !errors.Is(err, imageErr) {
 				t.Fatalf("Execute() error = %v, want preserved outcome uncertainty", err)
@@ -430,7 +431,7 @@ func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 	repo := &calendarRepoStub{err: errors.New("db connection lost")}
 
 	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{data: []byte("png-data")})
-	cmdCtx := &domain.CommandContext{Room: testCalendarRoom}
+	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 
 	err := cmd.Execute(t.Context(), cmdCtx, nil)
 	if err != nil {
@@ -451,7 +452,7 @@ func TestCalendarCommand_EnsureDeps_NilRepo(t *testing.T) {
 	}
 
 	cmd := NewCalendarCommand(deps, nil, nil)
-	cmdCtx := &domain.CommandContext{Room: testCalendarRoom}
+	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 
 	err := cmd.Execute(t.Context(), cmdCtx, nil)
 	if err == nil {

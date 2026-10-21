@@ -10,6 +10,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -69,7 +70,7 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "Shirakami Fubuki",
 	})
 	if err != nil {
@@ -113,7 +114,7 @@ func TestMemberInfoCommandPrefersRequestedSharedChannelMember(t *testing.T) {
 		{"query": "Michiru"},
 		{"query": "IZUKI  MICHIRU"},
 	} {
-		if err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, params); err != nil {
+		if err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, params); err != nil {
 			t.Fatal(err)
 		}
 
@@ -147,7 +148,7 @@ func TestMemberInfoDoesNotTurnDatabaseFailureIntoNotFound(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{"query": "Michiru"})
+	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{"query": "Michiru"})
 	if err == nil || !strings.Contains(err.Error(), "member DB unavailable") {
 		t.Fatalf("error=%v", err)
 	}

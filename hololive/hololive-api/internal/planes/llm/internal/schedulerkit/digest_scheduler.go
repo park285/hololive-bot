@@ -7,16 +7,17 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type DigestScheduler struct {
-	Locker  delivery.NotificationLocker
+	Locker  executionlock.Locker
 	Logger  *slog.Logger
 	runtime *Runtime
 }
 
-func NewDigestScheduler(locker delivery.NotificationLocker, logger *slog.Logger) *DigestScheduler {
+func NewDigestScheduler(locker executionlock.Locker, logger *slog.Logger) *DigestScheduler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -75,10 +76,10 @@ func (d *DigestScheduler) RunDigest[C any](ctx context.Context, op DigestOp[C]) 
 
 	// 락 TTL보다 먼저 협력적 취소를 요청한다. 호출자가 더 짧은 deadline을 주면 유지한다.
 	// 취소를 무시하는 외부 호출의 종료나 락 만료 전 join을 보장하는 fencing은 아니다.
-	ctx, cancel := context.WithTimeout(ctx, delivery.DefaultExecutionLockTTL-time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, executionlock.DefaultTTL-time.Minute)
 	defer cancel()
 
-	token, acquired, err := d.Locker.TryAcquire(ctx, op.LockKey, delivery.DefaultExecutionLockTTL)
+	token, acquired, err := d.Locker.TryAcquire(ctx, op.LockKey, executionlock.DefaultTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)
 	}
@@ -125,7 +126,7 @@ const digestLockReleaseTimeout = 5 * time.Second
 
 func (d *DigestScheduler) releaseDigestLock(ctx context.Context, lockKey, token string) {
 	// shutdown이 실행 ctx를 취소한 채 도달하면 Release가 반드시 실패해 lock이
-	// DefaultExecutionLockTTL(15분)까지 잔존하므로 해제는 취소와 분리한다.
+	// executionlock.DefaultTTL(15분)까지 잔존하므로 해제는 취소와 분리한다.
 	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), digestLockReleaseTimeout)
 	defer cancel()
 

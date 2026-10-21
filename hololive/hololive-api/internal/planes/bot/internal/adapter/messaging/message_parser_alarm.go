@@ -25,7 +25,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 const alarmSubCommandClear = "초기화"
@@ -73,12 +73,12 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 
 	if stringutil.ContainsString([]string{"추가", "설정", "set", "add"}, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
-		return alarmMemberCommand(domain.CommandAlarmAdd, "add", member, alarmType, rawMessage)
+		return alarmMemberCommand(botcommand.CommandAlarmAdd, "add", member, alarmType, rawMessage)
 	}
 
 	if stringutil.ContainsString([]string{"제거", "삭제", "remove", "del", "delete"}, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
-		return alarmMemberCommand(domain.CommandAlarmRemove, "remove", member, alarmType, rawMessage)
+		return alarmMemberCommand(botcommand.CommandAlarmRemove, "remove", member, alarmType, rawMessage)
 	}
 
 	if stringutil.ContainsString([]string{"목록", "list", "show"}, subCmd) {
@@ -92,7 +92,7 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 	return alarmInvalidCommand(subCmd, restArgs, rawMessage)
 }
 
-func alarmMemberCommand(commandType domain.CommandType, action, member, alarmType, rawMessage string) *ParsedCommand {
+func alarmMemberCommand(commandType botcommand.CommandType, action, member, alarmType, rawMessage string) *ParsedCommand {
 	return &ParsedCommand{
 		Type: commandType,
 		Params: map[string]any{
@@ -106,7 +106,7 @@ func alarmMemberCommand(commandType domain.CommandType, action, member, alarmTyp
 
 func alarmListCommand(rawMessage string) *ParsedCommand {
 	return &ParsedCommand{
-		Type:       domain.CommandAlarmList,
+		Type:       botcommand.CommandAlarmList,
 		Params:     map[string]any{paramAction: "list"},
 		RawMessage: rawMessage,
 	}
@@ -114,7 +114,7 @@ func alarmListCommand(rawMessage string) *ParsedCommand {
 
 func alarmClearCommand(rawMessage string) *ParsedCommand {
 	return &ParsedCommand{
-		Type:       domain.CommandAlarmClear,
+		Type:       botcommand.CommandAlarmClear,
 		Params:     map[string]any{paramAction: "clear"},
 		RawMessage: rawMessage,
 	}
@@ -122,7 +122,7 @@ func alarmClearCommand(rawMessage string) *ParsedCommand {
 
 func alarmInvalidCommand(subCmd string, restArgs []string, rawMessage string) *ParsedCommand {
 	return &ParsedCommand{
-		Type: domain.CommandAlarmInvalid,
+		Type: botcommand.CommandAlarmInvalid,
 		Params: map[string]any{
 			paramAction:   "invalid",
 			"sub_command": subCmd,

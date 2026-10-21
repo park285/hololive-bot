@@ -54,11 +54,6 @@ jobs:
           path: iris-client-go
           persist-credentials: false
 
-      - name: Python runtime
-        uses: ./hololive-bot/.github/actions/python-runtime
-        with:
-          working-directory: hololive-bot
-
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -106,7 +101,7 @@ jobs:
 
       - name: govulncheck
         run: |
-          mapfile -t modules < <(go work edit -json | "$CI_PYTHON_BIN" -c 'import json, sys; print("\n".join(use["DiskPath"] for use in json.load(sys.stdin)["Use"]))')
+          mapfile -t modules < <(go work edit -json | jq -r '.Use[].DiskPath')
           for module in "${modules[@]}"; do
             echo "govulncheck ${module}"
             (cd "${module}" && govulncheck ./...)

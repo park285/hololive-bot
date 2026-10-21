@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
@@ -22,7 +21,7 @@ func appendLatencyClassificationLogAttr(attrs []any, classification *timeline.Po
 		return attrs
 	}
 
-	return append(attrs, slog.Group(logschema.FieldLatencyClassification,
+	return append(attrs, slog.Group(FieldLatencyClassification,
 		slog.String("status", string(classification.Status)),
 		slog.Int64("threshold_millis", classification.ThresholdMillis),
 		slog.String("delay_source", string(classification.DelaySource)),

@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
+	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.Time) {
@@ -112,10 +112,10 @@ func assertRecentlyDispatchedStreamIDs(t *testing.T, pool liveSessionPool, sourc
 	t.Helper()
 
 	insertAlarmDispatchEvents(t, pool, []testAlarmDispatchEvent{
-		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
-		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
-		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: testOldDispatchStreamID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-25 * time.Hour)},
-		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, Category: alarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, Category: alarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: testOldDispatchStreamID, Category: alarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-25 * time.Hour)},
+		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", Category: alarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
 		{ID: 5, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, Category: "5", CreatedAt: now.Add(-2 * time.Hour)},
 	})
 

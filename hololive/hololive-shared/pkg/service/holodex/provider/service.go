@@ -38,18 +38,7 @@ type Service struct {
 	streamCacheFills streamCacheFillGate
 }
 
-func NewHolodexService(baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
-	cfg := settings.DefaultHolodexOperationalConfig()
-
-	service, err := NewHolodexServiceWithConfig(&cfg, baseURL, apiKey, cacheClient, scraperService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("holodex service with config: %w", err)
-	}
-
-	return service, nil
-}
-
-func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
+func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
 	if holodexCfg == nil {
 		return nil, errors.New("holodex config is nil")
 	}

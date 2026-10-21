@@ -15,17 +15,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func newAdvanceService(t *testing.T) *subscriptions.AlarmService {
 	t.Helper()
 
-	service, err := subscriptions.NewAlarmService(cachemocks.NewLenientClient(), nil, &alarm.Repository{}, slog.New(slog.DiscardHandler), []int{5, 3, 1})
+	service, err := subscriptions.NewAlarmService(cachemocks.NewLenientClient(), nil, &alarmstore.Repository{}, slog.New(slog.DiscardHandler), []int{5, 3, 1})
 	require.NoError(t, err)
 
 	return service
@@ -39,7 +40,7 @@ func newAdvanceRouter(service *subscriptions.AlarmService, apiKey string) http.H
 		group.Use(middleware.APIKeyAuthMiddleware(apiKey))
 	}
 
-	alarm.NewHandler(service, slog.New(slog.DiscardHandler)).RegisterInternalRoutes(group)
+	alarmhttp.NewHandler(service, slog.New(slog.DiscardHandler)).RegisterInternalRoutes(group)
 
 	return router
 }
@@ -137,10 +138,10 @@ func TestClientAdvanceAppliedThenResponseLostIsUnknown(t *testing.T) {
 }
 
 // newStrictAlarmClient는 admin·bot plane과 같은 운영 생성자로 httptest worker client를 만든다.
-func newStrictAlarmClient(t *testing.T, baseURL, apiKey string) *alarm.Client {
+func newStrictAlarmClient(t *testing.T, baseURL, apiKey string) *alarmhttp.Client {
 	t.Helper()
 
-	client, err := alarm.NewClientWithAPIKeyStrict(baseURL, apiKey, nil, sharedh3.ClientOptions{})
+	client, err := alarmhttp.NewClientWithAPIKeyStrict(baseURL, apiKey, nil, sharedh3.ClientOptions{})
 	require.NoError(t, err)
 
 	return client

@@ -28,7 +28,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (c *YouTubeChecker) buildUpcomingNotifications(
@@ -173,19 +172,9 @@ func (c *YouTubeChecker) detectRoomScheduleChanges(
 		channelID = stream.Channel.ID
 	}
 
-	changes := make(map[string]*dedup.ScheduleChange)
-
-	for _, roomID := range UniqueStrings(subscriberRooms) {
-		change, err := c.dedupService.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
-		if err != nil {
-			return nil, fmt.Errorf("detect room schedule changes: room %s: %w", privacylog.IdentifierToken(roomID), err)
-		}
-
-		if change == nil {
-			continue
-		}
-
-		changes[roomID] = change
+	changes, err := c.dedupService.DetectNotificationScheduleChanges(ctx, UniqueStrings(subscriberRooms), channelID, stream)
+	if err != nil {
+		return nil, fmt.Errorf("detect room schedule changes: %w", err)
 	}
 
 	return changes, nil

@@ -3,7 +3,6 @@ package youtubedispatch
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
@@ -11,19 +10,19 @@ import (
 
 func appendCommunityShortsAlarmTimingLogAttrs(attrs []any, timing alarmtiming.Snapshot) []any {
 	if timing.ActualPublishedAt != nil {
-		attrs = append(attrs, slog.Time(logschema.FieldActualPublishedAt, timing.ActualPublishedAt.UTC()))
+		attrs = append(attrs, slog.Time(FieldActualPublishedAt, timing.ActualPublishedAt.UTC()))
 	}
 
 	if timing.AlarmSentAt != nil {
-		attrs = append(attrs, slog.Time(logschema.FieldAlarmSentAt, timing.AlarmSentAt.UTC()))
+		attrs = append(attrs, slog.Time(FieldAlarmSentAt, timing.AlarmSentAt.UTC()))
 	}
 
 	if timing.AlarmLatencyMillis != nil {
-		attrs = append(attrs, slog.Int64(logschema.FieldAlarmLatencyMillis, *timing.AlarmLatencyMillis))
+		attrs = append(attrs, slog.Int64(FieldAlarmLatencyMillis, *timing.AlarmLatencyMillis))
 	}
 
 	if timing.AlarmLatencyExceeded != nil {
-		attrs = append(attrs, slog.Bool(logschema.FieldAlarmLatencyExceeded, *timing.AlarmLatencyExceeded))
+		attrs = append(attrs, slog.Bool(FieldAlarmLatencyExceeded, *timing.AlarmLatencyExceeded))
 	}
 
 	return attrs
