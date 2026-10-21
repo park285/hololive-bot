@@ -9,6 +9,8 @@ import (
 )
 
 func TestLiveReviewComparisonMigrationPreservesReceiptsAndReplays(t *testing.T) {
+	t.Parallel()
+
 	const migration = "270_youtube_live_review_compact_comparison.sql"
 
 	pool, dir := projectionMigrationPoolBefore(t, migration)

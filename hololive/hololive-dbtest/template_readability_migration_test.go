@@ -3,6 +3,8 @@ package dbtest
 import "testing"
 
 func TestTemplateReadabilityMigrationPreservesCustomBodiesAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 
 	dir, err := resolveMigrationsDir()

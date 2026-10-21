@@ -15,6 +15,8 @@ import (
 )
 
 func TestContentConsumerDoesNotRewriteAbsentCatalogRow(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -48,6 +50,8 @@ func TestContentConsumerDoesNotRewriteAbsentCatalogRow(t *testing.T) {
 }
 
 func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedShortsWatermark(t, pool)
@@ -100,6 +104,8 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 }
 
 func TestContentConsumerPersistPartialThenPositive(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 
@@ -109,6 +115,8 @@ func TestContentConsumerPersistPartialThenPositive(t *testing.T) {
 }
 
 func TestContentConsumerPersistLatePositiveClearsMissing(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 
@@ -119,6 +127,8 @@ func TestContentConsumerPersistLatePositiveClearsMissing(t *testing.T) {
 }
 
 func TestContentConsumerPersistNarrowScopeNegative(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 
@@ -163,6 +173,8 @@ func TestContentConsumerPersistNarrowScopeNegative(t *testing.T) {
 }
 
 func TestContentConsumerPersistOneNegativeRecordsMissing(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 
@@ -172,6 +184,8 @@ func TestContentConsumerPersistOneNegativeRecordsMissing(t *testing.T) {
 }
 
 func TestContentConsumerPersistTwoNegativesWithGraceWithdraws(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startContentPersistGrace(t, time.Hour)
 	ctx := t.Context()
 
@@ -205,6 +219,8 @@ func TestContentConsumerPersistTwoNegativesWithGraceWithdraws(t *testing.T) {
 }
 
 func TestContentConsumerPersistReplayedNegativeDoesNotIncrement(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 

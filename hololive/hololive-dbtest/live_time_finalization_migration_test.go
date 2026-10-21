@@ -9,6 +9,8 @@ import (
 const timeFinalizationMigration = "323_youtube_live_time_finalization.sql"
 
 func TestTimeFinalizationMigrationGuardsProgressShapeAndReplays(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

@@ -12,6 +12,8 @@ import (
 )
 
 func TestCollectionRuntimeBundlesBackfillExcludesConcurrentWrites(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, collectionRuntimeBundlesMigration)
 	seedCollectionBundleHeaders(t, pool)
 

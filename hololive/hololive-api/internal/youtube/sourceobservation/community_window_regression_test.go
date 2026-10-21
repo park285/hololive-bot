@@ -14,6 +14,8 @@ import (
 )
 
 func TestCommunityWindowBaselinePreventsPinnedPostReorderBurst(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

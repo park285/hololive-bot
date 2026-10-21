@@ -148,6 +148,8 @@ func retryDatabaseClock(t *testing.T, pool *pgxpool.Pool) time.Time {
 }
 
 func TestDeferNotBeforeRejectsStaleFenceAndPreCanceledWrite(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
@@ -192,6 +194,8 @@ func TestDeferNotBeforeRejectsStaleFenceAndPreCanceledWrite(t *testing.T) {
 }
 
 func TestDeferSQLRejectsNonCooldownNotBefore(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 

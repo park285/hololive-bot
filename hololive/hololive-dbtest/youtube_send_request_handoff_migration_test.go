@@ -13,6 +13,8 @@ const youtubeSendRequestHandoffMigration = "336_youtube_send_request_handoff_che
 // requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, 예정 시각도 확인 시각도 없는 requestId는 거부한다. 재적용은
 // 제약을 바꾸지 않는다.
 func TestYouTubeSendRequestHandoffShape(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()

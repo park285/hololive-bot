@@ -16,6 +16,8 @@ import (
 // 들어 있으면 갱신마다 새 인덱스 항목을 쓰고 HOT이 막힌다. 예정 시각이 있는 세션은 방송 이력 정렬값
 // (history_sort_at)도 그대로이므로 모든 갱신이 HOT이어야 한다.
 func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	observed := time.Date(2026, time.October, 12, 9, 0, 0, 0, time.UTC)

@@ -7,6 +7,8 @@ import (
 )
 
 func TestAlarmRequestMigrationPreservesLegacyAndReplaysAfterPartialApply(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `ALTER TABLE alarm_dispatch_send_units DROP CONSTRAINT chk_alarm_send_request_shape,

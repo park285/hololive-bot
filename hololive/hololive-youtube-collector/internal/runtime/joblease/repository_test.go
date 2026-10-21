@@ -69,6 +69,8 @@ func testDeferInput(
 }
 
 func TestConfigRequiresBoundedLeaseAndRuntimeBudgets(t *testing.T) {
+	t.Parallel()
+
 	config := testConfig()
 	if err := config.Validate(); err != nil {
 		t.Fatal(err)
@@ -88,6 +90,8 @@ func TestConfigRequiresBoundedLeaseAndRuntimeBudgets(t *testing.T) {
 }
 
 func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -131,6 +135,8 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 }
 
 func TestProjectionLockUsesRestrictedRoleFunction(t *testing.T) {
+	t.Parallel()
+
 	query := mustSQL("repository_projection_lock_0144_05.sql")
 	if !strings.Contains(query, "lock_current_youtube_collection_projection()") {
 		t.Fatal("projection lock query must use the restricted-role lock function")
@@ -142,6 +148,8 @@ func TestProjectionLockUsesRestrictedRoleFunction(t *testing.T) {
 }
 
 func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectGlobalSchedule, contract.KindSchedule, time.Minute, true}})
@@ -173,6 +181,8 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 }
 
 func TestAcquireDoesNotBlockOnLeaseRowLockHeldByFinishingHolder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -207,6 +217,8 @@ func TestAcquireDoesNotBlockOnLeaseRowLockHeldByFinishingHolder(t *testing.T) {
 }
 
 func TestConcurrentExpiredTakeoverProducesExactlyOneHolder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -278,6 +290,8 @@ func TestConcurrentExpiredTakeoverProducesExactlyOneHolder(t *testing.T) {
 }
 
 func TestMismatchedIdentityAcquireRollsBackTheLeaseUpdate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
@@ -346,6 +360,8 @@ func holdActiveLeaseRow(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseP
 }
 
 func TestYouTubeJSChannelCandidatesKeepLiveAndMetadataCadencesSeparate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
@@ -376,6 +392,8 @@ func TestYouTubeJSChannelCandidatesKeepLiveAndMetadataCadencesSeparate(t *testin
 }
 
 func TestHolodexCandidatesKeepLiveScheduleAndMetadataCadencesSeparate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
@@ -408,6 +426,8 @@ func TestHolodexCandidatesKeepLiveScheduleAndMetadataCadencesSeparate(t *testing
 }
 
 func TestCandidatesEventuallyIncludeSubjectsBeyondAcquisitionBatch(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
@@ -441,6 +461,8 @@ func TestCandidatesEventuallyIncludeSubjectsBeyondAcquisitionBatch(t *testing.T)
 }
 
 func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -525,6 +547,8 @@ func changedCadenceLease(
 // target 주기가 줄면 IDLE lease는 이전 긴 주기의 next_due_at을 기다리지 않고 현재 주기의 다음 slot에서 다시 후보가 되고
 // 획득된다. 새 slot은 직전 slot보다 늦고 현재 시각 이하이며, 현재 주기 경계에 맞는다.
 func TestShortenedCadenceReacquiresIdleLeaseBeforeOldDue(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool, repository, spec, previousSlot := changedCadenceLease(t, time.Hour, time.Minute, 2*time.Minute)
 
@@ -623,6 +647,8 @@ func assertActionPreservesScheduledSlot(t *testing.T, action string) {
 }
 
 func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -653,6 +679,8 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 }
 
 func TestDeferAndCompleteRetainFailureDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -742,6 +770,8 @@ func assertRetainedDiagnostics(t *testing.T, row, deferred leaseDiagnostics) {
 
 // typed failure 없이 DEFERRED로 바꾸는 이전 collector 형태의 갱신은 진단을 합성하지 않고 기존 typed 진단을 그대로 둔다.
 func TestLegacyShapedDeferNoLongerSynthesizesDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
@@ -762,6 +792,8 @@ func TestLegacyShapedDeferNoLongerSynthesizesDiagnostics(t *testing.T) {
 }
 
 func TestAcquireLeavesUntypedDeferredFailureWithoutDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -884,6 +916,8 @@ RETURNING job_key`
 }
 
 func TestReleasePreservesExistingFailureDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -962,6 +996,8 @@ func assertFailureDiagnostics(t *testing.T, pool *pgxpool.Pool, jobKey, wantCode
 
 // 비정상 진단·tuple은 typed 입력 생성에서 거절되고, 생성자를 거치지 않은 입력은 lease 갱신 없이 ErrInvalidJob이다.
 func TestDeferRejectsInvalidDiagnosticBounds(t *testing.T) {
+	t.Parallel()
+
 	if _, err := contract.NewFailureDiagnostic(
 		contract.ErrorCollectionFailed, contract.ClassTransient, strings.Repeat("x", collecterr.MaxDetailBytes+1),
 	); err == nil {
@@ -992,6 +1028,8 @@ func TestDeferRejectsInvalidDiagnosticBounds(t *testing.T) {
 }
 
 func TestProjectionExpiryBlocksAcquisition(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -1006,6 +1044,8 @@ func TestProjectionExpiryBlocksAcquisition(t *testing.T) {
 }
 
 func TestLoadExactTargetSnapshotReturnsOnlyLeasedSubject(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{
@@ -1035,6 +1075,8 @@ func TestLoadExactTargetSnapshotReturnsOnlyLeasedSubject(t *testing.T) {
 }
 
 func TestLoadProjectionTargetSnapshotPreservesEmptyAndEnforcesCap(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{
@@ -1072,6 +1114,8 @@ func TestLoadProjectionTargetSnapshotPreservesEmptyAndEnforcesCap(t *testing.T) 
 }
 
 func TestLoadTargetSnapshotRejectsStaleProjection(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -1093,6 +1137,8 @@ func TestLoadTargetSnapshotRejectsStaleProjection(t *testing.T) {
 }
 
 func TestLoadTargetSnapshotRejectsUnownedProof(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -1173,6 +1219,8 @@ func snapshotProof(spec *JobSpec, generation int64) contract.LeaseProof {
 }
 
 func TestYouTubeSubjectJobsDistributeWithoutDuplicateAcquisition(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
@@ -1235,6 +1283,8 @@ func (l *fakeLease) Release(_ context.Context, reason ReleaseReason) error {
 }
 
 func TestRenewFailureCancelsFetchAndRunJoins(t *testing.T) {
+	t.Parallel()
+
 	config := testConfig()
 
 	config.RenewInterval = 10 * time.Millisecond
@@ -1296,6 +1346,8 @@ func TestFenceLossPrefersBufferedCallbackResult(t *testing.T) {
 }
 
 func TestRunReturnsRunnerPanic(t *testing.T) {
+	t.Parallel()
+
 	repository := &Repository{config: testConfig()}
 	result := repository.Run(t.Context(), &fakeLease{}, func(context.Context, contract.LeaseProof) error {
 		panic("runner panic")
@@ -1307,6 +1359,8 @@ func TestRunReturnsRunnerPanic(t *testing.T) {
 }
 
 func TestRenewFailureBoundsNonCooperativeRunnerJoin(t *testing.T) {
+	t.Parallel()
+
 	config := testConfig()
 
 	config.RenewInterval = 5 * time.Millisecond
@@ -1339,6 +1393,8 @@ func TestRenewFailureBoundsNonCooperativeRunnerJoin(t *testing.T) {
 }
 
 func TestCancellationReleasesBeforeBoundedRunnerJoin(t *testing.T) {
+	t.Parallel()
+
 	config := testConfig()
 
 	config.RenewInterval = time.Second

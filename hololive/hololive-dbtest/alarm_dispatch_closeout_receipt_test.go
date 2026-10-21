@@ -26,6 +26,8 @@ type closeoutReceiptFixture struct {
 
 // 격리 묶음의 모든 원본 행은 그대로 두고, 보존 기간 뒤에도 검증 가능한 결정 영수증만 남긴다.
 func TestAlarmDispatchCloseoutReceiptPreservesOriginalAndSurvivesRetention(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	fixture := seedCloseoutReceiptFixture(t, pool)
 

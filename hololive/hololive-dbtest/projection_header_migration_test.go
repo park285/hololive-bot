@@ -38,6 +38,8 @@ func projectionMigrationPoolBefore(t *testing.T, stop string) (*pgxpool.Pool, st
 }
 
 func TestProjectionHeaderMigrationPreservesMembershipAndStorage(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, projectionHeaderMigration)
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `

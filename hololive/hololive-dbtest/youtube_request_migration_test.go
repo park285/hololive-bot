@@ -7,6 +7,8 @@ import (
 )
 
 func TestYouTubeRequestMigrationPreservesLegacyAndReplays(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `ALTER TABLE youtube_notification_delivery DROP COLUMN send_request_id, DROP COLUMN IF EXISTS request_snapshot_allowed;

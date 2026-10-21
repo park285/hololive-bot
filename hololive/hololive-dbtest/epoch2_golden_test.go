@@ -51,6 +51,8 @@ type epoch2Sequence struct {
 }
 
 func TestEpoch2CutoffGoldens(t *testing.T) {
+	t.Parallel()
+
 	pool := NewBlankPool(t)
 	roles := createEpoch2Roles(t, pool)
 	applyEpoch2Cutoff(t, pool, roles)

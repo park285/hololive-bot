@@ -16,6 +16,8 @@ const liveReviewRecorderDecoderMigration = "314_youtube_live_review_recorder_dec
 
 // 별도 invoker 기록 역할이 실제 upgrade 뒤에도 영수증·사실·runtime 판정을 함께 커밋해야 한다.
 func TestLiveReviewRecorderDecoderMigrationPreservesRestrictedRecording(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveReviewSharedSourcesMigration)
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)

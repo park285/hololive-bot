@@ -44,6 +44,8 @@ func collectionBundleProtectedSources(t *testing.T, pool *pgxpool.Pool) string {
 }
 
 func TestCollectionRuntimeBundlesRetentionPreservesBoundsAndProtection(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedCollectionBundleRetention(t, pool)
 
@@ -118,6 +120,8 @@ func TestCollectionRuntimeBundlesGuardPrecedesSourceLocks(t *testing.T) {
 }
 
 func TestCollectionRuntimeBundlesRetentionRejectsInvalidRequests(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 
 	for _, query := range []string{

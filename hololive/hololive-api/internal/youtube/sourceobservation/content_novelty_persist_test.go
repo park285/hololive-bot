@@ -72,6 +72,8 @@ func TestContentNoveltyBaselineTakesEarliestAcceptedListWithoutLegacyBackfill(t 
 // 신뢰 근거가 없는 신규 후보도 canonical·clock은 저장하되 알림 의도는 만들지 않고 novelty_pending으로 남깁니다. Player가 응답했지만
 // 시각을 확정하지 못한 관측은 계속 보류하고, 결정적 근거가 오면 정확히 한 번 알립니다. 이후 관측과 replay는 다시 알리지 않습니다.
 func TestContentNoveltyPendingCandidateNotifiesOnceWhenTrustedEvidenceArrives(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 
@@ -117,6 +119,8 @@ func TestContentNoveltyPendingCandidateNotifiesOnceWhenTrustedEvidenceArrives(t 
 
 // 다른 채널이나 Shorts로 이미 저장된 영상은 이 채널 video_list에서 처음 보여도 새 업로드 근거가 아닙니다.
 func TestContentNoveltyVideosKnownElsewhereStaySilent(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 
@@ -212,6 +216,8 @@ func TestContentVideoListClaimsKeepSameChannelOrder(t *testing.T) {
 
 // 기준 이후 발견한 예정 Premiere는 live 투영만 하고 발견 때 알리지 않으며, 공개 전환 관측과 발견 관측 replay에서도 알리지 않습니다.
 func TestContentNoveltyPremiereStaysSilentFromDiscoveryThroughRelease(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 	scheduled := proof.ScheduledFor.Add(2 * time.Hour)
@@ -235,6 +241,8 @@ func TestContentNoveltyPremiereStaysSilentFromDiscoveryThroughRelease(t *testing
 
 // 첫 기준 목록에 있던 예정 Premiere는 live 투영은 하되 알리지 않고, 공개 전환 뒤에도 알리지 않습니다.
 func TestContentNoveltyBaselinePremiereStaysSilentThroughRelease(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

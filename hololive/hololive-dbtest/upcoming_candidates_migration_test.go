@@ -9,6 +9,8 @@ import (
 )
 
 func TestUpcomingCandidatesMigrationResumesAndPreservesRows(t *testing.T) {
+	t.Parallel()
+
 	pool := NewBlankPool(t)
 	dir, err := resolveMigrationsDir()
 	require.NoError(t, err)

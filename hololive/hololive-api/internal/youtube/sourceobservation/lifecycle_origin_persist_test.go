@@ -122,6 +122,8 @@ func TestLifecycleOriginSnapshotAbsenceKeepsMetadataAndLegacyHeadless(t *testing
 }
 
 func TestLifecycleOriginPromotionRollsBackWithHeadFailure(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 

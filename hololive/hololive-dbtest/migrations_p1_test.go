@@ -25,6 +25,8 @@ const sourceObservationsTable = "source_observations"
 // reloptions는 schema_snapshot.golden.sql 직렬화(컬럼·제약·인덱스)에 포함되지 않아
 // 111의 autovacuum 튜닝은 골든 대신 이 구조 테스트로 고정한다.
 func TestTelemetryHotTableAutovacuumTuned(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 
@@ -84,6 +86,8 @@ var sourceObservationReplayMigrations = []string{
 }
 
 func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.T) {
+	t.Parallel()
+
 	pool, _ := channelStatisticsRemovalPool(t)
 	ctx := t.Context()
 
@@ -143,6 +147,8 @@ func assertObservationContractsSurvivedReplay(t *testing.T, pool *pgxpool.Pool) 
 }
 
 func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
+	t.Parallel()
+
 	pool, _ := channelStatisticsRemovalPool(t)
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)
@@ -267,6 +273,8 @@ func grantBroadObservationPrivileges(t *testing.T, pool *pgxpool.Pool, roles obs
 }
 
 func TestSourceObservationLockAPIMigrationIsAtomic(t *testing.T) {
+	t.Parallel()
+
 	dir, err := resolveMigrationsDir()
 	if err != nil {
 		t.Fatalf("resolve migrations dir: %v", err)

@@ -128,6 +128,8 @@ func readContentClockRowVersion(ctx context.Context, t *testing.T, pool *pgxpool
 }
 
 func TestContentClockUpsertGuardSkipsIdenticalValues(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	clock := populatedContentClock()
@@ -192,6 +194,8 @@ func TestContentClockUpsertGuardSkipsIdenticalValues(t *testing.T) {
 
 // 이번 관측에 없고 부재 판정도 없는(PARTIAL) clock은 Decision.Clocks 스냅샷에 남아도 다시 쓰지 않는다.
 func TestContentConsumerPersistsOnlyChangedClocks(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 

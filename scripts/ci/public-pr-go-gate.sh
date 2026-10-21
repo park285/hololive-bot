@@ -57,6 +57,14 @@ export GOMEMLIMIT="${GOMEMLIMIT:-5GiB}"
 
 cd "${module_dir}"
 
+# hololive-dbtest는 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 패키지들이 PostgreSQL 하나를 공유한다.
+# 패키지마다 testcontainers PostgreSQL을 띄우는 기동 비용을 없앤다. 호출자가 준 DB가 있으면 그대로 쓴다.
+use_shared_test_database() {
+  [[ -z "${TEST_DATABASE_URL:-}" ]] || return 0
+  source "${SCRIPT_DIR}/local-ci-integration.sh"
+  provision_integration_test_database
+}
+
 run_with_failure_tail() {
   local label="$1"
   shift
@@ -83,11 +91,13 @@ case "${stage}" in
     ;;
   test)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
+    use_shared_test_database
     echo "[public-pr] module=${module} go test -count=1 ./..."
     run_with_failure_tail "unit tests" go test -count=1 ./...
     ;;
   race)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
+    use_shared_test_database
     echo "[public-pr] module=${module} go test -race -p 2 -count=1 ./..."
     run_with_failure_tail "race tests" go test -race -p 2 -count=1 ./...
     run_with_failure_tail "non-race-only tests" bash "${SCRIPT_DIR}/go-test-nonrace.sh" ./...

@@ -6,6 +6,8 @@ import (
 )
 
 func TestAsobiMemberMigrationReplayPreservesExistingData(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

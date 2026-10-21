@@ -12,6 +12,8 @@ import (
 const liveRuntimeUpdateFilterMigration = "316_youtube_live_runtime_update_filter.sql"
 
 func TestLiveRuntimeUpdateFilterMigrationPreservesDataAndPrivileges(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeUpdateFilterMigration)
 	seedLiveReviewComparison(t, pool)
 	seedRecordedLiveReviews(t, pool)

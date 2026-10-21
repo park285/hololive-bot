@@ -23,6 +23,8 @@ const liveReviewReceiptSideFactsSQL = `public.youtube_live_review_semantic_facts
 
 // 기존 246·262 형식 영수증의 판정은 저장 사실로 바꾼 뒤에도 같고, 저장 사실은 270 영수증 쪽 식과 같다.
 func TestLiveReviewReceiptFactsMigrationPreservesDecisions(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveReviewReceiptFactsMigration)
 	ctx := t.Context()
 
@@ -75,6 +77,8 @@ func TestLiveReviewReceiptFactsMigrationPreservesDecisions(t *testing.T) {
 
 // 기록 함수와 직접 INSERT 모두 같은 트랜잭션에서 사실을 저장하고, 저장 사실은 영수증처럼 변경·삭제를 거부한다.
 func TestLiveReviewReceiptFactsStoredOnRecordAndImmutable(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 
@@ -99,6 +103,8 @@ func TestLiveReviewReceiptFactsStoredOnRecordAndImmutable(t *testing.T) {
 
 // 기본 ACL이 새 표에 줄 수 있는 넓은 권한을 걷어 runtime은 조회만, scraper는 권한 없음으로 남긴다.
 func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveReviewReceiptFactsMigration)
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)

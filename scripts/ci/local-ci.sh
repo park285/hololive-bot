@@ -143,27 +143,45 @@ check_golangci_lint
 check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "collector YouTube.js dependencies" bash scripts/ci/public-pr-collector-helper-install.sh
-run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
+# production JSON 테스트는 race 단계가 덮는 collector 테스트를 CGO_ENABLED=0으로 다시 돌려 환경 때문에 건너뛴
+# 테스트가 없는지 확인한다. Go 범위에 collector 모듈이 없으면 결과가 바뀌지 않으므로 생략한다.
+if [[ " ${GO_PACKAGES[*]} " == *" ./hololive/hololive-youtube-collector/... "* ]]; then
+    run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
+else
+    echo "[LOCAL CI] Skip collector production default JSON tests: collector module is outside the Go scope"
+    echo
+fi
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
 run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
-if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
-    RACE_TEST_PARALLEL="${RACE_TEST_PARALLEL:-$(( ($(nproc) + 2) / 3 ))}"
-    # 산술 컨텍스트는 변수 내용을 재귀 평가하므로, 검증 없이 (( ))에 넣으면 호출 env 가
-    # 제어하는 RACE_TEST_PARALLEL 로 코드가 실행될 수 있다(82cbfe75). 정수만 허용.
-    if [[ ! "${RACE_TEST_PARALLEL}" =~ ^[0-9]+$ ]]; then
-        echo "[LOCAL CI] invalid RACE_TEST_PARALLEL=${RACE_TEST_PARALLEL}; expected a non-negative integer" >&2
+# hololive-dbtest는 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 패키지들이 PostgreSQL 하나를 공유한다.
+# 패키지마다 testcontainers PostgreSQL을 띄우면 기동 비용과 남는 컨테이너 때문에 -p를 낮춰야 했다.
+# subshell에서 실행해 TEST_DATABASE_URL이 뒤의 통합 테스트 선택으로 새지 않고, 종료 시 컨테이너를 지운다.
+run_go_tests() {
+    local -a parallel=()
+
+    if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
+        provision_integration_test_database
+    fi
+    [[ -z "${RACE_TEST_PARALLEL:-}" ]] || parallel=(-p "${RACE_TEST_PARALLEL}")
+    if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
+        run_go_package_step "Go race test" go_mod_readonly go test -race "${parallel[@]}" -count=1
+        run_go_package_step "Go non-race-only tests" go_mod_readonly bash scripts/ci/go-test-nonrace.sh
+    else
+        run_go_package_step "Go test" go_mod_readonly go test "${parallel[@]}" -count=1
+    fi
+}
+
+if has_go_packages; then
+    # 산술 컨텍스트에 넣지 않더라도 go test 인자로 전달되므로 호출 env 값은 양의 정수만 허용한다(82cbfe75).
+    if [[ -n "${RACE_TEST_PARALLEL:-}" && ! "${RACE_TEST_PARALLEL}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "[LOCAL CI] invalid RACE_TEST_PARALLEL=${RACE_TEST_PARALLEL}; expected a positive integer" >&2
         exit 1
     fi
-    (( 10#${RACE_TEST_PARALLEL} < 2 )) && RACE_TEST_PARALLEL=2
-    run_go_package_step "Go race test (testcontainer boot fan-out limited via -p ${RACE_TEST_PARALLEL})" \
-        go_mod_readonly go test -race -p "${RACE_TEST_PARALLEL}" -count=1
-    run_go_package_step "Go non-race-only tests" go_mod_readonly bash scripts/ci/go-test-nonrace.sh
-else
-    run_go_package_step "Go test" go_mod_readonly go test -count=1
+    (run_go_tests)
 fi
 
 check_integration_tests

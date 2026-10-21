@@ -9,6 +9,8 @@ import (
 )
 
 func TestProjectionTargetSnapshotSQLBoundsOnlyNonNullRows(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{

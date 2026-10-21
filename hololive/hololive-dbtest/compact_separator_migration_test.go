@@ -14,6 +14,8 @@ const (
 )
 
 func TestCompactSeparatorMigrationUpgradePreservesCustomBodiesAndReplay(t *testing.T) {
+	t.Parallel()
+
 	pool, _ := channelStatisticsRemovalPool(t)
 	bodies := loadTemplateMigrationBodies(t, compactSeparatorFile)
 

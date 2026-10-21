@@ -82,6 +82,8 @@ func TestShortsWindowClaimsCannotOvertakePendingOrProcessingBaseline(t *testing.
 }
 
 func TestShortsWindowBaselineWithExistingVideoKind(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(ctx, `INSERT INTO youtube_videos (video_id, channel_id, title, is_short, first_seen_at, last_seen_at) VALUES ('known', $1, 'known', FALSE, NOW(), NOW())`, testChannelID)
@@ -149,6 +151,8 @@ func TestShortsWindowExistingPartialCatalogDoesNotBackfill(t *testing.T) {
 }
 
 func TestShortsWindowPersistenceFailureRollsBackNotificationAndCatalog(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -241,6 +245,8 @@ func TestShortsWindowOrderingIsChannelScopedAndTerminalDoesNotBlock(t *testing.T
 }
 
 func TestShortsWindowConcurrentClaimersChooseOnlyOldest(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

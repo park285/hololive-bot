@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **로컬 게이트 테스트 시간 단축:** Go 테스트가 패키지마다 testcontainers PostgreSQL을 띄우던 방식을 일회용 PostgreSQL 하나를 공유하는 방식으로 바꾸고 race 병렬도 제한(`-p 4`)을 없앱니다. `hololive-dbtest`가 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 검사 범위는 같습니다. 전체 범위 race 단계가 328초에서 168초로 줄고, 실행 중 남던 컨테이너 수십 개(약 10GiB)도 생기지 않습니다. CI의 `public-pr-go-gate.sh`도 같은 공유 DB를 쓰며 러너 메모리 제한(`-p 2`)은 그대로 둡니다.
+- **느린 테스트 정리:** admin auth 테스트는 bcrypt 최소 비용을 써 race 실행 시간이 109초에서 7초로 줄고, 설정 비용 반영 테스트는 기본값과 다른 비용으로 검사합니다. `hololive-dbtest`·`sourceobservation`·`joblease`의 격리된 DB 테스트는 병렬로 실행합니다. non-race 전용 단계는 race 빌드에서 빠지는 테스트 함수만 실행해 28초에서 2초로 줄고, collector production JSON 테스트는 collector 모듈이 Go 범위에 있을 때만 실행합니다. PostgreSQL failover·compose 보안 기본값 테스트는 다른 배포 스크립트 테스트처럼 입력이 바뀐 push에서 실행합니다.
 - **golangci-lint 2.15.0(shared·collector·api):** 로컬 게이트의 최소 버전을 v2.15.0으로 올립니다. HTTP/3 종료 시한에 Shutdown을 끊는 순간 정상 종료가 먼저 끝나 실패를 돌려주면, idle 연결만 남았더라도 그 실패를 종료 실패로 반환합니다(이전에는 무시). pobroker·internalhttp 테스트 cleanup은 `Serve` 결과를 검사하고, `NewAmbiguousMatchError` 생성자는 스택 lint 템플릿 예외로 둡니다.
 - **AP 배포·로그 미러 SSH 키 위치:** 배포 키 기본 경로를 저장소 안 `KR.key`에서 `~/.ssh/KR.key`로 옮겨, 저장소를 다시 받거나 지워도 키가 함께 사라지지 않게 합니다. `SSH_KEY`·`HOL_LOG_*_SSH_KEY` 지정은 그대로 우선하며, 로그 미러 systemd 유닛의 중복 키 경로 지정을 제거합니다.
 - **pre-push 범위 정리:** 로컬 게이트의 모듈별 tidy·canonical vet·govulncheck·VERSION 전용 빌드와 전체 범위 테스트·staticcheck·NilAway가 형제 저장소(`../iris-client-go`, `../shared-go`)를 반복하지 않습니다. 각 저장소 게이트가 그 모듈을 검증하며, workspace 빌드·테스트는 형제 HEAD를 계속 사용합니다. 메모리 scope 재실행을 게이트 맨 앞으로 옮겨 준비 단계를 한 번만 실행합니다. 셸 스크립트 ShellCheck는 메타 포인터 push 대신 이 저장소의 push에서 실행됩니다. shared-go가 스택 서브모듈로 옮겨진 뒤 매칭될 수 없던 `shared-go/` 변경 범위 조건도 제거합니다.

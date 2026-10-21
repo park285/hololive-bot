@@ -63,6 +63,8 @@ func TestReadySnapshotUsesSchedulingAndExpiredLeaseThresholds(t *testing.T) {
 }
 
 func TestReadySnapshotReplayCutoffEqualityRemainsClaimable(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")

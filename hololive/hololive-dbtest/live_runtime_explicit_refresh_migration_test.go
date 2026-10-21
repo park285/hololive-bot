@@ -19,6 +19,8 @@ const liveRuntimeExplicitRefreshMigration = "328_youtube_live_runtime_explicit_r
 
 // 트리거 기간에 어긋난 행도 전체 재계산으로 맞추고, 재적용해도 원본·영수증과 권한 경계가 같아야 한다.
 func TestLiveRuntimeExplicitRefreshMigrationRecomputesAndRemovesTriggers(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeExplicitRefreshMigration)
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)
@@ -122,6 +124,8 @@ func assertRuntimeRoleRefreshesLiveRuntimeState(t *testing.T, pool *pgxpool.Pool
 
 // shared 보유자끼리는 서로 기다리지 않고, exclusive 요청은 shared 보유자가 끝날 때까지 기다린다.
 func TestLiveRuntimeGlobalLockSharedAndExclusive(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

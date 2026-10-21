@@ -66,6 +66,8 @@ func TestRetryRequiresUnexpiredClaim(t *testing.T) {
 }
 
 func TestDeadLetterRequiresUnexpiredClaim(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
@@ -186,6 +188,8 @@ func requireQueueStatus(ctx context.Context, t *testing.T, pool *pgxpool.Pool, o
 }
 
 func TestRetryExpiryAfterQueueRowLockWaitReturnsClaimLost(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	batch := publishAndClaimCommunityPost(ctx, t, pool, claimOptions())
@@ -216,6 +220,8 @@ func TestRetryExpiryAfterQueueRowLockWaitReturnsClaimLost(t *testing.T) {
 }
 
 func TestClaimDoesNotStrandSupportedOldGenerationAfterCurrentBump(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
@@ -255,6 +261,8 @@ func TestClaimDoesNotStrandSupportedOldGenerationAfterCurrentBump(t *testing.T) 
 }
 
 func TestFinalizeUnsupportedContractDeadLettersWithBoundedAudit(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
@@ -302,6 +310,8 @@ func TestFinalizeUnsupportedContractDeadLettersWithBoundedAudit(t *testing.T) {
 }
 
 func TestFinalizeFutureSourceEventFallsBackToScheduledSlot(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
@@ -431,6 +441,8 @@ func expireClaimDuringReconcile(ctx context.Context, tx dbx.Tx, claimed *Observa
 }
 
 func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	batch := publishAndClaimCommunityPost(ctx, t, pool, claimOptions())
@@ -452,6 +464,8 @@ func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T
 }
 
 func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	options := claimOptions()
@@ -486,6 +500,8 @@ func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.
 }
 
 func TestReplayReactivatesTerminalQueueWithoutCopyingEvidence(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
@@ -540,12 +556,16 @@ func TestReplayReactivatesTerminalQueueWithoutCopyingEvidence(t *testing.T) {
 }
 
 func TestClaimWorkStaysCompact(t *testing.T) {
+	t.Parallel()
+
 	if size := reflect.TypeFor[ClaimWork]().Size(); size > 64 {
 		t.Fatalf("ClaimWork size = %d bytes, want <= 64", size)
 	}
 }
 
 func TestClaimOptionsBounds(t *testing.T) {
+	t.Parallel()
+
 	options := claimOptions()
 	if err := options.validate(); err != nil {
 		t.Fatalf("valid options: %v", err)
@@ -558,6 +578,8 @@ func TestClaimOptionsBounds(t *testing.T) {
 }
 
 func TestNewLeaseTokenReturnsBoundedLowercaseHex(t *testing.T) {
+	t.Parallel()
+
 	token, err := newLeaseToken()
 	if err != nil {
 		t.Fatalf("new lease token: %v", err)

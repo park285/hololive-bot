@@ -10,6 +10,8 @@ import (
 )
 
 func TestLiveStatementBatchFailureRollsBackEarlierChunks(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _ := startLivePersist(t)
 	ctx := t.Context()
 
@@ -69,6 +71,8 @@ func TestLiveStatementBatchFailureRollsBackEarlierChunks(t *testing.T) {
 }
 
 func TestLiveStatementBatchesPreserveDeferredForeignKeyBoundary(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _ := startLivePersist(t)
 	ctx := t.Context()
 	// SendBatch의 사전 prepare와 혼동하지 않도록 DDL은 별도 실행한다.

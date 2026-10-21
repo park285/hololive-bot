@@ -33,6 +33,8 @@ func insertBotReplyOutboxShape(ctx context.Context, t *testing.T, pool *pgxpool.
 // 엄격 shape CHECK는 lease 없이 handoff 확인을 기다리는 accepted만 받고, 이전 바이너리의 leased accepted와 그 밖의
 // 잘못된 모양은 거부한다. 326·332 재적용은 제약을 바꾸지 않는다.
 func TestBotReplyOutboxAcceptedShape(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()
@@ -98,6 +100,8 @@ func TestBotReplyOutboxAcceptedShape(t *testing.T) {
 
 // 332는 leased accepted가 남아 있으면 완화 CHECK를 그대로 둔 채 중단하고, 그 행을 정리한 뒤에는 엄격 CHECK로 바꾼다.
 func TestBotReplyOutboxAcceptedStrictRequiresNoLeasedAccepted(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()

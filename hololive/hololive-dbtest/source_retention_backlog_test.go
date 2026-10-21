@@ -63,6 +63,8 @@ func TestSourceRetentionBacklogBoundedEvidence(t *testing.T) {
 }
 
 func TestSourceRetentionBacklogCombinesKindsAndCutoffs(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 4, 4)
 	insertRetentionObservation(t, pool, retentionLiveSnapshotKind, base.Add(-time.Hour), "backlog-other-kind")
@@ -100,6 +102,8 @@ func TestSourceRetentionBacklogCombinesKindsAndCutoffs(t *testing.T) {
 }
 
 func TestSourceRetentionBacklogOrdersTiesByID(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 3, 1)
 	_, err := pool.Exec(t.Context(), `UPDATE source_observations SET received_at=$1`, base)

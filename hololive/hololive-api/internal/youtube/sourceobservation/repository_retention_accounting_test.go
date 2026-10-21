@@ -11,6 +11,8 @@ import (
 )
 
 func TestRetentionKeepsCommittedCountsOnLaterFailure(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	repo := NewRepository(pool)
@@ -34,6 +36,8 @@ func TestRetentionKeepsCommittedCountsOnLaterFailure(t *testing.T) {
 }
 
 func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	repo := NewRepository(pool)

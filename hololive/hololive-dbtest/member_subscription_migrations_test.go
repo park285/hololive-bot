@@ -3,6 +3,8 @@ package dbtest
 import "testing"
 
 func TestMemberSubscriptionMigrationsReplayWithoutChangingChoices(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

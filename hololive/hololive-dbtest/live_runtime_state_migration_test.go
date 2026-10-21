@@ -25,6 +25,8 @@ func assertLiveRuntimeState(t *testing.T, db LiveRuntimeStateReader) {
 
 // 진단 SQL이 늘 0을 내면 운영 점검도 정상으로 오판하므로, 집계를 직접 손상시켜 종류마다 한 건씩 세는지 확인한다.
 func TestLiveRuntimeStateDriftCountsEachMismatch(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 
 	tx, err := pool.Begin(t.Context())
@@ -44,6 +46,8 @@ func TestLiveRuntimeStateDriftCountsEachMismatch(t *testing.T) {
 }
 
 func TestLiveRuntimeStateMigrationBackfillAndReapply(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeStateMigration)
 	seedLiveReviewComparison(t, pool)
 	seedRecordedLiveReviews(t, pool)
@@ -122,6 +126,8 @@ func TestLiveRuntimeStateRefreshAppliesSourceChangesAndRollsBack(t *testing.T) {
 }
 
 func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
 	RefreshAllLiveRuntimeState(t, pool)
@@ -163,6 +169,8 @@ func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
 
 // 소비자 의미가 같은 기술적 쓰기 뒤 갱신은 행 버전을 새로 만들지 않아 읽기 모델의 불필요한 쓰기를 늘리지 않는다.
 func TestLiveRuntimeStateRefreshKeepsUnchangedRow(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
 	RefreshAllLiveRuntimeState(t, pool)
@@ -188,6 +196,8 @@ func TestLiveRuntimeStateRefreshKeepsUnchangedRow(t *testing.T) {
 }
 
 func TestLiveRuntimeStateMigrationPrivilegesAndRecordingACL(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeStateMigration)
 	roles := createObservationGrantRoles(t, pool)
 	runtime := pgx.Identifier{roles.runtime}.Sanitize()
@@ -260,6 +270,8 @@ func TestLiveRuntimeStateMigrationPrivilegesAndRecordingACL(t *testing.T) {
 
 // 증거 FK의 SET NULL은 수명 모델 입력이 아니므로 retention 삭제는 갱신 key 없이도 오라클과 일치한다.
 func TestLiveRuntimeStateObservationDeleteKeepsState(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
 	RefreshAllLiveRuntimeState(t, pool)
@@ -297,6 +309,8 @@ func TestLiveRuntimeStateObservationDeleteKeepsState(t *testing.T) {
 }
 
 func TestLiveRuntimeStateMigrationFailureIsAtomic(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeStateMigration)
 	seedLiveReviewComparison(t, pool)
 

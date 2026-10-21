@@ -50,6 +50,8 @@ ALTER TABLE public.source_observation_consumer_offsets
 		'channel_live_check', 'video_live_check')) NOT VALID`
 
 func TestLiveAbsenceEvidenceMigrationUpgradesKindVocabIdempotently(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

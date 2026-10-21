@@ -15,6 +15,8 @@ const (
 // 운영 DB처럼 217 이후 표준 본문과 그 본문을 복사한 채널 override가 섞인 상태에서, 233은 두 행을 모두
 // NextStream 없는 본문으로 바꾸고 재적용 시 아무것도 다시 쓰지 않는다.
 func TestNextStreamRemovalMigrationRewritesStandardBodiesAndReplays(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	bodies := loadNextStreamRemovalBodies(t)
 	seedNextStreamRemovalUpgrade(t, pool, bodies)
@@ -44,6 +46,8 @@ func TestNextStreamRemovalMigrationRewritesStandardBodiesAndReplays(t *testing.T
 // 표준과 다른 본문이 NextStream을 참조하면 새 코드에서 렌더가 실패하므로, 233은 표준 행까지 포함해
 // 아무것도 바꾸지 않고 거절한다.
 func TestNextStreamRemovalMigrationRejectsCustomNextStreamBody(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	bodies := loadNextStreamRemovalBodies(t)
 	seedNextStreamRemovalUpgrade(t, pool, bodies)

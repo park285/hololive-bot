@@ -13,6 +13,8 @@ import (
 )
 
 func TestReplayEpochActivationIsImmutableAndIdempotent(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -45,6 +47,8 @@ func TestReplayEpochActivationIsImmutableAndIdempotent(t *testing.T) {
 }
 
 func TestReplayEpochDeadLettersPreEpochAutomaticClaim(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -86,6 +90,8 @@ func TestReplayEpochDeadLettersPreEpochAutomaticClaim(t *testing.T) {
 
 // 시도를 모두 쓴 epoch 이전 자동 claim은 replay epoch 사유로 끝나고, claim 트랜잭션 시각에 lease 없이 기록된다.
 func TestReplayEpochDeadLetterTakesPrecedenceOverExhaustedAttempts(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -136,6 +142,8 @@ func TestReplayEpochDeadLetterTakesPrecedenceOverExhaustedAttempts(t *testing.T)
 }
 
 func TestReplayEpochFencesPreEpochObservationAlreadyClaimed(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -164,6 +172,8 @@ func TestReplayEpochFencesPreEpochObservationAlreadyClaimed(t *testing.T) {
 }
 
 func TestReplayEpochRejectsManualAndPendingReplay(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

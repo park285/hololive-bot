@@ -18,6 +18,8 @@ import (
 )
 
 func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -77,6 +79,8 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 }
 
 func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -170,6 +174,8 @@ func TestContentConsumerPremiereIgnoresNonPremiereEvidence(t *testing.T) {
 }
 
 func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -227,6 +233,8 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 }
 
 func TestContentConsumerPremiereAtomicRollback(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -266,6 +274,8 @@ func TestContentConsumerPremiereAtomicRollback(t *testing.T) {
 }
 
 func TestContentPremierePersistencePreservesRowCreatedAfterRead(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
@@ -319,6 +329,8 @@ func TestContentPremierePersistencePreservesRowCreatedAfterRead(t *testing.T) {
 }
 
 func TestContentConsumerPremiereKeepsApplicationsWithinFinalizeLimit(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -371,6 +383,8 @@ func TestContentConsumerPremiereKeepsApplicationsWithinFinalizeLimit(t *testing.
 }
 
 func TestContentPremiereFactsBoundLiveTitle(t *testing.T) {
+	t.Parallel()
+
 	evidence := content.Evidence{
 		Kind: contract.KindVideoList,
 		Videos: []content.Entity{{

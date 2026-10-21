@@ -57,6 +57,8 @@ func TestReleaseReasonsUseDistinctShapesAndPreserveFailureHistory(t *testing.T) 
 }
 
 func TestOrdinaryDeferSQLInvalidTupleDoesNotUpdateActiveLease(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -89,6 +91,8 @@ func TestOrdinaryDeferSQLInvalidTupleDoesNotUpdateActiveLease(t *testing.T) {
 }
 
 func TestReleaseReasonRejectsUnknownCode(t *testing.T) {
+	t.Parallel()
+
 	if ReleaseReason("not_a_release").Valid() {
 		t.Fatal("unknown release reason must be invalid")
 	}
@@ -147,6 +151,8 @@ func assertReleasedLeaseShape(
 }
 
 func TestReleaseRejectsInvalidReasonWithoutChangingActiveLease(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 

@@ -77,6 +77,8 @@ VALUES ('NEW_VIDEO', 'UC0000000000000000000000', 'video-226', '{}'::jsonb)`,
 }
 
 func TestLedgerBackfillStateDroppedAfterCompletion(t *testing.T) {
+	t.Parallel()
+
 	var stateExists, ledgerExists bool
 
 	pool := NewPool(t)
@@ -217,6 +219,8 @@ func runLedgerBackfillStateDropCase(t *testing.T, dir string, tc ledgerBackfillS
 }
 
 func TestLedgerBackfillStateDropRollsBackOnDependency(t *testing.T) {
+	t.Parallel()
+
 	var stateExists, viewExists, receiptExists bool
 
 	dir, err := resolveMigrationsDir()
@@ -257,6 +261,8 @@ func TestLedgerBackfillStateDropRollsBackOnDependency(t *testing.T) {
 }
 
 func TestLedgerBackfillStateDropRecordsReceiptWithDrop(t *testing.T) {
+	t.Parallel()
+
 	var stateExists, receiptExists bool
 
 	dir, err := resolveMigrationsDir()

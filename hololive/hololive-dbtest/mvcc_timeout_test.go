@@ -29,6 +29,8 @@ import (
 )
 
 func TestIdleInTransactionSessionTimeoutDatabaseDefault(t *testing.T) {
+	t.Parallel()
+
 	pool := NewReplayPool(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 

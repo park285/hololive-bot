@@ -9,6 +9,8 @@ import (
 )
 
 func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -50,6 +52,8 @@ func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
 }
 
 func TestReplayUnsupportedSchemaIsRejectedWithAudit(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

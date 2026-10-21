@@ -13,6 +13,8 @@ import (
 )
 
 func TestConnectSessionReaperRetriesReplacementWindow(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
@@ -50,6 +52,8 @@ func TestConnectSessionReaperRetriesReplacementWindow(t *testing.T) {
 }
 
 func TestConnectSessionReaperDoesNotRetryProtocolError(t *testing.T) {
+	t.Parallel()
+
 	wantErr := errors.New("unexpected reaper response")
 	registerCalls := 0
 
@@ -69,6 +73,8 @@ func TestConnectSessionReaperDoesNotRetryProtocolError(t *testing.T) {
 }
 
 func TestConnectSessionReaperTimesOutWhenReplacementNeverAppears(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
 
@@ -88,6 +94,8 @@ func TestConnectSessionReaperTimesOutWhenReplacementNeverAppears(t *testing.T) {
 }
 
 func TestReaperSessionFilterLineUsesCurrentSessionAndOptionalVersion(t *testing.T) {
+	t.Parallel()
+
 	line := reaperSessionFilterLine("0.13.0")
 
 	require.True(t, strings.HasSuffix(line, "\n"))

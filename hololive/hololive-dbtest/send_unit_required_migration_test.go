@@ -19,6 +19,8 @@ ALTER TABLE alarm_dispatch_deliveries ADD CONSTRAINT alarm_dispatch_deliveries_a
 // 처리되지 않은 dlq legacy 행이 있으면 아무것도 지우지 않고 실패한다. 종료된 legacy 행만 남으면 그 행만 지우고
 // send_unit_id를 NOT NULL로 바꾸며, 관리자 작업 기록은 남기고 재적용은 아무것도 바꾸지 않는다.
 func TestSendUnitRequiredMigrationDeletesSettledLegacyRowsOnly(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()

@@ -19,6 +19,8 @@ import (
 )
 
 func TestPublishBatchMixedCollisionStillQueuesAndPublishesIndependentObservation(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -280,6 +282,8 @@ func assertMixedCollisionOutbox(ctx context.Context, t *testing.T, pool *pgxpool
 }
 
 func TestConsumerIsolatesInvalidItemAndProcessesLaterBatchItem(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -330,6 +334,8 @@ func TestConsumerIsolatesInvalidItemAndProcessesLaterBatchItem(t *testing.T) {
 }
 
 func TestConsumerTransactionFailureRollsBackCanonicalAndProcessedState(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -364,6 +370,8 @@ func TestConsumerTransactionFailureRollsBackCanonicalAndProcessedState(t *testin
 }
 
 func TestConsumerReplayDoesNotDuplicateNotificationIntent(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -449,6 +457,8 @@ func requireCommunityWatermark(ctx context.Context, t *testing.T, pool *pgxpool.
 }
 
 func TestConsumerDoesNotRegressCanonicalStateWhenOlderObservationFinishesLast(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

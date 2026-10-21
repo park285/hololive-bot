@@ -81,6 +81,8 @@ func seedCollectionBundleTargets(t *testing.T, db collectionBundleDB) {
 }
 
 func TestCollectionRuntimeBundlesExactAggregation(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)
@@ -89,6 +91,8 @@ func TestCollectionRuntimeBundlesExactAggregation(t *testing.T) {
 
 // 진단 SQL이 늘 0을 내면 운영 점검도 정상으로 오판하므로, 집계와 매핑을 직접 손상시켜 종류마다 한 건씩 세는지 확인한다.
 func TestCollectionRuntimeBundlesDriftCountsEachMismatch(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)
@@ -131,6 +135,8 @@ func collectionBundleTupleSnapshot(t *testing.T, db collectionBundleDB) string {
 }
 
 func TestCollectionRuntimeBundlesTechnicalWritesAndReentry(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)
@@ -204,6 +210,8 @@ func TestCollectionRuntimeBundlesImmediateChangesAndRollback(t *testing.T) {
 }
 
 func TestCollectionRuntimeBundlesExpiryRemainsQueryTime(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)
@@ -229,6 +237,8 @@ func TestCollectionRuntimeBundlesExpiryRemainsQueryTime(t *testing.T) {
 }
 
 func TestCollectionRuntimeBundlesSingleBundleWritePreservesPeers(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)

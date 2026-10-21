@@ -41,6 +41,8 @@ func TestBoundedVideoTitlePreservesUTF8(t *testing.T) {
 }
 
 func TestContentConsumerPersistsUTF8TitleAndNotification(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -78,6 +80,8 @@ func TestContentConsumerPersistsUTF8TitleAndNotification(t *testing.T) {
 }
 
 func TestContentFieldUpdatesRollBackAcrossBatchBoundary(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 

@@ -16,6 +16,8 @@ import (
 )
 
 func TestScheduleBatchesPreserveItemBeforeSessionAndDuplicateOrder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	observation, decision := scheduleBatchFixture(129)

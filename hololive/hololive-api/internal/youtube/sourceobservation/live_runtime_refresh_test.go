@@ -126,6 +126,8 @@ func reportedLiveWrite(reportAll, failCommit bool) ReconcileWrite {
 }
 
 func TestLiveRuntimeRefreshLiveSnapshotWriter(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -152,6 +154,8 @@ func TestLiveRuntimeRefreshLiveSnapshotWriter(t *testing.T) {
 }
 
 func TestLiveRuntimeRefreshScheduleWriter(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	consumer := NewConsumerWithGraces(NewRepository(pool), 0, 0)
@@ -176,6 +180,8 @@ func TestLiveRuntimeRefreshScheduleWriter(t *testing.T) {
 }
 
 func TestLiveRuntimeRefreshPremiereWriter(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -235,6 +241,8 @@ func TestLiveRuntimeRefreshVideoLiveCheckWriter(t *testing.T) {
 }
 
 func TestLiveRuntimeRefreshLiveEndFinalizer(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 

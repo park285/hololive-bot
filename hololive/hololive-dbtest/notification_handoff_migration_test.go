@@ -13,6 +13,8 @@ const notificationHandoffMigration = "330_notification_delivery_handoff_check.sq
 // requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, SENT가 아닌 행의 예정 시각, 예정 시각 없는 확인 대기 SENT
 // 행은 거부한다. 재적용은 제약을 바꾸지 않는다.
 func TestNotificationHandoffShape(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()

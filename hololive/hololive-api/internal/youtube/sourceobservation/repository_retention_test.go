@@ -15,6 +15,8 @@ import (
 )
 
 func TestRetentionTickDeletesAtMostBatchSize(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -39,6 +41,8 @@ func TestRetentionTickDeletesAtMostBatchSize(t *testing.T) {
 }
 
 func TestRetentionTickBoundsLiveAbsenceSlots(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -115,6 +119,8 @@ func TestDeleteRetentionBatchesRunsEveryTable(t *testing.T) {
 }
 
 func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -162,6 +168,8 @@ func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
 }
 
 func TestRetentionTickDoesNotDeleteEvidenceWhileQueueRemains(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -187,6 +195,8 @@ func TestRetentionTickDoesNotDeleteEvidenceWhileQueueRemains(t *testing.T) {
 }
 
 func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
@@ -254,6 +264,8 @@ func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
 }
 
 func TestRetentionTickDoesNotDeleteReplayAuditWhileEvidenceRemains(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -277,6 +289,8 @@ func TestRetentionTickDoesNotDeleteReplayAuditWhileEvidenceRemains(t *testing.T)
 }
 
 func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -308,6 +322,8 @@ func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
 }
 
 func TestRetentionTickCascadesApplicationsWithParent(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -337,6 +353,8 @@ func TestRetentionTickCascadesApplicationsWithParent(t *testing.T) {
 }
 
 func TestRetentionTickKeepsLatestCheckpointPerLogicalIdentity(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

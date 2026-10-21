@@ -7,6 +7,8 @@ import (
 )
 
 func TestLiveStreamsElapsedMigrationUpgradesStandardBodyAndPreservesCustomBodies(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 
 	const (

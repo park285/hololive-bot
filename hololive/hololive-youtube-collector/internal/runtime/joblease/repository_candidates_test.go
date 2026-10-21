@@ -36,6 +36,8 @@ func TestBuildJobKeyCanonicalIdentity(t *testing.T) {
 }
 
 func TestCandidatesForProjectionEmptyWhenTargetsMissingOrDisabled(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, false}})
@@ -61,6 +63,8 @@ func TestCandidatesForProjectionEmptyWhenTargetsMissingOrDisabled(t *testing.T) 
 }
 
 func TestCandidatesForProjectionStaleGeneration(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -75,6 +79,8 @@ func TestCandidatesForProjectionStaleGeneration(t *testing.T) {
 }
 
 func TestCandidatesForProjectionTruncatesWithSentinel(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
 		{subjectChannelA, contract.KindCommunityPage, time.Minute, true},
@@ -91,6 +97,8 @@ func TestCandidatesForProjectionTruncatesWithSentinel(t *testing.T) {
 }
 
 func TestSCH009QueuedKeyExclusionDoesNotHideLaterDueKeys(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
 		{subjectChannelA, contract.KindCommunityPage, time.Minute, true},
@@ -118,6 +126,8 @@ func TestSCH009QueuedKeyExclusionDoesNotHideLaterDueKeys(t *testing.T) {
 }
 
 func TestSCH008GlobalNotDueReturnsEmptyPage(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
@@ -147,6 +157,8 @@ func TestSCH008GlobalNotDueReturnsEmptyPage(t *testing.T) {
 }
 
 func TestGlobalExactSubjectMembershipUsesLeaseSubject(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
 		{subjectGlobalSchedule, contract.KindSchedule, time.Minute, true},
@@ -166,6 +178,8 @@ func TestGlobalExactSubjectMembershipUsesLeaseSubject(t *testing.T) {
 }
 
 func TestCandidatesForProjectionMixedIntervalIsInternal(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
