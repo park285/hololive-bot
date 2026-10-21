@@ -8,7 +8,7 @@
 
 ## 미출시
 
-- **pre-push 범위 정리:** 로컬 게이트의 모듈별 tidy·canonical vet·govulncheck·VERSION 전용 빌드와 전체 범위 테스트·staticcheck·NilAway가 형제 저장소(`../iris-client-go`, `../shared-go`)를 반복하지 않습니다. 각 저장소 게이트가 그 모듈을 검증하며, workspace 빌드·테스트는 형제 HEAD를 계속 사용합니다. 메모리 scope 재실행을 게이트 맨 앞으로 옮겨 준비 단계를 한 번만 실행합니다. 셸 스크립트 ShellCheck는 메타 포인터 push 대신 이 저장소의 push에서 실행됩니다.
+- **pre-push 범위 정리:** 로컬 게이트의 모듈별 tidy·canonical vet·govulncheck·VERSION 전용 빌드와 전체 범위 테스트·staticcheck·NilAway가 형제 저장소(`../iris-client-go`, `../shared-go`)를 반복하지 않습니다. 각 저장소 게이트가 그 모듈을 검증하며, workspace 빌드·테스트는 형제 HEAD를 계속 사용합니다. 메모리 scope 재실행을 게이트 맨 앞으로 옮겨 준비 단계를 한 번만 실행합니다. 셸 스크립트 ShellCheck는 메타 포인터 push 대신 이 저장소의 push에서 실행됩니다. shared-go가 스택 서브모듈로 옮겨진 뒤 매칭될 수 없던 `shared-go/` 변경 범위 조건도 제거합니다.
 - **Go 1.27.3 보안 갱신:** 다섯 모듈과 workspace, 앱 이미지 빌더(`golang:1.27.3-alpine3.24`), staticcheck·NilAway 프로필의 Go 버전을 1.27.3으로 올려 `crypto/x509` 취약점 GO-2026-6809를 해소합니다. 운영 인프라 이미지(gosu·socket-proxy·deunhealth) 정의와 socket-proxy 태그도 1.27.3으로 올립니다. 실행 중인 서비스와 인프라는 재빌드·배포 후 반영됩니다.
 - **CI 경량화:** 공개 Go matrix의 불필요한 Python 준비와 중복 checkout·환경 출력 단계를 제거하고 보안 스캔의 모듈 선택을 한 번으로 합칩니다. 정확한 Markdown·세 VERSION 파일 전용 push는 릴리스 정합성만 검사하며, VERSION이 바뀌면 정본 workspace 모듈을 모두 컴파일합니다. `FULL_PRE_PUSH=true`는 fast 설정보다 우선하고 코드·의존성 변경의 기존 검사와 공개 필수 job은 유지합니다.
 - **promptguard 일본어 공격 차단(api·alarm-worker·collector·shared·dbtest):** 다섯 모듈과 security 워크플로의 shared-go를 v2.16.0으로 올립니다. 주요 이벤트·멤버 뉴스·웹 검색 결과 같은 일본어 외부 소스의 지시 무시·시스템 프롬프트 유출 문구를 차단합니다. v2.15.0은 일본어 문구를 score 0으로 통과시켰습니다. 운영 주요 이벤트 399건과 이 저장소의 일본어 문장 1,391줄에서 판정이 바뀐 것은 없습니다.

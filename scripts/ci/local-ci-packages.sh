@@ -43,7 +43,7 @@ is_shared_module_file() {
     local file="$1"
 
     case "${file}" in
-        shared-go/*|hololive/hololive-shared/*)
+        hololive/hololive-shared/*)
             return 0
             ;;
         *)
