@@ -51,7 +51,7 @@ services:
   valkey-cache:
     image: ${VALKEY_IMAGE:-iris-stack-valkey:9.1.2-zlib1.3.2-r1}
   docker-proxy:
-    image: ${DOCKER_SOCKET_PROXY_IMAGE:-iris-stack-socket-proxy:1.13.1-go1.27.2}
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-iris-stack-socket-proxy:1.13.1-go1.27.3}
 EOF
 cat >"${repo}/deploy/compose/image-override.yml" <<'EOF'
 services:

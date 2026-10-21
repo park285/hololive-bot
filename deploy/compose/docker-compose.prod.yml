@@ -634,7 +634,7 @@ services:
 
   docker-proxy:
     <<: *restart-logging
-    image: ${DOCKER_SOCKET_PROXY_IMAGE:-iris-stack-socket-proxy:1.13.1-go1.27.2}
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-iris-stack-socket-proxy:1.13.1-go1.27.3}
     pull_policy: never
     build:
       <<: *go-build-base

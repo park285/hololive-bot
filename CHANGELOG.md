@@ -8,7 +8,7 @@
 
 ## 미출시
 
-- **Go 1.27.3 보안 갱신:** 다섯 모듈과 workspace, 앱 이미지 빌더(`golang:1.27.3-alpine3.24`), staticcheck·NilAway 프로필의 Go 버전을 1.27.3으로 올려 `crypto/x509` 취약점 GO-2026-6809를 해소합니다. 운영 인프라 이미지(gosu·socket-proxy·deunhealth)는 별도 재빌드·배포 전까지 1.27.2로 유지합니다.
+- **Go 1.27.3 보안 갱신:** 다섯 모듈과 workspace, 앱 이미지 빌더(`golang:1.27.3-alpine3.24`), staticcheck·NilAway 프로필의 Go 버전을 1.27.3으로 올려 `crypto/x509` 취약점 GO-2026-6809를 해소합니다. 운영 인프라 이미지(gosu·socket-proxy·deunhealth) 정의와 socket-proxy 태그도 1.27.3으로 올립니다. 실행 중인 서비스와 인프라는 재빌드·배포 후 반영됩니다.
 - **CI 경량화:** 공개 Go matrix의 불필요한 Python 준비와 중복 checkout·환경 출력 단계를 제거하고 보안 스캔의 모듈 선택을 한 번으로 합칩니다. 정확한 Markdown·세 VERSION 파일 전용 push는 릴리스 정합성만 검사하며, VERSION이 바뀌면 정본 workspace 모듈을 모두 컴파일합니다. `FULL_PRE_PUSH=true`는 fast 설정보다 우선하고 코드·의존성 변경의 기존 검사와 공개 필수 job은 유지합니다.
 - **promptguard 일본어 공격 차단(api·alarm-worker·collector·shared·dbtest):** 다섯 모듈과 security 워크플로의 shared-go를 v2.16.0으로 올립니다. 주요 이벤트·멤버 뉴스·웹 검색 결과 같은 일본어 외부 소스의 지시 무시·시스템 프롬프트 유출 문구를 차단합니다. v2.15.0은 일본어 문구를 score 0으로 통과시켰습니다. 운영 주요 이벤트 399건과 이 저장소의 일본어 문장 1,391줄에서 판정이 바뀐 것은 없습니다.
 - **promptguard 오탐 축소(api·alarm-worker·collector·shared·dbtest):** 다섯 모듈의 shared-go pin을 v2.15.0으로 올리고 security 워크플로의 shared-go checkout도 같은 커밋으로 맞춥니다. LLM guard가 단어 내부·코드 식별자·부정·방법 질문 같은 정상 문맥과 해석 미완료로 정상 입력을 막는 경우가 줄고, 대문자·위장 문자 지시 변경과 표지 없는 hex 공격은 새로 탐지합니다. 엔진은 `promptguard-engine-v3.2.7`입니다. 운영 반영에는 재배포가 필요합니다.

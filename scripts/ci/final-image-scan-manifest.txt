@@ -6,4 +6,4 @@ local|linux/arm64|hololive-youtube-collector:prod
 local|linux/arm64|hololive-youtube-po-sandbox:prod
 local|linux/arm64|iris-stack-nginx:1.31.7-zlib1.3.2-r1
 local|linux/arm64|iris-stack-valkey:9.1.2-zlib1.3.2-r1
-local|linux/arm64|iris-stack-socket-proxy:1.13.1-go1.27.2
+local|linux/arm64|iris-stack-socket-proxy:1.13.1-go1.27.3

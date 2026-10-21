@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.28.0@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine3.24@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS gosu
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.24@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS gosu
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 ADD --checksum=sha256:a656a62069c1ac63dda1f52c3d69c7261dcd5466a22f11dd52d2c2e42fca86f0 https://proxy.golang.org/github.com/tianon/gosu/@v/v0.0.0-20260606051551-40506998e34a.zip /tmp/gosu.zip
 RUN unzip -q /tmp/gosu.zip -d /src
 WORKDIR /src/github.com/tianon/gosu@v0.0.0-20260606051551-40506998e34a
 COPY dependencies.mod go.mod
 COPY dependencies.sum go.sum
-RUN test "$(go env GOVERSION)" = go1.27.2 && go mod download
+RUN test "$(go env GOVERSION)" = go1.27.3 && go mod download
 ARG TARGETOS
 ARG TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=readonly -trimpath -buildvcs=false -o /out/gosu .
@@ -32,7 +32,7 @@ ARG REVISION=unknown
 LABEL org.opencontainers.image.revision=$REVISION \
       org.opencontainers.image.source="https://github.com/park285/hololive-bot" \
       io.hololive.gosu.source="40506998e34a7a679e6dae41374c1b7aa37eb73f" \
-      io.hololive.gosu.toolchain="go1.27.2" \
+      io.hololive.gosu.toolchain="go1.27.3" \
       io.hololive.pg_stat_kcache.version="2.3.2" \
       io.hololive.pg_wait_sampling.version="1.1.11"
 # 공식 gosu 1.19의 Go 1.24.6 취약 stdlib를 교체하며 entrypoint와 UID/GID 전환은 보존한다.
