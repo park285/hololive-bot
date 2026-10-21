@@ -83,24 +83,19 @@ jobs:
       - name: Resolve workspace package patterns
         run: |
           source scripts/ci/go-workspace-modules.sh
-          patterns="$(go_workspace_package_patterns | sed 's#^\./\.\./#../#' | tr '\n' ' ')"
-          patterns="./... ${patterns}"
-          echo "GO_PKG_PATTERNS=${patterns}" >> "${GITHUB_ENV}"
-          echo "resolved patterns: ${patterns}"
+          owned_pkgs=(./...)
+          for module in "${GO_WORKSPACE_MODULES[@]}"; do
+            case "$module" in
+              ../shared-go|../iris-client-go) ;;
+              *) owned_pkgs+=("./${module}/...") ;;
+            esac
+          done
+          printf 'GO_PKG_PATTERNS=%s\n' "${owned_pkgs[*]}" >> "${GITHUB_ENV}"
 
       - name: gosec
         run: |
           read -ra pkgs <<< "${GO_PKG_PATTERNS}"
-          owned_pkgs=()
-          for pkg in "${pkgs[@]}"; do
-            case "${pkg}" in
-              ../shared-go/...|../iris-client-go/...)
-                continue
-                ;;
-            esac
-            owned_pkgs+=("${pkg}")
-          done
-          gosec -quiet -fmt text "${owned_pkgs[@]}"
+          gosec -quiet -fmt text "${pkgs[@]}"
 
       - name: NilAway
         env:
@@ -108,18 +103,9 @@ jobs:
           GOMAXPROCS: "2"
         run: |
           read -ra pkgs <<< "${GO_PKG_PATTERNS}"
-          owned_pkgs=()
-          for pkg in "${pkgs[@]}"; do
-            case "${pkg}" in
-              ../shared-go/...|../iris-client-go/...)
-                continue
-                ;;
-            esac
-            owned_pkgs+=("${pkg}")
-          done
           # 로컬과 같은 unitchecker로 의존성 분석을 재사용하고 동시 메모리 사용을 제한한다.
           go vet -p 1 -vettool="${NILAWAY_BIN}" -pretty-print \
-            -include-errors-in-files="${PWD}" "${owned_pkgs[@]}"
+            -include-errors-in-files="${PWD}" "${pkgs[@]}"
 
       - name: govulncheck
         run: |
@@ -191,11 +177,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json
-
-      - name: Python runtime
-        uses: ./hololive-bot/.github/actions/python-runtime
-        with:
-          working-directory: hololive-bot
 
       - name: Docker Compose
         uses: ./hololive-bot/.github/actions/docker-compose

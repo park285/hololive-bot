@@ -37,15 +37,6 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Show verification context
-        env:
-          EXPECTED_SHA: ${{ github.sha }}
-        run: |
-          actual_sha="$(git rev-parse HEAD)"
-          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
-            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
-          test "${actual_sha}" = "${EXPECTED_SHA}"
-
       # gofmt 규칙은 릴리스마다 바뀐다. 이 단계가 없으면 러너 기본 Go로 검사해
       # go.mod가 요구하는 판본과 다른 결과를 낸다.
       - name: Setup Go
@@ -53,11 +44,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-
-      - name: Show Go environment
-        run: |
-          go version
-          go env GOOS GOARCH GOMOD GOWORK CGO_ENABLED
 
       - name: Shell syntax
         run: bash scripts/ci/shell-syntax-sweep.sh
@@ -91,29 +77,12 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Show verification context
-        env:
-          EXPECTED_SHA: ${{ github.sha }}
-        run: |
-          actual_sha="$(git rev-parse HEAD)"
-          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
-            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
-          test "${actual_sha}" = "${EXPECTED_SHA}"
-
-      - name: Python runtime
-        uses: ./.github/actions/python-runtime
-
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           # leg별 캐시 키 분리 — 목록 공유 시 7개 leg가 같은 키를 놓고 경쟁해 6개가 영구 캐시 미스가 된다.
           cache-dependency-path: ${{ matrix.module == '.' && 'go.sum' || format('{0}/go.sum', matrix.module) }}
-
-      - name: Show Go environment
-        run: |
-          go version
-          go env GOOS GOARCH GOMOD GOWORK CGO_ENABLED
 
       - name: Setup Node for collector helper integration tests
         if: matrix.module == 'hololive/hololive-youtube-collector'
@@ -167,15 +136,6 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Show verification context
-        env:
-          EXPECTED_SHA: ${{ github.sha }}
-        run: |
-          actual_sha="$(git rev-parse HEAD)"
-          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
-            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
-          test "${actual_sha}" = "${EXPECTED_SHA}"
-
       - name: Docker Compose
         uses: ./.github/actions/docker-compose
 
@@ -196,15 +156,6 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-
-      - name: Show verification context
-        env:
-          EXPECTED_SHA: ${{ github.sha }}
-        run: |
-          actual_sha="$(git rev-parse HEAD)"
-          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
-            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
-          test "${actual_sha}" = "${EXPECTED_SHA}"
 
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

@@ -26,20 +26,6 @@ if (( $# > 0 )); then
   exit 2
 fi
 
-if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
-  && command -v systemd-run >/dev/null 2>&1 \
-  && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
-  echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
-  export PRE_PUSH_GATE_SCOPED=1
-  # 부모 cgroup을 벗어나는 scope에도 종료 상한을 두어 기동 fixture를 회수한다.
-  exec systemd-run --user --scope --quiet \
-    -p RuntimeMaxSec=2h \
-    -p KillMode=control-group \
-    -p "MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G}" \
-    -p "MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}" \
-    "${SCRIPT_DIR}/pre-push-gate.sh"
-fi
-
 resolve_route() {
   if [[ "${route_resolved}" == "true" ]]; then
     return 0
@@ -63,7 +49,7 @@ resolve_route() {
   fi
 
   if [[ "${FULL_PRE_PUSH:-false}" == "true" ]]; then
-    PRE_PUSH_MODE="${PRE_PUSH_MODE:-full}"
+    PRE_PUSH_MODE=full
   else
     PRE_PUSH_MODE="${PRE_PUSH_MODE:-fast}"
   fi
@@ -87,15 +73,17 @@ resolve_route() {
   route_resolved=true
 }
 
-is_docs_only_route() {
-  local non_doc_changes docs_code_changes
+is_metadata_only_route() {
+  local diff_status=0
   resolve_route
-  [[ "${route_exact}" == "true" ]] || return 1
-  # grep -qv 회피: ugrep 는 quiet+invert 조합 exit 코드가 GNU grep 과 달라 필터 결과로 판정한다.
-  non_doc_changes="$(grep -vE '^(docs/|.*\.md$)' <<<"${changed_files}" || true)"
-  docs_code_changes="$(grep -E '^docs/.*\.(go|sh|sql)$' <<<"${changed_files}" || true)"
-  [[ "${PRE_PUSH_MODE}" != "full" ]] && [[ -n "${changed_files}" ]] \
-    && [[ -z "${non_doc_changes}" ]] && [[ -z "${docs_code_changes}" ]]
+  [[ "${route_exact}" == "true" && "${PRE_PUSH_MODE}" != "full" ]] || return 1
+  git diff --quiet --no-ext-diff "${BASE_SHA}" "${HEAD_SHA}" -- . \
+    ':(exclude)*.md' ':(exclude)VERSION' \
+    ':(exclude)hololive/hololive-api/VERSION' ':(exclude)hololive/hololive-alarm-worker/VERSION' || diff_status=$?
+  case "${diff_status}" in
+    0|1) return "${diff_status}" ;;
+    *) exit "${diff_status}" ;;
+  esac
 }
 
 inputs_changed() {
@@ -139,9 +127,34 @@ run_if_changed() {
 run_content_gates() {
   bash scripts/check-release-version.sh
   resolve_route
-  if is_docs_only_route; then
-    echo "[pre-push] docs-only change detected; skipping Go gate"
+  if is_metadata_only_route; then
+    local version_status=0 module
+    git diff --quiet --no-ext-diff "${BASE_SHA}" "${HEAD_SHA}" -- VERSION \
+      hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION || version_status=$?
+    if [[ "${version_status}" == 1 ]]; then
+      source "${SCRIPT_DIR}/go-workspace-modules.sh"
+      for module in . "${GO_WORKSPACE_MODULES[@]}"; do
+        echo "[pre-push] version-only build: ${module}"
+        (cd "${module}" && GOWORK=off go build -mod=readonly ./...)
+      done
+    elif [[ "${version_status}" != 0 ]]; then
+      exit "${version_status}"
+    fi
+    echo "[pre-push] documentation/version-only gate passed"
     return 0
+  fi
+  if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
+    && command -v systemd-run >/dev/null 2>&1 \
+    && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
+    echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
+    export PRE_PUSH_GATE_SCOPED=1
+    # 부모 cgroup을 벗어나는 scope에도 종료 상한을 두어 기동 fixture를 회수한다.
+    exec systemd-run --user --scope --quiet \
+      -p RuntimeMaxSec=2h \
+      -p KillMode=control-group \
+      -p "MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G}" \
+      -p "MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}" \
+      "${SCRIPT_DIR}/pre-push-gate.sh"
   fi
 
   run_if_changed scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/compose.sh \
@@ -218,12 +231,12 @@ run_content_gates() {
   fi
 }
 
-# 취약점 데이터는 계속 바뀌므로 docs-only push 외에는 매번 검사한다.
+# 취약점 데이터는 계속 바뀌므로 문서·버전만 바뀐 정확한 범위 외에는 매번 검사한다.
 run_dependency_hygiene() {
   local module govulncheck_bin
   resolve_route
-  if is_docs_only_route; then
-    echo "[pre-push] docs-only change detected; skipping dependency hygiene"
+  if is_metadata_only_route; then
+    echo "[pre-push] documentation/version-only change; skipping dependency hygiene"
     return 0
   fi
 
