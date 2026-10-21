@@ -10,6 +10,8 @@ source "${SCRIPT_DIR}/nilaway-inputs.sh"
 source "${SCRIPT_DIR}/local-ci-nilaway.sh"
 cd "${ROOT_DIR}"
 
+# local-ci-files.sh·local-ci-packages.sh가 형제 모듈을 포함한 이 배열로 경로를 판별한다.
+# shellcheck disable=SC2034
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 source "${SCRIPT_DIR}/local-ci-files.sh"
 source "${SCRIPT_DIR}/go-work-sync-drift.sh"
@@ -41,7 +43,7 @@ run_step() {
 check_go_mod_tidy() {
     local module
 
-    for module in . "${GO_MODULES[@]}"; do
+    for module in . "${GO_OWNED_MODULES[@]}"; do
         run_step "go mod tidy -diff: ${module}" bash -c "cd '$module' && GOWORK=off go mod tidy -diff"
     done
 }
@@ -72,7 +74,7 @@ go_mod_readonly() {
 check_canonical_module_builds() {
     local module
 
-    for module in . "${GO_MODULES[@]}"; do
+    for module in . "${GO_OWNED_MODULES[@]}"; do
         run_step "Canonical vet (GOWORK=off): ${module}" \
             bash -c "cd '${module}' && GOWORK=off go vet ./..."
     done
@@ -91,24 +93,9 @@ run_go_package_step() {
     run_step "${name}" "$@" "${GO_PACKAGES[@]}"
 }
 
-owned_go_package_patterns() {
-    # 상위 workspace의 외부 모듈은 자체 lint 설정을 쓰므로 worktree 이름과 무관하게 제외한다.
-    local package_pattern
-    for package_pattern in "${GO_PACKAGES[@]}"; do
-        case "${package_pattern}" in
-            ./../*|../*)
-                continue
-                ;;
-        esac
-        printf '%s\n' "${package_pattern}"
-    done
-}
-
 check_golangci_lint() {
-    local packages=()
-    mapfile -t packages < <(owned_go_package_patterns)
-    if (( ${#packages[@]} == 0 )); then
-        echo "[LOCAL CI] Skip golangci-lint: no owned Go packages in scope"
+    if ! has_go_packages; then
+        echo "[LOCAL CI] Skip golangci-lint: no Go packages in scope"
         echo
         return 0
     fi
@@ -116,7 +103,7 @@ check_golangci_lint() {
     local golangci_lint_bin
     golangci_lint_bin="$(ensure_golangci_lint)"
 
-    run_step "golangci-lint" "${golangci_lint_bin}" run -c .golangci.yml "${packages[@]}"
+    run_step "golangci-lint" "${golangci_lint_bin}" run -c .golangci.yml "${GO_PACKAGES[@]}"
 }
 
 

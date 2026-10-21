@@ -84,11 +84,8 @@ jobs:
         run: |
           source scripts/ci/go-workspace-modules.sh
           owned_pkgs=(./...)
-          for module in "${GO_WORKSPACE_MODULES[@]}"; do
-            case "$module" in
-              ../shared-go|../iris-client-go) ;;
-              *) owned_pkgs+=("./${module}/...") ;;
-            esac
+          for module in "${GO_OWNED_MODULES[@]}"; do
+            owned_pkgs+=("./${module}/...")
           done
           printf 'GO_PKG_PATTERNS=%s\n' "${owned_pkgs[*]}" >> "${GITHUB_ENV}"
 

@@ -56,10 +56,16 @@ workspace_modules="$(load_go_workspace_modules)" || {
 }
 mapfile -t GO_WORKSPACE_MODULES < <(printf '%s\n' "${workspace_modules}")
 unset workspace_modules
+# 형제 저장소 모듈(../)은 각 저장소 게이트가 검증한다. 이 저장소의 검사는 소유 모듈만 반복한다.
+GO_OWNED_MODULES=()
+for workspace_module in "${GO_WORKSPACE_MODULES[@]}"; do
+    [[ "${workspace_module}" == ../* ]] || GO_OWNED_MODULES+=("${workspace_module}")
+done
+unset workspace_module
 
 go_workspace_package_patterns() {
     local module
-    for module in "${GO_WORKSPACE_MODULES[@]}"; do
+    for module in "${GO_OWNED_MODULES[@]}"; do
         printf './%s/...\n' "${module}"
     done
 }

@@ -7,6 +7,27 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if (( $# > 0 )); then
+  echo "usage: $0" >&2
+  exit 2
+fi
+
+# 게이트(특히 NilAway)가 호스트 램을 전역 고갈시킨 2026-07-04 OOM의 재발 방지.
+# 준비 단계를 두 번 실행하지 않도록 다른 작업보다 먼저 scope로 다시 실행한다.
+if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
+  && command -v systemd-run >/dev/null 2>&1 \
+  && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
+  echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
+  export PRE_PUSH_GATE_SCOPED=1
+  # 부모 cgroup을 벗어나는 scope에도 종료 상한을 두어 기동 fixture를 회수한다.
+  exec systemd-run --user --scope --quiet \
+    -p RuntimeMaxSec=2h \
+    -p KillMode=control-group \
+    -p "MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G}" \
+    -p "MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}" \
+    "${SCRIPT_DIR}/pre-push-gate.sh"
+fi
+
 . "${SCRIPT_DIR}/python-runtime.sh"
 repo_python_init
 route_resolved=false
@@ -19,12 +40,6 @@ export GOTOOLCHAIN="${GOTOOLCHAIN-auto}"
 # hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
-
-# 게이트(특히 NilAway)가 호스트 램을 전역 고갈시킨 2026-07-04 OOM의 재발 방지.
-if (( $# > 0 )); then
-  echo "usage: $0" >&2
-  exit 2
-fi
 
 resolve_route() {
   if [[ "${route_resolved}" == "true" ]]; then
@@ -133,7 +148,7 @@ run_content_gates() {
       hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION || version_status=$?
     if [[ "${version_status}" == 1 ]]; then
       source "${SCRIPT_DIR}/go-workspace-modules.sh"
-      for module in . "${GO_WORKSPACE_MODULES[@]}"; do
+      for module in . "${GO_OWNED_MODULES[@]}"; do
         echo "[pre-push] version-only build: ${module}"
         (cd "${module}" && GOWORK=off go build -mod=readonly ./...)
       done
@@ -142,19 +157,6 @@ run_content_gates() {
     fi
     echo "[pre-push] documentation/version-only gate passed"
     return 0
-  fi
-  if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
-    && command -v systemd-run >/dev/null 2>&1 \
-    && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
-    echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
-    export PRE_PUSH_GATE_SCOPED=1
-    # 부모 cgroup을 벗어나는 scope에도 종료 상한을 두어 기동 fixture를 회수한다.
-    exec systemd-run --user --scope --quiet \
-      -p RuntimeMaxSec=2h \
-      -p KillMode=control-group \
-      -p "MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G}" \
-      -p "MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}" \
-      "${SCRIPT_DIR}/pre-push-gate.sh"
   fi
 
   run_if_changed scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/compose.sh \
@@ -245,7 +247,7 @@ run_dependency_hygiene() {
   # shellcheck source=go-workspace-modules.sh
   source "${SCRIPT_DIR}/go-workspace-modules.sh"
   govulncheck_bin="$(ensure_govulncheck)"
-  for module in . "${GO_WORKSPACE_MODULES[@]}"; do
+  for module in . "${GO_OWNED_MODULES[@]}"; do
     echo "[pre-push] dependency hygiene: ${module}"
     (cd "${module}" && GOWORK=off "${govulncheck_bin}" ./...)
   done
