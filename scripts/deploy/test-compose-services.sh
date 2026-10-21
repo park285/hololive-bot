@@ -86,7 +86,7 @@ expect_eq "$(compose_service_resolve_log_target youtube-collector-c)" "youtube-c
 
 . "${ROOT_DIR}/scripts/deploy/lib/ap-host.sh"
 
-# KR.key는 gitignore된 로컬 배포 키라 클린 체크아웃에 없다.
+# 배포 키(~/.ssh/KR.key)는 운영자 호스트에만 있다.
 # conf 계약 검증에는 키 실체가 불필요하므로 tmp 키로 대체한다.
 SSH_KEY="${TEST_TMP_DIR}/ssh-key"
 : >"${SSH_KEY}"
