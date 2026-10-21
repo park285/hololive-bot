@@ -104,7 +104,9 @@ func startPeerH3Server(t *testing.T) (addr, caFile string, conns <-chan *quic.Co
 			t.Errorf("close peer server: %v", err)
 		}
 
-		<-served
+		if err := <-served; !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("serve peer server: %v", err)
+		}
 
 		if err := packetConn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			t.Errorf("close peer udp: %v", err)

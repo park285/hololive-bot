@@ -34,7 +34,10 @@ func TestServeDoesNotReportHealthyBeforeWorkerLoads(t *testing.T) {
 		broker.retire(ExitSignal)
 
 		select {
-		case <-done:
+		case serveErr := <-done:
+			if serveErr != nil {
+				t.Errorf("Serve() after retirement error = %v, want nil", serveErr)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("broker did not finish retirement")
 		}
@@ -122,7 +125,11 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 		broker.retire(ExitSignal)
 
 		select {
-		case <-done:
+		case serveErr := <-done:
+			// 본문이 결과를 읽었으면 닫힌 channel의 nil이 오고, 읽기 전에 실패했으면 기동 deadline 오류가 온다.
+			if serveErr != nil && !errors.Is(serveErr, context.DeadlineExceeded) {
+				t.Errorf("Serve() after silent startup error = %v, want startup deadline", serveErr)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("silent startup did not retire")
 		}
@@ -219,7 +226,11 @@ func serveKeepAliveBroker(t *testing.T) (broker *Broker, socket string, done <-c
 		broker.retire(ExitSignal)
 
 		select {
-		case <-served:
+		// 본문이 결과를 이미 읽었으면 닫힌 channel의 nil이 온다.
+		case serveErr := <-served:
+			if serveErr != nil {
+				t.Errorf("Serve() after retirement error = %v, want nil", serveErr)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("broker did not finish retirement")
 		}
