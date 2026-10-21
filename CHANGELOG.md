@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **golangci-lint 2.15.0(shared·collector·api):** 로컬 게이트의 최소 버전을 v2.15.0으로 올립니다. HTTP/3 종료 시한에 Shutdown을 끊는 순간 정상 종료가 먼저 끝나 실패를 돌려주면, idle 연결만 남았더라도 그 실패를 종료 실패로 반환합니다(이전에는 무시). pobroker·internalhttp 테스트 cleanup은 `Serve` 결과를 검사하고, `NewAmbiguousMatchError` 생성자는 스택 lint 템플릿 예외로 둡니다.
 - **AP 배포·로그 미러 SSH 키 위치:** 배포 키 기본 경로를 저장소 안 `KR.key`에서 `~/.ssh/KR.key`로 옮겨, 저장소를 다시 받거나 지워도 키가 함께 사라지지 않게 합니다. `SSH_KEY`·`HOL_LOG_*_SSH_KEY` 지정은 그대로 우선하며, 로그 미러 systemd 유닛의 중복 키 경로 지정을 제거합니다.
 - **pre-push 범위 정리:** 로컬 게이트의 모듈별 tidy·canonical vet·govulncheck·VERSION 전용 빌드와 전체 범위 테스트·staticcheck·NilAway가 형제 저장소(`../iris-client-go`, `../shared-go`)를 반복하지 않습니다. 각 저장소 게이트가 그 모듈을 검증하며, workspace 빌드·테스트는 형제 HEAD를 계속 사용합니다. 메모리 scope 재실행을 게이트 맨 앞으로 옮겨 준비 단계를 한 번만 실행합니다. 셸 스크립트 ShellCheck는 메타 포인터 push 대신 이 저장소의 push에서 실행됩니다. shared-go가 스택 서브모듈로 옮겨진 뒤 매칭될 수 없던 `shared-go/` 변경 범위 조건도 제거합니다.
 - **Go 1.27.3 보안 갱신:** 다섯 모듈과 workspace, 앱 이미지 빌더(`golang:1.27.3-alpine3.24`), staticcheck·NilAway 프로필의 Go 버전을 1.27.3으로 올려 `crypto/x509` 취약점 GO-2026-6809를 해소합니다. 운영 인프라 이미지(gosu·socket-proxy·deunhealth) 정의와 socket-proxy 태그도 1.27.3으로 올립니다. 실행 중인 서비스와 인프라는 재빌드·배포 후 반영됩니다.

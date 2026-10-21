@@ -79,7 +79,11 @@ func shutdownH3Server(ctx context.Context, server *http3.Server, drain *h3Reques
 		idleOnly := drain.drained()
 
 		abort()
-		<-done
+
+		// abort한 Shutdown은 끊긴 shutdownCtx의 취소를 돌려준다. 같은 순간 정상 종료가 먼저 끝났다면 그 결과는 위 분기와 같이 판정한다.
+		if err := <-done; err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("HTTP/3 server shutdown failed: %w", err)
+		}
 
 		if idleOnly {
 			return nil
