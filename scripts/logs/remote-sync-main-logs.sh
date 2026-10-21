@@ -23,22 +23,22 @@ Usage:
 Environment:
   LOG_ROOT=<repo>/logs
   HOL_LOG_CENTRAL_USER_HOST=ubuntu@100.100.1.8
-  HOL_LOG_CENTRAL_SSH_KEY=<repo>/KR.key
+  HOL_LOG_CENTRAL_SSH_KEY=~/.ssh/KR.key
   HOL_LOG_CENTRAL_HOST_KEY_ALIAS=100.100.1.8
   HOL_LOG_CENTRAL_LOG_DIR=/var/log/hololive-bot
   HOL_LOG_CENTRAL_SERVICES="hololive-api alarm-worker youtube-collector-c"
   HOL_LOG_OSAKA_USER_HOST=ubuntu@100.100.1.6
-  HOL_LOG_OSAKA_SSH_KEY=<repo>/KR.key
+  HOL_LOG_OSAKA_SSH_KEY=~/.ssh/KR.key
   HOL_LOG_OSAKA_HOST_KEY_ALIAS=100.100.1.6
   HOL_LOG_OSAKA_LOG_DIR=/var/log/hololive-bot
   HOL_LOG_OSAKA_SERVICES=youtube-collector-a
   HOL_LOG_OSAKA2_USER_HOST=ubuntu@100.100.1.2
-  HOL_LOG_OSAKA2_SSH_KEY=<repo>/KR.key
+  HOL_LOG_OSAKA2_SSH_KEY=~/.ssh/KR.key
   HOL_LOG_OSAKA2_HOST_KEY_ALIAS=100.100.1.2
   HOL_LOG_OSAKA2_LOG_DIR=/var/log/hololive-bot
   HOL_LOG_OSAKA2_SERVICES=youtube-collector-d
   HOL_LOG_SEOUL_USER_HOST=ubuntu@100.100.1.5
-  HOL_LOG_SEOUL_SSH_KEY=<repo>/KR.key
+  HOL_LOG_SEOUL_SSH_KEY=~/.ssh/KR.key
   HOL_LOG_SEOUL_HOST_KEY_ALIAS=100.100.1.5
   HOL_LOG_SEOUL_LOG_DIR=/home/ubuntu/hololive-bot/logs
   HOL_LOG_SEOUL_SERVICES=youtube-collector-b

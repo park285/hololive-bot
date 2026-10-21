@@ -88,7 +88,7 @@ ap_host_load() {
         return 2
     fi
 
-    SSH_KEY="${SSH_KEY:-$repo_root/KR.key}"
+    SSH_KEY="${SSH_KEY:-$HOME/.ssh/KR.key}"
     if [[ ! -r "$SSH_KEY" ]]; then
         echo "SSH key not readable: $SSH_KEY" >&2
         return 1

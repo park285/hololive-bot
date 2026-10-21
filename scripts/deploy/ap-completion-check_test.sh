@@ -58,6 +58,7 @@ echo "AP QUIC UDP buffers ok on ${host_name}: runtime rmem=7500000 wmem=7500000;
 EOF
 chmod +x "$fixture_root/scripts/deploy/lib/require-quic-udp-buffer.sh"
 touch "$fixture_root/KR.key" "$fixture_root/deploy/compose/docker-compose.osaka.yml"
+export SSH_KEY="$fixture_root/KR.key"
 cat > "$fixture_root/scripts/deploy/ap-hosts/osaka.conf" <<'EOF'
 AP_NAME=osaka
 AP_SSH_HOST=mock-host
