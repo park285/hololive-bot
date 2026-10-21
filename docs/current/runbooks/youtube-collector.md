@@ -244,9 +244,9 @@ guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니�
 
 수용 검사 뒤에는 stack의 [배포 산출물 보존 절차](../../../../docs/ops/release-artifact-retention.md)를
 배포 완료 기록에 포함합니다. `tools/ops/prune-release-artifacts.py --profile native-ap --ap-name <AP_NAME>`으로
-current·previous·최근 세 release와 실행 중인 참조를 보존하는 후보를 산출합니다.
+current·previous와 previous의 `rollback-contract/previous-before-cutover`가 가리키는 이전 release, 실행 중인 참조를 보존하는 후보를 산출합니다.
 전송 staging도 보존 release와 연결된 것은 남기며 `.incoming-*`와 소유 불명 파일은 삭제하지 않습니다.
-이전 staging/release 삭제는 별도 승인된 exact 경로만 `--apply`로 실행하고, 배포와 동시에 실행하지 않습니다.
+이전 staging/release 삭제는 수용을 통과한 배포 승인에 포함되며, 검토한 exact 경로만 `--apply`로 실행하고 배포와 동시에 실행하지 않습니다.
 후보 출력·수용 성공만으로 정리가 완료됐다고 표시하지 않습니다.
 
 ## Logs
