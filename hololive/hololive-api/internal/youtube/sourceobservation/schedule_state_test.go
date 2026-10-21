@@ -50,6 +50,8 @@ func TestScheduleStateDoesNotWaitForUnusedHead(t *testing.T) {
 }
 
 func TestScheduleStateRetainsStatusFromHeadWithoutSession(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(ctx, `

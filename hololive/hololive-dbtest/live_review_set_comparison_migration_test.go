@@ -182,6 +182,8 @@ func seedLiveReviewTypedFacts(t *testing.T, pool *pgxpool.Pool) {
 
 // 새 집합 함수도 runtime 조회 권한만으로 실행되며 PUBLIC/scraper에는 열리지 않는다.
 func TestLiveReviewSetMigrationPrivileges(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveReviewSetMigration)
 	roles := createObservationGrantRoles(t, pool)
 	runtime := pgx.Identifier{roles.runtime}.Sanitize()

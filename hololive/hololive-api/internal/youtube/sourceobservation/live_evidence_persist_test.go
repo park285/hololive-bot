@@ -16,6 +16,8 @@ import (
 )
 
 func TestLiveEndBeforePositiveSurvivesPersist(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -54,6 +56,8 @@ func TestLiveEndBeforePositiveSurvivesPersist(t *testing.T) {
 }
 
 func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
@@ -120,6 +124,8 @@ func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
 }
 
 func TestLiveSteadyConsumeAndFinalizerDoNotReloadOldAbsenceHistory(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
@@ -151,6 +157,8 @@ func TestLiveSteadyConsumeAndFinalizerDoNotReloadOldAbsenceHistory(t *testing.T)
 }
 
 func TestLiveGracePreservesExplicitEndedAt(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
@@ -245,6 +253,8 @@ func TestLiveEvidenceDBPermutationsConverge(t *testing.T) {
 }
 
 func TestLiveSameSlotKeepsFirstCoverageAcrossProviders(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 

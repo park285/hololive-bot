@@ -13,6 +13,8 @@ import (
 // 여러 영상의 필드 변경을 한 transaction의 묶음 전송으로 반영해도 행마다 순차 실행과 같은 결과여야 한다.
 // 변경에 published_at이 없으면 저장된 값을 유지한다.
 func TestPersistContentFieldUpdatesAppliesEveryRowInBatch(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	storedAt := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)

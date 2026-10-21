@@ -20,6 +20,8 @@ type alarmStateRow struct {
 }
 
 func TestYouTubeAlarmStateAuthorizationDropNormalizesLegacyClaims(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

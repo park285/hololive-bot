@@ -14,6 +14,8 @@ import (
 )
 
 func TestLiveHeadPreservesUnchangedToastArray(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	at := time.Date(2026, time.October, 6, 0, 0, 0, 0, time.UTC)
@@ -52,6 +54,8 @@ func TestLiveHeadPreservesUnchangedToastArray(t *testing.T) {
 
 // 활성 세션의 미적재 이력은 보존하고 새 head의 미적재 이력은 빈 배열로 시작한다.
 func TestLiveHeadOmittedHistoryKeepsStoredArray(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	at := time.Date(2026, time.October, 6, 0, 0, 0, 0, time.UTC)
 	history := toastIgnoredHistory(at)

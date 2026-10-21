@@ -116,7 +116,7 @@ func TestSha256Hex_EmptyString(t *testing.T) {
 func TestCreateSession_Success(t *testing.T) {
 	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	config := DefaultConfig()
+	config := testConfig()
 
 	config.SessionTTL = 30 * time.Minute
 
@@ -135,7 +135,7 @@ func TestCreateSession_Success(t *testing.T) {
 func TestCreateSession_StoresJSONSessionDataWithGeneration(t *testing.T) {
 	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	config := DefaultConfig()
+	config := testConfig()
 
 	config.SessionTTL = 30 * time.Minute
 
@@ -156,7 +156,7 @@ func TestCreateSession_StoresJSONSessionDataWithGeneration(t *testing.T) {
 
 func TestCreateSession_NoCacheService(t *testing.T) {
 	db := newTestDB(t)
-	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), testConfig())
 	require.NoError(t, err)
 
 	_, err = service.createSession(t.Context(), "user-123", 0)
@@ -167,7 +167,7 @@ func TestCreateSession_NoCacheService(t *testing.T) {
 func TestCreateSession_EmptyUserID(t *testing.T) {
 	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), testConfig())
 	require.NoError(t, err)
 
 	_, err = service.createSession(t.Context(), "", 0)
@@ -178,7 +178,7 @@ func TestCreateSession_EmptyUserID(t *testing.T) {
 func TestCreateSession_UniqueSessions(t *testing.T) {
 	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), testConfig())
 	require.NoError(t, err)
 
 	s1, err := service.createSession(t.Context(), "user-123", 0)

@@ -43,6 +43,8 @@ const (
 // pg_dump가 아닌 catalog 직렬화를 쓰는 이유: pg_dump text는 patch/tool version별 헤더·구문
 // 차이가 커 결정성을 깬다. 반면 catalog 직렬화는 PG18과 검증된 외부 test DB에서 안정적으로 동작한다.
 func TestSchemaSnapshotGolden(t *testing.T) {
+	t.Parallel()
+
 	pool := NewReplayPool(t)
 	ctx := t.Context()
 

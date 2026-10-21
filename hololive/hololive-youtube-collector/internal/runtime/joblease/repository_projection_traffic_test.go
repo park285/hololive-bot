@@ -646,6 +646,8 @@ func oracleCandidateSubjects(t *testing.T, pool *pgxpool.Pool, generation int64,
 }
 
 func TestCandidateOrderMatchesRelationalOracle(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedCandidateScale(t, pool, 620)
 

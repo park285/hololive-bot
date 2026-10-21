@@ -90,6 +90,8 @@ func (f *unresolvableFixture) channelCheck(t *testing.T, payload contract.Channe
 // 시작을 관측한 LIVE가 비공개·삭제로 바뀌어 identity_missing만 이어지면 첫 관측 시각을 head에 두고, 지속 시간 안이거나
 // 채널 음성이 영상 확인 시각 기준 5분 밖이면 LIVE로 남긴다.
 func TestVideoLifecycleUnresolvableVideoRetainsInsideGraceOrWithoutFreshChannelNegative(t *testing.T) {
+	t.Parallel()
+
 	f := startUnresolvable(t)
 	firstAt := f.videoProof.ScheduledFor
 
@@ -111,6 +113,8 @@ func TestVideoLifecycleUnresolvableVideoRetainsInsideGraceOrWithoutFreshChannelN
 // 지속 시간이 지나고 같은 채널의 신선한 /live 음성이 있으면 UNRESOLVABLE_VIDEO로 끝낸다. 종료 시각은 첫 identity_missing
 // 시각이며 시작·positive clock·알림은 그대로다.
 func TestVideoLifecycleUnresolvableVideoEndsAfterSustainedIdentityMissingAndChannelNegative(t *testing.T) {
+	t.Parallel()
+
 	f := startUnresolvable(t)
 	firstAt := f.videoProof.ScheduledFor
 
@@ -141,6 +145,8 @@ func TestVideoLifecycleUnresolvableVideoEndsAfterSustainedIdentityMissingAndChan
 
 // 다른 UNKNOWN 사유는 기존처럼 수명을 바꾸지 않고, 추적 중 positive가 오면 추적을 지운다.
 func TestVideoLifecycleUnresolvableVideoRequiresIdentityMissingAndClearsOnPositive(t *testing.T) {
+	t.Parallel()
+
 	f := startUnresolvable(t)
 
 	f.checkVideo(t, 0, contract.LiveCheckReasonRequestFailed, videoLifecycleIdentityUnverified)
@@ -180,6 +186,8 @@ func startUnresolvableUpcoming(t *testing.T) *unresolvableFixture {
 
 // UPCOMING의 identity_missing은 추적만 하고, grace가 지나고 채널 음성이 있어도 끝내지 않는다. 이후 positive는 추적을 지운다.
 func TestVideoLifecycleUnresolvableUpcomingTracksWithoutEnding(t *testing.T) {
+	t.Parallel()
+
 	f := startUnresolvableUpcoming(t)
 	firstAt := f.videoProof.ScheduledFor
 
@@ -209,6 +217,8 @@ func TestVideoLifecycleUnresolvableUpcomingTracksWithoutEnding(t *testing.T) {
 
 // UPCOMING의 채널 불일치 확인도 추적하며, 다른 UNKNOWN 사유는 추적하지 않는다.
 func TestVideoLifecycleUnresolvableUpcomingTracksIdentityMismatchOnly(t *testing.T) {
+	t.Parallel()
+
 	f := startUnresolvableUpcoming(t)
 
 	f.checkVideo(t, 0, contract.LiveCheckReasonRequestFailed, videoLifecycleIdentityUnverified)
@@ -268,6 +278,8 @@ func TestVideoLifecycleUnresolvableVideoRequiresConfirmedChannelNegative(t *test
 // 7.2.7 롤백 창처럼 positive가 지우지 못한 잔여 추적값(마지막 positive보다 이른 값)은 지속 시간의 근거가 아니다.
 // 채널 음성과 grace가 갖춰져도 끝내지 않고 이번 관측부터 다시 추적한다.
 func TestVideoLifecycleUnresolvableVideoRestartsStaleTracking(t *testing.T) {
+	t.Parallel()
+
 	f := startUnresolvable(t)
 
 	if _, err := f.pool.Exec(t.Context(), `UPDATE youtube_live_reconciliation_heads
@@ -287,6 +299,8 @@ func TestVideoLifecycleUnresolvableVideoRestartsStaleTracking(t *testing.T) {
 
 // head 없는 metadata_only UPCOMING은 미확정 메타데이터가 head의 근거가 아니므로 추적하지 않고 기존 결정을 남긴다.
 func TestVideoLifecycleHeadlessMetadataUpcomingKeepsIdentityDecision(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 

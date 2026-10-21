@@ -9,6 +9,8 @@ import (
 )
 
 func TestVideoCheckExistingLivePrecedesNewUpcomingReview(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	seedProjection(t, pool, []leaseTarget{

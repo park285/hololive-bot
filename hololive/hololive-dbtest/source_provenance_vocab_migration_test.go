@@ -89,6 +89,8 @@ func applyMigrationsTwice(ctx context.Context, t *testing.T, pool *pgxpool.Pool,
 }
 
 func TestProvenanceCompactionMigrationPreservesIdentityAndProtection(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, provenanceCompactionMigration)
 	ctx := t.Context()
 	seedProvenanceCutoverRows(t, pool)
@@ -154,6 +156,8 @@ func TestProvenanceCompactionMigrationPreservesIdentityAndProtection(t *testing.
 }
 
 func TestProvenanceCompactionMigrationRejectsNonHexObservationKey(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, provenanceCompactionMigration)
 	ctx := t.Context()
 	seedProvenanceCutoverRows(t, pool)
@@ -175,6 +179,8 @@ func TestProvenanceCompactionMigrationRejectsNonHexObservationKey(t *testing.T) 
 }
 
 func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, provenanceCompactionMigration)
 	ctx := t.Context()
 	seedProvenanceCutoverRows(t, pool)

@@ -13,6 +13,8 @@ const alarmSendUnitHandoffMigration = "329_alarm_send_unit_handoff_check.sql"
 // requestId, requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, 빈 requestId는 거부한다. 재적용은 제약을 바꾸지
 // 않는다.
 func TestAlarmSendUnitHandoffShape(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()

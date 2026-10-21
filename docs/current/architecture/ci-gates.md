@@ -17,7 +17,7 @@ Go 파일·함수 크기는 golangci-lint의 `revive` `file-length-limit`(비테
 `funlen`(함수 120줄)이 검사합니다. 복잡도는 설정된 린터가 맡으며 별도 구조 예산 검사는 없습니다.
 
 로컬 Go 검증과 PR matrix는 race 테스트를 실행합니다. `scripts/ci/go-test-nonrace.sh`가
-일반·race 빌드의 테스트 파일을 비교해 race에서 제외되는 테스트가 있는 패키지만 추가 실행합니다.
+일반·race 빌드의 테스트 파일을 비교해 race 빌드에서 빠지는 테스트 함수만 추가 실행합니다.
 NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분석을 재사용하며,
 로컬 기본값과 security workflow는 `-p 1`로 분석 메모리 사용을 제한합니다.
 

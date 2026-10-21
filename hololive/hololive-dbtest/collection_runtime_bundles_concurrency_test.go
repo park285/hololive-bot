@@ -137,6 +137,8 @@ func TestCollectionRuntimeBundlesStaleFixedSnapshotFails(t *testing.T) {
 }
 
 func TestCollectionRuntimeBundlesMissingGuardRejectsSourceWrite(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	seedCollectionBundleHeaders(t, pool)
 	execCollectionBundleSQL(t, pool, `DELETE FROM youtube_collection_projection_guard`)

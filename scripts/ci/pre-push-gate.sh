@@ -197,6 +197,9 @@ run_content_gates() {
   run_if_changed hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback_test.sh \
     hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
+  run_if_changed scripts/deploy/test-compose-security-defaults.sh deploy/compose deploy/images/nginx deploy/nginx \
+    scripts/ci/public-pr-frontend-gate.sh scripts/ci/python-runtime.sh scripts/deploy/lib/public-bind-mounts.sh
+  run_if_changed scripts/ops/postgres-failover_test.sh scripts/ops scripts/systemd deploy/compose/docker-compose.standby.yml
   run_if_changed scripts/logs/test-stream-mirror-retention.sh scripts/logs/lib/stream.sh
   run_if_changed scripts/deploy/verify-exec-tree-ownership_test.sh scripts/deploy/verify-exec-tree-ownership.sh
   run_if_changed scripts/deploy/systemd-compose-up_test.sh \

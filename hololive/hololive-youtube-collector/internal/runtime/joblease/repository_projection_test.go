@@ -17,6 +17,8 @@ import (
 )
 
 func TestAcquireBundleRechecksHeaderExpiryAfterGuard(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
@@ -64,6 +66,8 @@ func seedCandidateScale(t *testing.T, pool *pgxpool.Pool, count int) int64 {
 }
 
 func TestCandidateLateKeyBeyondLeaseBatchAndLimit(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedCandidateScale(t, pool, 513)
 
@@ -82,6 +86,8 @@ func TestCandidateLateKeyBeyondLeaseBatchAndLimit(t *testing.T) {
 }
 
 func TestFourCollectorsCompeteAndRestartFromDurableLease(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
@@ -147,6 +153,8 @@ func TestFourCollectorsCompeteAndRestartFromDurableLease(t *testing.T) {
 }
 
 func TestCandidatesObserveCurrentEligibilityAndHeaderExpiry(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)
@@ -191,6 +199,8 @@ func TestCandidatesObserveCurrentEligibilityAndHeaderExpiry(t *testing.T) {
 }
 
 func TestCandidatesIncludeLastMaximumLegalSubject(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedCandidateScale(t, pool, contract.MaxProjectionTargetCount)
 
@@ -211,6 +221,8 @@ func TestCandidatesIncludeLastMaximumLegalSubject(t *testing.T) {
 
 // 만료된 기존 행이 잠겨 있어도 missing으로 오인해 INSERT 충돌을 기다려서는 안 된다.
 func TestAcquireSkipsLockedExpiredLease(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
@@ -250,6 +262,8 @@ func TestAcquireSkipsLockedExpiredLease(t *testing.T) {
 
 // 최초 행 생성의 유일 키 대기가 TTL보다 길어도 rollback 후 얻은 lease에는 온전한 새 TTL이 있어야 한다.
 func TestAcquireCreationTTLStartsAfterConflictingCreatorRollback(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)

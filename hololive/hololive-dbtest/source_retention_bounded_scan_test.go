@@ -12,6 +12,8 @@ import (
 )
 
 func TestSourceRetentionProgressesPastProtectedPrefixAndRevisits(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 11000, 10000)
 	kinds, cutoffs := []string{communityPageKind}, []time.Time{base.Add(time.Hour)}
@@ -37,6 +39,8 @@ func TestSourceRetentionProgressesPastProtectedPrefixAndRevisits(t *testing.T) {
 }
 
 func TestSourceRetentionBoundsProtectionChecksAndRollsBackCursor(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 11000, 10000)
 	tx, err := pool.Begin(t.Context())
@@ -72,6 +76,8 @@ func TestSourceRetentionBoundsProtectionChecksAndRollsBackCursor(t *testing.T) {
 }
 
 func TestSourceRetentionBoundsLockedWindowAndRevisits(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 1001, 0)
 	holder, err := pool.Begin(t.Context())
@@ -94,6 +100,8 @@ func TestSourceRetentionBoundsLockedWindowAndRevisits(t *testing.T) {
 }
 
 func TestSourceRetentionFixedSweepRevisitsDespiteNewTail(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 1001, 1000)
 	kinds := []string{communityPageKind, "live_snapshot"}
@@ -112,6 +120,8 @@ func TestSourceRetentionFixedSweepRevisitsDespiteNewTail(t *testing.T) {
 }
 
 func TestSourceRetentionChildCascadeIsAtomic(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 1, 0)
 	_, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
@@ -141,6 +151,8 @@ func TestSourceRetentionChildCascadeIsAtomic(t *testing.T) {
 }
 
 func TestSourceRetentionRevisitsAfterPolicyChangeAndMissingHorizon(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := seedBoundedRetention(t, pool, 1001, 1000)
 	cutoff := base.Add(time.Hour)

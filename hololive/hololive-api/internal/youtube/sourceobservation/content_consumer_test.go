@@ -13,6 +13,8 @@ import (
 )
 
 func TestContentConsumerPositiveThenCompleteNegative(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -55,6 +57,8 @@ func TestContentConsumerPositiveThenCompleteNegative(t *testing.T) {
 }
 
 func TestContentConsumerCompleteNegativeThenPositive(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -112,6 +116,8 @@ func alignReceivedAtToSlot(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 }
 
 func TestContentConsumerReplayDoesNotDuplicateNotification(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
@@ -146,6 +152,8 @@ func TestContentConsumerReplayDoesNotDuplicateNotification(t *testing.T) {
 }
 
 func TestContentConsumerInvalidItemDoesNotBlockLaterItem(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)

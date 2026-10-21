@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/valkey-io/valkey-go"
+	"golang.org/x/crypto/bcrypt"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -81,6 +82,16 @@ func newTestDB(t *testing.T) *pgxpool.Pool {
 	return dbtest.NewPool(t)
 }
 
+// testConfig는 운영 기본값에서 bcrypt 비용만 최솟값으로 낮춘다. 비용 12 해시는 race 실행에서 회당 약 4초라
+// NewService의 더미 해시만으로 패키지 시간이 커진다. 운영 기본 비용은 service_bcrypt_cost_test.go가 검증한다.
+func testConfig() Config {
+	config := DefaultConfig()
+
+	config.BcryptCost = bcrypt.MinCost
+
+	return config
+}
+
 func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 	t.Helper()
 
@@ -97,7 +108,7 @@ func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 func TestRegister_DuplicateEmail(t *testing.T) {
 	db := newTestDB(t)
 
-	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -119,7 +130,7 @@ func TestLogin_SessionFlow(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	config := DefaultConfig()
+	config := testConfig()
 
 	config.SessionTTL = 30 * time.Minute
 
@@ -188,7 +199,7 @@ func TestLogin_RateLimited(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	config := DefaultConfig()
+	config := testConfig()
 
 	config.LoginRateLimitPerMinute = 2
 	config.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
@@ -229,7 +240,7 @@ func TestLogin_AccountLocked(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	config := DefaultConfig()
+	config := testConfig()
 
 	config.LoginRateLimitPerMinute = 1000
 	config.LoginFailLimit = 3
@@ -267,7 +278,7 @@ func TestLogin_UnknownEmailRecordsFailureAndLocksAccount(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	config := DefaultConfig()
+	config := testConfig()
 
 	config.LoginRateLimitPerMinute = 1000
 	config.LoginFailLimit = 1
@@ -298,7 +309,7 @@ func TestMe_ReturnsUnauthorizedWhenSessionUserIsMissing(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -322,7 +333,7 @@ func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 	db := newTestDB(t)
 	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

@@ -39,7 +39,9 @@ func TestRegister_UsesConfiguredBcryptCost(t *testing.T) {
 	db := newTestDB(t)
 	cfg := DefaultConfig()
 
-	cfg.BcryptCost = 12
+	// 운영 기본값과 다른 비용이어야 설정값 대신 기본값을 쓰는 회귀를 구분한다.
+	// 낮은 비용은 race 실행에서 회당 수 초가 걸리는 비용 12 해시를 피한다.
+	cfg.BcryptCost = bcrypt.MinCost + 1
 
 	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), cfg)
 	if err != nil {
@@ -57,8 +59,8 @@ func TestRegister_UsesConfiguredBcryptCost(t *testing.T) {
 		t.Fatalf("bcrypt.Cost: %v", err)
 	}
 
-	if cost != 12 {
-		t.Fatalf("register hash cost = %d, want 12", cost)
+	if cost != cfg.BcryptCost {
+		t.Fatalf("register hash cost = %d, want %d", cost, cfg.BcryptCost)
 	}
 
 	// 해시/검증 일관성: 동일 비밀번호가 검증을 통과해야 한다.

@@ -173,6 +173,8 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 // UPCOMING을 유지한 영상처럼, grace가 지나도록 더 새로운 positive가 없으면 공급자 지연으로 보고 upstream 종료
 // 시각으로 끝내며 시작·알림을 만들지 않는다.
 func TestVideoLifecycleUnobservedEndAcceptsLaggedPositiveAfterGrace(t *testing.T) {
+	t.Parallel()
+
 	pool, consumer, proof := startUnobservedVideoLifecycleGrace(t, "metadata_only", 2*time.Minute)
 	ended := proof.ScheduledFor.Add(-20 * time.Minute)
 	laggedPositive := ended.Add(time.Minute)
@@ -263,6 +265,8 @@ func TestVideoLifecycleLiveEndAcceptsPositiveAfterEndedAt(t *testing.T) {
 
 // grace 안에 받은 positive는 즉시 종료를 막고, 같은 pending을 기존 finalizer가 검증된 ended_at으로 정산한다.
 func TestVideoLifecycleLiveEndWaitsForGraceAfterLaggedPositive(t *testing.T) {
+	t.Parallel()
+
 	const grace = time.Hour
 
 	pool, repo, consumer, videoProof, endedAt := startLiveWithLaggedPositive(t, grace)
@@ -309,6 +313,8 @@ func TestVideoLifecycleLiveEndWaitsForGraceAfterLaggedPositive(t *testing.T) {
 
 // 확인 관측 시각과 같거나 늦은 positive는 확인 뒤에도 방송이 이어졌다는 근거이므로 종료 사실을 버린다.
 func TestVideoLifecycleLiveEndRetainsPositiveAtCheckTime(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, videoProof, endedAt := startLiveWithLaggedPositive(t, 0)
 	ctx := t.Context()
 

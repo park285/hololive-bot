@@ -79,6 +79,8 @@ func claimBudgetFixture(t *testing.T) (*pgxpool.Pool, *Repository, Claim) {
 }
 
 func TestEnsureClaimBudgetSkipsWriteWhileLeaseCoversBudget(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool, repo, claim := claimBudgetFixture(t)
 	budget := 2 * claimBudgetTransactionTimeout
@@ -100,6 +102,8 @@ func TestEnsureClaimBudgetSkipsWriteWhileLeaseCoversBudget(t *testing.T) {
 }
 
 func TestEnsureClaimBudgetExtendsLeaseJustBelowBudget(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool, repo, claim := claimBudgetFixture(t)
 	budget := 2 * claimBudgetTransactionTimeout

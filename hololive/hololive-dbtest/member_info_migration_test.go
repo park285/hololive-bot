@@ -3,6 +3,8 @@ package dbtest
 import "testing"
 
 func TestMemberInfoMigrationReplayPreservesIdentityAndSubscriptions(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 
@@ -46,6 +48,8 @@ func TestMemberInfoMigrationReplayPreservesIdentityAndSubscriptions(t *testing.T
 }
 
 func TestMemberInfoMigrationRejectsConflictingIdentity(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 
@@ -74,6 +78,8 @@ func TestMemberInfoMigrationRejectsConflictingIdentity(t *testing.T) {
 }
 
 func TestMemberInfoMigrationBackfillsOnlyMissingVerifiedDates(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 
@@ -115,6 +121,8 @@ func TestMemberInfoMigrationBackfillsOnlyMissingVerifiedDates(t *testing.T) {
 }
 
 func TestHoloANBootstrapKeepsGroupAsChannelRepresentative(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 
 	var slug string

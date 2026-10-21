@@ -11,6 +11,8 @@ import (
 const lifecycleOriginMigration = "245_youtube_live_lifecycle_origin.sql"
 
 func TestLifecycleOriginMigrationConservativeBatchesAndReplay(t *testing.T) {
+	t.Parallel()
+
 	pool := NewBlankPool(t)
 	ctx := t.Context()
 	dir, err := resolveMigrationsDir()

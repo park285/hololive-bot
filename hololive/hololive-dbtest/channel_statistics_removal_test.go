@@ -13,6 +13,8 @@ import (
 const channelStatisticsRemovalMigration = "234_remove_channel_statistics.sql"
 
 func TestChannelStatisticsRemovalPreservesOtherKindsAndResumes(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := channelStatisticsRemovalPool(t)
 	seedChannelStatisticsRemoval(t, pool)
 
@@ -59,6 +61,8 @@ func TestChannelStatisticsRemovalPreservesOtherKindsAndResumes(t *testing.T) {
 }
 
 func TestChannelStatisticsRemovalRejectsProcessingObservationBeforeDeleting(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := channelStatisticsRemovalPool(t)
 	seedChannelStatisticsRemoval(t, pool)
 
@@ -77,6 +81,8 @@ func TestChannelStatisticsRemovalRejectsProcessingObservationBeforeDeleting(t *t
 }
 
 func TestChannelStatisticsRemovalPreservesUnresolvedDeliveryForReview(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := channelStatisticsRemovalPool(t)
 	seedChannelStatisticsRemoval(t, pool)
 
@@ -95,6 +101,8 @@ func TestChannelStatisticsRemovalPreservesUnresolvedDeliveryForReview(t *testing
 }
 
 func TestChannelStatisticsRemovalPreservesDurableNotificationHistory(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := channelStatisticsRemovalPool(t)
 	seedChannelStatisticsRemoval(t, pool)
 
@@ -113,6 +121,8 @@ func TestChannelStatisticsRemovalPreservesDurableNotificationHistory(t *testing.
 }
 
 func TestChannelStatisticsRemovalBoundsContractReferenceLookup(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := channelStatisticsRemovalPool(t)
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO source_observation_applications

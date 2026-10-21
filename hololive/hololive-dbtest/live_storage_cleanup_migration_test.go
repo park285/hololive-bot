@@ -7,6 +7,8 @@ import (
 )
 
 func TestLiveStorageCleanupPreservesActiveAndCandidateEvidence(t *testing.T) {
+	t.Parallel()
+
 	const migration = "305_live_storage_cleanup_and_lz4.sql"
 
 	pool, dir := projectionMigrationPoolBefore(t, migration)

@@ -13,6 +13,8 @@ const collectionMembershipMigration = "259_youtube_collection_job_membership.sql
 // TestCollectionMembershipMigrationInitializesOnlyCurrent는 재적용 가능한 259가 CURRENT의 bounded target만
 // membership을 초기화하고 과거 generation은 backfill하지 않으며, 이전 lock 함수를 제거하는지 확인한다.
 func TestCollectionMembershipMigrationInitializesOnlyCurrent(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, collectionMembershipMigration)
 	ctx := t.Context()
 
@@ -61,6 +63,8 @@ func TestCollectionMembershipMigrationInitializesOnlyCurrent(t *testing.T) {
 // TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent는 refresh가 guard를 쥔 채 CURRENT를 교체하면
 // collector lock 함수가 기다렸다가 0행이 아니라 새 CURRENT generation을 돌려주는지 확인한다.
 func TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 
@@ -126,6 +130,8 @@ func TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent(t *testing.T) {
 
 // TestLockCurrentProjectionFailsWithoutGuard는 guard row가 없을 때 잠금 없이 CURRENT를 돌려주지 않는지 확인한다.
 func TestLockCurrentProjectionFailsWithoutGuard(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

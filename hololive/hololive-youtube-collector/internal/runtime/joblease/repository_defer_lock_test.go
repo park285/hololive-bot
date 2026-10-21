@@ -15,10 +15,14 @@ import (
 )
 
 func TestDeferMinimumStartsAfterRowLockWait(t *testing.T) {
+	t.Parallel()
+
 	assertLeaseTransitionAfterRowLock(t, false, "")
 }
 
 func TestDeferRejectsLeaseExpiredDuringLockWait(t *testing.T) {
+	t.Parallel()
+
 	assertLeaseTransitionAfterRowLock(t, true, "")
 }
 
@@ -29,6 +33,8 @@ func TestReleaseRejectsLeaseExpiredDuringLockWait(t *testing.T) {
 }
 
 func TestReleaseJitterStartsAfterRowLockWait(t *testing.T) {
+	t.Parallel()
+
 	assertLeaseTransitionAfterRowLock(t, false, ReleaseShutdown)
 }
 

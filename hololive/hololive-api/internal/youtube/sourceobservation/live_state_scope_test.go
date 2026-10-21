@@ -466,6 +466,8 @@ func seedEndedHistoryFixture(t *testing.T, pool *pgxpool.Pool, base time.Time, h
 // 이력 없이 읽은 ENDED의 due candidate를 정리할 때 큰 배열도 비운다.
 // 적재한 활성 세션의 이력은 계속 늘어난다.
 func TestLiveEndedSessionSaveClearsIgnoredHistory(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-3 * time.Hour)

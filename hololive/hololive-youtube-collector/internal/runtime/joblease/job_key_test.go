@@ -9,6 +9,8 @@ import (
 )
 
 func TestBuildJobKeyAndExpectedLeaseSubjectPreservePersistedGlobalIdentity(t *testing.T) {
+	t.Parallel()
+
 	jobs := collection.InitialJobContracts()
 
 	for _, test := range []struct {

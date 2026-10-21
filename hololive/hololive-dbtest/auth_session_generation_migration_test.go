@@ -11,6 +11,8 @@ const authSessionGenerationMigration = "231_auth_session_generation.sql"
 // 231은 기존 auth_users 행을 다시 쓰지 않고(fast default) session_generation을 0으로 채워야 하며,
 // 재적용해도 값·스키마를 바꾸지 않아야 한다.
 func TestAuthSessionGenerationMigrationIsMetadataOnlyAndIdempotent(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

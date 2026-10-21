@@ -136,6 +136,8 @@ func assertScheduleConcurrentSession(t *testing.T, pool *pgxpool.Pool, session *
 }
 
 func TestScheduleStateKeepsSessionLockedUntilPersistence(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	observation, decision := scheduleBatchFixture(1)

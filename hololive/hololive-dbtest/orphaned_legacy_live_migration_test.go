@@ -9,6 +9,8 @@ import (
 const orphanedLegacyLiveMigration = "324_youtube_live_orphaned_legacy_live_end.sql"
 
 func TestOrphanedLegacyLiveMigrationEndsOnlyUnobservableSessions(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 

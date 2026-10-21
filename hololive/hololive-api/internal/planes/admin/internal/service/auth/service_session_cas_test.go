@@ -16,7 +16,7 @@ func newRefreshTestService(t *testing.T) (*Service, string) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

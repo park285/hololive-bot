@@ -10,6 +10,8 @@ import (
 )
 
 func TestPayloadGCConcurrentPublishNeverLosesEvidence(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

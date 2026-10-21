@@ -183,6 +183,8 @@ type convergenceState struct {
 // 운영 형태(270 적용 뒤 drift 재현)에 수렴 migration을 적용하면 기존 행과 테이블 저장소를 다시 쓰지 않고,
 // 두 번째 적용은 아무것도 바꾸지 않으며, 남은 manifest까지 적용한 결과는 fresh 재생과 같은 스키마여야 한다.
 func TestProdShapedSchemaConvergesToFreshReplay(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	dir, err := resolveMigrationsDir()
 	require.NoError(t, err)
@@ -362,6 +364,8 @@ func TestShapeConvergenceStopsOnInvalidRowsAndResumes(t *testing.T) {
 
 // 고아 revision은 지우지 않는다. FK 검증이 실패해 적용이 멈추고, 고아를 정리한 뒤 다시 적용하면 검증된다.
 func TestTemplateRevisionForeignKeyMigrationStopsOnOrphanRevision(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()
@@ -390,6 +394,8 @@ func TestTemplateRevisionForeignKeyMigrationStopsOnOrphanRevision(t *testing.T) 
 
 // 운영 전용 dispatched_at에 값이 생겼으면 열을 지우지 않고 실패한다. 값을 정리한 뒤 다시 적용하면 fresh와 같아진다.
 func TestNotificationConvergenceKeepsPopulatedDispatchedAt(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()
@@ -425,6 +431,8 @@ func TestNotificationConvergenceKeepsPopulatedDispatchedAt(t *testing.T) {
 
 // 운영 전용 테이블에 행이 생겼으면 지우지 않고 실패하며 행을 보존한다.
 func TestRetiredTableDropMigrationKeepsNonEmptyTable(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()

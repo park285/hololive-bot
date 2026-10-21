@@ -55,6 +55,8 @@ func prepareCollectionBundleBroadDefaults(t *testing.T, pool *pgxpool.Pool, role
 }
 
 func TestCollectionRuntimeBundlesMigrationRuntimeACL(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, collectionRuntimeBundlesMigration)
 	roles := createObservationGrantRoles(t, pool)
 	prepareCollectionBundleBroadDefaults(t, pool, roles)

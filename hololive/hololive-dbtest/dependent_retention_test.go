@@ -8,6 +8,8 @@ import (
 )
 
 func TestApplicationAuditCascadesWithSourceObservation(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	id := insertRetentionObservation(t, pool, communityPageKind, base, "audit-cascade")
@@ -79,6 +81,8 @@ const checkpointRetentionExplainSQL = `
 // 순차 스캔하면 안 된다. 267이 updated_at 인덱스를 지운 뒤 PG 18.6은 두 테이블을 한 번씩 읽는 hash semi join을
 // 고르고(약 30 ms), 후보마다 seq scan을 반복하는 계획은 행 수의 제곱 비용이 된다.
 func TestCheckpointRetentionCandidatePlanReadsCheckpointsOnce(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 

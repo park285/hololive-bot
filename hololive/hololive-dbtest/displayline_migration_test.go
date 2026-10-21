@@ -7,6 +7,8 @@ import (
 )
 
 func TestDisplayLineMigrationUpgradePreservesCustomBodiesAndReplay(t *testing.T) {
+	t.Parallel()
+
 	pool, _ := channelStatisticsRemovalPool(t)
 
 	const file = "208_template_displayline.sql"

@@ -7,6 +7,8 @@ import (
 )
 
 func TestPayloadMigrationResumesBoundedBackfillAndReplaysCutover(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := channelStatisticsRemovalPool(t)
 	ctx := t.Context()
 

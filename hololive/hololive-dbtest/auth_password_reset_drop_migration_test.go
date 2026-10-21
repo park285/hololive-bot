@@ -22,6 +22,8 @@ CREATE INDEX idx_auth_reset_tokens_user_unused ON auth_password_reset_tokens USI
 
 // 토큰 행이 남아 있으면 지우지 않고 실패하며, 비면 테이블과 인덱스를 지우고 재적용은 아무것도 바꾸지 않는다.
 func TestAuthPasswordResetDropMigrationKeepsNonEmptyTableAndDropsEmptyOne(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := NewPool(t)
 	dir, err := resolveMigrationsDir()

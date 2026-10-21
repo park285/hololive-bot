@@ -151,6 +151,8 @@ func valueOr(value *string) string {
 }
 
 func TestTimeFinalizationReplacesObservedTimesWithArchiveTimes(t *testing.T) {
+	t.Parallel()
+
 	h := startFinalization(t, nil)
 	slot := h.proof.ScheduledFor
 	before := loadFinalizationRow(t, h.pool)
@@ -309,6 +311,8 @@ func sameTimePtr(got, want *time.Time) bool {
 }
 
 func TestTimeFinalizationRetriesUnknownOnScheduleUntilExhausted(t *testing.T) {
+	t.Parallel()
+
 	h := startFinalization(t, nil)
 	detected := h.proof.ScheduledFor.Add(-3 * time.Minute)
 	unknown := unknownVideoCheck(contract.LiveCheckReasonIdentityMissing)
@@ -343,6 +347,8 @@ func TestTimeFinalizationRetriesUnknownOnScheduleUntilExhausted(t *testing.T) {
 }
 
 func TestTimeFinalizationEarlyArchiveStillFinalizes(t *testing.T) {
+	t.Parallel()
+
 	h := startFinalization(t, nil)
 	h.observe(t, unknownVideoCheck(contract.LiveCheckReasonIdentityMissing))
 
@@ -355,6 +361,8 @@ func TestTimeFinalizationEarlyArchiveStillFinalizes(t *testing.T) {
 }
 
 func TestTimeFinalizationDefersRequestFailuresSeparately(t *testing.T) {
+	t.Parallel()
+
 	h := startFinalization(t, nil)
 	failed := unknownVideoCheck(contract.LiveCheckReasonRequestFailed)
 	at := h.proof.ScheduledFor.Add(time.Second)
@@ -386,6 +394,8 @@ func TestTimeFinalizationDefersRequestFailuresSeparately(t *testing.T) {
 }
 
 func TestTimeFinalizationEndsMembersOnlyWithoutTimes(t *testing.T) {
+	t.Parallel()
+
 	h := startFinalization(t, nil)
 	id := h.observe(t, contract.VideoLiveCheckV1{
 		VideoID: testVideoID, ChannelID: testChannelID, IdentityConfirmed: true,
@@ -402,6 +412,8 @@ func TestTimeFinalizationEndsMembersOnlyWithoutTimes(t *testing.T) {
 }
 
 func TestTimeFinalizationReplayDoesNotCountAttemptTwice(t *testing.T) {
+	t.Parallel()
+
 	h := startFinalization(t, nil)
 	id := h.observe(t, unknownVideoCheck(contract.LiveCheckReasonIdentityMissing))
 

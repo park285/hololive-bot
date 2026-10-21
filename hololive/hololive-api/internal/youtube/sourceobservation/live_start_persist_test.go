@@ -13,6 +13,8 @@ import (
 )
 
 func TestLiveConsumerHolodexLiveWithoutActualStartStaysUpcoming(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startHolodexLivePersist(t)
 	waitingRoom := liveSession(testVideoID, testStatusLive)
 

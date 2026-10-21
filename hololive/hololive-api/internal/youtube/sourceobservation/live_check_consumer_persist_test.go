@@ -15,6 +15,8 @@ import (
 )
 
 func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -32,6 +34,8 @@ func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {
 
 // 채널 /live 확인은 최신값만 남기고 live reducer·pending·absence slot을 건드리지 않는다.
 func TestChannelLiveCheckStoresLatestWithoutLiveLifecycle(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -62,6 +66,8 @@ func TestChannelLiveCheckStoresLatestWithoutLiveLifecycle(t *testing.T) {
 }
 
 func TestChannelLiveCheckOlderObservationKeepsNewerUnknown(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -91,6 +97,8 @@ func TestChannelLiveCheckOlderObservationKeepsNewerUnknown(t *testing.T) {
 // 같은 effective_at에서는 observation_id가 큰 관측이 이기고, retention으로 ID가 지워진 최신값은
 // 같은 시각의 관측이 순서를 증명할 수 없으므로 유지된다.
 func TestChannelLiveCheckSameEffectiveTimeOrdering(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -168,6 +176,8 @@ func TestVideoLiveCheckVerifiedEndUsesUpstreamEndedAt(t *testing.T) {
 }
 
 func TestVideoLiveCheckCurrentLiveRefreshesPositive(t *testing.T) {
+	t.Parallel()
+
 	pool, consumer, _, videoProof := startVideoLiveCheck(t)
 	ctx := t.Context()
 
@@ -273,6 +283,8 @@ func TestVideoLiveCheckWithoutTrustedLifecycleKeepsLive(t *testing.T) {
 
 // 재확인 실패는 이전 공개 불가 판정을 계속 쓰지 않도록 최신 UNKNOWN으로 대체한다.
 func TestVideoLiveCheckRequestFailureReplacesUnavailable(t *testing.T) {
+	t.Parallel()
+
 	pool, consumer, _, videoProof := startVideoLiveCheck(t)
 	ctx := t.Context()
 
@@ -305,6 +317,8 @@ func TestVideoLiveCheckRequestFailureReplacesUnavailable(t *testing.T) {
 
 // 영상 확인은 grace 안의 기존 pending을 지우지 않고, 검증된 종료만 같은 pending·finalizer 규칙을 따른다.
 func TestVideoLiveCheckPreservesPendingPolicy(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
@@ -355,6 +369,8 @@ func TestVideoLiveCheckPreservesPendingPolicy(t *testing.T) {
 }
 
 func TestVideoLiveCheckKeepsEndedSession(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -375,6 +391,8 @@ func TestVideoLiveCheckKeepsEndedSession(t *testing.T) {
 }
 
 func TestVideoLiveCheckWithoutSessionCreatesNothing(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 	videoProof := seedAdditionalLease(t, pool, &proof, contract.KindVideoLiveCheck, testVideoID, "youtubejs_video_live")
@@ -699,6 +717,8 @@ func timeValue(value *time.Time) time.Time {
 }
 
 func TestVideoLiveCheckDoesNotSettleNewerEndWithoutTimestamp(t *testing.T) {
+	t.Parallel()
+
 	pool, consumer, liveProof, videoProof := startVideoLiveCheck(t)
 	ctx := t.Context()
 	newer := videoProof.ScheduledFor.Add(time.Minute)

@@ -13,6 +13,8 @@ const (
 )
 
 func TestApplicationCascadeMigrationResumesCommittedOrphanBatches(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, applicationCascadeMigration)
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `INSERT INTO source_observation_applications
@@ -48,6 +50,8 @@ func TestApplicationCascadeMigrationResumesCommittedOrphanBatches(t *testing.T) 
 }
 
 func TestBinaryHashesMigrationPreservesRoundTripAndIdentity(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, applicationCascadeMigration)
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `WITH payload AS (

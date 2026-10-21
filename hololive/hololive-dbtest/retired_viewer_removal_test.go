@@ -10,6 +10,8 @@ import (
 const retiredViewerRemovalMigration = "306_remove_retired_viewer_storage.sql"
 
 func TestRetiredViewerRemovalPreservesActiveCollectionAndReplays(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, retiredViewerRemovalMigration)
 	seedRetiredViewerProducts(t, pool)
 	seedViewerRemovalObservation(t, pool, "live_snapshot")
@@ -133,6 +135,8 @@ func TestRetiredViewerRemovalRejectsUnapprovedHistoryAtomically(t *testing.T) {
 }
 
 func TestRetiredViewerRemovalKeepsPendingObservation(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, retiredViewerRemovalMigration)
 	seedRetiredViewerProducts(t, pool)
 	seedViewerRemovalObservation(t, pool, "viewer_sample")

@@ -31,6 +31,8 @@ func (r *interruptedCandidateRows) Next() bool {
 func (r *interruptedCandidateRows) Err() error { return r.cause }
 
 func TestPartialCandidateStreamDoesNotReturnPage(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 
 	for _, maxMS := range []int64{60000, 120000} {

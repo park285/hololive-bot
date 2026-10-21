@@ -14,6 +14,8 @@ import (
 )
 
 func TestScheduleConsumerRetainsNewestItemAcrossReverseObservationOrder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
@@ -70,6 +72,8 @@ func TestScheduleConsumerRetainsNewestItemAcrossReverseObservationOrder(t *testi
 }
 
 func TestScheduleItemUnknownAndEqualObservationClocks(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	observed := time.Date(2026, time.September, 29, 12, 0, 0, 0, time.UTC)

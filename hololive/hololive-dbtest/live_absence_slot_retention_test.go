@@ -6,6 +6,8 @@ import (
 )
 
 func TestLiveAbsenceSlotRetentionWaitsForActiveOldSnapshot(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 	now := time.Now().UTC()

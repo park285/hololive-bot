@@ -12,6 +12,8 @@ import (
 )
 
 func TestMixedBundleFailureIsLocalAndPreservesHealthyRunner(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{
 		{subjectUCA, contract.KindChannelProfile, 2 * time.Minute, true},
@@ -41,6 +43,8 @@ func TestMixedBundleFailureIsLocalAndPreservesHealthyRunner(t *testing.T) {
 }
 
 func TestCandidateRequestBudgetErrorsRemainGlobal(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)
@@ -78,6 +82,8 @@ func TestCandidateReadFailureDoesNotReturnPartialPage(t *testing.T) {
 }
 
 func TestGlobalRunnerMixedBundleFailureIsLocal(t *testing.T) {
+	t.Parallel()
+
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{
 		{subjectChannelA, contract.KindLiveSnapshot, time.Minute, true},

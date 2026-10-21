@@ -8,6 +8,8 @@ import (
 )
 
 func TestLiveFactClockMigrationDoesNotInventLegacyEvidence(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	ctx := t.Context()
 	legacySeen := time.Now().UTC().Truncate(time.Second).Add(time.Hour)

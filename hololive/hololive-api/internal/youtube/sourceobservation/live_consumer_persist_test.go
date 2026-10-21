@@ -14,6 +14,8 @@ import (
 )
 
 func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -33,6 +35,8 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 }
 
 func TestLiveConsumerPersistsMetadataAndPreservesSparseFields(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -85,6 +89,8 @@ func TestLiveConsumerPersistsMetadataAndPreservesSparseFields(t *testing.T) {
 }
 
 func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	lastSeen := time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC)
@@ -153,6 +159,8 @@ func TestLiveConsumerPreservesPremiereClassification(t *testing.T) {
 }
 
 func TestLiveConsumerStaleEpochCannotCreateEndEvidence(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -174,6 +182,8 @@ func TestLiveConsumerStaleEpochCannotCreateEndEvidence(t *testing.T) {
 }
 
 func TestLiveConsumerFutureSkewedSourceEventUsesScheduledSlot(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 	envelope := liveSnapshotEnvelope(t, &proof, liveSession(testVideoID, testStatusLive))
@@ -215,6 +225,8 @@ func TestLiveConsumerFutureSkewedSourceEventUsesScheduledSlot(t *testing.T) {
 }
 
 func TestLiveConsumerTwoScopedAbsenceSlotsAfterGraceEnd(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -228,6 +240,8 @@ func TestLiveConsumerTwoScopedAbsenceSlotsAfterGraceEnd(t *testing.T) {
 }
 
 func TestLiveConsumerOneScopedAbsenceDoesNotEnd(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -244,6 +258,8 @@ func TestLiveConsumerOneScopedAbsenceDoesNotEnd(t *testing.T) {
 }
 
 func TestLiveConsumerNeverLiveUpcomingScopedAbsenceDoesNotEnd(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -257,6 +273,8 @@ func TestLiveConsumerNeverLiveUpcomingScopedAbsenceDoesNotEnd(t *testing.T) {
 }
 
 func TestLiveConsumerAlreadyEndedLateLiveStaysEnded(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
@@ -276,6 +294,8 @@ func TestLiveConsumerAlreadyEndedLateLiveStaysEnded(t *testing.T) {
 }
 
 func TestLiveConsumerDoesNotStubOverwriteExistingLiveHead(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
@@ -313,6 +333,8 @@ func TestLiveConsumerDoesNotStubOverwriteExistingLiveHead(t *testing.T) {
 }
 
 func TestLiveEndFinalizerMissRequeuesOrClearsDueRow(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
@@ -364,6 +386,8 @@ func TestLiveEndFinalizerMissRequeuesOrClearsDueRow(t *testing.T) {
 }
 
 func TestFinalizerPreservesPremiereWhenEndingAfterGraceWithoutNewObservation(t *testing.T) {
+	t.Parallel()
+
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 

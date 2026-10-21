@@ -13,6 +13,8 @@ import (
 const communityPageKind = "community_page"
 
 func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 
@@ -103,6 +105,8 @@ func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {
 }
 
 func TestSourceObservationRetentionBatchSkipsLockedRows(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	lockedID := insertRetentionObservation(t, pool, communityPageKind, base, "locked")
@@ -316,6 +320,8 @@ func repeatedTimes(value time.Time, count int) []time.Time {
 }
 
 func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	ids := make([]int64, 0, 5)

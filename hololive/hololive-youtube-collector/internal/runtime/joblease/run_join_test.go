@@ -14,6 +14,8 @@ import (
 )
 
 func TestWaitRunResultPrefersCompletedRunnerAfterDeadline(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
 
@@ -203,6 +205,8 @@ func TestParentCancelPreservesClassifiedCallbackJoinedWithCancel(t *testing.T) {
 }
 
 func TestRenewBufferedCallbackHonorsParentCancellation(t *testing.T) {
+	t.Parallel()
+
 	repository := &Repository{config: testConfig()}
 	lease := &fakeLease{}
 	ctx, cancel := context.WithCancel(t.Context())

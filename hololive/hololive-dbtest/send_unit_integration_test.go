@@ -12,6 +12,8 @@ import (
 
 // delivery는 상태와 무관하게 send unit 없이 기록할 수 없습니다(migration 301 NOT NULL).
 func TestAlarmDispatchDeliveriesRequireSendUnit(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 
 	var eventID int64
@@ -37,6 +39,8 @@ func TestAlarmDispatchDeliveriesRequireSendUnit(t *testing.T) {
 
 // migration 226이 비교 전용 shadowed 상태를 CHECK에서 제거했습니다.
 func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {
+	t.Parallel()
+
 	pool := NewPool(t)
 
 	var eventID int64

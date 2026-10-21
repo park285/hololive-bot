@@ -14,6 +14,8 @@ import (
 )
 
 func TestChannelProfileAbsentFieldDoesNotClear(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startChannelPersist(t, contract.KindChannelProfile)
 	ctx := t.Context()
 
@@ -37,6 +39,8 @@ func TestChannelProfileAbsentFieldDoesNotClear(t *testing.T) {
 }
 
 func TestChannelProfileExplicitEmptyRequiresStability(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startChannelPersist(t, contract.KindChannelProfile)
 	ctx := t.Context()
 
@@ -57,6 +61,8 @@ func TestChannelProfileExplicitEmptyRequiresStability(t *testing.T) {
 }
 
 func TestChannelProfileJoinedDateConflictIsRecorded(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startChannelPersist(t, contract.KindChannelProfile)
 	ctx := t.Context()
 
@@ -79,6 +85,8 @@ func TestChannelProfileJoinedDateConflictIsRecorded(t *testing.T) {
 }
 
 func TestChannelPhotoSameIdentityNewURLCreatesNoChangeEvent(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startChannelPersistPolicy(t, contract.KindChannelPhoto, ChannelPolicy{
 		PhotoChangeMinObservations: 2, PhotoChangeStability: time.Nanosecond,
 	})
@@ -102,6 +110,8 @@ func TestChannelPhotoSameIdentityNewURLCreatesNoChangeEvent(t *testing.T) {
 }
 
 func TestChannelPhotoWithoutIdentityCannotChangeCanonical(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startChannelPersistPolicy(t, contract.KindChannelPhoto, ChannelPolicy{
 		PhotoChangeMinObservations: 2, PhotoChangeStability: time.Nanosecond,
 	})
@@ -112,6 +122,8 @@ func TestChannelPhotoWithoutIdentityCannotChangeCanonical(t *testing.T) {
 }
 
 func TestChannelPhotoDifferentIdentityRequiresStability(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startChannelPersist(t, contract.KindChannelPhoto)
 	ctx := t.Context()
 
@@ -122,6 +134,8 @@ func TestChannelPhotoDifferentIdentityRequiresStability(t *testing.T) {
 }
 
 func TestChannelPhotoCollectorDoesNotSynthesizeFingerprint(t *testing.T) {
+	t.Parallel()
+
 	pool, _, consumer, proof := startChannelPersist(t, contract.KindChannelPhoto)
 	ctx := t.Context()
 	publishConsumePhoto(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, photoVariant("https://img.test/a.jpg?keep=1", 88, ""))

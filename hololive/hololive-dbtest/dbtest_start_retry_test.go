@@ -56,6 +56,8 @@ func TestProvisionPostgresContainerRetriesMarkedForRemoval(t *testing.T) {
 }
 
 func TestProvisionPostgresContainerDoesNotRetryPermanentStartError(t *testing.T) {
+	t.Parallel()
+
 	wantErr := errors.New("pull access denied for postgres:test")
 	starts := 0
 	_, err := provisionPostgresContainer(
@@ -78,6 +80,8 @@ func TestProvisionPostgresContainerDoesNotRetryPermanentStartError(t *testing.T)
 }
 
 func TestProvisionPostgresContainerDoesNotStartAfterCancellation(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
@@ -123,6 +127,8 @@ func TestProvisionPostgresContainerExhaustsTransientStartRetries(t *testing.T) {
 }
 
 func TestProvisionPostgresContainerDoesNotRetryHoldError(t *testing.T) {
+	t.Parallel()
+
 	wantErr := errors.New("docker daemon unavailable")
 	starts := 0
 	_, err := provisionPostgresContainer(
@@ -145,6 +151,8 @@ func TestProvisionPostgresContainerDoesNotRetryHoldError(t *testing.T) {
 }
 
 func TestProvisionPostgresContainerStartsAfterTransientHoldError(t *testing.T) {
+	t.Parallel()
+
 	holds := 0
 	starts := 0
 	container, err := provisionPostgresContainer(
@@ -178,6 +186,8 @@ func TestShouldFailClosedOnHold(t *testing.T) {
 }
 
 func TestProvisionPostgresContainerRejectsNilStartedContainer(t *testing.T) {
+	t.Parallel()
+
 	_, err := provisionPostgresContainer(
 		t.Context(),
 		"postgres:test",
@@ -198,6 +208,8 @@ func TestProvisionPostgresContainerRejectsNilStartedContainer(t *testing.T) {
 }
 
 func TestPreparePostgresRetryRejectsNilContainer(t *testing.T) {
+	t.Parallel()
+
 	err := preparePostgresRetry(t.Context(), nil, errors.New("reaper gone"))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unverified postgres container is missing")

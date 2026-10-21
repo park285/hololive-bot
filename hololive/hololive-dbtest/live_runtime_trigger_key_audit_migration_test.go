@@ -9,6 +9,8 @@ import (
 const liveRuntimeTriggerKeyAuditMigration = "325_youtube_live_runtime_trigger_key_audit.sql"
 
 func TestLiveRuntimeTriggerKeyAuditMigrationPreservesDataAndSecurity(t *testing.T) {
+	t.Parallel()
+
 	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeTriggerKeyAuditMigration)
 	seedLiveReviewComparison(t, pool)
 	seedRecordedLiveReviews(t, pool)

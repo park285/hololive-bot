@@ -40,7 +40,8 @@ func TestLogin_UnknownEmailRunsBcryptComparison(t *testing.T) {
 
 	cfg := DefaultConfig()
 
-	cfg.BcryptCost = 12
+	// 운영 기본값과 다른 비용이어야 더미 해시가 설정 비용을 따르는지 구분된다.
+	cfg.BcryptCost = bcrypt.MinCost + 1
 
 	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), cfg)
 	if err != nil {

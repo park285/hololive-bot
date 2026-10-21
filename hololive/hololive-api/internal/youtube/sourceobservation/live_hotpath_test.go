@@ -17,6 +17,8 @@ import (
 )
 
 func TestLiveDecisionStatementsPreserveSessionHeadOrder(t *testing.T) {
+	t.Parallel()
+
 	statements := liveDecisionStatements(nil, []live.SessionState{
 		{VideoID: "a", ChannelID: "channel", Status: domain.LiveStatusLive, LifecycleOrigin: live.OriginObserved},
 		{VideoID: "b", Status: domain.LiveStatusLive, HeadPresent: true},
@@ -39,6 +41,8 @@ func TestLiveDecisionStatementsPreserveSessionHeadOrder(t *testing.T) {
 // 세션 저장은 잠금 안에서 읽은 행과 reducer 결과를 비교해 바뀐 행만 reducer 값 그대로 쓴다.
 // 최초공개 분류 저장은 분류만 보완하고 수명·메타데이터를 바꾸지 않는다.
 func TestLiveSessionWriteFollowsLockedRow(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _ := startLivePersist(t)
 	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -125,6 +129,8 @@ func insertLiveSessionRow(ctx context.Context, tx dbx.Tx, session *live.SessionS
 
 // 같은 근거를 다시 저장해 검토 snapshot을 무효화하지 않으며 새 사실 시각은 반드시 저장한다.
 func TestLiveHeadNoopPreservesReviewSnapshotButNewEvidenceInvalidatesIt(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _ := startLivePersist(t)
 	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -291,6 +297,8 @@ func TestLiveSessionWriteReportsRowChangedAfterRead(t *testing.T) {
 }
 
 func TestLivePendingUpsertSkipsIdenticalEvidence(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _ := startLivePersist(t)
 	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -313,6 +321,8 @@ func TestLivePendingUpsertSkipsIdenticalEvidence(t *testing.T) {
 }
 
 func TestLiveStatementBatchFailureRollsBack(t *testing.T) {
+	t.Parallel()
+
 	pool, _, _, _ := startLivePersist(t)
 	ctx := t.Context()
 
@@ -370,6 +380,8 @@ func (tx *hotpathRecordingTx) Exec(_ context.Context, _ string, args ...any) (pg
 }
 
 func TestLiveSessionChunksKeepOrderAndStopAfterFailure(t *testing.T) {
+	t.Parallel()
+
 	sessions := make([]live.SessionState, 130)
 	for i := range sessions {
 		sessions[i] = live.SessionState{VideoID: fmt.Sprintf("video-%03d", i), ChannelID: "channel", Status: domain.LiveStatusLive, LifecycleOrigin: live.OriginObserved}
@@ -405,6 +417,8 @@ func TestLiveSessionChunksKeepOrderAndStopAfterFailure(t *testing.T) {
 }
 
 func TestPendingLiveEndChunksKeepOrderAndStopAfterFailure(t *testing.T) {
+	t.Parallel()
+
 	pending := make([]live.PendingEnd, 260)
 	for i := range pending {
 		pending[i].VideoID = fmt.Sprintf("video-%03d", i)
