@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **central collector 배포 무교체 종료 수정:** `po-central-cutover.sh deploy`가 ssh `bash -s`로 보낸 원격 본문을 Docker Compose v5.6.0의 `compose run`이 stdin으로 읽어, 이전 profile 확인 직후 collector `c`·issuer 교체 없이 exit 0으로 끝나던 문제를 고칩니다. 원격 실행 구간을 끝까지 읽은 뒤 실행하며, 중단된 실행은 runtime·태그·설치 파일을 바꾸지 않았습니다.
 - **Node.js 26.12.1 보안 갱신:** collector·PO 발급자·X Spaces 이미지의 Node 버전과 공식 이미지 digest를 보안 릴리스로 고정하고, npm 엔진 및 native AP 배포의 최소 버전을 `26.12.1`로 올립니다. 재배포 시 취약한 `26.12.0`을 다시 도입하지 않도록 하며 앱 의존성·프로필·DB 스키마는 변경하지 않습니다.
 - **CI·shared 책임 역전·alarm-worker 구조 정리(api·alarm-worker·collector·shared):** CI는 standalone staticcheck와 중복 게이트를 지우고 matrix 대기를 없애며, egress 단일 인스턴스 검사는 병합 compose 렌더로 판정합니다. api 전용 contracts·settings 조립·bot 명령 타입·실행 락·`ServicesConfig`를 api로, 알림 저장소·key를 worker로 옮기고 shared에는 alarm HTTP wire 계약면(`alarmhttp`)만 남기며 별칭·re-export는 두지 않습니다. runtime module 테스트 의존을 collector ← api ← worker 한 방향으로 정리해 Dockerfile·AP 전송 manifest가 형제 module을 복사하지 않습니다. alarm-worker는 notified 기록·stream 단위 조회를 batch당 한 번으로 줄이고 upcoming 후보 종료와 backlog 관측 쿼리를 묶으며, mock 호환 폴백과 HSET 재시도를 지워 cache warm·구독자 조회 실패를 그대로 드러냅니다. `hololive_alarm_subscriber_*` metric은 worker에서만 등록하고, worker는 `OFFICIAL_SCHEDULE_*` env를 읽지 않습니다. 발송 원장·env 키·wire JSON·Valkey key·metric 이름은 그대로입니다.
 - **로컬 게이트 테스트 시간 단축:** Go 테스트가 패키지마다 testcontainers PostgreSQL을 띄우던 방식을 일회용 PostgreSQL 하나를 공유하는 방식으로 바꾸고 race 병렬도 제한(`-p 4`)을 없앱니다. `hololive-dbtest`가 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 검사 범위는 같습니다. 전체 범위 race 단계가 328초에서 168초로 줄고, 실행 중 남던 컨테이너 수십 개(약 10GiB)도 생기지 않습니다. CI의 `public-pr-go-gate.sh`도 같은 공유 DB를 쓰며 러너 메모리 제한(`-p 2`)은 그대로 둡니다.

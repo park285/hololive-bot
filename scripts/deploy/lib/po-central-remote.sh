@@ -208,6 +208,9 @@ finally:
 }
 
 issuer_container_service=youtube-po-c
+# 이 본문은 ssh bash -s의 stdin으로 도착한다. 실행 구간을 한 묶음으로 끝까지 읽은 뒤 실행해야
+# stdin을 붙이는 compose run이 남은 본문을 읽어 교체 없이 exit 0으로 끝나지 않는다.
+{
 if [[ "$mode" == rollback ]]; then
   restore
   exit 0
@@ -368,3 +371,4 @@ for container in "$issuer_container" "$collector_container"; do
 done
 trap - ERR INT TERM HUP
 printf 'central issuer-first cutover verified revision=%s backup=%s started_at=%s\n' "$revision" "$backup" "$started_at"
+}

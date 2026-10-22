@@ -22,9 +22,10 @@ def function(source, name):
 
 
 def run(body, state, case):
+    # 운영 배포처럼 원격 본문을 bash -s의 stdin으로 보내 자식 명령의 stdin 소비까지 재현한다.
     result = subprocess.run(
-        ['bash', '-c', body, 'cutover-fixture', str(state), case, str(root)],
-        capture_output=True, text=True, timeout=20,
+        ['bash', '-s', '--', str(state), case, str(root)],
+        input=body, capture_output=True, text=True, timeout=20,
     )
     return result
 
@@ -237,6 +238,8 @@ docker() {
 compose() {
   local kind
   printf 'compose %s\n' "$*" >>"$fixture_root/calls"
+  # Compose run은 기본으로 stdin을 붙이므로 실제 배포처럼 남은 입력을 읽는다.
+  [[ "$1" != run ]] || cat >/dev/null
   [[ "$1" == up ]] || return 0
   kind=collector
   [[ "${*: -1}" != "$issuer_container_service" ]] || kind=issuer
