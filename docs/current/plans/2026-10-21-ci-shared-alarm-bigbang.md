@@ -119,3 +119,28 @@ env 키·허용값, wire JSON, Valkey key 형식, metric 이름·label은 바꾸
 - 독립 검토에서 찾은 backlog snapshot Scan 누락(격리·경과 gauge 미갱신)과 같은 stream의 예정 시각 교차 시 notified hash
   차이를 고치고, 각각 DB 테스트와 재현 테스트로 확인했다.
 - 실행하지 않음: `scripts/ci/pre-push-gate.sh`(게시 전 필수, 이번 범위는 commit·push 없음), 운영 배포 검증.
+
+## 운영 반영 결과 (2026-10-22)
+
+- revision: central api·alarm-worker는 `40fcb7841c2bef146ac1f30f01233c94492bf21e`, collector a·b·c·d와 PO issuer는
+  `84e54081071f4c826490dfede5c1479d1195d8c4`다. 둘의 차이는 central collector 배포 스크립트 수정과 그 테스트·변경 이력뿐이고
+  runtime 코드는 같다.
+- Node 26.12.1: 다른 작업자의 미커밋 source 변경을 내용 그대로 `f220d6da1`에 포함했다. 하한이 올라 깨진
+  `ap-completion-check_test.sh`의 fake node만 v26.12.1로 맞췄다.
+- 검증(`84e540810`, 마지막 편집 뒤): `scripts/ci/pre-push-gate.sh` 통과, 배포 정적 계약 8종 통과. `build-all.sh`는 `40fcb7841`에서 통과.
+- central: api `93d28d7630c9`·alarm-worker `54d717dfead1`(arm64)을 no-build로 prepare한 뒤 `db-migrate`(applied=0 skipped=200)를
+  실행하고 worker, api 순으로 교체했다. readiness 8종 rc=0, executor 3개 enabled, egress 컨테이너 1개다.
+  rollback 지점은 `artifacts/worker-profile/releases/app-40fcb7841-20261022T005852Z`와 `rollback-20261022T005852Z` 태그다.
+- central collector-c `a17d8da58e1a`·po-c `8d15b0b5b95b`는 `po-central-cutover.sh deploy`로 교체했고 backup은
+  `backups/po-c-20261022T011353Z`다. po-c RestartCount 1은 이전 collector 종료 때의 generation 반납(exit 0,
+  `reason=request_aborted`)으로 runbook 수용 기준을 충족한다.
+- 첫 collector 시도는 원격 본문이 `compose run`에 stdin으로 읽혀 교체 없이 exit 0으로 끝났다(runtime·태그·설치 파일 무변경).
+  `84e540810`으로 고친 뒤 다시 배포했다.
+- socket-proxy `1.13.1-go1.27.3` arm64 이미지는 central에 적재만 했다. docker-proxy와 postgres는 재생성하지 않았다.
+- AP: b(iris-seoul) backup `backups/seoul-collector-20261022T011608Z`, a(osaka1) current `20261022T011756Z-84e54081071f-osaka`,
+  d(osaka2) current `20261022T012254Z-84e54081071f-osaka2`(previous는 둘 다 `20261021-node-26.12.1-108ecb2e60c5`). 세 AP 모두
+  completion check를 통과했다.
+- 수용 뒤 retention: osaka1·osaka2의 10-18 release·staging 각 4개, central 과거 이미지 태그 13개와 backup·staging·release
+  디렉터리 5개, iris-seoul 과거 태그 5개와 backup 1개, kapu 과거 태그 5개를 지웠다. 다른 작업자의 `node-security`·`node-26.12.1`
+  태그와 backup은 남겼다.
+- 후속: `ADMIN_ALLOWED_IPS` 빈 값의 fail-open은 결정대로 현행 유지했고 별도 과제로 남긴다.
