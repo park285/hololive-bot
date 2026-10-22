@@ -160,3 +160,9 @@ env 키·허용값, wire JSON, Valkey key 형식, metric 이름·label은 바꾸
   정리 후 두 단계 모두 `compose-rollback-service.sh --check` rc=0이다.
 - retention: osaka1·osaka2의 v11.0.0 원본 release·staging(`20261019T015436Z-108ecb2e60c5-final`), central·iris-seoul의
   Node 보안 패치 이전 `po-sandbox:rollback-node-security-20261021` 태그, iris-seoul `backups/node-security-20261021`을 지웠다.
+- 관찰 생략 뒤 정리(2026-10-22): 사용자 지시로 24시간 관찰을 생략하고 리팩토링 이전 세대를 지웠다. central의 api·alarm-worker·collector·
+  PO rollback 이미지와 pair 태그, `releases/app-40fcb7841-20261022T005852Z`, `backups/po-c-20261022T011353Z`·staging, iris-seoul의
+  rollback 이미지와 `backups/seoul-collector-20261022T011608Z`, kapu의 해당 이미지가 대상이다. 복구는 `8655ce964`·`134c2d57f`·
+  `108ecb2e6` 재빌드로 한다. native AP의 `20261021-node-26.12.1-108ecb2e60c5`는 previous의 rollback 계약 대상이라 남는다.
+  남은 rollback(central `app-f3d240006` 두 서비스, po-c `po-c-20261022T024300Z`, AP b `seoul-collector-20261022T024445Z`)은
+  모두 검사를 통과했다.
