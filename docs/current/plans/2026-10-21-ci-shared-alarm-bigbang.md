@@ -144,3 +144,19 @@ env 키·허용값, wire JSON, Valkey key 형식, metric 이름·label은 바꾸
   디렉터리 5개, iris-seoul 과거 태그 5개와 backup 1개, kapu 과거 태그 5개를 지웠다. 다른 작업자의 `node-security`·`node-26.12.1`
   태그와 backup은 남겼다.
 - 후속: `ADMIN_ALLOWED_IPS` 빈 값의 fail-open은 결정대로 현행 유지했고 별도 과제로 남긴다.
+
+## v12.0.0 릴리스 반영 (2026-10-22)
+
+- 릴리스: v11.0.0 이후 미출시 항목을 `v12.0.0`(`f3d240006b25ca392c1c968e44e605551e288c3f`, #687)으로 묶었다. migration 331·332의
+  비가역 적용, `AlarmQueueEnvelope.youtube_outbox` 삭제, 프로필 검증 강화, 텍스트 202 requestId 필수화가 비호환 변경이라 MAJOR다.
+  annotated tag와 GitHub Release(이전 게시 릴리스 v11.0.0 기준 자동 생성 본문)를 게시했다.
+- 재배포: 코드는 위 배포와 같고 버전 표시만 12.0.0으로 바뀐다. 같은 절차로 central api `bf96a723e5bc`·alarm-worker `d6e61d1dc7d8`
+  (`db-migrate` applied=0), collector-c·po-c, AP b·a·d를 교체했다. 모든 컨테이너·서비스가 version 12.0.0, revision `f3d240006`이고
+  readiness·completion check를 통과했으며 새 로그에 오류 표지가 없다. po-c broker는 `IDLE`, helper는 아직 generation이 없다.
+  po-b RestartCount 1은 exit 0(`reason=session_closed`)이다.
+- rollback 지점: central `releases/app-f3d240006-20261022T024132Z`(→ 리팩토링 빌드)와 `app-40fcb7841-20261022T005852Z`
+  (→ 리팩토링 이전), po-c `backups/po-c-20261022T024300Z`, AP b `backups/seoul-collector-20261022T024445Z`, AP a·d previous
+  `…-84e54081071f-…`. 이번 재배포는 버전 표시만 바꾸므로 24시간 관찰이 끝날 때까지 리팩토링 이전 세대도 명시 보존한다.
+  정리 후 두 단계 모두 `compose-rollback-service.sh --check` rc=0이다.
+- retention: osaka1·osaka2의 v11.0.0 원본 release·staging(`20261019T015436Z-108ecb2e60c5-final`), central·iris-seoul의
+  Node 보안 패치 이전 `po-sandbox:rollback-node-security-20261021` 태그, iris-seoul `backups/node-security-20261021`을 지웠다.
