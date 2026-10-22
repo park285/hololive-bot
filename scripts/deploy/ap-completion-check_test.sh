@@ -45,7 +45,7 @@ cat > "$fakebin/node" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" == --version ]] || exit 1
-echo v26.12.0
+echo v26.12.1
 EOF
 chmod +x "$fakebin/node"
 cat > "$fixture_root/scripts/deploy/lib/require-quic-udp-buffer.sh" <<'EOF'

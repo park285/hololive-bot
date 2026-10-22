@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **Node.js 26.12.1 보안 갱신:** collector·PO 발급자·X Spaces 이미지의 Node 버전과 공식 이미지 digest를 보안 릴리스로 고정하고, npm 엔진 및 native AP 배포의 최소 버전을 `26.12.1`로 올립니다. 재배포 시 취약한 `26.12.0`을 다시 도입하지 않도록 하며 앱 의존성·프로필·DB 스키마는 변경하지 않습니다.
 - **로컬 게이트 테스트 시간 단축:** Go 테스트가 패키지마다 testcontainers PostgreSQL을 띄우던 방식을 일회용 PostgreSQL 하나를 공유하는 방식으로 바꾸고 race 병렬도 제한(`-p 4`)을 없앱니다. `hololive-dbtest`가 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 검사 범위는 같습니다. 전체 범위 race 단계가 328초에서 168초로 줄고, 실행 중 남던 컨테이너 수십 개(약 10GiB)도 생기지 않습니다. CI의 `public-pr-go-gate.sh`도 같은 공유 DB를 쓰며 러너 메모리 제한(`-p 2`)은 그대로 둡니다.
 - **느린 테스트 정리:** admin auth 테스트는 bcrypt 최소 비용을 써 race 실행 시간이 109초에서 7초로 줄고, 설정 비용 반영 테스트는 기본값과 다른 비용으로 검사합니다. `hololive-dbtest`·`sourceobservation`·`joblease`의 격리된 DB 테스트는 병렬로 실행합니다. non-race 전용 단계는 race 빌드에서 빠지는 테스트 함수만 실행해 28초에서 2초로 줄고, collector production JSON 테스트는 collector 모듈이 Go 범위에 있을 때만 실행합니다. PostgreSQL failover·compose 보안 기본값 테스트는 다른 배포 스크립트 테스트처럼 입력이 바뀐 push에서 실행합니다.
 - **golangci-lint 2.15.0(shared·collector·api):** 로컬 게이트의 최소 버전을 v2.15.0으로 올립니다. HTTP/3 종료 시한에 Shutdown을 끊는 순간 정상 종료가 먼저 끝나 실패를 돌려주면, idle 연결만 남았더라도 그 실패를 종료 실패로 반환합니다(이전에는 무시). pobroker·internalhttp 테스트 cleanup은 `Serve` 결과를 검사하고, `NewAmbiguousMatchError` 생성자는 스택 lint 템플릿 예외로 둡니다.
