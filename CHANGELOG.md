@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **로컬 생성물 정리:** 승인된 알림 미리보기 이미지를 제거하고 Python 빌드 도구의 `__pycache__`를 Git 추적 대상에서 제외했습니다. 실행 코드·설정·배포 이미지는 바꾸지 않습니다.
+
 ## v12.0.0 - 2026-10-22
 
 - **central collector 배포 무교체 종료 수정:** `po-central-cutover.sh deploy`가 ssh `bash -s`로 보낸 원격 본문을 Docker Compose v5.6.0의 `compose run`이 stdin으로 읽어, 이전 profile 확인 직후 collector `c`·issuer 교체 없이 exit 0으로 끝나던 문제를 고칩니다. 원격 실행 구간을 끝까지 읽은 뒤 실행하며, 중단된 실행은 runtime·태그·설치 파일을 바꾸지 않았습니다.
