@@ -174,7 +174,7 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 | `checkpoint_timeout` / `checkpoint_completion_target` | 15min / 0.9 | 기존 `postgresql.auto.conf` / PostgreSQL 기본값 유지 |
 | `wal_compression` | `lz4` | 기존 `postgresql.auto.conf` 유지 |
 
-메모리 한도에는 프로세스·공유 버퍼뿐 아니라 파일 캐시도 계상됩니다. `max_connections=60`,
+메모리 한도에는 프로세스·공유 버퍼뿐 아니라 파일 캐시도 계상됩니다. `max_connections=61`(postgres_exporter의 collector 연결 1개를 예산에 더한 2026-10-25 값),
 `fsync=on`, `synchronous_commit=on`, `full_page_writes=on`과 OCI 50GB·10 VPU/GB를 유지합니다.
 `max_wal_size`는 WAL 공간의 절대 상한이 아니며, 상향하면 보관 공간과 crash recovery 시간이
 늘어날 수 있습니다. 신규 PGDATA 생성 시 기존 `postgresql.auto.conf`는 승계되지 않으므로

@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **holo-postgres 로그·exporter 연결 예산:** `log_temp_files`를 0에서 1MB로 올려 `work_mem` 아래의 작은 hash batch 임시 파일(139~156바이트)마다 다중 행 STATEMENT 전문이 기록되던 하루 약 6,800만 줄의 PostgreSQL 로그를 멈춥니다. `postgres_exporter` role 연결 한도를 1에서 2로, `max_connections`를 60에서 61로 올려 exporter의 collector 연결이 매 scrape마다 거부되던 상태(2026-10-19부터 `pg_up`만 남음)를 복구하며 용량 gate의 여유 3은 유지합니다. 운영 반영은 `role-limits.sql`의 관리자 소켓 실행과 `holo-postgres` 재생성이 필요합니다.
 - **로컬 생성물 정리:** 승인된 알림 미리보기 이미지를 제거하고 Python 빌드 도구의 `__pycache__`를 Git 추적 대상에서 제외했습니다. 실행 코드·설정·배포 이미지는 바꾸지 않습니다.
 
 ## v12.0.0 - 2026-10-22

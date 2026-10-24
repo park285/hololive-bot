@@ -1,11 +1,11 @@
 # 소유자|Compose 서비스(외부 할당은 빈 값)|서비스 환경 키|소스 키|인스턴스 수|기본 최대값|DB 역할
-@server-limit|60
+@server-limit|61
 @superuser-reserved|3
 # 런타임 한도에는 별도 앱 풀이 아닌 일반 제어 슬롯 셋이 포함된다.
 @role-limit|hololive_runtime|25
 @role-limit|hololive_scraper|28
 @role-limit|hololive_migrator|1
-@role-limit|postgres_exporter|1
+@role-limit|postgres_exporter|2
 @role-limit|iris_db_nightly|2
 bot|hololive-api|BOT_POSTGRES_POOL_MAX_CONNS|BOT_POSTGRES_POOL_MAX_CONNS|1|4|hololive_runtime
 admin-api|hololive-api|ADMIN_API_POSTGRES_POOL_MAX_CONNS|ADMIN_API_POSTGRES_POOL_MAX_CONNS|1|4|hololive_runtime
@@ -14,5 +14,5 @@ youtube-plane|hololive-api|YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS|YOUTUBE_PLANE_P
 alarm-worker|hololive-alarm-worker|POSTGRES_POOL_MAX_CONNS|ALARM_WORKER_POSTGRES_POOL_MAX_CONNS|1|8|hololive_runtime
 youtube-collector|youtube-collector|POSTGRES_POOL_MAX_CONNS|YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS|4|7|hololive_scraper
 db-migrate|hololive-db-migrate|||1|1|hololive_migrator
-postgres-exporter||||1|1|postgres_exporter
+postgres-exporter||||1|2|postgres_exporter
 db-nightly||||1|2|iris_db_nightly

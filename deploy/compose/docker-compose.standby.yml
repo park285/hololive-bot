@@ -28,7 +28,7 @@ services:
       - "hot_standby_feedback=on"
       # primary보다 작으면 standby가 기동을 거부한다. 값은 prod primary와 동일하게 둔다.
       - "-c"
-      - "max_connections=60"
+      - "max_connections=61"
       - "-c"
       - "shared_buffers=256MB"
       - "-c"
@@ -52,7 +52,7 @@ services:
       - "-c"
       - "log_lock_waits=on"
       - "-c"
-      - "log_temp_files=0"
+      - "log_temp_files=1MB"
       - "-c"
       - "log_min_duration_statement=1s"
       - "-c"
