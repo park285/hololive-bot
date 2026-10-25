@@ -177,7 +177,7 @@ release pair, not as extra keys or aliases in the new profile.
 
 ### Build and CLI prerequisites
 
-- All five consumers retain the genuine published shared-go `v2.16.0` pins and
+- All five consumers retain the genuine published shared-go `v2.16.1` pins and
   sums. No unpublished external replace or invented tag is a production input.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
   production builds. Use root/API/alarm version `11.0.0`, a clean full

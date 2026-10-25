@@ -298,7 +298,7 @@ stats: cancelled_waiter_returned_before_release=false elapsed_ms=200 error=<nil>
 
 ```text
 cmd/hololive-api
-  └─ fxapp: process signal / fatal / telemetry / resource owner
+  └─ shared bootstrap/lifecycle: process signal / fatal / telemetry
       └─ app.Runtime
           ├─ bot: webhook → durable inbox → command → durable reply → Iris
           ├─ admin: 관리 HTTP → 조회/설정/trigger adapter
@@ -309,7 +309,7 @@ collector → source_observation → API youtube
 API llm/youtube → 영속 notification intent → alarm-worker → proactive Iris/Kakao egress
 ```
 
-근거: [API runtime](../../hololive/hololive-api/internal/app/runtime.go#L63), [Fx composition](../../hololive/hololive-api/internal/fxapp/application.go#L116), [현재 소유권](../current/PROJECT_MAP.md#cross-runtime-contracts).
+근거: [API runtime](../../hololive/hololive-api/internal/app/runtime.go#L63), [process bootstrap](../../hololive/hololive-api/cmd/hololive-api/main.go), [현재 소유권](../current/PROJECT_MAP.md#cross-runtime-contracts).
 
 중요한 구분:
 
@@ -408,7 +408,9 @@ Bot는 foundation/stack→`BotDependencyModules`→`orchestration.Dependencies`�
 
 **제안:** API 내부의 standalone runner를 실제 call graph 기준으로 제거하고 `Start/Shutdown/Close`만 남깁니다. bot/admin Run은 generic interface 참조까지 확인한 후 판정합니다. worker/collector가 사용하는 shared lifecycle 자체를 일괄 삭제하지 않습니다.
 
-**완료 기준:** production signal owner가 Fx 하나인 현재 계약 유지, fatal propagation·partial build cleanup·shutdown timeout 동작 보존. 단순히 unused method를 남기기 위한 테스트는 제거합니다.
+**완료 기준:** production signal owner가 하나인 계약 유지, fatal propagation·partial build cleanup·shutdown timeout 동작 보존. 단순히 unused method를 남기기 위한 테스트는 제거합니다.
+
+> 2026-10-25 [Fx 제거 계획](../current/plans/2026-10-25-hololive-api-fx-removal.md)이 "signal owner가 Fx 하나"라는 기준을 대체합니다. 하나뿐인 signal owner는 aggregate `Runtime.Run`이 호출하는 shared-go `lifecycle.Run`입니다.
 
 #### P2 — AlarmCRUD가 command와 원격 관리 실패를 같은 큰 interface에 섞습니다
 
@@ -472,14 +474,13 @@ MemberDataProvider의 `WithContext`와 포괄 조회 interface도 장기 정리 
 
 ### 목표 구조와 의존 방향
 
-모듈 개수를 늘리지 않습니다. 기존 `internal/app`, `internal/fxapp`, `internal/planes`, `internal/templateview`를 활용합니다. 다음은 책임 위치이며 디렉터리 전체 rename을 요구하는 규격이 아닙니다.
+모듈 개수를 늘리지 않습니다. 기존 `internal/app`, `internal/planes`, `internal/templateview`를 활용합니다. 다음은 책임 위치이며 디렉터리 전체 rename을 요구하는 규격이 아닙니다.
 
 ```text
 hololive-api/internal/
   config/                 API runtime 설정·검증 (shared/apiplane에서 회수)
-  app/                    aggregate plane 조립·자원 소유권
-  apifoundation/          bot/admin 공통 builder; app·planes·Fx에 의존하지 않음
-  fxapp/                  프로세스 lifecycle만 유지
+  app/                    aggregate plane 조립·자원 소유권·프로세스 lifecycle(shared bootstrap/lifecycle)
+  apifoundation/          bot/admin 공통 builder; app·planes에 의존하지 않음
   planes/
     bot/                  ingress·명령·durable reply
     admin/                HTTP adapter·관리 use case

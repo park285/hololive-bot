@@ -15,7 +15,7 @@ require (
 	github.com/mmcdole/gofeed v1.5.0
 	github.com/openai/openai-go/v3 v3.86.0
 	github.com/park285/iris-client-go/v3 v3.1.0
-	github.com/park285/shared-go/v2 v2.16.0
+	github.com/park285/shared-go/v2 v2.16.1
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.64.1
 	github.com/shirou/gopsutil/v4 v4.26.9
@@ -23,7 +23,6 @@ require (
 	github.com/valkey-io/valkey-go v1.0.79
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
-	go.uber.org/fx v1.24.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
 	golang.org/x/sync v0.24.0
@@ -125,9 +124,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
-	go.uber.org/dig v1.19.0 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.32.0 // indirect
 	golang.org/x/net v0.61.0 // indirect
