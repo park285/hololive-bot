@@ -196,11 +196,16 @@ test("overlapping parser calls keep failure ownership with their request", async
   assert.deepEqual(clients.map(client => client.calls()), [1, 1]);
 });
 
-test("successful unknown-node generation and schema updates remain usable", async () => {
-  const client = await rawClient(call => channelPage([tabNode("videos", [
-    rowNode("videos"),
-    { collectorParserDiagnosticRenderer: { label: "diagnostic", ...(call === 1 ? {} : { additionalField: true }) } },
-  ])]));
+test("successful unknown-node generation and schema updates remain usable inside a row", async () => {
+  // 행 내부의 미지 노드는 JIT 생성 진단만 남기고 행을 보존합니다. 본문 행 자체가 미지 renderer이면
+  // SDK가 목록에서 빼므로 collection-client 테스트에서 drift로 거부합니다.
+  const client = await rawClient(call => {
+    const row = rowNode("videos");
+    row.videoRenderer.thumbnailOverlays = [
+      { collectorParserDiagnosticRenderer: { label: "diagnostic", ...(call === 1 ? {} : { additionalField: true }) } },
+    ];
+    return channelPage([tabNode("videos", [row])]);
+  });
   for (let call = 1; call <= 2; call++) {
     const result = await collect(scenarios[0], client.innertube);
     assert.equal(result.status, 200);

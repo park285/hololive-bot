@@ -9,6 +9,7 @@
 ## 미출시
 
 - **의존성:** `openai-go/v3` v3.86.0·`quic-go` v0.64.1과 Go 전이 의존성, collector의 `youtubei.js` 18.3.0을 갱신합니다.
+- **YouTube.js helper 판정 소유권:** YouTube.js 18.2부터 `Video.is_live`가 재생 시간 표시가 없으면 라이브로 추정하고 `contentType` 없는 lockup을 오류 없이 영상 목록에서 뺍니다. helper는 더 이상 SDK `is_live` 추정값을 쓰지 않고 원문의 구조화된 표시(LIVE badge style, `Upcoming`·재생 시간 배지, LIVE_NOW 배지·time-status·`upcomingEventData`)로만 streams 상태를 정하며, 표시가 없는 행은 종료로 추정하지 않고 `parser_drift`로 거부합니다(범프 전에는 배지 없는 lockup을 ENDED로 보고했습니다). 본문·continuation 페이지의 원문 행 수와 SDK 목록 길이를 대조해 미지 renderer·null·분류되지 않은 lockup의 조용한 누락과 중첩 shelf의 추가를 거부하고, 제목 노드 없는 lockup도 거부합니다. 공유 게시물 안의 원본 게시물은 행에서 제외해 중복 수집도 사라집니다. continuation은 SDK와 같은 endpoint 호출을 유지하면서 원문을 보존합니다. 범프 전부터 SDK가 진단 없이 빼던 본문 행이 성공 응답으로 통과하던 문제도 함께 닫힙니다.
 
 ## v12.0.1 - 2026-10-25
 

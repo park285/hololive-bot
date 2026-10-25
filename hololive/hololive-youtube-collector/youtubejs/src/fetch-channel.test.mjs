@@ -8,6 +8,7 @@ import { fetchChannelFeed, liveSessionRows, mapPhoto, mapProfile } from "./fetch
 import { handleChannelRequest } from "./rpc-boundary.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 
+const liveBadges = [{ style: "BADGE_STYLE_TYPE_LIVE_NOW" }];
 const lockupFixture = JSON.parse(
   await readFile(new URL("../testdata/lockup-upcoming.json", import.meta.url), "utf8"),
 );
@@ -26,7 +27,7 @@ test("one restricted schedule preserves normal upcoming and live rows through th
     { id: "upcoming-a", is_upcoming: true },
     { id: "restricted-fixture", is_upcoming: true },
     { id: "upcoming-b", is_upcoming: true },
-    { id: "already-live", is_live: true },
+    { id: "already-live", badges: liveBadges },
   ] }, async (_, { videoId }) => {
     calls.push(videoId);
     return videoId === "restricted-fixture"
@@ -69,7 +70,7 @@ test("a restricted-only feed preserves its unresolved identity and is rechecked 
 test("restricted filtering never hides a conflicting duplicate or foreign channel row", async (t) => {
   t.mock.method(process.stderr, "write", () => true);
   const conflicts = [
-    { id: "restricted-fixture", is_live: true },
+    { id: "restricted-fixture", badges: liveBadges },
     { id: "restricted-fixture", is_upcoming: true, scheduled: "2026-09-11T03:00:00Z" },
     { id: "restricted-fixture", is_upcoming: true, author: { id: "UC_OTHER" } },
   ];
@@ -91,7 +92,7 @@ test("liveSessionRows fail-closes on unknown statuses", () => {
       Array.from(liveSessionRows(
         {
           videos: [
-            { id: "live-1", is_live: true },
+            { id: "live-1", badges: liveBadges },
             { id: "mystery", status: "unknown" },
           ],
         },
@@ -115,7 +116,8 @@ test("liveSessionRows maps current YouTube.js LockupView rows", () => {
             overlays: [{ badges: [{ text: "Upcoming" }] }],
           },
         },
-        { type: "LockupView", content_type: "VIDEO", content_id: "ended-1", content_image: { overlays: [] } },
+        { type: "LockupView", content_type: "VIDEO", content_id: "ended-1", metadata: { title: "Ended title" },
+          content_image: { overlays: [{ badges: [{ text: "1:23:45", badge_style: "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT" }] }] } },
       ],
     },
     "UC_TEST",
@@ -233,7 +235,7 @@ test("live collection does not depend on the about endpoint", async () => {
   const innertube = {
     getChannel: async () => channelFixture({
       getAbout: async () => { throw new Error("live requested about"); },
-      getLiveStreams: async () => channelFixture({ videos: [{ id: "live-1", is_live: true }] }),
+      getLiveStreams: async () => channelFixture({ videos: [{ id: "live-1", badges: liveBadges }] }),
     }),
   };
   const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
@@ -279,7 +281,7 @@ test("fetchChannelFeed preserves live states and schedules regardless of raw vie
   const feed = {
     videos: [
       { id: "scheduled", is_upcoming: true, scheduled: new Date("2026-09-01T20:00:00+09:00"), viewer_count: "hidden" },
-      { id: "live", is_live: true, viewer_count: -1, view_count: { unexpected: true } },
+      { id: "live", badges: liveBadges, viewer_count: -1, view_count: { unexpected: true } },
       { id: "ended", status: "ENDED" },
       { id: "canceled", status: "CANCELLED" },
     ],
@@ -466,7 +468,7 @@ test("oversized channel snapshot rejects before upcoming metadata hydration", as
   let calls = 0;
   const innertube = stubChannel({ videos: [
     { id: "upcoming", is_upcoming: true },
-    { id: "large-live", is_live: true, title: "x".repeat(2000) },
+    { id: "large-live", badges: liveBadges, title: "x".repeat(2000) },
   ] }, async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
   const result = await handleChannelRequest(
     JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
@@ -550,7 +552,7 @@ test("resolved rows leave only identities for pending bulky restricted duplicate
   t.mock.method(process.stderr, "write", () => true);
   const calls = [];
   const innertube = stubChannel({ videos: [
-    { id: "already-live", is_live: true },
+    { id: "already-live", badges: liveBadges },
     { id: "scheduled", is_upcoming: true },
     ...Array.from({ length: 10 }, () => ({ id: "restricted-fixture", is_upcoming: true, title: "x".repeat(2000) })),
   ] }, async (_, { videoId }) => {
@@ -604,7 +606,7 @@ test("unique unresolved identities alone can exceed the channel budget before hy
 
 test("channel lower-bound overflow stops before reading the next raw row", async () => {
   let nextRowReads = 0;
-  const videos = [{ id: "large-live", is_live: true, title: "x".repeat(2000) }];
+  const videos = [{ id: "large-live", badges: liveBadges, title: "x".repeat(2000) }];
   Object.defineProperty(videos, 1, { get() {
     nextRowReads++;
     throw new Error("row after assured overflow must not be read");
