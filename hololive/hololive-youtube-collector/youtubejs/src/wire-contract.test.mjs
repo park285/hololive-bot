@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { encodeResponseBody } from "./response-encoding.mjs";
 import { channelEndpoint, communityEndpoint, contentEndpoint } from "./rpc-collection-validation.mjs";
+import { RpcProtocolError, RpcResponseError } from "./rpc-errors.mjs";
 import { rpcErrorResult, rpcErrorResultFor } from "./rpc-execution.mjs";
 import { channelLiveCheckEndpoint, videoLiveCheckEndpoint } from "./rpc-live-check-validation.mjs";
 import { failureTuples } from "./upstream-errors.mjs";
@@ -76,7 +77,12 @@ for (const [path, cases] of Object.entries(fixture.endpoints)) {
 
   test(`${path} validator rejects fixture invalid bodies`, () => {
     for (const item of cases.invalid) {
-      assert.throws(() => endpoint.validateResponse(structuredClone(item.body)), undefined, item.name);
+      // 검증기 자체의 결함(TypeError 등)이 거부로 통과하지 않도록 응답·protocol 계약 오류만 인정합니다.
+      assert.throws(
+        () => endpoint.validateResponse(structuredClone(item.body)),
+        (error) => error instanceof RpcResponseError || error instanceof RpcProtocolError,
+        item.name,
+      );
     }
   });
 }

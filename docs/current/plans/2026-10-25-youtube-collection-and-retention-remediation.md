@@ -1,6 +1,6 @@
 # YouTube 수집 경계 정리와 DB 보존 적체 해소 통합 계획
 
-**상태: 로컬 구현 진행 중(1단계 완료). 운영 변경·배포·migration 적용은 미실행입니다.**
+**상태: 1·2단계 로컬 구현 완료(미배포). 0·3~6단계와 운영 변경·배포·migration 적용은 미실행입니다.**
 
 [DB 증가와 보존 적체 해소 계획](2026-10-25-db-growth-and-retention-remediation.md)과 [YouTube collector Go·JS 경계 구조 리뷰](../../history/architecture/2026-10-25-youtube-collector-go-js-boundary-review.md)의 후속 작업을 하나의 순서로 묶습니다. 이 문서는 전체 순서, 단계 사이의 의존, collector 작업 목록을 소유합니다. DB 단계의 관측 근거, 보호 불변식, 세부 체크리스트는 DB 계획이 계속 소유하며 여기서 다시 쓰지 않습니다. 아래 `리뷰 #n`은 리뷰 기록의 발견 번호입니다.
 
@@ -63,18 +63,55 @@
 
 1단계 뒤에 진행합니다. 하나의 collector·issuer 짝 배포로 묶을 수 있습니다.
 
-- [ ] **채널 live 숨은 fan-out(리뷰 #1, 선택지 a).**
+- [x] **채널 live 숨은 fan-out(리뷰 #1, 선택지 a).**
   - 한 RPC 안의 실제 upstream 호출이 Go `RateLimiter` 간격과 `jobMaxUpstreamCalls` 예산에 반영되게 합니다. 예정 영상 확인 상한 초과는 `parser_drift`가 아니라 RESOURCE_LIMIT으로 분류합니다.
   - 관측 계약은 바꾸지 않고, helper wire 변경은 같은 이미지 안의 짝 변경으로 처리합니다.
   - 선택지 b(예정 영상 확인을 Go 소유 RPC로 이동)는 snapshot의 `scheduled_at`과 이를 쓰는 API 경로를 다시 설계해야 하고 관측량도 늘어나므로 보류합니다. 3단계 운영 효과를 확인한 뒤 5단계와 함께 다시 평가합니다.
-- [ ] **badge 판정(리뷰 #3).** 인식하지 못한 badge는 `ENDED` 대신 `parser_drift`로 거부합니다. 배포 뒤 snapshot 실패율이 늘면 badge 구조를 조사하며, 기본값으로 되돌리지 않습니다.
-- [ ] **예정 최초공개 판정(리뷰 #4).** `classifyPublication`이 `WaitingStateConfirmed`를 직접 요구하게 하고, helper 응답 검증에 "`scheduled_at`이 있으면 대기 상태 확인" 관계를 추가합니다.
-- [ ] **continuation 일시 실패(리뷰 #6).** network, 5xx, timeout으로 한정하고, 그 밖의 SDK 예외는 `parser_drift`로 둡니다.
-- [ ] **공유 Innertube 초기화(리뷰 #7).** 요청 컨텍스트 밖(bootstrap)에서 생성하고, config 조회는 명시적으로 끄거나 실패를 분류된 오류로 드러냅니다.
-- [ ] **PO 상태 노출(리뷰 #5).** `proof.state`, `last_error`, 발급 누계를 Go 메트릭으로 내보냅니다.
-- [ ] **PO mint 취소 의미(리뷰 #8).** broker와 controller 중 한쪽 의미로 맞추고, JS fake broker를 실제 동작에 맞춥니다. broker를 바꾸면 issuer 이미지도 함께 바뀝니다.
-- [ ] **Node heap 상한(리뷰 #10).** helper spawn 인자에 heap 상한을 명시합니다. 값은 0단계 관측과 기존 Node 몫 192MiB 예산에서 정합니다.
+- [x] **badge 판정(리뷰 #3).** 인식하지 못한 badge는 `ENDED` 대신 `parser_drift`로 거부합니다. 배포 뒤 snapshot 실패율이 늘면 badge 구조를 조사하며, 기본값으로 되돌리지 않습니다.
+- [x] **예정 최초공개 판정(리뷰 #4).** `classifyPublication`이 `WaitingStateConfirmed`를 직접 요구하게 하고, helper 응답 검증에 "`scheduled_at`이 있으면 대기 상태 확인" 관계를 추가합니다.
+- [x] **continuation 일시 실패(리뷰 #6).** network, 5xx, timeout으로 한정하고, 그 밖의 SDK 예외는 `parser_drift`로 둡니다.
+- [x] **공유 Innertube 초기화(리뷰 #7).** 요청 컨텍스트 밖(bootstrap)에서 생성하고, config 조회는 명시적으로 끄거나 실패를 분류된 오류로 드러냅니다.
+- [x] **PO 상태 노출(리뷰 #5).** `proof.state`, `last_error`, 발급 누계를 Go 메트릭으로 내보냅니다.
+- [x] **PO mint 취소 의미(리뷰 #8).** broker와 controller 중 한쪽 의미로 맞추고, JS fake broker를 실제 동작에 맞춥니다. broker를 바꾸면 issuer 이미지도 함께 바뀝니다.
+- [x] **Node heap 상한(리뷰 #10).** helper spawn 인자에 heap 상한을 명시합니다. 값은 0단계 관측과 기존 Node 몫 192MiB 예산에서 정합니다.
 - 리뷰 #11의 낮은 항목은 같은 파일을 수정할 때만 함께 처리합니다.
+
+**2단계 결과 (로컬, 미배포)**
+
+각 항목에 바뀐 동작을 실행하는 테스트를 추가하거나 기존 기대값을 새 의미로 바꿨습니다. #1의 호출 예산 테스트는 변경 전 값(수집 시한 39초)에서 실패하는 것을 확인했습니다. 리뷰 주장이 틀려 고치지 않은 항목은 없습니다. 리뷰 #11은 해당 파일을 수정하지 않아 처리하지 않았습니다. 커밋은 모두 로컬이며 push하지 않았습니다.
+
+| 항목 | 커밋 | 바꾼 동작 |
+| --- | --- | --- |
+| #4 | `9ea78aa50` | `classifyPublication`이 `WaitingStateConfirmed == true`를 요구합니다. helper 검증기는 `scheduled_at`이 있으면 `waiting_state_confirmed === true`를 요구합니다. fixture에 classification 사례를 추가했습니다. |
+| #3 | `a733564ae` | 방송 탭 LockupView는 `live`·`upcoming`·재생 시간 badge(`^\d+(?::[0-5]\d){1,2}$`)만 상태 근거로 씁니다. 그 밖의 문구는 `parser_drift`입니다. |
+| #6 | `019514e19` | continuation 부분 결과(`continuation_transient`)는 `collection_timeout`, transport가 분류한 `collection_failed`, 원인 사슬(깊이 4까지)의 network 오류에만 남깁니다. HTTP 4xx는 기존 분류로 다시 던지고, 그 밖의 SDK 예외는 `parser_drift`입니다. continuation에서 생길 수 없는 `helper_busy`는 목록에서 뺐습니다. |
+| #10 | `f3120f2c5` | helper spawn에 `--max-old-space-size=192`를 붙입니다. 768M cgroup에서 기본 `heap_size_limit`는 408MiB, 플래그 적용 뒤 288MiB입니다(old space 192MiB와 그 밖의 V8 영역). |
+| #5 | `62a9d67f4` | scrape마다 helper `/health`를 읽는 collector로 `youtubejs_helper_health_scrape_success`, `youtubejs_po_proof_state{state}`, `youtubejs_po_proof_last_error{code}`와 bootstrap·upstream·mint·attach 누계를 냅니다. 모르는 state는 `UNRECOGNIZED`, 형식 밖 code는 `unrecognized`로 냅니다. native AP가 `/ready`를 주기적으로 부르지 않을 수 있어 `Healthy` 호출 시점에 기록하지 않습니다. |
+| #7 | `28fcbb9f5` | 수집 Innertube는 `retrieve_innertube_config: false`로 bootstrap 중 READY 전에 `FetcherSet.prepare()`가 만듭니다. 실패하면 helper는 FAULTED입니다. |
+| #8 | `fe3586e2b` | broker(issuer 이미지)는 바꾸지 않고 controller를 broker 의미에 맞췄습니다. 취소된 mint 뒤에는 session을 버리고 `UNAVAILABLE`, `last_error=mint_aborted`로 둡니다. JS fake broker도 중단된 mint의 세대를 퇴역시킵니다. |
+| #1 | `9d882c9d2` | live 채널 요청이 조회 상한 `max_schedule_lookups`(32, protocol 최대값)를 보냅니다. 후보가 상한을 넘으면 player 요청 전에 `response_too_large/RESOURCE_LIMIT`입니다. helper는 성공(`live_query`와 함께)·실패 응답에 실제 조회 수 `schedule_lookups`를 싣고, Go는 RPC 뒤 그 수만큼 limiter 예약을 하나씩 기다립니다. 상한을 넘는 보고나 `/v1/channel` 밖의 보고는 protocol mismatch입니다. `youtubejs_channel_live` 호출 예산은 1+32입니다. |
+
+- #1 수집 시한: 실행 프로필이 호출마다 요청 시한을 곱하므로, 기본 설정(요청 30초, 간격 2초, inflight 4, overhead 1초 가정)에서 `youtubejs_channel_live` 수집 시한은 39초에서 약 21분(33×30초 + 33×4×2초 + overhead)으로 늘어납니다. RPC 하나는 HTTP 시한 30초 하나가 묶으므로 실제 최악 경로는 약 5분입니다. 더 좁히려면 실행 프로필에서 RPC 수와 limiter 예약 수를 나눠야 하며 이번 범위에서는 하지 않았습니다.
+- #1 분류 변경의 효과: `parser_drift/DATA_CONTRACT`와 `response_too_large/RESOURCE_LIMIT`는 모두 DEFER이므로 재시도 동작은 같습니다. 진단 코드와 attempt 메트릭 결과값(`parser_drift` → `failed`)이 바뀝니다.
+- 배포 묶음: #1의 요청·응답 필드와 #4의 검증 관계는 같은 이미지 안의 collector·helper 짝 변경입니다. 두 쪽이 exact-key로 decode하므로 섞인 조합은 protocol mismatch로 실패합니다. issuer 이미지는 바뀌지 않았지만 기존 runbook대로 collector와 짝 배포합니다.
+
+검증(마지막 수정 뒤, 로컬)
+
+- `youtubejs`: `npm test` 397/397 통과, `npm run typecheck` exit 0.
+- `go test -race -count=1` `internal/runtime/youtubejs/...`, `youtubejscollector/...`, `collectorruntime/...` 통과. collector 모듈 `go test -count=1 ./...` 통과.
+- golangci-lint(`-c ../../.golangci.yml`, 같은 세 패키지) 0 issues. NilAway(`scripts/ci/nilaway-models/build.sh` 도구, 같은 세 패키지) exit 0.
+- `TestWireRPC`가 실제 `server.mjs`로 조회 수 보고와 limiter 지불(실패 전 조회 3건)을 왕복 확인합니다.
+- 실행하지 않은 검사: `scripts/ci/pre-push-gate.sh`(발행 전용). shared 계약을 바꾸지 않아 shared·API 모듈 테스트는 실행하지 않았습니다.
+
+남은 위험
+
+- badge가 아예 없는 lockup은 기존 테스트대로 `ENDED`입니다(#3 범위 밖).
+- #10의 값은 0단계 관측 없이 compose 주석의 Node 몫 192MiB와 기존 관측 최대 RSS 176MiB를 근거로 정했습니다. 배포 뒤 helper 재시작·OOM과 RSS를 확인해야 합니다.
+- #7에서 upstream config 조회를 끈 것이 실제 upstream 응답에 영향을 주는지는 운영에서 확인하지 않았습니다.
+- #8: dispatch 전에 취소되어 broker가 세대를 퇴역시키지 않은 경우에도 session을 버리므로, 다음 발급에서 한 번 불필요하게 재발급할 수 있습니다.
+- video live check의 Go 최소 크기(123)는 helper 하한(139)보다 작습니다. 그 사이 요청은 helper가 같은 RESOURCE_LIMIT로 거부합니다.
+- #1: 채널당 시각 없는 UPCOMING 수의 실제 분포(0단계)를 모르므로, 상한 32의 운영 적합성과 limiter 지불로 늘어나는 channel_live 지연은 배포 뒤 확인해야 합니다.
+- #1 지불 누락(리뷰 확인): 지불 대기 중 수집 문맥이 끝나면 그 예약은 기존 limiter 규칙대로 되돌려지고 남은 조회는 지불하지 않으며 job은 timeout·canceled로 실패합니다. helper 본문 없이 끝난 RPC(Go HTTP 시한 30초 초과·취소)는 그 전에 보낸 조회 수를 알 수 없어 지불하지 않습니다. 이를 막으려면 상한만큼 보수적으로 지불하거나 helper에 Go보다 짧은 수집 시한을 두어야 하며, 둘 다 계약 결정이라 이번에 하지 않았습니다. transport의 player 1회 재전송(5xx·network)은 조회 1건으로 세며 browse의 기존 회계와 같습니다.
 
 ### 3. DB 1단계: 삭제 가능 적체 처리량 (API)
 

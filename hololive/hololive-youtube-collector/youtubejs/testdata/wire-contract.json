@@ -39,6 +39,16 @@
       "name": "unknown error field",
       "status": 422,
       "body": { "protocol_version": 1, "error": { "code": "parser_drift", "class": "DATA_CONTRACT", "retry": { "kind": "default" }, "message": "drift", "detail": "x" } }
+    },
+    {
+      "name": "explicit zero schedule lookups",
+      "status": 422,
+      "body": { "protocol_version": 1, "error": { "code": "parser_drift", "class": "DATA_CONTRACT", "retry": { "kind": "default" }, "message": "drift" }, "schedule_lookups": 0 }
+    },
+    {
+      "name": "schedule lookups above protocol limit",
+      "status": 422,
+      "body": { "protocol_version": 1, "error": { "code": "parser_drift", "class": "DATA_CONTRACT", "retry": { "kind": "default" }, "message": "drift" }, "schedule_lookups": 33 }
     }
   ],
   "roundtrip_failures": [
@@ -244,6 +254,89 @@
             "continuity": "NOT_APPLICABLE",
             "termination_reason": "exhausted",
             "schedule_lookups": 0,
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
+          }
+        },
+        {
+          "name": "live query without schedule lookups",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
+          }
+        },
+        {
+          "name": "schedule lookups without live query",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "schedule_lookups": 0
+          }
+        },
+        {
+          "name": "schedule lookups above protocol limit",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "schedule_lookups": 33,
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
+          }
+        },
+        {
+          "name": "negative schedule lookups",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "schedule_lookups": -1,
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
+          }
+        },
+        {
+          "name": "fractional schedule lookups",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "schedule_lookups": 1.5,
             "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
           }
         }

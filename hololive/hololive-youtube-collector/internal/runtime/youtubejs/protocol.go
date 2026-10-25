@@ -95,8 +95,8 @@ type RPCFailure struct {
 type RPCErrorBody struct {
 	ProtocolVersion int16      `json:"protocol_version"`
 	Error           RPCFailure `json:"error"`
-	// ScheduleLookups는 /v1/channel live 요청이 실패 전까지 보낸 예정 영상 player 조회 수입니다.
-	ScheduleLookups int `json:"schedule_lookups,omitzero"`
+	// ScheduleLookups는 /v1/channel live 요청이 실패 전까지 보낸 예정 영상 player 조회 수입니다. helper는 0이면 생략합니다.
+	ScheduleLookups *int `json:"schedule_lookups,omitempty"`
 }
 
 type Pagination struct {
@@ -308,12 +308,29 @@ type ChannelResult struct {
 	Profile                 ChannelProfileItem            `json:"profile"`
 	Photo                   []ChannelPhotoVariant         `json:"photo"`
 	MissingTab              bool                          `json:"missing_tab,omitzero"`
-	ScheduleLookups         int                           `json:"schedule_lookups,omitzero"`
+	ScheduleLookups         *int                          `json:"schedule_lookups,omitempty"`
 	LiveQuery               *contract.LiveSnapshotQueryV1 `json:"live_query,omitempty"`
 }
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
-func (r *ChannelResult) validateSuccess() error         { return r.Validate() }
+
+// validateSuccess는 예정 영상 조회 수가 live_query와 함께만 있고 protocol 상한 안인지도 확인합니다.
+// 값이 없을 때 0으로 받아들이면 helper가 보낸 조회의 limiter 지불이 빠지므로 존재 여부를 따로 봅니다.
+func (r *ChannelResult) validateSuccess() error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+
+	if (r.LiveQuery != nil) != (r.ScheduleLookups != nil) {
+		return errors.New("youtube.js helper schedule lookups must accompany the live query")
+	}
+
+	if r.ScheduleLookups != nil && (*r.ScheduleLookups < 0 || *r.ScheduleLookups > ChannelLiveMaxScheduleLookups) {
+		return errors.New("youtube.js helper schedule lookups are outside the protocol limit")
+	}
+
+	return nil
+}
 
 // MaxLiveCheckResponseBytes는 평탄한 확인 결과 하나의 성공 응답 상한입니다.
 // 확인 RPC는 목록 RPC의 응답 예산을 물려받지 않고 이 값 이하로 요청합니다.

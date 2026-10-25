@@ -110,11 +110,17 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 		return ChannelResult{}, c.payFailedScheduleLookups(ctx, err, request.MaxScheduleLookups)
 	}
 
-	if result.ScheduleLookups < 0 || result.ScheduleLookups > request.MaxScheduleLookups || (result.LiveQuery == nil && result.ScheduleLookups != 0) {
+	lookups := 0
+
+	if result.ScheduleLookups != nil {
+		lookups = *result.ScheduleLookups
+	}
+
+	if lookups > request.MaxScheduleLookups {
 		return ChannelResult{}, protocolMismatch(errors.New("youtube.js helper schedule lookups exceed the requested budget"))
 	}
 
-	if err := c.payScheduleLookups(ctx, result.ScheduleLookups); err != nil {
+	if err := c.payScheduleLookups(ctx, lookups); err != nil {
 		return ChannelResult{}, err
 	}
 

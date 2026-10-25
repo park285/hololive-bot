@@ -27,15 +27,16 @@ func helperStatusError(status int, payload []byte) error {
 		return protocolMismatch(errors.New("youtube.js helper status/body tuple mismatch"))
 	}
 
-	if decoded.ScheduleLookups < 0 || decoded.ScheduleLookups > ChannelLiveMaxScheduleLookups {
+	// helper는 조회가 없으면 필드를 생략하므로 명시적 0도 protocol 위반입니다.
+	if decoded.ScheduleLookups != nil && (*decoded.ScheduleLookups < 1 || *decoded.ScheduleLookups > ChannelLiveMaxScheduleLookups) {
 		return protocolMismatch(errors.New("youtube.js helper error schedule lookups are outside the protocol limit"))
 	}
 
 	base := collecterr.New(mapped.code, mapped.class, "youtube.js helper: "+boundedFailureMessage(decoded.Error.Message))
 
 	failure := applyHelperRetry(base, decoded.Error.Retry)
-	if decoded.ScheduleLookups > 0 {
-		return &scheduleLookupError{lookups: decoded.ScheduleLookups, err: failure}
+	if decoded.ScheduleLookups != nil {
+		return &scheduleLookupError{lookups: *decoded.ScheduleLookups, err: failure}
 	}
 
 	return failure

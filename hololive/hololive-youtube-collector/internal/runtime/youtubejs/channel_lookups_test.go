@@ -56,8 +56,8 @@ func TestFetchChannelPaysScheduleLookupsThroughLimiter(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if requested != ChannelLiveMaxScheduleLookups || result.ScheduleLookups != 3 {
-			t.Fatalf("requested lookups = %d, reported = %d", requested, result.ScheduleLookups)
+		if requested != ChannelLiveMaxScheduleLookups || result.ScheduleLookups == nil || *result.ScheduleLookups != 3 {
+			t.Fatalf("requested lookups = %d, reported = %v", requested, result.ScheduleLookups)
 		}
 
 		// RPC 예약은 즉시이고 조회 세 건이 2초 간격 예약을 차례로 기다린다.
