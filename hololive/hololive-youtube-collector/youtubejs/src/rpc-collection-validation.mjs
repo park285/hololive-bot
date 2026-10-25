@@ -7,6 +7,7 @@ import {
   assertResponseKeys,
   keySchema,
   maxChannelIdentifierBytes,
+  maxScheduleMetadataLookups,
   nonemptyStringField,
   nonnegativeIntegerField,
   optionalBoolean,
@@ -58,7 +59,10 @@ function validateContentRequest(value) {
   };
 }
 
-const channelRequestKeys = keySchema(["protocol_version", "channel_id", "kind", "max_success_response_bytes"], ["max_pages"]);
+const channelRequestKeys = keySchema(
+  ["protocol_version", "channel_id", "kind", "max_success_response_bytes"],
+  ["max_pages", "max_schedule_lookups"],
+);
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelRequest} */
 function validateChannelRequest(value) {
@@ -68,11 +72,20 @@ function validateChannelRequest(value) {
   if (kind !== "live" && kind !== "metadata") {
     throw new RpcRequestError("kind must be live or metadata");
   }
+  // live 요청은 예정 영상 조회 상한을 반드시 지정하고, metadata 요청은 조회하지 않으므로 지정하지 않습니다.
+  if ((kind === "live") !== Object.hasOwn(record, "max_schedule_lookups")) {
+    throw new RpcRequestError("max_schedule_lookups must be present only for live requests");
+  }
+  const lookups = record.max_schedule_lookups;
+  if (lookups !== undefined && (!Number.isSafeInteger(lookups) || Number(lookups) < 0 || Number(lookups) > maxScheduleMetadataLookups)) {
+    throw new RpcRequestError(`max_schedule_lookups must be an integer between 0 and ${maxScheduleMetadataLookups}`);
+  }
   return {
     protocol_version: protocolVersion(record),
     channel_id: requiredString(record, "channel_id"),
     kind,
     ...optionalPositiveIntegers(record, ["max_pages"]),
+    ...(lookups === undefined ? {} : { max_schedule_lookups: Number(lookups) }),
     max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
   };
 }
@@ -87,7 +100,7 @@ const contentResponseKeys = keySchema(
 );
 const channelResponseKeys = keySchema(
   ["protocol_version", "live_sessions", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
-  ["missing_tab", "unavailable_live_sessions", "live_query"],
+  ["missing_tab", "unavailable_live_sessions", "schedule_lookups", "live_query"],
 );
 const channelProfileKeys = keySchema([], ["handle", "description", "country", "joined_date"]);
 const liveQueryKeys = keySchema(["channel_id", "source", "statuses", "exhausted", "access_restricted", "page_count"]);
@@ -152,8 +165,24 @@ export function validateChannelResponse(value) {
     photo: arrayField(record, "photo").map(validatePhoto),
     ...validatePagination(record),
     ...optionalBoolean(record, "missing_tab"),
+    ...validateScheduleLookups(record),
     ...(record.live_query === undefined ? {} : { live_query: validateLiveQuery(record, unavailable?.length ?? 0) }),
   };
+}
+
+/** 예정 영상 조회 수는 실제 streams 조회(live_query)가 있을 때만 있으며 protocol 상한을 넘지 않습니다.
+ * @param {Record<string, unknown>} record
+ */
+function validateScheduleLookups(record) {
+  if (Object.hasOwn(record, "schedule_lookups") !== (record.live_query !== undefined)) {
+    throw new RpcResponseError("schedule_lookups must accompany the live query proof");
+  }
+  if (record.schedule_lookups === undefined) return {};
+  const lookups = nonnegativeIntegerField(record, "schedule_lookups");
+  if (lookups > maxScheduleMetadataLookups) {
+    throw new RpcResponseError("schedule_lookups exceeds the protocol limit");
+  }
+  return { schedule_lookups: lookups };
 }
 
 /**

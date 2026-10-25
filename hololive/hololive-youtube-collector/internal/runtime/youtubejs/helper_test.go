@@ -632,6 +632,25 @@ func TestHLP011(t *testing.T) {
 	assertNoResidue(t, base)
 }
 
+// collector가 spawn한 Node helper의 V8 heap 한도가 Node 몫으로 제한되는지 실제 프로세스로 확인한다.
+func TestHLP013(t *testing.T) {
+	base := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+
+	defer cancel()
+
+	helper, _, err := Start(ctx, fixtureConfig(t, base, "require-heap-limit"))
+	if err != nil {
+		t.Fatalf("Start with heap limit check: %v", err)
+	}
+
+	if err := helper.Close(ctx); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	assertNoResidue(t, base)
+}
+
 func TestHLP012(t *testing.T) {
 	t.Run("missing-bin", testHLP012MissingBin)
 	t.Run("child-exit", testHLP012ChildExit)

@@ -405,6 +405,12 @@ func classifyPublicationCases(checkedAt time.Time) []classifyPublicationCase {
 		{name: "upcoming without confirmed schedule", result: premiere, mutate: func(result *youtubejs.VideoLiveCheckResult) {
 			result.ScheduledAt = nil
 		}, want: contract.VideoPublicationUnresolved},
+		{name: "upcoming with unconfirmed waiting state", result: premiere, mutate: func(result *youtubejs.VideoLiveCheckResult) {
+			result.WaitingStateConfirmed = new(false)
+		}, want: contract.VideoPublicationUnresolved},
+		{name: "upcoming without waiting state fact", result: premiere, mutate: func(result *youtubejs.VideoLiveCheckResult) {
+			result.WaitingStateConfirmed = nil
+		}, want: contract.VideoPublicationUnresolved},
 		{name: "upcoming publish date is not a release", result: premiere, mutate: func(result *youtubejs.VideoLiveCheckResult) {
 			result.ScheduledAt, result.PublishedAt = nil, new(testPublishedAt)
 		}, want: contract.VideoPublicationUnresolved},

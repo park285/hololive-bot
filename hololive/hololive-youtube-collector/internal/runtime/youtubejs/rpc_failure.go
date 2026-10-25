@@ -27,10 +27,30 @@ func helperStatusError(status int, payload []byte) error {
 		return protocolMismatch(errors.New("youtube.js helper status/body tuple mismatch"))
 	}
 
+	// helper는 조회가 없으면 필드를 생략하므로 명시적 0도 protocol 위반입니다.
+	if decoded.ScheduleLookups != nil && (*decoded.ScheduleLookups < 1 || *decoded.ScheduleLookups > ChannelLiveMaxScheduleLookups) {
+		return protocolMismatch(errors.New("youtube.js helper error schedule lookups are outside the protocol limit"))
+	}
+
 	base := collecterr.New(mapped.code, mapped.class, "youtube.js helper: "+boundedFailureMessage(decoded.Error.Message))
 
-	return applyHelperRetry(base, decoded.Error.Retry)
+	failure := applyHelperRetry(base, decoded.Error.Retry)
+	if decoded.ScheduleLookups != nil {
+		return &scheduleLookupError{lookups: *decoded.ScheduleLookups, err: failure}
+	}
+
+	return failure
 }
+
+// scheduleLookupError는 실패한 /v1/channel 요청이 그 전까지 보낸 예정 영상 조회 수를 오류와 함께 전달합니다.
+// 분류는 감싼 helper 오류를 그대로 따릅니다.
+type scheduleLookupError struct {
+	lookups int
+	err     error
+}
+
+func (e *scheduleLookupError) Error() string { return e.err.Error() }
+func (e *scheduleLookupError) Unwrap() error { return e.err }
 
 type mappedFailure struct {
 	code  contract.CollectionErrorCode

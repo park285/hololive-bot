@@ -57,6 +57,7 @@
 - [SQL·DB 리뷰 후속 작업 인계](plans/2026-10-15-sql-db-review-handoff.md) - 운영 source retention 실패, 알림 정리·집계 경합, RSS·due 지표 수정과 N1–N7, 315·316, 재측정·구조 압축 결정 기록. 로컬 구현·검증 완료, 운영 미적용.
 - [SQL 구조 압축(317–321) 세션 인계](plans/2026-10-16-sql-compaction-handoff.md) - 작업 트리 상태, migration 317–321·SQL·테스트 변경, 검증 결과, 발행·점검 창 적용 절차와 승인 경계.
 - [상태머신·최소 한 번 처리 로직의 AP 이관 계획](plans/2026-10-19-ap-state-machine-consolidation.md) - Go/SQL 정책 중복, inbox/outbox·lease·재시도·복구, 동기 파생 모델의 단계별 이관안과 검증·승인 경계. #667로 main 병합·운영 적용 완료. [인계 기록](plans/2026-10-19-ap-state-machine-consolidation-handoff.md)에 단계별 검증·운영 적용·남은 위험이 있습니다.
+- [YouTube 수집 경계 정리와 DB 보존 적체 해소 통합 계획](plans/2026-10-25-youtube-collection-and-retention-remediation.md) - collector Go·JS 경계 결함과 DB 보존 적체·보호 이력·인덱스 회수의 단계 순서, 의존, 검증·승인 경계. 세부 근거는 [DB 계획](plans/2026-10-25-db-growth-and-retention-remediation.md)과 [경계 리뷰 기록](../history/architecture/2026-10-25-youtube-collector-go-js-boundary-review.md)에 있습니다. 미구현.
 
 ## Compatibility Bridges
 

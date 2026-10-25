@@ -59,6 +59,7 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 	}
 
 	rpc.EnableMetrics(nil, collector.RequestInterval)
+	helper.EnableMetrics(nil)
 
 	return collectorInfra, nil
 }

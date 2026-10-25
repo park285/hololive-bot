@@ -1,8 +1,14 @@
 import { chmodSync } from "node:fs";
 import { createServer } from "node:http";
+import { getHeapStatistics } from "node:v8";
 
 const args = parseArgs(process.argv.slice(2));
 if (args.mode === "exit-now") {
+  process.exit(1);
+}
+// collector가 준 V8 old space 상한이 실제 heap 한도에 반영되지 않으면 기동하지 않습니다.
+// 192MiB old space에 young 영역 예약을 더한 값보다 크면 기본(cgroup 기반) 한도로 본 것입니다.
+if (args.mode === "require-heap-limit" && getHeapStatistics().heap_size_limit > 320 * 1024 * 1024) {
   process.exit(1);
 }
 if (args.mode === "insecure") {
@@ -78,8 +84,21 @@ function healthBody(state, maxInflight) {
     state,
     inflight: 0,
     max_inflight: maxInflight,
+    ...(args.mode === "proof-unavailable" ? { proof: unavailableProof } : {}),
   };
 }
+
+// 발급이 계속 실패하는 helper의 /health proof 진단입니다.
+const unavailableProof = {
+  state: "UNAVAILABLE",
+  last_error: "challenge_structure",
+  next_attempt_at: "2099-01-01T00:00:00.000Z",
+  bootstrap_attempts: 3,
+  bootstrap_successes: 1,
+  upstream_requests: 4,
+  minted_total: 2,
+  attached_total: 5,
+};
 
 function consume(req, done) {
   /** @type {Buffer[]} */

@@ -8,8 +8,18 @@
 
 ## 미출시
 
+## v12.1.0 - 2026-10-25
+
 - **의존성:** `openai-go/v3` v3.86.0·`quic-go` v0.64.1과 Go 전이 의존성, collector의 `youtubei.js` 18.3.0을 갱신합니다.
 - **YouTube.js helper 판정 소유권:** YouTube.js 18.2부터 `Video.is_live`가 재생 시간 표시가 없으면 라이브로 추정하고 `contentType` 없는 lockup을 오류 없이 영상 목록에서 뺍니다. helper는 더 이상 SDK `is_live` 추정값을 쓰지 않고 원문의 구조화된 표시(LIVE badge style, `Upcoming`·재생 시간 배지, LIVE_NOW 배지·time-status·`upcomingEventData`)로만 streams 상태를 정하며, 표시가 없는 행은 종료로 추정하지 않고 `parser_drift`로 거부합니다(범프 전에는 배지 없는 lockup을 ENDED로 보고했습니다). 본문·continuation 페이지의 원문 행 수와 SDK 목록 길이를 대조해 미지 renderer·null·분류되지 않은 lockup의 조용한 누락과 중첩 shelf의 추가를 거부하고, 제목 노드 없는 lockup도 거부합니다. 공유 게시물 안의 원본 게시물은 행에서 제외해 중복 수집도 사라집니다. continuation은 SDK와 같은 endpoint 호출을 유지하면서 원문을 보존합니다. 범프 전부터 SDK가 진단 없이 빼던 본문 행이 성공 응답으로 통과하던 문제도 함께 닫힙니다.
+- **YouTube.js helper wire 계약 검증:** Go 클라이언트와 helper가 같은 fixture(`youtubejs/testdata/wire-contract.json`)로 실패 tuple·retry hint·endpoint별 유효·무효 본문을 검증하고, 실제 `server.mjs`를 띄운 오프라인 왕복 테스트를 둡니다. Go의 최소 성공 응답 크기는 DTO를 marshal해 계산하며 `/v1/channel`의 171·160 불일치가 사라집니다.
+- **방송 탭 예정 영상 조회 예산:** live 채널 RPC가 조회 상한 `max_schedule_lookups`(32)를 보내고, 시각 없는 예정 영상이 상한을 넘으면 player 요청 전에 `parser_drift` 대신 `response_too_large/RESOURCE_LIMIT`로 거부합니다. helper는 성공·실패 응답에 실제 조회 수를 싣고 collector는 그 수만큼 기존 limiter 예약을 하나씩 기다리며, `youtubejs_channel_live` 호출 예산은 RPC 1회와 조회 32회입니다. 기본 설정의 수집 시한은 약 39초에서 약 21분으로 늘어납니다. collector와 helper는 exact-key 짝 변경이라 같은 image로만 동작합니다.
+- **예정 최초공개 판정:** 게시 시각 판정이 `waiting_state_confirmed`를 직접 요구하고, helper는 `scheduled_at`이 있으면 대기 상태 확인을 필수로 검증합니다.
+- **continuation 일시 간극:** 부분 결과(`continuation_transient`)를 연결·본문 수신 실패, transport가 분류한 5xx, 시간 초과로 한정합니다. HTTP 4xx는 기존 분류로 실패하고 그 밖의 SDK 예외는 `parser_drift`입니다.
+- **helper PO 발급 상태 메트릭:** scrape마다 helper `/health`를 읽어 `youtubejs_po_proof_state{state}`, `youtubejs_po_proof_last_error{code}`, 발급·부착 누계와 `youtubejs_helper_health_scrape_success`를 냅니다. 새 소스를 AP rsync 목록에 추가했습니다.
+- **공유 수집 Innertube 초기화:** bootstrap 중 READY 전에 upstream config 조회 없이(`retrieve_innertube_config: false`) 만들고, 실패하면 helper가 FAULTED로 종료합니다.
+- **취소된 PO mint:** collector RPC 취소로 중단된 mint 뒤에는 broker가 퇴역시킨 세대를 재사용하지 않고 `UNAVAILABLE`·`last_error=mint_aborted`로 다음 발급을 기다립니다.
+- **Node helper heap 상한:** helper를 `--max-old-space-size=192`로 띄워 V8 old space를 collector 메모리 상한 안의 Node 몫으로 제한합니다.
 
 ## v12.0.1 - 2026-10-25
 

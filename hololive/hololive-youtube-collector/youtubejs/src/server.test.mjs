@@ -67,7 +67,7 @@ test("handleCommunityRequest reports an ordinary upstream failure without a succ
 
 test("handleChannelRequest reports the typed parser response error class", async () => {
   const result = await handleChannelRequest(
-    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
+    rpcBody({ kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32 }),
     async () => ({ live_sessions: "not-an-array" }),
   );
   assert.equal(result.status, 422);
@@ -133,7 +133,7 @@ test("handleChannelRequest requires an explicit live or metadata kind", async ()
 
 test("handleChannelRequest rejects an unvalidated fetcher response", async () => {
   const result = await handleChannelRequest(
-    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
+    rpcBody({ kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32 }),
     async () => ({ live_sessions: "not-an-array" }),
   );
   assert.equal(result.status, 422);
@@ -142,7 +142,7 @@ test("handleChannelRequest rejects an unvalidated fetcher response", async () =>
 
 test("handleChannelRequest rejects fields outside the validated response contract", async () => {
   const result = await handleChannelRequest(
-    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
+    rpcBody({ kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32 }),
     async () => ({
       live_sessions: [], profile: {}, photo: [],
       page_count: 0, exhausted: true, continuity: "CONTIGUOUS",

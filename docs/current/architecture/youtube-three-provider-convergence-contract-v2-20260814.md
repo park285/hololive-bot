@@ -1889,7 +1889,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 - retry budget은 기존 provider policy를 재사용하고 신규 무제한 retry를 만들지 않는다.
 - rate limit/429는 bounded retry-after를 존중한다.
 - parser drift는 permanent collection error로 metric을 남기고 complete-empty를 publish하지 않는다.
-- YouTube.js raw player 보강의 32개 상한 초과, video identity 불일치, 잘못된 boolean/시각 shape 또는 아래의 접근 제한에 해당하지 않는 시각 부재는 `parser_drift`다. 해당 collection은 live observation과 checkpoint를 만들지 않으며 다른 provider 호출이나 표시 문자열 파싱으로 전환하지 않는다.
+- YouTube.js raw player 보강의 video identity 불일치, 잘못된 boolean/시각 shape 또는 아래의 접근 제한에 해당하지 않는 시각 부재는 `parser_drift`다. 보강 후보가 collector가 요청마다 정한 조회 상한(`max_schedule_lookups`, protocol 최대 32)을 넘으면 player 요청 전에 `response_too_large/RESOURCE_LIMIT`다. 두 경우 모두 해당 collection은 live observation과 checkpoint를 만들지 않으며 다른 provider 호출이나 표시 문자열 파싱으로 전환하지 않는다.
 - 관측된 `UNPLAYABLE`/`playerLegacyDesktopYpcOfferRenderer`와 정확한 video ID, `isUpcoming=true`, `isLiveContent=true`가 확인되고 두 기계가독 시각이 모두 없으면 `unavailable_live_sessions`에 ID·채널·`access_restricted`를 기록한다. 제한 행을 제외한 live observation은 PARTIAL이며 빈 sessions도 완전 수집으로 승격하지 않는다. 부재로 종료하지 않고 기존 canonical 상태·확인 시각을 보존하며, 명시적인 종료와 정상 positive는 기존 consumer 규칙을 따른다. poll은 완료하여 다음 기존 slot에서 재관측하고 추가 retry·stale 시각 재사용·provider를 만들지 않는다. 최대 32개 제한 행의 중복·중첩·교차 채널·미지 사유를 거부한다.
 - 이 접근 제한 예외의 소유자는 collector다. 구조화된 `youtubejs_live_schedule_unavailable` WARN은 ID·사유를, `youtube_collection_completeness_total`은 PARTIAL 발행을 나타낸다. renderer 변경 또는 다른 제한 유형의 독립 재현 때 범위를 재검토한다. `DEC-20260911-youtube-restricted-schedule-isolation`이 소유권과 예외를 통제한다.
 - 목록과 player 조회 사이에 실제 `LIVE`로 전환된 행은 예정 시각을 발명하지 않고 `LIVE`로 반영해 기존 catch-up admission에 맡긴다. 처음부터 `LIVE`인 목록 행도 상세 조회 없이 같은 경로를 유지한다.

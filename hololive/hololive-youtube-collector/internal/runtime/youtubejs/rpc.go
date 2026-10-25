@@ -100,12 +100,62 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 
 	request.MaxSuccessResponseBytes = limit
 
+	request.MaxScheduleLookups = 0
+	if request.Kind == "live" {
+		request.MaxScheduleLookups = ChannelLiveMaxScheduleLookups
+	}
+
 	result, err := c.doJSON[ChannelResult](ctx, "/v1/channel", &request, int64(request.MaxSuccessResponseBytes))
 	if err != nil {
+		return ChannelResult{}, c.payFailedScheduleLookups(ctx, err, request.MaxScheduleLookups)
+	}
+
+	lookups := 0
+
+	if result.ScheduleLookups != nil {
+		lookups = *result.ScheduleLookups
+	}
+
+	if lookups > request.MaxScheduleLookups {
+		return ChannelResult{}, protocolMismatch(errors.New("youtube.js helper schedule lookups exceed the requested budget"))
+	}
+
+	if err := c.payScheduleLookups(ctx, lookups); err != nil {
 		return ChannelResult{}, err
 	}
 
 	return *result, nil
+}
+
+// payFailedScheduleLookups는 실패한 RPC가 그 전까지 보낸 예정 영상 조회를 지불하고 RPC 오류를 그대로 돌려줍니다.
+func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget int) error {
+	failure, ok := errors.AsType[*scheduleLookupError](err)
+	if !ok {
+		return err
+	}
+
+	if failure.lookups > budget {
+		return protocolMismatch(errors.New("youtube.js helper schedule lookups exceed the requested budget"))
+	}
+
+	if payErr := c.payScheduleLookups(ctx, failure.lookups); payErr != nil {
+		return errors.Join(err, payErr)
+	}
+
+	return err
+}
+
+// payScheduleLookups는 helper가 RPC 안에서 보낸 예정 영상 player 조회를 limiter 예약 하나씩으로 지불합니다.
+// 다음 RPC가 이 조회들과 같은 간격을 두게 하며, 예약을 한 번에 하나씩 기다리므로 대기 예약 수가 inflight를 넘지 않아
+// 실행 프로필의 limiter 예산(호출 수 x inflight x 간격)과 맞습니다.
+func (c *RPC) payScheduleLookups(ctx context.Context, lookups int) error {
+	for range lookups {
+		if err := c.observeLimiterWait(ctx, "/v1/channel"); err != nil {
+			return fmt.Errorf("pay schedule lookup: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // FetchChannelLiveCheck는 채널 /live 확인을 한 번 요청합니다. 응답 예산은 MaxLiveCheckResponseBytes 이하로 제한하며
@@ -210,6 +260,11 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 
 	response := new(T)
 	if err := decodeHelperResponse(resp, successLimit, response); err != nil {
+		// 예정 영상 조회 수는 /v1/channel 오류 본문에만 있을 수 있습니다.
+		if _, ok := errors.AsType[*scheduleLookupError](err); ok && path != "/v1/channel" {
+			return nil, protocolMismatch(errors.New("youtube.js helper reported schedule lookups outside the channel endpoint"))
+		}
+
 		return nil, fmt.Errorf("decode helper response: %w", err)
 	}
 
@@ -231,18 +286,57 @@ func invalidHelperHTTPResponse(resp *http.Response) bool {
 }
 
 func minimumSuccessResponseBytes(path string) int64 {
-	switch path {
-	case "/v1/community", "/v1/content":
-		return 124
-	case "/v1/channel":
-		return 171
-	case "/v1/channel_live_check":
-		return 97
-	case "/v1/video_live_check":
-		return 139
-	default:
-		return 1
+	if size, ok := minimumSuccessBytes[path]; ok {
+		return size
 	}
+
+	return 1
+}
+
+// minimumSuccessBytes는 helper가 돌려줄 수 있는 가장 작은 성공 본문의 크기입니다. 같은 DTO를 marshal해
+// 필드 이름과 선택 필드 생략을 wire와 함께 따라가며, 식별자는 비워 하한만 셉니다.
+// 이 값이 helper 하한보다 크면 helper가 처리할 요청을 Go가 먼저 거부하므로 helper 하한을 넘지 않아야 합니다.
+// 확인된 MEMBERS_ONLY의 필수 channel_id는 빈 값이면 생략되어 helper 하한보다 작게 계산되며,
+// 그 사이의 요청은 helper가 같은 RESOURCE_LIMIT로 거부합니다.
+var minimumSuccessBytes = map[string]int64{
+	"/v1/community": encodedSize(&CommunityResult{
+		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
+		Continuity: string(contract.ContinuityContiguous), TerminationReason: TerminationExhausted,
+		Posts: []*CommunityPost{},
+	}),
+	"/v1/content": encodedSize(&ContentResult{
+		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
+		Continuity: string(contract.ContinuityContiguous), TerminationReason: TerminationExhausted,
+		Items: []ContentItem{},
+	}),
+	"/v1/channel": encodedSize(&ChannelResult{
+		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
+		Continuity: string(contract.ContinuityNotApplicable), TerminationReason: TerminationExhausted,
+		LiveSessions: []LiveSessionItem{}, Photo: []ChannelPhotoVariant{},
+	}),
+	"/v1/channel_live_check": encodedSize(&ChannelLiveCheckResult{
+		ProtocolVersion: ProtocolVersion, Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true,
+	}),
+	"/v1/video_live_check": min(
+		encodedSize(&VideoLiveCheckResult{
+			ProtocolVersion: ProtocolVersion, Availability: contract.VideoAvailabilityUnknown,
+			Method: contract.VideoAvailabilityMethodUnknown, UnknownReason: contract.LiveCheckReasonIdentityMissing,
+		}),
+		encodedSize(&VideoLiveCheckResult{
+			ProtocolVersion: ProtocolVersion, IdentityConfirmed: true,
+			Availability: contract.VideoAvailabilityMembersOnly, Method: contract.VideoAvailabilityMethodPlayerMembersOnly,
+		}),
+	),
+}
+
+func encodedSize(value any) int64 {
+	raw, err := jsonv2.Marshal(value)
+	if err != nil {
+		// 고정된 DTO 값의 marshal 실패는 프로그램 결함이므로 package 초기화에서 드러낸다.
+		panic(fmt.Sprintf("encode minimal youtube.js helper success response: %v", err))
+	}
+
+	return int64(len(raw))
 }
 
 func (c *RPC) newJSONRequest(ctx context.Context, path string, request any) (*http.Request, error) {

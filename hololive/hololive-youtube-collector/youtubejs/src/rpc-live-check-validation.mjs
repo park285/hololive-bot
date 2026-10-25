@@ -171,6 +171,10 @@ export function validateVideoLiveCheckResponse(value) {
   if (confirmed && (unknownReason === undefined || unknownReason === "availability_unclassified")) {
     assertLifecycleFacts(facts, Date.now());
   }
+  // 예정 시각은 대기 상태가 확인된 경우에만 근거이므로 확인 사실 없이 내보내지 않습니다.
+  if (facts.scheduled_at !== undefined && facts.waiting_state_confirmed !== true) {
+    throw new RpcResponseError("video live check scheduled_at requires a confirmed waiting state");
+  }
   if (availability === "PUBLIC" && facts.is_private !== false) {
     throw new RpcResponseError("PUBLIC availability requires raw is_private=false");
   }

@@ -324,24 +324,40 @@ test("close aborts pending issuance and cannot create new player or issuer work"
   assert.deepEqual(f.sent, [false]);
 });
 
-test("a canceled collection mint does not discard another caller's valid generation", async (t) => {
+test("a canceled collection mint drops the generation the broker retires on request abort", async (t) => {
   const started = Promise.withResolvers();
-  let calls = 0;
-  const f = fixture(t, { broker: { async mint(_generation, _video, signal) {
-    if (++calls > 1) return "current-proof";
+  const retiredByAbort = new Set();
+  const minted = [];
+  const f = fixture(t, { broker: { async mint(generation, _video, signal) {
+    minted.push(generation);
+    // 실제 broker는 worker IO 중 요청이 끊기면 그 세대를 퇴역시키므로(ExitRequestAborted) 이후 mint는 실패합니다.
+    if (retiredByAbort.has(generation)) throw new ProofError("broker_unavailable");
+    if (minted.length > 1) return "current-proof";
     started.resolve();
-    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => {
+      retiredByAbort.add(generation);
+      reject(signal.reason);
+    }, { once: true }));
   } } });
   await warm(f);
-  const generation = f.controller.status().generation;
   const rpc = new AbortController();
   const canceled = assert.rejects(f.player(rpc.signal), { name: "AbortError" });
   await started.promise;
   rpc.abort();
   await canceled;
+  assert.equal(f.controller.status().generation, undefined);
+  assert.equal(f.controller.status().state, "UNAVAILABLE");
+  assert.equal(f.controller.status().last_error, "mint_aborted");
+
+  // 퇴역한 세대로 다시 mint하지 않고, 시작 간격이 지나면 새 세대를 발급해 붙입니다.
   await f.player();
-  assert.equal(f.controller.status().generation, generation);
+  assert.deepEqual(minted, ["generation-1"]);
+  f.advance(300_000);
+  await f.player();
+  await tick();
+  await f.player();
+  assert.equal(f.controller.status().generation, "generation-2");
   assert.equal(f.controller.status().state, "READY");
-  assert.deepEqual(f.sent, [false, true]);
-  assert.equal(f.requests.length, 2);
+  assert.deepEqual(minted, ["generation-1", "generation-2"]);
+  assert.deepEqual(f.sent, [false, false, false, true]);
 });

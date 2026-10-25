@@ -366,6 +366,7 @@ hololive/hololive-youtube-collector/internal/runtime/youtubejs/health.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/helper.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/lifecycle.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/metrics.go
+hololive/hololive-youtube-collector/internal/runtime/youtubejs/proof_metrics.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/protocol.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/ratelimiter.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/rpc.go

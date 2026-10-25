@@ -95,6 +95,8 @@ type RPCFailure struct {
 type RPCErrorBody struct {
 	ProtocolVersion int16      `json:"protocol_version"`
 	Error           RPCFailure `json:"error"`
+	// ScheduleLookups는 /v1/channel live 요청이 실패 전까지 보낸 예정 영상 player 조회 수입니다. helper는 0이면 생략합니다.
+	ScheduleLookups *int `json:"schedule_lookups,omitempty"`
 }
 
 type Pagination struct {
@@ -211,7 +213,7 @@ type CommunityResult struct {
 	Pagination
 
 	Posts      []*CommunityPost `json:"posts"`
-	MissingTab bool             `json:"missing_tab"`
+	MissingTab bool             `json:"missing_tab,omitzero"`
 }
 
 func (r *CommunityResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -242,19 +244,26 @@ type ContentResult struct {
 	Pagination
 
 	Items      []ContentItem `json:"items"`
-	MissingTab bool          `json:"missing_tab"`
+	MissingTab bool          `json:"missing_tab,omitzero"`
 }
 
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 func (r *ContentResult) validateSuccess() error         { return r.Validate() }
 
+// ChannelLiveMaxScheduleLookups는 live 채널 RPC 하나가 시각 없는 예정 영상마다 보내는 player 조회 수의 상한입니다.
+// 값은 helper protocol 상한과 같으며, 초과하는 snapshot은 helper가 response_too_large(RESOURCE_LIMIT)로 거부합니다.
+// 이 조회는 RPC 안에서 일어나므로 collector가 RPC 뒤에 limiter로 지불하고 job 호출 예산에 셉니다.
+const ChannelLiveMaxScheduleLookups = 32
+
 // ChannelRequest는 동일 bundle의 helper에 live 또는 metadata 수집만 요청합니다.
 type ChannelRequest struct {
-	ProtocolVersion         int16  `json:"protocol_version"`
-	ChannelID               string `json:"channel_id"`
-	Kind                    string `json:"kind"`
-	MaxPages                int    `json:"max_pages"`
-	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
+	ProtocolVersion int16  `json:"protocol_version"`
+	ChannelID       string `json:"channel_id"`
+	Kind            string `json:"kind"`
+	MaxPages        int    `json:"max_pages"`
+	// MaxScheduleLookups는 FetchChannel이 live 요청에만 채웁니다. helper는 live 요청에서 이 값이 없으면 거부합니다.
+	MaxScheduleLookups      int `json:"max_schedule_lookups,omitzero"`
+	MaxSuccessResponseBytes int `json:"max_success_response_bytes"`
 }
 
 type LiveSessionItem struct {
@@ -269,10 +278,10 @@ type LiveSessionItem struct {
 }
 
 type ChannelProfileItem struct {
-	Handle      *string `json:"handle"`
-	Description *string `json:"description"`
-	Country     *string `json:"country"`
-	JoinedDate  *string `json:"joined_date"`
+	Handle      *string `json:"handle,omitzero"`
+	Description *string `json:"description,omitzero"`
+	Country     *string `json:"country,omitzero"`
+	JoinedDate  *string `json:"joined_date,omitzero"`
 }
 
 type ChannelPhotoVariant struct {
@@ -298,12 +307,30 @@ type ChannelResult struct {
 	UnavailableLiveSessions []UnavailableLiveSession      `json:"unavailable_live_sessions,omitempty"`
 	Profile                 ChannelProfileItem            `json:"profile"`
 	Photo                   []ChannelPhotoVariant         `json:"photo"`
-	MissingTab              bool                          `json:"missing_tab"`
+	MissingTab              bool                          `json:"missing_tab,omitzero"`
+	ScheduleLookups         *int                          `json:"schedule_lookups,omitempty"`
 	LiveQuery               *contract.LiveSnapshotQueryV1 `json:"live_query,omitempty"`
 }
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
-func (r *ChannelResult) validateSuccess() error         { return r.Validate() }
+
+// validateSuccess는 예정 영상 조회 수가 live_query와 함께만 있고 protocol 상한 안인지도 확인합니다.
+// 값이 없을 때 0으로 받아들이면 helper가 보낸 조회의 limiter 지불이 빠지므로 존재 여부를 따로 봅니다.
+func (r *ChannelResult) validateSuccess() error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+
+	if (r.LiveQuery != nil) != (r.ScheduleLookups != nil) {
+		return errors.New("youtube.js helper schedule lookups must accompany the live query")
+	}
+
+	if r.ScheduleLookups != nil && (*r.ScheduleLookups < 0 || *r.ScheduleLookups > ChannelLiveMaxScheduleLookups) {
+		return errors.New("youtube.js helper schedule lookups are outside the protocol limit")
+	}
+
+	return nil
+}
 
 // MaxLiveCheckResponseBytes는 평탄한 확인 결과 하나의 성공 응답 상한입니다.
 // 확인 RPC는 목록 RPC의 응답 예산을 물려받지 않고 이 값 이하로 요청합니다.
