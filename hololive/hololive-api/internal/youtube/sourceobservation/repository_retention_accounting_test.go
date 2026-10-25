@@ -64,9 +64,16 @@ func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
 	result, err := repo.RunRetentionTick(ctx, cfg, now)
 	require.NoError(t, err)
 
+	// 기대 나이는 남은 가장 오래된 원본의 실제 received_at으로 계산한다. 원본을 하나씩 늙히는 동안 흐른 시간이
+	// tick 기준 시각과의 차이에 섞이지 않게 한다.
+	var oldestRemaining time.Time
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT received_at FROM source_observations WHERE id=$1`, ids[sourceRetentionMaxWindows]).
+		Scan(&oldestRemaining))
+
 	part := evidenceRetentionPart(t, result)
 	require.True(t, part.BacklogKnown)
-	require.InDelta(t, (time.Duration(100-sourceRetentionMaxWindows) * 24 * time.Hour).Seconds(), part.BacklogAge.Seconds(), 1)
+	require.InDelta(t, now.Sub(oldestRemaining).Seconds(), part.BacklogAge.Seconds(), 1)
 	require.EqualValues(t, sourceRetentionMaxWindows, part.Deleted)
 
 	result, err = repo.RunRetentionTick(ctx, cfg, now)
