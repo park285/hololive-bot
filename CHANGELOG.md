@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **publish set 임시 파일 원인 제거(migration 340):** `lock_source_observation_identity`는 `uq_source_observation_identity` 전체 키 조회라 최대 1행인데 SETOF 기본 추정 1000행이 남아 있어, collector publish set의 `existing` CTE가 입력 100행 × 1000으로 과대 추정되고 checkpoint 조인이 표 전체 seq scan + 다중 batch hash join으로 풀려 발행마다 작은 임시 파일을 만들었습니다(2026-10-24 운영 관측: `log_temp_files=0`에서 하루 약 6,800만 줄, `source_collection_checkpoints` seq scan 217만 회). `ALTER FUNCTION ... ROWS 1`만 적용하며 함수 본문·권한·발행 결과는 그대로입니다. 적용 뒤 checkpoint 조인은 기본 키 index scan으로 바뀌고 임시 파일이 생기지 않습니다(격리 PostgreSQL EXPLAIN 회귀 테스트 추가).
 - **holo-postgres 로그·exporter 연결 예산:** `log_temp_files`를 0에서 1MB로 올려 `work_mem` 아래의 작은 hash batch 임시 파일(139~156바이트)마다 다중 행 STATEMENT 전문이 기록되던 하루 약 6,800만 줄의 PostgreSQL 로그를 멈춥니다. `postgres_exporter` role 연결 한도를 1에서 2로, `max_connections`를 60에서 61로 올려 exporter의 collector 연결이 매 scrape마다 거부되던 상태(2026-10-19부터 `pg_up`만 남음)를 복구하며 용량 gate의 여유 3은 유지합니다. 운영 반영은 `role-limits.sql`의 관리자 소켓 실행과 `holo-postgres` 재생성이 필요합니다.
 - **로컬 생성물 정리:** 승인된 알림 미리보기 이미지를 제거하고 Python 빌드 도구의 `__pycache__`를 Git 추적 대상에서 제외했습니다. 실행 코드·설정·배포 이미지는 바꾸지 않습니다.
 
