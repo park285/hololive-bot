@@ -61,6 +61,9 @@ COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-youtube-collector ./hololive/hololive-youtube-collector
 COPY scripts/build ./scripts/build
 
+# builder의 CA bundle에서 신뢰를 철회한 루트를 뺍니다.
+RUN sh scripts/build/ca-distrust.sh /etc/ssl/certs/ca-certificates.crt /tmp/ca-certificates.crt
+
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-collector
 
 RUN \
@@ -96,7 +99,7 @@ WORKDIR /app
 
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
-COPY --from=builder --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder --link /tmp/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=youtubejs-runtime --link /lib/ld-musl-*.so.1 /lib/
 COPY --from=youtubejs-runtime --link /usr/lib/libgcc_s.so.1 /usr/lib/
 COPY --from=youtubejs-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
