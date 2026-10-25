@@ -50,6 +50,29 @@ func (r *RateLimiter) Wait(ctx context.Context) error {
 	}
 }
 
+// Reserve는 이미 일어난 upstream 호출 n건을 기다리지 않고 예약합니다. 수집 문맥과 무관하게 예약하고 되돌리지
+// 않으므로 다음 Wait가 그 호출들의 간격만큼 기다립니다.
+func (r *RateLimiter) Reserve(n int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if n <= 0 || r.interval <= 0 {
+		return
+	}
+
+	next := time.Now()
+
+	if !r.last.IsZero() {
+		if allowed := r.last.Add(r.interval); allowed.After(next) {
+			next = allowed
+		}
+	}
+
+	r.last = next.Add(time.Duration(n-1) * r.interval)
+
+	r.seq += uint64(n)
+}
+
 func (r *RateLimiter) reserve(ctx context.Context) (time.Duration, rateLimiterReservation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
