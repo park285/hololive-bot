@@ -35,15 +35,18 @@ func helperStatusError(status int, payload []byte) error {
 	base := collecterr.New(mapped.code, mapped.class, "youtube.js helper: "+boundedFailureMessage(decoded.Error.Message))
 
 	failure := applyHelperRetry(base, decoded.Error.Retry)
+
+	lookups := 0
+
 	if decoded.ScheduleLookups != nil {
-		return &scheduleLookupError{lookups: *decoded.ScheduleLookups, err: failure}
+		lookups = *decoded.ScheduleLookups
 	}
 
-	return failure
+	return &scheduleLookupError{lookups: lookups, err: failure}
 }
 
-// scheduleLookupError는 실패한 /v1/channel 요청이 그 전까지 보낸 예정 영상 조회 수를 오류와 함께 전달합니다.
-// 분류는 감싼 helper 오류를 그대로 따릅니다.
+// scheduleLookupError는 검증된 helper 오류 본문의 오류와 그 본문이 보고한 예정 영상 조회 수(생략은 0)를 함께
+// 전달합니다. 이 오류가 없으면 helper가 조회 수를 보고하지 못한 것입니다. 분류는 감싼 helper 오류를 그대로 따릅니다.
 type scheduleLookupError struct {
 	lookups int
 	err     error

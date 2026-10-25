@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
@@ -105,9 +107,18 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 		request.MaxScheduleLookups = ChannelLiveMaxScheduleLookups
 	}
 
-	result, err := c.doJSON[ChannelResult](ctx, "/v1/channel", &request, int64(request.MaxSuccessResponseBytes))
+	// helper에 요청을 다 보냈는지 기록합니다. 보낸 뒤 조회 수를 받지 못하면 상한만큼 지불해야 합니다.
+	var sent atomic.Bool
+
+	traced := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(info httptrace.WroteRequestInfo) {
+		if info.Err == nil {
+			sent.Store(true)
+		}
+	}})
+
+	result, err := c.doJSON[ChannelResult](traced, "/v1/channel", &request, int64(request.MaxSuccessResponseBytes))
 	if err != nil {
-		return ChannelResult{}, c.payFailedScheduleLookups(ctx, err, request.MaxScheduleLookups)
+		return ChannelResult{}, c.payFailedScheduleLookups(ctx, err, request.MaxScheduleLookups, sent.Load())
 	}
 
 	lookups := 0
@@ -117,6 +128,8 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 	}
 
 	if lookups > request.MaxScheduleLookups {
+		c.reserveLimiter(request.MaxScheduleLookups)
+
 		return ChannelResult{}, protocolMismatch(errors.New("youtube.js helper schedule lookups exceed the requested budget"))
 	}
 
@@ -128,13 +141,22 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 }
 
 // payFailedScheduleLookups는 실패한 RPC가 그 전까지 보낸 예정 영상 조회를 지불하고 RPC 오류를 그대로 돌려줍니다.
-func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget int) error {
+// 검증된 helper 오류 본문은 조회 수를 싣습니다(생략은 0). 요청을 helper에 보냈는데 그런 본문을 받지 못하면
+// 시한 초과·취소·연결 끊김 전까지 보낸 조회 수를 알 수 없으므로, 요청한 상한만큼 기다리지 않고 예약합니다.
+// 요청이 끊기면 helper가 진행 중인 조회를 중단하므로 상한은 실제 조회 수의 상한입니다.
+func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget int, sent bool) error {
 	failure, ok := errors.AsType[*scheduleLookupError](err)
 	if !ok {
+		if sent {
+			c.reserveLimiter(budget)
+		}
+
 		return err
 	}
 
 	if failure.lookups > budget {
+		c.reserveLimiter(budget)
+
 		return protocolMismatch(errors.New("youtube.js helper schedule lookups exceed the requested budget"))
 	}
 
@@ -147,15 +169,24 @@ func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget in
 
 // payScheduleLookups는 helper가 RPC 안에서 보낸 예정 영상 player 조회를 limiter 예약 하나씩으로 지불합니다.
 // 다음 RPC가 이 조회들과 같은 간격을 두게 하며, 예약을 한 번에 하나씩 기다리므로 대기 예약 수가 inflight를 넘지 않아
-// 실행 프로필의 limiter 예산(호출 수 x inflight x 간격)과 맞습니다.
+// 실행 프로필의 limiter 예산(호출 수 x inflight x 간격)과 맞습니다. 기다리는 중 수집이 끝나면 조회는 이미
+// 일어났으므로 남은 몫을 기다리지 않고 예약해 다음 RPC가 대신 기다리게 합니다.
 func (c *RPC) payScheduleLookups(ctx context.Context, lookups int) error {
-	for range lookups {
+	for paid := range lookups {
 		if err := c.observeLimiterWait(ctx, "/v1/channel"); err != nil {
+			c.reserveLimiter(lookups - paid)
+
 			return fmt.Errorf("pay schedule lookup: %w", err)
 		}
 	}
 
 	return nil
+}
+
+func (c *RPC) reserveLimiter(calls int) {
+	if c.limiter != nil {
+		c.limiter.Reserve(calls)
+	}
 }
 
 // FetchChannelLiveCheck는 채널 /live 확인을 한 번 요청합니다. 응답 예산은 MaxLiveCheckResponseBytes 이하로 제한하며
@@ -261,7 +292,7 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 	response := new(T)
 	if err := decodeHelperResponse(resp, successLimit, response); err != nil {
 		// 예정 영상 조회 수는 /v1/channel 오류 본문에만 있을 수 있습니다.
-		if _, ok := errors.AsType[*scheduleLookupError](err); ok && path != "/v1/channel" {
+		if failure, ok := errors.AsType[*scheduleLookupError](err); ok && failure.lookups > 0 && path != "/v1/channel" {
 			return nil, protocolMismatch(errors.New("youtube.js helper reported schedule lookups outside the channel endpoint"))
 		}
 
