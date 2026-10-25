@@ -8,7 +8,9 @@ import {
   paginationEnvelopeReserve,
   paginationResult,
 } from "./pagination.mjs";
+import { FetchTransportError } from "./fetch-transport.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
+import { runUpstream } from "./upstream-errors.mjs";
 
 const tupleFixture = JSON.parse(
   readFileSync(new URL("../testdata/pagination-tuples.json", import.meta.url), "utf8"),
@@ -103,6 +105,50 @@ test("PAG-003 later recognized transient preserves prefix", async () => {
     },
   }));
   assert.equal(timedOut.termination_reason, "continuation_transient");
+
+  const serverError = new FetchTransportError("collection_failed", "TRANSIENT", "upstream request failed with status code 503");
+  const unavailable = await paginate(options({
+    firstPage: page("a", "cursor-b"),
+    getContinuation: async () => {
+      throw serverError;
+    },
+  }));
+  assert.equal(unavailable.termination_reason, "continuation_transient");
+
+  // SDK가 본문을 읽다 연결이 끊기면 runUpstream이 TypeError를 감싸지만 원인은 네트워크 실패입니다.
+  const terminated = Object.assign(new TypeError("terminated"), { cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }) });
+  const bodyCut = await paginate(options({
+    firstPage: page("a", "cursor-b"),
+    getContinuation: () => runUpstream(async () => {
+      throw terminated;
+    }),
+  }));
+  assert.equal(bodyCut.termination_reason, "continuation_transient");
+});
+
+test("PAG-014 continuation SDK exceptions are parser drift instead of a transient gap", async () => {
+  // 바뀐 continuation 응답 형상에서 SDK가 던지는 TypeError는 runUpstream을 거쳐도 일시 장애가 아닙니다.
+  await assert.rejects(
+    () => paginate(options({
+      firstPage: page("a", "cursor-b"),
+      getContinuation: () => runUpstream(async () => {
+        throw new TypeError("Cannot read properties of undefined (reading 'contents')");
+      }),
+    })),
+    (error) => error.code === "parser_drift",
+  );
+  // transport가 만들지 않은 HTTP 4xx는 앞 페이지만의 성공으로 바꾸지 않고 기존 분류로 실패합니다.
+  const notFound = new Error("upstream returned not found");
+  notFound.status = 404;
+  await assert.rejects(
+    () => paginate(options({
+      firstPage: page("a", "cursor-b"),
+      getContinuation: async () => {
+        throw notFound;
+      },
+    })),
+    (error) => error === notFound,
+  );
 });
 
 test("PAG-004 later protocol/internal/parser failures are fatal", async () => {

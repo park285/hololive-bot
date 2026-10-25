@@ -69,6 +69,21 @@ export function upstreamHTTPFailureCode(status) {
   return "collection_failed";
 }
 
+/** upstream HTTP 응답 상태를 읽습니다. HTTP 응답에서 생긴 오류가 아니면 undefined입니다.
+ * @param {unknown} error @returns {number | undefined}
+ */
+export function upstreamHTTPStatus(error) {
+  if (error instanceof Utils.InnertubeError) {
+    // youtubei.js 18의 HTTPClient는 status 필드 없이 이 메시지만 제공합니다.
+    const match = /^Request to .* failed with status code ([1-5]\d{2})$/.exec(error.message);
+    return match == null ? undefined : Number(match[1]);
+  }
+  if (isRecord(error) && typeof error.status === "number" && Number.isInteger(error.status) && error.status >= 400 && error.status <= 599) {
+    return error.status;
+  }
+  return undefined;
+}
+
 /** 취소·명시적 helper 결함은 보존하고, 일반 upstream 실패는 비치명적 수집 실패로 분류합니다.
  * @param {unknown} error
  * @param {"helper" | "upstream"} [origin]
@@ -80,14 +95,9 @@ export function classifyUpstreamError(error, origin = "helper") {
     return /** @type {RPCErrorCode} */ (error.code);
   }
   if (isTransientNetworkError(error)) return "collection_failed";
-  if (error instanceof Utils.InnertubeError) {
-    // youtubei.js 18의 HTTPClient는 status 필드 없이 이 메시지만 제공합니다.
-    const match = /^Request to .* failed with status code ([1-5]\d{2})$/.exec(error.message);
-    return match == null ? "collection_failed" : upstreamHTTPFailureCode(Number(match[1]));
-  }
-  if (isRecord(error) && typeof error.status === "number" && Number.isInteger(error.status) && error.status >= 400 && error.status <= 599) {
-    return upstreamHTTPFailureCode(error.status);
-  }
+  const status = upstreamHTTPStatus(error);
+  if (status !== undefined) return upstreamHTTPFailureCode(status);
+  if (error instanceof Utils.InnertubeError) return "collection_failed";
   // undici는 DNS·TLS·redirect 실패도 TypeError로 전달합니다. 이 분류는 재시도 허용 목록을 넓히지 않습니다.
   if (error instanceof TypeError && error.message === "fetch failed") return "collection_failed";
   if (error instanceof Error && error.name === "AbortError") return "helper_internal_invariant";

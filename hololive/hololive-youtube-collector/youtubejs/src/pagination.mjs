@@ -1,5 +1,6 @@
 import { Mixins, YTNodes } from "youtubei.js";
-import { classifyUpstreamError, readUpstream } from "./upstream-errors.mjs";
+import { FetchTransportError } from "./fetch-transport.mjs";
+import { classifyUpstreamError, isTransientNetworkError, readUpstream, upstreamHTTPStatus } from "./upstream-errors.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 
 export const continuityContiguous = "CONTIGUOUS";
@@ -235,7 +236,7 @@ export async function paginate({
         reason = "continuation_transient";
         break;
       }
-      throw error;
+      throw continuationFailure(error);
     }
   }
   if (pageCount < 1) {
@@ -264,9 +265,26 @@ function assertParentRequestAlive() {
   }
 }
 
+// 앞 페이지까지의 성공으로 바꾸는 일시 간극은 연결·본문 수신 실패, transport가 분류한 upstream 5xx, 시간 초과뿐입니다.
+// runUpstream이 SDK 경계에서 감싼 오류도 원인 사슬로 판정합니다.
 function isContinuationTransient(error) {
   const code = classifyUpstreamError(error);
-  return code === "collection_timeout" || code === "collection_failed" || code === "helper_busy";
+  if (code === "collection_timeout") return true;
+  if (code !== "collection_failed") return false;
+  for (let current = error, depth = 0; current != null && depth < 4; current = current.cause, depth += 1) {
+    if ((current instanceof FetchTransportError && current.code === "collection_failed") || isTransientNetworkError(current)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// transport·HTTP 실패가 아닌 일반 수집 실패는 SDK가 continuation 응답을 처리하지 못한 것이므로 parser drift입니다.
+function continuationFailure(error) {
+  if (classifyUpstreamError(error) !== "collection_failed" || upstreamHTTPStatus(error) !== undefined) {
+    return error;
+  }
+  return Object.assign(new Error("continuation response could not be processed", { cause: error }), { code: "parser_drift" });
 }
 
 function boundedInteger(value, minimum, maximum, fallback, field) {
