@@ -175,7 +175,7 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 32개 후보 초과, identity/schema/time drift, 미지의 UNPLAYABLE 또는 위 접근 제한에 해당하지 않는 시각 부재는 terminal `parser_drift`입니다. 해당 collection은 observation과 checkpoint를 저장하지 않습니다. `youtube_collection_attempts_total`과 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
 
-`youtubei.js@18.1.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
+`youtubei.js@18.3.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
 
 ## Isolated PO Token lifecycle
 
