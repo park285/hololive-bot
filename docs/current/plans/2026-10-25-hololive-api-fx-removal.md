@@ -1,6 +1,6 @@
 # hololive-api Fx 제거와 공유 bootstrap 통일
 
-**상태: 구현 완료·미커밋(2026-10-25).** worktree `.worktrees/refactor-hololive-api-fx-removal/hololive-bot`, 브랜치 `refactor/hololive-api-fx-removal`(origin/main `220c8a0ec` 기준). 결과는 맨 아래 [진행 결과](#진행-결과)에 있습니다.
+**상태: 구현·검증 완료, PR 게시(2026-10-25).** 브랜치 `refactor/hololive-api-fx-removal`. logger 닫기 오류 수정은 shared-go v2.16.1(`1c1b78c`)로 릴리스해 이 PR에서 pin을 갱신했습니다. 배포는 포함하지 않습니다. 결과는 맨 아래 [진행 결과](#진행-결과)에 있습니다.
 
 ## 결정
 
@@ -145,8 +145,5 @@ Fx가 제공하던 동작과 공유 기반의 대응을 소스에서 대조했�
   - 실행하지 않은 이유: 로컬 기동은 운영 PostgreSQL·Valkey·Iris에 붙어야 해서 승인 없이는 하지 않았습니다.
   - 대신 확인한 것: `Runtime.Run`과 lifecycle 옵션 단위 테스트, shared-go bootstrap의 exit code 계약.
   - 남은 확인: cutover smoke에서 실제 기동을 봐야 합니다.
-- **`scripts/ci/pre-push-gate.sh`와 shared-go `scripts/ci/release-gate.sh`**: publication이나 릴리스 단계에서 실행합니다. 커밋·push·tag는 요청되지 않았습니다.
-- **logger close 수정의 운영 반영 순서:** 다음 순서가 필요합니다. 그 전까지 운영 이미지의 bootstrap(v2.16.0)은 closer 오류를 계속 버립니다.
-  1. shared-go 커밋, push, 릴리스 tag(승인 필요)
-  2. hololive 4개 모듈과 twentyq-bot·chat-bot-go-kakao의 shared-go pin 갱신
-  3. iris-stack 포인터 갱신
+- **publication 게이트:** shared-go `scripts/ci/release-gate.sh`는 v2.16.1 tag 전에 통과했습니다(pgstore 필수 사례 skip=0, 영향 취약점 0건). hololive-bot `scripts/ci/pre-push-gate.sh`는 branch push hook에서 실행합니다.
+- **logger close 수정의 운영 반영:** shared-go v2.16.1을 릴리스하고 hololive 5개 모듈 pin과 `security.yml`의 shared-go 고정 SHA를 이 PR에서 갱신했습니다. twentyq-bot·chat-bot-go-kakao pin과 iris-stack 포인터는 각 저장소에서 따로 반영합니다. 운영 이미지 반영은 다음 hololive 릴리스·배포 때 이루어집니다.

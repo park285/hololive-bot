@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **logger 닫기 오류 보고(shared-go v2.16.1):** api·alarm-worker·collector가 종료할 때 logger closer의 오류(로그 파일 닫기 실패 등)를 버리지 않고 마스킹해 stderr에 남깁니다. exit code는 runtime 결과를 그대로 따릅니다.
 - **hololive-api Fx 제거:** `go.uber.org/fx`를 걷어내고 youtube-collector·alarm-worker와 같은 shared-go `bootstrap`·`lifecycle.Run` 조립으로 기동·종료합니다. 포트·설정·plane 계약, 종료 순서, drain 10초·process stop 30초 강제 상한, fatal 시 exit 1과 즉시 기록되는 `hololive-api runtime error`는 그대로입니다. Fx 전용 로그(`OnStart hook failed`, `hololive-api Fx stop failed` 등)는 사라지고 종료 요약은 `Runtime stopped with error`로 남습니다. 달라진 점: telemetry flush 실패는 로그만 남기고 exit code를 바꾸지 않으며, drain 중 두 번째 SIGTERM/SIGINT는 정리 없이 즉시 종료합니다.
 
 ## v12.2.0 - 2026-10-25
