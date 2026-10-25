@@ -1,6 +1,6 @@
 # YouTube 수집 경계 정리와 DB 보존 적체 해소 통합 계획
 
-**상태: 1·2단계 로컬 구현 완료(미배포). 0·3~6단계와 운영 변경·배포·migration 적용은 미실행입니다.**
+**상태: 1·2단계 완료, v12.1.0으로 collector a·b·c·d와 issuer에 배포(2026-10-25). 0·3~6단계와 migration 적용은 미실행입니다.**
 
 [DB 증가와 보존 적체 해소 계획](2026-10-25-db-growth-and-retention-remediation.md)과 [YouTube collector Go·JS 경계 구조 리뷰](../../history/architecture/2026-10-25-youtube-collector-go-js-boundary-review.md)의 후속 작업을 하나의 순서로 묶습니다. 이 문서는 전체 순서, 단계 사이의 의존, collector 작업 목록을 소유합니다. DB 단계의 관측 근거, 보호 불변식, 세부 체크리스트는 DB 계획이 계속 소유하며 여기서 다시 쓰지 않습니다. 아래 `리뷰 #n`은 리뷰 기록의 발견 번호입니다.
 
@@ -112,6 +112,31 @@
 - video live check의 Go 최소 크기(123)는 helper 하한(139)보다 작습니다. 그 사이 요청은 helper가 같은 RESOURCE_LIMIT로 거부합니다.
 - #1: 채널당 시각 없는 UPCOMING 수의 실제 분포(0단계)를 모르므로, 상한 32의 운영 적합성과 limiter 지불로 늘어나는 channel_live 지연은 배포 뒤 확인해야 합니다.
 - #1 지불 누락(리뷰 확인): 지불 대기 중 수집 문맥이 끝나면 그 예약은 기존 limiter 규칙대로 되돌려지고 남은 조회는 지불하지 않으며 job은 timeout·canceled로 실패합니다. helper 본문 없이 끝난 RPC(Go HTTP 시한 30초 초과·취소)는 그 전에 보낸 조회 수를 알 수 없어 지불하지 않습니다. 이를 막으려면 상한만큼 보수적으로 지불하거나 helper에 Go보다 짧은 수집 시한을 두어야 하며, 둘 다 계약 결정이라 이번에 하지 않았습니다. transport의 player 1회 재전송(5xx·network)은 조회 1건으로 세며 browse의 기존 회계와 같습니다.
+
+**2단계 운영 반영 결과 (2026-10-25)**
+
+- 릴리스: PR #696을 squash 병합해 `a1e713dbbd86b56e36aa917f744453dde77a80e3`이 됐습니다. 이 커밋에 annotated tag `v12.1.0`을 달았습니다. main의 미출시 #694(의존성)·#695(youtubejs 판정)와 같은 배포 단위입니다. #695는 이 계획의 #3을 대체했습니다. 병합 트리는 rebase 뒤 검증한 HEAD `002978930`과 같습니다.
+- 검증(`002978930`, 마지막 코드 편집 뒤):
+  - `scripts/ci/pre-push-gate.sh` 통과. push 때 hook으로 두 번 더 재실행했고 모두 통과했습니다.
+  - helper 테스트 406/406, typecheck 통과.
+  - PR CI 11개 검사 모두 통과(`fast-gate` 포함).
+  - 배포 정적 계약 8종 통과.
+- central c(hololive-seoul, 09:13Z 시작): `po-central-cutover.sh deploy`로 issuer부터 교체했습니다.
+  - collector-c(`e5ffe1a71c64`)와 po-c(`a179959bd2c1`) 모두 arm64, revision `a1e713dbb`, version 12.1.0입니다.
+  - `/health`·`/ready` rc=0, 새 로그에 오류 표지가 없고 PostgreSQL 연결 표지가 있습니다.
+  - po-c의 재시작 1회는 exit 0(`reason=session_closed`)으로 runbook 수용 기준을 충족합니다.
+  - rollback 기준점: `backups/po-c-20261025T091310Z`, `rollback-20261025T091310Z` 태그(v12.0.0 `f3d240006`).
+- AP b(iris-seoul): `ap-deploy.sh seoul --apply` 뒤 completion check를 통과했습니다.
+  - collector-b·po-b 모두 `a1e713dbb`, 12.1.0, healthy입니다. po-b의 재시작 1회는 `session_closed` exit 0입니다.
+  - rollback 기준점: `backups/seoul-collector-20261025T091509Z`(검증 통과).
+- AP a(osaka1)·d(osaka2): `HOLO_BOT_VERSION=12.1.0 ap-host-native-deploy.sh <ap> --apply` 뒤 두 곳 모두 completion check를 통과했습니다.
+  - current는 `20261025T091627Z-a1e713dbbd86-osaka`·`20261025T092035Z-a1e713dbbd86-osaka2`, previous는 `…-f3d240006b25-…`입니다.
+  - issuer는 `Result=success`, `ExecMainStatus=0`, active이고 journal의 실패·오류 표지는 0건입니다.
+- 수용 뒤 retention:
+  - 지운 것: central과 iris-seoul의 v12.0.0 배포 이전 rollback 태그(`rollback-20261022T024300Z`/`rollback-20261022T024445Z`)와 그 backup·staging, osaka1·osaka2의 `20261021-node-26.12.1-108ecb2e60c5` release.
+  - 남긴 것: 이번 rollback 세트, 다른 작업의 `emudhra` 태그, v12.0.1 hololive-api rollback 자료.
+- 재배포하지 않은 것: hololive-api(12.0.1)와 alarm-worker(12.0.0)는 다시 만들지 않았습니다. 중앙 `current`의 `hololive/hololive-api/VERSION`은 12.1.0이므로, 이후 전체 `compose up`이 돌면 API는 이전 image로 `APP_VERSION=12.1.0`이 됩니다(릴리스 runbook에 적힌 식별자 차이). #694 의존성 갱신의 api·alarm-worker 반영은 별도 배포가 필요합니다.
+- 확인하지 못한 것: 배포 뒤 channel live의 `parser_drift`·`response_too_large` 비율과 새 PO 메트릭 값은 Prometheus 조회 경로가 이 작업에서 확인되지 않아 보지 못했습니다. 다음 운영 점검에서 `youtube_collection_attempts_total{job_kind="youtubejs_channel_live"}`의 결과별 증가와 `youtubejs_po_proof_state`를 AP별로 확인합니다. 새 로그 기준으로는 네 곳 모두 오류 표지가 없습니다.
 
 ### 3. DB 1단계: 삭제 가능 적체 처리량 (API)
 
