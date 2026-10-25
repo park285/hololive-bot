@@ -1897,7 +1897,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 
 ### 15.2.1 YouTube.js raw metadata ownership
 
-Collector 로컬 adapter가 raw `/player`의 영상·채널 identity, `isLive`, `isLiveNow`, `isUpcoming`, `isLiveContent`, `isPrivate`, liveBroadcastDetails의 시작·종료 시각 해석을 소유한다. 기존 live schedule/content premiere 경로는 `live-metadata.mjs`의 입장 규칙을 유지하고, §3.4의 채널·영상 확인은 `live-check.mjs`가 UNKNOWN·가용성·종료 사실을 구분한다. `youtubei.js@18.1.0`은 Innertube session, request context, browse/transport와 범용 parser 기반층으로 유지하며 upstream 전체 source를 복사하지 않는다.
+Collector 로컬 adapter가 raw `/player`의 영상·채널 identity, `isLive`, `isLiveNow`, `isUpcoming`, `isLiveContent`, `isPrivate`, liveBroadcastDetails의 시작·종료 시각 해석을 소유한다. 기존 live schedule/content premiere 경로는 `live-metadata.mjs`의 입장 규칙을 유지하고, §3.4의 채널·영상 확인은 `live-check.mjs`가 UNKNOWN·가용성·종료 사실을 구분한다. `youtubei.js@18.3.0`은 Innertube session, request context, browse/transport와 범용 parser 기반층으로 유지하며 upstream 전체 source를 복사하지 않는다.
 
 Dependency upgrade 때는 upstream release note와 로컬 사용 surface만 검토하고 raw fixture, 전체 helper test와 typecheck를 통과시킨다. 사용 field의 parser 변경만 로컬 adapter에 선택적으로 반영한다. raw Actions 접근 제거로 incident 수정이 막히거나 adapter 밖 upstream parser 지연이 독립적으로 두 번 확인되기 전에는 전체 fork나 더 넓은 vendoring을 검토하지 않는다.
 

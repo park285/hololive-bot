@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **의존성:** `openai-go/v3` v3.86.0·`quic-go` v0.64.1과 Go 전이 의존성, collector의 `youtubei.js` 18.3.0을 갱신합니다.
+
 ## v12.0.1 - 2026-10-25
 
 - **publish set 임시 파일 원인 제거(migration 340):** `lock_source_observation_identity`는 `uq_source_observation_identity` 전체 키 조회라 최대 1행인데 SETOF 기본 추정 1000행이 남아 있어, collector publish set의 `existing` CTE가 입력 100행 × 1000으로 과대 추정되고 checkpoint 조인이 표 전체 seq scan + 다중 batch hash join으로 풀려 발행마다 작은 임시 파일을 만들었습니다(2026-10-24 운영 관측: `log_temp_files=0`에서 하루 약 6,800만 줄, `source_collection_checkpoints` seq scan 217만 회). `ALTER FUNCTION ... ROWS 1`만 적용하며 함수 본문·권한·발행 결과는 그대로입니다. 적용 뒤 checkpoint 조인은 기본 키 index scan으로 바뀌고 임시 파일이 생기지 않습니다(격리 PostgreSQL EXPLAIN 회귀 테스트 추가).
