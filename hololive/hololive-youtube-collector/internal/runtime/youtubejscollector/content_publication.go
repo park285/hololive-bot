@@ -297,7 +297,9 @@ func classifyPublication(result *youtubejs.VideoLiveCheckResult, channelID strin
 	}
 
 	if result.IsUpcoming != nil && *result.IsUpcoming {
-		if result.IsLiveContent == nil || *result.IsLiveContent || result.ScheduledAt == nil {
+		// 예정 시각은 대기 상태가 확인된 응답에서만 최초공개 근거이며, helper의 scheduled_at 출력 규칙에 기대지 않습니다.
+		if result.IsLiveContent == nil || *result.IsLiveContent || result.ScheduledAt == nil ||
+			result.WaitingStateConfirmed == nil || !*result.WaitingStateConfirmed {
 			return unresolved
 		}
 

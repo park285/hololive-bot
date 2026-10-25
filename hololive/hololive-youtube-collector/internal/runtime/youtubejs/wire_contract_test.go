@@ -164,8 +164,8 @@ func TestWireSuccessBodiesMatchFixture(t *testing.T) {
 				if collecterr.CodeOf(err) != contract.ErrorHelperProtocolMismatch {
 					t.Errorf("%s %s: error = %v, want protocol mismatch", path, invalid.Name, err)
 				}
-			case "envelope":
-				// 수집기 envelope 단계의 거부는 youtubejscollector 테스트가 같은 본문으로 확인한다.
+			case "envelope", "classification":
+				// 수집기 envelope·분류 단계의 거부는 youtubejscollector 테스트가 같은 본문으로 확인한다.
 				if err != nil {
 					t.Errorf("%s %s: decode error = %v, want envelope-stage rejection", path, invalid.Name, err)
 				}

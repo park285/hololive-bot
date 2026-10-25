@@ -330,6 +330,23 @@
           "body": { "protocol_version": 1, "video_id": "liveVideo01", "channel_id": "UCchannelLive", "identity_confirmed": true, "is_private": false, "availability": "PUBLIC", "method": "unknown" }
         },
         {
+          "name": "schedule without a confirmed waiting state",
+          "go_rejects_at": "classification",
+          "body": {
+            "protocol_version": 1,
+            "video_id": "upcoming001",
+            "channel_id": "UCchannelLive",
+            "identity_confirmed": true,
+            "is_upcoming": true,
+            "is_live_content": false,
+            "is_private": false,
+            "scheduled_at": "2099-01-01T00:00:00.000Z",
+            "waiting_state_confirmed": false,
+            "availability": "PUBLIC",
+            "method": "player_public"
+          }
+        },
+        {
           "name": "channel-only unknown reason",
           "go_rejects_at": "decode",
           "body": { "protocol_version": 1, "video_id": "liveVideo01", "channel_id": "UCchannelLive", "identity_confirmed": true, "availability": "UNKNOWN", "method": "unknown", "unknown_reason": "not_waiting_state" }

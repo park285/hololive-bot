@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -15,7 +16,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-type channelWireFixture struct {
+type wireEndpointFixture struct {
 	Valid []struct {
 		Name    string         `json:"name"`
 		Subject string         `json:"subject"`
@@ -30,9 +31,9 @@ type channelWireFixture struct {
 	} `json:"invalid"`
 }
 
-// loadChannelWireFixture는 youtubejs/testdata/wire-contract.json의 /v1/channel 본문을 읽습니다.
-// JS 검증기 테스트와 같은 본문을 실제 RPC decode와 live snapshot envelope 생성에 통과시킵니다.
-func loadChannelWireFixture(t *testing.T) channelWireFixture {
+// loadWireEndpointFixture는 youtubejs/testdata/wire-contract.json의 endpoint 본문을 읽습니다.
+// JS 검증기 테스트와 같은 본문을 실제 RPC decode와 envelope 생성·분류에 통과시킵니다.
+func loadWireEndpointFixture(t *testing.T, path string) wireEndpointFixture {
 	t.Helper()
 
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "youtubejs", "testdata", "wire-contract.json"))
@@ -41,20 +42,20 @@ func loadChannelWireFixture(t *testing.T) channelWireFixture {
 	}
 
 	var fixture struct {
-		Endpoints map[string]channelWireFixture `json:"endpoints"`
+		Endpoints map[string]wireEndpointFixture `json:"endpoints"`
 	}
 
 	if err := jsonv2.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
 
-	return fixture.Endpoints["/v1/channel"]
+	return fixture.Endpoints[path]
 }
 
 func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 	t.Parallel()
 
-	for _, valid := range loadChannelWireFixture(t).Valid {
+	for _, valid := range loadWireEndpointFixture(t, "/v1/channel").Valid {
 		if valid.Kind != channelKindLive {
 			continue
 		}
@@ -93,7 +94,7 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 func TestChannelLiveRunnerRejectsWireFixtureContradictions(t *testing.T) {
 	t.Parallel()
 
-	for _, invalid := range loadChannelWireFixture(t).Invalid {
+	for _, invalid := range loadWireEndpointFixture(t, "/v1/channel").Invalid {
 		if invalid.GoRejectsAt != "envelope" {
 			continue
 		}
@@ -101,6 +102,45 @@ func TestChannelLiveRunnerRejectsWireFixtureContradictions(t *testing.T) {
 		output, err := NewChannelLiveRunner(fixtureRPC(t, invalid.Body)).Collect(t.Context(), channelLiveFixtureInput(t, invalid.Subject))
 		if collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 			t.Fatalf("%s: error = %v output = %#v, want parser drift without output", invalid.Name, err, output)
+		}
+	}
+}
+
+// 영상 확인 본문은 실제 RPC decode 뒤 공개 근거 분류에서 helper와 같은 대기 상태 규칙을 따라야 합니다.
+func TestClassifyPublicationFollowsWireFixture(t *testing.T) {
+	t.Parallel()
+
+	fixture := loadWireEndpointFixture(t, "/v1/video_live_check")
+	checkedAt := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+	cases := map[string]contract.VideoPublicationStatus{
+		"upcoming premiere in the waiting state":     contract.VideoPublicationUpcomingPremiere,
+		"schedule without a confirmed waiting state": contract.VideoPublicationUnresolved,
+	}
+	bodies := make(map[string]jsontext.Value, len(cases))
+
+	for _, valid := range fixture.Valid {
+		bodies[valid.Name] = valid.Body
+	}
+
+	for _, invalid := range fixture.Invalid {
+		if invalid.GoRejectsAt == "classification" {
+			bodies[invalid.Name] = invalid.Body
+		}
+	}
+
+	for name, want := range cases {
+		body, ok := bodies[name]
+		if !ok {
+			t.Fatalf("fixture %q is missing", name)
+		}
+
+		result, err := fixtureRPC(t, body).FetchVideoLiveCheck(t.Context(), youtubejs.VideoLiveCheckRequest{VideoID: "upcoming001"})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+
+		if got := classifyPublication(&result, "UCchannelLive", checkedAt); got.Status != want {
+			t.Fatalf("%s: classification = %#v, want %s", name, got, want)
 		}
 	}
 }
