@@ -42,10 +42,15 @@ func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
 	ctx := t.Context()
 	repo := NewRepository(pool)
 	now := time.Now().UTC()
-	ids := publishProcessedObservations(ctx, t, pool, repo, 3)
-	ageObservations(t, pool, ids[:1], 100*24*time.Hour)
-	ageObservations(t, pool, ids[1:2], 95*24*time.Hour)
-	ageObservations(t, pool, ids[2:], 89*24*time.Hour)
+	// 배치 1건이면 한 tick은 창 상한만큼만 지우므로, 만료 원본을 그보다 두 건 많이 둔다(i번째는 100-i일 전).
+	expired := sourceRetentionMaxWindows + 2
+	ids := publishProcessedObservations(ctx, t, pool, repo, expired+1)
+
+	for i := range expired {
+		ageObservations(t, pool, ids[i:i+1], time.Duration(100-i)*24*time.Hour)
+	}
+
+	ageObservations(t, pool, ids[expired:], 89*24*time.Hour)
 
 	_, err := pool.Exec(ctx, `DELETE FROM source_observation_queue;
 		UPDATE youtube_collection_projection_generations SET status='RETIRED';
@@ -61,8 +66,8 @@ func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
 
 	part := evidenceRetentionPart(t, result)
 	require.True(t, part.BacklogKnown)
-	require.InDelta(t, (95 * 24 * time.Hour).Seconds(), part.BacklogAge.Seconds(), 1)
-	require.EqualValues(t, 1, part.Deleted)
+	require.InDelta(t, (time.Duration(100-sourceRetentionMaxWindows) * 24 * time.Hour).Seconds(), part.BacklogAge.Seconds(), 1)
+	require.EqualValues(t, sourceRetentionMaxWindows, part.Deleted)
 
 	result, err = repo.RunRetentionTick(ctx, cfg, now)
 	require.NoError(t, err)
