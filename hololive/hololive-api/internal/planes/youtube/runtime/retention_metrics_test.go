@@ -45,3 +45,23 @@ func TestRetentionBacklogMetricClearsZeroAndOmitsUnknown(t *testing.T) {
 	recordRetentionPart(sourceobservation.RetentionResult{Table: table})
 	require.False(t, youtubeRetentionBacklogAgeSeconds.DeleteLabelValues(table), "unknown backlog must not retain a stale or false-zero sample")
 }
+
+// 원본 단계가 앞 창을 커밋한 뒤 실패해도 그 창들의 삭제·검사·순회 완료를 센다.
+func TestRetentionMetricsCountCommittedSourceWindowsOfFailedTick(t *testing.T) {
+	const table = "source_observations"
+
+	deleted := youtubeRetentionDeletedTotal.WithLabelValues(table)
+	failures := youtubeRetentionErrorsTotal.WithLabelValues(table)
+	beforeDeleted, beforeFailures := testutil.ToFloat64(deleted), testutil.ToFloat64(failures)
+	beforeScanned, beforeTraversals := testutil.ToFloat64(youtubeRetentionSourceScannedTotal), testutil.ToFloat64(youtubeRetentionSourceTraversalsTotal)
+
+	recordRetentionTick(sourceobservation.RetentionResult{
+		Table: table, FailedTable: table, Deleted: 2,
+		ByTable: []sourceobservation.RetentionResult{{Table: table, Deleted: 2, Scanned: 1500, Traversals: 1}},
+	}, errors.New("later window failed"))
+
+	require.InDelta(t, beforeDeleted+2, testutil.ToFloat64(deleted), 0)
+	require.InDelta(t, beforeFailures+1, testutil.ToFloat64(failures), 0)
+	require.InDelta(t, beforeScanned+1500, testutil.ToFloat64(youtubeRetentionSourceScannedTotal), 0)
+	require.InDelta(t, beforeTraversals+1, testutil.ToFloat64(youtubeRetentionSourceTraversalsTotal), 0)
+}

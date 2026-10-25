@@ -122,12 +122,12 @@ func TestEvidenceRetentionGuardsBeforeCandidateAndPreservesAvailability(t *testi
 			)
 
 			workers.Go(func() {
-				var deleteErr error
-
-				deleted, deleteErr = repo.deleteEvidenceBatch(ctx, RetentionConfig{
+				result, deleteErr := repo.deleteEvidenceWindows(ctx, RetentionConfig{
 					EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindCommunityPage: time.Hour},
 					BatchSize:         10,
 				}, time.Now().Add(48*time.Hour))
+
+				deleted = result.Deleted
 
 				done <- deleteErr
 			})

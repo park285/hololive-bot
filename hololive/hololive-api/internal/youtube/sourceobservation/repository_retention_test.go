@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -100,13 +101,13 @@ func TestDeleteRetentionBatchesRunsEveryTable(t *testing.T) {
 	repo := &Repository{}
 
 	result, err := repo.deleteRetentionBatches([]retentionStep{
-		{table: "source_observation_queue", age: time.Hour, run: func() (int64, error) {
+		{table: "source_observation_queue", age: time.Hour, run: func() (RetentionResult, error) {
 			ran = append(ran, "queue")
-			return 1, nil
+			return countOnly(1, nil)
 		}},
-		{table: "source_observation_collisions", age: time.Hour, run: func() (int64, error) {
+		{table: "source_observation_collisions", age: time.Hour, run: func() (RetentionResult, error) {
 			ran = append(ran, "collisions")
-			return 2, nil
+			return countOnly(2, nil)
 		}},
 	})
 	if err != nil {
@@ -115,6 +116,32 @@ func TestDeleteRetentionBatchesRunsEveryTable(t *testing.T) {
 
 	if result.Deleted != 3 || len(result.ByTable) != 2 || len(ran) != 2 || ran[0] != "queue" || ran[1] != "collisions" {
 		t.Fatalf("result=%#v ran=%v", result, ran)
+	}
+}
+
+// 원본 단계가 앞 창을 커밋한 뒤 실패하면 그 계수를 실패 대상과 함께 보고하고 뒤 단계는 실행하지 않는다.
+func TestDeleteRetentionBatchesKeepsCommittedWindowsOfFailedStep(t *testing.T) {
+	t.Parallel()
+
+	ranPayloads := false
+	steps := []retentionStep{
+		{table: "source_observations", age: time.Hour, run: func() (RetentionResult, error) {
+			return RetentionResult{Deleted: 3, Scanned: 2000}, errors.New("window timeout")
+		}},
+		{table: "source_observation_payloads", age: time.Hour, run: func() (RetentionResult, error) {
+			ranPayloads = true
+			return countOnly(1, nil)
+		}},
+	}
+
+	result, err := (&Repository{}).deleteRetentionBatches(steps)
+	if err == nil || ranPayloads {
+		t.Fatalf("err=%v ranPayloads=%v", err, ranPayloads)
+	}
+
+	if result.FailedTable != steps[0].table || result.Deleted != 3 || len(result.ByTable) != 1 ||
+		result.ByTable[0].Table != steps[0].table || result.ByTable[0].Scanned != 2000 {
+		t.Fatalf("result=%#v", result)
 	}
 }
 

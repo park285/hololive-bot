@@ -100,6 +100,18 @@ var youtubeRetentionDeletedTotal = precreateCounterVec(promauto.NewCounterVec(pr
 	Help: "Total rows deleted by the YouTube plane retention worker.",
 }, []string{"table"}), youtubeRetentionTables)
 
+// 원본 보존은 커서로 만료 원본을 순회한다. 삭제 수(youtubeRetentionDeletedTotal)만으로는 보호 행을 지나는 진척과
+// 순회 주기를 알 수 없으므로 검사량과 순회 완료를 따로 센다. 검사량 - 삭제량이 보호·잠금으로 남긴 수다.
+var youtubeRetentionSourceScannedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "hololive_youtube_plane_retention_source_scanned_total",
+	Help: "Expired source observations the retention cursor moved past, including deleted ones; subtracting the source_observations deleted total gives the rows kept as protected or locked.",
+})
+
+var youtubeRetentionSourceTraversalsTotal = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "hololive_youtube_plane_retention_source_traversals_total",
+	Help: "Completed source observation retention traversals, counted when the cursor returns to the start.",
+})
+
 var youtubeRetentionErrorsTotal = precreateCounterVec(promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "hololive_youtube_plane_retention_errors_total",
 	Help: "Total YouTube plane retention ticks that failed.",

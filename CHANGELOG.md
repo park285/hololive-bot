@@ -8,6 +8,15 @@
 
 ## 미출시
 
+## v12.2.0 - 2026-10-25
+
+- **원본 보존이 보호된 창을 지나 같은 tick에서 계속 정리:** 원본(`source_observations`) 보존은 tick마다 만료 후보 창(최대 1,000건) 하나만 처리했습니다. 운영에서는 창의 대부분이 LIVE·UPCOMING 보호 행이라 삭제 가능한 뒤쪽 정리가 늦어졌습니다.
+  - 한 tick에서 창을 최대 8개까지 이어서 처리합니다. 삭제 0건이어도 커서가 전진하면 다음 창으로 넘어가고, 순회 완료·진척 없음·창 상한·시간 예산·오류에서 멈춥니다.
+  - 각 창은 이전처럼 독립 트랜잭션으로 커서와 삭제를 함께 커밋합니다. cutoff는 tick 시작 값으로 고정하고, 기존 DB 작업 시한(기본 10초)을 공유합니다. 첫 창 뒤에는 남은 시한의 절반 안에 끝날 것으로 보이는 창만 시작해, payload·absence·checkpoint 정리와 적체 측정에 시간을 남깁니다.
+  - 뒤 창이 실패해도 앞 창의 확정 삭제량은 보고하며, 실패한 창은 다시 실행하지 않습니다.
+  - 새 지표: `hololive_youtube_plane_retention_source_scanned_total`(커서가 지난 후보 수, 삭제분 포함), `hololive_youtube_plane_retention_source_traversals_total`(순회 완료 수).
+  - migration 341: 창 하나의 결과(삭제 id, 지난 후보 수, 순회 완료)를 돌려주는 `delete_source_observation_retention_window`를 추가하고, 기존 `delete_source_observation_retention_batch`는 반환 계약을 유지한 채 이 함수에 위임합니다. 보호 조건, 잠금 순서, 창 크기, 커서 규칙은 바뀌지 않습니다.
+
 ## v12.1.2 - 2026-10-25
 
 - **방송 탭 예정 영상 조회 지불 누락 보완:** v12.1.0은 두 경우에 helper가 이미 보낸 예정 영상 player 조회를 Go limiter에 지불하지 않았습니다. 이 수정으로 두 경우 모두 다음 RPC들이 그만큼 간격을 둡니다.

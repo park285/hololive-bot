@@ -384,9 +384,9 @@ func deleteRetainedLiveEndEvidence(t *testing.T, pool *pgxpool.Pool, repo *Repos
 		t.Fatal(err)
 	}
 
-	deleted, err := repo.deleteEvidenceBatch(ctx, RetentionConfig{EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindLiveSnapshot: time.Hour}, BatchSize: 10}, time.Now().Add(2*time.Hour))
-	if err != nil || deleted != 1 {
-		t.Fatalf("retention deleted=%d err=%v", deleted, err)
+	result, err := repo.deleteEvidenceWindows(ctx, RetentionConfig{EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindLiveSnapshot: time.Hour}, BatchSize: 10}, time.Now().Add(2*time.Hour))
+	if err != nil || result.Deleted != 1 {
+		t.Fatalf("retention deleted=%d err=%v", result.Deleted, err)
 	}
 }
 

@@ -282,6 +282,9 @@ func recordRetentionPart(part sourceobservation.RetentionResult) {
 		youtubeRetentionDeletedTotal.WithLabelValues(table).Add(float64(part.Deleted))
 	}
 
+	youtubeRetentionSourceScannedTotal.Add(float64(part.Scanned))
+	youtubeRetentionSourceTraversalsTotal.Add(float64(part.Traversals))
+
 	if part.BacklogKnown {
 		youtubeRetentionBacklogAgeSeconds.WithLabelValues(table).Set(part.BacklogAge.Seconds())
 	} else {
