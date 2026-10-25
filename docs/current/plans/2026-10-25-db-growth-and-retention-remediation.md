@@ -1,6 +1,6 @@
 # Hololive DB 증가와 보존 적체 해소
 
-**상태: 1단계 처리량 개선 구현(v12.2.0, migration 341). 운영 적용·관찰과 2·3단계는 미실행입니다.**
+**상태: 1단계 처리량 개선(v12.2.0, migration 341)을 2026-10-25 운영에 적용했고 24시간·7일 관찰 중입니다. 2·3단계는 미실행입니다.**
 
 collector 경계 작업과의 실행 순서와 의존은 [통합 계획](2026-10-25-youtube-collection-and-retention-remediation.md)이 소유합니다. 이 문서는 DB 단계의 관측 근거, 보호 불변식, 세부 체크리스트를 계속 소유합니다.
 
@@ -64,6 +64,36 @@ collector 경계 작업과의 실행 순서와 의존은 [통합 계획](2026-10
 - 실패한 창 앞의 확정 삭제·검사량은 `FailedTable`과 함께 보고하고 다시 실행하지 않습니다. 새 지표는 `hololive_youtube_plane_retention_source_scanned_total`과 `..._source_traversals_total`입니다.
 - 테스트: 보호 창을 지나 같은 tick 삭제와 후속 단계 실행, 창 상한에서 멈춘 뒤 새 Repository가 DB 커서로 재개, 삭제 상한을 채운 창의 재개 위치, 순회 완료 보고, runtime 전용 실행 권한, 부분 실패 계수와 지표. 기존 315 테스트가 위임된 공개 함수를 계속 검증합니다.
 - 하지 않은 것: 대표 분포 fixture(원본 약 168만·감사 약 450만 행) 부하 비교, 종류별 커서 후속안. 운영 적용 전 0단계 기준선이 필요합니다.
+
+**1단계 운영 적용 (v12.2.0, 2026-10-25)**
+
+- 릴리스: #701에 적체 나이 테스트의 시각 기준 수정 #702를 더해 main `9d9d569990d7c155f1fdc0d5693d1b95ef85bad5`에 tag `v12.2.0`과 GitHub Release를 게시했습니다. 첫 tag push는 pre-push gate에서 그 테스트가 부하 중 시각 차이(2.37초)로 실패해 막혔고, 원격에 올라간 tag는 없었습니다.
+- 적용 전 기준선(운영 읽기 전용, 적용 직전 24시간):
+
+  | 항목 | 기준선 | 허용 범위 |
+  | --- | --- | --- |
+  | DB 슬롯 대기 p99 | consume 4.9 ms, claim 49.7 ms, live_end 1.02 s, retention_source 0.13 s | consume < 50 ms, claim < 250 ms, live_end < 2 s |
+  | retention_source 슬롯 보유 p95 | 2.43 s | ≤ 7 s, timeout 0 |
+  | queue 최고 나이 | 최대 2.59 s | < 30 s |
+  | WAL | 288 MiB(18 segment) | < 1 GiB |
+  | DB 크기·여유 | 3,124,106,943 B, hololive-seoul 여유 35.0 GB | 여유 > 25 GiB |
+  | 원본 보존 | INSERT 193.3K·DELETE 172.5K(`pg_stat`), retention 오류 0, live 1.66M행 | 오류 0 |
+  | 적체 나이 | 시계열 없음 | `unknown` |
+
+  - 허용 범위는 기준선과 기존 시한(DB 작업 10초)으로 정한 운영 판단 값입니다. 넘으면 계획의 중단 조건으로 봅니다.
+  - 원본 창 호출(`pg_stat_statements`): 12:58Z에 29,269회·누적 19,724,615 ms, 13:59Z에 29,300회·19,760,356 ms입니다. 그 61분 동안 tick당 창 1개, 평균 1.15초, 창당 약 959행을 지웠습니다.
+- 적용 순서(`hololive-bot-ops` no-build pair 절차):
+  1. kapu에서 arm64 이미지 `hololive-api:app-9d9d56999-20261025T135925Z-arm64`(`a6af5d1eb589`)를 빌드했습니다. label은 12.2.0과 위 revision이고, CA bundle은 운영 api와 같습니다(`e9c7b63ee2623386…`, 148개). 원격 Id가 같음을 확인했습니다.
+  2. 배포 트리의 root·api `VERSION`을 12.2.0으로 설치했습니다. 이전 값은 `/var/tmp/app-9d9d56999-20261025T135925Z/{root,api}-VERSION.previous`에 있습니다(root 12.1.1, api 12.1.2). alarm-worker는 코드 변경이 없어 12.1.1로 둡니다.
+  3. prepare: rollback 태그 `hololive-api:rollback-20261025T135925Z`(v12.1.1 `7da9907bc2aa`), 이전 pair capture, 후보 pair 검증, PostgreSQL 연결 예산 검사(allocated 53/60, reserve 4)를 통과했습니다.
+  4. `hololive-db-migrate`: `applied=1 skipped=201 total=202`(341)입니다. `hololive_runtime`만 새 함수 실행 권한이 있습니다.
+  5. cutover: 14:01:02Z 시작, healthy, 재시작 0, `APP_VERSION` 12.2.0, 새 로그 표지 0입니다. alarm-worker도 healthy·재시작 0입니다.
+- 첫 관찰(14:01~14:10Z, source tick 5회):
+  - 첫 tick은 348건을 검사해 327건을 지우고 순회를 마쳤습니다(커서 초기화). 이후 4 tick은 모두 창 상한 8개에서 멈춰 tick당 8,000건을 검사했고, 누적 검사 32,348건·삭제 378건입니다. 창 하나가 약 0.6초라 구현 결과에서 예상한 시간 예산(4~7개)보다 상한이 먼저 걸립니다. 적용 전에는 tick당 1,000건이었으므로, 보호 prefix(약 45.5만 행) 한 순회가 약 15시간에서 약 1.9시간으로 줄 것으로 봅니다(추론).
+  - retention_source 슬롯 보유 p95 4.88 s(최대 bucket 5 s), 슬롯 대기 p99 consume 5.0 ms·claim 155 ms·live_end 0.96 s, queue 최고 나이 2.01 s, WAL 288 MiB, 여유 35.1 GB, retention 오류 0입니다. 모두 허용 범위 안입니다.
+  - 지켜볼 것: 배경 작업 `projection_refresh`의 슬롯 대기 p99가 0.50 s로, 적용 전 24시간의 8분 구간 최대 0.27 s를 넘었습니다. `queue_snapshot`(0.99 s)과 `collection_snapshot`(0.46 s)은 적용 전 범위 안입니다. 원본 창이 슬롯을 더 오래 잡는 영향으로 보며(추론), foreground 지연이 허용 범위를 넘지 않으면 중단 조건이 아닙니다.
+- 남은 관찰: 첫 24시간 6시간 구간과 7일 추적은 아래 "검증과 완료 기준"을 따릅니다. 순회 시간은 `..._source_traversals_total` 증가 간격으로, 보호량은 검사량에서 삭제량을 뺀 값으로 봅니다.
+- rollback: `hololive-api:rollback-20261025T135925Z`로 pair를 되돌리고 `VERSION` 두 파일을 이전 값으로 복원합니다. 341은 남겨도 이전 image의 공개 함수 동작이 같습니다. 지워진 만료 원본은 복원되지 않습니다.
 
 보존 기간 단축, 수집 주기 저하, 전체 원본 강제 삭제, queue/replay/head/CURRENT/STAGING/ACTIVE lease/live-session/pending-end 보호 해제는 이 단계에 포함하지 않습니다. 전역 live guard → 커서 → 원본 잠금 순서, 잠금 후 보호 재검사, CASCADE와 원자적 커밋을 유지합니다. 단순 interval 단축이나 무제한 배치 증가는 기본 해소안으로 삼지 않습니다.
 

@@ -1,6 +1,6 @@
 # YouTube 수집 경계 정리와 DB 보존 적체 해소 통합 계획
 
-**상태: 1·2단계 완료. v12.1.0으로 collector a·b·c·d와 issuer를, v12.1.1로 c·b·hololive-api·alarm-worker를 배포했습니다(2026-10-25). 3단계는 v12.2.0(migration 341)으로 구현했고 운영 적용 전입니다. 0·4~6단계는 미실행입니다.**
+**상태: 1·2단계 완료. v12.1.0으로 collector a·b·c·d와 issuer를, v12.1.1로 c·b·hololive-api·alarm-worker를, v12.1.2로 collector a·b·c·d와 issuer를 배포했습니다(2026-10-25). 3단계는 v12.2.0(migration 341)으로 2026-10-25 운영에 적용했고 24시간·7일 관찰 중입니다. 0단계는 기준선만 확정했고, 4~6단계는 미실행입니다.**
 
 [DB 증가와 보존 적체 해소 계획](2026-10-25-db-growth-and-retention-remediation.md)과 [YouTube collector Go·JS 경계 구조 리뷰](../../history/architecture/2026-10-25-youtube-collector-go-js-boundary-review.md)의 후속 작업을 하나의 순서로 묶습니다. 이 문서는 전체 순서, 단계 사이의 의존, collector 작업 목록을 소유합니다. DB 단계의 관측 근거, 보호 불변식, 세부 체크리스트는 DB 계획이 계속 소유하며 여기서 다시 쓰지 않습니다. 아래 `리뷰 #n`은 리뷰 기록의 발견 번호입니다.
 
@@ -31,7 +31,7 @@
 
 ### 0. 운영 기준선과 원인 분리 (읽기 전용)
 
-- [ ] DB 계획의 처리량 상향 전 기준선을 확정합니다: foreground 지연, queue age, DB 슬롯 대기, WAL, 디스크 여유와 각 허용 범위.
+- [x] DB 계획의 처리량 상향 전 기준선을 확정합니다: foreground 지연, queue age, DB 슬롯 대기, WAL, 디스크 여유와 각 허용 범위. 결과는 DB 계획의 "1단계 운영 적용"에 있습니다. 원본 적체 나이는 시계열이 없어 `unknown`입니다.
 - [ ] 7일 이상 미관측 UPCOMING·LIVE 연결의 영상과 채널이 다음 실패와 겹치는지 셉니다.
   - `youtubejs_channel_live`의 최근 `parser_drift`·DATA_CONTRACT 실패. 특히 coverage 밖 상태 거부.
   - 실패가 반복되는 채널 목록.
@@ -161,11 +161,21 @@
   - 삭제한 것은 로컬 검증 이미지(`*:ca-verify`)뿐입니다.
 - **재배포하지 않은 것:** native a·d는 바이너리와 CA 경로가 그대로라 v12.1.0 release로 둡니다.
 
+**v12.1.2 운영 반영 (2026-10-25)**
+
+- 릴리스: #1 지불 누락 보완(#700)을 main `220c8a0ec`에 squash하고 tag `v12.1.2`와 GitHub Release를 게시했습니다. collector·helper만 바뀌었고 issuer 이미지는 기존 runbook대로 짝 배포했습니다.
+- c(central)·b(Seoul): 기존 진입점으로 배포했고 revision `220c8a0ec`, 12.1.2, arm64입니다. 실행 중인 collector의 CA bundle은 검증값 `64e7c24b0536b525…`과 같습니다. b는 completion check를 통과했습니다. rollback 기준점은 c `backups/po-c-20261025T125658Z`, b `/home/ubuntu/hololive-bot/backups/seoul-collector-20261025T125846Z`입니다.
+- a(osaka)·d(osaka2): host-native 배포로 v12.1.0에서 v12.1.2로 맞췄습니다(v12.1.1은 a·d 변경이 없었습니다). 둘 다 completion check를 통과했고 collector는 `Result=success`, 재시작 0입니다. 이전 release는 a `20261025T091627Z-a1e713dbbd86-osaka`, d `20261025T092035Z-a1e713dbbd86-osaka2`입니다.
+- issuer 재시작: po-c·po-b는 recreate 직후 `session_closed`로 1회, d issuer는 `worker_timeout`으로 1회 재시작한 뒤 회복했습니다.
+- 관측(Prometheus): c·b·a·d 모두 `youtubejs_po_proof_state` READY, `youtubejs_helper_health_scrape_success` 1이고, 실패 지표의 30분 증가는 0입니다.
+- retention: v12.1.1 배포 때 만든 CA 차단 누락(v12.1.0) rollback 세트를 지웠습니다. central `collector`·`po` `rollback-20261025T110948Z` 태그, 출처가 확인된 pair 태그, `backups/po-c-20261025T110948Z`와 그 staging, Seoul `rollback-20261025T111138Z` 태그 2개와 pair 태그, `backups/seoul-collector-20261025T111138Z`입니다. a·d에서는 그보다 이전 release(`84e54081071f`)와 남은 staging을 지웠습니다. 출처를 확인하지 못한 pair 태그(central `pair-e7030a9…`, Seoul `pair-78999…`)와 위 v12.0.0 세트는 남겼습니다.
+
 ### 3. DB 1단계: 삭제 가능 적체 처리량 (API)
 
 - [x] DB 계획의 "1 삭제 가능한 적체의 처리량 개선" 체크리스트를 수행합니다(종류별 커서 후속안 제외). 결과는 DB 계획의 "1단계 구현 결과"에 있습니다.
 - 2단계와는 런타임이 달라 독립적이며 병렬로 진행할 수 있습니다. 운영 적용 전에 0단계 기준선이 있어야 합니다.
 - 운영 적용 뒤 DB 계획의 24시간·7일 관찰을 수행합니다.
+- [x] 운영 적용(v12.2.0, 2026-10-25): migration 341과 hololive-api pair를 적용했습니다. 기준선·허용 범위·첫 관찰은 DB 계획의 "1단계 운영 적용"에 있습니다.
 
 ### 4. 세대 cutover가 필요한 수집 계약 변경
 
