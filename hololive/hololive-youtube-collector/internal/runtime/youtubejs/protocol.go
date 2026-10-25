@@ -250,12 +250,12 @@ type ContentResult struct {
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 func (r *ContentResult) validateSuccess() error         { return r.Validate() }
 
-// ChannelRequest는 동일 bundle의 helper에 live 또는 metadata 수집만 요청합니다.
 // ChannelLiveMaxScheduleLookups는 live 채널 RPC 하나가 시각 없는 예정 영상마다 보내는 player 조회 수의 상한입니다.
-// helper protocol 상한과 같으며, 초과하는 snapshot은 helper가 response_too_large(RESOURCE_LIMIT)로 거부합니다.
+// 값은 helper protocol 상한과 같으며, 초과하는 snapshot은 helper가 response_too_large(RESOURCE_LIMIT)로 거부합니다.
 // 이 조회는 RPC 안에서 일어나므로 collector가 RPC 뒤에 limiter로 지불하고 job 호출 예산에 셉니다.
 const ChannelLiveMaxScheduleLookups = 32
 
+// ChannelRequest는 동일 bundle의 helper에 live 또는 metadata 수집만 요청합니다.
 type ChannelRequest struct {
 	ProtocolVersion int16  `json:"protocol_version"`
 	ChannelID       string `json:"channel_id"`

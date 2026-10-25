@@ -117,6 +117,7 @@ func TestChannelLiveProfileCoversScheduleLookupPayments(t *testing.T) {
 	t.Parallel()
 
 	cfg := collectorconfig.DefaultConfig()
+
 	cfg.YouTubeJSMaxInflight = 4
 	cfg.CollectionOverhead = time.Second
 
@@ -127,9 +128,9 @@ func TestChannelLiveProfileCoversScheduleLookupPayments(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reservations := time.Duration((1 + youtubejs.ChannelLiveMaxScheduleLookups) * cfg.YouTubeJSMaxInflight)
+	reservations := (1 + youtubejs.ChannelLiveMaxScheduleLookups) * cfg.YouTubeJSMaxInflight
 
-	worst := cfg.YouTubeJSRequestTimeout + reservations*cfg.RequestInterval + cfg.CollectionOverhead
+	worst := cfg.YouTubeJSRequestTimeout + time.Duration(reservations)*cfg.RequestInterval + cfg.CollectionOverhead
 	if got := profiles[id].CollectTimeout(); got < worst {
 		t.Fatalf("channel live collect timeout = %s, want at least %s", got, worst)
 	}

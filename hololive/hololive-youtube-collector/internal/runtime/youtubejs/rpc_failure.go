@@ -35,21 +35,21 @@ func helperStatusError(status int, payload []byte) error {
 
 	failure := applyHelperRetry(base, decoded.Error.Retry)
 	if decoded.ScheduleLookups > 0 {
-		return &scheduleLookupFailure{lookups: decoded.ScheduleLookups, err: failure}
+		return &scheduleLookupError{lookups: decoded.ScheduleLookups, err: failure}
 	}
 
 	return failure
 }
 
-// scheduleLookupFailure는 실패한 /v1/channel 요청이 그 전까지 보낸 예정 영상 조회 수를 오류와 함께 전달합니다.
+// scheduleLookupError는 실패한 /v1/channel 요청이 그 전까지 보낸 예정 영상 조회 수를 오류와 함께 전달합니다.
 // 분류는 감싼 helper 오류를 그대로 따릅니다.
-type scheduleLookupFailure struct {
+type scheduleLookupError struct {
 	lookups int
 	err     error
 }
 
-func (e *scheduleLookupFailure) Error() string { return e.err.Error() }
-func (e *scheduleLookupFailure) Unwrap() error { return e.err }
+func (e *scheduleLookupError) Error() string { return e.err.Error() }
+func (e *scheduleLookupError) Unwrap() error { return e.err }
 
 type mappedFailure struct {
 	code  contract.CollectionErrorCode

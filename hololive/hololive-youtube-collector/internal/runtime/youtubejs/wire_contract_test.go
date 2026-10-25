@@ -33,7 +33,7 @@ type wireFixture struct {
 		Subject         string        `json:"subject"`
 		Code            RPCErrorCode  `json:"code"`
 		Retry           *RPCRetryHint `json:"retry"`
-		ScheduleLookups int           `json:"schedule_lookups"`
+		ScheduleLookups uint64        `json:"schedule_lookups"`
 	} `json:"roundtrip_failures"`
 	Endpoints map[string]struct {
 		Minimal []jsontext.Value `json:"minimal"`
@@ -209,6 +209,7 @@ func TestWireRPC(t *testing.T) {
 
 	// limiter 예약 수로 helper가 보고한 예정 영상 조회의 지불을 확인한다.
 	limiter := NewRateLimiter(time.Microsecond)
+
 	cfg.Limiter = limiter
 	cfg.ScriptPath = absSibling(t, filepath.Join("..", "..", "..", "youtubejs", "testdata", "wire-roundtrip-helper.mjs"))
 
@@ -254,17 +255,20 @@ func TestWireRPC(t *testing.T) {
 		}
 	}
 
-	for _, failure := range fixture.RoundtripFailures {
-		path := "/v1/community"
-		if failure.ScheduleLookups > 0 {
-			path = "/v1/channel"
-		}
+	assertWireRoundtripFailures(ctx, t, rpc, limiter, &fixture)
+}
 
+// assertWireRoundtripFailures는 실패 tuple·retry hint 매핑과, 실패 전 예정 영상 조회의 limiter 지불을 확인한다.
+// 왕복 helper는 subject로 실패를 고르므로 모든 사례를 조회 수를 보고할 수 있는 /v1/channel live로 보낸다.
+func assertWireRoundtripFailures(ctx context.Context, t *testing.T, rpc *RPC, limiter *RateLimiter, fixture *wireFixture) {
+	t.Helper()
+
+	for _, failure := range fixture.RoundtripFailures {
 		before := limiterReservations(limiter)
-		_, err := fetchWire(ctx, rpc, path, failure.Subject, "live", 0)
+		_, err := fetchWire(ctx, rpc, "/v1/channel", failure.Subject, "live", 0)
 		tuple := fixture.FailureTuples[failure.Code]
 
-		if got := limiterReservations(limiter) - before; got != uint64(1+failure.ScheduleLookups) {
+		if got := limiterReservations(limiter) - before; got != 1+failure.ScheduleLookups {
 			t.Errorf("%s: limiter reservations = %d, want RPC plus %d lookups", failure.Subject, got, failure.ScheduleLookups)
 		}
 
