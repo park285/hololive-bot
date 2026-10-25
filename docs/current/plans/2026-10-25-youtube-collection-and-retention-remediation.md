@@ -78,18 +78,18 @@
 
 **2단계 결과 (로컬, 미배포)**
 
-각 항목에 바뀐 동작을 실행하는 테스트를 추가하거나 기존 기대값을 새 의미로 바꿨습니다. #1의 호출 예산 테스트는 변경 전 값(수집 시한 39초)에서 실패하는 것을 확인했습니다. 리뷰 주장이 틀려 고치지 않은 항목은 없습니다. 리뷰 #11은 해당 파일을 수정하지 않아 처리하지 않았습니다. 커밋은 모두 로컬이며 push하지 않았습니다.
+커밋 SHA는 2026-10-25 main `48bac3831` 위로 옮긴 뒤의 값입니다(#1 lint 정리 `c3895af98`, AP rsync manifest `24d2d5842`, 리뷰 반영 `eb484f722`). 각 항목에 바뀐 동작을 실행하는 테스트를 추가하거나 기존 기대값을 새 의미로 바꿨습니다. #1의 호출 예산 테스트는 변경 전 값(수집 시한 39초)에서 실패하는 것을 확인했습니다. 리뷰 주장이 틀려 고치지 않은 항목은 없습니다. 리뷰 #11은 해당 파일을 수정하지 않아 처리하지 않았습니다. 커밋은 모두 로컬이며 push하지 않았습니다.
 
 | 항목 | 커밋 | 바꾼 동작 |
 | --- | --- | --- |
-| #4 | `9ea78aa50` | `classifyPublication`이 `WaitingStateConfirmed == true`를 요구합니다. helper 검증기는 `scheduled_at`이 있으면 `waiting_state_confirmed === true`를 요구합니다. fixture에 classification 사례를 추가했습니다. |
-| #3 | `a733564ae` | 방송 탭 LockupView는 `live`·`upcoming`·재생 시간 badge(`^\d+(?::[0-5]\d){1,2}$`)만 상태 근거로 씁니다. 그 밖의 문구는 `parser_drift`입니다. |
-| #6 | `019514e19` | continuation 부분 결과(`continuation_transient`)는 `collection_timeout`, transport가 분류한 `collection_failed`, 원인 사슬(깊이 4까지)의 network 오류에만 남깁니다. HTTP 4xx는 기존 분류로 다시 던지고, 그 밖의 SDK 예외는 `parser_drift`입니다. continuation에서 생길 수 없는 `helper_busy`는 목록에서 뺐습니다. |
-| #10 | `f3120f2c5` | helper spawn에 `--max-old-space-size=192`를 붙입니다. 768M cgroup에서 기본 `heap_size_limit`는 408MiB, 플래그 적용 뒤 288MiB입니다(old space 192MiB와 그 밖의 V8 영역). |
-| #5 | `62a9d67f4` | scrape마다 helper `/health`를 읽는 collector로 `youtubejs_helper_health_scrape_success`, `youtubejs_po_proof_state{state}`, `youtubejs_po_proof_last_error{code}`와 bootstrap·upstream·mint·attach 누계를 냅니다. 모르는 state는 `UNRECOGNIZED`, 형식 밖 code는 `unrecognized`로 냅니다. native AP가 `/ready`를 주기적으로 부르지 않을 수 있어 `Healthy` 호출 시점에 기록하지 않습니다. |
-| #7 | `28fcbb9f5` | 수집 Innertube는 `retrieve_innertube_config: false`로 bootstrap 중 READY 전에 `FetcherSet.prepare()`가 만듭니다. 실패하면 helper는 FAULTED입니다. |
-| #8 | `fe3586e2b` | broker(issuer 이미지)는 바꾸지 않고 controller를 broker 의미에 맞췄습니다. 취소된 mint 뒤에는 session을 버리고 `UNAVAILABLE`, `last_error=mint_aborted`로 둡니다. JS fake broker도 중단된 mint의 세대를 퇴역시킵니다. |
-| #1 | `9d882c9d2` | live 채널 요청이 조회 상한 `max_schedule_lookups`(32, protocol 최대값)를 보냅니다. 후보가 상한을 넘으면 player 요청 전에 `response_too_large/RESOURCE_LIMIT`입니다. helper는 성공(`live_query`와 함께)·실패 응답에 실제 조회 수 `schedule_lookups`를 싣고, Go는 RPC 뒤 그 수만큼 limiter 예약을 하나씩 기다립니다. 상한을 넘는 보고나 `/v1/channel` 밖의 보고는 protocol mismatch입니다. `youtubejs_channel_live` 호출 예산은 1+32입니다. |
+| #4 | `7f94658af` | `classifyPublication`이 `WaitingStateConfirmed == true`를 요구합니다. helper 검증기는 `scheduled_at`이 있으면 `waiting_state_confirmed === true`를 요구합니다. fixture에 classification 사례를 추가했습니다. |
+| #3 | main `48bac3831`(#695) | rebase 때 같은 결함을 더 넓게 고친 main 변경으로 대체해 이 작업의 커밋을 뺐습니다. streams 상태는 LIVE badge style, `Upcoming`·재생 시간 배지 등 구조화된 표시로만 정하고, 표시가 없는 행도 `parser_drift`입니다. |
+| #6 | `4670e61c5` | continuation 부분 결과(`continuation_transient`)는 `collection_timeout`, transport가 분류한 `collection_failed`, 원인 사슬(깊이 4까지)의 network 오류에만 남깁니다. HTTP 4xx는 기존 분류로 다시 던지고, 그 밖의 SDK 예외는 `parser_drift`입니다. continuation에서 생길 수 없는 `helper_busy`는 목록에서 뺐습니다. |
+| #10 | `f2dfe1e50` | helper spawn에 `--max-old-space-size=192`를 붙입니다. 768M cgroup에서 기본 `heap_size_limit`는 408MiB, 플래그 적용 뒤 288MiB입니다(old space 192MiB와 그 밖의 V8 영역). |
+| #5 | `bf97617f7` | scrape마다 helper `/health`를 읽는 collector로 `youtubejs_helper_health_scrape_success`, `youtubejs_po_proof_state{state}`, `youtubejs_po_proof_last_error{code}`와 bootstrap·upstream·mint·attach 누계를 냅니다. 모르는 state는 `UNRECOGNIZED`, 형식 밖 code는 `unrecognized`로 냅니다. native AP가 `/ready`를 주기적으로 부르지 않을 수 있어 `Healthy` 호출 시점에 기록하지 않습니다. |
+| #7 | `266dc4be9` | 수집 Innertube는 `retrieve_innertube_config: false`로 bootstrap 중 READY 전에 `FetcherSet.prepare()`가 만듭니다. 실패하면 helper는 FAULTED입니다. |
+| #8 | `45b270c95` | broker(issuer 이미지)는 바꾸지 않고 controller를 broker 의미에 맞췄습니다. 취소된 mint 뒤에는 session을 버리고 `UNAVAILABLE`, `last_error=mint_aborted`로 둡니다. JS fake broker도 중단된 mint의 세대를 퇴역시킵니다. |
+| #1 | `b7790aeb9` | live 채널 요청이 조회 상한 `max_schedule_lookups`(32, protocol 최대값)를 보냅니다. 후보가 상한을 넘으면 player 요청 전에 `response_too_large/RESOURCE_LIMIT`입니다. helper는 성공(`live_query`와 함께)·실패 응답에 실제 조회 수 `schedule_lookups`를 싣고, Go는 RPC 뒤 그 수만큼 limiter 예약을 하나씩 기다립니다. 상한을 넘는 보고나 `/v1/channel` 밖의 보고는 protocol mismatch입니다. `youtubejs_channel_live` 호출 예산은 1+32입니다. |
 
 - #1 수집 시한: 실행 프로필이 호출마다 요청 시한을 곱하므로, 기본 설정(요청 30초, 간격 2초, inflight 4, overhead 1초 가정)에서 `youtubejs_channel_live` 수집 시한은 39초에서 약 21분(33×30초 + 33×4×2초 + overhead)으로 늘어납니다. RPC 하나는 HTTP 시한 30초 하나가 묶으므로 실제 최악 경로는 약 5분입니다. 더 좁히려면 실행 프로필에서 RPC 수와 limiter 예약 수를 나눠야 하며 이번 범위에서는 하지 않았습니다.
 - #1 분류 변경의 효과: `parser_drift/DATA_CONTRACT`와 `response_too_large/RESOURCE_LIMIT`는 모두 DEFER이므로 재시도 동작은 같습니다. 진단 코드와 attempt 메트릭 결과값(`parser_drift` → `failed`)이 바뀝니다.
@@ -105,7 +105,7 @@
 
 남은 위험
 
-- badge가 아예 없는 lockup은 기존 테스트대로 `ENDED`입니다(#3 범위 밖).
+- #3을 대체한 main #695는 shelf·안내 renderer가 있거나 배지 없는 streams lockup을 `parser_drift`로 거부하므로, 배포 뒤 channel live의 `parser_drift`(DATA_CONTRACT) 비율을 확인해야 합니다.
 - #10의 값은 0단계 관측 없이 compose 주석의 Node 몫 192MiB와 기존 관측 최대 RSS 176MiB를 근거로 정했습니다. 배포 뒤 helper 재시작·OOM과 RSS를 확인해야 합니다.
 - #7에서 upstream config 조회를 끈 것이 실제 upstream 응답에 영향을 주는지는 운영에서 확인하지 않았습니다.
 - #8: dispatch 전에 취소되어 broker가 세대를 퇴역시키지 않은 경우에도 session을 버리므로, 다음 발급에서 한 번 불필요하게 재발급할 수 있습니다.
