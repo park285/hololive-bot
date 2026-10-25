@@ -35,7 +35,7 @@ test("one restricted schedule preserves normal upcoming and live rows through th
       : rawPlayerResponse(videoId);
   });
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1048576 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
   assert.equal(result.status, 200);
@@ -362,21 +362,75 @@ test("fetchChannelFeed permits exactly 32 metadata lookups", async () => {
   assert.equal(requested.length, 32);
 });
 
-test("fetchChannelFeed rejects 33 candidates before a metadata request", async () => {
-  let calls = 0;
-  const feed = { videos: Array.from({ length: 33 }, (_, index) => ({ id: `video-${index}`, is_upcoming: true })) };
-  await assert.rejects(
-    () => fetchChannelFeed({
-    kind: "live",
-      channelId: "UC_TEST",
-      innertube: stubChannel(feed, async () => {
-        calls += 1;
-        return rawPlayerResponse("unused");
+test("fetchChannelFeed rejects candidates beyond the lookup budget as a resource limit before a metadata request", async () => {
+  // 조회 상한은 collector 호출 예산이므로 응답 형상 오류(parser_drift)가 아니라 자원 한도입니다.
+  for (const [count, maxScheduleLookups] of [[33, undefined], [2, 1], [1, 0]]) {
+    let calls = 0;
+    const feed = { videos: Array.from({ length: count }, (_, index) => ({ id: `video-${index}`, is_upcoming: true })) };
+    await assert.rejects(
+      () => fetchChannelFeed({
+        kind: "live",
+        channelId: "UC_TEST",
+        ...(maxScheduleLookups === undefined ? {} : { maxScheduleLookups }),
+        innertube: stubChannel(feed, async () => {
+          calls += 1;
+          return rawPlayerResponse("unused");
+        }),
       }),
-    }),
-    (error) => error.code === "parser_drift",
-  );
-  assert.equal(calls, 0);
+      (error) => error.code === "response_too_large",
+    );
+    assert.equal(calls, 0);
+  }
+});
+
+test("live snapshots report the player lookups they performed", async () => {
+  const feed = {
+    videos: [
+      { id: "first", is_upcoming: true },
+      { id: "first", is_upcoming: true },
+      { id: "second", is_upcoming: true },
+      { id: "scheduled", is_upcoming: true, scheduled: new Date("2026-09-01T20:00:00+09:00") },
+    ],
+  };
+  const result = await fetchChannelFeed({
+    kind: "live",
+    channelId: "UC_TEST",
+    maxScheduleLookups: 2,
+    innertube: stubChannel(feed, async (_endpoint, payload) => rawPlayerResponse(payload.videoId)),
+  });
+  assert.equal(result.schedule_lookups, 2);
+});
+
+test("a failed live RPC reports the player lookups sent before the failure", async () => {
+  const feed = { videos: [{ id: "first", is_upcoming: true }, { id: "second", is_upcoming: true }] };
+  let calls = 0;
+  const innertube = stubChannel(feed, async (_endpoint, payload) => {
+    calls += 1;
+    if (calls === 2) throw Object.assign(new Error("player drift"), { code: "parser_drift" });
+    return rawPlayerResponse(payload.videoId);
+  });
+  const result = await runWithRequestContext({ requestId: "lookups", signal: new AbortController().signal }, () =>
+    handleChannelRequest(
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1048576 }),
+      (options) => fetchChannelFeed({ ...options, innertube }),
+    ));
+  assert.equal(result.status, 422);
+  assert.equal(result.body.error.code, "parser_drift");
+  assert.equal(result.body.schedule_lookups, 2);
+});
+
+test("live requests carry the lookup budget and metadata requests never do", async () => {
+  const fetcher = async () => { throw new Error("unexpected fetch"); };
+  for (const body of [
+    { kind: "live", channel_id: "UC_TEST" },
+    { kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 33 },
+    { kind: "live", channel_id: "UC_TEST", max_schedule_lookups: -1 },
+    { kind: "metadata", channel_id: "UC_TEST", max_schedule_lookups: 0 },
+  ]) {
+    const result = await handleChannelRequest(JSON.stringify({ protocol_version: 1, max_success_response_bytes: 1048576, ...body }), fetcher);
+    assert.equal(result.status, 400, JSON.stringify(body));
+    assert.equal(result.body.error.code, "invalid_request");
+  }
 });
 
 test("fetchChannelFeed keeps a list-to-player LIVE transition catch-up eligible", async () => {
@@ -402,7 +456,7 @@ test("incomplete UPCOMING becomes a typed 422 RPC failure", async () => {
     async () => rawPlayerResponse("unresolved", { startTimestamp: undefined }),
   );
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1048576 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
 
@@ -420,7 +474,7 @@ test("fetchChannelFeed cancellation remains a typed canceled RPC failure", async
   const result = await runWithRequestContext(
     { requestId: "channel-canceled", signal: controller.signal },
     () => handleChannelRequest(
-      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1048576 }),
       (options) => fetchChannelFeed({ ...options, innertube }),
     ),
   );
@@ -471,7 +525,7 @@ test("oversized channel snapshot rejects before upcoming metadata hydration", as
     { id: "large-live", badges: liveBadges, title: "x".repeat(2000) },
   ] }, async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1000 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
   assert.equal(result.body.error.code, "response_too_large");
@@ -485,7 +539,7 @@ test("restricted bulky duplicate rows may shrink below the channel budget", asyn
     id: "restricted-fixture", is_upcoming: true, title: "x".repeat(2000),
   })) }, async () => { calls++; return { success: true, status_code: 200, data: restrictedFixture }; });
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1000 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
   assert.equal(result.status, 200);
@@ -514,7 +568,7 @@ for (const resolution of ["restricted", "scheduled", "LIVE"]) {
     const limit = Buffer.byteLength(JSON.stringify(complete), "utf8") - 1;
     calls.length = 0;
     const result = await handleChannelRequest(
-      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: limit }),
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: limit }),
       (options) => fetchChannelFeed({ ...options, innertube }),
     );
     assert.equal(result.body.error.code, "response_too_large");
@@ -539,7 +593,7 @@ for (const resolution of ["restricted", "scheduled", "LIVE"]) {
     const limit = Buffer.byteLength(JSON.stringify(expected), "utf8");
     calls = 0;
     const result = await handleChannelRequest(
-      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: limit }),
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: limit }),
       (options) => fetchChannelFeed({ ...options, innertube }),
     );
     assert.equal(result.status, 200);
@@ -562,7 +616,7 @@ test("resolved rows leave only identities for pending bulky restricted duplicate
       : rawPlayerResponse(videoId);
   });
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 700 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 700 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
   assert.equal(result.status, 200);
@@ -597,7 +651,7 @@ test("unique unresolved identities alone can exceed the channel budget before hy
     id: `upcoming-${index}`, is_upcoming: true,
   })) }, async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1000 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
   assert.equal(result.body.error.code, "response_too_large");
@@ -613,7 +667,7 @@ test("channel lower-bound overflow stops before reading the next raw row", async
   } });
   const innertube = stubChannel({ videos }, async () => assert.fail("metadata must not be requested"));
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1000 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
   assert.equal(result.body.error.code, "response_too_large");

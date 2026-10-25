@@ -100,12 +100,48 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 
 	request.MaxSuccessResponseBytes = limit
 
+	request.MaxScheduleLookups = 0
+	if request.Kind == "live" {
+		request.MaxScheduleLookups = ChannelLiveMaxScheduleLookups
+	}
+
 	result, err := c.doJSON[ChannelResult](ctx, "/v1/channel", &request, int64(request.MaxSuccessResponseBytes))
 	if err != nil {
+		if failure, ok := errors.AsType[*scheduleLookupFailure](err); ok {
+			if failure.lookups > request.MaxScheduleLookups {
+				return ChannelResult{}, protocolMismatch(errors.New("youtube.js helper schedule lookups exceed the requested budget"))
+			}
+
+			if payErr := c.payScheduleLookups(ctx, failure.lookups); payErr != nil {
+				return ChannelResult{}, errors.Join(err, payErr)
+			}
+		}
+
+		return ChannelResult{}, err
+	}
+
+	if result.ScheduleLookups < 0 || result.ScheduleLookups > request.MaxScheduleLookups || (result.LiveQuery == nil && result.ScheduleLookups != 0) {
+		return ChannelResult{}, protocolMismatch(errors.New("youtube.js helper schedule lookups exceed the requested budget"))
+	}
+
+	if err := c.payScheduleLookups(ctx, result.ScheduleLookups); err != nil {
 		return ChannelResult{}, err
 	}
 
 	return *result, nil
+}
+
+// payScheduleLookups는 helper가 RPC 안에서 보낸 예정 영상 player 조회를 limiter 예약 하나씩으로 지불합니다.
+// 다음 RPC가 이 조회들과 같은 간격을 두게 하며, 예약을 한 번에 하나씩 기다리므로 대기 예약 수가 inflight를 넘지 않아
+// 실행 프로필의 limiter 예산(호출 수 x inflight x 간격)과 맞습니다.
+func (c *RPC) payScheduleLookups(ctx context.Context, lookups int) error {
+	for range lookups {
+		if err := c.observeLimiterWait(ctx, "/v1/channel"); err != nil {
+			return fmt.Errorf("pay schedule lookup: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // FetchChannelLiveCheck는 채널 /live 확인을 한 번 요청합니다. 응답 예산은 MaxLiveCheckResponseBytes 이하로 제한하며
@@ -210,6 +246,11 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 
 	response := new(T)
 	if err := decodeHelperResponse(resp, successLimit, response); err != nil {
+		// 예정 영상 조회 수는 /v1/channel 오류 본문에만 있을 수 있습니다.
+		if _, ok := errors.AsType[*scheduleLookupFailure](err); ok && path != "/v1/channel" {
+			return nil, protocolMismatch(errors.New("youtube.js helper reported schedule lookups outside the channel endpoint"))
+		}
+
 		return nil, fmt.Errorf("decode helper response: %w", err)
 	}
 

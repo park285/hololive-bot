@@ -30,9 +30,10 @@ type wireFixture struct {
 		Body   jsontext.Value `json:"body"`
 	} `json:"invalid_failures"`
 	RoundtripFailures []struct {
-		Subject string        `json:"subject"`
-		Code    RPCErrorCode  `json:"code"`
-		Retry   *RPCRetryHint `json:"retry"`
+		Subject         string        `json:"subject"`
+		Code            RPCErrorCode  `json:"code"`
+		Retry           *RPCRetryHint `json:"retry"`
+		ScheduleLookups int           `json:"schedule_lookups"`
 	} `json:"roundtrip_failures"`
 	Endpoints map[string]struct {
 		Minimal []jsontext.Value `json:"minimal"`
@@ -206,6 +207,9 @@ func TestWireRPC(t *testing.T) {
 
 	cfg := liveHelperConfig(t, t.TempDir())
 
+	// limiter 예약 수로 helper가 보고한 예정 영상 조회의 지불을 확인한다.
+	limiter := NewRateLimiter(time.Microsecond)
+	cfg.Limiter = limiter
 	cfg.ScriptPath = absSibling(t, filepath.Join("..", "..", "..", "youtubejs", "testdata", "wire-roundtrip-helper.mjs"))
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -251,8 +255,18 @@ func TestWireRPC(t *testing.T) {
 	}
 
 	for _, failure := range fixture.RoundtripFailures {
-		_, err := fetchWire(ctx, rpc, "/v1/community", failure.Subject, "", 0)
+		path := "/v1/community"
+		if failure.ScheduleLookups > 0 {
+			path = "/v1/channel"
+		}
+
+		before := limiterReservations(limiter)
+		_, err := fetchWire(ctx, rpc, path, failure.Subject, "live", 0)
 		tuple := fixture.FailureTuples[failure.Code]
+
+		if got := limiterReservations(limiter) - before; got != uint64(1+failure.ScheduleLookups) {
+			t.Errorf("%s: limiter reservations = %d, want RPC plus %d lookups", failure.Subject, got, failure.ScheduleLookups)
+		}
 
 		mapped, ok := helperFailureMap[failure.Code]
 		if !ok || collecterr.CodeOf(err) != mapped.mapped.code || collecterr.ClassOf(err) != contract.FailureClass(tuple.Class) {
@@ -263,6 +277,13 @@ func TestWireRPC(t *testing.T) {
 
 		assertWireRetry(t, failure.Subject, collecterr.RetryOf(err), failure.Retry)
 	}
+}
+
+func limiterReservations(limiter *RateLimiter) uint64 {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+
+	return limiter.seq
 }
 
 // wireMinimalSubject는 왕복 helper가 fixture의 최소 본문을 돌려주는 요청 subject입니다.

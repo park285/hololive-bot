@@ -95,6 +95,8 @@ type RPCFailure struct {
 type RPCErrorBody struct {
 	ProtocolVersion int16      `json:"protocol_version"`
 	Error           RPCFailure `json:"error"`
+	// ScheduleLookups는 /v1/channel live 요청이 실패 전까지 보낸 예정 영상 player 조회 수입니다.
+	ScheduleLookups int `json:"schedule_lookups,omitzero"`
 }
 
 type Pagination struct {
@@ -249,12 +251,19 @@ func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta 
 func (r *ContentResult) validateSuccess() error         { return r.Validate() }
 
 // ChannelRequest는 동일 bundle의 helper에 live 또는 metadata 수집만 요청합니다.
+// ChannelLiveMaxScheduleLookups는 live 채널 RPC 하나가 시각 없는 예정 영상마다 보내는 player 조회 수의 상한입니다.
+// helper protocol 상한과 같으며, 초과하는 snapshot은 helper가 response_too_large(RESOURCE_LIMIT)로 거부합니다.
+// 이 조회는 RPC 안에서 일어나므로 collector가 RPC 뒤에 limiter로 지불하고 job 호출 예산에 셉니다.
+const ChannelLiveMaxScheduleLookups = 32
+
 type ChannelRequest struct {
-	ProtocolVersion         int16  `json:"protocol_version"`
-	ChannelID               string `json:"channel_id"`
-	Kind                    string `json:"kind"`
-	MaxPages                int    `json:"max_pages"`
-	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
+	ProtocolVersion int16  `json:"protocol_version"`
+	ChannelID       string `json:"channel_id"`
+	Kind            string `json:"kind"`
+	MaxPages        int    `json:"max_pages"`
+	// MaxScheduleLookups는 FetchChannel이 live 요청에만 채웁니다. helper는 live 요청에서 이 값이 없으면 거부합니다.
+	MaxScheduleLookups      int `json:"max_schedule_lookups,omitzero"`
+	MaxSuccessResponseBytes int `json:"max_success_response_bytes"`
 }
 
 type LiveSessionItem struct {
@@ -299,6 +308,7 @@ type ChannelResult struct {
 	Profile                 ChannelProfileItem            `json:"profile"`
 	Photo                   []ChannelPhotoVariant         `json:"photo"`
 	MissingTab              bool                          `json:"missing_tab,omitzero"`
+	ScheduleLookups         int                           `json:"schedule_lookups,omitzero"`
 	LiveQuery               *contract.LiveSnapshotQueryV1 `json:"live_query,omitempty"`
 }
 

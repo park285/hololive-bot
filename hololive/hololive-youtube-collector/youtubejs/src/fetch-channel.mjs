@@ -6,8 +6,8 @@ import { assertVideoRowTitled, hasDurationMarker, hasLiveMarker, hasUpcomingMark
 import { fetchLiveMetadata } from "./live-metadata.mjs";
 import { assertResponseBudget, EncodedArrayBudget, encodedSize, paginationResult, hasContinuation } from "./pagination.mjs";
 import { hasRFC3339Shape } from "./rfc3339.mjs";
-
-const maxScheduleMetadataLookups = 32;
+import { recordScheduleLookup } from "./request-context.mjs";
+import { maxScheduleMetadataLookups } from "./rpc-validation-primitives.mjs";
 
 const responseReserveBytes = encodedSize({
   protocol_version: 1,
@@ -29,6 +29,7 @@ const responseReserveBytes = encodedSize({
 export async function fetchChannelFeed({
   channelId,
   kind,
+  maxScheduleLookups = maxScheduleMetadataLookups,
   maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
 } = {}) {
@@ -41,6 +42,9 @@ export async function fetchChannelFeed({
   }
   if (innertube == null || typeof innertube.getChannel !== "function") {
     throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "innertube client is required");
+  }
+  if (!Number.isSafeInteger(maxScheduleLookups) || maxScheduleLookups < 0 || maxScheduleLookups > maxScheduleMetadataLookups) {
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "schedule lookup budget is outside the protocol limit");
   }
   assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
   const channel = await runUpstream(() => innertube.getChannel(id));
@@ -59,9 +63,10 @@ export async function fetchChannelFeed({
   } : undefined;
   // access_restricted=true가 한 byte 짧으므로 hydration 전에는 안전한 하한만 센다.
   const reserveBytes = encodedSize({ protocol_version: 1, live_sessions: [], profile: {}, photo: [], ...pagination,
-    ...(query === undefined ? {} : { live_query: { ...query, access_restricted: true } }) });
+    ...(query === undefined ? {} : { schedule_lookups: 0, live_query: { ...query, access_restricted: true } }) });
   const { sessions: liveSessions, minimumBytes } = collectLiveSnapshot(liveFeed, id, maxSuccessResponseBytes, reserveBytes);
-  const unavailable = await enrichUpcomingSchedules(liveSessions, innertube, minimumBytes, maxSuccessResponseBytes);
+  const { unavailable, lookups } = await enrichUpcomingSchedules(
+    liveSessions, innertube, minimumBytes, maxSuccessResponseBytes, maxScheduleLookups);
   const unavailableIDs = new Set(unavailable.map((item) => item.video_id));
   if (unavailable.length > 0) {
     logUnavailableSchedules(id, unavailable);
@@ -75,6 +80,7 @@ export async function fetchChannelFeed({
     photo: kind === "metadata" ? mapPhoto(channel, about) : [],
     ...pagination,
     ...(missingTab ? { missing_tab: true } : {}),
+    ...(kind === "live" && !missingTab ? { schedule_lookups: lookups } : {}),
     ...(kind === "live" && !missingTab ? { live_query: {
       channel_id: id, source: "streams", statuses: ["ENDED", "LIVE", "UPCOMING"],
       exhausted, access_restricted: unavailable.length > 0, page_count: 1,
@@ -106,7 +112,7 @@ function logUnavailableSchedules(channelId, unavailable) {
   })}\n`);
 }
 
-async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuccessResponseBytes) {
+async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuccessResponseBytes, maxLookups) {
   const candidates = new Map();
   const confirmedIDs = new Set();
   let liveRowCount = 0;
@@ -120,15 +126,19 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
     rows.push(session);
     candidates.set(session.video_id, rows);
   }
-  if (candidates.size > maxScheduleMetadataLookups) {
-    const error = new Error("upcoming schedule metadata lookup limit exceeded");
-    error.code = "parser_drift";
+  // 조회 상한은 collector의 호출 예산이므로 초과는 응답 형상 오류가 아니라 자원 한도입니다.
+  if (candidates.size > maxLookups) {
+    const error = new Error("upcoming schedule lookups exceed the requested upstream call budget");
+    error.code = "response_too_large";
     throw error;
   }
 
   const unavailable = new Map();
   let pendingCount = candidates.size;
+  let lookups = 0;
   for (const [videoId, rows] of candidates) {
+    lookups++;
+    recordScheduleLookup();
     const metadata = await fetchLiveMetadata(innertube, videoId);
     const identity = { video_id: videoId, channel_id: rows[0].channel_id };
     minimumBytes -= encodedSize(identity);
@@ -183,7 +193,7 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
     error.code = "parser_drift";
     throw error;
   }
-  return [...unavailable.values()];
+  return { unavailable: [...unavailable.values()], lookups };
 }
 
 export function* liveSessionRows(feed, channelId) {

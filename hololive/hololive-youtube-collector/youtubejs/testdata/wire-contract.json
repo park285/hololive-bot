@@ -47,7 +47,8 @@
     { "subject": "UCfailBusyAfter", "code": "helper_busy", "retry": { "kind": "after", "after_ms": 250 } },
     { "subject": "UCfailParserDrift", "code": "parser_drift" },
     { "subject": "UCfailConfiguration", "code": "configuration_error" },
-    { "subject": "UCfailResponseTooLarge", "code": "response_too_large" }
+    { "subject": "UCfailResponseTooLarge", "code": "response_too_large" },
+    { "subject": "UCfailAfterLookups", "code": "parser_drift", "schedule_lookups": 3 }
   ],
   "endpoints": {
     "/v1/community": {
@@ -173,6 +174,7 @@
             "exhausted": true,
             "continuity": "NOT_APPLICABLE",
             "termination_reason": "exhausted",
+            "schedule_lookups": 2,
             "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": true, "page_count": 1 }
           }
         },
@@ -223,6 +225,7 @@
             "exhausted": true,
             "continuity": "NOT_APPLICABLE",
             "termination_reason": "exhausted",
+            "schedule_lookups": 0,
             "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 2 }
           }
         },
@@ -240,6 +243,7 @@
             "exhausted": true,
             "continuity": "NOT_APPLICABLE",
             "termination_reason": "exhausted",
+            "schedule_lookups": 0,
             "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
           }
         }

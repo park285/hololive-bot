@@ -2,6 +2,7 @@
 import { channelEndpoint, communityEndpoint, contentEndpoint } from "./rpc-collection-validation.mjs";
 import { channelLiveCheckEndpoint, videoLiveCheckEndpoint } from "./rpc-live-check-validation.mjs";
 import { handleRpcRequest } from "./rpc-execution.mjs";
+import { currentScheduleLookups } from "./request-context.mjs";
 import { RpcResponseError } from "./rpc-errors.mjs";
 
 /**
@@ -43,14 +44,21 @@ export async function handleContentRequest(rawBody, fetchContent, maximumSuccess
  * @param {number} [maximumSuccessResponseBytes]
  */
 export async function handleChannelRequest(rawBody, fetchChannel, maximumSuccessResponseBytes) {
-  return handleRpcRequest(rawBody, channelEndpoint, async (payload) => {
+  const result = await handleRpcRequest(rawBody, channelEndpoint, async (payload) => {
     return fetchChannel({
       channelId: payload.channel_id,
       kind: payload.kind,
       maxPages: payload.max_pages,
+      ...(payload.max_schedule_lookups === undefined ? {} : { maxScheduleLookups: payload.max_schedule_lookups }),
       maxSuccessResponseBytes: payload.max_success_response_bytes,
     });
   }, maximumSuccessResponseBytes);
+  // 실패 전까지 보낸 예정 영상 조회도 collector 호출 예산에 반영되도록 오류 본문에 함께 싣습니다.
+  const lookups = currentScheduleLookups();
+  if (result.status !== 200 && lookups > 0) {
+    return { status: result.status, body: { ...result.body, schedule_lookups: lookups } };
+  }
+  return result;
 }
 
 /**

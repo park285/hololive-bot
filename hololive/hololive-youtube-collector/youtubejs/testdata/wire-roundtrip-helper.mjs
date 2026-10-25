@@ -2,6 +2,7 @@
 // 실제 server.mjs의 bootstrap·RPC 처리·응답 검증·인코딩을 그대로 쓰고 upstream fetcher만
 // wire-contract.json 응답으로 바꿉니다. 네트워크에 접속하지 않습니다.
 import { readFileSync } from "node:fs";
+import { recordScheduleLookup } from "../src/request-context.mjs";
 import { listenUnix } from "../src/server.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./wire-contract.json", import.meta.url), "utf8"));
@@ -14,6 +15,8 @@ const minimalSubject = "UCminimal";
 function respond(path, subject) {
   const failure = fixture.roundtrip_failures.find((item) => item.subject === subject);
   if (failure != null) {
+    // 실패 전에 보낸 예정 영상 조회를 흉내 내어 오류 본문의 조회 수 보고를 왕복시킵니다.
+    for (let index = 0; index < (failure.schedule_lookups ?? 0); index += 1) recordScheduleLookup();
     throw Object.assign(new Error(`fixture ${failure.code}`), {
       code: failure.code,
       ...(failure.retry == null ? {} : { retry: failure.retry }),

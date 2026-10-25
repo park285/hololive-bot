@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
@@ -108,6 +109,29 @@ func TestExecutionProfileRejectsDurationOverflowAndUndersizedTimeout(t *testing.
 
 	if _, err := NewExecutionProfile(2, time.Second, time.Second, 2, time.Second, 2*time.Second); err == nil {
 		t.Fatal("undersized collect timeout was accepted")
+	}
+}
+
+// 방송 탭 snapshot은 RPC 하나 뒤에 예정 영상 조회마다 limiter를 기다리므로, 수집 시간이 그 최악 경로를 덮어야 한다.
+func TestChannelLiveProfileCoversScheduleLookupPayments(t *testing.T) {
+	t.Parallel()
+
+	cfg := collectorconfig.DefaultConfig()
+	cfg.YouTubeJSMaxInflight = 4
+	cfg.CollectionOverhead = time.Second
+
+	id := collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_live"}
+
+	profiles, err := collectorExecutionProfiles([]collection.JobRunner{stubJob(id.Provider, string(id.Kind))}, &cfg, time.Second, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reservations := time.Duration((1 + youtubejs.ChannelLiveMaxScheduleLookups) * cfg.YouTubeJSMaxInflight)
+
+	worst := cfg.YouTubeJSRequestTimeout + reservations*cfg.RequestInterval + cfg.CollectionOverhead
+	if got := profiles[id].CollectTimeout(); got < worst {
+		t.Fatalf("channel live collect timeout = %s, want at least %s", got, worst)
 	}
 }
 

@@ -59,6 +59,8 @@ export interface ChannelRequest {
   channel_id: string;
   kind: "live" | "metadata";
   max_pages?: number;
+  /** live 요청에만 있으며, 예정 영상 player 조회 수의 상한입니다. collector가 호출 예산으로 소유합니다. */
+  max_schedule_lookups?: number;
   max_success_response_bytes: number;
 }
 
@@ -77,6 +79,7 @@ export interface ChannelFetchOptions {
   channelId: string;
   kind: "live" | "metadata";
   maxPages?: number;
+  maxScheduleLookups?: number;
   maxSuccessResponseBytes: number;
 }
 
@@ -177,6 +180,8 @@ export interface RPCFailure {
 
 export interface RPCErrorBody extends ProtocolMeta {
   error: RPCFailure;
+  /** 실패 전까지 수행한 예정 영상 player 조회 수입니다. 0이면 생략합니다. */
+  schedule_lookups?: number;
 }
 
 export interface CommunityResult extends Pagination {
@@ -259,6 +264,8 @@ export interface ChannelResult extends Pagination {
   profile: ChannelProfileItem;
   photo: ChannelPhotoVariant[];
   missing_tab?: boolean;
+  /** live_query와 함께만 있으며, 이 RPC가 수행한 예정 영상 player 조회 수입니다. */
+  schedule_lookups?: number;
   live_query?: {
     channel_id: string;
     source: "streams";

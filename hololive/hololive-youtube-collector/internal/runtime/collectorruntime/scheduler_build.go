@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
 
@@ -159,13 +160,16 @@ func newScheduler(executor *collectionExecutor, candidates projectionCandidateSo
 	return scheduler
 }
 
-// jobMaxUpstreamCalls는 job 실행 한 번이 보내는 helper RPC 수의 상한입니다.
+// jobMaxUpstreamCalls는 job 실행 한 번이 보내는 upstream 호출 수의 상한입니다.
 // Content는 목록 두 종류 RPC에 더해 신규 영상의 공개 시각 근거 확인 RPC(youtubejscollector.ContentPublicationMaxCalls)를
-// 같은 예산 안에서 보냅니다. 방송 탭 snapshot·채널 확인·영상 확인은 각자 RPC 1회입니다.
+// 같은 예산 안에서 보냅니다. 방송 탭 snapshot은 RPC 1회 안에서 시각 없는 예정 영상마다 player를 조회하고
+// 그 수만큼 limiter를 지불하므로 youtubejs.ChannelLiveMaxScheduleLookups를 더합니다. 채널 확인·영상 확인은 각자 RPC 1회입니다.
 func jobMaxUpstreamCalls(id collection.JobID) int {
 	switch string(id.Kind) {
 	case "youtubejs_content":
 		return 2 + youtubejscollector.ContentPublicationMaxCalls
+	case "youtubejs_channel_live":
+		return 1 + youtubejs.ChannelLiveMaxScheduleLookups
 	default:
 		return 1
 	}

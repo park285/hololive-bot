@@ -4,6 +4,8 @@ import { RpcRequestError, RpcResponseError } from "./rpc-errors.mjs";
 
 export const maxChannelIdentifierBytes = 256;
 export const maxVideoIdentifierBytes = 128;
+// live 채널 요청이 지정할 수 있는 예정 영상 player 조회 수의 protocol 상한입니다. 실제 상한은 collector가 요청마다 정합니다.
+export const maxScheduleMetadataLookups = 32;
 
 /** @param {unknown} value @returns {Record<string, unknown>} */
 export function requestRecord(value) {
