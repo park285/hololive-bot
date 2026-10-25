@@ -13,6 +13,8 @@
 !hololive/hololive-youtube-collector/
 !hololive/hololive-youtube-collector/go.mod
 !hololive/hololive-youtube-collector/go.sum
+!scripts/build/ca-distrust.sh
+!scripts/build/ca-distrust.sha256
 
 **/*_test.go
 **/testdata/

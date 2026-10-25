@@ -381,6 +381,8 @@ hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/live_che
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/mapper.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/validation.go
 scripts/build/build-youtube-collector-go.sh
+scripts/build/ca-distrust.sh
+scripts/build/ca-distrust.sha256
 scripts/build/po-sandbox-manifest.py
 scripts/ci/postgres-capacity-policy.tsv
 scripts/deploy/ap-hosts/osaka.conf

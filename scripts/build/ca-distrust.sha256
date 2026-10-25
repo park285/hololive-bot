@@ -1,0 +1,5 @@
+# 이미지 CA bundle에서 신뢰를 철회하는 공개 루트의 DER SHA-256 지문입니다.
+# 근거: 2026-10-22 eMudhra 중간 CA 침해 체인 차단(iris-stack emudhra 보안 반영).
+# base에 없는 지문은 건너뛰며, bundle에서 하나도 빼지 못하면 빌드가 실패합니다.
+86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b emSign ECC Root CA - G3
+d7a7a0fb5d7e2731d771e9484ebcdef71d5f0c3e0a2948782bc83ee0ea699ef4 AAA Certificate Services

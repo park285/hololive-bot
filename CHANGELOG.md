@@ -8,6 +8,13 @@
 
 ## 미출시
 
+## v12.1.1 - 2026-10-25
+
+- **이미지 CA 신뢰 차단을 빌드에 고정:** 2026-10-22 eMudhra 중간 CA 침해 대응으로 운영 이미지에 덧입혀 두었던 CA bundle 차단(`emSign ECC Root CA - G3`, `AAA Certificate Services`)이, 저장소 배포 진입점이 이미지를 다시 빌드할 때 빠졌습니다. v12.1.0 collector c·b가 그 상태로 배포됐습니다.
+  - 이제 collector·hololive-api·alarm-worker Dockerfile의 빌드 단계에서 `scripts/build/ca-distrust.sh`가 `ca-distrust.sha256`의 루트를 bundle에서 뺍니다. bundle에 PEM 블록이 아닌 내용이 있거나 차단 루트를 하나도 찾지 못하면 빌드가 실패합니다.
+  - 결과 bundle은 이전에 검증한 파생 이미지 bundle과 인증서 순서까지 같습니다.
+  - alarm-worker artifact도 함께 다시 빌드하므로 `hololive/hololive-alarm-worker/VERSION`을 12.1.1로 맞춥니다.
+
 ## v12.1.0 - 2026-10-25
 
 - **의존성:** `openai-go/v3` v3.86.0·`quic-go` v0.64.1과 Go 전이 의존성, collector의 `youtubei.js` 18.3.0을 갱신합니다.
