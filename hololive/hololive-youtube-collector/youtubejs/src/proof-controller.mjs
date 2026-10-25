@@ -94,12 +94,13 @@ export class ProofController {
         token = await this.broker.mint(session.generation, videoId, mintSignal);
         this.mintedTotal += 1;
       } catch (error) {
-        // 개별 RPC 취소만으로 공유 세대를 버리지 않습니다. 실제 퇴장은 다음 broker 응답으로 판정합니다.
+        // broker는 worker IO 중 요청이 끊기면 그 세대를 퇴역시키므로, 취소된 mint 뒤에도 세대를 재사용하지 않습니다.
+        // dispatch 전 취소로 세대가 남았다면 다음 발급의 freshGeneration이 한 번 reset합니다.
         // 옛 세대의 늦은 실패 역시 이미 준비된 새 세대를 무효화하지 않습니다.
-        if (!signal?.aborted && !this.stop.signal.aborted && this.session === session) {
+        if (!this.stop.signal.aborted && this.session === session) {
           this.session = undefined;
           this.state = "UNAVAILABLE";
-          this.lastError = safeCode(error);
+          this.lastError = signal?.aborted ? "mint_aborted" : safeCode(error);
         }
       }
       signal?.throwIfAborted();
