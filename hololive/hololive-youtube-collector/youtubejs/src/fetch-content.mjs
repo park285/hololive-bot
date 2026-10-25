@@ -8,7 +8,7 @@ import {
   paginationResult,
 } from "./pagination.mjs";
 import { textOf } from "./map-posts.mjs";
-import { lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
+import { assertVideoRowTitled, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 
 const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, items: [] });
 
@@ -109,6 +109,7 @@ function* mapContentPage(feed, channelId, kind) {
 // is_upcoming은 구조화된 예정 표시일 뿐 시각 근거가 아니며, collector가 저장한 근거가 현재 상태와 맞는지 판단할 때만 씁니다.
 // 이 함수는 upstream 호출을 하지 않으므로 목록 RPC 하나가 숨은 영상별 호출을 만들지 않습니다.
 function mapContentRow(row, channelId, kind) {
+  assertVideoRowTitled(row);
   const videoId = videoIDOf(row);
   if (videoId === "") {
     const err = new Error("content row is missing video id");

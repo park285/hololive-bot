@@ -2,7 +2,7 @@ import { FetchTransportError } from "./fetch-transport.mjs";
 import { readUpstream, runUpstream } from "./upstream-errors.mjs";
 import { fetchChannelTab } from "./channel-tabs.mjs";
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
-import { isVideoLockup, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
+import { assertVideoRowTitled, hasDurationMarker, hasLiveMarker, hasUpcomingMarker, isVideoLockup, lockupLiveStatus, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 import { fetchLiveMetadata } from "./live-metadata.mjs";
 import { assertResponseBudget, EncodedArrayBudget, encodedSize, paginationResult, hasContinuation } from "./pagination.mjs";
 import { hasRFC3339Shape } from "./rfc3339.mjs";
@@ -199,6 +199,7 @@ export function* liveSessionRows(feed, channelId) {
     throw error;
   }
   for (const row of rows) {
+    assertVideoRowTitled(row);
     const videoId = videoIDOf(row);
     const status = mapLiveStatus(row);
     if (videoId === "") {
@@ -281,11 +282,14 @@ export function mapPhoto(channel, about) {
   return variants;
 }
 
+// 표시가 없는 행은 종료로 추정하지 않고 ""로 두어 drift로 거부합니다.
 function mapLiveStatus(row) {
-  if (row?.is_live === true || row?.isLive === true) {
+  if (hasLiveMarker(row)) {
     return "LIVE";
   }
-  if (row?.is_upcoming === true || row?.isUpcoming === true) {
+  // is_upcoming 플래그는 테스트 대역 행을 위한 것으로, 실제 Video 노드에서는 upcomingEventData가 있을 때만 참이라
+  // hasUpcomingMarker와 같은 결과입니다.
+  if (row?.is_upcoming === true || row?.isUpcoming === true || hasUpcomingMarker(row)) {
     return "UPCOMING";
   }
   const status = textOf(row?.status).toUpperCase();
@@ -293,12 +297,9 @@ function mapLiveStatus(row) {
     return status;
   }
   if (isVideoLockup(row)) {
-    const badges = lockupBadgeTexts(row);
-    if (badges.includes("live")) return "LIVE";
-    if (badges.includes("upcoming")) return "UPCOMING";
-    return "ENDED";
+    return lockupLiveStatus(row);
   }
-  return "";
+  return hasDurationMarker(row) ? "ENDED" : "";
 }
 
 

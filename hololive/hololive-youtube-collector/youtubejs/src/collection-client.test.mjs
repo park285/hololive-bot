@@ -284,6 +284,110 @@ test("videos tab lockup times never become item times and only the structured up
   assert.ok(requests.every(request => !request.url.includes("/player")));
 });
 
+// 실제 streams/videos 탭의 lockupViewModel 형태입니다. 배지는 thumbnailBottomOverlayViewModel에 실립니다.
+// null은 해당 필드를 원문에서 빼라는 뜻입니다.
+const lockupRow = (id, badges, { contentType = "LOCKUP_CONTENT_TYPE_VIDEO", title = { content: id } } = {}) => ({ lockupViewModel: {
+  contentId: id, ...(contentType === null ? {} : { contentType }),
+  contentImage: { thumbnailViewModel: { image: { sources: [] }, overlays: [{ thumbnailBottomOverlayViewModel: { badges } }] } },
+  metadata: { lockupMetadataViewModel: { ...(title === null ? {} : { title }) } },
+} });
+const liveBadge = { thumbnailBadgeViewModel: { text: "LIVE", badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE" } };
+const upcomingBadge = { thumbnailBadgeViewModel: { text: "Upcoming", badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT" } };
+const durationBadge = { thumbnailBadgeViewModel: { text: "1:02:03", badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT" } };
+const richItem = row => ({ richItemRenderer: { content: row } });
+const grid = (tab, rows) => ({ tabRenderer: { title: tab, selected: true, endpoint: endpoint(tab), content: { richGridRenderer: { contents: rows } } } });
+
+test("streams lockups take their status from structured badges only", async () => {
+  const rows = [lockupRow("live-row", [liveBadge]), lockupRow("upcoming-row", [upcomingBadge]), lockupRow("ended-row", [durationBadge])];
+  // lockup에는 기계가독 예정 시각이 없으므로 UPCOMING 행만 raw /player로 보강합니다.
+  const player = { videoDetails: { videoId: "upcoming-row", isUpcoming: true, isLiveContent: true }, playabilityStatus: { status: "OK" },
+    microformat: { playerMicroformatRenderer: { liveBroadcastDetails: { isLiveNow: false, startTimestamp: "2100-01-01T00:00:00Z" } } } };
+  const { client, requests } = await localClient([page([grid("streams", rows.map(richItem))]), player]);
+  const result = await collect(scenarios[3], client);
+  assert.deepEqual(result.live_sessions.map(session => [session.video_id, session.status, session.scheduled_at]),
+    [["live-row", "LIVE", undefined], ["upcoming-row", "UPCOMING", "2100-01-01T00:00:00.000Z"], ["ended-row", "ENDED", undefined]]);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].body.videoId, "upcoming-row");
+  // 배지가 없는 lockup은 종료로 추정하지 않습니다.
+  await rejectsDrift(scenarios[3], [page([grid("streams", [richItem(lockupRow("unmarked-row", []))])])]);
+});
+
+test("streams video renderers become LIVE or UPCOMING only from structured markers", async () => {
+  const upcoming = { videoRenderer: { videoId: "upcoming-row", title: { simpleText: "upcoming-row" }, upcomingEventData: { startTime: "4102444800" } } };
+  const pastUpcoming = { videoRenderer: { videoId: "late-row", title: { simpleText: "late-row" }, upcomingEventData: { startTime: "946684800" } } };
+  const live = { videoRenderer: { videoId: "live-row", title: { simpleText: "live-row" },
+    badges: [{ metadataBadgeRenderer: { style: "BADGE_STYLE_TYPE_LIVE_NOW" } }] } };
+  const ended = { videoRenderer: { videoId: "ended-row", title: { simpleText: "ended-row" },
+    thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: "DEFAULT", text: { simpleText: "12:34" } } }] } };
+  const { client } = await localClient([page([tabNode("streams", true, [upcoming, pastUpcoming, live, ended])])]);
+  const result = await collect(scenarios[3], client);
+  assert.deepEqual(result.live_sessions.map(session => [session.video_id, session.status]),
+    [["upcoming-row", "UPCOMING"], ["late-row", "UPCOMING"], ["live-row", "LIVE"], ["ended-row", "ENDED"]]);
+  await rejectsDrift(scenarios[3], [page([tabNode("streams", true, [{ videoRenderer: { videoId: "unmarked-row" } }])])]);
+});
+
+for (const scenario of scenarios) {
+  const row = scenario.tab === "posts" ? rowNode("posts") : richItem(lockupRow("row-1", [durationBadge]));
+  const unknown = { unknownRowRenderer: { id: "row-2" } };
+  test(`${scenario.tab} rejects body rows the SDK list leaves out or adds`, async () => {
+    // SDK가 분류하지 못한 renderer, contentType 없는 lockup, null 행은 진단 없이 목록에서 빠집니다.
+    for (const dropped of [unknown, richItem(unknown), richItem(lockupRow("row-2", [durationBadge], { contentType: null })), richItem(null)]) {
+      await rejectsDrift(scenario, [page([grid(scenario.tab, [row, dropped])])]);
+    }
+    // 중첩 shelf의 항목은 본문 행 하나에 여러 항목을 더합니다.
+    const shelf = { richSectionRenderer: { content: { richShelfRenderer: { contents: [richItem(lockupRow("shelf-1", [durationBadge])), richItem(lockupRow("shelf-2", [durationBadge]))] } } } };
+    await rejectsDrift(scenario, [page([grid(scenario.tab, [row, shelf])])]);
+    // 같은 검사가 continuation 페이지에도 적용됩니다. streams 수집은 첫 페이지만 읽습니다.
+    if (scenario.tab === "streams") return;
+    await rejectsDrift(scenario, [page([grid(scenario.tab, [row, continuation("next")])]), continued([row, unknown])]);
+    const { client, requests } = await localClient([page([grid(scenario.tab, [row, continuation("next")])]), continued([row])]);
+    const result = await collect(scenario, client);
+    assert.equal(result[scenario.rows].length, 2);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].body.continuation, "next");
+  });
+}
+
+test("streams rows also take LIVE and UPCOMING from time-status overlays and badge text", async () => {
+  const timeStatus = (style, text) => ({ thumbnailOverlayTimeStatusRenderer: { style, text: { simpleText: text } } });
+  const liveOverlay = { videoRenderer: { videoId: "live-overlay", title: { simpleText: "live-overlay" }, thumbnailOverlays: [timeStatus("LIVE", "LIVE")] } };
+  const upcomingOverlay = { videoRenderer: { videoId: "upcoming-overlay", title: { simpleText: "upcoming-overlay" },
+    upcomingEventData: { startTime: "4102444800" }, thumbnailOverlays: [timeStatus("UPCOMING", "UPCOMING")] } };
+  const textOnlyLive = richItem(lockupRow("live-text", [{ thumbnailBadgeViewModel: { text: "LIVE", badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT" } }]));
+  const { client } = await localClient([page([grid("streams", [liveOverlay, upcomingOverlay, textOnlyLive].map(row => row.richItemRenderer ? row : richItem(row)))])]);
+  const result = await collect(scenarios[3], client);
+  assert.deepEqual(result.live_sessions.map(session => [session.video_id, session.status]),
+    [["live-overlay", "LIVE"], ["upcoming-overlay", "UPCOMING"], ["live-text", "LIVE"]]);
+});
+
+test("posts count a shared post as one row and drop its embedded original", async () => {
+  const post = id => ({ backstagePostRenderer: { postId: id, contentText: { simpleText: id },
+    authorText: { simpleText: "Channel" }, authorEndpoint: { browseEndpoint: { browseId: "UC_TEST" } } } });
+  const thread = inner => ({ backstagePostThreadRenderer: { post: inner } });
+  const shared = { sharedPostRenderer: { postId: "shared-1", content: { simpleText: "shared" }, displayName: { simpleText: "Channel" }, originalPost: post("original-1") } };
+  const { client } = await localClient([page([grid("posts", [thread(post("post-1")), thread(shared)])])]);
+  const result = await collect(scenarios[2], client);
+  assert.deepEqual(result.posts.map(item => item.postId), ["post-1", "shared-1"]);
+});
+
+test("continuation pages chain through endpoint-style responses with raw row accounting", async () => {
+  const row = id => richItem(lockupRow(id, [durationBadge]));
+  const continuedEndpoints = rows => ({ onResponseReceivedEndpoints: [{ appendContinuationItemsAction: { continuationItems: rows } }] });
+  const { client, requests } = await localClient([
+    page([grid("videos", [row("v1"), continuation("t1")])]),
+    continuedEndpoints([row("v2"), continuation("t2")]),
+    continued([row("v3")]),
+  ]);
+  const result = await collect(scenarios[0], client);
+  assert.deepEqual(result.items.map(item => item.video_id), ["v1", "v2", "v3"]);
+  assert.deepEqual(requests.slice(1).map(request => request.body.continuation), ["t1", "t2"]);
+  await rejectsDrift(scenarios[0], [page([grid("videos", [row("v1"), continuation("t1")])]), continuedEndpoints([row("v2"), { unknownRowRenderer: {} }])]);
+});
+
+test("videos lockups without a title node are rejected instead of becoming empty titles", async () => {
+  await rejectsDrift(scenarios[0], [page([grid("videos", [richItem(lockupRow("untitled", [durationBadge], { title: null }))])])]);
+});
+
 test("request cancellation stops before the first request, a tab load, or another navigation", async () => {
   for (const stage of ["before", "initial", "navigate", "loaded"]) {
     const controller = new AbortController();
