@@ -179,6 +179,7 @@ Holodex와 Official Schedule fetch는 collector-owned `providerhttp` transport�
 - `youtube_collection_discovery_cycles_total{result}`는 후보 탐색 cycle 결과(`ok`, `candidate_load_failed`)입니다. 투영 세대 교체(superseded)만 있는 cycle은 `ok`입니다. 탐색 실패 WARN `YouTube collection candidate discovery failed`는 job 필드 없이 runner 실패에만 `provider`·`job_kind`를 붙이며, 같은 대상의 연속 실패 동안 첫 건과 1분 간격 요약(`since`, `suppressed_cycles`)만 남깁니다. 복구되면 `YouTube collection candidate discovery recovered` INFO 한 건을 남깁니다.
 - 종료나 fatal로 scheduler context가 취소된 뒤 생긴 `CANCELED`는 `YouTube collection job canceled by shutdown`(후보 탐색은 `YouTube collection candidate discovery canceled by shutdown`) INFO로 기록합니다. attempt metric과 durable 진단은 그대로 canceled이며, 바깥 context가 살아 있는 취소(renew 실패 등)는 실패 WARN입니다.
 - 연결 거부·호스트/네트워크 경로 없음(DB와 provider HTTP 공통)과 PostgreSQL SQLSTATE class `08`·`57P01`~`57P03`은 `collection_failed/TRANSIENT`, 연결 dial 타임아웃은 `collection_timeout/TIMEOUT`입니다. 인증 실패나 TLS 검증 실패 같은 그 밖의 연결 오류는 미분류 `collection_internal_invariant/INTERNAL`로 남습니다. 두 분류 모두 fatal이 아닙니다.
+- `youtubejs_po_proof_state{state}`·`youtubejs_po_proof_last_error{code}`·`youtubejs_po_proof_*_total`은 scrape마다 helper `/health`의 PO 발급 진단을 읽은 값입니다. 발급 실패는 helper READY와 `/ready`를 바꾸지 않으므로 무토큰 저하(`UNAVAILABLE` 지속)는 이 지표로 봅니다. 읽기 실패는 상태를 추정하지 않고 `youtubejs_helper_health_scrape_success` 0으로만 남깁니다.
 - API target 지표는 여섯 collection job의 baseline 수요와 due/eligibility를 표현합니다. freshness 때문에 잠든 `video_live_check`는 누락된 필수 metric으로 간주하지 않습니다. `/ready` 성공은 수집 지연이나 queue full 부재의 증명이 아닙니다.
 
 ## Related docs

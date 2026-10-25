@@ -84,8 +84,21 @@ function healthBody(state, maxInflight) {
     state,
     inflight: 0,
     max_inflight: maxInflight,
+    ...(args.mode === "proof-unavailable" ? { proof: unavailableProof } : {}),
   };
 }
+
+// 발급이 계속 실패하는 helper의 /health proof 진단입니다.
+const unavailableProof = {
+  state: "UNAVAILABLE",
+  last_error: "challenge_structure",
+  next_attempt_at: "2099-01-01T00:00:00.000Z",
+  bootstrap_attempts: 3,
+  bootstrap_successes: 1,
+  upstream_requests: 4,
+  minted_total: 2,
+  attached_total: 5,
+};
 
 function consume(req, done) {
   /** @type {Buffer[]} */

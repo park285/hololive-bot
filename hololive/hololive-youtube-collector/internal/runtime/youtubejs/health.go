@@ -18,12 +18,26 @@ import (
 const helperControlBodyLimit int64 = 8 << 10
 
 func (h *Helper) Healthy(ctx context.Context) error {
+	body, err := h.readHealth(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := validateHealthResponse(body, h.maxInflight); err != nil {
+		return fmt.Errorf("validate health response: %w", err)
+	}
+
+	return nil
+}
+
+// readHealth는 helper /health의 200 응답을 엄격하게 decode합니다. 상태 검증은 호출자가 소유합니다.
+func (h *Helper) readHealth(ctx context.Context) (HealthResponse, error) {
 	if h == nil || h.health == nil {
-		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js helper is not configured")
+		return HealthResponse{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js helper is not configured")
 	}
 
 	if h.Exited() {
-		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "youtube.js helper exited")
+		return HealthResponse{}, collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "youtube.js helper exited")
 	}
 
 	healthCtx, cancel := withOptionalTimeout(ctx, h.healthTimeout)
@@ -32,29 +46,25 @@ func (h *Helper) Healthy(ctx context.Context) error {
 
 	req, err := http.NewRequestWithContext(healthCtx, http.MethodGet, h.endpoint+"/health", http.NoBody)
 	if err != nil {
-		return fmt.Errorf("youtube.js helper health request: %w", err)
+		return HealthResponse{}, fmt.Errorf("youtube.js helper health request: %w", err)
 	}
 
 	status, payload, err := doControlRequest(h.health, req, "youtube.js helper health")
 	if err != nil {
-		return fmt.Errorf("do control request: %w", err)
+		return HealthResponse{}, fmt.Errorf("do control request: %w", err)
 	}
 
 	if status != http.StatusOK {
-		return collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "youtube.js helper is not ready")
+		return HealthResponse{}, collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "youtube.js helper is not ready")
 	}
 
 	var body HealthResponse
 
 	if err := strictDecode(payload, &body); err != nil {
-		return collecterr.Wrap(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, fmt.Errorf("decode youtube.js helper health: %w", err))
+		return HealthResponse{}, collecterr.Wrap(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, fmt.Errorf("decode youtube.js helper health: %w", err))
 	}
 
-	if err := validateHealthResponse(body, h.maxInflight); err != nil {
-		return fmt.Errorf("validate health response: %w", err)
-	}
-
-	return nil
+	return body, nil
 }
 
 func (h *Helper) bootstrapReady(ctx context.Context, cfg *Config) error {
