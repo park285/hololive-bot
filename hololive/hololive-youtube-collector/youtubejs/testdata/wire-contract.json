@@ -1,0 +1,340 @@
+{
+  "failure_tuples": {
+    "invalid_request": { "class": "PROTOCOL", "statuses": [400, 404], "retry_kinds": ["default"] },
+    "request_too_large": { "class": "PROTOCOL", "statuses": [413], "retry_kinds": ["default"] },
+    "helper_not_ready": { "class": "PROTOCOL", "statuses": [503], "retry_kinds": ["default"] },
+    "helper_busy": { "class": "TRANSIENT", "statuses": [503], "retry_kinds": ["default", "after"] },
+    "collection_canceled": { "class": "CANCELED", "statuses": [408], "retry_kinds": ["default"] },
+    "collection_timeout": { "class": "TIMEOUT", "statuses": [408, 504], "retry_kinds": ["default"] },
+    "cooldown": { "class": "COOLDOWN", "statuses": [429], "retry_kinds": ["default", "after", "at"] },
+    "parser_drift": { "class": "DATA_CONTRACT", "statuses": [422], "retry_kinds": ["default"] },
+    "configuration_error": { "class": "CONFIGURATION", "statuses": [502], "retry_kinds": ["default"] },
+    "response_too_large": { "class": "RESOURCE_LIMIT", "statuses": [422], "retry_kinds": ["default"] },
+    "helper_protocol_mismatch": { "class": "PROTOCOL", "statuses": [409], "retry_kinds": ["default"] },
+    "helper_internal_invariant": { "class": "INTERNAL", "statuses": [500], "retry_kinds": ["default"] },
+    "collection_failed": { "class": "TRANSIENT", "statuses": [502], "retry_kinds": ["default"] }
+  },
+  "invalid_failures": [
+    {
+      "name": "status outside the code tuple",
+      "status": 500,
+      "body": { "protocol_version": 1, "error": { "code": "collection_failed", "class": "TRANSIENT", "retry": { "kind": "default" }, "message": "failed" } }
+    },
+    {
+      "name": "class outside the code tuple",
+      "status": 422,
+      "body": { "protocol_version": 1, "error": { "code": "parser_drift", "class": "TRANSIENT", "retry": { "kind": "default" }, "message": "drift" } }
+    },
+    {
+      "name": "retry kind outside the code tuple",
+      "status": 502,
+      "body": { "protocol_version": 1, "error": { "code": "collection_failed", "class": "TRANSIENT", "retry": { "kind": "after", "after_ms": 1000 }, "message": "failed" } }
+    },
+    {
+      "name": "unknown error code",
+      "status": 502,
+      "body": { "protocol_version": 1, "error": { "code": "upstream_failed", "class": "TRANSIENT", "retry": { "kind": "default" }, "message": "failed" } }
+    },
+    {
+      "name": "unknown error field",
+      "status": 422,
+      "body": { "protocol_version": 1, "error": { "code": "parser_drift", "class": "DATA_CONTRACT", "retry": { "kind": "default" }, "message": "drift", "detail": "x" } }
+    }
+  ],
+  "roundtrip_failures": [
+    { "subject": "UCfailCooldownAfter", "code": "cooldown", "retry": { "kind": "after", "after_ms": 1500 } },
+    { "subject": "UCfailCooldownAt", "code": "cooldown", "retry": { "kind": "at", "at": "2099-01-02T03:04:05.000Z" } },
+    { "subject": "UCfailBusyAfter", "code": "helper_busy", "retry": { "kind": "after", "after_ms": 250 } },
+    { "subject": "UCfailParserDrift", "code": "parser_drift" },
+    { "subject": "UCfailConfiguration", "code": "configuration_error" },
+    { "subject": "UCfailResponseTooLarge", "code": "response_too_large" }
+  ],
+  "endpoints": {
+    "/v1/community": {
+      "minimal": [
+        { "protocol_version": 1, "posts": [], "page_count": 1, "exhausted": true, "continuity": "CONTIGUOUS", "termination_reason": "exhausted" }
+      ],
+      "valid": [
+        {
+          "name": "exhausted empty page",
+          "subject": "UCcommunityEmpty",
+          "body": { "protocol_version": 1, "posts": [], "page_count": 1, "exhausted": true, "continuity": "CONTIGUOUS", "termination_reason": "exhausted" }
+        },
+        {
+          "name": "partial page with every post field",
+          "subject": "UCcommunityPosts",
+          "body": {
+            "protocol_version": 1,
+            "posts": [
+              {
+                "postId": "UgkxCommunityPost1",
+                "upstreamPostId": "UgkxUpstream1",
+                "authorId": "UCcommunityPosts",
+                "authorName": "Author",
+                "authorPhoto": [{ "url": "https://yt3.ggpht.com/author", "width": 88, "height": 88 }],
+                "contentText": "hello",
+                "publishedText": "1 day ago",
+                "publishedAt": "2026-10-24T00:00:00.000Z",
+                "likeCount": 3,
+                "commentCount": 1,
+                "images": [{ "url": "https://yt3.ggpht.com/image", "width": 640, "height": 360 }],
+                "videoId": "dQw4w9WgXcQ"
+              }
+            ],
+            "page_count": 2,
+            "exhausted": false,
+            "continuity": "GAP_UNRESOLVED",
+            "termination_reason": "max_pages",
+            "missing_tab": false
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "unknown response field",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 1, "posts": [], "page_count": 1, "exhausted": true, "continuity": "CONTIGUOUS", "termination_reason": "exhausted", "cursor_end": "token" }
+        },
+        {
+          "name": "unsupported protocol version",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 2, "posts": [], "page_count": 1, "exhausted": true, "continuity": "CONTIGUOUS", "termination_reason": "exhausted" }
+        },
+        {
+          "name": "exhausted reason without exhaustion",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 1, "posts": [], "page_count": 1, "exhausted": false, "continuity": "GAP_UNRESOLVED", "termination_reason": "exhausted" }
+        }
+      ]
+    },
+    "/v1/content": {
+      "minimal": [
+        { "protocol_version": 1, "items": [], "page_count": 1, "exhausted": true, "continuity": "CONTIGUOUS", "termination_reason": "exhausted" }
+      ],
+      "valid": [
+        {
+          "name": "videos with an upcoming lockup",
+          "subject": "UCcontentVideos",
+          "body": {
+            "protocol_version": 1,
+            "items": [
+              { "video_id": "dQw4w9WgXcQ", "channel_id": "UCcontentVideos", "title": "Premiere", "is_upcoming": true },
+              { "video_id": "9bZkp7q19f0", "channel_id": "UCcontentVideos", "title": "Short", "published_at": "2026-10-24T01:02:03.000Z" }
+            ],
+            "page_count": 1,
+            "exhausted": false,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "max_results"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "retired premiere field",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "items": [{ "video_id": "dQw4w9WgXcQ", "channel_id": "UCcontentVideos", "title": "Premiere", "is_premiere": true }],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "CONTIGUOUS",
+            "termination_reason": "exhausted"
+          }
+        },
+        {
+          "name": "interrupted pagination with contiguous continuity",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 1, "items": [], "page_count": 1, "exhausted": false, "continuity": "CONTIGUOUS", "termination_reason": "continuation_transient" }
+        }
+      ]
+    },
+    "/v1/channel": {
+      "minimal": [
+        { "protocol_version": 1, "live_sessions": [], "profile": {}, "photo": [], "page_count": 1, "exhausted": true, "continuity": "NOT_APPLICABLE", "termination_reason": "exhausted" }
+      ],
+      "valid": [
+        {
+          "name": "live snapshot with every status and an access-restricted row",
+          "subject": "UCchannelLive",
+          "kind": "live",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [
+              { "video_id": "liveVideo01", "channel_id": "UCchannelLive", "status": "LIVE", "title": "Live", "thumbnail_url": "https://i.ytimg.com/vi/liveVideo01/hqdefault.jpg", "started_at": "2026-10-25T00:00:00.000Z" },
+              { "video_id": "upcoming001", "channel_id": "UCchannelLive", "status": "UPCOMING", "title": "Upcoming", "scheduled_at": "2099-01-01T00:00:00.000Z" },
+              { "video_id": "endedVideo1", "channel_id": "UCchannelLive", "status": "ENDED", "title": "Ended" }
+            ],
+            "unavailable_live_sessions": [
+              { "video_id": "restricted1", "channel_id": "UCchannelLive", "reason": "access_restricted" }
+            ],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": true, "page_count": 1 }
+          }
+        },
+        {
+          "name": "metadata profile and photo",
+          "subject": "UCchannelMeta",
+          "kind": "metadata",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "profile": { "handle": "@channel", "description": "description", "country": null, "joined_date": "Joined Jan 1, 2020" },
+            "photo": [
+              { "kind": "avatar", "url": "https://yt3.ggpht.com/avatar", "width": 176, "height": 176 },
+              { "kind": "banner", "url": "https://yt3.ggpht.com/banner", "width": 2560, "height": 424 }
+            ],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "unknown live session field",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [{ "video_id": "liveVideo01", "channel_id": "UCchannelLive", "status": "LIVE", "viewer_count": 1 }],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted"
+          }
+        },
+        {
+          "name": "live query page count contradicts pagination",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "envelope",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 2 }
+          }
+        },
+        {
+          "name": "live query restriction contradicts unavailable rows",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "envelope",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [],
+            "unavailable_live_sessions": [{ "video_id": "restricted1", "channel_id": "UCchannelLive", "reason": "access_restricted" }],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
+          }
+        }
+      ]
+    },
+    "/v1/channel_live_check": {
+      "minimal": [
+        { "protocol_version": 1, "channel_id": "", "outcome": "CHANNEL_PAGE", "channel_identity_confirmed": true }
+      ],
+      "valid": [
+        {
+          "name": "live video selected",
+          "subject": "UCchannelCheckLive",
+          "body": { "protocol_version": 1, "channel_id": "UCchannelCheckLive", "outcome": "LIVE_VIDEO", "selected_video_id": "liveVideo01", "channel_identity_confirmed": true }
+        },
+        {
+          "name": "upcoming link outside the waiting state",
+          "subject": "UCchannelCheckUnknown",
+          "body": { "protocol_version": 1, "channel_id": "UCchannelCheckUnknown", "outcome": "UNKNOWN", "channel_identity_confirmed": true, "unknown_reason": "not_waiting_state" }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "unknown outcome without reason",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 1, "channel_id": "UCchannelCheckUnknown", "outcome": "UNKNOWN", "channel_identity_confirmed": false }
+        },
+        {
+          "name": "video-only unknown reason",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 1, "channel_id": "UCchannelCheckUnknown", "outcome": "UNKNOWN", "channel_identity_confirmed": true, "unknown_reason": "availability_unclassified" }
+        }
+      ]
+    },
+    "/v1/video_live_check": {
+      "minimal": [
+        { "protocol_version": 1, "video_id": "", "identity_confirmed": false, "availability": "UNKNOWN", "method": "unknown", "unknown_reason": "identity_missing" },
+        { "protocol_version": 1, "video_id": "", "channel_id": "", "identity_confirmed": true, "availability": "MEMBERS_ONLY", "method": "player_members_only" }
+      ],
+      "valid": [
+        {
+          "name": "public live video",
+          "subject": "liveVideo01",
+          "body": {
+            "protocol_version": 1,
+            "video_id": "liveVideo01",
+            "channel_id": "UCchannelLive",
+            "identity_confirmed": true,
+            "is_live": true,
+            "is_live_now": true,
+            "is_upcoming": false,
+            "is_live_content": true,
+            "is_private": false,
+            "has_live_broadcast_details": true,
+            "started_at": "2026-10-25T00:00:00.000Z",
+            "published_at": "2026-10-24T23:00:00.000Z",
+            "availability": "PUBLIC",
+            "method": "player_public"
+          }
+        },
+        {
+          "name": "upcoming premiere in the waiting state",
+          "subject": "upcoming001",
+          "body": {
+            "protocol_version": 1,
+            "video_id": "upcoming001",
+            "channel_id": "UCchannelLive",
+            "identity_confirmed": true,
+            "is_upcoming": true,
+            "is_live_content": false,
+            "is_private": false,
+            "scheduled_at": "2099-01-01T00:00:00.000Z",
+            "waiting_state_confirmed": true,
+            "availability": "PUBLIC",
+            "method": "player_public"
+          }
+        },
+        {
+          "name": "unconfirmed identity",
+          "subject": "missingVid1",
+          "body": { "protocol_version": 1, "video_id": "missingVid1", "identity_confirmed": false, "availability": "UNKNOWN", "method": "unknown", "unknown_reason": "identity_missing" }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "method contradicts availability",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 1, "video_id": "liveVideo01", "channel_id": "UCchannelLive", "identity_confirmed": true, "is_private": false, "availability": "PUBLIC", "method": "unknown" }
+        },
+        {
+          "name": "channel-only unknown reason",
+          "go_rejects_at": "decode",
+          "body": { "protocol_version": 1, "video_id": "liveVideo01", "channel_id": "UCchannelLive", "identity_confirmed": true, "availability": "UNKNOWN", "method": "unknown", "unknown_reason": "not_waiting_state" }
+        }
+      ]
+    }
+  }
+}

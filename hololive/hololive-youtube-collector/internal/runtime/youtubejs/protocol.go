@@ -211,7 +211,7 @@ type CommunityResult struct {
 	Pagination
 
 	Posts      []*CommunityPost `json:"posts"`
-	MissingTab bool             `json:"missing_tab"`
+	MissingTab bool             `json:"missing_tab,omitzero"`
 }
 
 func (r *CommunityResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -242,7 +242,7 @@ type ContentResult struct {
 	Pagination
 
 	Items      []ContentItem `json:"items"`
-	MissingTab bool          `json:"missing_tab"`
+	MissingTab bool          `json:"missing_tab,omitzero"`
 }
 
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -269,10 +269,10 @@ type LiveSessionItem struct {
 }
 
 type ChannelProfileItem struct {
-	Handle      *string `json:"handle"`
-	Description *string `json:"description"`
-	Country     *string `json:"country"`
-	JoinedDate  *string `json:"joined_date"`
+	Handle      *string `json:"handle,omitzero"`
+	Description *string `json:"description,omitzero"`
+	Country     *string `json:"country,omitzero"`
+	JoinedDate  *string `json:"joined_date,omitzero"`
 }
 
 type ChannelPhotoVariant struct {
@@ -298,7 +298,7 @@ type ChannelResult struct {
 	UnavailableLiveSessions []UnavailableLiveSession      `json:"unavailable_live_sessions,omitempty"`
 	Profile                 ChannelProfileItem            `json:"profile"`
 	Photo                   []ChannelPhotoVariant         `json:"photo"`
-	MissingTab              bool                          `json:"missing_tab"`
+	MissingTab              bool                          `json:"missing_tab,omitzero"`
 	LiveQuery               *contract.LiveSnapshotQueryV1 `json:"live_query,omitempty"`
 }
 

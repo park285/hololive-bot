@@ -231,18 +231,57 @@ func invalidHelperHTTPResponse(resp *http.Response) bool {
 }
 
 func minimumSuccessResponseBytes(path string) int64 {
-	switch path {
-	case "/v1/community", "/v1/content":
-		return 124
-	case "/v1/channel":
-		return 171
-	case "/v1/channel_live_check":
-		return 97
-	case "/v1/video_live_check":
-		return 139
-	default:
-		return 1
+	if size, ok := minimumSuccessBytes[path]; ok {
+		return size
 	}
+
+	return 1
+}
+
+// minimumSuccessBytes는 helper가 돌려줄 수 있는 가장 작은 성공 본문의 크기입니다. 같은 DTO를 marshal해
+// 필드 이름과 선택 필드 생략을 wire와 함께 따라가며, 식별자는 비워 하한만 셉니다.
+// 이 값이 helper 하한보다 크면 helper가 처리할 요청을 Go가 먼저 거부하므로 helper 하한을 넘지 않아야 합니다.
+// 확인된 MEMBERS_ONLY의 필수 channel_id는 빈 값이면 생략되어 helper 하한보다 작게 계산되며,
+// 그 사이의 요청은 helper가 같은 RESOURCE_LIMIT로 거부합니다.
+var minimumSuccessBytes = map[string]int64{
+	"/v1/community": encodedSize(&CommunityResult{
+		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
+		Continuity: string(contract.ContinuityContiguous), TerminationReason: TerminationExhausted,
+		Posts: []*CommunityPost{},
+	}),
+	"/v1/content": encodedSize(&ContentResult{
+		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
+		Continuity: string(contract.ContinuityContiguous), TerminationReason: TerminationExhausted,
+		Items: []ContentItem{},
+	}),
+	"/v1/channel": encodedSize(&ChannelResult{
+		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
+		Continuity: string(contract.ContinuityNotApplicable), TerminationReason: TerminationExhausted,
+		LiveSessions: []LiveSessionItem{}, Photo: []ChannelPhotoVariant{},
+	}),
+	"/v1/channel_live_check": encodedSize(&ChannelLiveCheckResult{
+		ProtocolVersion: ProtocolVersion, Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true,
+	}),
+	"/v1/video_live_check": min(
+		encodedSize(&VideoLiveCheckResult{
+			ProtocolVersion: ProtocolVersion, Availability: contract.VideoAvailabilityUnknown,
+			Method: contract.VideoAvailabilityMethodUnknown, UnknownReason: contract.LiveCheckReasonIdentityMissing,
+		}),
+		encodedSize(&VideoLiveCheckResult{
+			ProtocolVersion: ProtocolVersion, IdentityConfirmed: true,
+			Availability: contract.VideoAvailabilityMembersOnly, Method: contract.VideoAvailabilityMethodPlayerMembersOnly,
+		}),
+	),
+}
+
+func encodedSize(value any) int64 {
+	raw, err := jsonv2.Marshal(value)
+	if err != nil {
+		// 고정된 DTO 값의 marshal 실패는 프로그램 결함이므로 package 초기화에서 드러낸다.
+		panic(fmt.Sprintf("encode minimal youtube.js helper success response: %v", err))
+	}
+
+	return int64(len(raw))
 }
 
 func (c *RPC) newJSONRequest(ctx context.Context, path string, request any) (*http.Request, error) {
