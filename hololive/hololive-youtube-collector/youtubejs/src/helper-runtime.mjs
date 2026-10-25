@@ -182,6 +182,8 @@ export class HelperRuntime {
         )
         : null;
       this.fetchers = fetchers;
+      // 공유 upstream 자원은 READY 전에 준비하며, 실패하면 아래 catch에서 자원을 닫고 FAULTED로 끝냅니다.
+      await fetchers?.prepare?.();
       this.initializing = false;
       // 초기화 중 들어온 종료 요청은 늦게 생성된 자원을 닫은 뒤 완료합니다.
       if (this.state === RuntimeState.DRAINING) {

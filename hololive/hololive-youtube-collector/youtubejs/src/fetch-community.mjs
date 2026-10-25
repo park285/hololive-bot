@@ -105,6 +105,8 @@ export async function createInnertube({ fetchImpl } = {}) {
     retrieve_player: false,
     generate_session_locally: true,
     enable_session_cache: false,
+    // SDK는 config 요청 실패를 로그만 남기고 성공한 세션을 돌려주므로, 조회를 끄고 생성 중 upstream 호출을 두지 않습니다.
+    retrieve_innertube_config: false,
     fetch: fetchImpl,
   }));
 }

@@ -87,6 +87,8 @@ export function createRealFetchers(options = {}) {
     async fetchVideoLiveCheck(fetchOptions) {
       return fetchVideoLiveCheck(await liveCheckInnertubeClient(), fetchOptions.videoId, Date.now, proof);
     },
+    // 공유 수집 Innertube는 bootstrap에서 요청 context 밖에 만듭니다. 첫 RPC의 취소·제한 시간에 묶이지 않습니다.
+    async prepare() { await innertubeClient(); },
     proofStatus() { return proof?.status(); },
     async close() { await proof?.close(); },
   };

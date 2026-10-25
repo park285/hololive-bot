@@ -118,6 +118,8 @@ export interface FetcherSet {
   fetchChannel: ChannelFetcher;
   fetchChannelLiveCheck: ChannelLiveCheckFetcher;
   fetchVideoLiveCheck: VideoLiveCheckFetcher;
+  /** bootstrap에서 READY 전에 한 번 호출합니다. 요청 context 밖에서 공유 자원을 만듭니다. */
+  prepare?: () => Promise<void>;
   proofStatus?: () => ProofStatus | undefined;
   close?: () => Awaitable<void>;
 }

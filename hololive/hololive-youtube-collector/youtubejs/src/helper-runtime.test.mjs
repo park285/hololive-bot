@@ -39,6 +39,32 @@ test("first bootstrap becomes READY and echoes limits", async () => {
   assert.equal(runtime.healthStatus(), 200);
 });
 
+test("bootstrap prepares fetchers before READY and faults when preparation fails", async () => {
+  const order = [];
+  const ready = createHelperRuntime({
+    createTransport: async () => ({ fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch }),
+    createFetchers: () => ({ ...stubFetchers, prepare: async () => { order.push("prepare"); } }),
+  });
+  const result = await ready.handleBootstrap(bootstrapBody());
+  assert.equal(result.status, 200);
+  assert.deepEqual(order, ["prepare"]);
+
+  let closed = 0;
+  const failing = createHelperRuntime({
+    createTransport: async () => ({ fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch }),
+    createFetchers: () => ({
+      ...stubFetchers,
+      prepare: async () => { throw new Error("innertube init failed"); },
+      close: async () => { closed += 1; },
+    }),
+  });
+  const failed = await failing.handleBootstrap(bootstrapBody());
+  assert.equal(failed.status, 500);
+  assert.equal(failed.body.error.code, "helper_internal_invariant");
+  assert.equal(failing.state, RuntimeState.FAULTED);
+  assert.equal(closed, 1);
+});
+
 test("equal bootstrap replay is idempotent and keeps one transport", async () => {
   let created = 0;
   const runtime = createHelperRuntime({
