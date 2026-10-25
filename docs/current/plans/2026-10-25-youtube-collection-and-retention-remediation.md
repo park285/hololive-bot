@@ -1,6 +1,6 @@
 # YouTube 수집 경계 정리와 DB 보존 적체 해소 통합 계획
 
-**상태: 1·2단계 완료, v12.1.0으로 collector a·b·c·d와 issuer에 배포(2026-10-25). 0·3~6단계와 migration 적용은 미실행입니다.**
+**상태: 1·2단계 완료. v12.1.0으로 collector a·b·c·d와 issuer를, v12.1.1로 c·b·hololive-api·alarm-worker를 배포했습니다(2026-10-25). 0·3~6단계는 미실행이고 새 migration은 없습니다.**
 
 [DB 증가와 보존 적체 해소 계획](2026-10-25-db-growth-and-retention-remediation.md)과 [YouTube collector Go·JS 경계 구조 리뷰](../../history/architecture/2026-10-25-youtube-collector-go-js-boundary-review.md)의 후속 작업을 하나의 순서로 묶습니다. 이 문서는 전체 순서, 단계 사이의 의존, collector 작업 목록을 소유합니다. DB 단계의 관측 근거, 보호 불변식, 세부 체크리스트는 DB 계획이 계속 소유하며 여기서 다시 쓰지 않습니다. 아래 `리뷰 #n`은 리뷰 기록의 발견 번호입니다.
 
@@ -137,6 +137,29 @@
   - 남긴 것: 이번 rollback 세트, 다른 작업의 `emudhra` 태그, v12.0.1 hololive-api rollback 자료.
 - 재배포하지 않은 것: hololive-api(12.0.1)와 alarm-worker(12.0.0)는 다시 만들지 않았습니다. 중앙 `current`의 `hololive/hololive-api/VERSION`은 12.1.0이므로, 이후 전체 `compose up`이 돌면 API는 이전 image로 `APP_VERSION=12.1.0`이 됩니다(릴리스 runbook에 적힌 식별자 차이). #694 의존성 갱신의 api·alarm-worker 반영은 별도 배포가 필요합니다.
 - 확인하지 못한 것: 배포 뒤 channel live의 `parser_drift`·`response_too_large` 비율과 새 PO 메트릭 값은 Prometheus 조회 경로가 이 작업에서 확인되지 않아 보지 못했습니다. 다음 운영 점검에서 `youtube_collection_attempts_total{job_kind="youtubejs_channel_live"}`의 결과별 증가와 `youtubejs_po_proof_state`를 AP별로 확인합니다. 새 로그 기준으로는 네 곳 모두 오류 표지가 없습니다.
+
+**v12.1.1 운영 반영 (2026-10-25)**
+
+- **발견한 결함:** v12.1.0 배포 뒤 확인해 보니, collector-c·b 이미지에 2026-10-22 eMudhra CA 차단이 빠져 있었습니다. 차단은 운영 이미지에 덧입힌 파생 bundle 방식이었습니다. 그래서 저장소 배포 진입점이 다시 빌드하면 사라졌습니다. native a·d는 컨테이너 bundle을 쓰지 않아 영향이 없습니다.
+- **수정:** #698(v12.1.1, main `80a584f827061f33702c5b13e1bf466519a06f51`)에서 collector·hololive-api·alarm-worker 빌드 단계가 `scripts/build/ca-distrust.sh`로 차단 루트를 빼게 했습니다. 대상은 `emSign ECC Root CA - G3`, `AAA Certificate Services`입니다.
+  - 로컬 arm64 빌드의 bundle은 2026-10-22에 검증한 파생 bundle과 인증서 순서까지 같습니다.
+  - PR CI 11개 검사가 모두 통과했습니다. tag `v12.1.1`과 GitHub Release를 게시했습니다.
+- **central c·Seoul b:** 기존 진입점으로 다시 배포했고, 둘 다 revision `80a584f82`, 12.1.1, arm64입니다. 실행 중인 collector의 CA bundle SHA-256은 검증값 `64e7c24b0536b525…`과 같습니다.
+  - c: `/health`·`/ready` rc=0. 새 po-c는 `session_closed` exit 0으로 1회 재시작했습니다. exit 143은 recreate 때 멈춘 이전 컨테이너의 기록입니다. rollback 기준점은 `backups/po-c-20261025T110948Z`입니다.
+  - b: completion check를 통과했습니다. rollback 기준점은 `backups/seoul-collector-20261025T111138Z`입니다.
+- **hololive-api·alarm-worker:** release runbook의 no-build pair 절차를 따랐습니다(v12.0.1 api 배포와 같은 순서).
+  1. kapu에서 `--provenance=mode=max --sbom=true`로 빌드하고 전송했습니다. 원격 Id가 로컬과 같은지 확인했습니다.
+  2. 배포 트리를 `backups/app-80a584f82-20261025T111246Z`에 백업하고 root `VERSION`을 12.1.1로 설치했습니다.
+  3. 서비스별 pair를 `artifacts/worker-profile/releases/app-80a584f82-20261025T111246Z/<service>`에 만들었습니다. 이전 pair capture, 후보 `--check-worker-profile`, `verify-source`, `compose-rollback-service.sh --check`를 모두 통과했습니다.
+  4. `hololive-db-migrate`를 실행했습니다(applied=0, skipped=201).
+  5. alarm-worker, api 순서로 `up -d --no-build --no-deps`를 실행했습니다.
+  - 결과: 두 서비스 모두 healthy, 재시작 0, `verify-live` 통과, 새 로그 표지 0입니다. CA bundle은 검증값 `e9c7b63ee2623386…`과 같고, api `APP_VERSION`은 12.1.1입니다. Alertmanager 활성 경보는 0건입니다.
+  - 이전 이미지 `hololive-api:rollback-20261025T111246Z`(v12.0.1 `dc0b57be0a81`)와 `hololive-alarm-worker:rollback-20261025T111246Z`(v12.0.0 `b48066b8e06e`)는 둘 다 CA 차단 파생 이미지입니다.
+- **retention:**
+  - collector의 직전 rollback인 v12.1.0 세트에는 CA 차단이 없습니다. 그래서 그 앞의 차단된 v12.0.0 세트도 함께 보존합니다. central은 `po-c-20261025T091310Z`와 그 staging, Seoul은 `seoul-collector-20261025T091509Z`입니다.
+  - v12.0.1 api rollback 자료(`rollback-20261025T070228Z`, pgfix pair·backup)는 해당 작업의 요청대로 보존합니다.
+  - 삭제한 것은 로컬 검증 이미지(`*:ca-verify`)뿐입니다.
+- **재배포하지 않은 것:** native a·d는 바이너리와 CA 경로가 그대로라 v12.1.0 release로 둡니다.
 
 ### 3. DB 1단계: 삭제 가능 적체 처리량 (API)
 
