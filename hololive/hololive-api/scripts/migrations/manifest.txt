@@ -198,3 +198,4 @@
 198 334_bot_reply_outbox_submitting_lease_index.sql
 199 335_bot_reply_outbox_drop_legacy_lease_index.sql
 200 328_youtube_live_runtime_explicit_refresh.sql
+201 340_lock_source_observation_identity_rows.sql
