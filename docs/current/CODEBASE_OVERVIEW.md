@@ -154,7 +154,7 @@ Current operational details live in `docs/current/services/youtube-collector.md`
 | Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-youtube-collector.service` |
 | Release, rollback, or deploy | `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
-| Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/apifoundation/`, `internal/app/`, `internal/fxapp/`; each plane's `runtime/` |
+| Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/apifoundation/`, `internal/app/`, `cmd/hololive-api/`; each plane's `runtime/` |
 | Change YouTube collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change final notification delivery | `docs/current/contracts/alarm.md`, `docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md`, `docs/current/runbooks/alarm-worker.md`, `docs/current/runbooks/dlq-replay.md`, `hololive/hololive-alarm-worker/` |

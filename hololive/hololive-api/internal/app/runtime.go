@@ -5,9 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
@@ -21,6 +25,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
+// processStopTimeout은 drain과 자원 회수를 합친 process stop 상한이다. Compose의 45초 grace 안에서
+// 뒤이은 telemetry flush(5초)와 logger close까지 끝나도록 30초로 둔다.
+const processStopTimeout = 30 * time.Second
+
 // Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go
 // 프로세스에서 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
 type Runtime struct {
@@ -32,12 +40,13 @@ type Runtime struct {
 	LLM     *llmruntime.LLMSchedulerRuntime
 	YouTube *youtuberuntime.Runtime
 
-	group      runtimeGroup
-	closeSteps []func(context.Context) error
-	closeInit  sync.Once
-	closeDone  chan struct{}
-	closeMu    sync.Mutex
-	closeErr   error
+	group           runtimeGroup
+	closeSteps      []func(context.Context) error
+	closeInit       sync.Once
+	closeDone       chan struct{}
+	closeMu         sync.Mutex
+	closeErr        error
+	stopOwnsCleanup atomic.Bool
 }
 
 type runtimeGroup interface {
@@ -196,9 +205,79 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// Run은 production 경로의 유일한 process signal owner다. 종료 원인 요약은 반환값으로 전달하고,
+// bootstrap이 반환 오류를 ERROR로 기록한 뒤 exit 1로 바꾼다.
+func (r *Runtime) Run() error {
+	if err := lifecycle.Run(context.Background(), r.lifecycleOptions()); err != nil {
+		return fmt.Errorf("run aggregate runtime: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Runtime) lifecycleOptions() lifecycle.Options {
+	return lifecycle.Options{
+		ShutdownTimeout: processStopTimeout,
+		Start:           r.Start,
+		OnSignal: func(sig os.Signal) {
+			r.Logger.Info("Received shutdown signal",
+				slog.String("runtime", "hololive-api"),
+				slog.String("signal", sig.String()),
+			)
+		},
+		// 종료 처리가 끝나기 전에 원인을 남겨야 drain이 시한까지 막혀도 fatal 원인을 잃지 않는다.
+		OnError: func(err error) {
+			r.Logger.Error("hololive-api runtime error", slog.String("error", sharedlogging.RedactDiagnostic(err.Error())))
+		},
+		BeforeShutdown: func() {
+			r.Logger.Info("hololive-api draining runtime planes")
+		},
+		Shutdown: r.shutdownAndClose,
+	}
+}
+
+// lifecycle.Run은 Shutdown hook을 동기로 기다리므로 ctx를 따르지 않는 plane이 있으면 시한을 넘긴다.
+// 시한에서 hook을 끊어 processStopTimeout을 강제하고, 남은 drain·회수는 프로세스 종료와 함께 버린다.
+func (r *Runtime) shutdownAndClose(ctx context.Context) error {
+	r.stopOwnsCleanup.Store(true)
+
+	done := make(chan error, 1)
+
+	go func() { done <- r.drainAndClose(ctx) }()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		// 시한까지 쌓인 회수 오류는 버려지는 goroutine에만 남고 Close도 다시 보고하지 않으므로 함께 반환한다.
+		return errors.Join(fmt.Errorf("stop aggregate runtime: %w", ctx.Err()), r.closeError())
+	}
+}
+
+// plane drain은 AppTimeout.Shutdown 안에서 끝내고, 자원 회수는 processStopTimeout의 남은 예산을 쓴다.
+func (r *Runtime) drainAndClose(ctx context.Context) error {
+	drainCtx, cancel := context.WithTimeout(ctx, constants.AppTimeout.Shutdown)
+	shutdownErr := r.Shutdown(drainCtx)
+
+	cancel()
+
+	// stop 시한 뒤에 끝난 drain은 프로세스 종료와 겹치므로 자원 회수를 새로 시작하지 않는다.
+	if ctx.Err() != nil {
+		return shutdownErr
+	}
+
+	return errors.Join(shutdownErr, r.CloseContext(ctx))
+}
+
 // Close는 기동 rollback 등 context가 없는 호출에서도 제한된 시간으로 plane 자원을 회수한다.
 func (r *Runtime) Close() {
 	if r == nil {
+		return
+	}
+
+	// Run의 종료 hook이 process stop 예산 안에서 회수와 오류 보고를 이미 소유했다. 다시 합류하면
+	// Compose grace를 넘길 수 있고 같은 오류를 두 번 기록한다.
+	if r.stopOwnsCleanup.Load() {
 		return
 	}
 

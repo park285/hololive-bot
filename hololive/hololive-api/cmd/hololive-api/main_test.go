@@ -2,10 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -79,150 +76,24 @@ func TestRunWorkerProfileCheck(t *testing.T) {
 	}
 }
 
-func TestRunHololiveAPIInitializesAndRunsFxApplication(t *testing.T) {
-	config := mainTestConfig()
-	closer := &mainTestCloser{}
-	application := &mainTestApplication{}
-	initializedVersion := ""
-
-	var capturedCloser io.Closer
-
-	applicationBuilt := false
-	dependencies := startupDependencies{
-		initialize: func(version string) { initializedVersion = version },
-		loadConfig: func() (*apiconfig.RuntimeConfig, error) {
-			return config, nil
+func TestHololiveAPITelemetryConfigUsesFixedIdentity(t *testing.T) {
+	config := &apiconfig.RuntimeConfig{
+		Bot: &apiconfig.BotPlaneConfig{Environment: "production"},
+		Tracing: settings.TracingConfig{
+			Enabled:    true,
+			Endpoint:   "otel-collector:4317",
+			Insecure:   true,
+			SampleRate: 0.25,
 		},
-		newLogger: func(got *apiconfig.RuntimeConfig) (loggerResult, error) {
-			if got != config {
-				t.Fatal("newLogger() received a different config")
-			}
-
-			return loggerResult{logger: slog.New(slog.DiscardHandler), closer: closer}, nil
-		},
-		newApplication: func(
-			ctx context.Context,
-			got *apiconfig.RuntimeConfig,
-			_ *slog.Logger,
-			version string,
-		) (hololiveAPIApplication, error) {
-			applicationBuilt = true
-
-			if got != config || version != Version {
-				t.Fatalf("newApplication() config/version = (%p,%q), want (%p,%q)", got, version, config, Version)
-			}
-
-			if _, ok := ctx.Deadline(); !ok {
-				t.Fatal("newApplication() build context has no deadline")
-			}
-
-			return application, nil
-		},
-		stderr: io.Discard,
 	}
 
-	code := runHololiveAPIWithDependencies(func(value io.Closer) { capturedCloser = value }, dependencies)
+	got := hololiveAPITelemetryConfig(config, "1.2.3")
 
-	if code != 0 || !applicationBuilt || application.runCalls != 1 {
-		t.Fatalf("run result = (code=%d,built=%t,runs=%d)", code, applicationBuilt, application.runCalls)
+	if got.ServiceName != "hololive-api" || got.ServiceVersion != "1.2.3" || got.Environment != "production" {
+		t.Fatalf("telemetry identity = %#v, want fixed hololive-api identity", got)
 	}
 
-	if initializedVersion != Version {
-		t.Fatalf("initialized version = %q, want %q", initializedVersion, Version)
-	}
-
-	if capturedCloser != closer {
-		t.Fatal("logger closer was not retained for main")
-	}
-}
-
-func TestRunHololiveAPIStopsBeforeLoggerAndFxOnConfigFailure(t *testing.T) {
-	var stderr bytes.Buffer
-
-	loggerCalled := false
-	applicationCalled := false
-	dependencies := startupDependencies{
-		initialize: func(string) {},
-		loadConfig: func() (*apiconfig.RuntimeConfig, error) {
-			return nil, errors.New("postgres://user:canary-secret@db:5432/app")
-		},
-		newLogger: func(*apiconfig.RuntimeConfig) (loggerResult, error) {
-			loggerCalled = true
-
-			return loggerResult{}, errors.New("newLogger must not be called")
-		},
-		newApplication: func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error) {
-			applicationCalled = true
-
-			return nil, errors.New("newApplication must not be called")
-		},
-		stderr: &stderr,
-	}
-
-	code := runHololiveAPIWithDependencies(nil, dependencies)
-
-	if code != 1 || loggerCalled || applicationCalled {
-		t.Fatalf("run result = (code=%d,logger=%t,application=%t)", code, loggerCalled, applicationCalled)
-	}
-
-	if strings.Contains(stderr.String(), "canary-secret") {
-		t.Fatalf("config diagnostic leaked credential: %q", stderr.String())
-	}
-}
-
-func TestRunHololiveAPIReturnsOneAfterFxConstructionFailure(t *testing.T) {
-	var logs bytes.Buffer
-
-	buildErr := errors.New("Fx graph failed")
-	dependencies := startupDependencies{
-		initialize: func(string) {},
-		loadConfig: func() (*apiconfig.RuntimeConfig, error) {
-			return mainTestConfig(), nil
-		},
-		newLogger: func(*apiconfig.RuntimeConfig) (loggerResult, error) {
-			return loggerResult{
-				logger: slog.New(slog.NewTextHandler(&logs, nil)),
-				closer: &mainTestCloser{},
-			}, nil
-		},
-		newApplication: func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error) {
-			return nil, buildErr
-		},
-		stderr: io.Discard,
-	}
-
-	if code := runHololiveAPIWithDependencies(func(io.Closer) {}, dependencies); code != 1 {
-		t.Fatalf("runHololiveAPIWithDependencies() = %d, want 1", code)
-	}
-
-	if !strings.Contains(logs.String(), "Failed to assemble hololive-api runtime") {
-		t.Fatalf("logs = %q, want Fx construction diagnostic", logs.String())
-	}
-}
-
-type mainTestApplication struct {
-	runCalls int
-}
-
-func (a *mainTestApplication) Run(*slog.Logger) int {
-	a.runCalls++
-
-	return 0
-}
-
-type mainTestCloser struct{}
-
-func (*mainTestCloser) Close() error {
-	return nil
-}
-
-func mainTestConfig() *apiconfig.RuntimeConfig {
-	return &apiconfig.RuntimeConfig{
-		Bot:   &apiconfig.BotPlaneConfig{Server: settings.ServerConfig{Port: 30001}},
-		Admin: &apiconfig.AdminPlaneConfig{Server: settings.ServerConfig{Port: 30006}},
-		LLM:   &apiconfig.LLMSchedulerConfig{Server: settings.ServerConfig{Port: 30003}},
-		Logging: settings.LoggingConfig{
-			Level: "info",
-		},
+	if !got.Enabled || got.OTLPEndpoint != "otel-collector:4317" || !got.OTLPInsecure || got.SampleRate != 0.25 {
+		t.Fatalf("telemetry config = %#v, want tracing settings preserved", got)
 	}
 }

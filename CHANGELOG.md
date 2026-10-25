@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **hololive-api Fx 제거:** `go.uber.org/fx`를 걷어내고 youtube-collector·alarm-worker와 같은 shared-go `bootstrap`·`lifecycle.Run` 조립으로 기동·종료합니다. 포트·설정·plane 계약, 종료 순서, drain 10초·process stop 30초 강제 상한, fatal 시 exit 1과 즉시 기록되는 `hololive-api runtime error`는 그대로입니다. Fx 전용 로그(`OnStart hook failed`, `hololive-api Fx stop failed` 등)는 사라지고 종료 요약은 `Runtime stopped with error`로 남습니다. 달라진 점: telemetry flush 실패는 로그만 남기고 exit code를 바꾸지 않으며, drain 중 두 번째 SIGTERM/SIGINT는 정리 없이 즉시 종료합니다.
+
 ## v12.2.0 - 2026-10-25
 
 - **원본 보존이 보호된 창을 지나 같은 tick에서 계속 정리:** 원본(`source_observations`) 보존은 tick마다 만료 후보 창(최대 1,000건) 하나만 처리했습니다. 운영에서는 창의 대부분이 LIVE·UPCOMING 보호 행이라 삭제 가능한 뒤쪽 정리가 늦어졌습니다.

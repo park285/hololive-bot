@@ -134,7 +134,8 @@ func TestRuntimeCloseIsIdempotentAndOrdered(t *testing.T) {
 }
 
 type runtimeGroupStub struct {
-	start func(context.Context, chan<- error)
+	start    func(context.Context, chan<- error)
+	shutdown func(context.Context) error
 }
 
 func (g *runtimeGroupStub) Start(ctx context.Context, errCh chan<- error) {
@@ -143,7 +144,11 @@ func (g *runtimeGroupStub) Start(ctx context.Context, errCh chan<- error) {
 	}
 }
 
-func (g *runtimeGroupStub) Shutdown(context.Context) error {
+func (g *runtimeGroupStub) Shutdown(ctx context.Context) error {
+	if g.shutdown != nil {
+		return g.shutdown(ctx)
+	}
+
 	return nil
 }
 

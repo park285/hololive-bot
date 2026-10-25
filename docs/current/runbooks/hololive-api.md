@@ -359,17 +359,16 @@ DB maintenance 명령(아래 `db-maintenance-exec.sh`로 실행하는 migration�
 > `/etc/stack-secrets/hololive-bot/postgres/{pg_service.conf,pgpass}`(둘 다 `0600 root:root`)이며
 > `hololive_migrator`로 `verify-full` 접속합니다. 이 스크립트를 중앙 런타임 호스트에서 실행하십시오.
 
-### 4. Fx lifecycle startup or shutdown fails
+### 4. Process lifecycle startup or shutdown fails
 
-Fx v1.24.0은 `hololive-api` 한 바이너리의 process signal과 `Start`/`Wait`/`Stop`만 소유합니다. 별도 Fx mode나 legacy lifecycle fallback은 없으며, plane 내부 계약과 운영 endpoint는 바뀌지 않습니다.
+`hololive-api`는 youtube-collector·alarm-worker와 같은 shared-go `bootstrap`·`lifecycle.Run`으로 기동·종료합니다. aggregate `Runtime.Run`이 유일한 process signal owner이며 별도 lifecycle mode나 fallback은 없습니다. plane 내부 계약과 운영 endpoint는 바뀌지 않습니다. 정상 SIGTERM은 `Received shutdown signal` → `hololive-api draining runtime planes`를 남기고 exit 0으로 끝납니다. runtime fatal은 발생 즉시 `hololive-api runtime error`로 원인을 남기고, 종료 처리가 끝나면 runtime·drain·회수 오류를 합친 요약을 `Runtime stopped with error`로 남긴 뒤 exit 1로 끝납니다. drain 중 두 번째 SIGTERM/SIGINT는 정리 없이 프로세스를 즉시 끝냅니다(collector·alarm-worker와 같은 shared lifecycle 동작). `docker stop`은 신호를 한 번만 보냅니다.
 
 | Log diagnostic | Meaning | Required response |
 |---|---|---|
-| `Failed to assemble hololive-api runtime` or Fx graph/invoke error | telemetry, aggregate runtime, or Fx graph initialization failed before service start | Redacted error metadata로 실패한 constructor를 확인하고 config/dependency 원인을 수정합니다. 이미 생성된 resource는 reverse order로 once-only cleanup됩니다. |
-| `OnStart hook failed` / `hololive-api Fx start failed` | process lifecycle hook did not complete within the 30-second start budget or Fx start rollback failed | listener bind와 dependency initialization 오류를 확인합니다. 일부 plane만 살아 있는 상태를 정상으로 간주하지 않습니다. |
-| `hololive-api runtime error` | listener/runtime component가 fatal error를 보고하여 Fx shutdown을 요청했습니다 | 최초 runtime error를 원인으로 조사합니다. scheduled job의 자체 처리 오류는 이 경로의 process-fatal이 아닙니다. YouTube 관측 Retry·DeadLetter 기록이 일시 오류(DB slot timeout, 연결·잠금 경합)로 실패하면 종료하지 않고 `awaiting lease recovery` ERROR 로그와 `retry_error`·`dead_letter_error` 지표만 남기며, `PROCESSING` 행은 lease 만료 뒤 claim이 회수합니다. 그 밖의 기록 실패는 계속 이 경로로 종료합니다. |
-| `drain runtime planes` with deadline/shutdown errors / `hololive-api Fx stop failed` | 10-second plane drain에서 하나 이상 실패했습니다. 남은 plane과 tail cleanup은 계속 시도됩니다. | bot → admin → llm → YouTube 순서의 shutdown 진단을 확인하고 실패한 plane의 listener 또는 background loop를 조사합니다. |
-| `hololive-api Fx stop timed out` | 전체 30-second process stop cap이 만료되었습니다. | 같은 resource에 concurrent forced cleanup을 실행하지 않습니다. Compose의 45-second grace 이후 종료 결과와 다음 기동 상태를 확인합니다. |
+| `Failed to assemble hololive-api runtime` | telemetry 또는 aggregate runtime 조립이 서비스 시작 전에 실패했습니다 | Redacted error metadata로 실패한 단계를 확인하고 config/dependency 원인을 수정합니다. 이미 생성된 plane은 once-only cleanup되고 telemetry provider는 종료됩니다. |
+| `hololive-api runtime error` (즉시), 이어서 `Runtime stopped with error` | listener/runtime component가 fatal error를 보고해 process가 종료됐습니다. listener bind 실패도 이 경로입니다 | 최초 runtime error를 원인으로 조사합니다. 일부 plane만 살아 있는 상태를 정상으로 간주하지 않습니다. scheduled job의 자체 처리 오류는 이 경로의 process-fatal이 아닙니다. YouTube 관측 Retry·DeadLetter 기록이 일시 오류(DB slot timeout, 연결·잠금 경합)로 실패하면 종료하지 않고 `awaiting lease recovery` ERROR 로그와 `retry_error`·`dead_letter_error` 지표만 남기며, `PROCESSING` 행은 lease 만료 뒤 claim이 회수합니다. 그 밖의 기록 실패는 계속 이 경로로 종료합니다. |
+| `Runtime stopped with error`, error에 `shutdown runtime planes` 또는 deadline | 10-second plane drain에서 하나 이상 실패했습니다. 남은 plane과 자원 회수는 계속 시도됩니다. | bot → admin → llm → YouTube 순서의 shutdown 진단을 확인하고 실패한 plane의 listener 또는 background loop를 조사합니다. |
+| `Runtime stopped with error`, error에 `stop aggregate runtime` 또는 `join aggregate resource cleanup`과 deadline | drain과 자원 회수를 합친 30-second hard stop 상한이 만료됐습니다. 끝나지 않은 drain·회수는 기다리지 않고 프로세스가 종료됩니다. | 같은 resource에 concurrent forced cleanup을 실행하지 않습니다. Compose의 45-second grace 이후 종료 결과와 다음 기동 상태를 확인합니다. |
 
 진단 문자열은 redacted `error` field로 기록됩니다. raw config, token, DSN, certificate, secret을 로그에 복사하지 않습니다. 아래 기존 log 명령과 health smoke를 사용하며, restart/redeploy/rollback은 별도 승인 후 이 runbook의 기존 절차를 따릅니다.
 
