@@ -167,6 +167,29 @@ func TestClassifyBroadcastTitleFallbackGameMarkers(t *testing.T) {
 	})
 }
 
+func TestClassifyBroadcastGameTopicLeadTags(t *testing.T) {
+	t.Parallel()
+
+	runBroadcastTitleFallbackCases(t, []broadcastTitleFallbackCase{
+		{name: "game topic name with sequel", title: "【Forza Horizon 6】夜のドライブ", want: broadcasttype.Game},
+		{name: "game topic underscores match spaces", title: "【Pineapple on Pizza】謎の高評価", want: broadcasttype.Game},
+		{name: "game topic name must start lead tag", title: "【a story about pineapple on pizza】", want: broadcasttype.Unknown},
+		{name: "game topic name needs word boundary", title: "【Unofficial meeting】", want: broadcasttype.Unknown},
+		{name: "game topic name outside title tag", title: "pineapple on pizza tier list", want: broadcasttype.Unknown},
+		{name: "curly apostrophe game topic", title: "【Dragon’s Dogma 2】ポーン探し", want: broadcasttype.Game},
+		{name: "topic trailing period is dropped", title: "【The Dandelion Endures】ふわふわ", want: broadcasttype.Game},
+		{name: "uncharted prose is not game", title: "Exploring uncharted waters together", want: broadcasttype.Unknown},
+		{name: "a little to the left prose is not game", title: "move it a little to the left", want: broadcasttype.Unknown},
+		{name: "lead talk tag beats game name in body", title: "【雑談】Forza Horizon 6の感想", want: broadcasttype.Talk},
+		{name: "greeting does not beat game tag", title: "【APEX】おはよう練習", want: broadcasttype.Game},
+		{name: "fullwidth tft", title: "【鬼ランク】毎日ＴＦＴ", want: broadcasttype.Game},
+		{name: "cover needs word boundary", title: "Undercover agent day", want: broadcasttype.Unknown},
+		{name: "mv release aside is not singing", title: "【大掃除】片付けます(最後MV公開あり!)", want: broadcasttype.Unknown},
+		{name: "new outfit does not beat lead talk tag", title: "【TALK】We are so back! In new outfit", want: broadcasttype.Talk},
+		{name: "super chat catch-up is talk", title: "【SC KETCHUP】reading the rest", want: broadcasttype.Talk},
+	})
+}
+
 func TestClassifyBroadcastTitleFallbackFormatKeywords(t *testing.T) {
 	t.Parallel()
 
@@ -213,6 +236,7 @@ func TestClassifyBroadcastSource(t *testing.T) {
 		{name: "title source", topic: "endurance", title: "【雑談】", wantType: broadcasttype.Talk, wantSource: testTypeSourceTitle},
 		{name: "membership title overrides game topic", topic: testTopicMinecraft, title: "【Members Only】 yuru camp △ s1 ep.7-12 ゆるキャン", wantType: broadcasttype.Membership, wantSource: testTypeSourceTitle},
 		{name: "watchalong title overrides game topic", topic: "forza", title: "【同時視聴】映画をみんなで観よ", wantType: broadcasttype.Watchalong, wantSource: testTypeSourceTitle},
+		{name: "in-game sightseeing keeps game topic", topic: testTopicMinecraft, title: "【Minecraft】星空を観よう", wantType: broadcasttype.Game, wantSource: testTypeSourceTopic},
 		{name: "horse racing title overrides game topic", topic: testTopicMinecraft, title: "【競馬/大阪杯】阪神 芝2000！！！今日こそ勝！！！！！！！！！", wantType: broadcasttype.HorseRacing, wantSource: testTypeSourceTitle},
 		{name: "strong event title overrides game topic", topic: "pokemon", title: "【今夜19時】公認ポケモンチャンピオンズ大会!新たな歴史の一ページが生まれる…!?", wantType: broadcasttype.Event, wantSource: testTypeSourceTitle},
 		{name: "personal event title overrides game topic despite uma musume", topic: testTopicMinecraft, title: "【生誕祭】ウマ娘やる！", wantType: broadcasttype.Event, wantSource: testTypeSourceTitle},

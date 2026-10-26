@@ -65,6 +65,9 @@ type broadcastTypeRules struct {
 	Generic        []broadcastTitleRule            `json:"generic_title_rules,omitempty"`
 	GameTag        broadcastGameTagRules           `json:"game_title_tag"`
 	ReviewedVideos map[string]broadcastVideoReview `json:"reviewed_videos,omitempty"`
+
+	// gameTopicTags는 game 주제 ID를 제목 표기로 바꾼 것이다. 주제와 제목 태그가 같은 게임 목록을 쓰게 한다.
+	gameTopicTags []string
 }
 
 type broadcastTitleStrength int
@@ -229,11 +232,24 @@ func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
 	if leadTag != "" &&
 		!containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.RejectKeywords) &&
 		(containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.Contains) ||
-			containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.TagOnly)) {
+			containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.TagOnly) ||
+			hasAnyBroadcastKeywordPrefix(leadTag, broadcastRules.gameTopicTags)) {
 		return true
 	}
 
 	return containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains)
+}
+
+// 게임 주제 이름은 첫 제목 태그의 시작일 때만 인정한다. «forza horizon 6»처럼 속편·부제는 뒤에 붙지만,
+// 태그 중간의 일반 단어(«dark hours»의 ark)까지 게임명으로 보지 않는다.
+func hasAnyBroadcastKeywordPrefix(value string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if keyword != "" && strings.HasPrefix(value, keyword) && hasBroadcastKeywordBoundary(value, 0, len(keyword)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 var broadcastTitleTagDelims = [][2]string{
@@ -381,6 +397,9 @@ func normalizeBroadcastText(value string) string {
 		switch r {
 		case '\u200b', '\u200c', '\u200d', '\ufeff':
 			return -1
+		// NFKC\ub294 \uace1\uc120 \uc544\ud3ec\uc2a4\ud2b8\ub85c\ud53c\ub97c \ubc14\uafb8\uc9c0 \uc54a\uc544 \u00abDragon\u2019s Dogma\u00bb\uac00 \uc8fc\uc81c\u00b7\ud0a4\uc6cc\ub4dc\uc758 '\uc640 \uc5b4\uae0b\ub09c\ub2e4.
+		case '\u2019':
+			return '\''
 		default:
 			return r
 		}

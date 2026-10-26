@@ -1043,6 +1043,414 @@
       "topic_id": "News_Show",
       "event_time": "2026-09-11T02:58:15.135003+00:00",
       "expected_type": "news"
+    },
+    {
+      "video_id": "es-1awCFWYE",
+      "channel_id": "UC0TXe_LYZ4scaW2XMyi5_kw",
+      "title": "【Forza Horizon 6】AZKiと深夜のドライブ #6【ホロライブ / AZKi】",
+      "topic_id": "",
+      "event_time": "2026-07-05T17:07:12+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "OofA8-_PYEw",
+      "channel_id": "UCp-5t9SrOQwXMU7iIjQfARg",
+      "title": "【Dorfromantik】深夜のチルゲー🌌まったり話しながらやろ~【ホロライブ/大神ミオ】",
+      "topic_id": "",
+      "event_time": "2026-06-16T15:14:05+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "e0HQWTNONqc",
+      "channel_id": "UCP0BspO_AMEe3aQqqpo89Dg",
+      "title": "【Heartopia】Me on heartopia world?!【hololive | moona】",
+      "topic_id": "",
+      "event_time": "2026-04-04T16:53:41+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "mNIGaeQd564",
+      "channel_id": "UCLlJpxXt6L5d-XQ0cDdIyDQ",
+      "title": "【WUTHERING WAVES】WHO IS HSIN AND WHY DOES SHE MAKE ME FEEL THINGS ?!【#VSPOEN #AryaKuroha】",
+      "topic_id": "",
+      "event_time": "2026-10-07T00:21:16+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "2HfIsWWBBMg",
+      "channel_id": "UC7Xglp1fske9zmRe7Oj8YyA",
+      "title": "【DRESSMAKER】Fashionista coming through!【#VSPOEN #RikoSolari】",
+      "topic_id": "",
+      "event_time": "2026-10-01T17:28:46+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "2brEL3HQ-88",
+      "channel_id": "UCp-5t9SrOQwXMU7iIjQfARg",
+      "title": "【Balatro】イカサマでポーカーに勝ちまくる？！ビルド系ポーカーです【ホロライブ/大神ミオ】",
+      "topic_id": "Balatro",
+      "event_time": "2026-09-30T15:34:08+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "1kPBkAmaHkA",
+      "channel_id": "UCDHABijvPBnJm7F-KlNME3w",
+      "title": "【DEADLOCK】green goblin mask calling to me DEADLOCK YOU WILL PLAY DEADLOCK",
+      "topic_id": "Deadlock",
+      "event_time": "2026-10-21T23:31:59+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "Q2wKWUIrVSY",
+      "channel_id": "UCUKD-uaobj9jiqB-VXt71mA",
+      "title": "【WARDOGS】話題の100人対戦FPS！レベルあげていきたい～！【獅白ぼたん/ホロライブ】",
+      "topic_id": "WARDOGS",
+      "event_time": "2026-09-16T12:59:11+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "EwFHypyxeyg",
+      "channel_id": "UCl69AEx4MdqMZH7Jtsm7Tig",
+      "title": "【TREES HATE YOU】 GETTIN BULLIED BY NATURE 🌳💢",
+      "topic_id": "Trees_Hate_You",
+      "event_time": "2026-09-23T16:02:54+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "Da8uS27x050",
+      "channel_id": "UCX4WL24YEOUYd7qDsFSLDOw",
+      "title": "〖 VALO 〗はなびづお。の巻〖 ぶいすぽっ！ / 夜乃くろむ 〗",
+      "topic_id": "",
+      "event_time": "2026-09-14T14:40:54+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "2YSdSfG8PTo",
+      "channel_id": "UCuDY3ibSP2MFRgf7eo3cojg",
+      "title": "【#LTK】どすこいスクリム【 ぶいすぽっ！ / 千燈ゆうひ 】",
+      "topic_id": "",
+      "event_time": "2026-10-26T12:52:08+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "bLEwHUTCWcg",
+      "channel_id": "UCF_U2GCKHvDz52jWdizppIA",
+      "title": "【たぬファイ】スクリム！！ちせまる、ゆきおやうじ、ふぁんでる【空澄セナ/ぶいすぽっ！】",
+      "topic_id": "",
+      "event_time": "2026-09-29T17:18:38+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "ft3ZlB78w-E",
+      "channel_id": "UCF_U2GCKHvDz52jWdizppIA",
+      "title": "【鬼ランク】毎日TFｔやんねん。目指せマスター【空澄セナ/ぶいすぽっ！】",
+      "topic_id": "",
+      "event_time": "2026-09-17T13:18:27+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "MLr1iVKbA24",
+      "channel_id": "UCKSpM183c85d5V2cW5qaUjA",
+      "title": "【lol ➜ tft ➜ valo | #5】 warming up 【#VSPOEN #NarinMikure】",
+      "topic_id": "",
+      "event_time": "2026-03-06T07:41:01.935452+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "WmSE9Yl5mnI",
+      "channel_id": "UCyLGcqYs7RsBb3L0SJfzGYA",
+      "title": "【#エムホールデム】復刻コラボきたあ！！みんなでポーカーだ！【ぶいすぽっ！/花芽すみれ】",
+      "topic_id": "",
+      "event_time": "2026-10-23T11:14:55+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "i84EgXc1WWY",
+      "channel_id": "UCoW8qQy80mKH0RJTKAK-nNA",
+      "title": "◤  #ぶいすぽGG：ちせ視点  ◢  橘ひなの presents ~愉悦~ ちょっと後輩チームでやらせていただきます！ ◤ぶいすぽっ！ #龍巻ちせ ⁠◢",
+      "topic_id": "",
+      "event_time": "2026-09-13T14:01:06+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "9sR0FYpGR4A",
+      "channel_id": "UCX4WL24YEOUYd7qDsFSLDOw",
+      "title": "〖 Splatoon3 〗スプラ5日目、ガチをたしなむ。の巻〖 ぶいすぽっ！ / 夜乃くろむ 〗",
+      "topic_id": "",
+      "event_time": "2026-10-18T07:40:59+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "mtQaZj3rDQ4",
+      "channel_id": "UCyLGcqYs7RsBb3L0SJfzGYA",
+      "title": "【妹に運転を教える】DだのNだのPとかね。【ぶいすぽっ！/花芽すみれ】",
+      "topic_id": "",
+      "event_time": "2026-09-26T15:26:10+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "ec-2kflMSRM",
+      "channel_id": "UCL9hJsdk9eQa0IlWbFB2oRg",
+      "title": "【 Japanese Ramen Simulator 】　今日からラーメン屋さんでバイトはじめます！！！！！！！w/あじゃ、きるま、ミドリ　【 ぶいすぽっ！ ⁠/蝶屋はなび 】",
+      "topic_id": "",
+      "event_time": "2026-10-11T14:45:14+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "Q-PWzWgqtP4",
+      "channel_id": "UC5CwaMl1eIgY8h02uZw7u8A",
+      "title": "【回転寿司シミュレーター】すいちゃんのワンマン職場体験コーナー🍣【星街すいせい / ＃ほしまちすたじお】",
+      "topic_id": "",
+      "event_time": "2026-10-02T12:50:45+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "NvY3aGMsASs",
+      "channel_id": "UC8vKBjGY2HVfbW9GAmgikWw",
+      "title": "【トルネコの大冒険 不思議のダンジョン　ちょっとステキなリマスター】はじめてやります✨️　ネタバレ注意【 ぶいすぽっ！甘結もか 】",
+      "topic_id": "",
+      "event_time": "2026-09-21T15:05:57+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "aukRfuGBQLU",
+      "channel_id": "UCgTzsBI0DIRopMylJEDqnog",
+      "title": "【 Fishing Inc 】のんびり雑談しながら釣りする【 ぶいすぽ / 小雀とと 】",
+      "topic_id": "",
+      "event_time": "2026-10-14T09:10:54+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "UBHhk-Kev6E",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【リングフィットアドベンチャー】day2 朝活!爽やかな1日はきっと運動から始まるはず #墨汐さやな #さやな時間",
+      "topic_id": "ringfit",
+      "event_time": "2026-10-01T22:09:51+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "3sM_Hp2W-vo",
+      "channel_id": "UCvzGlP9oQwU--Y0r9id_jnA",
+      "title": "【#2】閲覧注意!初見トルネコやるしゅばあああああああああああ!!!!!：Torneko's Great Adventure: Mystery Dungeon【ネタバレあり】",
+      "topic_id": "Dragon_Quest",
+      "event_time": "2026-10-18T08:24:24+00:00",
+      "expected_type": "game"
+    },
+    {
+      "video_id": "31nx6HKpxhQ",
+      "channel_id": "UC_vMYWcDjmfdpH6r4TTn1MQ",
+      "title": "ホントノワタシ/風真いろは(official)",
+      "topic_id": "",
+      "event_time": "2026-09-28T10:05:45+00:00",
+      "expected_type": "singing"
+    },
+    {
+      "video_id": "KmebvK80v7Y",
+      "channel_id": "UCp-5t9SrOQwXMU7iIjQfARg",
+      "title": "KONKON Beats / 大神ミオ cover.",
+      "topic_id": "",
+      "event_time": "2026-06-17T11:04:58+00:00",
+      "expected_type": "singing"
+    },
+    {
+      "video_id": "gCJ0aoAX-Ek",
+      "channel_id": "UCUKD-uaobj9jiqB-VXt71mA",
+      "title": "トキハナテ / 獅白ぼたん【original】",
+      "topic_id": "",
+      "event_time": "2026-04-10T09:04:57+00:00",
+      "expected_type": "singing"
+    },
+    {
+      "video_id": "wci5O0rnsOs",
+      "channel_id": "UC9LSiN9hXI55svYEBrrK-tw",
+      "title": "Goodbye Princess / Hibikisaki Riona [Cover]",
+      "topic_id": "",
+      "event_time": "2026-02-14T09:04:13+00:00",
+      "expected_type": "singing"
+    },
+    {
+      "video_id": "NCdL_Y_VQxc",
+      "channel_id": "UCyLGcqYs7RsBb3L0SJfzGYA",
+      "title": "おはよ～あさだよ【ぶいすぽっ！/花芽すみれ】",
+      "topic_id": "",
+      "event_time": "2026-10-06T02:41:54+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "PTL-ZkyrSPA",
+      "channel_id": "UCIjdfjcSaEgdjwbgjxC3ZWg",
+      "title": "世にも珍しい夜雑【ぶいすぽ / 猫汰つな】",
+      "topic_id": "",
+      "event_time": "2026-10-20T17:31:30+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "7iaU8JIvS6I",
+      "channel_id": "UCvUc0m317LWTTPZoBQV479A",
+      "title": "こんばんは❕",
+      "topic_id": "",
+      "event_time": "2026-02-08T14:09:34+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "BJSMkaO8HHk",
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "title": "PRISUNERS NIGHT IS HERE",
+      "topic_id": "",
+      "event_time": "2026-03-20T17:49:57+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "r6V7HgcTn9k",
+      "channel_id": "UCDHABijvPBnJm7F-KlNME3w",
+      "title": "【SC KETCHUP】septem,ber",
+      "topic_id": "Superchat_Reading",
+      "event_time": "2026-09-15T01:19:09+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "FMk_7aEJDso",
+      "channel_id": "UCDHABijvPBnJm7F-KlNME3w",
+      "title": "【SC KETCHUP】breaking my record of 1 stream per hour",
+      "topic_id": "",
+      "event_time": "2026-08-25T01:42:07+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "Wm2pOMxG1PU",
+      "channel_id": "UChgTyjG-pdNvxxhdsXfHQ5Q",
+      "title": "Short Talking and Reading Supers【Pavolia Reine/hololive】",
+      "topic_id": "Superchat_Reading",
+      "event_time": "2026-09-26T11:42:03+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "pcgc2SFXswg",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【10月終わるまでは生誕】まだまだ話せてない裏話とかいろいろ話そう🌟【スパチャ読み】#墨汐さやな #さやな時間",
+      "topic_id": "Superchat_Reading",
+      "event_time": "2026-10-21T14:39:00+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "xYK4U4ncHBI",
+      "channel_id": "UCuDY3ibSP2MFRgf7eo3cojg",
+      "title": "【録画視聴】FUR vs MVK | World Championship 2026 Play-in Stage Day 1【ぶいすぽっ！/千燈ゆうひ】",
+      "topic_id": "",
+      "event_time": "2026-10-16T10:51:03+00:00",
+      "expected_type": "watchalong"
+    },
+    {
+      "video_id": "Rwo07FBTNQ0",
+      "channel_id": "UC6eWCld0KwmyHFbAqK3V-Rw",
+      "title": "みんなで秘密結社holoX Live 2026「First MISSION」を観よう!!! #SSholoX世界リペイント計画 【ラプラスダークネス・鷹嶺ルイ・博衣こより・風真いろは/ホロライブ】",
+      "topic_id": "",
+      "event_time": "2026-05-23T13:04:06+00:00",
+      "expected_type": "watchalong"
+    },
+    {
+      "video_id": "yac_Q716CjM",
+      "channel_id": "UC-hM6YJuNYVAmUWxeIr9FeA",
+      "title": "【手描き切り抜き鑑賞】べすとおぶ手描き切り抜き鑑賞‼面白い切り抜きみんなで観るぞ~~~‼💞🎬【ホロライブ/さくらみこ】",
+      "topic_id": "",
+      "event_time": "2026-05-23T12:39:19+00:00",
+      "expected_type": "watchalong"
+    },
+    {
+      "video_id": "RAoHfd1m9qQ",
+      "channel_id": "UCFTLzh12_nrtzqBPsTCqenA",
+      "title": "【#ロゼキャンARK】こんなこと起きてたの!?爆笑&名場面 切り抜き鑑賞会🦖【ARK: Survival Ascended】",
+      "topic_id": "ark",
+      "event_time": "2026-09-12T16:15:40+00:00",
+      "expected_type": "watchalong"
+    },
+    {
+      "video_id": "xAACb0WU2lI",
+      "channel_id": "UCdn5BQ06XqgXoAxIhbqw5Rg",
+      "title": "【月末定期】#フブキングダム総会 2026.01  MEMBERSHIP ONLY【ホロライブ/白上フブキ】",
+      "topic_id": "",
+      "event_time": "2026-01-31T15:03:43+00:00",
+      "expected_type": "membership"
+    },
+    {
+      "video_id": "QWHIbU1cY5o",
+      "channel_id": "UCAoy6rzhSf4ydcYjJw3WoVg",
+      "title": "【 #holoctober 】DAY 25 : ONSEN【 iofi / hololive】",
+      "topic_id": "drawing",
+      "event_time": "2026-10-25T10:09:42+00:00",
+      "expected_type": "other"
+    },
+    {
+      "video_id": "Bwn4xONCbnc",
+      "channel_id": "UCK9V2B22uJYu3N7eR_BT9QA",
+      "title": "[Legend of Polka] Mascot Character Creation!",
+      "topic_id": "",
+      "event_time": "2026-04-02T10:11:46+00:00",
+      "expected_type": "other"
+    },
+    {
+      "video_id": "CTjKjxd4B0s",
+      "channel_id": "UCxsZ6NCzjU_t4YSxQLBcM5A",
+      "title": "【New Outfit】woah, fish!",
+      "topic_id": "",
+      "event_time": "2026-10-03T23:59:14+00:00",
+      "expected_type": "event"
+    },
+    {
+      "video_id": "rg-BRxEx0P0",
+      "channel_id": "UCHsx4Hqa-1ORjQTh9TYDhww",
+      "title": "【TALK】We are so back! In new outfit ✨👗#kfp #キアライブ",
+      "topic_id": "",
+      "event_time": "2026-02-17T23:17:44+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "KMlPB3-zD30",
+      "channel_id": "UCdyqAaZDKHXg4Ahi7VENThQ",
+      "title": "【#ノエマリ夏の大掃除】今の家に引っ越して早1年4か月...先生たすけてくだたいTT(最後MV公開&グッズ販売あり!)【白銀ノエル/ホロライブ】",
+      "topic_id": "Gathering",
+      "event_time": "2026-08-15T13:05:07+00:00",
+      "expected_type": "unknown"
+    },
+    {
+      "video_id": "PP5-L-fVm2U",
+      "channel_id": "UCtyWhCj3AqKh2dXctLkDtng",
+      "title": "【#一条莉々華3周年】歌うよ🎵一緒に3周年を迎えてくれたら嬉しいな【hololive ReGLOSS】",
+      "topic_id": "Anniversary",
+      "event_time": "2026-09-08T15:38:21+00:00",
+      "expected_type": "singing"
+    },
+    {
+      "video_id": "vLTPZPk7ySg",
+      "channel_id": "UCozx5csNhCx1wsVq3SZVkBQ",
+      "title": "ReGLOSS3周年記念!Blu-rayやイベント情報などまとめてお届けします!【#昼ホロ/#風白ゆき】",
+      "topic_id": "Anniversary",
+      "event_time": "2026-08-24T04:06:02+00:00",
+      "expected_type": "news"
+    },
+    {
+      "video_id": "Nz2BKo9T7SY",
+      "channel_id": "UC8eitCE9Z6EwUCs-VUi1blg",
+      "title": "【#のじゃEnglish】DuolingoでStudy Englishですのじゃー!【ホロライブ/アソビ★まわり隊!/熱千めら】",
+      "topic_id": "Duolingo",
+      "event_time": "2026-10-06T23:55:43+00:00",
+      "expected_type": "talk"
+    },
+    {
+      "video_id": "M_6eIQaexuQ",
+      "channel_id": "UC9p_lqQ0FEDz327Vgf5JwqA",
+      "title": "【Dragon's Dogma 2: Dark Arisen】The adventures of bijou and biboo #DD2DA #sponsored",
+      "topic_id": "Dragon's_Dogma",
+      "event_time": "2026-10-24T05:09:21+00:00",
+      "expected_type": "game"
+    }
+  ],
+  "additional_captures": [
+    {
+      "captured_at": "2026-10-26T14:00:31.702318+00:00",
+      "source": "hololive-seoul/hololive: ENDED youtube_live_sessions; topic fallback matches broadcast history query",
+      "transaction_read_only": "on",
+      "label_basis": "제목·주제로 직접 지정한 회귀 기대값. 분류기 출력에서 정답을 생성하지 않았으며 공개 메타데이터 조회나 영상 재생 검수는 하지 않았다."
     }
   ]
 }

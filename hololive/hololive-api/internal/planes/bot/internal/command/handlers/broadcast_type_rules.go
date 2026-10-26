@@ -100,6 +100,8 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 	}
 
 	rules.Topics = topics
+	rules.gameTopicTags = broadcastGameTopicTags(topics)
+
 	for i := range rules.TitleRules {
 		rules.TitleRules[i].Keywords = normalizeBroadcastKeywords(rules.TitleRules[i].Keywords)
 		rules.TitleRules[i].ExactTags = normalizeBroadcastTitleTags(rules.TitleRules[i].ExactTags)
@@ -116,6 +118,19 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 	rules.GameTag.Exact = normalizeBroadcastTitleTags(rules.GameTag.Exact)
 	rules.GameTag.Contains = normalizeBroadcastKeywords(rules.GameTag.Contains)
 	rules.GameTag.TagOnly = normalizeBroadcastKeywords(rules.GameTag.TagOnly)
+}
+
+// Holodex 주제 ID는 게임명의 공백을 _로 쓰고 끝 마침표까지 담기도 한다(the_dandelion_endures.).
+// 제목 태그와 비교하도록 공백으로 되돌리고 끝 마침표를 뗀다.
+func broadcastGameTopicTags(topics map[string]broadcasttype.Type) []string {
+	tags := make([]string, 0, len(topics))
+	for topic, typ := range topics {
+		if typ == broadcasttype.Game {
+			tags = append(tags, strings.TrimRight(strings.ReplaceAll(topic, "_", " "), "."))
+		}
+	}
+
+	return normalizeBroadcastKeywords(tags)
 }
 
 func normalizeBroadcastKeywords(values []string) []string {
