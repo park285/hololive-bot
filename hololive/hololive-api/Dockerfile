@@ -16,7 +16,7 @@
 ARG GO_VERSION=1.27.3
 ARG ALPINE_VERSION=3.24
 
-FROM gcr.io/distroless/static-debian13@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0 AS runtime-base
+FROM gcr.io/distroless/static-debian13@sha256:15f8637509792e05b97d83451b0b6ccfa4abd548f997e406ac1e72c87fe1fa78 AS runtime-base
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS builder
 
@@ -71,11 +71,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/healthcheck ./cmd/healthcheck
 
-# runtime base의 CA bundle에서 신뢰를 철회한 루트를 뺍니다.
-COPY scripts/build/ca-distrust.sh scripts/build/ca-distrust.sha256 /workspace/hololive-bot/scripts/build/
-COPY --from=runtime-base /etc/ssl/certs/ca-certificates.crt /tmp/ca-source.crt
-RUN sh /workspace/hololive-bot/scripts/build/ca-distrust.sh /tmp/ca-source.crt /tmp/ca-certificates.crt
-
 FROM runtime-base
 
 ARG VERSION=dev
@@ -95,7 +90,6 @@ ENV TZ=Asia/Seoul \
 WORKDIR /app
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
-COPY --from=builder --link /tmp/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder --link --chown=1000:1000 /dist ./
 
 EXPOSE 30001/tcp 30001/udp 30003/tcp 30003/udp 30006/tcp 30006/udp 30061/tcp 30091/tcp

@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **distroless ca-certificates 갱신:** hololive-api·alarm-worker의 runtime base `gcr.io/distroless/static-debian13`을 `ca-certificates 20250419+deb13u1`(Debian DSA-6572-1)이 든 다이제스트로 올렸습니다. 2026-10-25 예약 security 스캔이 이전 base의 `ca-certificates 20250419`를 Go 밖 취약점으로 잡아 실패했습니다. 새 패키지가 빌드 단계에서 빼던 두 루트(emSign ECC Root CA - G3, AAA Certificate Services)를 직접 제거해, 두 이미지의 `ca-distrust.sh` 파생 단계는 지울 루트가 없어 빌드를 실패시키므로 제거했습니다. 이미지의 CA bundle은 이전 파생 bundle과 같습니다(SHA-256 `e9c7b63ee2623386…`). collector는 alpine bundle에서 계속 두 루트를 뺍니다.
+
 ## v12.2.1 - 2026-10-25
 
 - **logger 닫기 오류 보고(shared-go v2.16.1):** api·alarm-worker·collector가 종료할 때 logger closer의 오류(로그 파일 닫기 실패 등)를 버리지 않고 마스킹해 stderr에 남깁니다. exit code는 runtime 결과를 그대로 따릅니다.
