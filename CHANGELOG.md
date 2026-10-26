@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **node 런타임 musl 로더 1.2.6-r3:** alarm-worker·youtube-collector·po-sandbox 이미지가 node alpine base에서 복사하던 `ld-musl`(alpine 3.24.2의 musl `1.2.6-r2`, CVE-2026-107891) 대신 digest로 고정한 `alpine:3.24.3`의 `musl 1.2.6-r3` 로더를 복사합니다. build-time `apk add`나 대상 아키텍처 실행이 없어, production 이미지의 apk 설치 금지 계약과 에뮬레이션 없는 arm64 교차 빌드(`ap-deploy.sh`, issuer artifact)가 그대로 유지됩니다. 이 이미지들은 apk DB가 없어 Trivy가 로더 판을 보지 못합니다. node·libgcc·libstdc++·libatomic은 이전처럼 node base에서 가져옵니다.
+
 - **Alpine musl 1.2.6-r3 반영:** PostgreSQL·Nginx·Valkey 이미지가 고정 base의 `musl`·`musl-utils`를 `1.2.6-r3`(CVE-2026-107891)으로 올립니다. PostgreSQL은 `brotli-libs`를 `1.2.1-r0`(CVE-2026-111497)으로, `libcurl`을 `8.23.0-r0`(CVE-2026-92392 등 24건)으로 올립니다. 2026-10-26 security 재실행이 PostgreSQL 이미지의 `musl 1.2.6-r2`를 Go 밖 취약점으로 잡아 실패했고, 스캔이 첫 실패에서 멈춰 아직 검사되지 않은 Nginx·Valkey base도 같은 판이었습니다. 로컬 이미지 태그(`…-zlib1.3.2-r1`)는 바꾸지 않습니다.
 
 - **distroless ca-certificates 갱신:** hololive-api·alarm-worker의 runtime base `gcr.io/distroless/static-debian13`을 `ca-certificates 20250419+deb13u1`(Debian DSA-6572-1)이 든 다이제스트로 올렸습니다. 2026-10-25 예약 security 스캔이 이전 base의 `ca-certificates 20250419`를 Go 밖 취약점으로 잡아 실패했습니다. 새 패키지가 빌드 단계에서 빼던 두 루트(emSign ECC Root CA - G3, AAA Certificate Services)를 직접 제거해, 두 이미지의 `ca-distrust.sh` 파생 단계는 지울 루트가 없어 빌드를 실패시키므로 제거했습니다. 이미지의 CA bundle은 이전 파생 bundle과 같습니다(SHA-256 `e9c7b63ee2623386…`). collector는 alpine bundle에서 계속 두 루트를 뺍니다.
