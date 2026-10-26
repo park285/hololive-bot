@@ -8,7 +8,7 @@
 
 ## 미출시
 
-- **Alpine musl 1.2.6-r3 반영:** PostgreSQL·Nginx·Valkey 이미지가 고정 base의 `musl`·`musl-utils`를 `1.2.6-r3`(CVE-2026-107891)으로 올립니다. PostgreSQL은 `brotli-libs`도 `1.2.1-r0`(CVE-2026-111497)으로 올립니다. 2026-10-26 security 재실행이 PostgreSQL 이미지의 `musl 1.2.6-r2`를 Go 밖 취약점으로 잡아 실패했고, 스캔이 첫 실패에서 멈춰 아직 검사되지 않은 Nginx·Valkey base도 같은 판이었습니다. 로컬 이미지 태그(`…-zlib1.3.2-r1`)는 바꾸지 않습니다.
+- **Alpine musl 1.2.6-r3 반영:** PostgreSQL·Nginx·Valkey 이미지가 고정 base의 `musl`·`musl-utils`를 `1.2.6-r3`(CVE-2026-107891)으로 올립니다. PostgreSQL은 `brotli-libs`를 `1.2.1-r0`(CVE-2026-111497)으로, `libcurl`을 `8.23.0-r0`(CVE-2026-92392 등 24건)으로 올립니다. 2026-10-26 security 재실행이 PostgreSQL 이미지의 `musl 1.2.6-r2`를 Go 밖 취약점으로 잡아 실패했고, 스캔이 첫 실패에서 멈춰 아직 검사되지 않은 Nginx·Valkey base도 같은 판이었습니다. 로컬 이미지 태그(`…-zlib1.3.2-r1`)는 바꾸지 않습니다.
 
 - **distroless ca-certificates 갱신:** hololive-api·alarm-worker의 runtime base `gcr.io/distroless/static-debian13`을 `ca-certificates 20250419+deb13u1`(Debian DSA-6572-1)이 든 다이제스트로 올렸습니다. 2026-10-25 예약 security 스캔이 이전 base의 `ca-certificates 20250419`를 Go 밖 취약점으로 잡아 실패했습니다. 새 패키지가 빌드 단계에서 빼던 두 루트(emSign ECC Root CA - G3, AAA Certificate Services)를 직접 제거해, 두 이미지의 `ca-distrust.sh` 파생 단계는 지울 루트가 없어 빌드를 실패시키므로 제거했습니다. 이미지의 CA bundle은 이전 파생 bundle과 같습니다(SHA-256 `e9c7b63ee2623386…`). collector는 alpine bundle에서 계속 두 루트를 뺍니다.
 

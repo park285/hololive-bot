@@ -131,7 +131,7 @@ image (`pull_policy: never`). Its only build context is `deploy/images/nginx`; t
 immutable official Nginx base retains its entrypoint, configuration and users,
 with Alpine 3.24 `zlib=1.3.2-r1` (CVE-2026-85091) and `musl=1.2.6-r3`/`musl-utils=1.2.6-r3`
 (CVE-2026-107891) applied. The PostgreSQL runtime applies the same zlib and musl fixes
-alongside its `brotli-libs=1.2.1-r0` and `nghttp2-libs=1.70.0-r0` pins.
+alongside its `brotli-libs=1.2.1-r0`, `libcurl=8.23.0-r0` and `nghttp2-libs=1.70.0-r0` pins.
 
 Build the ingress explicitly with the production and live-compat Compose files
 and the `admin-dashboard-ingress` build target; `build-all.sh` only selects the
