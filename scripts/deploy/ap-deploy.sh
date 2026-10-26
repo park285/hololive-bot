@@ -238,6 +238,8 @@ PROD_COMPOSE_FILE="deploy/compose/docker-compose.prod.yml"
 
 change_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
+# 활성 pair는 백업 정리 뒤에도 bind되므로 release 저장소에 둔다.
+profile_release="artifacts/worker-profile/releases/$AP_BACKUP_PREFIX-$change_id/youtube-collector-b"
 rollback_image_tag="hololive-youtube-collector:rollback-$change_id"
 rollback_po_image_tag="hololive-youtube-po-sandbox:rollback-$change_id"
 po_manifest_active="backups/po-sandbox-current-b.json"
@@ -323,7 +325,7 @@ echo backup_dir='$backup_dir'"
 # 사전 mirror sync 전에 보존한 pair 또는 실행 중 loaded hash로 입증한 bytes만 백업한다.
 profile_container="$(remote "sudo -n docker ps -aq --no-trunc --filter 'name=^/hololive-youtube-collector-b$'")"
 if [[ "$AP_COLLECTOR_MAINTENANCE_STOPPED" == true || -n "$profile_container" ]]; then
-  "${AP_SSH[@]}" "sudo -n python3 - capture youtube-collector-b \"\$HOME/$REMOTE_REPO_DIR/$backup_dir/worker-profile-previous\" hololive-youtube-collector-b \"\$HOME/$REMOTE_REPO_DIR\"" \
+  "${AP_SSH[@]}" "sudo -n python3 - capture youtube-collector-b \"\$HOME/$REMOTE_REPO_DIR/$profile_release/previous\" hololive-youtube-collector-b \"\$HOME/$REMOTE_REPO_DIR\"" \
     < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
 fi
 # rollback 기준점은 ap-rollback.sh와 같은 파일(rollback-image-tag)로 판정하고, trap을 걸기 전에 값을 확정한다.
@@ -415,7 +417,7 @@ for image in '$IMAGE_REF' '$PO_IMAGE_REF'; do
   fi
 done
 rm -f -- '$po_manifest_active' '$po_image_id_active'
-if [[ -r artifacts/worker-profile/active/youtube-collector-b.pair && \$(cat artifacts/worker-profile/active/youtube-collector-b.pair) == \"\$PWD/$backup_dir/worker-profile-candidate\" ]]; then
+if [[ -r artifacts/worker-profile/active/youtube-collector-b.pair && \$(cat artifacts/worker-profile/active/youtube-collector-b.pair) == \"\$PWD/$profile_release/candidate\" ]]; then
   sudo -n rm artifacts/worker-profile/active/youtube-collector-b.yml artifacts/worker-profile/active/youtube-collector-b.pair
 fi" || {
     echo "AP first deploy cleanup failed on $AP_NAME; preserve and inspect $backup_dir before fixing forward" >&2
@@ -481,13 +483,13 @@ remote "set -euo pipefail
 cd ~/hololive-bot
 pair_tool=scripts/deploy/lib/worker-profile-pair.py
 sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' config --format json \
-  | sudo -n python3 \"\$pair_tool\" candidate youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\"
-sudo -n env WORKER_PROFILE_OVERRIDE_FILE=\"\$PWD/$backup_dir/worker-profile-candidate/compose.yml\" HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' run --rm --no-deps --pull never youtube-collector-b --check-worker-profile
-sudo -n python3 \"\$pair_tool\" verify-source youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\""
+  | sudo -n python3 \"\$pair_tool\" candidate youtube-collector-b \"\$PWD/$profile_release/candidate\"
+sudo -n env WORKER_PROFILE_OVERRIDE_FILE=\"\$PWD/$profile_release/candidate/compose.yml\" HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' run --rm --no-deps --pull never youtube-collector-b --check-worker-profile
+sudo -n python3 \"\$pair_tool\" verify-source youtube-collector-b \"\$PWD/$profile_release/candidate\""
 cutover_armed=true
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n python3 scripts/deploy/lib/worker-profile-pair.py activate youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\" \"\$PWD\""
+sudo -n python3 scripts/deploy/lib/worker-profile-pair.py activate youtube-collector-b \"\$PWD/$profile_release/candidate\" \"\$PWD\""
 
 change_started_at="$(
   remote 'date -u +%Y-%m-%dT%H:%M:%SZ'
@@ -548,7 +550,7 @@ for container in $containers_list; do
     exit 1
   fi
 done
-sudo -n python3 scripts/deploy/lib/worker-profile-pair.py verify-live youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\" hololive-youtube-collector-b"
+sudo -n python3 scripts/deploy/lib/worker-profile-pair.py verify-live youtube-collector-b \"\$PWD/$profile_release/candidate\" hololive-youtube-collector-b"
 
 "$REPO_ROOT/scripts/logs/ap-smoke.sh" "$AP_NAME"
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

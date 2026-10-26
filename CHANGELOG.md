@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **활성 worker-profile pair 저장 위치:** 중앙 collector-c PO 배포와 서울 AP collector-b 배포가 활성 pair를 수용 후 정리되는 백업 디렉터리(`backups/po-c-*`, `backups/seoul-collector-*`)에 두었습니다. 2026-10-26 백업 정리 뒤 Compose가 지워진 경로를 bind하려다 중앙 부팅 경로가 `youtube-collector`에서 실패했습니다. 이제 두 배포와 AP 롤백은 pair를 `artifacts/worker-profile/releases/`에 만들고, `worker-profile-pair.py activate`는 그 밖의 pair를 거부합니다.
+
 ## v12.3.0 - 2026-10-26
 
 - **방송 유형 분류 보완(규칙 `2026-10-26.1`):** 방송 이력의 유형 표시와 `type` 필터에 쓰는 분류기가 게임으로 매핑한 Holodex 주제 이름을 첫 제목 태그에도 적용해, 주제 없이 `【Forza Horizon 6】`처럼 게임명만 있는 방송을 게임으로 봅니다. 신규 게임 주제 68개와 VSPO 게임 표기(`VALO`·`#LTK`·`TFT`·`スクリム`), 공식 MV·커버, 切り抜き 동시시청, 인사말 잡담 등을 추가했고, 슈퍼챗 밀린 읽기(`SC KETCHUP`)를 게임에서 잡담으로 바로잡았습니다. 종료 방송 10,807건 기준 미분류가 9.8%에서 5.3%(2026-09-11 이후 14.6%에서 3.8%)로 줄었고 기존 유형은 24건이 바뀌었습니다. 결과는 [3차 보완 보고서](docs/review/classifier-refinement-20261026.md)에 있습니다.

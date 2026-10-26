@@ -189,6 +189,7 @@ run_content_gates() {
     hololive/hololive-api/Dockerfile hololive/hololive-alarm-worker/Dockerfile hololive/hololive-youtube-collector/Dockerfile
   run_if_changed scripts/deploy/source-revision-entrypoints_test.sh \
     build-all.sh scripts/deploy/compose-redeploy-service.sh scripts/deploy/lib
+  run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
   run_if_changed scripts/deploy/test-postgres-capacity-entrypoints.sh \

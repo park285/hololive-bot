@@ -10,6 +10,8 @@ mode="$1" staging="$2" backup="$3" revision="$4" version="$5"
 current=/opt/hololive-bot/compose/current
 manifest=../po-current-c/rootfs-manifest.json
 image_id_file=../po-current-c/image-id
+# 활성 pair는 백업 정리 뒤에도 bind되므로 release 저장소에 둔다.
+profile_release="$current/artifacts/worker-profile/releases/po-c-${backup##*/po-c-}/youtube-collector"
 # 중앙 collector-c는 prod+live-compat의 youtube-collector다.
 files=(hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION
        deploy/compose/docker-compose.prod.yml deploy/compose/docker-compose.live-compat.yml
@@ -107,17 +109,17 @@ restore() {
   else
     [[ "$state" == absent ]] || return 1
   fi
-  python3 "$pair_tool" verify youtube-collector "$backup/worker-profile-previous" "hololive-youtube-collector:rollback-${backup##*/po-c-}"
+  python3 "$pair_tool" verify youtube-collector "$profile_release/previous" "hololive-youtube-collector:rollback-${backup##*/po-c-}"
   HOLO_API_VERSION="$(cat "$backup/previous-files/hololive/hololive-api/VERSION")" \
   HOLO_ALARM_WORKER_VERSION="$(cat "$backup/previous-files/hololive/hololive-alarm-worker/VERSION")" \
     docker compose --env-file /etc/stack-secrets/hololive-bot/compose.env \
     --project-directory "$current/deploy/compose" \
     -f "$backup/previous-files/deploy/compose/docker-compose.prod.yml" \
     -f "$backup/previous-files/deploy/compose/docker-compose.live-compat.yml" \
-    -f "$backup/worker-profile-previous/compose.yml" \
+    -f "$profile_release/previous/compose.yml" \
     run --rm --no-deps --pull never youtube-collector --check-worker-profile
   # 복원 profile 게시가 실패해도 현재 issuer를 먼저 제거하지 않는다.
-  python3 "$pair_tool" activate youtube-collector "$backup/worker-profile-previous" "$current" || return
+  python3 "$pair_tool" activate youtube-collector "$profile_release/previous" "$current" || return
   docker stop "$issuer_container" >/dev/null 2>&1 || true
   docker rm -f "$issuer_container" >/dev/null 2>&1 || true
   docker tag "hololive-youtube-collector:rollback-${backup##*/po-c-}" "$collector"
@@ -130,7 +132,7 @@ restore() {
     fi
   done
   install -m 0755 "$staging/scripts/deploy/compose.sh" "$current/scripts/deploy/compose.sh"
-  export WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-previous/compose.yml"
+  export WORKER_PROFILE_OVERRIDE_FILE="$profile_release/previous/compose.yml"
   if [[ "$state" == present ]]; then
     docker tag "hololive-youtube-po-sandbox:rollback-${backup##*/po-c-}" "$issuer"
     install -D -m 0644 "$backup/po-prechange-manifest.json" "$current/$manifest"
@@ -262,10 +264,10 @@ case "$(docker inspect -f '{{.State.Running}}' "$collector_container")" in
   false) printf 'stopped\n' > "$backup/collector-prechange.state" ;;
   *) echo 'central collector running state unavailable' >&2; exit 1 ;;
 esac
-python3 "$pair_tool" capture youtube-collector "$backup/worker-profile-previous" "$collector_container" "$current"
+python3 "$pair_tool" capture youtube-collector "$profile_release/previous" "$collector_container" "$current"
 WORKER_PROFILE_OVERRIDE_FILE=none compose config --format json \
-  | python3 "$pair_tool" rollback youtube-collector "$backup/worker-profile-previous"
-WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-previous/compose.yml" compose run --rm --no-deps --pull never youtube-collector --check-worker-profile
+  | python3 "$pair_tool" rollback youtube-collector "$profile_release/previous"
+WORKER_PROFILE_OVERRIDE_FILE="$profile_release/previous/compose.yml" compose run --rm --no-deps --pull never youtube-collector --check-worker-profile
 printf '%s\n' "$old_revision" > "$backup/collector.revision"
 docker tag "$collector" "hololive-youtube-collector:rollback-${backup##*/po-c-}"
 if docker image inspect "$issuer" >/dev/null 2>&1; then
@@ -349,12 +351,12 @@ verify_collector "$collector" "$staging/collector-manifest.json" "$revision" "$s
 [[ "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$collector")" == "$version" ]]
 compose config --quiet
 WORKER_PROFILE_OVERRIDE_FILE=none compose config --format json \
-  | python3 "$pair_tool" candidate youtube-collector "$backup/worker-profile-candidate"
-WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-candidate/compose.yml" compose run --rm --no-deps --pull never youtube-collector --check-worker-profile
-python3 "$pair_tool" verify-source youtube-collector "$backup/worker-profile-candidate"
+  | python3 "$pair_tool" candidate youtube-collector "$profile_release/candidate"
+WORKER_PROFILE_OVERRIDE_FILE="$profile_release/candidate/compose.yml" compose run --rm --no-deps --pull never youtube-collector --check-worker-profile
+python3 "$pair_tool" verify-source youtube-collector "$profile_release/candidate"
 cutover_started=true
-python3 "$pair_tool" activate youtube-collector "$backup/worker-profile-candidate" "$current"
-export WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-candidate/compose.yml"
+python3 "$pair_tool" activate youtube-collector "$profile_release/candidate" "$current"
+export WORKER_PROFILE_OVERRIDE_FILE="$profile_release/candidate/compose.yml"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '%s\n' "$started_at" > "$backup/change-started-at"
 compose up -d --no-build --no-deps --force-recreate "$issuer_container_service"
@@ -363,7 +365,7 @@ install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
 install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
 compose up -d --no-build --no-deps --force-recreate youtube-collector
 wait_collector "$revision"
-python3 "$pair_tool" verify-live youtube-collector "$backup/worker-profile-candidate" "$collector_container"
+python3 "$pair_tool" verify-live youtube-collector "$profile_release/candidate" "$collector_container"
 since_epoch="$(date -u -d "$started_at" +%s)"
 for container in "$issuer_container" "$collector_container"; do
   [[ "$(date -u -d "$(docker inspect -f '{{.State.StartedAt}}' "$container")" +%s)" -ge "$since_epoch" ]]
