@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-11.3",
+  "version": "2026-10-26.1",
   "source_notes": [
     "JRA 2026 G1/J-G1 race names plus observed production broadcast titles",
     "NAR dirt graded races and major international races commonly covered by prediction streams",
@@ -16,7 +16,10 @@
     "hololive Dreams is a rhythm/RPG game (https://www.hololive-dreams.com/); gameplay is game, while explicit tournament/event lead tags retain their priority",
     "ark/rust/peak are tag_only because the bare English words can describe non-game subjects",
     "振り返り配信 identifies a dedicated retrospective even when its source topic names the game being discussed",
-    "2026-09-11 round 2: public metadata reviewed for all 40 remaining unknown broadcasts; exact video/channel-bound reviews supplement title/topic evidence. Reviewer evidence is versioned here, never inferred from a generic greeting or all channel profile keywords."
+    "2026-09-11 round 2: public metadata reviewed for all 40 remaining unknown broadcasts; exact video/channel-bound reviews supplement title/topic evidence. Reviewer evidence is versioned here, never inferred from a generic greeting or all channel profile keywords.",
+    "2026-10-26: compared 10,807 ENDED sessions (3,366 since 2026-09-11); unknown 1,056 before this revision. Game topic IDs double as lead-tag game names (prefix match on the first title tag), so one topic entry covers both Holodex topics and title tags.",
+    "2026-10-26: new game topics were mapped only when observed titles name the game; drawing/announce/morning/celebration/ranking/teaser/charity/anniversary stay unmapped because their streams mix formats (anniversary would turn 歌枠 and #昼ホロ news into event). duolingo follows language_learning (talk).",
+    "2026-10-26: greetings (おはよ/good morning/こんばんは) stay generic talk below every game marker; bare cover is generic singing, while (official)/【original】 are strong singing. sc ketchup (super chat catch-up) is talk, not a game title."
   ],
   "topics": {
     "voice_mimicry_show": "game",
@@ -149,7 +152,77 @@
     "the_berlin_apartment": "game",
     "undertale": "game",
     "uno": "game",
-    "village_in_the_shade": "game"
+    "village_in_the_shade": "game",
+    "ace_combat": "game",
+    "an_automaton's_journey": "game",
+    "balatro": "game",
+    "bang_dream": "game",
+    "building_0:_hakuei_university": "game",
+    "captain_tsubasa": "game",
+    "convenience_store": "game",
+    "conveyor_belt_sushi_simulator": "game",
+    "crash_bandicoot": "game",
+    "crazy_taxi": "game",
+    "crime_scene_cleaner": "game",
+    "cuphead": "game",
+    "danganronpa": "game",
+    "dark_souls": "game",
+    "deadlock": "game",
+    "death_momotaro": "game",
+    "deck_of_haunts": "game",
+    "dragon_quest": "game",
+    "dragon's_dogma": "game",
+    "dressmaker": "game",
+    "duet_night_abyss": "game",
+    "ganbare_goemon": "game",
+    "gears_of_war": "game",
+    "getting_over_it": "game",
+    "god_hand": "game",
+    "gone_fishing": "game",
+    "hachishaku": "game",
+    "heavy_rain": "game",
+    "human_fall_flat": "game",
+    "indika": "game",
+    "invokyr": "game",
+    "jackbox": "game",
+    "japanese_ramen_simulator": "game",
+    "ketsu_battler": "game",
+    "kuuki_yomi": "game",
+    "melatonin": "game",
+    "monster_rancher": "game",
+    "nintendo_switch_sports": "game",
+    "no_man's_sky": "game",
+    "patapon": "game",
+    "persona": "game",
+    "pico_park": "game",
+    "poly_bridge": "game",
+    "pop'n_music": "game",
+    "ringfit": "game",
+    "rise_of_the_ronin": "game",
+    "shape_of_dreams": "game",
+    "signalis": "game",
+    "slay_the_princess": "game",
+    "splatoon": "game",
+    "star_fox": "game",
+    "sucker_for_love": "game",
+    "suikoden": "game",
+    "sun_haven": "game",
+    "tcg_card_shop_simulator": "game",
+    "teach_my_little_sister_how_to_drive": "game",
+    "the_backrooms": "game",
+    "the_closing_shift": "game",
+    "the_dandelion_endures.": "game",
+    "the_exit_8": "game",
+    "tokyo_xtreme_racer": "game",
+    "touhou": "game",
+    "trees_hate_you": "game",
+    "uncharted": "game",
+    "wardogs": "game",
+    "what_the_golf": "game",
+    "withering_rooms": "game",
+    "zako_no_ahiru": "game",
+    "duolingo": "talk",
+    "superchat_reading": "talk"
   },
   "title_rules": [
     {
@@ -170,7 +243,8 @@
         "memberonly",
         "membersonly",
         "【member stream】",
-        "【members】"
+        "【members】",
+        "membership only"
       ]
     },
     {
@@ -193,7 +267,11 @@
         "応援会場",
         "応援枠",
         "一緒に応援",
-        "co-streaming"
+        "co-streaming",
+        "録画視聴",
+        "切り抜き鑑賞",
+        "一緒に観よう",
+        "」を観よう"
       ]
     },
     {
@@ -236,7 +314,12 @@
         "歌いたい",
         "歌うよ",
         "gonna sing",
-        "作業用bgm"
+        "作業用bgm",
+        "(official)",
+        "【original】",
+        "オリジナル楽曲",
+        "english cover",
+        "3d cover"
       ]
     },
     {
@@ -456,7 +539,8 @@
         "dlc",
         "playthrough",
         "ゲーム",
-        "げーむ"
+        "げーむ",
+        "スクリム"
       ]
     },
     {
@@ -478,7 +562,9 @@
         "凸待ち",
         "耐久",
         "誕生日",
-        "爆誕"
+        "爆誕",
+        "new outfit",
+        "new costume"
       ]
     },
     {
@@ -490,7 +576,8 @@
         "エレクトーン",
         "ウクレレ",
         "piano",
-        "guitar"
+        "guitar",
+        "cover"
       ]
     },
     {
@@ -565,7 +652,19 @@
         "質問",
         "英会話",
         "supacha",
-        "q&a"
+        "q&a",
+        "おはよ",
+        "good morning",
+        "ohayo",
+        "こんばんは",
+        "こんばんわ",
+        "夜雑",
+        "駄弁",
+        "しゃべろう",
+        "prisuners night",
+        "monday malam",
+        "sc ketchup",
+        "supadonoreading"
       ]
     },
     {
@@ -636,7 +735,10 @@
         "#らでんと巡る布袋劇",
         "#ad",
         "#sponsored",
-        "#pr"
+        "#pr",
+        "#holoctober",
+        "legend of polka",
+        "polka legend"
       ]
     },
     {
@@ -659,7 +761,9 @@
     "tag_only": [
       "ark",
       "rust",
-      "peak"
+      "peak",
+      "unpacking",
+      "a little to the left"
     ],
     "reject_keywords": [
       "hololive",
@@ -698,7 +802,10 @@
       "ow2",
       "tft",
       "vct",
-      "dww"
+      "dww",
+      "valo",
+      "#ltk",
+      "ltk"
     ],
     "contains": [
       "berdinkum",
@@ -1104,7 +1211,6 @@
       "roulette dungeon",
       "sanabi",
       "school 666",
-      "sc ketchup",
       "scritchy scratchy",
       "sky 星を紡ぐ子どもたち",
       "sonic racing",
@@ -1128,7 +1234,63 @@
       "ほの暮らしの庭",
       "ポケコロツイン",
       "レーシングマスター",
-      "リヴリーアイランド"
+      "リヴリーアイランド",
+      "ぶいすぽgg",
+      "tft",
+      "エムホールデム",
+      "m hold'em",
+      "forza horizon",
+      "妹に運転を教える",
+      "妹に運転教える",
+      "teach my little sister how to drive",
+      "ace combat",
+      "エースコンバット",
+      "タンポポは耐える",
+      "トルネコの大冒険",
+      "スプラ3",
+      "splatoon",
+      "回転寿司シミュレーター",
+      "回転寿司シュミレーター",
+      "ramen simulator",
+      "tcg card shop",
+      "rise of the ronin",
+      "rise of the rōnin",
+      "no man's sky",
+      "no man sky",
+      "ペルソナ",
+      "ダンガンロンパ",
+      "幻想水滸伝",
+      "夜勤事件",
+      "デス桃太郎",
+      "ケツバトラー",
+      "アンチャーテッド",
+      "ほのぼの釣り物語",
+      "どろぼうノーム",
+      "リングフィット",
+      "栄冠ナイン",
+      "東方紅魔郷",
+      "cod:dmz",
+      "cities: skylines",
+      "just volleyball",
+      "maplestory",
+      "リーサルカンパニー",
+      "end of abyss",
+      "#endofabyss",
+      "8番出口",
+      "首都高バトル",
+      "クレイジータクシー",
+      "キャプテン翼",
+      "がんばれゴエモン",
+      "空気読み。",
+      "壺おじ",
+      "ダークソウル",
+      "八尺様",
+      "ポップン",
+      "インボキア",
+      "閉店事件",
+      "deep dish dungeon",
+      "fishing inc",
+      "escape simulator"
     ]
   },
   "reviewed_videos": {
