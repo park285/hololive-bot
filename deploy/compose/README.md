@@ -130,8 +130,11 @@ replacement, and failed cutover restoration. No live operation is implied by the
 image (`pull_policy: never`). Its only build context is `deploy/images/nginx`; the
 immutable official Nginx base retains its entrypoint, configuration and users,
 with Alpine 3.24 `zlib=1.3.2-r1` (CVE-2026-85091) and `musl=1.2.6-r3`/`musl-utils=1.2.6-r3`
-(CVE-2026-107891) applied. The PostgreSQL runtime applies the same zlib and musl fixes
-alongside its `brotli-libs=1.2.1-r0`, `libcurl=8.23.0-r0` and `nghttp2-libs=1.70.0-r0` pins.
+(CVE-2026-107891) applied. `ca-certificates-bundle=20261020-r0` keeps the CA bundle free of the
+roots distrusted on 2026-10-22 (emSign ECC Root CA - G3, AAA Certificate Services), so the
+built image needs no separate CA derivation. The PostgreSQL and Valkey runtimes apply the same
+zlib, musl and CA bundle pins; PostgreSQL adds `brotli-libs=1.2.1-r0`, `libcurl=8.23.0-r0` and
+`nghttp2-libs=1.70.0-r0`.
 
 Build the ingress explicitly with the production and live-compat Compose files
 and the `admin-dashboard-ingress` build target; `build-all.sh` only selects the
@@ -150,7 +153,7 @@ The existing ingress behavior checks build an isolated temporary tag from this
 context; `NGINX_TEST_PLATFORM` selects the architecture (default `linux/amd64`).
 
 `valkey-cache` and `docker-proxy` also use local-only owned images:
-`iris-stack-valkey:9.1.2-zlib1.3.2-r1` applies the same zlib and musl fixes to the pinned official
+`iris-stack-valkey:9.1.2-zlib1.3.2-r1` applies the same zlib, musl and CA bundle pins to the pinned official
 Valkey base, while `iris-stack-socket-proxy:1.13.1-go1.27.2` rebuilds the checksum-pinned
 upstream 1.13.1 source with Go 1.27.2. The latter replaces the vulnerable Go 1.26.6
 standard library without changing CLI flags, UID 65534, socket paths or request policy.
