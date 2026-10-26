@@ -297,6 +297,11 @@ def capture(container, service, directory, root):
 
 
 def activate(directory, service, root, prepared_overlay=None):
+    # 활성 overlay는 재생성·재부팅마다 이 디렉터리를 bind하므로, 수용 후 정리되는 백업이 아니라
+    # 배포 동기화와 보존 정리에서 빠지는 release 저장소에만 둔다.
+    releases = (Path(root) / "artifacts/worker-profile/releases").resolve()
+    if not directory.resolve().is_relative_to(releases):
+        raise ValueError("active profile pair must live under artifacts/worker-profile/releases")
     verify(directory, service)
     contents = (prepared_overlay or directory / "compose.yml").read_bytes()
     active = Path(root) / "artifacts/worker-profile/active"

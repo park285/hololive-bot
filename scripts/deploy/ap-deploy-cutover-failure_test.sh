@@ -99,6 +99,7 @@ run_failure() (
   AP_SSH=(fake_ssh)
   REMOTE_REPO_DIR=hololive-bot
   backup_dir=backups/first
+  profile_release=artifacts/worker-profile/releases/first/youtube-collector-b
   containers_list=hololive-youtube-collector-b
   IMAGE_REF=hololive-youtube-collector:prod
   PO_IMAGE_REF=hololive-youtube-po-sandbox:prod

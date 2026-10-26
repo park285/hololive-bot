@@ -12,7 +12,7 @@ cd "$HOME/hololive-bot"
 . "$rollback_root/scripts/deploy/lib/ap-prechange-config.sh"
 . "$rollback_root/scripts/deploy/lib/po-sandbox-image.sh"
 pair_tool="$rollback_root/scripts/deploy/lib/worker-profile-pair.py"
-profile_pair="$HOME/hololive-bot/$backup/worker-profile-previous"
+profile_pair="$HOME/hololive-bot/artifacts/worker-profile/releases/${backup#backups/}/$service/previous"
 prod_source="$(cat "$backup/prod-compose-source-path")"
 ap_source="$(cat "$backup/ap-compose-source-path")"
 # 기록된 배치는 이전 이미지·프로필·소스 조합의 일부다.

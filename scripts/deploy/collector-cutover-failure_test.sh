@@ -310,8 +310,9 @@ for case in central_cases:
         if is_check or is_rollback:
             backup.mkdir()
             (backup / 'snapshot-complete').touch()
-            (backup / 'worker-profile-previous').mkdir()
-            (backup / 'worker-profile-previous/profile.json').write_text('retained profile')
+            previous_pair = current / 'artifacts/worker-profile/releases' / backup.name / 'youtube-collector/previous'
+            previous_pair.mkdir(parents=True)
+            (previous_pair / 'profile.json').write_text('retained profile')
             (backup / 'issuer.state').write_text('present')
             (backup / 'collector-prechange.state').write_text('stopped' if case == 'rollback_stopped' else 'running')
             (backup / 'collector.revision').write_text(old_revision)
