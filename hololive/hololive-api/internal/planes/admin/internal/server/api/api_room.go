@@ -156,11 +156,6 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 		return
 	}
 
-	if added {
-		// 봇 plane 적용이 실패해도 PG에는 커밋됐으므로 활동 로그는 남긴다(재시도는 409라 다시 남지 않는다).
-		h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
-	}
-
 	if err != nil {
 		h.respondACLMutationError(ctx, c, err, "Failed to add room", slog.String("room", req.Room))
 
@@ -172,6 +167,8 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 
 		return
 	}
+
+	h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
 
 	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
 }
@@ -201,11 +198,6 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
-	if removed {
-		// AddRoom과 같다: PG 커밋 뒤 봇 plane 적용 실패여도 활동 로그는 남긴다.
-		h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
-	}
-
 	if err != nil {
 		h.respondACLMutationError(ctx, c, err, "Failed to remove room", slog.String("room", req.Room))
 
@@ -217,6 +209,8 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 
 		return
 	}
+
+	h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
 
 	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
 }
