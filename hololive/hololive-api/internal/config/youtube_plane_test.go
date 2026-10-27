@@ -385,6 +385,7 @@ func TestYouTubePlaneLiveCheckRetentionBounds(t *testing.T) {
 
 		cfg := testYouTubePlaneConfig(t)
 		set(&cfg.Retention, 3650*24*time.Hour)
+
 		// retention은 항상 켜져 있으므로 replay audit 보존도 가장 긴 증거 보존을 덮어야 한다.
 		cfg.Retention.ReplayAuditAge = 3650 * 24 * time.Hour
 

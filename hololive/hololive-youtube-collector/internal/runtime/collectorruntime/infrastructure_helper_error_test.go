@@ -12,6 +12,7 @@ import (
 func TestStartYouTubeJSHelperFailureNamesActionOnce(t *testing.T) {
 	// helper 경로를 주지 않으면 다른 후보를 찾지 않고 기동 전에 실패한다.
 	collector := fixtureCollectorConfig(t)
+
 	collector.YouTubeJSNodePath = ""
 	collector.YouTubeJSScriptPath = ""
 

@@ -29,8 +29,8 @@ func TestACLRoomsChatIDMigrationDropsNonCanonicalRowsAndRejectsNewOnes(t *testin
 	for _, attempt := range []string{"first", "reapply"} {
 		require.NoError(t, applyMigrationFile(ctx, pool, dir, aclRoomsChatIDMigration), attempt)
 
-		rows, err := pool.Query(ctx, `SELECT room_id FROM acl_rooms ORDER BY room_id`)
-		require.NoError(t, err)
+		rows, queryErr := pool.Query(ctx, `SELECT room_id FROM acl_rooms ORDER BY room_id`)
+		require.NoError(t, queryErr)
 
 		var kept []string
 

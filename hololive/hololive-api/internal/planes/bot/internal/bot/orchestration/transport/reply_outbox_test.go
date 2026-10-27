@@ -190,6 +190,7 @@ func TestDispatchStoredReplyKeepsNotSentOutOfOutcomeUnknown(t *testing.T) {
 	require.False(t, IsReplyOutcomeUnknown(err))
 
 	lost := &iris.TransportError{Op: "post /reply", Err: io.ErrUnexpectedEOF, Idempotent: true}
+
 	_, err = DispatchStoredReply(t.Context(), &stubBotClient{acceptErr: lost}, "room-1", payload, "hololive:v1:message:m-1:reply:0")
 	require.True(t, IsReplyOutcomeUnknown(err))
 }

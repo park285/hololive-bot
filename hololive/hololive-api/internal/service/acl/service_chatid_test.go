@@ -104,6 +104,7 @@ func TestReloadRejectsStoredNonChatIDRoom(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
+
 	store.settings[dbKeyEnabled] = testDBEnabledTrue
 	store.settings[dbKeyMode] = string(ACLModeWhitelist)
 	store.rooms[roomKey{roomID: "room-legacy", listType: listTypeWhitelist}] = struct{}{}

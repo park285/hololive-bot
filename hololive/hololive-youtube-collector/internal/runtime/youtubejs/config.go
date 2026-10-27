@@ -243,7 +243,7 @@ func canonicalHelperFile(path, name string) (string, error) {
 		return "", fmt.Errorf("resolve %s path: %w", name, err)
 	}
 
-	info, err := os.Stat(resolved) //nolint:gosec // G703 오탐: 신뢰된 운영 설정 경로를 검증하는 호출이다.
+	info, err := os.Stat(resolved)
 	if err != nil {
 		return "", fmt.Errorf("inspect %s path: %w", name, err)
 	}

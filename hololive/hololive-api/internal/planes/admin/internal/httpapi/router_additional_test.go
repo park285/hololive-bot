@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	jsonv2 "encoding/json/v2"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -288,23 +287,6 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("wrong api key status = %d, want %d", rec.Code, http.StatusForbidden)
 	}
-}
-
-func provideTestAPIRouter(t *testing.T, cfg *apiconfig.AdminPlaneConfig) (*gin.Engine, error) {
-	t.Helper()
-
-	router, err := ProvideAPIRouter(
-		t.Context(),
-		cfg,
-		slog.New(slog.DiscardHandler),
-		(&server.Handler{}).DomainHandlers(),
-		sharedtestutil.NewTestCacheService(t.Context(), t),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("provide API router: %w", err)
-	}
-
-	return router, nil
 }
 
 func testRouterConfig() *apiconfig.AdminPlaneConfig {
