@@ -11,6 +11,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/retry"
 
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -45,10 +46,10 @@ func (r *durableRuntime) Start(ctx context.Context) {
 
 	r.cancel = cancel
 	r.wg.Go(func() {
-		panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-inbox-queue-sampler", func() { r.inboxSampler.Run(runCtx) })
+		panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-inbox-queue-sampler", func() { r.inboxSampler.Run(runCtx) })
 	})
 	r.wg.Go(func() {
-		panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-outbox-queue-sampler", func() { r.outboxSampler.Run(runCtx) })
+		panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-outbox-queue-sampler", func() { r.outboxSampler.Run(runCtx) })
 	})
 
 	if r.inboxEnabled {
@@ -56,7 +57,7 @@ func (r *durableRuntime) Start(ctx context.Context) {
 
 		for range r.inboxWorkers {
 			r.wg.Go(func() {
-				panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
+				panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
 			})
 		}
 	}
@@ -66,17 +67,17 @@ func (r *durableRuntime) Start(ctx context.Context) {
 
 		for range r.outboxWorkers {
 			r.wg.Go(func() {
-				panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
+				panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
 			})
 		}
 
 		r.wg.Go(func() {
-			panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-reply-handoff-reconciler", func() { r.runReplyHandoffReconciler(runCtx) })
+			panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-reply-handoff-reconciler", func() { r.runReplyHandoffReconciler(runCtx) })
 		})
 	}
 
 	r.wg.Go(func() {
-		panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-maintenance", func() { r.runMaintenance(runCtx) })
+		panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-maintenance", func() { r.runMaintenance(runCtx) })
 	})
 }
 
@@ -101,7 +102,7 @@ func (r *durableRuntime) Stop(ctx context.Context) error {
 
 	if r.stopDone == nil {
 		r.stopDone = make(chan struct{})
-		go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-stop-wait", func() { r.wg.Wait(); close(r.stopDone) })
+		go panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-stop-wait", func() { r.wg.Wait(); close(r.stopDone) })
 	}
 
 	done := r.stopDone

@@ -401,6 +401,7 @@ DB maintenance 명령(아래 `db-maintenance-exec.sh`로 실행하는 migration�
 
 - Migration 326 이후 binary를 그 이전 binary로 되돌리면 lease 없는 `accepted` 행은 이전 reclaim(`lease_until <= now`)에 걸리지 않아 같은 방의 후속 응답을 영구히 막습니다. Ingress를 quiesce한 뒤 `bot_reply_outbox` executor `attempt_timeout` 지평 동안 reconciler가 `accepted`를 0으로 배수하면 위 preflight가 통과합니다. Preflight는 `accepted`가 남은 rollback을 막습니다. Migration 332 이후에는 326 이전 binary가 쓰는 lease 있는 `accepted`를 엄격 CHECK가 거부하므로 그 binary로는 되돌리지 않고, 326·333을 포함한 직전 릴리스까지만 되돌립니다.
 
+- iris-client-go v4로 올린 binary부터 `bot_webhook_inbox.payload`는 Iris 원본 webhook 본문이고 claim 때 `webhook.DecodeMessage`로 복원합니다. v3 binary가 저장한 Message JSON 행은 새 binary가 복원하지 못해 poison으로 abandon하고, 반대로 v4 행은 v3 binary가 읽지 못합니다. 어느 방향으로 바꾸든 교체 전에 Iris webhook ingress를 quiesce하고 현재 binary로 inbox 비종결 행(`pending`·`processing`)을 0으로 배수합니다. 0이 아니면 교체하지 않습니다.
 - Preflight 성공과 ingress quiescence를 같은 maintenance window에서 유지한 경우에만 이전 image를 재배포합니다. Schema rollback은 계속 [`Migration ordering`](#3-durable-webhook-or-reply-backlog-grows)의 writer quiescence 규칙을 따릅니다.
 - Recheck Iris webhook/reply, scheduler-dependent commands, manual triggers, and dashboard health after rollback.
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
@@ -41,12 +40,7 @@ func buildNotificationEgress(
 		return nil, errors.New("postgres is required")
 	}
 
-	irisClient, err := irisproviders.ProvideIrisClient(
-		&appConfig.Iris,
-		logger,
-		iris.WithBaseURL(appConfig.Iris.BaseURL),
-		iris.WithBotToken(appConfig.Iris.BotToken),
-	)
+	irisClient, err := irisproviders.ProvideIrisClient(ctx, &appConfig.Iris, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)
 	}

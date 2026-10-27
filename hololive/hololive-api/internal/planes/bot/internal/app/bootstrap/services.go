@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v3/iris"
-
 	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -31,12 +29,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneCon
 		}
 	}()
 
-	irisClient, err := irisproviders.ProvideIrisClient(
-		&appConfig.Iris,
-		logger,
-		iris.WithBaseURL(appConfig.Iris.BaseURL),
-		iris.WithBotToken(appConfig.Iris.BotToken),
-	)
+	irisClient, err := irisproviders.ProvideIrisClient(ctx, &appConfig.Iris, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide iris client: %w", err)
 	}

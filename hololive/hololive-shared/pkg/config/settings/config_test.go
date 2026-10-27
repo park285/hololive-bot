@@ -162,6 +162,35 @@ func TestLoadIrisConfigUsesSeparateTrimmedTokens(t *testing.T) {
 	}
 }
 
+func TestLoadIrisConfigParsesTypedTransportAndTLSInputs(t *testing.T) {
+	t.Setenv("IRIS_TRANSPORT", "")
+	t.Setenv("IRIS_H3_CA_CERT_FILE", " /run/iris-ca.pem ")
+	t.Setenv("IRIS_H3_SERVER_NAME", " iris.example ")
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", " , 100.64.0.1 ,")
+	t.Setenv("APP_ENV", "production")
+
+	config, err := LoadIrisConfig()
+	if err != nil {
+		t.Fatalf("LoadIrisConfig() error = %v", err)
+	}
+
+	if config.Transport != "h3" || config.H3CACertFile != "/run/iris-ca.pem" || config.H3ServerName != "iris.example" {
+		t.Fatalf("Iris TLS inputs = (%q,%q,%q), want h3 default and trimmed values", config.Transport, config.H3CACertFile, config.H3ServerName)
+	}
+
+	if len(config.BaseURLAllowedHosts) != 1 || config.BaseURLAllowedHosts[0] != "100.64.0.1" || !config.ValidateBaseURLFileStat {
+		t.Fatalf("Iris URL file policy = (%q,%t), want trimmed allowlist and production stat validation", config.BaseURLAllowedHosts, config.ValidateBaseURLFileStat)
+	}
+
+	for _, alias := range []string{"quic", "http3", "http"} {
+		t.Setenv("IRIS_TRANSPORT", alias)
+
+		if _, err := LoadIrisConfig(); err == nil || !strings.Contains(err.Error(), "IRIS_TRANSPORT") {
+			t.Fatalf("LoadIrisConfig(IRIS_TRANSPORT=%s) error = %v, want startup rejection", alias, err)
+		}
+	}
+}
+
 func TestValidateIrisEgressInputs(t *testing.T) {
 	valid := IrisConfig{BaseURL: "https://iris.example.invalid", WebhookToken: "w", BotToken: "b"}
 	if err := ValidateIrisEgressInputs(&valid); err != nil {
@@ -176,6 +205,7 @@ func TestValidateIrisEgressInputs(t *testing.T) {
 		{name: "webhook token", mutate: func(c *IrisConfig) { c.WebhookToken = " " }, want: "IRIS_WEBHOOK_TOKEN is required"},
 		{name: "bot token", mutate: func(c *IrisConfig) { c.BotToken = "" }, want: "IRIS_BOT_TOKEN is required"},
 		{name: "base URL", mutate: func(c *IrisConfig) { c.BaseURL = "" }, want: "IRIS_BASE_URL or IRIS_BASE_URL_FILE is required"},
+		{name: "base URL file without allowlist", mutate: func(c *IrisConfig) { c.BaseURLFile = "/run/iris_base_url" }, want: "IRIS_BASE_URL_FILE requires IRIS_H3_SERVER_NAME or IRIS_BASE_URL_ALLOWED_HOSTS"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config := valid

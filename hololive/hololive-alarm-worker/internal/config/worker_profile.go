@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -150,13 +150,13 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 // 발송 전에 멈추면 행은 lease_ms 만료 뒤 다음 recovery tick(recovery_interval_ms)에서야 재발송
 // 대상이 된다. 이 합은 재발송까지의 최소 회수 지연일 뿐이며, 실제 창에는 첫 admission 뒤의 retry
 // backoff·attempt timeout·DrainBatch 주기가 더해진다. 따라서 이 검사는 필요조건이다. 기준은 Iris
-// admission 보존 기간에서 그 차이를 흡수할 여유를 뺀 irisdurable.AutomaticReplayHorizon이며,
+// admission 보존 기간에서 그 차이를 흡수할 여유를 뺀 iris.ReplyAutomaticReplayHorizon(iris-client-go 공개 상수)이며,
 // 지평과 같은 값도 여유를 잠식하므로 거부한다.
 //
 // 다른 두 경로의 lease는 이 지평과 묶이지 않는다. 발송 전 claim만 회수하는 notification_delivery의
 // lease는 profile 값이 아니며, youtube_delivery의 lock_timeout_ms가 만료한 SENDING 행은 격리된다.
 func alarmDispatchRecoveryExceedsReplayHorizon(settings AlarmDispatchWorkerSettings) bool {
-	horizon := irisdurable.AutomaticReplayHorizon.Milliseconds()
+	horizon := iris.ReplyAutomaticReplayHorizon.Milliseconds()
 	lease, recovery := settings.LeaseMS, settings.RecoveryIntervalMS
 
 	// 양수가 아닌 값은 positiveValueProblems가 보고한다. 양수 lease에서는 뺄셈이 넘치지 않는다.

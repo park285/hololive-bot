@@ -29,9 +29,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/iris-client-go/v3/webhook"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v4/webhook"
 	"github.com/park285/shared-go/v2/pkg/health"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -39,6 +38,7 @@ import (
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/readiness"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )

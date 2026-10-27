@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 const (
@@ -316,7 +317,7 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 
 	runSearch := func(query, warnMessage string, dst *[]sharedmodel.SearchResult) {
 		wg.Go(func() {
-			panicguard.Run(s.logger, panicguard.BackgroundTask, "major-event-summary-search", func() {
+			panicguard.Run(s.logger, panicscope.BackgroundTask, "major-event-summary-search", func() {
 				found, ok := s.searchWithTimeout(ctx, query, warnMessage)
 				if !ok {
 					return

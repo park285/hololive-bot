@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/webhook"
-	"github.com/park285/iris-client-go/v3/webhooksign"
+	"github.com/park285/iris-client-go/v4/webhook"
+	"github.com/park285/iris-client-go/v4/webhooksign"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,8 +47,6 @@ func TestBuildDurableBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *te
 		token     = "test-token"
 		messageID = "message-id-malformed-first"
 	)
-
-	t.Setenv("IRIS_WEBHOOK_TOKEN", "env-token-must-not-win")
 
 	admitter := &recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)}
 	handler := buildDurableBotWebhookHandlerForTest(t, admitter)
@@ -81,8 +79,6 @@ func TestBuildDurableBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *te
 func TestBuildDurableBotWebhookHandlerWiresPrometheusMetrics(t *testing.T) {
 	const token = "test-token"
 
-	t.Setenv("IRIS_WEBHOOK_TOKEN", token)
-
 	handler := buildDurableBotWebhookHandlerForTest(t, &recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)})
 
 	request := newSignedBotWebhookTestRequest(t, token, "message-id-metrics", "{invalid-json")
@@ -96,8 +92,6 @@ func TestBuildDurableBotWebhookHandlerWiresPrometheusMetrics(t *testing.T) {
 
 func TestBuildDurableBotWebhookHandlerRequiresHMAC(t *testing.T) {
 	const token = "test-token"
-
-	t.Setenv("IRIS_WEBHOOK_TOKEN", token)
 
 	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
 	cacheClient := cachemocks.NewLenientClient()
@@ -179,7 +173,7 @@ type recordingWebhookAdmitter struct {
 	messages chan *webhook.Message
 }
 
-func (a *recordingWebhookAdmitter) AdmitMessage(_ context.Context, msg *webhook.Message) error {
+func (a *recordingWebhookAdmitter) AdmitMessage(_ context.Context, msg *webhook.Message, _ []byte) error {
 	select {
 	case a.messages <- msg:
 	default:

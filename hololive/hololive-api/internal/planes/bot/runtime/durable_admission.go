@@ -3,7 +3,6 @@ package botruntime
 import (
 	"context"
 	"crypto/rand"
-	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,8 +11,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v4/webhook"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -24,6 +23,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -41,8 +41,10 @@ type durableAdmitter struct {
 	totals *workercontract.Counters
 }
 
-func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message) error {
-	if err := a.admit(ctx, msg); err != nil {
+// AdmitMessage는 Iris 원본 본문(body)을 inbox에 저장한다. 같은 Message는 claim 때 webhook.DecodeMessage로 복원하므로
+// SDK Message의 Go 표현을 저장 형식으로 삼지 않는다.
+func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message, body []byte) error {
+	if err := a.admit(ctx, msg, body); err != nil {
 		logDurableError(a.logger, "admit durable webhook", err)
 
 		return fmt.Errorf("admit durable webhook: %w", err)
@@ -51,9 +53,13 @@ func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message)
 	return nil
 }
 
-func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error {
+func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message, body []byte) error {
 	if msg == nil || msg.JSON == nil {
 		return errors.New("admit webhook: message identity is missing")
+	}
+
+	if len(body) == 0 {
+		return errors.New("admit webhook: raw body is missing")
 	}
 
 	if a.accept != nil && !a.accept(ctx, msg) {
@@ -71,13 +77,8 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error 
 
 	roomID := strings.TrimSpace(msg.Room)
 
-	payload, err := jsonv2.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("marshal webhook inbox payload: %w", err)
-	}
-
 	result, err := a.inbox.AdmitResult(ctx, durability.InboxMessage{
-		MessageID: messageID, RoomID: roomID, OrderingKey: "room:" + roomID, Payload: payload,
+		MessageID: messageID, RoomID: roomID, OrderingKey: "room:" + roomID, Payload: body,
 	})
 	if a.totals != nil {
 		a.totals.RecordAdmission(result)
@@ -307,9 +308,8 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 		return err
 	}
 
-	var msg webhook.Message
-
-	if err := jsonv2.Unmarshal(claim.Payload, &msg); err != nil {
+	msg, err := webhook.DecodeMessage(claim.Payload)
+	if err != nil {
 		settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
 		defer cancel()
 
@@ -319,7 +319,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 			return errors.Join(err, abandonErr)
 		}
 
-		return fmt.Errorf("unmarshal: %w", err)
+		return fmt.Errorf("decode stored webhook: %w", err)
 	}
 
 	claimed, err := r.claimCommand(ctx, claim, token)
@@ -338,13 +338,13 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	heartbeatCtx, stopHeartbeat := context.WithCancel(commandCtx)
 	heartbeatDone := make(chan struct{})
 
-	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-claim-heartbeat", func() {
+	go panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-claim-heartbeat", func() {
 		defer close(heartbeatDone)
 
 		r.runClaimHeartbeat(heartbeatCtx, claim.MessageID, token, claim.LeaseUntil, cancelCommand)
 	})
 
-	err = r.bot.ProcessMessage(commandCtx, &msg)
+	err = r.bot.ProcessMessage(commandCtx, msg)
 	if commandCtx.Err() != nil {
 		err = errors.Join(err, commandCtx.Err())
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"

@@ -31,6 +31,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 type StartHooks struct {
@@ -164,7 +165,7 @@ func startAlarmScheduler(ctx context.Context, errCh chan<- error, hooks StartHoo
 	alarmCtx := alarmSchedulerContext(ctx, hooks)
 
 	go func() {
-		if err := panicguard.RunE(hooks.Logger, panicguard.BackgroundTask, "alarm-scheduler", func() error {
+		if err := panicguard.RunE(hooks.Logger, panicscope.BackgroundTask, "alarm-scheduler", func() error {
 			return hooks.StartAlarmScheduler(alarmCtx)
 		}); err != nil {
 			handleAlarmSchedulerError(alarmCtx, err, errCh, hooks.Logger)

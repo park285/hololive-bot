@@ -71,6 +71,7 @@ func NewPresetClient(baseURL, apiKey, model string, logger *slog.Logger, opts ..
 		openaipreset.WithHTTPClient(newLLMHTTPClient()),
 		openaipreset.WithLogger(logger),
 		openaipreset.WithWebSearch(resolveWebSearch(o)),
+		openaipreset.WithMaxRetries(llmMaxRetries),
 	}
 
 	if o.Temperature != nil {

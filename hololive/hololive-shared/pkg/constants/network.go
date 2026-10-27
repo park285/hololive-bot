@@ -88,10 +88,16 @@ var DatabaseConfig = struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
+	// ConnMaxLifetimeJitter·ConnMaxIdleTime은 shared-go v2.18.0이 숨은 기본값을 없애며 호출자 명시로 옮긴 값이다.
+	// 이전 실효값(수명/5 지터, 유휴 30분)을 그대로 둔다.
+	ConnMaxLifetimeJitter time.Duration
+	ConnMaxIdleTime       time.Duration
 }{
-	MaxOpenConns:    8,
-	MaxIdleConns:    2,
-	ConnMaxLifetime: 5 * time.Minute,
+	MaxOpenConns:          8,
+	MaxIdleConns:          2,
+	ConnMaxLifetime:       5 * time.Minute,
+	ConnMaxLifetimeJitter: time.Minute,
+	ConnMaxIdleTime:       30 * time.Minute,
 }
 
 var QueryTimeout = struct {

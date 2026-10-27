@@ -24,7 +24,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"

@@ -91,10 +91,12 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		CancelRequest: config.CancelRequest,
 		AcquirePolicy: config.AcquirePolicy,
 		Pool: pgxdb.PoolConfig{
-			MinConns:        minConns,
-			MaxConns:        maxConns,
-			ConnMaxLifetime: constants.DatabaseConfig.ConnMaxLifetime,
-			PingTimeout:     time.Second,
+			MinConns:              minConns,
+			MaxConns:              maxConns,
+			ConnMaxLifetime:       constants.DatabaseConfig.ConnMaxLifetime,
+			ConnMaxLifetimeJitter: constants.DatabaseConfig.ConnMaxLifetimeJitter,
+			ConnMaxIdleTime:       constants.DatabaseConfig.ConnMaxIdleTime,
+			AcquirePingTimeout:    time.Second,
 		},
 		Ping: pgxdb.PingConfig{
 			PingTimeout: constants.RequestTimeout.DatabasePing,

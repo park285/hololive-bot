@@ -34,6 +34,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 const (
@@ -156,7 +158,7 @@ func (c *Cache) runEpochReconciliation(ctx context.Context) {
 	triggers := make(chan string, 1)
 	workerDone := make(chan struct{})
 
-	go panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-epoch-reconciler", func() {
+	go panicguard.Run(c.logger, panicscope.BackgroundTask, "member-cache-epoch-reconciler", func() {
 		defer close(workerDone)
 
 		c.runEpochReconcileWorker(ctx, triggers)

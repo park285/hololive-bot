@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // Start는 YouTube 조회와 캐시 복구 루프를 실행하고 context 취소 시 종료한다.
@@ -22,12 +23,12 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-youtube", func() error {
+		return panicguard.RunE(s.logger, panicscope.BackgroundTask, "alarm-scheduler-youtube", func() error {
 			return s.runLoop(egCtx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
 		})
 	})
 	eg.Go(func() error {
-		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-cache-recovery", func() error {
+		return panicguard.RunE(s.logger, panicscope.BackgroundTask, "alarm-scheduler-cache-recovery", func() error {
 			return s.runAlarmCacheRecoveryLoop(egCtx)
 		})
 	})

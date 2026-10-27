@@ -33,6 +33,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -151,7 +152,7 @@ func (c *Cache) startEpochReconciliation(ctx context.Context) {
 	c.epochRuntimeCancel = cancel
 	c.epochRuntimeDone = done
 
-	go panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-epoch-subscription", func() {
+	go panicguard.Run(c.logger, panicscope.BackgroundTask, "member-cache-epoch-subscription", func() {
 		defer close(done)
 
 		c.runEpochReconciliation(runtimeCtx)

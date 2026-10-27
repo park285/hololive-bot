@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // helperMaxOldSpaceMiB는 collector 메모리 상한 안의 Node helper 몫(192MiB, 관측 최대 RSS 176MiB)입니다.
@@ -186,7 +188,7 @@ func (h *Helper) spawn(cfg *Config) error {
 
 	h.cmd = cmd
 
-	go panicguard.Run(nil, panicguard.BackgroundTask, "youtubejs-helper-wait", func() {
+	go panicguard.Run(nil, panicscope.BackgroundTask, "youtubejs-helper-wait", func() {
 		defer close(h.waited)
 
 		h.waitErr = cmd.Wait()

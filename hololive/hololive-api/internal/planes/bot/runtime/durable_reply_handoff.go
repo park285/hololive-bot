@@ -9,11 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 const (
@@ -154,7 +155,7 @@ func (r *durableRuntime) reconcileReplyHandoffBatch(ctx context.Context, _ func(
 
 	for _, claim := range claims {
 		wg.Go(func() {
-			panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-reply-handoff-check", func() {
+			panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-reply-handoff-check", func() {
 				r.reconcileReplyHandoff(ctx, claim)
 			})
 		})

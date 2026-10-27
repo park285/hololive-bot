@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
@@ -118,8 +118,8 @@ func (s *stubBotIrisClient) GetReplyStatus(context.Context, string) (*iris.Reply
 	return &iris.ReplyStatusSnapshot{}, nil
 }
 
-func (s *stubBotIrisClient) Ping(context.Context) bool {
-	return true
+func (s *stubBotIrisClient) Ping(context.Context) error {
+	return nil
 }
 
 func (s *stubBotIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {

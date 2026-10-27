@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/irisdurable"
 	"github.com/park285/shared-go/v2/pkg/irisdurable/contracttest"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -78,9 +78,11 @@ func TestIrisDurableContract(t *testing.T) {
 			NewTerminalConflict:   func() error { return contractIrisConflict(t, iris.HTTPErrorCodeClientRequestIDOutcomeUnknown) },
 		},
 		Retention: &contracttest.RetentionFixture{
-			ReplyOutboxRetention:   terminalRetention,
-			AutomaticReplayHorizon: ReplyOutboxAutomaticReplayHorizon,
-			InboxTerminalRetention: terminalRetention,
+			IrisAdmissionRetention:     iris.ReplyAdmissionRetention,
+			IrisAutomaticReplayHorizon: iris.ReplyAutomaticReplayHorizon,
+			ReplyOutboxRetention:       terminalRetention,
+			AutomaticReplayHorizon:     ReplyOutboxAutomaticReplayHorizon,
+			InboxTerminalRetention:     terminalRetention,
 		},
 	})
 }

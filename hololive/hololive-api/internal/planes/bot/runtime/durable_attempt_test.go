@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v4/webhook"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
@@ -23,7 +23,7 @@ func TestInboxAttemptTrackingEndsOnReturnAndPanic(t *testing.T) {
 			inbox := durability.NewInboxRepository(pool)
 			_, err := inbox.Admit(t.Context(), durability.InboxMessage{
 				MessageID: "message:attempt", RoomID: testRoomID, OrderingKey: testOrderingKey,
-				Payload: []byte(`{"msg":"!help","room":"room-1","json":{"message_id":"attempt"}}`),
+				Payload: testWebhookBody(t, "attempt", "!help"),
 			})
 			require.NoError(t, err)
 

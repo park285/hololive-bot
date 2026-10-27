@@ -25,9 +25,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
 func (h *StreamHandler) GetChannel(c *gin.Context) {

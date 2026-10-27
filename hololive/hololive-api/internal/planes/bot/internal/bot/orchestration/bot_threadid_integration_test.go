@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v4/webhook"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -100,14 +100,23 @@ func TestBotProcessMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T
 		"a redelivered inbound message must reuse the same clientRequestId so iris can dedup it")
 }
 
-func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan iris.ReplyRequest) {
+// capturedReplyRequest는 Iris /reply 요청 본문 가운데 이 테스트가 검사하는 필드다. SDK v4가 ReplyRequest alias를 삭제했다.
+type capturedReplyRequest struct {
+	ClientRequestID *string `json:"clientRequestId,omitempty"`
+	Type            string  `json:"type"`
+	Room            string  `json:"room"`
+	Data            string  `json:"data"`
+	ThreadID        *string `json:"threadId,omitempty"`
+}
+
+func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan capturedReplyRequest) {
 	t.Helper()
 
-	reqCh := make(chan iris.ReplyRequest, capacity)
+	reqCh := make(chan capturedReplyRequest, capacity)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/reply", func(w http.ResponseWriter, r *http.Request) {
-		var req iris.ReplyRequest
+		var req capturedReplyRequest
 
 		if err := jsonv2.UnmarshalRead(r.Body, &req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -140,7 +149,9 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 	srv.Start()
 	t.Cleanup(srv.Close)
 
-	irisClient := iris.NewAPIClient(srv.URL, "bot-token", iris.WithTransport("http1"))
+	irisClient, err := iris.NewClient(iris.WithBaseURL(srv.URL), iris.WithBotToken("bot-token"), iris.WithTransport(iris.TransportHTTP1), iris.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
 	messageStrings := loadSeededBotMessageStrings(t)
 	b := &Bot{
 		logger:          newBotTestLogger(),
@@ -171,7 +182,7 @@ func handleHelpMessage(t *testing.T, b *Bot, messageID string) {
 	}))
 }
 
-func receiveReplyRequest(t *testing.T, reqCh <-chan iris.ReplyRequest) iris.ReplyRequest {
+func receiveReplyRequest(t *testing.T, reqCh <-chan capturedReplyRequest) capturedReplyRequest {
 	t.Helper()
 
 	select {
@@ -181,5 +192,5 @@ func receiveReplyRequest(t *testing.T, reqCh <-chan iris.ReplyRequest) iris.Repl
 		t.Fatal("did not receive /reply request in time")
 	}
 
-	return iris.ReplyRequest{}
+	return capturedReplyRequest{}
 }

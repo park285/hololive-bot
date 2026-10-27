@@ -21,6 +21,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
@@ -280,7 +281,7 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	defer r.finishStart()
 
 	r.tasks.Go(func() {
-		panicguard.Run(r.Logger, panicguard.BackgroundTask, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
+		panicguard.Run(r.Logger, panicscope.BackgroundTask, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
 	})
 
 	if !r.Config.Enabled {
@@ -343,8 +344,8 @@ func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name str
 	r.tasks.Go(func() {
 		defer group.Done()
 
-		panicguard.Run(r.Logger, panicguard.BackgroundTask, name, func() {
-			if err := panicguard.RunE(r.Logger, panicguard.BackgroundTask, name, func() error {
+		panicguard.Run(r.Logger, panicscope.BackgroundTask, name, func() {
+			if err := panicguard.RunE(r.Logger, panicscope.BackgroundTask, name, func() error {
 				run()
 
 				return nil

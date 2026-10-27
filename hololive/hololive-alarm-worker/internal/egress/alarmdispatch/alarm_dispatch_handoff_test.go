@@ -13,7 +13,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

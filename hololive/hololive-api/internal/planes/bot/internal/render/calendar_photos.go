@@ -20,6 +20,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 var photoClient = newCalendarPhotoHTTPClient()
@@ -91,7 +92,7 @@ func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []
 
 	for i, photoURL := range photoURLs {
 		group.Go(func() error {
-			return panicguard.RunE(nil, panicguard.BackgroundTask, "calendar-photo-fetch", func() error {
+			return panicguard.RunE(nil, panicscope.BackgroundTask, "calendar-photo-fetch", func() error {
 				slots[i] = fetchCalendarPhotoSlot(budgetCtx, photoURL)
 
 				return nil

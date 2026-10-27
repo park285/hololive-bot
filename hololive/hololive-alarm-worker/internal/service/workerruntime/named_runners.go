@@ -7,6 +7,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // 첫 오류로 형제를 취소하되 시작한 모든 작업의 종료 뒤에만 반환합니다.
@@ -19,7 +21,7 @@ func runNamedSchedulers(ctx context.Context, logger *slog.Logger, prefix string,
 		}
 
 		group.Go(func() error {
-			return panicguard.RunE(logger, panicguard.BackgroundTask, prefix+runner.Name, func() error {
+			return panicguard.RunE(logger, panicscope.BackgroundTask, prefix+runner.Name, func() error {
 				return runner.Scheduler.Start(groupCtx)
 			})
 		})

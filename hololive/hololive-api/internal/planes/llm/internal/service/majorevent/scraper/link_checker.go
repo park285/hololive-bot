@@ -36,6 +36,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // LinkChecker는 링크 유효성 검증(HEAD 후 GET fallback)을 수행한다.
@@ -110,7 +111,7 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 		}
 
 		eg.Go(func() error {
-			return panicguard.RunE(c.logger, panicguard.BackgroundTask, "major-event-link-check", func() error {
+			return panicguard.RunE(c.logger, panicscope.BackgroundTask, "major-event-link-check", func() error {
 				check := c.checkEventLink(egCtx, event)
 
 				mu.Lock()

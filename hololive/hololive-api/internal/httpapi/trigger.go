@@ -28,10 +28,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )

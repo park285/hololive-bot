@@ -87,3 +87,10 @@ func IdentifierToken(value string) string {
 
 	return Pseudonym(trimmed)
 }
+
+// LoggerPrivacyKeys는 hololive 세 runtime이 shared-go logging.Options.PrivacyKeys로 넘기는 개인 식별자 키다.
+// 내장 목록은 shared-go v2.18.0에서 사라져 서비스가 키를 소유한다. 이전 내장 목록 가운데 hololive가 실제로 로그에
+// 쓰는 키만 둬 마스킹 결과를 그대로 유지한다. 상관관계 키(room_id·user_id 등)는 넘기지 않아 보존된다.
+func LoggerPrivacyKeys() []string {
+	return []string{"room", "room_name", KeyChatID, "user_name", "thread_id"}
+}

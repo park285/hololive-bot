@@ -32,6 +32,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 type eventRepository interface {
@@ -184,7 +185,7 @@ func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
 		eg.Go(func() error {
 			result := sourceScrapeResult{source: source}
 
-			guardErr := panicguard.RunE(s.logger, panicguard.BackgroundTask, "major-event-source-scrape", func() error {
+			guardErr := panicguard.RunE(s.logger, panicscope.BackgroundTask, "major-event-source-scrape", func() error {
 				result = s.scrapeSingleSource(egCtx, source)
 
 				return nil

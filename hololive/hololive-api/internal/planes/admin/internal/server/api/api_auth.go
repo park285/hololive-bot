@@ -29,10 +29,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
 type AuthHandler struct {

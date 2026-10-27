@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
@@ -186,7 +187,7 @@ func (r *HandoffReconciler) RunOnce(ctx context.Context) (int, error) {
 
 	for i := range claims {
 		wg.Go(func() {
-			panicguard.Run(r.logger, panicguard.BackgroundTask, "youtube-delivery-handoff-check", func() {
+			panicguard.Run(r.logger, panicscope.BackgroundTask, "youtube-delivery-handoff-check", func() {
 				r.reconcile(ctx, &claims[i])
 			})
 		})

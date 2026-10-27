@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 type scrapeTriggerType string
@@ -89,7 +91,7 @@ func (s *FeedScheduler) Start(ctx context.Context) {
 	}
 
 	s.wg.Go(func() {
-		panicguard.Run(s.logger, panicguard.BackgroundTask, "major-event-feed-scheduler", func() {
+		panicguard.Run(s.logger, panicscope.BackgroundTask, "major-event-feed-scheduler", func() {
 			s.run(ctx)
 		})
 	})

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
@@ -268,7 +268,9 @@ func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.R
 		return ytlifecycle.FailurePermanent, lifecycleReasonPermanent, 0
 	case errors.Is(err, iris.ErrRateLimited):
 		return ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, deliveryRetryAfter(err)
-	case errors.Is(err, iris.ErrTransport):
+	// ErrNotSent는 요청이 나가기 전 확정 실패라 부수효과가 없다. iris-client-go v4부터 ErrTransport와 겹치지 않으므로
+	// 따로 받아 v3에서 ErrTransport로 받던 재시도 분류를 유지한다.
+	case errors.Is(err, iris.ErrTransport), errors.Is(err, iris.ErrNotSent):
 		return ytlifecycle.FailureRetryable, lifecycleReasonTransport, deliveryRetryAfter(err)
 	default:
 		observeDeliveryOutcomeUnknown(string(defaultReason))

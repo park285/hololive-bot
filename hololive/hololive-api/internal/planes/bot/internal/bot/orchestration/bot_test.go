@@ -22,12 +22,13 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 const (
@@ -72,14 +73,14 @@ func (f *fakeIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, erro
 	return &iris.RoomListResponse{}, nil
 }
 func (f *fakeIrisClient) Decrypt(context.Context, string) (string, error) { return "", nil }
-func (f *fakeIrisClient) Ping(context.Context) bool {
+func (f *fakeIrisClient) Ping(context.Context) error {
 	f.pingCalls++
 	if f.failCount > 0 {
 		f.failCount--
-		return false
+		return errors.New("iris not ready")
 	}
 
-	return true
+	return nil
 }
 
 func TestWaitUntilIrisReady_SucceedsAfterRetry(t *testing.T) {

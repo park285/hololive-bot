@@ -26,7 +26,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 
 	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"

@@ -28,10 +28,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )

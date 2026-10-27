@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 type channelAlarmRoomTargets map[domain.AlarmType]map[string]bool
@@ -144,7 +145,7 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 
 	for idx := range groups {
 		eg.Go(func() error {
-			return panicguard.RunE(g.logger, panicguard.BackgroundTask, "youtube-outbox-subscriber-lookup", func() error {
+			return panicguard.RunE(g.logger, panicscope.BackgroundTask, "youtube-outbox-subscriber-lookup", func() error {
 				g.resolveSubscriberGroup(egCtx, entries, groups[idx], results)
 
 				return nil

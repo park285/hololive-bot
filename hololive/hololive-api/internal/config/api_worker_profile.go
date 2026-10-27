@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -100,7 +100,7 @@ func apiWorkerRelationshipProblems(profile *APIWorkerProfile, workers map[string
 		problems = append(problems, "bot_webhook_inbox heartbeat must fit command stale window")
 	}
 
-	if profile.BotWebhookInbox.TerminalRetentionMS <= irisdurable.IrisReplyAdmissionRetention.Milliseconds() {
+	if profile.BotWebhookInbox.TerminalRetentionMS <= iris.ReplyAdmissionRetention.Milliseconds() {
 		problems = append(problems, "bot_webhook_inbox terminal retention must exceed Iris reply admission retention")
 	}
 

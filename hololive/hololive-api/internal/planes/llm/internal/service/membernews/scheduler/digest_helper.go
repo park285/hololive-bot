@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -192,12 +193,12 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 		roomID := rooms[i].RoomID
 
 		wg.Go(func() {
-			panicguard.Run(nil, panicguard.BackgroundTask, "member-news-digest-room", func() {
+			panicguard.Run(nil, panicscope.BackgroundTask, "member-news-digest-room", func() {
 				defer func() { <-sem }()
 
 				var roomResult digestEnqueueResult
 
-				if err := panicguard.RunE(nil, panicguard.BackgroundTask, "member-news-digest-room", func() error {
+				if err := panicguard.RunE(nil, panicscope.BackgroundTask, "member-news-digest-room", func() error {
 					roomResult = config.processRoom(ctx, config.periodKey, roomID)
 					return nil
 				}); err != nil {

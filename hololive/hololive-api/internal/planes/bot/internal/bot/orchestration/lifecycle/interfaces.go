@@ -6,7 +6,7 @@ import (
 )
 
 type IrisPinger interface {
-	Ping(ctx context.Context) bool
+	Ping(ctx context.Context) error
 }
 
 type CacheReadiness interface {

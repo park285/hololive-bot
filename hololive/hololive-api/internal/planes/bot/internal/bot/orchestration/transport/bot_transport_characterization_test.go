@@ -28,7 +28,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -143,8 +143,6 @@ type stubBotClient struct {
 	multiErr      error
 	multiAccepted *iris.ReplyAcceptedResponse
 	onMultiImage  func(call int)
-
-	pingResult bool
 
 	acceptCalls          int
 	markdownCalls        int
@@ -264,7 +262,7 @@ func (c *stubBotClient) GetReplyStatus(context.Context, string) (*iris.ReplyStat
 	return &iris.ReplyStatusSnapshot{}, nil
 }
 
-func (c *stubBotClient) Ping(context.Context) bool { return c.pingResult }
+func (c *stubBotClient) Ping(context.Context) error { return nil }
 
 func TestWithThreadIDAndFromContext(t *testing.T) {
 	t.Parallel()

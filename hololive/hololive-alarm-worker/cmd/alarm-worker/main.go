@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/observability"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 var Version = "dev"
@@ -67,7 +68,7 @@ func main() {
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}, "alarm-worker.log", sharedlogging.Options{OTel: appConfig.Tracing.Enabled, AsyncStdout: true})
+			}, "alarm-worker.log", sharedlogging.Options{OTel: appConfig.Tracing.Enabled, AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 			if err != nil {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}

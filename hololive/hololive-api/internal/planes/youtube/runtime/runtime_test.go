@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -710,7 +711,7 @@ func testYouTubePlaneConfig(t *testing.T) apiconfig.YouTubePlaneConfig {
 
 	var sourceSettings apiconfig.SourceObservationWorkerSettings
 
-	if err := workercontract.DecodeWorkerSettings(loaded, apiconfig.WorkerSourceObservation, &sourceSettings); err != nil {
+	if err := jsonv2.Unmarshal(loaded.Profile.Workers[apiconfig.WorkerSourceObservation].Settings, &sourceSettings); err != nil {
 		t.Fatal(err)
 	}
 

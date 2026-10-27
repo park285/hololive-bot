@@ -82,7 +82,7 @@ func TestMigratorPoolRequiresExplicitValidSSLMode(t *testing.T) {
 				return
 			}
 
-			pool, err := pgxdb.OpenPoolDSN(t.Context(), dsn, pgxdb.Options{})
+			pool, err := pgxdb.OpenPoolDSN(t.Context(), dsn, migrationPoolOptions())
 			if pool != nil {
 				pool.Close()
 				t.Fatal("invalid sslmode unexpectedly opened a migration pool")

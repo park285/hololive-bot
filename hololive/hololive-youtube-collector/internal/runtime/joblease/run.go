@@ -10,6 +10,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
@@ -45,8 +46,8 @@ func (r *Repository) Run(ctx context.Context, lease Lease, run RunFunc) LeaseRun
 
 	result := make(chan error, 1)
 
-	go panicguard.Run(nil, panicguard.BackgroundTask, "collection-job-run", func() {
-		result <- panicguard.RunE(nil, panicguard.BackgroundTask, "collection-job-run", func() error {
+	go panicguard.Run(nil, panicscope.BackgroundTask, "collection-job-run", func() {
+		result <- panicguard.RunE(nil, panicscope.BackgroundTask, "collection-job-run", func() error {
 			return run(runCtx, lease.Proof())
 		})
 	})

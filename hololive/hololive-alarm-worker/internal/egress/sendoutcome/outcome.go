@@ -7,7 +7,7 @@ import (
 	"net"
 	"slices"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 // Kind는 발송 결과의 증거를 나타냅니다. 재시도 허용은 각 저장소 정책이 결정합니다. Success는 Iris durable
@@ -49,6 +49,11 @@ func Classify(err error) Kind {
 		return Classify(cause) == TransportAmbiguous
 	}) {
 		return TransportAmbiguous
+	}
+
+	// ErrNotSent는 요청이 나가기 전에 확정된 실패라 결과 불명이 아니다(iris-client-go v4는 ErrTransport와 겹치지 않게 둔다).
+	if errors.Is(err, iris.ErrNotSent) {
+		return Failed
 	}
 
 	if errors.Is(err, iris.ErrTransport) {

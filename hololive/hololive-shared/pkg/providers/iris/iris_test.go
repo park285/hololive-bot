@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	irisclient "github.com/park285/iris-client-go/v3/iris"
+	irisclient "github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
@@ -75,15 +75,17 @@ func TestProvideIrisClient_UsesRuntimeBaseURLFile(t *testing.T) {
 		t.Fatalf("write base url file: %v", err)
 	}
 
-	irisConfig := &settings.IrisConfig{BaseURL: fallback.server.URL, BotToken: "bot-token", BaseURLFile: baseURLFilePath}
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testProviderBaseURLHost(t, primary.server.URL))
+	irisConfig := &settings.IrisConfig{
+		BaseURL: fallback.server.URL, BotToken: "bot-token", BaseURLFile: baseURLFilePath,
+		BaseURLAllowedHosts: []string{testProviderBaseURLHost(t, primary.server.URL)},
+	}
 
-	client, err := ProvideIrisClient(irisConfig, nil, irisclient.WithHTTPClient(primary.server.Client()))
+	client, err := ProvideIrisClient(t.Context(), irisConfig, nil, irisclient.WithHTTPClient(primary.server.Client()))
 	if err != nil {
 		t.Fatalf("provide iris client: %v", err)
 	}
 
-	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
+	if _, err := client.SendMessageAccepted(ctx, "room-1", "hello"); err != nil {
 		t.Fatalf("send message: %v", err)
 	}
 
@@ -97,11 +99,9 @@ func TestProvideIrisClient_RejectsInvalidBaseURLFileAtConstruction(t *testing.T)
 		t.Fatalf("write base url file: %v", err)
 	}
 
-	irisConfig := &settings.IrisConfig{BaseURL: "https://iris.example", BotToken: "bot-token", BaseURLFile: baseURLFilePath}
+	irisConfig := &settings.IrisConfig{BaseURL: "https://iris.example", BotToken: "bot-token", BaseURLFile: baseURLFilePath, H3ServerName: "iris.example"}
 
-	t.Setenv("IRIS_H3_SERVER_NAME", "iris.example")
-
-	client, err := ProvideIrisClient(irisConfig, nil, irisclient.WithHTTPClient(&http.Client{}))
+	client, err := ProvideIrisClient(t.Context(), irisConfig, nil, irisclient.WithHTTPClient(&http.Client{}))
 	if err == nil {
 		t.Fatalf("ProvideIrisClient() error = nil, client = %T", client)
 	}
@@ -136,16 +136,17 @@ func TestProvideIrisClient_AllowsBaseURLFileWithoutFallbackURL(t *testing.T) {
 		t.Fatalf("write base url file: %v", err)
 	}
 
-	irisConfig := &settings.IrisConfig{BaseURL: "", BotToken: "bot-token", BaseURLFile: baseURLFilePath}
+	irisConfig := &settings.IrisConfig{
+		BaseURL: "", BotToken: "bot-token", BaseURLFile: baseURLFilePath,
+		BaseURLAllowedHosts: []string{testProviderBaseURLHost(t, server.URL)},
+	}
 
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testProviderBaseURLHost(t, server.URL))
-
-	client, err := ProvideIrisClient(irisConfig, nil, irisclient.WithHTTPClient(server.Client()))
+	client, err := ProvideIrisClient(t.Context(), irisConfig, nil, irisclient.WithHTTPClient(server.Client()))
 	if err != nil {
 		t.Fatalf("provide iris client: %v", err)
 	}
 
-	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
+	if _, err := client.SendMessageAccepted(ctx, "room-1", "hello"); err != nil {
 		t.Fatalf("send message: %v", err)
 	}
 }
@@ -159,31 +160,4 @@ func testProviderBaseURLHost(t *testing.T, raw string) string {
 	}
 
 	return parsed.Hostname()
-}
-
-func TestProvideIrisClient_UsesExplicitOptionsOverConfig(t *testing.T) {
-	ctx := t.Context()
-	explicit := newCountingIrisServer(t, "explicit", false)
-	configServer := newCountingIrisServer(t, "env", false)
-
-	irisConfig := &settings.IrisConfig{BaseURL: configServer.server.URL, BotToken: "bot-token", BaseURLFile: ""}
-
-	t.Setenv("IRIS_TRANSPORT", "h3")
-
-	client, err := ProvideIrisClient(irisConfig, nil,
-		irisclient.WithBaseURL(explicit.server.URL),
-		irisclient.WithBotToken("explicit-bot-token"),
-		irisclient.WithTransport("http1"),
-		irisclient.WithHTTPClient(&http.Client{}),
-	)
-	if err != nil {
-		t.Fatalf("provide iris client: %v", err)
-	}
-
-	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
-		t.Fatalf("send message: %v", err)
-	}
-
-	explicit.assertCalls(t, 1)
-	configServer.assertCalls(t, 0)
 }

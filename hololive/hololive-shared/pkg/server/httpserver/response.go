@@ -25,7 +25,8 @@ import (
 	"maps"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
+
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
 const responseKeyError = "error"

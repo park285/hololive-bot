@@ -30,12 +30,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
 type alarmHTTPWriter interface {

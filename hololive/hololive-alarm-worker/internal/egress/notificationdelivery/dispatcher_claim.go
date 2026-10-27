@@ -8,6 +8,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // 실행 슬롯이 있는 방의 첫 항목만 claim합니다. 대기 항목을 미리 임대하지 않아
@@ -52,7 +53,7 @@ func (d *Dispatcher) processReady(ctx context.Context) {
 					workers.Go(func() {
 						defer func() { completed <- item.RoomID }()
 
-						panicguard.Run(d.logger, panicguard.BackgroundTask, "delivery-dispatch-item", func() {
+						panicguard.Run(d.logger, panicscope.BackgroundTask, "delivery-dispatch-item", func() {
 							d.processItem(ctx, &item)
 						})
 					})

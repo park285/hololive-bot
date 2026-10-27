@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
@@ -121,7 +121,7 @@ func TestValidateWorkerProfileAlarmRecoveryDelayWithinReplayHorizon(t *testing.T
 		t.Fatal(err)
 	}
 
-	horizon := irisdurable.AutomaticReplayHorizon.Milliseconds()
+	horizon := iris.ReplyAutomaticReplayHorizon.Milliseconds()
 	lease := profile.AlarmDispatch.LeaseMS
 	recovery := profile.AlarmDispatch.RecoveryIntervalMS
 
@@ -252,7 +252,7 @@ func TestLoadWorkerProfileNotificationDeliveryTimingBoundaries(t *testing.T) {
 
 				var settings NotificationDeliveryWorkerSettings
 
-				if err := workercontract.DecodeWorkerSettings(loaded, "notification_delivery", &settings); err != nil {
+				if err := jsonv2.Unmarshal(loaded.Profile.Workers["notification_delivery"].Settings, &settings); err != nil {
 					t.Fatal(err)
 				}
 

@@ -9,7 +9,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	contractssettings "github.com/kapu/hololive-api/internal/contracts/settings"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
@@ -17,6 +16,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )

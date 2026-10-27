@@ -57,6 +57,11 @@ func ValidateIrisEgressInputs(iris *IrisConfig) error {
 		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
+	// URL 파일의 host는 bot token을 실은 요청의 목적지라 허용 집합 없이 받지 않는다(fail-closed).
+	if strings.TrimSpace(iris.BaseURLFile) != "" && strings.TrimSpace(iris.H3ServerName) == "" && len(iris.BaseURLAllowedHosts) == 0 {
+		return errors.New("IRIS_BASE_URL_FILE requires IRIS_H3_SERVER_NAME or IRIS_BASE_URL_ALLOWED_HOSTS")
+	}
+
 	return nil
 }
 

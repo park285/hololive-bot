@@ -14,8 +14,8 @@ require (
 	github.com/kapu/hololive-youtube-collector v0.0.0
 	github.com/mmcdole/gofeed v1.5.0
 	github.com/openai/openai-go/v3 v3.86.0
-	github.com/park285/iris-client-go/v3 v3.2.0
-	github.com/park285/shared-go/v2 v2.17.0
+	github.com/park285/iris-client-go/v4 v4.0.0
+	github.com/park285/shared-go/v2 v2.18.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.64.1
 	github.com/shirou/gopsutil/v4 v4.26.9
@@ -123,7 +123,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
-	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.32.0 // indirect
 	golang.org/x/net v0.62.0 // indirect

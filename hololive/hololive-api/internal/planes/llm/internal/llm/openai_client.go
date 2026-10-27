@@ -75,6 +75,7 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
 		HTTPClient: newLLMHTTPClient(),
+		MaxRetries: llmMaxRetries,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create openai compatible json generator: %w", err)
@@ -92,6 +93,11 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		costTracker:     o.CostTracker,
 	}, nil
 }
+
+// llmMaxRetries는 LLM 요청의 SDK 재시도 수다. LLM 호출은 응답이 유실되면 과금과 웹 검색 tool 사용이 중복될 수 있는
+// 비멱등 비용 작업이고 재시도를 정당화할 계약·독립 근거가 없으므로(workspace 실패 경로 규칙) 재시도하지 않는다.
+// 실패는 그대로 호출자에게 드러난다. 이전 실효값(shared-go v2.18.0 전)은 SDK 기본 2회 재시도(최대 3요청)였다.
+const llmMaxRetries = 0
 
 func newLLMHTTPClient() *http.Client {
 	return httputil.NewProfiledClient(httputil.TransportProfile{

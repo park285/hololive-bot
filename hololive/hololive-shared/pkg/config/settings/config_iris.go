@@ -22,12 +22,20 @@ package settings
 
 import "time"
 
+// IrisConfig는 Iris egress client의 typed 입력이다. SDK(iris-client-go v4)는 IRIS_* env를 읽지 않으므로
+// 이 값이 client 옵션(WithBaseURL·WithBotToken·WithTransport·WithH3CACertFile·WithH3ServerName)의 유일한 원천이다.
 type IrisConfig struct {
-	BaseURL                   string
-	BaseURLFile               string
-	WebhookToken              string // env: IRIS_WEBHOOK_TOKEN
-	BotToken                  string // env: IRIS_BOT_TOKEN
-	HTTPTimeout               time.Duration
-	HTTPDialTimeout           time.Duration
-	HTTPResponseHeaderTimeout time.Duration
+	BaseURL      string
+	BaseURLFile  string
+	WebhookToken string // env: IRIS_WEBHOOK_TOKEN
+	BotToken     string // env: IRIS_BOT_TOKEN
+	HTTPTimeout  time.Duration
+	// Transport는 iris.ParseTransport로 검증한 h3 또는 http1이다. env를 비우면 SDK 기본인 h3이다.
+	Transport    string // env: IRIS_TRANSPORT
+	H3CACertFile string // env: IRIS_H3_CA_CERT_FILE
+	H3ServerName string // env: IRIS_H3_SERVER_NAME
+	// BaseURLAllowedHosts는 IRIS_BASE_URL_FILE URL host allowlist다. H3ServerName과 함께 허용 집합을 이룬다.
+	BaseURLAllowedHosts []string // env: IRIS_BASE_URL_ALLOWED_HOSTS (쉼표 구분)
+	// ValidateBaseURLFileStat은 APP_ENV=production일 때 참이며 URL 파일의 경로·소유·권한을 항상 검사한다.
+	ValidateBaseURLFileStat bool
 }

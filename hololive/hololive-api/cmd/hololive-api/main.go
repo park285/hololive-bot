@@ -16,6 +16,7 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/observability"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 var Version = "dev"
@@ -89,7 +90,7 @@ func newHololiveAPILogger(config *apiconfig.RuntimeConfig) (*slog.Logger, io.Clo
 		MaxBackups: config.Logging.MaxBackups,
 		MaxAgeDays: config.Logging.MaxAgeDays,
 		Compress:   config.Logging.Compress,
-	}, "hololive-api.log", sharedlogging.Options{OTel: config.Tracing.Enabled, AsyncStdout: true})
+	}, "hololive-api.log", sharedlogging.Options{OTel: config.Tracing.Enabled, AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 	if err != nil {
 		return nil, nil, fmt.Errorf("enable file logging: %w", err)
 	}

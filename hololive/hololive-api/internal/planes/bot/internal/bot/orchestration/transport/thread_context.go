@@ -25,7 +25,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 type (

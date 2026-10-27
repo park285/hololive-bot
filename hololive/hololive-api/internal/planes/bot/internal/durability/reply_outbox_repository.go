@@ -31,7 +31,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 var (
@@ -74,8 +74,8 @@ func (o ReplyOutboxInsertOutcome) String() string {
 
 const (
 	ReplyOutboxMaxAttempts = int32(5)
-	// 자동 replay 지평은 스택 공통 irisdurable 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
-	ReplyOutboxAutomaticReplayHorizon = irisdurable.AutomaticReplayHorizon
+	// 자동 replay 지평은 iris-client-go 공개 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
+	ReplyOutboxAutomaticReplayHorizon = iris.ReplyAutomaticReplayHorizon
 )
 
 const (

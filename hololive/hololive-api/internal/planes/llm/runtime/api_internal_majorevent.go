@@ -28,12 +28,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	majoreventcontracts "github.com/kapu/hololive-api/internal/contracts/majorevent"
 	"github.com/kapu/hololive-api/internal/contracts/subscription"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )

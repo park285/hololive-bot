@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v4/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -168,7 +168,7 @@ func (c *acceptedTestIrisClient) SendMessageAccepted(ctx context.Context, room, 
 	return &iris.ReplyAcceptedResponse{RequestID: "reply-1", Delivery: testDeliveryQueued, Room: room, Type: "text"}, nil
 }
 
-func (c *testIrisClient) Ping(context.Context) bool { return true }
+func (c *testIrisClient) Ping(context.Context) error { return nil }
 
 func (c *testIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
 	return &iris.RoomListResponse{}, nil

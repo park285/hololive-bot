@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -62,6 +63,6 @@ func (r *BotRuntime) startWorkerProfileChecker(ctx context.Context) {
 	}
 
 	r.tasksWG.Go(func() {
-		panicguard.Run(r.Logger, panicguard.BackgroundTask, "stack-worker-profile-checker", func() { r.workerProfileChecker.Run(ctx) })
+		panicguard.Run(r.Logger, panicscope.BackgroundTask, "stack-worker-profile-checker", func() { r.workerProfileChecker.Run(ctx) })
 	})
 }

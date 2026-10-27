@@ -25,7 +25,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/webhook"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 

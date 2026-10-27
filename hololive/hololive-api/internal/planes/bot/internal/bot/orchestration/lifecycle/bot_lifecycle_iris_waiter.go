@@ -69,13 +69,14 @@ func (l *BotLifecycle) runIrisReadyWaitLoop(
 	for {
 		attempt++
 
-		if l.pingIrisReady(waitCtx, pingTimeout) {
+		pingErr := l.pingIrisReady(waitCtx, pingTimeout)
+		if pingErr == nil {
 			l.logIrisReadyAfterRetry(attempt, startedAt)
 
 			return nil
 		}
 
-		if loggedAt, ok := l.logIrisNotReadyRetry(attempt, retryInterval, startedAt, lastWarnLoggedAt); ok {
+		if loggedAt, ok := l.logIrisNotReadyRetry(attempt, retryInterval, startedAt, lastWarnLoggedAt, pingErr); ok {
 			lastWarnLoggedAt = loggedAt
 		}
 
@@ -85,11 +86,16 @@ func (l *BotLifecycle) runIrisReadyWaitLoop(
 	}
 }
 
-func (l *BotLifecycle) pingIrisReady(ctx context.Context, pingTimeout time.Duration) bool {
+// pingIrisReady는 GET /ready를 한 번 확인한다. SDK Ping은 단일 시도이므로 재시도 간격과 로그는 이 waiter가 소유한다.
+func (l *BotLifecycle) pingIrisReady(ctx context.Context, pingTimeout time.Duration) error {
 	pingCtx, pingCancel := context.WithTimeout(ctx, pingTimeout)
 	defer pingCancel()
 
-	return l.irisClient.Ping(pingCtx)
+	if err := l.irisClient.Ping(pingCtx); err != nil {
+		return fmt.Errorf("ping iris: %w", err)
+	}
+
+	return nil
 }
 
 func (l *BotLifecycle) logIrisReadyAfterRetry(attempt int, startedAt time.Time) {
@@ -104,7 +110,7 @@ func (l *BotLifecycle) logIrisReadyAfterRetry(attempt int, startedAt time.Time) 
 	)
 }
 
-func (l *BotLifecycle) logIrisNotReadyRetry(attempt int, retryInterval time.Duration, startedAt, lastWarnLoggedAt time.Time) (time.Time, bool) {
+func (l *BotLifecycle) logIrisNotReadyRetry(attempt int, retryInterval time.Duration, startedAt, lastWarnLoggedAt time.Time, pingErr error) (time.Time, bool) {
 	now := time.Now()
 	if attempt != 1 && !lastWarnLoggedAt.IsZero() && now.Sub(lastWarnLoggedAt) < time.Minute {
 		return lastWarnLoggedAt, false
@@ -115,6 +121,7 @@ func (l *BotLifecycle) logIrisNotReadyRetry(attempt int, retryInterval time.Dura
 		slog.Int("attempt", attempt),
 		slog.Duration("retry_interval", retryInterval),
 		slog.Duration("elapsed", now.Sub(startedAt)),
+		slog.Any("error", pingErr),
 	)
 
 	return now, true

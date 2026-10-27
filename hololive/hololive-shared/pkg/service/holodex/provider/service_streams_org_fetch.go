@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // orgFetchResult는 org별 Holodex primary 조회 결과다. 호출자 취소로 끝난 org는 원천 실패가 아니므로
@@ -61,7 +63,7 @@ func runOrgFetchesParallel(ctx context.Context, parallelism int, orgs []string, 
 			var outcome orgFetchOutcome
 
 			// panic은 org 실패로 센다. panicguard가 복구 사실을 로그로 남긴다.
-			if err := panicguard.RunE(nil, panicguard.BackgroundTask, "holodex-org-fetch", func() error {
+			if err := panicguard.RunE(nil, panicscope.BackgroundTask, "holodex-org-fetch", func() error {
 				outcome = runOrgFetch(ctx, org, run)
 
 				return nil

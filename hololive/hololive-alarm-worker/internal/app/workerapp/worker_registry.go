@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 type alarmWorkerRegistryState struct {
@@ -92,10 +93,10 @@ func (s *alarmWorkerRegistryState) Start(ctx context.Context) {
 		return
 	}
 
-	go panicguard.Run(nil, panicguard.BackgroundTask, "alarm-worker-profile-checker", func() { s.checker.Run(ctx) })
+	go panicguard.Run(nil, panicscope.BackgroundTask, "alarm-worker-profile-checker", func() { s.checker.Run(ctx) })
 
 	for workerID, sampler := range s.samplers {
-		go panicguard.Run(nil, panicguard.BackgroundTask, "alarm-worker-queue-sampler-"+workerID, func() { sampler.Run(ctx) })
+		go panicguard.Run(nil, panicscope.BackgroundTask, "alarm-worker-queue-sampler-"+workerID, func() { sampler.Run(ctx) })
 	}
 }
 

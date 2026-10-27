@@ -33,6 +33,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // outboxCleanupLoopInterval은 운영 dispatcher의 완료 알림 정리 주기다.
@@ -85,7 +86,7 @@ func (d *Dispatcher) Start(ctx context.Context) {
 		return
 	}
 
-	go panicguard.Run(d.logger, panicguard.BackgroundTask, "youtube-outbox-dispatcher", func() {
+	go panicguard.Run(d.logger, panicscope.BackgroundTask, "youtube-outbox-dispatcher", func() {
 		defer d.started.Store(false)
 
 		d.runJoined(ctx)
@@ -125,13 +126,13 @@ func (d *Dispatcher) startBackgroundLoop(
 	loop func(context.Context),
 ) {
 	if waitGroup == nil {
-		go panicguard.Run(d.logger, panicguard.BackgroundTask, name, func() { loop(ctx) })
+		go panicguard.Run(d.logger, panicscope.BackgroundTask, name, func() { loop(ctx) })
 
 		return
 	}
 
 	waitGroup.Go(func() {
-		panicguard.Run(d.logger, panicguard.BackgroundTask, name, func() { loop(ctx) })
+		panicguard.Run(d.logger, panicscope.BackgroundTask, name, func() { loop(ctx) })
 	})
 }
 

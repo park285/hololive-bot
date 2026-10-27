@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -161,7 +161,9 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 
 	defer server.Close()
 
-	client := iris.NewAPIClient(server.URL, "test-token", iris.WithTransport("http1"), iris.WithHTTPClient(server.Client()))
+	client, err := iris.NewClient(iris.WithBaseURL(server.URL), iris.WithBotToken("test-token"), iris.WithTransport(iris.TransportHTTP1), iris.WithHTTPClient(server.Client()))
+	require.NoError(t, err)
+
 	sender := buildNotificationSender(client, true, workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom})
 	clientRequestID := "hololive-alarm:request-123"
 

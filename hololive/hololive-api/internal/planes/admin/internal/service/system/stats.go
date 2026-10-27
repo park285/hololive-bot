@@ -36,6 +36,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
@@ -172,7 +173,7 @@ func (c *Collector) refreshCurrentStats(ctx context.Context) (*SystemStats, erro
 	)
 
 	// DoChan goroutine의 panic은 호출자의 복구 경계 밖이므로 공유 수집 안에서 오류로 바꾼다.
-	if err := panicguard.RunE(nil, panicguard.BackgroundTask, "system-stats-refresh", func() error {
+	if err := panicguard.RunE(nil, panicscope.BackgroundTask, "system-stats-refresh", func() error {
 		stats, collectErr = c.collectCurrentStats(ctx)
 
 		return nil
@@ -288,7 +289,7 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 		}
 
 		wg.Go(func() {
-			if err := panicguard.RunE(nil, panicguard.BackgroundTask, "system-stats-service-goroutines", func() error {
+			if err := panicguard.RunE(nil, panicscope.BackgroundTask, "system-stats-service-goroutines", func() error {
 				goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
 
 				results[i] = ServiceGoroutines{

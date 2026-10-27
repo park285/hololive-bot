@@ -23,11 +23,13 @@ package transport
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -172,6 +174,24 @@ func TestDispatchStoredReplyReissuesFailedConflictWithStoredPayload(t *testing.T
 	second, _ := capturedSendOptions(t, client.optsByAttempt[1])
 	assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
 	assert.Equal(t, "hololive:v1:message:m-1:reply:0:r1", second)
+}
+
+// ErrNotSent(전송 전 확정 실패)는 iris-client-go v4에서 ErrTransport가 아니므로 결과 불명으로 승격하지 않는다.
+// 응답 소실(ErrTransport)만 outcome_unknown이다.
+func TestDispatchStoredReplyKeepsNotSentOutOfOutcomeUnknown(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"kind":"text","message":"persisted payload"}`)
+
+	notSent := &iris.TransportError{Op: "post /reply", Err: fmt.Errorf("%w: resolve h3 dial addr", iris.ErrNotSent)}
+	_, err := DispatchStoredReply(t.Context(), &stubBotClient{acceptErr: notSent}, "room-1", payload, "hololive:v1:message:m-1:reply:0")
+	require.ErrorIs(t, err, iris.ErrNotSent)
+	require.ErrorIs(t, err, iris.ErrRetryable)
+	require.False(t, IsReplyOutcomeUnknown(err))
+
+	lost := &iris.TransportError{Op: "post /reply", Err: io.ErrUnexpectedEOF, Idempotent: true}
+	_, err = DispatchStoredReply(t.Context(), &stubBotClient{acceptErr: lost}, "room-1", payload, "hololive:v1:message:m-1:reply:0")
+	require.True(t, IsReplyOutcomeUnknown(err))
 }
 
 func TestStoredReplyKindsStayDispatchable(t *testing.T) {

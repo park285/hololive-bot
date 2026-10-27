@@ -181,8 +181,9 @@ release pair, not as extra keys or aliases in the new profile.
 
 ### Build and CLI prerequisites
 
-- All five consumers retain the genuine published shared-go `v2.17.0` pins and
-  sums; api, alarm-worker and shared also pin iris-client-go `v3.2.0`. No
+- All five consumers pin the published shared-go `v2.18.0` and its sums; api,
+  alarm-worker and shared also pin `github.com/park285/iris-client-go/v4`
+  `v4.0.0`. Both tags must exist before a production build. No
   unpublished external replace or invented tag is a production input.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
   production builds. Use root/API/alarm version `11.0.0`, a clean full

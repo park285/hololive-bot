@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -224,7 +225,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 	notifications *[]*domain.AlarmNotification,
 ) {
 	eg.Go(func() error {
-		return panicguard.RunE(c.logger, panicguard.BackgroundTask, "youtube-channel-check", func() error {
+		return panicguard.RunE(c.logger, panicscope.BackgroundTask, "youtube-channel-check", func() error {
 			channelNotifications, err := c.buildChannelNotifications(
 				ctx,
 				work.channelID,

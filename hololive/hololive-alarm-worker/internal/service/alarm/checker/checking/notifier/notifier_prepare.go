@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -44,7 +45,7 @@ func (n *Notifier) prepareOutcomes(ctx context.Context, notifications []*domain.
 		notification := notifications[i]
 
 		eg.Go(func() error {
-			return panicguard.RunE(n.logger, panicguard.BackgroundTask, "alarm-notifier-prepare", func() error {
+			return panicguard.RunE(n.logger, panicscope.BackgroundTask, "alarm-notifier-prepare", func() error {
 				if err := egCtx.Err(); err != nil {
 					// ctx 취소: claim 미수행이므로 발송 대상에서 제외(누락 아님). zero-value outcome 으로 어떤 카운터에도 넣지 않는다.
 					outcomes[i] = prepareOutcome{notification: notification}

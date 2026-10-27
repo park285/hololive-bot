@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
@@ -154,10 +154,10 @@ func TestAPIWorkerProfileDurableBoundaries(t *testing.T) {
 		valid    bool
 	}{
 		{name: "retention equal admission", workerID: WorkerBotWebhookInbox, mutate: func(s map[string]any, _ *workercontract.WorkerProfile) {
-			s["terminal_retention_ms"] = irisdurable.IrisReplyAdmissionRetention.Milliseconds()
+			s["terminal_retention_ms"] = iris.ReplyAdmissionRetention.Milliseconds()
 		}},
 		{name: "retention beyond admission", workerID: WorkerBotWebhookInbox, valid: true, mutate: func(s map[string]any, _ *workercontract.WorkerProfile) {
-			s["terminal_retention_ms"] = irisdurable.IrisReplyAdmissionRetention.Milliseconds() + 1
+			s["terminal_retention_ms"] = iris.ReplyAdmissionRetention.Milliseconds() + 1
 		}},
 		{name: "heartbeat equal command stale", workerID: WorkerBotWebhookInbox, mutate: func(s map[string]any, _ *workercontract.WorkerProfile) {
 			s["heartbeat_interval_ms"] = BotCommandStaleAfter.Milliseconds()
