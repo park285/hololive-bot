@@ -1168,6 +1168,7 @@ TABLE youtube_content_absence_slots
   CONSTRAINT chk_youtube_content_absence_kind CHECK ((observation_kind = ANY (ARRAY['video_list'::text, 'shorts_list'::text])))
   CONSTRAINT youtube_content_absence_slots_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_content_absence_slots_pkey PRIMARY KEY (channel_id, observation_kind, scheduled_for)
+  INDEX CREATE INDEX idx_youtube_content_absence_slots_effective ON public.youtube_content_absence_slots USING btree (channel_id, observation_kind, effective_at)
   INDEX CREATE INDEX idx_youtube_content_absence_slots_observation_id ON public.youtube_content_absence_slots USING btree (observation_id)
 
 TABLE youtube_content_alarm_tracking
