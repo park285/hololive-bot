@@ -26,7 +26,7 @@
     └── docker-compose.osaka2.yml   # native Osaka2 d configuration/path validation
 ```
 
-`go.work` ties the root module, the Go runtime/shared/dbtest modules under `hololive/`, and sibling modules `../shared-go` and `../iris-client-go` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
+`go.work` ties the Go runtime/shared/dbtest modules under `hololive/` and sibling modules `../shared-go` and `../iris-client-go` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
 
 ## Runtime Services
 

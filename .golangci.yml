@@ -341,7 +341,6 @@ formatters:
       no-prefix-comments: true
 
     gofumpt:
-      module-path: github.com/kapu/hololive-bot-workspace
       extra:
         group-params: true
 

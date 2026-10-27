@@ -41,8 +41,7 @@ one pass:
   `go mod tidy` drift, `go vet`, golangci-lint (staticcheck, formatters and
   modernize included), NilAway, build, unit and race tests, and PostgreSQL
   integration.
-- Dependency hygiene: `go list -m -u` and `govulncheck` for the root module and
-  every `go.work` module.
+- Dependency hygiene: `go list -m -u` and `govulncheck` for every owned `go.work` module.
 - Workspace compatibility: canonical module vet and the configured Go build/test scopes in `scripts/ci/local-ci.sh`.
 
 A docs-only push (`docs/**` and `*.md` only, no `.go`/`.sh`/`.sql` under
