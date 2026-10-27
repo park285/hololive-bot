@@ -23,7 +23,7 @@ const (
 	IrisBotTokenEnv     = "IRIS_BOT_TOKEN"     //nolint:gosec // G101 오탐: 값은 자격증명이 아니라 환경변수 이름이다.
 )
 
-// UseProfileFixture는 worker profile 파일 env를 fixture 경로로 세운다. fixture는 identity를 소유한 runtime의
+// UseProfileFixture는 worker profile 파일 env를 fixture 경로로 세운다. 이 fixture는 identity를 소유한 runtime의
 // testdata에 두고, 호출자가 경로를 넘긴다.
 func UseProfileFixture(t *testing.T, path string) {
 	t.Helper()
@@ -42,7 +42,7 @@ func LoadProfileFixture(t *testing.T, identity workercontract.Identity, path str
 	return loaded
 }
 
-// SharedTestProfileFixture는 shared 패키지 시험 전용 profile이다. hololive/api identity를 빌려 registry·metrics
+// SharedTestProfileFixture는 shared 패키지 시험 전용 profile이다. 여기서는 hololive/api identity를 빌려 registry·metrics
 // 조립만 시험하며, hololive-api runtime fixture(internal/config/configtest/testdata)와는 따로 바뀐다.
 func SharedTestProfileFixture(t *testing.T) string {
 	t.Helper()

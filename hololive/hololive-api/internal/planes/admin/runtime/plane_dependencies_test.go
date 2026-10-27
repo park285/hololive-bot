@@ -34,7 +34,7 @@ func (r *recordingIrisRooms) GetRooms(context.Context) (*iris.RoomListResponse, 
 }
 
 // admin plane은 process 조립이 넘긴 Iris 방 목록 조회와 ACL Service를 HTTP 경로에서 그대로 쓴다.
-// joined-rooms는 주입된 bot 소유 client를 호출하고, 방 추가는 bot ingress가 판정에 쓰는 같은 ACL 인스턴스를
+// 방 목록 조회(joined-rooms)는 주입된 bot 소유 client를 호출하고, 방 추가는 bot ingress가 판정에 쓰는 같은 ACL 인스턴스를
 // 응답 전에 바꾼다.
 func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
 	gin.SetMode(gin.TestMode)

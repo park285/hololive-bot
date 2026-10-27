@@ -47,7 +47,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-//nolint:gosec // 이 값은 자격 증명이 아니라 고정된 구성 오류 메시지다.
 type LLMSchedulerRuntime struct {
 	lifecycle.Managed
 
@@ -283,6 +282,7 @@ func buildLLMSchedulerRuntimeComponents(
 		memberNewsMonthlyScheduler,
 		httpServers,
 	)
+
 	runtime.MajorEventSubscriptions = majorEventRepository
 	runtime.MemberNews = memberNewsService
 

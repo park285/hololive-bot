@@ -11,9 +11,9 @@ import (
 	"net/http"
 	"strings"
 
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
-
 	"github.com/park285/shared-go/v2/pkg/httputil"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 func (c *Client) postJSON[T any](ctx context.Context, path string, body any) (T, error) {

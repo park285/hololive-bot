@@ -26,8 +26,6 @@ import (
 )
 
 type orderedSettingsApplier struct {
-	testSettingsApplier
-
 	mu      sync.Mutex
 	targets []int
 	entered chan struct{}

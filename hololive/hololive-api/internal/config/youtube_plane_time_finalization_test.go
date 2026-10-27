@@ -4,10 +4,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/kapu/hololive-api/internal/config/configtest"
-
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 

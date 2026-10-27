@@ -9,7 +9,7 @@ import (
 )
 
 // saveTestTemplate는 운영의 본문 변경(migration upsert)과 같은 SQL로 기본·override 본문을 바꾼다.
-// row_version이 바뀌므로 Renderer는 캐시 무효화 호출 없이 다음 렌더부터 새 본문을 써야 한다.
+// 이때 row_version이 바뀌므로 Renderer는 캐시 무효화 호출 없이 다음 렌더부터 새 본문을 써야 한다.
 func saveTestTemplate(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey, channelID *string, body string) {
 	t.Helper()
 
@@ -20,6 +20,7 @@ func saveTestTemplate(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey, 
 		ON CONFLICT (template_key, channel_id) WHERE channel_id IS NOT NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now()`
 
 	var err error
+
 	if channelID == nil {
 		_, err = pool.Exec(t.Context(), upsertDefault, key, body)
 	} else {

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/config/configtest"
-
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -29,29 +28,25 @@ func setAdminPlaneEnv(t *testing.T) {
 }
 
 // loadAdminPlaneRuntime은 LoadRuntime이 admin plane에 적용하는 공통 env 단계와 역할 검증을 그대로 거친다.
-func loadAdminPlaneRuntime(t *testing.T) (*AdminPlaneConfig, error) {
+func loadAdminPlaneRuntime(t *testing.T) error {
 	t.Helper()
 
 	if err := loadProcessEnv(); err != nil {
-		return nil, err
+		return err
 	}
 
 	config, err := loadAdminPlaneConfig()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := config.Validate(); err != nil {
-		return nil, err
-	}
-
-	return config, nil
+	return config.Validate()
 }
 
 func TestAdminPlaneBootsWithoutIrisEgressTokens(t *testing.T) {
 	setAdminPlaneEnv(t)
 
-	if _, err := loadAdminPlaneRuntime(t); err != nil {
+	if err := loadAdminPlaneRuntime(t); err != nil {
 		t.Fatalf("admin plane load error = %v", err)
 	}
 
@@ -75,7 +70,7 @@ func TestAdminPlaneIgnoresAccidentalIrisEgressInputs(t *testing.T) {
 	t.Setenv(settingstest.IrisBotTokenEnv, "accidental-egress-token")
 	t.Setenv("IRIS_BASE_URL", "http://iris.invalid")
 
-	if _, err := loadAdminPlaneRuntime(t); err != nil {
+	if err := loadAdminPlaneRuntime(t); err != nil {
 		t.Fatalf("admin plane load error = %v, want nil without Iris worker profile fetch", err)
 	}
 }
@@ -84,7 +79,7 @@ func TestAdminPlaneDefaultEnforcesCORSOrigins(t *testing.T) {
 	setAdminPlaneEnv(t)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 
-	_, err := loadAdminPlaneRuntime(t)
+	err := loadAdminPlaneRuntime(t)
 	if err == nil || !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true") {
 		t.Fatalf("admin plane load error = %v, want missing CORS_ALLOWED_ORIGINS error", err)
 	}
@@ -98,7 +93,7 @@ func TestAdminPlaneRequiresHolodexKey(t *testing.T) {
 			setAdminPlaneEnv(t)
 			t.Setenv(key, "")
 
-			_, err := loadAdminPlaneRuntime(t)
+			err := loadAdminPlaneRuntime(t)
 			if err == nil || !strings.Contains(err.Error(), want) {
 				t.Fatalf("admin plane load error = %v, want %q", err, want)
 			}
@@ -112,7 +107,7 @@ func TestPlaneLoadersIgnoreInvalidYouTubeCollectorEnv(t *testing.T) {
 		setAdminPlaneEnv(t)
 		t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
 
-		if _, err := loadAdminPlaneRuntime(t); err != nil {
+		if err := loadAdminPlaneRuntime(t); err != nil {
 			t.Fatalf("admin plane load error = %v, want success when collector env is invalid", err)
 		}
 	})

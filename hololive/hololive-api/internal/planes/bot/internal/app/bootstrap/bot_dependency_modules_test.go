@@ -24,9 +24,6 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
-// ACL seed(KAKAO_ROOMS)는 chatID만 받으므로 fixture도 signed i64 문자열이다.
-const testRoomA = "1001"
-
 func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 	t.Parallel()
 

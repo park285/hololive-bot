@@ -5,11 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-api/internal/config/configtest"
-
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

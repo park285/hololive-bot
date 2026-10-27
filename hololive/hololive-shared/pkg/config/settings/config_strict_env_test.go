@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// invalidBoolValue는 shared-go bool 수용 집합(1/0, true/false, yes/no, y/n, on/off)에 없는 값이다.
-const invalidBoolValue = "maybe"
-
 // 숫자·bool env의 잘못된 값은 기본값으로 바뀌지 않고 기동 실패로 드러나야 한다.
 // 각 행은 공통 형식 검사가 다시 쓰는 공유 parser 하나를 대표하며,
 // 해당 구획을 보관하지 않는 runtime에서도 같은 거절이 유지된다.

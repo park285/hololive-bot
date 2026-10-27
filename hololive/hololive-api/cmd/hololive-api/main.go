@@ -169,7 +169,7 @@ const rerunNotificationFlag = "--rerun-notification="
 const notificationRerunTimeout = 5 * time.Minute
 
 // runNotificationRerun은 `hololive-api --rerun-notification=<kind>` 운영 명령이다. 결과 JSON을 stdout에 쓴다.
-// exit 0은 오류 없이 끝났다는 뜻이며 일부 방 실패는 결과의 status(partial)와 failed로 보인다. 같은 주·월 알림이 이미
+// 종료 코드 0은 오류 없이 끝났다는 뜻이며 일부 방 실패는 결과의 status(partial)와 failed로 보인다. 같은 주·월 알림이 이미
 // 실행 중이면 exit 2, 그 밖의 실패는 exit 1이다.
 func runNotificationRerun(args []string, stdout, stderr io.Writer, run func(context.Context, string) (notification.Result, error)) (handled bool, exitCode int) {
 	if len(args) != 1 {
@@ -187,6 +187,7 @@ func runNotificationRerun(args []string, stdout, stderr io.Writer, run func(cont
 	result, err := run(ctx, kind)
 	if err != nil {
 		code := 1
+
 		if errors.Is(err, notification.ErrNotificationInProgress) {
 			code = 2
 		}
@@ -228,9 +229,9 @@ func rerunNotification(ctx context.Context, kind string) (notification.Result, e
 	return result, nil
 }
 
-// newRerunNotificationLogger는 운영 CLI 전용 logger다. stdout에는 Result JSON 한 줄만 남아야 하고, CLI는 실행 중인
+// newRerunNotificationLogger는 운영 CLI 전용 logger다. 표준 출력에는 Result JSON 한 줄만 남아야 하고, CLI는 실행 중인
 // 서버와 같은 container에서 돌므로 서버의 회전 로그 파일과 archiver를 함께 건드리면 안 된다. 그래서 파일 lane 없는
-// 콘솔 구성(Dir 빈 값, Closer nil)으로만 만든다. shared-go 콘솔 handler는 os.Stdout으로 쓰므로, main이 결과 writer를
+// 콘솔 구성(Dir 빈 값, Closer nil)으로만 만든다. 공용 shared-go 콘솔 handler는 os.Stdout으로 쓰므로, main이 결과 writer를
 // 잡아 둔 뒤 여기서 os.Stdout을 stderr로 돌린다. 라이브러리가 stdout에 직접 쓰는 출력도 함께 stderr로 간다.
 func newRerunNotificationLogger(config *apiconfig.RuntimeConfig) (*slog.Logger, error) {
 	os.Stdout = os.Stderr

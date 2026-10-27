@@ -11,12 +11,11 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/kapu/hololive-api/internal/config/configtest"
-
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"

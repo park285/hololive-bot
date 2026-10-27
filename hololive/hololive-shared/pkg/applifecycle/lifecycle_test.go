@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,19 +162,4 @@ func TestLogHelpers_HandleNilLogger(t *testing.T) {
 		logInfo(nil, "info", slog.String("key", "value"))
 		logError(nil, "error", errors.New("boom"))
 	})
-}
-
-func receiveLifecycleTestValue[T any](t *testing.T, ch <-chan T) T {
-	t.Helper()
-
-	select {
-	case value := <-ch:
-		return value
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for lifecycle hook")
-	}
-
-	var zero T
-
-	return zero
 }

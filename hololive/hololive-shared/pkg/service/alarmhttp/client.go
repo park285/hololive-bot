@@ -198,7 +198,7 @@ func (c *Client) CountAlarmEntries(ctx context.Context) (int, error) {
 	return *result.Count, nil
 }
 
-// alarmTypeStrings는 domain 알림 종류를 wire 문자열 배열로 바꾼다. nil은 nil로 두어 직렬화 결과를 바꾸지 않는다.
+// alarmTypeStrings는 domain 알림 종류를 wire 문자열 배열로 바꾼다. 입력이 nil이면 nil로 두어 직렬화 결과를 바꾸지 않는다.
 func alarmTypeStrings(types domain.AlarmTypes) []string {
 	if types == nil {
 		return nil

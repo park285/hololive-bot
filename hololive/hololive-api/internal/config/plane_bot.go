@@ -80,7 +80,7 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	return config, nil
 }
 
-// loadProcessEnv는 .env를 읽는다. env 형식은 각 plane config가 자기 구획 loader로 검사한다.
+// loadProcessEnv는 .env를 읽는다. 환경 값 형식은 각 plane config가 자기 구획 loader로 검사한다.
 func loadProcessEnv() error {
 	if err := envload.DotEnv(); err != nil {
 		return fmt.Errorf("load dot env: %w", err)

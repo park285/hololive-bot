@@ -65,7 +65,7 @@ type Handler struct {
 	logger *slog.Logger
 }
 
-// decodeAlarmRequest는 wire 요청을 읽고 경로별 필수 값 검사를 적용한다. wire 타입은 client와 공유하므로 검사는 여기서만 한다.
+// decodeAlarmRequest는 wire 요청을 읽고 경로별 필수 값 검사를 적용한다. 요청 타입은 client와 공유하므로 검사는 여기서만 한다.
 func decodeAlarmRequest[T any](c *gin.Context, destination *T, validate func(*T) error) error {
 	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
 		return fmt.Errorf("unmarshal read: %w", err)

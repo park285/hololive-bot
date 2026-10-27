@@ -94,6 +94,7 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 	// ACL은 process에 하나만 있고, 관리 변경은 같은 인스턴스의 판정에 바로 보인다.
 	require.NotNil(t, infra.acl)
 	require.False(t, infra.acl.IsRoomAllowed("3001"))
+
 	added, err := infra.acl.AddRoom(t.Context(), "3001")
 	require.NoError(t, err)
 	require.True(t, added)

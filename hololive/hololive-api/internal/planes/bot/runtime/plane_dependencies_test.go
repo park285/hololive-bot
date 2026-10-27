@@ -85,10 +85,10 @@ func (r *recordingMajorEvent) Subscribe(_ context.Context, roomID, _ string) err
 
 func (*recordingMajorEvent) Unsubscribe(context.Context, string) error { return nil }
 
-// process 조립은 llm plane의 구독·digest 서비스와 process 하나뿐인 ACL Service를 bot에 직접 넘긴다.
-// bot 명령은 loopback HTTP 없이 주입된 인스턴스를 호출하고, 같은 ACL 인스턴스에 대한 관리 변경은
-// 다음 메시지의 ingress 판정에 바로 보여야 한다.
-func TestBotUsesInjectedPlaneDependencies(t *testing.T) {
+// newInjectedDependencyBot은 process 조립과 같은 방식으로 ACL·구독·digest 인스턴스를 넘겨 bot을 만든다.
+func newInjectedDependencyBot(t *testing.T, memberNews *recordingMemberNews, majorEvent *recordingMajorEvent) (*orchestration.Bot, *acl.Service) {
+	t.Helper()
+
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
@@ -97,9 +97,6 @@ func TestBotUsesInjectedPlaneDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	memberNews := &recordingMemberNews{}
-	majorEvent := &recordingMajorEvent{}
 
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
 		Logger:               logger,
@@ -120,46 +117,58 @@ func TestBotUsesInjectedPlaneDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const room = "3001"
+	return bot, aclService
+}
+
+const injectedTestRoom = "3001"
+
+func sendInjectedTestMessage(t *testing.T, bot *orchestration.Bot, id, text string) {
+	t.Helper()
 
 	sender := "user"
-	send := func(id, text string) {
-		t.Helper()
-
-		message := &webhook.Message{
-			Msg:    text,
-			Room:   room,
-			Sender: &sender,
-			JSON:   &webhook.MessageJSON{UserID: "4001", MessageID: id},
-		}
-		if err := bot.ProcessMessage(t.Context(), message); err != nil {
-			t.Fatalf("ProcessMessage(%q) error = %v", text, err)
-		}
+	message := &webhook.Message{
+		Msg:    text,
+		Room:   injectedTestRoom,
+		Sender: &sender,
+		JSON:   &webhook.MessageJSON{UserID: "4001", MessageID: id},
 	}
 
-	send("m-1", "!뉴스구독 켜기")
+	if err := bot.ProcessMessage(t.Context(), message); err != nil {
+		t.Fatalf("ProcessMessage(%q) error = %v", text, err)
+	}
+}
+
+// process 조립은 llm plane의 구독·digest 서비스와 process 하나뿐인 ACL Service를 bot에 직접 넘긴다.
+// 봇 명령은 loopback HTTP 없이 주입된 인스턴스를 호출하고, 같은 ACL 인스턴스에 대한 관리 변경은
+// 다음 메시지의 ingress 판정에 바로 보여야 한다.
+func TestBotUsesInjectedPlaneDependencies(t *testing.T) {
+	memberNews := &recordingMemberNews{}
+	majorEvent := &recordingMajorEvent{}
+	bot, aclService := newInjectedDependencyBot(t, memberNews, majorEvent)
+
+	sendInjectedTestMessage(t, bot, "m-1", "!뉴스구독 켜기")
 
 	if subscribed, _ := memberNews.calls(); len(subscribed) != 0 {
 		t.Fatalf("command in non-whitelisted room reached member news: %v", subscribed)
 	}
 
-	if _, err := aclService.AddRoom(t.Context(), room); err != nil {
+	if _, err := aclService.AddRoom(t.Context(), injectedTestRoom); err != nil {
 		t.Fatal(err)
 	}
 
-	send("m-2", "!뉴스구독 켜기")
-	send("m-3", "!뉴스")
-	send("m-4", "!행사알림 켜기")
+	sendInjectedTestMessage(t, bot, "m-2", "!뉴스구독 켜기")
+	sendInjectedTestMessage(t, bot, "m-3", "!뉴스")
+	sendInjectedTestMessage(t, bot, "m-4", "!행사알림 켜기")
 
 	subscribed, digests := memberNews.calls()
-	if len(subscribed) != 1 || subscribed[0] != room || len(digests) != 1 || digests[0] != room {
-		t.Fatalf("member news calls = subscribed %v digests %v, want one call each for %s", subscribed, digests, room)
+	if len(subscribed) != 1 || subscribed[0] != injectedTestRoom || len(digests) != 1 || digests[0] != injectedTestRoom {
+		t.Fatalf("member news calls = subscribed %v digests %v, want one call each for %s", subscribed, digests, injectedTestRoom)
 	}
 
 	majorEvent.mu.Lock()
 	defer majorEvent.mu.Unlock()
 
-	if len(majorEvent.subscribed) != 1 || majorEvent.subscribed[0] != room {
-		t.Fatalf("major event subscriptions = %v, want one for %s", majorEvent.subscribed, room)
+	if len(majorEvent.subscribed) != 1 || majorEvent.subscribed[0] != injectedTestRoom {
+		t.Fatalf("major event subscriptions = %v, want one for %s", majorEvent.subscribed, injectedTestRoom)
 	}
 }

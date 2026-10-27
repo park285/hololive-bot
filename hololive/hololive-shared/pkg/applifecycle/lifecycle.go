@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// StartHooks는 runtime 공통 시작 단계(HTTP 시작)만 담는다. background 작업의 시작·취소·대기는 각 runtime이
+// StartHooks는 runtime 공통 시작 단계(HTTP 시작)만 담는다. 백그라운드 작업의 시작·취소·대기는 각 runtime이
 // 직접 소유한다.
 type StartHooks struct {
 	Logger          *slog.Logger

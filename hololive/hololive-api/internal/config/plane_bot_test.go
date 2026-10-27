@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/config/configtest"
-
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )

@@ -52,7 +52,7 @@ type MinutesResponse struct {
 	TargetMinutes []int `json:"target_minutes"`
 }
 
-// Envelope는 모든 응답의 공통 봉투다. worker는 Data에 응답 값을 그대로 넣고, client는 jsontext.Value로 받아 경로별 타입으로 푼다.
+// Envelope는 모든 응답의 공통 봉투다. 서버(worker)는 Data에 응답 값을 그대로 넣고, client는 jsontext.Value로 받아 경로별 타입으로 푼다.
 type Envelope[T any] struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`

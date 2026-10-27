@@ -6,11 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kapu/hololive-api/internal/config/configtest"
-
 	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 

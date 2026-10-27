@@ -115,37 +115,44 @@ func renderOutboxBody(t *testing.T, body string, data any) string {
 	return buf.String()
 }
 
+const (
+	sampleFieldMemberName = "MemberName"
+	sampleFieldTitle      = "Title"
+	sampleFieldURL        = "URL"
+	sampleMemberMiko      = "사쿠라 미코"
+)
+
 // outboxSampleData는 outbox 본문 렌더 시험용 대표 payload다. Kind는 sampleWithKind가 사례마다 덮어쓴다.
 var outboxSampleData = map[domain.TemplateKey]map[string]any{
 	domain.TemplateKeyOutboxShorts: {
-		"MemberName": "사쿠라 미코", "Title": "새 쇼츠 제목 - 귀여운 미코치",
-		"URL": "https://www.youtube.com/shorts/abc123xyz", "VideoID": "abc123xyz",
+		sampleFieldMemberName: sampleMemberMiko, sampleFieldTitle: "새 쇼츠 제목 - 귀여운 미코치",
+		sampleFieldURL: "https://www.youtube.com/shorts/abc123xyz", "VideoID": "abc123xyz",
 	},
 	domain.TemplateKeyOutboxCommunity: {
-		"MemberName": "사쿠라 미코", "ContentText": "오늘 밤 10시에 방송합니다! 많이 놀러오세요~",
-		"URL": "https://www.youtube.com/post/Ugkxyz123", "PostID": "Ugkxyz123",
+		sampleFieldMemberName: sampleMemberMiko, "ContentText": "오늘 밤 10시에 방송합니다! 많이 놀러오세요~",
+		sampleFieldURL: "https://www.youtube.com/post/Ugkxyz123", "PostID": "Ugkxyz123",
 	},
 	domain.TemplateKeyOutboxVideo: {
-		"MemberName": "사쿠라 미코", "Title": "마인크래프트 건축 배틀 #미코라이브",
-		"URL": "https://youtu.be/video123xyz", "VideoID": "video123xyz",
+		sampleFieldMemberName: sampleMemberMiko, sampleFieldTitle: "마인크래프트 건축 배틀 #미코라이브",
+		sampleFieldURL: "https://youtu.be/video123xyz", "VideoID": "video123xyz",
 		"IsPremiere": false, "IsUpcomingPremiere": false, "MinutesUntilPremiere": 0,
 	},
 	domain.TemplateKeyOutboxVideoGroup: {
-		"MemberName": "사쿠라 미코", "Count": 2, "Items": []map[string]any{
-			{"Title": "마인크래프트 건축 배틀 #1", "URL": "https://youtu.be/group-video-1"},
-			{"Title": "마인크래프트 건축 배틀 #2", "URL": "https://youtu.be/group-video-2"},
+		sampleFieldMemberName: sampleMemberMiko, "Count": 2, "Items": []map[string]any{
+			{sampleFieldTitle: "마인크래프트 건축 배틀 #1", sampleFieldURL: "https://youtu.be/group-video-1"},
+			{sampleFieldTitle: "마인크래프트 건축 배틀 #2", sampleFieldURL: "https://youtu.be/group-video-2"},
 		},
 	},
 	domain.TemplateKeyOutboxShortsGroup: {
-		"MemberName": "사쿠라 미코", "Count": 2, "Items": []map[string]any{
-			{"Title": "오늘의 쇼츠 #1", "URL": "https://www.youtube.com/shorts/group-1"},
-			{"Title": "오늘의 쇼츠 #2", "URL": "https://www.youtube.com/shorts/group-2"},
+		sampleFieldMemberName: sampleMemberMiko, "Count": 2, "Items": []map[string]any{
+			{sampleFieldTitle: "오늘의 쇼츠 #1", sampleFieldURL: "https://www.youtube.com/shorts/group-1"},
+			{sampleFieldTitle: "오늘의 쇼츠 #2", sampleFieldURL: "https://www.youtube.com/shorts/group-2"},
 		},
 	},
 	domain.TemplateKeyOutboxCommunityGroup: {
-		"MemberName": "사쿠라 미코", "Count": 2, "Items": []map[string]any{
-			{"ContentText": "오늘 밤 10시 방송 공지", "URL": "https://www.youtube.com/post/group-community-1"},
-			{"ContentText": "굿즈 판매 시작 안내", "URL": "https://www.youtube.com/post/group-community-2"},
+		sampleFieldMemberName: sampleMemberMiko, "Count": 2, "Items": []map[string]any{
+			{"ContentText": "오늘 밤 10시 방송 공지", sampleFieldURL: "https://www.youtube.com/post/group-community-1"},
+			{"ContentText": "굿즈 판매 시작 안내", sampleFieldURL: "https://www.youtube.com/post/group-community-2"},
 		},
 	},
 }

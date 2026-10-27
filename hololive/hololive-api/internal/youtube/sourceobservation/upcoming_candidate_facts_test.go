@@ -22,6 +22,7 @@ func TestPremiereClassificationKeepsCandidateFacts(t *testing.T) {
 
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 	now := time.Now().UTC().Truncate(time.Second)
+
 	proof = advanceLease(ctx, t, pool, &proof, now.Add(-time.Second).Sub(proof.ScheduledFor))
 
 	seen := now.Add(-time.Minute)
@@ -55,6 +56,7 @@ func TestScheduleMetadataRecordsObservationClockOnly(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
 	now := time.Now().UTC().Truncate(time.Second)
+
 	proof = advanceLease(ctx, t, pool, &proof, now.Add(-time.Second).Sub(proof.ScheduledFor))
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{

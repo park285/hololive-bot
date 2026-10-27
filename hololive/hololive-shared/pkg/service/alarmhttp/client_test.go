@@ -28,11 +28,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 

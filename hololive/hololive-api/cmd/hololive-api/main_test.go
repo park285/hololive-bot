@@ -150,7 +150,7 @@ func TestRunNotificationRerunMapsOutcomes(t *testing.T) {
 	}
 }
 
-// 운영 CLI logger는 LOG_DIR가 있어도 서버 회전 파일을 만들지 않고 stderr에만 쓴다. stdout에는 Result JSON 한 줄만 남는다.
+// 운영 CLI logger는 LOG_DIR가 있어도 서버 회전 파일을 만들지 않고 stderr에만 쓴다. 표준 출력에는 Result JSON 한 줄만 남는다.
 func TestRunNotificationRerunKeepsStdoutForResult(t *testing.T) {
 	stdoutFile, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {
@@ -163,19 +163,22 @@ func TestRunNotificationRerunKeepsStdoutForResult(t *testing.T) {
 	}
 
 	originalStdout, originalStderr, originalDefault := os.Stdout, os.Stderr, slog.Default()
+
 	t.Cleanup(func() {
 		os.Stdout, os.Stderr = originalStdout, originalStderr
+
 		slog.SetDefault(originalDefault)
 	})
 
 	os.Stdout, os.Stderr = stdoutFile, stderrFile
+
 	logDir := t.TempDir()
 	config := &apiconfig.RuntimeConfig{Logging: settings.LoggingConfig{Level: "info", Dir: logDir, MaxSizeMB: 1, MaxBackups: 1, MaxAgeDays: 1}}
 
 	handled, code := runNotificationRerun([]string{"--rerun-notification=majorevent-weekly"}, os.Stdout, os.Stderr, func(context.Context, string) (notification.Result, error) {
-		logger, err := newRerunNotificationLogger(config)
-		if err != nil {
-			return notification.Result{}, err
+		logger, loggerErr := newRerunNotificationLogger(config)
+		if loggerErr != nil {
+			return notification.Result{}, loggerErr
 		}
 
 		logger.Info("rerun_progress", slog.String("room", "12345"))
@@ -192,8 +195,9 @@ func TestRunNotificationRerunKeepsStdoutForResult(t *testing.T) {
 	}
 
 	var result notification.Result
-	if err := jsonv2.Unmarshal(bytes.TrimSuffix(stdout, []byte("\n")), &result); err != nil || result.Queued != 1 {
-		t.Fatalf("stdout = %q, want one Result JSON line (err %v)", stdout, err)
+
+	if decodeErr := jsonv2.Unmarshal(bytes.TrimSuffix(stdout, []byte("\n")), &result); decodeErr != nil || result.Queued != 1 {
+		t.Fatalf("stdout = %q, want one Result JSON line (err %v)", stdout, decodeErr)
 	}
 
 	stderr, err := os.ReadFile(stderrFile.Name())

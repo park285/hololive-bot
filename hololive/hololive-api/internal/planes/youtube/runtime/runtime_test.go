@@ -12,13 +12,12 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/kapu/hololive-api/internal/config/configtest"
-
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/park285/shared-go/v2/pkg/health"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
