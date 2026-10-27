@@ -6,7 +6,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/repository"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -19,7 +18,8 @@ func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	overrideChannel := "UC_override"
 
-	if _, _, err := repository.NewTemplateRepository(db, logger).UpsertWithRevision(t.Context(), domain.TemplateKeyOutboxShorts, &overrideChannel, "OVERRIDE {{.MemberName}} {{.VideoID}}", 0); err != nil {
+	if _, err := db.Exec(t.Context(), `INSERT INTO notification_templates (template_key, channel_id, body) VALUES ($1, $2, $3)`,
+		domain.TemplateKeyOutboxShorts, overrideChannel, "OVERRIDE {{.MemberName}} {{.VideoID}}"); err != nil {
 		t.Fatalf("upsert override: %v", err)
 	}
 

@@ -8,7 +8,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
-	sharedtemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 var outboxRenderFuncs = template.FuncMap{
@@ -116,17 +115,47 @@ func renderOutboxBody(t *testing.T, body string, data any) string {
 	return buf.String()
 }
 
+// outboxSampleData는 outbox 본문 렌더 시험용 대표 payload다. Kind는 sampleWithKind가 사례마다 덮어쓴다.
+var outboxSampleData = map[domain.TemplateKey]map[string]any{
+	domain.TemplateKeyOutboxShorts: {
+		"MemberName": "사쿠라 미코", "Title": "새 쇼츠 제목 - 귀여운 미코치",
+		"URL": "https://www.youtube.com/shorts/abc123xyz", "VideoID": "abc123xyz",
+	},
+	domain.TemplateKeyOutboxCommunity: {
+		"MemberName": "사쿠라 미코", "ContentText": "오늘 밤 10시에 방송합니다! 많이 놀러오세요~",
+		"URL": "https://www.youtube.com/post/Ugkxyz123", "PostID": "Ugkxyz123",
+	},
+	domain.TemplateKeyOutboxVideo: {
+		"MemberName": "사쿠라 미코", "Title": "마인크래프트 건축 배틀 #미코라이브",
+		"URL": "https://youtu.be/video123xyz", "VideoID": "video123xyz",
+		"IsPremiere": false, "IsUpcomingPremiere": false, "MinutesUntilPremiere": 0,
+	},
+	domain.TemplateKeyOutboxVideoGroup: {
+		"MemberName": "사쿠라 미코", "Count": 2, "Items": []map[string]any{
+			{"Title": "마인크래프트 건축 배틀 #1", "URL": "https://youtu.be/group-video-1"},
+			{"Title": "마인크래프트 건축 배틀 #2", "URL": "https://youtu.be/group-video-2"},
+		},
+	},
+	domain.TemplateKeyOutboxShortsGroup: {
+		"MemberName": "사쿠라 미코", "Count": 2, "Items": []map[string]any{
+			{"Title": "오늘의 쇼츠 #1", "URL": "https://www.youtube.com/shorts/group-1"},
+			{"Title": "오늘의 쇼츠 #2", "URL": "https://www.youtube.com/shorts/group-2"},
+		},
+	},
+	domain.TemplateKeyOutboxCommunityGroup: {
+		"MemberName": "사쿠라 미코", "Count": 2, "Items": []map[string]any{
+			{"ContentText": "오늘 밤 10시 방송 공지", "URL": "https://www.youtube.com/post/group-community-1"},
+			{"ContentText": "굿즈 판매 시작 안내", "URL": "https://www.youtube.com/post/group-community-2"},
+		},
+	},
+}
+
 func sampleWithKind(t *testing.T, key domain.TemplateKey, kind string) map[string]any {
 	t.Helper()
 
-	_, data, err := (&sharedtemplate.AdminService{}).Preview(t.Context(), key, "")
-	if err != nil {
-		t.Fatalf("load template sample data: %v", err)
-	}
-
-	src, ok := data.(map[string]any)
+	src, ok := outboxSampleData[key]
 	if !ok {
-		t.Fatalf("sample data for %s is not map[string]any", key)
+		t.Fatalf("no outbox sample data for %s", key)
 	}
 
 	out := make(map[string]any, len(src))

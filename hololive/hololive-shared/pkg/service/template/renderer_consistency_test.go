@@ -17,30 +17,23 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/repository"
 )
 
 const cacheAfterBody = "AFTER"
 
-func TestRendererAdminSaveReachesConsumerRenderer(t *testing.T) {
+func TestRendererSavedBodyReachesConsumerRenderer(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
 	consumer := NewRenderer(pool, logger)
-	admin := NewAdminService(repository.NewTemplateRepository(pool, logger), NewRenderer(pool, logger), logger)
 	key := domain.TemplateKeyCmdHelp
 
-	if _, err := admin.Save(t.Context(), key, nil, "BEFORE"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, nil, "BEFORE")
 
 	if got, err := consumer.Render(t.Context(), key, "", nil); err != nil || got != "BEFORE" {
 		t.Fatalf("warm cache: got=%q err=%v", got, err)
 	}
 
-	saved, err := admin.Save(t.Context(), key, nil, cacheAfterBody)
-	if err != nil || saved.Body != cacheAfterBody {
-		t.Fatalf("save: err=%v", err)
-	}
+	saveTestTemplate(t, pool, key, nil, cacheAfterBody)
 
 	if fresh, err := NewRenderer(pool, logger).Render(t.Context(), key, "", nil); err != nil || fresh != cacheAfterBody {
 		t.Fatalf("database update missing: got=%q err=%v", fresh, err)
@@ -92,12 +85,9 @@ func TestRendererInFlightReadCannotUndoInvalidation(t *testing.T) {
 	t.Cleanup(unblock)
 
 	renderer := NewRenderer(tracedPool, logger)
-	admin := NewAdminService(repository.NewTemplateRepository(pool, logger), renderer, logger)
 	key := domain.TemplateKeyCmdHelp
 
-	if _, err := admin.Save(t.Context(), key, nil, "BEFORE"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, nil, "BEFORE")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 
@@ -118,9 +108,7 @@ func TestRendererInFlightReadCannotUndoInvalidation(t *testing.T) {
 		t.Fatal("old template read did not reach barrier")
 	}
 
-	if _, err := admin.Save(ctx, key, nil, cacheAfterBody); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, nil, cacheAfterBody)
 
 	if got, err := renderer.Render(ctx, key, "", nil); err != nil || got != cacheAfterBody {
 		t.Fatalf("post-save request joined old flight: got=%q err=%v", got, err)
@@ -148,12 +136,9 @@ func TestRendererOverrideLifecycleAndDefaultSharing(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
 	r := NewRenderer(pool, logger)
-	admin := NewAdminService(repository.NewTemplateRepository(pool, logger), NewRenderer(pool, logger), logger)
 	key := domain.TemplateKeyCmdHelp
 
-	if _, err := admin.Save(t.Context(), key, nil, "DEFAULT"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, nil, "DEFAULT")
 
 	a, err := r.getTemplate(t.Context(), key, "channel-a")
 	if err != nil {
@@ -179,37 +164,29 @@ func TestRendererOverrideLifecycleAndDefaultSharing(t *testing.T) {
 		}
 	}
 
-	if _, err := admin.Save(t.Context(), key, &channel, "OVERRIDE"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, &channel, "OVERRIDE")
 
 	assertRender(channel, "OVERRIDE")
 	assertRender("channel-b", "DEFAULT")
 
 	const updatedOverride = "UPDATED OVERRIDE"
 
-	if _, err := admin.Save(t.Context(), key, &channel, updatedOverride); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, &channel, updatedOverride)
 
 	assertRender(channel, updatedOverride)
 
-	if _, err := admin.Save(t.Context(), key, nil, "NEW DEFAULT"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, nil, "NEW DEFAULT")
 
 	assertRender(channel, updatedOverride)
 	assertRender("channel-b", "NEW DEFAULT")
 
-	if err := admin.DeleteOverride(t.Context(), key, channel); err != nil {
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates WHERE template_key = $1 AND channel_id = $2`, key, channel); err != nil {
 		t.Fatal(err)
 	}
 
 	assertRender(channel, "NEW DEFAULT")
 
-	if _, err := admin.Save(t.Context(), key, &channel, "RECREATED"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, &channel, "RECREATED")
 
 	assertRender(channel, "RECREATED")
 }

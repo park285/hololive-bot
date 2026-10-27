@@ -10,8 +10,6 @@ import (
 	"testing"
 	texttemplate "text/template"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // 이름 있는 정수도 fmt의 '*' 인자로 허용되므로 컨테이너 padding 전에 거부해야 합니다.
@@ -80,11 +78,9 @@ func TestFormatNumberIntegerAndFloatEdges(t *testing.T) {
 	}
 }
 
-// 관리자 미리보기의 정수·실수 경계 literal은 프로세스를 끝내지 않고 결정적으로 렌더링되어야 합니다.
-func TestPreviewNumericEdgeLiteralsTerminate(t *testing.T) {
+// 정수·실수 경계 literal은 프로세스를 끝내지 않고 결정적으로 렌더링되어야 합니다.
+func TestNumericEdgeLiteralsTerminate(t *testing.T) {
 	t.Parallel()
-
-	service := &AdminService{}
 
 	for body, want := range map[string]string{
 		`{{formatNumber -9223372036854775808}}`:    "-9,223,372,036,854,775,808",
@@ -92,22 +88,22 @@ func TestPreviewNumericEdgeLiteralsTerminate(t *testing.T) {
 		`{{formatNumber 9223372036854775808.0}}`:   "9.223372036854776e+18",
 		`{{formatNumberKR 9223372036854775808.0}}`: "9.223372036854776e+18",
 	} {
-		got, _, err := service.Preview(t.Context(), domain.TemplateKeyOutboxShorts, body)
+		got, err := boundedRender(t, body, nil)
 		if err != nil || got != want {
-			t.Errorf("Preview(%s) = %q, %v; want %q", body, got, err, want)
+			t.Errorf("render(%s) = %q, %v; want %q", body, got, err, want)
 		}
 	}
 }
 
-func TestPreviewCanceledContextProducesNothing(t *testing.T) {
+func TestCanceledContextProducesNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	got, data, err := (&AdminService{}).Preview(ctx, domain.TemplateKeyOutboxShorts, `{{range 10000}}x{{end}}`)
-	if !errors.Is(err, ErrTemplateRenderError) || !errors.Is(err, context.Canceled) || got != "" || data != nil {
-		t.Fatalf("Preview(canceled) = %q, %v, %v; want render error with context.Canceled and no output", got, data, err)
+	got, err := boundedRenderContext(ctx, t, `{{range 10000}}x{{end}}`, nil)
+	if !errors.Is(err, context.Canceled) || got != "" {
+		t.Fatalf("render(canceled) = %q, %v; want context.Canceled and no output", got, err)
 	}
 }
 
@@ -208,7 +204,7 @@ func TestTemplateAmplificationRejectedBeforeLargeAllocation(t *testing.T) {
 
 		runtime.ReadMemStats(&before)
 
-		got, _, err := (&AdminService{}).Preview(t.Context(), domain.TemplateKeyOutboxShorts, body)
+		got, err := boundedRender(t, body, nil)
 
 		runtime.ReadMemStats(&after)
 
@@ -222,15 +218,14 @@ func TestTemplateAmplificationRejectedBeforeLargeAllocation(t *testing.T) {
 	}
 }
 
-// 본문 상한은 한 action 안에서 단계 확인 없이 실행되는 호출 수를 제한하므로 저장·미리보기 모두 넘는 본문을 거절합니다.
+// 본문 상한은 한 action 안에서 단계 확인 없이 실행되는 호출 수를 제한하므로 넘는 본문은 파싱 단계에서 거절합니다.
 func TestTemplateSourceOverLimitRejected(t *testing.T) {
 	t.Parallel()
 
 	body := strings.Repeat("x", templateSourceMaxBytes+1)
 
-	got, _, err := (&AdminService{}).Preview(t.Context(), domain.TemplateKeyOutboxShorts, body)
-	if !errors.Is(err, ErrTemplateParseError) || !errors.Is(err, ErrTemplateExecutionLimit) || got != "" {
-		t.Fatalf("Preview(over limit) = %d bytes, %v; want parse error with ErrTemplateExecutionLimit", len(got), err)
+	if _, err := parseTemplateBody("over", body, false); !errors.Is(err, ErrTemplateExecutionLimit) {
+		t.Fatalf("parse over limit: %v; want ErrTemplateExecutionLimit", err)
 	}
 
 	if _, err := parseTemplateBody("exact", strings.Repeat("x", templateSourceMaxBytes), false); err != nil {

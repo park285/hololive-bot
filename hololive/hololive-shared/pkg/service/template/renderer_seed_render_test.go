@@ -132,7 +132,14 @@ func auditSeedRender(t *testing.T, key domain.TemplateKey, body string, data any
 	}
 
 	// 실행 예산 계측과 제한판 함수는 기본 seed의 출력을 한 바이트도 바꾸지 않아야 합니다.
-	bounded, err := renderTemplateBody(t.Context(), key, body, data)
+	boundedTmpl, err := parseTemplateBody(string(key), body, true)
+	if err != nil {
+		t.Errorf("%s: 제한판 파싱 실패: %v", key, err)
+
+		return
+	}
+
+	bounded, err := executeTemplate(t.Context(), boundedTmpl, data)
 	if err != nil || bounded != buf.String() {
 		t.Errorf("%s: 제한 실행 결과가 다름: err=%v\nbounded=%q\nraw=%q", key, err, bounded, buf.String())
 	}
@@ -352,7 +359,12 @@ func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey) string {
 func renderSeedBody(t *testing.T, key domain.TemplateKey, body string, data any) string {
 	t.Helper()
 
-	out, err := renderTemplateBody(t.Context(), key, body, data)
+	tmpl, err := parseTemplateBody(string(key), body, true)
+	if err != nil {
+		t.Fatalf("%s: 파싱 실패: %v", key, err)
+	}
+
+	out, err := executeTemplate(t.Context(), tmpl, data)
 	if err != nil {
 		t.Fatalf("%s: 렌더 실패: %v", key, err)
 	}
