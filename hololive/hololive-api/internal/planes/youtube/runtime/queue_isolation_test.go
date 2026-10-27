@@ -79,3 +79,36 @@ func TestQueueObservationClearsResolvedDeadLetterBacklog(t *testing.T) {
 		t.Fatal("queue observation without DEAD_LETTER rows left the plane degraded")
 	}
 }
+
+// 재시작 뒤처럼 이 process가 dead letter를 기록하지 않았어도, queue 관측이 남은 DEAD_LETTER 행을 보면 degraded가 켜진다.
+func TestQueueObservationRaisesDegradedForStoredDeadLetter(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
+
+	r.pool = pool
+
+	if _, err := pool.Exec(t.Context(), `WITH payload AS (
+		INSERT INTO source_observation_payloads(observation_kind,schema_version,canonical_profile,payload_sha256,payload)
+		VALUES ('community_page',1,'source-observation-canonical-json-v1',decode(repeat('b',64),'hex'),'{}') RETURNING id
+	), observation AS (
+		INSERT INTO source_observations(provider,observation_kind,subject_key,observation_key,schema_version,contract_generation,
+			scheduled_for,observed_at,received_at,scope_sha256,completeness,continuity,payload_id,evidence_sha256,
+			provenance_id,fence_epoch,projection_generation)
+		SELECT 'youtubejs','community_page','dead-letter',sha256('dead-letter'::bytea),1,1,now(),now(),now(),
+			decode(repeat('a',64),'hex'),'COMPLETE','CONTIGUOUS',payload.id,decode(repeat('c',64),'hex'),
+			source_observation_provenance_id('dead-letter','dbtest','community_page'),1,1 FROM payload RETURNING id
+	) INSERT INTO source_observation_queue(observation_id,status,dead_lettered_at,last_error_code)
+	SELECT id,'DEAD_LETTER',now(),'test_dead_letter' FROM observation`); err != nil {
+		t.Fatal(err)
+	}
+
+	if r.Degraded() {
+		t.Fatal("plane started degraded before observing the queue")
+	}
+
+	r.observePendingQueue(t.Context())
+
+	if !r.Degraded() {
+		t.Fatal("queue observation with a stored DEAD_LETTER row did not degrade the plane")
+	}
+}
