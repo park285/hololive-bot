@@ -1006,3 +1006,36 @@ func alarmGroupRenderEnvelope(minutesUntil int, memberName, streamID, title stri
 
 	return envelope
 }
+
+// 저장된 send unit의 room이 claim한 group과 다르면 그 group만 발송 전 실패로 기록하고, 같은 batch의 다른 group은 계속 보낸다.
+func TestAlarmDispatchRunnerRoutesRoomMismatchedGroupAndSendsRemainingGroups(t *testing.T) {
+	const otherRoomID = "9876543210"
+
+	mismatched := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	mismatched.ClientRequestID = "hololive-alarm:test-room-mismatch"
+	healthy := alarmDispatchRunnerTestEnvelope(otherRoomID, nil)
+
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{mismatched, healthy}}}
+	consumer.requests = map[string]*dispatchoutbox.SendRequest{
+		mismatched.ClientRequestID: {
+			ClientRequestID:     mismatched.ClientRequestID,
+			BaseClientRequestID: mismatched.ClientRequestID,
+			Body:                "stored body",
+			Route:               dispatchoutbox.SendRouteText,
+			RoomID:              otherRoomID,
+		},
+	}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, consumer.scheduledRetry, 1)
+	assert.Equal(t, testAlarmRoomID, consumer.scheduledRetry[0].Notification.RoomID)
+	require.Len(t, sender.messages, 1)
+	assert.Equal(t, otherRoomID, sender.roomID)
+	require.Len(t, consumer.markDispatched, 1)
+	assert.Equal(t, otherRoomID, consumer.markDispatched[0].Notification.RoomID)
+}

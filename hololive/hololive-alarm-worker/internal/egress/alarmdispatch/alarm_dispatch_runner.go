@@ -317,7 +317,19 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 	}
 
 	if request.RoomID != group.roomID {
-		return errors.New("prepare alarm request: stored send unit room differs from the claimed group")
+		// 저장된 send unit과 claim한 group의 room이 어긋난 불변식 위반이다. 이 group만 발송 전 실패로 기록해
+		// 같은 batch의 다른 group 처리를 막지 않고, 반복 claim이 시도 상한에서 DLQ로 수렴하게 한다.
+		if r.logger != nil {
+			r.logger.Error("alarm dispatch stored send unit room differs from the claimed group; not sending",
+				privacylog.RoomIDAttr(group.roomID),
+				slog.Int("envelopes", len(group.envelopes)))
+		}
+
+		if routeErr := r.routePreSendFailure(ctx, group.envelopes, errAlarmDispatchSendUnitRoomMismatch); routeErr != nil {
+			return fmt.Errorf("route send unit room mismatch: %w", routeErr)
+		}
+
+		return nil
 	}
 
 	return r.dispatchPreparedMessageGroup(ctx, group, request)
