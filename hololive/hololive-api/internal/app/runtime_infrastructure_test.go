@@ -14,8 +14,11 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
+	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
+	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -43,8 +46,22 @@ func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
 	postgres := settings.PostgresConfig{Host: pg.Host, Port: int(pg.Port), User: pg.User, Password: pg.Password, Database: pg.Database, SSLMode: "disable", PoolMinConns: 0, PoolMaxConns: 2}
 	valkey := settings.ValkeyConfig{Host: host, Port: port}
 
+	// infra가 process 하나의 Holodex 서비스를 bot plane 설정으로 만들므로 env 기본값을 그대로 쓴다.
+	holodex, err := settings.LoadHolodexConfig()
+	require.NoError(t, err)
+
+	// 조립만 확인하므로 외부 Holodex에 닿지 않는 loopback 주소와 시험 키를 쓴다.
+	holodex.BaseURL = "http://127.0.0.1:1"
+	holodex.APIKey = "test-holodex-key"
+
+	officialSchedule, err := settings.LoadOfficialScheduleRuntimeConfig()
+	require.NoError(t, err)
+
 	return &apiconfig.RuntimeConfig{
-		Bot:   &apiconfig.BotPlaneConfig{Postgres: postgres, Valkey: valkey, Kakao: settings.KakaoConfig{ACLEnabled: true, ACLMode: "whitelist"}},
+		Bot: &apiconfig.BotPlaneConfig{
+			Postgres: postgres, Valkey: valkey, Kakao: settings.KakaoConfig{ACLEnabled: true, ACLMode: "whitelist"},
+			Holodex: holodex, OfficialSchedule: officialSchedule,
+		},
 		Admin: &apiconfig.AdminPlaneConfig{Postgres: postgres, Valkey: valkey},
 		LLM:   &apiconfig.LLMSchedulerConfig{Postgres: postgres, Valkey: valkey},
 	}
@@ -209,7 +226,20 @@ func TestSharedInfrastructureClosesAfterUnstartedBorrowers(t *testing.T) {
 	require.Equal(t, []string{"admin", "infrastructure"}, calls)
 }
 
-// Holodex 서비스는 process에 하나만 있고 bot·admin 조립이 같은 인스턴스를 빌린다.
+// bot·admin plane 조립은 process infra가 소유한 같은 Holodex·ACL 인스턴스를 받는다.
+func TestPlaneDependenciesBorrowProcessHolodex(t *testing.T) {
+	infra := &apiInfrastructure{holodex: &apifoundation.ScraperHolodexFoundation{}, acl: &acl.Service{}}
+
+	bot := botPlaneDependencies(infra, &llmruntime.LLMSchedulerRuntime{})
+	admin := adminPlaneDependencies(infra, &botruntime2.BotRuntime{})
+
+	require.Same(t, infra.holodex, bot.Holodex)
+	require.Same(t, infra.holodex, admin.Holodex)
+	require.Same(t, infra.acl, bot.ACL)
+	require.Same(t, infra.acl, admin.ACL)
+}
+
+// process infra는 Holodex 서비스를 한 번 만들어 소유한다.
 func TestAPIInfrastructureOwnsOneHolodexService(t *testing.T) {
 	infra, err := buildAPIInfrastructure(t.Context(), infrastructureConfig(t), slog.New(slog.DiscardHandler))
 	require.NoError(t, err)

@@ -110,21 +110,14 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	// plane 사이 호출은 같은 프로세스의 인스턴스를 직접 주입한다. bot은 llm의 구독·digest 서비스를, admin은
 	// bot이 소유한 Iris client를 빌린다. 빌린 자원은 모든 plane drain이 끝난 뒤 소유 plane의 CloseContext가 닫으므로
 	// GroupRuntime의 plane 정지 순서에 의존하지 않는다.
-	planes.bot, err = botruntime2.BuildRuntime(ctx, appConfig.Bot, planes.infra.bot, botruntime2.Dependencies{
-		ACL:        planes.infra.acl,
-		Holodex:    planes.infra.holodex,
-		MajorEvent: planes.llm.MajorEventSubscriptions,
-		MemberNews: planes.llm.MemberNews,
-	}, logger.With(slog.String("plane", "bot")))
+	planes.bot, err = botruntime2.BuildRuntime(ctx, appConfig.Bot, planes.infra.bot, botPlaneDependencies(planes.infra, planes.llm),
+		logger.With(slog.String("plane", "bot")))
 	if err != nil {
 		return planes, fmt.Errorf("build bot plane: %w", err)
 	}
 
-	planes.admin, err = adminruntime.BuildAdminAPIRuntime(ctx, appConfig.Admin, planes.infra.admin, adminruntime.Dependencies{
-		ACL:       planes.infra.acl,
-		Holodex:   planes.infra.holodex,
-		IrisRooms: planes.bot.IrisRooms,
-	}, logger.With(slog.String("plane", "admin")))
+	planes.admin, err = adminruntime.BuildAdminAPIRuntime(ctx, appConfig.Admin, planes.infra.admin, adminPlaneDependencies(planes.infra, planes.bot),
+		logger.With(slog.String("plane", "admin")))
 	if err != nil {
 		return planes, fmt.Errorf("build admin plane: %w", err)
 	}
@@ -140,6 +133,25 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	}
 
 	return planes, nil
+}
+
+// 두 plane은 process infra가 소유한 ACL·Holodex 인스턴스를 그대로 빌린다. Holodex를 plane마다 따로 만들면
+// Holodex 호출·공식 일정 캐시가 process 안에서 두 벌이 된다.
+func botPlaneDependencies(infra *apiInfrastructure, llm *llmruntime.LLMSchedulerRuntime) botruntime2.Dependencies {
+	return botruntime2.Dependencies{
+		ACL:        infra.acl,
+		Holodex:    infra.holodex,
+		MajorEvent: llm.MajorEventSubscriptions,
+		MemberNews: llm.MemberNews,
+	}
+}
+
+func adminPlaneDependencies(infra *apiInfrastructure, bot *botruntime2.BotRuntime) adminruntime.Dependencies {
+	return adminruntime.Dependencies{
+		ACL:       infra.acl,
+		Holodex:   infra.holodex,
+		IrisRooms: bot.IrisRooms,
+	}
 }
 
 func (p apiPlanes) closeContext(ctx context.Context) error {
