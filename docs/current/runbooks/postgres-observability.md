@@ -21,7 +21,7 @@ base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.6, `amcheck
 기존 volume에 initdb를 재실행하지 않는다. `postgres-replication.md`의 single-primary
 경계와 현재 `DEPLOYMENT_BASELINE.md`를 유지한다.
 
-현재 두 확장은 서울 primary에서 이미 활성화되어 있습니다. 로컬 main으로의 소스 통합은
+현재 네 확장과 auto_explain preload는 서울 primary에서 활성화되어 있습니다. 로컬 main으로의 소스 통합은
 재배포·재활성화가 아닙니다. 운영 점검은 아래 읽기 전용 관측 절차를 사용합니다.
 Osaka의 적용 기록은 당시 증거로 보존하되, 해당 VM은 삭제했고 100GB 부트 볼륨만 남았습니다.
 과거 복구 이미지·파일이 서울에 같은 경로로 존재한다고 가정하지 않습니다.
