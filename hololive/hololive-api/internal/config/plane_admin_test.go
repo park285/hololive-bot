@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -54,12 +56,12 @@ func TestAdminPlaneBootsWithoutIrisEgressTokens(t *testing.T) {
 	}
 
 	// 같은 env에서 bot plane은 Iris egress 입력을 요구한다.
-	server := settingstest.NewIrisRuntimeDiagnosticsServer(t, settingstest.WorkerProfileDiagnosticsJSON())
+	server := configtest.NewIrisRuntimeDiagnosticsServer(t, configtest.WorkerProfileDiagnosticsJSON())
 	t.Setenv("IRIS_BASE_URL", server.URL)
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", settingstest.URLHostname(t, server.URL))
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", configtest.URLHostname(t, server.URL))
 	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	if _, err := LoadBotPlaneRuntime(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
 		t.Fatalf("LoadBotPlaneRuntime() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)

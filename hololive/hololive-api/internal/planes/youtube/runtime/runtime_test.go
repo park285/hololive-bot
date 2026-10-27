@@ -12,6 +12,8 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/park285/shared-go/v2/pkg/health"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -707,7 +709,7 @@ func newTestRuntime(t *testing.T, claimer observationClaimer, consumer observati
 func testYouTubePlaneConfig(t *testing.T) apiconfig.YouTubePlaneConfig {
 	t.Helper()
 
-	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), configtest.APIProfileFixture(t))
 
 	var sourceSettings apiconfig.SourceObservationWorkerSettings
 

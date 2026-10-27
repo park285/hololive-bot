@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
@@ -14,7 +16,7 @@ func setBotPlaneEnv(t *testing.T) {
 	t.Helper()
 	settingstest.ClearRuntimeRoleEnv(t)
 	settingstest.ClearTracingEnv(t)
-	settingstest.SetRequiredLoadEnv(t)
+	configtest.SetRequiredLoadEnv(t)
 }
 
 func TestLoadBotPlaneRuntimeRejectsNonPositiveHolodexTimeout(t *testing.T) {
@@ -250,7 +252,7 @@ func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
 func TestLoadBotPlaneRuntimeDerivesWebhookFromLocalStackWorkerProfile(t *testing.T) {
 	setBotPlaneEnv(t)
 
-	server := settingstest.NewIrisRuntimeDiagnosticsServer(t, settingstest.LocalStackWorkerProfileDiagnosticsJSON())
+	server := configtest.NewIrisRuntimeDiagnosticsServer(t, configtest.LocalStackWorkerProfileDiagnosticsJSON())
 	t.Setenv("IRIS_BASE_URL", server.URL)
 
 	config, err := LoadBotPlaneRuntime()

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -65,7 +67,7 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			settingstest.ClearRuntimeRoleEnv(t)
 			settingstest.ClearTracingEnv(t)
-			settingstest.SetRequiredLoadEnv(t)
+			configtest.SetRequiredLoadEnv(t)
 			clearConfigurePlanesIntEnv(t)
 			t.Setenv("APP_ENV", "development")
 			t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
@@ -86,7 +88,7 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 func TestLoadRuntimeIgnoresGenericPoolKeys(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 	settingstest.ClearTracingEnv(t)
-	settingstest.SetRequiredLoadEnv(t)
+	configtest.SetRequiredLoadEnv(t)
 	clearConfigurePlanesIntEnv(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")

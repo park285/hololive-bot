@@ -1,0 +1,7 @@
+{
+  "contract_version": 1,
+  "service": "hololive",
+  "role": "api",
+  "profile_id": "foreign-role-test",
+  "workers": {}
+}

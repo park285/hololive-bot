@@ -14,7 +14,7 @@ import (
 )
 
 func TestLoadWorkerProfileLoadsExactRoleSettings(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -27,7 +27,7 @@ func TestLoadWorkerProfileLoadsExactRoleSettings(t *testing.T) {
 }
 
 func TestLoadWorkerProfileRejectsWrongRole(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, "testdata/foreign-role-worker-profile.json")
 
 	if _, err := LoadWorkerProfile(); err == nil || !strings.Contains(err.Error(), "got hololive/api, want hololive/alarm-worker") {
 		t.Fatalf("LoadWorkerProfile() error = %v", err)
@@ -35,7 +35,7 @@ func TestLoadWorkerProfileRejectsWrongRole(t *testing.T) {
 }
 
 func TestLoadWorkerProfileRejectsRetiredNotificationLockTimeout(t *testing.T) {
-	raw, err := os.ReadFile(settingstest.ProfileFixture(t, "stack-worker-profile-alarm-worker.json"))
+	raw, err := os.ReadFile("testdata/stack-worker-profile-alarm-worker.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestLoadWorkerProfileRejectsRetiredNotificationLockTimeout(t *testing.T) {
 }
 
 func TestValidateWorkerProfileRequiresYouTubeLockTimeout(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -87,7 +87,7 @@ func TestValidateWorkerProfileRequiresYouTubeLockTimeout(t *testing.T) {
 }
 
 func TestValidateWorkerProfileAlarmAttemptLeaseBoundary(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -114,7 +114,7 @@ func TestValidateWorkerProfileAlarmAttemptLeaseBoundary(t *testing.T) {
 // 최소 회수 지연(lease_ms+recovery_interval_ms)이 Iris 자동 재발송 지평에 닿으면 기동을 거부한다.
 // 지평과 같은 값은 거부하고 1ms 안쪽은 허용하며, lease와 recovery 어느 쪽이 늘어도 같은 경계를 쓴다.
 func TestValidateWorkerProfileAlarmRecoveryDelayWithinReplayHorizon(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -156,7 +156,7 @@ func TestValidateWorkerProfileAlarmRecoveryDelayWithinReplayHorizon(t *testing.T
 // 격리 기준이 lease보다 짧으면 기동을 거부한다. 기준이 lease와 같은 값이면 허용하며, 기준이나 lease 어느 쪽이
 // 바뀌어도 같은 경계를 쓴다.
 func TestValidateWorkerProfileAlarmQuarantineThresholdCoversLease(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -193,7 +193,7 @@ func TestValidateWorkerProfileAlarmQuarantineThresholdCoversLease(t *testing.T) 
 }
 
 func TestWorkerProfileDeclaresDomainAgePolicies(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -248,7 +248,7 @@ func TestLoadWorkerProfileNotificationDeliveryTimingBoundaries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, enabled := range []bool{true, false} {
-				loaded := settingstest.LoadProfileFixture(t, WorkerIdentity(), "stack-worker-profile-alarm-worker.json")
+				loaded := settingstest.LoadProfileFixture(t, WorkerIdentity(), "testdata/stack-worker-profile-alarm-worker.json")
 
 				var settings NotificationDeliveryWorkerSettings
 

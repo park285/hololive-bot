@@ -51,7 +51,7 @@ func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T
 		Role:      "api",
 		WorkerIDs: []string{"bot_reply_outbox", "bot_webhook_inbox", "source_observation"},
 	}
-	loaded := settingstest.LoadProfileFixture(t, apiIdentity, "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, apiIdentity, settingstest.SharedTestProfileFixture(t))
 
 	// executor를 끈 memory queue worker는 snapshot source 없이 등록되므로 profile의 worker 전체를 그렇게 등록한다.
 	for workerID, worker := range loaded.Profile.Workers {

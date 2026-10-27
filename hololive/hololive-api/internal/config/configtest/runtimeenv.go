@@ -1,4 +1,5 @@
-package settingstest
+// Package configtest는 hololive-api runtime 설정 시험이 공유하는 worker profile fixture와 기동 env helper다.
+package configtest
 
 import (
 	"crypto/tls"
@@ -8,8 +9,12 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 var (
@@ -19,15 +24,27 @@ var (
 	errIrisRuntimeDiagnosticsTLS      error
 )
 
+// APIProfileFixture는 hololive-api worker identity와 짝을 이루는 profile fixture 경로다.
+func APIProfileFixture(t *testing.T) string {
+	t.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve configtest source path")
+	}
+
+	return filepath.Join(filepath.Dir(file), "testdata", "stack-worker-profile-api.json")
+}
+
 // SetRequiredLoadEnv: bot/admin/llm 런타임 로더가 성공하는 최소 환경을 세운다.
 func SetRequiredLoadEnv(t *testing.T) {
 	t.Helper()
-	UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, APIProfileFixture(t))
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
-	t.Setenv(IrisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(IrisBotTokenEnv, "test-bot-token")
+	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
+	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
 
 	server := NewIrisRuntimeDiagnosticsServer(t, WorkerProfileDiagnosticsJSON())
 	t.Setenv("IRIS_BASE_URL", server.URL)
@@ -40,8 +57,8 @@ func SetRequiredLoadEnv(t *testing.T) {
 
 func SetH3CertificateEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOLOLIVE_H3_CERT_FILE", HololiveH3CertPath)
-	t.Setenv("HOLOLIVE_H3_KEY_FILE", HololiveH3KeyPath)
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", settingstest.HololiveH3CertPath)
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", settingstest.HololiveH3KeyPath)
 }
 
 // NewIrisRuntimeDiagnosticsServer: Iris runtime 진단 응답을 흉내내는 TLS 서버다.

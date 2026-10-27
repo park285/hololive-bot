@@ -15,7 +15,7 @@ import (
 )
 
 func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
-	loaded := settingstest.LoadProfileFixture(t, collectorconfig.WorkerIdentity(), "stack-worker-profile-youtube-collector.json")
+	loaded := settingstest.LoadProfileFixture(t, collectorconfig.WorkerIdentity(), filepath.Join("..", "..", "config", "testdata", "stack-worker-profile-youtube-collector.json"))
 	worker := loaded.Profile.Workers[collectorconfig.WorkerCollection]
 
 	worker.Executor.Enabled = false
@@ -100,7 +100,7 @@ func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 }
 
 func TestCollectionRegistryRequiresFiniteAdmissionPolicy(t *testing.T) {
-	loaded := settingstest.LoadProfileFixture(t, collectorconfig.WorkerIdentity(), "stack-worker-profile-youtube-collector.json")
+	loaded := settingstest.LoadProfileFixture(t, collectorconfig.WorkerIdentity(), filepath.Join("..", "..", "config", "testdata", "stack-worker-profile-youtube-collector.json"))
 
 	profile, err := collectorconfig.DecodeWorkerProfile(loaded)
 	if err != nil {

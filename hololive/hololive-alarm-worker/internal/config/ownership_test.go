@@ -10,7 +10,7 @@ import (
 
 func alarmWorkerProfileFixture(t *testing.T) *AlarmWorkerProfile {
 	t.Helper()
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {

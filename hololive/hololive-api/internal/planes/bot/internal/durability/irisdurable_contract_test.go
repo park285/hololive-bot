@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/irisdurable"
@@ -38,7 +40,6 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
-	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -93,7 +94,7 @@ func TestIrisDurableContract(t *testing.T) {
 func contractTerminalRetention(t *testing.T) time.Duration {
 	t.Helper()
 
-	fixture := settingstest.ProfileFixture(t, "stack-worker-profile-api.json")
+	fixture := configtest.APIProfileFixture(t)
 
 	t.Setenv(workercontract.ProfileFileEnv, fixture)
 

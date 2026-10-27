@@ -11,9 +11,21 @@ import (
 func setRuntimeEnv(t *testing.T) {
 	t.Helper()
 	settingstest.ClearRuntimeRoleEnv(t)
-	settingstest.SetRequiredLoadEnv(t)
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	setWorkerRequiredEnv(t)
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 	t.Setenv("APP_ENV", "development")
+}
+
+// setWorkerRequiredEnv는 alarm-worker LoadRuntime이 요구하는 egress·Iris·H3 입력만 세운다.
+func setWorkerRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOLODEX_API_KEY", "test-key")
+	t.Setenv("KAKAO_ROOMS", "test-room")
+	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
+	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
+	t.Setenv("IRIS_BASE_URL", "https://iris.example.test")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", settingstest.HololiveH3CertPath)
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", settingstest.HololiveH3KeyPath)
 }
 
 func TestLoadRuntimeRejectsInvalidDispatchRetentionEnv(t *testing.T) {

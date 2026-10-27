@@ -11,6 +11,8 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
@@ -104,7 +106,7 @@ func TestDisabledRuntimeReportsDurableQueueDepth(t *testing.T) {
 	}, 5*time.Second, time.Millisecond)
 
 	// 나머지 API 큐 둘은 봇 런타임 소유이므로 이 실행 영역의 등록만 격리한다.
-	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), configtest.APIProfileFixture(t))
 	worker := loaded.Profile.Workers[apiconfig.WorkerSourceObservation]
 
 	worker.Executor.Enabled = false

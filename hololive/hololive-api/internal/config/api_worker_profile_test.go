@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
@@ -13,7 +15,7 @@ import (
 )
 
 func TestDisabledSourceObservationProfileRemainsValid(t *testing.T) {
-	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), configtest.APIProfileFixture(t))
 	worker := loaded.Profile.Workers["source_observation"]
 
 	worker.Executor.Enabled = false
@@ -120,7 +122,7 @@ func TestLoadAPIWorkerProfileSourceObservationBoundaries(t *testing.T) {
 }
 
 func TestSourceObservationPoolReservationRemainsRuntimeOwned(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	profile, err := LoadAPIWorkerProfile()
 	if err != nil {
@@ -178,7 +180,7 @@ func TestAPIWorkerProfileDurableBoundaries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, enabled := range []bool{true, false} {
-				loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")
+				loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), configtest.APIProfileFixture(t))
 				worker := loaded.Profile.Workers[tc.workerID]
 
 				var settings map[string]any
@@ -228,7 +230,7 @@ func useAPIWorkerSettings(t *testing.T, loaded workercontract.LoadedProfile, wor
 func checkSourceObservationBoundary(t *testing.T, enabled, valid bool, mutate func(*SourceObservationWorkerSettings, *workercontract.WorkerProfile)) {
 	t.Helper()
 
-	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), configtest.APIProfileFixture(t))
 	worker := loaded.Profile.Workers[WorkerSourceObservation]
 	settings := SourceObservationWorkerSettings{
 		DBOperationConcurrency: 3,

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
+
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -13,7 +15,7 @@ import (
 )
 
 func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	profile, err := apiconfig.LoadAPIWorkerProfile()
 	if err != nil {
@@ -38,7 +40,7 @@ func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testi
 func testDurableProfile(t *testing.T) *apiconfig.APIWorkerProfile {
 	t.Helper()
 
-	profile := &apiconfig.APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")}
+	profile := &apiconfig.APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), configtest.APIProfileFixture(t))}
 	if err := workercontract.DecodeWorkerSettingsSet(profile.Loaded, map[string]any{
 		apiconfig.WorkerBotWebhookInbox:   &profile.BotWebhookInbox,
 		apiconfig.WorkerBotReplyOutbox:    &profile.BotReplyOutbox,

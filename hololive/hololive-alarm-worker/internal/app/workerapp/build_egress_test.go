@@ -64,7 +64,7 @@ type workerappEgressTestPostgres struct{ pool *pgxpool.Pool }
 func alarmWorkerTestConfig(t *testing.T) (*workerconfig.RuntimeConfig, *alarmWorkerRegistryState) {
 	t.Helper()
 
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	settingstest.UseProfileFixture(t, "../../config/testdata/stack-worker-profile-alarm-worker.json")
 
 	profile, err := workerconfig.LoadWorkerProfile()
 	require.NoError(t, err)
