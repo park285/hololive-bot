@@ -80,32 +80,35 @@ type Runtime struct {
 	liveFreshnessBudget time.Duration
 	now                 func() time.Time
 
-	dbSem         chan struct{}
-	workCh        chan sourceobservation.ClaimWork
-	claim         sourceobservation.ClaimOptions
-	runCancel     context.CancelFunc
-	started       atomic.Bool
-	claiming      atomic.Bool
-	ready         atomic.Bool
-	degraded      atomic.Bool
-	loopDone      chan struct{}
-	claimDone     chan struct{}
-	loopCount     int
-	workerDone    chan struct{}
-	closeWork     sync.Once
-	lifecycleMu   sync.Mutex
-	tasks         sync.WaitGroup
-	loopTasks     sync.WaitGroup
-	workerTasks   sync.WaitGroup
-	tasksDone     chan struct{}
-	closing       bool
-	closed        bool
-	releaseDone   chan struct{}
-	releaseErr    error
-	inFlight      sync.Map
-	workerTracker *workercontract.ExecutorTracker
-	workerTotals  *workercontract.Counters
-	workerSampler *workercontract.QueueSampler
+	dbSem     chan struct{}
+	workCh    chan sourceobservation.ClaimWork
+	claim     sourceobservation.ClaimOptions
+	runCancel context.CancelFunc
+	started   atomic.Bool
+	claiming  atomic.Bool
+	ready     atomic.Bool
+	// degraded 상태는 원인별로 따로 갱신하고 Degraded()가 OR로 합친다.
+	// projection refresh 성공이 DEAD_LETTER backlog 신호를 지우지 않게 하기 위해서다.
+	projectionDegraded atomic.Bool
+	deadLetterBacklog  atomic.Bool
+	loopDone           chan struct{}
+	claimDone          chan struct{}
+	loopCount          int
+	workerDone         chan struct{}
+	closeWork          sync.Once
+	lifecycleMu        sync.Mutex
+	tasks              sync.WaitGroup
+	loopTasks          sync.WaitGroup
+	workerTasks        sync.WaitGroup
+	tasksDone          chan struct{}
+	closing            bool
+	closed             bool
+	releaseDone        chan struct{}
+	releaseErr         error
+	inFlight           sync.Map
+	workerTracker      *workercontract.ExecutorTracker
+	workerTotals       *workercontract.Counters
+	workerSampler      *workercontract.QueueSampler
 
 	collectionObservation queueObservationThrottle
 }
@@ -575,7 +578,7 @@ func (r *Runtime) Ready() bool {
 }
 
 func (r *Runtime) Degraded() bool {
-	return r != nil && r.degraded.Load()
+	return r != nil && (r.projectionDegraded.Load() || r.deadLetterBacklog.Load())
 }
 
 // withDB는 DBOperationConcurrency 슬롯 하나를 잡고 fn을 실행한다. 슬롯 대기는 획득에 실패해도,

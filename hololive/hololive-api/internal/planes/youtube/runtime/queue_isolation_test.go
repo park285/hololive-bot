@@ -64,3 +64,17 @@ func TestClaimDeliveryDoesNotWaitForQueueMetrics(t *testing.T) {
 		t.Fatal("metric query exceeded its own budget")
 	}
 }
+
+// DEAD_LETTER 행이 없는 queue를 관측하면 dead letter 원인의 degraded가 풀린다.
+func TestQueueObservationClearsResolvedDeadLetterBacklog(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
+	r.pool = pool
+	r.markDeadLettered()
+
+	r.observePendingQueue(t.Context())
+
+	if r.Degraded() {
+		t.Fatal("queue observation without DEAD_LETTER rows left the plane degraded")
+	}
+}

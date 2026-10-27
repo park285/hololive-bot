@@ -636,7 +636,7 @@ func TestRuntimePublishesProcessReadiness(t *testing.T) {
 	t.Cleanup(func() { health.RemoveComponent(youtubeHealthComponent) })
 
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
-	runtime.degraded.Store(true)
+	runtime.projectionDegraded.Store(true)
 	runtime.Start(t.Context(), make(chan error, 1))
 
 	response, ready := health.GetReadiness()
