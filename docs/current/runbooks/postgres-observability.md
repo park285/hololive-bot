@@ -10,6 +10,9 @@ USAGE가 없는 exporter에도 이 전용 스키마의 USAGE와 통계 객체 SE
 기존 pg_stat_statements는 public에 유지하며 관리자 소유 view가 필요한 숫자 지표를 제공한다.
 Dockerfile은 고정 PostgreSQL 18.6/Alpine PGXS로 두 CPU 아키텍처의 모듈을 빌드하며
 앱 테이블·마이그레이션·initdb를 변경하지 않는다.
+base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.6, `amcheck` 1.5도
+같은 절차로 켠다. 두 확장은 같은 전용 스키마에 두고 확장 기본 권한을 유지한다.
+버퍼 조회는 `pg_monitor`, evict 함수와 amcheck 검사는 관리자만 실행할 수 있다.
 최종 이미지 스캔의 `CVE-2026-58055` 보고를 해소하도록 기존 `nghttp2-libs`만
 `1.69.0-r0`에서 `1.70.0-r0`으로 갱신한다. base digest·다른 OS 패키지는 유지한다.
 
@@ -18,7 +21,7 @@ Dockerfile은 고정 PostgreSQL 18.6/Alpine PGXS로 두 CPU 아키텍처의 모�
 기존 volume에 initdb를 재실행하지 않는다. `postgres-replication.md`의 single-primary
 경계와 현재 `DEPLOYMENT_BASELINE.md`를 유지한다.
 
-현재 두 확장은 서울 primary에서 이미 활성화되어 있습니다. 로컬 main으로의 소스 통합은
+현재 네 확장과 auto_explain preload는 서울 primary에서 활성화되어 있습니다. 로컬 main으로의 소스 통합은
 재배포·재활성화가 아닙니다. 운영 점검은 아래 읽기 전용 관측 절차를 사용합니다.
 Osaka의 적용 기록은 당시 증거로 보존하되, 해당 VM은 삭제했고 100GB 부트 볼륨만 남았습니다.
 과거 복구 이미지·파일이 서울에 같은 경로로 존재한다고 가정하지 않습니다.
@@ -60,11 +63,13 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
    검증한다. 수동 명령과 systemd 재시작 모두 같은 값을 읽도록 한다.
 
    ```dotenv
-   HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,pg_stat_kcache,pg_wait_sampling
+   HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain
    ```
 
    Compose는 kcache `track=top`, planning off, wait `profile_pid=off`,
    `profile_queries=top`, `sample_cpu=off`, profile 20ms/history 100ms·20,000 entries를 사용한다.
+   auto_explain은 1초 이상 문장을 nested 포함으로 기록하며 `log_analyze`·`log_buffers`는 켜고
+   `log_timing`은 끈다. 바인드 값은 statement log와 같이 남기지 않는다(`log_parameter_max_length=0`).
    기본 비활성 상태의 custom GUC placeholder와 활성 상태 모두 로컬 기동을 검증한다.
 4. 승인된 새 이미지를 선택한 현재 prod+live-compat 파일 세트로 `config --quiet` 후
    `up -d --no-build --no-deps holo-postgres`만 실행한다. DB 연결이 잠시 끊기고 진행 중인
@@ -76,7 +81,7 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
      -f /usr/local/share/hololive/enable-observability.sql
    ```
 
-   한 transaction에서 preload/version/schema를 검증하고 확장을 생성한다. 새 스키마의 통계 읽기는
+   한 transaction에서 preload/version/schema를 검증하고 네 확장을 생성한다. 새 스키마의 통계 읽기는
    `pg_read_all_stats` 구성원에게만 부여하며 reset은 관리자만 가능하다. public USAGE와 기존 앱 역할을
    확장하지 않는다. 2026-10-07 읽기 확인에서는 `postgres_exporter`, `iris_db_nightly`가
    이미 이 통계 역할을 상속했다. 적용 직전에 재확인하고 실제 `SET ROLE postgres_exporter` 상태의
@@ -108,9 +113,19 @@ sudo docker exec -e PGOPTIONS='-c default_transaction_read_only=on -c statement_
   `profile_pid=off`로 PID 증가를 막되 query ID 변화에 따른 entry 수·메모리를 관찰한다.
   통계 reset은 읽기 수집에 넣지 않는다. 필요하면 대상/손실 구간 승인을 받은 관리자가 수행한다.
 
+- `pg_buffercache_summary()`·`pg_buffercache_usage_counts()`는 공유 버퍼 전체를 한 번 훑는
+  짧은 조회다. relation별 점유는 `pg_buffercache`를 `pg_class.relfilenode`와 현재 DB로 묶어
+  집계한다. `pg_buffercache_evict*`는 캐시를 비우므로 운영 진단에 쓰지 않는다.
+- amcheck는 운영에서 `bt_index_check`만 쓴다. `bt_index_parent_check`는 ShareLock으로 쓰기를
+  막는다. `heapallindexed => true`는 heap 전체를 읽으므로 한 번에 한 인덱스씩, 부하가 낮을 때
+  실행한다. `REINDEX CONCURRENTLY` 전후와 major upgrade 전 검사에 사용한다.
+- auto_explain 계획은 PostgreSQL 로그(Loki)에 `duration: ... plan:`으로 남는다. 시간 계측을 끈
+  계획이므로 노드별 시간은 없고 실제 행 수와 버퍼만 있다. 운영 계측 비용은 같은 query ID의
+  `pg_stat_statements` 구간 평균을 활성화 전후로 비교해 확인한다.
+
 ## 복구
 
-새 모듈 파일이 있는 이미지가 아직 실행 중일 때 아래 SQL로 두 확장만 제거한다.
+새 모듈 파일이 있는 이미지가 아직 실행 중일 때 아래 SQL로 네 확장만 제거한다.
 이 작업은 새 계측 통계/객체를 버리고 앱 테이블·기존 pg_stat_statements는 보존한다.
 관리하는 두 읽기 view와 확장을 제거한 뒤 전용 스키마가 비었을 때만 제거한다.
 `RESTRICT`가 외부 의존 객체 때문에 실패하면 중단하고 그 객체를 검토한다. `CASCADE`로 우회하지 않는다.
@@ -120,7 +135,8 @@ sudo docker exec holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR
   -f /usr/local/share/hololive/disable-observability.sql
 ```
 
-해당 env 키를 종전 값(이번 도입 전에는 미설정/`pg_stat_statements`)으로 복구하고 이전
+auto_explain만 끌 때는 preload에서 `auto_explain`을 빼고 같은 이미지로 재생성한다. contrib이라
+모든 이미지에 모듈이 있다. 해당 env 키를 종전 값(이번 도입 전에는 미설정/`pg_stat_statements`)으로 복구하고 이전
 image ID/tag와 deploy tree로 같은 `--no-build --no-deps holo-postgres` 재생성을 수행한다.
 같은 PGDATA volume을 유지하고 readiness·앱 재연결·기존 통계를 확인한다.
 새 preload를 남긴 채 모듈 없는 이전 이미지로 바꾸면 시작에 실패한다.

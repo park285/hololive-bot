@@ -13,7 +13,10 @@ start_server() {
     -c pg_stat_kcache.track=top -c pg_stat_kcache.track_planning=off \
     -c pg_wait_sampling.profile_pid=off -c pg_wait_sampling.profile_queries=top \
     -c pg_wait_sampling.sample_cpu=off -c pg_wait_sampling.profile_period=20 \
-    -c pg_wait_sampling.history_period=100 -c pg_wait_sampling.history_size=20000 "$@" &
+    -c pg_wait_sampling.history_period=100 -c pg_wait_sampling.history_size=20000 \
+    -c auto_explain.log_min_duration=1s -c auto_explain.log_analyze=on -c auto_explain.log_buffers=on \
+    -c auto_explain.log_timing=off -c auto_explain.log_nested_statements=on \
+    -c auto_explain.log_parameter_max_length=0 "$@" &
   server=$!
   trap 'kill -TERM "$server" 2>/dev/null || true; wait "$server" || true' EXIT
   attempts=0
@@ -40,7 +43,7 @@ stop_server() {
 }
 
 start_observability() {
-  start_server -c shared_preload_libraries=pg_stat_statements,pg_stat_kcache,pg_wait_sampling \
+  start_server -c shared_preload_libraries=pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain \
     -c compute_query_id=on
 }
 
@@ -54,7 +57,7 @@ if psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   printf 'activation unexpectedly succeeded without preload\n' >&2
   exit 1
 fi
-[ "$(psql -X -h /var/run/postgresql -U postgres -Atqc "SELECT count(*) FROM pg_extension WHERE extname IN ('pg_stat_kcache','pg_wait_sampling')")" = 0 ]
+[ "$(psql -X -h /var/run/postgresql -U postgres -Atqc "SELECT count(*) FROM pg_extension WHERE extname IN ('pg_stat_kcache','pg_wait_sampling','pg_buffercache','amcheck')")" = 0 ]
 stop_server
 start_observability
 [ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SELECT current_user')" = postgres ]
@@ -94,6 +97,7 @@ BEGIN
        OR has_table_privilege('extension_test_app', 'hololive_observability.pg_wait_sampling_profile', 'SELECT')
        OR has_function_privilege('extension_test_monitor', 'hololive_observability.pg_stat_kcache_reset()', 'EXECUTE')
        OR has_function_privilege('extension_test_monitor', 'hololive_observability.pg_wait_sampling_reset_profile()', 'EXECUTE')
+       OR has_function_privilege('extension_test_monitor', 'hololive_observability.bt_index_check(regclass,boolean)', 'EXECUTE')
        OR has_schema_privilege('extension_test_monitor','public','USAGE')
        OR has_schema_privilege('extension_test_monitor','hololive_observability','CREATE')
        OR has_schema_privilege('extension_test_app','hololive_observability','USAGE') THEN
@@ -108,6 +112,13 @@ BEGIN
        OR NOT EXISTS (SELECT 1 FROM hololive_observability.pg_wait_sampling_profile) THEN
         RAISE EXCEPTION 'monitor role cannot read collected statistics';
     END IF;
+    -- evict 함수는 ACL이 아니라 함수 안의 superuser 검사로 막힙니다.
+    BEGIN
+        PERFORM hololive_observability.pg_buffercache_evict_all();
+        RAISE EXCEPTION 'monitor unexpectedly evicted shared buffers';
+    EXCEPTION WHEN insufficient_privilege THEN
+        NULL;
+    END;
 END
 $monitor$;
 RESET ROLE;
@@ -130,6 +141,17 @@ END
 $app$;
 RESET ROLE;
 SQL
+
+# 1초 넘는 문장은 시간 계측 없이 실제 행 수와 버퍼가 담긴 계획으로 기록되어야 합니다.
+plan="$(psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
+  -c 'SET client_min_messages = log' -c 'SELECT count(*) FROM pg_class, pg_sleep(1.1)' 2>&1)"
+printf '%s\n' "$plan" | grep -q 'duration: .* plan:'
+printf '%s\n' "$plan" | grep -q 'actual rows='
+printf '%s\n' "$plan" | grep -q 'Buffers: shared'
+if printf '%s\n' "$plan" | grep -q 'actual time='; then
+  printf 'auto_explain unexpectedly logged per-node timing\n' >&2
+  exit 1
+fi
 
 # 의도적인 서로 다른 세션의 행 잠금 대기를 수집합니다.
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 -c \
@@ -154,6 +176,11 @@ BEGIN
                    WHERE event_type='Lock' AND event='transactionid' AND queryid<>0 AND count>0) THEN
         RAISE EXCEPTION 'row lock wait samples were not collected';
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM hololive_observability.pg_buffercache_summary() WHERE buffers_used > 0) THEN
+        RAISE EXCEPTION 'shared buffer usage was not readable';
+    END IF;
+    -- heap 전체 대조까지 포함해 실제 PK의 B-tree 검사가 통과해야 합니다.
+    PERFORM hololive_observability.bt_index_check('extension_lock_test_pkey'::regclass, true);
 END
 $lock$;
 DROP TABLE extension_lock_test;
@@ -178,7 +205,7 @@ psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -c 'SET ROLE extension_test_monitor' -f /usr/local/share/hololive/read-observability.sql
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/disable-observability.sql
-[ "$(psql -X -h /var/run/postgresql -U postgres -Atqc "SELECT count(*) FROM pg_extension WHERE extname IN ('pg_stat_kcache','pg_wait_sampling')")" = 0 ]
+[ "$(psql -X -h /var/run/postgresql -U postgres -Atqc "SELECT count(*) FROM pg_extension WHERE extname IN ('pg_stat_kcache','pg_wait_sampling','pg_buffercache','amcheck')")" = 0 ]
 stop_server
 start_server -c shared_preload_libraries=pg_stat_statements
 [ "$(psql -X -h /var/run/postgresql -U postgres -Atqc 'SELECT count(*)>=0 FROM public.pg_stat_statements')" = t ]

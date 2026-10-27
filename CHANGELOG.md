@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **PostgreSQL 실행 계획 로그와 버퍼·인덱스 진단:** 중앙 `holo-postgres`가 `auto_explain`을 preload하여 1초 이상 걸린 문장의 계획을 PostgreSQL 로그(Loki)에 남깁니다. 보존 함수 안의 문장도 포함하며, 실제 행 수와 버퍼는 기록하고 노드별 시간 계측과 바인드 값은 남기지 않습니다. 같은 활성화 SQL이 `pg_buffercache` 1.6과 `amcheck` 1.5를 `hololive_observability` 스키마에 만듭니다. 버퍼 조회는 `pg_monitor`가, evict 함수와 amcheck 검사는 관리자만 실행할 수 있습니다. 2026-10-27 서울 primary에 적용했고 preload 키는 `HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES`가 계속 소유합니다. 절차와 복구는 [PostgreSQL observability runbook](docs/current/runbooks/postgres-observability.md)에 있습니다.
+
 ## v12.3.1 - 2026-10-27
 
 - **의존성(shared-go v2.17.0·iris-client-go v3.2.0):** 두 라이브러리가 공개 API를 지우거나 이름·시그니처를 바꿨기 때문에 같은 변경에서 코드를 함께 옮깁니다. hololive-api·hololive-alarm-worker·hololive-shared는 두 모듈을 모두 올리고, hololive-youtube-collector·hololive-dbtest는 shared-go만 올립니다. go.sum에서는 이 두 모듈 줄만 바뀝니다.

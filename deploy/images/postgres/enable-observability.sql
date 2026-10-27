@@ -35,6 +35,10 @@ REVOKE ALL ON SCHEMA hololive_observability FROM PUBLIC;
 GRANT USAGE ON SCHEMA hololive_observability TO pg_read_all_stats;
 CREATE EXTENSION IF NOT EXISTS pg_stat_kcache WITH SCHEMA hololive_observability;
 CREATE EXTENSION IF NOT EXISTS pg_wait_sampling WITH SCHEMA hololive_observability;
+-- 공유 버퍼 점유 진단과 인덱스 무결성 검사용 contrib입니다. 확장 기본 권한을 유지하여
+-- 버퍼 조회는 pg_monitor, evict 함수와 amcheck는 관리자만 실행합니다.
+CREATE EXTENSION IF NOT EXISTS pg_buffercache WITH SCHEMA hololive_observability;
+CREATE EXTENSION IF NOT EXISTS amcheck WITH SCHEMA hololive_observability;
 
 DO $versions$
 BEGIN
@@ -44,6 +48,12 @@ BEGIN
     ) OR NOT EXISTS (
         SELECT 1 FROM pg_extension
         WHERE extname = 'pg_wait_sampling' AND extversion = '1.1' AND extnamespace = 'hololive_observability'::regnamespace
+    ) OR NOT EXISTS (
+        SELECT 1 FROM pg_extension
+        WHERE extname = 'pg_buffercache' AND extversion = '1.6' AND extnamespace = 'hololive_observability'::regnamespace
+    ) OR NOT EXISTS (
+        SELECT 1 FROM pg_extension
+        WHERE extname = 'amcheck' AND extversion = '1.5' AND extnamespace = 'hololive_observability'::regnamespace
     ) THEN
         RAISE EXCEPTION 'unexpected observability extension version or schema; review before upgrading';
     END IF;
