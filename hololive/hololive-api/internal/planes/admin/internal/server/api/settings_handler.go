@@ -54,8 +54,8 @@ type SettingsHandler struct {
 	operations    settingsOperationGate
 }
 
-// updateSettingsRequest는 alarmAdvanceMinutes만 받는다. 소비자인 iris-console은 scraperProxyEnabled를 보내지 않고
-// 요청에 들어오면 거절한다.
+// updateSettingsRequest는 alarmAdvanceMinutes만 받는다. 생산자 계약(admin-api.openapi.json
+// `holoUpdateSettings`)에 다른 필드가 없으므로 들어오면 거절한다.
 type updateSettingsRequest struct {
 	AlarmAdvanceMinutes *int `json:"alarmAdvanceMinutes"`
 }

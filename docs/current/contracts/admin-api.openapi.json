@@ -1,0 +1,2684 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "hololive-api admin plane",
+    "version": "1",
+    "description": "hololive-api admin plane `/api/holo/*` 생산자 계약입니다. 정본은 이 파일이며 iris-console은 고정한 hololive-bot revision에서 생성 사본을 만듭니다. 계약 문서: docs/current/contracts/admin-api.md"
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/api/holo/alarms": {
+      "get": {
+        "operationId": "holoGetAlarms",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "holoDeleteAlarm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAlarmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteAlarmResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/members": {
+      "get": {
+        "operationId": "holoGetMembers",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "holoAddMember",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/members/calendar": {
+      "get": {
+        "operationId": "holoGetCalendar",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 12
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/members/{id}/aliases": {
+      "post": {
+        "operationId": "holoAddAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAliasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "holoRemoveAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveAliasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/members/{id}/channel": {
+      "patch": {
+        "operationId": "holoUpdateChannel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateChannelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/members/{id}/graduation": {
+      "patch": {
+        "operationId": "holoSetGraduation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGraduationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/members/{id}/name": {
+      "patch": {
+        "operationId": "holoUpdateMemberName",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberNameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/names/room": {
+      "post": {
+        "operationId": "holoSetRoomName",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomNameUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/rooms": {
+      "get": {
+        "operationId": "holoGetRooms",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "x-producer-verified": true
+      },
+      "post": {
+        "operationId": "holoAddRoom",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddRoomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomChangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ACL mode changed (code acl_mode_changed); nothing written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "x-producer-verified": true
+      },
+      "delete": {
+        "operationId": "holoRemoveRoom",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveRoomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomChangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ACL mode changed (code acl_mode_changed); nothing written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "x-producer-verified": true
+      }
+    },
+    "/api/holo/rooms/joined": {
+      "get": {
+        "operationId": "holoGetRoomsJoined",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinedRoomsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "x-producer-verified": true
+      }
+    },
+    "/api/holo/rooms/acl": {
+      "post": {
+        "operationId": "holoSetAcl",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAclRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetAclResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "x-producer-verified": true
+      }
+    },
+    "/api/holo/settings": {
+      "get": {
+        "operationId": "holoGetSettings",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "holoUpdateSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsUpdateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/stats": {
+      "get": {
+        "operationId": "holoGetStats",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/streams/live": {
+      "get": {
+        "operationId": "holoGetLiveStreams",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/streams/upcoming": {
+      "get": {
+        "operationId": "holoGetUpcomingStreams",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/dispatch/summary": {
+      "get": {
+        "operationId": "holoGetDispatchSummary",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchSummary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/dispatch/failures": {
+      "get": {
+        "operationId": "holoGetDispatchFailures",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchFailureBreakdown"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/dispatch/deliveries": {
+      "get": {
+        "operationId": "holoGetDispatchDeliveries",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchDeliveryPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/DispatchStatus"
+            }
+          },
+          {
+            "in": "query",
+            "name": "roomId",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "channelId",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
+            "in": "query",
+            "name": "alarmType",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
+            "in": "query",
+            "name": "errorCode",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "beforeId",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PositiveBigInt"
+            }
+          }
+        ]
+      }
+    },
+    "/api/holo/dispatch/deliveries/{id}": {
+      "get": {
+        "operationId": "holoGetDispatchDelivery",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchDeliveryDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PositiveBigInt"
+            }
+          }
+        ]
+      }
+    },
+    "/api/holo/dispatch/deliveries/{id}/actions": {
+      "get": {
+        "operationId": "holoGetDispatchActions",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchActionPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PositiveBigInt"
+            }
+          },
+          {
+            "in": "query",
+            "name": "beforeId",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PositiveBigInt"
+            }
+          }
+        ]
+      }
+    },
+    "/api/holo/dispatch/deliveries/{id}/requeue": {
+      "post": {
+        "operationId": "holoRequeueDispatchDelivery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchRequeueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchRequeueResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PositiveBigInt"
+            }
+          }
+        ]
+      }
+    },
+    "/api/holo/x-spaces/session": {
+      "get": {
+        "operationId": "holoGetXSpaceSession",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XSpaceSessionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "holoSubmitXSpaceSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XSpaceSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XSpaceSessionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/dispatch/deliveries/{id}/settle": {
+      "post": {
+        "operationId": "holoSettleDispatchDelivery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchSettleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchRequeueResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PositiveBigInt"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    },
+    "schemas": {
+      "AddAliasRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "alias"
+        ],
+        "properties": {
+          "alias": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "example": "ko"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddMemberRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "channelId",
+          "aliases",
+          "isGraduated"
+        ],
+        "properties": {
+          "aliases": {
+            "$ref": "#/components/schemas/Aliases"
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "isGraduated": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nameJa": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nameKo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddRoomRequest": {
+        "type": "object",
+        "required": [
+          "room",
+          "mode"
+        ],
+        "properties": {
+          "room": {
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]{0,18})$",
+            "description": "canonical signed 64-bit chat ID"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "whitelist",
+              "blacklist"
+            ],
+            "description": "호출자가 읽은 ACL 모드. 현재 모드와 다르면 409 acl_mode_changed"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Alarm": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "roomName",
+          "channelId",
+          "memberName"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "roomName": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlarmsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "alarms"
+        ],
+        "properties": {
+          "alarms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Alarm"
+            }
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "additionalProperties": false,
+        "description": "alarms는 페이지 없이 전체 목록입니다. 생산자는 상한을 두지 않으며 표시 상한은 소비자가 소유합니다."
+      },
+      "Aliases": {
+        "type": "object",
+        "required": [
+          "ko",
+          "ja"
+        ],
+        "properties": {
+          "ja": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ko": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CalendarEntry": {
+        "type": "object",
+        "required": [
+          "kind",
+          "member",
+          "day"
+        ],
+        "properties": {
+          "day": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "member": {
+            "$ref": "#/components/schemas/CalendarMember"
+          },
+          "ordinal": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CalendarMember": {
+        "type": "object",
+        "required": [
+          "id",
+          "channelId",
+          "name"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "isGraduated": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nameKo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "photo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shortKoreanName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suborg": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CalendarResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "month",
+          "year",
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarEntry"
+            }
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteAlarmRequest": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "channelId"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteAlarmResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "removed"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "removed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchAction": {
+        "type": "object",
+        "required": [
+          "id",
+          "deliveryId",
+          "action",
+          "operatorId",
+          "reason",
+          "fromStatus",
+          "toStatus",
+          "duplicateRiskAck",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/PositiveBigInt"
+          },
+          "deliveryId": {
+            "$ref": "#/components/schemas/PositiveBigInt"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "manual_requeue",
+              "manual_cancel",
+              "manual_quarantine"
+            ]
+          },
+          "operatorId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "fromStatus": {
+            "$ref": "#/components/schemas/DispatchStatus"
+          },
+          "toStatus": {
+            "$ref": "#/components/schemas/DispatchStatus"
+          },
+          "duplicateRiskAck": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchActionPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextBeforeId"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchAction"
+            },
+            "maxItems": 50
+          },
+          "nextBeforeId": {
+            "type": "string",
+            "pattern": "^(?:|[1-9][0-9]*)$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchDelivery": {
+        "type": "object",
+        "required": [
+          "id",
+          "eventId",
+          "roomId",
+          "sendUnitId",
+          "alarmType",
+          "channelId",
+          "streamId",
+          "status",
+          "attemptCount",
+          "errorCode",
+          "nextAttemptAt",
+          "createdAt",
+          "updatedAt",
+          "lockExpiresAt",
+          "sendingAt",
+          "sentAt",
+          "dlqAt",
+          "quarantinedAt",
+          "cancelledAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/PositiveBigInt"
+          },
+          "eventId": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "roomId": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "sendUnitId": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "alarmType": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "channelId": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "streamId": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "status": {
+            "$ref": "#/components/schemas/DispatchStatus"
+          },
+          "attemptCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "errorCode": {
+            "type": "string",
+            "pattern": "^(?:|[a-z][a-z0-9_]{0,63})$"
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lockExpiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "sendingAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "sentAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "dlqAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "quarantinedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "cancelledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchDeliveryDetail": {
+        "type": "object",
+        "required": [
+          "delivery",
+          "group",
+          "groupTruncated",
+          "replayTargets",
+          "replayBlocked"
+        ],
+        "properties": {
+          "delivery": {
+            "$ref": "#/components/schemas/DispatchDelivery"
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchDelivery"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "groupTruncated": {
+            "type": "boolean"
+          },
+          "replayTargets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchRevision"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "replayBlocked": {
+            "type": "string",
+            "enum": [
+              "",
+              "not_found",
+              "group_too_large",
+              "group_not_terminal_failure",
+              "group_identity_mismatch"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchDeliveryPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextBeforeId"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchDelivery"
+            },
+            "maxItems": 50
+          },
+          "nextBeforeId": {
+            "type": "string",
+            "pattern": "^(?:|[1-9][0-9]*)$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchFailureBreakdown": {
+        "type": "object",
+        "required": [
+          "total",
+          "errorCodes",
+          "alarmTypes",
+          "channels",
+          "rooms",
+          "observedAt"
+        ],
+        "properties": {
+          "total": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "errorCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchFailureCount"
+            },
+            "maxItems": 10
+          },
+          "alarmTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchFailureCount"
+            },
+            "maxItems": 10
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchFailureCount"
+            },
+            "maxItems": 10
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchFailureCount"
+            },
+            "maxItems": 10
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchFailureCount": {
+        "type": "object",
+        "required": [
+          "value",
+          "count"
+        ],
+        "properties": {
+          "value": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "count": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchRequeueRequest": {
+        "type": "object",
+        "required": [
+          "reason",
+          "duplicateRiskAck",
+          "targets"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[^\\s\\u0000-\\u001F\\u007F](?:[^\\u0000-\\u001F\\u007F]*[^\\s\\u0000-\\u001F\\u007F])?$"
+          },
+          "duplicateRiskAck": {
+            "const": true
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchRevision"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchRequeueResponse": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PositiveBigInt"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchRevision": {
+        "type": "object",
+        "required": [
+          "id",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/PositiveBigInt"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchSettleRequest": {
+        "type": "object",
+        "required": [
+          "reason",
+          "action",
+          "targets"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[^\\s\\u0000-\\u001F\\u007F](?:[^\\u0000-\\u001F\\u007F]*[^\\s\\u0000-\\u001F\\u007F])?$"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchRevision"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "cancel",
+              "quarantine"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "retry",
+          "leased",
+          "sending",
+          "sent",
+          "dlq",
+          "quarantined",
+          "cancelled"
+        ]
+      },
+      "DispatchStatusCount": {
+        "type": "object",
+        "required": [
+          "status",
+          "count",
+          "oldestAt"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/DispatchStatus"
+          },
+          "count": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "oldestAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchSummary": {
+        "type": "object",
+        "required": [
+          "counts",
+          "observedAt"
+        ],
+        "properties": {
+          "counts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DispatchStatusCount"
+            },
+            "maxItems": 9
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinedRoom": {
+        "type": "object",
+        "required": [
+          "chatId",
+          "name",
+          "type",
+          "memberCount"
+        ],
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "memberCount": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinedRoomsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "rooms"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JoinedRoom"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Member": {
+        "type": "object",
+        "required": [
+          "id",
+          "channelId",
+          "name",
+          "aliases",
+          "isGraduated"
+        ],
+        "properties": {
+          "aliases": {
+            "$ref": "#/components/schemas/Aliases"
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "isGraduated": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nameJa": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nameKo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "MembersResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "members"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "additionalProperties": false,
+        "description": "members는 페이지 없이 전체 목록입니다. 생산자는 상한을 두지 않으며 표시 상한은 소비자가 소유합니다."
+      },
+      "PositiveBigInt": {
+        "type": "string",
+        "maxLength": 19,
+        "pattern": "^[1-9][0-9]*$"
+      },
+      "ProducerError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "RemoveAliasRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "alias"
+        ],
+        "properties": {
+          "alias": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "example": "ja"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RemoveRoomRequest": {
+        "type": "object",
+        "required": [
+          "room",
+          "mode"
+        ],
+        "properties": {
+          "room": {
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]{0,18})$",
+            "description": "canonical signed 64-bit chat ID"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "whitelist",
+              "blacklist"
+            ],
+            "description": "호출자가 읽은 ACL 모드. 현재 모드와 다르면 409 acl_mode_changed"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoomChangeResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "changed"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "message": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "false면 이미 요청한 상태였고 쓰지 않았음"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoomNameUpdateRequest": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "roomName"
+        ],
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "roomName": {
+            "type": "string",
+            "description": "관리자 지정 방 이름입니다. 빈 값이나 공백뿐인 값은 지정을 해제하고 Kakao 방 이름으로 돌아갑니다."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoomsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "rooms",
+          "aclEnabled",
+          "aclMode"
+        ],
+        "properties": {
+          "aclEnabled": {
+            "type": "boolean"
+          },
+          "aclMode": {
+            "type": "string",
+            "enum": [
+              "whitelist",
+              "blacklist"
+            ]
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "additionalProperties": false,
+        "description": "rooms는 페이지 없이 현재 모드 목록 전체입니다. 생산자는 상한을 두지 않으며 표시 상한은 소비자가 소유합니다."
+      },
+      "SetAclRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetAclResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "enabled",
+          "mode"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "message": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "whitelist",
+              "blacklist"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetGraduationRequest": {
+        "type": "object",
+        "required": [
+          "isGraduated"
+        ],
+        "properties": {
+          "isGraduated": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Settings": {
+        "type": "object",
+        "required": [
+          "alarmAdvanceMinutes"
+        ],
+        "properties": {
+          "alarmAdvanceMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
+          }
+        },
+        "additionalProperties": false
+      },
+      "SettingsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "settings"
+        ],
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SettingsRuntimeResult": {
+        "type": "object",
+        "properties": {
+          "alarm_applied": {
+            "type": "boolean"
+          },
+          "alarm_requested_advance_minutes": {
+            "type": "integer"
+          },
+          "alarm_reason": {
+            "type": "string"
+          },
+          "alarm_target_minutes": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "config_publish_alarm_advance_minutes": {
+            "type": "boolean"
+          },
+          "config_publish_alarm_advance_minutes_error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "SettingsUpdateResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "settings",
+          "runtime"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "message": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/SettingsRuntimeResult"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StatsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "members",
+          "alarms",
+          "rooms",
+          "version",
+          "uptime"
+        ],
+        "properties": {
+          "alarms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "members": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rooms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "uptime": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StatusOnlyResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Stream": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "channel_id"
+        ],
+        "properties": {
+          "channel_id": {
+            "type": "string"
+          },
+          "channel_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_actual": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_scheduled": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "thumbnail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StreamsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "streams"
+        ],
+        "properties": {
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Stream"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateChannelRequest": {
+        "type": "object",
+        "required": [
+          "channelId"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateMemberNameRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "XSpaceConnection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "available",
+          "revision",
+          "state",
+          "candidateState",
+          "lastError",
+          "candidateError",
+          "lastCheckedAt",
+          "lastSuccessAt",
+          "nextCheckAt"
+        ],
+        "properties": {
+          "recovery": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "lastError",
+              "lastAttemptAt"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "disabled",
+                  "running",
+                  "submitted",
+                  "connected",
+                  "login_required",
+                  "outcome_unknown",
+                  "manual_override"
+                ]
+              },
+              "lastError": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "lastAttemptAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "unconfigured",
+              "connected",
+              "auth_required",
+              "rate_limited",
+              "error"
+            ]
+          },
+          "candidateState": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "pending",
+              "accepted",
+              "rejected"
+            ]
+          },
+          "lastError": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "candidateError": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "lastCheckedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastSuccessAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "nextCheckAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "XSpaceSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authToken",
+          "csrfToken",
+          "expectedRevision"
+        ],
+        "properties": {
+          "authToken": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{16,512}$",
+            "writeOnly": true
+          },
+          "csrfToken": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{16,512}$",
+            "writeOnly": true
+          },
+          "expectedRevision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$"
+          }
+        }
+      },
+      "XSpaceSessionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "connection",
+          "accepted"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "connection": {
+            "$ref": "#/components/schemas/XSpaceConnection"
+          },
+          "accepted": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

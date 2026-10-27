@@ -37,8 +37,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// 멤버 목록의 aliases는 별명이 없어도 항상 빈 ko·ja 배열을 가진 객체다. 소비자인 iris-console은 부재·null 보정을
-// 지우고 null을 거절하므로 소유 API가 이 계약을 지킨다.
+// 멤버 목록의 aliases는 별명이 없어도 항상 빈 ko·ja 배열을 가진 객체다. 생산자 계약(admin-api.openapi.json
+// `Aliases`)이 부재·null을 허용하지 않으므로 소유 API가 이 형식을 지킨다.
 func TestGetMembersAlwaysReturnsAliasesObject(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

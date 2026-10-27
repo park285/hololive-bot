@@ -11,3 +11,4 @@ alarm.state.read|alarm-worker|hololive-api|postgres_table|alarms|hololive/hololi
 shortlink.youtube|hololive-api|external,alarm-worker|external_https_redirect|GET,HEAD /l/:videoID|hololive/hololive-shared/pkg/contracts/shortlink|docs/current/contracts/shortlink.md
 settings.update|hololive-api|iris-console,alarm-worker|http_json+settings_file|/api/holo/settings;settings.json|hololive/hololive-api/internal/server/settings|docs/current/contracts/settings.md
 iris.webhook|iris|hololive-api,alarm-worker|external_http_h3|webhook/reply/send|external|docs/current/contracts/iris-boundary.md
+admin.api|hololive-api|iris-console|http_json|/api/holo/*|hololive/hololive-api/internal/planes/admin;docs/current/contracts/admin-api.openapi.json|docs/current/contracts/admin-api.md
