@@ -127,6 +127,7 @@ func TestRoomChangeWithStaleModeDoesNotWrite(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
+
 	store.createRoomHook = func(string, string) error {
 		t.Error("stale mode add wrote to the store")
 
@@ -137,6 +138,7 @@ func TestRoomChangeWithStaleModeDoesNotWrite(t *testing.T) {
 
 		return nil
 	}
+
 	service := newACLServiceFromFakeStore(t, store, true)
 
 	if added, err := service.AddRoom(t.Context(), ACLModeBlacklist, "3001"); !errors.Is(err, ErrACLModeChanged) || added {

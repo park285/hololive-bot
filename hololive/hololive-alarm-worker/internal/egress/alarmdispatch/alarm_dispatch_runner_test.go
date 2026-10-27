@@ -1012,10 +1012,12 @@ func TestAlarmDispatchRunnerRoutesRoomMismatchedGroupAndSendsRemainingGroups(t *
 	const otherRoomID = "9876543210"
 
 	mismatched := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	mismatched.ClientRequestID = "hololive-alarm:test-room-mismatch"
-	healthy := alarmDispatchRunnerTestEnvelope(otherRoomID, nil)
 
+	mismatched.ClientRequestID = "hololive-alarm:test-room-mismatch"
+
+	healthy := alarmDispatchRunnerTestEnvelope(otherRoomID, nil)
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{mismatched, healthy}}}
+
 	consumer.requests = map[string]*dispatchoutbox.SendRequest{
 		mismatched.ClientRequestID: {
 			ClientRequestID:     mismatched.ClientRequestID,
@@ -1025,6 +1027,7 @@ func TestAlarmDispatchRunnerRoutesRoomMismatchedGroupAndSendsRemainingGroups(t *
 			RoomID:              otherRoomID,
 		},
 	}
+
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 

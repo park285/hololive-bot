@@ -16,6 +16,7 @@ func decodeRoomMutation(t *testing.T, body []byte) roomMutationBody {
 	t.Helper()
 
 	var decoded roomMutationBody
+
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
 	}
@@ -23,10 +24,14 @@ func decodeRoomMutation(t *testing.T, body []byte) roomMutationBody {
 	return decoded
 }
 
-func assertRoomChange(t *testing.T, serve adminTestServe, method, body string, wantChanged bool) {
+const roomChangeBody = `{"room":"3002","mode":"whitelist"}`
+
+func assertRoomChange(t *testing.T, serve adminTestServe, method string, wantChanged bool) {
 	t.Helper()
 
-	rec := serve(method, "/api/holo/rooms", body)
+	body := roomChangeBody
+
+	rec := serve(method, roomsPath, body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("%s %s = %d %s, want 200", method, body, rec.Code, rec.Body.String())
 	}
@@ -41,17 +46,16 @@ func assertRoomChange(t *testing.T, serve adminTestServe, method, body string, w
 // 요청을 다시 보낸 호출자가 실행 거절로 오인하지 않게 하기 위해서다.
 func TestRoomChangesConvergeWithChangedFlag(t *testing.T) {
 	serve, aclService := newAdminTestRouter(t, &recordingIrisRooms{})
-	const room = `{"room":"3002","mode":"whitelist"}`
 
-	assertRoomChange(t, serve, http.MethodPost, room, true)
-	assertRoomChange(t, serve, http.MethodPost, room, false)
+	assertRoomChange(t, serve, http.MethodPost, true)
+	assertRoomChange(t, serve, http.MethodPost, false)
 
 	if !aclService.IsRoomAllowed("3002") {
 		t.Fatal("repeated add left the room out of the whitelist")
 	}
 
-	assertRoomChange(t, serve, http.MethodDelete, room, true)
-	assertRoomChange(t, serve, http.MethodDelete, room, false)
+	assertRoomChange(t, serve, http.MethodDelete, true)
+	assertRoomChange(t, serve, http.MethodDelete, false)
 
 	if aclService.IsRoomAllowed("3002") {
 		t.Fatal("repeated remove left the room in the whitelist")
@@ -63,7 +67,7 @@ func TestRoomChangeRejectsStaleACLMode(t *testing.T) {
 	serve, aclService := newAdminTestRouter(t, &recordingIrisRooms{})
 
 	for _, method := range []string{http.MethodPost, http.MethodDelete} {
-		rec := serve(method, "/api/holo/rooms", `{"room":"3003","mode":"blacklist"}`)
+		rec := serve(method, roomsPath, `{"room":"3003","mode":"blacklist"}`)
 		if rec.Code != http.StatusConflict {
 			t.Fatalf("%s stale mode = %d %s, want 409", method, rec.Code, rec.Body.String())
 		}
@@ -79,7 +83,7 @@ func TestRoomChangeRejectsStaleACLMode(t *testing.T) {
 	}
 
 	for _, body := range []string{`{"room":"3003"}`, `{"room":"3003","mode":"graylist"}`, `{"room":"","mode":"whitelist"}`} {
-		if rec := serve(http.MethodPost, "/api/holo/rooms", body); rec.Code != http.StatusBadRequest {
+		if rec := serve(http.MethodPost, roomsPath, body); rec.Code != http.StatusBadRequest {
 			t.Fatalf("add %s = %d %s, want 400", body, rec.Code, rec.Body.String())
 		}
 	}

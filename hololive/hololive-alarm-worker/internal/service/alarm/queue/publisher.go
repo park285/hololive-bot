@@ -60,8 +60,8 @@ type Publisher struct {
 	now           func() time.Time
 }
 
-// NewPublisher는 PG dispatch outbox에 pending 행을 쓰고 wakeup을 보내는 발행자를 만든다. outbox는 유일한 발행
-// 경로이므로 필수이고, batch 한도는 RuntimeConfig.AlarmDispatchPublish가 검증한 양수여야 한다. 기본값으로 바꾸지
+// NewPublisher는 PG dispatch outbox에 pending 행을 쓰고 wakeup을 보내는 발행자를 만든다. 유일한 발행 경로인
+// outbox는 필수이고, batch 한도는 RuntimeConfig.AlarmDispatchPublish가 검증한 양수여야 한다. 기본값으로 바꾸지
 // 않고 생성 오류로 드러낸다.
 func NewPublisher(c WakeupCache, outbox dispatchoutbox.Writer, config PublishConfig, logger *slog.Logger) (*Publisher, error) {
 	if outbox == nil {

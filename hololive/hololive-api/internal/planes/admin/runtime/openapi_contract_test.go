@@ -17,6 +17,9 @@ import (
 	"unicode/utf8"
 )
 
+// roomsPath는 방 목록·변경 operation 경로다.
+const roomsPath = "/api/holo/rooms"
+
 // adminOpenAPI는 admin plane /api/holo/* 생산자 계약(docs/current/contracts/admin-api.openapi.json)이다.
 type adminOpenAPI struct {
 	Paths      map[string]map[string]openAPIOperation `json:"paths"`
@@ -41,14 +44,24 @@ func loadAdminOpenAPI(t *testing.T) *adminOpenAPI {
 		t.Fatal("resolve test source path")
 	}
 
-	path := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "..", "..", "docs", "current", "contracts", "admin-api.openapi.json")
+	root, err := os.OpenRoot(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "..", "..", "docs", "current", "contracts"))
+	if err != nil {
+		t.Fatalf("open contracts directory: %v", err)
+	}
 
-	raw, err := os.ReadFile(path)
+	t.Cleanup(func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	})
+
+	raw, err := root.ReadFile("admin-api.openapi.json")
 	if err != nil {
 		t.Fatalf("read admin OpenAPI: %v", err)
 	}
 
 	var spec adminOpenAPI
+
 	if err := json.Unmarshal(raw, &spec); err != nil {
 		t.Fatalf("decode admin OpenAPI: %v", err)
 	}
@@ -56,8 +69,8 @@ func loadAdminOpenAPI(t *testing.T) *adminOpenAPI {
 	return &spec
 }
 
-// assertResponse는 handler 응답 본문이 계약의 operation·status 응답 schema를 지키는지 본다.
-// status 응답이 없으면 default(ProducerError)를 쓴다.
+// 계약의 operation·status 응답 schema로 handler 응답 본문을 검사한다.
+// 해당 status 응답이 없으면 default(ProducerError)를 쓴다.
 func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, status int, body []byte) {
 	t.Helper()
 
@@ -89,7 +102,7 @@ func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, status 
 	}
 }
 
-// jsonSchema는 계약이 쓰는 JSON Schema 키워드만 담는다. format·uniqueItems·description은 판정하지 않는다.
+// 계약이 쓰는 JSON Schema 키워드만 담는다. 형식(format)·uniqueItems·description은 판정하지 않는다.
 type jsonSchema struct {
 	Ref                  string                     `json:"$ref"`
 	Type                 json.RawMessage            `json:"type"`
@@ -159,8 +172,10 @@ func checkType(raw json.RawMessage, value any, at string) error {
 	}
 
 	var types []string
+
 	if err := json.Unmarshal(raw, &types); err != nil {
 		var single string
+
 		if err := json.Unmarshal(raw, &single); err != nil {
 			return fmt.Errorf("%s: decode type: %w", at, err)
 		}
@@ -296,14 +311,14 @@ func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 		method, path, body string
 		status             int
 	}{
-		{http.MethodGet, "/api/holo/rooms", "", http.StatusOK},
-		{http.MethodPost, "/api/holo/rooms", `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
-		{http.MethodPost, "/api/holo/rooms", `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
-		{http.MethodPost, "/api/holo/rooms", `{"room":"3011","mode":"blacklist"}`, http.StatusConflict},
-		{http.MethodPost, "/api/holo/rooms", `{"room":"room name","mode":"whitelist"}`, http.StatusBadRequest},
-		{http.MethodGet, "/api/holo/rooms", "", http.StatusOK},
-		{http.MethodDelete, "/api/holo/rooms", `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
-		{http.MethodDelete, "/api/holo/rooms", `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
+		{http.MethodGet, roomsPath, "", http.StatusOK},
+		{http.MethodPost, roomsPath, `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
+		{http.MethodPost, roomsPath, `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
+		{http.MethodPost, roomsPath, `{"room":"3011","mode":"blacklist"}`, http.StatusConflict},
+		{http.MethodPost, roomsPath, `{"room":"room name","mode":"whitelist"}`, http.StatusBadRequest},
+		{http.MethodGet, roomsPath, "", http.StatusOK},
+		{http.MethodDelete, roomsPath, `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
+		{http.MethodDelete, roomsPath, `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
 		{http.MethodGet, "/api/holo/rooms/joined", "", http.StatusOK},
 		{http.MethodPost, "/api/holo/rooms/acl", `{"enabled":true,"mode":"blacklist"}`, http.StatusOK},
 		{http.MethodPost, "/api/holo/rooms/acl", `{"mode":"graylist"}`, http.StatusBadRequest},

@@ -69,6 +69,7 @@ func TestClaimDeliveryDoesNotWaitForQueueMetrics(t *testing.T) {
 func TestQueueObservationClearsResolvedDeadLetterBacklog(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
+
 	r.pool = pool
 	r.markDeadLettered()
 

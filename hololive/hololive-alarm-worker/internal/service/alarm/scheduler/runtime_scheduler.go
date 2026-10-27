@@ -120,6 +120,7 @@ func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(deps.Notification.CheckInterval)
 	tierScheduler := tier.NewTieredScheduler(logger)
 	dedupService := dedup.NewService(deps.Cache, targetMinutes, logger)
+
 	queuePublisher, err := queue.NewPublisher(deps.Cache, deps.Outbox, deps.Publish, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: %w", err)

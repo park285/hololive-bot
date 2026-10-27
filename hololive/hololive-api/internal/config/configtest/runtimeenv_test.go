@@ -15,7 +15,7 @@ func TestDiagnosticsServerCAOutlivesEarlierTest(t *testing.T) {
 	t.Run("later test verifies TLS", func(t *testing.T) {
 		server := NewIrisRuntimeDiagnosticsServer(t, WorkerProfileDiagnosticsJSON())
 
-		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/diagnostics/runtime", nil)
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/diagnostics/runtime", http.NoBody)
 		if err != nil {
 			t.Fatal(err)
 		}

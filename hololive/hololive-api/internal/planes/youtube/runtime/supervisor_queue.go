@@ -71,7 +71,7 @@ func (r *Runtime) observePendingQueue(ctx context.Context) {
 	}
 }
 
-// observeDeadLetterBacklog는 DEAD_LETTER backlog 원인만 갱신한다. projection 원인은 refreshProjection이 소유한다.
+// DEAD_LETTER backlog 원인만 갱신한다. Projection 원인은 refreshProjection이 소유한다.
 func (r *Runtime) observeDeadLetterBacklog(exists bool) {
 	if r.deadLetterBacklog.Swap(exists) != exists && r.started.Load() {
 		r.publishHealth()

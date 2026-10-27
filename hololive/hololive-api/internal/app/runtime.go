@@ -381,17 +381,13 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 		return nil, fmt.Errorf("build bot infrastructure: %w", err)
 	}
 
-	var (
-		cleanupAdmin, cleanupLLM func()
-		holodex                  *apifoundation.ScraperHolodexFoundation
-	)
+	var cleanupAdmin, cleanupLLM func()
+
+	stopHolodex := func() {}
 
 	cleanup := sync.OnceFunc(func() {
 		// 공유 Holodex 서비스와 캐시를 먼저 join한 뒤 모든 pool과 Valkey를 닫는다.
-		if holodex != nil {
-			holodex.HolodexService.Stop()
-		}
-
+		stopHolodex()
 		bot.StopMemberCache()
 
 		if cleanupLLM != nil {
@@ -421,23 +417,12 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 		return nil, fmt.Errorf("provide llm database resources: %w", err)
 	}
 
-	aclMode, err := acl.ParseACLModeStrict(config.Bot.Kakao.ACLMode)
+	aclService, holodex, err := buildSharedPlaneServices(ctx, config.Bot, bot, logger)
 	if err != nil {
-		return nil, fmt.Errorf("invalid KAKAO_ACL_MODE: %w", err)
+		return nil, err
 	}
 
-	aclService, err := acl.NewACLService(ctx, bot.Postgres, logger, config.Bot.Kakao.ACLEnabled, aclMode, config.Bot.Kakao.Rooms)
-	if err != nil {
-		return nil, fmt.Errorf("build ACL service: %w", err)
-	}
-
-	holodex, err = apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
-		Holodex:          config.Bot.Holodex,
-		OfficialSchedule: config.Bot.OfficialSchedule,
-	}, bot.MemberCache, bot.Cache, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build holodex foundation: %w", err)
-	}
+	stopHolodex = holodex.HolodexService.Stop
 
 	return &apiInfrastructure{
 		acl:            aclService,
@@ -447,4 +432,33 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 		llm:            &sharedmodules.InfraModule{Cache: bot.Cache, Postgres: llm.Service, MemberRepository: member.NewMemberRepository(llm.Service, logger), MemberCache: bot.MemberCache},
 		closeResources: cleanup,
 	}, nil
+}
+
+// buildSharedPlaneServices는 bot·admin plane이 빌려 쓰는 process 하나의 ACL Service와 Holodex 서비스를 만든다.
+// 둘 다 bot pool·cache와 bot plane 설정(KAKAO_ROOMS·KAKAO_ACL_*, HOLODEX_*·공식 일정)을 쓴다.
+func buildSharedPlaneServices(
+	ctx context.Context,
+	botConfig *apiconfig.BotPlaneConfig,
+	bot *sharedmodules.InfraModule,
+	logger *slog.Logger,
+) (*acl.Service, *apifoundation.ScraperHolodexFoundation, error) {
+	aclMode, err := acl.ParseACLModeStrict(botConfig.Kakao.ACLMode)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid KAKAO_ACL_MODE: %w", err)
+	}
+
+	aclService, err := acl.NewACLService(ctx, bot.Postgres, logger, botConfig.Kakao.ACLEnabled, aclMode, botConfig.Kakao.Rooms)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build ACL service: %w", err)
+	}
+
+	holodex, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
+		Holodex:          botConfig.Holodex,
+		OfficialSchedule: botConfig.OfficialSchedule,
+	}, bot.MemberCache, bot.Cache, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build holodex foundation: %w", err)
+	}
+
+	return aclService, holodex, nil
 }
