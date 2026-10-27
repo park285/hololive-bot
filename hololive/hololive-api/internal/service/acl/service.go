@@ -83,8 +83,7 @@ func parseACLEnabledStrict(s string) (bool, error) {
 	}
 }
 
-// ErrInvalidRoomChatID는 새 ACL 값이 정규 signed i64 chatID가 아님을 뜻한다.
-// 기존 비-chatID 값은 조회·제거만 허용한다.
+// ErrInvalidRoomChatID는 ACL 값이 정규 signed i64 chatID가 아님을 뜻한다. 등록·제거·저장 행 모두 이 규칙을 따른다.
 var ErrInvalidRoomChatID = errors.New("ACL room must be a canonical signed 64-bit chat ID")
 
 // validateRoomChatID는 console roomRegistration(canonicalI64)과 같은 규칙으로 부호·앞자리 0·범위를 본다.

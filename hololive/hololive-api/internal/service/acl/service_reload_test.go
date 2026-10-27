@@ -60,18 +60,18 @@ func TestReloadPropagatesRoomRemovalAndSettings(t *testing.T) {
 
 	store.settings[dbKeyEnabled] = testDBEnabledTrue
 	store.settings[dbKeyMode] = string(ACLModeWhitelist)
-	store.rooms[roomKey{roomID: "room-old", listType: listTypeWhitelist}] = struct{}{}
+	store.rooms[roomKey{roomID: "9002", listType: listTypeWhitelist}] = struct{}{}
 
 	botSide := newReloadTestService(store)
 	if err := botSide.Reload(t.Context()); err != nil {
 		t.Fatalf("initial Reload error: %v", err)
 	}
 
-	if !botSide.IsRoomAllowed("room-old") {
+	if !botSide.IsRoomAllowed("9002") {
 		t.Fatal("seeded room must be allowed after the first reload")
 	}
 
-	delete(store.rooms, roomKey{roomID: "room-old", listType: listTypeWhitelist})
+	delete(store.rooms, roomKey{roomID: "9002", listType: listTypeWhitelist})
 
 	store.settings[dbKeyMode] = "blacklist"
 	store.settings[dbKeyEnabled] = testDBEnabledFalse

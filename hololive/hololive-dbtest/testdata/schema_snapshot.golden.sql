@@ -14,6 +14,11 @@ TABLE acl_rooms
   COLUMN room_id character varying(100) NOT NULL
   COLUMN list_type character varying(16) NOT NULL DEFAULT 'whitelist'::character varying
   CONSTRAINT chk_acl_rooms_list_type_vocab CHECK (((list_type)::text = ANY ((ARRAY['whitelist'::character varying, 'blacklist'::character varying])::text[])))
+  CONSTRAINT chk_acl_rooms_room_id_chat_id CHECK (
+CASE
+    WHEN ((room_id)::text ~ '^(0|-?[1-9][0-9]{0,18})$'::text) THEN (((room_id)::numeric >= ('-9223372036854775808'::bigint)::numeric) AND ((room_id)::numeric <= ('9223372036854775807'::bigint)::numeric))
+    ELSE false
+END)
   CONSTRAINT acl_rooms_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_room_list ON public.acl_rooms USING btree (room_id, list_type)
 

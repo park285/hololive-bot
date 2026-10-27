@@ -204,3 +204,4 @@
 204 343_youtube_collection_candidate_generic_plan.sql
 205 344_youtube_collection_global_candidate_generic_plan.sql
 206 342_drop_auth_users.sql
+207 343_acl_rooms_room_id_chat_id.sql

@@ -109,7 +109,7 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 	// 기존 DB에 데이터가 있으면 기본값 대신 DB 값을 사용해야 한다
 	mustCreateACLSetting(t, pool, dbKeyEnabled, testDBEnabledFalse)
 	mustCreateACLSetting(t, pool, dbKeyMode, "blacklist")
-	mustCreateACLRoom(t, pool, "existing-room", listTypeBlacklist)
+	mustCreateACLRoom(t, pool, "-9001", listTypeBlacklist)
 
 	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
@@ -134,7 +134,7 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 		t.Fatalf("expected mode=blacklist from DB, got %s", mode)
 	}
 
-	if len(rooms) != 1 || rooms[0] != "existing-room" {
+	if len(rooms) != 1 || rooms[0] != "-9001" {
 		t.Fatalf("expected only existing room from DB, got %v", rooms)
 	}
 }

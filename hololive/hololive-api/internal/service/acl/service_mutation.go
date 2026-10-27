@@ -141,7 +141,7 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	return true, s.notifyChange(ctx)
 }
 
-// RemoveRoom 현재 활성 모드의 목록에서 방 제거. 이미 저장된 비-chatID 값도 치울 수 있어야 하므로 형식은 보지 않는다.
+// RemoveRoom 현재 활성 모드의 목록에서 방 제거. 저장 행은 migration 343 이후 모두 chatID이므로 AddRoom과 같은 형식을 요구한다.
 // 없으면 PG에 쓰지 않고 추종 인스턴스만 재동기화한 뒤 false를 돌려준다. 추종 실패는 AddRoom과 같다.
 func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	s.reloadMu.Lock()
@@ -150,6 +150,10 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	room = stringutil.TrimSpace(room)
 	if room == "" {
 		return false, nil
+	}
+
+	if err := validateRoomChatID(room); err != nil {
+		return false, err
 	}
 
 	s.mu.Lock()

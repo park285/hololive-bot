@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **ACL 방 값을 chatID로 닫음(migration 343, 파괴적):** ACL 판정은 chatID로 하므로 `acl_rooms`에 남은 옛 방 이름 같은 비정규 `room_id` 행은 어느 목록에서도 일치하지 않는 죽은 등록이었습니다. migration 343이 그 행을 지우고 `chk_acl_rooms_room_id_chat_id`(부호·앞자리 0·i64 범위, `NOT VALID` 뒤 별도 `VALIDATE`)를 추가합니다. 적용 전에 운영에서 `SELECT list_type, room_id FROM acl_rooms WHERE room_id !~ '^(0|-?[1-9][0-9]{0,18})$'`로 지울 대상을 확인하고 승인받습니다. 이제 `RemoveRoom`도 chatID가 아니면 `ErrInvalidRoomChatID`(admin API 400)를 돌려주고, snapshot 적재는 규칙을 벗어난 저장 행을 건너뛰지 않고 실패합니다.
 - **youtube.js helper `--stub` 제거:** Go가 넘기지 않는 `--stub` 인자와 `listenUnix({ stub })` 옵션을 지웠습니다. 켜지면 0건을 끊김 없는 완결 수집(`CONTIGUOUS`·`exhausted`)으로 보고할 수 있던 경로입니다. 테스트용 fetcher는 `src/test-fixtures/fetchers.mjs`로 옮겼습니다.
 - **youtube.js helper 경로 추측 제거:** collector가 `YOUTUBEJS_NODE`·`YOUTUBEJS_SCRIPT`를 설정에서 한 번 읽어 helper에 넘깁니다. 이전에는 지정 경로가 없거나 읽을 수 없으면 `/usr/local/bin/node`·`/nodejs/bin/node`·PATH의 `node`, 작업 디렉터리 기준 `youtubejs/src/server.mjs`·`/app/...` 순으로 다른 후보를 골라 helper 판본 고정 계약을 우회할 수 있었습니다. 이제 값이 비었거나 절대·정규 경로의 일반 파일이 아니면 helper 기동 오류입니다. 두 키는 helper 자식 프로세스 env 허용 목록에서도 빠졌습니다. Compose image는 Dockerfile ENV로, native 호스트는 `ap-host-native-deploy.sh`가 렌더한 env로 두 값을 이미 넘깁니다.
 - **collector instance ID를 fleet enum으로 검증(파괴적):** `YOUTUBE_COLLECTOR_INSTANCE_ID`는 이제 `youtube-collector-a`·`-b`·`-c`·`-d` 중 하나와 정확히 같아야 합니다. 이전에는 64자 이하 임의 ID와 `c`·대소문자 변형을 받았고, ID가 비었거나 알 수 없으면서 모든 토글이 꺼져 있으면 배포 어디에도 설정되지 않은 범용 토글 `OTEL_YOUTUBE_COLLECTOR_ENABLED`로 대신 진행했습니다. 이 fallback과 범용 토글 상수를 지웠습니다. Compose 세 종과 native 배포는 이미 네 이름만 씁니다.

@@ -201,6 +201,12 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	removed, err := h.acl.RemoveRoom(ctx, req.Room)
+	if errors.Is(err, acl.ErrInvalidRoomChatID) {
+		sharedserver.RespondError(c, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)", nil)
+
+		return
+	}
+
 	if removed {
 		// AddRoom과 같다: PG 커밋 뒤 봇 plane 적용 실패여도 활동 로그는 남긴다.
 		h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})

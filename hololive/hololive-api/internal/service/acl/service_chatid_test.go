@@ -1,6 +1,7 @@
 package acl
 
 import (
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -84,4 +85,30 @@ func fakeStoreRoomCount(t *testing.T, store *fakeACLStore) int {
 	}
 
 	return len(rooms)
+}
+
+// 제거도 등록과 같은 chatID 규칙을 따른다. 저장 행이 모두 chatID이므로 비정규 값은 PG에 닿기 전에 입력 오류다.
+func TestRemoveRoomRejectsNonChatID(t *testing.T) {
+	t.Parallel()
+
+	service := newACLServiceFromFakeStore(t, newFakeACLStore(), true)
+
+	removed, err := service.RemoveRoom(t.Context(), "홀로라이브 알림방")
+	if !errors.Is(err, ErrInvalidRoomChatID) || removed {
+		t.Fatalf("RemoveRoom() = (%v, %v), want ErrInvalidRoomChatID", removed, err)
+	}
+}
+
+// migration 343 CHECK를 벗어난 저장 행은 판정에 쓰이지 않는 죽은 등록이므로 snapshot 적재를 실패시킨다.
+func TestReloadRejectsStoredNonChatIDRoom(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeACLStore()
+	store.settings[dbKeyEnabled] = testDBEnabledTrue
+	store.settings[dbKeyMode] = string(ACLModeWhitelist)
+	store.rooms[roomKey{roomID: "room-legacy", listType: listTypeWhitelist}] = struct{}{}
+
+	if err := newReloadTestService(store).Reload(t.Context()); !errors.Is(err, ErrInvalidRoomChatID) {
+		t.Fatalf("Reload() error = %v, want ErrInvalidRoomChatID", err)
+	}
 }
