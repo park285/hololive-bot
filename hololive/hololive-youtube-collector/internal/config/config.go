@@ -52,10 +52,14 @@ type Config struct {
 	YouTubeJSRequestTimeout  time.Duration
 	YouTubeJSStartupTimeout  time.Duration
 	YouTubeJSShutdownTimeout time.Duration
-	MaxPages                 int
-	MaxSuccessResponseBytes  int
-	MaxTargetRosterRows      int
-	RequestInterval          time.Duration
+	// YouTubeJSNodePath·YouTubeJSScriptPath는 배포가 YOUTUBEJS_NODE·YOUTUBEJS_SCRIPT로 고정한 helper 절대 경로다.
+	// 비었거나 절대·정규 경로의 일반 파일이 아니면 helper 기동이 실패하며, 다른 후보 경로로 넘어가지 않는다.
+	YouTubeJSNodePath       string
+	YouTubeJSScriptPath     string
+	MaxPages                int
+	MaxSuccessResponseBytes int
+	MaxTargetRosterRows     int
+	RequestInterval         time.Duration
 }
 
 // DefaultConfig는 profile이 소유하지 않는 provider·환경 기본값만 반환합니다.

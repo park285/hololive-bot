@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **youtube.js helper 경로 추측 제거:** collector가 `YOUTUBEJS_NODE`·`YOUTUBEJS_SCRIPT`를 설정에서 한 번 읽어 helper에 넘깁니다. 이전에는 지정 경로가 없거나 읽을 수 없으면 `/usr/local/bin/node`·`/nodejs/bin/node`·PATH의 `node`, 작업 디렉터리 기준 `youtubejs/src/server.mjs`·`/app/...` 순으로 다른 후보를 골라 helper 판본 고정 계약을 우회할 수 있었습니다. 이제 값이 비었거나 절대·정규 경로의 일반 파일이 아니면 helper 기동 오류입니다. 두 키는 helper 자식 프로세스 env 허용 목록에서도 빠졌습니다. Compose image는 Dockerfile ENV로, native 호스트는 `ap-host-native-deploy.sh`가 렌더한 env로 두 값을 이미 넘깁니다.
 - **collector instance ID를 fleet enum으로 검증(파괴적):** `YOUTUBE_COLLECTOR_INSTANCE_ID`는 이제 `youtube-collector-a`·`-b`·`-c`·`-d` 중 하나와 정확히 같아야 합니다. 이전에는 64자 이하 임의 ID와 `c`·대소문자 변형을 받았고, ID가 비었거나 알 수 없으면서 모든 토글이 꺼져 있으면 배포 어디에도 설정되지 않은 범용 토글 `OTEL_YOUTUBE_COLLECTOR_ENABLED`로 대신 진행했습니다. 이 fallback과 범용 토글 상수를 지웠습니다. Compose 세 종과 native 배포는 이미 네 이름만 씁니다.
 - **빈 루트 Go 모듈 제거:** 퇴역 테스트를 담던 루트 `go.mod`·`go.sum`·`doc.go`(`package workspace`)를 지우고 `go.work`에서 `./`를 뺐습니다. CI의 `go-version-file`은 같은 `go 1.27.3`을 지시하는 `go.work`를 읽고, CI matrix·pre-push 의존성 hygiene·version-only build에서 루트 모듈 단계가 빠집니다. `.golangci.yml`의 gofumpt `module-path`도 지웠습니다.
 - **worker profile `bot_webhook_inbox.dedup_ttl_ms` 제거(파괴적, 배포 순서 주의):** v12.3.1에서 소비처를 지운 뒤 필수 양수 값으로만 남아 있던 필드와 그 검증을 지웠습니다. profile 해석은 `RejectUnknownMembers`라 이 필드가 남은 profile은 새 binary가 거부하고, 필드를 지운 profile은 이전 binary가 거부합니다. 그래서 `dedup_ttl_ms`를 지운 hololive-api profile release pair(`artifacts/worker-profile/releases/`)를 만들어 binary와 같은 배포에서 활성화해야 합니다. Iris runtime diagnostics fixture의 `dedup_ttl_ms`는 Iris 소유 값이라 그대로 둡니다.
