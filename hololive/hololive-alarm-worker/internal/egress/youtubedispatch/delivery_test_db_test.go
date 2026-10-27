@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type deliveryTestSQLResult struct {

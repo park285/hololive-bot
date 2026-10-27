@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 func TestCloneUTCTimePtr_NilReturnsNil(t *testing.T) {

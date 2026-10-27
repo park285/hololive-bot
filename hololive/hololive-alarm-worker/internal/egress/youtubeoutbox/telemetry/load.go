@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 func (r *Repository) loadTrackingSnapshots(

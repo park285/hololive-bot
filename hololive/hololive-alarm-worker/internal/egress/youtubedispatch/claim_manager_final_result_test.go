@@ -13,9 +13,9 @@ import (
 	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/require"
 
+	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 var errFinalResultSendFailed = errors.Join(errors.New(testSendFailedMessage), iris.ErrPermanent)

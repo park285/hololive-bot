@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 type deliveryTelemetryIdentity struct {

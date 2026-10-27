@@ -13,10 +13,10 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 const deliveryFailureReasonPreSendClaim = "pre-send claim"

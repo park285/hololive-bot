@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	telemetry "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 func openTelemetryLoopTestDB(t *testing.T) *pgxpool.Pool {

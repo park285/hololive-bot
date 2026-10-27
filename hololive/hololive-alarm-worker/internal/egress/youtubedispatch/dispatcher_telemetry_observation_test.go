@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	telemetry "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
+	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
-	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {

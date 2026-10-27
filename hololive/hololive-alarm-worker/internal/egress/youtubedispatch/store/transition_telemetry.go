@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 // DeliveryMode는 발송 방식(per_room/grouped)이다. TransitionStore가 lifecycle 전이와 함께 시도를 기록한다.

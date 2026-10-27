@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	analytics "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/analytics"
+	telemetry "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	analytics "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
-	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type deliveryTelemetryTestTrackingModel struct {

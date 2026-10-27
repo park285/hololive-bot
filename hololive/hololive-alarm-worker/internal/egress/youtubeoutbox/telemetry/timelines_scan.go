@@ -1,8 +1,8 @@
 package telemetry
 
 import (
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 type postDeliveryTimelineScanRow struct {

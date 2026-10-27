@@ -15,8 +15,8 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 // 시간 예산: claim은 요청의 다음 확인을 soft claim(15s) 뒤로 미루고, 요청마다 상태 조회(최대 5s)와 정산(최대

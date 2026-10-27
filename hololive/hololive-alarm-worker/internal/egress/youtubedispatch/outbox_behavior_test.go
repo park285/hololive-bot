@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/analytics"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 )
 
 func TestErrDeliveryDedupeKeyRequiredMatchesInternalSentinel(t *testing.T) {

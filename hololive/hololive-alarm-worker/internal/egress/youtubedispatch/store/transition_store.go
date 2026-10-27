@@ -16,10 +16,10 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 const transitionOperationRetryLimit = 1

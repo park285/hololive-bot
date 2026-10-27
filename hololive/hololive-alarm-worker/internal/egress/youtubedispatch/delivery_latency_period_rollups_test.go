@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	analytics "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/analytics"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	analytics "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 )
 
 type postLatencyPeriodInputs struct {

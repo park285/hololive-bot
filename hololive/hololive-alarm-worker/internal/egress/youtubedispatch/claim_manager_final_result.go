@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 )
 
 func (d *ClaimManager) logFinalizedCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) error {

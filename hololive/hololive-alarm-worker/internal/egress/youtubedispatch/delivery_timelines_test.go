@@ -7,8 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 type timelineTestOutboxModel struct {

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 func (r *Repository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, outboxIDs []int64) ([]timeline.PostDeliveryTimeline, error) {

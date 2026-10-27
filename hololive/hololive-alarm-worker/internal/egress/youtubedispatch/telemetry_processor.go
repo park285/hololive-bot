@@ -10,10 +10,10 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
+	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
-	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificationDeliveryTelemetry, classification *timeline.PostLatencyClassificationResult) []any {

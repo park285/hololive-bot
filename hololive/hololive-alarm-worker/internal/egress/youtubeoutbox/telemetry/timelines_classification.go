@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 )
 
 func (r *Repository) PersistPostLatencyClassificationsByIdentities(
