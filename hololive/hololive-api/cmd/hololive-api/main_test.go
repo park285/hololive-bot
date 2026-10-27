@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -144,5 +147,66 @@ func TestRunNotificationRerunMapsOutcomes(t *testing.T) {
 
 	if handled, _ := runNotificationRerun([]string{"--check-config"}, io.Discard, io.Discard, nil); handled {
 		t.Fatal("runNotificationRerun() handled an unrelated argument")
+	}
+}
+
+// 운영 CLI logger는 LOG_DIR가 있어도 서버 회전 파일을 만들지 않고 stderr에만 쓴다. stdout에는 Result JSON 한 줄만 남는다.
+func TestRunNotificationRerunKeepsStdoutForResult(t *testing.T) {
+	stdoutFile, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stderrFile, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	originalStdout, originalStderr, originalDefault := os.Stdout, os.Stderr, slog.Default()
+	t.Cleanup(func() {
+		os.Stdout, os.Stderr = originalStdout, originalStderr
+		slog.SetDefault(originalDefault)
+	})
+
+	os.Stdout, os.Stderr = stdoutFile, stderrFile
+	logDir := t.TempDir()
+	config := &apiconfig.RuntimeConfig{Logging: settings.LoggingConfig{Level: "info", Dir: logDir, MaxSizeMB: 1, MaxBackups: 1, MaxAgeDays: 1}}
+
+	handled, code := runNotificationRerun([]string{"--rerun-notification=majorevent-weekly"}, os.Stdout, os.Stderr, func(context.Context, string) (notification.Result, error) {
+		logger, err := newRerunNotificationLogger(config)
+		if err != nil {
+			return notification.Result{}, err
+		}
+
+		logger.Info("rerun_progress", slog.String("room", "12345"))
+
+		return notification.NewResult(1, 0, 0), nil
+	})
+	if !handled || code != 0 {
+		t.Fatalf("runNotificationRerun() = (%v, %d), want (true, 0)", handled, code)
+	}
+
+	stdout, err := os.ReadFile(stdoutFile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var result notification.Result
+	if err := jsonv2.Unmarshal(bytes.TrimSuffix(stdout, []byte("\n")), &result); err != nil || result.Queued != 1 {
+		t.Fatalf("stdout = %q, want one Result JSON line (err %v)", stdout, err)
+	}
+
+	stderr, err := os.ReadFile(stderrFile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(stderr), "rerun_progress") || strings.Contains(string(stderr), "12345") {
+		t.Fatalf("stderr = %q, want masked rerun log", stderr)
+	}
+
+	entries, err := os.ReadDir(logDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("log dir entries = %v (err %v), want none", entries, err)
 	}
 }

@@ -33,7 +33,7 @@
 
 ## Result
 
-stdout에 `notification.Result` JSON 한 줄을 씁니다. 실제 delivery/handoff 완료를 뜻하지 않습니다.
+stdout에는 `notification.Result` JSON 한 줄만 씁니다. 진행 로그는 stderr 콘솔에만 쓰고 서버의 `LOG_DIR` 회전 파일은 건드리지 않습니다. 결과는 실제 delivery/handoff 완료를 뜻하지 않습니다.
 
 ```json
 {"status":"queued","queued":2,"skipped":0,"failed":0}

@@ -215,12 +215,10 @@ func rerunNotification(ctx context.Context, kind string) (notification.Result, e
 		return notification.Result{}, fmt.Errorf("load hololive api runtime: %w", err)
 	}
 
-	logger, closer, err := newHololiveAPILogger(config)
+	logger, err := newRerunNotificationLogger(config)
 	if err != nil {
 		return notification.Result{}, err
 	}
-
-	defer func() { _ = closer.Close() }()
 
 	result, err := runtimeapp.RerunNotification(ctx, config, kind, logger)
 	if err != nil {
@@ -228,4 +226,23 @@ func rerunNotification(ctx context.Context, kind string) (notification.Result, e
 	}
 
 	return result, nil
+}
+
+// newRerunNotificationLogger는 운영 CLI 전용 logger다. stdout에는 Result JSON 한 줄만 남아야 하고, CLI는 실행 중인
+// 서버와 같은 container에서 돌므로 서버의 회전 로그 파일과 archiver를 함께 건드리면 안 된다. 그래서 파일 lane 없는
+// 콘솔 구성(Dir 빈 값, Closer nil)으로만 만든다. shared-go 콘솔 handler는 os.Stdout으로 쓰므로, main이 결과 writer를
+// 잡아 둔 뒤 여기서 os.Stdout을 stderr로 돌린다. 라이브러리가 stdout에 직접 쓰는 출력도 함께 stderr로 간다.
+func newRerunNotificationLogger(config *apiconfig.RuntimeConfig) (*slog.Logger, error) {
+	os.Stdout = os.Stderr
+
+	logger, _, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
+		Level: config.Logging.Level,
+	}, "hololive-api.log", sharedlogging.Options{OTel: false, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
+	if err != nil {
+		return nil, fmt.Errorf("enable console logging: %w", err)
+	}
+
+	slog.SetDefault(logger)
+
+	return logger, nil
 }
