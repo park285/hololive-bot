@@ -50,7 +50,6 @@ type PhotoSyncService struct {
 }
 
 type photoSyncMemberRepository interface {
-	GetAllChannelIDs(ctx context.Context) ([]string, error)
 	GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error)
 	UpdatePhoto(ctx context.Context, channelID, photoURL string) error
 }
@@ -121,7 +120,7 @@ func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, options retry.Ret
 	}
 
 	lastErr := retry.WithRetry(ctx, options, func(ctx context.Context) error {
-		return ps.doSync(ctx, false)
+		return ps.doSync(ctx)
 	})
 	if lastErr == nil || ctx.Err() != nil {
 		return
@@ -133,18 +132,8 @@ func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, options retry.Ret
 	)
 }
 
-func (ps *PhotoSyncService) SyncAll(ctx context.Context) error {
-	ps.logger.Info("Starting full photo sync")
-
-	if err := ps.doSync(ctx, true); err != nil {
-		return fmt.Errorf("do sync: %w", err)
-	}
-
-	return nil
-}
-
-func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
-	channelIDs, err := ps.photoSyncChannelIDs(ctx, forceAll)
+func (ps *PhotoSyncService) doSync(ctx context.Context) error {
+	channelIDs, err := ps.memberRepository.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
 	if err != nil {
 		return fmt.Errorf("get members needing photo sync: %w", err)
 	}
@@ -157,7 +146,6 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 
 	ps.logger.Info("Syncing photos from Holodex",
 		slog.Int("target_count", len(channelIDs)),
-		slog.Bool("force_all", forceAll),
 	)
 
 	photoMap, err := ps.fetchPhotoMap(ctx)
@@ -173,24 +161,6 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 	)
 
 	return nil
-}
-
-func (ps *PhotoSyncService) photoSyncChannelIDs(ctx context.Context, forceAll bool) ([]string, error) {
-	if forceAll {
-		out, err := ps.memberRepository.GetAllChannelIDs(ctx)
-		if err != nil {
-			return out, fmt.Errorf("get all channel IDs: %w", err)
-		}
-
-		return out, nil
-	}
-
-	out, err := ps.memberRepository.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
-	if err != nil {
-		return out, fmt.Errorf("get members needing photo sync: %w", err)
-	}
-
-	return out, nil
 }
 
 func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]string, error) {

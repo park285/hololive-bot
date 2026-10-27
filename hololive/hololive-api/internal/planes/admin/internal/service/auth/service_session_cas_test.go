@@ -2,10 +2,9 @@ package auth
 
 import (
 	stdErrors "errors"
+	"log/slog"
 	"sync"
 	"testing"
-
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -16,7 +15,7 @@ func newRefreshTestService(t *testing.T) (*Service, string) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), testConfig())
+	service, err := NewService(db, cacheClient, slog.New(slog.DiscardHandler), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

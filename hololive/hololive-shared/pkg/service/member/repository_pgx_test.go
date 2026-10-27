@@ -287,21 +287,14 @@ func TestRepositoryPGXPhotoOperationsPreserveSemantics(t *testing.T) {
 		t.Fatalf("insert photo fixtures: %v", err)
 	}
 
-	if got, err := repository.GetPhotoByChannelID(ctx, "UC_PGX_NULL"); err != nil || got != "" {
-		t.Fatalf("GetPhotoByChannelID(null) = %q, %v; want empty nil", got, err)
-	}
-
-	if got, err := repository.GetPhotoByChannelID(ctx, "UC_PGX_MISSING"); err != nil || got != "" {
-		t.Fatalf("GetPhotoByChannelID(missing) = %q, %v; want empty nil", got, err)
-	}
-
 	if err := repository.UpdatePhoto(ctx, "UC_PGX_NULL", "https://example.com/photo=s1024"); err != nil {
 		t.Fatalf("UpdatePhoto() error = %v, want nil", err)
 	}
 
-	got, err := repository.GetPhotoByChannelID(ctx, "UC_PGX_NULL")
-	if err != nil || got != "https://example.com/photo=s1024" {
-		t.Fatalf("GetPhotoByChannelID(updated) = %q, %v; want updated photo nil", got, err)
+	var got string
+
+	if err := pool.QueryRow(ctx, `SELECT photo FROM members WHERE channel_id = 'UC_PGX_NULL'`).Scan(&got); err != nil || got != "https://example.com/photo=s1024" {
+		t.Fatalf("photo after UpdatePhoto = %q, %v; want updated photo nil", got, err)
 	}
 
 	needingSync, err := repository.GetMembersNeedingPhotoSync(ctx, time.Hour)

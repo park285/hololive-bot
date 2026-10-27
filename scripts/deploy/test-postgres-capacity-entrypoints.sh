@@ -9,7 +9,7 @@ BOT_POSTGRES_POOL_MAX_CONNS=50
 YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=7
 ENV
 : >"${tmp}/default.env"
-mkdir -p "${tmp}/shared-go" "${tmp}/iris-client-go" "${tmp}/bin"
+mkdir -p "${tmp}/bin"
 cat >"${tmp}/bin/docker" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${MOCK_DOCKER_LOG}"
@@ -50,8 +50,6 @@ assert_entrypoint_blocked() {
         PATH="${tmp}/bin:${PATH}" CONTAINER_CLI=docker MOCK_DOCKER_LOG="${tmp}/docker.log" \
         HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1 \
         COMPOSE_ENV_FILE="${env_file}" \
-        SHARED_GO_WORKSPACE_PATH="${tmp}/shared-go" \
-        IRIS_CLIENT_GO_WORKSPACE_PATH="${tmp}/iris-client-go" \
         HOLOLIVE_APP_UID="$(id -u)" HOLOLIVE_APP_GID="$(id -g)" \
         "$@" >"${tmp}/out" 2>&1; then
         echo "${label} accepted unsafe target capacity" >&2

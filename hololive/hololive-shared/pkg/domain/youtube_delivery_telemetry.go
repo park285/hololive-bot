@@ -31,7 +31,3 @@ type YouTubeNotificationDeliveryTelemetry struct {
 	LoggedAt           *time.Time `json:"logged_at,omitempty"`
 	Error              string     `db:"error" json:"error,omitempty"`
 }
-
-func (YouTubeNotificationDeliveryTelemetry) TableName() string {
-	return "youtube_notification_delivery_telemetry"
-}

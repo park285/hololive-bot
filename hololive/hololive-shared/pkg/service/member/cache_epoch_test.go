@@ -35,13 +35,12 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/testredis"
-	"github.com/kapu/hololive-shared/internal/testutil"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 type fakeMemberEpochAuthority struct {
@@ -467,7 +466,7 @@ func newEpochTestTopology(t *testing.T) *epochTestTopology {
 			Host:         host,
 			Port:         port,
 			DisableCache: true,
-		}, sharedlogging.NewTestLogger())
+		}, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatalf("NewCacheService() error = %v", err)
 		}

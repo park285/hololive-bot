@@ -32,7 +32,6 @@ import (
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 func provideExaSearcher(exaConfig settings.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
@@ -53,7 +52,7 @@ func provideExaSearcher(exaConfig settings.ExaConfig, logger *slog.Logger) share
 	return client
 }
 
-func buildMajorEventSummarizer(exaConfig *apiconfig.LLMSchedulerConfig, cacheClient cache.Client, guards *llmGuards, logger *slog.Logger) *mesummarizer.EventSummarizer {
+func buildMajorEventSummarizer(exaConfig *apiconfig.LLMSchedulerConfig, cacheClient mesummarizer.CacheStore, guards *llmGuards, logger *slog.Logger) *mesummarizer.EventSummarizer {
 	costTracker := ProvideLLMCostTracker()
 	provider := exaConfig.SelectedLLMProvider()
 	majorEventLLMClient := guardLLMClient(ProvideMajorEventLLMClient(provider, costTracker, logger), guards)
@@ -69,7 +68,7 @@ func provideEventSummarizer(
 	llmClient mesummarizer.LLMClient,
 	reviewerClient mesummarizer.LLMClient,
 	adjudicatorClient mesummarizer.LLMClient,
-	cacheClient cache.Client,
+	cacheClient mesummarizer.CacheStore,
 	searcher sharedmodel.WebSearcher,
 	guards *llmGuards,
 	logger *slog.Logger,

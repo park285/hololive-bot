@@ -60,11 +60,9 @@ func validateJSONStructure(raw []byte) error {
 	return nil
 }
 
+// canonicalJSON은 jsonv2.Marshal이 잘못된 UTF-8을 거부하고 CanonicalizeJSON이 중첩 상한을 소유하므로
+// 별도의 사전 순회 없이 인코딩한다.
 func canonicalJSON(value any) ([]byte, error) {
-	if err := validateCanonicalJSONStrings(value); err != nil {
-		return nil, fmt.Errorf("validate canonical JSON strings: %w", err)
-	}
-
 	encoded, err := jsonv2.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)

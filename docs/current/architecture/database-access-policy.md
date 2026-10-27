@@ -2,25 +2,19 @@
 
 ## Verified Baseline
 
-On 2026-07-08, the active-code inventory command returned no matches:
+Active Go source and module manifests have no `gorm.io`, `gorm.DB`,
+`gorm.Open`, `GetGormDB`, or `AutoMigrate(` usage. Re-check the owned surfaces
+with:
 
 ```bash
-rg -n 'gorm\.io|gorm\.DB|gorm\.Open|GetGormDB|AutoMigrate\(' --glob '*.go' --glob 'go.mod' go.mod hololive admin-dashboard scripts
+rg -n 'gorm\.io|gorm\.DB|gorm\.Open|GetGormDB|AutoMigrate\(' --glob '*.go' --glob 'go.mod' go.mod hololive scripts
 ```
-
-That means current active code has no `gorm.io`, `gorm.DB`, `gorm.Open`,
-`GetGormDB`, or `AutoMigrate(` usage in the owned Go source/module surfaces
-covered by this policy. The current work is therefore a verification and
-guardrail task, not a fake migration task.
-The guard also scans the root `go.mod` module manifest so dependency
-reintroduction cannot bypass the active source-tree scan.
 
 ## Workspace Scope Note
 
-This repository-local guard covers the root `go.mod` and owned in-repo Go
-surfaces under `hololive`, `admin-dashboard`, and `scripts`. Sibling modules
-referenced by `go.work`, such as `../shared-go` and `../iris-client-go`, are
-covered by the meta-repository stack guard, not by this repository-local script.
+This inventory covers the root `go.mod` and owned in-repo Go surfaces under
+`hololive` and `scripts`. Sibling modules referenced by `go.work`, such as
+`../shared-go` and `../iris-client-go`, follow their own repository policy.
 
 ## Policy
 
@@ -44,8 +38,8 @@ embedding or reviewed SQL templates.
 ## Disallowed Defaults
 
 Do not reintroduce broad ORM/query-framework defaults that hide or infer
-database behavior. In active Go code and module manifests, the architecture
-gate rejects:
+database behavior. Active Go code and module manifests must not use (enforced
+in review and dependency approval; there is no grep gate):
 
 - `gorm.io`
 - `gorm.DB`

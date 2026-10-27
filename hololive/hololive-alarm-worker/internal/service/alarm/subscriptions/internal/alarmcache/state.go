@@ -10,12 +10,12 @@ import (
 type MemberDataFunc func() domain.MemberDataProvider
 
 type State struct {
-	Cache        cache.Client
+	Cache        cache.HashCache
 	memberDataFn MemberDataFunc
 	Logger       *slog.Logger
 }
 
-func NewState(cacheClient cache.Client, memberDataFn MemberDataFunc, logger *slog.Logger) *State {
+func NewState(cacheClient cache.HashCache, memberDataFn MemberDataFunc, logger *slog.Logger) *State {
 	return &State{
 		Cache:        cacheClient,
 		memberDataFn: memberDataFn,

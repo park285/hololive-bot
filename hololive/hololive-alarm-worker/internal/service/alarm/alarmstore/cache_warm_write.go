@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-func writeWarmSet(ctx context.Context, cacheClient cache.Client, key string, members []string, scope string) error {
+func writeWarmSet(ctx context.Context, cacheClient cache.LowLevelCache, key string, members []string, scope string) error {
 	if err := writeWarmSetMap(ctx, cacheClient, map[string][]string{key: members}, scope); err != nil {
 		return fmt.Errorf("write warm set map: %w", err)
 	}
@@ -17,7 +17,7 @@ func writeWarmSet(ctx context.Context, cacheClient cache.Client, key string, mem
 	return nil
 }
 
-func writeWarmSetMap(ctx context.Context, cacheClient cache.Client, setMembers map[string][]string, scope string) error {
+func writeWarmSetMap(ctx context.Context, cacheClient cache.LowLevelCache, setMembers map[string][]string, scope string) error {
 	keys := make([]string, 0, len(setMembers))
 	cmds := make([]valkey.Completed, 0, len(setMembers))
 
@@ -57,7 +57,7 @@ func verifyWarmSetBatchResults(results []valkey.ValkeyResult, keys []string, sco
 	return nil
 }
 
-func writeWarmHash(ctx context.Context, cacheClient cache.Client, key string, values map[string]string) error {
+func writeWarmHash(ctx context.Context, cacheClient cache.HashWriter, key string, values map[string]string) error {
 	if len(values) == 0 {
 		return nil
 	}

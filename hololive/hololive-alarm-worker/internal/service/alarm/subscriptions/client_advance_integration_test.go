@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/httpapi"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
@@ -40,7 +41,7 @@ func newAdvanceRouter(service *subscriptions.AlarmService, apiKey string) http.H
 		group.Use(middleware.APIKeyAuthMiddleware(apiKey))
 	}
 
-	alarmhttp.NewHandler(service, slog.New(slog.DiscardHandler)).RegisterInternalRoutes(group)
+	httpapi.NewHandler(service, slog.New(slog.DiscardHandler)).RegisterInternalRoutes(group)
 
 	return router
 }

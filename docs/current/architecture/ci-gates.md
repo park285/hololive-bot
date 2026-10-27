@@ -28,7 +28,7 @@ NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분
 
 `security.yml`의 SDK·shared-go 체크아웃은 스택에서 검증·게시한 commit SHA로 고정합니다.
 과거 release tag를 그대로 쓰면 sibling을 단독으로 검사할 때 보안 패치 전 의존성이 선택될 수 있습니다.
-현재 입력은 Go 1.27.2·`x/net v0.60.0`을 사용하며 runtime `go.mod`와 릴리스 태그는 변경하지 않습니다.
+현재 입력은 Go 1.27.3·`x/net v0.61.0`을 사용하며 runtime `go.mod`와 릴리스 태그는 변경하지 않습니다.
 `govulncheck`는 기존대로 `go.work`의 모든 모듈을 검사하고, 도달 가능한 취약점이 있으면 실패합니다.
 
 ## 주요 코드 경계
@@ -36,7 +36,7 @@ NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분
 | 검사 | 스크립트 | 실패 조건 |
 |---|---|---|
 | 내부 route 상수 | `check-internal-route-hardcoding.sh` | 허용된 파일 밖에서 내부 route를 하드코딩함 |
-| 저장소 소유권 | `check-repository-ownership.sh` | 다른 runtime의 internal 코드나 소유권 밖 저장소에 직접 접근함 |
+| 저장소 소유권 | `check-repository-ownership.sh` | hololive-api나 shared template 실행기가 `os/exec`·`plugin`을 import하거나, bot/admin plane이 major event 저장소에 직접 접근함 |
 
 ## 로컬 실행
 

@@ -3,9 +3,9 @@ package queue
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -99,7 +99,7 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 		InsertedDeliveries:  0,
 		HashConflictEvents:  0,
 	}}
-	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
+	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
 		WithOutbox(repository),
 		WithWakeupEnabled(false),
 	)
@@ -121,7 +121,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 	repository := &fakeOutboxRepository{
 		batchErrors: []error{nil, errors.New("pg unavailable")},
 	}
-	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
+	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
 		WithOutbox(repository),
 		WithWakeupEnabled(false),
 		WithMaxDeliveriesPerBatch(1),
@@ -142,7 +142,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
+	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
 		WithOutbox(repository),
 	)
 	channel := &domain.Channel{ID: "channel-1"}
@@ -173,7 +173,7 @@ func TestPublisherPreservesNonPrefixReceiptsAcrossChunkError(t *testing.T) {
 		},
 		batchErrors: []error{nil, errors.New("commit response unavailable")},
 	}
-	publisher := NewPublisher(nil, sharedlogging.NewTestLogger(), WithOutbox(repository), WithMaxDeliveriesPerBatch(2), WithWakeupEnabled(false))
+	publisher := NewPublisher(nil, slog.New(slog.DiscardHandler), WithOutbox(repository), WithMaxDeliveriesPerBatch(2), WithWakeupEnabled(false))
 	notifications := make([]*domain.AlarmNotification, 4)
 
 	for i := range notifications {

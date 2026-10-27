@@ -11,21 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type ReadRepository interface {
-	FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error)
-}
-
-type WriteRepository interface {
-	Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error
-	UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error
-	MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error
-}
-
-type Repository interface {
-	ReadRepository
-	WriteRepository
-}
-
 type alarmStateRepository struct {
 	db trackingDB
 }
@@ -65,10 +50,6 @@ type AlarmSentMark struct {
 }
 
 func NewRepository(db trackingDB) *PgxRepository {
-	return NewRepositoryContext(context.Background(), db)
-}
-
-func NewRepositoryContext(_ context.Context, db trackingDB) *PgxRepository {
 	repo := &PgxRepository{
 		db: db,
 		alarm: &alarmStateRepository{
@@ -92,14 +73,6 @@ func (r *PgxRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.
 	}
 
 	return out, nil
-}
-
-func (r *PgxRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
-	if err := r.alarm.UpsertAlarmState(ctx, record); err != nil {
-		return fmt.Errorf("upsert alarm state: %w", err)
-	}
-
-	return nil
 }
 
 func (r *PgxRepository) UpsertAlarmStateBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsAlarmState) error {
@@ -131,14 +104,6 @@ func (r *PgxRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKi
 	return out, nil
 }
 
-func (r *PgxRepository) Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error {
-	if err := r.identity.Upsert(ctx, record); err != nil {
-		return fmt.Errorf("upsert: %w", err)
-	}
-
-	return nil
-}
-
 func (r *PgxRepository) UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error {
 	if err := r.identity.UpsertBatch(ctx, records); err != nil {
 		return fmt.Errorf("upsert batch: %w", err)
@@ -148,14 +113,6 @@ func (r *PgxRepository) UpsertBatch(ctx context.Context, records []*domain.YouTu
 }
 
 // --- 위임: SourcePost ---
-
-func (r *PgxRepository) UpsertSourcePost(ctx context.Context, record *domain.YouTubeCommunityShortsSourcePost) error {
-	if err := r.source.UpsertSourcePost(ctx, record); err != nil {
-		return fmt.Errorf("upsert source post: %w", err)
-	}
-
-	return nil
-}
 
 func (r *PgxRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
 	if err := r.source.UpsertSourcePostsBatch(ctx, records); err != nil {

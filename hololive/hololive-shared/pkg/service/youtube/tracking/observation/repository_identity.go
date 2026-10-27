@@ -43,18 +43,6 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 	return &records[0], nil
 }
 
-func (r *identityRepository) Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error {
-	if record == nil {
-		return errors.New("upsert tracking: record is nil")
-	}
-
-	if err := r.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{record}); err != nil {
-		return fmt.Errorf("upsert batch: %w", err)
-	}
-
-	return nil
-}
-
 func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error {
 	if len(records) == 0 {
 		return nil

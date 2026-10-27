@@ -21,10 +21,10 @@
 package auth
 
 import (
+	"log/slog"
 	"testing"
 	"time"
 
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -120,7 +120,7 @@ func TestCreateSession_Success(t *testing.T) {
 
 	config.SessionTTL = 30 * time.Minute
 
-	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(newTestDB(t), cache, slog.New(slog.DiscardHandler), config)
 	require.NoError(t, err)
 
 	session, err := service.createSession(t.Context(), "user-123", 0)
@@ -139,7 +139,7 @@ func TestCreateSession_StoresJSONSessionDataWithGeneration(t *testing.T) {
 
 	config.SessionTTL = 30 * time.Minute
 
-	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(newTestDB(t), cache, slog.New(slog.DiscardHandler), config)
 	require.NoError(t, err)
 
 	session, err := service.createSession(t.Context(), "user-123", 7)
@@ -156,7 +156,7 @@ func TestCreateSession_StoresJSONSessionDataWithGeneration(t *testing.T) {
 
 func TestCreateSession_NoCacheService(t *testing.T) {
 	db := newTestDB(t)
-	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), testConfig())
+	service, err := NewService(db, nil, slog.New(slog.DiscardHandler), testConfig())
 	require.NoError(t, err)
 
 	_, err = service.createSession(t.Context(), "user-123", 0)
@@ -167,7 +167,7 @@ func TestCreateSession_NoCacheService(t *testing.T) {
 func TestCreateSession_EmptyUserID(t *testing.T) {
 	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), testConfig())
+	service, err := NewService(newTestDB(t), cache, slog.New(slog.DiscardHandler), testConfig())
 	require.NoError(t, err)
 
 	_, err = service.createSession(t.Context(), "", 0)
@@ -178,7 +178,7 @@ func TestCreateSession_EmptyUserID(t *testing.T) {
 func TestCreateSession_UniqueSessions(t *testing.T) {
 	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), testConfig())
+	service, err := NewService(newTestDB(t), cache, slog.New(slog.DiscardHandler), testConfig())
 	require.NoError(t, err)
 
 	s1, err := service.createSession(t.Context(), "user-123", 0)

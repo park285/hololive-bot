@@ -245,7 +245,7 @@ func TestNoRouteHandlerExplicitDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.NoRoute(NoRouteHandler(httputil.AdminAuthConfig{Disabled: true}))
+	router.NoRoute(noRouteHandler(httputil.AdminAuthConfig{Disabled: true}))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)
 	rec := httptest.NewRecorder()

@@ -16,14 +16,14 @@ func TestRepositoryUpsertAndFindByIdentity(t *testing.T) {
 	detectedAt := time.Date(2026, time.April, 10, 1, 4, 0, 0, time.UTC)
 	alarmSentAt := time.Date(2026, time.April, 10, 1, 4, 30, 0, time.UTC)
 
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:              domain.OutboxKindCommunityPost,
 		ContentID:         testCommunityPostID,
 		ChannelID:         testChannelID,
 		ActualPublishedAt: &actualPublishedAt,
 		DetectedAt:        detectedAt,
 		AlarmSentAt:       &alarmSentAt,
-	}))
+	}}))
 
 	record, err := repository.FindByIdentity(ctx, domain.OutboxKindCommunityPost, testCommunityPostID)
 	require.NoError(t, err)
@@ -53,27 +53,27 @@ func TestRepositoryUpsertPreservesEarliestDetectionAndSentAt(t *testing.T) {
 	laterAlarmSentAt := time.Date(2026, time.April, 10, 1, 9, 0, 0, time.UTC)
 	actualPublishedAt := time.Date(2026, time.April, 10, 1, 1, 0, 0, time.UTC)
 
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:       domain.OutboxKindNewShort,
 		ContentID:  testShortContentID,
 		ChannelID:  testShortChannelID,
 		DetectedAt: firstDetectedAt,
-	}))
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	}}))
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:              domain.OutboxKindNewShort,
 		ContentID:         testShortContentID,
 		ChannelID:         testShortChannelID,
 		ActualPublishedAt: &actualPublishedAt,
 		DetectedAt:        laterDetectedAt,
 		AlarmSentAt:       &laterAlarmSentAt,
-	}))
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	}}))
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:        domain.OutboxKindNewShort,
 		ContentID:   testShortContentID,
 		ChannelID:   testShortChannelID,
 		DetectedAt:  laterDetectedAt,
 		AlarmSentAt: &firstAlarmSentAt,
-	}))
+	}}))
 
 	record, err := repository.FindByIdentity(ctx, domain.OutboxKindNewShort, testShortContentID)
 	require.NoError(t, err)
@@ -97,21 +97,21 @@ func TestRepositoryUpsertPreservesExistingActualPublishedAt(t *testing.T) {
 	alarmSentAt := firstActualPublishedAt.Add(10 * time.Minute)
 	detectedAt := time.Date(2026, time.April, 10, 1, 4, 0, 0, time.UTC)
 
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:              domain.OutboxKindNewShort,
 		ContentID:         "short-stable-published-at",
 		ChannelID:         testShortChannelID,
 		ActualPublishedAt: &firstActualPublishedAt,
 		DetectedAt:        detectedAt,
-	}))
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	}}))
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:              domain.OutboxKindNewShort,
 		ContentID:         "short-stable-published-at",
 		ChannelID:         testShortChannelID,
 		ActualPublishedAt: &laterActualPublishedAt,
 		DetectedAt:        detectedAt.Add(time.Minute),
 		AlarmSentAt:       &alarmSentAt,
-	}))
+	}}))
 
 	record, err := repository.FindByIdentity(ctx, domain.OutboxKindNewShort, "short-stable-published-at")
 	require.NoError(t, err)
@@ -127,12 +127,12 @@ func TestRepositoryFindByIdentitySupportsShortCanonicalAlias(t *testing.T) {
 	ctx := t.Context()
 	detectedAt := time.Date(2026, time.April, 10, 1, 4, 0, 0, time.UTC)
 
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:       domain.OutboxKindNewShort,
 		ContentID:  testShortContentID,
 		ChannelID:  testShortChannelID,
 		DetectedAt: detectedAt,
-	}))
+	}}))
 
 	record, err := repository.FindByIdentity(ctx, domain.OutboxKindNewShort, testShortCanonicalPostID)
 	require.NoError(t, err)
@@ -155,18 +155,18 @@ func TestRepositoryUpsertDedupesByCanonicalContentIdentity(t *testing.T) {
 	detectedAt := time.Date(2026, time.April, 10, 1, 4, 0, 0, time.UTC)
 	laterDetectedAt := detectedAt.Add(2 * time.Minute)
 
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:       domain.OutboxKindNewShort,
 		ContentID:  testShortContentID,
 		ChannelID:  testShortChannelID,
 		DetectedAt: detectedAt,
-	}))
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	}}))
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:       domain.OutboxKindNewShort,
 		ContentID:  testShortCanonicalPostID,
 		ChannelID:  testShortChannelID,
 		DetectedAt: laterDetectedAt,
-	}))
+	}}))
 
 	rows := selectTrackingRowsForTest(t, db)
 	require.Len(t, rows, 1)
@@ -183,13 +183,13 @@ func TestRepositoryUpsertRecomputesLatencyWhenPublishedAtBackfillsAfterSentAt(t 
 	alarmSentAt := time.Date(2026, time.April, 10, 1, 7, 30, 0, time.UTC)
 	actualPublishedAt := time.Date(2026, time.April, 10, 1, 6, 0, 0, time.UTC)
 
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:        domain.OutboxKindCommunityPost,
 		ContentID:   "post-backfill",
 		ChannelID:   "UC_BACKFILL",
 		DetectedAt:  detectedAt,
 		AlarmSentAt: &alarmSentAt,
-	}))
+	}}))
 
 	record, err := repository.FindByIdentity(ctx, domain.OutboxKindCommunityPost, "post-backfill")
 	require.NoError(t, err)
@@ -197,13 +197,13 @@ func TestRepositoryUpsertRecomputesLatencyWhenPublishedAtBackfillsAfterSentAt(t 
 	require.Nil(t, record.AlarmLatencyMillis)
 	require.Nil(t, record.AlarmLatencyExceeded)
 
-	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 		Kind:              domain.OutboxKindCommunityPost,
 		ContentID:         "post-backfill",
 		ChannelID:         "UC_BACKFILL",
 		ActualPublishedAt: &actualPublishedAt,
 		DetectedAt:        laterDetectedAt,
-	}))
+	}}))
 
 	record, err = repository.FindByIdentity(ctx, domain.OutboxKindCommunityPost, "post-backfill")
 	require.NoError(t, err)

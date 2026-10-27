@@ -36,7 +36,3 @@ type YouTubeNotificationDelivery struct {
 	Error         string       `db:"error" json:"error,omitempty"`
 	RowVersion    int64        `db:"row_version" json:"row_version"`
 }
-
-func (YouTubeNotificationDelivery) TableName() string {
-	return "youtube_notification_delivery"
-}

@@ -33,7 +33,7 @@
 | Path/Event/Queue | `/internal/membernews/subscriptions`, `/internal/membernews/digest` |
 | Method | `GET /subscriptions/:roomID`, `POST /subscriptions`, `DELETE /subscriptions/:roomID`, `POST /digest` |
 | Version | unversioned HTTP body; route constants in package |
-| Contract package | `hololive/hololive-shared/pkg/contracts/membernews` |
+| Contract package | `hololive/hololive-api/internal/contracts/membernews` |
 
 ## Request
 
@@ -99,7 +99,7 @@ LLM 출력의 `source_url`은 입력 후보의 URL을 정확히 복사해야 하
 | Owner | `hololive-api` llm plane의 membernews(`internal/planes/llm/internal/service/membernews`) |
 | 검토 조건 | `reason="summarizer_error"`가 요약 요청의 다수를 차지하면 요약기 결함으로 보고 원인을 고친 뒤 이 경로의 유지 여부를 다시 결정합니다. LLM 요약을 제품에서 빼기로 하면 결정적 digest를 정상 경로로 바꾸고 이 예외를 지웁니다. |
 
-provider는 `result_type`(`primary`, `fallback`, `empty`)을 응답에 싣지만, consumer 계약 struct(`hololive-shared/pkg/contracts/membernews.Digest`)에는 이 필드가 없어 bot 응답에서 fallback 여부가 보이지 않습니다. 사용자에게 표시하려면 bot 문구를 바꿔야 하므로 이 계약의 범위가 아닙니다.
+provider는 `result_type`(`primary`, `fallback`, `empty`)을 응답에 싣지만, consumer 계약 struct(`hololive-api/internal/contracts/membernews.Digest`)에는 이 필드가 없어 bot 응답에서 fallback 여부가 보이지 않습니다. 사용자에게 표시하려면 bot 문구를 바꿔야 하므로 이 계약의 범위가 아닙니다.
 
 ## Timeout and retry policy
 

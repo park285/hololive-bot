@@ -46,7 +46,7 @@ func ProvideAPIRouter(
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
-	cacheClient cache.Client,
+	cacheClient cache.LowLevelCache,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*gin.Engine, error) {
 	if err := validateAPIRouterInputs(appConfig, domainHandlers, authHandler); err != nil {

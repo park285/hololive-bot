@@ -96,9 +96,9 @@ func newRuntimeH3TracingHandler(t *testing.T, operation string, observation *run
 
 	certFile, keyFile := writeH3LocalhostCertificate(t)
 
-	server, err := NewH3Server(":0", newRuntimeTracingMux(observation), certFile, keyFile, operation)
+	server, err := newH3Server(":0", newRuntimeTracingMux(observation), certFile, keyFile, operation)
 	if err != nil {
-		t.Fatalf("NewH3Server() error = %v", err)
+		t.Fatalf("newH3Server() error = %v", err)
 	}
 
 	return server.Handler
@@ -222,9 +222,9 @@ func TestRuntimeHTTPServersBlankOperationDoesNotCreateSpan(t *testing.T) {
 	http1Server := NewHTTPServer(":0", handler, " \t\n ")
 	certFile, keyFile := writeH3LocalhostCertificate(t)
 
-	h3Server, err := NewH3Server(":0", handler, certFile, keyFile, " \t\n ")
+	h3Server, err := newH3Server(":0", handler, certFile, keyFile, " \t\n ")
 	if err != nil {
-		t.Fatalf("NewH3Server() error = %v", err)
+		t.Fatalf("newH3Server() error = %v", err)
 	}
 
 	for _, server := range []struct {

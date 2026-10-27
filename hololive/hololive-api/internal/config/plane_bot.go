@@ -39,7 +39,6 @@ type BotPlaneConfig struct {
 // WebhookConfig는 bot webhook 수신 한도다. 값은 Stack Worker Profile의 bot_webhook_inbox에서만 온다.
 type WebhookConfig struct {
 	MaxBodyBytes int64
-	DedupTTL     time.Duration
 	DedupTimeout time.Duration
 }
 
@@ -151,7 +150,6 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 func webhookConfigFromProfile(profile *APIWorkerProfile) WebhookConfig {
 	return WebhookConfig{
 		MaxBodyBytes: profile.BotWebhookInbox.MaxBodyBytes,
-		DedupTTL:     workercontract.Milliseconds(profile.BotWebhookInbox.DedupTTLMS),
 		DedupTimeout: workercontract.Milliseconds(profile.BotWebhookInbox.DedupTimeoutMS),
 	}
 }
@@ -179,7 +177,7 @@ func (c *BotPlaneConfig) Validate() error {
 		return errors.New("bot runtime requires Stack Worker Profile v1")
 	}
 
-	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeBot, envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
+	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeBot, sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""), sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, "")); err != nil {
 		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 

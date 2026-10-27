@@ -9,7 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/backoff"
 	"github.com/park285/shared-go/v2/pkg/retry"
 
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
@@ -78,7 +78,7 @@ func (c *APIClient) waitForDistributedRateLimitBucket(ctx context.Context, bucke
 	}
 }
 
-func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string) (ratelimit.Decision, error) {
+func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string) (ratelimitvalkey.Decision, error) {
 	decision, err := c.distributed.Allow(
 		ctx,
 		bucket,
@@ -86,13 +86,13 @@ func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string
 		c.distributedRLCfg.Window,
 	)
 	if err != nil {
-		return ratelimit.Decision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
+		return ratelimitvalkey.Decision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
 	}
 
 	return decision, nil
 }
 
-func waitDistributedRateLimitDecision(ctx context.Context, bucket string, decision ratelimit.Decision) (bool, error) {
+func waitDistributedRateLimitDecision(ctx context.Context, bucket string, decision ratelimitvalkey.Decision) (bool, error) {
 	if decision.Allowed {
 		return true, nil
 	}

@@ -1,6 +1,6 @@
 # Scripts
 
-`hololive-kakao-bot-go/scripts`는 아래 3개 범주만 유지합니다.
+`hololive/hololive-api/scripts`는 아래 범주만 유지합니다.
 
 ## 1. 로컬 단일 프로세스 보조
 - `bot.sh` (`start|stop|restart|rebuild|status`)

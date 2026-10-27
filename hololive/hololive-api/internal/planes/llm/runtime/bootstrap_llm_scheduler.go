@@ -180,11 +180,20 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LL
 	return runtime, nil
 }
 
+// llmSchedulerCache는 LLM scheduler 조립이 cache에 요구하는 작업의 합집합이다. 행사 요약 cache(Get·Set),
+// digest 실행 lock(SetNX·CompareAndDelete), readiness(IsConnected)를 쓴다.
+type llmSchedulerCache interface {
+	cache.KeyValueReader
+	cache.KeyValueWriter
+	cache.ScriptCache
+	sharedreadiness.ConnectionChecker
+}
+
 func buildLLMSchedulerComponents(
 	ctx context.Context,
 	schedulerConfig *apiconfig.LLMSchedulerConfig,
 	logger *slog.Logger,
-	cacheService cache.Client,
+	cacheService llmSchedulerCache,
 	postgresService database.Client,
 	memberCache *member.Cache,
 ) (_ *LLMSchedulerRuntime, err error) {
@@ -239,7 +248,7 @@ func buildLLMSchedulerRuntimeComponents(
 	schedulerConfig *apiconfig.LLMSchedulerConfig,
 	logger *slog.Logger,
 	postgresService database.Client,
-	cacheService cache.Client,
+	cacheService llmSchedulerCache,
 	majorEventRepository *majorevent.Repository,
 	memberNewsService *membernews.Service,
 	formatter *llmSchedulerFormatter,
@@ -278,7 +287,7 @@ func buildLLMSchedulerRuntimeComponents(
 	), nil
 }
 
-func buildLLMSchedulerReadyProbe(postgresService database.Client, cacheService cache.Client) *sharedreadiness.Probe {
+func buildLLMSchedulerReadyProbe(postgresService sharedreadiness.Pinger, cacheService sharedreadiness.ConnectionChecker) *sharedreadiness.Probe {
 	return sharedreadiness.NewProbe("llm",
 		sharedreadiness.PostgresCheck(postgresService),
 		sharedreadiness.ValkeyCheck(cacheService),
@@ -315,7 +324,7 @@ func buildMajorEventRepository(
 }
 
 func buildLLMSchedulerDeliveryModule(
-	cacheService cache.Client,
+	cacheService deliveryLockCache,
 	postgresService database.Client,
 	logger *slog.Logger,
 ) (*DeliveryModule, error) {

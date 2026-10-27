@@ -115,18 +115,9 @@ expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY" "seo
 
 expect_fail "ap-host loader rejects unknown host" ap_host_load "${ROOT_DIR}" nonexistent-host
 
-AP_ACTIVE_ACTIVE_FILES="${ROOT_DIR}/scripts/deploy/ap-rsync-files.txt"
-[[ -r "${AP_ACTIVE_ACTIVE_FILES}" ]] || fail "ap active-active files list is readable"
-while IFS= read -r compose_dependency; do
-    grep -qxF "${compose_dependency}" "${AP_ACTIVE_ACTIVE_FILES}" \
-        || fail "ap active-active syncs Compose helper ${compose_dependency}"
-done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "${ROOT_DIR}/scripts/deploy/compose.sh" | sort -u)
-pass "ap active-active syncs every Compose helper"
-grep -qx 'scripts/deploy/ap-collector-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs collector preflight"
-pass "ap active-active syncs collector preflight"
+"${ROOT_DIR}/scripts/deploy/check-ap-rsync-manifest.sh" >/dev/null || fail "ap active-active transfer list covers the Compose AP runtime inputs"
+pass "ap active-active transfer list covers the Compose AP runtime inputs"
 ap_udp_lib="scripts/deploy/lib/require-quic-udp-buffer.sh"
-grep -qx "${ap_udp_lib}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_udp_lib}"
-pass "ap active-active syncs the QUIC UDP buffer preflight"
 
 # persisted 검증은 sysctl --system 적용 의미론(last-wins: sysctl.d lexical 순서 후 sysctl.conf 최종)을 따라야 한다.
 quic_fixture_root="${TEST_TMP_DIR}/quic"
@@ -148,38 +139,6 @@ if AP_SYSCTL_ROOT="${quic_fixture_root}" bash "${ROOT_DIR}/${ap_udp_lib}" 1024 f
     fail "${ap_udp_lib} must treat /etc/sysctl.conf as the final persisted assignment (sysctl --system order)"
 fi
 pass "quic udp lib applies sysctl.conf as final override"
-for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.osaka2.yml deploy/compose/docker-compose.seoul.yml; do
-    grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
-done
-pass "ap active-active syncs per-host compose files"
-for ap_conf in scripts/deploy/lib/ap-host.sh scripts/deploy/ap-hosts/osaka.conf scripts/deploy/ap-hosts/osaka2.conf scripts/deploy/ap-hosts/seoul.conf; do
-    grep -qx "${ap_conf}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_conf}"
-done
-pass "ap active-active syncs host conf and loader"
-for dbtest_module_file in hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum; do
-    grep -qx "${dbtest_module_file}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs Docker build context dependency ${dbtest_module_file}"
-done
-pass "ap active-active syncs dbtest module metadata"
-while IFS= read -r path; do
-    [[ -n "${path}" ]] || continue
-    [[ -e "${ROOT_DIR}/${path}" ]] || fail "ap active-active files list path exists: ${path}"
-    case "${path}" in
-        hololive/hololive-youtube-collector/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
-        go.sum|*/go.sum) fail "ap active-active files list excludes unapproved go.sum path: ${path}" ;;
-    esac
-    case "${path}" in
-        hololive/hololive-shared/pkg/domain/internal/model/data/*) ;;
-        data|data/*|*/data/*) fail "ap active-active files list excludes unapproved data path: ${path}" ;;
-    esac
-done < "${AP_ACTIVE_ACTIVE_FILES}"
-pass "ap active-active files list paths exist"
-
-if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "${AP_ACTIVE_ACTIVE_FILES}" \
-    | grep -Ev '^[0-9]+:hololive/hololive-alarm-worker/(VERSION|go\.mod|go\.sum)$'; then
-    fail "ap active-active files list excludes forbidden deployment scope"
-fi
-pass "ap active-active files list excludes forbidden deployment scope"
-
 expect_fail_contains "osaka Compose deploy rejects native runtime" \
     "use ./scripts/deploy/ap-host-native-deploy.sh osaka" \
     "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka --dry-run

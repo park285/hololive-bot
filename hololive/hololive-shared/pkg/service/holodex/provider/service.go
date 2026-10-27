@@ -38,7 +38,14 @@ type Service struct {
 	streamCacheFills streamCacheFillGate
 }
 
-func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
+// Cache는 Holodex 서비스가 응답 cache(Get·Set)와 분산 rate limit(B·DoMulti)에 쓰는 cache 작업이다.
+type Cache interface {
+	cache.KeyValueReader
+	cache.KeyValueWriter
+	cache.LowLevelCache
+}
+
+func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey string, cacheClient Cache, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
 	if holodexCfg == nil {
 		return nil, errors.New("holodex config is nil")
 	}

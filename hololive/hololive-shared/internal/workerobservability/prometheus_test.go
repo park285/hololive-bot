@@ -14,7 +14,13 @@ import (
 func registryWithObservationMetrics(t *testing.T) *workercontract.Registry {
 	t.Helper()
 
-	loaded := settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")
+	// hololive-shared는 hololive-api config를 import할 수 없어 같은 identity를 여기 둔다. 값이 어긋나면 fixture 로드가 실패한다.
+	apiIdentity := workercontract.Identity{
+		Service:   "hololive",
+		Role:      "api",
+		WorkerIDs: []string{"bot_reply_outbox", "bot_webhook_inbox", "source_observation"},
+	}
+	loaded := settingstest.LoadProfileFixture(t, apiIdentity, "stack-worker-profile-api.json")
 	idleWorkers := []string{"bot_reply_outbox", "bot_webhook_inbox"}
 
 	// 관측 대상이 아닌 worker는 executor를 꺼 snapshot source 없이 빈 process queue로 등록한다.

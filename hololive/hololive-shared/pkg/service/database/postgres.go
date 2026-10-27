@@ -135,11 +135,11 @@ func (ps *PostgresService) GetPool() *pgxpool.Pool {
 	return ps.pool
 }
 
+// Close는 pool을 닫는다. 종료 중 Ping·GetPool이 같은 필드를 읽으므로 nil로 바꾸지 않고
+// 멱등인 pgxpool.Pool.Close에 맡긴다. 닫힌 pool의 Ping은 pgxpool의 closed pool 오류로 끝난다.
 func (ps *PostgresService) Close() error {
 	if ps.pool != nil {
 		ps.pool.Close()
-
-		ps.pool = nil
 	}
 
 	return nil

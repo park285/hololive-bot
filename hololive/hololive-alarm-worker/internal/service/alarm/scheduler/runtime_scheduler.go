@@ -21,11 +21,13 @@
 package scheduler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
@@ -55,11 +57,17 @@ type targetMinutesUpdater interface {
 	UpdateTargetMinutes([]int)
 }
 
+// recoveryCache는 scheduler의 subscriber cache 복구 판단이 요구하는 작업이다(marker Exists, 연결 WaitUntilReady).
+type recoveryCache interface {
+	Exists(ctx context.Context, key string) (bool, error)
+	WaitUntilReady(ctx context.Context, timeout time.Duration) error
+}
+
 // RuntimeScheduler는 런타임 알람 체크 루프를 관리한다.
 type RuntimeScheduler struct {
 	youtubeChecker checking.Runner
 	notifier       checking.Sender
-	cacheClient    cache.Client
+	cacheClient    recoveryCache
 
 	youtubeTargetUpdater targetMinutesUpdater
 	dedupTargetUpdater   targetMinutesUpdater
@@ -81,8 +89,16 @@ type AlarmState interface {
 	alarmCacheWarmer
 }
 
+// Cache는 scheduler가 조립하는 dedup·queue publisher·YouTube checker와 cache 복구가 함께 요구하는 cache 작업이다.
+// ScriptCache와 Close·IsConnected는 쓰지 않는다.
+type Cache interface {
+	cache.DataCache
+	cache.LowLevelCache
+	WaitUntilReady(ctx context.Context, timeout time.Duration) error
+}
+
 type Dependencies struct {
-	Cache          cache.Client
+	Cache          Cache
 	HolodexService *holodexprovider.Service
 	AlarmState     AlarmState
 	Postgres       database.Client
@@ -130,7 +146,7 @@ func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 }
 
 func newRuntimeSchedulerYouTubeChecker(
-	cacheClient cache.Client,
+	cacheClient alarmstore.SubscriberCache,
 	holodexService *holodexprovider.Service,
 	tierScheduler *tier.TieredScheduler,
 	dedupService *dedup.Service,
@@ -173,7 +189,7 @@ func runtimeSchedulerLogger(logger *slog.Logger) *slog.Logger {
 }
 
 func validateRuntimeSchedulerDeps(
-	cacheClient cache.Client,
+	cacheClient Cache,
 	holodexService *holodexprovider.Service,
 	alarmState AlarmState,
 ) error {
@@ -202,7 +218,7 @@ func runtimeSchedulerYouTubeTiming(checkInterval time.Duration) (initialDelay, i
 }
 
 func newRuntimeSchedulerQueuePublisher(
-	cacheClient cache.Client,
+	cacheClient queue.WakeupCache,
 	logger *slog.Logger,
 	outbox dispatchoutbox.Writer,
 	publishConfig queue.PublishConfig,
@@ -216,7 +232,7 @@ func newRuntimeSchedulerQueuePublisher(
 }
 
 func newRuntimeSchedulerInstance(
-	cacheClient cache.Client,
+	cacheClient recoveryCache,
 	alarmState AlarmState,
 	youtubeChecker *checking.YouTubeChecker,
 	notifierService checking.Sender,

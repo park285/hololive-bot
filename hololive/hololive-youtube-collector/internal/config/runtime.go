@@ -133,7 +133,7 @@ func loadRuntimeOwnershipConfig() (RuntimeOwnershipConfig, error) {
 	return RuntimeOwnershipConfig{
 		RuntimeAllowed:         runtimeAllowed,
 		PhotoSyncEnabled:       photoSyncEnabled,
-		NotificationEgressRole: envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv),
+		NotificationEgressRole: sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""),
 	}, nil
 }
 
@@ -278,11 +278,11 @@ func (c *RuntimeConfig) validateCollectorOwnershipFlags() error {
 }
 
 func (c *RuntimeConfig) validateCollectorEgressOwnership() error {
-	if err := runtimepolicy.ValidateNotificationRoleEnvValues(envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
+	if err := runtimepolicy.ValidateNotificationRoleEnvValues(sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""), sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, "")); err != nil {
 		return fmt.Errorf("validate notification role env values: %w", err)
 	}
 
-	if err := runtimepolicy.RejectReservedEgressRoles(runtimepolicy.RuntimeYouTubeCollector, envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
+	if err := runtimepolicy.RejectReservedEgressRoles(runtimepolicy.RuntimeYouTubeCollector, sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""), sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, "")); err != nil {
 		return fmt.Errorf("reject reserved egress roles: %w", err)
 	}
 

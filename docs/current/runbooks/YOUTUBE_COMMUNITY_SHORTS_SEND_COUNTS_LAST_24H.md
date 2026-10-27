@@ -11,7 +11,7 @@
 
 ## Execute
 
-standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다. 아래 Readout 필드와 `youtube_content_alarm_tracking` / `youtube_notification_delivery_telemetry`를 직접 조회한다.
+전용 리포트 CLI는 없다. 아래 Readout 필드와 `youtube_content_alarm_tracking` / `youtube_notification_delivery_telemetry`를 직접 조회한다.
 
 - 운영자가 중복/누락 후보를 바로 읽을 수 있도록 `status`, `alarm_type`, `channel_id`, `post_id`, `actual_published_at`, `alarm_sent_at`, `delay_seconds`, 발송 횟수, room 수와 함께 `delay_source`, `publish_to_detect_ms`, `internal_delay_cause`, `queue_wait_ms`, `retry_accumulation_ms`, `job_failure_detected`를 함께 본다.
 - 운영 기준은 `duplicate_success_posts == 0` 이다. 이 값이 `pass` 이고 `duplicate_posts = 0` 이어야 중복 알람 0건으로 판정한다.

@@ -24,13 +24,13 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/httputil"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -56,7 +56,7 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 
 	var postgres database.Client = &fakePostgresClient{}
 
-	logger := sharedlogging.NewTestLogger()
+	logger := slog.New(slog.DiscardHandler)
 
 	module, err := BuildDeliveryModule(cachemocks.NewLenientClient(), postgres, logger)
 	require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 func TestBuildDeliveryModuleRejectsNilCache(t *testing.T) {
 	t.Parallel()
 
-	module, err := BuildDeliveryModule(nil, &fakePostgresClient{}, sharedlogging.NewTestLogger())
+	module, err := BuildDeliveryModule(nil, &fakePostgresClient{}, slog.New(slog.DiscardHandler))
 
 	require.Error(t, err)
 	assert.Nil(t, module)
@@ -118,7 +118,7 @@ func TestConvertMemberNewsDigest(t *testing.T) {
 func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	registerMemberNewsInternalRoutes(nil, httputil.AdminAuthConfig{Disabled: true}, nil)
 
-	service := membernewssvc.NewService(nil, nil, nil, nil, sharedlogging.NewTestLogger())
+	service := membernewssvc.NewService(nil, nil, nil, nil, slog.New(slog.DiscardHandler))
 
 	t.Run("auth middleware", func(t *testing.T) {
 		router := newMemberNewsRouter(t, httputil.AdminAuthConfig{APIKey: "secret"}, service)
@@ -186,7 +186,7 @@ func newMemberNewsRouter(t *testing.T, authConfig httputil.AdminAuthConfig, serv
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
-	engine, err := buildTriggerRouter(t.Context(), sharedlogging.NewTestLogger(), nil, "")
+	engine, err := buildTriggerRouter(t.Context(), slog.New(slog.DiscardHandler), nil, "")
 	require.NoError(t, err)
 	registerMemberNewsInternalRoutes(engine, authConfig, service)
 

@@ -39,7 +39,7 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	if serverConfig.TransportEnabled("h3") {
 		drain := &h3RequestDrain{}
 
-		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), drain.wrap(handler), serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
+		h3Server, err := newH3Server(runtimeH3Addr(serverConfig), drain.wrap(handler), serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
 		if err != nil {
 			return nil, fmt.Errorf("H3 server: %w", err)
 		}
@@ -59,7 +59,7 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	return servers, nil
 }
 
-func NewH3Server(addr string, handler http.Handler, certFile, keyFile, operation string,
+func newH3Server(addr string, handler http.Handler, certFile, keyFile, operation string,
 	traceFilters ...func(*http.Request) bool,
 ) (*http3.Server, error) {
 	if handler == nil {
@@ -91,7 +91,7 @@ func (s *RuntimeHTTPServers) Start(logger *slog.Logger, errCh chan<- error) {
 		return
 	}
 
-	StartH3Server(s.H3, logger, errCh)
+	startH3Server(s.H3, logger, errCh)
 
 	if s.Metrics != nil {
 		runtimehttpserver.StartServerWithPrefix(s.Metrics, "metrics server error", logger, errCh)
@@ -129,7 +129,7 @@ func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 	return errors.Join(h3Err, metricsErr, pprofErr)
 }
 
-func StartH3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
+func startH3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return
 	}

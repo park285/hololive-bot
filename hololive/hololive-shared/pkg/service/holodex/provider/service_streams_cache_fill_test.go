@@ -519,14 +519,14 @@ func TestStreamCacheFillGate_FollowerDeadlineAndCanceledWake(t *testing.T) {
 }
 
 type streamFillFaultCache struct {
-	cache.KeyValueCache
+	cacheManagerStore
 
 	readFails  bool
 	writeFails bool
 }
 
 func (c streamFillFaultCache) Get(ctx context.Context, key string, dest any) error {
-	err := c.KeyValueCache.Get(ctx, key, dest)
+	err := c.cacheManagerStore.Get(ctx, key, dest)
 	if c.readFails {
 		return errors.New("cache read unavailable")
 	}
@@ -543,7 +543,7 @@ func (c streamFillFaultCache) Set(ctx context.Context, key string, value any, tt
 		return errors.New("cache write unavailable")
 	}
 
-	if err := c.KeyValueCache.Set(ctx, key, value, ttl); err != nil {
+	if err := c.cacheManagerStore.Set(ctx, key, value, ttl); err != nil {
 		return fmt.Errorf("write fault test cache: %w", err)
 	}
 
@@ -573,7 +573,7 @@ func TestStreamCacheFillCacheFailuresPreserveEachCaller(t *testing.T) {
 			}}
 			service := newStreamFillTestService(t, requester)
 
-			service.cacheManager.cache = streamFillFaultCache{KeyValueCache: service.cacheManager.cache, readFails: readFails, writeFails: !readFails}
+			service.cacheManager.cache = streamFillFaultCache{cacheManagerStore: service.cacheManager.cache, readFails: readFails, writeFails: !readFails}
 
 			owner := startStreamFillTestCall(t.Context(), service.GetLiveStreams)
 

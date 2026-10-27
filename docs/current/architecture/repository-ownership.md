@@ -28,7 +28,7 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 - The `hololive-api` bot plane must not import `hololive-alarm-worker/internal`; cross-runtime access uses documented internal HTTP/queue contracts.
 - `shared-go` must not import any `hololive/*` module.
 - The `hololive-api` bot and admin planes must not import major event repository/storage internals directly; they use documented internal HTTP contracts.
-- `youtube-collector` must not import `pkg/service/alarm` or call `alarm.NewRepository`; `Repository`는 `Add`/`Remove`/`ClearByRoom` write 메서드를 함께 노출하므로 alarms를 읽어야 하는 read 전용 경로는 소유 plane의 SQL asset으로 직접 읽는다(예: YouTube plane `notification_channel_ids.sql`). `pkg/service/alarm/keys`는 제외 대상이 아니다.
+- alarms 저장소 `alarmstore.Repository`(`Add`/`Remove`/`ClearByRoom` write 메서드 포함)는 `hololive-alarm-worker/internal/service/alarm/alarmstore`에 있어 Go `internal` 가시성 규칙상 다른 module이 import할 수 없다. alarms를 읽어야 하는 read 전용 경로는 소유 plane의 SQL asset으로 직접 읽는다(예: YouTube plane `notification_channel_ids.sql`).
 - Shared data ownership changes must update `repository-ownership.allowlist`.
 
 ## YouTube Runtime Role Separation
@@ -39,7 +39,7 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 | `hololive-api` YouTube plane | Observation consume, canonical persist, notification intent | External scraping, proactive egress |
 
 Duplicated polling prevention is enforced by PostgreSQL collection leases. Each collector uses a slot-specific Stack Worker Profile v1 with `collection.executor.enabled=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.
-Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery`, and the Iris proactive sender `NewIrisMessageSender` exists only in `alarm-worker/internal/egress`.
+Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery`, and the Iris proactive sender `NewIrisMessageSender` exists only in `hololive-alarm-worker/internal/egress`.
 Canonical 저장 함수는 `hololive-api/internal/youtube/canonicalwrite`에 있으므로 collector에서 import할 수 없습니다.
 
 YouTube outbox dispatcher와 범용 notification delivery dispatcher도 각각 `hololive-alarm-worker/internal/egress/{youtubedispatch,notificationdelivery}`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. 삭제된 dispatcher·batchrepo 이름의 재등장을 찾는 grep은 두지 않습니다. 반면 `pkg/service/delivery`의 producer enqueue 저장소·sender interface·Iris transport는 API llm plane producer와 worker consumer가 함께 쓰므로 collector의 직접 사용을 scoped gate로 제한합니다.

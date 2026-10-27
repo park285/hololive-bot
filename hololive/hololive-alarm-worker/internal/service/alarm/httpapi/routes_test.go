@@ -1,4 +1,4 @@
-package alarmhttp
+package httpapi
 
 import (
 	"context"

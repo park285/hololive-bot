@@ -16,27 +16,6 @@ export GIT_OPTIONAL_LOCKS=0
 . "${REPO_ROOT}/scripts/deploy/lib/postgres-capacity.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/source-revision.sh"
 
-resolve_workspace_path() {
-    local explicit_value="$1"
-    local sibling_path="$2"
-    local embedded_path="$3"
-    local label="$4"
-    local candidate="${explicit_value}"
-
-    if [[ -z "${candidate}" ]]; then
-        if [[ -d "${sibling_path}" ]]; then
-            candidate="${sibling_path}"
-        elif [[ -d "${embedded_path}" ]]; then
-            candidate="${embedded_path}"
-        fi
-    fi
-    if [[ ! -d "${candidate}" ]]; then
-        echo "[ERROR] Active ${label} workspace not found" >&2
-        exit 1
-    fi
-    (cd "${candidate}" && pwd)
-}
-
 read_version() {
     local dir_path="$1"
     local fallback="$2"
@@ -156,18 +135,6 @@ if [[ "${SECURITY_SCAN}" == true && ( "${BUILD_ONLY}" != true || ${#TARGET_SERVI
     echo "[ERROR] --security-scan requires an all-service --build-only invocation" >&2
     exit 2
 fi
-
-SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
-    "${SHARED_GO_WORKSPACE_PATH:-}" \
-    "${REPO_ROOT}/../shared-go" \
-    "${REPO_ROOT}/shared-go" \
-    "shared-go")"
-IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_workspace_path \
-    "${IRIS_CLIENT_GO_WORKSPACE_PATH:-}" \
-    "${REPO_ROOT}/../iris-client-go" \
-    "${REPO_ROOT}/iris-client-go" \
-    "iris-client-go")"
-export SHARED_GO_WORKSPACE_PATH IRIS_CLIENT_GO_WORKSPACE_PATH
 
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 case "${CONTAINER_CLI}" in
@@ -344,8 +311,6 @@ echo "[INFO] REMOTE_CACHE=${REMOTE_CACHE}"
 echo "[INFO] HOLO_API_VERSION=${HOLO_API_VERSION}"
 echo "[INFO] HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
 echo "[INFO] REVISION=${REVISION}"
-echo "[INFO] SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
-echo "[INFO] IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
 echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" config --quiet

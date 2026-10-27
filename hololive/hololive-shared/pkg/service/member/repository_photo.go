@@ -22,12 +22,9 @@ package member
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string) error {
@@ -37,25 +34,6 @@ func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string
 	}
 
 	return nil
-}
-
-func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) (string, error) {
-	var photo *string
-
-	err := r.pool.QueryRow(ctx, mustSQL("repository_photo_0048_02.sql"), channelID).Scan(&photo)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-
-		return "", fmt.Errorf("get photo: %w", err)
-	}
-
-	if photo == nil {
-		return "", nil
-	}
-
-	return *photo, nil
 }
 
 // staleThreshold: 이 기간보다 오래된 photo는 재동기화 대상.

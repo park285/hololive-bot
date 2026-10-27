@@ -21,12 +21,7 @@ func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
 	runtime, err := BuildAlarmWorkerRuntime(t.Context(), nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Equal(t, "normalize runtime build inputs: config must not be nil", err.Error())
-
-	runtime, err = BuildAlarmWorkerRuntime(t.Context(), &workerconfig.RuntimeConfig{}, nil)
-	require.Error(t, err)
-	assert.Nil(t, runtime)
-	assert.Equal(t, "normalize runtime build inputs: logger must not be nil", err.Error())
+	assert.Equal(t, "normalize runtime build inputs: bootstrap: config must not be nil", err.Error())
 }
 
 func TestAlarmSchedulerEnabled(t *testing.T) {

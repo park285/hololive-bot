@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/park285/iris-client-go/v3/webhook"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
@@ -74,28 +73,7 @@ func buildBotHTTP3ServerWithReloaderOptions(
 		GetCertificate: certReloader.GetCertificate,
 	}
 
-	return sharedh3.NewServerWithTLSConfig(appConfig.Server.H3Addr, botRouter, tlsConfig), runBotCertificateReload(certReloader, reloaderOptions), nil
-}
-
-func runBotCertificateReload(reloader *sharedh3.CertificateReloader, options sharedh3.CertificateReloaderOptions) func(context.Context) {
-	interval := options.ReloadInterval
-	if interval <= 0 {
-		interval = sharedh3.DefaultCertificateReloadInterval
-	}
-
-	return func(ctx context.Context) {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if _, err := reloader.GetCertificate(nil); err != nil && options.Logger != nil {
-					options.Logger.Warn("bot_h3_certificate_reload_failed", slog.Any("error", err))
-				}
-			}
-		}
-	}
+	// Run은 넘긴 ctx가 끝날 때까지 블로킹하므로 bot runtime이 tasksWG와 panicguard로 수명을 소유한다.
+	// 실패는 reloader가 logger로 중복 없이 남긴다.
+	return sharedh3.NewServerWithTLSConfig(appConfig.Server.H3Addr, botRouter, tlsConfig), certReloader.Run, nil
 }

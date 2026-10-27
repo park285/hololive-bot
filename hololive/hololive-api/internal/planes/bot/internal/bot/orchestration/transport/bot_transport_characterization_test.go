@@ -266,10 +266,6 @@ func (c *stubBotClient) GetReplyStatus(context.Context, string) (*iris.ReplyStat
 
 func (c *stubBotClient) Ping(context.Context) bool { return c.pingResult }
 
-func (c *stubBotClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
-	return &iris.ConfigResponse{}, nil
-}
-
 func TestWithThreadIDAndFromContext(t *testing.T) {
 	t.Parallel()
 

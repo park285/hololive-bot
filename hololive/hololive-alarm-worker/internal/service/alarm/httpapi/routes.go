@@ -1,4 +1,4 @@
-package alarmhttp
+package httpapi
 
 import (
 	"log/slog"
@@ -8,10 +8,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
-// alarm HTTP 계약 전체에 대한 RuntimeRouter registrar를 반환한다. Gin route 배선을
-// 공유 alarm 패키지에 중앙화해 runtime 패키지들이 route set을
-// 중복 정의하지 않게 한다.
-func NewInternalRouteRegistrar(apiKey string, alarmService AlarmHTTPService, logger *slog.Logger) func(*gin.Engine) error {
+// NewInternalRouteRegistrar는 alarm HTTP 계약 전체에 대한 RuntimeRouter registrar를 반환한다.
+// 전체 route 집합과 API key 인증 배선을 이 한 곳에 두어 worker runtime 조립이 route를 중복 정의하지 않게 한다.
+func NewInternalRouteRegistrar(apiKey string, alarmService AlarmService, logger *slog.Logger) func(*gin.Engine) error {
 	return func(router *gin.Engine) error {
 		if router == nil || alarmService == nil {
 			return nil

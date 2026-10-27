@@ -35,9 +35,15 @@ type DeliveryModule struct {
 	Repository *delivery.OutboxRepository
 }
 
+// deliveryLockCache는 delivery module의 실행 lock이 쓰는 cache 작업이다(SetNX, CompareAndDelete).
+type deliveryLockCache interface {
+	cache.KeyValueWriter
+	cache.ScriptCache
+}
+
 // BuildDeliveryModule은 digest 발송을 notification_delivery_outbox에 적재한다. 발송은 alarm-worker가 소유한다.
 func BuildDeliveryModule(
-	cacheClient cache.Client,
+	cacheClient deliveryLockCache,
 	postgres database.Client,
 	logger *slog.Logger,
 ) (*DeliveryModule, error) {

@@ -32,7 +32,7 @@ Iris의 플랫폼 secret master/manifest를 거쳐 전달하며 여기에서 중
 대표 origin을 확인하고, 운영 변경은 승인된 효과에 한정합니다. 기존 native generation·공개 ingress 설정·
 Osaka deploy snapshot과 secret 복구 자료를 보존합니다. 웹 변경 승인만으로 DB migration이나 봇 재시작을 실행하지 않습니다.
 
-`public-pr-frontend-gate.sh`는 웹 전용 credential·env 부재, `deunhealth`의 공유 `docker-proxy` 연결과 shortlink ingress 보존을 검사합니다.
+`public-pr-frontend-gate.sh`는 `deunhealth`의 공유 `docker-proxy` 연결과 shortlink ingress 보존을 검사합니다.
 영향받는 저장소의 검증과 이 저장소의 Compose/실제 Nginx 검사를 마친 뒤 kapu의 검증된 빌드 산출물만 호스트에 전송합니다.
 공통 인증 조회·SSR·권한 거절·logout/PWA와 기존 봇·단축 링크 상태를 확인하고 임시 조회 계정은 정확한 ID로 폐기합니다.
 실제 AI 호출·메시지/푸시 발송·iOS 실기기 검증을 자동 smoke에 포함하지 않습니다.

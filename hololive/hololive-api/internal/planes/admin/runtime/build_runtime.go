@@ -36,7 +36,7 @@ type alarmModeComponents struct {
 }
 
 func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, infra *sharedmodules.InfraModule, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
-	ctx, appConfig, err := normalizeAdminAPIRuntimeInputs(ctx, appConfig, logger)
+	ctx, appConfig, logger, err := normalizeAdminAPIRuntimeInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize admin API runtime inputs: %w", err)
 	}
@@ -82,17 +82,17 @@ func normalizeAdminAPIRuntimeInputs(
 	ctx context.Context,
 	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,
-) (context.Context, *apiconfig.AdminPlaneConfig, error) {
+) (context.Context, *apiconfig.AdminPlaneConfig, *slog.Logger, error) {
 	if appConfig == nil {
-		return nil, nil, errors.New("config must not be nil")
+		return nil, nil, nil, errors.New("config must not be nil")
 	}
 
-	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
+	ctx, logger, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("normalize runtime build inputs: %w", err)
+		return nil, nil, nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
 
-	return ctx, appConfig, nil
+	return ctx, appConfig, logger, nil
 }
 
 func buildAdminAPIRuntimeAfterAlarmMode(

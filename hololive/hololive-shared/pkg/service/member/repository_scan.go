@@ -240,24 +240,6 @@ func (r *Repository) querySingleMember(ctx context.Context, query string, args .
 	return out, nil
 }
 
-func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query string, args ...any) (*domain.Member, error) {
-	row, err := scanMemberPhotoQueryRow(r.pool.QueryRow(ctx, query, args...))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, domain.ErrMemberNotFound
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("scan member photo query row: %w", err)
-	}
-
-	out, err := r.parseMemberPhotoRow(&row)
-	if err != nil {
-		return nil, fmt.Errorf("parse member photo row: %w", err)
-	}
-
-	return out, nil
-}
-
 // rows.Err 오류 접두는 조회 경로별로 기존 문구를 유지합니다.
 const (
 	memberIterLabel            = "rows iteration error"

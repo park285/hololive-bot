@@ -1,17 +1,17 @@
-package alarmhttp
+package httpapi
 
 import (
 	"context"
-	"log/slog"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )
 
-func newMemberSubscriptionAPIClient(t *testing.T) (*Client, <-chan domain.AddAlarmRequest, <-chan domain.Alarm) {
+func newMemberSubscriptionAPIClient(t *testing.T) (*alarmhttp.Client, <-chan domain.AddAlarmRequest, <-chan domain.Alarm) {
 	t.Helper()
 
 	added := make(chan domain.AddAlarmRequest, 4)
@@ -39,9 +39,7 @@ func newMemberSubscriptionAPIClient(t *testing.T) (*Client, <-chan domain.AddAla
 	server := httptest.NewServer(newTestHandler(t, mock))
 	t.Cleanup(server.Close)
 
-	client := newTestClient(server.URL, "", slog.New(slog.DiscardHandler))
-
-	return client, added, removed
+	return newRoundTripClient(t, server.URL), added, removed
 }
 
 func TestMemberSubscriptionClientAndAPIRoundTrip(t *testing.T) {

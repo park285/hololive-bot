@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/iris-client-go/v3/valkeydedup"
 	"github.com/park285/iris-client-go/v3/webhook"
 
@@ -20,14 +19,13 @@ func BuildDurableBotWebhookHandler(
 	nonceStore := valkeydedup.NewNonceStore(deps.Cache.GetClient())
 	metrics := defaultWebhookMetrics()
 
-	handler, err := iris.NewDurableWebhookHandler(admitter,
+	handler, err := webhook.NewDurableHandler(admitter,
 		webhook.WithWebhookToken(appConfig.Iris.WebhookToken),
 		webhook.WithWebhookLogger(logger),
 		webhook.WithMetrics(metrics),
 		webhook.WithNonceStore(nonceStore),
 		webhook.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
-		webhook.WithDedupTTL(appConfig.Webhook.DedupTTL),
-		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
+		webhook.WithNonceTimeout(appConfig.Webhook.DedupTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("durable webhook handler: %w", err)

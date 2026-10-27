@@ -20,9 +20,9 @@ func TestNewH3ServerLoadsTLSConfig(t *testing.T) {
 
 	certFile, keyFile := writeH3LocalhostCertificate(t)
 
-	server, err := NewH3Server(testLoopbackAddr, http.NotFoundHandler(), certFile, keyFile, "test.h3")
+	server, err := newH3Server(testLoopbackAddr, http.NotFoundHandler(), certFile, keyFile, "test.h3")
 	if err != nil {
-		t.Fatalf("NewH3Server() error = %v", err)
+		t.Fatalf("newH3Server() error = %v", err)
 	}
 
 	if server.Addr != testLoopbackAddr {

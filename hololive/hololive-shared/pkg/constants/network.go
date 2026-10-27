@@ -84,9 +84,6 @@ var IrisConnection = struct {
 	PingTimeout:   3 * time.Second,
 }
 
-// ACK 지연이 Iris 재시도/백프레셔로 이어지지 않도록 짧게 유지합니다.
-var IrisWebhookDedupTimeout = 200 * time.Millisecond
-
 var DatabaseConfig = struct {
 	MaxOpenConns    int
 	MaxIdleConns    int

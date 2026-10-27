@@ -148,30 +148,6 @@ func TestKakaoConfig_AddRemoveRoom(t *testing.T) {
 	}
 }
 
-func TestKakaoConfig_SnapshotACL_ReturnsCopy(t *testing.T) {
-	config := KakaoConfig{
-		Rooms:      []string{"a"},
-		ACLEnabled: true,
-	}
-
-	enabled, _, rooms := config.SnapshotACL()
-	if !enabled {
-		t.Fatal("expected enabled to be true")
-	}
-
-	if len(rooms) != 1 || rooms[0] != "a" {
-		t.Fatalf("unexpected rooms snapshot: %v", rooms)
-	}
-
-	rooms[0] = "mutated"
-
-	_, _, rooms2 := config.SnapshotACL()
-
-	if rooms2[0] != "a" {
-		t.Fatalf("expected SnapshotACL to return a copy, got: %v", rooms2)
-	}
-}
-
 func TestLoadIrisConfigUsesSeparateTrimmedTokens(t *testing.T) {
 	t.Setenv(irisWebhookTokenEnv, " webhook-token ")
 	t.Setenv(irisBotTokenEnv, " bot-token ")

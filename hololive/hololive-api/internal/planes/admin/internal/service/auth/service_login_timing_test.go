@@ -2,10 +2,10 @@ package auth
 
 import (
 	"bytes"
+	"log/slog"
 	"sync"
 	"testing"
 
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/hololive-shared/pkg/testutil"
@@ -43,7 +43,7 @@ func TestLogin_UnknownEmailRunsBcryptComparison(t *testing.T) {
 	// 운영 기본값과 다른 비용이어야 더미 해시가 설정 비용을 따르는지 구분된다.
 	cfg.BcryptCost = bcrypt.MinCost + 1
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), cfg)
+	service, err := NewService(db, cacheClient, slog.New(slog.DiscardHandler), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

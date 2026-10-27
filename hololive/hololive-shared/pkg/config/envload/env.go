@@ -29,10 +29,6 @@ func AppEnvironment() string {
 	return sharedenv.String("APP_ENV", runtimepolicy.EnvironmentProduction)
 }
 
-func TrimmedEnv(key string) string {
-	return strings.TrimSpace(os.Getenv(key))
-}
-
 func CommaSeparated(value string) []string {
 	if value == "" {
 		return []string{}

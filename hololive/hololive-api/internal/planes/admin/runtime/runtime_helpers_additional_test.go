@@ -44,7 +44,7 @@ func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) (triggercon
 func TestNormalizeRuntimeBuildInputsDefaultsTODOContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(t.Context(), &apiconfig.AdminPlaneConfig{}, slog.New(slog.DiscardHandler))
+	ctx, _, err := bootstrap.NormalizeRuntimeBuildInputs(t.Context(), &apiconfig.AdminPlaneConfig{}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NormalizeRuntimeBuildInputs() error = %v", err)
 	}

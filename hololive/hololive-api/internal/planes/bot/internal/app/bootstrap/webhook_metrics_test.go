@@ -22,29 +22,23 @@ func TestWebhookMetricsObservesCountersAndHistograms(t *testing.T) {
 	metrics.ObserveEnqueueFailure()
 	metrics.ObserveAccepted()
 	metrics.ObserveDecodeLatency(10 * time.Millisecond)
-	metrics.ObserveDedupLatency(20 * time.Millisecond)
-	metrics.ObserveEnqueueWait(30 * time.Millisecond)
-	metrics.ObserveQueueDepth(7)
 	metrics.ObserveHandlerDuration(40 * time.Millisecond)
 
-	assertMetricValue(t, metrics.requests, 1)
-	assertMetricValue(t, metrics.unauthorized, 1)
-	assertMetricValue(t, metrics.badRequests, 1)
-	assertMetricValue(t, metrics.duplicates, 1)
-	assertMetricValue(t, metrics.enqueueFailures, 1)
-	assertMetricValue(t, metrics.accepted, 1)
-	assertMetricValue(t, metrics.queueDepth, 7)
+	assertCounterOnce(t, metrics.requests)
+	assertCounterOnce(t, metrics.unauthorized)
+	assertCounterOnce(t, metrics.badRequests)
+	assertCounterOnce(t, metrics.duplicates)
+	assertCounterOnce(t, metrics.enqueueFailures)
+	assertCounterOnce(t, metrics.accepted)
 	assertHistogramCount(t, registry, "hololive_bot_webhook_decode_latency_seconds")
-	assertHistogramCount(t, registry, "hololive_bot_webhook_dedup_latency_seconds")
-	assertHistogramCount(t, registry, "hololive_bot_webhook_enqueue_wait_seconds")
 	assertHistogramCount(t, registry, "hololive_bot_webhook_handler_duration_seconds")
 }
 
-func assertMetricValue(t *testing.T, collector prometheus.Collector, want float64) {
+func assertCounterOnce(t *testing.T, collector prometheus.Collector) {
 	t.Helper()
 
-	if got := testutil.ToFloat64(collector); got != want {
-		t.Fatalf("metric = %v, want %v", got, want)
+	if got := testutil.ToFloat64(collector); got != 1 {
+		t.Fatalf("metric = %v, want 1", got)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/httpapi"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
@@ -24,9 +25,6 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -50,7 +48,7 @@ func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err er
 }
 
 func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *workerconfig.RuntimeConfig, logger *slog.Logger) (*workerruntime.AlarmWorkerRuntime, error) {
-	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
+	ctx, logger, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
@@ -216,7 +214,7 @@ func buildAlarmWorkerHTTPRuntime(
 		APIKey:                 appConfig.Server.APIKey,
 		ReadyResponder:         publicReadyHandler(ctx, readyProbe),
 		InternalReadyResponder: internalReadyHandler(ctx, readyProbe),
-		RegisterRoutes: alarmhttp.NewInternalRouteRegistrar(
+		RegisterRoutes: httpapi.NewInternalRouteRegistrar(
 			appConfig.Server.APIKey,
 			foundation.AlarmService,
 			logger,
@@ -259,8 +257,8 @@ func buildAlarmWorkerHTTPRuntime(
 
 func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness.Probe {
 	var (
-		postgres    database.Client
-		cacheClient cache.Client
+		postgres    sharedreadiness.Pinger
+		cacheClient sharedreadiness.ConnectionChecker
 	)
 
 	if infra != nil {

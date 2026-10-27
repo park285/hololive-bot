@@ -74,6 +74,31 @@ func TestGroupRuntimeShutdownUsesReverseOrderAndJoinsErrors(t *testing.T) {
 	}
 }
 
+func TestGroupRuntimeShutdownIsolatesComponentPanic(t *testing.T) {
+	t.Parallel()
+
+	var got []string
+
+	group := NewGroupRuntime(nil,
+		GroupComponent{Name: "deps", Shutdown: func(context.Context) error {
+			got = append(got, "deps")
+			return nil
+		}},
+		GroupComponent{Name: "web", Shutdown: func(context.Context) error {
+			panic("web shutdown exploded")
+		}},
+	)
+
+	err := group.Shutdown(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "shutdown web") || !strings.Contains(err.Error(), "web shutdown exploded") {
+		t.Fatalf("shutdown error = %v, want recovered web panic", err)
+	}
+
+	if !reflect.DeepEqual(got, []string{"deps"}) {
+		t.Fatalf("shutdown continued = %v, want deps after web panic", got)
+	}
+}
+
 func TestGroupRuntimeNilIsNoop(t *testing.T) {
 	t.Parallel()
 

@@ -10,7 +10,6 @@ import (
 
 const (
 	SchemaVersionV1                 int16 = 1
-	CommunitySchemaVersionV1              = SchemaVersionV1
 	MaxPayloadBytes                       = 1 << 20
 	DefaultMaxSourceEventFutureSkew       = 5 * time.Minute
 	MaxSourceEventFutureSkew              = 15 * time.Minute

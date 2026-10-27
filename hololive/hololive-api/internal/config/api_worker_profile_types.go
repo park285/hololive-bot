@@ -8,6 +8,16 @@ const (
 	WorkerSourceObservation = "source_observation"
 )
 
+// APIWorkerIdentity: hololive-api가 소유한 worker profile identity다.
+// 호출자가 WorkerIDs를 바꿔도 다른 로드에 번지지 않도록 매 호출 새 슬라이스를 돌려준다.
+func APIWorkerIdentity() workercontract.Identity {
+	return workercontract.Identity{
+		Service:   "hololive",
+		Role:      "api",
+		WorkerIDs: []string{WorkerBotReplyOutbox, WorkerBotWebhookInbox, WorkerSourceObservation},
+	}
+}
+
 type BotWebhookInboxWorkerSettings struct {
 	MaxBodyBytes            int64 `json:"max_body_bytes"`
 	DedupTTLMS              int64 `json:"dedup_ttl_ms"`

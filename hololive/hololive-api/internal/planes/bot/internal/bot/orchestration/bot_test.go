@@ -68,10 +68,6 @@ func (f *fakeIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.Repl
 	return &iris.ReplyStatusSnapshot{}, nil
 }
 
-func (f *fakeIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
-	return &iris.ConfigResponse{}, nil
-}
-
 func (f *fakeIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
 	return &iris.RoomListResponse{}, nil
 }

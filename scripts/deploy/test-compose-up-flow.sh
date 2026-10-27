@@ -64,7 +64,6 @@ export HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1
 
 env_file="${tmpdir}/env"
 compose_file="${tmpdir}/docker-compose.yml"
-mkdir -p "${tmpdir}/shared-go" "${tmpdir}/iris-client-go"
 cat >"${env_file}" <<'EOF'
 TEST_VALUE=ok
 HOLOLIVE_BOT_PORT_BIND_IP=127.0.0.1
@@ -82,8 +81,6 @@ mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/data"
 
 : >"${MOCK_DOCKER_LOG}"
 COMPOSE_ENV_FILE="${env_file}" \
-SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
-IRIS_CLIENT_GO_WORKSPACE_PATH="${tmpdir}/iris-client-go" \
 HOLOLIVE_APP_UID="$(id -u)" \
 HOLOLIVE_APP_GID="$(id -g)" \
     "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build hololive-api
@@ -105,9 +102,7 @@ fi
 pass "unified API start renders, builds dependencies and starts last without a rebuild"
 
 : >"${MOCK_DOCKER_LOG}"
-unset IRIS_CLIENT_GO_WORKSPACE_PATH
 COMPOSE_ENV_FILE="${env_file}" \
-SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
 HOLOLIVE_APP_UID="$(id -u)" \
 HOLOLIVE_APP_GID="$(id -g)" \
     "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build youtube-collector >"${tmpdir}/collector.out" 2>&1
@@ -116,11 +111,10 @@ grep -Eq '^compose --env-file .* build --with-dependencies youtube-collector$' "
     || fail "collector-only start did not preserve targeted dependency build"
 grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/collector.out" \
     || fail "collector-only start did not run writable bind-mount preflight"
-pass "collector-only AP start does not require iris-client-go and runs the bind-mount preflight"
+pass "collector-only start keeps the targeted dependency build and runs the bind-mount preflight"
 
 : >"${MOCK_DOCKER_LOG}"
 COMPOSE_ENV_FILE="${env_file}" \
-SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
 HOLOLIVE_APP_UID="$(id -u)" \
 HOLOLIVE_APP_GID="$(id -g)" \
     "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d hololive-alarm-worker >"${tmpdir}/alarm-worker.out" 2>&1

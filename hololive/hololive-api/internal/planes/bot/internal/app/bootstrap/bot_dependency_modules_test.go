@@ -122,10 +122,6 @@ func (s *stubBotIrisClient) Ping(context.Context) bool {
 	return true
 }
 
-func (s *stubBotIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
-	return &iris.ConfigResponse{}, nil
-}
-
 func (s *stubBotIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
 	return &iris.RoomListResponse{}, nil
 }

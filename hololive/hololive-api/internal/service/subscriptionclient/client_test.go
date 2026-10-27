@@ -28,7 +28,7 @@ func newTestClient(t *testing.T, handler http.Handler) *subscriptionclient.Clien
 	t.Cleanup(server.Close)
 
 	return &subscriptionclient.Client{
-		HTTPClient:        &internalhttp.JSONClient{JSONClient: httputil.NewJSONClient(server.URL, "test-api-key", 5*time.Second)},
+		HTTPClient:        &internalhttp.JSONClient{JSONClient: httputil.NewJSONClientWithHTTPClient(server.URL, "test-api-key", httputil.NewInternalServiceClient(5*time.Second))},
 		SubscriptionsPath: testSubscriptionsPath,
 	}
 }
@@ -131,7 +131,7 @@ func TestIsSubscribedReturnsAPIErrorForNonSuccessStatus(t *testing.T) {
 		t.Fatal("expected error for 500 response, got nil")
 	}
 
-	if !httputil.IsStatus(err, http.StatusInternalServerError) {
+	if apiErr, ok := errors.AsType[*httputil.APIError](err); !ok || apiErr.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("error = %v, want APIError with status 500", err)
 	}
 
@@ -223,7 +223,7 @@ func TestSubscribeReturnsAPIErrorForNonSuccessStatus(t *testing.T) {
 		t.Fatal("expected error for 503 response, got nil")
 	}
 
-	if !httputil.IsStatus(err, http.StatusServiceUnavailable) {
+	if apiErr, ok := errors.AsType[*httputil.APIError](err); !ok || apiErr.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("error = %v, want APIError with status 503", err)
 	}
 }
@@ -256,7 +256,7 @@ func TestUnsubscribeReturnsAPIErrorForNonSuccessStatus(t *testing.T) {
 		t.Fatal("expected error for 404 response, got nil")
 	}
 
-	if !httputil.IsStatus(err, http.StatusNotFound) {
+	if apiErr, ok := errors.AsType[*httputil.APIError](err); !ok || apiErr.StatusCode != http.StatusNotFound {
 		t.Fatalf("error = %v, want APIError with status 404", err)
 	}
 }

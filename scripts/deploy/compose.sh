@@ -145,13 +145,6 @@ if ! assert_kapu_alarm_worker_start_allowed "$(hostname -s)" "${compose_command_
     exit 1
 fi
 
-SHARED_GO_WORKSPACE_PATH="$(resolve_required_workspace_path \
-    "${SHARED_GO_WORKSPACE_PATH:-}" \
-    "${ROOT_DIR}/../shared-go" \
-    "${ROOT_DIR}/shared-go" \
-    "shared-go")"
-export SHARED_GO_WORKSPACE_PATH
-
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 case "${CONTAINER_CLI}" in
     docker|podman) ;;

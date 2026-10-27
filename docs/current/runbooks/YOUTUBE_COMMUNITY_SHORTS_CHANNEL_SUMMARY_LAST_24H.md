@@ -14,7 +14,7 @@
 
 ## Execute
 
-standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다. 아래 SQL로 채널별 `detected`, `alarm_sent`, `success`, `failure`, `detected_unsent` 집계를 확인한다.
+전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회한다. 아래 SQL로 채널별 `detected`, `alarm_sent`, `success`, `failure`, `detected_unsent` 집계를 확인한다.
 
 ## SQL
 

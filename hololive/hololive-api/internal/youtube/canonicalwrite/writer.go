@@ -80,7 +80,7 @@ func persistReconciledVideosTx(
 	canonicalizeShortContentIDs(notifications, trackingRows)
 
 	sourcePosts := buildShortSourcePosts(videos, trackingRows)
-	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
+	if err := observation.NewRepository(tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
 		return fmt.Errorf("upsert short source posts: %w", err)
 	}
 
@@ -128,7 +128,7 @@ func persistCommunityPostsTx(
 	}
 
 	sourcePosts := buildCommunitySourcePosts(posts, trackingRows)
-	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
+	if err := observation.NewRepository(tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
 		return fmt.Errorf("upsert community source posts: %w", err)
 	}
 
@@ -156,12 +156,12 @@ func persistTrackingAndWatermark(
 		return fmt.Errorf("reconcile tracking rows with persisted send state: %w", err)
 	}
 
-	if err := observation.NewRepositoryContext(ctx, tx).UpsertBatch(ctx, trackingRows); err != nil {
+	if err := observation.NewRepository(tx).UpsertBatch(ctx, trackingRows); err != nil {
 		return fmt.Errorf("upsert %s tracking: %w", trackingLabel, err)
 	}
 
 	alarmStates := buildCommunityShortsAlarmStates(trackingRows)
-	if err := observation.NewRepositoryContext(ctx, tx).UpsertAlarmStateBatch(ctx, alarmStates); err != nil {
+	if err := observation.NewRepository(tx).UpsertAlarmStateBatch(ctx, alarmStates); err != nil {
 		return fmt.Errorf("upsert %s alarm states: %w", alarmStateLabel, err)
 	}
 

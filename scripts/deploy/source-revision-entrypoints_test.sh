@@ -19,8 +19,6 @@ mkdir -p \
     "${repo}/deploy/compose" \
     "${repo}/hololive/hololive-api" \
     "${repo}/hololive/hololive-alarm-worker" \
-    "${tmp}/shared-go" \
-    "${tmp}/iris-client-go" \
     "${fakebin}"
 
 cp "${ROOT_DIR}/build-all.sh" "${repo}/build-all.sh"
@@ -173,8 +171,6 @@ common_env=(
     FAKE_DOCKER_LOG="${docker_log}"
     FAKE_REAL_DOCKER="${REAL_DOCKER}"
     COMPOSE_ENV_FILE="${repo}/deploy/compose/build-only.env.sample"
-    SHARED_GO_WORKSPACE_PATH="${tmp}/shared-go"
-    IRIS_CLIENT_GO_WORKSPACE_PATH="${tmp}/iris-client-go"
 )
 
 : >"${docker_log}"

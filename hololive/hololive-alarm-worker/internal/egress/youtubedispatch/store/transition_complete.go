@@ -238,7 +238,7 @@ func recordSentTrackingAndTelemetry(
 // validateSentTracking은 commit 응답 유실 뒤 post-state를 확인할 때 community/shorts owner의 post 단위 발송 표시가
 // alarm_state 또는 tracking에 남았는지 읽는다. 없으면 같은 트랜잭션이 기록했어야 할 결과가 빠진 것이다.
 func validateSentTracking(ctx context.Context, db dbx.Querier, operation StartedOperation) error {
-	repository := observation.NewRepositoryContext(ctx, db)
+	repository := observation.NewRepository(db)
 	seen := make(map[string]struct{})
 
 	for i := range operation.groups {

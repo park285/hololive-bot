@@ -78,7 +78,7 @@ func runtimeIrisValidationTransport(explicit string) string {
 
 func normalizeRuntimeIrisTransport(raw string) string {
 	normalized := strings.ToLower(strings.TrimSpace(raw))
-	if isRuntimeIrisHTTP3Transport(normalized) {
+	if settings.IsHTTP3Transport(normalized) {
 		return "h3"
 	}
 
@@ -87,8 +87,4 @@ func normalizeRuntimeIrisTransport(raw string) string {
 	}
 
 	return normalized
-}
-
-func isRuntimeIrisHTTP3Transport(normalized string) bool {
-	return normalized == "h3" || normalized == "http3" || normalized == "http/3" || normalized == "quic"
 }

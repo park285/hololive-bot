@@ -21,6 +21,7 @@
 package orchestration
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -47,6 +48,12 @@ type BotIrisClient interface {
 	kakaoroom.IrisRooms
 }
 
+// BotCache는 Bot이 명령 admission(B·DoMulti)과 기동 readiness 대기(WaitUntilReady)에 쓰는 cache 작업이다.
+type BotCache interface {
+	cache.LowLevelCache
+	WaitUntilReady(ctx context.Context, timeout time.Duration) error
+}
+
 type Dependencies struct {
 	BotSelfUser           string
 	IrisBaseURL           string
@@ -59,7 +66,7 @@ type Dependencies struct {
 	Formatter             *formatter.ResponseFormatter
 	MessageStrings        *messagestrings.Store
 	MarkdownReplies       bool
-	Cache                 cache.Client
+	Cache                 BotCache
 	Postgres              database.Client
 	MemberRepository      *member.Repository
 	Holodex               domain.StreamProvider

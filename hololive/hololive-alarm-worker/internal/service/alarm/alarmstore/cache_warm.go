@@ -33,10 +33,18 @@ var subscriberCacheStaticKeys = []string{
 	alarmkeys.MemberNameKey,
 }
 
+// SubscriberCacheStore는 subscriber cache 전체 rebuild가 요구하는 작업이다. 이름공간 SCAN·삭제(ScanKeyPages·DelMany),
+// 빈 상태 marker(Set·Del), 멤버 이름 hash(HMSet), 구독 set pipeline(B·DoMulti)을 쓴다.
+type SubscriberCacheStore interface {
+	cache.KeyValueCache
+	cache.HashWriter
+	cache.LowLevelCache
+}
+
 // RebuildSubscriberCacheFromRepository는 전체 subscriber cache를 정본 구독으로 다시 채운다.
 // 호출자는 모든 구독 변경과 같은 mutation mutex를 보유해야 한다. 현재 단일 alarm-worker의 AlarmService가
 // 이 직렬화를 소유하며, 여러 프로세스에서 같은 cache를 쓰려면 rebuild와 변경을 함께 fence해야 한다.
-func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository) (CacheWarmSummary, error) {
+func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient SubscriberCacheStore, repository *Repository) (CacheWarmSummary, error) {
 	if repository == nil {
 		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
 	}
@@ -44,7 +52,7 @@ func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache
 	return rebuildSubscriberCache(ctx, cacheClient, repository)
 }
 
-func rebuildSubscriberCache(ctx context.Context, cacheClient cache.Client, source subscriberCacheWarmSource) (CacheWarmSummary, error) {
+func rebuildSubscriberCache(ctx context.Context, cacheClient SubscriberCacheStore, source subscriberCacheWarmSource) (CacheWarmSummary, error) {
 	// 모든 페이지 삭제를 끝낸 뒤 DB 스냅샷을 읽는다. 일부 삭제가 실패한 경우 오래된 snapshot을 다시 쓰지 않고
 	// 오류를 반환하며, 사라진 set은 구독 조회의 기존 DB read-through로 확정한다.
 	if err := clearSubscriberCacheNamespace(ctx, cacheClient); err != nil {
@@ -89,7 +97,7 @@ func loadSubscriberCacheWarmData(ctx context.Context, source subscriberCacheWarm
 // clearSubscriberCacheNamespace는 subscriber cache key를 SCAN page마다 바로 지워 전체 key 목록을 메모리에 모으지 않는다.
 // 모든 page 삭제가 끝난 뒤에만 반환하므로 호출자의 clear→load 순서가 유지되고, 삭제가 SCAN 순회와 겹쳐도 SCAN은
 // 순회 내내 존재한 key를 빠뜨리지 않는다. 순회 중 새로 생긴 key는 이후 load한 DB 스냅샷에도 반영돼 있어 지워져도 복원된다.
-func clearSubscriberCacheNamespace(ctx context.Context, cacheClient cache.Client) error {
+func clearSubscriberCacheNamespace(ctx context.Context, cacheClient cache.KeyValueCache) error {
 	if cacheClient == nil {
 		return errors.New("rebuild subscriber cache from alarms: cache service is nil")
 	}
@@ -115,7 +123,7 @@ func clearSubscriberCacheNamespace(ctx context.Context, cacheClient cache.Client
 	return nil
 }
 
-func deleteSubscriberCacheKeys(ctx context.Context, cacheClient cache.Client, keysToDelete []string) error {
+func deleteSubscriberCacheKeys(ctx context.Context, cacheClient cache.KeyValueLifecycle, keysToDelete []string) error {
 	keysToDelete = compactUniqueStrings(keysToDelete)
 	if len(keysToDelete) == 0 {
 		return nil
@@ -164,7 +172,7 @@ func normalizedWarmAlarmIdentity(alarmRecord *domain.Alarm) (normalizedRoomID, n
 	return roomID, channelID, roomID != "" && channelID != ""
 }
 
-func writeSubscriberCacheWarmData(ctx context.Context, cacheClient cache.Client, data *subscriberCacheWarmData) error {
+func writeSubscriberCacheWarmData(ctx context.Context, cacheClient SubscriberCacheStore, data *subscriberCacheWarmData) error {
 	if err := writeSubscriberCacheSets(ctx, cacheClient, data); err != nil {
 		return fmt.Errorf("write subscriber cache sets: %w", err)
 	}
@@ -180,7 +188,7 @@ func writeSubscriberCacheWarmData(ctx context.Context, cacheClient cache.Client,
 	return nil
 }
 
-func writeSubscriberCacheSets(ctx context.Context, cacheClient cache.Client, data *subscriberCacheWarmData) error {
+func writeSubscriberCacheSets(ctx context.Context, cacheClient cache.LowLevelCache, data *subscriberCacheWarmData) error {
 	if err := writeWarmSet(ctx, cacheClient, alarmkeys.AlarmChannelRegistryKey, compactUniqueStrings(data.channelRegistry), "channel registry"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
@@ -192,7 +200,7 @@ func writeSubscriberCacheSets(ctx context.Context, cacheClient cache.Client, dat
 	return nil
 }
 
-func markSubscriberCacheEmptyState(ctx context.Context, cacheClient cache.Client, empty bool) error {
+func markSubscriberCacheEmptyState(ctx context.Context, cacheClient cache.KeyValueCache, empty bool) error {
 	if empty {
 		if err := cacheClient.Set(ctx, alarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0); err != nil {
 			return fmt.Errorf("set: %w", err)

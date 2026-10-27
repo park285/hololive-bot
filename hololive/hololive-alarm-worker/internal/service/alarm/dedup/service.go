@@ -47,14 +47,21 @@ type LogicalScheduleNotifiedData struct {
 	NotifiedAt     string `json:"notified_at"`
 }
 
+// Cache는 dedup 선점·기록이 요구하는 cache 작업이다. 선점 key(SetNX·Del·DelMany·Expire), JSON 기록(Get·Set),
+// 예정 알림 hash(HGetAll·HMSet)를 쓴다.
+type Cache interface {
+	cache.KeyValueCache
+	cache.HashCache
+}
+
 type Service struct {
-	cache           cache.Client
+	cache           Cache
 	targetPolicy    targetpolicy.TargetMinutePolicy
 	targetMinutesMu sync.RWMutex
 	logger          *slog.Logger
 }
 
-func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Service {
+func NewService(c Cache, targetMinutes []int, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}

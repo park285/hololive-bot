@@ -24,11 +24,11 @@ import (
 	"context"
 	stdErrors "errors"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/valkey-io/valkey-go"
 	"golang.org/x/crypto/bcrypt"
 
@@ -108,7 +108,7 @@ func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 func TestRegister_DuplicateEmail(t *testing.T) {
 	db := newTestDB(t)
 
-	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), testConfig())
+	service, err := NewService(db, nil, slog.New(slog.DiscardHandler), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestLogin_SessionFlow(t *testing.T) {
 
 	config.SessionTTL = 30 * time.Minute
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, slog.New(slog.DiscardHandler), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestLogin_RateLimited(t *testing.T) {
 	config.LoginRateLimitPerMinute = 2
 	config.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, slog.New(slog.DiscardHandler), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestLogin_AccountLocked(t *testing.T) {
 	config.LoginFailWindow = 10 * time.Minute
 	config.LoginLockDuration = 10 * time.Minute
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, slog.New(slog.DiscardHandler), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestLogin_UnknownEmailRecordsFailureAndLocksAccount(t *testing.T) {
 	config.LoginFailWindow = 10 * time.Minute
 	config.LoginLockDuration = 10 * time.Minute
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, slog.New(slog.DiscardHandler), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestMe_ReturnsUnauthorizedWhenSessionUserIsMissing(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), testConfig())
+	service, err := NewService(db, cacheClient, slog.New(slog.DiscardHandler), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 	db := newTestDB(t)
 	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), testConfig())
+	service, err := NewService(db, baseCache, slog.New(slog.DiscardHandler), testConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

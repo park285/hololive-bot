@@ -27,14 +27,3 @@ type SendResult struct {
 	Failed      int      // 적재 처리 실패 room 수; 실제 발송 상태와 별개
 	FailedRooms []string // 실패 room ID 목록
 }
-
-func (r *SendResult) Merge(child SendResult) {
-	r.Attempted += child.Attempted
-	r.Sent += child.Sent
-	r.Skipped += child.Skipped
-	r.Failed += child.Failed
-
-	if len(child.FailedRooms) > 0 {
-		r.FailedRooms = append(r.FailedRooms, child.FailedRooms...)
-	}
-}

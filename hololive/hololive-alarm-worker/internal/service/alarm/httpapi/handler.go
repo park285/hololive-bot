@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package alarmhttp
+package httpapi
 
 import (
 	"context"
@@ -52,8 +52,8 @@ type alarmHTTPReader interface {
 	CountAlarmEntries(context.Context) (int, error)
 }
 
-// AlarmHTTPService는 실제 알림 HTTP route가 호출하는 작업만 요구한다.
-type AlarmHTTPService interface {
+// AlarmService는 worker 알림 HTTP route가 호출하는 작업만 요구한다. 운영 구현은 subscriptions.AlarmService다.
+type AlarmService interface {
 	alarmHTTPWriter
 	alarmHTTPReader
 	UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error)
@@ -61,7 +61,7 @@ type AlarmHTTPService interface {
 }
 
 type Handler struct {
-	alarm  AlarmHTTPService
+	alarm  AlarmService
 	logger *slog.Logger
 }
 
@@ -81,7 +81,7 @@ func decodeAlarmRequest(c *gin.Context, destination any) error {
 	return nil
 }
 
-func NewHandler(alarm AlarmHTTPService, logger *slog.Logger) *Handler {
+func NewHandler(alarm AlarmService, logger *slog.Logger) *Handler {
 	return &Handler{
 		alarm:  alarm,
 		logger: logger,
@@ -281,6 +281,22 @@ func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	}
 
 	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": result.TargetMinutes}})
+}
+
+// validAdvanceTargets는 적용 확정 응답에 실을 target_minutes가 비어 있지 않은 양수 목록인지 본다.
+// 응답을 받는 alarmhttp client도 같은 규칙으로 검증하므로, 서버가 그 규칙을 어기는 결과를 확정으로 응답하지 않게 한다.
+func validAdvanceTargets(targets []int) bool {
+	if len(targets) == 0 {
+		return false
+	}
+
+	for _, minute := range targets {
+		if minute <= 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (h *Handler) SetRoomName(c *gin.Context) {

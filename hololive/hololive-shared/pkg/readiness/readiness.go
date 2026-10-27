@@ -10,9 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/health"
-
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 const (
@@ -27,7 +24,17 @@ type Check struct {
 	Probe func(context.Context) error
 }
 
-func PostgresCheck(db database.Client) Check {
+// Pinger는 PostgresCheck가 데이터베이스 클라이언트에 요구하는 유일한 동작이다.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// ConnectionChecker는 ValkeyCheck가 캐시 클라이언트에 요구하는 유일한 동작이다.
+type ConnectionChecker interface {
+	IsConnected(ctx context.Context) bool
+}
+
+func PostgresCheck(db Pinger) Check {
 	return Check{
 		Name:  "postgres",
 		Group: GroupDependencies,
@@ -41,7 +48,7 @@ func PostgresCheck(db database.Client) Check {
 	}
 }
 
-func ValkeyCheck(client cache.Client) Check {
+func ValkeyCheck(client ConnectionChecker) Check {
 	return Check{
 		Name:  "valkey",
 		Group: GroupDependencies,

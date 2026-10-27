@@ -152,7 +152,6 @@ func testDurableWebhookConfig() *apiconfig.BotPlaneConfig {
 		Iris: settings.IrisConfig{WebhookToken: "test-token"},
 		Webhook: apiconfig.WebhookConfig{
 			MaxBodyBytes: 1024,
-			DedupTTL:     time.Minute,
 			DedupTimeout: 500 * time.Millisecond,
 		},
 	}

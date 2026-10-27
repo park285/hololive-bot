@@ -4,15 +4,16 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/config/envload"
+	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 // validateOwnership: alarm-worker만 proactive egress와 scheduler 역할을 소유한다.
 // 두 역할은 production에서 명시돼야 하고, 그 밖의 환경에서는 값 검증만 한다.
 func validateOwnership(environment string) error {
-	egressRole := envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv)
-	schedulerRole := envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)
+	egressRole := sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, "")
+	schedulerRole := sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, "")
 
 	if err := runtimepolicy.ValidateNotificationRoleEnvValues(egressRole, schedulerRole); err != nil {
 		return fmt.Errorf("validate notification role env values: %w", err)

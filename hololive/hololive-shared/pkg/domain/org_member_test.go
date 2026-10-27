@@ -72,54 +72,6 @@ func TestMember_GetAllAliases(t *testing.T) {
 	}
 }
 
-func TestMember_HasAlias(t *testing.T) {
-	t.Parallel()
-
-	member := &domain.Member{
-		Name: "우사다 페코라",
-		Aliases: &domain.Aliases{
-			Ko: []string{"페코", testNamePekora},
-			Ja: []string{"ぺこら", "ぺこ"},
-		},
-	}
-
-	tests := []struct {
-		name  string
-		alias string
-		want  bool
-	}{
-		{
-			// Ko 별명에서 발견 → true
-			name:  "Ko 별명 일치",
-			alias: "페코",
-			want:  true,
-		},
-		{
-			// Ja 별명에서 발견 → true
-			name:  "Ja 별명 일치",
-			alias: "ぺこら",
-			want:  true,
-		},
-		{
-			// 존재하지 않는 별명 → false
-			name:  "별명 없음",
-			alias: "마린",
-			want:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := member.HasAlias(tt.alias)
-			if got != tt.want {
-				t.Errorf("HasAlias(%q) = %v, want %v", tt.alias, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestMember_GetOrg(t *testing.T) {
 	t.Parallel()
 

@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	holodexproviders "github.com/kapu/hololive-shared/pkg/providers/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
@@ -29,7 +28,7 @@ func BuildScraperHolodex(
 	ctx context.Context,
 	options ScraperHolodexOptions,
 	memberCache *member.Cache,
-	cacheClient cache.Client,
+	cacheClient holodexprovider.Cache,
 	logger *slog.Logger,
 ) (*ScraperHolodexFoundation, error) {
 	scraperService, err := holodexproviders.ProvideScraperService(

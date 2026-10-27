@@ -706,7 +706,7 @@ func newTestRuntime(t *testing.T, claimer observationClaimer, consumer observati
 func testYouTubePlaneConfig(t *testing.T) apiconfig.YouTubePlaneConfig {
 	t.Helper()
 
-	loaded := settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")
 
 	var sourceSettings apiconfig.SourceObservationWorkerSettings
 

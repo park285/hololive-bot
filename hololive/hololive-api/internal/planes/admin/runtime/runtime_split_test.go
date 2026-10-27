@@ -19,11 +19,6 @@ func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	require.ErrorContains(t, err, "config must not be nil")
-
-	runtime, err = BuildAdminAPIRuntime(t.Context(), &apiconfig.AdminPlaneConfig{}, nil, nil)
-	require.Error(t, err)
-	assert.Nil(t, runtime)
-	require.ErrorContains(t, err, "logger must not be nil")
 }
 
 func TestNormalizeAdminAPIRuntimeInputs_ReturnsValidatedConfig(t *testing.T) {
@@ -33,8 +28,9 @@ func TestNormalizeAdminAPIRuntimeInputs_ReturnsValidatedConfig(t *testing.T) {
 	appConfig := &apiconfig.AdminPlaneConfig{}
 	logger := slog.New(slog.DiscardHandler)
 
-	ctx, validatedConfig, err := normalizeAdminAPIRuntimeInputs(inputCtx, appConfig, logger)
+	ctx, validatedConfig, validatedLogger, err := normalizeAdminAPIRuntimeInputs(inputCtx, appConfig, logger)
 	require.NoError(t, err)
 	assert.Equal(t, inputCtx, ctx)
 	assert.Same(t, appConfig, validatedConfig)
+	assert.Same(t, logger, validatedLogger)
 }

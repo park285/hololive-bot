@@ -22,24 +22,50 @@ package testutil
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
 
-	internaltestutil "github.com/kapu/hololive-shared/internal/testutil"
+	"github.com/kapu/hololive-shared/internal/testredis"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// NewTestCacheService는 외부 모듈 테스트에서 사용할 miniredis 기반 캐시 서비스를 생성합니다.
+// NewTestCacheService는 miniredis 기반 테스트용 캐시 서비스를 생성합니다.
 func NewTestCacheService(ctx context.Context, t *testing.T) *cache.Service {
 	t.Helper()
 
-	return internaltestutil.NewTestCacheService(ctx, t)
+	service, _ := NewTestCacheServiceWithMini(ctx, t)
+
+	return service
 }
 
-// NewTestCacheServiceWithMini는 캐시 서비스와 miniredis 핸들을 함께 반환합니다.
+// NewTestCacheServiceWithMini는 테스트용 캐시 서비스와 miniredis 인스턴스를 함께 반환합니다.
+// 캐시 서비스와 miniredis는 테스트 종료 시 함께 닫힙니다.
 func NewTestCacheServiceWithMini(ctx context.Context, t *testing.T) (*cache.Service, *miniredis.Miniredis) {
 	t.Helper()
 
-	return internaltestutil.NewTestCacheServiceWithMini(ctx, t)
+	host, port, mini := testredis.StartMiniRedis(t)
+
+	service, err := cache.NewCacheService(ctx, cache.Config{
+		Host:              host,
+		Port:              port,
+		DB:                0,
+		DisableCache:      true,
+		ForceSingleClient: true,
+	}, slog.New(slog.DiscardHandler))
+	if err != nil {
+		mini.Close()
+		t.Fatalf("new cache service: %v", err)
+	}
+
+	t.Cleanup(func() {
+		if err := service.Close(); err != nil {
+			t.Errorf("close cache service: %v", err)
+		}
+
+		mini.Close()
+	})
+
+	return service, mini
 }

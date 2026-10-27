@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package valkey는 ratelimit.Decision 계약을 Valkey sorted-set 슬라이딩 윈도우로 구현한다.
+// Package valkey는 분산 rate-limit 판정을 Valkey sorted-set 슬라이딩 윈도우로 구현하고 판정 결과 Decision을 소유한다.
 package valkey
 
 import (
@@ -36,7 +36,6 @@ import (
 	valkeygo "github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
 const defaultKeyPrefix = "ratelimit:sliding"
@@ -71,6 +70,16 @@ return {1, count + 1, 0}
 
 // allowLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
 var allowLua = valkeygo.NewLuaScript(allowScript)
+
+// Decision은 분산 슬라이딩 윈도우 판정 결과다.
+type Decision struct {
+	Allowed    bool
+	Current    int
+	Remaining  int
+	Limit      int
+	Window     time.Duration
+	RetryAfter time.Duration
+}
 
 type SlidingWindowLimiter struct {
 	cacheClient cache.LowLevelCache
@@ -108,22 +117,22 @@ func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, 
 	}, nil
 }
 
-func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimit.Decision, error) {
+func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit int, window time.Duration) (Decision, error) {
 	if bucket == "" {
-		return ratelimit.Decision{}, errors.New("allow: bucket must not be empty")
+		return Decision{}, errors.New("allow: bucket must not be empty")
 	}
 
 	if limit <= 0 {
-		return ratelimit.Decision{}, errors.New("allow: limit must be greater than zero")
+		return Decision{}, errors.New("allow: limit must be greater than zero")
 	}
 
 	if window <= 0 {
-		return ratelimit.Decision{}, errors.New("allow: window must be greater than zero")
+		return Decision{}, errors.New("allow: window must be greater than zero")
 	}
 
 	windowMS := window.Milliseconds()
 	if windowMS <= 0 {
-		return ratelimit.Decision{}, errors.New("allow: window milliseconds must be greater than zero")
+		return Decision{}, errors.New("allow: window milliseconds must be greater than zero")
 	}
 
 	key := l.buildKey(bucket)
@@ -133,12 +142,12 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit i
 
 	allowed, current, retryAfter, err := l.allowByScript(ctx, key, nowMS, windowMS, limit, member, ttlSeconds)
 	if err != nil {
-		return ratelimit.Decision{}, fmt.Errorf("allow: evaluate script: %w", err)
+		return Decision{}, fmt.Errorf("allow: evaluate script: %w", err)
 	}
 
 	remaining := max(0, limit-current)
 
-	result := ratelimit.Decision{
+	result := Decision{
 		Allowed:   allowed,
 		Current:   current,
 		Remaining: remaining,

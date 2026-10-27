@@ -22,18 +22,15 @@
 `docs/history`는 완료된 migration, 과거 장애 대응, 더 이상 현재 기준이 아닌 handoff/closeout 문서를 둡니다.
 
 - `history/README.md` - historical 문서 규칙과 인덱스
-- `history/plan-kits/` - 더 이상 top-level entrypoint가 아닌 legacy plan-kit bundle
 
 ## Design
 
-`docs/design`과 `docs/superpowers/specs`는 아직 current로 승격되지 않은 설계 제안을 둡니다.
+`docs/design`은 아직 current로 승격되지 않은 설계 제안을 둡니다.
 
 - `design/README.md` - 설계 문서 규칙
 - `design/three-runtime-consolidation-plan.md` - 5개 Go runtime을 3개 runtime으로 줄이기 위한 migration plan (완료 — 2026-06-27 cutover, `history/runtime-split/THREE_RUNTIME_CUTOVER_20260627.md` 참조)
 - `design/2026-05-15-repo-structure-refactor-worklog.md` - repo structure refactor worklog
 - `design/repo-tree-classification.md` - completed top-level docs directory classification and move record
-- `superpowers/specs/` - 승인된 design spec 보관 위치
-- `superpowers/plans/` - 구현 plan 보관 위치
 
 ## Top-level 디렉터리 편입
 
@@ -42,10 +39,8 @@
 | 경로 | 층 | 결정 |
 |---|---|---|
 | `PROJECT_MAP.md` | current | `current/PROJECT_MAP.md`로의 compatibility bridge. 유지. |
-| `architecture/` | current + history | gate asset(`*.txt` threshold/allowlist)은 current 층 — `scripts/architecture/*`가 경로를 참조하므로 이동 금지. 날짜 붙은 분석 `.md`는 5-runtime 시절 historical 기록이며 각 파일 상단 historical 배너로 구분. |
-| `runbook_execution/` | current | 배포/릴리스 runbook 실행 기록. `scripts/architecture/render-release-notes.sh`, `current/DEPLOYMENT_BASELINE.md`가 참조하므로 유지. 새 운영 runbook은 `current/runbooks/`에 작성. |
-| `superpowers/` | design + history | `specs/`는 design 층, `plans/`는 완료된 구현 plan 기록. `scripts/architecture/check-removed-runtime-regressions.sh`가 참조하므로 유지. |
-| `agent-workflows/` | history + 진행 중 plan | agent 주도 plan/note 작업 공간. 완료된 plan/note는 history 층 기록으로 취급하되, `docs/current/` 문서들이 경로를 참조하므로 제자리 유지. |
+| `architecture/` | history | 날짜 붙은 분석 `.md`는 5-runtime 시절 historical 기록이며 각 파일 상단 historical 배너로 구분. |
+| `runbook_execution/` | current | 배포/릴리스 runbook 실행 기록. `scripts/architecture/render-release-notes.sh`가 릴리스 노트 템플릿을 참조하므로 유지. 새 운영 runbook은 `current/runbooks/`에 작성. |
 | `handoff/` | history | 완료된 refactor handoff 기록(P1-P4 split, youtube-producer multi-worker). 새 handoff/closeout 문서는 `history/`에 작성. |
 | `review/` | history | 날짜 붙은 review snapshot. 새 review 기록은 `history/`에 작성. |
 | `../admin-dashboard/docs/` (삭제) | history | 퇴역 admin-dashboard BFF의 설계·bigbang 전환 증거였다. 디렉터리는 삭제했으며 `DEC-20260909-hololive-admin-bigbang-replacement`·`DEC-20260910-*`가 가리키는 파일은 `git show f258dc645:admin-dashboard/docs/<path>`로 조회한다. 웹은 Iris Console이 소유한다. |

@@ -25,14 +25,14 @@ func TestFindAlarmStateByPostIDReturnsExisting(t *testing.T) {
 	publishedAt := time.Date(2026, time.April, 10, 1, 2, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(30 * time.Second)
 
-	require.NoError(t, repository.UpsertAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
+	require.NoError(t, repository.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{{
 		Kind:              domain.OutboxKindCommunityPost,
 		PostID:            "post-existing",
 		ContentID:         "post-existing",
 		ChannelID:         "UC_EXISTING",
 		ActualPublishedAt: &publishedAt,
 		DetectedAt:        detectedAt,
-	}))
+	}}))
 
 	row, err := repository.FindAlarmStateByPostID(ctx, domain.OutboxKindCommunityPost, "community:post-existing")
 

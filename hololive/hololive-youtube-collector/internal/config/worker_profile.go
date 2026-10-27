@@ -12,6 +12,16 @@ import (
 // WorkerCollection은 collector profile과 runtime registry가 공유하는 worker ID다.
 const WorkerCollection = "collection"
 
+// WorkerIdentity: hololive-youtube-collector가 소유한 worker profile identity다.
+// 호출자가 WorkerIDs를 바꿔도 다른 로드에 번지지 않도록 매 호출 새 슬라이스를 돌려준다.
+func WorkerIdentity() workercontract.Identity {
+	return workercontract.Identity{
+		Service:   "hololive",
+		Role:      "youtube-collector",
+		WorkerIDs: []string{WorkerCollection},
+	}
+}
+
 // CollectionWorkerSettings는 collection worker profile의 service-owned settings 원문이다.
 // DecodeWorkerSettings가 키의 정확한 일치를 요구하므로 JSON 태그가 profile wire 계약이다.
 type CollectionWorkerSettings struct {
@@ -44,7 +54,7 @@ type WorkerProfile struct {
 // LoadWorkerProfile은 STACK_WORKER_PROFILE_FILE의 collector profile을 읽고 profile이 소유한 정책 전체를 검증한다.
 // DB·provider env를 읽지 않으므로 --check-worker-profile preflight가 운영 env 없이 같은 수치 경계를 적용한다.
 func LoadWorkerProfile() (*WorkerProfile, error) {
-	loaded, err := workercontract.LoadProfileFromEnv("hololive", "youtube-collector")
+	loaded, err := workercontract.LoadProfileFromEnv(WorkerIdentity())
 	if err != nil {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}

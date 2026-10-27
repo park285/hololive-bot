@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -38,7 +37,7 @@ import (
 // 설정이 없으면 코드 기본값으로 대신하지 않고 오류를 돌려준다.
 func ProvideHolodexService(
 	holodexCfg *settings.HolodexConfig,
-	cacheClient cache.Client,
+	cacheClient holodexprovider.Cache,
 	scraperService *htmlscraper.Service,
 	logger *slog.Logger,
 ) (*holodexprovider.Service, error) {

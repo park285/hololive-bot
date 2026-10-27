@@ -9,7 +9,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
-	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 
@@ -45,7 +44,6 @@ func main() {
 	os.Exit(bootstrap.Options[*apiconfig.RuntimeConfig, *observability.ManagedRuntime[*runtimeapp.Runtime]]{
 		Version: Version,
 		Initialize: func(version string) {
-			automaxprocs.Init(nil)
 			health.Init(version)
 		},
 		LoadConfig:             apiconfig.LoadRuntime,
