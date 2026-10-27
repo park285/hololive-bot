@@ -36,7 +36,6 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -47,7 +46,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -76,7 +75,7 @@ func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), apiHandler.DomainHandlers(), &server.AuthHandler{}, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), apiHandler.DomainHandlers(), sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -90,16 +89,6 @@ func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 
 func expectedAdminAPIDomainRoutes() map[string][]string {
 	return map[string][]string{
-		"oauth": {
-			"GET /oauth/callback",
-		},
-		"auth": {
-			"POST /api/auth/register",
-			"POST /api/auth/login",
-			"POST /api/auth/logout",
-			"POST /api/auth/refresh",
-			"GET /api/auth/me",
-		},
 		"member": {
 			"GET /api/holo/members",
 			"POST /api/holo/members",

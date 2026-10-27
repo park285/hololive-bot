@@ -14,7 +14,6 @@ import (
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
-	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
@@ -120,7 +119,6 @@ func buildAdminAPIRouter(
 	ctx context.Context,
 	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
-	authService *authsvc.Service,
 	handler *server.Handler,
 	logger *slog.Logger,
 ) (*gin.Engine, error) {
@@ -141,7 +139,6 @@ func buildAdminAPIRouter(
 		appConfig,
 		logger,
 		domains,
-		server.NewAuthHandler(authService, logger),
 		infra.Cache,
 		readyProbe,
 	)

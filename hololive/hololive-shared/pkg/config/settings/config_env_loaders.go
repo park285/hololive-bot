@@ -108,7 +108,6 @@ func LoadServerConfigWithAPIKey(apiKey string) (ServerConfig, error) {
 
 	port := env.Int("SERVER_PORT", 30001)
 	config := ServerConfig{
-		AuthBcryptCost:          env.Int("AUTH_BCRYPT_COST", 0),
 		Port:                    port,
 		APIKey:                  apiKey,
 		HTTPTransports:          envload.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
@@ -118,7 +117,6 @@ func LoadServerConfigWithAPIKey(apiKey string) (ServerConfig, error) {
 		ShortLinkAddr:           strings.TrimSpace(sharedenv.String("HOLOLIVE_SHORT_LINK_ADDR", "")),
 		MetricsAddr:             strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
 		PprofAddr:               strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
-		AdminAllowedIPs:         envload.CommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
 		WebSocketAllowedOrigins: envload.CommaSeparated(sharedenv.String("WEBSOCKET_ALLOWED_ORIGINS", "")),
 	}
 

@@ -230,18 +230,6 @@ TABLE alarms
   INDEX CREATE UNIQUE INDEX idx_alarms_room_channel_host ON public.alarms USING btree (room_id, channel_id, host_id)
   INDEX CREATE INDEX idx_alarms_room_created ON public.alarms USING btree (room_id, created_at)
 
-TABLE auth_users
-  COLUMN id text NOT NULL
-  COLUMN email text NOT NULL
-  COLUMN password_hash text NOT NULL
-  COLUMN display_name text NOT NULL
-  COLUMN avatar_url text
-  COLUMN created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
-  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
-  COLUMN session_generation bigint NOT NULL DEFAULT 0
-  CONSTRAINT auth_users_pkey PRIMARY KEY (id)
-  CONSTRAINT auth_users_email_key UNIQUE (email)
-
 TABLE bot_command_executions
   COLUMN id bigint NOT NULL DEFAULT nextval('bot_command_executions_id_seq'::regclass)
   COLUMN message_id text NOT NULL

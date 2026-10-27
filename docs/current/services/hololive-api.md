@@ -71,12 +71,12 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - Iris Console의 실제 Go 응답 projection은 기존 201/200·`status`·`message`로 위 응답을 수락합니다. 추가 필드는 현재 projection에서 제거되므로 Console 화면이 캐시 동기화 상태를 표시한다는 보장은 없습니다.
 - 활동 기록은 기존 logger sink를 사용합니다. 캐시 실패 때문에 이미 저장된 변경의 기록을 건너뛰지는 않지만, DB commit과 로그 저장 사이의 프로세스 종료까지 원자적으로 보장하는 감사 outbox는 아닙니다.
 
-## Password reset API
+## Admin 사용자 인증
 
-- 관리자 비밀번호 재설정은 지원하지 않습니다. 재설정 링크 전달 수단이 없어 2026-10-02부터 503만 반환하던 `POST /api/auth/password/reset-request`와 `POST /api/auth/password/reset`, 재설정 서비스, `auth_password_reset_tokens` 테이블(migration 281)을 제거했습니다.
-- 두 경로는 다른 미등록 경로와 같이 NoRoute 응답을 받습니다. API key가 없으면 401, 틀리면 403, 맞으면 404입니다.
-- `auth_users.session_generation`은 세션 폐기 장치로 남습니다. 값을 올리면 그 사용자의 기존 세션은 Me·Refresh에서 거부되고 세션 키가 지워집니다. 이 값을 올리는 API는 없습니다.
-- 다시 지원하려면 링크 전달 수단과 복구 절차를 먼저 구현하고 공개 API 계약 변경 승인을 받아야 합니다.
+- admin plane은 사용자 계정·세션을 소유하지 않습니다. Iris Console이 자기 세션으로 사용자를 인증하고 admin plane에는 `/api/holo/*`를 API key로만 호출합니다.
+- 독립 대시보드 잔재였던 `/api/auth/*`(register·login·logout·refresh·me)와 `/oauth/callback`, auth service(Valkey `auth:*` 세션·bcrypt·로그인 rate limit), `ADMIN_ALLOWED_IPS`·`AUTH_BCRYPT_COST` 설정, `auth_users` 테이블(migration 342)을 제거했습니다. 비밀번호 재설정 경로와 `auth_password_reset_tokens`(migration 281)는 그보다 먼저 제거했습니다.
+- 제거한 경로는 다른 미등록 경로와 같이 NoRoute 응답을 받습니다. API key가 없으면 401, 틀리면 403, 맞으면 404입니다.
+- 다시 사용자 인증을 두려면 Iris Console 경계와 겹치지 않는 근거와 공개 API 계약 변경 승인이 먼저 필요합니다.
 
 ## Live query behavior
 

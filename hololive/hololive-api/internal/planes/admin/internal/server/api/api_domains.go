@@ -94,8 +94,6 @@ type MajorEventHandler struct {
 	logger                     *slog.Logger
 }
 
-type OAuthHandler struct{}
-
 func NewMemberHandler(repository *member.Repository, service *MemberAdminService, logger *slog.Logger) *MemberHandler {
 	return &MemberHandler{repository: repository, service: service, logger: logger}
 }
@@ -137,7 +135,6 @@ type DomainHandlers struct {
 	Settings   *SettingsAPIHandler
 	Template   *TemplateHandler
 	MajorEvent *MajorEventHandler
-	OAuth      *OAuthHandler
 }
 
 func (h *Handler) DomainHandlers() *DomainHandlers {
@@ -169,6 +166,5 @@ func (h *Handler) DomainHandlers() *DomainHandlers {
 		Settings:   settingsHandler,
 		Template:   NewTemplateHandler(h.logger, h.templateAdmin),
 		MajorEvent: NewMajorEventHandler(h.logger, MajorEventDeps{Scheduler: h.majorEventScheduler, MonthlyScheduler: h.majorEventMonthlyScheduler}),
-		OAuth:      &OAuthHandler{},
 	}
 }

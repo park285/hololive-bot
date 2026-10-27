@@ -23,8 +23,6 @@ package settings
 import "time"
 
 type ServerConfig struct {
-	// AuthBcryptCost는 AUTH_BCRYPT_COST 원값이며 범위 검증·기본값은 auth service가 소유한다.
-	AuthBcryptCost int
 	Port           int
 	APIKey         string // API 인증용 시크릿 키 (X-API-Key 헤더로 검증)
 	HTTPTransports []string
@@ -41,11 +39,6 @@ type ServerConfig struct {
 	// PprofAddr: net/http/pprof debug 리스너 주소. 빈 값이면 비활성.
 	// 인증이 없으므로 compose에서 loopback(127.0.0.1) 또는 Tailscale IP로만 publish한다.
 	PprofAddr string
-
-	// AdminAllowedIPs: admin-api /api/auth/* 접근을 허용할 CIDR 목록.
-	// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 RemoteAddr 기준으로 판단한다.
-	// 예: ADMIN_ALLOWED_IPS="100.100.1.0/24". 비어 있으면 전체 허용(개발 편의).
-	AdminAllowedIPs []string
 
 	// WebSocketAllowedOrigins: admin-api WebSocket 업그레이드를 허용할 Origin 목록(WEBSOCKET_ALLOWED_ORIGINS).
 	// 비어 있으면 모든 WebSocket 연결을 거부한다.

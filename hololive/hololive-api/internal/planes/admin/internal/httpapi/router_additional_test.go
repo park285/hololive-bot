@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +26,6 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 		testRouterConfig(),
 		slog.New(slog.DiscardHandler),
 		(&server.Handler{}).DomainHandlers(),
-		&server.AuthHandler{},
 		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
@@ -41,8 +39,6 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 	}
 
 	expectedRoutes := []string{
-		"GET /oauth/callback",
-		"POST /api/auth/register",
 		"GET /api/holo/members",
 		"DELETE /api/holo/alarms",
 		"POST /api/holo/rooms/acl",
@@ -64,26 +60,23 @@ func TestValidateAPIRouterInputsRejectsMissingDependencies(t *testing.T) {
 
 	validConfig := testRouterConfig()
 	validDomains := (&server.Handler{}).DomainHandlers()
-	validAuth := &server.AuthHandler{}
 
 	tests := []struct {
 		name    string
 		cfg     *apiconfig.AdminPlaneConfig
 		domains *server.DomainHandlers
-		auth    *server.AuthHandler
 		wantErr string
 	}{
-		{name: "nil config", cfg: nil, domains: validDomains, auth: validAuth, wantErr: "config must not be nil"},
-		{name: "blank api key", cfg: &apiconfig.AdminPlaneConfig{}, domains: validDomains, auth: validAuth, wantErr: "API_SECRET_KEY required"},
-		{name: "nil domains", cfg: validConfig, domains: nil, auth: validAuth, wantErr: "domain handlers must not be nil"},
-		{name: "nil auth", cfg: validConfig, domains: validDomains, auth: nil, wantErr: "auth handler must not be nil"},
+		{name: "nil config", cfg: nil, domains: validDomains, wantErr: "config must not be nil"},
+		{name: "blank api key", cfg: &apiconfig.AdminPlaneConfig{}, domains: validDomains, wantErr: "API_SECRET_KEY required"},
+		{name: "nil domains", cfg: validConfig, domains: nil, wantErr: "domain handlers must not be nil"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateAPIRouterInputs(tt.cfg, tt.domains, tt.auth)
+			err := validateAPIRouterInputs(tt.cfg, tt.domains)
 			if err == nil {
 				t.Fatal("validateAPIRouterInputs() expected error")
 			}
@@ -111,7 +104,6 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 		{name: "settings", mutate: func(h *server.DomainHandlers) { h.Settings = nil }, wantErr: "settings handler must not be nil"},
 		{name: "template", mutate: func(h *server.DomainHandlers) { h.Template = nil }, wantErr: "template handler must not be nil"},
 		{name: "major event", mutate: func(h *server.DomainHandlers) { h.MajorEvent = nil }, wantErr: "major event handler must not be nil"},
-		{name: "oauth", mutate: func(h *server.DomainHandlers) { h.OAuth = nil }, wantErr: "oauth handler must not be nil"},
 	}
 
 	for _, tt := range tests {
@@ -233,38 +225,6 @@ func TestNewAPIRouterCORSValidation(t *testing.T) {
 	}
 }
 
-func TestProvideAPIRouterRejectsEmptyAdminAllowedIPsOnlyInProduction(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	productionEmpty := testRouterConfig()
-
-	productionEmpty.Environment = "production"
-	productionEmpty.Server.AdminAllowedIPs = nil
-
-	if router, err := provideTestAPIRouter(t, productionEmpty); err == nil || router != nil ||
-		!strings.Contains(err.Error(), "ADMIN_ALLOWED_IPS must be configured in production") {
-		t.Fatalf("production empty allowlist router=%v error=%v, want production allowlist error", router, err)
-	}
-
-	productionAllowed := testRouterConfig()
-
-	productionAllowed.Environment = "production"
-	productionAllowed.Server.AdminAllowedIPs = []string{"100.100.1.0/24"}
-
-	if router, err := provideTestAPIRouter(t, productionAllowed); err != nil || router == nil {
-		t.Fatalf("production configured allowlist router=%v error=%v, want no error", router, err)
-	}
-
-	nonProductionEmpty := testRouterConfig()
-
-	nonProductionEmpty.Environment = "development"
-	nonProductionEmpty.Server.AdminAllowedIPs = nil
-
-	if router, err := provideTestAPIRouter(t, nonProductionEmpty); err != nil || router == nil {
-		t.Fatalf("non-production empty allowlist router=%v error=%v, want no error", router, err)
-	}
-}
-
 func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -305,7 +265,6 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 		testRouterConfig(),
 		nil,
 		(&server.Handler{}).DomainHandlers(),
-		&server.AuthHandler{},
 		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
@@ -339,7 +298,6 @@ func provideTestAPIRouter(t *testing.T, cfg *apiconfig.AdminPlaneConfig) (*gin.E
 		cfg,
 		slog.New(slog.DiscardHandler),
 		(&server.Handler{}).DomainHandlers(),
-		&server.AuthHandler{},
 		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {

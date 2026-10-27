@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -57,33 +56,12 @@ func registerAPIRoutes(
 	cacheClient cache.LowLevelCache,
 	logger *slog.Logger,
 	domainHandlers *api.DomainHandlers,
-	authHandler *api.AuthHandler,
-	adminAllowedIPs []*net.IPNet,
 ) error {
 	if domainHandlers == nil {
 		return errors.New("domain handlers must not be nil")
 	}
 
 	domains := domainHandlers
-
-	// OAuth 콜백 프록시 (인증 불필요 - Google에서 직접 호출)
-	// 모바일 앱에서 localhost 리디렉션이 불가능하므로 서버가 프록시 역할
-	router.GET("/oauth/callback", domains.OAuth.OAuthCallbackHandler)
-
-	// Session 기반 인증 API. Login은 외부 진입점이고,
-	// register는 관리자 계정 생성면이므로 API key로 보호한다.
-	// admin-api는 Tailscale 직결이므로 RemoteAddr 기준 ip_allowlist로 추가 차단한다.
-	authAPI := router.Group("/api/auth")
-	authAPI.Use(middleware.AdminIPAllowMiddleware(adminAllowedIPs, logger))
-	authAPI.POST("/login", authHandler.Login)
-	authAPI.POST("/logout", authHandler.Logout)
-	authAPI.POST("/refresh", authHandler.Refresh)
-	authAPI.GET("/me", authHandler.Me)
-
-	authAdminAPI := router.Group("/api/auth")
-	authAdminAPI.Use(middleware.AdminIPAllowMiddleware(adminAllowedIPs, logger))
-	authAdminAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
-	authAdminAPI.POST("/register", authHandler.Register)
 
 	// hololive-bot 도메인 API (Admin Dashboard, Tauri 앱에서 사용)
 	holoAPI := router.Group("/api/holo")

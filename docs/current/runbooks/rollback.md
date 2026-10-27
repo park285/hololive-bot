@@ -85,7 +85,7 @@ migration 231~233 이전 image의 image-only rollback, session 일괄 삭제, sy
 비활성화 절차는 현재 운영 경로가 아닙니다. 당시 분석은
 [Valkey 축소 계획](../plans/2026-09-28-valkey-dependency-reduction.md#2차-rollback-규칙migration-231233-적용-뒤)과 Git 이력에 보존합니다.
 
-현재 schema·migration ledger·관리자 `session_generation`·방 이름 정본을 이해하지
+현재 schema·migration ledger·방 이름 정본을 이해하지
 못하는 이전 image는 pair가 있더라도 적용하지 않습니다. 구 migrator 실행이나
 `--no-deps` 누락으로 dependencies를 다시 기동하지 않으며, 실패한 migration은
 소유자의 검증·복구 절차로 처리합니다. 데이터/세션 파괴나 서비스 자동 기동 정책 변경을

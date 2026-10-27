@@ -15,7 +15,6 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
-	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -111,11 +110,6 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 
 	templateAdmin := buildAdminAPITemplateAdmin(infra, logger)
 
-	authService, err := buildAdminAPIAuthService(appConfig, infra, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build admin api runtime: auth service: %w", err)
-	}
-
 	adminSettings, err := buildAdminAPISettings(appConfig, alarmMode, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin api runtime: settings: %w", err)
@@ -154,7 +148,7 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 
 	handler.SetXSpaceSessions(xSpaceSessions)
 
-	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, resources.Close, logger)
+	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, handler, resources.Close, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin APIHTTP runtime: %w", err)
 	}
@@ -172,12 +166,11 @@ func buildAdminAPIHTTPRuntime(
 	ctx context.Context,
 	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
-	authService *authsvc.Service,
 	handler *server.Handler,
 	runtimeCleanup func() error,
 	logger *slog.Logger,
 ) (*AdminAPIRuntime, error) {
-	router, err := buildAdminAPIRouter(ctx, appConfig, infra, authService, handler, logger)
+	router, err := buildAdminAPIRouter(ctx, appConfig, infra, handler, logger)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("build admin api runtime: provide api router: %w", err), runtimeCleanup())
 	}

@@ -165,9 +165,7 @@ func TestBuildAdminAPIHTTPRuntimeCleansUpInfraOnRouterFailure(t *testing.T) {
 		t.Context(),
 		&apiconfig.AdminPlaneConfig{},
 		infra,
-		nil,
 		&server.Handler{},
-
 		func() error {
 			infra.Cleanup()
 
@@ -341,7 +339,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 		t.Fatal("buildAdminHandler() returned nil")
 	}
 
-	router, err := buildAdminAPIRouter(t.Context(), appConfig, infra, nil, &server.Handler{}, logger)
+	router, err := buildAdminAPIRouter(t.Context(), appConfig, infra, &server.Handler{}, logger)
 	if err != nil {
 		t.Fatalf("buildAdminAPIRouter() error = %v", err)
 	}

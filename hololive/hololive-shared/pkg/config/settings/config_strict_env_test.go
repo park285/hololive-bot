@@ -20,7 +20,6 @@ func TestValidateRuntimeEnvSyntaxRejectsInvalidEnvValues(t *testing.T) {
 		{key: "CACHE_PORT", value: "invalid"},
 		{key: "CACHE_DB", value: "zero"},
 		{key: "SERVER_PORT", value: "invalid"},
-		{key: "AUTH_BCRYPT_COST", value: "high"},
 		{key: "LOG_MAX_SIZE_MB", value: "5MB"},
 		{key: "LOG_COMPRESS", value: invalidBoolValue},
 		{key: "BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", value: "1d"},

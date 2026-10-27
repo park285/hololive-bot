@@ -54,7 +54,7 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 			}
 
 			infra := &sharedmodules.InfraModule{Cache: sharedtestutil.NewTestCacheService(t.Context(), t), Postgres: &databasemocks.Client{}}
-			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, infra, nil, &server.Handler{}, resources.Close, slog.New(slog.DiscardHandler))
+			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, infra, &server.Handler{}, resources.Close, slog.New(slog.DiscardHandler))
 			require.Nil(t, runtime)
 			require.ErrorIs(t, err, closeErr)
 

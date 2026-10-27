@@ -47,7 +47,6 @@ func TestFailClosedAuth(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	tests := []struct {
 		name        string
@@ -79,7 +78,7 @@ func TestFailClosedAuth(t *testing.T) {
 				},
 			}
 
-			router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+			router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 
 			if tt.wantErr {
 				assertAPIRouterError(t, router, err, tt.expectedErr)
@@ -125,12 +124,10 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
-			APIKey:          testAPIKey,
-			AdminAllowedIPs: []string{"127.0.0.1"},
+			APIKey: testAPIKey,
 		},
 		Environment: "production",
 		CORS: settings.CORSConfig{
@@ -139,7 +136,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -170,7 +167,6 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -184,7 +180,7 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error")
 	}
@@ -201,7 +197,6 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -212,7 +207,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, nil, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, nil, sharedtestutil.NewTestCacheService(ctx, t))
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error for nil domain handlers")
 	}
@@ -226,62 +221,11 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 	}
 }
 
-func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
-	ctx := t.Context()
-	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
-
-	appConfig := &apiconfig.AdminPlaneConfig{
-		Server: settings.ServerConfig{
-			APIKey: testAPIKey,
-		},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{testAllowedOrigin},
-		},
-	}
-
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
-	if err != nil {
-		t.Fatalf("ProvideAPIRouter() error = %v", err)
-	}
-
-	tests := []struct {
-		name       string
-		headerVal  string
-		wantStatus int
-	}{
-		{name: "missing api key", wantStatus: http.StatusUnauthorized},
-		{name: "invalid api key", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
-		{name: "valid api key reaches handler", headerVal: testAPIKey, wantStatus: http.StatusServiceUnavailable},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/register", strings.NewReader(`{"email":"admin@example.com","password":"password123","displayName":"Admin"}`))
-			req.Header.Set("Content-Type", "application/json")
-
-			if tt.headerVal != "" {
-				req.Header.Set(common.APIKeyHeader, tt.headerVal)
-			}
-
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
-			}
-		})
-	}
-}
-
 func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -292,7 +236,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -333,7 +277,6 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -344,7 +287,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -364,7 +307,6 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -375,7 +317,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}

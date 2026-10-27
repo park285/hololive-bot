@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -45,11 +44,10 @@ func ProvideAPIRouter(
 	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
-	authHandler *server.AuthHandler,
 	cacheClient cache.LowLevelCache,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*gin.Engine, error) {
-	if err := validateAPIRouterInputs(appConfig, domainHandlers, authHandler); err != nil {
+	if err := validateAPIRouterInputs(appConfig, domainHandlers); err != nil {
 		return nil, fmt.Errorf("validate API router inputs: %w", err)
 	}
 
@@ -62,12 +60,7 @@ func ProvideAPIRouter(
 		return nil, fmt.Errorf("API router: %w", err)
 	}
 
-	adminAllowedIPs, err := buildAdminAllowedIPs(appConfig)
-	if err != nil {
-		return nil, fmt.Errorf("build admin allowed i ps: %w", err)
-	}
-
-	if err := registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler, adminAllowedIPs); err != nil {
+	if err := registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers); err != nil {
 		return nil, fmt.Errorf("register API routes: %w", err)
 	}
 
@@ -76,23 +69,9 @@ func ProvideAPIRouter(
 	return router, nil
 }
 
-func buildAdminAllowedIPs(appConfig *apiconfig.AdminPlaneConfig) ([]*net.IPNet, error) {
-	adminAllowedIPs, err := middleware.NewIPAllowList(appConfig.Server.AdminAllowedIPs)
-	if err != nil {
-		return nil, fmt.Errorf("parse admin allowed IPs: %w", err)
-	}
-
-	if strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production") && len(adminAllowedIPs) == 0 {
-		return nil, errors.New("ADMIN_ALLOWED_IPS must be configured in production")
-	}
-
-	return adminAllowedIPs, nil
-}
-
 func validateAPIRouterInputs(
 	appConfig *apiconfig.AdminPlaneConfig,
 	domainHandlers *server.DomainHandlers,
-	authHandler *server.AuthHandler,
 ) error {
 	if appConfig == nil {
 		return errors.New("config must not be nil")
@@ -108,10 +87,6 @@ func validateAPIRouterInputs(
 
 	if err := validateDomainHandlers(domainHandlers); err != nil {
 		return fmt.Errorf("validate domain handlers: %w", err)
-	}
-
-	if authHandler == nil {
-		return errors.New("auth handler must not be nil")
 	}
 
 	return nil
@@ -130,7 +105,6 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 		{h.Settings == nil, "settings handler must not be nil"},
 		{h.Template == nil, "template handler must not be nil"},
 		{h.MajorEvent == nil, "major event handler must not be nil"},
-		{h.OAuth == nil, "oauth handler must not be nil"},
 	}
 	for _, required := range requiredHandlers {
 		if required.missing {
@@ -160,7 +134,7 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		EnableGzip:   true,
 		SkipLogPaths: []string{"/metrics"},
 		// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 신뢰 가능한 클라이언트 IP는
-		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 ip_allowlist를
+		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 IP 기준 rate limit을
 		// 우회하지 못하도록 RemoteAddr만 신뢰한다.
 		TrustRemoteAddrOnly: true,
 		PreRouteUse: []gin.HandlerFunc{
