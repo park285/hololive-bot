@@ -17,12 +17,19 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
-var (
-	irisRuntimeDiagnosticsTLSOnce     sync.Once
-	irisRuntimeDiagnosticsTLSCert     tls.Certificate
-	irisRuntimeDiagnosticsTLSCertFile string
-	errIrisRuntimeDiagnosticsTLS      error
-)
+// irisRuntimeDiagnosticsTLS는 진단 서버 인증서와 CA PEM을 프로세스당 한 번 만든다. CA 파일은 호출한 시험마다
+// 그 시험의 임시 디렉터리에 다시 쓴다. 첫 시험의 디렉터리를 공유하면 그 시험이 끝난 뒤 처음 시스템 root를
+// 적재하는 시험이 지워진 SSL_CERT_FILE을 읽어 인증서 검증에 실패한다.
+var irisRuntimeDiagnosticsTLS = sync.OnceValues(func() (tls.Certificate, error) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+
+	if len(server.TLS.Certificates) == 0 {
+		return tls.Certificate{}, errors.New("test TLS server did not provide a certificate")
+	}
+
+	return server.TLS.Certificates[0], nil
+})
 
 // APIProfileFixture는 hololive-api worker identity와 짝을 이루는 profile fixture 경로다.
 func APIProfileFixture(t *testing.T) string {
@@ -65,8 +72,12 @@ func SetH3CertificateEnv(t *testing.T) {
 func NewIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 
-	cert, certFile := irisRuntimeDiagnosticsTLS(t)
-	t.Setenv("SSL_CERT_FILE", certFile)
+	cert, err := irisRuntimeDiagnosticsTLS()
+	if err != nil {
+		t.Fatalf("initialize Iris diagnostics TLS failed: %v", err)
+	}
+
+	t.Setenv("SSL_CERT_FILE", writeDiagnosticsCA(t, cert))
 
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/diagnostics/runtime" {
@@ -92,53 +103,17 @@ func NewIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server
 	return server
 }
 
-func irisRuntimeDiagnosticsTLS(t *testing.T) (cert tls.Certificate, certFile string) {
+func writeDiagnosticsCA(t *testing.T, cert tls.Certificate) string {
 	t.Helper()
 
-	irisRuntimeDiagnosticsTLSOnce.Do(func() {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-		defer server.Close()
+	path := filepath.Join(t.TempDir(), "hololive-iris-diagnostics-ca.pem")
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]})
 
-		if len(server.TLS.Certificates) == 0 {
-			errIrisRuntimeDiagnosticsTLS = errors.New("test TLS server did not provide a certificate")
-			return
-		}
-
-		certPEM := pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: server.Certificate().Raw,
-		})
-
-		file, err := os.CreateTemp(t.TempDir(), "hololive-iris-diagnostics-ca-*.pem")
-		if err != nil {
-			errIrisRuntimeDiagnosticsTLS = err
-			return
-		}
-
-		if _, err := file.Write(certPEM); err != nil {
-			errIrisRuntimeDiagnosticsTLS = err
-
-			if closeErr := file.Close(); closeErr != nil {
-				errIrisRuntimeDiagnosticsTLS = errors.Join(errIrisRuntimeDiagnosticsTLS, closeErr)
-			}
-
-			return
-		}
-
-		if err := file.Close(); err != nil {
-			errIrisRuntimeDiagnosticsTLS = err
-			return
-		}
-
-		irisRuntimeDiagnosticsTLSCert = server.TLS.Certificates[0]
-		irisRuntimeDiagnosticsTLSCertFile = file.Name()
-	})
-
-	if errIrisRuntimeDiagnosticsTLS != nil {
-		t.Fatalf("initialize Iris diagnostics TLS failed: %v", errIrisRuntimeDiagnosticsTLS)
+	if err := os.WriteFile(path, certPEM, 0o600); err != nil {
+		t.Fatalf("write Iris diagnostics CA: %v", err)
 	}
 
-	return irisRuntimeDiagnosticsTLSCert, irisRuntimeDiagnosticsTLSCertFile
+	return path
 }
 
 func URLHostname(t *testing.T, raw string) string {
