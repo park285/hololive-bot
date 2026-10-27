@@ -308,12 +308,11 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 		})
 	}
 
-	if r.Config.Retention.Enabled {
-		r.loopCount++
-		r.startGuarded(runCtx, errCh, "youtube-retention-loop", &r.loopTasks, func() {
-			r.runRetentionLoop(runCtx, errCh)
-		})
-	}
+	// plane이 켜져 있으면 retention은 항상 돈다. 보존 기간은 YOUTUBE_PLANE_RETENTION_*_DAYS가 소유한다.
+	r.loopCount++
+	r.startGuarded(runCtx, errCh, "youtube-retention-loop", &r.loopTasks, func() {
+		r.runRetentionLoop(runCtx, errCh)
+	})
 
 	if r.Config.Replay.Enabled {
 		r.loopCount++

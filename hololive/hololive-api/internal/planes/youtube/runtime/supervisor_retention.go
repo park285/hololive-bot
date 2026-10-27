@@ -51,7 +51,7 @@ func (r *Runtime) stopAfterRetentionError(ctx context.Context, _ chan<- error, e
 }
 
 func (r *Runtime) retentionTick(ctx context.Context) error {
-	if r == nil || !r.Config.Retention.Enabled {
+	if r == nil {
 		return nil
 	}
 

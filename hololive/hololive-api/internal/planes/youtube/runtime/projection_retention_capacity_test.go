@@ -126,7 +126,6 @@ func TestProjectionRetentionStopsBeforeNextBatchOnCancellation(t *testing.T) {
 func TestProjectionRetentionDeadlineKeepsSourceCleanupIndependent(t *testing.T) {
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime.Config.Retention.Enabled = true
 	runtime.Config.TransactionTimeout = 20 * time.Millisecond
 
 	calls := 0

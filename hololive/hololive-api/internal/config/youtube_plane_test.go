@@ -36,8 +36,8 @@ func TestDefaultYouTubePlaneConfigValidates(t *testing.T) {
 func assertDefaultRetentionAndReplayDisabled(t *testing.T, retention YouTubePlaneRetentionConfig, replay YouTubePlaneReplayConfig) {
 	t.Helper()
 
-	if retention.Enabled || retention.PolicyApproved || replay.Enabled {
-		t.Fatalf("retention/replay must stay disabled until enabled: %#v %#v", retention, replay)
+	if replay.Enabled {
+		t.Fatalf("replay must stay disabled until enabled: %#v", replay)
 	}
 
 	if retention.BatchSize != 1000 || retention.Interval != 120*time.Second {
@@ -93,14 +93,13 @@ func youTubePlaneRetentionValidateCases() []youTubePlaneValidateCase {
 			wantErr: "retention batch size must be between 1 and 1000",
 		},
 		{
-			name:    "retention enabled without interval",
-			mutate:  func(c *YouTubePlaneConfig) { c.Retention.Enabled = true; c.Retention.Interval = 0 },
+			name:    "retention without interval",
+			mutate:  func(c *YouTubePlaneConfig) { c.Retention.Interval = 0 },
 			wantErr: "retention interval must be positive when enabled",
 		},
 		{
 			name: "replay audit shorter than evidence",
 			mutate: func(c *YouTubePlaneConfig) {
-				c.Retention.Enabled = true
 				c.Retention.ReplayAuditAge = c.Retention.ChannelProfileAge - time.Hour
 			},
 			wantErr: "replay audit retention must cover the longest evidence retention",
@@ -221,8 +220,6 @@ func TestYouTubePlaneConfigRejectsInvalidContentAbsenceGrace(t *testing.T) {
 
 func setYouTubePlaneRetentionOverrideEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("YOUTUBE_PLANE_RETENTION_ENABLED", "true")
-	t.Setenv("YOUTUBE_PLANE_RETENTION_POLICY_APPROVED", "true")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_INTERVAL_SECONDS", "1800")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_BATCH_SIZE", "25")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS", "7")
@@ -299,7 +296,7 @@ func TestLoadYouTubePlaneConfigRetentionOverride(t *testing.T) {
 		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
 	}
 
-	if !cfg.Retention.Enabled || !cfg.Retention.PolicyApproved || cfg.Retention.Interval != 30*time.Minute || cfg.Retention.BatchSize != 25 {
+	if cfg.Retention.Interval != 30*time.Minute || cfg.Retention.BatchSize != 25 {
 		t.Fatalf("retention override = %#v", cfg.Retention)
 	}
 
@@ -317,24 +314,12 @@ func TestLoadYouTubePlaneConfigRetentionOverride(t *testing.T) {
 	}
 }
 
-func TestYouTubePlaneProductionRetentionRequiresApprovedBoundedPolicy(t *testing.T) {
+func TestYouTubePlaneProductionRetentionRequiresBoundedPolicy(t *testing.T) {
 	cfg := testYouTubePlaneConfig(t)
 	if err := cfg.validateProductionRetention("development"); err != nil {
 		t.Fatalf("development retention validation: %v", err)
 	}
 
-	if err := cfg.validateProductionRetention(runtimepolicy.EnvironmentProduction); err == nil ||
-		!strings.Contains(err.Error(), "YOUTUBE_PLANE_RETENTION_ENABLED=true") {
-		t.Fatalf("disabled production retention error = %v", err)
-	}
-
-	cfg.Retention.Enabled = true
-	if err := cfg.validateProductionRetention(runtimepolicy.EnvironmentProduction); err == nil ||
-		!strings.Contains(err.Error(), "YOUTUBE_PLANE_RETENTION_POLICY_APPROVED=true") {
-		t.Fatalf("unapproved production retention error = %v", err)
-	}
-
-	cfg.Retention.PolicyApproved = true
 	cfg.Retention.QueueProcessedAge = 0
 
 	if err := cfg.validateProductionRetention(runtimepolicy.EnvironmentProduction); err == nil ||
@@ -400,6 +385,8 @@ func TestYouTubePlaneLiveCheckRetentionBounds(t *testing.T) {
 
 		cfg := testYouTubePlaneConfig(t)
 		set(&cfg.Retention, 3650*24*time.Hour)
+		// retention은 항상 켜져 있으므로 replay audit 보존도 가장 긴 증거 보존을 덮어야 한다.
+		cfg.Retention.ReplayAuditAge = 3650 * 24 * time.Hour
 
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("%s retention at upper bound: %v", name, err)
@@ -412,7 +399,6 @@ func TestYouTubePlaneReplayAuditMustCoverLiveCheckRetention(t *testing.T) {
 
 	cfg := testYouTubePlaneConfig(t)
 
-	cfg.Retention.Enabled = true
 	cfg.Retention.VideoLiveCheckAge = cfg.Retention.ChannelProfileAge + 24*time.Hour
 
 	if err := cfg.validateRetention(); err == nil || !strings.Contains(err.Error(), "replay audit retention") {

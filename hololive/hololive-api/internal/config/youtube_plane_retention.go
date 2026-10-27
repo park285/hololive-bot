@@ -52,14 +52,6 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 
 	var err error
 
-	if config.Retention.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_RETENTION_ENABLED", false); err != nil {
-		return fmt.Errorf("load retention enabled: %w", err)
-	}
-
-	if config.Retention.PolicyApproved, err = sharedenv.BoolE("YOUTUBE_PLANE_RETENTION_POLICY_APPROVED", false); err != nil {
-		return fmt.Errorf("load retention policy approval: %w", err)
-	}
-
 	if config.Retention.Interval, err = envload.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_INTERVAL_SECONDS",
 		defaults.Interval,
@@ -154,7 +146,7 @@ func loadYouTubePlaneReplay(config *YouTubePlaneConfig) error {
 }
 
 func (c *YouTubePlaneConfig) validateRetention() error {
-	if err := validateRetentionLoop("retention", c.Retention.Enabled, c.Retention.Interval, c.Retention.BatchSize); err != nil {
+	if err := validateRetentionLoop("retention", true, c.Retention.Interval, c.Retention.BatchSize); err != nil {
 		return fmt.Errorf("validate retention loop: %w", err)
 	}
 
@@ -162,7 +154,7 @@ func (c *YouTubePlaneConfig) validateRetention() error {
 		return fmt.Errorf("validate retention ages: %w", err)
 	}
 
-	if c.Retention.Enabled && c.Retention.ReplayAuditAge > 0 &&
+	if c.Retention.ReplayAuditAge > 0 &&
 		c.Retention.ReplayAuditAge < maxEvidenceRetentionAge(&c.Retention) {
 		return errors.New("youtube plane replay audit retention must cover the longest evidence retention")
 	}
@@ -256,14 +248,6 @@ func validateRetentionAge(name string, age time.Duration) error {
 func (c *YouTubePlaneConfig) validateProductionRetention(environment string) error {
 	if !runtimepolicy.IsProduction(environment) || !c.Enabled {
 		return nil
-	}
-
-	if !c.Retention.Enabled {
-		return errors.New("YOUTUBE_PLANE_RETENTION_ENABLED=true is required in production")
-	}
-
-	if !c.Retention.PolicyApproved {
-		return errors.New("YOUTUBE_PLANE_RETENTION_POLICY_APPROVED=true is required in production")
 	}
 
 	for _, item := range youtubePlaneRetentionAgeEnvs(&c.Retention) {

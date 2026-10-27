@@ -22,7 +22,6 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime.Config.Retention.Enabled = true
 	runtime.Config.Replay.Enabled = true
 	runtime.retainer = fakeRetainer{
 		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
@@ -53,15 +52,14 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 	}
 }
 
-func TestRetentionAndReplayLoopsStayStoppedWhenDisabled(t *testing.T) {
+func TestReplayLoopStaysStoppedWhenDisabled(t *testing.T) {
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime.Config.Retention.Enabled = false
 	runtime.Config.Replay.Enabled = false
 	runtime.Start(t.Context(), make(chan error, 1))
 
-	if runtime.loopCount != 4 {
-		t.Fatalf("loopCount = %d, want 4 with claim/projection/live-end/metrics", runtime.loopCount)
+	if runtime.loopCount != 5 {
+		t.Fatalf("loopCount = %d, want 5 with claim/projection/live-end/metrics/retention", runtime.loopCount)
 	}
 
 	if err := runtime.Shutdown(t.Context()); err != nil {
@@ -74,7 +72,6 @@ func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime.Config.Retention.Enabled = true
 	runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour
 	runtime.projectionRetainer = fakeProjectionRetainer{
 		retain: func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error) {

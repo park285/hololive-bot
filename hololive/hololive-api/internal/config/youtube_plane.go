@@ -16,8 +16,6 @@ const (
 )
 
 type YouTubePlaneRetentionConfig struct {
-	Enabled              bool
-	PolicyApproved       bool
 	Interval             time.Duration
 	BatchSize            int
 	QueueProcessedAge    time.Duration

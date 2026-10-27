@@ -204,7 +204,6 @@ func newClaimRegistrationFixture(t *testing.T, settle func(context.Context) erro
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{})
-	f.runtime.Config.Retention.Enabled = false
 	f.runtime.Config.Replay.Enabled = false
 	f.runtime.Config.LiveEndFinalizer.Enabled = false
 	f.runtime.Config.TransactionTimeout = 25 * time.Millisecond
