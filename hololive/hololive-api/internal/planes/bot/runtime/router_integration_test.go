@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
@@ -92,7 +91,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 func TestProvideBotRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, nil, nil)
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -122,7 +121,7 @@ func TestProvideBotRouter_SkipsScraperShortLinkWarnings(t *testing.T) {
 
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, nil, nil)
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -161,7 +160,7 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 
 	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{
 		Server: settings.ServerConfig{APIKey: "test-key"},
-	}, logger, nil, nil, nil, probe)
+	}, logger, nil, probe)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -201,24 +200,6 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 
 	if probeCalls != 1 {
 		t.Fatalf("/internal/ready invoked dependency probe %d time(s), want 1", probeCalls)
-	}
-}
-
-func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
-	logger := slog.New(slog.DiscardHandler)
-	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
-
-	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, triggerHandler, nil)
-	if err == nil {
-		t.Fatal("ProvideBotRouter() error = nil, want non-nil")
-	}
-
-	if router != nil {
-		t.Fatal("ProvideBotRouter() router = non-nil, want nil")
-	}
-
-	if err.Error() != "runtime router: register routes: API_SECRET_KEY required" {
-		t.Fatalf("ProvideBotRouter() error = %q, want %q", err.Error(), "runtime router: register routes: API_SECRET_KEY required")
 	}
 }
 

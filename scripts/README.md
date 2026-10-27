@@ -19,7 +19,6 @@ PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니
 - 표준 진입점: `./scripts/architecture/ci-boundary-gate.sh`
 - 세부 체크:
   - `check-shared-go-boundary.sh`
-  - `check-internal-route-hardcoding.sh`
 
 ## 3. deploy/
 Docker Compose 운영 재배포 스크립트입니다.

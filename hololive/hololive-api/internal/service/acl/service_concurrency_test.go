@@ -1,7 +1,6 @@
 package acl
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,7 +21,7 @@ func TestConcurrentRoomMutationsPreserveCommittedACL(t *testing.T) {
 		store.settings[dbKeyEnabled] = testDBEnabledTrue
 		store.settings[dbKeyMode] = string(ACLModeWhitelist)
 
-		admin, bot := newFollowPair(t, store)
+		admin := newLoadedTestService(t, store)
 		entered, release := make(chan struct{}), make(chan struct{})
 		unblock := sync.OnceFunc(func() { close(release) })
 		t.Cleanup(unblock)
@@ -61,9 +60,8 @@ func TestConcurrentRoomMutationsPreserveCommittedACL(t *testing.T) {
 		require.True(t, added.changed)
 		require.NoError(t, removed.err)
 		require.True(t, removed.changed)
-		assertFollowerMatchesStore(t, admin, store)
-		assertFollowerMatchesStore(t, bot, store)
-		require.False(t, bot.IsRoomAllowed("3001"))
+		assertServiceMatchesStore(t, admin, store)
+		require.False(t, admin.IsRoomAllowed("3001"))
 	})
 }
 
@@ -75,7 +73,7 @@ func TestFailedRoomDeletionKeepsCommittedACLVisible(t *testing.T) {
 		store.settings[dbKeyMode] = string(ACLModeBlacklist)
 		store.rooms[roomKey{roomID: "3001", listType: listTypeBlacklist}] = struct{}{}
 
-		admin, bot := newFollowPair(t, store)
+		admin := newLoadedTestService(t, store)
 		entered, release := make(chan struct{}), make(chan struct{})
 		unblock := sync.OnceFunc(func() { close(release) })
 		t.Cleanup(unblock)
@@ -93,11 +91,9 @@ func TestFailedRoomDeletionKeepsCommittedACLVisible(t *testing.T) {
 
 		<-entered
 		require.False(t, admin.IsRoomAllowed("3001"), "DB 삭제가 실패할 수 있으므로 차단을 먼저 해제하면 안 된다")
-		require.False(t, bot.IsRoomAllowed("3001"))
 		unblock()
 		require.Error(t, <-done)
-		assertFollowerMatchesStore(t, admin, store)
-		assertFollowerMatchesStore(t, bot, store)
+		assertServiceMatchesStore(t, admin, store)
 	})
 }
 
@@ -113,12 +109,6 @@ func TestRemoveRoomRevokesPersistedRoomMissingFromMemory(t *testing.T) {
 		store: store, logger: slog.New(slog.DiscardHandler), enabled: true,
 		mode: ACLModeWhitelist, whitelistRooms: map[string]struct{}{}, blacklistRooms: map[string]struct{}{},
 	}
-	bot := &Service{
-		store: store, logger: slog.New(slog.DiscardHandler), enabled: true,
-		mode: ACLModeWhitelist, whitelistRooms: map[string]struct{}{}, blacklistRooms: map[string]struct{}{},
-	}
-	require.NoError(t, bot.Reload(t.Context()))
-	bot.Follow(admin)
 
 	removed, err := admin.RemoveRoom(t.Context(), "3001")
 	require.NoError(t, err)
@@ -127,83 +117,32 @@ func TestRemoveRoomRevokesPersistedRoomMissingFromMemory(t *testing.T) {
 	rooms, err := store.ListRooms(t.Context())
 	require.NoError(t, err)
 	require.Empty(t, rooms)
-	require.False(t, bot.IsRoomAllowed("3001"))
-}
-
-type pausedCreateACLStore struct {
-	aclStore
-
-	entered chan struct{}
-	release chan struct{}
-}
-
-func (s *pausedCreateACLStore) CreateRoom(ctx context.Context, roomID, listType string) error {
-	close(s.entered)
-
-	select {
-	case <-s.release:
-	case <-ctx.Done():
-		return fmt.Errorf("wait for create release: %w", ctx.Err())
-	}
-
-	if err := s.aclStore.CreateRoom(ctx, roomID, listType); err != nil {
-		return fmt.Errorf("create room through paused store: %w", err)
-	}
-
-	return nil
-}
-
-func TestConcurrentRoomMutationsConvergePostgresAndBot(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	store := &pausedCreateACLStore{aclStore: newPgxACLStore(pool), entered: make(chan struct{}), release: make(chan struct{})}
-	release := sync.OnceFunc(func() { close(store.release) })
-	t.Cleanup(release)
-	require.NoError(t, store.UpsertSetting(t.Context(), dbKeyEnabled, testDBEnabledTrue))
-	require.NoError(t, store.UpsertSetting(t.Context(), dbKeyMode, string(ACLModeWhitelist)))
-
-	admin := &Service{
-		store: store, logger: slog.New(slog.DiscardHandler), enabled: true,
-		mode: ACLModeWhitelist, whitelistRooms: map[string]struct{}{}, blacklistRooms: map[string]struct{}{},
-	}
-	bot := &Service{
-		store: store.aclStore, logger: slog.New(slog.DiscardHandler), enabled: true,
-		mode: ACLModeWhitelist, whitelistRooms: map[string]struct{}{}, blacklistRooms: map[string]struct{}{},
-	}
-	bot.Follow(admin)
-
-	type outcome struct {
-		changed bool
-		err     error
-	}
-
-	addDone, removeDone := make(chan outcome, 1), make(chan outcome, 1)
-
-	go func() { changed, err := admin.AddRoom(t.Context(), "3001"); addDone <- outcome{changed, err} }()
-
-	<-store.entered
 	require.False(t, admin.IsRoomAllowed("3001"))
+}
 
-	removeStarted := make(chan struct{})
+// newLoadedTestService는 production 기동(NewACLService)과 같은 loadFromDatabase로 저장 상태를 snapshot에 적재한다.
+func newLoadedTestService(t *testing.T, store aclStore) *Service {
+	t.Helper()
 
-	go func() {
-		close(removeStarted)
+	service := &Service{store: store, logger: slog.New(slog.DiscardHandler)}
+	require.NoError(t, service.loadFromDatabase(t.Context(), false, ACLModeWhitelist, nil))
 
-		changed, err := admin.RemoveRoom(t.Context(), "3001")
-		removeDone <- outcome{changed, err}
-	}()
+	return service
+}
 
-	<-removeStarted
-	release()
+func assertServiceMatchesStore(t *testing.T, service *Service, store *fakeACLStore) {
+	t.Helper()
 
-	added, removed := <-addDone, <-removeDone
-	require.NoError(t, added.err)
-	require.True(t, added.changed)
-	require.NoError(t, removed.err)
-	require.True(t, removed.changed)
+	enabled, mode, rooms := service.GetACLStatus()
+	require.Equal(t, store.settings[dbKeyEnabled], fmt.Sprintf("%t", enabled))
+	require.Equal(t, store.settings[dbKeyMode], string(mode))
 
-	rooms, err := store.ListRooms(t.Context())
-	require.NoError(t, err)
-	require.Empty(t, rooms)
-	require.False(t, admin.IsRoomAllowed("3001"))
-	require.False(t, bot.IsRoomAllowed("3001"))
+	stored := make([]string, 0, len(store.rooms))
+	for key := range store.rooms {
+		if key.listType == string(mode) {
+			stored = append(stored, key.roomID)
+		}
+	}
+
+	require.ElementsMatch(t, stored, rooms)
 }

@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
@@ -35,9 +35,9 @@ func TestFormatMemberNewsDigest_RendersTemplate(t *testing.T) {
 	renderer := setupMemberNewsRenderer(t)
 	formatter := NewResponseFormatter("!", renderer)
 
-	digest := &membernewscontracts.Digest{
+	digest := &membernewsmodel.Digest{
 		Headline: "🗞️ 이번주 구독 멤버 뉴스",
-		TopItems: []membernewscontracts.SummaryItem{
+		TopItems: []membernewsmodel.SummaryItem{
 			{Member: testMemberSakuraMiko, Category: "birthday_live", Title: "생일 라이브", DateText: "2026-02-20", SourceURL: "https://hololive.hololivepro.com/news/1"},
 			{Member: "후부키", Category: "event", Title: "EXPO", DateText: "2026-02-21", SourceURL: "https://hololive.hololivepro.com/news/2"},
 		},
@@ -62,9 +62,9 @@ func TestFormatMemberNewsDigest_LocalizesCategoryLabel(t *testing.T) {
 	renderer := setupMemberNewsRenderer(t)
 	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 
-	digest := &membernewscontracts.Digest{
+	digest := &membernewsmodel.Digest{
 		Headline: "🗞️ 테스트",
-		TopItems: []membernewscontracts.SummaryItem{
+		TopItems: []membernewsmodel.SummaryItem{
 			{Member: "호시마치 스이세이", Category: "solo_live", Title: "라이브", DateText: "2026-02-20", SourceURL: "https://hololive.hololivepro.com/news/solo"},
 		},
 	}
@@ -81,7 +81,7 @@ func TestFormatMemberNewsDigest_LocalizesCategoryLabel(t *testing.T) {
 
 func TestFormatMemberNewsDigest_RenderFailFallback(t *testing.T) {
 	formatter := NewResponseFormatter("!", nil, WithMessageStrings(setupFormatterTestStore(t)))
-	digest := &membernewscontracts.Digest{Headline: "뉴스"}
+	digest := &membernewsmodel.Digest{Headline: "뉴스"}
 
 	output := formatter.FormatMemberNewsDigest(t.Context(), digest)
 

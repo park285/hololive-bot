@@ -32,7 +32,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 

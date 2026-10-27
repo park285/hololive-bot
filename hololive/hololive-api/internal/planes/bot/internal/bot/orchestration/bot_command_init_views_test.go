@@ -27,11 +27,11 @@ import (
 	"slices"
 	"testing"
 
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -70,8 +70,8 @@ func (s *stubCommandInitMajorEventRepository) Unsubscribe(context.Context, strin
 
 type stubCommandInitMemberNewsService struct{}
 
-func (s *stubCommandInitMemberNewsService) GenerateRoomDigest(context.Context, string, membernewscontracts.Period) (*membernewscontracts.Digest, error) {
-	return &membernewscontracts.Digest{}, nil
+func (s *stubCommandInitMemberNewsService) GenerateRoomDigest(context.Context, string, membernewsmodel.Period) (*membernewsmodel.Digest, error) {
+	return &membernewsmodel.Digest{}, nil
 }
 
 func (s *stubCommandInitMemberNewsService) SubscribeRoom(context.Context, string, string) error {

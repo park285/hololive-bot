@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -19,9 +19,9 @@ func TestBuildMemberNewsDigestLocalizesWithoutMutatingInput(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 	require.NoError(t, store.Load(t.Context()))
 
-	digest := membernewscontracts.Digest{
+	digest := membernewsmodel.Digest{
 		Headline: "소식", MoreSummary: "추가 소식", TotalCount: 99,
-		TopItems: []membernewscontracts.SummaryItem{
+		TopItems: []membernewsmodel.SummaryItem{
 			{Category: "birthday_live", Title: "A", SourceURL: "https://example.com/a"},
 			{Category: "solo_live", Title: "B"},
 			{Category: "event", Title: "C"},
@@ -64,7 +64,7 @@ func TestBuildMemberNewsDigestCountsDisplayedBlocks(t *testing.T) {
 		{name: "summary only", more: "추가 소식", want: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			data := BuildMemberNewsDigest(membernewscontracts.Digest{TopItems: make([]membernewscontracts.SummaryItem, tc.items), MoreSummary: tc.more, TotalCount: 100}, nil)
+			data := BuildMemberNewsDigest(membernewsmodel.Digest{TopItems: make([]membernewsmodel.SummaryItem, tc.items), MoreSummary: tc.more, TotalCount: 100}, nil)
 			assert.Equal(t, tc.want, data.DisplayCount)
 			assert.Equal(t, tc.fold, ShouldFoldItems(data.DisplayCount))
 		})

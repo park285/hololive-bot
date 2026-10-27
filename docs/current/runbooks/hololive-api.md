@@ -5,7 +5,7 @@
 `hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 한 프로세스(단일 compose service `hololive-api`)에서 호스팅하는 통합 runtime입니다.
 
 - Bot plane: Kakao/Iris webhook ingress, 사용자 명령 routing, reply orchestration (port `30001`).
-- LLM plane: major event/member news scheduling, LLM digest 생성, internal subscription/trigger 제공자 (port `30003`).
+- LLM plane: major event/member news scheduling, LLM digest 생성, bot plane에 구독·digest 서비스를 in-process로 제공 (port `30003`, container 안 health·ready 전용).
 - Admin plane: dashboard-facing admin HTTP control plane, trigger client와 worker alarm HTTP client, `members.photo` Holodex PhotoSync (port `30006`).
 - YouTube plane: observation claim/finalize, canonical persist, notification intent, live-end finalizer, retention/replay. YouTube channel photos는 `channel_photo` reducer.
 
@@ -72,7 +72,6 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `LLM_SCHEDULER_PORT` | llm plane HTTP port (`30003`) | yes |
 | `HOLOLIVE_HTTP_TRANSPORTS` | enabled transports | yes |
 | `IRIS_*` | Iris URL/certs/tokens | yes |
-| `LLM_SCHEDULER_INTERNAL_URL` | internal scheduler/trigger API base | partial |
 | `LLM_PROVIDER` | `cliproxy` or native `gemini` provider selection | partial |
 | `CLIPROXY_*` | CLIProxy endpoint, credential, model, and reasoning settings | required when `LLM_PROVIDER=cliproxy` |
 | `GEMINI_*` | native Gemini endpoint, credential, model, and thinking settings | required when `LLM_PROVIDER=gemini` |
@@ -273,11 +272,11 @@ Diagnosis:
 ```
 
 Mitigation:
-- Validate `LLM_SCHEDULER_INTERNAL_URL`, the selected LLM provider, and member news/major event source state.
+- Validate the selected LLM provider and member news/major event source state.
 - Use `LLM_PROVIDER=gemini` for Gemini native `google_search`; routing Gemini through CLIProxy does not satisfy the MajorEvent search-call contract.
 - The native Gemini path uses the beta Interactions API and fails closed on non-`completed`, malformed, empty, or non-JSON output. Use `LLM_PROVIDER=cliproxy` with the retained CLIProxy settings for rollback.
-- For `409`, wait for the active run to finish; investigate a stuck scheduler if the conflict persists.
-- A scheduled major event digest whose summary fails (LLM error, empty result, or external-content guard failure) is not enqueued and is not retried automatically; the only trace is a `Failed to send weekly notification` / `Failed to send monthly notification` error log. The next scheduled run uses the next week or month key, so re-run `/internal/trigger/majorevent-weekly` or `/internal/trigger/majorevent-monthly` within the same KST week or month after fixing the cause (`DEC-20260926-hololive-source-fallbacks-retirement`).
+- For exit 2 (`notification already in progress`), wait for the active run to finish; investigate a stuck scheduler if the conflict persists.
+- A scheduled major event digest whose summary fails (LLM error, empty result, or external-content guard failure) is not enqueued and is not retried automatically; the only trace is a `Failed to send weekly notification` / `Failed to send monthly notification` error log. The next scheduled run uses the next week or month key, so re-run it with `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/hololive-api --rerun-notification=majorevent-weekly` (or `=majorevent-monthly`) within the same KST week or month after fixing the cause (`DEC-20260926-hololive-source-fallbacks-retirement`). The command prints the enqueue result JSON; exit 2 means the same run is still in progress, exit 1 is a failure (see [trigger contract](../contracts/trigger.md)).
 
 Rollback:
 - Roll back the plane/contract/config change that introduced failures.

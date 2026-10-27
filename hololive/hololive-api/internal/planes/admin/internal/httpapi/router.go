@@ -103,8 +103,6 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 		{h.Stream == nil, "stream handler must not be nil"},
 		{h.Stats == nil, "stats handler must not be nil"},
 		{h.Settings == nil, "settings handler must not be nil"},
-		{h.Template == nil, "template handler must not be nil"},
-		{h.MajorEvent == nil, "major event handler must not be nil"},
 	}
 	for _, required := range requiredHandlers {
 		if required.missing {

@@ -80,11 +80,9 @@ func registerAPIRoutes(
 	registerMemberRoutes(holoAPI, domains.Member)
 	registerAlarmRoutes(holoAPI, domains.Alarm)
 	registerRoomRoutes(holoAPI, domains.Room)
-	registerStatsRoutes(holoAPI, domains.Stats, domains.Stream)
+	registerStatsRoutes(holoAPI, domains.Stats)
 	registerStreamRoutes(holoAPI, domains.Stream)
 	registerSettingsRoutes(holoAPI, domains.Settings)
-	registerTemplateRoutes(holoAPI, domains.Template)
-	registerMajorEventRoutes(holoAPI, domains.MajorEvent)
 
 	return nil
 }

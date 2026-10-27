@@ -27,30 +27,28 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/readiness"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-func buildTriggerRouter(
+// buildLLMSchedulerRouter는 llm plane의 health·ready 응답만 연다. 구독·digest·trigger는 같은 프로세스의 bot plane과
+// 운영 CLI(--rerun-notification)가 직접 호출하므로 HTTP 경로가 없다.
+func buildLLMSchedulerRouter(
 	ctx context.Context,
 	logger *slog.Logger,
-	triggerHandler *apiserver.TriggerHandler,
 	apiKey string,
-	readyProbe ...*sharedreadiness.Probe,
+	readyProbe *sharedreadiness.Probe,
 ) (*gin.Engine, error) {
-	var opts []func(*sharedserver.RuntimeRouterOptions)
+	options := sharedserver.RuntimeRouterOptions{APIKey: apiKey}
 
-	if probe := readiness.Pick(readyProbe...); probe != nil {
-		opts = append(opts, func(o *sharedserver.RuntimeRouterOptions) {
-			o.InternalReadyResponder = readiness.GinHandler(ctx, probe)
-		})
+	if readyProbe != nil {
+		options.InternalReadyResponder = readiness.GinHandler(ctx, readyProbe)
 	}
 
-	router, err := apiserver.NewTriggerRuntimeRouter(ctx, logger, triggerHandler, apiKey, opts...)
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &options)
 	if err != nil {
-		return nil, fmt.Errorf("build trigger router: %w", err)
+		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}
 
 	return router, nil

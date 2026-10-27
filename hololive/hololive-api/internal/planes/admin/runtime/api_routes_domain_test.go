@@ -110,32 +110,13 @@ func expectedAdminAPIDomainRoutes() map[string][]string {
 		},
 		"stats_stream": {
 			"GET /api/holo/stats",
-			"GET /api/holo/stats/system",
-			"GET /api/holo/stats/youtube/community-shorts",
 			"GET /api/holo/streams/live",
 			"GET /api/holo/streams/upcoming",
-			"GET /api/holo/channels",
-			"GET /api/holo/channels/search",
 		},
 		"settings": {
-			"GET /api/holo/logs",
 			"GET /api/holo/settings",
 			"POST /api/holo/settings",
-			"POST /api/holo/settings/llm",
 			"POST /api/holo/names/room",
-		},
-		"template": {
-			"GET /api/holo/templates",
-			"GET /api/holo/templates/:key",
-			"PUT /api/holo/templates/:key",
-			"DELETE /api/holo/templates/:key",
-			"POST /api/holo/templates/:key/preview",
-			"GET /api/holo/templates/:key/revisions",
-			"GET /api/holo/templates/:key/revisions/:id",
-		},
-		"major_event": {
-			"POST /api/holo/majorevent/trigger",
-			"POST /api/holo/majorevent/monthly-trigger",
 		},
 	}
 }

@@ -38,7 +38,7 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	buildCtx, buildCancel := context.WithCancel(t.Context())
 
 	server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
-		buildCtx, appConfig, nil, nil, nil, nil,
+		buildCtx, appConfig, nil, nil,
 		sharedh3.CertificateReloaderOptions{ReloadInterval: 10 * time.Millisecond},
 	)
 	if err != nil {

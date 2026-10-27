@@ -2,11 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
@@ -95,5 +99,50 @@ func TestHololiveAPITelemetryConfigUsesFixedIdentity(t *testing.T) {
 
 	if !got.Enabled || got.OTLPEndpoint != "otel-collector:4317" || !got.OTLPInsecure || got.SampleRate != 0.25 {
 		t.Fatalf("telemetry config = %#v, want tracing settings preserved", got)
+	}
+}
+
+// 수동 재실행은 kind를 그대로 넘기고, 실행 중 충돌(exit 2)과 그 밖의 실패(exit 1)를 구분하며 결과를 stdout에 남긴다.
+func TestRunNotificationRerunMapsOutcomes(t *testing.T) {
+	tests := []struct {
+		name       string
+		result     notification.Result
+		err        error
+		wantCode   int
+		wantStdout string
+		wantStderr string
+	}{
+		{name: "partial result", result: notification.NewResult(2, 0, 1), wantStdout: `"status":"partial"`},
+		{name: "in progress", err: fmt.Errorf("rerun: %w", notification.ErrNotificationInProgress), wantCode: 2, wantStderr: "already in progress"},
+		{name: "failure", err: errors.New("llm provider unavailable"), wantCode: 1, wantStderr: "llm provider unavailable"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+
+			var gotKind string
+
+			handled, code := runNotificationRerun([]string{"--rerun-notification=majorevent-weekly"}, &stdout, &stderr, func(ctx context.Context, kind string) (notification.Result, error) {
+				gotKind = kind
+
+				if _, ok := ctx.Deadline(); !ok {
+					t.Error("rerun context has no deadline")
+				}
+
+				return test.result, test.err
+			})
+
+			if !handled || code != test.wantCode || gotKind != "majorevent-weekly" {
+				t.Fatalf("runNotificationRerun() = (%v, %d) kind %q, want (true, %d) kind majorevent-weekly", handled, code, gotKind, test.wantCode)
+			}
+
+			if !strings.Contains(stdout.String(), test.wantStdout) || !strings.Contains(stderr.String(), test.wantStderr) {
+				t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+			}
+		})
+	}
+
+	if handled, _ := runNotificationRerun([]string{"--check-config"}, io.Discard, io.Discard, nil); handled {
+		t.Fatal("runNotificationRerun() handled an unrelated argument")
 	}
 }

@@ -29,19 +29,10 @@ func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
 		return &SettingsHandler{}
 	}
 
-	var readRecentLogs SettingsReadRecentLogsFunc
-
-	if h.activity != nil {
-		readRecentLogs = func(limit int) (any, error) {
-			return h.activity.GetRecentLogs(limit)
-		}
-	}
-
 	return &SettingsHandler{
 		Logger:          h.logger,
 		Alarm:           h.roomNames,
 		Activity:        h.activity,
-		ReadRecentLogs:  readRecentLogs,
 		Settings:        h.settings,
 		SettingsApplier: h.settingsApplier,
 		operationGate:   h.settingsOperations,
@@ -52,18 +43,10 @@ func (h *SettingsAPIHandler) SetRoomName(c *gin.Context) {
 	h.settingsHandler().SetRoomName(c)
 }
 
-func (h *SettingsAPIHandler) GetLogs(c *gin.Context) {
-	h.settingsHandler().GetLogs(c)
-}
-
 func (h *SettingsAPIHandler) GetSettings(c *gin.Context) {
 	h.settingsHandler().GetSettings(c)
 }
 
 func (h *SettingsAPIHandler) UpdateSettings(c *gin.Context) {
 	h.settingsHandler().UpdateSettings(c)
-}
-
-func (h *SettingsAPIHandler) UpdateLLMSettings(c *gin.Context) {
-	h.settingsHandler().UpdateLLMSettings(c)
 }

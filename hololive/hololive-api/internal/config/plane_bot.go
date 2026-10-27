@@ -32,7 +32,6 @@ type BotPlaneConfig struct {
 	APIWorkerProfile *APIWorkerProfile
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath string
-	LLMSchedulerURL  string
 	AlarmServiceURL  string
 }
 
@@ -136,7 +135,6 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 		Webhook:          webhookConfigFromProfile(profile),
 		APIWorkerProfile: profile,
 		SettingsFilePath: settings.LoadSettingsFilePath(),
-		LLMSchedulerURL:  sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		AlarmServiceURL:  sharedenv.String("ALARM_INTERNAL_URL", ""),
 	}
 	// KakaoConfig는 잠금을 포함하므로 값 복사 대신 필드를 옮긴다.

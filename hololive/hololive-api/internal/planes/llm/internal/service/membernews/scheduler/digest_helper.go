@@ -32,10 +32,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
@@ -223,8 +223,8 @@ func runMemberNewsDigest(
 	service model.DigestService,
 	processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult,
 	config *digestDispatchConfig,
-) (triggercontracts.Result, error) {
-	result := triggercontracts.NewResult(0, 0, 0)
+) (notification.Result, error) {
+	result := notification.NewResult(0, 0, 0)
 	if err := digest.RunDigest(ctx, buildDigestOp(digest, service, processRoom, config, &result)); err != nil {
 		return result, fmt.Errorf("run digest: %w", err)
 	}
@@ -237,7 +237,7 @@ func buildDigestOp(
 	service model.DigestService,
 	processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult,
 	config *digestDispatchConfig,
-	result *triggercontracts.Result,
+	result *notification.Result,
 ) schedulerkit.DigestOp[[]model.SubscribedRoom] {
 	return schedulerkit.DigestOp[[]model.SubscribedRoom]{
 		LockKey: config.lockKey,
@@ -281,12 +281,12 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, co
 	}
 }
 
-func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig, outcome *triggercontracts.Result) func(context.Context, []model.SubscribedRoom) error {
+func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig, outcome *notification.Result) func(context.Context, []model.SubscribedRoom) error {
 	return func(ctx context.Context, rooms []model.SubscribedRoom) error {
 		result := dispatchDigestRooms(ctx, rooms, config)
 		logDigestResult(logger, config, result)
 
-		*outcome = triggercontracts.NewResult(result.Queued, result.Skipped, result.Failed)
+		*outcome = notification.NewResult(result.Queued, result.Skipped, result.Failed)
 
 		if result.Queued == 0 && result.Failed > 0 {
 			return fmt.Errorf(config.allFailedMessage, result.Failed)

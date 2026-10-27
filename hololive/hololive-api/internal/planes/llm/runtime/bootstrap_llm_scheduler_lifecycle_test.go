@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -120,43 +119,4 @@ func TestLLMSchedulerRuntimeStartReportsServerErrorAndCloses(t *testing.T) {
 	}
 
 	require.NoError(t, runtime.CloseContext(t.Context()))
-}
-
-func TestBuildLLMSchedulerRouter_WithoutTriggerHandler(t *testing.T) {
-	router, err := buildLLMSchedulerRouter(t.Context(), testRuntimeLogger(), nil, "", nil, nil, nil)
-	require.NoError(t, err)
-	require.NotNil(t, router)
-
-	t.Run("health available", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusOK, rr.Code)
-	})
-
-	t.Run("trigger route not registered", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusNotFound, rr.Code)
-	})
-}
-
-func TestBuildTriggerRouter_NoTriggerHandler(t *testing.T) {
-	router, err := buildTriggerRouter(t.Context(), testRuntimeLogger(), nil, "")
-	require.NoError(t, err)
-	require.NotNil(t, router)
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusNotFound, rr.Code)
-
-	healthReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
-	healthRR := httptest.NewRecorder()
-	router.ServeHTTP(healthRR, healthReq)
-	assert.Equal(t, http.StatusOK, healthRR.Code)
-	assert.Contains(t, healthRR.Body.String(), "status")
 }

@@ -18,16 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package majorevent
+package notification
 
-const (
-	BasePath = "/internal/majorevent"
-)
+import "errors"
 
-const (
-	SubscriptionsRoute = "/subscriptions"
-)
-
-const (
-	SubscriptionsPath = BasePath + SubscriptionsRoute
-)
+// ErrNotificationInProgress는 같은 주·월 알림이 이미 실행 중이라 lock을 얻지 못했음을 뜻한다. 정기 실행과
+// 운영 CLI(--rerun-notification) 모두 이 값을 받으면 새로 발송하지 않는다.
+var ErrNotificationInProgress = errors.New("notification already in progress")

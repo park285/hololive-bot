@@ -27,11 +27,11 @@ import (
 	"strings"
 	"testing"
 
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
 const (
@@ -40,7 +40,7 @@ const (
 )
 
 type stubMemberNewsService struct {
-	digest             *membernewscontracts.Digest
+	digest             *membernewsmodel.Digest
 	generateErr        error
 	isSubscribed       bool
 	isSubscribedErr    error
@@ -51,7 +51,7 @@ type stubMemberNewsService struct {
 	unsubscribedRoomID string
 }
 
-func (s *stubMemberNewsService) GenerateRoomDigest(_ context.Context, _ string, _ membernewscontracts.Period) (*membernewscontracts.Digest, error) {
+func (s *stubMemberNewsService) GenerateRoomDigest(_ context.Context, _ string, _ membernewsmodel.Period) (*membernewsmodel.Digest, error) {
 	if s.generateErr != nil {
 		return nil, s.generateErr
 	}
@@ -92,7 +92,7 @@ func (s *stubMemberNewsService) IsRoomSubscribed(_ context.Context, _ string) (b
 
 func TestMemberNewsCommand_NoMembersMessage(t *testing.T) {
 	formatter := messageformatter.NewResponseFormatter("!", nil)
-	stub := &stubMemberNewsService{generateErr: membernewscontracts.ErrNoSubscribedMembers}
+	stub := &stubMemberNewsService{generateErr: membernewsmodel.ErrNoSubscribedMembers}
 
 	var sentMessage string
 

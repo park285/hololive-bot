@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -17,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-api/internal/service/activity"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -25,7 +23,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-func newMemberBoundaryHarness(t *testing.T) (*MemberHandler, *pgxpool.Pool, *miniredis.Miniredis, *activity.Logger) {
+func newMemberBoundaryHarness(t *testing.T) (*MemberHandler, *pgxpool.Pool, *miniredis.Miniredis, *recordingActivity) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
@@ -47,12 +45,7 @@ func newMemberBoundaryHarness(t *testing.T) (*MemberHandler, *pgxpool.Pool, *min
 
 	t.Cleanup(cache.Close)
 
-	audit := activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), logger)
-	t.Cleanup(func() {
-		if err := audit.Close(); err != nil {
-			t.Error(err)
-		}
-	})
+	audit := &recordingActivity{}
 
 	service := NewMemberAdminService(repo, cache, audit, logger)
 	// 멤버 경계는 ACL·Iris·LLM 의존성 없이 실제 DB와 캐시만으로 구성한다.
@@ -94,21 +87,32 @@ func createMemberHTTP(t *testing.T, h *MemberHandler, request CreateMemberReques
 	return response.MemberMutationResult
 }
 
-func assertMemberAuditCount(t *testing.T, audit *activity.Logger, want int) {
+// recordingActivity는 member 경계가 남긴 activity 기록 수를 센다.
+type recordingActivity struct {
+	mu      sync.Mutex
+	entries []map[string]any
+}
+
+func (a *recordingActivity) Log(_, _ string, details map[string]any) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.entries = append(a.entries, details)
+}
+
+func assertMemberAuditCount(t *testing.T, audit *recordingActivity, want int) {
 	t.Helper()
 
-	entries, err := audit.GetRecentLogs(100)
-	if err != nil {
-		t.Fatal(err)
+	audit.mu.Lock()
+	defer audit.mu.Unlock()
+
+	if len(audit.entries) != want {
+		t.Fatalf("activity entries=%d want=%d: %v", len(audit.entries), want, audit.entries)
 	}
 
-	if len(entries) != want {
-		t.Fatalf("activity entries=%d want=%d: %+v", len(entries), want, entries)
-	}
-
-	for _, entry := range entries {
-		if entry.Details["persisted"] != true {
-			t.Fatalf("activity lacks committed evidence: %+v", entry)
+	for _, details := range audit.entries {
+		if details["persisted"] != true {
+			t.Fatalf("activity lacks committed evidence: %+v", details)
 		}
 	}
 }

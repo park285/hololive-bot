@@ -21,7 +21,6 @@
 package handlers
 
 import (
-	"context"
 	stdErrors "errors"
 	"log/slog"
 	"net/http"
@@ -30,15 +29,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
-
-type StreamMemberRepository interface {
-	GetMembersWithPhoto(ctx context.Context, channelIDs []string) (map[string]*domain.Member, error)
-}
 
 type StreamRespondErrorFunc func(c *gin.Context, status int, message string, extra gin.H)
 
@@ -47,7 +41,6 @@ type StreamRespondInternalErrorFunc func(c *gin.Context, userMessage, logMessage
 type StreamHandler struct {
 	Logger               *slog.Logger
 	Holodex              *holodexprovider.Service
-	MemberRepository     StreamMemberRepository
 	RespondError         StreamRespondErrorFunc
 	RespondInternalError StreamRespondInternalErrorFunc
 }

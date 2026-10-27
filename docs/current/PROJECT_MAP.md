@@ -84,8 +84,8 @@ and single-primary fence.
 | Owner | Current source paths | Responsibility |
 |---|---|---|
 | API composition | `hololive/hololive-api/internal/config`, `internal/apifoundation` | API plane 설정·profile, plane별 DB pool·transport 수명, process-owned Valkey/member cache의 생성·borrower join·최종 close |
-| API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream/OAuth/WebSocket handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
-| API common HTTP | `hololive/hololive-api/internal/httpapi` | bot·LLM이 사용하는 trigger handler와 route 조립 |
+| API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
+| API plane 조립 | `hololive/hololive-api/internal/app` | process 자원(bot pool, Valkey, member cache, 단일 ACL Service)과 plane 사이 in-process 주입(bot→llm 구독·digest, admin→bot Iris 방 목록), 운영 CLI `--rerun-notification` |
 | API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/canonicalwrite`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, transaction 전용 canonical persist, replay·retention 및 private reducer |
 | Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,httpapi,dedup,dispatchoutbox,queue}`, `internal/egress/{alarmdispatch,notificationdelivery,sendoutcome}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache, `/internal/alarm/*` HTTP handler·route registrar·binding DTO, dispatch 저장/발행·runner, 범용 notification delivery dispatcher·store·SQL, Iris 발송 결과 분류, 실제 formatter |
 | Collector | `hololive/hololive-youtube-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |

@@ -100,7 +100,7 @@ func TestRemoveRoomRejectsNonChatID(t *testing.T) {
 }
 
 // migration 343 CHECK를 벗어난 저장 행은 판정에 쓰이지 않는 죽은 등록이므로 snapshot 적재를 실패시킨다.
-func TestReloadRejectsStoredNonChatIDRoom(t *testing.T) {
+func TestLoadRejectsStoredNonChatIDRoom(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
@@ -109,7 +109,8 @@ func TestReloadRejectsStoredNonChatIDRoom(t *testing.T) {
 	store.settings[dbKeyMode] = string(ACLModeWhitelist)
 	store.rooms[roomKey{roomID: "room-legacy", listType: listTypeWhitelist}] = struct{}{}
 
-	if err := newReloadTestService(store).Reload(t.Context()); !errors.Is(err, ErrInvalidRoomChatID) {
-		t.Fatalf("Reload() error = %v, want ErrInvalidRoomChatID", err)
+	service := &Service{store: store, logger: slog.New(slog.DiscardHandler)}
+	if err := service.loadFromDatabase(t.Context(), false, ACLModeWhitelist, nil); !errors.Is(err, ErrInvalidRoomChatID) {
+		t.Fatalf("loadFromDatabase() error = %v, want ErrInvalidRoomChatID", err)
 	}
 }

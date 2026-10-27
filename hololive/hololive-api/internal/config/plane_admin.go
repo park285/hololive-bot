@@ -21,7 +21,6 @@ type AdminPlaneConfig struct {
 	Environment      string
 	Server           settings.ServerConfig
 	InternalH3       sharedh3.ClientOptions
-	Kakao            settings.KakaoConfig
 	Holodex          settings.HolodexConfig
 	OfficialSchedule settings.OfficialScheduleRuntimeConfig
 	Valkey           settings.ValkeyConfig
@@ -29,20 +28,12 @@ type AdminPlaneConfig struct {
 	Notification     settings.NotificationConfig
 	CORS             settings.CORSConfig
 	Ingestion        settings.IngestionConfig
-	Services         ServicesConfig
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath string
-	LLMSchedulerURL  string
 	AlarmServiceURL  string
-	BotInternalURL   string
 }
 
 func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
-	kakao, err := settings.LoadKakaoConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load Kakao config: %w", err)
-	}
-
 	server, serverErr := settings.LoadServerConfig()
 	holodex, holodexErr := settings.LoadHolodexConfig()
 	officialSchedule, officialScheduleErr := settings.LoadOfficialScheduleRuntimeConfig()
@@ -69,22 +60,14 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 		Notification:     notification,
 		CORS:             cors,
 		Ingestion:        ingestion,
-		Services:         loadServicesConfig(),
 		SettingsFilePath: settings.LoadSettingsFilePath(),
-		LLMSchedulerURL:  sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		AlarmServiceURL:  sharedenv.String("ALARM_INTERNAL_URL", ""),
-		BotInternalURL:   sharedenv.String("HOLOLIVE_BOT_INTERNAL_URL", ""),
 	}
-	// KakaoConfig는 잠금을 포함하므로 값 복사 대신 필드를 옮긴다.
-	config.Kakao.Rooms = kakao.Rooms
-	config.Kakao.ACLEnabled = kakao.ACLEnabled
-	config.Kakao.ACLMode = kakao.ACLMode
 
 	return config, nil
 }
 
-// Validate는 admin plane 역할 조건을 검사한다. NonEgress라 Iris 입력 필수 검증은 면제하지만 room ACL seed와
-// Holodex API 키, production CORS 허용 origin을 요구하고, proactive notification egress 소유를 거절한다.
+// Validate는 admin plane 역할 조건을 검사한다. NonEgress라 Iris 입력 필수 검증은 면제하지만 Holodex API 키, production CORS 허용 origin을 요구하고, proactive notification egress 소유를 거절한다.
 func (c *AdminPlaneConfig) Validate() error {
 	if c == nil {
 		return errors.New("admin plane config is required")
@@ -92,10 +75,6 @@ func (c *AdminPlaneConfig) Validate() error {
 
 	if err := settings.ValidateServerRuntime(c.Environment, &c.Server); err != nil {
 		return fmt.Errorf("validate server runtime: %w", err)
-	}
-
-	if err := settings.ValidateKakaoRooms(c.Kakao.Rooms); err != nil {
-		return fmt.Errorf("validate kakao rooms: %w", err)
 	}
 
 	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
@@ -115,19 +94,4 @@ func (c *AdminPlaneConfig) Validate() error {
 	}
 
 	return nil
-}
-
-// ServicesConfig는 운영 화면이 조회하는 외부 서비스 health URL이다.
-type ServicesConfig struct {
-	LLMSchedulerHealthURL   string
-	GameBotTwentyQHealthURL string
-	GameBotTurtleHealthURL  string
-}
-
-func loadServicesConfig() ServicesConfig {
-	return ServicesConfig{
-		LLMSchedulerHealthURL:   sharedenv.String("SERVICES_LLM_SCHEDULER_HEALTH_URL", ""),
-		GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-		GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
-	}
 }

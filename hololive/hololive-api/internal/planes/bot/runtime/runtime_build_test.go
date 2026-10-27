@@ -29,7 +29,7 @@ func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("nil config", func(t *testing.T) {
-		runtime, err := BuildRuntime(t.Context(), nil, nil, logger)
+		runtime, err := BuildRuntime(t.Context(), nil, nil, Dependencies{}, logger)
 		if err == nil {
 			t.Fatal("BuildRuntime() expected error for nil config")
 		}

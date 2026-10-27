@@ -39,10 +39,6 @@ type ServerConfig struct {
 	// PprofAddr: net/http/pprof debug 리스너 주소. 빈 값이면 비활성.
 	// 인증이 없으므로 compose에서 loopback(127.0.0.1) 또는 Tailscale IP로만 publish한다.
 	PprofAddr string
-
-	// WebSocketAllowedOrigins: admin-api WebSocket 업그레이드를 허용할 Origin 목록(WEBSOCKET_ALLOWED_ORIGINS).
-	// 비어 있으면 모든 WebSocket 연결을 거부한다.
-	WebSocketAllowedOrigins []string
 }
 
 type LoggingConfig struct {

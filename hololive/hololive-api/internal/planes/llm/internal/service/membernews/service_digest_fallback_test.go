@@ -9,7 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
 type failingDigestSummarizer struct{ err error }

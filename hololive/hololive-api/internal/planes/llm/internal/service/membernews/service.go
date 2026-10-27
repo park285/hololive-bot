@@ -32,8 +32,8 @@ import (
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	newssummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )

@@ -25,15 +25,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 
-	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scheduler"
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
@@ -52,8 +48,6 @@ import (
 )
 
 //nolint:gosec // 이 값은 자격 증명이 아니라 고정된 구성 오류 메시지다.
-const llmSchedulerAPISecretRequired = "build llm scheduler router: API_SECRET_KEY required"
-
 type LLMSchedulerRuntime struct {
 	lifecycle.Managed
 
@@ -65,6 +59,11 @@ type LLMSchedulerRuntime struct {
 	MajorEventScraperScheduler *mescraper.RuntimeScheduler
 	MemberNewsScheduler        *mnscheduler.Scheduler
 	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
+
+	// MajorEventSubscriptions·MemberNews는 bot plane이 같은 프로세스에서 직접 호출하는 구독 저장소와
+	// digest 서비스다. 수명은 llm plane이 빌린 PostgreSQL pool을 따른다.
+	MajorEventSubscriptions *majorevent.Repository
+	MemberNews              *membernews.Service
 
 	httpServers *sharedserver.RuntimeHTTPServers
 
@@ -267,15 +266,14 @@ func buildLLMSchedulerRuntimeComponents(
 	)
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, guards.output, logger)
 
-	triggerHandler := apiserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
 	readyProbe := buildLLMSchedulerReadyProbe(postgresService, cacheService)
 
-	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService, readyProbe)
+	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, readyProbe)
 	if err != nil {
 		return nil, fmt.Errorf("build LLM scheduler HTTP servers: %w", err)
 	}
 
-	return newLLMSchedulerRuntime(
+	runtime := newLLMSchedulerRuntime(
 		schedulerConfig,
 		logger,
 		majorEventScheduler,
@@ -284,7 +282,11 @@ func buildLLMSchedulerRuntimeComponents(
 		memberNewsScheduler,
 		memberNewsMonthlyScheduler,
 		httpServers,
-	), nil
+	)
+	runtime.MajorEventSubscriptions = majorEventRepository
+	runtime.MemberNews = memberNewsService
+
+	return runtime, nil
 }
 
 func buildLLMSchedulerReadyProbe(postgresService sharedreadiness.Pinger, cacheService sharedreadiness.ConnectionChecker) *sharedreadiness.Probe {
@@ -340,17 +342,13 @@ func buildLLMSchedulerHTTPServers(
 	ctx context.Context,
 	serverConfig *settings.ServerConfig,
 	logger *slog.Logger,
-	triggerHandler *apiserver.TriggerHandler,
-	apiKey string,
-	majorEventRepository *majorevent.Repository,
-	memberNewsService *membernews.Service,
 	readyProbe *sharedreadiness.Probe,
 ) (*sharedserver.RuntimeHTTPServers, error) {
 	if serverConfig == nil {
 		serverConfig = &settings.ServerConfig{}
 	}
 
-	router, err := buildLLMSchedulerRouter(ctx, logger, triggerHandler, apiKey, majorEventRepository, memberNewsService, readyProbe)
+	router, err := buildLLMSchedulerRouter(ctx, logger, serverConfig.APIKey, readyProbe)
 	if err != nil {
 		return nil, err
 	}
@@ -362,33 +360,6 @@ func buildLLMSchedulerHTTPServers(
 	}
 
 	return out, nil
-}
-
-// buildLLMSchedulerRouter는 trigger·내부 데이터 경로가 하나라도 열리면 API key 없이 기동하지 않는다.
-func buildLLMSchedulerRouter(
-	ctx context.Context,
-	logger *slog.Logger,
-	triggerHandler *apiserver.TriggerHandler,
-	apiKey string,
-	majorEventRepository *majorevent.Repository,
-	memberNewsService *membernews.Service,
-	readyProbe *sharedreadiness.Probe,
-) (*gin.Engine, error) {
-	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
-		return nil, errors.New(llmSchedulerAPISecretRequired)
-	}
-
-	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey, readyProbe)
-	if err != nil {
-		return nil, fmt.Errorf("build llm scheduler router: %w", err)
-	}
-
-	//nolint:contextcheck // gin 핸들러는 c.Request.Context()로 요청별 컨텍스트를 사용한다.
-	registerMajorEventInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, majorEventRepository)
-	//nolint:contextcheck // gin 핸들러는 c.Request.Context()로 요청별 컨텍스트를 사용한다.
-	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
-
-	return router, nil
 }
 
 // loadLLMMessageStrings는 llm plane formatter가 쓰는 message_strings를 기동 때 적재하고 뉴스 분류 namespace를

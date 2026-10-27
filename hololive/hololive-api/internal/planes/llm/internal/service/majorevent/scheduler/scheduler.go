@@ -29,10 +29,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
+	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
@@ -170,14 +170,14 @@ type weeklyCollected struct {
 	events []*domain.MajorEvent
 }
 
-func (s *Scheduler) SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error) {
+func (s *Scheduler) SendWeeklyNotification(ctx context.Context) (notification.Result, error) {
 	weekStart, weekEnd := GetWeekRange(s.digest.Clock())
 	weekKey := weekStart.Format(time.DateOnly)
-	result := triggercontracts.NewResult(0, 0, 0)
+	result := notification.NewResult(0, 0, 0)
 
 	if err := s.digest.RunDigest(ctx, schedulerkit.DigestOp[weeklyCollected]{
 		LockKey:           fmt.Sprintf("majorevent:lock:weekly:%s", weekKey),
-		OnLockNotAcquired: func() error { return triggercontracts.ErrNotificationInProgress },
+		OnLockNotAcquired: func() error { return notification.ErrNotificationInProgress },
 		Collect: func(ctx context.Context) (weeklyCollected, bool, error) {
 			return s.weeklyNotificationInputs(ctx, weekStart, weekEnd, weekKey)
 		},
@@ -233,7 +233,7 @@ func (s *Scheduler) weeklyNotificationInputs(
 	return weeklyCollected{rooms: rooms, events: events}, true, nil
 }
 
-func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) (triggercontracts.Result, error) {
+func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) (notification.Result, error) {
 	return executePeriodNotification(ctx, periodNotification{
 		outboxRepository: s.outboxRepository,
 		outputGuard:      s.outputGuard,
@@ -270,12 +270,12 @@ type periodNotification struct {
 
 // executePeriodNotification은 enqueue 결과를 Result로 돌려주고, 일부 방 enqueue가 실패하면 이벤트 표시를 미룬다.
 // 표시 실패는 이미 enqueue된 알림을 되돌릴 수 없으므로 오류 대신 로그로만 남긴다.
-func executePeriodNotification(ctx context.Context, n periodNotification) (triggercontracts.Result, error) {
+func executePeriodNotification(ctx context.Context, n periodNotification) (notification.Result, error) {
 	domainEvents, eventIDs := toDomainEventsAndIDs(n.events)
 
 	message, err := n.message(ctx, domainEvents, n.periodKey)
 	if err != nil {
-		return triggercontracts.Result{}, fmt.Errorf("%s: format message: %w", n.errorPrefix, err)
+		return notification.Result{}, fmt.Errorf("%s: format message: %w", n.errorPrefix, err)
 	}
 
 	counts, shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
@@ -290,7 +290,7 @@ func executePeriodNotification(ctx context.Context, n periodNotification) (trigg
 		enqueueLogMsg:    n.enqueueLogMsg,
 		deferLogMsg:      n.deferLogMsg,
 	})
-	result := triggercontracts.NewResult(counts.Sent, counts.Skipped, counts.Failed)
+	result := notification.NewResult(counts.Sent, counts.Skipped, counts.Failed)
 
 	if err != nil {
 		return result, fmt.Errorf("%s: %w", n.errorPrefix, err)

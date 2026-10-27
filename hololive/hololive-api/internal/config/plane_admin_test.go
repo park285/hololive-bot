@@ -88,10 +88,9 @@ func TestAdminPlaneDefaultEnforcesCORSOrigins(t *testing.T) {
 	}
 }
 
-func TestAdminPlaneRequiresHolodexKeyAndRooms(t *testing.T) {
+func TestAdminPlaneRequiresHolodexKey(t *testing.T) {
 	for key, want := range map[string]string{
 		"HOLODEX_API_KEY": "HOLODEX_API_KEY is required",
-		"KAKAO_ROOMS":     "KAKAO_ROOMS is required",
 	} {
 		t.Run(key, func(t *testing.T) {
 			setAdminPlaneEnv(t)
@@ -102,20 +101,6 @@ func TestAdminPlaneRequiresHolodexKeyAndRooms(t *testing.T) {
 				t.Fatalf("admin plane load error = %v, want %q", err, want)
 			}
 		})
-	}
-}
-
-func TestAdminPlaneReadsCanonicalLLMSchedulerHealthURL(t *testing.T) {
-	setAdminPlaneEnv(t)
-	t.Setenv("SERVICES_LLM_SCHEDULER_HEALTH_URL", " https://llm.internal/health ")
-
-	config, err := loadAdminPlaneRuntime(t)
-	if err != nil {
-		t.Fatalf("admin plane load error = %v", err)
-	}
-
-	if config.Services.LLMSchedulerHealthURL != "https://llm.internal/health" {
-		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want canonical value", config.Services.LLMSchedulerHealthURL)
 	}
 }
 

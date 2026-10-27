@@ -27,12 +27,10 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 	return s.enabled, s.mode, rooms
 }
 
-// SetEnabled ACL 활성화/비활성화.
-// 같은 값이면 PG에 쓰지 않고 추종 인스턴스만 재동기화한다 — 앞선 요청이 ErrACLPropagation으로
-// 끝났을 때 같은 요청 재시도로 수렴시키기 위해서다. 추종 실패는 ErrACLPropagation으로 돌려준다.
+// SetEnabled ACL 활성화/비활성화. 같은 값이면 PG에 쓰지 않는다.
 func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
-	s.reloadMu.Lock()
-	defer s.reloadMu.Unlock()
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 
 	s.mu.RLock()
 
@@ -40,7 +38,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.mu.RUnlock()
 
 	if current == enabled {
-		return s.notifyChange(ctx)
+		return nil
 	}
 
 	if err := s.store.UpsertSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", enabled)); err != nil {
@@ -56,13 +54,13 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 		slog.Bool("enabled", enabled),
 	)
 
-	return s.notifyChange(ctx)
+	return nil
 }
 
-// SetMode ACL 모드 변경 (whitelist ↔ blacklist). 같은 값 재요청과 추종 실패는 SetEnabled와 같다.
+// SetMode ACL 모드 변경 (whitelist ↔ blacklist). 같은 값이면 PG에 쓰지 않는다.
 func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
-	s.reloadMu.Lock()
-	defer s.reloadMu.Unlock()
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 
 	normalizedMode, err := normalizeACLModeStrict(mode)
 	if err != nil {
@@ -75,7 +73,7 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	s.mu.RUnlock()
 
 	if current == normalizedMode {
-		return s.notifyChange(ctx)
+		return nil
 	}
 
 	if err := s.store.UpsertSetting(ctx, dbKeyMode, string(normalizedMode)); err != nil {
@@ -91,15 +89,14 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 		slog.String("mode", string(normalizedMode)),
 	)
 
-	return s.notifyChange(ctx)
+	return nil
 }
 
 // AddRoom 현재 활성 모드의 목록에 방 추가. 새 등록값은 chatID만 받는다(ErrInvalidRoomChatID).
-// 이미 있으면 PG에 쓰지 않고 추종 인스턴스만 재동기화한 뒤 false를 돌려준다(재시도 수렴 경로).
-// 추종 실패는 added 값과 함께 ErrACLPropagation으로 돌려준다 — added=true면 PG에는 이미 커밋됐다.
+// 이미 있으면 PG에 쓰지 않고 false를 돌려준다.
 func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
-	s.reloadMu.Lock()
-	defer s.reloadMu.Unlock()
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 
 	room = stringutil.TrimSpace(room)
 	if room == "" {
@@ -119,7 +116,7 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	if _, exists := targetRooms[room]; exists {
 		s.mu.Unlock()
 
-		return false, s.notifyChange(ctx)
+		return false, nil
 	}
 
 	s.mu.Unlock()
@@ -138,14 +135,14 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 		slog.String("list_type", listType),
 	)
 
-	return true, s.notifyChange(ctx)
+	return true, nil
 }
 
 // RemoveRoom 현재 활성 모드의 목록에서 방 제거. 저장 행은 migration 343 이후 모두 chatID이므로 AddRoom과 같은 형식을 요구한다.
-// 없으면 PG에 쓰지 않고 추종 인스턴스만 재동기화한 뒤 false를 돌려준다. 추종 실패는 AddRoom과 같다.
+// 없으면 PG에 쓰지 않고 false를 돌려준다.
 func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
-	s.reloadMu.Lock()
-	defer s.reloadMu.Unlock()
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 
 	room = stringutil.TrimSpace(room)
 	if room == "" {
@@ -176,7 +173,7 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 			return stored.RoomID == room && stored.ListType == listType
 		})
 		if !exists {
-			return false, s.notifyChange(ctx)
+			return false, nil
 		}
 	}
 
@@ -193,5 +190,5 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 		slog.String("list_type", listType),
 	)
 
-	return true, s.notifyChange(ctx)
+	return true, nil
 }

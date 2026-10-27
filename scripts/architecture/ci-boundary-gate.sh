@@ -13,7 +13,6 @@ step() {
 
 step "shared-go boundary" "${SCRIPT_DIR}/check-shared-go-boundary.sh"
 step "tracked local artifacts" "${SCRIPT_DIR}/check-tracked-local-artifacts.sh"
-step "internal route hardcoding" "${SCRIPT_DIR}/check-internal-route-hardcoding.sh"
 step "migration manifest" "${SCRIPT_DIR}/check-migration-manifest.sh"
 step "SQL ownership" "${SCRIPT_DIR}/check-sql-ownership.sh"
 step "runtime import boundaries" "${SCRIPT_DIR}/check-repository-ownership.sh"

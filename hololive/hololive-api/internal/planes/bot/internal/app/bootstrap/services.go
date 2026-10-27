@@ -10,15 +10,20 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	irisproviders "github.com/kapu/hololive-shared/pkg/providers/iris"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, infra *sharedmodules.InfraModule, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
+func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, infra *sharedmodules.InfraModule, deps PlaneDependencies, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
 	if infra == nil {
 		return nil, errors.New("shared infra must not be nil")
+	}
+
+	if deps.ACL == nil {
+		return nil, errors.New("acl service must not be nil")
 	}
 
 	owner := &botInfrastructureOwner{}
@@ -36,7 +41,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneCon
 
 	owner.irisClient = irisClient
 
-	infrastructure, err := buildBotInfrastructureServices(ctx, appConfig, logger, infra, irisClient, owner)
+	infrastructure, err := buildBotInfrastructureServices(ctx, appConfig, logger, infra, deps, irisClient, owner)
 	if err != nil {
 		return nil, fmt.Errorf("build bot infrastructure services: %w", err)
 	}
@@ -49,6 +54,7 @@ func buildBotInfrastructureServices(
 	appConfig *apiconfig.BotPlaneConfig,
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
+	planeDeps PlaneDependencies,
 	irisClient irisproviders.ManagedIrisClient,
 	owner *botInfrastructureOwner,
 ) (*BotInfrastructure, error) {
@@ -79,12 +85,12 @@ func buildBotInfrastructureServices(
 
 	owner.internalClients = append(owner.internalClients, alarmYouTubeStack.AlarmMode.AlarmClient)
 
-	integrationServices, err := InitCoreIntegrationServices(ctx, appConfig, infra, logger)
-	if err != nil {
-		return nil, fmt.Errorf("init core integration services: %w", err)
+	integrationServices := &CoreIntegrationServices{
+		ACLService:           planeDeps.ACL,
+		MajorEventRepository: planeDeps.MajorEvent,
+		MemberNewsService:    planeDeps.MemberNews,
+		CommandBuilders:      []orchcmd.CommandBuilder{},
 	}
-
-	owner.internalClients = append(owner.internalClients, integrationServices.SchedulerTransports...)
 
 	deps := BuildBotDependencies(
 		appConfig, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, messageStrings, irisClient, logger,

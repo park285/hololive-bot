@@ -32,7 +32,8 @@ func assertHololiveAPITrustDomainControls(t *testing.T, cfg renderedCompose) {
 	service := composeService(t, cfg, serviceHololiveAPI)
 	env := composeEnvironment(t, cfg, serviceHololiveAPI)
 
-	for _, port := range []string{"30003", "30006"} {
+	// llm plane(30003)은 container 안 healthcheck 전용이라 host에 publish하지 않는다.
+	for _, port := range []string{"30006"} {
 		assertRenderedPortOnHost(t, cfg, serviceHololiveAPI, "127.0.0.1", port, port, "tcp")
 		assertRenderedPortOnHost(t, cfg, serviceHololiveAPI, "127.0.0.1", port, port, "udp")
 	}

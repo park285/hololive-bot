@@ -2,7 +2,7 @@
 
 ## Summary
 
-`hololive-api`의 bot plane이 같은 프로세스의 llm plane에 major event 구독 상태를 조회/변경하는 internal HTTP JSON 계약입니다.
+`hololive-api`의 bot plane이 같은 프로세스 llm plane의 major event 구독 저장소를 직접 호출해 구독 상태를 조회·변경하는 in-process 계약입니다. HTTP 경로와 직렬화는 없습니다.
 
 ## Contract ID
 
@@ -10,58 +10,26 @@
 
 ## Provider
 
-- Service: `hololive-api` (llm plane)
-- Module: `hololive-api`
-- Runtime: `hololive-api`
+- Service: `hololive-api` (llm plane `majorevent.Repository`, `internal/planes/llm/internal/service/majorevent`)
 
 ## Consumers
 
-- Service: `hololive-api` (bot plane)
-- Module: `hololive-api`
+- Service: `hololive-api` (bot plane `handlercore.MajorEventRepository`)
 - Usage: major event subscription commands
 
-## Transport
+## Wiring
 
-- HTTP JSON with `X-API-Key`
-- Internal H3 options are passed from the bot plane's loaded config, and that plane owns its client timeout and transport cleanup.
-
-## Endpoint / Event / Queue
-
-| Field | Value |
-|---|---|
-| Path/Event/Queue | `/internal/majorevent/subscriptions` |
-| Method | `GET /subscriptions/:roomID`, `POST /subscriptions`, `DELETE /subscriptions/:roomID` |
-| Version | unversioned HTTP body; route constants in package |
-| Contract package | `hololive/hololive-api/internal/contracts/majorevent` |
-
-## Request
+`app.BuildRuntime`이 `LLMSchedulerRuntime.MajorEventSubscriptions`를 `botruntime.Dependencies.MajorEvent`로 넘깁니다.
 
 ```go
-type SubscribeRequest struct {
-    RoomID   string `json:"room_id"`
-    RoomName string `json:"room_name"`
+type MajorEventRepository interface {
+    IsSubscribed(ctx context.Context, roomID string) (bool, error)
+    Subscribe(ctx context.Context, roomID, roomName string) error
+    Unsubscribe(ctx context.Context, roomID string) error
 }
 ```
 
-## Response
-
-```go
-type SubscriptionStatusResponse struct {
-    Subscribed bool `json:"subscribed"`
-}
-```
-
-Subscribe/unsubscribe success currently returns `{"status":"subscribed"}` or `{"status":"unsubscribed"}`.
-
-## Error codes
-
-| Code | HTTP status | Meaning | Consumer behavior |
-|---|---:|---|---|
-| `invalid_request` | 400 | request JSON binding failed | surface command error |
-| `room_id_required` | 400 | missing room id | fix caller input |
-| `subscription_check_failed` | 500 | provider failed checking state | retry/manual diagnosis |
-| `subscribe_failed` | 500 | provider failed subscribing | retry/manual diagnosis |
-| `unsubscribe_failed` | 500 | provider failed unsubscribing | retry/manual diagnosis |
+오류는 bot 명령 오류 응답으로 드러나며 문자열 오류 코드 매핑은 없습니다.
 
 ## 링크 검사 HEAD→GET 예외 계약
 
@@ -78,22 +46,14 @@ llm plane의 major event 수집은 이벤트 링크를 HEAD로 확인합니다. 
 
 ## Timeout and retry policy
 
-- Timeout: consumer client uses 30 seconds.
-- Retry: no automatic client retry documented.
+- Timeout: bot 명령 실행 시한(worker profile `bot_webhook_inbox` executor `attempt_timeout`)을 그대로 따릅니다.
+- Retry: 자동 재시도는 없습니다.
 - Idempotency: subscription operations are expected to be safe at service level; exact DB idempotency 검토 필요.
 
 ## Compatibility policy
 
-- Additive response fields are allowed.
-- Removing or renaming JSON fields requires consumer update.
-- Version bump: no current HTTP body version; document before adding one.
+- 이전의 llm plane `/internal/majorevent/subscriptions` HTTP 경로와 `internal/contracts/majorevent` route 상수는 삭제했습니다.
 
 ## Tests
 
-- Provider route tests: `hololive/hololive-api/internal/planes/llm/runtime/providers_major_event_routes_test.go`
-- Consumer client tests: `hololive/hololive-api/internal/planes/bot/internal/client/majorevent/client_test.go`
-
-## Known gaps
-
-- No formal request/response version field.
-- Error response still uses `{ "error": string }`.
+- Repository: `hololive/hololive-api/internal/planes/llm/internal/service/majorevent/repository_test.go`, `repository_postgres_test.go`

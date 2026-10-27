@@ -1,13 +1,11 @@
 package adminruntime
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"log/slog"
 	"math/big"
 	"os"
@@ -21,7 +19,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -29,17 +26,6 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
-
-type memberNewsRunNowStub struct {
-	calls  int
-	err    error
-	result triggercontracts.Result
-}
-
-func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) (triggercontracts.Result, error) {
-	s.calls++
-	return s.result, s.err
-}
 
 func TestNormalizeRuntimeBuildInputsDefaultsTODOContext(t *testing.T) {
 	t.Parallel()
@@ -190,115 +176,6 @@ func TestBuildAdminAPIHTTPRuntimeCleansUpInfraOnRouterFailure(t *testing.T) {
 	}
 }
 
-func TestBotSettingsApplierMemberNewsRunNowPaths(t *testing.T) {
-	t.Parallel()
-
-	base := sharedsettings.NewLocalSettingsApplier(nil)
-
-	unconfigured := newBotSettingsApplier(base, nil, nil)
-	unconfiguredResult := unconfigured.ApplyMemberNewsWeeklyRunNow(t.Context())
-
-	if unconfiguredResult.Applied {
-		t.Fatal("unconfigured member news trigger unexpectedly applied")
-	}
-
-	if unconfiguredResult.Reason != "member news trigger is not configured" {
-		t.Fatalf("unconfigured reason = %q", unconfiguredResult.Reason)
-	}
-
-	trigger := &memberNewsRunNowStub{}
-	configured := newBotSettingsApplier(base, trigger, slog.New(slog.DiscardHandler))
-	successResult := configured.ApplyMemberNewsWeeklyRunNow(t.Context())
-
-	if !successResult.Applied {
-		t.Fatalf("configured result = %+v", successResult)
-	}
-
-	if successResult.Source != "member_news_trigger" {
-		t.Fatalf("configured source = %q", successResult.Source)
-	}
-
-	if trigger.calls != 1 {
-		t.Fatalf("trigger calls = %d, want 1", trigger.calls)
-	}
-
-	trigger.err = errors.New("trigger failed")
-
-	failedResult := configured.ApplyMemberNewsWeeklyRunNow(t.Context())
-
-	if failedResult.Applied {
-		t.Fatal("failed trigger unexpectedly applied")
-	}
-
-	if failedResult.Reason != "member news trigger failed" {
-		t.Fatalf("failed reason = %q", failedResult.Reason)
-	}
-
-	if failedResult.Error != "trigger failed" {
-		t.Fatalf("failed error = %q", failedResult.Error)
-	}
-}
-
-// 부분 실패나 전부 skip인 trigger 결과도 적용된 실행으로 보고하고 원래 집계를 그대로 전달한다.
-func TestBotSettingsApplierRunNowPreservesPartialAndSkippedResults(t *testing.T) {
-	t.Parallel()
-
-	base := sharedsettings.NewLocalSettingsApplier(nil)
-
-	for _, outcome := range []triggercontracts.Result{
-		triggercontracts.NewResult(2, 0, 1),
-		triggercontracts.NewResult(0, 3, 0),
-	} {
-		trigger := &memberNewsRunNowStub{result: outcome}
-		result := newBotSettingsApplier(base, trigger, slog.New(slog.DiscardHandler)).ApplyMemberNewsWeeklyRunNow(t.Context())
-
-		if !result.Applied || result.Trigger == nil || *result.Trigger != outcome || trigger.calls != 1 {
-			t.Fatalf("run-now result = %+v (calls=%d), want applied with trigger %+v", result, trigger.calls, outcome)
-		}
-	}
-}
-
-func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
-	t.Parallel()
-
-	alarmMode := &alarmModeComponents{}
-	logger := slog.New(slog.DiscardHandler)
-
-	applier, triggerClient, err := buildAdminAPISettingsApplier(&apiconfig.AdminPlaneConfig{}, alarmMode, logger)
-	if err != nil {
-		t.Fatalf("buildAdminAPISettingsApplier() error = %v", err)
-	}
-
-	if applier == nil {
-		t.Fatal("buildAdminAPISettingsApplier() returned nil applier")
-	}
-
-	if triggerClient != nil {
-		t.Fatal("buildAdminAPISettingsApplier() returned trigger client for empty URL")
-	}
-
-	result := applier.ApplyMemberNewsWeeklyRunNow(t.Context())
-	if result.Applied {
-		t.Fatalf("empty URL member news result = %+v", result)
-	}
-
-	applier, triggerClient, err = buildAdminAPISettingsApplier(&apiconfig.AdminPlaneConfig{
-		LLMSchedulerURL: "http://127.0.0.1:1",
-		Server:          settings.ServerConfig{APIKey: testAPIKey},
-	}, alarmMode, logger)
-	if err != nil {
-		t.Fatalf("buildAdminAPISettingsApplier() with URL error = %v", err)
-	}
-
-	if applier == nil {
-		t.Fatal("buildAdminAPISettingsApplier() returned nil applier with URL")
-	}
-
-	if triggerClient == nil {
-		t.Fatal("buildAdminAPISettingsApplier() returned nil trigger client with URL")
-	}
-}
-
 func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -327,12 +204,8 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 		alarmMode,
 		nil,
 		nil,
-		nil,
 		settingsService,
 		settingsApplier,
-		buildAdminAPISystemCollector(appConfig),
-		nil,
-		nil,
 		logger,
 	)
 	if handler == nil {
@@ -346,10 +219,6 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 
 	if router == nil {
 		t.Fatal("buildAdminAPIRouter() returned nil router")
-	}
-
-	if _, err := buildAdminAPICommunityShortsOpsRepository(infra); err == nil {
-		t.Fatal("community shorts repository must reject a missing postgres pool")
 	}
 }
 
@@ -386,23 +255,5 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 
 	if err := runtime.ShutdownHTTPServer(t.Context()); err != nil {
 		t.Fatalf("ShutdownHTTPServer() error = %v", err)
-	}
-}
-
-// 설정된 bot 내부 URL로 joined-rooms client를 만들지 못하면 endpoint를 조용히 끄지 않고 기동 오류다. 내부 H3 env는
-// https URL에 명시적으로 전달한다.
-func TestBuildAdminAPIBotRoomListerFailsWithoutInternalH3Options(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.DiscardHandler)
-
-	lister, err := buildAdminAPIBotRoomLister(&apiconfig.AdminPlaneConfig{BotInternalURL: "https://127.0.0.1:30001"}, logger)
-	if err == nil || lister != nil {
-		t.Fatalf("buildAdminAPIBotRoomLister(https) = (%v, %v), want missing internal H3 options error", lister, err)
-	}
-
-	lister, err = buildAdminAPIBotRoomLister(&apiconfig.AdminPlaneConfig{}, logger)
-	if err != nil || lister != nil {
-		t.Fatalf("buildAdminAPIBotRoomLister(unset) = (%v, %v), want disabled without error", lister, err)
 	}
 }

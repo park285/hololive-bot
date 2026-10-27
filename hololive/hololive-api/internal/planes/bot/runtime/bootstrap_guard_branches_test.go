@@ -29,9 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func testBootstrapGuardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
@@ -45,7 +43,7 @@ func canceledContext() context.Context {
 func TestInitBotInfrastructureRequiresProcessResources(t *testing.T) {
 	t.Parallel()
 
-	infra, err := appbootstrap.InitBotInfrastructure(canceledContext(), &apiconfig.BotPlaneConfig{}, nil, testBootstrapGuardLogger())
+	infra, err := appbootstrap.InitBotInfrastructure(canceledContext(), &apiconfig.BotPlaneConfig{}, nil, appbootstrap.PlaneDependencies{}, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Nil(t, infra)
 	assert.ErrorContains(t, err, "shared infra must not be nil")
@@ -54,17 +52,10 @@ func TestInitBotInfrastructureRequiresProcessResources(t *testing.T) {
 func TestBuildRuntimeRequiresProcessResources(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := BuildRuntime(canceledContext(), &apiconfig.BotPlaneConfig{}, nil, testBootstrapGuardLogger())
+	runtime, err := BuildRuntime(canceledContext(), &apiconfig.BotPlaneConfig{}, nil, Dependencies{}, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "shared infra must not be nil")
-}
-
-func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
-	t.Parallel()
-
-	handler := apiserver.NewTriggerHandler(nil, nil, nil, testBootstrapGuardLogger())
-	require.NotNil(t, handler)
 }
 
 func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
@@ -74,34 +65,4 @@ func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "create bot")
-}
-
-func TestResolveLLMSchedulerClients_Guards(t *testing.T) {
-	t.Parallel()
-
-	clients, err := appbootstrap.ResolveLLMSchedulerClients(&apiconfig.BotPlaneConfig{}, testBootstrapGuardLogger())
-	require.NoError(t, err)
-	assert.Nil(t, clients.MajorEvent)
-	assert.Nil(t, clients.MemberNews)
-
-	clients, err = appbootstrap.ResolveLLMSchedulerClients(&apiconfig.BotPlaneConfig{
-		LLMSchedulerURL: "http://localhost:18080",
-		Server:          configsettings.ServerConfig{APIKey: "test-api-key"},
-	}, testBootstrapGuardLogger())
-	require.NoError(t, err)
-	assert.NotNil(t, clients.MajorEvent)
-	assert.NotNil(t, clients.MemberNews)
-}
-
-// https LLM scheduler URL이 설정됐는데 내부 H3 env가 없으면 명령을 조용히 끄거나 TCP client로 내려가지 않고
-// 기동 오류다.
-func TestResolveLLMSchedulerClientsFailsWithoutInternalH3Options(t *testing.T) {
-	clients, err := appbootstrap.ResolveLLMSchedulerClients(&apiconfig.BotPlaneConfig{
-		LLMSchedulerURL: "https://127.0.0.1:30003",
-		Server:          configsettings.ServerConfig{APIKey: "test-api-key"},
-	}, testBootstrapGuardLogger())
-	require.Error(t, err)
-	require.ErrorContains(t, err, "configure major event client transport")
-	assert.Nil(t, clients.MajorEvent)
-	assert.Nil(t, clients.MemberNews)
 }

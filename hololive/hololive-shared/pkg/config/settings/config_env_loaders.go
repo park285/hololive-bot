@@ -108,16 +108,15 @@ func LoadServerConfigWithAPIKey(apiKey string) (ServerConfig, error) {
 
 	port := env.Int("SERVER_PORT", 30001)
 	config := ServerConfig{
-		Port:                    port,
-		APIKey:                  apiKey,
-		HTTPTransports:          envload.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
-		H3Addr:                  sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
-		H3CertFile:              strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
-		H3KeyFile:               strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
-		ShortLinkAddr:           strings.TrimSpace(sharedenv.String("HOLOLIVE_SHORT_LINK_ADDR", "")),
-		MetricsAddr:             strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
-		PprofAddr:               strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
-		WebSocketAllowedOrigins: envload.CommaSeparated(sharedenv.String("WEBSOCKET_ALLOWED_ORIGINS", "")),
+		Port:           port,
+		APIKey:         apiKey,
+		HTTPTransports: envload.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
+		H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
+		H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
+		H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
+		ShortLinkAddr:  strings.TrimSpace(sharedenv.String("HOLOLIVE_SHORT_LINK_ADDR", "")),
+		MetricsAddr:    strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
+		PprofAddr:      strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
 	}
 
 	if err := env.Err(); err != nil {

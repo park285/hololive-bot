@@ -46,12 +46,6 @@ func TestConfigurePlanesRejectsInvalidEnvValues(t *testing.T) {
 			if !strings.Contains(err.Error(), key) {
 				t.Fatalf("configurePlanes() error = %v, want it to name %s", err, key)
 			}
-
-			// 파싱이 실패한 포트로 loopback URL을 조립하면 안 된다.
-			if adminConfig.BotInternalURL != "" || botConfig.LLMSchedulerURL != "" || adminConfig.LLMSchedulerURL != "" {
-				t.Fatalf("configurePlanes() built loopback URLs after a parse error: bot internal %q, llm %q/%q",
-					adminConfig.BotInternalURL, botConfig.LLMSchedulerURL, adminConfig.LLMSchedulerURL)
-			}
 		})
 	}
 }

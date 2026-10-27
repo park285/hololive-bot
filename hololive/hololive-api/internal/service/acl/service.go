@@ -159,13 +159,9 @@ type Service struct {
 	store  aclStore
 	logger *slog.Logger
 
-	// changeListeners는 mutation이 PG에 반영된 직후 동기 호출된다(Follow 참고).
-	// 오류는 mutation 호출자에게 ErrACLPropagation으로 전달된다.
-	changeListeners []func(context.Context) error
-
-	// reloadMu는 mutation의 PG 커밋~메모리 적용과 Reload의 PG 읽기~메모리 적용을 직렬화한다.
-	// 메모리의 선행 변경이나 오래된 Reload가 최신 PG 커밋을 덮어쓰면 권한 철회가 유실된다.
-	reloadMu sync.Mutex
+	// mutationMu는 mutation의 PG 커밋~메모리 적용을 직렬화한다. 한 프로세스에 Service가 하나뿐이라
+	// admin 변경은 메모리 적용 뒤 같은 인스턴스를 쓰는 bot 판정에 바로 보인다.
+	mutationMu sync.Mutex
 
 	// 메모리 캐시 (빠른 조회용)
 	mu             sync.RWMutex

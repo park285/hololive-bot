@@ -44,8 +44,6 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 		acl:    &acl.Service{},
 	}
 
-	noticeParams := gin.Params{{Key: templateKeyParam, Value: "notice"}}
-
 	testCases := []struct {
 		name   string
 		path   string
@@ -57,8 +55,6 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 		{"room remove", "/api/holo/rooms/remove", nil, base.DomainHandlers().Room.RemoveRoom},
 		{"room acl", "/api/holo/rooms/acl", nil, base.DomainHandlers().Room.SetACL},
 		{"member add", "/api/holo/members", nil, base.DomainHandlers().Member.AddMember},
-		{"template upsert", "/api/holo/templates/notice", noticeParams, base.DomainHandlers().Template.UpsertTemplate},
-		{"template preview", "/api/holo/templates/notice/preview", noticeParams, base.DomainHandlers().Template.PreviewTemplate},
 	}
 
 	for _, tc := range testCases {

@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -136,12 +135,7 @@ func newAliasOperationTestHandler(t *testing.T) *MemberHandler {
 
 	t.Cleanup(memberCache.Close)
 
-	activityLogger := activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), logger)
-	t.Cleanup(func() {
-		if closeErr := activityLogger.Close(); closeErr != nil {
-			t.Error(closeErr)
-		}
-	})
+	activityLogger := activity.NewActivityLogger(logger)
 
 	return (&Handler{
 		repository:  &member.Repository{},

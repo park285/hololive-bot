@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 

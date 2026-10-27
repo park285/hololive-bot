@@ -41,11 +41,7 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 		"GET /api/holo/members",
 		"DELETE /api/holo/alarms",
 		"POST /api/holo/rooms/acl",
-		"GET /api/holo/stats/youtube/community-shorts",
 		"GET /api/holo/streams/live",
-		"POST /api/holo/settings/llm",
-		"POST /api/holo/templates/:key/preview",
-		"POST /api/holo/majorevent/monthly-trigger",
 	}
 	for _, route := range expectedRoutes {
 		if _, ok := routeSet[route]; !ok {
@@ -101,8 +97,6 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 		{name: "stream", mutate: func(h *server.DomainHandlers) { h.Stream = nil }, wantErr: "stream handler must not be nil"},
 		{name: "stats", mutate: func(h *server.DomainHandlers) { h.Stats = nil }, wantErr: "stats handler must not be nil"},
 		{name: "settings", mutate: func(h *server.DomainHandlers) { h.Settings = nil }, wantErr: "settings handler must not be nil"},
-		{name: "template", mutate: func(h *server.DomainHandlers) { h.Template = nil }, wantErr: "template handler must not be nil"},
-		{name: "major event", mutate: func(h *server.DomainHandlers) { h.MajorEvent = nil }, wantErr: "major event handler must not be nil"},
 	}
 
 	for _, tt := range tests {

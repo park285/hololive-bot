@@ -33,7 +33,6 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
-	"github.com/kapu/hololive-api/internal/service/acl"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -103,7 +102,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 	)
 
 	if appConfig.Server.TransportEnabled("h3") {
-		h3Server, h3CertReloadStart, err = appbootstrap.BuildBotHTTP3Server(ctx, appConfig, webhookHandler, nil, infra.IrisRoomLister, logger, readyProbe)
+		h3Server, h3CertReloadStart, err = appbootstrap.BuildBotHTTP3Server(ctx, appConfig, webhookHandler, logger, readyProbe)
 		if err != nil {
 			return nil, fmt.Errorf("build bot HTTP3 server: %w", err)
 		}
@@ -111,14 +110,13 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 
 	metricsServer, pprofServer := buildBotOptionalServers(ctx, appConfig)
 
-	return assembleBotRuntime(appConfig, logger, botBot, infra.Deps.ACL, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
+	return assembleBotRuntime(appConfig, logger, botBot, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
 }
 
 func assembleBotRuntime(
 	appConfig *apiconfig.BotPlaneConfig,
 	logger *slog.Logger,
 	botBot *orchestration.Bot,
-	aclService *acl.Service,
 	h3Server *http3.Server,
 	h3CertReloadStart func(context.Context),
 	metricsServer, pprofServer *http.Server,
@@ -129,7 +127,6 @@ func assembleBotRuntime(
 		Config:               appConfig,
 		Logger:               logger,
 		Bot:                  botBot,
-		ACL:                  aclService,
 		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
 		ShortLinkServer:      appbootstrap.BuildShortLinkServer(appConfig.Server.ShortLinkAddr),

@@ -30,10 +30,6 @@ func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes i
 	}, nil
 }
 
-func (testSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {
-	return sharedsettings.MemberNewsWeeklyRunNowResult{Applied: true}
-}
-
 func (testSettingsApplier) SettingsRuntimeState() sharedsettings.SettingsRuntimeStateResult {
 	return sharedsettings.SettingsRuntimeStateResult{}
 }
@@ -175,7 +171,7 @@ func TestSettingsHandler_SetRoomName_LogsMaskedRoomID(t *testing.T) {
 		// 운영 배선과 같은 stdout 전용 activity logger라 activity 줄도 같은 버퍼에서 함께 검사한다.
 		handler := &SettingsHandler{
 			Logger:   logger,
-			Activity: activity.NewActivityLogger("", logger),
+			Activity: activity.NewActivityLogger(logger),
 			Alarm:    &roomNameRecordingAlarm{},
 		}
 

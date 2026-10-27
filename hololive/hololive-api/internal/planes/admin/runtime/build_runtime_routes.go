@@ -4,26 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	botroomsclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms"
-	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops"
-	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/kapu/hololive-shared/pkg/repository"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 func buildAdminHandler(
@@ -31,19 +25,15 @@ func buildAdminHandler(
 	foundation *apifoundation.ScraperHolodexFoundation,
 	alarmMode *alarmModeComponents,
 	aclService *acl.Service,
-	irisRoomClient server.IrisRoomLister,
-	communityShortsOpsRepository server.YouTubeCommunityShortsOpsRepository,
+	irisRooms IrisRoomLister,
 	settingsService settingssvc.ReadWriter,
 	settingsApplier sharedsettings.SettingsApplier,
-	systemCollector *system.Collector,
-	templateAdmin *template.AdminService,
-	majorEventTriggerClient *triggerclient.Client,
 	logger *slog.Logger,
 ) *server.Handler {
 	return server.NewHandler(&server.HandlerDeps{
 		Common: server.CommonDeps{
 			Logger:   logger,
-			Activity: activity.NewActivityLogger("", logger),
+			Activity: activity.NewActivityLogger(logger),
 		},
 		Member: server.MemberDeps{
 			Repository: infra.MemberRepository,
@@ -53,66 +43,16 @@ func buildAdminHandler(
 			Holodex: foundation.HolodexService,
 		},
 		Stats: server.StatsDeps{
-			Alarm:       alarmMode.AlarmClient,
-			ACL:         aclService,
-			Iris:        irisRoomClient,
-			SystemStats: systemCollector,
+			Alarm: alarmMode.AlarmClient,
+			ACL:   aclService,
+			Iris:  irisRooms,
 		},
 		Settings: server.SettingsDeps{
 			Settings:  settingsService,
 			Applier:   settingsApplier,
 			RoomNames: alarmMode.AlarmClient,
 		},
-		Template: server.TemplateDeps{
-			Admin: templateAdmin,
-		},
-		MajorEvent: server.MajorEventDeps{
-			Scheduler:        majorEventTriggerClient,
-			MonthlyScheduler: majorEventTriggerClient,
-		},
-		YouTubeOps: server.YouTubeOpsDeps{
-			CommunityShortsOps: communityShortsOpsRepository,
-		},
 	})
-}
-
-// buildAdminAPIBotRoomLister는 bot 내부 URL이 설정된 경우에만 joined-rooms client를 만든다. 설정된 URL로 client를
-// 만들지 못하면(허용되지 않은 URL, HOLOLIVE_INTERNAL_H3_* 누락 포함) 경고 뒤 endpoint를 끄지 않고 오류로 기동을
-// 실패시킨다.
-func buildAdminAPIBotRoomLister(appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger) (server.IrisRoomLister, error) {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	if appConfig == nil {
-		logger.Warn("admin api bot room client unavailable; config is nil")
-
-		return nil, nil //nolint:nilnil // 설정이 없으면 joined-rooms endpoint를 끄는 계약값이며 오류가 아니다.
-	}
-
-	botURL := strings.TrimSpace(appConfig.BotInternalURL)
-	if botURL == "" {
-		logger.Warn("admin api bot room client unavailable; joined-rooms endpoint disabled")
-
-		return nil, nil //nolint:nilnil // bot 내부 URL 미설정은 joined-rooms endpoint를 끄는 계약값이며 오류가 아니다.
-	}
-
-	client, err := botroomsclient.NewClient(botURL, appConfig.Server.APIKey, appConfig.InternalH3)
-	if err != nil {
-		return nil, fmt.Errorf("build admin api bot room client: %w", err)
-	}
-
-	return client, nil
-}
-
-func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {
-	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
-
-	return template.NewAdminService(
-		repository.NewTemplateRepository(infra.Postgres.GetPool(), logger),
-		templateRenderer,
-		logger,
-	)
 }
 
 func buildAdminAPIRouter(

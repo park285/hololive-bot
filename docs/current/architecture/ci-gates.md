@@ -35,7 +35,6 @@ NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분
 
 | 검사 | 스크립트 | 실패 조건 |
 |---|---|---|
-| 내부 route 상수 | `check-internal-route-hardcoding.sh` | 허용된 파일 밖에서 내부 route를 하드코딩함 |
 | 저장소 소유권 | `check-repository-ownership.sh` | hololive-api나 shared template 실행기가 `os/exec`·`plugin`을 import하거나, bot/admin plane이 major event 저장소에 직접 접근함 |
 
 ## 로컬 실행

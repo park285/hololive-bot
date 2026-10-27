@@ -3,7 +3,7 @@ package model_test
 import (
 	"testing"
 
-	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	model "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
 func TestNormalizePeriod(t *testing.T) {

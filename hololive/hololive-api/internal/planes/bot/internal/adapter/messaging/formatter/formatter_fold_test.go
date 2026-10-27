@@ -29,8 +29,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -113,7 +113,7 @@ func TestListFoldingUsesDisplayedCountRegardlessOfLength(t *testing.T) {
 					return f.BroadcastHistory(t.Context(), BroadcastHistoryFilter{MemberName: strings.Repeat("긴 필터", 100)}, history)
 				},
 				"news": func(f *ResponseFormatter) string {
-					return f.FormatMemberNewsDigest(t.Context(), &membernewscontracts.Digest{TopItems: make([]membernewscontracts.SummaryItem, tc.count), TotalCount: 100})
+					return f.FormatMemberNewsDigest(t.Context(), &membernewsmodel.Digest{TopItems: make([]membernewsmodel.SummaryItem, tc.count), TotalCount: 100})
 				},
 			}
 			for name, call := range calls {
@@ -160,7 +160,7 @@ func TestDetailAndNewsSummaryFolding(t *testing.T) {
 		f := NewResponseFormatter("!", renderer, WithSeeMoreFold(true))
 		assertFoldedBody(t, f.FormatHelp(t.Context()), body, true)
 		assertFoldedBody(t, f.FormatMemberInfo(t.Context(), &domain.Member{Name: "멤버"}), body, true)
-		assertFoldedBody(t, f.FormatMemberNewsDigest(t.Context(), &membernewscontracts.Digest{TopItems: []membernewscontracts.SummaryItem{{Title: "항목"}}, MoreSummary: "추가 소식"}), body, true)
+		assertFoldedBody(t, f.FormatMemberNewsDigest(t.Context(), &membernewsmodel.Digest{TopItems: []membernewsmodel.SummaryItem{{Title: "항목"}}, MoreSummary: "추가 소식"}), body, true)
 	}
 }
 
@@ -171,7 +171,7 @@ func TestRenderFailureStaysUnfolded(t *testing.T) {
 
 func TestNormalEmptyNewsUsesUnfoldedTemplateNotice(t *testing.T) {
 	f := NewResponseFormatter("!", template.NewRenderer(dbtest.NewPool(t), slog.New(slog.DiscardHandler)), WithSeeMoreFold(true))
-	got := f.FormatMemberNewsDigest(t.Context(), &membernewscontracts.Digest{Headline: "뉴스"})
+	got := f.FormatMemberNewsDigest(t.Context(), &membernewsmodel.Digest{Headline: "뉴스"})
 	assert.Contains(t, got, "표시할 뉴스가 없습니다.")
 	assert.NotContains(t, got, strings.Repeat("\u200b", 500))
 }

@@ -36,12 +36,6 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-// aclBotResyncFailedCode는 같은 프로세스의 봇 plane ACL 재동기화(PG reload)가 실패했음을 뜻하는 안정 오류 코드다
-// (acl.ErrACLPropagation). 요청한 변경은 PostgreSQL에 저장됐을 수도 있고(첫 요청), 이미 같은 상태라 쓰기 없이
-// 재동기화만 시도했을 수도 있다(재시도·중복 요청). 같은 요청을 다시 보내면 PG 쓰기 없이 재동기화를 다시 시도하고
-// 원래 결과(200 no-op/404/409)를 돌려준다.
-const aclBotResyncFailedCode = "acl_bot_resync_failed"
-
 type setACLRequest struct {
 	Enabled *bool   `json:"enabled"`
 	Mode    *string `json:"mode"`
@@ -227,19 +221,9 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
 }
 
-// respondACLMutationError는 ACL mutation 오류를 500으로 응답한다. 봇 plane 재동기화 실패는 저장 실패와 구분되는
-// aclBotResyncFailedCode로 알려, 호출자가 같은 요청 재시도로 수렴시키게 한다.
+// respondACLMutationError는 ACL mutation 오류를 500으로 응답한다.
 func (h *RoomHandler) respondACLMutationError(ctx context.Context, c *gin.Context, err error, failMessage string, attrs ...slog.Attr) {
 	attrs = append(attrs, slog.Any("error", err))
-
-	if errors.Is(err, acl.ErrACLPropagation) {
-		h.safeLogger().LogAttrs(ctx, slog.LevelError, "ACL bot-plane resync failed", attrs...)
-		sharedserver.RespondError(c, http.StatusInternalServerError, aclBotResyncFailedCode, gin.H{
-			"message": "the bot has not applied the current ACL (the requested change may already be saved); retry the same request",
-		})
-
-		return
-	}
 
 	h.safeLogger().LogAttrs(ctx, slog.LevelError, failMessage, attrs...)
 	sharedserver.RespondError(c, http.StatusInternalServerError, failMessage, nil)
@@ -295,7 +279,7 @@ func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 		return true
 	}
 
-	// 오류 응답을 보낸 뒤에도 이미 커밋된 부분(예: enabled만 저장되고 mode 저장·재동기화 실패)은 감사 기록에 남긴다.
+	// 오류 응답을 보낸 뒤에도 이미 커밋된 부분(예: enabled만 저장되고 mode 저장 실패)은 감사 기록에 남긴다.
 	// 호출자가 재시도하지 않으면 이 변경의 activity가 남지 않기 때문이다.
 	h.logCommittedACLChange(beforeEnabled, beforeMode)
 
@@ -308,7 +292,7 @@ func (h *RoomHandler) logCommittedACLChange(beforeEnabled bool, beforeMode acl.A
 		return
 	}
 
-	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s (bot resync or later step failed)", enabled, mode),
+	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s (later step failed)", enabled, mode),
 		map[string]any{"enabled": enabled, "mode": string(mode), "partial": true})
 }
 

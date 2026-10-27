@@ -42,22 +42,6 @@ func (h *StatsHandler) safeLogger() *slog.Logger {
 	return loggerOrDefault(h.logger)
 }
 
-func (h *TemplateHandler) safeLogger() *slog.Logger {
-	if h == nil {
-		return slog.Default()
-	}
-
-	return loggerOrDefault(h.logger)
-}
-
-func (h *MajorEventHandler) safeLogger() *slog.Logger {
-	if h == nil {
-		return slog.Default()
-	}
-
-	return loggerOrDefault(h.logger)
-}
-
 func (h *AlarmHandler) logActivity(kind, summary string, details map[string]any) {
 	if h != nil && h.activity != nil {
 		h.activity.Log(kind, summary, details)

@@ -41,13 +41,20 @@ type AlarmModeComponents struct {
 	AlarmClient io.Closer
 }
 
+// PlaneDependencies는 process 조립이 소유하고 bot plane이 빌려 쓰는 in-process 의존성이다.
+// ACL은 admin plane과 같은 인스턴스이고, MajorEvent·MemberNews는 같은 프로세스 llm plane의 구독 저장소와
+// digest 서비스다. 둘 중 하나가 nil이면 해당 명령은 꺼진다.
+type PlaneDependencies struct {
+	ACL        *acl.Service
+	MajorEvent handlercore.MajorEventRepository
+	MemberNews handlercore.MemberNewsService
+}
+
 type CoreIntegrationServices struct {
 	ACLService           *acl.Service
 	MajorEventRepository handlercore.MajorEventRepository
 	MemberNewsService    handlercore.MemberNewsService
-	// SchedulerTransports는 llm-scheduler client의 H3 transport다. bot plane Close에서 닫는다.
-	SchedulerTransports []io.Closer
-	CommandBuilders     []orchcmd.CommandBuilder
+	CommandBuilders      []orchcmd.CommandBuilder
 }
 
 type BotWebhookRuntimeDependencies struct {

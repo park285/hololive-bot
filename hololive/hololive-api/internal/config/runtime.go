@@ -144,17 +144,6 @@ func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig, l
 		return err
 	}
 
-	if strings.TrimSpace(adminConfig.BotInternalURL) == "" {
-		adminConfig.BotInternalURL = fmt.Sprintf("https://127.0.0.1:%d", botPort)
-	}
-
-	// 전체 기동에서는 llm plane이 같은 프로세스에 있으므로 plane 로더가 읽은 LLM_SCHEDULER_INTERNAL_URL을 loopback으로 대체한다.
-	llmLoopbackURL := fmt.Sprintf("https://127.0.0.1:%d", llmPort)
-
-	botConfig.LLMSchedulerURL = llmLoopbackURL
-	adminConfig.LLMSchedulerURL = llmLoopbackURL
-	adminConfig.Services.LLMSchedulerHealthURL = llmLoopbackURL + "/health"
-
 	return nil
 }
 

@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
@@ -14,6 +18,7 @@ import (
 
 	runtimeapp "github.com/kapu/hololive-api/internal/app"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
@@ -39,6 +44,10 @@ func main() {
 
 		return nil
 	}); handled {
+		os.Exit(exitCode)
+	}
+
+	if handled, exitCode := runNotificationRerun(os.Args[1:], os.Stdout, os.Stderr, rerunNotification); handled {
 		os.Exit(exitCode)
 	}
 
@@ -151,4 +160,72 @@ func runConfigCheck(args []string, stderr io.Writer, load func() error) (handled
 	}
 
 	return true, 0
+}
+
+const rerunNotificationFlag = "--rerun-notification="
+
+// notificationRerunTimeout은 수동 재실행 한 번의 상한이다. 방별 LLM 요약과 outbox 적재가 중간에 끊기면 일부 방만
+// 적재되므로 signal로 취소하지 않고 이 시한으로만 끊는다(정기 실행 trigger와 같은 5분).
+const notificationRerunTimeout = 5 * time.Minute
+
+// runNotificationRerun은 `hololive-api --rerun-notification=<kind>` 운영 명령이다. 결과 JSON을 stdout에 쓴다.
+// exit 0은 오류 없이 끝났다는 뜻이며 일부 방 실패는 결과의 status(partial)와 failed로 보인다. 같은 주·월 알림이 이미
+// 실행 중이면 exit 2, 그 밖의 실패는 exit 1이다.
+func runNotificationRerun(args []string, stdout, stderr io.Writer, run func(context.Context, string) (notification.Result, error)) (handled bool, exitCode int) {
+	if len(args) != 1 {
+		return false, 0
+	}
+
+	kind, ok := strings.CutPrefix(args[0], rerunNotificationFlag)
+	if !ok {
+		return false, 0
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), notificationRerunTimeout)
+	defer cancel()
+
+	result, err := run(ctx, kind)
+	if err != nil {
+		code := 1
+		if errors.Is(err, notification.ErrNotificationInProgress) {
+			code = 2
+		}
+
+		if _, writeErr := fmt.Fprintf(stderr, "hololive-api notification rerun failed: %v\n", err); writeErr != nil {
+			return true, 1
+		}
+
+		return true, code
+	}
+
+	if err := jsonv2.MarshalWrite(stdout, result); err != nil {
+		return true, 1
+	}
+
+	if _, err := fmt.Fprintln(stdout); err != nil {
+		return true, 1
+	}
+
+	return true, 0
+}
+
+func rerunNotification(ctx context.Context, kind string) (notification.Result, error) {
+	config, err := apiconfig.LoadRuntime()
+	if err != nil {
+		return notification.Result{}, fmt.Errorf("load hololive api runtime: %w", err)
+	}
+
+	logger, closer, err := newHololiveAPILogger(config)
+	if err != nil {
+		return notification.Result{}, err
+	}
+
+	defer func() { _ = closer.Close() }()
+
+	result, err := runtimeapp.RerunNotification(ctx, config, kind, logger)
+	if err != nil {
+		return result, fmt.Errorf("rerun notification: %w", err)
+	}
+
+	return result, nil
 }

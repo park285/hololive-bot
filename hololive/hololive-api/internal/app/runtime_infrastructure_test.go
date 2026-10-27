@@ -43,7 +43,7 @@ func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
 	valkey := settings.ValkeyConfig{Host: host, Port: port}
 
 	return &apiconfig.RuntimeConfig{
-		Bot:   &apiconfig.BotPlaneConfig{Postgres: postgres, Valkey: valkey},
+		Bot:   &apiconfig.BotPlaneConfig{Postgres: postgres, Valkey: valkey, Kakao: settings.KakaoConfig{ACLEnabled: true, ACLMode: "whitelist"}},
 		Admin: &apiconfig.AdminPlaneConfig{Postgres: postgres, Valkey: valkey},
 		LLM:   &apiconfig.LLMSchedulerConfig{Postgres: postgres, Valkey: valkey},
 	}
@@ -90,6 +90,14 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 		require.Equal(t, int32(0), pools[i].Config().MinConns)
 		require.Equal(t, time.Second, pools[i].Config().PingTimeout)
 	}
+
+	// ACL은 process에 하나만 있고, 관리 변경은 같은 인스턴스의 판정에 바로 보인다.
+	require.NotNil(t, infra.acl)
+	require.False(t, infra.acl.IsRoomAllowed("3001"))
+	added, err := infra.acl.AddRoom(t.Context(), "3001")
+	require.NoError(t, err)
+	require.True(t, added)
+	require.True(t, infra.acl.IsRoomAllowed("3001"))
 
 	_, err = infra.llm.MemberCache.LoadAllMembers(t.Context())
 	require.NoError(t, err)

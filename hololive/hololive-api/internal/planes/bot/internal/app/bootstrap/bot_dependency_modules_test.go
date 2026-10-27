@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -77,19 +76,6 @@ func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 	require.Same(t, formatter, deps.Formatter)
 	require.True(t, deps.MarkdownReplies)
 	assertCommandBuilderPointers(t, deps.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
-}
-
-func TestProvideACLServiceWrapsInitializationError(t *testing.T) {
-	t.Parallel()
-
-	_, err := ProvideACLService(t.Context(), true, "whitelist", []string{testRoomA}, nil, slog.New(slog.DiscardHandler))
-	if err == nil {
-		t.Fatal("ProvideACLService() error = nil, want initialization error")
-	}
-
-	if !strings.Contains(err.Error(), "create ACL service") || !strings.Contains(err.Error(), "postgres service is nil") {
-		t.Fatalf("ProvideACLService() error = %q, want wrapped postgres initialization failure", err)
-	}
 }
 
 type stubBotIrisClient struct{}

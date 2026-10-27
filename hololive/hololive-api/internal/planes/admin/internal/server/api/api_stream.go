@@ -40,7 +40,6 @@ func (h *StreamHandler) sharedStreamHandler() *adminhandlers.StreamHandler {
 
 	if h != nil {
 		handler.Holodex = h.holodex
-		handler.MemberRepository = h.repository
 	}
 
 	return handler
@@ -52,12 +51,4 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 
 func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetUpcomingStreams(c)
-}
-
-func (h *StreamHandler) GetChannel(c *gin.Context) {
-	h.sharedStreamHandler().GetChannel(c)
-}
-
-func (h *StreamHandler) SearchChannels(c *gin.Context) {
-	h.sharedStreamHandler().SearchChannels(c)
 }

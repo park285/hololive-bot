@@ -12,22 +12,17 @@ One process is one trust domain.
 - LLM listener는 host loopback에만 publish합니다. Admin은 loopback 또는 host가 실제
   소유한 승인된 Tailscale 주소에만 publish하며 정확한 source allowlist와 host firewall을
   함께 검증합니다. 기본 transport는 `h3`로 유지합니다.
-- Admin과 LLM internal route는 비어 있지 않은 `API_SECRET_KEY`를 요구합니다.
+- Admin route와 llm plane의 `/internal/ready`·`/metrics`는 비어 있지 않은 `API_SECRET_KEY`를 요구합니다.
 - `hololive-api`는 `docker-proxy-net`에 가입하거나 Docker socket 또는 `DOCKER_HOST`를
   받아서는 안 됩니다.
 - No admin or LLM endpoint may load native plugins, spawn processes, invoke shells, or execute
   user-controlled native commands. LLM output과 일반 사용자 입력은 data로만 처리하며 runtime
   extension, shell command, script, 또는 plugin entry point로 해석하지 않습니다.
 
-Admin template update and preview are an explicit, authenticated, capability-bounded interpretation
-surface. `PUT /api/holo/templates/:key`와 `POST /api/holo/templates/:key/preview`는 비어 있지 않은
-`API_SECRET_KEY` 인증 뒤 user-supplied Go `text/template` body를 parse하고 execute합니다. Save는
-고정 sample data로 실행 검증한 뒤 저장하고, preview는 같은 종류의 sample data로 즉시 실행합니다.
-저장된 template은 이후 app-owned notification data에 대해 renderer가 실행합니다. 사용할 수 있는
+Template 본문을 HTTP로 저장·미리보기하는 관리 경로는 없습니다(Console 계약에 없어 삭제). 운영자가 DB에 넣은
+`notification_templates` 본문은 renderer가 app-owned notification data에 대해서만 실행합니다. 사용할 수 있는
 `FuncMap`은 문자열·형식 변환 helper의 고정 allowlist이며 file, network, native command, plugin,
-process primitive를 제공하지 않습니다. They do not provide native command, plugin, or process
-execution. 따라서 이는 user-supplied template interpretation surface이지, 사용자 입력을 전혀
-해석하지 않는 endpoint라는 의미는 아닙니다. 본문·출력은 각각 64KiB, 실행 예산은 1초·100,000 단계·
+process primitive를 제공하지 않습니다. 본문·출력은 각각 64KiB, 실행 예산은 1초·100,000 단계·
 `{{template}}` 중첩 64단계이며, 초과하면 부분 결과 없이 실패합니다. 호출자 `ctx` 취소와 시간은 action
 경계에서 확인합니다. 파생 값은 64KiB와 가장 큰 입력의 측정 크기 중 큰 값을 넘지 못하도록 검사하고,
 반복 인자·padding·컨테이너 확장처럼 초선형 할당이 가능한 helper는 실행 전에 크기를 확인합니다.
@@ -36,7 +31,7 @@ execution. 따라서 이는 user-supplied template interpretation surface이지,
 
 Repository security contract tests는 Compose listener/network/secret wiring을 검증합니다.
 기존 architecture gate는 production Go source의 직접적인 `os/exec` 및 `plugin` import를 제한하고,
-template 동작 테스트는 인증된 관리 기능이 사용하는 동일한 parse/execute 경로의 예산·오류 계약을 검증합니다.
+template 동작 테스트는 renderer parse/execute 경로의 예산·오류 계약을 검증합니다.
 
 ## Accepted consequence
 
