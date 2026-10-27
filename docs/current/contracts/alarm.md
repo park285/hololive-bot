@@ -250,7 +250,7 @@ the stored target list is absent/empty under the existing settings contract.
 | Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
 | Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
 | Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |
-| Contract package | `hololive/hololive-shared/pkg/contracts/alarm`; server binding DTOs are in `hololive/hololive-alarm-worker/internal/service/alarm/httpapi`, client request structs in `hololive/hololive-shared/pkg/service/alarmhttp` |
+| Contract package | `hololive/hololive-shared/pkg/contracts/alarm` owns the route constants and the single request/response wire types (`AddRequest`, `RemoveRequest`, `ClearRequest`, `UpdateAdvanceMinutesRequest`, `SetRoomNameRequest`, `*Response`, `Envelope`) used by both the `alarmhttp` client and the worker handler; required-field checks (`room_id`, `channel_id`, `minutes >= 1`, present `room_name`) live in the worker handler in `hololive/hololive-alarm-worker/internal/service/alarm/httpapi` |
 | Envelope fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
 
 ## Request

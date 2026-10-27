@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -136,9 +138,9 @@ func TestClientSendsAPIKeyHeader(t *testing.T) {
 
 func TestDecodeAPIEnvelopeRejectsMalformedAndMissingSuccess(t *testing.T) {
 	for _, body := range []string{"not-json", `{"data":{"added":true}}`} {
-		got, err := decodeAPIEnvelope[addAlarmResp]("/test", strings.NewReader(body))
+		got, err := decodeAPIEnvelope[contractsalarm.AddResponse]("/test", strings.NewReader(body))
 		require.Error(t, err)
-		assert.Equal(t, addAlarmResp{}, got)
+		assert.Equal(t, contractsalarm.AddResponse{}, got)
 	}
 }
 

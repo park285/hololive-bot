@@ -22,7 +22,6 @@ package alarmhttp
 
 import (
 	"context"
-	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -46,76 +45,23 @@ type Client struct {
 	targetMinutes   []int
 }
 
-type addAlarmReq struct {
-	RoomID     string            `json:"room_id"`
-	UserID     string            `json:"user_id"`
-	ChannelID  string            `json:"channel_id"`
-	HostID     string            `json:"host_id,omitempty"`
-	RoomName   string            `json:"room_name"`
-	UserName   string            `json:"user_name"`
-	AlarmTypes domain.AlarmTypes `json:"alarm_types"`
-}
-
-type removeAlarmReq struct {
-	RoomID     string            `json:"room_id"`
-	ChannelID  string            `json:"channel_id"`
-	HostID     string            `json:"host_id,omitempty"`
-	AlarmTypes domain.AlarmTypes `json:"alarm_types"`
-}
-
-type clearRoomReq struct {
-	RoomID string `json:"room_id"`
-}
-
-type setRoomNameReq struct {
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
-}
-
-type updateAdvanceMinutesReq struct {
-	Minutes int `json:"minutes"`
-}
-
-type addAlarmResp struct {
-	Added bool `json:"added"`
-}
-
-type removeAlarmResp struct {
-	Removed bool `json:"removed"`
-}
-
-type clearRoomResp struct {
-	Deleted int `json:"deleted"`
-}
-
-type minutesResp struct {
-	TargetMinutes []int `json:"target_minutes"`
-}
-
-type apiEnvelope struct {
-	Success bool           `json:"success"`
-	Error   string         `json:"error,omitempty"`
-	Message string         `json:"message,omitempty"`
-	Data    jsontext.Value `json:"data,omitempty"`
-}
-
 // AddAlarm은 채팅방의 채널·멤버별 구독을 알람 API에 등록한다.
 func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	if req == nil {
 		return false, errors.New("alarm-api: add alarm request must not be nil")
 	}
 
-	body := addAlarmReq{
+	body := contractsalarm.AddRequest{
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
 		ChannelID:  req.ChannelID,
 		HostID:     req.HostID,
 		RoomName:   req.RoomName,
 		UserName:   req.UserName,
-		AlarmTypes: req.AlarmTypes,
+		AlarmTypes: alarmTypeStrings(req.AlarmTypes),
 	}
 
-	resp, err := c.postJSON[addAlarmResp](ctx, contractsalarm.AddPath, body)
+	resp, err := c.postJSON[contractsalarm.AddResponse](ctx, contractsalarm.AddPath, body)
 	if err != nil {
 		return false, err
 	}
@@ -125,10 +71,10 @@ func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (boo
 
 // RemoveAlarm은 채팅방의 전체 채널 구독에서 지정한 알림 종류를 해지한다.
 func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
-	return c.removeAlarm(ctx, removeAlarmReq{
+	return c.removeAlarm(ctx, contractsalarm.RemoveRequest{
 		RoomID:     roomID,
 		ChannelID:  channelID,
-		AlarmTypes: alarmTypes,
+		AlarmTypes: alarmTypeStrings(alarmTypes),
 	})
 }
 
@@ -138,13 +84,13 @@ func (c *Client) RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID 
 		return false, errors.New("alarm-api: host_id is required for member removal")
 	}
 
-	return c.removeAlarm(ctx, removeAlarmReq{
-		RoomID: roomID, ChannelID: channelID, HostID: hostID, AlarmTypes: alarmTypes,
+	return c.removeAlarm(ctx, contractsalarm.RemoveRequest{
+		RoomID: roomID, ChannelID: channelID, HostID: hostID, AlarmTypes: alarmTypeStrings(alarmTypes),
 	})
 }
 
-func (c *Client) removeAlarm(ctx context.Context, body removeAlarmReq) (bool, error) {
-	resp, err := c.postJSON[removeAlarmResp](ctx, contractsalarm.RemovePath, body)
+func (c *Client) removeAlarm(ctx context.Context, body contractsalarm.RemoveRequest) (bool, error) {
+	resp, err := c.postJSON[contractsalarm.RemoveResponse](ctx, contractsalarm.RemovePath, body)
 	if err != nil {
 		return false, err
 	}
@@ -199,9 +145,9 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 }
 
 func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
-	body := clearRoomReq{RoomID: roomID}
+	body := contractsalarm.ClearRequest{RoomID: roomID}
 
-	resp, err := c.postJSON[clearRoomResp](ctx, contractsalarm.ClearPath, body)
+	resp, err := c.postJSON[contractsalarm.ClearResponse](ctx, contractsalarm.ClearPath, body)
 	if err != nil {
 		return 0, err
 	}
@@ -217,7 +163,7 @@ func (c *Client) GetTargetMinutes() []int {
 }
 
 func (c *Client) SetRoomName(ctx context.Context, roomID, roomName string) error {
-	body := setRoomNameReq{RoomID: roomID, RoomName: roomName}
+	body := contractsalarm.SetRoomNameRequest{RoomID: roomID, RoomName: &roomName}
 	if err := c.putNoData(ctx, contractsalarm.RoomNamePath, body); err != nil {
 		return fmt.Errorf("put no data: %w", err)
 	}
@@ -250,4 +196,18 @@ func (c *Client) CountAlarmEntries(ctx context.Context) (int, error) {
 	}
 
 	return *result.Count, nil
+}
+
+// alarmTypeStrings는 domain 알림 종류를 wire 문자열 배열로 바꾼다. nil은 nil로 두어 직렬화 결과를 바꾸지 않는다.
+func alarmTypeStrings(types domain.AlarmTypes) []string {
+	if types == nil {
+		return nil
+	}
+
+	out := make([]string, len(types))
+	for i, alarmType := range types {
+		out[i] = string(alarmType)
+	}
+
+	return out
 }

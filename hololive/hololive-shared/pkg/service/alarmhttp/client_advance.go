@@ -61,7 +61,7 @@ func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) (do
 		return result, fmt.Errorf("update alarm advance minutes: validate response: %w", responseErr)
 	}
 
-	data, err := decodeAPIEnvelope[minutesResp](contractsalarm.SettingsPath, resp.Body)
+	data, err := decodeAPIEnvelope[contractsalarm.MinutesResponse](contractsalarm.SettingsPath, resp.Body)
 	if err != nil {
 		c.setTargetMinutes(nil)
 
@@ -86,7 +86,7 @@ func (c *Client) newAdvanceRequest(ctx context.Context, minutes int) (*http.Requ
 		return nil, fmt.Errorf("update alarm advance minutes: validate origin: %w", err)
 	}
 
-	body, err := encodeJSONRequestBody(contractsalarm.SettingsPath, updateAdvanceMinutesReq{Minutes: minutes})
+	body, err := encodeJSONRequestBody(contractsalarm.SettingsPath, contractsalarm.UpdateAdvanceMinutesRequest{Minutes: minutes})
 	if err != nil {
 		return nil, fmt.Errorf("update alarm advance minutes: encode request: %w", err)
 	}
