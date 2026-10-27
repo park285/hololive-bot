@@ -28,10 +28,6 @@ type photoSyncRetryMemberRepository struct {
 	updateCalls int
 }
 
-func (r *photoSyncRetryMemberRepository) GetAllChannelIDs(context.Context) ([]string, error) {
-	return nil, nil
-}
-
 func (r *photoSyncRetryMemberRepository) GetMembersNeedingPhotoSync(context.Context, time.Duration) ([]string, error) {
 	r.calls++
 	if r.onCall != nil {
@@ -49,10 +45,6 @@ func (r *photoSyncRetryMemberRepository) UpdatePhoto(context.Context, string, st
 	r.updateCalls++
 
 	return r.updateErr
-}
-
-func (r *photoSyncTestMemberRepository) GetAllChannelIDs(context.Context) ([]string, error) {
-	return nil, nil
 }
 
 func (r *photoSyncTestMemberRepository) GetMembersNeedingPhotoSync(context.Context, time.Duration) ([]string, error) {

@@ -37,29 +37,20 @@ type StartHooks struct {
 	Logger                  *slog.Logger
 	ServerAddr              string
 	StartAlarmScheduler     func(ctx context.Context) error
-	StartBot                func(ctx context.Context) error
-	StartH3CertReload       func(ctx context.Context)
 	StartHTTPServer         func(errCh chan<- error)
 	SetAlarmSchedulerCancel func(cancel context.CancelFunc)
 }
 
+// ShutdownHooks는 runtime 공통 종료 단계(scheduler 취소 신호, HTTP 종료)만 담는다. 고유 종료 단계는
+// 각 runtime이 Shutdown 반환 뒤 이어서 실행하고 오류를 직접 합친다.
 type ShutdownHooks struct {
 	Logger              *slog.Logger
 	ClearAlarmScheduler func() bool
 	ShutdownHTTPServer  func(ctx context.Context) error
-	WebhookHandlerClose func() error
-	ShutdownBot         func(ctx context.Context) error
 }
 
 func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	startAlarmScheduler(ctx, errCh, hooks)
-
-	startBot(ctx, errCh, hooks.Logger, hooks.StartBot)
-
-	if hooks.StartH3CertReload != nil {
-		hooks.StartH3CertReload(ctx)
-		logInfo(hooks.Logger, "H3 certificate reload started")
-	}
 
 	if hooks.StartHTTPServer != nil {
 		hooks.StartHTTPServer(errCh)
@@ -142,11 +133,7 @@ func logSignal(logger *slog.Logger, sig os.Signal) {
 func Shutdown(ctx context.Context, hooks ShutdownHooks) error {
 	shutdownAlarmScheduler(hooks)
 
-	return errors.Join(
-		shutdownHTTPServer(ctx, hooks),
-		closeWebhookHandler(hooks),
-		shutdownBot(ctx, hooks),
-	)
+	return shutdownHTTPServer(ctx, hooks)
 }
 
 func shutdownAlarmScheduler(hooks ShutdownHooks) {
@@ -161,32 +148,6 @@ func shutdownHTTPServer(ctx context.Context, hooks ShutdownHooks) error {
 			logError(hooks.Logger, "HTTP server shutdown error", err)
 
 			return fmt.Errorf("shutdown HTTP server: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func closeWebhookHandler(hooks ShutdownHooks) error {
-	if hooks.WebhookHandlerClose != nil {
-		if err := hooks.WebhookHandlerClose(); err != nil {
-			logError(hooks.Logger, "Iris webhook handler shutdown error", err)
-
-			return fmt.Errorf("close Iris webhook handler: %w", err)
-		}
-
-		logInfo(hooks.Logger, "Iris webhook handler stopped")
-	}
-
-	return nil
-}
-
-func shutdownBot(ctx context.Context, hooks ShutdownHooks) error {
-	if hooks.ShutdownBot != nil {
-		if err := hooks.ShutdownBot(ctx); err != nil {
-			logError(hooks.Logger, "Error during shutdown", err)
-
-			return fmt.Errorf("shutdown bot: %w", err)
 		}
 	}
 
@@ -277,37 +238,6 @@ func isContextTerminationTree(err error) bool {
 
 	// 중간 원인의 취소 sentinel만으로 scheduler의 실제 말단 오류를 무시하지 않습니다.
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-func startBot(ctx context.Context, errCh chan<- error, logger *slog.Logger, startBot func(ctx context.Context) error) {
-	if startBot == nil {
-		return
-	}
-
-	go func() {
-		if err := panicguard.RunE(logger, panicguard.BackgroundTask, "bot-runtime", func() error {
-			return startBot(ctx)
-		}); err != nil {
-			handleBotError(err, errCh, logger)
-		}
-	}()
-}
-
-func handleBotError(err error, errCh chan<- error, logger *slog.Logger) {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		logInfo(logger, "Background runtime task stopped (context done)")
-
-		return
-	}
-
-	wrapped := fmt.Errorf("bot runtime error: %w", err)
-
-	if errCh != nil {
-		errCh <- wrapped
-		return
-	}
-
-	logError(logger, "Background runtime task error", wrapped)
 }
 
 func logInfo(logger *slog.Logger, msg string, attrs ...any) {

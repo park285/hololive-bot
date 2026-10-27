@@ -66,45 +66,41 @@ func (c *Service) BatchHGet(ctx context.Context, key string, fields []string) (m
 		return map[string]string{}, nil
 	}
 
-	cmds := make([]valkey.Completed, 0, len(fields))
-	for _, field := range fields {
-		cmds = append(cmds, c.client.B().Hget().Key(key).Field(field).Build())
+	// 필드 수만큼 HGET을 보내는 대신 HMGET 한 명령으로 받는다. 없는 필드는 nil 원소로 온다.
+	resp := c.client.Do(ctx, c.client.B().Hmget().Key(key).Field(fields...).Build())
+	if err := resp.Error(); err != nil {
+		c.logger.Error("Cache batch hget failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
+
+		return nil, NewCacheError("hmget", key, err)
 	}
 
-	results := c.client.DoMulti(ctx, cmds...)
+	items, err := resp.ToArray()
+	if err != nil {
+		return nil, NewCacheError("hmget", key, err)
+	}
+
+	if len(items) != len(fields) {
+		return nil, NewCacheError("hmget", key, fmt.Errorf("hmget returned %d values for %d fields", len(items), len(fields)))
+	}
+
 	values := make(map[string]string, len(fields))
 
-	for i, result := range results {
-		value, found, err := c.batchHGetValue(key, result)
-		if err != nil {
-			return nil, fmt.Errorf("batch h get value: %w", err)
+	for i := range items {
+		if items[i].IsNil() {
+			continue
 		}
 
-		if found {
+		value, err := items[i].ToString()
+		if err != nil {
+			return nil, NewCacheError("hmget", key, err)
+		}
+
+		if value != "" {
 			values[fields[i]] = value
 		}
 	}
 
 	return values, nil
-}
-
-func (c *Service) batchHGetValue(key string, result valkey.ValkeyResult) (string, bool, error) {
-	if callErr := result.Error(); callErr != nil {
-		if errors.Is(callErr, valkey.Nil) {
-			return "", false, nil
-		}
-
-		c.logger.Error("Cache batch hget failed", privacylog.CacheKeyAttr(key), slog.Any("error", callErr))
-
-		return "", false, NewCacheError("hget", key, callErr)
-	}
-
-	value, err := result.ToString()
-	if err != nil {
-		return "", false, NewCacheError("hget", key, err)
-	}
-
-	return value, value != "", nil
 }
 
 func (c *Service) HDel(ctx context.Context, key string, fields ...string) error {

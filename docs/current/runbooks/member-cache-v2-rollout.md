@@ -29,9 +29,9 @@ Valkey 재시작 등으로 authority key가 사라지면 다음 reconcile이 `SE
 
 ## Consumer and mutation inventory
 
-다음 runtime은 모두 `pkg/providers/member.ProvideMemberCache` 또는 `pkg/providers/modules.BuildInfraModule`을 통해 V2 consumer가 됩니다(2026-09-28 코드 기준 member cache 4개).
+다음 runtime은 모두 `pkg/providers/modules.BuildInfraModule`이 만드는 `member.Cache`로 V2 consumer가 됩니다(현재 member cache 2개).
 
-- `hololive-api`: bot, admin, llm plane의 각각 독립된 `member.Cache`
+- `hololive-api`: bot plane infra가 만든 `member.Cache` 하나를 bot·admin·llm plane이 함께 사용
 - `hololive-alarm-worker`: alarm target/member adapter
 
 `hololive-youtube-collector`는 더 이상 member cache를 만들지 않습니다(`collectorruntime` infrastructure가 `BuildInfraModule`/member cache를 쓰지 않음). 아래 Expand rollout과 Contraction 절의 collector `a`/`b`/`c`/`d` 언급은 2026-08-06 당시 기록입니다.

@@ -26,9 +26,6 @@ func (s *stubIrisClient) SendMultipleImages(context.Context, string, [][]byte, .
 	return &iris.ReplyAcceptedResponse{}, nil
 }
 func (s *stubIrisClient) Ping(context.Context) bool { return true }
-func (s *stubIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
-	return &iris.ConfigResponse{}, nil
-}
 
 func (s *stubIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
 	return &iris.RoomListResponse{}, nil

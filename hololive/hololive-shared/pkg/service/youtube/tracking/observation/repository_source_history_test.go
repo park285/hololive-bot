@@ -186,33 +186,33 @@ func TestRepositoryUpsertKeepsSingleTrackingRowForRepeatedSaves(t *testing.T) {
 			earliestAlarmSentAt := actualPublishedAt.Add(75 * time.Second)
 			laterAlarmSentAt := actualPublishedAt.Add(95 * time.Second)
 
-			require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+			require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 				Kind:       tc.kind,
 				ContentID:  tc.rawID,
 				ChannelID:  "UC_REPEAT",
 				DetectedAt: laterDetectedAt,
-			}))
-			require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+			}}))
+			require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 				Kind:              tc.kind,
 				ContentID:         tc.canonicalID,
 				ChannelID:         "UC_REPEAT",
 				ActualPublishedAt: &actualPublishedAt,
 				DetectedAt:        earliestDetectedAt,
-			}))
-			require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+			}}))
+			require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 				Kind:        tc.kind,
 				ContentID:   tc.rawID,
 				ChannelID:   "UC_REPEAT",
 				DetectedAt:  laterDetectedAt.Add(time.Minute),
 				AlarmSentAt: &laterAlarmSentAt,
-			}))
-			require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+			}}))
+			require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
 				Kind:        tc.kind,
 				ContentID:   tc.canonicalID,
 				ChannelID:   "UC_REPEAT",
 				DetectedAt:  laterDetectedAt.Add(2 * time.Minute),
 				AlarmSentAt: &earliestAlarmSentAt,
-			}))
+			}}))
 
 			requireConvergedTrackingRow(t, db, repository, tc, convergedTrackingRow{
 				actualPublishedAt:   actualPublishedAt,
@@ -303,7 +303,7 @@ func TestRepositoryUpsertKeepsSingleTrackingRowForConcurrentSaves(t *testing.T) 
 				wg.Go(func() {
 					<-start
 
-					errCh <- repository.Upsert(ctx, record)
+					errCh <- repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{record})
 				})
 			}
 
@@ -337,7 +337,7 @@ func concurrentUpsertTracking(t *testing.T, repository *PgxRepository, records [
 		wg.Go(func() {
 			<-start
 
-			errCh <- repository.Upsert(ctx, record)
+			errCh <- repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{record})
 		})
 	}
 

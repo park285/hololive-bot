@@ -15,50 +15,28 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
+// SubscriberCache는 구독자 조회 경로가 cache에 요구하는 작업이다. 구독 set 조회(SMembers), 빈 구독 marker 확인(Exists),
+// 여러 채널의 pipeline 조회(B·DoMulti)를 쓴다. 이 경로를 공유하는 checker·egress 조립도 같은 집합을 받는다.
+type SubscriberCache interface {
+	cache.KeyValueReader
+	cache.SetCache
+	cache.LowLevelCache
+}
+
 // SubscriberResolver는 하나의 구독 cache와 구독 DB에 묶인 구독자 조회기다.
 // 같은 resolver로 들어온 같은 채널·알림 종류의 DB 조회만 하나로 합친다. 다른 DB, 다른 트랜잭션에 묶인 resolver와는
 // 조회 결과나 오류를 공유하지 않으므로 pool 조회는 연결 수명 동안 resolver 하나를 재사용하고, 트랜잭션 안의 조회는
 // 그 트랜잭션 전용 resolver를 만든다. CacheClient가 nil이면 cache를 건너뛰고, db가 nil이면 cache로 확정되지 않는
 // 조회를 오류로 반환한다. 복사하지 말고 반환된 포인터를 공유한다.
 type SubscriberResolver struct {
-	cache cache.Client
+	cache SubscriberCache
 	db    dbx.Querier
 	loads singleflight.Group
 }
 
 // NewSubscriberResolver는 cacheClient와 db에 묶인 구독자 조회기를 만든다. 두 인자 모두 nil을 허용한다.
-func NewSubscriberResolver(cacheClient cache.Client, db dbx.Querier) *SubscriberResolver {
+func NewSubscriberResolver(cacheClient SubscriberCache, db dbx.Querier) *SubscriberResolver {
 	return &SubscriberResolver{cache: cacheClient, db: db}
-}
-
-func LookupChannelSubscribersByType(
-	ctx context.Context,
-	cacheClient cache.Client,
-	channelID string,
-	alarmType domain.AlarmType,
-) ([]string, error) {
-	if cacheClient == nil {
-		return nil, errors.New("lookup channel subscribers by type: cache service is nil")
-	}
-
-	normalizedChannelID := strings.TrimSpace(channelID)
-	if normalizedChannelID == "" {
-		return nil, nil
-	}
-
-	key := alarmkeys.BuildChannelSubscriberKey(normalizedChannelID, alarmType)
-
-	subscribers, err := cacheClient.SMembers(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"lookup channel subscribers by type: channel %s type %s: %w",
-			normalizedChannelID,
-			alarmType,
-			err,
-		)
-	}
-
-	return subscribers, nil
 }
 
 // ResolveChannelSubscribersByType는 채널·알림 종류의 구독 방을 cache에서 찾고, cache로 확정되지 않으면 resolver의
@@ -95,17 +73,17 @@ func (r *SubscriberResolver) ResolveChannelSubscribersByType(
 
 func resolveChannelSubscribersFromCache(
 	ctx context.Context,
-	cacheClient cache.Client,
+	cacheClient SubscriberCache,
 	channelID string,
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,
 ) ([]string, bool, error) {
-	subscribers, err := LookupChannelSubscribersByType(ctx, cacheClient, channelID, alarmType)
+	subscribers, err := cacheClient.SMembers(ctx, alarmkeys.BuildChannelSubscriberKey(channelID, alarmType))
 	if err != nil {
 		observeAlarmSubscriberCacheError("lookup")
 
 		if requireCacheSuccess {
-			return nil, true, fmt.Errorf("resolve channel subscribers by type: %w", err)
+			return nil, true, fmt.Errorf("resolve channel subscribers by type: lookup channel %s type %s: %w", channelID, alarmType, err)
 		}
 
 		return nil, false, nil
@@ -126,7 +104,7 @@ func resolveChannelSubscribersFromCache(
 
 func resolveKnownEmptySubscriberCache(
 	ctx context.Context,
-	cacheClient cache.Client,
+	cacheClient cache.KeyValueReader,
 	channelID string,
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,
@@ -228,7 +206,7 @@ func (r *SubscriberResolver) ResolveUncachedChannelSubscribersByType(
 // 정규화·중복 제거한 채널의 marker 확인은 한 번의 pipeline으로 보낸다.
 func filterKnownEmptySubscriberChannels(
 	ctx context.Context,
-	cacheClient cache.Client,
+	cacheClient cache.LowLevelCache,
 	channelIDs []string,
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,
@@ -275,7 +253,7 @@ func filterKnownEmptySubscriberChannels(
 // 믿어야 하면(requireCacheSuccess) 실패를 오류로 반환한다.
 func resolveKnownEmptySubscriberChannels(
 	ctx context.Context,
-	cacheClient cache.Client,
+	cacheClient cache.LowLevelCache,
 	channelIDs []string,
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,

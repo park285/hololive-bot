@@ -87,34 +87,6 @@ func unsetEnvForTest(t *testing.T, key string) {
 	}
 }
 
-func TestKakaoConfig_SetACLEnabled(t *testing.T) {
-	t.Parallel()
-
-	c := &KakaoConfig{
-		ACLEnabled: false,
-		ACLMode:    "whitelist",
-		Rooms:      []string{"room1"},
-	}
-
-	if c.ACLEnabled {
-		t.Fatal("ACLEnabled should start as false")
-	}
-
-	c.SetACLEnabled(true)
-
-	enabled, _, _ := c.SnapshotACL()
-	if !enabled {
-		t.Fatal("ACLEnabled should be true after SetACLEnabled(true)")
-	}
-
-	c.SetACLEnabled(false)
-
-	enabled, _, _ = c.SnapshotACL()
-	if enabled {
-		t.Fatal("ACLEnabled should be false after SetACLEnabled(false)")
-	}
-}
-
 func TestKakaoConfig_IsRoomAllowed_EmptyChatIDDenied(t *testing.T) {
 	t.Parallel()
 

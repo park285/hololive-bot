@@ -32,12 +32,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
+// cacheManagerStore는 CacheManager가 응답 cache에 쓰는 Get·Set 작업이다.
+type cacheManagerStore interface {
+	cache.KeyValueReader
+	cache.KeyValueWriter
+}
+
 type CacheManager struct {
-	cache  cache.KeyValueCache
+	cache  cacheManagerStore
 	logger *slog.Logger
 }
 
-func NewCacheManager(cacheClient cache.KeyValueCache, logger *slog.Logger) *CacheManager {
+func NewCacheManager(cacheClient cacheManagerStore, logger *slog.Logger) *CacheManager {
 	return &CacheManager{
 		cache:  cacheClient,
 		logger: logger,

@@ -37,13 +37,11 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 type commandInitView struct {
 	holodex               domain.StreamProvider
-	cache                 cache.Client
 	postgres              database.Client
 	alarm                 handlercore.AlarmService
 	matcher               *matcher.Matcher
@@ -68,7 +66,6 @@ func (b *Bot) commandInitView() commandInitView {
 
 	return commandInitView{
 		holodex:               b.holodex,
-		cache:                 b.cache,
 		postgres:              b.postgres,
 		alarm:                 b.alarm,
 		matcher:               b.matcher,
@@ -91,7 +88,6 @@ func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *ha
 	deps := &handlercore.Dependencies{
 		Holodex:             v.holodex,
 		LiveQuery:           livequery.New(v.postgres),
-		Cache:               v.cache,
 		Alarm:               v.alarm,
 		Matcher:             v.matcher,
 		MemberNews:          v.memberNews,

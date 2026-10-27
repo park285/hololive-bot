@@ -40,20 +40,16 @@ var (
 		},
 		[]string{"reason", "namespace"},
 	)
-
-	metricsInitOnce sync.Once
 )
 
 // initMetrics는 알려진 이유·namespace 조합을 0으로 미리 만들어 첫 miss도 increase()에 잡히게 한다.
-func initMetrics() {
-	metricsInitOnce.Do(func() {
-		for _, reason := range []string{lookupMissReasonUnloaded, lookupMissReasonMissing} {
-			for _, namespace := range knownNamespaces {
-				lookupMissTotal.WithLabelValues(reason, namespace)
-			}
+var initMetrics = sync.OnceFunc(func() {
+	for _, reason := range []string{lookupMissReasonUnloaded, lookupMissReasonMissing} {
+		for _, namespace := range knownNamespaces {
+			lookupMissTotal.WithLabelValues(reason, namespace)
 		}
-	})
-}
+	}
+})
 
 func observeLoadFailure() {
 	initMetrics()

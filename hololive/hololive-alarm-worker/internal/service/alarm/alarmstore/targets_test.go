@@ -28,7 +28,7 @@ type alarmLoadResult struct {
 	err    error
 }
 
-func TestLookupChannelSubscribersByTypeUsesTypedKey(t *testing.T) {
+func TestResolveChannelSubscribersByTypeUsesTypedCacheKey(t *testing.T) {
 	t.Parallel()
 
 	var lookedUpKey string
@@ -40,9 +40,9 @@ func TestLookupChannelSubscribersByTypeUsesTypedKey(t *testing.T) {
 		return []string{"room-a", "room-b"}, nil
 	}
 
-	got, err := LookupChannelSubscribersByType(t.Context(), cache, "UC_shorts", domain.AlarmTypeShorts)
+	got, err := NewSubscriberResolver(cache, nil).ResolveChannelSubscribersByType(t.Context(), "UC_shorts", domain.AlarmTypeShorts)
 	if err != nil {
-		t.Fatalf("LookupChannelSubscribersByType() error = %v", err)
+		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
 
 	wantKey := alarmkeys.BuildChannelSubscriberKey("UC_shorts", domain.AlarmTypeShorts)
@@ -51,7 +51,7 @@ func TestLookupChannelSubscribersByTypeUsesTypedKey(t *testing.T) {
 	}
 
 	if len(got) != 2 || got[0] != "room-a" || got[1] != "room-b" {
-		t.Fatalf("LookupChannelSubscribersByType() = %#v", got)
+		t.Fatalf("ResolveChannelSubscribersByType() = %#v", got)
 	}
 }
 

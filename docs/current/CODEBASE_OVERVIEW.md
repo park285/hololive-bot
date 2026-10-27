@@ -44,10 +44,10 @@ The current production runtime set is three Go binaries:
 
 - domain models under `pkg/domain`;
 - config section types, loaders and pure validators under `pkg/config` (runtime aggregates belong to each module's `internal/config`);
-- typed infra constructors under `pkg/providers/{cache,database,holodex,iris,member,modules}`;
+- typed infra constructors under `pkg/providers/{database,holodex,iris,modules}`;
 - shared service implementations under `pkg/service`;
 - runtime contracts under `pkg/contracts`;
-- database/cache integration under internal/shared packages.
+- PostgreSQL/Valkey clients under `pkg/service/{database,cache}`; module-private implementations (Holodex API client, template sample data, worker observability) under `internal/`.
 
 실행 구현의 조립은 각 module이 소유합니다. API는 `internal/config`와 plane별 인스턴스를 만드는
 `internal/apifoundation`, admin의 `runtime`·`internal/httpapi`, 공통 trigger의 `internal/httpapi`를 사용합니다.
@@ -153,7 +153,7 @@ Current operational details live in `docs/current/services/youtube-collector.md`
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
 | Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-youtube-collector.service` |
 | Release, rollback, or deploy | `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
-| Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
+| Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/`, `hololive/hololive-api/internal/contracts/` |
 | Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/apifoundation/`, `internal/app/`, `cmd/hololive-api/`; each plane's `runtime/` |
 | Change YouTube collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |

@@ -23,8 +23,6 @@ package botruntime
 import (
 	"log/slog"
 	"testing"
-
-	apiconfig "github.com/kapu/hololive-api/internal/config"
 )
 
 func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -36,23 +34,8 @@ func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
 			t.Fatal("BuildRuntime() expected error for nil config")
 		}
 
-		if err.Error() != "normalize runtime build inputs: config must not be nil" {
-			t.Fatalf("BuildRuntime() error = %q, want %q", err.Error(), "normalize runtime build inputs: config must not be nil")
-		}
-
-		if runtime != nil {
-			t.Fatal("BuildRuntime() expected nil runtime on error")
-		}
-	})
-
-	t.Run("nil logger", func(t *testing.T) {
-		runtime, err := BuildRuntime(t.Context(), &apiconfig.BotPlaneConfig{}, nil, nil)
-		if err == nil {
-			t.Fatal("BuildRuntime() expected error for nil logger")
-		}
-
-		if err.Error() != "normalize runtime build inputs: logger must not be nil" {
-			t.Fatalf("BuildRuntime() error = %q, want %q", err.Error(), "normalize runtime build inputs: logger must not be nil")
+		if err.Error() != "normalize runtime build inputs: bootstrap: config must not be nil" {
+			t.Fatalf("BuildRuntime() error = %q, want %q", err.Error(), "normalize runtime build inputs: bootstrap: config must not be nil")
 		}
 
 		if runtime != nil {

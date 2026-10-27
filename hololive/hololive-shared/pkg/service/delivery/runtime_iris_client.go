@@ -55,7 +55,7 @@ func NewRuntimeIrisClient(
 	clientOpts = append(clientOpts,
 		iris.WithLogger(logger),
 		iris.WithReplyRetry(runtimeIrisReplyRetryMax),
-		iris.WithH3DialGuardContext(h3DialGuard.allow),
+		iris.WithH3DialGuard(h3DialGuard.allow),
 	)
 	clientOpts = append(clientOpts, opts...)
 

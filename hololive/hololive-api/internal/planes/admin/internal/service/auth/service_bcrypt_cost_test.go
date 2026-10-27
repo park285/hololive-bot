@@ -1,9 +1,9 @@
 package auth
 
 import (
+	"log/slog"
 	"testing"
 
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -43,7 +43,7 @@ func TestRegister_UsesConfiguredBcryptCost(t *testing.T) {
 	// 낮은 비용은 race 실행에서 회당 수 초가 걸리는 비용 12 해시를 피한다.
 	cfg.BcryptCost = bcrypt.MinCost + 1
 
-	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), cfg)
+	service, err := NewService(db, nil, slog.New(slog.DiscardHandler), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

@@ -23,7 +23,7 @@ func mustLoadAPIWorkerProfile(t *testing.T) *APIWorkerProfile {
 func testYouTubePlaneConfig(t *testing.T) YouTubePlaneConfig {
 	t.Helper()
 
-	profile := &APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")}
+	profile := &APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")}
 	if err := workercontract.DecodeWorkerSettingsSet(profile.Loaded, map[string]any{
 		WorkerBotWebhookInbox:   &profile.BotWebhookInbox,
 		WorkerBotReplyOutbox:    &profile.BotReplyOutbox,

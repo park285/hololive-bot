@@ -13,7 +13,7 @@
 
 ## Execute
 
-standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
+전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회한다.
 
 기간별 지연 집계와 2분 초과 후보는 `youtube_content_alarm_tracking`의 `alarm_latency_exceeded`, `delay_source`, `internal_delay_cause`, `latency_classification_status`와 `youtube_notification_delivery_telemetry`로 확인한다.
 

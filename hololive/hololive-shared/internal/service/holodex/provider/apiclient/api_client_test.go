@@ -38,7 +38,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 const testAPIKey = "test-key"
@@ -533,18 +533,18 @@ func TestTimeoutMaxRetries(t *testing.T) {
 
 type stubDistributedLimiter struct {
 	mu        sync.Mutex
-	decisions []ratelimit.Decision
+	decisions []ratelimitvalkey.Decision
 	calls     int
 }
 
-func (s *stubDistributedLimiter) Allow(_ context.Context, _ string, _ int, _ time.Duration) (ratelimit.Decision, error) {
+func (s *stubDistributedLimiter) Allow(_ context.Context, _ string, _ int, _ time.Duration) (ratelimitvalkey.Decision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.calls++
 
 	if len(s.decisions) == 0 {
-		return ratelimit.Decision{Allowed: true}, nil
+		return ratelimitvalkey.Decision{Allowed: true}, nil
 	}
 
 	if len(s.decisions) == 1 {
@@ -563,7 +563,7 @@ func TestWaitForDistributedRateLimiter_DeniedThenAllowed(t *testing.T) {
 		admissionGate:    make(chan struct{}, 1),
 		maxRetryAttempts: 3,
 		distributed: &stubDistributedLimiter{
-			decisions: []ratelimit.Decision{
+			decisions: []ratelimitvalkey.Decision{
 				{Allowed: false, RetryAfter: 5 * time.Millisecond, Current: 10, Limit: 10},
 				{Allowed: true, Current: 9, Limit: 10},
 			},
@@ -585,7 +585,7 @@ func TestWaitForDistributedRateLimiter_DeniedWithoutRetryAfter(t *testing.T) {
 		admissionGate:    make(chan struct{}, 1),
 		maxRetryAttempts: 3,
 		distributed: &stubDistributedLimiter{
-			decisions: []ratelimit.Decision{
+			decisions: []ratelimitvalkey.Decision{
 				{Allowed: false, RetryAfter: 0, Current: 10, Limit: 10},
 			},
 		},

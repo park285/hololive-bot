@@ -8,6 +8,71 @@
 
 ## 미출시
 
+- **의존성(shared-go v2.17.0·iris-client-go v3.2.0):** 두 라이브러리가 공개 API를 지우거나 이름·시그니처를 바꿨기 때문에 같은 변경에서 코드를 함께 옮깁니다. hololive-api·hololive-alarm-worker·hololive-shared는 두 모듈을 모두 올리고, hololive-youtube-collector·hololive-dbtest는 shared-go만 올립니다. go.sum에서는 이 두 모듈 줄만 바뀝니다.
+  - `workercontract.LoadProfileFromEnv`가 서비스·역할 문자열 대신 `Identity`를 받습니다. 그래서 각 runtime이 자기 worker 집합을 직접 소유합니다. api는 `APIWorkerIdentity()`(`bot_reply_outbox`·`bot_webhook_inbox`·`source_observation`), alarm-worker는 `WorkerIdentity()`(`alarm_dispatch`·`notification_delivery`·`youtube_delivery`), collector는 `WorkerIdentity()`(`collection`)를 둡니다. 세 함수 모두 호출할 때마다 새 슬라이스를 돌려주며, 값은 shared-go에서 지운 내장 표와 같습니다. `settingstest.LoadProfileFixture`는 이제 `(t, identity, name)`을 받습니다.
+  - 세 main의 `Initialize`에서 `automaxprocs.Init(nil)`을 지웠습니다. NewLogger가 있어 쓰이지 않던 `LoggerFileName`도 지웠으며, 로그 파일 이름은 전처럼 각 NewLogger가 정합니다. `NormalizeRuntimeBuildInputs`가 이제 정규화한 logger도 함께 돌려주므로, alarm-worker·admin·bot runtime 조립은 그 logger를 씁니다.
+  - bot H3 인증서 갱신은 자체 ticker(`runBotCertificateReload`) 대신 `h3.CertificateReloader.Run`을 씁니다. 실행 위치는 기존 `bot-h3-certificate-reload` 작업(tasksWG·panicguard) 안입니다. 갱신 주기와 실패 로그 `h3 certificate reload failed; using previous certificate`는 그대로입니다. reloader를 정상 생성한 뒤에는 닿지 않던 bot 전용 Warn `bot_h3_certificate_reload_failed`는 없어집니다.
+  - bot webhook은 이제 `webhook.NewDurableHandler`로 만들고, `WithDedupTimeout` 대신 `WithNonceTimeout`(profile `dedup_timeout_ms`)을 넘깁니다. durable 경로에서 쓰이지 않던 `WithDedupTTL`과 `WebhookConfig.DedupTTL`은 지웠습니다. profile의 `dedup_ttl_ms`는 계약이므로 계속 읽고 검증합니다. `ManagedIrisClient`는 삭제된 `iris.Client` 대신 `iris.BotClient`를 내장하고, H3 dial guard는 `iris.WithH3DialGuard`로 등록합니다. webhook token 필수 검사와 HTTP status 매핑은 바뀌지 않습니다.
+  - 테스트에서는 `logging.NewTestLogger`를 `slog.New(slog.DiscardHandler)`로 바꿨습니다. `httputil.NewJSONClient`·`IsStatus`는 `NewJSONClientWithHTTPClient`·`errors.AsType[*httputil.APIError]`로 바꿨고, 삭제된 `GetConfig`는 stub에서 뺐습니다.
+  - 보안 workflow(`security.yml`)가 sibling으로 checkout하는 shared-go·iris-client-go 고정 SHA도 v2.17.0·v3.2.0으로 올렸고, `deploy/compose/README.md`의 pin 표기도 맞췄습니다. 이 workflow는 go.work로 sibling 소스를 컴파일하므로, 옛 SHA로 두면 gosec·NilAway·govulncheck가 새 API 호출에서 컴파일에 실패합니다.
+- **bot webhook 지표 삭제:** hololive-api가 다음 지표를 더 등록하지 않습니다. `hololive_bot_webhook_dedup_latency_seconds`·`hololive_bot_webhook_enqueue_wait_seconds` histogram(`_bucket`·`_sum`·`_count`)과 `hololive_bot_webhook_queue_depth` gauge입니다. iris-client-go v3.2.0이 세 관측 콜백을 지웠습니다. hololive가 쓰는 durable 수신 경로는 이전에도 이 콜백을 부르지 않았으므로, 세 지표는 등록만 되어 늘 0(histogram은 `_count` 0)으로 노출됐습니다. 이 이름을 조회하는 대시보드·알림·쿼리는 함께 지웁니다. 나머지 `hololive_bot_webhook_*` 지표의 이름과 값은 그대로입니다.
+- **기동 로그·오류 문구(shared-go v2.17.0):** 아래 기동 로그와 오류 문구가 바뀝니다.
+  - hololive-api·alarm-worker·youtube-collector는 기동할 때 서비스 logger로 automaxprocs 결정을 1줄 남깁니다. 기본값은 `automaxprocs skipped; Go 1.25+ runtime handles container-aware GOMAXPROCS`이고, `AUTOMAXPROCS_DISABLE`을 켜면 `automaxprocs disabled by env`입니다. 이 결정 시점은 프로세스 시작 직후에서 설정 로드·logger 생성 뒤로 옮겨지지만 `BuildRuntime`보다는 여전히 먼저입니다. 시점 차이는 `AUTOMAXPROCS_FORCE`를 켤 때만 드러나며, 저장소의 Compose와 env 예시는 두 env를 설정하지 않습니다.
+  - shared-go 공개 경계 오류가 `<pkg>: `로 시작하므로 기동 실패와 runtime 오류 로그의 문구가 바뀝니다. 예는 다음과 같습니다.
+    - `read int64 env: envutil: invalid int64 env <KEY> (...)`
+    - `workercontract: STACK_WORKER_PROFILE_FILE is required`
+    - `httpserver: listen: ...`(이전 `http server listen: ...`)
+    - `lifecycle: run: ...`
+    - `h3: load certificate pair: ...`
+    - `promptguard: guard unavailable`(이전 `prompt guard unavailable`)
+    - `panicguard: <작업>: recovered panic: ...`
+    - plane 간 내부 HTTP client의 `httputil: status <N> ...`·`httputil: decode JSON: ...`
+    - collector healthcheck smoke의 `healthprobe: fetch URL: ...`
+  - 중간 wrap도 일부 바뀝니다. migration runner의 dbmigrate advisory lock 오류에서는 `fn: `·`acquire advisory lock: `이, worker profile 로드 오류(기동 실패·`--check-worker-profile` 출력)에서는 `load profile file: `이 빠집니다. 종료 오류에는 `lifecycle: shutdown: `이, 종료 때 stderr에 남는 logger 닫기 오류에는 `logging: close log lanes: `가 새로 붙습니다. wrap은 모두 `%w`라 오류 판정은 같습니다. exit code·env 이름·metric 이름·HTTP 응답 본문도 바뀌지 않습니다.
+- **Iris client 응답 처리(iris-client-go v3.2.0):** reply 전송처럼 2xx 본문을 버리는 요청의 본문이 멈추면, 이제 요청 deadline까지 기다리지 않습니다. `min(100ms, Timeout)`이 지나면 요청을 끊고 성공으로 반환합니다. typed 응답의 trailer drain과 Close는 호출 goroutine에서 실행합니다. 그래서 `iris: response body close timed out` 오류와 `iris_client_response_body_drain_panic`·`iris_client_response_body_close_panic` 로그가 없어지고, panic은 호출자로 전파됩니다. `IRIS_H3_CA_RELOAD_INTERVAL`은 더 읽지 않으며, H3 CA 파일은 client를 만들 때 한 번만 읽습니다. 저장소 설정에는 이 env가 없으므로 동작은 같습니다. CA 파일을 설정하지 않았을 때의 오류 문구는 `iris: no H3 CA cert file configured; set IRIS_H3_CA_CERT_FILE or opt in with IRIS_H3_ALLOW_SYSTEM_ROOTS`입니다.
+- **plane 종료 panic 격리:** hololive-api의 plane 묶음(`applifecycle.GroupRuntime`)은 plane을 역순으로 종료합니다. 이제 이 과정에서 한 plane의 Shutdown이 panic하면 `panicguard`가 잡아 오류로 바꾸고, 남은 plane 정지를 계속합니다. 이때 `background goroutine panic recovered`(`guard`=plane 이름)와 `runtime component shutdown failed: <plane>` 로그가 남습니다. 종료 오류는 `shutdown <plane>: panicguard: <plane>: recovered panic: ...` 형태로 합쳐집니다. 이전에는 panic이 종료 반복문을 빠져나가 뒤 순서의 plane 정지를 건너뛰었습니다.
+- **Seoul AP 전송 파일 축소:** `ap-deploy.sh`가 AP로 보내는 `scripts/deploy/ap-rsync-files.txt`를 453줄에서 23줄로 줄였습니다. AP는 kapu가 빌드한 이미지 아카이브를 받을 뿐 이미지를 직접 빌드하지 않으므로, AP가 읽거나 실행하는 파일만 남겼습니다.
+  - 남은 파일은 Compose 파일 3개(collector·prod·seoul), `compose.sh`와 lib, 원격 확인·rollback 스크립트(`po-ap-rollback-remote.sh`·`worker-profile-pair.py` 등), runtime VERSION 2개, `postgres-capacity-policy.tsv`입니다.
+  - 더 보내지 않는 파일은 Go 소스·SQL·`go.mod`·`go.sum`·`go.work`·`go.work.sum`, Dockerfile과 po-sandbox 소스, `scripts/build/*`, `ap-hosts/*.conf`와 kapu에서만 실행하는 `ap-collector-preflight.sh`·`lib/ap-host.sh`·`ap-rsync-files.txt`, osaka·osaka2 Compose 파일, `deploy/topology/hosts.conf`, 루트 `VERSION`, shared-go 파일입니다.
+  - collector go.mod가 고정한 shared-go tag를 `git archive`로 꺼내던 단계와 `SHARED_GO_DIR`도 지웠습니다. 이제 shared-go pin과 AP 배포가 묶이지 않습니다.
+  - source snapshot·source-candidate·rollback 범위도 새 목록을 따릅니다. `rsync --files-from`은 원격 파일을 지우지 않으므로, 이전 배포가 AP의 `~/hololive-bot`·`~/shared-go`에 남긴 사본은 그대로 남습니다. 현재 revision의 명령은 이 사본을 읽지 않습니다. 다만 변경 전 백업이나 source snapshot으로 rollback하면 되돌아온 이전 `compose.sh`가 `~/shared-go`를 필수로 확인하므로, 변경 전 백업이 모두 만료되고 live `compose.sh`가 새 revision으로 확정될 때까지 AP의 `~/shared-go`를 지우지 않습니다(youtube-collector runbook).
+- **AP 전송 목록 검사:** `check-ap-rsync-manifest.sh`를 `go list` 없이 다시 써서 이제 Go 없이 실행됩니다. 검사 항목은 다음과 같습니다.
+  - 저장소 안의 symlink가 아닌 일반 파일인지, 중복 항목이 없는지 확인합니다.
+  - 배포 범위를 지키는지 확인합니다. 비밀·데이터·문서·로그·백업·`_test.go`는 제외하고, alarm-worker에서는 `VERSION`만 허용합니다.
+  - AP 원격 명령 입력 10개와 Compose 모드 AP host overlay가 목록에 있는지 확인합니다.
+  - 보내는 스크립트가 참조하는 `scripts/…`·runtime VERSION이 포함됐는지 확인합니다.
+  - `ap-deploy.sh`는 이전의 자체 범위 반복문과 전송 tree 준비 뒤 재검사 대신, 원격에 접속하기 전에 이 검사를 한 번 실행합니다. alarm-worker의 `go.mod`·`go.sum`은 이제 목록 검사와 rsync preview 검사(`check-ap-rsync-preview.sh`) 양쪽에서 거부됩니다.
+- **shared-go workspace 요구 제거:** `compose.sh`·`build-all.sh`·`compose-redeploy-service.sh`가 형제·내장 `shared-go` 디렉터리를 더 요구하지 않습니다(build-all은 `iris-client-go`도 마찬가지입니다). 그래서 `[ERROR] Active shared-go workspace not found`로 멈추는 일이 없어집니다. 세 스크립트는 `SHARED_GO_WORKSPACE_PATH`·`IRIS_CLIENT_GO_WORKSPACE_PATH`를 export하거나 `[INFO]`로 출력하지도 않습니다. `compose-env.sh`도 두 키를 허용 shell 제어 키에서 뺐습니다. Compose 파일은 이 값을 보간하지 않고 Dockerfile은 `GOWORK=off`로 go.mod pin을 빌드하므로, 렌더·빌드 결과는 같습니다. 새 전송 목록만으로 만든 AP tree와 rollback source-candidate에서도 `compose.sh`가 이 검사 때문에 실패하지 않습니다. architecture 검사 스크립트 2개는 여전히 `SHARED_GO_WORKSPACE_PATH`를 선택 경로로 읽습니다.
+- **관리 앱 표기:** `admin-bind.sh`의 admin source 거부 오류가 `[ERROR] Admin sources must be loopback or the approved Iris Console host`로 바뀝니다(이전 `... Iris Admin host`). 허용 대상(`127.0.0.1/32`·`::1/128`·`100.100.1.5/32`)은 그대로입니다. `.env.example`·`deploy/compose/README.md`·`scripts/README.md`와 현행 문서는 관리 앱 소유자를 iris-seoul의 Iris Console(`iris-console.service`)로 적습니다. 발송 원장 runbook은 iris-console의 OpenAPI 정본과 Go gateway 경로(`/admin/api/holo/dispatch/...`)를 기준으로 고쳤습니다.
+- **Valkey·PostgreSQL client 세부 동작:**
+  - alarm-worker의 멤버 이름 조회(`cache.BatchHGet`)는 필드마다 보내던 HGET pipeline 대신 HMGET 한 명령을 보냅니다. 빈 값은 전처럼 없는 값으로 봅니다. 실패하면 `hmget` 작업의 cache 오류를 돌려주고 `Cache batch hget failed`를 한 번 기록합니다. 응답 개수가 필드 수와 다르면 오류입니다.
+  - `GetJSON`은 응답 바이트를 바로 decode하며, 실패 wrap이 `get string:`에서 `get:`으로 바뀝니다.
+  - `PostgresService.Close`는 이제 pool을 nil로 바꾸지 않습니다. 그래서 닫힌 뒤의 `Ping`은 `ping database: pool is nil` 대신 pgxpool의 닫힌 pool 오류를 돌려줍니다.
+- **source observation 직렬화의 UTF-8 검증:** `canonicalJSON`·`MarshalPayloadV1`에서 reflect로 모든 문자열을 미리 훑던 검사를 지우고, 거부를 jsonv2 인코더에 맡깁니다. map key와 중첩 값을 포함해 잘못된 UTF-8은 계속 거부됩니다. 다만 오류 문구가 `canonical json string contains invalid UTF-8` 대신 인코더 오류(`marshal: ...`·`marshal source observation payload: ...`)로 나옵니다. 중첩 깊이 상한(128)은 이제 `CanonicalizeJSON`이 JSON 깊이 기준으로만 검사하므로, 깊이 초과 문구는 `canonical json value nesting exceeds 128` 대신 `canonical json nesting exceeds 128`입니다.
+- **그 밖의 로그·오류 문구:** alarm-worker의 구독자 cache 조회 실패 오류가 짧아집니다. 대상은 cache 성공이 필수인 resolver이며, 새 문구는 `resolve channel subscribers by type: lookup channel <id> type <type>: ...`입니다(이전 `... lookup channel subscribers by type: channel <id> type <type>: ...`). Holodex 사진 동기화 로그 `Syncing photos from Holodex`에서는 늘 false였던 `force_all` 속성이 빠집니다.
+- **alarm HTTP 서버 쪽을 worker로 이동:** `/internal/alarm/*`의 handler·route registrar(`NewInternalRouteRegistrar`)·binding DTO를 hololive-shared `pkg/service/alarmhttp`에서 alarm-worker `internal/service/alarm/httpapi`로 옮기고, service interface 이름을 `AlarmService`로 바꿨습니다. shared `alarmhttp`에는 hololive-api가 쓰는 client만 남습니다. route·인증·HTTP status·응답 바이트는 같습니다. handler↔client 왕복 테스트는 worker로 옮겼고, api admin 테스트는 worker 응답 envelope를 돌려주는 net/http stub으로 바꿨습니다.
+- **cache 의존 축소:** 운영 코드에서 `cache.Client` 전체를 받던 소비자가 이제 실제로 쓰는 작업만 묶은 interface를 받습니다. 대상은 다음과 같습니다.
+  - alarm-worker: 구독 resolver·rebuild·dedup·queue publisher·scheduler·YouTube checker·youtubedispatch
+  - hololive-api: 관리자 인증·router·bot·LLM scheduler·delivery module
+  - Holodex provider
+  - `cache.Client`는 process가 소유하는 `InfraModule`에만 남습니다. readiness의 `PostgresCheck`·`ValkeyCheck`는 `readiness.Pinger`·`ConnectionChecker`를 받습니다. 호출자가 하나뿐이던 `LookupChannelSubscribersByType`는 resolver 안으로 합쳤고, 쓰이지 않던 `handlercore.Dependencies.Cache`는 지웠습니다.
+- **미사용 코드 삭제:** 쓰이지 않던 코드를 지웠습니다. 운영 SQL·테이블명과 CHECK 제약 값인 `MajorEventStatusCanceled`는 그대로 둡니다.
+  - observation 단건 래퍼(`Upsert`·`UpsertAlarmState`·`UpsertSourcePost`)와 `ReadRepository`·`WriteRepository`·`Repository` interface를 지웠고, `NewRepositoryContext`는 `NewRepository`로 합쳤습니다. 배치 쓰기는 그대로입니다.
+  - member 저장소의 조회 4개(`GetMemberWithPhotoByChannelID`·`FindAllByName`·`FindByNameAndOrg`·`GetPhotoByChannelID`)와 SQL 파일 4개를 지웠습니다.
+  - 호출자가 없던 `PhotoSyncService.SyncAll`과 전체 동기화 경로를 지웠습니다.
+  - domain의 GORM 잔재 `TableName` 16개·`YouTubeChannelProfile`·`YouTubeModels`를 지웠습니다.
+  - `MajorEvent.EventDates`·`HasEventDates`·`SetEventDatesFromParsed`·`IsNotified`, `Member.HasAlias`, `Channel.IsHololive`·`GetPhotoURL`, `Stream.TimeUntilStart`, `AlarmNotification.UserCount`를 지웠습니다.
+  - `KakaoConfig.SnapshotACL`·`SetACLEnabled`, `SendResult.Merge`, `constants.IrisWebhookDedupTimeout`, `CommunitySchemaVersionV1`을 지웠습니다.
+  - collection failure accessor 4개와 `scannableTime.Require`를 지웠습니다.
+  - `envload.TrimmedEnv`를 지우고, trim 의미가 같은 `envutil.String`으로 대체했습니다.
+- **패키지·구현 정리:** 패키지 위치와 내부 구현을 정리했습니다.
+  - `ratelimit.Decision`을 `ratelimit/valkey`로 옮기고, `internal/testutil`(cacheclient 포함)을 `pkg/testutil`로 합쳤습니다.
+  - HTTP/3 전송 별칭 판정은 서버 전송과 Iris runtime 전송이 `settings.IsHTTP3Transport` 하나를 함께 씁니다.
+  - `applifecycle`에서 운영에 쓰이지 않던 `StartHooks.StartBot`·`StartH3CertReload`를 지우고, `ShutdownHooks`를 scheduler 취소와 HTTP 종료로 줄였습니다. bot runtime이 HTTP→webhook·durability→bot 종료를 직접 이어 실행하고 오류를 합칩니다. 종료 순서·로그·오류 문구는 같습니다.
+  - httpserver의 `StartH3Server`·`NewH3Server`와 middleware의 `NoRouteHandler`·`ParseClientHints`는 비공개로 바꿨습니다.
+  - Prometheus 지표 지연 초기화는 `sync.OnceValue`·`sync.OnceFunc`로 바꿨습니다. 지표 이름과 label은 같습니다.
+- **테스트·gate 정리:** 지운 코드만 검증하던 테스트는 함께 지웠습니다. 새로 더한 테스트는 bot runtime 종료 순서, plane 종료 panic 격리, map key·중첩 값의 잘못된 UTF-8 거부입니다. `public-pr-frontend-gate.sh`에서는 이미 지운 이름(`IRIS_ADMIN_WEB_*` env, `iris-admin-credentials` mount)이 없는지 보던 검사를 빼고, docker-proxy 연결과 30192 shortlink ingress만 검사합니다. 배포 shell 테스트는 shared-go·iris-client-go 가짜 workspace를 더 만들지 않습니다. `test-compose-services.sh`는 자체 목록 단언 대신 `check-ap-rsync-manifest.sh`를 실행합니다.
+- **문서:** 현행 문서(`docs/current`)의 존재하지 않는 경로와 지운 심볼 참조를 고쳤습니다. alarm HTTP 소유 경로도 맞췄습니다(`CONTRACT_MAP.md`·`CONTRACT_MANIFEST.txt`·`PROJECT_MAP.md`·`SERVICE_OWNERSHIP.md`, contracts·runbooks·services). `docs/README.md`·`repo-tree-policy.md`에서는 저장소에 없는 `docs/superpowers` 안내를 지웠습니다. migration `CONVENTIONS.md`의 dbtest 경로는 `hololive/hololive-dbtest`로 바로잡았습니다.
 - **활성 worker-profile pair 저장 위치:** 중앙 collector-c PO 배포와 서울 AP collector-b 배포가 활성 pair를 수용 후 정리되는 백업 디렉터리(`backups/po-c-*`, `backups/seoul-collector-*`)에 두었습니다. 2026-10-26 백업 정리 뒤 Compose가 지워진 경로를 bind하려다 중앙 부팅 경로가 `youtube-collector`에서 실패했습니다. 이제 두 배포와 AP 롤백은 pair를 `artifacts/worker-profile/releases/`에 만들고, `worker-profile-pair.py activate`는 그 밖의 pair를 거부합니다.
 
 ## v12.3.0 - 2026-10-26

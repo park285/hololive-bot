@@ -91,17 +91,9 @@ type NotificationTemplate struct {
 	UpdatedAt   time.Time   `db:"updated_at" json:"updated_at"`
 }
 
-func (NotificationTemplate) TableName() string {
-	return "notification_templates"
-}
-
 type NotificationTemplateRevision struct {
 	ID         int64     `db:"id" json:"id"`
 	TemplateID int64     `db:"template_id" json:"template_id"`
 	Body       string    `db:"body" json:"body"`
 	CreatedAt  time.Time `db:"created_at" json:"created_at"`
-}
-
-func (NotificationTemplateRevision) TableName() string {
-	return "notification_template_revisions"
 }

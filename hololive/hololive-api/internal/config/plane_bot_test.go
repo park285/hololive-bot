@@ -271,8 +271,8 @@ func TestLoadBotPlaneRuntimeDerivesWebhookFromLocalStackWorkerProfile(t *testing
 		t.Fatalf("Webhook.MaxBodyBytes = %d, want 65536", config.Webhook.MaxBodyBytes)
 	}
 
-	if config.Webhook.DedupTTL != 16*time.Minute || config.Webhook.DedupTimeout != 200*time.Millisecond {
-		t.Fatalf("Webhook dedup = (%v,%v), want (16m,200ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
+	if config.Webhook.DedupTimeout != 200*time.Millisecond {
+		t.Fatalf("Webhook.DedupTimeout = %v, want 200ms", config.Webhook.DedupTimeout)
 	}
 
 	if config.APIWorkerProfile == nil || config.APIWorkerProfile.Loaded.Profile.ProfileID != "hololive-api-test" {

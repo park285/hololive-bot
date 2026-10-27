@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"log/slog"
 	"testing"
 	"time"
 
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -19,7 +19,7 @@ func newGenerationTestService(t *testing.T, cacheClient cache.Client) *Service {
 	config.BcryptCost = bcrypt.MinCost
 	config.LoginRateLimitPerMinute = 1000
 
-	service, err := NewService(newTestDB(t), cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(newTestDB(t), cacheClient, slog.New(slog.DiscardHandler), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

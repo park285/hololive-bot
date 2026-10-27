@@ -6,8 +6,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
-mkdir -p "$tmpdir/shared-go"
-export SHARED_GO_WORKSPACE_PATH="$tmpdir/shared-go"
 
 pass() {
     echo "[PASS] $*"
@@ -61,7 +59,6 @@ services:
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: ${YOUTUBE_COLLECTOR_RUNTIME_ALLOWED:-false}
       NOTIFICATION_EGRESS_ROLE: ${NOTIFICATION_EGRESS_ROLE:-alarm-worker}
       REVISION: ${REVISION:-unknown}
-      SHARED_GO_WORKSPACE_PATH: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
 EOF
 
 compose_env_validate_file_format "$env_file"
@@ -94,7 +91,7 @@ mapfile -t keys < <(compose_env_list_keys_from_file "$env_file")
 pass "env keys are listed"
 
 mapfile -t interpolation_keys < <(compose_env_list_interpolation_keys_from_files "$compose_file")
-[[ "${interpolation_keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD NOTIFICATION_EGRESS_ROLE REVISION SHARED_GO_WORKSPACE_PATH YOUTUBE_COLLECTOR_RUNTIME_ALLOWED" ]] || fail "unexpected interpolation keys: ${interpolation_keys[*]}"
+[[ "${interpolation_keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD NOTIFICATION_EGRESS_ROLE REVISION YOUTUBE_COLLECTOR_RUNTIME_ALLOWED" ]] || fail "unexpected interpolation keys: ${interpolation_keys[*]}"
 pass "compose interpolation keys are listed"
 
 bad_export="$tmpdir/bad-export.env"
@@ -141,7 +138,6 @@ pass "shell mismatch for compose key fails"
 expect_fail env NOTIFICATION_EGRESS_ROLE=youtube-producer bash -c '. "$1"; compose_env_assert_no_shell_shadow_for_compose_files "$2" "$3"' _ "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" "$env_file" "$compose_file"
 pass "shell-only compose key fails"
 
-SHARED_GO_WORKSPACE_PATH=/tmp/shared compose_env_assert_no_shell_shadow_for_compose_files "$env_file" "$compose_file"
 REVISION=0123456789abcdef0123456789abcdef01234567 compose_env_assert_no_shell_shadow_for_compose_files "$env_file" "$compose_file"
 pass "allowed shell control keys pass"
 

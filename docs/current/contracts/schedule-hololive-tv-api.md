@@ -2,7 +2,7 @@
 
 ## 상태와 소유권
 
-`Holodex`는 live/upcoming/channel identity의 primary source입니다. 공식 일정 source는 `Holodex`가 실패한 경우 org upcoming을 보충하는 secondary source입니다. channel schedule(`GetChannelSchedule`)과 channel 조회(`GetChannel`, `GetChannels`)는 Holodex만 원천으로 쓰고 실패를 그대로 돌려줍니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
+`Holodex`는 live/upcoming/channel identity의 primary source입니다. 공식 일정 source는 `Holodex`가 실패한 경우 org upcoming을 보충하는 secondary source입니다. channel schedule(`GetChannelSchedule`)과 channel 조회(`GetChannel`)는 Holodex만 원천으로 쓰고 실패를 그대로 돌려줍니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
 
 공식 일정 source는 `GET https://schedule.hololive.tv/api/list/2`만 소비합니다. `/lives/hololive` HTML scraper, source mode, API-to-HTML fallback 및 관련 rollback branch는 지원하지 않습니다.
 
@@ -118,7 +118,7 @@ workspace 예외 형식에 맞춰 다음을 함께 지킵니다(2026-10-02 보�
 | Owner | `hololive-shared/pkg/service/holodex/provider`(실행)와 `internal/service/holodex/provider/htmlscraper`(공식 API 조회) |
 | 검토 조건 | `outcome="hit"`이 90일 동안 0이면 이 fallback을 지우고 Holodex 실패를 그대로 오류로 반환합니다. Holodex upcoming이 공식 일정 API를 대체할 수 없게 되면(Holodex 퇴역 등) 공식 API를 primary로 올리고 이 예외를 지웁니다. |
 
-이 fallback만 쓰던 범용 실행기 `internal/service/fallback`은 2026-10-02 provider 안으로 합쳤습니다. 위 metric의 이름과 label 구성은 그대로입니다.
+이 fallback 실행은 `hololive-shared/pkg/service/holodex/provider`가 직접 소유합니다. 위 metric의 이름과 label 구성은 그대로입니다.
 
 ### Channel schedule
 
@@ -131,7 +131,7 @@ Holodex 실패를 YouTube channel source나 공식 API로 보충하던 경로, �
 
 ### Channel
 
-`GetChannel`은 Holodex `/channels/{id}` 하나만 원천으로 쓰고, 실패를 YouTube scraper로 만든 부분 Channel(구독자 수·아바타만 채운 값)로 보충하거나 캐시하지 않습니다. `GetChannels`는 목록 API(`/channels?org=Hololive`) 실패를 개별 `/channels/{id}` 조회로 보충하지 않고 `get channels batch list` 오류로 돌려줍니다.
+`GetChannel`은 Holodex `/channels/{id}` 하나만 원천으로 쓰고, 실패를 YouTube scraper로 만든 부분 Channel(구독자 수·아바타만 채운 값)로 보충하거나 캐시하지 않습니다.
 
 ### Live
 

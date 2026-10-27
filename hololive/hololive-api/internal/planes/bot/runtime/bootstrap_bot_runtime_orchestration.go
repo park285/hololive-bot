@@ -38,10 +38,10 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-func newBotReadyProbe(infra *appbootstrap.BotInfrastructure) *sharedreadiness.Probe {
+func newBotReadyProbe(postgres sharedreadiness.Pinger, cacheClient sharedreadiness.ConnectionChecker) *sharedreadiness.Probe {
 	return sharedreadiness.NewProbe("bot",
-		sharedreadiness.PostgresCheck(infra.Postgres),
-		sharedreadiness.ValkeyCheck(infra.Cache),
+		sharedreadiness.PostgresCheck(postgres),
+		sharedreadiness.ValkeyCheck(cacheClient),
 	)
 }
 
@@ -95,7 +95,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		}
 	}()
 
-	readyProbe := newBotReadyProbe(infra)
+	readyProbe := newBotReadyProbe(infra.Postgres, infra.Cache)
 
 	var (
 		h3Server          *http3.Server

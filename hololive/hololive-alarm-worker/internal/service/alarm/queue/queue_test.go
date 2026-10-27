@@ -21,12 +21,12 @@
 package queue
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -61,7 +61,7 @@ func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string)
 func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
+	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
 		WithOutbox(repository),
 		WithWakeupEnabled(false),
 	)
@@ -91,7 +91,7 @@ func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 	t.Parallel()
 
-	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger())
+	publisher := NewPublisher(cachemocks.NewStrictClient(), slog.New(slog.DiscardHandler))
 
 	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
 		t.Run(string(alarmType), func(t *testing.T) {
@@ -111,7 +111,7 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 func TestPublisherPublishDispatchBatchAcceptsDeliveryDigestContentEnvelope(t *testing.T) {
 	t.Parallel()
 
-	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger(), WithWakeupEnabled(false), WithOutbox(&fakeOutboxRepository{}))
+	publisher := NewPublisher(cachemocks.NewStrictClient(), slog.New(slog.DiscardHandler), WithWakeupEnabled(false), WithOutbox(&fakeOutboxRepository{}))
 	envelope := queueTestDeliveryDigestEnvelope("room-canonical")
 
 	envelope.Version = contractsalarm.QueueEnvelopeVersionV1
@@ -125,7 +125,7 @@ func TestPublisherPublishDispatchBatchRejectsMissingEnvelopeVersion(t *testing.T
 	t.Parallel()
 
 	outbox := &fakeOutboxRepository{}
-	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger(), WithWakeupEnabled(false), WithOutbox(outbox))
+	publisher := NewPublisher(cachemocks.NewStrictClient(), slog.New(slog.DiscardHandler), WithWakeupEnabled(false), WithOutbox(outbox))
 	envelope := queueTestDeliveryDigestEnvelope("room-versionless")
 
 	_, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})

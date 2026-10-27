@@ -32,7 +32,6 @@ import (
 	"github.com/alicebob/miniredis/v2"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
 func newTestLimiter(t *testing.T) *SlidingWindowLimiter {
@@ -301,7 +300,7 @@ func TestAllowConcurrentLimit(t *testing.T) {
 		deniedCount  atomic.Int64
 	)
 
-	results := make(chan ratelimit.Decision, concurrency)
+	results := make(chan Decision, concurrency)
 
 	var wg sync.WaitGroup
 

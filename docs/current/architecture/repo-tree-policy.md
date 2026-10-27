@@ -13,11 +13,11 @@ Allowed at root:
 - Entrypoints and readme: `README.md`, `AGENTS.md`, `LICENSE`
 - Release versioning: `VERSION` (release SSOT read by `scripts/check-release-version.sh`), `CHANGELOG.md`
 - Go workspace: `go.work`, `go.work.sum`, root `go.mod`/`go.sum`, and `doc.go` (the root `package workspace` anchor)
-- Repository config: `.gitignore`, `.golangci.yml`, `.go-version`, `.tool-versions`, `.dockerignore`
+- Repository config: `.gitignore`, `.golangci.yml`, `.go-version`, `.python-version`, `.tool-versions`, `.dockerignore`
 - Build entry script: `build-all.sh`
 - Canonical env sample: `.env.example` (region- and host-specific `.env.*.example` live beside their compose files under `deploy/compose/`)
 - Reserved local-runtime placeholders: `logs/`, `runtime-config/`, `artifacts/` (see §Local Runtime Data and §Artifacts)
-- Module and content directories: `.github/`, `hololive/`, `deploy/`, `docs/`, `scripts/`, `internal/`
+- Module and content directories: `.github/`, `hololive/`, `deploy/`, `docs/`, `scripts/`
 
 Not at root — these were relocated and must not return:
 
@@ -29,9 +29,8 @@ Not at root — these were relocated and must not return:
 - `docs/current/` contains current operational source-of-truth documents.
 - `docs/current/` root is limited to core current docs and short compatibility bridges. Runbooks, service docs, contracts, architecture guidance, and review bundle policy belong in their purpose-specific subdirectories.
 - `docs/history/` contains completed or non-current records.
-- `docs/design/` and `docs/superpowers/specs/` contain proposals before they become current.
-- `docs/superpowers/plans/` contains executable implementation plans.
-- Large old plan kits under `docs/holobot-*` or similar names belong under `docs/history/plan-kits/` after classification.
+- `docs/design/` contains proposals before they become current.
+- Large old plan kits belong under `docs/history/` after classification.
 
 ## Artifacts
 
@@ -45,18 +44,20 @@ Not at root — these were relocated and must not return:
 
 Go module directories stay stable:
 
-- `shared-go/`
 - `hololive/hololive-shared/`
 - `hololive/hololive-api/`
 - `hololive/hololive-alarm-worker/`
 - `hololive/hololive-youtube-collector/`
+- `hololive/hololive-dbtest/`
+
+`go.work` also uses the sibling repositories `../shared-go` and `../iris-client-go`.
 
 Package refactors must preserve `go.work`, Docker Compose build targets, runtime binary names, and architecture import boundary gates.
 
 ## Go Package Tree Depth
 
 - Root packages that are part of an existing import contract should remain small facades or entrypoint wiring when their implementation grows beyond a single responsibility.
-- Implementation files belong under role-specific internal packages such as `delivery`, `polling`, `scraping`, `model`, `settings`, `httpserver`, `botruntime`, `workerapp`, or `reports`.
+- Implementation files belong under role-specific internal packages such as `delivery`, `model`, `settings`, `httpserver`, `workerapp`, `collectorruntime`, or `alarmstore`.
 - Further nested packages should be created by behavior family only when the new package has a stable contract and package-local tests.
 
 ## Validation

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 type policyTransport func(*http.Request) (*http.Response, error)
@@ -507,9 +507,9 @@ func TestAPIClientCooldownExtensionPreservesRequestSpacing(t *testing.T) {
 	})
 }
 
-type policyDistributedLimiter func(context.Context, string, int, time.Duration) (ratelimit.Decision, error)
+type policyDistributedLimiter func(context.Context, string, int, time.Duration) (ratelimitvalkey.Decision, error)
 
-func (f policyDistributedLimiter) Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimit.Decision, error) {
+func (f policyDistributedLimiter) Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimitvalkey.Decision, error) {
 	return f(ctx, bucket, limit, window)
 }
 
@@ -530,13 +530,13 @@ func TestAPIClientRefreshesAdmissionAfterCooldownDuringDistributedWait(t *testin
 
 		var approvals []time.Time
 
-		client.distributed = policyDistributedLimiter(func(context.Context, string, int, time.Duration) (ratelimit.Decision, error) {
+		client.distributed = policyDistributedLimiter(func(context.Context, string, int, time.Duration) (ratelimitvalkey.Decision, error) {
 			approvals = append(approvals, time.Now())
 			if len(approvals) == 1 {
-				return ratelimit.Decision{Allowed: false, RetryAfter: time.Second}, nil
+				return ratelimitvalkey.Decision{Allowed: false, RetryAfter: time.Second}, nil
 			}
 
-			return ratelimit.Decision{Allowed: true}, nil
+			return ratelimitvalkey.Decision{Allowed: true}, nil
 		})
 
 		go func() { time.Sleep(100 * time.Millisecond); client.rememberRetryAfter("5") }()
@@ -570,16 +570,16 @@ func TestAPIClientLongDistributedWaitPreservesActualRequestSpacing(t *testing.T)
 			return policyResponse(http.StatusOK, ""), nil
 		})
 
-		client.distributed = policyDistributedLimiter(func(ctx context.Context, _ string, _ int, _ time.Duration) (ratelimit.Decision, error) {
+		client.distributed = policyDistributedLimiter(func(ctx context.Context, _ string, _ int, _ time.Duration) (ratelimitvalkey.Decision, error) {
 			if delay := time.Until(openAt); delay > 0 {
 				select {
 				case <-time.After(delay):
 				case <-ctx.Done():
-					return ratelimit.Decision{}, ctx.Err()
+					return ratelimitvalkey.Decision{}, ctx.Err()
 				}
 			}
 
-			return ratelimit.Decision{Allowed: true}, nil
+			return ratelimitvalkey.Decision{Allowed: true}, nil
 		})
 
 		results := make(chan error, 3)
@@ -686,16 +686,16 @@ func TestAPIClientAdmissionCancellationPreservesCooldown(t *testing.T) {
 		entered := make(chan struct{})
 		approvals := 0
 
-		client.distributed = policyDistributedLimiter(func(ctx context.Context, _ string, _ int, _ time.Duration) (ratelimit.Decision, error) {
+		client.distributed = policyDistributedLimiter(func(ctx context.Context, _ string, _ int, _ time.Duration) (ratelimitvalkey.Decision, error) {
 			approvals++
 			if approvals == 1 {
 				close(entered)
 				<-ctx.Done()
 
-				return ratelimit.Decision{}, ctx.Err()
+				return ratelimitvalkey.Decision{}, ctx.Err()
 			}
 
-			return ratelimit.Decision{Allowed: true}, nil
+			return ratelimitvalkey.Decision{Allowed: true}, nil
 		})
 
 		firstResult := make(chan error, 1)

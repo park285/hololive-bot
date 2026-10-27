@@ -10,12 +10,9 @@
 | `internal/planes/bot/internal/app/bootstrap/` | provider·service·서버 구성과 bootstrap helper |
 | `internal/planes/bot/internal/app/http/` | router·middleware·route 및 shortlink handler |
 
-단일 소비자였던 `internal/planes/bot/internal/app/runtime/http_server.go`는
-`internal/planes/bot/runtime/http_server_helpers.go`로 흡수했습니다. 실제 runtime이 같은 package의
-private helper를 직접 사용하며, 이전 package의 alias나 forwarding 함수는 남기지 않습니다.
-
-이 이동은 nil 처리, 서버별 로그 prefix, 오류 wrapping과 종료 호출 순서를 보존합니다.
-raw HTTP/3의 정상 종료·listener 소실·진행 중 요청 처리 방식을 바꾸는 작업은 별도 행동 변경입니다.
+HTTP 서버 시작·종료 helper는 `internal/planes/bot/runtime/http_server_helpers.go`가 소유하며, 실제 runtime이
+같은 package의 private helper를 직접 사용합니다. raw HTTP/3의 정상 종료·listener 소실·진행 중 요청 처리 방식을
+바꾸는 작업은 별도 행동 변경입니다.
 
 ## 현재 자원과 구성 소유권
 
@@ -26,8 +23,6 @@ Orchestration의 readiness 포트에는 Close가 없으며 DB/cache/Holodex 수�
 Durable sampler·certificate reload 등 background task를 cancel/join한 뒤 member-cache 작업을 끝내고
 PG/cache를 해제합니다. `CloseContext`가 공유된 남은 종료 예산을 사용하며, join 미완료에서 자원을 닫거나
 동일 cleanup을 병렬로 다시 시작하지 않습니다. Fatal/drain/cleanup 오류는 합쳐서 보존합니다.
-
-과거 `internal/app` façade·`internal/app/internal/botruntime`·wiring 배치는 현재 경로 계약으로 사용하지 않습니다.
 
 ## 검증
 

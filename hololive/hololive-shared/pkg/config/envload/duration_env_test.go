@@ -21,7 +21,7 @@ func TestRequiredDurationEnvReportsParseFailureOnce(t *testing.T) {
 			t.Fatalf("%s: accepted non-numeric value", name)
 		}
 
-		const wantPrefix = "read int64 env: invalid int64 env " + key + " ("
+		const wantPrefix = "read int64 env: envutil: invalid int64 env " + key + " ("
 
 		if got := err.Error(); !strings.HasPrefix(got, wantPrefix) {
 			t.Fatalf("%s: error = %q, want prefix %q", name, got, wantPrefix)

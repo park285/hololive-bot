@@ -6,7 +6,7 @@
 
 ## 수집 명령
 
-standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
+전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회한다.
 
 Community/shorts 수집 evidence는 `youtube-collector` observation, canonical consume는 `hololive-api` YouTube plane, 최종 발송은 `alarm-worker`다. 운영 채널과 typed 활성 상태는 `members`와 `alarms`를 직접 조회한다.
 

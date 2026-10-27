@@ -42,23 +42,6 @@ type KakaoConfig struct {
 	mu sync.RWMutex
 }
 
-// Thread-safe하게 읽기 락을 사용한다.
-func (c *KakaoConfig) SnapshotACL() (enabled bool, mode string, rooms []string) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	rooms = append([]string(nil), c.Rooms...)
-
-	return c.ACLEnabled, c.ACLMode, rooms
-}
-
-func (c *KakaoConfig) SetACLEnabled(enabled bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.ACLEnabled = enabled
-}
-
 func (c *KakaoConfig) AddRoom(room string) bool {
 	room = stringutil.TrimSpace(room)
 	if room == "" {

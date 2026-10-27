@@ -79,9 +79,8 @@ func cacheClientOptions(config Config, addr string) valkey.ClientOption {
 	return opts
 }
 
+// Close는 멱등이며 valkey client 닫기는 오류를 돌려주지 않으므로 항상 nil을 반환한다.
 func (c *Service) Close() error {
-	var closeErr error
-
 	c.closeOnce.Do(func() {
 		if c.client == nil {
 			return
@@ -91,7 +90,7 @@ func (c *Service) Close() error {
 		c.logger.Info("Cache store disconnected")
 	})
 
-	return closeErr
+	return nil
 }
 
 func (c *Service) IsConnected(ctx context.Context) bool {

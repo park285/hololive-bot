@@ -67,7 +67,3 @@ type NotificationDeliveryOutbox struct {
 	SentAt        sql.NullTime         `db:"sent_at"`
 	Error         sql.NullString       `db:"error"`
 }
-
-func (NotificationDeliveryOutbox) TableName() string {
-	return "notification_delivery_outbox"
-}

@@ -40,13 +40,9 @@ func UseProfileFixture(t *testing.T, name string) {
 	t.Setenv(workercontract.ProfileFileEnv, ProfileFixture(t, name))
 }
 
-func LoadProfileFixture(t *testing.T, service, role, name string) workercontract.LoadedProfile {
+// LoadProfileFixture: fixture를 호출 서비스가 소유한 identity로 읽는다. 둘이 어긋나면 로드가 실패한다.
+func LoadProfileFixture(t *testing.T, identity workercontract.Identity, name string) workercontract.LoadedProfile {
 	t.Helper()
-
-	identity, err := workercontract.KnownIdentity(service, role)
-	if err != nil {
-		t.Fatalf("resolve worker identity: %v", err)
-	}
 
 	loaded, err := workercontract.LoadProfileFile(ProfileFixture(t, name), identity)
 	if err != nil {

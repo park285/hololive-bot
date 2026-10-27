@@ -45,7 +45,13 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 }
 
 func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T) {
-	loaded := settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")
+	// hololive-shared는 hololive-api config를 import할 수 없어 같은 identity를 여기 둔다. 값이 어긋나면 fixture 로드가 실패한다.
+	apiIdentity := workercontract.Identity{
+		Service:   "hololive",
+		Role:      "api",
+		WorkerIDs: []string{"bot_reply_outbox", "bot_webhook_inbox", "source_observation"},
+	}
+	loaded := settingstest.LoadProfileFixture(t, apiIdentity, "stack-worker-profile-api.json")
 
 	// executor를 끈 memory queue worker는 snapshot source 없이 등록되므로 profile의 worker 전체를 그렇게 등록한다.
 	for workerID, worker := range loaded.Profile.Workers {

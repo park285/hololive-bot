@@ -13,18 +13,6 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *sourcePostRepository) UpsertSourcePost(ctx context.Context, record *domain.YouTubeCommunityShortsSourcePost) error {
-	if record == nil {
-		return errors.New("upsert source post: record is nil")
-	}
-
-	if err := r.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{record}); err != nil {
-		return fmt.Errorf("upsert source posts batch: %w", err)
-	}
-
-	return nil
-}
-
 func (r *sourcePostRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
 	if len(records) == 0 {
 		return nil

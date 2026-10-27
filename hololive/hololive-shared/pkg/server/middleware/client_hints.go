@@ -53,7 +53,7 @@ type ClientHints struct {
 // 표준 Sec-CH-UA-* 헤더를 읽어 ClientHints 구조체로 반환합니다.
 //
 // 참고: 브라우저가 Client Hints를 지원하지 않거나 헤더가 없으면 빈 값이 반환됩니다.
-func ParseClientHints(c *gin.Context) ClientHints {
+func parseClientHints(c *gin.Context) ClientHints {
 	return ClientHints{
 		Brands:          c.GetHeader("Sec-CH-UA"),
 		Mobile:          c.GetHeader("Sec-CH-UA-Mobile") == "?1",

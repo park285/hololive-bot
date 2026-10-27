@@ -19,7 +19,7 @@ var claimKeyPrefixes = [...]string{
 }
 
 // ClaimKeyReleaser는 Consumer가 dedup claim 키를 삭제할 때 의존하는 narrow interface다.
-// 이 interface는 cache.Client(god interface)가 그대로 만족한다. NewConsumer의 필수 인자다.
+// DelMany만 요구하므로 cache.KeyValueLifecycle을 구현하는 값이면 만족한다. NewConsumer의 필수 인자다.
 type ClaimKeyReleaser interface {
 	DelMany(ctx context.Context, keys []string) (int64, error)
 }

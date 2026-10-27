@@ -12,7 +12,7 @@ import (
 )
 
 func LoadWorkerProfile() (*AlarmWorkerProfile, error) {
-	loaded, err := workercontract.LoadProfileFromEnv("hololive", "alarm-worker")
+	loaded, err := workercontract.LoadProfileFromEnv(WorkerIdentity())
 	if err != nil {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}

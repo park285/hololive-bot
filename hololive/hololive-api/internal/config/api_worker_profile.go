@@ -16,7 +16,7 @@ const BotCommandStaleAfter = 5 * time.Minute
 
 // LoadAPIWorkerProfile은 hololive-api 역할의 Stack Worker Profile v1을 읽고 bot·source observation 설정 관계를 검증한다.
 func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
-	loaded, err := workercontract.LoadProfileFromEnv("hololive", "api")
+	loaded, err := workercontract.LoadProfileFromEnv(APIWorkerIdentity())
 	if err != nil {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}

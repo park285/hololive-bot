@@ -58,7 +58,7 @@ admin_source_assert_allowlist() {
     for source in "${sources[@]}"; do
         case "${source}" in
             127.0.0.1/32|::1/128|100.100.1.5/32) ;;
-            *) echo '[ERROR] Admin sources must be loopback or the approved Iris Admin host' >&2; return 1 ;;
+            *) echo '[ERROR] Admin sources must be loopback or the approved Iris Console host' >&2; return 1 ;;
         esac
     done
 }

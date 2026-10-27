@@ -171,10 +171,6 @@ func ValidDurableFailureTuple(code CollectionErrorCode, class FailureClass) bool
 	return ok
 }
 
-func AllCollectionErrorCodes() []CollectionErrorCode {
-	return cloneCodes(allCollectionErrorCodes)
-}
-
 func DeferFailureTuples() []FailureTuple {
 	return cloneTuples(deferFailureTuples)
 }
@@ -183,20 +179,8 @@ func CompleteErrorFailureTuples() []FailureTuple {
 	return cloneTuples(completeErrorFailureTuples)
 }
 
-func AllDurableFailureTuples() []FailureTuple {
-	return cloneTuples(allDurableFailureTuples)
-}
-
-func DeferableCollectionErrorCodes() []CollectionErrorCode {
-	return cloneCodes(deferableCollectionErrorCodes)
-}
-
 func ReleasableCollectionErrorCodes() []CollectionErrorCode {
 	return cloneCodes(releasableCollectionErrorCodes)
-}
-
-func CompletesWithErrorCodes() []CollectionErrorCode {
-	return cloneCodes(completesWithErrorCodes)
 }
 
 func validateFailureDetail(detail string) error {

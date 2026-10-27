@@ -30,7 +30,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -43,7 +43,7 @@ const defaultLogicalGroupScanLimit = 100
 // Dependencies는 dispatcher의 저장소와 메시지 전달 의존성을 명시한다.
 type Dependencies struct {
 	DB             deliverysql.DeliveryDB
-	Cache          cache.Client
+	Cache          alarmstore.SubscriberCache
 	Sender         delivery.PreparedMessageSender
 	Renderer       *template.Renderer
 	MessageStrings *messagestrings.Store

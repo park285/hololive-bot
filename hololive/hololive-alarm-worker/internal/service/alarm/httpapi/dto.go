@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package alarmhttp
+package httpapi
 
-// API 요청/응답 DTO (alarm-dispatcher internal API)
+// worker 알림 internal HTTP API의 요청 바인딩·응답 DTO. client는 alarmhttp의 자체 직렬화 타입을 쓴다.
 
 // AddAlarmRequest는 기존 채널 ID와 선택적인 UNIT B 멤버 ID로 구독을 지정한다.
 type AddAlarmRequest struct {

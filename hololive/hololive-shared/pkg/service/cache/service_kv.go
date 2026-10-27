@@ -23,9 +23,9 @@ func (c *Service) Get(ctx context.Context, key string, dest any) error {
 }
 
 func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
-	value, hit, err := c.GetString(ctx, key)
+	resp, hit, err := c.getResult(ctx, key)
 	if err != nil {
-		return hit, fmt.Errorf("get string: %w", err)
+		return hit, fmt.Errorf("get: %w", err)
 	}
 
 	if !hit {
@@ -33,7 +33,15 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 	}
 
 	if dest != nil {
-		if err := jsonv2.Unmarshal([]byte(value), dest); err != nil {
+		// 문자열을 거치지 않고 응답 바이트를 바로 디코드한다.
+		raw, err := resp.AsBytes()
+		if err != nil {
+			c.logger.Error("Cache value conversion failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
+
+			return true, NewCacheError("get", key, err)
+		}
+
+		if err := jsonv2.Unmarshal(raw, dest); err != nil {
 			c.logger.Error("Cache value unmarshal failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 
 			return true, NewCacheError("get", key, err)
@@ -44,15 +52,9 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 }
 
 func (c *Service) GetString(ctx context.Context, key string) (string, bool, error) {
-	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
-	if errors.Is(resp.Error(), valkey.Nil) {
-		return "", false, nil
-	}
-
-	if resp.Error() != nil {
-		c.logger.Error("Cache get operation failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
-
-		return "", false, NewCacheError("get", key, resp.Error())
+	resp, hit, err := c.getResult(ctx, key)
+	if err != nil || !hit {
+		return "", hit, err
 	}
 
 	value, err := resp.ToString()
@@ -63,6 +65,22 @@ func (c *Service) GetString(ctx context.Context, key string) (string, bool, erro
 	}
 
 	return value, true, nil
+}
+
+// getResult는 GET 응답을 돌려주며 miss는 (false, nil)로 구분한다.
+func (c *Service) getResult(ctx context.Context, key string) (valkey.ValkeyResult, bool, error) {
+	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
+	if errors.Is(resp.Error(), valkey.Nil) {
+		return resp, false, nil
+	}
+
+	if resp.Error() != nil {
+		c.logger.Error("Cache get operation failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
+
+		return resp, false, NewCacheError("get", key, resp.Error())
+	}
+
+	return resp, true, nil
 }
 
 func ttlSecondsCeil(ttl time.Duration) (int64, error) {

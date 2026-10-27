@@ -101,7 +101,7 @@ func markSentDeliveryTracking(
 	tx dbx.Querier,
 	trackingMarks []observation.AlarmSentMark,
 ) error {
-	if err := observation.NewRepositoryContext(ctx, tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
+	if err := observation.NewRepository(tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
 		return fmt.Errorf("update tracking rows: %w", err)
 	}
 

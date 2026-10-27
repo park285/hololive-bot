@@ -170,10 +170,6 @@ func (c *acceptedTestIrisClient) SendMessageAccepted(ctx context.Context, room, 
 
 func (c *testIrisClient) Ping(context.Context) bool { return true }
 
-func (c *testIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
-	return &iris.ConfigResponse{}, nil
-}
-
 func (c *testIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
 	return &iris.RoomListResponse{}, nil
 }

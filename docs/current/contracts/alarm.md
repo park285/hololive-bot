@@ -21,7 +21,7 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 
 ## Provider
 
-- HTTP provider: `alarm-worker` registers `hololive-shared/pkg/service/alarm.Handler` for `/internal/alarm/*` through the shared alarm route registrar.
+- HTTP provider: `alarm-worker` registers `hololive-alarm-worker/internal/service/alarm/httpapi.Handler` for `/internal/alarm/*` through `httpapi.NewInternalRouteRegistrar`. The bot/admin client stays in `hololive-shared/pkg/service/alarmhttp`.
 - Domain owner: `alarm-worker`.
 - The actual subscription service is `hololive/hololive-alarm-worker/internal/service/alarm/subscriptions`. The same instance supplies the local scheduler's target/cache-warm port and the HTTP handler's route-specific ports.
 - `hololive-api` bot/admin planes require `ALARM_INTERNAL_URL` and construct worker clients. They do not register a second `/internal/alarm/*` provider or construct an in-process subscription service.
@@ -36,7 +36,7 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
   - YouTube plane: `internal/planes/youtube/runtime/queries/notification_channel_ids.sql`을 projection transaction 안에서 실행합니다. `members` JOIN으로 졸업 멤버를 제외하고 `MaxInputChannelCount+1`로 상한을 둡니다.
   - llm plane membernews: `repository_query_0080_03.sql`이 방별 구독 멤버 이름을 읽습니다.
   - bot/admin plane은 `alarm.http`를 사용합니다. 통합 API의 `internal/config.RuntimeConfig.Validate`와 두 plane의 builder가 빈 `ALARM_INTERNAL_URL`을 거부합니다. URL 미설정 시 in-process service/repository를 주입하는 분기는 없습니다.
-  - `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 youtube-collector와 YouTube plane에는 주입하지 않습니다. `check-repository-ownership.sh`는 youtube-collector의 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
+  - `Add`/`Remove`/`ClearByRoom`을 함께 노출하는 alarms 저장소 `alarmstore.Repository`는 alarm-worker의 `internal/service/alarm/alarmstore`에 있으므로, Go `internal` 가시성 규칙에 따라 youtube-collector와 hololive-api는 import할 수 없습니다.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery
 
 ## Transport
@@ -52,7 +52,6 @@ Iris Console 발송 원장은 기존 재처리 외에 `POST /api/holo/dispatch/d
 Gateway는 운영자 ID를 인증 세션에서 결합합니다. `dlq`·`quarantined`인 최대 100건만
 직렬화 트랜잭션에서 잠그고, 현재 리비전과 전체 구성 일치 후 상태·감사를 함께 커밋합니다.
 발송 중·완료·취소된 묶음, 일부 대상, 오래된 리비전, 이미 전체 격리된 묶음의 재격리는 거절합니다.
-이전 send unit 없는 실패 행도 단일 항목으로 처리할 수 있습니다.
 
 취소는 `cancelled`로 종결하여 재처리를 막고, 격리는 `quarantined`로 보관하여 기존 수동
 재처리 조건을 유지합니다. 두 작업 모두 외부 발송·자동 재실행 없이 식별자·실패 이력을 보존하며,
@@ -251,7 +250,7 @@ the stored target list is absent/empty under the existing settings contract.
 | Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
 | Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
 | Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |
-| Contract package | `hololive/hololive-shared/pkg/contracts/alarm`; HTTP DTOs remain under `hololive/hololive-shared/pkg/service/alarm` |
+| Contract package | `hololive/hololive-shared/pkg/contracts/alarm`; server binding DTOs are in `hololive/hololive-alarm-worker/internal/service/alarm/httpapi`, client request structs in `hololive/hololive-shared/pkg/service/alarmhttp` |
 | Envelope fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
 
 ## Request
@@ -288,7 +287,7 @@ Major event/member news rows are produced in `notification_delivery_outbox`; `al
 
 Birthday stream notifications use `SourceKind=celebration`, `AlarmType=BIRTHDAY`, and `Celebration.Kind=birthday_stream`. Their recipient contract is the set of rooms whose matching `celebration:birthday:member-{memberID}:{date}` delivery is already `sent`; an audience lookup failure must not widen delivery to other rooms. Re-publishing a known birthday stream event is permitted so a newly eligible room can add its missing delivery through the existing event/delivery dedupe keys. The birthday window for a KST birthday date runs from 21:00 KST on the previous day to 17:00 KST on the following day so that members in time zones behind or ahead of KST keep their local birthday streams. The runner evaluates a date only from KST midnight and keeps evaluating the previous date until that window closes, so a session that started before midnight is announced only while it is still `UPCOMING` or `LIVE` after the greeting is sent. A stream starting on another KST date shows its start as `01/02 15:04`. A session on the birthday member's own channel inside that window becomes a birthday stream only when its NFKC-normalized, lower-cased title contains a birthday keyword (`birthday`, `bday`, `b-day`, `誕生日`, `誕生祭`, `誕生会`, `生誕`, `たんじょうび`, `バースデー`, `バースデイ`, `バースディ`, `생일`, `ulang tahun`, `ultah`); birthday streams without such a keyword are not announced. The per-member, per-day cap of three counts only published events whose stored title passes the same check, and only those events are re-evaluated after a later title change. A published event whose stored title fails the check is never re-sent, even if the current title later passes.
 
-HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service/alarm/dto.go` and the client-local request structs in `client.go`.
+HTTP request binding DTOs are defined in `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/dto.go`, and the client-local request structs in `hololive/hololive-shared/pkg/service/alarmhttp/client.go`.
 
 ### UNIT B member subscriptions
 
@@ -299,7 +298,7 @@ HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service
 전체 채널 해지는 별도로 등록한 멤버 구독을 삭제하지 않는다.
 
 채널별 구독 캐시는 해당 방의 전체·멤버별 구독 합집합이다. UNIT B의 최종 수신 방은
-`alarm.SubscriberResolver.ResolveEventSubscribers`가 DB 구독 행과 제목으로 결정한다. 진행자가 확인되면
+`alarmstore.SubscriberResolver.ResolveEventSubscribers`가 DB 구독 행과 제목으로 결정한다. 진행자가 확인되면
 해당 멤버와 전체 채널 구독 방을, 미상이면 해당 알림 종류를 구독한 모든 UNIT B 방을 포함한다.
 공동 진행자는 합집합이며 방 ID는 중복을 제거한다. 외부 유닛의 게스트를 UNIT B 진행자로
 취급하지 않는다. 구독 DB 오류나 손상된 outbox payload는 이 fail-open의 대상이 아니다.
@@ -347,12 +346,12 @@ members 한국어 표시명을 가졌다. 그래서 중간 단계(최신 `alarms
 | 순서 | members(`short_korean_name`→`korean_name`) → 표시 단계 `misc/vtuber_fallback` 문구(종단) |
 | 한도 | 표시 전용. 식별·dedup·라우팅에 쓰지 않고 외부 호출·재시도가 없음. 조회 오류는 trigger가 아님 |
 | Telemetry | `hololive_youtube_outbox_member_name_missing_total`(YouTube outbox 알림), `hololive_alarm_dispatch_member_name_missing_total`(방송·X 스페이스 알림)이 종단 문구로 알림을 만든 횟수 |
-| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`의 `GetMemberName`, `hololive-alarm-worker/internal/egress/youtubedispatch/format`의 `DisplayMemberName`, `hololive-alarm-worker/internal/egress/alarmdispatch`의 `alarmContractMemberName`) |
+| Owner | hololive-bot alarm(`hololive-alarm-worker/internal/service/alarm/alarmstore`의 `Repository.GetMemberName`, `hololive-alarm-worker/internal/egress/youtubedispatch/format`의 `DisplayMemberName`, `hololive-alarm-worker/internal/egress/alarmdispatch`의 `alarmContractMemberName`) |
 | 검토 조건 | 지표가 0이 아니면 해당 채널의 members 한국어 표시명을 등록한다. 90일 동안 0이면 종단 문구 대신 포맷 실패로 바꿀지 다시 결정한다 |
 
-코드 근거는 `alarm.Repository.GetMemberName` 주석과 `queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
+코드 근거는 `alarmstore.Repository.GetMemberName` 주석과 같은 package의 `queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
 
-YouTube outbox dispatch의 `MemberNameSource`는 표시명을 Valkey `alarm:member_names`에서 읽지 않고 메시지마다 `alarm.Repository.GetMemberName`으로
+YouTube outbox dispatch의 `MemberNameSource`는 표시명을 Valkey `alarm:member_names`에서 읽지 않고 메시지마다 `alarmstore.Repository.GetMemberName`으로
 PostgreSQL 정본을 조회한다(2026-10-02). 조회 오류는 이 예외 계약의 trigger가 아니다. 대체 문구로 보내지 않고
 재시도 가능한 `format_message` 실패로 전이하며, grouped 발송이면 group 전체를 같은 실패로 전이한다. 조회 결과가 빈
 문자열일 때만 `misc/vtuber_fallback` 문구를 쓴다.
@@ -481,10 +480,12 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - Dispatch outbox and canonical clock: `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/*_test.go`
 - Actual subscription service and worker/client roundtrip: `hololive/hololive-alarm-worker/internal/service/alarm/subscriptions/*_test.go`, including `client_advance_integration_test.go` without a build tag.
 - Alarm runner and formatter: `hololive/hololive-alarm-worker/internal/egress/alarmdispatch/*_test.go`, `hololive/hololive-alarm-worker/internal/egress/youtubedispatch/format/*_test.go`
-- HTTP handler/client: `hololive/hololive-shared/pkg/service/alarm/api_test.go`, `client_test.go`
-- Shared alarm route registrar: `hololive/hololive-shared/pkg/service/alarm/routes_test.go`
-- Member subscription HTTP roundtrip: `hololive/hololive-shared/pkg/service/alarm/member_subscription_api_test.go`
-- Member selection and fail-open: `hololive/hololive-shared/pkg/service/alarm/member_subscriptions_test.go`
+- HTTP handler: `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/handler_test.go`
+- HTTP client: `hololive/hololive-shared/pkg/service/alarmhttp/client_test.go`
+- Alarm route registrar: `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/routes_test.go`
+- Handler/client envelope roundtrip: `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/client_roundtrip_test.go`
+- Member subscription HTTP roundtrip: `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/member_subscription_roundtrip_test.go`
+- Member selection and fail-open: `hololive/hololive-alarm-worker/internal/service/alarm/alarmstore/member_subscriptions_test.go`
 
 ## Known gaps
 

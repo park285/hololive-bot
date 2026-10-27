@@ -153,7 +153,7 @@ func httpLogAttrs(c *gin.Context, path string, status int, latency time.Duration
 }
 
 func requestDeviceInfo(c *gin.Context) string {
-	clientHints := ParseClientHints(c)
+	clientHints := parseClientHints(c)
 	if deviceInfo := clientHints.Summary(); deviceInfo != "" {
 		return deviceInfo
 	}

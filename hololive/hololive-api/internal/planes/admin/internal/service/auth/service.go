@@ -56,15 +56,23 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
+// SessionCache는 관리자 인증이 세션·잠금·rate limit에 쓰는 cache 작업이다. 세션 key(Get·GetString·Exists·Set·SetNX·Del),
+// 세션 CAS 삭제(CompareAndDelete), 카운터 pipeline(B·DoMulti)을 쓴다.
+type SessionCache interface {
+	cache.KeyValueCache
+	cache.ScriptCache
+	cache.LowLevelCache
+}
+
 type Service struct {
 	db             *pgxpool.Pool
-	cacheClient    cache.Client
+	cacheClient    SessionCache
 	logger         *slog.Logger
 	config         Config
 	loginDummyHash []byte
 }
 
-func NewService(db *pgxpool.Pool, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
+func NewService(db *pgxpool.Pool, cacheClient SessionCache, logger *slog.Logger, config Config) (*Service, error) {
 	if db == nil {
 		return nil, errors.New("db must not be nil")
 	}

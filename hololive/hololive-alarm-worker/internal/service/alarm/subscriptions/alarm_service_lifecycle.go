@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 const (
@@ -40,7 +39,7 @@ const (
 )
 
 func NewAlarmService(
-	cacheClient cache.Client,
+	cacheClient Cache,
 	memberData domain.MemberDataProvider,
 	alarmRepository *alarmstore.Repository,
 	logger *slog.Logger,

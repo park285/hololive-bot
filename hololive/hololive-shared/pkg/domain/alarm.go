@@ -181,10 +181,6 @@ func NewAlarmNotification(roomID string, channel *Channel, stream *Stream, minut
 	}
 }
 
-func (n *AlarmNotification) UserCount() int {
-	return len(n.Users)
-}
-
 func (n *AlarmNotification) IsStarting() bool {
 	if n == nil {
 		return false

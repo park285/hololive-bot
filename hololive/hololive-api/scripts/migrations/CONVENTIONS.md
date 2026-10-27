@@ -6,7 +6,7 @@
 ## 러너 의미론 (모든 규칙의 전제)
 
 - 프로덕션 적용은 Go 러너(`hololive-api/internal/migrationrunner`, `cmd/db-migrate` → compose `hololive-db-migrate`)가
-  수행하고, dbtest 재생(`hololive-shared/pkg/dbtest`)도 같은 의미론이다. 파일을 statement 단위로 분할
+  수행하고, dbtest 재생(`hololive/hololive-dbtest`)도 같은 의미론이다. 파일을 statement 단위로 분할
   (`hololive-shared/pkg/sqlsplit`)해 개별 autocommit Exec로 보내고, `schema_migrations` ledger로 적용 완료
   파일을 skip한다. **파일 중간 실패 시 ledger 미기록 → 재실행 때 그 파일 전체가 재적용**된다.
 - top-level `BEGIN;`/`COMMIT;` 블록은 단일 커넥션의 실제 트랜잭션으로 실행된다(`sqlsplit.Segments`).
@@ -23,8 +23,7 @@
   고친 파일에 이르면 skip하지 않고 `migration <file> checksum mismatch`로 실행을 멈춘다(뒤 파일도 적용하지 않는다).
   프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다(예: 183의 DB 기본값을 다시 선언한 271).
 - 적용 경로는 `db-migrate` 하나다. checksum, epoch residue, atomic baseline ledger 계약은 Go 러너만 소유하므로
-  local·production·복구 적용은 모두 `db-migrate`를 사용한다. epoch-2에서 거부만 하던 셸 러너 `apply-all.sh`와
-  `bootstrap-and-apply.sh`는 runbook과 호스트 절차에 실행 단계가 없음을 확인해 삭제했다(stack-audit 2026-09-26 T11).
+  local·production·복구 적용은 모두 `db-migrate`를 사용하며 셸 러너는 없다.
 - manifest 밖 `schema_migrations` 행(이전 epoch 잔재 포함)이 있으면 러너는 SQL을 실행하기 전에 거부한다.
   epoch-1 ledger 잔재를 `182_epoch2_legacy_ledger_cleanup.sql`이 같은 실행 안에서 지우도록 182 적용 전까지 허용하던
   창과 epoch-1 checkpoint baseline 수용은 닫혔다. 제거 조건이던 "운영 `schema_migrations`에 001·182가 기록되고

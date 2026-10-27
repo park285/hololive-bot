@@ -23,27 +23,6 @@ compose_file_resolve_path() {
     printf '%s\n' "${file}"
 }
 
-resolve_workspace_path() {
-    local explicit_value="$1"
-    local sibling_path="$2"
-    local embedded_path="$3"
-    local label="$4"
-    local candidate="${explicit_value}"
-
-    if [[ -z "${candidate}" ]]; then
-        if [[ -d "${sibling_path}" ]]; then
-            candidate="${sibling_path}"
-        elif [[ -d "${embedded_path}" ]]; then
-            candidate="${embedded_path}"
-        fi
-    fi
-    if [[ ! -d "${candidate}" ]]; then
-        echo "[ERROR] Active ${label} workspace not found" >&2
-        exit 1
-    fi
-    (cd "${candidate}" && pwd)
-}
-
 contains_compose_file() {
     local expected="$1"
     local path=""
@@ -181,13 +160,6 @@ if ! assert_kapu_alarm_worker_start_allowed "$(hostname -s)" 0 "${fence_compose_
     exit 1
 fi
 
-SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
-    "${SHARED_GO_WORKSPACE_PATH:-}" \
-    "${ROOT_DIR}/../shared-go" \
-    "${ROOT_DIR}/shared-go" \
-    "shared-go")"
-export SHARED_GO_WORKSPACE_PATH
-
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 case "${CONTAINER_CLI}" in
     docker|podman) ;;
@@ -242,7 +214,6 @@ echo "[INFO] HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
 if [[ "${REVISION_ENABLED}" == true ]]; then
     echo "[INFO] REVISION=${REVISION}"
 fi
-echo "[INFO] SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
 echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" config --quiet

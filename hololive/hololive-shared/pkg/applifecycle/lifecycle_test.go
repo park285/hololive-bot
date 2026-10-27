@@ -21,7 +21,6 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx := context.WithValue(t.Context(), lifecycleContextKey{}, "parent")
 	alarmCtxCh := make(chan context.Context, 1)
-	botCtxCh := make(chan context.Context, 1)
 	cancelCh := make(chan context.CancelFunc, 1)
 	order := make([]string, 0, 2)
 
@@ -30,10 +29,6 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 		ServerAddr: "127.0.0.1:0",
 		StartAlarmScheduler: func(ctx context.Context) error {
 			alarmCtxCh <- ctx
-			return nil
-		},
-		StartBot: func(ctx context.Context) error {
-			botCtxCh <- ctx
 			return nil
 		},
 		StartHTTPServer: func(gotErrCh chan<- error) {
@@ -54,10 +49,8 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 
 	cancelAlarm := receiveLifecycleTestValue(t, cancelCh)
 	alarmCtx := receiveLifecycleTestValue(t, alarmCtxCh)
-	botCtx := receiveLifecycleTestValue(t, botCtxCh)
 
 	assert.Equal(t, "parent", alarmCtx.Value(lifecycleContextKey{}))
-	assert.Equal(t, "parent", botCtx.Value(lifecycleContextKey{}))
 
 	cancelAlarm()
 
@@ -165,33 +158,6 @@ func TestStart_NonErrorAlarmAdapterDoesNotTouchErrCh(t *testing.T) {
 	}
 }
 
-func TestStart_BotErrorPropagatesToErrCh(t *testing.T) {
-	t.Parallel()
-
-	errCh := make(chan error, 1)
-	botCrash := errors.New("bot crashed")
-
-	Start(t.Context(), errCh, StartHooks{
-		Logger: slog.New(slog.DiscardHandler),
-		StartBot: func(context.Context) error {
-			return botCrash
-		},
-	})
-
-	select {
-	case err := <-errCh:
-		if err == nil {
-			t.Fatal("expected bot error, got nil")
-		}
-
-		if !errors.Is(err, botCrash) {
-			t.Fatalf("unexpected bot error: %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("expected bot error to be sent to errCh")
-	}
-}
-
 func TestStart_AlarmSchedulerPanicIsRecoveredAndPropagatedToErrCh(t *testing.T) {
 	t.Parallel()
 
@@ -212,68 +178,6 @@ func TestStart_AlarmSchedulerPanicIsRecoveredAndPropagatedToErrCh(t *testing.T) 
 		assert.Contains(t, err.Error(), "alarm scheduler exploded")
 	case <-time.After(time.Second):
 		t.Fatal("expected recovered scheduler panic to be sent to errCh")
-	}
-}
-
-func TestStart_BotPanicIsRecoveredAndPropagatedToErrCh(t *testing.T) {
-	t.Parallel()
-
-	errCh := make(chan error, 1)
-
-	require.NotPanics(t, func() {
-		Start(t.Context(), errCh, StartHooks{
-			Logger: slog.New(slog.DiscardHandler),
-			StartBot: func(context.Context) error {
-				panic("bot exploded")
-			},
-		})
-	})
-
-	select {
-	case err := <-errCh:
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "bot exploded")
-	case <-time.After(time.Second):
-		t.Fatal("expected recovered bot panic to be sent to errCh")
-	}
-}
-
-func TestStart_BotContextCancellationIsNotFatal(t *testing.T) {
-	t.Parallel()
-
-	errCh := make(chan error, 1)
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	Start(ctx, errCh, StartHooks{
-		Logger: slog.New(slog.DiscardHandler),
-		StartBot: func(context.Context) error {
-			return context.Canceled
-		},
-	})
-
-	select {
-	case err := <-errCh:
-		t.Fatalf("bot context cancellation must not be propagated as fatal error: %v", err)
-	case <-time.After(50 * time.Millisecond):
-	}
-}
-
-func TestStartRunsH3CertReloadHookWithRunContext(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	gotCh := make(chan context.Context, 1)
-
-	Start(ctx, nil, StartHooks{
-		StartH3CertReload: func(c context.Context) { gotCh <- c },
-	})
-
-	got := receiveLifecycleTestValue(t, gotCh)
-	if got != ctx {
-		t.Fatalf("StartH3CertReload ctx = %v, want run ctx", got)
 	}
 }
 
@@ -359,15 +263,13 @@ func TestRuntimeOptions_LogsShutdownError(t *testing.T) {
 	assert.True(t, bytes.Contains(output.Bytes(), []byte("Shutdown error")))
 }
 
-func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
+func TestShutdown_CallsHooksInOrder(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	calls := make([]string, 0, 5)
+	calls := make([]string, 0, 2)
 
 	httpErr := errors.New("http shutdown failed")
-	webhookErr := errors.New("webhook close failed")
-	botErr := errors.New("bot shutdown failed")
 	err := Shutdown(ctx, ShutdownHooks{
 		Logger: slog.New(slog.DiscardHandler),
 		ClearAlarmScheduler: func() bool {
@@ -383,31 +285,13 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 
 			return httpErr
 		},
-		WebhookHandlerClose: func() error {
-			calls = append(calls, "close-webhook-handler")
-			return webhookErr
-		},
-		ShutdownBot: func(gotCtx context.Context) error {
-			calls = append(calls, "shutdown-bot")
-
-			if gotCtx != ctx {
-				t.Fatal("ShutdownBot received unexpected context")
-			}
-
-			return botErr
-		},
 	})
 
 	assert.Equal(t, []string{
 		"clear-alarm-scheduler",
 		"shutdown-http-server",
-		"close-webhook-handler",
-		"shutdown-bot",
 	}, calls)
-
-	for _, wantErr := range []error{httpErr, webhookErr, botErr} {
-		assert.ErrorIs(t, err, wantErr)
-	}
+	assert.ErrorIs(t, err, httpErr)
 }
 
 func TestShutdown_HandlesNilHooks(t *testing.T) {

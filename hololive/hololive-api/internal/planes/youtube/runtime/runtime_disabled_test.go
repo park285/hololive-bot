@@ -105,7 +105,7 @@ func TestDisabledRuntimeReportsDurableQueueDepth(t *testing.T) {
 	}, 5*time.Second, time.Millisecond)
 
 	// 나머지 API 큐 둘은 봇 런타임 소유이므로 이 실행 영역의 등록만 격리한다.
-	loaded := settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")
 	worker := loaded.Profile.Workers[apiconfig.WorkerSourceObservation]
 
 	worker.Executor.Enabled = false

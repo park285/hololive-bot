@@ -93,14 +93,6 @@ func (s *scannableTime) Ptr() *time.Time {
 	return &normalized
 }
 
-func (s *scannableTime) Require(field string) (time.Time, error) {
-	if s.value == nil {
-		return time.Time{}, fmt.Errorf("%s is empty", field)
-	}
-
-	return s.value.UTC(), nil
-}
-
 type scannableBool struct {
 	value *bool
 }

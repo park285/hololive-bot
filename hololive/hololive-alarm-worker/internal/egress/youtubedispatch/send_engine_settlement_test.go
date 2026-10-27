@@ -239,9 +239,9 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 
 		row := domain.YouTubeNotificationDelivery{OutboxID: outbox.ID, RoomID: "settlement-room"}
 		require.NoError(t, insertDeliveryTestRows(pool, &row).Error)
-		require.NoError(t, observation.NewRepository(pool).Upsert(t.Context(), &domain.YouTubeContentAlarmTracking{
+		require.NoError(t, observation.NewRepository(pool).UpsertBatch(t.Context(), []*domain.YouTubeContentAlarmTracking{{
 			Kind: outbox.Kind, ContentID: contentID, ChannelID: outbox.ChannelID, DetectedAt: detectedAt,
-		}))
+		}}))
 
 		state := domain.YouTubeCommunityShortsAlarmState{Kind: outbox.Kind, PostID: "short:" + contentID, ContentID: contentID, ChannelID: outbox.ChannelID, DetectedAt: detectedAt}
 		_, stateErr := insertDomainAlarmState(t.Context(), pool, &state)

@@ -32,7 +32,7 @@
 | Path/Event/Queue | `/internal/majorevent/subscriptions` |
 | Method | `GET /subscriptions/:roomID`, `POST /subscriptions`, `DELETE /subscriptions/:roomID` |
 | Version | unversioned HTTP body; route constants in package |
-| Contract package | `hololive/hololive-shared/pkg/contracts/majorevent` |
+| Contract package | `hololive/hololive-api/internal/contracts/majorevent` |
 
 ## Request
 

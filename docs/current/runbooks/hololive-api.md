@@ -349,7 +349,7 @@ Migration 230은 적용 전 catalog에서 정확한 trigger/function 관계와 C
 
 Migration 125 이후 runtime은 `bot_webhook_heads`와 `ordering_key` advisory lock을 함께 사용합니다. Schema rollback은 이전 runtime으로 먼저 전환해 writer를 quiesce한 뒤에만 `bot_webhook_heads`/`available_at`을 제거해야 하며, 현재 runtime이 쓰는 동안 migration 125~136을 되돌리면 안 됩니다.
 
-Epoch-1/R1 artifact로 되돌린 뒤 migration 114를 다시 적용하던 preflight(`preflight-114-restore.sh`)와 074~082 message contract repair 도구는 `DEC-20260926-hololive-retired-rollback-tooling`으로 epoch-1 rollback 창을 닫으며 지웠습니다. T18(2026-09-26)에서 운영 `schema_migrations`에 `001_schema_epoch2_baseline`·`182_epoch2_legacy_ledger_cleanup`이 기록되고 epoch-1 파일명 행이 0건이며 epoch-1 이미지가 보존되지 않음을 확인했습니다.
+Epoch-1/R1 artifact로 되돌리는 rollback 창은 `DEC-20260926-hololive-retired-rollback-tooling`으로 닫혔고, migration 114 재적용 preflight와 074~082 message contract repair 도구는 없습니다. T18(2026-09-26)에서 운영 `schema_migrations`에 `001_schema_epoch2_baseline`·`182_epoch2_legacy_ledger_cleanup`이 기록되고 epoch-1 파일명 행이 0건이며 epoch-1 이미지가 보존되지 않음을 확인했습니다.
 
 DB maintenance 명령(아래 `db-maintenance-exec.sh`로 실행하는 migration·preflight SQL, 예: [Rollback](#rollback)의 durable preflight)은 libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
 

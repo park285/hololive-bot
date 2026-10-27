@@ -23,7 +23,6 @@ package domain
 import (
 	"cmp"
 	"fmt"
-	"slices"
 	"time"
 )
 
@@ -65,11 +64,6 @@ func (m *Member) GetAllAliases() []string {
 	all = append(all, m.Aliases.Ja...)
 
 	return all
-}
-
-func (m *Member) HasAlias(name string) bool {
-	aliases := m.GetAllAliases()
-	return slices.Contains(aliases, name)
 }
 
 func (m *Member) GetOrg() string {

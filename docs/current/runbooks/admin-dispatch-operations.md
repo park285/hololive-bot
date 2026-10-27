@@ -6,12 +6,16 @@
 감사 가능한 재처리를 추가합니다. 기존 worker만 실제 메시지를 전송하며,
 관리 API는 payload를 변경하거나 직접 외부 발송을 호출하지 않습니다.
 
-Iris Admin은 `/dashboard/dispatch`에서 이 API를 노출합니다. `park285/iris-admin`의 OpenAPI
-정본과 생성 gateway/browser 계약이 허용 경로를 소유하고, gateway가 공통 세션·CSRF·비밀번호
-증명·mutation ID를 확인한 뒤 세션 audit ID를 `operatorId`로 결합합니다. 브라우저 요청 schema는
-`operatorId`를 허용하지 않습니다. 조회한 묶음 리비전과 중복 위험 확인은 OperationRegistry의
-단회 변경으로 전송되며 결과 불명 뒤 자동 재실행하지 않습니다. 폐기된 `admin-dashboard`나
-gateway 허용 목록 우회 경로는 사용하지 않습니다.
+Iris Console(`park285/iris-console`, iris-seoul의 `iris-console.service`)이 이 API를 운영자에게
+노출합니다. 현재 소스의 화면은 Android 네이티브 앱의 발송 원장 화면(`HololiveDispatchScreen`)입니다.
+PC 웹 화면(`/dashboard/dispatch`)은 iris-console 소스에서 퇴역했으며, 운영 전환 상태는 iris-console
+배포 문서를 따릅니다. iris-console의 `contracts/hololive/openapi.json` 정본과 Go gateway가 embed하는
+생성 계약이 허용 경로(`/admin/api/holo/dispatch/...`)와 요청 schema를 소유합니다. gateway는 공통 세션·CSRF
+marker·단회 재인증 증명·mutation ID를 확인한 뒤 재처리·정산 요청에 세션 audit ID를 `operatorId`로
+결합합니다. 클라이언트 요청 schema는 `operatorId`를 허용하지 않습니다. 앱은 조회한 묶음 리비전과 중복 위험
+확인을 확인창 뒤 공용 변경 실행기로 한 번만 보내며 결과 불명 뒤 자동 재실행하지 않습니다. 폐기된
+`admin-dashboard`나 gateway 허용 목록 우회 경로는 사용하지 않습니다. Iris의 별도 호스트 제어 API
+`iris-admin`은 이 경로에 관여하지 않습니다.
 
 ## HTTP 계약
 
@@ -26,6 +30,7 @@ gateway 허용 목록 우회 경로는 사용하지 않습니다.
 | GET | `/api/holo/dispatch/deliveries/{id}` | 상태, 같은 외부 발송 묶음, 재처리 가능 여부와 리비전 |
 | GET | `/api/holo/dispatch/deliveries/{id}/actions` | 해당 발송의 영속 감사 이력 |
 | POST | `/api/holo/dispatch/deliveries/{id}/requeue` | 조회한 묶음 전체를 원자적으로 retry에 등록 |
+| POST | `/api/holo/dispatch/deliveries/{id}/settle` | 조회한 묶음 전체를 취소 또는 격리([alarm 계약](../contracts/alarm.md#관리자-실패-발송-취소격리)) |
 
 목록 query는 `status`, `roomId`, `channelId`, `beforeId`, `alarmType`, `errorCode`만 허용합니다.
 상태 생략 시 `dlq`와 `quarantined`를 함께 조회합니다. 단일 상태는
@@ -84,8 +89,8 @@ ID를 JavaScript Number로 변환하거나 숫자 문자열을 사전순으로 �
 ```
 
 `operatorId`는 현재 backend의 API-key 신뢰 경계에서 호출자가 제공하는 감사 식별자입니다.
-backend가 사용자 세션을 검증한 값이라는 의미가 아닙니다. Iris Admin 연결 시에는
-브라우저가 임의 입력한 값을 전달하지 말고 gateway의 인증된 세션 사용자에 결합해야 합니다.
+backend가 사용자 세션을 검증한 값이라는 의미가 아닙니다. Iris Console 연결에서는
+클라이언트가 임의 입력한 값을 전달하지 말고 gateway의 인증된 세션 사용자에 결합해야 합니다.
 사유는 공백만으로 구성할 수 없고 최대 1,024자이며 제어 문자를 허용하지 않습니다.
 운영자 식별자는 최대 128자, 대상은 최대 100개, JSON 본문은 최대 64 KiB입니다.
 알 수 없는 JSON 필드와 중복 JSON 필드는 거부합니다.

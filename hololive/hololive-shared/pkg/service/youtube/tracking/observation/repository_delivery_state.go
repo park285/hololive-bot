@@ -25,7 +25,7 @@ func (r *deliveryStateRepository) MarkAlarmSentBatch(ctx context.Context, marks 
 	}
 
 	if err := inPgxTx(ctx, r.db, func(tx trackingDB) error {
-		txRepo := NewRepositoryContext(ctx, tx)
+		txRepo := NewRepository(tx)
 		return txRepo.delivery.applyAlarmSentMarks(ctx, normalized)
 	}); err != nil {
 		return fmt.Errorf("mark alarm sent batch transaction: %w", err)

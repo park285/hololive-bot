@@ -45,8 +45,16 @@ type PublishConfig struct {
 	MaxDeliveriesPerBatch int
 }
 
+// WakeupCache는 Publisher가 dispatch wakeup 신호에 쓰는 cache 작업이다. 중복 신호 guard 선점(SetNX),
+// 신호 LPUSH(B·DoMulti), 신호 queue 만료(Expire)를 쓴다.
+type WakeupCache interface {
+	cache.KeyValueWriter
+	cache.KeyValueLifecycle
+	cache.LowLevelCache
+}
+
 type Publisher struct {
-	cache         cache.Client
+	cache         WakeupCache
 	outbox        dispatchoutbox.Writer
 	publishConfig PublishConfig
 	logger        *slog.Logger
@@ -83,7 +91,7 @@ func WithPublishConfig(config PublishConfig) PublisherOption {
 	}
 }
 
-func NewPublisher(c cache.Client, logger *slog.Logger, opts ...PublisherOption) *Publisher {
+func NewPublisher(c WakeupCache, logger *slog.Logger, opts ...PublisherOption) *Publisher {
 	if logger == nil {
 		logger = slog.Default()
 	}

@@ -12,6 +12,16 @@ const (
 	WorkerYouTubeDelivery      = "youtube_delivery"
 )
 
+// WorkerIdentity: hololive-alarm-worker가 소유한 worker profile identity다.
+// 호출자가 WorkerIDs를 바꿔도 다른 로드에 번지지 않도록 매 호출 새 슬라이스를 돌려준다.
+func WorkerIdentity() workercontract.Identity {
+	return workercontract.Identity{
+		Service:   "hololive",
+		Role:      "alarm-worker",
+		WorkerIDs: []string{WorkerAlarmDispatch, WorkerNotificationDelivery, WorkerYouTubeDelivery},
+	}
+}
+
 // NotificationDeliveryLease는 claim과 SENDING 전이에 사용하는 소유권 예산이다.
 const NotificationDeliveryLease = 60 * time.Second
 

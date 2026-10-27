@@ -66,15 +66,6 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 func TestPhotoQueriesUseTheChannelRepresentative(t *testing.T) {
 	repo, owner := seedSharedReviewMembers(t)
 
-	photo, err := repo.GetMemberWithPhotoByChannelID(t.Context(), sharedReviewChannel)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if photo.ID != owner.ID {
-		t.Fatalf("photo representative=%d want=%d", photo.ID, owner.ID)
-	}
-
 	photos, err := repo.GetMembersWithPhoto(t.Context(), []string{sharedReviewChannel})
 	if err != nil {
 		t.Fatal(err)

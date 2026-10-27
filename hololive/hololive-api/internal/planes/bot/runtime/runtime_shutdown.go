@@ -48,24 +48,16 @@ func (r *BotRuntime) Shutdown(ctx context.Context) error {
 	r.cancelBackgroundTasks()
 	r.stopHTTPRequestAdmission()
 
-	var usersErr error
-
-	shutdownErr := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
+	// HTTP → webhook·durability → bot 순서로 종료한다. 앞 단계가 실패해도 뒤 단계를 건너뛰면 webhook 수신이나
+	// bot 작업이 남으므로, 세 단계를 모두 실행한 뒤 오류를 합친다.
+	httpErr := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:             r.Logger,
 		ShutdownHTTPServer: r.ShutdownHTTPServer,
-		WebhookHandlerClose: func() error {
-			usersErr = r.shutdownWebhookAndDurability(ctx)
-
-			return usersErr
-		},
-		ShutdownBot: func(ctx context.Context) error {
-			if r.Bot == nil {
-				return nil
-			}
-
-			return r.Bot.Shutdown(ctx)
-		},
 	})
+	usersErr := r.shutdownWebhookAndDurability(ctx)
+	webhookErr := r.reportWebhookShutdown(usersErr)
+	botErr := r.shutdownBot(ctx)
+	shutdownErr := errors.Join(httpErr, webhookErr, botErr)
 	joinErr := r.joinBackgroundTasks(ctx)
 	requestErr := r.joinHTTPRequests(ctx)
 
@@ -83,6 +75,32 @@ func (r *BotRuntime) Shutdown(ctx context.Context) error {
 	r.lifecycleMu.Unlock()
 
 	return err
+}
+
+func (r *BotRuntime) reportWebhookShutdown(err error) error {
+	if err != nil {
+		r.logError("Iris webhook handler shutdown error", err)
+
+		return fmt.Errorf("close Iris webhook handler: %w", err)
+	}
+
+	r.logInfo("Iris webhook handler stopped")
+
+	return nil
+}
+
+func (r *BotRuntime) shutdownBot(ctx context.Context) error {
+	if r.Bot == nil {
+		return nil
+	}
+
+	if err := r.Bot.Shutdown(ctx); err != nil {
+		r.logError("Error during shutdown", err)
+
+		return fmt.Errorf("shutdown bot: %w", err)
+	}
+
+	return nil
 }
 
 func (r *BotRuntime) shutdownWebhookAndDurability(ctx context.Context) error {

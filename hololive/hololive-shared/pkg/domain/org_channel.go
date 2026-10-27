@@ -31,30 +31,10 @@ type Channel struct {
 	Group       *string `json:"group,omitempty"`
 }
 
-func (c *Channel) IsHololive() bool {
-	if c == nil || c.Org == nil {
-		return false
-	}
-
-	return *c.Org == "Hololive"
-}
-
 func (c *Channel) HasPhoto() bool {
 	if c == nil {
 		return false
 	}
 
 	return c.Photo != nil && *c.Photo != ""
-}
-
-func (c *Channel) GetPhotoURL() string {
-	if c == nil {
-		return ""
-	}
-
-	if c.HasPhoto() {
-		return *c.Photo
-	}
-
-	return ""
 }

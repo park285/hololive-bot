@@ -30,34 +30,22 @@ func TestERR001AllCollectionErrorCodesExactSortedSet(t *testing.T) {
 	}
 	slices.Sort(want)
 
-	got := AllCollectionErrorCodes()
+	got := allCollectionErrorCodes
 	if !slices.Equal(got, want) {
-		t.Fatalf("AllCollectionErrorCodes() = %#v, want %#v", got, want)
+		t.Fatalf("allCollectionErrorCodes = %#v, want %#v", got, want)
 	}
 
 	if len(got) != 16 {
-		t.Fatalf("AllCollectionErrorCodes length = %d, want 16", len(got))
-	}
-
-	got[0] = testMutatedMarker
-
-	fresh := AllCollectionErrorCodes()
-
-	if len(fresh) == 0 {
-		t.Fatal("AllCollectionErrorCodes returned an empty vocabulary")
-	}
-
-	if fresh[0] == testMutatedMarker {
-		t.Fatal("AllCollectionErrorCodes leaked internal state")
+		t.Fatalf("allCollectionErrorCodes length = %d, want 16", len(got))
 	}
 }
 
 func TestERR002TerminalCodeSetsPartitionPersistedVocabulary(t *testing.T) {
 	t.Parallel()
 
-	deferable := DeferableCollectionErrorCodes()
+	deferable := deferableCollectionErrorCodes
 	releasable := ReleasableCollectionErrorCodes()
-	complete := CompletesWithErrorCodes()
+	complete := completesWithErrorCodes
 
 	if overlap := intersectCodes(deferable, releasable); len(overlap) > 0 {
 		t.Fatalf("defer ∩ release = %#v", overlap)
@@ -74,15 +62,15 @@ func TestERR002TerminalCodeSetsPartitionPersistedVocabulary(t *testing.T) {
 	union := append(append(slices.Clone(deferable), releasable...), complete...)
 	slices.Sort(union)
 
-	if !slices.Equal(union, AllCollectionErrorCodes()) {
-		t.Fatalf("union = %#v, want %#v", union, AllCollectionErrorCodes())
+	if !slices.Equal(union, allCollectionErrorCodes) {
+		t.Fatalf("union = %#v, want %#v", union, allCollectionErrorCodes)
 	}
 
 	durable := append(slices.Clone(DeferFailureTuples()), CompleteErrorFailureTuples()...)
 	slices.SortFunc(durable, compareFailureTuple)
 
-	if !slices.Equal(durable, AllDurableFailureTuples()) {
-		t.Fatalf("durable union = %#v, want %#v", durable, AllDurableFailureTuples())
+	if !slices.Equal(durable, allDurableFailureTuples) {
+		t.Fatalf("durable union = %#v, want %#v", durable, allDurableFailureTuples)
 	}
 }
 

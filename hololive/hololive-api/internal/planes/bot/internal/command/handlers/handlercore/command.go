@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 type Command interface {
@@ -142,7 +141,6 @@ type AlarmService interface {
 type Dependencies struct {
 	Holodex             domain.StreamProvider
 	LiveQuery           livequery.Reader
-	Cache               cache.Client
 	Alarm               AlarmService
 	Matcher             *matcher.Matcher
 	MemberNews          MemberNewsService

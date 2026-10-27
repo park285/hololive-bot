@@ -36,7 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
-// MemberNameSource는 알림 표시명의 정본 조회다. 운영 구현은 PostgreSQL을 읽는 alarm.Repository.GetMemberName이며,
+// MemberNameSource는 알림 표시명의 정본 조회다. 운영 구현은 PostgreSQL을 읽는 alarmstore.Repository.GetMemberName이며,
 // members의 한국어 표시명(short_korean_name→korean_name)을 사용한다. 조회 오류는 오류로
 // 돌려주고, 빈 문자열은 표시명이 없다는 뜻이다.
 type MemberNameSource interface {

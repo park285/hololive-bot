@@ -181,8 +181,9 @@ release pair, not as extra keys or aliases in the new profile.
 
 ### Build and CLI prerequisites
 
-- All five consumers retain the genuine published shared-go `v2.16.1` pins and
-  sums. No unpublished external replace or invented tag is a production input.
+- All five consumers retain the genuine published shared-go `v2.17.0` pins and
+  sums; api, alarm-worker and shared also pin iris-client-go `v3.2.0`. No
+  unpublished external replace or invented tag is a production input.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
   production builds. Use root/API/alarm version `11.0.0`, a clean full
   40-character source revision, and the architecture/Node/issuer manifests.
@@ -322,7 +323,7 @@ the removed network will not work. Other observability peers cannot reach the AP
 through that external network. Admin/LLM loopback bindings remain unchanged.
 `HOLOLIVE_ADMIN_API_PORT_BIND_IP` must match `tailscale ip --assert` on the deployment
 host before any build/start/restart. The approved current IPv4 binding remains
-`100.100.1.8:30006/udp`. Admin sources are loopback and Iris Admin `100.100.1.5/32`;
+`100.100.1.8:30006/udp`. Admin sources are loopback and the Iris Console host (iris-seoul) `100.100.1.5/32`;
 broad private CIDRs and wildcard source overrides fail preflight.
 
 AP collectors no longer use Valkey (see the collector cache-topology contract).

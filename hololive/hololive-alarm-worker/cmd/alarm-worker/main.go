@@ -29,7 +29,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
-	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 
@@ -56,7 +55,6 @@ func main() {
 	os.Exit(bootstrap.Options[*workerconfig.RuntimeConfig, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
 		Version: Version,
 		Initialize: func(version string) {
-			automaxprocs.Init(nil)
 			health.Init(version)
 		},
 		LoadConfig:             workerconfig.LoadRuntime,
@@ -79,7 +77,6 @@ func main() {
 
 			return logger, closer, nil
 		},
-		LoggerFileName: "alarm-worker.log",
 		LoggerLevel: func(appConfig *workerconfig.RuntimeConfig) string {
 			return appConfig.Logging.Level
 		},

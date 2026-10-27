@@ -46,8 +46,6 @@ type Client struct {
 	targetMinutes   []int
 }
 
-var _ AlarmHTTPService = (*Client)(nil)
-
 type addAlarmReq struct {
 	RoomID     string            `json:"room_id"`
 	UserID     string            `json:"user_id"`

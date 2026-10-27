@@ -40,7 +40,6 @@ import (
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -56,7 +55,7 @@ type Bot struct {
 	formatter             *formatter.ResponseFormatter
 	messageStrings        *messagestrings.Store
 	markdownReplies       bool
-	cache                 cache.Client
+	cache                 BotCache
 	postgres              database.Client
 	holodex               domain.StreamProvider
 	alarm                 handlercore.AlarmService

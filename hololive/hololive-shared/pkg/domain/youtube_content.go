@@ -27,17 +27,6 @@ import (
 	"time"
 )
 
-type YouTubeChannelProfile struct {
-	ChannelID string         `db:"channel_id" json:"channel_id"`
-	Avatar    ThumbnailsJSON `db:"avatar" json:"avatar,omitempty"`
-	Banner    ThumbnailsJSON `db:"banner" json:"banner,omitempty"`
-	UpdatedAt time.Time      `db:"updated_at" json:"updated_at"`
-}
-
-func (YouTubeChannelProfile) TableName() string {
-	return "youtube_channel_profiles"
-}
-
 type YouTubeVideo struct {
 	VideoID       string         `db:"video_id" json:"video_id"`
 	ChannelID     string         `db:"channel_id" json:"channel_id"`
@@ -51,10 +40,6 @@ type YouTubeVideo struct {
 	ViewCount     int64          `json:"view_count"`
 	FirstSeenAt   time.Time      `db:"first_seen_at" json:"first_seen_at"`
 	LastSeenAt    time.Time      `db:"last_seen_at" json:"last_seen_at"`
-}
-
-func (YouTubeVideo) TableName() string {
-	return "youtube_videos"
 }
 
 type YouTubeCommunityPost struct {
@@ -71,10 +56,6 @@ type YouTubeCommunityPost struct {
 	AttachedVideo string         `db:"attached_video" json:"attached_video,omitempty"`
 	FirstSeenAt   time.Time      `db:"first_seen_at" json:"first_seen_at"`
 	LastSeenAt    time.Time      `db:"last_seen_at" json:"last_seen_at"`
-}
-
-func (YouTubeCommunityPost) TableName() string {
-	return "youtube_community_posts"
 }
 
 // 동일 콘텐츠에 대해 실제 게시 시각, 최초 감지 시각, 최초 성공 발송 시각과 저장된 지연 분류값을 보존한다.
@@ -94,10 +75,6 @@ type YouTubeContentAlarmTracking struct {
 	InternalDelayCause          string                            `db:"internal_delay_cause" json:"internal_delay_cause,omitempty"`
 	CreatedAt                   time.Time                         `db:"created_at" json:"created_at"`
 	UpdatedAt                   time.Time                         `db:"updated_at" json:"updated_at"`
-}
-
-func (YouTubeContentAlarmTracking) TableName() string {
-	return "youtube_content_alarm_tracking"
 }
 
 type YouTubeContentAlarmDeliveryStatus string
@@ -126,10 +103,6 @@ type YouTubeCommunityShortsSourcePost struct {
 	UpdatedAt         time.Time  `db:"updated_at" json:"updated_at"`
 }
 
-func (YouTubeCommunityShortsSourcePost) TableName() string {
-	return "youtube_community_shorts_source_posts"
-}
-
 // canonical post identifier를 루트 키로 사용해 게시물당 하나의 상태 레코드만 유지한다.
 type YouTubeCommunityShortsAlarmState struct {
 	Kind              OutboxKind                             `db:"kind" json:"kind"`
@@ -142,10 +115,6 @@ type YouTubeCommunityShortsAlarmState struct {
 	DeliveryStatus    YouTubeCommunityShortsAlarmStateStatus `db:"delivery_status" json:"delivery_status"`
 	CreatedAt         time.Time                              `db:"created_at" json:"created_at"`
 	UpdatedAt         time.Time                              `db:"updated_at" json:"updated_at"`
-}
-
-func (YouTubeCommunityShortsAlarmState) TableName() string {
-	return "youtube_community_shorts_alarm_states"
 }
 
 type YouTubeCommunityShortsAlarmStateStatus string
@@ -177,10 +146,6 @@ type YouTubeContentWatermark struct {
 	Initialized   bool          `db:"initialized" json:"initialized"`
 	LastContentID string        `db:"last_content_id" json:"last_content_id,omitempty"`
 	UpdatedAt     time.Time     `db:"updated_at" json:"updated_at"`
-}
-
-func (YouTubeContentWatermark) TableName() string {
-	return "youtube_content_watermarks"
 }
 
 type OutboxKind string
@@ -252,10 +217,6 @@ type YouTubeNotificationOutbox struct {
 	Error         string       `db:"error" json:"error,omitempty"`
 }
 
-func (*YouTubeNotificationOutbox) TableName() string {
-	return "youtube_notification_outbox"
-}
-
 // BuildYouTubeNotificationDedupeKey는 outbox kind/content_id에서 dedupe key를 생성한다.
 func BuildYouTubeNotificationDedupeKey(kind OutboxKind, contentID string) (string, error) {
 	normalizedKind := strings.TrimSpace(string(kind))
@@ -308,8 +269,4 @@ type YouTubeLiveSession struct {
 	LastSeenAt         time.Time  `db:"last_seen_at" json:"last_seen_at"`
 	StatusObservedAt   *time.Time `db:"status_observed_at" json:"status_observed_at,omitempty"`
 	ScheduleObservedAt *time.Time `db:"schedule_observed_at" json:"schedule_observed_at,omitempty"`
-}
-
-func (YouTubeLiveSession) TableName() string {
-	return "youtube_live_sessions"
 }

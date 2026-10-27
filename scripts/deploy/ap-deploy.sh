@@ -3,7 +3,6 @@ set -Eeuo pipefail
 [[ "$(hostname -s)" == kapu ]] || { echo 'AP image builds and export are restricted to kapu' >&2; exit 1; }
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-SHARED_GO_DIR="${SHARED_GO_WORKSPACE_PATH:-$REPO_ROOT/../shared-go}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-hololive-bot}"
 FILES_FROM="${FILES_FROM:-$REPO_ROOT/scripts/deploy/ap-rsync-files.txt}"
 EXCLUDES="${EXCLUDES:-$REPO_ROOT/scripts/deploy/ap-rsync-excludes.txt}"
@@ -56,32 +55,8 @@ if [[ ! -r "$EXCLUDES" ]]; then
   exit 1
 fi
 
-while IFS= read -r path; do
-  [[ -n "$path" ]] || continue
-  [[ -e "$path" ]] || {
-    echo "files-from path does not exist: $path" >&2
-    exit 1
-  }
-  case "$path" in
-    hololive/hololive-youtube-collector/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
-    go.sum|*/go.sum)
-      echo "files-from list contains unapproved go.sum path: $path" >&2
-      exit 1
-      ;;
-  esac
-  case "$path" in
-    data|data/*|*/data/*)
-      echo "files-from list contains unapproved data path: $path" >&2
-      exit 1
-      ;;
-  esac
-done < "$FILES_FROM"
-
-if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM" \
-  | rg -v '^[0-9]+:hololive/hololive-alarm-worker/(VERSION|go\.mod|go\.sum)$'; then
-  echo "files-from list contains forbidden deployment scope" >&2
-  exit 1
-fi
+# 전송 목록의 범위(비밀·데이터 제외, 중복 금지)와 AP가 실행하는 파일의 포함 여부를 원격 접속 전에 검사한다.
+"$REPO_ROOT/scripts/deploy/check-ap-rsync-manifest.sh" "$FILES_FROM"
 
 RSYNC_RSH="$(ap_rsync_rsh)"
 
@@ -97,37 +72,18 @@ remote() {
 build_rsync_files_from() {
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
-    case "$path" in
-      ../shared-go/*)
-        printf 'shared-go/%s\n' "${path#../shared-go/}"
-        ;;
-      ../*)
-        echo "files-from list contains unsupported parent path: $path" >&2
-        exit 1
-        ;;
-      *)
-        printf '%s/%s\n' "$REMOTE_REPO_DIR" "$path"
-        ;;
-    esac
+    printf '%s/%s\n' "$REMOTE_REPO_DIR" "$path"
   done < "$FILES_FROM" > "$rsync_files_from"
 }
 
 # rsync 원본은 이번에 빌드하는 commit과 같아야 한다. 예전에는 $REPO_ROOT/../hololive-bot을 그대로 보내,
 # 이름이 다른 worktree에서 실행하면 빌드 원본이 아닌 기본 checkout(미커밋 변경 포함)을 원격 tree에
-# 설치하려 했다(2026-10-02 7.2.0 seoul 배포). 저장소 파일은 HEAD commit에서, shared-go 파일은
-# collector go.mod가 고정한 module tag에서 꺼낸다.
+# 설치하려 했다(2026-10-02 7.2.0 seoul 배포). 그래서 HEAD commit에서 꺼낸다. AP는 Go를 빌드하지 않고
+# 이미지 아카이브를 받으므로 shared-go 등 다른 저장소의 파일은 보내지 않는다.
 stage_transfer_workspace() {
-  local shared_go_version
   transfer_revision="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
-  shared_go_version="$(awk '$1 == "github.com/park285/shared-go/v2" { print $2; exit }' \
-    "$REPO_ROOT/hololive/hololive-youtube-collector/go.mod")"
-  if [[ ! "$shared_go_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "collector go.mod has no pinned shared-go version" >&2
-    exit 1
-  fi
-  mkdir "$transfer_root/$REMOTE_REPO_DIR" "$transfer_root/shared-go"
+  mkdir "$transfer_root/$REMOTE_REPO_DIR"
   git -C "$REPO_ROOT" archive "$transfer_revision" | tar -x -C "$transfer_root/$REMOTE_REPO_DIR"
-  git -C "$SHARED_GO_DIR" archive "refs/tags/$shared_go_version" | tar -x -C "$transfer_root/shared-go"
 }
 
 rsync_preview() {
@@ -159,7 +115,6 @@ trap 'rm -f "$preview_file" "$rsync_files_from"; rm -rf "$transfer_root"; [[ -z 
 
 stage_transfer_workspace
 build_rsync_files_from
-"$REPO_ROOT/scripts/deploy/check-ap-rsync-manifest.sh" "$FILES_FROM"
 rsync_preview | tee "$preview_file"
 validate_preview "$preview_file"
 

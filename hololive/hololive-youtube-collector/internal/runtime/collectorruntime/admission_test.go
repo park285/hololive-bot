@@ -18,7 +18,7 @@ import (
 func fixtureCollectorConfig(t *testing.T) collectorconfig.Config {
 	t.Helper()
 
-	loaded := settingstest.LoadProfileFixture(t, "hololive", "youtube-collector", "stack-worker-profile-youtube-collector.json")
+	loaded := settingstest.LoadProfileFixture(t, collectorconfig.WorkerIdentity(), "stack-worker-profile-youtube-collector.json")
 
 	profile, err := collectorconfig.DecodeWorkerProfile(loaded)
 	if err != nil {

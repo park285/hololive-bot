@@ -38,7 +38,7 @@ func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testi
 func testDurableProfile(t *testing.T) *apiconfig.APIWorkerProfile {
 	t.Helper()
 
-	profile := &apiconfig.APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")}
+	profile := &apiconfig.APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")}
 	if err := workercontract.DecodeWorkerSettingsSet(profile.Loaded, map[string]any{
 		apiconfig.WorkerBotWebhookInbox:   &profile.BotWebhookInbox,
 		apiconfig.WorkerBotReplyOutbox:    &profile.BotReplyOutbox,

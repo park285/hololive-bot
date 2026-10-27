@@ -83,7 +83,7 @@ type BotRuntime struct {
 }
 
 func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, shared *sharedmodules.InfraModule, logger *slog.Logger) (*BotRuntime, error) {
-	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
+	ctx, logger, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}

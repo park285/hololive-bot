@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -155,7 +154,7 @@ func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 	original := rebuildSubscriberCacheFromRepository
 	rebuildCalled := false
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheClient cache.Client, repository *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheClient alarmstore.SubscriberCacheStore, repository *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
 		rebuildCalled = true
 
 		assert.Same(t, as.cache, cacheClient)
@@ -179,7 +178,7 @@ func TestWarmCacheFromDBSerializesCacheMutations(t *testing.T) {
 	rebuildStarted := make(chan struct{})
 	releaseRebuild := make(chan struct{})
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ alarmstore.SubscriberCacheStore, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
 		close(rebuildStarted)
 		<-releaseRebuild
 
@@ -226,7 +225,7 @@ func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 
 	original := rebuildSubscriberCacheFromRepository
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ alarmstore.SubscriberCacheStore, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
 		return alarmstore.CacheWarmSummary{}, errors.New("repo load failed")
 	}
 
@@ -252,7 +251,7 @@ func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
 
 	original := rebuildSubscriberCacheFromRepository
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ alarmstore.SubscriberCacheStore, _ *alarmstore.Repository) (alarmstore.CacheWarmSummary, error) {
 		return alarmstore.CacheWarmSummary{
 			AlarmCount:   5,
 			RoomCount:    3,

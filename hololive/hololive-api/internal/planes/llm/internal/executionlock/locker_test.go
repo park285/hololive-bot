@@ -27,8 +27,6 @@ import (
 	"log/slog"
 	"testing"
 	"time"
-
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 // mockLockCache: lockCache mock 구현.
@@ -64,7 +62,7 @@ func (m *mockLockCache) CompareAndDelete(ctx context.Context, key, expectedValue
 }
 
 func testLogger() *slog.Logger {
-	return sharedlogging.NewTestLogger()
+	return slog.New(slog.DiscardHandler)
 }
 
 // cache가 없을 때 dedup을 끈 noop locker로 내려가던 폴백을 지웠다. 생성 오류로 드러나야 한다.

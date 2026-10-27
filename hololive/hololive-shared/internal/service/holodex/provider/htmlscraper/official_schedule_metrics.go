@@ -28,81 +28,78 @@ const (
 
 const officialScheduleSourceLabel = "source"
 
-var (
-	officialScheduleMetricsOnce        sync.Once
-	officialScheduleFallbackTotal      *prometheus.CounterVec
-	officialScheduleRequestsTotal      *prometheus.CounterVec
-	officialScheduleRequestDuration    *prometheus.HistogramVec
-	officialScheduleResponseBytes      *prometheus.HistogramVec
-	officialScheduleRowsTotal          *prometheus.CounterVec
-	officialScheduleLastSuccessSeconds *prometheus.GaugeVec
-)
+type officialScheduleMetrics struct {
+	fallbackTotal      *prometheus.CounterVec
+	requestsTotal      *prometheus.CounterVec
+	requestDuration    *prometheus.HistogramVec
+	responseBytes      *prometheus.HistogramVec
+	rowsTotal          *prometheus.CounterVec
+	lastSuccessSeconds *prometheus.GaugeVec
+}
 
-func initOfficialScheduleMetrics() {
-	officialScheduleMetricsOnce.Do(func() {
-		officialScheduleFallbackTotal = promauto.NewCounterVec(
+// 기본 registry에는 한 번만 등록하므로 첫 관측 때 묶음으로 만든다.
+var officialScheduleMetricsFor = sync.OnceValue(func() *officialScheduleMetrics {
+	return &officialScheduleMetrics{
+		fallbackTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_holodex_official_schedule_fallback_total",
 				Help: "Total official schedule fallback outcomes grouped by operation and reason.",
 			},
 			[]string{"operation", "outcome", "reason"},
-		)
-		officialScheduleRequestsTotal = promauto.NewCounterVec(
+		),
+		requestsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_official_schedule_requests_total",
 				Help: "Total official schedule API requests grouped by outcome and reason.",
 			},
 			[]string{officialScheduleSourceLabel, "outcome", "reason"},
-		)
-		officialScheduleRequestDuration = promauto.NewHistogramVec(
+		),
+		requestDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "hololive_official_schedule_request_duration_seconds",
 				Help: "Official schedule API request and decode latency.",
 			},
 			[]string{officialScheduleSourceLabel, "outcome"},
-		)
-		officialScheduleResponseBytes = promauto.NewHistogramVec(
+		),
+		responseBytes: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "hololive_official_schedule_response_bytes",
 				Help: "Official schedule API response size in bytes.",
 			},
 			[]string{officialScheduleSourceLabel},
-		)
-		officialScheduleRowsTotal = promauto.NewCounterVec(
+		),
+		rowsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_official_schedule_rows_total",
 				Help: "Official schedule API video rows grouped by mapping result.",
 			},
 			[]string{officialScheduleSourceLabel, "result"},
-		)
-		officialScheduleLastSuccessSeconds = promauto.NewGaugeVec(
+		),
+		lastSuccessSeconds: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "hololive_official_schedule_last_success_timestamp_seconds",
 				Help: "Unix timestamp of the latest successful official schedule API response.",
 			},
 			[]string{officialScheduleSourceLabel},
-		)
-	})
-}
+		),
+	}
+})
 
 func observeOfficialScheduleFallback(operation, outcome string, reason officialScheduleReason) {
-	initOfficialScheduleMetrics()
-	officialScheduleFallbackTotal.WithLabelValues(operation, outcome, string(reason)).Inc()
+	officialScheduleMetricsFor().fallbackTotal.WithLabelValues(operation, outcome, string(reason)).Inc()
 }
 
 func observeOfficialScheduleRequest(outcome string, reason officialScheduleReason, duration time.Duration) {
-	initOfficialScheduleMetrics()
-	officialScheduleRequestsTotal.WithLabelValues("api", outcome, string(reason)).Inc()
-	officialScheduleRequestDuration.WithLabelValues("api", outcome).Observe(duration.Seconds())
+	metrics := officialScheduleMetricsFor()
+	metrics.requestsTotal.WithLabelValues("api", outcome, string(reason)).Inc()
+	metrics.requestDuration.WithLabelValues("api", outcome).Observe(duration.Seconds())
 }
 
 func observeOfficialScheduleResponseBytes(size int) {
-	initOfficialScheduleMetrics()
-	officialScheduleResponseBytes.WithLabelValues("api").Observe(float64(size))
+	officialScheduleMetricsFor().responseBytes.WithLabelValues("api").Observe(float64(size))
 }
 
 func observeOfficialScheduleRows(stats officialScheduleRowStats) {
-	initOfficialScheduleMetrics()
 	observeOfficialScheduleRowResult("valid", stats.Valid)
 	observeOfficialScheduleRowResult("invalid", stats.Invalid)
 	observeOfficialScheduleRowResult("unmapped", stats.Unmapped)
@@ -114,12 +111,11 @@ func observeOfficialScheduleRowResult(result string, count int) {
 		return
 	}
 
-	officialScheduleRowsTotal.WithLabelValues("api", result).Add(float64(count))
+	officialScheduleMetricsFor().rowsTotal.WithLabelValues("api", result).Add(float64(count))
 }
 
 func markOfficialScheduleSuccess() {
-	initOfficialScheduleMetrics()
-	officialScheduleLastSuccessSeconds.WithLabelValues("api").SetToCurrentTime()
+	officialScheduleMetricsFor().lastSuccessSeconds.WithLabelValues("api").SetToCurrentTime()
 }
 
 func classifyOfficialScheduleReason(err error, matchedStreams int) officialScheduleReason {

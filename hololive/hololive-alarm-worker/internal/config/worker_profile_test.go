@@ -248,7 +248,7 @@ func TestLoadWorkerProfileNotificationDeliveryTimingBoundaries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, enabled := range []bool{true, false} {
-				loaded := settingstest.LoadProfileFixture(t, "hololive", "alarm-worker", "stack-worker-profile-alarm-worker.json")
+				loaded := settingstest.LoadProfileFixture(t, WorkerIdentity(), "stack-worker-profile-alarm-worker.json")
 
 				var settings NotificationDeliveryWorkerSettings
 

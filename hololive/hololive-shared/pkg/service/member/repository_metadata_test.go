@@ -27,25 +27,18 @@ func TestRepositoryQueriesPreserveMemberMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	singleQueries := []struct {
-		name      string
-		query     func() (*domain.Member, error)
-		wantPhoto bool
+		name  string
+		query func() (*domain.Member, error)
 	}{
-		{"FindByChannelID", func() (*domain.Member, error) { return repository.FindByChannelID(ctx, channelID) }, false},
-		{"FindByName", func() (*domain.Member, error) { return repository.FindByName(ctx, name) }, false},
-		{"FindByAlias", func() (*domain.Member, error) { return repository.FindByAlias(ctx, "메타 별칭") }, false},
-		{"GetMemberWithPhotoByChannelID", func() (*domain.Member, error) { return repository.GetMemberWithPhotoByChannelID(ctx, channelID) }, true},
-		{"FindByNameAndOrg", func() (*domain.Member, error) { return repository.FindByNameAndOrg(ctx, name, "Hololive") }, false},
+		{"FindByChannelID", func() (*domain.Member, error) { return repository.FindByChannelID(ctx, channelID) }},
+		{"FindByName", func() (*domain.Member, error) { return repository.FindByName(ctx, name) }},
+		{"FindByAlias", func() (*domain.Member, error) { return repository.FindByAlias(ctx, "메타 별칭") }},
 	}
 	for _, query := range singleQueries {
 		t.Run(query.name, func(t *testing.T) {
 			got, queryErr := query.query()
 			require.NoError(t, queryErr)
 			assertMemberRepositoryMetadata(t, got)
-
-			if query.wantPhoto {
-				require.Equal(t, photo, got.Photo)
-			}
 		})
 	}
 
@@ -71,12 +64,6 @@ func TestRepositoryQueriesPreserveMemberMetadata(t *testing.T) {
 		got := members[channelID]
 		assertMemberRepositoryMetadata(t, got)
 		require.Equal(t, photo, got.Photo)
-	})
-	t.Run("FindAllByName", func(t *testing.T) {
-		members, queryErr := repository.FindAllByName(ctx, name)
-		require.NoError(t, queryErr)
-		require.Len(t, members, 1)
-		assertMemberRepositoryMetadata(t, members[0])
 	})
 }
 

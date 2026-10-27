@@ -39,8 +39,15 @@ type alarmWriter interface {
 	ClearByRoom(ctx context.Context, roomID string) (int64, error)
 }
 
+// Cache는 AlarmService가 구독 cache 증분 동기화(Set·Del·SAdd·SRem·Lua Exec), 전체 rebuild, 멤버 이름 hash에 쓰는
+// cache 작업이다. ScriptCache와 연결 관리(Close·IsConnected·WaitUntilReady)는 쓰지 않는다.
+type Cache interface {
+	cache.DataCache
+	cache.LowLevelCache
+}
+
 type AlarmService struct {
-	cache           cache.Client
+	cache           Cache
 	memberData      domain.MemberDataProvider
 	alarmRepository *alarmstore.Repository
 	alarmWriter     alarmWriter

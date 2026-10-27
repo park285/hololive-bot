@@ -12,18 +12,6 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *alarmStateRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
-	if record == nil {
-		return errors.New("upsert alarm state: record is nil")
-	}
-
-	if err := r.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{record}); err != nil {
-		return fmt.Errorf("upsert alarm state batch: %w", err)
-	}
-
-	return nil
-}
-
 func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsAlarmState) error {
 	if len(records) == 0 {
 		return nil

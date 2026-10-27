@@ -204,7 +204,7 @@ func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (message, p
 // Cache set이 비어 있는 채널은 subscribers resolver의 empty marker와 구독 DB로 확정한다.
 func LoadSubscriberRoomsByChannel(
 	ctx context.Context,
-	cacheClient cache.Client,
+	cacheClient cache.LowLevelCache,
 	subscribers *alarmstore.SubscriberResolver,
 	channelIDs []string,
 ) (map[string][]string, error) {
@@ -243,7 +243,7 @@ func LoadSubscriberRoomsByChannel(
 
 func loadCachedSubscriberRoomsByChannel(
 	ctx context.Context,
-	cacheClient cache.Client,
+	cacheClient cache.LowLevelCache,
 	uniqueChannelIDs []string,
 ) (map[string][]string, error) {
 	cmds := make([]valkey.Completed, 0, len(uniqueChannelIDs))

@@ -87,7 +87,7 @@ func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
 	return AuthMiddleware(httputil.AdminAuthConfig{APIKey: apiKey})
 }
 
-func NoRouteHandler(config httputil.AdminAuthConfig) gin.HandlerFunc {
+func noRouteHandler(config httputil.AdminAuthConfig) gin.HandlerFunc {
 	expected := strings.TrimSpace(config.APIKey)
 
 	return func(c *gin.Context) {
@@ -121,5 +121,5 @@ func NoRouteHandler(config httputil.AdminAuthConfig) gin.HandlerFunc {
 }
 
 func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
-	return NoRouteHandler(httputil.AdminAuthConfig{APIKey: apiKey})
+	return noRouteHandler(httputil.AdminAuthConfig{APIKey: apiKey})
 }

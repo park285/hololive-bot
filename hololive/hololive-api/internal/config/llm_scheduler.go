@@ -138,7 +138,7 @@ func (c *LLMSchedulerConfig) validateRuntime() error {
 		return fmt.Errorf("validate LLM provider: %w", err)
 	}
 
-	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeLLMScheduler, envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
+	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeLLMScheduler, sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""), sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, "")); err != nil {
 		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 

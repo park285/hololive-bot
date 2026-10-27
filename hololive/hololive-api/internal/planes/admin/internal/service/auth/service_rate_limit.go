@@ -104,7 +104,7 @@ func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
 	}
 }
 
-func incrWithTTL(ctx context.Context, cacheClient cache.Client, key string, ttl time.Duration) (int64, error) {
+func incrWithTTL(ctx context.Context, cacheClient cache.LowLevelCache, key string, ttl time.Duration) (int64, error) {
 	ttlSeconds := ceilTTLSeconds(ttl)
 	builder := cacheClient.B()
 	cmds := incrWithTTLCommands(builder, key, ttlSeconds)

@@ -81,7 +81,22 @@ func assertCanonicalJSONFixtureCase(t *testing.T, testCase *canonicalJSONFixture
 func TestMarshalPayloadV1RejectsInvalidGoString(t *testing.T) {
 	_, err := MarshalPayloadV1(CommunityPayloadV1{ChannelID: string([]byte{0xff})})
 	if err == nil {
-		t.Fatal("typed payload with invalid UTF-8 must be rejected before jsonv2.Marshal replacement")
+		t.Fatal("typed payload with invalid UTF-8 must be rejected instead of replaced")
+	}
+}
+
+// 사전 reflect 순회를 없앤 뒤에도 map key·중첩 문자열의 잘못된 UTF-8이 인코더에서 거부되는지 확인한다.
+func TestCanonicalJSONRejectsInvalidUTF8InKeysAndNestedValues(t *testing.T) {
+	invalid := string([]byte{0xff})
+
+	for name, value := range map[string]any{
+		"map key":      map[string]string{invalid: "x"},
+		"nested slice": map[string][]string{"items": {"ok", invalid}},
+		"nested map":   map[string]map[string]string{"inner": {"k": invalid}},
+	} {
+		if _, err := canonicalJSON(value); err == nil {
+			t.Fatalf("%s with invalid UTF-8 must be rejected", name)
+		}
 	}
 }
 

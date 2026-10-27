@@ -122,7 +122,7 @@
 
 ## Execute
 
-standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
+전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회한다.
 
 우선 경로는 alarm-worker의 `message="YouTube community/shorts delivery audit"` 구조화 로그다. 보조 근거는 `youtube_notification_delivery_telemetry`다.
 

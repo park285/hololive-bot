@@ -1,83 +1,82 @@
 #!/usr/bin/env bash
-# youtube-collector 빌드에 필요한 hololive-bot 내부 .go 파일이 ap-rsync 매니페스트에
-# 모두 포함되는지 go list -deps로 검증한다.
+# Compose AP(ap-deploy.sh)로 보내는 source 파일 목록을 검증한다.
+# AP는 이미지를 빌드하지 않고 kapu가 빌드한 collector·issuer 이미지 아카이브를 받는다. 그래서 목록에는
+# AP가 ~/hololive-bot과 배포 백업의 source-candidate에서 읽거나 실행하는 Compose 파일, wrapper와 원격
+# 스크립트, runtime VERSION만 둔다. Go 소스·모듈 파일·Docker 빌드 컨텍스트는 대상이 아니다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANIFEST="${1:-$ROOT_DIR/scripts/deploy/ap-rsync-files.txt}"
-GO_CMD="${GO_CMD:-go}"
-if [[ "$MANIFEST" != /* ]]; then
-  MANIFEST="$PWD/$MANIFEST"
-fi
 
-if ! command -v "$GO_CMD" >/dev/null 2>&1; then
-  echo "[FAIL] required Go command not found: $GO_CMD" >&2
+fail() {
+  echo "[FAIL] $*" >&2
   exit 1
-fi
-if ! GOWORK=off "$GO_CMD" version; then
-  echo "[FAIL] Go executable preflight failed: $GO_CMD version" >&2
-  exit 1
-fi
-if [[ ! -r "$MANIFEST" ]]; then
-  echo "[FAIL] manifest not readable: $MANIFEST" >&2
-  exit 1
-fi
+}
 
+[[ -r "$MANIFEST" ]] || fail "manifest not readable: $MANIFEST"
+
+declare -A shipped=()
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
-  if [[ ! -f "$ROOT_DIR/$path" || -L "$ROOT_DIR/$path" ]]; then
-    echo "[FAIL] ap-rsync-files.txt entry must be a regular non-symlink file: $path" >&2
-    exit 1
+  case "$path" in
+    /*|../*|*/../*) fail "ap-rsync-files.txt entry must stay inside the repository: $path" ;;
+  esac
+  [[ -f "$ROOT_DIR/$path" && ! -L "$ROOT_DIR/$path" ]] ||
+    fail "ap-rsync-files.txt entry must be a regular non-symlink file: $path"
+  # source snapshot(ap-source-snapshot.py)은 중복 경로가 있는 목록을 거절한다.
+  [[ -z "${shipped[$path]+x}" ]] || fail "ap-rsync-files.txt has a duplicate entry: $path"
+  # 비밀·데이터·문서·로그·백업과 중앙 전용 alarm-worker 트리는 보내지 않는다.
+  # alarm-worker에서는 compose.sh가 이미지 버전을 맞추려고 읽는 VERSION만 예외다.
+  if [[ "$path" != hololive/hololive-alarm-worker/VERSION &&
+    "$path" =~ (^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|data|docs|logs|runtime-config|backups|artifacts)(/|$) ]]; then
+    fail "ap-rsync-files.txt entry is outside the deployment scope: $path"
   fi
+  shipped[$path]=1
 done < "$MANIFEST"
 
-while IFS= read -r path; do
-  if ! grep -qxF "$path" "$MANIFEST"; then
-    echo "[FAIL] ap-rsync-files.txt missing Compose wrapper dependency: $path" >&2
-    exit 1
-  fi
-done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "$ROOT_DIR/scripts/deploy/compose.sh" | sort -u)
+require() {
+  [[ -n "${shipped[$1]+x}" ]] || fail "ap-rsync-files.txt missing $2: $1"
+}
 
-required_context_files=(
-  hololive/hololive-dbtest/go.mod
-  hololive/hololive-dbtest/go.sum
-  scripts/build/build-youtube-collector-go.sh
-  hololive/hololive-youtube-collector/Dockerfile.po-sandbox
-  hololive/hololive-youtube-collector/po-sandbox/package.json
-  hololive/hololive-youtube-collector/po-sandbox/package-lock.json
-  hololive/hololive-youtube-collector/po-sandbox/src/worker.mjs
-  scripts/build/po-sandbox-manifest.py
-  scripts/deploy/lib/po-sandbox-image.sh
-  scripts/deploy/lib/po-ap-rollback-remote.sh
-)
-for path in "${required_context_files[@]}"; do
-  if ! grep -qxF "$path" "$MANIFEST"; then
-    echo "[FAIL] ap-rsync-files.txt missing Docker build context dependency: $path" >&2
-    exit 1
-  fi
+# kapu에서 보내는 원격 명령이 AP tree에서 직접 읽거나 실행하는 파일이다. 호출자는 ap-deploy.sh,
+# ap-rollback.sh(source-candidate의 po-ap-rollback-remote.sh), ap-completion-check.sh,
+# scripts/logs/ap-status.sh, scripts/logs/ap-smoke.sh다.
+for path in \
+  deploy/compose/docker-compose.collector.yml \
+  deploy/compose/docker-compose.prod.yml \
+  hololive/hololive-api/VERSION \
+  scripts/deploy/compose.sh \
+  scripts/deploy/lib/ap-collector-readiness.sh \
+  scripts/deploy/lib/po-ap-rollback-remote.sh \
+  scripts/deploy/lib/po-sandbox-image.sh \
+  scripts/deploy/lib/require-quic-udp-buffer.sh \
+  scripts/deploy/lib/worker-profile-pair.py \
+  scripts/deploy/lib/youtubejs-node-version.sh; do
+  require "$path" "AP remote command input"
 done
 
-SHARED_GO_DIR="${SHARED_GO_WORKSPACE_PATH:-$ROOT_DIR/../shared-go}"
-if [[ ! -d "$SHARED_GO_DIR" ]]; then
-  echo "[FAIL] shared-go workspace missing: $SHARED_GO_DIR" >&2
-  exit 1
-fi
-SHARED_GO_DIR="$(cd "$SHARED_GO_DIR" && pwd)"
-build_targets=(./cmd/runtime/youtube-collector ./cmd/runtime/healthcheck ./cmd/po-broker)
-if ! dependencies="$(cd "$ROOT_DIR/hololive/hololive-youtube-collector" &&
-  GOWORK=off "$GO_CMD" list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}")"; then
-  echo "[FAIL] Go dependency enumeration failed: $GO_CMD list -deps (GOWORK=off)" >&2
-  exit 1
-fi
-missing="$(printf '%s\n' "$dependencies" |
-  sed "s#^$ROOT_DIR/##; s#^$SHARED_GO_DIR/#../shared-go/#" |
-  grep -E '^(hololive/|\.\./shared-go/)' |
-  sort -u |
-  while IFS= read -r f; do grep -qxF "$f" "$MANIFEST" || echo "$f"; done)"
+# Compose runtime AP host의 원격 명령은 그 host의 overlay를 compose.sh에 넘긴다.
+for conf in "$ROOT_DIR"/scripts/deploy/ap-hosts/*.conf; do
+  read -r mode compose_file < <(
+    AP_RUNTIME_MODE=""
+    AP_COMPOSE_FILE=""
+    # shellcheck disable=SC1090
+    . "$conf"
+    printf '%s %s\n' "${AP_RUNTIME_MODE:-compose}" "$AP_COMPOSE_FILE"
+  )
+  [[ "$mode" == compose ]] || continue
+  require "$compose_file" "Compose AP overlay of ${conf##*/}"
+done
 
-if [[ -n "$missing" ]]; then
-  echo "[FAIL] ap-rsync-files.txt missing youtube-collector build deps:" >&2
-  while IFS= read -r missing_file; do printf ' - %s\n' "$missing_file" >&2; done <<< "$missing"
-  exit 1
-fi
-echo "[PASS] ap-rsync-files.txt covers youtube-collector build deps"
+# 보내는 스크립트가 참조하는 저장소 파일(lib, 정책 표, runtime VERSION)도 보내야 AP에서 source·실행할 수 있다.
+for path in "${!shipped[@]}"; do
+  case "$path" in
+    *.sh|*.py) ;;
+    *) continue ;;
+  esac
+  while IFS= read -r dependency; do
+    require "$dependency" "dependency of $path"
+  done < <(grep -oE '(scripts/[[:alnum:]_./-]+\.(sh|py|tsv)|hololive/hololive-[[:alnum:]-]+/VERSION)' "$ROOT_DIR/$path" | sort -u)
+done
+
+echo "[PASS] ap-rsync-files.txt covers the Compose AP runtime inputs"

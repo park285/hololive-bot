@@ -74,7 +74,7 @@ and single-primary fence.
 - Deployment baseline: `DEPLOYMENT_BASELINE.md`
 - YouTube notification split: `youtube-collector` AP fleet owns external fetch/normalize/collection lease/checkpoint/`source_observation` Publish; `hololive-api` YouTube plane owns observation consume, canonical persist, notification intent, live-end finalizer, and retention/replay; `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
 - Birthday stream split: collector publishes live evidence; `hololive-api` YouTube plane owns live session/end reconciliation; `alarm-worker` resolves recipients from `status='sent'` deliveries of the matching birthday greeting event and relies on the dispatch ledger for late-room convergence.
-- X Spaces: alarm-worker의 선택적 Node helper가 무료 웹 내부 API 관측을 수행하고 기존 dispatch ledger로 LIVE 구독 방에 시작 링크를 보낸다. Iris Admin은 후보 세션 제출·상태 화면을, hololive-api는 암호화된 후보 저장을, worker는 검증·승격을 소유한다. 상세 계약은 `services/x-spaces.md`를 따른다.
+- X Spaces: alarm-worker의 선택적 Node helper가 무료 웹 내부 API 관측을 수행하고 기존 dispatch ledger로 LIVE 구독 방에 시작 링크를 보낸다. Iris Console은 후보 세션 제출·상태 화면을, hololive-api는 암호화된 후보 저장을, worker는 검증·승격을 소유한다. 상세 계약은 `services/x-spaces.md`를 따른다.
 - X Spaces 연결 복구는 `DEC-20260924-x-spaces-auto-login-fadeout`에 따라 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 과거 자동 로그인 시도 이력은 연결 상태의 읽기 전용 정보로 남긴다.
 
 ## Implementation Ownership
@@ -87,9 +87,9 @@ and single-primary fence.
 | API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream/OAuth/WebSocket handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
 | API common HTTP | `hololive/hololive-api/internal/httpapi` | bot·LLM이 사용하는 trigger handler와 route 조립 |
 | API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/canonicalwrite`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, transaction 전용 canonical persist, replay·retention 및 private reducer |
-| Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,dedup,dispatchoutbox,queue}`, `internal/egress/{alarmdispatch,notificationdelivery,sendoutcome}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache·dispatch 저장/발행·runner, 범용 notification delivery dispatcher·store·SQL, Iris 발송 결과 분류, 실제 formatter |
+| Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,httpapi,dedup,dispatchoutbox,queue}`, `internal/egress/{alarmdispatch,notificationdelivery,sendoutcome}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache, `/internal/alarm/*` HTTP handler·route registrar·binding DTO, dispatch 저장/발행·runner, 범용 notification delivery dispatcher·store·SQL, Iris 발송 결과 분류, 실제 formatter |
 | Collector | `hololive/hololive-youtube-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |
-| Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{cache,database,holodex,iris,member,modules}` | strict 환경 파싱, 설정 구획 타입·loader·순수 검증, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계는 각 module `internal/config`가 소유 |
+| Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{database,holodex,iris,modules}` | strict 환경 파싱, 설정 구획 타입·loader·순수 검증, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계는 각 module `internal/config`가 소유 |
 
 `hololive-shared/pkg/contracts/notificationdelivery` owns only the persisted
 `notification_delivery_outbox` JSON envelope and immutable request snapshot.

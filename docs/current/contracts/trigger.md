@@ -32,7 +32,7 @@
 | Path/Event/Queue | `/internal/trigger/majorevent-weekly`, `/internal/trigger/majorevent-monthly`, `/internal/trigger/membernews-weekly` |
 | Method | `POST` |
 | Version | route constants, no request body |
-| Contract package | `hololive/hololive-shared/pkg/contracts/trigger` |
+| Contract package | `hololive/hololive-api/internal/contracts/trigger` |
 
 ## Request
 
@@ -78,14 +78,14 @@
 
 ## Compatibility policy
 
-- Route constants in `contracts/trigger` are SSOT.
+- Route constants in `hololive-api/internal/contracts/trigger` are SSOT.
 - The 409 mapping is contract-significant.
 - This is a coordinated source cutover to the typed result, with no legacy `"... sent"` response shim. Provider, admin client, and run-now callers must ship together; route paths/status codes and persisted outbox bytes are unchanged. This source contract update is not a deployment-completion claim.
 - New trigger routes must update `CONTRACT_MAP.md`, this file, provider registration, and consumer client.
 
 ## Tests
 
-- Route constants: `hololive/hololive-shared/pkg/contracts/trigger/routes_test.go`
+- Route constants: `hololive/hololive-api/internal/contracts/trigger/routes_test.go`
 - Provider/router tests: `hololive/hololive-api/internal/planes/llm/runtime/router_integration_test.go`, `hololive/hololive-api/internal/httpapi/trigger_test.go`, `router_test.go`
 - Consumer tests: `hololive/hololive-api/internal/planes/admin/internal/client/trigger/client_test.go`
 - Enqueue result decoding/no-retry: `hololive/hololive-api/internal/planes/admin/internal/client/trigger/client_result_test.go`

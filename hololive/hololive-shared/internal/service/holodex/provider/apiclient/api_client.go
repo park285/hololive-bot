@@ -44,7 +44,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 type Requester interface {
@@ -79,7 +79,7 @@ type holodexRequestRetryState struct {
 }
 
 type distributedRateLimiter interface {
-	Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimit.Decision, error)
+	Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimitvalkey.Decision, error)
 }
 
 var errNoAPIKeys = stdErrors.New("no Holodex API keys configured")

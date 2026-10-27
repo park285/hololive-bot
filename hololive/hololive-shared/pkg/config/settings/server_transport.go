@@ -70,12 +70,25 @@ func (s *ServerConfig) TransportEnabled(name string) bool {
 }
 
 func normalizeServerHTTPTransport(raw string) (string, bool) {
-	switch transport := strings.TrimSpace(strings.ToLower(raw)); transport {
-	case "":
+	transport := strings.TrimSpace(strings.ToLower(raw))
+	if transport == "" {
 		return "", true
-	case "h3", "http3", "http/3", "quic":
+	}
+
+	if IsHTTP3Transport(transport) {
 		return "h3", true
+	}
+
+	return transport, false
+}
+
+// IsHTTP3Transport는 HTTP/3 전송 별칭(h3·http3·http/3·quic)을 대소문자·앞뒤 공백과 무관하게 판정한다.
+// 서버 전송 목록과 Iris 런타임 전송 설정이 같은 별칭 집합을 쓴다.
+func IsHTTP3Transport(raw string) bool {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "h3", "http3", "http/3", "quic":
+		return true
 	default:
-		return transport, false
+		return false
 	}
 }

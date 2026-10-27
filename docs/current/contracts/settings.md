@@ -48,7 +48,7 @@ pass, 2026-09-28).
 | Admin paths | `POST /api/holo/settings`, `POST /api/holo/settings/llm` |
 | Worker apply | `PUT /internal/alarm/settings` (see `alarm.md`) |
 | Persisted file | `settings.json` (`alarmAdvanceMinutes`, `targetMinutes`) |
-| Contract package | `hololive/hololive-shared/pkg/contracts/settings` (`UpdateTypeMemberNewsRunNow` response key only) |
+| Contract package | `hololive/hololive-api/internal/contracts/settings` (`UpdateTypeMemberNewsRunNow` response key only) |
 
 ## Request
 
@@ -112,9 +112,9 @@ application, preserving the distinction from a confirmed worker rejection.
 - Persistence failure before worker apply: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_persistence_test.go`
 - Concurrent save/apply, no-op updates and consistent GET snapshots: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_order_test.go`
 - Actual partial-file-write failure on Linux: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_partial_write_linux_test.go`
-- Total client apply budget and cancellation before dispatch: `hololive/hololive-shared/pkg/service/alarm/client_advance_budget_test.go`
+- Total client apply budget and cancellation before dispatch: `hololive/hololive-shared/pkg/service/alarmhttp/client_advance_budget_test.go`
 - Saved settings and unknown outcome after the worker applies but loses its response: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_response_loss_test.go`
-- Worker/client result classification and concurrent request ordering: `hololive/hololive-shared/pkg/service/alarm/client_advance_test.go`, `hololive/hololive-alarm-worker/internal/service/alarm/subscriptions/client_advance_integration_test.go` (both run without build tags)
+- Worker/client result classification and concurrent request ordering: `hololive/hololive-shared/pkg/service/alarmhttp/client_advance_test.go`, `hololive/hololive-alarm-worker/internal/service/alarm/subscriptions/client_advance_integration_test.go` (both run without build tags)
 - Zero rejection before persistence/apply: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_update_test.go`.
 - Persist-before-publish and stored-file validation: `hololive/hololive-shared/pkg/service/settings/service_test.go`.
 - ACL in-process propagation, overlapping reloads, and reload-failure retry: `hololive/hololive-api/internal/service/acl/service_follow_test.go`

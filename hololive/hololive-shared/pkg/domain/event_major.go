@@ -21,7 +21,6 @@
 package domain
 
 import (
-	"slices"
 	"time"
 )
 
@@ -60,10 +59,9 @@ type MajorEvent struct {
 	Description string   `json:"description" db:"description"`
 	Members     []string `json:"members" db:"members"` // PostgreSQL text[] 또는 JSON
 
-	PubDate        *time.Time  `json:"pub_date" db:"pub_date"`                 // RSS 발행일
-	EventStartDate *time.Time  `json:"event_start_date" db:"event_start_date"` // 행사 시작일
-	EventEndDate   *time.Time  `json:"event_end_date" db:"event_end_date"`     // 행사 종료일 (멀티데이)
-	EventDates     []time.Time `json:"-" db:"-"`                               // 파싱 시 임시 저장 (DB 미저장)
+	PubDate        *time.Time `json:"pub_date" db:"pub_date"`                 // RSS 발행일
+	EventStartDate *time.Time `json:"event_start_date" db:"event_start_date"` // 행사 시작일
+	EventEndDate   *time.Time `json:"event_end_date" db:"event_end_date"`     // 행사 종료일 (멀티데이)
 
 	Status        MajorEventStatus     `json:"status" db:"status"`
 	LinkStatus    MajorEventLinkStatus `json:"link_status" db:"link_status"`
@@ -76,34 +74,6 @@ type MajorEvent struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
-func (*MajorEvent) TableName() string {
-	return "major_events"
-}
-
-func (e *MajorEvent) HasEventDates() bool {
-	return e.EventStartDate != nil || len(e.EventDates) > 0
-}
-
-func (e *MajorEvent) SetEventDatesFromParsed() {
-	if len(e.EventDates) == 0 {
-		return
-	}
-
-	slices.SortFunc(e.EventDates, func(a, b time.Time) int {
-		return a.Compare(b)
-	})
-
-	startDate := e.EventDates[0]
-	endDate := e.EventDates[len(e.EventDates)-1]
-
-	e.EventStartDate = &startDate
-	e.EventEndDate = &endDate
-}
-
-func (e *MajorEvent) IsNotified(weekKey string) bool {
-	return e.NotifiedWeek == weekKey
-}
-
 func (e *MajorEvent) MarkAsNotified(weekKey string, at time.Time) {
 	e.NotifiedWeek = weekKey
 	e.NotifiedAt = &at
@@ -114,8 +84,4 @@ type EventRoomSubscription struct {
 	RoomID    string    `json:"room_id" db:"room_id"` // 카카오톡 방 ID (고유)
 	RoomName  string    `json:"room_name"`            // 방 이름 (표시용)
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
-}
-
-func (EventRoomSubscription) TableName() string {
-	return "major_event_subscriptions"
 }

@@ -21,9 +21,6 @@ type webhookMetrics struct {
 	enqueueFailures prometheus.Counter
 	accepted        prometheus.Counter
 	decodeLatency   prometheus.Histogram
-	dedupLatency    prometheus.Histogram
-	enqueueWait     prometheus.Histogram
-	queueDepth      prometheus.Gauge
 	handlerDuration prometheus.Histogram
 }
 
@@ -47,9 +44,6 @@ func newWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 		enqueueFailures: prometheus.NewCounter(prometheus.CounterOpts{Name: webhookMetricPrefix + "enqueue_failures_total", Help: "Total bot webhook enqueue failures."}),
 		accepted:        prometheus.NewCounter(prometheus.CounterOpts{Name: webhookMetricPrefix + "accepted_total", Help: "Total accepted bot webhook requests."}),
 		decodeLatency:   prometheus.NewHistogram(prometheus.HistogramOpts{Name: webhookMetricPrefix + "decode_latency_seconds", Help: "Bot webhook body decode latency in seconds.", Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12)}),
-		dedupLatency:    prometheus.NewHistogram(prometheus.HistogramOpts{Name: webhookMetricPrefix + "dedup_latency_seconds", Help: "Bot webhook deduplication latency in seconds.", Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12)}),
-		enqueueWait:     prometheus.NewHistogram(prometheus.HistogramOpts{Name: webhookMetricPrefix + "enqueue_wait_seconds", Help: "Bot webhook queue enqueue wait in seconds.", Buckets: prometheus.DefBuckets}),
-		queueDepth:      prometheus.NewGauge(prometheus.GaugeOpts{Name: webhookMetricPrefix + "queue_depth", Help: "Current bot webhook queue depth."}),
 		handlerDuration: prometheus.NewHistogram(prometheus.HistogramOpts{Name: webhookMetricPrefix + "handler_duration_seconds", Help: "Bot webhook message handler duration in seconds.", Buckets: prometheus.DefBuckets}),
 	}
 	signatureV3Validated := prometheus.NewCounterFunc(prometheus.CounterOpts{Name: webhookMetricPrefix + "signature_v3_validated_total", Help: "Total webhook signature v3 requests whose HMAC comparison succeeded."}, func() float64 {
@@ -63,8 +57,7 @@ func newWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 	})
 	registerer.MustRegister(
 		metrics.requests, metrics.unauthorized, metrics.badRequests, metrics.duplicates,
-		metrics.enqueueFailures, metrics.accepted, metrics.decodeLatency, metrics.dedupLatency,
-		metrics.enqueueWait, metrics.queueDepth, metrics.handlerDuration,
+		metrics.enqueueFailures, metrics.accepted, metrics.decodeLatency, metrics.handlerDuration,
 		signatureV3Validated, signatureUnknownRejected, signatureMalformedRejected,
 	)
 
@@ -109,10 +102,6 @@ func (m *webhookMetrics) ObserveEnqueueFailure()               { m.enqueueFailur
 func (m *webhookMetrics) ObserveAccepted()                     { m.accepted.Inc() }
 func (m *webhookMetrics) ObserveDecodeLatency(d time.Duration) { m.decodeLatency.Observe(d.Seconds()) }
 
-func (m *webhookMetrics) ObserveDedupLatency(d time.Duration) { m.dedupLatency.Observe(d.Seconds()) }
-
-func (m *webhookMetrics) ObserveEnqueueWait(d time.Duration) { m.enqueueWait.Observe(d.Seconds()) }
-func (m *webhookMetrics) ObserveQueueDepth(depth int)        { m.queueDepth.Set(float64(depth)) }
 func (m *webhookMetrics) ObserveHandlerDuration(d time.Duration) {
 	m.handlerDuration.Observe(d.Seconds())
 }

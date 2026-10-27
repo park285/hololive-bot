@@ -6,7 +6,7 @@
 
 ## Current Compatibility Format
 
-`hololive-shared/pkg/server.RespondError`와 `hololive-shared/pkg/contracts/common.ErrorResponse`는 현재 다음 형태와 호환됩니다.
+`hololive-shared/pkg/server/httpserver.RespondError`와 `hololive-shared/pkg/contracts/common.ErrorResponse`는 현재 다음 형태와 호환됩니다.
 
 ```json
 {"error":"error_code_or_message"}
@@ -49,7 +49,7 @@ Alarm shared API는 legacy `success` envelope에 additive `error` field를 함�
 ## Client Interpretation Rules
 
 - Clients must not parse arbitrary full error strings from `httputil.CheckStatus`.
-- Clients should use `httputil.IsStatus`, `httputil.IsCode`, and `httputil.AsAPIError`.
+- Clients should unwrap with `errors.AsType[*httputil.APIError](err)` and branch on its `StatusCode` and `Code` fields.
 - Clients may map a specific stable body code only when the contract document lists it.
 - Status code remains the first branch key; body parsing is a secondary contract-specific step.
 - Production code must not use substring parsing for `status 404` or `status 409`.

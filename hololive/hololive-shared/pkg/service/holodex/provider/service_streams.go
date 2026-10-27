@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,14 +38,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+var supportedStreamOrgParams = []string{
+	strings.ToLower(constants.HolodexAPIParams.OrgHololive),
+	strings.ToLower(constants.HolodexAPIParams.OrgVSpo),
+	strings.ToLower(constants.HolodexAPIParams.OrgStellive),
+	strings.ToLower(constants.HolodexAPIParams.OrgIndie),
+	constants.HolodexAPIParams.OrgAll,
+}
+
+// SupportedStreamOrgParams는 호출자가 바꿔도 되는 사본을 돌려준다.
 func SupportedStreamOrgParams() []string {
-	return []string{
-		strings.ToLower(constants.HolodexAPIParams.OrgHololive),
-		strings.ToLower(constants.HolodexAPIParams.OrgVSpo),
-		strings.ToLower(constants.HolodexAPIParams.OrgStellive),
-		strings.ToLower(constants.HolodexAPIParams.OrgIndie),
-		constants.HolodexAPIParams.OrgAll,
-	}
+	return slices.Clone(supportedStreamOrgParams)
 }
 
 func (h *Service) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
@@ -213,26 +217,25 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 }
 
 func resolveStreamOrg(org string) (string, error) {
-	if resolvedOrg, ok := streamOrgAliases()[normalizeStreamOrg(org)]; ok {
+	if resolvedOrg, ok := streamOrgAliases[normalizeStreamOrg(org)]; ok {
 		return resolvedOrg, nil
 	}
 
 	return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, stringutil.TrimSpace(org))
 }
 
-func streamOrgAliases() map[string]string {
-	return map[string]string{
-		"":     constants.HolodexAPIParams.OrgHololive,
-		"holo": constants.HolodexAPIParams.OrgHololive,
-		// "indie"는 e4dc4e710 이전 공개 query 값이다. API 소유자가 기존 호출자를
-		// 모두 "independents"로 전환할 때 제거한다.
-		"indie": constants.HolodexAPIParams.OrgIndie,
-		strings.ToLower(constants.HolodexAPIParams.OrgHololive): constants.HolodexAPIParams.OrgHololive,
-		strings.ToLower(constants.HolodexAPIParams.OrgVSpo):     constants.HolodexAPIParams.OrgVSpo,
-		strings.ToLower(constants.HolodexAPIParams.OrgStellive): constants.HolodexAPIParams.OrgStellive,
-		strings.ToLower(constants.HolodexAPIParams.OrgIndie):    constants.HolodexAPIParams.OrgIndie,
-		constants.HolodexAPIParams.OrgAll:                       constants.HolodexAPIParams.OrgAll,
-	}
+// streamOrgAliases는 읽기 전용이라 요청마다 만들지 않는다.
+var streamOrgAliases = map[string]string{
+	"":     constants.HolodexAPIParams.OrgHololive,
+	"holo": constants.HolodexAPIParams.OrgHololive,
+	// "indie"는 e4dc4e710 이전 공개 query 값이다. API 소유자가 기존 호출자를
+	// 모두 "independents"로 전환할 때 제거한다.
+	"indie": constants.HolodexAPIParams.OrgIndie,
+	strings.ToLower(constants.HolodexAPIParams.OrgHololive): constants.HolodexAPIParams.OrgHololive,
+	strings.ToLower(constants.HolodexAPIParams.OrgVSpo):     constants.HolodexAPIParams.OrgVSpo,
+	strings.ToLower(constants.HolodexAPIParams.OrgStellive): constants.HolodexAPIParams.OrgStellive,
+	strings.ToLower(constants.HolodexAPIParams.OrgIndie):    constants.HolodexAPIParams.OrgIndie,
+	constants.HolodexAPIParams.OrgAll:                       constants.HolodexAPIParams.OrgAll,
 }
 
 func streamTargetOrgs(org string) []string {

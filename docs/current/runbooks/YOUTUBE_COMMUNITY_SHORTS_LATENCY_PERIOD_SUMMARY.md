@@ -13,7 +13,7 @@
 
 ## Execute
 
-standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
+전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회한다.
 
 기간별 `total_posts`, `alarm_sent_posts`, `pending_posts`, `measured_posts`, `avg_latency_ms`, `p95_latency_ms`, `max_latency_ms`, `over_2m_posts`는 `youtube_content_alarm_tracking`의 저장된 지연 컬럼으로 집계한다.
 
