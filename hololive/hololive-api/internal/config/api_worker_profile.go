@@ -50,7 +50,6 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 	})
 	positive := map[string]int64{
 		"bot_webhook_inbox.max_body_bytes":             profile.BotWebhookInbox.MaxBodyBytes,
-		"bot_webhook_inbox.dedup_ttl_ms":               profile.BotWebhookInbox.DedupTTLMS,
 		"bot_webhook_inbox.dedup_timeout_ms":           profile.BotWebhookInbox.DedupTimeoutMS,
 		"bot_webhook_inbox.poll_interval_ms":           profile.BotWebhookInbox.PollIntervalMS,
 		"bot_webhook_inbox.claim_lease_ms":             profile.BotWebhookInbox.ClaimLeaseMS,

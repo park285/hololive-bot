@@ -16,7 +16,6 @@
       },
       "settings": {
         "max_body_bytes": 65536,
-        "dedup_ttl_ms": 960000,
         "dedup_timeout_ms": 200,
         "poll_interval_ms": 100,
         "claim_lease_ms": 120000,

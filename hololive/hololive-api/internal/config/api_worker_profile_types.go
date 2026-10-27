@@ -20,7 +20,6 @@ func APIWorkerIdentity() workercontract.Identity {
 
 type BotWebhookInboxWorkerSettings struct {
 	MaxBodyBytes            int64 `json:"max_body_bytes"`
-	DedupTTLMS              int64 `json:"dedup_ttl_ms"`
 	DedupTimeoutMS          int64 `json:"dedup_timeout_ms"`
 	PollIntervalMS          int64 `json:"poll_interval_ms"`
 	ClaimLeaseMS            int64 `json:"claim_lease_ms"`
