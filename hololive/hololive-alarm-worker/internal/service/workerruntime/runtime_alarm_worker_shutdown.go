@@ -36,17 +36,14 @@ func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	var schedulerWaitErr error
+	if r.clearAlarmSchedulerCancel() {
+		logInfo(r.Logger, "Alarm runtime scheduler cancellation signaled")
+	}
+
+	schedulerWaitErr := r.waitAlarmScheduler(ctx)
 
 	shutdownErr := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
-		Logger: r.Logger,
-		ClearAlarmScheduler: func() bool {
-			canceled := r.clearAlarmSchedulerCancel()
-
-			schedulerWaitErr = r.waitAlarmScheduler(ctx)
-
-			return canceled
-		},
+		Logger:             r.Logger,
 		ShutdownHTTPServer: r.ShutdownHTTPServer,
 	})
 

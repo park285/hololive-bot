@@ -1,4 +1,4 @@
-package applifecycle
+package workerruntime
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ func TestSchedulerChildContextErrorReachesLiveParent(t *testing.T) {
 	for _, childErr := range []error{context.DeadlineExceeded, context.Canceled} {
 		t.Run(childErr.Error(), func(t *testing.T) {
 			errCh := make(chan error, 1)
-			startAlarmScheduler(t.Context(), errCh, StartHooks{StartAlarmScheduler: func(context.Context) error { return childErr }})
+			startAlarmScheduler(t.Context(), errCh, alarmSchedulerHooks{Start: func(context.Context) error { return childErr }})
 
 			select {
 			case err := <-errCh:

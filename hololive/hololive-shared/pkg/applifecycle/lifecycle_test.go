@@ -13,70 +13,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type lifecycleContextKey struct{}
-
-func TestStart_RunsConfiguredHooks(t *testing.T) {
+func TestStart_StartsHTTPServerWithErrorChannel(t *testing.T) {
 	t.Parallel()
 
 	errCh := make(chan error, 1)
-	ctx := context.WithValue(t.Context(), lifecycleContextKey{}, "parent")
-	alarmCtxCh := make(chan context.Context, 1)
-	cancelCh := make(chan context.CancelFunc, 1)
-	order := make([]string, 0, 2)
+	called := false
 
-	Start(ctx, errCh, StartHooks{
+	Start(t.Context(), errCh, StartHooks{
 		Logger:     slog.New(slog.DiscardHandler),
 		ServerAddr: "127.0.0.1:0",
-		StartAlarmScheduler: func(ctx context.Context) error {
-			alarmCtxCh <- ctx
-			return nil
-		},
 		StartHTTPServer: func(gotErrCh chan<- error) {
-			order = append(order, "http-server")
+			called = true
 
 			if gotErrCh != chan<- error(errCh) {
 				t.Fatal("StartHTTPServer received unexpected error channel")
 			}
 		},
-		SetAlarmSchedulerCancel: func(cancel context.CancelFunc) {
-			order = append(order, "set-alarm-cancel")
-
-			cancelCh <- cancel
-		},
 	})
 
-	require.Equal(t, []string{"set-alarm-cancel", "http-server"}, order)
-
-	cancelAlarm := receiveLifecycleTestValue(t, cancelCh)
-	alarmCtx := receiveLifecycleTestValue(t, alarmCtxCh)
-
-	assert.Equal(t, "parent", alarmCtx.Value(lifecycleContextKey{}))
-
-	cancelAlarm()
-
-	select {
-	case <-alarmCtx.Done():
-	case <-time.After(time.Second):
-		t.Fatal("alarm scheduler context was not canceled")
-	}
-}
-
-func TestStart_UsesParentContextWithoutAlarmCancelSetter(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.WithValue(t.Context(), lifecycleContextKey{}, "parent")
-	alarmCtxCh := make(chan context.Context, 1)
-
-	Start(ctx, nil, StartHooks{
-		Logger: slog.New(slog.DiscardHandler),
-		StartAlarmScheduler: func(ctx context.Context) error {
-			alarmCtxCh <- ctx
-			return nil
-		},
-	})
-
-	alarmCtx := receiveLifecycleTestValue(t, alarmCtxCh)
-	assert.Equal(t, "parent", alarmCtx.Value(lifecycleContextKey{}))
+	require.True(t, called)
 }
 
 func TestStart_HandlesNilHooksAndNilContext(t *testing.T) {
@@ -85,100 +40,6 @@ func TestStart_HandlesNilHooksAndNilContext(t *testing.T) {
 	require.NotPanics(t, func() {
 		Start(t.Context(), make(chan error, 1), StartHooks{})
 	})
-}
-
-func TestStart_AlarmSchedulerErrorPropagatesToErrCh(t *testing.T) {
-	t.Parallel()
-
-	errCh := make(chan error, 1)
-	schedulerCrash := errors.New("scheduler crashed")
-
-	Start(t.Context(), errCh, StartHooks{
-		Logger: slog.New(slog.DiscardHandler),
-		StartAlarmScheduler: func(context.Context) error {
-			return schedulerCrash
-		},
-	})
-
-	select {
-	case err := <-errCh:
-		if err == nil {
-			t.Fatal("expected scheduler error, got nil")
-		}
-
-		if !errors.Is(err, schedulerCrash) {
-			t.Fatalf("unexpected scheduler error: %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("expected scheduler error to be sent to errCh")
-	}
-}
-
-func TestStart_AlarmSchedulerContextCancellationIsNotFatal(t *testing.T) {
-	t.Parallel()
-
-	errCh := make(chan error, 1)
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	Start(ctx, errCh, StartHooks{
-		Logger: slog.New(slog.DiscardHandler),
-		StartAlarmScheduler: func(context.Context) error {
-			return context.Canceled
-		},
-	})
-
-	select {
-	case err := <-errCh:
-		t.Fatalf("context cancellation must not be propagated as fatal error: %v", err)
-	case <-time.After(50 * time.Millisecond):
-	}
-}
-
-func TestStart_NonErrorAlarmAdapterDoesNotTouchErrCh(t *testing.T) {
-	t.Parallel()
-
-	errCh := make(chan error, 1)
-	called := make(chan struct{}, 1)
-
-	Start(t.Context(), errCh, StartHooks{
-		Logger: slog.New(slog.DiscardHandler),
-		StartAlarmScheduler: func(context.Context) error {
-			called <- struct{}{}
-			return nil
-		},
-	})
-
-	receiveLifecycleTestValue(t, called)
-
-	select {
-	case err := <-errCh:
-		t.Fatalf("non-error alarm adapter must not send to errCh: %v", err)
-	case <-time.After(50 * time.Millisecond):
-	}
-}
-
-func TestStart_AlarmSchedulerPanicIsRecoveredAndPropagatedToErrCh(t *testing.T) {
-	t.Parallel()
-
-	errCh := make(chan error, 1)
-
-	require.NotPanics(t, func() {
-		Start(t.Context(), errCh, StartHooks{
-			Logger: slog.New(slog.DiscardHandler),
-			StartAlarmScheduler: func(context.Context) error {
-				panic("alarm scheduler exploded")
-			},
-		})
-	})
-
-	select {
-	case err := <-errCh:
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "alarm scheduler exploded")
-	case <-time.After(time.Second):
-		t.Fatal("expected recovered scheduler panic to be sent to errCh")
-	}
 }
 
 func TestRun_DelegatesStartAndShutdown(t *testing.T) {
@@ -263,19 +124,15 @@ func TestRuntimeOptions_LogsShutdownError(t *testing.T) {
 	assert.True(t, bytes.Contains(output.Bytes(), []byte("Shutdown error")))
 }
 
-func TestShutdown_CallsHooksInOrder(t *testing.T) {
+func TestShutdown_CallsHTTPShutdownHook(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	calls := make([]string, 0, 2)
+	calls := make([]string, 0, 1)
 
 	httpErr := errors.New("http shutdown failed")
 	err := Shutdown(ctx, ShutdownHooks{
 		Logger: slog.New(slog.DiscardHandler),
-		ClearAlarmScheduler: func() bool {
-			calls = append(calls, "clear-alarm-scheduler")
-			return true
-		},
 		ShutdownHTTPServer: func(gotCtx context.Context) error {
 			calls = append(calls, "shutdown-http-server")
 
@@ -287,10 +144,7 @@ func TestShutdown_CallsHooksInOrder(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, []string{
-		"clear-alarm-scheduler",
-		"shutdown-http-server",
-	}, calls)
+	assert.Equal(t, []string{"shutdown-http-server"}, calls)
 	assert.ErrorIs(t, err, httpErr)
 }
 
