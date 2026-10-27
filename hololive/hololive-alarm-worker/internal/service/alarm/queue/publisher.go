@@ -35,9 +35,8 @@ import (
 )
 
 const (
-	AlarmDispatchWakeupQueue         = "alarm:dispatch:wakeup"
-	alarmDispatchWakeupGuardKey      = "alarm:dispatch:wakeup:guard"
-	defaultPublishBatchDeliveryLimit = 1000
+	AlarmDispatchWakeupQueue    = "alarm:dispatch:wakeup"
+	alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
 )
 
 type PublishConfig struct {
@@ -61,62 +60,31 @@ type Publisher struct {
 	now           func() time.Time
 }
 
-type PublisherOption func(*Publisher)
-
-func WithOutbox(repository dispatchoutbox.Writer) PublisherOption {
-	return func(p *Publisher) {
-		p.outbox = repository
+// NewPublisher는 PG dispatch outbox에 pending 행을 쓰고 wakeup을 보내는 발행자를 만든다. outbox는 유일한 발행
+// 경로이므로 필수이고, batch 한도는 RuntimeConfig.AlarmDispatchPublish가 검증한 양수여야 한다. 기본값으로 바꾸지
+// 않고 생성 오류로 드러낸다.
+func NewPublisher(c WakeupCache, outbox dispatchoutbox.Writer, config PublishConfig, logger *slog.Logger) (*Publisher, error) {
+	if outbox == nil {
+		return nil, errors.New("new alarm publisher: outbox repository is required")
 	}
-}
 
-func WithWakeupEnabled(enabled bool) PublisherOption {
-	return func(p *Publisher) {
-		p.publishConfig.WakeupEnabled = enabled
+	if config.MaxDeliveriesPerBatch <= 0 {
+		return nil, fmt.Errorf("new alarm publisher: max deliveries per batch must be positive, got %d", config.MaxDeliveriesPerBatch)
 	}
-}
 
-func WithMaxDeliveriesPerBatch(limit int) PublisherOption {
-	return func(p *Publisher) {
-		if limit > 0 {
-			p.publishConfig.MaxDeliveriesPerBatch = limit
-		}
-	}
-}
-
-// WithPublishConfig는 worker profile에서 읽은 발행 설정을 한 번에 적용한다. 0 이하 batch 한도는 기본값을 유지한다.
-func WithPublishConfig(config PublishConfig) PublisherOption {
-	return func(p *Publisher) {
-		WithWakeupEnabled(config.WakeupEnabled)(p)
-		WithMaxDeliveriesPerBatch(config.MaxDeliveriesPerBatch)(p)
-	}
-}
-
-func NewPublisher(c WakeupCache, logger *slog.Logger, opts ...PublisherOption) *Publisher {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	initQueueMetrics()
 
-	publisher := &Publisher{
-		cache: c,
-		publishConfig: PublishConfig{
-			WakeupEnabled:         true,
-			MaxDeliveriesPerBatch: defaultPublishBatchDeliveryLimit,
-		},
-		logger: logger,
-		now:    time.Now,
-	}
-
-	for _, opt := range opts {
-		opt(publisher)
-	}
-
-	if publisher.publishConfig.MaxDeliveriesPerBatch <= 0 {
-		publisher.publishConfig.MaxDeliveriesPerBatch = defaultPublishBatchDeliveryLimit
-	}
-
-	return publisher
+	return &Publisher{
+		cache:         c,
+		outbox:        outbox,
+		publishConfig: config,
+		logger:        logger,
+		now:           time.Now,
+	}, nil
 }
 
 func (p *Publisher) Publish(ctx context.Context, notification *domain.AlarmNotification, claimKeys []string) (dispatchoutbox.PublishBatchResult, error) {
@@ -245,10 +213,6 @@ func (p *Publisher) publishEnvelopes(
 	ctx context.Context,
 	envelopes []domain.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
-	if p.outbox == nil {
-		return dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}, errors.New("publish alarm queue batch: pg_first requires outbox repository")
-	}
-
 	result, err := p.insertOutboxChunks(ctx, envelopes)
 
 	result.RequestedDeliveries = len(envelopes)
@@ -268,10 +232,6 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 	var total dispatchoutbox.PublishBatchResult
 
 	limit := p.publishConfig.MaxDeliveriesPerBatch
-
-	if limit <= 0 {
-		limit = defaultPublishBatchDeliveryLimit
-	}
 
 	for start := 0; start < len(envelopes); start += limit {
 		end := min(start+limit, len(envelopes))

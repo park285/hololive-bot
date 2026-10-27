@@ -28,6 +28,13 @@ type RuntimeConfig struct {
 	MarkdownReplies    bool
 	AlarmWorkerProfile *AlarmWorkerProfile
 	DispatchRetention  DispatchRetentionConfig
+	// AlarmDispatchPublish: ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH. wakeup 여부는 worker profile alarm_dispatch.wakeup_enabled가 소유한다.
+	AlarmDispatchPublish AlarmDispatchPublishConfig
+}
+
+// AlarmDispatchPublishConfig는 알림 발행자가 outbox에 한 번에 넣는 delivery 상한이다.
+type AlarmDispatchPublishConfig struct {
+	MaxDeliveriesPerBatch int
 }
 
 // alarmWorkerCORSDefaultEnforce: alarm-worker는 브라우저 표면이 없지만, 예전과 같이 CORS_ENFORCE가 명시된 production
@@ -123,7 +130,7 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	}, nil
 }
 
-// loadRoleSections는 alarm-worker의 worker profile과 dispatch retention을 채운다.
+// loadRoleSections는 alarm-worker의 worker profile, dispatch retention, 발행 batch 한도를 채운다.
 func loadRoleSections(config *RuntimeConfig) error {
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -135,8 +142,15 @@ func loadRoleSections(config *RuntimeConfig) error {
 		return fmt.Errorf("load alarm dispatch retention config: %w", err)
 	}
 
+	// 잘못된 batch 한도는 기본값으로 바꾸지 않고 기동 오류로 드러낸다.
+	maxDeliveries, err := envload.RequiredPositiveIntEnv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
+	if err != nil {
+		return fmt.Errorf("load alarm dispatch publish config: %w", err)
+	}
+
 	config.AlarmWorkerProfile = profile
 	config.DispatchRetention = retention
+	config.AlarmDispatchPublish = AlarmDispatchPublishConfig{MaxDeliveriesPerBatch: maxDeliveries}
 
 	return nil
 }

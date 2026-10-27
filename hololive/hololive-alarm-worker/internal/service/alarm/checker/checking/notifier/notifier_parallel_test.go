@@ -60,10 +60,7 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -120,10 +117,7 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -169,10 +163,7 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)

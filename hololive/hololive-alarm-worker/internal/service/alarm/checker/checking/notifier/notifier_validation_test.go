@@ -18,7 +18,7 @@ func TestNewNotifierValidation(t *testing.T) {
 
 	cache := newCheckerTestCacheClient(t)
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
-	queuePublisher := queue.NewPublisher(cache, newCheckerTestLogger())
+	queuePublisher := newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000})
 
 	_, err := NewNotifier(nil, queuePublisher, nil, newCheckerTestLogger())
 	require.Error(t, err)

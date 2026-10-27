@@ -86,7 +86,7 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, newCheckerTestLogger()),
+		newCheckerTestPublisher(t, cacheClient, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -189,10 +189,7 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, newCheckerTestLogger(),
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -272,10 +269,7 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tierSched,
 		logger,
 	)
@@ -325,7 +319,7 @@ func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 
 			notifier, err := NewNotifier(
 				dedupService,
-				queue.NewPublisher(cacheClient, logger),
+				newCheckerTestPublisher(t, cacheClient, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000}),
 				nil,
 				logger,
 			)
@@ -364,10 +358,7 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -422,10 +413,7 @@ func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -476,10 +464,7 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -537,11 +522,7 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-			queue.WithMaxDeliveriesPerBatch(1),
-		),
+		newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)

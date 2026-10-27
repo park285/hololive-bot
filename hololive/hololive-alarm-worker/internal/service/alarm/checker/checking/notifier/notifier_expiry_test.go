@@ -38,7 +38,7 @@ func TestUpcomingExpiresDuringDedupClaim(t *testing.T) {
 		outbox := &notifierBatchOutbox{}
 		logger := newCheckerTestLogger()
 		claimCache := &expiryClaimCache{}
-		n, err := NewNotifier(dedup.NewService(claimCache, []int{5}, logger), queue.NewPublisher(claimCache, logger, queue.WithOutbox(outbox), queue.WithWakeupEnabled(false)), nil, logger)
+		n, err := NewNotifier(dedup.NewService(claimCache, []int{5}, logger), newCheckerTestPublisher(t, claimCache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}), nil, logger)
 		require.NoError(t, err)
 
 		result, err := n.Send(t.Context(), []*domain.AlarmNotification{item.payload.notification})
@@ -58,7 +58,7 @@ func TestPublishPreparedBatchSkipsExpiredAndKeepsActiveReceipt(t *testing.T) {
 	logger := newCheckerTestLogger()
 	service := dedup.NewService(cacheClient, []int{5}, logger)
 	outbox := &notifierBatchOutbox{}
-	n, err := NewNotifier(service, queue.NewPublisher(cacheClient, logger, queue.WithOutbox(outbox), queue.WithWakeupEnabled(false)), nil, logger)
+	n, err := NewNotifier(service, newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}), nil, logger)
 	require.NoError(t, err)
 	require.NoError(t, cacheClient.Set(ctx, "expired-claim", "1", time.Minute))
 	require.NoError(t, cacheClient.Set(ctx, "active-claim", "1", time.Minute))

@@ -42,8 +42,8 @@ compose_file="$tmpdir/docker-compose.yml"
 cat >"$env_file" <<'EOF'
 DB_PASSWORD=db-secret
 CACHE_PASSWORD=cache-secret
-ALARM_DISPATCH_PUBLISH_MODE=pg_first
-ALARM_DISPATCH_CONSUMER_MODE=pg
+ALARM_DISPATCH_RETENTION_LIMIT=1000
+ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH=1000
 YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=false
 EOF
 
@@ -54,8 +54,8 @@ services:
     environment:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
-      ALARM_DISPATCH_PUBLISH_MODE: ${ALARM_DISPATCH_PUBLISH_MODE:-pg_first}
-      ALARM_DISPATCH_CONSUMER_MODE: ${ALARM_DISPATCH_CONSUMER_MODE:-pg}
+      ALARM_DISPATCH_RETENTION_LIMIT: ${ALARM_DISPATCH_RETENTION_LIMIT:-1000}
+      ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH: ${ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH:-1000}
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: ${YOUTUBE_COLLECTOR_RUNTIME_ALLOWED:-false}
       NOTIFICATION_EGRESS_ROLE: ${NOTIFICATION_EGRESS_ROLE:-alarm-worker}
       REVISION: ${REVISION:-unknown}
@@ -87,11 +87,11 @@ cp "$env_file" "$stack_secrets_compose_env"
 pass "stack-secrets compose.env fallback resolves"
 
 mapfile -t keys < <(compose_env_list_keys_from_file "$env_file")
-[[ "${keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD YOUTUBE_COLLECTOR_RUNTIME_ALLOWED" ]] || fail "unexpected env keys: ${keys[*]}"
+[[ "${keys[*]}" == "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH ALARM_DISPATCH_RETENTION_LIMIT CACHE_PASSWORD DB_PASSWORD YOUTUBE_COLLECTOR_RUNTIME_ALLOWED" ]] || fail "unexpected env keys: ${keys[*]}"
 pass "env keys are listed"
 
 mapfile -t interpolation_keys < <(compose_env_list_interpolation_keys_from_files "$compose_file")
-[[ "${interpolation_keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD NOTIFICATION_EGRESS_ROLE REVISION YOUTUBE_COLLECTOR_RUNTIME_ALLOWED" ]] || fail "unexpected interpolation keys: ${interpolation_keys[*]}"
+[[ "${interpolation_keys[*]}" == "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH ALARM_DISPATCH_RETENTION_LIMIT CACHE_PASSWORD DB_PASSWORD NOTIFICATION_EGRESS_ROLE REVISION YOUTUBE_COLLECTOR_RUNTIME_ALLOWED" ]] || fail "unexpected interpolation keys: ${interpolation_keys[*]}"
 pass "compose interpolation keys are listed"
 
 bad_export="$tmpdir/bad-export.env"
@@ -132,7 +132,7 @@ pass "duplicate key fails"
 expect_fail env DB_PASSWORD=wrong bash -c '. "$1"; compose_env_assert_shell_matches_all_file_keys "$2"' _ "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" "$env_file"
 pass "shell mismatch for env file key fails"
 
-expect_fail env ALARM_DISPATCH_CONSUMER_MODE=valkey bash -c '. "$1"; compose_env_assert_no_shell_shadow_for_compose_files "$2" "$3"' _ "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" "$env_file" "$compose_file"
+expect_fail env ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH=50 bash -c '. "$1"; compose_env_assert_no_shell_shadow_for_compose_files "$2" "$3"' _ "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" "$env_file" "$compose_file"
 pass "shell mismatch for compose key fails"
 
 expect_fail env NOTIFICATION_EGRESS_ROLE=youtube-producer bash -c '. "$1"; compose_env_assert_no_shell_shadow_for_compose_files "$2" "$3"' _ "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" "$env_file" "$compose_file"
