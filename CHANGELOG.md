@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v12.3.1 - 2026-10-27
+
 - **의존성(shared-go v2.17.0·iris-client-go v3.2.0):** 두 라이브러리가 공개 API를 지우거나 이름·시그니처를 바꿨기 때문에 같은 변경에서 코드를 함께 옮깁니다. hololive-api·hololive-alarm-worker·hololive-shared는 두 모듈을 모두 올리고, hololive-youtube-collector·hololive-dbtest는 shared-go만 올립니다. go.sum에서는 이 두 모듈 줄만 바뀝니다.
   - `workercontract.LoadProfileFromEnv`가 서비스·역할 문자열 대신 `Identity`를 받습니다. 그래서 각 runtime이 자기 worker 집합을 직접 소유합니다. api는 `APIWorkerIdentity()`(`bot_reply_outbox`·`bot_webhook_inbox`·`source_observation`), alarm-worker는 `WorkerIdentity()`(`alarm_dispatch`·`notification_delivery`·`youtube_delivery`), collector는 `WorkerIdentity()`(`collection`)를 둡니다. 세 함수 모두 호출할 때마다 새 슬라이스를 돌려주며, 값은 shared-go에서 지운 내장 표와 같습니다. `settingstest.LoadProfileFixture`는 이제 `(t, identity, name)`을 받습니다.
   - 세 main의 `Initialize`에서 `automaxprocs.Init(nil)`을 지웠습니다. NewLogger가 있어 쓰이지 않던 `LoggerFileName`도 지웠으며, 로그 파일 이름은 전처럼 각 NewLogger가 정합니다. `NormalizeRuntimeBuildInputs`가 이제 정규화한 logger도 함께 돌려주므로, alarm-worker·admin·bot runtime 조립은 그 logger를 씁니다.
@@ -74,6 +76,8 @@
 - **테스트·gate 정리:** 지운 코드만 검증하던 테스트는 함께 지웠습니다. 새로 더한 테스트는 bot runtime 종료 순서, plane 종료 panic 격리, map key·중첩 값의 잘못된 UTF-8 거부입니다. `public-pr-frontend-gate.sh`에서는 이미 지운 이름(`IRIS_ADMIN_WEB_*` env, `iris-admin-credentials` mount)이 없는지 보던 검사를 빼고, docker-proxy 연결과 30192 shortlink ingress만 검사합니다. 배포 shell 테스트는 shared-go·iris-client-go 가짜 workspace를 더 만들지 않습니다. `test-compose-services.sh`는 자체 목록 단언 대신 `check-ap-rsync-manifest.sh`를 실행합니다.
 - **문서:** 현행 문서(`docs/current`)의 존재하지 않는 경로와 지운 심볼 참조를 고쳤습니다. alarm HTTP 소유 경로도 맞췄습니다(`CONTRACT_MAP.md`·`CONTRACT_MANIFEST.txt`·`PROJECT_MAP.md`·`SERVICE_OWNERSHIP.md`, contracts·runbooks·services). `docs/README.md`·`repo-tree-policy.md`에서는 저장소에 없는 `docs/superpowers` 안내를 지웠습니다. migration `CONVENTIONS.md`의 dbtest 경로는 `hololive/hololive-dbtest`로 바로잡았습니다.
 - **활성 worker-profile pair 저장 위치:** 중앙 collector-c PO 배포와 서울 AP collector-b 배포가 활성 pair를 수용 후 정리되는 백업 디렉터리(`backups/po-c-*`, `backups/seoul-collector-*`)에 두었습니다. 2026-10-26 백업 정리 뒤 Compose가 지워진 경로를 bind하려다 중앙 부팅 경로가 `youtube-collector`에서 실패했습니다. 이제 두 배포와 AP 롤백은 pair를 `artifacts/worker-profile/releases/`에 만들고, `worker-profile-pair.py activate`는 그 밖의 pair를 거부합니다.
+
+- **`/opt` 동기화의 형제 저장소 복사 삭제:** `scripts/deploy/sync-opt-current.sh`가 `/opt/hololive-bot/compose/shared-go`·`iris-client-go`를 더 갱신하지 않습니다. 이번 릴리스의 `compose.sh`는 형제 저장소를 요구하지 않습니다. 기존 디렉터리는 지우지 않으므로, 변경 전 백업으로 되돌린 `compose.sh`가 확인하는 경로는 그대로 남습니다.
 
 ## v12.3.0 - 2026-10-26
 

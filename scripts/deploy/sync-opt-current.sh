@@ -46,17 +46,6 @@ trap cleanup EXIT
 git -C "$REPO_ROOT" archive HEAD | tar -x -C "$STAGING"
 log "staged tracked tree ($(find "$STAGING" -type f | wc -l) files)"
 
-for sib in shared-go iris-client-go; do
-  src="${REPO_ROOT}/../${sib}"
-  assert_clean "$src" "sibling $sib"
-  sib_staging="$(mktemp -d "${OPT_ROOT}/.staging-${sib}.XXXXXX")"
-  git -C "$src" archive HEAD | tar -x -C "$sib_staging"
-  rsync -a --delete "$sib_staging/" "${OPT_ROOT}/${sib}/"
-  rm -rf "$sib_staging"
-  chown -R root:root "${OPT_ROOT}/${sib}"
-  log "sibling synced: ${sib} ($(git -C "$src" rev-parse --short HEAD))"
-done
-
 # current 반영: tracked 트리만 교체하고 런타임 bind-mount 데이터는 보존한다. staging 에는
 # data/logs/backups 가 없으므로 --delete 가 OPT_CURRENT 의 기존 런타임 데이터를 지우지 않도록
 # 명시적으로 제외한다.
