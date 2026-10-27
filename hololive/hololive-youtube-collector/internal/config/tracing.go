@@ -3,9 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"strings"
-
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -18,7 +15,7 @@ func loadTracingConfig(instanceID string) (settings.TracingConfig, error) {
 		return settings.TracingConfig{}, fmt.Errorf("reject standard OTLP endpoint env: %w", err)
 	}
 
-	enabledEnv, err := resolveTracingEnabledEnv(instanceID)
+	enabledEnv, err := tracingEnabledEnvForInstance(instanceID)
 	if err != nil {
 		return settings.TracingConfig{}, fmt.Errorf("tracing enabled env: %w", err)
 	}
@@ -31,63 +28,21 @@ func loadTracingConfig(instanceID string) (settings.TracingConfig, error) {
 	return config, nil
 }
 
-// resolveTracingEnabledEnv: 빈 instance ID는 기본 토글을 쓴다. 알 수 없는 instance ID는 모든 collector 토글이
-// false일 때만 받아들이며, 그때는 false로 확인된 기본 토글을 돌려줘 tracing이 꺼진 채로 읽힌다.
-func resolveTracingEnabledEnv(instanceID string) (string, error) {
-	enabledEnv, err := tracingEnabledEnvForInstance(instanceID)
-	if err == nil {
-		return enabledEnv, nil
-	}
-
-	if strings.TrimSpace(instanceID) == "" {
-		return envload.TracingYouTubeCollectorEnabledEnv, nil
-	}
-
-	disabled, disabledErr := allTracingTogglesDisabled()
-	if disabledErr != nil {
-		return "", fmt.Errorf("all youtube collector tracing disabled: %w", disabledErr)
-	}
-
-	if disabled {
-		return envload.TracingYouTubeCollectorEnabledEnv, nil
-	}
-
-	return "", fmt.Errorf("youtube collector tracing enabled env: %w", err)
-}
-
-func allTracingTogglesDisabled() (bool, error) {
-	for _, key := range []string{
-		envload.TracingYouTubeCollectorAEnabledEnv,
-		envload.TracingYouTubeCollectorBEnabledEnv,
-		envload.TracingYouTubeCollectorCEnabledEnv,
-		envload.TracingYouTubeCollectorDEnabledEnv,
-		envload.TracingYouTubeCollectorEnabledEnv,
-	} {
-		enabled, err := sharedenv.BoolE(key, false)
-		if err != nil {
-			return false, fmt.Errorf("read bool env: %w", err)
-		}
-
-		if enabled {
-			return false, nil
-		}
-	}
-
-	return true, nil
+// youtubeCollectorInstanceTracingEnv는 PROJECT_MAP이 닫은 collector slot 네 개와 slot별 OTEL 토글을 잇는다.
+// 이 표 밖의 instance ID는 lease owner 표시와 tracing slot 정책을 우회하므로 기동 오류다.
+var youtubeCollectorInstanceTracingEnv = map[string]string{
+	"youtube-collector-a": envload.TracingYouTubeCollectorAEnabledEnv,
+	"youtube-collector-b": envload.TracingYouTubeCollectorBEnabledEnv,
+	"youtube-collector-c": envload.TracingYouTubeCollectorCEnabledEnv,
+	"youtube-collector-d": envload.TracingYouTubeCollectorDEnabledEnv,
 }
 
 // tracingEnabledEnvForInstance: instance ID에 대응하는 AP slot OTEL 토글 환경변수 이름이다.
 func tracingEnabledEnvForInstance(instanceID string) (string, error) {
-	switch strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-collector-") {
-	case "a":
-		return envload.TracingYouTubeCollectorAEnabledEnv, nil
-	case "b":
-		return envload.TracingYouTubeCollectorBEnabledEnv, nil
-	case "c":
-		return envload.TracingYouTubeCollectorCEnabledEnv, nil
-	case "d":
-		return envload.TracingYouTubeCollectorDEnabledEnv, nil
-	default:
-		return "", errors.New("YOUTUBE_COLLECTOR_INSTANCE_ID must be one of a, b, c, d, youtube-collector-a, youtube-collector-b, youtube-collector-c, youtube-collector-d")
+	enabledEnv, ok := youtubeCollectorInstanceTracingEnv[instanceID]
+	if !ok {
+		return "", errors.New("YOUTUBE_COLLECTOR_INSTANCE_ID must be one of youtube-collector-a, youtube-collector-b, youtube-collector-c, youtube-collector-d")
 	}
+
+	return enabledEnv, nil
 }
