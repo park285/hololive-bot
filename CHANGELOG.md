@@ -9,6 +9,9 @@
 ## 미출시
 
 - **PostgreSQL 실행 계획 로그와 버퍼·인덱스 진단:** 중앙 `holo-postgres`가 `auto_explain`을 preload하여 1초 이상 걸린 문장의 계획을 PostgreSQL 로그(Loki)에 남깁니다. 보존 함수 안의 문장도 포함하며, 실제 행 수와 버퍼는 기록하고 노드별 시간 계측과 바인드 값은 남기지 않습니다. 같은 활성화 SQL이 `pg_buffercache` 1.6과 `amcheck` 1.5를 `hololive_observability` 스키마에 만듭니다. 버퍼 조회는 `pg_monitor`가, evict 함수와 amcheck 검사는 관리자만 실행할 수 있습니다. 2026-10-27 서울 primary에 적용했고 preload 키는 `HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES`가 계속 소유합니다. 절차와 복구는 [PostgreSQL observability runbook](docs/current/runbooks/postgres-observability.md)에 있습니다.
+- **collector 후보 조회 계획 재사용:** 후보 조회(`repository_candidates_0144_02.sql`)는 runner마다 1초 주기로 실행되며, 운영에서는 하루 약 200만 회입니다. 이 조회는 custom plan 추정 비용이 항상 더 낮아 호출할 때마다 계획을 다시 세웠습니다(운영 계획 0.5~0.7ms, 실행 0.6ms, pg_stat_kcache 실행 CPU 1위). migration 342는 `youtube_collection_targets (projection_generation, observation_kind, subject_key)` 인덱스를 `CONCURRENTLY`로 만듭니다. 343은 기존 본문을 그대로 옮긴 `youtube_collection_job_candidates()` SQL 함수를 만들고, 함수 안에서 generic plan을 고정합니다. 그래서 PG 18의 SQL 함수 plan cache가 세션마다 계획을 한 번만 세웁니다. 후보 판정·순서와 wire 바이트는 같고, 함수 EXECUTE 권한은 `hololive_scraper`에만 줍니다.
+  - 운영 통계를 복원한 로컬 PG 18 측정에서 내부 문장은 6,002회 호출 중 3회만 계획했습니다. 호출당 시간은 848~857µs에서 470~474µs로 줄었습니다.
+  - 배포 순서: 새 collector는 함수가 없으면 후보 조회가 실패합니다. 따라서 `hololive-db-migrate`로 342·343을 먼저 적용한 뒤 collector 네 곳을 바꿉니다. 이전 collector는 함수가 생겨도 기존 SQL로 계속 동작합니다. 343은 342의 인덱스가 없거나 invalid이면 함수를 만들지 않고 실패합니다. 인덱스 없이 generic plan을 고정하면 운영 통계에서 targets 전체 parallel seq scan(약 60ms)이 되기 때문입니다.
 
 ## v12.3.1 - 2026-10-27
 
