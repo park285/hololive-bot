@@ -29,6 +29,11 @@ type adminOpenAPI struct {
 }
 
 type openAPIOperation struct {
+	RequestBody struct {
+		Content map[string]struct {
+			Schema json.RawMessage `json:"schema"`
+		} `json:"content"`
+	} `json:"requestBody"`
 	Responses map[string]struct {
 		Content map[string]struct {
 			Schema json.RawMessage `json:"schema"`
@@ -99,6 +104,35 @@ func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, status 
 
 	if err := s.check(response.Content["application/json"].Schema, value, "$"); err != nil {
 		t.Fatalf("%s %s %d body violates contract: %v: %s", method, path, status, err, body)
+	}
+}
+
+// 요청 본문이 계약의 requestBody schema를 지키는지가 생산자 입력 검증의 수락 여부와 같아야 한다.
+// 생산자가 400으로 거절한 요청은 schema도 거절하고, 받아들인 요청은 schema를 지킨다.
+func (s *adminOpenAPI) assertRequest(t *testing.T, method, path, body string, accepted bool) {
+	t.Helper()
+
+	schema := s.Paths[path][strings.ToLower(method)].RequestBody.Content["application/json"].Schema
+	if len(schema) == 0 {
+		t.Fatalf("contract has no request body for %s %s", method, path)
+	}
+
+	var value any
+
+	decoder := json.NewDecoder(strings.NewReader(body))
+	decoder.UseNumber()
+
+	if err := decoder.Decode(&value); err != nil {
+		t.Fatalf("%s %s request is not JSON: %v: %s", method, path, err, body)
+	}
+
+	err := s.check(schema, value, "$")
+
+	switch {
+	case accepted && err != nil:
+		t.Fatalf("%s %s producer accepted a request the contract rejects: %v: %s", method, path, err, body)
+	case !accepted && err == nil:
+		t.Fatalf("%s %s producer rejected a request the contract accepts: %s", method, path, body)
 	}
 }
 
@@ -301,7 +335,7 @@ func (s *adminOpenAPI) checkObject(schema *jsonSchema, value map[string]any, at 
 	return nil
 }
 
-// room·ACL 관리 operation의 실제 handler 응답은 생산자 계약 schema를 지킨다. 조립은 process와 같은
+// room·ACL 관리 operation의 실제 handler 요청 수락 여부와 응답은 생산자 계약 schema를 지킨다. 조립은 process와 같은
 // buildAdminHandler·ProvideAPIRouter 경로이고 ACL Service는 시험 DB를 쓰는 실제 인스턴스다.
 func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 	spec := loadAdminOpenAPI(t)
@@ -316,18 +350,27 @@ func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 		{http.MethodPost, roomsPath, `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
 		{http.MethodPost, roomsPath, `{"room":"3011","mode":"blacklist"}`, http.StatusConflict},
 		{http.MethodPost, roomsPath, `{"room":"room name","mode":"whitelist"}`, http.StatusBadRequest},
+		{http.MethodPost, roomsPath, `{"room":"3012"}`, http.StatusBadRequest},
+		{http.MethodPost, roomsPath, `{"room":"3012","mode":"graylist"}`, http.StatusBadRequest},
+		{http.MethodPost, roomsPath, `{"room":"3012","mode":"whitelist","note":"ignored"}`, http.StatusOK},
 		{http.MethodGet, roomsPath, "", http.StatusOK},
 		{http.MethodDelete, roomsPath, `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
 		{http.MethodDelete, roomsPath, `{"room":"3010","mode":"whitelist"}`, http.StatusOK},
+		{http.MethodDelete, roomsPath, `{"room":"","mode":"whitelist"}`, http.StatusBadRequest},
 		{http.MethodGet, "/api/holo/rooms/joined", "", http.StatusOK},
 		{http.MethodPost, "/api/holo/rooms/acl", `{"enabled":true,"mode":"blacklist"}`, http.StatusOK},
 		{http.MethodPost, "/api/holo/rooms/acl", `{"mode":"graylist"}`, http.StatusBadRequest},
+		{http.MethodPost, "/api/holo/rooms/acl", `{"enabled":"yes"}`, http.StatusBadRequest},
 	}
 
 	for _, step := range steps {
 		rec := serve(step.method, step.path, step.body)
 		if rec.Code != step.status {
 			t.Fatalf("%s %s %s = %d %s, want %d", step.method, step.path, step.body, rec.Code, rec.Body.String(), step.status)
+		}
+
+		if step.body != "" {
+			spec.assertRequest(t, step.method, step.path, step.body, rec.Code != http.StatusBadRequest)
 		}
 
 		spec.assertResponse(t, step.method, step.path, rec.Code, rec.Body.Bytes())
