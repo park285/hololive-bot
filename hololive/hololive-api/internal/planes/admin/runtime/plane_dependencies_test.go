@@ -37,6 +37,33 @@ func (r *recordingIrisRooms) GetRooms(context.Context) (*iris.RoomListResponse, 
 // 방 목록 조회(joined-rooms)는 주입된 bot 소유 client를 호출하고, 방 추가는 bot ingress가 판정에 쓰는 같은 ACL 인스턴스를
 // 응답 전에 바꾼다.
 func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
+	rooms := &recordingIrisRooms{}
+	serve, aclService := newAdminTestRouter(t, rooms)
+
+	if rec := serve(http.MethodGet, "/api/holo/rooms/joined", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "3001") || rooms.calls.Load() != 1 {
+		t.Fatalf("joined rooms = %d %s, iris calls %d; want 200 from injected lister", rec.Code, rec.Body.String(), rooms.calls.Load())
+	}
+
+	if aclService.IsRoomAllowed("3001") {
+		t.Fatal("room allowed before admin add")
+	}
+
+	if rec := serve(http.MethodPost, "/api/holo/rooms", `{"room":"3001","mode":"whitelist"}`); rec.Code != http.StatusOK {
+		t.Fatalf("add room = %d %s, want 200", rec.Code, rec.Body.String())
+	}
+
+	if !aclService.IsRoomAllowed("3001") {
+		t.Fatal("admin add did not reach the shared ACL instance")
+	}
+}
+
+// adminTestServe는 API key를 붙여 admin router에 요청 하나를 보낸다.
+type adminTestServe func(method, path, body string) *httptest.ResponseRecorder
+
+// newAdminTestRouter는 process 조립과 같은 buildAdminHandler·ProvideAPIRouter 경로로 admin router를 만든다.
+// ACL Service는 시험 DB를 쓰는 실제 인스턴스다.
+func newAdminTestRouter(t *testing.T, rooms *recordingIrisRooms) (adminTestServe, *acl.Service) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	pool := dbtest.NewPool(t)
@@ -48,7 +75,6 @@ func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rooms := &recordingIrisRooms{}
 	handler := buildAdminHandler(&sharedmodules.InfraModule{}, &apifoundation.ScraperHolodexFoundation{}, &alarmModeComponents{},
 		aclService, rooms, nil, nil, logger)
 
@@ -72,19 +98,5 @@ func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
 		return rec
 	}
 
-	if rec := serve(http.MethodGet, "/api/holo/rooms/joined", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "3001") || rooms.calls.Load() != 1 {
-		t.Fatalf("joined rooms = %d %s, iris calls %d; want 200 from injected lister", rec.Code, rec.Body.String(), rooms.calls.Load())
-	}
-
-	if aclService.IsRoomAllowed("3001") {
-		t.Fatal("room allowed before admin add")
-	}
-
-	if rec := serve(http.MethodPost, "/api/holo/rooms", `{"room":"3001"}`); rec.Code != http.StatusOK {
-		t.Fatalf("add room = %d %s, want 200", rec.Code, rec.Body.String())
-	}
-
-	if !aclService.IsRoomAllowed("3001") {
-		t.Fatal("admin add did not reach the shared ACL instance")
-	}
+	return serve, aclService
 }

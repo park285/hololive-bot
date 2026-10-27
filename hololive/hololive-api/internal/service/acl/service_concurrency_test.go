@@ -40,12 +40,18 @@ func TestConcurrentRoomMutationsPreserveCommittedACL(t *testing.T) {
 
 		addDone, removeDone := make(chan outcome, 1), make(chan outcome, 1)
 
-		go func() { changed, err := admin.AddRoom(t.Context(), "3001"); addDone <- outcome{changed, err} }()
+		go func() {
+			changed, err := admin.AddRoom(t.Context(), currentACLMode(admin), "3001")
+			addDone <- outcome{changed, err}
+		}()
 
 		<-entered
 		require.False(t, admin.IsRoomAllowed("3001"), "미커밋 권한을 먼저 허용하면 안 된다")
 
-		go func() { changed, err := admin.RemoveRoom(t.Context(), "3001"); removeDone <- outcome{changed, err} }()
+		go func() {
+			changed, err := admin.RemoveRoom(t.Context(), currentACLMode(admin), "3001")
+			removeDone <- outcome{changed, err}
+		}()
 
 		select {
 		case got := <-removeDone:
@@ -87,7 +93,7 @@ func TestFailedRoomDeletionKeepsCommittedACLVisible(t *testing.T) {
 
 		done := make(chan error, 1)
 
-		go func() { _, err := admin.RemoveRoom(t.Context(), "3001"); done <- err }()
+		go func() { _, err := admin.RemoveRoom(t.Context(), currentACLMode(admin), "3001"); done <- err }()
 
 		<-entered
 		require.False(t, admin.IsRoomAllowed("3001"), "DB 삭제가 실패할 수 있으므로 차단을 먼저 해제하면 안 된다")
@@ -110,7 +116,7 @@ func TestRemoveRoomRevokesPersistedRoomMissingFromMemory(t *testing.T) {
 		mode: ACLModeWhitelist, whitelistRooms: map[string]struct{}{}, blacklistRooms: map[string]struct{}{},
 	}
 
-	removed, err := admin.RemoveRoom(t.Context(), "3001")
+	removed, err := admin.RemoveRoom(t.Context(), currentACLMode(admin), "3001")
 	require.NoError(t, err)
 	require.True(t, removed)
 

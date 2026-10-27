@@ -237,16 +237,14 @@ func assertACLAddRoomLifecycle(t *testing.T, service *Service) {
 
 	assertAddRoomResult(t, service, " 1099 ", true)
 	assertAddRoomResult(t, service, testRoomX, false)
-	assertAddRoomResult(t, service, "   ", false)
 	assertRemoveRoomResult(t, service, " 1099 ", true)
 	assertRemoveRoomResult(t, service, testRoomX, false)
-	assertRemoveRoomResult(t, service, "   ", false)
 }
 
 func assertAddRoomResult(t *testing.T, service *Service, room string, wantAdded bool) {
 	t.Helper()
 
-	added, err := service.AddRoom(t.Context(), room)
+	added, err := service.AddRoom(t.Context(), currentACLMode(service), room)
 	if err != nil {
 		t.Fatalf("AddRoom(%q) error: %v", room, err)
 	}
@@ -259,7 +257,7 @@ func assertAddRoomResult(t *testing.T, service *Service, room string, wantAdded 
 func assertRemoveRoomResult(t *testing.T, service *Service, room string, wantRemoved bool) {
 	t.Helper()
 
-	removed, err := service.RemoveRoom(t.Context(), room)
+	removed, err := service.RemoveRoom(t.Context(), currentACLMode(service), room)
 	if err != nil {
 		t.Fatalf("RemoveRoom(%q) error: %v", room, err)
 	}
@@ -353,14 +351,14 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	service := newACLServiceFromPool(t, pool, true, nil)
 
 	// 화이트리스트 모드에서 방 추가
-	if added, addErr := service.AddRoom(t.Context(), "2003"); addErr != nil || !added {
+	if added, addErr := service.AddRoom(t.Context(), currentACLMode(service), "2003"); addErr != nil || !added {
 		t.Fatalf("AddRoom whitelist: added=%v err=%v", added, addErr)
 	}
 
 	// 블랙리스트 모드로 전환 후 같은 이름의 방 추가 (다른 list_type이므로 가능)
 	assertACLSetMode(t, service, ACLModeBlacklist)
 
-	if added, addErr := service.AddRoom(t.Context(), "2003"); addErr != nil || !added {
+	if added, addErr := service.AddRoom(t.Context(), currentACLMode(service), "2003"); addErr != nil || !added {
 		t.Fatalf("AddRoom blacklist: added=%v err=%v", added, addErr)
 	}
 
@@ -376,7 +374,7 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	}
 
 	// 블랙리스트에서 제거해도 화이트리스트는 유지
-	if removed, removeErr := service.RemoveRoom(t.Context(), "2003"); removeErr != nil || !removed {
+	if removed, removeErr := service.RemoveRoom(t.Context(), currentACLMode(service), "2003"); removeErr != nil || !removed {
 		t.Fatalf("RemoveRoom blacklist: removed=%v err=%v", removed, removeErr)
 	}
 

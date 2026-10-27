@@ -243,7 +243,7 @@ func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 
 	t.Run("add room rejects non chat ID", func(t *testing.T) {
 		handler := (&Handler{acl: &acl.Service{}, logger: newDiscardLogger()}).DomainHandlers().Room
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte(`{"room":"홀로라이브 알림방"}`))
+		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte(`{"room":"홀로라이브 알림방","mode":"whitelist"}`))
 		handler.AddRoom(ctx)
 
 		assertErrorResponse(t, rec, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)")

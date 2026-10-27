@@ -16,6 +16,7 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
+	"github.com/kapu/hololive-api/internal/service/acl"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
@@ -95,7 +96,7 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 	require.NotNil(t, infra.acl)
 	require.False(t, infra.acl.IsRoomAllowed("3001"))
 
-	added, err := infra.acl.AddRoom(t.Context(), "3001")
+	added, err := infra.acl.AddRoom(t.Context(), acl.ACLModeWhitelist, "3001")
 	require.NoError(t, err)
 	require.True(t, added)
 	require.True(t, infra.acl.IsRoomAllowed("3001"))

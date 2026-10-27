@@ -130,47 +130,35 @@ func joinedRoomFromIris(summary iris.RoomSummary) joinedRoom {
 	return room
 }
 
+// roomChangeRequest의 mode는 호출자가 본 ACL 모드다. 현재 모드와 다르면 409 acl_mode_changed로 쓰지 않고 거절한다.
+type roomChangeRequest struct {
+	Room string `json:"room" binding:"required"`
+	Mode string `json:"mode" binding:"required"`
+}
+
+// roomChangeResponse의 changed는 이번 요청이 목록을 바꿨는지다. 이미 원하는 상태(추가할 방이 있음, 제거할 방이 없음)면
+// 200과 changed:false로 수렴하므로, 응답을 잃은 뒤 같은 요청을 다시 보내도 거절로 보이지 않는다.
+type roomChangeResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Changed bool   `json:"changed"`
+}
+
+const aclModeChangedCode = "acl_mode_changed"
+
 func (h *RoomHandler) AddRoom(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
 	}
 
-	var req struct {
-		Room string `json:"room" binding:"required"`
-	}
-
-	if err := bindJSON(c, &req); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
-
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	added, err := h.acl.AddRoom(ctx, req.Room)
-	if errors.Is(err, acl.ErrInvalidRoomChatID) {
-		// 방 이름 같은 비-chatID 값은 저장해도 어떤 방에도 적용되지 않으므로 입력 오류로 돌려준다.
-		sharedserver.RespondError(c, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)", nil)
-
-		return
-	}
-
-	if err != nil {
-		h.respondACLMutationError(ctx, c, err, "Failed to add room", slog.String("room", req.Room))
-
-		return
-	}
-
-	if !added {
-		sharedserver.RespondError(c, http.StatusConflict, "Room already exists", nil)
-
-		return
-	}
-
-	h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
-
-	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
+	h.changeRoom(c, roomChange{
+		apply:            h.acl.AddRoom,
+		failMessage:      "Failed to add room",
+		activity:         "room_add",
+		activityPrefix:   "Room added to ACL list: ",
+		changedMessage:   "Room added successfully",
+		unchangedMessage: "Room already exists",
+	})
 }
 
 func (h *RoomHandler) RemoveRoom(c *gin.Context) {
@@ -178,9 +166,27 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Room string `json:"room" binding:"required"`
-	}
+	h.changeRoom(c, roomChange{
+		apply:            h.acl.RemoveRoom,
+		failMessage:      "Failed to remove room",
+		activity:         "room_remove",
+		activityPrefix:   "Room removed from ACL list: ",
+		changedMessage:   "Room removed successfully",
+		unchangedMessage: "Room not found",
+	})
+}
+
+type roomChange struct {
+	apply            func(context.Context, acl.ACLMode, string) (bool, error)
+	failMessage      string
+	activity         string
+	activityPrefix   string
+	changedMessage   string
+	unchangedMessage string
+}
+
+func (h *RoomHandler) changeRoom(c *gin.Context, change roomChange) {
+	var req roomChangeRequest
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
@@ -189,30 +195,29 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
+	mode, ok := h.parseACLMode(c, &req.Mode)
+	if !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 
-	removed, err := h.acl.RemoveRoom(ctx, req.Room)
-	if errors.Is(err, acl.ErrInvalidRoomChatID) {
+	changed, err := change.apply(ctx, mode, req.Room)
+
+	switch {
+	case errors.Is(err, acl.ErrInvalidRoomChatID):
+		// 방 이름 같은 비-chatID 값은 저장해도 어떤 방에도 적용되지 않으므로 입력 오류로 돌려준다.
 		sharedserver.RespondError(c, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)", nil)
-
-		return
+	case errors.Is(err, acl.ErrACLModeChanged):
+		sharedserver.RespondError(c, http.StatusConflict, "ACL mode changed", gin.H{"code": aclModeChangedCode})
+	case err != nil:
+		h.respondACLMutationError(ctx, c, err, change.failMessage, slog.String("room", req.Room))
+	case !changed:
+		ginjson.Respond(c, http.StatusOK, roomChangeResponse{Status: "ok", Message: change.unchangedMessage, Changed: false})
+	default:
+		h.logActivity(change.activity, change.activityPrefix+req.Room, map[string]any{"room": req.Room})
+		ginjson.Respond(c, http.StatusOK, roomChangeResponse{Status: "ok", Message: change.changedMessage, Changed: true})
 	}
-
-	if err != nil {
-		h.respondACLMutationError(ctx, c, err, "Failed to remove room", slog.String("room", req.Room))
-
-		return
-	}
-
-	if !removed {
-		sharedserver.RespondError(c, http.StatusNotFound, "Room not found", nil)
-
-		return
-	}
-
-	h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
-
-	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
 }
 
 // respondACLMutationError는 ACL mutation 오류를 500으로 응답한다.

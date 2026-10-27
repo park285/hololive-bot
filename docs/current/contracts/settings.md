@@ -15,6 +15,12 @@ pass, 2026-09-28).
   the second step fails, the first may already be committed; a committed partial change is recorded as `acl_update`
   activity with `partial=true`. No Valkey ACL mirror exists. The ACL instance uses the bot pool and the bot-plane
   `KAKAO_ROOMS`/`KAKAO_ACL_*` seed (`app.buildAPIInfrastructure`).
+- Room changes (`POST/DELETE /api/holo/rooms`) take `{"room":"<chatID>","mode":"whitelist|blacklist"}`; both fields
+  are required. `mode` is the ACL mode the caller read; when it differs from the current mode the change is rejected
+  with `409 {"error":"ACL mode changed","code":"acl_mode_changed"}` and nothing is written. A change that is already in
+  the requested state (adding a listed room, removing an unlisted one) returns `200 {"status":"ok","message":...,
+  "changed":false}` without a write; an applied change returns `changed:true`. A non-chatID or empty `room` and a
+  missing or unknown `mode` return 400. Room changes no longer answer 404 or 409 for the no-op case.
 - Member news run-now moved to the operator CLI (`trigger.manual`, `hololive-api --rerun-notification=membernews-weekly`).
 
 ## Contract ID

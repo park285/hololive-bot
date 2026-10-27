@@ -152,7 +152,7 @@ func TestBotUsesInjectedPlaneDependencies(t *testing.T) {
 		t.Fatalf("command in non-whitelisted room reached member news: %v", subscribed)
 	}
 
-	if _, err := aclService.AddRoom(t.Context(), injectedTestRoom); err != nil {
+	if _, err := aclService.AddRoom(t.Context(), acl.ACLModeWhitelist, injectedTestRoom); err != nil {
 		t.Fatal(err)
 	}
 

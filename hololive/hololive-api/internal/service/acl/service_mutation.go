@@ -92,17 +92,15 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	return nil
 }
 
-// AddRoom 현재 활성 모드의 목록에 방 추가. 새 등록값은 chatID만 받는다(ErrInvalidRoomChatID).
-// 이미 있으면 PG에 쓰지 않고 false를 돌려준다.
-func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
+// AddRoom은 호출자가 본 모드(expectedMode)의 목록에 방을 추가한다. 새 등록값은 chatID만 받는다(ErrInvalidRoomChatID).
+// 현재 모드가 expectedMode와 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다. 화면을 읽은 뒤 모드가 바뀌면
+// 허용하려던 방이 차단 목록에 들어가는 반대 효과가 성공으로 보고되기 때문이다. SetMode도 mutationMu를 잡으므로
+// 비교와 저장 사이에 모드가 바뀌지 않는다. 이미 있으면 PG에 쓰지 않고 false를 돌려준다.
+func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string) (bool, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
 	room = stringutil.TrimSpace(room)
-	if room == "" {
-		return false, nil
-	}
-
 	if err := validateRoomChatID(room); err != nil {
 		return false, err
 	}
@@ -110,6 +108,12 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	s.mu.Lock()
 
 	mode := s.mode
+	if mode != expectedMode {
+		s.mu.Unlock()
+
+		return false, ErrACLModeChanged
+	}
+
 	targetRooms := s.roomsMapForMode(mode)
 	listType := string(mode)
 
@@ -138,17 +142,14 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	return true, nil
 }
 
-// RemoveRoom 현재 활성 모드의 목록에서 방 제거. 저장 행은 migration 343 이후 모두 chatID이므로 AddRoom과 같은 형식을 요구한다.
+// RemoveRoom은 호출자가 본 모드(expectedMode)의 목록에서 방을 제거한다. 저장 행은 migration 343 이후 모두 chatID이므로
+// AddRoom과 같은 형식을 요구한다. 현재 모드가 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다.
 // 없으면 PG에 쓰지 않고 false를 돌려준다.
-func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
+func (s *Service) RemoveRoom(ctx context.Context, expectedMode ACLMode, room string) (bool, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
 	room = stringutil.TrimSpace(room)
-	if room == "" {
-		return false, nil
-	}
-
 	if err := validateRoomChatID(room); err != nil {
 		return false, err
 	}
@@ -156,6 +157,12 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	s.mu.Lock()
 
 	mode := s.mode
+	if mode != expectedMode {
+		s.mu.Unlock()
+
+		return false, ErrACLModeChanged
+	}
+
 	targetRooms := s.roomsMapForMode(mode)
 	listType := string(mode)
 
