@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -68,15 +67,10 @@ func buildBotInfrastructureServices(
 	messageAdapter := messaging.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
 	formatter := messageformatter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, messageformatter.WithMessageStrings(messageStrings), messageformatter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
 
-	foundation, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
-		Holodex:          appConfig.Holodex,
-		OfficialSchedule: appConfig.OfficialSchedule,
-	}, infra.MemberCache, infra.Cache, logger)
-	if err != nil {
-		return nil, fmt.Errorf("init scraper holodex foundation: %w", err)
+	foundation := planeDeps.Holodex
+	if foundation == nil || foundation.HolodexService == nil {
+		return nil, errors.New("holodex foundation must not be nil")
 	}
-
-	owner.stopHolodex = foundation.HolodexService.Stop
 
 	alarmYouTubeStack, err := InitAlarmYouTubeStack(appConfig, foundation, logger)
 	if err != nil {

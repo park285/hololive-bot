@@ -85,22 +85,6 @@ func TestAdminPlaneDefaultEnforcesCORSOrigins(t *testing.T) {
 	}
 }
 
-func TestAdminPlaneRequiresHolodexKey(t *testing.T) {
-	for key, want := range map[string]string{
-		"HOLODEX_API_KEY": "HOLODEX_API_KEY is required",
-	} {
-		t.Run(key, func(t *testing.T) {
-			setAdminPlaneEnv(t)
-			t.Setenv(key, "")
-
-			err := loadAdminPlaneRuntime(t)
-			if err == nil || !strings.Contains(err.Error(), want) {
-				t.Fatalf("admin plane load error = %v, want %q", err, want)
-			}
-		})
-	}
-}
-
 // bot·admin plane 로더는 youtube-collector 전용 env를 읽지 않는다.
 func TestPlaneLoadersIgnoreInvalidYouTubeCollectorEnv(t *testing.T) {
 	t.Run("admin", func(t *testing.T) {

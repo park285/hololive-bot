@@ -92,6 +92,10 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 		require.Equal(t, time.Second, pools[i].Config().PingTimeout)
 	}
 
+	// Holodex 서비스는 process에 하나만 있고 bot·admin 조립이 같은 인스턴스를 빌린다.
+	require.NotNil(t, infra.holodex)
+	require.NotNil(t, infra.holodex.HolodexService)
+
 	// ACL은 process에 하나만 있고, 관리 변경은 같은 인스턴스의 판정에 바로 보인다.
 	require.NotNil(t, infra.acl)
 	require.False(t, infra.acl.IsRoomAllowed("3001"))

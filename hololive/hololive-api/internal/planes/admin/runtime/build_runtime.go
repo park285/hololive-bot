@@ -45,6 +45,8 @@ type IrisRoomLister interface {
 type Dependencies struct {
 	// ACL은 process 하나에 하나뿐인 ACL Service다. 관리 변경은 같은 인스턴스를 쓰는 bot 판정에 바로 보인다.
 	ACL *acl.Service
+	// Holodex는 process 하나의 Holodex·공식 일정 서비스다(bot plane과 공유). 종료는 process 조립이 소유한다.
+	Holodex *apifoundation.ScraperHolodexFoundation
 	// IrisRooms가 nil이면 joined-rooms endpoint는 503을 돌려준다.
 	IrisRooms IrisRoomLister
 }
@@ -63,6 +65,10 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, errors.New("acl service must not be nil")
 	}
 
+	if deps.Holodex == nil || deps.Holodex.HolodexService == nil {
+		return nil, errors.New("holodex foundation must not be nil")
+	}
+
 	resources := &adminRuntimeResources{logger: logger}
 
 	defer func() {
@@ -71,15 +77,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		}
 	}()
 
-	foundation, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
-		Holodex:          appConfig.Holodex,
-		OfficialSchedule: appConfig.OfficialSchedule,
-	}, infra.MemberCache, infra.Cache, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build admin api runtime: foundation: %w", err)
-	}
-
-	resources.holodex = foundation.HolodexService
+	foundation := deps.Holodex
 
 	alarmMode, err := buildAlarmModeComponents(appConfig, logger)
 	if err != nil {

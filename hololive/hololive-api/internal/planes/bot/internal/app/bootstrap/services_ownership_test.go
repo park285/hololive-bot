@@ -6,11 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"testing/synctest"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -21,60 +17,6 @@ import (
 type botOwnerCloser func() error
 
 func (f botOwnerCloser) Close() error { return f() }
-
-func TestBotInfrastructureOwnerJoinsHolodexBeforeClosingClients(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		entered := make(chan struct{})
-		release := make(chan struct{})
-		finish := sync.OnceFunc(func() { close(release) })
-
-		defer finish()
-
-		var resourceCloses atomic.Int64
-
-		var order []string
-
-		owner := &botInfrastructureOwner{
-			stopHolodex: func() {
-				order = append(order, "holodex")
-
-				close(entered)
-				<-release
-			},
-			internalClients: []io.Closer{botOwnerCloser(func() error {
-				resourceCloses.Add(1)
-
-				order = append(order, "internal-client")
-
-				return nil
-			})},
-			irisClient: botOwnerCloser(func() error {
-				order = append(order, "iris")
-
-				return nil
-			}),
-		}
-		closed := make(chan error, 1)
-
-		go func() { closed <- owner.Close() }()
-
-		<-entered
-
-		if got := resourceCloses.Load(); got != 0 {
-			t.Fatalf("client closed while Holodex is alive=%d want=0", got)
-		}
-
-		finish()
-
-		if err := <-closed; err != nil {
-			t.Fatal(err)
-		}
-
-		if want := []string{"holodex", "internal-client", "iris"}; !slices.Equal(order, want) {
-			t.Fatalf("cleanup order=%v want=%v", order, want)
-		}
-	})
-}
 
 func TestBotInfrastructureOwnerPartialBuildClosesAcquiredResourcesAndPreservesErrors(t *testing.T) {
 	clientErr := errors.New("client close failed")

@@ -65,7 +65,7 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 			}
 
 			require.ErrorIs(t, resources.Close(), closeErr)
-			assert.Equal(t, []string{"holodex", "alarm"}, calls)
+			assert.Equal(t, []string{"alarm"}, calls)
 		})
 	}
 }
@@ -78,8 +78,7 @@ func newAdminResourceFixture(t *testing.T, calls *[]string, closeErr error) *adm
 	}
 
 	return &adminRuntimeResources{
-		holodex: stopFunc(func() { *calls = append(*calls, "holodex") }),
-		alarm:   closer("alarm", closeErr),
+		alarm: closer("alarm", closeErr),
 	}
 }
 

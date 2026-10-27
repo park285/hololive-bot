@@ -6,6 +6,7 @@ import (
 
 	"github.com/park285/iris-client-go/v4/iris"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -46,6 +47,7 @@ type AlarmModeComponents struct {
 // digest 서비스다. 둘 중 하나가 nil이면 해당 명령은 꺼진다.
 type PlaneDependencies struct {
 	ACL        *acl.Service
+	Holodex    *apifoundation.ScraperHolodexFoundation
 	MajorEvent handlercore.MajorEventRepository
 	MemberNews handlercore.MemberNewsService
 }

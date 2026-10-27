@@ -16,18 +16,17 @@ import (
 const adminCORSDefaultEnforce = true
 
 // AdminPlaneConfig는 admin plane(관리 HTTP API·room ACL 관리·운영 상태 조회)이 소비하는 설정만 담는다.
+// Holodex·공식 일정 설정은 process 하나의 Holodex 서비스를 만드는 bot plane 설정이 소유한다.
 // Admin plane은 compose 보안 계약상 nonEgress라 Iris egress 입력을 갖지 않는다.
 type AdminPlaneConfig struct {
-	Environment      string
-	Server           settings.ServerConfig
-	InternalH3       sharedh3.ClientOptions
-	Holodex          settings.HolodexConfig
-	OfficialSchedule settings.OfficialScheduleRuntimeConfig
-	Valkey           settings.ValkeyConfig
-	Postgres         settings.PostgresConfig
-	Notification     settings.NotificationConfig
-	CORS             settings.CORSConfig
-	Ingestion        settings.IngestionConfig
+	Environment  string
+	Server       settings.ServerConfig
+	InternalH3   sharedh3.ClientOptions
+	Valkey       settings.ValkeyConfig
+	Postgres     settings.PostgresConfig
+	Notification settings.NotificationConfig
+	CORS         settings.CORSConfig
+	Ingestion    settings.IngestionConfig
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath string
 	AlarmServiceURL  string
@@ -35,8 +34,6 @@ type AdminPlaneConfig struct {
 
 func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 	server, serverErr := settings.LoadServerConfig()
-	holodex, holodexErr := settings.LoadHolodexConfig()
-	officialSchedule, officialScheduleErr := settings.LoadOfficialScheduleRuntimeConfig()
 	valkey, valkeyErr := settings.LoadValkeyConfig()
 	postgres, postgresErr := settings.LoadPostgresEndpointConfig()
 	notification, notificationErr := settings.LoadNotificationConfig()
@@ -44,7 +41,7 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 	ingestion, ingestionErr := settings.LoadIngestionConfig()
 
 	if err := errors.Join(
-		serverErr, holodexErr, officialScheduleErr, valkeyErr, postgresErr, notificationErr, corsErr, ingestionErr,
+		serverErr, valkeyErr, postgresErr, notificationErr, corsErr, ingestionErr,
 	); err != nil {
 		return nil, fmt.Errorf("load admin plane sections: %w", err)
 	}
@@ -53,8 +50,6 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 		Environment:      envload.AppEnvironment(),
 		Server:           server,
 		InternalH3:       settings.LoadInternalH3ClientOptions(),
-		Holodex:          holodex,
-		OfficialSchedule: officialSchedule,
 		Valkey:           valkey,
 		Postgres:         postgres,
 		Notification:     notification,
@@ -67,7 +62,7 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 	return config, nil
 }
 
-// Validate는 admin plane 역할 조건을 검사한다. NonEgress라 Iris 입력 필수 검증은 면제하지만 Holodex API 키, production CORS 허용 origin을 요구하고, proactive notification egress 소유를 거절한다.
+// Validate는 admin plane 역할 조건을 검사한다. NonEgress라 Iris 입력 필수 검증은 면제하지만 production CORS 허용 origin을 요구하고, proactive notification egress 소유를 거절한다.
 func (c *AdminPlaneConfig) Validate() error {
 	if c == nil {
 		return errors.New("admin plane config is required")
@@ -77,12 +72,8 @@ func (c *AdminPlaneConfig) Validate() error {
 		return fmt.Errorf("validate server runtime: %w", err)
 	}
 
-	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
-		return fmt.Errorf("validate holodex API key: %w", err)
-	}
-
-	if err := validatePlaneDependencies(c.Environment, &c.Postgres, &c.Holodex, c.OfficialSchedule); err != nil {
-		return err
+	if err := runtimepolicy.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
 
 	if err := settings.ValidateCORSConfig(c.Environment, c.CORS); err != nil {

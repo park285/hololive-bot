@@ -33,6 +33,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
@@ -87,6 +88,8 @@ type BotRuntime struct {
 type Dependencies struct {
 	// ACL은 process 하나에 하나뿐인 ACL Service다(admin plane과 공유).
 	ACL *acl.Service
+	// Holodex는 process 하나의 Holodex·공식 일정 서비스다(admin plane과 공유). 종료는 process 조립이 소유한다.
+	Holodex *apifoundation.ScraperHolodexFoundation
 	// MajorEvent·MemberNews는 같은 프로세스 llm plane의 구독 저장소와 digest 서비스다.
 	MajorEvent handlercore.MajorEventRepository
 	MemberNews handlercore.MemberNewsService
@@ -98,7 +101,7 @@ func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, shar
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
 
-	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, shared, appbootstrap.PlaneDependencies{ACL: deps.ACL, MajorEvent: deps.MajorEvent, MemberNews: deps.MemberNews}, logger)
+	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, shared, appbootstrap.PlaneDependencies{ACL: deps.ACL, Holodex: deps.Holodex, MajorEvent: deps.MajorEvent, MemberNews: deps.MemberNews}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init bot infrastructure: %w", err)
 	}
