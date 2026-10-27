@@ -22,7 +22,6 @@ package settings
 
 import (
 	"log/slog"
-	"math"
 	"strconv"
 	"strings"
 
@@ -30,24 +29,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 )
-
-// clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.
-// NaN/Inf 입력 시 기본값(0.85)을 반환한다.
-func clampConfidence(v float64) float64 {
-	if math.IsNaN(v) || math.IsInf(v, 0) {
-		return 0.85
-	}
-
-	if v < 0 {
-		return 0.0
-	}
-
-	if v > 1 {
-		return 1.0
-	}
-
-	return v
-}
 
 func parseIntList(value string) []int {
 	if value == "" {

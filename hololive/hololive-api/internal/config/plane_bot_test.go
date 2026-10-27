@@ -226,33 +226,24 @@ func TestLoadBotPlaneRuntimeDevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	}
 }
 
-// bot plane이 보관하지 않는 공통 구획(LLM·CORS·사진 동기화 등)의 잘못된 값도 기동 실패로 드러나고,
-// 한 번의 실패가 잘못된 키를 모두 보인다.
+// bot plane이 읽는 공통 구획의 잘못된 값은 키 이름과 함께 기동 실패로 드러난다.
+// LLM·Exa 구획은 llm plane loader가, 사진 동기화는 admin plane loader가 검사한다.
 func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
-	setBotPlaneEnv(t)
+	for key, value := range map[string]string{
+		"POSTGRES_PORT": "not-a-number",
+		"CACHE_PORT":    "invalid",
+		"SERVER_PORT":   "invalid",
+		"CORS_ENFORCE":  invalidBoolEnvValue,
+	} {
+		t.Run(key, func(t *testing.T) {
+			setBotPlaneEnv(t)
+			t.Setenv(key, value)
 
-	keys := map[string]string{
-		"POSTGRES_PORT":           "not-a-number",
-		"CACHE_PORT":              "invalid",
-		"SERVER_PORT":             "invalid",
-		"MEMBER_NEWS_TEMPERATURE": "warm",
-		"CORS_ENFORCE":            invalidBoolEnvValue,
-		"PHOTO_SYNC_ENABLED":      invalidBoolEnvValue,
-		"EXA_ENABLED":             invalidBoolEnvValue,
-	}
-	for key, value := range keys {
-		t.Setenv(key, value)
-	}
-
-	_, err := LoadBotPlaneRuntime()
-	if err == nil {
-		t.Fatal("LoadBotPlaneRuntime() error = nil, want invalid env rejection")
-	}
-
-	for key := range keys {
-		if !strings.Contains(err.Error(), key) {
-			t.Fatalf("LoadBotPlaneRuntime() error = %v, want it to name %s", err, key)
-		}
+			_, err := LoadBotPlaneRuntime()
+			if err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("LoadBotPlaneRuntime() error = %v, want it to name %s", err, key)
+			}
+		})
 	}
 }
 

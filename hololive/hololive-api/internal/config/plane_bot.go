@@ -15,7 +15,7 @@ import (
 )
 
 // BotPlaneConfig는 bot plane(Iris webhook 수신·명령 응답·durable inbox/outbox)이 소비하는 설정만 담는다.
-// 공통 env 형식 검사는 settings.ValidateRuntimeEnvSyntax가, 역할 검증은 Validate가 소유한다.
+// 각 구획 env 형식은 그 구획 loader가, 역할 검증은 Validate가 소유한다.
 type BotPlaneConfig struct {
 	Environment      string
 	Server           settings.ServerConfig
@@ -80,14 +80,10 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	return config, nil
 }
 
-// loadProcessEnv는 .env를 읽고, bot·admin plane이 공유하는 공통 env 형식 검사를 한 번 수행한다.
+// loadProcessEnv는 .env를 읽는다. env 형식은 각 plane config가 자기 구획 loader로 검사한다.
 func loadProcessEnv() error {
 	if err := envload.DotEnv(); err != nil {
 		return fmt.Errorf("load dot env: %w", err)
-	}
-
-	if err := settings.ValidateRuntimeEnvSyntax(); err != nil {
-		return fmt.Errorf("validate runtime env syntax: %w", err)
 	}
 
 	return nil

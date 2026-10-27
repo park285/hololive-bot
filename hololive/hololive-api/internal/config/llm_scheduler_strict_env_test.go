@@ -20,6 +20,8 @@ func TestLoadLLMSchedulerRuntimeRejectsInvalidEnvValues(t *testing.T) {
 		{key: "CLIPROXY_ENABLED", value: invalidBoolEnvValue},
 		{key: "CACHE_PORT", value: "invalid"},
 		{key: "MAJOREVENT_CONSENSUS_CONFIDENCE", value: "high"},
+		{key: "MEMBER_NEWS_TEMPERATURE", value: "warm"},
+		{key: "EXA_ENABLED", value: invalidBoolEnvValue},
 		{key: "BOT_SEE_MORE_FOLD", value: invalidBoolEnvValue},
 	} {
 		t.Run(tc.key+"="+tc.value, func(t *testing.T) {

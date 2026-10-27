@@ -69,10 +69,6 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load Kakao config: %w", err)
 	}
 
-	if err = settings.ValidateRuntimeEnvSyntax(); err != nil {
-		return nil, fmt.Errorf("validate runtime env syntax: %w", err)
-	}
-
 	config, err := loadRuntimeSections()
 	if err != nil {
 		return nil, err
