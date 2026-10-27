@@ -234,6 +234,21 @@ services:
       - "pg_wait_sampling.history_period=100"
       - "-c"
       - "pg_wait_sampling.history_size=20000"
+      # preload에 auto_explain이 있을 때만 적용된다. slow log와 같은 1초 기준으로 실제 행 수·버퍼가 담긴
+      # 계획을 남기고, 보존 함수 안의 문장도 잡도록 nested를 켠다. 노드별 시간 계측은 모든 문장에 비용이
+      # 붙으므로 끄고, 바인드 값은 statement log와 같게 남기지 않는다.
+      - "-c"
+      - "auto_explain.log_min_duration=1s"
+      - "-c"
+      - "auto_explain.log_analyze=on"
+      - "-c"
+      - "auto_explain.log_buffers=on"
+      - "-c"
+      - "auto_explain.log_timing=off"
+      - "-c"
+      - "auto_explain.log_nested_statements=on"
+      - "-c"
+      - "auto_explain.log_parameter_max_length=0"
       - "-c"
       - "pg_stat_statements.track=all"
       - "-c"
