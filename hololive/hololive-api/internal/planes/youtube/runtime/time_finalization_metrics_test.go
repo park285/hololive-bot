@@ -19,8 +19,8 @@ func TestTimeFinalizationMetricsReflectQueuesAndRecentDelays(t *testing.T) {
             retry_base_at=now()-interval '20 minutes' WHERE video_id='backlog-1';
         UPDATE youtube_live_time_finalizations SET outcome='exhausted',reason='identity_missing',completed_at=now()
             WHERE video_id='backlog-2';
-        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,status_observed_at)
-        SELECT id,'outside-roster','ENDED',now()-interval '3 days',now()-interval '50 minutes'
+        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,status_observed_at,lifecycle_origin)
+        SELECT id,'outside-roster','ENDED',now()-interval '3 days',now()-interval '50 minutes','observed'
         FROM unnest(ARRAY['new-final','new-old-final','new-empty','new-pending','old-empty','no-start']) id;
         UPDATE youtube_live_sessions SET status_observed_at=now()-interval '3 days'
             WHERE video_id IN ('new-pending','old-empty','new-old-final');

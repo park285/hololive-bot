@@ -171,8 +171,8 @@ func seedBirthdayStreamTitleDrift(
 
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_live_sessions (
-			video_id, channel_id, status, title, scheduled_start_time, last_seen_at, schedule_observed_at
-		) VALUES ($1, $2, 'UPCOMING', $3, $4, $5, $5)
+			video_id, channel_id, status, title, scheduled_start_time, last_seen_at, schedule_observed_at, lifecycle_origin
+		) VALUES ($1, $2, 'UPCOMING', $3, $4, $5, $5, 'metadata_only')
 	`, testVideoA, testChannelA, "original birthday title", scheduledAt, now)
 	require.NoError(t, err)
 
@@ -290,18 +290,20 @@ func TestBirthdaySessionsRequireFreshStateSpecificObservation(t *testing.T) {
 	} {
 		for _, status := range []string{testStatusLive, testStatusUpcoming} {
 			id := status + "-" + observation.name
+			origin := "metadata_only"
 			statusClock, scheduleClock := new(now), new(now)
 
 			if status == testStatusLive {
 				statusClock = observation.clock
+				origin = "observed"
 			} else {
 				scheduleClock = observation.clock
 			}
 
 			_, err := pool.Exec(t.Context(), `
-				INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,started_at,last_seen_at,status_observed_at,schedule_observed_at)
-				VALUES($1,$2,$3,$4,$5,$4,$6,$7)
-			`, id, testChannelA, status, now.Add(10*time.Minute), now.Add(-time.Hour), statusClock, scheduleClock)
+				INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,started_at,last_seen_at,status_observed_at,schedule_observed_at,lifecycle_origin)
+				VALUES($1,$2,$3,$4,$5,$4,$6,$7,$8)
+			`, id, testChannelA, status, now.Add(10*time.Minute), now.Add(-time.Hour), statusClock, scheduleClock, origin)
 			require.NoError(t, err)
 
 			if observation.valid {

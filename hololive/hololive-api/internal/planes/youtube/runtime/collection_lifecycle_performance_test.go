@@ -149,7 +149,7 @@ func TestLiveCheckOverflowPreservesLastGoodProjection(t *testing.T) {
 
 	seedLiveCheckProjectionMembers(t, pool)
 
-	_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id, channel_id, status) VALUES ('overflow-0000', 'UC_tp_stale_ops', 'LIVE')`)
+	_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id, channel_id, status, lifecycle_origin) VALUES ('overflow-0000', 'UC_tp_stale_ops', 'LIVE', 'observed')`)
 	require.NoError(t, err)
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
@@ -162,8 +162,9 @@ func TestLiveCheckOverflowPreservesLastGoodProjection(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `
-        INSERT INTO youtube_live_sessions(video_id, channel_id, status)
-        SELECT 'overflow-' || lpad(n::text, 4, '0'), 'UC_tp_stale_ops', CASE WHEN n % 2 = 0 THEN 'LIVE' ELSE 'UPCOMING' END
+        INSERT INTO youtube_live_sessions(video_id, channel_id, status, lifecycle_origin)
+        SELECT 'overflow-' || lpad(n::text, 4, '0'), 'UC_tp_stale_ops', CASE WHEN n % 2 = 0 THEN 'LIVE' ELSE 'UPCOMING' END,
+               CASE WHEN n % 2 = 0 THEN 'observed' ELSE 'metadata_only' END
         FROM generate_series(1, $1::int) n
     `, targetprojection.MaxInputLiveCheckVideoCount)
 	require.NoError(t, err)

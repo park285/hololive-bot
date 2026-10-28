@@ -171,8 +171,8 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_sessions (
-			video_id, channel_id, status, title, last_seen_at, is_premiere
-		) VALUES ($1, $2, 'LIVE', 'Keep live fields', $3, FALSE)
+			video_id, channel_id, status, title, last_seen_at, is_premiere, lifecycle_origin
+		) VALUES ($1, $2, 'LIVE', 'Keep live fields', $3, FALSE, 'observed')
 	`, testVideoID, testChannelID, seen); err != nil {
 		t.Fatalf("seed non-Premiere live session: %v", err)
 	}
@@ -254,8 +254,8 @@ func TestContentPremierePersistencePreservesRowCreatedAfterRead(t *testing.T) {
 
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_sessions (
-			video_id, channel_id, status, title, scheduled_start_time, last_seen_at
-		) VALUES ($1, $2, 'UPCOMING', 'Schedule-owned title', $3, $3)
+			video_id, channel_id, status, title, scheduled_start_time, last_seen_at, lifecycle_origin
+		) VALUES ($1, $2, 'UPCOMING', 'Schedule-owned title', $3, $3, 'metadata_only')
 	`, testVideoID, testChannelID, scheduled); err != nil {
 		t.Fatalf("seed concurrently created live session: %v", err)
 	}

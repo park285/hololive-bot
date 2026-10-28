@@ -127,8 +127,8 @@ func TestLifecycleOriginPromotionRollsBackWithHeadFailure(t *testing.T) {
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	if _, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id,channel_id,status,title)
-        VALUES ($1,$2,'UPCOMING','')`, testVideoID, testChannelID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id,channel_id,status,title,lifecycle_origin)
+        VALUES ($1,$2,'UPCOMING','','legacy_unknown')`, testVideoID, testChannelID); err != nil {
 		t.Fatal(err)
 	}
 

@@ -18,8 +18,8 @@ func TestLiveFactClockMigrationDoesNotInventLegacyEvidence(t *testing.T) {
  ALTER TABLE youtube_live_sessions ADD COLUMN status_observed_at TIMESTAMPTZ`)
 	require.NoError(t, err)
 
-	_, err = pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,last_seen_at,scheduled_start_time,is_premiere)
- VALUES('clock-legacy','clock-channel','UPCOMING',$1,$1,true)`, legacySeen)
+	_, err = pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,last_seen_at,scheduled_start_time,is_premiere,lifecycle_origin)
+ VALUES('clock-legacy','clock-channel','UPCOMING',$1,$1,true,'legacy_unknown')`, legacySeen)
 	require.NoError(t, err)
 
 	dir, err := resolveMigrationsDir()

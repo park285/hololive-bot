@@ -235,8 +235,8 @@ func TestUpcomingCandidatesHonorNewerCanonicalFactsOnly(t *testing.T) {
 	store := NewUpcomingCandidates(pool)
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{n}))
 
-	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,last_seen_at)
-		VALUES('staged-video','staged-channel','UPCOMING',$1,$1)`, now.Add(10*time.Minute))
+	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,last_seen_at,lifecycle_origin)
+		VALUES('staged-video','staged-channel','UPCOMING',$1,$1,'metadata_only')`, now.Add(10*time.Minute))
 	require.NoError(t, err)
 
 	pending, err := store.Pending(t.Context(), now.Add(time.Second))

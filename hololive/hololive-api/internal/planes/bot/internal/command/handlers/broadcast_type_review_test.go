@@ -87,8 +87,8 @@ func TestPgBroadcastHistoryRepositoryReviewedClassification(t *testing.T) {
 	endedAt := time.Date(2026, time.September, 11, 0, 0, 0, 0, time.UTC)
 
 	_, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
-		VALUES ($1, $2, 'ENDED', 'Prisuners, hello', $3, $3)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at, lifecycle_origin)
+		VALUES ($1, $2, 'ENDED', 'Prisuners, hello', $3, $3, 'observed')
 	`, reviewedTalkVideoID, reviewedTalkChannelID, endedAt)
 	require.NoError(t, err)
 

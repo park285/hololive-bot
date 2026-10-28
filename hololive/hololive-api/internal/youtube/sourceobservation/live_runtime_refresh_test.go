@@ -102,8 +102,8 @@ func TestFinalizeRefreshesReportedLiveRuntimeKeys(t *testing.T) {
 // 커밋 실패 사례는 커밋 때 검사되는 deferred FK를 어기는 head를 함께 써서 갱신 뒤 커밋을 실패시킨다.
 func reportedLiveWrite(reportAll, failCommit bool) ReconcileWrite {
 	return func(ctx context.Context, tx dbx.Tx, _ *Observation) (ReconcileResult, error) {
-		if _, err := tx.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id, channel_id, status)
-			VALUES ('refresh-reported', $1, 'LIVE'), ('refresh-other', $1, 'LIVE')`, testChannelID); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id, channel_id, status, lifecycle_origin)
+			VALUES ('refresh-reported', $1, 'LIVE', 'observed'), ('refresh-other', $1, 'LIVE', 'observed')`, testChannelID); err != nil {
 			return ReconcileResult{}, fmt.Errorf("insert refreshed live sessions: %w", err)
 		}
 

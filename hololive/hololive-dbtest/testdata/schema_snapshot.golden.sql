@@ -1342,7 +1342,7 @@ TABLE youtube_live_sessions
   COLUMN topic_id text NOT NULL DEFAULT ''::text
   COLUMN thumbnail_url text NOT NULL DEFAULT ''::text
   COLUMN is_premiere boolean
-  COLUMN lifecycle_origin text NOT NULL DEFAULT 'legacy_unknown'::text
+  COLUMN lifecycle_origin text NOT NULL
   COLUMN status_observed_at timestamp with time zone
   COLUMN schedule_observed_at timestamp with time zone
   COLUMN title_observed_at timestamp with time zone

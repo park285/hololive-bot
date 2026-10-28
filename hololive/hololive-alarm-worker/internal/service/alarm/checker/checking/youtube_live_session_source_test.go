@@ -332,13 +332,20 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 
 	for i := range sessions {
 		session := &sessions[i]
+		// 현행 writer는 일정 메타데이터만 있는 UPCOMING을 metadata_only, 그 밖의 관측 상태를 observed로 기록한다.
+		origin := "observed"
+
+		if session.Status == domain.LiveStatusUpcoming {
+			origin = "metadata_only"
+		}
+
 		_, err := pool.Exec(t.Context(), `
 			INSERT INTO youtube_live_sessions(
 				video_id, channel_id, status, title, scheduled_start_time,
 				started_at, ended_at, live_first_seen_at, topic_id, thumbnail_url, last_seen_at,
-				is_premiere, status_observed_at, schedule_observed_at
+				is_premiere, status_observed_at, schedule_observed_at, lifecycle_origin
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		`,
 			session.VideoID,
 			session.ChannelID,
@@ -354,6 +361,7 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 			session.IsPremiere,
 			session.StatusObservedAt,
 			session.ScheduleObservedAt,
+			origin,
 		)
 		require.NoError(t, err)
 	}

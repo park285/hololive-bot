@@ -207,3 +207,4 @@
 207 346_acl_rooms_room_id_chat_id.sql
 208 347_youtube_content_absence_slots_effective_index.sql
 209 348_drop_source_observation_replay.sql
+210 349_youtube_live_lifecycle_origin_drop_default.sql

@@ -40,11 +40,11 @@ VALUES(repeat('b',64),'repair-protected-group','repair-room','repair-protected-r
 INSERT INTO alarm_dispatch_deliveries(id,event_id,room_id,dedupe_key,dispatch_group_key,send_unit_id,status,quarantined_at)
 SELECT 1,e.id,'repair-room','repair-protected-delivery','repair-protected-group',u.id,'quarantined',now()
 FROM alarm_dispatch_events e CROSS JOIN alarm_dispatch_send_units u;
-INSERT INTO youtube_live_sessions(video_id,channel_id,status,ended_at,title) VALUES
- ('a','repair-channel','ENDED','2026-08-16','preserve a'),('b','repair-channel','ENDED','2026-08-16','preserve b'),
- ('live','repair-channel','LIVE',NULL,'preserve live'),('upcoming','repair-channel','UPCOMING',NULL,'preserve upcoming'),
- ('conflict','repair-channel','ENDED','2026-08-16','preserve conflict'),('recent','repair-channel','ENDED','2026-08-16','preserve recent'),
- ('candidate','repair-channel','ENDED','2026-08-16','preserve candidate');
+INSERT INTO youtube_live_sessions(video_id,channel_id,status,ended_at,title,lifecycle_origin) VALUES
+ ('a','repair-channel','ENDED','2026-08-16','preserve a','observed'),('b','repair-channel','ENDED','2026-08-16','preserve b','observed'),
+ ('live','repair-channel','LIVE',NULL,'preserve live','observed'),('upcoming','repair-channel','UPCOMING',NULL,'preserve upcoming','metadata_only'),
+ ('conflict','repair-channel','ENDED','2026-08-16','preserve conflict','observed'),('recent','repair-channel','ENDED','2026-08-16','preserve recent','observed'),
+ ('candidate','repair-channel','ENDED','2026-08-16','preserve candidate','observed');
 INSERT INTO youtube_live_reconciliation_heads(video_id,status,updated_at,last_live_positive_at,last_live_positive_seen_at)
 SELECT video_id,'LIVE','2026-08-16','2026-08-15','2026-08-15 00:01:00+00' FROM youtube_live_sessions WHERE video_id<>'upcoming';
 INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,ended_at,negative_eligible,scope_covers)

@@ -331,8 +331,8 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 			 slot_state,scheduled_for,next_due_at,owner_instance,lease_expires_at)
 		VALUES ('leased','youtubejs','SUBJECT','community_collect','leased',9003,120000,
 			'ACTIVE',now(),now(),'collector',now()+interval '1 minute');
-		INSERT INTO youtube_live_sessions(video_id,channel_id,status)
-		VALUES ('retention-live','UC_retention','LIVE'),('retention-upcoming','UC_retention','UPCOMING');
+		INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin)
+		VALUES ('retention-live','UC_retention','LIVE','observed'),('retention-upcoming','UC_retention','UPCOMING','metadata_only');
 		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
 		SELECT id,source_observation_entity_kind_id('youtube_live_session'),'retention-'||subject_key,source_observation_decision_id('APPLIED') FROM source_observations
 		WHERE subject_key IN ('live','upcoming')`)

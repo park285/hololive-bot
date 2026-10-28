@@ -16,8 +16,8 @@ func TestScheduleStateDoesNotWaitForUnusedHead(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title)
-		VALUES ('schedule-existing', 'channel', 'LIVE', NULL);
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, lifecycle_origin)
+		VALUES ('schedule-existing', 'channel', 'LIVE', NULL, 'observed');
 		INSERT INTO youtube_live_reconciliation_heads(video_id, status)
 		VALUES ('schedule-existing', 'UPCOMING')
 	`)

@@ -162,7 +162,7 @@ func TestEvidenceRetentionGuardsBeforeCandidateAndPreservesAvailability(t *testi
 func runtimeProjectionWrite(rollback bool, rejected error) ReconcileWrite {
 	return func(ctx context.Context, tx dbx.Tx, _ *Observation) (ReconcileResult, error) {
 		if _, err := tx.Exec(ctx, `INSERT INTO youtube_live_sessions
-			(video_id, channel_id, status, title) VALUES ($1, $2, 'LIVE', 'guarded live')`, testVideoID, testChannelID); err != nil {
+			(video_id, channel_id, status, title, lifecycle_origin) VALUES ($1, $2, 'LIVE', 'guarded live', 'observed')`, testVideoID, testChannelID); err != nil {
 			return ReconcileResult{}, fmt.Errorf("insert live session: %w", err)
 		}
 
@@ -183,8 +183,8 @@ func seedRuntimeGuardRetention(ctx context.Context, t *testing.T, pool *pgxpool.
 		UPDATE youtube_collection_projection_generations SET status='RETIRED';
 		UPDATE youtube_collection_job_leases SET slot_state='IDLE', owner_instance=NULL,
 			lease_expires_at=NULL, retry_not_before=NULL;
-		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title)
-		VALUES ('vid-a', 'UC_TEST', 'LIVE', 'retained availability');
+		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, lifecycle_origin)
+		VALUES ('vid-a', 'UC_TEST', 'LIVE', 'retained availability', 'observed');
 		INSERT INTO youtube_video_availability (
 			video_id, channel_id, provider, identity_confirmed, availability, method,
 			observation_id, evidence_sha256, scheduled_for, effective_at, observed_at, received_at

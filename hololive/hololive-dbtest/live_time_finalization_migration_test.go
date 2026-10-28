@@ -19,8 +19,8 @@ func TestTimeFinalizationMigrationGuardsProgressShapeAndReplays(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id,channel_id,status,started_at,ended_at)
-        SELECT 'tf-'||n,'UC_tf','ENDED',now()-interval '3 hours',now()-interval '1 hour' FROM generate_series(1,4) n`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id,channel_id,status,started_at,ended_at,lifecycle_origin)
+        SELECT 'tf-'||n,'UC_tf','ENDED',now()-interval '3 hours',now()-interval '1 hour','observed' FROM generate_series(1,4) n`); err != nil {
 		t.Fatal(err)
 	}
 
