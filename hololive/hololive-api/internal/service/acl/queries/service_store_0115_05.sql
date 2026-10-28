@@ -1,1 +1,1 @@
-INSERT INTO acl_rooms (room_id, list_type) VALUES ($1, $2)
+INSERT INTO acl_rooms (room_id, list_type) VALUES ($1, $2) ON CONFLICT (room_id, list_type) DO NOTHING

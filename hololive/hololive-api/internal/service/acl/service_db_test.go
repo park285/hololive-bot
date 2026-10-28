@@ -177,6 +177,19 @@ func TestACLService_SetEnabledAddRemoveRoom(t *testing.T) {
 	assertACLRoomRemovedFromDB(t, pool, testRoomX)
 }
 
+// INSERT는 커밋됐지만 응답을 잃은 AddRoom을 재시도하면 메모리에는 방이 없고 PG에는 행이 있다.
+// 재시도는 23505 오류를 반복하지 않고 changed:false로 수렴해 메모리도 PG 상태에 맞춰야 한다.
+func TestACLService_AddRoomRetryAfterCommittedInsertConverges(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	service := newACLServiceFromPool(t, pool, true, nil)
+
+	mustCreateACLRoom(t, pool, testRoomX, listTypeWhitelist)
+
+	assertAddRoomResult(t, service, testRoomX, false)
+	assertACLRoomCount(t, pool, testRoomX, listTypeWhitelist, 1)
+	assertACLStatus(t, service, true, ACLModeWhitelist, 1, []string{testRoomX})
+}
+
 func newACLServiceFromPool(
 	t *testing.T,
 	pool *pgxpool.Pool,

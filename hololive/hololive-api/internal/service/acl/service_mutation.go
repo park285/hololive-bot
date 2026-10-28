@@ -96,6 +96,8 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 // 현재 모드가 expectedMode와 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다. 화면을 읽은 뒤 모드가 바뀌면
 // 허용하려던 방이 차단 목록에 들어가는 반대 효과가 성공으로 보고되기 때문이다. SetMode도 mutationMu를 잡으므로
 // 비교와 저장 사이에 모드가 바뀌지 않는다. 이미 있으면 PG에 쓰지 않고 false를 돌려준다.
+// 커밋 뒤 응답을 잃은 요청의 재시도는 메모리에 방이 없어도 PG에 행이 있으므로, 삽입하지 않은 경우도
+// 메모리를 PG에 맞추고 false를 돌려준다.
 func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string) (bool, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -125,7 +127,8 @@ func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string
 
 	s.mu.Unlock()
 
-	if err := s.store.CreateRoom(ctx, room, listType); err != nil {
+	created, err := s.store.CreateRoom(ctx, room, listType)
+	if err != nil {
 		return false, fmt.Errorf("add room to database: %w", err)
 	}
 
@@ -133,6 +136,10 @@ func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string
 
 	s.roomsMapForMode(mode)[room] = struct{}{}
 	s.mu.Unlock()
+
+	if !created {
+		return false, nil
+	}
 
 	s.logger.Info("Room added to ACL list",
 		slog.String("room", room),

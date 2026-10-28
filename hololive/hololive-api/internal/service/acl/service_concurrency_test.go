@@ -109,7 +109,9 @@ func TestRemoveRoomRevokesPersistedRoomMissingFromMemory(t *testing.T) {
 	store := newPgxACLStore(pool)
 	require.NoError(t, store.UpsertSetting(t.Context(), dbKeyEnabled, testDBEnabledTrue))
 	require.NoError(t, store.UpsertSetting(t.Context(), dbKeyMode, string(ACLModeWhitelist)))
-	require.NoError(t, store.CreateRoom(t.Context(), "3001", listTypeWhitelist))
+
+	_, err := store.CreateRoom(t.Context(), "3001", listTypeWhitelist)
+	require.NoError(t, err)
 
 	admin := &Service{
 		store: store, logger: slog.New(slog.DiscardHandler), enabled: true,

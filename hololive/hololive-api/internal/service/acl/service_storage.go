@@ -192,7 +192,7 @@ func (s *Service) initializeDefaultRooms(ctx context.Context, defaultRooms []str
 	listType := string(s.mode)
 
 	for _, room := range normalizeRoomList(defaultRooms) {
-		if err := s.store.CreateRoom(ctx, room, listType); err != nil {
+		if _, err := s.store.CreateRoom(ctx, room, listType); err != nil {
 			return fmt.Errorf("initialize ACL room %q: %w", room, err)
 		}
 
