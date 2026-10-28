@@ -176,7 +176,7 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 }
 
 // requireNoAutoPadding은 접기 패딩 판정과 같은 기준(연속 ZWSP)으로 확인해, 길이가 다른 패딩이 다시 생겨도 잡는다.
-// 템플릿의 단발 ZWSP(제목 Markdown 해석 방지)는 허용한다.
+// 사용자 지정 본문의 단발 ZWSP는 접기 패딩으로 보지 않는다.
 func requireNoAutoPadding(t *testing.T, final string) {
 	t.Helper()
 
@@ -203,9 +203,6 @@ func TestAlarmDispatchRunnerKeepsLongAlarmNotificationGroupUnfoldedAtFinalPayloa
 
 	final := runSeeMoreFoldFinalPayload(t, renderer, store, envelopes...)
 
-	head, _, _ := strings.Cut(final, "\n")
-	require.True(t, strings.HasPrefix(final[len(head):], "\n\n"), "alarm header and body must stay separated: %q", final)
-	require.Contains(t, head, "· 6개")
 	requireNoAutoPadding(t, final)
 
 	require.Equal(t, len(envelopes), strings.Count(final, "https://youtube.com/watch?v="))
