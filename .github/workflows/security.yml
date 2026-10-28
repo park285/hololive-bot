@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 7859bd0007e017f67465d140af41981b8ae3ee29 # v2.18.0 준비 커밋(발행 전). 태그 발행 뒤 release provenance SHA로 교체
+          ref: bfbfed99e4106f114df7c6fb3cd92c2349748ef4 # v2.18.0, verified release provenance
           path: shared-go
           persist-credentials: false
 
@@ -50,7 +50,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: dbe8f61567e8cc0b6f5089e75f7dc8924ef8c0f5 # v4.0.0 준비 커밋(발행 전). 태그 발행 뒤 release provenance SHA로 교체
+          ref: c2dfdeb173e5311dab849441dac1a16f00508a12 # v4.0.0, verified release provenance
           path: iris-client-go
           persist-credentials: false
 
