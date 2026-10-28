@@ -141,7 +141,7 @@ func (s *Service) loadRoomsFromDatabase(ctx context.Context) ([]Room, error) {
 	return rooms, nil
 }
 
-// validateStoredRooms는 저장 행이 migration 343의 CHECK와 같은 규칙을 지키는지 본다. 어긋난 행은 판정에 쓰이지 않는
+// validateStoredRooms는 저장 행이 migration 346의 CHECK와 같은 규칙을 지키는지 본다. 어긋난 행은 판정에 쓰이지 않는
 // 죽은 등록이므로 건너뛰지 않고 snapshot 적재를 실패시킨다. 방 이름일 수 있는 비정규 값은 오류에 넣지 않는다.
 func validateStoredRooms(rooms []Room) error {
 	for _, room := range rooms {

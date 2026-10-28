@@ -99,7 +99,7 @@ func TestRemoveRoomRejectsNonChatID(t *testing.T) {
 	}
 }
 
-// migration 343 CHECK를 벗어난 저장 행은 판정에 쓰이지 않는 죽은 등록이므로 snapshot 적재를 실패시킨다.
+// migration 346 CHECK를 벗어난 저장 행은 판정에 쓰이지 않는 죽은 등록이므로 snapshot 적재를 실패시킨다.
 func TestLoadRejectsStoredNonChatIDRoom(t *testing.T) {
 	t.Parallel()
 

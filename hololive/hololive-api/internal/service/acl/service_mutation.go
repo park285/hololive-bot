@@ -142,7 +142,7 @@ func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string
 	return true, nil
 }
 
-// RemoveRoom은 호출자가 본 모드(expectedMode)의 목록에서 방을 제거한다. 저장 행은 migration 343 이후 모두 chatID이므로
+// RemoveRoom은 호출자가 본 모드(expectedMode)의 목록에서 방을 제거한다. 저장 행은 migration 346 이후 모두 chatID이므로
 // AddRoom과 같은 형식을 요구한다. 현재 모드가 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다.
 // 없으면 PG에 쓰지 않고 false를 돌려준다.
 func (s *Service) RemoveRoom(ctx context.Context, expectedMode ACLMode, room string) (bool, error) {
