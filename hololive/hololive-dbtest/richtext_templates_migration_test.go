@@ -23,17 +23,24 @@ func TestRichTextTemplatesMigrationPreservesCustomBodiesAndFrozenRequests(t *tes
 	require.NoError(t, err)
 
 	type identity struct{ id, version int64 }
+
 	before := make(map[string]identity)
+
 	for rows.Next() {
-		var key, body string
-		var value identity
+		var (
+			key, body string
+			value     identity
+		)
 
 		require.NoError(t, rows.Scan(&key, &body, &value.id, &value.version))
+
 		pair, exists := bodies[key]
 		require.True(t, exists, "기준선 키 누락: %s", key)
 		require.Equal(t, pair.oldBody, body, "최종 기준선 불일치: %s", key)
+
 		before[key] = value
 	}
+
 	require.NoError(t, rows.Err())
 	rows.Close()
 	require.Len(t, before, 42)
@@ -58,8 +65,10 @@ VALUES('legacy-bot','reply',0,'legacy-room','{"body":"**저장된 본문**","rou
 	require.NoError(t, applyMigrationFile(ctx, pool, dir, richTextTemplatesMigration))
 
 	for key, previous := range before {
-		var body string
-		var current identity
+		var (
+			body    string
+			current identity
+		)
 
 		require.NoError(t, pool.QueryRow(ctx, `SELECT body,id,row_version FROM notification_templates WHERE template_key=$1 AND channel_id IS NULL`, key).
 			Scan(&body, &current.id, &current.version))
@@ -67,6 +76,7 @@ VALUES('legacy-bot','reply',0,'legacy-room','{"body":"**저장된 본문**","rou
 		require.Equal(t, previous.id, current.id, key)
 		require.Equal(t, previous.version+1, current.version, key)
 	}
+
 	require.Equal(t, protected, richTextProtectedSnapshot(t, pool))
 	assertTemplateReplayStable(t, pool, dir, richTextTemplatesMigration)
 
@@ -83,6 +93,7 @@ func richTextTemplatesUpgradePool(t *testing.T) (*pgxpool.Pool, string) {
 	pool := NewBlankPool(t)
 	dir, err := resolveMigrationsDir()
 	require.NoError(t, err)
+
 	entries, err := dbmigrate.Manifest(os.DirFS(dir))
 	require.NoError(t, err)
 	require.NoError(t, ensureDBTestMigrationLedger(t.Context(), pool))
@@ -91,10 +102,12 @@ func richTextTemplatesUpgradePool(t *testing.T) (*pgxpool.Pool, string) {
 		if filename == richTextTemplatesMigration {
 			return pool, dir
 		}
+
 		require.NoError(t, applyManifestMigration(t.Context(), pool, dir, filename))
 	}
 
 	t.Fatal("RichText 템플릿 migration이 manifest에 없습니다")
+
 	return nil, ""
 }
 
@@ -102,6 +115,7 @@ func richTextProtectedSnapshot(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 
 	var snapshot string
+
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT jsonb_build_array(
 (SELECT jsonb_agg(to_jsonb(t) || jsonb_build_object('xmin',xmin::text) ORDER BY id) FROM notification_templates t WHERE channel_id IS NOT NULL),
 (SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM notification_template_revisions r),
@@ -109,5 +123,6 @@ func richTextProtectedSnapshot(t *testing.T, pool *pgxpool.Pool) string {
 (SELECT jsonb_agg(to_jsonb(r) ORDER BY base_id) FROM youtube_notification_send_request r),
 (SELECT jsonb_agg(to_jsonb(o) ORDER BY id) FROM bot_reply_outbox o)
 )::text`).Scan(&snapshot))
+
 	return snapshot
 }

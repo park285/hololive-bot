@@ -36,11 +36,14 @@ func TestTemplateFuncs_MdSafe(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		for _, title := range []string{"**긴급**", "끝**", "*시작", "||숨김||", "`코드`", "[공식명]", "_원문_", "~~표기~~", "- 안내"} {
 			var buf strings.Builder
+
 			if err := tmpl.Execute(&buf, struct{ Title string }{Title: title}); err != nil {
 				t.Fatal(err)
 			}
+
 			visible := kakaoformat.Render(buf.String())
 			// 의도한 바깥 강조와 별개로 입력의 구문 문자·내용·뒤 문장은 그대로 보여야 한다.
 			if !strings.Contains(visible, title) || !strings.HasSuffix(visible, " 끝") {

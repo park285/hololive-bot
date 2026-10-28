@@ -128,12 +128,15 @@ func TestFoldSurvivesLiteralFields(t *testing.T) {
 	t.Parallel()
 
 	const head = "**헤더 라인**"
+
 	body := head + "\n" + kakaotext.MarkdownLiteral(strings.Repeat("가~나*다_라#마]바`사", 40))
 	folded := FoldForSeeMore(body)
 	padding := strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)
+
 	if strings.Count(folded, padding) != 1 || !strings.HasPrefix(folded, head+padding) {
 		t.Fatal("literal 필드 보호가 정적 머리말 또는 접기 패딩을 변경함")
 	}
+
 	if again := FoldForSeeMore(folded); again != folded {
 		t.Fatal("접기 패딩 중복 삽입")
 	}

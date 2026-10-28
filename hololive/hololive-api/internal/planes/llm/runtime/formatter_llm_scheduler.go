@@ -118,6 +118,7 @@ func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key
 	}
 
 	normalizedSummary := strings.TrimSpace(kakaotext.MarkdownLiteral(strings.TrimSpace(llmSummary)))
+
 	var views []templateview.MajorEventView
 
 	if normalizedSummary == "" {

@@ -41,6 +41,7 @@ func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 	if results[0].Err != nil {
 		t.Fatalf("default item: %v", results[0].Err)
 	}
+
 	for _, field := range []string{"멤버", "테스트 쇼츠", "https://www.youtube.com/shorts/abc"} {
 		if !strings.Contains(kakaoformat.Render(results[0].Message), field) {
 			t.Errorf("default item lost %q: %q", field, results[0].Message)

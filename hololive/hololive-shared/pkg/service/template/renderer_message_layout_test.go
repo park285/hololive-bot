@@ -54,7 +54,7 @@ func literalTitleData(title, url string) map[string]any {
 		fieldTitle: title, fieldURL: url, fieldMemberName: testMixedMemberName, fieldChannelName: testMixedMemberName,
 		"Index": 1, "IsLive": true, "TimeInfo": "시간 미정", fieldElapsed: "", fieldScheduledKST: "",
 		"IsStarting": true, "IsScheduled": false, fieldIsPremiere: false, fieldMinutesUntil: 0,
-		"CollabMembers": "", "ScheduleMessage": "",
+		"CollabMembers": "", fieldScheduleMessage: "",
 		"ContentText": title, "Link": url, "DateStr": "미정", "Members": "",
 		"Member": testMixedMemberName, "DateText": "미정", "Category": "노래", "Summary": "", "SourceURL": url,
 	}
@@ -62,8 +62,8 @@ func literalTitleData(title, url string) map[string]any {
 	return map[string]any{
 		fieldTitle: title, fieldURL: url, fieldMemberName: testMixedMemberName, fieldChannelName: testMixedMemberName,
 		fieldCount: 1, "Hours": 24, "Days": 7,
-		"Streams": []map[string]any{entry}, "Entries": []map[string]any{entry}, "Items": []map[string]any{entry},
-		"ScheduledTimes": []string{}, "ScheduledTimeKST": "", "ScheduleMessage": "",
+		fieldStreams: []map[string]any{entry}, "Entries": []map[string]any{entry}, "Items": []map[string]any{entry},
+		"ScheduledTimes": []string{}, "ScheduledTimeKST": "", fieldScheduleMessage: "",
 		"StreamTitle": title, "StreamURL": url, "ScheduledStartKST": "",
 		"Kind": string(domain.OutboxKindNewVideo), "IsStarting": true, "AllPremiere": false, fieldIsPremiere: false,
 		"IsUpcomingPremiere": false, "MinutesUntilPremiere": 0, fieldMinutesUntil: 0, "IsScheduled": false, "CollabMembers": "",
@@ -78,36 +78,39 @@ func TestSeedTemplates_WorkerCompositeURLsAndScheduleLines(t *testing.T) {
 	const (
 		primary   = "https://short.holoshi.com/l/CtQ_15HfY_M"
 		secondary = "https://chzzk.naver.com/live/channel"
+		collab    = "미코, 스이세이"
+		schedule  = "변경 안내\r\n- 다음 시간에 시작"
 	)
 
 	data := literalTitleData("방송 제목", primary+" | "+secondary)
 
-	data["CollabMembers"] = "미코, 스이세이"
-	data["ScheduleMessage"] = "변경 안내\r\n- 다음 시간에 시작"
+	data["CollabMembers"] = collab
+	data[fieldScheduleMessage] = schedule
 
 	out := kakaoformat.Render(renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotification,
 		seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotification), data))
 	visible := strings.ReplaceAll(out, kakaotext.ZeroWidthSpace, "")
 
 	if !hasSeedLine(out, primary) || !hasSeedLine(out, secondary) ||
-		!strings.Contains(visible, data["CollabMembers"].(string)) ||
-		!strings.Contains(visible, strings.ReplaceAll(data["ScheduleMessage"].(string), "\r\n", "\n")) {
+		!strings.Contains(visible, collab) ||
+		!strings.Contains(visible, strings.ReplaceAll(schedule, "\r\n", "\n")) {
 		t.Errorf("composite URL, collab, or schedule text changed: %q", out)
 	}
 }
 
 func TestSeedTemplates_EmptyStatesDoNotInventEntries(t *testing.T) {
 	pool := dbtest.NewPool(t)
+
 	const hidden = "표시되면 안 되는 항목"
 
 	for _, tc := range []struct {
 		key  domain.TemplateKey
 		data map[string]any
 	}{
-		{domain.TemplateKeyCmdLiveStreams, map[string]any{fieldCount: 0, "Streams": []any{hidden}}},
-		{domain.TemplateKeyCmdUpcomingStreams, map[string]any{fieldCount: 0, "Hours": 24, "Streams": []any{hidden}}},
-		{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: "", "Streams": []any{hidden}}},
-		{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: "미코", fieldCount: 0, "Days": 7, "Streams": []any{hidden}}},
+		{domain.TemplateKeyCmdLiveStreams, map[string]any{fieldCount: 0, fieldStreams: []any{hidden}}},
+		{domain.TemplateKeyCmdUpcomingStreams, map[string]any{fieldCount: 0, "Hours": 24, fieldStreams: []any{hidden}}},
+		{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: "", fieldStreams: []any{hidden}}},
+		{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: "미코", fieldCount: 0, "Days": 7, fieldStreams: []any{hidden}}},
 		{domain.TemplateKeyCmdAlarmList, map[string]any{fieldCount: 0, "Prefix": "!", "Alarms": []any{hidden}}},
 		{domain.TemplateKeyCmdMemberNewsDigest, map[string]any{"Headline": " ", "TopItems": []any{}, "MoreSummary": hidden}},
 		{domain.TemplateKeyCmdCalendar, map[string]any{fieldCount: 0, "Year": 2026, "Month": 9, "Days": []any{hidden}}},

@@ -66,7 +66,7 @@ func alarmGoldenStream(id, title string) *domain.Stream {
 	return &domain.Stream{ID: id, Title: title}
 }
 
-func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Stream) domain.AlarmNotification {
+func alarmGoldenNotification(name string, stream *domain.Stream) domain.AlarmNotification {
 	var channel *domain.Channel
 
 	if name != "" {
@@ -78,16 +78,16 @@ func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Strea
 		RoomID:       testAlarmGoldenRoomID,
 		Channel:      channel,
 		Stream:       stream,
-		MinutesUntil: minutesUntil,
+		MinutesUntil: 5,
 	}
 }
 
 func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
-	premiere := alarmGoldenNotification("Premiere", 5, alarmGoldenStream("premiere", "Premiere Title"))
+	premiere := alarmGoldenNotification("Premiere", alarmGoldenStream("premiere", "Premiere Title"))
 
 	premiere.Stream.IsPremiere = true
 
-	regular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("regular", "Regular Title"))
+	regular := alarmGoldenNotification("Regular", alarmGoldenStream("regular", "Regular Title"))
 
 	item, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &premiere, 5)
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 
 func TestRenderAlarmDispatchNotificationIncludesCollabMembers(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
-	notification := alarmGoldenNotification("미코", 5, alarmGoldenStream("collab-1", "콜라보 방송"))
+	notification := alarmGoldenNotification("미코", alarmGoldenStream("collab-1", "콜라보 방송"))
 
 	notification.Stream.ChannelID = "ch-miko"
 	notification.Stream.CollaboTalentNames = []string{"星街すいせい", "Gawr Gura"}
@@ -172,25 +172,33 @@ func (collabTestMembers) FindMembersByAlias(context.Context, string) ([]*domain.
 
 func TestAlarmProducerPreservesLiteralFields(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
+
 	const (
 		member = "||멤버|| **끝**"
 		title  = "1. ||가격|| **제목** _원문_"
 		note   = "> 변경 **안내**"
 	)
-	notification := alarmGoldenNotification(member, 5, alarmGoldenStream("a_b-c", title))
+
+	notification := alarmGoldenNotification(member, alarmGoldenStream("a_b-c", title))
+
 	notification.ScheduleChangeMessage = note
+
 	single, err := renderAlarmDispatchNotification(t.Context(), renderer, store, alarmGoldenMembers{}, &notification)
 	require.NoError(t, err)
+
 	grouped, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, "", alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{notification, notification},
 	})
 	require.NoError(t, err)
+
 	for _, message := range []string{single, grouped} {
 		visible := strings.ReplaceAll(kakaoformat.Render(message), kakaotext.ZeroWidthSpace, "")
+
 		for _, field := range []string{member, "||가격||", "**제목**", "_원문_", note} {
 			require.Contains(t, visible, field)
 		}
+
 		require.Contains(t, visible, "https://")
 		require.Contains(t, visible, "a_b-c")
 	}

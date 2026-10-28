@@ -46,6 +46,7 @@ func TestLiveQueryShowsElapsedSinceQueryTime(t *testing.T) {
 			if elapsed := liveElapsed(tc.startedAt, tc.asOf); elapsed != tc.want {
 				t.Errorf("조회 시각 기준 경과 불일치: %q, want %q", elapsed, tc.want)
 			}
+
 			if !strings.Contains(kakaoformat.Render(out), tc.want) {
 				t.Errorf("경과 표시 손실: %q in %q", tc.want, out)
 			}

@@ -40,16 +40,18 @@ import (
 // 시드 본문 그대로 렌더해, 시드-샘플-변수 계약 위반을 배포 전에 유일하게 차단한다.
 
 const (
-	fieldScheduledKST = "ScheduledKST"
-	fieldIsPremiere   = "IsPremiere"
-	fieldMinutesUntil = "MinutesUntil"
-	fieldNextStream   = "NextStream"
-	fieldCount        = "Count"
-	fieldChannelName  = "ChannelName"
-	fieldMemberName   = "MemberName"
-	fieldTitle        = "Title"
-	fieldURL          = "URL"
-	fieldElapsed      = "Elapsed"
+	fieldScheduledKST    = "ScheduledKST"
+	fieldIsPremiere      = "IsPremiere"
+	fieldMinutesUntil    = "MinutesUntil"
+	fieldNextStream      = "NextStream"
+	fieldCount           = "Count"
+	fieldChannelName     = "ChannelName"
+	fieldMemberName      = "MemberName"
+	fieldTitle           = "Title"
+	fieldURL             = "URL"
+	fieldElapsed         = "Elapsed"
+	fieldStreams         = "Streams"
+	fieldScheduleMessage = "ScheduleMessage"
 )
 
 func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
@@ -160,7 +162,7 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 	liveBody := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
 	live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
 		fieldCount: 1,
-		"Streams": []map[string]any{
+		fieldStreams: []map[string]any{
 			{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0, fieldElapsed: ""},
 		},
 	})
@@ -182,7 +184,7 @@ func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 	body := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
 	got := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
 		fieldCount: 2,
-		"Streams": []map[string]any{
+		fieldStreams: []map[string]any{
 			{fieldChannelName: "츠즈리", fieldTitle: "잡담 방송", fieldURL: url, fieldElapsed: "1시간 23분째"},
 			{fieldChannelName: "두 번째 채널", fieldTitle: "노래 방송", fieldURL: "", fieldElapsed: ""},
 		},
@@ -191,14 +193,17 @@ func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 	if strings.Count(got, "1시간 23분째") != 1 {
 		t.Errorf("경과 시간이 누락되거나 중복됨: %q", got)
 	}
+
 	for line := range strings.SplitSeq(got, "\n") {
 		if strings.Contains(line, "1시간 23분째") && !strings.Contains(line, "츠즈리") {
 			t.Errorf("다른 방송에 경과 시간이 붙음: %q", line)
 		}
+
 		if strings.Contains(line, "두 번째 채널") && strings.Contains(line, "⏱") {
 			t.Errorf("알 수 없는 경과 시간이 만들어짐: %q", line)
 		}
 	}
+
 	if !hasSeedLine(got, url) {
 		t.Errorf("독립 URL 소실: %q", got)
 	}
@@ -294,15 +299,15 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 		"AllPremiere":     false,
 		"Entries": []map[string]any{
 			{
-				fieldMemberName:   "유닛 B",
-				fieldTitle:        markerTitle,
-				fieldURL:          shortURL,
-				"CollabMembers":   "",
-				"ScheduleMessage": "",
-				fieldMinutesUntil: 5,
-				"IsStarting":      false,
-				"IsScheduled":     true,
-				fieldIsPremiere:   false,
+				fieldMemberName:      "유닛 B",
+				fieldTitle:           markerTitle,
+				fieldURL:             shortURL,
+				"CollabMembers":      "",
+				fieldScheduleMessage: "",
+				fieldMinutesUntil:    5,
+				"IsStarting":         false,
+				"IsScheduled":        true,
+				fieldIsPremiere:      false,
 			},
 		},
 	})

@@ -250,16 +250,20 @@ func TestMajorEventSummaryLiteralBoundary(t *testing.T) {
 	t.Parallel()
 
 	const body = "**행사**\n\n{{.LLMSummary}}{{range .Events}}{{.Title}}{{end}}"
+
 	renderer := setupFormatterRendererMulti(t, map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdMajorEventWeeklySummary:  body,
 		domain.TemplateKeyCmdMajorEventMonthlySummary: body,
 	})
+
 	const summary = "공개 ||가격|| **원제** (_공식명_)\r\n- 무료 **안내** &amp;\r\nhttps://example.org/a_b*(c)?q=||x||&v=~y~\n!썸네일 a_b"
+
 	events := []domain.MajorEvent{{Title: "중복되면 안 되는 목록"}, {Title: "다른 행사"}}
 	padding := strings.Repeat(kakaotext.ZeroWidthSpace, templateview.KakaoSeeMorePadding)
 
 	for _, fold := range []bool{false, true} {
 		formatter := newLLMSchedulerFormatter("!", renderer, nil, fold)
+
 		for _, format := range []func() (string, error){
 			func() (string, error) {
 				return formatter.FormatMajorEventWeeklySummary(t.Context(), events, summary+padding)
@@ -271,8 +275,10 @@ func TestMajorEventSummaryLiteralBoundary(t *testing.T) {
 			message, err := format()
 			require.NoError(t, err)
 			require.Equal(t, fold, strings.Contains(message, padding))
+
 			visible := strings.ReplaceAll(kakaoformat.Render(message), padding, "")
 			require.Contains(t, visible, strings.ReplaceAll(summary, "\r\n", "\n"))
+
 			for _, event := range events {
 				require.NotContains(t, visible, event.Title)
 			}
@@ -284,6 +290,7 @@ func TestInvisibleSummaryKeepsEventList(t *testing.T) {
 	t.Parallel()
 
 	const body = "{{.LLMSummary}}{{range .Events}}{{.Title}}\n{{end}}"
+
 	renderer := setupFormatterRendererMulti(t, map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdMajorEventWeeklySummary:  body,
 		domain.TemplateKeyCmdMajorEventMonthlySummary: body,
@@ -301,9 +308,11 @@ func TestInvisibleSummaryKeepsEventList(t *testing.T) {
 	} {
 		empty, err := format("")
 		require.NoError(t, err)
+
 		for _, event := range events {
 			require.Contains(t, empty, event.Title)
 		}
+
 		for _, summary := range []string{
 			kakaotext.ZeroWidthSpace,
 			strings.Repeat(kakaotext.ZeroWidthSpace, 500),

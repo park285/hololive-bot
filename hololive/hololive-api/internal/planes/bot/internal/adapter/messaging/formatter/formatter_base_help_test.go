@@ -180,13 +180,19 @@ func TestMemberNotFound(t *testing.T) {
 
 func TestGraduatedWarningPreservesLiteralAndProfileBoundary(t *testing.T) {
 	pool := dbtest.NewPool(t)
+
 	const warning = "졸업 ||상태|| **문자**"
+
 	_, err := pool.Exec(t.Context(), `UPDATE message_strings SET value = $1 WHERE namespace = 'notify' AND key = 'graduated_member_warning'`, warning+"\n\n")
 	require.NoError(t, err)
+
 	store := messagestrings.NewStore(pool, slog.New(slog.DiscardHandler))
 	require.NoError(t, store.Load(t.Context()))
+
 	f := NewResponseFormatter("!", nil, WithMessageStrings(store))
+
 	const profile = "프로필 본문"
+
 	message := f.GraduatedMemberWarning(t.Context()) + profile
 	visible := kakaoformat.Render(message)
 	require.Contains(t, visible, warning)

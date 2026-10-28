@@ -32,6 +32,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
+	"github.com/stretchr/testify/require"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -715,6 +716,7 @@ func (m *mockCache) Get(_ context.Context, key string, dest any) error {
 func (m *mockCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
 	m.setKey = key
 	m.setData = value
+
 	return m.setErr
 }
 
@@ -1322,47 +1324,49 @@ func TestSummaryPlainDataSurvivesReviewAndCache(t *testing.T) {
 	for _, review := range []bool{false, true} {
 		t.Run(fmt.Sprintf("review=%t", review), func(t *testing.T) {
 			response := summaryResponse{Highlights: []eventHighlight{{Name: title, Members: member, Note: note, Link: link}}}
+
 			encoded, err := jsonv2.Marshal(response)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			primary := &mockSummarizer{jsonResponse: string(encoded)}
 			cache := &mockCache{}
 			s := NewEventSummarizer(primary, cache, nil, testLogger())
 			reviewed := title + " (" + member + ")\r\n- " + note + "\r\n" + link + "\n!썸네일 a_b"
+
 			var reviewer *mockSummarizer
+
 			if review {
 				encoded, err = jsonv2.Marshal(map[string]string{"summary": reviewed})
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
+
 				reviewer = &mockSummarizer{jsonResponse: string(encoded)}
 				s.reviewer = reviewer
 			}
 
 			events := []domain.MajorEvent{{ID: 1, Title: title}}
+
 			first, err := s.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-10-28")
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			for _, field := range []string{title, member, note, link} {
 				if !strings.Contains(first, field) {
 					t.Fatalf("평문 필드 손실: %q in %q", field, first)
 				}
 			}
+
 			if review && (first != reviewed || reviewer.callCount != 1) {
 				t.Fatalf("최종 검토 결과 변형 또는 미적용: %q", first)
 			}
+
 			if cache.setData != first {
 				t.Fatalf("캐시가 평문 대신 표시용 문자열을 저장함: %q", cache.setData)
 			}
 
 			cache.getData = cache.setData
+
 			second, err := s.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-10-28")
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			if second != first || primary.callCount != 1 || (review && reviewer.callCount != 1) {
 				t.Fatalf("캐시 재조회가 본문이나 생성 횟수를 변경함: %q", second)
 			}

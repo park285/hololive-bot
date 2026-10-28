@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
@@ -55,7 +56,7 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 		t.Run(fmt.Sprintf("title_%d_%s", utf8.RuneCountInString(title), string([]rune(title + " ")[:1])), func(t *testing.T) {
 			rendered := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
 				fieldCount: 3,
-				"Streams": []map[string]any{
+				fieldStreams: []map[string]any{
 					{fieldChannelName: "Kureiji Ollie Ch. hololive", fieldTitle: title, fieldURL: url, "ViewerCount": 987654, fieldElapsed: ""},
 					{fieldChannelName: "두 번째 채널", fieldTitle: "제목만 있음", fieldURL: "", "ViewerCount": 0, fieldElapsed: ""},
 					{fieldChannelName: "세 번째 채널", fieldTitle: "", fieldURL: "", "ViewerCount": 0, fieldElapsed: ""},
@@ -64,10 +65,9 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 			out := kakaoformat.Render(rendered)
 
 			for _, required := range []string{"Kureiji Ollie Ch. hololive", "두 번째 채널", "세 번째 채널", "제목만 있음"} {
-				if !strings.Contains(rendered, required) {
-					t.Errorf("입력 항목 소실: %q", rendered)
-				}
+				require.Contains(t, rendered, required, "입력 항목 소실")
 			}
+
 			if !hasSeedLine(out, url) {
 				t.Errorf("독립 URL 소실: %q", out)
 			}
@@ -114,6 +114,7 @@ func TestSeedTemplates_OutboxVideoDistinguishesPremiereStates(t *testing.T) {
 		if seen[out] || !strings.Contains(out, "미코") {
 			t.Errorf("알림 상태 구분 또는 대상 소실: %q", out)
 		}
+
 		seen[out] = true
 	}
 }

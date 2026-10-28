@@ -41,6 +41,7 @@ func TestDefaultStreamLayoutsReportDisplayLimitAndKeepFold(t *testing.T) {
 			if strings.Contains(out, streams[streamListDisplayLimit].GetYouTubeURL()) {
 				t.Errorf("표시 한도를 넘은 항목 노출: %q", out)
 			}
+
 			for _, stream := range streams[:streamListDisplayLimit] {
 				if !strings.Contains("\n"+out+"\n", "\n"+stream.GetYouTubeURL()+"\n") {
 					t.Errorf("독립 URL 손실: %q", stream.GetYouTubeURL())
@@ -144,6 +145,7 @@ func TestLiveQueryKeepsTruncationNoticeAboveFold(t *testing.T) {
 	}, ""))
 	head, body, folded := strings.Cut(out, padding)
 	plainHead, plainBody, plainFolded := strings.Cut(withoutNotice, padding)
+
 	if !folded || !plainFolded || len(head) <= len(plainHead) || body != plainBody {
 		t.Fatal("잘린 결과 안내가 접기 아래로 이동하거나 항목을 변경함")
 	}

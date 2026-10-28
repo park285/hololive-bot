@@ -95,6 +95,7 @@ func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
 
 	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
+
 	for _, field := range []string{envelope.Celebration.MemberName, envelope.Celebration.ScheduledStartKST, envelope.Celebration.StreamTitle, envelope.Celebration.StreamURL} {
 		assert.Contains(t, kakaoformat.Render(msg), field)
 	}

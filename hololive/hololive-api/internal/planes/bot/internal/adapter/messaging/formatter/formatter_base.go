@@ -134,6 +134,7 @@ func (f *ResponseFormatter) GraduatedMemberWarning(_ context.Context) string {
 
 	text := f.messageStrings.Text(messagestrings.NotifyGraduatedMemberWarning)
 	warning := strings.TrimRight(text, "\r\n")
+
 	if warning == "" {
 		return text
 	}

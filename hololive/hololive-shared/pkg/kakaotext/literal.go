@@ -19,6 +19,7 @@ func MarkdownLiteral(text string) string {
 	text = kakaoformat.EscapeMarkdown(strings.ReplaceAll(text, ZeroWidthSpace, ""))
 
 	var b strings.Builder
+
 	copied := 0
 
 	for start := 0; start < len(text); {
@@ -29,21 +30,26 @@ func MarkdownLiteral(text string) string {
 			end += start
 		}
 
-		indent, columns := start, 0
-		for indent < end && (text[indent] == ' ' || text[indent] == '\t') {
-			if text[indent] == '\t' {
+		line := text[start:end]
+		indent, columns := 0, 0
+
+		for indent < len(line) && (line[indent] == ' ' || line[indent] == '\t') {
+			if line[indent] == '\t' {
 				columns += 4 - columns%4
 			} else {
 				columns++
 			}
+
 			indent++
 		}
 
-		if columns >= 4 && indent < end {
+		if columns >= 4 && indent < len(line) {
 			if copied == 0 {
 				b.Grow(len(text) + len("&#32;"))
 			}
+
 			b.WriteString(text[copied:start])
+
 			// 첫 공백을 문자 참조로 쓰면 코드블록이 되지 않고, 렌더 후에는 원래 공백/탭으로 복원된다.
 			// 숨은 문자를 추가하지 않으므로 명령·URL 복사와 기존 접기 패딩 판정도 유지한다.
 			if text[start] == '\t' {
@@ -51,6 +57,7 @@ func MarkdownLiteral(text string) string {
 			} else {
 				b.WriteString("&#32;")
 			}
+
 			copied = start + 1
 		}
 
@@ -60,6 +67,7 @@ func MarkdownLiteral(text string) string {
 	if copied == 0 {
 		return text
 	}
+
 	b.WriteString(text[copied:])
 
 	return b.String()

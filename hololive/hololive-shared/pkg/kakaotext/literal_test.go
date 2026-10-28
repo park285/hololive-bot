@@ -24,11 +24,15 @@ func TestMarkdownLiteralPreservesVisibleFields(t *testing.T) {
 		"안내\r- 항목\r# 제목\r> 인용\r1. 순서",
 	} {
 		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+
 			want := strings.NewReplacer(ZeroWidthSpace, "", "\r\n", "\n", "\r", "\n").Replace(input)
 			literal := MarkdownLiteral(input)
+
 			if strings.Contains(literal, ZeroWidthSpace+ZeroWidthSpace) {
 				t.Fatal("외부 문자가 접기 패딩으로 남음")
 			}
+
 			if got := kakaoformat.Render(literal); got != want {
 				t.Fatalf("평문 필드 변형: got %q, want %q", got, want)
 			}
@@ -51,12 +55,15 @@ func TestMarkdownLiteralIndentedBlankLinesKeepContent(t *testing.T) {
 	t.Parallel()
 
 	const url = "https://example.org/a_b?x=1&y=2"
+
 	visible := kakaoformat.Render(MarkdownLiteral("안내\r\n    \r \t\r\n    **원제**\r\t" + url + "\n\n끝"))
+
 	for _, field := range []string{"안내", "    **원제**", "\t" + url, "끝"} {
 		if !strings.Contains(visible, field) {
 			t.Fatalf("빈 들여쓰기 줄 뒤의 본문 변형: %q in %q", field, visible)
 		}
 	}
+
 	if strings.Contains(visible, "\\*") || strings.Contains(visible, "\\_") || strings.Contains(visible, "\\&") {
 		t.Fatalf("코드블록 안에 표시용 이스케이프 잔존: %q", visible)
 	}
