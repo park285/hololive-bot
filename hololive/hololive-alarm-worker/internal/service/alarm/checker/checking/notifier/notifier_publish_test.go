@@ -46,7 +46,7 @@ func TestNotifierPublishBatchAndMarkEmpty(t *testing.T) {
 	logger := newCheckerTestLogger()
 	notifier, err := NewNotifier(
 		dedup.NewService(cache, []int{10}, logger),
-		queue.NewPublisher(cache, logger),
+		newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -66,10 +66,7 @@ func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
 	outbox := &notifierBatchOutbox{}
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -107,11 +104,7 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 	outbox := &notifierBatchOutbox{batchErrors: []error{nil, errors.New("pg unavailable")}}
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger,
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-			queue.WithMaxDeliveriesPerBatch(1),
-		),
+		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -189,10 +182,7 @@ func TestNotifierPublishBatchAndMarkWritesStreamMarkOncePerSchedule(t *testing.T
 	dedupService := dedup.NewService(cache, []int{10}, logger)
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger,
-			queue.WithOutbox(&notifierBatchOutbox{}),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -227,10 +217,7 @@ func TestNotifierPublishBatchAndMarkRewritesStreamMarkAfterScheduleChange(t *tes
 	dedupService := dedup.NewService(cache, []int{10}, logger)
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger,
-			queue.WithOutbox(&notifierBatchOutbox{}),
-			queue.WithWakeupEnabled(false),
-		),
+		newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)

@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	apisettings "github.com/kapu/hololive-api/internal/server/settings"
 )
 
 type AlarmYouTubeStackComponents struct {
@@ -35,16 +34,6 @@ func InitAlarmYouTubeStack(
 	}()
 
 	memberMatcher := ProvideMatcher(alarmMode.MemberDataSource, logger)
-
-	// orchestration에 전달하지 않아도 settings 파일 기동 검증은 유지한다.
-	_, err = apisettings.BuildSettingsService(
-		appConfig.SettingsFilePath,
-		appConfig.Notification.AdvanceMinutes,
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build settings service: %w", err)
-	}
 
 	return &AlarmYouTubeStackComponents{
 		AlarmMode: alarmMode,

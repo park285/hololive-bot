@@ -21,6 +21,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
@@ -57,10 +58,6 @@ type observationRetainer interface {
 	RunRetentionTick(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error)
 }
 
-type observationReplayer interface {
-	ProcessNextReplay(context.Context) (bool, error)
-}
-
 type Runtime struct {
 	Config apiconfig.YouTubePlaneConfig
 	Logger *slog.Logger
@@ -73,38 +70,40 @@ type Runtime struct {
 	projectionRetainer projectionRetainer
 	finalizer          liveEndFinalizer
 	retainer           observationRetainer
-	replayer           observationReplayer
 	builder            targetprojection.Builder
 	// liveFreshnessBudget는 builder와 같은 schedule에서 도출한 not_before 예산이며 수요 지표가 씁니다.
 	liveFreshnessBudget time.Duration
 	now                 func() time.Time
 
-	dbSem         chan struct{}
-	workCh        chan sourceobservation.ClaimWork
-	claim         sourceobservation.ClaimOptions
-	runCancel     context.CancelFunc
-	started       atomic.Bool
-	claiming      atomic.Bool
-	ready         atomic.Bool
-	degraded      atomic.Bool
-	loopDone      chan struct{}
-	claimDone     chan struct{}
-	loopCount     int
-	workerDone    chan struct{}
-	closeWork     sync.Once
-	lifecycleMu   sync.Mutex
-	tasks         sync.WaitGroup
-	loopTasks     sync.WaitGroup
-	workerTasks   sync.WaitGroup
-	tasksDone     chan struct{}
-	closing       bool
-	closed        bool
-	releaseDone   chan struct{}
-	releaseErr    error
-	inFlight      sync.Map
-	workerTracker *workercontract.ExecutorTracker
-	workerTotals  *workercontract.Counters
-	workerSampler *workercontract.QueueSampler
+	dbSem     chan struct{}
+	workCh    chan sourceobservation.ClaimWork
+	claim     sourceobservation.ClaimOptions
+	runCancel context.CancelFunc
+	started   atomic.Bool
+	claiming  atomic.Bool
+	ready     atomic.Bool
+	// degraded 상태는 원인별로 따로 갱신하고 Degraded()가 OR로 합친다.
+	// projection refresh 성공이 DEAD_LETTER backlog 신호를 지우지 않게 하기 위해서다.
+	projectionDegraded atomic.Bool
+	deadLetterBacklog  atomic.Bool
+	loopDone           chan struct{}
+	claimDone          chan struct{}
+	loopCount          int
+	workerDone         chan struct{}
+	closeWork          sync.Once
+	lifecycleMu        sync.Mutex
+	tasks              sync.WaitGroup
+	loopTasks          sync.WaitGroup
+	workerTasks        sync.WaitGroup
+	tasksDone          chan struct{}
+	closing            bool
+	closed             bool
+	releaseDone        chan struct{}
+	releaseErr         error
+	inFlight           sync.Map
+	workerTracker      *workercontract.ExecutorTracker
+	workerTotals       *workercontract.Counters
+	workerSampler      *workercontract.QueueSampler
 
 	collectionObservation queueObservationThrottle
 }
@@ -210,7 +209,6 @@ func newRuntime(
 		projectionRetainer: refresher,
 		finalizer:          repo,
 		retainer:           repo,
-		replayer:           repo,
 		builder: targetprojection.PolicyBuilder{
 			Reader:    rosterReader{timeFinalizationBacklogBatchSize: plane.TimeFinalizationBacklogBatchSize},
 			Schedules: schedules,
@@ -280,7 +278,7 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	defer r.finishStart()
 
 	r.tasks.Go(func() {
-		panicguard.Run(r.Logger, panicguard.BackgroundTask, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
+		panicguard.Run(r.Logger, panicscope.BackgroundTask, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
 	})
 
 	if !r.Config.Enabled {
@@ -307,19 +305,11 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 		})
 	}
 
-	if r.Config.Retention.Enabled {
-		r.loopCount++
-		r.startGuarded(runCtx, errCh, "youtube-retention-loop", &r.loopTasks, func() {
-			r.runRetentionLoop(runCtx, errCh)
-		})
-	}
-
-	if r.Config.Replay.Enabled {
-		r.loopCount++
-		r.startGuarded(runCtx, errCh, "youtube-replay-loop", &r.loopTasks, func() {
-			r.runReplayLoop(runCtx, errCh)
-		})
-	}
+	// plane이 켜져 있으면 retention은 항상 돈다. 보존 기간은 YOUTUBE_PLANE_RETENTION_*_DAYS가 소유한다.
+	r.loopCount++
+	r.startGuarded(runCtx, errCh, "youtube-retention-loop", &r.loopTasks, func() {
+		r.runRetentionLoop(runCtx, errCh)
+	})
 }
 
 // startCoreLoops는 Start가 lifecycle 잠금을 소유한 동안 필수 supervisor 작업을 등록한다.
@@ -343,8 +333,8 @@ func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name str
 	r.tasks.Go(func() {
 		defer group.Done()
 
-		panicguard.Run(r.Logger, panicguard.BackgroundTask, name, func() {
-			if err := panicguard.RunE(r.Logger, panicguard.BackgroundTask, name, func() error {
+		panicguard.Run(r.Logger, panicscope.BackgroundTask, name, func() {
+			if err := panicguard.RunE(r.Logger, panicscope.BackgroundTask, name, func() error {
 				run()
 
 				return nil
@@ -575,7 +565,7 @@ func (r *Runtime) Ready() bool {
 }
 
 func (r *Runtime) Degraded() bool {
-	return r != nil && r.degraded.Load()
+	return r != nil && (r.projectionDegraded.Load() || r.deadLetterBacklog.Load())
 }
 
 // withDB는 DBOperationConcurrency 슬롯 하나를 잡고 fn을 실행한다. 슬롯 대기는 획득에 실패해도,

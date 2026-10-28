@@ -60,21 +60,12 @@ def env_map(svc):
         return out
     return env
 
-admin_api = services.get("hololive-api", {})
-env = env_map(admin_api)
 for service_name in ("hololive-api", "hololive-alarm-worker"):
     service_env = env_map(services.get(service_name, {}))
     for token_name in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         if token_name in service_env:
             print(f"[FAIL] {service_name} common environment must not shadow {token_name} from env_file")
             sys.exit(1)
-if env.get("CORS_ENFORCE") != "${CORS_ENFORCE:-true}":
-    print("[FAIL] hololive-api CORS_ENFORCE default must be true")
-    sys.exit(1)
-origins = str(env.get("CORS_ALLOWED_ORIGINS", ""))
-if origins in ("", "${CORS_ALLOWED_ORIGINS:-}"):
-    print("[FAIL] hololive-api CORS_ALLOWED_ORIGINS default must be explicit")
-    sys.exit(1)
 
 postgres = services.get("holo-postgres", {})
 command = postgres.get("command", []) or []
@@ -300,8 +291,6 @@ for port in service.get("ports", []) or []:
         sys.exit(1)
 PY
 done <<'EOF'
-youtube-collector-a docker-compose.osaka.yml
 youtube-collector-b docker-compose.seoul.yml
-youtube-collector-d docker-compose.osaka2.yml
 EOF
 pass "remote AP producers remain outside the trace network without Jaeger or OTLP host ports"

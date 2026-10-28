@@ -26,29 +26,23 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 var (
-	replyOutboxInsertSQL             = mustSQL("reply_outbox_insert.sql")
-	replyOutboxConflictSQL           = mustSQL("reply_outbox_conflict.sql")
-	replyOutboxClaimSQL              = mustSQL("reply_outbox_claim.sql")
-	replyOutboxSettleSQL             = mustSQL("reply_outbox_settle.sql")
-	replyOutboxSettleRetrySQL        = mustSQL("reply_outbox_settle_retry.sql")
-	replyOutboxSettleTerminalSQL     = mustSQL("reply_outbox_settle_terminal.sql")
-	replyOutboxReclaimExpiredSQL     = mustSQL("reply_outbox_reclaim_expired.sql")
-	replyOutboxManualReviewStatsSQL  = mustSQL("reply_outbox_manual_review_stats.sql")
-	replyOutboxReadySnapshotSQL      = mustSQL("reply_outbox_ready_snapshot.sql")
-	replyOutboxReplayManualReviewSQL = strings.NewReplacer(
-		":'outbox_id'", "$1",
-		":'operator_actor'", "$2",
-		":'operator_reason'", "$3",
-	).Replace(mustSQL("reply_outbox_replay_manual_review.sql"))
+	replyOutboxInsertSQL            = mustSQL("reply_outbox_insert.sql")
+	replyOutboxConflictSQL          = mustSQL("reply_outbox_conflict.sql")
+	replyOutboxClaimSQL             = mustSQL("reply_outbox_claim.sql")
+	replyOutboxSettleSQL            = mustSQL("reply_outbox_settle.sql")
+	replyOutboxSettleRetrySQL       = mustSQL("reply_outbox_settle_retry.sql")
+	replyOutboxSettleTerminalSQL    = mustSQL("reply_outbox_settle_terminal.sql")
+	replyOutboxReclaimExpiredSQL    = mustSQL("reply_outbox_reclaim_expired.sql")
+	replyOutboxManualReviewStatsSQL = mustSQL("reply_outbox_manual_review_stats.sql")
+	replyOutboxReadySnapshotSQL     = mustSQL("reply_outbox_ready_snapshot.sql")
 )
 
 type ReplyOutboxInsertOutcome int
@@ -74,8 +68,8 @@ func (o ReplyOutboxInsertOutcome) String() string {
 
 const (
 	ReplyOutboxMaxAttempts = int32(5)
-	// 자동 replay 지평은 스택 공통 irisdurable 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
-	ReplyOutboxAutomaticReplayHorizon = irisdurable.AutomaticReplayHorizon
+	// 자동 replay 지평은 iris-client-go 공개 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
+	ReplyOutboxAutomaticReplayHorizon = iris.ReplyAutomaticReplayHorizon
 )
 
 const (

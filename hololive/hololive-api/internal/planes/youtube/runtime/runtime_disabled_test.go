@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
@@ -37,8 +38,6 @@ func TestDisabledRuntimeOnlyRunsAndJoinsQueueSampler(t *testing.T) {
 		}})
 
 		runtime.Config.Enabled = false
-		runtime.Config.Retention.Enabled = true
-		runtime.Config.Replay.Enabled = true
 		runtime.Config.LiveEndFinalizer.Enabled = true
 		runtime.workerTracker = workercontract.NewExecutorTracker()
 		runtime.workerTotals = &workercontract.Counters{}
@@ -105,7 +104,7 @@ func TestDisabledRuntimeReportsDurableQueueDepth(t *testing.T) {
 	}, 5*time.Second, time.Millisecond)
 
 	// 나머지 API 큐 둘은 봇 런타임 소유이므로 이 실행 영역의 등록만 격리한다.
-	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), configtest.APIProfileFixture(t))
 	worker := loaded.Profile.Workers[apiconfig.WorkerSourceObservation]
 
 	worker.Executor.Enabled = false

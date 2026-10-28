@@ -32,19 +32,19 @@ VALUES('video-stale','LIVE'),('video-fresh','LIVE'),
       ('ended-head','ENDED'),('fully-ended','ENDED'),
       ('video-disabled','LIVE'),('video-expired','LIVE'),('video-outside','LIVE'),
       ('video-retired','LIVE'),('head-without-session','LIVE');
-INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time)
-VALUES('video-stale','stale','ENDED',now()-interval '8 days'),
-      ('video-fresh','fresh','LIVE',now()-interval '1 hour'),
-      ('video-missing','missing','UPCOMING',now()-interval '8 days'),
-      ('video-deferred','deferred','UPCOMING',now()+interval '1 hour'),
-      ('recent-overdue','stale','UPCOMING',now()-interval '1 hour'),
-      ('no-head','fresh','LIVE',now()-interval '1 hour'),
-      ('ended-head','fresh','UPCOMING',now()-interval '1 hour'),
-      ('fully-ended','fresh','ENDED',now()-interval '8 days'),
-      ('video-disabled','disabled','LIVE',now()-interval '1 hour'),
-      ('video-expired','expired','LIVE',now()-interval '1 hour'),
-      ('video-outside','outside','LIVE',now()-interval '1 hour'),
-      ('video-retired','retired','LIVE',now()-interval '1 hour');
+INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,lifecycle_origin)
+VALUES('video-stale','stale','ENDED',now()-interval '8 days','observed'),
+      ('video-fresh','fresh','LIVE',now()-interval '1 hour','observed'),
+      ('video-missing','missing','UPCOMING',now()-interval '8 days','observed'),
+      ('video-deferred','deferred','UPCOMING',now()+interval '1 hour','observed'),
+      ('recent-overdue','stale','UPCOMING',now()-interval '1 hour','observed'),
+      ('no-head','fresh','LIVE',now()-interval '1 hour','observed'),
+      ('ended-head','fresh','UPCOMING',now()-interval '1 hour','observed'),
+      ('fully-ended','fresh','ENDED',now()-interval '8 days','observed'),
+      ('video-disabled','disabled','LIVE',now()-interval '1 hour','observed'),
+      ('video-expired','expired','LIVE',now()-interval '1 hour','observed'),
+      ('video-outside','outside','LIVE',now()-interval '1 hour','observed'),
+      ('video-retired','retired','LIVE',now()-interval '1 hour','observed');
 INSERT INTO youtube_collection_job_leases(job_key,provider,job_class,collection_job_kind,subject_key,
 projection_generation,poll_interval_ms,slot_state,scheduled_for,next_due_at,last_completed_at,owner_instance,lease_expires_at,retry_not_before)
 SELECT 'collector:youtubejs:youtubejs_channel_live:'||subject,'youtubejs','SUBJECT','youtubejs_channel_live',subject,

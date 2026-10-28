@@ -29,6 +29,8 @@ import (
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // GroupComponent는 더 큰 프로세스 안에 호스팅되는 하나의 논리적 runtime plane이다.
@@ -83,7 +85,7 @@ func (g *GroupRuntime) Shutdown(ctx context.Context) error {
 
 		name := componentName(i, component.Name)
 		// 한 component의 Shutdown panic이 뒤에 설 공유 의존성 provider의 정지를 건너뛰지 않도록 격리한다.
-		err := panicguard.RunE(g.Logger, panicguard.BackgroundTask, name, func() error {
+		err := panicguard.RunE(g.Logger, panicscope.BackgroundTask, name, func() error {
 			return component.Shutdown(ctx)
 		})
 		if err != nil {

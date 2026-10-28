@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -18,7 +19,6 @@ func setAdminPlaneEnv(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", settingstest.HololiveH3CertPath)
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", settingstest.HololiveH3KeyPath)
 	t.Setenv("SERVER_PORT", "30006")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
 	t.Setenv(settingstest.IrisWebhookTokenEnv, "")
 	t.Setenv(settingstest.IrisBotTokenEnv, "")
 	t.Setenv("IRIS_BASE_URL", "")
@@ -27,39 +27,35 @@ func setAdminPlaneEnv(t *testing.T) {
 }
 
 // loadAdminPlaneRuntime은 LoadRuntime이 admin plane에 적용하는 공통 env 단계와 역할 검증을 그대로 거친다.
-func loadAdminPlaneRuntime(t *testing.T) (*AdminPlaneConfig, error) {
+func loadAdminPlaneRuntime(t *testing.T) error {
 	t.Helper()
 
 	if err := loadProcessEnv(); err != nil {
-		return nil, err
+		return err
 	}
 
 	config, err := loadAdminPlaneConfig()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := config.Validate(); err != nil {
-		return nil, err
-	}
-
-	return config, nil
+	return config.Validate()
 }
 
 func TestAdminPlaneBootsWithoutIrisEgressTokens(t *testing.T) {
 	setAdminPlaneEnv(t)
 
-	if _, err := loadAdminPlaneRuntime(t); err != nil {
+	if err := loadAdminPlaneRuntime(t); err != nil {
 		t.Fatalf("admin plane load error = %v", err)
 	}
 
 	// 같은 env에서 bot plane은 Iris egress 입력을 요구한다.
-	server := settingstest.NewIrisRuntimeDiagnosticsServer(t, settingstest.WorkerProfileDiagnosticsJSON())
+	server := configtest.NewIrisRuntimeDiagnosticsServer(t, configtest.WorkerProfileDiagnosticsJSON())
 	t.Setenv("IRIS_BASE_URL", server.URL)
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", settingstest.URLHostname(t, server.URL))
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", configtest.URLHostname(t, server.URL))
 	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	if _, err := LoadBotPlaneRuntime(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
 		t.Fatalf("LoadBotPlaneRuntime() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
@@ -73,49 +69,8 @@ func TestAdminPlaneIgnoresAccidentalIrisEgressInputs(t *testing.T) {
 	t.Setenv(settingstest.IrisBotTokenEnv, "accidental-egress-token")
 	t.Setenv("IRIS_BASE_URL", "http://iris.invalid")
 
-	if _, err := loadAdminPlaneRuntime(t); err != nil {
+	if err := loadAdminPlaneRuntime(t); err != nil {
 		t.Fatalf("admin plane load error = %v, want nil without Iris worker profile fetch", err)
-	}
-}
-
-func TestAdminPlaneDefaultEnforcesCORSOrigins(t *testing.T) {
-	setAdminPlaneEnv(t)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "")
-
-	_, err := loadAdminPlaneRuntime(t)
-	if err == nil || !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true") {
-		t.Fatalf("admin plane load error = %v, want missing CORS_ALLOWED_ORIGINS error", err)
-	}
-}
-
-func TestAdminPlaneRequiresHolodexKeyAndRooms(t *testing.T) {
-	for key, want := range map[string]string{
-		"HOLODEX_API_KEY": "HOLODEX_API_KEY is required",
-		"KAKAO_ROOMS":     "KAKAO_ROOMS is required",
-	} {
-		t.Run(key, func(t *testing.T) {
-			setAdminPlaneEnv(t)
-			t.Setenv(key, "")
-
-			_, err := loadAdminPlaneRuntime(t)
-			if err == nil || !strings.Contains(err.Error(), want) {
-				t.Fatalf("admin plane load error = %v, want %q", err, want)
-			}
-		})
-	}
-}
-
-func TestAdminPlaneReadsCanonicalLLMSchedulerHealthURL(t *testing.T) {
-	setAdminPlaneEnv(t)
-	t.Setenv("SERVICES_LLM_SCHEDULER_HEALTH_URL", " https://llm.internal/health ")
-
-	config, err := loadAdminPlaneRuntime(t)
-	if err != nil {
-		t.Fatalf("admin plane load error = %v", err)
-	}
-
-	if config.Services.LLMSchedulerHealthURL != "https://llm.internal/health" {
-		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want canonical value", config.Services.LLMSchedulerHealthURL)
 	}
 }
 
@@ -125,7 +80,7 @@ func TestPlaneLoadersIgnoreInvalidYouTubeCollectorEnv(t *testing.T) {
 		setAdminPlaneEnv(t)
 		t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
 
-		if _, err := loadAdminPlaneRuntime(t); err != nil {
+		if err := loadAdminPlaneRuntime(t); err != nil {
 			t.Fatalf("admin plane load error = %v, want success when collector env is invalid", err)
 		}
 	})

@@ -440,11 +440,6 @@ func TestReplyOutboxRepositoryWithoutPool(t *testing.T) {
 
 	_, err := repo.Insert(t.Context(), newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`))
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
-
-	_, err = repo.ReplayManualReview(t.Context(), ReplyOutboxManualReplay{
-		OutboxID: 1, Actor: testOperatorEmail, Reason: "ticket-1",
-	})
-	require.ErrorIs(t, err, ErrPoolNotConfigured)
 }
 
 func TestReplyOutboxClientRequestIDMatchesTransportDerivation(t *testing.T) {

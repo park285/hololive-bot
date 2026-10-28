@@ -26,7 +26,7 @@ func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 			defer cancel()
 
 			if existing {
-				_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('concurrent','old-channel','LIVE');
+				_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin) VALUES ('concurrent','old-channel','LIVE','observed');
 					INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('concurrent','UPCOMING')`)
 				require.NoError(t, err)
 				RefreshAllLiveRuntimeState(t, pool)
@@ -42,8 +42,8 @@ func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 
 			defer rollbackLiveReviewReceiptFactsTx(t, second)
 
-			_, err = first.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status)
-				VALUES ('concurrent','first-writer','LIVE') ON CONFLICT(video_id) DO UPDATE SET channel_id=excluded.channel_id;
+			_, err = first.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin)
+				VALUES ('concurrent','first-writer','LIVE','observed') ON CONFLICT(video_id) DO UPDATE SET channel_id=excluded.channel_id;
 				SELECT refresh_youtube_live_runtime_state(ARRAY['concurrent'])`)
 			require.NoError(t, err)
 			assertLiveRuntimeState(t, first)

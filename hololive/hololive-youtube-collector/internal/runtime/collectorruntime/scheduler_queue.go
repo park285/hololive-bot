@@ -10,6 +10,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
@@ -146,7 +147,7 @@ func (s *leaseScheduler) sendQueued(ctx context.Context, spec *queuedJob) Enqueu
 }
 
 func (s *leaseScheduler) worker(ctx context.Context) {
-	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() error {
+	if err := panicguard.RunE(s.logger, panicscope.BackgroundTask, "youtube-collector-worker", func() error {
 		for {
 			spec, ok := s.nextSpec(ctx)
 			if !ok {
@@ -173,7 +174,7 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *queuedJob) {
 		return
 	}
 
-	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-job", func() error {
+	if err := panicguard.RunE(s.logger, panicscope.BackgroundTask, "youtube-collector-job", func() error {
 		s.executor.runSpec(ctx, spec)
 
 		return nil

@@ -15,7 +15,7 @@ import (
 func TestLiveConsumerHolodexLiveWithoutActualStartStaysUpcoming(t *testing.T) {
 	t.Parallel()
 
-	pool, repo, consumer, proof := startHolodexLivePersist(t)
+	pool, _, consumer, proof := startHolodexLivePersist(t)
 	waitingRoom := liveSession(testVideoID, testStatusLive)
 
 	waitingRoom.ScheduledAt = new(proof.ScheduledFor.Add(time.Hour))
@@ -31,7 +31,6 @@ func TestLiveConsumerHolodexLiveWithoutActualStartStaysUpcoming(t *testing.T) {
 		waitingRoom,
 	)
 
-	replayLiveObservation(t, repo, consumer, observationID)
 	requireUnconfirmedLiveProjection(t, loadLiveStartProjection(t, pool), *waitingRoom.ScheduledAt)
 	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
 	assertLifecycleOrigin(t, pool, "metadata_only")
@@ -78,23 +77,6 @@ func startHolodexLivePersist(t *testing.T) (*pgxpool.Pool, *Repository, *Consume
 	)
 
 	return pool, repo, NewConsumerWithGraces(repo, 0, 0), proof
-}
-
-func replayLiveObservation(t *testing.T, repo *Repository, consumer *Consumer, observationID int64) {
-	t.Helper()
-
-	replay, err := repo.RequestReplay(t.Context(), ReplayInput{
-		ObservationID: observationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "verify unconfirmed live admission replay",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request waiting-room replay: replay=%#v err=%v", replay, err)
-	}
-
-	if err := consumer.Consume(t.Context(), liveClaimOptions()); err != nil {
-		t.Fatalf("consume waiting-room replay: %v", err)
-	}
 }
 
 func loadLiveStartProjection(t *testing.T, pool *pgxpool.Pool) liveStartProjection {

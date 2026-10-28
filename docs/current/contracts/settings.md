@@ -8,19 +8,20 @@ pass, 2026-09-28).
 
 - `alarm_advance_minutes`: `POST /api/holo/settings` writes `settings.json` once, then applies to alarm-worker once via
   `PUT /internal/alarm/settings` (`alarm.http`). alarm-worker restores target minutes from `settings.json` at startup.
-- `membernews_weekly_run_now`: `POST /api/holo/settings/llm` calls the llm scheduler trigger API directly
-  (`trigger.manual`); `membernews_weekly_run_now` is only the response `runtime` / activity-log key.
-- ACL changes: admin ACL routes (`POST/DELETE /api/holo/rooms`, `POST /api/holo/rooms/acl`) write PostgreSQL, then the
-  bot-plane ACL instance in the same `hololive-api` process reloads from PostgreSQL before the admin response returns
-  (`acl.Service.Follow`; overlapping reloads are serialized so the last applied snapshot reflects every commit). The
-  in-process notification cannot be lost, but the reload (a PostgreSQL read) can fail: the admin route then answers
-  `500 acl_bot_resync_failed` and the bot keeps its previous snapshot until the next successful reload. The requested
-  change may already be committed (first request) or may have needed no write (duplicate/retry request). Re-sending the
-  same request retries the resync without writing parts that are already applied and returns the original outcome (200
-  no-op for an unchanged `enabled`/`mode`, 409 for an existing room, 404 for a missing room). `POST /api/holo/rooms/acl`
-  with both `enabled` and `mode` applies them as two steps without a transaction: if the second step fails, the first
-  may already be committed and propagated; a committed partial change is recorded as `acl_update` activity with
-  `partial=true`. No Valkey ACL mirror exists.
+- ACL changes: admin ACL routes (`POST/DELETE /api/holo/rooms`, `POST /api/holo/rooms/acl`) write PostgreSQL and then
+  the in-memory snapshot of the single process-owned `acl.Service`. The bot plane reads the same instance, so the
+  change is visible to bot ingress decisions before the admin response returns; there is no reload or propagation
+  step. `POST /api/holo/rooms/acl` with both `enabled` and `mode` applies them as two steps without a transaction: if
+  the second step fails, the first may already be committed; a committed partial change is recorded as `acl_update`
+  activity with `partial=true`. No Valkey ACL mirror exists. The ACL instance uses the bot pool and the bot-plane
+  `KAKAO_ROOMS`/`KAKAO_ACL_*` seed (`app.buildAPIInfrastructure`).
+- Room changes (`POST/DELETE /api/holo/rooms`) take `{"room":"<chatID>","mode":"whitelist|blacklist"}`; both fields
+  are required. `mode` is the ACL mode the caller read; when it differs from the current mode the change is rejected
+  with `409 {"error":"ACL mode changed","code":"acl_mode_changed"}` and nothing is written. A change that is already in
+  the requested state (adding a listed room, removing an unlisted one) returns `200 {"status":"ok","message":...,
+  "changed":false}` without a write; an applied change returns `changed:true`. A non-chatID or empty `room` and a
+  missing or unknown `mode` return 400. Room changes no longer answer 404 or 409 for the no-op case.
+- Member news run-now moved to the operator CLI (`trigger.manual`, `hololive-api --rerun-notification=membernews-weekly`).
 
 ## Contract ID
 
@@ -28,13 +29,13 @@ pass, 2026-09-28).
 
 ## Provider
 
-- Service: `hololive-api` admin plane (`POST /api/holo/settings`, `POST /api/holo/settings/llm`)
+- Service: `hololive-api` admin plane (`POST /api/holo/settings`)
 - Runtime: `hololive-api`
 
 ## Consumers
 
 - Services: `iris-console` (admin HTTP caller), `alarm-worker` (receives the apply `PUT`, reads `settings.json` at startup)
-- Usage: alarm advance minutes, member news run-now
+- Usage: alarm advance minutes
 
 ## Transport
 
@@ -45,10 +46,10 @@ pass, 2026-09-28).
 
 | Field | Value |
 |---|---|
-| Admin paths | `POST /api/holo/settings`, `POST /api/holo/settings/llm` |
+| Admin paths | `POST /api/holo/settings` |
 | Worker apply | `PUT /internal/alarm/settings` (see `alarm.md`) |
 | Persisted file | `settings.json` (`alarmAdvanceMinutes`, `targetMinutes`) |
-| Contract package | `hololive/hololive-api/internal/contracts/settings` (`UpdateTypeMemberNewsRunNow` response key only) |
+| Contract package | `hololive/hololive-api/internal/server/settings` |
 
 ## Request
 
@@ -57,7 +58,7 @@ pass, 2026-09-28).
 ```
 
 `alarmAdvanceMinutes` must be within `1..1440`. Zero is rejected before any file write or worker call; it is not
-clamped or substituted. Both settings update endpoints reject unknown JSON fields before any persistence or
+clamped or substituted. The settings update endpoint rejects unknown JSON fields before any persistence or
 runtime apply, including mixed requests with a valid field plus the retired `scraperProxyEnabled` field.
 Other admin request decoders retain their existing unknown-field policy.
 
@@ -93,7 +94,6 @@ application, preserving the distinction from a confirmed worker rejection.
 | Failed to get settings | 500 | the request was canceled or its budget expired while waiting for a consistent snapshot | surface the failed read; no stale success snapshot is returned |
 | Failed to update settings | 500 | admission was canceled/timed out before persistence, or the `settings.json` write failed; worker not called | inspect the cause before re-submitting |
 | `alarm_applied=false` | 200 | file written; worker application was rejected or could not be confirmed | inspect `alarm_reason`; an unknown outcome may already have changed the worker, so the response must not be interpreted as proof of its previous state |
-| `acl_bot_resync_failed` | 500 | ACL route: bot-plane reload failed; the requested change may already be committed (body `message` explains) | bot keeps the previous ACL until a reload succeeds; retry the same request (already-applied parts are not written again; returns 200 no-op / 404 / 409) |
 | Failed to add room / Failed to remove room / Failed to set ACL enabled / Failed to set ACL mode | 500 | ACL route: that step's PostgreSQL write failed. For a combined `enabled`+`mode` request, `enabled` may already be applied | retry after fixing storage |
 
 ## Timeout and retry policy
@@ -117,12 +117,10 @@ application, preserving the distinction from a confirmed worker rejection.
 - Worker/client result classification and concurrent request ordering: `hololive/hololive-shared/pkg/service/alarmhttp/client_advance_test.go`, `hololive/hololive-alarm-worker/internal/service/alarm/subscriptions/client_advance_integration_test.go` (both run without build tags)
 - Zero rejection before persistence/apply: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_update_test.go`.
 - Persist-before-publish and stored-file validation: `hololive/hololive-shared/pkg/service/settings/service_test.go`.
-- ACL in-process propagation, overlapping reloads, and reload-failure retry: `hololive/hololive-api/internal/service/acl/service_follow_test.go`
-- ACL admin response on bot-plane apply failure: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_room_acl_propagation_test.go`
+- ACL concurrent mutations and committed snapshot: `hololive/hololive-api/internal/service/acl/service_concurrency_test.go`
+- Single process ACL instance: `hololive/hololive-api/internal/app/runtime_infrastructure_test.go` (needs `TEST_VALKEY_ADDR`)
 
 ## Known gaps
 
 - `settings.json` is written before the worker apply; a rejected apply leaves file and worker diverged until the next
   successful apply or worker restart. With an unknown outcome, that divergence cannot be determined from the response.
-- ACL: a bot-plane reload failure is not retried automatically; the bot keeps its previous ACL until the admin caller
-  retries, another ACL change succeeds, or `hololive-api` restarts.

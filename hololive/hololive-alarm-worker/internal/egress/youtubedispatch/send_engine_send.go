@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -67,7 +68,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 		group := &groups[i]
 
 		eg.Go(func() error {
-			return panicguard.RunE(d.logger, panicguard.BackgroundTask, "youtube-outbox-delivery-group", func() error {
+			return panicguard.RunE(d.logger, panicscope.BackgroundTask, "youtube-outbox-delivery-group", func() error {
 				d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, &result)
 
 				return nil

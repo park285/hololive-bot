@@ -39,7 +39,7 @@ generation 3 snapshot의 `query`는 helper의 `streams` 질의 범위·페이지
 
 영상 확인 대상은 LIVE를 먼저 확보하고 기존 1,000건 상한의 남은 자리에서 지난 UPCOMING과 예정 시각 없는 legacy_unknown을 선택합니다. 미래 UPCOMING은 전수 확인하지 않습니다. 최근 실제 영상 확인은 UNKNOWN이어도 재확인 빈도를 제한하며 positive clock을 만들지 않습니다. 신규 UPCOMING 검토 target의 우선순위는 기존 영상 확인보다 한 단계 낮고 최초 discovery도 기존 LIVE를 앞서지 않습니다. 요청·worker·retry 상한은 변경하지 않습니다.
 
-`lifecycle_origin`은 일정·Premiere·시작 미확정 메타데이터의 `metadata_only`, 실제 수명 사실의 `observed`, 증거 미확정 기존 행의 `legacy_unknown`입니다. 메타데이터 병합은 observed/legacy_unknown을 낮추지 않습니다. schema 2 영상 확인은 canonical 채널 identity·신뢰·무모순 시각·관측 순서를 확인한 명시적 종료에 한해 시작 미관측 UPCOMING을 정산합니다. 시작 clock과 과거 알림은 만들지 않습니다. UPCOMING positive에는 새 요청의 `scheduled_at`과 `waiting_state_confirmed`가 필요하며 과거 정본 일정은 대체 증거가 아닙니다.
+`lifecycle_origin`은 일정·Premiere·시작 미확정 메타데이터의 `metadata_only`, 실제 수명 사실의 `observed`, 증거 미확정 기존 행의 `legacy_unknown`입니다. 열 기본값은 없어(migration 349) writer는 출처를 반드시 명시하고, 빠뜨리면 NOT NULL 위반으로 실패합니다. 메타데이터 병합은 observed/legacy_unknown을 낮추지 않습니다. schema 2 영상 확인은 canonical 채널 identity·신뢰·무모순 시각·관측 순서를 확인한 명시적 종료에 한해 시작 미관측 UPCOMING을 정산합니다. 시작 clock과 과거 알림은 만들지 않습니다. UPCOMING positive에는 새 요청의 `scheduled_at`과 `waiting_state_confirmed`가 필요하며 과거 정본 일정은 대체 증거가 아닙니다.
 
 검토 영수증 `closed_unresolved`는 ENDED·전송 성공이 아닙니다. UNKNOWN 확인 이후 운영자가 정확한 현재 원본 digest CAS(`youtube_live_review_snapshot.snapshot_sha256`, 무시한 부재 slot 배열 포함 전체 원본)로 기록하는 append-only 결정이며 canonical/head/dispatch를 바꾸지 않습니다. 저장 snapshot은 head의 무시한 부재 slot 배열을 개수·SHA-256 요약으로 바꿔 256 KiB 상한 안에 둡니다(migration 262). 기록 뒤 면제 판정은 `youtube_live_review_current_receipt`가 소유합니다. 영수증 쪽 수명 사실은 기록 시 trigger가 `youtube_live_review_receipt_facts`에 한 번 고정 저장하고, 판정은 현재 원본의 수명 사실을 이 저장값과 비교하며, runtime은 이 표를 조회만 합니다(migration 279). 원본이 현재도 검토 가능하고, 영수증 digest가 같거나 기존·신규 형식 모두에서 뽑은 수명 사실이 같을 때만 적용됩니다. 수명 사실은 session 상태·일정·출처·제목·시작/종료, head 상태·positive·종료·부재 근거·종료 후보, pending end, 가용성 판정입니다. 관측·갱신 시각, thumbnail, 무시한 부재 slot, 가용성 재확인 시각·관측 ID·evidence hash만 바뀐 경우는 기존 면제를 유지하고, 수명 사실이 바뀌면 면제를 무효화합니다. 집계와 영상 확인 대상 선택은 같은 함수를 씁니다. 미래 일정의 `legacy_unknown` UPCOMING은 `legacy_unreviewed`와 `legacy_not_due`에 남고 `unresolved_unreviewed`에서는 빠집니다. head와 충돌하면 `state_mismatch`로 계속 셉니다. runtime은 영수증과 snapshot·판정 함수의 조회 권한만 가지며 기록 함수는 운영자가 READ COMMITTED 트랜잭션(psql 기본)에서 사용합니다.
 
@@ -146,7 +146,7 @@ player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체�
 - `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
 - `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the Compose/native CA path above
-- Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` for fleet member `c` and issuer `youtube-po-c`. Seoul uses `docker-compose.prod.yml` + `docker-compose.seoul.yml` for `youtube-collector-b` and issuer `youtube-po-b`; the AP overlay pins central services to `central-only`. Osaka `a` and Osaka2 `d` use native systemd units; their Compose overlays validate configuration/path contracts. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
+- Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` for fleet member `c` and issuer `youtube-po-c`. Seoul uses `docker-compose.prod.yml` + `docker-compose.seoul.yml` for `youtube-collector-b` and issuer `youtube-po-b`; the AP overlay pins central services to `central-only`. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
 
 ## Shutdown behavior
 

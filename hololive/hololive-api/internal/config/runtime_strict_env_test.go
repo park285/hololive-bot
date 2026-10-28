@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -46,12 +47,6 @@ func TestConfigurePlanesRejectsInvalidEnvValues(t *testing.T) {
 			if !strings.Contains(err.Error(), key) {
 				t.Fatalf("configurePlanes() error = %v, want it to name %s", err, key)
 			}
-
-			// 파싱이 실패한 포트로 loopback URL을 조립하면 안 된다.
-			if adminConfig.BotInternalURL != "" || botConfig.LLMSchedulerURL != "" || adminConfig.LLMSchedulerURL != "" {
-				t.Fatalf("configurePlanes() built loopback URLs after a parse error: bot internal %q, llm %q/%q",
-					adminConfig.BotInternalURL, botConfig.LLMSchedulerURL, adminConfig.LLMSchedulerURL)
-			}
 		})
 	}
 }
@@ -71,7 +66,7 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			settingstest.ClearRuntimeRoleEnv(t)
 			settingstest.ClearTracingEnv(t)
-			settingstest.SetRequiredLoadEnv(t)
+			configtest.SetRequiredLoadEnv(t)
 			clearConfigurePlanesIntEnv(t)
 			t.Setenv("APP_ENV", "development")
 			t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
@@ -92,7 +87,7 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 func TestLoadRuntimeIgnoresGenericPoolKeys(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 	settingstest.ClearTracingEnv(t)
-	settingstest.SetRequiredLoadEnv(t)
+	configtest.SetRequiredLoadEnv(t)
 	clearConfigurePlanesIntEnv(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")

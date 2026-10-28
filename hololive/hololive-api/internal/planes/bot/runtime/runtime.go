@@ -33,9 +33,11 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
@@ -46,8 +48,8 @@ type BotRuntime struct {
 
 	Bot *orchestration.Bot
 
-	// ACL은 봇 판정 인스턴스다. 같은 프로세스의 관리 plane 변경은 Follow로 받는다.
-	ACL *acl.Service
+	// IrisRooms는 bot plane이 소유한 Iris client의 방 목록 조회다. admin plane이 같은 프로세스에서 빌려 쓴다.
+	IrisRooms appbootstrap.IrisRoomLister
 
 	ServerAddr      string
 	H3Server        *http3.Server
@@ -82,13 +84,24 @@ type BotRuntime struct {
 	httpHandlersOnce   sync.Once
 }
 
-func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, shared *sharedmodules.InfraModule, logger *slog.Logger) (*BotRuntime, error) {
+// Dependencies는 process 조립(app.BuildRuntime)이 소유하고 bot plane이 빌려 쓰는 in-process 의존성이다.
+type Dependencies struct {
+	// ACL은 process 하나에 하나뿐인 ACL Service다(admin plane과 공유).
+	ACL *acl.Service
+	// Holodex는 process 하나의 Holodex·공식 일정 서비스다(admin plane과 공유). 종료는 process 조립이 소유한다.
+	Holodex *apifoundation.ScraperHolodexFoundation
+	// MajorEvent·MemberNews는 같은 프로세스 llm plane의 구독 저장소와 digest 서비스다.
+	MajorEvent handlercore.MajorEventRepository
+	MemberNews handlercore.MemberNewsService
+}
+
+func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, shared *sharedmodules.InfraModule, deps Dependencies, logger *slog.Logger) (*BotRuntime, error) {
 	ctx, logger, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
 
-	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, shared, logger)
+	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, shared, appbootstrap.PlaneDependencies{ACL: deps.ACL, Holodex: deps.Holodex, MajorEvent: deps.MajorEvent, MemberNews: deps.MemberNews}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init bot infrastructure: %w", err)
 	}
@@ -99,6 +112,7 @@ func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, shar
 	}
 
 	runtime.cleanup = infra.Cleanup
+	runtime.IrisRooms = infra.IrisRoomLister
 
 	return runtime, nil
 }

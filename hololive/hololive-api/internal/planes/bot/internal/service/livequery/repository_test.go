@@ -46,8 +46,8 @@ func addCoverage(t *testing.T, pool *pgxpool.Pool) {
 
 func addLive(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	execFixture(t, pool, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at,last_seen_at)
- VALUES('livequery01','UC_live_query','LIVE','Confirmed stream',now()-interval '1 hour',now()+interval '2 days');
+	execFixture(t, pool, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at,last_seen_at,lifecycle_origin)
+ VALUES('livequery01','UC_live_query','LIVE','Confirmed stream',now()-interval '1 hour',now()+interval '2 days','observed');
  INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at)
  VALUES('livequery01','LIVE',now()-interval '30 seconds',now()-interval '29 seconds');`)
 }
@@ -166,7 +166,7 @@ func TestRepositoryReadsCommittedStateAndCoverageTogether(t *testing.T) {
 		}
 	})
 
-	_, err = tx.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title) VALUES('atomicquery','UC_live_query','LIVE','Atomic stream');
+	_, err = tx.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,lifecycle_origin) VALUES('atomicquery','UC_live_query','LIVE','Atomic stream','observed');
 INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at) VALUES('atomicquery','LIVE',now(),now());
 UPDATE youtube_channel_live_checks SET effective_at=now(),received_at=now(),scheduled_for=now(),observed_at=now();`)
 	require.NoError(t, err)
@@ -219,8 +219,8 @@ func TestRepositoryScopeSharedChannelAndLimit(t *testing.T) {
  ('live-query-other','UC_other_query','Other Member','VSpo','manual');
  INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,created_at)
  SELECT projection_generation,'UC_other_query',observation_kind,priority,poll_interval_ms,enabled,created_at FROM youtube_collection_targets WHERE subject_key='UC_live_query';
- INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at) VALUES
- ('livequery02','UC_live_query','LIVE','Second stream',now()),('otherquery01','UC_other_query','LIVE','Other stream',now());
+ INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at,lifecycle_origin) VALUES
+ ('livequery02','UC_live_query','LIVE','Second stream',now(),'observed'),('otherquery01','UC_other_query','LIVE','Other stream',now(),'observed');
  INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at)
  SELECT video_id,'LIVE',now(),now() FROM youtube_live_sessions WHERE video_id IN ('livequery02','otherquery01');`)
 
@@ -292,8 +292,8 @@ func TestRepositoryDeadlineIncludesLockWait(t *testing.T) {
 func TestRepositoryDisplayLimitKeepsExtraItemEvidence(t *testing.T) {
 	repo, pool := queryFixture(t)
 	addCoverage(t, pool)
-	execFixture(t, pool, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at)
-SELECT 'limit-'||g,'UC_live_query','LIVE','Stream '||g,now() FROM generate_series(1,101) g;
+	execFixture(t, pool, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at,lifecycle_origin)
+SELECT 'limit-'||g,'UC_live_query','LIVE','Stream '||g,now(),'observed' FROM generate_series(1,101) g;
 INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at)
 SELECT video_id,'LIVE',now(),now() FROM youtube_live_sessions WHERE channel_id='UC_live_query';`)
 

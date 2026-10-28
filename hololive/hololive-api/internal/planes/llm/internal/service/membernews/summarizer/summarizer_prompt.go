@@ -8,7 +8,7 @@ import (
 	"time"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
 // JSON Schema 어휘 리터럴. 프로덕션 스키마 전용이며, golden 테스트는

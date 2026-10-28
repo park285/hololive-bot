@@ -22,31 +22,20 @@ package api
 
 import (
 	"context"
-	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/health"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
-	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
-
-var systemStatsStreamInterval = 5 * time.Second
-
-const systemStatsWriteTimeout = 10 * time.Second
-
-var errSystemStatsStreamStopped = errors.New("system stats stream stopped")
 
 type statsResponse struct {
 	Status  string `json:"status"`
@@ -61,7 +50,7 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members, alarmKeys int
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		memberErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-members", func() error {
+		memberErr = panicguard.RunE(h.safeLogger(), panicscope.BackgroundTask, "admin-stats-members", func() error {
 			var err error
 
 			members, err = h.repository.CountMembers(ctx)
@@ -73,7 +62,7 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members, alarmKeys int
 		})
 	})
 	wg.Go(func() {
-		alarmErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-alarms", func() error {
+		alarmErr = panicguard.RunE(h.safeLogger(), panicscope.BackgroundTask, "admin-stats-alarms", func() error {
 			var err error
 
 			alarmKeys, err = h.alarm.CountAlarmEntries(ctx)
@@ -133,85 +122,4 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 		Version: health.GetVersion(),
 		Uptime:  health.GetUptime(),
 	})
-}
-
-// 5초마다 CPU/메모리 통계를 전송합니다.
-func (h *StatsHandler) StreamSystemStats(c *gin.Context) {
-	if h == nil || h.systemStats == nil {
-		sharedserver.RespondError(c, http.StatusBadRequest, "System stats collector not available", nil)
-
-		return
-	}
-
-	conn, err := adminhandlers.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		h.safeLogger().Warn("failed to upgrade websocket", slog.Any("error", err))
-		sharedserver.RespondError(c, http.StatusBadRequest, "failed to upgrade websocket connection", nil)
-
-		return
-	}
-
-	defer func() {
-		if closeErr := conn.Close(); closeErr != nil {
-			h.safeLogger().Warn("failed to close websocket connection", slog.Any("error", closeErr))
-		}
-	}()
-
-	ctx := c.Request.Context()
-	h.streamSystemStats(ctx, conn)
-}
-
-func (h *StatsHandler) streamSystemStats(ctx context.Context, conn *websocket.Conn) {
-	if !h.writeInitialSystemStats(ctx, conn) {
-		return
-	}
-
-	if err := lifecycle.RunTickerLoop(ctx, systemStatsStreamInterval, func(ctx context.Context) error {
-		if !h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats") {
-			return errSystemStatsStreamStopped
-		}
-
-		return nil
-	}); err != nil && !errors.Is(err, errSystemStatsStreamStopped) {
-		h.safeLogger().Warn("system stats stream stopped", slog.Any("error", err))
-	}
-}
-
-func (h *StatsHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {
-	return h.writeSystemStats(ctx, conn, "failed to collect initial system stats", "failed to write initial system stats")
-}
-
-func (h *StatsHandler) writeSystemStats(
-	ctx context.Context,
-	conn *websocket.Conn,
-	collectMessage string,
-	writeMessage string,
-) bool {
-	stats, err := h.systemStats.GetCurrentStats(ctx)
-	if err != nil {
-		h.safeLogger().Error(collectMessage, slog.Any("error", err))
-
-		return false
-	}
-
-	if setErr := conn.SetWriteDeadline(time.Now().Add(systemStatsWriteTimeout)); setErr != nil {
-		h.safeLogger().Warn(writeMessage, slog.Any("error", setErr))
-
-		return false
-	}
-
-	payload, err := jsonv2.Marshal(stats)
-	if err != nil {
-		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
-
-		return false
-	}
-
-	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
-
-		return false
-	}
-
-	return true
 }

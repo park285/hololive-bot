@@ -37,7 +37,11 @@ func buildXSpacesRunner(infra *sharedmodules.InfraModule, foundation *alarmFound
 		return optionalRuntimeSchedulerResult{err: errors.New("x spaces config requires X_SPACES_KEY_FILE")}
 	}
 
-	pub := queue.NewPublisher(infra.Cache, logger, queue.WithOutbox(foundation.Outbox), queue.WithPublishConfig(publishConfig))
+	pub, err := queue.NewPublisher(infra.Cache, foundation.Outbox, publishConfig, logger)
+	if err != nil {
+		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build X spaces publisher: %w", err)}
+	}
+
 	resolver := alarmstore.NewSubscriberResolver(infra.Cache, infra.Postgres.GetPool())
 
 	runner, err := xspacesworker.NewRunner(*config, store, xspacesworker.StartStore{Pool: infra.Postgres.GetPool()},

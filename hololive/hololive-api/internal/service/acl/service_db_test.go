@@ -109,7 +109,7 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 	// 기존 DB에 데이터가 있으면 기본값 대신 DB 값을 사용해야 한다
 	mustCreateACLSetting(t, pool, dbKeyEnabled, testDBEnabledFalse)
 	mustCreateACLSetting(t, pool, dbKeyMode, "blacklist")
-	mustCreateACLRoom(t, pool, "existing-room", listTypeBlacklist)
+	mustCreateACLRoom(t, pool, "-9001", listTypeBlacklist)
 
 	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
@@ -134,7 +134,7 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 		t.Fatalf("expected mode=blacklist from DB, got %s", mode)
 	}
 
-	if len(rooms) != 1 || rooms[0] != "existing-room" {
+	if len(rooms) != 1 || rooms[0] != "-9001" {
 		t.Fatalf("expected only existing room from DB, got %v", rooms)
 	}
 }
@@ -175,6 +175,19 @@ func TestACLService_SetEnabledAddRemoveRoom(t *testing.T) {
 	assertACLSetEnabled(t, service, pool, true)
 	assertACLAddRoomLifecycle(t, service)
 	assertACLRoomRemovedFromDB(t, pool, testRoomX)
+}
+
+// INSERT는 커밋됐지만 응답을 잃은 AddRoom을 재시도하면 메모리에는 방이 없고 PG에는 행이 있다.
+// 재시도는 23505 오류를 반복하지 않고 changed:false로 수렴해 메모리도 PG 상태에 맞춰야 한다.
+func TestACLService_AddRoomRetryAfterCommittedInsertConverges(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	service := newACLServiceFromPool(t, pool, true, nil)
+
+	mustCreateACLRoom(t, pool, testRoomX, listTypeWhitelist)
+
+	assertAddRoomResult(t, service, testRoomX, false)
+	assertACLRoomCount(t, pool, testRoomX, listTypeWhitelist, 1)
+	assertACLStatus(t, service, true, ACLModeWhitelist, 1, []string{testRoomX})
 }
 
 func newACLServiceFromPool(
@@ -237,16 +250,14 @@ func assertACLAddRoomLifecycle(t *testing.T, service *Service) {
 
 	assertAddRoomResult(t, service, " 1099 ", true)
 	assertAddRoomResult(t, service, testRoomX, false)
-	assertAddRoomResult(t, service, "   ", false)
 	assertRemoveRoomResult(t, service, " 1099 ", true)
 	assertRemoveRoomResult(t, service, testRoomX, false)
-	assertRemoveRoomResult(t, service, "   ", false)
 }
 
 func assertAddRoomResult(t *testing.T, service *Service, room string, wantAdded bool) {
 	t.Helper()
 
-	added, err := service.AddRoom(t.Context(), room)
+	added, err := service.AddRoom(t.Context(), currentACLMode(service), room)
 	if err != nil {
 		t.Fatalf("AddRoom(%q) error: %v", room, err)
 	}
@@ -259,7 +270,7 @@ func assertAddRoomResult(t *testing.T, service *Service, room string, wantAdded 
 func assertRemoveRoomResult(t *testing.T, service *Service, room string, wantRemoved bool) {
 	t.Helper()
 
-	removed, err := service.RemoveRoom(t.Context(), room)
+	removed, err := service.RemoveRoom(t.Context(), currentACLMode(service), room)
 	if err != nil {
 		t.Fatalf("RemoveRoom(%q) error: %v", room, err)
 	}
@@ -353,14 +364,14 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	service := newACLServiceFromPool(t, pool, true, nil)
 
 	// 화이트리스트 모드에서 방 추가
-	if added, addErr := service.AddRoom(t.Context(), "2003"); addErr != nil || !added {
+	if added, addErr := service.AddRoom(t.Context(), currentACLMode(service), "2003"); addErr != nil || !added {
 		t.Fatalf("AddRoom whitelist: added=%v err=%v", added, addErr)
 	}
 
 	// 블랙리스트 모드로 전환 후 같은 이름의 방 추가 (다른 list_type이므로 가능)
 	assertACLSetMode(t, service, ACLModeBlacklist)
 
-	if added, addErr := service.AddRoom(t.Context(), "2003"); addErr != nil || !added {
+	if added, addErr := service.AddRoom(t.Context(), currentACLMode(service), "2003"); addErr != nil || !added {
 		t.Fatalf("AddRoom blacklist: added=%v err=%v", added, addErr)
 	}
 
@@ -376,7 +387,7 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	}
 
 	// 블랙리스트에서 제거해도 화이트리스트는 유지
-	if removed, removeErr := service.RemoveRoom(t.Context(), "2003"); removeErr != nil || !removed {
+	if removed, removeErr := service.RemoveRoom(t.Context(), currentACLMode(service), "2003"); removeErr != nil || !removed {
 		t.Fatalf("RemoveRoom blacklist: removed=%v err=%v", removed, removeErr)
 	}
 

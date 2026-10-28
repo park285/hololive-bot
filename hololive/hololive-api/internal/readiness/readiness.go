@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/health"
 
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
 func Pick(probes ...*sharedreadiness.Probe) *sharedreadiness.Probe {

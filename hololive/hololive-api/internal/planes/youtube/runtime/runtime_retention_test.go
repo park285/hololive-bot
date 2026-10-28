@@ -14,16 +14,11 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
-	var (
-		retentionTicks atomic.Int64
-		replayTicks    atomic.Int64
-	)
+func TestShutdownJoinsRetentionWorker(t *testing.T) {
+	var retentionTicks atomic.Int64
 
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime.Config.Retention.Enabled = true
-	runtime.Config.Replay.Enabled = true
 	runtime.retainer = fakeRetainer{
 		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
 			retentionTicks.Add(1)
@@ -31,38 +26,13 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 			return sourceobservation.RetentionResult{}, nil
 		},
 	}
-	runtime.replayer = fakeReplayer{
-		next: func(context.Context) (bool, error) {
-			replayTicks.Add(1)
-
-			return false, nil
-		},
-	}
-
 	runtime.Start(t.Context(), make(chan error, 1))
 
-	if runtime.loopCount != 6 {
-		t.Fatalf("loopCount = %d, want 6", runtime.loopCount)
+	if runtime.loopCount != 5 {
+		t.Fatalf("loopCount = %d, want 5 with claim/projection/live-end/metrics/retention", runtime.loopCount)
 	}
 
 	waitForTicks(t, &retentionTicks)
-	waitForTicks(t, &replayTicks)
-
-	if err := runtime.Shutdown(t.Context()); err != nil {
-		t.Fatalf("shutdown: %v", err)
-	}
-}
-
-func TestRetentionAndReplayLoopsStayStoppedWhenDisabled(t *testing.T) {
-	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
-
-	runtime.Config.Retention.Enabled = false
-	runtime.Config.Replay.Enabled = false
-	runtime.Start(t.Context(), make(chan error, 1))
-
-	if runtime.loopCount != 4 {
-		t.Fatalf("loopCount = %d, want 4 with claim/projection/live-end/metrics", runtime.loopCount)
-	}
 
 	if err := runtime.Shutdown(t.Context()); err != nil {
 		t.Fatalf("shutdown: %v", err)
@@ -74,7 +44,6 @@ func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime.Config.Retention.Enabled = true
 	runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour
 	runtime.projectionRetainer = fakeProjectionRetainer{
 		retain: func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error) {
@@ -216,23 +185,6 @@ func (f fakeProjectionRetainer) Retain(
 	out, err := f.retain(ctx, now, age, batchSize)
 	if err != nil {
 		return out, fmt.Errorf("retain: %w", err)
-	}
-
-	return out, nil
-}
-
-type fakeReplayer struct {
-	next func(context.Context) (bool, error)
-}
-
-func (f fakeReplayer) ProcessNextReplay(ctx context.Context) (bool, error) {
-	if f.next == nil {
-		return false, nil
-	}
-
-	out, err := f.next(ctx)
-	if err != nil {
-		return out, fmt.Errorf("next: %w", err)
 	}
 
 	return out, nil

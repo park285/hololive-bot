@@ -27,31 +27,27 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
+// StartHooks는 runtime 공통 시작 단계(HTTP 시작)만 담는다. 백그라운드 작업의 시작·취소·대기는 각 runtime이
+// 직접 소유한다.
 type StartHooks struct {
-	Logger                  *slog.Logger
-	ServerAddr              string
-	StartAlarmScheduler     func(ctx context.Context) error
-	StartHTTPServer         func(errCh chan<- error)
-	SetAlarmSchedulerCancel func(cancel context.CancelFunc)
+	Logger          *slog.Logger
+	ServerAddr      string
+	StartHTTPServer func(errCh chan<- error)
 }
 
-// ShutdownHooks는 runtime 공통 종료 단계(scheduler 취소 신호, HTTP 종료)만 담는다. 고유 종료 단계는
+// ShutdownHooks는 runtime 공통 종료 단계(HTTP 종료)만 담는다. 고유 종료 단계는
 // 각 runtime이 Shutdown 반환 뒤 이어서 실행하고 오류를 직접 합친다.
 type ShutdownHooks struct {
-	Logger              *slog.Logger
-	ClearAlarmScheduler func() bool
-	ShutdownHTTPServer  func(ctx context.Context) error
+	Logger             *slog.Logger
+	ShutdownHTTPServer func(ctx context.Context) error
 }
 
-func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
-	startAlarmScheduler(ctx, errCh, hooks)
-
+func Start(_ context.Context, errCh chan<- error, hooks StartHooks) {
 	if hooks.StartHTTPServer != nil {
 		hooks.StartHTTPServer(errCh)
 	}
@@ -131,15 +127,7 @@ func logSignal(logger *slog.Logger, sig os.Signal) {
 }
 
 func Shutdown(ctx context.Context, hooks ShutdownHooks) error {
-	shutdownAlarmScheduler(hooks)
-
 	return shutdownHTTPServer(ctx, hooks)
-}
-
-func shutdownAlarmScheduler(hooks ShutdownHooks) {
-	if hooks.ClearAlarmScheduler != nil && hooks.ClearAlarmScheduler() {
-		logInfo(hooks.Logger, "Alarm runtime scheduler cancellation signaled")
-	}
 }
 
 func shutdownHTTPServer(ctx context.Context, hooks ShutdownHooks) error {
@@ -152,92 +140,6 @@ func shutdownHTTPServer(ctx context.Context, hooks ShutdownHooks) error {
 	}
 
 	return nil
-}
-
-func startAlarmScheduler(ctx context.Context, errCh chan<- error, hooks StartHooks) {
-	if hooks.StartAlarmScheduler == nil {
-		logInfo(hooks.Logger, "Alarm runtime scheduler not configured")
-
-		return
-	}
-
-	alarmCtx := alarmSchedulerContext(ctx, hooks)
-
-	go func() {
-		if err := panicguard.RunE(hooks.Logger, panicguard.BackgroundTask, "alarm-scheduler", func() error {
-			return hooks.StartAlarmScheduler(alarmCtx)
-		}); err != nil {
-			handleAlarmSchedulerError(alarmCtx, err, errCh, hooks.Logger)
-		}
-	}()
-
-	logInfo(hooks.Logger, "Alarm runtime scheduler started")
-}
-
-func alarmSchedulerContext(ctx context.Context, hooks StartHooks) context.Context {
-	if hooks.SetAlarmSchedulerCancel == nil {
-		return ctx
-	}
-
-	alarmCtx, alarmCancel := context.WithCancel(ctx)
-	hooks.SetAlarmSchedulerCancel(alarmCancel)
-
-	return alarmCtx
-}
-
-func handleAlarmSchedulerError(ctx context.Context, err error, errCh chan<- error, logger *slog.Logger) {
-	if ctx.Err() != nil && isContextTerminationTree(err) {
-		logInfo(logger, "Alarm runtime scheduler stopped")
-
-		return
-	}
-
-	wrapped := fmt.Errorf("alarm runtime scheduler error: %w", err)
-
-	if errCh != nil {
-		select {
-		case errCh <- wrapped:
-		case <-ctx.Done():
-			logError(logger, "Alarm runtime scheduler error during shutdown", wrapped)
-		}
-
-		return
-	}
-
-	logError(logger, "Alarm runtime scheduler error", wrapped)
-}
-
-func isContextTerminationTree(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		foundLeaf := false
-
-		for _, child := range joined.Unwrap() {
-			if child == nil {
-				continue
-			}
-
-			foundLeaf = true
-
-			if !isContextTerminationTree(child) {
-				return false
-			}
-		}
-
-		if foundLeaf {
-			return true
-		}
-	}
-
-	if unwrapped := errors.Unwrap(err); unwrapped != nil {
-		return isContextTerminationTree(unwrapped)
-	}
-
-	// 중간 원인의 취소 sentinel만으로 scheduler의 실제 말단 오류를 무시하지 않습니다.
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func logInfo(logger *slog.Logger, msg string, attrs ...any) {

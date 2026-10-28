@@ -26,10 +26,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -80,17 +80,17 @@ func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *botcommand.Comm
 	return nil
 }
 
-func memberNewsPeriod(params map[string]any) membernewscontracts.Period {
+func memberNewsPeriod(params map[string]any) membernewsmodel.Period {
 	rawPeriod, ok := params["period"].(string)
 	if !ok {
-		return membernewscontracts.PeriodWeekly
+		return membernewsmodel.PeriodWeekly
 	}
 
-	return membernewscontracts.NormalizePeriod(membernewscontracts.Period(rawPeriod))
+	return membernewsmodel.NormalizePeriod(membernewsmodel.Period(rawPeriod))
 }
 
 func (c *MemberNewsCommand) replyMemberNewsFailure(ctx context.Context, room string, digestErr error) error {
-	if stdErrors.Is(digestErr, membernewscontracts.ErrNoSubscribedMembers) {
+	if stdErrors.Is(digestErr, membernewsmodel.ErrNoSubscribedMembers) {
 		if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.FormatMemberNewsNoMembers(ctx)); err != nil {
 			return fmt.Errorf("send message: %w", err)
 		}

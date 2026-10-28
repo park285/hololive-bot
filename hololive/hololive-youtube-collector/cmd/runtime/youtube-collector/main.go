@@ -17,6 +17,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/observability"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
 )
@@ -52,7 +53,7 @@ func main() {
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}, youtubeCollectorLogFileName(), sharedlogging.Options{OTel: appConfig.Tracing.Enabled, AsyncStdout: true})
+			}, youtubeCollectorLogFileName(), sharedlogging.Options{OTel: appConfig.Tracing.Enabled, AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 			if err != nil {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}

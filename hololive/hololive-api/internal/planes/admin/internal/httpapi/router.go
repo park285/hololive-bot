@@ -25,10 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"strings"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -45,11 +43,10 @@ func ProvideAPIRouter(
 	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
-	authHandler *server.AuthHandler,
 	cacheClient cache.LowLevelCache,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*gin.Engine, error) {
-	if err := validateAPIRouterInputs(appConfig, domainHandlers, authHandler); err != nil {
+	if err := validateAPIRouterInputs(appConfig, domainHandlers); err != nil {
 		return nil, fmt.Errorf("validate API router inputs: %w", err)
 	}
 
@@ -62,12 +59,7 @@ func ProvideAPIRouter(
 		return nil, fmt.Errorf("API router: %w", err)
 	}
 
-	adminAllowedIPs, err := buildAdminAllowedIPs(appConfig)
-	if err != nil {
-		return nil, fmt.Errorf("build admin allowed i ps: %w", err)
-	}
-
-	if err := registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler, adminAllowedIPs); err != nil {
+	if err := registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers); err != nil {
 		return nil, fmt.Errorf("register API routes: %w", err)
 	}
 
@@ -76,23 +68,9 @@ func ProvideAPIRouter(
 	return router, nil
 }
 
-func buildAdminAllowedIPs(appConfig *apiconfig.AdminPlaneConfig) ([]*net.IPNet, error) {
-	adminAllowedIPs, err := middleware.NewIPAllowList(appConfig.Server.AdminAllowedIPs)
-	if err != nil {
-		return nil, fmt.Errorf("parse admin allowed IPs: %w", err)
-	}
-
-	if strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production") && len(adminAllowedIPs) == 0 {
-		return nil, errors.New("ADMIN_ALLOWED_IPS must be configured in production")
-	}
-
-	return adminAllowedIPs, nil
-}
-
 func validateAPIRouterInputs(
 	appConfig *apiconfig.AdminPlaneConfig,
 	domainHandlers *server.DomainHandlers,
-	authHandler *server.AuthHandler,
 ) error {
 	if appConfig == nil {
 		return errors.New("config must not be nil")
@@ -110,10 +88,6 @@ func validateAPIRouterInputs(
 		return fmt.Errorf("validate domain handlers: %w", err)
 	}
 
-	if authHandler == nil {
-		return errors.New("auth handler must not be nil")
-	}
-
 	return nil
 }
 
@@ -128,9 +102,6 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 		{h.Stream == nil, "stream handler must not be nil"},
 		{h.Stats == nil, "stats handler must not be nil"},
 		{h.Settings == nil, "settings handler must not be nil"},
-		{h.Template == nil, "template handler must not be nil"},
-		{h.MajorEvent == nil, "major event handler must not be nil"},
-		{h.OAuth == nil, "oauth handler must not be nil"},
 	}
 	for _, required := range requiredHandlers {
 		if required.missing {
@@ -150,22 +121,16 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		logger = slog.Default()
 	}
 
-	isProduction := strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production")
-	if err := validateAPICORSConfig(appConfig, isProduction); err != nil {
-		return nil, fmt.Errorf("validate APICORS config: %w", err)
-	}
-
 	routerOptions := &sharedserver.RuntimeRouterOptions{
 		APIKey:       appConfig.Server.APIKey,
 		EnableGzip:   true,
 		SkipLogPaths: []string{"/metrics"},
 		// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 신뢰 가능한 클라이언트 IP는
-		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 ip_allowlist를
+		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 IP 기준 rate limit을
 		// 우회하지 못하도록 RemoteAddr만 신뢰한다.
 		TrustRemoteAddrOnly: true,
+		// admin API는 Iris Console gateway가 서버 대 서버로 API key를 붙여 호출하므로 브라우저 CORS 표면이 없다.
 		PreRouteUse: []gin.HandlerFunc{
-			corsOriginGuard(appConfig.CORS.AllowedOrigins, appConfig.CORS.Enforce, logger),
-			cors.New(newAPICORSConfig(appConfig, appConfig.CORS.Enforce)),
 			middleware.ClientHintsMiddleware(),
 		},
 	}
@@ -179,30 +144,7 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		return nil, fmt.Errorf("runtime router: %w", err)
 	}
 
-	warnMissingProductionCORS(logger, appConfig, isProduction)
-
 	router.NoRoute(middleware.NoRouteAuthHandler(appConfig.Server.APIKey))
 
 	return router, nil
-}
-
-func validateAPICORSConfig(appConfig *apiconfig.AdminPlaneConfig, isProduction bool) error {
-	origins := normalizedOrigins(appConfig.CORS.AllowedOrigins)
-	if isProduction && appConfig.CORS.Enforce && (len(origins) == 0 || containsWildcard(origins)) {
-		return errors.New("explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true")
-	}
-
-	return nil
-}
-
-func warnMissingProductionCORS(logger *slog.Logger, appConfig *apiconfig.AdminPlaneConfig, isProduction bool) {
-	if !isProduction || !appConfig.CORS.MissingInProduction {
-		return
-	}
-
-	logger.Warn(
-		"cors_allowed_origins_missing_in_production_monitor_mode",
-		slog.Bool("cors_enforce", appConfig.CORS.Enforce),
-		slog.String("next_step", "set CORS_ALLOWED_ORIGINS and enable CORS_ENFORCE"),
-	)
 }

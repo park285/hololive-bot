@@ -19,7 +19,6 @@ PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니
 - 표준 진입점: `./scripts/architecture/ci-boundary-gate.sh`
 - 세부 체크:
   - `check-shared-go-boundary.sh`
-  - `check-internal-route-hardcoding.sh`
 
 ## 3. deploy/
 Docker Compose 운영 재배포 스크립트입니다.
@@ -44,9 +43,9 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh prune`
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
-- `./scripts/logs/ap-status.sh <host>` (osaka, seoul)
+- `./scripts/logs/ap-status.sh <host>` (seoul, osaka, osaka2)
 - `./scripts/logs/ap-logs.sh <host> [youtube-collector|all]`
-- `./scripts/logs/ap-smoke.sh <host>`
+- `./scripts/logs/ap-smoke.sh seoul` (Compose AP 전용, native 호스트는 `./scripts/deploy/ap-completion-check.sh <host>`)
 
 ## 5. review/
 리뷰 전달용 source/full bundle export와 사후 검증 스크립트입니다.

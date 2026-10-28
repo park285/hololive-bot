@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { emptyCommunityPage } from "./fetch-community.mjs";
 import { createHelperRuntime, RuntimeState } from "./helper-runtime.mjs";
-import { createRealFetchers, stubFetchers } from "./real-fetchers.mjs";
+import { createRealFetchers } from "./real-fetchers.mjs";
 import {
   handleChannelLiveCheckRequest,
   handleChannelRequest,
@@ -45,7 +45,7 @@ class RequestTimeoutError extends Error {}
 
 /**
  * @param {string} socketPath
- * @param {{ stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
+ * @param {{ requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
  * @returns {Promise<import("node:http").Server>}
  */
 export async function listenUnix(socketPath, options = {}) {
@@ -55,12 +55,9 @@ export async function listenUnix(socketPath, options = {}) {
   process.umask(0o077);
   const opts = normalizeListenOptions(options);
   const runtime = createHelperRuntime({
-    createFetchers: (fetchImpl, singleAttemptFetchImpl) => {
-      if (opts.stub) {
-        return stubFetchers;
-      }
-      return { ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }), ...opts.fetchers };
-    },
+    createFetchers: (fetchImpl, singleAttemptFetchImpl) => (
+      { ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }), ...opts.fetchers }
+    ),
   });
   const server = attachHelperServer(runtime, opts.requestReadTimeoutMs);
   applyServerLimits(server, opts.requestReadTimeoutMs, 0);
@@ -369,12 +366,11 @@ function disarmPipeUnlink(server) {
 }
 
 /**
- * @param {{ stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
+ * @param {{ requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
  */
 function normalizeListenOptions(options) {
   const record = options && typeof options === "object" ? options : {};
   return {
-    stub: Boolean("stub" in record && record.stub),
     requestReadTimeoutMs: "requestReadTimeoutMs" in record && typeof record.requestReadTimeoutMs === "number"
       ? record.requestReadTimeoutMs
       : 30_000,
@@ -387,7 +383,6 @@ function normalizeListenOptions(options) {
 function parseArgs(argv) {
   const args = {
     socket: "",
-    stub: false,
     protocolVersion: 1,
     requestReadTimeoutMs: 30_000,
   };
@@ -408,9 +403,6 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === "--stub") {
-      args.stub = true;
-    }
   }
   return args;
 }
@@ -424,7 +416,6 @@ if (isMain) {
   }
   process.umask(0o077);
   await listenUnix(args.socket, {
-    stub: args.stub,
     requestReadTimeoutMs: args.requestReadTimeoutMs,
     manageProcess: true,
   });

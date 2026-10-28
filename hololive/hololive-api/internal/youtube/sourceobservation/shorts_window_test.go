@@ -73,12 +73,6 @@ func TestShortsWindowClaimsCannotOvertakePendingOrProcessingBaseline(t *testing.
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT earliest_complete_effective_at FROM youtube_content_channel_heads WHERE channel_id = $1 AND observation_kind = 'shorts_list'`, testChannelID).Scan(&completeAt))
 	require.Nil(t, completeAt)
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{ObservationID: first, RequestedBy: testReplayOperator, Reason: "baseline must stay silent"})
-	require.NoError(t, err)
-	require.True(t, replay.Applied)
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertShortWindowOutboxes(t, pool, "new")
 }
 
 func TestShortsWindowBaselineWithExistingVideoKind(t *testing.T) {
@@ -133,7 +127,7 @@ func TestShortsWindowExistingPartialCatalogDoesNotBackfill(t *testing.T) {
 	repo := NewRepository(pool)
 	consumer := NewConsumerWithGraces(repo, 0, 0)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
-	first := publishShortWindow(t, repo, &proof, "old-1", "old-2", "new")
+	publishShortWindow(t, repo, &proof, "old-1", "old-2", "new")
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
 	assertShortWindowOutboxes(t, pool, "new")
 	assertTableCount(t, pool, "youtube_videos", 50)
@@ -142,11 +136,6 @@ func TestShortsWindowExistingPartialCatalogDoesNotBackfill(t *testing.T) {
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 	publishShortWindow(t, repo, &proof, "new", "old-49", "old-1")
 	require.NoError(t, NewConsumerWithGraces(repo, 0, 0).Consume(ctx, contentClaimOptions()))
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{ObservationID: first, RequestedBy: testReplayOperator, Reason: "existing catalog must not backfill"})
-	require.NoError(t, err)
-	require.True(t, replay.Applied)
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
 	assertShortWindowOutboxes(t, pool, "new")
 }
 

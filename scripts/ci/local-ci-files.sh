@@ -55,7 +55,6 @@ workspace_metadata_files() {
     {
         git ls-files --cached --others --exclude-standard \
             go.work go.work.sum \
-            'go.mod' 'go.sum' \
             '*/go.mod' '*/go.sum'
 
         local module

@@ -40,23 +40,6 @@ func TestCommunityWindowBaselinePreventsPinnedPostReorderBurst(t *testing.T) {
 	assertCommunityWindowOutboxIDs(ctx, t, pool, "community:new-a", "community:new-b")
 }
 
-func bootstrapCommunityWindow(
-	ctx context.Context,
-	t *testing.T,
-	pool *pgxpool.Pool,
-	publisher *publishkit.Publisher,
-	consumer *Consumer,
-	proof contract.LeaseProof,
-) contract.LeaseProof {
-	t.Helper()
-
-	publishCommunityWindow(ctx, t, publisher, &proof, "baseline-post")
-	consumeCommunityWindow(ctx, t, consumer)
-	assertCommunityWindowOutboxIDs(ctx, t, pool)
-
-	return advanceLease(ctx, t, pool, &proof, time.Minute)
-}
-
 func publishCommunityWindow(
 	ctx context.Context,
 	t *testing.T,

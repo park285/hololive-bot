@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -50,7 +50,6 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 	})
 	positive := map[string]int64{
 		"bot_webhook_inbox.max_body_bytes":             profile.BotWebhookInbox.MaxBodyBytes,
-		"bot_webhook_inbox.dedup_ttl_ms":               profile.BotWebhookInbox.DedupTTLMS,
 		"bot_webhook_inbox.dedup_timeout_ms":           profile.BotWebhookInbox.DedupTimeoutMS,
 		"bot_webhook_inbox.poll_interval_ms":           profile.BotWebhookInbox.PollIntervalMS,
 		"bot_webhook_inbox.claim_lease_ms":             profile.BotWebhookInbox.ClaimLeaseMS,
@@ -100,7 +99,7 @@ func apiWorkerRelationshipProblems(profile *APIWorkerProfile, workers map[string
 		problems = append(problems, "bot_webhook_inbox heartbeat must fit command stale window")
 	}
 
-	if profile.BotWebhookInbox.TerminalRetentionMS <= irisdurable.IrisReplyAdmissionRetention.Milliseconds() {
+	if profile.BotWebhookInbox.TerminalRetentionMS <= iris.ReplyAdmissionRetention.Milliseconds() {
 		problems = append(problems, "bot_webhook_inbox terminal retention must exceed Iris reply admission retention")
 	}
 

@@ -42,7 +42,7 @@ run_step() {
 check_go_mod_tidy() {
     local module
 
-    for module in . "${GO_OWNED_MODULES[@]}"; do
+    for module in "${GO_OWNED_MODULES[@]}"; do
         run_step "go mod tidy -diff: ${module}" bash -c "cd '$module' && GOWORK=off go mod tidy -diff"
     done
 }
@@ -54,7 +54,7 @@ go_mod_readonly() {
 check_canonical_module_builds() {
     local module
 
-    for module in . "${GO_OWNED_MODULES[@]}"; do
+    for module in "${GO_OWNED_MODULES[@]}"; do
         run_step "Canonical vet (GOWORK=off): ${module}" \
             bash -c "cd '${module}' && GOWORK=off go vet ./..."
     done

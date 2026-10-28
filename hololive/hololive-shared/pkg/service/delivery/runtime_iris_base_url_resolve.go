@@ -4,21 +4,48 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+// runtimeIrisBaseURLResolver는 생성 시 받은 설정만으로 Base URL을 해석한다. 해석 중 env를 다시
+// 읽지 않으므로 기동 때 검증한 정책과 실제로 쓰는 정책이 갈라지지 않는다. URL 파일 내용만 동적으로 다시 읽는다.
 type runtimeIrisBaseURLResolver struct {
-	fallbackBaseURL string
-	baseURLFilePath string
-	transport       string
-	logger          *slog.Logger
-	warnOnce        sync.Once
+	fallbackBaseURL  string
+	baseURLFilePath  string
+	allowedHosts     map[string]struct{}
+	validateFileStat bool
+}
+
+func newRuntimeIrisBaseURLResolver(config settings.IrisConfig) (*runtimeIrisBaseURLResolver, error) {
+	resolver := &runtimeIrisBaseURLResolver{
+		fallbackBaseURL:  strings.TrimSpace(config.BaseURL),
+		baseURLFilePath:  strings.TrimSpace(config.BaseURLFile),
+		allowedHosts:     make(map[string]struct{}),
+		validateFileStat: config.ValidateBaseURLFileStat,
+	}
+
+	if resolver.fallbackBaseURL == "" && resolver.baseURLFilePath == "" {
+		return nil, errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
+	}
+
+	for _, rawHost := range append([]string{config.H3ServerName}, config.BaseURLAllowedHosts...) {
+		if host := normalizeRuntimeIrisHost(rawHost); host != "" {
+			resolver.allowedHosts[host] = struct{}{}
+		}
+	}
+
+	// 허용 집합이 비면 URL 파일의 모든 host를 거절하게 되므로 설정 오류로 먼저 드러낸다(fail-closed).
+	if resolver.baseURLFilePath != "" && len(resolver.allowedHosts) == 0 {
+		return nil, fmt.Errorf("IRIS_BASE_URL_FILE requires %s or %s", irisH3ServerNameEnv, irisBaseURLAllowedHostsEnv)
+	}
+
+	return resolver, nil
 }
 
 func (r *runtimeIrisBaseURLResolver) resolve() (string, error) {
@@ -31,23 +58,21 @@ func (r *runtimeIrisBaseURLResolver) resolve() (string, error) {
 		return out, nil
 	}
 
-	out, err := validateHTTPBaseURL(r.fallbackBaseURL, r.transport)
+	parsed, err := iris.ParseBaseEndpoint(r.fallbackBaseURL)
 	if err != nil {
-		return out, fmt.Errorf("validate HTTP base URL: %w", err)
+		return "", fmt.Errorf("parse canonical Iris base endpoint: %w", err)
 	}
 
-	return out, nil
+	return parsed.String(), nil
 }
 
 func (r *runtimeIrisBaseURLResolver) resolveFromFile() (string, error) {
-	validateStat := shouldValidateRuntimeIrisBaseURLFileStat()
-
-	baseURLFilePath, err := normalizeRuntimeIrisBaseURLFilePath(r.baseURLFilePath, validateStat)
+	baseURLFilePath, err := normalizeRuntimeIrisBaseURLFilePath(r.baseURLFilePath, r.validateFileStat)
 	if err != nil {
 		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE path: %w", err)
 	}
 
-	if validateStat {
+	if r.validateFileStat {
 		if validateErr := validateRuntimeIrisBaseURLFileStat(baseURLFilePath); validateErr != nil {
 			return "", fmt.Errorf("validate IRIS_BASE_URL_FILE: %w", validateErr)
 		}
@@ -58,7 +83,7 @@ func (r *runtimeIrisBaseURLResolver) resolveFromFile() (string, error) {
 		return "", fmt.Errorf("read IRIS_BASE_URL_FILE: %w", err)
 	}
 
-	baseURL, err := validateRuntimeIrisBaseURLFileOverride(string(raw), r.transport, r.warnBaseURLHostUnvalidated)
+	baseURL, err := validateRuntimeIrisBaseURLFileOverride(string(raw), r.allowedHosts)
 	if err != nil {
 		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE URL: %w", err)
 	}
@@ -78,39 +103,4 @@ func readRuntimeIrisBaseURLFile(path string) ([]byte, error) {
 	}
 
 	return out, nil
-}
-
-func (r *runtimeIrisBaseURLResolver) warnBaseURLHostUnvalidated(host string) {
-	if r.logger == nil {
-		return
-	}
-
-	r.warnOnce.Do(func() {
-		r.logger.Warn("IRIS_BASE_URL_FILE host is unvalidated because no Iris base URL allowlist is configured",
-			slog.String("host", host),
-			slog.String("path", r.baseURLFilePath),
-			slog.String("allowlist_env", irisH3ServerNameEnv+","+irisBaseURLAllowedHostsEnv),
-		)
-	})
-}
-
-func validateHTTPBaseURL(raw string, explicitTransport ...string) (string, error) {
-	parsed, err := iris.ParseBaseEndpoint(raw)
-	if err != nil {
-		return "", fmt.Errorf("parse canonical Iris base endpoint: %w", err)
-	}
-
-	if err := validateRuntimeIrisTransportScheme(runtimeIrisValidationTransport(firstRuntimeIrisTransport(explicitTransport)), parsed); err != nil {
-		return "", fmt.Errorf("validate runtime iris transport scheme: %w", err)
-	}
-
-	return parsed.String(), nil
-}
-
-func firstRuntimeIrisTransport(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-
-	return values[0]
 }

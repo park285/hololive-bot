@@ -134,15 +134,21 @@ func (s *Service) loadRoomsFromDatabase(ctx context.Context) ([]Room, error) {
 		return nil, fmt.Errorf("load ACL rooms: %w", err)
 	}
 
-	if err := validateRoomListTypes(rooms); err != nil {
-		return nil, fmt.Errorf("validate room list types: %w", err)
+	if err := validateStoredRooms(rooms); err != nil {
+		return nil, fmt.Errorf("validate stored rooms: %w", err)
 	}
 
 	return rooms, nil
 }
 
-func validateRoomListTypes(rooms []Room) error {
+// validateStoredRooms는 저장 행이 migration 346의 CHECK와 같은 규칙을 지키는지 본다. 어긋난 행은 판정에 쓰이지 않는
+// 죽은 등록이므로 건너뛰지 않고 snapshot 적재를 실패시킨다. 방 이름일 수 있는 비정규 값은 오류에 넣지 않는다.
+func validateStoredRooms(rooms []Room) error {
 	for _, room := range rooms {
+		if err := validateRoomChatID(room.RoomID); err != nil {
+			return fmt.Errorf("invalid stored ACL room (list_type %q): %w", room.ListType, err)
+		}
+
 		switch room.ListType {
 		case listTypeWhitelist, listTypeBlacklist:
 		default:
@@ -186,7 +192,7 @@ func (s *Service) initializeDefaultRooms(ctx context.Context, defaultRooms []str
 	listType := string(s.mode)
 
 	for _, room := range normalizeRoomList(defaultRooms) {
-		if err := s.store.CreateRoom(ctx, room, listType); err != nil {
+		if _, err := s.store.CreateRoom(ctx, room, listType); err != nil {
 			return fmt.Errorf("initialize ACL room %q: %w", room, err)
 		}
 

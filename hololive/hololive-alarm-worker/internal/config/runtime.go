@@ -28,11 +28,14 @@ type RuntimeConfig struct {
 	MarkdownReplies    bool
 	AlarmWorkerProfile *AlarmWorkerProfile
 	DispatchRetention  DispatchRetentionConfig
+	// AlarmDispatchPublish: ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH. wakeup 여부는 worker profile alarm_dispatch.wakeup_enabled가 소유한다.
+	AlarmDispatchPublish AlarmDispatchPublishConfig
 }
 
-// alarmWorkerCORSDefaultEnforce: alarm-worker는 브라우저 표면이 없지만, 예전과 같이 CORS_ENFORCE가 명시된 production
-// 설정의 허용 origin 누락은 기동 실패로 유지한다.
-const alarmWorkerCORSDefaultEnforce = false
+// AlarmDispatchPublishConfig는 알림 발행자가 outbox에 한 번에 넣는 delivery 상한이다.
+type AlarmDispatchPublishConfig struct {
+	MaxDeliveriesPerBatch int
+}
 
 func LoadRuntime() (*RuntimeConfig, error) {
 	if err := envload.DotEnv(); err != nil {
@@ -69,10 +72,6 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load Kakao config: %w", err)
 	}
 
-	if err = settings.ValidateRuntimeEnvSyntax(); err != nil {
-		return nil, fmt.Errorf("validate runtime env syntax: %w", err)
-	}
-
 	config, err := loadRuntimeSections()
 	if err != nil {
 		return nil, err
@@ -101,21 +100,15 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	notification, notificationErr := settings.LoadNotificationConfig()
 	logging, loggingErr := settings.LoadLoggingConfig()
 	bot, botErr := settings.LoadBotConfig()
-	cors, corsErr := settings.LoadCORSConfig(alarmWorkerCORSDefaultEnforce)
 
 	if err := errors.Join(
-		serverErr, holodexErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr, corsErr,
+		serverErr, holodexErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr,
 	); err != nil {
 		return nil, fmt.Errorf("load alarm-worker sections: %w", err)
 	}
 
-	environment := envload.AppEnvironment()
-	if err := settings.ValidateCORSConfig(environment, cors); err != nil {
-		return nil, fmt.Errorf("validate CORS config: %w", err)
-	}
-
 	return &RuntimeConfig{
-		Environment:      environment,
+		Environment:      envload.AppEnvironment(),
 		Server:           server,
 		Holodex:          holodex,
 		Valkey:           valkey,
@@ -127,7 +120,7 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	}, nil
 }
 
-// loadRoleSections는 alarm-worker의 worker profile과 dispatch retention을 채운다.
+// loadRoleSections는 alarm-worker의 worker profile, dispatch retention, 발행 batch 한도를 채운다.
 func loadRoleSections(config *RuntimeConfig) error {
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -139,8 +132,15 @@ func loadRoleSections(config *RuntimeConfig) error {
 		return fmt.Errorf("load alarm dispatch retention config: %w", err)
 	}
 
+	// 잘못된 batch 한도는 기본값으로 바꾸지 않고 기동 오류로 드러낸다.
+	maxDeliveries, err := envload.RequiredPositiveIntEnv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
+	if err != nil {
+		return fmt.Errorf("load alarm dispatch publish config: %w", err)
+	}
+
 	config.AlarmWorkerProfile = profile
 	config.DispatchRetention = retention
+	config.AlarmDispatchPublish = AlarmDispatchPublishConfig{MaxDeliveriesPerBatch: maxDeliveries}
 
 	return nil
 }

@@ -112,32 +112,6 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 	})
 }
 
-func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {
-	t.Setenv("SERVER_PORT", "31001")
-	t.Setenv("HOLOLIVE_BOT_INTERNAL_URL", "")
-
-	botConfig := &BotPlaneConfig{}
-	adminConfig := &AdminPlaneConfig{}
-	llmConfig := &LLMSchedulerConfig{}
-
-	require.NoError(t, configurePlanes(botConfig, adminConfig, llmConfig))
-
-	require.Equal(t, 31001, botConfig.Server.Port)
-	require.Equal(t, "https://127.0.0.1:31001", adminConfig.BotInternalURL)
-}
-
-func TestConfigureHololiveAPIPlanesPreservesBotInternalURLOverride(t *testing.T) {
-	t.Setenv("SERVER_PORT", "31001")
-
-	botConfig := &BotPlaneConfig{}
-	adminConfig := &AdminPlaneConfig{BotInternalURL: "https://bot.internal:3443"}
-	llmConfig := &LLMSchedulerConfig{}
-
-	require.NoError(t, configurePlanes(botConfig, adminConfig, llmConfig))
-
-	require.Equal(t, "https://bot.internal:3443", adminConfig.BotInternalURL)
-}
-
 func TestValidatePlanePool(t *testing.T) {
 	t.Parallel()
 

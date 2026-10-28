@@ -22,32 +22,11 @@ package settings
 
 import (
 	"log/slog"
-	"math"
 	"strconv"
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
-
-	"github.com/kapu/hololive-shared/pkg/config/envload"
 )
-
-// clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.
-// NaN/Inf 입력 시 기본값(0.85)을 반환한다.
-func clampConfidence(v float64) float64 {
-	if math.IsNaN(v) || math.IsInf(v, 0) {
-		return 0.85
-	}
-
-	if v < 0 {
-		return 0.0
-	}
-
-	if v > 1 {
-		return 1.0
-	}
-
-	return v
-}
 
 func parseIntList(value string) []int {
 	if value == "" {
@@ -76,39 +55,4 @@ func parseIntList(value string) []int {
 	}
 
 	return result
-}
-
-func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bool) {
-	origins := envload.CommaSeparated(rawOrigins)
-
-	if !isProduction {
-		if len(origins) == 0 {
-			return []string{"http://localhost:5173"}, false
-		}
-
-		return origins, false
-	}
-
-	filtered := productionCORSAllowedOrigins(origins)
-
-	return filtered, len(filtered) == 0
-}
-
-func productionCORSAllowedOrigins(origins []string) []string {
-	filtered := make([]string, 0, len(origins))
-	for _, origin := range origins {
-		if isProductionCORSOriginBlocked(origin) {
-			continue
-		}
-
-		filtered = append(filtered, origin)
-	}
-
-	return filtered
-}
-
-func isProductionCORSOriginBlocked(origin string) bool {
-	return origin == "*" ||
-		strings.HasPrefix(origin, "http://localhost") ||
-		strings.HasPrefix(origin, "https://localhost")
 }

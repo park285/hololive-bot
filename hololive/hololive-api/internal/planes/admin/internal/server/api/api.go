@@ -24,9 +24,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
@@ -34,31 +33,25 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
 // Handler는 런타임의 도메인별 의존성 조립만 담당한다. 요청은 DomainHandlers가 처리한다.
 type Handler struct {
-	repository                 *member.Repository
-	memberCache                *member.Cache
-	alarm                      AlarmManager
-	roomNames                  RoomNameSetter
-	holodex                    *holodexprovider.Service
-	communityShortsOps         YouTubeCommunityShortsOpsRepository
-	activity                   *activity.Logger
-	settings                   settings.ReadWriter
-	settingsApplier            sharedsettings.SettingsApplier
-	settingsOperations         settingsOperationGate
-	acl                        *acl.Service
-	iris                       IrisRoomLister
-	logger                     *slog.Logger
-	systemStats                *system.Collector
-	templateAdmin              *template.AdminService
-	majorEventScheduler        MajorEventScheduler
-	majorEventMonthlyScheduler MajorEventMonthlyScheduler
-	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
-	xSpaceSessions             *xspaces.Store
+	repository         *member.Repository
+	memberCache        *member.Cache
+	alarm              AlarmManager
+	roomNames          RoomNameSetter
+	holodex            *holodexprovider.Service
+	activity           *activity.Logger
+	settings           settings.ReadWriter
+	settingsApplier    sharedsettings.SettingsApplier
+	settingsOperations settingsOperationGate
+	acl                *acl.Service
+	iris               IrisRoomLister
+	logger             *slog.Logger
+	memberIndexLoader  func(context.Context) ([]*domain.Member, error)
+	xSpaceSessions     *xspaces.Store
 }
 
 // SetXSpaceSessions는 시작 단계에서만 관리자 세션 저장소를 연결한다. Secret은 응답하지 않는다.
@@ -100,10 +93,9 @@ type StreamDeps struct {
 }
 
 type StatsDeps struct {
-	Alarm       AlarmManager
-	ACL         *acl.Service
-	Iris        IrisRoomLister
-	SystemStats *system.Collector
+	Alarm AlarmManager
+	ACL   *acl.Service
+	Iris  IrisRoomLister
 }
 
 type SettingsDeps struct {
@@ -119,28 +111,12 @@ type AlarmManager interface {
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
 }
 
-type TemplateDeps struct {
-	Admin *template.AdminService
-}
-
-type MajorEventDeps struct {
-	Scheduler        MajorEventScheduler
-	MonthlyScheduler MajorEventMonthlyScheduler
-}
-
-type YouTubeOpsDeps struct {
-	CommunityShortsOps YouTubeCommunityShortsOpsRepository
-}
-
 type HandlerDeps struct {
-	Common     CommonDeps
-	Member     MemberDeps
-	Stream     StreamDeps
-	Stats      StatsDeps
-	Settings   SettingsDeps
-	Template   TemplateDeps
-	MajorEvent MajorEventDeps
-	YouTubeOps YouTubeOpsDeps
+	Common   CommonDeps
+	Member   MemberDeps
+	Stream   StreamDeps
+	Stats    StatsDeps
+	Settings SettingsDeps
 }
 
 func NewHandler(deps *HandlerDeps) *Handler {
@@ -155,22 +131,17 @@ func NewHandler(deps *HandlerDeps) *Handler {
 	}
 
 	return (&Handler{
-		repository:                 deps.Member.Repository,
-		memberCache:                deps.Member.Cache,
-		alarm:                      deps.Stats.Alarm,
-		roomNames:                  deps.Settings.RoomNames,
-		holodex:                    deps.Stream.Holodex,
-		communityShortsOps:         deps.YouTubeOps.CommunityShortsOps,
-		activity:                   deps.Common.Activity,
-		settings:                   deps.Settings.Settings,
-		settingsApplier:            deps.Settings.Applier,
-		acl:                        deps.Stats.ACL,
-		iris:                       deps.Stats.Iris,
-		systemStats:                deps.Stats.SystemStats,
-		templateAdmin:              deps.Template.Admin,
-		majorEventScheduler:        deps.MajorEvent.Scheduler,
-		majorEventMonthlyScheduler: deps.MajorEvent.MonthlyScheduler,
-		logger:                     deps.Common.Logger,
-		memberIndexLoader:          memberIndexLoader,
+		repository:        deps.Member.Repository,
+		memberCache:       deps.Member.Cache,
+		alarm:             deps.Stats.Alarm,
+		roomNames:         deps.Settings.RoomNames,
+		holodex:           deps.Stream.Holodex,
+		activity:          deps.Common.Activity,
+		settings:          deps.Settings.Settings,
+		settingsApplier:   deps.Settings.Applier,
+		acl:               deps.Stats.ACL,
+		iris:              deps.Stats.Iris,
+		logger:            deps.Common.Logger,
+		memberIndexLoader: memberIndexLoader,
 	}).ensureDefaults()
 }

@@ -15,7 +15,7 @@ func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 
-	runtime, err := BuildAdminAPIRuntime(t.Context(), nil, nil, logger)
+	runtime, err := BuildAdminAPIRuntime(t.Context(), nil, nil, Dependencies{}, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	require.ErrorContains(t, err, "config must not be nil")

@@ -34,8 +34,8 @@ func TestLiveRuntimeStateDriftCountsEachMismatch(t *testing.T) {
 
 	defer rollbackLiveReviewReceiptFactsTx(t, tx)
 
-	_, err = tx.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status)
-		VALUES ('drift-missing','drift-channel','LIVE'),('drift-changed','drift-channel','LIVE');
+	_, err = tx.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin)
+		VALUES ('drift-missing','drift-channel','LIVE','observed'),('drift-changed','drift-channel','LIVE','observed');
 		SELECT refresh_youtube_live_runtime_state(ARRAY['drift-missing','drift-changed']);
 		DELETE FROM youtube_live_runtime_state WHERE video_id='drift-missing';
 		UPDATE youtube_live_runtime_state SET channel_id='corrupted' WHERE video_id='drift-changed';
@@ -104,7 +104,7 @@ func TestLiveRuntimeStateRefreshAppliesSourceChangesAndRollsBack(t *testing.T) {
 		{"pending_delete", `DELETE FROM youtube_live_pending_ends WHERE video_id='recorded'`, []string{"recorded"}},
 		{"availability_delete", `DELETE FROM youtube_video_availability WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
 		{"inactive_delete", `UPDATE youtube_live_sessions SET status='ENDED' WHERE video_id='array'; UPDATE youtube_live_reconciliation_heads SET status='ENDED' WHERE video_id='array'`, []string{liveRuntimeReviewedVideo}},
-		{"absent_session_upsert", `INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('absent','runtime-channel','LIVE') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`, []string{"absent"}},
+		{"absent_session_upsert", `INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin) VALUES ('absent','runtime-channel','LIVE','observed') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`, []string{"absent"}},
 		{"absent_head_upsert", `INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('absent','UPCOMING') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`, []string{"absent"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -256,7 +256,7 @@ func TestLiveRuntimeStateMigrationPrivilegesAndRecordingACL(t *testing.T) {
 
 	_, err = tx.Exec(t.Context(), `SET LOCAL ROLE `+runtime+`;
 		SELECT lock_youtube_live_runtime_state();
-		INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('runtime-role','runtime-channel','LIVE')`)
+		INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin) VALUES ('runtime-role','runtime-channel','LIVE','observed')`)
 	require.NoError(t, err)
 
 	var visible bool

@@ -40,7 +40,7 @@ LLM이 `hololive-bot` 문서/계약 작업을 수행할 때 지켜야 하는 cur
 ## Required Validation
 
 ```bash
-./scripts/architecture/check-internal-route-hardcoding.sh
+./scripts/architecture/ci-boundary-gate.sh
 ```
 
 ## Completion Rule

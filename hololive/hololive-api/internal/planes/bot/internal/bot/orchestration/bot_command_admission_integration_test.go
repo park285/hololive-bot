@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -52,6 +52,7 @@ func TestBotProcessMessageRejectsUnknownIngressUserForExpensiveCommand(t *testin
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      &testIrisClient{},
 		formatter:       formatter.NewResponseFormatter("!", nil),
+		transport:       newDispatchingTransport(&testIrisClient{}, formatter.NewResponseFormatter("!", nil)),
 		cache:           cacheClient,
 	}
 	sender := testSenderName

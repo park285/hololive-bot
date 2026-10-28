@@ -23,7 +23,7 @@ package formatter
 import (
 	"context"
 
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -42,7 +42,7 @@ func (f *ResponseFormatter) memberNewsNotify(key messagestrings.Key) string {
 	return f.messageStrings.Text(key)
 }
 
-func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernewscontracts.Digest) string {
+func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernewsmodel.Digest) string {
 	if digest == nil {
 		return f.renderFailureText()
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 func (r *AdminAPIRuntime) Run() error {
@@ -67,7 +68,7 @@ func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
 	r.stateMu.Unlock()
 
 	if photoDone != nil {
-		go panicguard.Run(r.Logger, panicguard.BackgroundTask, "admin-photo-sync", func() {
+		go panicguard.Run(r.Logger, panicscope.BackgroundTask, "admin-photo-sync", func() {
 			defer close(photoDone)
 
 			r.PhotoSync.Start(photoCtx)

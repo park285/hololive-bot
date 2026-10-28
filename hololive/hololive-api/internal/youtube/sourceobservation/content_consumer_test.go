@@ -115,42 +115,6 @@ func alignReceivedAtToSlot(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 	}
 }
 
-func TestContentConsumerReplayDoesNotDuplicateNotification(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	seedContentWatermark(t, pool)
-
-	repo := NewRepository(pool)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-
-	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, testVideoID)))
-	if err != nil {
-		t.Fatalf("publish: %v", err)
-	}
-
-	consumer := NewConsumerWithGraces(repo, 0, 0)
-	if consumeErr := consumer.Consume(ctx, contentClaimOptions()); consumeErr != nil {
-		t.Fatalf("first consume: %v", consumeErr)
-	}
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "duplicate notification guard",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request replay: %#v err=%v", replay, err)
-	}
-
-	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("replay consume: %v", err)
-	}
-
-	assertTableCount(t, pool, "youtube_notification_outbox", 1)
-}
-
 func TestContentConsumerInvalidItemDoesNotBlockLaterItem(t *testing.T) {
 	t.Parallel()
 

@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -50,21 +50,21 @@ func TestProvideExaSearcher(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		t.Parallel()
 
-		searcher := provideExaSearcher(settings.ExaConfig{Enabled: false, APIKey: testProviderKey}, searchProviderTestLogger())
+		searcher := provideExaSearcher(apiconfig.ExaConfig{Enabled: false, APIKey: testProviderKey}, searchProviderTestLogger())
 		assert.Nil(t, searcher)
 	})
 
 	t.Run("missing api key", func(t *testing.T) {
 		t.Parallel()
 
-		searcher := provideExaSearcher(settings.ExaConfig{Enabled: true, APIKey: ""}, searchProviderTestLogger())
+		searcher := provideExaSearcher(apiconfig.ExaConfig{Enabled: true, APIKey: ""}, searchProviderTestLogger())
 		assert.Nil(t, searcher)
 	})
 
 	t.Run("enabled", func(t *testing.T) {
 		t.Parallel()
 
-		searcher := provideExaSearcher(settings.ExaConfig{
+		searcher := provideExaSearcher(apiconfig.ExaConfig{
 			Enabled:  true,
 			Endpoint: "https://exa.example.com",
 			APIKey:   "test-api-key",
@@ -77,7 +77,7 @@ func TestProvideEventSummarizer_Default(t *testing.T) {
 	t.Parallel()
 
 	summarizer := provideEventSummarizer(
-		settings.ConsensusLLMConfig{},
+		apiconfig.ConsensusLLMConfig{},
 		nil,
 		nil,
 		nil,
@@ -101,7 +101,7 @@ func TestProvideEventSummarizer_ConsensusEnabled(t *testing.T) {
 	adjudicator := fakeMajorEventLLMClient{}
 
 	summarizer := provideEventSummarizer(
-		settings.ConsensusLLMConfig{
+		apiconfig.ConsensusLLMConfig{
 			Enabled:           true,
 			Confidence:        0.82,
 			ReviewTimeout:     7,

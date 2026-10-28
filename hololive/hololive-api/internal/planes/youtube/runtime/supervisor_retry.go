@@ -102,7 +102,7 @@ func (r *Runtime) applyRetryStatus(observationID int64, status contract.Status) 
 }
 
 func (r *Runtime) markDeadLettered() {
-	r.degraded.Store(true)
+	r.deadLetterBacklog.Store(true)
 
 	if r.started.Load() {
 		r.publishHealth()

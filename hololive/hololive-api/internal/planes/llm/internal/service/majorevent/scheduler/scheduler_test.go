@@ -30,8 +30,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
+	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -285,7 +285,7 @@ func TestSendWeeklyNotification_AllSuccess_MarksEvents(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result != triggercontracts.NewResult(2, 0, 0) {
+	if result != notification.NewResult(2, 0, 0) {
 		t.Fatalf("enqueue result = %+v", result)
 	}
 
@@ -319,7 +319,7 @@ func TestSendWeeklyNotification_PartialEnqueueFailure_NoMarking(t *testing.T) {
 		t.Fatalf("unexpected error (partial failure returns nil): %v", err)
 	}
 
-	if result != triggercontracts.NewResult(2, 0, 1) {
+	if result != notification.NewResult(2, 0, 1) {
 		t.Fatalf("partial enqueue result = %+v", result)
 	}
 
@@ -416,7 +416,7 @@ func TestSendMonthlyNotification_AllSuccess_MarksEvents(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result != triggercontracts.NewResult(2, 0, 0) {
+	if result != notification.NewResult(2, 0, 0) {
 		t.Fatalf("enqueue result = %+v", result)
 	}
 
@@ -446,7 +446,7 @@ func TestSendMonthlyNotification_PartialFailure_NoMarking(t *testing.T) {
 		t.Fatalf("unexpected error (partial failure returns nil): %v", err)
 	}
 
-	if result != triggercontracts.NewResult(1, 0, 1) {
+	if result != notification.NewResult(1, 0, 1) {
 		t.Fatalf("partial enqueue result = %+v", result)
 	}
 
@@ -464,7 +464,7 @@ func TestSendWeeklyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing.
 	scheduler := newTestScheduler(nil, newMockOutboxRepository(), locker)
 
 	_, err := scheduler.SendWeeklyNotification(t.Context())
-	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
+	if !errors.Is(err, notification.ErrNotificationInProgress) {
 		t.Errorf("expected ErrNotificationInProgress, got: %v", err)
 	}
 }
@@ -478,7 +478,7 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 	scheduler := newTestMonthlyScheduler(nil, newMockOutboxRepository(), locker)
 
 	_, err := scheduler.SendMonthlyNotification(t.Context())
-	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
+	if !errors.Is(err, notification.ErrNotificationInProgress) {
 		t.Errorf("expected ErrNotificationInProgress, got: %v", err)
 	}
 }

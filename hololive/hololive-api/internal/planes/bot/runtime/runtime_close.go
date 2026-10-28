@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 func (r *BotRuntime) cancelBackgroundTasks() {
@@ -87,7 +89,7 @@ func (r *BotRuntime) CloseContext(ctx context.Context) error {
 		go func() {
 			defer close(r.resourcesDone)
 
-			r.resourcesErr = panicguard.RunE(r.Logger, panicguard.BackgroundTask, "bot-resource-close", func() error {
+			r.resourcesErr = panicguard.RunE(r.Logger, panicscope.BackgroundTask, "bot-resource-close", func() error {
 				if r.cleanup == nil {
 					return nil
 				}

@@ -12,38 +12,21 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/park285/iris-client-go/v3/iris"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 const (
-	appEnvKey                               = "APP_ENV"
-	appEnvProduction                        = "production"
 	irisBaseURLAllowedHostsEnv              = "IRIS_BASE_URL_ALLOWED_HOSTS"
 	irisH3ServerNameEnv                     = "IRIS_H3_SERVER_NAME"
+	runtimeIrisSchemeHTTP                   = "http"
+	runtimeIrisSchemeHTTPS                  = "https"
 	runtimeIrisBaseURLFileMaxAllowedPerms   = 0o644
 	runtimeIrisBaseURLFileWorldWritablePerm = 0o002
 )
 
-type runtimeIrisBaseURLValidationOptions struct {
-	transport           string
-	warnUnvalidatedHost func(string)
-}
-
-func validateRuntimeIrisBaseURLFileOverride(raw, transport string, warnUnvalidatedHost func(string)) (string, error) {
-	out, err := validateRuntimeIrisBaseURLWithOptions(raw, runtimeIrisBaseURLValidationOptions{
-		transport:           transport,
-		warnUnvalidatedHost: warnUnvalidatedHost,
-	})
-	if err != nil {
-		return out, fmt.Errorf("validate runtime iris base URL with options: %w", err)
-	}
-
-	return out, nil
-}
-
-func validateRuntimeIrisBaseURLWithOptions(raw string, opts runtimeIrisBaseURLValidationOptions) (string, error) {
+// validateRuntimeIrisBaseURLFileOverride는 URL 파일 내용의 형식과 host를 검사한다. Transport와 scheme의
+// 일치(h3는 https, http1은 loopback)는 client 생성 시 iris.NewClient가 검사한다.
+func validateRuntimeIrisBaseURLFileOverride(raw string, allowedHosts map[string]struct{}) (string, error) {
 	baseURL, parsed, err := parseRuntimeIrisBaseURL(raw)
 	if err != nil {
 		return "", fmt.Errorf("parse runtime iris base URL: %w", err)
@@ -53,12 +36,8 @@ func validateRuntimeIrisBaseURLWithOptions(raw string, opts runtimeIrisBaseURLVa
 		return "", fmt.Errorf("validate runtime iris base URL scheme: %w", err)
 	}
 
-	if err := validateRuntimeIrisBaseURLShape(parsed, opts); err != nil {
+	if err := validateRuntimeIrisBaseURLShape(parsed, allowedHosts); err != nil {
 		return "", fmt.Errorf("validate runtime iris base URL shape: %w", err)
-	}
-
-	if err := validateRuntimeIrisTransportScheme(runtimeIrisValidationTransport(opts.transport), parsed); err != nil {
-		return "", fmt.Errorf("validate runtime iris transport scheme: %w", err)
 	}
 
 	return baseURL, nil
@@ -83,7 +62,7 @@ func validateRuntimeIrisBaseURLScheme(parsed *url.URL) error {
 	return nil
 }
 
-func validateRuntimeIrisBaseURLShape(parsed *url.URL, opts runtimeIrisBaseURLValidationOptions) error {
+func validateRuntimeIrisBaseURLShape(parsed *url.URL, allowedHosts map[string]struct{}) error {
 	if parsed.Host == "" {
 		return errors.New("base URL host is empty")
 	}
@@ -108,7 +87,7 @@ func validateRuntimeIrisBaseURLShape(parsed *url.URL, opts runtimeIrisBaseURLVal
 		return errors.New("IRIS_BASE_URL_FILE URL must not include fragment")
 	}
 
-	if err := validateRuntimeIrisBaseURLHost(parsed.Hostname(), opts); err != nil {
+	if err := validateRuntimeIrisBaseURLHost(parsed.Hostname(), allowedHosts); err != nil {
 		return fmt.Errorf("validate runtime iris base URL host: %w", err)
 	}
 
@@ -145,46 +124,17 @@ func runtimeIrisBaseURLHostHasPortSeparator(host string) bool {
 	return strings.Contains(host, ":")
 }
 
-func validateRuntimeIrisBaseURLHost(host string, opts runtimeIrisBaseURLValidationOptions) error {
+func validateRuntimeIrisBaseURLHost(host string, allowedHosts map[string]struct{}) error {
 	normalizedHost := normalizeRuntimeIrisHost(host)
 	if normalizedHost == "" {
 		return errors.New("IRIS_BASE_URL_FILE URL host is empty")
 	}
 
-	allowedHosts := runtimeIrisAllowedBaseURLHosts()
 	if _, ok := allowedHosts[normalizedHost]; ok {
 		return nil
 	}
 
-	if !runtimeIrisBaseURLHostAllowlistConfigured() {
-		if opts.warnUnvalidatedHost != nil {
-			opts.warnUnvalidatedHost(host)
-		}
-
-		return nil
-	}
-
 	return fmt.Errorf("IRIS_BASE_URL_FILE host %q must match %s or %s", host, irisH3ServerNameEnv, irisBaseURLAllowedHostsEnv)
-}
-
-func runtimeIrisBaseURLHostAllowlistConfigured() bool {
-	return settings.LoadIrisRuntimeValidationConfig().HostAllowlistConfigured()
-}
-
-func runtimeIrisAllowedBaseURLHosts() map[string]struct{} {
-	allowedHosts := make(map[string]struct{})
-	config := settings.LoadIrisRuntimeValidationConfig()
-
-	for _, rawHost := range append([]string{config.ServerName}, config.AllowedHosts...) {
-		host := normalizeRuntimeIrisHost(rawHost)
-		if host == "" {
-			continue
-		}
-
-		allowedHosts[host] = struct{}{}
-	}
-
-	return allowedHosts
 }
 
 func normalizeRuntimeIrisHost(raw string) string {
@@ -201,10 +151,6 @@ func normalizeRuntimeIrisHost(raw string) string {
 	host = strings.TrimSuffix(host, "]")
 
 	return host
-}
-
-func shouldValidateRuntimeIrisBaseURLFileStat() bool {
-	return settings.LoadIrisRuntimeValidationConfig().ValidateFileStat
 }
 
 func normalizeRuntimeIrisBaseURLFilePath(path string, strict bool) (string, error) {

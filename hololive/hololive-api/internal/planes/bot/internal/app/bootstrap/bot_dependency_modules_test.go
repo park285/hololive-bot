@@ -4,11 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
@@ -24,9 +23,6 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
-
-// ACL seed(KAKAO_ROOMS)는 chatID만 받으므로 fixture도 signed i64 문자열이다.
-const testRoomA = "1001"
 
 func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 	t.Parallel()
@@ -79,19 +75,6 @@ func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 	assertCommandBuilderPointers(t, deps.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
-func TestProvideACLServiceWrapsInitializationError(t *testing.T) {
-	t.Parallel()
-
-	_, err := ProvideACLService(t.Context(), true, "whitelist", []string{testRoomA}, nil, slog.New(slog.DiscardHandler))
-	if err == nil {
-		t.Fatal("ProvideACLService() error = nil, want initialization error")
-	}
-
-	if !strings.Contains(err.Error(), "create ACL service") || !strings.Contains(err.Error(), "postgres service is nil") {
-		t.Fatalf("ProvideACLService() error = %q, want wrapped postgres initialization failure", err)
-	}
-}
-
 type stubBotIrisClient struct{}
 
 func (s *stubBotIrisClient) SendMessage(context.Context, string, string, ...iris.SendOption) error {
@@ -118,8 +101,8 @@ func (s *stubBotIrisClient) GetReplyStatus(context.Context, string) (*iris.Reply
 	return &iris.ReplyStatusSnapshot{}, nil
 }
 
-func (s *stubBotIrisClient) Ping(context.Context) bool {
-	return true
+func (s *stubBotIrisClient) Ping(context.Context) error {
+	return nil
 }
 
 func (s *stubBotIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {

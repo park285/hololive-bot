@@ -105,8 +105,8 @@ func newLongHistoryQueryFixture(b *testing.B, allLive bool) (*Repository, *pgxpo
  CROSS JOIN generate_series(0,73) g CROSS JOIN (VALUES('live_snapshot'),('channel_live_check')) kinds(kind) WHERE status='CURRENT';
  INSERT INTO youtube_channel_live_checks(channel_id,provider,outcome,channel_identity_confirmed,evidence_sha256,scheduled_for,effective_at,observed_at,received_at)
  SELECT 'channel-'||g,'youtubejs','CHANNEL_PAGE',true,repeat('c',64),now(),now(),now(),now() FROM generate_series(0,73) g;
- INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at)
- SELECT 'ended-'||g,'channel-'||(g%74),'ENDED','Old stream',now()-interval '2 days' FROM generate_series(1,50000) g;
+ INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at,lifecycle_origin)
+ SELECT 'ended-'||g,'channel-'||(g%74),'ENDED','Old stream',now()-interval '2 days','observed' FROM generate_series(1,50000) g;
  INSERT INTO youtube_live_reconciliation_heads(video_id,status) SELECT video_id,'ENDED' FROM youtube_live_sessions WHERE video_id LIKE 'ended-%';
  INSERT INTO youtube_live_pending_ends
  (video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
@@ -121,8 +121,8 @@ func newLongHistoryQueryFixture(b *testing.B, allLive bool) (*Repository, *pgxpo
 	require.NoError(b, err)
 
 	_, err = pool.Exec(b.Context(), `WITH inserted AS (
-INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at)
-SELECT 'current-'||g,'channel-'||g,'LIVE','Current stream '||g,now()-interval '1 hour'
+INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at,lifecycle_origin)
+SELECT 'current-'||g,'channel-'||g,'LIVE','Current stream '||g,now()-interval '1 hour','observed'
 FROM generate_series(0,73) g WHERE $1::bool OR g%20=0 RETURNING video_id)
 INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at)
 SELECT video_id,'LIVE',now(),now() FROM inserted`, allLive)

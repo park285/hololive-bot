@@ -31,6 +31,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 const (
@@ -270,7 +271,7 @@ func (c *Cache) guardedReloadAllMembersSnapshot(
 		loadErr error
 	)
 
-	if panicErr := panicguard.RunE(c.logger, panicguard.BackgroundTask, "member-snapshot-load", func() error {
+	if panicErr := panicguard.RunE(c.logger, panicscope.BackgroundTask, "member-snapshot-load", func() error {
 		loaded, loadErr = c.reloadAllMembersSnapshot(ctx, loader, generation)
 
 		return nil

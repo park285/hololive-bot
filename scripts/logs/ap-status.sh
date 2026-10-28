@@ -8,7 +8,7 @@ LOG_TAIL="${LOG_TAIL:-400}"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
-if [[ "${AP_RUNTIME_MODE:-compose}" == "native" ]]; then
+if [[ "${AP_RUNTIME_MODE}" == "native" ]]; then
   exec "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "${1:-}"
 fi
 

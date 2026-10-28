@@ -38,11 +38,11 @@ jobs:
           persist-credentials: false
 
       # gofmt 규칙은 릴리스마다 바뀐다. 이 단계가 없으면 러너 기본 Go로 검사해
-      # go.mod가 요구하는 판본과 다른 결과를 낸다.
+      # go.work가 요구하는 판본과 다른 결과를 낸다.
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version-file: go.work
           cache: false
 
       - name: Shell syntax
@@ -63,7 +63,6 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - "."
           - hololive/hololive-api
           - hololive/hololive-alarm-worker
           - hololive/hololive-dbtest
@@ -82,9 +81,9 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version-file: go.work
           # leg별 캐시 키 분리 — 목록 공유 시 7개 leg가 같은 키를 놓고 경쟁해 6개가 영구 캐시 미스가 된다.
-          cache-dependency-path: ${{ matrix.module == '.' && 'go.sum' || format('{0}/go.sum', matrix.module) }}
+          cache-dependency-path: ${{ format('{0}/go.sum', matrix.module) }}
 
       - name: Setup Node for collector helper integration tests
         if: matrix.module == 'hololive/hololive-youtube-collector'

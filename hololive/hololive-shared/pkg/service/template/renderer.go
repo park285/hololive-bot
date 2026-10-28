@@ -72,28 +72,6 @@ func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID
 	return executeTemplate(ctx, tmpl, data)
 }
 
-func (r *Renderer) InvalidateCache(key domain.TemplateKey, channelID string) {
-	r.cacheMu.Lock()
-	defer r.cacheMu.Unlock()
-
-	for ck := range r.cache {
-		if ck.templateKey == key && ck.channelID == channelID {
-			delete(r.cache, ck)
-		}
-	}
-}
-
-func (r *Renderer) InvalidateKey(key domain.TemplateKey) {
-	r.cacheMu.Lock()
-	defer r.cacheMu.Unlock()
-
-	for ck := range r.cache {
-		if ck.templateKey == key {
-			delete(r.cache, ck)
-		}
-	}
-}
-
 // templateFuncs는 공용 함수와 크기를 늘릴 수 있는 builtin(print·printf·println·html·js·urlquery)의 제한판입니다.
 // 결과가 입력보다 커질 수 있는 함수는 모두 파생 값 불변식(renderer_guard.go)을 지키며, 상한 안에서는 원래 함수와
 // 같은 결과를 냅니다. Trim·displayline·default·contains·hasPrefix·formatNumber·timeAgo·add는 결과가 입력 크기를

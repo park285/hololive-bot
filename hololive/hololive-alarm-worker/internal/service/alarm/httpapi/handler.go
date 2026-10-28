@@ -23,19 +23,19 @@ package httpapi
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
 type alarmHTTPWriter interface {
@@ -65,20 +65,77 @@ type Handler struct {
 	logger *slog.Logger
 }
 
-func decodeAlarmRequest(c *gin.Context, destination any) error {
+// decodeAlarmRequest는 wire 요청을 읽고 경로별 필수 값 검사를 적용한다. 요청 타입은 client와 공유하므로 검사는 여기서만 한다.
+func decodeAlarmRequest[T any](c *gin.Context, destination *T, validate func(*T) error) error {
 	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
 		return fmt.Errorf("unmarshal read: %w", err)
 	}
 
-	if binding.Validator == nil {
-		return nil
-	}
-
-	if err := binding.Validator.ValidateStruct(destination); err != nil {
-		return fmt.Errorf("validate struct: %w", err)
+	if err := validate(destination); err != nil {
+		return fmt.Errorf("validate request: %w", err)
 	}
 
 	return nil
+}
+
+var (
+	errRoomIDRequired    = errors.New("room_id is required")
+	errChannelIDRequired = errors.New("channel_id is required")
+	errMinutesRequired   = errors.New("minutes must be at least 1")
+	errRoomNameRequired  = errors.New("room_name is required")
+)
+
+func validateAddRequest(req *contractsalarm.AddRequest) error {
+	return requireRoomAndChannel(req.RoomID, req.ChannelID)
+}
+
+func validateRemoveRequest(req *contractsalarm.RemoveRequest) error {
+	return requireRoomAndChannel(req.RoomID, req.ChannelID)
+}
+
+func requireRoomAndChannel(roomID, channelID string) error {
+	if roomID == "" {
+		return errRoomIDRequired
+	}
+
+	if channelID == "" {
+		return errChannelIDRequired
+	}
+
+	return nil
+}
+
+func validateClearRequest(req *contractsalarm.ClearRequest) error {
+	if req.RoomID == "" {
+		return errRoomIDRequired
+	}
+
+	return nil
+}
+
+func validateUpdateAdvanceMinutesRequest(req *contractsalarm.UpdateAdvanceMinutesRequest) error {
+	if req.Minutes < 1 {
+		return errMinutesRequired
+	}
+
+	return nil
+}
+
+// room_name 필드가 없으면 거부하고, 공백뿐인 값은 해제 요청으로 통과시킨다.
+func validateSetRoomNameRequest(req *contractsalarm.SetRoomNameRequest) error {
+	if req.RoomID == "" {
+		return errRoomIDRequired
+	}
+
+	if req.RoomName == nil {
+		return errRoomNameRequired
+	}
+
+	return nil
+}
+
+func alarmAPIError(code, message string) contractsalarm.Envelope[any] {
+	return contractsalarm.Envelope[any]{Success: false, Error: code, Message: message}
 }
 
 func NewHandler(alarm AlarmService, logger *slog.Logger) *Handler {
@@ -110,14 +167,14 @@ func (h *Handler) CountAlarmEntries(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: contractsalarm.EntryCount{Count: new(count)}})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.EntryCount{Count: new(count)}})
 }
 
 // AddAlarm은 선택적인 host_id로 채팅방의 채널 또는 멤버 구독을 등록한다.
 func (h *Handler) AddAlarm(c *gin.Context) {
-	var req AddAlarmRequest
+	var req contractsalarm.AddRequest
 
-	if err := decodeAlarmRequest(c, &req); err != nil {
+	if err := decodeAlarmRequest(c, &req, validateAddRequest); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 
 		return
@@ -154,14 +211,14 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"added": added}})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.AddResponse{Added: added}})
 }
 
 // RemoveAlarm은 host_id가 있으면 해당 멤버만, 없으면 전체 채널 구독만 해지한다.
 func (h *Handler) RemoveAlarm(c *gin.Context) {
-	var req RemoveAlarmRequest
+	var req contractsalarm.RemoveRequest
 
-	if err := decodeAlarmRequest(c, &req); err != nil {
+	if err := decodeAlarmRequest(c, &req, validateRemoveRequest); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 
 		return
@@ -198,7 +255,7 @@ func (h *Handler) RemoveAlarm(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"removed": removed}})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.RemoveResponse{Removed: removed}})
 }
 
 func validAlarmHost(channelID, hostID string) bool {
@@ -223,7 +280,7 @@ func (h *Handler) GetRoomAlarmsWithTypes(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: alarms})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: alarms})
 }
 
 func (h *Handler) GetRoomAlarmsView(c *gin.Context) {
@@ -238,13 +295,13 @@ func (h *Handler) GetRoomAlarmsView(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: entries})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: entries})
 }
 
 func (h *Handler) ClearRoomAlarms(c *gin.Context) {
-	var req ClearAlarmsRequest
+	var req contractsalarm.ClearRequest
 
-	if err := decodeAlarmRequest(c, &req); err != nil {
+	if err := decodeAlarmRequest(c, &req, validateClearRequest); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 
 		return
@@ -260,13 +317,13 @@ func (h *Handler) ClearRoomAlarms(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"deleted": count}})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.ClearResponse{Deleted: count}})
 }
 
 func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
-	var req UpdateAdvanceMinutesRequest
+	var req contractsalarm.UpdateAdvanceMinutesRequest
 
-	if err := decodeAlarmRequest(c, &req); err != nil {
+	if err := decodeAlarmRequest(c, &req, validateUpdateAdvanceMinutesRequest); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 
 		return
@@ -280,7 +337,7 @@ func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": result.TargetMinutes}})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.MinutesResponse{TargetMinutes: result.TargetMinutes}})
 }
 
 // validAdvanceTargets는 적용 확정 응답에 실을 target_minutes가 비어 있지 않은 양수 목록인지 본다.
@@ -300,9 +357,9 @@ func validAdvanceTargets(targets []int) bool {
 }
 
 func (h *Handler) SetRoomName(c *gin.Context) {
-	var req SetRoomNameRequest
+	var req contractsalarm.SetRoomNameRequest
 
-	if err := decodeAlarmRequest(c, &req); err != nil {
+	if err := decodeAlarmRequest(c, &req, validateSetRoomNameRequest); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 
 		return
@@ -324,7 +381,7 @@ func (h *Handler) SetRoomName(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true})
 }
 
 func (h *Handler) GetAllAlarmKeys(c *gin.Context) {
@@ -338,5 +395,5 @@ func (h *Handler) GetAllAlarmKeys(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: keys})
+	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: keys})
 }

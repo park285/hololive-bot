@@ -19,7 +19,7 @@ import (
 
 func TestAlarmDispatchSendUnitFirstInsertIsAtomic(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	roomID := strings.Repeat("r", 100)
 	envelope := sendUnitTestEnvelope(roomID, "stream-first")
 
@@ -40,7 +40,7 @@ func TestAlarmDispatchSendUnitFirstInsertIsAtomic(t *testing.T) {
 
 func TestAlarmDispatchSendUnitConcurrentClaimKeepsGroupAtomic(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	envelopes := []domain.AlarmQueueEnvelope{
 		sendUnitTestEnvelope("room-group", "stream-a"),
 		sendUnitTestEnvelope("room-group", "stream-b"),
@@ -105,7 +105,7 @@ func TestAlarmDispatchSendUnitConcurrentClaimKeepsGroupAtomic(t *testing.T) {
 
 func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, 7)
 
 	for i := range 7 {
@@ -130,7 +130,7 @@ func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(fixedNowPool(t, pool, at), nil)
+	repository := newOutboxRepository(t, fixedNowPool(t, pool, at))
 	result, err := repository.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{
 		Envelopes: []domain.AlarmQueueEnvelope{
 			sendUnitTestEnvelope("room-skew", "stream-skew-a"),
@@ -175,7 +175,7 @@ func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 func TestAlarmDispatchClaimLeavesTerminalUnitMembers(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	result, err := repository.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{
 		Envelopes: []domain.AlarmQueueEnvelope{
 			sendUnitTestEnvelope("room-terminal", "stream-terminal-a"),
@@ -245,7 +245,7 @@ func fixedNowPool(t *testing.T, pool *pgxpool.Pool, at time.Time) *pgxpool.Pool 
 
 func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: []domain.AlarmQueueEnvelope{sendUnitTestEnvelope("room-status", "stream-status")},
 	})
@@ -273,4 +273,14 @@ func sendUnitTestEnvelope(roomID, streamID string) domain.AlarmQueueEnvelope {
 		},
 		Version: 1,
 	}
+}
+
+// newOutboxRepository는 production 생성자에 테스트 pool을 dbtest.WrapPool로 감싸 넘긴다.
+func newOutboxRepository(tb testing.TB, pool *pgxpool.Pool) *dispatchoutbox.PgxRepository {
+	tb.Helper()
+
+	repository, err := dispatchoutbox.NewPgxRepository(dbtest.WrapPool(pool), nil)
+	require.NoError(tb, err)
+
+	return repository
 }

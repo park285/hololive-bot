@@ -6,11 +6,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func TestTimeFinalizationBacklogConfiguration(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	profile, profileErr := LoadAPIWorkerProfile()
 	if profileErr != nil {

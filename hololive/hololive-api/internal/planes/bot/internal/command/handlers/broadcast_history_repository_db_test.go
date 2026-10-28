@@ -28,15 +28,15 @@ func TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks(t *testing.T) 
 	at := func(hours int) time.Time { return base.Add(time.Duration(hours) * time.Hour) }
 
 	seedHistorySessions(t, pool, []historySession{
-		{videoID: "v-ended", channelID: historyPagingChannel, status: domain.LiveStatusEnded, scheduled: new(at(1)), started: new(at(2)), ended: new(at(5)), lastSeen: at(9)},
-		{videoID: "v-tie-b", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(at(4)), lastSeen: at(9)},
-		{videoID: "v-tie-a", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(at(4)), lastSeen: at(9)},
-		{videoID: "v-started", channelID: historyPagingChannel, status: domain.LiveStatusEnded, scheduled: new(at(1)), started: new(at(4)), lastSeen: at(9)},
-		{videoID: "v-other", channelID: historyOtherChannel, status: domain.LiveStatusEnded, ended: new(at(3)), lastSeen: at(9)},
-		{videoID: "v-scheduled", channelID: historyPagingChannel, status: domain.LiveStatusEnded, scheduled: new(at(3)), lastSeen: at(9)},
-		{videoID: "v-last-seen", channelID: historyPagingChannel, status: domain.LiveStatusEnded, lastSeen: at(2)},
-		{videoID: "v-live", channelID: historyPagingChannel, status: domain.LiveStatusLive, started: new(at(8)), lastSeen: at(9)},
-		{videoID: "v-before-since", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(at(-2)), lastSeen: at(9)},
+		{videoID: "v-ended", channelID: historyPagingChannel, status: domain.LiveStatusEnded, scheduled: new(at(1)), started: new(at(2)), ended: new(at(5)), lastSeen: at(9), origin: observedLifecycleOrigin},
+		{videoID: "v-tie-b", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(at(4)), lastSeen: at(9), origin: observedLifecycleOrigin},
+		{videoID: "v-tie-a", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(at(4)), lastSeen: at(9), origin: observedLifecycleOrigin},
+		{videoID: "v-started", channelID: historyPagingChannel, status: domain.LiveStatusEnded, scheduled: new(at(1)), started: new(at(4)), lastSeen: at(9), origin: observedLifecycleOrigin},
+		{videoID: "v-other", channelID: historyOtherChannel, status: domain.LiveStatusEnded, ended: new(at(3)), lastSeen: at(9), origin: observedLifecycleOrigin},
+		{videoID: "v-scheduled", channelID: historyPagingChannel, status: domain.LiveStatusEnded, scheduled: new(at(3)), lastSeen: at(9), origin: observedLifecycleOrigin},
+		{videoID: "v-last-seen", channelID: historyPagingChannel, status: domain.LiveStatusEnded, lastSeen: at(2), origin: observedLifecycleOrigin},
+		{videoID: "v-live", channelID: historyPagingChannel, status: domain.LiveStatusLive, started: new(at(8)), lastSeen: at(9), origin: observedLifecycleOrigin},
+		{videoID: "v-before-since", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(at(-2)), lastSeen: at(9), origin: observedLifecycleOrigin},
 	})
 
 	since := at(0)
@@ -108,9 +108,9 @@ func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 	now := time.Date(2026, time.October, 12, 0, 0, 0, 0, time.UTC)
 
 	_, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at, lifecycle_origin)
 		SELECT 'plan-' || n, 'plan-channel-' || (n % $2), 'ENDED', 'plan',
-		       $3::timestamptz - n * INTERVAL '1 minute', $3::timestamptz
+		       $3::timestamptz - n * INTERVAL '1 minute', $3::timestamptz, 'observed'
 		FROM generate_series(1, $1::int) AS n
 	`, historyPlanSessions, historyPlanChannels, now)
 	require.NoError(t, err)
@@ -226,7 +226,7 @@ type historySession struct {
 	status                    domain.LiveStatus
 	scheduled, started, ended *time.Time
 	lastSeen                  time.Time
-	// origin이 비면 열 기본값(legacy_unknown)으로 저장한다.
+	// lifecycle_origin은 열 기본값이 없어 모든 시험 세션이 출처를 명시한다.
 	origin string
 }
 
@@ -235,15 +235,10 @@ func seedHistorySessions(t *testing.T, pool *pgxpool.Pool, sessions []historySes
 
 	for _, session := range sessions {
 		_, err := pool.Exec(t.Context(), `
-			INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, last_seen_at)
-			VALUES ($1, $2, $3, 'history', $4, $5, $6, $7)
-		`, session.videoID, session.channelID, string(session.status), session.scheduled, session.started, session.ended, session.lastSeen)
+			INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, last_seen_at, lifecycle_origin)
+			VALUES ($1, $2, $3, 'history', $4, $5, $6, $7, $8)
+		`, session.videoID, session.channelID, string(session.status), session.scheduled, session.started, session.ended, session.lastSeen, session.origin)
 		require.NoError(t, err, "insert %s", session.videoID)
-
-		if session.origin != "" {
-			_, err = pool.Exec(t.Context(), `UPDATE youtube_live_sessions SET lifecycle_origin = $2 WHERE video_id = $1`, session.videoID, session.origin)
-			require.NoError(t, err, "set origin %s", session.videoID)
-		}
 	}
 }
 
@@ -256,7 +251,7 @@ func TestPgBroadcastHistoryRepositoryReadsTimeEvidence(t *testing.T) {
 	seedHistorySessions(t, pool, []historySession{
 		{videoID: "v-with-head", channelID: historyPagingChannel, status: domain.LiveStatusEnded, started: new(base), ended: new(base.Add(90 * time.Minute)), lastSeen: base.Add(90 * time.Minute), origin: observedLifecycleOrigin},
 		{videoID: "v-head-no-live", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(base.Add(60 * time.Minute)), lastSeen: base.Add(60 * time.Minute), origin: observedLifecycleOrigin},
-		{videoID: "v-legacy", channelID: historyPagingChannel, status: domain.LiveStatusEnded, started: new(base), ended: new(base.Add(30 * time.Minute)), lastSeen: base.Add(30 * time.Minute)},
+		{videoID: "v-legacy", channelID: historyPagingChannel, status: domain.LiveStatusEnded, started: new(base), ended: new(base.Add(30 * time.Minute)), lastSeen: base.Add(30 * time.Minute), origin: legacyLifecycleOrigin},
 	})
 
 	_, err := pool.Exec(t.Context(), `

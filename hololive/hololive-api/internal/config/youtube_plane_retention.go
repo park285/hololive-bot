@@ -24,7 +24,6 @@ func defaultYouTubePlaneRetentionConfig() YouTubePlaneRetentionConfig {
 		QueueProcessedAge:    youtubePlaneRetentionDay,
 		QueueDLQAge:          14 * youtubePlaneRetentionDay,
 		CollisionAge:         30 * youtubePlaneRetentionDay,
-		ReplayAuditAge:       30 * youtubePlaneRetentionDay,
 		LiveAbsenceSlotAge:   14 * youtubePlaneRetentionDay,
 		CheckpointHistoryAge: 2 * youtubePlaneRetentionDay,
 		ProjectionRetiredAge: 2 * youtubePlaneRetentionDay,
@@ -40,25 +39,10 @@ func defaultYouTubePlaneRetentionConfig() YouTubePlaneRetentionConfig {
 	}
 }
 
-func defaultYouTubePlaneReplayConfig() YouTubePlaneReplayConfig {
-	return YouTubePlaneReplayConfig{
-		Interval:  time.Hour,
-		BatchSize: youtubePlaneRetentionMaxBatchSize,
-	}
-}
-
 func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 	defaults := defaultYouTubePlaneRetentionConfig()
 
 	var err error
-
-	if config.Retention.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_RETENTION_ENABLED", false); err != nil {
-		return fmt.Errorf("load retention enabled: %w", err)
-	}
-
-	if config.Retention.PolicyApproved, err = sharedenv.BoolE("YOUTUBE_PLANE_RETENTION_POLICY_APPROVED", false); err != nil {
-		return fmt.Errorf("load retention policy approval: %w", err)
-	}
 
 	if config.Retention.Interval, err = envload.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_INTERVAL_SECONDS",
@@ -94,7 +78,6 @@ func youtubePlaneRetentionAgeEnvs(retention *YouTubePlaneRetentionConfig) []yout
 		{"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS", &retention.QueueProcessedAge},
 		{"YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS", &retention.QueueDLQAge},
 		{"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", &retention.CollisionAge},
-		{"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", &retention.ReplayAuditAge},
 		{"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", &retention.LiveAbsenceSlotAge},
 		{"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", &retention.CheckpointHistoryAge},
 		{"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", &retention.ProjectionRetiredAge},
@@ -126,35 +109,8 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTube
 	return nil
 }
 
-func loadYouTubePlaneReplay(config *YouTubePlaneConfig) error {
-	defaults := defaultYouTubePlaneReplayConfig()
-
-	var err error
-
-	if config.Replay.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_REPLAY_ENABLED", false); err != nil {
-		return fmt.Errorf("load replay enabled: %w", err)
-	}
-
-	if config.Replay.Interval, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_REPLAY_INTERVAL_SECONDS",
-		defaults.Interval,
-		time.Second,
-	); err != nil {
-		return fmt.Errorf("load replay interval: %w", err)
-	}
-
-	if config.Replay.BatchSize, err = sharedenv.IntE(
-		"YOUTUBE_PLANE_REPLAY_BATCH_SIZE",
-		defaults.BatchSize,
-	); err != nil {
-		return fmt.Errorf("load replay batch size: %w", err)
-	}
-
-	return nil
-}
-
 func (c *YouTubePlaneConfig) validateRetention() error {
-	if err := validateRetentionLoop("retention", c.Retention.Enabled, c.Retention.Interval, c.Retention.BatchSize); err != nil {
+	if err := validateRetentionLoop(c.Retention.Interval, c.Retention.BatchSize); err != nil {
 		return fmt.Errorf("validate retention loop: %w", err)
 	}
 
@@ -162,29 +118,16 @@ func (c *YouTubePlaneConfig) validateRetention() error {
 		return fmt.Errorf("validate retention ages: %w", err)
 	}
 
-	if c.Retention.Enabled && c.Retention.ReplayAuditAge > 0 &&
-		c.Retention.ReplayAuditAge < maxEvidenceRetentionAge(&c.Retention) {
-		return errors.New("youtube plane replay audit retention must cover the longest evidence retention")
-	}
-
 	return nil
 }
 
-func (c *YouTubePlaneConfig) validateReplay() error {
-	if err := validateRetentionLoop("replay", c.Replay.Enabled, c.Replay.Interval, c.Replay.BatchSize); err != nil {
-		return fmt.Errorf("validate retention loop: %w", err)
-	}
-
-	return nil
-}
-
-func validateRetentionLoop(name string, enabled bool, interval time.Duration, batchSize int) error {
-	if enabled && interval <= 0 {
-		return fmt.Errorf("youtube plane %s interval must be positive when enabled", name)
+func validateRetentionLoop(interval time.Duration, batchSize int) error {
+	if interval <= 0 {
+		return errors.New("youtube plane retention interval must be positive")
 	}
 
 	if batchSize < 1 || batchSize > youtubePlaneRetentionMaxBatchSize {
-		return fmt.Errorf("youtube plane %s batch size must be between 1 and %d", name, youtubePlaneRetentionMaxBatchSize)
+		return fmt.Errorf("youtube plane retention batch size must be between 1 and %d", youtubePlaneRetentionMaxBatchSize)
 	}
 
 	return nil
@@ -198,7 +141,6 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 		{"queue processed", cfg.QueueProcessedAge},
 		{"queue dlq", cfg.QueueDLQAge},
 		{"collision", cfg.CollisionAge},
-		{"replay audit", cfg.ReplayAuditAge},
 		{"live absence slots", cfg.LiveAbsenceSlotAge},
 		{"checkpoint history", cfg.CheckpointHistoryAge},
 		{"retired projection", cfg.ProjectionRetiredAge},
@@ -221,30 +163,6 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 	return nil
 }
 
-func maxEvidenceRetentionAge(cfg *YouTubePlaneRetentionConfig) time.Duration {
-	ages := []time.Duration{
-		cfg.CommunityPageAge,
-		cfg.VideoListAge,
-		cfg.ShortsListAge,
-		cfg.LiveSnapshotAge,
-		cfg.ChannelProfileAge,
-		cfg.ChannelPhotoAge,
-		cfg.ScheduleSnapshotAge,
-		cfg.ChannelLiveCheckAge,
-		cfg.VideoLiveCheckAge,
-	}
-
-	var maxAge time.Duration
-
-	for _, age := range ages {
-		if age > maxAge {
-			maxAge = age
-		}
-	}
-
-	return maxAge
-}
-
 func validateRetentionAge(name string, age time.Duration) error {
 	if age < 0 || age > youtubePlaneRetentionMaxAge {
 		return fmt.Errorf("youtube plane %s retention must be between 0 and 3650 days", name)
@@ -256,14 +174,6 @@ func validateRetentionAge(name string, age time.Duration) error {
 func (c *YouTubePlaneConfig) validateProductionRetention(environment string) error {
 	if !runtimepolicy.IsProduction(environment) || !c.Enabled {
 		return nil
-	}
-
-	if !c.Retention.Enabled {
-		return errors.New("YOUTUBE_PLANE_RETENTION_ENABLED=true is required in production")
-	}
-
-	if !c.Retention.PolicyApproved {
-		return errors.New("YOUTUBE_PLANE_RETENTION_POLICY_APPROVED=true is required in production")
 	}
 
 	for _, item := range youtubePlaneRetentionAgeEnvs(&c.Retention) {

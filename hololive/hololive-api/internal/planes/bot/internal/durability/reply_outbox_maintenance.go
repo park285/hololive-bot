@@ -14,41 +14,6 @@ type ReplyOutboxManualReviewStats struct {
 	OldestAge time.Duration
 }
 
-type ReplyOutboxManualReplay struct {
-	OutboxID int64
-	Actor    string
-	Reason   string
-}
-
-func (r *ReplyOutboxRepository) ReplayManualReview(ctx context.Context, replay ReplyOutboxManualReplay) (string, error) {
-	if err := ensurePool(r.pool); err != nil {
-		return "", err
-	}
-
-	if replay.OutboxID <= 0 {
-		return "", errors.Join(ErrInvalidArgument, errors.New("outbox id must be positive"))
-	}
-
-	actor, err := requireOperatorActor(replay.Actor)
-	if err != nil {
-		return "", fmt.Errorf("require operator actor: %w", err)
-	}
-
-	reason, err := requireOperatorReason(replay.Reason)
-	if err != nil {
-		return "", fmt.Errorf("require operator reason: %w", err)
-	}
-
-	var outcome string
-
-	err = r.pool.QueryRow(ctx, replyOutboxReplayManualReviewSQL, replay.OutboxID, actor, reason).Scan(&outcome)
-	if err != nil {
-		return "", fmt.Errorf("replay manual-review reply outbox row %d: %w", replay.OutboxID, err)
-	}
-
-	return outcome, nil
-}
-
 func (r *ReplyOutboxRepository) ManualReviewStats(ctx context.Context) (ReplyOutboxManualReviewStats, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return ReplyOutboxManualReviewStats{}, err

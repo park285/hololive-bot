@@ -88,13 +88,6 @@ func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, min
 	return runtime, nil
 }
 
-func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) MemberNewsWeeklyRunNowResult {
-	return MemberNewsWeeklyRunNowResult{
-		Applied: false,
-		Reason:  "llm scheduler settings are not available in local mode",
-	}
-}
-
 func (a *localSettingsApplier) SettingsRuntimeState() SettingsRuntimeStateResult {
 	if a.alarm == nil {
 		return SettingsRuntimeStateResult{}

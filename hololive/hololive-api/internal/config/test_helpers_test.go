@@ -5,12 +5,13 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func mustLoadAPIWorkerProfile(t *testing.T) *APIWorkerProfile {
 	t.Helper()
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	profile, err := LoadAPIWorkerProfile()
 	if err != nil {
@@ -23,7 +24,7 @@ func mustLoadAPIWorkerProfile(t *testing.T) *APIWorkerProfile {
 func testYouTubePlaneConfig(t *testing.T) YouTubePlaneConfig {
 	t.Helper()
 
-	profile := &APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")}
+	profile := &APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, APIWorkerIdentity(), configtest.APIProfileFixture(t))}
 	if err := workercontract.DecodeWorkerSettingsSet(profile.Loaded, map[string]any{
 		WorkerBotWebhookInbox:   &profile.BotWebhookInbox,
 		WorkerBotReplyOutbox:    &profile.BotReplyOutbox,

@@ -42,8 +42,8 @@ type aclSettingStore interface {
 type aclRoomStore interface {
 	// ListRooms는 모든 ACL 방 행을 반환한다.
 	ListRooms(ctx context.Context) ([]Room, error)
-	// CreateRoom은 (roomID, listType) 방 행을 삽입한다.
-	CreateRoom(ctx context.Context, roomID, listType string) error
+	// CreateRoom은 (roomID, listType) 방 행을 삽입한다. 이미 있으면 쓰지 않고 created=false를 돌려준다.
+	CreateRoom(ctx context.Context, roomID, listType string) (created bool, err error)
 	// DeleteRoom은 (roomID, listType) 방 행을 삭제한다.
 	DeleteRoom(ctx context.Context, roomID, listType string) error
 }
@@ -114,15 +114,16 @@ func (s *pgxACLStore) ListRooms(ctx context.Context) ([]Room, error) {
 	return rooms, nil
 }
 
-func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) error {
-	if _, err := s.pool.Exec(ctx,
+func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
 		mustSQL("service_store_0115_05.sql"),
 		roomID, listType,
-	); err != nil {
-		return fmt.Errorf("create acl room %q/%q: %w", roomID, listType, err)
+	)
+	if err != nil {
+		return false, fmt.Errorf("create acl room %q/%q: %w", roomID, listType, err)
 	}
 
-	return nil
+	return tag.RowsAffected() == 1, nil
 }
 
 func (s *pgxACLStore) DeleteRoom(ctx context.Context, roomID, listType string) error {

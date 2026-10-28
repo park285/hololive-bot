@@ -19,7 +19,6 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 
 	queueProtected := insertRetentionObservation(t, pool, communityPageKind, base, "queue-protected")
-	replayProtected := insertRetentionObservation(t, pool, communityPageKind, base.Add(time.Hour), "replay-protected")
 	headProtected := insertRetentionObservation(t, pool, "live_snapshot", base.Add(2*time.Hour), "head-protected")
 	oldestEligible := insertRetentionObservation(t, pool, "live_snapshot", base.Add(3*time.Hour), "oldest-eligible")
 	nextEligible := insertRetentionObservation(t, pool, communityPageKind, base.Add(4*time.Hour), "next-eligible")
@@ -29,18 +28,6 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 		`INSERT INTO public.source_observation_queue (observation_id) VALUES ($1)`, queueProtected,
 	); err != nil {
 		t.Fatalf("protect retention observation with queue row: %v", err)
-	}
-
-	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO public.source_observation_replay_requests (
-			observation_id, provider, observation_kind, subject_key, observation_key,
-			evidence_sha256, requested_by, reason, previous_attempt_count
-		)
-		SELECT id, provider, observation_kind, subject_key, observation_key,
-		       encode(evidence_sha256, 'hex'), 'dbtest', 'retention protection', 0
-		FROM public.source_observations
-		WHERE id = $1`, replayProtected); err != nil {
-		t.Fatalf("protect retention observation with replay row: %v", err)
 	}
 
 	if _, err := pool.Exec(t.Context(), `
@@ -72,7 +59,7 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 		t.Fatalf("second retention batch deleted %v, want [%d]", got, nextEligible)
 	}
 
-	assertRetentionObservationsExist(t, pool, []int64{queueProtected, replayProtected, headProtected, recent})
+	assertRetentionObservationsExist(t, pool, []int64{queueProtected, headProtected, recent})
 }
 
 func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {
@@ -344,8 +331,8 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 			 slot_state,scheduled_for,next_due_at,owner_instance,lease_expires_at)
 		VALUES ('leased','youtubejs','SUBJECT','community_collect','leased',9003,120000,
 			'ACTIVE',now(),now(),'collector',now()+interval '1 minute');
-		INSERT INTO youtube_live_sessions(video_id,channel_id,status)
-		VALUES ('retention-live','UC_retention','LIVE'),('retention-upcoming','UC_retention','UPCOMING');
+		INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin)
+		VALUES ('retention-live','UC_retention','LIVE','observed'),('retention-upcoming','UC_retention','UPCOMING','metadata_only');
 		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
 		SELECT id,source_observation_entity_kind_id('youtube_live_session'),'retention-'||subject_key,source_observation_decision_id('APPLIED') FROM source_observations
 		WHERE subject_key IN ('live','upcoming')`)

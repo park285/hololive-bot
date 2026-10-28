@@ -71,10 +71,19 @@ func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
 			wantErr: "iris client dependency is required",
 		},
 		{
-			name: "nil message adapter",
+			name: "nil reply outbox",
 			deps: &Dependencies{
 				Logger: testBotLogger(),
 				Client: &fakeIrisClient{},
+			},
+			wantErr: "reply outbox dependency is required",
+		},
+		{
+			name: "nil message adapter",
+			deps: &Dependencies{
+				Logger:      testBotLogger(),
+				Client:      &fakeIrisClient{},
+				ReplyOutbox: dispatchingReplyOutbox{},
 			},
 			wantErr: "message adapter dependency is required",
 		},
@@ -83,6 +92,7 @@ func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
 			deps: &Dependencies{
 				Logger:         testBotLogger(),
 				Client:         &fakeIrisClient{},
+				ReplyOutbox:    dispatchingReplyOutbox{},
 				MessageAdapter: &messaging.MessageAdapter{},
 				Formatter:      &formatter.ResponseFormatter{},
 				Cache:          &cache.Service{},

@@ -10,12 +10,11 @@ import (
 // helper 기동 실패 오류는 동작명을 한 번만 담아야 한다. 같은 접두가 leaf·중간·호출부에서 반복되면
 // 기동 실패 로그가 원인보다 접두로 채워진다.
 func TestStartYouTubeJSHelperFailureNamesActionOnce(t *testing.T) {
-	// 실행 파일이 없는 경로만 주어 helper 경로 해석이 기동 전에 실패하게 한다.
-	t.Setenv("YOUTUBEJS_NODE", "")
-	t.Setenv("YOUTUBEJS_SCRIPT", "")
-	t.Chdir(t.TempDir())
-
+	// helper 경로를 주지 않으면 다른 후보를 찾지 않고 기동 전에 실패한다.
 	collector := fixtureCollectorConfig(t)
+
+	collector.YouTubeJSNodePath = ""
+	collector.YouTubeJSScriptPath = ""
 
 	helper, _, err := startYouTubeJSHelper(t.Context(), &collector, youtubejs.NewRateLimiter(collector.RequestInterval))
 	if err == nil {

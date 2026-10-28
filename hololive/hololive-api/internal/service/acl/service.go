@@ -83,9 +83,11 @@ func parseACLEnabledStrict(s string) (bool, error) {
 	}
 }
 
-// ErrInvalidRoomChatID는 새 ACL 값이 정규 signed i64 chatID가 아님을 뜻한다.
-// 기존 비-chatID 값은 조회·제거만 허용한다.
+// ErrInvalidRoomChatID는 ACL 값이 정규 signed i64 chatID가 아님을 뜻한다. 등록·제거·저장 행 모두 이 규칙을 따른다.
 var ErrInvalidRoomChatID = errors.New("ACL room must be a canonical signed 64-bit chat ID")
+
+// ErrACLModeChanged는 방 변경 요청이 본 ACL 모드와 현재 모드가 달라 PG에 쓰지 않았음을 뜻한다.
+var ErrACLModeChanged = errors.New("ACL mode differs from the mode the room change expected")
 
 // validateRoomChatID는 console roomRegistration(canonicalI64)과 같은 규칙으로 부호·앞자리 0·범위를 본다.
 // 값이 방 이름일 수 있어 오류에는 원문을 넣지 않는다.
@@ -160,13 +162,9 @@ type Service struct {
 	store  aclStore
 	logger *slog.Logger
 
-	// changeListeners는 mutation이 PG에 반영된 직후 동기 호출된다(Follow 참고).
-	// 오류는 mutation 호출자에게 ErrACLPropagation으로 전달된다.
-	changeListeners []func(context.Context) error
-
-	// reloadMu는 mutation의 PG 커밋~메모리 적용과 Reload의 PG 읽기~메모리 적용을 직렬화한다.
-	// 메모리의 선행 변경이나 오래된 Reload가 최신 PG 커밋을 덮어쓰면 권한 철회가 유실된다.
-	reloadMu sync.Mutex
+	// mutationMu는 mutation의 PG 커밋~메모리 적용을 직렬화한다. 한 프로세스에 Service가 하나뿐이라
+	// admin 변경은 메모리 적용 뒤 같은 인스턴스를 쓰는 bot 판정에 바로 보인다.
+	mutationMu sync.Mutex
 
 	// 메모리 캐시 (빠른 조회용)
 	mu             sync.RWMutex
@@ -174,18 +172,6 @@ type Service struct {
 	mode           ACLMode
 	whitelistRooms map[string]struct{}
 	blacklistRooms map[string]struct{}
-}
-
-func (s *Service) IsReady() bool {
-	if s == nil {
-		return false
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return s.store != nil && s.logger != nil &&
-		s.whitelistRooms != nil && s.blacklistRooms != nil
 }
 
 // NewACLService ACL 서비스 생성 및 초기화.

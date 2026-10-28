@@ -60,9 +60,8 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	require.NoError(t, messageStrings.Load(t.Context()))
 
 	bot := &Bot{
-		logger: logger,
-		transport: transport.NewCommandTransport(&testIrisClient{}, formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings)),
-			transport.WithReplyOutboxWriter(writer)),
+		logger:    logger,
+		transport: transport.NewCommandTransport(writer, formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings))),
 	}
 	ctx := transport.WithReplyIdentity(t.Context(), rawID)
 

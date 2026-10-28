@@ -23,11 +23,13 @@ package transport
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -81,29 +83,22 @@ func (r *recordingReplyOutbox) RecordReply(_ context.Context, entry *ReplyOutbox
 	return nil
 }
 
-func TestReplyOutboxWriterInjection(t *testing.T) {
+func TestReplyOutboxWriterOwnsTheSendPath(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no writer is configured by default", func(t *testing.T) {
+	// writer 없는 transport는 조립 결함이다. 원장 없이 즉시 발송하는 대체 경로가 없으므로 기록하지 않고 실패한다.
+	t.Run("missing writer fails closed", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Nil(t, NewCommandTransport(&stubBotClient{}, nil).replyOutboxWriter())
+		ctx := WithReplyIdentity(t.Context(), "message:m-no-writer")
+		require.ErrorContains(t, NewCommandTransport(nil, nil).SendMessage(ctx, "room-1", "hello"), "reply outbox writer is not configured")
 	})
 
-	t.Run("the option installs the writer", func(t *testing.T) {
+	t.Run("the writer records the reply", func(t *testing.T) {
 		t.Parallel()
 
 		writer := &recordingReplyOutbox{}
-		transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
-
-		assert.Same(t, writer, transport.replyOutboxWriter())
-	})
-
-	t.Run("an installed writer owns the send path", func(t *testing.T) {
-		t.Parallel()
-
-		writer := &recordingReplyOutbox{}
-		transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
+		transport := NewCommandTransport(writer, nil)
 		ctx := WithReplyIdentity(t.Context(), "message:m-1")
 
 		require.NoError(t, transport.SendMessage(ctx, "room-1", "hello"))
@@ -115,8 +110,7 @@ func TestReplyOutboxWriterInjection(t *testing.T) {
 	t.Run("staging failures carry typed uncertainty", func(t *testing.T) {
 		t.Parallel()
 
-		transport := NewCommandTransport(&stubBotClient{}, nil,
-			WithReplyOutboxWriter(failingReplyOutbox{err: errors.New("postgres unavailable")}))
+		transport := NewCommandTransport(failingReplyOutbox{err: errors.New("postgres unavailable")}, nil)
 		ctx := WithReplyIdentity(t.Context(), "message:m-stage-fail")
 
 		err := transport.SendMessage(ctx, "room-1", "hello")
@@ -129,11 +123,12 @@ func TestExportedReplyClientRequestIDMatchesTheSentID(t *testing.T) {
 
 	const identity = "message:m-1"
 
-	client := &stubBotClient{}
+	writer := &recordingReplyOutbox{}
 	ctx := WithReplyIdentity(t.Context(), identity)
-	require.NoError(t, NewCommandTransport(client, nil).SendMessage(ctx, "room-1", "hello"))
+	require.NoError(t, NewCommandTransport(writer, nil).SendMessage(ctx, "room-1", "hello"))
+	require.Len(t, writer.entries, 1)
 
-	sentID, _ := capturedSendOptions(t, client.lastOpts)
+	sentID := writer.entries[0].ClientRequestID
 	assert.Equal(t, ReplyClientRequestID(identity, 0), sentID)
 	assert.Equal(t, "hololive:v1:"+identity+":"+ReplyPhase+":0", sentID)
 }
@@ -142,7 +137,7 @@ func TestReplyOutboxPersistsImageContentType(t *testing.T) {
 	t.Parallel()
 
 	writer := &recordingReplyOutbox{}
-	transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
+	transport := NewCommandTransport(writer, nil)
 	ctx := WithReplyIdentity(t.Context(), "message:m-image")
 
 	ctx = WithImageContentType(ctx, "video/mp4")
@@ -168,10 +163,29 @@ func TestDispatchStoredReplyReissuesFailedConflictWithStoredPayload(t *testing.T
 	assert.Equal(t, []string{"persisted payload", "persisted payload"}, client.messages)
 	require.Len(t, client.optsByAttempt, 2)
 
-	first, _ := capturedSendOptions(t, client.optsByAttempt[0])
-	second, _ := capturedSendOptions(t, client.optsByAttempt[1])
+	first := capturedClientRequestID(t, client.optsByAttempt[0])
+	second := capturedClientRequestID(t, client.optsByAttempt[1])
 	assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
 	assert.Equal(t, "hololive:v1:message:m-1:reply:0:r1", second)
+}
+
+// ErrNotSent(전송 전 확정 실패)는 iris-client-go v4에서 ErrTransport가 아니므로 결과 불명으로 승격하지 않는다.
+// 응답 소실(ErrTransport)만 outcome_unknown이다.
+func TestDispatchStoredReplyKeepsNotSentOutOfOutcomeUnknown(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"kind":"text","message":"persisted payload"}`)
+
+	notSent := &iris.TransportError{Op: "post /reply", Err: fmt.Errorf("%w: resolve h3 dial addr", iris.ErrNotSent)}
+	_, err := DispatchStoredReply(t.Context(), &stubBotClient{acceptErr: notSent}, "room-1", payload, "hololive:v1:message:m-1:reply:0")
+	require.ErrorIs(t, err, iris.ErrNotSent)
+	require.ErrorIs(t, err, iris.ErrRetryable)
+	require.False(t, IsReplyOutcomeUnknown(err))
+
+	lost := &iris.TransportError{Op: "post /reply", Err: io.ErrUnexpectedEOF, Idempotent: true}
+
+	_, err = DispatchStoredReply(t.Context(), &stubBotClient{acceptErr: lost}, "room-1", payload, "hololive:v1:message:m-1:reply:0")
+	require.True(t, IsReplyOutcomeUnknown(err))
 }
 
 func TestStoredReplyKindsStayDispatchable(t *testing.T) {
@@ -203,7 +217,7 @@ func TestConcurrentSendsRecordDistinctOrdinalsMatchingClientRequestIDs(t *testin
 	const identity = "message:m-race"
 
 	writer := &recordingReplyOutbox{}
-	transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
+	transport := NewCommandTransport(writer, nil)
 	ctx := WithReplyIdentity(t.Context(), identity)
 
 	const sends = 8

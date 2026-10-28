@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -547,11 +548,11 @@ func TestRoomIdentifierFollowsTheWebhookContract(t *testing.T) {
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
-	admitted, err := repo.Admit(ctx, inboxMessage("message:m-longroom", strings.Repeat("방", 256), "room:long"))
+	admission, err := repo.AdmitResult(ctx, inboxMessage("message:m-longroom", strings.Repeat("방", 256), "room:long"))
 	require.NoError(t, err, "SDK Room 계약(256 rune) 안의 방 제목이 admission에서 탈락하면 메시지가 유실된다")
-	assert.True(t, admitted)
+	assert.Equal(t, workercontract.AdmissionAccepted, admission)
 
-	_, err = repo.Admit(ctx, inboxMessage("message:m-toolong", strings.Repeat("방", 257), "room:toolong"))
+	_, err = repo.AdmitResult(ctx, inboxMessage("message:m-toolong", strings.Repeat("방", 257), "room:toolong"))
 	require.ErrorIs(t, err, ErrInvalidArgument)
 }
 
@@ -582,13 +583,13 @@ func TestMessageIdentityIsOneKeySpaceAcrossTheThreeLedgers(t *testing.T) {
 	require.Equal(t, prefixed, MessageIdentity(prefixed), "정규화는 멱등이어야 한다")
 
 	inbox := NewInboxRepository(pool)
-	admitted, err := inbox.Admit(ctx, inboxMessage(raw, "room-1", "room:room-1"))
+	admission, err := inbox.AdmitResult(ctx, inboxMessage(raw, "room-1", "room:room-1"))
 	require.NoError(t, err)
-	require.True(t, admitted)
+	require.Equal(t, workercontract.AdmissionAccepted, admission)
 
-	admitted, err = inbox.Admit(ctx, inboxMessage(prefixed, "room-1", "room:room-1"))
+	admission, err = inbox.AdmitResult(ctx, inboxMessage(prefixed, "room-1", "room:room-1"))
 	require.NoError(t, err)
-	assert.False(t, admitted, "raw id와 접두 id가 다른 행을 만들면 메시지당 실행 1회가 깨진다")
+	assert.NotEqual(t, workercontract.AdmissionAccepted, admission, "raw id와 접두 id가 다른 행을 만들면 메시지당 실행 1회가 깨진다")
 
 	executions := NewCommandExecutionRepository(pool)
 	claimed, err := executions.Claim(ctx, raw, "alarm", testClaimToken)

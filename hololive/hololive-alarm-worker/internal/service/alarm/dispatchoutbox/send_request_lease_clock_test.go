@@ -42,7 +42,7 @@ func runRequestClockScenario(t *testing.T, operation, lock string, expired bool)
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit, ids, requestID := seedRequestClockUnit(t, repo)
 	claims := attemptClaims(0, ids...)
 	candidate := SendRequest{Body: "frozen body", Route: SendRouteMarkdown}
@@ -276,7 +276,7 @@ func assertRequestClockSending(ctx context.Context, t *testing.T, pool *pgxpool.
 // 대상마다 원인을 돌려준다.
 func TestBeginSendRequestRejectsChangedFencesAtomically(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit, ids, requestID := seedRequestClockUnit(t, repo)
 	claims := attemptClaims(0, ids...)
 	request, err := repo.PinSendRequest(t.Context(), unit, claims, requestClockOwner, requestID, SendRequest{Body: "body", Route: SendRouteText})

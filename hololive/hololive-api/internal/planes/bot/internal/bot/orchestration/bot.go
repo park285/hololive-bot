@@ -118,7 +118,12 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 
 	bot.rooms = newRoomCatalog(bot.postgres, bot.irisClient, bot.logger)
 
-	bot.transport = bot.newCommandTransport()
+	bot.transport = transport.NewCommandTransport(
+		deps.ReplyOutbox,
+		bot.formatter,
+		transport.WithMarkdownReplies(bot.markdownReplies),
+		transport.WithRoomChatLookup(bot.rooms),
+	)
 	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender, ingress.WithRoomObserver(bot.rooms))
 	bot.lifecycle = lifecycle.NewBotLifecycle(
 		bot.logger,

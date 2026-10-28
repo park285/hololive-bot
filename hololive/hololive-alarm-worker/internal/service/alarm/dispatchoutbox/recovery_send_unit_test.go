@@ -26,7 +26,7 @@ func TestExpiredLeaseRecoveryKeepsSendUnitAtomic(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
-			repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+			repo := newOutboxRepository(t, pool)
 			_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{
 				sendUnitTestEnvelope("recover-pair", "recover-a"), sendUnitTestEnvelope("recover-pair", "recover-b"),
 			}})

@@ -499,62 +499,6 @@ func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.
 	requireQueueClaimIntact(ctx, t, pool, observation, "DLQ")
 }
 
-func TestReplayReactivatesTerminalQueueWithoutCopyingEvidence(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	repo := NewRepository(pool)
-
-	if _, err := publishkit.NewPublisher(repo.pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
-		t.Fatalf("publish: %v", err)
-	}
-
-	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Claims) != 1 {
-		t.Fatalf("claim: batch=%#v err=%v", batch, err)
-	}
-
-	observation := batch.Claims[0]
-	if _, finalizeErr := repo.Finalize(ctx, Claim{
-		ConsumerName:  batch.ConsumerName,
-		ObservationID: observation.ObservationID,
-		LeaseToken:    observation.LeaseToken,
-	}, func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error) {
-		return ReconcileResult{}, nil
-	}); finalizeErr != nil {
-		t.Fatalf("finalize: %v", finalizeErr)
-	}
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: observation.ObservationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "regression verification",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request replay: result=%#v err=%v", replay, err)
-	}
-
-	assertTableCount(t, pool, "source_observations", 1)
-	assertTableCount(t, pool, "source_observation_replay_requests", 1)
-
-	var (
-		status      string
-		replayCount int
-	)
-
-	if err := pool.QueryRow(ctx, `
-		SELECT status, replay_count FROM source_observation_queue WHERE observation_id = $1
-	`, observation.ObservationID).Scan(&status, &replayCount); err != nil {
-		t.Fatalf("load replayed queue: %v", err)
-	}
-
-	if status != "PENDING" || replayCount != 1 {
-		t.Fatalf("status=%s replay_count=%d", status, replayCount)
-	}
-}
-
 func TestClaimWorkStaysCompact(t *testing.T) {
 	t.Parallel()
 

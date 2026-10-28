@@ -28,13 +28,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -44,9 +42,6 @@ const (
 	alarmsPath      = "/api/holo/alarms"
 	alarmPath       = "/api/holo/alarm"
 	alarmDeleteBody = `{"roomId":"room-1","channelId":"ch-1"}`
-
-	majorEventPath        = "/api/holo/trigger/major-event"
-	majorEventMonthlyPath = "/api/holo/trigger/major-event-monthly"
 )
 
 type stubAlarmCRUDForServer struct {
@@ -118,7 +113,7 @@ func newDiscardLogger() *slog.Logger {
 func newActivityLoggerForTest(t *testing.T) *activity.Logger {
 	t.Helper()
 
-	return activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), newDiscardLogger())
+	return activity.NewActivityLogger(newDiscardLogger())
 }
 
 func TestAlarmHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
@@ -235,57 +230,6 @@ func alarmDeleteSuccess(t *testing.T) {
 	}
 }
 
-func TestMajorEventHandler_TriggerEndpoints(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	weekly := func(sched MajorEventScheduler) gin.HandlerFunc {
-		h := (&Handler{logger: newDiscardLogger(), majorEventScheduler: sched}).DomainHandlers().MajorEvent
-
-		return h.TriggerMajorEventNotification
-	}
-
-	monthly := func(sched MajorEventMonthlyScheduler) gin.HandlerFunc {
-		h := (&Handler{logger: newDiscardLogger(), majorEventMonthlyScheduler: sched}).DomainHandlers().MajorEvent
-
-		return h.TriggerMajorEventMonthlyNotification
-	}
-
-	inProgress := triggercontracts.ErrNotificationInProgress
-
-	tests := []struct {
-		name       string
-		path       string
-		invoke     gin.HandlerFunc
-		wantStatus int
-		wantError  string
-	}{
-		{"weekly scheduler not initialized", majorEventPath, weekly(nil), http.StatusServiceUnavailable, "major event scheduler not initialized"},
-		{"weekly conflict in progress", majorEventPath, weekly(&stubMajorEventScheduler{err: inProgress}), http.StatusConflict, "notification already in progress"},
-		{"weekly internal error", majorEventPath, weekly(&stubMajorEventScheduler{err: errors.New("boom")}), http.StatusInternalServerError, ""},
-		{"weekly success", majorEventPath, weekly(&stubMajorEventScheduler{}), http.StatusOK, ""},
-		{"monthly scheduler not initialized", majorEventMonthlyPath, monthly(nil), http.StatusServiceUnavailable, ""},
-		{"monthly conflict in progress", majorEventMonthlyPath, monthly(&stubMajorEventMonthlyScheduler{err: inProgress}), http.StatusConflict, ""},
-		{"monthly success", majorEventMonthlyPath, monthly(&stubMajorEventMonthlyScheduler{}), http.StatusOK, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, rec := newAPITestContext(http.MethodPost, tt.path, nil)
-			tt.invoke(ctx)
-
-			if tt.wantError != "" {
-				assertErrorResponse(t, rec, tt.wantStatus, tt.wantError)
-
-				return
-			}
-
-			if rec.Code != tt.wantStatus {
-				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
-			}
-		})
-	}
-}
-
 func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -299,7 +243,7 @@ func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 
 	t.Run("add room rejects non chat ID", func(t *testing.T) {
 		handler := (&Handler{acl: &acl.Service{}, logger: newDiscardLogger()}).DomainHandlers().Room
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte(`{"room":"홀로라이브 알림방"}`))
+		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte(`{"room":"홀로라이브 알림방","mode":"whitelist"}`))
 		handler.AddRoom(ctx)
 
 		assertErrorResponse(t, rec, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)")

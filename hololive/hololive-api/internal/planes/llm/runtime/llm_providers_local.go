@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"strings"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 // errSelectedLLMProviderDisabled와 errConsensusLLMDisabled는 기능이 설정으로 꺼져 있음을 알리는 sentinel이다.
@@ -71,7 +71,7 @@ func ProvideLLMCostTracker() llm.CostTracker {
 	return llm.NewTokenMetricsRecorder()
 }
 
-func ProvideMajorEventLLMClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMajorEventLLMClient(provider apiconfig.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	client, model, _, err := buildProviderClient(provider, tracker, logger, providerClientSpec{
 		schemaName: "event_summary",
 		webSearch:  true,
@@ -94,9 +94,9 @@ func ProvideMajorEventLLMClient(provider settings.LLMProviderConfig, tracker llm
 
 // ProvideMemberNewsLLMClient는 member news 요약 client를 만든다. 선택한 provider가 꺼져 있으면
 // errSelectedLLMProviderDisabled를 감싼 오류로 기능 비활성을 알리고, 그 밖의 초기화 실패는 기동 실패 대상 오류다.
-func ProvideMemberNewsLLMClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
+func ProvideMemberNewsLLMClient(provider apiconfig.LLMProviderConfig, llmConfig *apiconfig.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
 	if llmConfig == nil {
-		llmConfig = &settings.LLMConfig{}
+		llmConfig = &apiconfig.LLMConfig{}
 	}
 
 	client, model, temperatureApplied, err := buildProviderClient(provider, tracker, logger, providerClientSpec{
@@ -126,9 +126,9 @@ func ProvideMemberNewsLLMClient(provider settings.LLMProviderConfig, llmConfig *
 
 // ProvideMemberNewsReviewerClient는 consensus가 켜져 있을 때만 reviewer client를 만든다. 설정으로 consensus나
 // provider가 꺼져 있으면 비활성 sentinel을 감싼 오류를, 그 밖의 초기화 실패는 기동 실패 대상 오류를 돌려준다.
-func ProvideMemberNewsReviewerClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
+func ProvideMemberNewsReviewerClient(provider apiconfig.LLMProviderConfig, llmConfig *apiconfig.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
 	if llmConfig == nil {
-		llmConfig = &settings.LLMConfig{}
+		llmConfig = &apiconfig.LLMConfig{}
 	}
 
 	model := cmp.Or(llmConfig.MemberNews.ReviewerModel, llmConfig.MemberNewsModel)
@@ -149,9 +149,9 @@ func ProvideMemberNewsReviewerClient(provider settings.LLMProviderConfig, llmCon
 	return client, nil
 }
 
-func ProvideMajorEventReviewerClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMajorEventReviewerClient(provider apiconfig.LLMProviderConfig, llmConfig *apiconfig.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if llmConfig == nil {
-		llmConfig = &settings.LLMConfig{}
+		llmConfig = &apiconfig.LLMConfig{}
 	}
 
 	client, err := buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
@@ -170,9 +170,9 @@ func ProvideMajorEventReviewerClient(provider settings.LLMProviderConfig, llmCon
 	return client
 }
 
-func ProvideMajorEventAdjudicatorClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMajorEventAdjudicatorClient(provider apiconfig.LLMProviderConfig, llmConfig *apiconfig.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if llmConfig == nil {
-		llmConfig = &settings.LLMConfig{}
+		llmConfig = &apiconfig.LLMConfig{}
 	}
 
 	client, err := buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
@@ -192,9 +192,9 @@ func ProvideMajorEventAdjudicatorClient(provider settings.LLMProviderConfig, llm
 
 // ProvideMemberNewsAdjudicatorClient는 consensus가 켜져 있을 때만 adjudicator client를 만든다. 오류 계약은
 // ProvideMemberNewsReviewerClient와 같다.
-func ProvideMemberNewsAdjudicatorClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
+func ProvideMemberNewsAdjudicatorClient(provider apiconfig.LLMProviderConfig, llmConfig *apiconfig.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
 	if llmConfig == nil {
-		llmConfig = &settings.LLMConfig{}
+		llmConfig = &apiconfig.LLMConfig{}
 	}
 
 	model := cmp.Or(llmConfig.MemberNews.AdjudicatorModel, llmConfig.MemberNewsModel)
@@ -217,7 +217,7 @@ func ProvideMemberNewsAdjudicatorClient(provider settings.LLMProviderConfig, llm
 
 // buildConsensusLLMClient는 consensus나 provider가 꺼져 있으면 비활성 sentinel을 감싼 오류를 돌려준다.
 // 오류를 기동 실패로 올릴지는 기능별 호출자가 정한다.
-func buildConsensusLLMClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec consensusClientSpec) (llm.Client, error) {
+func buildConsensusLLMClient(provider apiconfig.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec consensusClientSpec) (llm.Client, error) {
 	if !spec.enabled {
 		return nil, errConsensusLLMDisabled
 	}
@@ -247,7 +247,7 @@ func isLLMFeatureDisabled(err error) bool {
 }
 
 // major event consensus는 B5 범위 밖이라 기존대로 초기화 실패를 경고로 남기고 consensus 없이 진행한다.
-func logConsensusInitializationWarning(logger *slog.Logger, message string, provider settings.LLMProviderConfig, err error) {
+func logConsensusInitializationWarning(logger *slog.Logger, message string, provider apiconfig.LLMProviderConfig, err error) {
 	if isLLMFeatureDisabled(err) {
 		return
 	}
@@ -258,7 +258,7 @@ func logConsensusInitializationWarning(logger *slog.Logger, message string, prov
 	)
 }
 
-func buildProviderClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec providerClientSpec) (llm.Client, string, bool, error) {
+func buildProviderClient(provider apiconfig.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec providerClientSpec) (llm.Client, string, bool, error) {
 	selected, err := selectLLMProvider(provider)
 	if err != nil {
 		return nil, "", false, fmt.Errorf("select LLM provider: %w", err)
@@ -276,7 +276,7 @@ func buildProviderClient(provider settings.LLMProviderConfig, tracker llm.CostTr
 		llm.WithCostTracker(tracker),
 	}
 
-	if selected.name == settings.LLMProviderGemini {
+	if selected.name == apiconfig.LLMProviderGemini {
 		client, buildErr := buildGeminiProviderClient(selected, model, logger, opts)
 		if buildErr != nil {
 			return nil, "", false, fmt.Errorf("build gemini provider client: %w", buildErr)
@@ -325,16 +325,16 @@ func buildCliproxyProviderClient(selected selectedLLMProvider, model string, log
 	return client, model, temperatureApplied, nil
 }
 
-func selectLLMProvider(config settings.LLMProviderConfig) (selectedLLMProvider, error) {
+func selectLLMProvider(config apiconfig.LLMProviderConfig) (selectedLLMProvider, error) {
 	switch normalizedProviderName(config.Name) {
-	case settings.LLMProviderGemini:
+	case apiconfig.LLMProviderGemini:
 		provider, err := selectGeminiProvider(config.Gemini)
 		if err != nil {
 			return selectedLLMProvider{}, fmt.Errorf("select gemini provider: %w", err)
 		}
 
 		return provider, nil
-	case settings.LLMProviderCliproxy:
+	case apiconfig.LLMProviderCliproxy:
 		provider, err := selectCliproxyProvider(config.Cliproxy)
 		if err != nil {
 			return selectedLLMProvider{}, fmt.Errorf("select cliproxy provider: %w", err)
@@ -346,7 +346,7 @@ func selectLLMProvider(config settings.LLMProviderConfig) (selectedLLMProvider, 
 	}
 }
 
-func selectGeminiProvider(config settings.GeminiConfig) (selectedLLMProvider, error) {
+func selectGeminiProvider(config apiconfig.GeminiConfig) (selectedLLMProvider, error) {
 	if !config.Enabled || strings.TrimSpace(config.APIKey) == "" {
 		return selectedLLMProvider{}, errSelectedLLMProviderDisabled
 	}
@@ -356,7 +356,7 @@ func selectGeminiProvider(config settings.GeminiConfig) (selectedLLMProvider, er
 	}
 
 	return selectedLLMProvider{
-		name:           settings.LLMProviderGemini,
+		name:           apiconfig.LLMProviderGemini,
 		baseURL:        config.BaseURL,
 		apiKey:         config.APIKey,
 		defaultModel:   config.Model,
@@ -364,7 +364,7 @@ func selectGeminiProvider(config settings.GeminiConfig) (selectedLLMProvider, er
 	}, nil
 }
 
-func selectCliproxyProvider(config settings.CliproxyConfig) (selectedLLMProvider, error) {
+func selectCliproxyProvider(config apiconfig.CliproxyConfig) (selectedLLMProvider, error) {
 	if !config.Enabled || strings.TrimSpace(config.APIKey) == "" {
 		return selectedLLMProvider{}, errSelectedLLMProviderDisabled
 	}
@@ -374,7 +374,7 @@ func selectCliproxyProvider(config settings.CliproxyConfig) (selectedLLMProvider
 	}
 
 	return selectedLLMProvider{
-		name:           settings.LLMProviderCliproxy,
+		name:           apiconfig.LLMProviderCliproxy,
 		baseURL:        config.BaseURL,
 		apiKey:         config.APIKey,
 		defaultModel:   config.Model,
@@ -393,11 +393,11 @@ func logProviderInitializationError(logger *slog.Logger, name string, err error)
 }
 
 func normalizedProviderName(name string) string {
-	return cmp.Or(strings.ToLower(strings.TrimSpace(name)), settings.LLMProviderCliproxy)
+	return cmp.Or(strings.ToLower(strings.TrimSpace(name)), apiconfig.LLMProviderCliproxy)
 }
 
-func selectedProviderReasoningLevel(config settings.LLMProviderConfig) string {
-	if normalizedProviderName(config.Name) == settings.LLMProviderGemini {
+func selectedProviderReasoningLevel(config apiconfig.LLMProviderConfig) string {
+	if normalizedProviderName(config.Name) == apiconfig.LLMProviderGemini {
 		return config.Gemini.ThinkingLevel
 	}
 

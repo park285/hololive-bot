@@ -30,20 +30,6 @@ var AppTimeout = struct {
 	Shutdown: 10 * time.Second,
 }
 
-var CORSConfig = struct {
-	AllowMethods []string
-	AllowHeaders []string
-}{
-	AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-	AllowHeaders: []string{
-		"Origin", "Content-Type", "Accept", "Authorization",
-		// Client Hints 헤더 (실제 기기 정보 수집용)
-		"Sec-CH-UA", "Sec-CH-UA-Mobile", "Sec-CH-UA-Platform",
-		"Sec-CH-UA-Platform-Version", "Sec-CH-UA-Model",
-		"Sec-CH-UA-Arch", "Sec-CH-UA-Bitness", "Sec-CH-UA-Full-Version-List",
-	},
-}
-
 var RequestTimeout = struct {
 	AdminRequest      time.Duration
 	BotCommand        time.Duration
@@ -88,10 +74,16 @@ var DatabaseConfig = struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
+	// ConnMaxLifetimeJitter·ConnMaxIdleTime은 shared-go v2.18.0이 숨은 기본값을 없애며 호출자 명시로 옮긴 값이다.
+	// 이전 실효값(수명/5 지터, 유휴 30분)을 그대로 둔다.
+	ConnMaxLifetimeJitter time.Duration
+	ConnMaxIdleTime       time.Duration
 }{
-	MaxOpenConns:    8,
-	MaxIdleConns:    2,
-	ConnMaxLifetime: 5 * time.Minute,
+	MaxOpenConns:          8,
+	MaxIdleConns:          2,
+	ConnMaxLifetime:       5 * time.Minute,
+	ConnMaxLifetimeJitter: time.Minute,
+	ConnMaxIdleTime:       30 * time.Minute,
 }
 
 var QueryTimeout = struct {

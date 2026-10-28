@@ -79,7 +79,7 @@ func grantReclaimReplay(ctx context.Context, t *testing.T, pool *pgxpool.Pool, r
 
 	require.NoError(t, pool.QueryRow(ctx, `UPDATE bot_reply_outbox SET status='manual_review' WHERE message_id=$1 RETURNING id`, messageID).Scan(&id))
 
-	result, err := repo.ReplayManualReview(ctx, ReplyOutboxManualReplay{OutboxID: id, Actor: testOperatorEmail, Reason: manualReplayReason})
+	result, err := replayManualReviewArtifact(ctx, repo, id, testOperatorEmail, manualReplayReason)
 	require.NoError(t, err)
 	require.Equal(t, "replayed", result)
 }

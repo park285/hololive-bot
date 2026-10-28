@@ -52,14 +52,16 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 		r.WorkerObservability.Start(ctx)
 	}
 
+	startAlarmScheduler(ctx, errCh, alarmSchedulerHooks{
+		Logger:    r.Logger,
+		Start:     r.startBackgroundSchedulers,
+		SetCancel: r.setAlarmSchedulerCancel,
+	})
+
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
-		Logger:     r.Logger,
-		ServerAddr: r.ServerAddr,
-		StartAlarmScheduler: func(ctx context.Context) error {
-			return r.startBackgroundSchedulers(ctx)
-		},
-		StartHTTPServer:         r.StartHTTPServer,
-		SetAlarmSchedulerCancel: r.setAlarmSchedulerCancel,
+		Logger:          r.Logger,
+		ServerAddr:      r.ServerAddr,
+		StartHTTPServer: r.StartHTTPServer,
 	})
 }
 

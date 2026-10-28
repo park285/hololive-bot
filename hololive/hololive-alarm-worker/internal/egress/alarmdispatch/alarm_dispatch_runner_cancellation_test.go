@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
@@ -245,7 +245,7 @@ func TestAlarmDispatchRunnerCancellationCompensationPreservesOwnerAndAttemptFenc
 func TestAlarmDispatchLaterSerialGroupCannotSendAfterLeaseExpiry(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
-	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repo := newOutboxRepository(t, pool)
 
 	for _, room := range []string{testAlarmRoomID, "late-room"} {
 		_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(room, nil)}})
@@ -343,7 +343,7 @@ func claimFrozenAlarmDispatchSerialGroups(t *testing.T, pool *pgxpool.Pool, cons
 func alarmDispatchCancellationPersistedRequest(t *testing.T, pool *pgxpool.Pool) (*dispatchoutbox.Consumer, alarmDispatchGroup, *dispatchoutbox.SendRequest) {
 	t.Helper()
 
-	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repo := newOutboxRepository(t, pool)
 	_, err := repo.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}})
 	require.NoError(t, err)
 

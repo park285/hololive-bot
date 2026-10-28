@@ -18,8 +18,6 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Central production Compose service definitions; used with the live-compat overlay | - |
 | `deploy/compose/docker-compose.collector.yml` | YAML | `deploy/compose/docker-compose.collector.yml` | Standalone AP collector/issuer base; central prod extends the collector and adds central dependencies | - |
 | `deploy/compose/docker-compose.live-compat.yml` | YAML | `deploy/compose/docker-compose.live-compat.yml` | Required central host wiring and shortlink ingress | - |
-| `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
-| `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.seoul.yml` | YAML | `deploy/compose/docker-compose.seoul.yml` | Seoul Compose AP (`youtube-collector-b` + isolated issuer `youtube-po-b`) | - |
 
 The Console module row describes the current Go gateway + Android Kotlin source.
@@ -84,12 +82,12 @@ and single-primary fence.
 | Owner | Current source paths | Responsibility |
 |---|---|---|
 | API composition | `hololive/hololive-api/internal/config`, `internal/apifoundation` | API plane 설정·profile, plane별 DB pool·transport 수명, process-owned Valkey/member cache의 생성·borrower join·최종 close |
-| API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream/OAuth/WebSocket handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
-| API common HTTP | `hololive/hololive-api/internal/httpapi` | bot·LLM이 사용하는 trigger handler와 route 조립 |
+| API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
+| API plane 조립 | `hololive/hololive-api/internal/app` | process 자원(bot pool, Valkey, member cache, 단일 ACL Service)과 plane 사이 in-process 주입(bot→llm 구독·digest, admin→bot Iris 방 목록), 운영 CLI `--rerun-notification` |
 | API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/canonicalwrite`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, transaction 전용 canonical persist, replay·retention 및 private reducer |
-| Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,httpapi,dedup,dispatchoutbox,queue}`, `internal/egress/{alarmdispatch,notificationdelivery,sendoutcome}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache, `/internal/alarm/*` HTTP handler·route registrar·binding DTO, dispatch 저장/발행·runner, 범용 notification delivery dispatcher·store·SQL, Iris 발송 결과 분류, 실제 formatter |
+| Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,httpapi,dedup,dispatchoutbox,queue}`, `internal/egress/{alarmdispatch,notificationdelivery,sendoutcome}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache, `/internal/alarm/*` HTTP handler·route registrar·요청 필수 값 검사(wire 타입은 shared `pkg/contracts/alarm`), dispatch 저장/발행·runner, 범용 notification delivery dispatcher·store·SQL, Iris 발송 결과 분류, 실제 formatter |
 | Collector | `hololive/hololive-youtube-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |
-| Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{database,holodex,iris,modules}` | strict 환경 파싱, 설정 구획 타입·loader·순수 검증, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계는 각 module `internal/config`가 소유 |
+| Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{database,holodex,iris,modules}` | strict 환경 파싱, 여러 runtime이 읽는 설정 구획 타입·loader·순수 검증, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계와 단일 runtime 전용 구획(hololive-api의 LLM·CLIProxy·Gemini·Exa)은 각 module `internal/config`가 소유 |
 
 `hololive-shared/pkg/contracts/notificationdelivery` owns only the persisted
 `notification_delivery_outbox` JSON envelope and immutable request snapshot.
@@ -119,5 +117,5 @@ not a parallel MQ configuration type.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-collector AP fleet). `hololive-api` hosts the bot/admin/llm planes in one process on ports 30001/30003/30006.
 - Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` and starts `hololive-api`, `hololive-alarm-worker`, fleet member `c` (`youtube-collector`, 30025), its isolated issuer and central infra. Runtime hosts use verified images with no builds, following the release runbook.
-- Prepared Seoul/AP Compose uses `docker-compose.collector.yml` + the selected AP overlay, with no central service interpolation or dependencies. Osaka `a` and Osaka2 `d` retain native systemd execution. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
+- Prepared Seoul Compose uses `docker-compose.collector.yml` + `docker-compose.seoul.yml`, with no central service interpolation or dependencies. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`, `youtube-producer`.

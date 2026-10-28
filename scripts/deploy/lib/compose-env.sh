@@ -153,7 +153,7 @@ compose_env_list_interpolation_keys_from_files() {
     # central-c 서비스를 선택하지 않고 치환 키만 포함한다.
     for file in "$@"; do
         case "${file##*/}" in
-            docker-compose.prod.yml|docker-compose.seoul.yml|docker-compose.osaka.yml|docker-compose.osaka2.yml)
+            docker-compose.prod.yml|docker-compose.seoul.yml)
                 collector_base="$(dirname "$file")/docker-compose.collector.yml"
                 [[ ! -f "$collector_base" ]] || inputs+=("$collector_base")
                 ;;

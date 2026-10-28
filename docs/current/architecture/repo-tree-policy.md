@@ -12,7 +12,7 @@ Allowed at root:
 
 - Entrypoints and readme: `README.md`, `AGENTS.md`, `LICENSE`
 - Release versioning: `VERSION` (release SSOT read by `scripts/check-release-version.sh`), `CHANGELOG.md`
-- Go workspace: `go.work`, `go.work.sum`, root `go.mod`/`go.sum`, and `doc.go` (the root `package workspace` anchor)
+- Go workspace: `go.work` and `go.work.sum`. The root holds no Go module; every module lives under `hololive/`
 - Repository config: `.gitignore`, `.golangci.yml`, `.go-version`, `.python-version`, `.tool-versions`, `.dockerignore`
 - Build entry script: `build-all.sh`
 - Canonical env sample: `.env.example` (region- and host-specific `.env.*.example` live beside their compose files under `deploy/compose/`)
@@ -21,7 +21,7 @@ Allowed at root:
 
 Not at root — these were relocated and must not return:
 
-- Module tests belong beside their source; `doc.go` stays at root as the workspace package anchor
+- Module tests belong beside their source; a root `go.mod`/`go.sum`/`doc.go` workspace anchor
 - Local logs, backups, data dumps, generated review bundles, key/pem files, or unclassified design kits (covered by §Local Runtime Data and the artifact gate)
 
 ## Docs

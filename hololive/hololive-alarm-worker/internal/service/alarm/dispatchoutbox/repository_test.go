@@ -117,3 +117,13 @@ func TestValidateEventPayloadRoomAgnosticRejectsNestedDeliveryFields(t *testing.
 		t.Fatal("validateEventPayloadRoomAgnostic() error = nil, want nested delivery field error")
 	}
 }
+
+// postgres 없이 조립하면 pool 없는 저장소를 돌려주지 않고 생성 시점에 거절한다.
+func TestNewPgxRepositoryRejectsMissingPostgres(t *testing.T) {
+	t.Parallel()
+
+	repository, err := NewPgxRepository(nil, nil)
+	if err == nil {
+		t.Fatalf("NewPgxRepository(nil) = %v, want error", repository)
+	}
+}

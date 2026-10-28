@@ -33,11 +33,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
-	apiserver "github.com/kapu/hololive-api/internal/httpapi"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
-	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -80,7 +75,7 @@ func TestBuildLLMSchedulerRouter_Endpoints(t *testing.T) {
 		gin.SetMode(prevMode)
 	})
 
-	router, err := buildLLMSchedulerRouter(t.Context(), newDiscardLogger(), nil, "test-key", nil, nil, nil)
+	router, err := buildLLMSchedulerRouter(t.Context(), newDiscardLogger(), "test-key", nil)
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
@@ -135,62 +130,4 @@ func TestBuildLLMSchedulerRouter_Endpoints(t *testing.T) {
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusNotFound, rr.Code)
 	})
-}
-
-func TestBuildLLMSchedulerHTTPServers_FailsClosedWithoutAPIKey(t *testing.T) {
-	prevMode := gin.Mode()
-
-	t.Cleanup(func() {
-		gin.SetMode(prevMode)
-	})
-
-	logger := newDiscardLogger()
-	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
-
-	servers, err := buildLLMSchedulerHTTPServers(t.Context(), &settings.ServerConfig{}, logger, triggerHandler, "", nil, nil, nil)
-	require.Error(t, err)
-	assert.Nil(t, servers)
-	assert.Contains(t, err.Error(), "API_SECRET_KEY required")
-}
-
-func TestBuildLLMSchedulerRouter_WithAPIKey(t *testing.T) {
-	prevMode := gin.Mode()
-
-	t.Cleanup(func() {
-		gin.SetMode(prevMode)
-	})
-
-	logger := newDiscardLogger()
-	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
-
-	router, err := buildLLMSchedulerRouter(t.Context(), logger, triggerHandler, "test-key", nil, nil, nil)
-	require.NoError(t, err)
-	require.NotNil(t, router)
-
-	withoutKeyReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	withoutKeyRR := httptest.NewRecorder()
-	router.ServeHTTP(withoutKeyRR, withoutKeyReq)
-	assert.Equal(t, http.StatusUnauthorized, withoutKeyRR.Code)
-
-	withKeyReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	withKeyReq.Header.Set(common.APIKeyHeader, "test-key")
-
-	withKeyRR := httptest.NewRecorder()
-	router.ServeHTTP(withKeyRR, withKeyReq)
-	assert.Equal(t, http.StatusServiceUnavailable, withKeyRR.Code)
-}
-
-func TestBuildLLMSchedulerRouter_FailsClosedForInternalDataRoutesWithoutAPIKey(t *testing.T) {
-	prevMode := gin.Mode()
-
-	t.Cleanup(func() {
-		gin.SetMode(prevMode)
-	})
-
-	logger := newDiscardLogger()
-
-	router, err := buildLLMSchedulerRouter(t.Context(), logger, nil, "", &majorevent.Repository{}, membernewssvc.NewService(nil, nil, nil, nil, logger), nil)
-	require.Error(t, err)
-	assert.Nil(t, router)
-	assert.Contains(t, err.Error(), "API_SECRET_KEY required")
 }

@@ -22,6 +22,12 @@ import (
 
 const commandTimeout = 15 * time.Minute
 
+// migrationPoolOptions는 migration 풀 옵션이다. 시작 Ping 기한이 shared-go v2.18.0부터 필수라
+// 이전 라이브러리 숨은 값(5초)을 명시한다.
+func migrationPoolOptions() pgxdb.Options {
+	return pgxdb.Options{Ping: pgxdb.PingConfig{PingTimeout: 5 * time.Second}}
+}
+
 func main() {
 	log.SetFlags(0)
 
@@ -66,7 +72,7 @@ func run() error {
 		return fmt.Errorf("postgres conn string: %w", err)
 	}
 
-	pool, err := pgxdb.OpenPoolDSN(ctx, connString, pgxdb.Options{})
+	pool, err := pgxdb.OpenPoolDSN(ctx, connString, migrationPoolOptions())
 	if err != nil {
 		return fmt.Errorf("open postgres pool: %w", err)
 	}

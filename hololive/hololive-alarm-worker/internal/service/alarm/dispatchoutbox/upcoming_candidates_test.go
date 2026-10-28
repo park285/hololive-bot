@@ -30,7 +30,7 @@ func TestUpcomingCandidatesRecoverFrozenPartialPublishAfterRestart(t *testing.T)
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{first, second}))
 
 	// 첫 방 commit 뒤 publish 응답 소실: 수용 receipt를 못 받아도 ledger가 증거다.
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *first, Version: 1}}})
 	require.NoError(t, err)
 
@@ -121,7 +121,7 @@ func TestUpcomingCandidatesRejectCollision(t *testing.T) {
 
 	n.Stream.Title = "Conflicting event"
 
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
 	require.NoError(t, err)
 
@@ -207,7 +207,7 @@ func TestUpcomingCandidatesDoNotReopenUnknownDeliveryAtExpiry(t *testing.T) {
 	store := NewUpcomingCandidates(pool)
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{n}))
 
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
 	require.NoError(t, err)
 
@@ -235,8 +235,8 @@ func TestUpcomingCandidatesHonorNewerCanonicalFactsOnly(t *testing.T) {
 	store := NewUpcomingCandidates(pool)
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{n}))
 
-	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,last_seen_at)
-		VALUES('staged-video','staged-channel','UPCOMING',$1,$1)`, now.Add(10*time.Minute))
+	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,last_seen_at,lifecycle_origin)
+		VALUES('staged-video','staged-channel','UPCOMING',$1,$1,'metadata_only')`, now.Add(10*time.Minute))
 	require.NoError(t, err)
 
 	pending, err := store.Pending(t.Context(), now.Add(time.Second))

@@ -171,46 +171,6 @@ func TestReplayEpochFencesPreEpochObservationAlreadyClaimed(t *testing.T) {
 	requireNoReconcileSideEffects(t, pool)
 }
 
-func TestReplayEpochRejectsManualAndPendingReplay(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	repo := NewRepository(pool)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	observationID := publishOne(ctx, t, repo, &proof, "pre-epoch-replay")
-	finalizeObservation(ctx, t, repo, observationID)
-
-	pendingRequestID := insertPendingReplayRequest(t, pool, observationID)
-	activateReplayEpoch(t, repo)
-
-	manual, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: observationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "manual pre-epoch replay must be rejected",
-	})
-	if err != nil {
-		t.Fatalf("request pre-epoch replay: %v", err)
-	}
-
-	if manual.Applied || manual.RejectionCode != replayEpochExpiredCode {
-		t.Fatalf("manual replay = %#v", manual)
-	}
-
-	processed, err := repo.ProcessNextReplay(ctx)
-	if err != nil {
-		t.Fatalf("process pending pre-epoch replay: %v", err)
-	}
-
-	if !processed {
-		t.Fatal("pending pre-epoch replay was not processed")
-	}
-
-	assertReplayRequestRejected(t, pool, pendingRequestID)
-	assertReplayRequestRejected(t, pool, manual.RequestID)
-	assertQueueStatus(t, pool, observationID, string(contract.StatusProcessed))
-}
-
 func TestReplayEpochAllowsPostEpochObservation(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -272,61 +232,5 @@ func assertReplayEpochDeadLetter(t *testing.T, pool *pgxpool.Pool, observationID
 
 	if status != string(contract.StatusDeadLetter) || errorCode != replayEpochExpiredCode {
 		t.Fatalf("queue status=%s error=%s", status, errorCode)
-	}
-}
-
-func insertPendingReplayRequest(t *testing.T, pool *pgxpool.Pool, observationID int64) int64 {
-	t.Helper()
-
-	var requestID int64
-
-	if err := pool.QueryRow(t.Context(), `
-		INSERT INTO source_observation_replay_requests (
-			observation_id,
-			provider,
-			observation_kind,
-			subject_key,
-			observation_key,
-			evidence_sha256,
-			requested_by,
-			reason,
-			previous_attempt_count
-		)
-		SELECT observation.id,
-		       observation.provider,
-		       observation.observation_kind,
-		       observation.subject_key,
-		       observation.observation_key,
-		       encode(observation.evidence_sha256, 'hex'),
-		       $2,
-		       $3,
-		       queue.attempt_count
-		FROM source_observations AS observation
-		JOIN source_observation_queue AS queue
-		  ON queue.observation_id = observation.id
-		WHERE observation.id = $1
-		RETURNING id
-	`, observationID, testReplayOperator, "pending pre-epoch replay").Scan(&requestID); err != nil {
-		t.Fatalf("insert pending replay request: %v", err)
-	}
-
-	return requestID
-}
-
-func assertReplayRequestRejected(t *testing.T, pool *pgxpool.Pool, requestID int64) {
-	t.Helper()
-
-	var status, rejectionCode string
-
-	if err := pool.QueryRow(t.Context(), `
-		SELECT status, COALESCE(rejection_code, '')
-		FROM source_observation_replay_requests
-		WHERE id = $1
-	`, requestID).Scan(&status, &rejectionCode); err != nil {
-		t.Fatalf("load replay request: %v", err)
-	}
-
-	if status != "REJECTED" || rejectionCode != replayEpochExpiredCode {
-		t.Fatalf("replay request status=%s rejection=%s", status, rejectionCode)
 	}
 }

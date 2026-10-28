@@ -26,11 +26,6 @@ func (a *boundarySettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, 
 	return a.testSettingsApplier.ApplyAlarmAdvanceMinutes(ctx, minutes)
 }
 
-func (a *boundarySettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {
-	a.calls++
-	return a.testSettingsApplier.ApplyMemberNewsWeeklyRunNow(ctx)
-}
-
 func TestSettingsRejectUnknownFieldsBeforePersistenceOrApply(t *testing.T) {
 	store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())
 	applier := &boundarySettingsApplier{}
@@ -52,13 +47,6 @@ func TestSettingsRejectUnknownFieldsBeforePersistenceOrApply(t *testing.T) {
 			t.Fatal("rejected setting changed persisted or applied state")
 		}
 	}
-
-	ctx, recorder := newSettingsTestContext(t, []byte(`{"memberNewsWeeklyRunNow":true,"retired":true}`))
-	h.UpdateLLMSettings(ctx)
-
-	if recorder.Code != http.StatusBadRequest || applier.calls != 0 {
-		t.Fatalf("unknown LLM setting status=%d calls=%d", recorder.Code, applier.calls)
-	}
 }
 
 func TestRoomNameAbsentFromProductionAndActivityLogs(t *testing.T) {
@@ -79,47 +67,13 @@ func TestRoomNameAbsentFromProductionAndActivityLogs(t *testing.T) {
 	t.Cleanup(func() { os.Stdout = prior })
 
 	logger := sharedlogging.NewLogger()
-	directory := t.TempDir()
+	audit := activity.NewActivityLogger(logger)
+	h := &SettingsHandler{Logger: logger, Activity: audit, Alarm: &roomNameRecordingAlarm{}}
+	ctx, recorder := newSettingsTestContext(t, []byte(`{"roomId":"private-room-id","roomName":"`+canary+`"}`))
+	h.SetRoomName(ctx)
 
-	root, openErr := os.OpenRoot(directory)
-	if openErr != nil {
-		t.Fatal(openErr)
-	}
-
-	t.Cleanup(func() {
-		if closeErr := root.Close(); closeErr != nil {
-			t.Error(closeErr)
-		}
-	})
-
-	for _, name := range []string{"", "activity.log"} {
-		path := ""
-
-		if name != "" {
-			path = filepath.Join(directory, name)
-		}
-
-		audit := activity.NewActivityLogger(path, logger)
-		h := &SettingsHandler{Logger: logger, Activity: audit, Alarm: &roomNameRecordingAlarm{}}
-		ctx, recorder := newSettingsTestContext(t, []byte(`{"roomId":"private-room-id","roomName":"`+canary+`"}`))
-		h.SetRoomName(ctx)
-
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status=%d", recorder.Code)
-		}
-
-		if closeErr := audit.Close(); closeErr != nil {
-			t.Fatal(closeErr)
-		}
-
-		if name != "" {
-			raw, readErr := root.ReadFile(name)
-			if readErr != nil {
-				t.Fatal(readErr)
-			}
-
-			assertRoomNameLogIsPrivate(t, raw, canary)
-		}
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d", recorder.Code)
 	}
 
 	bytes, err := os.ReadFile(output.Name())

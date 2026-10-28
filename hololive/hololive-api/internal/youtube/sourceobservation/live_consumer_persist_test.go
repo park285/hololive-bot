@@ -96,8 +96,8 @@ func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
 	lastSeen := time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC)
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at)
-		VALUES ('vid-keep', 'UC_TEST', 'LIVE', 'Keep', $1)
+		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at, lifecycle_origin)
+		VALUES ('vid-keep', 'UC_TEST', 'LIVE', 'Keep', $1, 'observed')
 	`, lastSeen); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -145,8 +145,8 @@ func TestLiveConsumerPreservesPremiereClassification(t *testing.T) {
 
 			if _, err := pool.Exec(ctx, `
 				INSERT INTO youtube_live_sessions (
-					video_id, channel_id, status, title, last_seen_at, is_premiere
-				) VALUES ($1, $2, 'UPCOMING', 'Keep classification', $3, $4)
+					video_id, channel_id, status, title, last_seen_at, is_premiere, lifecycle_origin
+				) VALUES ($1, $2, 'UPCOMING', 'Keep classification', $3, $4, 'metadata_only')
 			`, testVideoID, testChannelID, seen, test.isPremiere); err != nil {
 				t.Fatalf("seed classified session: %v", err)
 			}

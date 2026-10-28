@@ -3,7 +3,7 @@ package botruntime
 import (
 	"context"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -25,7 +25,7 @@ func (s *stubIrisClient) SendImage(context.Context, string, []byte, ...iris.Send
 func (s *stubIrisClient) SendMultipleImages(context.Context, string, [][]byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return &iris.ReplyAcceptedResponse{}, nil
 }
-func (s *stubIrisClient) Ping(context.Context) bool { return true }
+func (s *stubIrisClient) Ping(context.Context) error { return nil }
 
 func (s *stubIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
 	return &iris.RoomListResponse{}, nil

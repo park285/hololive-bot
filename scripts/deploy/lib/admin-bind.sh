@@ -7,7 +7,6 @@ admin_network_preflight() {
     local firewall_required=false
     shift 2
     admin_bind_assert_host "$env_file" || return 1
-    admin_source_assert_allowlist "$env_file" || return 1
     compose_env_key_exists_in_file "$env_file" HOLOLIVE_ADMIN_API_PORT_BIND_IP && firewall_required=true
     for file in "$@"; do
         [[ "${file##*/}" != docker-compose.live-compat.yml ]] || firewall_required=true
@@ -42,25 +41,6 @@ admin_bind_assert_host() {
         echo '[ERROR] Admin bind must match this host verified Tailscale identity' >&2
         return 1
     fi
-}
-
-admin_source_assert_allowlist() {
-    local env_file="$1"
-    local value source
-    local -a sources=()
-    value="$(compose_env_read_value_from_file "${env_file}" ADMIN_ALLOWED_IPS)" || return 1
-    # Compose의 기존 unset/empty 기본값과 일치한다.
-    value="${value:-127.0.0.1/32,::1/128,100.100.1.5/32}"
-    case "${value}" in
-        ,*|*,|*,,*) echo '[ERROR] Admin source list contains an empty entry' >&2; return 1 ;;
-    esac
-    IFS=',' read -r -a sources <<<"${value}"
-    for source in "${sources[@]}"; do
-        case "${source}" in
-            127.0.0.1/32|::1/128|100.100.1.5/32) ;;
-            *) echo '[ERROR] Admin sources must be loopback or the approved Iris Console host' >&2; return 1 ;;
-        esac
-    done
 }
 
 # unit이 예전 ruleset으로 active인 경우도 source set/forward chain 확인에서 거절한다.

@@ -29,7 +29,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	templateview "github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -146,7 +146,7 @@ func (f *llmSchedulerFormatter) FormatMemberNewsDigest(ctx context.Context, dige
 		return "", errors.New("format member news digest: digest is nil")
 	}
 
-	data := templateview.BuildMemberNewsDigest(*convertMemberNewsDigest(digest), f.store)
+	data := templateview.BuildMemberNewsDigest(*digest, f.store)
 
 	return f.renderNotification(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed", templateview.ShouldFoldItems(data.DisplayCount))
 }

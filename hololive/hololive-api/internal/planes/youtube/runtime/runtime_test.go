@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -634,7 +636,7 @@ func TestRuntimePublishesProcessReadiness(t *testing.T) {
 	t.Cleanup(func() { health.RemoveComponent(youtubeHealthComponent) })
 
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
-	runtime.degraded.Store(true)
+	runtime.projectionDegraded.Store(true)
 	runtime.Start(t.Context(), make(chan error, 1))
 
 	response, ready := health.GetReadiness()
@@ -706,11 +708,11 @@ func newTestRuntime(t *testing.T, claimer observationClaimer, consumer observati
 func testYouTubePlaneConfig(t *testing.T) apiconfig.YouTubePlaneConfig {
 	t.Helper()
 
-	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), configtest.APIProfileFixture(t))
 
 	var sourceSettings apiconfig.SourceObservationWorkerSettings
 
-	if err := workercontract.DecodeWorkerSettings(loaded, apiconfig.WorkerSourceObservation, &sourceSettings); err != nil {
+	if err := jsonv2.Unmarshal(loaded.Profile.Workers[apiconfig.WorkerSourceObservation].Settings, &sourceSettings); err != nil {
 		t.Fatal(err)
 	}
 

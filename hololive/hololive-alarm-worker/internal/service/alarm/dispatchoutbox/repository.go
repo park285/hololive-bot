@@ -12,7 +12,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 var _ Repository = (*PgxRepository)(nil)
@@ -42,24 +41,21 @@ type fencedQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func NewPgxRepository(postgres database.Client, logger *slog.Logger) *PgxRepository {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	if postgres == nil {
-		return &PgxRepository{now: time.Now, logger: logger}
-	}
-
-	return &PgxRepository{pool: postgres.GetPool(), now: time.Now, logger: logger}
+// PoolSource는 저장소가 쓸 pgx pool을 내준다. 운영 조립은 database.Client를, 테스트는 dbtest.WrapPool을 넘긴다.
+type PoolSource interface {
+	GetPool() *pgxpool.Pool
 }
 
-func NewPgxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *PgxRepository {
+func NewPgxRepository(postgres PoolSource, logger *slog.Logger) (*PgxRepository, error) {
+	if postgres == nil {
+		return nil, errors.New("new dispatch outbox repository: postgres is required")
+	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	return &PgxRepository{pool: pool, now: time.Now, logger: logger}
+	return &PgxRepository{pool: postgres.GetPool(), now: time.Now, logger: logger}, nil
 }
 
 // applyFenced는 sendfence 관측 열을 돌려주는 전이 문장을 실행하고 want 대상 전원이 적용됐는지 확인한다. 미스는

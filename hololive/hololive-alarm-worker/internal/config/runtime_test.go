@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -11,9 +12,21 @@ import (
 func setRuntimeEnv(t *testing.T) {
 	t.Helper()
 	settingstest.ClearRuntimeRoleEnv(t)
-	settingstest.SetRequiredLoadEnv(t)
-	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+	setWorkerRequiredEnv(t)
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 	t.Setenv("APP_ENV", "development")
+}
+
+// setWorkerRequiredEnv는 alarm-worker LoadRuntime이 요구하는 egress·Iris·H3 입력만 세운다.
+func setWorkerRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOLODEX_API_KEY", "test-key")
+	t.Setenv("KAKAO_ROOMS", "test-room")
+	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
+	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
+	t.Setenv("IRIS_BASE_URL", "https://iris.example.test")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", settingstest.HololiveH3CertPath)
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", settingstest.HololiveH3KeyPath)
 }
 
 func TestLoadRuntimeRejectsInvalidDispatchRetentionEnv(t *testing.T) {
@@ -60,14 +73,11 @@ func TestLoadRuntimeSelectsAlarmWorkerTracingToggle(t *testing.T) {
 	}
 }
 
-// alarm-worker가 보관하지 않는 공통 구획(LLM·bot 표시·CORS 등)의 잘못된 값도 예전처럼 기동 실패로 드러난다.
-func TestLoadRuntimeRejectsInvalidUnconsumedCommonEnv(t *testing.T) {
+// alarm-worker가 읽는 bot 표시 구획의 잘못된 값은 기동 실패로 드러난다.
+// LLM·Exa·사진 동기화처럼 hololive-api만 읽는 env는 worker가 검사하지 않는다.
+func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	for key, value := range map[string]string{
-		"MEMBER_NEWS_TEMPERATURE":              "warm",
 		"BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS": "1d",
-		"CORS_ENFORCE":                         "maybe",
-		"EXA_ENABLED":                          "maybe",
-		"PHOTO_SYNC_ENABLED":                   "maybe",
 	} {
 		t.Run(key, func(t *testing.T) {
 			setRuntimeEnv(t)
@@ -134,5 +144,35 @@ func TestLoadRuntimeRequiresControlCapacityAndPreservesIdleZero(t *testing.T) {
 
 	if config.Postgres.PoolMinConns != 0 || config.Postgres.PoolMaxConns != 2 {
 		t.Fatalf("pool bounds = %d/%d, want 0/2", config.Postgres.PoolMinConns, config.Postgres.PoolMaxConns)
+	}
+}
+
+// 발행 batch 한도는 config가 소유한다. 미설정은 1000이고, 잘못된 값은 기본값으로 바뀌지 않고 기동 오류다.
+func TestLoadRuntimeAlarmDispatchPublishBatchLimit(t *testing.T) {
+	setRuntimeEnv(t)
+	t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", "1000")
+
+	if err := os.Unsetenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH"); err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := LoadRuntime()
+	if err != nil {
+		t.Fatalf("LoadRuntime() error = %v", err)
+	}
+
+	if got := config.AlarmDispatchPublish.MaxDeliveriesPerBatch; got != 1000 {
+		t.Fatalf("MaxDeliveriesPerBatch = %d, want 1000", got)
+	}
+
+	for _, value := range []string{"many", "0", "-10", "", "  "} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", value)
+
+			_, err := LoadRuntime()
+			if err == nil || !strings.Contains(err.Error(), "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH") {
+				t.Fatalf("LoadRuntime() error = %v, want batch limit rejection", err)
+			}
+		})
 	}
 }

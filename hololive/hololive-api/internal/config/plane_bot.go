@@ -15,7 +15,7 @@ import (
 )
 
 // BotPlaneConfig는 bot plane(Iris webhook 수신·명령 응답·durable inbox/outbox)이 소비하는 설정만 담는다.
-// 공통 env 형식 검사는 settings.ValidateRuntimeEnvSyntax가, 역할 검증은 Validate가 소유한다.
+// 각 구획 env 형식은 그 구획 loader가, 역할 검증은 Validate가 소유한다.
 type BotPlaneConfig struct {
 	Environment      string
 	Server           settings.ServerConfig
@@ -30,9 +30,6 @@ type BotPlaneConfig struct {
 	Bot              settings.BotConfig
 	Webhook          WebhookConfig
 	APIWorkerProfile *APIWorkerProfile
-	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
-	SettingsFilePath string
-	LLMSchedulerURL  string
 	AlarmServiceURL  string
 }
 
@@ -58,17 +55,6 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 		return nil, fmt.Errorf("validate tracing config: %w", err)
 	}
 
-	// 예전 bot 로더는 CORS_ENFORCE 기본값 false로 production 허용 origin 누락을 거절했다. 전체 기동에서는 admin plane의
-	// 더 엄격한 검사가 같은 조건을 덮고, 단독 bot 로더는 같은 거절을 여기서 유지한다.
-	cors, err := settings.LoadCORSConfig(false)
-	if err != nil {
-		return nil, fmt.Errorf("load CORS config: %w", err)
-	}
-
-	if err = settings.ValidateCORSConfig(envload.AppEnvironment(), cors); err != nil {
-		return nil, fmt.Errorf("validate CORS config: %w", err)
-	}
-
 	config, err := loadBotPlaneConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load bot plane config: %w", err)
@@ -81,14 +67,10 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	return config, nil
 }
 
-// loadProcessEnv는 .env를 읽고, bot·admin plane이 공유하는 공통 env 형식 검사를 한 번 수행한다.
+// loadProcessEnv는 .env를 읽는다. 환경 값 형식은 각 plane config가 자기 구획 loader로 검사한다.
 func loadProcessEnv() error {
 	if err := envload.DotEnv(); err != nil {
 		return fmt.Errorf("load dot env: %w", err)
-	}
-
-	if err := settings.ValidateRuntimeEnvSyntax(); err != nil {
-		return fmt.Errorf("validate runtime env syntax: %w", err)
 	}
 
 	return nil
@@ -135,8 +117,6 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 		Bot:              bot,
 		Webhook:          webhookConfigFromProfile(profile),
 		APIWorkerProfile: profile,
-		SettingsFilePath: settings.LoadSettingsFilePath(),
-		LLMSchedulerURL:  sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		AlarmServiceURL:  sharedenv.String("ALARM_INTERNAL_URL", ""),
 	}
 	// KakaoConfig는 잠금을 포함하므로 값 복사 대신 필드를 옮긴다.

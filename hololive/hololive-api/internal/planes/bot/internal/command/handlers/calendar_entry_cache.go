@@ -19,6 +19,7 @@ import (
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 const (
@@ -89,7 +90,7 @@ func (f *cachedCelebrationCalendarFinder) FindMembersWithCelebrationsInMonth(
 		var entries []domain.CalendarEntry
 
 		// DoChan의 goroutine panic은 호출자의 복구 경계를 벗어나므로 공유 조회 안에서 오류로 돌려준다.
-		err := panicguard.RunE(slog.Default(), panicguard.BackgroundTask, "calendar-entry-cache", func() error {
+		err := panicguard.RunE(slog.Default(), panicscope.BackgroundTask, "calendar-entry-cache", func() error {
 			var loadErr error
 
 			entries, loadErr = f.loadEntriesSnapshot(ctx, path, month, referenceYear)

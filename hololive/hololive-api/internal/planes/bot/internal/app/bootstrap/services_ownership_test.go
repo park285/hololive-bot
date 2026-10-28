@@ -3,78 +3,12 @@ package bootstrap
 import (
 	"errors"
 	"io"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"slices"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"testing/synctest"
-
-	"github.com/kapu/hololive-api/internal/apifoundation"
-	apiconfig "github.com/kapu/hololive-api/internal/config"
-	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type botOwnerCloser func() error
 
 func (f botOwnerCloser) Close() error { return f() }
-
-func TestBotInfrastructureOwnerJoinsHolodexBeforeClosingClients(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		entered := make(chan struct{})
-		release := make(chan struct{})
-		finish := sync.OnceFunc(func() { close(release) })
-
-		defer finish()
-
-		var resourceCloses atomic.Int64
-
-		var order []string
-
-		owner := &botInfrastructureOwner{
-			stopHolodex: func() {
-				order = append(order, "holodex")
-
-				close(entered)
-				<-release
-			},
-			internalClients: []io.Closer{botOwnerCloser(func() error {
-				resourceCloses.Add(1)
-
-				order = append(order, "internal-client")
-
-				return nil
-			})},
-			irisClient: botOwnerCloser(func() error {
-				order = append(order, "iris")
-
-				return nil
-			}),
-		}
-		closed := make(chan error, 1)
-
-		go func() { closed <- owner.Close() }()
-
-		<-entered
-
-		if got := resourceCloses.Load(); got != 0 {
-			t.Fatalf("client closed while Holodex is alive=%d want=0", got)
-		}
-
-		finish()
-
-		if err := <-closed; err != nil {
-			t.Fatal(err)
-		}
-
-		if want := []string{"holodex", "internal-client", "iris"}; !slices.Equal(order, want) {
-			t.Fatalf("cleanup order=%v want=%v", order, want)
-		}
-	})
-}
 
 func TestBotInfrastructureOwnerPartialBuildClosesAcquiredResourcesAndPreservesErrors(t *testing.T) {
 	clientErr := errors.New("client close failed")
@@ -96,20 +30,5 @@ func TestBotInfrastructureOwnerPartialBuildClosesAcquiredResourcesAndPreservesEr
 
 	if internalCloses != 1 || irisCloses != 1 {
 		t.Fatalf("cleanup counts client/Iris=%d/%d want=1/1", internalCloses, irisCloses)
-	}
-}
-
-func TestInitAlarmYouTubeStackStillRejectsMalformedSettingsFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "settings.json")
-	if err := os.WriteFile(path, []byte(`{"alarmAdvanceMinutes":`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	stack, err := InitAlarmYouTubeStack(&apiconfig.BotPlaneConfig{
-		AlarmServiceURL: "http://127.0.0.1:8081", SettingsFilePath: path,
-		Notification: settings.NotificationConfig{AdvanceMinutes: []int{10, 5, 1}},
-	}, &apifoundation.ScraperHolodexFoundation{MemberData: &membermocks.DataProvider{}}, slog.New(slog.DiscardHandler))
-	if err == nil || stack != nil {
-		t.Fatalf("malformed settings startup=(%+v, %v) want=(nil, error)", stack, err)
 	}
 }

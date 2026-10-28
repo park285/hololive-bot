@@ -161,11 +161,11 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	return bytes.NewBuffer(b)
 }
 
-// decodeResponse: 응답 바디를 APIResponse로 디코딩합니다.
-func decodeResponse(t *testing.T, body *bytes.Buffer) APIResponse {
+// decodeResponse: 응답 바디를 contractsalarm.Envelope로 디코딩합니다.
+func decodeResponse(t *testing.T, body *bytes.Buffer) contractsalarm.Envelope[any] {
 	t.Helper()
 
-	var resp APIResponse
+	var resp contractsalarm.Envelope[any]
 
 	if err := jsonv2.UnmarshalRead(body, &resp); err != nil {
 		t.Fatalf("응답 디코딩 실패: %v", err)
@@ -185,7 +185,7 @@ func TestAddAlarm(t *testing.T) {
 	}{
 		{
 			name: "성공",
-			body: AddAlarmRequest{
+			body: contractsalarm.AddRequest{
 				RoomID:    testRoomID,
 				ChannelID: testChannelID,
 			},
@@ -197,7 +197,7 @@ func TestAddAlarm(t *testing.T) {
 		},
 		{
 			name:       "binding 실패: room_id 누락",
-			body:       AddAlarmRequest{ChannelID: testChannelID},
+			body:       contractsalarm.AddRequest{ChannelID: testChannelID},
 			mockFn:     nil,
 			wantStatus: http.StatusBadRequest,
 			wantOK:     false,
@@ -205,7 +205,7 @@ func TestAddAlarm(t *testing.T) {
 		},
 		{
 			name: "서비스 에러",
-			body: AddAlarmRequest{
+			body: contractsalarm.AddRequest{
 				RoomID:    testRoomID,
 				ChannelID: testChannelID,
 			},
@@ -259,7 +259,7 @@ func TestRemoveAlarm(t *testing.T) {
 	}{
 		{
 			name: "성공",
-			body: RemoveAlarmRequest{RoomID: testRoomID, ChannelID: testChannelID},
+			body: contractsalarm.RemoveRequest{RoomID: testRoomID, ChannelID: testChannelID},
 			mockFn: func(_ context.Context, _, _ string, _ domain.AlarmTypes) (bool, error) {
 				return true, nil
 			},
@@ -268,7 +268,7 @@ func TestRemoveAlarm(t *testing.T) {
 		},
 		{
 			name:       "binding 실패: channel_id 누락",
-			body:       RemoveAlarmRequest{RoomID: testRoomID},
+			body:       contractsalarm.RemoveRequest{RoomID: testRoomID},
 			wantStatus: http.StatusBadRequest,
 			wantOK:     false,
 		},
@@ -415,7 +415,7 @@ func TestClearRoomAlarms(t *testing.T) {
 	}{
 		{
 			name: "성공",
-			body: ClearAlarmsRequest{RoomID: testRoomID},
+			body: contractsalarm.ClearRequest{RoomID: testRoomID},
 			mockFn: func(_ context.Context, _ string) (int, error) {
 				return 3, nil
 			},
@@ -456,7 +456,7 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	}{
 		{
 			name: "성공",
-			body: UpdateAdvanceMinutesRequest{Minutes: 10},
+			body: contractsalarm.UpdateAdvanceMinutesRequest{Minutes: 10},
 			mockFn: func(minutes int) (domain.AdvanceMinutesResult, error) {
 				return domain.AdvanceMinutesResult{RequestedMinutes: minutes, Outcome: domain.ApplyConfirmed, TargetMinutes: []int{5, 10}}, nil
 			},
@@ -465,7 +465,7 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 		},
 		{
 			name:       "binding 실패: minutes=0 (min=1 위반)",
-			body:       UpdateAdvanceMinutesRequest{Minutes: 0},
+			body:       contractsalarm.UpdateAdvanceMinutesRequest{Minutes: 0},
 			mockFn:     nil,
 			wantStatus: http.StatusBadRequest,
 			wantOK:     false,

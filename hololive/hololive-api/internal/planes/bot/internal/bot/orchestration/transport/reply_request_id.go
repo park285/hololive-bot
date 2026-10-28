@@ -21,7 +21,6 @@
 package transport
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -29,7 +28,7 @@ import (
 	"strconv"
 	"strings"
 
-	iris "github.com/park285/iris-client-go/v3/iris"
+	iris "github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/irisdurable"
 )
 
@@ -44,15 +43,6 @@ const (
 var replyReissueLadder = irisdurable.ReissueLadder{
 	MaxGenerations: iris.ReplyReissueMaxGenerations,
 	Derive:         reissuedReplyClientRequestID,
-}
-
-func nextReplyClientRequestID(ctx context.Context) string {
-	identity, ordinal, ok := nextReplyEmission(ctx)
-	if !ok {
-		return ""
-	}
-
-	return replyClientRequestID(identity, ordinal)
 }
 
 func replyClientRequestID(messageID string, ordinal uint64) string {

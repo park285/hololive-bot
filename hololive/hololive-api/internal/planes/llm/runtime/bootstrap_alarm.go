@@ -28,12 +28,12 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	llmclient "github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	mnsummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
@@ -42,16 +42,16 @@ import (
 // 못하면 조용히 기능을 줄이지 않고 오류를 돌려 기동을 실패시킨다.
 func initMemberNewsService(
 	ctx context.Context,
-	provider settings.LLMProviderConfig,
-	llmConfig *settings.LLMConfig,
-	exaConfig settings.ExaConfig,
+	provider apiconfig.LLMProviderConfig,
+	llmConfig *apiconfig.LLMConfig,
+	exaConfig apiconfig.ExaConfig,
 	xAllowlistPath string,
 	postgres database.Client,
 	membersData domain.MemberDataProvider, guards *llmGuards,
 	logger *slog.Logger,
 ) (*membernews.Service, error) {
 	if llmConfig == nil {
-		llmConfig = &settings.LLMConfig{}
+		llmConfig = &apiconfig.LLMConfig{}
 	}
 
 	clients, err := provideMemberNewsLLMClients(provider, llmConfig, ProvideLLMCostTracker(), logger)
@@ -120,7 +120,7 @@ type memberNewsLLMClients struct {
 	adjudicator llmclient.Client
 }
 
-func provideMemberNewsLLMClients(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llmclient.CostTracker, logger *slog.Logger) (memberNewsLLMClients, error) {
+func provideMemberNewsLLMClients(provider apiconfig.LLMProviderConfig, llmConfig *apiconfig.LLMConfig, tracker llmclient.CostTracker, logger *slog.Logger) (memberNewsLLMClients, error) {
 	var clients memberNewsLLMClients
 
 	summary, err := ProvideMemberNewsLLMClient(provider, llmConfig, tracker, logger)

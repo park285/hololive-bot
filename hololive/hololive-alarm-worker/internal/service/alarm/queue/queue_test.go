@@ -21,7 +21,6 @@
 package queue
 
 import (
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -61,10 +60,7 @@ func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string)
 func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
-		WithOutbox(repository),
-		WithWakeupEnabled(false),
-	)
+	publisher := newTestPublisher(t, cacheClient, repository, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000})
 
 	notification := &domain.AlarmNotification{
 		AlarmType:    domain.AlarmTypeLive,
@@ -91,7 +87,7 @@ func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 	t.Parallel()
 
-	publisher := NewPublisher(cachemocks.NewStrictClient(), slog.New(slog.DiscardHandler))
+	publisher := newTestPublisher(t, cachemocks.NewStrictClient(), &fakeOutboxRepository{}, PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000})
 
 	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
 		t.Run(string(alarmType), func(t *testing.T) {
@@ -111,7 +107,7 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 func TestPublisherPublishDispatchBatchAcceptsDeliveryDigestContentEnvelope(t *testing.T) {
 	t.Parallel()
 
-	publisher := NewPublisher(cachemocks.NewStrictClient(), slog.New(slog.DiscardHandler), WithWakeupEnabled(false), WithOutbox(&fakeOutboxRepository{}))
+	publisher := newTestPublisher(t, cachemocks.NewStrictClient(), &fakeOutboxRepository{}, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000})
 	envelope := queueTestDeliveryDigestEnvelope("room-canonical")
 
 	envelope.Version = contractsalarm.QueueEnvelopeVersionV1
@@ -125,7 +121,7 @@ func TestPublisherPublishDispatchBatchRejectsMissingEnvelopeVersion(t *testing.T
 	t.Parallel()
 
 	outbox := &fakeOutboxRepository{}
-	publisher := NewPublisher(cachemocks.NewStrictClient(), slog.New(slog.DiscardHandler), WithWakeupEnabled(false), WithOutbox(outbox))
+	publisher := newTestPublisher(t, cachemocks.NewStrictClient(), outbox, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000})
 	envelope := queueTestDeliveryDigestEnvelope("room-versionless")
 
 	_, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})

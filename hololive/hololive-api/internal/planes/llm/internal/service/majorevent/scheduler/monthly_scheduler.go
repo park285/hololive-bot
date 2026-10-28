@@ -29,10 +29,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
+	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -130,13 +130,13 @@ type monthlyCollected struct {
 	events []*domain.MajorEvent
 }
 
-func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) (triggercontracts.Result, error) {
+func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) (notification.Result, error) {
 	monthKey := s.getMonthKey()
-	result := triggercontracts.NewResult(0, 0, 0)
+	result := notification.NewResult(0, 0, 0)
 
 	if err := s.digest.RunDigest(ctx, schedulerkit.DigestOp[monthlyCollected]{
 		LockKey:           fmt.Sprintf("majorevent:lock:monthly:%s", monthKey),
-		OnLockNotAcquired: func() error { return triggercontracts.ErrNotificationInProgress },
+		OnLockNotAcquired: func() error { return notification.ErrNotificationInProgress },
 		Collect: func(ctx context.Context) (monthlyCollected, bool, error) {
 			return s.monthlyNotificationInputs(ctx, monthKey)
 		},
@@ -193,7 +193,7 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 	return monthlyCollected{rooms: rooms, events: events}, true, nil
 }
 
-func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) (triggercontracts.Result, error) {
+func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) (notification.Result, error) {
 	return executePeriodNotification(ctx, periodNotification{
 		outboxRepository: s.outboxRepository,
 		outputGuard:      s.outputGuard,

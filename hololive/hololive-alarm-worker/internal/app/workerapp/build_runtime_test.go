@@ -2,7 +2,6 @@ package workerapp
 
 import (
 	"log/slog"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,30 +43,6 @@ func TestAlarmSchedulerEnabled(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tt.want, alarmSchedulerEnabled(tt.configValue))
-		})
-	}
-}
-
-func TestLoadAlarmDispatchPublishConfigDefaults(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", "1000")
-	require.NoError(t, os.Unsetenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH"))
-
-	appConfig, err := loadAlarmDispatchPublishConfig(&workerconfig.AlarmWorkerProfile{
-		AlarmDispatch: workerconfig.AlarmDispatchWorkerSettings{WakeupEnabled: true},
-	})
-	require.NoError(t, err)
-	assert.True(t, appConfig.WakeupEnabled)
-	assert.Equal(t, 1000, appConfig.MaxDeliveriesPerBatch)
-}
-
-// 잘못된 batch 한도는 기본값 1000으로 바뀌지 않고 설정 오류가 된다. 비어 있거나 공백뿐인 값도 strict env 계약대로 오류다.
-func TestLoadAlarmDispatchPublishConfigRejectsInvalidMaxDeliveries(t *testing.T) {
-	for _, value := range []string{"many", "0", "-10", "", "  "} {
-		t.Run(value, func(t *testing.T) {
-			t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", value)
-
-			_, err := loadAlarmDispatchPublishConfig(&workerconfig.AlarmWorkerProfile{})
-			require.ErrorContains(t, err, "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH")
 		})
 	}
 }

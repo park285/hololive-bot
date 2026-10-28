@@ -6,8 +6,6 @@ PROD_FILE="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 ACTIVE_COMPOSE_FILES=(
     "${PROD_FILE}"
     "${ROOT_DIR}/deploy/compose/docker-compose.live-compat.yml"
-    "${ROOT_DIR}/deploy/compose/docker-compose.osaka.yml"
-    "${ROOT_DIR}/deploy/compose/docker-compose.osaka2.yml"
     "${ROOT_DIR}/deploy/compose/docker-compose.seoul.yml"
     "${ROOT_DIR}/deploy/compose/docker-compose.remote-cache.yml"
 )
@@ -62,11 +60,12 @@ grep -Fq 'ALARM_INTERNAL_URL: https://hololive-alarm-worker:30007' "${PROD_FILE}
     || fail "hololive-api does not target alarm-worker as the alarm provider"
 pass "the business API targets alarm-worker as the alarm provider"
 
-for port in 30001 30003 30006; do
+# llm plane(30003)은 container 안 healthcheck만 쓰므로 host에 publish하지 않는다.
+for port in 30001 30006; do
     grep -Fq "127.0.0.1:${port}:${port}" "${PROD_FILE}" \
-        || fail "hololive-api compatibility listener ${port} is not published"
+        || fail "hololive-api listener ${port} is not published"
 done
-pass "hololive-api preserves the three listener ports in one service"
+pass "hololive-api publishes the bot and admin listener ports"
 
 service_block hololive-alarm-worker | grep -Fq 'NOTIFICATION_EGRESS_ROLE: "owner"' \
     || fail "alarm-worker is not configured as proactive egress owner"

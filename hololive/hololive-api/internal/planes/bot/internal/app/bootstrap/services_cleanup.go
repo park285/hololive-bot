@@ -12,7 +12,6 @@ import (
 type botInfrastructureOwner struct {
 	once sync.Once
 
-	stopHolodex     func()
 	irisClient      io.Closer
 	internalClients []io.Closer
 	closeErr        error
@@ -22,10 +21,6 @@ type botInfrastructureOwner struct {
 // 같은 owner가 부분 생성 rollback과 정상 plane Close를 맡는다.
 func (o *botInfrastructureOwner) Close() error {
 	o.once.Do(func() {
-		if o.stopHolodex != nil {
-			o.stopHolodex()
-		}
-
 		var closeErrs []error
 
 		if err := internalhttp.CloseAll(o.internalClients...); err != nil {

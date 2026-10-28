@@ -39,9 +39,8 @@ github.com/cpuguy83/dockercfg v0.3.2/go.mod h1:sugsbF4//dDlL/i+S+rtpIWp+5h0BHJHf
 github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
 github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
-github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/distribution/reference v0.6.0 h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5QvfrDyIgxBk=
 github.com/distribution/reference v0.6.0/go.mod h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=
 github.com/docker/go-connections v0.8.2 h1:9d9DEokx5W7qlr0shkFXIxEA7+TTD+llwzcykSlxMNc=
@@ -162,10 +161,10 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/park285/iris-client-go/v3 v3.2.0 h1:sLqH8pEgX1+fWB+K0Edax3xs2jKSD99JQfHB/xeAf9o=
-github.com/park285/iris-client-go/v3 v3.2.0/go.mod h1:O2oviJeBByWmB6MEuOBQIolo+WVA2VSNqhpx6HKrkhw=
-github.com/park285/shared-go/v2 v2.17.0 h1:Ptdh7Ztfj4AzTsmf8Ldie7F24Y+eS4j0VDhbRrzLqQ8=
-github.com/park285/shared-go/v2 v2.17.0/go.mod h1:zNJ9khC2b4QYfmkL50IMc4+iHaaCyzHjh+iyZKTUhv8=
+github.com/park285/iris-client-go/v4 v4.0.0 h1:eAnzCI7RLmosAS0CLPVKepBC9VXJjAc8qmQKmCr5IYc=
+github.com/park285/iris-client-go/v4 v4.0.0/go.mod h1:hj4z7CaOrO9moXohUD34l+wcJUUuPnbwSq6K9ViiWC4=
+github.com/park285/shared-go/v2 v2.18.0 h1:OdjAp2Hfq78AFTgHqB+hDxShw0/MujDU7DN4NiaGgJU=
+github.com/park285/shared-go/v2 v2.18.0/go.mod h1:bFqsIs/tu3gFp5MbengmgaVKIQ54iqxogJr4t/hdqo0=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

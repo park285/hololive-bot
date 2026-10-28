@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,9 +90,9 @@ func claimedInboxForScrubRetirement(t *testing.T) (*pgxpool.Pool, *InboxReposito
 		Payload:     []byte(retiredScrubPayload),
 	}
 
-	admitted, err := repo.Admit(t.Context(), message)
+	admission, err := repo.AdmitResult(t.Context(), message)
 	require.NoError(t, err)
-	require.True(t, admitted)
+	require.Equal(t, workercontract.AdmissionAccepted, admission)
 
 	claim, err := repo.Claim(t.Context(), testClaimToken, durabilityTestLease)
 	require.NoError(t, err)

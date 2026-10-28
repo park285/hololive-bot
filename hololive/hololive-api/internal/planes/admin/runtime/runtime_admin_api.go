@@ -30,7 +30,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -48,9 +47,6 @@ type AdminAPIRuntime struct {
 	ServerAddr  string
 	HTTPServers *sharedserver.RuntimeHTTPServers
 	PhotoSync   photoSyncTask
-
-	// ACL은 관리 API가 변경하는 인스턴스다. 같은 프로세스의 봇 plane이 Follow로 추종한다.
-	ACL *acl.Service
 
 	stateMu     sync.Mutex
 	started     bool

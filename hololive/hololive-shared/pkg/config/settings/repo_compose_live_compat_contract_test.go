@@ -8,34 +8,14 @@ import (
 )
 
 func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
-	tests := []struct {
-		name string
-		file string
-	}{
-		{
-			name: "osaka",
-			file: "deploy/compose/docker-compose.osaka.yml",
-		},
-		{
-			name: "osaka2",
-			file: "deploy/compose/docker-compose.osaka2.yml",
-		},
-		{
-			name: "seoul",
-			file: "deploy/compose/docker-compose.seoul.yml",
-		},
-	}
+	const file = "deploy/compose/docker-compose.seoul.yml"
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderAPComposeConfig(t, tt.file)
-			assertAPComposeCertMountsAreMinimized(t, cfg, tt.file)
-			assertAPComposeDoesNotRequireCentralEgressEnvFiles(t, cfg, tt.file)
+	cfg := renderAPComposeConfig(t, file)
+	assertAPComposeCertMountsAreMinimized(t, cfg, file)
+	assertAPComposeDoesNotRequireCentralEgressEnvFiles(t, cfg, file)
 
-			for _, service := range apComposeServiceNames(t, cfg, tt.file) {
-				assertCollectorRenderedWithoutValkey(t, cfg, service)
-			}
-		})
+	for _, service := range apComposeServiceNames(t, cfg, file) {
+		assertCollectorRenderedWithoutValkey(t, cfg, service)
 	}
 }
 

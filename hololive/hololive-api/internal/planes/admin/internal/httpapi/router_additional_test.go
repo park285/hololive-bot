@@ -2,12 +2,9 @@ package httpapi
 
 import (
 	jsonv2 "encoding/json/v2"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +24,6 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 		testRouterConfig(),
 		slog.New(slog.DiscardHandler),
 		(&server.Handler{}).DomainHandlers(),
-		&server.AuthHandler{},
 		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
@@ -41,16 +37,10 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 	}
 
 	expectedRoutes := []string{
-		"GET /oauth/callback",
-		"POST /api/auth/register",
 		"GET /api/holo/members",
 		"DELETE /api/holo/alarms",
 		"POST /api/holo/rooms/acl",
-		"GET /api/holo/stats/youtube/community-shorts",
 		"GET /api/holo/streams/live",
-		"POST /api/holo/settings/llm",
-		"POST /api/holo/templates/:key/preview",
-		"POST /api/holo/majorevent/monthly-trigger",
 	}
 	for _, route := range expectedRoutes {
 		if _, ok := routeSet[route]; !ok {
@@ -64,26 +54,23 @@ func TestValidateAPIRouterInputsRejectsMissingDependencies(t *testing.T) {
 
 	validConfig := testRouterConfig()
 	validDomains := (&server.Handler{}).DomainHandlers()
-	validAuth := &server.AuthHandler{}
 
 	tests := []struct {
 		name    string
 		cfg     *apiconfig.AdminPlaneConfig
 		domains *server.DomainHandlers
-		auth    *server.AuthHandler
 		wantErr string
 	}{
-		{name: "nil config", cfg: nil, domains: validDomains, auth: validAuth, wantErr: "config must not be nil"},
-		{name: "blank api key", cfg: &apiconfig.AdminPlaneConfig{}, domains: validDomains, auth: validAuth, wantErr: "API_SECRET_KEY required"},
-		{name: "nil domains", cfg: validConfig, domains: nil, auth: validAuth, wantErr: "domain handlers must not be nil"},
-		{name: "nil auth", cfg: validConfig, domains: validDomains, auth: nil, wantErr: "auth handler must not be nil"},
+		{name: "nil config", cfg: nil, domains: validDomains, wantErr: "config must not be nil"},
+		{name: "blank api key", cfg: &apiconfig.AdminPlaneConfig{}, domains: validDomains, wantErr: "API_SECRET_KEY required"},
+		{name: "nil domains", cfg: validConfig, domains: nil, wantErr: "domain handlers must not be nil"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateAPIRouterInputs(tt.cfg, tt.domains, tt.auth)
+			err := validateAPIRouterInputs(tt.cfg, tt.domains)
 			if err == nil {
 				t.Fatal("validateAPIRouterInputs() expected error")
 			}
@@ -109,9 +96,6 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 		{name: "stream", mutate: func(h *server.DomainHandlers) { h.Stream = nil }, wantErr: "stream handler must not be nil"},
 		{name: "stats", mutate: func(h *server.DomainHandlers) { h.Stats = nil }, wantErr: "stats handler must not be nil"},
 		{name: "settings", mutate: func(h *server.DomainHandlers) { h.Settings = nil }, wantErr: "settings handler must not be nil"},
-		{name: "template", mutate: func(h *server.DomainHandlers) { h.Template = nil }, wantErr: "template handler must not be nil"},
-		{name: "major event", mutate: func(h *server.DomainHandlers) { h.MajorEvent = nil }, wantErr: "major event handler must not be nil"},
-		{name: "oauth", mutate: func(h *server.DomainHandlers) { h.OAuth = nil }, wantErr: "oauth handler must not be nil"},
 	}
 
 	for _, tt := range tests {
@@ -137,90 +121,11 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 	}
 }
 
-func TestNewAPICORSConfigModes(t *testing.T) {
-	t.Parallel()
-
-	monitor := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
-		CORS: settings.CORSConfig{AllowedOrigins: []string{"https://allowed.example"}},
-	}, false)
-	if monitor.AllowOriginFunc == nil || !monitor.AllowOriginFunc("https://any.example") {
-		t.Fatal("monitor CORS config should allow any origin")
-	}
-
-	enforced := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
-		CORS: settings.CORSConfig{AllowedOrigins: []string{" https://a.example ", "", "https://a.example", "https://b.example"}},
-	}, true)
-	if !reflect.DeepEqual(enforced.AllowOrigins, []string{"https://a.example", "https://b.example"}) {
-		t.Fatalf("enforced AllowOrigins = %#v", enforced.AllowOrigins)
-	}
-
-	if enforced.AllowOriginFunc != nil {
-		t.Fatal("enforced explicit origin config should not set AllowOriginFunc")
-	}
-
-	wildcard := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
-		CORS: settings.CORSConfig{AllowedOrigins: []string{"*"}},
-	}, true)
-	if wildcard.AllowOriginFunc == nil || wildcard.AllowOriginFunc("https://allowed.example") {
-		t.Fatal("enforced wildcard CORS config should reject origins")
-	}
-}
-
-func TestCorsOriginGuardAllowsNoOriginAndMonitorMode(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-	router.Use(corsOriginGuard([]string{"https://allowed.example"}, true, nil))
-	router.GET("/no-origin", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
-	noOriginReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/no-origin", http.NoBody)
-	noOriginRec := httptest.NewRecorder()
-	router.ServeHTTP(noOriginRec, noOriginReq)
-
-	if noOriginRec.Code != http.StatusOK {
-		t.Fatalf("no origin status = %d, want %d", noOriginRec.Code, http.StatusOK)
-	}
-
-	monitorRouter := gin.New()
-	monitorRouter.Use(corsOriginGuard([]string{"https://allowed.example"}, false, slog.New(slog.DiscardHandler)))
-	monitorRouter.GET("/monitor", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
-	monitorReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/monitor", http.NoBody)
-	monitorReq.Header.Set("Origin", "https://blocked.example")
-
-	monitorRec := httptest.NewRecorder()
-	monitorRouter.ServeHTTP(monitorRec, monitorReq)
-
-	if monitorRec.Code != http.StatusOK {
-		t.Fatalf("monitor status = %d, want %d", monitorRec.Code, http.StatusOK)
-	}
-}
-
-func TestNewAPIRouterCORSValidation(t *testing.T) {
+func TestNewAPIRouterValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	if router, err := newAPIRouter(t.Context(), nil, nil); err == nil || router != nil {
 		t.Fatalf("newAPIRouter(nil) router=%v error=%v", router, err)
-	}
-
-	productionWildcard := &apiconfig.AdminPlaneConfig{
-		Environment: "production",
-		Server:      settings.ServerConfig{APIKey: "test-key"},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"*"},
-			Enforce:        true,
-		},
-	}
-	if err := validateAPICORSConfig(productionWildcard, true); err == nil {
-		t.Fatal("validateAPICORSConfig() expected production wildcard error")
-	}
-
-	if err := validateAPICORSConfig(productionWildcard, false); err != nil {
-		t.Fatalf("validateAPICORSConfig() non-production error = %v", err)
 	}
 
 	router, err := newAPIRouter(t.Context(), testRouterConfig(), nil)
@@ -230,38 +135,6 @@ func TestNewAPIRouterCORSValidation(t *testing.T) {
 
 	if router == nil {
 		t.Fatal("newAPIRouter() returned nil router")
-	}
-}
-
-func TestProvideAPIRouterRejectsEmptyAdminAllowedIPsOnlyInProduction(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	productionEmpty := testRouterConfig()
-
-	productionEmpty.Environment = "production"
-	productionEmpty.Server.AdminAllowedIPs = nil
-
-	if router, err := provideTestAPIRouter(t, productionEmpty); err == nil || router != nil ||
-		!strings.Contains(err.Error(), "ADMIN_ALLOWED_IPS must be configured in production") {
-		t.Fatalf("production empty allowlist router=%v error=%v, want production allowlist error", router, err)
-	}
-
-	productionAllowed := testRouterConfig()
-
-	productionAllowed.Environment = "production"
-	productionAllowed.Server.AdminAllowedIPs = []string{"100.100.1.0/24"}
-
-	if router, err := provideTestAPIRouter(t, productionAllowed); err != nil || router == nil {
-		t.Fatalf("production configured allowlist router=%v error=%v, want no error", router, err)
-	}
-
-	nonProductionEmpty := testRouterConfig()
-
-	nonProductionEmpty.Environment = "development"
-	nonProductionEmpty.Server.AdminAllowedIPs = nil
-
-	if router, err := provideTestAPIRouter(t, nonProductionEmpty); err != nil || router == nil {
-		t.Fatalf("non-production empty allowlist router=%v error=%v, want no error", router, err)
 	}
 }
 
@@ -305,7 +178,6 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 		testRouterConfig(),
 		nil,
 		(&server.Handler{}).DomainHandlers(),
-		&server.AuthHandler{},
 		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
@@ -331,29 +203,8 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 	}
 }
 
-func provideTestAPIRouter(t *testing.T, cfg *apiconfig.AdminPlaneConfig) (*gin.Engine, error) {
-	t.Helper()
-
-	router, err := ProvideAPIRouter(
-		t.Context(),
-		cfg,
-		slog.New(slog.DiscardHandler),
-		(&server.Handler{}).DomainHandlers(),
-		&server.AuthHandler{},
-		sharedtestutil.NewTestCacheService(t.Context(), t),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("provide API router: %w", err)
-	}
-
-	return router, nil
-}
-
 func testRouterConfig() *apiconfig.AdminPlaneConfig {
 	return &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: "test-key"},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
-		},
 	}
 }

@@ -218,45 +218,6 @@ func TestContentConsumerPersistTwoNegativesWithGraceWithdraws(t *testing.T) {
 	assertPersistBoundary(t, pool, true, true)
 }
 
-func TestContentConsumerPersistReplayedNegativeDoesNotIncrement(t *testing.T) {
-	t.Parallel()
-
-	pool, repo, consumer, proof := startContentPersist(t)
-	ctx := t.Context()
-
-	proof = publishConsumeVideos(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, contract.CompletenessComplete, testVideoID)
-
-	nextProof := advanceLease(ctx, t, pool, &proof, time.Minute)
-
-	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &nextProof, contract.CompletenessComplete)))
-	if err != nil {
-		t.Fatalf("publish negative: %v", err)
-	}
-
-	if consumeErr := consumer.Consume(ctx, contentClaimOptions()); consumeErr != nil {
-		t.Fatalf("consume negative: %v", consumeErr)
-	}
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "replayed negative count",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request replay: %#v err=%v", replay, err)
-	}
-
-	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("replay consume: %v", err)
-	}
-
-	assertPersistBoundary(t, pool, true, false)
-
-	if slots := contentConsecutiveSlots(t, pool, testVideoID); slots != 1 {
-		t.Fatalf("consecutive = %d, want 1", slots)
-	}
-}
-
 func startContentPersist(t *testing.T) (*pgxpool.Pool, *Repository, *Consumer, contract.LeaseProof) {
 	t.Helper()
 
@@ -321,18 +282,4 @@ func assertPersistBoundary(t *testing.T, pool *pgxpool.Pool, missing, withdrawn 
 	assertContentMissing(t, pool, testVideoID, missing)
 	assertContentWithdrawn(t, pool, testVideoID, withdrawn)
 	assertTableCount(t, pool, "youtube_notification_outbox", 1)
-}
-
-func contentConsecutiveSlots(t *testing.T, pool *pgxpool.Pool, videoID string) int {
-	t.Helper()
-
-	var slots int
-
-	if err := pool.QueryRow(t.Context(), `
-		SELECT consecutive_absence_slots FROM youtube_content_evidence_clocks WHERE video_id = $1
-	`, videoID).Scan(&slots); err != nil {
-		t.Fatalf("load consecutive slots: %v", err)
-	}
-
-	return slots
 }

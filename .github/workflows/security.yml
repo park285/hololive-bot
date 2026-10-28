@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 004ca91574d5ca0ee89f85ffd657e4d69c4c800a # v2.17.0, verified release provenance
+          ref: bfbfed99e4106f114df7c6fb3cd92c2349748ef4 # v2.18.0, verified release provenance
           path: shared-go
           persist-credentials: false
 
@@ -50,14 +50,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: 6f0f070b42d9983993a1bb54296668733f4a7003 # v3.2.0, verified release provenance
+          ref: c2dfdeb173e5311dab849441dac1a16f00508a12 # v4.0.0, verified release provenance
           path: iris-client-go
           persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: hololive-bot/go.mod
+          go-version-file: hololive-bot/go.work
           cache-dependency-path: |
             hololive-bot/go.work.sum
             hololive-bot/go.sum

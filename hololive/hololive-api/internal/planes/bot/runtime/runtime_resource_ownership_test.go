@@ -186,6 +186,7 @@ func TestBotRuntimeClosePreservesFatalAndResourceErrorsAfterTasksJoin(t *testing
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
 		Logger:         slog.New(slog.DiscardHandler),
 		Client:         &stubIrisClient{},
+		ReplyOutbox:    dispatchingReplyOutbox{client: &stubIrisClient{}},
 		MessageAdapter: messaging.NewMessageAdapter("!", ""),
 		Formatter:      formatter.NewResponseFormatter("!", nil),
 		Cache:          &cachemocks.Client{WaitUntilReadyFunc: func(context.Context, time.Duration) error { return fatalErr }},

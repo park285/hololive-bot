@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 // X allowlist 경로는 MEMBER_NEWS_X_ALLOWLIST_PATH 하나로만 받는다. 설정했는데 읽지 못하면 빈 allowlist로
@@ -70,9 +70,9 @@ func TestInitMemberNewsSourceValidator(t *testing.T) {
 func TestInitMemberNewsServiceFailsWhenEnabledLLMClientCannotInitialize(t *testing.T) {
 	_, err := initMemberNewsService(
 		t.Context(),
-		cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: ""}),
-		&settings.LLMConfig{MemberNewsModel: "test-model"},
-		settings.ExaConfig{},
+		cliproxyProvider(apiconfig.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: ""}),
+		&apiconfig.LLMConfig{MemberNewsModel: "test-model"},
+		apiconfig.ExaConfig{},
 		"",
 		nil,
 		nil,
@@ -86,9 +86,9 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 	t.Run("basic config without consensus", func(t *testing.T) {
 		service, err := initMemberNewsService(
 			t.Context(),
-			cliproxyProvider(settings.CliproxyConfig{}),
-			&settings.LLMConfig{},
-			settings.ExaConfig{},
+			cliproxyProvider(apiconfig.CliproxyConfig{}),
+			&apiconfig.LLMConfig{},
+			apiconfig.ExaConfig{},
 			"",
 			nil,
 			nil,
@@ -101,16 +101,16 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 
 	t.Run("consensus config enabled", func(t *testing.T) {
 		apiKey := strings.Join([]string{"dummy", "api", "key"}, "-")
-		cliproxyConfig := cliproxyProvider(settings.CliproxyConfig{
+		cliproxyConfig := cliproxyProvider(apiconfig.CliproxyConfig{
 			Enabled:         true,
 			BaseURL:         "https://example.com",
 			APIKey:          apiKey,
 			Model:           "gpt-4.1",
 			ReasoningEffort: "medium",
 		})
-		llmConfig := &settings.LLMConfig{
+		llmConfig := &apiconfig.LLMConfig{
 			MemberNewsModel: "gpt-4.1",
-			MemberNews: settings.ConsensusLLMConfig{
+			MemberNews: apiconfig.ConsensusLLMConfig{
 				Enabled:           true,
 				Confidence:        0.7,
 				ReviewerModel:     "gpt-4.1-mini",
@@ -124,7 +124,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			t.Context(),
 			cliproxyConfig,
 			llmConfig,
-			settings.ExaConfig{},
+			apiconfig.ExaConfig{},
 			"",
 			nil,
 			nil,

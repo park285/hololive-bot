@@ -94,8 +94,8 @@ func TestScheduleConsumerPreservesPremiereAndDoesNotAdvanceLiveLastSeenAt(t *tes
 	seen := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at, is_premiere)
-		VALUES ('vid-a', 'UC_TEST', 'LIVE', 'Keep', $1, TRUE)
+		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at, is_premiere, lifecycle_origin)
+		VALUES ('vid-a', 'UC_TEST', 'LIVE', 'Keep', $1, TRUE, 'observed')
 	`, seen); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -203,8 +203,8 @@ func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at)
-		VALUES ('vid-a', 'UC_TEST', 'UPCOMING', 'Keep', NOW())
+		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at, lifecycle_origin)
+		VALUES ('vid-a', 'UC_TEST', 'UPCOMING', 'Keep', NOW(), 'metadata_only')
 	`); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -258,8 +258,8 @@ func TestScheduleConsumerArbitratesMetadataByFieldObservation(t *testing.T) {
 			titleClock, scheduleClock := observed.Add(test.titleAge), observed.Add(test.scheduleAge)
 
 			_, err := pool.Exec(ctx, `
-				INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,scheduled_start_time,title_observed_at,schedule_observed_at)
-				VALUES($1,$2,'UPCOMING','Current',$3,$4,$5)
+				INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,scheduled_start_time,title_observed_at,schedule_observed_at,lifecycle_origin)
+				VALUES($1,$2,'UPCOMING','Current',$3,$4,$5,'metadata_only')
 			`, testVideoID, testChannelID, currentStart, titleClock, scheduleClock)
 			require.NoError(t, err)
 

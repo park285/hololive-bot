@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
@@ -47,6 +47,8 @@ var deliveryFailureReasonBySentinel = []struct {
 	{err: iris.ErrAuthFailed, reason: deliveryReasonAuth, permanent: true},
 	{err: iris.ErrRateLimited, reason: deliveryReasonRateLimited},
 	{err: iris.ErrTransport, reason: deliveryReasonTransport},
+	// v4의 ErrNotSent(전송 전 확정 실패)는 ErrTransport가 아니지만 같은 transport 사유로 집계한다.
+	{err: iris.ErrNotSent, reason: deliveryReasonTransport},
 	{err: iris.ErrPermanent, reason: deliveryReasonPermanent, permanent: true},
 }
 

@@ -53,16 +53,29 @@ func (r *Runtime) observePendingQueue(ctx context.Context) {
 		pending          int64
 		processing       int64
 		oldestAgeSeconds float64
+		deadLetterExists bool
 	)
 
 	queryCtx, cancel := context.WithTimeout(ctx, queueObservationTimeout)
 	defer cancel()
 
 	err := r.withDB(queryCtx, dbOperationQueueSnapshot, func(ctx context.Context) error {
-		return r.pool.QueryRow(ctx, mustSQL("queue_observability.sql")).Scan(&pending, &processing, &oldestAgeSeconds)
+		return r.pool.QueryRow(ctx, mustSQL("queue_observability.sql")).Scan(&pending, &processing, &oldestAgeSeconds, &deadLetterExists)
 	})
 
 	recordQueueObservation(pending, processing, oldestAgeSeconds, r.now(), err)
+
+	// 조회 실패는 DEAD_LETTER 존재 여부를 모르는 상태이므로 직전 판정을 유지한다.
+	if err == nil {
+		r.observeDeadLetterBacklog(deadLetterExists)
+	}
+}
+
+// DEAD_LETTER backlog 원인만 갱신한다. Projection 원인은 refreshProjection이 소유한다.
+func (r *Runtime) observeDeadLetterBacklog(exists bool) {
+	if r.deadLetterBacklog.Swap(exists) != exists && r.started.Load() {
+		r.publishHealth()
+	}
 }
 
 // 실패는 이전 깊이·경과를 덮지 않고 success만 내린다. 5초 주기라 로그 대신 상태 gauge와 마지막 성공 시각으로 드러낸다.

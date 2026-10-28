@@ -57,40 +57,19 @@ func registerRoomRoutes(holoAPI *gin.RouterGroup, handler *api.RoomHandler) {
 	holoAPI.POST("/rooms/acl", handler.SetACL)
 }
 
-func registerMajorEventRoutes(holoAPI *gin.RouterGroup, handler *api.MajorEventHandler) {
-	holoAPI.POST("/majorevent/trigger", handler.TriggerMajorEventNotification)
-	holoAPI.POST("/majorevent/monthly-trigger", handler.TriggerMajorEventMonthlyNotification)
-}
-
 func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsAPIHandler) {
-	holoAPI.GET("/logs", handler.GetLogs)
 	holoAPI.GET("/settings", handler.GetSettings)
 	holoAPI.POST("/settings", handler.UpdateSettings)
 	holoAPI.GET("/x-spaces/session", handler.GetXSpaceSession)
 	holoAPI.POST("/x-spaces/session", handler.SubmitXSpaceSession)
-	holoAPI.POST("/settings/llm", handler.UpdateLLMSettings)
 	holoAPI.POST("/names/room", handler.SetRoomName)
 }
 
-func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *api.StatsHandler, streamHandler *api.StreamHandler) {
+func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *api.StatsHandler) {
 	holoAPI.GET("/stats", statsHandler.GetStats)
-	holoAPI.GET("/stats/system", statsHandler.StreamSystemStats)
-	holoAPI.GET("/stats/youtube/community-shorts", statsHandler.GetYouTubeCommunityShortsOps)
-	holoAPI.GET("/channels", streamHandler.GetChannel)
-	holoAPI.GET("/channels/search", streamHandler.SearchChannels)
 }
 
 func registerStreamRoutes(holoAPI *gin.RouterGroup, handler *api.StreamHandler) {
 	holoAPI.GET("/streams/live", handler.GetLiveStreams)
 	holoAPI.GET("/streams/upcoming", handler.GetUpcomingStreams)
-}
-
-func registerTemplateRoutes(holoAPI *gin.RouterGroup, handler *api.TemplateHandler) {
-	holoAPI.GET("/templates", handler.GetTemplates)
-	holoAPI.GET("/templates/:key", handler.GetTemplateByKey)
-	holoAPI.PUT("/templates/:key", handler.UpsertTemplate)
-	holoAPI.DELETE("/templates/:key", handler.DeleteTemplateOverride)
-	holoAPI.POST("/templates/:key/preview", handler.PreviewTemplate)
-	holoAPI.GET("/templates/:key/revisions", handler.GetTemplateRevisions)
-	holoAPI.GET("/templates/:key/revisions/:id", handler.GetTemplateRevision)
 }

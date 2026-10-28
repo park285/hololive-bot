@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 // IrisHTTPError는 전체 HTTP 응답을 실제 SDK로 읽어 만든 오류를 반환한다.
@@ -26,9 +26,17 @@ func IrisHTTPError(ctx context.Context, t *testing.T, status int, body string) e
 
 	defer server.Close()
 
-	client := iris.NewAPIClient(server.URL, "test-token", iris.WithTransport("http1"), iris.WithHTTPClient(server.Client()))
+	client, err := iris.NewClient(
+		iris.WithBaseURL(server.URL),
+		iris.WithBotToken("test-token"),
+		iris.WithTransport(iris.TransportHTTP1),
+		iris.WithHTTPClient(server.Client()),
+	)
+	if err != nil {
+		t.Fatalf("new iris client: %v", err)
+	}
 
-	err := client.SendMessage(ctx, "1", "error fixture")
+	_, err = client.SendMessageAccepted(ctx, "1", "error fixture")
 	if err == nil {
 		t.Fatal("expected SDK HTTP error")
 	}

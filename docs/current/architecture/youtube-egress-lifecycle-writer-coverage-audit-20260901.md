@@ -51,8 +51,8 @@ Additive schema, compatibility writer, bounded backfill binary, typed policy와 
 | primary delivery claim | `dispatchstate.DefaultConfig().ClaimFreshnessWindow = 2h`; claim query가 outbox `created_at` 하한을 적용 | 현재 outbox 생성 시각 기준 `now-2h` |
 | worker revive | `ReviveFreshnessWindow = 1h`, interval `5m`; current code가 outbox `created_at`을 검사 | 현재 outbox 생성 시각 기준 `now-1h` |
 | terminal full-row cleanup | `CleanupAfter = 7d`; current query는 `COALESCE(sent_at, created_at)` 사용 | retained row의 가장 이른 완전 경계를 보장하지 못함 |
-| source observation automatic replay | replay queue가 observation ID로 원본 evidence를 다시 처리하며 event age predicate가 없음 | unbounded |
-| operator/manual source replay | `RequestReplay`가 positive observation ID와 audit fields만 검증하며 event age predicate가 없음 | unbounded |
+| source observation automatic replay | 2026-10-28 삭제(migration 348). 감사 당시에는 replay queue가 observation ID로 원본 evidence를 다시 처리하며 event age predicate가 없었음 | 경로 없음 |
+| operator/manual source replay | 2026-10-28 삭제(migration 348). 감사 당시 `RequestReplay`는 positive observation ID와 audit fields만 검증했음 | 경로 없음 |
 | poller rediscovery rearm | Community/Shorts existing `FAILED` outbox를 현재 시각의 due로 재활성화 | source history에 따라 unbounded |
 | tracking-based repair | post-level `SENT`를 room delivery `SENT`로 투영 | logical room evidence가 아니므로 floor로 사용할 수 없음 |
 | big-bang cutover 또는 historical repair | repository에 승인된 bounded command가 없음 | unknown, 실행 차단 |

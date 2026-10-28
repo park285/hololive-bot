@@ -28,9 +28,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 type DeliveryRepository struct {

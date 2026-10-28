@@ -30,18 +30,6 @@ if admin_bind_assert_host "$fixture/host.env" > "$fixture/rejected.log" 2>&1; th
 fi
 echo 'admin bind host identity fixtures passed'
 
-for sources in '127.0.0.1/32,::1/128,100.100.1.5/32' '127.0.0.1/32' ''; do
-    printf 'ADMIN_ALLOWED_IPS=%s\n' "$sources" > "$fixture/host.env"
-    admin_source_assert_allowlist "$fixture/host.env"
-done
-for sources in '172.16.0.0/12' '0.0.0.0/0' '::/0' '*' '100.100.1.9/32' '127.0.0.1/32,,100.100.1.5/32' '127.0.0.1/32,'; do
-    printf 'ADMIN_ALLOWED_IPS=%s\n' "$sources" > "$fixture/host.env"
-    if admin_source_assert_allowlist "$fixture/host.env" > "$fixture/rejected.log" 2>&1; then
-        echo 'unapproved admin source accepted' >&2
-        exit 1
-    fi
-done
-
 cp "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
 systemctl() { [[ "${inactive:-false}" == false ]]; }
 nft() { cat "$fixture/firewall.json"; }

@@ -148,7 +148,7 @@ run_content_gates() {
       hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION || version_status=$?
     if [[ "${version_status}" == 1 ]]; then
       source "${SCRIPT_DIR}/go-workspace-modules.sh"
-      for module in . "${GO_OWNED_MODULES[@]}"; do
+      for module in "${GO_OWNED_MODULES[@]}"; do
         echo "[pre-push] version-only build: ${module}"
         (cd "${module}" && GOWORK=off go build -mod=readonly ./...)
       done
@@ -250,7 +250,7 @@ run_dependency_hygiene() {
   # shellcheck source=go-workspace-modules.sh
   source "${SCRIPT_DIR}/go-workspace-modules.sh"
   govulncheck_bin="$(ensure_govulncheck)"
-  for module in . "${GO_OWNED_MODULES[@]}"; do
+  for module in "${GO_OWNED_MODULES[@]}"; do
     echo "[pre-push] dependency hygiene: ${module}"
     (cd "${module}" && GOWORK=off "${govulncheck_bin}" ./...)
   done

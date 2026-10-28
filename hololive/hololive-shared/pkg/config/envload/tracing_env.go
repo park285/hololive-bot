@@ -16,7 +16,6 @@ const (
 	TracingYouTubeCollectorBEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_B_ENABLED"
 	TracingYouTubeCollectorCEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_C_ENABLED"
 	TracingYouTubeCollectorDEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_D_ENABLED"
-	TracingYouTubeCollectorEnabledEnv  = "OTEL_YOUTUBE_COLLECTOR_ENABLED"
 )
 
 // TracingEnabledEnvKeys: 런타임별 OTEL 토글 환경변수 전체 목록이다.
@@ -28,6 +27,5 @@ func TracingEnabledEnvKeys() []string {
 		TracingYouTubeCollectorBEnabledEnv,
 		TracingYouTubeCollectorCEnabledEnv,
 		TracingYouTubeCollectorDEnabledEnv,
-		TracingYouTubeCollectorEnabledEnv,
 	}
 }

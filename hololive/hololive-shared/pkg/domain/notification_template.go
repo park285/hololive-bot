@@ -20,8 +20,6 @@
 
 package domain
 
-import "time"
-
 type TemplateKey string
 
 const (
@@ -81,19 +79,3 @@ const (
 	TemplateKeyCmdMemberNewsNotSub       TemplateKey = "CMD_MEMBER_NEWS_NOT_SUB"
 	TemplateKeyCmdMemberNewsStatus       TemplateKey = "CMD_MEMBER_NEWS_STATUS"
 )
-
-type NotificationTemplate struct {
-	ID          int64       `db:"id" json:"id"`
-	TemplateKey TemplateKey `db:"template_key" json:"template_key"`
-	ChannelID   *string     `db:"channel_id" json:"channel_id,omitempty"`
-	Body        string      `db:"body" json:"body"`
-	CreatedAt   time.Time   `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time   `db:"updated_at" json:"updated_at"`
-}
-
-type NotificationTemplateRevision struct {
-	ID         int64     `db:"id" json:"id"`
-	TemplateID int64     `db:"template_id" json:"template_id"`
-	Body       string    `db:"body" json:"body"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
-}

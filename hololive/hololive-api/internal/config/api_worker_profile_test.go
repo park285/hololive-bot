@@ -6,14 +6,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/park285/shared-go/v2/pkg/irisdurable"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func TestDisabledSourceObservationProfileRemainsValid(t *testing.T) {
-	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), configtest.APIProfileFixture(t))
 	worker := loaded.Profile.Workers["source_observation"]
 
 	worker.Executor.Enabled = false
@@ -120,7 +121,7 @@ func TestLoadAPIWorkerProfileSourceObservationBoundaries(t *testing.T) {
 }
 
 func TestSourceObservationPoolReservationRemainsRuntimeOwned(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	profile, err := LoadAPIWorkerProfile()
 	if err != nil {
@@ -154,10 +155,10 @@ func TestAPIWorkerProfileDurableBoundaries(t *testing.T) {
 		valid    bool
 	}{
 		{name: "retention equal admission", workerID: WorkerBotWebhookInbox, mutate: func(s map[string]any, _ *workercontract.WorkerProfile) {
-			s["terminal_retention_ms"] = irisdurable.IrisReplyAdmissionRetention.Milliseconds()
+			s["terminal_retention_ms"] = iris.ReplyAdmissionRetention.Milliseconds()
 		}},
 		{name: "retention beyond admission", workerID: WorkerBotWebhookInbox, valid: true, mutate: func(s map[string]any, _ *workercontract.WorkerProfile) {
-			s["terminal_retention_ms"] = irisdurable.IrisReplyAdmissionRetention.Milliseconds() + 1
+			s["terminal_retention_ms"] = iris.ReplyAdmissionRetention.Milliseconds() + 1
 		}},
 		{name: "heartbeat equal command stale", workerID: WorkerBotWebhookInbox, mutate: func(s map[string]any, _ *workercontract.WorkerProfile) {
 			s["heartbeat_interval_ms"] = BotCommandStaleAfter.Milliseconds()
@@ -178,7 +179,7 @@ func TestAPIWorkerProfileDurableBoundaries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, enabled := range []bool{true, false} {
-				loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")
+				loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), configtest.APIProfileFixture(t))
 				worker := loaded.Profile.Workers[tc.workerID]
 
 				var settings map[string]any
@@ -228,7 +229,7 @@ func useAPIWorkerSettings(t *testing.T, loaded workercontract.LoadedProfile, wor
 func checkSourceObservationBoundary(t *testing.T, enabled, valid bool, mutate func(*SourceObservationWorkerSettings, *workercontract.WorkerProfile)) {
 	t.Helper()
 
-	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), "stack-worker-profile-api.json")
+	loaded := settingstest.LoadProfileFixture(t, APIWorkerIdentity(), configtest.APIProfileFixture(t))
 	worker := loaded.Profile.Workers[WorkerSourceObservation]
 	settings := SourceObservationWorkerSettings{
 		DBOperationConcurrency: 3,

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -311,10 +310,10 @@ func TestPgBroadcastHistoryRepositoryStopsAtScanBudgetForTypeFilter(t *testing.T
 
 	base := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at, lifecycle_origin)
 		SELECT 'talk' || lpad(gs::text, 7, '0'), 'channel-a', 'ENDED', '【雑談】test',
 		       $1::timestamptz - (gs * interval '1 minute'),
-		       $1::timestamptz - (gs * interval '1 minute')
+		       $1::timestamptz - (gs * interval '1 minute'), 'observed'
 		FROM generate_series(0, $2 - 1) AS gs
 	`, base, maxBroadcastHistoryProcessedRows); err != nil {
 		t.Fatalf("insert talk sessions: %v", err)
@@ -322,8 +321,8 @@ func TestPgBroadcastHistoryRepositoryStopsAtScanBudgetForTypeFilter(t *testing.T
 
 	gameEndedAt := base.Add(-time.Duration(maxBroadcastHistoryProcessedRows+1) * time.Minute)
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
-		VALUES ($1, $2, 'ENDED', $3, $4, $4)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at, lifecycle_origin)
+		VALUES ($1, $2, 'ENDED', $3, $4, $4, 'observed')
 	`, "game001", "channel-a", "【Minecraft】test", gameEndedAt); err != nil {
 		t.Fatalf("insert game session: %v", err)
 	}
@@ -358,10 +357,10 @@ func TestPgBroadcastHistoryRepositoryPushesStableTopicFilterIntoSQL(t *testing.T
 
 	base := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, topic_id, ended_at, last_seen_at)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, topic_id, ended_at, last_seen_at, lifecycle_origin)
 		SELECT 'topic' || lpad(gs::text, 6, '0'), 'channel-a', 'ENDED', 'test', 'talking',
 		       $1::timestamptz - (gs * interval '1 minute'),
-		       $1::timestamptz - (gs * interval '1 minute')
+		       $1::timestamptz - (gs * interval '1 minute'), 'observed'
 		FROM generate_series(0, $2) AS gs
 	`, base, maxBroadcastHistoryProcessedRows); err != nil {
 		t.Fatalf("insert topic sessions: %v", err)
@@ -419,8 +418,8 @@ func TestPgBroadcastHistoryRepositoryUsesLiveEventMetadataFallback(t *testing.T)
 
 	endedAt := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
-		VALUES ($1, $2, 'ENDED', $3, $4, $4)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at, lifecycle_origin)
+		VALUES ($1, $2, 'ENDED', $3, $4, $4, 'observed')
 	`, "fallback001", "channel-a", "test", endedAt); err != nil {
 		t.Fatalf("insert live session: %v", err)
 	}
@@ -489,8 +488,8 @@ func TestPgBroadcastHistoryRepositoryDeduplicatesSharedChannelMembers(t *testing
 
 	endedAt := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
-		VALUES ('shared001', $1, 'ENDED', '【雑談】test', $2, $2)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at, lifecycle_origin)
+		VALUES ('shared001', $1, 'ENDED', '【雑談】test', $2, $2, 'observed')
 	`, channelID, endedAt); err != nil {
 		t.Fatalf("insert shared channel session: %v", err)
 	}
@@ -527,7 +526,7 @@ func TestBroadcastThumbnailCommandExecute(t *testing.T) {
 		ThumbnailDownloader: downloader,
 		SendMessage:         func(_ context.Context, _, _ string) error { return nil },
 		SendError:           func(_ context.Context, _, _ string) error { return nil },
-		SendImage: func(_ context.Context, _ string, imageData []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, imageData []byte) error {
 			sentImage = imageData
 			return nil
 		},
@@ -570,7 +569,7 @@ func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, _ []byte) error {
 			t.Fatal("unexpected image send")
 
 			return nil
@@ -608,7 +607,7 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, _ []byte) error {
 			t.Fatal("unexpected image send")
 
 			return nil

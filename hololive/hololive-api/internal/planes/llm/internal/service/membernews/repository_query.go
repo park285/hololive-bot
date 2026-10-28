@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -114,10 +114,6 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 	slices.Sort(members)
 
 	return members, nil
-}
-
-func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candidate, error) {
-	return r.listActiveMajorEvents(ctx, mustSQL("repository_query_0129_04.sql"))
 }
 
 func (r *Repository) ListActiveMajorEventsForPeriod(ctx context.Context, period model.Period, now time.Time) ([]model.Candidate, error) {

@@ -13,7 +13,6 @@ import (
 const (
 	MaxClaimBatchSize = 100
 	MaxAttempts       = 64
-	MaxReplayCount    = 16
 	maxErrorCodeBytes = 128
 	maxErrorTextBytes = 2048
 	maxClaimKinds     = 11
@@ -195,18 +194,6 @@ type DeadLetterInput struct {
 	ErrorDetail   string
 }
 
-type ReplayInput struct {
-	ObservationID int64
-	RequestedBy   string
-	Reason        string
-}
-
-type ReplayResult struct {
-	RequestID     int64
-	Applied       bool
-	RejectionCode string
-}
-
 type ReplayEpochInput struct {
 	ActivatedBy string
 	Reason      string
@@ -221,12 +208,6 @@ type ReplayEpoch struct {
 type ReplayEpochActivation struct {
 	Epoch     ReplayEpoch
 	Activated bool
-}
-
-type RetentionQuery struct {
-	Kind   contract.ObservationKind
-	Before time.Time
-	Limit  int
 }
 
 func (o ClaimOptions) validate() error {

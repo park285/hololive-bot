@@ -3,9 +3,9 @@ package youtubedispatch
 import (
 	"log/slog"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
+	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
-	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 func appendCommunityShortsAlarmTimingLogAttrs(attrs []any, timing alarmtiming.Snapshot) []any {

@@ -27,10 +27,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/iris-client-go/v4/iris"
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
-	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 // LoadIrisConfig는 Iris egress 클라이언트 입력(IRIS_*)을 읽는다. 필수 여부 판단은 runtime이
@@ -41,20 +41,57 @@ func LoadIrisConfig() (IrisConfig, error) {
 	var env envload.StrictEnv
 
 	config := IrisConfig{
-		BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
-		BaseURLFile:               sharedenv.String("IRIS_BASE_URL_FILE", ""),
-		WebhookToken:              webhookToken,
-		BotToken:                  botToken,
-		HTTPTimeout:               env.Seconds("IRIS_HTTP_TIMEOUT_SECONDS", 10*time.Second),
-		HTTPDialTimeout:           env.Seconds("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3*time.Second),
-		HTTPResponseHeaderTimeout: env.Seconds("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5*time.Second),
+		BaseURL:                 sharedenv.String("IRIS_BASE_URL", ""),
+		BaseURLFile:             sharedenv.String("IRIS_BASE_URL_FILE", ""),
+		WebhookToken:            webhookToken,
+		BotToken:                botToken,
+		HTTPTimeout:             env.Seconds("IRIS_HTTP_TIMEOUT_SECONDS", 10*time.Second),
+		H3CACertFile:            sharedenv.String("IRIS_H3_CA_CERT_FILE", ""),
+		H3ServerName:            sharedenv.String("IRIS_H3_SERVER_NAME", ""),
+		BaseURLAllowedHosts:     splitIrisAllowedHosts(os.Getenv("IRIS_BASE_URL_ALLOWED_HOSTS")),
+		ValidateBaseURLFileStat: strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production"),
 	}
 
 	if err := env.Err(); err != nil {
 		return IrisConfig{}, fmt.Errorf("load iris config: %w", err)
 	}
 
+	transport, err := parseIrisTransport(os.Getenv("IRIS_TRANSPORT"))
+	if err != nil {
+		return IrisConfig{}, fmt.Errorf("load iris config: %w", err)
+	}
+
+	config.Transport = transport
+
 	return config, nil
+}
+
+// parseIrisTransport는 IRIS_TRANSPORT를 SDK 어휘(h3, http1)로 해석한다. 빈 값은 SDK 기본 h3이고,
+// quic·http3 같은 옛 별칭은 기동 시 거절한다.
+func parseIrisTransport(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return iris.TransportH3, nil
+	}
+
+	transport, err := iris.ParseTransport(raw)
+	if err != nil {
+		return "", fmt.Errorf("IRIS_TRANSPORT: %w", err)
+	}
+
+	return transport, nil
+}
+
+// splitIrisAllowedHosts는 쉼표 구분 allowlist에서 빈 항목을 버린다. 빈 항목만 있으면 미설정과 같다.
+func splitIrisAllowedHosts(raw string) []string {
+	var hosts []string
+
+	for host := range strings.SplitSeq(raw, ",") {
+		if host = strings.TrimSpace(host); host != "" {
+			hosts = append(hosts, host)
+		}
+	}
+
+	return hosts
 }
 
 // LoadKakaoConfig는 room ACL 초기값을 읽는다. 반환값은 잠금을 포함하므로 호출자는 값 복사 없이 필드를 옮긴다.
@@ -207,25 +244,6 @@ func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 	}
 
 	return config, nil
-}
-
-// LoadCORSConfig는 CORS 허용 origin과 강제 여부를 읽는다. DefaultEnforce는 CORS_ENFORCE가 없을 때의 runtime별 기본값이다.
-func LoadCORSConfig(defaultEnforce bool) (CORSConfig, error) {
-	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
-		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),
-		runtimepolicy.IsProduction(envload.AppEnvironment()),
-	)
-
-	enforce, err := sharedenv.BoolE("CORS_ENFORCE", defaultEnforce)
-	if err != nil {
-		return CORSConfig{}, fmt.Errorf("load CORS config: %w", err)
-	}
-
-	return CORSConfig{
-		AllowedOrigins:      corsAllowedOrigins,
-		Enforce:             enforce,
-		MissingInProduction: corsMissingInProduction,
-	}, nil
 }
 
 func LoadIngestionConfig() (IngestionConfig, error) {

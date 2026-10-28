@@ -52,22 +52,22 @@ func seedLiveCheckVideoFixtures(t *testing.T, pool *pgxpool.Pool, budget time.Du
 	seedLiveCheckProjectionMembers(t, pool)
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status, scheduled_start_time)
-		VALUES ('tp-fresh', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-stale', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-seen-stale', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-no-head', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-null-clock', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-future', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-future-seen', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-inside-boundary', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-past-boundary', 'UC_tp_stale_ops', 'LIVE', NULL),
-		       ('tp-upcoming', 'UC_tp_stale_ops', 'UPCOMING', statement_timestamp() - INTERVAL '1 hour'),
-		       ('tp-upcoming-unknown', 'UC_tp_stale_ops', 'UPCOMING', statement_timestamp() - INTERVAL '1 hour'),
-		       ('tp-upcoming-later', 'UC_tp_stale_ops', 'UPCOMING', statement_timestamp() + INTERVAL '1 hour'),
-		       ('tp-ended', 'UC_tp_stale_ops', 'ENDED', NULL),
-		       ('tp-graduated', 'UC_tp_stale_grad', 'LIVE', NULL),
-		       ('tp-unrostered', 'UC_tp_stale_none', 'LIVE', NULL)
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, scheduled_start_time, lifecycle_origin)
+		VALUES ('tp-fresh', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-stale', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-seen-stale', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-no-head', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-null-clock', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-future', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-future-seen', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-inside-boundary', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-past-boundary', 'UC_tp_stale_ops', 'LIVE', NULL, 'observed'),
+		       ('tp-upcoming', 'UC_tp_stale_ops', 'UPCOMING', statement_timestamp() - INTERVAL '1 hour', 'metadata_only'),
+		       ('tp-upcoming-unknown', 'UC_tp_stale_ops', 'UPCOMING', statement_timestamp() - INTERVAL '1 hour', 'metadata_only'),
+		       ('tp-upcoming-later', 'UC_tp_stale_ops', 'UPCOMING', statement_timestamp() + INTERVAL '1 hour', 'metadata_only'),
+		       ('tp-ended', 'UC_tp_stale_ops', 'ENDED', NULL, 'observed'),
+		       ('tp-graduated', 'UC_tp_stale_grad', 'LIVE', NULL, 'observed'),
+		       ('tp-unrostered', 'UC_tp_stale_none', 'LIVE', NULL, 'observed')
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func newLatencyProjection(t *testing.T) (*pgxpool.Pool, projectionRefresh) {
 	seedLiveCheckProjectionMembers(t, pool)
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions(video_id, channel_id, status) VALUES ('tp-latency', 'UC_tp_stale_ops', 'LIVE');
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, lifecycle_origin) VALUES ('tp-latency', 'UC_tp_stale_ops', 'LIVE', 'observed');
 		INSERT INTO youtube_live_reconciliation_heads(video_id, status, last_live_positive_at, last_live_positive_seen_at)
 		VALUES ('tp-latency', 'LIVE', statement_timestamp(), statement_timestamp())
 	`); err != nil {

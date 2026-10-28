@@ -12,8 +12,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
 type candidateResponseLLM struct{ response string }

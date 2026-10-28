@@ -411,26 +411,6 @@ func TestTimeFinalizationEndsMembersOnlyWithoutTimes(t *testing.T) {
 	assertApplicationDecision(t, h.pool, id, liveSessionEntityKind, videoTimeAttempted)
 }
 
-func TestTimeFinalizationReplayDoesNotCountAttemptTwice(t *testing.T) {
-	t.Parallel()
-
-	h := startFinalization(t, nil)
-	id := h.observe(t, unknownVideoCheck(contract.LiveCheckReasonIdentityMissing))
-
-	replay, err := NewRepository(h.pool).RequestReplay(t.Context(), ReplayInput{
-		ObservationID: id, RequestedBy: testReplayOperator, Reason: "finalization replay",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request replay: %#v err=%v", replay, err)
-	}
-
-	consumeLiveChecks(t.Context(), t, h.consumer)
-
-	if got := loadFinalizationRow(t, h.pool); got.attempts != 1 || valueOr(got.outcome) != finalizationPending {
-		t.Fatalf("replayed observation counted again: attempts=%d outcome=%s", got.attempts, valueOr(got.outcome))
-	}
-}
-
 func TestTimeFinalizationLeavesNonCandidatesEnded(t *testing.T) {
 	for name, edit := range map[string]func(*endedFixture){
 		"canceled before live": func(f *endedFixture) {

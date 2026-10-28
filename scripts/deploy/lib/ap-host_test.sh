@@ -7,12 +7,11 @@ trap 'rm -rf "$tmp"' EXIT
 
 fixture_root="$tmp/repo"
 mkdir -p "$fixture_root/scripts/deploy/ap-hosts" "$fixture_root/deploy/compose" "$tmp/bin"
-touch "$fixture_root/KR.key" "$fixture_root/deploy/compose/docker-compose.osaka.yml"
+touch "$fixture_root/KR.key" "$fixture_root/deploy/compose/docker-compose.seoul.yml"
 cat > "$fixture_root/scripts/deploy/ap-hosts/osaka.conf" <<'EOF'
 AP_NAME=osaka
 AP_SSH_HOST=unreachable.invalid
 AP_SSH_HOST_KEY_ALIAS=ap-osaka
-AP_COMPOSE_FILE=deploy/compose/docker-compose.osaka.yml
 AP_RUNTIME_MODE=native
 AP_SERVICES=(youtube-collector-a)
 AP_CONTAINERS=(hololive-youtube-collector-a)
@@ -41,6 +40,39 @@ if SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" osaka 2>/dev/null
 fi
 sed -i '/^AP_GOAMD64=/d' "$fixture_root/scripts/deploy/ap-hosts/osaka.conf"
 SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" osaka
+
+# 실행 방식은 conf가 명시해야 하고, Compose overlay는 compose 호스트만 가진다.
+expect_load_rejected() {
+  local name="$1" message="$2"
+  shift 2
+  sed "$@" "$fixture_root/scripts/deploy/ap-hosts/osaka.conf" > "$fixture_root/scripts/deploy/ap-hosts/$name.conf"
+  sed -i "s/^AP_NAME=osaka$/AP_NAME=$name/" "$fixture_root/scripts/deploy/ap-hosts/$name.conf"
+  if (SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" "$name") 2>"$tmp/$name.err"; then
+    echo "[FAIL] $name conf must be rejected" >&2
+    exit 1
+  fi
+  grep -Fq -- "$message" "$tmp/$name.err"
+}
+expect_load_rejected missing-mode "missing AP_RUNTIME_MODE" '/^AP_RUNTIME_MODE=/d'
+expect_load_rejected native-overlay "AP_COMPOSE_FILE is only valid for AP_RUNTIME_MODE=compose" \
+  's/^AP_RUNTIME_MODE=native$/&\nAP_COMPOSE_FILE=deploy\/compose\/docker-compose.seoul.yml/'
+expect_load_rejected compose-no-overlay "missing AP_COMPOSE_FILE" 's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose/'
+sed -e 's/^AP_NAME=osaka$/AP_NAME=compose-host/' \
+  -e 's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose\nAP_COMPOSE_FILE=deploy\/compose\/docker-compose.seoul.yml/' \
+  "$fixture_root/scripts/deploy/ap-hosts/osaka.conf" > "$fixture_root/scripts/deploy/ap-hosts/compose-host.conf"
+(SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" compose-host)
+
+# Compose smoke는 native 호스트에서 원격 명령을 보내기 전에 거부한다.
+mkdir -p "$fixture_root/scripts/deploy/lib" "$tmp/smoke-bin"
+cp "$ROOT_DIR/scripts/deploy/lib/ap-host.sh" "$fixture_root/scripts/deploy/lib/ap-host.sh"
+printf '#!/usr/bin/env bash\necho "unexpected ssh: $*" >&2\nexit 99\n' > "$tmp/smoke-bin/ssh"
+chmod +x "$tmp/smoke-bin/ssh"
+if PATH="$tmp/smoke-bin:$PATH" REPO_ROOT="$fixture_root" SSH_KEY="$fixture_root/KR.key" \
+  bash "$ROOT_DIR/scripts/logs/ap-smoke.sh" osaka 2>"$tmp/smoke.err"; then
+  echo "[FAIL] ap-smoke.sh must refuse a native AP host" >&2
+  exit 1
+fi
+grep -Fq 'Refusing Compose AP smoke for osaka (runtime=native)' "$tmp/smoke.err"
 
 rsync_rsh="$(ap_rsync_rsh)"
 read -r -a parsed_rsync_rsh <<<"$rsync_rsh"

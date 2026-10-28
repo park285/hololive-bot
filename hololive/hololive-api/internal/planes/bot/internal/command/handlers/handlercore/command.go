@@ -26,13 +26,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
-
-	membernewscontracts "github.com/kapu/hololive-api/internal/contracts/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -52,7 +50,7 @@ type Dispatcher interface {
 }
 
 type MemberNewsService interface {
-	GenerateRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (*membernewscontracts.Digest, error)
+	GenerateRoomDigest(ctx context.Context, roomID string, period membernewsmodel.Period) (*membernewsmodel.Digest, error)
 	SubscribeRoom(ctx context.Context, roomID, roomName string) error
 	UnsubscribeRoom(ctx context.Context, roomID string) error
 	IsRoomSubscribed(ctx context.Context, roomID string) (bool, error)
@@ -150,8 +148,8 @@ type Dependencies struct {
 	Formatter           *formatter.ResponseFormatter
 	HelpImageProvider   HelpImageProvider
 	SendMessage         func(ctx context.Context, room, message string) error
-	SendImage           func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
-	SendImages          func(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error
+	SendImage           func(ctx context.Context, room string, imageData []byte) error
+	SendImages          func(ctx context.Context, room string, images [][]byte) error
 	SendError           func(ctx context.Context, room, message string) error
 	Dispatcher          Dispatcher
 	Logger              *slog.Logger

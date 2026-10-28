@@ -110,7 +110,7 @@ func assertRuntimeRoleRefreshesLiveRuntimeState(t *testing.T, pool *pgxpool.Pool
 
 	_, err = tx.Exec(ctx, `SET LOCAL ROLE `+runtime+`;
 		SELECT lock_youtube_live_runtime_state_shared();
-		INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('runtime-role','runtime-channel','LIVE');
+		INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin) VALUES ('runtime-role','runtime-channel','LIVE','observed');
 		SELECT refresh_youtube_live_runtime_state(ARRAY['runtime-role']);
 		RESET ROLE`)
 	require.NoError(t, err)

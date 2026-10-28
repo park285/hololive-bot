@@ -237,3 +237,40 @@ func (c deadLetterClaimer) DeadLetter(ctx context.Context, input sourceobservati
 
 	return nil
 }
+
+// projection refresh 성공은 DEAD_LETTER backlog 원인을 지우지 않고, queue 관측이 backlog 해소를 볼 때만 풀린다.
+func TestDeadLetterDegradationOutlivesProjectionRefresh(t *testing.T) {
+	runtime := newTestRuntime(t, fakeClaimer{
+		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+			return contract.StatusDeadLetter, nil
+		},
+	}, fakeConsumer{
+		consume: func(context.Context, sourceobservation.Claim) error {
+			return &pgconn.PgError{Code: "40001", Message: "serialization failure"}
+		},
+	})
+	observation := sourceobservation.ClaimWork{
+		ObservationID:   41,
+		LeaseToken:      strings.Repeat("ef", 32),
+		ObservationKind: contract.KindCommunityPage,
+		SubjectKey:      "UC_DLQ_REFRESH",
+	}
+
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
+		t.Fatalf("processClaim() error = %v", err)
+	}
+
+	if err := runtime.refreshProjection(t.Context()); err != nil {
+		t.Fatalf("refreshProjection() error = %v", err)
+	}
+
+	if !runtime.Degraded() {
+		t.Fatal("successful projection refresh cleared dead letter degradation")
+	}
+
+	runtime.observeDeadLetterBacklog(false)
+
+	if runtime.Degraded() {
+		t.Fatal("resolved dead letter backlog left the plane degraded")
+	}
+}

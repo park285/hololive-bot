@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // 시간 예산: claim은 단위의 다음 확인을 soft claim(15s) 뒤로 미루고, 단위마다 상태 조회(최대 5s)와 정산(최대
@@ -127,7 +128,7 @@ func (r *HandoffReconciler) RunOnce(ctx context.Context) (int, error) {
 
 	for i := range claims {
 		wg.Go(func() {
-			panicguard.Run(r.logger, panicguard.BackgroundTask, "alarm-dispatch-handoff-check", func() {
+			panicguard.Run(r.logger, panicscope.BackgroundTask, "alarm-dispatch-handoff-check", func() {
 				r.reconcile(ctx, &claims[i])
 			})
 		})

@@ -89,8 +89,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/park285/shared-go/v2 v2.17.0 h1:Ptdh7Ztfj4AzTsmf8Ldie7F24Y+eS4j0VDhbRrzLqQ8=
-github.com/park285/shared-go/v2 v2.17.0/go.mod h1:zNJ9khC2b4QYfmkL50IMc4+iHaaCyzHjh+iyZKTUhv8=
+github.com/park285/shared-go/v2 v2.18.0 h1:OdjAp2Hfq78AFTgHqB+hDxShw0/MujDU7DN4NiaGgJU=
+github.com/park285/shared-go/v2 v2.18.0/go.mod h1:bFqsIs/tu3gFp5MbengmgaVKIQ54iqxogJr4t/hdqo0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

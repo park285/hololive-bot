@@ -165,12 +165,6 @@ Current Go runtime services:
 ./scripts/architecture/ci-boundary-gate.sh
 ```
 
-For contract/document changes:
-
-```bash
-./scripts/architecture/check-internal-route-hardcoding.sh
-```
-
 ## PostgreSQL hot path plan gate
 
 Before releasing PostgreSQL GUC, migration, alarm dispatch, or YouTube outbox claim changes, capture fresh plan snapshots from the target environment:

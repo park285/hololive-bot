@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
@@ -395,7 +396,7 @@ func (e *collectionExecutor) runCollector(ctx context.Context, runner collection
 	var collectErr error
 
 	returned := false
-	recoveredErr := panicguard.RunE(e.logger, panicguard.BackgroundTask, "youtube-collector-collect", func() error {
+	recoveredErr := panicguard.RunE(e.logger, panicscope.BackgroundTask, "youtube-collector-collect", func() error {
 		result, collectErr = runner.Collect(ctx, input)
 		returned = true
 

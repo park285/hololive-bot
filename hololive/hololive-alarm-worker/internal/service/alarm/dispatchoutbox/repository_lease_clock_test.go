@@ -22,7 +22,7 @@ func TestRouteFailuresChecksExpiryAfterAllRowLocks(t *testing.T) {
 		for _, size := range []int{1, 2} {
 			t.Run(fmt.Sprintf("%s/%d", target, size), func(t *testing.T) {
 				pool := dbtest.NewPool(t)
-				repo := NewPgxRepositoryFromPool(pool, nil)
+				repo := newTestRepository(t, pool)
 				ids := seedFailureClockRows(t, repo, size)
 				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 

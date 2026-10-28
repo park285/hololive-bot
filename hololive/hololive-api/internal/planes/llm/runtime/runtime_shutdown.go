@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 func (r *LLMSchedulerRuntime) beginSchedulerStop() <-chan struct{} {
@@ -113,7 +114,7 @@ func (r *LLMSchedulerRuntime) shutdownHTTPServer(ctx context.Context) error {
 	go func() {
 		defer func() { <-r.httpStopGate }()
 
-		stopErr := panicguard.RunE(r.Logger, panicguard.BackgroundTask, "llm-http-stop", func() error {
+		stopErr := panicguard.RunE(r.Logger, panicscope.BackgroundTask, "llm-http-stop", func() error {
 			if err := r.httpServers.Shutdown(ctx); err != nil {
 				return fmt.Errorf("stop LLM HTTP servers: %w", err)
 			}
@@ -184,7 +185,7 @@ func (r *LLMSchedulerRuntime) CloseContext(ctx context.Context) error {
 		go func() {
 			defer close(r.resourcesDone)
 
-			r.resourcesErr = panicguard.RunE(r.Logger, panicguard.BackgroundTask, "llm-resource-close", func() error {
+			r.resourcesErr = panicguard.RunE(r.Logger, panicscope.BackgroundTask, "llm-resource-close", func() error {
 				r.Managed.Close()
 
 				return nil

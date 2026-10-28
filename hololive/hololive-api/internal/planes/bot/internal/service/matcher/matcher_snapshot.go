@@ -29,6 +29,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 const matcherSnapshotLoadTimeout = 5 * time.Second
@@ -50,7 +51,7 @@ func (mm *Matcher) getSnapshot(ctx context.Context) (*matcherSnapshot, error) {
 
 		var loaded *matcherSnapshot
 
-		err := panicguard.RunE(mm.logger, panicguard.BackgroundTask, "matcher-snapshot-load", func() error {
+		err := panicguard.RunE(mm.logger, panicscope.BackgroundTask, "matcher-snapshot-load", func() error {
 			if cached := mm.cachedSnapshot(); cached != nil {
 				loaded = cached
 				return nil

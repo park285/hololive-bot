@@ -3,7 +3,6 @@ go 1.27.3
 use (
 	../iris-client-go
 	../shared-go
-	./
 	./hololive/hololive-alarm-worker
 	./hololive/hololive-api
 	./hololive/hololive-dbtest

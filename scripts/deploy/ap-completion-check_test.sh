@@ -24,7 +24,7 @@ trap cleanup EXIT
 
 fixture_root="$tmp/repo"
 fakebin="$tmp/bin"
-mkdir -p "$fixture_root/scripts/deploy/lib" "$fixture_root/scripts/deploy/ap-hosts" "$fixture_root/deploy/compose" "$fakebin"
+mkdir -p "$fixture_root/scripts/deploy/lib" "$fixture_root/scripts/deploy/ap-hosts" "$fakebin"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host.sh" "$fixture_root/scripts/deploy/lib/ap-host.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scripts/deploy/lib/youtubejs-node-version.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-collector-readiness.sh" "$fixture_root/scripts/deploy/lib/ap-collector-readiness.sh"
@@ -57,13 +57,12 @@ host_name="${2:?host}"
 echo "AP QUIC UDP buffers ok on ${host_name}: runtime rmem=7500000 wmem=7500000; persisted rmem=7500000 wmem=7500000"
 EOF
 chmod +x "$fixture_root/scripts/deploy/lib/require-quic-udp-buffer.sh"
-touch "$fixture_root/KR.key" "$fixture_root/deploy/compose/docker-compose.osaka.yml"
+touch "$fixture_root/KR.key"
 export SSH_KEY="$fixture_root/KR.key"
 cat > "$fixture_root/scripts/deploy/ap-hosts/osaka.conf" <<'EOF'
 AP_NAME=osaka
 AP_SSH_HOST=mock-host
 AP_SSH_HOST_KEY_ALIAS=mock-host
-AP_COMPOSE_FILE=deploy/compose/docker-compose.osaka.yml
 AP_RUNTIME_MODE=native
 AP_SERVICES=(youtube-collector-a)
 AP_CONTAINERS=(hololive-youtube-collector-a)

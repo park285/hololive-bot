@@ -28,7 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// pgUniqueViolation은 acl_settings.key / acl_rooms(room_id,list_type)의 UNIQUE 제약
+// pgUniqueViolation은 acl_settings.key의 UNIQUE 제약
 // 위반을 실 PG와 동일하게(SQLSTATE 23505, *pgconn.PgError) 모사한다.
 func pgUniqueViolation(constraint string) error {
 	return &pgconn.PgError{
@@ -141,30 +141,25 @@ func (f *fakeACLStore) ListRooms(_ context.Context) ([]Room, error) {
 	return rooms, nil
 }
 
-func (f *fakeACLStore) CreateRoom(_ context.Context, roomID, listType string) error {
+// CreateRoom은 실 SQL의 ON CONFLICT (room_id, list_type) DO NOTHING처럼 이미 있는 행을 쓰지 않고 false를 돌려준다.
+func (f *fakeACLStore) CreateRoom(_ context.Context, roomID, listType string) (bool, error) {
 	if f.createRoomHook != nil {
 		if err := f.createRoomHook(roomID, listType); err != nil {
-			return fmt.Errorf("create room hook: %w", err)
+			return false, fmt.Errorf("create room hook: %w", err)
 		}
 	}
 
 	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	key := roomKey{roomID: roomID, listType: listType}
 	if _, exists := f.rooms[key]; exists {
-		f.mu.Unlock()
-
-		if err := pgUniqueViolation("idx_room_list"); err != nil {
-			return fmt.Errorf("pg unique violation: %w", err)
-		}
-
-		return nil
+		return false, nil
 	}
 
 	f.rooms[key] = struct{}{}
-	f.mu.Unlock()
 
-	return nil
+	return true, nil
 }
 
 func (f *fakeACLStore) DeleteRoom(_ context.Context, roomID, listType string) error {

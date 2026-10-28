@@ -29,10 +29,10 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
-	triggercontracts "github.com/kapu/hololive-api/internal/contracts/trigger"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
@@ -132,13 +132,13 @@ func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
 	return target
 }
 
-func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) (triggercontracts.Result, error) {
+func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) (notification.Result, error) {
 	if s == nil {
-		return triggercontracts.Result{}, errors.New("member news monthly scheduler is nil")
+		return notification.Result{}, errors.New("member news monthly scheduler is nil")
 	}
 
 	if s.service == nil {
-		return triggercontracts.Result{}, errors.New("member news service is nil")
+		return notification.Result{}, errors.New("member news service is nil")
 	}
 
 	now := s.digest.Clock()

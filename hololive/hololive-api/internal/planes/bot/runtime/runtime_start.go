@@ -27,6 +27,8 @@ import (
 	"log/slog"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 // Start는 background 작업을 등록한 뒤 ingress를 연다. Shutdown 이후 다시 시작하지 않는다.
@@ -58,7 +60,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r.Bot != nil {
 		r.tasksWG.Go(func() {
 			// readiness 자체 만료는 기동 실패다. runtime 취소로 끝난 작업만 정상 종료로 본다.
-			if err := panicguard.RunE(r.Logger, panicguard.BackgroundTask, "bot-runtime", func() error {
+			if err := panicguard.RunE(r.Logger, panicscope.BackgroundTask, "bot-runtime", func() error {
 				return r.Bot.Start(runCtx)
 			}); err != nil && !isContextTermination(err, runCtx.Err()) {
 				r.recordBackgroundError(runCtx, errCh, fmt.Errorf("bot runtime error: %w", err))
@@ -68,7 +70,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 
 	if r.h3CertReloadStart != nil {
 		r.tasksWG.Go(func() {
-			if err := panicguard.RunE(r.Logger, panicguard.BackgroundTask, "bot-h3-certificate-reload", func() error {
+			if err := panicguard.RunE(r.Logger, panicscope.BackgroundTask, "bot-h3-certificate-reload", func() error {
 				r.h3CertReloadStart(runCtx)
 
 				return nil
@@ -78,7 +80,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 		})
 	}
 
-	go panicguard.Run(r.Logger, panicguard.BackgroundTask, "bot-runtime-task-join", func() {
+	go panicguard.Run(r.Logger, panicscope.BackgroundTask, "bot-runtime-task-join", func() {
 		r.tasksWG.Wait()
 		close(r.tasksDone)
 	})

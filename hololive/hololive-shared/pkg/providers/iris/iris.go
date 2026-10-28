@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package iris는 Iris egress runtime이 IRIS_* 설정으로 room 조회·발송 클라이언트를 만드는 provider를 담는다.
+// Package iris는 Iris egress runtime이 typed IRIS_* 설정으로 room 조회·발송 클라이언트를 만드는 provider를 담는다.
 package iris
 
 import (
@@ -26,9 +26,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
-	irisclient "github.com/park285/iris-client-go/v3/iris"
+	irisclient "github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -41,50 +40,16 @@ type ManagedIrisClient interface {
 	Close() error
 }
 
-// ProvideIrisClient - Iris 발송 클라이언트 생성.
-func ProvideIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...irisclient.ClientOption) (ManagedIrisClient, error) {
-	out, err := provideRuntimeIrisClient(irisConfig, logger, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("provide runtime iris client: %w", err)
-	}
-
-	return out, nil
-}
-
-func provideRuntimeIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...irisclient.ClientOption) (*delivery.RuntimeIrisClient, error) {
+// ProvideIrisClient는 settings.IrisConfig의 typed 값(Base URL 원천·token·transport·H3 CA·server name)으로
+// Iris 발송 클라이언트를 만든다. SDK가 env를 읽지 않으므로 이 설정이 유일한 원천이다.
+// 옵션 opts는 기본 옵션 뒤에 적용되며 Base URL은 회전 해석 결과가 항상 이긴다.
+func ProvideIrisClient(ctx context.Context, irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...irisclient.ClientOption) (ManagedIrisClient, error) {
 	if irisConfig == nil {
 		return nil, errors.New("provide iris client: iris config is required")
 	}
 
-	resolved := irisclient.ResolveClientSDKConfig(opts)
-	fallbackBaseURL := strings.TrimSpace(resolved.BaseURL)
-
-	if fallbackBaseURL == "" {
-		fallbackBaseURL = strings.TrimSpace(irisConfig.BaseURL)
-	}
-
-	baseURLFilePath := strings.TrimSpace(irisConfig.BaseURLFile)
-	if fallbackBaseURL == "" && baseURLFilePath == "" {
-		return nil, errors.New("provide iris client: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
-	}
-
-	botToken := strings.TrimSpace(resolved.BotToken)
-	if botToken == "" {
-		botToken = strings.TrimSpace(irisConfig.BotToken)
-	}
-
-	if botToken == "" {
-		return nil, errors.New("provide iris client: bot token is required")
-	}
-
-	client := delivery.NewRuntimeIrisClient(
-		fallbackBaseURL,
-		botToken,
-		baseURLFilePath,
-		logger,
-		opts...,
-	)
-	if err := client.ValidateBaseURL(); err != nil {
+	client, err := delivery.NewRuntimeIrisClient(ctx, *irisConfig, logger, opts...)
+	if err != nil {
 		return nil, fmt.Errorf("provide iris client: %w", err)
 	}
 

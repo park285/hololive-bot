@@ -40,8 +40,8 @@ func finalizationVideos(t *testing.T, pool *pgxpool.Pool, batchSize int) map[str
 func TestTimeFinalizationCandidateEligibility(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(t.Context(), `
-        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at)
-        SELECT id,'outside-roster','ENDED',now()-interval '2 hours',now()-interval '1 hour',now()-interval '1 hour'
+        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at,lifecycle_origin)
+        SELECT id,'outside-roster','ENDED',now()-interval '2 hours',now()-interval '1 hour',now()-interval '1 hour','observed'
         FROM unnest(ARRAY['new','positive-only','cancelled','provider','no-start','old','pending-old',
                           'finalized','exhausted','conflict','members_only','reverted']) id;
         UPDATE youtube_live_sessions SET started_at=NULL WHERE video_id IN ('positive-only','no-start');
@@ -77,8 +77,8 @@ func TestTimeFinalizationCandidateEligibility(t *testing.T) {
 func TestTimeFinalizationNewRetriesKeepGeneration(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(t.Context(), `
-        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at)
-        VALUES ('new-retry','outside-roster','ENDED',now()-interval '2 hours',now()-interval '1 hour',now()-interval '1 hour');
+        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at,lifecycle_origin)
+        VALUES ('new-retry','outside-roster','ENDED',now()-interval '2 hours',now()-interval '1 hour',now()-interval '1 hour','observed');
     `)
 	require.NoError(t, err)
 
@@ -122,9 +122,9 @@ func seedFinalizationBacklog(t *testing.T, pool *pgxpool.Pool, count int) {
 	t.Helper()
 
 	_, err := pool.Exec(t.Context(), `
-        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at)
+        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at,lifecycle_origin)
         SELECT 'backlog-'||n,'outside-roster','ENDED',now()-interval '10 days',
-               now()-interval '5 days'-n*interval '1 minute',now()-interval '5 days'
+               now()-interval '5 days'-n*interval '1 minute',now()-interval '5 days','observed'
         FROM generate_series(1,$1::int) n`, count)
 	require.NoError(t, err)
 
@@ -284,9 +284,9 @@ func TestTimeFinalizationReaderPopulationWithinRuntimeBudget(t *testing.T) {
 	seedFinalizationBacklog(t, pool, 10000)
 
 	_, err := pool.Exec(t.Context(), `
-        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at)
+        INSERT INTO youtube_live_sessions(video_id,channel_id,status,started_at,ended_at,status_observed_at,lifecycle_origin)
         SELECT 'new-'||n,'outside-roster','ENDED',now()-interval '2 hours',now()-interval '1 hour',
-               now()-n*interval '1 second' FROM generate_series(1,350) n;
+               now()-n*interval '1 second','observed' FROM generate_series(1,350) n;
         ANALYZE youtube_live_sessions;
         ANALYZE youtube_live_time_finalizations;
     `)

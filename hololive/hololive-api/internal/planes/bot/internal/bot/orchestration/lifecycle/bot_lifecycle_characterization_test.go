@@ -56,7 +56,7 @@ type stubPinger struct {
 	onCall  func(call int)
 }
 
-func (p *stubPinger) Ping(context.Context) bool {
+func (p *stubPinger) Ping(context.Context) error {
 	p.calls++
 	if p.onCall != nil {
 		p.onCall(p.calls)
@@ -67,10 +67,20 @@ func (p *stubPinger) Ping(context.Context) bool {
 
 		p.results = p.results[1:]
 
-		return r
+		return pingResultErr(r)
 	}
 
-	return p.result
+	return pingResultErr(p.result)
+}
+
+var errIrisNotReady = errors.New("iris not ready")
+
+func pingResultErr(ready bool) error {
+	if ready {
+		return nil
+	}
+
+	return errIrisNotReady
 }
 
 type recordingHandler struct {
@@ -349,12 +359,12 @@ func TestPingIrisReady(t *testing.T) {
 
 	up := &stubPinger{result: true}
 	l := NewBotLifecycle(discardLogger(), nil, up, "", nil, nil)
-	assert.True(t, l.pingIrisReady(t.Context(), 10*time.Millisecond))
+	require.NoError(t, l.pingIrisReady(t.Context(), 10*time.Millisecond))
 	assert.Equal(t, 1, up.calls)
 
 	down := &stubPinger{result: false}
 	l2 := NewBotLifecycle(discardLogger(), nil, down, "", nil, nil)
-	assert.False(t, l2.pingIrisReady(t.Context(), 10*time.Millisecond))
+	require.Error(t, l2.pingIrisReady(t.Context(), 10*time.Millisecond))
 }
 
 func TestLogIrisReadyAfterRetry(t *testing.T) {
@@ -389,7 +399,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 		t.Parallel()
 
 		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
-		got, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Time{})
+		got, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Time{}, errIrisNotReady)
 		assert.True(t, ok)
 		assert.False(t, got.IsZero())
 	})
@@ -399,7 +409,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 
 		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 		last := time.Now()
-		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last)
+		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last, errIrisNotReady)
 		assert.False(t, ok)
 		assert.Equal(t, last, got)
 	})
@@ -409,7 +419,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 
 		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 		last := time.Now().Add(-2 * time.Minute)
-		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last)
+		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last, errIrisNotReady)
 		assert.True(t, ok)
 		assert.True(t, got.After(last))
 	})
@@ -418,7 +428,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 		t.Parallel()
 
 		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
-		_, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Now())
+		_, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Now(), errIrisNotReady)
 		assert.True(t, ok)
 	})
 }

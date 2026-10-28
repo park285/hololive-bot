@@ -29,7 +29,7 @@ func TestBuildAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
 	require.Error(t, err)
 }
 
-// admin plane의 Holodex 서비스는 runtime 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.
+// process 하나의 Holodex 서비스는 runtime 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.
 func TestBuildScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	t.Parallel()
 
@@ -50,17 +50,15 @@ func TestBuildScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	appConfig := &apiconfig.AdminPlaneConfig{
-		Holodex: settings.DefaultHolodexOperationalConfig(),
-	}
+	holodex := settings.DefaultHolodexOperationalConfig()
 
-	appConfig.Holodex.BaseURL = server.URL + "/configured"
-	appConfig.Holodex.APIKey = "configured-key"
-	appConfig.Holodex.DistributedRateLimit.Enabled = false
+	holodex.BaseURL = server.URL + "/configured"
+	holodex.APIKey = "configured-key"
+	holodex.DistributedRateLimit.Enabled = false
 
 	foundation, err := apifoundation.BuildScraperHolodex(
 		t.Context(),
-		apifoundation.ScraperHolodexOptions{Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialSchedule},
+		apifoundation.ScraperHolodexOptions{Holodex: holodex},
 		newFoundationTestMemberCache(t), cachemocks.NewLenientClient(), slog.New(slog.DiscardHandler),
 	)
 	require.NoError(t, err)
@@ -77,10 +75,6 @@ func TestBuildScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 		t.Fatal("holodex probe received no request")
 	}
 }
-
-type stopFunc func()
-
-func (f stopFunc) Stop() { f() }
 
 // newFoundationTestMemberCache는 migration 시드 DB를 읽는 member cache다. 공식 일정 식별 색인은 멤버 적재에 실패하면
 // 기동 오류이므로 foundation 테스트도 실제 멤버 원천을 준다.

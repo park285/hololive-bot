@@ -7,7 +7,7 @@
 | Module | `hololive-api` |
 | Binary | `hololive-api` |
 | Compose service | `hololive-api` |
-| Port | `30001` (bot) / `30003` (llm) / `30006` (admin) |
+| Port | `30001` (bot) / `30003` (llm, container 안 health·ready 전용, host publish 없음) / `30006` (admin) |
 | Health endpoint | `https://127.0.0.1:30001/health` through container `./bin/healthcheck` |
 | Ready endpoint | `https://127.0.0.1:30003/internal/ready` through container `./bin/healthcheck --api-key-env API_SECRET_KEY` (llm plane dependencies) |
 
@@ -16,16 +16,17 @@
 bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서 호스팅하는 통합 runtime입니다.
 
 - Bot plane: Kakao/Iris webhook ingress와 사용자 명령 routing, reply orchestration.
-- LLM plane: major event/member news scheduling, LLM digest 생성, internal subscription/trigger 제공.
-- Admin plane: dashboard-facing admin HTTP control plane, trigger client, worker alarm HTTP client.
+- LLM plane: major event/member news scheduling, LLM digest 생성, bot plane에 구독 저장소·digest 서비스를 in-process로 제공.
+- Admin plane: dashboard-facing admin HTTP control plane, worker alarm HTTP client.
 
 ## Owns
 
 - Kakao/Iris webhook ingress, user-facing command routing and reply orchestration (bot plane)
-- Major event/member news subscription, digest generation, internal trigger endpoints, LLM summary cache and notification intent production (llm plane)
-- Dashboard-facing admin HTTP API and operational trigger/worker alarm clients (admin plane)
-- Bot-side clients for major event, member news, and alarm operations
-- Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention/replay (YouTube plane)
+- Major event/member news subscription, digest generation, operator rerun (`--rerun-notification`), LLM summary cache and notification intent production (llm plane)
+- Dashboard-facing admin HTTP API and the worker alarm client (admin plane)
+- Bot-side alarm client; major event·member news는 llm plane 인스턴스를 직접 호출
+- Process-owned single ACL `Service` (bot pool, bot-plane `KAKAO_*` seed) shared by bot ingress and admin ACL routes
+- Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention (YouTube plane)
 - `members.photo` Holodex PhotoSync product path (admin plane). YouTube channel photos are the `channel_photo` reducer.
 
 ## Provides
@@ -33,11 +34,11 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
 | Iris webhook boundary | external HTTP/H3 | webhook/reply/send | Iris / Redroid |
-| membernews | HTTP JSON | `/internal/membernews/*` | `hololive-api` (bot plane) |
-| majorevent | HTTP JSON | `/internal/majorevent/*` | `hololive-api` (bot plane) |
-| trigger | HTTP JSON | `/internal/trigger/*` | `hololive-api` (admin plane) |
-| Admin HTTP API | HTTP JSON | 검토 필요 | `admin-dashboard` |
-| settings.update | HTTP JSON + `settings.json` | `POST /api/holo/settings`, `POST /api/holo/settings/llm` | `iris-console`, `alarm-worker` |
+| membernews | in-process | `handlercore.MemberNewsService` | `hololive-api` (bot plane) |
+| majorevent | in-process | `handlercore.MajorEventRepository` | `hololive-api` (bot plane) |
+| trigger.manual | operator CLI | `./bin/hololive-api --rerun-notification=<kind>` | 운영자 |
+| Admin HTTP API | HTTP JSON | `/api/holo/*` (Console 계약 `iris-console/contracts/hololive/openapi.json`에 있는 operation만) | `iris-console` |
+| settings.update | HTTP JSON + `settings.json` | `POST /api/holo/settings` | `iris-console`, `alarm-worker` |
 
 ## Consumes
 
@@ -50,9 +51,10 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | Alarm API | alarm CRUD/query | alarm commands and admin operations fail |
 
 API 설정은 `internal/config`, plane별 공통 서비스 생성은 `internal/apifoundation`이 소유합니다.
-Admin 조립·수명은 `internal/planes/admin/runtime`, router와 Stream/OAuth/WebSocket handler는
-`internal/planes/admin/internal/httpapi`, 공통 trigger handler/router는 `internal/httpapi`에 있습니다.
-Observation consume·canonical/replay/retention과 private reducer는 `internal/youtube/`가 소유합니다.
+Admin 조립·수명은 `internal/planes/admin/runtime`, router와 Stream handler는
+`internal/planes/admin/internal/httpapi`에 있습니다. plane 사이 의존(bot→llm 구독·digest, admin→bot Iris 방 목록,
+admin·bot ACL)은 `internal/app`이 같은 프로세스 인스턴스를 주입하며 loopback HTTP를 쓰지 않습니다.
+Observation consume·canonical/retention과 private reducer는 `internal/youtube/`가 소유합니다.
 Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-process alarm service를 생성하지 않습니다.
 
 ## Must not own
@@ -71,12 +73,12 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - Iris Console의 실제 Go 응답 projection은 기존 201/200·`status`·`message`로 위 응답을 수락합니다. 추가 필드는 현재 projection에서 제거되므로 Console 화면이 캐시 동기화 상태를 표시한다는 보장은 없습니다.
 - 활동 기록은 기존 logger sink를 사용합니다. 캐시 실패 때문에 이미 저장된 변경의 기록을 건너뛰지는 않지만, DB commit과 로그 저장 사이의 프로세스 종료까지 원자적으로 보장하는 감사 outbox는 아닙니다.
 
-## Password reset API
+## Admin 사용자 인증
 
-- 관리자 비밀번호 재설정은 지원하지 않습니다. 재설정 링크 전달 수단이 없어 2026-10-02부터 503만 반환하던 `POST /api/auth/password/reset-request`와 `POST /api/auth/password/reset`, 재설정 서비스, `auth_password_reset_tokens` 테이블(migration 281)을 제거했습니다.
-- 두 경로는 다른 미등록 경로와 같이 NoRoute 응답을 받습니다. API key가 없으면 401, 틀리면 403, 맞으면 404입니다.
-- `auth_users.session_generation`은 세션 폐기 장치로 남습니다. 값을 올리면 그 사용자의 기존 세션은 Me·Refresh에서 거부되고 세션 키가 지워집니다. 이 값을 올리는 API는 없습니다.
-- 다시 지원하려면 링크 전달 수단과 복구 절차를 먼저 구현하고 공개 API 계약 변경 승인을 받아야 합니다.
+- admin plane은 사용자 계정·세션을 소유하지 않습니다. Iris Console이 자기 세션으로 사용자를 인증하고 admin plane에는 `/api/holo/*`를 API key로만 호출합니다.
+- 독립 대시보드 잔재였던 `/api/auth/*`(register·login·logout·refresh·me)와 `/oauth/callback`, auth service(Valkey `auth:*` 세션·bcrypt·로그인 rate limit), `ADMIN_ALLOWED_IPS`·`AUTH_BCRYPT_COST` 설정, `auth_users` 테이블(migration 345)을 제거했습니다. 비밀번호 재설정 경로와 `auth_password_reset_tokens`(migration 281)는 그보다 먼저 제거했습니다.
+- 제거한 경로는 다른 미등록 경로와 같이 NoRoute 응답을 받습니다. API key가 없으면 401, 틀리면 403, 맞으면 404입니다.
+- 다시 사용자 인증을 두려면 Iris Console 경계와 겹치지 않는 근거와 공개 API 계약 변경 승인이 먼저 필요합니다.
 
 ## Live query behavior
 
@@ -84,7 +86,8 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - 공개·멤버 한정·최초공개의 fresh positive는 `/live`가 예정 영상이나 채널 페이지를 고르더라도 표시합니다. 방송 탭·Holodex 누락·absence slot은 채널 coverage가 아닙니다. 모든 채널의 신선한 음성 확인과 해소된 현재 후보가 갖춰진 빈 결과만 '현재 방송 중인 멤버가 없습니다.'로 안내합니다. 그 밖의 빈 결과는 '현재 방송 상태를 확인할 수 없습니다.'입니다. 멤버 지정 빈 결과의 `CMD_MEMBER_NOT_LIVE`와 100개 표시 한도는 유지합니다.
 - 세션·head 없는 EXPLICIT_END와 session=ENDED는 완전성을 막지 않고 `live query incomplete`의 `nonblocking_diagnostics`로 남깁니다. LIVE/head 없음은 계속 차단합니다. 신선한 공개 불가 사실과 익명 수집에서 비공개·삭제 영상이 남기는 신선한 `identity_missing` UNKNOWN은 정상 head가 있는 stale LIVE 후보만 제외하며, 만료나 그 밖의 UNKNOWN 사유는 다시 차단합니다. pending을 삭제하거나 표시 전용 종료 상태를 만들지 않습니다. 사용자 응답에는 조회 사유·기준 시각·범위 설명을 붙이지 않습니다(`DEC-20260926-hololive-list-reply-fold-default`).
 - YouTube plane은 `channel_live_check`를 최신값에만 저장하고 reducer로 보내지 않습니다. `video_live_check`의 identity가 맞고 유효한 upstream 종료 시각이 있을 때만 기존 명시적 종료 경로로 반영합니다. 공개 불가·해석 불가 UNKNOWN만으로 수명 상태를 바꾸지 않되, 시작을 관측한 LIVE 세션의 `identity_missing`이 `YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS`(기본 600초) 이상 이어지고 같은 채널의 신선한 `/live` identity 확인 음성이 있으며 신선한 positive가 없으면 `UNRESOLVABLE_VIDEO`로 끝냅니다(ended_at은 첫 `identity_missing` 시각, 알림 없음). UPCOMING 세션과 다른 UNKNOWN 사유는 종료 대상이 아닙니다. 다만 UPCOMING의 `identity_missing`·`identity_mismatch`는 추적만 하여 projection이 그 영상 확인 target의 재확인 주기를 추적 기간에 따라 2분→10분→30분→1시간으로 늦춥니다(10분·1시간·24시간 경계). 추적 시작 이후의 positive가 오면 다음 projection에서 2분으로 돌아오고, collector는 이전 긴 주기의 남은 대기 없이 현재 주기의 다음 slot에서 재확인합니다. head가 없는 `metadata_only`·`legacy_unknown` UPCOMING은 추적하지 않습니다. `!예정`·`!일정`과 Stream HTTP API는 기존 Holodex 원천·조직·기간·5분 캐시를 유지합니다. 응답 필드는 아래 Chzzk·Twitch 필드 제거 외에는 그대로이고, `org=all` 부분 실패의 응답은 아래처럼 바뀌었습니다.
-- Holodex live/upcoming 목록은 Service 인스턴스 안에서 같은 cache key의 미스를 조정합니다. owner가 조회·저장을 마치면 대기 caller가 캐시를 다시 읽습니다. caller의 취소/기한을 유지하고 결과 포인터나 오류를 공유하지 않습니다. cache write 실패·원천 실패·서로 다른 인스턴스의 요청까지 한 번으로 합친다는 보장은 없습니다.
+- hololive-api process는 Holodex·공식 일정 Service를 하나만 만듭니다(`app.buildAPIInfrastructure`, bot plane의 `HOLODEX_*`·공식 일정 설정). bot(`!예정`·`!일정`)과 admin(`/streams/*`, PhotoSync)이 같은 인스턴스를 빌리므로 retry scheduler·circuit breaker·cache-fill 조정이 process 하나로 묶이고, 종료는 모든 plane이 멈춘 뒤 process 조립이 한 번 합니다. admin plane 설정은 `HOLODEX_*`·공식 일정 env를 더 읽지 않습니다.
+- Holodex live/upcoming 목록은 Service 인스턴스 안에서 같은 cache key의 미스를 조정합니다. owner가 조회·저장을 마치면 대기 caller가 캐시를 다시 읽습니다. caller의 취소/기한을 유지하고 결과 포인터나 오류를 공유하지 않습니다. cache write 실패·원천 실패·다른 process(collector·alarm-worker)의 요청까지 한 번으로 합친다는 보장은 없습니다.
 - 원천 장애 때의 꼬리 지연(stack audit D10, PLN-20260926-stack-audit-refactoring T12 측정 기록, 동작 변경 없음): 실패는 캐시하지 않으므로 같은 key의 동시 miss는 한 명씩 원천을 다시 조회하고, k번째 caller는 앞선 k-1번의 실패 조회를 기다립니다. 2026-09-27 로컬 측정(`GetLiveStreams`, 같은 key caller 6명, MockRequester가 100ms 뒤 응답, miniredis, 3회 반복)에서 성공이면 원천 호출 1번에 6명 모두 100–120ms에 끝났고, 실패면 원천 호출 6번에 완료가 100·200·300·400·500·610ms로 늘어났습니다. caller 기한을 350ms로 두면 3명은 원천 오류로, 3명은 350ms에 `context.DeadlineExceeded`로 끝났습니다(원천 호출 4번, 4번째 조회는 기한으로 취소). 운영 값은 측정하지 않았습니다. 코드상으로는 한 번의 실패 조회가 Holodex client의 시도당 제한(기본 20초)과 재시도·backoff로 길어질 수 있고, 연속 3번 실패하면 circuit breaker가 열려(30초) 이후 대기 caller는 원천을 부르지 않고 바로 실패합니다. 대기 시간의 상한은 각 caller의 ctx 기한입니다.
 - `DEC-20260926-youtube-only-stream-providers`에 따라 `!라이브`는 YouTube만 조회합니다. Chzzk·Twitch client/설정/DI와 명령 내 플랫폼 병합은 제거했습니다. YouTube 조회 실패는 기존 조회 실패 응답으로 전달합니다. 멤버 저장 데이터와 프로필의 정적 링크는 보존하며 제공자 지원을 뜻하지는 않습니다. Stream JSON의 Chzzk·Twitch 필드 10개(`chzzk_channel_id`, `chzzk_live_id`, `chzzk_live_url`, `is_integrated`, `is_chzzk_only`, `twitch_user_id`, `twitch_user_login`, `twitch_stream_id`, `twitch_live_url`, `is_twitch_only`)는 채우는 생산자가 없어 제거했습니다. Stream HTTP 응답과 alarm dispatch event payload에서 이 키가 빠집니다.
 - 새로운 자동 재시도·DB 실패 시 원천 전환·부분 결과 fallback은 추가하지 않습니다. 예약 retry 의미는 cache-fill 개선에서 변경하지 않았습니다.
@@ -101,7 +104,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 - Holodex `GetChannel`은 YouTube scraper로 부분 Channel을 만들지 않고, `GetChannelSchedule`은 YouTube·공식 일정으로 보충하거나 그 결과를 캐시하지 않습니다([공식 일정 계약](../contracts/schedule-hololive-tv-api.md)).
 - 멤버 matcher의 부분 일치 결과는 roster(멤버 데이터·Valkey 동적 멤버) 이름을 채널명 정본으로 씁니다. Holodex 조회 보강과 그 실패 시 후보명·알림 멤버명 캐시로 채우던 체인은 없습니다. 정확 일치 결과와 같은 이름을 씁니다.
-- major event 주간·월간 요약은 LLM 실패·빈 결과·외부 내용 guard 실패를 이벤트 목록만 보내는 대체 경로로 바꾸지 않습니다. 요약 실패는 스케줄러 오류이며 enqueue도 이벤트 표시도 하지 않습니다. 자동 재시도는 없습니다. 스케줄러는 `Failed to send weekly notification`·`Failed to send monthly notification` error 로그만 남기고 다음 실행을 일주일·한 달 뒤로 잡으며, 다음 실행은 새 주(KST 월–일)·새 달 키로 조회하므로 실패한 주기의 digest는 다시 보내지 않습니다. 복구는 같은 KST 주·달 안에 `/internal/trigger/majorevent-weekly`·`/internal/trigger/majorevent-monthly` 수동 trigger로만 합니다([trigger 계약](../contracts/trigger.md), [hololive-api runbook](../runbooks/hololive-api.md)). LLM이 설정되지 않은 모드(`llm == nil`)만 이벤트 목록을 보냅니다.
+- major event 주간·월간 요약은 LLM 실패·빈 결과·외부 내용 guard 실패를 이벤트 목록만 보내는 대체 경로로 바꾸지 않습니다. 요약 실패는 스케줄러 오류이며 enqueue도 이벤트 표시도 하지 않습니다. 자동 재시도는 없습니다. 스케줄러는 `Failed to send weekly notification`·`Failed to send monthly notification` error 로그만 남기고 다음 실행을 일주일·한 달 뒤로 잡으며, 다음 실행은 새 주(KST 월–일)·새 달 키로 조회하므로 실패한 주기의 digest는 다시 보내지 않습니다. 복구는 같은 KST 주·달 안에 `./bin/hololive-api --rerun-notification=majorevent-weekly`·`--rerun-notification=majorevent-monthly` 운영 CLI로만 합니다([trigger 계약](../contracts/trigger.md), [hololive-api runbook](../runbooks/hololive-api.md)). LLM이 설정되지 않은 모드(`llm == nil`)만 이벤트 목록을 보냅니다.
 - `/api/holo` rate limit은 fail-closed입니다. rate limit이 켜져 있는데 cache가 없거나 limiter 초기화에 실패하면 admin API가 기동하지 않고, 판정 실패는 503으로 거절하며 `hololive_admin_rate_limit_check_failures_total`로 셉니다. `hololive_admin_rate_limit_fail_open_total`은 삭제했습니다.
 - `domain.MemberDataProvider`는 오류를 돌려주는 `LoadAllMembers` 하나로 전체 멤버를 적재합니다. 공식 일정 식별 색인·멤버 목록 응답·alarm 콜라보 표시명은 멤버 적재 실패를 빈 결과로 바꾸지 않고 오류로 드러냅니다.
 - 알림 멤버 표시명 폴백만 예외 계약으로 남습니다([alarm 계약](../contracts/alarm.md)의 멤버 표시명 예외 계약).
@@ -184,8 +187,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 | 수동 검토 영수증 (`record_youtube_live_review`) | 운영자 READ COMMITTED 트랜잭션 | DB 함수, exclusive | 전역 → 세션 → head → pending → availability `FOR UPDATE` → snapshot CAS → 영수증·사실 insert → 갱신(해당 영상) |
 | maintenance: terminal head 복구 (`reconcile-terminal-live-heads.sql`) | 단독 | 스크립트 첫 잠금, exclusive | 전역 → 세션 → head `FOR UPDATE`(video_id 순) → head 갱신 → 갱신(복구 영상) |
 | maintenance: 원본 retention (`delete_source_observation_retention_batch`) | 단독 | DB 함수 첫 문장, exclusive | 전역 → retention 커서 singleton `FOR UPDATE` → 원본 후보 잠금·삭제(FK `SET NULL`·`CASCADE`). 수명 모델 입력이 아니므로 갱신 없음 |
-| maintenance: queue·collision·replay 감사·payload·absence slot·checkpoint retention | 단계별 단독 | 없음 | 각 표의 제한된 DELETE. 라이브 원본 표를 쓰지 않음 |
-| maintenance: replay 처리 (`ProcessNextReplay`) | 단독 | 없음 | replay 요청 `FOR UPDATE SKIP LOCKED` → `lock_source_observation` → queue 행 `FOR UPDATE` → queue 재활성 또는 요청 거절. live 표를 쓰지 않음 |
+| maintenance: queue·collision·payload·absence slot·checkpoint retention | 단계별 단독 | 없음 | 각 표의 제한된 DELETE. 라이브 원본 표를 쓰지 않음 |
 | claim (`ClaimBatch`) | 단독 | 없음 | due queue 행 `FOR UPDATE SKIP LOCKED`(replay epoch 이전·시도 소진 후보와 선점 후보) → 같은 트랜잭션에서 종료 후보 DEAD_LETTER 집합 갱신 |
 
 - migration 328은 기존 guard를 잡은 뒤 316·325의 원본 문장 트리거, `refresh_youtube_live_runtime_state_statement()`, `guard_youtube_live_runtime_state()`, `youtube_live_runtime_state_guard` 표를 제거하고, 잠금 함수 본문을 advisory로 바꾸며 기록 함수를 READ COMMITTED 요구로 다시 정의합니다. runtime 역할은 수명 모델 표 SELECT만 유지하고 refresh·shared 잠금 EXECUTE를 받습니다. 기록 함수 실행 권한이 있는 역할은 refresh EXECUTE를 받고 scraper는 shared 잠금 권한이 없습니다. 마지막에 기존 모델·세션·head의 전체 key로 재계산해 drift 0에서 시작합니다. 328 이후 신설하는 기록 역할에는 기존 의존 권한에 더해 `refresh_youtube_live_runtime_state(text[])` 실행 권한도 부여합니다.
@@ -196,11 +198,11 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 - 채널 수치 통계·구독자 수 명령·통계 알림은 제거합니다. 채널 profile/photo, 방송·일정과 알림 구독은 유지합니다.
 - 각 successful collection slot의 관측은 독립 저장합니다. payload만 kind/schema/canonical profile과 전체 32바이트 SHA-256으로 공유하며, JSONB의 PostgreSQL LZ4 압축을 사용합니다. identity와 외부 hex hash 계약은 바꾸지 않습니다.
-- claim/replay는 같은 SQL에서 payload를 조회합니다. 참조 누락·kind/schema 불일치·hash 손상은 오류이며 구 저장 경로로 되돌아가지 않습니다. GC는 참조가 없는 payload만 잠금 후 새 snapshot으로 확인하여 제한된 수만 삭제합니다.
+- claim은 같은 SQL에서 payload를 조회합니다. 참조 누락·kind/schema 불일치·hash 손상은 오류이며 구 저장 경로로 되돌아가지 않습니다. GC는 참조가 없는 payload만 잠금 후 새 snapshot으로 확인하여 제한된 수만 삭제합니다.
 - claim SQL은 due 행 중 replay epoch 이전 자동 claim과 시도 소진 행을 다른 선점 후보와 함께 잠그기만 합니다. DEAD_LETTER 여부와 사유(`replay_epoch_expired`가 `attempts_exhausted`보다 우선)는 Go 재시도 정책이 정하고, 같은 claim 트랜잭션의 집합 UPDATE 한 번으로 claim 트랜잭션 시각·NULL 상세와 함께 기록합니다. claim 시점 DEAD_LETTER는 지표를 남기지 않습니다.
 - application은 entity별 멱등·CANONICALIZED 결과를 한 INSERT로 저장하며 원본의 `ON DELETE CASCADE` 수명을 따릅니다. 고아 유예·별도 감사 retention은 없습니다. provider/kind/subject/hash/effective clock은 원본에서 읽고 감사 행에 중복 저장하지 않습니다.
-- 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/replay/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
-- 원본 retention은 큐·pending replay·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.
+- 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
+- 원본 retention은 큐·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.
 - migration 315의 원본 정리는 보호 판정 전에 최대 1,000개 ID를 materialize합니다. kind별 인덱스 후보 반환은 최대 1,000개(정책 최대 16개), 최초 보호 검사는 합계 최대 1,000개이며 삭제·최종 보호 재검사는 `BatchSize`(최대 1,000) 이내입니다. 이 상한은 물리 I/O·보호 함수 내부의 자식 조회량·FK 쓰기량·실행 시간의 상한이 아닙니다.
 - `(received_at,id)` 진행 커서와 고정된 순회 상한을 DB singleton에 보존합니다. 새 유입이 계속되어도 순회 끝에서 앞쪽을 재방문하고, 잠긴 후보는 건너뛴 뒤 다음 순회에서 다시 봅니다. 모든 kind가 같은 시간/ID 순서를 공유하며 보호 해제·늦게 삽입된 앞쪽 원본도 재방문합니다. 커서와 원본/application 삭제는 같은 transaction으로 확정·롤백하므로 재시작 때 처음부터 훑지 않습니다.
 - DB 함수가 exclusive live 전역 잠금 → 커서 → 원본 잠금을 소유합니다. 전부 보호된 창도 성공한 tick이며 payload·absence·checkpoint 정리는 계속 실행됩니다. 앞 단계의 별도 commit 수량과 `BacklogKnown=false`의 미확정 의미는 유지합니다. runtime·scraper는 커서 표에 직접 접근하지 않습니다.
@@ -213,17 +215,17 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 - Iris URL/cert/token configuration
 - PostgreSQL and Valkey availability
-- Internal API base URLs and key configuration for scheduler, trigger, and alarm services
-- Internal HTTP/H3 client options are loaded once into `BotPlaneConfig.InternalH3` and `AdminPlaneConfig.InternalH3` and passed explicitly; each plane owns timeout and transport cleanup. Iris URL-file dynamic reload remains on its existing path.
+- `ALARM_INTERNAL_URL` and API key configuration for the alarm-worker client
+- Internal HTTP/H3 client options (alarm-worker client) are loaded once into `BotPlaneConfig.InternalH3` and `AdminPlaneConfig.InternalH3` and passed explicitly; each plane owns timeout and transport cleanup. Iris URL-file dynamic reload remains on its existing path.
 - CLIPROXY/LLM settings where enabled
 - The process lifecycle uses the same shared-go `bootstrap` and `lifecycle.Run` assembly as youtube-collector and alarm-worker. It is not an operator-selectable mode and does not change ports, routes, config keys, or dependency readiness requirements.
 
 ## Shutdown behavior
 
-- The aggregate `Runtime.Run` (shared-go `lifecycle.Run`) is the single process signal owner. It starts the optional YouTube plane, then llm, admin, and bot; shutdown cancels the runtime context and drains bot, admin, llm, then the optional YouTube plane.
+- The aggregate `Runtime.Run` (shared-go `lifecycle.Run`) is the single process signal owner. It builds llm, then bot, then admin (each borrows the earlier planes' in-process instances), starts the optional YouTube plane, then llm, admin, and bot; shutdown cancels the runtime context and drains bot, admin, llm, then the optional YouTube plane.
 - Stop HTTP/H3 ingress and scheduler workers within one shared 10-second plane-drain budget. Drain plus plane cleanup is a hard 30-second cap: as with the former Fx stop timeout, a plane that ignores cancellation is abandoned at the deadline and the bootstrap `Close` does not re-join unfinished cleanup. Only the telemetry flush (at most 5 seconds) and logger close follow, inside the Compose 45-second grace period.
 - Plane `CloseContext` receives the remaining process-stop context. Each plane joins its background tasks before releasing owned member-cache/DB/cache resources; bot durable samplers are included. A join timeout preserves live resources and the error; the process then exits without re-joining or starting concurrent cleanup, and cleanup that has not started by the stop deadline is not started.
-- LLM HTTP/H3 shutdown has one active owner. A caller deadline returns control to the remaining planes even when a detached trigger is still running; the original shutdown error remains observable. LLM resources are released only after the actual HTTP handlers and scheduler have joined, including metrics/pprof handlers.
+- LLM HTTP/H3 (health·ready only) shutdown has one active owner. A caller deadline returns control to the remaining planes; the original shutdown error remains observable. LLM resources are released only after the actual HTTP handlers and scheduler have joined, including metrics/pprof handlers.
 - YouTube claim release waits for the claim producer to finish registering its returned batch. Registration and fenced release share the existing settlement budget; if registration times out, a later `CloseContext` can finish that release. An attempted release failure is retained without automatic retry, and DB cleanup still waits for all workers to join.
 - Bot readiness cancellation is normal only when its error matches the runtime's actual shutdown cancellation. An independent readiness deadline or a joined operational error remains fatal.
 - A runtime fatal, plane-drain failure, or process-stop timeout remains process-fatal. Cleanup is attempted once and no legacy lifecycle fallback is selected.

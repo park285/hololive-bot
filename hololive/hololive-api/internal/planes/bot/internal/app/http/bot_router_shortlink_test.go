@@ -1,7 +1,6 @@
 package apphttp
 
 import (
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,7 +14,7 @@ func TestBotRouteRegistrarIncludesPublicShortLink(t *testing.T) {
 	t.Parallel()
 
 	router := gin.New()
-	err := botRouteRegistrar("", nil, nil, nil, slog.New(slog.DiscardHandler))(router)
+	err := botRouteRegistrar(nil)(router)
 	require.NoError(t, err)
 
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/l/dQw4w9WgXcQ", http.NoBody)

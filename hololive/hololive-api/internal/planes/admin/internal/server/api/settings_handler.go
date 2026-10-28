@@ -9,22 +9,16 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
-	contractssettings "github.com/kapu/hololive-api/internal/contracts/settings"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
-
-type logsResponse struct {
-	Status string `json:"status"`
-	Logs   any    `json:"logs"`
-}
 
 type settingsResponse struct {
 	Status   string               `json:"status"`
@@ -39,17 +33,9 @@ type settingsUpdateResponse struct {
 	Runtime  map[string]any       `json:"runtime"`
 }
 
-type llmSettingsResponse struct {
-	Status  string         `json:"status"`
-	Message string         `json:"message"`
-	Runtime map[string]any `json:"runtime"`
-}
-
 type SettingsActivityLogger interface {
 	Log(entryType, summary string, details map[string]any)
 }
-
-type SettingsReadRecentLogsFunc func(limit int) (any, error)
 
 // RoomNameSetter는 관리 화면이 알림 서비스에 요구하는 방 이름 변경 작업만 제공한다.
 type RoomNameSetter interface {
@@ -59,11 +45,10 @@ type RoomNameSetter interface {
 type SettingsHandler struct {
 	sharedsettings.SettingsApplier
 
-	Logger         *slog.Logger
-	Alarm          RoomNameSetter
-	Activity       SettingsActivityLogger
-	ReadRecentLogs SettingsReadRecentLogsFunc
-	Settings       settingssvc.ReadWriter
+	Logger   *slog.Logger
+	Alarm    RoomNameSetter
+	Activity SettingsActivityLogger
+	Settings settingssvc.ReadWriter
 
 	operationGate *settingsOperationGate
 	operations    settingsOperationGate
@@ -73,10 +58,6 @@ type SettingsHandler struct {
 // 요청에 들어오면 거절한다.
 type updateSettingsRequest struct {
 	AlarmAdvanceMinutes *int `json:"alarmAdvanceMinutes"`
-}
-
-type updateLLMSettingsRequest struct {
-	MemberNewsWeeklyRunNow *bool `json:"memberNewsWeeklyRunNow"`
 }
 
 const (
@@ -191,23 +172,6 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	})
 
 	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room name set successfully"})
-}
-
-func (h *SettingsHandler) GetLogs(c *gin.Context) {
-	if h == nil || h.ReadRecentLogs == nil {
-		sharedserver.RespondError(c, http.StatusServiceUnavailable, "activity log service not available", nil)
-
-		return
-	}
-
-	logs, err := h.ReadRecentLogs(100)
-	if err != nil {
-		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to get logs", "Failed to get logs", err)
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, logsResponse{Status: "ok", Logs: logs})
 }
 
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
@@ -361,73 +325,4 @@ func (h *SettingsHandler) logSettingsUpdate(current settingssvc.Settings, runtim
 		"alarm_advance_minutes": current.AlarmAdvanceMinutes,
 		"runtime_status":        runtime,
 	})
-}
-
-func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
-	req, ok := h.bindUpdateLLMSettingsRequest(c)
-
-	if !ok {
-		return
-	}
-
-	if !h.requireApplier(c) {
-		return
-	}
-
-	if !req.validate(c) {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
-
-	defer cancel()
-
-	runtime := map[string]any{}
-
-	if req.MemberNewsWeeklyRunNow != nil && *req.MemberNewsWeeklyRunNow {
-		memberNewsResult := h.ApplyMemberNewsWeeklyRunNow(ctx)
-
-		runtime[contractssettings.UpdateTypeMemberNewsRunNow] = memberNewsResult.AsMap()
-	}
-
-	h.logActivity("llm_settings_update", "LLM settings updated", map[string]any{
-		contractssettings.UpdateTypeMemberNewsRunNow: req.MemberNewsWeeklyRunNow,
-		"runtime": runtime,
-	})
-
-	ginjson.Respond(c, http.StatusOK, llmSettingsResponse{
-		Status:  "ok",
-		Message: "LLM settings updated",
-		Runtime: runtime,
-	})
-}
-
-func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLLMSettingsRequest, bool) {
-	var req updateLLMSettingsRequest
-
-	if err := bindJSON(c, &req, jsonv2.RejectUnknownMembers(true)); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-
-		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
-
-		return req, false
-	}
-
-	return req, true
-}
-
-func (req updateLLMSettingsRequest) validate(c *gin.Context) bool {
-	if req.MemberNewsWeeklyRunNow == nil {
-		sharedserver.RespondError(c, http.StatusBadRequest, "at least one llm setting field is required", nil)
-
-		return false
-	}
-
-	if req.MemberNewsWeeklyRunNow != nil && !*req.MemberNewsWeeklyRunNow {
-		sharedserver.RespondError(c, http.StatusBadRequest, "memberNewsWeeklyRunNow must be true when provided", nil)
-
-		return false
-	}
-
-	return true
 }

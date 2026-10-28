@@ -19,7 +19,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/repository"
 )
 
 type (
@@ -64,24 +63,18 @@ func checkSourceReselection(t *testing.T, deleteDefault bool) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
-	logger := slog.New(slog.DiscardHandler)
-	admin := NewAdminService(repository.NewTemplateRepository(pool, logger), NewRenderer(pool, logger), logger)
 	key := domain.TemplateKeyCmdHelp
 	channel := "bounded-reselect"
 
-	if _, err := admin.Save(t.Context(), key, nil, "DEFAULT"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, nil, "DEFAULT")
 
-	if _, err := admin.Save(t.Context(), key, &channel, "OVERRIDE"); err != nil {
-		t.Fatal(err)
-	}
+	saveTestTemplate(t, pool, key, &channel, "OVERRIDE")
 
 	tr := &sourceChangeTrace{}
 
 	tr.afterResolve = func(ctx context.Context, n int64) {
 		if n == 1 {
-			if err := admin.DeleteOverride(ctx, key, channel); err != nil {
+			if _, err := pool.Exec(ctx, `DELETE FROM notification_templates WHERE template_key=$1 AND channel_id=$2`, key, channel); err != nil {
 				t.Error(err)
 			}
 		} else if deleteDefault {
@@ -262,7 +255,9 @@ func TestRendererBlockedParseDoesNotBlockOtherCacheKeys(t *testing.T) {
 			t.Fatal("unrelated cache entry unavailable")
 		}
 
-		r.InvalidateKey(other.templateKey)
+		r.cacheMu.Lock()
+		delete(r.cache, other)
+		r.cacheMu.Unlock()
 
 		if r.cachedTemplate(other) != nil {
 			t.Fatal("unrelated invalidation failed")

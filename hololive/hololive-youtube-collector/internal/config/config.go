@@ -5,8 +5,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -25,8 +23,6 @@ const (
 	minCollectorPhaseTimeout = 100 * time.Millisecond
 	maxYouTubeJSTimeout      = 10 * time.Minute
 )
-
-var youtubeCollectorInstanceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
 // Config는 collector의 수집 동시성, 제한과 lease 예산을 보관합니다.
 type Config struct {
@@ -56,10 +52,14 @@ type Config struct {
 	YouTubeJSRequestTimeout  time.Duration
 	YouTubeJSStartupTimeout  time.Duration
 	YouTubeJSShutdownTimeout time.Duration
-	MaxPages                 int
-	MaxSuccessResponseBytes  int
-	MaxTargetRosterRows      int
-	RequestInterval          time.Duration
+	// YouTubeJSNodePath·YouTubeJSScriptPath는 배포가 YOUTUBEJS_NODE·YOUTUBEJS_SCRIPT로 고정한 helper 절대 경로다.
+	// 비었거나 절대·정규 경로의 일반 파일이 아니면 helper 기동이 실패하며, 다른 후보 경로로 넘어가지 않는다.
+	YouTubeJSNodePath       string
+	YouTubeJSScriptPath     string
+	MaxPages                int
+	MaxSuccessResponseBytes int
+	MaxTargetRosterRows     int
+	RequestInterval         time.Duration
 }
 
 // DefaultConfig는 profile이 소유하지 않는 provider·환경 기본값만 반환합니다.
@@ -141,15 +141,11 @@ func (c *Config) validateEnvPolicy(holodexTimeout, officialTimeout time.Duration
 }
 
 func (c *Config) validateInstanceID() error {
-	if !validYouTubeCollectorInstanceID(c.InstanceID) {
-		return errors.New("YOUTUBE_COLLECTOR_INSTANCE_ID is invalid")
+	if _, err := tracingEnabledEnvForInstance(c.InstanceID); err != nil {
+		return err
 	}
 
 	return nil
-}
-
-func validYouTubeCollectorInstanceID(id string) bool {
-	return youtubeCollectorInstanceIDPattern.MatchString(strings.TrimSpace(id))
 }
 
 func (c *Config) validateLeaseTiming() error {

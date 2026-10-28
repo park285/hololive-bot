@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 func (c *Client) postJSON[T any](ctx context.Context, path string, body any) (T, error) {
@@ -58,15 +60,15 @@ func (c *Client) putNoData(ctx context.Context, path string, body any) error {
 	return nil
 }
 
-func readAPIEnvelope(path string, body io.Reader) (apiEnvelope, error) {
-	var envelope apiEnvelope
+func readAPIEnvelope(path string, body io.Reader) (contractsalarm.Envelope[jsontext.Value], error) {
+	var envelope contractsalarm.Envelope[jsontext.Value]
 
 	if err := jsonv2.UnmarshalRead(body, &envelope); err != nil {
-		return apiEnvelope{}, fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
+		return contractsalarm.Envelope[jsontext.Value]{}, fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
 	}
 
 	if !envelope.Success {
-		return apiEnvelope{}, fmt.Errorf("alarm-api: %s: %s", path, envelopeFailureMessage(envelope))
+		return contractsalarm.Envelope[jsontext.Value]{}, fmt.Errorf("alarm-api: %s: %s", path, envelopeFailureMessage(envelope))
 	}
 
 	return envelope, nil
@@ -93,7 +95,7 @@ func decodeAPIEnvelope[T any](path string, body io.Reader) (T, error) {
 	return out, nil
 }
 
-func envelopeFailureMessage(envelope apiEnvelope) string {
+func envelopeFailureMessage(envelope contractsalarm.Envelope[jsontext.Value]) string {
 	message := strings.TrimSpace(envelope.Message)
 	if message == "" {
 		message = strings.TrimSpace(envelope.Error)

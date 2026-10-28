@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 // FirstCheckDelay는 admission부터 첫 확인까지의 간격이다. Iris 같은 ID 재시도 창(약 2초)보다 길게 두어 첫 확인에서

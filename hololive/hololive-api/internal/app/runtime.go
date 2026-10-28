@@ -13,11 +13,13 @@ import (
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
 	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
 	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
+	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
@@ -105,18 +107,20 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 		return planes, fmt.Errorf("build llm plane: %w", err)
 	}
 
-	planes.admin, err = adminruntime.BuildAdminAPIRuntime(ctx, appConfig.Admin, planes.infra.admin, logger.With(slog.String("plane", "admin")))
-	if err != nil {
-		return planes, fmt.Errorf("build admin plane: %w", err)
-	}
-
-	planes.bot, err = botruntime2.BuildRuntime(ctx, appConfig.Bot, planes.infra.bot, logger.With(slog.String("plane", "bot")))
+	// plane 사이 호출은 같은 프로세스의 인스턴스를 직접 주입한다. bot은 llm의 구독·digest 서비스를, admin은
+	// bot이 소유한 Iris client를 빌린다. 빌린 자원은 모든 plane drain이 끝난 뒤 소유 plane의 CloseContext가 닫으므로
+	// GroupRuntime의 plane 정지 순서에 의존하지 않는다.
+	planes.bot, err = botruntime2.BuildRuntime(ctx, appConfig.Bot, planes.infra.bot, botPlaneDependencies(planes.infra, planes.llm),
+		logger.With(slog.String("plane", "bot")))
 	if err != nil {
 		return planes, fmt.Errorf("build bot plane: %w", err)
 	}
 
-	// 관리 plane이 바꾼 ACL을 같은 요청 안에서 봇 판정에 반영한다.
-	planes.bot.ACL.Follow(planes.admin.ACL)
+	planes.admin, err = adminruntime.BuildAdminAPIRuntime(ctx, appConfig.Admin, planes.infra.admin, adminPlaneDependencies(planes.infra, planes.bot),
+		logger.With(slog.String("plane", "admin")))
+	if err != nil {
+		return planes, fmt.Errorf("build admin plane: %w", err)
+	}
 
 	// 비활성 executor도 영속 큐 관측과 profile 진단의 수명을 소유한다.
 	planes.youtube, err = youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
@@ -129,6 +133,25 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	}
 
 	return planes, nil
+}
+
+// 두 plane은 process infra가 소유한 ACL·Holodex 인스턴스를 그대로 빌린다. Holodex를 plane마다 따로 만들면
+// Holodex 호출·공식 일정 캐시가 process 안에서 두 벌이 된다.
+func botPlaneDependencies(infra *apiInfrastructure, llm *llmruntime.LLMSchedulerRuntime) botruntime2.Dependencies {
+	return botruntime2.Dependencies{
+		ACL:        infra.acl,
+		Holodex:    infra.holodex,
+		MajorEvent: llm.MajorEventSubscriptions,
+		MemberNews: llm.MemberNews,
+	}
+}
+
+func adminPlaneDependencies(infra *apiInfrastructure, bot *botruntime2.BotRuntime) adminruntime.Dependencies {
+	return adminruntime.Dependencies{
+		ACL:       infra.acl,
+		Holodex:   infra.holodex,
+		IrisRooms: bot.IrisRooms,
+	}
 }
 
 func (p apiPlanes) closeContext(ctx context.Context) error {
@@ -339,11 +362,17 @@ func (r *Runtime) closeError() error {
 	return r.closeErr
 }
 
-// apiInfrastructure는 bot pool을 멤버 정본의 backing pool로 소유한다.
+// apiInfrastructure는 bot pool을 멤버 정본과 ACL의 backing pool로 소유한다.
 // Plane에 전달한 모듈에는 종료 권한이 없고 모든 plane join 후 한 번만 정리한다.
 type apiInfrastructure struct {
 	bot, admin, llm *sharedmodules.InfraModule
-	closeResources  func()
+	// acl은 process 하나에 하나뿐인 ACL Service다. admin 변경과 bot 판정이 같은 메모리 snapshot을 쓴다.
+	acl *acl.Service
+	// holodex는 bot(!예정·!일정)과 admin(/streams/*)이 빌려 쓰는 process 하나의 Holodex·공식 일정 서비스다.
+	// 두 plane이 같은 Valkey cache를 쓰면서 retry scheduler·circuit breaker·cache-fill 조정을 따로 두면 장애 때
+	// 원천을 따로 다시 조회하고 breaker 상태도 나뉘므로 하나만 만든다.
+	holodex        *apifoundation.ScraperHolodexFoundation
+	closeResources func()
 }
 
 func (r *apiInfrastructure) CloseContext(context.Context) error {
@@ -366,8 +395,11 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 
 	var cleanupAdmin, cleanupLLM func()
 
+	stopHolodex := func() {}
+
 	cleanup := sync.OnceFunc(func() {
-		// 공유 캐시를 먼저 join한 뒤 모든 pool과 Valkey를 닫는다.
+		// 공유 Holodex 서비스와 캐시를 먼저 join한 뒤 모든 pool과 Valkey를 닫는다.
+		stopHolodex()
 		bot.StopMemberCache()
 
 		if cleanupLLM != nil {
@@ -397,10 +429,48 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 		return nil, fmt.Errorf("provide llm database resources: %w", err)
 	}
 
+	aclService, holodex, err := buildSharedPlaneServices(ctx, config.Bot, bot, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	stopHolodex = holodex.HolodexService.Stop
+
 	return &apiInfrastructure{
+		acl:            aclService,
+		holodex:        holodex,
 		bot:            &sharedmodules.InfraModule{Cache: bot.Cache, Postgres: bot.Postgres, MemberRepository: bot.MemberRepository, MemberCache: bot.MemberCache},
 		admin:          &sharedmodules.InfraModule{Cache: bot.Cache, Postgres: admin.Service, MemberRepository: member.NewMemberRepository(admin.Service, logger), MemberCache: bot.MemberCache},
 		llm:            &sharedmodules.InfraModule{Cache: bot.Cache, Postgres: llm.Service, MemberRepository: member.NewMemberRepository(llm.Service, logger), MemberCache: bot.MemberCache},
 		closeResources: cleanup,
 	}, nil
+}
+
+// buildSharedPlaneServices는 bot·admin plane이 빌려 쓰는 process 하나의 ACL Service와 Holodex 서비스를 만든다.
+// 둘 다 bot pool·cache와 bot plane 설정(KAKAO_ROOMS·KAKAO_ACL_*, HOLODEX_*·공식 일정)을 쓴다.
+func buildSharedPlaneServices(
+	ctx context.Context,
+	botConfig *apiconfig.BotPlaneConfig,
+	bot *sharedmodules.InfraModule,
+	logger *slog.Logger,
+) (*acl.Service, *apifoundation.ScraperHolodexFoundation, error) {
+	aclMode, err := acl.ParseACLModeStrict(botConfig.Kakao.ACLMode)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid KAKAO_ACL_MODE: %w", err)
+	}
+
+	aclService, err := acl.NewACLService(ctx, bot.Postgres, logger, botConfig.Kakao.ACLEnabled, aclMode, botConfig.Kakao.Rooms)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build ACL service: %w", err)
+	}
+
+	holodex, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
+		Holodex:          botConfig.Holodex,
+		OfficialSchedule: botConfig.OfficialSchedule,
+	}, bot.MemberCache, bot.Cache, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build holodex foundation: %w", err)
+	}
+
+	return aclService, holodex, nil
 }

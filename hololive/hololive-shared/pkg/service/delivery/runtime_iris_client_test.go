@@ -1,11 +1,9 @@
 package delivery
 
 import (
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	jsonv2 "encoding/json/v2"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -18,8 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 const (
@@ -28,15 +28,33 @@ const (
 	testIrisHost             = "iris.example"
 	testIrisBaseURL          = "https://" + testIrisHost + ":3001"
 	testIrisBaseURLWithSlash = testIrisBaseURL + "/"
-	testIrisHTTPBaseURL      = "http://" + testIrisHost
 	testBareIPBaseURL        = "https://100.100.1.5:3001"
 )
+
+func newTestRuntimeIrisClient(t *testing.T, config settings.IrisConfig, opts ...iris.ClientOption) *RuntimeIrisClient {
+	t.Helper()
+
+	if config.BotToken == "" {
+		config.BotToken = testBotToken
+	}
+
+	client, err := NewRuntimeIrisClient(t.Context(), config, nil, opts...)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
+
+	return client
+}
 
 func writeRuntimeIrisResponse(t *testing.T, w http.ResponseWriter, body string) {
 	t.Helper()
 
 	if _, err := w.Write([]byte(body)); err != nil {
-		t.Fatalf("write iris response: %v", err)
+		t.Errorf("write iris response: %v", err)
 	}
 }
 
@@ -70,145 +88,109 @@ func tlsClientForServers(t *testing.T, servers ...*httptest.Server) *http.Client
 	return &http.Client{Transport: transport}
 }
 
-func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *testing.T) {
+// expireRuntimeIrisSnapshot은 해석 snapshot 만료를 기다리지 않고 다음 호출이 refresh하게 한다.
+func expireRuntimeIrisSnapshot(client *RuntimeIrisClient) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	client.resolveValidUntil = time.Time{}
+}
+
+func currentRuntimeIrisBinding(client *RuntimeIrisClient) *runtimeIrisBinding {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	return client.current
+}
+
+func runtimeIrisBindingRefs(client *RuntimeIrisClient, binding *runtimeIrisBinding) int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	return binding.refs
+}
+
+func TestRuntimeIrisClientUsesBaseURLFileOverrideAndReloads(t *testing.T) {
 	ctx := t.Context()
 	first := newRuntimeIrisReplyCounter(t, httptest.NewTLSServer)
 	second := newRuntimeIrisReplyCounter(t, httptest.NewTLSServer)
 	baseURLFilePath := writeRuntimeIrisBaseURLFile(t, first.server.URL)
 
-	t.Setenv(irisBaseURLAllowedHostsEnv, testBaseURLHost(t, first.server.URL)+","+testBaseURLHost(t, second.server.URL))
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{
+		BaseURL:             second.server.URL,
+		BaseURLFile:         baseURLFilePath,
+		BaseURLAllowedHosts: []string{testBaseURLHost(t, first.server.URL), testBaseURLHost(t, second.server.URL)},
+	}, iris.WithHTTPClient(tlsClientForServers(t, first.server, second.server)))
 
-	client := NewRuntimeIrisClient(second.server.URL, testBotToken, baseURLFilePath, nil,
-		iris.WithHTTPClient(tlsClientForServers(t, first.server, second.server)))
-
-	defer func() {
-		if err := client.Close(); err != nil {
-			t.Errorf("Close() error = %v", err)
-		}
-	}()
-
-	if err := client.SendMessage(ctx, testRoomID, "hello"); err != nil {
-		t.Fatalf("send via first override: %v", err)
-	}
-
+	_, err := client.SendMessageAccepted(ctx, testRoomID, "hello")
+	require.NoError(t, err)
 	assertRuntimeIrisReplyCalls(t, first, 1, "first calls after first send")
 
-	if err := os.WriteFile(baseURLFilePath, []byte(second.server.URL), 0o600); err != nil {
-		t.Fatalf("write second base url file: %v", err)
-	}
+	require.NoError(t, os.WriteFile(baseURLFilePath, []byte(second.server.URL), 0o600))
 
-	if err := client.SendMessage(ctx, testRoomID, "cached"); err != nil {
-		t.Fatalf("send before resolve interval expiry: %v", err)
-	}
-
+	_, err = client.SendMessageAccepted(ctx, testRoomID, "cached")
+	require.NoError(t, err)
 	assertRuntimeIrisReplyCalls(t, first, 2, "first calls before resolve interval expiry")
 	assertRuntimeIrisReplyCalls(t, second, 0, "second calls before resolve interval expiry")
 
 	require.Eventually(t, func() bool {
-		if err := client.SendMessage(ctx, testRoomID, "world"); err != nil {
+		if _, err := client.SendMessageAccepted(ctx, testRoomID, "world"); err != nil {
 			return false
 		}
 
 		return second.callCount() == 1
 	}, 2*time.Second, 50*time.Millisecond)
-
-	assertRuntimeIrisReplyCalls(t, second, 1, "second calls after reload")
 }
 
-func TestRuntimeIrisClient_SendMessagePreservesBaseURLFileDeploymentPrefix(t *testing.T) {
-	t.Setenv("IRIS_TRANSPORT", "http1")
-
+func TestRuntimeIrisClientPreservesBaseURLFileDeploymentPrefix(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.URL.Path, "/tenant/iris/reply"; got != want {
-			t.Fatalf("request path = %q, want %q", got, want)
+			t.Errorf("request path = %q, want %q", got, want)
 		}
 
 		w.WriteHeader(http.StatusOK)
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	t.Cleanup(server.Close)
 
-	baseURLFilePath := writeRuntimeIrisBaseURLFile(t, server.URL+"/tenant/iris///")
-	client := NewRuntimeIrisClient(
-		server.URL,
-		testBotToken,
-		baseURLFilePath,
-		nil,
-		iris.WithHTTPClient(server.Client()),
-		iris.WithTransport("http1"),
-	)
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{
+		BaseURL:             server.URL,
+		BaseURLFile:         writeRuntimeIrisBaseURLFile(t, server.URL+"/tenant/iris///"),
+		BaseURLAllowedHosts: []string{testBaseURLHost(t, server.URL)},
+		Transport:           iris.TransportHTTP1,
+	}, iris.WithHTTPClient(server.Client()))
 
-	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Errorf("Close() error = %v", err)
-		}
-	})
-
-	if err := client.SendMessage(t.Context(), testRoomID, "hello"); err != nil {
-		t.Fatalf("SendMessage() error = %v", err)
-	}
+	_, err := client.SendMessageAccepted(t.Context(), testRoomID, "hello")
+	require.NoError(t, err)
 }
 
 func TestRuntimeIrisClientRejectsDialOutsideInitialBaseURLAllowset(t *testing.T) {
-	client := NewRuntimeIrisClient("https://192.0.2.10:3001", testBotToken, "", nil)
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{BaseURL: "https://192.0.2.10:3001"}, iris.WithHTTPClient(&http.Client{}))
 
-	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Errorf("Close() error = %v", err)
-		}
-	})
-
-	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
-		t.Fatalf("h3DialGuard(allowed IP) error = %v", err)
-	}
-
-	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.11")); err == nil {
-		t.Fatal("h3DialGuard(disallowed IP) error = nil")
-	}
+	require.NoError(t, client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")))
+	require.Error(t, client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.11")))
 }
 
 func TestRuntimeIrisClientDialGuardFollowsRotatedBaseURL(t *testing.T) {
-	dir := t.TempDir()
-	baseURLFilePath := filepath.Join(dir, "iris_base_url")
+	baseURLFilePath := writeRuntimeIrisBaseURLFile(t, "https://192.0.2.10:3001")
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{
+		BaseURL:             "https://192.0.2.10:3001",
+		BaseURLFile:         baseURLFilePath,
+		BaseURLAllowedHosts: []string{"192.0.2.10", "192.0.2.11"},
+	}, iris.WithHTTPClient(&http.Client{}))
 
-	if err := os.WriteFile(baseURLFilePath, []byte("https://192.0.2.10:3001"), 0o600); err != nil {
-		t.Fatalf("write initial base URL: %v", err)
-	}
-
-	client := NewRuntimeIrisClient("https://192.0.2.10:3001", testBotToken, baseURLFilePath, nil)
-
-	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Errorf("Close() error = %v", err)
-		}
-	})
-
-	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
-		t.Fatalf("h3DialGuard.allow(initial IP) error = %v", err)
-	}
-
-	if err := os.WriteFile(baseURLFilePath, []byte("https://192.0.2.11:3001"), 0o600); err != nil {
-		t.Fatalf("write rotated base URL: %v", err)
-	}
-
-	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.11")); err != nil {
-		t.Fatalf("h3DialGuard.allow(rotated IP) error = %v", err)
-	}
-
-	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")); err == nil {
-		t.Fatal("h3DialGuard.allow(stale IP) error = nil")
-	}
+	require.NoError(t, client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")))
+	require.NoError(t, os.WriteFile(baseURLFilePath, []byte("https://192.0.2.11:3001"), 0o600))
+	require.NoError(t, client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.11")))
+	require.Error(t, client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")))
 }
 
-func TestRuntimeIrisClient_SendMessageDefaultsToReplyRetry(t *testing.T) {
-	t.Setenv("IRIS_TRANSPORT", "http1")
-
-	ctx := t.Context()
-
+func TestRuntimeIrisClientDefaultsToReplyRetry(t *testing.T) {
 	var attempts atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != iris.PathReply {
-			t.Fatalf("path = %q, want %q", r.URL.Path, iris.PathReply)
+			t.Errorf("path = %q, want %q", r.URL.Path, iris.PathReply)
 		}
 
 		if attempts.Add(1) == 1 {
@@ -221,17 +203,141 @@ func TestRuntimeIrisClient_SendMessageDefaultsToReplyRetry(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
+	t.Cleanup(server.Close)
 
-	defer server.Close()
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{BaseURL: server.URL, Transport: iris.TransportHTTP1}, iris.WithHTTPClient(server.Client()))
 
-	client := NewRuntimeIrisClient(server.URL, testBotToken, "", nil, iris.WithHTTPClient(server.Client()), iris.WithTransport("http1"))
+	_, err := client.SendMessageAccepted(t.Context(), testRoomID, "hello", iris.WithClientRequestID("hololive-retry-1"))
+	require.NoError(t, err)
+	require.Equal(t, int32(2), attempts.Load())
+}
 
-	if err := client.SendMessage(ctx, testRoomID, "hello"); err != nil {
-		t.Fatalf("SendMessage() error = %v", err)
+// 회전으로 교체된 client는 진행 중인 호출이 끝날 때까지 참조를 유지하고, 마지막 release에서만 닫힌다.
+func TestRuntimeIrisClientKeepsRotatedClientUntilInFlightCallReleases(t *testing.T) {
+	ctx := t.Context()
+	entered := make(chan struct{})
+	unblock := make(chan struct{})
+
+	first := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(entered)
+		<-unblock
+		w.WriteHeader(http.StatusOK)
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
+	}))
+	t.Cleanup(first.Close)
+
+	second := newRuntimeIrisReplyCounter(t, httptest.NewTLSServer)
+	baseURLFilePath := writeRuntimeIrisBaseURLFile(t, first.URL)
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{
+		BaseURLFile:         baseURLFilePath,
+		BaseURLAllowedHosts: []string{testBaseURLHost(t, first.URL), testBaseURLHost(t, second.server.URL)},
+	}, iris.WithHTTPClient(tlsClientForServers(t, first, second.server)))
+
+	rotatedOut := currentRuntimeIrisBinding(client)
+
+	inFlight := make(chan error, 1)
+
+	go func() {
+		_, err := client.SendMessageAccepted(ctx, testRoomID, "slow")
+		inFlight <- err
+	}()
+
+	<-entered
+
+	require.NoError(t, os.WriteFile(baseURLFilePath, []byte(second.server.URL), 0o600))
+	expireRuntimeIrisSnapshot(client)
+
+	_, err := client.SendMessageAccepted(ctx, testRoomID, "rotated")
+	require.NoError(t, err)
+	assertRuntimeIrisReplyCalls(t, second, 1, "second calls after rotation")
+
+	require.Equal(t, 1, runtimeIrisBindingRefs(client, rotatedOut), "rotated client must stay referenced by the in-flight call")
+
+	close(unblock)
+	require.NoError(t, <-inFlight)
+
+	require.Zero(t, runtimeIrisBindingRefs(client, rotatedOut), "last release must drop the rotated client")
+}
+
+// refresh는 호출 goroutine에서 실행하므로 resolver panic이 호출자에게 그대로 전파되고, 다음 호출을 막지 않는다.
+func TestRuntimeIrisClientPropagatesResolverPanic(t *testing.T) {
+	server := newRuntimeIrisReplyCounter(t, httptest.NewServer)
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{BaseURL: server.server.URL}, iris.WithHTTPClient(server.server.Client()))
+	resolve := client.resolveBaseURL
+
+	client.resolveBaseURL = func() (string, error) { panic("resolver boom") }
+
+	expireRuntimeIrisSnapshot(client)
+	require.PanicsWithValue(t, "resolver boom", func() {
+		if _, err := client.SendMessageAccepted(t.Context(), testRoomID, "panic"); err != nil {
+			t.Errorf("SendMessageAccepted() error = %v, want resolver panic", err)
+		}
+	})
+
+	client.resolveBaseURL = resolve
+
+	_, err := client.SendMessageAccepted(t.Context(), testRoomID, "after panic")
+	require.NoError(t, err)
+	assertRuntimeIrisReplyCalls(t, server, 1, "calls after panic")
+}
+
+func TestRuntimeIrisClientRejectsCallsAfterClose(t *testing.T) {
+	server := newRuntimeIrisReplyCounter(t, httptest.NewServer)
+
+	client, err := NewRuntimeIrisClient(t.Context(), settings.IrisConfig{BaseURL: server.server.URL, BotToken: testBotToken}, nil, iris.WithHTTPClient(server.server.Client()))
+	require.NoError(t, err)
+
+	_, err = client.SendMessageAccepted(t.Context(), testRoomID, "hello")
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
+
+	_, err = client.SendMessageAccepted(t.Context(), testRoomID, "world")
+	require.ErrorIs(t, err, errRuntimeIrisClientClosed)
+}
+
+func TestNewRuntimeIrisClientRejectsInvalidConfigAtConstruction(t *testing.T) {
+	cases := []struct {
+		name   string
+		config settings.IrisConfig
+		opts   []iris.ClientOption
+		want   string
+	}{
+		{name: "empty bot token", config: settings.IrisConfig{BaseURL: testIrisBaseURL}, want: "bot token"},
+		{name: "no base URL source", config: settings.IrisConfig{BotToken: testBotToken}, want: "IRIS_BASE_URL"},
+		{
+			name:   "base URL file without allowlist",
+			config: settings.IrisConfig{BotToken: testBotToken, BaseURLFile: "/run/iris_base_url"},
+			want:   "IRIS_BASE_URL_FILE requires",
+		},
+		{
+			name:   "missing base URL file",
+			config: settings.IrisConfig{BotToken: testBotToken, BaseURLFile: filepath.Join(t.TempDir(), "missing-iris-base-url"), H3ServerName: testIrisHost},
+			opts:   []iris.ClientOption{iris.WithHTTPClient(&http.Client{})},
+			want:   "IRIS_BASE_URL_FILE",
+		},
+		{
+			name:   "h3 rejects http base URL",
+			config: settings.IrisConfig{BotToken: testBotToken, BaseURL: "http://" + testIrisHost, Transport: iris.TransportH3},
+			want:   "https",
+		},
+		{
+			name:   "h3 requires CA file",
+			config: settings.IrisConfig{BotToken: testBotToken, BaseURL: testIrisBaseURL, Transport: iris.TransportH3},
+			want:   "CA",
+		},
+		{
+			name:   "http1 rejects remote host",
+			config: settings.IrisConfig{BotToken: testBotToken, BaseURL: testIrisBaseURL, Transport: iris.TransportHTTP1},
+			want:   "loopback",
+		},
 	}
 
-	if got := attempts.Load(); got != 2 {
-		t.Fatalf("attempts = %d, want 2", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client, err := NewRuntimeIrisClient(t.Context(), tc.config, nil, tc.opts...)
+			require.Nil(t, client)
+			require.ErrorContains(t, err, tc.want)
+		})
 	}
 }
 
@@ -241,180 +347,130 @@ type runtimeIrisBaseURLFileCase struct {
 	fileMode         os.FileMode
 	useSymlink       bool
 	useSymlinkParent bool
-	disableFilePath  bool
-	env              map[string]string
+	serverName       string
+	allowedHosts     []string
+	validateFileStat bool
 	wantBaseURL      string
 	wantErrContains  string
-	wantWarnContains string
 }
 
-func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
+func TestRuntimeIrisBaseURLResolverValidatesFileOverride(t *testing.T) {
 	for _, tc := range runtimeIrisBaseURLFileCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			setRuntimeIrisBaseURLEnv(t, tc.env)
+			resolver, err := newRuntimeIrisBaseURLResolver(settings.IrisConfig{
+				BaseURL:                 "https://fallback.example",
+				BaseURLFile:             writeRuntimeIrisBaseURLFileCase(t, &tc),
+				H3ServerName:            tc.serverName,
+				BaseURLAllowedHosts:     tc.allowedHosts,
+				ValidateBaseURLFileStat: tc.validateFileStat,
+			})
+			require.NoError(t, err)
 
-			baseURLFilePath := writeRuntimeIrisBaseURLFileCase(t, &tc)
+			got, err := resolver.resolve()
 
-			var logBuffer bytes.Buffer
+			if tc.wantErrContains != "" {
+				require.ErrorContains(t, err, tc.wantErrContains)
 
-			logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
-			client := NewRuntimeIrisClient("https://fallback.example", testBotToken, baseURLFilePath, logger)
-			assertRuntimeIrisBaseURLResolve(t, client, &logBuffer, &tc)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantBaseURL, got)
 		})
 	}
 }
 
 func runtimeIrisBaseURLFileCases() []runtimeIrisBaseURLFileCase {
-	cases := runtimeIrisBaseURLFileSchemeCases()
-
-	cases = append(cases, runtimeIrisBaseURLFileHostCases()...)
-	cases = append(cases, runtimeIrisBaseURLFileShapeCases()...)
-	cases = append(cases, runtimeIrisBaseURLFileStatCases()...)
-
-	return cases
-}
-
-func runtimeIrisBaseURLFileSchemeCases() []runtimeIrisBaseURLFileCase {
-	return []runtimeIrisBaseURLFileCase{
-		{
-			name:             "accepts bare IP host when no allowlist is configured",
-			fileContent:      testBareIPBaseURL,
-			wantBaseURL:      testBareIPBaseURL,
-			wantWarnContains: "host is unvalidated",
-		},
-		{
-			name:            "rejects http bare IP host when no allowlist is configured",
-			fileContent:     "http://100.100.1.5:3001",
-			wantErrContains: "https",
-		},
+	return append([]runtimeIrisBaseURLFileCase{
 		{
 			name:        "accepts https host without explicit port",
 			fileContent: "https://" + testSingleLabelHost + "/",
-			env:         map[string]string{irisH3ServerNameEnv: testSingleLabelHost},
+			serverName:  testSingleLabelHost,
 			wantBaseURL: "https://" + testSingleLabelHost,
 		},
-	}
-}
-
-func runtimeIrisBaseURLFileHostCases() []runtimeIrisBaseURLFileCase {
-	return []runtimeIrisBaseURLFileCase{
 		{
-			name:        "accepts bare IP host matching allowed hosts",
-			fileContent: testBareIPBaseURL,
-			env:         map[string]string{irisBaseURLAllowedHostsEnv: "100.100.1.5"},
-			wantBaseURL: testBareIPBaseURL,
-		},
-		{
-			name:        "accepts bare IP host matching trimmed allowed hosts",
-			fileContent: testBareIPBaseURL,
-			env:         map[string]string{irisBaseURLAllowedHostsEnv: " otherhost, 100.100.1.5 "},
-			wantBaseURL: testBareIPBaseURL,
+			name:         "accepts bare IP host matching allowed hosts",
+			fileContent:  testBareIPBaseURL,
+			allowedHosts: []string{"otherhost", "100.100.1.5"},
+			wantBaseURL:  testBareIPBaseURL,
 		},
 		{
 			name:            "rejects bare IP host mismatching allowed hosts",
 			fileContent:     testBareIPBaseURL,
-			env:             map[string]string{irisBaseURLAllowedHostsEnv: "otherhost"},
+			allowedHosts:    []string{"otherhost"},
 			wantErrContains: "host",
 		},
 		{
 			name:            "rejects bare IP host mismatching configured H3 server name",
 			fileContent:     testBareIPBaseURL,
-			env:             map[string]string{irisH3ServerNameEnv: testIrisHost},
-			wantErrContains: "host",
-		},
-		{
-			name:            "rejects http attacker URL",
-			fileContent:     "http://attacker.example:3001/",
-			env:             map[string]string{irisH3ServerNameEnv: testIrisHost},
+			serverName:      testIrisHost,
 			wantErrContains: "host",
 		},
 		{
 			name:            "rejects host mismatch against H3 server name",
 			fileContent:     "https://attacker.example:3001/",
-			env:             map[string]string{irisH3ServerNameEnv: testIrisHost},
+			serverName:      testIrisHost,
 			wantErrContains: "host",
 		},
 		{
 			name:        "accepts matching H3 server name",
 			fileContent: testIrisBaseURLWithSlash,
-			env:         map[string]string{irisH3ServerNameEnv: testIrisHost},
+			serverName:  testIrisHost,
 			wantBaseURL: testIrisBaseURL,
 		},
-	}
-}
-
-func runtimeIrisBaseURLFileShapeCases() []runtimeIrisBaseURLFileCase {
-	return []runtimeIrisBaseURLFileCase{
 		{
 			name:            "rejects nonnumeric explicit port",
 			fileContent:     "https://" + testIrisHost + ":port/",
-			env:             map[string]string{irisH3ServerNameEnv: testIrisHost},
+			serverName:      testIrisHost,
 			wantErrContains: "port",
 		},
 		{
 			name:            "rejects userinfo",
 			fileContent:     "https://token@" + testIrisHost + ":3001/",
-			env:             map[string]string{irisH3ServerNameEnv: testIrisHost},
+			serverName:      testIrisHost,
 			wantErrContains: "userinfo",
 		},
 		{
 			name:            "rejects path tricks",
 			fileContent:     testIrisBaseURL + "/%2e%2e/admin",
-			env:             map[string]string{irisH3ServerNameEnv: testIrisHost},
+			serverName:      testIrisHost,
 			wantErrContains: "path",
 		},
-	}
+		{
+			name:            "rejects empty file",
+			fileContent:     " \n",
+			serverName:      testIrisHost,
+			wantErrContains: "IRIS_BASE_URL_FILE",
+		},
+	}, runtimeIrisBaseURLFileStatCases()...)
 }
 
 func runtimeIrisBaseURLFileStatCases() []runtimeIrisBaseURLFileCase {
-	strictEnv := map[string]string{appEnvKey: appEnvProduction, irisH3ServerNameEnv: testIrisHost}
-
 	return []runtimeIrisBaseURLFileCase{
 		{
-			name:            "rejects symlink in production strict mode",
-			fileContent:     testIrisBaseURLWithSlash,
-			useSymlink:      true,
-			env:             strictEnv,
-			wantErrContains: "symlink",
+			name:             "rejects symlink in production strict mode",
+			fileContent:      testIrisBaseURLWithSlash,
+			useSymlink:       true,
+			serverName:       testIrisHost,
+			validateFileStat: true,
+			wantErrContains:  "symlink",
 		},
 		{
 			name:             "rejects symlink parent in production strict mode",
 			fileContent:      testIrisBaseURLWithSlash,
 			useSymlinkParent: true,
-			env:              strictEnv,
+			serverName:       testIrisHost,
+			validateFileStat: true,
 			wantErrContains:  "parent",
 		},
 		{
-			name:            "rejects world writable file in production strict mode",
-			fileContent:     testIrisBaseURLWithSlash,
-			fileMode:        0o666,
-			env:             strictEnv,
-			wantErrContains: "permission",
+			name:             "rejects world writable file in production strict mode",
+			fileContent:      testIrisBaseURLWithSlash,
+			fileMode:         0o666,
+			serverName:       testIrisHost,
+			validateFileStat: true,
+			wantErrContains:  "permission",
 		},
-		{
-			name:            "uses fallback when file override path is empty",
-			fileContent:     "https://attacker.example:3001/",
-			disableFilePath: true,
-			env:             map[string]string{irisH3ServerNameEnv: testIrisHost},
-			wantBaseURL:     "https://fallback.example",
-		},
-	}
-}
-
-func setRuntimeIrisBaseURLEnv(t *testing.T, env map[string]string) {
-	t.Helper()
-
-	for _, key := range []string{
-		appEnvKey,
-		irisBaseURLAllowedHostsEnv,
-		irisH3ServerNameEnv,
-		"IRIS_TRANSPORT",
-	} {
-		t.Setenv(key, "")
-	}
-
-	for key, value := range env {
-		t.Setenv(key, value)
 	}
 }
 
@@ -446,10 +502,6 @@ func writeRuntimeIrisBaseURLFileCase(t *testing.T, tc *runtimeIrisBaseURLFileCas
 		}
 	}
 
-	if tc.disableFilePath {
-		return ""
-	}
-
 	return baseURLFilePath
 }
 
@@ -474,107 +526,46 @@ func writeRuntimeIrisBaseURLInSymlinkParent(t *testing.T, dir, content string) s
 	return baseURLFilePath
 }
 
-func assertRuntimeIrisBaseURLResolve(t *testing.T, client *RuntimeIrisClient, logBuffer *bytes.Buffer, tc *runtimeIrisBaseURLFileCase) {
-	t.Helper()
-
-	got, err := client.resolver.resolve()
-
-	if tc.wantErrContains != "" {
-		assertRuntimeIrisBaseURLResolveError(t, err, tc.wantErrContains)
-
-		return
-	}
-
-	if err != nil {
-		t.Fatalf("resolve() error = %v, want nil", err)
-	}
-
-	if got != tc.wantBaseURL {
-		t.Fatalf("resolve() = %q, want %q", got, tc.wantBaseURL)
-	}
-
-	assertRuntimeIrisBaseURLWarning(t, client, logBuffer, tc)
-}
-
-func assertRuntimeIrisBaseURLResolveError(t *testing.T, err error, want string) {
-	t.Helper()
-
-	if err == nil {
-		t.Fatalf("resolve() error = nil, want containing %q", want)
-	}
-
-	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("resolve() error = %v, want containing %q", err, want)
-	}
-}
-
-func assertRuntimeIrisBaseURLWarning(t *testing.T, client *RuntimeIrisClient, logBuffer *bytes.Buffer, tc *runtimeIrisBaseURLFileCase) {
-	t.Helper()
-
-	if tc.wantWarnContains == "" {
-		if strings.Contains(logBuffer.String(), "host is unvalidated") {
-			t.Fatalf("unexpected unvalidated host warning: %s", logBuffer.String())
-		}
-
-		return
-	}
-
-	got, err := client.resolver.resolve()
-	if err != nil {
-		t.Fatalf("second resolve() error = %v, want nil", err)
-	}
-
-	if got != tc.wantBaseURL {
-		t.Fatalf("second resolve() = %q, want %q", got, tc.wantBaseURL)
-	}
-
-	logs := logBuffer.String()
-	if strings.Count(logs, tc.wantWarnContains) != 1 {
-		t.Fatalf("warning count for %q in logs = %d, want 1; logs: %s", tc.wantWarnContains, strings.Count(logs, tc.wantWarnContains), logs)
-	}
-}
-
-func TestRuntimeIrisClient_ResolveBaseURLFileRejectsUncleanSymlinkTraversalInProductionStrict(t *testing.T) {
+func TestRuntimeIrisBaseURLResolverRejectsUncleanSymlinkTraversalInProductionStrict(t *testing.T) {
 	dir := t.TempDir()
 	realParent := filepath.Join(dir, "real-parent")
 	realChild := filepath.Join(realParent, "child")
 
-	if err := os.MkdirAll(realChild, 0o750); err != nil {
-		t.Fatalf("mkdir real child: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(realChild, 0o750))
 
 	linkParent := filepath.Join(dir, "symlink")
-	if err := os.Symlink(realChild, linkParent); err != nil {
-		t.Fatalf("symlink parent: %v", err)
+	require.NoError(t, os.Symlink(realChild, linkParent))
+
+	for _, target := range []string{filepath.Join(dir, "target"), filepath.Join(realParent, "target")} {
+		require.NoError(t, os.MkdirAll(target, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(target, "iris_base_url"), []byte(testIrisBaseURLWithSlash), 0o600))
 	}
 
-	cleanTarget := filepath.Join(dir, "target")
-	if err := os.MkdirAll(cleanTarget, 0o750); err != nil {
-		t.Fatalf("mkdir clean target: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(cleanTarget, "iris_base_url"), []byte(testIrisBaseURLWithSlash), 0o600); err != nil {
-		t.Fatalf("write clean target base url: %v", err)
-	}
-
-	resolvedTarget := filepath.Join(realParent, "target")
-	if err := os.MkdirAll(resolvedTarget, 0o750); err != nil {
-		t.Fatalf("mkdir resolved target: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(resolvedTarget, "iris_base_url"), []byte(testIrisBaseURLWithSlash), 0o600); err != nil {
-		t.Fatalf("write resolved target base url: %v", err)
-	}
-
-	uncleanPath := strings.Join([]string{linkParent, "..", "target", "iris_base_url"}, string(os.PathSeparator))
 	// production은 stat 검사를 건너뛸 수 없어 정리되지 않은 symlink 경로를 항상 거절한다.
-	t.Setenv(appEnvKey, appEnvProduction)
-	t.Setenv(irisH3ServerNameEnv, testIrisHost)
+	resolver, err := newRuntimeIrisBaseURLResolver(settings.IrisConfig{
+		BaseURLFile:             strings.Join([]string{linkParent, "..", "target", "iris_base_url"}, string(os.PathSeparator)),
+		H3ServerName:            testIrisHost,
+		ValidateBaseURLFileStat: true,
+	})
+	require.NoError(t, err)
 
-	client := NewRuntimeIrisClient("http://fallback.example", testBotToken, uncleanPath, nil)
-	_, err := client.resolver.resolve()
+	_, err = resolver.resolve()
+	require.ErrorContains(t, err, "clean")
+}
 
-	assertRuntimeIrisBaseURLResolveError(t, err, "clean")
+// resolver는 생성 시 받은 정책만 쓰므로 실행 중 env를 바꿔도 허용 집합이 달라지지 않는다.
+func TestRuntimeIrisBaseURLResolverIgnoresRuntimeEnvChanges(t *testing.T) {
+	baseURLFilePath := writeRuntimeIrisBaseURLFile(t, testIrisBaseURLWithSlash)
+
+	resolver, err := newRuntimeIrisBaseURLResolver(settings.IrisConfig{BaseURLFile: baseURLFilePath, H3ServerName: testIrisHost})
+	require.NoError(t, err)
+
+	t.Setenv(irisH3ServerNameEnv, "attacker.example")
+	t.Setenv(irisBaseURLAllowedHostsEnv, "attacker.example")
+	require.NoError(t, os.WriteFile(baseURLFilePath, []byte("https://attacker.example:3001/"), 0o600))
+
+	_, err = resolver.resolve()
+	require.ErrorContains(t, err, "host")
 }
 
 type runtimeIrisReplyCounter struct {
@@ -632,115 +623,24 @@ func writeRuntimeIrisBaseURLFile(t *testing.T, content string) string {
 	return baseURLFilePath
 }
 
-func assertSendMessageFailsWithoutFallback(t *testing.T, counter *runtimeIrisReplyCounter, client *RuntimeIrisClient, failure string) {
-	t.Helper()
-
-	if err := client.SendMessage(t.Context(), testRoomID, "hello"); err == nil {
-		t.Fatalf("send with %s base URL file error = nil, want error", failure)
-	}
-
-	assertRuntimeIrisReplyCalls(t, counter, 0, "fallback calls")
-}
-
-func TestRuntimeIrisClient_SendMessage_FailsWhenBaseURLFileMissing(t *testing.T) {
-	t.Parallel()
-
-	fallback := newRuntimeIrisReplyCounter(t, httptest.NewServer)
-	client := NewRuntimeIrisClient(fallback.server.URL, testBotToken, filepath.Join(t.TempDir(), "missing"), nil, iris.WithHTTPClient(&http.Client{}))
-
-	assertSendMessageFailsWithoutFallback(t, fallback, client, "missing")
-}
-
-func TestRuntimeIrisClient_SendMessage_FailsWhenBaseURLFileIsEmpty(t *testing.T) {
-	t.Parallel()
-
-	fallback := newRuntimeIrisReplyCounter(t, httptest.NewServer)
-	client := NewRuntimeIrisClient(fallback.server.URL, testBotToken, writeRuntimeIrisBaseURLFile(t, " \n"), nil, iris.WithHTTPClient(&http.Client{}))
-
-	assertSendMessageFailsWithoutFallback(t, fallback, client, "empty")
-}
-
-func TestRuntimeIrisClient_SendMessage_FailsWhenBaseURLFileIsInvalid(t *testing.T) {
-	t.Parallel()
-
-	fallback := newRuntimeIrisReplyCounter(t, httptest.NewServer)
-	client := NewRuntimeIrisClient(fallback.server.URL, testBotToken, writeRuntimeIrisBaseURLFile(t, "http:// bad"), nil, iris.WithHTTPClient(&http.Client{}))
-
-	assertSendMessageFailsWithoutFallback(t, fallback, client, "invalid")
-}
-
-func TestRuntimeIrisClient_SendMessage_FailsWhenH3BaseURLFileUsesHTTP(t *testing.T) {
-	t.Setenv("IRIS_TRANSPORT", "h3")
-
-	fallback := newRuntimeIrisReplyCounter(t, httptest.NewServer)
-	client := NewRuntimeIrisClient(fallback.server.URL, testBotToken, writeRuntimeIrisBaseURLFile(t, "http://stale-iris.example"), nil, iris.WithHTTPClient(fallback.server.Client()))
-
-	assertSendMessageFailsWithoutFallback(t, fallback, client, "h3 http")
-}
-
-func TestValidateRuntimeIrisBaseURL_TransportSchemeAndHTTPS(t *testing.T) {
-	tests := []struct {
-		name      string
-		transport string
-		baseURL   string
-		wantErr   bool
-	}{
-		{name: "h3 accepts https", transport: "h3", baseURL: testIrisBaseURL},
-		{name: "h3 rejects http", transport: "h3", baseURL: testIrisHTTPBaseURL, wantErr: true},
-		{name: "http3 alias rejects http", transport: "http3", baseURL: testIrisHTTPBaseURL, wantErr: true},
-		{name: "quic alias rejects http", transport: "quic", baseURL: testIrisHTTPBaseURL, wantErr: true},
-		{name: "uppercase h3 alias rejects http", transport: "H3", baseURL: testIrisHTTPBaseURL, wantErr: true},
-		{name: "http1 rejects remote https", transport: "http1", baseURL: testIrisBaseURL, wantErr: true},
-		{name: "http1 loopback diagnostics accepts https", transport: "http1", baseURL: "https://127.0.0.1:3001"},
-		{name: "unknown rejects https", transport: "custom", baseURL: testIrisBaseURL, wantErr: true},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("IRIS_TRANSPORT", tc.transport)
-			t.Setenv(irisH3ServerNameEnv, testIrisHost)
-			t.Setenv(irisBaseURLAllowedHostsEnv, "iris.example,127.0.0.1")
-
-			_, err := validateRuntimeIrisBaseURLFileOverride(tc.baseURL, "", nil)
-			if tc.wantErr && err == nil {
-				t.Fatal("validateRuntimeIrisBaseURLFileOverride() error = nil, want error")
-			}
-
-			if !tc.wantErr && err != nil {
-				t.Fatalf("validateRuntimeIrisBaseURLFileOverride() error = %v, want nil", err)
-			}
-		})
-	}
-}
-
-func TestValidateHTTPBaseURL_TransportScheme(t *testing.T) {
-	t.Setenv(irisBaseURLAllowedHostsEnv, "127.0.0.1")
-
-	t.Run("default h3 rejects http fallback", func(t *testing.T) {
-		t.Setenv("IRIS_TRANSPORT", "")
-
-		if _, err := validateHTTPBaseURL("http://127.0.0.1:3001"); err == nil {
-			t.Fatal("validateHTTPBaseURL() error = nil, want h3 http fallback rejection")
-		}
-	})
-}
-
-func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
-	t.Setenv("IRIS_TRANSPORT", "http1")
-
+func TestRuntimeIrisClientSendMessageAcceptedReturnsRequestID(t *testing.T) {
 	var (
 		gotPath    string
-		gotRequest iris.ReplyRequest
+		gotRequest struct {
+			Type string `json:"type"`
+			Room string `json:"room"`
+			Data string `json:"data"`
+		}
 	)
 
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		if r.Header.Get("X-Iris-Signature") == "" {
-			t.Fatal("missing iris signature")
+			t.Error("missing iris signature")
 		}
 
 		if err := jsonv2.UnmarshalRead(r.Body, &gotRequest); err != nil {
-			t.Fatalf("decode request: %v", err)
+			t.Errorf("decode request: %v", err)
 		}
 
 		w.WriteHeader(http.StatusAccepted)
@@ -752,32 +652,22 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 			Room:      testRoomID,
 			Type:      "text",
 		}); err != nil {
-			t.Fatalf("encode response: %v", err)
+			t.Errorf("encode response: %v", err)
 		}
 	}))
+	t.Cleanup(server.Close)
 
-	server.Start()
-
-	defer server.Close()
-
-	client := NewRuntimeIrisClient(server.URL, testBotToken, "", nil, iris.WithTransport("http1"))
+	client := newTestRuntimeIrisClient(t, settings.IrisConfig{BaseURL: server.URL, Transport: iris.TransportHTTP1}, iris.WithHTTPClient(server.Client()))
 
 	resp, err := client.SendMessageAccepted(t.Context(), testRoomID, "hello")
-	if err != nil {
-		t.Fatalf("send accepted: %v", err)
-	}
-
-	if gotPath != iris.PathReply {
-		t.Fatalf("path = %q, want %q", gotPath, iris.PathReply)
-	}
-
-	if gotRequest.Type != "text" || gotRequest.Room != testRoomID || gotRequest.Data != "hello" {
-		t.Fatalf("request = %+v, want text room-1 hello", gotRequest)
-	}
-
-	if resp == nil || resp.RequestID != "reply-123" || resp.Delivery != "queued" {
-		t.Fatalf("response = %+v, want queued reply-123", resp)
-	}
+	require.NoError(t, err)
+	require.Equal(t, iris.PathReply, gotPath)
+	require.Equal(t, "text", gotRequest.Type)
+	require.Equal(t, testRoomID, gotRequest.Room)
+	require.Equal(t, "hello", gotRequest.Data)
+	require.NotNil(t, resp)
+	require.Equal(t, "reply-123", resp.RequestID)
+	require.Equal(t, "queued", resp.Delivery)
 }
 
 func testBaseURLHost(t *testing.T, raw string) string {

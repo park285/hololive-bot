@@ -14,6 +14,12 @@ esac
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
+# 이 smoke는 Compose 컨테이너를 검사한다. native 호스트에는 컨테이너가 없으므로 실행 전에 거부한다.
+if [[ "$AP_RUNTIME_MODE" != compose ]]; then
+  echo "Refusing Compose AP smoke for $AP_NAME (runtime=$AP_RUNTIME_MODE); use ./scripts/deploy/ap-completion-check.sh $AP_NAME" >&2
+  exit 2
+fi
+
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"

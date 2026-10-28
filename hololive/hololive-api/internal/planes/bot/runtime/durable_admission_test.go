@@ -15,8 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v4/webhook"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
@@ -33,25 +33,34 @@ const (
 	testOrderingKey = "room:" + testRoomID
 )
 
-// v2가 inbox에 저장한 이중 필드는 v3 decode에서 거절된다. 전환 전 active inbox 드레인이 필요하다.
-func TestStoredWebhookPayloadV3ShapeRequiresActiveInboxDrain(t *testing.T) {
-	var message webhook.Message
-
-	legacy := []byte(`{"msg":"!help","room":"room-1","json":{"message":"!help","chat_id":"room-1","message_id":"m-1"}}`)
-
-	if err := jsonv2.Unmarshal(legacy, &message); err == nil || !strings.Contains(err.Error(), "retired MessageJSON field message") {
-		t.Fatalf("legacy stored payload decode = %v, want retired-field rejection", err)
+// 저장 형식: iris-client-go v4부터 inbox는 Iris 원본 본문을 저장한다. 구 v3 binary가 저장한 Message JSON 형식은 claim에서 복원할 수 없으므로
+// 전환 전 active inbox 드레인이 필요하다.
+func TestStoredWebhookPayloadV4RequiresRawBodyAndActiveInboxDrain(t *testing.T) {
+	legacy := []byte(`{"msg":"!help","room":"room-1","json":{"message_id":"m-1"}}`)
+	if _, err := webhook.DecodeMessage(legacy); err == nil {
+		t.Fatal("v3 stored Message JSON decoded, want rejection that requires inbox drain")
 	}
 
-	canonical := []byte(`{"msg":"!help","room":"room-1","json":{"message_id":"m-1"}}`)
-
-	if err := jsonv2.Unmarshal(canonical, &message); err != nil {
-		t.Fatalf("v3 stored payload decode: %v", err)
+	message, err := webhook.DecodeMessage(testWebhookBody(t, "m-1", "!help"))
+	if err != nil {
+		t.Fatalf("raw Iris body decode: %v", err)
 	}
 
-	if message.Room != testRoomID || message.JSON == nil || message.JSON.MessageID != "m-1" {
-		t.Fatalf("v3 stored payload = %#v, want room and message identity", message)
+	if message.Room != testRoomID || message.Msg != "!help" || message.JSON == nil || message.JSON.MessageID != "m-1" {
+		t.Fatalf("raw Iris body = %#v, want room, text and message identity", message)
 	}
+}
+
+// testWebhookBody는 Iris가 보내는 webhook 원본 본문이다. 이 본문이 inbox에 그대로 저장된다.
+func testWebhookBody(t *testing.T, messageID, text string) []byte {
+	t.Helper()
+
+	body, err := jsonv2.Marshal(webhook.WebhookRequest{MessageID: messageID, Text: text, Room: testRoomID, UserID: "user-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return body
 }
 
 type durableMessageProcessorFunc func(context.Context, *webhook.Message) error
@@ -404,16 +413,9 @@ func TestRunClaimHeartbeatShutdownDoesNotCancelCommand(t *testing.T) {
 func claimDeadlineInboxMessage(t *testing.T, inbox *durability.InboxRepository) *durability.InboxClaim {
 	t.Helper()
 
-	msg := webhook.Message{Msg: "!help", Room: testRoomID, JSON: &webhook.MessageJSON{
-		MessageID: "deadline-message",
-	}}
+	payload := testWebhookBody(t, "deadline-message", "!help")
 
-	payload, err := jsonv2.Marshal(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = inbox.Admit(t.Context(), durability.InboxMessage{
+	_, err := inbox.AdmitResult(t.Context(), durability.InboxMessage{
 		MessageID: "message:deadline-message", RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: payload,
 	})
 	if err != nil {
@@ -536,7 +538,7 @@ func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
 	inbox := durability.NewInboxRepository(pool)
 	commands := durability.NewCommandExecutionRepository(pool)
 
-	_, err = inbox.Admit(ctx, durability.InboxMessage{
+	_, err = inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: "message:crash-window", RoomID: testRoomID, OrderingKey: testOrderingKey,
 		Payload: []byte(`{"JSON":{"message_id":"crash-window"}}`),
 	})
@@ -706,18 +708,11 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msg := webhook.Message{Msg: "!bad", Room: testRoomID, JSON: &webhook.MessageJSON{
-		MessageID: "failed-message",
-	}}
-
-	payload, err := jsonv2.Marshal(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	payload := testWebhookBody(t, "failed-message", "!bad")
 
 	inbox := durability.NewInboxRepository(pool)
 
-	_, err = inbox.Admit(ctx, durability.InboxMessage{
+	_, err = inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: "message:failed-message", RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: payload,
 	})
 	if err != nil {
@@ -926,7 +921,7 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 	pool := dbtest.NewPool(t)
 	repo := durability.NewInboxRepository(pool)
 
-	_, err := repo.Admit(t.Context(), durability.InboxMessage{
+	_, err := repo.AdmitResult(t.Context(), durability.InboxMessage{
 		MessageID: rawID, RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: []byte(`{"body":"x"}`),
 	})
 	if err != nil {
@@ -1023,12 +1018,12 @@ func admittedInboxReleaseFixture(t *testing.T, pool *pgxpool.Pool, messageID str
 		t.Fatal(err)
 	}
 
-	r, err := newDurableRuntime(nil, nil, pool, testDurableProfile(t), slog.New(slog.DiscardHandler))
+	r, err := newDurableRuntime(nil, nil, pool, mustDurableReplyOutbox(t, pool, testDurableProfile(t)), testDurableProfile(t), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = r.inbox.Admit(ctx, durability.InboxMessage{
+	_, err = r.inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: messageID, RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: []byte(`{"JSON":{"message_id":"safe"}}`),
 	})
 	if err != nil {
@@ -1074,7 +1069,7 @@ func TestAdmitMessageLogsValidationConstraintOnFailure(t *testing.T) {
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
 		Msg: "hello", JSON: &webhook.MessageJSON{MessageID: "message:missing-room"},
-	})
+	}, []byte(`{}`))
 	if err == nil {
 		t.Fatal("admission must fail when the room id is missing")
 	}
@@ -1094,7 +1089,7 @@ func TestAdmitMessageWithoutLoggerReturnsErrorWithoutPanic(t *testing.T) {
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
 		Room: testRoomID, JSON: &webhook.MessageJSON{MessageID: "message:no-logger"},
-	})
+	}, []byte(`{}`))
 	if err == nil {
 		t.Fatal("admission must fail when the pool is not configured")
 	}
@@ -1110,7 +1105,7 @@ func TestAdmitMessageDoesNotPersistRejectedIngress(t *testing.T) {
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
 		Room: testRoomID, JSON: &webhook.MessageJSON{MessageID: "message:blocked"},
-	})
+	}, []byte(`{}`))
 	if err != nil {
 		t.Fatalf("rejected admission returned error: %v", err)
 	}
@@ -1129,7 +1124,7 @@ func TestAdmitMessageValidatesIdentityBeforeIngressFilter(t *testing.T) {
 		},
 	}
 
-	if err := admitter.AdmitMessage(t.Context(), nil); err == nil {
+	if err := admitter.AdmitMessage(t.Context(), nil, nil); err == nil {
 		t.Fatal("nil message admission error = nil")
 	}
 
@@ -1145,7 +1140,7 @@ func TestAdmitMessageRejectsWithoutOptionalCounters(t *testing.T) {
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
 		Room: testRoomID, JSON: &webhook.MessageJSON{MessageID: "message:blocked"},
-	})
+	}, []byte(`{}`))
 	if err != nil {
 		t.Fatalf("rejected admission returned error: %v", err)
 	}

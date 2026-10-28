@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -50,7 +49,6 @@ func resolveConfig(config *Config) (Config, error) {
 	}
 
 	cfg := *config
-	resolveHelperPaths(&cfg)
 	applyConfigDefaults(&cfg)
 
 	if err := absolutizeHelperPaths(&cfg); err != nil {
@@ -153,37 +151,11 @@ func validateRuntimeBaseDir(path string) error {
 	return nil
 }
 
-func resolveHelperPaths(cfg *Config) {
-	if cfg.NodePath == "" {
-		cfg.NodePath = firstExisting(
-			os.Getenv("YOUTUBEJS_NODE"),
-			"/usr/local/bin/node",
-			"/nodejs/bin/node",
-		)
-	}
-
-	if cfg.NodePath == "" {
-		if found, err := exec.LookPath("node"); err == nil {
-			cfg.NodePath = found
-		}
-	}
-
-	if cfg.ScriptPath == "" {
-		cfg.ScriptPath = firstExisting(
-			os.Getenv("YOUTUBEJS_SCRIPT"),
-			"youtubejs/src/server.mjs",
-			"/app/youtubejs/src/server.mjs",
-		)
-	}
-}
-
 func absolutizeHelperPaths(cfg *Config) error {
 	paths := []struct {
 		value *string
 		name  string
 	}{
-		{&cfg.NodePath, "node path"},
-		{&cfg.ScriptPath, "script path"},
 		{&cfg.RuntimeBaseDir, "runtime base dir"},
 	}
 	for _, path := range paths {
@@ -244,8 +216,6 @@ func helperProcessEnv(parent []string) []string {
 		"SSL_CERT_FILE":       {},
 		"TMPDIR":              {},
 		"TZ":                  {},
-		"YOUTUBEJS_NODE":      {},
-		"YOUTUBEJS_SCRIPT":    {},
 	}
 	filtered := make([]string, 0, len(allowed))
 
@@ -263,27 +233,6 @@ func helperProcessEnv(parent []string) []string {
 	return filtered
 }
 
-func firstExisting(paths ...string) string {
-	for _, candidate := range paths {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-
-		absolute, err := filepath.Abs(candidate)
-		if err != nil {
-			continue
-		}
-
-		resolved, err := canonicalHelperFile(absolute, "helper candidate")
-		if err == nil {
-			return resolved
-		}
-	}
-
-	return ""
-}
-
 func canonicalHelperFile(path, name string) (string, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return "", fmt.Errorf("%s path must be absolute and clean", name)
@@ -294,7 +243,7 @@ func canonicalHelperFile(path, name string) (string, error) {
 		return "", fmt.Errorf("resolve %s path: %w", name, err)
 	}
 
-	info, err := os.Stat(resolved) //nolint:gosec // G703 오탐: 신뢰된 운영 설정 경로를 검증하는 호출이다.
+	info, err := os.Stat(resolved)
 	if err != nil {
 		return "", fmt.Errorf("inspect %s path: %w", name, err)
 	}

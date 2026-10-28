@@ -23,7 +23,7 @@ func receiptEnvelope(room, title string) domain.AlarmQueueEnvelope {
 
 func TestPublishReceiptsDistinguishMixedCommittedInputs(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	active := receiptEnvelope("room-active", "canonical")
 	sent := receiptEnvelope("room-sent", "canonical")
@@ -63,7 +63,7 @@ func TestPublishReceiptsDistinguishMixedCommittedInputs(t *testing.T) {
 // 시청자 수만 다른 재발행은 이미 보낸 방에는 중복 발송으로, 나중에 합류한 방에는 새 delivery로 수용한다.
 func TestPublishIgnoresViewerCountInSharedEventIdentity(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 
 	first := receiptEnvelope("room-first", "canonical")
@@ -99,7 +99,7 @@ func TestPublishIgnoresViewerCountInSharedEventIdentity(t *testing.T) {
 
 func TestPublishCommitReconciliationVerifiesLedgerAndLeavesMissingUnresolved(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	committed := receiptEnvelope("room-committed", "canonical")
 	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{committed}})
@@ -115,7 +115,7 @@ func TestPublishCommitReconciliationVerifiesLedgerAndLeavesMissingUnresolved(t *
 
 func TestPublishRolledBackChunkHasNoAcceptedReceipts(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `CREATE FUNCTION reject_receipt_delivery() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected rollback'; END $$;
  CREATE TRIGGER reject_receipt_delivery BEFORE INSERT ON alarm_dispatch_deliveries FOR EACH ROW EXECUTE FUNCTION reject_receipt_delivery()`)

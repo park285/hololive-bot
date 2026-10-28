@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -104,7 +105,7 @@ func TestLoadLLMSchedulerRuntimeEnvApplied(t *testing.T) {
 func TestLoadRuntimeSelectsHololiveAPITracingToggle(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 	settingstest.ClearTracingEnv(t)
-	settingstest.SetRequiredLoadEnv(t)
+	configtest.SetRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
 	t.Setenv(envload.HololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
@@ -128,7 +129,7 @@ func TestLoadRuntimeSelectsHololiveAPITracingToggle(t *testing.T) {
 // 모든 plane의 내부 client 설정과 LLM allowlist 경로는 기동 config가 보관한다.
 func TestLoadRuntimeCapturesInternalClientAndMemberNewsInputs(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
-	settingstest.SetRequiredLoadEnv(t)
+	configtest.SetRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("ALARM_INTERNAL_URL", " http://127.0.0.1:30007 ")
 	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", " /internal-ca.crt ")

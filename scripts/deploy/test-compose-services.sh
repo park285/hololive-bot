@@ -69,15 +69,13 @@ expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" 
 expect_fail "redeploy rejects unpaired all-service cutover" compose_service_resolve_redeploy_target all
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector-c)" "youtube-collector" "redeploy alias youtube-collector-c"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"
-for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-compose.seoul.yml; do
-    expect_fail_contains "${ap_overlay} rejects explicit collector redeploy" \
-        "youtube-collector is central-only" \
-        env COMPOSE_FILE="deploy/compose/${ap_overlay}" \
-        "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" youtube-collector
-    expect_fail "${ap_overlay} rejects topology-unsafe all-service redeploy" \
-        env COMPOSE_FILE="deploy/compose/${ap_overlay}" \
-        "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" all
-done
+expect_fail_contains "docker-compose.seoul.yml rejects explicit collector redeploy" \
+    "youtube-collector is central-only" \
+    env COMPOSE_FILE="deploy/compose/docker-compose.seoul.yml" \
+    "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" youtube-collector
+expect_fail "docker-compose.seoul.yml rejects topology-unsafe all-service redeploy" \
+    env COMPOSE_FILE="deploy/compose/docker-compose.seoul.yml" \
+    "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" all
 
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
@@ -96,14 +94,12 @@ ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-collector-a" "osaka AP services"
 expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-a" "osaka AP containers"
 expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
-expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka.yml" "osaka AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
 ap_host_load "${ROOT_DIR}" osaka2 || fail "osaka2 ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-collector-d" "osaka2 AP services"
 expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-d" "osaka2 AP containers"
 expect_eq "${AP_PORTS[*]}" "30035" "osaka2 AP ports"
-expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka2.yml" "osaka2 AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY" "osaka2 AP deploy approval var"
 
 ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"

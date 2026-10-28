@@ -13,6 +13,8 @@
 
 2026-09-29 채널 통계 퇴역과 저장 구조 변경은 [저장 축소 계획](../plans/2026-09-29-youtube-storage-reduction.md)의 실행 기록 및 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 아래 DDL 예시는 초기 설계이며 현행 물리 스키마는 migration manifest와 schema snapshot이 소유합니다. payload는 kind/schema/canonical profile별 공유 JSONB(LZ4), 32바이트 digest와 8바이트 FK로 저장하며 슬롯별 관측·오류·알림 의미는 유지합니다.
 
+2026-10-28 개정: source observation 수동 replay 파이프라인(요청 표 `source_observation_replay_requests`, `RequestReplay`, `ProcessNextReplay` loop, `YOUTUBE_PLANE_REPLAY_*`, replay audit retention, `source_observation_queue.replay_count`)을 migration 348에서 삭제했습니다. 운영 생산자(CLI·route)가 한 번도 생기지 않았기 때문입니다. 이 문서에서 replay 요청·재활성화·replay audit를 서술하는 §9.5·§12와 구현 순서(§18)·시험 표(§19)의 해당 항목은 초기 설계 기록이며 현행 계약이 아닙니다. replay epoch(`source_observation_replay_epoch`)는 claim 시점의 pre-epoch dead-letter 경계로 남습니다.
+
 ### 근거와 신규 설계 결정의 구분
 
 제공된 snapshot에서 직접 확인된 사실은 다음과 같다.
@@ -80,7 +82,7 @@ retention 기간, 기존 product grace, provider별 request budget처럼 snapsho
 2. provider 이름은 provenance와 capability를 나타낼 뿐, primary/fallback/authority 우선순위를 나타내지 않는다.
 3. 동일한 evidence 집합은 도착 순서와 collector instance에 관계없이 같은 canonical state와 notification intent를 만든다.
 4. `youtube-collector`는 AP fleet에서 외부 수집, 정규화, collection lease, checkpoint, observation publish만 소유한다.
-5. `hololive-api` YouTube plane만 canonical YouTube state, domain watermark, notification intent, replay와 retention을 소유한다.
+5. `hololive-api` YouTube plane만 canonical YouTube state, domain watermark, notification intent와 retention을 소유한다.
 6. `alarm-worker`만 proactive notification delivery와 Iris/Kakao egress를 소유한다.
 7. `youtube-producer` binary, module, Compose profile, systemd helper, runtime registration, PGO inventory와 current runbook은 최종 branch에서 제거한다.
 8. collector publish와 collection checkpoint는 한 PostgreSQL transaction이다.
@@ -1059,7 +1061,7 @@ CREATE TABLE source_observation_collisions (
 
 collision candidate의 전체 payload를 중복 보관하지 않는다. hash와 provenance만 보관해 PII·payload amplification을 막는다.
 
-### 9.5 Consumer offset, replay, application audit
+### 9.5 Consumer offset, application audit
 
 ```sql
 CREATE TABLE source_observation_consumer_offsets (
@@ -1072,31 +1074,6 @@ CREATE TABLE source_observation_consumer_offsets (
     PRIMARY KEY (consumer_name, observation_kind)
 );
 
-CREATE TABLE source_observation_replay_requests (
-    id BIGSERIAL PRIMARY KEY,
-    observation_id BIGINT
-        REFERENCES source_observations(id) ON DELETE SET NULL,
-    provider TEXT NOT NULL,
-    observation_kind TEXT NOT NULL,
-    subject_key TEXT NOT NULL,
-    observation_key TEXT NOT NULL,
-    evidence_sha256 TEXT NOT NULL,
-    requested_by TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    previous_attempt_count SMALLINT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'PENDING'
-        CHECK (status IN ('PENDING', 'APPLIED', 'REJECTED')),
-    requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    applied_at TIMESTAMPTZ,
-    rejection_code TEXT,
-    CONSTRAINT chk_source_observation_replay_terminal_shape CHECK (
-        (status = 'APPLIED' AND applied_at IS NOT NULL AND rejection_code IS NULL)
-        OR
-        (status = 'REJECTED' AND applied_at IS NULL AND rejection_code IS NOT NULL)
-        OR
-        (status = 'PENDING' AND applied_at IS NULL AND rejection_code IS NULL)
-    )
-);
 
 CREATE TABLE source_observation_applications (
     id BIGSERIAL PRIMARY KEY,
@@ -1112,9 +1089,9 @@ CREATE UNIQUE INDEX uq_source_observation_application_active
     WHERE observation_id IS NOT NULL;
 ```
 
-replay는 source evidence를 수정하지 않는다. replay request와 queue 재활성화를 한 transaction에서 audit한다. public HTTP control plane은 추가하지 않고 existing operator path 또는 내부 CLI owner가 호출하도록 한다.
+초기 설계의 `source_observation_replay_requests`와 queue 재활성화 경로는 2026-10-28 삭제했다(migration 348). terminal queue 행을 다시 `PENDING`으로 돌리는 현행 경로는 없다.
 
-application 수명은 원본과 동일하며 고아 유예·별도 retention이 없다. 원본의 provider/kind/subject/hash/clock은 JOIN으로 읽는다. 원본 retention은 큐·pending replay·종료 근거·CURRENT/STAGING generation·ACTIVE lease·LIVE/UPCOMING 세션의 application/pending-end 근거를 보호한다. 원본과 live/content absence slot의 scope/evidence hash는 32바이트 bytea이며 공개 JSON/Go 표현은 기존 64자 소문자 hex를 유지한다. 다른 audit/checkpoint hash 열의 표현은 바꾸지 않는다.
+application 수명은 원본과 동일하며 고아 유예·별도 retention이 없다. 원본의 provider/kind/subject/hash/clock은 JOIN으로 읽는다. 원본 retention은 큐·종료 근거·CURRENT/STAGING generation·ACTIVE lease·LIVE/UPCOMING 세션의 application/pending-end 근거를 보호한다. 원본과 live/content absence slot의 scope/evidence hash는 32바이트 bytea이며 공개 JSON/Go 표현은 기존 64자 소문자 hex를 유지한다. 다른 audit/checkpoint hash 열의 표현은 바꾸지 않는다.
 
 
 ### 9.6 Reconciliation conflict와 live head
@@ -1424,14 +1401,14 @@ transaction 순서는 다음과 같다.
 11. commit한다.
 12. AfterCommit metric/log만 실행한다. 필수 correctness side effect를 AfterCommit에 두지 않는다.
 
-## 12. Retention과 replay
+## 12. Retention
 
 ### 12.1 Lifetime 분리
 
 - `source_observation_queue`: handoff/retry 상태. terminal retention이 가장 짧다.
-- `source_observations`: immutable raw evidence. kind별 replay·audit 기간을 보존한다.
+- `source_observations`: immutable raw evidence. kind별 audit 기간을 보존한다.
 - canonical tables는 제품 상태를 보존하고 `source_observation_applications`의 결정 provenance는 원본이 보존되는 동안만 유지한다.
-- collision audit와 replay audit: 운영 조사 기간을 보존한다.
+- collision audit: 운영 조사 기간을 보존한다.
 
 초기 implementation에서 retention duration을 SQL에 임의 hardcode하지 않는다. 기존 producer의 동등 데이터 보존 기간을 조사해 settings contract로 옮긴다. 현재 policy가 없는 kind는 production apply 전에 명시적인 bounded duration과 storage estimate를 승인받아야 한다.
 
@@ -1443,7 +1420,6 @@ type RetentionConfig struct {
     QueueDLQAge       time.Duration
     EvidenceAgeByKind map[contract.ObservationKind]time.Duration
     CollisionAge     time.Duration
-    ReplayAuditAge   time.Duration
     BatchSize        int
     Interval         time.Duration
 }
@@ -1451,25 +1427,17 @@ type RetentionConfig struct {
 
 - `BatchSize`는 1..1000 범위로 validate한다.
 - 한 tick에서 table별 최대 한 batch만 삭제해 DB burst를 제한한다.
-- pending replay와 active queue가 있는 evidence는 삭제하지 않는다.
+- active queue가 있는 evidence는 삭제하지 않는다.
 - `youtube_live_reconciliation_heads.end_candidate_observation_id`가 참조하는 active end candidate evidence는 finalizer가 적용하거나 candidate를 clear하기 전까지 삭제하지 않는다.
-- terminal replay/collision audit는 identity와 hash를 자체 보존하므로 evidence 삭제 뒤에도 조사할 수 있다. application은 원본과 동시에 CASCADE 삭제되며 고아 유예가 없다.
+- terminal collision audit는 identity와 hash를 자체 보존하므로 evidence 삭제 뒤에도 조사할 수 있다. application은 원본과 동시에 CASCADE 삭제되며 고아 유예가 없다.
 - FK가 `SET NULL`인 audit row는 identity/hash를 자체 보존한 뒤 evidence 삭제를 허용한다. FK가 `RESTRICT`인 row가 남아 있으면 audit retention을 먼저 적용한다.
-- queue terminal row를 먼저 정리하고 active/replay queue가 없는 evidence만 정리한다.
+- queue terminal row를 먼저 정리하고 queue 행이 없는 evidence만 정리한다.
 - CURRENT/STAGING projection generation과 ACTIVE collection lease가 소유한 원본, LIVE/UPCOMING 세션에 적용된 application·pending-end 원본은 보호한다.
 - deletion count, duration, error와 backlog age를 metric으로 노출한다.
 
-### 12.3 Replay
+### 12.3 Replay(삭제)
 
-replay는 terminal queue row를 무조건 덮어쓰지 않는다.
-
-1. operator request를 audit insert한다.
-2. observation schema/generation이 현재 consumer에서 지원되는지 확인한다.
-3. 현재 queue가 `PROCESSING`이면 reject한다.
-4. queue row가 `PROCESSED` 또는 `DEAD_LETTER`이면 이전 attempt count를 replay request에 기록하고 `attempt_count=0`, terminal timestamps/error/lease fields를 clear한 뒤 `replay_count+1`, `PENDING`으로 전환한다.
-5. queue row가 terminal retention으로 이미 삭제됐으면 같은 transaction에서 새 queue row를 insert하고, 이전 applied replay request 수로 `replay_count`를 복원한다. immutable observation을 복제하지 않는다.
-6. canonical writes, `source_observation_applications`, notification intent의 기존 unique identity가 duplicate side effect를 막아야 한다. 이미 적용된 observation은 idempotent no-op application으로 `PROCESSED`가 될 수 있다.
-7. replay 완료 또는 reject를 request row에 기록한다.
+초기 설계의 operator replay(요청 audit, terminal queue 재활성화, `replay_count`, replay audit retention)는 운영 생산자 없이 남아 retention 보호 조건만 늘렸으므로 2026-10-28 삭제했다(migration 348). 이 경로를 되살리려면 생산자·권한·retention 계약을 새로 정한다.
 
 ## 13. Source-neutral reconciliation
 

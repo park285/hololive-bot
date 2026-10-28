@@ -525,18 +525,17 @@ const alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
 PublishBatch
   -> buildPublishBatchEnvelopes
   -> publishEnvelopes
-  -> publishPGFirstBatch
       -> insertOutboxChunks
       -> publishWakeup
 ```
 
-`publishPGFirstBatch`는 outbox repository가 없으면 실패한다.
+`queue.NewPublisher`는 outbox repository와 양수 batch 한도를 필수로 받으며, 없으면 생성 오류다.
 
 ```text
-pg_first requires outbox repository
+new alarm publisher: outbox repository is required
 ```
 
-이 말은 현재 경로에서 "큐에 넣는다"는 의미가 Valkey list에 payload를 넣는 것이 아니라 PostgreSQL outbox row를 만드는 것이라는 뜻이다.
+현재 경로에서 "큐에 넣는다"는 의미가 Valkey list에 payload를 넣는 것이 아니라 PostgreSQL outbox row를 만드는 것이라는 뜻이다.
 
 `publishWakeup`은 outbox insert 이후 worker를 깨우기 위한 보조 신호다.
 

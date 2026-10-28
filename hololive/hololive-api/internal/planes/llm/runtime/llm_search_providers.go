@@ -31,10 +31,9 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func provideExaSearcher(exaConfig settings.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
+func provideExaSearcher(exaConfig apiconfig.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -64,7 +63,7 @@ func buildMajorEventSummarizer(exaConfig *apiconfig.LLMSchedulerConfig, cacheCli
 }
 
 func provideEventSummarizer(
-	majorEventConfig settings.ConsensusLLMConfig,
+	majorEventConfig apiconfig.ConsensusLLMConfig,
 	llmClient mesummarizer.LLMClient,
 	reviewerClient mesummarizer.LLMClient,
 	adjudicatorClient mesummarizer.LLMClient,

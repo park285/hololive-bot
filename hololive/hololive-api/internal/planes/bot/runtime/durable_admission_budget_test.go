@@ -5,22 +5,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/config/configtest"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testing.T) {
-	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+	settingstest.UseProfileFixture(t, configtest.APIProfileFixture(t))
 
 	profile, err := apiconfig.LoadAPIWorkerProfile()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	runtime, err := newDurableRuntime(nil, nil, nil, profile, slog.New(slog.DiscardHandler))
+	runtime, err := newDurableRuntime(nil, nil, nil, mustDurableReplyOutbox(t, nil, profile), profile, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,10 +37,21 @@ func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testi
 	}
 }
 
+func mustDurableReplyOutbox(t *testing.T, pool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile) durableReplyOutbox {
+	t.Helper()
+
+	outbox, err := newDurableReplyOutbox(pool, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return outbox
+}
+
 func testDurableProfile(t *testing.T) *apiconfig.APIWorkerProfile {
 	t.Helper()
 
-	profile := &apiconfig.APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), "stack-worker-profile-api.json")}
+	profile := &apiconfig.APIWorkerProfile{Loaded: settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), configtest.APIProfileFixture(t))}
 	if err := workercontract.DecodeWorkerSettingsSet(profile.Loaded, map[string]any{
 		apiconfig.WorkerBotWebhookInbox:   &profile.BotWebhookInbox,
 		apiconfig.WorkerBotReplyOutbox:    &profile.BotReplyOutbox,
@@ -57,7 +70,7 @@ func TestDurableReplyUsesExecutorAttemptTimeout(t *testing.T) {
 	worker.Executor.AttemptTimeout.Milliseconds = new(int64(42000))
 	profile.Loaded.Profile.Workers[apiconfig.WorkerBotReplyOutbox] = worker
 
-	runtime, err := newDurableRuntime(nil, nil, nil, profile, slog.New(slog.DiscardHandler))
+	runtime, err := newDurableRuntime(nil, nil, nil, mustDurableReplyOutbox(t, nil, profile), profile, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}

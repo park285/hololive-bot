@@ -218,16 +218,17 @@ func TestHelperProcessEnvOmitsSecrets(t *testing.T) {
 		"METRICS_API_KEY=metrics-secret",
 		"HOLODEX_API_KEY=holodex-secret",
 		"YOUTUBEJS_NODE=/usr/local/bin/node",
+		"YOUTUBEJS_SCRIPT=/app/youtubejs/src/server.mjs",
 		"YOUTUBEJS_SOCKET=/tmp/foreign.sock",
 		"not-a-pair",
 	})
 	joined := strings.Join(got, "\n")
 
-	if !strings.Contains(joined, "PATH=/usr/bin") || !strings.Contains(joined, "YOUTUBEJS_NODE=/usr/local/bin/node") {
+	if !strings.Contains(joined, "PATH=/usr/bin") || !strings.Contains(joined, "TZ=Asia/Seoul") {
 		t.Fatalf("helper env missing required keys: %#v", got)
 	}
 
-	for _, forbidden := range []string{"POSTGRES_PASSWORD", "API_SECRET_KEY", "METRICS_API_KEY", "HOLODEX_API_KEY", "YOUTUBEJS_SOCKET"} {
+	for _, forbidden := range []string{"POSTGRES_PASSWORD", "API_SECRET_KEY", "METRICS_API_KEY", "HOLODEX_API_KEY", "YOUTUBEJS_SOCKET", "YOUTUBEJS_NODE", "YOUTUBEJS_SCRIPT"} {
 		if strings.Contains(joined, forbidden) {
 			t.Fatalf("helper env leaked %s: %#v", forbidden, got)
 		}

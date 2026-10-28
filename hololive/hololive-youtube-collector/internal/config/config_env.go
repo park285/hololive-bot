@@ -23,6 +23,9 @@ func loadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("required seconds duration env: %w", err)
 	}
 
+	cfg.YouTubeJSNodePath = strings.TrimSpace(sharedenv.String("YOUTUBEJS_NODE", ""))
+	cfg.YouTubeJSScriptPath = strings.TrimSpace(sharedenv.String("YOUTUBEJS_SCRIPT", ""))
+
 	if err := loadCollectorYouTubeJSLimits(&cfg, &defaults); err != nil {
 		return Config{}, fmt.Errorf("load collector youtube JS limits: %w", err)
 	}

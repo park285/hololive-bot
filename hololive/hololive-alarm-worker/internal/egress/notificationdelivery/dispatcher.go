@@ -35,7 +35,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
@@ -47,6 +47,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -221,7 +222,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 // runGuardedLoop은 어느 loop든 끝나면 다른 loop도 멈추게 한다. 한쪽만 남아 발송 없이 유지보수만 하거나
 // 유지보수 없이 발송만 계속하는 반쪽 실행을 남기지 않기 위해서다.
 func (d *Dispatcher) runGuardedLoop(ctx context.Context, cancel context.CancelCauseFunc, name string, loop func(context.Context)) error {
-	err := panicguard.RunE(d.logger, panicguard.BackgroundTask, name, func() error {
+	err := panicguard.RunE(d.logger, panicscope.BackgroundTask, name, func() error {
 		loop(ctx)
 
 		return nil

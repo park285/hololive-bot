@@ -158,10 +158,6 @@ func dockerComposeConfigCommand(ctx context.Context, t *testing.T, files []strin
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "config")
 	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.live-compat.yml":
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "-f", composeLiveCompatFile, "config")
-	case "deploy/compose/docker-compose.osaka.yml":
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.osaka.yml", "config")
-	case "deploy/compose/docker-compose.osaka2.yml":
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.osaka2.yml", "config")
 	case "deploy/compose/docker-compose.seoul.yml":
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.seoul.yml", "config")
 	default:

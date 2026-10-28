@@ -29,18 +29,12 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-api/internal/service/acl"
+	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
-
-// aclBotResyncFailedCode는 같은 프로세스의 봇 plane ACL 재동기화(PG reload)가 실패했음을 뜻하는 안정 오류 코드다
-// (acl.ErrACLPropagation). 요청한 변경은 PostgreSQL에 저장됐을 수도 있고(첫 요청), 이미 같은 상태라 쓰기 없이
-// 재동기화만 시도했을 수도 있다(재시도·중복 요청). 같은 요청을 다시 보내면 PG 쓰기 없이 재동기화를 다시 시도하고
-// 원래 결과(200 no-op/404/409)를 돌려준다.
-const aclBotResyncFailedCode = "acl_bot_resync_failed"
 
 type setACLRequest struct {
 	Enabled *bool   `json:"enabled"`
@@ -136,50 +130,35 @@ func joinedRoomFromIris(summary iris.RoomSummary) joinedRoom {
 	return room
 }
 
+// roomChangeRequest의 mode는 호출자가 본 ACL 모드다. 현재 모드와 다르면 409 acl_mode_changed로 쓰지 않고 거절한다.
+type roomChangeRequest struct {
+	Room string `json:"room" binding:"required"`
+	Mode string `json:"mode" binding:"required"`
+}
+
+// roomChangeResponse의 changed는 이번 요청이 목록을 바꿨는지다. 이미 원하는 상태(추가할 방이 있음, 제거할 방이 없음)면
+// 200과 changed:false로 수렴하므로, 응답을 잃은 뒤 같은 요청을 다시 보내도 거절로 보이지 않는다.
+type roomChangeResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Changed bool   `json:"changed"`
+}
+
+const aclModeChangedCode = "acl_mode_changed"
+
 func (h *RoomHandler) AddRoom(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
 	}
 
-	var req struct {
-		Room string `json:"room" binding:"required"`
-	}
-
-	if err := bindJSON(c, &req); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
-
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	added, err := h.acl.AddRoom(ctx, req.Room)
-	if errors.Is(err, acl.ErrInvalidRoomChatID) {
-		// 방 이름 같은 비-chatID 값은 저장해도 어떤 방에도 적용되지 않으므로 입력 오류로 돌려준다.
-		sharedserver.RespondError(c, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)", nil)
-
-		return
-	}
-
-	if added {
-		// 봇 plane 적용이 실패해도 PG에는 커밋됐으므로 활동 로그는 남긴다(재시도는 409라 다시 남지 않는다).
-		h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
-	}
-
-	if err != nil {
-		h.respondACLMutationError(ctx, c, err, "Failed to add room", slog.String("room", req.Room))
-
-		return
-	}
-
-	if !added {
-		sharedserver.RespondError(c, http.StatusConflict, "Room already exists", nil)
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
+	h.changeRoom(c, roomChange{
+		apply:            h.acl.AddRoom,
+		failMessage:      "Failed to add room",
+		activity:         "room_add",
+		activityPrefix:   "Room added to ACL list: ",
+		changedMessage:   "Room added successfully",
+		unchangedMessage: "Room already exists",
+	})
 }
 
 func (h *RoomHandler) RemoveRoom(c *gin.Context) {
@@ -187,9 +166,27 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Room string `json:"room" binding:"required"`
-	}
+	h.changeRoom(c, roomChange{
+		apply:            h.acl.RemoveRoom,
+		failMessage:      "Failed to remove room",
+		activity:         "room_remove",
+		activityPrefix:   "Room removed from ACL list: ",
+		changedMessage:   "Room removed successfully",
+		unchangedMessage: "Room not found",
+	})
+}
+
+type roomChange struct {
+	apply            func(context.Context, acl.ACLMode, string) (bool, error)
+	failMessage      string
+	activity         string
+	activityPrefix   string
+	changedMessage   string
+	unchangedMessage string
+}
+
+func (h *RoomHandler) changeRoom(c *gin.Context, change roomChange) {
+	var req roomChangeRequest
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
@@ -198,42 +195,34 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
+	mode, ok := h.parseACLMode(c, &req.Mode)
+	if !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 
-	removed, err := h.acl.RemoveRoom(ctx, req.Room)
-	if removed {
-		// AddRoom과 같다: PG 커밋 뒤 봇 plane 적용 실패여도 활동 로그는 남긴다.
-		h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
+	changed, err := change.apply(ctx, mode, req.Room)
+
+	switch {
+	case errors.Is(err, acl.ErrInvalidRoomChatID):
+		// 방 이름 같은 비-chatID 값은 저장해도 어떤 방에도 적용되지 않으므로 입력 오류로 돌려준다.
+		sharedserver.RespondError(c, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)", nil)
+	case errors.Is(err, acl.ErrACLModeChanged):
+		sharedserver.RespondError(c, http.StatusConflict, "ACL mode changed", gin.H{"code": aclModeChangedCode})
+	case err != nil:
+		h.respondACLMutationError(ctx, c, err, change.failMessage, slog.String("room", req.Room))
+	case !changed:
+		ginjson.Respond(c, http.StatusOK, roomChangeResponse{Status: "ok", Message: change.unchangedMessage, Changed: false})
+	default:
+		h.logActivity(change.activity, change.activityPrefix+req.Room, map[string]any{"room": req.Room})
+		ginjson.Respond(c, http.StatusOK, roomChangeResponse{Status: "ok", Message: change.changedMessage, Changed: true})
 	}
-
-	if err != nil {
-		h.respondACLMutationError(ctx, c, err, "Failed to remove room", slog.String("room", req.Room))
-
-		return
-	}
-
-	if !removed {
-		sharedserver.RespondError(c, http.StatusNotFound, "Room not found", nil)
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
 }
 
-// respondACLMutationError는 ACL mutation 오류를 500으로 응답한다. 봇 plane 재동기화 실패는 저장 실패와 구분되는
-// aclBotResyncFailedCode로 알려, 호출자가 같은 요청 재시도로 수렴시키게 한다.
+// respondACLMutationError는 ACL mutation 오류를 500으로 응답한다.
 func (h *RoomHandler) respondACLMutationError(ctx context.Context, c *gin.Context, err error, failMessage string, attrs ...slog.Attr) {
 	attrs = append(attrs, slog.Any("error", err))
-
-	if errors.Is(err, acl.ErrACLPropagation) {
-		h.safeLogger().LogAttrs(ctx, slog.LevelError, "ACL bot-plane resync failed", attrs...)
-		sharedserver.RespondError(c, http.StatusInternalServerError, aclBotResyncFailedCode, gin.H{
-			"message": "the bot has not applied the current ACL (the requested change may already be saved); retry the same request",
-		})
-
-		return
-	}
 
 	h.safeLogger().LogAttrs(ctx, slog.LevelError, failMessage, attrs...)
 	sharedserver.RespondError(c, http.StatusInternalServerError, failMessage, nil)
@@ -289,7 +278,7 @@ func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 		return true
 	}
 
-	// 오류 응답을 보낸 뒤에도 이미 커밋된 부분(예: enabled만 저장되고 mode 저장·재동기화 실패)은 감사 기록에 남긴다.
+	// 오류 응답을 보낸 뒤에도 이미 커밋된 부분(예: enabled만 저장되고 mode 저장 실패)은 감사 기록에 남긴다.
 	// 호출자가 재시도하지 않으면 이 변경의 activity가 남지 않기 때문이다.
 	h.logCommittedACLChange(beforeEnabled, beforeMode)
 
@@ -302,7 +291,7 @@ func (h *RoomHandler) logCommittedACLChange(beforeEnabled bool, beforeMode acl.A
 		return
 	}
 
-	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s (bot resync or later step failed)", enabled, mode),
+	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s (later step failed)", enabled, mode),
 		map[string]any{"enabled": enabled, "mode": string(mode), "partial": true})
 }
 

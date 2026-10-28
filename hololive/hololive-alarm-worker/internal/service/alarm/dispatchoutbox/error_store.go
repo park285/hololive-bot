@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 )
 
 const (
@@ -109,7 +109,8 @@ func classifyInfraErrorCode(cause error) string {
 		return ErrorCodeNetwork
 	}
 
-	if errors.Is(cause, iris.ErrTransport) {
+	// v4의 ErrNotSent(egress 거부·dial 전 resolve 실패)는 ErrTransport가 아니므로 함께 network로 분류한다.
+	if errors.Is(cause, iris.ErrTransport) || errors.Is(cause, iris.ErrNotSent) {
 		return ErrorCodeNetwork
 	}
 

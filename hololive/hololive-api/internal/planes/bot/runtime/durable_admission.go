@@ -3,7 +3,6 @@ package botruntime
 import (
 	"context"
 	"crypto/rand"
-	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,8 +11,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v4/webhook"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -24,6 +23,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -41,8 +41,10 @@ type durableAdmitter struct {
 	totals *workercontract.Counters
 }
 
-func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message) error {
-	if err := a.admit(ctx, msg); err != nil {
+// AdmitMessage는 Iris 원본 본문(body)을 inbox에 저장한다. 같은 Message는 claim 때 webhook.DecodeMessage로 복원하므로
+// SDK Message의 Go 표현을 저장 형식으로 삼지 않는다.
+func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message, body []byte) error {
+	if err := a.admit(ctx, msg, body); err != nil {
 		logDurableError(a.logger, "admit durable webhook", err)
 
 		return fmt.Errorf("admit durable webhook: %w", err)
@@ -51,9 +53,13 @@ func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message)
 	return nil
 }
 
-func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error {
+func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message, body []byte) error {
 	if msg == nil || msg.JSON == nil {
 		return errors.New("admit webhook: message identity is missing")
+	}
+
+	if len(body) == 0 {
+		return errors.New("admit webhook: raw body is missing")
 	}
 
 	if a.accept != nil && !a.accept(ctx, msg) {
@@ -71,13 +77,8 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error 
 
 	roomID := strings.TrimSpace(msg.Room)
 
-	payload, err := jsonv2.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("marshal webhook inbox payload: %w", err)
-	}
-
 	result, err := a.inbox.AdmitResult(ctx, durability.InboxMessage{
-		MessageID: messageID, RoomID: roomID, OrderingKey: "room:" + roomID, Payload: payload,
+		MessageID: messageID, RoomID: roomID, OrderingKey: "room:" + roomID, Payload: body,
 	})
 	if a.totals != nil {
 		a.totals.RecordAdmission(result)
@@ -196,9 +197,55 @@ type durableMessageProcessor interface {
 	ProcessMessage(context.Context, *webhook.Message) error
 }
 
-func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
+// durableReplyOutbox는 bot이 응답을 기록할 reply outbox와 그 dispatcher 깨움·계수기다. Bot이 생성 시점에 writer를
+// 받아야 하므로 inbox 처리기(bot을 소유)보다 먼저 만든다.
+type durableReplyOutbox struct {
+	repository *durability.ReplyOutboxRepository
+	wake       chan struct{}
+	totals     *workercontract.Counters
+}
+
+func newDurableReplyOutbox(pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile) (durableReplyOutbox, error) {
+	if profile == nil {
+		return durableReplyOutbox{}, errors.New("build reply outbox: API worker profile is required")
+	}
+
+	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(
+		pgPool,
+		profile.BotReplyOutbox.MaxAttempts,
+		workercontract.Milliseconds(profile.BotReplyOutbox.AutomaticReplayHorizonMS),
+	)
+	if err != nil {
+		return durableReplyOutbox{}, fmt.Errorf("build reply outbox: policy: %w", err)
+	}
+
+	return durableReplyOutbox{repository: repository, wake: make(chan struct{}, 1), totals: &workercontract.Counters{}}, nil
+}
+
+// writer는 bot transport가 응답을 기록하는 ReplyOutboxWriter를 만든다.
+func (o durableReplyOutbox) writer(logger *slog.Logger) durableReplyWriter {
+	return durableReplyWriter{
+		outbox: o.repository,
+		logger: logger,
+		wake:   func() { notifyDurable(o.wake) },
+		totals: o.totals,
+	}
+}
+
+func newDurableRuntime(
+	bot *orchestration.Bot,
+	client iris.BotClient,
+	pgPool *pgxpool.Pool,
+	outbox durableReplyOutbox,
+	profile *apiconfig.APIWorkerProfile,
+	logger *slog.Logger,
+) (*durableRuntime, error) {
 	if profile == nil {
 		return nil, errors.New("build durable runtime: API worker profile is required")
+	}
+
+	if outbox.repository == nil {
+		return nil, errors.New("build durable runtime: reply outbox is required")
 	}
 
 	workers := profile.Loaded.Profile.Workers
@@ -207,23 +254,14 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 	handlerTimeout, _ := inboxProfile.Executor.AttemptTimeout.FixedDuration()
 	dispatchBudget, _ := outboxProfile.Executor.AttemptTimeout.FixedDuration()
 
-	outboxRepository, err := durability.NewReplyOutboxRepositoryWithPolicy(
-		pgPool,
-		profile.BotReplyOutbox.MaxAttempts,
-		workercontract.Milliseconds(profile.BotReplyOutbox.AutomaticReplayHorizonMS),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build durable runtime: reply outbox policy: %w", err)
-	}
-
 	r := &durableRuntime{
 		inbox: durability.NewInboxRepository(pgPool), commands: durability.NewCommandExecutionRepository(pgPool),
-		outbox: outboxRepository, ledger: durability.NewDurableLedgerRepository(pgPool),
+		outbox: outbox.repository, ledger: durability.NewDurableLedgerRepository(pgPool),
 		bot: bot, irisClient: client, logger: logger,
 		inboxWorkers: inboxProfile.Executor.ConfiguredWorkers, outboxWorkers: outboxProfile.Executor.ConfiguredWorkers,
 		inboxEnabled: inboxProfile.Executor.Enabled, outboxEnabled: outboxProfile.Executor.Enabled,
 		handlerTimeout: handlerTimeout,
-		inboxWake:      make(chan struct{}, 1), outboxWake: make(chan struct{}, 1), handoffWake: make(chan struct{}, 1),
+		inboxWake:      make(chan struct{}, 1), outboxWake: outbox.wake, handoffWake: make(chan struct{}, 1),
 		inboxPollSlot: newDurablePollSlot(), outboxPollSlot: newDurablePollSlot(), handoffPollSlot: newDurablePollSlot(),
 		// bot_reply_outbox attempt timeout은 admission 예산이자 handoff 확인 지평이다.
 		dispatchBudget:        dispatchBudget,
@@ -243,7 +281,7 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 		terminalRetention:     workercontract.Milliseconds(profile.BotWebhookInbox.TerminalRetentionMS),
 		manualReviewRetention: workercontract.Milliseconds(profile.BotReplyOutbox.ManualReviewRetentionMS),
 		inboxTracker:          workercontract.NewExecutorTracker(), outboxTracker: workercontract.NewExecutorTracker(),
-		inboxTotals: &workercontract.Counters{}, outboxTotals: &workercontract.Counters{},
+		inboxTotals: &workercontract.Counters{}, outboxTotals: outbox.totals,
 	}
 
 	r.inboxSampler = newDurableQueueSampler("inbox", r.inbox.ReadySnapshot)
@@ -307,9 +345,8 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 		return err
 	}
 
-	var msg webhook.Message
-
-	if err := jsonv2.Unmarshal(claim.Payload, &msg); err != nil {
+	msg, err := webhook.DecodeMessage(claim.Payload)
+	if err != nil {
 		settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
 		defer cancel()
 
@@ -319,7 +356,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 			return errors.Join(err, abandonErr)
 		}
 
-		return fmt.Errorf("unmarshal: %w", err)
+		return fmt.Errorf("decode stored webhook: %w", err)
 	}
 
 	claimed, err := r.claimCommand(ctx, claim, token)
@@ -338,13 +375,13 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	heartbeatCtx, stopHeartbeat := context.WithCancel(commandCtx)
 	heartbeatDone := make(chan struct{})
 
-	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-claim-heartbeat", func() {
+	go panicguard.Run(r.logger, panicscope.BackgroundTask, "durable-claim-heartbeat", func() {
 		defer close(heartbeatDone)
 
 		r.runClaimHeartbeat(heartbeatCtx, claim.MessageID, token, claim.LeaseUntil, cancelCommand)
 	})
 
-	err = r.bot.ProcessMessage(commandCtx, &msg)
+	err = r.bot.ProcessMessage(commandCtx, msg)
 	if commandCtx.Err() != nil {
 		err = errors.Join(err, commandCtx.Err())
 	}

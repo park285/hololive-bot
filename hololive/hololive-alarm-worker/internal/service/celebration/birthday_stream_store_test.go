@@ -42,7 +42,7 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	eventKey := birthdayGreetingEventKey(testMemberIDA, testBirthdayDate)
 	envelopes := []domain.AlarmQueueEnvelope{
 		birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, "room-sent"),
@@ -84,7 +84,7 @@ func TestPgxStoreListPublishedBirthdayStreamEventsMatchesMemberDatePrefix(t *tes
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 
 	const prefixSharingMemberID = 1010
 
@@ -123,7 +123,7 @@ func TestBirthdayStreamRunnerReusesPublishedPayloadWhenTitleChanges(t *testing.T
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	store := NewPgxStore(pool)
 	publisher := &birthdayStreamRepositoryPublisher{repository: repository}
 	now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
@@ -171,8 +171,8 @@ func seedBirthdayStreamTitleDrift(
 
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_live_sessions (
-			video_id, channel_id, status, title, scheduled_start_time, last_seen_at, schedule_observed_at
-		) VALUES ($1, $2, 'UPCOMING', $3, $4, $5, $5)
+			video_id, channel_id, status, title, scheduled_start_time, last_seen_at, schedule_observed_at, lifecycle_origin
+		) VALUES ($1, $2, 'UPCOMING', $3, $4, $5, $5, 'metadata_only')
 	`, testVideoA, testChannelA, "original birthday title", scheduledAt, now)
 	require.NoError(t, err)
 
@@ -290,18 +290,20 @@ func TestBirthdaySessionsRequireFreshStateSpecificObservation(t *testing.T) {
 	} {
 		for _, status := range []string{testStatusLive, testStatusUpcoming} {
 			id := status + "-" + observation.name
+			origin := "metadata_only"
 			statusClock, scheduleClock := new(now), new(now)
 
 			if status == testStatusLive {
 				statusClock = observation.clock
+				origin = "observed"
 			} else {
 				scheduleClock = observation.clock
 			}
 
 			_, err := pool.Exec(t.Context(), `
-				INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,started_at,last_seen_at,status_observed_at,schedule_observed_at)
-				VALUES($1,$2,$3,$4,$5,$4,$6,$7)
-			`, id, testChannelA, status, now.Add(10*time.Minute), now.Add(-time.Hour), statusClock, scheduleClock)
+				INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,started_at,last_seen_at,status_observed_at,schedule_observed_at,lifecycle_origin)
+				VALUES($1,$2,$3,$4,$5,$4,$6,$7,$8)
+			`, id, testChannelA, status, now.Add(10*time.Minute), now.Add(-time.Hour), statusClock, scheduleClock, origin)
 			require.NoError(t, err)
 
 			if observation.valid {
@@ -319,4 +321,14 @@ func TestBirthdaySessionsRequireFreshStateSpecificObservation(t *testing.T) {
 	}
 
 	require.ElementsMatch(t, expected, ids)
+}
+
+// newOutboxRepository는 production 생성자에 테스트 pool을 dbtest.WrapPool로 감싸 넘긴다.
+func newOutboxRepository(tb testing.TB, pool *pgxpool.Pool) *dispatchoutbox.PgxRepository {
+	tb.Helper()
+
+	repository, err := dispatchoutbox.NewPgxRepository(dbtest.WrapPool(pool), nil)
+	require.NoError(tb, err)
+
+	return repository
 }

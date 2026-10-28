@@ -12,7 +12,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/repository"
 )
 
 type resolveStatementCounter struct {
@@ -33,26 +32,17 @@ func (c *resolveStatementCounter) TraceQueryStart(ctx context.Context, _ *pgx.Co
 
 func (*resolveStatementCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
-func upsertTestTemplate(t *testing.T, repo *repository.TemplateRepository, key domain.TemplateKey, channelID *string, body string) {
-	t.Helper()
-
-	if _, _, err := repo.UpsertWithRevision(t.Context(), key, channelID, body, 0); err != nil {
-		t.Fatalf("upsert %s: %v", key, err)
-	}
-}
-
 // 배치 렌더는 항목 수와 무관하게 호출당 버전 확인 한 문장만 쓰고, 항목별 override 선택·부재·실행 실패를 분리하며,
 // 호출 전에 끝난 저장을 다음 호출의 모든 항목이 봅니다.
 func TestRenderBatchResolvesOncePerCallWithOverridesAndFreshness(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
-	repo := repository.NewTemplateRepository(pool, logger)
 	key, limitKey := domain.TemplateKeyCmdHelp, domain.TemplateKeyOutboxShorts
 	channel := "channel-a"
 
-	upsertTestTemplate(t, repo, key, nil, "DEFAULT {{.}}")
-	upsertTestTemplate(t, repo, key, &channel, "OVERRIDE {{.}}")
-	upsertTestTemplate(t, repo, limitKey, nil, `{{range 20}}{{printf "%5000s" ""}}{{end}}`)
+	saveTestTemplate(t, pool, key, nil, "DEFAULT {{.}}")
+	saveTestTemplate(t, pool, key, &channel, "OVERRIDE {{.}}")
+	saveTestTemplate(t, pool, limitKey, nil, `{{range 20}}{{printf "%5000s" ""}}{{end}}`)
 
 	counter := &resolveStatementCounter{}
 	r := NewRenderer(tracedCachePool(t, pool, counter), logger)
@@ -87,7 +77,7 @@ func TestRenderBatchResolvesOncePerCallWithOverridesAndFreshness(t *testing.T) {
 		t.Fatalf("resolve statements = batch %d single %d; want one batch statement", batches, singles)
 	}
 
-	upsertTestTemplate(t, repo, key, &channel, "UPDATED {{.}}")
+	saveTestTemplate(t, pool, key, &channel, "UPDATED {{.}}")
 
 	results, err = r.RenderBatch(t.Context(), requests[:2])
 	if err != nil || results[0].Text != "UPDATED 1" || results[1].Text != "DEFAULT 2" {
@@ -103,11 +93,10 @@ func TestRenderBatchResolvesOncePerCallWithOverridesAndFreshness(t *testing.T) {
 func TestRenderBatchCancellationReturnsNoPartialResults(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
-	repo := repository.NewTemplateRepository(pool, logger)
 	key, cancelKey := domain.TemplateKeyCmdHelp, domain.TemplateKeyOutboxVideo
 
-	upsertTestTemplate(t, repo, key, nil, "FIRST")
-	upsertTestTemplate(t, repo, cancelKey, nil, "{{call .Cancel}}SECOND")
+	saveTestTemplate(t, pool, key, nil, "FIRST")
+	saveTestTemplate(t, pool, cancelKey, nil, "{{call .Cancel}}SECOND")
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

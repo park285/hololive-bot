@@ -5,98 +5,26 @@ package dispatchoutbox
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// setupDispatchOutboxIntegration은 production과 같은 전체 migration 사슬을 적용한 격리 DB를 쓴다.
 func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool) {
 	t.Helper()
 
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
-	ctx := context.Background()
-	setupPool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatalf("connect test database: %v", err)
-	}
+	pool := dbtest.NewPool(t)
 
-	schema := fmt.Sprintf("dispatchoutbox_test_%d", time.Now().UnixNano())
-	if _, err := setupPool.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-	setupPool.Close()
-
-	config, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatalf("parse test database config: %v", err)
-	}
-	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, "SET search_path TO "+schema)
-		return err
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatalf("connect schema-scoped test database: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	t.Cleanup(func() {
-		cleanupPool, err := pgxpool.New(context.Background(), dsn)
-		if err == nil {
-			_, _ = cleanupPool.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-			cleanupPool.Close()
-		}
-	})
-	if _, err := pool.Exec(ctx, "CREATE TYPE alarm_type AS ENUM ('LIVE', 'COMMUNITY', 'SHORTS')"); err != nil {
-		t.Fatalf("create alarm_type: %v", err)
-	}
-	for _, migration := range []string{
-		"hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/epoch1_migrations/058_create_alarm_dispatch_outbox.sql",
-		"hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/epoch1_migrations/059_harden_alarm_dispatch_outbox.sql",
-		"hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/epoch1_migrations/065_record_alarm_dispatch_event_collisions.sql",
-		"hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/epoch1_migrations/118_alarm_dispatch_state_shape_check.sql",
-		"hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/epoch1_migrations/122_alarm_dispatch_last_error_size_check.sql",
-		"hololive/hololive-api/scripts/migrations/141_alarm_dispatch_send_units.sql",
-		"hololive/hololive-api/scripts/migrations/142_alarm_dispatch_send_unit_due_index.sql",
-		"hololive/hololive-api/scripts/migrations/143_alarm_dispatch_send_unit_index.sql",
-		"hololive/hololive-api/scripts/migrations/248_alarm_dispatch_immutable_request.sql",
-		"hololive/hololive-api/scripts/migrations/329_alarm_send_unit_handoff_check.sql",
-		"hololive/hololive-api/scripts/migrations/337_alarm_send_unit_handoff_due_index.sql",
-	} {
-		sql := readRepoMigration(t, migration)
-		if _, err := pool.Exec(ctx, sql); err != nil {
-			t.Fatalf("apply %s: %v", migration, err)
-		}
-	}
-	return NewPgxRepositoryFromPool(pool, nil), pool
-}
-
-func readRepoMigration(t *testing.T, relative string) string {
-	t.Helper()
-
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller(0) failed")
-	}
-	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "..", ".."))
-	raw, err := os.ReadFile(filepath.Join(root, relative))
-	if err != nil {
-		t.Fatalf("read migration %s: %v", relative, err)
-	}
-	return string(raw)
+	return newTestRepository(t, pool), pool
 }
 
 func TestPgxRepositoryInsertBatchKeepsCanonicalPayloadAfterConflictingCandidate(t *testing.T) {

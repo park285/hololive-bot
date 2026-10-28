@@ -169,6 +169,8 @@ func startYouTubeJSHelper(
 	limiter *youtubejs.RateLimiter,
 ) (*youtubejs.Helper, *youtubejs.RPC, error) {
 	helper, rpc, err := youtubejs.Start(ctx, &youtubejs.Config{
+		NodePath:          collector.YouTubeJSNodePath,
+		ScriptPath:        collector.YouTubeJSScriptPath,
 		StartupTimeout:    collector.YouTubeJSStartupTimeout,
 		RequestTimeout:    collector.YouTubeJSRequestTimeout,
 		HealthTimeout:     collector.HelperHealthTimeout,

@@ -99,10 +99,7 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 		InsertedDeliveries:  0,
 		HashConflictEvents:  0,
 	}}
-	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
-		WithOutbox(repository),
-		WithWakeupEnabled(false),
-	)
+	publisher := newTestPublisher(t, cacheClient, repository, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000})
 
 	result, err := publisher.Publish(t.Context(), &domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive,
@@ -121,11 +118,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 	repository := &fakeOutboxRepository{
 		batchErrors: []error{nil, errors.New("pg unavailable")},
 	}
-	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
-		WithOutbox(repository),
-		WithWakeupEnabled(false),
-		WithMaxDeliveriesPerBatch(1),
-	)
+	publisher := newTestPublisher(t, cacheClient, repository, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1})
 
 	result, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"},
@@ -142,9 +135,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, slog.New(slog.DiscardHandler),
-		WithOutbox(repository),
-	)
+	publisher := newTestPublisher(t, cacheClient, repository, PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000})
 	channel := &domain.Channel{ID: "channel-1"}
 	stream := &domain.Stream{ID: "stream-1", ChannelID: "channel-1"}
 
@@ -173,7 +164,7 @@ func TestPublisherPreservesNonPrefixReceiptsAcrossChunkError(t *testing.T) {
 		},
 		batchErrors: []error{nil, errors.New("commit response unavailable")},
 	}
-	publisher := NewPublisher(nil, slog.New(slog.DiscardHandler), WithOutbox(repository), WithMaxDeliveriesPerBatch(2), WithWakeupEnabled(false))
+	publisher := newTestPublisher(t, nil, repository, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 2})
 	notifications := make([]*domain.AlarmNotification, 4)
 
 	for i := range notifications {
@@ -190,4 +181,26 @@ func TestPublisherPreservesNonPrefixReceiptsAcrossChunkError(t *testing.T) {
 	require.True(t, result.Receipts[1].Accepted())
 	require.True(t, result.Receipts[2].Accepted())
 	require.Equal(t, 3, result.ProcessedDeliveries)
+}
+
+func newTestPublisher(t *testing.T, c WakeupCache, outbox dispatchoutbox.Writer, config PublishConfig) *Publisher {
+	t.Helper()
+
+	publisher, err := NewPublisher(c, outbox, config, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	return publisher
+}
+
+// outbox가 없거나 batch 한도가 양수가 아니면 기본값으로 바꾸지 않고 생성 오류로 드러낸다.
+func TestNewPublisherRejectsMissingOutboxAndNonPositiveBatchLimit(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewPublisher(nil, nil, PublishConfig{MaxDeliveriesPerBatch: 1000}, nil)
+	require.ErrorContains(t, err, "outbox repository is required")
+
+	for _, limit := range []int{0, -1} {
+		_, err := NewPublisher(nil, &fakeOutboxRepository{}, PublishConfig{MaxDeliveriesPerBatch: limit}, nil)
+		require.ErrorContains(t, err, "max deliveries per batch must be positive")
+	}
 }

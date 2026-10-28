@@ -3,7 +3,7 @@ package messaging
 import (
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v4/webhook"
 )
 
 var benchmarkParsedCommandSink *ParsedCommand

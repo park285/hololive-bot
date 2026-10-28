@@ -11,6 +11,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 type calendarRenderCall struct {
@@ -87,7 +88,7 @@ func (r *CalendarCardRenderer) startCalendarRenderCall(ctx context.Context, cach
 
 	entrySnapshot := append([]domain.CalendarEntry(nil), entries...)
 
-	go panicguard.Run(slog.Default(), panicguard.BackgroundTask, "calendar-render", func() {
+	go panicguard.Run(slog.Default(), panicscope.BackgroundTask, "calendar-render", func() {
 		r.runCalendarRenderCall(workCtx, call, cacheKey, month, year, entrySnapshot)
 	})
 

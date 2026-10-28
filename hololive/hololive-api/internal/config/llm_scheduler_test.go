@@ -3,8 +3,6 @@ package config
 import (
 	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func TestLoadCliproxyConfigRequiresExplicitBaseURL(t *testing.T) {
@@ -12,7 +10,7 @@ func TestLoadCliproxyConfigRequiresExplicitBaseURL(t *testing.T) {
 	t.Setenv("CLIPROXY_API_KEY", "test-key")
 	t.Setenv("CLIPROXY_BASE_URL", "")
 
-	cfg, err := settings.LoadCliproxyConfig()
+	cfg, err := LoadCliproxyConfig()
 	if err != nil {
 		t.Fatalf("LoadCliproxyConfig() error = %v", err)
 	}
@@ -33,8 +31,8 @@ func TestLoadLLMProviderConfigDefaultsToCliproxy(t *testing.T) {
 		t.Fatalf("buildLLMSchedulerConfig() error = %v", err)
 	}
 
-	if cfg.LLMProvider != settings.LLMProviderCliproxy {
-		t.Fatalf("LLMProvider = %q, want %q", cfg.LLMProvider, settings.LLMProviderCliproxy)
+	if cfg.LLMProvider != LLMProviderCliproxy {
+		t.Fatalf("LLMProvider = %q, want %q", cfg.LLMProvider, LLMProviderCliproxy)
 	}
 
 	if cfg.Gemini.BaseURL != "https://generativelanguage.googleapis.com" {
@@ -68,9 +66,9 @@ func TestBuildLLMSchedulerConfigSharesSeeMoreFoldSwitch(t *testing.T) {
 }
 
 func TestValidateLLMProviderGemini(t *testing.T) {
-	cfg := settings.LLMProviderConfig{
-		Name: settings.LLMProviderGemini,
-		Gemini: settings.GeminiConfig{
+	cfg := LLMProviderConfig{
+		Name: LLMProviderGemini,
+		Gemini: GeminiConfig{
 			Enabled:       true,
 			BaseURL:       "https://generativelanguage.googleapis.com",
 			APIKey:        "test-key",
@@ -97,8 +95,8 @@ func TestLoadLLMProviderConfigGeminiExplicit(t *testing.T) {
 		t.Fatalf("buildLLMSchedulerConfig() error = %v", err)
 	}
 
-	if cfg.LLMProvider != settings.LLMProviderGemini {
-		t.Fatalf("LLMProvider = %q, want %q", cfg.LLMProvider, settings.LLMProviderGemini)
+	if cfg.LLMProvider != LLMProviderGemini {
+		t.Fatalf("LLMProvider = %q, want %q", cfg.LLMProvider, LLMProviderGemini)
 	}
 
 	if err := validateLLMProvider(cfg.SelectedLLMProvider()); err != nil {
@@ -107,16 +105,16 @@ func TestLoadLLMProviderConfigGeminiExplicit(t *testing.T) {
 }
 
 func TestValidateLLMProviderRejectsInvalidSelection(t *testing.T) {
-	err := validateLLMProvider(settings.LLMProviderConfig{Name: "unknown"})
+	err := validateLLMProvider(LLMProviderConfig{Name: "unknown"})
 	if err == nil || !strings.Contains(err.Error(), "LLM_PROVIDER") {
 		t.Fatalf("validateLLMProvider() error = %v, want LLM_PROVIDER error", err)
 	}
 }
 
 func TestValidateLLMProviderRejectsIncompleteGemini(t *testing.T) {
-	err := validateLLMProvider(settings.LLMProviderConfig{
-		Name: settings.LLMProviderGemini,
-		Gemini: settings.GeminiConfig{
+	err := validateLLMProvider(LLMProviderConfig{
+		Name: LLMProviderGemini,
+		Gemini: GeminiConfig{
 			Enabled:       true,
 			Model:         "gemini-3.7-flash",
 			ThinkingLevel: "high",
@@ -128,9 +126,9 @@ func TestValidateLLMProviderRejectsIncompleteGemini(t *testing.T) {
 }
 
 func TestValidateLLMProviderRejectsUnsupportedGeminiThinkingLevel(t *testing.T) {
-	err := validateLLMProvider(settings.LLMProviderConfig{
-		Name: settings.LLMProviderGemini,
-		Gemini: settings.GeminiConfig{
+	err := validateLLMProvider(LLMProviderConfig{
+		Name: LLMProviderGemini,
+		Gemini: GeminiConfig{
 			Enabled:       true,
 			BaseURL:       "https://generativelanguage.googleapis.com",
 			APIKey:        "test-key",
@@ -148,7 +146,7 @@ func TestLoadCliproxyConfigUsesExplicitBaseURL(t *testing.T) {
 
 	t.Setenv("CLIPROXY_BASE_URL", endpoint)
 
-	cfg, err := settings.LoadCliproxyConfig()
+	cfg, err := LoadCliproxyConfig()
 	if err != nil {
 		t.Fatalf("LoadCliproxyConfig() error = %v", err)
 	}

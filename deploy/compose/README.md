@@ -5,8 +5,6 @@
   baseline (ports, volumes, and the main-host `youtube-collector-c`, which is `youtube-collector` in
   `docker-compose.prod.yml`).
 - `docker-compose.collector.yml`: shared collector/issuer definitions only; no central credentials.
-- `docker-compose.osaka.yml`: standalone AP composition for collector/issuer `a` (native runtime remains actual).
-- `docker-compose.osaka2.yml`: standalone AP composition for collector/issuer `d` (native runtime remains actual).
 - `docker-compose.seoul.yml`: standalone AP composition for collector/issuer `b`.
 - `docker-compose.remote-cache.yml`: optional BuildKit registry cache overlay. Export is fixed to
   `mode=min`, so only final-image cache records are published; intermediate build stages and copied
@@ -181,8 +179,9 @@ release pair, not as extra keys or aliases in the new profile.
 
 ### Build and CLI prerequisites
 
-- All five consumers retain the genuine published shared-go `v2.17.0` pins and
-  sums; api, alarm-worker and shared also pin iris-client-go `v3.2.0`. No
+- All five consumers pin the published shared-go `v2.18.0` and its sums; api,
+  alarm-worker and shared also pin `github.com/park285/iris-client-go/v4`
+  `v4.0.0`. Both tags must exist before a production build. No
   unpublished external replace or invented tag is a production input.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
   production builds. Use root/API/alarm version `11.0.0`, a clean full
@@ -280,9 +279,8 @@ HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE=/etc/stack-secrets/hololive-bot/youtube-coll
 
 ### Central endpoint ownership
 
-AP overlays never hardcode the central address. All three (`docker-compose.seoul.yml`,
-`docker-compose.osaka.yml`, `docker-compose.osaka2.yml`) read one key family and fail the
-render when it is absent, so a host move cannot leave an AP silently pointed at the
+The AP overlay `docker-compose.seoul.yml` never hardcodes the central address. It reads one
+key family and fails the render when it is absent, so a host move cannot leave an AP silently pointed at the
 retired address:
 
 ```text
@@ -298,8 +296,8 @@ owner is `deploy/topology/hosts.conf` (`central=100.100.1.8`). Native generation
 owner and `scripts/ci/postgres-capacity-policy.tsv`, not a second address/pool literal.
 CLIProxy/OTLP workstation addresses are unrelated to the primary DB route.
 
-AP overlays use only `youtube-collector.env` for `youtube-collector` instances, so Iris
-egress tokens stay out of AP collector containers. Osaka/Seoul AP hosts also use
+The AP overlay uses only `youtube-collector.env` for `youtube-collector` instances, so Iris
+egress tokens stay out of AP collector containers. The Seoul AP host also uses
 `ap-compose.env`, which excludes `IRIS_WEBHOOK_TOKEN` and `IRIS_BOT_TOKEN`.
 The central unsuffixed `youtube-collector` (`c`) also uses scoped
 `youtube-collector.env`; it still must not receive Iris egress tokens or the
@@ -346,7 +344,7 @@ The local uniform collector maximum 7 (minimum 2 unchanged) gives runtime 22 + s
 + migrator 1 + exporter 1 + nightly 2 = 54, leaving **three ordinary control slots**.
 Both capacity readers account for external consumers and aggregate all pools by role;
 native max is emitted from the same policy. Role limits are runtime 25 (including bounded
-maintenance/replay control work), scraper 28, migrator 1, exporter 1 and nightly 2.
+maintenance control work), scraper 28, migrator 1, exporter 1 and nightly 2.
 One migration job at a time is supported. Multiple runtime maintenance commands must share
 the three-slot control allowance, not claim independent three-slot budgets.
 

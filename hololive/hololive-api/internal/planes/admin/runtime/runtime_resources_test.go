@@ -44,17 +44,16 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 
 			var calls []string
 
-			closeErr := errors.New("trigger transport close failed")
+			closeErr := errors.New("alarm transport close failed")
 			resources := newAdminResourceFixture(t, &calls, closeErr)
 			config := &apiconfig.AdminPlaneConfig{}
 
 			if stage == "server" {
 				config.Server = settings.ServerConfig{APIKey: testAPIKey, HTTPTransports: []string{"h3"}, H3Addr: testLoopbackAddr}
-				config.CORS.AllowedOrigins = []string{testAllowedOrigin}
 			}
 
 			infra := &sharedmodules.InfraModule{Cache: sharedtestutil.NewTestCacheService(t.Context(), t), Postgres: &databasemocks.Client{}}
-			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, infra, nil, &server.Handler{}, resources.Close, slog.New(slog.DiscardHandler))
+			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, infra, &server.Handler{}, resources.Close, slog.New(slog.DiscardHandler))
 			require.Nil(t, runtime)
 			require.ErrorIs(t, err, closeErr)
 
@@ -65,7 +64,7 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 			}
 
 			require.ErrorIs(t, resources.Close(), closeErr)
-			assert.Equal(t, []string{"holodex", "rooms", "collector", "trigger", "alarm"}, calls)
+			assert.Equal(t, []string{"alarm"}, calls)
 		})
 	}
 }
@@ -78,9 +77,7 @@ func newAdminResourceFixture(t *testing.T, calls *[]string, closeErr error) *adm
 	}
 
 	return &adminRuntimeResources{
-		holodex: stopFunc(func() { *calls = append(*calls, "holodex") }),
-		alarm:   closer("alarm", nil), trigger: closer("trigger", closeErr),
-		collector: closer("collector", nil), rooms: closer("rooms", nil),
+		alarm: closer("alarm", closeErr),
 	}
 }
 

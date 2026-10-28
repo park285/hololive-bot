@@ -21,7 +21,6 @@ func TestDomainHandlers_MissingDependenciesRejectRequests(t *testing.T) {
 		{"room", domains.Room.GetRooms},
 		{"stats", domains.Stats.GetStats},
 		{"settings", domains.Settings.GetSettings},
-		{"template", domains.Template.GetTemplates},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, recorder := newAPITestContext(http.MethodGet, "/test", nil)

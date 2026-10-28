@@ -44,10 +44,10 @@ type LLMSchedulerConfig struct {
 	Bot                      settings.BotConfig
 	Environment              string
 	LLMProvider              string
-	Cliproxy                 settings.CliproxyConfig
-	Gemini                   settings.GeminiConfig
-	LLM                      settings.LLMConfig
-	Exa                      settings.ExaConfig
+	Cliproxy                 CliproxyConfig
+	Gemini                   GeminiConfig
+	LLM                      LLMConfig
+	Exa                      ExaConfig
 	Version                  string
 	MemberNewsXAllowlistPath string
 }
@@ -79,10 +79,10 @@ func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
 	valkey, valkeyErr := settings.LoadValkeyConfig()
 	postgres, postgresErr := settings.LoadPostgresEndpointConfig()
 	logging, loggingErr := settings.LoadLoggingConfig()
-	cliproxy, cliproxyErr := settings.LoadCliproxyConfig()
-	gemini, geminiErr := settings.LoadGeminiConfig()
-	llm, llmErr := settings.LoadLLMConfig()
-	exa, exaErr := settings.LoadExaConfig()
+	cliproxy, cliproxyErr := LoadCliproxyConfig()
+	gemini, geminiErr := LoadGeminiConfig()
+	llm, llmErr := LoadLLMConfig()
+	exa, exaErr := LoadExaConfig()
 	seeMoreFold, seeMoreFoldErr := settings.LoadSeeMoreFold()
 
 	if err := errors.Join(portErr, valkeyErr, postgresErr, loggingErr, cliproxyErr, geminiErr, llmErr, exaErr, seeMoreFoldErr); err != nil {
@@ -115,7 +115,7 @@ func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
 			SeeMoreFold: seeMoreFold,
 		},
 		Environment:              envload.AppEnvironment(),
-		LLMProvider:              strings.ToLower(strings.TrimSpace(sharedenv.String("LLM_PROVIDER", settings.LLMProviderCliproxy))),
+		LLMProvider:              strings.ToLower(strings.TrimSpace(sharedenv.String("LLM_PROVIDER", LLMProviderCliproxy))),
 		Cliproxy:                 cliproxy,
 		Gemini:                   gemini,
 		LLM:                      llm,
@@ -145,38 +145,38 @@ func (c *LLMSchedulerConfig) validateRuntime() error {
 	return nil
 }
 
-func (c *LLMSchedulerConfig) SelectedLLMProvider() settings.LLMProviderConfig {
+func (c *LLMSchedulerConfig) SelectedLLMProvider() LLMProviderConfig {
 	if c == nil {
-		return settings.LLMProviderConfig{}
+		return LLMProviderConfig{}
 	}
 
-	return settings.LLMProviderConfig{
+	return LLMProviderConfig{
 		Name:     c.LLMProvider,
 		Cliproxy: c.Cliproxy,
 		Gemini:   c.Gemini,
 	}
 }
 
-func validateLLMProvider(config settings.LLMProviderConfig) error {
-	provider := cmp.Or(strings.ToLower(strings.TrimSpace(config.Name)), settings.LLMProviderCliproxy)
+func validateLLMProvider(config LLMProviderConfig) error {
+	provider := cmp.Or(strings.ToLower(strings.TrimSpace(config.Name)), LLMProviderCliproxy)
 
 	switch provider {
-	case settings.LLMProviderCliproxy:
+	case LLMProviderCliproxy:
 		if err := validateCliproxyProvider(config.Cliproxy); err != nil {
 			return fmt.Errorf("validate cliproxy provider: %w", err)
 		}
-	case settings.LLMProviderGemini:
+	case LLMProviderGemini:
 		if err := validateGeminiProvider(config.Gemini); err != nil {
 			return fmt.Errorf("validate gemini provider: %w", err)
 		}
 	default:
-		return fmt.Errorf("LLM_PROVIDER must be %q or %q", settings.LLMProviderCliproxy, settings.LLMProviderGemini)
+		return fmt.Errorf("LLM_PROVIDER must be %q or %q", LLMProviderCliproxy, LLMProviderGemini)
 	}
 
 	return nil
 }
 
-func validateCliproxyProvider(config settings.CliproxyConfig) error {
+func validateCliproxyProvider(config CliproxyConfig) error {
 	if !config.Enabled {
 		return nil
 	}
@@ -188,7 +188,7 @@ func validateCliproxyProvider(config settings.CliproxyConfig) error {
 	return nil
 }
 
-func validateGeminiProvider(config settings.GeminiConfig) error {
+func validateGeminiProvider(config GeminiConfig) error {
 	if !config.Enabled {
 		return errors.New("selected gemini provider is disabled")
 	}

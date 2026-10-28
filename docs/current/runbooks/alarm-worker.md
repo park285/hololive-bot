@@ -130,6 +130,73 @@ migration 331은 `youtube_community_shorts_alarm_states`의 발송 전 선점 �
 - rollback: 331 적용 뒤에는 worker·API 모두 claim 제거 릴리스까지 되돌릴 수 있습니다. 그보다 이전이 필요하면
   fix-forward합니다.
 
+## Alarm dispatch PG ledger
+
+PG dispatch outbox(`alarm_dispatch_events`·`alarm_dispatch_deliveries`)가 유일한 발행·소비 경로입니다. 선택할 mode는 없고
+`ALARM_DISPATCH_PUBLISH_MODE`·`ALARM_DISPATCH_CONSUMER_MODE`·`ALARM_DISPATCH_SHADOW_FATAL`·`ALARM_DISPATCH_WAKEUP_ENABLED`는
+어느 코드도 읽지 않습니다. 이 값을 넣어도 효과가 없으므로 운영 env에서 지웁니다.
+
+- 발행: publisher가 `pending` delivery 행을 쓰고 payload 없는 Valkey wakeup(`alarm:dispatch:wakeup`)을 보냅니다. wakeup 여부는
+  worker profile의 `alarm_dispatch.wakeup_enabled`가 소유합니다. 한 번에 outbox에 넣는 delivery 수는
+  `ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 미설정 1000)이고 `internal/config`의 `RuntimeConfig.AlarmDispatchPublish`가
+  기동 때 검증합니다. outbox가 없거나 한도가 양수가 아니면 publisher 생성이 실패합니다.
+- 소비: runner는 lease로 due 행을 claim하고, idle일 때 wakeup을 기다리며 상한이 있는 polling으로 돌아갑니다. lease·격리
+  임계·batch·recovery·retention 주기는 worker profile `alarm_dispatch`가 소유합니다(`quarantine_threshold_ms ≥ lease_ms`).
+- 발송 전 실패(렌더·요청 준비·send unit 불변식 위반)는 `RouteFailures`로 재시도 시도를 하나 쓰고 상한에서 DLQ로 갑니다.
+- 발송 뒤 실패는 다음 순서로 분류합니다. 명시적 결과 불명은 재시도 없이 격리합니다. pre-handoff client_request_id 충돌은
+  재발급 세대가 남아 있을 때만 다시 발급합니다. 미수락(Iris 429·502·503) 실패와, 저장된 최종 요청과 send-unit
+  `client_request_id`로 같은 요청을 다시 보낼 수 있는 transport 모호 실패만 같은 요청으로 재시도합니다. 그 밖은 격리합니다.
+  `MarkDispatched` 실패는 외부 발송 뒤이므로 재시도하지 않습니다.
+- metric label `alarm_dispatch_publish_*_total{mode="pg_first"}`과 `alarm_dispatch_runner_*{consumer_mode="pg"}`는 대시보드
+  호환을 위해 남긴 고정값이며 mode 선택을 뜻하지 않습니다.
+
+상태 점검(읽기 전용):
+
+```sql
+SELECT status, count(*)
+FROM alarm_dispatch_deliveries
+GROUP BY status
+ORDER BY status;
+
+SELECT COALESCE(EXTRACT(EPOCH FROM NOW() - MIN(next_attempt_at)), 0) AS oldest_pending_age_seconds
+FROM alarm_dispatch_deliveries
+WHERE status = 'pending'
+  AND next_attempt_at <= NOW();
+
+SELECT COALESCE(EXTRACT(EPOCH FROM NOW() - MIN(next_attempt_at)), 0) AS oldest_retry_age_seconds
+FROM alarm_dispatch_deliveries
+WHERE status = 'retry'
+  AND next_attempt_at <= NOW();
+
+SELECT COALESCE(EXTRACT(EPOCH FROM NOW() - MIN(sending_started_at)), 0) AS oldest_sending_age_seconds
+FROM alarm_dispatch_deliveries
+WHERE status = 'sending';
+```
+
+event payload는 `alarm_dispatch_events`에 한 번 저장되고 방별 상태는 `alarm_dispatch_deliveries`에 있습니다.
+
+복구:
+
+- 오래된 `leased` 행은 외부 발송 전이므로 다시 claim될 수 있습니다. 오래된 `sending` 행은 결과가 모호하므로 격리되며,
+  격리 행은 [closeout 절차](alarm-dispatch-quarantine-closeout.md)로 검토하기 전에는 재처리하지 않습니다.
+- 수동 requeue는 중복 위험 확인을 명시해야 하고 감사 행을 남깁니다.
+
+```bash
+DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-requeue.sh \
+  <delivery-id> <operator-id> "<reason>" force_duplicate_risk_ack=true
+```
+
+- retention은 `ALARM_DISPATCH_RETENTION_ENABLED=true`일 때 maintenance runner가 chunk·조회 시한·advisory lock으로
+  수행합니다. 비상 수동 정리는 status 하나씩, 반환 행 수가 limit과 같을 때만 반복합니다.
+
+```bash
+DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh sent 90 1000
+DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh dlq 180 500
+DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh quarantined 180 500
+```
+
+- 자동으로 `sending` 행을 재시도하지 않고, 중복 위험 확인 없이 `quarantined` 행을 재처리하지 않습니다.
+
 ## Common failure modes
 
 ### 1. Alarm queue stops growing despite due events

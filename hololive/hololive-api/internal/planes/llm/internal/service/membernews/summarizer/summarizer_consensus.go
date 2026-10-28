@@ -31,7 +31,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
 // reviewer/adjudicator 응답이 JSON으로 파싱되지 않은 경우를 LLM 호출 실패와

@@ -14,6 +14,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `alarm.dispatch` - alarm dispatch Valkey queue/retry/DLQ
 - `shortlink.youtube` - public fixed-target YouTube redirect with KakaoTalk scraper rejection
 - `settings.update` - admin settings API, single apply path to alarm-worker (no Pub/Sub)
+- `admin.api` - admin plane `/api/holo/*` HTTP JSON; producer-owned OpenAPI `admin-api.openapi.json` (producer-verified rooms·ACL operations only)
 - `iris.webhook` - Iris external webhook/send boundary
 
 ## Contract Documents
@@ -24,6 +25,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `alarm.md` - alarm HTTP API and alarm dispatch queue
 - `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and grouped message rendering contract
 - `settings.md` - admin settings API and alarm advance apply path
+- `admin-api.md` - admin plane `/api/holo/*` producer contract, OpenAPI source, and console generated-copy path
 - `iris-boundary.md` - Iris external boundary
 - `schedule-hololive-tv-api.md` - Official Schedule API request, mapping, fallback ownership, live non-goal, cache, and observability contract
 

@@ -24,8 +24,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v3/iris"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
@@ -49,8 +47,8 @@ type commandInitView struct {
 	membersData           domain.MemberDataProvider
 	formatter             *formatter.ResponseFormatter
 	sendMessage           func(ctx context.Context, room, message string) error
-	sendImage             func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
-	sendImages            func(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error
+	sendImage             func(ctx context.Context, room string, imageData []byte) error
+	sendImages            func(ctx context.Context, room string, images [][]byte) error
 	sendError             func(ctx context.Context, room, message string) error
 	logger                *slog.Logger
 	majorEventRepository  handlercore.MajorEventRepository

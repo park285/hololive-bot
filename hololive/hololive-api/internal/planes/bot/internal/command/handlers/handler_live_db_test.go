@@ -72,7 +72,7 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 	}
 	execute()
 	t.Logf("actual command unknown reply: %s", *message)
-	runSQL(`INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at) VALUES('cmdlive0001','UC_command_query','LIVE','DB 방송',now());
+	runSQL(`INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at,lifecycle_origin) VALUES('cmdlive0001','UC_command_query','LIVE','DB 방송',now(),'observed');
  INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at) VALUES('cmdlive0001','LIVE',now(),now());`)
 	execute()
 	require.Contains(t, *message, "cmdlive0001")

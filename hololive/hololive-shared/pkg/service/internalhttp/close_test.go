@@ -122,21 +122,23 @@ func startPeerH3Server(t *testing.T) (addr, caFile string, conns <-chan *quic.Co
 }
 
 // API가 종료 때 내부 H3 client를 닫지 않으면 peer(alarm-worker 등)는 CONNECTION_CLOSE를 받지 못하고, 그 연결이 QUIC
-// idle timeout까지 남아 peer의 graceful shutdown이 종료 시한을 넘긴다. Close는 peer가 원격 application close를 바로
+// idle timeout까지 남아 peer의 graceful shutdown이 종료 시한을 넘긴다. CloseClient는 peer가 원격 application close를 바로
 // 받게 해야 한다(idle timeout·stateless reset이 아니라 client가 보낸 CONNECTION_CLOSE).
-func TestJSONClientCloseSendsCleanConnectionCloseToPeer(t *testing.T) {
+func TestCloseClientSendsCleanConnectionCloseToPeer(t *testing.T) {
 	addr, caFile, conns := startPeerH3Server(t)
 
 	options := sharedh3.ClientOptions{CACertFile: caFile, ServerName: testInternalH3ServerName}
 
-	client, err := NewJSONClient("https://"+addr, "", 5*time.Second, options)
+	baseURL := "https://" + addr
+
+	client, err := NewClientForURLStrict(baseURL, 5*time.Second, options)
 	if err != nil {
-		t.Fatalf("NewJSONClient() error = %v", err)
+		t.Fatalf("NewClientForURLStrict() error = %v", err)
 	}
 
-	req, err := client.NewRequest(t.Context(), http.MethodGet, "/")
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/", http.NoBody)
 	if err != nil {
-		t.Fatalf("NewRequest() error = %v", err)
+		t.Fatalf("NewRequestWithContext() error = %v", err)
 	}
 
 	resp, err := client.Do(req)
@@ -156,14 +158,14 @@ func TestJSONClientCloseSendsCleanConnectionCloseToPeer(t *testing.T) {
 		t.Fatal("peer never accepted the client connection")
 	}
 
-	if err := client.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
+	if err := CloseClient(client); err != nil {
+		t.Fatalf("CloseClient() error = %v", err)
 	}
 
 	select {
 	case <-peerConn.Context().Done():
 	case <-time.After(5 * time.Second):
-		t.Fatal("peer connection still open after Close; the peer would wait for the QUIC idle timeout")
+		t.Fatal("peer connection still open after CloseClient; the peer would wait for the QUIC idle timeout")
 	}
 
 	cause := context.Cause(peerConn.Context())

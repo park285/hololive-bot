@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
@@ -34,7 +34,7 @@ func providerAttemptOutcome(err error, completed bool) workercontract.AttemptOut
 		return workercontract.AttemptCanceled
 	case errors.Is(err, errDeliverySendOutcomeUnknown):
 		return workercontract.AttemptOutcomeUnknown
-	case errors.Is(err, iris.ErrPermanent), errors.Is(err, iris.ErrAuthFailed), errors.Is(err, iris.ErrRateLimited), errors.Is(err, iris.ErrTransport), iris.IsPreHandoffClientRequestIDConflict(err):
+	case errors.Is(err, iris.ErrPermanent), errors.Is(err, iris.ErrAuthFailed), errors.Is(err, iris.ErrRateLimited), errors.Is(err, iris.ErrTransport), errors.Is(err, iris.ErrNotSent), iris.IsPreHandoffClientRequestIDConflict(err):
 		return workercontract.AttemptFailed
 	default:
 		return workercontract.AttemptOutcomeUnknown

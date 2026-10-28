@@ -8,7 +8,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -34,6 +34,8 @@ func TestClassifyPreservesDeliveryEvidence(t *testing.T) {
 		{"post response lost", &iris.TransportError{Op: testPostOperation, Err: io.ErrUnexpectedEOF}, TransportAmbiguous},
 		{"dial rejected", &iris.TransportError{Op: testPostOperation, Err: &net.OpError{Op: testDialOperation, Err: errors.New("refused")}}, Failed},
 		{"dns rejected", &iris.TransportError{Op: testPostOperation, Err: &net.DNSError{Err: "no host"}}, Failed},
+		{"not sent before dial", &iris.TransportError{Op: testPostOperation, Err: fmt.Errorf("%w: resolve h3 dial addr: %w", iris.ErrNotSent, &net.DNSError{Err: "no host"})}, Failed},
+		{"egress denied is not sent", fmt.Errorf("%w: egress denied", iris.ErrNotSent), Failed},
 		{"joined confirmed failure preserves lost response", errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), &iris.TransportError{Op: testPostOperation, Err: io.ErrUnexpectedEOF}), TransportAmbiguous},
 		{"joined dial failure preserves read ambiguity", errors.Join(
 			&iris.TransportError{Op: testPostOperation, Err: &net.OpError{Op: testDialOperation, Err: errors.New("refused")}},

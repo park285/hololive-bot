@@ -439,7 +439,7 @@ func (r *Runtime) refreshProjection(ctx context.Context) error {
 		return nil
 	})
 	if err == nil {
-		r.degraded.Store(false)
+		r.projectionDegraded.Store(false)
 
 		if r.started.Load() {
 			r.publishHealth()
@@ -448,7 +448,7 @@ func (r *Runtime) refreshProjection(ctx context.Context) error {
 		return nil
 	}
 
-	r.degraded.Store(true)
+	r.projectionDegraded.Store(true)
 
 	if r.started.Load() {
 		r.publishHealth()

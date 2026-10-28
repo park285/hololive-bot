@@ -1,6 +1,7 @@
 package acl
 
 import (
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestAddRoomRejectsNonChatIDRegistration(t *testing.T) {
 		store := newFakeACLStore()
 		service := newACLServiceFromFakeStore(t, store, true)
 
-		added, err := service.AddRoom(t.Context(), room)
+		added, err := service.AddRoom(t.Context(), currentACLMode(service), room)
 		if err == nil || added {
 			t.Fatalf("AddRoom(%q) = (%v, %v), want invalid chatID error", room, added, err)
 		}
@@ -41,7 +42,7 @@ func TestAddRoomAcceptsCanonicalChatID(t *testing.T) {
 		store := newFakeACLStore()
 		service := newACLServiceFromFakeStore(t, store, true)
 
-		added, err := service.AddRoom(t.Context(), room)
+		added, err := service.AddRoom(t.Context(), currentACLMode(service), room)
 		if err != nil || !added {
 			t.Fatalf("AddRoom(%q) = (%v, %v), want added", room, added, err)
 		}
@@ -84,4 +85,67 @@ func fakeStoreRoomCount(t *testing.T, store *fakeACLStore) int {
 	}
 
 	return len(rooms)
+}
+
+// 제거도 등록과 같은 chatID 규칙을 따른다. 저장 행이 모두 chatID이므로 비정규 값은 PG에 닿기 전에 입력 오류다.
+func TestRemoveRoomRejectsNonChatID(t *testing.T) {
+	t.Parallel()
+
+	service := newACLServiceFromFakeStore(t, newFakeACLStore(), true)
+
+	removed, err := service.RemoveRoom(t.Context(), currentACLMode(service), "홀로라이브 알림방")
+	if !errors.Is(err, ErrInvalidRoomChatID) || removed {
+		t.Fatalf("RemoveRoom() = (%v, %v), want ErrInvalidRoomChatID", removed, err)
+	}
+}
+
+// migration 346 CHECK를 벗어난 저장 행은 판정에 쓰이지 않는 죽은 등록이므로 snapshot 적재를 실패시킨다.
+func TestLoadRejectsStoredNonChatIDRoom(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeACLStore()
+
+	store.settings[dbKeyEnabled] = testDBEnabledTrue
+	store.settings[dbKeyMode] = string(ACLModeWhitelist)
+	store.rooms[roomKey{roomID: "room-legacy", listType: listTypeWhitelist}] = struct{}{}
+
+	service := &Service{store: store, logger: slog.New(slog.DiscardHandler)}
+	if err := service.loadFromDatabase(t.Context(), false, ACLModeWhitelist, nil); !errors.Is(err, ErrInvalidRoomChatID) {
+		t.Fatalf("loadFromDatabase() error = %v, want ErrInvalidRoomChatID", err)
+	}
+}
+
+// currentACLMode는 방 변경 시험이 호출자가 본 모드로 현재 모드를 넘기게 한다.
+func currentACLMode(service *Service) ACLMode {
+	_, mode, _ := service.GetACLStatus()
+
+	return mode
+}
+
+// 호출자가 본 모드가 현재 모드와 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다.
+func TestRoomChangeWithStaleModeDoesNotWrite(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeACLStore()
+
+	store.createRoomHook = func(string, string) error {
+		t.Error("stale mode add wrote to the store")
+
+		return nil
+	}
+	store.deleteRoomHook = func(string, string) error {
+		t.Error("stale mode remove wrote to the store")
+
+		return nil
+	}
+
+	service := newACLServiceFromFakeStore(t, store, true)
+
+	if added, err := service.AddRoom(t.Context(), ACLModeBlacklist, "3001"); !errors.Is(err, ErrACLModeChanged) || added {
+		t.Fatalf("AddRoom() = (%v, %v), want ErrACLModeChanged", added, err)
+	}
+
+	if removed, err := service.RemoveRoom(t.Context(), ACLModeBlacklist, "3001"); !errors.Is(err, ErrACLModeChanged) || removed {
+		t.Fatalf("RemoveRoom() = (%v, %v), want ErrACLModeChanged", removed, err)
+	}
 }

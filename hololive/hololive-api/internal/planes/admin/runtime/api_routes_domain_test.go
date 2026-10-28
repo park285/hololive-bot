@@ -36,18 +36,14 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
-	authHandler := &server.AuthHandler{}
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{testAllowedOrigin},
-		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -73,10 +69,9 @@ func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 	apiHandler := &server.Handler{}
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: testAPIKey},
-		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), apiHandler.DomainHandlers(), &server.AuthHandler{}, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), apiHandler.DomainHandlers(), sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -90,16 +85,6 @@ func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 
 func expectedAdminAPIDomainRoutes() map[string][]string {
 	return map[string][]string{
-		"oauth": {
-			"GET /oauth/callback",
-		},
-		"auth": {
-			"POST /api/auth/register",
-			"POST /api/auth/login",
-			"POST /api/auth/logout",
-			"POST /api/auth/refresh",
-			"GET /api/auth/me",
-		},
 		"member": {
 			"GET /api/holo/members",
 			"POST /api/holo/members",
@@ -121,32 +106,13 @@ func expectedAdminAPIDomainRoutes() map[string][]string {
 		},
 		"stats_stream": {
 			"GET /api/holo/stats",
-			"GET /api/holo/stats/system",
-			"GET /api/holo/stats/youtube/community-shorts",
 			"GET /api/holo/streams/live",
 			"GET /api/holo/streams/upcoming",
-			"GET /api/holo/channels",
-			"GET /api/holo/channels/search",
 		},
 		"settings": {
-			"GET /api/holo/logs",
 			"GET /api/holo/settings",
 			"POST /api/holo/settings",
-			"POST /api/holo/settings/llm",
 			"POST /api/holo/names/room",
-		},
-		"template": {
-			"GET /api/holo/templates",
-			"GET /api/holo/templates/:key",
-			"PUT /api/holo/templates/:key",
-			"DELETE /api/holo/templates/:key",
-			"POST /api/holo/templates/:key/preview",
-			"GET /api/holo/templates/:key/revisions",
-			"GET /api/holo/templates/:key/revisions/:id",
-		},
-		"major_event": {
-			"POST /api/holo/majorevent/trigger",
-			"POST /api/holo/majorevent/monthly-trigger",
 		},
 	}
 }

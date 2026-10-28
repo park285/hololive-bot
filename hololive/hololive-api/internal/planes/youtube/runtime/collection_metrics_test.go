@@ -223,8 +223,8 @@ func TestCollectionLiveStateWorkExcludesRetainedEndedHistory(t *testing.T) {
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_reconciliation_heads (video_id, status)
 		SELECT 'retained-' || n, 'ENDED' FROM generate_series(1, 30000) n;
-		INSERT INTO youtube_live_sessions (video_id, channel_id, status)
-		SELECT 'retained-' || n, 'stale', 'ENDED' FROM generate_series(1, 30000) n;
+		INSERT INTO youtube_live_sessions (video_id, channel_id, status, lifecycle_origin)
+		SELECT 'retained-' || n, 'stale', 'ENDED', 'observed' FROM generate_series(1, 30000) n;
 		ANALYZE youtube_live_reconciliation_heads;
 		ANALYZE youtube_live_sessions;
 	`); err != nil {

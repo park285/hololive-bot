@@ -23,8 +23,28 @@ const (
 	IrisBotTokenEnv     = "IRIS_BOT_TOKEN"     //nolint:gosec // G101 오탐: 값은 자격증명이 아니라 환경변수 이름이다.
 )
 
-// ProfileFixture: runtime worker profile fixture(settingstest/testdata)의 경로를 모든 소비 패키지에 같은 값으로 돌려준다.
-func ProfileFixture(t *testing.T, name string) string {
+// UseProfileFixture는 worker profile 파일 env를 fixture 경로로 세운다. 이 fixture는 identity를 소유한 runtime의
+// testdata에 두고, 호출자가 경로를 넘긴다.
+func UseProfileFixture(t *testing.T, path string) {
+	t.Helper()
+	t.Setenv(workercontract.ProfileFileEnv, absFixturePath(t, path))
+}
+
+// LoadProfileFixture: fixture를 호출 서비스가 소유한 identity로 읽는다. 둘이 어긋나면 로드가 실패한다.
+func LoadProfileFixture(t *testing.T, identity workercontract.Identity, path string) workercontract.LoadedProfile {
+	t.Helper()
+
+	loaded, err := workercontract.LoadProfileFile(absFixturePath(t, path), identity)
+	if err != nil {
+		t.Fatalf("load worker profile fixture: %v", err)
+	}
+
+	return loaded
+}
+
+// SharedTestProfileFixture는 shared 패키지 시험 전용 profile이다. 여기서는 hololive/api identity를 빌려 registry·metrics
+// 조립만 시험하며, hololive-api runtime fixture(internal/config/configtest/testdata)와는 따로 바뀐다.
+func SharedTestProfileFixture(t *testing.T) string {
 	t.Helper()
 
 	_, file, _, ok := runtime.Caller(0)
@@ -32,24 +52,18 @@ func ProfileFixture(t *testing.T, name string) string {
 		t.Fatal("resolve settingstest source path")
 	}
 
-	return filepath.Join(filepath.Dir(file), "testdata", name)
+	return filepath.Join(filepath.Dir(file), "testdata", "shared-test-worker-profile.json")
 }
 
-func UseProfileFixture(t *testing.T, name string) {
-	t.Helper()
-	t.Setenv(workercontract.ProfileFileEnv, ProfileFixture(t, name))
-}
-
-// LoadProfileFixture: fixture를 호출 서비스가 소유한 identity로 읽는다. 둘이 어긋나면 로드가 실패한다.
-func LoadProfileFixture(t *testing.T, identity workercontract.Identity, name string) workercontract.LoadedProfile {
+func absFixturePath(t *testing.T, path string) string {
 	t.Helper()
 
-	loaded, err := workercontract.LoadProfileFile(ProfileFixture(t, name), identity)
+	abs, err := filepath.Abs(path)
 	if err != nil {
-		t.Fatalf("load worker profile fixture: %v", err)
+		t.Fatalf("resolve worker profile fixture %q: %v", path, err)
 	}
 
-	return loaded
+	return abs
 }
 
 func UnsetEnv(t *testing.T, key string) {

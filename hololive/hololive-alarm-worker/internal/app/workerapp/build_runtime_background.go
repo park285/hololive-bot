@@ -46,12 +46,11 @@ func buildCelebrationRunnerScheduler(
 
 	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
 	alarmRepo := alarmstore.NewRepository(infra.Postgres, logger)
-	publisher := queue.NewPublisher(
-		infra.Cache,
-		logger,
-		queue.WithOutbox(foundation.Outbox),
-		queue.WithPublishConfig(publishConfig),
-	)
+
+	publisher, err := queue.NewPublisher(infra.Cache, foundation.Outbox, publishConfig, logger)
+	if err != nil {
+		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build celebration publisher: %w", err)}
+	}
 
 	return optionalRuntimeSchedulerResult{scheduler: celebration.NewRunner(memberRepo, alarmRepo, publisher, logger, config)}
 }
@@ -100,12 +99,11 @@ func buildBirthdayStreamRunnerScheduler(
 	}
 
 	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
-	publisher := queue.NewPublisher(
-		infra.Cache,
-		logger,
-		queue.WithOutbox(foundation.Outbox),
-		queue.WithPublishConfig(publishConfig),
-	)
+
+	publisher, err := queue.NewPublisher(infra.Cache, foundation.Outbox, publishConfig, logger)
+	if err != nil {
+		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build birthday stream publisher: %w", err)}
+	}
 
 	return optionalRuntimeSchedulerResult{scheduler: celebration.NewBirthdayStreamRunner(
 		memberRepo,

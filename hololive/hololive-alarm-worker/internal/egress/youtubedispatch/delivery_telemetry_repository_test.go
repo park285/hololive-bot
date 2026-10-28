@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	telemetry "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type deliveryTelemetryTestOutboxModel struct {
@@ -31,46 +31,6 @@ type deliveryTelemetryTestOutboxModel struct {
 
 func (deliveryTelemetryTestOutboxModel) TableName() string {
 	return testTableOutbox
-}
-
-type deliveryTelemetryOutboxSpec struct {
-	kind         domain.OutboxKind
-	channelID    string
-	contentID    string
-	payload      string
-	status       domain.OutboxStatus
-	attemptCount int
-	createdAt    time.Time
-}
-
-func seedDeliveryTelemetryOutboxes(
-	t *testing.T,
-	db *pgxpool.Pool,
-	nextAttemptAt time.Time,
-	specs []deliveryTelemetryOutboxSpec,
-) []deliveryTelemetryTestOutboxModel {
-	t.Helper()
-
-	rows := make([]deliveryTelemetryTestOutboxModel, 0, len(specs))
-
-	for _, spec := range specs {
-		row := deliveryTelemetryTestOutboxModel{
-			Kind:          string(spec.kind),
-			ChannelID:     spec.channelID,
-			ContentID:     spec.contentID,
-			Payload:       spec.payload,
-			Status:        string(spec.status),
-			AttemptCount:  spec.attemptCount,
-			NextAttemptAt: nextAttemptAt,
-			CreatedAt:     spec.createdAt,
-		}
-
-		require.NoError(t, insertDeliveryTestRows(db, &row).Error)
-
-		rows = append(rows, row)
-	}
-
-	return rows
 }
 
 type deliveryTelemetryTestDeliveryModel struct {

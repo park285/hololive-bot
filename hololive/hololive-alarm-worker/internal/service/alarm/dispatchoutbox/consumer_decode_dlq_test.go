@@ -14,7 +14,7 @@ import (
 // DLQ 전이가 fence에 막혀 배치 반환과 재claim이 반복된다.
 func TestConsumerDrainMovesUndecodableRetriedRowToDLQ(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 
 	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("decode-dlq-room", "decode-dlq")}})

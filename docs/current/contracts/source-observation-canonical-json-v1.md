@@ -60,11 +60,11 @@ fixture의 `cases`는 input, expected canonical UTF-8 text와 lowercase SHA-256�
 |---|---|---|
 | Collector core | `hololive/hololive-youtube-collector/internal/runtime/collection` | SQL에 의존하지 않는 job·target snapshot·수집 입력/결과·retry 값 |
 | Collector storage | `hololive/hololive-youtube-collector/internal/runtime/{joblease,sourceobservation}` | collection lease, observation publish, checkpoint |
-| API | `hololive/hololive-api/internal/youtube/{sourceobservation,canonicalwrite}` | claim/consume, transaction 전용 canonical persist, replay·retention |
+| API | `hololive/hololive-api/internal/youtube/{sourceobservation,canonicalwrite}` | claim/consume, transaction 전용 canonical persist, retention |
 | API private reducers | `hololive/hololive-api/internal/youtube/reconcile`, `internal/youtube/community` | content/live/viewer/schedule/profile/photo와 community 처리 |
-| Worker clock regression | `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/canonical_fact_clock_test.go` | 실제 publish/consume 관측 시각과 upcoming candidate 종료·일정 변경 검증 |
+| Upcoming candidate facts | `hololive/hololive-api/internal/youtube/sourceobservation/upcoming_candidate_facts_test.go`, `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/upcoming_candidates_test.go` | consumer가 남기는 관측 시각·Premiere 사실과, 그 행을 읽는 worker 후보 종료·일정 변경 판정 |
 
-교차 DB 시험은 API·collector의 `testkit/sourceobservation`으로 실제 양 구현을 호출합니다. private fault hook을 공개하거나 runtime alias를 남기는 방식은 사용하지 않습니다. 저장소 루트에서 다음 owner 시험을 실행합니다.
+교차 DB 시험은 collector의 `testkit/sourceobservation`으로 실제 publisher를 호출하고 API consumer를 같은 module 안에서 실행합니다. alarm-worker는 consumer가 쓴 canonical 행을 SQL로 세워 자기 판정만 시험합니다. private fault hook을 공개하거나 runtime alias를 남기는 방식은 사용하지 않습니다. 저장소 루트에서 다음 owner 시험을 실행합니다.
 
 ```bash
 go test ./hololive/hololive-shared/pkg/contracts/sourceobservation \

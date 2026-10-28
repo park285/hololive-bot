@@ -123,15 +123,6 @@ func (r *InboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot
 	return snapshot, nil
 }
 
-func (r *InboxRepository) Admit(ctx context.Context, msg InboxMessage) (admitted bool, err error) {
-	result, err := r.AdmitResult(ctx, msg)
-	if err != nil {
-		return result == workercontract.AdmissionAccepted, fmt.Errorf("admit result: %w", err)
-	}
-
-	return result == workercontract.AdmissionAccepted, nil
-}
-
 func (r *InboxRepository) AdmitResult(ctx context.Context, msg InboxMessage) (result workercontract.AdmissionResult, err error) {
 	if poolErr := ensurePool(r.pool); poolErr != nil {
 		return workercontract.AdmissionFailed, poolErr
