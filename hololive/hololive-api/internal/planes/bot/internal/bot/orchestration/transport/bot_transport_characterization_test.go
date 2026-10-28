@@ -66,7 +66,7 @@ func (s *stubAcceptedSender) SendMessageAccepted(_ context.Context, _, _ string,
 	return &iris.ReplyAcceptedResponse{RequestID: "r-accepted"}, nil
 }
 
-func (s *stubAcceptedSender) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+func (s *stubAcceptedSender) SendRichText(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	out, err := s.SendMessageAccepted(ctx, room, markdown, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("send message accepted: %w", err)
@@ -94,7 +94,7 @@ func irisConflictWithCode(ctx context.Context, t *testing.T, code string) error 
 func replyLanesUnderTest() map[string]func(*stubAcceptedSender) replySendFunc {
 	return map[string]func(*stubAcceptedSender) replySendFunc{
 		"accepted": func(s *stubAcceptedSender) replySendFunc { return s.SendMessageAccepted },
-		"markdown": func(s *stubAcceptedSender) replySendFunc { return s.SendMarkdown },
+		"richtext": func(s *stubAcceptedSender) replySendFunc { return s.SendRichText },
 	}
 }
 
@@ -134,7 +134,7 @@ func sendOptionStringField(t *testing.T, box reflect.Value, name string) string 
 type stubBotClient struct {
 	acceptErr   error
 	sendErr     error
-	markdownErr error
+	richTextErr error
 	accepted    *iris.ReplyAcceptedResponse
 
 	imageErr      error
@@ -147,6 +147,7 @@ type stubBotClient struct {
 	pingResult bool
 
 	acceptCalls          int
+	richTextCalls        int
 	markdownCalls        int
 	imageCalls           int
 	multiImageCalls      int
@@ -242,17 +243,24 @@ func (c *stubBotClient) SendMultipleImages(_ context.Context, room string, image
 	return &iris.ReplyAcceptedResponse{RequestID: "r-images"}, nil
 }
 
-func (c *stubBotClient) SendMarkdown(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	c.markdownCalls++
+func (c *stubBotClient) SendRichText(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.richTextCalls++
 	c.recordSend(room, markdown, opts)
 
-	if c.markdownErr != nil {
-		return nil, c.markdownErr
+	if c.richTextErr != nil {
+		return nil, c.richTextErr
 	}
 
 	if c.accepted != nil {
 		return c.accepted, nil
 	}
+
+	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
+}
+
+func (c *stubBotClient) SendMarkdown(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.markdownCalls++
+	c.recordSend(room, markdown, opts)
 
 	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
 }
@@ -621,7 +629,7 @@ func TestCommandTransportSendMessage(t *testing.T) {
 		tr := NewCommandTransport(c, nil)
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "hi"))
 		assert.Equal(t, 1, c.acceptCalls)
-		assert.Equal(t, 0, c.markdownCalls)
+		assert.Equal(t, 0, c.richTextCalls)
 		assert.Equal(t, 0, c.statusCalls)
 		assert.Equal(t, "hi", c.lastMessage)
 	})
@@ -681,14 +689,14 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 
 	const wantRequestID = "hololive:v1:message:m-1:reply:0"
 
-	t.Run("markdown lane sends through SendMarkdown with the stable request id", func(t *testing.T) {
+	t.Run("markdown lane sends through SendRichText with the stable request id", func(t *testing.T) {
 		t.Parallel()
 
 		c := &stubBotClient{}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room-md", "**hi**"))
-		assert.Equal(t, 1, c.markdownCalls)
+		assert.Equal(t, 1, c.richTextCalls)
 		assert.Equal(t, 0, c.acceptCalls)
 		assert.Equal(t, "room-md", c.lastRoom)
 		assert.Equal(t, "**hi**", c.lastMessage)
@@ -709,7 +717,7 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 		chatCtx := WithRoomChat(inboundCtx(ctx), "MultiChat", "")
 		require.NoError(t, tr.SendMessage(chatCtx, "room-reg", "## **hi**"))
 		assert.Equal(t, 1, c.acceptCalls)
-		assert.Equal(t, 0, c.markdownCalls)
+		assert.Equal(t, 0, c.richTextCalls)
 		assert.Equal(t, "【𝗵𝗶】", c.lastMessage)
 	})
 
@@ -721,7 +729,7 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "**hi**"))
 		assert.Equal(t, 1, c.acceptCalls)
-		assert.Equal(t, 0, c.markdownCalls)
+		assert.Equal(t, 0, c.richTextCalls)
 		assert.Equal(t, "𝗵𝗶", c.lastMessage)
 
 		requestID, _ := capturedSendOptions(t, c.lastOpts)
@@ -739,26 +747,26 @@ func TestCommandTransportSendMessageMarkdownLaneAdmission(t *testing.T) {
 	t.Run("send error returns after a single markdown attempt", func(t *testing.T) {
 		t.Parallel()
 
-		c := &stubBotClient{markdownErr: errors.New("iris down")}
+		c := &stubBotClient{richTextErr: errors.New("iris down")}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
 		err := tr.SendMessage(inboundCtx(ctx), "room-x", "hi")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send message: ")
 		assert.Contains(t, err.Error(), "iris down")
-		assert.Equal(t, 1, c.markdownCalls)
+		assert.Equal(t, 1, c.richTextCalls)
 	})
 
 	t.Run("lost admission response is re-posted with the same request id", func(t *testing.T) {
 		t.Parallel()
 
-		c := &stubBotClient{markdownErr: lostAdmissionResponseError()}
+		c := &stubBotClient{richTextErr: lostAdmissionResponseError()}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
 		err := tr.SendMessage(inboundCtx(ctx), "room", "hi")
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrReplyOutcomeUnknown)
-		assert.Equal(t, replyAdmissionMaxAttempts, c.markdownCalls)
+		assert.Equal(t, replyAdmissionMaxAttempts, c.richTextCalls)
 		require.Len(t, c.optsByAttempt, replyAdmissionMaxAttempts)
 
 		first, _ := capturedSendOptions(t, c.optsByAttempt[0])
@@ -788,7 +796,7 @@ func TestCommandTransportSendMessageMarkdownLaneAdmission(t *testing.T) {
 		tr := NewCommandTransport(c, nil, nil, WithMarkdownReplies(true))
 
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "hi"))
-		assert.Equal(t, 1, c.markdownCalls)
+		assert.Equal(t, 1, c.richTextCalls)
 	})
 }
 
@@ -1141,7 +1149,7 @@ func TestCommandTransportSendError(t *testing.T) {
 	})
 }
 
-func tr(c iris.BotClient) *CommandTransport {
+func tr(c ReplyClient) *CommandTransport {
 	return NewCommandTransport(c, nil)
 }
 

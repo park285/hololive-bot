@@ -50,6 +50,7 @@ func TestMarkdownNeutralize(t *testing.T) {
 			{"italic", "__이탤릭__", "__"},
 			{"code", "```code```", "``"},
 			{"strike", "~~취소선~~", "~~"},
+			{"spoiler", "공개 ||가격|| 안내", "||"},
 			{"link", "[제목](https://example.com)", "]("},
 			{"heading", "# 제목", "# "},
 			{"entity", "Fish &amp; Chips", "&amp;"},
@@ -94,6 +95,7 @@ func TestMarkdownNeutralize_PreservesVisibleRunes(t *testing.T) {
 		"*_`~]#",
 		"별표*중간_밑줄",
 		"이모지 🎤 와 마커 **혼합**",
+		"공개 ||가격|| 안내 | 단일 파이프",
 	}
 
 	for _, in := range inputs {
@@ -125,7 +127,7 @@ func TestMarkdownNeutralize_NoConsecutiveZeroWidth(t *testing.T) {
 func TestMarkdownNeutralize_Idempotent(t *testing.T) {
 	t.Parallel()
 
-	in := "**굵게** [제목](https://example.com) ~~취소선~~ # 헤딩"
+	in := "**굵게** [제목](https://example.com) ~~취소선~~ ||리터럴|| # 헤딩"
 	once := MarkdownNeutralize(in)
 
 	if twice := MarkdownNeutralize(once); twice != once {

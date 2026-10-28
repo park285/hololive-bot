@@ -131,6 +131,10 @@ func (*seeMoreFoldIrisClient) SendMarkdown(context.Context, string, string, ...i
 	return nil, errors.New("markdown lane is not configured")
 }
 
+func (*seeMoreFoldIrisClient) SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, errors.New("richtext lane is not configured")
+}
+
 func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]string) (*template.Renderer, *messagestrings.Store) {
 	t.Helper()
 

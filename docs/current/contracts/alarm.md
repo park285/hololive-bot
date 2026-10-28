@@ -6,7 +6,7 @@ Alarm domain currently has HTTP JSON APIs, the PostgreSQL alarm dispatch outbox,
 
 관리 통계는 인증된 `GET /internal/alarm/count`로 `{"success":true,"data":{"count":3}}`를 받는다. `count`는 `/keys` 목록과 같은 서로 다른 `(room_id, channel_id)` 쌍의 개수이며 host 구독 중복은 한 번만 센다. 누락·null·음수 count는 client가 오류로 거절한다. 이 조회는 이름 캐시와 전체 목록 직렬화를 거치지 않는다. 기존 `/keys`는 관리 목록용으로 유지한다. 새 API를 배포하기 전에 worker의 count route를 먼저 활성화한다.
 
-Generic notification과 YouTube dispatcher는 `PreparedMessageSender`만 받는다. 저장한 본문·text/markdown 경로·client request ID를 그대로 전송하며 일반 SendMessage나 ID만 받는 sender로 내려가지 않는다. 결과 불명 증거는 결합된 확정 실패보다 우선하고 알려진 실패 저장 전이를 만들지 않는다. 2026-10-06 중앙 읽기 전용 확인에서 YouTube 저장 요청 40건은 모두 text였으며 generic outbox는 비어 있었다. 과거 요청 증거가 없는 행의 격리와 send-unit 없는 종단 행 조회는 유지한다.
+Generic notification과 YouTube dispatcher는 `PreparedMessageSender`만 받는다. 새 요청은 최종 본문·text/richtext 경로·client request ID를 고정하며 기존 markdown 요청은 저장된 타입 그대로 재생한다. 일반 SendMessage나 ID만 받는 sender로 내려가지 않는다. 결과 불명 증거는 결합된 확정 실패보다 우선하고 알려진 실패 저장 전이를 만들지 않는다. 2026-10-06 중앙 읽기 전용 확인에서 YouTube 저장 요청 40건은 모두 text였으며 generic outbox는 비어 있었다. 과거 요청 증거가 없는 행의 격리와 send-unit 없는 종단 행 조회는 유지한다.
 
 X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한다. 기존 `LIVE` 구독을 사용하되 YouTube stream payload와 섞지 않는다. 이벤트 키는 `x-space:start:<space-id>`, delivery는 기존 방별 키이며 최초 관측 스냅샷을 사용해 제목 변경에 따른 payload 충돌을 막는다. 발송은 기존 텍스트 egress와 receipt·미상 결과 계약을 따른다. [인증·관측·보존 경계](../services/x-spaces.md).
 
@@ -59,7 +59,11 @@ Gateway는 운영자 ID를 인증 세션에서 결합합니다. `dlq`·`quaranti
 운영자·사유·변경 전후 상태를 남깁니다. 결과 불명은 상세·감사 재조회로 확인합니다.
 기존 보존 기간은 유지하며 별도 DB migration은 필요하지 않습니다.
 
-### Iris Markdown admission
+### Iris RichText 및 기존 Markdown admission
+
+새 Markdown 발송은 `richtext`로 고정하며, 기존 frozen `markdown`만 기존 SDK 경로로 재생합니다.
+아래 Markdown admission·handoff 규칙은 두 서식 타입에 동일하게 적용됩니다. writer 전에 migration
+`345`·`346`으로 저장 경로 제약을 확장해야 하며 기존 행의 본문·타입·ID는 변경하지 않습니다.
 
 공유 sender는 Markdown·텍스트 모두 Iris `202`가 durable admission을 증명하면 바로 반환하며 `/reply-status`를 조회하지
 않습니다. 따라서 sender 성공(`sendoutcome.Success`)은 durable admission만 뜻하고, 돌려준 Iris request ID가 이후
@@ -75,8 +79,8 @@ Alarm-worker does not send Karing templates
 (`DEC-20260926-hololive-karing-egress-disposition`, superseding
 `DEC-20260904-hololive-karing-regular-chat-egress`). The Karing chunk planner,
 per-chunk request IDs, and the `karing.kakaolink` contract were removed with it.
-Alarm dispatch pins each send unit's final body, text/markdown route, membership,
-base ID and generation before `BeginSending`. Retries and restarts reuse that request.
+Alarm dispatch는 `BeginSending` 전에 최종 본문·text/richtext 경로·멤버·base ID·generation을 고정합니다.
+이미 저장된 markdown을 포함해 재시도와 재시작은 고정 요청을 그대로 재사용합니다.
 Transport ambiguity may retry with the stored ID and identical request for every
 source kind; structured `OUTCOME_UNKNOWN` and unknown handoff remain quarantined.
 Only confirmed pre-handoff `CLIENT_REQUEST_ID_FAILED` or a reconciled `failed` reply status (see below) permits

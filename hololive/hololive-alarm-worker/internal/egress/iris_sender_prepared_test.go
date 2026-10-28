@@ -16,14 +16,15 @@ func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing
 	first := NewIrisMessageSender(client, WithMarkdownReplies(true), WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
 	body, route, err := first.PrepareMessageRequest(t.Context(), testIrisSenderRoomID, "**fixed**")
 	require.NoError(t, err)
+	require.Equal(t, "richtext", route)
 
 	restarted := NewIrisMessageSender(client)
 
 	_, err = restarted.SendPreparedMessage(t.Context(), testIrisSenderRoomID, body, route, preparedTestRequestID)
 	require.NoError(t, err)
 	require.Empty(t, client.textCalls)
-	require.Len(t, client.markdownCalls, 1)
-	require.Equal(t, "**fixed**", client.markdownCalls[0].message)
+	require.Len(t, client.richTextCalls, 1)
+	require.Equal(t, "**fixed**", client.richTextCalls[0].message)
 
 	plain, plainRoute, err := restarted.PrepareMessageRequest(t.Context(), testIrisSenderRoomID, "**fixed**")
 	require.NoError(t, err)
@@ -32,17 +33,18 @@ func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing
 	require.NoError(t, err)
 	require.Len(t, client.textCalls, 1)
 	require.Equal(t, plain, client.textCalls[0].message)
+	require.Empty(t, client.markdownCalls)
 }
 
-// 두 경로 모두 202가 증명한 Iris requestId를 handoff 결과와 무관하게 바로 돌려준다. 이 값이 reconciler의 handoff
+// 모든 경로는 202가 증명한 Iris requestId를 handoff 결과와 무관하게 바로 돌려준다. 이 값이 reconciler의 handoff
 // 확인 대상이다.
-func TestPreparedMessageReturnsAdmittedRequestIDOnBothLanes(t *testing.T) {
-	for _, route := range []string{"text", "markdown"} {
+func TestPreparedMessageReturnsAdmittedRequestIDOnAllRoutes(t *testing.T) {
+	for _, route := range []string{"text", "richtext", "markdown"} {
 		t.Run(route, func(t *testing.T) {
 			accepted := &iris.ReplyAcceptedResponse{Success: true, Delivery: " QUEUED ", RequestID: " iris-" + route + " "}
 			client := &irisSenderTestClient{
 				textAccepted: accepted, textAcceptedSet: true,
-				markdownAccepted: accepted, markdownAcceptedSet: true,
+				richTextAccepted: accepted, richTextAcceptedSet: true,
 			}
 
 			requestID, err := NewIrisMessageSender(client).SendPreparedMessage(t.Context(), testIrisSenderRoomID, "body", route, preparedTestRequestID)
@@ -52,20 +54,23 @@ func TestPreparedMessageReturnsAdmittedRequestIDOnBothLanes(t *testing.T) {
 	}
 }
 
-// Markdown 202가 durable admission(성공·queued·requestId)을 증명하지 못하면 성공으로 보고하지 않고 결과 불명이다.
-func TestPreparedMarkdownMalformedAdmissionIsOutcomeUnknown(t *testing.T) {
-	for _, accepted := range []*iris.ReplyAcceptedResponse{
-		nil,
-		{Success: false, Delivery: irisSenderQueued, RequestID: "request"},
-		{Success: true, Delivery: "async", RequestID: "request"},
-		{Success: true, Delivery: irisSenderQueued, RequestID: "  "},
-	} {
-		client := &irisSenderTestClient{markdownAccepted: accepted, markdownAcceptedSet: true}
-
-		requestID, err := NewIrisMessageSender(client).SendPreparedMessage(t.Context(), testIrisSenderRoomID, "body", "markdown", preparedTestRequestID)
-		require.ErrorIs(t, err, sendoutcome.ErrAdmissionOutcomeUnknown, "%+v", accepted)
-		require.Empty(t, requestID)
-		require.Len(t, client.markdownCalls, 1)
+// 새 RichText와 기존 Markdown 모두 202가 durable admission을 증명하지 못하면 결과 불명이다.
+func TestPreparedFormattedMalformedAdmissionIsOutcomeUnknown(t *testing.T) {
+	for _, route := range []string{"richtext", "markdown"} {
+		t.Run(route, func(t *testing.T) {
+			for _, accepted := range []*iris.ReplyAcceptedResponse{
+				nil,
+				{Success: false, Delivery: irisSenderQueued, RequestID: "request"},
+				{Success: true, Delivery: "async", RequestID: "request"},
+				{Success: true, Delivery: irisSenderQueued, RequestID: "  "},
+			} {
+				client := &irisSenderTestClient{richTextAccepted: accepted, richTextAcceptedSet: true}
+				requestID, err := NewIrisMessageSender(client).SendPreparedMessage(t.Context(), testIrisSenderRoomID, "body", route, preparedTestRequestID)
+				require.ErrorIs(t, err, sendoutcome.ErrAdmissionOutcomeUnknown, "%+v", accepted)
+				require.Empty(t, requestID)
+				require.Equal(t, 1, len(client.richTextCalls)+len(client.markdownCalls))
+			}
+		})
 	}
 }
 
@@ -95,6 +100,40 @@ func TestPreparedTextAdmissionRequiresOnlyRequestID(t *testing.T) {
 
 			require.Equal(t, tc.want, requestID)
 			require.Len(t, client.textCalls, 1)
+		})
+	}
+}
+
+func TestPreparedLegacyRequestsDoNotUseCurrentRichTextRoute(t *testing.T) {
+	for _, route := range []string{"markdown", "text"} {
+		t.Run(route, func(t *testing.T) {
+			client := &irisSenderTestClient{}
+			sender := NewIrisMessageSender(client, WithMarkdownReplies(true), WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
+
+			const body = "**원문** [제목](https://example.com/a_b) @사용자_이름"
+
+			for range 2 {
+				_, err := sender.SendPreparedMessage(t.Context(), testIrisSenderRoomID, body, route, preparedTestRequestID)
+				require.NoError(t, err)
+			}
+
+			require.Empty(t, client.richTextCalls)
+
+			calls := client.textCalls
+
+			if route == "markdown" {
+				calls = client.markdownCalls
+				require.Empty(t, client.textCalls)
+			} else {
+				require.Empty(t, client.markdownCalls)
+			}
+
+			require.Len(t, calls, 2)
+
+			for _, call := range calls {
+				require.Equal(t, body, call.message)
+				require.Equal(t, testIrisSenderRoomID, call.roomID)
+			}
 		})
 	}
 }

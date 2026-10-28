@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-dbtest v0.0.0
-	github.com/park285/iris-client-go/v3 v3.2.0
+	github.com/park285/iris-client-go/v3 v3.3.0
 	github.com/park285/shared-go/v2 v2.17.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.64.1

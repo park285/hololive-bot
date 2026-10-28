@@ -16,13 +16,13 @@ func (s *IrisMessageSender) PrepareMessageRequest(ctx context.Context, roomID, m
 	}
 
 	if s.useMarkdown(ctx, roomID) {
-		return message, "markdown", nil
+		return message, "richtext", nil
 	}
 
 	return kakaoformat.Render(message), "text", nil
 }
 
-// SendPreparedMessage는 저장된 요청을 재해석하지 않아 설정 변경 뒤에도 같은 ID의 payload를 보존한다. 두 경로 모두
+// SendPreparedMessage는 저장된 요청을 재해석하지 않아 설정 변경 뒤에도 같은 ID의 payload를 보존한다. 모든 경로는
 // 202가 durable admission을 증명하면 handoff를 기다리지 않고 그 Iris requestId를 바로 돌려주며, 이 성공은 durable
 // admission만 뜻한다. 증명하지 못하면 결과 불명 오류다. 각 원장의 handoff reconciler가 handoff 결과를 확인한다.
 func (s *IrisMessageSender) SendPreparedMessage(ctx context.Context, roomID, body, route, clientRequestID string) (string, error) {
@@ -35,8 +35,8 @@ func (s *IrisMessageSender) SendPreparedMessage(ctx context.Context, roomID, bod
 	}
 
 	switch route {
-	case "markdown":
-		return s.sendMarkdown(ctx, roomID, body, iris.WithClientRequestID(clientRequestID))
+	case "richtext", "markdown":
+		return s.sendFormatted(ctx, roomID, body, route, iris.WithClientRequestID(clientRequestID))
 	case "text":
 		requestID, err := s.sendText(ctx, roomID, body, iris.WithClientRequestID(clientRequestID))
 		if err != nil {

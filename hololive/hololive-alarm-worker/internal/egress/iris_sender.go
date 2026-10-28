@@ -10,11 +10,12 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
-// IrisClient는 alarm-worker가 알림 admission에 사용하는 Iris 계약입니다. 텍스트와 Markdown 모두 202 응답의
+// IrisClient는 alarm-worker가 알림 admission에 사용하는 Iris 계약입니다. 텍스트와 RichText 모두 202 응답의
 // requestId를 받고, handoff 확인은 이 계약이 아니라 각 원장의 handoff reconciler가 맡습니다. Karing template은
 // 보내지 않습니다.
 type IrisClient interface {
 	SendMessageAccepted(ctx context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+	SendRichText(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendMarkdown(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 }
 
@@ -23,7 +24,7 @@ type OpenChat interface {
 	OpenChat(ctx context.Context, roomID string) bool
 }
 
-// IrisMessageSender는 방 유형별 message를 Iris로 전송합니다. 오픈채팅은 BOT_MARKDOWN_REPLIES에 따라 Markdown,
+// IrisMessageSender는 방 유형별 message를 Iris로 전송합니다. 오픈채팅은 BOT_MARKDOWN_REPLIES에 따라 RichText,
 // 그 밖의 방은 일반 텍스트 경로를 씁니다.
 type IrisMessageSender struct {
 	client          IrisClient
@@ -81,21 +82,29 @@ func (s *IrisMessageSender) sendText(ctx context.Context, roomID, message string
 	return requestID, nil
 }
 
-// sendMarkdown은 Markdown 202가 성공·queued·requestId를 모두 갖추면 handoff를 기다리지 않고 그 requestId를
+// sendFormatted는 서식 응답의 202가 성공·queued·requestId를 모두 갖추면 handoff를 기다리지 않고 그 requestId를
 // 돌려준다.
-func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
-	accepted, err := s.client.SendMarkdown(ctx, roomID, message, opts...)
+func (s *IrisMessageSender) sendFormatted(ctx context.Context, roomID, message, route string, opts ...iris.SendOption) (string, error) {
+	send := s.client.SendRichText
+
+	if route == "markdown" {
+		// alarm/notificationdelivery/youtubedispatch 원장이 소유하는 기존 markdown 요청은
+		// 같은 ID의 body·semantic hash를 유지한다. 기존 행이 모두 drain된 뒤에만 제거한다.
+		send = s.client.SendMarkdown
+	}
+
+	accepted, err := send(ctx, roomID, message, opts...)
 	if err != nil {
 		return "", fmt.Errorf("iris send message: %w", err)
 	}
 
 	if accepted == nil {
-		return "", fmt.Errorf("%w: markdown admission response is empty", sendoutcome.ErrAdmissionOutcomeUnknown)
+		return "", fmt.Errorf("%w: %s admission response is empty", sendoutcome.ErrAdmissionOutcomeUnknown, route)
 	}
 
 	requestID, err := acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
 	if err != nil {
-		return "", fmt.Errorf("validate iris markdown admission: %w", err)
+		return "", fmt.Errorf("validate iris %s admission: %w", route, err)
 	}
 
 	return requestID, nil

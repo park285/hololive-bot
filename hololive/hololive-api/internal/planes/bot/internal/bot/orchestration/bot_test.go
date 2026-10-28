@@ -64,6 +64,10 @@ func (f *fakeIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.
 	return &iris.ReplyAcceptedResponse{}, nil
 }
 
+func (f *fakeIrisClient) SendRichText(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return &iris.ReplyAcceptedResponse{}, nil
+}
+
 func (f *fakeIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
 	return &iris.ReplyStatusSnapshot{}, nil
 }

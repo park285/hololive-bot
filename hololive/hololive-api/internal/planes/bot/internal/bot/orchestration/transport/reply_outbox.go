@@ -36,6 +36,7 @@ type StoredReplyKind string
 
 const (
 	StoredReplyKindText     StoredReplyKind = "text"
+	StoredReplyKindRichText StoredReplyKind = "richtext"
 	StoredReplyKindMarkdown StoredReplyKind = "markdown"
 	StoredReplyKindImage    StoredReplyKind = "image"
 	StoredReplyKindImages   StoredReplyKind = "images"
@@ -57,7 +58,7 @@ type ReplyOutboxEntry struct {
 
 // DispatchStoredReply는 저장된 응답을 Iris에 보내고 durable admission이 증명한 Iris requestId를 돌려준다.
 // Handoff 결과는 기다리지 않는다. 그 확인은 outbox의 accepted 행을 읽는 reconciler가 맡는다.
-func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string, payload []byte, clientRequestID string) (string, error) {
+func DispatchStoredReply(ctx context.Context, client ReplyClient, room string, payload []byte, clientRequestID string) (string, error) {
 	if client == nil {
 		return "", errors.New("dispatch stored reply: iris client is nil")
 	}
@@ -114,12 +115,17 @@ func acceptedReplyRequestID(accepted *iris.ReplyAcceptedResponse) (string, error
 	return requestID, nil
 }
 
-func postStoredReply(ctx context.Context, client iris.BotClient, room string, reply *StoredReply, opts []iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+func postStoredReply(ctx context.Context, client ReplyClient, room string, reply *StoredReply, opts []iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	if reply == nil {
 		return nil, fmt.Errorf("%w: reply is nil", ErrStoredReplyInvalid)
 	}
 
 	senders := map[StoredReplyKind]func() (*iris.ReplyAcceptedResponse, error){
+		StoredReplyKindRichText: func() (*iris.ReplyAcceptedResponse, error) {
+			return client.SendRichText(ctx, room, reply.Message, opts...)
+		},
+		// bot reply outbox가 소유하는 기존 markdown 행은 같은 ID의 body·semantic hash를 보존한다.
+		// 기존 행이 모두 drain된 뒤에만 이 읽기 경로를 제거하며 richtext로 재해석하지 않는다.
 		StoredReplyKindMarkdown: func() (*iris.ReplyAcceptedResponse, error) {
 			return client.SendMarkdown(ctx, room, reply.Message, opts...)
 		},

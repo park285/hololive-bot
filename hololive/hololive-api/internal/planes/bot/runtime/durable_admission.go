@@ -137,13 +137,18 @@ func (w durableReplyWriter) RecordReply(ctx context.Context, entry *transport.Re
 	return nil
 }
 
+type durableIrisClient interface {
+	transport.ReplyClient
+	GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error)
+}
+
 type durableRuntime struct {
 	inbox                  *durability.InboxRepository
 	commands               *durability.CommandExecutionRepository
 	outbox                 *durability.ReplyOutboxRepository
 	ledger                 *durability.DurableLedgerRepository
 	bot                    durableMessageProcessor
-	irisClient             iris.BotClient
+	irisClient             durableIrisClient
 	logger                 *slog.Logger
 	inboxWorkers           int
 	outboxWorkers          int
@@ -196,7 +201,7 @@ type durableMessageProcessor interface {
 	ProcessMessage(context.Context, *webhook.Message) error
 }
 
-func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
+func newDurableRuntime(bot *orchestration.Bot, client durableIrisClient, pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
 	if profile == nil {
 		return nil, errors.New("build durable runtime: API worker profile is required")
 	}

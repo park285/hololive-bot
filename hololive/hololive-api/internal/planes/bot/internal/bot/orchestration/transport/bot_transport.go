@@ -43,8 +43,17 @@ type (
 	replyAdmissionFunc func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 )
 
+// ReplyClient는 bot 응답 발송에 필요한 로컬 계약이다. SDK의 공개 BotClient는 확장하지 않는다.
+type ReplyClient interface {
+	SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+	SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+	SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+	SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+	SendMultipleImages(context.Context, string, [][]byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+}
+
 type CommandTransport struct {
-	irisClient      iris.BotClient
+	irisClient      ReplyClient
 	formatter       *messageformatter.ResponseFormatter
 	markdownReplies bool
 	rooms           RoomChat
@@ -65,7 +74,7 @@ func WithRoomChatLookup(rooms RoomChat) Option {
 	}
 }
 
-func NewCommandTransport(irisClient iris.BotClient, formatter *messageformatter.ResponseFormatter, opts ...Option) *CommandTransport {
+func NewCommandTransport(irisClient ReplyClient, formatter *messageformatter.ResponseFormatter, opts ...Option) *CommandTransport {
 	t := &CommandTransport{
 		irisClient: irisClient,
 		formatter:  formatter,
@@ -121,7 +130,7 @@ func (t *CommandTransport) recordTextReply(
 	kind := StoredReplyKindText
 
 	if useMarkdown {
-		kind = StoredReplyKindMarkdown
+		kind = StoredReplyKindRichText
 	}
 
 	threadID, _ := ThreadIDFromContext(ctx)
@@ -136,7 +145,7 @@ func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clien
 	send := t.irisClient.SendMessageAccepted
 
 	if useMarkdown {
-		send = t.irisClient.SendMarkdown
+		send = t.irisClient.SendRichText
 	}
 
 	if err := sendReply(ctx, send, room, message, clientRequestID, opts); err != nil {

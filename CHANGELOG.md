@@ -8,6 +8,11 @@
 
 ## 미출시
 
+## v12.4.0 - 2026-10-28
+
+- **동적 제목의 스포일러 해석 방지:** 공통 `MarkdownNeutralize`가 파이프에도 기존 단발 ZWSP 보호를 적용합니다. 영상·방송·출처 메타데이터의 `||`는 가시 문자를 보존하며 숨김 범위가 되지 않고, 템플릿과 답변의 의도된 서식은 유지됩니다.
+- **새 Markdown 발송을 RichText로 전환:** bot 및 alarm/notification/YouTube의 새 Markdown 요청은 `SendRichText`와 durable `richtext` kind/route를 사용합니다. `BOT_MARKDOWN_REPLIES`, 기존 방별 선택과 텍스트 경로, 본문·thread·request ID, admission/handoff 정산은 유지합니다. 기존 frozen `markdown`·`text`는 같은 타입으로 재생하며 실패 시 형식을 바꾸지 않습니다. SDK와 보안 workflow checkout은 검증된 `iris-client-go v3.3.0`에 고정합니다.
+- **RichText 저장 경로 허용:** migration `345`·`346`은 alarm send unit·YouTube 고정 요청의 CHECK에 `richtext`를 추가하고 기존 행은 수정하지 않습니다. writer 배포 전에 두 migration을 적용해야 하며 새 RichText 요청을 저장한 뒤에는 이를 모르는 구형 writer로 롤백하지 않습니다. disposable PostgreSQL migration·재생 검사와 bot/worker 실제 SDK HTTP 발송 검증을 통과했습니다. 운영 적용은 검증된 API/alarm 이미지와 기존 worker profile을 같은 배포 창에서 교체합니다.
 - **PostgreSQL 실행 계획 로그와 버퍼·인덱스 진단:** 중앙 `holo-postgres`가 `auto_explain`을 preload하여 1초 이상 걸린 문장의 계획을 PostgreSQL 로그(Loki)에 남깁니다. 보존 함수 안의 문장도 포함하며, 실제 행 수와 버퍼는 기록하고 노드별 시간 계측과 바인드 값은 남기지 않습니다. 같은 활성화 SQL이 `pg_buffercache` 1.6과 `amcheck` 1.5를 `hololive_observability` 스키마에 만듭니다. 버퍼 조회는 `pg_monitor`가, evict 함수와 amcheck 검사는 관리자만 실행할 수 있습니다. 2026-10-27 서울 primary에 적용했고 preload 키는 `HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES`가 계속 소유합니다. 절차와 복구는 [PostgreSQL observability runbook](docs/current/runbooks/postgres-observability.md)에 있습니다.
 - **collector 후보 조회 계획 재사용:** 후보 조회(`repository_candidates_0144_02.sql`)는 runner마다 1초 주기로 실행되며, 운영에서는 하루 약 200만 회입니다. 이 조회는 custom plan 추정 비용이 항상 더 낮아 호출할 때마다 계획을 다시 세웠습니다(운영 계획 0.5~0.7ms, 실행 0.6ms, pg_stat_kcache 실행 CPU 1위). migration 342는 `youtube_collection_targets (projection_generation, observation_kind, subject_key)` 인덱스를 `CONCURRENTLY`로 만듭니다. 343은 기존 본문을 의미 그대로 옮긴 `youtube_collection_job_candidates()` SQL 함수를 만들고, 함수 안에서 generic plan을 고정합니다. 그래서 PG 18의 SQL 함수 plan cache가 세션마다 계획을 한 번만 세웁니다. 후보 판정·순서와 wire 바이트는 같습니다. 343은 PUBLIC의 실행 권한을 회수하고 `hololive_scraper`에 EXECUTE를 줍니다. `hololive_runtime`은 다른 migrator 함수와 마찬가지로 기존 default privileges에 따라 EXECUTE를 갖습니다.
   - 운영 통계를 복원한 로컬 PG 18 측정에서 내부 문장은 6,002회 호출 중 3회만 계획했습니다. 호출당 시간은 848~857µs에서 470~474µs로 줄었습니다.

@@ -75,6 +75,7 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 		"hololive/hololive-api/scripts/migrations/248_alarm_dispatch_immutable_request.sql",
 		"hololive/hololive-api/scripts/migrations/329_alarm_send_unit_handoff_check.sql",
 		"hololive/hololive-api/scripts/migrations/337_alarm_send_unit_handoff_due_index.sql",
+		"hololive/hololive-api/scripts/migrations/345_alarm_richtext_immutable_request.sql",
 	} {
 		sql := readRepoMigration(t, migration)
 		if _, err := pool.Exec(ctx, sql); err != nil {

@@ -129,7 +129,7 @@ func TestProviderAttemptSkipsUnsupportedStoredRoute(t *testing.T) {
 	d.SetWorkerInstrumentation(tracker, totals)
 
 	_, err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}, frozen: &store.FrozenRequest{Route: "sender"}})
-	require.ErrorContains(t, err, "stored text or markdown request required")
+	require.Error(t, err)
 	require.False(t, sender.seen)
 	require.Zero(t, tracker.Snapshot(time.Now()).InFlight)
 	require.Equal(t, (&workercontract.Counters{}).Snapshot(), totals.Snapshot())

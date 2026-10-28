@@ -37,6 +37,7 @@ import (
 // ManagedIrisClient는 Hololive runtime이 room 조회와 종료까지 소유하는 Iris 계약입니다.
 type ManagedIrisClient interface {
 	irisclient.BotClient
+	SendRichText(ctx context.Context, room, markdown string, opts ...irisclient.SendOption) (*irisclient.ReplyAcceptedResponse, error)
 	GetRooms(ctx context.Context) (*irisclient.RoomListResponse, error)
 	Close() error
 }

@@ -74,7 +74,7 @@ type testIrisClient struct {
 	lastImageRoom   string
 	lastImage       []byte
 	lastMultiImages [][]byte
-	markdownCalls   int
+	richTextCalls   int
 }
 
 type sentMessage struct {
@@ -142,17 +142,21 @@ func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, imag
 	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-test", Delivery: testDeliveryQueued, Room: room, Type: "image_multiple"}, nil
 }
 
-func (c *testIrisClient) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+func (c *testIrisClient) SendRichText(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.mu.Lock()
 
-	c.markdownCalls++
+	c.richTextCalls++
 	c.mu.Unlock()
 
 	if err := c.SendMessage(ctx, room, markdown, opts...); err != nil {
 		return nil, fmt.Errorf("send message: %w", err)
 	}
 
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-markdown", Delivery: testDeliveryQueued, Room: room, Type: "markdown"}, nil
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-richtext", Delivery: testDeliveryQueued, Room: room, Type: "richtext"}, nil
+}
+
+func (c *testIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, errors.New("unexpected legacy markdown send")
 }
 
 func (c *testIrisClient) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
@@ -328,14 +332,14 @@ func TestCommandTransportSendMessageMethods(t *testing.T) {
 		assert.Contains(t, err.Error(), "send message: ")
 	})
 
-	t.Run("markdown replies option routes through SendMarkdown", func(t *testing.T) {
+	t.Run("markdown replies option routes through SendRichText", func(t *testing.T) {
 		t.Parallel()
 
 		client := &acceptedTestIrisClient{}
 		transport := bottransport.NewCommandTransport(client, nil, bottransport.WithMarkdownReplies(true))
 
 		require.NoError(t, transport.SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
-		assert.Equal(t, 1, client.markdownCalls)
+		assert.Equal(t, 1, client.richTextCalls)
 		assert.Equal(t, 0, client.acceptedCalls)
 		assert.Equal(t, "hello", client.lastMessage)
 	})
@@ -433,7 +437,7 @@ func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
 		}
 
 		require.NoError(t, b.ensureTransport().SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
-		assert.Equal(t, 1, client.markdownCalls)
+		assert.Equal(t, 1, client.richTextCalls)
 		assert.Equal(t, 0, client.acceptedCalls)
 	})
 
@@ -448,7 +452,7 @@ func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
 		}
 
 		require.NoError(t, b.ensureTransport().SendMessage(ctx, "room", "hello"))
-		assert.Equal(t, 0, client.markdownCalls)
+		assert.Equal(t, 0, client.richTextCalls)
 		assert.Equal(t, 1, client.acceptedCalls)
 	})
 }

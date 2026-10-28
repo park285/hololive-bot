@@ -50,7 +50,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: 6f0f070b42d9983993a1bb54296668733f4a7003 # v3.2.0, verified release provenance
+          ref: 644d76448f5f7868829781580b2bcc262a407e50 # v3.3.0, 검증된 릴리스 provenance
           path: iris-client-go
           persist-credentials: false
 

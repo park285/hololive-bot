@@ -24,12 +24,13 @@ type irisSenderTestCall struct {
 
 type irisSenderTestClient struct {
 	textCalls           []irisSenderTestCall
+	richTextCalls       []irisSenderTestCall
 	markdownCalls       []irisSenderTestCall
 	textAccepted        *iris.ReplyAcceptedResponse
 	textAcceptedSet     bool
-	markdownErr         error
-	markdownAccepted    *iris.ReplyAcceptedResponse
-	markdownAcceptedSet bool
+	richTextErr         error
+	richTextAccepted    *iris.ReplyAcceptedResponse
+	richTextAcceptedSet bool
 }
 
 func (c *irisSenderTestClient) SendMessageAccepted(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -41,14 +42,23 @@ func (c *irisSenderTestClient) SendMessageAccepted(_ context.Context, roomID, me
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: irisSenderQueued, RequestID: "text-request-1"}, nil
 }
 
-func (c *irisSenderTestClient) SendMarkdown(_ context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	c.markdownCalls = append(c.markdownCalls, irisSenderTestCall{roomID: roomID, message: markdown, opts: len(opts)})
-	if c.markdownErr != nil {
-		return nil, c.markdownErr
+func (c *irisSenderTestClient) SendRichText(_ context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.richTextCalls = append(c.richTextCalls, irisSenderTestCall{roomID: roomID, message: markdown, opts: len(opts)})
+	if c.richTextErr != nil {
+		return nil, c.richTextErr
 	}
 
-	if c.markdownAcceptedSet {
-		return c.markdownAccepted, nil
+	if c.richTextAcceptedSet {
+		return c.richTextAccepted, nil
+	}
+
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: irisSenderQueued, RequestID: "markdown-request-1"}, nil
+}
+
+func (c *irisSenderTestClient) SendMarkdown(_ context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.markdownCalls = append(c.markdownCalls, irisSenderTestCall{roomID: roomID, message: markdown, opts: len(opts)})
+	if c.richTextAcceptedSet {
+		return c.richTextAccepted, nil
 	}
 
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: irisSenderQueued, RequestID: "markdown-request-1"}, nil
@@ -71,10 +81,10 @@ func TestIrisMessageSenderUsesMarkdownLaneForOpenChat(t *testing.T) {
 	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**"))
 
 	assert.Empty(t, client.textCalls)
-	require.Len(t, client.markdownCalls, 1)
-	assert.Equal(t, testIrisSenderRoomID, client.markdownCalls[0].roomID)
-	assert.Equal(t, "**hello**", client.markdownCalls[0].message)
-	assert.Equal(t, 1, client.markdownCalls[0].opts)
+	require.Len(t, client.richTextCalls, 1)
+	assert.Equal(t, testIrisSenderRoomID, client.richTextCalls[0].roomID)
+	assert.Equal(t, "**hello**", client.richTextCalls[0].message)
+	assert.Equal(t, 1, client.richTextCalls[0].opts)
 }
 
 func TestIrisMessageSenderRendersPlainTextForRegularChat(t *testing.T) {
@@ -87,7 +97,7 @@ func TestIrisMessageSenderRendersPlainTextForRegularChat(t *testing.T) {
 
 	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "## **hello**"))
 
-	assert.Empty(t, client.markdownCalls)
+	assert.Empty(t, client.richTextCalls)
 	require.Len(t, client.textCalls, 1)
 	assert.Equal(t, testIrisSenderRoomID, client.textCalls[0].roomID)
 	assert.Equal(t, "【𝗵𝗲𝗹𝗹𝗼】", client.textCalls[0].message)
@@ -104,7 +114,7 @@ func TestIrisMessageSenderRendersPlainTextForOpenChatWhenMarkdownDisabled(t *tes
 
 	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**"))
 
-	assert.Empty(t, client.markdownCalls)
+	assert.Empty(t, client.richTextCalls)
 	require.Len(t, client.textCalls, 1)
 	assert.Equal(t, "𝗵𝗲𝗹𝗹𝗼", client.textCalls[0].message)
 }
@@ -115,7 +125,7 @@ func TestIrisMessageSenderRendersPlainTextForUnknownRoom(t *testing.T) {
 
 	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**"))
 
-	assert.Empty(t, client.markdownCalls)
+	assert.Empty(t, client.richTextCalls)
 	require.Len(t, client.textCalls, 1)
 	assert.Equal(t, "𝗵𝗲𝗹𝗹𝗼", client.textCalls[0].message)
 }
@@ -141,12 +151,12 @@ func TestIrisMessageSenderMarkdownPropagatesClientRequestID(t *testing.T) {
 	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**", "req-1"))
 
 	assert.Empty(t, client.textCalls)
-	require.Len(t, client.markdownCalls, 1)
-	assert.Equal(t, 1, client.markdownCalls[0].opts)
+	require.Len(t, client.richTextCalls, 1)
+	assert.Equal(t, 1, client.richTextCalls[0].opts)
 }
 
 func TestIrisMessageSenderMarkdownWrapsError(t *testing.T) {
-	client := &irisSenderTestClient{markdownErr: errors.New("boom")}
+	client := &irisSenderTestClient{richTextErr: errors.New("boom")}
 	sender := NewIrisMessageSender(
 		client,
 		WithMarkdownReplies(true),
@@ -156,7 +166,7 @@ func TestIrisMessageSenderMarkdownWrapsError(t *testing.T) {
 	err := sendPreparedTestMessage(t.Context(), sender, "**hello**")
 
 	require.ErrorContains(t, err, "iris send message")
-	require.ErrorIs(t, err, client.markdownErr)
+	require.ErrorIs(t, err, client.richTextErr)
 }
 
 func TestIrisMessageSenderGuardsNilInputs(t *testing.T) {

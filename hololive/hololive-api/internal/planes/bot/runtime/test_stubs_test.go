@@ -35,6 +35,10 @@ func (s *stubIrisClient) SendMarkdown(context.Context, string, string, ...iris.S
 	return &iris.ReplyAcceptedResponse{}, nil
 }
 
+func (s *stubIrisClient) SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return &iris.ReplyAcceptedResponse{}, nil
+}
+
 func (s *stubIrisClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
 	return &iris.ReplyStatusSnapshot{}, nil
 }

@@ -80,6 +80,10 @@ func (*alarmDispatchCancellationIrisClient) SendMarkdown(context.Context, string
 	return nil, errors.New("unexpected markdown send")
 }
 
+func (*alarmDispatchCancellationIrisClient) SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, errors.New("unexpected richtext send")
+}
+
 func alarmDispatchCancellationRequest(attempt int) (alarmDispatchGroup, *dispatchoutbox.SendRequest) {
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{
 		alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: attempt}),
