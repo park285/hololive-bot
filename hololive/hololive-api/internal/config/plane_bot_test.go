@@ -171,11 +171,6 @@ func TestLoadBotPlaneRuntimeProductionPolicies(t *testing.T) {
 			env:  map[string]string{"POSTGRES_SSLMODE": "verify-ca", "POSTGRES_SSLMODE_ALLOW_INSECURE": "true"},
 			want: "POSTGRES_SSLMODE=verify-ca is not allowed in production",
 		},
-		{
-			name: "enforced CORS without origins",
-			env:  map[string]string{"CORS_ALLOWED_ORIGINS": "", "CORS_ENFORCE": "true"},
-			want: "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true",
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setBotPlaneEnv(t)
@@ -194,13 +189,11 @@ func TestLoadBotPlaneRuntimeProductionPolicies(t *testing.T) {
 	}
 }
 
-func TestLoadBotPlaneRuntimeProductionAllowsVerifyFullAndMonitorModeCORS(t *testing.T) {
+func TestLoadBotPlaneRuntimeProductionAllowsVerifyFull(t *testing.T) {
 	setBotPlaneEnv(t)
 	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", runtimepolicy.PostgresSSLModeVerifyFull)
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "")
-	t.Setenv("CORS_ENFORCE", "false")
 
 	config, err := LoadBotPlaneRuntime()
 	if err != nil {
@@ -234,7 +227,6 @@ func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
 		"POSTGRES_PORT": "not-a-number",
 		"CACHE_PORT":    "invalid",
 		"SERVER_PORT":   "invalid",
-		"CORS_ENFORCE":  invalidBoolEnvValue,
 	} {
 		t.Run(key, func(t *testing.T) {
 			setBotPlaneEnv(t)

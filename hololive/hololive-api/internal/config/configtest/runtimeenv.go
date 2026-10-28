@@ -59,7 +59,6 @@ func SetRequiredLoadEnv(t *testing.T) {
 	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	SetH3CertificateEnv(t)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
 }
 
 func SetH3CertificateEnv(t *testing.T) {

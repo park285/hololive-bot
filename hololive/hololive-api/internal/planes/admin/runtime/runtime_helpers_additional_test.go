@@ -182,7 +182,6 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: testAPIKey},
-		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
 	}
 	infra := &sharedmodules.InfraModule{
 		Postgres: &databasemocks.Client{},

@@ -103,12 +103,3 @@ func ValidateOfficialScheduleRuntimeConfig(config OfficialScheduleRuntimeConfig)
 
 	return nil
 }
-
-// ValidateCORSConfig는 production에서 CORS를 강제하면서 허용 origin이 하나도 없는 설정을 거절한다.
-func ValidateCORSConfig(environment string, config CORSConfig) error {
-	if runtimepolicy.IsProduction(environment) && config.Enforce && len(config.AllowedOrigins) == 0 {
-		return errors.New("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
-	}
-
-	return nil
-}

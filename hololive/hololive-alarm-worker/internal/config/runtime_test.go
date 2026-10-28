@@ -73,12 +73,11 @@ func TestLoadRuntimeSelectsAlarmWorkerTracingToggle(t *testing.T) {
 	}
 }
 
-// alarm-worker가 읽는 bot 표시·CORS 구획의 잘못된 값은 기동 실패로 드러난다.
+// alarm-worker가 읽는 bot 표시 구획의 잘못된 값은 기동 실패로 드러난다.
 // LLM·Exa·사진 동기화처럼 hololive-api만 읽는 env는 worker가 검사하지 않는다.
 func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	for key, value := range map[string]string{
 		"BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS": "1d",
-		"CORS_ENFORCE":                         "maybe",
 	} {
 		t.Run(key, func(t *testing.T) {
 			setRuntimeEnv(t)

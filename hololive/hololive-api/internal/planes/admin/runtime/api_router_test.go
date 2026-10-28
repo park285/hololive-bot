@@ -37,10 +37,7 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-const (
-	testAPIKey        = "test-key"
-	testAllowedOrigin = "http://localhost:3000"
-)
+const testAPIKey = "test-key"
 
 func TestFailClosedAuth(t *testing.T) {
 	ctx := t.Context()
@@ -72,9 +69,6 @@ func TestFailClosedAuth(t *testing.T) {
 			appConfig := &apiconfig.AdminPlaneConfig{
 				Server: settings.ServerConfig{
 					APIKey: tt.apiKey,
-				},
-				CORS: settings.CORSConfig{
-					AllowedOrigins: []string{testAllowedOrigin},
 				},
 			}
 
@@ -119,7 +113,9 @@ func assertAPIRouterSuccess(t *testing.T, router *gin.Engine, err error) {
 	}
 }
 
-func TestAPIRouter_CORSOriginGuard(t *testing.T) {
+// admin API는 Iris Console gateway가 서버 대 서버로 호출하므로 CORS 표면이 없다. Origin 헤더는 판정에 쓰지 않고
+// 브라우저 허용 헤더도 내지 않는다.
+func TestAPIRouter_IgnoresOriginWithoutCORSHeaders(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.Handler{}
@@ -130,10 +126,6 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 			APIKey: testAPIKey,
 		},
 		Environment: "production",
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"https://allowed.example.com"},
-			Enforce:        true,
-		},
 	}
 
 	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
@@ -141,56 +133,18 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
 
-	disallowedReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
-	disallowedReq.Header.Set("Origin", "https://blocked.example.com")
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
+	req.Header.Set("Origin", "https://any.example.com")
 
-	disallowedRec := httptest.NewRecorder()
-	router.ServeHTTP(disallowedRec, disallowedReq)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
-	if disallowedRec.Code != http.StatusForbidden {
-		t.Fatalf("disallowed origin status = %d, want %d", disallowedRec.Code, http.StatusForbidden)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("origin request status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	allowedReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
-	allowedReq.Header.Set("Origin", "https://allowed.example.com")
-
-	allowedRec := httptest.NewRecorder()
-	router.ServeHTTP(allowedRec, allowedReq)
-
-	if allowedRec.Code != http.StatusOK {
-		t.Fatalf("allowed origin status = %d, want %d", allowedRec.Code, http.StatusOK)
-	}
-}
-
-func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
-	ctx := t.Context()
-	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
-
-	appConfig := &apiconfig.AdminPlaneConfig{
-		Server: settings.ServerConfig{
-			APIKey: testAPIKey,
-		},
-		Environment: "production",
-		CORS: settings.CORSConfig{
-			AllowedOrigins:      nil,
-			Enforce:             true,
-			MissingInProduction: true,
-		},
-	}
-
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
-	if err == nil {
-		t.Fatal("ProvideAPIRouter() expected error")
-	}
-
-	if !strings.Contains(err.Error(), "explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true") {
-		t.Fatalf("ProvideAPIRouter() error = %q", err.Error())
-	}
-
-	if router != nil {
-		t.Fatal("ProvideAPIRouter() expected nil router")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
 	}
 }
 
@@ -201,9 +155,6 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
-		},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -230,9 +181,6 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
-		},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -282,9 +230,6 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{testAllowedOrigin},
-		},
 	}
 
 	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
@@ -311,9 +256,6 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
-		},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 

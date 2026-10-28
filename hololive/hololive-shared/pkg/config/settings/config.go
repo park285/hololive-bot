@@ -31,7 +31,6 @@ import (
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
-	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 // LoadIrisConfig는 Iris egress 클라이언트 입력(IRIS_*)을 읽는다. 필수 여부 판단은 runtime이
@@ -245,25 +244,6 @@ func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 	}
 
 	return config, nil
-}
-
-// LoadCORSConfig는 CORS 허용 origin과 강제 여부를 읽는다. DefaultEnforce는 CORS_ENFORCE가 없을 때의 runtime별 기본값이다.
-func LoadCORSConfig(defaultEnforce bool) (CORSConfig, error) {
-	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
-		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),
-		runtimepolicy.IsProduction(envload.AppEnvironment()),
-	)
-
-	enforce, err := sharedenv.BoolE("CORS_ENFORCE", defaultEnforce)
-	if err != nil {
-		return CORSConfig{}, fmt.Errorf("load CORS config: %w", err)
-	}
-
-	return CORSConfig{
-		AllowedOrigins:      corsAllowedOrigins,
-		Enforce:             enforce,
-		MissingInProduction: corsMissingInProduction,
-	}, nil
 }
 
 func LoadIngestionConfig() (IngestionConfig, error) {

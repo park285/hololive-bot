@@ -30,20 +30,6 @@ var AppTimeout = struct {
 	Shutdown: 10 * time.Second,
 }
 
-var CORSConfig = struct {
-	AllowMethods []string
-	AllowHeaders []string
-}{
-	AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-	AllowHeaders: []string{
-		"Origin", "Content-Type", "Accept", "Authorization",
-		// Client Hints 헤더 (실제 기기 정보 수집용)
-		"Sec-CH-UA", "Sec-CH-UA-Mobile", "Sec-CH-UA-Platform",
-		"Sec-CH-UA-Platform-Version", "Sec-CH-UA-Model",
-		"Sec-CH-UA-Arch", "Sec-CH-UA-Bitness", "Sec-CH-UA-Full-Version-List",
-	},
-}
-
 var RequestTimeout = struct {
 	AdminRequest      time.Duration
 	BotCommand        time.Duration

@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -122,90 +121,11 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 	}
 }
 
-func TestNewAPICORSConfigModes(t *testing.T) {
-	t.Parallel()
-
-	monitor := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
-		CORS: settings.CORSConfig{AllowedOrigins: []string{"https://allowed.example"}},
-	}, false)
-	if monitor.AllowOriginFunc == nil || !monitor.AllowOriginFunc("https://any.example") {
-		t.Fatal("monitor CORS config should allow any origin")
-	}
-
-	enforced := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
-		CORS: settings.CORSConfig{AllowedOrigins: []string{" https://a.example ", "", "https://a.example", "https://b.example"}},
-	}, true)
-	if !reflect.DeepEqual(enforced.AllowOrigins, []string{"https://a.example", "https://b.example"}) {
-		t.Fatalf("enforced AllowOrigins = %#v", enforced.AllowOrigins)
-	}
-
-	if enforced.AllowOriginFunc != nil {
-		t.Fatal("enforced explicit origin config should not set AllowOriginFunc")
-	}
-
-	wildcard := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
-		CORS: settings.CORSConfig{AllowedOrigins: []string{"*"}},
-	}, true)
-	if wildcard.AllowOriginFunc == nil || wildcard.AllowOriginFunc("https://allowed.example") {
-		t.Fatal("enforced wildcard CORS config should reject origins")
-	}
-}
-
-func TestCorsOriginGuardAllowsNoOriginAndMonitorMode(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-	router.Use(corsOriginGuard([]string{"https://allowed.example"}, true, nil))
-	router.GET("/no-origin", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
-	noOriginReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/no-origin", http.NoBody)
-	noOriginRec := httptest.NewRecorder()
-	router.ServeHTTP(noOriginRec, noOriginReq)
-
-	if noOriginRec.Code != http.StatusOK {
-		t.Fatalf("no origin status = %d, want %d", noOriginRec.Code, http.StatusOK)
-	}
-
-	monitorRouter := gin.New()
-	monitorRouter.Use(corsOriginGuard([]string{"https://allowed.example"}, false, slog.New(slog.DiscardHandler)))
-	monitorRouter.GET("/monitor", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
-	monitorReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/monitor", http.NoBody)
-	monitorReq.Header.Set("Origin", "https://blocked.example")
-
-	monitorRec := httptest.NewRecorder()
-	monitorRouter.ServeHTTP(monitorRec, monitorReq)
-
-	if monitorRec.Code != http.StatusOK {
-		t.Fatalf("monitor status = %d, want %d", monitorRec.Code, http.StatusOK)
-	}
-}
-
-func TestNewAPIRouterCORSValidation(t *testing.T) {
+func TestNewAPIRouterValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	if router, err := newAPIRouter(t.Context(), nil, nil); err == nil || router != nil {
 		t.Fatalf("newAPIRouter(nil) router=%v error=%v", router, err)
-	}
-
-	productionWildcard := &apiconfig.AdminPlaneConfig{
-		Environment: "production",
-		Server:      settings.ServerConfig{APIKey: "test-key"},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"*"},
-			Enforce:        true,
-		},
-	}
-	if err := validateAPICORSConfig(productionWildcard, true); err == nil {
-		t.Fatal("validateAPICORSConfig() expected production wildcard error")
-	}
-
-	if err := validateAPICORSConfig(productionWildcard, false); err != nil {
-		t.Fatalf("validateAPICORSConfig() non-production error = %v", err)
 	}
 
 	router, err := newAPIRouter(t.Context(), testRouterConfig(), nil)
@@ -286,8 +206,5 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 func testRouterConfig() *apiconfig.AdminPlaneConfig {
 	return &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: "test-key"},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
-		},
 	}
 }

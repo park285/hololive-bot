@@ -37,10 +37,6 @@ type AlarmDispatchPublishConfig struct {
 	MaxDeliveriesPerBatch int
 }
 
-// alarmWorkerCORSDefaultEnforce: alarm-worker는 브라우저 표면이 없지만, 예전과 같이 CORS_ENFORCE가 명시된 production
-// 설정의 허용 origin 누락은 기동 실패로 유지한다.
-const alarmWorkerCORSDefaultEnforce = false
-
 func LoadRuntime() (*RuntimeConfig, error) {
 	if err := envload.DotEnv(); err != nil {
 		return nil, fmt.Errorf("load dot env: %w", err)
@@ -104,21 +100,15 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	notification, notificationErr := settings.LoadNotificationConfig()
 	logging, loggingErr := settings.LoadLoggingConfig()
 	bot, botErr := settings.LoadBotConfig()
-	cors, corsErr := settings.LoadCORSConfig(alarmWorkerCORSDefaultEnforce)
 
 	if err := errors.Join(
-		serverErr, holodexErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr, corsErr,
+		serverErr, holodexErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr,
 	); err != nil {
 		return nil, fmt.Errorf("load alarm-worker sections: %w", err)
 	}
 
-	environment := envload.AppEnvironment()
-	if err := settings.ValidateCORSConfig(environment, cors); err != nil {
-		return nil, fmt.Errorf("validate CORS config: %w", err)
-	}
-
 	return &RuntimeConfig{
-		Environment:      environment,
+		Environment:      envload.AppEnvironment(),
 		Server:           server,
 		Holodex:          holodex,
 		Valkey:           valkey,

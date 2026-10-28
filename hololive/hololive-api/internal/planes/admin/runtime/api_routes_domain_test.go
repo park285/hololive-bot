@@ -41,9 +41,6 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
-		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{testAllowedOrigin},
-		},
 	}
 
 	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
@@ -72,7 +69,6 @@ func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 	apiHandler := &server.Handler{}
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: testAPIKey},
-		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
 	}
 
 	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), apiHandler.DomainHandlers(), sharedtestutil.NewTestCacheService(ctx, t))

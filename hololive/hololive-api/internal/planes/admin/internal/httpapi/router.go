@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -122,11 +121,6 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		logger = slog.Default()
 	}
 
-	isProduction := strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production")
-	if err := validateAPICORSConfig(appConfig, isProduction); err != nil {
-		return nil, fmt.Errorf("validate APICORS config: %w", err)
-	}
-
 	routerOptions := &sharedserver.RuntimeRouterOptions{
 		APIKey:       appConfig.Server.APIKey,
 		EnableGzip:   true,
@@ -135,9 +129,8 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 IP 기준 rate limit을
 		// 우회하지 못하도록 RemoteAddr만 신뢰한다.
 		TrustRemoteAddrOnly: true,
+		// admin API는 Iris Console gateway가 서버 대 서버로 API key를 붙여 호출하므로 브라우저 CORS 표면이 없다.
 		PreRouteUse: []gin.HandlerFunc{
-			corsOriginGuard(appConfig.CORS.AllowedOrigins, appConfig.CORS.Enforce, logger),
-			cors.New(newAPICORSConfig(appConfig, appConfig.CORS.Enforce)),
 			middleware.ClientHintsMiddleware(),
 		},
 	}
@@ -151,30 +144,7 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		return nil, fmt.Errorf("runtime router: %w", err)
 	}
 
-	warnMissingProductionCORS(logger, appConfig, isProduction)
-
 	router.NoRoute(middleware.NoRouteAuthHandler(appConfig.Server.APIKey))
 
 	return router, nil
-}
-
-func validateAPICORSConfig(appConfig *apiconfig.AdminPlaneConfig, isProduction bool) error {
-	origins := normalizedOrigins(appConfig.CORS.AllowedOrigins)
-	if isProduction && appConfig.CORS.Enforce && (len(origins) == 0 || containsWildcard(origins)) {
-		return errors.New("explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true")
-	}
-
-	return nil
-}
-
-func warnMissingProductionCORS(logger *slog.Logger, appConfig *apiconfig.AdminPlaneConfig, isProduction bool) {
-	if !isProduction || !appConfig.CORS.MissingInProduction {
-		return
-	}
-
-	logger.Warn(
-		"cors_allowed_origins_missing_in_production_monitor_mode",
-		slog.Bool("cors_enforce", appConfig.CORS.Enforce),
-		slog.String("next_step", "set CORS_ALLOWED_ORIGINS and enable CORS_ENFORCE"),
-	)
 }

@@ -19,7 +19,6 @@ func setAdminPlaneEnv(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", settingstest.HololiveH3CertPath)
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", settingstest.HololiveH3KeyPath)
 	t.Setenv("SERVER_PORT", "30006")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
 	t.Setenv(settingstest.IrisWebhookTokenEnv, "")
 	t.Setenv(settingstest.IrisBotTokenEnv, "")
 	t.Setenv("IRIS_BASE_URL", "")
@@ -72,16 +71,6 @@ func TestAdminPlaneIgnoresAccidentalIrisEgressInputs(t *testing.T) {
 
 	if err := loadAdminPlaneRuntime(t); err != nil {
 		t.Fatalf("admin plane load error = %v, want nil without Iris worker profile fetch", err)
-	}
-}
-
-func TestAdminPlaneDefaultEnforcesCORSOrigins(t *testing.T) {
-	setAdminPlaneEnv(t)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "")
-
-	err := loadAdminPlaneRuntime(t)
-	if err == nil || !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true") {
-		t.Fatalf("admin plane load error = %v, want missing CORS_ALLOWED_ORIGINS error", err)
 	}
 }
 

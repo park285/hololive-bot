@@ -20,7 +20,6 @@
 package settings
 
 import (
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -215,62 +214,6 @@ func TestValidateIrisEgressInputs(t *testing.T) {
 				t.Fatalf("ValidateIrisEgressInputs() error = %v, want %q", err, tc.want)
 			}
 		})
-	}
-}
-
-func TestLoadCORSConfigProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
-	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "")
-	t.Setenv("CORS_ENFORCE", "false")
-
-	config, err := LoadCORSConfig(true)
-	if err != nil {
-		t.Fatalf("LoadCORSConfig() error = %v", err)
-	}
-
-	if len(config.AllowedOrigins) != 0 || !config.MissingInProduction {
-		t.Fatalf("CORS = %#v, want empty origins marked missing in production", config)
-	}
-
-	if err := ValidateCORSConfig(runtimepolicy.EnvironmentProduction, config); err != nil {
-		t.Fatalf("ValidateCORSConfig(monitor mode) error = %v", err)
-	}
-}
-
-func TestLoadCORSConfigDefaultEnforceIsRuntimeOwned(t *testing.T) {
-	settingstest.UnsetEnv(t, "CORS_ENFORCE")
-
-	for _, defaultEnforce := range []bool{true, false} {
-		config, err := LoadCORSConfig(defaultEnforce)
-		if err != nil {
-			t.Fatalf("LoadCORSConfig(%t) error = %v", defaultEnforce, err)
-		}
-
-		if config.Enforce != defaultEnforce {
-			t.Fatalf("LoadCORSConfig(%t).Enforce = %t", defaultEnforce, config.Enforce)
-		}
-	}
-}
-
-func TestValidateCORSConfigProductionEnforceRequiresOrigins(t *testing.T) {
-	err := ValidateCORSConfig(runtimepolicy.EnvironmentProduction, CORSConfig{Enforce: true})
-	if err == nil || !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true") {
-		t.Fatalf("ValidateCORSConfig() error = %v, want missing origins rejection", err)
-	}
-}
-
-func TestLoadCORSConfigProductionFiltersWildcardAndLocalhost(t *testing.T) {
-	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "*,http://localhost:5173,https://admin.example.com")
-
-	config, err := LoadCORSConfig(false)
-	if err != nil {
-		t.Fatalf("LoadCORSConfig() error = %v", err)
-	}
-
-	expected := []string{"https://admin.example.com"}
-	if !reflect.DeepEqual(config.AllowedOrigins, expected) {
-		t.Fatalf("AllowedOrigins = %v, want %v", config.AllowedOrigins, expected)
 	}
 }
 

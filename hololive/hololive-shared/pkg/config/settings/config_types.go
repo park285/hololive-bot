@@ -59,9 +59,3 @@ type BotConfig struct {
 	SeeMoreFold           bool // 기능·표시 항목 수에 따라 조회와 보고서를 머리 문단과 '전체보기'로 접는다. 기본 true, false는 운영 차단 스위치
 	MarkdownReplies       bool
 }
-
-type CORSConfig struct {
-	AllowedOrigins      []string
-	Enforce             bool
-	MissingInProduction bool
-}

@@ -5,7 +5,6 @@ go 1.27.3
 require (
 	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/georgysavva/scany/v2 v2.1.4
-	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/kapu/hololive-dbtest v0.0.0

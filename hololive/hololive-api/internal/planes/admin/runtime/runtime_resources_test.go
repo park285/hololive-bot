@@ -50,7 +50,6 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 
 			if stage == "server" {
 				config.Server = settings.ServerConfig{APIKey: testAPIKey, HTTPTransports: []string{"h3"}, H3Addr: testLoopbackAddr}
-				config.CORS.AllowedOrigins = []string{testAllowedOrigin}
 			}
 
 			infra := &sharedmodules.InfraModule{Cache: sharedtestutil.NewTestCacheService(t.Context(), t), Postgres: &databasemocks.Client{}}

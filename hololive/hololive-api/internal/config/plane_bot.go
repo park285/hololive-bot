@@ -55,17 +55,6 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 		return nil, fmt.Errorf("validate tracing config: %w", err)
 	}
 
-	// 예전 bot 로더는 CORS_ENFORCE 기본값 false로 production 허용 origin 누락을 거절했다. 전체 기동에서는 admin plane의
-	// 더 엄격한 검사가 같은 조건을 덮고, 단독 bot 로더는 같은 거절을 여기서 유지한다.
-	cors, err := settings.LoadCORSConfig(false)
-	if err != nil {
-		return nil, fmt.Errorf("load CORS config: %w", err)
-	}
-
-	if err = settings.ValidateCORSConfig(envload.AppEnvironment(), cors); err != nil {
-		return nil, fmt.Errorf("validate CORS config: %w", err)
-	}
-
 	config, err := loadBotPlaneConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load bot plane config: %w", err)
