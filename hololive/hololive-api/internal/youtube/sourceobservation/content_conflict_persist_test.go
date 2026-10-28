@@ -15,7 +15,7 @@ import (
 // youtube_video·KEEP_EXISTING 행 하나로 남는다. 0042에서 상수였던 entity_kind·decision이 이제 인자이므로 인자 순서가
 // 어긋나면 이 행의 식별 열과 effective_at이 달라진다. 같은 관측을 replay해도 행은 늘지 않는다.
 func TestContentConsumerRecordsEqualTimeConflictOnce(t *testing.T) {
-	pool, repo, consumer, proof := startContentPersist(t)
+	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 	storedSHA := strings.Repeat("ab", 32)
 
@@ -68,25 +68,5 @@ func TestContentConsumerRecordsEqualTimeConflictOnce(t *testing.T) {
 	require.Equal(t, storedSHA, existingSHA)
 	require.NotEqual(t, storedSHA, attemptedSHA)
 
-	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "content conflict replay",
-	})
-	require.NoError(t, err)
-	require.True(t, replay.Applied)
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-
-	var (
-		status      string
-		replayCount int
-	)
-
-	// replay가 관측을 다시 처리해 충돌 기록을 한 번 더 시도했음을 확인한 뒤 행 수를 본다.
-	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT status, replay_count FROM source_observation_queue WHERE observation_id = $1
-	`, published.Results[0].ObservationID).Scan(&status, &replayCount))
-	require.Equal(t, "PROCESSED", status)
-	require.Equal(t, 1, replayCount)
 	assertTableCount(t, pool, "source_reconciliation_conflicts", 1)
 }

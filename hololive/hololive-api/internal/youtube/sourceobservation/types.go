@@ -13,7 +13,6 @@ import (
 const (
 	MaxClaimBatchSize = 100
 	MaxAttempts       = 64
-	MaxReplayCount    = 16
 	maxErrorCodeBytes = 128
 	maxErrorTextBytes = 2048
 	maxClaimKinds     = 11
@@ -193,18 +192,6 @@ type DeadLetterInput struct {
 	LeaseToken    string
 	ErrorCode     string
 	ErrorDetail   string
-}
-
-type ReplayInput struct {
-	ObservationID int64
-	RequestedBy   string
-	Reason        string
-}
-
-type ReplayResult struct {
-	RequestID     int64
-	Applied       bool
-	RejectionCode string
 }
 
 type ReplayEpochInput struct {

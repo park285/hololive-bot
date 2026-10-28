@@ -347,7 +347,7 @@ The local uniform collector maximum 7 (minimum 2 unchanged) gives runtime 22 + s
 + migrator 1 + exporter 1 + nightly 2 = 54, leaving **three ordinary control slots**.
 Both capacity readers account for external consumers and aggregate all pools by role;
 native max is emitted from the same policy. Role limits are runtime 25 (including bounded
-maintenance/replay control work), scraper 28, migrator 1, exporter 1 and nightly 2.
+maintenance control work), scraper 28, migrator 1, exporter 1 and nightly 2.
 One migration job at a time is supported. Multiple runtime maintenance commands must share
 the three-slot control allowance, not claim independent three-slot budgets.
 

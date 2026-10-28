@@ -132,87 +132,11 @@ func (r *Runtime) withBudgetDB(ctx context.Context, operation dbOperation, fn fu
 	return r.withDB(budgetCtx, operation, fn)
 }
 
-func (r *Runtime) runReplayLoop(ctx context.Context, errCh chan<- error) {
-	ticker := time.NewTicker(r.Config.Replay.Interval)
-
-	defer ticker.Stop()
-
-	if r.stopAfterReplayError(ctx, errCh, r.replayTick(ctx)) {
-		return
-	}
-
-	for waitTicker(ctx, ticker) {
-		if r.stopAfterReplayError(ctx, errCh, r.replayTick(ctx)) {
-			return
-		}
-	}
-}
-
-func (r *Runtime) stopAfterReplayError(ctx context.Context, errCh chan<- error, err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
-		return true
-	}
-
-	if retryableObservationError(err) {
-		r.Logger.Error("youtube plane replay failed", slog.Any("error", err))
-
-		return false
-	}
-
-	r.reportLoopError(ctx, errCh, "replay source observations", err)
-
-	return true
-}
-
-func (r *Runtime) replayTick(ctx context.Context) error {
-	if r == nil || r.replayer == nil || !r.Config.Replay.Enabled {
-		return nil
-	}
-
-	for range r.Config.Replay.BatchSize {
-		processed, err := r.processNextReplay(ctx)
-		if err != nil {
-			return fmt.Errorf("%w", err)
-		}
-
-		if !processed {
-			return nil
-		}
-	}
-
-	return nil
-}
-
-func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
-	var processed bool
-
-	err := r.withBudgetDB(ctx, dbOperationReplay, func(ctx context.Context) error {
-		var tickErr error
-
-		processed, tickErr = r.replayer.ProcessNextReplay(ctx)
-		if tickErr != nil {
-			return fmt.Errorf("process next replay: %w", tickErr)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return false, err
-	}
-
-	return processed, nil
-}
-
 func planeRetentionConfig(cfg *apiconfig.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
 	return sourceobservation.RetentionConfig{
 		QueueProcessedAge:    cfg.QueueProcessedAge,
 		QueueDLQAge:          cfg.QueueDLQAge,
 		CollisionAge:         cfg.CollisionAge,
-		ReplayAuditAge:       cfg.ReplayAuditAge,
 		LiveAbsenceSlotAge:   cfg.LiveAbsenceSlotAge,
 		CheckpointHistoryAge: cfg.CheckpointHistoryAge,
 		EvidenceAgeByKind:    evidenceRetentionAges(cfg),

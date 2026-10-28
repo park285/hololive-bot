@@ -38,7 +38,6 @@ func TestDisabledRuntimeOnlyRunsAndJoinsQueueSampler(t *testing.T) {
 		}})
 
 		runtime.Config.Enabled = false
-		runtime.Config.Replay.Enabled = true
 		runtime.Config.LiveEndFinalizer.Enabled = true
 		runtime.workerTracker = workercontract.NewExecutorTracker()
 		runtime.workerTotals = &workercontract.Counters{}

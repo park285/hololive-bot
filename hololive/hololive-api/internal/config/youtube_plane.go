@@ -21,7 +21,6 @@ type YouTubePlaneRetentionConfig struct {
 	QueueProcessedAge    time.Duration
 	QueueDLQAge          time.Duration
 	CollisionAge         time.Duration
-	ReplayAuditAge       time.Duration
 	LiveAbsenceSlotAge   time.Duration
 	CheckpointHistoryAge time.Duration
 	ProjectionRetiredAge time.Duration
@@ -34,12 +33,6 @@ type YouTubePlaneRetentionConfig struct {
 	ScheduleSnapshotAge  time.Duration
 	ChannelLiveCheckAge  time.Duration
 	VideoLiveCheckAge    time.Duration
-}
-
-type YouTubePlaneReplayConfig struct {
-	Enabled   bool
-	Interval  time.Duration
-	BatchSize int
 }
 
 type YouTubePlaneTargetProjectionConfig struct {
@@ -67,7 +60,6 @@ type YouTubePlaneConfig struct {
 
 	ShutdownTimeout     time.Duration
 	Retention           YouTubePlaneRetentionConfig
-	Replay              YouTubePlaneReplayConfig
 	TargetProjection    YouTubePlaneTargetProjectionConfig
 	LiveEndFinalizer    YouTubePlaneLiveEndFinalizerConfig
 	ContentAbsenceGrace time.Duration
@@ -88,7 +80,6 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 		PostgresPoolMinConns: 1,
 		PostgresPoolMaxConns: 4,
 		Retention:            defaultYouTubePlaneRetentionConfig(),
-		Replay:               defaultYouTubePlaneReplayConfig(),
 		TargetProjection: YouTubePlaneTargetProjectionConfig{
 			Interval: 5 * time.Second,
 			Validity: time.Hour,
@@ -112,10 +103,6 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 
 	if err := loadYouTubePlaneRetention(&config); err != nil {
 		return YouTubePlaneConfig{}, fmt.Errorf("load youtube plane retention: %w", err)
-	}
-
-	if err := loadYouTubePlaneReplay(&config); err != nil {
-		return YouTubePlaneConfig{}, fmt.Errorf("load youtube plane replay: %w", err)
 	}
 
 	if err := loadYouTubePlaneSchedules(&config, &defaults); err != nil {

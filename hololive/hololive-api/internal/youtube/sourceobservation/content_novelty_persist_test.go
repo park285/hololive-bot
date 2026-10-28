@@ -74,7 +74,7 @@ func TestContentNoveltyBaselineTakesEarliestAcceptedListWithoutLegacyBackfill(t 
 func TestContentNoveltyPendingCandidateNotifiesOnceWhenTrustedEvidenceArrives(t *testing.T) {
 	t.Parallel()
 
-	pool, repo, consumer, proof := startContentPersist(t)
+	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 
 	publishVideoItems(t, pool, &proof, contract.CompletenessComplete,
@@ -99,7 +99,7 @@ func TestContentNoveltyPendingCandidateNotifiesOnceWhenTrustedEvidenceArrives(t 
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 
-	trusted := publishVideoItems(t, pool, &proof, contract.CompletenessComplete,
+	publishVideoItems(t, pool, &proof, contract.CompletenessComplete,
 		trustedVideoItem("late", proof.ScheduledFor.Add(-30*time.Second), proof.ScheduledFor), unresolvedVideoItem("old"))
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
 	assertNewVideoOutboxes(t, pool, "late")
@@ -108,11 +108,6 @@ func TestContentNoveltyPendingCandidateNotifiesOnceWhenTrustedEvidenceArrives(t 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 	publishVideoItems(t, pool, &proof, contract.CompletenessComplete,
 		trustedVideoItem("late", proof.ScheduledFor.Add(-90*time.Second), proof.ScheduledFor), unresolvedVideoItem("old"))
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{ObservationID: trusted, RequestedBy: testReplayOperator, Reason: "decided novelty must not resend"})
-	require.NoError(t, err)
-	require.True(t, replay.Applied)
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
 	assertNewVideoOutboxes(t, pool, "late")
 }
@@ -218,23 +213,17 @@ func TestContentVideoListClaimsKeepSameChannelOrder(t *testing.T) {
 func TestContentNoveltyPremiereStaysSilentFromDiscoveryThroughRelease(t *testing.T) {
 	t.Parallel()
 
-	pool, repo, consumer, proof := startContentPersist(t)
+	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 	scheduled := proof.ScheduledFor.Add(2 * time.Hour)
 
-	discovered := publishVideoItems(t, pool, &proof, contract.CompletenessComplete, premiereVideoItem(testVideoID, scheduled, proof.ScheduledFor))
+	publishVideoItems(t, pool, &proof, contract.CompletenessComplete, premiereVideoItem(testVideoID, scheduled, proof.ScheduledFor))
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
 	assertNewVideoOutboxes(t, pool)
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusUpcoming, new(true))
 
 	proof = advanceLease(ctx, t, pool, &proof, 3*time.Hour)
 	publishVideoItems(t, pool, &proof, contract.CompletenessComplete, trustedVideoItem(testVideoID, scheduled, proof.ScheduledFor))
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertNewVideoOutboxes(t, pool)
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{ObservationID: discovered, RequestedBy: testReplayOperator, Reason: "Premiere discovery replay"})
-	require.NoError(t, err)
-	require.True(t, replay.Applied)
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
 	assertNewVideoOutboxes(t, pool)
 }

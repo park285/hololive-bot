@@ -139,7 +139,7 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 `youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, 30025), Osaka2 `d` (host-native, 30035). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
 
 - collector owns fetch/normalize/lease/checkpoint/`source_observations` Publish only;
-- `hololive-api` YouTube plane owns claim/finalize, canonical persist, notification intent, live-end finalizer, and retention/replay;
+- `hololive-api` YouTube plane owns claim/finalize, canonical persist, notification intent, live-end finalizer, and retention;
 - `members.photo` stays on hololive-api admin PhotoSync; YouTube channel photos are the `channel_photo` reducer;
 - final notification delivery is owned by `alarm-worker`.
 

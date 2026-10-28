@@ -476,7 +476,6 @@ var sourceObservationTables = []string{
 	"source_observation_queue",
 	"source_observation_collisions",
 	"source_observation_consumer_offsets",
-	"source_observation_replay_requests",
 	"source_observation_replay_epoch",
 	"source_observation_applications",
 	"source_observation_entity_kinds",
@@ -501,7 +500,6 @@ var sourceObservationSequences = []string{
 	"source_observation_payloads_id_seq",
 	"source_observation_collisions_id_seq",
 	"youtube_collection_projection_generations_generation_seq",
-	"source_observation_replay_requests_id_seq",
 	"source_observation_applications_id_seq",
 	"source_reconciliation_conflicts_id_seq",
 }
@@ -534,7 +532,6 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"source_observation_queue":                  observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_collisions":             observationPrivileges("SELECT", "DELETE"),
 			"source_observation_consumer_offsets":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
-			"source_observation_replay_requests":        observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_replay_epoch":           observationPrivileges("SELECT", "INSERT"),
 			"source_observation_applications":           observationPrivileges("SELECT", "INSERT"),
 			"source_observation_entity_kinds":           observationPrivileges("SELECT"),
@@ -562,7 +559,6 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 		},
 		roles.runtime: {
 			"youtube_collection_projection_generations_generation_seq": observationPrivileges("USAGE", "SELECT"),
-			"source_observation_replay_requests_id_seq":                observationPrivileges("USAGE", "SELECT"),
 			"source_observation_applications_id_seq":                   observationPrivileges("USAGE", "SELECT"),
 			"source_reconciliation_conflicts_id_seq":                   observationPrivileges("USAGE", "SELECT"),
 		},
@@ -654,7 +650,6 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		roles.runtime: {dir: consumeQueryDir, queries: []observationRoleQuery{
 			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
 			{name: "repository_replay_epoch_load_0086_86.sql"},
-			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_pending_ends.sql", args: []any{[]string{}}},
 			{name: "repository_live_absence_slots.sql", args: []any{[]string{}, nil, time.Now().UTC(), []string{}}},

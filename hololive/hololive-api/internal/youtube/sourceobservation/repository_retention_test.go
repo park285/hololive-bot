@@ -145,16 +145,15 @@ func TestDeleteRetentionBatchesKeepsCommittedWindowsOfFailedStep(t *testing.T) {
 	}
 }
 
-func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
+func TestRetentionTickDoesNotDeleteActiveOrQueuedEvidence(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	pendingID := publishOne(ctx, t, repo, &proof, "post-pending")
-	finalizeObservation(ctx, t, repo, pendingID)
-	insertPendingReplay(t, pool, pendingID)
+	processedID := publishOne(ctx, t, repo, &proof, "post-processed")
+	finalizeObservation(ctx, t, repo, processedID)
 
 	proof = advanceLease(t.Context(), t, pool, &proof, time.Minute)
 
@@ -170,7 +169,7 @@ func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
 	finalizeObservation(ctx, t, repo, candidateID)
 	insertLiveEndCandidate(t, pool, candidateID)
 
-	ageObservations(t, pool, []int64{pendingID, activeID, candidateID}, 48*time.Hour)
+	ageObservations(t, pool, []int64{processedID, activeID, candidateID}, 48*time.Hour)
 
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
 		BatchSize: 10,
@@ -288,31 +287,6 @@ func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
 	}
 
 	assertQueueStatus(t, pool, ids[0], string(contract.StatusPending))
-}
-
-func TestRetentionTickDoesNotDeleteReplayAuditWhileEvidenceRemains(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	repo := NewRepository(pool)
-	ids := publishProcessedObservations(ctx, t, pool, repo, 1)
-	insertAppliedReplay(t, pool, ids[0])
-	ageReplayAudits(t, pool, ids, 48*time.Hour)
-
-	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
-		ReplayAuditAge: 24 * time.Hour,
-		BatchSize:      10,
-	}, time.Now().UTC())
-	if err != nil {
-		t.Fatalf("retention tick: %v", err)
-	}
-
-	if result.Deleted != 0 {
-		t.Fatalf("replay audit deleted while evidence remained: %#v", result)
-	}
-
-	assertTableCount(t, pool, "source_observation_replay_requests", 1)
 }
 
 func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
@@ -511,53 +485,6 @@ func ageQueueTerminal(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Du
 		WHERE observation_id = ANY($1)
 	`, ids, age.Milliseconds()); err != nil {
 		t.Fatalf("age queue: %v", err)
-	}
-}
-
-func insertAppliedReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) {
-	t.Helper()
-
-	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO source_observation_replay_requests (
-			observation_id, provider, observation_kind, subject_key, observation_key,
-			evidence_sha256, requested_by, reason, previous_attempt_count, status, applied_at
-		)
-		SELECT id, provider, observation_kind, subject_key, observation_key,
-		       encode(evidence_sha256, 'hex'), 'test-operator', 'count replay', 0, 'APPLIED', NOW()
-		FROM source_observations
-		WHERE id = $1
-	`, observationID); err != nil {
-		t.Fatalf("insert applied replay: %v", err)
-	}
-}
-
-func ageReplayAudits(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Duration) {
-	t.Helper()
-
-	if _, err := pool.Exec(t.Context(), `
-		UPDATE source_observation_replay_requests
-		SET requested_at = NOW() - ($2 * INTERVAL '1 millisecond'),
-		    applied_at = NOW() - ($2 * INTERVAL '1 millisecond')
-		WHERE observation_id = ANY($1)
-	`, ids, age.Milliseconds()); err != nil {
-		t.Fatalf("age replay audits: %v", err)
-	}
-}
-
-func insertPendingReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) {
-	t.Helper()
-
-	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO source_observation_replay_requests (
-			observation_id, provider, observation_kind, subject_key, observation_key,
-			evidence_sha256, requested_by, reason, previous_attempt_count
-		)
-		SELECT id, provider, observation_kind, subject_key, observation_key,
-		       encode(evidence_sha256, 'hex'), 'test-operator', 'hold evidence', 0
-		FROM source_observations
-		WHERE id = $1
-	`, observationID); err != nil {
-		t.Fatalf("insert pending replay: %v", err)
 	}
 }
 

@@ -60,7 +60,7 @@ fixture의 `cases`는 input, expected canonical UTF-8 text와 lowercase SHA-256�
 |---|---|---|
 | Collector core | `hololive/hololive-youtube-collector/internal/runtime/collection` | SQL에 의존하지 않는 job·target snapshot·수집 입력/결과·retry 값 |
 | Collector storage | `hololive/hololive-youtube-collector/internal/runtime/{joblease,sourceobservation}` | collection lease, observation publish, checkpoint |
-| API | `hololive/hololive-api/internal/youtube/{sourceobservation,canonicalwrite}` | claim/consume, transaction 전용 canonical persist, replay·retention |
+| API | `hololive/hololive-api/internal/youtube/{sourceobservation,canonicalwrite}` | claim/consume, transaction 전용 canonical persist, retention |
 | API private reducers | `hololive/hololive-api/internal/youtube/reconcile`, `internal/youtube/community` | content/live/viewer/schedule/profile/photo와 community 처리 |
 | Upcoming candidate facts | `hololive/hololive-api/internal/youtube/sourceobservation/upcoming_candidate_facts_test.go`, `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/upcoming_candidates_test.go` | consumer가 남기는 관측 시각·Premiere 사실과, 그 행을 읽는 worker 후보 종료·일정 변경 판정 |
 

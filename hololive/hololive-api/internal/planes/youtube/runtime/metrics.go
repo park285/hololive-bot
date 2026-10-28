@@ -139,7 +139,6 @@ const (
 	dbOperationDeadLetter          dbOperation = "dead_letter"
 	dbOperationLiveEnd             dbOperation = "live_end"
 	dbOperationProjectionRefresh   dbOperation = "projection_refresh"
-	dbOperationReplay              dbOperation = "replay"
 	dbOperationRetentionSource     dbOperation = "retention_source"
 	dbOperationRetentionProjection dbOperation = "retention_projection"
 	dbOperationQueueSnapshot       dbOperation = "queue_snapshot"
@@ -154,7 +153,6 @@ var dbOperationLabels = []string{
 	string(dbOperationDeadLetter),
 	string(dbOperationLiveEnd),
 	string(dbOperationProjectionRefresh),
-	string(dbOperationReplay),
 	string(dbOperationRetentionSource),
 	string(dbOperationRetentionProjection),
 	string(dbOperationQueueSnapshot),

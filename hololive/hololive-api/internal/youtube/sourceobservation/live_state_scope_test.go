@@ -765,13 +765,6 @@ func TestLivePartialCurrentSlotReplaysAfterDelayedVideoCheck(t *testing.T) {
 			observation := publishHolodexReplayPartial(t, publisher, &holodexProof, companion)
 			before := assertPartialCurrentSlotReplay(t, pool, consumer, observation, completeID)
 
-			replayLiveObservation(t, repo, consumer, observation.ID)
-			require.Equal(t, 1, liveConsecutiveSlots(t, pool), "same-slot replay must not count twice")
-			require.True(t, storedIgnoredEquals(t, pool, "partial-up", slices.Concat(
-				toastIgnoredHistory(base.Add(-17000*time.Minute)), []time.Time{at})), "ignored current slot must not be appended twice")
-			require.Equal(t, before, liveHeadToastIDs(t, pool))
-			assertTableCount(t, pool, "youtube_live_absence_slots", 1)
-
 			// 다음 PARTIAL에는 저장된 slot이 없으므로 빠진 LIVE를 새 부재로 세지 않는다.
 			holodexProof = advanceLease(ctx, t, pool, &holodexProof, time.Minute)
 			publishHolodexReplayPartial(t, publisher, &holodexProof, companion)

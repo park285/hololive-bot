@@ -30,7 +30,7 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
-	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &contentProof, scheduled)))
+	_, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &contentProof, scheduled)))
 	if err != nil {
 		t.Fatalf("publish content: %v", err)
 	}
@@ -42,19 +42,6 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusUpcoming, new(true))
 	assertLifecycleOrigin(t, pool, "metadata_only")
 	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "Premiere projection replay",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request replay: %#v err=%v", replay, err)
-	}
-
-	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("consume replay: %v", err)
-	}
 
 	assertTableCount(t, pool, "youtube_live_sessions", 1)
 	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
@@ -196,7 +183,7 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
-	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &proof, scheduled)))
+	_, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &proof, scheduled)))
 	if err != nil {
 		t.Fatalf("publish content: %v", err)
 	}
@@ -214,22 +201,6 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 	assertTableCount(t, pool, "source_reconciliation_conflicts", 1)
 	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
 	assertPremiereConflict(t, pool)
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "Premiere conflict replay",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request replay: %#v err=%v", replay, err)
-	}
-
-	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("consume replay: %v", err)
-	}
-
-	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(false))
-	assertTableCount(t, pool, "source_reconciliation_conflicts", 1)
 }
 
 func TestContentConsumerPremiereAtomicRollback(t *testing.T) {

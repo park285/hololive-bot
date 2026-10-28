@@ -26,7 +26,7 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - Dashboard-facing admin HTTP API and the worker alarm client (admin plane)
 - Bot-side alarm client; major event·member news는 llm plane 인스턴스를 직접 호출
 - Process-owned single ACL `Service` (bot pool, bot-plane `KAKAO_*` seed) shared by bot ingress and admin ACL routes
-- Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention/replay (YouTube plane)
+- Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention (YouTube plane)
 - `members.photo` Holodex PhotoSync product path (admin plane). YouTube channel photos are the `channel_photo` reducer.
 
 ## Provides
@@ -54,7 +54,7 @@ API 설정은 `internal/config`, plane별 공통 서비스 생성은 `internal/a
 Admin 조립·수명은 `internal/planes/admin/runtime`, router와 Stream handler는
 `internal/planes/admin/internal/httpapi`에 있습니다. plane 사이 의존(bot→llm 구독·digest, admin→bot Iris 방 목록,
 admin·bot ACL)은 `internal/app`이 같은 프로세스 인스턴스를 주입하며 loopback HTTP를 쓰지 않습니다.
-Observation consume·canonical/replay/retention과 private reducer는 `internal/youtube/`가 소유합니다.
+Observation consume·canonical/retention과 private reducer는 `internal/youtube/`가 소유합니다.
 Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-process alarm service를 생성하지 않습니다.
 
 ## Must not own
@@ -187,8 +187,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 | 수동 검토 영수증 (`record_youtube_live_review`) | 운영자 READ COMMITTED 트랜잭션 | DB 함수, exclusive | 전역 → 세션 → head → pending → availability `FOR UPDATE` → snapshot CAS → 영수증·사실 insert → 갱신(해당 영상) |
 | maintenance: terminal head 복구 (`reconcile-terminal-live-heads.sql`) | 단독 | 스크립트 첫 잠금, exclusive | 전역 → 세션 → head `FOR UPDATE`(video_id 순) → head 갱신 → 갱신(복구 영상) |
 | maintenance: 원본 retention (`delete_source_observation_retention_batch`) | 단독 | DB 함수 첫 문장, exclusive | 전역 → retention 커서 singleton `FOR UPDATE` → 원본 후보 잠금·삭제(FK `SET NULL`·`CASCADE`). 수명 모델 입력이 아니므로 갱신 없음 |
-| maintenance: queue·collision·replay 감사·payload·absence slot·checkpoint retention | 단계별 단독 | 없음 | 각 표의 제한된 DELETE. 라이브 원본 표를 쓰지 않음 |
-| maintenance: replay 처리 (`ProcessNextReplay`) | 단독 | 없음 | replay 요청 `FOR UPDATE SKIP LOCKED` → `lock_source_observation` → queue 행 `FOR UPDATE` → queue 재활성 또는 요청 거절. live 표를 쓰지 않음 |
+| maintenance: queue·collision·payload·absence slot·checkpoint retention | 단계별 단독 | 없음 | 각 표의 제한된 DELETE. 라이브 원본 표를 쓰지 않음 |
 | claim (`ClaimBatch`) | 단독 | 없음 | due queue 행 `FOR UPDATE SKIP LOCKED`(replay epoch 이전·시도 소진 후보와 선점 후보) → 같은 트랜잭션에서 종료 후보 DEAD_LETTER 집합 갱신 |
 
 - migration 328은 기존 guard를 잡은 뒤 316·325의 원본 문장 트리거, `refresh_youtube_live_runtime_state_statement()`, `guard_youtube_live_runtime_state()`, `youtube_live_runtime_state_guard` 표를 제거하고, 잠금 함수 본문을 advisory로 바꾸며 기록 함수를 READ COMMITTED 요구로 다시 정의합니다. runtime 역할은 수명 모델 표 SELECT만 유지하고 refresh·shared 잠금 EXECUTE를 받습니다. 기록 함수 실행 권한이 있는 역할은 refresh EXECUTE를 받고 scraper는 shared 잠금 권한이 없습니다. 마지막에 기존 모델·세션·head의 전체 key로 재계산해 drift 0에서 시작합니다. 328 이후 신설하는 기록 역할에는 기존 의존 권한에 더해 `refresh_youtube_live_runtime_state(text[])` 실행 권한도 부여합니다.
@@ -199,11 +198,11 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 - 채널 수치 통계·구독자 수 명령·통계 알림은 제거합니다. 채널 profile/photo, 방송·일정과 알림 구독은 유지합니다.
 - 각 successful collection slot의 관측은 독립 저장합니다. payload만 kind/schema/canonical profile과 전체 32바이트 SHA-256으로 공유하며, JSONB의 PostgreSQL LZ4 압축을 사용합니다. identity와 외부 hex hash 계약은 바꾸지 않습니다.
-- claim/replay는 같은 SQL에서 payload를 조회합니다. 참조 누락·kind/schema 불일치·hash 손상은 오류이며 구 저장 경로로 되돌아가지 않습니다. GC는 참조가 없는 payload만 잠금 후 새 snapshot으로 확인하여 제한된 수만 삭제합니다.
+- claim은 같은 SQL에서 payload를 조회합니다. 참조 누락·kind/schema 불일치·hash 손상은 오류이며 구 저장 경로로 되돌아가지 않습니다. GC는 참조가 없는 payload만 잠금 후 새 snapshot으로 확인하여 제한된 수만 삭제합니다.
 - claim SQL은 due 행 중 replay epoch 이전 자동 claim과 시도 소진 행을 다른 선점 후보와 함께 잠그기만 합니다. DEAD_LETTER 여부와 사유(`replay_epoch_expired`가 `attempts_exhausted`보다 우선)는 Go 재시도 정책이 정하고, 같은 claim 트랜잭션의 집합 UPDATE 한 번으로 claim 트랜잭션 시각·NULL 상세와 함께 기록합니다. claim 시점 DEAD_LETTER는 지표를 남기지 않습니다.
 - application은 entity별 멱등·CANONICALIZED 결과를 한 INSERT로 저장하며 원본의 `ON DELETE CASCADE` 수명을 따릅니다. 고아 유예·별도 감사 retention은 없습니다. provider/kind/subject/hash/effective clock은 원본에서 읽고 감사 행에 중복 저장하지 않습니다.
-- 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/replay/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
-- 원본 retention은 큐·pending replay·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.
+- 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
+- 원본 retention은 큐·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.
 - migration 315의 원본 정리는 보호 판정 전에 최대 1,000개 ID를 materialize합니다. kind별 인덱스 후보 반환은 최대 1,000개(정책 최대 16개), 최초 보호 검사는 합계 최대 1,000개이며 삭제·최종 보호 재검사는 `BatchSize`(최대 1,000) 이내입니다. 이 상한은 물리 I/O·보호 함수 내부의 자식 조회량·FK 쓰기량·실행 시간의 상한이 아닙니다.
 - `(received_at,id)` 진행 커서와 고정된 순회 상한을 DB singleton에 보존합니다. 새 유입이 계속되어도 순회 끝에서 앞쪽을 재방문하고, 잠긴 후보는 건너뛴 뒤 다음 순회에서 다시 봅니다. 모든 kind가 같은 시간/ID 순서를 공유하며 보호 해제·늦게 삽입된 앞쪽 원본도 재방문합니다. 커서와 원본/application 삭제는 같은 transaction으로 확정·롤백하므로 재시작 때 처음부터 훑지 않습니다.
 - DB 함수가 exclusive live 전역 잠금 → 커서 → 원본 잠금을 소유합니다. 전부 보호된 창도 성공한 tick이며 payload·absence·checkpoint 정리는 계속 실행됩니다. 앞 단계의 별도 commit 수량과 `BacklogKnown=false`의 미확정 의미는 유지합니다. runtime·scraper는 커서 표에 직접 접근하지 않습니다.

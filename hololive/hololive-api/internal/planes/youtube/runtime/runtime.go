@@ -58,10 +58,6 @@ type observationRetainer interface {
 	RunRetentionTick(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error)
 }
 
-type observationReplayer interface {
-	ProcessNextReplay(context.Context) (bool, error)
-}
-
 type Runtime struct {
 	Config apiconfig.YouTubePlaneConfig
 	Logger *slog.Logger
@@ -74,7 +70,6 @@ type Runtime struct {
 	projectionRetainer projectionRetainer
 	finalizer          liveEndFinalizer
 	retainer           observationRetainer
-	replayer           observationReplayer
 	builder            targetprojection.Builder
 	// liveFreshnessBudget는 builder와 같은 schedule에서 도출한 not_before 예산이며 수요 지표가 씁니다.
 	liveFreshnessBudget time.Duration
@@ -214,7 +209,6 @@ func newRuntime(
 		projectionRetainer: refresher,
 		finalizer:          repo,
 		retainer:           repo,
-		replayer:           repo,
 		builder: targetprojection.PolicyBuilder{
 			Reader:    rosterReader{timeFinalizationBacklogBatchSize: plane.TimeFinalizationBacklogBatchSize},
 			Schedules: schedules,
@@ -316,13 +310,6 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	r.startGuarded(runCtx, errCh, "youtube-retention-loop", &r.loopTasks, func() {
 		r.runRetentionLoop(runCtx, errCh)
 	})
-
-	if r.Config.Replay.Enabled {
-		r.loopCount++
-		r.startGuarded(runCtx, errCh, "youtube-replay-loop", &r.loopTasks, func() {
-			r.runReplayLoop(runCtx, errCh)
-		})
-	}
 }
 
 // startCoreLoops는 Start가 lifecycle 잠금을 소유한 동안 필수 supervisor 작업을 등록한다.

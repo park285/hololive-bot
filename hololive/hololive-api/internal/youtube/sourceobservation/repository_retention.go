@@ -22,7 +22,6 @@ type RetentionConfig struct {
 	QueueDLQAge          time.Duration
 	EvidenceAgeByKind    map[contract.ObservationKind]time.Duration
 	CollisionAge         time.Duration
-	ReplayAuditAge       time.Duration
 	LiveAbsenceSlotAge   time.Duration
 	CheckpointHistoryAge time.Duration
 	BatchSize            int
@@ -60,7 +59,7 @@ func (c RetentionConfig) Validate() error {
 }
 
 func (c RetentionConfig) hasNegativeAge() bool {
-	return c.QueueProcessedAge < 0 || c.QueueDLQAge < 0 || c.CollisionAge < 0 || c.ReplayAuditAge < 0 ||
+	return c.QueueProcessedAge < 0 || c.QueueDLQAge < 0 || c.CollisionAge < 0 ||
 		c.LiveAbsenceSlotAge < 0 || c.CheckpointHistoryAge < 0
 }
 
@@ -206,13 +205,6 @@ func (r *Repository) retentionSteps(
 			age:   cfg.CollisionAge,
 			run: func() (RetentionResult, error) {
 				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_collisions_0077_77.sql", cfg.CollisionAge, now, cfg.BatchSize))
-			},
-		},
-		{
-			table: "source_observation_replay_requests",
-			age:   cfg.ReplayAuditAge,
-			run: func() (RetentionResult, error) {
-				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_replay_0078_78.sql", cfg.ReplayAuditAge, now, cfg.BatchSize))
 			},
 		},
 		{

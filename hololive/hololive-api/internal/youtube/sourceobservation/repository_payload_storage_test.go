@@ -14,7 +14,7 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-func TestPayloadDictionaryKeepsIndependentObservationSlotsAndReplay(t *testing.T) {
+func TestPayloadDictionaryKeepsIndependentObservationSlots(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -64,13 +64,6 @@ func TestPayloadDictionaryKeepsIndependentObservationSlotsAndReplay(t *testing.T
 		})
 		require.NoError(t, err)
 	}
-
-	result, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID, RequestedBy: testReplayOperator,
-		Reason: "verify shared payload replay",
-	})
-	require.NoError(t, err)
-	require.True(t, result.Applied)
 }
 
 func TestPayloadDigestCollisionAndCorruptionFailClosed(t *testing.T) {
@@ -80,7 +73,7 @@ func TestPayloadDigestCollisionAndCorruptionFailClosed(t *testing.T) {
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	first := communityEnvelope(t, &proof, "same-post")
 
-	published, err := publishkit.NewPublisher(repo.pool).PublishBatch(ctx, publishInput(first))
+	_, err := publishkit.NewPublisher(repo.pool).PublishBatch(ctx, publishInput(first))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,11 +101,5 @@ func TestPayloadDigestCollisionAndCorruptionFailClosed(t *testing.T) {
 
 	if !errors.Is(err, errStoredPayloadCorrupt) {
 		t.Fatalf("claim corrupt payload error = %v", err)
-	}
-
-	if _, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID, RequestedBy: testReplayOperator, Reason: "corrupt payload",
-	}); !errors.Is(err, errStoredPayloadCorrupt) {
-		t.Fatalf("replay corrupt payload error = %v", err)
 	}
 }

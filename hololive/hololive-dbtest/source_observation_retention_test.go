@@ -19,7 +19,6 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 
 	queueProtected := insertRetentionObservation(t, pool, communityPageKind, base, "queue-protected")
-	replayProtected := insertRetentionObservation(t, pool, communityPageKind, base.Add(time.Hour), "replay-protected")
 	headProtected := insertRetentionObservation(t, pool, "live_snapshot", base.Add(2*time.Hour), "head-protected")
 	oldestEligible := insertRetentionObservation(t, pool, "live_snapshot", base.Add(3*time.Hour), "oldest-eligible")
 	nextEligible := insertRetentionObservation(t, pool, communityPageKind, base.Add(4*time.Hour), "next-eligible")
@@ -29,18 +28,6 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 		`INSERT INTO public.source_observation_queue (observation_id) VALUES ($1)`, queueProtected,
 	); err != nil {
 		t.Fatalf("protect retention observation with queue row: %v", err)
-	}
-
-	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO public.source_observation_replay_requests (
-			observation_id, provider, observation_kind, subject_key, observation_key,
-			evidence_sha256, requested_by, reason, previous_attempt_count
-		)
-		SELECT id, provider, observation_kind, subject_key, observation_key,
-		       encode(evidence_sha256, 'hex'), 'dbtest', 'retention protection', 0
-		FROM public.source_observations
-		WHERE id = $1`, replayProtected); err != nil {
-		t.Fatalf("protect retention observation with replay row: %v", err)
 	}
 
 	if _, err := pool.Exec(t.Context(), `
@@ -72,7 +59,7 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 		t.Fatalf("second retention batch deleted %v, want [%d]", got, nextEligible)
 	}
 
-	assertRetentionObservationsExist(t, pool, []int64{queueProtected, replayProtected, headProtected, recent})
+	assertRetentionObservationsExist(t, pool, []int64{queueProtected, headProtected, recent})
 }
 
 func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {

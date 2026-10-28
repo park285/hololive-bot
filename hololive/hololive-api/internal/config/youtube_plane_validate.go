@@ -21,24 +21,12 @@ func (c *YouTubePlaneConfig) Validate() error {
 		return fmt.Errorf("validate projection and finalizer: %w", err)
 	}
 
-	if err := c.validateRetentionAndReplay(); err != nil {
-		return fmt.Errorf("validate retention and replay: %w", err)
-	}
-
-	if err := c.validateStabilityPolicies(); err != nil {
-		return fmt.Errorf("validate stability policies: %w", err)
-	}
-
-	return nil
-}
-
-func (c *YouTubePlaneConfig) validateRetentionAndReplay() error {
 	if err := c.validateRetention(); err != nil {
 		return fmt.Errorf("validate retention: %w", err)
 	}
 
-	if err := c.validateReplay(); err != nil {
-		return fmt.Errorf("validate replay: %w", err)
+	if err := c.validateStabilityPolicies(); err != nil {
+		return fmt.Errorf("validate stability policies: %w", err)
 	}
 
 	return nil

@@ -369,46 +369,6 @@ func TestConsumerTransactionFailureRollsBackCanonicalAndProcessedState(t *testin
 	}
 }
 
-func TestConsumerReplayDoesNotDuplicateNotificationIntent(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	repo := NewRepository(pool)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-
-	consumer := NewConsumerWithGraces(repo, 0, 0)
-
-	proof = bootstrapCommunityWindow(ctx, t, pool, publishkit.NewPublisher(pool), consumer, proof)
-
-	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
-	if err != nil {
-		t.Fatalf("publish: %v", err)
-	}
-
-	if consumeErr := consumer.Consume(ctx, claimOptions()); consumeErr != nil {
-		t.Fatalf("first consume: %v", consumeErr)
-	}
-
-	assertTableCount(t, pool, "youtube_notification_outbox", 1)
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: published.Results[0].ObservationID,
-		RequestedBy:   testReplayOperator,
-		Reason:        "duplicate notification guard",
-	})
-	if err != nil || !replay.Applied {
-		t.Fatalf("request replay: %#v err=%v", replay, err)
-	}
-
-	if err := consumer.Consume(ctx, claimOptions()); err != nil {
-		t.Fatalf("replay consume: %v", err)
-	}
-
-	assertTableCount(t, pool, "youtube_notification_outbox", 1)
-	assertTableCount(t, pool, "source_observations", 2)
-}
-
 func setQueueAvailability(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, offset, action string) {
 	t.Helper()
 
