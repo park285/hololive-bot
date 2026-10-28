@@ -80,8 +80,11 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/api` profile for `bot_webhook_inbox`, `bot_reply_outbox`, `source_observation` | yes |
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
 | `BOT_SEE_MORE_FOLD` | bot·llm plane의 조회·보고서 2건 이상과 프로필·전체 도움말 텍스트에 전체보기 패딩 적용; 0·1건 목록과 알림은 펼침. 기본 `true`, `false`는 자동 패딩 차단 (`docs/current/architecture/MESSAGE_STYLE_GUIDE.md` §8) | no |
+| `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 새 응답을 `SendRichText`로 전송. 미설정은 `false`; RichText 운영 시 API·알람 워커 양쪽에 `true` 명시 | RichText 운영 시 필수 |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 | `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
+
+RichText 활성화는 코드·DB 배포와 별도입니다. migration `347`은 표준 기본 템플릿만 갱신하며 사용자 지정 기본값·채널 override·저장된 답변은 보존합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며, 행사 요약은 최종 검토·캐시까지 평문으로 유지한 후 formatter에서 보호합니다. 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
 
 ## YouTube 관측 보존
 

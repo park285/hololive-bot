@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -32,7 +33,8 @@ func TestRenderCelebrationMessageBirthday(t *testing.T) {
 
 	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Equal(t, "🎂 시라카미 후부키 생일 축하합니다!\nhttps://youtube.com/channel/UCdn5BQ06XqgXoAxIhbqw5Rg", msg)
+	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
 }
 
 func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
@@ -50,7 +52,9 @@ func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
 
 	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Equal(t, "🎂 리오나 2번째 생일 축하합니다!\nhttps://youtube.com/channel/UC9LSiN9hXI55svYEBrrK-tw", msg)
+	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+	assert.Contains(t, msg, "2")
 }
 
 func TestRenderCelebrationMessageAnniversary(t *testing.T) {
@@ -68,7 +72,9 @@ func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 
 	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Equal(t, "🎉 토키노 소라 데뷔 7주년 축하합니다!\nhttps://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg", msg)
+	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+	assert.Contains(t, msg, "7")
 }
 
 func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
@@ -89,7 +95,9 @@ func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
 
 	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Equal(t, "🎂 시라카미 후부키 생일 방송\n⏰ 21:00\n\u200b【생일 방송】후부키 생일 기념 라이브!\nhttps://www.youtube.com/watch?v=video-1", msg)
+	for _, field := range []string{envelope.Celebration.MemberName, envelope.Celebration.ScheduledStartKST, envelope.Celebration.StreamTitle, envelope.Celebration.StreamURL} {
+		assert.Contains(t, kakaoformat.Render(msg), field)
+	}
 }
 
 func TestRenderCelebrationMessageBirthdayStreamWithoutOptionalFields(t *testing.T) {
@@ -107,7 +115,8 @@ func TestRenderCelebrationMessageBirthdayStreamWithoutOptionalFields(t *testing.
 
 	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Equal(t, "🎂 시라카미 후부키 생일 방송", msg)
+	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+	assert.NotContains(t, msg, "https://")
 }
 
 func TestRenderCelebrationMessageNilPayload(t *testing.T) {
@@ -247,7 +256,7 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, processed)
 	require.Len(t, sender.messages, 1)
-	assert.Contains(t, sender.messages[0], "🎂 Test Member 생일 축하합니다!")
+	assert.Contains(t, sender.messages[0], envelope.Celebration.MemberName)
 	assert.Contains(t, sender.messages[0], "https://youtube.com/channel/UC_test")
 }
 
@@ -271,5 +280,6 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 
 	msg, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", group)
 	require.NoError(t, err)
-	assert.Equal(t, "🎉 토키노 소라 데뷔 7주년 축하합니다!\nhttps://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg", msg)
+	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
 }

@@ -46,6 +46,13 @@ Iris / Redroid is an external KakaoTalk automation boundary used for webhook ing
 오픈채팅 판정은 유지하고, 일반 텍스트 및 다른 메시지 유형은 전환하지 않습니다.
 SDK의 기존 `SendMarkdown`·`Sender`·`BotClient` 계약은 변경하지 않으며 필요한 소비자 인터페이스만 확장합니다.
 
+기본 템플릿 42개는 migration `347_richtext_templates.sql`에서 RichText 표현으로 전환합니다.
+이전 표준 본문과 일치하는 전역 기본값만 갱신하며 사용자 지정 기본값·채널 override와 기존 발송 요청은 유지합니다.
+운영 활성화는 API와 알람 워커 양쪽의 `BOT_MARKDOWN_REPLIES=true`를 확인해야 완료됩니다. 미설정 기본값은 `false`입니다.
+템플릿 `mdsafe`와 직접 조합하는 동적 필드는 `kakaotext.MarkdownLiteral`로 한 번만 보호합니다.
+LLM 최종 검토·캐시의 평문은 formatter 진입에서 보호하며 정적 서식·전체보기 패딩·저장 요청에는 재적용하지 않습니다.
+카카오 표를 생성하지 않고 제목·대상·상태 강조, 항목 순서와 독립 URL을 사용합니다. 제목 문법은 굵은 서식이지 큰 글자가 아니며 링크 문법도 숨은 URL을 만들지 않습니다.
+
 ## Response
 
 ```go

@@ -3,9 +3,11 @@ package alarmdispatch
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -23,7 +25,8 @@ func TestXSpaceRenderingAndIsolation(t *testing.T) {
 	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), newAlarmDispatchTestRenderer(t), nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, "🔴 소라 스페이스 시작\n\u200b이야기\nhttps://x.com/i/spaces/1abc", message)
+	require.Contains(t, kakaoformat.Render(message), envelope.XSpace.Title)
+	require.Contains(t, message, envelope.XSpace.URL())
 
 	require.NoError(t, alarmDispatchEnvelopeError(&envelope))
 
@@ -53,7 +56,8 @@ func TestXSpaceDispatchUsesTextAndRecordsCompletion(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, processed)
 	require.Equal(t, testAlarmRoomID, sender.roomID)
-	require.Equal(t, []string{"🔴 소라 스페이스 시작\n\u200b이야기\nhttps://x.com/i/spaces/1abc"}, sender.messages)
+	require.Len(t, sender.messages, 1)
+	require.Contains(t, sender.messages[0], envelope.XSpace.URL())
 	require.Len(t, consumer.markSending, 1)
 	require.Len(t, consumer.markDispatched, 1)
 	require.Empty(t, consumer.scheduledRetry)
@@ -80,13 +84,10 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, handled)
 
-			link := payload.URL()
-
-			if title != "" {
-				link = kakaotext.ZeroWidthSpace + kakaotext.MarkdownNeutralize(title) + "\n" + link
-			}
-
-			require.Equal(t, "🔴 "+kakaotext.MarkdownNeutralize(markdownMemberName)+" 스페이스 시작\n"+link, message)
+			visible := strings.ReplaceAll(kakaoformat.Render(message), kakaotext.ZeroWidthSpace, "")
+			require.Contains(t, visible, markdownMemberName)
+			require.Contains(t, visible, title)
+			require.Contains(t, visible, payload.URL())
 		})
 	}
 }

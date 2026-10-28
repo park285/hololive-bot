@@ -118,7 +118,7 @@ var templateFuncs = template.FuncMap{
 	"nl2br":          guardStringFunc("nl2br", nl2br),
 	"stripTags":      guardStringFunc("stripTags", stripTags),
 	"urlEncode":      guardStringFunc("urlEncode", urlEncode),
-	"mdsafe":         guardStringFunc("mdsafe", kakaotext.MarkdownNeutralize),
+	"mdsafe":         guardStringFunc("mdsafe", kakaotext.MarkdownLiteral),
 	// 복사할 명령어는 숨은 문자를 삽입하지 않고 Markdown 이스케이프로 보호합니다.
 	"mdescape": guardStringFunc("mdescape", kakaoformat.EscapeMarkdown),
 	"print":    boundedPrint,

@@ -1,11 +1,11 @@
 # Message Style Guide
 
 KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안내 단문)의 단일 스타일 규범.
-2026-07 미니멀 정돈 개편(마이그레이션 084~087)의 근거 문서이며, 이후 모든 신규/수정 문구는 이 가이드를 따른다.
+기본 템플릿 42개의 RichText 전환(migration 347)과 일반 텍스트 경로가 함께 따르는 현재 표현 계약입니다.
 
 ## 1. 범위와 SSOT
 
-- 문구의 SSOT는 DB 카탈로그 2개다: `notification_templates`(Go text/template 본문, template_key), `message_strings`(namespace/key/value). 코드 인라인 문구는 허용하지 않으며, 남은 인라인 라벨은 `timefmt` 네임스페이스로 추출한다.
+- 정적 문구의 정본은 DB 카탈로그 `notification_templates`(Go text/template 본문)와 `message_strings`(namespace/key/value)입니다. 방송 이력처럼 기존 formatter가 구조를 조합하는 표면은 해당 formatter가 소유하며 카탈로그와 같은 문자 보호·강조·링크·접기 규칙을 적용합니다.
 - `message_strings`는 bot plane·llm plane·alarm-worker가 기동 때 한 번 적재하고, 코드가 쓰는 타입 있는 key(`messagestrings.Key`)와 동적 조회 namespace를 검증한다. 누락되면 기동에 실패하며, 코드 대체 문구·조회 중 재적재·sentinel 대체 값은 없다. 템플릿 렌더 실패 응답은 `error/command_processing_failed` 문구를 쓰고, 예약 알림은 렌더에 실패하면 발송하지 않는다(`DEC-20260926-hololive-message-strings-startup-validation`). 새 key를 추가하면 `messagestrings` key 목록과 시드 SQL 계약 테스트(format 인자 수 포함)를 함께 갱신한다.
 - 소비 plane은 4곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), llm plane scheduler(`hololive-api/internal/planes/llm/runtime/formatter_llm_scheduler.go`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), alarm-worker YouTube outbox formatter(`hololive-alarm-worker/internal/egress/youtubedispatch/format`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
 - 템플릿 렌더러(`hololive-shared/pkg/service/template`)는 호출마다 현재 template `row_version`을 확인하고, YouTube outbox `FormatMessages`는 `RenderBatch`로 묶음 전체의 버전을 한 SQL 문장에서 확인한다. 본문·렌더 결과는 각각 64KiB, 실행 예산은 1초·100,000 단계·`{{template}}` 중첩 64단계다. 초과나 호출자 `ctx` 취소는 부분 결과 없이 실패한다. 시간·취소는 action 경계에서 확인하므로 실행 중인 Go 함수·method를 강제 중단하는 sandbox는 아니다.
@@ -48,13 +48,16 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 ## 4. 구조 패턴
 
-- 목록형 메시지 1행 헤더: `<글리프> <제목> · <N>개`(단위는 `개`·`건`·`명` 중 대상에 맞게). 기간·표시 한도 같은 헤더 보조 행은 헤더 바로 아래에 두고, 머리 문단 끝에는 빈 줄 1개를 둔다.
-- 메시지 내부 섹션 구분: `[섹션명]` 브래킷, 글리프 없음. (예: 도움말 명령 그룹, 멤버 목록 기수 그룹)
+- 목록형 메시지의 첫 줄 제목과 주요 개수, 항목의 멤버·방송 제목·핵심 상태는 `**...**`로 강조합니다. 기간·표시 한도는 헤더 바로 아래에 두고 머리 문단 끝에는 빈 줄 1개를 둡니다.
+- 도움말·프로필의 내부 섹션도 굵게 구분합니다. 제목 문법을 사용해도 Iris는 굵은 서식으로 변환할 뿐 큰 글자를 제공하지 않습니다. 표와 숨은 링크는 생성하지 않습니다.
 - 번호 목록: `N · ` 마커. 카카오 일반채팅이 `1. ` Markdown 목록의 빈 줄을 합치므로 쓰지 않는다. 상세 행은 들여쓰지 않는다.
 - URL은 단독 행에 bare로 둔다. 접두 글리프·라벨 금지. 항목의 마지막 행에 배치.
 - 여러 줄 항목의 경계는 `──────────` 한 줄이며 앞뒤에 빈 줄을 두지 않는다. 첫 항목 앞과 마지막 항목 뒤에는 넣지 않는다. 한 줄 항목끼리는 구분선 없이 이어 쓴다(예: 알람 목록). `━━━`·`---` 등 다른 구분선은 금지.
 - 빈 결과는 한 줄: `<글리프> <대상>이(가) 없습니다.` (+ 필요 시 사용 안내 1줄).
 - 사용 안내는 글리프 없이 `예) {{.Prefix}}알람 추가 페코라` 형식, 또는 명령 나열. 안내 예시 멤버명은 `페코라`로 고정.
+- 동적 필드는 `displayline` 등 표시 정규화 후 `mdsafe`로 한 번만 보호합니다. `mdsafe`는 `MarkdownLiteral`을 사용하며 문자 뒤에 ZWSP를 끼워 넣던 방식은 사용하지 않습니다. 들여쓰기 코드블록은 첫 공백·탭을 문자 참조로 전달하여 복사 시 원래 문자를 보존합니다.
+- 정규화한 표시값이 비어 있으면 강조 구문을 만들지 않습니다. 복사할 명령은 `mdescape`를 유지하고 명령·URL 전체를 강조하지 않습니다. 일반 텍스트 경로의 강조는 기존 `kakaoformat.Render`의 Unicode/괄호 표현을 따릅니다.
+- LLM 생성·최종 검토·캐시는 평문 데이터입니다. formatter가 표시 전에 한 번 보호하고, 표시값이 비어 있으면 기존 행사 목록을 사용합니다. 완성된 메시지·전체보기 패딩·저장된 요청에 문자 보호를 다시 적용하지 않습니다.
 
 ## 5. org 라벨 정책 — unmarked default
 
@@ -102,38 +105,25 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 ## 10. 변경 절차 (시드 재작성 규율)
 
-- 기존 마이그레이션 수정 금지. 신규 마이그레이션에 upsert로 재시드한다:
-  - 템플릿: `INSERT ... ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now()`
-  - 문자열: `INSERT ... ON CONFLICT (namespace, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`
-  - `DELETE` 금지. `manifest.txt`에 gapless order로 등록(`check-migration-manifest.sh`가 order 연속성·파일 parity를 강제).
-- 테스트 영향은 두 부류로 갈린다 — 반드시 같은 커밋에서 처리한다:
-  - **REAL-SEED**(시드 본문을 실제 렌더/조회 — 바꾸면 깨짐): alarm_dispatch 골든, celebration 골든, `store_test.go` 값 핀, `messages_seed_parity_test.go`(키셋·글리프), 라벨 lookup 테스트.
-  - **INLINE-TEMPLATE**(테스트 로컬 본문 주입 — 안 깨지지만 미러가 낡음): formatter/llm/outbox 골든의 로컬 본문 상수는 시드의 의도적 미러이므로 lockstep으로 갱신한다.
-- channel별 override 행(`channel_id IS NOT NULL`)은 보존이 정책이다 — 새 톤이 자동 적용되지 않으므로 재작성 시 키별 override 목록(`GET /api/holo/templates/:key`의 `overrides`, 조회 SQL `hololive-shared/pkg/repository/queries/template_list_overrides.sql`)으로 대상 방을 기록한다.
-- 롤아웃: 문자열 캐시는 프로세스별 무기한이므로 `message_strings` 변경은 `hololive-api`와 `hololive-alarm-worker` **둘 다** 재시작해야 반영된다. 템플릿 본문 변경은 `row_version`이 바뀌어 다음 렌더 호출부터 반영된다. (캘린더 PNG 디스크 캐시는 별도 — 렌더러 버전 bump가 담당.)
+- 적용된 마이그레이션은 수정하지 않습니다. 새 migration은 이전 표준 본문과 정확히 일치하는 전역 기본값만 갱신합니다. 사용자 지정 전역 본문과 채널 override를 무조건 upsert하거나 덮어쓰지 않습니다.
+- `manifest.txt`의 기존 순서를 유지하고 신규 항목을 등록합니다. 반복 적용은 본문·ID·버전·갱신 시각을 다시 변경하지 않아야 합니다.
+- 문구·배치를 복제한 golden이나 템플릿 원문 검사 대신 실제 렌더링의 동적 문자·URL·명령 복사, 빈 상태·상태 전환, 사용자 본문·저장 요청 보존을 검증합니다. 이전 표현만 고정하는 assertions는 새 문구로 재고정하지 않고 제거합니다.
+- Go 템플릿 Preview 성공은 Iris 네이티브 서식의 안전성 증명이 아닙니다. 최종 본문을 실제 RichText 변환기로 실행해 UTF-16 서식 범위, literal 기호·코드 경계·빈 강조·접기 패딩을 확인합니다.
+- 기본 템플릿 변경은 `row_version`에 따라 다음 렌더부터 반영됩니다. `message_strings` 변경은 프로세스별 기동 캐시 때문에 API·워커를 모두 재시작해야 합니다. helper 의미가 바뀌는 RichText 전환도 두 런타임을 함께 교체합니다.
+- 활성화 시 API·워커의 `BOT_MARKDOWN_REPLIES=true`를 명시하고 확인된 오픈채팅의 신규 RichText 요청을 검증합니다. 일반채팅·방 유형 미확인·명시적 비활성은 기존 텍스트 경로이며, 기존 원장의 본문·route·ID는 변경하지 않습니다.
 
-## 11. 소비자 매트릭스 (2026-07 기준)
+## 11. 현재 기본 템플릿 소비자
 
-| 키 패밀리 | 키 수 | 소비 plane | REAL-SEED 차단 테스트 | lockstep 미러 |
-|---|---|---|---|---|
-| `CMD_*` 코어 | 22 | bot | — | formatter_{calendar,stats_more,alarm,major_event_profile_more,streams_directory}_test.go 로컬 본문 |
-| `CMD_MAJOR_EVENT_*` | 8 | bot + llm | — | formatter_major_event*_test.go, formatter_llm_scheduler_major_member_test.go |
-| `CMD_MEMBER_NEWS_*` | 7 | bot + llm | — | formatter_member_news*_test.go, llm 동파일 |
-| `OUTBOX_*` | 7 | shared outbox(worker·producer) | outbox 골든의 sample data 임베드 | outbox_header_body_render_test.go 본문 미러 |
-| `ALARM_DISPATCH_*` | 2 | alarm-worker | alarm_dispatch_render_golden_test.go | — |
-| `CELEBRATION_*` | 2 | alarm-worker | celebration_message_test.go (byte-exact) | — |
-| `error` ns | 37 | bot | messages_seed_parity(글리프·키셋) | — |
-| `notify` ns | 8 | bot | messages_seed_parity(키셋) | — |
-| `org`/`alarmtype`/`newscat`/`social`/`misc` | 25 | bot + llm + worker + outbox | store_test.go 값 핀, 라벨 lookup 테스트 | — |
-| `calendar` ns | 8(코드 사용 7 — `overflow_footer`는 단일 페이지 전환으로 미사용 시드 잔존) | bot(render) | calendar_strings_test.go (시드 store byte-equal, 코드 대체 문구 없음), seed_sql_contract_test.go(시드 존재·format 인자 수) | — |
-| `timefmt` ns (신규) | 087에서 시드 | bot | seed_sql_contract_test.go(타입 key의 시드 존재·format 인자 수), 세 runtime 기동 검증 | — |
-| `karing` ns (087·188) | **미사용 시드 잔존** (alarm-worker Karing 발송 삭제, `DEC-20260926-hololive-karing-egress-disposition`) | — | seed parser 표본(migration 188 행)만 | — |
-| `livecard` ns (092) | 4 — **미사용 시드 잔존** (라이브 카드 제거, `!라이브` 텍스트 회귀) | — | — | — |
-| `profilecard` ns (093) | 1 — **미사용 시드 잔존** (프로필 카드 제거, `!멤버` 텍스트 회귀) | — | — | — |
-| `rankcard` ns (094) | 3 | bot(render 순위 카드) | rank_test.go parity | — |
+| 키 패밀리 | 키 수 | 소비자 |
+|---|---:|---|
+| 일반 `CMD_*` | 15 | bot plane |
+| `CMD_MAJOR_EVENT_*` | 8 | bot·llm plane |
+| `CMD_MEMBER_NEWS_*` | 7 | bot·llm plane |
+| `OUTBOX_*` | 6 | 알람 워커 YouTube formatter |
+| `ALARM_DISPATCH_*` | 2 | 알람 워커 |
+| `CELEBRATION_*` | 3 | 알람 워커 |
+| `X_SPACE_STARTED` | 1 | 알람 워커 |
 
-이미지 카드 표면: `!캘린더`(단일 이미지, 자연 높이 초과 시 compact 비례 축소로 1024x1536 안에 수용)와 `!구독자순위`(단일, top-N)만 유지 — 렌더·전송 실패 시 기존 텍스트로 폴백하며, 카드 문자열은 위 ns가 SSOT다. `!라이브`·`!멤버`는 카카오에서 이미지 내 URL 클릭이 불가해 텍스트 전송으로 회귀했다(라이브·프로필 카드 렌더러 및 SendMultipleImages 배선 제거). 드로잉 프리미티브는 `render/cardkit`, 팔레트는 `render/theme`이 단일 소스.
-
-부록 — 알려진 정합 이슈(개편에서 해소):
-- `GetAllTemplateKeys()`/sample data가 `ALARM_DISPATCH_NOTIFICATION{,_GROUP}` 2키를 누락(시드·상수 48 vs 키셋 46) → 키셋·샘플 보강으로 seed-render 게이트에 편입.
-- `misc/chzzk_title`은 소비자 없는 orphan — 삭제하지 않고 유지(store_test 핀), 신규 사용 전 재검토.
+이 42개 키와 표본 데이터는 `hololive-shared/internal/service/template/sampledata`가 소유합니다.
+문자열 카탈로그의 타입 있는 key·format 인자 계약과 이미지 렌더 경로는 별도 소유 경계를 유지합니다.
+이번 RichText 전환은 이미지 발송을 바꾸지 않으며, 기존 이미지 실패 시 텍스트 경로에도 동일한 템플릿·문자 보호 계약이 적용됩니다.

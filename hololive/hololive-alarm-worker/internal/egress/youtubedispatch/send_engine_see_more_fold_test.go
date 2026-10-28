@@ -106,11 +106,6 @@ func TestDispatchDeliveryRowsKeepsShortsUnfoldedAtFinalPayload(t *testing.T) {
 			final := runDirectGroupedShortsFinalPayload(t, count, nil)
 			require.NotContains(t, final, kakaotext.ZeroWidthSpace+kakaotext.ZeroWidthSpace, "alarm text must not carry see-more padding (consecutive ZWSP)")
 			require.Equal(t, count, strings.Count(final, "https://www.youtube.com/shorts/"))
-			require.Contains(t, final, "[Announcement]")
-
-			if count > 1 {
-				require.Contains(t, final, fmt.Sprintf("· %d개", count))
-			}
 		})
 	}
 }

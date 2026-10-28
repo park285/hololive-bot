@@ -41,7 +41,7 @@ func ShouldFoldItems(displayCount int) bool { return displayCount >= 2 }
 // seeMoreHeadMaxLines 안에 빈 줄이 없으면 첫 줄만 남긴다.
 // 빈 본문·한 줄짜리·이미 패딩된 텍스트는 그대로 반환한다(멱등).
 func FoldForSeeMore(text string) string {
-	// 단발 ZWSP는 MarkdownNeutralize가 남긴 것이므로, 패딩 판정은 연속 2개 이상으로만 한다.
+	// 템플릿의 줄 첫 위치 보호용 단발 ZWSP와 구별하여 연속 2개 이상만 기존 패딩으로 본다.
 	if strings.Contains(text, kakaotext.ZeroWidthSpace+kakaotext.ZeroWidthSpace) {
 		return text
 	}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
+	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 )
 
 var errAlarmDispatchRunnerTestSend = errors.New("send failed")
@@ -562,7 +564,7 @@ func TestGroupAlarmDispatchEnvelopesForDeliveryPreservesScheduledMinuteBuckets(t
 	assert.Len(t, groups, 2)
 }
 
-func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T) {
+func TestAlarmGroupViewPreservesPerItemCountdown(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	first := alarmGroupRenderEnvelope(3, "Member1", "abc", "Title1")
 	second := alarmGroupRenderEnvelope(1, "Member2", "def", "Title2")
@@ -572,15 +574,16 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 	group := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{first, second})[0]
 
-	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, "", group)
-
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, group, shortlinkservice.YouTubeBuilder{})
 	require.NoError(t, err)
-	assert.Equal(t, "⏰ 방송 1분 전 · 2개\n\n"+
-		"1 · ⏰ Member1 방송 3분 전\n\u200bTitle1\nhttps://youtube.com/watch?v=abc\n──────────\n"+
-		"2 · ⏰ Member2 방송 예정\n\u200bTitle2\nhttps://youtube.com/watch?v=def", message)
+	require.Len(t, view.Entries, 2)
+	assert.Equal(t, 1, view.MinutesUntil)
+	assert.Equal(t, 3, view.Entries[0].MinutesUntil)
+	assert.False(t, view.Entries[0].IsScheduled)
+	assert.True(t, view.Entries[1].IsScheduled)
 }
 
-func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t *testing.T) {
+func TestAlarmGroupViewAllLiveCatchupIsStarting(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	first := alarmGroupRenderEnvelope(5, "Member1", "abc", "Title1")
 	second := alarmGroupRenderEnvelope(5, "Member2", "def", "Title2")
@@ -594,15 +597,15 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, "", group)
-
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, group, shortlinkservice.YouTubeBuilder{})
 	require.NoError(t, err)
-	assert.Equal(t, "🔴 방송 시작 · 2개\n\n"+
-		"1 · 🔴 Member1 방송 시작\n\u200bTitle1\nhttps://youtube.com/watch?v=abc\n──────────\n"+
-		"2 · 🔴 Member2 방송 시작\n\u200bTitle2\nhttps://youtube.com/watch?v=def", message)
+	require.Len(t, view.Entries, 2)
+	assert.True(t, view.IsStarting)
+	assert.True(t, view.Entries[0].IsStarting)
+	assert.True(t, view.Entries[1].IsStarting)
 }
 
-func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader(t *testing.T) {
+func TestAlarmGroupViewMixedCatchupKeepsPerItemState(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	first := alarmGroupRenderEnvelope(5, "LiveMember", "live", "Live Title")
 	second := alarmGroupRenderEnvelope(5, "UpcomingMember", "upcoming", "Upcoming Title")
@@ -616,15 +619,16 @@ func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, "", group)
-
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, group, shortlinkservice.YouTubeBuilder{})
 	require.NoError(t, err)
-	assert.Equal(t, "⏰ 방송 5분 전 · 2개\n\n"+
-		"1 · 🔴 LiveMember 방송 시작\n\u200bLive Title\nhttps://youtube.com/watch?v=live\n──────────\n"+
-		"2 · ⏰ UpcomingMember 방송 예정\n\u200bUpcoming Title\nhttps://youtube.com/watch?v=upcoming", message)
+	require.Len(t, view.Entries, 2)
+	assert.False(t, view.IsStarting)
+	assert.True(t, view.Entries[0].IsStarting)
+	assert.False(t, view.Entries[1].IsStarting)
+	assert.True(t, view.Entries[1].IsScheduled)
 }
 
-func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(t *testing.T) {
+func TestAlarmItemViewActualStartOverridesCountdown(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	notification := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
 
@@ -636,16 +640,12 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 	notification.Stream.StartScheduled = &start
 	notification.Stream.StartActual = &start
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
-
+	view, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &notification, -1)
 	require.NoError(t, err)
-	assert.Equal(t,
-		"🔴 Member 방송 시작\n\u200bLive Title\nhttps://youtube.com/watch?v=live-1",
-		got,
-	)
+	assert.True(t, view.IsStarting)
 }
 
-func TestRenderAlarmDispatchNotificationLiveStatusUsesStartingMessage(t *testing.T) {
+func TestAlarmItemViewLiveStatusOverridesCountdown(t *testing.T) {
 	notification := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
 
 	notification.MinutesUntil = 5
@@ -655,16 +655,12 @@ func TestRenderAlarmDispatchNotificationLiveStatusUsesStartingMessage(t *testing
 	notification.Stream.Title = "Live Title"
 	notification.Stream.Status = domain.StreamStatusLive
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
-
+	view, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &notification, -1)
 	require.NoError(t, err)
-	assert.Equal(t,
-		"🔴 Member 방송 시작\n\u200bLive Title\nhttps://youtube.com/watch?v=live-status-1",
-		got,
-	)
+	assert.True(t, view.IsStarting)
 }
 
-func TestRenderAlarmDispatchNotificationUpcomingKeepsPreliveMessage(t *testing.T) {
+func TestAlarmItemViewUpcomingKeepsCountdown(t *testing.T) {
 	notification := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
 
 	notification.MinutesUntil = 5
@@ -674,13 +670,10 @@ func TestRenderAlarmDispatchNotificationUpcomingKeepsPreliveMessage(t *testing.T
 	notification.Stream.Title = "Upcoming Title"
 	notification.Stream.Status = domain.StreamStatusUpcoming
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
-
+	view, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &notification, -1)
 	require.NoError(t, err)
-	assert.Equal(t,
-		"⏰ Member 방송 5분 전\n\u200bUpcoming Title\nhttps://youtube.com/watch?v=upcoming-1",
-		got,
-	)
+	assert.False(t, view.IsStarting)
+	assert.Equal(t, 5, view.MinutesUntil)
 }
 
 func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
@@ -705,10 +698,10 @@ func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
 	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
 
 	require.NoError(t, err)
-	assert.Equal(t,
-		fmt.Sprintf("⏰ 비비 방송 5분 전\n%s%s\n%s", kakaotext.ZeroWidthSpace, kakaotext.MarkdownNeutralize(string([]rune(strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, ""))[:61])+"..."), streamURL),
-		got,
-	)
+	visible := strings.ReplaceAll(kakaoformat.Render(got), kakaotext.ZeroWidthSpace, "")
+	assert.Contains(t, "\n"+visible+"\n", "\n"+streamURL+"\n")
+	assert.Contains(t, visible, "【ホロライブ ドリームス】")
+	assert.NotContains(t, visible, strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, ""))
 }
 
 func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {

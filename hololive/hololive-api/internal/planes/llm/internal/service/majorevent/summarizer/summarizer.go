@@ -61,6 +61,8 @@ type EventSummarizer struct {
 	logger      *slog.Logger
 }
 
+// SummaryResult의 Text는 원제·공식명·URL을 보존하는 평문이다.
+// 최종 검토와 캐시도 이 계약을 유지하며, Markdown 보호는 소비 formatter가 한 번만 수행한다.
 type SummaryResult struct {
 	Text       string
 	ResultType sharedmodel.SummaryResultType

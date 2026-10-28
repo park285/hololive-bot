@@ -205,3 +205,4 @@
 205 344_youtube_collection_global_candidate_generic_plan.sql
 206 345_alarm_richtext_immutable_request.sql
 207 346_youtube_richtext_immutable_request.sql
+208 347_richtext_templates.sql
