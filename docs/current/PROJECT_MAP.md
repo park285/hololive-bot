@@ -18,8 +18,6 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Central production Compose service definitions; used with the live-compat overlay | - |
 | `deploy/compose/docker-compose.collector.yml` | YAML | `deploy/compose/docker-compose.collector.yml` | Standalone AP collector/issuer base; central prod extends the collector and adds central dependencies | - |
 | `deploy/compose/docker-compose.live-compat.yml` | YAML | `deploy/compose/docker-compose.live-compat.yml` | Required central host wiring and shortlink ingress | - |
-| `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
-| `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.seoul.yml` | YAML | `deploy/compose/docker-compose.seoul.yml` | Seoul Compose AP (`youtube-collector-b` + isolated issuer `youtube-po-b`) | - |
 
 The Console module row describes the current Go gateway + Android Kotlin source.
@@ -119,5 +117,5 @@ not a parallel MQ configuration type.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-collector AP fleet). `hololive-api` hosts the bot/admin/llm planes in one process on ports 30001/30003/30006.
 - Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` and starts `hololive-api`, `hololive-alarm-worker`, fleet member `c` (`youtube-collector`, 30025), its isolated issuer and central infra. Runtime hosts use verified images with no builds, following the release runbook.
-- Prepared Seoul/AP Compose uses `docker-compose.collector.yml` + the selected AP overlay, with no central service interpolation or dependencies. Osaka `a` and Osaka2 `d` retain native systemd execution. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
+- Prepared Seoul Compose uses `docker-compose.collector.yml` + `docker-compose.seoul.yml`, with no central service interpolation or dependencies. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`, `youtube-producer`.

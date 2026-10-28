@@ -21,9 +21,7 @@
 └── deploy/compose/                 # Docker Compose baselines and overlays
     ├── docker-compose.prod.yml     # production compose baseline
     ├── docker-compose.live-compat.yml # main-host live wiring overlay (always applied; owns collector-c ports/volumes)
-    ├── docker-compose.seoul.yml    # Seoul Compose AP (youtube-collector-b + youtube-po-b)
-    ├── docker-compose.osaka.yml    # native Osaka a configuration/path validation
-    └── docker-compose.osaka2.yml   # native Osaka2 d configuration/path validation
+    └── docker-compose.seoul.yml    # Seoul Compose AP (youtube-collector-b + youtube-po-b)
 ```
 
 `go.work` ties the Go runtime/shared/dbtest modules under `hololive/` and sibling modules `../shared-go` and `../iris-client-go` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
@@ -130,7 +128,7 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 | Osaka collector `a`·Osaka2 collector `d` | native `hololive-youtube-collector@youtube-collector-{a,d}.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 또는 `osaka2` 대상; [collector runbook](runbooks/youtube-collector.md) |
 | 통합 관리자 웹 | iris-seoul의 `iris-console.service` | Iris Console 운영 절차; 이 저장소의 [연결 경계](runbooks/admin-dashboard.md) |
 
-`scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Seoul에 `compose`, Osaka·Osaka2에 `native`를 지정합니다. Osaka의 Compose overlays는 설정·경로 계약 검증용입니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
+`scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Seoul에 `compose`, Osaka·Osaka2에 `native`를 지정합니다. `AP_COMPOSE_FILE`은 `compose` 호스트에만 둡니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
 
 Live deploy, restart, rollback, secret writes, and production config mutation require explicit operator approval.
 

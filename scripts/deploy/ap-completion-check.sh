@@ -133,7 +133,7 @@ REMOTE
     < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
 }
 
-if [[ "${AP_RUNTIME_MODE:-compose}" == "native" ]]; then
+if [[ "${AP_RUNTIME_MODE}" == "native" ]]; then
   run_native_completion_check
   exit 0
 fi

@@ -1,8 +1,5 @@
-deploy/compose/.env.osaka.example	central
 deploy/compose/.env.seoul.example	central
 deploy/compose/docker-compose.live-compat.yml	workstation,seoul
-deploy/compose/docker-compose.osaka.yml	osaka
-deploy/compose/docker-compose.osaka2.yml	osaka2
 deploy/compose/docker-compose.prod.yml	seoul
 deploy/compose/docker-compose.seoul.yml	seoul
 deploy/compose/postgres/pg_hba.conf	central,workstation,seoul,osaka,osaka2

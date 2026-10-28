@@ -43,9 +43,9 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh prune`
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
-- `./scripts/logs/ap-status.sh <host>` (osaka, seoul)
+- `./scripts/logs/ap-status.sh <host>` (seoul, osaka, osaka2)
 - `./scripts/logs/ap-logs.sh <host> [youtube-collector|all]`
-- `./scripts/logs/ap-smoke.sh <host>`
+- `./scripts/logs/ap-smoke.sh seoul` (Compose AP 전용, native 호스트는 `./scripts/deploy/ap-completion-check.sh <host>`)
 
 ## 5. review/
 리뷰 전달용 source/full bundle export와 사후 검증 스크립트입니다.

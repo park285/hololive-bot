@@ -291,8 +291,6 @@ for port in service.get("ports", []) or []:
         sys.exit(1)
 PY
 done <<'EOF'
-youtube-collector-a docker-compose.osaka.yml
 youtube-collector-b docker-compose.seoul.yml
-youtube-collector-d docker-compose.osaka2.yml
 EOF
 pass "remote AP producers remain outside the trace network without Jaeger or OTLP host ports"

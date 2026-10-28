@@ -6,8 +6,6 @@ PROD_FILE="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 ACTIVE_COMPOSE_FILES=(
     "${PROD_FILE}"
     "${ROOT_DIR}/deploy/compose/docker-compose.live-compat.yml"
-    "${ROOT_DIR}/deploy/compose/docker-compose.osaka.yml"
-    "${ROOT_DIR}/deploy/compose/docker-compose.osaka2.yml"
     "${ROOT_DIR}/deploy/compose/docker-compose.seoul.yml"
     "${ROOT_DIR}/deploy/compose/docker-compose.remote-cache.yml"
 )

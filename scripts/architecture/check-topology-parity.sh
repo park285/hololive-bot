@@ -163,8 +163,6 @@ assert_assignment "osaka2 AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$osaka2" "$r
 assert_assignment "seoul AP host" AP_SSH_HOST "$seoul" "$root_dir/scripts/deploy/ap-hosts/seoul.conf"
 assert_assignment "seoul AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$seoul" "$root_dir/scripts/deploy/ap-hosts/seoul.conf"
 
-assert_count "osaka Compose bind" 1 "\"$osaka:30096:30096\"" "$root_dir/deploy/compose/docker-compose.osaka.yml"
-assert_count "osaka2 Compose bind" 1 "\"$osaka2:30096:30096\"" "$root_dir/deploy/compose/docker-compose.osaka2.yml"
 assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/compose/docker-compose.seoul.yml"
 assert_count "prod Iris host aliases" 2 ":$seoul\"" "$root_dir/deploy/compose/docker-compose.prod.yml"
 assert_count "live-compat Iris allowlist" 2 "IRIS_BASE_URL_ALLOWED_HOSTS:-$seoul" "$root_dir/deploy/compose/docker-compose.live-compat.yml"

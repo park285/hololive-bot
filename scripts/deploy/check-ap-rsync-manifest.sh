@@ -57,14 +57,18 @@ done
 
 # Compose runtime AP host의 원격 명령은 그 host의 overlay를 compose.sh에 넘긴다.
 for conf in "$ROOT_DIR"/scripts/deploy/ap-hosts/*.conf; do
-  read -r mode compose_file < <(
+  IFS="|" read -r mode compose_file < <(
     AP_RUNTIME_MODE=""
     AP_COMPOSE_FILE=""
     # shellcheck disable=SC1090
     . "$conf"
-    printf '%s %s\n' "${AP_RUNTIME_MODE:-compose}" "$AP_COMPOSE_FILE"
+    printf '%s|%s\n' "$AP_RUNTIME_MODE" "$AP_COMPOSE_FILE"
   )
-  [[ "$mode" == compose ]] || continue
+  case "$mode" in
+    compose) ;;
+    native) continue ;;
+    *) fail "AP_RUNTIME_MODE must be compose or native in ${conf##*/}" ;;
+  esac
   require "$compose_file" "Compose AP overlay of ${conf##*/}"
 done
 

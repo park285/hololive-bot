@@ -38,7 +38,7 @@ state distinct from the target configuration documented in the repository.
 | Osaka2 AP `d` | `<tailnet-osaka2-d>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-d.service`와 격리 issuer `hololive-youtube-po.service`. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
 
-Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용합니다. Osaka `a`·Osaka2 `d`의 Compose overlay는 경로·설정 계약 검증용이며 실제 기동은 native unit이 소유합니다. 실행 방식의 설정은 `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`의 `AP_RUNTIME_MODE`가 소유합니다.
+Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용합니다. Osaka `a`·Osaka2 `d`는 Compose overlay 없이 native systemd unit 하나로만 기동합니다. 실행 방식의 설정은 `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`의 `AP_RUNTIME_MODE`가 소유합니다.
 
 2026-10-07 중앙 runtime과 PostgreSQL을 Osaka에서 Seoul로 이전했습니다. 새 VM이 기존 중앙
 주소 `100.100.1.8`을 승계했으므로 AP·Iris webhook·관리 gateway·DB exporter·shortlink의

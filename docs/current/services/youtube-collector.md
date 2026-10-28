@@ -146,7 +146,7 @@ player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체�
 - `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
 - `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the Compose/native CA path above
-- Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` for fleet member `c` and issuer `youtube-po-c`. Seoul uses `docker-compose.prod.yml` + `docker-compose.seoul.yml` for `youtube-collector-b` and issuer `youtube-po-b`; the AP overlay pins central services to `central-only`. Osaka `a` and Osaka2 `d` use native systemd units; their Compose overlays validate configuration/path contracts. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
+- Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` for fleet member `c` and issuer `youtube-po-c`. Seoul uses `docker-compose.prod.yml` + `docker-compose.seoul.yml` for `youtube-collector-b` and issuer `youtube-po-b`; the AP overlay pins central services to `central-only`. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
 
 ## Shutdown behavior
 

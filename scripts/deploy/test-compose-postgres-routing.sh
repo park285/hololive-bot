@@ -68,16 +68,13 @@ render default "${endpoint_root}/default.env" "${endpoint_root}/default.json" "$
 render default "${endpoint_root}/default.env" "${endpoint_root}/default-live.json" "${live[@]}"
 render oracle "${endpoint_root}/override.env" "${endpoint_root}/central.json" "${prod[@]}"
 render oracle "${endpoint_root}/override.env" "${endpoint_root}/live.json" "${live[@]}"
-for endpoint_spec in "a deploy/compose/docker-compose.osaka.yml" "b deploy/compose/docker-compose.seoul.yml" "d deploy/compose/docker-compose.osaka2.yml"; do
-    set -- ${endpoint_spec}
-    render oracle "${endpoint_root}/ap.env" "${endpoint_root}/${1}.json" -f "${2}"
-    quiet oracle "${endpoint_root}/ap.env" -f "${2}"
-done
-render oracle "${endpoint_root}/ap-default.env" "${endpoint_root}/ap-default.json" -f deploy/compose/docker-compose.osaka.yml
+render oracle "${endpoint_root}/ap.env" "${endpoint_root}/b.json" -f deploy/compose/docker-compose.seoul.yml
+quiet oracle "${endpoint_root}/ap.env" -f deploy/compose/docker-compose.seoul.yml
+render oracle "${endpoint_root}/ap-default.env" "${endpoint_root}/ap-default.json" -f deploy/compose/docker-compose.seoul.yml
 quiet default "${endpoint_root}/default.env" "${prod[@]}"
 quiet oracle "${endpoint_root}/override.env" "${prod[@]}"
 
-"${CI_PYTHON_BIN}" - "${endpoint_root}/default.json" "${endpoint_root}/default-live.json" "${endpoint_root}/central.json" "${endpoint_root}/live.json" "${endpoint_root}/a.json" "${endpoint_root}/b.json" "${endpoint_root}/d.json" "${endpoint_root}/ap-default.json" <<'PY'
+"${CI_PYTHON_BIN}" - "${endpoint_root}/default.json" "${endpoint_root}/default-live.json" "${endpoint_root}/central.json" "${endpoint_root}/live.json" "${endpoint_root}/b.json" "${endpoint_root}/ap-default.json" <<'PY'
 import json
 import sys
 def load(path):
@@ -119,7 +116,7 @@ def check_no_scraper_poll(services, name, label):
     if scraper_keys:
         raise SystemExit(f"[FAIL] {label}: scraper env {scraper_keys}")
     print(f"[PASS] {label}")
-default, live_default, central, live, osaka, seoul, osaka2, ap_default = map(load, sys.argv[1:])
+default, live_default, central, live, seoul, ap_default = map(load, sys.argv[1:])
 for args in [
     (default, "hololive-api", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central API default"),
     (default, "hololive-alarm-worker", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central worker default"),
@@ -139,9 +136,7 @@ for args in [
     (live, "hololive-api", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live API override"),
     (live, "youtube-collector", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live collector override"),
     (live, "hololive-db-migrate", "/var/run/postgresql", "5432", ("PGHOST", "PGPORT"), "live migrate ignores TCP override"),
-    (osaka, "youtube-collector-a", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka producer-a override"),
     (seoul, "youtube-collector-b", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Seoul producer-b override"),
-    (osaka2, "youtube-collector-d", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka2 producer-d override"),
 ]:
     check(*args)
 for services, name, label in [
@@ -149,25 +144,21 @@ for services, name, label in [
     (central, "hololive-alarm-worker", "central worker uses tailnet DNS"),
     (central, "youtube-collector", "central collector uses tailnet DNS"),
     (live, "youtube-collector", "live collector uses tailnet DNS"),
-    (osaka, "youtube-collector-a", "Osaka producer-a uses tailnet DNS"),
     (seoul, "youtube-collector-b", "Seoul producer-b uses tailnet DNS"),
-    (osaka2, "youtube-collector-d", "Osaka2 producer-d uses tailnet DNS"),
 ]:
     check_dns(services, name, label)
-check(ap_default, "youtube-collector-a", "postgres.service.fixture", "5433", ("POSTGRES_HOST", "POSTGRES_PORT"), "AP port default")
+check(ap_default, "youtube-collector-b", "postgres.service.fixture", "5433", ("POSTGRES_HOST", "POSTGRES_PORT"), "AP port default")
 for services, name, label in [
     (default, "youtube-collector", "central collector default has no Valkey"),
     (live_default, "youtube-collector", "live collector default has no Valkey"),
     (central, "youtube-collector", "central collector override has no Valkey"),
     (live, "youtube-collector", "live collector override has no Valkey"),
-    (osaka, "youtube-collector-a", "Osaka collector-a has no Valkey"),
     (seoul, "youtube-collector-b", "Seoul collector-b has no Valkey"),
-    (osaka2, "youtube-collector-d", "Osaka2 collector-d has no Valkey"),
-    (ap_default, "youtube-collector-a", "AP port-default collector-a has no Valkey"),
+    (ap_default, "youtube-collector-b", "AP port-default collector-b has no Valkey"),
 ]:
     check_no_cache(services, name, label)
     check_no_scraper_poll(services, name, label.replace("no Valkey", "has no SCRAPER_POLL_/SCRAPER_FETCHER_ENGINE"))
-for services, slot in [(osaka, "a"), (seoul, "b"), (osaka2, "d")]:
+for services, slot in [(seoul, "b")]:
     if set(services) != {f"youtube-collector-{slot}", f"youtube-po-{slot}"}:
         raise SystemExit(f"[FAIL] AP {slot} contains central services")
     collector = services[f"youtube-collector-{slot}"]

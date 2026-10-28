@@ -72,12 +72,10 @@ main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 default_render="$(render "" "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 migration_override_render="$(render oracle "${STUB_MIGRATION_OVERRIDE_ENV}" "${PROD_OVERLAYS[@]}")"
 collector_disabled_render="$(render oracle "${STUB_COLLECTOR_DISABLED_ENV}" "${PROD_OVERLAYS[@]}")"
-osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.osaka.yml)"
-osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.osaka2.yml)"
 seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.seoul.yml)"
 
 MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" COLLECTOR_DISABLED_RENDER="${collector_disabled_render}" \
-    OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" "${CI_PYTHON_BIN}" - <<'PY'
+    SEOUL_RENDER="${seoul_render}" "${CI_PYTHON_BIN}" - <<'PY'
 import json
 import os
 import sys
@@ -264,8 +262,6 @@ def has_bind_target(svc, target):
 
 
 AP_PRODUCERS = (
-    ("OSAKA_RENDER", "youtube-collector-a", 30005, "100.100.1.6"),
-    ("OSAKA2_RENDER", "youtube-collector-d", 30035, "100.100.1.2"),
     ("SEOUL_RENDER", "youtube-collector-b", 30015, "100.100.1.5"),
 )
 

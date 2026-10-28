@@ -46,7 +46,7 @@ ap_host_load() {
 
     : "${AP_NAME:?missing AP_NAME in $conf}"
     : "${AP_SSH_HOST:?missing AP_SSH_HOST in $conf}"
-    : "${AP_COMPOSE_FILE:?missing AP_COMPOSE_FILE in $conf}"
+    : "${AP_RUNTIME_MODE:?missing AP_RUNTIME_MODE in $conf}"
     : "${AP_APPROVE_DEPLOY_VAR:?missing AP_APPROVE_DEPLOY_VAR in $conf}"
     : "${AP_APPROVE_ROLLBACK_VAR:?missing AP_APPROVE_ROLLBACK_VAR in $conf}"
     : "${AP_BACKUP_PREFIX:?missing AP_BACKUP_PREFIX in $conf}"
@@ -66,7 +66,6 @@ ap_host_load() {
         echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must have matching lengths in $conf" >&2
         return 2
     fi
-    AP_RUNTIME_MODE="${AP_RUNTIME_MODE:-compose}"
     case "${AP_RUNTIME_MODE}" in
         compose|native) ;;
         *)
@@ -83,8 +82,15 @@ ap_host_load() {
             return 2
             ;;
     esac
-    if [[ ! -r "$repo_root/$AP_COMPOSE_FILE" ]]; then
-        echo "AP_COMPOSE_FILE not readable: $repo_root/$AP_COMPOSE_FILE" >&2
+    # Compose overlay는 compose 모드 호스트만 소유한다. native 호스트의 실행 정본은 systemd unit이다.
+    if [[ "$AP_RUNTIME_MODE" == compose ]]; then
+        : "${AP_COMPOSE_FILE:?missing AP_COMPOSE_FILE in $conf}"
+        if [[ ! -r "$repo_root/$AP_COMPOSE_FILE" ]]; then
+            echo "AP_COMPOSE_FILE not readable: $repo_root/$AP_COMPOSE_FILE" >&2
+            return 2
+        fi
+    elif [[ -n "$AP_COMPOSE_FILE" ]]; then
+        echo "AP_COMPOSE_FILE is only valid for AP_RUNTIME_MODE=compose in $conf" >&2
         return 2
     fi
 

@@ -34,12 +34,6 @@ contains_compose_file() {
     return 1
 }
 
-contains_ap_compose_file() {
-    contains_compose_file docker-compose.osaka.yml \
-        || contains_compose_file docker-compose.osaka2.yml \
-        || contains_compose_file docker-compose.seoul.yml
-}
-
 usage() {
     echo "Usage: $0 <service>"
     echo
@@ -144,7 +138,7 @@ if ! TARGET="$(compose_service_resolve_redeploy_target "${SERVICE}")"; then
     exit 1
 fi
 
-if contains_ap_compose_file && [[ "${TARGET}" == "youtube-collector" || "${TARGET}" == "youtube-po-c" ]]; then
+if contains_compose_file docker-compose.seoul.yml && [[ "${TARGET}" == "youtube-collector" || "${TARGET}" == "youtube-po-c" ]]; then
     echo "[ERROR] youtube-collector is central-only and cannot be redeployed with an AP compose overlay" >&2
     exit 1
 fi
