@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -118,16 +119,16 @@ func assertInboxAdmitIsKeyedByMessageID(
 	t.Helper()
 	truncateDurabilityTables(ctx, t, pool)
 
-	admitted, err := repo.Admit(ctx, message)
+	admission, err := repo.AdmitResult(ctx, message)
 	require.NoError(t, err)
-	assert.True(t, admitted)
+	assert.Equal(t, workercontract.AdmissionAccepted, admission)
 
 	redelivered := message
 
 	redelivered.Payload = []byte(`{"body":"second"}`)
-	admitted, err = repo.Admit(ctx, redelivered)
+	admission, err = repo.AdmitResult(ctx, redelivered)
 	require.NoError(t, err, "중복 webhook 재전송은 실패가 아니다")
-	assert.False(t, admitted)
+	assert.NotEqual(t, workercontract.AdmissionAccepted, admission)
 
 	_, payload, _, _ := inboxRow(ctx, t, pool, message.MessageID)
 	assert.JSONEq(t, `{"body":"first"}`, string(payload))
@@ -279,7 +280,7 @@ func assertInboxRejectsInvalidArguments(
 ) {
 	t.Helper()
 
-	_, err := repo.Admit(ctx, InboxMessage{RoomID: testDurableRoomID, OrderingKey: "k", Payload: []byte(`{}`)})
+	_, err := repo.AdmitResult(ctx, InboxMessage{RoomID: testDurableRoomID, OrderingKey: "k", Payload: []byte(`{}`)})
 	require.ErrorIs(t, err, ErrInvalidArgument)
 
 	_, err = repo.Claim(ctx, testClaimToken, 0)
@@ -292,7 +293,7 @@ func assertInboxRejectsInvalidArguments(
 func TestInboxRepositoryWithoutPool(t *testing.T) {
 	repo := NewInboxRepository(nil)
 
-	_, err := repo.Admit(t.Context(), InboxMessage{
+	_, err := repo.AdmitResult(t.Context(), InboxMessage{
 		MessageID:   testMessageID,
 		RoomID:      testDurableRoomID,
 		OrderingKey: "room:room-1",
@@ -304,7 +305,7 @@ func TestInboxRepositoryWithoutPool(t *testing.T) {
 func admitOne(ctx context.Context, t *testing.T, repo *InboxRepository, msg InboxMessage) {
 	t.Helper()
 
-	admitted, err := repo.Admit(ctx, msg)
+	admission, err := repo.AdmitResult(ctx, msg)
 	require.NoError(t, err)
-	require.True(t, admitted)
+	require.Equal(t, workercontract.AdmissionAccepted, admission)
 }

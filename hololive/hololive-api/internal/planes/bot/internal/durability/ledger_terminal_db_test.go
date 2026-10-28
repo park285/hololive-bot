@@ -178,7 +178,7 @@ func TestInboxConcurrentFirstAdmitsPreserveOneOldestHead(t *testing.T) {
 		go func() {
 			<-start
 
-			_, admitErr := repo.Admit(ctx, inboxMessage(id, "room-1", "room:barrier-first"))
+			_, admitErr := repo.AdmitResult(ctx, inboxMessage(id, "room-1", "room:barrier-first"))
 			errs <- admitErr
 		}()
 	}
@@ -218,7 +218,7 @@ func TestInboxAdmitRacingTerminalTransitionPreservesSuccessorHead(t *testing.T) 
 
 	go func() { _, e := repo.Abandon(ctx, claim.MessageID, "terminal-token", "poison"); errs <- e }()
 	go func() {
-		_, e := repo.Admit(ctx, inboxMessage("message:successor", "room-1", "room:barrier-terminal"))
+		_, e := repo.AdmitResult(ctx, inboxMessage("message:successor", "room-1", "room:barrier-terminal"))
 		errs <- e
 	}()
 

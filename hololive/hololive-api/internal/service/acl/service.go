@@ -174,18 +174,6 @@ type Service struct {
 	blacklistRooms map[string]struct{}
 }
 
-func (s *Service) IsReady() bool {
-	if s == nil {
-		return false
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return s.store != nil && s.logger != nil &&
-		s.whitelistRooms != nil && s.blacklistRooms != nil
-}
-
 // NewACLService ACL 서비스 생성 및 초기화.
 func NewACLService(
 	ctx context.Context,

@@ -210,12 +210,6 @@ type ReplayEpochActivation struct {
 	Activated bool
 }
 
-type RetentionQuery struct {
-	Kind   contract.ObservationKind
-	Before time.Time
-	Limit  int
-}
-
 func (o ClaimOptions) validate() error {
 	if err := validateText("consumer name", o.ConsumerName, 128); err != nil {
 		return fmt.Errorf("validate source observation claim: %w", err)

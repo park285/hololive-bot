@@ -116,10 +116,6 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 	return members, nil
 }
 
-func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candidate, error) {
-	return r.listActiveMajorEvents(ctx, mustSQL("repository_query_0129_04.sql"))
-}
-
 func (r *Repository) ListActiveMajorEventsForPeriod(ctx context.Context, period model.Period, now time.Time) ([]model.Candidate, error) {
 	start, end := filter.PeriodBounds(period, now)
 	return r.listActiveMajorEvents(ctx, mustSQL("repository_query_period.sql"), start, end)

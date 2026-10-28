@@ -19,6 +19,22 @@ import (
 
 const manualReplayReason = "incident INC-2026-0801 verified Iris repair"
 
+// replyOutboxManualReplayArtifactSQL은 운영자가 psql로 실행하는 artifact의 psql 변수를 bind 인자로 바꾼 문장이다.
+// 시험은 production 정본인 이 artifact를 그대로 실행한다.
+var replyOutboxManualReplayArtifactSQL = strings.NewReplacer(
+	":'outbox_id'", "$1",
+	":'operator_actor'", "$2",
+	":'operator_reason'", "$3",
+).Replace(mustSQL("reply_outbox_replay_manual_review.sql"))
+
+func replayManualReviewArtifact(ctx context.Context, repo *ReplyOutboxRepository, id int64, actor, reason string) (string, error) {
+	var outcome string
+
+	err := repo.pool.QueryRow(ctx, replyOutboxManualReplayArtifactSQL, id, actor, reason).Scan(&outcome)
+
+	return outcome, err
+}
+
 type manualReplayCutoffCase struct {
 	name      string
 	createdAt string
@@ -62,11 +78,7 @@ func assertManualReplayCutoff(ctx context.Context, t *testing.T, pool *pgxpool.P
 		WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id)
 	require.NoError(t, err)
 
-	replayOutcome, err := repo.ReplayManualReview(ctx, ReplyOutboxManualReplay{
-		OutboxID: id,
-		Actor:    testOperatorEmail,
-		Reason:   manualReplayReason,
-	})
+	replayOutcome, err := replayManualReviewArtifact(ctx, repo, id, testOperatorEmail, manualReplayReason)
 	require.NoError(t, err)
 	require.Equal(t, tc.want, replayOutcome)
 
@@ -169,11 +181,7 @@ func TestManualReplayAuditRuntimePrivileges(t *testing.T) {
 		SET status = 'manual_review', attempts = 5
 		WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id))
 
-	outcome, err := ownerRepo.ReplayManualReview(ctx, ReplyOutboxManualReplay{
-		OutboxID: id,
-		Actor:    testOperatorEmail,
-		Reason:   "incident INC-2026-0801 authorized replay",
-	})
+	outcome, err := replayManualReviewArtifact(ctx, ownerRepo, id, testOperatorEmail, "incident INC-2026-0801 authorized replay")
 	require.NoError(t, err)
 	require.Equal(t, "replayed", outcome)
 
@@ -278,21 +286,16 @@ func TestManualReviewReplayRejectsUnboundedOrUnsafeMetadata(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `UPDATE bot_reply_outbox
 		SET status = 'manual_review' WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id))
 
-	_, err := repo.ReplayManualReview(ctx, ReplyOutboxManualReplay{
-		OutboxID: id, Actor: "operator with spaces", Reason: "ticket-1",
-	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
-
-	_, err = repo.ReplayManualReview(ctx, ReplyOutboxManualReplay{
-		OutboxID: id, Actor: testOperatorEmail, Reason: strings.Repeat("r", 257),
-	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
-
-	var outcome string
-
-	err = pool.QueryRow(ctx, replyOutboxReplayManualReviewSQL, id, testOperatorEmail, "bad\nreason").Scan(&outcome)
-	require.NoError(t, err)
-	require.Equal(t, "invalid_operator_metadata", outcome)
+	// 운영자 입력 검증은 psql artifact의 DB 함수가 소유한다. 거절은 상태를 바꾸지 않는 결과 값으로 돌아온다.
+	for _, input := range []struct{ actor, reason string }{
+		{actor: "operator with spaces", reason: "ticket-1"},
+		{actor: testOperatorEmail, reason: strings.Repeat("r", 257)},
+		{actor: testOperatorEmail, reason: "bad\nreason"},
+	} {
+		outcome, err := replayManualReviewArtifact(ctx, repo, id, input.actor, input.reason)
+		require.NoError(t, err)
+		require.Equal(t, "invalid_operator_metadata", outcome)
+	}
 
 	var (
 		status     string
@@ -358,11 +361,7 @@ func runConcurrentManualReplays(
 		wg.Go(func() {
 			<-start
 
-			outcome, replayErr := repo.ReplayManualReview(ctx, ReplyOutboxManualReplay{
-				OutboxID: id,
-				Actor:    testOperatorEmail,
-				Reason:   fmt.Sprintf("concurrent grant attempt %d", i),
-			})
+			outcome, replayErr := replayManualReviewArtifact(ctx, repo, id, testOperatorEmail, fmt.Sprintf("concurrent grant attempt %d", i))
 			outcomes <- outcome
 
 			errs <- replayErr
@@ -442,11 +441,7 @@ func TestManualReviewReplayGrantAllowsRetryableReclaimWithoutDuplicateAudit(t *t
 		SET status = 'manual_review', attempts = 1
 		WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id))
 
-	outcome, err := repo.ReplayManualReview(ctx, ReplyOutboxManualReplay{
-		OutboxID: id,
-		Actor:    testOperatorEmail,
-		Reason:   "incident INC-2026-0801 authorized retryable replay",
-	})
+	outcome, err := replayManualReviewArtifact(ctx, repo, id, testOperatorEmail, "incident INC-2026-0801 authorized retryable replay")
 	require.NoError(t, err)
 	require.Equal(t, "replayed", outcome)
 

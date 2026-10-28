@@ -19,6 +19,20 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
+// allActiveMajorEventsSQL은 기간 조회의 대조 기준인 전체 활성 후보 조회다. 기간 SQL의 active_candidates와 같은
+// 조건·scan 순서를 쓰며, production은 기간 조회만 하므로 시험에만 둔다.
+const allActiveMajorEventsSQL = `
+SELECT id, type, COALESCE(title, ''), COALESCE(description, ''), COALESCE(members, '{}'::text[]),
+       pub_date, event_start_date, COALESCE(link, '')
+FROM major_events
+WHERE status = 'active'
+  AND type IN ('news', 'event')
+  AND COALESCE(link_status, 'unchecked') NOT IN ('failed', 'blocked')`
+
+func listAllActiveMajorEvents(ctx context.Context, repository *Repository) ([]model.Candidate, error) {
+	return repository.listActiveMajorEvents(ctx, allActiveMajorEventsSQL)
+}
+
 func newPeriodCandidatePool(tb testing.TB) (*Repository, *pgxpool.Pool) {
 	tb.Helper()
 
@@ -68,7 +82,7 @@ func TestPeriodCandidateSQLPreservesDatesValuesOrderAndFallback(t *testing.T) {
 		}
 
 		for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly, "이번달"} {
-			all, err := repository.ListActiveMajorEvents(ctx)
+			all, err := listAllActiveMajorEvents(ctx, repository)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -112,7 +126,7 @@ func TestPeriodCandidateSQLRetainsNonfiniteScanErrors(t *testing.T) {
 		}
 
 		for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly} {
-			_, oldErr := repository.ListActiveMajorEvents(ctx)
+			_, oldErr := listAllActiveMajorEvents(ctx, repository)
 			_, newErr := repository.ListActiveMajorEventsForPeriod(ctx, period, now)
 
 			if oldErr == nil || newErr == nil || !strings.Contains(oldErr.Error(), "Infinity") || !strings.Contains(newErr.Error(), "Infinity") {
@@ -150,7 +164,7 @@ func candidateQueryIteration(ctx context.Context, repository *Repository, now ti
 	)
 
 	if variant == "full" {
-		candidates, err = repository.ListActiveMajorEvents(ctx)
+		candidates, err = listAllActiveMajorEvents(ctx, repository)
 	} else {
 		candidates, err = repository.ListActiveMajorEventsForPeriod(ctx, model.PeriodWeekly, now)
 	}
@@ -338,7 +352,7 @@ func BenchmarkMemberNewsCandidateQueries(b *testing.B) {
 func assertMatrixCandidateEquivalence(tb testing.TB, repository *Repository, now time.Time) {
 	tb.Helper()
 
-	all, err := repository.ListActiveMajorEvents(tb.Context())
+	all, err := listAllActiveMajorEvents(tb.Context(), repository)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -373,7 +387,7 @@ func TestPeriodCandidateSQLRetainsMemberArrayScanErrors(t *testing.T) {
 		}
 
 		for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly} {
-			_, fullErr := repository.ListActiveMajorEvents(ctx)
+			_, fullErr := listAllActiveMajorEvents(ctx, repository)
 			_, periodErr := repository.ListActiveMajorEventsForPeriod(ctx, period, now)
 
 			if fullErr == nil || periodErr == nil || fullErr.Error() != periodErr.Error() {
@@ -420,7 +434,7 @@ func TestPeriodCandidateSQLPreservesFullFiniteDateRangeAndPriority(t *testing.T)
 	now := time.Date(2026, time.October, 2, 12, 0, 0, 0, time.UTC)
 
 	for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly} {
-		all, err := repository.ListActiveMajorEvents(ctx)
+		all, err := listAllActiveMajorEvents(ctx, repository)
 		if err != nil {
 			t.Fatalf("full finite date scan: %v", err)
 		}

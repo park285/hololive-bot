@@ -21,7 +21,7 @@ func TestInboxAttemptTrackingEndsOnReturnAndPanic(t *testing.T) {
 		t.Run(outcome, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
 			inbox := durability.NewInboxRepository(pool)
-			_, err := inbox.Admit(t.Context(), durability.InboxMessage{
+			_, err := inbox.AdmitResult(t.Context(), durability.InboxMessage{
 				MessageID: "message:attempt", RoomID: testRoomID, OrderingKey: testOrderingKey,
 				Payload: testWebhookBody(t, "attempt", "!help"),
 			})

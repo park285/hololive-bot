@@ -415,7 +415,7 @@ func claimDeadlineInboxMessage(t *testing.T, inbox *durability.InboxRepository) 
 
 	payload := testWebhookBody(t, "deadline-message", "!help")
 
-	_, err := inbox.Admit(t.Context(), durability.InboxMessage{
+	_, err := inbox.AdmitResult(t.Context(), durability.InboxMessage{
 		MessageID: "message:deadline-message", RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: payload,
 	})
 	if err != nil {
@@ -538,7 +538,7 @@ func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
 	inbox := durability.NewInboxRepository(pool)
 	commands := durability.NewCommandExecutionRepository(pool)
 
-	_, err = inbox.Admit(ctx, durability.InboxMessage{
+	_, err = inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: "message:crash-window", RoomID: testRoomID, OrderingKey: testOrderingKey,
 		Payload: []byte(`{"JSON":{"message_id":"crash-window"}}`),
 	})
@@ -712,7 +712,7 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 
 	inbox := durability.NewInboxRepository(pool)
 
-	_, err = inbox.Admit(ctx, durability.InboxMessage{
+	_, err = inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: "message:failed-message", RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: payload,
 	})
 	if err != nil {
@@ -921,7 +921,7 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 	pool := dbtest.NewPool(t)
 	repo := durability.NewInboxRepository(pool)
 
-	_, err := repo.Admit(t.Context(), durability.InboxMessage{
+	_, err := repo.AdmitResult(t.Context(), durability.InboxMessage{
 		MessageID: rawID, RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: []byte(`{"body":"x"}`),
 	})
 	if err != nil {
@@ -1023,7 +1023,7 @@ func admittedInboxReleaseFixture(t *testing.T, pool *pgxpool.Pool, messageID str
 		t.Fatal(err)
 	}
 
-	_, err = r.inbox.Admit(ctx, durability.InboxMessage{
+	_, err = r.inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: messageID, RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: []byte(`{"JSON":{"message_id":"safe"}}`),
 	})
 	if err != nil {
