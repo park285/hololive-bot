@@ -151,7 +151,7 @@ func claimOneHandoff(t *testing.T, repo *PgxRepository) HandoffClaim {
 // sent 기록은 같은 문장 clock에서 첫 확인 시각과 Iris requestId를 단위에 남긴다.
 func TestHandoffMarkSentRecordsCheckOnUnit(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	records := claimSendingUnits(t, repo, "handoff-marksent")[0]
 	unit := records[0].SendUnitID
 
@@ -185,7 +185,7 @@ func TestConsumerMarkDispatchedClipsFirstCheckToHorizon(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
-			repo := NewPgxRepositoryFromPool(pool, nil)
+			repo := newTestRepository(t, pool)
 			records := claimSendingUnits(t, repo, "handoff-first-check")[0]
 			unit := records[0].SendUnitID
 
@@ -212,7 +212,7 @@ func TestConsumerMarkDispatchedClipsFirstCheckToHorizon(t *testing.T) {
 // 멤버 일부만 sent가 된 기록은 미스이며 단위에 handoff 확인을 남기지 않는다.
 func TestHandoffPartialMarkSentRecordsNoCheck(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	records := claimSendingUnits(t, repo, "handoff-partial")[0]
 	unit := records[0].SendUnitID
 	claims := []DeliveryClaim{{ID: records[0].ID, AttemptCount: records[0].AttemptCount}, {ID: records[1].ID, AttemptCount: records[1].AttemptCount + 1}}
@@ -229,7 +229,7 @@ func TestHandoffPartialMarkSentRecordsNoCheck(t *testing.T) {
 // 확인 claim은 다른 트랜잭션이 잠근 단위를 건너뛰고, soft claim한 단위는 만료 전까지 다시 고르지 않는다.
 func TestHandoffClaimSkipsLockedAndSoftClaimedUnits(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	units := seedSentHandoffUnits(t, pool, repo, "handoff-a", "handoff-b", "handoff-c")
 
 	blocker, err := pool.Begin(t.Context())
@@ -275,7 +275,7 @@ func TestHandoffClaimSkipsLockedAndSoftClaimedUnits(t *testing.T) {
 // 동시에 도는 확인 claim은 같은 단위를 두 번 고르지 않는다.
 func TestHandoffConcurrentClaimsAreExclusive(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	rooms := []string{"handoff-1", "handoff-2", "handoff-3", "handoff-4", "handoff-5", "handoff-6"}
 	units := seedSentHandoffUnits(t, pool, repo, rooms...)
 
@@ -321,7 +321,7 @@ func TestHandoffConcurrentClaimsAreExclusive(t *testing.T) {
 // 확인을 닫은 미스로 보고하지 않는다.
 func TestHandoffApplyRejectsReplacedClaimToken(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit := seedSentHandoffUnits(t, pool, repo, "handoff-token")[0]
 
 	stale := claimOneHandoff(t, repo)
@@ -351,7 +351,7 @@ func TestHandoffApplyRejectsReplacedClaimToken(t *testing.T) {
 // 세대의 failed는 재발급하지 않고 dlq로 끝내며 dedup claim 키를 해제한다.
 func TestHandoffFailedReissuesUntilGenerationsRunOut(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit := seedSentHandoffUnits(t, pool, repo, "handoff-reissue")[0]
 	base := loadHandoffUnit(t, pool, unit.id).clientRequestID
 
@@ -439,7 +439,7 @@ func resendHandoffUnit(t *testing.T, pool *pgxpool.Pool, repo *PgxRepository, un
 // ErrHandoffCheckClosed로 보고한다.
 func TestHandoffMemberMismatchClosesCheckWithoutTransition(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit := seedSentHandoffUnits(t, pool, repo, "handoff-member")[0]
 	claim := claimOneHandoff(t, repo)
 
@@ -468,7 +468,7 @@ func TestHandoffMemberMismatchClosesCheckWithoutTransition(t *testing.T) {
 // 두고 소유 상실 미스로, 소유한 확인은 확인을 닫고 ErrHandoffCheckClosed로 보고한다.
 func TestHandoffClosesCheckWhenAllMembersAreGone(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit := seedSentHandoffUnits(t, pool, repo, "handoff-gone")[0]
 	stale := claimOneHandoff(t, repo)
 
@@ -504,7 +504,7 @@ func TestHandoffClosesCheckWhenAllMembersAreGone(t *testing.T) {
 // 진행 중 재예약은 admission + 지평에서 잘리고, 지평을 넘긴 확인은 handoff 미확인으로 격리된다.
 func TestHandoffRescheduleStopsAtHorizonThenQuarantines(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit := seedSentHandoffUnits(t, pool, repo, "handoff-horizon")[0]
 	horizon := 10 * time.Minute
 

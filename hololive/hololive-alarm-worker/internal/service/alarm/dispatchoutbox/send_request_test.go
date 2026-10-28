@@ -15,7 +15,7 @@ import (
 
 func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	first := receiptEnvelope("request-room", "first")
 	second := receiptEnvelope("request-room", "second")
@@ -73,14 +73,14 @@ func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 		err = repository.ReissueSendRequest(ctx, unit, "owner", request, updates)
 		require.Zero(t, requireFenceMiss(t, err, sendfence.ReasonStatusChanged).Applied)
 
-		repository = NewPgxRepositoryFromPool(pool, nil)
+		repository = newTestRepository(t, pool)
 		request = assertPinnedReplay(t, repository, unit, ids, request, generation+1)
 	}
 }
 
 func TestSendRequestMustBePinnedBeforeSending(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("pin-room", "pin")}})
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestSendRequestMustBePinnedBeforeSending(t *testing.T) {
 
 func TestSendRequestCanPinAfterKnownUnsentFailure(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("pre-render-room", "title")}})
 	require.NoError(t, err)
@@ -180,7 +180,7 @@ func assertPinnedReplay(t *testing.T, repository *PgxRepository, unit int64, ids
 
 func TestReissueRequestRollsBackWholeUnitWhenMemberAttemptFenceFails(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	first := receiptEnvelope("rollback-request", "one")
 	second := receiptEnvelope("rollback-request", "two")
@@ -246,7 +246,7 @@ func TestFailureTransitionsShareOneClockAcrossUnitMembers(t *testing.T) {
 	for name, apply := range cases {
 		t.Run(name, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
-			repository := NewPgxRepositoryFromPool(pool, nil)
+			repository := newTestRepository(t, pool)
 			first := receiptEnvelope("clock-unit-room", "one")
 			second := receiptEnvelope("clock-unit-room", "two")
 

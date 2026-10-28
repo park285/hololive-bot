@@ -55,7 +55,7 @@ func prepareFailureRoutingBenchmark(b *testing.B, size int) (*pgxpool.Pool, *Pgx
 	b.Helper()
 
 	pool := dbtest.NewPool(b)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(b, pool)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	envelopes := make([]domain.AlarmQueueEnvelope, size)
 

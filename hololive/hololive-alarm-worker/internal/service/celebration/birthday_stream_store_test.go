@@ -42,7 +42,7 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	eventKey := birthdayGreetingEventKey(testMemberIDA, testBirthdayDate)
 	envelopes := []domain.AlarmQueueEnvelope{
 		birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, "room-sent"),
@@ -84,7 +84,7 @@ func TestPgxStoreListPublishedBirthdayStreamEventsMatchesMemberDatePrefix(t *tes
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 
 	const prefixSharingMemberID = 1010
 
@@ -123,7 +123,7 @@ func TestBirthdayStreamRunnerReusesPublishedPayloadWhenTitleChanges(t *testing.T
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repository := newOutboxRepository(t, pool)
 	store := NewPgxStore(pool)
 	publisher := &birthdayStreamRepositoryPublisher{repository: repository}
 	now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
@@ -321,4 +321,14 @@ func TestBirthdaySessionsRequireFreshStateSpecificObservation(t *testing.T) {
 	}
 
 	require.ElementsMatch(t, expected, ids)
+}
+
+// newOutboxRepository는 production 생성자에 테스트 pool을 dbtest.WrapPool로 감싸 넘긴다.
+func newOutboxRepository(tb testing.TB, pool *pgxpool.Pool) *dispatchoutbox.PgxRepository {
+	tb.Helper()
+
+	repository, err := dispatchoutbox.NewPgxRepository(dbtest.WrapPool(pool), nil)
+	require.NoError(tb, err)
+
+	return repository
 }

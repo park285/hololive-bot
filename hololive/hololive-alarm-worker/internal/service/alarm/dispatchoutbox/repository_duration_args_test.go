@@ -16,7 +16,7 @@ import (
 func TestPgxRepositoryRejectsSubMillisecondDurationsBeforeDatabase(t *testing.T) {
 	t.Parallel()
 
-	repository := NewPgxRepositoryFromPool(nil, nil)
+	repository := newTestRepository(t, nil)
 	calls := map[string]func(context.Context, time.Duration) error{
 		"claim due": func(ctx context.Context, d time.Duration) error {
 			_, err := repository.ClaimDue(ctx, "worker-1", 10, d)
@@ -53,7 +53,7 @@ func TestNewConsumerRejectsSubMillisecondLease(t *testing.T) {
 // claim과 발송 진입 lease, stale 격리 기준은 초로 절사하지 않고 밀리초 그대로 DB 시각에 적용된다.
 func TestPgxRepositoryKeepsMillisecondLeasesAndThresholds(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("lease-ms-room", "lease-ms")}})
 	require.NoError(t, err)

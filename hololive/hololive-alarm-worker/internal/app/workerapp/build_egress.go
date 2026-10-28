@@ -198,7 +198,12 @@ func buildAlarmDispatchHandoffReconciler(
 	statusClient handoffcheck.ReplyStatusClient,
 	logger *slog.Logger,
 ) (*alarmdispatch.HandoffReconciler, error) {
-	consumer, err := dispatchoutbox.NewHandoffConsumer(dispatchoutbox.NewPgxRepository(infra.Postgres, logger), infra.Cache)
+	repository, err := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
+	if err != nil {
+		return nil, fmt.Errorf("new alarm dispatch handoff repository: %w", err)
+	}
+
+	consumer, err := dispatchoutbox.NewHandoffConsumer(repository, infra.Cache)
 	if err != nil {
 		return nil, fmt.Errorf("new alarm dispatch handoff consumer: %w", err)
 	}
@@ -403,8 +408,13 @@ func newAlarmDispatchConsumer(appConfig *workerconfig.RuntimeConfig, infra *shar
 	profile := appConfig.AlarmWorkerProfile.AlarmDispatch
 	lease := workercontract.Milliseconds(profile.LeaseMS)
 
+	repository, err := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
+	if err != nil {
+		return nil, fmt.Errorf("new dispatch outbox repository: %w", err)
+	}
+
 	consumer, err := dispatchoutbox.NewConsumer(
-		dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
+		repository,
 		infra.Cache,
 		logger,
 		dispatchoutbox.WithLease(lease),

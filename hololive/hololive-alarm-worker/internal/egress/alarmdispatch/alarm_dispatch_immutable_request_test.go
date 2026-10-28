@@ -38,7 +38,7 @@ func (s *immutableRequestSender) SendPreparedMessage(ctx context.Context, room, 
 func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
-	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repo := newOutboxRepository(t, pool)
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 	envelope.Notification.Channel.ID = "request-channel"
@@ -59,7 +59,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE notification_templates SET body='CHANGED TEMPLATE'; UPDATE alarm_dispatch_deliveries SET next_attempt_at=NOW()`)
 	require.NoError(t, err)
 
-	consumer, err = dispatchoutbox.NewConsumer(dispatchoutbox.NewPgxRepositoryFromPool(pool, nil), requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("restarted-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
+	consumer, err = dispatchoutbox.NewConsumer(newOutboxRepository(t, pool), requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("restarted-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
 	sender.route = dispatchoutbox.SendRouteText
@@ -80,7 +80,7 @@ func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
 			ctx := t.Context()
-			repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+			repo := newOutboxRepository(t, pool)
 			envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 			envelope.Notification.Channel.ID = "request-channel"

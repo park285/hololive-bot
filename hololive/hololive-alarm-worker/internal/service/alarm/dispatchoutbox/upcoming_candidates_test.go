@@ -30,7 +30,7 @@ func TestUpcomingCandidatesRecoverFrozenPartialPublishAfterRestart(t *testing.T)
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{first, second}))
 
 	// 첫 방 commit 뒤 publish 응답 소실: 수용 receipt를 못 받아도 ledger가 증거다.
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *first, Version: 1}}})
 	require.NoError(t, err)
 
@@ -121,7 +121,7 @@ func TestUpcomingCandidatesRejectCollision(t *testing.T) {
 
 	n.Stream.Title = "Conflicting event"
 
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
 	require.NoError(t, err)
 
@@ -207,7 +207,7 @@ func TestUpcomingCandidatesDoNotReopenUnknownDeliveryAtExpiry(t *testing.T) {
 	store := NewUpcomingCandidates(pool)
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{n}))
 
-	repository := NewPgxRepositoryFromPool(pool, nil)
+	repository := newTestRepository(t, pool)
 	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
 	require.NoError(t, err)
 

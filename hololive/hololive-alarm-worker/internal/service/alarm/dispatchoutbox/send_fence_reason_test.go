@@ -17,7 +17,7 @@ func TestSendRequestReportsMemberTerminalForTerminalOrDeletedPinnedMember(t *tes
 		`DELETE FROM alarm_dispatch_deliveries WHERE id=$1`,
 	} {
 		pool := dbtest.NewPool(t)
-		repo := NewPgxRepositoryFromPool(pool, nil)
+		repo := newTestRepository(t, pool)
 		unit, ids, requestID := seedRequestClockUnit(t, repo)
 		request, err := repo.PinSendRequest(t.Context(), unit, attemptClaims(0, ids...), requestClockOwner, requestID, SendRequest{Body: "fence reason", Route: SendRouteText})
 		require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestSendRequestReportsMemberTerminalForTerminalOrDeletedPinnedMember(t *tes
 // claim에서 본 attempt와 행의 attempt가 다르면 MarkSent·DLQ·격리·반환은 version_changed로 행을 그대로 둔다.
 func TestOwnerTransitionsRejectAttemptMismatch(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repo := NewPgxRepositoryFromPool(pool, nil)
+	repo := newTestRepository(t, pool)
 	unit, ids, requestID := seedRequestClockUnit(t, repo)
 	claims := attemptClaims(0, ids...)
 	request, err := repo.PinSendRequest(t.Context(), unit, claims, requestClockOwner, requestID, SendRequest{Body: "fence reason", Route: SendRouteText})

@@ -16,7 +16,7 @@ import (
 func TestDefaultRecoveryPreservesImmutableSendUnitMembership(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
-	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repo := newOutboxRepository(t, pool)
 	seedExpiredPinnedRecoveryUnits(t, pool, repo)
 
 	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("new-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
@@ -94,4 +94,14 @@ func seedExpiredPinnedRecoveryUnits(t *testing.T, pool *pgxpool.Pool, repo *disp
 
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET locked_at=NOW()-INTERVAL '2 minutes',lock_expires_at=NOW()-INTERVAL '1 minute'`)
 	require.NoError(t, err)
+}
+
+// newOutboxRepository는 production 생성자에 테스트 pool을 dbtest.WrapPool로 감싸 넘긴다.
+func newOutboxRepository(tb testing.TB, pool *pgxpool.Pool) *dispatchoutbox.PgxRepository {
+	tb.Helper()
+
+	repository, err := dispatchoutbox.NewPgxRepository(dbtest.WrapPool(pool), nil)
+	require.NoError(tb, err)
+
+	return repository
 }

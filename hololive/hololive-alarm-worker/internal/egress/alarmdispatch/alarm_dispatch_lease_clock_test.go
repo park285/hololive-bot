@@ -150,7 +150,7 @@ func runAlarmLeaseClockScenario(t *testing.T, phase string) {
 func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpool.Pool, phase string) (*alarmLeaseClockConsumer, []domain.AlarmQueueEnvelope) {
 	t.Helper()
 
-	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+	repo := newOutboxRepository(t, pool)
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 	envelope.Notification.Channel.ID = "lease-clock-channel"

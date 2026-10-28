@@ -24,7 +24,7 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 
 	pool := dbtest.NewPool(t)
 
-	return NewPgxRepositoryFromPool(pool, nil), pool
+	return newTestRepository(t, pool), pool
 }
 
 func TestPgxRepositoryInsertBatchKeepsCanonicalPayloadAfterConflictingCandidate(t *testing.T) {

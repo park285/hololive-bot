@@ -305,7 +305,11 @@ func buildAlarmFoundation(
 	}
 
 	alarmRepository := alarmstore.NewRepository(infra.Postgres, logger)
-	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
+
+	outboxRepository, err := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
+	if err != nil {
+		return nil, fmt.Errorf("new dispatch outbox repository: %w", err)
+	}
 
 	resolved, err := resolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, logger)
 	if err != nil {

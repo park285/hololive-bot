@@ -57,8 +57,11 @@ func TestRunnerReconnectionAndStableStartAcrossRestart(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	collector := &fakeCollector{observations: []Observation{{SpaceID: "1space", CreatorID: "123", Title: "최초 제목", StartedAt: now}}}
 	config := Config{Targets: []Target{{UserID: "123", ChannelID: "UC" + strings.Repeat("a", 22)}}, PollSeconds: 120}
+	repository, err := dispatchoutbox.NewPgxRepository(dbtest.WrapPool(pool), nil)
+	require.NoError(t, err)
+
 	makeRunner := func() *Runner {
-		r, buildErr := NewRunner(config, store, StartStore{Pool: pool}, collector, ledgerPublisher{dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)},
+		r, buildErr := NewRunner(config, store, StartStore{Pool: pool}, collector, ledgerPublisher{repository},
 			func(context.Context, string) ([]string, error) { return []string{"room-a", "room-b"}, nil }, slog.New(slog.DiscardHandler))
 		require.NoError(t, buildErr)
 
