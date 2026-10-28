@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/iris-client-go/v4/iris"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -58,7 +56,7 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 			textSent = msg
 			return nil
 		},
-		SendImage: func(context.Context, string, []byte, ...iris.SendOption) error {
+		SendImage: func(context.Context, string, []byte) error {
 			imageSent = true
 			return nil
 		},

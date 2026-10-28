@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/iris-client-go/v4/iris"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
@@ -87,7 +85,7 @@ func TestHelpCommand_Execute_GoldenPathSendsImageAlbum(t *testing.T) {
 			textCalls++
 			return nil
 		},
-		SendImages: func(_ context.Context, room string, images [][]byte, _ ...iris.SendOption) error {
+		SendImages: func(_ context.Context, room string, images [][]byte) error {
 			if room != testRoomID {
 				t.Fatalf("image room = %q, want room-1", room)
 			}
@@ -136,7 +134,7 @@ func TestHelpCommand_Execute_ImageProviderFailureFallsBackToText(t *testing.T) {
 			fallback = message
 			return nil
 		},
-		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
+		SendImages: func(_ context.Context, _ string, _ [][]byte) error {
 			t.Fatal("SendImages must not be called after image provider failure")
 
 			return nil
@@ -174,7 +172,7 @@ func TestHelpCommand_Execute_AlbumFailureFallsBackToText(t *testing.T) {
 			fallback = message
 			return nil
 		},
-		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
+		SendImages: func(_ context.Context, _ string, _ [][]byte) error {
 			imageCalls++
 			return imageErr
 		},
@@ -208,7 +206,7 @@ func TestHelpCommand_Execute_AlbumOutcomeUnknownSuppressesTextFallback(t *testin
 				Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
 				HelpImageProvider: &stubHelpImageProvider{images: [][]byte{[]byte("one"), []byte("two")}},
 				SendMessage:       func(context.Context, string, string) error { textCalls++; return nil },
-				SendImages: func(context.Context, string, [][]byte, ...iris.SendOption) error {
+				SendImages: func(context.Context, string, [][]byte) error {
 					imageCalls++
 					return fmt.Errorf("send help album: %w", imageErr)
 				},
@@ -241,7 +239,7 @@ func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return textErr
 		},
-		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
+		SendImages: func(_ context.Context, _ string, _ [][]byte) error {
 			return imageErr
 		},
 		Logger: slog.New(slog.DiscardHandler),

@@ -1018,7 +1018,7 @@ func admittedInboxReleaseFixture(t *testing.T, pool *pgxpool.Pool, messageID str
 		t.Fatal(err)
 	}
 
-	r, err := newDurableRuntime(nil, nil, pool, testDurableProfile(t), slog.New(slog.DiscardHandler))
+	r, err := newDurableRuntime(nil, nil, pool, mustDurableReplyOutbox(t, pool, testDurableProfile(t)), testDurableProfile(t), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}

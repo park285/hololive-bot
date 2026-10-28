@@ -25,8 +25,6 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/park285/iris-client-go/v4/iris"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -63,7 +61,7 @@ func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *handlercore
 			textSent = msg
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, data []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, data []byte) error {
 			singleSent = data
 			return nil
 		},

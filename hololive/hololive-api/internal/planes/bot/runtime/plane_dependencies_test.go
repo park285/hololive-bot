@@ -2,6 +2,7 @@ package botruntime
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-api/internal/service/acl"
@@ -101,6 +103,7 @@ func newInjectedDependencyBot(t *testing.T, memberNews *recordingMemberNews, maj
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
 		Logger:               logger,
 		Client:               &acceptingIrisClient{},
+		ReplyOutbox:          dispatchingReplyOutbox{client: &acceptingIrisClient{}},
 		MessageAdapter:       messaging.NewMessageAdapter("!", ""),
 		Formatter:            formatter.NewResponseFormatter("!", nil),
 		Cache:                sharedtestutil.NewTestCacheService(t.Context(), t),
@@ -118,6 +121,19 @@ func newInjectedDependencyBot(t *testing.T, memberNews *recordingMemberNews, maj
 	}
 
 	return bot, aclService
+}
+
+// dispatchingReplyOutbox는 기록한 응답을 outbox dispatcher와 같은 DispatchStoredReply로 바로 보낸다.
+type dispatchingReplyOutbox struct {
+	client iris.BotClient
+}
+
+func (o dispatchingReplyOutbox) RecordReply(ctx context.Context, entry *transport.ReplyOutboxEntry) error {
+	if _, err := transport.DispatchStoredReply(ctx, o.client, entry.Room, []byte(entry.Payload), entry.ClientRequestID); err != nil {
+		return fmt.Errorf("dispatch stored reply: %w", err)
+	}
+
+	return nil
 }
 
 const injectedTestRoom = "3001"

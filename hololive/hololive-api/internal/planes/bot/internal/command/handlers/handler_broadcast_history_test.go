@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -527,7 +526,7 @@ func TestBroadcastThumbnailCommandExecute(t *testing.T) {
 		ThumbnailDownloader: downloader,
 		SendMessage:         func(_ context.Context, _, _ string) error { return nil },
 		SendError:           func(_ context.Context, _, _ string) error { return nil },
-		SendImage: func(_ context.Context, _ string, imageData []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, imageData []byte) error {
 			sentImage = imageData
 			return nil
 		},
@@ -570,7 +569,7 @@ func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, _ []byte) error {
 			t.Fatal("unexpected image send")
 
 			return nil
@@ -608,7 +607,7 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, _ []byte) error {
 			t.Fatal("unexpected image send")
 
 			return nil

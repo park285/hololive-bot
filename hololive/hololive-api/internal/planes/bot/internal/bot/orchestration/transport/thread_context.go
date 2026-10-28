@@ -24,8 +24,6 @@ import (
 	"context"
 	"strings"
 	"sync/atomic"
-
-	"github.com/park285/iris-client-go/v4/iris"
 )
 
 type (
@@ -62,14 +60,6 @@ func ThreadIDFromContext(ctx context.Context) (string, bool) {
 	}
 
 	return id, true
-}
-
-func appendThreadIDOption(ctx context.Context, opts []iris.SendOption) []iris.SendOption {
-	if id, ok := ThreadIDFromContext(ctx); ok {
-		return append(opts, iris.WithThreadID(id))
-	}
-
-	return opts
 }
 
 func WithImageContentType(ctx context.Context, contentType string) context.Context {

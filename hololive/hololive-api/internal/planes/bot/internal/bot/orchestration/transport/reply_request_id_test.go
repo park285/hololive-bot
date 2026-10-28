@@ -121,13 +121,12 @@ func TestReplyClientRequestIDIgnoresBody(t *testing.T) {
 	sendAndCaptureID := func(t *testing.T, room, message string) string {
 		t.Helper()
 
-		c := &stubBotClient{}
+		writer := &recordingReplyOutbox{}
 		ctx := WithReplyIdentity(t.Context(), "message:m-1")
-		require.NoError(t, NewCommandTransport(c, nil).SendMessage(ctx, room, message))
+		require.NoError(t, NewCommandTransport(writer, nil).SendMessage(ctx, room, message))
+		require.Len(t, writer.entries, 1)
 
-		id, _ := capturedSendOptions(t, c.lastOpts)
-
-		return id
+		return writer.entries[0].ClientRequestID
 	}
 
 	baseline := sendAndCaptureID(t, "room-1", "hello")
@@ -173,29 +172,29 @@ func TestReplyClientRequestIDHonoursIrisConstraints(t *testing.T) {
 	})
 }
 
-func TestNextReplyClientRequestID(t *testing.T) {
+func TestIssueReplyEmissionClientRequestID(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no inbound identity yields no id", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Empty(t, nextReplyClientRequestID(t.Context()))
+		assert.Empty(t, issueReplyEmission(t.Context()).clientRequestID)
 	})
 
 	t.Run("ordinal advances per emission within one context", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := WithReplyIdentity(t.Context(), "message:m-1")
-		assert.Equal(t, "hololive:v1:message:m-1:reply:0", nextReplyClientRequestID(ctx))
-		assert.Equal(t, "hololive:v1:message:m-1:reply:1", nextReplyClientRequestID(ctx))
-		assert.Equal(t, "hololive:v1:message:m-1:reply:2", nextReplyClientRequestID(ctx))
+		assert.Equal(t, "hololive:v1:message:m-1:reply:0", issueReplyEmission(ctx).clientRequestID)
+		assert.Equal(t, "hololive:v1:message:m-1:reply:1", issueReplyEmission(ctx).clientRequestID)
+		assert.Equal(t, "hololive:v1:message:m-1:reply:2", issueReplyEmission(ctx).clientRequestID)
 	})
 
 	t.Run("a redelivered inbound message restarts at ordinal zero", func(t *testing.T) {
 		t.Parallel()
 
-		first := nextReplyClientRequestID(WithReplyIdentity(t.Context(), "message:m-1"))
-		second := nextReplyClientRequestID(WithReplyIdentity(t.Context(), "message:m-1"))
+		first := issueReplyEmission(WithReplyIdentity(t.Context(), "message:m-1")).clientRequestID
+		second := issueReplyEmission(WithReplyIdentity(t.Context(), "message:m-1")).clientRequestID
 		assert.Equal(t, first, second)
 	})
 
@@ -205,8 +204,8 @@ func TestNextReplyClientRequestID(t *testing.T) {
 		ctx := WithReplyIdentity(t.Context(), "message:m-1")
 		derived := WithThreadID(ctx, "t-1")
 
-		assert.Equal(t, "hololive:v1:message:m-1:reply:0", nextReplyClientRequestID(ctx))
-		assert.Equal(t, "hololive:v1:message:m-1:reply:1", nextReplyClientRequestID(derived))
+		assert.Equal(t, "hololive:v1:message:m-1:reply:0", issueReplyEmission(ctx).clientRequestID)
+		assert.Equal(t, "hololive:v1:message:m-1:reply:1", issueReplyEmission(derived).clientRequestID)
 	})
 
 	t.Run("concurrent emissions never collide", func(t *testing.T) {
@@ -225,7 +224,7 @@ func TestNextReplyClientRequestID(t *testing.T) {
 
 		for range emissions {
 			wg.Go(func() {
-				id := nextReplyClientRequestID(ctx)
+				id := issueReplyEmission(ctx).clientRequestID
 
 				mu.Lock()
 				defer mu.Unlock()

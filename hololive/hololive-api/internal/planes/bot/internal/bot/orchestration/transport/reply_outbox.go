@@ -164,20 +164,6 @@ type ReplyOutboxWriter interface {
 	RecordReply(ctx context.Context, entry *ReplyOutboxEntry) error
 }
 
-func WithReplyOutboxWriter(writer ReplyOutboxWriter) Option {
-	return func(t *CommandTransport) {
-		t.replyOutbox = writer
-	}
-}
-
-func (t *CommandTransport) replyOutboxWriter() ReplyOutboxWriter {
-	if t == nil {
-		return nil
-	}
-
-	return t.replyOutbox
-}
-
 func ReplyClientRequestID(identity string, ordinal uint64) string {
 	return replyClientRequestID(identity, ordinal)
 }
@@ -192,7 +178,8 @@ func encodeStoredReply(reply *StoredReply) (string, error) {
 }
 
 func (t *CommandTransport) recordReply(ctx context.Context, room string, emission replyEmission, reply *StoredReply) error {
-	writer := t.replyOutboxWriter()
+	// 공개 진입점이 nil transport를 먼저 거르므로 여기서는 writer 누락(조립 결함)만 확인한다.
+	writer := t.replyOutbox
 	if writer == nil {
 		return errors.New("reply outbox writer is not configured")
 	}

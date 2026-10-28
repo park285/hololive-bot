@@ -37,6 +37,10 @@ func validateBotDependencies(deps *Dependencies) error {
 		return errors.New("iris client dependency is required")
 	}
 
+	if deps.ReplyOutbox == nil {
+		return errors.New("reply outbox dependency is required")
+	}
+
 	if deps.MessageAdapter == nil {
 		return errors.New("message adapter dependency is required")
 	}

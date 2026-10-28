@@ -65,17 +65,27 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		return nil, errors.New("infra is nil")
 	}
 
+	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
+		return nil, errors.New("durable postgres pool is nil")
+	}
+
+	// bot은 모든 응답을 이 outbox에 기록하므로 bot보다 먼저 만든다.
+	outbox, err := newDurableReplyOutbox(infra.Postgres.GetPool(), appConfig.APIWorkerProfile)
+	if err != nil {
+		return nil, fmt.Errorf("build reply outbox: %w", err)
+	}
+
+	infra.Deps.ReplyOutbox = outbox.writer(logger)
+
 	botBot, err := orchestration.NewBot(infra.Deps)
 	if err != nil {
 		return nil, fmt.Errorf("create bot: %w", err)
 	}
 
-	durable, err := buildDurableRuntime(infra, botBot, appConfig.APIWorkerProfile, logger)
+	durable, err := newDurableRuntime(botBot, infra.Deps.Client, infra.Postgres.GetPool(), outbox, appConfig.APIWorkerProfile, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build durable runtime: %w", err)
 	}
-
-	configureDurableReplyWriter(botBot, durable, logger)
 
 	webhookHandler, err := appbootstrap.BuildDurableBotWebhookHandler(appConfig, durableAdmitter{
 		inbox:  durable.inbox,
@@ -136,26 +146,4 @@ func assembleBotRuntime(
 		webhookHandlerCloser: webhookHandler,
 		durable:              durable,
 	}
-}
-
-func configureDurableReplyWriter(bot *orchestration.Bot, durable *durableRuntime, logger *slog.Logger) {
-	bot.SetReplyOutboxWriter(durableReplyWriter{
-		outbox: durable.outbox,
-		logger: logger,
-		wake:   func() { notifyDurable(durable.outboxWake) },
-		totals: durable.outboxTotals,
-	})
-}
-
-func buildDurableRuntime(infra *appbootstrap.BotInfrastructure, bot *orchestration.Bot, profile *apiconfig.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
-	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
-		return nil, errors.New("durable postgres pool is nil")
-	}
-
-	out, err := newDurableRuntime(bot, infra.Deps.Client, infra.Postgres.GetPool(), profile, logger)
-	if err != nil {
-		return nil, fmt.Errorf("durable runtime: %w", err)
-	}
-
-	return out, nil
 }

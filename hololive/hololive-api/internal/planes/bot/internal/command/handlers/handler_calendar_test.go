@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/iris"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
@@ -119,7 +117,7 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
-		SendImage: func(_ context.Context, _ string, data []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, data []byte) error {
 			sentImage = data
 			return nil
 		},
@@ -151,7 +149,7 @@ func TestCalendarCommand_Execute_NextMonthAcrossYear(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
-		SendImage:   func(context.Context, string, []byte, ...iris.SendOption) error { return nil },
+		SendImage:   func(context.Context, string, []byte) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
 		Logger:      slog.Default(),
 	}
@@ -180,7 +178,7 @@ func TestCalendarCommand_Execute_PreviousMonthAcrossYear(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
-		SendImage:   func(context.Context, string, []byte, ...iris.SendOption) error { return nil },
+		SendImage:   func(context.Context, string, []byte) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
 		Logger:      slog.Default(),
 	}
@@ -306,7 +304,7 @@ func TestCalendarCommand_Execute_ImageFailureFallsBackToText(t *testing.T) {
 			sentMessage = msg
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, _ []byte) error {
 			t.Error("SendImage should not be called on render failure")
 
 			return nil
@@ -349,7 +347,7 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 			sentMessage = msg
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImage: func(_ context.Context, _ string, _ []byte) error {
 			return errors.New("iris image upload failed")
 		},
 		SendError: func(_ context.Context, _, _ string) error { return nil },
@@ -388,7 +386,7 @@ func TestCalendarCommand_Execute_ImageOutcomeUnknownSuppressesTextFallback(t *te
 			deps := &handlercore.Dependencies{
 				Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 				SendMessage: func(context.Context, string, string) error { sentMessages++; return nil },
-				SendImage: func(context.Context, string, []byte, ...iris.SendOption) error {
+				SendImage: func(context.Context, string, []byte) error {
 					return fmt.Errorf("send image: %w", imageErr)
 				},
 				SendError: func(context.Context, string, string) error { return nil },
@@ -424,7 +422,7 @@ func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 			sentError = msg
 			return nil
 		},
-		SendImage: func(context.Context, string, []byte, ...iris.SendOption) error { return nil },
+		SendImage: func(context.Context, string, []byte) error { return nil },
 		Logger:    slog.Default(),
 	}
 

@@ -199,7 +199,7 @@ func newShutdownOrderBot(t *testing.T, logger *slog.Logger) *orchestration.Bot {
 	t.Helper()
 
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
-		Logger: logger, Client: &stubIrisClient{}, MessageAdapter: messaging.NewMessageAdapter("!", ""),
+		Logger: logger, Client: &stubIrisClient{}, ReplyOutbox: dispatchingReplyOutbox{client: &stubIrisClient{}}, MessageAdapter: messaging.NewMessageAdapter("!", ""),
 		Formatter: formatter.NewResponseFormatter("!", nil), Cache: cachemocks.NewLenientClient(), Postgres: &databasemocks.Client{},
 		Holodex: &holodexprovider.Service{}, Alarm: testAlarmCRUD{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
 	})

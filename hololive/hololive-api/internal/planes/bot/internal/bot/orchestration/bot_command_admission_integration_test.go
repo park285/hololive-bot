@@ -52,6 +52,7 @@ func TestBotProcessMessageRejectsUnknownIngressUserForExpensiveCommand(t *testin
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      &testIrisClient{},
 		formatter:       formatter.NewResponseFormatter("!", nil),
+		transport:       newDispatchingTransport(&testIrisClient{}, formatter.NewResponseFormatter("!", nil)),
 		cache:           cacheClient,
 	}
 	sender := testSenderName

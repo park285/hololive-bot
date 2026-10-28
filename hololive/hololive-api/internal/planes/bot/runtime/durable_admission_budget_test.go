@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -21,7 +22,7 @@ func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testi
 		t.Fatal(err)
 	}
 
-	runtime, err := newDurableRuntime(nil, nil, nil, profile, slog.New(slog.DiscardHandler))
+	runtime, err := newDurableRuntime(nil, nil, nil, mustDurableReplyOutbox(t, nil, profile), profile, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +35,17 @@ func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testi
 	if runtime.settlementTimeout <= 0 || runtime.settlementTimeout > constants.AppTimeout.Shutdown/2 {
 		t.Fatalf("configured runtime settlement timeout=%s leaves too little shared shutdown budget=%s", runtime.settlementTimeout, constants.AppTimeout.Shutdown)
 	}
+}
+
+func mustDurableReplyOutbox(t *testing.T, pool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile) durableReplyOutbox {
+	t.Helper()
+
+	outbox, err := newDurableReplyOutbox(pool, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return outbox
 }
 
 func testDurableProfile(t *testing.T) *apiconfig.APIWorkerProfile {
@@ -58,7 +70,7 @@ func TestDurableReplyUsesExecutorAttemptTimeout(t *testing.T) {
 	worker.Executor.AttemptTimeout.Milliseconds = new(int64(42000))
 	profile.Loaded.Profile.Workers[apiconfig.WorkerBotReplyOutbox] = worker
 
-	runtime, err := newDurableRuntime(nil, nil, nil, profile, slog.New(slog.DiscardHandler))
+	runtime, err := newDurableRuntime(nil, nil, nil, mustDurableReplyOutbox(t, nil, profile), profile, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}

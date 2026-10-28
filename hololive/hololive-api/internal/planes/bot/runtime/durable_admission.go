@@ -197,9 +197,55 @@ type durableMessageProcessor interface {
 	ProcessMessage(context.Context, *webhook.Message) error
 }
 
-func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
+// durableReplyOutbox는 bot이 응답을 기록할 reply outbox와 그 dispatcher 깨움·계수기다. Bot이 생성 시점에 writer를
+// 받아야 하므로 inbox 처리기(bot을 소유)보다 먼저 만든다.
+type durableReplyOutbox struct {
+	repository *durability.ReplyOutboxRepository
+	wake       chan struct{}
+	totals     *workercontract.Counters
+}
+
+func newDurableReplyOutbox(pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile) (durableReplyOutbox, error) {
+	if profile == nil {
+		return durableReplyOutbox{}, errors.New("build reply outbox: API worker profile is required")
+	}
+
+	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(
+		pgPool,
+		profile.BotReplyOutbox.MaxAttempts,
+		workercontract.Milliseconds(profile.BotReplyOutbox.AutomaticReplayHorizonMS),
+	)
+	if err != nil {
+		return durableReplyOutbox{}, fmt.Errorf("build reply outbox: policy: %w", err)
+	}
+
+	return durableReplyOutbox{repository: repository, wake: make(chan struct{}, 1), totals: &workercontract.Counters{}}, nil
+}
+
+// writer는 bot transport가 응답을 기록하는 ReplyOutboxWriter를 만든다.
+func (o durableReplyOutbox) writer(logger *slog.Logger) durableReplyWriter {
+	return durableReplyWriter{
+		outbox: o.repository,
+		logger: logger,
+		wake:   func() { notifyDurable(o.wake) },
+		totals: o.totals,
+	}
+}
+
+func newDurableRuntime(
+	bot *orchestration.Bot,
+	client iris.BotClient,
+	pgPool *pgxpool.Pool,
+	outbox durableReplyOutbox,
+	profile *apiconfig.APIWorkerProfile,
+	logger *slog.Logger,
+) (*durableRuntime, error) {
 	if profile == nil {
 		return nil, errors.New("build durable runtime: API worker profile is required")
+	}
+
+	if outbox.repository == nil {
+		return nil, errors.New("build durable runtime: reply outbox is required")
 	}
 
 	workers := profile.Loaded.Profile.Workers
@@ -208,23 +254,14 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 	handlerTimeout, _ := inboxProfile.Executor.AttemptTimeout.FixedDuration()
 	dispatchBudget, _ := outboxProfile.Executor.AttemptTimeout.FixedDuration()
 
-	outboxRepository, err := durability.NewReplyOutboxRepositoryWithPolicy(
-		pgPool,
-		profile.BotReplyOutbox.MaxAttempts,
-		workercontract.Milliseconds(profile.BotReplyOutbox.AutomaticReplayHorizonMS),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build durable runtime: reply outbox policy: %w", err)
-	}
-
 	r := &durableRuntime{
 		inbox: durability.NewInboxRepository(pgPool), commands: durability.NewCommandExecutionRepository(pgPool),
-		outbox: outboxRepository, ledger: durability.NewDurableLedgerRepository(pgPool),
+		outbox: outbox.repository, ledger: durability.NewDurableLedgerRepository(pgPool),
 		bot: bot, irisClient: client, logger: logger,
 		inboxWorkers: inboxProfile.Executor.ConfiguredWorkers, outboxWorkers: outboxProfile.Executor.ConfiguredWorkers,
 		inboxEnabled: inboxProfile.Executor.Enabled, outboxEnabled: outboxProfile.Executor.Enabled,
 		handlerTimeout: handlerTimeout,
-		inboxWake:      make(chan struct{}, 1), outboxWake: make(chan struct{}, 1), handoffWake: make(chan struct{}, 1),
+		inboxWake:      make(chan struct{}, 1), outboxWake: outbox.wake, handoffWake: make(chan struct{}, 1),
 		inboxPollSlot: newDurablePollSlot(), outboxPollSlot: newDurablePollSlot(), handoffPollSlot: newDurablePollSlot(),
 		// bot_reply_outbox attempt timeout은 admission 예산이자 handoff 확인 지평이다.
 		dispatchBudget:        dispatchBudget,
@@ -244,7 +281,7 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 		terminalRetention:     workercontract.Milliseconds(profile.BotWebhookInbox.TerminalRetentionMS),
 		manualReviewRetention: workercontract.Milliseconds(profile.BotReplyOutbox.ManualReviewRetentionMS),
 		inboxTracker:          workercontract.NewExecutorTracker(), outboxTracker: workercontract.NewExecutorTracker(),
-		inboxTotals: &workercontract.Counters{}, outboxTotals: &workercontract.Counters{},
+		inboxTotals: &workercontract.Counters{}, outboxTotals: outbox.totals,
 	}
 
 	r.inboxSampler = newDurableQueueSampler("inbox", r.inbox.ReadySnapshot)

@@ -30,21 +30,12 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	appErrors "github.com/kapu/hololive-api/internal/planes/bot/internal/apperrors"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-const serviceNameIris = "iris"
-
-const replyAdmissionMaxAttempts = 2
-
-type (
-	replySendFunc      func(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-	replyAdmissionFunc func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-)
-
+// CommandTransport는 명령 응답을 durable reply outbox에 기록한다. Iris 발송은 outbox dispatcher가
+// DispatchStoredReply로만 하므로, 조립 실수로 원장 없이 즉시 발송하는 경로가 없다.
 type CommandTransport struct {
-	irisClient      iris.BotClient
 	formatter       *messageformatter.ResponseFormatter
 	markdownReplies bool
 	rooms           RoomChat
@@ -65,10 +56,10 @@ func WithRoomChatLookup(rooms RoomChat) Option {
 	}
 }
 
-func NewCommandTransport(irisClient iris.BotClient, formatter *messageformatter.ResponseFormatter, opts ...Option) *CommandTransport {
+func NewCommandTransport(replyOutbox ReplyOutboxWriter, formatter *messageformatter.ResponseFormatter, opts ...Option) *CommandTransport {
 	t := &CommandTransport{
-		irisClient: irisClient,
-		formatter:  formatter,
+		formatter:   formatter,
+		replyOutbox: replyOutbox,
 	}
 
 	for _, opt := range opts {
@@ -81,8 +72,8 @@ func NewCommandTransport(irisClient iris.BotClient, formatter *messageformatter.
 }
 
 func (t *CommandTransport) SendMessage(ctx context.Context, room, message string) error {
-	if t == nil || t.irisClient == nil {
-		return errors.New("send message: iris client is not configured")
+	if t == nil {
+		return errors.New("send message: transport is not configured")
 	}
 
 	useMarkdown := markdownForRoom(ctx, room, t.markdownReplies, t.rooms)
@@ -93,23 +84,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	return t.dispatchMessage(sendCtx, room, message, useMarkdown)
-}
-
-func (t *CommandTransport) dispatchMessage(ctx context.Context, room, message string, useMarkdown bool) error {
-	opts := appendThreadIDOption(ctx, nil)
-	emission := issueReplyEmission(ctx)
-
-	if t.replyOutboxWriter() != nil {
-		return t.recordTextReply(ctx, room, message, emission, useMarkdown)
-	}
-
-	if err := t.sendMessage(ctx, room, message, emission.clientRequestID, useMarkdown, opts...); err != nil {
-		serviceErr := appErrors.NewServiceError("iris send message", serviceNameIris, "send_message", err)
-		return fmt.Errorf("send message: %w", serviceErr)
-	}
-
-	return nil
+	return t.recordTextReply(sendCtx, room, message, issueReplyEmission(sendCtx), useMarkdown)
 }
 
 func (t *CommandTransport) recordTextReply(
@@ -130,53 +105,6 @@ func (t *CommandTransport) recordTextReply(
 	}
 
 	return nil
-}
-
-func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestID string, useMarkdown bool, opts ...iris.SendOption) error {
-	send := t.irisClient.SendMessageAccepted
-
-	if useMarkdown {
-		send = t.irisClient.SendMarkdown
-	}
-
-	if err := sendReply(ctx, send, room, message, clientRequestID, opts); err != nil {
-		return fmt.Errorf("send reply: %w", err)
-	}
-
-	return nil
-}
-
-// sendReply는 Iris durable admission(202와 requestId)까지만 확인한다. Handoff 결과는 이 경로에서
-// 기다리지 않는다.
-func sendReply(ctx context.Context, send replySendFunc, room, message, clientRequestID string, opts []iris.SendOption) error {
-	accepted, err := postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
-		return postReply(ctx, send, room, message, generationID, appendReplyClientRequestID(opts, generationID))
-	})
-	if err != nil {
-		return fmt.Errorf("post reply with reissue: %w", err)
-	}
-
-	if _, err := acceptedReplyRequestID(accepted); err != nil {
-		return fmt.Errorf("accepted reply request id: %w", err)
-	}
-
-	return nil
-}
-
-func postLiveMediaWithReissue(
-	ctx context.Context,
-	clientRequestID string,
-	opts []iris.SendOption,
-	post replyAdmissionFunc,
-) (*iris.ReplyAcceptedResponse, error) {
-	out, err := postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
-		return post(ctx, appendReplyClientRequestID(opts, generationID)...)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("post reply with reissue: %w", err)
-	}
-
-	return out, nil
 }
 
 // postReplyWithReissue는 pre-handoff conflict에서만 replyReissueLadder로 세대를 올린다. Conflict는
@@ -225,58 +153,6 @@ func replyPostError(err error) error {
 	return fmt.Errorf("post reply: %w", err)
 }
 
-func postReply(
-	ctx context.Context,
-	send replySendFunc,
-	room, message, clientRequestID string,
-	opts []iris.SendOption,
-) (*iris.ReplyAcceptedResponse, error) {
-	var lastErr error
-
-	admissionMayHaveLanded := false
-
-	for attempt := 1; attempt <= replyAdmissionMaxAttempts; attempt++ {
-		accepted, err := send(ctx, room, message, opts...)
-		if err == nil {
-			return accepted, nil
-		}
-
-		lastErr = err
-
-		abort, stop := replyAdmissionFailureAction(ctx, err, admissionMayHaveLanded, clientRequestID)
-
-		if abort {
-			return nil, fmt.Errorf("send reply admission: %w", err)
-		}
-
-		if stop {
-			break
-		}
-
-		admissionMayHaveLanded = true
-	}
-
-	return nil, replyOutcomeUnknownError{reason: "reply admission response was not received", cause: lastErr}
-}
-
-func replyAdmissionFailureAction(ctx context.Context, err error, admissionMayHaveLanded bool, clientRequestID string) (abort, stop bool) {
-	if isReplyReissueConflict(err) {
-		return true, false
-	}
-
-	s, definitive := stopReplyAdmissionRetry(ctx, err, admissionMayHaveLanded, clientRequestID)
-
-	return definitive, s
-}
-
-func stopReplyAdmissionRetry(ctx context.Context, err error, admissionMayHaveLanded bool, clientRequestID string) (stop, definitive bool) {
-	if !admissionResponseLost(err) {
-		return true, !admissionMayHaveLanded
-	}
-
-	return clientRequestID == "" || ctx.Err() != nil, false
-}
-
 func admissionResponseLost(err error) bool {
 	return errors.Is(err, iris.ErrTransport)
 }
@@ -305,112 +181,49 @@ func appendReplyClientRequestID(opts []iris.SendOption, clientRequestID string) 
 	return next
 }
 
-func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error {
-	if t == nil || t.irisClient == nil {
-		return errors.New("send image: iris client is not configured")
+func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData []byte) error {
+	if t == nil {
+		return errors.New("send image: transport is not configured")
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	if t.replyOutboxWriter() != nil {
-		emission := issueReplyEmission(sendCtx)
-		threadID, _ := ThreadIDFromContext(sendCtx)
-		contentType, _ := ImageContentTypeFromContext(sendCtx)
+	emission := issueReplyEmission(sendCtx)
+	threadID, _ := ThreadIDFromContext(sendCtx)
+	contentType, _ := ImageContentTypeFromContext(sendCtx)
 
-		if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: StoredReplyKindImage, Image: imageData, ThreadID: threadID, ImageContentType: contentType}); err != nil {
-			return fmt.Errorf("record image reply: %w", err)
-		}
-
-		return nil
-	}
-
-	if contentType, ok := ImageContentTypeFromContext(sendCtx); ok {
-		opts = append(opts, iris.WithImageContentType(contentType))
-	}
-
-	clientRequestID, opts := liveMediaRequestOptions(sendCtx, opts)
-
-	accepted, err := postLiveMediaWithReissue(sendCtx, clientRequestID, opts, func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-		return t.irisClient.SendImage(ctx, room, imageData, opts...)
-	})
-	if err != nil {
-		err = classifyAdmissionError(err)
-	} else {
-		_, err = acceptedReplyRequestID(accepted)
-	}
-
-	if err != nil {
-		serviceErr := appErrors.NewServiceError("iris send image", serviceNameIris, "send_image", err)
-		return fmt.Errorf("send image: %w", serviceErr)
+	if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: StoredReplyKindImage, Image: imageData, ThreadID: threadID, ImageContentType: contentType}); err != nil {
+		return fmt.Errorf("record image reply: %w", err)
 	}
 
 	return nil
 }
 
-func (t *CommandTransport) SendImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
+func (t *CommandTransport) SendImages(ctx context.Context, room string, images [][]byte) error {
 	if len(images) == 1 {
-		if err := t.SendImage(ctx, room, images[0], opts...); err != nil {
+		if err := t.SendImage(ctx, room, images[0]); err != nil {
 			return fmt.Errorf("send image: %w", err)
 		}
 
 		return nil
 	}
 
-	if err := t.sendMultipleImages(ctx, room, images, opts...); err != nil {
-		return fmt.Errorf("send multiple images: %w", err)
-	}
-
-	return nil
-}
-
-func (t *CommandTransport) sendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
-	if t == nil || t.irisClient == nil {
-		return errors.New("send images: iris client is not configured")
+	if t == nil {
+		return errors.New("send images: transport is not configured")
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	if t.replyOutboxWriter() != nil {
-		emission := issueReplyEmission(sendCtx)
-		threadID, _ := ThreadIDFromContext(sendCtx)
+	emission := issueReplyEmission(sendCtx)
+	threadID, _ := ThreadIDFromContext(sendCtx)
 
-		if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: StoredReplyKindImages, Images: images, ThreadID: threadID}); err != nil {
-			return fmt.Errorf("record image replies: %w", err)
-		}
-
-		return nil
-	}
-
-	clientRequestID, opts := liveMediaRequestOptions(sendCtx, opts)
-
-	accepted, err := postLiveMediaWithReissue(sendCtx, clientRequestID, opts, func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-		return t.irisClient.SendMultipleImages(ctx, room, images, opts...)
-	})
-	if err != nil {
-		err = classifyAdmissionError(err)
-	} else {
-		_, err = acceptedReplyRequestID(accepted)
-	}
-
-	if err != nil {
-		serviceErr := appErrors.NewServiceError("iris send images", serviceNameIris, "send_images", err)
-		return fmt.Errorf("send images: %w", serviceErr)
+	if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: StoredReplyKindImages, Images: images, ThreadID: threadID}); err != nil {
+		return fmt.Errorf("record image replies: %w", err)
 	}
 
 	return nil
-}
-
-func liveMediaRequestOptions(ctx context.Context, opts []iris.SendOption) (clientRequestID string, next []iris.SendOption) {
-	clientRequestID = nextReplyClientRequestID(ctx)
-	next = make([]iris.SendOption, 0, len(opts)+1)
-
-	if threadID, ok := ThreadIDFromContext(ctx); ok {
-		next = append(next, iris.WithThreadID(threadID))
-	}
-
-	return clientRequestID, append(next, opts...)
 }
 
 // SendError는 message_strings error namespace 문구로 응답한다. 응답 formatter가 없으면 코드 대체 문구를 보내지 않고

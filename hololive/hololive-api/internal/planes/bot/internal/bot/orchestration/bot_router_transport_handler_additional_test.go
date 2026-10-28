@@ -60,6 +60,24 @@ func (c *testCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandCon
 	return c.execute(ctx, cmdCtx, params)
 }
 
+// dispatchingReplyOutbox는 transport가 기록한 응답을 outbox dispatcher와 같은 DispatchStoredReply로 바로 보낸다.
+// 시험이 Iris client 관측으로 응답을 확인하면서도 production 발송 경로(원장 기록 → 저장 payload 발송)를 탄다.
+type dispatchingReplyOutbox struct {
+	client iris.BotClient
+}
+
+func (o dispatchingReplyOutbox) RecordReply(ctx context.Context, entry *bottransport.ReplyOutboxEntry) error {
+	if _, err := bottransport.DispatchStoredReply(ctx, o.client, entry.Room, []byte(entry.Payload), entry.ClientRequestID); err != nil {
+		return fmt.Errorf("dispatch stored reply: %w", err)
+	}
+
+	return nil
+}
+
+func newDispatchingTransport(client iris.BotClient, responseFormatter *messageformatter.ResponseFormatter, opts ...bottransport.Option) *bottransport.CommandTransport {
+	return bottransport.NewCommandTransport(dispatchingReplyOutbox{client: client}, responseFormatter, opts...)
+}
+
 type testIrisClient struct {
 	sendMessageErr        error
 	sendImageErr          error
@@ -297,13 +315,12 @@ func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 func TestCommandTransportSendMessageMethods(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
+	ctx := bottransport.WithReplyIdentity(t.Context(), "message:transport-test")
 
 	t.Run("constructor", func(t *testing.T) {
 		t.Parallel()
 
-		client := &testIrisClient{}
-		transport := bottransport.NewCommandTransport(client, nil)
+		transport := newDispatchingTransport(&testIrisClient{}, nil)
 		require.NotNil(t, transport)
 	})
 
@@ -314,14 +331,14 @@ func TestCommandTransportSendMessageMethods(t *testing.T) {
 
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "iris client is not configured")
+		assert.Contains(t, err.Error(), "transport is not configured")
 	})
 
 	t.Run("send message wraps iris error", func(t *testing.T) {
 		t.Parallel()
 
 		client := &testIrisClient{sendMessageErr: errors.New("iris unavailable")}
-		transport := bottransport.NewCommandTransport(client, nil)
+		transport := newDispatchingTransport(client, nil)
 
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.Error(t, err)
@@ -332,7 +349,7 @@ func TestCommandTransportSendMessageMethods(t *testing.T) {
 		t.Parallel()
 
 		client := &acceptedTestIrisClient{}
-		transport := bottransport.NewCommandTransport(client, nil, bottransport.WithMarkdownReplies(true))
+		transport := newDispatchingTransport(client, nil, bottransport.WithMarkdownReplies(true))
 
 		require.NoError(t, transport.SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
 		assert.Equal(t, 1, client.markdownCalls)
@@ -344,24 +361,24 @@ func TestCommandTransportSendMessageMethods(t *testing.T) {
 func TestCommandTransportSendImageMethods(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
+	ctx := bottransport.WithReplyIdentity(t.Context(), "message:transport-test")
 
 	t.Run("send image wraps iris error", func(t *testing.T) {
 		t.Parallel()
 
 		client := &testIrisClient{sendImageErr: errors.New("image failed")}
-		transport := bottransport.NewCommandTransport(client, nil)
+		transport := newDispatchingTransport(client, nil)
 
 		err := transport.SendImage(ctx, "room", []byte("img"))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send image: ")
+		require.ErrorIs(t, err, bottransport.ErrReplyStagingFailed)
+		assert.Contains(t, err.Error(), "image failed")
 	})
 
 	t.Run("send image forwards byte data to client", func(t *testing.T) {
 		t.Parallel()
 
 		client := &testIrisClient{}
-		transport := bottransport.NewCommandTransport(client, nil)
+		transport := newDispatchingTransport(client, nil)
 
 		imageData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG 매직 바이트
 		err := transport.SendImage(ctx, testRoomID, imageData)
@@ -377,14 +394,14 @@ func TestCommandTransportSendImageMethods(t *testing.T) {
 
 		err := transport.SendImage(ctx, "room", []byte("data"))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "iris client is not configured")
+		assert.Contains(t, err.Error(), "transport is not configured")
 	})
 }
 
 func TestCommandTransportSendErrorMethods(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
+	ctx := bottransport.WithReplyIdentity(t.Context(), "message:transport-test")
 
 	t.Run("send error resolves key via formatter", func(t *testing.T) {
 		t.Parallel()
@@ -394,7 +411,7 @@ func TestCommandTransportSendErrorMethods(t *testing.T) {
 		require.NoError(t, store.Load(ctx))
 
 		formatter := messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(store))
-		transport := bottransport.NewCommandTransport(client, formatter)
+		transport := newDispatchingTransport(client, formatter)
 
 		require.NoError(t, transport.SendError(ctx, "room", messaging.ErrAlarmAddFailed))
 		assert.Equal(t, "room", client.lastMessageRoom)
@@ -409,47 +426,10 @@ func TestCommandTransportSendErrorMethods(t *testing.T) {
 
 		client := &testIrisClient{}
 		formatter := messageformatter.NewResponseFormatter("!", nil)
-		transport := bottransport.NewCommandTransport(client, formatter)
+		transport := newDispatchingTransport(client, formatter)
 
 		require.Error(t, transport.SendError(ctx, "room", "totally_unknown_key"))
 		assert.Empty(t, client.lastMessage)
-	})
-}
-
-func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-
-	t.Run("enabled flag reaches the markdown lane", func(t *testing.T) {
-		t.Parallel()
-
-		client := &acceptedTestIrisClient{}
-		b := &Bot{
-			logger:          newBotTestLogger(),
-			irisClient:      client,
-			formatter:       messageformatter.NewResponseFormatter("!", nil),
-			markdownReplies: true,
-		}
-
-		require.NoError(t, b.ensureTransport().SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
-		assert.Equal(t, 1, client.markdownCalls)
-		assert.Equal(t, 0, client.acceptedCalls)
-	})
-
-	t.Run("disabled flag keeps the accepted lane", func(t *testing.T) {
-		t.Parallel()
-
-		client := &acceptedTestIrisClient{}
-		b := &Bot{
-			logger:     newBotTestLogger(),
-			irisClient: client,
-			formatter:  messageformatter.NewResponseFormatter("!", nil),
-		}
-
-		require.NoError(t, b.ensureTransport().SendMessage(ctx, "room", "hello"))
-		assert.Equal(t, 0, client.markdownCalls)
-		assert.Equal(t, 1, client.acceptedCalls)
 	})
 }
 
@@ -466,6 +446,7 @@ func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
 		formatter:       messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(messageStrings)),
+		transport:       newDispatchingTransport(irisClient, messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(messageStrings))),
 		messageStrings:  messageStrings,
 	}
 
@@ -476,10 +457,6 @@ func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 	ingress := b.ensureIngress()
 	require.NotNil(t, ingress)
 	assert.Same(t, ingress, b.ensureIngress())
-
-	transport := b.ensureTransport()
-	require.NotNil(t, transport)
-	assert.Same(t, transport, b.ensureTransport())
 
 	// 알 수 없는 command 경로: message_strings의 unknown_command 문구가 전송돼야 한다
 	sender := testSenderName
@@ -523,6 +500,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
 		formatter:       messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t))),
+		transport:       newDispatchingTransport(irisClient, messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t)))),
 	}
 
 	sender := testSenderName

@@ -198,7 +198,7 @@ func newBotReadinessRuntime(t *testing.T, client cache.Client) *BotRuntime {
 	logger := slog.New(slog.DiscardHandler)
 
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
-		Logger: logger, Client: &stubIrisClient{}, MessageAdapter: messaging.NewMessageAdapter("!", ""),
+		Logger: logger, Client: &stubIrisClient{}, ReplyOutbox: dispatchingReplyOutbox{client: &stubIrisClient{}}, MessageAdapter: messaging.NewMessageAdapter("!", ""),
 		Formatter: formatter.NewResponseFormatter("!", nil), Cache: client, Postgres: &databasemocks.Client{},
 		Holodex: &holodexprovider.Service{}, Alarm: testAlarmCRUD{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
 	})

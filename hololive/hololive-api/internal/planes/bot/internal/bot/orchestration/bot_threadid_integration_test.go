@@ -159,6 +159,7 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ca
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
 		formatter:       formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings)),
+		transport:       newDispatchingTransport(irisClient, formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings))),
 		messageStrings:  messageStrings,
 	}
 
