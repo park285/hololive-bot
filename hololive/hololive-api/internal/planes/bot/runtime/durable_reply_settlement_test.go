@@ -2,7 +2,9 @@ package botruntime
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net"
 	"testing"
 	"time"
 
@@ -122,7 +124,10 @@ func TestReplySettlementKeepsBoundedBudgetAfterCallerCancellation(t *testing.T) 
 	applied, err := runtime.settleOutboxDispatch(ctx, claim, "blocked-token", durability.ReplyOutboxAccepted, "iris-request", nil)
 	require.False(t, applied)
 	require.Error(t, err)
-	require.ErrorIs(t, err, context.DeadlineExceeded, "blocked settlement must expire its own budget: %v", err)
+
+	// 같은 정산 deadline이 pgx의 context 취소나 socket write timeout으로 관측될 수 있다.
+	timeoutErr, ok := errors.AsType[net.Error](err)
+	require.True(t, ok && timeoutErr.Timeout(), "정산 자체의 시간 예산으로 종료되어야 함: %v", err)
 }
 
 func TestReplySettlementUsesRuntimeReserveWhileOrdinaryTransactionHeld(t *testing.T) {
