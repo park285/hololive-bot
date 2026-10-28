@@ -29,18 +29,22 @@ WITH valid_failure(error_code, failure_class) AS MATERIALIZED (
     FROM youtube_collection_job_leases AS jobs CROSS JOIN requested
     WHERE jobs.job_key = $1
     FOR UPDATE OF jobs
+), clock AS MATERIALIZED (
+    -- locked를 읽은 뒤 평가되므로 행 잠금 대기 이후의 DB 시각이다.
+    SELECT clock_timestamp() AS now_at
+    FROM locked
 ), eligible AS MATERIALIZED (
     -- 잠금 대기 후 소유권과 만료를 확인하고 재시도·진단 시각에 같은 DB 시각을 쓴다.
     SELECT locked.job_key, requested.error_code, requested.failure_class,
-           clock_timestamp() AS transitioned_at
-    FROM locked CROSS JOIN requested
+           clock.now_at AS transitioned_at
+    FROM locked CROSS JOIN requested CROSS JOIN clock
     WHERE locked.job_key = $1
       AND locked.owner_instance = $2
       AND locked.fence_epoch = $3
       AND locked.projection_generation = $4
       AND locked.scheduled_for = $5
       AND locked.slot_state = 'ACTIVE'
-      AND locked.lease_expires_at > clock_timestamp()
+      AND locked.lease_expires_at > clock.now_at
       AND $6::timestamptz IS NOT NULL
       AND isfinite($6::timestamptz)
       AND $10::bigint > 0
