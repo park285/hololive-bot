@@ -2,6 +2,7 @@ package workerapp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,9 +39,9 @@ type clientRequestIDRecordingIrisSender struct {
 	roomID          string
 	message         string
 	opts            int
-	markdownRoomID  string
-	markdownMessage string
-	markdownOpts    int
+	richTextRoomID  string
+	richTextMessage string
+	richTextOpts    int
 }
 
 func (s *clientRequestIDRecordingIrisSender) SendMessageAccepted(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -51,12 +52,16 @@ func (s *clientRequestIDRecordingIrisSender) SendMessageAccepted(_ context.Conte
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
 }
 
-func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	s.markdownRoomID = roomID
-	s.markdownMessage = message
-	s.markdownOpts = len(opts)
+func (s *clientRequestIDRecordingIrisSender) SendRichText(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	s.richTextRoomID = roomID
+	s.richTextMessage = message
+	s.richTextOpts = len(opts)
 
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
+}
+
+func (s *clientRequestIDRecordingIrisSender) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, errors.New("unexpected legacy markdown send")
 }
 
 type workerappEgressTestPostgres struct{ pool *pgxpool.Pool }
@@ -106,25 +111,25 @@ func TestBuildNotificationSenderUsesMarkdownOnlyForOpenChat(t *testing.T) {
 			require.NoError(t, sendPreparedWorkerTestMessage(t.Context(), irisSender, roomID, "[title](https://example.com/video)"))
 
 			if roomID == workerappTestOpenRoom {
-				assert.Equal(t, roomID, stub.markdownRoomID)
-				assert.Equal(t, "[title](https://example.com/video)", stub.markdownMessage)
+				assert.Equal(t, roomID, stub.richTextRoomID)
+				assert.Equal(t, "[title](https://example.com/video)", stub.richTextMessage)
 				assert.Empty(t, stub.roomID)
 			} else {
 				assert.Equal(t, roomID, stub.roomID)
 				assert.Equal(t, "title( https://example.com/video )", stub.message)
-				assert.Empty(t, stub.markdownRoomID)
+				assert.Empty(t, stub.richTextRoomID)
 			}
 
 			require.NoError(t, sendPreparedWorkerTestMessage(t.Context(), irisSender, roomID, "**world**", "req-1"))
 
 			if roomID == workerappTestOpenRoom {
-				assert.Equal(t, roomID, stub.markdownRoomID)
-				assert.Equal(t, "**world**", stub.markdownMessage)
-				assert.Equal(t, 1, stub.markdownOpts)
+				assert.Equal(t, roomID, stub.richTextRoomID)
+				assert.Equal(t, "**world**", stub.richTextMessage)
+				assert.Equal(t, 1, stub.richTextOpts)
 			} else {
 				assert.Equal(t, "𝘄𝗼𝗿𝗹𝗱", stub.message)
 				assert.Equal(t, 1, stub.opts)
-				assert.Empty(t, stub.markdownRoomID)
+				assert.Empty(t, stub.richTextRoomID)
 			}
 		})
 	}
@@ -137,7 +142,7 @@ func TestBuildNotificationSenderDisablesMarkdownWhenConfigured(t *testing.T) {
 	require.NoError(t, sendPreparedWorkerTestMessage(t.Context(), irisSender, workerappTestOpenRoom, "[title](https://example.com/video)"))
 
 	assert.Equal(t, "title( https://example.com/video )", stub.message)
-	assert.Empty(t, stub.markdownRoomID)
+	assert.Empty(t, stub.richTextRoomID)
 }
 
 func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {

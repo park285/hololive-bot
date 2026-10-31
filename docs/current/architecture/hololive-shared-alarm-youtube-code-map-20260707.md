@@ -37,7 +37,7 @@ alarm dispatch runner
   -> dispatchoutbox.Consumer DrainBatch / ClaimDue
   -> group and render
   -> MarkSending
-  -> Iris SendMessage (오픈채팅 + BOT_MARKDOWN_REPLIES=true는 SendMarkdown)
+  -> Iris SendMessage (오픈채팅 + BOT_MARKDOWN_REPLIES=true의 새 요청은 SendRichText)
   -> MarkSent or retry/dlq/quarantine
 ```
 

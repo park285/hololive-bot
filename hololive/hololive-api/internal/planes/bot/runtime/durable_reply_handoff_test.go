@@ -203,7 +203,7 @@ func sentClientRequestID(opts []iris.SendOption) string {
 	return *value
 }
 
-func newHandoffRuntime(t *testing.T, pool *pgxpool.Pool, client iris.BotClient, horizon time.Duration, maxAttempts int32) *durableRuntime {
+func newHandoffRuntime(t *testing.T, pool *pgxpool.Pool, client durableIrisClient, horizon time.Duration, maxAttempts int32) *durableRuntime {
 	t.Helper()
 
 	return &durableRuntime{

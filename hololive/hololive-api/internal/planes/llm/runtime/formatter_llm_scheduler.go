@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	templateview "github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -116,12 +117,13 @@ func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key
 		return "", nil
 	}
 
-	normalizedSummary := strings.TrimSpace(llmSummary)
-	views := templateview.BuildMajorEventViews(events)
+	normalizedSummary := strings.TrimSpace(kakaotext.MarkdownLiteral(strings.TrimSpace(llmSummary)))
 
-	if normalizedSummary != "" {
-		// LLM 요약이 있는 경우 템플릿의 기본 목록과 중복 노출을 방지합니다.
-		views = nil
+	var views []templateview.MajorEventView
+
+	if normalizedSummary == "" {
+		// 표시할 요약이 없을 때만 기본 목록을 만들며, 외부 ZWSP만 있는 요약도 빈 값으로 취급한다.
+		views = templateview.BuildMajorEventViews(events)
 	}
 
 	data := majorEventSummaryData{

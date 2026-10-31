@@ -13,23 +13,23 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type displayLineSeedPair struct{ oldBody, newBody string }
+type templateSeedPair struct{ oldBody, newBody string }
 
-func loadDisplayLineSeeds(tb testing.TB) map[domain.TemplateKey]displayLineSeedPair {
+func loadTemplateSeedPairs(tb testing.TB, file string) map[domain.TemplateKey]templateSeedPair {
 	tb.Helper()
 
 	dir := filepath.Join("..", "..", "..", "..", "hololive-api", "scripts", "migrations")
 
-	raw, err := fs.ReadFile(os.DirFS(dir), "208_template_displayline.sql")
+	raw, err := fs.ReadFile(os.DirFS(dir), file)
 	if err != nil {
 		tb.Fatal(err)
 	}
 
 	rows := regexp.MustCompile(`(?s)\('([^']+)', \$old\$(.*?)\$old\$, \$new\$(.*?)\$new\$\)`).FindAllStringSubmatch(string(raw), -1)
 
-	pairs := make(map[domain.TemplateKey]displayLineSeedPair, len(rows))
+	pairs := make(map[domain.TemplateKey]templateSeedPair, len(rows))
 	for _, row := range rows {
-		pairs[domain.TemplateKey(row[1])] = displayLineSeedPair{row[2], row[3]}
+		pairs[domain.TemplateKey(row[1])] = templateSeedPair{row[2], row[3]}
 	}
 
 	return pairs

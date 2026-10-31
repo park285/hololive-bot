@@ -63,7 +63,7 @@ func (c *testCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandCon
 // dispatchingReplyOutbox는 transport가 기록한 응답을 outbox dispatcher와 같은 DispatchStoredReply로 바로 보낸다.
 // 시험이 Iris client 관측으로 응답을 확인하면서도 production 발송 경로(원장 기록 → 저장 payload 발송)를 탄다.
 type dispatchingReplyOutbox struct {
-	client iris.BotClient
+	client bottransport.ReplyClient
 }
 
 func (o dispatchingReplyOutbox) RecordReply(ctx context.Context, entry *bottransport.ReplyOutboxEntry) error {
@@ -74,7 +74,7 @@ func (o dispatchingReplyOutbox) RecordReply(ctx context.Context, entry *bottrans
 	return nil
 }
 
-func newDispatchingTransport(client iris.BotClient, responseFormatter *messageformatter.ResponseFormatter, opts ...bottransport.Option) *bottransport.CommandTransport {
+func newDispatchingTransport(client bottransport.ReplyClient, responseFormatter *messageformatter.ResponseFormatter, opts ...bottransport.Option) *bottransport.CommandTransport {
 	return bottransport.NewCommandTransport(dispatchingReplyOutbox{client: client}, responseFormatter, opts...)
 }
 
@@ -92,7 +92,7 @@ type testIrisClient struct {
 	lastImageRoom   string
 	lastImage       []byte
 	lastMultiImages [][]byte
-	markdownCalls   int
+	richTextCalls   int
 }
 
 type sentMessage struct {
@@ -160,17 +160,21 @@ func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, imag
 	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-test", Delivery: testDeliveryQueued, Room: room, Type: "image_multiple"}, nil
 }
 
-func (c *testIrisClient) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+func (c *testIrisClient) SendRichText(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.mu.Lock()
 
-	c.markdownCalls++
+	c.richTextCalls++
 	c.mu.Unlock()
 
 	if err := c.SendMessage(ctx, room, markdown, opts...); err != nil {
 		return nil, fmt.Errorf("send message: %w", err)
 	}
 
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-markdown", Delivery: testDeliveryQueued, Room: room, Type: "markdown"}, nil
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-richtext", Delivery: testDeliveryQueued, Room: room, Type: "richtext"}, nil
+}
+
+func (c *testIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, errors.New("unexpected legacy markdown send")
 }
 
 func (c *testIrisClient) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
@@ -345,14 +349,14 @@ func TestCommandTransportSendMessageMethods(t *testing.T) {
 		assert.Contains(t, err.Error(), "send message: ")
 	})
 
-	t.Run("markdown replies option routes through SendMarkdown", func(t *testing.T) {
+	t.Run("markdown replies option routes through SendRichText", func(t *testing.T) {
 		t.Parallel()
 
 		client := &acceptedTestIrisClient{}
 		transport := newDispatchingTransport(client, nil, bottransport.WithMarkdownReplies(true))
 
 		require.NoError(t, transport.SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
-		assert.Equal(t, 1, client.markdownCalls)
+		assert.Equal(t, 1, client.richTextCalls)
 		assert.Equal(t, 0, client.acceptedCalls)
 		assert.Equal(t, "hello", client.lastMessage)
 	})

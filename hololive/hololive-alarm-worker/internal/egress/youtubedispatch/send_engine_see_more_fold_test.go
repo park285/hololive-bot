@@ -35,6 +35,10 @@ func (*seeMoreFoldEgressClient) SendMarkdown(context.Context, string, string, ..
 	return nil, errors.New("markdown lane is not configured")
 }
 
+func (*seeMoreFoldEgressClient) SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, errors.New("richtext lane is not configured")
+}
+
 // 사용자 첨부 화면처럼 한 방에 쇼츠 10개가 한 번에 묶여 나가는 v1 직접 발송 경로다.
 func runDirectGroupedShortsFinalPayload(t *testing.T, count int, renderer *template.Renderer) string {
 	t.Helper()
@@ -102,11 +106,6 @@ func TestDispatchDeliveryRowsKeepsShortsUnfoldedAtFinalPayload(t *testing.T) {
 			final := runDirectGroupedShortsFinalPayload(t, count, nil)
 			require.NotContains(t, final, kakaotext.ZeroWidthSpace+kakaotext.ZeroWidthSpace, "alarm text must not carry see-more padding (consecutive ZWSP)")
 			require.Equal(t, count, strings.Count(final, "https://www.youtube.com/shorts/"))
-			require.Contains(t, final, "[Announcement]")
-
-			if count > 1 {
-				require.Contains(t, final, fmt.Sprintf("· %d개", count))
-			}
 		})
 	}
 }

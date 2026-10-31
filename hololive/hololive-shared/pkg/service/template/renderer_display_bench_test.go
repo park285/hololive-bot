@@ -38,7 +38,7 @@ func BenchmarkTemplateTruncate(b *testing.B) {
 }
 
 func BenchmarkDisplayLineTemplate(b *testing.B) {
-	pair := loadDisplayLineSeeds(b)[domain.TemplateKeyCmdLiveStreams]
+	pair := loadTemplateSeedPairs(b, "208_template_displayline.sql")[domain.TemplateKeyCmdLiveStreams]
 	previousFuncs := legacyTemplateFunctions()
 
 	for _, count := range []int{1, 100} {

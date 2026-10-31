@@ -25,39 +25,30 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/kapu/hololive-shared/pkg/kakaotext"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 )
 
 func TestTemplateFuncs_MdSafe(t *testing.T) {
 	t.Parallel()
 
-	tmpl, err := template.New("mdsafe").Funcs(templateFuncs).Parse("제목: {{mdsafe .Title}}")
-	if err != nil {
-		t.Fatalf("failed to parse template: %v", err)
-	}
+	for _, body := range []string{"제목: {{mdsafe .Title}} 끝", "제목: **{{mdsafe .Title}}** 끝"} {
+		tmpl, err := template.New("mdsafe").Funcs(templateFuncs).Parse(body)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	data := struct {
-		Title string
-	}{
-		Title: "**긴급** [공지](https://example.com)",
-	}
+		for _, title := range []string{"**긴급**", "끝**", "*시작", "||숨김||", "`코드`", "[공식명]", "_원문_", "~~표기~~", "- 안내"} {
+			var buf strings.Builder
 
-	var buf strings.Builder
+			if err := tmpl.Execute(&buf, struct{ Title string }{Title: title}); err != nil {
+				t.Fatal(err)
+			}
 
-	if err := tmpl.Execute(&buf, data); err != nil {
-		t.Fatalf("failed to execute template: %v", err)
-	}
-
-	got := buf.String()
-	if strings.Contains(got, "**") || strings.Contains(got, "](") {
-		t.Errorf("markdown 마커가 무력화되지 않음: %q", got)
-	}
-
-	if want := "제목: " + kakaotext.MarkdownNeutralize(data.Title); got != want {
-		t.Errorf("mdsafe 출력 = %q, want %q", got, want)
-	}
-
-	if stripped := strings.ReplaceAll(got, kakaotext.ZeroWidthSpace, ""); stripped != "제목: "+data.Title {
-		t.Errorf("가시 문자 변형됨: %q", stripped)
+			visible := kakaoformat.Render(buf.String())
+			// 의도한 바깥 강조와 별개로 입력의 구문 문자·내용·뒤 문장은 그대로 보여야 한다.
+			if !strings.Contains(visible, title) || !strings.HasSuffix(visible, " 끝") {
+				t.Errorf("literal 경계 소실: title=%q out=%q", title, visible)
+			}
+		}
 	}
 }

@@ -35,8 +35,16 @@ import (
 func capturedClientRequestID(t *testing.T, opts []iris.SendOption) string {
 	t.Helper()
 
+	clientRequestID, _ := capturedSendOptions(t, opts)
+
+	return clientRequestID
+}
+
+func capturedSendOptions(t *testing.T, opts []iris.SendOption) (clientRequestID, threadID string) {
+	t.Helper()
+
 	if len(opts) == 0 {
-		return ""
+		return "", ""
 	}
 
 	// iris.SendOption이 적용하는 구조체가 비공개라 리플렉션 외에는 적용값을 읽을 수 없다.
@@ -46,7 +54,7 @@ func capturedClientRequestID(t *testing.T, opts []iris.SendOption) string {
 		reflect.ValueOf(opt).Call([]reflect.Value{box})
 	}
 
-	return sendOptionStringField(t, box, "ClientRequestID")
+	return sendOptionStringField(t, box, "ClientRequestID"), sendOptionStringField(t, box, "ThreadID")
 }
 
 func sendOptionStringField(t *testing.T, box reflect.Value, name string) string {
@@ -68,7 +76,7 @@ func sendOptionStringField(t *testing.T, box reflect.Value, name string) string 
 type stubBotClient struct {
 	acceptErr   error
 	sendErr     error
-	markdownErr error
+	richTextErr error
 	accepted    *iris.ReplyAcceptedResponse
 
 	imageErr      error
@@ -79,6 +87,7 @@ type stubBotClient struct {
 	onMultiImage  func(call int)
 
 	acceptCalls          int
+	richTextCalls        int
 	markdownCalls        int
 	imageCalls           int
 	multiImageCalls      int
@@ -174,17 +183,24 @@ func (c *stubBotClient) SendMultipleImages(_ context.Context, room string, image
 	return &iris.ReplyAcceptedResponse{RequestID: "r-images"}, nil
 }
 
-func (c *stubBotClient) SendMarkdown(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	c.markdownCalls++
+func (c *stubBotClient) SendRichText(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.richTextCalls++
 	c.recordSend(room, markdown, opts)
 
-	if c.markdownErr != nil {
-		return nil, c.markdownErr
+	if c.richTextErr != nil {
+		return nil, c.richTextErr
 	}
 
 	if c.accepted != nil {
 		return c.accepted, nil
 	}
+
+	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
+}
+
+func (c *stubBotClient) SendMarkdown(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.markdownCalls++
+	c.recordSend(room, markdown, opts)
 
 	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
 }

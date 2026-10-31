@@ -45,7 +45,7 @@ func runRequestClockScenario(t *testing.T, operation, lock string, expired bool)
 	repo := newTestRepository(t, pool)
 	unit, ids, requestID := seedRequestClockUnit(t, repo)
 	claims := attemptClaims(0, ids...)
-	candidate := SendRequest{Body: "frozen body", Route: SendRouteMarkdown}
+	candidate := SendRequest{Body: "frozen body", Route: SendRouteRichText}
 
 	var pinned *SendRequest
 

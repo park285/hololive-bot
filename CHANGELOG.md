@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **v12.5.0 운영 배포본 합류와 migration 번호 정정:** 운영에 먼저 배포한 v12.4.0·v12.5.0(`release/richtext-20261028`, `e8ef0944c`)의 RichText 발송·기본 템플릿 42개 RichText 표현·동적 문자 보호를 v4 SDK 기준 main에 합칩니다. 봇 응답은 main 구조대로 reply outbox에만 기록하고, 새 Markdown 응답은 `richtext` kind로 저장해 dispatcher가 `SendRichText`로 보냅니다. 이미 저장된 `markdown` 행은 같은 ID의 본문·semantic hash를 지키도록 `SendMarkdown`으로 재생합니다. 운영 `schema_migrations`에 `345_alarm_richtext_immutable_request.sql`·`346_youtube_richtext_immutable_request.sql`·`347_richtext_templates.sql`이 이미 기록돼 있으므로 이 번호를 고정하고, 어느 운영 DB에도 적용된 적 없는 v13.0.0의 migration을 내용 변경 없이 옮깁니다: 345→`348_drop_auth_users.sql`, 346→`349_acl_rooms_room_id_chat_id.sql`, 347→`350_youtube_content_absence_slots_effective_index.sql`, 348→`351_drop_source_observation_replay.sql`, 349→`352_youtube_live_lifecycle_origin_drop_default.sql`. v13.0.0 절의 migration 번호는 태그 당시 기록이며, v13.0.0 태그는 운영 ledger와 번호가 겹쳐 러너가 거부하므로 배포하지 않고 다음 릴리스가 대체합니다.
+
 ## v13.0.0 - 2026-10-28
 
 - **Osaka·Osaka2 검증용 Compose overlay 계약 폐기:** Osaka `a`·Osaka2 `d`는 native systemd 하나로만 실행하는데, 실행되지 않는 `docker-compose.osaka.yml`·`docker-compose.osaka2.yml`·`.env.osaka.example`을 hololive-shared repo compose 테스트, topology parity, h3·postgres-routing·security-defaults·three-runtime-topology 스크립트 테스트가 계속 고정하고 있었습니다. 세 파일과 그 테스트 분기, `consumers.tsv` 행을 지웠습니다. `ap-hosts/*.conf`는 이제 `AP_RUNTIME_MODE`를 반드시 적어야 하고(빠지면 `compose`로 간주하던 기본값 삭제), `AP_COMPOSE_FILE`은 `compose` 호스트에만 두며 native 호스트에 있으면 거절합니다. `ap-completion-check.sh`·`ap-status.sh`·`check-ap-rsync-manifest.sh`도 같은 기본값을 쓰지 않습니다. `scripts/logs/ap-smoke.sh`는 Compose 컨테이너 검사 전용이므로 native 호스트에서는 원격 명령 없이 `ap-completion-check.sh`를 안내하며 거절합니다. 운영 호스트의 실행 방식과 파일은 바뀌지 않습니다.
@@ -63,6 +65,21 @@
   - lease heap 압축(2026-10-27 23:22Z): 비대는 v11.0.0 전환 직후 lease가 일시적으로 10,519행까지 늘었던 흔적입니다. live 행이 361번 블록까지 흩어져 있어 autovacuum이 줄이지 못했습니다. collector를 운영 중인 상태에서 `lock_timeout=1s`로 `VACUUM (FULL, ANALYZE)`를 실행해 44ms 만에 heap을 362→27페이지, 인덱스를 1,644→18페이지로 줄였습니다. 직후 110초 동안 함수의 호출당 버퍼는 377→57, CPU는 1.02→0.85ms였고, lease 실패는 0건이었습니다.
 - **collector global 후보 조회와 lease membership 판정의 계획 재사용:** global 후보 조회(`repository_candidates_global_0144_17.sql`, 운영 하루 약 130만 회)는 `(NOT $3 OR subject_key = $4)` 조건 때문에 custom plan 추정이 항상 낮아, 호출마다 계획을 다시 세웠습니다(운영 계획 0.51~0.58ms, 실행 0.16~0.26ms). generic plan의 실행 시간은 0.22~0.31ms입니다. migration 344는 이 본문을 그대로 옮긴 `youtube_collection_job_global_candidates()` SQL 함수를 만들고 함수 안에서 generic plan을 고정합니다. lease membership 검사(하루 약 40만 회)가 부르는 `youtube_collection_membership_valid()`에도 같은 OR 조건이 있습니다. 그래서 `plan_cache_mode = force_generic_plan`을 지정합니다(운영 0.37~0.66ms → 0.19~0.49ms). 판정과 wire 바이트는 같습니다. 새 함수 권한은 343과 같습니다. PUBLIC 권한을 회수하고 `hololive_scraper`에 EXECUTE를 주며, `hololive_runtime`은 기존 default privileges에 따라 EXECUTE를 갖습니다.
   - 배포 순서: 342·343과 같습니다. `hololive-db-migrate`로 344를 먼저 적용한 뒤 collector 네 곳을 바꿉니다. 344도 342 인덱스가 없거나 invalid이면 실패합니다.
+
+## v12.5.0 - 2026-10-28
+
+- **기본 템플릿 42개 RichText 표현:** migration `347_richtext_templates.sql`이 제목·멤버·주요 상태와 도움말·프로필 섹션을 강조합니다. 표를 사용하지 않으며 기존 항목 순서·시간·독립 URL·복사 명령을 유지합니다. 표준 이전 본문과 정확히 일치하는 전역 기본값만 바꾸고 사용자 지정 기본값·채널 override·기존 발송 원장은 보존합니다.
+- **동적 문자 보호 완성:** `mdsafe`와 직접 조합하는 방송 이력은 `MarkdownLiteral`로 데이터를 한 번 이스케이프합니다. 이전 마커 뒤 단발 ZWSP 방식은 제거했습니다. 외부 ZWSP와 CR 계열 줄바꿈을 정규화하고, 들여쓰기 코드블록은 첫 공백·탭의 문자 참조로 방지하여 원제의 별표·스포일러 기호·URL·명령을 보존합니다. 빈 표시값에는 빈 강조 구문을 만들지 않습니다.
+- **행사 요약·캐시 경계:** 생성·최종 검토·캐시는 평문을 유지하고 주간·월간 formatter가 표시 직전에만 보호합니다. 보이지 않는 문자뿐인 요약은 빈 요약과 동일하게 행사 목록을 사용합니다. 정적 서식·전체보기 패딩과 저장된 요청을 다시 변환하지 않습니다.
+- **운영 활성화 구분:** RichText 지원 코드의 배포만으로 활성화되지 않습니다. API와 알람 워커의 `BOT_MARKDOWN_REPLIES=true`, 실제 실행 이미지·프로필, 신규 요청의 `richtext` 경로와 Kakao handoff를 함께 확인합니다. 일반채팅·방 유형 미확인·명시적 비활성 경로는 기존 일반 텍스트 렌더링을 유지합니다.
+- **검증:** 격리 DB에서 전체 migration 이행·사용자 본문 및 저장 요청 보존·재적용을 검사하고, 실제 DB 템플릿 렌더러와 Iris 네이티브 변환기로 기본 42종과 특수문자·URL·복사 명령·들여쓰기·빈 값·접기 경계를 검증합니다. 문구를 복제한 golden과 이전 평문 강조 금지 assertions는 제거했습니다.
+
+## v12.4.0 - 2026-10-28
+
+- **동적 제목의 스포일러 해석 방지:** 공통 `MarkdownNeutralize`가 파이프에도 기존 단발 ZWSP 보호를 적용합니다. 영상·방송·출처 메타데이터의 `||`는 가시 문자를 보존하며 숨김 범위가 되지 않고, 템플릿과 답변의 의도된 서식은 유지됩니다.
+- **새 Markdown 발송을 RichText로 전환:** bot 및 alarm/notification/YouTube의 새 Markdown 요청은 `SendRichText`와 durable `richtext` kind/route를 사용합니다. `BOT_MARKDOWN_REPLIES`, 기존 방별 선택과 텍스트 경로, 본문·thread·request ID, admission/handoff 정산은 유지합니다. 기존 frozen `markdown`·`text`는 같은 타입으로 재생하며 실패 시 형식을 바꾸지 않습니다. SDK와 보안 workflow checkout은 검증된 `iris-client-go v3.3.0`에 고정합니다.
+- **RichText 저장 경로 허용:** migration `345`·`346`은 alarm send unit·YouTube 고정 요청의 CHECK에 `richtext`를 추가하고 기존 행은 수정하지 않습니다. writer 배포 전에 두 migration을 적용해야 하며 새 RichText 요청을 저장한 뒤에는 이를 모르는 구형 writer로 롤백하지 않습니다. disposable PostgreSQL migration·재생 검사와 bot/worker 실제 SDK HTTP 발송 검증을 통과했습니다. 운영 적용은 검증된 API/alarm 이미지와 기존 worker profile을 같은 배포 창에서 교체합니다.
+- 이 릴리스는 main `c377ca891`(#718)까지의 미출시 항목(아래 v13.0.0 절의 `PostgreSQL 실행 계획 로그와 버퍼·인덱스 진단`부터 이어지는 항목)도 함께 담았습니다. v12.4.0·v12.5.0은 태그 없이 `release/richtext-20261028` 브랜치(`e8ef0944c`)로 API·알람 워커에 배포했습니다.
 
 ## v12.3.1 - 2026-10-27
 

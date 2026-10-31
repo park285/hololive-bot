@@ -2,7 +2,10 @@ package format
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
+
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -35,8 +38,14 @@ func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 		t.Fatalf("FormatMessages() = %+v, %v", results, err)
 	}
 
-	if want := "🔔 멤버 새 쇼츠\n\u200b테스트 쇼츠\nhttps://www.youtube.com/shorts/abc"; results[0].Err != nil || results[0].Message != want {
-		t.Errorf("default item = %+v; want %q", results[0], want)
+	if results[0].Err != nil {
+		t.Fatalf("default item: %v", results[0].Err)
+	}
+
+	for _, field := range []string{"멤버", "테스트 쇼츠", "https://www.youtube.com/shorts/abc"} {
+		if !strings.Contains(kakaoformat.Render(results[0].Message), field) {
+			t.Errorf("default item lost %q: %q", field, results[0].Message)
+		}
 	}
 
 	if want := "OVERRIDE 멤버 def"; results[1].Err != nil || results[1].Message != want {

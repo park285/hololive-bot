@@ -362,6 +362,22 @@ func (c *RuntimeIrisClient) SendMarkdown(ctx context.Context, room, markdown str
 	return out, nil
 }
 
+// SendRichText는 Markdown 본문을 Iris가 카카오 네이티브 서식으로 변환해 보내게 한다.
+func (c *RuntimeIrisClient) SendRichText(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	binding, err := c.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer c.release(binding)
+
+	out, err := binding.client.SendRichText(ctx, room, markdown, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("send rich text: %w", err)
+	}
+
+	return out, nil
+}
+
 func (c *RuntimeIrisClient) GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
 	binding, err := c.acquire(ctx)
 	if err != nil {

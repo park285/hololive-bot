@@ -79,6 +79,15 @@ Runtime service names:
 
 `hololive-api`가 durable bot admission migration 123~136을 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 
+### RichText 저장 요청과의 경계
+
+새 bot outbox 및 alarm/notification/YouTube 고정 요청은 `richtext` kind/route를 사용합니다.
+writer 배포 전에 migration `345`·`346`을 적용하며 기존 `markdown`·`text` 행은 바꾸지 않습니다.
+새 RichText 요청을 저장한 이후에는 해당 타입을 모르는 구형 API/alarm writer로 롤백하지 않습니다.
+구형 writer는 저장 요청을 거부하거나 같은 ID에 다른 타입을 보내므로 현재 revision을 forward-fix합니다.
+기존 Markdown 재생은 각 원장의 불변 요청을 보존하기 위한 읽기 경로이며 실패 fallback이 아닙니다.
+이 변경의 로컬 DB·HTTP 검증은 운영 migration·배포·rollback 승인이나 완료를 뜻하지 않습니다.
+
 ### 이전 Valkey 축소 revision과의 경계
 
 migration 231~233 이전 image의 image-only rollback, session 일괄 삭제, systemd

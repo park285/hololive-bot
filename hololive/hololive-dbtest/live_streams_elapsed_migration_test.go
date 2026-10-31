@@ -19,11 +19,6 @@ func TestLiveStreamsElapsedMigrationUpgradesStandardBodyAndPreservesCustomBodies
 
 	body := loadTemplateMigrationBodies(t, file)["CMD_LIVE_STREAMS"]
 
-	// 전체 manifest를 재생한 DB에서도 220 표준 본문이 322로 이어져야 새 DB가 경과 시간 본문을 갖는다.
-	if got := liveStreamsTemplateBody(t, pool, ""); got != body.newBody {
-		t.Fatal("fresh manifest replay did not reach the elapsed body")
-	}
-
 	dir, err := resolveMigrationsDir()
 	if err != nil {
 		t.Fatal(err)

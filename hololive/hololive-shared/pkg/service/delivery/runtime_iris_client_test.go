@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	jsonv2 "encoding/json/v2"
@@ -623,51 +624,66 @@ func writeRuntimeIrisBaseURLFile(t *testing.T, content string) string {
 	return baseURLFilePath
 }
 
+// 일반 텍스트와 RichText 위임이 각자의 wire type으로 보내고 admission requestId를 돌려준다.
 func TestRuntimeIrisClientSendMessageAcceptedReturnsRequestID(t *testing.T) {
-	var (
-		gotPath    string
-		gotRequest struct {
-			Type string `json:"type"`
-			Room string `json:"room"`
-			Data string `json:"data"`
-		}
-	)
+	for _, tc := range []struct {
+		wantType string
+		send     func(context.Context, *RuntimeIrisClient) (*iris.ReplyAcceptedResponse, error)
+	}{
+		{wantType: "text", send: func(ctx context.Context, c *RuntimeIrisClient) (*iris.ReplyAcceptedResponse, error) {
+			return c.SendMessageAccepted(ctx, testRoomID, "hello")
+		}},
+		{wantType: "richtext", send: func(ctx context.Context, c *RuntimeIrisClient) (*iris.ReplyAcceptedResponse, error) {
+			return c.SendRichText(ctx, testRoomID, "hello")
+		}},
+	} {
+		t.Run(tc.wantType, func(t *testing.T) {
+			var (
+				gotPath    string
+				gotRequest struct {
+					Type string `json:"type"`
+					Room string `json:"room"`
+					Data string `json:"data"`
+				}
+			)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		if r.Header.Get("X-Iris-Signature") == "" {
-			t.Error("missing iris signature")
-		}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				if r.Header.Get("X-Iris-Signature") == "" {
+					t.Error("missing iris signature")
+				}
 
-		if err := jsonv2.UnmarshalRead(r.Body, &gotRequest); err != nil {
-			t.Errorf("decode request: %v", err)
-		}
+				if err := jsonv2.UnmarshalRead(r.Body, &gotRequest); err != nil {
+					t.Errorf("decode request: %v", err)
+				}
 
-		w.WriteHeader(http.StatusAccepted)
+				w.WriteHeader(http.StatusAccepted)
 
-		if err := jsonv2.MarshalWrite(w, iris.ReplyAcceptedResponse{
-			Success:   true,
-			Delivery:  "queued",
-			RequestID: "reply-123",
-			Room:      testRoomID,
-			Type:      "text",
-		}); err != nil {
-			t.Errorf("encode response: %v", err)
-		}
-	}))
-	t.Cleanup(server.Close)
+				if err := jsonv2.MarshalWrite(w, iris.ReplyAcceptedResponse{
+					Success:   true,
+					Delivery:  "queued",
+					RequestID: "reply-123",
+					Room:      testRoomID,
+					Type:      tc.wantType,
+				}); err != nil {
+					t.Errorf("encode response: %v", err)
+				}
+			}))
+			t.Cleanup(server.Close)
 
-	client := newTestRuntimeIrisClient(t, settings.IrisConfig{BaseURL: server.URL, Transport: iris.TransportHTTP1}, iris.WithHTTPClient(server.Client()))
+			client := newTestRuntimeIrisClient(t, settings.IrisConfig{BaseURL: server.URL, Transport: iris.TransportHTTP1}, iris.WithHTTPClient(server.Client()))
 
-	resp, err := client.SendMessageAccepted(t.Context(), testRoomID, "hello")
-	require.NoError(t, err)
-	require.Equal(t, iris.PathReply, gotPath)
-	require.Equal(t, "text", gotRequest.Type)
-	require.Equal(t, testRoomID, gotRequest.Room)
-	require.Equal(t, "hello", gotRequest.Data)
-	require.NotNil(t, resp)
-	require.Equal(t, "reply-123", resp.RequestID)
-	require.Equal(t, "queued", resp.Delivery)
+			resp, err := tc.send(t.Context(), client)
+			require.NoError(t, err)
+			require.Equal(t, iris.PathReply, gotPath)
+			require.Equal(t, tc.wantType, gotRequest.Type)
+			require.Equal(t, testRoomID, gotRequest.Room)
+			require.Equal(t, "hello", gotRequest.Data)
+			require.NotNil(t, resp)
+			require.Equal(t, "reply-123", resp.RequestID)
+			require.Equal(t, "queued", resp.Delivery)
+		})
+	}
 }
 
 func testBaseURLHost(t *testing.T, raw string) string {

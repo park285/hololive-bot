@@ -2,10 +2,11 @@ package formatter
 
 import (
 	"log/slog"
-	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -26,13 +27,13 @@ func TestLiveQueryShowsElapsedSinceQueryTime(t *testing.T) {
 		asOf      time.Time
 		want      string
 	}{
-		{"unknown start", nil, asOf, "1 · 츠즈리"},
-		{"under a minute", startedBefore(59 * time.Second), asOf, "1 · 츠즈리 · ⏱ 방금 시작"},
-		{"one minute", startedBefore(time.Minute), asOf, "1 · 츠즈리 · ⏱ 1분째"},
-		{"hours floor minutes", startedBefore(83*time.Minute + 59*time.Second), asOf, "1 · 츠즈리 · ⏱ 1시간 23분째"},
-		{"days", startedBefore(77*time.Hour + 5*time.Minute), asOf, "1 · 츠즈리 · ⏱ 3일 5시간 5분째"},
-		{"start after query time", new(asOf.Add(time.Second)), asOf, "1 · 츠즈리"},
-		{"missing query time", startedBefore(time.Hour), time.Time{}, "1 · 츠즈리"},
+		{"unknown start", nil, asOf, ""},
+		{"under a minute", startedBefore(59 * time.Second), asOf, "방금 시작"},
+		{"one minute", startedBefore(time.Minute), asOf, "1분째"},
+		{"hours floor minutes", startedBefore(83*time.Minute + 59*time.Second), asOf, "1시간 23분째"},
+		{"days", startedBefore(77*time.Hour + 5*time.Minute), asOf, "3일 5시간 5분째"},
+		{"start after query time", new(asOf.Add(time.Second)), asOf, ""},
+		{"missing query time", startedBefore(time.Hour), time.Time{}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := f.LiveQuery(t.Context(), livequery.Result{
@@ -42,9 +43,12 @@ func TestLiveQueryShowsElapsedSinceQueryTime(t *testing.T) {
 				Status: livequery.Complete, AsOf: tc.asOf,
 			}, "")
 
-			// 경과를 표시하지 않는 경우에는 구분자와 아이콘까지 빠져 방송명 줄이 그대로여야 한다.
-			if !slices.Contains(strings.Split(out, "\n"), tc.want) || (!strings.Contains(tc.want, "⏱") && strings.Contains(out, "⏱")) {
-				t.Errorf("channel line %q missing or elapsed shown unexpectedly: %q", tc.want, out)
+			if elapsed := liveElapsed(tc.startedAt, tc.asOf); elapsed != tc.want {
+				t.Errorf("조회 시각 기준 경과 불일치: %q, want %q", elapsed, tc.want)
+			}
+
+			if !strings.Contains(kakaoformat.Render(out), tc.want) {
+				t.Errorf("경과 표시 손실: %q in %q", tc.want, out)
 			}
 		})
 	}

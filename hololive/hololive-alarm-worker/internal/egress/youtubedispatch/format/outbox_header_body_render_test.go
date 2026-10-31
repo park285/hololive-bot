@@ -1,348 +1,62 @@
 package format
 
 import (
-	"bytes"
-	"maps"
+	jsonv2 "encoding/json/v2"
+	"log/slog"
+	"strings"
 	"testing"
-	"text/template"
 
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-var outboxRenderFuncs = template.FuncMap{
-	"truncate": func(maxLen int, s string) string {
-		runes := []rune(s)
-		if len(runes) <= maxLen {
-			return s
-		}
+// 실제 기본 템플릿과 생산자를 거쳐도 동적 기호와 복사 가능한 URL이 보존된다.
+func TestOutboxProducersPreserveLiteralFields(t *testing.T) {
+	pool := dbtest.NewPool(t)
 
-		if maxLen <= 3 {
-			return string(runes[:maxLen])
-		}
+	const (
+		member = "||멤버|| **끝**"
+		title  = "1. ||가격|| **제목** _원문_"
+	)
 
-		return string(runes[:maxLen-3]) + "..."
-	},
-	"add":    func(a, b int) int { return a + b },
-	"mdsafe": kakaotext.MarkdownNeutralize,
-}
-
-const zwsp = kakaotext.ZeroWidthSpace
-
-const (
-	outboxBodyVideo = `{{if eq .Kind "LIVE_STREAM"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else if .IsUpcomingPremiere}}🔔 **{{mdsafe .MemberName}}** {{.MinutesUntilPremiere}}분 후 공개 예정{{else if .IsPremiere}}🔔 **{{mdsafe .MemberName}}** 최초공개{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}
-{{- if and .Title .URL}}
-[{{mdsafe (truncate 50 .Title)}}]({{.URL}})
-{{- else if .Title}}
-{{mdsafe (truncate 50 .Title)}}
-{{- else if .URL}}
-{{.URL}}
-{{- end}}`
-	outboxBodyShorts = `🔔 **{{mdsafe .MemberName}}** 새 쇼츠
-{{- if and .Title .URL}}
-[{{mdsafe (truncate 50 .Title)}}]({{.URL}})
-{{- else if .Title}}
-{{mdsafe (truncate 50 .Title)}}
-{{- else if .URL}}
-{{.URL}}
-{{- end}}`
-	outboxBodyCommunity = `🔔 **{{mdsafe .MemberName}}** 커뮤니티 글
-{{- if .ContentText}}
-{{mdsafe (truncate 100 .ContentText)}}
-{{- end}}
-{{- if .URL}}
-[커뮤니티 글 보기]({{.URL}})
-{{- end}}`
-
-	outboxBodyVideoGroup = `## {{if eq .Kind "LIVE_STREAM"}}🔴 {{mdsafe .MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind "NEW_VIDEO"}}🔔 {{mdsafe .MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{mdsafe .MemberName}} 알림 ({{.Count}}){{end}}
-{{- $n := 0}}
-{{- range $item := .Items}}
-{{- if and $item.Title $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
-{{- else if $item.Title}}
-{{- $n = add $n 1}}
-{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
-{{- else if $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. {{$item.URL}}
-{{- end}}
-{{- end}}`
-	outboxBodyShortsGroup = `## 🔔 {{mdsafe .MemberName}} 새 쇼츠 ({{.Count}})
-{{- $n := 0}}
-{{- range $item := .Items}}
-{{- if and $item.Title $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
-{{- else if $item.Title}}
-{{- $n = add $n 1}}
-{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
-{{- else if $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. {{$item.URL}}
-{{- end}}
-{{- end}}`
-	outboxBodyCommunityGroup = `## 🔔 {{mdsafe .MemberName}} 커뮤니티 글 ({{.Count}})
-{{- $n := 0}}
-{{- range $item := .Items}}
-{{- if $item.ContentText}}
-{{- $n = add $n 1}}
-{{$n}}. {{mdsafe (truncate 40 $item.ContentText)}}
-{{- if $item.URL}}
-   [커뮤니티 글 보기]({{$item.URL}})
-{{- end}}
-{{- else if $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. [커뮤니티 글 보기]({{$item.URL}})
-{{- end}}
-{{- end}}`
-)
-
-func renderOutboxBody(t *testing.T, body string, data any) string {
-	t.Helper()
-
-	tmpl, err := template.New("outbox").Funcs(outboxRenderFuncs).Option("missingkey=error").Parse(body)
-	if err != nil {
-		t.Fatalf("parse template: %v", err)
-	}
-
-	var buf bytes.Buffer
-
-	if err := tmpl.Execute(&buf, data); err != nil {
-		t.Fatalf("execute template: %v", err)
-	}
-
-	return buf.String()
-}
-
-const (
-	sampleFieldMemberName = "MemberName"
-	sampleFieldTitle      = "Title"
-	sampleFieldURL        = "URL"
-	sampleMemberMiko      = "사쿠라 미코"
-)
-
-// outboxSampleData는 outbox 본문 렌더 시험용 대표 payload다. Kind는 sampleWithKind가 사례마다 덮어쓴다.
-var outboxSampleData = map[domain.TemplateKey]map[string]any{
-	domain.TemplateKeyOutboxShorts: {
-		sampleFieldMemberName: sampleMemberMiko, sampleFieldTitle: "새 쇼츠 제목 - 귀여운 미코치",
-		sampleFieldURL: "https://www.youtube.com/shorts/abc123xyz", "VideoID": "abc123xyz",
-	},
-	domain.TemplateKeyOutboxCommunity: {
-		sampleFieldMemberName: sampleMemberMiko, "ContentText": "오늘 밤 10시에 방송합니다! 많이 놀러오세요~",
-		sampleFieldURL: "https://www.youtube.com/post/Ugkxyz123", "PostID": "Ugkxyz123",
-	},
-	domain.TemplateKeyOutboxVideo: {
-		sampleFieldMemberName: sampleMemberMiko, sampleFieldTitle: "마인크래프트 건축 배틀 #미코라이브",
-		sampleFieldURL: "https://youtu.be/video123xyz", "VideoID": "video123xyz",
-		"IsPremiere": false, "IsUpcomingPremiere": false, "MinutesUntilPremiere": 0,
-	},
-	domain.TemplateKeyOutboxVideoGroup: {
-		sampleFieldMemberName: sampleMemberMiko, "Count": 2, "Items": []map[string]any{
-			{sampleFieldTitle: "마인크래프트 건축 배틀 #1", sampleFieldURL: "https://youtu.be/group-video-1"},
-			{sampleFieldTitle: "마인크래프트 건축 배틀 #2", sampleFieldURL: "https://youtu.be/group-video-2"},
-		},
-	},
-	domain.TemplateKeyOutboxShortsGroup: {
-		sampleFieldMemberName: sampleMemberMiko, "Count": 2, "Items": []map[string]any{
-			{sampleFieldTitle: "오늘의 쇼츠 #1", sampleFieldURL: "https://www.youtube.com/shorts/group-1"},
-			{sampleFieldTitle: "오늘의 쇼츠 #2", sampleFieldURL: "https://www.youtube.com/shorts/group-2"},
-		},
-	},
-	domain.TemplateKeyOutboxCommunityGroup: {
-		sampleFieldMemberName: sampleMemberMiko, "Count": 2, "Items": []map[string]any{
-			{"ContentText": "오늘 밤 10시 방송 공지", sampleFieldURL: "https://www.youtube.com/post/group-community-1"},
-			{"ContentText": "굿즈 판매 시작 안내", sampleFieldURL: "https://www.youtube.com/post/group-community-2"},
-		},
-	},
-}
-
-func sampleWithKind(t *testing.T, key domain.TemplateKey, kind string) map[string]any {
-	t.Helper()
-
-	src, ok := outboxSampleData[key]
-	if !ok {
-		t.Fatalf("no outbox sample data for %s", key)
-	}
-
-	out := make(map[string]any, len(src))
-	maps.Copy(out, src)
-
-	out["Kind"] = kind
-
-	return out
-}
-
-func TestOutboxVideoGroupBodySkipsEmptyItems(t *testing.T) {
-	t.Parallel()
-
-	allEmpty := renderOutboxBody(t, outboxBodyVideoGroup, GroupedTemplateData{
-		MemberName: "사쿠라 미코",
-		Kind:       string(domain.OutboxKindNewVideo),
-		Count:      2,
-		Items:      []GroupedItemData{{}, {}},
+	payload, err := jsonv2.Marshal(map[string]string{
+		"video_id": "a_b-c", "post_id": "p_q-r", "title": title,
+		"content_text": title,
 	})
-	if want := "## 🔔 사쿠라 미코 새 영상 (2)"; allEmpty != want {
-		t.Fatalf("all-empty render mismatch\n got=%q\nwant=%q", allEmpty, want)
-	}
+	require.NoError(t, err)
 
-	mixed := renderOutboxBody(t, outboxBodyVideoGroup, GroupedTemplateData{
-		MemberName: "사쿠라 미코",
-		Kind:       string(domain.OutboxKindNewVideo),
-		Count:      3,
-		Items: []GroupedItemData{
-			{},
-			{Title: "제목1", URL: "https://youtu.be/v1"},
-			{Title: "제목2", URL: "https://youtu.be/v2"},
-		},
-	})
-	wantMixed := "## 🔔 사쿠라 미코 새 영상 (3)\n1. [제목1](https://youtu.be/v1)\n2. [제목2](https://youtu.be/v2)"
+	formatter := NewMessageFormatter(template.NewRenderer(pool, slog.Default()), staticMemberNameSource{name: member}, nil)
 
-	if mixed != wantMixed {
-		t.Fatalf("mixed render mismatch\n got=%q\nwant=%q", mixed, wantMixed)
-	}
-}
+	for _, kind := range []domain.OutboxKind{domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost} {
+		t.Run(string(kind), func(t *testing.T) {
+			item := domain.YouTubeNotificationOutbox{ID: 17, Kind: kind, ChannelID: "UC_literal", Payload: string(payload)}
+			results, err := formatter.FormatMessages(t.Context(), []domain.YouTubeNotificationOutbox{item})
+			require.NoError(t, err)
+			require.Len(t, results, 1)
+			require.NoError(t, results[0].Err)
 
-func TestOutboxGroupBodiesNumberRenderedItemsConsecutively(t *testing.T) {
-	t.Parallel()
+			grouped, err := formatter.FormatGroupedMessage(t.Context(), member, item.ChannelID, kind, []domain.YouTubeNotificationOutbox{item, item})
+			require.NoError(t, err)
 
-	shorts := renderOutboxBody(t, outboxBodyShortsGroup, GroupedTemplateData{
-		MemberName: "사쿠라 미코",
-		Kind:       string(domain.OutboxKindNewShort),
-		Count:      3,
-		Items: []GroupedItemData{
-			{},
-			{Title: "쇼츠1", URL: "https://www.youtube.com/shorts/s1"},
-			{Title: "쇼츠2", URL: "https://www.youtube.com/shorts/s2"},
-		},
-	})
-	wantShorts := "## 🔔 사쿠라 미코 새 쇼츠 (3)\n1. [쇼츠1](https://www.youtube.com/shorts/s1)\n2. [쇼츠2](https://www.youtube.com/shorts/s2)"
-
-	if shorts != wantShorts {
-		t.Fatalf("shorts group render mismatch\n got=%q\nwant=%q", shorts, wantShorts)
-	}
-
-	community := renderOutboxBody(t, outboxBodyCommunityGroup, GroupedTemplateData{
-		MemberName: "사쿠라 미코",
-		Kind:       string(domain.OutboxKindCommunityPost),
-		Count:      3,
-		Items: []GroupedItemData{
-			{},
-			{ContentText: "공지1", URL: "https://www.youtube.com/post/p1"},
-			{ContentText: "공지2", URL: "https://www.youtube.com/post/p2"},
-		},
-	})
-	wantCommunity := "## 🔔 사쿠라 미코 커뮤니티 글 (3)\n1. 공지1\n   [커뮤니티 글 보기](https://www.youtube.com/post/p1)\n2. 공지2\n   [커뮤니티 글 보기](https://www.youtube.com/post/p2)"
-
-	if community != wantCommunity {
-		t.Fatalf("community group render mismatch\n got=%q\nwant=%q", community, wantCommunity)
-	}
-}
-
-func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name string
-		body string
-		data map[string]any
-		want string
-	}{
-		{
-			name: "single/new_video",
-			body: outboxBodyVideo,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxVideo, "NEW_VIDEO"),
-			want: "🔔 **사쿠라 미코** 새 영상\n[마인크래프트 건축 배틀 #" + zwsp + "미코라이브](https://youtu.be/video123xyz)",
-		},
-		{
-			name: "single/live_stream",
-			body: outboxBodyVideo,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxVideo, "LIVE_STREAM"),
-			want: "🔴 **사쿠라 미코** 방송 시작\n[마인크래프트 건축 배틀 #" + zwsp + "미코라이브](https://youtu.be/video123xyz)",
-		},
-		{
-			name: "single/shorts",
-			body: outboxBodyShorts,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxShorts, "NEW_SHORT"),
-			want: "🔔 **사쿠라 미코** 새 쇼츠\n[새 쇼츠 제목 - 귀여운 미코치](https://www.youtube.com/shorts/abc123xyz)",
-		},
-		{
-			name: "single/community",
-			body: outboxBodyCommunity,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxCommunity, "COMMUNITY_POST"),
-			want: "🔔 **사쿠라 미코** 커뮤니티 글\n오늘 밤 10시에 방송합니다! 많이 놀러오세요~" + zwsp + "\n[커뮤니티 글 보기](https://www.youtube.com/post/Ugkxyz123)",
-		},
-		{
-			name: "group/new_video",
-			body: outboxBodyVideoGroup,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "NEW_VIDEO"),
-			want: "## 🔔 사쿠라 미코 새 영상 (2)\n1. [마인크래프트 건축 배틀 #" + zwsp + "1](https://youtu.be/group-video-1)\n2. [마인크래프트 건축 배틀 #" + zwsp + "2](https://youtu.be/group-video-2)",
-		},
-		{
-			name: "group/live_stream",
-			body: outboxBodyVideoGroup,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "LIVE_STREAM"),
-			want: "## 🔴 사쿠라 미코 방송 시작 (2)\n1. [마인크래프트 건축 배틀 #" + zwsp + "1](https://youtu.be/group-video-1)\n2. [마인크래프트 건축 배틀 #" + zwsp + "2](https://youtu.be/group-video-2)",
-		},
-		{
-			name: "group/shorts",
-			body: outboxBodyShortsGroup,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxShortsGroup, "NEW_SHORT"),
-			want: "## 🔔 사쿠라 미코 새 쇼츠 (2)\n1. [오늘의 쇼츠 #" + zwsp + "1](https://www.youtube.com/shorts/group-1)\n2. [오늘의 쇼츠 #" + zwsp + "2](https://www.youtube.com/shorts/group-2)",
-		},
-		{
-			name: "group/community",
-			body: outboxBodyCommunityGroup,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxCommunityGroup, "COMMUNITY_POST"),
-			want: "## 🔔 사쿠라 미코 커뮤니티 글 (2)\n1. 오늘 밤 10시 방송 공지\n   [커뮤니티 글 보기](https://www.youtube.com/post/group-community-1)\n2. 굿즈 판매 시작 안내\n   [커뮤니티 글 보기](https://www.youtube.com/post/group-community-2)",
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := renderOutboxBody(t, c.body, c.data); got != c.want {
-				t.Fatalf("render mismatch\n got=%q\nwant=%q", got, c.want)
+			url := VideoTemplateURL(kind, "a_b-c")
+			if kind == domain.OutboxKindCommunityPost {
+				url = "https://www.youtube.com/post/p_q-r"
 			}
-		})
-	}
-}
 
-func TestOutboxHeaderBodyRendersPremiereGoldens(t *testing.T) {
-	t.Parallel()
+			for _, message := range []string{results[0].Message, grouped} {
+				visible := strings.ReplaceAll(kakaoformat.Render(message), kakaotext.ZeroWidthSpace, "")
+				require.Contains(t, visible, member)
 
-	cases := []struct {
-		name string
-		data map[string]any
-		want string
-	}{
-		{
-			name: "upcoming",
-			data: map[string]any{
-				"Kind": "NEW_VIDEO", "MemberName": "아크로라", "Title": "최초공개 영상",
-				"URL": "https://youtu.be/premiere", "IsPremiere": true,
-				"IsUpcomingPremiere": true, "MinutesUntilPremiere": 30,
-			},
-			want: "🔔 **아크로라** 30분 후 공개 예정\n[최초공개 영상](https://youtu.be/premiere)",
-		},
-		{
-			name: "after schedule",
-			data: map[string]any{
-				"Kind": "NEW_VIDEO", "MemberName": "아크로라", "Title": "최초공개 영상",
-				"URL": "https://youtu.be/premiere", "IsPremiere": true,
-				"IsUpcomingPremiere": false, "MinutesUntilPremiere": -1,
-			},
-			want: "🔔 **아크로라** 최초공개\n[최초공개 영상](https://youtu.be/premiere)",
-		},
-	}
+				for _, field := range []string{"||가격||", "**제목**", "_원문_"} {
+					require.Contains(t, visible, field)
+				}
 
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := renderOutboxBody(t, outboxBodyVideo, test.data); got != test.want {
-				t.Fatalf("render mismatch\n got=%q\nwant=%q", got, test.want)
+				require.Contains(t, "\n"+visible+"\n", "\n"+url+"\n")
 			}
 		})
 	}

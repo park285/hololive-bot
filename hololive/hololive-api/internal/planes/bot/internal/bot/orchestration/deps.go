@@ -46,6 +46,7 @@ import (
 // BotIrisClient는 bot orchestration이 발송과 room catalog 구성에 사용하는 Iris 계약입니다.
 type BotIrisClient interface {
 	iris.BotClient
+	transport.ReplyClient
 	kakaoroom.IrisRooms
 }
 

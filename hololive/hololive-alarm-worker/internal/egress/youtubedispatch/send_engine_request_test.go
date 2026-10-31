@@ -13,7 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-const frozenProviderMarkdownRoute = "markdown"
+const frozenProviderRichTextRoute = "richtext"
 
 type frozenProviderSender struct {
 	route  string
@@ -51,7 +51,7 @@ func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 	transition, err := store.NewTransitionStore(pool, slog.Default(), store.TransitionConfig{Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Millisecond, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
 	require.NoError(t, err)
 
-	sender := &frozenProviderSender{body: "final body", route: frozenProviderMarkdownRoute, err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
+	sender := &frozenProviderSender{body: "final body", route: frozenProviderRichTextRoute, err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
 	engine := &SendEngine{sender: sender, transition: transition, config: config, logger: slog.New(slog.DiscardHandler)}
 
 	var outboxID int64
@@ -75,7 +75,7 @@ func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 		sender.route = testPreparedTextRoute
 	}
 
-	require.Equal(t, []string{frozenProviderMarkdownRoute, frozenProviderMarkdownRoute, frozenProviderMarkdownRoute}, sender.routes)
+	require.Equal(t, []string{frozenProviderRichTextRoute, frozenProviderRichTextRoute, frozenProviderRichTextRoute}, sender.routes)
 	require.Equal(t, []string{"final body", "final body", "final body"}, sender.bodies)
 	require.Equal(t, sender.ids[0]+":r1", sender.ids[1])
 	require.Equal(t, sender.ids[0]+":r2", sender.ids[2])

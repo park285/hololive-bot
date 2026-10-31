@@ -13,7 +13,7 @@
 
 2026-09-29 채널 통계 퇴역과 저장 구조 변경은 [저장 축소 계획](../plans/2026-09-29-youtube-storage-reduction.md)의 실행 기록 및 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 아래 DDL 예시는 초기 설계이며 현행 물리 스키마는 migration manifest와 schema snapshot이 소유합니다. payload는 kind/schema/canonical profile별 공유 JSONB(LZ4), 32바이트 digest와 8바이트 FK로 저장하며 슬롯별 관측·오류·알림 의미는 유지합니다.
 
-2026-10-28 개정: source observation 수동 replay 파이프라인(요청 표 `source_observation_replay_requests`, `RequestReplay`, `ProcessNextReplay` loop, `YOUTUBE_PLANE_REPLAY_*`, replay audit retention, `source_observation_queue.replay_count`)을 migration 348에서 삭제했습니다. 운영 생산자(CLI·route)가 한 번도 생기지 않았기 때문입니다. 이 문서에서 replay 요청·재활성화·replay audit를 서술하는 §9.5·§12와 구현 순서(§18)·시험 표(§19)의 해당 항목은 초기 설계 기록이며 현행 계약이 아닙니다. replay epoch(`source_observation_replay_epoch`)는 claim 시점의 pre-epoch dead-letter 경계로 남습니다.
+2026-10-28 개정: source observation 수동 replay 파이프라인(요청 표 `source_observation_replay_requests`, `RequestReplay`, `ProcessNextReplay` loop, `YOUTUBE_PLANE_REPLAY_*`, replay audit retention, `source_observation_queue.replay_count`)을 migration 351에서 삭제했습니다. 운영 생산자(CLI·route)가 한 번도 생기지 않았기 때문입니다. 이 문서에서 replay 요청·재활성화·replay audit를 서술하는 §9.5·§12와 구현 순서(§18)·시험 표(§19)의 해당 항목은 초기 설계 기록이며 현행 계약이 아닙니다. replay epoch(`source_observation_replay_epoch`)는 claim 시점의 pre-epoch dead-letter 경계로 남습니다.
 
 ### 근거와 신규 설계 결정의 구분
 
@@ -1089,7 +1089,7 @@ CREATE UNIQUE INDEX uq_source_observation_application_active
     WHERE observation_id IS NOT NULL;
 ```
 
-초기 설계의 `source_observation_replay_requests`와 queue 재활성화 경로는 2026-10-28 삭제했다(migration 348). terminal queue 행을 다시 `PENDING`으로 돌리는 현행 경로는 없다.
+초기 설계의 `source_observation_replay_requests`와 queue 재활성화 경로는 2026-10-28 삭제했다(migration 351). terminal queue 행을 다시 `PENDING`으로 돌리는 현행 경로는 없다.
 
 application 수명은 원본과 동일하며 고아 유예·별도 retention이 없다. 원본의 provider/kind/subject/hash/clock은 JOIN으로 읽는다. 원본 retention은 큐·종료 근거·CURRENT/STAGING generation·ACTIVE lease·LIVE/UPCOMING 세션의 application/pending-end 근거를 보호한다. 원본과 live/content absence slot의 scope/evidence hash는 32바이트 bytea이며 공개 JSON/Go 표현은 기존 64자 소문자 hex를 유지한다. 다른 audit/checkpoint hash 열의 표현은 바꾸지 않는다.
 
@@ -1437,7 +1437,7 @@ type RetentionConfig struct {
 
 ### 12.3 Replay(삭제)
 
-초기 설계의 operator replay(요청 audit, terminal queue 재활성화, `replay_count`, replay audit retention)는 운영 생산자 없이 남아 retention 보호 조건만 늘렸으므로 2026-10-28 삭제했다(migration 348). 이 경로를 되살리려면 생산자·권한·retention 계약을 새로 정한다.
+초기 설계의 operator replay(요청 audit, terminal queue 재활성화, `replay_count`, replay audit retention)는 운영 생산자 없이 남아 retention 보호 조건만 늘렸으므로 2026-10-28 삭제했다(migration 351). 이 경로를 되살리려면 생산자·권한·retention 계약을 새로 정한다.
 
 ## 13. Source-neutral reconciliation
 

@@ -76,7 +76,7 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "방송 이력 %d건\n", len(entries))
+	fmt.Fprintf(&b, "**방송 이력 %d건**\n", len(entries))
 
 	if line := broadcastHistoryFilterLine(filter); line != "" {
 		b.WriteString(line)
@@ -103,7 +103,7 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 }
 
 func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry *BroadcastHistoryEntry) {
-	fmt.Fprintf(b, "%d · [%s] %s\n", index, broadcastHistoryDisplayLine(entry.TypeLabel), broadcastHistoryDisplayLine(entry.MemberName))
+	fmt.Fprintf(b, "%d · **[%s] %s**\n", index, broadcastHistoryDisplayLine(entry.TypeLabel), broadcastHistoryDisplayLine(entry.MemberName))
 	writeBroadcastHistoryTitle(b, entry.Type, entry.Title)
 	writeBroadcastHistoryTime(ctx, f, b, entry)
 	writeBroadcastHistoryURL(b, entry.URL)
@@ -118,13 +118,12 @@ func writeBroadcastHistoryTitle(b *strings.Builder, broadcastType, title string)
 			title = stringutil.TruncateString(title, 61)
 		}
 
-		// 줄 첫 위치의 번호·인용 기호도 표시 문자로 보존합니다.
-		fmt.Fprintf(b, "%s%s\n", kakaotext.ZeroWidthSpace, kakaotext.MarkdownNeutralize(title))
+		fmt.Fprintf(b, "%s\n", kakaotext.MarkdownLiteral(title))
 	}
 }
 
 func broadcastHistoryDisplayLine(value string) string {
-	return kakaotext.MarkdownNeutralize(strings.Join(strings.Fields(value), " "))
+	return kakaotext.MarkdownLiteral(strings.Join(strings.Fields(value), " "))
 }
 
 func broadcastHistoryDisplayTitle(broadcastType, title string) string {
@@ -259,7 +258,7 @@ func broadcastHistoryTimeSpan(ctx context.Context, f *ResponseFormatter, entry *
 			return text
 		}
 
-		return text + " " + entry.TimeLabel
+		return text + " " + broadcastHistoryDisplayLine(entry.TimeLabel)
 	}
 
 	start := timeutil.FormatKST(entry.StartedAt, broadcastHistoryTimeLayout)

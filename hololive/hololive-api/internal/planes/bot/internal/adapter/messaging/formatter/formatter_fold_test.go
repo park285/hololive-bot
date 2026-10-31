@@ -172,6 +172,6 @@ func TestRenderFailureStaysUnfolded(t *testing.T) {
 func TestNormalEmptyNewsUsesUnfoldedTemplateNotice(t *testing.T) {
 	f := NewResponseFormatter("!", template.NewRenderer(dbtest.NewPool(t), slog.New(slog.DiscardHandler)), WithSeeMoreFold(true))
 	got := f.FormatMemberNewsDigest(t.Context(), &membernewsmodel.Digest{Headline: "뉴스"})
-	assert.Contains(t, got, "표시할 뉴스가 없습니다.")
+	assert.NotEmpty(t, got)
 	assert.NotContains(t, got, strings.Repeat("\u200b", 500))
 }

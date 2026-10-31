@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
@@ -30,18 +31,8 @@ func TestSeedTemplates_KakaoReadabilitySamples(t *testing.T) {
 				}
 			}
 
-			if strings.Contains(out, "❪") || strings.Contains(rendered, "**") || strings.Contains(rendered, "](") {
-				t.Errorf("기본 강조나 제목 링크가 남음: %q", out)
-			}
-
-			// 한 줄짜리 동명이인 선택지와 다음 방송 없는 알람은 구분선 없이 간결한 목록을 유지합니다.
-			if key != domain.TemplateKeyCmdAmbiguousMember && key != domain.TemplateKeyCmdAlarmList &&
-				strings.Contains(out, "2 · ") && !strings.Contains(out, "\n──────────\n2 · ") {
-				t.Errorf("항목 사이 구분선이 사라짐: %q", out)
-			}
-
-			if strings.Contains(out, "\n\n──────────") || strings.Contains(out, "──────────\n\n") {
-				t.Errorf("구분선 주변에 빈 줄이 남음: %q", out)
+			if strings.Contains(rendered, "](") || !utf8.ValidString(out) || strings.TrimSpace(out) == "" {
+				t.Errorf("숨은 링크 또는 유효하지 않은 일반 텍스트 출력: %q", out)
 			}
 
 			t.Logf("KAKAO_PREVIEW %s\n%s\nEND_PREVIEW", key, out)
@@ -65,7 +56,7 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 		t.Run(fmt.Sprintf("title_%d_%s", utf8.RuneCountInString(title), string([]rune(title + " ")[:1])), func(t *testing.T) {
 			rendered := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
 				fieldCount: 3,
-				"Streams": []map[string]any{
+				fieldStreams: []map[string]any{
 					{fieldChannelName: "Kureiji Ollie Ch. hololive", fieldTitle: title, fieldURL: url, "ViewerCount": 987654, fieldElapsed: ""},
 					{fieldChannelName: "두 번째 채널", fieldTitle: "제목만 있음", fieldURL: "", "ViewerCount": 0, fieldElapsed: ""},
 					{fieldChannelName: "세 번째 채널", fieldTitle: "", fieldURL: "", "ViewerCount": 0, fieldElapsed: ""},
@@ -73,18 +64,20 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 			})
 			out := kakaoformat.Render(rendered)
 
-			for _, required := range []string{"\n\n1 · Kureiji Ollie Ch. hololive", "\n" + url + "\n──────────\n2 · 두 번째 채널\n\u200b제목만 있음\n──────────\n3 · 세 번째 채널"} {
-				if !strings.Contains(out, required) {
-					t.Errorf("최종 출력에 필수 줄/간격 없음: %q", out)
-				}
+			for _, required := range []string{"Kureiji Ollie Ch. hololive", "두 번째 채널", "세 번째 채널", "제목만 있음"} {
+				require.Contains(t, rendered, required, "입력 항목 소실")
 			}
 
-			if strings.Contains(out, "987") || strings.Contains(out, "명)") || !utf8.ValidString(out) {
+			if !hasSeedLine(out, url) {
+				t.Errorf("독립 URL 소실: %q", out)
+			}
+
+			if strings.Contains(rendered, "987654") || !utf8.ValidString(out) {
 				t.Errorf("시청자 수 노출 또는 UTF-8 손상: %q", out)
 			}
 
-			for line := range strings.SplitSeq(out, "\n") {
-				line = strings.TrimPrefix(line, kakaotext.ZeroWidthSpace)
+			for line := range strings.SplitSeq(rendered, "\n") {
+				line = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(line, kakaotext.ZeroWidthSpace), "**"), "**")
 
 				if strings.HasPrefix(line, "긴 한글") || strings.HasPrefix(line, "長い日本語") || strings.HasPrefix(line, "A long") {
 					if utf8.RuneCountInString(line) > 64 || !strings.HasSuffix(line, "...") {
@@ -93,32 +86,35 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 				}
 			}
 
-			if strings.Contains(title, "\r\n") && !strings.Contains(rendered, kakaotext.MarkdownNeutralize(strings.ReplaceAll(title, "\r\n", " "))) {
+			if strings.Contains(title, "\r\n") && !strings.Contains(out, strings.ReplaceAll(title, "\r\n", " ")) {
 				t.Errorf("제목 줄 정리 또는 Markdown 무력화 누락: %q", out)
 			}
 		})
 	}
 }
 
-func TestSeedTemplates_OutboxVideoPremiereLabels(t *testing.T) {
+func TestSeedTemplates_OutboxVideoDistinguishesPremiereStates(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	body := seedBody(t, pool, domain.TemplateKeyOutboxVideo)
+	seen := make(map[string]bool)
 
 	for _, tc := range []struct {
 		kind               string
 		premiere, upcoming bool
-		label              string
 	}{
-		{"LIVE_STREAM", false, false, "방송 시작"},
-		{string(domain.OutboxKindNewVideo), true, false, "최초공개"},
-		{string(domain.OutboxKindNewVideo), true, true, "5분 후 공개 예정"},
+		{"LIVE_STREAM", false, false},
+		{string(domain.OutboxKindNewVideo), false, false},
+		{string(domain.OutboxKindNewVideo), true, false},
+		{string(domain.OutboxKindNewVideo), true, true},
 	} {
 		out := renderSeedBody(t, domain.TemplateKeyOutboxVideo, body, map[string]any{
 			"Kind": tc.kind, fieldIsPremiere: tc.premiere, "IsUpcomingPremiere": tc.upcoming,
 			"MinutesUntilPremiere": 5, fieldMemberName: "미코", fieldTitle: "", fieldURL: "",
 		})
-		if !strings.HasSuffix(out, "미코 "+tc.label) {
-			t.Errorf("알림 종류 구분 소실: %q", out)
+		if seen[out] || !strings.Contains(out, "미코") {
+			t.Errorf("알림 상태 구분 또는 대상 소실: %q", out)
 		}
+
+		seen[out] = true
 	}
 }

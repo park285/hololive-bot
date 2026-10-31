@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	testPreparedMarkdown = "markdown"
+	testPreparedRichText = "richtext"
 	testPreparedText     = "text"
 )
 
@@ -71,7 +71,7 @@ func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", "source"))
 
 	conflict := testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)
-	sender := &preparedSenderSpy{body: "original final body", route: testPreparedMarkdown, err: conflict}
+	sender := &preparedSenderSpy{body: "original final body", route: testPreparedRichText, err: conflict}
 	cfg := testDispatcherConfig()
 
 	cfg.RetryBackoff = time.Nanosecond
@@ -89,7 +89,7 @@ func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 
 	require.Equal(t, []string{sender.ids[0], sender.ids[0] + ":r1", sender.ids[0] + ":r2"}, sender.ids)
 	require.Equal(t, []string{"original final body", "original final body", "original final body"}, sender.bodies)
-	require.Equal(t, []string{testPreparedMarkdown, testPreparedMarkdown, testPreparedMarkdown}, sender.routes)
+	require.Equal(t, []string{testPreparedRichText, testPreparedRichText, testPreparedRichText}, sender.routes)
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, domain.DeliveryStatusFailed))
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", "new source"))
 
@@ -114,7 +114,7 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", "different source"))
 
 	sender.body = "different rendered body"
-	sender.route = testPreparedMarkdown
+	sender.route = testPreparedRichText
 	sender.err = nil
 	d = mustNewDispatcher(t, repo, sender, dispatcherLogger(), &cfg)
 	d.processReady(ctx)
@@ -151,6 +151,16 @@ func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 }
 
 func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
+	for _, route := range []string{testPreparedText, testPreparedRichText, "markdown"} {
+		t.Run(route, func(t *testing.T) {
+			testGenericGenerationReplay(t, route)
+		})
+	}
+}
+
+func testGenericGenerationReplay(t *testing.T, route string) {
+	t.Helper()
+
 	repo := testRepository(t)
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "replay", "room", "source"))
@@ -158,18 +168,19 @@ func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
 
-	previous := &deliverypayload.Request{Body: "pinned", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
+	previous := &deliverypayload.Request{Body: "pinned", Route: route, BaseID: notificationDeliveryClientRequestID(&items[0])}
 	require.NoError(t, repo.saveRequest(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, previous))
 	markOutboxSending(ctx, t, repo, &items[0])
 	require.NoError(t, repo.reissueFailedRequest(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, previous.Generation, false, 3, 0, "pre-handoff failure"))
 
 	// 별도 MarkFailed 호출 없이 새 dispatcher가 commit된 세대와 retry 상태를 복구합니다.
 
-	sender := &preparedSenderSpy{body: "new config", route: testPreparedMarkdown}
+	sender := &preparedSenderSpy{body: "new config", route: testPreparedRichText}
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 	d.processReady(ctx)
 	require.Equal(t, []string{previous.BaseID + ":r1"}, sender.ids)
 	require.Equal(t, []string{"pinned"}, sender.bodies)
+	require.Equal(t, []string{route}, sender.routes)
 }
 
 func TestGenericPayloadMismatchDoesNotReissue(t *testing.T) {
