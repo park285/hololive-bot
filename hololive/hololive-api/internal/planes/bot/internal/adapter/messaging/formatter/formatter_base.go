@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/templateview"
@@ -131,7 +132,14 @@ func (f *ResponseFormatter) GraduatedMemberWarning(_ context.Context) string {
 		return ""
 	}
 
-	return f.messageStrings.Text(messagestrings.NotifyGraduatedMemberWarning)
+	text := f.messageStrings.Text(messagestrings.NotifyGraduatedMemberWarning)
+	warning := strings.TrimRight(text, "\r\n")
+
+	if warning == "" {
+		return text
+	}
+
+	return "**" + kakaoformat.EscapeMarkdown(warning) + "**" + text[len(warning):]
 }
 
 type memberNotFoundTemplateData struct {

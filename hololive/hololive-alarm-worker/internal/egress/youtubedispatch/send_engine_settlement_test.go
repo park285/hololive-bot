@@ -213,7 +213,7 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 
 	pool := newDeliveryPool(t)
 	db := &settlementDB{Pool: pool}
-	sender := &settlementSender{body: "immutable final body", route: "markdown"}
+	sender := &settlementSender{body: "immutable final body", route: "richtext"}
 	engine := newOutcomeUnknownTestEngine(sender, nil, time.Minute)
 
 	engine.config.MaxRetries = 3
@@ -385,7 +385,7 @@ func assertSettlementProviderCalls(t *testing.T, f *settlementFixture, path, out
 
 	for i := range f.sender.ids {
 		require.Equal(t, "immutable final body", f.sender.bodies[i])
-		require.Equal(t, "markdown", f.sender.routes[i])
+		require.Equal(t, "richtext", f.sender.routes[i])
 	}
 }
 
@@ -556,7 +556,7 @@ func assertSettlementFrozenRequests(t *testing.T, f *settlementFixture, path, ou
 	for i := range requests {
 		request := &requests[i]
 		require.Equal(t, "immutable final body", request.Message)
-		require.Equal(t, "markdown", request.Route)
+		require.Equal(t, "richtext", request.Route)
 
 		generation := 0
 

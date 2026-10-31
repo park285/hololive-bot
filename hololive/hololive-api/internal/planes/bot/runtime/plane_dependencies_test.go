@@ -125,7 +125,7 @@ func newInjectedDependencyBot(t *testing.T, memberNews *recordingMemberNews, maj
 
 // dispatchingReplyOutbox는 기록한 응답을 outbox dispatcher와 같은 DispatchStoredReply로 바로 보낸다.
 type dispatchingReplyOutbox struct {
-	client iris.BotClient
+	client transport.ReplyClient
 }
 
 func (o dispatchingReplyOutbox) RecordReply(ctx context.Context, entry *transport.ReplyOutboxEntry) error {

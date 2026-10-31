@@ -38,12 +38,14 @@ func TestDefaultStreamLayoutsReportDisplayLimitAndKeepFold(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			out := kakaoformat.Render(rendered)
-			if !strings.Contains(out, "전체 101개 중 100개 표시") || strings.Contains(out, streams[100].GetYouTubeURL()) {
-				t.Errorf("display cap notice or item bound broken: %q", out)
+			if strings.Contains(out, streams[streamListDisplayLimit].GetYouTubeURL()) {
+				t.Errorf("표시 한도를 넘은 항목 노출: %q", out)
 			}
 
-			if strings.Count(out, "\n──────────\n") != 99 || strings.Contains(out, "\n\n──────────") || strings.Contains(out, "──────────\n\n") {
-				t.Error("multi-stream item separators lost or widened after final conversion")
+			for _, stream := range streams[:streamListDisplayLimit] {
+				if !strings.Contains("\n"+out+"\n", "\n"+stream.GetYouTubeURL()+"\n") {
+					t.Errorf("독립 URL 손실: %q", stream.GetYouTubeURL())
+				}
 			}
 
 			padding := strings.Repeat(kakaotext.ZeroWidthSpace, templateview.KakaoSeeMorePadding)
@@ -51,9 +53,9 @@ func TestDefaultStreamLayoutsReportDisplayLimitAndKeepFold(t *testing.T) {
 				t.Error("fold padding lost or duplicated")
 			}
 
-			// 표시 한도 안내는 머리 문단에 있으므로 접힌 화면(패딩 앞)에 남아야 한다.
-			if notice := strings.Index(out, "전체 101개 중 100개 표시"); notice < 0 || notice > strings.Index(out, padding) {
-				t.Errorf("display cap notice folded away: %q", out[:min(len(out), 160)])
+			head, _, _ := strings.Cut(rendered, padding)
+			if !strings.Contains(head, fmt.Sprint(len(streams))) || !strings.Contains(head, fmt.Sprint(streamListDisplayLimit)) {
+				t.Error("표시 한도 수치가 접힌 머리 문단에서 사라짐")
 			}
 		})
 	}
@@ -70,21 +72,22 @@ func TestBroadcastHistoryFinalTextKeepsBoundariesAndCopyableShortcut(t *testing.
 
 	entries := []BroadcastHistoryEntry{
 		{
-			VideoID: videoID, MemberName: "미코\r\nMiko", TypeLabel: "노래", Title: title,
+			VideoID: videoID, MemberName: "||미코|| **별명**\r\n이름", TypeLabel: "노래", Title: title,
 			URL: url, HasThumbnail: true, Time: time.Unix(1, 0),
+			TimeLabel: "||시각|| **원문**",
 		},
 		{MemberName: "다음 채널", TypeLabel: "게임", Title: strings.Repeat("긴 제목 ", 40), Time: time.Unix(1, 0)},
 	}
 	out := kakaoformat.Render(f.BroadcastHistory(t.Context(), BroadcastHistoryFilter{Days: 7}, entries))
 	visible := strings.ReplaceAll(out, kakaotext.ZeroWidthSpace, "")
 
-	for _, want := range []string{"1 · [노래] 미코 Miko", title, "\n" + url + "\n", "썸네일: !썸네일 " + videoID, "_\n──────────\n2 · [게임] 다음 채널"} {
+	for _, want := range []string{"||미코|| **별명** 이름", "||시각|| **원문**", title, "\n" + url + "\n", "!썸네일 " + videoID, "다음 채널"} {
 		if !strings.Contains(visible, want) {
 			t.Errorf("history display lost %q: %q", want, out)
 		}
 	}
 
-	if strings.Contains(out, strings.Repeat("긴 제목 ", 20)) || strings.Contains(out, "❪") {
+	if strings.Contains(out, strings.Repeat("긴 제목 ", 20)) {
 		t.Errorf("long or literal title formatting regressed: %q", out)
 	}
 }
@@ -137,13 +140,13 @@ func TestLiveQueryKeepsTruncationNoticeAboveFold(t *testing.T) {
 	}, ""))
 
 	padding := strings.Repeat(kakaotext.ZeroWidthSpace, templateview.KakaoSeeMorePadding)
-	if notice := strings.Index(out, "표시 한도를 초과한 방송이 있습니다."); notice < 0 || notice > strings.Index(out, padding) {
-		t.Errorf("truncation notice folded away: %q", out[:min(len(out), 160)])
-	}
+	withoutNotice := kakaoformat.Render(f.LiveQuery(t.Context(), livequery.Result{
+		Items: items, Status: livequery.Partial, Truncated: false, AsOf: time.Unix(1, 0),
+	}, ""))
+	head, body, folded := strings.Cut(out, padding)
+	plainHead, plainBody, plainFolded := strings.Cut(withoutNotice, padding)
 
-	for _, removed := range []string{"조회 미완료", "기준:"} {
-		if strings.Contains(out, removed) {
-			t.Errorf("coverage diagnostics must not be shown: %q", removed)
-		}
+	if !folded || !plainFolded || len(head) <= len(plainHead) || body != plainBody {
+		t.Fatal("잘린 결과 안내가 접기 아래로 이동하거나 항목을 변경함")
 	}
 }

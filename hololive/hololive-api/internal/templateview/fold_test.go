@@ -112,44 +112,33 @@ func TestFoldForSeeMoreFallsBackToFirstLineForLongHead(t *testing.T) {
 	}
 }
 
-func TestMarkdownNeutralize_StrippedBodyStillFolds(t *testing.T) {
+func TestLiteralFieldsStripForeignPaddingBeforeFold(t *testing.T) {
 	t.Parallel()
 
 	title := "라이브" + strings.Repeat(kakaotext.ZeroWidthSpace, 4) + "제목"
-	body := title + "\n" + strings.Repeat("가나다라마바사아자차카타파하", 25)
+	body := kakaotext.MarkdownLiteral(title) + "\n" + strings.Repeat("가나다라마바사아자차카타파하", 25)
 
-	folded := FoldForSeeMore(kakaotext.MarkdownNeutralize(body))
+	folded := FoldForSeeMore(body)
 	if !strings.Contains(folded, strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)) {
 		t.Errorf("외부 유입 ZWSP run 때문에 fold가 억제됨: %q", folded[:60])
 	}
 }
 
-func TestFoldSurvivesNeutralizedBody(t *testing.T) {
+func TestFoldSurvivesLiteralFields(t *testing.T) {
 	t.Parallel()
 
-	body := "**헤더 라인**\n" + strings.Repeat("가~나*다_라#마]바`사", 40)
-	neutralized := kakaotext.MarkdownNeutralize(body)
+	const head = "**헤더 라인**"
 
-	if !strings.Contains(neutralized, kakaotext.ZeroWidthSpace) {
-		t.Fatal("전제 실패: neutralize 결과에 ZWSP가 없음")
-	}
+	body := head + "\n" + kakaotext.MarkdownLiteral(strings.Repeat("가~나*다_라#마]바`사", 40))
+	folded := FoldForSeeMore(body)
+	padding := strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)
 
-	folded := FoldForSeeMore(neutralized)
-	if folded == neutralized {
-		t.Fatal("neutralize된 본문이 fold되지 않음")
-	}
-
-	if !strings.Contains(folded, strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)) {
-		t.Errorf("ZWSP %d-run 패딩이 삽입되지 않음", KakaoSeeMorePadding)
-	}
-
-	head := "*" + kakaotext.ZeroWidthSpace + "*" + kakaotext.ZeroWidthSpace + "헤더 라인"
-	if !strings.HasPrefix(folded, head) {
-		t.Error("첫 줄이 보존되지 않음")
+	if strings.Count(folded, padding) != 1 || !strings.HasPrefix(folded, head+padding) {
+		t.Fatal("literal 필드 보호가 정적 머리말 또는 접기 패딩을 변경함")
 	}
 
 	if again := FoldForSeeMore(folded); again != folded {
-		t.Error("neutralize된 본문에서 fold가 멱등하지 않음")
+		t.Fatal("접기 패딩 중복 삽입")
 	}
 }
 

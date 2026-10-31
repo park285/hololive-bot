@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const sourceObservationReplayDropMigration = "348_drop_source_observation_replay.sql"
+const sourceObservationReplayDropMigration = "351_drop_source_observation_replay.sql"
 
 // 348은 PENDING replay 요청이 남아 있으면 아무것도 지우지 않고 실패하고, 끝난 요청만 있으면 표와 replay_count 열을 지운다.
 func TestSourceObservationReplayDropRejectsPendingRequests(t *testing.T) {

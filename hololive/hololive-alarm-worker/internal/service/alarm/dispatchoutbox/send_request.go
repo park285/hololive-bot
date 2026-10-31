@@ -21,6 +21,7 @@ import (
 // 발송 경로는 저장된 최종 요청의 일부이며 재시도 때 다시 판정하지 않는다.
 const (
 	SendRouteText     = "text"
+	SendRouteRichText = "richtext"
 	SendRouteMarkdown = "markdown"
 )
 
@@ -126,8 +127,9 @@ func (r *PgxRepository) prepareSendRequest(
 }
 
 // fillPinnedRequest는 잠근 미고정 요청에 candidate 본문·경로와 멤버 ID, 첫 세대 요청 ID를 채운다.
+// 새 요청은 text/richtext만 허용한다. 기존 markdown은 prepareSendRequest의 고정 스냅샷 반환 경로로 읽는다.
 func fillPinnedRequest(request, candidate *SendRequest, ids []int64) error {
-	if candidate.Route != SendRouteText && candidate.Route != SendRouteMarkdown {
+	if candidate.Route != SendRouteText && candidate.Route != SendRouteRichText {
 		return errors.New("pin send request: unsupported route")
 	}
 

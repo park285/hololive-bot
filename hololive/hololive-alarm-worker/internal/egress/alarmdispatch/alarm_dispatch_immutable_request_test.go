@@ -49,7 +49,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("pin-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
 	require.NoError(t, err)
 
-	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteMarkdown, messageErr: context.DeadlineExceeded}
+	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteRichText, messageErr: context.DeadlineExceeded}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: template.NewRenderer(pool, slog.Default()), maxBatch: 10}
 
 	_, err = runner.runOnce(ctx)
@@ -72,7 +72,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	require.Len(t, sender.messages, 2)
 	require.Equal(t, sender.messages[0], sender.messages[1])
 	require.Equal(t, sender.clientRequestIDs[0], sender.clientRequestIDs[1])
-	require.Equal(t, []string{dispatchoutbox.SendRouteMarkdown, dispatchoutbox.SendRouteMarkdown}, sender.routes)
+	require.Equal(t, []string{dispatchoutbox.SendRouteRichText, dispatchoutbox.SendRouteRichText}, sender.routes)
 }
 
 func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {

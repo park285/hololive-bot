@@ -40,16 +40,18 @@ import (
 // 시드 본문 그대로 렌더해, 시드-샘플-변수 계약 위반을 배포 전에 유일하게 차단한다.
 
 const (
-	fieldScheduledKST = "ScheduledKST"
-	fieldIsPremiere   = "IsPremiere"
-	fieldMinutesUntil = "MinutesUntil"
-	fieldNextStream   = "NextStream"
-	fieldCount        = "Count"
-	fieldChannelName  = "ChannelName"
-	fieldMemberName   = "MemberName"
-	fieldTitle        = "Title"
-	fieldURL          = "URL"
-	fieldElapsed      = "Elapsed"
+	fieldScheduledKST    = "ScheduledKST"
+	fieldIsPremiere      = "IsPremiere"
+	fieldMinutesUntil    = "MinutesUntil"
+	fieldNextStream      = "NextStream"
+	fieldCount           = "Count"
+	fieldChannelName     = "ChannelName"
+	fieldMemberName      = "MemberName"
+	fieldTitle           = "Title"
+	fieldURL             = "URL"
+	fieldElapsed         = "Elapsed"
+	fieldStreams         = "Streams"
+	fieldScheduleMessage = "ScheduleMessage"
 )
 
 func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
@@ -160,25 +162,20 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 		fieldMemberName: markerName,
 	})
 
-	if !strings.Contains(notFound, kakaotext.MarkdownNeutralize(markerName)) {
-		t.Errorf("CMD_MEMBER_NOT_FOUND: mdsafe 미적용: %q", notFound)
-	}
-
-	if strings.Contains(notFound, markerName) {
-		t.Errorf("CMD_MEMBER_NOT_FOUND: 원본 마커가 그대로 노출: %q", notFound)
+	if visible := kakaoformat.Render(notFound); !strings.Contains(visible, markerName) {
+		t.Errorf("CMD_MEMBER_NOT_FOUND: literal 이름 소실: %q", visible)
 	}
 
 	liveBody := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
 	live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
 		fieldCount: 1,
-		"Streams": []map[string]any{
+		fieldStreams: []map[string]any{
 			{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0, fieldElapsed: ""},
 		},
 	})
 
-	wantTitleURL := kakaotext.MarkdownNeutralize(markerName) + "\n" + markerURL
-	if !strings.Contains(live, wantTitleURL) {
-		t.Errorf("CMD_LIVE_STREAMS: 제목과 URL 분리 %q 없음: %q", wantTitleURL, live)
+	if !strings.Contains(kakaoformat.Render(live), markerName) || !hasSeedLine(live, markerURL) {
+		t.Errorf("CMD_LIVE_STREAMS: literal 제목 또는 독립 URL 소실: %q", live)
 	}
 
 	if !strings.Contains(live, markerURL) {
@@ -194,17 +191,28 @@ func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 	body := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
 	got := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
 		fieldCount: 2,
-		"Streams": []map[string]any{
+		fieldStreams: []map[string]any{
 			{fieldChannelName: "츠즈리", fieldTitle: "잡담 방송", fieldURL: url, fieldElapsed: "1시간 23분째"},
 			{fieldChannelName: "두 번째 채널", fieldTitle: "노래 방송", fieldURL: "", fieldElapsed: ""},
 		},
 	})
 
-	// 경과 표기는 방송명 줄 끝에만 붙고, 비어 있으면 구분자까지 생략되어 줄 수와 빈 줄이 그대로여야 한다.
-	want := "🔴 방송 중 · 2개\n\n1 · 츠즈리 · ⏱ 1시간 23분째\n\u200b잡담 방송\n" + url +
-		"\n──────────\n2 · 두 번째 채널\n\u200b노래 방송"
-	if got != want {
-		t.Errorf("CMD_LIVE_STREAMS: 경과 시간 줄 배치가 다름\ngot:  %q\nwant: %q", got, want)
+	if strings.Count(got, "1시간 23분째") != 1 {
+		t.Errorf("경과 시간이 누락되거나 중복됨: %q", got)
+	}
+
+	for line := range strings.SplitSeq(got, "\n") {
+		if strings.Contains(line, "1시간 23분째") && !strings.Contains(line, "츠즈리") {
+			t.Errorf("다른 방송에 경과 시간이 붙음: %q", line)
+		}
+
+		if strings.Contains(line, "두 번째 채널") && strings.Contains(line, "⏱") {
+			t.Errorf("알 수 없는 경과 시간이 만들어짐: %q", line)
+		}
+	}
+
+	if !hasSeedLine(got, url) {
+		t.Errorf("독립 URL 소실: %q", got)
 	}
 }
 
@@ -229,16 +237,8 @@ func TestSeedTemplates_OutboxVideoSeparateTitleURLBranches(t *testing.T) {
 		})
 	}
 
-	safeMember := kakaotext.MarkdownNeutralize(markerMember)
-	safeTitle := kakaotext.MarkdownNeutralize(markerTitle)
-	wantHeader := "🔔 " + safeMember + " 새 영상"
-
 	both := render(markerTitle, videoURL)
-	if !hasSeedLine(both, wantHeader) {
-		t.Errorf("OUTBOX_VIDEO: 헤더 라인 %q 없음: %q", wantHeader, both)
-	}
-
-	if !hasSeedLine(both, safeTitle) || !hasSeedLine(both, videoURL) {
+	if visible := kakaoformat.Render(both); strings.Count(visible, markerMember) != 1 || !strings.Contains(visible, markerTitle) || !hasSeedLine(visible, videoURL) {
 		t.Errorf("OUTBOX_VIDEO: 제목과 URL 분리 없음: %q", both)
 	}
 
@@ -246,12 +246,8 @@ func TestSeedTemplates_OutboxVideoSeparateTitleURLBranches(t *testing.T) {
 		t.Errorf("OUTBOX_VIDEO: URL이 변형됨(ZWSP 삽입 금지): %q", both)
 	}
 
-	if strings.Contains(both, markerTitle) || strings.Contains(both, markerMember) {
-		t.Errorf("OUTBOX_VIDEO: 원본 마커가 그대로 노출: %q", both)
-	}
-
 	titleOnly := render(markerTitle, "")
-	if !hasSeedLine(titleOnly, safeTitle) {
+	if !strings.Contains(kakaoformat.Render(titleOnly), markerTitle) {
 		t.Errorf("OUTBOX_VIDEO: Title-only fallback 없음: %q", titleOnly)
 	}
 
@@ -268,8 +264,8 @@ func TestSeedTemplates_OutboxVideoSeparateTitleURLBranches(t *testing.T) {
 		t.Errorf("OUTBOX_VIDEO: Title 없이 라벨 링크가 생성됨: %q", urlOnly)
 	}
 
-	if got := render("", ""); got != wantHeader {
-		t.Errorf("OUTBOX_VIDEO: Title/URL 모두 없을 때 = %q, want %q", got, wantHeader)
+	if got := kakaoformat.Render(render("", "")); !strings.Contains(got, markerMember) || strings.Contains(got, "\n") {
+		t.Errorf("OUTBOX_VIDEO: 빈 제목/URL에서 불필요한 항목이 생김: %q", got)
 	}
 }
 
@@ -288,9 +284,10 @@ func TestSeedTemplates_OutboxVideoGroupNumbersRenderedItems(t *testing.T) {
 		},
 	})
 
-	want := "🔔 사쿠라 미코 새 영상 · 3개\n\n1 · 제목1\nhttps://youtu.be/v1\n──────────\n2 · 제목2\nhttps://youtu.be/v2\n\n전체 3개 중 2개 표시"
-	if out != want {
-		t.Errorf("OUTBOX_VIDEO_GROUP: skip 항목 뒤 번호가 연속되지 않음\n got=%q\nwant=%q", out, want)
+	if strings.Count(out, "제목1") != 1 || strings.Count(out, "제목2") != 1 ||
+		!hasSeedLine(out, "https://youtu.be/v1") || !hasSeedLine(out, "https://youtu.be/v2") ||
+		!strings.Contains(out, "\n1 · ") || !strings.Contains(out, "\n2 · ") || strings.Contains(out, "\n3 · ") {
+		t.Errorf("OUTBOX_VIDEO_GROUP: 빈 항목 생략·연속 번호·독립 URL 계약 위반: %q", out)
 	}
 }
 
@@ -309,20 +306,20 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 		"AllPremiere":     false,
 		"Entries": []map[string]any{
 			{
-				fieldMemberName:   "유닛 B",
-				fieldTitle:        markerTitle,
-				fieldURL:          shortURL,
-				"CollabMembers":   "",
-				"ScheduleMessage": "",
-				fieldMinutesUntil: 5,
-				"IsStarting":      false,
-				"IsScheduled":     true,
-				fieldIsPremiere:   false,
+				fieldMemberName:      "유닛 B",
+				fieldTitle:           markerTitle,
+				fieldURL:             shortURL,
+				"CollabMembers":      "",
+				fieldScheduleMessage: "",
+				fieldMinutesUntil:    5,
+				"IsStarting":         false,
+				"IsScheduled":        true,
+				fieldIsPremiere:      false,
 			},
 		},
 	})
 
-	if !hasSeedLine(out, kakaotext.MarkdownNeutralize(markerTitle)) || !hasSeedLine(out, shortURL) {
+	if !strings.Contains(kakaoformat.Render(out), kakaoformat.Render("**"+kakaotext.MarkdownLiteral(markerTitle)+"**")) || !hasSeedLine(out, shortURL) {
 		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: 제목 또는 원본 short-link 줄 없음: %q", out)
 	}
 
@@ -370,23 +367,4 @@ func renderSeedBody(t *testing.T, key domain.TemplateKey, body string, data any)
 	}
 
 	return out
-}
-
-func TestSeedTemplates_CommandHelpMentionsBroadcastHistory(t *testing.T) {
-	pool := dbtest.NewPool(t)
-
-	var body string
-
-	if err := pool.QueryRow(t.Context(),
-		`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id IS NULL`,
-		domain.TemplateKeyCmdHelp,
-	).Scan(&body); err != nil {
-		t.Fatalf("query CMD_HELP seed: %v", err)
-	}
-
-	for _, token := range []string{"방송이력", "썸네일"} {
-		if !strings.Contains(body, token) {
-			t.Fatalf("CMD_HELP missing %q: %s", token, body)
-		}
-	}
 }

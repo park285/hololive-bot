@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const aclRoomsChatIDMigration = "346_acl_rooms_room_id_chat_id.sql"
+const aclRoomsChatIDMigration = "349_acl_rooms_room_id_chat_id.sql"
 
 // 343은 비정규 room_id 행만 지우고 정규 chatID 행은 남기며, 이후 비정규 값 INSERT를 CHECK로 막는다. 재적용은 바꾸지 않는다.
 func TestACLRoomsChatIDMigrationDropsNonCanonicalRowsAndRejectsNewOnes(t *testing.T) {
@@ -17,7 +17,7 @@ func TestACLRoomsChatIDMigrationDropsNonCanonicalRowsAndRejectsNewOnes(t *testin
 	dir, err := resolveMigrationsDir()
 	require.NoError(t, err)
 
-	// 346 적용 전 형태로 되돌려 옛 방 이름·앞자리 0·i64 범위 밖 값을 넣는다.
+	// 349 적용 전 형태로 되돌려 옛 방 이름·앞자리 0·i64 범위 밖 값을 넣는다.
 	_, err = pool.Exec(ctx, `
 		ALTER TABLE acl_rooms DROP CONSTRAINT chk_acl_rooms_room_id_chat_id;
 		INSERT INTO acl_rooms (room_id, list_type) VALUES

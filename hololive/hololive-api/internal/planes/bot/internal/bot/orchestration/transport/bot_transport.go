@@ -96,7 +96,7 @@ func (t *CommandTransport) recordTextReply(
 	kind := StoredReplyKindText
 
 	if useMarkdown {
-		kind = StoredReplyKindMarkdown
+		kind = StoredReplyKindRichText
 	}
 
 	threadID, _ := ThreadIDFromContext(ctx)

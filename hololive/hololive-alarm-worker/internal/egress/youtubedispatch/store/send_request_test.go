@@ -16,6 +16,16 @@ import (
 const testFrozenTextRoute = "text"
 
 func TestFrozenRequestPreservesBodyRouteGenerationAndMembership(t *testing.T) {
+	for _, route := range []string{testFrozenTextRoute, "richtext", "markdown"} {
+		t.Run(route, func(t *testing.T) {
+			testFrozenRequestPreservesSnapshot(t, route)
+		})
+	}
+}
+
+func testFrozenRequestPreservesSnapshot(t *testing.T, route string) {
+	t.Helper()
+
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	seedTransitionLogicalGroup(t, pool, "freeze-video", "freeze-room")
@@ -28,7 +38,7 @@ func TestFrozenRequestPreservesBodyRouteGenerationAndMembership(t *testing.T) {
 	prepared, err := transition.PrepareClaimed(ctx, claimed, outboxes)
 	require.NoError(t, err)
 
-	frozen, err := transition.FreezeRequest(ctx, prepared.ActiveRows, FrozenRequest{BaseID: "youtube:freeze", RoomID: "freeze-room", Message: "original body", Route: "markdown", DedupeKeys: []string{"key"}})
+	frozen, err := transition.FreezeRequest(ctx, prepared.ActiveRows, FrozenRequest{BaseID: "youtube:freeze", RoomID: "freeze-room", Message: "original body", Route: route, DedupeKeys: []string{"key"}})
 	require.NoError(t, err)
 
 	operation, _, err := transition.BeginSending(ctx, prepared.ActiveRows, outboxes)
@@ -53,7 +63,7 @@ func TestFrozenRequestPreservesBodyRouteGenerationAndMembership(t *testing.T) {
 	restored, err := transition.FreezeRequest(ctx, prepared.ActiveRows, FrozenRequest{BaseID: "different", RoomID: "freeze-room", Message: "changed template", Route: testFrozenTextRoute, DedupeKeys: []string{"changed"}})
 	require.NoError(t, err)
 	require.Equal(t, "original body", restored.Message)
-	require.Equal(t, "markdown", restored.Route)
+	require.Equal(t, route, restored.Route)
 	require.Equal(t, 1, restored.Generation)
 
 	id, err := restored.ClientRequestID()

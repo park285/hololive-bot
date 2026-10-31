@@ -22,6 +22,7 @@ package transport
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -193,6 +194,7 @@ func TestStoredReplyKindsStayDispatchable(t *testing.T) {
 
 	for _, kind := range []StoredReplyKind{
 		StoredReplyKindText,
+		StoredReplyKindRichText,
 		StoredReplyKindMarkdown,
 		StoredReplyKindImage,
 		StoredReplyKindImages,
@@ -207,6 +209,85 @@ func TestStoredReplyKindsStayDispatchable(t *testing.T) {
 			accepted, err := postStoredReply(t.Context(), client, "room-1", &reply, nil)
 			require.NoError(t, err)
 			require.NotNil(t, accepted)
+		})
+	}
+}
+
+func TestMarkdownReplyIsFrozenAsRichTextBeforeDispatch(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingReplyOutbox{}
+	client := &stubBotClient{}
+	tr := NewCommandTransport(writer, nil, WithMarkdownReplies(true))
+	ctx := WithThreadID(inboundCtx(t.Context()), "thread-1")
+
+	const body = "**안내** [제목](https://example.com/a_b) @사용자_이름"
+
+	require.NoError(t, tr.SendMessage(ctx, "room-1", body))
+	require.Len(t, writer.entries, 1)
+
+	entry := writer.entries[0]
+
+	var frozen StoredReply
+
+	require.NoError(t, jsonv2.Unmarshal([]byte(entry.Payload), &frozen))
+	require.Equal(t, StoredReplyKindRichText, frozen.Kind)
+	require.Equal(t, body, frozen.Message)
+	require.Equal(t, "thread-1", frozen.ThreadID)
+	require.Zero(t, client.richTextCalls)
+	require.Zero(t, client.markdownCalls)
+
+	// 새 transport의 설정이 달라도 outbox는 저장된 kind·본문·요청 ID·thread로 재시도한다.
+	for range 2 {
+		_, err := DispatchStoredReply(t.Context(), client, entry.Room, []byte(entry.Payload), entry.ClientRequestID)
+		require.NoError(t, err)
+		require.Equal(t, body, client.lastMessage)
+
+		id, thread := capturedSendOptions(t, client.lastOpts)
+		require.Equal(t, entry.ClientRequestID, id)
+		require.Equal(t, "thread-1", thread)
+	}
+
+	require.Equal(t, 2, client.richTextCalls)
+	require.Zero(t, client.markdownCalls)
+}
+
+func TestLegacyStoredReplyRetainsRequestAcrossReplay(t *testing.T) {
+	t.Parallel()
+
+	for _, kind := range []StoredReplyKind{StoredReplyKindMarkdown, StoredReplyKindText} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+
+			const (
+				body      = "**원문** [제목](https://example.com/a_b) @사용자_이름"
+				requestID = "hololive:legacy:request"
+			)
+
+			payload, err := encodeStoredReply(&StoredReply{Kind: kind, Message: body, ThreadID: "thread-legacy"})
+			require.NoError(t, err)
+
+			client := &stubBotClient{}
+
+			for range 2 {
+				_, err := DispatchStoredReply(t.Context(), client, "room-legacy", []byte(payload), requestID)
+				require.NoError(t, err)
+				require.Equal(t, body, client.lastMessage)
+
+				id, thread := capturedSendOptions(t, client.lastOpts)
+				require.Equal(t, requestID, id)
+				require.Equal(t, "thread-legacy", thread)
+			}
+
+			require.Zero(t, client.richTextCalls)
+
+			if kind == StoredReplyKindMarkdown {
+				require.Equal(t, 2, client.markdownCalls)
+				require.Zero(t, client.acceptCalls)
+			} else {
+				require.Equal(t, 2, client.acceptCalls)
+				require.Zero(t, client.markdownCalls)
+			}
 		})
 	}
 }

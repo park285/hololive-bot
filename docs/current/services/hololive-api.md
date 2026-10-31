@@ -76,7 +76,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 ## Admin 사용자 인증
 
 - admin plane은 사용자 계정·세션을 소유하지 않습니다. Iris Console이 자기 세션으로 사용자를 인증하고 admin plane에는 `/api/holo/*`를 API key로만 호출합니다.
-- 독립 대시보드 잔재였던 `/api/auth/*`(register·login·logout·refresh·me)와 `/oauth/callback`, auth service(Valkey `auth:*` 세션·bcrypt·로그인 rate limit), `ADMIN_ALLOWED_IPS`·`AUTH_BCRYPT_COST` 설정, `auth_users` 테이블(migration 345)을 제거했습니다. 비밀번호 재설정 경로와 `auth_password_reset_tokens`(migration 281)는 그보다 먼저 제거했습니다.
+- 독립 대시보드 잔재였던 `/api/auth/*`(register·login·logout·refresh·me)와 `/oauth/callback`, auth service(Valkey `auth:*` 세션·bcrypt·로그인 rate limit), `ADMIN_ALLOWED_IPS`·`AUTH_BCRYPT_COST` 설정, `auth_users` 테이블(migration 348)을 제거했습니다. 비밀번호 재설정 경로와 `auth_password_reset_tokens`(migration 281)는 그보다 먼저 제거했습니다.
 - 제거한 경로는 다른 미등록 경로와 같이 NoRoute 응답을 받습니다. API key가 없으면 401, 틀리면 403, 맞으면 404입니다.
 - 다시 사용자 인증을 두려면 Iris Console 경계와 겹치지 않는 근거와 공개 API 계약 변경 승인이 먼저 필요합니다.
 

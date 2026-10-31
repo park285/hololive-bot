@@ -138,13 +138,18 @@ func (w durableReplyWriter) RecordReply(ctx context.Context, entry *transport.Re
 	return nil
 }
 
+type durableIrisClient interface {
+	transport.ReplyClient
+	GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error)
+}
+
 type durableRuntime struct {
 	inbox                  *durability.InboxRepository
 	commands               *durability.CommandExecutionRepository
 	outbox                 *durability.ReplyOutboxRepository
 	ledger                 *durability.DurableLedgerRepository
 	bot                    durableMessageProcessor
-	irisClient             iris.BotClient
+	irisClient             durableIrisClient
 	logger                 *slog.Logger
 	inboxWorkers           int
 	outboxWorkers          int
@@ -234,7 +239,7 @@ func (o durableReplyOutbox) writer(logger *slog.Logger) durableReplyWriter {
 
 func newDurableRuntime(
 	bot *orchestration.Bot,
-	client iris.BotClient,
+	client durableIrisClient,
 	pgPool *pgxpool.Pool,
 	outbox durableReplyOutbox,
 	profile *apiconfig.APIWorkerProfile,
