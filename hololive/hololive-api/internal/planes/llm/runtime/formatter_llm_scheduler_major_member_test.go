@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 const seedBodyMajorEventWeeklySummary = `📅 이번 주 행사 ({{.Count}})
@@ -125,8 +126,11 @@ func TestFormatMajorEventWeeklySummary_NoSeeMorePadding(t *testing.T) {
 		{Title: "Holo Fes"},
 	}
 
-	got, err := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
+	variants, err := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
 	require.NoError(t, err)
+	require.Equal(t, variants.Plain, variants.RichText)
+
+	got := variants.Plain
 	assert.Contains(t, got, "📅 이번 주 행사 (2)")
 	assert.Contains(t, got, "1. Holo Expo")
 	assert.Contains(t, got, "2. Holo Fes")
@@ -144,8 +148,11 @@ func TestFormatMajorEventWeeklySummary_UsesLLMSummaryWithoutFallbackList(t *test
 	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{{Title: "A"}}
-	got, err := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "요약 본문")
+	variants, err := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "요약 본문")
 	require.NoError(t, err)
+	require.Equal(t, variants.Plain, variants.RichText)
+
+	got := variants.Plain
 	assert.Contains(t, got, "📅 이번 주 행사 (1)")
 	assert.Contains(t, got, "요약 본문")
 	assert.NotContains(t, got, "1. A")
@@ -190,8 +197,8 @@ func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
 		monthly, monthlyErr := formatter.FormatMajorEventMonthlySummary(t.Context(), events, llmSummary)
 		require.NoError(t, monthlyErr)
 
-		normalizedWeekly := strings.Replace(weekly, "이번 주 행사", "이번 달 행사", 1)
-		assert.Equal(t, normalizedWeekly, monthly, "weekly/monthly must be identical modulo header word (llmSummary=%q)", llmSummary)
+		normalizedWeekly := strings.Replace(weekly.Plain, "이번 주 행사", "이번 달 행사", 1)
+		assert.Equal(t, normalizedWeekly, monthly.Plain, "weekly/monthly must be identical modulo header word (llmSummary=%q)", llmSummary)
 	}
 }
 
@@ -213,8 +220,11 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 		formatter := newLLMSchedulerFormatter("!", setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, seedBodyMemberNewsDigest), nil, true)
 		got, err := formatter.FormatMemberNewsDigest(t.Context(), &model.Digest{Headline: "뉴스"})
 		require.NoError(t, err)
-		assert.Contains(t, got, "표시할 뉴스가 없습니다.")
-		assert.NotContains(t, got, strings.Repeat("\u200b", 500))
+
+		for _, text := range []string{got.Plain, got.RichText} {
+			assert.Contains(t, text, "표시할 뉴스가 없습니다.")
+			assert.NotContains(t, text, strings.Repeat("\u200b", 500))
+		}
 	})
 
 	t.Run("localize categories", func(t *testing.T) {
@@ -239,10 +249,13 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 
 		got, err := formatter.FormatMemberNewsDigest(t.Context(), digest)
 		require.NoError(t, err)
-		assert.Contains(t, got, "이번주 뉴스")
-		assert.Contains(t, got, "· 콜라보")
-		assert.Contains(t, got, "· 기타")
-		assert.Contains(t, got, "합방")
+
+		for _, text := range []string{got.Plain, got.RichText} {
+			assert.Contains(t, text, "이번주 뉴스")
+			assert.Contains(t, text, "· 콜라보")
+			assert.Contains(t, text, "· 기타")
+			assert.Contains(t, text, "합방")
+		}
 	})
 }
 
@@ -264,23 +277,26 @@ func TestMajorEventSummaryLiteralBoundary(t *testing.T) {
 	for _, fold := range []bool{false, true} {
 		formatter := newLLMSchedulerFormatter("!", renderer, nil, fold)
 
-		for _, format := range []func() (string, error){
-			func() (string, error) {
+		for _, format := range []func() (delivery.MessageVariants, error){
+			func() (delivery.MessageVariants, error) {
 				return formatter.FormatMajorEventWeeklySummary(t.Context(), events, summary+padding)
 			},
-			func() (string, error) {
+			func() (delivery.MessageVariants, error) {
 				return formatter.FormatMajorEventMonthlySummary(t.Context(), events, summary+padding)
 			},
 		} {
-			message, err := format()
+			variants, err := format()
 			require.NoError(t, err)
-			require.Equal(t, fold, strings.Contains(message, padding))
 
-			visible := strings.ReplaceAll(kakaoformat.Render(message), padding, "")
-			require.Contains(t, visible, strings.ReplaceAll(summary, "\r\n", "\n"))
+			for _, message := range []string{variants.Plain, variants.RichText} {
+				require.Equal(t, fold, strings.Contains(message, padding))
 
-			for _, event := range events {
-				require.NotContains(t, visible, event.Title)
+				visible := strings.ReplaceAll(kakaoformat.Render(message), padding, "")
+				require.Contains(t, visible, strings.ReplaceAll(summary, "\r\n", "\n"))
+
+				for _, event := range events {
+					require.NotContains(t, visible, event.Title)
+				}
 			}
 		}
 	}
@@ -298,11 +314,11 @@ func TestInvisibleSummaryKeepsEventList(t *testing.T) {
 	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 	events := []domain.MajorEvent{{Title: "표시할 행사"}, {Title: "다음 행사"}}
 
-	for _, format := range []func(string) (string, error){
-		func(summary string) (string, error) {
+	for _, format := range []func(string) (delivery.MessageVariants, error){
+		func(summary string) (delivery.MessageVariants, error) {
 			return formatter.FormatMajorEventWeeklySummary(t.Context(), events, summary)
 		},
-		func(summary string) (string, error) {
+		func(summary string) (delivery.MessageVariants, error) {
 			return formatter.FormatMajorEventMonthlySummary(t.Context(), events, summary)
 		},
 	} {
@@ -310,7 +326,8 @@ func TestInvisibleSummaryKeepsEventList(t *testing.T) {
 		require.NoError(t, err)
 
 		for _, event := range events {
-			require.Contains(t, empty, event.Title)
+			require.Contains(t, empty.Plain, event.Title)
+			require.Contains(t, empty.RichText, event.Title)
 		}
 
 		for _, summary := range []string{

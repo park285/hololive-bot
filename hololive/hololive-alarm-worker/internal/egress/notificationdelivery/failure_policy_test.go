@@ -16,7 +16,7 @@ import (
 func TestDeliveryFailureUsesClaimedAttemptAndPreservesTerminalSchedule(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "attempt-policy", "room", "message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "attempt-policy", "room", testDeliveryMessage("message")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
@@ -49,7 +49,7 @@ func TestDeliveryFailureUsesClaimedAttemptAndPreservesTerminalSchedule(t *testin
 func TestDeliveryFailureSettlesAttemptCountBeyondInt4Range(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "attempt-int4-limit", "room", "message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "attempt-int4-limit", "room", testDeliveryMessage("message")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
@@ -74,7 +74,7 @@ func TestDeliveryFailureSettlesAttemptCountBeyondInt4Range(t *testing.T) {
 func TestDeliveryReissuePreservesRequestOnStaleAttemptAndExhaustsGeneration(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue-policy", "room", "message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue-policy", "room", testDeliveryMessage("message")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)

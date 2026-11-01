@@ -2,7 +2,14 @@ package transport
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"testing"
+
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+	"github.com/stretchr/testify/require"
+
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type staticRoomChat map[string]bool
@@ -34,5 +41,42 @@ func TestMarkdownForRoom(t *testing.T) {
 
 	if markdownForRoom(t.Context(), "9", false, staticRoomChat{"9": true}) {
 		t.Fatal("disabled flag should force plain")
+	}
+}
+
+// formatter는 요청에 고정한 판정으로 템플릿 변형을 고르므로, SendMessage가 방 유형을 다시 판정하면 일반채팅에
+// RichText 본문이 나가거나 오픈채팅에 경로와 다른 본문이 나갈 수 있다. 판정 뒤 방 정보가 바뀌어도 경로는 고정한
+// 판정을 따라야 한다.
+func TestReplyFormatDecisionFixesRouteForRequest(t *testing.T) {
+	t.Parallel()
+
+	const body = "**안내** 본문"
+
+	for _, openAtDecision := range []bool{false, true} {
+		rooms := staticRoomChat{"9": openAtDecision}
+		writer := &recordingReplyOutbox{}
+		tr := NewCommandTransport(writer, nil, WithMarkdownReplies(true), WithRoomChatLookup(rooms))
+		ctx := tr.WithReplyFormat(WithReplyIdentity(t.Context(), "message:m-1"), "9")
+
+		format, ok := messageformatter.ReplyFormatFromContext(ctx)
+		require.True(t, ok)
+		require.Equal(t, openAtDecision, format == domain.TemplateFormatRichText)
+
+		rooms["9"] = !openAtDecision
+
+		require.NoError(t, tr.SendMessage(ctx, "9", body))
+		require.Len(t, writer.entries, 1)
+
+		var frozen StoredReply
+
+		require.NoError(t, jsonv2.Unmarshal([]byte(writer.entries[0].Payload), &frozen))
+
+		if openAtDecision {
+			require.Equal(t, StoredReplyKindRichText, frozen.Kind)
+			require.Equal(t, body, frozen.Message)
+		} else {
+			require.Equal(t, StoredReplyKindText, frozen.Kind)
+			require.Equal(t, kakaoformat.Render(body), frozen.Message)
+		}
 	}
 }

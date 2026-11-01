@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 func partitionGroupedDeliveries(
@@ -55,7 +56,7 @@ func (d *SendEngine) dispatchRowsIndividually(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) {
@@ -70,19 +71,19 @@ func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
 	group *deliveryGroup,
 	validOutboxes []domain.YouTubeNotificationOutbox,
-) (string, error) {
+) (messagedelivery.MessageVariants, error) {
 	if group == nil {
-		return "", errors.New("format grouped message: delivery group is missing")
+		return messagedelivery.MessageVariants{}, errors.New("format grouped message: delivery group is missing")
 	}
 
 	memberName, err := d.formatter.GetMemberName(ctx, group.channelID)
 	if err != nil {
-		return "", fmt.Errorf("format grouped message: %w", err)
+		return messagedelivery.MessageVariants{}, fmt.Errorf("format grouped message: %w", err)
 	}
 
 	message, err := d.formatter.FormatGroupedMessage(ctx, d.formatter.DisplayMemberName(memberName), group.channelID, group.kind, validOutboxes)
 	if err != nil {
-		return "", fmt.Errorf("format grouped message: %w", err)
+		return messagedelivery.MessageVariants{}, fmt.Errorf("format grouped message: %w", err)
 	}
 
 	return message, nil
@@ -90,8 +91,8 @@ func (d *SendEngine) formatGroupedMessage(
 
 // preFormatMessages: outbox_id별 메시지를 FormatMessages 한 번으로 포맷하여 캐싱한다.
 // 전체 오류는 모든 outbox를 포맷 실패로 표시하고 한 번만 기록한다. 항목별 오류는 그 outbox만 실패로 남긴다.
-func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
-	messages = make(map[int64]string, len(outboxByID))
+func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]messagedelivery.MessageVariants, failures map[int64]bool) {
+	messages = make(map[int64]messagedelivery.MessageVariants, len(outboxByID))
 	failures = make(map[int64]bool)
 
 	if len(outboxByID) == 0 {

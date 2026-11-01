@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 func (d *SendEngine) dispatchDeliveryRows(
@@ -86,7 +87,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 func (d *SendEngine) dispatchGroup(
 	ctx context.Context,
 	group *deliveryGroup,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) {
@@ -131,7 +132,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 	ctx context.Context,
 	group *deliveryGroup,
 	attempt *deliveryAttempt,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) {
@@ -157,7 +158,7 @@ func (d *SendEngine) dispatchDeliveryRow(
 	ctx context.Context,
 	row *domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) {
@@ -180,7 +181,7 @@ func (d *SendEngine) dispatchDeliveryRow(
 func (d *SendEngine) dispatchClaimedDeliveryRow(
 	ctx context.Context,
 	attempt *deliveryAttempt,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) {
@@ -216,7 +217,7 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 func (d *SendEngine) preparePerRoomSend(
 	ctx context.Context,
 	attempt *deliveryAttempt,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) (deliverySendRequest, bool) {
@@ -300,8 +301,8 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 	ctx context.Context,
 	group *deliveryGroup,
 	attempt *deliveryAttempt,
-	message string,
-	formattedMessages map[int64]string,
+	message messagedelivery.MessageVariants,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) {
@@ -338,7 +339,7 @@ func (d *SendEngine) prepareGroupedSend(
 	ctx context.Context,
 	group *deliveryGroup,
 	attempt *deliveryAttempt,
-	message string,
+	message messagedelivery.MessageVariants,
 	result *deliveryDispatchResult,
 ) (deliverySendRequest, bool) {
 	rows, outboxes := attempt.rows, attempt.outboxes
@@ -359,7 +360,7 @@ func (d *SendEngine) handleGroupedSendFailure(
 	ctx context.Context,
 	group *deliveryGroup,
 	attempt *deliveryAttempt,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	sendErr error,
 	result *deliveryDispatchResult,
@@ -413,7 +414,7 @@ func (d *SendEngine) logGroupedSendFallback(
 func (d *SendEngine) dispatchStartedRowsIndividually(
 	ctx context.Context,
 	attempt *deliveryAttempt,
-	formattedMessages map[int64]string,
+	formattedMessages map[int64]messagedelivery.MessageVariants,
 	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 ) {

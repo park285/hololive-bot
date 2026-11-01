@@ -48,7 +48,7 @@ func TestOutboxProducersPreserveLiteralFields(t *testing.T) {
 				url = "https://www.youtube.com/post/p_q-r"
 			}
 
-			for _, message := range []string{results[0].Message, grouped} {
+			for _, message := range []string{results[0].Message.Plain, results[0].Message.RichText, grouped.Plain, grouped.RichText} {
 				visible := strings.ReplaceAll(kakaoformat.Render(message), kakaotext.ZeroWidthSpace, "")
 				require.Contains(t, visible, member)
 

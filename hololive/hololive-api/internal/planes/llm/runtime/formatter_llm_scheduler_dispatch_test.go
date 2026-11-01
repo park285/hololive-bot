@@ -12,6 +12,7 @@ import (
 
 	eventscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scheduler"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type renderFailureEvents struct{ marked bool }
@@ -40,7 +41,7 @@ func (r *renderFailureEvents) MarkEventsAsMonthlyNotified(context.Context, []int
 
 type renderFailureOutbox struct{ calls int }
 
-func (r *renderFailureOutbox) Enqueue(context.Context, domain.DeliveryOutboxKind, string, string, string) error {
+func (r *renderFailureOutbox) Enqueue(context.Context, domain.DeliveryOutboxKind, string, string, delivery.MessageVariants) error {
 	r.calls++
 	return nil
 }

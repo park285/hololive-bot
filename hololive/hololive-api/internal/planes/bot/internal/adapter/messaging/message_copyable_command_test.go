@@ -15,30 +15,34 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
+var templateFormats = []domain.TemplateFormat{domain.TemplateFormatPlain, domain.TemplateFormatRichText}
+
 func TestSeedHelpCommandsCopyRoundTrip(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	renderer := template.NewRenderer(pool, slog.Default())
 
-	for _, prefix := range []string{"!", "#", "*", "\\", "**", "[]", ">", "1.", "bot:"} {
-		t.Run(prefix, func(t *testing.T) {
-			rendered, err := renderer.Render(t.Context(), domain.TemplateKeyCmdHelp, "", map[string]any{"Prefix": prefix})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			var command string
-
-			for line := range strings.SplitSeq(kakaoformat.Render(rendered), "\n") {
-				if strings.HasSuffix(line, "도움말 - 도움말") {
-					command = strings.TrimSuffix(line, " - 도움말")
+	for _, format := range templateFormats {
+		for _, prefix := range []string{"!", "#", "*", "\\", "**", "[]", ">", "1.", "bot:"} {
+			t.Run(string(format)+"/"+prefix, func(t *testing.T) {
+				rendered, err := renderer.Render(t.Context(), domain.TemplateKeyCmdHelp, "", format, map[string]any{"Prefix": prefix})
+				if err != nil {
+					t.Fatal(err)
 				}
-			}
 
-			parsed := NewMessageAdapter(prefix, "").ParseMessage(&webhook.Message{Msg: command})
-			if parsed == nil || parsed.Type != botcommand.CommandHelp {
-				t.Errorf("copy command %q failed: %#v", command, parsed)
-			}
-		})
+				var command string
+
+				for line := range strings.SplitSeq(kakaoformat.Render(rendered), "\n") {
+					if strings.HasSuffix(line, "도움말 - 도움말") {
+						command = strings.TrimSuffix(line, " - 도움말")
+					}
+				}
+
+				parsed := NewMessageAdapter(prefix, "").ParseMessage(&webhook.Message{Msg: command})
+				if parsed == nil || parsed.Type != botcommand.CommandHelp {
+					t.Errorf("copy command %q failed: %#v", command, parsed)
+				}
+			})
+		}
 	}
 }
 
@@ -47,24 +51,27 @@ func TestAmbiguousMemberExampleCopyPreservesArgument(t *testing.T) {
 	renderer := template.NewRenderer(pool, slog.Default())
 	f := formatter.NewResponseFormatter("#", renderer)
 
-	for _, name := range []string{"미코", "Star*Name", "Name_with_underscores", "A & B", "[멤버]", "Mi`ko", `A\B`} {
-		t.Run(name, func(t *testing.T) {
-			member := &domain.Member{Name: name}
-			output := kakaoformat.Render(f.FormatAmbiguousMembers(t.Context(), []*domain.Member{member}, "라이브"))
+	for _, format := range templateFormats {
+		for _, name := range []string{"미코", "Star*Name", "Name_with_underscores", "A & B", "[멤버]", "Mi`ko", `A\B`} {
+			t.Run(string(format)+"/"+name, func(t *testing.T) {
+				member := &domain.Member{Name: name}
+				ctx := formatter.WithReplyFormat(t.Context(), format)
+				output := kakaoformat.Render(f.FormatAmbiguousMembers(ctx, []*domain.Member{member}, "라이브"))
 
-			var command string
+				var command string
 
-			for line := range strings.SplitSeq(output, "\n") {
-				if example, ok := strings.CutPrefix(line, "예) "); ok {
-					command = example
+				for line := range strings.SplitSeq(output, "\n") {
+					if example, ok := strings.CutPrefix(line, "예) "); ok {
+						command = example
+					}
 				}
-			}
 
-			parsed := NewMessageAdapter("#", "").ParseMessage(&webhook.Message{Msg: command})
-			if parsed == nil || parsed.Type != botcommand.CommandLive || parsed.Params[paramMember] != member.QualifiedName() {
-				t.Errorf("copy example changed member argument: command=%q parsed=%#v", command, parsed)
-			}
-		})
+				parsed := NewMessageAdapter("#", "").ParseMessage(&webhook.Message{Msg: command})
+				if parsed == nil || parsed.Type != botcommand.CommandLive || parsed.Params[paramMember] != member.QualifiedName() {
+					t.Errorf("copy example changed member argument: command=%q parsed=%#v", command, parsed)
+				}
+			})
+		}
 	}
 }
 
@@ -91,13 +98,15 @@ func TestSeedCommandPrefixesRemainCopyable(t *testing.T) {
 					"Candidates": []any{}, "CommandExample": "라이브", "FirstName": "미코",
 				}
 
-				rendered, err := renderer.Render(t.Context(), tc.key, "", data)
-				if err != nil {
-					t.Fatal(err)
-				}
+				for _, format := range templateFormats {
+					rendered, err := renderer.Render(t.Context(), tc.key, "", format, data)
+					if err != nil {
+						t.Fatal(err)
+					}
 
-				if output := kakaoformat.Render(rendered); !strings.Contains(output, prefix+tc.command) {
-					t.Errorf("copyable command changed: prefix=%q output=%q", prefix, output)
+					if output := kakaoformat.Render(rendered); !strings.Contains(output, prefix+tc.command) {
+						t.Errorf("copyable command changed: format=%s prefix=%q output=%q", format, prefix, output)
+					}
 				}
 			}
 		})

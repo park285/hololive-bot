@@ -31,6 +31,7 @@ import (
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // CommandTransport는 명령 응답을 durable reply outbox에 기록한다. Iris 발송은 outbox dispatcher가
@@ -71,12 +72,24 @@ func NewCommandTransport(replyOutbox ReplyOutboxWriter, formatter *messageformat
 	return t
 }
 
+// WithReplyFormat은 요청의 방 유형을 한 번 판정해 ctx에 고정한다. 같은 값으로 formatter가 템플릿 변형을, SendMessage가
+// 경로를 고르므로 일반채팅에 RichText 본문이 나가거나 오픈채팅에 경로와 다른 본문이 나가지 않는다.
+func (t *CommandTransport) WithReplyFormat(ctx context.Context, room string) context.Context {
+	format := domain.TemplateFormatPlain
+
+	if t != nil && markdownForRoom(ctx, room, t.markdownReplies, t.rooms) {
+		format = domain.TemplateFormatRichText
+	}
+
+	return messageformatter.WithReplyFormat(ctx, format)
+}
+
 func (t *CommandTransport) SendMessage(ctx context.Context, room, message string) error {
 	if t == nil {
 		return errors.New("send message: transport is not configured")
 	}
 
-	useMarkdown := markdownForRoom(ctx, room, t.markdownReplies, t.rooms)
+	useMarkdown := replyUsesRichText(ctx)
 	if !useMarkdown {
 		message = kakaoformat.Render(message)
 	}
@@ -85,6 +98,14 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	defer cancel()
 
 	return t.recordTextReply(sendCtx, room, message, issueReplyEmission(sendCtx), useMarkdown)
+}
+
+// replyUsesRichText는 요청에 고정된 판정만 따른다. 판정이 없으면 formatter와 같이 plain으로 보내, 판정을 고정하지 않은
+// 경로가 plain 본문을 RichText 경로로 보내지 않게 한다.
+func replyUsesRichText(ctx context.Context) bool {
+	format, ok := messageformatter.ReplyFormatFromContext(ctx)
+
+	return ok && format == domain.TemplateFormatRichText
 }
 
 func (t *CommandTransport) recordTextReply(

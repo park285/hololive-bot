@@ -29,6 +29,7 @@ import (
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 var ErrNoSubscribedMembers = errors.New("no subscribed members")
@@ -125,7 +126,7 @@ type Summarizer interface {
 
 // DigestFormatter의 렌더 실패는 오류다. 호출자는 실패한 방을 enqueue하지 않고 실패로 센다.
 type DigestFormatter interface {
-	FormatMemberNewsDigest(ctx context.Context, digest *Digest) (string, error)
+	FormatMemberNewsDigest(ctx context.Context, digest *Digest) (delivery.MessageVariants, error)
 }
 
 type DigestGenerator interface {

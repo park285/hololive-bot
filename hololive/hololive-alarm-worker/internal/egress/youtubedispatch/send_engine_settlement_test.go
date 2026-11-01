@@ -20,6 +20,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -178,7 +179,7 @@ type settlementSender struct {
 	prepareCalls      int
 }
 
-func (s *settlementSender) PrepareMessageRequest(ctx context.Context, room, message string) (string, string, error) {
+func (s *settlementSender) PrepareMessageRequest(ctx context.Context, room string, message delivery.MessageVariants) (string, string, error) {
 	s.prepareCalls++
 	if s.cancelPreparation && ctx.Err() != nil {
 		return "", "", ctx.Err()
@@ -204,7 +205,7 @@ type settlementFixture struct {
 	sender     *settlementSender
 	rows       []domain.YouTubeNotificationDelivery
 	outboxes   []domain.YouTubeNotificationOutbox
-	messages   map[int64]string
+	messages   map[int64]delivery.MessageVariants
 	cancel     context.CancelFunc
 }
 
@@ -224,7 +225,7 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 
 	t.Cleanup(cancel)
 
-	f := &settlementFixture{pool: pool, db: db, engine: engine, sender: sender, cancel: cancel, messages: make(map[int64]string)}
+	f := &settlementFixture{pool: pool, db: db, engine: engine, sender: sender, cancel: cancel, messages: make(map[int64]delivery.MessageVariants)}
 
 	f.transition = &settlementTransition{TransitionStore: transition, db: db, cancel: cancel, cancelAt: 1}
 	engine.transition = f.transition
@@ -248,7 +249,7 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 		require.NoError(t, stateErr)
 
 		f.outboxes = append(f.outboxes, outbox)
-		f.messages[outbox.ID] = "template body"
+		f.messages[outbox.ID] = testMessage("template body")
 		byID[outbox.ID] = outbox
 	}
 
@@ -283,7 +284,7 @@ func (f *settlementFixture) dispatch(ctx context.Context, t *testing.T, path str
 	case settlementPathPerRoom:
 		f.engine.dispatchClaimedDeliveryRow(ctx, &attempt, f.messages, nil, &result)
 	case "frozen_per_room", "frozen_grouped":
-		candidate, err := buildDeliverySendRequest(group.roomID, "original template", f.outboxes)
+		candidate, err := buildDeliverySendRequest(group.roomID, testMessage("original template"), f.outboxes)
 		require.NoError(t, err)
 
 		attempt.request = candidate
@@ -293,7 +294,7 @@ func (f *settlementFixture) dispatch(ctx context.Context, t *testing.T, path str
 		f.sender.body, f.sender.route = "changed template", "text"
 		f.engine.dispatchFrozenGroup(ctx, group, f.messages, nil, &result)
 	default:
-		f.engine.dispatchGroupedClaimedRows(ctx, group, &attempt, "group template", f.messages, nil, &result)
+		f.engine.dispatchGroupedClaimedRows(ctx, group, &attempt, testMessage("group template"), f.messages, nil, &result)
 	}
 
 	return result.DispatchResult

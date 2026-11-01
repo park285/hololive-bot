@@ -38,6 +38,11 @@ func testRepository(t *testing.T) *OutboxRepository {
 	return NewOutboxRepositoryFromPool(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 }
 
+// testMessage는 형식 분기와 무관한 저장소 테스트에서 두 변형에 같은 본문을 쓴다.
+func testMessage(text string) MessageVariants {
+	return MessageVariants{Plain: text, RichText: text}
+}
+
 func buildOutboxBatchItems(count int) []OutboxItem {
 	items := make([]OutboxItem, 0, count)
 	for i := range count {
@@ -45,7 +50,7 @@ func buildOutboxBatchItems(count int) []OutboxItem {
 			Kind:      domain.DeliveryKindMemberNewsWeekly,
 			PeriodKey: "2026-W08",
 			RoomID:    fmt.Sprintf("room-batch-%d", i),
-			Message:   fmt.Sprintf("batch-msg-%d", i),
+			Message:   testMessage(fmt.Sprintf("batch-msg-%d", i)),
 		})
 	}
 
@@ -80,12 +85,12 @@ func TestEnqueue_Idempotent_PendingNoOp(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg1"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testMessage("msg1")); err != nil {
 		t.Fatalf("first enqueue: %v", err)
 	}
 
 	// 동일 content_id로 다시 Enqueue → PENDING이므로 무시
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg2"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testMessage("msg2")); err != nil {
 		t.Fatalf("second enqueue: %v", err)
 	}
 
@@ -98,11 +103,12 @@ func TestEnqueue_Idempotent_PendingNoOp(t *testing.T) {
 	}
 }
 
+// alarm-worker는 message와 rich_text_message 키로 방 유형별 본문을 읽는다.
 func TestEnqueuePersistsOnlyProducerMessage(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	const message = "알림\n<&>"
+	message := MessageVariants{Plain: "알림\n<&>", RichText: "**알림**\n<&>"}
 
 	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "payload-contract", "room", message); err != nil {
 		t.Fatalf("enqueue: %v", err)
@@ -111,8 +117,8 @@ func TestEnqueuePersistsOnlyProducerMessage(t *testing.T) {
 	var matches bool
 
 	if err := repository.pool.QueryRow(ctx,
-		"SELECT payload = jsonb_build_object('message', $2::text) FROM notification_delivery_outbox WHERE content_id = $1",
-		"payload-contract:room", message,
+		"SELECT payload = jsonb_build_object('message', $2::text, 'rich_text_message', $3::text) FROM notification_delivery_outbox WHERE content_id = $1",
+		"payload-contract:room", message.Plain, message.RichText,
 	).Scan(&matches); err != nil {
 		t.Fatalf("read persisted payload: %v", err)
 	}
@@ -126,7 +132,7 @@ func TestEnqueue_FailedRetry(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "msg1"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", testMessage("msg1")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -135,7 +141,7 @@ func TestEnqueue_FailedRetry(t *testing.T) {
 	}
 
 	// 고정 요청 없이 FAILED가 된 행은 발송 전 실패이므로 시도 횟수와 무관하게 새 payload로 다시 적재한다.
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "retry-msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", testMessage("retry-msg")); err != nil {
 		t.Fatalf("retry enqueue: %v", err)
 	}
 

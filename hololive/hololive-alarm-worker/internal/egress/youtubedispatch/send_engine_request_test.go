@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -28,7 +29,7 @@ func (s *frozenProviderSender) SendMessage(context.Context, string, string) erro
 	panic("prepared sender expected")
 }
 
-func (s *frozenProviderSender) PrepareMessageRequest(context.Context, string, string) (string, string, error) {
+func (s *frozenProviderSender) PrepareMessageRequest(context.Context, string, messagedelivery.MessageVariants) (string, string, error) {
 	return s.body, s.route, nil
 }
 
@@ -105,7 +106,7 @@ func runFrozenProviderAttempt(t *testing.T, engine *SendEngine, transition *stor
 	delivery := newDeliveryAttempt([]claimedDelivery{{row: rows[0], outbox: outbox}})
 
 	if attempt == 0 {
-		candidate, buildErr := buildDeliverySendRequest("reissue-room", "template body", []domain.YouTubeNotificationOutbox{outbox})
+		candidate, buildErr := buildDeliverySendRequest("reissue-room", testMessage("template body"), []domain.YouTubeNotificationOutbox{outbox})
 		require.NoError(t, buildErr)
 
 		delivery.request = candidate

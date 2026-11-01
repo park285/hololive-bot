@@ -1,7 +1,11 @@
 package template
 
 import (
+	"io/fs"
 	"maps"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -12,9 +16,31 @@ import (
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
-// DB 없이 strict parse와 제한 실행 경로에 migration의 새 본문을 전달한다.
+// loadTemplateFormatPairs는 358의 표준 본문을 oldBody=plain, newBody=richtext로 돌려준다.
+func loadTemplateFormatPairs(tb testing.TB) map[domain.TemplateKey]templateSeedPair {
+	tb.Helper()
+
+	dir := filepath.Join("..", "..", "..", "..", "hololive-api", "scripts", "migrations")
+
+	raw, err := fs.ReadFile(os.DirFS(dir), "358_template_format_variants.sql")
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	rows := regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '[0-9a-f]{64}', \$plain\$(.*?)\$plain\$, \$rich\$(.*?)\$rich\$\)`).
+		FindAllStringSubmatch(string(raw), -1)
+	pairs := make(map[domain.TemplateKey]templateSeedPair, len(rows))
+
+	for _, row := range rows {
+		pairs[domain.TemplateKey(row[1])] = templateSeedPair{row[2], row[3]}
+	}
+
+	return pairs
+}
+
+// DB 없이 strict parse와 제한 실행 경로에 현행 RichText 본문을 전달한다.
 func TestRichTextSeedsPreviewAllKeys(t *testing.T) {
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+	pairs := loadTemplateFormatPairs(t)
 	keys := sampledata.GetAllTemplateKeys()
 
 	if len(pairs) != len(keys) {
@@ -45,8 +71,8 @@ func TestRichTextSeedsPreviewAllKeys(t *testing.T) {
 
 			auditSeedRender(t, key, pair.newBody, data)
 
-			if !strings.Contains(out, "**") || strings.Contains(out, "<no value>") {
-				t.Fatalf("의도한 강조가 없거나 데이터가 누락됨: %q", out)
+			if strings.Contains(out, "<no value>") {
+				t.Fatalf("데이터가 누락됨: %q", out)
 			}
 
 			t.Logf("RICHTEXT_PREVIEW %s\n%s\nEND_PREVIEW", key, out)
@@ -57,7 +83,7 @@ func TestRichTextSeedsPreviewAllKeys(t *testing.T) {
 func TestRichTextSeedsPreserveCopyableCommands(t *testing.T) {
 	const prefix = "/!*"
 
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+	pairs := loadTemplateFormatPairs(t)
 
 	for _, key := range []domain.TemplateKey{
 		domain.TemplateKeyCmdHelp, domain.TemplateKeyCmdAmbiguousMember, domain.TemplateKeyCmdAlarmList,
@@ -108,7 +134,7 @@ func TestRichTextSeedsPreserveCopyableCommands(t *testing.T) {
 }
 
 func TestRichTextSeedsOutboxLiteralBoundaries(t *testing.T) {
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+	pairs := loadTemplateFormatPairs(t)
 
 	const (
 		title  = "**원제** [공식명] _표기_ 끝**"
@@ -139,7 +165,7 @@ func TestRichTextSeedsOutboxLiteralBoundaries(t *testing.T) {
 }
 
 func TestRichTextSeedsPreserveProtectedSummaryAndPadding(t *testing.T) {
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+	pairs := loadTemplateFormatPairs(t)
 	// 호출자 경계에서 이미 보호된 요약과 접기 패딩을 템플릿이 다시 중화하지 않아야 한다.
 	summary := `\*\*원제\*\*` + "\n" + strings.Repeat(kakaotext.ZeroWidthSpace, 500) + "\nhttps://example.invalid/a_b"
 
@@ -163,7 +189,7 @@ func TestRichTextSeedsPreserveProtectedSummaryAndPadding(t *testing.T) {
 }
 
 func TestRichTextSeedsDistinguishSubscriptionAndAlarmStates(t *testing.T) {
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+	pairs := loadTemplateFormatPairs(t)
 
 	for key, field := range map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdAlarmAdded:       "Added",
@@ -195,7 +221,7 @@ func TestRichTextSeedsDistinguishSubscriptionAndAlarmStates(t *testing.T) {
 }
 
 func TestRichTextSeedsNormalizedEmptyFields(t *testing.T) {
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+	pairs := loadTemplateFormatPairs(t)
 
 	for _, key := range sampledata.GetAllTemplateKeys() {
 		t.Run(string(key), func(t *testing.T) {
@@ -254,17 +280,17 @@ func richTextDisplayData(t *testing.T, key domain.TemplateKey, value string) map
 	return data
 }
 
-func TestRichTextSeedsPlainConsumerRendersStaticEmphasis(t *testing.T) {
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+func TestRichTextSeedsCloseStaticEmphasis(t *testing.T) {
+	pairs := loadTemplateFormatPairs(t)
 
 	for _, key := range sampledata.GetAllTemplateKeys() {
 		t.Run(string(key), func(t *testing.T) {
-			// 입력에는 별표가 없으므로 일반 텍스트에 남는 **는 정적 강조의 미렌더링이다.
+			// 입력에는 별표가 없으므로 CommonMark 변환 뒤 남는 **는 닫히지 않은 정적 강조다(구두점 뒤 조사 등).
 			out := renderSeedBody(t, key, pairs[key].newBody, richTextDisplayData(t, key, "표시 대상"))
 			plain := kakaoformat.Render(out)
 
-			if !strings.Contains(out, "**") || strings.Contains(plain, "**") {
-				t.Fatalf("일반 텍스트 소비자가 정적 강조를 렌더하지 못함: raw=%q plain=%q", out, plain)
+			if strings.Contains(plain, "**") {
+				t.Fatalf("정적 강조가 닫히지 않음: raw=%q plain=%q", out, plain)
 			}
 
 			const url = "https://example.invalid/item"
@@ -277,7 +303,7 @@ func TestRichTextSeedsPlainConsumerRendersStaticEmphasis(t *testing.T) {
 }
 
 func TestRichTextSeedsMultilineLiteralsRemainVisible(t *testing.T) {
-	pairs := loadTemplateSeedPairs(t, "347_richtext_templates.sql")
+	pairs := loadTemplateFormatPairs(t)
 
 	const content = "- 안내\r\n    **원제**\r\n\t목록"
 

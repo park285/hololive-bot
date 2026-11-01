@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 func TestFormatMessagesPreservesMemberNameLookupError(t *testing.T) {
@@ -20,7 +21,7 @@ func TestFormatMessagesPreservesMemberNameLookupError(t *testing.T) {
 		t.Fatalf("FormatMessages() = %+v, %v; want one item result", results, err)
 	}
 
-	if !errors.Is(results[0].Err, lookupErr) || results[0].Message != "" {
+	if !errors.Is(results[0].Err, lookupErr) || results[0].Message != (delivery.MessageVariants{}) {
 		t.Fatalf("FormatMessages()[0] = %+v; want lookup failure without a replacement message", results[0])
 	}
 }

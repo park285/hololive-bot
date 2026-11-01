@@ -23,7 +23,7 @@ func sendForHandoff(t *testing.T, repo *outboxFixture) int64 {
 	t.Helper()
 
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, testRoomA, "message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, testRoomA, testDeliveryMessage("message")))
 
 	items := claimItems(ctx, t, repo, testWorkerA, 1)
 	require.Len(t, items, 1)
@@ -103,7 +103,7 @@ func TestNotificationHandoffMarkSentSchedulesFirstCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, early)
 
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "no-request-id", "room-without-id", "message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "no-request-id", "room-without-id", testDeliveryMessage("message")))
 
 	items := claimItems(ctx, t, repo, testWorkerA, 1)
 	require.Len(t, items, 1)
@@ -154,7 +154,7 @@ func TestNotificationHandoffClosingOutcomesReleaseRoom(t *testing.T) {
 
 			id := sendForHandoff(t, repo)
 
-			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "second", testRoomA, "message"))
+			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "second", testRoomA, testDeliveryMessage("message")))
 
 			held, err := repo.fetchReadyAndLock(ctx, testWorkerB, 10, config.NotificationDeliveryLease, nil, nil)
 			require.NoError(t, err)
@@ -170,7 +170,7 @@ func TestNotificationHandoffClosingOutcomesReleaseRoom(t *testing.T) {
 			tc.check(t, state)
 
 			// 같은 kind·기간·방의 producer 재적재는 FAILED이고 소진이 아닌 행만 되살린다.
-			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, testRoomA, "message again"))
+			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, testRoomA, testDeliveryMessage("message again")))
 			require.Equal(t, state.status, loadHandoffRow(t, repo, id).status)
 
 			released, err := repo.fetchReadyAndLock(ctx, testWorkerB, 10, config.NotificationDeliveryLease, nil, nil)
@@ -186,7 +186,7 @@ func TestNotificationHandoffClosingOutcomesReleaseRoom(t *testing.T) {
 func TestNotificationHandoffReissueResendsPinnedBodyWithNextGeneration(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue", testRoomA, "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue", testRoomA, testDeliveryMessage("source")))
 
 	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText}
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)

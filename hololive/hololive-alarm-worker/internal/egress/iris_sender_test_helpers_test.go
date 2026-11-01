@@ -3,6 +3,8 @@ package egress
 import (
 	"context"
 	"fmt"
+
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 // 실제 dispatcher와 같이 최종 본문·경로를 먼저 준비하고 식별자를 포함해 전송한다.
@@ -13,7 +15,7 @@ func sendPreparedTestMessage(ctx context.Context, sender *IrisMessageSender, mes
 		id = ids[0]
 	}
 
-	body, route, err := sender.PrepareMessageRequest(ctx, testIrisSenderRoomID, message)
+	body, route, err := sender.PrepareMessageRequest(ctx, testIrisSenderRoomID, delivery.MessageVariants{Plain: message, RichText: message})
 	if err != nil {
 		return fmt.Errorf("prepare test message: %w", err)
 	}

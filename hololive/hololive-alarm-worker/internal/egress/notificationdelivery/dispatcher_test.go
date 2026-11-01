@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 const (
@@ -804,8 +805,8 @@ func TestProcessOncePreservesOrderWithinRoom(t *testing.T) {
 	}
 }
 
-func (m *mockSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, "text", nil
+func (m *mockSender) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {
+	return body.Plain, "text", nil
 }
 
 // SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.

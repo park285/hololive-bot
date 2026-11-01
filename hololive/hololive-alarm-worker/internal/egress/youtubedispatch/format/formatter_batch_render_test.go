@@ -9,10 +9,11 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 여러 outbox 항목을 한 번에 포맷해도 채널별 override와 기본 template 선택이 항목마다 유지되고,
+// 여러 outbox 항목을 한 번에 포맷해도 채널별 override와 기본 template 선택이 항목·변형마다 유지되고,
 // payload를 읽지 못한 항목만 실패하며 다른 항목은 정상 본문을 받는다.
 func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 	t.Parallel()
@@ -21,8 +22,9 @@ func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	overrideChannel := "UC_override"
 
-	if _, err := db.Exec(t.Context(), `INSERT INTO notification_templates (template_key, channel_id, body) VALUES ($1, $2, $3)`,
-		domain.TemplateKeyOutboxShorts, overrideChannel, "OVERRIDE {{.MemberName}} {{.VideoID}}"); err != nil {
+	if _, err := db.Exec(t.Context(), `INSERT INTO notification_templates (template_key, channel_id, format_variant, body)
+VALUES ($1, $2, 'plain', $3), ($1, $2, 'richtext', $4)`,
+		domain.TemplateKeyOutboxShorts, overrideChannel, "OVERRIDE {{.MemberName}} {{.VideoID}}", "**OVERRIDE** {{.MemberName}} {{.VideoID}}"); err != nil {
 		t.Fatalf("upsert override: %v", err)
 	}
 
@@ -42,17 +44,20 @@ func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 		t.Fatalf("default item: %v", results[0].Err)
 	}
 
-	for _, field := range []string{"멤버", "테스트 쇼츠", "https://www.youtube.com/shorts/abc"} {
-		if !strings.Contains(kakaoformat.Render(results[0].Message), field) {
-			t.Errorf("default item lost %q: %q", field, results[0].Message)
+	for _, message := range []string{results[0].Message.Plain, results[0].Message.RichText} {
+		for _, field := range []string{"멤버", "테스트 쇼츠", "https://www.youtube.com/shorts/abc"} {
+			if !strings.Contains(kakaoformat.Render(message), field) {
+				t.Errorf("default item lost %q: %q", field, message)
+			}
 		}
 	}
 
-	if want := "OVERRIDE 멤버 def"; results[1].Err != nil || results[1].Message != want {
-		t.Errorf("override item = %+v; want %q", results[1], want)
+	want := delivery.MessageVariants{Plain: "OVERRIDE 멤버 def", RichText: "**OVERRIDE** 멤버 def"}
+	if results[1].Err != nil || results[1].Message != want {
+		t.Errorf("override item = %+v; want %+v", results[1], want)
 	}
 
-	if results[2].Err == nil || results[2].Message != "" {
+	if results[2].Err == nil || results[2].Message != (delivery.MessageVariants{}) {
 		t.Errorf("invalid payload item = %+v; want item error without message", results[2])
 	}
 }

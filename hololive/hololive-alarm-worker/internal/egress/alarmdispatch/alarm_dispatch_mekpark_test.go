@@ -46,7 +46,8 @@ func TestMekParkLiveAndUpcomingRendering(t *testing.T) {
 		}
 		message, err := renderAlarmDispatchNotification(t.Context(), renderer, store, mekparkTestMembers{}, notification)
 		require.NoError(t, err)
-		require.Contains(t, message, "유닛 B · 미라")
+		require.Contains(t, message.Plain, "유닛 B · 미라")
+		require.Contains(t, message.RichText, "유닛 B · 미라")
 
 		require.Equal(t, "UNIT B Ch.", notification.Channel.Name)
 		require.Equal(t, "UNIT B", notification.Stream.ChannelName)
@@ -70,7 +71,8 @@ func TestMekParkSeriesHostRendering(t *testing.T) {
 	}
 	message, err := renderAlarmDispatchNotification(t.Context(), renderer, store, mekparkTestMembers{}, notification)
 	require.NoError(t, err)
-	require.Contains(t, message, "아크로라 · 사야나 (게스트: 히나미)")
+	require.Contains(t, message.Plain, "아크로라 · 사야나 (게스트: 히나미)")
+	require.Contains(t, message.RichText, "아크로라 · 사야나 (게스트: 히나미)")
 }
 
 type failingDispatchMembers struct {

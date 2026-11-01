@@ -39,6 +39,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 // digestEnqueueResult는 영속 큐 수락을 집계하며 실제 전송 완료를 뜻하지 않습니다.
@@ -136,8 +137,8 @@ func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Pe
 	return failedRoomResult(roomID)
 }
 
-func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logger, roomID string, period model.Period, message string) (digestEnqueueResult, bool) {
-	evaluation, err := guardrail.ValidateGeneratedOutput(outputGuard, message, "membernews_notification")
+func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logger, roomID string, period model.Period, message delivery.MessageVariants) (digestEnqueueResult, bool) {
+	evaluation, err := guardrail.ValidateGeneratedMessage(outputGuard, message, "membernews_notification")
 	if err == nil {
 		return digestEnqueueResult{}, false
 	}
@@ -307,22 +308,22 @@ func logDigestResult(logger *slog.Logger, config *digestDispatchConfig, result d
 	)
 }
 
-func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest) (string, error) {
+func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest) (delivery.MessageVariants, error) {
 	if fmtr == nil {
-		return "", errors.New("format member news digest: formatter not configured")
+		return delivery.MessageVariants{}, errors.New("format member news digest: formatter not configured")
 	}
 
 	if digest == nil {
-		return "", errors.New("format member news digest: digest is nil")
+		return delivery.MessageVariants{}, errors.New("format member news digest: digest is nil")
 	}
 
 	formatted, err := fmtr.FormatMemberNewsDigest(ctx, digest)
 	if err != nil {
-		return "", fmt.Errorf("format member news digest: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("format member news digest: %w", err)
 	}
 
-	if strings.TrimSpace(formatted) == "" {
-		return "", errors.New("format member news digest: template rendered empty")
+	if strings.TrimSpace(formatted.Plain) == "" || strings.TrimSpace(formatted.RichText) == "" {
+		return delivery.MessageVariants{}, errors.New("format member news digest: template rendered empty")
 	}
 
 	return formatted, nil

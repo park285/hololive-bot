@@ -1,5 +1,7 @@
 package youtubedispatch
 
+import messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
+
 const (
 	testRoomCommunity = "room-community"
 	testRoomShorts    = "room-shorts"
@@ -39,3 +41,8 @@ const (
 	testPayloadShortOne = `{"canonical_post_id":"short:short-1","video_id":"s1","title":"쇼츠1"}`
 	testPayloadShortTwo = `{"canonical_post_id":"short:short-2","video_id":"s2","title":"쇼츠2"}`
 )
+
+// testMessage는 형식 분기와 무관한 발송 테스트에서 두 변형에 같은 본문을 쓴다.
+func testMessage(text string) messagedelivery.MessageVariants {
+	return messagedelivery.MessageVariants{Plain: text, RichText: text}
+}

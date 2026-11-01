@@ -94,7 +94,7 @@ func sendYouTubeHandoffFixture(t *testing.T) youtubeHandoffFixture {
 
 	attempt := newDeliveryAttempt([]claimedDelivery{{row: rows[0], outbox: outbox}})
 
-	attempt.request, err = buildDeliverySendRequest(testYouTubeHandoffRoom, "template body", []domain.YouTubeNotificationOutbox{outbox})
+	attempt.request, err = buildDeliverySendRequest(testYouTubeHandoffRoom, testMessage("template body"), []domain.YouTubeNotificationOutbox{outbox})
 	require.NoError(t, err)
 	require.True(t, engine.freezeDeliveryRequest(ctx, &attempt))
 

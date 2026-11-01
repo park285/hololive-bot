@@ -6,6 +6,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type alarmRequestTestStore struct {
@@ -40,16 +41,16 @@ func (c *alarmRequestTestStore) ReissueSendRequest(context.Context, []domain.Ala
 	return sendfence.ErrGenerationExhausted
 }
 
-func (s *alarmDispatchRunnerTestSender) PrepareMessageRequest(_ context.Context, _, message string) (string, string, error) {
-	return message, dispatchoutbox.SendRouteText, nil
+func (s *alarmDispatchRunnerTestSender) PrepareMessageRequest(_ context.Context, _ string, message delivery.MessageVariants) (string, string, error) {
+	return message.Plain, dispatchoutbox.SendRouteText, nil
 }
 
 func (s *alarmDispatchRunnerTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	return alarmTestAdmission(id, s.SendMessageWithClientRequestID(ctx, room, body, id))
 }
 
-func (s *alarmDispatchRunnerBlockingSender) PrepareMessageRequest(_ context.Context, _, message string) (string, string, error) {
-	return message, dispatchoutbox.SendRouteText, nil
+func (s *alarmDispatchRunnerBlockingSender) PrepareMessageRequest(_ context.Context, _ string, message delivery.MessageVariants) (string, string, error) {
+	return message.Plain, dispatchoutbox.SendRouteText, nil
 }
 
 func (s *alarmDispatchRunnerBlockingSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
@@ -63,4 +64,9 @@ func alarmTestAdmission(clientRequestID string, err error) (string, error) {
 	}
 
 	return "iris:" + clientRequestID, nil
+}
+
+// messageTexts는 두 본문 변형을 차례로 돌려준다. 내용 계약은 방 유형과 무관하게 두 변형 모두 지켜야 한다.
+func messageTexts(message delivery.MessageVariants) []string {
+	return []string{message.Plain, message.RichText}
 }

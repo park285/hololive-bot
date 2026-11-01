@@ -63,8 +63,9 @@ func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
 // 저장 완료 후 시작한 호출은 새 버전을 사용하며, 저장과 겹친 호출은 이전 버전을 사용할 수 있습니다.
 // 템플릿 획득 대기는 최대 5초이며 더 짧은 호출자 deadline을 보존합니다.
 // 실행은 호출자 취소와 출력·단계·시간 예산을 따르며 실패하면 부분 결과 없이 오류를 돌려줍니다.
-func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID string, data any) (string, error) {
-	tmpl, err := r.getTemplate(ctx, key, channelID)
+// 본문 변형은 발송 경로가 정하며, 그 변형의 행이 없으면 다른 변형으로 대체하지 않고 ErrTemplateNotFound입니다.
+func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID string, format domain.TemplateFormat, data any) (string, error) {
+	tmpl, err := r.getTemplate(ctx, key, channelID, format)
 	if err != nil {
 		return "", fmt.Errorf("get template: %w", err)
 	}

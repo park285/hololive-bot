@@ -9,10 +9,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// RenderRequest는 RenderBatch의 항목 하나입니다. 채널 override 선택은 Render와 같습니다.
+// RenderRequest는 RenderBatch의 항목 하나입니다. 채널 override와 본문 변형 선택은 Render와 같습니다.
 type RenderRequest struct {
 	Key       domain.TemplateKey
 	ChannelID string
+	Format    domain.TemplateFormat
 	Data      any
 }
 
@@ -25,6 +26,7 @@ type RenderResult struct {
 type templateSelector struct {
 	key       domain.TemplateKey
 	channelID string
+	format    domain.TemplateFormat
 }
 
 type templateLookup struct {
@@ -49,7 +51,7 @@ func (r *Renderer) RenderBatch(ctx context.Context, requests []RenderRequest) ([
 	results := make([]RenderResult, len(requests))
 
 	for i := range requests {
-		lookup := lookups[templateSelector{key: requests[i].Key, channelID: requests[i].ChannelID}]
+		lookup := lookups[requests[i].selector()]
 		if lookup.err != nil {
 			results[i].Err = fmt.Errorf("get template: %w", lookup.err)
 
@@ -78,6 +80,10 @@ func (r *Renderer) RenderBatch(ctx context.Context, requests []RenderRequest) ([
 	return results, nil
 }
 
+func (request RenderRequest) selector() templateSelector {
+	return templateSelector{key: request.Key, channelID: request.ChannelID, format: request.Format}
+}
+
 func (r *Renderer) getTemplates(ctx context.Context, requests []RenderRequest) (map[templateSelector]templateLookup, error) {
 	// Render와 같이 최초 pool 대기부터 제한하며 소스 재확인으로 예산을 연장하지 않습니다.
 	ctx, cancel := context.WithTimeout(ctx, templateLoadTimeout)
@@ -87,8 +93,14 @@ func (r *Renderer) getTemplates(ctx context.Context, requests []RenderRequest) (
 	pending := make([]templateSelector, 0, len(requests))
 
 	for i := range requests {
-		selector := templateSelector{key: requests[i].Key, channelID: requests[i].ChannelID}
+		selector := requests[i].selector()
 		if _, seen := lookups[selector]; seen {
+			continue
+		}
+
+		if !selector.format.IsValid() {
+			lookups[selector] = templateLookup{err: fmt.Errorf("%w: %q", ErrInvalidTemplateFormat, selector.format)}
+
 			continue
 		}
 
@@ -144,12 +156,13 @@ func (r *Renderer) getTemplates(ctx context.Context, requests []RenderRequest) (
 func (r *Renderer) resolveTemplates(ctx context.Context, selectors []templateSelector) (map[int]cacheKey, error) {
 	keys := make([]string, len(selectors))
 	channels := make([]string, len(selectors))
+	formats := make([]string, len(selectors))
 
 	for i, selector := range selectors {
-		keys[i], channels[i] = string(selector.key), selector.channelID
+		keys[i], channels[i], formats[i] = string(selector.key), selector.channelID, string(selector.format)
 	}
 
-	rows, err := r.pool.Query(ctx, mustSQL("renderer_resolve_batch.sql"), keys, channels)
+	rows, err := r.pool.Query(ctx, mustSQL("renderer_resolve_batch.sql"), keys, channels, formats)
 	if err != nil {
 		return nil, fmt.Errorf("query templates: %w", err)
 	}

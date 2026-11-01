@@ -16,6 +16,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -285,8 +286,8 @@ func TestShouldFallbackGroupedSendSkipsOutcomeUnknown(t *testing.T) {
 	}
 }
 
-func (s *flowTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *flowTestSender) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *flowTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

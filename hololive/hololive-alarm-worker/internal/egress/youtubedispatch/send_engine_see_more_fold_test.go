@@ -17,6 +17,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -119,8 +120,8 @@ func TestDispatchDeliveryRowsPreservesCustomPadding(t *testing.T) {
 	require.Equal(t, 2, strings.Count(final, "https://www.youtube.com/shorts/"))
 }
 
-func (c *seeMoreFoldEgressClient) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (c *seeMoreFoldEgressClient) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

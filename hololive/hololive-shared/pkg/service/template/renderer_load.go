@@ -20,16 +20,21 @@ const (
 
 var (
 	ErrTemplateNotFound      = errors.New("template not found in database")
+	ErrInvalidTemplateFormat = errors.New("invalid template format")
 	errTemplateSourceChanged = fmt.Errorf("template source changed: %w", ErrTemplateNotFound)
 )
 
-func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, channelID string) (*template.Template, error) {
+func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, channelID string, format domain.TemplateFormat) (*template.Template, error) {
+	if !format.IsValid() {
+		return nil, fmt.Errorf("%w: %q", ErrInvalidTemplateFormat, format)
+	}
+
 	// 최초 pool 대기부터 제한하며 소스 재확인으로 대기 예산을 연장하지 않습니다.
 	ctx, cancel := context.WithTimeout(ctx, templateLoadTimeout)
 	defer cancel()
 
 	for attempt := 1; attempt <= templateResolveMaxAttempts; attempt++ {
-		ck, err := r.resolveTemplate(ctx, key, channelID)
+		ck, err := r.resolveTemplate(ctx, key, channelID, format)
 		if err != nil {
 			return nil, err
 		}
@@ -49,11 +54,11 @@ func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, chan
 	return nil, fmt.Errorf("template %s source changed after %d attempts: %w", key, templateResolveMaxAttempts, errTemplateSourceChanged)
 }
 
-func (r *Renderer) resolveTemplate(ctx context.Context, key domain.TemplateKey, channelID string) (cacheKey, error) {
+func (r *Renderer) resolveTemplate(ctx context.Context, key domain.TemplateKey, channelID string, format domain.TemplateFormat) (cacheKey, error) {
 	// 저장 완료 뒤 시작한 호출이 이전 버전의 진행 중 조회에 합류하지 않도록 먼저 확인합니다.
 	ck := cacheKey{templateKey: key}
 
-	err := r.pool.QueryRow(ctx, mustSQL("renderer_resolve.sql"), key, channelID).Scan(&ck.id, &ck.version, &ck.channelID)
+	err := r.pool.QueryRow(ctx, mustSQL("renderer_resolve.sql"), key, channelID, format).Scan(&ck.id, &ck.version, &ck.channelID)
 	if err != nil {
 		return cacheKey{}, templateQueryError(key, err)
 	}

@@ -12,7 +12,7 @@ import (
 func markStaleSending(ctx context.Context, t *testing.T, repository *outboxFixture) int64 {
 	t.Helper()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -90,7 +90,7 @@ func TestQuarantineStaleSending_QuarantinedRowDoesNotRearmOnEnqueue(t *testing.T
 		t.Fatalf("quarantine stale sending: %v", err)
 	}
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "rearm-msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("rearm-msg")); err != nil {
 		t.Fatalf("re-enqueue: %v", err)
 	}
 

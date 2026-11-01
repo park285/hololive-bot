@@ -141,7 +141,7 @@ func assertCleanupRearmed(ctx context.Context, t *testing.T, test cleanupRearmCa
 func seedCleanupRearm(ctx context.Context, t *testing.T, repo *outboxFixture, test cleanupRearmCase) (*domain.NotificationDeliveryOutbox, string) {
 	t.Helper()
 
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cleanup-rearm", "cleanup-room", "original message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cleanup-rearm", "cleanup-room", testDeliveryMessage("original message")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
@@ -184,7 +184,7 @@ func TestCleanupConcurrentTerminalTimestampRefresh(t *testing.T) {
 
 			defer cancel()
 
-			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cleanup-cutoff", "cleanup-room", "message"))
+			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cleanup-cutoff", "cleanup-room", testDeliveryMessage("message")))
 
 			var id int64
 
@@ -256,7 +256,7 @@ func TestCleanupRetentionBoundaryDeletesOnlyExpiredRows(t *testing.T) {
 	ctx := t.Context()
 
 	for _, room := range []string{"expired-room", "retained-room"} {
-		require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "retention-boundary", room, "message"))
+		require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "retention-boundary", room, testDeliveryMessage("message")))
 	}
 
 	_, err := repo.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET status='FAILED',

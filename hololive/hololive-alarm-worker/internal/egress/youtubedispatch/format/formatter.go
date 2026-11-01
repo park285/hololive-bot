@@ -21,6 +21,7 @@
 package format
 
 import (
+	"cmp"
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
@@ -31,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
@@ -65,19 +67,20 @@ func (mf *MessageFormatter) DisplayMemberName(name string) string {
 	return mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 }
 
-// FormattedMessage는 FormatMessages의 항목별 결과다. Err가 있으면 Message는 비어 있다.
+// FormattedMessage는 FormatMessages의 항목별 결과다. Message는 방 유형별 두 본문이며 Err가 있으면 비어 있다.
 type FormattedMessage struct {
-	Message string
+	Message delivery.MessageVariants
 	Err     error
 }
 
 // FormatMessages는 outbox 항목을 각 항목의 template과 채널 override로 렌더링한다. Template 버전 확인은 표시명 조회가
 // 끝난 뒤 호출당 한 SQL 문장이며, 호출 시작 전에 끝난 template 저장은 모든 항목에 보인다.
+// 한 outbox를 여러 방이 받으므로 두 본문 변형을 모두 렌더하고, 방마다 발송기가 변형 하나를 고른다.
 // 결과는 items와 같은 순서·길이다. 표시명 조회·payload·template 부재·렌더 실패는 항목별 Err이고(대체 문구 없음),
 // renderer 부재·template 버전 조회 실패·취소는 결과 없이 오류다. 호출자는 오류를 모든 항목의 포맷 실패로 다룬다.
 func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.YouTubeNotificationOutbox) ([]FormattedMessage, error) {
 	results := make([]FormattedMessage, len(items))
-	requests := make([]template.RenderRequest, 0, len(items))
+	requests := make([]template.RenderRequest, 0, 2*len(items))
 	requestItems := make([]int, 0, len(items))
 
 	for i := range items {
@@ -88,7 +91,12 @@ func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.Y
 			continue
 		}
 
-		requests = append(requests, template.RenderRequest{Key: items[i].Kind.ToTemplateKey(), ChannelID: items[i].ChannelID, Data: data})
+		key := items[i].Kind.ToTemplateKey()
+
+		requests = append(requests,
+			template.RenderRequest{Key: key, ChannelID: items[i].ChannelID, Format: domain.TemplateFormatPlain, Data: data},
+			template.RenderRequest{Key: key, ChannelID: items[i].ChannelID, Format: domain.TemplateFormatRichText, Data: data},
+		)
 		requestItems = append(requestItems, i)
 	}
 
@@ -110,15 +118,16 @@ func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.Y
 		return nil, fmt.Errorf("render templates: %w", err)
 	}
 
-	for j := range rendered {
-		i := requestItems[j]
-		if rendered[j].Err != nil {
-			results[i].Err = fmt.Errorf("render template %s: %w", requests[j].Key, rendered[j].Err)
+	// 요청은 항목마다 plain, richtext 순서의 두 개다.
+	for j, i := range requestItems {
+		plain, richText := rendered[2*j], rendered[2*j+1]
+		if err := cmp.Or(plain.Err, richText.Err); err != nil {
+			results[i].Err = fmt.Errorf("render template %s: %w", requests[2*j].Key, err)
 
 			continue
 		}
 
-		results[i].Message = rendered[j].Text
+		results[i].Message = delivery.MessageVariants{Plain: plain.Text, RichText: richText.Text}
 	}
 
 	return results, nil
@@ -139,17 +148,23 @@ func (mf *MessageFormatter) messageTemplateData(ctx context.Context, item *domai
 	return data, nil
 }
 
-func (mf *MessageFormatter) renderTemplate(ctx context.Context, templateKey domain.TemplateKey, channelID string, data any) (string, error) {
+// renderTemplate는 같은 자료로 두 본문 변형을 렌더한다. 어느 변형을 보낼지는 발송기가 방 유형으로 정한다.
+func (mf *MessageFormatter) renderTemplate(ctx context.Context, templateKey domain.TemplateKey, channelID string, data any) (delivery.MessageVariants, error) {
 	if mf.Renderer == nil {
-		return "", fmt.Errorf("render template %s: renderer is nil", templateKey)
+		return delivery.MessageVariants{}, fmt.Errorf("render template %s: renderer is nil", templateKey)
 	}
 
-	msg, err := mf.Renderer.Render(ctx, templateKey, channelID, data)
+	plain, err := mf.Renderer.Render(ctx, templateKey, channelID, domain.TemplateFormatPlain, data)
 	if err != nil {
-		return "", fmt.Errorf("render template %s: %w", templateKey, err)
+		return delivery.MessageVariants{}, fmt.Errorf("render plain template %s: %w", templateKey, err)
 	}
 
-	return msg, nil
+	richText, err := mf.Renderer.Render(ctx, templateKey, channelID, domain.TemplateFormatRichText, data)
+	if err != nil {
+		return delivery.MessageVariants{}, fmt.Errorf("render richtext template %s: %w", templateKey, err)
+	}
+
+	return delivery.MessageVariants{Plain: plain, RichText: richText}, nil
 }
 
 type TemplateData struct {
@@ -281,19 +296,19 @@ type GroupedTemplateData struct {
 	Items      []GroupedItemData
 }
 
-func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName, channelID string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) (string, error) {
+func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName, channelID string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) (delivery.MessageVariants, error) {
 	if len(items) == 0 {
-		return "", errors.New("no items to format")
+		return delivery.MessageVariants{}, errors.New("no items to format")
 	}
 
 	templateKey, err := groupedTemplateKey(kind)
 	if err != nil {
-		return "", err
+		return delivery.MessageVariants{}, err
 	}
 
 	data, err := mf.BuildGroupedTemplateData(memberName, kind, items)
 	if err != nil {
-		return "", err
+		return delivery.MessageVariants{}, err
 	}
 
 	return mf.renderTemplate(ctx, templateKey, channelID, data)

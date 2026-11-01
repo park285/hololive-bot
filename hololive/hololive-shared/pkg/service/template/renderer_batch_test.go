@@ -47,11 +47,11 @@ func TestRenderBatchResolvesOncePerCallWithOverridesAndFreshness(t *testing.T) {
 	counter := &resolveStatementCounter{}
 	r := NewRenderer(tracedCachePool(t, pool, counter), logger)
 	requests := []RenderRequest{
-		{Key: key, ChannelID: channel, Data: "1"},
-		{Key: key, ChannelID: "channel-b", Data: "2"},
-		{Key: key, ChannelID: channel, Data: "3"},
-		{Key: domain.TemplateKey("NO_SUCH_TEMPLATE")},
-		{Key: limitKey},
+		{Key: key, Format: domain.TemplateFormatPlain, ChannelID: channel, Data: "1"},
+		{Key: key, Format: domain.TemplateFormatPlain, ChannelID: "channel-b", Data: "2"},
+		{Key: key, Format: domain.TemplateFormatPlain, ChannelID: channel, Data: "3"},
+		{Key: domain.TemplateKey("NO_SUCH_TEMPLATE"), Format: domain.TemplateFormatPlain},
+		{Key: limitKey, Format: domain.TemplateFormatPlain},
 	}
 
 	results, err := r.RenderBatch(t.Context(), requests)
@@ -102,9 +102,9 @@ func TestRenderBatchCancellationReturnsNoPartialResults(t *testing.T) {
 	defer cancel()
 
 	results, err := NewRenderer(pool, logger).RenderBatch(ctx, []RenderRequest{
-		{Key: key},
+		{Key: key, Format: domain.TemplateFormatPlain},
 
-		{Key: cancelKey, Data: map[string]any{"Cancel": func() string {
+		{Key: cancelKey, Format: domain.TemplateFormatPlain, Data: map[string]any{"Cancel": func() string {
 			cancel()
 
 			return ""
@@ -114,7 +114,7 @@ func TestRenderBatchCancellationReturnsNoPartialResults(t *testing.T) {
 		t.Fatalf("RenderBatch() = %+v, %v; want context.Canceled without results", results, err)
 	}
 
-	results, err = NewRenderer(pool, logger).RenderBatch(ctx, []RenderRequest{{Key: key}})
+	results, err = NewRenderer(pool, logger).RenderBatch(ctx, []RenderRequest{{Key: key, Format: domain.TemplateFormatPlain}})
 	if err == nil || results != nil {
 		t.Fatalf("RenderBatch(canceled) = %+v, %v; want error without results", results, err)
 	}

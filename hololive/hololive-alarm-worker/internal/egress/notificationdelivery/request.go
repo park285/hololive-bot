@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 // saveRequest는 claim 당시 시도 횟수의 발송 전 claim에 아직 고정되지 않은 요청을 고정한다. 조건이 맞지 않으면
@@ -32,7 +33,14 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 		return d.validateStoredRequest(ctx, item, payload.Request)
 	}
 
-	body, route, err := d.sender.PrepareMessageRequest(ctx, item.RoomID, payload.Message)
+	message := delivery.MessageVariants{Plain: payload.Message, RichText: payload.RichTextMessage}
+	if message.RichText == "" {
+		// 변형 도입 전에 적재된 행은 한 본문만 담았으므로 그 본문을 두 경로에 그대로 쓴다. 생산자는 항상 두 본문을
+		// 적재하므로 rich_text_message가 없는 미발송 행이 남지 않으면 이 분기를 지울 수 있다.
+		message.RichText = payload.Message
+	}
+
+	body, route, err := d.sender.PrepareMessageRequest(ctx, item.RoomID, message)
 	if err != nil {
 		d.markPreparationFailed(ctx, item, err)
 

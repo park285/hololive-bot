@@ -83,7 +83,7 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 | `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
 
-RichText 활성화는 코드·DB 배포와 별도입니다. migration `347`은 표준 기본 템플릿만 갱신하며 사용자 지정 기본값·채널 override·저장된 답변은 보존합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며, 행사 요약은 최종 검토·캐시까지 평문으로 유지한 후 formatter에서 보호합니다. 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
+RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 방 유형별 `plain`·`richtext` 변형으로 나뉘어 있고(migration `353`~`358`), bot plane은 요청마다 방 유형을 한 번 판정해 같은 값으로 변형과 발송 경로를 고릅니다. llm plane 예약 알림은 두 변형을 모두 적재합니다. `358`은 표준 기본 템플릿만 변형별 본문으로 나누며 사용자 지정 기본값·채널 override는 같은 본문을 두 변형에 두고 저장된 답변은 보존합니다. `358` 적용 직후 API와 알람 워커를 함께 교체합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며, 행사 요약은 최종 검토·캐시까지 평문으로 유지한 후 formatter에서 보호합니다. 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
 
 ## YouTube 관측 보존
 

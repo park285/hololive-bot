@@ -5,6 +5,7 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -27,6 +29,8 @@ const (
 type preparedSenderSpy struct {
 	prepareErr          error
 	body, route         string
+	preparedMu          sync.Mutex // dispatcher는 방마다 동시에 준비한다.
+	prepared            []delivery.MessageVariants
 	ids, bodies, routes []string
 	err                 error
 	onPrepare, onSend   func()
@@ -36,12 +40,21 @@ func (s *preparedSenderSpy) SendMessage(context.Context, string, string) error {
 	return errors.New("unprepared send")
 }
 
-func (s *preparedSenderSpy) PrepareMessageRequest(context.Context, string, string) (string, string, error) {
+func (s *preparedSenderSpy) PrepareMessageRequest(_ context.Context, _ string, message delivery.MessageVariants) (string, string, error) {
+	s.recordPrepared(message)
+
 	if s.onPrepare != nil {
 		s.onPrepare()
 	}
 
 	return s.body, s.route, s.prepareErr
+}
+
+func (s *preparedSenderSpy) recordPrepared(message delivery.MessageVariants) {
+	s.preparedMu.Lock()
+	defer s.preparedMu.Unlock()
+
+	s.prepared = append(s.prepared, message)
 }
 
 // SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
@@ -65,10 +78,27 @@ func preparedSpyIrisRequestID(clientRequestID string) string {
 	return "iris-" + clientRequestID
 }
 
+// 생산자가 적재한 두 본문이 준비 단계까지 그대로 가야 발송기가 방 유형에 맞는 본문을 고른다. RichText 본문이 없는
+// 변형 도입 전 행은 한 본문을 두 경로에 쓴다.
+func TestGenericRequestPassesStoredVariantsToPreparation(t *testing.T) {
+	repo := testRepository(t)
+	ctx := t.Context()
+	current := delivery.MessageVariants{Plain: "일반 본문", RichText: "**리치 본문**"}
+
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "variants", "room-current", current))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "variants", "room-legacy", delivery.MessageVariants{Plain: "이전 본문"}))
+
+	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText}
+	cfg := testDispatcherConfig()
+
+	mustNewDispatcher(t, repo, sender, dispatcherLogger(), &cfg).processReady(ctx)
+	require.ElementsMatch(t, []delivery.MessageVariants{current, {Plain: "이전 본문", RichText: "이전 본문"}}, sender.prepared)
+}
+
 func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", testDeliveryMessage("source")))
 
 	conflict := testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)
 	sender := &preparedSenderSpy{body: "original final body", route: testPreparedRichText, err: conflict}
@@ -91,7 +121,7 @@ func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 	require.Equal(t, []string{"original final body", "original final body", "original final body"}, sender.bodies)
 	require.Equal(t, []string{testPreparedRichText, testPreparedRichText, testPreparedRichText}, sender.routes)
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, domain.DeliveryStatusFailed))
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", "new source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", testDeliveryMessage("new source")))
 
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), &cfg)
 	d.processReady(ctx)
@@ -101,7 +131,7 @@ func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", testDeliveryMessage("source")))
 
 	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText, err: errors.New("known failure")}
 	cfg := testDispatcherConfig()
@@ -111,7 +141,7 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), &cfg)
 	d.processReady(ctx)
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, domain.DeliveryStatusFailed))
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", "different source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", testDeliveryMessage("different source")))
 
 	sender.body = "different rendered body"
 	sender.route = testPreparedRichText
@@ -127,7 +157,7 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cas", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cas", "room", testDeliveryMessage("source")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
@@ -146,7 +176,7 @@ func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 	requireFenceMiss(t, repo.MarkQuarantined(ctx, id, testWorkerB, attempt, "foreign"), actionMarkQuarantined, sendfence.ReasonOwnerChanged)
 	require.NoError(t, repo.MarkQuarantined(ctx, id, testWorkerA, attempt, "unknown"))
 	requireFenceMiss(t, repo.MarkFailed(ctx, id, testWorkerA, attempt, 3, time.Minute, "late failure"), actionMarkFailed, sendfence.ReasonStatusChanged)
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cas", "room", "changed"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cas", "room", testDeliveryMessage("changed")))
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, deliveryStatusQuarantined))
 }
 
@@ -163,7 +193,7 @@ func testGenericGenerationReplay(t *testing.T, route string) {
 
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "replay", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "replay", "room", testDeliveryMessage("source")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
@@ -212,7 +242,7 @@ func TestGenericPayloadMismatchDoesNotReissue(t *testing.T) {
 func TestGenericRequestGenerationFenceRejectsStaleGeneration(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "generation-fence", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "generation-fence", "room", testDeliveryMessage("source")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
@@ -239,7 +269,7 @@ func TestGenericRequestGenerationFenceRejectsStaleGeneration(t *testing.T) {
 func TestGenericConcurrentReissueAdvancesGenerationOnce(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "generation-cas", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "generation-cas", "room", testDeliveryMessage("source")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
@@ -294,7 +324,7 @@ func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
 	// content_id는 period_key와 room_id의 연결이므로 두 입력이 같은 conflict key를 만들 수 있습니다.
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "period:part", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "period:part", "room", testDeliveryMessage("source")))
 
 	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText, err: errors.New("known failure")}
 	cfg := testDispatcherConfig()
@@ -303,7 +333,7 @@ func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
 
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), &cfg)
 	d.processReady(ctx)
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "period", "part:room", "changed source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "period", "part:room", testDeliveryMessage("changed source")))
 
 	var room string
 
@@ -314,7 +344,7 @@ func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
 func TestGenericPreparationFailureRetriesWithoutSending(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "prepare-retry", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "prepare-retry", "room", testDeliveryMessage("source")))
 
 	sender := &preparedSenderSpy{body: "body", route: testPreparedText, prepareErr: errors.New("prepare unavailable")}
 	cfg := testDispatcherConfig()
@@ -342,7 +372,7 @@ func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 		t.Run(unknown.Error(), func(t *testing.T) {
 			repo := testRepository(t)
 			ctx := t.Context()
-			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "joined-conflict", "room", "source"))
+			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "joined-conflict", "room", testDeliveryMessage("source")))
 
 			sender := &preparedSenderSpy{body: "pinned", route: testPreparedText, err: errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), unknown)}
 			d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
@@ -380,7 +410,7 @@ func fenceMissCount(action string, reason sendfence.Reason, result string) float
 func TestGenericReissueFenceMissWithHeldOwnershipFailsWithoutSendingResidue(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue-fence-held", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue-fence-held", "room", testDeliveryMessage("source")))
 
 	sender := &preparedSenderSpy{
 		body: "held body", route: testPreparedText,
@@ -422,7 +452,7 @@ func TestGenericReissueFenceMissWithHeldOwnershipFailsWithoutSendingResidue(t *t
 	require.Zero(t, countByStatus(ctx, t, repo, deliveryStatusSending))
 
 	// 같은 키를 다시 적재해도 producer rearm이 소진된 요청을 PENDING으로 되살리지 않는다.
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue-fence-held", "room", "new source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reissue-fence-held", "room", testDeliveryMessage("new source")))
 	d.processReady(ctx)
 	readRow()
 	require.Equal(t, string(domain.DeliveryStatusFailed), status)
@@ -472,7 +502,7 @@ func TestGenericReissueFenceMissLeavesForeignTakeoverUntouched(t *testing.T) {
 			repo := testRepository(t)
 			ctx := t.Context()
 			periodKey := "fence-" + tc.name
-			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, periodKey, "room", "source"))
+			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, periodKey, "room", testDeliveryMessage("source")))
 
 			sender := &preparedSenderSpy{
 				body: "conflicted", route: testPreparedText,
@@ -546,7 +576,7 @@ func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing
 			repo := testRepository(t)
 			ctx := t.Context()
 			periodKey := "save-" + tc.name
-			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, periodKey, "room", "source"))
+			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, periodKey, "room", testDeliveryMessage("source")))
 
 			sender := &preparedSenderSpy{body: "rendered", route: testPreparedText, onPrepare: func() { tc.interfere(ctx, t, repo, periodKey) }}
 
@@ -577,7 +607,7 @@ func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing
 func TestRequestFenceMissReportsObservedReason(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "fence-cause", "room", "source"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "fence-cause", "room", testDeliveryMessage("source")))
 
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)

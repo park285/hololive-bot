@@ -62,7 +62,7 @@ func sentWithLaterRow(t *testing.T, repo *outboxFixture, age time.Duration) int6
 	t.Helper()
 
 	id := sendForHandoff(t, repo)
-	require.NoError(t, repo.Enqueue(t.Context(), domain.DeliveryKindMemberNewsWeekly, testHandoffLaterPeriod, testRoomA, "message"))
+	require.NoError(t, repo.Enqueue(t.Context(), domain.DeliveryKindMemberNewsWeekly, testHandoffLaterPeriod, testRoomA, testDeliveryMessage("message")))
 	require.Empty(t, readyPeriods(t, repo))
 
 	_, err := repo.pool.Exec(t.Context(), `UPDATE notification_delivery_outbox

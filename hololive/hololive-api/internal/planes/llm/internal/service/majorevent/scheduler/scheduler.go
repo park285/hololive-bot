@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -63,8 +64,8 @@ func GetWeekRange(now time.Time) (start, end time.Time) {
 
 // Formatter의 렌더 실패는 오류다. 스케줄러는 실패한 본문을 enqueue하지 않고 이벤트를 미표시로 남긴다.
 type Formatter interface {
-	FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (string, error)
-	FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (string, error)
+	FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (delivery.MessageVariants, error)
+	FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (delivery.MessageVariants, error)
 }
 
 type EventRepository interface {
@@ -260,7 +261,7 @@ type periodNotification struct {
 	events           []*domain.MajorEvent
 	periodKey        string
 	kind             domain.DeliveryOutboxKind
-	message          func(ctx context.Context, events []domain.MajorEvent, periodKey string) (string, error)
+	message          func(ctx context.Context, events []domain.MajorEvent, periodKey string) (delivery.MessageVariants, error)
 	mark             func(ctx context.Context, eventIDs []int, periodKey string) error
 	errorPrefix      string
 	enqueueLogMsg    string
@@ -319,14 +320,14 @@ func toDomainEventsAndIDs(events []*domain.MajorEvent) (domainEvents []domain.Ma
 	return domainEvents, eventIDs
 }
 
-func (s *Scheduler) weeklyNotificationMessage(ctx context.Context, events []domain.MajorEvent, weekKey string) (string, error) {
+func (s *Scheduler) weeklyNotificationMessage(ctx context.Context, events []domain.MajorEvent, weekKey string) (delivery.MessageVariants, error) {
 	var llmSummary string
 
 	// 요약 실패는 이벤트 목록만 보내는 대체 경로로 바꾸지 않고 오류로 돌려준다. 이벤트는 미표시로 남는다.
 	if s.summarizer != nil {
 		summary, err := s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeWeekly, weekKey)
 		if err != nil {
-			return "", fmt.Errorf("summarize weekly events: %w", err)
+			return delivery.MessageVariants{}, fmt.Errorf("summarize weekly events: %w", err)
 		}
 
 		llmSummary = summary
@@ -334,7 +335,7 @@ func (s *Scheduler) weeklyNotificationMessage(ctx context.Context, events []doma
 
 	message, err := s.formatter.FormatMajorEventWeeklySummary(ctx, events, llmSummary)
 	if err != nil {
-		return "", fmt.Errorf("format weekly summary: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("format weekly summary: %w", err)
 	}
 
 	return message, nil

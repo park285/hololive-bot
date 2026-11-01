@@ -36,7 +36,7 @@ import (
 
 // outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도).
 type outboxEnqueuer interface {
-	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error
+	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message delivery.MessageVariants) error
 }
 
 type notificationEnqueue struct {
@@ -46,7 +46,7 @@ type notificationEnqueue struct {
 	rooms            []*domain.EventRoomSubscription
 	kind             domain.DeliveryOutboxKind
 	periodKey        string
-	message          string
+	message          delivery.MessageVariants
 	eventCount       int
 	enqueueLogMsg    string
 	deferLogMsg      string
@@ -92,7 +92,7 @@ func enqueueToRooms(
 	rooms []roomTarget,
 	kind domain.DeliveryOutboxKind,
 	periodKey string,
-	message string,
+	message delivery.MessageVariants,
 	outputGuard *outputguard.Guard,
 	logger *slog.Logger,
 ) delivery.SendResult {
@@ -102,7 +102,7 @@ func enqueueToRooms(
 		logger = slog.Default()
 	}
 
-	evaluation, err := guardrail.ValidateGeneratedOutput(outputGuard, message, "majorevent_notification")
+	evaluation, err := guardrail.ValidateGeneratedMessage(outputGuard, message, "majorevent_notification")
 	if err != nil {
 		logger.Error("Major event notification output blocked",
 			slog.Any("error", err),

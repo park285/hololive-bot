@@ -16,6 +16,7 @@ import (
 	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 var errFinalResultSendFailed = errors.Join(errors.New(testSendFailedMessage), iris.ErrPermanent)
@@ -564,8 +565,8 @@ func assertLogIntField(t *testing.T, entry map[string]any, field string, want in
 	}
 }
 
-func (s *finalResultTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *finalResultTestSender) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *finalResultTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

@@ -41,13 +41,19 @@ func TestRenderNotification_SeeMoreFoldToggle(t *testing.T) {
 	on := newLLMSchedulerFormatter("!", renderer, nil, true)
 	folded, err := on.renderNotification(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn", true)
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(folded, "다이제스트 헤더\u200b"), "padding must follow the head line")
-	assert.Contains(t, folded, "\u200b")
 
 	off := newLLMSchedulerFormatter("!", renderer, nil, false)
 	unfolded, err := off.renderNotification(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn", true)
 	require.NoError(t, err)
-	assert.NotContains(t, unfolded, "\u200b")
+
+	// 접기는 발송 전에 어느 변형이 쓰일지 모르므로 두 변형 모두에 적용한다.
+	for _, text := range []string{folded.Plain, folded.RichText} {
+		assert.True(t, strings.HasPrefix(text, "다이제스트 헤더\u200b"), "padding must follow the head line")
+	}
+
+	for _, text := range []string{unfolded.Plain, unfolded.RichText} {
+		assert.NotContains(t, text, "\u200b")
+	}
 }
 
 func TestSchedulerReportFoldingUsesDisplayedCount(t *testing.T) {
@@ -70,7 +76,8 @@ func TestSchedulerReportFoldingUsesDisplayedCount(t *testing.T) {
 					digest := &model.Digest{TopItems: make([]model.SummaryItem, tc.count), MoreSummary: tc.more, TotalCount: 100}
 					news, err := f.FormatMemberNewsDigest(t.Context(), digest)
 					require.NoError(t, err)
-					assert.Equal(t, enabled && tc.newsFold, strings.Contains(news, strings.Repeat("\u200b", 500)))
+					assert.Equal(t, enabled && tc.newsFold, strings.Contains(news.Plain, strings.Repeat("\u200b", 500)))
+					assert.Equal(t, news.Plain, news.RichText)
 
 					for _, summary := range []string{"", "LLM 요약"} {
 						events := make([]domain.MajorEvent, tc.count)
@@ -84,8 +91,9 @@ func TestSchedulerReportFoldingUsesDisplayedCount(t *testing.T) {
 						if tc.count == 0 {
 							assert.Empty(t, weekly)
 						} else {
-							assert.Equal(t, enabled && tc.eventFold, strings.Contains(weekly, strings.Repeat("\u200b", 500)))
-							assert.Equal(t, body, strings.Replace(weekly, strings.Repeat("\u200b", 500), "", 1))
+							assert.Equal(t, enabled && tc.eventFold, strings.Contains(weekly.Plain, strings.Repeat("\u200b", 500)))
+							assert.Equal(t, body, strings.Replace(weekly.Plain, strings.Repeat("\u200b", 500), "", 1))
+							assert.Equal(t, weekly.Plain, weekly.RichText)
 						}
 					}
 				}

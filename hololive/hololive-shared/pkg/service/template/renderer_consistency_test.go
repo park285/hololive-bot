@@ -29,18 +29,18 @@ func TestRendererSavedBodyReachesConsumerRenderer(t *testing.T) {
 
 	saveTestTemplate(t, pool, key, nil, "BEFORE")
 
-	if got, err := consumer.Render(t.Context(), key, "", nil); err != nil || got != "BEFORE" {
+	if got, err := consumer.Render(t.Context(), key, "", domain.TemplateFormatPlain, nil); err != nil || got != "BEFORE" {
 		t.Fatalf("warm cache: got=%q err=%v", got, err)
 	}
 
 	saveTestTemplate(t, pool, key, nil, cacheAfterBody)
 
-	if fresh, err := NewRenderer(pool, logger).Render(t.Context(), key, "", nil); err != nil || fresh != cacheAfterBody {
+	if fresh, err := NewRenderer(pool, logger).Render(t.Context(), key, "", domain.TemplateFormatPlain, nil); err != nil || fresh != cacheAfterBody {
 		t.Fatalf("database update missing: got=%q err=%v", fresh, err)
 	}
 
 	for range 3 {
-		if got, err := consumer.Render(t.Context(), key, "", nil); err != nil || got != cacheAfterBody {
+		if got, err := consumer.Render(t.Context(), key, "", domain.TemplateFormatPlain, nil); err != nil || got != cacheAfterBody {
 			t.Errorf("consumer uses stale saved template: got=%q err=%v", got, err)
 		}
 	}
@@ -100,7 +100,10 @@ func TestRendererInFlightReadCannotUndoInvalidation(t *testing.T) {
 
 	done := make(chan result, 1)
 
-	go func() { msg, err := renderer.Render(ctx, key, "", nil); done <- result{msg, err} }()
+	go func() {
+		msg, err := renderer.Render(ctx, key, "", domain.TemplateFormatPlain, nil)
+		done <- result{msg, err}
+	}()
 
 	select {
 	case <-tr.entered:
@@ -110,7 +113,7 @@ func TestRendererInFlightReadCannotUndoInvalidation(t *testing.T) {
 
 	saveTestTemplate(t, pool, key, nil, cacheAfterBody)
 
-	if got, err := renderer.Render(ctx, key, "", nil); err != nil || got != cacheAfterBody {
+	if got, err := renderer.Render(ctx, key, "", domain.TemplateFormatPlain, nil); err != nil || got != cacheAfterBody {
 		t.Fatalf("post-save request joined old flight: got=%q err=%v", got, err)
 	}
 
@@ -126,7 +129,7 @@ func TestRendererInFlightReadCannotUndoInvalidation(t *testing.T) {
 	}
 
 	for range 3 {
-		if got, err := renderer.Render(ctx, key, "", nil); err != nil || got != cacheAfterBody {
+		if got, err := renderer.Render(ctx, key, "", domain.TemplateFormatPlain, nil); err != nil || got != cacheAfterBody {
 			t.Errorf("in-flight load reinstalled stale cache after save: got=%q err=%v", got, err)
 		}
 	}
@@ -140,12 +143,12 @@ func TestRendererOverrideLifecycleAndDefaultSharing(t *testing.T) {
 
 	saveTestTemplate(t, pool, key, nil, "DEFAULT")
 
-	a, err := r.getTemplate(t.Context(), key, "channel-a")
+	a, err := r.getTemplate(t.Context(), key, "channel-a", domain.TemplateFormatPlain)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	b, err := r.getTemplate(t.Context(), key, "channel-b")
+	b, err := r.getTemplate(t.Context(), key, "channel-b", domain.TemplateFormatPlain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +161,7 @@ func TestRendererOverrideLifecycleAndDefaultSharing(t *testing.T) {
 	assertRender := func(channel, want string) {
 		t.Helper()
 
-		got, err := r.Render(t.Context(), key, channel, nil)
+		got, err := r.Render(t.Context(), key, channel, domain.TemplateFormatPlain, nil)
 		if err != nil || got != want {
 			t.Fatalf("channel %s: got=%q want=%q err=%v", channel, got, want, err)
 		}
@@ -279,7 +282,10 @@ func TestRendererConcurrentLoadsAndCancellation(t *testing.T) {
 	firstCtx, cancelFirst := context.WithCancel(ctx)
 	first := make(chan error, 1)
 
-	go func() { _, err := r.getTemplate(firstCtx, domain.TemplateKeyCmdHelp, ""); first <- err }()
+	go func() {
+		_, err := r.getTemplate(firstCtx, domain.TemplateKeyCmdHelp, "", domain.TemplateFormatPlain)
+		first <- err
+	}()
 
 	select {
 	case <-tr.entered:
@@ -293,7 +299,7 @@ func TestRendererConcurrentLoadsAndCancellation(t *testing.T) {
 
 	for i := range readers {
 		go func() {
-			tmpl, err := r.getTemplate(ctx, domain.TemplateKeyCmdHelp, fmt.Sprintf("channel-%d", i))
+			tmpl, err := r.getTemplate(ctx, domain.TemplateKeyCmdHelp, fmt.Sprintf("channel-%d", i), domain.TemplateFormatPlain)
 			done <- parsedCacheResult{tmpl, err}
 		}()
 	}
@@ -306,17 +312,7 @@ func TestRendererConcurrentLoadsAndCancellation(t *testing.T) {
 		}
 	}
 
-	cancelFirst()
-
-	select {
-	case err := <-first:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("cancel: %v", err)
-		}
-	case <-ctx.Done():
-		t.Fatal("canceled waiter blocked")
-	}
-
+	cancelSharedLoadLeader(ctx, t, cancelFirst, first)
 	unblock()
 
 	assertSharedCacheResults(ctx, t, done, readers)
@@ -332,12 +328,27 @@ func TestRendererConcurrentLoadsAndCancellation(t *testing.T) {
 	t.Logf("%d callers: %d version queries, %d body query, one shared AST; canceled leader isolated", readers+1, tr.versions.Load(), tr.bodies.Load())
 }
 
+// cancelSharedLoadLeader는 공유 본문 조회를 시작한 첫 호출을 취소하고 그 호출만 취소 오류로 끝나는지 확인한다.
+func cancelSharedLoadLeader(ctx context.Context, t *testing.T, cancel context.CancelFunc, first <-chan error) {
+	t.Helper()
+	cancel()
+
+	select {
+	case err := <-first:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancel: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("canceled waiter blocked")
+	}
+}
+
 func TestRendererErrorsDoNotReturnStaleCache(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	r := NewRenderer(pool, slog.New(slog.DiscardHandler))
 	key := domain.TemplateKeyCmdHelp
 
-	if _, err := r.getTemplate(t.Context(), key, ""); err != nil {
+	if _, err := r.getTemplate(t.Context(), key, "", domain.TemplateFormatPlain); err != nil {
 		t.Fatal(err)
 	}
 
@@ -346,7 +357,7 @@ func TestRendererErrorsDoNotReturnStaleCache(t *testing.T) {
 	}
 
 	for range 2 {
-		if _, err := r.getTemplate(t.Context(), key, ""); err == nil {
+		if _, err := r.getTemplate(t.Context(), key, "", domain.TemplateFormatPlain); err == nil {
 			t.Fatal("parse error concealed")
 		}
 	}
@@ -355,7 +366,7 @@ func TestRendererErrorsDoNotReturnStaleCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, err := r.Render(t.Context(), key, "", nil); err != nil || got != "RECOVERED" {
+	if got, err := r.Render(t.Context(), key, "", domain.TemplateFormatPlain, nil); err != nil || got != "RECOVERED" {
 		t.Fatalf("recovery: %q %v", got, err)
 	}
 
@@ -363,13 +374,13 @@ func TestRendererErrorsDoNotReturnStaleCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := r.getTemplate(t.Context(), key, ""); !errors.Is(err, ErrTemplateNotFound) {
+	if _, err := r.getTemplate(t.Context(), key, "", domain.TemplateFormatPlain); !errors.Is(err, ErrTemplateNotFound) {
 		t.Fatalf("missing template: %v", err)
 	}
 
 	pool.Close()
 
-	if _, err := r.getTemplate(t.Context(), key, ""); err == nil {
+	if _, err := r.getTemplate(t.Context(), key, "", domain.TemplateFormatPlain); err == nil {
 		t.Fatal("closed pool returned cached body")
 	}
 }
@@ -384,14 +395,14 @@ func BenchmarkRenderVersionValidated(b *testing.B) {
 	}
 
 	data := struct{ Name string }{"benchmark"}
-	if _, err := r.Render(b.Context(), key, "", data); err != nil {
+	if _, err := r.Render(b.Context(), key, "", domain.TemplateFormatPlain, data); err != nil {
 		b.Fatal(err)
 	}
 
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := r.Render(b.Context(), key, "", data); err != nil {
+		if _, err := r.Render(b.Context(), key, "", domain.TemplateFormatPlain, data); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -402,7 +413,7 @@ func TestRendererBodyReadCachesActualVersion(t *testing.T) {
 	r := NewRenderer(pool, slog.New(slog.DiscardHandler))
 	ck := cacheKey{templateKey: domain.TemplateKeyCmdHelp}
 
-	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), ck.templateKey, "").Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
+	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -427,7 +438,7 @@ func TestRendererBodyReadCachesActualVersion(t *testing.T) {
 		t.Fatal("actual body version was not cached")
 	}
 
-	if got, err := r.Render(t.Context(), ck.templateKey, "", nil); err != nil || got != "LATEST" {
+	if got, err := r.Render(t.Context(), ck.templateKey, "", domain.TemplateFormatPlain, nil); err != nil || got != "LATEST" {
 		t.Fatalf("render: %q %v", got, err)
 	}
 }
@@ -465,7 +476,7 @@ func TestRendererBodyReadRejectsChangedSource(t *testing.T) {
 	r := NewRenderer(pool, slog.New(slog.DiscardHandler))
 	ck := cacheKey{templateKey: domain.TemplateKeyCmdHelp}
 
-	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), ck.templateKey, "").Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
+	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
 		t.Fatal(err)
 	}
 

@@ -40,6 +40,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
@@ -963,8 +964,8 @@ func seedIntegrationOutboxItem(t *testing.T, db *pgxpool.Pool, item *domain.YouT
 	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 }
 
-func (f *fakeSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, "text", nil
+func (f *fakeSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, "text", nil
 }
 
 // SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
