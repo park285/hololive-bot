@@ -28,6 +28,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 func TestFilterPromptEvents(t *testing.T) {
@@ -74,7 +75,7 @@ func TestFilterPromptEventsFailsClosedWithoutGuard(t *testing.T) {
 
 func TestEnqueueToRoomsBlocksRestrictedOutput(t *testing.T) {
 	repository := newMockOutboxRepository()
-	result := enqueueToRooms(t.Context(), repository, []roomTarget{{roomID: testRoomID1}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "system prompt: leaked", outputguard.NewGuard(), testLogger())
+	result := enqueueToRooms(t.Context(), repository, []roomTarget{{roomID: testRoomID1}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", testMessage("system prompt: leaked"), outputguard.NewGuard(), testLogger())
 
 	if result.Failed != 1 || result.Sent != 0 {
 		t.Fatalf("enqueue result = %+v, want failed=1 sent=0", result)
@@ -85,9 +86,20 @@ func TestEnqueueToRoomsBlocksRestrictedOutput(t *testing.T) {
 	}
 }
 
+// 어느 변형이 발송될지는 enqueue 뒤 방 유형으로 정해지므로 한 변형만 차단 대상이어도 메시지 전체를 막는다.
+func TestEnqueueToRoomsBlocksRestrictedRichTextVariant(t *testing.T) {
+	repository := newMockOutboxRepository()
+	message := delivery.MessageVariants{Plain: "정상 알림", RichText: "system prompt: leaked"}
+	result := enqueueToRooms(t.Context(), repository, []roomTarget{{roomID: testRoomID1}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", message, outputguard.NewGuard(), testLogger())
+
+	if result.Failed != 1 || result.Sent != 0 || len(repository.enqueuedItems) != 0 {
+		t.Fatalf("enqueue result = %+v items=%d, want blocked", result, len(repository.enqueuedItems))
+	}
+}
+
 func TestEnqueueToRoomsFailsClosedWithoutOutputGuard(t *testing.T) {
 	repository := newMockOutboxRepository()
-	result := enqueueToRooms(t.Context(), repository, []roomTarget{{roomID: testRoomID1}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "정상 알림", nil, testLogger())
+	result := enqueueToRooms(t.Context(), repository, []roomTarget{{roomID: testRoomID1}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", testMessage("정상 알림"), nil, testLogger())
 
 	if result.Failed != 1 || result.Sent != 0 {
 		t.Fatalf("enqueue result = %+v, want failed=1 sent=0", result)

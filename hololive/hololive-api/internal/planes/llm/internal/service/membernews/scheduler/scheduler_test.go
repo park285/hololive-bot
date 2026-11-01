@@ -31,6 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -88,12 +89,12 @@ func (m *mockDigestService) PrepareDigestRun(_ context.Context, period model.Per
 
 type mockFormatter struct{}
 
-func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Digest) (string, error) {
+func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Digest) (delivery.MessageVariants, error) {
 	if digest == nil {
-		return "", nil
+		return delivery.MessageVariants{}, nil
 	}
 
-	return digest.Headline, nil
+	return delivery.MessageVariants{Plain: digest.Headline, RichText: digest.Headline}, nil
 }
 
 // mockNotificationLocker: executionlock.Locker 구현.
@@ -130,7 +131,7 @@ type enqueueRecord struct {
 	Kind      domain.DeliveryOutboxKind
 	PeriodKey string
 	RoomID    string
-	Message   string
+	Message   delivery.MessageVariants
 }
 
 func newMockOutboxRepository() *mockOutboxRepository {
@@ -139,7 +140,7 @@ func newMockOutboxRepository() *mockOutboxRepository {
 	}
 }
 
-func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
+func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message delivery.MessageVariants) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

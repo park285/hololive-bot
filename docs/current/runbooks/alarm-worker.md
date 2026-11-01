@@ -48,17 +48,19 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 
 | Room / notification | Egress |
 |---|---|
-| 일반채팅의 broadcast/video/Shorts/community | `kakaoformat.Render` 일반 텍스트 |
-| 오픈채팅 + `BOT_MARKDOWN_REPLIES=true` | 원문을 `SendRichText`로 전달하고 Iris가 본문·네이티브 서식으로 변환 |
-| 오픈채팅 + `BOT_MARKDOWN_REPLIES=false` | `kakaoformat.Render` 일반 텍스트 |
-| 방 유형 미확인 | 일반 텍스트 |
+| 일반채팅의 broadcast/video/Shorts/community | `plain` 템플릿 변형을 `kakaoformat.Render` 일반 텍스트로 |
+| 오픈채팅 + `BOT_MARKDOWN_REPLIES=true` | `richtext` 템플릿 변형을 `SendRichText`로 전달하고 Iris가 본문·네이티브 서식으로 변환 |
+| 오픈채팅 + `BOT_MARKDOWN_REPLIES=false` | `plain` 변형, 일반 텍스트 |
+| 방 유형 미확인 | `plain` 변형, 일반 텍스트 |
 | celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
+
+워커는 두 변형을 모두 렌더하고 발송 요청을 고정할 때(`PrepareMessageRequest`) 방 유형을 한 번 판정해 하나를 고릅니다. 고정한 요청의 본문·route는 재시도와 재시작에서 그대로 재사용합니다. generic notification delivery는 producer가 적재한 `message`(plain)와 `rich_text_message`(richtext)를 쓰며, `rich_text_message`가 없는 변형 도입 전 행과 저장된 delivery digest는 한 본문을 두 경로에 씁니다.
 
 일반 텍스트는 `kakaoformat.Render`를 거칩니다. 방 resolver는 오픈채팅 여부만 제공합니다. 텍스트·RichText sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·notification·youtube handoff reconciler만 합니다. 기존 frozen `markdown`·`text`는 저장한 형식 그대로 재생합니다.
 
 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
-기본 본문 전환은 migration `347`이 이전 표준 본문과 일치하는 전역 기본값에만 적용합니다. 사용자 지정 본문·override와 이미 저장된 요청은 변경하지 않습니다. 새 템플릿은 `mdsafe`의 literal 보호와 함께 배포해야 하므로 API·워커를 같은 창에서 교체합니다. 설정 마스터 변경·좁은 동기화는 `stack-platform-ops`, 이미지·프로필 쌍과 no-build 재생성은 `hololive-bot-ops` 절차를 사용합니다.
+기본 본문은 migration `353`~`358`이 방 유형별 두 변형으로 나눕니다. 347 표준 본문과 일치하는 전역 기본값은 `plain`을 347 이전 본문으로 되돌리고 `richtext`에 새 RichText 본문을 넣습니다. 사용자 지정 기본값과 채널 override는 같은 본문을 `richtext` 행으로 복사해 지금 표시를 유지하고, 이미 저장된 요청은 변경하지 않습니다. 렌더러가 변형을 골라 조회하므로 `358` 적용 직후 API·워커를 같은 창에서 교체합니다. 교체 전 이미지는 두 변형 중 하나를 임의로 읽을 수 있고(표시만 다르며 실패하지 않음), API만 먼저 바뀌면 구 워커가 `rich_text_message`를 무시해 오픈채팅 예약 알림이 `plain` 본문으로 나갑니다. 설정 마스터 변경·좁은 동기화는 `stack-platform-ops`, 이미지·프로필 쌍과 no-build 재생성은 `hololive-bot-ops` 절차를 사용합니다.
 
 이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다. T18(2026-09-26)에서 v1·v3 원장의 Karing 비종단 행이 0건임을 확인했습니다.
 

@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/model"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 var ErrOutputGuardUnavailable = errors.New("output guard unavailable")
@@ -93,6 +94,17 @@ func ValidateGeneratedOutput(guard *outputguard.Guard, text, boundary string) (o
 	RecordBlock("output", boundary)
 
 	return evaluation, outputguard.ErrRestrictedGeneratedText
+}
+
+// ValidateGeneratedMessage는 방 유형별 두 본문을 모두 검사한다. 어느 쪽이 발송될지는 enqueue 뒤 발송기가 정하므로
+// 한 변형이라도 차단되면 메시지 전체를 차단한다.
+func ValidateGeneratedMessage(guard *outputguard.Guard, message delivery.MessageVariants, boundary string) (outputguard.Evaluation, error) {
+	evaluation, err := ValidateGeneratedOutput(guard, message.Plain, boundary)
+	if err != nil {
+		return evaluation, err
+	}
+
+	return ValidateGeneratedOutput(guard, message.RichText, boundary)
 }
 
 func RecordBlock(guard, boundary string) {

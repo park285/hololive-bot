@@ -32,6 +32,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/templateview"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
@@ -76,7 +77,12 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "**방송 이력 %d건**\n", len(entries))
+	richText := replyFormat(ctx) == domain.TemplateFormatRichText
+	if richText {
+		fmt.Fprintf(&b, "**방송 이력 %d건**\n", len(entries))
+	} else {
+		fmt.Fprintf(&b, "방송 이력 %d건\n", len(entries))
+	}
 
 	if line := broadcastHistoryFilterLine(filter); line != "" {
 		b.WriteString(line)
@@ -96,14 +102,22 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 			b.WriteString("──────────\n")
 		}
 
-		f.writeBroadcastHistoryEntry(ctx, &b, i+1, &entries[i])
+		f.writeBroadcastHistoryEntry(ctx, &b, i+1, richText, &entries[i])
 	}
 
 	return f.foldSeeMore(strings.TrimRight(b.String(), "\n"), templateview.ShouldFoldItems(len(entries)))
 }
 
-func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry *BroadcastHistoryEntry) {
-	fmt.Fprintf(b, "%d · **[%s] %s**\n", index, broadcastHistoryDisplayLine(entry.TypeLabel), broadcastHistoryDisplayLine(entry.MemberName))
+// writeBroadcastHistoryEntry는 일반 텍스트에서 항목 번호로, RichText에서 굵은 이름으로 항목 머리를 구분한다.
+func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, richText bool, entry *BroadcastHistoryEntry) {
+	typeLabel, memberName := broadcastHistoryDisplayLine(entry.TypeLabel), broadcastHistoryDisplayLine(entry.MemberName)
+
+	if richText {
+		fmt.Fprintf(b, "**[%s] %s**\n", typeLabel, memberName)
+	} else {
+		fmt.Fprintf(b, "%d · [%s] %s\n", index, typeLabel, memberName)
+	}
+
 	writeBroadcastHistoryTitle(b, entry.Type, entry.Title)
 	writeBroadcastHistoryTime(ctx, f, b, entry)
 	writeBroadcastHistoryURL(b, entry.URL)

@@ -87,7 +87,7 @@ func checkSourceReselection(t *testing.T, deleteDefault bool) {
 	var logs bytes.Buffer
 
 	r := NewRenderer(tracedCachePool(t, pool, tr), slog.New(slog.NewTextHandler(&logs, nil)))
-	got, err := r.Render(t.Context(), key, channel, nil)
+	got, err := r.Render(t.Context(), key, channel, domain.TemplateFormatPlain, nil)
 
 	assertSourceReselectionResult(t, got, err, deleteDefault, logs.String())
 
@@ -143,7 +143,7 @@ func TestRendererOtherErrorsDoNotReselect(t *testing.T) {
 			}
 
 			r := NewRenderer(tracedCachePool(t, pool, tr), slog.New(slog.DiscardHandler))
-			if _, err := r.Render(t.Context(), key, "", nil); err == nil {
+			if _, err := r.Render(t.Context(), key, "", domain.TemplateFormatPlain, nil); err == nil {
 				t.Fatal("expected error")
 			}
 
@@ -177,7 +177,7 @@ func TestRendererWarmLookupBudgetIncludesPoolWait(t *testing.T) {
 			t.Cleanup(pool.Close)
 
 			r := NewRenderer(pool, slog.New(slog.DiscardHandler))
-			if _, err = r.getTemplate(t.Context(), domain.TemplateKeyCmdHelp, ""); err != nil {
+			if _, err = r.getTemplate(t.Context(), domain.TemplateKeyCmdHelp, "", domain.TemplateFormatPlain); err != nil {
 				t.Fatal(err)
 			}
 
@@ -202,7 +202,7 @@ func TestRendererWarmLookupBudgetIncludesPoolWait(t *testing.T) {
 
 			start := time.Now()
 
-			_, err = r.getTemplate(ctx, domain.TemplateKeyCmdHelp, "")
+			_, err = r.getTemplate(ctx, domain.TemplateKeyCmdHelp, "", domain.TemplateFormatPlain)
 
 			elapsed := time.Since(start)
 
@@ -280,7 +280,7 @@ func TestRendererDifferentResolvedVersionsShareActualParse(t *testing.T) {
 	key := domain.TemplateKeyCmdHelp
 	old := cacheKey{templateKey: key}
 
-	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), key, "").Scan(&old.id, &old.version, &old.channelID); err != nil {
+	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), key, "", domain.TemplateFormatPlain).Scan(&old.id, &old.version, &old.channelID); err != nil {
 		t.Fatal(err)
 	}
 

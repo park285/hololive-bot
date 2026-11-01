@@ -74,7 +74,7 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 		return "", fmt.Errorf("render template %s: renderer not configured", key)
 	}
 
-	rendered, err := f.renderer.Render(ctx, key, "", data)
+	rendered, err := f.renderer.Render(ctx, key, "", replyFormat(ctx), data)
 	if err != nil {
 		return "", fmt.Errorf("render template %s: %w", key, err)
 	}
@@ -127,7 +127,7 @@ func (f *ResponseFormatter) renderFailureText() string {
 	return f.messageStrings.Text(RenderFailureMessageKey)
 }
 
-func (f *ResponseFormatter) GraduatedMemberWarning(_ context.Context) string {
+func (f *ResponseFormatter) GraduatedMemberWarning(ctx context.Context) string {
 	if f == nil {
 		return ""
 	}
@@ -139,7 +139,14 @@ func (f *ResponseFormatter) GraduatedMemberWarning(_ context.Context) string {
 		return text
 	}
 
-	return "**" + kakaoformat.EscapeMarkdown(warning) + "**" + text[len(warning):]
+	// 문구는 두 변형 모두 literal로 보존하고, 강조는 RichText 변형에만 둔다.
+	literal := kakaoformat.EscapeMarkdown(warning)
+
+	if replyFormat(ctx) == domain.TemplateFormatRichText {
+		literal = "**" + literal + "**"
+	}
+
+	return literal + text[len(warning):]
 }
 
 type memberNotFoundTemplateData struct {

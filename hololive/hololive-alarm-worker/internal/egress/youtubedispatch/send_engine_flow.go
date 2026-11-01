@@ -15,14 +15,17 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type deliverySendRequest struct {
 	clientRequestID string
 	frozen          *store.FrozenRequest
 	roomID          string
-	message         string
-	dedupeKeys      []string
+	// variants는 고정 전 렌더 결과다. 고정할 때 발송기가 방 유형으로 하나를 골라 message에 최종 본문을 남긴다.
+	variants   messagedelivery.MessageVariants
+	message    string
+	dedupeKeys []string
 }
 
 var (
@@ -52,12 +55,12 @@ var deliveryFailureReasonBySentinel = []struct {
 	{err: iris.ErrPermanent, reason: deliveryReasonPermanent, permanent: true},
 }
 
-func buildDeliverySendRequest(roomID, message string, outboxes []domain.YouTubeNotificationOutbox) (deliverySendRequest, error) {
+func buildDeliverySendRequest(roomID string, message messagedelivery.MessageVariants, outboxes []domain.YouTubeNotificationOutbox) (deliverySendRequest, error) {
 	if strings.TrimSpace(roomID) == "" {
 		return deliverySendRequest{}, errors.New("build delivery send request: room id is empty")
 	}
 
-	if strings.TrimSpace(message) == "" {
+	if strings.TrimSpace(message.Plain) == "" || strings.TrimSpace(message.RichText) == "" {
 		return deliverySendRequest{}, errors.New("build delivery send request: message is empty")
 	}
 
@@ -75,16 +78,11 @@ func buildDeliverySendRequest(roomID, message string, outboxes []domain.YouTubeN
 		dedupeKeys = append(dedupeKeys, dedupeKey)
 	}
 
-	req := deliverySendRequest{
-		roomID:     roomID,
-		message:    message,
-		dedupeKeys: dedupeKeys,
-	}
-	if err := validateDeliverySendRequest(req); err != nil {
+	if err := validateDeliveryDedupeKeys(dedupeKeys); err != nil {
 		return deliverySendRequest{}, fmt.Errorf("build delivery send request: %w", err)
 	}
 
-	return req, nil
+	return deliverySendRequest{roomID: roomID, variants: message, dedupeKeys: dedupeKeys}, nil
 }
 
 func dedupeKeyLogAttr(dedupeKeys []string) slog.Attr {
@@ -105,12 +103,16 @@ func validateDeliverySendRequest(req deliverySendRequest) error {
 		return errors.New("send delivery message: message is empty")
 	}
 
-	if len(req.dedupeKeys) == 0 {
+	return validateDeliveryDedupeKeys(req.dedupeKeys)
+}
+
+func validateDeliveryDedupeKeys(dedupeKeys []string) error {
+	if len(dedupeKeys) == 0 {
 		return fmt.Errorf("%w: send delivery message: dedupe keys are empty", ErrDeliveryDedupeKeyRequired)
 	}
 
-	for i := range req.dedupeKeys {
-		if strings.TrimSpace(req.dedupeKeys[i]) == "" {
+	for i := range dedupeKeys {
+		if strings.TrimSpace(dedupeKeys[i]) == "" {
 			return fmt.Errorf("%w: send delivery message: dedupe key at index %d is empty", ErrDeliveryDedupeKeyRequired, i)
 		}
 	}

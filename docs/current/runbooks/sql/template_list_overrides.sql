@@ -1,5 +1,5 @@
-SELECT id, template_key, channel_id, body, created_at, updated_at
+SELECT id, template_key, channel_id, format_variant, body, created_at, updated_at
 FROM notification_templates
 WHERE template_key = $1
   AND channel_id IS NOT NULL
-ORDER BY channel_id
+ORDER BY channel_id, format_variant

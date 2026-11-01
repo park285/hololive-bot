@@ -355,7 +355,7 @@ func TestCommandTransportSendMessageMethods(t *testing.T) {
 		client := &acceptedTestIrisClient{}
 		transport := newDispatchingTransport(client, nil, bottransport.WithMarkdownReplies(true))
 
-		require.NoError(t, transport.SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
+		require.NoError(t, transport.SendMessage(transport.WithReplyFormat(bottransport.WithRoomChat(ctx, "OM", ""), "room"), "room", "hello"))
 		assert.Equal(t, 1, client.richTextCalls)
 		assert.Equal(t, 0, client.acceptedCalls)
 		assert.Equal(t, "hello", client.lastMessage)

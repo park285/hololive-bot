@@ -219,7 +219,7 @@ func TestMarkdownReplyIsFrozenAsRichTextBeforeDispatch(t *testing.T) {
 	writer := &recordingReplyOutbox{}
 	client := &stubBotClient{}
 	tr := NewCommandTransport(writer, nil, WithMarkdownReplies(true))
-	ctx := WithThreadID(inboundCtx(t.Context()), "thread-1")
+	ctx := tr.WithReplyFormat(WithThreadID(inboundCtx(t.Context()), "thread-1"), "room-1")
 
 	const body = "**안내** [제목](https://example.com/a_b) @사용자_이름"
 

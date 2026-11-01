@@ -57,8 +57,19 @@ const (
 func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
+	for _, format := range templateFormats {
+		t.Run(string(format), func(t *testing.T) {
+			auditSeedFormat(t, pool, format)
+		})
+	}
+}
+
+// auditSeedFormat은 한 변형의 기본 행이 키 목록과 정확히 같고 모든 키가 샘플 데이터로 렌더되는지 확인합니다.
+func auditSeedFormat(t *testing.T, pool *pgxpool.Pool, format domain.TemplateFormat) {
+	t.Helper()
+
 	rows, err := pool.Query(t.Context(),
-		`SELECT template_key, body FROM notification_templates WHERE channel_id IS NULL`)
+		`SELECT template_key, body FROM notification_templates WHERE channel_id IS NULL AND format_variant = $1`, format)
 	if err != nil {
 		t.Fatalf("query seeds: %v", err)
 	}
@@ -152,179 +163,206 @@ func auditSeedRender(t *testing.T, key domain.TemplateKey, body string, data any
 func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
-	const (
-		markerName = "**미코**_[테스트]"
-		markerURL  = "https://youtu.be/a_b#c"
-	)
+	for _, format := range templateFormats {
+		t.Run(string(format), func(t *testing.T) {
+			const (
+				markerName = "**미코**_[테스트]"
+				markerURL  = "https://youtu.be/a_b#c"
+			)
 
-	notFoundBody := seedBody(t, pool, domain.TemplateKeyCmdMemberNotFound)
-	notFound := renderSeedBody(t, domain.TemplateKeyCmdMemberNotFound, notFoundBody, map[string]any{
-		fieldMemberName: markerName,
-	})
+			notFoundBody := seedBody(t, pool, domain.TemplateKeyCmdMemberNotFound, format)
+			notFound := renderSeedBody(t, domain.TemplateKeyCmdMemberNotFound, notFoundBody, map[string]any{
+				fieldMemberName: markerName,
+			})
 
-	if visible := kakaoformat.Render(notFound); !strings.Contains(visible, markerName) {
-		t.Errorf("CMD_MEMBER_NOT_FOUND: literal 이름 소실: %q", visible)
-	}
+			if visible := kakaoformat.Render(notFound); !strings.Contains(visible, markerName) {
+				t.Errorf("CMD_MEMBER_NOT_FOUND: literal 이름 소실: %q", visible)
+			}
 
-	liveBody := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
-	live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
-		fieldCount: 1,
-		fieldStreams: []map[string]any{
-			{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0, fieldElapsed: ""},
-		},
-	})
+			liveBody := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams, format)
+			live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
+				fieldCount: 1,
+				fieldStreams: []map[string]any{
+					{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0, fieldElapsed: ""},
+				},
+			})
 
-	if !strings.Contains(kakaoformat.Render(live), markerName) || !hasSeedLine(live, markerURL) {
-		t.Errorf("CMD_LIVE_STREAMS: literal 제목 또는 독립 URL 소실: %q", live)
-	}
+			if !strings.Contains(kakaoformat.Render(live), markerName) || !hasSeedLine(live, markerURL) {
+				t.Errorf("CMD_LIVE_STREAMS: literal 제목 또는 독립 URL 소실: %q", live)
+			}
 
-	if !strings.Contains(live, markerURL) {
-		t.Errorf("CMD_LIVE_STREAMS: URL이 변형됨(ZWSP 삽입 금지): %q", live)
+			if !strings.Contains(live, markerURL) {
+				t.Errorf("CMD_LIVE_STREAMS: URL이 변형됨(ZWSP 삽입 금지): %q", live)
+			}
+		})
 	}
 }
 
 func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
-	const url = "https://youtu.be/live123"
+	for _, format := range templateFormats {
+		t.Run(string(format), func(t *testing.T) {
+			const url = "https://youtu.be/live123"
 
-	body := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
-	got := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
-		fieldCount: 2,
-		fieldStreams: []map[string]any{
-			{fieldChannelName: "츠즈리", fieldTitle: "잡담 방송", fieldURL: url, fieldElapsed: "1시간 23분째"},
-			{fieldChannelName: "두 번째 채널", fieldTitle: "노래 방송", fieldURL: "", fieldElapsed: ""},
-		},
-	})
+			body := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams, format)
+			got := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
+				fieldCount: 2,
+				fieldStreams: []map[string]any{
+					{fieldChannelName: "츠즈리", fieldTitle: "잡담 방송", fieldURL: url, fieldElapsed: "1시간 23분째"},
+					{fieldChannelName: "두 번째 채널", fieldTitle: "노래 방송", fieldURL: "", fieldElapsed: ""},
+				},
+			})
 
-	if strings.Count(got, "1시간 23분째") != 1 {
-		t.Errorf("경과 시간이 누락되거나 중복됨: %q", got)
-	}
+			if strings.Count(got, "1시간 23분째") != 1 {
+				t.Errorf("경과 시간이 누락되거나 중복됨: %q", got)
+			}
 
-	for line := range strings.SplitSeq(got, "\n") {
-		if strings.Contains(line, "1시간 23분째") && !strings.Contains(line, "츠즈리") {
-			t.Errorf("다른 방송에 경과 시간이 붙음: %q", line)
-		}
+			for line := range strings.SplitSeq(got, "\n") {
+				if strings.Contains(line, "1시간 23분째") && !strings.Contains(line, "츠즈리") {
+					t.Errorf("다른 방송에 경과 시간이 붙음: %q", line)
+				}
 
-		if strings.Contains(line, "두 번째 채널") && strings.Contains(line, "⏱") {
-			t.Errorf("알 수 없는 경과 시간이 만들어짐: %q", line)
-		}
-	}
+				if strings.Contains(line, "두 번째 채널") && strings.Contains(line, "⏱") {
+					t.Errorf("알 수 없는 경과 시간이 만들어짐: %q", line)
+				}
+			}
 
-	if !hasSeedLine(got, url) {
-		t.Errorf("독립 URL 소실: %q", got)
+			if !hasSeedLine(got, url) {
+				t.Errorf("독립 URL 소실: %q", got)
+			}
+		})
 	}
 }
 
 func TestSeedTemplates_OutboxVideoSeparateTitleURLBranches(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
-	const (
-		markerMember = "**미코**_[테스트]"
-		markerTitle  = "~~신작~~ #미코라이브"
-		videoURL     = "https://youtu.be/a_b#c"
-	)
+	for _, format := range templateFormats {
+		t.Run(string(format), func(t *testing.T) {
+			const (
+				markerMember = "**미코**_[테스트]"
+				markerTitle  = "~~신작~~ #미코라이브"
+				videoURL     = "https://youtu.be/a_b#c"
+			)
 
-	body := seedBody(t, pool, domain.TemplateKeyOutboxVideo)
-	render := func(title, url string) string {
-		return renderSeedBody(t, domain.TemplateKeyOutboxVideo, body, map[string]any{
-			"Kind":               string(domain.OutboxKindNewVideo),
-			fieldMemberName:      markerMember,
-			fieldTitle:           title,
-			fieldURL:             url,
-			fieldIsPremiere:      false,
-			"IsUpcomingPremiere": false,
+			body := seedBody(t, pool, domain.TemplateKeyOutboxVideo, format)
+			render := func(title, url string) string {
+				return renderSeedBody(t, domain.TemplateKeyOutboxVideo, body, map[string]any{
+					"Kind":               string(domain.OutboxKindNewVideo),
+					fieldMemberName:      markerMember,
+					fieldTitle:           title,
+					fieldURL:             url,
+					fieldIsPremiere:      false,
+					"IsUpcomingPremiere": false,
+				})
+			}
+
+			both := render(markerTitle, videoURL)
+			if visible := kakaoformat.Render(both); strings.Count(visible, markerMember) != 1 || !strings.Contains(visible, markerTitle) || !hasSeedLine(visible, videoURL) {
+				t.Errorf("OUTBOX_VIDEO: 제목과 URL 분리 없음: %q", both)
+			}
+
+			if !strings.Contains(both, videoURL) {
+				t.Errorf("OUTBOX_VIDEO: URL이 변형됨(ZWSP 삽입 금지): %q", both)
+			}
+
+			titleOnly := render(markerTitle, "")
+			if !strings.Contains(kakaoformat.Render(titleOnly), markerTitle) {
+				t.Errorf("OUTBOX_VIDEO: Title-only fallback 없음: %q", titleOnly)
+			}
+
+			if strings.Contains(titleOnly, "](") {
+				t.Errorf("OUTBOX_VIDEO: URL 없이 라벨 링크가 생성됨: %q", titleOnly)
+			}
+
+			urlOnly := render("", videoURL)
+			if !hasSeedLine(urlOnly, videoURL) {
+				t.Errorf("OUTBOX_VIDEO: URL-only fallback 없음: %q", urlOnly)
+			}
+
+			if strings.Contains(urlOnly, "](") {
+				t.Errorf("OUTBOX_VIDEO: Title 없이 라벨 링크가 생성됨: %q", urlOnly)
+			}
+
+			if got := kakaoformat.Render(render("", "")); !strings.Contains(got, markerMember) || strings.Contains(got, "\n") {
+				t.Errorf("OUTBOX_VIDEO: 빈 제목/URL에서 불필요한 항목이 생김: %q", got)
+			}
 		})
-	}
-
-	both := render(markerTitle, videoURL)
-	if visible := kakaoformat.Render(both); strings.Count(visible, markerMember) != 1 || !strings.Contains(visible, markerTitle) || !hasSeedLine(visible, videoURL) {
-		t.Errorf("OUTBOX_VIDEO: 제목과 URL 분리 없음: %q", both)
-	}
-
-	if !strings.Contains(both, videoURL) {
-		t.Errorf("OUTBOX_VIDEO: URL이 변형됨(ZWSP 삽입 금지): %q", both)
-	}
-
-	titleOnly := render(markerTitle, "")
-	if !strings.Contains(kakaoformat.Render(titleOnly), markerTitle) {
-		t.Errorf("OUTBOX_VIDEO: Title-only fallback 없음: %q", titleOnly)
-	}
-
-	if strings.Contains(titleOnly, "](") {
-		t.Errorf("OUTBOX_VIDEO: URL 없이 라벨 링크가 생성됨: %q", titleOnly)
-	}
-
-	urlOnly := render("", videoURL)
-	if !hasSeedLine(urlOnly, videoURL) {
-		t.Errorf("OUTBOX_VIDEO: URL-only fallback 없음: %q", urlOnly)
-	}
-
-	if strings.Contains(urlOnly, "](") {
-		t.Errorf("OUTBOX_VIDEO: Title 없이 라벨 링크가 생성됨: %q", urlOnly)
-	}
-
-	if got := kakaoformat.Render(render("", "")); !strings.Contains(got, markerMember) || strings.Contains(got, "\n") {
-		t.Errorf("OUTBOX_VIDEO: 빈 제목/URL에서 불필요한 항목이 생김: %q", got)
 	}
 }
 
-func TestSeedTemplates_OutboxVideoGroupNumbersRenderedItems(t *testing.T) {
+func TestSeedTemplates_OutboxVideoGroupSeparatesRenderedItems(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
-	body := seedBody(t, pool, domain.TemplateKeyOutboxVideoGroup)
-	out := renderSeedBody(t, domain.TemplateKeyOutboxVideoGroup, body, map[string]any{
-		fieldMemberName: "사쿠라 미코",
-		"Kind":          string(domain.OutboxKindNewVideo),
-		fieldCount:      3,
-		"Items": []map[string]any{
-			{fieldTitle: "", fieldURL: ""},
-			{fieldTitle: "제목1", fieldURL: "https://youtu.be/v1"},
-			{fieldTitle: "제목2", fieldURL: "https://youtu.be/v2"},
-		},
-	})
+	for _, format := range templateFormats {
+		t.Run(string(format), func(t *testing.T) {
+			body := seedBody(t, pool, domain.TemplateKeyOutboxVideoGroup, format)
+			out := renderSeedBody(t, domain.TemplateKeyOutboxVideoGroup, body, map[string]any{
+				fieldMemberName: "사쿠라 미코",
+				"Kind":          string(domain.OutboxKindNewVideo),
+				fieldCount:      3,
+				"Items": []map[string]any{
+					{fieldTitle: "", fieldURL: ""},
+					{fieldTitle: "제목1", fieldURL: "https://youtu.be/v1"},
+					{fieldTitle: "제목2", fieldURL: "https://youtu.be/v2"},
+				},
+			})
 
-	if strings.Count(out, "제목1") != 1 || strings.Count(out, "제목2") != 1 ||
-		!hasSeedLine(out, "https://youtu.be/v1") || !hasSeedLine(out, "https://youtu.be/v2") ||
-		!strings.Contains(out, "\n1 · ") || !strings.Contains(out, "\n2 · ") || strings.Contains(out, "\n3 · ") {
-		t.Errorf("OUTBOX_VIDEO_GROUP: 빈 항목 생략·연속 번호·독립 URL 계약 위반: %q", out)
+			if strings.Count(out, "제목1") != 1 || strings.Count(out, "제목2") != 1 ||
+				!hasSeedLine(out, "https://youtu.be/v1") || !hasSeedLine(out, "https://youtu.be/v2") {
+				t.Errorf("OUTBOX_VIDEO_GROUP: 빈 항목 생략·독립 URL 계약 위반: %q", out)
+			}
+
+			// 일반 텍스트는 렌더된 항목에만 연속 번호를 붙이고, RichText는 번호 없이 항목 사이에만 구분선을 둔다.
+			numbered := strings.Contains(out, "\n1 · ") && strings.Contains(out, "\n2 · ") && !strings.Contains(out, "\n3 · ")
+			separated := strings.Count(out, "──────────") == 1 && !strings.Contains(out, "\n1 · ")
+
+			if (format == domain.TemplateFormatPlain && !numbered) || (format == domain.TemplateFormatRichText && !separated) {
+				t.Errorf("OUTBOX_VIDEO_GROUP: %s 항목 구분 계약 위반: %q", format, out)
+			}
+		})
 	}
 }
 
 func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
-	const (
-		markerTitle = "【挑戦】今日こそは絶対フルコン!!【 #UNIT_B / #玲銘ミラ】"
-		shortURL    = "https://short.holoshi.com/l/CtQ_15HfY_M"
-	)
+	for _, format := range templateFormats {
+		t.Run(string(format), func(t *testing.T) {
+			const (
+				markerTitle = "【挑戦】今日こそは絶対フルコン!!【 #UNIT_B / #玲銘ミラ】"
+				shortURL    = "https://short.holoshi.com/l/CtQ_15HfY_M"
+			)
 
-	body := seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotificationGroup)
-	out := renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotificationGroup, body, map[string]any{
-		fieldMinutesUntil: 5,
-		"IsStarting":      false,
-		"AllPremiere":     false,
-		"Entries": []map[string]any{
-			{
-				fieldMemberName:      "유닛 B",
-				fieldTitle:           markerTitle,
-				fieldURL:             shortURL,
-				"CollabMembers":      "",
-				fieldScheduleMessage: "",
-				fieldMinutesUntil:    5,
-				"IsStarting":         false,
-				"IsScheduled":        true,
-				fieldIsPremiere:      false,
-			},
-		},
-	})
+			body := seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotificationGroup, format)
+			out := renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotificationGroup, body, map[string]any{
+				fieldMinutesUntil: 5,
+				"IsStarting":      false,
+				"AllPremiere":     false,
+				"Entries": []map[string]any{
+					{
+						fieldMemberName:      "유닛 B",
+						fieldTitle:           markerTitle,
+						fieldURL:             shortURL,
+						"CollabMembers":      "",
+						fieldScheduleMessage: "",
+						fieldMinutesUntil:    5,
+						"IsStarting":         false,
+						"IsScheduled":        true,
+						fieldIsPremiere:      false,
+					},
+				},
+			})
 
-	if !strings.Contains(kakaoformat.Render(out), kakaoformat.Render("**"+kakaotext.MarkdownLiteral(markerTitle)+"**")) || !hasSeedLine(out, shortURL) {
-		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: 제목 또는 원본 short-link 줄 없음: %q", out)
-	}
+			if !strings.Contains(kakaoformat.Render(out), kakaoformat.Render(kakaotext.MarkdownLiteral(markerTitle))) || !hasSeedLine(out, shortURL) {
+				t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: 제목 또는 원본 short-link 줄 없음: %q", out)
+			}
 
-	if !strings.Contains(out, shortURL) {
-		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: short URL이 변형됨: %q", out)
+			if !strings.Contains(out, shortURL) {
+				t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: short URL이 변형됨: %q", out)
+			}
+		})
 	}
 }
 
@@ -338,14 +376,17 @@ func hasSeedLine(out, want string) bool {
 	return false
 }
 
-func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey) string {
+// templateFormats는 두 본문 변형이다. 변형은 발송 경로의 표현만 다르고 동적 문자 보호·독립 URL 줄·빈 상태 계약은 같다.
+var templateFormats = []domain.TemplateFormat{domain.TemplateFormatPlain, domain.TemplateFormatRichText}
+
+func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey, format domain.TemplateFormat) string {
 	t.Helper()
 
 	var body string
 
 	if err := pool.QueryRow(t.Context(),
-		`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id IS NULL`,
-		key,
+		`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id IS NULL AND format_variant = $2`,
+		key, format,
 	).Scan(&body); err != nil {
 		t.Fatalf("query %s seed: %v", key, err)
 	}

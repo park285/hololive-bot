@@ -13,6 +13,7 @@ import (
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type lifecycleTestSender struct {
@@ -146,7 +147,7 @@ func TestDispatchClaimedDeliveryRequiresConfirmedBeginAndCompletion(t *testing.T
 
 			attempt := newDeliveryAttempt([]claimedDelivery{{row: row, outbox: outbox}})
 			engine.dispatchClaimedDeliveryRow(t.Context(), &attempt,
-				map[int64]string{outbox.ID: testMessageHello}, nil, &result)
+				map[int64]delivery.MessageVariants{outbox.ID: testMessage(testMessageHello)}, nil, &result)
 
 			if got := sender.calls.Load(); got != tc.wantSend {
 				t.Fatalf("sender calls = %d, want %d", got, tc.wantSend)
@@ -193,7 +194,7 @@ func TestDispatchClaimedDeliveryResponseLostAfterProviderSuccessDoesNotResend(t 
 	engine.dispatchClaimedDeliveryRow(
 		t.Context(),
 		&attempt,
-		map[int64]string{outbox.ID: testMessageHello},
+		map[int64]delivery.MessageVariants{outbox.ID: testMessage(testMessageHello)},
 		map[int64]bool{},
 		&result,
 	)
@@ -252,8 +253,8 @@ func (s *lifecycleTransitionSpy) recordedPreparedFailures() []string {
 	return slices.Clone(s.preparedFailures)
 }
 
-func (s *lifecycleTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *lifecycleTestSender) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *lifecycleTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

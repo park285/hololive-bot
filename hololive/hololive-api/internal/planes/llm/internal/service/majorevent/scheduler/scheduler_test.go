@@ -33,6 +33,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 const (
@@ -46,12 +47,12 @@ type mockFormatter struct {
 	err     error
 }
 
-func (m *mockFormatter) FormatMajorEventWeeklySummary(_ context.Context, _ []domain.MajorEvent, _ string) (string, error) {
-	return m.message, m.err
+func (m *mockFormatter) FormatMajorEventWeeklySummary(_ context.Context, _ []domain.MajorEvent, _ string) (delivery.MessageVariants, error) {
+	return testMessage(m.message), m.err
 }
 
-func (m *mockFormatter) FormatMajorEventMonthlySummary(_ context.Context, _ []domain.MajorEvent, _ string) (string, error) {
-	return m.message, m.err
+func (m *mockFormatter) FormatMajorEventMonthlySummary(_ context.Context, _ []domain.MajorEvent, _ string) (delivery.MessageVariants, error) {
+	return testMessage(m.message), m.err
 }
 
 func TestWeekKeyFromGetWeekRange(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -25,8 +26,11 @@ func TestXSpaceRenderingAndIsolation(t *testing.T) {
 	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), newAlarmDispatchTestRenderer(t), nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Contains(t, kakaoformat.Render(message), envelope.XSpace.Title)
-	require.Contains(t, message, envelope.XSpace.URL())
+
+	for _, text := range messageTexts(message) {
+		require.Contains(t, kakaoformat.Render(text), envelope.XSpace.Title)
+		require.Contains(t, text, envelope.XSpace.URL())
+	}
 
 	require.NoError(t, alarmDispatchEnvelopeError(&envelope))
 
@@ -84,10 +88,12 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, handled)
 
-			visible := strings.ReplaceAll(kakaoformat.Render(message), kakaotext.ZeroWidthSpace, "")
-			require.Contains(t, visible, markdownMemberName)
-			require.Contains(t, visible, title)
-			require.Contains(t, visible, payload.URL())
+			for _, text := range messageTexts(message) {
+				visible := strings.ReplaceAll(kakaoformat.Render(text), kakaotext.ZeroWidthSpace, "")
+				require.Contains(t, visible, markdownMemberName)
+				require.Contains(t, visible, title)
+				require.Contains(t, visible, payload.URL())
+			}
 		})
 	}
 }
@@ -99,14 +105,14 @@ func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeLive},
 		XSpace:       &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: testAlarmChannelID, StartedAt: time.Now().UTC()},
 	}
-	_, err := pool.Exec(t.Context(), `UPDATE notification_templates SET body = '{{.MemberName}}: {{.URL}}' WHERE template_key = $1 AND channel_id IS NULL`, domain.TemplateKeyXSpaceStarted)
+	_, err := pool.Exec(t.Context(), `UPDATE notification_templates SET body = format_variant || ' {{.MemberName}}: {{.URL}}' WHERE template_key = $1 AND channel_id IS NULL`, domain.TemplateKeyXSpaceStarted)
 	require.NoError(t, err)
 
 	group := alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}}
 	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, group)
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, "소라: https://x.com/i/spaces/1abc", message)
+	require.Equal(t, delivery.MessageVariants{Plain: "plain 소라: https://x.com/i/spaces/1abc", RichText: "richtext 소라: https://x.com/i/spaces/1abc"}, message)
 
 	_, err = pool.Exec(t.Context(), `DELETE FROM notification_templates WHERE template_key = $1`, domain.TemplateKeyXSpaceStarted)
 	require.NoError(t, err)

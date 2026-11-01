@@ -4,19 +4,25 @@ import (
 	"testing"
 
 	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 const preparedTestRequestID = "prepared:request"
 
+// 방 유형 판정은 준비 단계에서 한 번만 하며 고른 경로의 변형만 최종 본문이 된다. 일반채팅은 RichText 서식을
+// 표시하지 않으므로 오픈채팅 본문이 text 경로로 새면 안 된다.
 func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing.T) {
+	message := delivery.MessageVariants{Plain: "일반 _본문_", RichText: "**fixed**"}
 	client := &irisSenderTestClient{}
 	first := NewIrisMessageSender(client, WithMarkdownReplies(true), WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
-	body, route, err := first.PrepareMessageRequest(t.Context(), testIrisSenderRoomID, "**fixed**")
+	body, route, err := first.PrepareMessageRequest(t.Context(), testIrisSenderRoomID, message)
 	require.NoError(t, err)
 	require.Equal(t, "richtext", route)
+	require.Equal(t, message.RichText, body)
 
 	restarted := NewIrisMessageSender(client)
 
@@ -26,8 +32,10 @@ func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing
 	require.Len(t, client.richTextCalls, 1)
 	require.Equal(t, "**fixed**", client.richTextCalls[0].message)
 
-	plain, plainRoute, err := restarted.PrepareMessageRequest(t.Context(), testIrisSenderRoomID, "**fixed**")
+	plain, plainRoute, err := restarted.PrepareMessageRequest(t.Context(), testIrisSenderRoomID, message)
 	require.NoError(t, err)
+	require.Equal(t, "text", plainRoute)
+	require.Equal(t, kakaoformat.Render(message.Plain), plain)
 
 	_, err = first.SendPreparedMessage(t.Context(), testIrisSenderRoomID, plain, plainRoute, "prepared:plain")
 	require.NoError(t, err)

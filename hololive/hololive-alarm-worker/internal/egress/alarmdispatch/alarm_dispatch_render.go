@@ -9,14 +9,30 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
+// renderTemplateVariants는 같은 자료로 두 본문 변형을 렌더한다. 어느 변형을 보낼지는 발송기가 방 유형으로 한 번 정한다.
+func renderTemplateVariants(ctx context.Context, renderer *template.Renderer, key domain.TemplateKey, data any) (delivery.MessageVariants, error) {
+	plain, err := renderer.Render(ctx, key, "", domain.TemplateFormatPlain, data)
+	if err != nil {
+		return delivery.MessageVariants{}, fmt.Errorf("render plain %s: %w", key, err)
+	}
+
+	richText, err := renderer.Render(ctx, key, "", domain.TemplateFormatRichText, data)
+	if err != nil {
+		return delivery.MessageVariants{}, fmt.Errorf("render richtext %s: %w", key, err)
+	}
+
+	return delivery.MessageVariants{Plain: plain, RichText: richText}, nil
+}
+
 // renderAlarmDispatchGroup는 알림을 자동 접기 없이 렌더링하고 사전 렌더된 다이제스트는 그대로 유지한다.
-func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
+func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
 	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, members, group); handled {
 		if err != nil {
 			return message, fmt.Errorf("render alarm dispatch group source: %w", err)
@@ -32,49 +48,49 @@ func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, 
 	return renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, shortLinkBaseURL, group)
 }
 
-func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (message string, handled bool, err error) {
+func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (message delivery.MessageVariants, handled bool, err error) {
 	if len(group.envelopes) == 0 {
-		return "", false, nil
+		return delivery.MessageVariants{}, false, nil
 	}
 
 	envelope := &group.envelopes[0]
 
 	type sourceRenderer struct {
 		action string
-		run    func() (string, error)
+		run    func() (delivery.MessageVariants, error)
 	}
 
 	renderers := map[domain.AlarmDispatchSourceKind]sourceRenderer{
 		domain.AlarmDispatchSourceKindXSpace: {
 			action: "render x space start",
-			run: func() (string, error) {
+			run: func() (delivery.MessageVariants, error) {
 				if validationErr := envelope.ValidateCanonicalDispatch(); validationErr != nil {
-					return "", fmt.Errorf("validate x space: %w", validationErr)
+					return delivery.MessageVariants{}, fmt.Errorf("validate x space: %w", validationErr)
 				}
 
 				memberName, nameErr := alarmContractMemberName(ctx, messageStrings, members, envelope.XSpace.ChannelID)
 				if nameErr != nil {
-					return "", fmt.Errorf("resolve x space member name: %w", nameErr)
+					return delivery.MessageVariants{}, fmt.Errorf("resolve x space member name: %w", nameErr)
 				}
 
-				return renderer.Render(ctx, domain.TemplateKeyXSpaceStarted, "", xSpaceStartView{
+				return renderTemplateVariants(ctx, renderer, domain.TemplateKeyXSpaceStarted, xSpaceStartView{
 					MemberName: memberName, Title: envelope.XSpace.Title, URL: envelope.XSpace.URL(),
 				})
 			},
 		},
 		domain.AlarmDispatchSourceKindCelebration: {
 			action: "render celebration message",
-			run:    func() (string, error) { return renderCelebrationMessage(ctx, renderer, envelope) },
+			run:    func() (delivery.MessageVariants, error) { return renderCelebrationMessage(ctx, renderer, envelope) },
 		},
 		domain.AlarmDispatchSourceKindDeliveryDigest: {
 			action: "render delivery digest dispatch",
-			run:    func() (string, error) { return renderAlarmDispatchDeliveryDigest(envelope) },
+			run:    func() (delivery.MessageVariants, error) { return renderAlarmDispatchDeliveryDigest(envelope) },
 		},
 	}
 
 	selected, ok := renderers[envelope.SourceKind]
 	if !ok {
-		return "", false, nil
+		return delivery.MessageVariants{}, false, nil
 	}
 
 	message, err = selected.run()
@@ -85,12 +101,16 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 	return message, true, nil
 }
 
-func renderAlarmDispatchDeliveryDigest(envelope *domain.AlarmQueueEnvelope) (string, error) {
+// 저장된 digest envelope는 변형 도입 전에 한 본문만 담았으므로 그 본문을 두 경로에 그대로 쓴다. 이 저장소에는 새 digest
+// 생산자가 없으므로 남은 envelope가 모두 처리되면 이 분기와 함께 지울 수 있다.
+func renderAlarmDispatchDeliveryDigest(envelope *domain.AlarmQueueEnvelope) (delivery.MessageVariants, error) {
 	if envelope.DeliveryDigest == nil {
-		return "", errors.New("payload is nil")
+		return delivery.MessageVariants{}, errors.New("payload is nil")
 	}
 
-	return envelope.DeliveryDigest.PreRenderedMessage, nil
+	message := envelope.DeliveryDigest.PreRenderedMessage
+
+	return delivery.MessageVariants{Plain: message, RichText: message}, nil
 }
 
 type alarmDispatchItemView struct {
@@ -206,39 +226,34 @@ func buildAlarmDispatchGroupViewWithShortLinks(
 	}, nil
 }
 
-func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
+func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
 	shortLinks, err := configuredAlarmShortLinkBuilder(shortLinkBaseURL)
 	if err != nil {
-		return "", fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
 	}
 
 	view, err := buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortLinks)
 	if err != nil {
-		return "", fmt.Errorf("render alarm dispatch notification group: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification group: %w", err)
 	}
 
-	message, err := renderer.Render(
-		ctx,
-		domain.TemplateKeyAlarmDispatchNotificationGroup,
-		"",
-		view,
-	)
+	message, err := renderTemplateVariants(ctx, renderer, domain.TemplateKeyAlarmDispatchNotificationGroup, view)
 	if err != nil {
-		return "", fmt.Errorf("render alarm dispatch notification group: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification group: %w", err)
 	}
 
 	return message, nil
 }
 
-func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification) (string, error) {
+func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification) (delivery.MessageVariants, error) {
 	view, err := buildAlarmDispatchItemView(ctx, store, members, notification, -1)
 	if err != nil {
-		return "", fmt.Errorf("render alarm dispatch notification: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification: %w", err)
 	}
 
-	message, err := renderer.Render(ctx, domain.TemplateKeyAlarmDispatchNotification, "", view)
+	message, err := renderTemplateVariants(ctx, renderer, domain.TemplateKeyAlarmDispatchNotification, view)
 	if err != nil {
-		return "", fmt.Errorf("render alarm dispatch notification: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification: %w", err)
 	}
 
 	return message, nil

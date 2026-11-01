@@ -13,6 +13,7 @@ import (
 	"github.com/park285/iris-client-go/v4/iris"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type sentinelFailureSender struct {
@@ -218,8 +219,8 @@ func assertAuthSentinelRowsFailed(t *testing.T, db *pgxpool.Pool, outboxID, deli
 	}
 }
 
-func (s sentinelFailureSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s sentinelFailureSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s sentinelFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type testSender struct {
@@ -390,16 +391,16 @@ func newDispatcherTestCache(t *testing.T) (*cache.Service, *miniredis.Miniredis)
 	return service, mini
 }
 
-func (s *testSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *testSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *testSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	return testAdmission(id, s.SendMessageWithClientRequestID(ctx, room, body, id))
 }
 
-func (s *failFirstSendTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *failFirstSendTestSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *failFirstSendTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

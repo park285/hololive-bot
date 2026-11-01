@@ -29,6 +29,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -50,9 +51,9 @@ func setupFormatterRenderer(t *testing.T, key domain.TemplateKey, body string) *
 	require.NoError(t, err)
 
 	_, err = pool.Exec(t.Context(), `
-		INSERT INTO notification_templates(template_key, channel_id, body)
-		VALUES ($1, NULL, $2)
-		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		INSERT INTO notification_templates(template_key, channel_id, format_variant, body)
+		SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
+		ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 	`, key, body)
 	require.NoError(t, err)
@@ -69,9 +70,9 @@ func setupFormatterRendererMulti(t *testing.T, bodies map[domain.TemplateKey]str
 
 	for key, body := range bodies {
 		_, err = pool.Exec(t.Context(), `
-			INSERT INTO notification_templates(template_key, channel_id, body)
-			VALUES ($1, NULL, $2)
-			ON CONFLICT (template_key) WHERE channel_id IS NULL
+			INSERT INTO notification_templates(template_key, channel_id, format_variant, body)
+			SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
+			ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 			DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 		`, key, body)
 		require.NoError(t, err)
@@ -113,7 +114,7 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 
 		var formatter *llmSchedulerFormatter
 
-		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil)
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, domain.TemplateFormatPlain, nil)
 		require.Error(t, err)
 		assert.Empty(t, rendered)
 		assert.Contains(t, err.Error(), "template renderer not configured")
@@ -123,7 +124,7 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		formatter := &llmSchedulerFormatter{logger: slog.New(slog.DiscardHandler)}
-		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil)
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, domain.TemplateFormatPlain, nil)
 		require.Error(t, err)
 		assert.Empty(t, rendered)
 		assert.Contains(t, err.Error(), "template renderer not configured")
@@ -135,7 +136,7 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내\n본문: {{.name}}\n")
 		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.DiscardHandler), false)
 
-		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, map[string]string{"name": "미코"})
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, domain.TemplateFormatPlain, map[string]string{"name": "미코"})
 		require.NoError(t, err)
 		assert.Equal(t, "안내\n본문: 미코", rendered)
 	})
@@ -146,10 +147,10 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "{{.MissingField}}")
 		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.DiscardHandler), false)
 
-		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, struct{}{})
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, domain.TemplateFormatPlain, struct{}{})
 		require.Error(t, err)
 		assert.Empty(t, rendered)
-		assert.Contains(t, err.Error(), "render template")
+		assert.Contains(t, err.Error(), "render plain template")
 	})
 
 	t.Run("template not found", func(t *testing.T) {
@@ -158,9 +159,24 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내")
 		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.DiscardHandler), false)
 
-		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMajorEventWeeklySummary, nil)
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMajorEventWeeklySummary, domain.TemplateFormatPlain, nil)
 		require.Error(t, err)
 		assert.Empty(t, rendered)
 		assert.Contains(t, err.Error(), "get template")
 	})
+}
+
+// 같은 예약 알림을 여러 방에 enqueue하고 발송기가 방마다 변형을 고르므로, 두 변형을 각자의 템플릿으로 렌더해야 한다.
+func TestRenderNotificationRendersBothTemplateVariants(t *testing.T) {
+	t.Parallel()
+
+	pool := dbtest.NewPool(t)
+	_, err := pool.Exec(t.Context(), `UPDATE notification_templates SET body = format_variant || ' {{.Headline}}'
+WHERE template_key = $1 AND channel_id IS NULL`, domain.TemplateKeyCmdMemberNewsDigest)
+	require.NoError(t, err)
+
+	formatter := newLLMSchedulerFormatter("!", template.NewRenderer(pool, slog.New(slog.DiscardHandler)), slog.New(slog.DiscardHandler), false)
+	message, err := formatter.renderNotification(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, map[string]string{"Headline": "뉴스"}, "warn", false)
+	require.NoError(t, err)
+	assert.Equal(t, delivery.MessageVariants{Plain: "plain 뉴스", RichText: "richtext 뉴스"}, message)
 }

@@ -67,6 +67,11 @@ func testRepository(t *testing.T) *outboxFixture {
 	}
 }
 
+// testDeliveryMessage는 형식 분기와 무관한 저장소 테스트에서 두 변형에 같은 본문을 쓴다.
+func testDeliveryMessage(text string) delivery.MessageVariants {
+	return delivery.MessageVariants{Plain: text, RichText: text}
+}
+
 func buildOutboxBatchItems(count int) []delivery.OutboxItem {
 	items := make([]delivery.OutboxItem, 0, count)
 	for i := range count {
@@ -74,7 +79,7 @@ func buildOutboxBatchItems(count int) []delivery.OutboxItem {
 			Kind:      domain.DeliveryKindMemberNewsWeekly,
 			PeriodKey: "2026-W08",
 			RoomID:    fmt.Sprintf("room-batch-%d", i),
-			Message:   fmt.Sprintf("batch-msg-%d", i),
+			Message:   testDeliveryMessage(fmt.Sprintf("batch-msg-%d", i)),
 		})
 	}
 
@@ -138,7 +143,7 @@ func TestFetchReadyAndLockClaimsDistinctRooms(t *testing.T) {
 	ctx := t.Context()
 
 	for i := range 3 {
-		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
+		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), testDeliveryMessage("msg")); err != nil {
 			t.Fatalf("enqueue %d: %v", i, err)
 		}
 	}
@@ -160,11 +165,11 @@ func TestFetchReadyAndLock_OrdersDueBeforeCreatedAt(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "older-created", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "older-created", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue older-created: %v", err)
 	}
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "earlier-due", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "earlier-due", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue earlier-due: %v", err)
 	}
 
@@ -199,7 +204,7 @@ func TestMarkSent_RejectsOwnedPendingRow(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -247,7 +252,7 @@ func TestMarkSent_FromSending(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -275,7 +280,7 @@ func TestMarkSent_ClearsLock(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -312,7 +317,7 @@ func TestMarkSent_DoesNotResurrectFailedRow(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -344,7 +349,7 @@ func TestMarkFailed_DoesNotResurrectSentRow(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -376,7 +381,7 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -400,7 +405,7 @@ func TestMarkFailed_FromSending(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -428,7 +433,7 @@ func TestCleanup(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -462,7 +467,7 @@ func TestCleanup_FailedItems(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room-fail", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room-fail", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -499,7 +504,7 @@ func TestCountByStatus(t *testing.T) {
 	ctx := t.Context()
 
 	for i := range 3 {
-		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
+		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), testDeliveryMessage("msg")); err != nil {
 			t.Fatalf("enqueue %d: %v", i, err)
 		}
 	}
@@ -547,7 +552,7 @@ func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -589,7 +594,7 @@ func TestMarkFailed_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -622,7 +627,7 @@ func TestMarkSent_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -650,7 +655,7 @@ func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -709,7 +714,7 @@ func TestMarkSending_Fenced(t *testing.T) {
 			repository := testRepository(t)
 			ctx := t.Context()
 
-			if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+			if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 				t.Fatalf("enqueue: %v", err)
 			}
 
@@ -730,7 +735,7 @@ func TestFetchReadyAndLock_ReclaimsExpiredLease(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -758,7 +763,7 @@ func TestFetchReadyAndLock_DoesNotReclaimSendingAfterLeaseExpiry(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -806,7 +811,7 @@ func TestPreviousAttemptTransitionsRejectedAfterSameOwnerReclaim(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", testDeliveryMessage("msg")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 

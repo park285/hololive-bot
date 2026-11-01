@@ -54,7 +54,7 @@ type OutboxItem struct {
 	Kind      domain.DeliveryOutboxKind
 	PeriodKey string
 	RoomID    string
-	Message   string
+	Message   MessageVariants
 }
 
 func NewOutboxRepository(postgres database.Client, logger *slog.Logger) *OutboxRepository {
@@ -73,7 +73,7 @@ func NewOutboxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *Outbo
 	return &OutboxRepository{pool: pool, logger: logger}
 }
 
-func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
+func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message MessageVariants) error {
 	if err := r.EnqueueBatch(ctx, []OutboxItem{
 		{
 			Kind:      kind,
@@ -108,7 +108,7 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 			PeriodKey: item.PeriodKey,
 			RoomID:    item.RoomID,
 			ContentID: contentID,
-			Payload:   deliverypayload.Payload{Message: item.Message},
+			Payload:   deliverypayload.Payload{Message: item.Message.Plain, RichTextMessage: item.Message.RichText},
 		})
 	}
 

@@ -6,27 +6,28 @@ import (
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func renderCelebrationMessage(ctx context.Context, renderer *template.Renderer, envelope *domain.AlarmQueueEnvelope) (string, error) {
+func renderCelebrationMessage(ctx context.Context, renderer *template.Renderer, envelope *domain.AlarmQueueEnvelope) (delivery.MessageVariants, error) {
 	if envelope.Celebration == nil {
-		return "", errors.New("render celebration: payload is nil")
+		return delivery.MessageVariants{}, errors.New("render celebration: payload is nil")
 	}
 
 	p := envelope.Celebration
 	if err := validateCelebrationPayload(p); err != nil {
-		return "", fmt.Errorf("validate celebration payload: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("validate celebration payload: %w", err)
 	}
 
 	templateKey, ok := celebrationTemplateKey(p.Kind)
 	if !ok {
-		return "", fmt.Errorf("render celebration: unknown kind %q", p.Kind)
+		return delivery.MessageVariants{}, fmt.Errorf("render celebration: unknown kind %q", p.Kind)
 	}
 
-	out, err := renderer.Render(ctx, templateKey, "", p)
+	out, err := renderTemplateVariants(ctx, renderer, templateKey, p)
 	if err != nil {
-		return out, fmt.Errorf("render: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("render: %w", err)
 	}
 
 	return out, nil

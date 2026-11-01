@@ -46,9 +46,9 @@ func setupScheduleTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	}
 
 	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO notification_templates(template_key, channel_id, body)
-		VALUES ($1, NULL, $2)
-		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		INSERT INTO notification_templates(template_key, channel_id, format_variant, body)
+		SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
+		ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 	`, domain.TemplateKeyCmdChannelSchedule, "채널 일정\n{{range .Streams}}{{.Title}}\n{{end}}"); err != nil {
 		t.Fatalf("seed schedule template: %v", err)

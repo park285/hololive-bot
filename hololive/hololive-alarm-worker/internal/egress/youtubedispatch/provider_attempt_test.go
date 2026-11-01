@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -135,8 +136,8 @@ func TestProviderAttemptSkipsUnsupportedStoredRoute(t *testing.T) {
 	require.Equal(t, (&workercontract.Counters{}).Snapshot(), totals.Snapshot())
 }
 
-func (s *providerAttemptSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *providerAttemptSender) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *providerAttemptSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

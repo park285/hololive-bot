@@ -20,10 +20,10 @@ func TestFetchReadyAndLockPreservesRoomOrderAcrossWorkers(t *testing.T) {
 	ctx := t.Context()
 
 	for _, item := range []delivery.OutboxItem{
-		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: testFirstPeriod, RoomID: testRoomA, Message: "a1"},
-		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: "second", RoomID: testRoomA, Message: "a2"},
-		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: testFirstPeriod, RoomID: "room-b", Message: "b1"},
-		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: testFirstPeriod, RoomID: "room-c", Message: "c1"},
+		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: testFirstPeriod, RoomID: testRoomA, Message: testDeliveryMessage("a1")},
+		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: "second", RoomID: testRoomA, Message: testDeliveryMessage("a2")},
+		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: testFirstPeriod, RoomID: "room-b", Message: testDeliveryMessage("b1")},
+		{Kind: domain.DeliveryKindMemberNewsWeekly, PeriodKey: testFirstPeriod, RoomID: "room-c", Message: testDeliveryMessage("c1")},
 	} {
 		require.NoError(t, r.EnqueueBatch(ctx, []delivery.OutboxItem{item}))
 	}
@@ -101,10 +101,10 @@ func TestFetchReadyAndLockDoesNotSkipLockedPredecessor(t *testing.T) {
 	ctx := t.Context()
 
 	for _, period := range []string{testFirstPeriod, "second"} {
-		require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, period, testRoomA, "message"))
+		require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, period, testRoomA, testDeliveryMessage("message")))
 	}
 
-	require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, "room-b", "message"))
+	require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, "room-b", testDeliveryMessage("message")))
 
 	tx, err := r.pool.Begin(ctx)
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestFetchReadyAndLockDoesNotSkipLockedPredecessor(t *testing.T) {
 func TestFetchReadyAndLockSkipsAlreadyProcessedIDs(t *testing.T) {
 	r := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, testRoomA, "message"))
+	require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, testFirstPeriod, testRoomA, testDeliveryMessage("message")))
 
 	first, err := r.fetchReadyAndLock(ctx, testWorkerA, 1, config.NotificationDeliveryLease, nil, nil)
 	require.NoError(t, err)
@@ -151,7 +151,7 @@ func TestNotificationSnapshotUsesDueAndExpiredLockThresholds(t *testing.T) {
 	ctx := t.Context()
 
 	for _, period := range []string{"future", "due"} {
-		require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, period, testRoomA, "message"))
+		require.NoError(t, r.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, period, testRoomA, testDeliveryMessage("message")))
 	}
 
 	_, err := r.pool.Exec(ctx, `UPDATE notification_delivery_outbox

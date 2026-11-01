@@ -72,9 +72,12 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, alarmShortLinkOrigin, group)
 
 	require.NoError(t, err)
-	assert.Contains(t, message, alarmShortLinkOrigin+"/l/dQw4w9WgXcQ")
-	assert.Contains(t, message, alarmShortLinkOrigin+"/l/abcdefghijk")
-	assert.NotContains(t, message, domain.YouTubeWatchURL("dQw4w9WgXcQ"))
+
+	for _, text := range messageTexts(message) {
+		assert.Contains(t, text, alarmShortLinkOrigin+"/l/dQw4w9WgXcQ")
+		assert.Contains(t, text, alarmShortLinkOrigin+"/l/abcdefghijk")
+		assert.NotContains(t, text, domain.YouTubeWatchURL("dQw4w9WgXcQ"))
+	}
 }
 
 func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *testing.T) {

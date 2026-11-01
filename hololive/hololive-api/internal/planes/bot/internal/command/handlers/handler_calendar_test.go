@@ -27,9 +27,9 @@ func setupCalendarTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	}
 
 	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO notification_templates(template_key, channel_id, body)
-		VALUES ($1, NULL, $2)
-		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		INSERT INTO notification_templates(template_key, channel_id, format_variant, body)
+		SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
+		ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 	`, domain.TemplateKeyCmdCalendar, "📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}}건)"); err != nil {
 		t.Fatalf("seed calendar template: %v", err)

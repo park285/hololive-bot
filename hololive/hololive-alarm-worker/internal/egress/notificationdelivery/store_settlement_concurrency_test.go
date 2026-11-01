@@ -34,7 +34,7 @@ func TestOutboxSettlementCannotOverwriteConcurrentQuarantine(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			repo := testRepository(t)
 			ctx := t.Context()
-			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "settlement-period", "settlement-room", "message"))
+			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "settlement-period", "settlement-room", testDeliveryMessage("message")))
 
 			rows := fetchAndLockItems(ctx, t, repo)
 			require.Len(t, rows, 1)
@@ -85,7 +85,7 @@ func TestOutboxSettlementCannotOverwriteConcurrentQuarantine(t *testing.T) {
 func TestMarkSendingCannotUsePreviousOwnerAfterConcurrentReclaim(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reclaim-period", "reclaim-room", "message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "reclaim-period", "reclaim-room", testDeliveryMessage("message")))
 
 	rows := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, rows, 1)
@@ -120,7 +120,7 @@ func TestMarkSendingCannotUsePreviousOwnerAfterConcurrentReclaim(t *testing.T) {
 func TestStaleOwnerTransitionsLeaveReclaimedSendingRowUntouched(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "stale-owner", "stale-owner-room", "message"))
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "stale-owner", "stale-owner-room", testDeliveryMessage("message")))
 
 	stale := fetchAndLockItems(ctx, t, repo)[0]
 	request := &deliverypayload.Request{Body: "stale owner body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&stale)}

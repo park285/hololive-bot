@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -26,8 +27,12 @@ type immutableRequestSender struct {
 	routes []string
 }
 
-func (s *immutableRequestSender) PrepareMessageRequest(_ context.Context, _, message string) (string, string, error) {
-	return message, s.route, nil
+func (s *immutableRequestSender) PrepareMessageRequest(_ context.Context, _ string, message delivery.MessageVariants) (string, string, error) {
+	if s.route == dispatchoutbox.SendRouteRichText {
+		return message.RichText, s.route, nil
+	}
+
+	return message.Plain, s.route, nil
 }
 
 func (s *immutableRequestSender) SendPreparedMessage(ctx context.Context, room, body, route, id string) (string, error) {

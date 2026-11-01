@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -47,7 +48,7 @@ const (
 )
 
 type outboxEnqueuer interface {
-	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error
+	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message delivery.MessageVariants) error
 }
 
 type Scheduler struct {

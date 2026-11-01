@@ -29,6 +29,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 func TestProcessDigestForRoomBlocksRestrictedOutput(t *testing.T) {
@@ -63,8 +64,8 @@ func TestProcessDigestForRoomFailsClosedWithoutOutputGuard(t *testing.T) {
 
 type failingDigestFormatter struct{}
 
-func (failingDigestFormatter) FormatMemberNewsDigest(context.Context, *model.Digest) (string, error) {
-	return "", errors.New("template render failed")
+func (failingDigestFormatter) FormatMemberNewsDigest(context.Context, *model.Digest) (delivery.MessageVariants, error) {
+	return delivery.MessageVariants{}, errors.New("template render failed")
 }
 
 // digest 렌더 실패는 대체 문구 없이 그 방의 실패로 센다.
@@ -85,8 +86,8 @@ func TestProcessDigestForRoomCountsFormatFailureWithoutEnqueue(t *testing.T) {
 
 type fixedDigestFormatter struct{ message string }
 
-func (f fixedDigestFormatter) FormatMemberNewsDigest(context.Context, *model.Digest) (string, error) {
-	return f.message, nil
+func (f fixedDigestFormatter) FormatMemberNewsDigest(context.Context, *model.Digest) (delivery.MessageVariants, error) {
+	return delivery.MessageVariants{Plain: f.message, RichText: f.message}, nil
 }
 
 func TestProcessDigestForRoomRejectsInvalidRendering(t *testing.T) {

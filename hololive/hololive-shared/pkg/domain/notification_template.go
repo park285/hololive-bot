@@ -79,3 +79,18 @@ const (
 	TemplateKeyCmdMemberNewsNotSub       TemplateKey = "CMD_MEMBER_NEWS_NOT_SUB"
 	TemplateKeyCmdMemberNewsStatus       TemplateKey = "CMD_MEMBER_NEWS_STATUS"
 )
+
+// TemplateFormat은 같은 템플릿 키의 방 유형별 본문 변형입니다. 카카오 일반채팅은 RichText 서식을 표시하지 않으므로
+// 일반 텍스트로 보내는 방은 plain 본문을, 확인된 오픈채팅의 RichText 발송은 richtext 본문을 씁니다.
+// 값은 notification_templates.format_variant의 CHECK 어휘와 같습니다.
+type TemplateFormat string
+
+const (
+	TemplateFormatPlain    TemplateFormat = "plain"
+	TemplateFormatRichText TemplateFormat = "richtext"
+)
+
+// IsValid는 저장소가 받는 변형인지 확인합니다.
+func (f TemplateFormat) IsValid() bool {
+	return f == TemplateFormatPlain || f == TemplateFormatRichText
+}

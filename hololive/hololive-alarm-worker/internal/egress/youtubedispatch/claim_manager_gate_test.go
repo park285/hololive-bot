@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
@@ -590,8 +591,8 @@ func TestOutcomeUnknownInOneRoomDoesNotDeferOtherRoomOfSamePost(t *testing.T) {
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, state.DeliveryStatus)
 }
 
-func (s *claimGateTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *claimGateTestSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *claimGateTestSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {

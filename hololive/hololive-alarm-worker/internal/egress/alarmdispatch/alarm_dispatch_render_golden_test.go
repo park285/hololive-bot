@@ -123,8 +123,11 @@ func TestRenderAlarmDispatchNotificationIncludesCollabMembers(t *testing.T) {
 
 	got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, collabTestMembers{}, &notification)
 	require.NoError(t, err)
-	assert.Contains(t, got, "스이세이")
-	assert.Contains(t, got, "Gawr Gura")
+
+	for _, text := range messageTexts(got) {
+		assert.Contains(t, text, "스이세이")
+		assert.Contains(t, text, "Gawr Gura")
+	}
 }
 
 type collabTestMembers struct{}
@@ -192,7 +195,7 @@ func TestAlarmProducerPreservesLiteralFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	for _, message := range []string{single, grouped} {
+	for _, message := range append(messageTexts(single), messageTexts(grouped)...) {
 		visible := strings.ReplaceAll(kakaoformat.Render(message), kakaotext.ZeroWidthSpace, "")
 
 		for _, field := range []string{member, "||가격||", "**제목**", "_원문_", note} {

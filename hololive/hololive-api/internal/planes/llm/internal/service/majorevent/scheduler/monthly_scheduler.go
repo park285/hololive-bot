@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type MonthlyScheduler struct {
@@ -211,14 +212,14 @@ func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c mon
 	})
 }
 
-func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, events []domain.MajorEvent, monthKey string) (string, error) {
+func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, events []domain.MajorEvent, monthKey string) (delivery.MessageVariants, error) {
 	var llmSummary string
 
 	// 요약 실패는 이벤트 목록만 보내는 대체 경로로 바꾸지 않고 오류로 돌려준다. 이벤트는 미표시로 남는다.
 	if s.summarizer != nil {
 		summary, err := s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeMonthly, monthKey)
 		if err != nil {
-			return "", fmt.Errorf("summarize monthly events: %w", err)
+			return delivery.MessageVariants{}, fmt.Errorf("summarize monthly events: %w", err)
 		}
 
 		llmSummary = summary
@@ -226,7 +227,7 @@ func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, event
 
 	message, err := s.formatter.FormatMajorEventMonthlySummary(ctx, events, llmSummary)
 	if err != nil {
-		return "", fmt.Errorf("format monthly summary: %w", err)
+		return delivery.MessageVariants{}, fmt.Errorf("format monthly summary: %w", err)
 	}
 
 	return message, nil

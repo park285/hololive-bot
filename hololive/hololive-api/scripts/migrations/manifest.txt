@@ -211,3 +211,9 @@
 211 350_youtube_content_absence_slots_effective_index.sql
 212 351_drop_source_observation_replay.sql
 213 352_youtube_live_lifecycle_origin_drop_default.sql
+214 353_template_format_variant.sql
+215 354_template_default_format_index.sql
+216 355_template_channel_format_index.sql
+217 356_drop_template_default_index.sql
+218 357_drop_template_channel_index.sql
+219 358_template_format_variants.sql

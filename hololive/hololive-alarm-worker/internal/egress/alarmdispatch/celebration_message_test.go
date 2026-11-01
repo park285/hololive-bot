@@ -31,10 +31,13 @@ func TestRenderCelebrationMessageBirthday(t *testing.T) {
 		},
 	}
 
-	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
+	variants, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
-	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+
+	for _, msg := range messageTexts(variants) {
+		assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+		assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+	}
 }
 
 func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
@@ -50,11 +53,14 @@ func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
 		},
 	}
 
-	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
+	variants, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
-	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
-	assert.Contains(t, msg, "2")
+
+	for _, msg := range messageTexts(variants) {
+		assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+		assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+		assert.Contains(t, msg, "2")
+	}
 }
 
 func TestRenderCelebrationMessageAnniversary(t *testing.T) {
@@ -70,11 +76,14 @@ func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 		},
 	}
 
-	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
+	variants, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
-	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
-	assert.Contains(t, msg, "7")
+
+	for _, msg := range messageTexts(variants) {
+		assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+		assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+		assert.Contains(t, msg, "7")
+	}
 }
 
 func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
@@ -93,11 +102,13 @@ func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
 		},
 	}
 
-	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
+	variants, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
 
-	for _, field := range []string{envelope.Celebration.MemberName, envelope.Celebration.ScheduledStartKST, envelope.Celebration.StreamTitle, envelope.Celebration.StreamURL} {
-		assert.Contains(t, kakaoformat.Render(msg), field)
+	for _, msg := range messageTexts(variants) {
+		for _, field := range []string{envelope.Celebration.MemberName, envelope.Celebration.ScheduledStartKST, envelope.Celebration.StreamTitle, envelope.Celebration.StreamURL} {
+			assert.Contains(t, kakaoformat.Render(msg), field)
+		}
 	}
 }
 
@@ -114,10 +125,13 @@ func TestRenderCelebrationMessageBirthdayStreamWithoutOptionalFields(t *testing.
 		},
 	}
 
-	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
+	variants, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
-	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
-	assert.NotContains(t, msg, "https://")
+
+	for _, msg := range messageTexts(variants) {
+		assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+		assert.NotContains(t, msg, "https://")
+	}
 }
 
 func TestRenderCelebrationMessageNilPayload(t *testing.T) {
@@ -279,8 +293,11 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	}
 
-	msg, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", group)
+	variants, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", group)
 	require.NoError(t, err)
-	assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
-	assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+
+	for _, msg := range messageTexts(variants) {
+		assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
+		assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
+	}
 }

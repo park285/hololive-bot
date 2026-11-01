@@ -695,14 +695,16 @@ func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
 	notification.Stream.Link = &link
 	notification.Stream.Status = domain.StreamStatusUpcoming
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
+	variants, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
 
 	require.NoError(t, err)
 
-	visible := strings.ReplaceAll(kakaoformat.Render(got), kakaotext.ZeroWidthSpace, "")
-	assert.Contains(t, "\n"+visible+"\n", "\n"+streamURL+"\n")
-	assert.Contains(t, visible, "【ホロライブ ドリームス】")
-	assert.NotContains(t, visible, strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, ""))
+	for _, got := range messageTexts(variants) {
+		visible := strings.ReplaceAll(kakaoformat.Render(got), kakaotext.ZeroWidthSpace, "")
+		assert.Contains(t, "\n"+visible+"\n", "\n"+streamURL+"\n")
+		assert.Contains(t, visible, "【ホロライブ ドリームス】")
+		assert.NotContains(t, visible, strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, ""))
+	}
 }
 
 func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {

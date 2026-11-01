@@ -17,7 +17,7 @@ func TestMarkSendingChecksLeaseAtDatabaseExecutionTime(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W33", "db-clock-room", "message"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W33", "db-clock-room", testDeliveryMessage("message")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W34", "db-clock-sent-room", "message"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W34", "db-clock-sent-room", testDeliveryMessage("message")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -120,7 +120,7 @@ func TestMarkFailedSchedulesRetryFromDatabaseExecutionTime(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W35", "db-clock-retry-room", "message"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W35", "db-clock-retry-room", testDeliveryMessage("message")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -172,7 +172,7 @@ func TestFetchReadyAndLockRoundsPositiveSubMillisecondLeaseUp(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W36", "submillisecond-lease-room", "message"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W36", "submillisecond-lease-room", testDeliveryMessage("message")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -205,7 +205,7 @@ func TestStoreRejectsNonPositiveDurationsWithoutTouchingRows(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W37", "non-positive-room", "message"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W37", "non-positive-room", testDeliveryMessage("message")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
@@ -238,7 +238,7 @@ func TestQuarantineStaleSendingUsesDatabaseExecutionTime(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()
 
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W38", "db-clock-quarantine-room", "message"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W38", "db-clock-quarantine-room", testDeliveryMessage("message")); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 

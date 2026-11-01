@@ -30,6 +30,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type mockOutboxRepository struct {
@@ -41,7 +42,12 @@ type enqueueRecord struct {
 	Kind      domain.DeliveryOutboxKind
 	PeriodKey string
 	RoomID    string
-	Message   string
+	Message   delivery.MessageVariants
+}
+
+// testMessage는 형식 분기와 무관한 테스트에서 두 변형에 같은 본문을 쓴다.
+func testMessage(text string) delivery.MessageVariants {
+	return delivery.MessageVariants{Plain: text, RichText: text}
 }
 
 func newMockOutboxRepository() *mockOutboxRepository {
@@ -50,7 +56,7 @@ func newMockOutboxRepository() *mockOutboxRepository {
 	}
 }
 
-func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
+func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message delivery.MessageVariants) error {
 	if err, ok := m.enqueueErr[roomID]; ok {
 		return err
 	}
@@ -88,7 +94,7 @@ func TestEnqueueToRooms_AllSuccess(t *testing.T) {
 	repository := newMockOutboxRepository()
 	rooms := []roomTarget{{roomID: testRoomID1}, {roomID: testRoomID2}, {roomID: testRoomID3}}
 
-	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
+	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", testMessage("msg"), outputguard.NewGuard(), testLogger())
 
 	if result.Sent != 3 {
 		t.Errorf("expected 3 sent, got %d", result.Sent)
@@ -114,7 +120,7 @@ func TestEnqueueToRooms_PartialFailure(t *testing.T) {
 
 	rooms := []roomTarget{{roomID: testRoomID1}, {roomID: testRoomID2}, {roomID: testRoomID3}}
 
-	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
+	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", testMessage("msg"), outputguard.NewGuard(), testLogger())
 
 	if result.Sent != 2 {
 		t.Errorf("expected 2 sent, got %d", result.Sent)
@@ -137,7 +143,7 @@ func TestEnqueueToRooms_AllFail(t *testing.T) {
 
 	rooms := []roomTarget{{roomID: testRoomID1}, {roomID: testRoomID2}}
 
-	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
+	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", testMessage("msg"), outputguard.NewGuard(), testLogger())
 
 	if result.Failed != 2 {
 		t.Errorf("expected 2 failed, got %d", result.Failed)
@@ -152,7 +158,7 @@ func TestEnqueueToRooms_VerifiesKindAndPeriodKey(t *testing.T) {
 	repository := newMockOutboxRepository()
 	rooms := []roomTarget{{roomID: testRoomID1}}
 
-	enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", "test msg", outputguard.NewGuard(), testLogger())
+	enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", testMessage("test msg"), outputguard.NewGuard(), testLogger())
 
 	if len(repository.enqueuedItems) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(repository.enqueuedItems))
@@ -167,7 +173,7 @@ func TestEnqueueToRooms_VerifiesKindAndPeriodKey(t *testing.T) {
 		t.Errorf("expected periodKey 2026-02, got %s", item.PeriodKey)
 	}
 
-	if item.Message != "test msg" {
-		t.Errorf("expected message 'test msg', got %s", item.Message)
+	if item.Message != testMessage("test msg") {
+		t.Errorf("expected message 'test msg', got %+v", item.Message)
 	}
 }

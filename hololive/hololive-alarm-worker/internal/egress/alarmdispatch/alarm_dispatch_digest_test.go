@@ -62,8 +62,10 @@ func TestDeliveryDigestGroupingAndRenderingUsesContentIdentity(t *testing.T) {
 		message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, messageStrings, nil, groups[i])
 		require.NoError(t, err)
 		require.True(t, handled)
+		// 변형 도입 전 digest는 한 본문만 담으므로 두 경로가 같은 본문을 받는다.
+		require.Equal(t, message.Plain, message.RichText)
 
-		seen[message] = struct{}{}
+		seen[message.Plain] = struct{}{}
 	}
 
 	require.Contains(t, seen, "주간 멤버 뉴스 A")

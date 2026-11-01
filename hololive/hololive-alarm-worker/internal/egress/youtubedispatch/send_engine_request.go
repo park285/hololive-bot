@@ -11,6 +11,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 var (
@@ -46,7 +47,7 @@ func (d *SendEngine) freezeDeliveryRequest(ctx context.Context, attempt *deliver
 }
 
 func (d *SendEngine) prepareFrozenRequest(ctx context.Context, request deliverySendRequest) (store.FrozenRequest, error) {
-	body, route, err := d.sender.PrepareMessageRequest(ctx, request.roomID, request.message)
+	body, route, err := d.sender.PrepareMessageRequest(ctx, request.roomID, request.variants)
 	if err != nil {
 		return store.FrozenRequest{}, fmt.Errorf("prepare frozen request: %w", err)
 	}
@@ -144,7 +145,7 @@ func (d *SendEngine) frozenDeliveryGroups(ctx context.Context, rows []domain.You
 	return groups, remaining, nil
 }
 
-func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]string, formatFailures map[int64]bool, result *deliveryDispatchResult) {
+func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]messagedelivery.MessageVariants, formatFailures map[int64]bool, result *deliveryDispatchResult) {
 	if len(group.rows) != len(group.frozen.MemberIDs) {
 		d.deferIncompleteFrozenGroup(ctx, group.rows)
 
@@ -223,7 +224,7 @@ func (d *SendEngine) deferIncompleteFrozenGroup(ctx context.Context, rows []doma
 	}
 }
 
-func (d *SendEngine) prepareFallbackRequests(ctx context.Context, attempt *deliveryAttempt, messages map[int64]string, failures map[int64]bool) ([]store.FrozenRequest, error) {
+func (d *SendEngine) prepareFallbackRequests(ctx context.Context, attempt *deliveryAttempt, messages map[int64]messagedelivery.MessageVariants, failures map[int64]bool) ([]store.FrozenRequest, error) {
 	requests := make([]store.FrozenRequest, 0, len(attempt.members))
 	for i := range attempt.members {
 		member := &attempt.members[i]

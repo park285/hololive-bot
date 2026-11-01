@@ -7,19 +7,22 @@ import (
 
 	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// PrepareMessageRequest는 설정과 방 유형을 외부 발송 전 최종 본문·경로로 고정한다.
-func (s *IrisMessageSender) PrepareMessageRequest(ctx context.Context, roomID, message string) (body, route string, err error) {
+// PrepareMessageRequest는 설정과 방 유형을 외부 발송 전 최종 본문·경로로 고정한다. 판정은 여기서 한 번만 하며
+// 고른 경로의 변형만 쓴다.
+func (s *IrisMessageSender) PrepareMessageRequest(ctx context.Context, roomID string, message delivery.MessageVariants) (body, route string, err error) {
 	if s == nil || s.client == nil {
 		return "", "", errors.New("iris message sender: client is nil")
 	}
 
 	if s.useMarkdown(ctx, roomID) {
-		return message, "richtext", nil
+		return message.RichText, "richtext", nil
 	}
 
-	return kakaoformat.Render(message), "text", nil
+	return kakaoformat.Render(message.Plain), "text", nil
 }
 
 // SendPreparedMessage는 저장된 요청을 재해석하지 않아 설정 변경 뒤에도 같은 ID의 payload를 보존한다. 모든 경로는

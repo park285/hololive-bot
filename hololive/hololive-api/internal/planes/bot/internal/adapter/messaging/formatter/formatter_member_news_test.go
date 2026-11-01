@@ -103,9 +103,9 @@ func setupMemberNewsRenderer(t *testing.T) *serviceTemplate.Renderer {
 {{range $index, $item := .TopItems}}{{if gt $index 0}}\n{{end}}{{$item.Member}} {{$item.Category}} {{$item.Title}} {{$item.SourceURL}}{{end}}
 {{if .MoreSummary}}{{.MoreSummary}}{{end}}`
 	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO notification_templates(template_key, channel_id, body)
-		VALUES ($1, NULL, $2)
-		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		INSERT INTO notification_templates(template_key, channel_id, format_variant, body)
+		SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
+		ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 	`, domain.TemplateKeyCmdMemberNewsDigest, body); err != nil {
 		t.Fatalf("failed to insert template: %v", err)

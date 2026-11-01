@@ -355,7 +355,7 @@ func TestValidateOutboxPayload(t *testing.T) {
 func TestBuildDeliverySendRequest(t *testing.T) {
 	t.Parallel()
 
-	req, err := buildDeliverySendRequest(testRoom1, "message", []domain.YouTubeNotificationOutbox{
+	req, err := buildDeliverySendRequest(testRoom1, testMessage("message"), []domain.YouTubeNotificationOutbox{
 		{Kind: domain.OutboxKindNewShort, ContentID: testShortOne},
 		{Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne},
 	})
@@ -383,7 +383,7 @@ func TestBuildDeliverySendRequest(t *testing.T) {
 func TestBuildDeliverySendRequestRejectsEmptyDedupeKey(t *testing.T) {
 	t.Parallel()
 
-	_, err := buildDeliverySendRequest(testRoom1, "message", []domain.YouTubeNotificationOutbox{
+	_, err := buildDeliverySendRequest(testRoom1, testMessage("message"), []domain.YouTubeNotificationOutbox{
 		{Kind: domain.OutboxKindNewShort, ContentID: "   "},
 	})
 	if err == nil {
@@ -1388,9 +1388,9 @@ func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body strin
 	}
 
 	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO notification_templates(template_key, channel_id, body)
-		VALUES ($1, NULL, $2)
-		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		INSERT INTO notification_templates(template_key, channel_id, format_variant, body)
+		SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
+		ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 	`, key, body); err != nil {
 		t.Fatalf("seed grouped template: %v", err)
@@ -1416,9 +1416,9 @@ func newShortsGroupAndSingleTemplateRenderer(t *testing.T) *template.Renderer {
 	}
 	for _, item := range templates {
 		if _, err := pool.Exec(t.Context(), `
-			INSERT INTO notification_templates(template_key, channel_id, body)
-			VALUES ($1, NULL, $2)
-			ON CONFLICT (template_key) WHERE channel_id IS NULL
+			INSERT INTO notification_templates(template_key, channel_id, format_variant, body)
+			SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
+			ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 			DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 		`, item.key, item.body); err != nil {
 			t.Fatalf("seed template %s: %v", item.key, err)
@@ -1790,7 +1790,7 @@ func TestDispatchClaimedDeliveryRow_PreSendCancelBucketsRetry(t *testing.T) {
 	cancel()
 
 	attempt := newDeliveryAttempt([]claimedDelivery{{row: row, outbox: outbox}})
-	engine.dispatchClaimedDeliveryRow(ctx, &attempt, map[int64]string{1: testMessageHello}, map[int64]bool{}, &result)
+	engine.dispatchClaimedDeliveryRow(ctx, &attempt, map[int64]messagedelivery.MessageVariants{1: testMessage(testMessageHello)}, map[int64]bool{}, &result)
 
 	if got := sender.calls.Load(); got != 0 {
 		t.Fatalf("sender calls = %d, want 0 (request must not leave the client)", got)
@@ -1827,10 +1827,10 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 		{row: validRows[0], outbox: validOutboxes[0]},
 		{row: validRows[1], outbox: validOutboxes[1]},
 	})
-	formatted := map[int64]string{1: "쇼츠1", 2: "쇼츠2"}
+	formatted := map[int64]messagedelivery.MessageVariants{1: testMessage("쇼츠1"), 2: testMessage("쇼츠2")}
 	result := newDeliveryDispatchResult(len(validRows))
 
-	engine.dispatchGroupedClaimedRows(t.Context(), group, &attempt, "쇼츠1\n쇼츠2", formatted, map[int64]bool{}, &result)
+	engine.dispatchGroupedClaimedRows(t.Context(), group, &attempt, testMessage("쇼츠1\n쇼츠2"), formatted, map[int64]bool{}, &result)
 
 	if got := sender.calls.Load(); got != 1 {
 		t.Fatalf("sender calls = %d, want 1 grouped attempt without per-room fallback", got)
@@ -1845,24 +1845,24 @@ func groupedSendFallbackCount(result string) float64 {
 	return testutil.ToFloat64(outboxGroupedSendFallbackTotal.WithLabelValues(result))
 }
 
-func (s *groupedPermanentFailureSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *groupedPermanentFailureSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *groupedPermanentFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	return testAdmission(id, s.SendMessage(ctx, room, body))
 }
 
-func (s *blockingSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *blockingSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *blockingSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	return testAdmission(id, s.SendMessage(ctx, room, body))
 }
 
-func (s *parentDeadlineBeforeReturnSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
-	return body, testPreparedTextRoute, nil
+func (s *parentDeadlineBeforeReturnSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
 }
 
 func (s *parentDeadlineBeforeReturnSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
