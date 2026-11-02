@@ -55,7 +55,13 @@ func TestAdmittedBudgetBoundsProviderWaitAfterConfigurationChanges(t *testing.T)
 		return collection.CollectResult{}, nil
 	}
 
-	executor, spec := newExecutorFixture(t, runner, &fatal)
+	// 갱신 시각은 이 시도 뒤에 둔다. 부하로 50ms 갱신 기한을 넘기면 provider 대기가 예산을 채우기 전에 시도가 끝난다.
+	leaseConfig := runtimeLeaseConfig()
+
+	leaseConfig.LeaseTTL = 30 * time.Second
+	leaseConfig.RenewInterval = 10 * time.Second
+
+	executor, spec := newExecutorFixtureWithLease(t, runner, &fatal, &leaseConfig)
 	job := admitShortTestJob(t, executor, spec)
 
 	executor.collector.ProviderAdmissionTimeout = 10 * time.Second
