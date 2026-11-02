@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,6 +17,7 @@ import (
 
 func NewCacheService(ctx context.Context, config Config, logger *slog.Logger) (*Service, error) {
 	addr, connMethod := cacheAddress(config)
+
 	opts, err := cacheClientOptions(config, addr)
 	if err != nil {
 		return nil, NewCacheError("config", "", err)
@@ -49,6 +51,7 @@ func cacheAddress(config Config) (string, string) {
 	if config.SentinelMasterSet != "" {
 		return config.SentinelMasterSet, "sentinel"
 	}
+
 	if config.SocketPath != "" {
 		return config.SocketPath, "unix"
 	}
@@ -56,6 +59,7 @@ func cacheAddress(config Config) (string, string) {
 	if config.TLSCAFile != "" {
 		return net.JoinHostPort(config.Host, strconv.Itoa(config.Port)), "tls"
 	}
+
 	return net.JoinHostPort(config.Host, strconv.Itoa(config.Port)), "tcp"
 }
 
@@ -76,10 +80,12 @@ func cacheClientOptions(config Config, addr string) (valkey.ClientOption, error)
 		if err := validateCacheSentinel(config); err != nil {
 			return valkey.ClientOption{}, err
 		}
+
 		transport, err := cacheTLSConfig(config.TLSCAFile)
 		if err != nil {
 			return valkey.ClientOption{}, err
 		}
+
 		opts.InitAddress = config.SentinelAddrs
 		opts.TLSConfig = transport
 		opts.Dialer = net.Dialer{Timeout: constants.ValkeyTimeout.DialTimeout}
@@ -92,16 +98,20 @@ func cacheClientOptions(config Config, addr string) (valkey.ClientOption, error)
 			// 알림을 놓친 전환도 회복하되 직접 주소로 돌아가는 대체 경로는 만들지 않는다.
 			TopologyRefreshInterval: 5 * time.Second,
 		}
+
 		return opts, nil
 	}
+
 	if config.TLSCAFile != "" {
 		if config.SocketPath != "" {
-			return valkey.ClientOption{}, fmt.Errorf("TLS and Unix socket cache endpoints are mutually exclusive")
+			return valkey.ClientOption{}, errors.New("TLS and Unix socket cache endpoints are mutually exclusive")
 		}
+
 		transport, err := cacheTLSConfig(config.TLSCAFile)
 		if err != nil {
 			return valkey.ClientOption{}, err
 		}
+
 		opts.TLSConfig = transport
 	}
 

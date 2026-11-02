@@ -35,16 +35,20 @@ import (
 
 func LoadValkeyConfig() (ValkeyConfig, error) {
 	var env envload.StrictEnv
+
 	password, err := sharedenv.StringOrSecretFile("CACHE_PASSWORD")
 	if err != nil {
 		return ValkeyConfig{}, fmt.Errorf("load CACHE_PASSWORD: %w", err)
 	}
+
 	sentinelPassword, err := sharedenv.StringOrSecretFile("CACHE_SENTINEL_PASSWORD")
 	if err != nil {
 		return ValkeyConfig{}, fmt.Errorf("load CACHE_SENTINEL_PASSWORD: %w", err)
 	}
+
 	masterSet := sharedenv.String("CACHE_SENTINEL_MASTER_SET", "")
 	defaultHost := "localhost"
+
 	if masterSet != "" {
 		defaultHost = ""
 	}
