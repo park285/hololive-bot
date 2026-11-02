@@ -217,3 +217,4 @@
 217 356_drop_template_default_index.sql
 218 357_drop_template_channel_index.sql
 219 358_template_format_variants.sql
+220 359_richtext_collapsed_summary.sql
