@@ -176,6 +176,41 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 
+# 중앙 HA와 kapu의 독립 보조 캐시는 서로 다른 명시적 배포 경로를 사용한다.
+valkey_ha_value="0"
+if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_VALKEY_HA_ENABLED"; then
+    valkey_ha_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_VALKEY_HA_ENABLED")"
+fi
+case "${valkey_ha_value}" in
+    0) ;;
+    1)
+        valkey_overlays=("deploy/compose/docker-compose.valkey-ha.yml")
+        if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "VALKEY_SENTINEL_ADDRS" &&
+           [[ -n "$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "VALKEY_SENTINEL_ADDRS")" ]]; then
+            valkey_overlays+=("deploy/compose/docker-compose.valkey-sentinel.yml")
+        fi
+        for valkey_overlay in "${valkey_overlays[@]}"; do
+            valkey_overlay_present=false
+            for file in "${compose_files[@]}"; do
+                if [[ "${file##*/}" == "${valkey_overlay##*/}" ]]; then
+                    valkey_overlay_present=true
+                    break
+                fi
+            done
+            if [[ "${valkey_overlay_present}" == false ]]; then
+                compose_files+=("${valkey_overlay}")
+                if (( compose_command_index >= 0 )); then
+                    compose_args=("${compose_args[@]:0:compose_command_index}" -f "${valkey_overlay}" "${compose_args[@]:compose_command_index}")
+                    compose_command_index=$((compose_command_index + 2))
+                else
+                    compose_args+=(-f "${valkey_overlay}")
+                fi
+            fi
+        done
+        ;;
+    *) echo "[ERROR] HOLOLIVE_VALKEY_HA_ENABLED must be 0 or 1" >&2; exit 1 ;;
+esac
+
 # 릴리스 pair overlay는 재부팅에도 유지한다. 배포 사전 검사는 명시한 후보 overlay만 사용한다.
 profile_overlays=()
 case "${WORKER_PROFILE_OVERRIDE_FILE:-}" in
@@ -262,6 +297,7 @@ case "${x_spaces_value}" in
         ;;
     *) echo "[ERROR] HOLOLIVE_X_SPACES_ENABLED must be 0 or 1" >&2; exit 1 ;;
 esac
+
 
 collector_disable_value="${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}"
 if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR"; then

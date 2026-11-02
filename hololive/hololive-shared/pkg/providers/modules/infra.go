@@ -32,11 +32,17 @@ type InfraOptions struct {
 
 func BuildInfraModule(ctx context.Context, options InfraOptions, logger *slog.Logger) (_ *InfraModule, retErr error) {
 	cacheService, err := cache.NewCacheService(ctx, cache.Config{
-		Host:       options.Valkey.Host,
-		Port:       options.Valkey.Port,
-		Password:   options.Valkey.Password,
-		DB:         options.Valkey.DB,
-		SocketPath: options.Valkey.SocketPath,
+		Host:              options.Valkey.Host,
+		Port:              options.Valkey.Port,
+		Username:          options.Valkey.Username,
+		Password:          options.Valkey.Password,
+		DB:                options.Valkey.DB,
+		SocketPath:        options.Valkey.SocketPath,
+		SentinelMasterSet: options.Valkey.SentinelMasterSet,
+		SentinelAddrs:     options.Valkey.SentinelAddrs,
+		SentinelUsername:  options.Valkey.SentinelUsername,
+		SentinelPassword:  options.Valkey.SentinelPassword,
+		TLSCAFile:         options.Valkey.TLSCAFile,
 	}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build infra module: create cache service: %w", err)

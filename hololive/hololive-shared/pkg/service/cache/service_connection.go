@@ -16,7 +16,10 @@ import (
 
 func NewCacheService(ctx context.Context, config Config, logger *slog.Logger) (*Service, error) {
 	addr, connMethod := cacheAddress(config)
-	opts := cacheClientOptions(config, addr)
+	opts, err := cacheClientOptions(config, addr)
+	if err != nil {
+		return nil, NewCacheError("config", "", err)
+	}
 
 	client, err := valkey.NewClient(opts)
 	if err != nil {
@@ -43,16 +46,23 @@ func NewCacheService(ctx context.Context, config Config, logger *slog.Logger) (*
 }
 
 func cacheAddress(config Config) (string, string) {
+	if config.SentinelMasterSet != "" {
+		return config.SentinelMasterSet, "sentinel"
+	}
 	if config.SocketPath != "" {
 		return config.SocketPath, "unix"
 	}
 
+	if config.TLSCAFile != "" {
+		return net.JoinHostPort(config.Host, strconv.Itoa(config.Port)), "tls"
+	}
 	return net.JoinHostPort(config.Host, strconv.Itoa(config.Port)), "tcp"
 }
 
-func cacheClientOptions(config Config, addr string) valkey.ClientOption {
+func cacheClientOptions(config Config, addr string) (valkey.ClientOption, error) {
 	opts := valkey.ClientOption{
 		InitAddress:       []string{addr},
+		Username:          config.Username,
 		Password:          config.Password,
 		SelectDB:          config.DB,
 		ConnWriteTimeout:  constants.ValkeyTimeout.ConnWriteTimeout,
@@ -60,6 +70,39 @@ func cacheClientOptions(config Config, addr string) valkey.ClientOption {
 		PipelineMultiplex: constants.ValkeyConfig.PipelineMultiplex,
 		DisableCache:      config.DisableCache,
 		ForceSingleClient: config.ForceSingleClient,
+	}
+	if config.SentinelMasterSet != "" || len(config.SentinelAddrs) != 0 ||
+		config.SentinelUsername != "" || config.SentinelPassword != "" {
+		if err := validateCacheSentinel(config); err != nil {
+			return valkey.ClientOption{}, err
+		}
+		transport, err := cacheTLSConfig(config.TLSCAFile)
+		if err != nil {
+			return valkey.ClientOption{}, err
+		}
+		opts.InitAddress = config.SentinelAddrs
+		opts.TLSConfig = transport
+		opts.Dialer = net.Dialer{Timeout: constants.ValkeyTimeout.DialTimeout}
+		opts.Sentinel = valkey.SentinelOption{
+			MasterSet: config.SentinelMasterSet,
+			Username:  config.SentinelUsername,
+			Password:  config.SentinelPassword,
+			TLSConfig: transport,
+			Dialer:    opts.Dialer,
+			// 알림을 놓친 전환도 회복하되 직접 주소로 돌아가는 대체 경로는 만들지 않는다.
+			TopologyRefreshInterval: 5 * time.Second,
+		}
+		return opts, nil
+	}
+	if config.TLSCAFile != "" {
+		if config.SocketPath != "" {
+			return valkey.ClientOption{}, fmt.Errorf("TLS and Unix socket cache endpoints are mutually exclusive")
+		}
+		transport, err := cacheTLSConfig(config.TLSCAFile)
+		if err != nil {
+			return valkey.ClientOption{}, err
+		}
+		opts.TLSConfig = transport
 	}
 
 	if config.SocketPath != "" {
@@ -76,7 +119,7 @@ func cacheClientOptions(config Config, addr string) valkey.ClientOption {
 		opts.Dialer = net.Dialer{Timeout: constants.ValkeyTimeout.DialTimeout}
 	}
 
-	return opts
+	return opts, nil
 }
 
 // Close는 멱등이며 valkey client 닫기는 오류를 돌려주지 않으므로 항상 nil을 반환한다.
