@@ -107,7 +107,11 @@ def check_no_cache(services, name, label):
         else:
             source = str(volume)
             target = str(volume)
-        if source == "valkey-cache-socket" or target == "/var/run/valkey" or "valkey" in source or "valkey" in target:
+        # checkout 상위 경로의 이름이 아니라 실제 소켓·비밀 파일 접근 경계를 검사한다.
+        if (source == "valkey-cache-socket"
+                or source == "/etc/stack-secrets/valkey"
+                or source.startswith("/etc/stack-secrets/valkey/")
+                or target in ("/var/run/valkey", "/run/valkey", "/run/valkey-certs")):
             raise SystemExit(f"[FAIL] {label}: Valkey mount {source}->{target}")
     print(f"[PASS] {label}")
 def check_no_scraper_poll(services, name, label):
