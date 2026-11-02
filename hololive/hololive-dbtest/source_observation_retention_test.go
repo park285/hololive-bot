@@ -2,6 +2,7 @@ package dbtest
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -366,4 +367,64 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 	if applications != 0 {
 		t.Fatalf("applications remain after parents expire: %d", applications)
 	}
+}
+
+// 오래 이어지는 UPCOMING 세션(프리챗 등)은 스냅샷마다 application이 쌓인다. 세션별 최신 근거만 보호해야
+// 보관 기간이 지난 과거 스냅샷이 세션 종료까지 무기한 남지 않는다.
+func TestSourceRetentionProtectsOnlyLatestActiveSessionApplication(t *testing.T) {
+	t.Parallel()
+
+	pool := NewPool(t)
+	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	cutoff := base.Add(24 * time.Hour)
+	older := insertRetentionObservation(t, pool, communityPageKind, base, "session-older")
+	middle := insertRetentionObservation(t, pool, communityPageKind, base.Add(time.Hour), "session-middle")
+	latest := insertRetentionObservation(t, pool, communityPageKind, base.Add(2*time.Hour), "session-latest")
+
+	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin)
+		VALUES ('ret-long-upcoming','UC_retention','UPCOMING','observed');
+		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
+		SELECT id,source_observation_entity_kind_id('youtube_live_session'),'ret-long-upcoming',
+			source_observation_decision_id('APPLIED')
+		FROM source_observations WHERE subject_key LIKE 'session-%'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{cutoff}, 1000)
+	slices.Sort(got)
+
+	if want := []int64{older, middle}; !slices.Equal(got, want) {
+		t.Fatalf("active session retention deleted %v, want older evidence %v", got, want)
+	}
+
+	assertRetentionObservationsExist(t, pool, []int64{latest})
+
+	// 같은 video_id라도 다른 kind의 더 새 application은 세션 근거를 대체하지 않는다.
+	otherKind := insertRetentionObservation(t, pool, communityPageKind, cutoff.Add(30*time.Minute), "session-other-kind")
+	if _, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications
+		(observation_id,entity_kind_id,entity_key,decision_id)
+		VALUES ($1,source_observation_entity_kind_id('youtube_video_availability'),'ret-long-upcoming',
+			source_observation_decision_id('APPLIED'))`, otherKind); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{cutoff}, 1000); len(got) != 0 {
+		t.Fatalf("other-kind application released session evidence: deleted %v", got)
+	}
+
+	// 보관 기간 안의 새 근거가 들어오면 이전 최신 근거도 보호에서 풀린다.
+	recent := insertRetentionObservation(t, pool, communityPageKind, cutoff.Add(time.Hour), "session-recent")
+	if _, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications
+		(observation_id,entity_kind_id,entity_key,decision_id)
+		VALUES ($1,source_observation_entity_kind_id('youtube_live_session'),'ret-long-upcoming',
+			source_observation_decision_id('APPLIED'))`, recent); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{cutoff}, 1000); !slices.Equal(got, []int64{latest}) {
+		t.Fatalf("superseded session evidence retention deleted %v, want %d", got, latest)
+	}
+
+	assertRetentionObservationsExist(t, pool, []int64{recent})
 }

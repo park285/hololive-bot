@@ -202,7 +202,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - claim SQL은 due 행 중 replay epoch 이전 자동 claim과 시도 소진 행을 다른 선점 후보와 함께 잠그기만 합니다. DEAD_LETTER 여부와 사유(`replay_epoch_expired`가 `attempts_exhausted`보다 우선)는 Go 재시도 정책이 정하고, 같은 claim 트랜잭션의 집합 UPDATE 한 번으로 claim 트랜잭션 시각·NULL 상세와 함께 기록합니다. claim 시점 DEAD_LETTER는 지표를 남기지 않습니다.
 - application은 entity별 멱등·CANONICALIZED 결과를 한 INSERT로 저장하며 원본의 `ON DELETE CASCADE` 수명을 따릅니다. 고아 유예·별도 감사 retention은 없습니다. provider/kind/subject/hash/effective clock은 원본에서 읽고 감사 행에 중복 저장하지 않습니다.
 - 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
-- 원본 retention은 큐·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.
+- 원본 retention은 큐·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션별 최신 application 근거와 pending-end 근거를 보호합니다.
 - migration 315의 원본 정리는 보호 판정 전에 최대 1,000개 ID를 materialize합니다. kind별 인덱스 후보 반환은 최대 1,000개(정책 최대 16개), 최초 보호 검사는 합계 최대 1,000개이며 삭제·최종 보호 재검사는 `BatchSize`(최대 1,000) 이내입니다. 이 상한은 물리 I/O·보호 함수 내부의 자식 조회량·FK 쓰기량·실행 시간의 상한이 아닙니다.
 - `(received_at,id)` 진행 커서와 고정된 순회 상한을 DB singleton에 보존합니다. 새 유입이 계속되어도 순회 끝에서 앞쪽을 재방문하고, 잠긴 후보는 건너뛴 뒤 다음 순회에서 다시 봅니다. 모든 kind가 같은 시간/ID 순서를 공유하며 보호 해제·늦게 삽입된 앞쪽 원본도 재방문합니다. 커서와 원본/application 삭제는 같은 transaction으로 확정·롤백하므로 재시작 때 처음부터 훑지 않습니다.
 - DB 함수가 exclusive live 전역 잠금 → 커서 → 원본 잠금을 소유합니다. 전부 보호된 창도 성공한 tick이며 payload·absence·checkpoint 정리는 계속 실행됩니다. 앞 단계의 별도 commit 수량과 `BacklogKnown=false`의 미확정 의미는 유지합니다. runtime·scraper는 커서 표에 직접 접근하지 않습니다.

@@ -71,18 +71,21 @@ var IrisConnection = struct {
 }
 
 var DatabaseConfig = struct {
-	MaxOpenConns    int
-	MaxIdleConns    int
+	MaxOpenConns int
+	MaxIdleConns int
+	// 수명 5분은 풀마다 연결을 몇 분 간격으로 다시 맺게 해, 2026-10-26~11-02 운영에서 9개 풀이 주당 약 4.2만 회
+	// 재연결하고 그 대부분이 빈 풀 acquire 경로에서 일어났다(Osaka collector는 TLS 왕복으로 주당 약 1,500초 대기).
+	// 근거가 기록되지 않은 초기값이라 스택의 다른 Go 서비스(TwentyQ·ChatBotGo)와 같은 1시간으로 둔다.
 	ConnMaxLifetime time.Duration
 	// ConnMaxLifetimeJitter·ConnMaxIdleTime은 shared-go v2.18.0이 숨은 기본값을 없애며 호출자 명시로 옮긴 값이다.
-	// 이전 실효값(수명/5 지터, 유휴 30분)을 그대로 둔다.
+	// 지터는 수명/5 비율을 유지해 동시 만료를 분산하고, 유휴 30분은 그대로 둔다.
 	ConnMaxLifetimeJitter time.Duration
 	ConnMaxIdleTime       time.Duration
 }{
 	MaxOpenConns:          8,
 	MaxIdleConns:          2,
-	ConnMaxLifetime:       5 * time.Minute,
-	ConnMaxLifetimeJitter: time.Minute,
+	ConnMaxLifetime:       time.Hour,
+	ConnMaxLifetimeJitter: 12 * time.Minute,
 	ConnMaxIdleTime:       30 * time.Minute,
 }
 

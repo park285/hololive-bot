@@ -1091,7 +1091,7 @@ CREATE UNIQUE INDEX uq_source_observation_application_active
 
 초기 설계의 `source_observation_replay_requests`와 queue 재활성화 경로는 2026-10-28 삭제했다(migration 351). terminal queue 행을 다시 `PENDING`으로 돌리는 현행 경로는 없다.
 
-application 수명은 원본과 동일하며 고아 유예·별도 retention이 없다. 원본의 provider/kind/subject/hash/clock은 JOIN으로 읽는다. 원본 retention은 큐·종료 근거·CURRENT/STAGING generation·ACTIVE lease·LIVE/UPCOMING 세션의 application/pending-end 근거를 보호한다. 원본과 live/content absence slot의 scope/evidence hash는 32바이트 bytea이며 공개 JSON/Go 표현은 기존 64자 소문자 hex를 유지한다. 다른 audit/checkpoint hash 열의 표현은 바꾸지 않는다.
+application 수명은 원본과 동일하며 고아 유예·별도 retention이 없다. 원본의 provider/kind/subject/hash/clock은 JOIN으로 읽는다. 원본 retention은 큐·종료 근거·CURRENT/STAGING generation·ACTIVE lease·LIVE/UPCOMING 세션별 최신 application 근거·pending-end 근거를 보호한다(2026-11-02 개정, migration 361: 같은 세션의 더 새 application이 있는 과거 원본은 보호하지 않는다). 원본과 live/content absence slot의 scope/evidence hash는 32바이트 bytea이며 공개 JSON/Go 표현은 기존 64자 소문자 hex를 유지한다. 다른 audit/checkpoint hash 열의 표현은 바꾸지 않는다.
 
 
 ### 9.6 Reconciliation conflict와 live head
@@ -1432,7 +1432,7 @@ type RetentionConfig struct {
 - terminal collision audit는 identity와 hash를 자체 보존하므로 evidence 삭제 뒤에도 조사할 수 있다. application은 원본과 동시에 CASCADE 삭제되며 고아 유예가 없다.
 - FK가 `SET NULL`인 audit row는 identity/hash를 자체 보존한 뒤 evidence 삭제를 허용한다. FK가 `RESTRICT`인 row가 남아 있으면 audit retention을 먼저 적용한다.
 - queue terminal row를 먼저 정리하고 queue 행이 없는 evidence만 정리한다.
-- CURRENT/STAGING projection generation과 ACTIVE collection lease가 소유한 원본, LIVE/UPCOMING 세션에 적용된 application·pending-end 원본은 보호한다.
+- CURRENT/STAGING projection generation과 ACTIVE collection lease가 소유한 원본, LIVE/UPCOMING 세션의 최신 application 원본(세션별 observation id가 가장 큰 것)과 pending-end 원본은 보호한다. 몇 주씩 UPCOMING으로 남는 세션이 스냅샷마다 받은 과거 application까지 보호하면 보관 기간이 무력해지므로 최신 근거만 남긴다(2026-11-02, migration 361).
 - deletion count, duration, error와 backlog age를 metric으로 노출한다.
 
 ### 12.3 Replay(삭제)

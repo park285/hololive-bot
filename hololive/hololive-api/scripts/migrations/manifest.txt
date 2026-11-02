@@ -218,3 +218,5 @@
 218 357_drop_template_channel_index.sql
 219 358_template_format_variants.sql
 220 359_richtext_collapsed_summary.sql
+221 360_source_application_entity_latest_index.sql
+222 361_source_retention_latest_session_evidence.sql
