@@ -18,13 +18,14 @@ const MaxRetentionBatchSize = 1000
 const sourceRetentionMaxWindows = 8
 
 type RetentionConfig struct {
-	QueueProcessedAge    time.Duration
-	QueueDLQAge          time.Duration
-	EvidenceAgeByKind    map[contract.ObservationKind]time.Duration
-	CollisionAge         time.Duration
-	LiveAbsenceSlotAge   time.Duration
-	CheckpointHistoryAge time.Duration
-	BatchSize            int
+	QueueProcessedAge     time.Duration
+	QueueDLQAge           time.Duration
+	EvidenceAgeByKind     map[contract.ObservationKind]time.Duration
+	CollisionAge          time.Duration
+	LiveAbsenceSlotAge    time.Duration
+	ContentAbsenceSlotAge time.Duration
+	CheckpointHistoryAge  time.Duration
+	BatchSize             int
 }
 
 // RetentionResult는 앞 단계의 확정된 삭제량과 실패 대상을 함께 반환한다.
@@ -60,7 +61,7 @@ func (c RetentionConfig) Validate() error {
 
 func (c RetentionConfig) hasNegativeAge() bool {
 	return c.QueueProcessedAge < 0 || c.QueueDLQAge < 0 || c.CollisionAge < 0 ||
-		c.LiveAbsenceSlotAge < 0 || c.CheckpointHistoryAge < 0
+		c.LiveAbsenceSlotAge < 0 || c.ContentAbsenceSlotAge < 0 || c.CheckpointHistoryAge < 0
 }
 
 func validateEvidenceAges(ages map[contract.ObservationKind]time.Duration) error {
@@ -137,7 +138,7 @@ func (r *Repository) retentionSteps(
 	cfg RetentionConfig,
 	now time.Time,
 ) []retentionStep {
-	return []retentionStep{
+	return append([]retentionStep{
 		{
 			table: "source_observation_queue",
 			age:   minPositiveDuration(cfg.QueueProcessedAge, cfg.QueueDLQAge),
@@ -179,6 +180,47 @@ func (r *Repository) retentionSteps(
 					cfg.BatchSize,
 				))
 			},
+		},
+	}, r.auditRetentionSteps(ctx, cfg, now)...)
+}
+
+// auditRetentionSteps는 원본 정리 뒤에 도는 감사 이력·출처 사전 정리 단계다. 출처 사전을 마지막에 두어
+// 같은 tick에서 원본 삭제로 참조가 사라진 사전 행까지 정리한다.
+func (r *Repository) auditRetentionSteps(
+	ctx context.Context,
+	cfg RetentionConfig,
+	now time.Time,
+) []retentionStep {
+	// profile evidence·photo variant는 head가 현재 값을 갖는 감사 이력이라 원본 kind와 같은 기간만 남긴다.
+	profileAge := cfg.EvidenceAgeByKind[contract.KindChannelProfile]
+	photoAge := cfg.EvidenceAgeByKind[contract.KindChannelPhoto]
+
+	return []retentionStep{
+		{
+			table: "youtube_content_absence_slots",
+			age:   cfg.ContentAbsenceSlotAge,
+			run: func() (RetentionResult, error) {
+				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_content_absence_slots.sql", cfg.ContentAbsenceSlotAge, now, cfg.BatchSize))
+			},
+		},
+		{
+			table: "youtube_channel_profile_evidence",
+			age:   profileAge,
+			run: func() (RetentionResult, error) {
+				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_profile_evidence.sql", profileAge, now, cfg.BatchSize))
+			},
+		},
+		{
+			table: "youtube_channel_photo_variants",
+			age:   photoAge,
+			run: func() (RetentionResult, error) {
+				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_photo_variants.sql", photoAge, now, cfg.BatchSize))
+			},
+		},
+		{
+			table: "source_observation_provenances",
+			age:   minEvidenceAge(cfg.EvidenceAgeByKind),
+			run:   func() (RetentionResult, error) { return countOnly(r.deleteUnreferencedProvenanceBatch(ctx, cfg)) },
 		},
 	}
 }
@@ -357,6 +399,22 @@ func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg Ret
 		cfg.BatchSize,
 	).Scan(&removed); err != nil {
 		return 0, fmt.Errorf("collect unreferenced source observation payloads: %w", err)
+	}
+
+	return removed, nil
+}
+
+// deleteUnreferencedProvenanceBatch는 어떤 원본도 참조하지 않는 출처 사전 행을 id 순 창 하나만큼 지운다.
+// 사전 행에는 시각 열이 없어 기간 대신 참조 여부로 판정하며, 원본 보존이 꺼져 있으면 실행하지 않는다.
+func (r *Repository) deleteUnreferencedProvenanceBatch(ctx context.Context, cfg RetentionConfig) (int64, error) {
+	if minEvidenceAge(cfg.EvidenceAgeByKind) == 0 {
+		return 0, nil
+	}
+
+	var removed int64
+
+	if err := r.pool.QueryRow(ctx, mustSQL("repository_retention_delete_provenances.sql"), cfg.BatchSize).Scan(&removed); err != nil {
+		return 0, fmt.Errorf("collect unreferenced source observation provenances: %w", err)
 	}
 
 	return removed, nil

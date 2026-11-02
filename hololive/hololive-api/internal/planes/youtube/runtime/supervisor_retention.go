@@ -134,13 +134,14 @@ func (r *Runtime) withBudgetDB(ctx context.Context, operation dbOperation, fn fu
 
 func planeRetentionConfig(cfg *apiconfig.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
 	return sourceobservation.RetentionConfig{
-		QueueProcessedAge:    cfg.QueueProcessedAge,
-		QueueDLQAge:          cfg.QueueDLQAge,
-		CollisionAge:         cfg.CollisionAge,
-		LiveAbsenceSlotAge:   cfg.LiveAbsenceSlotAge,
-		CheckpointHistoryAge: cfg.CheckpointHistoryAge,
-		EvidenceAgeByKind:    evidenceRetentionAges(cfg),
-		BatchSize:            cfg.BatchSize,
+		QueueProcessedAge:     cfg.QueueProcessedAge,
+		QueueDLQAge:           cfg.QueueDLQAge,
+		CollisionAge:          cfg.CollisionAge,
+		LiveAbsenceSlotAge:    cfg.LiveAbsenceSlotAge,
+		ContentAbsenceSlotAge: cfg.ContentAbsenceSlotAge,
+		CheckpointHistoryAge:  cfg.CheckpointHistoryAge,
+		EvidenceAgeByKind:     evidenceRetentionAges(cfg),
+		BatchSize:             cfg.BatchSize,
 	}
 }
 

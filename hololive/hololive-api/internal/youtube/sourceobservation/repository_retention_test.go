@@ -93,6 +93,62 @@ func TestRetentionTickBoundsLiveAbsenceSlots(t *testing.T) {
 	}
 }
 
+// tick 하나가 감사 이력 세 표의 기간 지난 행과 참조 없는 출처 사전 행을 함께 정리한다.
+func TestRetentionTickBoundsAuditTables(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	now := time.Now().UTC()
+
+	for channel, age := range map[string]time.Duration{"UC_old": 31 * 24 * time.Hour, "UC_new": 24 * time.Hour} {
+		at := now.Add(-age)
+
+		for _, statement := range []string{
+			`INSERT INTO youtube_content_absence_slots (
+				channel_id, observation_kind, scheduled_for, evidence_sha256, effective_at, received_at, scope_sha256, coverage
+			) VALUES ($1, 'video_list', $2, decode(repeat('a', 64), 'hex'), $2, $2, decode(repeat('b', 64), 'hex'), '{}'::jsonb)`,
+			`INSERT INTO youtube_channel_profile_evidence (
+				channel_id, scheduled_for, provider, handle_present, description_present, country_present,
+				joined_date_present, complete, effective_at, received_at
+			) VALUES ($1, $2, 'youtubejs', false, false, false, false, true, $2, $2)`,
+			`INSERT INTO youtube_channel_photo_variants (
+				channel_id, kind, provider, scheduled_for, url, effective_at, received_at
+			) VALUES ($1, 'avatar', 'youtubejs', $2, 'https://example.invalid/avatar', $2, $2)`,
+		} {
+			if _, err := pool.Exec(ctx, statement, channel, at); err != nil {
+				t.Fatalf("insert %s audit row: %v", channel, err)
+			}
+		}
+	}
+
+	if _, err := pool.Exec(ctx, `SELECT source_observation_provenance_id('orphan-job', 'retention-test', 'live_snapshot')`); err != nil {
+		t.Fatalf("resolve orphan provenance: %v", err)
+	}
+
+	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
+		ContentAbsenceSlotAge: 14 * 24 * time.Hour,
+		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{
+			contract.KindChannelProfile: 30 * 24 * time.Hour,
+			contract.KindChannelPhoto:   30 * 24 * time.Hour,
+		},
+		BatchSize: MaxRetentionBatchSize,
+	}, now)
+	if err != nil {
+		t.Fatalf("retention tick: %v", err)
+	}
+
+	if result.Deleted != 4 {
+		t.Fatalf("result = %#v, want one row from each audit table", result)
+	}
+
+	assertTableCount(t, pool, "youtube_content_absence_slots", 1)
+	assertTableCount(t, pool, "youtube_channel_profile_evidence", 1)
+	assertTableCount(t, pool, "youtube_channel_photo_variants", 1)
+	assertTableCount(t, pool, "source_observation_provenances", 0)
+}
+
 func TestDeleteRetentionBatchesRunsEveryTable(t *testing.T) {
 	t.Parallel()
 
