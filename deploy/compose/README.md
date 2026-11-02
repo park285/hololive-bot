@@ -151,7 +151,7 @@ The existing ingress behavior checks build an isolated temporary tag from this
 context; `NGINX_TEST_PLATFORM` selects the architecture (default `linux/amd64`).
 
 `valkey-cache` and `docker-proxy` also use local-only owned images:
-`iris-stack-valkey:9.1.2-zlib1.3.2-r1` applies the same zlib, musl and CA bundle pins to the pinned official
+`iris-stack-valkey:9.1.3-zlib1.3.2-r1` applies the same zlib, musl and CA bundle pins to the pinned official
 Valkey base, while `iris-stack-socket-proxy:1.13.1-go1.27.2` rebuilds the checksum-pinned
 upstream 1.13.1 source with Go 1.27.2. The latter replaces the vulnerable Go 1.26.6
 standard library without changing CLI flags, UID 65534, socket paths or request policy.
@@ -159,6 +159,12 @@ Their contexts are `deploy/images/valkey` and `deploy/images/socket-proxy`; both
 included in the base production build. ChatBotGo must load the same owned Valkey
 image for its host architecture. No official-image fallback or live-data mutation
 is performed by building these candidates.
+
+Valkey 9.1.3은 잘못된 `RESTORE` 문자열 길이로 서버가 종료되는 결함과
+Cluster Pub/Sub의 힙 버퍼 오버플로를 수정합니다. 버전 업데이트는 기존
+인증·소켓·메모리 정책을 유지하며 Cluster나 Sentinel 전환을 포함하지 않습니다.
+`appendonly no`·`save ""` 구성의 재생성은 메모리 상태를 지우므로,
+소비자별 데이터 보존 계약을 확인한 뒤 승인된 전환 절차를 적용합니다.
 
 ## Worker settings cutover (11.0.0)
 
