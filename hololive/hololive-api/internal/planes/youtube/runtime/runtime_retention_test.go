@@ -120,13 +120,15 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 
 func TestPlaneRetentionConfigIncludesDependentRetention(t *testing.T) {
 	cfg := apiconfig.YouTubePlaneRetentionConfig{
-		LiveAbsenceSlotAge:   30 * 24 * time.Hour,
-		CheckpointHistoryAge: 7 * 24 * time.Hour,
-		BatchSize:            1000,
+		LiveAbsenceSlotAge:    30 * 24 * time.Hour,
+		ContentAbsenceSlotAge: 14 * 24 * time.Hour,
+		CheckpointHistoryAge:  7 * 24 * time.Hour,
+		BatchSize:             1000,
 	}
 	got := planeRetentionConfig(&cfg)
 
 	if got.LiveAbsenceSlotAge != cfg.LiveAbsenceSlotAge ||
+		got.ContentAbsenceSlotAge != cfg.ContentAbsenceSlotAge ||
 		got.CheckpointHistoryAge != cfg.CheckpointHistoryAge {
 		t.Fatalf("dependent retention config = %#v", got)
 	}

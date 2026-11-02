@@ -220,3 +220,8 @@
 220 359_richtext_collapsed_summary.sql
 221 360_source_application_entity_latest_index.sql
 222 361_source_retention_latest_session_evidence.sql
+223 362_source_observation_provenance_index.sql
+224 363_content_absence_slot_scheduled_index.sql
+225 364_channel_profile_evidence_received_index.sql
+226 365_channel_photo_variant_received_index.sql
+227 366_bounded_audit_retention.sql
