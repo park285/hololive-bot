@@ -47,6 +47,14 @@ func (l *countedTerminalLease) CompleteCurrent(ctx context.Context) error {
 func newExecutorFixture(t *testing.T, runner collection.JobRunner, fatal *[]error) (*collectionExecutor, *joblease.JobSpec) {
 	t.Helper()
 
+	config := runtimeLeaseConfig()
+
+	return newExecutorFixtureWithLease(t, runner, fatal, &config)
+}
+
+func newExecutorFixtureWithLease(t *testing.T, runner collection.JobRunner, fatal *[]error, config *joblease.Config) (*collectionExecutor, *joblease.JobSpec) {
+	t.Helper()
+
 	pool := dbtest.NewPool(t)
 	seedRuntimeCommunityTarget(t, pool)
 
@@ -54,11 +62,9 @@ func newExecutorFixture(t *testing.T, runner collection.JobRunner, fatal *[]erro
 
 	executor.retryBounds = testRetryBounds
 
-	config := runtimeLeaseConfig()
-
 	var err error
 
-	executor.repository, err = joblease.NewRepository(pool, &config)
+	executor.repository, err = joblease.NewRepository(pool, config)
 	if err != nil {
 		t.Fatal(err)
 	}
