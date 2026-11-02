@@ -14,6 +14,15 @@
 - **Valkey native 상태 보존:** 공통 9.1.3 r2 recipe는 `/data`의 config를 최초에만 seed하고 이후 Sentinel의 역할 변경을 보존합니다. AOF everysec·최소 ACL·TLS health/AOF 상태 관측을 추가하며, 재시작 때 과거 primary 역할로 초기화하지 않습니다. 운영 활성화와 데이터 보존 전환은 별도 수용 절차입니다.
 - **collector 권한 경계 검사:** checkout 상위 디렉터리에 `valkey`가 포함되어도 일반 데이터 bind를 Valkey 접근으로 오인하지 않습니다. 실제 소켓·전용 비밀 파일 mount와 CACHE 설정·서비스 의존성은 계속 거절합니다.
 
+## v13.1.3 - 2026-11-02
+
+- **삭제 경로가 없던 네 표에 보존 정리 추가(migration 362~366):** 2026-11-02 운영에서 아래 네 표는 지우는 경로 없이 하루 약 6,300행씩 늘기만 했습니다. retention tick이 SECURITY DEFINER 정리 함수로 각 표를 tick당 최대 1,000행씩 지웁니다.
+  - `youtube_content_absence_slots`(하루 2,881행, 131,899행 중 14일 지난 행 91,578): live slot과 같이 `scheduled_for`가 14일(`YOUTUBE_PLANE_RETENTION_CONTENT_ABSENCE_SLOTS_DAYS`, production은 양수 필수)을 넘은 행을 지웁니다. 그보다 오래된 `video_list`·`shorts_list` 관측이 queue에서 대기·처리 중이면 보류합니다.
+  - `youtube_channel_profile_evidence`(하루 476행)·`youtube_channel_photo_variants`(하루 1,035행): 런타임이 읽지 않는 slot별 감사 이력이라 원본 kind와 같은 보존 기간(기본 30일)이 지난 `received_at` 행을 지웁니다.
+  - `source_observation_provenances`(하루 1,924행, 47,959행 중 원본이 참조하는 행 17,708): collector_instance가 프로세스마다 달라 collector를 재시작·배포할 때마다 job_key 전체가 새 사전 행이 됩니다. 어떤 원본도 참조하지 않는 사전 행만 지웁니다. resolver(`source_observation_provenance_id`)는 재사용할 행을 `FOR KEY SHARE`로 잠그고 정리는 그 행을 `SKIP LOCKED`로 건너뜁니다. 이 잠금이 없으면 정리와 겹친 원본 삽입이 FK 위반(23503)으로 실패하는 것을 dbtest로 확인했습니다.
+  - 정리용 인덱스 4개는 `CREATE INDEX CONCURRENTLY`(362~365)로 만들고 366이 인덱스 유효성을 확인한 뒤 함수를 설치합니다. `source_observations(provenance_id)` 인덱스가 없으면 사전 행 하나를 지울 때마다 FK 검사가 원본 약 180만 행을 전체 스캔합니다.
+- **배포 단위:** hololive-api와 그 이미지의 `hololive-db-migrate`만 바뀝니다. alarm-worker와 collector는 코드가 바뀌지 않았고, collector가 쓰는 resolver는 migration 366이 DB에서 바꿉니다.
+
 ## v13.1.2 - 2026-11-02
 
 - **활성 세션 보존 근거를 세션별 최신 원본으로 축소(migration 360·361):** 원본 retention은 LIVE/UPCOMING 세션에 적용된 application이 있는 원본을 모두 보호했습니다. 그래서 몇 주씩 UPCOMING으로 남는 프리챗·미시작 예약이 스냅샷마다 받은 application 때문에 보관 기간이 지난 원본이 세션 종료 전까지 지워지지 않았습니다. 2026-11-02 운영에서는 세션 163개가 application 137만 행을 붙잡아 7일이 지난 `live_snapshot` 80만 행이 남았고, hololive DB는 하루 약 90 MiB씩 늘었습니다(표본 3,609건 중 99.3%가 이 보호 사유). 360은 `source_observation_applications (entity_kind_id, entity_key, observation_id)` 인덱스를 `CONCURRENTLY`로 만들고, 361은 그 인덱스가 유효한지 확인한 뒤 `source_observation_retention_protected`를 같은 세션의 더 새 application이 없는 원본만 보호하도록 바꿉니다. 나머지 보호 사유(큐·종료 후보·CURRENT/STAGING generation·ACTIVE lease·pending-end)는 그대로입니다. 런타임 소비자는 큐·종료 후보·pending-end로만 원본을 읽습니다. 그래서 동작 변화는 retention 삭제량과, 지운 원본을 `ON DELETE SET NULL`로 가리키던 행(예: `youtube_video_availability`·`youtube_channel_live_checks`의 `observation_id`)이 다른 원본 삭제 때처럼 NULL이 되는 것뿐입니다. 함수 서명이 같아 실행 중인 hololive-api는 재시작 없이 다음 tick부터 새 판정을 씁니다. 배포: 360·361을 포함한 hololive-api 이미지를 승격한 뒤 `hololive-db-migrate`를 실행합니다. 360은 인덱스를 만드는 동안 쓰기를 막지 않습니다. 대상 테이블은 2026-11-02 기준 499만 행·451 MiB(기존 인덱스 878 MiB)입니다. 생성이 db-migrate 기본 `statement_timeout` 4분을 넘으면 실행기가 invalid 인덱스를 지우고 실패하므로, `-statement-timeout 10m`로 다시 실행합니다. 이미 쌓인 원본은 기존 tick 예산(120초마다 최대 8개 창 × 1,000건, 시간 예산이 먼저 멈출 수 있음)으로 최소 약 3시간에 걸쳐 지워지며, 지운 공간은 테이블 안에서 재사용됩니다(디스크 반환에는 별도 승인된 정리가 필요합니다). 되돌리려면 351의 보호 함수 본문을 다시 선언하는 새 migration을 추가합니다.

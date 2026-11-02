@@ -215,6 +215,7 @@ func setYouTubePlaneRetentionOverrideEnv(t *testing.T) {
 	t.Setenv("YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS", "14")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", "21")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", "39")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_CONTENT_ABSENCE_SLOTS_DAYS", "40")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", "8")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", "45")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS", "31")
@@ -245,6 +246,10 @@ func assertRetentionOverrideAuditAges(t *testing.T, retention YouTubePlaneRetent
 
 	if retention.LiveAbsenceSlotAge != 39*24*time.Hour {
 		t.Fatalf("live absence slot age = %s", retention.LiveAbsenceSlotAge)
+	}
+
+	if retention.ContentAbsenceSlotAge != 40*24*time.Hour {
+		t.Fatalf("content absence slot age = %s", retention.ContentAbsenceSlotAge)
 	}
 
 	if retention.ProjectionRetiredAge != 45*24*time.Hour {
@@ -333,9 +338,10 @@ func TestYouTubePlaneProductionRetentionRequiresBoundedPolicy(t *testing.T) {
 	}
 
 	for key, disable := range map[string]func(*YouTubePlaneRetentionConfig){
-		"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS": func(r *YouTubePlaneRetentionConfig) { r.ChannelLiveCheckAge = 0 },
-		"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS":   func(r *YouTubePlaneRetentionConfig) { r.VideoLiveCheckAge = 0 },
-		"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS": func(r *YouTubePlaneRetentionConfig) { r.LiveAbsenceSlotAge = 0 },
+		"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS":    func(r *YouTubePlaneRetentionConfig) { r.ChannelLiveCheckAge = 0 },
+		"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS":      func(r *YouTubePlaneRetentionConfig) { r.VideoLiveCheckAge = 0 },
+		"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS":    func(r *YouTubePlaneRetentionConfig) { r.LiveAbsenceSlotAge = 0 },
+		"YOUTUBE_PLANE_RETENTION_CONTENT_ABSENCE_SLOTS_DAYS": func(r *YouTubePlaneRetentionConfig) { r.ContentAbsenceSlotAge = 0 },
 	} {
 		unbounded := cfg
 		disable(&unbounded.Retention)

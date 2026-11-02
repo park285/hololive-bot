@@ -82,12 +82,17 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 새 응답을 `SendRichText`로 전송. 미설정은 `false`; RichText 운영 시 API·알람 워커 양쪽에 `true` 명시 | RichText 운영 시 필수 |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 | `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
+| `YOUTUBE_PLANE_RETENTION_CONTENT_ABSENCE_SLOTS_DAYS` | `youtube_content_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
 
 RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 방 유형별 `plain`·`richtext` 변형으로 나뉘어 있고(migration `353`~`358`), bot plane은 요청마다 방 유형을 한 번 판정해 같은 값으로 변형과 발송 경로를 고릅니다. llm plane 예약 알림은 두 변형을 모두 적재합니다. `358`은 표준 기본 템플릿만 변형별 본문으로 나누며 사용자 지정 기본값·채널 override는 같은 본문을 두 변형에 두고 저장된 답변은 보존합니다. `358` 적용 직후 API와 알람 워커를 함께 교체합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며, 행사 요약은 최종 검토·캐시까지 평문으로 유지한 후 formatter에서 보호합니다. 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
 
 ## YouTube 관측 보존
 
 소스 기본값에서 `youtube_live_absence_slots`는 14일이 지난 `scheduled_for` 행을 retention tick당 최대 1000건 삭제합니다. 과거 positive 재처리는 삭제된 slot을 복원할 수 없으므로 보관 기간 밖의 absence 역재생 결과는 보장하지 않습니다. 이미 session/head에 반영된 absence clock과 `youtube_live_pending_ends`는 이 삭제에 포함되지 않습니다. 오래된 `live_snapshot`이 queue에서 대기·처리 중이면 slot 삭제를 보류합니다. 오래된 작업이 장기간 남으면 slot 크기가 계속 증가할 수 있으므로 상태를 함께 확인합니다.
+
+`youtube_content_absence_slots`도 같은 방식으로 14일(`YOUTUBE_PLANE_RETENTION_CONTENT_ABSENCE_SLOTS_DAYS`)이 지난 `scheduled_for` 행을 지웁니다. reducer는 현재 slot과 이번 관측보다 늦은 slot만 읽고 반영된 판정은 `youtube_content_evidence_clocks`에 남으므로, 보관 기간 밖의 content absence 역재생 결과도 보장하지 않습니다. 그보다 오래된 `video_list`·`shorts_list` 관측이 queue에서 대기·처리 중이면 삭제를 보류합니다.
+
+`youtube_channel_profile_evidence`·`youtube_channel_photo_variants`는 slot별 감사 이력이고 런타임은 head 표만 읽습니다. 원본 kind(`YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS`·`YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS`, 기본 30일)와 같은 기간이 지난 `received_at` 행을 지웁니다. `source_observation_provenances`는 시각 열이 없어 어떤 원본도 참조하지 않는 사전 행만 id 순 창으로 지웁니다. collector_instance가 프로세스마다 달라 collector를 재시작·배포할 때마다 새 사전 행이 생기기 때문입니다. resolver가 재사용 중인 행은 건너뛰고, 정리가 먼저 잠근 행은 resolver가 정리 커밋 뒤 새 행을 만듭니다. 네 표의 삭제량은 `hololive_youtube_plane_retention_deleted_total{table=...}`로 봅니다(migration `362`~`366`).
 
 운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-seoul/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간(`hololive_youtube_plane_retention_tick_seconds{phase=source|projection}`, 슬롯 획득 뒤 실행분만 포함하며 슬롯을 얻지 못한 phase는 오류로만 셉니다), `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
 
