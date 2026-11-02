@@ -679,6 +679,8 @@ services:
       args:
         REVISION: ${REVISION:-unknown}
     container_name: deunhealth
+    # Docker API는 docker-proxy TCP로만 쓰고 파일 쓰기·low port bind가 없어 root가 필요 없다.
+    user: "65534:65534"
     environment:
       TZ: Asia/Seoul
       LOG_LEVEL: info
