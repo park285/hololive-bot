@@ -33,9 +33,11 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/service/wakeup"
 )
 
 const defaultLogicalGroupScanLimit = 100
@@ -49,6 +51,8 @@ type Dependencies struct {
 	MessageStrings *messagestrings.Store
 	// MemberNames는 알림 표시명의 PostgreSQL 정본 조회다. Valkey 장애가 표시명을 바꾸거나 발송을 막지 않게 한다.
 	MemberNames format.MemberNameSource
+	// WakeupCache는 hololive-api YouTube plane의 commit 신호로 빈 대기를 깨운다. 없으면 poll_interval_ms 주기로만 조회한다.
+	WakeupCache cache.LowLevelCache
 }
 
 // NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
@@ -84,7 +88,16 @@ func NewDispatcher(deps Dependencies, logger *slog.Logger, config *Config) (*Dis
 		return nil, fmt.Errorf("initialize youtube dispatcher: telemetry repository: %w", err)
 	}
 
-	return assembleDispatcher(deps, logger, validConfig, telemetryRepository, transitionStore), nil
+	idle, err := wakeup.NewWaiter(deps.WakeupCache, wakeup.YouTubeDelivery, validConfig.PollInterval, logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
+	}
+
+	dispatcher := assembleDispatcher(deps, logger, validConfig, telemetryRepository, transitionStore)
+
+	dispatcher.idle = idle
+
+	return dispatcher, nil
 }
 
 func dispatcherLogger(logger *slog.Logger) *slog.Logger {

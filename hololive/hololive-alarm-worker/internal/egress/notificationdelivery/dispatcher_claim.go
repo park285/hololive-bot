@@ -13,8 +13,8 @@ import (
 
 // 실행 슬롯이 있는 방의 첫 항목만 claim합니다. 대기 항목을 미리 임대하지 않아
 // 방별 순서를 기다리는 시간이 PENDING lease를 소비하지 않습니다.
-// 짧은 backoff로 다시 due가 된 ID도 같은 poll에서는 한 번만 처리합니다.
-func (d *Dispatcher) processReady(ctx context.Context) {
+// 짧은 backoff로 다시 due가 된 ID도 같은 poll에서는 한 번만 처리합니다. 이번 호출에서 claim한 항목이 있었는지 반환합니다.
+func (d *Dispatcher) processReady(ctx context.Context) bool {
 	remaining := d.config.BatchSize
 	concurrency := min(d.config.MaxConcurrent, remaining)
 	activeRooms := make(map[string]struct{}, concurrency)
@@ -39,7 +39,7 @@ func (d *Dispatcher) processReady(ctx context.Context) {
 			if err != nil {
 				d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 
-				return
+				return len(processedIDs) > 0
 			}
 
 			if len(items) > 0 {
@@ -64,16 +64,18 @@ func (d *Dispatcher) processReady(ctx context.Context) {
 		}
 
 		if len(activeRooms) == 0 {
-			return
+			return len(processedIDs) > 0
 		}
 
 		select {
 		case roomID := <-completed:
 			delete(activeRooms, roomID)
 		case <-ctx.Done():
-			return
+			return len(processedIDs) > 0
 		}
 	}
+
+	return len(processedIDs) > 0
 }
 
 func drainCompletedDeliveries(completed <-chan string, activeRooms map[string]struct{}) {

@@ -817,3 +817,51 @@ func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id 
 
 	return "iris-" + id, nil
 }
+
+// scriptedIdleWaiter는 send 루프가 빈 조회 뒤에만 기다리고 처리 뒤에는 대기를 짧게 되돌리는지 기록한다.
+type scriptedIdleWaiter struct {
+	waits     []bool
+	waitCalls int
+	resets    int
+}
+
+func (w *scriptedIdleWaiter) Wait(context.Context) bool {
+	if w.waitCalls >= len(w.waits) {
+		return false
+	}
+
+	w.waitCalls++
+
+	return w.waits[w.waitCalls-1]
+}
+
+func (w *scriptedIdleWaiter) Reset() {
+	w.resets++
+}
+
+func TestDispatcher_RunSendLoopResetsWaitAfterProcessedItems(t *testing.T) {
+	var fetches atomic.Int32
+
+	repository := &mockDeliveryRepository{
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+			if fetches.Add(1) == 1 {
+				return []domain.NotificationDeliveryOutbox{{ID: 1, RoomID: testRoomA, Payload: makePayload(t, "hello")}}, nil
+			}
+
+			return nil, nil
+		},
+	}
+
+	config := testDispatcherConfig()
+	d := mustNewDispatcher(t, repository, &mockSender{}, dispatcherLogger(), &config)
+	idle := &scriptedIdleWaiter{waits: []bool{true, false}}
+
+	d.idle = idle
+
+	d.runSendLoop(t.Context())
+
+	// 첫 조회가 항목을 처리해 대기를 되돌리고, 깨어난 뒤의 빈 조회는 되돌리지 않은 채 다시 기다린다.
+	if idle.resets != 1 || idle.waitCalls != 2 {
+		t.Fatalf("resets = %d, waits = %d; want 1 reset after the processed item and 2 waits", idle.resets, idle.waitCalls)
+	}
+}

@@ -179,11 +179,12 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LL
 }
 
 // llmSchedulerCache는 LLM scheduler 조립이 cache에 요구하는 작업의 합집합이다. 행사 요약 cache(Get·Set),
-// digest 실행 lock(SetNX·CompareAndDelete), readiness(IsConnected)를 쓴다.
+// digest 실행 lock(SetNX·CompareAndDelete), readiness(IsConnected), 적재 뒤 alarm-worker wakeup 신호(LowLevelCache)를 쓴다.
 type llmSchedulerCache interface {
 	cache.KeyValueReader
 	cache.KeyValueWriter
 	cache.ScriptCache
+	cache.LowLevelCache
 	sharedreadiness.ConnectionChecker
 }
 

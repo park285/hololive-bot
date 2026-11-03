@@ -38,7 +38,6 @@ import (
 	"github.com/park285/iris-client-go/v4/iris"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
@@ -49,7 +48,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/wakeup"
 )
 
 type deliveryOutboxClaimer interface {
@@ -103,6 +104,12 @@ type DispatcherConfig struct {
 	StaleSendingSweepLimit    int
 }
 
+// idleWaiter는 빈 조회 뒤 다음 조회까지 기다린다. Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
+type idleWaiter interface {
+	Wait(ctx context.Context) bool
+	Reset()
+}
+
 type Dispatcher struct {
 	repository    deliveryRepository
 	sender        delivery.PreparedMessageSender
@@ -111,6 +118,7 @@ type Dispatcher struct {
 	workerID      string
 	workerTracker *workercontract.ExecutorTracker
 	workerTotals  *workercontract.Counters
+	idle          idleWaiter
 }
 
 func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTracker, totals *workercontract.Counters) {
@@ -147,7 +155,25 @@ func NewDispatcher(repository deliveryRepository, sender delivery.PreparedMessag
 		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
 	}
 
-	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: workerID}, nil
+	// wakeup cache를 받기 전에는 poll_interval_ms 주기로만 조회한다.
+	idle, err := wakeup.NewWaiter(nil, wakeup.NotificationDelivery, cfg.PollInterval, logger)
+	if err != nil {
+		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
+	}
+
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: workerID, idle: idle}, nil
+}
+
+// SetWakeupCache는 hololive-api 적재 신호로 빈 대기를 깨운다. 신호를 놓쳐도 poll_interval_ms 안에 다시 조회한다.
+func (d *Dispatcher) SetWakeupCache(c cache.LowLevelCache) error {
+	idle, err := wakeup.NewWaiter(c, wakeup.NotificationDelivery, d.config.PollInterval, d.logger)
+	if err != nil {
+		return fmt.Errorf("set delivery wakeup cache: %w", err)
+	}
+
+	d.idle = idle
+
+	return nil
 }
 
 func (c *DispatcherConfig) validate() error {
@@ -237,14 +263,15 @@ func (d *Dispatcher) runGuardedLoop(ctx context.Context, cancel context.CancelCa
 }
 
 func (d *Dispatcher) runSendLoop(ctx context.Context) {
-	d.processReady(ctx)
+	for {
+		// 처리한 행이 있으면 뒤따른 행의 신호가 guard에 억제됐어도 짧은 대기 뒤 다시 조회한다.
+		if d.processReady(ctx) {
+			d.idle.Reset()
+		}
 
-	if err := lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
-		d.processReady(ctx)
-
-		return nil
-	}); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-		d.logger.Warn("Delivery dispatcher ticker stopped with error", slog.Any("error", err))
+		if !d.idle.Wait(ctx) {
+			return
+		}
 	}
 }
 
