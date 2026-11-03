@@ -12,8 +12,8 @@ require (
 	github.com/kapu/hololive-youtube-collector v0.0.0
 	github.com/mmcdole/gofeed v1.5.0
 	github.com/openai/openai-go/v3 v3.86.0
-	github.com/park285/iris-client-go/v4 v4.0.0
-	github.com/park285/shared-go/v2 v2.18.0
+	github.com/park285/iris-client-go/v4 v4.0.1
+	github.com/park285/shared-go/v2 v2.19.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.64.1
 	github.com/stretchr/testify v1.12.1

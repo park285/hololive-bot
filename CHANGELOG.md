@@ -10,6 +10,7 @@
 
 - **반복 경로의 불변 값 재생성 제거:** 고정 SQL은 소유 패키지 `sql.go`에서 초기화 때 한 번만 읽고, 고정 조각을 잇는 조합 SQL도 그때 완성합니다. 호출마다 파일을 읽던 SQL reader를 없애고, `sqlassets.MustReader`는 성공한 읽기만 cache합니다. 상수 정규식·Replacer·lookup 표는 패키지 수준으로 옮겼고, Debug 전용 가명·해시 attr은 Debug가 켜졌을 때만 계산합니다. SQL 본문과 로그 출력 바이트·key·레벨은 같습니다. arm64에서 dedup claim 경로(Info)가 1.07µs·10 allocs에서 14ns·0 allocs로, matcher cache hit가 286ns에서 190ns로, SQL 자산 읽기가 약 710ns에서 26ns로 줄었습니다.
 - **SQL 자산 이름 통일:** 번호식 이름(`<stem>_<4자리>_<2자리>.sql`) 189개를 쓰는 함수 이름 기반으로 바꿨습니다. 내용은 바이트 단위로 같습니다. SQL ownership·YouTube egress lifecycle gate와 현행 계약·runbook 경로를 함께 고쳤습니다. 적용된 migration 주석의 옛 이름은 checksum 규칙에 따라 그대로 둡니다.
+- **의존성:** shared-go v2.19.0(kakaoformat 렌더 할당 축소, 공통 runtime 지표에 `process_cpu_seconds_total` 추가)·iris-client-go v4.0.1(media chunk 응답 해석 할당 축소)로 올렸습니다. 공개 동작은 바뀌지 않습니다.
 
 ## v13.2.0 - 2026-11-02
 
