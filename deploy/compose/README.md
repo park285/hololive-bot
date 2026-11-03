@@ -151,7 +151,7 @@ The existing ingress behavior checks build an isolated temporary tag from this
 context; `NGINX_TEST_PLATFORM` selects the architecture (default `linux/amd64`).
 
 `valkey-cache` and `docker-proxy` also use local-only owned images:
-`iris-stack-valkey:9.1.2-zlib1.3.2-r1` applies the same zlib, musl and CA bundle pins to the pinned official
+`iris-stack-valkey:9.1.3-zlib1.3.2-r1` applies the same zlib, musl and CA bundle pins to the pinned official
 Valkey base, while `iris-stack-socket-proxy:1.13.1-go1.27.2` rebuilds the checksum-pinned
 upstream 1.13.1 source with Go 1.27.2. The latter replaces the vulnerable Go 1.26.6
 standard library without changing CLI flags, UID 65534, socket paths or request policy.
@@ -159,6 +159,12 @@ Their contexts are `deploy/images/valkey` and `deploy/images/socket-proxy`; both
 included in the base production build. ChatBotGo must load the same owned Valkey
 image for its host architecture. No official-image fallback or live-data mutation
 is performed by building these candidates.
+
+Valkey 9.1.3은 잘못된 `RESTORE` 문자열 길이로 서버가 종료되는 결함과
+Cluster Pub/Sub의 힙 버퍼 오버플로를 수정합니다. 버전 업데이트는 기존
+인증·소켓·메모리 정책을 유지하며 Cluster나 Sentinel 전환을 포함하지 않습니다.
+`appendonly no`·`save ""` 구성의 재생성은 메모리 상태를 지우므로,
+소비자별 데이터 보존 계약을 확인한 뒤 승인된 전환 절차를 적용합니다.
 
 ## Worker settings cutover (11.0.0)
 
@@ -254,6 +260,39 @@ a/d retain their existing rollback entrypoints and stopped-state behavior.
 Rollback never writes the desired mirror or synthesizes removed keys; verify
 the restored loaded hash, not health alone. A known schema-incompatible old
 writer must stay stopped even when its profile CLI succeeds.
+
+## 중앙 Valkey 영속 TLS·Sentinel 전환
+
+`HOLOLIVE_VALKEY_HA_ENABLED=1`은 중앙의 `docker-compose.valkey-ha.yml`을 선택합니다.
+기본 prod의 kapu 보조 standalone/UDS 경로는 바꾸지 않습니다.
+`VALKEY_BIND_IP=100.100.1.8`과 검증된 `VALKEY_IMAGE`를 지정하고 `VALKEY_SENTINEL_ADDRS`를 비우면
+API·worker는 역할별 ACL과 기존 내부 CA로 `100.100.1.8:16379`에 직접 TLS 접속합니다.
+`valkey-cache` 물리 슬롯은 `hololive-bot_valkey-ha-data`를 사용하며 역할은 native `/data/valkey.conf`가 소유합니다.
+
+두 그룹 primary와 각 복제본 2개의 초기 동기화를 수용하고 세 Sentinel/quorum 2를 확인한 뒤
+`VALKEY_SENTINEL_ADDRS=100.100.1.3:26379,100.100.1.8:26379,100.86.97.95:26379`를 설정합니다.
+같은 wrapper가 `docker-compose.valkey-sentinel.yml`을 추가하여 앱의 직접 host/socket을 비우고
+master `hololive`, discovery 계정 `hololive-discovery`로 전환합니다. 직접 endpoint fallback은 없습니다.
+두 overlay는 활성 worker profile overlay보다 먼저 적용되며 `LIVE_LOGS_PATH`의 로그 bind를 유지합니다.
+
+secret 정본은 `stack-secrets/hosts/<host>/valkey/`와 각 host manifest입니다.
+서버 TLS·seed·ACL·복제·health 파일은 UID 999가 읽고, operator password는 호스트 root 전용입니다.
+앱은 자기 `valkey-api-password` 또는 `valkey-worker-password`와 공통 `valkey-discovery-password`만 개별 mount합니다.
+새 leaf는 기존 내부 CA로 host tailnet IP 및 health의 `127.0.0.1` SAN을 포함해 발급합니다.
+개인키·전체 env·인증 암호를 출력하거나 CA 개인키를 host로 전송하지 않습니다.
+
+`iris-stack/deploy/valkey-ha/`는 중앙의 반대 그룹 replica, kt032의 Hololive replica,
+kapu의 두 replica와 세 Sentinel을 관리합니다. 초기 standalone stage에는 `sentinel` profile이 없습니다.
+복제 수용 뒤 seed 정본·native runtime의 replica write gate를 1/5초로 맞추고 `CONFIG REWRITE`한 다음
+host profile에 `sentinel`을 추가합니다. 준비 중에는 unit을 enable하지 않으며
+최초 기동 시 `--wait`/PING을 full-sync·lineage·offset·TTL 보존의 대체 증거로 사용하지 않습니다.
+
+기존 메모리-only 원본은 writer 정지와 승인된 임시 replication donor를 거쳐 영속 volume으로 옮깁니다.
+원본→donor의 기존 plaintext/auth 경로와 donor→영속 노드의 TLS/replication-auth 경로를 구분합니다.
+앱 재개 뒤에는 과거 donor·빈 AOF·이전 비영속 Compose로 데이터 rollback하지 않습니다.
+최신 데이터와 호환되는 image/profile/transport로 복구하며 기존 PostgreSQL 포함 unit은 유지합니다.
+비동기 복제·AOF everysec·min-replicas는 무손실 동기 커밋이나 외부 부수효과 fencing이 아닙니다.
+정기 백업 중단 정책은 변경하지 않습니다.
 
 ## Runtime Env Inputs
 

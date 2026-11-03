@@ -8,6 +8,12 @@
 
 ## 미출시
 
+## v13.2.0 - 2026-11-02
+
+- **독립 Valkey Sentinel HA 접속·영속 TLS 배포 구성:** API/worker 계정과 discovery 계정을 분리하고 TLS CA·Sentinel 설정을 지원합니다. 직접 접속과 Sentinel을 혼합하면 기동을 거절하며, native client가 알림과 5초 topology 재조회로 primary를 전환합니다. 중앙 영속 TLS overlay와 Sentinel discovery overlay를 분리하여 복제 수용 전에 직접 TLS로 기동할 수 있습니다. kapu 보조 standalone, live 로그 bind와 활성 worker profile overlay는 유지합니다.
+- **Valkey native 상태 보존:** 공통 9.1.3 r2 recipe는 `/data`의 config를 최초에만 seed하고 이후 Sentinel의 역할 변경을 보존합니다. AOF everysec·최소 ACL·TLS health/AOF 상태 관측을 추가하며, 재시작 때 과거 primary 역할로 초기화하지 않습니다. 운영 활성화와 데이터 보존 전환은 별도 수용 절차입니다.
+- **collector 권한 경계 검사:** checkout 상위 디렉터리에 `valkey`가 포함되어도 일반 데이터 bind를 Valkey 접근으로 오인하지 않습니다. 실제 소켓·전용 비밀 파일 mount와 CACHE 설정·서비스 의존성은 계속 거절합니다.
+
 ## v13.1.3 - 2026-11-02
 
 - **삭제 경로가 없던 네 표에 보존 정리 추가(migration 362~366):** 2026-11-02 운영에서 아래 네 표는 지우는 경로 없이 하루 약 6,300행씩 늘기만 했습니다. retention tick이 SECURITY DEFINER 정리 함수로 각 표를 tick당 최대 1,000행씩 지웁니다.

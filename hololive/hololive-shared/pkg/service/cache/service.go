@@ -37,11 +37,17 @@ type Service struct {
 var _ Client = (*Service)(nil)
 
 type Config struct {
-	Host       string
-	Port       int
-	Password   string
-	DB         int
-	SocketPath string // UDS 경로 (비어있으면 TCP 사용)
+	Host              string
+	Port              int
+	Username          string
+	Password          string
+	DB                int
+	SocketPath        string // UDS 경로 (비어있으면 TCP 사용)
+	SentinelMasterSet string
+	SentinelAddrs     []string
+	SentinelUsername  string
+	SentinelPassword  string
+	TLSCAFile         string
 	// DisableCache: valkey-go client-side caching 비활성화 (miniredis/RESP2 호환)
 	DisableCache      bool
 	ForceSingleClient bool

@@ -21,9 +21,15 @@
 package settings
 
 type ValkeyConfig struct {
-	Host       string
-	Port       int
-	Password   string
-	DB         int
-	SocketPath string // UDS 경로 (비어있으면 TCP 사용)
+	Host              string
+	Port              int
+	Username          string
+	Password          string
+	DB                int
+	SocketPath        string // UDS 경로 (비어있으면 TCP 사용)
+	SentinelMasterSet string
+	SentinelAddrs     []string
+	SentinelUsername  string
+	SentinelPassword  string
+	TLSCAFile         string
 }
