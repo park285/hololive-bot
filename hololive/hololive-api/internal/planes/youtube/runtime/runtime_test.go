@@ -51,7 +51,7 @@ func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 
 	cfg.DBOperationConcurrency = cfg.PostgresPoolMaxConns
 
-	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "hololive_runtime"}, slog.Default())
+	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "hololive_runtime"}, nil, slog.Default())
 
 	if err == nil || !strings.Contains(err.Error(), "leave one pool connection reserved") {
 		t.Fatalf("Build() = %v", err)
@@ -62,7 +62,7 @@ func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 	t.Parallel()
 
 	cfg := testYouTubePlaneConfig(t)
-	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: runtimepolicy.PostgresScraperRoleUser}, slog.Default())
+	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: runtimepolicy.PostgresScraperRoleUser}, nil, slog.Default())
 
 	if err == nil || !strings.Contains(err.Error(), runtimepolicy.PostgresRuntimeRoleUser) {
 		t.Fatalf("Build() = %v", err)
@@ -73,7 +73,7 @@ func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 	t.Parallel()
 
 	cfg := testYouTubePlaneConfig(t)
-	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
+	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, nil, slog.Default())
 
 	if err == nil || !strings.Contains(err.Error(), runtimepolicy.PostgresRuntimeRoleUser) {
 		t.Fatalf("Build() = %v", err)

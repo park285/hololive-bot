@@ -32,6 +32,7 @@ import (
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/wakeup"
 )
 
 type outboxBatchRow struct {
@@ -48,6 +49,7 @@ type outboxBatchRow struct {
 type OutboxRepository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
+	wakeup *wakeup.Signaler
 }
 
 type OutboxItem struct {
@@ -71,6 +73,15 @@ func NewOutboxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *Outbo
 	}
 
 	return &OutboxRepository{pool: pool, logger: logger}
+}
+
+// SetWakeup은 적재가 commit된 뒤 alarm-worker notification consumer를 깨울 신호를 정한다. 값이 nil이면 consumer polling만 남는다.
+func (r *OutboxRepository) SetWakeup(signaler *wakeup.Signaler) {
+	if r == nil {
+		return
+	}
+
+	r.wakeup = signaler
 }
 
 func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message MessageVariants) error {
@@ -117,8 +128,15 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 		return fmt.Errorf("enqueue batch: marshal rows: %w", err)
 	}
 
-	if _, err := r.pool.Exec(ctx, outboxEnqueueBatchUpsertSQL, string(raw)); err != nil {
+	tag, err := r.pool.Exec(ctx, outboxEnqueueBatchUpsertSQL, string(raw))
+	if err != nil {
 		return fmt.Errorf("enqueue batch: %w", err)
+	}
+
+	// autocommit Exec가 성공했으므로 행은 commit됐다. 새 행이나 FAILED rearm이 있을 때만 깨우고, 기존 PENDING·SENT
+	// 충돌만 있으면 처리할 행이 없으므로 깨우지 않는다. 신호 실패는 적재 실패가 아니다.
+	if tag.RowsAffected() > 0 {
+		r.wakeup.Signal(ctx)
 	}
 
 	return nil

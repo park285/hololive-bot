@@ -322,6 +322,10 @@ func buildDeliveryOutboxDispatcher(
 		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
 	}
 
+	if err := dispatcher.SetWakeupCache(infra.Cache); err != nil {
+		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
+	}
+
 	dispatcher.SetWorkerInstrumentation(workerState.trackers[workerconfig.WorkerNotificationDelivery], workerState.totals[workerconfig.WorkerNotificationDelivery])
 
 	return workerruntime.NewDeliveryOutboxDispatcherRunner(dispatcher, logger), nil
@@ -511,6 +515,7 @@ func newYouTubeOutboxDispatcher(
 		Renderer: template.NewRenderer(pool, logger), MessageStrings: messageStrings,
 		// 표시명은 PostgreSQL members 정본에서 읽어 Valkey 장애가 알림 이름과 발송을 막지 않게 한다.
 		MemberNames: alarmstore.NewRepository(infra.Postgres, logger),
+		WakeupCache: infra.Cache,
 	}, logger, &dispatchConfig)
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube outbox dispatcher dependencies: %w", err)

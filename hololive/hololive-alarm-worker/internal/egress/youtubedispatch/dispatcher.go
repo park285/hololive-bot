@@ -53,8 +53,16 @@ type Dispatcher struct {
 	started         atomic.Bool
 	workerTracker   *workercontract.ExecutorTracker
 	workerTotals    *workercontract.Counters
+	// idle은 빈 조회 뒤 다음 조회까지 기다린다. NewDispatcher가 채운다.
+	idle idleWaiter
 
 	testHooks dispatcherTestHooks
+}
+
+// idleWaiter는 빈 조회 뒤 다음 조회까지 기다린다. Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
+type idleWaiter interface {
+	Wait(ctx context.Context) bool
+	Reset()
 }
 
 func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTracker, totals *workercontract.Counters) {
@@ -178,36 +186,46 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("delivery_parallelism", d.config.DeliveryParallelism),
 		slog.Int("subscriber_lookup_parallelism", d.grouper.config.SubscriberLookupParallelism))
 
-	d.processOnce(ctx)
+	for {
+		// 처리한 행이 있으면 뒤따른 행의 신호가 guard에 억제됐어도 짧은 대기 뒤 다시 조회한다.
+		if d.processOnce(ctx) {
+			d.idle.Reset()
+		}
 
-	if err := lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
-		d.processOnce(ctx)
-
-		return nil
-	}); err != nil {
-		logTickerStop(d.logger, "Outbox dispatcher loop stopped with error", err)
+		if !d.idle.Wait(ctx) {
+			break
+		}
 	}
 
 	d.logger.Info("Outbox dispatcher stopped")
 }
 
-// processOnce: 한 번의 폴링 사이클.
-func (d *Dispatcher) processOnce(ctx context.Context) {
-	d.processAvailable(ctx, 4)
+// processOnce: 한 번의 폴링 사이클. 처리한 항목이 있었는지 반환한다.
+func (d *Dispatcher) processOnce(ctx context.Context) bool {
+	processed := d.processAvailable(ctx, 4)
 	d.testHooks.fireProcessOnce()
+
+	return processed
 }
 
-func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
+func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) bool {
 	if maxRounds <= 0 {
 		maxRounds = 1
 	}
 
+	processedAny := false
+
 	for round := range maxRounds {
 		processed, ok := d.processAvailableRound(ctx, round)
+
+		processedAny = processedAny || processed
+
 		if !ok || !processed {
-			return
+			return processedAny
 		}
 	}
+
+	return processedAny
 }
 
 func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (processed, ok bool) {

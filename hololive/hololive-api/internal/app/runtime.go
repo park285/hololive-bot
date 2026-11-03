@@ -123,7 +123,7 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	}
 
 	// 비활성 executor도 영속 큐 관측과 profile 진단의 수명을 소유한다.
-	planes.youtube, err = youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+	planes.youtube, err = youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, planes.infra.bot.Cache, logger.With(slog.String("plane", "youtube")))
 	if err != nil {
 		return planes, fmt.Errorf("build youtube plane: %w", err)
 	}

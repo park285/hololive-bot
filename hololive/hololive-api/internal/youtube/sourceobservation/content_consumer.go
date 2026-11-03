@@ -49,7 +49,11 @@ func (c *Consumer) reconcileContent(
 
 	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
 
-	return ReconcileResult{Applications: applications, LiveRuntimeVideoIDs: premiereRuntimeVideoIDs}, nil
+	return ReconcileResult{
+		Applications:        applications,
+		LiveRuntimeVideoIDs: premiereRuntimeVideoIDs,
+		NotificationsQueued: len(decision.Notifications) > 0,
+	}, nil
 }
 
 func mergeContentApplications(contentApplications, premiereApplications []Application) []Application {

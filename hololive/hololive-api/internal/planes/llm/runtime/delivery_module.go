@@ -28,6 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/wakeup"
 )
 
 type DeliveryModule struct {
@@ -35,10 +36,12 @@ type DeliveryModule struct {
 	Repository *delivery.OutboxRepository
 }
 
-// deliveryLockCache는 delivery module의 실행 lock이 쓰는 cache 작업이다(SetNX, CompareAndDelete).
+// deliveryLockCache는 delivery module이 쓰는 cache 작업이다. 실행 lock(SetNX, CompareAndDelete)과 적재 뒤
+// alarm-worker wakeup 신호(SET NX EX, LPUSH, EXPIRE)를 쓴다.
 type deliveryLockCache interface {
 	cache.KeyValueWriter
 	cache.ScriptCache
+	cache.LowLevelCache
 }
 
 // BuildDeliveryModule은 digest 발송을 notification_delivery_outbox에 적재한다. 발송은 alarm-worker가 소유한다.
@@ -52,8 +55,11 @@ func BuildDeliveryModule(
 		return nil, fmt.Errorf("build delivery module: %w", err)
 	}
 
+	repository := delivery.NewOutboxRepository(postgres, logger)
+	repository.SetWakeup(wakeup.NewSignaler(cacheClient, wakeup.NotificationDelivery, logger))
+
 	return &DeliveryModule{
 		Locker:     locker,
-		Repository: delivery.NewOutboxRepository(postgres, logger),
+		Repository: repository,
 	}, nil
 }

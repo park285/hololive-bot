@@ -68,7 +68,10 @@ func (c *Consumer) reconcileCommunity(
 		return ReconcileResult{}, err
 	}
 
-	return ReconcileResult{Applications: communityApplications(payload.ChannelID, &persisted)}, nil
+	return ReconcileResult{
+		Applications:        communityApplications(payload.ChannelID, &persisted),
+		NotificationsQueued: len(persisted.Notifications) > 0,
+	}, nil
 }
 
 func communityNotificationState(

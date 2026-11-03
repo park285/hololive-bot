@@ -9,6 +9,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-shared/pkg/service/wakeup"
 )
 
 type ChannelPolicy struct {
@@ -25,6 +26,7 @@ type Consumer struct {
 	liveGrace         time.Duration
 	unresolvableGrace time.Duration
 	channel           ChannelPolicy
+	wakeup            *wakeup.Signaler
 }
 
 func NewConsumerWithGraces(repo observationClaimFinalizer, grace, liveGrace time.Duration) *Consumer {
@@ -58,6 +60,18 @@ func (c *Consumer) WithChannelPolicy(policy ChannelPolicy) *Consumer {
 	return c
 }
 
+// WithWakeup은 알림 행을 담은 관측이 commit된 뒤 alarm-worker YouTube consumer를 깨울 신호를 정한다.
+// 값이 nil이면 consumer polling만 남는다.
+func (c *Consumer) WithWakeup(signaler *wakeup.Signaler) *Consumer {
+	if c == nil {
+		return nil
+	}
+
+	c.wakeup = signaler
+
+	return c
+}
+
 func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {
 	if c == nil || c.repo == nil {
 		return ErrInvalidRepository
@@ -80,8 +94,14 @@ func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {
 }
 
 func (c *Consumer) ConsumeClaim(ctx context.Context, claim Claim) error {
-	if _, err := c.repo.Finalize(ctx, claim, c.finalizeObservation); err != nil {
+	out, err := c.repo.Finalize(ctx, claim, c.finalizeObservation)
+	if err != nil {
 		return fmt.Errorf("finalize: %w", err)
+	}
+
+	// Finalize가 오류 없이 끝나면 트랜잭션이 commit됐다. 신호 실패는 처리 실패가 아니며 consumer polling이 행을 잡는다.
+	if out.NotificationsQueued {
+		c.wakeup.Signal(ctx)
 	}
 
 	return nil

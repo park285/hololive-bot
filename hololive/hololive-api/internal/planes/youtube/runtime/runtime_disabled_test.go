@@ -94,7 +94,7 @@ func TestDisabledRuntimeReportsDurableQueueDepth(t *testing.T) {
 
 	config.Enabled = false
 
-	runtime, err := newRuntime(&config, slog.New(slog.DiscardHandler), pool, nil)
+	runtime, err := newRuntime(&config, slog.New(slog.DiscardHandler), pool, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(runtime.Close)
 	require.NoError(t, runtime.prepare(t.Context()))

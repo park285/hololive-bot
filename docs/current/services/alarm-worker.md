@@ -169,7 +169,7 @@ request snapshot/generation을 보존하지 못하는 구버전 바이너리로 
 - Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker`
 - Health: `https://127.0.0.1:30007/health`
 - Ready: `https://127.0.0.1:30007/ready`; authenticated `/diagnostics/workers` reports profile match, executors, and real queue snapshots.
-- Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority.
+- Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority. `notification_delivery`·`youtube_delivery` executor는 `notification:delivery:wakeup`·`youtube:delivery:wakeup`을 `BRPOP`으로 기다리고 Valkey 오류 때 `poll_interval_ms`로 조회합니다. 대기 결과는 `hololive_delivery_wakeup_waits_total{channel,result}`입니다.
 - Metrics: alarm-dispatch backlog/retention metrics (the v3 handoff metrics were removed with the handoff)
 - YouTube 공통 attempt counter는 실제 provider operation을 집계하며 grouped 호출 1회와 방별 delivery 결과를 구분합니다. 준비·claim·이미 충족된 행은 provider success로 세지 않습니다. provider 성공과 DB finalization 실패도 별도로 유지합니다.
 - Alarm retention의 기존 7개 status label은 advisory lock 안의 삭제 transaction이 commit된 뒤 계상합니다. rollback·lock 미획득·commit 응답 불명은 계상하지 않으며, commit 직후 process 종료까지 보장하는 감사 원장은 아닙니다. `alarm_dispatch_pg_mark_sending_failed_total`은 발송 진입(Begin) 실패당 한 번 증가하고 빈 입력·성공에는 증가하지 않습니다. `alarm_dispatch_pg_transition_partial_total{action,reason}`은 소유자 전이 미스마다 원인별로 한 번 증가합니다.

@@ -172,6 +172,9 @@ type ReconcileResult struct {
 	// Finalize가 같은 트랜잭션 끝에 이 key로 수명 모델을 갱신하므로, 원본을 쓰는 writer는 빠짐없이 채워야 한다.
 	// 실제 변경 key의 상위집합이며 중복을 허용한다.
 	LiveRuntimeVideoIDs []string
+	// NotificationsQueued는 이 관측 저장이 youtube_notification_outbox 행을 넣었을 수 있음을 뜻한다. ON CONFLICT DO NOTHING과
+	// 이미 알려진 Shorts 제외 때문에 실제 삽입의 상위집합이며, commit 뒤 alarm-worker를 깨울지만 정한다.
+	NotificationsQueued bool
 	Unsupported         bool
 	EffectiveAt         time.Time
 	SourceEventFallback bool

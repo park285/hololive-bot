@@ -28,6 +28,8 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/wakeup"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 const testRoomID = "room-1"
@@ -177,5 +179,48 @@ func TestEnqueueBatch(t *testing.T) {
 				t.Fatalf("pending count = %d, want %d", pending, tc.count)
 			}
 		})
+	}
+}
+
+// 새 행과 FAILED rearm처럼 commit된 변경이 있을 때만 consumer를 깨우고, PENDING 충돌 no-op은 깨우지 않는다.
+func TestEnqueueSignalsWakeupOnlyForChangedRows(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+	client, mini := testutil.NewTestCacheServiceWithMini(ctx, t)
+
+	repository.SetWakeup(wakeup.NewSignaler(client, wakeup.NotificationDelivery, nil))
+
+	const queue = "notification:delivery:wakeup"
+
+	enqueue := func(message string) {
+		t.Helper()
+
+		mini.FlushAll()
+
+		if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", testMessage(message)); err != nil {
+			t.Fatalf("enqueue %s: %v", message, err)
+		}
+	}
+
+	enqueue("msg1")
+
+	if got, err := mini.List(queue); err != nil || len(got) != 1 {
+		t.Fatalf("wakeup queue after new row = %v, %v; want one token", got, err)
+	}
+
+	enqueue("msg1-again")
+
+	if mini.Exists(queue) {
+		t.Fatal("pending conflict no-op signaled the consumer")
+	}
+
+	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE content_id = $1", "2026-W08:room1"); err != nil {
+		t.Fatalf("set failed status: %v", err)
+	}
+
+	enqueue("retry-msg")
+
+	if got, err := mini.List(queue); err != nil || len(got) != 1 {
+		t.Fatalf("wakeup queue after failed rearm = %v, %v; want one token", got, err)
 	}
 }

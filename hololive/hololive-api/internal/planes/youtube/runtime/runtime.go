@@ -23,6 +23,8 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/wakeup"
 )
 
 const (
@@ -108,7 +110,15 @@ type Runtime struct {
 	collectionObservation queueObservationThrottle
 }
 
-func Build(ctx context.Context, plane *apiconfig.YouTubePlaneConfig, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
+// Build의 wakeupCache는 알림 행 commit 뒤 alarm-worker를 깨우는 신호에만 쓴다. 없거나 실패해도 plane readiness와 처리에는
+// 영향이 없고 alarm-worker polling이 행을 잡는다.
+func Build(
+	ctx context.Context,
+	plane *apiconfig.YouTubePlaneConfig,
+	postgresConfig *settings.PostgresConfig,
+	wakeupCache cache.LowLevelCache,
+	logger *slog.Logger,
+) (*Runtime, error) {
 	config, postgres, err := validateBuildInputs(plane, postgresConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("validate build inputs: %w", err)
@@ -129,7 +139,7 @@ func Build(ctx context.Context, plane *apiconfig.YouTubePlaneConfig, postgresCon
 		return nil, errors.New("build youtube plane: dedicated pool is not configured")
 	}
 
-	runtime, err := newRuntime(config, logger, pool, cleanup)
+	runtime, err := newRuntime(config, logger, pool, cleanup, wakeup.NewSignaler(wakeupCache, wakeup.YouTubeDelivery, logger))
 	if err != nil {
 		cleanup()
 
@@ -181,6 +191,7 @@ func newRuntime(
 	logger *slog.Logger,
 	pool *pgxpool.Pool,
 	cleanup func(),
+	signaler *wakeup.Signaler,
 ) (*Runtime, error) {
 	repo := sourceobservation.NewRepository(pool)
 
@@ -204,7 +215,8 @@ func newRuntime(
 				ProfileClearStability:       plane.ProfileClearStability,
 				PhotoChangeMinObservations:  plane.PhotoChangeMinObservations,
 				PhotoChangeStability:        plane.PhotoChangeStability,
-			}),
+			}).
+			WithWakeup(signaler),
 		refresher:          refresher,
 		projectionRetainer: refresher,
 		finalizer:          repo,

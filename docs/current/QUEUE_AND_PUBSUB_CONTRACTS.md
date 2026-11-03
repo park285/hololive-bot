@@ -57,6 +57,20 @@ Consumer behavior:
 - `notification_delivery_outbox` keeps its own Iris handoff check (`handoff_request_id`, `handoff_next_check_at`, `handoff_checked_at`; migrations 330 and 338). It has no `last_error_code`; the handoff codes prefix `error` instead. The contract is in `contracts/alarm.md` under "Iris handoff reconciliation".
 - `youtube_notification_send_request` (the YouTube pinned request) keeps the YouTube Iris handoff check (`handoff_request_id`, `handoff_next_check_at`, `handoff_checked_at`; migrations 336 and 339), recorded by `CompleteSent` and settled by `youtube-delivery-handoff-reconciler`. Settlement reverts the logical group's `SENT` rows, deletes only the owner-sourced `SENT` ledger row and recomputes the parent outbox aggregate in the same transaction; post-level tracking marks are not reverted. The contract is in `contracts/alarm.md` under "Iris handoff reconciliation".
 
+## Delivery Outbox Wakeup
+
+`hololive-api`는 `notification_delivery_outbox`와 `youtube_notification_outbox` 행을 PostgreSQL에 commit한 뒤 payload 없는 Valkey 신호로 `alarm-worker`를 깨웁니다. 신호는 정본이 아니며, 유실·중복·축출돼도 worker가 `poll_interval_ms` 안에 PostgreSQL에서 행을 claim합니다. 공용 구현은 `hololive/hololive-shared/pkg/service/wakeup`입니다.
+
+| Channel | Producer 시점 | Queue / guard key | Consumer |
+|---|---|---|---|
+| `notification_delivery` | `delivery.OutboxRepository.EnqueueBatch`가 행을 삽입하거나 `FAILED` 행을 다시 `PENDING`으로 바꾼 뒤 | `notification:delivery:wakeup` / `notification:delivery:wakeup:guard` | `notification_delivery` executor |
+| `youtube_delivery` | YouTube plane `ConsumeClaim`의 Finalize가 알림 행을 담고 commit된 뒤 | `youtube:delivery:wakeup` / `youtube:delivery:wakeup:guard` | `youtube_delivery` executor |
+
+- Producer: `SET <guard> 1 NX EX 3`이 성공할 때만 `LPUSH <queue> 1`과 `EXPIRE <queue> 5`를 보냅니다. 호출자 취소와 분리해 500ms 안에서 보내고, 실패는 경고 로그와 `hololive_delivery_wakeup_signals_total{channel,result}`로만 드러내며 적재 결과를 바꾸지 않습니다.
+- Consumer: 조회한 행이 있으면 다음 대기를 250ms부터 시작하고, 빈 조회 뒤에는 `BRPOP <queue>`로 기다리되 timeout을 `poll_interval_ms`까지 두 배씩 늘립니다. Valkey 오류나 cache 미설정 때는 `poll_interval_ms`만큼 잠듭니다. 결과는 `hololive_delivery_wakeup_waits_total{channel,result}`입니다.
+- 처리 직후 대기가 250ms부터 다시 시작하므로, 처리할 행이 이어지는 동안에는 `poll_interval_ms`보다 짧은 간격으로 조회합니다. `poll_interval_ms`는 빈 대기의 상한이며 발송 속도 제한이 아닙니다.
+- Valkey ACL: `hololive-api` 계정에 `+set`(NX EX)·`+lpush`·`+expire`, `hololive-worker` 계정에 `+brpop`이 필요합니다.
+
 ## X 스페이스 시작 알림
 
 X 스페이스 시작 알림은 `source_kind=x_space`와 전용 `x_space` payload를 사용하며
