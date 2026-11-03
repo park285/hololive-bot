@@ -203,21 +203,22 @@ func absolutizeHelperPath(value *string, name string) error {
 	return nil
 }
 
+var helperProcessEnvKeys = map[string]struct{}{
+	"HOME":                {},
+	"LANG":                {},
+	"LC_ALL":              {},
+	"LC_CTYPE":            {},
+	"NODE_ENV":            {},
+	"NODE_EXTRA_CA_CERTS": {},
+	"PATH":                {},
+	"SSL_CERT_DIR":        {},
+	"SSL_CERT_FILE":       {},
+	"TMPDIR":              {},
+	"TZ":                  {},
+}
+
 func helperProcessEnv(parent []string) []string {
-	allowed := map[string]struct{}{
-		"HOME":                {},
-		"LANG":                {},
-		"LC_ALL":              {},
-		"LC_CTYPE":            {},
-		"NODE_ENV":            {},
-		"NODE_EXTRA_CA_CERTS": {},
-		"PATH":                {},
-		"SSL_CERT_DIR":        {},
-		"SSL_CERT_FILE":       {},
-		"TMPDIR":              {},
-		"TZ":                  {},
-	}
-	filtered := make([]string, 0, len(allowed))
+	filtered := make([]string, 0, len(helperProcessEnvKeys))
 
 	for _, entry := range parent {
 		key, _, found := strings.Cut(entry, "=")
@@ -225,7 +226,7 @@ func helperProcessEnv(parent []string) []string {
 			continue
 		}
 
-		if _, ok := allowed[key]; ok {
+		if _, ok := helperProcessEnvKeys[key]; ok {
 			filtered = append(filtered, entry)
 		}
 	}

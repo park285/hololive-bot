@@ -11,6 +11,8 @@ const brokerStates = new Set(["IDLE", "STARTING", "AWAITING_CHALLENGE", "AWAITIN
 const brokerErrors = new Set([
   "invalid_request", "generation_mismatch", "invalid_state", "expired", "busy", "worker_failed", "worker_timeout",
 ]);
+const poTokenPattern = /^[A-Za-z0-9_-]+={0,2}$/;
+const generationPattern = /^[A-Za-z0-9_-]+$/;
 
 /** 비신뢰 응답/예외 원문을 진단 경계 밖으로 보내지 않습니다. */
 export class ProofError extends Error {
@@ -106,7 +108,7 @@ export class ProofBrokerClient {
     }, signal);
     fields(result, ["protocol_version", "generation", "video_id", "po_token"]);
     if (result.generation !== id || result.video_id !== videoId || !boundedString(result.po_token, 8_192) ||
-        !/^[A-Za-z0-9_-]+={0,2}$/.test(result.po_token)) {
+        !poTokenPattern.test(result.po_token)) {
       throw new ProofError("broker_protocol");
     }
     return result.po_token;
@@ -199,5 +201,5 @@ function boundedString(value, limit) {
 
 /** @param {unknown} value @returns {value is string} */
 function generation(value) {
-  return boundedString(value, 128) && /^[A-Za-z0-9_-]+$/.test(value);
+  return boundedString(value, 128) && generationPattern.test(value);
 }

@@ -323,7 +323,7 @@ func deliverysqlSelectTransitionRows(
 		db,
 		dest,
 		"read transition rows",
-		mustSQL("transition_read_rows.sql"),
+		transitionReadRowsSQL,
 		uniqueSortedInt64s(ids),
 	); err != nil {
 		return fmt.Errorf("read transition rows: %w", err)

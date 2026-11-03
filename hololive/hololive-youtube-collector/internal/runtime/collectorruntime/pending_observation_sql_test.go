@@ -15,7 +15,7 @@ func TestPendingObservationCountBoundsBothActiveStates(t *testing.T) {
 
 	var seeded int
 
-	if err := pool.QueryRow(ctx, mustTestSQL("seed_observation_queue.sql"), 5, 4, 40, "pending-count").Scan(&seeded); err != nil {
+	if err := pool.QueryRow(ctx, seedObservationQueueSQL, 5, 4, 40, "pending-count").Scan(&seeded); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,7 +63,7 @@ func TestPendingObservationCountPlanUsesBothPartialIndexes(t *testing.T) {
 		t.Fatal(execErr)
 	}
 
-	rows, err := tx.Query(ctx, "EXPLAIN (COSTS OFF) "+mustSQL("pending_observation_count.sql"), pendingQueueCap)
+	rows, err := tx.Query(ctx, "EXPLAIN (COSTS OFF) "+pendingObservationCountSQL, pendingQueueCap)
 	if err != nil {
 		t.Fatal(err)
 	}

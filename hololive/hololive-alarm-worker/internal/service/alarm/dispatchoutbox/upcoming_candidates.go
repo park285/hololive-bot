@@ -99,7 +99,7 @@ func stageUpcomingInputs(ctx context.Context, db upcomingCandidateDB, channelID 
 		return fmt.Errorf("stage upcoming candidates: encode: %w", err)
 	}
 
-	if _, err := db.Exec(ctx, mustSQL("upcoming_candidates_stage.sql"), string(raw), channelID, now); err != nil {
+	if _, err := db.Exec(ctx, upcomingCandidatesStageSQL, string(raw), channelID, now); err != nil {
 		return fmt.Errorf("stage upcoming candidates: insert candidates: %w", err)
 	}
 
@@ -147,7 +147,7 @@ func (s *UpcomingCandidates) Finish(ctx context.Context, keysByOutcome map[strin
 			continue
 		}
 
-		if _, err := s.db.Exec(ctx, mustSQL("upcoming_candidates_apply.sql"), keys, outcome, &now, now); err != nil {
+		if _, err := s.db.Exec(ctx, upcomingCandidatesApplySQL, keys, outcome, &now, now); err != nil {
 			return fmt.Errorf("finish upcoming candidates: outcome %s: %w", outcome, err)
 		}
 	}
@@ -161,7 +161,7 @@ func (s *UpcomingCandidates) Cleanup(ctx context.Context, retentionDays, limit i
 		return 0, errors.New("cleanup upcoming candidates: retention and limit must be positive")
 	}
 
-	tag, err := s.db.Exec(ctx, mustSQL("upcoming_candidates_cleanup.sql"), retentionDays, limit)
+	tag, err := s.db.Exec(ctx, upcomingCandidatesCleanupSQL, retentionDays, limit)
 	if err != nil {
 		return 0, fmt.Errorf("cleanup upcoming candidates: %w", err)
 	}

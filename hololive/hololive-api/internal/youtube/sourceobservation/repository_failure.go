@@ -44,12 +44,12 @@ func (r *Repository) Retry(ctx context.Context, input RetryInput) (contract.Stat
 
 	// claim이 반환한 시도 횟수로 정책을 정하고 동일 횟수·token을 DB에서 다시 검증한다.
 	// 추가 SELECT 없이 재시도와 소진 종료를 결정하며 DB 시각에 따른 lease 만료 검증은 유지한다.
-	query := mustSQL("repository_retry_0017_17.sql")
+	query := retrySQL
 	target := contract.StatusPending
 	args := []any{input.ObservationID, input.LeaseToken, input.Delay.Milliseconds(), input.ErrorCode, input.ErrorDetail, input.AttemptCount}
 
 	if attemptsExhausted(input.AttemptCount) {
-		query = mustSQL("repository_retry_exhausted.sql")
+		query = repositoryRetryExhaustedSQL
 		target = contract.StatusDeadLetter
 		args = []any{input.ObservationID, input.LeaseToken, input.ErrorDetail, input.AttemptCount, attemptsExhaustedCode}
 	}
@@ -115,7 +115,7 @@ func persistDeadLetter(ctx context.Context, db dbx.Querier, input DeadLetterInpu
 
 	err := db.QueryRow(
 		ctx,
-		mustSQL("repository_dead_letter_0018_18.sql"),
+		persistDeadLetterSQL,
 		input.ObservationID,
 		input.LeaseToken,
 		input.ErrorCode,

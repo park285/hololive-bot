@@ -15,7 +15,7 @@ func persistReconcileConflict(
 ) error {
 	_, err := tx.Exec(
 		ctx,
-		mustSQL("repository_reconcile_conflict_insert_0061_61.sql"),
+		persistReconcileConflictSQL,
 		observation.ID,
 		observation.Provider,
 		observation.ObservationKind,

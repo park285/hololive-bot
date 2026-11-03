@@ -198,6 +198,8 @@ func readBroadcastThumbnailBody(body io.Reader) ([]byte, error) {
 	return data, nil
 }
 
+var broadcastThumbnailFallbackNames = []string{"maxresdefault.jpg", "sddefault.jpg", "hqdefault.jpg", "mqdefault.jpg"}
+
 func broadcastThumbnailCandidates(entry *handlercore.BroadcastHistoryEntry) []string {
 	candidates := make([]string, 0, 6)
 
@@ -209,7 +211,7 @@ func broadcastThumbnailCandidates(entry *handlercore.BroadcastHistoryEntry) []st
 		candidates = append(candidates, strings.TrimSpace(entry.ThumbnailURL))
 	}
 
-	for _, name := range []string{"maxresdefault.jpg", "sddefault.jpg", "hqdefault.jpg", "mqdefault.jpg"} {
+	for _, name := range broadcastThumbnailFallbackNames {
 		candidates = append(candidates, fmt.Sprintf("https://i.ytimg.com/vi/%s/%s", entry.VideoID, name))
 	}
 

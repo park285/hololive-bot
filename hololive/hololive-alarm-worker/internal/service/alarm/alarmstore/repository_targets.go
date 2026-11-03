@@ -37,7 +37,7 @@ func (r *Repository) loadChannelSubscriberAlarmsByChannels(
 	queryCtx, cancel := context.WithTimeout(ctx, channelSubscriberLoadTimeout)
 	defer cancel()
 
-	rows, err := r.pool.Query(queryCtx, mustSQL("repository_targets_0047_01.sql"), channelIDs, string(alarmType))
+	rows, err := r.pool.Query(queryCtx, loadChannelSubscriberAlarmsByChannelsSQL, channelIDs, string(alarmType))
 	if err != nil {
 		return nil, fmt.Errorf("load channel subscriber alarms by channels: %w", err)
 	}

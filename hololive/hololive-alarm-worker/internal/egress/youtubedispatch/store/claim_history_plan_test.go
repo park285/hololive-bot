@@ -31,17 +31,17 @@ type claimIndexPlanCase struct {
 // idx_ynd_pending_due_created_id, idx_ynd_sending_stale)를 증명하도록 쓴 claim SQL이다.
 var claimIndexPlanCases = []claimIndexPlanCase{
 	{
-		name: "fanout claim", sql: mustSQL("fanout_claim.sql"),
+		name: "fanout claim", sql: fanoutClaimSQL,
 		params:   fmt.Sprintf("'PENDING', 60000, 3600000, %d", claimPlanBatchSize),
 		relation: "youtube_notification_outbox",
 	},
 	{
-		name: "claim pending", sql: claimPendingSQL,
+		name: "claim pending", sql: transitionClaimPendingSQL,
 		params:   fmt.Sprintf("'PENDING', 60000, 3600000, %d, 'youtube-dispatcher:test'", claimPlanBatchSize),
 		relation: "youtube_notification_delivery",
 	},
 	{
-		name: "stale sending", sql: mustSQL("transition_stale_sending.sql"),
+		name: "stale sending", sql: transitionStaleSendingSQL,
 		params:   fmt.Sprintf("'SENDING', 3600000, %d", claimPlanBatchSize),
 		relation: "youtube_notification_delivery",
 	},

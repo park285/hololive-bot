@@ -69,7 +69,7 @@ func newPgxACLStore(pool *pgxpool.Pool) *pgxACLStore {
 func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (value string, ok bool, err error) {
 	var stored *string
 
-	scanErr := pgxscan.Get(ctx, s.pool, &stored, mustSQL("service_store_0067_01.sql"), key)
+	scanErr := pgxscan.Get(ctx, s.pool, &stored, getSettingSQL, key)
 	if scanErr != nil {
 		if stdErrors.Is(scanErr, pgx.ErrNoRows) {
 			return "", false, nil
@@ -86,7 +86,7 @@ func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (value string,
 }
 
 func (s *pgxACLStore) CreateSetting(ctx context.Context, key, value string) error {
-	if _, err := s.pool.Exec(ctx, mustSQL("service_store_0084_02.sql"), key, value); err != nil {
+	if _, err := s.pool.Exec(ctx, createSettingSQL, key, value); err != nil {
 		return fmt.Errorf("create acl setting %q: %w", key, err)
 	}
 
@@ -95,7 +95,7 @@ func (s *pgxACLStore) CreateSetting(ctx context.Context, key, value string) erro
 
 func (s *pgxACLStore) UpsertSetting(ctx context.Context, key, value string) error {
 	if _, err := s.pool.Exec(ctx,
-		mustSQL("service_store_0093_03.sql"),
+		upsertSettingSQL,
 		key, value,
 	); err != nil {
 		return fmt.Errorf("upsert acl setting %q: %w", key, err)
@@ -107,7 +107,7 @@ func (s *pgxACLStore) UpsertSetting(ctx context.Context, key, value string) erro
 func (s *pgxACLStore) ListRooms(ctx context.Context) ([]Room, error) {
 	var rooms []Room
 
-	if err := pgxscan.Select(ctx, s.pool, &rooms, mustSQL("service_store_0106_04.sql")); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rooms, listRoomsSQL); err != nil {
 		return nil, fmt.Errorf("list acl rooms: %w", err)
 	}
 
@@ -116,7 +116,7 @@ func (s *pgxACLStore) ListRooms(ctx context.Context) ([]Room, error) {
 
 func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) (bool, error) {
 	tag, err := s.pool.Exec(ctx,
-		mustSQL("service_store_0115_05.sql"),
+		createRoomSQL,
 		roomID, listType,
 	)
 	if err != nil {
@@ -128,7 +128,7 @@ func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) (
 
 func (s *pgxACLStore) DeleteRoom(ctx context.Context, roomID, listType string) error {
 	if _, err := s.pool.Exec(ctx,
-		mustSQL("service_store_0126_06.sql"),
+		deleteRoomSQL,
 		roomID, listType,
 	); err != nil {
 		return fmt.Errorf("delete acl room %q/%q: %w", roomID, listType, err)

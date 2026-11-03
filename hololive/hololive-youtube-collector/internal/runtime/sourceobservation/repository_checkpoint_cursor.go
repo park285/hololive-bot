@@ -34,7 +34,7 @@ func (r *Repository) LatestCheckpointCursor(
 
 	var cursor []byte
 
-	err := r.pool.QueryRow(ctx, mustSQL("repository_checkpoint_cursor_0005_05.sql"), string(provider), string(kind), subjectKey).Scan(&cursor)
+	err := r.pool.QueryRow(ctx, latestCheckpointCursorSQL, string(provider), string(kind), subjectKey).Scan(&cursor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

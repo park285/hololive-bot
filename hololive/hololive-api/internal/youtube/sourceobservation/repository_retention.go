@@ -148,7 +148,7 @@ func (r *Repository) retentionSteps(
 			table: "source_observation_collisions",
 			age:   cfg.CollisionAge,
 			run: func() (RetentionResult, error) {
-				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_collisions_0077_77.sql", cfg.CollisionAge, now, cfg.BatchSize))
+				return countOnly(r.deleteAgedBatch(ctx, retentionStepsSQL, cfg.CollisionAge, now, cfg.BatchSize))
 			},
 		},
 		{
@@ -165,7 +165,7 @@ func (r *Repository) retentionSteps(
 			table: "youtube_live_absence_slots",
 			age:   cfg.LiveAbsenceSlotAge,
 			run: func() (RetentionResult, error) {
-				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_live_absence_slots.sql", cfg.LiveAbsenceSlotAge, now, cfg.BatchSize))
+				return countOnly(r.deleteAgedBatch(ctx, repositoryRetentionDeleteLiveAbsenceSlotsSQL, cfg.LiveAbsenceSlotAge, now, cfg.BatchSize))
 			},
 		},
 		{
@@ -174,7 +174,7 @@ func (r *Repository) retentionSteps(
 			run: func() (RetentionResult, error) {
 				return countOnly(r.deleteAgedBatch(
 					ctx,
-					"repository_retention_delete_checkpoints_0084_84.sql",
+					retentionSteps2SQL,
 					cfg.CheckpointHistoryAge,
 					now,
 					cfg.BatchSize,
@@ -200,21 +200,21 @@ func (r *Repository) auditRetentionSteps(
 			table: "youtube_content_absence_slots",
 			age:   cfg.ContentAbsenceSlotAge,
 			run: func() (RetentionResult, error) {
-				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_content_absence_slots.sql", cfg.ContentAbsenceSlotAge, now, cfg.BatchSize))
+				return countOnly(r.deleteAgedBatch(ctx, repositoryRetentionDeleteContentAbsenceSlotsSQL, cfg.ContentAbsenceSlotAge, now, cfg.BatchSize))
 			},
 		},
 		{
 			table: "youtube_channel_profile_evidence",
 			age:   profileAge,
 			run: func() (RetentionResult, error) {
-				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_profile_evidence.sql", profileAge, now, cfg.BatchSize))
+				return countOnly(r.deleteAgedBatch(ctx, repositoryRetentionDeleteProfileEvidenceSQL, profileAge, now, cfg.BatchSize))
 			},
 		},
 		{
 			table: "youtube_channel_photo_variants",
 			age:   photoAge,
 			run: func() (RetentionResult, error) {
-				return countOnly(r.deleteAgedBatch(ctx, "repository_retention_delete_photo_variants.sql", photoAge, now, cfg.BatchSize))
+				return countOnly(r.deleteAgedBatch(ctx, repositoryRetentionDeletePhotoVariantsSQL, photoAge, now, cfg.BatchSize))
 			},
 		},
 		{
@@ -275,7 +275,7 @@ func (r *Repository) deleteQueueBatch(ctx context.Context, cfg RetentionConfig, 
 
 	out, err := r.execDelete(
 		ctx,
-		"repository_retention_delete_queue_0076_76.sql",
+		deleteQueueBatchSQL,
 		processedBefore,
 		dlqBefore,
 		cfg.BatchSize,
@@ -289,7 +289,7 @@ func (r *Repository) deleteQueueBatch(ctx context.Context, cfg RetentionConfig, 
 
 func (r *Repository) deleteAgedBatch(
 	ctx context.Context,
-	sqlName string,
+	query string,
 	age time.Duration,
 	now time.Time,
 	limit int,
@@ -299,7 +299,7 @@ func (r *Repository) deleteAgedBatch(
 		return 0, nil
 	}
 
-	out, err := r.execDelete(ctx, sqlName, cutoff, limit)
+	out, err := r.execDelete(ctx, query, cutoff, limit)
 	if err != nil {
 		return out, fmt.Errorf("exec delete: %w", err)
 	}
@@ -369,7 +369,7 @@ func (r *Repository) deleteEvidenceWindow(ctx context.Context, kinds []string, c
 	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (evidenceWindow, error) {
 		var window evidenceWindow
 
-		if err := tx.QueryRow(ctx, mustSQL("repository_retention_delete_evidence_window.sql"), kinds, cutoffs, limit).
+		if err := tx.QueryRow(ctx, repositoryRetentionDeleteEvidenceWindowSQL, kinds, cutoffs, limit).
 			Scan(&window.deleted, &window.passed, &window.traversalCompleted); err != nil {
 			return evidenceWindow{}, fmt.Errorf("delete source observation evidence: %w", err)
 		}
@@ -394,7 +394,7 @@ func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg Ret
 
 	if err := r.pool.QueryRow(
 		ctx,
-		mustSQL("repository_retention_delete_payloads.sql"),
+		repositoryRetentionDeletePayloadsSQL,
 		now.Add(-time.Hour),
 		cfg.BatchSize,
 	).Scan(&removed); err != nil {
@@ -413,15 +413,15 @@ func (r *Repository) deleteUnreferencedProvenanceBatch(ctx context.Context, cfg 
 
 	var removed int64
 
-	if err := r.pool.QueryRow(ctx, mustSQL("repository_retention_delete_provenances.sql"), cfg.BatchSize).Scan(&removed); err != nil {
+	if err := r.pool.QueryRow(ctx, repositoryRetentionDeleteProvenancesSQL, cfg.BatchSize).Scan(&removed); err != nil {
 		return 0, fmt.Errorf("collect unreferenced source observation provenances: %w", err)
 	}
 
 	return removed, nil
 }
 
-func (r *Repository) execDelete(ctx context.Context, name string, args ...any) (int64, error) {
-	tag, err := r.pool.Exec(ctx, mustSQL(name), args...)
+func (r *Repository) execDelete(ctx context.Context, query string, args ...any) (int64, error) {
+	tag, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}

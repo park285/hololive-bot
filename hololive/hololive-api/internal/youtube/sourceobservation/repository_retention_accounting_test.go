@@ -114,7 +114,7 @@ func TestRetentionBacklogDoesNotClaimEmptyBeyondProtectedScanLimit(t *testing.T)
 			known  bool
 		)
 
-		require.NoError(t, pool.QueryRow(ctx, mustSQL("repository_retention_backlog_evidence.sql"),
+		require.NoError(t, pool.QueryRow(ctx, repositoryRetentionBacklogEvidenceSQL,
 			[]string{string(contract.KindCommunityPage)}, []time.Time{time.Now().Add(-24 * time.Hour)}, tc.limit).Scan(&oldest, &known))
 		require.Equal(t, tc.known, known)
 

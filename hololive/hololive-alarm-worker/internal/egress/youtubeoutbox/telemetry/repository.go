@@ -178,7 +178,7 @@ func (r *Repository) EnqueuePrepared(
 func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
 	var sb strings.Builder
 
-	sb.WriteString(mustSQL("repository_0136_01.sql"))
+	sb.WriteString(enqueuePreparedChunkSQL)
 
 	args := make([]any, 0, len(rows)*enqueueTelemetryColumnsPerRow)
 	for i := range rows {
@@ -232,7 +232,7 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 	now := time.Now().UTC()
 	lockExpiry := now.Add(-lockTimeout)
 
-	rows, err := r.db.Query(ctx, mustSQL("repository_fetch_lock_pending.sql"), now, lockExpiry, batchSize)
+	rows, err := r.db.Query(ctx, repositoryFetchLockPendingSQL, now, lockExpiry, batchSize)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock pending delivery telemetry: %w", err)
 	}
@@ -264,7 +264,7 @@ func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 		return nil
 	}
 
-	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql"), time.Now().UTC(), uniqueIDs); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry logged", markLoggedBatchSQL, time.Now().UTC(), uniqueIDs); err != nil {
 		return fmt.Errorf("mark delivery telemetry logged: %w", err)
 	}
 
@@ -279,7 +279,7 @@ func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff ti
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
 
-	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql"), nextAttemptAt, deliverysql.TruncateString(errMsg, 500), uniqueIDs); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry retry", markRetryBatchSQL, nextAttemptAt, deliverysql.TruncateString(errMsg, 500), uniqueIDs); err != nil {
 		return fmt.Errorf("mark delivery telemetry retry: %w", err)
 	}
 
@@ -321,7 +321,7 @@ func (r *Repository) refreshLockedRows(
 		return nil
 	}
 
-	if _, err := dbx.ExecSQL(ctx, r.db, "refresh locked delivery telemetry rows", mustSQL("repository_0343_08.sql"), ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "refresh locked delivery telemetry rows", refreshLockedRowsSQL, ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
 		return fmt.Errorf("exec delivery SQL: %w", err)
 	}
 
@@ -362,7 +362,7 @@ func (r *Repository) deleteLoggedBeforeInBatches(ctx context.Context, cutoff tim
 }
 
 func (r *Repository) deleteLoggedBeforeBatch(ctx context.Context, cutoff time.Time, batchSize int) (deleted int64, done bool, err error) {
-	tag, err := r.db.Exec(ctx, mustSQL("repository_0364_09.sql"), cutoff.UTC(), batchSize)
+	tag, err := r.db.Exec(ctx, deleteLoggedBeforeBatchSQL, cutoff.UTC(), batchSize)
 	if err != nil {
 		return 0, true, fmt.Errorf("delete delivery telemetry before cutoff: %w", err)
 	}

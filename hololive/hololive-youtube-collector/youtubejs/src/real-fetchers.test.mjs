@@ -5,6 +5,8 @@ import { createInnertube } from "./fetch-community.mjs";
 import { createRealFetchers } from "./real-fetchers.mjs";
 import { currentRequestSignal, runWithRequestContext } from "./request-context.mjs";
 
+const initFailedPattern = /init failed/;
+
 test("rejected Innertube init clears the promise", async () => {
   let calls = 0;
   const fetchers = createRealFetchers({
@@ -13,8 +15,8 @@ test("rejected Innertube init clears the promise", async () => {
       throw new Error("init failed");
     },
   });
-  await assert.rejects(() => fetchers.fetchChannel({ channelId: "UC_TEST", kind: "live", maxSuccessResponseBytes: 1 << 20 }), /init failed/);
-  await assert.rejects(() => fetchers.fetchChannel({ channelId: "UC_TEST", kind: "live", maxSuccessResponseBytes: 1 << 20 }), /init failed/);
+  await assert.rejects(() => fetchers.fetchChannel({ channelId: "UC_TEST", kind: "live", maxSuccessResponseBytes: 1 << 20 }), initFailedPattern);
+  await assert.rejects(() => fetchers.fetchChannel({ channelId: "UC_TEST", kind: "live", maxSuccessResponseBytes: 1 << 20 }), initFailedPattern);
   assert.equal(calls, 2);
 });
 

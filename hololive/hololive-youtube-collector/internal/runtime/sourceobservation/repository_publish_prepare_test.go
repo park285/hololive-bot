@@ -269,12 +269,12 @@ func clonePublishBatchResult(source PublishBatchResult) PublishBatchResult {
 func TestERR003AtomicAndCompleteErrorSQLMatchGoTuples(t *testing.T) {
 	t.Parallel()
 
-	deferTuples := extractDurableFailureTuples(mustSQL("repository_job_defer_0082_82.sql"))
+	deferTuples := extractDurableFailureTuples(deferCollectionJobSQL)
 	if !failureTupleSetsEqual(deferTuples, contract.DeferFailureTuples()) {
 		t.Fatalf("atomic defer SQL tuples = %#v, want %#v", deferTuples, contract.DeferFailureTuples())
 	}
 
-	completeTuples := extractDurableFailureTuples(mustSQL("repository_job_complete_error_0081_81.sql"))
+	completeTuples := extractDurableFailureTuples(completeCollectionJobWithErrorSQL)
 	if !failureTupleSetsEqual(completeTuples, contract.CompleteErrorFailureTuples()) {
 		t.Fatalf("complete-with-error SQL tuples = %#v, want %#v", completeTuples, contract.CompleteErrorFailureTuples())
 	}

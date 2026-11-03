@@ -59,9 +59,18 @@ func (ma *MessageAdapter) tryAlarmCommand(command string, args []string, raw str
 	return ma.parseAlarmCommand(command, args, raw), true
 }
 
+var alarmCommandAliases = []string{"알람", "알림", "알림설정", "알람설정", "alarm"}
+
 func (ma *MessageAdapter) isAlarmCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"알람", "알림", "알림설정", "알람설정", "alarm"}, cmd)
+	return stringutil.ContainsString(alarmCommandAliases, cmd)
 }
+
+var (
+	alarmAddSubCommandAliases    = []string{"추가", "설정", "set", "add"}
+	alarmRemoveSubCommandAliases = []string{"제거", "삭제", "remove", "del", "delete"}
+	alarmListSubCommandAliases   = []string{"목록", "list", "show"}
+	alarmClearSubCommandAliases  = []string{alarmSubCommandClear, "clear", "reset"}
+)
 
 func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage string) *ParsedCommand {
 	if len(args) == 0 {
@@ -71,21 +80,21 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 	subCmd := stringutil.Normalize(args[0])
 	restArgs := args[1:]
 
-	if stringutil.ContainsString([]string{"추가", "설정", "set", "add"}, subCmd) {
+	if stringutil.ContainsString(alarmAddSubCommandAliases, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
 		return alarmMemberCommand(botcommand.CommandAlarmAdd, "add", member, alarmType, rawMessage)
 	}
 
-	if stringutil.ContainsString([]string{"제거", "삭제", "remove", "del", "delete"}, subCmd) {
+	if stringutil.ContainsString(alarmRemoveSubCommandAliases, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
 		return alarmMemberCommand(botcommand.CommandAlarmRemove, "remove", member, alarmType, rawMessage)
 	}
 
-	if stringutil.ContainsString([]string{"목록", "list", "show"}, subCmd) {
+	if stringutil.ContainsString(alarmListSubCommandAliases, subCmd) {
 		return alarmListCommand(rawMessage)
 	}
 
-	if stringutil.ContainsString([]string{alarmSubCommandClear, "clear", "reset"}, subCmd) {
+	if stringutil.ContainsString(alarmClearSubCommandAliases, subCmd) {
 		return alarmClearCommand(rawMessage)
 	}
 

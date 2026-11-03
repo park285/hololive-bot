@@ -37,7 +37,7 @@ func (r *Repository) EnsureClaimBudget(
 
 	err := r.pool.QueryRow(
 		ctx,
-		mustSQL("repository_claim_budget_0019_19.sql"),
+		ensureClaimBudgetSQL,
 		claim.ObservationID,
 		claim.LeaseToken,
 		(2 * transactionTimeout).Milliseconds(),
@@ -241,7 +241,7 @@ func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Obse
 
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_application_insert_0014_14.sql"),
+		writeFinalizeApplicationsSQL,
 		observation.ID, kinds, keys, decisions,
 	); err != nil {
 		return fmt.Errorf("finalize source observation: insert application audit batch: %w", err)
@@ -271,7 +271,7 @@ func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, ob
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_complete_0015_15.sql"),
+		completeFinalizeObservationSQL,
 		observation.ID,
 		observation.LeaseToken,
 	).Scan(&observationID)
@@ -286,7 +286,7 @@ func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, ob
 
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_offset_upsert_0016_16.sql"),
+		completeFinalizeObservation2SQL,
 		claim.ConsumerName,
 		observation.ObservationKind,
 		observation.ID,
@@ -301,7 +301,7 @@ func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, ob
 func lockClaim(ctx context.Context, tx dbx.Tx, claim Claim) (Observation, error) {
 	row := tx.QueryRow(
 		ctx,
-		mustSQL("repository_claim_lock_0013_13.sql"),
+		lockClaimSQL,
 		claim.ObservationID,
 		claim.LeaseToken,
 	)

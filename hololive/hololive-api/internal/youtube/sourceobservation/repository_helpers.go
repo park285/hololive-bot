@@ -31,7 +31,7 @@ func boundedErrorDetail(value string) string {
 // head 복구는 같은 key를 exclusive로 잡으므로 서로 배제되고, 관측 writer끼리는 원본 행과 영상 잠금으로만 직렬화된다.
 // 잠금 경합의 40001·40P01·55P03은 트랜잭션 안에서 재시도하지 않고 관측 재시도에 맡긴다.
 func lockLiveRuntimeState(ctx context.Context, tx dbx.Tx) error {
-	if _, err := tx.Exec(ctx, mustSQL("repository_live_runtime_lock.sql")); err != nil {
+	if _, err := tx.Exec(ctx, repositoryLiveRuntimeLockSQL); err != nil {
 		return fmt.Errorf("lock youtube live runtime state: %w", err)
 	}
 
@@ -45,7 +45,7 @@ func refreshLiveRuntimeState(ctx context.Context, tx dbx.Tx, videoIDs []string) 
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("repository_live_runtime_refresh.sql"), videoIDs); err != nil {
+	if _, err := tx.Exec(ctx, repositoryLiveRuntimeRefreshSQL, videoIDs); err != nil {
 		return fmt.Errorf("refresh youtube live runtime state: %w", err)
 	}
 

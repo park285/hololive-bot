@@ -22,8 +22,10 @@ func (ma *MessageAdapter) tryCelebrationCalendarCommand(command string, args []s
 	}, true
 }
 
+var calendarCommandAliases = []string{"달력", "기념일", "calendar"}
+
 func (ma *MessageAdapter) isCalendarCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"달력", "기념일", "calendar"}, cmd)
+	return stringutil.ContainsString(calendarCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) parseCalendarArgs(args []string) map[string]any {

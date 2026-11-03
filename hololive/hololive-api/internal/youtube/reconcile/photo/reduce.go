@@ -61,6 +61,8 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 	}, nil
 }
 
+var photoReduceKinds = []string{"avatar", "banner"}
+
 func reducePhotoKinds(
 	head *Head,
 	byKind map[string][]Variant,
@@ -75,7 +77,7 @@ func reducePhotoKinds(
 
 	product := map[string]Canonical{}
 
-	for _, kind := range []string{"avatar", "banner"} {
+	for _, kind := range photoReduceKinds {
 		variants := byKind[kind]
 		if len(variants) == 0 {
 			continue

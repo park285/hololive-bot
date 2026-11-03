@@ -15,7 +15,7 @@ import (
 )
 
 func lockContentSubject(ctx context.Context, tx dbx.Tx, kind contract.ObservationKind, subjectKey string) error {
-	if _, err := tx.Exec(ctx, mustSQL("repository_content_subject_lock_0034_34.sql"), kind, subjectKey); err != nil {
+	if _, err := tx.Exec(ctx, lockContentSubjectSQL, kind, subjectKey); err != nil {
 		return fmt.Errorf("lock content subject: %w", err)
 	}
 
@@ -59,7 +59,7 @@ func loadContentState(
 func loadContentHead(ctx context.Context, tx dbx.Tx, state *content.State) error {
 	var earliestComplete, earliestBaseline *time.Time
 
-	err := tx.QueryRow(ctx, mustSQL("repository_content_channel_head_0040_40.sql"), state.ChannelID, state.Kind).Scan(&earliestComplete, &earliestBaseline)
+	err := tx.QueryRow(ctx, loadContentHeadSQL, state.ChannelID, state.Kind).Scan(&earliestComplete, &earliestBaseline)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -87,7 +87,7 @@ func evidenceVideoIDs(evidence *content.Evidence) []string {
 func loadContentVideos(ctx context.Context, tx dbx.Tx, state *content.State, evidenceIDs []string) error {
 	isShort := state.Kind == contract.KindShortsList
 
-	rows, err := tx.Query(ctx, mustSQL("repository_content_videos_0035_35.sql"), state.ChannelID, isShort, evidenceIDs)
+	rows, err := tx.Query(ctx, loadContentVideosSQL, state.ChannelID, isShort, evidenceIDs)
 	if err != nil {
 		return fmt.Errorf("load content videos: %w", err)
 	}
@@ -129,7 +129,7 @@ func loadKnownElsewhere(ctx context.Context, tx dbx.Tx, state *content.State, ev
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_content_known_elsewhere_0087_87.sql"), state.ChannelID, evidenceIDs)
+	rows, err := tx.Query(ctx, loadKnownElsewhereSQL, state.ChannelID, evidenceIDs)
 	if err != nil {
 		return fmt.Errorf("query known elsewhere: %w", err)
 	}
@@ -171,7 +171,7 @@ func loadContentClocks(ctx context.Context, tx dbx.Tx, state *content.State, ids
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_content_clocks_0036_36.sql"), ids)
+	rows, err := tx.Query(ctx, loadContentClocksSQL, ids)
 	if err != nil {
 		return fmt.Errorf("load content clocks: %w", err)
 	}
@@ -199,7 +199,7 @@ func loadContentClocks(ctx context.Context, tx dbx.Tx, state *content.State, ids
 func loadContentAbsenceSlots(ctx context.Context, tx dbx.Tx, state *content.State, evidence *content.Evidence) error {
 	rows, err := tx.Query(
 		ctx,
-		mustSQL("repository_content_absence_slots_0038_38.sql"),
+		loadContentAbsenceSlotsSQL,
 		state.ChannelID,
 		state.Kind,
 		evidence.ScheduledFor,

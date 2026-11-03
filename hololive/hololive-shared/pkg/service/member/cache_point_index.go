@@ -31,12 +31,12 @@ import (
 // memberSnapshotIndex는 snapshot 멤버 목록에서 한 번 만들어 snapshot과 함께 불변으로 게시하는 조회 색인이다. 게시 뒤에는
 // 읽기만 하므로 잠금 없이 공유한다. 각 색인이 맞추는 PostgreSQL 조회 규칙은 필드 주석에 적는다.
 type memberSnapshotIndex struct {
-	// channelRepresentatives는 채널별 가장 작은 영속 ID 멤버다(repository_query_0032_01.sql의 ORDER BY id).
+	// channelRepresentatives는 채널별 가장 작은 영속 ID 멤버다(find_by_channel_id.sql의 ORDER BY id).
 	channelRepresentatives map[string]*domain.Member
-	// byName은 english_name 정확 일치다. 같은 이름이 여럿이면 repository_query_0048_02.sql의 ORDER BY id처럼 가장 작은
+	// byName은 english_name 정확 일치다. 같은 이름이 여럿이면 find_by_name.sql의 ORDER BY id처럼 가장 작은
 	// 영속 ID가 이긴다.
 	byName map[string]*domain.Member
-	// pointAliasByName과 pointAliasByExact는 repository_query_0064_03.sql의 단건 별칭 규칙이다. 공식 이름(영·일·한)은
+	// pointAliasByName과 pointAliasByExact는 find_by_alias.sql의 단건 별칭 규칙이다. 공식 이름(영·일·한)은
 	// 대소문자 무관(EqualFold) 비교, 명시 별칭은 정확 일치이며, 키마다 가장 작은 영속 ID를 담는다.
 	pointAliasByName  map[string]*domain.Member
 	pointAliasByExact map[string]*domain.Member
@@ -127,7 +127,7 @@ func appendDistinct(index map[string][]*domain.Member, member *domain.Member, va
 	}
 }
 
-// aliasOwner는 repository FindByAlias(repository_query_0064_03.sql)와 같은 기준으로 snapshot에서 별칭 주인을 고른다.
+// aliasOwner는 repository FindByAlias(find_by_alias.sql)와 같은 기준으로 snapshot에서 별칭 주인을 고른다.
 // 공식 이름은 대소문자를 무시하고, 명시 별칭은 정확히 일치해야 하며, 여러 명이 맞으면 SQL의 ORDER BY id처럼 가장 작은
 // 영속 ID가 이긴다.
 func (index *memberSnapshotIndex) aliasOwner(alias string) *domain.Member {

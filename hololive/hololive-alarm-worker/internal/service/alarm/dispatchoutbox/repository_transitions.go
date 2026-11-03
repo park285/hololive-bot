@@ -40,13 +40,13 @@ func (r *PgxRepository) MarkSent(ctx context.Context, unitID int64, claims []Del
 		return fmt.Errorf("%s: marshal claims: %w", fenceActionMarkSent, err)
 	}
 
-	return r.applyFenced(ctx, r.pool, fenceActionMarkSent, sqlMarkSent, fencedTargetIDs(claims),
+	return r.applyFenced(ctx, r.pool, fenceActionMarkSent, markSentSQL, fencedTargetIDs(claims),
 		jsonbRecordsetParam(raw), workerID, unitID, irisRequestID, firstCheckMS)
 }
 
 // ReleaseLeased는 발송 전 claim을 같은 attempt의 retry로 반환한다.
 func (r *PgxRepository) ReleaseLeased(ctx context.Context, claims []DeliveryClaim, workerID string) error {
-	return r.applyClaims(ctx, fenceActionReleaseLeased, sqlReleaseLeased, claims, workerID)
+	return r.applyClaims(ctx, fenceActionReleaseLeased, releaseLeasedSQL, claims, workerID)
 }
 
 func (r *PgxRepository) applyClaims(ctx context.Context, action, query string, claims []DeliveryClaim, workerID string) error {
@@ -64,13 +64,13 @@ func (r *PgxRepository) applyClaims(ctx context.Context, action, query string, c
 
 // RouteFailures는 발송 전 실패를 retry·dlq로 정산한다. 잠금 뒤 clock 기준으로 lease가 유효한 소유 claim만 바꾼다.
 func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	return r.routeFailureUpdates(ctx, updates, workerID, sqlRouteFailures, fenceActionRouteFailures)
+	return r.routeFailureUpdates(ctx, updates, workerID, routeFailuresSQL, fenceActionRouteFailures)
 }
 
 // RouteSendingFailures는 외부 호출 뒤 실패를 retry·dlq로 정산한다. 상태는 leased·sending을 받고 lease 만료는 보지 않는다.
 // 만료 회수는 leased만, stale 격리는 sending의 locked_by를 비우므로 소유자·attempt 일치가 소유권 증명이다.
 func (r *PgxRepository) RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	return r.routeFailureUpdates(ctx, updates, workerID, sqlRouteSendingFailures, fenceActionRouteSendingFailures)
+	return r.routeFailureUpdates(ctx, updates, workerID, routeSendingFailuresSQL, fenceActionRouteSendingFailures)
 }
 
 // RequeuePreSend는 외부 호출 전에 멈춘 claim을 같은 attempt의 retry로 되돌린다.
@@ -81,7 +81,7 @@ func (r *PgxRepository) RequeuePreSend(ctx context.Context, updates []FailureUpd
 		}
 	}
 
-	return r.routeFailureUpdates(ctx, updates, workerID, sqlRequeuePreSend, fenceActionRequeuePreSend)
+	return r.routeFailureUpdates(ctx, updates, workerID, requeuePreSendSQL, fenceActionRequeuePreSend)
 }
 
 func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, query, action string) error {
@@ -147,12 +147,12 @@ func prepareFailureUpdates(updates []FailureUpdate) []failureRouteInput {
 
 // MoveToDLQ는 소유한 leased·sending claim을 같은 attempt에서 dlq로 끝낸다.
 func (r *PgxRepository) MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error {
-	return r.terminalUpdates(ctx, fenceActionMoveToDLQ, sqlMoveToDLQ, updates, workerID)
+	return r.terminalUpdates(ctx, fenceActionMoveToDLQ, repositoryTerminalDLQSQL, updates, workerID)
 }
 
 // Quarantine은 소유한 leased·sending claim을 같은 attempt에서 quarantined로 끝낸다.
 func (r *PgxRepository) Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error {
-	return r.terminalUpdates(ctx, fenceActionQuarantine, sqlQuarantine, updates, workerID)
+	return r.terminalUpdates(ctx, fenceActionQuarantine, repositoryTerminalQuarantineSQL, updates, workerID)
 }
 
 func (r *PgxRepository) terminalUpdates(ctx context.Context, action, query string, updates []TerminalUpdate, workerID string) error {

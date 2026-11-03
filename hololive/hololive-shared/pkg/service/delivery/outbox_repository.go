@@ -117,7 +117,7 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 		return fmt.Errorf("enqueue batch: marshal rows: %w", err)
 	}
 
-	if _, err := r.pool.Exec(ctx, mustSQL("outbox_enqueue_batch_upsert.sql"), string(raw)); err != nil {
+	if _, err := r.pool.Exec(ctx, outboxEnqueueBatchUpsertSQL, string(raw)); err != nil {
 		return fmt.Errorf("enqueue batch: %w", err)
 	}
 

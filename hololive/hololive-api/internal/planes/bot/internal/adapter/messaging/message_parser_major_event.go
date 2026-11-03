@@ -26,8 +26,10 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
+var majorEventCommandAliases = []string{"이벤트", "행사", "행사알림", "이벤트알림"}
+
 func (ma *MessageAdapter) isMajorEventCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"이벤트", "행사", "행사알림", "이벤트알림"}, cmd)
+	return stringutil.ContainsString(majorEventCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) tryMajorEventCommand(command string, args []string, raw string) (*ParsedCommand, bool) {

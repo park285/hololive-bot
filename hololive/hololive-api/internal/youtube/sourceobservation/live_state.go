@@ -14,7 +14,7 @@ import (
 )
 
 func lockLiveSubject(ctx context.Context, tx dbx.Tx, subjectKey string) error {
-	if _, err := tx.Exec(ctx, mustSQL("repository_live_subject_lock_0044_44.sql"), subjectKey); err != nil {
+	if _, err := tx.Exec(ctx, lockLiveSubjectSQL, subjectKey); err != nil {
 		return fmt.Errorf("lock live subject: %w", err)
 	}
 
@@ -85,7 +85,7 @@ func loadLiveSessions(ctx context.Context, tx dbx.Tx, state *live.State, channel
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_live_sessions_0045_45.sql"), channelIDs, videoIDs)
+	rows, err := tx.Query(ctx, loadLiveSessionsSQL, channelIDs, videoIDs)
 	if err != nil {
 		return fmt.Errorf("load live sessions: %w", err)
 	}
@@ -149,7 +149,7 @@ func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs, 
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_live_heads_0046_46.sql"), videoIDs, omitIgnoredFor)
+	rows, err := tx.Query(ctx, loadLiveHeadsSQL, videoIDs, omitIgnoredFor)
 	if err != nil {
 		return fmt.Errorf("load live heads: %w", err)
 	}
@@ -174,7 +174,7 @@ func loadLiveIgnoredAbsences(ctx context.Context, tx dbx.Tx, state *live.State, 
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_live_ignored_absences.sql"), videoIDs)
+	rows, err := tx.Query(ctx, repositoryLiveIgnoredAbsencesSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("query ignored absences: %w", err)
 	}

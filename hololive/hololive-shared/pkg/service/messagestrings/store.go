@@ -180,7 +180,7 @@ func (s *Store) GetMap(namespace string) map[string]string {
 }
 
 func (s *Store) load(ctx context.Context) error {
-	rows, err := s.pool.Query(ctx, mustSQL("store_0189_01.sql"))
+	rows, err := s.pool.Query(ctx, loadSQL)
 	if err != nil {
 		return fmt.Errorf("query message_strings: %w", err)
 	}

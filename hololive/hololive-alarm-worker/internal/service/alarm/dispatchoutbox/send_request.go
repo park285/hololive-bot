@@ -99,7 +99,7 @@ func (r *PgxRepository) prepareSendRequest(
 	}
 
 	ids := fencedTargetIDs(claims)
-	if err := r.applyFenced(ctx, tx, action, sqlSendRequestMembers, ids, unitID, jsonbRecordsetParam(raw), workerID, expectedID); err != nil {
+	if err := r.applyFenced(ctx, tx, action, sendRequestMembersSQL, ids, unitID, jsonbRecordsetParam(raw), workerID, expectedID); err != nil {
 		return nil, err
 	}
 
@@ -148,7 +148,7 @@ func fillPinnedRequest(request, candidate *SendRequest, ids []int64) error {
 func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest, error) {
 	var request SendRequest
 
-	err := tx.QueryRow(ctx, mustSQL("send_request_lock.sql"), unitID).Scan(&request.Body, &request.Route, &request.BodyHash, &request.DeliveryIDs, &request.BaseClientRequestID, &request.ClientRequestID, &request.Generation, &request.RoomID)
+	err := tx.QueryRow(ctx, sendRequestLockSQL, unitID).Scan(&request.Body, &request.Route, &request.BodyHash, &request.DeliveryIDs, &request.BaseClientRequestID, &request.ClientRequestID, &request.Generation, &request.RoomID)
 	if err != nil {
 		return nil, fmt.Errorf("lock send request: %w", err)
 	}
@@ -159,7 +159,7 @@ func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest
 // pinSendRequest는 잠근 단위의 요청이 아직 비어 있을 때만 고정한다. 고정하지 못하면 다른 고정이 앞선 것이므로
 // 단위 전원을 request_changed 미스로 보고한다.
 func pinSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, request *SendRequest, claims []DeliveryClaim) error {
-	rows, err := tx.Query(ctx, mustSQL("send_request_pin.sql"), unitID, request.Body, request.Route, request.BodyHash, request.DeliveryIDs, request.BaseClientRequestID)
+	rows, err := tx.Query(ctx, sendRequestPinSQL, unitID, request.Body, request.Route, request.BodyHash, request.DeliveryIDs, request.BaseClientRequestID)
 	if err != nil {
 		return fmt.Errorf("pin send request: %w", err)
 	}
@@ -217,7 +217,7 @@ func (r *PgxRepository) ReissueSendRequest(ctx context.Context, unitID int64, wo
 		return fmt.Errorf("%s: marshal batch: %w", fenceActionReissueSendRequest, err)
 	}
 
-	return r.applyFenced(ctx, r.pool, fenceActionReissueSendRequest, sqlReissueSendRequest, fencedTargetIDs(updates),
+	return r.applyFenced(ctx, r.pool, fenceActionReissueSendRequest, sendRequestReissueSQL, fencedTargetIDs(updates),
 		unitID, jsonbRecordsetParam(raw), workerID, request.ClientRequestID, request.Generation, nextID)
 }
 
@@ -238,6 +238,6 @@ func (r *PgxRepository) BeginSendRequest(ctx context.Context, unitID int64, clai
 		return fmt.Errorf("%s: marshal claims: %w", fenceActionBeginSendRequest, err)
 	}
 
-	return r.applyFenced(ctx, r.pool, fenceActionBeginSendRequest, sqlBeginSendRequest, fencedTargetIDs(claims),
+	return r.applyFenced(ctx, r.pool, fenceActionBeginSendRequest, sendRequestBeginSQL, fencedTargetIDs(claims),
 		unitID, jsonbRecordsetParam(raw), workerID, expectedID, leaseMS)
 }

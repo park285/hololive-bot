@@ -41,7 +41,7 @@ func TestExtendTargetsCurrentRangeBufferBound(t *testing.T) {
 			_, err = tx.Exec(t.Context(), "SET LOCAL plan_cache_mode = "+mode)
 			require.NoError(t, err)
 
-			_, err = tx.Exec(t.Context(), "PREPARE extend_target_plan(bigint,text[],text[],timestamptz[]) AS "+mustSQL("extend_targets.sql"))
+			_, err = tx.Exec(t.Context(), "PREPARE extend_target_plan(bigint,text[],text[],timestamptz[]) AS "+extendTargetsSQL)
 			require.NoError(t, err)
 
 			before := targetPlanTuples(t, tx, first.Generation)

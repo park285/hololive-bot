@@ -37,7 +37,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 		return false, errors.New("membernews repository pool is nil")
 	}
 
-	query := mustSQL("repository_query_0037_01.sql")
+	query := isSubscribedSQL
 
 	var exists bool
 
@@ -53,7 +53,7 @@ func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.Subscribe
 		return nil, errors.New("membernews repository pool is nil")
 	}
 
-	query := mustSQL("repository_query_0050_02.sql")
+	query := listSubscribedRoomsSQL
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -85,7 +85,7 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 		return nil, errors.New("membernews repository pool is nil")
 	}
 
-	query := mustSQL("repository_query_0080_03.sql")
+	query := getRoomMembersSQL
 
 	rows, err := r.pool.Query(ctx, query, roomID)
 	if err != nil {
@@ -118,7 +118,7 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 
 func (r *Repository) ListActiveMajorEventsForPeriod(ctx context.Context, period model.Period, now time.Time) ([]model.Candidate, error) {
 	start, end := filter.PeriodBounds(period, now)
-	return r.listActiveMajorEvents(ctx, mustSQL("repository_query_period.sql"), start, end)
+	return r.listActiveMajorEvents(ctx, repositoryQueryPeriodSQL, start, end)
 }
 
 func (r *Repository) listActiveMajorEvents(ctx context.Context, query string, args ...any) ([]model.Candidate, error) {

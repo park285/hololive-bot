@@ -25,7 +25,7 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
-	rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
+	rows, err := pool.Query(t.Context(), collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestCollectionTargetSnapshotDefersSleepingTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := pool.Query(ctx, mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
+	rows, err := pool.Query(ctx, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestCollectionTargetSnapshotRejectsInvalidProjection(t *testing.T) {
 				}
 			}
 
-			rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
+			rows, err := pool.Query(t.Context(), collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -233,7 +233,7 @@ func TestCollectionLiveStateWorkExcludesRetainedEndedHistory(t *testing.T) {
 
 	var raw []byte
 
-	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds()).Scan(&raw); err != nil {
+	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds()).Scan(&raw); err != nil {
 		t.Fatal(err)
 	}
 

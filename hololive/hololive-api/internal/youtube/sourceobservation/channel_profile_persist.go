@@ -13,7 +13,7 @@ import (
 
 func loadProfileState(ctx context.Context, tx dbx.Tx, channelID string) (profile.State, error) {
 	state := profile.State{ChannelID: channelID, Head: profile.Head{ChannelID: channelID}}
-	err := tx.QueryRow(ctx, mustSQL("repository_profile_head_0070_70.sql"), channelID).Scan(
+	err := tx.QueryRow(ctx, loadProfileStateSQL, channelID).Scan(
 		&state.Head.ChannelID,
 		&state.Head.Handle.Set, &state.Head.Handle.Value, &state.Head.Handle.EffectiveAt,
 		&state.Head.Description.Set, &state.Head.Description.Value, &state.Head.Description.EffectiveAt,
@@ -55,7 +55,7 @@ func persistProfileEvidence(ctx context.Context, tx dbx.Tx, observation *Observa
 
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_profile_evidence_upsert_0069_69.sql"),
+		persistProfileEvidenceSQL,
 		decision.Sample.ChannelID,
 		decision.Sample.ScheduledFor,
 		observation.Provider,
@@ -85,7 +85,7 @@ func persistProfileHead(ctx context.Context, tx dbx.Tx, decision *profile.Decisi
 
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_profile_head_upsert_0071_71.sql"),
+		persistProfileHeadSQL,
 		decision.Head.ChannelID,
 		decision.Head.Handle.Set, decision.Head.Handle.Value, decision.Head.Handle.EffectiveAt,
 		decision.Head.Description.Set, decision.Head.Description.Value, decision.Head.Description.EffectiveAt,

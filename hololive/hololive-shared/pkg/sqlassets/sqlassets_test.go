@@ -2,7 +2,10 @@ package sqlassets
 
 import (
 	"fmt"
+	"io/fs"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 )
@@ -71,6 +74,122 @@ func TestMustReaderRejectsTraversal(t *testing.T) {
 	)
 
 	assertPanicContains(t, func() { read("../secret.sql") }, `invalid embedded SQL path "queries/../secret.sql"`)
+}
+
+const (
+	selectAssetName = "select.sql"
+	selectQuery     = "SELECT 1;\n"
+)
+
+func selectAssets(query string) fstest.MapFS {
+	return fstest.MapFS{
+		"queries/" + selectAssetName: &fstest.MapFile{Data: []byte(query)},
+	}
+}
+
+func TestMustReaderReusesSuccessfulRead(t *testing.T) {
+	t.Parallel()
+
+	assets := &countingFS{fsys: selectAssets(selectQuery)}
+	read := MustReader(assets, "queries")
+
+	for range 3 {
+		if got := read(selectAssetName); got != selectQuery {
+			t.Fatalf("read(%s) = %q, want %q", selectAssetName, got, selectQuery)
+		}
+	}
+
+	if got := assets.opens.Load(); got != 1 {
+		t.Fatalf("assets opened %d times, want 1", got)
+	}
+}
+
+func TestMustReaderPanicsOnEveryFailedCall(t *testing.T) {
+	t.Parallel()
+
+	assets := &countingFS{fsys: fstest.MapFS{
+		"queries/blank.sql": &fstest.MapFile{Data: []byte(" \n\t")},
+		"secret.sql":        &fstest.MapFile{Data: []byte("secret")},
+	}}
+	read := MustReader(assets, "queries")
+
+	for _, tc := range []struct {
+		name string
+		want string
+	}{
+		{name: "missing.sql", want: `read embedded SQL "queries/missing.sql"`},
+		{name: "blank.sql", want: `empty embedded SQL "queries/blank.sql"`},
+		{name: "../secret.sql", want: `invalid embedded SQL path "queries/../secret.sql"`},
+	} {
+		for range 2 {
+			assertPanicContains(t, func() { read(tc.name) }, tc.want)
+		}
+	}
+
+	// 잘못된 경로는 열기 전에 거부하고, 없는 파일과 빈 자산은 호출마다 다시 연다.
+	if got := assets.opens.Load(); got != 4 {
+		t.Fatalf("assets opened %d times, want 4", got)
+	}
+}
+
+func TestMustReaderDoesNotShareCacheAcrossReaders(t *testing.T) {
+	t.Parallel()
+
+	const otherQuery = "SELECT 2;\n"
+
+	first := MustReader(selectAssets(selectQuery), "queries")
+	second := MustReader(selectAssets(otherQuery), "queries")
+
+	if got := first(selectAssetName); got != selectQuery {
+		t.Fatalf("first(%s) = %q, want %q", selectAssetName, got, selectQuery)
+	}
+
+	if got := second(selectAssetName); got != otherQuery {
+		t.Fatalf("second(%s) = %q, want %q", selectAssetName, got, otherQuery)
+	}
+}
+
+func TestMustReaderConcurrentFirstCalls(t *testing.T) {
+	t.Parallel()
+
+	read := MustReader(selectAssets(selectQuery), "queries")
+
+	const goroutines = 16
+
+	results := make([]string, goroutines)
+
+	var wg sync.WaitGroup
+
+	for i := range goroutines {
+		wg.Go(func() {
+			results[i] = read(selectAssetName)
+		})
+	}
+
+	wg.Wait()
+
+	for i, got := range results {
+		if got != selectQuery {
+			t.Fatalf("results[%d] = %q, want %q", i, got, selectQuery)
+		}
+	}
+}
+
+// countingFS는 MustReader가 자산을 실제로 다시 읽었는지 확인하려고 Open 횟수를 센다.
+type countingFS struct {
+	fsys  fs.FS
+	opens atomic.Int64
+}
+
+func (c *countingFS) Open(name string) (fs.File, error) {
+	c.opens.Add(1)
+
+	file, err := c.fsys.Open(name)
+	if err != nil {
+		return nil, fmt.Errorf("open counted asset: %s: %w", name, err)
+	}
+
+	return file, nil
 }
 
 func assertPanicContains(t *testing.T, fn func(), want string) {

@@ -127,7 +127,7 @@ func prepareAcquireTrafficState(t *testing.T, pool *pgxpool.Pool, jobKey, state 
 	case "missing":
 		query = `DELETE FROM youtube_collection_job_leases WHERE job_key=$1`
 	case "expired":
-		query = mustTestSQL("expire_lease.sql")
+		query = expireLeaseSQL
 	case "idle":
 		query = `UPDATE youtube_collection_job_leases SET slot_state='IDLE', owner_instance=NULL,
 			lease_expires_at=NULL, next_due_at=clock_timestamp() WHERE job_key=$1`

@@ -43,7 +43,7 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 		values[i] = string(kinds[i])
 	}
 
-	rows, err := p.pool.Query(ctx, sqlLoadContractGenerations, string(provider), values)
+	rows, err := p.pool.Query(ctx, loadContractGenerationsSQL, string(provider), values)
 	if err != nil {
 		return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, fmt.Errorf("load observation contract generations: %w", err))
 	}

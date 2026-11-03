@@ -30,14 +30,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	commandExecutionClaimSQL       = mustSQL("command_execution_claim.sql")
-	commandExecutionCompleteSQL    = mustSQL("command_execution_complete.sql")
-	commandExecutionExpireStaleSQL = mustSQL("command_execution_expire_stale.sql")
-	commandExecutionHeartbeatSQL   = mustSQL("command_execution_heartbeat.sql")
-	commandExecutionStateSQL       = mustSQL("command_execution_state.sql")
-)
-
 const (
 	CommandExecutionClaimed        = "claimed"
 	CommandExecutionSucceeded      = "succeeded"

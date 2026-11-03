@@ -182,7 +182,7 @@ func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode, budget s
 		return nil, fmt.Errorf("set claim budget: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, "PREPARE claim_backlog_plan AS "+mustSQL("repository_claim_0012_12.sql")); err != nil {
+	if _, err := tx.Exec(ctx, "PREPARE claim_backlog_plan AS "+claimObservationsSQL); err != nil {
 		return nil, fmt.Errorf("prepare claim: %w", err)
 	}
 

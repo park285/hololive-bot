@@ -365,7 +365,7 @@ func loadReviveCandidates(
 		db,
 		&checked,
 		"load failed logical group revive candidates",
-		mustSQL("transition_revive_candidates.sql"),
+		transitionReviveCandidatesSQL,
 		lifecycle.StatusFailed,
 		lease.Milliseconds(),
 		freshness.Milliseconds(),

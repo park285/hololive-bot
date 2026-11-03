@@ -89,7 +89,7 @@ func (s *TransitionStore) lockHandoffUnits(
 func loadHandoffMembers(ctx context.Context, tx dbx.Querier, memberIDs []int64) (handoffMembers, error) {
 	var rows []transitionRow
 
-	if err := dbx.SelectSQL(ctx, tx, &rows, "load handoff members", mustSQL("handoff_members.sql"), memberIDs); err != nil {
+	if err := dbx.SelectSQL(ctx, tx, &rows, "load handoff members", handoffMembersSQL, memberIDs); err != nil {
 		return handoffMembers{}, fmt.Errorf("load frozen members: %w", err)
 	}
 

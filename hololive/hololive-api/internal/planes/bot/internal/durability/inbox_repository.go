@@ -31,21 +31,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-var (
-	inboxAdmitSQL                = mustSQL("inbox_admit.sql")
-	inboxClaimSQL                = mustSQL("inbox_claim.sql")
-	inboxCompleteSQL             = mustSQL("inbox_complete.sql")
-	inboxReleaseSQL              = mustSQL("inbox_release.sql")
-	inboxReleaseRetrySQL         = mustSQL("inbox_release_retry.sql")
-	inboxAbandonSQL              = mustSQL("inbox_abandon.sql")
-	inboxHeartbeatSQL            = mustSQL("inbox_heartbeat.sql")
-	inboxReclaimExpiredSQL       = mustSQL("inbox_reclaim_expired.sql")
-	inboxReclaimExpiredKeysSQL   = mustSQL("inbox_reclaim_expired_keys.sql")
-	inboxOrderingKeyLockSQL      = mustSQL("inbox_ordering_key_lock.sql")
-	inboxOrderingKeyByMessageSQL = mustSQL("inbox_ordering_key_by_message.sql")
-	inboxReadySnapshotSQL        = mustSQL("inbox_ready_snapshot.sql")
-)
-
 type InboxReleaseOutcome int
 
 const (

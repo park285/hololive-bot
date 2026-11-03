@@ -186,10 +186,13 @@ func fetchMemberPhoto(ctx context.Context, photoURL string) (image.Image, bool) 
 
 	img, err := fetchImageWithContext(ctx, url)
 	if err != nil {
-		slog.Debug("calendar photo fetch skipped",
-			slog.String("photo_host", calendarPhotoURLHost(url)),
-			slog.String("err", err.Error()),
-		)
+		// 사진 실패는 정상 경로라 Debug가 꺼진 운영 레벨에서는 host 추출을 하지 않는다.
+		if slog.Default().Enabled(ctx, slog.LevelDebug) {
+			slog.Debug("calendar photo fetch skipped",
+				slog.String("photo_host", calendarPhotoURLHost(url)),
+				slog.String("err", err.Error()),
+			)
+		}
 
 		return nil, false
 	}

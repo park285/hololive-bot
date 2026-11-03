@@ -112,7 +112,7 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 		t.Fatalf("concurrent acquire error = %v", concurrentErr)
 	}
 
-	if _, expireErr := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); expireErr != nil {
+	if _, expireErr := pool.Exec(ctx, expireLeaseSQL, spec.JobKey); expireErr != nil {
 		t.Fatal(expireErr)
 	}
 
@@ -137,7 +137,7 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 func TestProjectionLockUsesRestrictedRoleFunction(t *testing.T) {
 	t.Parallel()
 
-	query := mustSQL("repository_projection_lock_0144_05.sql")
+	query := lockProjectionGuardShareSQL
 	if !strings.Contains(query, "lock_current_youtube_collection_projection()") {
 		t.Fatal("projection lock query must use the restricted-role lock function")
 	}
@@ -171,7 +171,7 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 
 	var active int
 
-	if err := pool.QueryRow(ctx, mustTestSQL("active_lease_count.sql"), spec.JobKey).Scan(&active); err != nil {
+	if err := pool.QueryRow(ctx, activeLeaseCountSQL, spec.JobKey).Scan(&active); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,7 +230,7 @@ func TestConcurrentExpiredTakeoverProducesExactlyOneHolder(t *testing.T) {
 		t.Fatalf("first acquire: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, expireLeaseSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -280,7 +280,7 @@ func TestConcurrentExpiredTakeoverProducesExactlyOneHolder(t *testing.T) {
 
 	var active int
 
-	if err := pool.QueryRow(ctx, mustTestSQL("active_lease_count.sql"), spec.JobKey).Scan(&active); err != nil {
+	if err := pool.QueryRow(ctx, activeLeaseCountSQL, spec.JobKey).Scan(&active); err != nil {
 		t.Fatal(err)
 	}
 
@@ -306,7 +306,7 @@ func TestMismatchedIdentityAcquireRollsBackTheLeaseUpdate(t *testing.T) {
 		t.Fatalf("first acquire: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, expireLeaseSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -351,7 +351,7 @@ func holdActiveLeaseRow(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseP
 
 	err = tx.QueryRow(
 		ctx,
-		mustSQL("repository_lease_failure_lock_0144_14.sql"),
+		lockActiveLeaseSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
 	if err != nil {
@@ -479,7 +479,7 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 		t.Fatal(completeErr)
 	}
 
-	if _, overdueErr := pool.Exec(ctx, mustTestSQL("make_lease_overdue.sql"), spec.JobKey); overdueErr != nil {
+	if _, overdueErr := pool.Exec(ctx, makeLeaseOverdueSQL, spec.JobKey); overdueErr != nil {
 		t.Fatal(overdueErr)
 	}
 
@@ -490,7 +490,7 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 
 	var recent bool
 
-	if err := pool.QueryRow(ctx, mustTestSQL("scheduled_for_is_recent.sql"), coalesced.Proof().ScheduledFor).Scan(&recent); err != nil {
+	if err := pool.QueryRow(ctx, scheduledForIsRecentSQL, coalesced.Proof().ScheduledFor).Scan(&recent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -526,12 +526,12 @@ func changedCadenceLease(
 
 	var previousSlot time.Time
 
-	if err := pool.QueryRow(ctx, mustTestSQL("shift_idle_slot.sql"), spec.JobKey,
+	if err := pool.QueryRow(ctx, shiftIdleSlotSQL, spec.JobKey,
 		slotAge.Milliseconds(), (completedInterval - slotAge).Milliseconds()).Scan(&previousSlot); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := pool.Exec(ctx, mustTestSQL("retire_projection.sql"), previous); err != nil {
+	if _, err := pool.Exec(ctx, retireProjectionSQL, previous); err != nil {
 		t.Fatal(err)
 	}
 
@@ -566,7 +566,7 @@ func TestShortenedCadenceReacquiresIdleLeaseBeforeOldDue(t *testing.T) {
 
 	var recent bool
 
-	if err := pool.QueryRow(ctx, mustTestSQL("scheduled_for_is_recent.sql"), slot).Scan(&recent); err != nil {
+	if err := pool.QueryRow(ctx, scheduledForIsRecentSQL, slot).Scan(&recent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -632,7 +632,7 @@ func assertActionPreservesScheduledSlot(t *testing.T, action string) {
 		t.Fatalf("%s: %v", action, err)
 	}
 
-	if _, retryErr := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); retryErr != nil {
+	if _, retryErr := pool.Exec(ctx, makeRetryDueSQL, spec.JobKey); retryErr != nil {
 		t.Fatal(retryErr)
 	}
 
@@ -669,7 +669,7 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 		retryAt time.Time
 	)
 
-	if err := pool.QueryRow(ctx, mustTestSQL("lease_deferred_state.sql"), lease.Proof().JobKey).Scan(&state, &retryAt); err != nil {
+	if err := pool.QueryRow(ctx, leaseDeferredStateSQL, lease.Proof().JobKey).Scan(&state, &retryAt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -702,7 +702,7 @@ func TestDeferAndCompleteRetainFailureDiagnostics(t *testing.T) {
 	deferred := readLeaseDiagnostics(t, pool, first.Proof().JobKey)
 	assertDeferredDiagnostics(t, deferred, detail)
 
-	if _, retryErr := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), first.Proof().JobKey); retryErr != nil {
+	if _, retryErr := pool.Exec(ctx, makeRetryDueSQL, first.Proof().JobKey); retryErr != nil {
 		t.Fatal(retryErr)
 	}
 
@@ -859,7 +859,7 @@ func readFailureDiagnostics(t *testing.T, pool *pgxpool.Pool, jobKey string) fai
 func makeRetryDue(t *testing.T, pool *pgxpool.Pool, jobKey string) {
 	t.Helper()
 
-	if _, err := pool.Exec(t.Context(), mustTestSQL("make_retry_due.sql"), jobKey); err != nil {
+	if _, err := pool.Exec(t.Context(), makeRetryDueSQL, jobKey); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -946,7 +946,7 @@ func TestReleasePreservesExistingFailureDiagnostics(t *testing.T) {
 		t.Fatal(readErr)
 	}
 
-	if _, retryErr := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); retryErr != nil {
+	if _, retryErr := pool.Exec(ctx, makeRetryDueSQL, spec.JobKey); retryErr != nil {
 		t.Fatal(retryErr)
 	}
 
@@ -1034,7 +1034,7 @@ func TestProjectionExpiryBlocksAcquisition(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
-	if _, err := pool.Exec(ctx, mustTestSQL("expire_projection.sql"), generation); err != nil {
+	if _, err := pool.Exec(ctx, expireProjectionSQL, generation); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1127,7 +1127,7 @@ func TestLoadTargetSnapshotRejectsStaleProjection(t *testing.T) {
 	})
 	proof := seedSnapshotLease(t, pool, &spec, job, generation, 1)
 
-	if _, err := pool.Exec(ctx, mustTestSQL("expire_projection.sql"), generation); err != nil {
+	if _, err := pool.Exec(ctx, expireProjectionSQL, generation); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1175,7 +1175,7 @@ func TestCompleteCurrentFailsClosedAfterTargetDisabledOrProjectionStale(t *testi
 				`, generation); disableErr != nil {
 					t.Fatal(disableErr)
 				}
-			} else if _, expireErr := pool.Exec(ctx, mustTestSQL("expire_projection.sql"), generation); expireErr != nil {
+			} else if _, expireErr := pool.Exec(ctx, expireProjectionSQL, generation); expireErr != nil {
 				t.Fatal(expireErr)
 			}
 
@@ -1199,7 +1199,7 @@ func seedSnapshotLease(t *testing.T, pool *pgxpool.Pool, spec *JobSpec, job coll
 	proof := snapshotProof(spec, generation)
 	scope := collection.MembershipScopeFor(job)
 
-	if _, err := pool.Exec(t.Context(), mustTestSQL("insert_active_lease.sql"),
+	if _, err := pool.Exec(t.Context(), insertActiveLeaseSQL,
 		spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey, generation,
 		spec.PollInterval.Milliseconds(), proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance,
 		scope.Kinds, scope.ExactSubject, count,
@@ -1439,12 +1439,12 @@ func seedProjection(t *testing.T, pool *pgxpool.Pool, targets []leaseTarget) int
 
 	var generation int64
 
-	if err := pool.QueryRow(ctx, mustTestSQL("insert_projection.sql"), len(targets)).Scan(&generation); err != nil {
+	if err := pool.QueryRow(ctx, insertProjectionSQL, len(targets)).Scan(&generation); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, target := range targets {
-		if _, err := pool.Exec(ctx, mustTestSQL("insert_target.sql"), generation, target.subject, target.kind, target.interval.Milliseconds(), target.enabled); err != nil {
+		if _, err := pool.Exec(ctx, insertTargetSQL, generation, target.subject, target.kind, target.interval.Milliseconds(), target.enabled); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1474,7 +1474,7 @@ func (l *JobLease) Complete(ctx context.Context) error {
 
 	var jobKey string
 
-	err := l.repository.pool.QueryRow(ctx, sqlLeaseComplete, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := l.repository.pool.QueryRow(ctx, completeCurrentLeaseSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor).Scan(&jobKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return collection.ErrFenceLost

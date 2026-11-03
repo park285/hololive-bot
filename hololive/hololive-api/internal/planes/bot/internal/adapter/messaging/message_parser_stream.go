@@ -46,8 +46,10 @@ func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw stri
 	return &ParsedCommand{Type: botcommand.CommandLive, Params: params, RawMessage: raw}, true
 }
 
+var liveCommandAliases = []string{"라이브", "live", "방송중", "생방송"}
+
 func (ma *MessageAdapter) isLiveCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"라이브", "live", "방송중", "생방송"}, cmd)
+	return stringutil.ContainsString(liveCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) tryUpcomingCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -62,8 +64,10 @@ func (ma *MessageAdapter) tryUpcomingCommand(command string, args []string, raw 
 	}, true
 }
 
+var upcomingCommandAliases = []string{"예정", "upcoming"}
+
 func (ma *MessageAdapter) isUpcomingCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"예정", "upcoming"}, cmd)
+	return stringutil.ContainsString(upcomingCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
@@ -95,8 +99,10 @@ func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 	return params
 }
 
+var allUpcomingTokens = []string{"전체", "전부", "모두", "all"}
+
 func isAllUpcomingToken(token string) bool {
-	return stringutil.ContainsString([]string{"전체", "전부", "모두", "all"}, stringutil.Normalize(token))
+	return stringutil.ContainsString(allUpcomingTokens, stringutil.Normalize(token))
 }
 
 func applyUpcomingLimit(params map[string]any, token string) bool {
@@ -130,12 +136,14 @@ func applyUpcomingMember(params map[string]any, memberTokens []string) {
 	}
 }
 
+var scheduleMemberCommandAliases = []string{"멤버", "member"}
+
 func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
 	if !ma.isScheduleCommand(command) {
 		return nil, false
 	}
 
-	if len(args) == 0 && stringutil.ContainsString([]string{"멤버", "member"}, command) {
+	if len(args) == 0 && stringutil.ContainsString(scheduleMemberCommandAliases, command) {
 		return nil, false
 	}
 
@@ -150,8 +158,10 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 	}, true
 }
 
+var scheduleCommandAliases = []string{"일정", "스케줄", "schedule", "멤버", "member"}
+
 func (ma *MessageAdapter) isScheduleCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"일정", "스케줄", "schedule", "멤버", "member"}, cmd)
+	return stringutil.ContainsString(scheduleCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) parseScheduleArgs(args []string) map[string]any {

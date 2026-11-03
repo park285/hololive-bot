@@ -204,7 +204,7 @@ func TestDeferSQLRejectsNonCooldownNotBefore(t *testing.T) {
 
 	var jobKey string
 
-	err := pool.QueryRow(t.Context(), sqlLeaseDefer,
+	err := pool.QueryRow(t.Context(), deferSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		time.Now().UTC().Add(10*time.Minute), string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "failure",
 		testRetryBounds.Minimum.Milliseconds(), testRetryBounds.Maximum.Milliseconds(), true,

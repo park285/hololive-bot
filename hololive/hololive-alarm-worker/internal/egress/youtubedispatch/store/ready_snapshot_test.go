@@ -61,7 +61,7 @@ func TestReadySnapshotAndClaimShareThresholds(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.want, values.Depth)
 
-			rows, err := pool.Query(ctx, claimPendingSQL, "PENDING", readyTestLease.Milliseconds(),
+			rows, err := pool.Query(ctx, transitionClaimPendingSQL, "PENDING", readyTestLease.Milliseconds(),
 				readyTestFreshness.Milliseconds(), 10, "youtube-dispatcher:test")
 			require.NoError(t, err)
 

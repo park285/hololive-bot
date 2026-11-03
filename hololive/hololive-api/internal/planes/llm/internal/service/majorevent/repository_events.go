@@ -36,7 +36,7 @@ func (r *Repository) GetExistingExternalIDs(ctx context.Context, eventType domai
 		return nil, nil
 	}
 
-	query := mustSQL("repository_events_0038_01.sql")
+	query := getExistingExternalIDsSQL
 
 	rows, err := r.pool.Query(ctx, query, eventType, externalIDs)
 	if err != nil {
@@ -68,7 +68,7 @@ func (r *Repository) queryEvents(ctx context.Context, action, query string, args
 }
 
 func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) error {
-	query := mustSQL("repository_events_0105_02.sql")
+	query := upsertEventSQL
 
 	eventType, linkStatus := normalizeEventForUpsert(event)
 
@@ -93,14 +93,7 @@ func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) 
 }
 
 func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDate time.Time, weekKey string) ([]*domain.MajorEvent, error) {
-	query := majorEventSelectColumns + `
-		WHERE status = $1
-		  AND type IN ($2, $3)
-		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'UTC')::date) <= $5
-		  AND COALESCE(event_end_date, event_start_date, (pub_date AT TIME ZONE 'UTC')::date) >= $4
-		  AND (notified_week IS NULL OR notified_week != $6)
-		ORDER BY event_start_date ASC
-	`
+	query := getEventsByDateRangeSQL
 
 	out, err := r.queryEvents(
 		ctx,
@@ -124,14 +117,7 @@ func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, mont
 	monthStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	monthEnd := monthStart.AddDate(0, 1, -1)
 
-	query := majorEventSelectColumns + `
-		WHERE status = $1
-		  AND type IN ($2, $3)
-		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'UTC')::date) <= $4
-		  AND COALESCE(event_end_date, event_start_date, (pub_date AT TIME ZONE 'UTC')::date) >= $5
-		  AND (notified_month IS NULL OR notified_month != $6)
-		ORDER BY event_start_date ASC
-	`
+	query := getEventsByMonthSQL
 
 	out, err := r.queryEvents(
 		ctx,
@@ -156,7 +142,7 @@ func (r *Repository) MarkEventsAsMonthlyNotified(ctx context.Context, eventIDs [
 		return nil
 	}
 
-	query := mustSQL("repository_events_0209_03.sql")
+	query := markEventsAsMonthlyNotifiedSQL
 
 	_, err := r.pool.Exec(ctx, query, monthKey, eventIDs)
 	if err != nil {
@@ -171,7 +157,7 @@ func (r *Repository) MarkEventsAsNotified(ctx context.Context, eventIDs []int, w
 		return nil
 	}
 
-	query := mustSQL("repository_events_0228_04.sql")
+	query := markEventsAsNotifiedSQL
 
 	_, err := r.pool.Exec(ctx, query, weekKey, eventIDs)
 	if err != nil {
@@ -182,7 +168,7 @@ func (r *Repository) MarkEventsAsNotified(ctx context.Context, eventIDs []int, w
 }
 
 func (r *Repository) UpdateExpiredEvents(ctx context.Context) (int64, error) {
-	query := mustSQL("repository_events_0244_05.sql")
+	query := updateExpiredEventsSQL
 
 	result, err := r.pool.Exec(ctx, query, domain.MajorEventStatusEnded, domain.MajorEventStatusActive)
 	if err != nil {
@@ -193,10 +179,7 @@ func (r *Repository) UpdateExpiredEvents(ctx context.Context) (int64, error) {
 }
 
 func (r *Repository) GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEvent, error) {
-	query := majorEventSelectColumns + `
-		WHERE status = $1
-		ORDER BY event_start_date ASC
-	`
+	query := getAllActiveEventsSQL
 
 	out, err := r.queryEvents(ctx, "get all active events", query, domain.MajorEventStatusActive)
 	if err != nil {
@@ -212,7 +195,7 @@ func (r *Repository) UpdateEventLinkStatuses(ctx context.Context, events []*doma
 		return 0, nil
 	}
 
-	query := mustSQL("repository_events_0260_06.sql")
+	query := updateEventLinkStatusesSQL
 
 	result, err := r.pool.Exec(ctx, query, ids, statuses, checkedAts, links)
 	if err != nil {

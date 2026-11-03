@@ -43,8 +43,10 @@ func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, ra
 	return &ParsedCommand{Type: botcommand.CommandMemberInfo, Params: params, RawMessage: raw}, true
 }
 
+var memberInfoCommandAliases = []string{"멤버", "member", "프로필", "profile", "정보", "info"}
+
 func (ma *MessageAdapter) isMemberInfoCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"멤버", "member", "프로필", "profile", "정보", "info"}, cmd)
+	return stringutil.ContainsString(memberInfoCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) tryMemberNewsSubscriptionCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -61,8 +63,10 @@ func (ma *MessageAdapter) tryMemberNewsSubscriptionCommand(command string, args 
 	}, true
 }
 
+var memberNewsSubscriptionCommandAliases = []string{"뉴스알림", "뉴스구독", "newsalert", "newsalerts", "newssubscription"}
+
 func (ma *MessageAdapter) isMemberNewsSubscriptionCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"뉴스알림", "뉴스구독", "newsalert", "newsalerts", "newssubscription"}, cmd)
+	return stringutil.ContainsString(memberNewsSubscriptionCommandAliases, cmd)
 }
 
 var memberNewsSubscriptionActions = map[string]string{
@@ -94,8 +98,10 @@ func (ma *MessageAdapter) tryMemberNewsCommand(command string, args []string, ra
 	}, true
 }
 
+var memberNewsCommandAliases = []string{"뉴스", "news"}
+
 func (ma *MessageAdapter) isMemberNewsCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"뉴스", "news"}, cmd)
+	return stringutil.ContainsString(memberNewsCommandAliases, cmd)
 }
 
 const (
@@ -103,20 +109,21 @@ const (
 	memberNewsPeriodMonthly = "monthly"
 )
 
+var memberNewsPeriods = map[string]string{
+	"이번주":     memberNewsPeriodWeekly,
+	"주간":      memberNewsPeriodWeekly,
+	"weekly":  memberNewsPeriodWeekly,
+	"이번달":     memberNewsPeriodMonthly,
+	"월간":      memberNewsPeriodMonthly,
+	"monthly": memberNewsPeriodMonthly,
+}
+
 func memberNewsPeriod(args []string) string {
 	if len(args) == 0 {
 		return memberNewsPeriodWeekly
 	}
 
-	periods := map[string]string{
-		"이번주":     memberNewsPeriodWeekly,
-		"주간":      memberNewsPeriodWeekly,
-		"weekly":  memberNewsPeriodWeekly,
-		"이번달":     memberNewsPeriodMonthly,
-		"월간":      memberNewsPeriodMonthly,
-		"monthly": memberNewsPeriodMonthly,
-	}
-	if period, ok := periods[stringutil.Normalize(strings.Join(args, ""))]; ok {
+	if period, ok := memberNewsPeriods[stringutil.Normalize(strings.Join(args, ""))]; ok {
 		return period
 	}
 

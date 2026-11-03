@@ -53,7 +53,7 @@ func VerifyLeaseMembership(ctx context.Context, q dbx.Querier, proof *contract.L
 
 // LeaseMembershipQuery는 VerifyLeaseMembership과 같은 판정 문장을 pipeline batch에 쌓을 수 있게 반환한다.
 func LeaseMembershipQuery(proof *contract.LeaseProof, scope MembershipScope) (string, []any) {
-	return sqlLeaseMembership, []any{
+	return leaseMembershipQuerySQL, []any{
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		scope.Kinds, scope.ExactSubject,
 	}

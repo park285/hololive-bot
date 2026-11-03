@@ -14,7 +14,7 @@ func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (in
 		return 0, errors.New("recover expired leased dispatch deliveries: limit must be positive")
 	}
 
-	tag, err := r.pool.Exec(ctx, mustSQL("repository_maintenance_0010_01.sql"), limit, maxDeliveriesPerSendUnit)
+	tag, err := r.pool.Exec(ctx, recoverExpiredLeasedSQL, limit, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return 0, fmt.Errorf("recover expired leased dispatch deliveries: %w", err)
 	}
@@ -29,7 +29,7 @@ func (r *PgxRepository) QuarantineStaleSending(ctx context.Context, olderThan ti
 		return 0, fmt.Errorf("quarantine stale sending dispatch deliveries: older than: %w", err)
 	}
 
-	tag, err := r.pool.Exec(ctx, mustSQL("repository_maintenance_0035_02.sql"), limit, olderThanMS)
+	tag, err := r.pool.Exec(ctx, quarantineStaleSendingSQL, limit, olderThanMS)
 	if err != nil {
 		return 0, fmt.Errorf("quarantine stale sending dispatch deliveries: %w", err)
 	}

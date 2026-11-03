@@ -42,7 +42,7 @@ func TestCollectionLifecycleSnapshotWithinRuntimeBudget(t *testing.T) {
 			defer cancel()
 
 			started := time.Now()
-			rows, err := pool.Query(ctx, mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
+			rows, err := pool.Query(ctx, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 			require.NoError(t, err)
 
 			defer rows.Close()
@@ -97,7 +97,7 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 	require.NoError(t, err)
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
-	rows, err := pool.Query(ctx, mustSQL("live_check_videos.sql"), []string{"review-channel"}, 10)
+	rows, err := pool.Query(ctx, liveCheckVideosSQL, []string{"review-channel"}, 10)
 	require.NoError(t, err)
 
 	defer rows.Close()

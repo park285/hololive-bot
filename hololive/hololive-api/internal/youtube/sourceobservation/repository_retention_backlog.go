@@ -19,7 +19,7 @@ func (r *Repository) measureRetentionBacklogs(ctx context.Context, cfg Retention
 		known  bool
 	)
 
-	if err := r.pool.QueryRow(ctx, mustSQL("repository_retention_backlog_evidence.sql"), kinds, cutoffs, MaxRetentionBatchSize).Scan(&oldest, &known); err != nil {
+	if err := r.pool.QueryRow(ctx, repositoryRetentionBacklogEvidenceSQL, kinds, cutoffs, MaxRetentionBatchSize).Scan(&oldest, &known); err != nil {
 		result.FailedTable = "source_observations"
 		return fmt.Errorf("read retention backlog: source_observations: %w", err)
 	}

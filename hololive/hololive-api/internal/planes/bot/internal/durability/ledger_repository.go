@@ -9,8 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var durablePruneTerminalSQL = mustSQL("durable_prune_terminal.sql")
-
 type DurableLedgerMaintenance struct {
 	DeletedInbox   int64
 	DeletedCommand int64

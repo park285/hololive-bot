@@ -28,6 +28,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var composeQueryExecModePattern = regexp.MustCompile(`POSTGRES_QUERY_EXEC_MODE:\s*\$\{POSTGRES_QUERY_EXEC_MODE:-([a-z_]+)\}`)
+
 func TestProductionComposePinsTheTestPoolQueryExecMode(t *testing.T) {
 	t.Parallel()
 
@@ -36,9 +38,7 @@ func TestProductionComposePinsTheTestPoolQueryExecMode(t *testing.T) {
 		t.Fatalf("read production compose: %v", err)
 	}
 
-	match := regexp.MustCompile(
-		`POSTGRES_QUERY_EXEC_MODE:\s*\$\{POSTGRES_QUERY_EXEC_MODE:-([a-z_]+)\}`,
-	).FindSubmatch(raw)
+	match := composeQueryExecModePattern.FindSubmatch(raw)
 	if match == nil {
 		t.Fatal("production compose no longer declares a POSTGRES_QUERY_EXEC_MODE default; update the test pool contract together")
 	}

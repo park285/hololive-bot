@@ -413,7 +413,7 @@ func TestRendererBodyReadCachesActualVersion(t *testing.T) {
 	r := NewRenderer(pool, slog.New(slog.DiscardHandler))
 	ck := cacheKey{templateKey: domain.TemplateKeyCmdHelp}
 
-	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
+	if err := pool.QueryRow(t.Context(), rendererResolveSQL, ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -476,7 +476,7 @@ func TestRendererBodyReadRejectsChangedSource(t *testing.T) {
 	r := NewRenderer(pool, slog.New(slog.DiscardHandler))
 	ck := cacheKey{templateKey: domain.TemplateKeyCmdHelp}
 
-	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
+	if err := pool.QueryRow(t.Context(), rendererResolveSQL, ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
 		t.Fatal(err)
 	}
 

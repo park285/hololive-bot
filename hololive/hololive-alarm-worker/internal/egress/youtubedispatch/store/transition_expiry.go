@@ -50,7 +50,7 @@ func (s *TransitionStore) expirePendingInTx(ctx context.Context, tx dbx.Querier,
 	var checked []checkedTransitionRow
 
 	if err := dbx.SelectSQL(
-		ctx, tx, &checked, "load expired pending", mustSQL("transition_expired_pending.sql"),
+		ctx, tx, &checked, "load expired pending", transitionExpiredPendingSQL,
 		s.config.ClaimFreshnessWindow.Milliseconds(), s.config.LockTimeout.Milliseconds(), afterID, limit,
 	); err != nil {
 		return fmt.Errorf("expire pending: candidates: %w", err)

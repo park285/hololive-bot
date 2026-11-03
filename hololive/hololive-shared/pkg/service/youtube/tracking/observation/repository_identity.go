@@ -31,7 +31,7 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 	var records []domain.YouTubeContentAlarmTracking
 
 	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row",
-		mustSQL("repository_identity_0049_01.sql"), normalizedKind, canonicalContentID); err != nil {
+		findByIdentitySQL, normalizedKind, canonicalContentID); err != nil {
 		return nil, fmt.Errorf("select SQL: %w", err)
 	}
 
@@ -42,6 +42,23 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 
 	return &records[0], nil
 }
+
+// tracking upsert의 갱신 식은 상수 조각만으로 정해지므로 호출마다 조립하지 않고 초기화 때 한 번 만든다.
+const (
+	trackingFinalActualPublishedExpr = `COALESCE(youtube_content_alarm_tracking.actual_published_at, EXCLUDED.actual_published_at)`
+	trackingFinalAlarmSentExpr       = `CASE
+		        WHEN youtube_content_alarm_tracking.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
+		        WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_content_alarm_tracking.alarm_sent_at
+		        WHEN EXCLUDED.alarm_sent_at < youtube_content_alarm_tracking.alarm_sent_at THEN EXCLUDED.alarm_sent_at
+		        ELSE youtube_content_alarm_tracking.alarm_sent_at
+		    END`
+)
+
+var (
+	trackingLatencyMillisExpr   = buildLatencyMillisExpr(trackingFinalActualPublishedExpr, trackingFinalAlarmSentExpr)
+	trackingLatencyExceededExpr = buildLatencyExceededExpr(trackingLatencyMillisExpr)
+	trackingDeliveryStatusExpr  = buildDeliveryStatusExpr(trackingFinalAlarmSentExpr)
+)
 
 func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error {
 	if len(records) == 0 {
@@ -58,17 +75,7 @@ func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.
 	}
 
 	now := timestamp.Normalize(time.Now())
-	finalActualPublishedExpr := `COALESCE(youtube_content_alarm_tracking.actual_published_at, EXCLUDED.actual_published_at)`
-	finalAlarmSentExpr := `CASE
-		        WHEN youtube_content_alarm_tracking.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_content_alarm_tracking.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at < youtube_content_alarm_tracking.alarm_sent_at THEN EXCLUDED.alarm_sent_at
-		        ELSE youtube_content_alarm_tracking.alarm_sent_at
-		    END`
-	latencyMillisExpr := buildLatencyMillisExpr(finalActualPublishedExpr, finalAlarmSentExpr)
-	latencyExceededExpr := buildLatencyExceededExpr(latencyMillisExpr)
-	deliveryStatusExpr := buildDeliveryStatusExpr(finalAlarmSentExpr)
-	query, args := buildTrackingUpsertQuery(normalized, now, latencyMillisExpr, latencyExceededExpr, deliveryStatusExpr)
+	query, args := buildTrackingUpsertQuery(normalized, now, trackingLatencyMillisExpr, trackingLatencyExceededExpr, trackingDeliveryStatusExpr)
 
 	if _, err := dbx.ExecSQL(ctx, r.db, "upsert tracking batch: exec query", query, args...); err != nil {
 		return fmt.Errorf("exec SQL: %w", err)
@@ -97,7 +104,7 @@ func buildTrackingUpsertQuery(
 
 	var sb strings.Builder
 
-	sb.WriteString(mustSQL("repository_identity_0183_02.sql"))
+	sb.WriteString(buildTrackingUpsertQuerySQL)
 
 	for i, record := range normalized {
 		if i > 0 {
@@ -109,7 +116,7 @@ func buildTrackingUpsertQuery(
 		args = appendTrackingUpsertValues(args, record, now)
 	}
 
-	sb.WriteString(mustSQL("repository_identity_0195_03.sql"))
+	sb.WriteString(buildTrackingUpsertQuery2SQL)
 	sb.WriteString(latencyMillisExpr)
 	sb.WriteString(`,
 		    alarm_latency_exceeded = `)

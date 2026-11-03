@@ -12,6 +12,8 @@ import { hasRFC3339Shape, isCalendarRFC3339 } from "./rfc3339.mjs";
 const maxVideoIdBytes = 128;
 const maxChannelIdBytes = 256;
 const playabilityStatuses = new Set(["OK", "UNPLAYABLE", "LIVE_STREAM_OFFLINE", "LOGIN_REQUIRED", "ERROR"]);
+const playerResponseAssignmentPattern = /\bvar ytInitialPlayerResponse\s*=\s*(?=\{)/;
+const epochSecondsPattern = /^[1-9]\d*$/;
 
 /** raw 구조 해석 실패입니다. 호출 경계에서 UNKNOWN 사유로만 변환합니다. */
 class RawStructureError extends Error {
@@ -133,7 +135,7 @@ async function readWatchPlayer(innertube, videoId) {
 
 // JSON 문자열 안의 중괄호·세미콜론은 경계가 아니며, 페이지의 JavaScript는 실행하지 않습니다.
 function watchPlayerJSON(html) {
-  const assignment = /\bvar ytInitialPlayerResponse\s*=\s*(?=\{)/.exec(html);
+  const assignment = playerResponseAssignmentPattern.exec(html);
   if (assignment === null) return undefined;
   const start = assignment.index + assignment[0].length;
   let depth = 0;
@@ -660,7 +662,7 @@ function rawTimestamp(record, key) {
 }
 
 function epochSeconds(value) {
-  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
+  if (typeof value !== "string" || !epochSecondsPattern.test(value)) {
     throw new RawStructureError("structure_unrecognized", "raw scheduledStartTime is not epoch seconds");
   }
   const milliseconds = Number(value) * 1000;

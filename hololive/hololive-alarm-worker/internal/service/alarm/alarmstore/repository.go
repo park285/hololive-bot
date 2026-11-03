@@ -64,7 +64,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 		roomName = ""
 	}
 
-	query := mustSQL("repository_0055_01.sql")
+	query := addSQL
 
 	typesValue, err := alarmTypes.Value()
 	if err != nil {
@@ -98,7 +98,7 @@ func (r *Repository) RemoveHost(ctx context.Context, roomID, channelID, hostID s
 }
 
 func (r *Repository) removeSubscription(ctx context.Context, roomID, channelID, hostID string) error {
-	query := mustSQL("repository_0082_02.sql")
+	query := removeSubscriptionSQL
 
 	_, err := r.pool.Exec(ctx, query, roomID, channelID, hostID)
 	if err != nil {
@@ -109,7 +109,7 @@ func (r *Repository) removeSubscription(ctx context.Context, roomID, channelID, 
 }
 
 func (r *Repository) ClearByRoom(ctx context.Context, roomID string) (int64, error) {
-	query := mustSQL("repository_0091_03.sql")
+	query := clearByRoomSQL
 
 	cmdTag, err := r.pool.Exec(ctx, query, roomID)
 	if err != nil {
@@ -120,7 +120,7 @@ func (r *Repository) ClearByRoom(ctx context.Context, roomID string) (int64, err
 }
 
 func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	query := mustSQL("repository_0100_04.sql")
+	query := findByRoomSQL
 
 	rows, err := r.pool.Query(ctx, query, roomID)
 	if err != nil {
@@ -140,7 +140,7 @@ func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.A
 func (r *Repository) HasChannelSubscriptions(ctx context.Context, channelID string) (bool, error) {
 	var exists bool
 
-	if err := r.pool.QueryRow(ctx, mustSQL("repository_channel_subscriptions_exist.sql"), channelID).Scan(&exists); err != nil {
+	if err := r.pool.QueryRow(ctx, repositoryChannelSubscriptionsExistSQL, channelID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("check channel subscriptions: %w", err)
 	}
 
@@ -148,7 +148,7 @@ func (r *Repository) HasChannelSubscriptions(ctx context.Context, channelID stri
 }
 
 func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*domain.Alarm, error) {
-	query := mustSQL("repository_0117_05.sql")
+	query := findByChannelSQL
 
 	rows, err := r.pool.Query(ctx, query, channelID)
 	if err != nil {
@@ -165,7 +165,7 @@ func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*do
 }
 
 func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
-	query := mustSQL("targets_0188_01.sql")
+	query := findByChannelAndTypeSQL
 
 	rows, err := r.pool.Query(ctx, query, channelID, string(alarmType))
 	if err != nil {
@@ -184,7 +184,7 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 // GetMemberName은 members 정본의 한국어 표시명(short_korean_name→korean_name)을 돌려준다. 행이 없거나 두 값이 모두
 // 비면 빈 문자열이며, 알림 표시 단계가 misc/vtuber_fallback 문구를 쓴다.
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
-	query := mustSQL("repository_0155_07.sql")
+	query := getMemberNameSQL
 
 	var memberName string
 
@@ -202,7 +202,7 @@ func (r *Repository) GetMemberName(ctx context.Context, channelID string) (strin
 }
 
 func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
-	query := mustSQL("repository_0191_08.sql")
+	query := loadAllSQL
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -220,7 +220,7 @@ func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
 
 // GetAllMemberNames는 알림 구독 채널 중 members에 한국어 표시명이 있는 채널의 표시명을 돌려준다.
 func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, error) {
-	query := mustSQL("repository_0231_10.sql")
+	query := getAllMemberNamesSQL
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {

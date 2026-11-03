@@ -13,6 +13,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+var templateSeedPairPattern = regexp.MustCompile(`(?s)\('([^']+)', \$old\$(.*?)\$old\$, \$new\$(.*?)\$new\$\)`)
+
 type templateSeedPair struct{ oldBody, newBody string }
 
 func loadTemplateSeedPairs(tb testing.TB, file string) map[domain.TemplateKey]templateSeedPair {
@@ -25,7 +27,7 @@ func loadTemplateSeedPairs(tb testing.TB, file string) map[domain.TemplateKey]te
 		tb.Fatal(err)
 	}
 
-	rows := regexp.MustCompile(`(?s)\('([^']+)', \$old\$(.*?)\$old\$, \$new\$(.*?)\$new\$\)`).FindAllStringSubmatch(string(raw), -1)
+	rows := templateSeedPairPattern.FindAllStringSubmatch(string(raw), -1)
 
 	pairs := make(map[domain.TemplateKey]templateSeedPair, len(rows))
 	for _, row := range rows {

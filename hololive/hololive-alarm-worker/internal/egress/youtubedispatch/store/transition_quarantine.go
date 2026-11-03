@@ -328,7 +328,7 @@ func loadStaleSendingCandidates(
 		db,
 		&checked,
 		"load stale sending transition rows",
-		mustSQL("transition_stale_sending.sql"),
+		transitionStaleSendingSQL,
 		lifecycle.StatusSending,
 		lease.Milliseconds(),
 		limit,

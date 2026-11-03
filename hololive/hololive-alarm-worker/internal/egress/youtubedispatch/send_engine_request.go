@@ -203,7 +203,7 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 	}
 
 	if len(attempt.members) == 1 {
-		d.recordPerRoomSuccess(&attempt, result)
+		d.recordPerRoomSuccess(ctx, &attempt, result)
 	} else {
 		d.recordGroupedSuccess(group, &attempt, result)
 	}

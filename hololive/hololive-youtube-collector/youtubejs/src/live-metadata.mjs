@@ -1,6 +1,8 @@
 import { runUpstream } from "./upstream-errors.mjs";
 import { hasRFC3339Shape, isCalendarRFC3339 } from "./rfc3339.mjs";
 
+const epochSecondsPattern = /^[1-9]\d*$/;
+
 export async function fetchLiveMetadata(innertube, videoId) {
   const id = String(videoId ?? "").trim();
   if (id === "") {
@@ -207,7 +209,7 @@ function normalizedRFC3339(value) {
 }
 
 function normalizedEpochSeconds(value) {
-  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
+  if (typeof value !== "string" || !epochSecondsPattern.test(value)) {
     throw parserDrift("raw player scheduledStartTime is not epoch seconds");
   }
   const seconds = Number(value);

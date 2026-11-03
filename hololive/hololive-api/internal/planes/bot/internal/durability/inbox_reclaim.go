@@ -92,8 +92,6 @@ type inboxReclaimCandidate struct {
 	Attempts int32
 }
 
-var inboxReclaimCandidatesSQL = mustSQL("inbox_reclaim_candidates.sql")
-
 func lockedExpiredInboxCandidates(ctx context.Context, tx pgx.Tx, batchSize int32, keys []string) ([]inboxReclaimCandidate, error) {
 	rows, err := tx.Query(ctx, inboxReclaimCandidatesSQL, batchSize, keys)
 	if err != nil {

@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var templateFormatSeedPattern = regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '([0-9a-f]{64})', \$plain\$(.*?)\$plain\$, \$rich\$(.*?)\$rich\$\)`)
+
 const (
 	templateFormatColumnMigration = "353_template_format_variant.sql"
 	templateFormatDataMigration   = "358_template_format_variants.sql"
@@ -179,8 +181,7 @@ func loadTemplateFormatSeeds(t *testing.T, dir string) map[string]templateFormat
 	raw, err := fs.ReadFile(os.DirFS(dir), templateFormatDataMigration)
 	require.NoError(t, err)
 
-	rows := regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '([0-9a-f]{64})', \$plain\$(.*?)\$plain\$, \$rich\$(.*?)\$rich\$\)`).
-		FindAllStringSubmatch(string(raw), -1)
+	rows := templateFormatSeedPattern.FindAllStringSubmatch(string(raw), -1)
 	seeds := make(map[string]templateFormatSeed, len(rows))
 
 	for _, row := range rows {

@@ -18,6 +18,9 @@ type payloadDecodeInput struct {
 
 type payloadDecoder func(raw []byte, input payloadDecodeInput) (any, any, error)
 
+// liveSnapshotQueryStatuses는 streams 질의 증명이 정렬된 상태로 담아야 하는 상태 목록이다.
+var liveSnapshotQueryStatuses = []string{"ENDED", "LIVE", "UPCOMING"}
+
 var payloadDecoders = map[ObservationKind]payloadDecoder{
 	KindCommunityPage:    decodeCommunityPayload,
 	KindVideoList:        decodeVideoListPayload,
@@ -182,7 +185,7 @@ func validateLiveSnapshotQueryProof(value *LiveSnapshotV1, input payloadDecodeIn
 		query.Statuses = slices.Clone(query.Statuses)
 		slices.Sort(query.Statuses)
 
-		if !slices.Equal(query.Statuses, []string{"ENDED", "LIVE", "UPCOMING"}) || !slices.Equal(query.Statuses, value.Coverage.Filters.Statuses) {
+		if !slices.Equal(query.Statuses, liveSnapshotQueryStatuses) || !slices.Equal(query.Statuses, value.Coverage.Filters.Statuses) {
 			return errors.New("live snapshot coverage does not match streams query scope")
 		}
 

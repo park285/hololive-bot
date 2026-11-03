@@ -33,6 +33,12 @@ var subscriberCacheStaticKeys = []string{
 	alarmkeys.MemberNameKey,
 }
 
+// subscriberCacheKeyPatterns는 rebuild가 SCAN으로 지우는 채널별 subscriber key 이름공간이다.
+var subscriberCacheKeyPatterns = []string{
+	alarmkeys.ChannelSubscribersKeyPrefix + "*",
+	alarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
+}
+
 // SubscriberCacheStore는 subscriber cache 전체 rebuild가 요구하는 작업이다. 이름공간 SCAN·삭제(ScanKeyPages·DelMany),
 // 빈 상태 marker(Set·Del), 멤버 이름 hash(HMSet), 구독 set pipeline(B·DoMulti)을 쓴다.
 type SubscriberCacheStore interface {
@@ -102,10 +108,7 @@ func clearSubscriberCacheNamespace(ctx context.Context, cacheClient cache.KeyVal
 		return errors.New("rebuild subscriber cache from alarms: cache service is nil")
 	}
 
-	for _, pattern := range []string{
-		alarmkeys.ChannelSubscribersKeyPrefix + "*",
-		alarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
-	} {
+	for _, pattern := range subscriberCacheKeyPatterns {
 		err := cacheClient.ScanKeyPages(ctx, pattern, cacheScanBatchSize, func(keys []string) error {
 			return deleteSubscriberCacheKeys(ctx, cacheClient, keys)
 		})

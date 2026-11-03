@@ -16,6 +16,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var composeServiceHeaderPattern = regexp.MustCompile(`^ {2}[A-Za-z0-9_-]+:`)
+
 type renderedCompose struct {
 	Services map[string]map[string]any `yaml:"services"`
 	Volumes  map[string]map[string]any `yaml:"volumes"`
@@ -38,7 +40,7 @@ func composeServiceBlock(t *testing.T, content, service string) string {
 		if line == header {
 			end := len(lines)
 			for j := i + 1; j < len(lines); j++ {
-				if regexp.MustCompile(`^ {2}[A-Za-z0-9_-]+:`).MatchString(lines[j]) {
+				if composeServiceHeaderPattern.MatchString(lines[j]) {
 					end = j
 					break
 				}

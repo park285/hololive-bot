@@ -100,7 +100,7 @@ func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, map[string]stri
 }
 
 func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (map[string]int64, int, error) {
-	rows, err := tx.Query(ctx, mustSQL("repository_insert_0092_01.sql"), jsonbRecordsetParam(raw))
+	rows, err := tx.Query(ctx, insertEventBatchSQL, jsonbRecordsetParam(raw))
 	if err != nil {
 		return nil, 0, fmt.Errorf("insert dispatch events: %w", err)
 	}
@@ -167,7 +167,7 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 }
 
 func ensureSendUnits(ctx context.Context, tx pgx.Tx, raw []byte) error {
-	if _, err := tx.Exec(ctx, mustSQL("repository_insert_0179_01.sql"), jsonbRecordsetParam(raw)); err != nil {
+	if _, err := tx.Exec(ctx, ensureSendUnitsSQL, jsonbRecordsetParam(raw)); err != nil {
 		return fmt.Errorf("insert dispatch send units: %w", err)
 	}
 
@@ -198,7 +198,7 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 }
 
 func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected int, inserted []string, err error) {
-	err = tx.QueryRow(ctx, mustSQL("repository_insert_0183_02.sql"), jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
+	err = tx.QueryRow(ctx, insertDeliveryBatchSQL, jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
 	if err != nil {
 		return 0, nil, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}

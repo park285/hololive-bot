@@ -61,7 +61,7 @@ func buildSourcePostsBatchUpsert(
 
 	var sb strings.Builder
 
-	sb.WriteString(mustSQL("repository_source_posts_0063_01.sql"))
+	sb.WriteString(buildSourcePostsBatchUpsertSQL)
 
 	for i, record := range normalized {
 		if i > 0 {
@@ -73,7 +73,7 @@ func buildSourcePostsBatchUpsert(
 		args = append(args, record.Kind, record.PostID, record.ChannelID, record.ActualPublishedAt, record.DetectedAt, now, now)
 	}
 
-	sb.WriteString(mustSQL("repository_source_posts_0077_02.sql"))
+	sb.WriteString(buildSourcePostsBatchUpsert2SQL)
 
 	return sb.String(), args
 }

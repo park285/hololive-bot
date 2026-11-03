@@ -2,11 +2,9 @@ package dispatchops
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,9 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 )
-
-//go:embed queries/*.sql
-var queries embed.FS
 
 // Repository는 기존 dispatch 테이블을 사용하며 스키마 변경이나 외부 발송을 수행하지 않습니다.
 type Repository struct{ pool *pgxpool.Pool }
@@ -32,15 +27,6 @@ func (r *Repository) available() error {
 	return nil
 }
 
-func querySQL(name string) string {
-	content, err := queries.ReadFile("queries/" + name + ".sql")
-	if err != nil {
-		panic(fmt.Sprintf("dispatch operation SQL missing: %s", name))
-	}
-
-	return strings.ReplaceAll(string(content), "{{errorCodeExpression}}", errorCodeExpression)
-}
-
 // Summary는 보존 중인 모든 발송 상태를 단일 PostgreSQL 스냅샷으로 집계합니다.
 func (r *Repository) Summary(ctx context.Context) (Summary, error) {
 	result := Summary{Counts: []StatusCount{}}
@@ -49,7 +35,7 @@ func (r *Repository) Summary(ctx context.Context) (Summary, error) {
 		return result, availabilityErr
 	}
 
-	rows, err := r.pool.Query(ctx, querySQL("summary"))
+	rows, err := r.pool.Query(ctx, summarySQL)
 	if err != nil {
 		return result, fmt.Errorf("query dispatch summary: %w", err)
 	}
@@ -85,7 +71,7 @@ func (r *Repository) Failures(ctx context.Context) (FailureBreakdown, error) {
 		return result, err
 	}
 
-	rows, err := r.pool.Query(ctx, querySQL("failures"), FailureBreakdownLimit)
+	rows, err := r.pool.Query(ctx, failuresSQL, FailureBreakdownLimit)
 	if err != nil {
 		return result, fmt.Errorf("query dispatch failures: %w", err)
 	}
@@ -127,7 +113,7 @@ func (r *Repository) Failures(ctx context.Context) (FailureBreakdown, error) {
 func (r *Repository) List(ctx context.Context, filter Filter) (Page, error) {
 	result := Page{Items: []Delivery{}}
 
-	query, args, err := buildListQuery(querySQL("list"), filter)
+	query, args, err := buildListQuery(listSQL, filter)
 	if err != nil {
 		return result, err
 	}
@@ -175,7 +161,7 @@ func (r *Repository) Detail(ctx context.Context, id string) (Detail, error) {
 	}
 	defer rollback(ctx, tx)
 
-	item, err := scanDelivery(tx.QueryRow(ctx, querySQL("detail"), numericID))
+	item, err := scanDelivery(tx.QueryRow(ctx, detailSQL, numericID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, ErrNotFound
 	}
@@ -232,7 +218,7 @@ func (r *Repository) Actions(ctx context.Context, id, beforeID string) (ActionPa
 		return result, availabilityErr
 	}
 
-	rows, err := r.pool.Query(ctx, querySQL("actions"), numericID, before, PageSize+1)
+	rows, err := r.pool.Query(ctx, actionsSQL, numericID, before, PageSize+1)
 	if err != nil {
 		return result, fmt.Errorf("query dispatch actions: %w", err)
 	}
@@ -305,13 +291,13 @@ func readDeliveries(rows pgx.Rows) ([]Delivery, error) {
 }
 
 func loadGroup(ctx context.Context, tx pgx.Tx, id int64, lock bool) ([]Delivery, error) {
-	queryName := "group"
+	query := groupSQL
 
 	if lock {
-		queryName = "group_locked"
+		query = groupLockedSQL
 	}
 
-	rows, err := tx.Query(ctx, querySQL(queryName), id, MaxReplaySize+1)
+	rows, err := tx.Query(ctx, query, id, MaxReplaySize+1)
 	if err != nil {
 		return nil, fmt.Errorf("query dispatch replay group: %w", err)
 	}

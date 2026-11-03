@@ -18,7 +18,7 @@ func ReadySnapshot(ctx context.Context, pool *pgxpool.Pool, lockTimeout, freshne
 	)
 
 	if err := pool.QueryRow(
-		ctx, readySnapshotSQL, "PENDING", lockTimeout.Milliseconds(), freshness.Milliseconds(), batchSize,
+		ctx, deliveryReadySnapshotSQL, "PENDING", lockTimeout.Milliseconds(), freshness.Milliseconds(), batchSize,
 	).Scan(&depth, &ageSeconds); err != nil {
 		return workercontract.QueueValues{}, fmt.Errorf("sample ready youtube deliveries: %w", err)
 	}

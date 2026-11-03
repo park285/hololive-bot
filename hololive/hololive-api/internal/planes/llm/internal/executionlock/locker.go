@@ -93,7 +93,8 @@ func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token s
 		return fmt.Errorf("release notification lock: compare and delete: %w", err)
 	}
 
-	if !deleted {
+	// 운영 기본 레벨(info)에서 lock 경합마다 key 가명을 계산해 버리지 않게 먼저 확인한다.
+	if !deleted && l.logger.Enabled(ctx, slog.LevelDebug) {
 		l.logger.Debug("Lock owned by another instance, skipping release",
 			privacylog.CacheKeyAttr(lockKey))
 	}

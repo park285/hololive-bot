@@ -4,6 +4,9 @@ import test from "node:test";
 import { createHelperRuntime, parseBootstrapRequest, RuntimeState } from "./helper-runtime.mjs";
 import { stubFetchers } from "./test-fixtures/fetchers.mjs";
 
+const unknownFingerprintFieldPattern = /unknown field: fingerprint/;
+const unknownProxyFieldPattern = /unknown field: proxy/;
+
 const validBootstrap = {
   protocol_version: 1,
   limits: {
@@ -186,7 +189,7 @@ test("parseBootstrapRequest rejects unknown fields", () => {
       limits: { request_body_bytes: 1, response_body_bytes: 1, max_inflight: 1 },
       fingerprint: "nope",
     })),
-    /unknown field: fingerprint/,
+    unknownFingerprintFieldPattern,
   );
   assert.throws(
     () => parseBootstrapRequest(JSON.stringify({
@@ -194,7 +197,7 @@ test("parseBootstrapRequest rejects unknown fields", () => {
       proxy: { enabled: false },
       limits: { request_body_bytes: 1, response_body_bytes: 1, max_inflight: 1 },
     })),
-    /unknown field: proxy/,
+    unknownProxyFieldPattern,
   );
 });
 

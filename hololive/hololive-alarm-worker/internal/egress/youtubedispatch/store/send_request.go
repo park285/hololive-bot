@@ -58,7 +58,7 @@ func scanFrozenRequest(row pgx.CollectableRow) (FrozenRequest, error) {
 }
 
 func (s *TransitionStore) LoadFrozenRequests(ctx context.Context, deliveryIDs []int64) ([]FrozenRequest, error) {
-	rows, err := s.db.Query(ctx, mustSQL("send_request_load.sql"), deliveryIDs)
+	rows, err := s.db.Query(ctx, sendRequestLoadSQL, deliveryIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load frozen youtube requests: query: %w", err)
 	}
@@ -131,7 +131,7 @@ func freezeRequestInTx(ctx context.Context, tx dbx.Querier, deliveries []domain.
 }
 
 func loadRequestDeliveryStates(ctx context.Context, tx dbx.Querier, ids []int64) ([]requestDeliveryState, error) {
-	rows, err := tx.Query(ctx, mustSQL("send_request_lock.sql"), ids)
+	rows, err := tx.Query(ctx, sendRequestLockSQL, ids)
 	if err != nil {
 		return nil, fmt.Errorf("freeze request: lock deliveries: %w", err)
 	}
@@ -158,7 +158,7 @@ func loadBoundFrozenRequest(ctx context.Context, tx dbx.Querier, bound string, i
 }
 
 func bindFrozenRequest(ctx context.Context, tx dbx.Querier, ids []int64, baseID string) error {
-	tag, err := tx.Exec(ctx, mustSQL("send_request_bind.sql"), ids, baseID)
+	tag, err := tx.Exec(ctx, sendRequestBindSQL, ids, baseID)
 	if err != nil {
 		return fmt.Errorf("freeze request: bind: %w", err)
 	}
@@ -205,7 +205,7 @@ func validateRequestDeliveryStates(expected []domain.YouTubeNotificationDelivery
 }
 
 func loadFrozenRequest(ctx context.Context, db dbx.Querier, id string) (FrozenRequest, error) {
-	rows, err := db.Query(ctx, mustSQL("send_request_get.sql"), id)
+	rows, err := db.Query(ctx, sendRequestGetSQL, id)
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("get frozen request: %w", err)
 	}
@@ -252,7 +252,7 @@ func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation
 		return err
 	}
 
-	tag, err := tx.Exec(ctx, mustSQL("send_request_advance.sql"), request.BaseID, request.Generation)
+	tag, err := tx.Exec(ctx, sendRequestAdvanceSQL, request.BaseID, request.Generation)
 	if err != nil {
 		return fmt.Errorf("advance request generation: update: %w", err)
 	}
@@ -286,7 +286,7 @@ func verifyStartedRequestOwners(ctx context.Context, tx dbx.Querier, operation S
 
 		var valid bool
 
-		if err := tx.QueryRow(ctx, mustSQL("send_request_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID, group.ownerAfter.LockedBy).Scan(&valid); err != nil {
+		if err := tx.QueryRow(ctx, sendRequestFenceSQL, group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID, group.ownerAfter.LockedBy).Scan(&valid); err != nil {
 			return fmt.Errorf("advance request generation: owner fence: %w", err)
 		}
 
@@ -304,7 +304,7 @@ func (s *TransitionStore) CleanupOrphanRequests(ctx context.Context, cutoff time
 		return 0, errors.New("cleanup orphan requests: invalid limit")
 	}
 
-	tag, err := s.db.Exec(ctx, mustSQL("send_request_cleanup.sql"), cutoff, limit)
+	tag, err := s.db.Exec(ctx, sendRequestCleanupSQL, cutoff, limit)
 	if err != nil {
 		return 0, fmt.Errorf("cleanup orphan requests: %w", err)
 	}
@@ -317,7 +317,7 @@ func insertFrozenRequest(ctx context.Context, tx dbx.Querier, request FrozenRequ
 
 	request.MessageHash = hex.EncodeToString(sum[:])
 
-	if _, err := tx.Exec(ctx, mustSQL("send_request_insert.sql"), request.BaseID, request.RoomID, request.Message, request.MessageHash, request.DedupeKeys, request.MemberIDs, request.Route); err != nil {
+	if _, err := tx.Exec(ctx, sendRequestInsertSQL, request.BaseID, request.RoomID, request.Message, request.MessageHash, request.DedupeKeys, request.MemberIDs, request.Route); err != nil {
 		return FrozenRequest{}, fmt.Errorf("insert frozen request: %w", err)
 	}
 

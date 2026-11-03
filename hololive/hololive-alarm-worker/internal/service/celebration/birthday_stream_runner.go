@@ -138,7 +138,7 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, kstDay time.Time)
 		return fmt.Errorf("birthday stream runner: find birthday members: %w", err)
 	}
 
-	members = r.filterMembersWithChannel(members)
+	members = r.filterMembersWithChannel(ctx, members)
 	if len(members) == 0 {
 		return nil
 	}
@@ -272,11 +272,12 @@ func (r *BirthdayStreamRunner) findSentRoomsForPublishedStreams(
 	return sentRooms, nil
 }
 
-func (r *BirthdayStreamRunner) filterMembersWithChannel(members []*domain.Member) []*domain.Member {
+func (r *BirthdayStreamRunner) filterMembersWithChannel(ctx context.Context, members []*domain.Member) []*domain.Member {
 	withChannel := make([]*domain.Member, 0, len(members))
 	for _, m := range members {
 		if strings.TrimSpace(m.ChannelID) == "" {
-			if r.logger != nil {
+			// Handle에 넘기는 ctx(Background)를 바꾸지 않도록 Enabled만 ctx로 묻고 Debug는 그대로 쓴다.
+			if r.logger != nil && r.logger.Enabled(ctx, slog.LevelDebug) {
 				r.logger.Debug("Birthday stream runner skipped member without YouTube channel",
 					slog.String("member", resolveCelebrationMemberName(m)))
 			}

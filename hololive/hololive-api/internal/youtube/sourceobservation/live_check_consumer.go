@@ -60,7 +60,7 @@ func (c *Consumer) reconcileChannelLiveCheck(
 		return ReconcileResult{}, fmt.Errorf("decode channel live check payload: %w", err)
 	}
 
-	applied, err := upsertLatestLiveCheck(ctx, tx, mustSQL("repository_channel_live_check_upsert.sql"),
+	applied, err := upsertLatestLiveCheck(ctx, tx, repositoryChannelLiveCheckUpsertSQL,
 		payload.ChannelID, claimed.Provider, string(payload.Outcome), nullableText(payload.SelectedVideoID),
 		payload.ChannelIdentityConfirmed, nullableText(string(payload.UnknownReason)),
 		claimed.ID, claimed.EvidenceSHA256, claimed.ScheduledFor, claimed.EffectiveAt,
@@ -181,7 +181,7 @@ func (c *Consumer) reduceVideoLiveCheck(
 func persistVideoAvailability(ctx context.Context, tx dbx.Tx, claimed *Observation, payload *contract.VideoLiveCheckV1, channelID string) (bool, error) {
 	availability := canonicalVideoAvailability(payload, channelID)
 
-	return upsertLatestLiveCheck(ctx, tx, mustSQL("repository_video_availability_upsert.sql"),
+	return upsertLatestLiveCheck(ctx, tx, repositoryVideoAvailabilityUpsertSQL,
 		payload.VideoID, availability.channelID, claimed.Provider, availability.identityConfirmed,
 		string(availability.availability), string(availability.method), nullableText(string(availability.unknownReason)),
 		claimed.ID, claimed.EvidenceSHA256, claimed.ScheduledFor, claimed.EffectiveAt, claimed.ObservedAt, claimed.ReceivedAt,
@@ -353,7 +353,7 @@ func (c *Consumer) unresolvableVideoFact(
 
 	var negativeAt time.Time
 
-	err := tx.QueryRow(ctx, mustSQL("repository_channel_live_negative.sql"),
+	err := tx.QueryRow(ctx, repositoryChannelLiveNegativeSQL,
 		session.ChannelID, *session.Clock.LastLivePositiveAt, claimed.EffectiveAt).Scan(&negativeAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fact, nil

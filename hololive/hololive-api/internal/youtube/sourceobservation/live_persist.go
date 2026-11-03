@@ -20,13 +20,6 @@ const (
 	liveSessionUpdateArgCount = 2*liveSessionColumnCount - 1
 )
 
-var (
-	liveSessionInsertSQL          = mustSQL("repository_live_session_insert.sql")
-	liveSessionUpdateSQL          = mustSQL("repository_live_session_update.sql")
-	livePremiereClassificationSQL = mustSQL("repository_live_premiere_classification_upsert.sql")
-	liveHeadUpsertSQL             = mustSQL("repository_live_head_upsert_0048_48.sql")
-)
-
 // LiveSessionConflictError는 잠금 안에서 읽은 세션 행을 기준으로 한 저장이 어떤 행에도 적용되지 않았음을 뜻한다.
 // 읽은 뒤 다른 writer가 행을 만들거나 바꿨으므로 이번 판정은 버리고 트랜잭션을 되돌려야 한다.
 type LiveSessionConflictError struct {
@@ -131,7 +124,7 @@ func liveSessionWrite(stored map[string]live.SessionState, next *live.SessionSta
 	if !ok || !prior.Present {
 		return dbx.Statement{
 			Operation:  "insert live session",
-			SQL:        liveSessionInsertSQL,
+			SQL:        repositoryLiveSessionInsertSQL,
 			Args:       appendLiveSessionArgs(make([]any, 0, liveSessionColumnCount), next, next.Title),
 			RequireRow: true,
 		}, true
@@ -156,7 +149,7 @@ func liveSessionWrite(stored map[string]live.SessionState, next *live.SessionSta
 		prior.StatusObservedAt, prior.ScheduleObservedAt, prior.TitleObservedAt,
 	)
 
-	return dbx.Statement{Operation: "update live session", SQL: liveSessionUpdateSQL, Args: args, RequireRow: true}, true
+	return dbx.Statement{Operation: "update live session", SQL: repositoryLiveSessionUpdateSQL, Args: args, RequireRow: true}, true
 }
 
 func appendLiveSessionArgs(args []any, session *live.SessionState, title any) []any {
@@ -208,7 +201,7 @@ func upsertConfirmedPremiereSession(ctx context.Context, tx dbx.Tx, session *liv
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, livePremiereClassificationSQL, appendLiveSessionArgs(make([]any, 0, liveSessionColumnCount), session, session.Title)...); err != nil {
+	if _, err := tx.Exec(ctx, repositoryLivePremiereClassificationUpsertSQL, appendLiveSessionArgs(make([]any, 0, liveSessionColumnCount), session, session.Title)...); err != nil {
 		return fmt.Errorf("upsert live session: %w", err)
 	}
 
@@ -231,7 +224,7 @@ func liveHeadStatement(session *live.SessionState) dbx.Statement {
 
 	return dbx.Statement{
 		Operation: "upsert live head",
-		SQL:       liveHeadUpsertSQL,
+		SQL:       liveHeadStatementSQL,
 		Args: []any{
 			session.VideoID, string(session.Status),
 			session.Clock.LastUpcomingPositiveAt, session.Clock.LastUpcomingPositiveSeenAt,

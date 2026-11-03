@@ -12,7 +12,7 @@ func TestFanoutClaimDeclaresPendingPartialIndexPredicate(t *testing.T) {
 		t.Fatal("fanout claim SQL must track the canonical pending status")
 	}
 
-	claim, update, found := strings.Cut(mustSQL("fanout_claim.sql"), "), updated AS (")
+	claim, update, found := strings.Cut(fanoutClaimSQL, "), updated AS (")
 	if !found {
 		t.Fatal("fanout claim must retain the atomic claim/update statement")
 	}

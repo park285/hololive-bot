@@ -10,6 +10,8 @@ import { readUpstream, runUpstream } from "./upstream-errors.mjs";
  * @typedef {{ raw: RawPage, channelId: string, rowCount?: number }} ChannelEvidence */
 /** @type {WeakMap<object, ChannelEvidence>} */
 const evidence = new WeakMap();
+const absoluteHTTPURLPattern = /^https?:\/\//u;
+const trailingSlashesPattern = /\/+$/u;
 
 /** 원시 응답을 보존하는 수집 전용 클라이언트입니다. SDK 메서드의 this 바인딩을 유지합니다.
  * @param {Innertube} client
@@ -260,12 +262,12 @@ function leafRowsOf(contents) {
 
 /** @param {unknown} value */
 function routeOf(value) {
-  if (typeof value !== "string" || value.trim() === "" || (!value.startsWith("/") && !/^https?:\/\//u.test(value))) return undefined;
+  if (typeof value !== "string" || value.trim() === "" || (!value.startsWith("/") && !absoluteHTTPURLPattern.test(value))) return undefined;
   try {
     const url = new URL(value, "https://www.youtube.com");
     if (!["https:", "http:"].includes(url.protocol) || !["www.youtube.com", "youtube.com", "m.youtube.com"].includes(url.hostname) ||
         url.username !== "" || url.password !== "" || url.port !== "") return undefined;
-    const segments = url.pathname.replace(/\/+$/u, "").split("/").slice(1).map(decodeURIComponent);
+    const segments = url.pathname.replace(trailingSlashesPattern, "").split("/").slice(1).map(decodeURIComponent);
     if (segments.some(segment => segment === "" || segment.includes("/"))) return undefined;
     if (segments[0] === "channel" && segments.length >= 2 && segments.length <= 3) {
       return { tab: segments[2] ?? "featured", channelId: segments[1] };

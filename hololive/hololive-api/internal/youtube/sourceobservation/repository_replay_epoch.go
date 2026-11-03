@@ -45,7 +45,7 @@ func activateReplayEpochTx(
 ) (ReplayEpochActivation, error) {
 	epoch, err := scanReplayEpoch(tx.QueryRow(
 		ctx,
-		mustSQL("repository_replay_epoch_activate_0085_85.sql"),
+		activateReplayEpochTxSQL,
 		input.ActivatedBy,
 		input.Reason,
 	))
@@ -59,7 +59,7 @@ func activateReplayEpochTx(
 
 	epoch, err = scanReplayEpoch(tx.QueryRow(
 		ctx,
-		mustSQL("repository_replay_epoch_load_0086_86.sql"),
+		activateReplayEpochTx2SQL,
 	))
 	if err != nil {
 		return ReplayEpochActivation{}, fmt.Errorf("load active source observation replay epoch: %w", err)

@@ -18,6 +18,11 @@ const features = {
   longform_notetweets_inline_media_enabled: true, responsive_web_media_download_video_enabled: false,
   responsive_web_enhance_cards_enabled: false,
 };
+const nodeErrorCodePattern = /^[A-Z][A-Z0-9_]{0,63}$/;
+const clientWebAssetPathPattern = /^\/responsive-web\/client-web\/[^/]+\.js$/;
+const cookieValuePattern = /^[a-zA-Z0-9_-]{16,512}$/;
+const userIDPattern = /^[0-9]{1,20}$/;
+const broadcastIDPattern = /^[a-zA-Z0-9]{1,64}$/;
 
 /** 원문·쿠키 없이 고정 오류 코드와 제한된 HTTP 진단 정보만 전달한다. */
 export class CollectionError extends Error {
@@ -43,7 +48,7 @@ export function failureReport(error, stage) {
   }
   const errorName = builtinErrorNames.has(error?.name) ? error.name : 'other';
   // fetch 실패는 TypeError 하나로 감싸이므로 DNS·연결 원인은 cause의 코드에서만 구분된다.
-  const errorCode = [error?.code, error?.cause?.code].find((value) => typeof value === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(value)) ?? '';
+  const errorCode = [error?.code, error?.cause?.code].find((value) => typeof value === 'string' && nodeErrorCodePattern.test(value)) ?? '';
   return { error: 'collector_failed', stage, error_name: errorName, error_code: errorCode, cooldown_seconds: 0, http_status: 0, api_codes: [] };
 }
 
@@ -53,7 +58,7 @@ export function boundedFetch(fetchImpl) {
     const url = new URL(input instanceof Request ? input.url : input);
     const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const api = url.origin === 'https://x.com' && [fleetPath, spacePath].includes(url.pathname);
-    const asset = url.origin === 'https://abs.twimg.com' && /^\/responsive-web\/client-web\/[^/]+\.js$/.test(url.pathname);
+    const asset = url.origin === 'https://abs.twimg.com' && clientWebAssetPathPattern.test(url.pathname);
     // 로그아웃 상태의 /home은 로그인 화면으로 redirect되므로 요청 ID 라이브러리는 /i/jf/ 앱 셸만 읽는다.
     const appShell = url.href === 'https://x.com/i/jf/';
     if (method !== 'GET' || url.username || url.password || (!api && !asset && !appShell)) {
@@ -96,7 +101,7 @@ function object(value) {
 export function validateCookies(value) {
   object(value);
   for (const key of ['auth_token', 'ct0']) {
-    if (typeof value[key] !== 'string' || !/^[a-zA-Z0-9_-]{16,512}$/.test(value[key])) {
+    if (typeof value[key] !== 'string' || !cookieValuePattern.test(value[key])) {
       throw new CollectionError('invalid_cookies');
     }
   }
@@ -107,7 +112,7 @@ export function validateCookies(value) {
 /** 사용자 ID를 한 번에 최대 100개 조회하고 직접 개설한 Running 스페이스만 반환한다. */
 export async function collectSpaces(userIDs, cookies, transaction, fetchImpl) {
   if (!Array.isArray(userIDs) || userIDs.length < 1 || userIDs.length > 100 ||
-      userIDs.some((id) => typeof id !== 'string' || !/^[0-9]{1,20}$/.test(id)) ||
+      userIDs.some((id) => typeof id !== 'string' || !userIDPattern.test(id)) ||
       new Set(userIDs).size !== userIDs.length) throw new CollectionError('invalid_targets');
   validateCookies(cookies);
   async function request(path, params) {
@@ -158,7 +163,7 @@ export async function collectSpaces(userIDs, cookies, transaction, fetchImpl) {
     const spaces = object(user.spaces);
     if (spaces.live_content === undefined) continue;
     const audio = object(object(spaces.live_content).audiospace);
-    if (typeof audio.broadcast_id !== 'string' || !/^[a-zA-Z0-9]{1,64}$/.test(audio.broadcast_id)) {
+    if (typeof audio.broadcast_id !== 'string' || !broadcastIDPattern.test(audio.broadcast_id)) {
       throw new CollectionError('invalid_response');
     }
     spaceIDs.add(audio.broadcast_id);
@@ -175,7 +180,7 @@ export async function collectSpaces(userIDs, cookies, transaction, fetchImpl) {
     }
     if (metadata.state !== 'Running') continue;
     const creatorID = object(object(metadata.creator_results).result).rest_id;
-    if (typeof creatorID !== 'string' || !/^[0-9]{1,20}$/.test(creatorID)) throw new CollectionError('invalid_response');
+    if (typeof creatorID !== 'string' || !userIDPattern.test(creatorID)) throw new CollectionError('invalid_response');
     if (!requested.has(creatorID)) continue;
     if (!Number.isSafeInteger(metadata.started_at) || metadata.started_at <= 0 ||
         typeof metadata.title !== 'string' || Buffer.byteLength(metadata.title) > 2048) {

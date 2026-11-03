@@ -29,7 +29,7 @@ import (
 )
 
 func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
-	query := mustSQL("repository_query_0032_01.sql")
+	query := findByChannelIDSQL
 
 	member, err := r.querySingleMember(ctx, query, channelID)
 	if err != nil {
@@ -40,7 +40,7 @@ func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*do
 }
 
 func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Member, error) {
-	query := mustSQL("repository_query_0048_02.sql")
+	query := findByNameSQL
 
 	member, err := r.querySingleMember(ctx, query, name)
 	if err != nil {
@@ -51,7 +51,7 @@ func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Membe
 }
 
 func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
-	query := mustSQL("repository_query_0064_03.sql")
+	query := findByAliasSQL
 
 	member, err := r.querySingleMember(ctx, query, alias)
 	if err != nil {
@@ -62,7 +62,7 @@ func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Mem
 }
 
 func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
-	query := mustSQL("repository_query_0084_04.sql")
+	query := getAllChannelIDsSQL
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -92,7 +92,7 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 }
 
 func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error) {
-	query := mustSQL("repository_query_0115_05.sql")
+	query := getAllMembersSQL
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -112,7 +112,7 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 func (r *Repository) CountMembers(ctx context.Context) (int, error) {
 	var count int
 
-	if err := r.pool.QueryRow(ctx, mustSQL("count_members.sql")).Scan(&count); err != nil {
+	if err := r.pool.QueryRow(ctx, countMembersSQL).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count members: %w", err)
 	}
 
@@ -124,7 +124,7 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 		return make(map[string]*domain.Member), nil
 	}
 
-	query := mustSQL("repository_query_0136_06.sql")
+	query := getMembersWithPhotoSQL
 
 	rows, err := r.pool.Query(ctx, query, channelIDs)
 	if err != nil {

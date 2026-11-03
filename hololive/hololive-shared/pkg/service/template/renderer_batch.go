@@ -162,7 +162,7 @@ func (r *Renderer) resolveTemplates(ctx context.Context, selectors []templateSel
 		keys[i], channels[i], formats[i] = string(selector.key), selector.channelID, string(selector.format)
 	}
 
-	rows, err := r.pool.Query(ctx, mustSQL("renderer_resolve_batch.sql"), keys, channels, formats)
+	rows, err := r.pool.Query(ctx, rendererResolveBatchSQL, keys, channels, formats)
 	if err != nil {
 		return nil, fmt.Errorf("query templates: %w", err)
 	}

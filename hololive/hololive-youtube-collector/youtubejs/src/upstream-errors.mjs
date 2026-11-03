@@ -46,6 +46,8 @@ Parser.setParserErrorHandler((failure) => {
   });
 });
 
+const upstreamStatusMessagePattern = /^Request to .* failed with status code ([1-5]\d{2})$/;
+
 const transientNetworkCodes = new Set([
   "ECONNRESET", "ENETRESET", "EPIPE", "ETIMEDOUT", "EAI_AGAIN",
   "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET",
@@ -75,7 +77,7 @@ export function upstreamHTTPFailureCode(status) {
 export function upstreamHTTPStatus(error) {
   if (error instanceof Utils.InnertubeError) {
     // youtubei.js 18의 HTTPClient는 status 필드 없이 이 메시지만 제공합니다.
-    const match = /^Request to .* failed with status code ([1-5]\d{2})$/.exec(error.message);
+    const match = upstreamStatusMessagePattern.exec(error.message);
     return match == null ? undefined : Number(match[1]);
   }
   if (isRecord(error) && typeof error.status === "number" && Number.isInteger(error.status) && error.status >= 400 && error.status <= 599) {

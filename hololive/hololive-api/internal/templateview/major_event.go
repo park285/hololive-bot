@@ -48,14 +48,15 @@ func safeMarkdownLink(raw string) string {
 	return trimmed
 }
 
+var majorEventWeekdayNames = []string{"일", "월", "화", "수", "목", "금", "토"}
+
 func FormatMajorEventDatesFromDB(start, end *time.Time) string {
 	if start == nil {
 		return "TBA"
 	}
 
-	weekdays := []string{"일", "월", "화", "수", "목", "금", "토"}
 	formatDate := func(t time.Time) string {
-		return fmt.Sprintf("%d년 %d월 %d일(%s)", t.Year(), t.Month(), t.Day(), weekdays[t.Weekday()])
+		return fmt.Sprintf("%d년 %d월 %d일(%s)", t.Year(), t.Month(), t.Day(), majorEventWeekdayNames[t.Weekday()])
 	}
 
 	if end == nil || start.Equal(*end) {

@@ -65,7 +65,7 @@ func upsertVideosChunk(ctx context.Context, tx dbx.Querier, videos []*domain.You
 
 	var sb strings.Builder
 
-	sb.WriteString(mustSQL("repository_batch_writes_0054_01.sql"))
+	sb.WriteString(upsertVideosChunkSQL)
 
 	for i, video := range videos {
 		publishedAt := yttimestamp.NormalizePtr(video.PublishedAt)
@@ -93,7 +93,7 @@ func upsertVideosChunk(ctx context.Context, tx dbx.Querier, videos []*domain.You
 		)
 	}
 
-	sb.WriteString(mustSQL("repository_batch_writes_0083_02.sql"))
+	sb.WriteString(upsertVideosChunk2SQL)
 
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec video upsert chunk (%d rows)", len(videos)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec video upsert chunk (%d rows): %w", len(videos), err)
@@ -128,7 +128,7 @@ func upsertCommunityPostsChunk(ctx context.Context, tx dbx.Querier, posts []*dom
 
 	var sb strings.Builder
 
-	sb.WriteString(mustSQL("repository_batch_writes_0117_03.sql"))
+	sb.WriteString(upsertCommunityPostsChunkSQL)
 
 	for i, post := range posts {
 		publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
@@ -157,7 +157,7 @@ func upsertCommunityPostsChunk(ctx context.Context, tx dbx.Querier, posts []*dom
 		)
 	}
 
-	sb.WriteString(mustSQL("repository_batch_writes_0147_04.sql"))
+	sb.WriteString(upsertCommunityPostsChunk2SQL)
 
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec community post upsert chunk (%d rows)", len(posts)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec community post upsert chunk (%d rows): %w", len(posts), err)
@@ -239,13 +239,13 @@ func insertNotificationsSameKindChunk(ctx context.Context, tx dbx.Querier, notif
 
 	var sb strings.Builder
 
-	sb.WriteString(mustSQL("repository_batch_writes_0234_05.sql"))
+	sb.WriteString(insertNotificationsSameKindChunkSQL)
 
 	for i, notification := range notifications {
 		appendNotificationInsertArgs(&sb, &args, i, notification, now)
 	}
 
-	sb.WriteString(mustSQL("repository_batch_writes_0244_06.sql"))
+	sb.WriteString(insertNotificationsSameKindChunk2SQL)
 
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), err)
@@ -317,7 +317,7 @@ func upsertWatermark(ctx context.Context, tx dbx.Querier, watermark *domain.YouT
 	}
 
 	now := time.Now()
-	if _, err := dbx.ExecSQL(ctx, tx, "exec watermark upsert", mustSQL("repository_batch_writes_0347_07.sql"),
+	if _, err := dbx.ExecSQL(ctx, tx, "exec watermark upsert", upsertWatermarkSQL,
 		watermark.ChannelID,
 		watermark.WatermarkType,
 		watermark.Initialized,

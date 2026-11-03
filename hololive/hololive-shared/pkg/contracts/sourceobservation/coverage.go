@@ -8,6 +8,18 @@ import (
 	"time"
 )
 
+// 커버리지 어휘는 계약 상수라 호출마다 허용 집합을 만들지 않고 패키지 수준에 한 번 둔다.
+var (
+	liveCoverageStatusVocabulary = map[string]struct{}{
+		"CANCELLED": {}, //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
+		"ENDED":     {},
+		"LIVE":      {},
+		"UPCOMING":  {},
+	}
+	channelProfileFieldVocabulary = map[string]struct{}{"country": {}, "description": {}, "handle": {}, "joined_date": {}}
+	channelPhotoVariantVocabulary = map[string]struct{}{"avatar": {}, "banner": {}}
+)
+
 type CoverageRelation uint8
 
 const (
@@ -206,7 +218,7 @@ func (c *GlobalChannelCoverageV1) normalizeAndValidate(subject string) error {
 		}
 	}
 
-	statuses, err := normalizedVocabulary(c.Filters.Statuses, []string{"CANCELLED", "ENDED", "LIVE", "UPCOMING"}) //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
+	statuses, err := normalizedVocabulary(c.Filters.Statuses, liveCoverageStatusVocabulary)
 	if err != nil {
 		return fmt.Errorf("live coverage statuses: %w", err)
 	}
@@ -217,7 +229,7 @@ func (c *GlobalChannelCoverageV1) normalizeAndValidate(subject string) error {
 }
 
 func (c *ChannelProfileCoverageV1) normalizeAndValidate(subject string) error {
-	if err := normalizeChannelFields(subject, &c.ChannelID, &c.Fields, []string{"country", "description", "handle", "joined_date"}); err != nil {
+	if err := normalizeChannelFields(subject, &c.ChannelID, &c.Fields, channelProfileFieldVocabulary); err != nil {
 		return fmt.Errorf("normalize channel fields: %w", err)
 	}
 
@@ -225,7 +237,7 @@ func (c *ChannelProfileCoverageV1) normalizeAndValidate(subject string) error {
 }
 
 func (c *ChannelPhotoCoverageV1) normalizeAndValidate(subject string) error {
-	if err := normalizeChannelFields(subject, &c.ChannelID, &c.Variants, []string{"avatar", "banner"}); err != nil {
+	if err := normalizeChannelFields(subject, &c.ChannelID, &c.Variants, channelPhotoVariantVocabulary); err != nil {
 		return fmt.Errorf("normalize channel fields: %w", err)
 	}
 
@@ -284,7 +296,7 @@ func normalizeOptionalTime(value **time.Time) error {
 	return nil
 }
 
-func normalizeChannelFields(subject string, channelID *string, fields *[]string, allowed []string) error {
+func normalizeChannelFields(subject string, channelID *string, fields *[]string, allowed map[string]struct{}) error {
 	if *channelID != subject {
 		return errors.New("channel coverage does not match subject")
 	}
@@ -330,19 +342,14 @@ func normalizedUnique(values []string, maxLength int) ([]string, error) {
 	return result, nil
 }
 
-func normalizedVocabulary(values, allowed []string) ([]string, error) {
+func normalizedVocabulary(values []string, allowed map[string]struct{}) ([]string, error) {
 	result, err := normalizedUnique(values, 128)
 	if err != nil {
 		return nil, fmt.Errorf("normalized unique: %w", err)
 	}
 
-	allowedSet := make(map[string]struct{}, len(allowed))
-	for _, value := range allowed {
-		allowedSet[value] = struct{}{}
-	}
-
 	for _, value := range result {
-		if _, ok := allowedSet[value]; !ok {
+		if _, ok := allowed[value]; !ok {
 			return nil, fmt.Errorf("unsupported value %q", value)
 		}
 	}

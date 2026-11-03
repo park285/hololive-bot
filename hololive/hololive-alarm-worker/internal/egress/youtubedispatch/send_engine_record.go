@@ -1,5 +1,7 @@
 package youtubedispatch
 
+import "context"
+
 // 실패·성공 기록 wrapper는 확정된 결과만 MetricsRecorder에 넘긴다.
 // recorder는 로그·audit·결과 집계만 맡는다.
 
@@ -43,10 +45,11 @@ func (d *SendEngine) recordPerRoomSendFailure(
 }
 
 func (d *SendEngine) recordPerRoomSuccess(
+	ctx context.Context,
 	attempt *deliveryAttempt,
 	result *deliveryDispatchResult,
 ) {
-	d.metricsRecorder.recordPerRoomSuccess(&attempt.rows[0], attempt.rows, attempt.outboxes, attempt.request, result)
+	d.metricsRecorder.recordPerRoomSuccess(ctx, &attempt.rows[0], attempt.rows, attempt.outboxes, attempt.request, result)
 }
 
 func (d *SendEngine) recordDeliveryFailure(

@@ -20,7 +20,7 @@ func loadLivePendingEnds(ctx context.Context, tx dbx.Tx, state *live.State, vide
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_live_pending_ends.sql"), videoIDs)
+	rows, err := tx.Query(ctx, repositoryLivePendingEndsSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("query pending ends: %w", err)
 	}
@@ -171,9 +171,9 @@ func loadLiveAbsenceSlots(ctx context.Context, tx dbx.Tx, state *live.State, cha
 	)
 
 	if len(channelIDs) == 0 {
-		rows, err = tx.Query(ctx, mustSQL("repository_live_absence_current_slot.sql"), scheduledFor, currentChannels)
+		rows, err = tx.Query(ctx, repositoryLiveAbsenceCurrentSlotSQL, scheduledFor, currentChannels)
 	} else {
-		rows, err = tx.Query(ctx, mustSQL("repository_live_absence_slots.sql"), channelIDs, after, scheduledFor, currentChannels)
+		rows, err = tx.Query(ctx, repositoryLiveAbsenceSlotsSQL, channelIDs, after, scheduledFor, currentChannels)
 	}
 
 	if err != nil {
@@ -223,7 +223,7 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 	}
 
 	// Decision에 없는 전역 pending을 지우면 다른 채널의 아직 도착하지 않은 positive를 잃는다.
-	if _, err := tx.Exec(ctx, mustSQL("repository_live_pending_ends_delete.sql"), sessionIDs, pendingIDs); err != nil {
+	if _, err := tx.Exec(ctx, repositoryLivePendingEndsDeleteSQL, sessionIDs, pendingIDs); err != nil {
 		return fmt.Errorf("delete settled pending ends: %w", err)
 	}
 
@@ -238,7 +238,7 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 		return fmt.Errorf("encode absence coverage: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("repository_live_absence_slot_insert.sql"),
+	if _, err := tx.Exec(ctx, repositoryLiveAbsenceSlotInsertSQL,
 		slot.ObservationID, slot.ScheduledFor, slot.EvidenceSHA256, slot.EffectiveAt,
 		slot.ReceivedAt, slot.ScopeSHA256, string(coverage)); err != nil {
 		return fmt.Errorf("persist absence slot: %w", err)
@@ -273,7 +273,7 @@ func pendingLiveEndStatements(pending []live.PendingEnd) []dbx.Statement {
 
 		statements = append(statements, dbx.Statement{
 			Operation: "upsert pending live end",
-			SQL:       mustSQL("repository_live_pending_end_upsert.sql"),
+			SQL:       repositoryLivePendingEndUpsertSQL,
 			Args: []any{
 				item.VideoID, item.ChannelID, item.Kind, item.ObservationID, item.EffectiveAt,
 				item.ReceivedAt, item.ScheduledFor, item.EndedAt, item.NegativeEligible, item.ScopeCovers,

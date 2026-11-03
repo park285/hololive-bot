@@ -54,7 +54,7 @@ func (l *JobLease) completeCurrentTx(ctx context.Context, tx dbx.Tx) error {
 func completeCurrentLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof) error {
 	var jobKey string
 
-	err := tx.QueryRow(ctx, sqlLeaseComplete, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
+	err := tx.QueryRow(ctx, completeCurrentLeaseSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
 		proof.ProjectionGeneration, proof.ScheduledFor).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -76,7 +76,7 @@ func lockActiveLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof)
 
 	err := tx.QueryRow(
 		ctx,
-		sqlLeaseFailureLock,
+		lockActiveLeaseSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
 

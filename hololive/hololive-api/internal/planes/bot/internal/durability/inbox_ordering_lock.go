@@ -9,8 +9,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 )
 
-var inboxOrderingKeysLockSQL = mustSQL("inbox_ordering_keys_lock.sql")
-
 func (r *InboxRepository) beginLockedMessageTx(ctx context.Context, messageID string) (pgx.Tx, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

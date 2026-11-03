@@ -60,10 +60,10 @@ func prepareLiveReviewPlans(t *testing.T, tx pgx.Tx, mode string) {
 	require.NoError(t, err)
 
 	// SQL PREPARE/EXECUTE로 두 캐시 모드를 실제 매개변수 계획에 적용한다.
-	_, err = tx.Exec(t.Context(), "PREPARE review_observability(bigint) AS "+mustSQL("collection_target_observability.sql"))
+	_, err = tx.Exec(t.Context(), "PREPARE review_observability(bigint) AS "+collectionTargetObservabilitySQL)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(t.Context(), "PREPARE review_live_check(text[],bigint) AS "+mustSQL("live_check_videos.sql"))
+	_, err = tx.Exec(t.Context(), "PREPARE review_live_check(text[],bigint) AS "+liveCheckVideosSQL)
 	require.NoError(t, err)
 }
 

@@ -5,6 +5,7 @@ import { mapContentItems } from "../../../hololive/hololive-youtube-collector/yo
 import { paginate, paginationEnvelopeReserve } from "../../../hololive/hololive-youtube-collector/youtubejs/src/pagination.mjs";
 
 const outputURL = new URL("./public-titles.json", import.meta.url);
+const videoIDPattern = /^[A-Za-z0-9_-]{11}$/;
 const rules = JSON.parse(await readFile(new URL("../../../hololive/hololive-shared/pkg/domain/mekparkhost/rules.json", import.meta.url), "utf8"));
 const client = await createInnertube({
   fetchImpl: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(20_000) }),
@@ -32,7 +33,7 @@ for (const [unit, definition] of Object.entries(rules.units)) {
         buildResult: (items, pagination) => ({ items, ...pagination }),
       });
       for (const item of result.items) {
-        if (!/^[A-Za-z0-9_-]{11}$/.test(item.video_id) || item.channel_id !== channelID || !item.title) {
+        if (!videoIDPattern.test(item.video_id) || item.channel_id !== channelID || !item.title) {
           throw new Error("public title identity or channel validation failed");
         }
         const previous = videos.get(item.video_id);

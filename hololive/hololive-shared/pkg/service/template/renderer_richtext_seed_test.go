@@ -16,6 +16,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
+var (
+	templateFormatPairPattern      = regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '[0-9a-f]{64}', \$plain\$(.*?)\$plain\$, \$rich\$(.*?)\$rich\$\)`)
+	templateRichTextSummaryPattern = regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '[0-9a-f]{64}', \$rich\$(.*?)\$rich\$\)`)
+)
+
 // loadTemplateFormatPairs는 현행 표준 본문을 oldBody=plain, newBody=richtext로 돌려준다.
 // 358이 두 변형을 정하고, 359가 일부 키의 richtext 본문을 바꾼다.
 func loadTemplateFormatPairs(tb testing.TB) map[domain.TemplateKey]templateSeedPair {
@@ -28,8 +33,7 @@ func loadTemplateFormatPairs(tb testing.TB) map[domain.TemplateKey]templateSeedP
 		tb.Fatal(err)
 	}
 
-	rows := regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '[0-9a-f]{64}', \$plain\$(.*?)\$plain\$, \$rich\$(.*?)\$rich\$\)`).
-		FindAllStringSubmatch(string(raw), -1)
+	rows := templateFormatPairPattern.FindAllStringSubmatch(string(raw), -1)
 	pairs := make(map[domain.TemplateKey]templateSeedPair, len(rows))
 
 	for _, row := range rows {
@@ -41,7 +45,7 @@ func loadTemplateFormatPairs(tb testing.TB) map[domain.TemplateKey]templateSeedP
 		tb.Fatal(err)
 	}
 
-	for _, row := range regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '[0-9a-f]{64}', \$rich\$(.*?)\$rich\$\)`).FindAllStringSubmatch(string(raw), -1) {
+	for _, row := range templateRichTextSummaryPattern.FindAllStringSubmatch(string(raw), -1) {
 		key := domain.TemplateKey(row[1])
 
 		pair, exists := pairs[key]

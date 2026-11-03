@@ -22,7 +22,7 @@ func (r *Repository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, o
 		return []timeline.PostDeliveryTimeline{}, nil
 	}
 
-	rows, err := r.listPostDeliveryTimelines(ctx, postDeliveryTimelineOutboxFilter, uniqueIDs)
+	rows, err := r.listPostDeliveryTimelines(ctx, postDeliveryTimelineByOutboxIDsSQL, uniqueIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by outbox ids: %w", err)
 	}
@@ -49,7 +49,7 @@ func (r *Repository) ListPostDeliveryTimelinesByTrackingIdentities(
 
 	kinds, contentIDs := postTrackingIdentityArrays(normalized)
 
-	rows, err := r.listPostDeliveryTimelines(ctx, postDeliveryTimelineIdentityFilter, kinds, contentIDs)
+	rows, err := r.listPostDeliveryTimelines(ctx, postDeliveryTimelineByTrackingIdentitiesSQL, kinds, contentIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by tracking identities: %w", err)
 	}
@@ -57,27 +57,18 @@ func (r *Repository) ListPostDeliveryTimelinesByTrackingIdentities(
 	return rows, nil
 }
 
-// timeline 조회 필터는 두 고정 모양뿐이다(queries/ 아래 SQL asset). 목록 길이와 무관하게 SQL 문자열이 같아
-// plan cache를 재사용한다.
-const (
-	// $2: 대상 outbox id 배열.
-	postDeliveryTimelineOutboxFilter = "timelines_filter_outbox_ids.sql"
-	// $2/$3: 같은 길이의 (kind, content_id) 쌍 배열.
-	postDeliveryTimelineIdentityFilter = "timelines_filter_tracking_identities.sql"
-)
-
-var postDeliveryTimelineKinds = []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
+var postDeliveryTimelineKinds = deliverysql.Texts([]domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort})
 
 func (r *Repository) listPostDeliveryTimelines(
 	ctx context.Context,
-	filterAsset string,
+	query string,
 	filterArgs ...any,
 ) ([]timeline.PostDeliveryTimeline, error) {
 	var scanned []postDeliveryTimelineScanRow
 
-	args := append([]any{deliverysql.Texts(postDeliveryTimelineKinds)}, filterArgs...)
+	args := append([]any{postDeliveryTimelineKinds}, filterArgs...)
 
-	if err := dbx.SelectSQL(ctx, r.db, &scanned, "scan rows", postDeliveryTimelineQuery(mustSQL(filterAsset)), args...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}
 
@@ -85,7 +76,7 @@ func (r *Repository) listPostDeliveryTimelines(
 }
 
 func postDeliveryTimelineQuery(filter string) string {
-	return mustSQL("timelines_query_0107_01.sql") + postDeliveryTimelineSelect() + `
+	return postDeliveryTimelineQuerySQL + postDeliveryTimelineSelect() + `
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
 		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id

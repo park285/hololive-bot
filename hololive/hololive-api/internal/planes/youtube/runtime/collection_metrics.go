@@ -82,7 +82,7 @@ func (r *Runtime) observeCollectionTargets(ctx context.Context) {
 	var finalizations []timeFinalizationSample
 
 	err := r.withDB(ctx, dbOperationCollectionSnapshot, func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx, mustSQL("collection_target_observability.sql"), r.liveFreshnessBudget.Milliseconds())
+		rows, err := r.pool.Query(ctx, collectionTargetObservabilitySQL, r.liveFreshnessBudget.Milliseconds())
 		if err != nil {
 			return fmt.Errorf("query collection target snapshot: %w", err)
 		}

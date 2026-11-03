@@ -39,7 +39,7 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 
 	// NOW()는 전역·session 행 잠금 대기 전 트랜잭션 시작 시각이다. 대기 중 새로 due가 된 항목은
 	// 다음 호출로 남기고, 이번 후보 조회·재확인·FinalizeDue에는 같은 시각을 쓴다.
-	err := tx.QueryRow(ctx, mustSQL("repository_live_due_one_0049_49.sql")).Scan(&videoID, &dbNow)
+	err := tx.QueryRow(ctx, finalizeNextDueLiveEndTxSQL).Scan(&videoID, &dbNow)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil

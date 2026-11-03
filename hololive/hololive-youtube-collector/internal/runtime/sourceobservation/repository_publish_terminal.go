@@ -71,7 +71,7 @@ func completeCollectionJobWithError(
 
 	err := tx.QueryRow(
 		ctx,
-		sqlJobCompleteError,
+		completeCollectionJobWithErrorSQL,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,
@@ -111,7 +111,7 @@ func deferCollectionJob(
 
 	err := tx.QueryRow(
 		ctx,
-		sqlJobDefer,
+		deferCollectionJobSQL,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,

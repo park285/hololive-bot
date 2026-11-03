@@ -92,7 +92,7 @@ func lockOutboxAggregateParents(ctx context.Context, tx dbx.Querier, outboxIDs [
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("delivery_repository_aggregate_lock.sql"), outboxIDs); err != nil {
+	if _, err := tx.Exec(ctx, deliveryRepositoryAggregateLockSQL, outboxIDs); err != nil {
 		return fmt.Errorf("lock outbox aggregate parents: %w", err)
 	}
 
@@ -108,7 +108,7 @@ func syncOutboxAggregates(ctx context.Context, tx dbx.Querier, outboxIDs []int64
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("delivery_repository_aggregate_sync.sql"),
+	if _, err := tx.Exec(ctx, deliveryRepositoryAggregateSyncSQL,
 		outboxIDs,
 		domain.OutboxStatusPending,
 		DeliveryStatusSending,
@@ -130,7 +130,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 
 	var outboxIDs []int64
 
-	if err := dbx.SelectSQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), batchSize); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", findPendingOutboxIDsForAggregateSyncSQL, batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}
 
