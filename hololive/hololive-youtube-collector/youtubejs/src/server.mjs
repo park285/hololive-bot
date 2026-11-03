@@ -43,6 +43,9 @@ class BodyLimitError extends Error {
 class InvalidRequestError extends Error {}
 class RequestTimeoutError extends Error {}
 
+const jsonContentTypePattern = /^application\/json(?:\s*;|$)/i;
+const contentLengthPattern = /^(0|[1-9][0-9]*)$/;
+
 /**
  * @param {string} socketPath
  * @param {{ requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
@@ -231,7 +234,7 @@ function writeJSON(res, status, body) {
 function readBody(req, limit) {
   const maxBytes = limit > 0 ? limit : defaultRequestBodyBytes();
   const contentType = req.headers["content-type"];
-  if (typeof contentType !== "string" || !/^application\/json(?:\s*;|$)/i.test(contentType)) {
+  if (typeof contentType !== "string" || !jsonContentTypePattern.test(contentType)) {
     return Promise.reject(new InvalidRequestError("content-type must be application/json"));
   }
   const contentLengths = [];
@@ -245,7 +248,7 @@ function readBody(req, limit) {
   }
   if (contentLengths.length === 1) {
     const rawLength = contentLengths[0];
-    if (!/^(0|[1-9][0-9]*)$/.test(rawLength)) {
+    if (!contentLengthPattern.test(rawLength)) {
       return Promise.reject(new InvalidRequestError("content-length is invalid"));
     }
     if (Number(rawLength) > maxBytes) {

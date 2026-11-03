@@ -36,7 +36,7 @@ func TestPointIndexKeepsSmallestIDChannelRepresentative(t *testing.T) {
 	}
 }
 
-// snapshot 별칭 조회는 repository_query_0064_03.sql과 같은 규칙을 따른다: 공식 이름은 대소문자 무시, 명시 별칭은
+// snapshot 별칭 조회는 find_by_alias.sql과 같은 규칙을 따른다: 공식 이름은 대소문자 무시, 명시 별칭은
 // 정확히 일치, 여러 명이 맞으면 가장 작은 ID.
 func TestSnapshotAliasLookupFollowsRepositoryRules(t *testing.T) {
 	sigma := &domain.Member{ID: 5, Name: "Sigma", NameJa: "Σ", Aliases: &domain.Aliases{Ko: []string{"ExactAlias", "공유"}}}

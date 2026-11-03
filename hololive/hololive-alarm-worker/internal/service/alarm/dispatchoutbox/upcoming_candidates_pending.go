@@ -114,7 +114,7 @@ type pendingCandidatePayload struct {
 }
 
 func evaluateUpcomingCandidates(ctx context.Context, tx pgx.Tx, now time.Time) ([]pendingCandidatePayload, error) {
-	rows, err := tx.Query(ctx, mustSQL("upcoming_candidates_pending.sql"), UpcomingCandidateLimit)
+	rows, err := tx.Query(ctx, upcomingCandidatesPendingSQL, UpcomingCandidateLimit)
 	if err != nil {
 		return nil, fmt.Errorf("load upcoming candidate facts: %w", err)
 	}
@@ -160,7 +160,7 @@ func evaluateUpcomingCandidates(ctx context.Context, tx pgx.Tx, now time.Time) (
 		}
 
 		statements = append(statements, dbx.Statement{
-			SQL:       mustSQL("upcoming_candidates_apply.sql"),
+			SQL:       upcomingCandidatesApplySQL,
 			Args:      []any{keys, outcome, terminalAt, now},
 			Operation: "apply upcoming candidate outcomes",
 		})

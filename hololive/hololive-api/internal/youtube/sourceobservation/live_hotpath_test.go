@@ -309,7 +309,7 @@ func TestLivePendingUpsertSkipsIdenticalEvidence(t *testing.T) {
 			args[7] = now
 		}
 
-		tag, err := pool.Exec(ctx, mustSQL("repository_live_pending_end_upsert.sql"), args...)
+		tag, err := pool.Exec(ctx, repositoryLivePendingEndUpsertSQL, args...)
 		if err != nil {
 			t.Fatal(err)
 		}

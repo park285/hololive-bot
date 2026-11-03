@@ -32,7 +32,7 @@ func lockCommunitySubject(
 ) error {
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_community_subject_lock_0028_28.sql"),
+		lockCommunitySubjectSQL,
 		provider,
 		kind,
 		subjectKey,
@@ -54,7 +54,7 @@ func loadCommunitySubjectHead(
 
 	err := q.QueryRow(
 		ctx,
-		mustSQL("repository_community_subject_head_0029_29.sql"),
+		loadCommunitySubjectHeadSQL,
 		provider,
 		kind,
 		subjectKey,
@@ -78,7 +78,7 @@ func saveCommunitySubjectHead(
 ) error {
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_community_subject_head_upsert_0033_33.sql"),
+		saveCommunitySubjectHeadSQL,
 		observation.Provider,
 		observation.ObservationKind,
 		observation.SubjectKey,
@@ -119,7 +119,7 @@ func loadCommunityWindowReady(
 
 	if err := q.QueryRow(
 		ctx,
-		mustSQL("repository_community_window_ready_0086_86.sql"),
+		loadCommunityWindowReadySQL,
 		observationID,
 		communityWindowEntityKind,
 		channelID,
@@ -144,7 +144,7 @@ func loadKnownCommunityPostIDs(
 
 	rows, err := q.Query(
 		ctx,
-		mustSQL("repository_community_known_posts_0085_85.sql"),
+		loadKnownCommunityPostIDsSQL,
 		channelID,
 		postIDs,
 	)
@@ -183,7 +183,7 @@ func loadTypedWatermark(
 
 	err := q.QueryRow(
 		ctx,
-		mustSQL("repository_community_watermark_0014_14.sql"),
+		loadTypedWatermarkSQL,
 		channelID,
 		watermarkType,
 	).Scan(

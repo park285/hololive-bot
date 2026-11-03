@@ -24,7 +24,7 @@ func (r *Repository) loadTrackingSnapshots(
 
 	var trackingRows []domain.YouTubeContentAlarmTracking
 
-	if err := dbx.SelectSQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", mustSQL("load_0032_01.sql"), kinds, contentIDs); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", loadTrackingSnapshotsSQL, kinds, contentIDs); err != nil {
 		return nil, fmt.Errorf("enrich delivery telemetry context: load tracking rows: %w", err)
 	}
 

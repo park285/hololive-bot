@@ -36,7 +36,7 @@ func (s *PgxStore) FindBirthdaySessions(
 	channelIDs []string,
 	windowStartUTC, windowEndUTC, observedSince, observedUntil time.Time,
 ) ([]BirthdayStreamSession, error) {
-	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0050_01.sql"), channelIDs, windowStartUTC, windowEndUTC, observedSince, observedUntil)
+	rows, err := s.db.Query(ctx, findBirthdaySessionsSQL, channelIDs, windowStartUTC, windowEndUTC, observedSince, observedUntil)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query sessions: %w", err)
 	}
@@ -78,7 +78,7 @@ func (s *PgxStore) ListPublishedBirthdayStreamEvents(
 ) (map[string]domain.AlarmQueueEnvelope, error) {
 	pattern := birthdayStreamLikeEscaper.Replace(keyPrefix) + "%"
 
-	events, err := s.findPublishedCelebrationEvents(ctx, "birthday_stream_runner_0081_02.sql", pattern, validatePublishedBirthdayStreamEvent)
+	events, err := s.findPublishedCelebrationEvents(ctx, listPublishedBirthdayStreamEventsSQL, pattern, validatePublishedBirthdayStreamEvent)
 	if err != nil {
 		return nil, fmt.Errorf("list published birthday stream events: %w", err)
 	}
@@ -94,7 +94,7 @@ func (s *PgxStore) FindPublishedCelebrationEvents(
 		return map[string]domain.AlarmQueueEnvelope{}, nil
 	}
 
-	events, err := s.findPublishedCelebrationEvents(ctx, "celebration_runner_0108_01.sql", eventKeys, validatePublishedCelebrationEvent)
+	events, err := s.findPublishedCelebrationEvents(ctx, findPublishedCelebrationEventsSQL, eventKeys, validatePublishedCelebrationEvent)
 	if err != nil {
 		return nil, fmt.Errorf("find published celebration events: %w", err)
 	}
@@ -104,13 +104,13 @@ func (s *PgxStore) FindPublishedCelebrationEvents(
 
 func (s *PgxStore) findPublishedCelebrationEvents(
 	ctx context.Context,
-	queryName string,
+	query string,
 	queryArg any,
 	validate func(string, *domain.AlarmQueueEnvelope) error,
 ) (map[string]domain.AlarmQueueEnvelope, error) {
 	events := make(map[string]domain.AlarmQueueEnvelope)
 
-	rows, err := s.db.Query(ctx, mustSQL(queryName), queryArg)
+	rows, err := s.db.Query(ctx, query, queryArg)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query published events: %w", err)
 	}
@@ -187,7 +187,7 @@ func (s *PgxStore) FindSentRoomsByEventKeys(ctx context.Context, eventKeys []str
 		return map[string][]string{}, nil
 	}
 
-	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0104_03.sql"), eventKeys)
+	rows, err := s.db.Query(ctx, findSentRoomsByEventKeysSQL, eventKeys)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query sent birthday rooms: %w", err)
 	}

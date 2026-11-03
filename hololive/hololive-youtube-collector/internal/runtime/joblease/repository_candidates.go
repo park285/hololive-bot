@@ -36,7 +36,7 @@ func (r *Repository) CurrentProjectionGeneration(ctx context.Context) (int64, er
 
 	var generation int64
 
-	err := r.pool.QueryRow(ctx, sqlProjectionCurrent).Scan(&generation)
+	err := r.pool.QueryRow(ctx, currentProjectionGenerationSQL).Scan(&generation)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, collection.ErrProjectionStale
@@ -122,7 +122,7 @@ func (r *Repository) subjectCandidatesForProjection(
 ) (CandidatePage, error) {
 	rows, err := r.pool.Query(
 		ctx,
-		sqlCandidates,
+		subjectCandidatesForProjectionSQL,
 		generation,
 		kindValues,
 		string(job.ID().Provider),
@@ -162,7 +162,7 @@ func (r *Repository) globalCandidatesForProjection(
 
 	rows, err := r.pool.Query(
 		ctx,
-		sqlCandidatesGlobal,
+		globalCandidatesForProjectionSQL,
 		generation,
 		kindValues,
 		job.Membership() == collection.JobMembershipExactSubject,

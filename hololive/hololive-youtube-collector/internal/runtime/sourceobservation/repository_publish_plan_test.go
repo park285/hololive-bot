@@ -43,7 +43,7 @@ func TestPublishSetPlanEstimatesSingleIdentityRowAndProbesCheckpointsByKey(t *te
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	rows, err := pool.Query(ctx, "EXPLAIN (COSTS, FORMAT TEXT) "+sqlPublishSet, "[]")
+	rows, err := pool.Query(ctx, "EXPLAIN (COSTS, FORMAT TEXT) "+publishObservationSetSQL, "[]")
 	if err != nil {
 		t.Fatalf("explain publish set: %v", err)
 	}

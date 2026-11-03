@@ -179,6 +179,13 @@ func resolvePublishedAt(item *gofeed.Item) *time.Time {
 	return nil
 }
 
+var rssDateLayouts = []string{
+	time.RFC1123Z,
+	"Mon, 2 Jan 2006 15:04:05 -0700",
+	time.RFC1123,
+	"Mon, 2 Jan 2006 15:04:05 MST",
+}
+
 func parseRSSDate(raw string) (time.Time, bool) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -193,13 +200,7 @@ func parseRSSDate(raw string) (time.Time, bool) {
 		return parsed.UTC(), true
 	}
 
-	formats := []string{
-		time.RFC1123Z,
-		"Mon, 2 Jan 2006 15:04:05 -0700",
-		time.RFC1123,
-		"Mon, 2 Jan 2006 15:04:05 MST",
-	}
-	for _, layout := range formats {
+	for _, layout := range rssDateLayouts {
 		if parsed, err := time.Parse(layout, trimmed); err == nil {
 			return parsed.UTC(), true
 		}

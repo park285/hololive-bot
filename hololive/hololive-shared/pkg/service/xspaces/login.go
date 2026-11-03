@@ -40,7 +40,7 @@ func (s *Store) LoginStatus(ctx context.Context) (LoginStatus, error) {
 		return LoginStatus{State: "disabled"}, nil
 	}
 
-	a, err := scanLogin(s.pool.QueryRow(ctx, mustSQL("login_latest.sql")))
+	a, err := scanLogin(s.pool.QueryRow(ctx, loginLatestSQL))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return LoginStatus{State: "disabled"}, nil
 	}

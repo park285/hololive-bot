@@ -91,7 +91,7 @@ scripts/architecture/ci-notification-egress-gate.sh
 
 지켜야 하는 불변식은 행 단위 배타성이 아니라 **"한 알림 묶음은 한 메시지로, 같은 `ClientRequestID`로"**입니다. 이 묶음의 저장 단위는 send unit입니다. dispatchoutbox가 delivery를 적재할 때(`dispatch_group.go`의 `assignSendUnits`) 같은 `dispatch_group_key`(room과 source 식별자, 또는 알림 유형·단계·`MinutesUntil`)의 delivery를 dedupe key 순으로 최대 10개씩 묶어 `alarm_dispatch_send_units`에 저장하고, 그 unit의 `client_request_id`(`hololive-alarm:<hash>`)도 이때 정합니다. send unit은 한 적재 batch 안에서만 만들어지므로 같은 room·같은 group key라도 다른 batch로 적재되거나 10개를 넘으면 unit(메시지)이 여러 개가 됩니다. 이것은 인스턴스 수와 무관한 적재 규칙입니다.
 
-`ClaimDue`는 send unit 단위로 배타적입니다. `repository_claim_0053_02.sql`이 due delivery가 있는 send unit 행을 `FOR UPDATE OF u SKIP LOCKED`로 잠그고, 잠근 unit의 대기(`pending`·`retry`) delivery를 `next_attempt_at`과 관계없이 같은 statement에서 모두 `leased`로 전이합니다. 실패 정산은 문장 하나의 DB clock에 `retry_after_ms`를 더해 같은 unit 멤버에 같은 재시도 시각을 쓰지만, 시각이 어긋난 기존 행이 있어도 unit 일부만 claim되지 않게 하기 위해서입니다. claim 이후 모든 소유자 전이는 `(status, locked_by, attempt_count)` tuple과 잠금 뒤 채취한 단일 `clock_timestamp()`로 fence하며, 미스는 대상별 원인을 담은 `*sendfence.MissError`입니다. `attempt_count`는 claim·반환·만료 회수에서 바뀌지 않으므로 claim마다 바뀌는 토큰은 `locked_by`이고, 같은 worker ID가 같은 attempt의 행을 다시 claim하지 않는 것은 runner가 한 배치를 정산한 뒤에만 다음 claim을 하는 직렬 루프이기 때문입니다. runner를 병렬화하거나 replica를 늘리려면 claim별 토큰이 먼저 필요합니다. 배치 상한은 unit 경계에서 자르며 첫 unit은 상한을 넘어도 통째로 가져갑니다(`ordinal = 1`). `ClaimDue`는 명시적 트랜잭션 없는 단일 auto-commit statement라 반환 시점에 row lock은 이미 풀려 있고, 이후 배타성은 `leased` 상태와 `locked_by` fence가 맡습니다.
+`ClaimDue`는 send unit 단위로 배타적입니다. `claim_due.sql`이 due delivery가 있는 send unit 행을 `FOR UPDATE OF u SKIP LOCKED`로 잠그고, 잠근 unit의 대기(`pending`·`retry`) delivery를 `next_attempt_at`과 관계없이 같은 statement에서 모두 `leased`로 전이합니다. 실패 정산은 문장 하나의 DB clock에 `retry_after_ms`를 더해 같은 unit 멤버에 같은 재시도 시각을 쓰지만, 시각이 어긋난 기존 행이 있어도 unit 일부만 claim되지 않게 하기 위해서입니다. claim 이후 모든 소유자 전이는 `(status, locked_by, attempt_count)` tuple과 잠금 뒤 채취한 단일 `clock_timestamp()`로 fence하며, 미스는 대상별 원인을 담은 `*sendfence.MissError`입니다. `attempt_count`는 claim·반환·만료 회수에서 바뀌지 않으므로 claim마다 바뀌는 토큰은 `locked_by`이고, 같은 worker ID가 같은 attempt의 행을 다시 claim하지 않는 것은 runner가 한 배치를 정산한 뒤에만 다음 claim을 하는 직렬 루프이기 때문입니다. runner를 병렬화하거나 replica를 늘리려면 claim별 토큰이 먼저 필요합니다. 배치 상한은 unit 경계에서 자르며 첫 unit은 상한을 넘어도 통째로 가져갑니다(`ordinal = 1`). `ClaimDue`는 명시적 트랜잭션 없는 단일 auto-commit statement라 반환 시점에 row lock은 이미 풀려 있고, 이후 배타성은 `leased` 상태와 `locked_by` fence가 맡습니다.
 
 alarm-worker는 claim한 봉투를 send unit별로 묶고(`alarmDispatchRegroupKey`), 저장된 send-unit `client_request_id`를 그대로 씁니다(`alarmDispatchClientRequestID`). 그룹 구성(envelope `DispatchOutboxID`와 범위)에서 ID를 파생하던 경로는 지웠습니다(stack-audit 2026-09-26 T17). 저장 ID가 비었거나 한 그룹에 서로 다른 ID가 섞이면 보내지 않고 발송 전 실패로 드러냅니다. karing 경로는 `DEC-20260926-hololive-karing-egress-disposition`에 따라 삭제했습니다(stack-audit 2026-09-26 T19). 모든 방은 message path를 씁니다.
 
@@ -126,7 +126,7 @@ alarm-worker 쪽은 `hololive/hololive-alarm-worker/internal/service/dispatchrun
 
 | 경로 | claim 락 | 동시성 테스트로 확인된 것 |
 |---|---|---|
-| alarm dispatch outbox (`dispatchoutbox`) | `repository_claim_0053_02.sql`의 send unit `FOR UPDATE OF u SKIP LOCKED` | 행 단위 배타성과 동시 claim의 send unit 원자성. 재발송 구간 경합은 미확인 — (a) 참조 |
+| alarm dispatch outbox (`dispatchoutbox`) | `claim_due.sql`의 send unit `FOR UPDATE OF u SKIP LOCKED` | 행 단위 배타성과 동시 claim의 send unit 원자성. 재발송 구간 경합은 미확인 — (a) 참조 |
 | generic notification delivery outbox (`alarm-worker/internal/egress/notificationdelivery`) | `outbox_claim_ready.sql`의 방별 선행 항목 선택과 `FOR UPDATE` + `locked_by`/`lock_expires_at` lease | 방별 순서, lease 만료 회수, stale worker fence, 정산 경합은 해당 패키지의 DB 회귀로 검증한다. 여러 프로세스에서 같은 방의 발송과 독립 maintenance를 함께 수행하는 조건은 확장 전 별도 검증 대상이다. |
 | YouTube delivery lifecycle (`alarm-worker/internal/egress/youtubedispatch/store`) | `transition_claim_pending.sql`의 `FOR UPDATE OF delivery SKIP LOCKED`와 `row_version` fence | 별개 `Dispatcher` 인스턴스 2개가 하나의 DB를 공유해 같은 delivery row를 경합해도 post당 1회만 전송이 시작됨 — `TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOncePerPost`. community post와 short kind에 한함 |
 
@@ -147,7 +147,7 @@ hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries/tra
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_claim_gate_test.go
   두 Dispatcher 인스턴스 경합 테스트
 
-hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql
+hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/claim_due.sql
   send unit FOR UPDATE OF u SKIP LOCKED / unit 경계 LIMIT / 잠근 unit의 대기(pending·retry) delivery 전체 status='leased' 전이
 
 hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/dispatch_group.go

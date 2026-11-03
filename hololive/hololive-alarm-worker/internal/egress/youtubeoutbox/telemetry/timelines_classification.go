@@ -59,7 +59,7 @@ func (r *Repository) persistPostLatencyClassifications(ctx context.Context, rows
 		return nil
 	}
 
-	if _, err := r.db.Exec(ctx, mustSQL("timelines_classification_0105_01.sql"),
+	if _, err := r.db.Exec(ctx, persistPostLatencyClassificationsSQL,
 		batch.kinds, batch.contentIDs, batch.statuses, batch.delaySources, batch.internalDelayCauses, time.Now().UTC(),
 	); err != nil {
 		return fmt.Errorf("update post latency classifications (%d identities): %w", len(batch.kinds), err)

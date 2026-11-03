@@ -106,7 +106,7 @@ func explainQueueRetentionDelete(t *testing.T, pool *pgxpool.Pool, mode string, 
 	_, err = conn.Exec(ctx, "SET plan_cache_mode = "+mode)
 	require.NoError(t, err)
 
-	_, err = conn.Exec(ctx, "PREPARE queue_retention_plan(timestamptz, timestamptz, integer) AS "+mustSQL("repository_retention_delete_queue_0076_76.sql"))
+	_, err = conn.Exec(ctx, "PREPARE queue_retention_plan(timestamptz, timestamptz, integer) AS "+deleteQueueBatchSQL)
 	require.NoError(t, err)
 
 	defer func() {

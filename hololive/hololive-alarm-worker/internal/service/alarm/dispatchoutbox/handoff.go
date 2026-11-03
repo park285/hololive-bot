@@ -87,7 +87,7 @@ func (r *PgxRepository) ClaimHandoffDue(ctx context.Context, limit int, softClai
 		return nil, fmt.Errorf("claim handoff checks: soft claim: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, sqlHandoffClaimDue, limit, softClaimMS)
+	rows, err := r.pool.Query(ctx, handoffClaimDueSQL, limit, softClaimMS)
 	if err != nil {
 		return nil, fmt.Errorf("claim handoff checks: %w", err)
 	}
@@ -125,7 +125,7 @@ func scanHandoffClaim(row pgx.CollectableRow) (HandoffClaim, error) {
 
 // CompleteHandoff는 handoff 완료를 확인으로 기록한다. 멤버는 sent 그대로다.
 func (r *PgxRepository) CompleteHandoff(ctx context.Context, claim *HandoffClaim) error {
-	return r.applyHandoff(ctx, fenceActionHandoffComplete, sqlHandoffComplete, claim)
+	return r.applyHandoff(ctx, fenceActionHandoffComplete, handoffCompleteSQL, claim)
 }
 
 // RescheduleHandoff는 전이 없이 다음 확인을 DB 시계 기준 step 뒤로 예약하되 admission + horizon을 넘기지 않는다.
@@ -140,7 +140,7 @@ func (r *PgxRepository) RescheduleHandoff(ctx context.Context, claim *HandoffCla
 		return fmt.Errorf("%s: horizon: %w", fenceActionHandoffReschedule, err)
 	}
 
-	return r.applyHandoff(ctx, fenceActionHandoffReschedule, sqlHandoffReschedule, claim, stepMS, horizonMS)
+	return r.applyHandoff(ctx, fenceActionHandoffReschedule, handoffRescheduleSQL, claim, stepMS, horizonMS)
 }
 
 // ReissueAfterHandoff는 Iris failed를 멤버 전원의 retry(attempt + 1, DB 시계 + retryAfter)와 다음 요청 세대로 한
@@ -159,18 +159,18 @@ func (r *PgxRepository) ReissueAfterHandoff(ctx context.Context, claim *HandoffC
 		return fmt.Errorf("%s: derive reissue request: %w", fenceActionHandoffReissue, err)
 	}
 
-	return r.applyHandoff(ctx, fenceActionHandoffReissue, sqlHandoffReissue, claim,
+	return r.applyHandoff(ctx, fenceActionHandoffReissue, handoffReissueSQL, claim,
 		retryAfter.Milliseconds(), sanitizeStoredError(detail), code, nextID)
 }
 
 // DLQAfterHandoff는 재발급 예산이 없는 Iris failed를 멤버 전원의 dlq(attempt + 1)로 끝낸다.
 func (r *PgxRepository) DLQAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
-	return r.applyHandoff(ctx, fenceActionHandoffDLQ, sqlHandoffDLQ, claim, sanitizeStoredError(detail), code)
+	return r.applyHandoff(ctx, fenceActionHandoffDLQ, handoffDLQSQL, claim, sanitizeStoredError(detail), code)
 }
 
 // QuarantineAfterHandoff는 handoff 결과 불명을 멤버 전원의 quarantined로 끝낸다.
 func (r *PgxRepository) QuarantineAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
-	return r.applyHandoff(ctx, fenceActionHandoffQuarantine, sqlHandoffQuarantine, claim, sanitizeStoredError(detail), code)
+	return r.applyHandoff(ctx, fenceActionHandoffQuarantine, handoffQuarantineSQL, claim, sanitizeStoredError(detail), code)
 }
 
 // applyHandoff는 handoff fence 인자(단위·토큰·요청 ID·Iris requestId) 뒤에 전이별 인자를 붙여 적용한다. 대상은 claim

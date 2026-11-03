@@ -16,7 +16,7 @@ func (r *PgxRepository) findByDedupeKey(ctx context.Context, dedupeKey string) (
 		return nil, errors.New("find dispatch delivery by dedupe key: dedupe key is empty")
 	}
 
-	row := r.pool.QueryRow(ctx, mustSQL("repository_claim_0029_01.sql"), []string{key}, key)
+	row := r.pool.QueryRow(ctx, findByDedupeKeySQL, []string{key}, key)
 
 	record, err := scanDeliveryRecord(row)
 	if err != nil {
@@ -38,7 +38,7 @@ func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int
 		return nil, fmt.Errorf("claim due dispatch deliveries: lease: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, sqlClaimDue, limit, workerID, leaseMS, maxDeliveriesPerSendUnit)
+	rows, err := r.pool.Query(ctx, claimDueSQL, limit, workerID, leaseMS, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return nil, fmt.Errorf("claim due dispatch deliveries: %w", err)
 	}
@@ -68,7 +68,7 @@ func (r *PgxRepository) LoadEventsByID(ctx context.Context, eventIDs []int64) (m
 		return events, nil
 	}
 
-	rows, err := r.pool.Query(ctx, mustSQL("repository_claim_0102_03.sql"), eventIDs)
+	rows, err := r.pool.Query(ctx, loadEventsByIDSQL, eventIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load dispatch events: %w", err)
 	}

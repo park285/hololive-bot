@@ -9,15 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var (
-	replyOutboxSettleAcceptedSQL    = mustSQL("reply_outbox_settle_accepted.sql")
-	replyOutboxHandoffClaimSQL      = mustSQL("reply_outbox_handoff_claim.sql")
-	replyOutboxHandoffTerminalSQL   = mustSQL("reply_outbox_handoff_terminal.sql")
-	replyOutboxHandoffSettleSQL     = mustSQL("reply_outbox_handoff_settle.sql")
-	replyOutboxHandoffRequeueSQL    = mustSQL("reply_outbox_handoff_requeue.sql")
-	replyOutboxHandoffRescheduleSQL = mustSQL("reply_outbox_handoff_reschedule.sql")
-)
-
 // accepted에서 handoff reconciler가 갈 수 있는 곳이다. Failed만 재발송 큐로 돌아가고, 나머지는 재발송하지
 // 않는 종단이거나 payload를 보존한 수동 확인이다.
 var replyHandoffSettlementPolicies = map[string]replyOutboxSettlementPolicy{

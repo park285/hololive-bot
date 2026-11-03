@@ -11,6 +11,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
+var literalTitleWhitespaceReplacer = strings.NewReplacer("\r\n", " ", "\t", " ")
+
 const testMixedMemberName = "미코 Miko"
 
 func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
@@ -37,7 +39,7 @@ func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
 
 						out := kakaoformat.Render(renderSeedBody(t, key, body, literalTitleData(title, url)))
 						visible := strings.ReplaceAll(out, kakaotext.ZeroWidthSpace, "")
-						want := strings.NewReplacer("\r\n", " ", "\t", " ").Replace(title)
+						want := literalTitleWhitespaceReplacer.Replace(title)
 						styled := strings.ReplaceAll(kakaoformat.Render("**"+kakaotext.MarkdownLiteral(want)+"**"), kakaotext.ZeroWidthSpace, "")
 
 						if (!strings.Contains(visible, want) && !strings.Contains(visible, styled)) || !hasSeedLine(out, url) {

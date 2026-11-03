@@ -35,8 +35,8 @@ func TestFindBestMatchCacheHitAllocationBudget(t *testing.T) {
 			t.Fatalf("FindBestMatch = (%v, %v), want cached channel", channel, err)
 		}
 	})
-	if allocs > 2 {
-		t.Errorf("FindBestMatch cache hit allocs/op = %.1f, want <= 2", allocs)
+	if allocs > 1 {
+		t.Errorf("FindBestMatch cache hit allocs/op = %.1f, want <= 1", allocs)
 	}
 }
 

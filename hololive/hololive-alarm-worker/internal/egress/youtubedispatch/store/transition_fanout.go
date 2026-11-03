@@ -42,7 +42,7 @@ func (s *TransitionStore) ClaimOutboxesForFanout(ctx context.Context, batchSize 
 
 	rows, err := s.db.Query(
 		ctx,
-		mustSQL("fanout_claim.sql"),
+		fanoutClaimSQL,
 		domain.OutboxStatusPending,
 		s.config.LockTimeout.Milliseconds(),
 		s.config.ClaimFreshnessWindow.Milliseconds(),
@@ -182,7 +182,7 @@ func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 
 	rows, err := s.db.Query(
 		ctx,
-		mustSQL("fanout_revive_failed.sql"),
+		fanoutReviveFailedSQL,
 		domain.OutboxStatusFailed,
 		freshnessWindow.Milliseconds(),
 		s.config.LockTimeout.Milliseconds(),
@@ -281,7 +281,7 @@ func applyFanoutFailureTx(
 ) error {
 	rows, err := tx.Query(
 		ctx,
-		mustSQL("fanout_fail.sql"),
+		fanoutFailSQL,
 		next.status,
 		next.attempt,
 		next.delay.Milliseconds(),
@@ -401,7 +401,7 @@ func completeNoTargetFanout(
 ) error {
 	tag, err := tx.Exec(
 		ctx,
-		mustSQL("fanout_complete_no_targets.sql"),
+		fanoutCompleteNoTargetsSQL,
 		domain.OutboxStatusSent,
 		outbox.ID,
 		domain.OutboxStatusPending,
@@ -426,7 +426,7 @@ func materializeFanoutTargets(
 ) error {
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("fanout_insert_children.sql"),
+		fanoutInsertChildrenSQL,
 		outbox.ID,
 		domain.OutboxStatusPending,
 		targets,
@@ -457,7 +457,7 @@ func materializeFanoutTargets(
 func releaseFanoutOutbox(ctx context.Context, tx dbx.Querier, outbox domain.YouTubeNotificationOutbox) error {
 	tag, err := tx.Exec(
 		ctx,
-		mustSQL("fanout_release_outbox.sql"),
+		fanoutReleaseOutboxSQL,
 		outbox.ID,
 		domain.OutboxStatusPending,
 		*outbox.LockedAt,
@@ -480,7 +480,7 @@ func loadFanoutState(
 ) (fanoutOutboxState, []string, bool, error) {
 	var state fanoutOutboxState
 
-	err := db.QueryRow(ctx, mustSQL("fanout_load_outbox.sql"), outboxID).Scan(
+	err := db.QueryRow(ctx, fanoutLoadOutboxSQL, outboxID).Scan(
 		&state.status,
 		&state.attemptCount,
 		&state.nextAttemptAt,
@@ -498,7 +498,7 @@ func loadFanoutState(
 		return fanoutOutboxState{}, nil, false, fmt.Errorf("load fanout outbox state: %w", err)
 	}
 
-	rows, err := db.Query(ctx, mustSQL("fanout_load_children.sql"), outboxID)
+	rows, err := db.Query(ctx, fanoutLoadChildrenSQL, outboxID)
 	if err != nil {
 		return fanoutOutboxState{}, nil, false, fmt.Errorf("load fanout children: %w", err)
 	}

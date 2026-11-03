@@ -182,7 +182,7 @@ func deleteCleanupOutboxes(
 ) (int, error) {
 	rows, err := tx.Query(
 		ctx,
-		mustSQL("transition_cleanup_delete.sql"),
+		transitionCleanupDeleteSQL,
 		eligible,
 		[]string{string(domain.OutboxStatusSent), string(domain.OutboxStatusFailed)},
 		cutoff,
@@ -224,7 +224,7 @@ func (s *TransitionStore) CleanupExpiredFanoutOutboxes(
 
 	rows, err := s.db.Query(
 		ctx,
-		mustSQL("fanout_cleanup_expired.sql"),
+		fanoutCleanupExpiredSQL,
 		domain.OutboxStatusPending,
 		pendingAge.Milliseconds(),
 		s.config.LockTimeout.Milliseconds(),
@@ -258,7 +258,7 @@ func loadCleanupCandidates(
 		db,
 		&candidates,
 		"load terminal outbox cleanup candidates",
-		mustSQL("transition_cleanup_candidates.sql"),
+		transitionCleanupCandidatesSQL,
 		[]string{string(domain.OutboxStatusSent), string(domain.OutboxStatusFailed)},
 		cutoff,
 		afterTerminalAt,
@@ -287,7 +287,7 @@ func loadCleanupChildren(ctx context.Context, db dbx.Querier, outboxIDs []int64)
 		db,
 		&rows,
 		"load terminal outbox cleanup children",
-		mustSQL("transition_cleanup_children.sql"),
+		transitionCleanupChildrenSQL,
 		outboxIDs,
 	); err != nil {
 		return nil, fmt.Errorf("load terminal outbox cleanup children: %w", err)
@@ -514,7 +514,7 @@ func (s *TransitionStore) loadCleanupSiblings(
 		db,
 		&observed,
 		"load terminal outbox cleanup siblings",
-		mustSQL("transition_cleanup_group_rows.sql"),
+		transitionCleanupGroupRowsSQL,
 		args.ids,
 		args.roomIDs,
 		args.kinds,

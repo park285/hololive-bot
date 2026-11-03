@@ -16,7 +16,7 @@ type rosterReader struct {
 }
 
 func (rosterReader) NotificationChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error) {
-	out, err := loadChannelIDs(ctx, tx, "notification_channel_ids.sql", "notification")
+	out, err := loadChannelIDs(ctx, tx, notificationChannelIDsSQL, "notification")
 	if err != nil {
 		return out, fmt.Errorf("load channel IDs: %w", err)
 	}
@@ -25,7 +25,7 @@ func (rosterReader) NotificationChannelIDs(ctx context.Context, tx dbx.Tx) ([]st
 }
 
 func (rosterReader) OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error) {
-	out, err := loadChannelIDs(ctx, tx, "operational_channel_ids.sql", "operational")
+	out, err := loadChannelIDs(ctx, tx, operationalChannelIDsSQL, "operational")
 	if err != nil {
 		return out, fmt.Errorf("load channel IDs: %w", err)
 	}
@@ -52,7 +52,7 @@ func (rosterReader) LiveCheckVideos(
 		return nil, nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("live_check_videos.sql"),
+	rows, err := tx.Query(ctx, liveCheckVideosSQL,
 		query.OperationalChannelIDs,
 		targetprojection.MaxInputLiveCheckVideoCount+1)
 	if err != nil {
@@ -105,7 +105,7 @@ func (r rosterReader) TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]
 		maxBacklogFinalizations = 2000
 	)
 
-	rows, err := tx.Query(ctx, mustSQL("time_finalization_videos.sql"), r.timeFinalizationBacklogBatchSize,
+	rows, err := tx.Query(ctx, timeFinalizationVideosSQL, r.timeFinalizationBacklogBatchSize,
 		maxNewFinalizations, maxBacklogFinalizations)
 	if err != nil {
 		return nil, fmt.Errorf("%w: load time finalization videos: %w", targetprojection.ErrInputRead, err)
@@ -181,12 +181,12 @@ func freshnessDeadline(asOf time.Time, effective, observed pgtype.Timestamptz, b
 	return earliest.Add(budget)
 }
 
-func loadChannelIDs(ctx context.Context, tx dbx.Tx, queryName, label string) ([]string, error) {
+func loadChannelIDs(ctx context.Context, tx dbx.Tx, query, label string) ([]string, error) {
 	if tx == nil {
 		return nil, fmt.Errorf("%w: transaction is not configured", targetprojection.ErrInputRead)
 	}
 
-	rows, err := tx.Query(ctx, mustSQL(queryName), targetprojection.MaxInputChannelCount+1)
+	rows, err := tx.Query(ctx, query, targetprojection.MaxInputChannelCount+1)
 	if err != nil {
 		return nil, fmt.Errorf("%w: load %s channels: %w", targetprojection.ErrInputRead, label, err)
 	}

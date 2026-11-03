@@ -51,7 +51,7 @@ func TestLiveAbsenceCurrentSlotLookupIsBoundedBySlotNotChannelHistory(t *testing
 			var raw []byte
 
 			// 새 positive 채널이 없는 scoped negative는 현재 slot의 coverage만 다시 읽습니다.
-			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("repository_live_absence_current_slot.sql"),
+			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+repositoryLiveAbsenceCurrentSlotSQL,
 				current, []string{testChannelID}).Scan(&raw)
 			require.NoError(t, err)
 

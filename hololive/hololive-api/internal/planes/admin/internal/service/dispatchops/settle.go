@@ -49,7 +49,7 @@ func (r *Repository) Settle(ctx context.Context, id string, request SettleReques
 		return result, err
 	}
 
-	rows, err := tx.Query(ctx, querySQL("settle"), mutation.ids, request.OperatorID, request.Reason, request.Action,
+	rows, err := tx.Query(ctx, settleSQL, mutation.ids, request.OperatorID, request.Reason, request.Action,
 		mutation.status, mutation.cancel, mutation.quarantineIDs)
 	if err != nil {
 		return result, fmt.Errorf("update dispatch settlement group: %w", conflictError(err))

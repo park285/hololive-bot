@@ -39,7 +39,7 @@ func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCol
 		return fmt.Errorf("record dispatch event collisions: marshal batch: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("repository_collision_0038_01.sql"), jsonbRecordsetParam(raw)); err != nil {
+	if _, err := tx.Exec(ctx, recordEventCollisionsSQL, jsonbRecordsetParam(raw)); err != nil {
 		return fmt.Errorf("record dispatch event collisions: %w", err)
 	}
 

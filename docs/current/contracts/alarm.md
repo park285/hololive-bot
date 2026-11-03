@@ -34,7 +34,7 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 - Dispatch outbox consumer: `alarm-worker` (`dispatchoutbox.Consumer`).
 - `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 다음 경로로 직접 읽습니다.
   - YouTube plane: `internal/planes/youtube/runtime/queries/notification_channel_ids.sql`을 projection transaction 안에서 실행합니다. `members` JOIN으로 졸업 멤버를 제외하고 `MaxInputChannelCount+1`로 상한을 둡니다.
-  - llm plane membernews: `repository_query_0080_03.sql`이 방별 구독 멤버 이름을 읽습니다.
+  - llm plane membernews: `get_room_members.sql`이 방별 구독 멤버 이름을 읽습니다.
   - bot/admin plane은 `alarm.http`를 사용합니다. 통합 API의 `internal/config.RuntimeConfig.Validate`와 두 plane의 builder가 빈 `ALARM_INTERNAL_URL`을 거부합니다. URL 미설정 시 in-process service/repository를 주입하는 분기는 없습니다.
   - `Add`/`Remove`/`ClearByRoom`을 함께 노출하는 alarms 저장소 `alarmstore.Repository`는 alarm-worker의 `internal/service/alarm/alarmstore`에 있으므로, Go `internal` 가시성 규칙에 따라 youtube-collector와 hololive-api는 import할 수 없습니다.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery
@@ -353,7 +353,7 @@ members 한국어 표시명을 가졌다. 그래서 중간 단계(최신 `alarms
 | Owner | hololive-bot alarm(`hololive-alarm-worker/internal/service/alarm/alarmstore`의 `Repository.GetMemberName`, `hololive-alarm-worker/internal/egress/youtubedispatch/format`의 `DisplayMemberName`, `hololive-alarm-worker/internal/egress/alarmdispatch`의 `alarmContractMemberName`) |
 | 검토 조건 | 지표가 0이 아니면 해당 채널의 members 한국어 표시명을 등록한다. 90일 동안 0이면 종단 문구 대신 포맷 실패로 바꿀지 다시 결정한다 |
 
-코드 근거는 `alarmstore.Repository.GetMemberName` 주석과 같은 package의 `queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
+코드 근거는 `alarmstore.Repository.GetMemberName` 주석과 같은 package의 `queries/get_member_name.sql`, `queries/get_all_member_names.sql`이다.
 
 YouTube outbox dispatch의 `MemberNameSource`는 표시명을 Valkey `alarm:member_names`에서 읽지 않고 메시지마다 `alarmstore.Repository.GetMemberName`으로
 PostgreSQL 정본을 조회한다(2026-10-02). 조회 오류는 이 예외 계약의 trigger가 아니다. 대체 문구로 보내지 않고
@@ -373,7 +373,7 @@ members에서만 읽는다. 1단계 배포를 확인한 뒤 migration 269가 컬
 봇 명령 응답(`!라이브`, `!예정`, `!일정`, 알람 추가·해제, 방송기록, 동명이인 후보, 캘린더)은 members 정본
 `short_korean_name`→`korean_name`→`english_name` 순서로 멤버 이름을 표시한다(2026-10-05). 알림의 위 예외 계약과 달리
 `english_name`까지 쓰며 종단 문구는 없다. 담당은 `domain.Member.DisplayName`이고, SQL로 이름을 만드는 `!라이브` 목록
-(`livequery/queries/snapshot.sql`)과 방송기록(`broadcast_history_repository_0179_01.sql`)이 같은 순서를 쓴다.
+(`livequery/queries/snapshot.sql`)과 방송기록(`broadcast_history_list_page_template.sql`)이 같은 순서를 쓴다.
 
 - 식별·검색·dedup은 `channel_id`와 matcher 검색 키로 한다. 동명이인 안내의 복사 예시는 검색 키 형식
   `english_name (그룹)`(`domain.Member.QualifiedName`)을 유지한다.

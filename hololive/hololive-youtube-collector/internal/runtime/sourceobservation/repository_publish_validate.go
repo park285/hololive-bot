@@ -296,7 +296,7 @@ func completeCollectionJob(
 
 	err := tx.QueryRow(
 		ctx,
-		sqlJobComplete,
+		completeCollectionJobSQL,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,

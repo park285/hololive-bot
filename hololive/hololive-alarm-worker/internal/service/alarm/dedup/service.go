@@ -90,10 +90,15 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 		return false, fmt.Errorf("dedup claim setnx: claim_key_token=%s: %w", privacylog.Pseudonym(key), err)
 	}
 
-	s.logger.Debug("dedup claim result",
-		slog.String("claim_key_token", privacylog.Pseudonym(key)),
-		slog.Bool("acquired", acquired),
-	)
+	// Debug가 꺼진 운영 레벨에서도 claim마다 HMAC 가명을 계산해 버리던 비용을 없앤다.
+	// 운영 핸들러의 Enabled는 ctx와 무관하므로 기록 여부는 그대로이며, Handle에 넘기는
+	// ctx(Background)를 바꾸지 않으려고 DebugContext가 아닌 Debug를 유지한다.
+	if s.logger.Enabled(ctx, slog.LevelDebug) {
+		s.logger.Debug("dedup claim result",
+			slog.String("claim_key_token", privacylog.Pseudonym(key)),
+			slog.Bool("acquired", acquired),
+		)
+	}
 
 	return acquired, nil
 }

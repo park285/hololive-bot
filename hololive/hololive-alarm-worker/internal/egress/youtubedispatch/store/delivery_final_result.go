@@ -49,19 +49,21 @@ type TerminalCommunityShortsOutboxResult struct {
 	LatencyClassification timeline.PostLatencyClassificationResult
 }
 
+var (
+	terminalCommunityShortsOutboxKinds    = deliverysql.Texts([]domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost})
+	terminalCommunityShortsOutboxStatuses = deliverysql.Texts([]domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusFailed})
+)
+
 func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) ([]TerminalCommunityShortsOutboxResult, error) {
 	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
 	if r == nil || r.db == nil || len(uniqueIDs) == 0 {
 		return nil, nil
 	}
 
-	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
-	terminalStatuses := []domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusFailed}
-
 	var outboxes []domain.YouTubeNotificationOutbox
 
-	if err := dbx.SelectSQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", mustSQL("delivery_final_result_0060_01.sql"),
-		uniqueIDs, deliverysql.Texts(postKinds), deliverysql.Texts(terminalStatuses)); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", loadTerminalCommunityShortsOutboxResultsSQL,
+		uniqueIDs, terminalCommunityShortsOutboxKinds, terminalCommunityShortsOutboxStatuses); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts outboxes: %w", err)
 	}
 
@@ -73,7 +75,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	var deliveries []domain.YouTubeNotificationDelivery
 
-	if err := dbx.SelectSQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql"), outboxResultIDs); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", loadTerminalCommunityShortsOutboxResults2SQL, outboxResultIDs); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts deliveries: %w", err)
 	}
 

@@ -205,15 +205,17 @@ func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Mess
 	}
 
 	if parsed.Type == botcommand.CommandUnknown {
-		summaryAttrs := messageSummaryAttrs(message.Msg)
-		attrs := make([]slog.Attr, 0, 1+len(summaryAttrs))
+		if i.debugEnabled(ctx) {
+			summaryAttrs := messageSummaryAttrs(message.Msg)
+			attrs := make([]slog.Attr, 0, 1+len(summaryAttrs))
 
-		attrs = append(attrs, roomAttr)
-		attrs = append(attrs, summaryAttrs...)
-		i.logDebug(ctx,
-			"Unknown command ignored",
-			attrs...,
-		)
+			attrs = append(attrs, roomAttr)
+			attrs = append(attrs, summaryAttrs...)
+			i.logDebug(ctx,
+				"Unknown command ignored",
+				attrs...,
+			)
+		}
 
 		return nil
 	}
@@ -228,7 +230,7 @@ func (i *MessageIngress) logCommandReceived(
 	userID string,
 	roomAttr slog.Attr,
 ) {
-	if i.logger == nil || parsed == nil {
+	if parsed == nil || !i.debugEnabled(ctx) {
 		return
 	}
 
@@ -249,6 +251,12 @@ func (i *MessageIngress) isSelfSender(sender string) bool {
 	}
 
 	return canonical == i.selfSender
+}
+
+// debugEnabled는 Debug 전용 attr을 만들기 전에 확인한다. 운영 기본 레벨(info)에서 명령 메시지마다 attr slice를
+// 할당하고 버리지 않게 하려는 것이며, 핸들러의 Enabled는 ctx와 무관하므로 기록 여부는 바뀌지 않는다.
+func (i *MessageIngress) debugEnabled(ctx context.Context) bool {
+	return i.logger != nil && i.logger.Enabled(ctx, slog.LevelDebug)
 }
 
 func (i *MessageIngress) logDebug(ctx context.Context, msg string, attrs ...slog.Attr) {

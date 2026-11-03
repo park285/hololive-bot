@@ -8,8 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var replyOutboxReclaimCandidatesSQL = mustSQL("reply_outbox_reclaim_candidates.sql")
-
 const replyOutboxStatusPending = "pending"
 
 // replyReclaimCandidate는 lease가 만료된 submitting 행이다.

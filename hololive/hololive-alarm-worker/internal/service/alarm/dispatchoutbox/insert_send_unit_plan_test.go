@@ -113,7 +113,7 @@ func explainInsertDeliveryBatch(ctx context.Context, t *testing.T, pool *pgxpool
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(ctx, "PREPARE insert_delivery_plan AS "+mustSQL("repository_insert_0183_02.sql"))
+	_, err = tx.Exec(ctx, "PREPARE insert_delivery_plan AS "+insertDeliveryBatchSQL)
 	require.NoError(t, err)
 
 	// prepared statement는 rollback 뒤에도 연결에 남으므로 풀에 돌려주기 전에 지운다.

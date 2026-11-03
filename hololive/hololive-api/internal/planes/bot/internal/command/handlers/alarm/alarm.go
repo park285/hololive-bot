@@ -198,9 +198,12 @@ func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *botcomma
 
 	alarmTypes := c.parseAlarmTypes(params)
 
-	c.Deps().Logger.Debug(mutation.requestedLog,
-		sharedprivacylog.RoomIDAttr(cmdCtx.Room),
-		slog.Any("types", alarmTypes))
+	// 운영 기본 레벨(info)에서 알람 변경 명령마다 room 가명을 계산해 버리지 않게 먼저 확인한다.
+	if logger := c.Deps().Logger; logger.Enabled(ctx, slog.LevelDebug) {
+		logger.Debug(mutation.requestedLog,
+			sharedprivacylog.RoomIDAttr(cmdCtx.Room),
+			slog.Any("types", alarmTypes))
+	}
 
 	channel, err := mutation.resolve(ctx, cmdCtx.Room, memberName)
 	if stdErrors.Is(err, handlercore.ErrMemberLookupHandled) {

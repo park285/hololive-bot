@@ -70,9 +70,9 @@ func publishVerificationBatch(
 	membershipQuery, membershipArgs := collection.LeaseMembershipQuery(proof, scope)
 	batch := &pgx.Batch{}
 
-	batch.Queue(sqlProjectionCurrent)
+	batch.Queue(publishVerificationBatchSQL)
 	batch.Queue(
-		sqlPublishFence,
+		publishVerificationBatch2SQL,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,
@@ -80,8 +80,8 @@ func publishVerificationBatch(
 		proof.ScheduledFor,
 	)
 	batch.Queue(membershipQuery, membershipArgs...)
-	batch.Queue(sqlTargetEnabled, proof.ProjectionGeneration, subjects, kinds)
-	batch.Queue(sqlContractBatchCurrent, string(contracts))
+	batch.Queue(publishVerificationBatch3SQL, proof.ProjectionGeneration, subjects, kinds)
+	batch.Queue(publishVerificationBatch4SQL, string(contracts))
 
 	return batch
 }

@@ -57,7 +57,7 @@ func freezeFallbackRequest(ctx context.Context, tx dbx.Querier, group startedLog
 
 	var bound string
 
-	if err := tx.QueryRow(ctx, mustSQL("send_request_fallback_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, group.ownerAfter.LockedBy).Scan(&bound); err != nil {
+	if err := tx.QueryRow(ctx, sendRequestFallbackFenceSQL, group.ownerAfter.ID, group.ownerAfter.RowVersion, group.ownerAfter.LockedBy).Scan(&bound); err != nil {
 		return FrozenRequest{}, fmt.Errorf("freeze fallback requests: owner fence: %w", err)
 	}
 
@@ -85,7 +85,7 @@ func freezeFallbackRequest(ctx context.Context, tx dbx.Querier, group startedLog
 		return FrozenRequest{}, err
 	}
 
-	if _, bindErr := tx.Exec(ctx, mustSQL("send_request_fallback_bind.sql"), group.ownerAfter.ID, request.BaseID); bindErr != nil {
+	if _, bindErr := tx.Exec(ctx, sendRequestFallbackBindSQL, group.ownerAfter.ID, request.BaseID); bindErr != nil {
 		return FrozenRequest{}, fmt.Errorf("freeze fallback requests: bind: %w", bindErr)
 	}
 

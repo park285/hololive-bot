@@ -74,6 +74,8 @@ func LoadConfig() (result *Config, retErr error) {
 	return &config, nil
 }
 
+var targetChannelIDPattern = regexp.MustCompile(`^UC[a-zA-Z0-9_-]{22}$`)
+
 // Validate는 계정 범위와 호출 주기를 제한하고 모호한 멤버 매핑을 거부한다.
 func (c Config) Validate() error {
 	if len(c.Targets) == 0 || len(c.Targets) > 100 || c.PollSeconds < 120 || c.PollSeconds > 3600 {
@@ -82,11 +84,10 @@ func (c Config) Validate() error {
 
 	seenUsers := make(map[string]bool)
 	seenChannels := make(map[string]bool)
-	channelPattern := regexp.MustCompile(`^UC[a-zA-Z0-9_-]{22}$`)
 
 	for _, target := range c.Targets {
 		payload := domain.XSpaceDispatchPayload{SpaceID: "validation", CreatorID: target.UserID, ChannelID: target.ChannelID, StartedAt: time.Unix(1, 0)}
-		if payload.Validate() != nil || !channelPattern.MatchString(target.ChannelID) || seenUsers[target.UserID] || seenChannels[target.ChannelID] {
+		if payload.Validate() != nil || !targetChannelIDPattern.MatchString(target.ChannelID) || seenUsers[target.UserID] || seenChannels[target.ChannelID] {
 			return errors.New("invalid or duplicate X spaces target")
 		}
 

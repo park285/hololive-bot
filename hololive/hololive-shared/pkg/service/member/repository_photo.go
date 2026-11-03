@@ -29,7 +29,7 @@ import (
 
 func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string) error {
 	now := time.Now()
-	if _, err := r.pool.Exec(ctx, mustSQL("repository_photo_0035_01.sql"), channelID, photoURL, now); err != nil {
+	if _, err := r.pool.Exec(ctx, updatePhotoSQL, channelID, photoURL, now); err != nil {
 		return fmt.Errorf("update photo: %w", err)
 	}
 
@@ -40,7 +40,7 @@ func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string
 func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error) {
 	staleTime := time.Now().Add(-staleThreshold)
 
-	rows, err := r.pool.Query(ctx, mustSQL("repository_photo_0073_03.sql"), staleTime)
+	rows, err := r.pool.Query(ctx, getMembersNeedingPhotoSyncSQL, staleTime)
 	if err != nil {
 		return nil, fmt.Errorf("get members needing photo sync: %w", err)
 	}
@@ -65,12 +65,15 @@ func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThresh
 	return channelIDs, nil
 }
 
+// photoSizeSuffixes는 고해상도로 바꿀 YouTube 썸네일 크기 표기를 찾는 순서대로 둔다.
+var photoSizeSuffixes = []string{"=s88", "=s240", "=s800", "=s176", "=s68"}
+
 func UpgradePhotoResolution(photoURL string) string {
 	if photoURL == "" {
 		return ""
 	}
 
-	for _, size := range []string{"=s88", "=s240", "=s800", "=s176", "=s68"} {
+	for _, size := range photoSizeSuffixes {
 		if strings.Contains(photoURL, size) {
 			return strings.Replace(photoURL, size, "=s1024", 1)
 		}

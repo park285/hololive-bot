@@ -162,7 +162,7 @@ func sameJobContract(left, right collection.JobContract) bool {
 }
 
 func (q *snapshotQuery) loadExact(ctx context.Context, tx dbx.Tx, subject string) (collection.TargetSnapshot, error) {
-	rows, err := tx.Query(ctx, sqlTargetSnapshotExact, q.current, q.kindValues, subject)
+	rows, err := tx.Query(ctx, loadExactSQL, q.current, q.kindValues, subject)
 	if err != nil {
 		return collection.TargetSnapshot{}, fmt.Errorf("load exact target snapshot: query targets: %w", err)
 	}
@@ -248,7 +248,7 @@ func scanExactTargetRow(rows pgx.Rows) (contract.ObservationKind, bool, error) {
 }
 
 func (q *snapshotQuery) loadProjection(ctx context.Context, tx dbx.Tx) (collection.TargetSnapshot, error) {
-	rows, err := tx.Query(ctx, sqlTargetSnapshotProjection, q.current, q.kindValues, q.maxRosterRows)
+	rows, err := tx.Query(ctx, loadProjectionSQL, q.current, q.kindValues, q.maxRosterRows)
 	if err != nil {
 		return collection.TargetSnapshot{}, fmt.Errorf("load projection target snapshot: query targets: %w", err)
 	}

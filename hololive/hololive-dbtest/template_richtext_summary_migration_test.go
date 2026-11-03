@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var templateRichTextSummarySeedPattern = regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '([0-9a-f]{64})', \$rich\$(.*?)\$rich\$\)`)
+
 const (
 	templateRichTextSummaryMigration = "359_richtext_collapsed_summary.sql"
 	templateRichTextSummaryCustomKey = "CMD_LIVE_STREAMS"
@@ -93,7 +95,7 @@ func loadTemplateRichTextSummarySeeds(t *testing.T, dir string) map[string]templ
 	raw, err := fs.ReadFile(os.DirFS(dir), templateRichTextSummaryMigration)
 	require.NoError(t, err)
 
-	rows := regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '([0-9a-f]{64})', \$rich\$(.*?)\$rich\$\)`).FindAllStringSubmatch(string(raw), -1)
+	rows := templateRichTextSummarySeedPattern.FindAllStringSubmatch(string(raw), -1)
 	seeds := make(map[string]templateRichTextSummarySeed, len(rows))
 
 	for _, row := range rows {

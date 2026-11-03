@@ -247,7 +247,7 @@ func deleteHandoffSentLedger(ctx context.Context, tx dbx.Querier, units []handof
 		sources = append(sources, units[i].owner.ID)
 	}
 
-	tag, err := tx.Exec(ctx, mustSQL("handoff_ledger_delete_sent.sql"), kinds, logicalIDs, roomIDs, sources)
+	tag, err := tx.Exec(ctx, handoffLedgerDeleteSentSQL, kinds, logicalIDs, roomIDs, sources)
 	if err != nil {
 		return fmt.Errorf("delete sent ledger: %w", err)
 	}
@@ -275,7 +275,7 @@ func recordHandoffQuarantinedLedger(ctx context.Context, tx dbx.Querier, units [
 }
 
 func reissueHandoffRequest(ctx context.Context, tx dbx.Querier, claim *HandoffClaim) error {
-	tag, err := tx.Exec(ctx, mustSQL("handoff_request_reissue.sql"), claim.RequestBaseID, claim.Generation)
+	tag, err := tx.Exec(ctx, handoffRequestReissueSQL, claim.RequestBaseID, claim.Generation)
 	if err != nil {
 		return fmt.Errorf("reissue frozen request: %w", err)
 	}
@@ -288,7 +288,7 @@ func reissueHandoffRequest(ctx context.Context, tx dbx.Querier, claim *HandoffCl
 }
 
 func closeHandoffRequest(ctx context.Context, tx dbx.Querier, baseID string) error {
-	tag, err := tx.Exec(ctx, mustSQL("handoff_request_close.sql"), baseID)
+	tag, err := tx.Exec(ctx, handoffRequestCloseSQL, baseID)
 	if err != nil {
 		return fmt.Errorf("close handoff check: %w", err)
 	}

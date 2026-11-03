@@ -39,7 +39,7 @@ func loadPublishReceipts(ctx context.Context, db publishReceiptQueryer, envelope
 		return nil, fmt.Errorf("marshal receipt identities: %w", err)
 	}
 
-	rows, err := db.Query(ctx, mustSQL("repository_publish_receipts.sql"), jsonbRecordsetParam(raw))
+	rows, err := db.Query(ctx, repositoryPublishReceiptsSQL, jsonbRecordsetParam(raw))
 	if err != nil {
 		return nil, fmt.Errorf("query receipt identities: %w", err)
 	}

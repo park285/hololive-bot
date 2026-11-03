@@ -90,17 +90,17 @@ func applyProjectionChange(t *testing.T, tx pgx.Tx, previous int64, change proje
 
 	var guard bool
 
-	if err := tx.QueryRow(ctx, mustTestSQL("lock_projection_guard.sql")).Scan(&guard); err != nil {
+	if err := tx.QueryRow(ctx, lockProjectionGuardSQL).Scan(&guard); err != nil {
 		t.Fatalf("lock projection guard: %v", err)
 	}
 
-	if _, err := tx.Exec(ctx, mustTestSQL("retire_projection.sql"), previous); err != nil {
+	if _, err := tx.Exec(ctx, retireProjectionSQL, previous); err != nil {
 		t.Fatalf("retire projection: %v", err)
 	}
 
 	var next int64
 
-	if err := tx.QueryRow(ctx, mustTestSQL("insert_projection.sql"), 0).Scan(&next); err != nil {
+	if err := tx.QueryRow(ctx, insertProjectionSQL, 0).Scan(&next); err != nil {
 		t.Fatalf("insert projection: %v", err)
 	}
 
@@ -112,12 +112,12 @@ func applyProjectionChange(t *testing.T, tx pgx.Tx, previous int64, change proje
 		droppedKinds[i] = string(target.kind)
 	}
 
-	if _, err := tx.Exec(ctx, mustTestSQL("carry_targets.sql"), previous, next, droppedSubjects, droppedKinds); err != nil {
+	if _, err := tx.Exec(ctx, carryTargetsSQL, previous, next, droppedSubjects, droppedKinds); err != nil {
 		t.Fatalf("carry targets: %v", err)
 	}
 
 	for _, target := range change.added {
-		if _, err := tx.Exec(ctx, mustTestSQL("insert_target_since.sql"), next, target.subject, target.kind,
+		if _, err := tx.Exec(ctx, insertTargetSinceSQL, next, target.subject, target.kind,
 			target.interval.Milliseconds(), target.enabled, next); err != nil {
 			t.Fatalf("add target: %v", err)
 		}
@@ -317,7 +317,7 @@ func testExpiredLeaseIsOwnerLoss(t *testing.T) {
 	spec := contentJob(subjectUCA)
 	lease := mustAcquireLease(t, repository, spec, "collector-a")
 
-	if _, err := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, expireLeaseSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -348,7 +348,7 @@ func testOwnerLossOutranksStaleProjection(t *testing.T) {
 	spec := contentJob(subjectUCA)
 	lease := mustAcquireLease(t, repository, spec, "collector-a")
 
-	if _, err := pool.Exec(ctx, mustTestSQL("expire_projection.sql"), generation); err != nil {
+	if _, err := pool.Exec(ctx, expireProjectionSQL, generation); err != nil {
 		t.Fatal(err)
 	}
 
@@ -356,7 +356,7 @@ func testOwnerLossOutranksStaleProjection(t *testing.T) {
 		t.Fatalf("stale projection renew error = %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, expireLeaseSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -374,7 +374,7 @@ func testLegacyLeaseWithoutScopeFailsClosed(t *testing.T) {
 	spec := contentJob(subjectUCA)
 	lease := mustAcquireLease(t, repository, spec, "collector-a")
 
-	if _, err := pool.Exec(ctx, mustTestSQL("clear_lease_membership.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, clearLeaseMembershipSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -386,7 +386,7 @@ func testUnprovenMembershipIsNotAdmitted(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, contentTargets(subjectUCA))
 
-	if _, err := pool.Exec(ctx, mustTestSQL("null_target_membership.sql"), generation); err != nil {
+	if _, err := pool.Exec(ctx, nullTargetMembershipSQL, generation); err != nil {
 		t.Fatal(err)
 	}
 
@@ -409,7 +409,7 @@ func TestLeaseRecreatedAfterRetentionDoesNotReviveOldProof(t *testing.T) {
 	spec := contentJob(subjectUCA)
 	old := mustAcquireLease(t, repository, spec, "collector-a")
 
-	if _, err := pool.Exec(ctx, mustTestSQL("delete_lease.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, deleteLeaseSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -450,7 +450,7 @@ func TestNotBeforeChangesOnlyGateNewAdmission(t *testing.T) {
 	}
 	lease := mustAcquireLease(t, repository, spec, "collector-a")
 
-	if _, err := pool.Exec(ctx, mustTestSQL("set_not_before.sql"), generation, time.Hour.Milliseconds()); err != nil {
+	if _, err := pool.Exec(ctx, setNotBeforeSQL, generation, time.Hour.Milliseconds()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -467,7 +467,7 @@ func TestNotBeforeChangesOnlyGateNewAdmission(t *testing.T) {
 		t.Fatalf("complete after future not_before: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, mustTestSQL("make_lease_overdue.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, makeLeaseOverdueSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -479,7 +479,7 @@ func TestNotBeforeChangesOnlyGateNewAdmission(t *testing.T) {
 		t.Fatalf("acquire before not_before error = %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, mustTestSQL("set_not_before.sql"), generation, -time.Second.Milliseconds()); err != nil {
+	if _, err := pool.Exec(ctx, setNotBeforeSQL, generation, -time.Second.Milliseconds()); err != nil {
 		t.Fatal(err)
 	}
 

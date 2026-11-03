@@ -37,8 +37,6 @@ type Repository struct {
 	logger *slog.Logger
 }
 
-var majorEventSelectColumns = mustSQL("repository_0040_01.sql")
-
 func (r *Repository) requirePool(action string) error {
 	if r == nil || r.pool == nil {
 		return fmt.Errorf("%s: postgres pool not configured", action)
@@ -73,7 +71,7 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 		return err
 	}
 
-	query := mustSQL("repository_0080_02.sql")
+	query := subscribeSQL
 
 	_, err := r.pool.Exec(ctx, query, roomID, roomName)
 	if err != nil {
@@ -88,7 +86,7 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 		return err
 	}
 
-	query := mustSQL("repository_0099_03.sql")
+	query := unsubscribeSQL
 
 	_, err := r.pool.Exec(ctx, query, roomID)
 	if err != nil {
@@ -103,7 +101,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 		return false, err
 	}
 
-	query := mustSQL("repository_0112_04.sql")
+	query := isSubscribedSQL
 
 	var exists bool
 
@@ -120,7 +118,7 @@ func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoo
 		return nil, err
 	}
 
-	query := mustSQL("repository_0127_05.sql")
+	query := getSubscribedRoomsSQL
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {

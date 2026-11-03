@@ -22,15 +22,6 @@ const (
 	alarmDispatchRetentionLockKey  = 781512042
 )
 
-// 종료 상태마다 상태와 보존 시각 열을 상수로 쓴 삭제 SQL을 둔다. 상태를 파라미터로 받으면 generic plan이
-// 상태별 보존 부분 인덱스를 쓰지 못하고 해당 상태 전체를 읽는다.
-var alarmDispatchRetentionDeleteSQL = map[dispatchoutbox.Status]string{
-	dispatchoutbox.StatusSent:        mustSQL("alarm_dispatch_retention_delete_sent.sql"),
-	dispatchoutbox.StatusDLQ:         mustSQL("alarm_dispatch_retention_delete_dlq.sql"),
-	dispatchoutbox.StatusQuarantined: mustSQL("alarm_dispatch_retention_delete_quarantined.sql"),
-	dispatchoutbox.StatusCancelled:   mustSQL("alarm_dispatch_retention_delete_cancelled.sql"), //nolint:misspell // 파일명이 실제 상태값 cancelled를 따른다.
-}
-
 type alarmDispatchMaintenanceStore interface {
 	WithAdvisoryLock(ctx context.Context, key int64, fn func(context.Context, alarmDispatchMaintenanceDataStore) error) error
 }
@@ -260,7 +251,7 @@ func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 func acquireAlarmDispatchLock(ctx context.Context, tx dbx.Tx, key int64) (bool, error) {
 	var locked bool
 
-	if err := tx.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0275_01.sql"), key).Scan(&locked); err != nil {
+	if err := tx.QueryRow(ctx, acquireAlarmDispatchLockSQL, key).Scan(&locked); err != nil {
 		return false, fmt.Errorf("scan: %w", err)
 	}
 
@@ -272,7 +263,7 @@ func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (
 
 	var pendingRows, retryRows, leasedRows, sendingRows int64
 
-	if err := s.db.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0325_03.sql")).
+	if err := s.db.QueryRow(ctx, backlogSnapshotSQL).
 		Scan(
 			&snapshot.OldestPendingAgeSeconds,
 			&snapshot.OldestRetryAgeSeconds,
@@ -325,7 +316,7 @@ func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context
 		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("cleanup upcoming candidates: %w", err)
 	}
 
-	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0368_05.sql"), retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	tag, err := s.db.Exec(ctx, deleteOrphanEventsSQL, retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
 		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("exec: %w", err)
 	}
@@ -334,7 +325,7 @@ func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error) {
-	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0360_05.sql"), clampAlarmDispatchRetentionLimit(limit))
+	tag, err := s.db.Exec(ctx, deleteOrphanSendUnitsSQL, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}

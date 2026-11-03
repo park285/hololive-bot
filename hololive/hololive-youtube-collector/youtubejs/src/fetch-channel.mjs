@@ -9,6 +9,7 @@ import { hasRFC3339Shape } from "./rfc3339.mjs";
 import { recordScheduleLookup } from "./request-context.mjs";
 import { maxScheduleMetadataLookups } from "./rpc-validation-primitives.mjs";
 
+const vanityHandlePathPattern = /^\/(@[^\s/]+)\/?$/u;
 const responseReserveBytes = encodedSize({
   protocol_version: 1,
   live_sessions: [],
@@ -257,7 +258,7 @@ export function mapProfile(channel, about) {
           (url.hostname === "www.youtube.com" || url.hostname === "youtube.com") &&
           url.port === "" && url.username === "" && url.password === "") {
         // legacy /user·/c 주소는 handle을 증명하지 않습니다.
-        const match = /^\/(@[^\s/]+)\/?$/u.exec(decodeURIComponent(url.pathname));
+        const match = vanityHandlePathPattern.exec(decodeURIComponent(url.pathname));
         metadataHandle = match?.[1] ?? null;
       }
     } catch {

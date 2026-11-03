@@ -7,6 +7,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 )
 
+var visibleFieldNormalizer = strings.NewReplacer(ZeroWidthSpace, "", "\r\n", "\n", "\r", "\n")
+
 func TestMarkdownLiteralPreservesVisibleFields(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +28,7 @@ func TestMarkdownLiteralPreservesVisibleFields(t *testing.T) {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 
-			want := strings.NewReplacer(ZeroWidthSpace, "", "\r\n", "\n", "\r", "\n").Replace(input)
+			want := visibleFieldNormalizer.Replace(input)
 			literal := MarkdownLiteral(input)
 
 			if strings.Contains(literal, ZeroWidthSpace+ZeroWidthSpace) {

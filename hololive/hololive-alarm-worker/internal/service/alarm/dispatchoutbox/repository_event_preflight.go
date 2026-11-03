@@ -33,7 +33,7 @@ func loadExistingEventRows(ctx context.Context, tx pgx.Tx, events []eventInsert)
 		keys = append(keys, events[i].EventKey)
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_event_preflight_0033_01.sql"), keys)
+	rows, err := tx.Query(ctx, loadExistingEventRowsSQL, keys)
 	if err != nil {
 		return nil, fmt.Errorf("preflight dispatch events: %w", err)
 	}

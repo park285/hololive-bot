@@ -12,12 +12,6 @@ import (
 
 const scheduleStatementBatchSize = 128
 
-var (
-	scheduleItemUpsertSQL = mustSQL("repository_schedule_item_upsert_0059_59.sql")
-	scheduleSessionsSQL   = mustSQL("repository_schedule_sessions.sql")
-	scheduleHeadsSQL      = mustSQL("repository_schedule_heads.sql")
-)
-
 func lockScheduleSubject(ctx context.Context, tx dbx.Tx, groupKey string) error {
 	return lockLiveSubject(ctx, tx, "schedule:"+groupKey)
 }
@@ -48,7 +42,7 @@ func loadScheduleSessions(
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, scheduleSessionsSQL, videoIDs)
+	rows, err := tx.Query(ctx, repositoryScheduleSessionsSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("load schedule sessions: %w", err)
 	}
@@ -94,7 +88,7 @@ func loadScheduleHeads(ctx context.Context, tx dbx.Tx, state *schedule.State, vi
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, scheduleHeadsSQL, videoIDs)
+	rows, err := tx.Query(ctx, repositoryScheduleHeadsSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("load schedule head statuses: %w", err)
 	}
@@ -186,7 +180,7 @@ func scheduleDecisionRuntimeVideoIDs(decision *schedule.Decision) []string {
 func scheduleItemStatement(observation *Observation, item *schedule.Item) dbx.Statement {
 	return dbx.Statement{
 		Operation: "upsert schedule item",
-		SQL:       scheduleItemUpsertSQL,
+		SQL:       scheduleItemStatementSQL,
 		Args: []any{
 			item.GroupKey, observation.Provider, item.ExternalID, item.VideoID,
 			item.ChannelID, item.Title, item.ScheduledAt, item.EndedAt, item.IsLive,

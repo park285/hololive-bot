@@ -55,7 +55,7 @@ func (r *Repository) Requeue(ctx context.Context, id string, request RequeueRequ
 		ids = append(ids, parsed)
 	}
 
-	rows, err := tx.Query(ctx, querySQL("requeue"), ids, request.OperatorID, request.Reason)
+	rows, err := tx.Query(ctx, requeueSQL, ids, request.OperatorID, request.Reason)
 	if err != nil {
 		return result, fmt.Errorf("update dispatch replay group: %w", conflictError(err))
 	}

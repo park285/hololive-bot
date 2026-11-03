@@ -27,7 +27,7 @@ func (r *Refresher) Retain(ctx context.Context, now time.Time, age time.Duration
 
 	cutoff := now.UTC().Add(-age)
 
-	leaseTag, err := r.pool.Exec(ctx, mustSQL("delete_retired_job_leases.sql"), cutoff, batchSize)
+	leaseTag, err := r.pool.Exec(ctx, deleteRetiredJobLeasesSQL, cutoff, batchSize)
 	if err != nil {
 		return RetentionResult{}, fmt.Errorf("retain youtube target projections: delete retired job leases: %w", err)
 	}
@@ -36,7 +36,7 @@ func (r *Refresher) Retain(ctx context.Context, now time.Time, age time.Duration
 
 	result.LeasesDeleted = leaseTag.RowsAffected()
 
-	err = r.pool.QueryRow(ctx, mustSQL("delete_retired_generations.sql"), cutoff, batchSize).
+	err = r.pool.QueryRow(ctx, deleteRetiredGenerationsSQL, cutoff, batchSize).
 		Scan(&result.ReasonsDeleted, &result.TargetsDeleted, &result.GenerationsDeleted)
 	if err != nil {
 		return RetentionResult{LeasesDeleted: result.LeasesDeleted}, fmt.Errorf("retain youtube target projections: delete retired generation rows: %w", err)

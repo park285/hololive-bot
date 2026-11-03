@@ -326,7 +326,7 @@ func TestPublishBatchRollsBackEvidenceAndCheckpointWhenQueueInsertFails(t *testi
 }
 
 func TestPublishSetCollisionWriteKeepsInsertOnlyPrivilege(t *testing.T) {
-	query := mustSQL("repository_publish_set_0032_32.sql")
+	query := publishObservationSetSQL
 	start := strings.Index(query, "collision_write AS (")
 	end := strings.Index(query, "), observation_write AS (")
 

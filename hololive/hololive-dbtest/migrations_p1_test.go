@@ -641,16 +641,16 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		queries []observationRoleQuery
 	}{
 		roles.scraper: {dir: publishQueryDir, queries: []observationRoleQuery{
-			{name: "repository_projection_current_0002_02.sql"},
-			{name: "repository_contract_batch_current_0031_31.sql", args: []any{fmt.Sprintf(
+			{name: "publish_verification_batch.sql"},
+			{name: "publish_verification_batch_4.sql", args: []any{fmt.Sprintf(
 				`[{"provider":"youtubejs","observation_kind":%q,"schema_version":1,"contract_generation":1}]`, communityPageKind,
 			)}},
-			{name: "repository_publish_set_0032_32.sql", args: []any{"[]"}},
+			{name: "publish_observation_set.sql", args: []any{"[]"}},
 		}},
 		roles.runtime: {dir: consumeQueryDir, queries: []observationRoleQuery{
-			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
-			{name: "repository_replay_epoch_load_0086_86.sql"},
-			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
+			{name: "activate_replay_epoch_tx.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
+			{name: "activate_replay_epoch_tx_2.sql"},
+			{name: "lock_claim.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_pending_ends.sql", args: []any{[]string{}}},
 			{name: "repository_live_absence_slots.sql", args: []any{[]string{}, nil, time.Now().UTC(), []string{}}},
 		}},
@@ -930,8 +930,8 @@ func assertScraperCollectionMembership(t *testing.T, pool *pgxpool.Pool, role, r
 
 	ctx := t.Context()
 	roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": pgx.Identifier{role}.Sanitize()})
-	lockSQL := readObservationRoleSQL(t, filepath.Join(queryDir, "repository_projection_current_0002_02.sql"), nil)
-	membershipSQL := readObservationRoleSQL(t, filepath.Join(membershipQueryDir, "repository_lease_membership_0004_04.sql"), nil)
+	lockSQL := readObservationRoleSQL(t, filepath.Join(queryDir, "publish_verification_batch.sql"), nil)
+	membershipSQL := readObservationRoleSQL(t, filepath.Join(membershipQueryDir, "lease_membership_query.sql"), nil)
 	kinds := []string{"shorts_list", "video_list"}
 	scheduledFor := time.Date(2026, time.October, 3, 0, 0, 0, 0, time.UTC)
 	jobKey := "collector:youtubejs:youtubejs_content:" + membershipGrantSubject

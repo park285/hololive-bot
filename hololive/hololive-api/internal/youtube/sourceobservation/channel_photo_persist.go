@@ -13,7 +13,7 @@ import (
 func loadPhotoState(ctx context.Context, tx dbx.Tx, channelID string) (photo.State, error) {
 	state := photo.State{ChannelID: channelID, Head: photo.Head{ChannelID: channelID, Kinds: map[string]photo.Canonical{}}}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_photo_head_0073_73.sql"), channelID)
+	rows, err := tx.Query(ctx, loadPhotoStateSQL, channelID)
 	if err != nil {
 		return photo.State{}, fmt.Errorf("load channel photo heads: %w", err)
 	}
@@ -80,7 +80,7 @@ func persistPhotoVariants(ctx context.Context, tx dbx.Tx, observation *Observati
 func persistPhotoVariant(ctx context.Context, tx dbx.Tx, observation *Observation, decision *photo.Decision, variant *photo.Variant) error {
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_photo_variant_upsert_0072_72.sql"),
+		persistPhotoVariantSQL,
 		decision.Sample.ChannelID,
 		variant.Kind,
 		observation.Provider,
@@ -122,7 +122,7 @@ func persistPhotoHead(ctx context.Context, tx dbx.Tx, channelID, kind string, ca
 
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_photo_head_upsert_0074_74.sql"),
+		persistPhotoHeadSQL,
 		channelID,
 		kind,
 		canonical.Identity,
@@ -153,7 +153,7 @@ func persistPhotoProduct(ctx context.Context, tx dbx.Tx, decision *photo.Decisio
 	avatar, banner := photoProductThumbnails(decision.WriteProduct)
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_photo_product_upsert_0075_75.sql"),
+		persistPhotoProductSQL,
 		decision.Sample.ChannelID,
 		nullableThumbnails(avatar),
 		nullableThumbnails(banner),

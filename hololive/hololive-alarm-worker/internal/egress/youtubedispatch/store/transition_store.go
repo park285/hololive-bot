@@ -79,7 +79,7 @@ func (s *TransitionStore) ClaimPending(ctx context.Context, batchSize int) ([]do
 
 	rows, err := s.db.Query(
 		ctx,
-		claimPendingSQL,
+		transitionClaimPendingSQL,
 		lifecycle.StatusPending,
 		s.config.LockTimeout.Milliseconds(),
 		s.config.ClaimFreshnessWindow.Milliseconds(),
@@ -451,7 +451,7 @@ func loadTransitionLedger(
 		db,
 		&records,
 		"load transition ledger rows",
-		mustSQL("transition_ledger_rows.sql"),
+		transitionLedgerRowsSQL,
 		kinds,
 		logicalIDs,
 		roomIDs,
@@ -546,7 +546,7 @@ func applyFencedRowTransitions(
 
 	rows, err := db.Query(
 		ctx,
-		mustSQL("transition_apply_rows.sql"),
+		transitionApplyRowsSQL,
 		vectors.ids,
 		vectors.expectedStatuses,
 		vectors.expectedVersions,

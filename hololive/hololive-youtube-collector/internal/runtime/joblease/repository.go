@@ -113,7 +113,7 @@ func (r *Repository) acquireTx(
 func lockProjectionGuard(ctx context.Context, tx dbx.Tx) (int64, bool, error) {
 	var generation int64
 
-	err := tx.QueryRow(ctx, sqlProjectionLock).Scan(&generation)
+	err := tx.QueryRow(ctx, lockProjectionGuardShareSQL).Scan(&generation)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil
@@ -197,10 +197,10 @@ func acquireLeaseProof(
 		kindValues[i] = string(kinds[i])
 	}
 
-	query := sqlLeaseAcquire
+	query := repositoryLeaseAcquireSQL
 
 	if scope.ExactSubject {
-		query = sqlLeaseAcquireExact
+		query = repositoryLeaseAcquireExactSQL
 	}
 
 	var (
@@ -239,7 +239,7 @@ func acquireLeaseProof(
 	if created {
 		// INSERT의 유일 키 대기가 끝난 뒤 DB 시계로 최초 slot과 TTL을 확정한다.
 		// 기존 행 획득에는 이 문장이 없고, 방금 생성해 잠근 행만 한 번 갱신한다.
-		if err := tx.QueryRow(ctx, sqlLeaseInitialize,
+		if err := tx.QueryRow(ctx, repositoryLeaseInitializeSQL,
 			proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, leaseTTL.Milliseconds(),
 		).Scan(&proof.ScheduledFor); err != nil {
 			return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: initialize created lease: %w", err)
@@ -313,7 +313,7 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 
 	var jobKey string
 
-	err := tx.QueryRow(ctx, sqlLeaseRenew, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := tx.QueryRow(ctx, renewTxSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, l.repository.config.LeaseTTL.Milliseconds()).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -351,7 +351,7 @@ func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionIn
 
 	var jobKey string
 
-	err := l.repository.pool.QueryRow(ctx, sqlLeaseDefer, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := l.repository.pool.QueryRow(ctx, deferSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, input.Schedule().At(), code, string(diagnostic.Class()), detail,
 		bounds.Minimum.Milliseconds(), bounds.Maximum.Milliseconds(), input.Schedule().IsNotBefore()).Scan(&jobKey)
 
@@ -382,14 +382,14 @@ func (l *JobLease) Release(ctx context.Context, reason ReleaseReason) error {
 	)
 
 	if reason == ReleaseSuperseded {
-		err = l.repository.pool.QueryRow(ctx, sqlLeaseReleaseSuperseded,
+		err = l.repository.pool.QueryRow(ctx, repositoryLeaseReleaseSupersededSQL,
 			l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch, l.proof.ProjectionGeneration, l.proof.ScheduledFor,
 			string(reason.ErrorCode()),
 		).Scan(&jobKey)
 	} else {
 		delay := deterministicJitter(&l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
 
-		err = l.repository.pool.QueryRow(ctx, sqlLeaseRelease,
+		err = l.repository.pool.QueryRow(ctx, releaseSQL,
 			l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch, l.proof.ProjectionGeneration, l.proof.ScheduledFor,
 			delay.Milliseconds(), string(reason.ErrorCode()),
 		).Scan(&jobKey)

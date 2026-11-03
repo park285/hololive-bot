@@ -2,7 +2,6 @@ package workerapp
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"time"
 
@@ -13,9 +12,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 )
-
-//go:embed queries/youtube_delivery_expired_snapshot.sql
-var youtubeDeliveryExpiredSnapshotSQL string
 
 var youtubeExpiredPending = promauto.NewGauge(prometheus.GaugeOpts{
 	Name: "hololive_youtube_delivery_expired_pending_bounded",

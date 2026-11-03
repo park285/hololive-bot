@@ -34,6 +34,8 @@ func (ma *MessageAdapter) tryHelpCommand(command, raw string) (*ParsedCommand, b
 	return &ParsedCommand{Type: botcommand.CommandHelp, Params: make(map[string]any), RawMessage: raw}, true
 }
 
+var helpCommandAliases = []string{"도움말", "도움", "help", "명령어", "commands"}
+
 func (ma *MessageAdapter) isHelpCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"도움말", "도움", "help", "명령어", "commands"}, cmd)
+	return stringutil.ContainsString(helpCommandAliases, cmd)
 }

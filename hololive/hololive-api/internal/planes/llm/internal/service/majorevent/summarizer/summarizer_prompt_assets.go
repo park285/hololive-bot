@@ -231,9 +231,10 @@ func buildMemberFilterSection() string {
 	return sb.String()
 }
 
+var graduatedBranchOrder = []string{"JP", "EN", "DEV_IS", "HOLOSTARS_EN", "HOLOSTARS_JP"}
+
 func writeGraduatedBranches(sb *strings.Builder) {
-	branchOrder := []string{"JP", "EN", "DEV_IS", "HOLOSTARS_EN", "HOLOSTARS_JP"}
-	for _, branch := range branchOrder {
+	for _, branch := range graduatedBranchOrder {
 		members := parsedGraduatedData.Graduated[branch]
 		if len(members) == 0 {
 			continue

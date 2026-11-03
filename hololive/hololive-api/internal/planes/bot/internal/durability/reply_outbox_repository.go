@@ -33,18 +33,6 @@ import (
 	"github.com/park285/iris-client-go/v4/iris"
 )
 
-var (
-	replyOutboxInsertSQL            = mustSQL("reply_outbox_insert.sql")
-	replyOutboxConflictSQL          = mustSQL("reply_outbox_conflict.sql")
-	replyOutboxClaimSQL             = mustSQL("reply_outbox_claim.sql")
-	replyOutboxSettleSQL            = mustSQL("reply_outbox_settle.sql")
-	replyOutboxSettleRetrySQL       = mustSQL("reply_outbox_settle_retry.sql")
-	replyOutboxSettleTerminalSQL    = mustSQL("reply_outbox_settle_terminal.sql")
-	replyOutboxReclaimExpiredSQL    = mustSQL("reply_outbox_reclaim_expired.sql")
-	replyOutboxManualReviewStatsSQL = mustSQL("reply_outbox_manual_review_stats.sql")
-	replyOutboxReadySnapshotSQL     = mustSQL("reply_outbox_ready_snapshot.sql")
-)
-
 type ReplyOutboxInsertOutcome int
 
 const (

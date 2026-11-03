@@ -38,7 +38,7 @@ func newTimeFinalizationMetrics(reg prometheus.Registerer) *timeFinalizationMetr
 }
 
 func (r *Runtime) loadTimeFinalizationSamples(ctx context.Context) ([]timeFinalizationSample, error) {
-	rows, err := r.pool.Query(ctx, mustSQL("time_finalization_observability.sql"))
+	rows, err := r.pool.Query(ctx, timeFinalizationObservabilitySQL)
 	if err != nil {
 		return nil, fmt.Errorf("query time finalization snapshot: %w", err)
 	}

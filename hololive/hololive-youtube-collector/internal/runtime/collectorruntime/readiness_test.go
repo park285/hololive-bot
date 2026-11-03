@@ -102,12 +102,12 @@ func TestRDY003PendingCountUsesCapSentinel(t *testing.T) {
 		t.Fatalf("bounded count = %+v, %v", got, err)
 	}
 
-	sql := mustSQL("pending_observation_count.sql")
+	sql := pendingObservationCountSQL
 	if !strings.Contains(sql, "LIMIT $1 + 1") {
 		t.Fatal("pending count must use cap+1 sentinel")
 	}
 
-	handoffSQL := mustSQL("observation_handoff_status.sql")
+	handoffSQL := observationHandoffStatusSQL
 	if !strings.Contains(handoffSQL, "unnest($1::bigint[]) WITH ORDINALITY") {
 		t.Fatal("handoff status query must keep requested ID order")
 	}

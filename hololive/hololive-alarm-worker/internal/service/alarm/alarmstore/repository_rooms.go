@@ -11,7 +11,7 @@ import (
 func (r *Repository) CountAlarmEntries(ctx context.Context) (int, error) {
 	var count int
 
-	if err := r.pool.QueryRow(ctx, mustSQL("count_alarm_entries.sql")).Scan(&count); err != nil {
+	if err := r.pool.QueryRow(ctx, countAlarmEntriesSQL).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count alarm entries: %w", err)
 	}
 
@@ -19,7 +19,7 @@ func (r *Repository) CountAlarmEntries(ctx context.Context) (int, error) {
 }
 
 func (r *Repository) GetAllDistinctRoomIDs(ctx context.Context) ([]string, error) {
-	rows, err := r.pool.Query(ctx, mustSQL("repository_rooms_0009_01.sql"))
+	rows, err := r.pool.Query(ctx, getAllDistinctRoomIDsSQL)
 	if err != nil {
 		return nil, fmt.Errorf("get all distinct room ids: %w", err)
 	}
@@ -50,7 +50,7 @@ func (r *Repository) GetAllDistinctRoomIDs(ctx context.Context) ([]string, error
 // 둘 다 없으면 빈 문자열이다. 방 ID와 같은 room_name은 Kakao 이름을 모를 때 저장된 자리표시자라 대표값에서 뺀다.
 // MemberName은 채우지 않는다.
 func (r *Repository) ListAlarmEntries(ctx context.Context) ([]*domain.AlarmEntry, error) {
-	rows, err := r.pool.Query(ctx, mustSQL("repository_rooms_0036_02.sql"))
+	rows, err := r.pool.Query(ctx, listAlarmEntriesSQL)
 	if err != nil {
 		return nil, fmt.Errorf("list alarm entries: %w", err)
 	}
@@ -77,7 +77,7 @@ func (r *Repository) ListAlarmEntries(ctx context.Context) ([]*domain.AlarmEntry
 
 // SetRoomDisplayName은 관리자 지정 방 이름을 저장한다. 알림 행과 독립이라 알림 재등록·전체 해지 뒤에도 남는다.
 func (r *Repository) SetRoomDisplayName(ctx context.Context, roomID, displayName string) error {
-	if _, err := r.pool.Exec(ctx, mustSQL("repository_rooms_0062_03.sql"), roomID, displayName); err != nil {
+	if _, err := r.pool.Exec(ctx, setRoomDisplayNameSQL, roomID, displayName); err != nil {
 		return fmt.Errorf("upsert room display name: %w", err)
 	}
 
@@ -86,7 +86,7 @@ func (r *Repository) SetRoomDisplayName(ctx context.Context, roomID, displayName
 
 // DeleteRoomDisplayName은 관리자 지정 방 이름을 지워 관리 목록이 Kakao 방 이름으로 돌아가게 한다.
 func (r *Repository) DeleteRoomDisplayName(ctx context.Context, roomID string) error {
-	if _, err := r.pool.Exec(ctx, mustSQL("repository_rooms_0074_04.sql"), roomID); err != nil {
+	if _, err := r.pool.Exec(ctx, deleteRoomDisplayNameSQL, roomID); err != nil {
 		return fmt.Errorf("delete room display name: %w", err)
 	}
 

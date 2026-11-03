@@ -28,7 +28,7 @@ func TestCollectionTargetCadenceMatchesSchedulerCandidates(t *testing.T) {
 	const idleLeaseState = "IDLE"
 
 	// collector 내부 패키지를 복제하지 않고 실제 후보 SQL을 같은 migration DB에서 실행한다.
-	candidateSQL, err := os.ReadFile("../../../../../hololive-youtube-collector/internal/runtime/joblease/queries/repository_candidates_0144_02.sql")
+	candidateSQL, err := os.ReadFile("../../../../../hololive-youtube-collector/internal/runtime/joblease/queries/subject_candidates_for_projection.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func assertCollectionCadenceMetrics(t *testing.T, pool *pgxpool.Pool, fixtureTim
 		t.Fatal(err)
 	}
 
-	rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
+	rows, err := pool.Query(t.Context(), collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
 	}

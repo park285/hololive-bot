@@ -44,10 +44,14 @@ func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.C
 		return nil, sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, searchQueryAttr(query))
 	}
 
-	h.logger.Debug("Holodex API search results",
-		searchQueryAttr(query),
-		slog.Int("total_results", len(channels)),
-	)
+	// Debug가 꺼진 운영 레벨에서 검색마다 HMAC 가명을 계산하지 않는다. 운영 핸들러의 Enabled는
+	// ctx와 무관하고, Handle에 넘기는 ctx(Background)를 바꾸지 않으려고 Debug를 유지한다.
+	if h.logger.Enabled(ctx, slog.LevelDebug) {
+		h.logger.Debug("Holodex API search results",
+			searchQueryAttr(query),
+			slog.Int("total_results", len(channels)),
+		)
+	}
 
 	filtered := filterChannelsByQuery(channels, query, h.filter)
 

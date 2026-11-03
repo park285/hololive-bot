@@ -124,7 +124,7 @@ func loadPersistedOutboxSentState(
 
 	var outboxRows []persistedOutboxSentStateRow
 
-	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", mustSQL("repository_batch_persisted_state_0117_01.sql"), kinds, contentIDs); err != nil {
+	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", loadPersistedOutboxSentStateSQL, kinds, contentIDs); err != nil {
 		return nil, fmt.Errorf("query outbox rows: %w", err)
 	}
 
@@ -170,7 +170,7 @@ func mergePersistedDeliverySentState(
 
 	var deliveryRows []persistedDeliverySentStateRow
 
-	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", mustSQL("repository_batch_persisted_state_0162_02.sql"), outboxIDs, domain.OutboxStatusSent); err != nil {
+	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", mergePersistedDeliverySentStateSQL, outboxIDs, domain.OutboxStatusSent); err != nil {
 		return fmt.Errorf("query sent delivery rows: %w", err)
 	}
 

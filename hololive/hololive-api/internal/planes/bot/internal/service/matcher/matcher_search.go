@@ -60,7 +60,7 @@ func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Cha
 	}
 
 	normalizedQuery := stringutil.Normalize(query)
-	cacheKey := fmt.Sprintf("match:%s", normalizedQuery)
+	cacheKey := "match:" + normalizedQuery
 
 	mm.matchCacheMu.RLock()
 
@@ -78,7 +78,7 @@ func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Cha
 		mm.matchCacheMu.Unlock()
 	}
 
-	channel, found := mm.findBestMatchImpl(snapshot, query)
+	channel, found := mm.findBestMatchImpl(ctx, snapshot, query)
 	mm.storeMatch(cacheKey, channel, snapshot)
 
 	mm.maybeCleanupMatchCache()
@@ -145,11 +145,12 @@ func (mm *Matcher) evictOneMatchLocked(now time.Time) bool {
 	return false
 }
 
-func (mm *Matcher) findBestMatchImpl(snapshot *matcherSnapshot, query string) (*domain.Channel, bool) {
+func (mm *Matcher) findBestMatchImpl(ctx context.Context, snapshot *matcherSnapshot, query string) (*domain.Channel, bool) {
 	queryNorm := normalizeMatcherTerm(query)
 
 	channel := mm.finalizeCandidate(mm.resolveSnapshotCandidate(snapshot, queryNorm))
-	if channel == nil {
+	// 운영 기본 레벨(info)에서 매칭 실패 질의마다 HMAC 가명을 계산해 버리지 않게 먼저 확인한다.
+	if channel == nil && mm.logger.Enabled(ctx, slog.LevelDebug) {
 		mm.logger.Debug("No match found in internal data",
 			slog.String("query_token", sharedprivacylog.Pseudonym(queryNorm)),
 		)

@@ -118,7 +118,7 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 				applyEventLinkCheck(&result, check)
 				mu.Unlock()
 
-				c.logEventLinkCheckFailure(check)
+				c.logEventLinkCheckFailure(egCtx, check)
 
 				return nil
 			})
@@ -163,8 +163,9 @@ func addLinkCheckStatus(result *LinkCheckResult, status domain.MajorEventLinkSta
 	}
 }
 
-func (c *LinkChecker) logEventLinkCheckFailure(check eventLinkCheck) {
-	if check.err == nil {
+func (c *LinkChecker) logEventLinkCheckFailure(ctx context.Context, check eventLinkCheck) {
+	// 운영 기본 레벨(info)에서는 실패 링크마다 마스킹 문자열을 만들지 않는다.
+	if check.err == nil || !c.logger.Enabled(ctx, slog.LevelDebug) {
 		return
 	}
 

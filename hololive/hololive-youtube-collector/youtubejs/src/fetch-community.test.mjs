@@ -7,6 +7,8 @@ import {
   listBackstagePosts,
 } from "./fetch-community.mjs";
 
+const innertubeUnavailablePattern = /innertube unavailable/;
+
 test("listBackstagePosts reads memo.getType", () => {
   const posts = listBackstagePosts(
     {
@@ -81,7 +83,7 @@ test("fetchCommunityFeed fail-closes on Innertube errors", async () => {
   };
   await assert.rejects(
     () => fetchCommunityFeed({ channelId: "UC_FAIL", innertube }),
-    /innertube unavailable/,
+    innertubeUnavailablePattern,
   );
 });
 

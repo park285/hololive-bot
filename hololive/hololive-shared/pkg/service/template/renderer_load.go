@@ -58,7 +58,7 @@ func (r *Renderer) resolveTemplate(ctx context.Context, key domain.TemplateKey, 
 	// 저장 완료 뒤 시작한 호출이 이전 버전의 진행 중 조회에 합류하지 않도록 먼저 확인합니다.
 	ck := cacheKey{templateKey: key}
 
-	err := r.pool.QueryRow(ctx, mustSQL("renderer_resolve.sql"), key, channelID, format).Scan(&ck.id, &ck.version, &ck.channelID)
+	err := r.pool.QueryRow(ctx, rendererResolveSQL, key, channelID, format).Scan(&ck.id, &ck.version, &ck.channelID)
 	if err != nil {
 		return cacheKey{}, templateQueryError(key, err)
 	}
@@ -140,7 +140,7 @@ func (r *Renderer) loadTemplate(ctx context.Context, ck cacheKey) (*template.Tem
 
 	// 이미 선택한 행만 읽어 기본값을 공유하는 다른 채널의 override가 섞이지 않게 합니다.
 	// 본문 수정은 실제 읽은 버전으로 저장하며 소스 소실만 제한된 재확인을 허용합니다.
-	err := r.pool.QueryRow(ctx, mustSQL("renderer_load.sql"), ck.id, ck.templateKey, ck.channelID).Scan(&body, &ck.version)
+	err := r.pool.QueryRow(ctx, rendererLoadSQL, ck.id, ck.templateKey, ck.channelID).Scan(&body, &ck.version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", errTemplateSourceChanged, ck.templateKey)
 	}

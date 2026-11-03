@@ -49,12 +49,16 @@ func (ma *MessageAdapter) tryBroadcastHistoryCommand(command string, args []stri
 	return &ParsedCommand{Type: botcommand.CommandBroadcastHistory, Params: parseBroadcastHistoryArgs(args), RawMessage: raw}, true
 }
 
+var broadcastHistoryCommandAliases = []string{"방송이력", "방송기록", "종료방송", "이전방송", "history", "broadcast_history"}
+
 func (ma *MessageAdapter) isBroadcastHistoryCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"방송이력", "방송기록", "종료방송", "이전방송", "history", "broadcast_history"}, cmd)
+	return stringutil.ContainsString(broadcastHistoryCommandAliases, cmd)
 }
 
+var broadcastThumbnailCommandAliases = []string{"방송썸네일", "썸네일", "썸네일다운", "썸네일다운로드", "thumbnail", "thumbnail_download", "thumbnaildownload", "broadcast_thumbnail"}
+
 func (ma *MessageAdapter) isBroadcastThumbnailCommand(cmd string) bool {
-	return stringutil.ContainsString([]string{"방송썸네일", "썸네일", "썸네일다운", "썸네일다운로드", "thumbnail", "thumbnail_download", "thumbnaildownload", "broadcast_thumbnail"}, cmd)
+	return stringutil.ContainsString(broadcastThumbnailCommandAliases, cmd)
 }
 
 func broadcastThumbnailCommand(args []string, raw string) *ParsedCommand {
@@ -383,12 +387,16 @@ func applyBroadcastHistoryLimitFilter(params map[string]any, value string) {
 	}
 }
 
+var broadcastThumbnailActionAliases = []string{"썸네일", "thumbnail", "thumb", "다운로드", "download"}
+
 func isBroadcastThumbnailAction(token string) bool {
-	return stringutil.ContainsString([]string{"썸네일", "thumbnail", "thumb", "다운로드", "download"}, stringutil.Normalize(token))
+	return stringutil.ContainsString(broadcastThumbnailActionAliases, stringutil.Normalize(token))
 }
 
+var allBroadcastHistoryTokens = []string{"전체", "전부", "모두", "all"}
+
 func isAllBroadcastHistoryToken(token string) bool {
-	return stringutil.ContainsString([]string{"전체", "전부", "모두", "all"}, token)
+	return stringutil.ContainsString(allBroadcastHistoryTokens, token)
 }
 
 func parseBroadcastHistoryDays(token string) (int, bool) {

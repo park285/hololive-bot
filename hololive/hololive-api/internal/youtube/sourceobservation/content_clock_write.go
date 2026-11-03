@@ -62,7 +62,7 @@ func contentClockStatement(clock *content.EntityState, coverage []byte) dbx.Stat
 
 	return dbx.Statement{
 		Operation: "upsert content evidence clock",
-		SQL:       mustSQL("repository_content_clock_upsert_0037_37.sql"),
+		SQL:       contentClockStatementSQL,
 		Args: []any{
 			clock.VideoID,
 			clock.FirstPositiveEffectiveAt,

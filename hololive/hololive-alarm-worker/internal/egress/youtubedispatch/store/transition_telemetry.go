@@ -156,7 +156,7 @@ func assignAttemptOrdinals(ctx context.Context, tx dbx.Querier, rows []domain.Yo
 		return fmt.Errorf("assign attempt ordinals: %d attempts share %d deliveries", len(rows), len(deliveryIDs))
 	}
 
-	queryRows, err := tx.Query(ctx, mustSQL("transition_telemetry_last_attempt.sql"), deliveryIDs)
+	queryRows, err := tx.Query(ctx, transitionTelemetryLastAttemptSQL, deliveryIDs)
 	if err != nil {
 		return fmt.Errorf("assign attempt ordinals: load last ordinals: %w", err)
 	}

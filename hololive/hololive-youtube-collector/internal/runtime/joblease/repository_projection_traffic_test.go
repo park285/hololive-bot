@@ -67,11 +67,11 @@ func (c *candidateTraffic) TraceQueryStart(ctx context.Context, _ *pgx.Conn, dat
 	c.statements.Add(1)
 
 	switch data.SQL {
-	case sqlProjectionCurrent, mustTestSQL("projection_260_bd498868a.sql"):
+	case currentProjectionGenerationSQL, projection260Bd498868aSQL:
 		c.headers.Add(1)
-	case sqlCandidates, sqlCandidatesGlobal:
+	case subjectCandidatesForProjectionSQL, globalCandidatesForProjectionSQL:
 		c.candidates.Add(1)
-	case mustTestSQL("candidate_260_bd498868a.sql"):
+	case candidate260Bd498868aSQL:
 		c.oracle.Add(1)
 	}
 
@@ -368,7 +368,7 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 
 	var generation int64
 
-	if err := f.pools[ap].QueryRow(ctx, mustTestSQL("projection_260_bd498868a.sql")).Scan(&generation); err != nil {
+	if err := f.pools[ap].QueryRow(ctx, projection260Bd498868aSQL).Scan(&generation); err != nil {
 		return CandidatePage{}, err
 	}
 
@@ -376,7 +376,7 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 		return CandidatePage{}, fmt.Errorf("이전 generation=%d 예상=%d", generation, f.generation)
 	}
 
-	rows, err := f.pools[ap].Query(ctx, mustTestSQL("candidate_260_bd498868a.sql"), f.arguments()...)
+	rows, err := f.pools[ap].Query(ctx, candidate260Bd498868aSQL, f.arguments()...)
 	if err != nil {
 		return CandidatePage{}, err
 	}
@@ -479,10 +479,10 @@ func (f *candidateTrafficFleet) explain(t *testing.T, state string) {
 func (f *candidateTrafficFleet) explainMode(t *testing.T, state, mode string) {
 	t.Helper()
 
-	query := sqlCandidates
+	query := subjectCandidatesForProjectionSQL
 
 	if f.legacy {
-		query = mustTestSQL("candidate_260_bd498868a.sql")
+		query = candidate260Bd498868aSQL
 	}
 
 	tx, err := f.base.Begin(t.Context())
@@ -610,7 +610,7 @@ func oracleCandidateSubjects(t *testing.T, pool *pgxpool.Pool, generation int64,
 		excluded = []string{}
 	}
 
-	rows, err := pool.Query(t.Context(), mustTestSQL("candidate_order_oracle.sql"), generation, []string{string(contract.KindCommunityPage)}, string(contract.ProviderYouTubeJS), "community_collect", excluded, limit)
+	rows, err := pool.Query(t.Context(), candidateOrderOracleSQL, generation, []string{string(contract.KindCommunityPage)}, string(contract.ProviderYouTubeJS), "community_collect", excluded, limit)
 	if err != nil {
 		t.Fatal(err)
 	}

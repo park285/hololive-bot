@@ -19,6 +19,13 @@ const (
 	alarmDispatchBacklogObservationTimeout  = 10 * time.Second
 )
 
+var alarmDispatchBacklogStatuses = []dispatchoutbox.Status{
+	dispatchoutbox.StatusPending,
+	dispatchoutbox.StatusRetry,
+	dispatchoutbox.StatusLeased,
+	dispatchoutbox.StatusSending,
+}
+
 type alarmDispatchBacklogSnapshotStore interface {
 	BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error)
 }
@@ -87,12 +94,7 @@ func (o *alarmDispatchBacklogObserver) observeBacklog(ctx context.Context) error
 		return fmt.Errorf("backlog snapshot: %w", err)
 	}
 
-	for _, status := range []dispatchoutbox.Status{
-		dispatchoutbox.StatusPending,
-		dispatchoutbox.StatusRetry,
-		dispatchoutbox.StatusLeased,
-		dispatchoutbox.StatusSending,
-	} {
+	for _, status := range alarmDispatchBacklogStatuses {
 		observeAlarmDispatchBacklogStatus(string(status), snapshot.RowsByStatus[status])
 	}
 

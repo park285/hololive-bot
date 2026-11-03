@@ -12,10 +12,14 @@ import {
 } from "./server.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 
+const channelIDMessagePattern = /channel_id/;
+const innertubeDownPattern = /innertube down/;
+const kindMessagePattern = /kind/;
+
 test("handleCommunityRequest requires channel_id", async () => {
   const result = await handleCommunityRequest(rpcBody({}), async () => ({}));
   assert.equal(result.status, 400);
-  assert.match(result.body.error.message, /channel_id/);
+  assert.match(result.body.error.message, channelIDMessagePattern);
 });
 
 test("handleCommunityRequest returns pagination metadata from the injected fetcher", async () => {
@@ -60,7 +64,7 @@ test("handleCommunityRequest reports an ordinary upstream failure without a succ
     },
   );
   assert.equal(result.status, 502);
-  assert.match(result.body.error.message, /innertube down/);
+  assert.match(result.body.error.message, innertubeDownPattern);
   assert.equal(result.body.error.code, "collection_failed");
   assert.equal(result.body.error.class, "TRANSIENT");
 });
@@ -96,13 +100,13 @@ test("handleCommunityRequest rejects invalid JSON", async () => {
 test("handleCommunityRequest rejects coercible non-string ids", async () => {
   const result = await handleCommunityRequest(rpcBody({ channel_id: { toString: "UC_FAKE" } }), async () => ({}));
   assert.equal(result.status, 400);
-  assert.match(result.body.error.message, /channel_id/);
+  assert.match(result.body.error.message, channelIDMessagePattern);
 });
 
 test("handleContentRequest requires kind", async () => {
   const result = await handleContentRequest(rpcBody({ channel_id: "UC_TEST" }), async () => ({}));
   assert.equal(result.status, 400);
-  assert.match(result.body.error.message, /kind/);
+  assert.match(result.body.error.message, kindMessagePattern);
 });
 
 test("handleContentRequest passes the upcoming flag and rejects the retired premiere field at the RPC boundary", async () => {

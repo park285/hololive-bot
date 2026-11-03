@@ -169,7 +169,7 @@ func loadTimeFinalizationState(ctx context.Context, tx dbx.Tx, videoID string) (
 		enqueuedAt          *time.Time
 	)
 
-	if err := tx.QueryRow(ctx, mustSQL("repository_live_time_finalization_state.sql"), videoID).Scan(
+	if err := tx.QueryRow(ctx, repositoryLiveTimeFinalizationStateSQL, videoID).Scan(
 		&state.TimesSource, &queue, &outcome, &attempts, &deferrals, &retryBase, &next, &observationID, &enqueuedAt,
 	); err != nil {
 		return timeFinalizationState{}, fmt.Errorf("load live time finalization: %w", err)
@@ -367,7 +367,7 @@ func persistTimeFinalization(ctx context.Context, tx dbx.Tx, write *timeFinaliza
 		sessionUpdated bool
 	)
 
-	err := tx.QueryRow(ctx, mustSQL("repository_live_time_finalization_write.sql"),
+	err := tx.QueryRow(ctx, repositoryLiveTimeFinalizationWriteSQL,
 		write.VideoID, write.Queue, write.Outcome, nullableText(write.Reason), write.Attempts, write.Deferrals,
 		write.RetryBaseAt, write.NextAttemptAt, write.LastAttemptAt, write.ObservationID,
 		write.ObservedStartedAt, write.ObservedEndedAt, write.StartedAt, write.EndedAt,

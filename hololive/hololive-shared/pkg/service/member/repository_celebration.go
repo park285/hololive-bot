@@ -10,7 +10,7 @@ import (
 )
 
 func (r *Repository) FindMembersWithCelebrationsInMonth(ctx context.Context, month, referenceYear int) ([]domain.CalendarEntry, error) {
-	query := fmt.Sprintf(mustSQL("repository_celebration_0013_01.sql"), celebrationMemberColumns, celebrationMemberColumns)
+	query := findMembersWithCelebrationsInMonthSQL
 
 	rows, err := r.pool.Query(ctx, query, month, referenceYear)
 	if err != nil {
@@ -84,7 +84,7 @@ const celebrationMemberColumns = `id, slug, channel_id, english_name, japanese_n
 	birthday, debut_date, official_link, units, chzzk_channel_id`
 
 func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day int) ([]*domain.Member, error) {
-	query := fmt.Sprintf(mustSQL("repository_celebration_0094_02.sql"), celebrationMemberColumns)
+	query := findMembersWithBirthdayOnSQL
 
 	rows, err := r.pool.Query(ctx, query, month, day)
 	if err != nil {
@@ -101,7 +101,7 @@ func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day i
 }
 
 func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, day, referenceYear int) ([]*domain.Member, error) {
-	query := fmt.Sprintf(mustSQL("repository_celebration_0112_03.sql"), celebrationMemberColumns)
+	query := findMembersWithAnniversaryOnSQL
 
 	rows, err := r.pool.Query(ctx, query, month, day, referenceYear)
 	if err != nil {

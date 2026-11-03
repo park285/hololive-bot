@@ -11,7 +11,9 @@ import (
 )
 
 // 실제 projection을 사용하되 DB 연결이나 쿼리 계획 검증을 대신하지 않습니다.
-var testListProjection = querySQL("list")
+var testListProjection = listSQL
+
+var listPlaceholderPattern = regexp.MustCompile(`\$(\d+)`)
 
 func TestListQueryAllFilterCombinations(t *testing.T) {
 	for mask := range 64 {
@@ -144,8 +146,6 @@ func FuzzListQueryBindings(f *testing.F) {
 	f.Add("", "", "", "")
 	f.Add("sent", "' OR TRUE--", "한글", "9223372036854775807")
 
-	placeholder := regexp.MustCompile(`\$(\d+)`)
-
 	f.Fuzz(func(t *testing.T, status, room, channel, before string) {
 		filter := Filter{Status: status, RoomID: room, ChannelID: channel, BeforeID: before}
 		query, args, err := buildListQuery(testListProjection, filter)
@@ -162,7 +162,7 @@ func FuzzListQueryBindings(f *testing.F) {
 			t.Fatalf("invalid bindings: %#v %v", args, err)
 		}
 
-		matches := placeholder.FindAllStringSubmatch(query, -1)
+		matches := listPlaceholderPattern.FindAllStringSubmatch(query, -1)
 		if len(matches) != len(args) {
 			t.Fatalf("placeholder count differs: %q %#v", query, args)
 		}

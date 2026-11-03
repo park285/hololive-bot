@@ -12,6 +12,9 @@ import {
   validateContentResponse,
 } from "./rpc-collection-validation.mjs";
 
+const invalidFailureTuplePattern = /invalid RPC failure tuple/;
+const terminationReasonRequiredPattern = /termination_reason is required/;
+
 test("rpcErrorResult accepts the closed status and class tuples", () => {
   assert.equal(rpcErrorResult(404, "invalid_request", "PROTOCOL", "unknown endpoint").status, 404);
   assert.equal(rpcErrorResult(408, "collection_timeout", "TIMEOUT", "request body timed out").status, 408);
@@ -21,7 +24,7 @@ test("rpcErrorResult accepts the closed status and class tuples", () => {
 test("rpcErrorResult rejects an impossible status and body tuple", () => {
   assert.throws(
     () => rpcErrorResult(500, "collection_failed", "TRANSIENT", "failed"),
-    /invalid RPC failure tuple/,
+    invalidFailureTuplePattern,
   );
 });
 
@@ -33,7 +36,7 @@ test("PAG-013 response validator requires termination_reason and rejects impossi
     exhausted: true,
     continuity: "CONTIGUOUS",
   };
-  assert.throws(() => validateCommunityResponse(base), /termination_reason is required/);
+  assert.throws(() => validateCommunityResponse(base), terminationReasonRequiredPattern);
   assert.throws(
     () => validateCommunityResponse({
       ...base,

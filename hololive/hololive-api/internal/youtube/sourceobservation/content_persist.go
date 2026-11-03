@@ -149,7 +149,7 @@ func persistContentFieldUpdates(ctx context.Context, tx dbx.Tx, updates []conten
 	for i := range updates {
 		statements = append(statements, dbx.Statement{
 			Operation: "update content video fields",
-			SQL:       mustSQL("repository_content_video_fields_0043_43.sql"),
+			SQL:       persistContentFieldUpdatesSQL,
 			Args: []any{
 				updates[i].VideoID,
 				boundedVideoTitle(updates[i].Title),
@@ -178,7 +178,7 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_content_absence_upsert_0039_39.sql"),
+		persistContentAbsenceSQL,
 		observation.SubjectKey,
 		observation.ObservationKind,
 		slot.ScheduledFor,
@@ -198,7 +198,7 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation, earliestComplete, earliestBaseline *time.Time) error {
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_content_channel_head_upsert_0041_41.sql"),
+		persistContentHeadSQL,
 		observation.SubjectKey,
 		observation.ObservationKind,
 		earliestComplete,

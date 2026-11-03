@@ -21,7 +21,7 @@ func (r *alarmStateRepository) FindAlarmStateByPostID(ctx context.Context, kind 
 
 	var row domain.YouTubeCommunityShortsAlarmState
 
-	found, err := dbx.GetSQL(ctx, r.db, &row, "find alarm state by post id: query row", mustSQL("alarm_state_repository_0022_01.sql"), normalizedKind, normalizedPostID)
+	found, err := dbx.GetSQL(ctx, r.db, &row, "find alarm state by post id: query row", findAlarmStateByPostIDSQL, normalizedKind, normalizedPostID)
 	if err != nil {
 		return nil, fmt.Errorf("get SQL: %w", err)
 	}

@@ -280,7 +280,7 @@ func TestRendererDifferentResolvedVersionsShareActualParse(t *testing.T) {
 	key := domain.TemplateKeyCmdHelp
 	old := cacheKey{templateKey: key}
 
-	if err := pool.QueryRow(t.Context(), mustSQL("renderer_resolve.sql"), key, "", domain.TemplateFormatPlain).Scan(&old.id, &old.version, &old.channelID); err != nil {
+	if err := pool.QueryRow(t.Context(), rendererResolveSQL, key, "", domain.TemplateFormatPlain).Scan(&old.id, &old.version, &old.channelID); err != nil {
 		t.Fatal(err)
 	}
 

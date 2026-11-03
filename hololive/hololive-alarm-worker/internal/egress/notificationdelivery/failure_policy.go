@@ -9,12 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-var (
-	markFailedSQL    = mustSQL("outbox_repository_0209_06.sql")
-	reissueFailedSQL = mustSQL("outbox_reissue_failed_request.sql")
-	saveRequestSQL   = mustSQL("outbox_save_request.sql")
-)
-
 // fence 미스의 처리 결과다. 각 값은 소유권이 남은 요청 미스에 소유자 fence가 걸린 실패 전이 적용(failed), 행을
 // 건드리지 않음(fence_lost), 그 실패 전이 자체의 DB 오류(transition_error)를 뜻한다.
 const (

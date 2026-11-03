@@ -9,6 +9,8 @@ import { rpcErrorResult, rpcErrorResultFor } from "./rpc-execution.mjs";
 import { channelLiveCheckEndpoint, videoLiveCheckEndpoint } from "./rpc-live-check-validation.mjs";
 import { failureTuples } from "./upstream-errors.mjs";
 
+const invalidFailureTuplePattern = /invalid RPC failure tuple/;
+
 // Go 클라이언트 테스트와 같은 fixture로 helper wire 계약의 실제 검증·오류 생성 동작을 확인합니다.
 const fixture = JSON.parse(readFileSync(new URL("../testdata/wire-contract.json", import.meta.url), "utf8"));
 
@@ -33,11 +35,11 @@ test("rpcErrorResult accepts exactly the fixture status and class tuples", () =>
       if (tuple.statuses.includes(status)) {
         assert.equal(build().status, status, `${code} ${status}`);
       } else {
-        assert.throws(build, /invalid RPC failure tuple/, `${code} ${status}`);
+        assert.throws(build, invalidFailureTuplePattern, `${code} ${status}`);
       }
     }
     const otherClass = tuple.class === "INTERNAL" ? "PROTOCOL" : "INTERNAL";
-    assert.throws(() => rpcErrorResult(tuple.statuses[0], code, otherClass, "failure"), /invalid RPC failure tuple/);
+    assert.throws(() => rpcErrorResult(tuple.statuses[0], code, otherClass, "failure"), invalidFailureTuplePattern);
   }
 });
 

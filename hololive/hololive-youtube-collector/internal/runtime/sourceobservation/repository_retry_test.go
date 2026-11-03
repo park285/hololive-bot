@@ -137,7 +137,7 @@ func TestPartialDeferSQLRejectsNonCooldownNotBefore(t *testing.T) {
 
 	var jobKey string
 
-	err := pool.QueryRow(t.Context(), sqlJobDefer,
+	err := pool.QueryRow(t.Context(), deferCollectionJobSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "failure", time.Now().Add(10*time.Minute), int64(100), int64(1000), true,
 	).Scan(&jobKey)

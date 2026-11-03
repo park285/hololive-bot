@@ -39,6 +39,8 @@ type deliveryAlarmSentTarget struct {
 	ContentID string            `db:"content_id"`
 }
 
+var alarmSentMarkOutboxKinds = deliverysql.Texts([]domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort})
+
 // LoadAlarmSentMarksForDeliveryIDs는 community/shorts 발송 행마다 같은 발송 시각의 tracking 발송 표시를 만든다.
 func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time) ([]observation.AlarmSentMark, error) {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
@@ -46,12 +48,10 @@ func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids [
 		return nil, nil
 	}
 
-	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
-
 	var targets []deliveryAlarmSentTarget
 
 	if err := dbx.SelectSQL(ctx, db, &targets, "query delivery alarm sent targets",
-		mustSQL("delivery_repository_tracking_0066_01.sql"), uniqueIDs, deliverysql.Texts(postKinds)); err != nil {
+		loadAlarmSentMarksForDeliveryIDsSQL, uniqueIDs, alarmSentMarkOutboxKinds); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)
 	}
 

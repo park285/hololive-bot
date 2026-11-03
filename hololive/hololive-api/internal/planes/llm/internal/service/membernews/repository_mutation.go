@@ -31,7 +31,7 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 		return errors.New("membernews repository pool is nil")
 	}
 
-	query := mustSQL("repository_mutation_0033_01.sql")
+	query := subscribeSQL
 
 	if err := r.pool.Exec(ctx, query, roomID, roomName); err != nil {
 		return fmt.Errorf("subscribe member news: %w", err)
@@ -45,7 +45,7 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 		return errors.New("membernews repository pool is nil")
 	}
 
-	query := mustSQL("repository_mutation_0054_02.sql")
+	query := unsubscribeSQL
 	if err := r.pool.Exec(ctx, query, roomID); err != nil {
 		return fmt.Errorf("unsubscribe member news: %w", err)
 	}

@@ -59,7 +59,7 @@ func (a HandoffAdmission) validate() error {
 // lockAdmissionRequest는 CompleteSent 트랜잭션에서 멤버 delivery보다 먼저 고정 요청을 잠근다. 요청의 세대와 고정 멤버가
 // 이번 발송의 세대·owner 전원과 다르면 SENT 전이 없이 conflict다.
 func lockAdmissionRequest(ctx context.Context, tx dbx.Querier, operation StartedOperation, admission HandoffAdmission) error {
-	rows, err := tx.Query(ctx, mustSQL("handoff_admit_lock.sql"),
+	rows, err := tx.Query(ctx, handoffAdmitLockSQL,
 		admission.RequestBaseID, admission.RequestGeneration, startedOwnerIDs(operation))
 	if err != nil {
 		return fmt.Errorf("lock admitted request: %w", err)
@@ -84,7 +84,7 @@ func lockAdmissionRequest(ctx context.Context, tx dbx.Querier, operation Started
 func recordAdmission(ctx context.Context, tx dbx.Querier, admission HandoffAdmission, sentAt time.Time) error {
 	firstCheck := min(handoffcheck.FirstCheckDelay, admission.Horizon)
 
-	tag, err := tx.Exec(ctx, mustSQL("handoff_admit.sql"),
+	tag, err := tx.Exec(ctx, handoffAdmitSQL,
 		admission.RequestBaseID, admission.IrisRequestID, sentAt, firstCheck.Milliseconds())
 	if err != nil {
 		return fmt.Errorf("record handoff admission: %w", err)
@@ -123,7 +123,7 @@ type handoffRequestState struct {
 func loadHandoffRequestState(ctx context.Context, db dbx.Querier, baseID string) (handoffRequestState, bool, error) {
 	var state handoffRequestState
 
-	err := db.QueryRow(ctx, mustSQL("handoff_request_state.sql"), baseID).
+	err := db.QueryRow(ctx, handoffRequestStateSQL, baseID).
 		Scan(&state.IrisRequestID, &state.Generation, &state.NextCheckAt, &state.CheckedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return handoffRequestState{}, false, nil
@@ -221,7 +221,7 @@ func (s *TransitionStore) ClaimHandoffDue(ctx context.Context, limit int, softCl
 		return nil, fmt.Errorf("claim youtube handoff checks: soft claim %s must be at least 1ms", softClaim)
 	}
 
-	rows, err := s.db.Query(ctx, mustSQL("handoff_claim_due.sql"), limit, softClaim.Milliseconds())
+	rows, err := s.db.Query(ctx, handoffClaimDueSQL, limit, softClaim.Milliseconds())
 	if err != nil {
 		return nil, fmt.Errorf("claim youtube handoff checks: %w", err)
 	}

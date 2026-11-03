@@ -90,7 +90,7 @@ func claimObservations(
 
 	rows, err := tx.Query(
 		ctx,
-		mustSQL("repository_claim_0012_12.sql"),
+		claimObservationsSQL,
 		kinds,
 		options.Limit,
 		options.LeaseOwner,
@@ -197,7 +197,7 @@ func (s *claimTerminalSet) deadLetter(ctx context.Context, tx dbx.Tx) error {
 		return nil
 	}
 
-	tag, err := tx.Exec(ctx, mustSQL("repository_claim_dead_letter.sql"), s.ids, s.codes)
+	tag, err := tx.Exec(ctx, repositoryClaimDeadLetterSQL, s.ids, s.codes)
 	if err != nil {
 		return fmt.Errorf("claim source observations: dead letter terminal rows: %w", err)
 	}
@@ -226,7 +226,7 @@ func (r *Repository) ReadySnapshot(ctx context.Context, kinds []contract.Observa
 		ageSeconds float64
 	)
 
-	if err := r.pool.QueryRow(ctx, mustSQL("repository_ready_snapshot.sql"), kindNames, maxAttempts).Scan(&values.Depth, &ageSeconds); err != nil {
+	if err := r.pool.QueryRow(ctx, repositoryReadySnapshotSQL, kindNames, maxAttempts).Scan(&values.Depth, &ageSeconds); err != nil {
 		return workercontract.QueueValues{}, fmt.Errorf("snapshot source observation ready queue: %w", err)
 	}
 

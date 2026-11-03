@@ -37,7 +37,7 @@ func TestAcquireBundleRechecksHeaderExpiryAfterGuard(t *testing.T) {
 		t.Fatalf("guard: %v %v", current, err)
 	}
 
-	if _, err := tx.Exec(t.Context(), mustTestSQL("expire_projection.sql"), generation); err != nil {
+	if _, err := tx.Exec(t.Context(), expireProjectionSQL, generation); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,7 +164,7 @@ func TestCandidatesObserveCurrentEligibilityAndHeaderExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := pool.Exec(t.Context(), mustTestSQL("set_not_before.sql"), generation, time.Hour.Milliseconds()); err != nil {
+	if _, err := pool.Exec(t.Context(), setNotBeforeSQL, generation, time.Hour.Milliseconds()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -189,7 +189,7 @@ func TestCandidatesObserveCurrentEligibilityAndHeaderExpiry(t *testing.T) {
 		t.Fatalf("취소된 header 조회: %v", err)
 	}
 
-	if _, err := pool.Exec(t.Context(), mustTestSQL("expire_projection.sql"), generation); err != nil {
+	if _, err := pool.Exec(t.Context(), expireProjectionSQL, generation); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,7 +230,7 @@ func TestAcquireSkipsLockedExpiredLease(t *testing.T) {
 	spec := communityJob()
 	mustAcquireLease(t, repository, spec, "collector-a")
 
-	if _, err := pool.Exec(t.Context(), mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+	if _, err := pool.Exec(t.Context(), expireLeaseSQL, spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 

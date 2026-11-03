@@ -203,23 +203,28 @@ func parseScannableBool(cleaned string) (*bool, bool) {
 	}
 }
 
-func parseScannableTime(cleaned string) (*time.Time, bool) {
-	for _, layout := range []string{
+var (
+	scannableTimeZonedLayouts = []string{
 		time.RFC3339Nano,
 		time.RFC3339,
 		"2006-01-02 15:04:05.999999999-07:00",
 		"2006-01-02 15:04:05-07:00",
-	} {
+	}
+	scannableTimeUTCLayouts = []string{
+		"2006-01-02 15:04:05.999999999",
+		time.DateTime,
+	}
+)
+
+func parseScannableTime(cleaned string) (*time.Time, bool) {
+	for _, layout := range scannableTimeZonedLayouts {
 		parsed, err := time.Parse(layout, cleaned)
 		if err == nil {
 			return normalizedTimePtr(parsed), true
 		}
 	}
 
-	for _, layout := range []string{
-		"2006-01-02 15:04:05.999999999",
-		time.DateTime,
-	} {
+	for _, layout := range scannableTimeUTCLayouts {
 		parsed, err := time.ParseInLocation(layout, cleaned, time.UTC)
 		if err == nil {
 			return normalizedTimePtr(parsed), true

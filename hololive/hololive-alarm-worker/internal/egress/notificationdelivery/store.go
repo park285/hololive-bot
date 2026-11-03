@@ -56,7 +56,7 @@ func (r *Store) fetchReadyAndLock(ctx context.Context, workerID string, batchSiz
 		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, claimReadySQL, batchSize, workerID, leaseMS, activeRooms, processedIDs)
+	rows, err := r.pool.Query(ctx, outboxClaimReadySQL, batchSize, workerID, leaseMS, activeRooms, processedIDs)
 	if err != nil {
 		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
 	}
@@ -77,7 +77,7 @@ func (r *Store) ReadySnapshot(ctx context.Context) (workercontract.QueueValues, 
 		ageSeconds float64
 	)
 
-	if err := r.pool.QueryRow(ctx, readySnapshotSQL).Scan(&depth, &ageSeconds); err != nil {
+	if err := r.pool.QueryRow(ctx, outboxReadySnapshotSQL).Scan(&depth, &ageSeconds); err != nil {
 		return workercontract.QueueValues{}, fmt.Errorf("sample ready notification deliveries: %w", err)
 	}
 
@@ -128,7 +128,7 @@ func (r *Store) MarkSending(ctx context.Context, id int64, workerID string, atte
 		return fmt.Errorf("%s: %w", actionMarkSending, err)
 	}
 
-	return r.applyFenced(ctx, actionMarkSending, id, mustSQL("outbox_repository_0172_04.sql"), id, workerID, attemptCount, leaseMS)
+	return r.applyFenced(ctx, actionMarkSending, id, markSendingSQL, id, workerID, attemptCount, leaseMS)
 }
 
 // MarkSent는 현재 worker가 claim 당시 시도 횟수로 소유한 SENDING 행만 SENT로 확정한다. 발송이 lease를 넘겨도 성공
@@ -147,13 +147,13 @@ func (r *Store) MarkSent(ctx context.Context, id int64, workerID string, attempt
 		return fmt.Errorf("%s: %w", actionMarkSent, err)
 	}
 
-	return r.applyFenced(ctx, actionMarkSent, id, mustSQL("outbox_repository_0189_05.sql"),
+	return r.applyFenced(ctx, actionMarkSent, id, markSentSQL,
 		id, workerID, attemptCount, irisRequestID, firstCheckMS)
 }
 
 // MarkQuarantined는 현재 worker의 같은 claim인 SENDING만 격리하며 자동 재발송 가능한 FAILED로 되돌리지 않습니다.
 func (r *Store) MarkQuarantined(ctx context.Context, id int64, workerID string, attemptCount int, reason string) error {
-	return r.applyFenced(ctx, actionMarkQuarantined, id, mustSQL("outbox_mark_quarantined.sql"), id, workerID, attemptCount, reason)
+	return r.applyFenced(ctx, actionMarkQuarantined, id, outboxMarkQuarantinedSQL, id, workerID, attemptCount, reason)
 }
 
 // MarkFailed는 claim 당시 횟수로 실패 정책을 정하고 동일 횟수·소유권인 행에만 적용합니다.
@@ -206,7 +206,7 @@ func (r *Store) cleanupInBatches(ctx context.Context, olderThanMS int64, batchSi
 	for {
 		var picked, deleted int64
 
-		if err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0279_09.sql"), olderThanMS, batchSize).Scan(&picked, &deleted); err != nil {
+		if err := r.pool.QueryRow(ctx, cleanupInBatchesSQL, olderThanMS, batchSize).Scan(&picked, &deleted); err != nil {
 			return total, fmt.Errorf("delete notification cleanup batch: %w", err)
 		}
 
@@ -249,7 +249,7 @@ func (r *Store) QuarantineStaleSending(ctx context.Context, olderThan time.Durat
 		return 0, fmt.Errorf("quarantine stale sending: %w", err)
 	}
 
-	tag, err := r.pool.Exec(ctx, mustSQL("outbox_repository_0301_10.sql"), olderThanMS, limit, staleSendingFailureReason)
+	tag, err := r.pool.Exec(ctx, quarantineStaleSendingSQL, olderThanMS, limit, staleSendingFailureReason)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}
@@ -264,7 +264,7 @@ func (r *Store) CountFailed(ctx context.Context) (int64, error) {
 
 	var count int64
 
-	if err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0330_11.sql")).Scan(&count); err != nil {
+	if err := r.pool.QueryRow(ctx, countFailedSQL).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count failed: %w", err)
 	}
 

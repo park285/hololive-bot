@@ -1059,16 +1059,16 @@ func deliveryTestColumnName(field *reflect.StructField) (string, bool) {
 	return deliveryTestSnakeCase(field.Name), true
 }
 
-func deliveryTestSnakeCase(name string) string {
-	replacer := strings.NewReplacer(
-		"ID", "Id",
-		"URL", "Url",
-		"HTTP", "Http",
-		"JSON", "Json",
-		"API", "Api",
-	)
+var deliveryTestInitialismReplacer = strings.NewReplacer(
+	"ID", "Id",
+	"URL", "Url",
+	"HTTP", "Http",
+	"JSON", "Json",
+	"API", "Api",
+)
 
-	name = replacer.Replace(name)
+func deliveryTestSnakeCase(name string) string {
+	name = deliveryTestInitialismReplacer.Replace(name)
 
 	var out strings.Builder
 

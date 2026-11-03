@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"embed"
 	"encoding/hex"
 	jsonv2 "encoding/json/v2"
 	"errors"
@@ -20,17 +19,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
 
-//go:embed queries/*.sql
-var sqlFiles embed.FS
-
-var (
-	mustSQL       = sqlassets.MustReader(sqlFiles, "queries")
-	cookiePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,512}$`)
-)
+var cookiePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,512}$`)
 
 // ErrDisabled는 세션 저장용 키 파일이 설정되지 않았음을 나타낸다.
 var ErrDisabled = errors.New("x session store disabled")
@@ -203,7 +194,7 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 		return status, nil
 	}
 
-	err := s.pool.QueryRow(ctx, mustSQL("status.sql")).Scan(&status.Revision, &status.State,
+	err := s.pool.QueryRow(ctx, statusSQL).Scan(&status.Revision, &status.State,
 		&status.CandidateState, &status.LastError, &status.CandidateError, &status.LastCheckedAt, &status.LastSuccessAt, &status.NextCheckAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return status, nil
@@ -240,7 +231,7 @@ func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, e
 		return false, err
 	}
 
-	result, err := s.pool.Exec(ctx, mustSQL("submit.sql"), sealed, revision)
+	result, err := s.pool.Exec(ctx, submitSQL, sealed, revision)
 	if err != nil {
 		return false, fmt.Errorf("submit X session candidate: %w", err)
 	}
@@ -255,7 +246,7 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 		active, candidate []byte
 	)
 
-	err := s.pool.QueryRow(ctx, mustSQL("snapshot.sql")).Scan(&snapshot.Revision, &snapshot.ActiveRevision, &active, &candidate, &snapshot.NextCheckAt, &snapshot.State, &snapshot.LastError)
+	err := s.pool.QueryRow(ctx, snapshotSQL).Scan(&snapshot.Revision, &snapshot.ActiveRevision, &active, &candidate, &snapshot.NextCheckAt, &snapshot.State, &snapshot.LastError)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return snapshot, nil
@@ -285,17 +276,17 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 // ResolveCandidate는 검증 성공 시에만 후보를 승격한다. 세대가 다른 결과는 반영하지 않는다.
 // Rejection은 authentication만 허용하며 기존 활성 인증을 보존한다.
 func (s *Store) ResolveCandidate(ctx context.Context, revision int64, rejection string) (bool, error) {
-	query := "promote.sql"
+	query := promoteSQL
 
 	if rejection != "" {
 		if rejection != "authentication" {
 			return false, errors.New("invalid X session rejection")
 		}
 
-		query = "reject.sql"
+		query = rejectSQL
 	}
 
-	result, err := s.pool.Exec(ctx, mustSQL(query), revision, rejection)
+	result, err := s.pool.Exec(ctx, query, revision, rejection)
 	if err != nil {
 		return false, fmt.Errorf("resolve X session candidate: %w", err)
 	}
@@ -324,7 +315,7 @@ func (s *Store) Observe(ctx context.Context, activeRevision int64, code string, 
 		return false, errors.New("invalid X observation error code")
 	}
 
-	result, err := s.pool.Exec(ctx, mustSQL("observe.sql"), activeRevision, state, code, next, code == "")
+	result, err := s.pool.Exec(ctx, observeSQL, activeRevision, state, code, next, code == "")
 	if err != nil {
 		return false, fmt.Errorf("record X session observation: %w", err)
 	}
@@ -349,7 +340,7 @@ func (s *Store) CandidateFailure(ctx context.Context, revision int64, code strin
 		return errors.New("invalid candidate failure code")
 	}
 
-	_, err := s.pool.Exec(ctx, mustSQL("candidate_failure.sql"), revision, code, next)
+	_, err := s.pool.Exec(ctx, candidateFailureSQL, revision, code, next)
 	if err != nil {
 		return fmt.Errorf("record X candidate failure: %w", err)
 	}

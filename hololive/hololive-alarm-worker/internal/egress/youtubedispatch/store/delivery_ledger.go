@@ -10,11 +10,6 @@ import (
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
-var (
-	recordSentLedgerSQL        = mustSQL("delivery_ledger_record_sent.sql")
-	recordQuarantinedLedgerSQL = mustSQL("delivery_ledger_record_quarantined.sql")
-)
-
 // LedgerStatus는 논리 전송에 저장하는 단방향 종단 상태다.
 type LedgerStatus string
 
@@ -79,10 +74,10 @@ func RecordDeliveryLedgerWrites(
 		sourceDeliveryIDs = append(sourceDeliveryIDs, writes[i].SourceDeliveryID)
 	}
 
-	query := recordSentLedgerSQL
+	query := deliveryLedgerRecordSentSQL
 
 	if status == LedgerStatusQuarantined {
-		query = recordQuarantinedLedgerSQL
+		query = deliveryLedgerRecordQuarantinedSQL
 	}
 
 	// 호출부는 오류만 받습니다. 기존 증거를 유지한 no-op도 성공이며,

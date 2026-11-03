@@ -318,7 +318,7 @@ func (r *pgBroadcastHistoryRepository) GetEndedBroadcast(ctx context.Context, qu
 		return nil, handlercore.ErrBroadcastNotFound
 	}
 
-	row := r.pool.QueryRow(ctx, broadcastHistoryGetByVideoIDSQL, query.VideoID)
+	row := r.pool.QueryRow(ctx, getEndedBroadcastSQL, query.VideoID)
 
 	entry, err := scanBroadcastHistoryRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -330,19 +330,6 @@ func (r *pgBroadcastHistoryRepository) GetEndedBroadcast(ctx context.Context, qu
 	}
 
 	return &entry, nil
-}
-
-// 전체·채널 목록을 다른 문장으로 준비합니다. 빈 채널이면 참이 되는 OR 조건으로 한 문장에 두면 generic plan에서
-// 채널 조건이 채널 정렬 인덱스의 key가 되지 못하고 다른 채널 행을 건너뛰며 읽습니다. 전체 목록의 $1 조건은
-// 매개변수 형식을 정하고 빈 채널로만 호출됨을 확인합니다.
-var (
-	broadcastHistoryAllChannelsPageSQL = broadcastHistoryListPageSQL(`$1::text = ''`)
-	broadcastHistoryChannelPageSQL     = broadcastHistoryListPageSQL(`s.channel_id = $1`)
-	broadcastHistoryGetByVideoIDSQL    = mustSQL("broadcast_history_repository_0242_02.sql")
-)
-
-func broadcastHistoryListPageSQL(channelPredicate string) string {
-	return strings.ReplaceAll(mustSQL("broadcast_history_repository_0179_01.sql"), "{{channelPredicate}}", channelPredicate)
 }
 
 func broadcastHistoryPageSQL(channelID string) string {

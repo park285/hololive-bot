@@ -63,7 +63,7 @@ if [[ -d "${canonical_queries}" ]]; then
       in_outbox_insert && /DO[[:space:]]+UPDATE/ {
         print FILENAME ":" FNR ":" $0
       }
-    ' "${canonical_queries}"/repository_batch_writes_*.sql
+    ' "${canonical_queries}"/{upsert_videos_chunk,upsert_videos_chunk_2,upsert_community_posts_chunk,upsert_community_posts_chunk_2,insert_notifications_same_kind_chunk,insert_notifications_same_kind_chunk_2,upsert_watermark}.sql
   )"
 else
   echo "[FAIL] canonical writer SQL directory missing: ${canonical_queries}" >&2

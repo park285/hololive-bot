@@ -210,7 +210,7 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 	}
 
 	if d.completeLifecycleSent(ctx, attempt, store.DeliveryModePerRoom, result) {
-		d.recordPerRoomSuccess(attempt, result)
+		d.recordPerRoomSuccess(ctx, attempt, result)
 	}
 }
 
@@ -469,7 +469,7 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 		}
 
 		if d.completeLifecycleSent(ctx, &singleton, store.DeliveryModePerRoom, result) {
-			d.recordPerRoomSuccess(&singleton, result)
+			d.recordPerRoomSuccess(ctx, &singleton, result)
 		}
 	}
 }

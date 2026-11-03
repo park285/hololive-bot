@@ -60,7 +60,7 @@ func (r *Runtime) observePendingQueue(ctx context.Context) {
 	defer cancel()
 
 	err := r.withDB(queryCtx, dbOperationQueueSnapshot, func(ctx context.Context) error {
-		return r.pool.QueryRow(ctx, mustSQL("queue_observability.sql")).Scan(&pending, &processing, &oldestAgeSeconds, &deadLetterExists)
+		return r.pool.QueryRow(ctx, queueObservabilitySQL).Scan(&pending, &processing, &oldestAgeSeconds, &deadLetterExists)
 	})
 
 	recordQueueObservation(pending, processing, oldestAgeSeconds, r.now(), err)

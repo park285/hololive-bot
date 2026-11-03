@@ -12,6 +12,8 @@ const bodyLimit = 512 * 1024;
 const minimumAttemptInterval = 300_000;
 const maximumLifetime = 43_200_000;
 const expiryMargin = 30_000;
+const interpreterPathPattern = /^\/js\/th\/[A-Za-z0-9_-]+\.js$/;
+const integrityTokenPattern = /^[A-Za-z0-9+/_-]+={0,2}$/;
 
 /** @typedef {{ generation: string, deadline: number, refreshAt: number, expiresAt: string }} ProofSession */
 
@@ -188,7 +190,7 @@ export class ProofController {
         throw new ProofError("interpreter_url");
       }
       if (url.protocol !== "https:" || url.hostname !== "www.google.com" || url.port ||
-          url.username || url.password || url.search || url.hash || !/^\/js\/th\/[A-Za-z0-9_-]+\.js$/.test(url.pathname)) {
+          url.username || url.password || url.search || url.hash || !interpreterPathPattern.test(url.pathname)) {
         throw new ProofError("interpreter_url");
       }
       interpreter = await upstream(url.href, undefined);
@@ -201,7 +203,7 @@ export class ProofController {
     const requestedWall = this.wallClock();
     const integrity = parseJSON(await upstream(integrityURL, [requestKey, snapshot]));
     if (!Array.isArray(integrity) || !text(integrity[0], 8_192) ||
-        !/^[A-Za-z0-9+/_-]+={0,2}$/.test(integrity[0]) || !Number.isSafeInteger(integrity[1]) || integrity[1] <= 0) {
+        !integrityTokenPattern.test(integrity[0]) || !Number.isSafeInteger(integrity[1]) || integrity[1] <= 0) {
       throw new ProofError("integrity_structure");
     }
     const lifetime = Math.min(integrity[1] * 1_000, maximumLifetime);

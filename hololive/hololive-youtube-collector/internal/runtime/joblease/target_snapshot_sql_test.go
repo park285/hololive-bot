@@ -20,7 +20,7 @@ func TestProjectionTargetSnapshotSQLBoundsOnlyNonNullRows(t *testing.T) {
 	})
 	requested := []string{string(contract.KindLiveSnapshot), string(contract.KindSchedule)}
 
-	rows, err := pool.Query(ctx, mustSQL("repository_target_snapshot_projection_0144_16.sql"), generation, requested, 1)
+	rows, err := pool.Query(ctx, loadProjectionSQL, generation, requested, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

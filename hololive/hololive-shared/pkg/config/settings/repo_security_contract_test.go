@@ -14,6 +14,8 @@ import (
 	shortlinkcontracts "github.com/kapu/hololive-shared/pkg/contracts/shortlink"
 )
 
+var nginxLocationPattern = regexp.MustCompile(`(?m)^\s*location\s+`)
+
 const centralIngressBindPlaceholder = "@BIND_IP@"
 
 func repoRootFromConfigTest(t *testing.T) string {
@@ -101,7 +103,7 @@ func assertShortLinkIngressBoundary(t *testing.T, cfg renderedCompose) {
 
 func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 	publicTemplate := readRepoFile(t, "deploy/nginx/holoshi-public-shortlink.conf")
-	if count := len(regexp.MustCompile(`(?m)^\s*location\s+`).FindAllString(publicTemplate, -1)); count != 3 {
+	if count := len(nginxLocationPattern.FindAllString(publicTemplate, -1)); count != 3 {
 		t.Fatalf("public ingress location count = %d, want 3", count)
 	}
 

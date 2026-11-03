@@ -2,7 +2,6 @@ package livequery
 
 import (
 	"context"
-	"embed"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -12,13 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
-
-//go:embed queries/*.sql
-var queryFiles embed.FS
-
-var snapshotSQL = sqlassets.MustReader(queryFiles, "queries")("snapshot.sql")
 
 const (
 	queryBudget = time.Second

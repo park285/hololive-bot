@@ -36,14 +36,15 @@ func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.Alar
 	return record, insertDuplicateResult(record.Status), nil
 }
 
+var insertDuplicateTerminalStatuses = map[Status]struct{}{
+	StatusSent:        {},
+	StatusDLQ:         {},
+	StatusQuarantined: {},
+	StatusCancelled:   {},
+}
+
 func insertDuplicateResult(status Status) InsertResult {
-	terminal := map[Status]struct{}{
-		StatusSent:        {},
-		StatusDLQ:         {},
-		StatusQuarantined: {},
-		StatusCancelled:   {},
-	}
-	if _, ok := terminal[status]; ok {
+	if _, ok := insertDuplicateTerminalStatuses[status]; ok {
 		return DuplicateTerminal
 	}
 

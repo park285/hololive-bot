@@ -25,7 +25,7 @@ func (r *Store) saveRequest(ctx context.Context, id int64, workerID string, atte
 		return fmt.Errorf("encode delivery request: %w", err)
 	}
 
-	return r.applyFenced(ctx, actionSaveRequest, id, saveRequestSQL, id, workerID, attemptCount, string(requestJSON))
+	return r.applyFenced(ctx, actionSaveRequest, id, outboxSaveRequestSQL, id, workerID, attemptCount, string(requestJSON))
 }
 
 func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, payload deliverypayload.Payload) (*deliverypayload.Request, bool) {
@@ -117,7 +117,7 @@ func (r *Store) reissueFailedRequest(ctx context.Context, id int64, workerID str
 		reason = "client request ID generations exhausted: " + reason
 	}
 
-	return r.applyFenced(ctx, actionReissueRequest, id, reissueFailedSQL,
+	return r.applyFenced(ctx, actionReissueRequest, id, outboxReissueFailedRequestSQL,
 		id, workerID, attemptCount, generation, exhaust, status, durationMilliseconds(backoff), reason, status == domain.DeliveryStatusPending,
 	)
 }

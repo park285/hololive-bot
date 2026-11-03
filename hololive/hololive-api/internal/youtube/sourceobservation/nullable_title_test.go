@@ -11,6 +11,9 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
+// 단건 세션 조회 문장은 시험만 쓴다.
+var liveSessionForUpdateSQL = mustSQL("live_session_for_update.sql")
+
 func TestNullableLiveTitleConsumerPreservesLifecycle(t *testing.T) {
 	for _, origin := range []string{"metadata_only", "legacy_unknown"} {
 		t.Run(origin, func(t *testing.T) {
@@ -60,7 +63,7 @@ func TestNullableLiveTitleSingleAndBatchLookup(t *testing.T) {
 			}
 
 			require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
-				rows, err := tx.Query(ctx, mustSQL("repository_live_session_one_0060_60.sql"), testVideoID)
+				rows, err := tx.Query(ctx, liveSessionForUpdateSQL, testVideoID)
 				require.NoError(t, err)
 
 				defer rows.Close()

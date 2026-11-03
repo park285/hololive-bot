@@ -12,6 +12,16 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
+// alarm state upsert의 병합 식은 상수 조각만으로 정해지므로 호출마다 조립하지 않고 초기화 때 한 번 만든다.
+const alarmStateFinalAlarmSentExpr = `CASE
+                WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
+                WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_community_shorts_alarm_states.alarm_sent_at
+                WHEN EXCLUDED.alarm_sent_at < youtube_community_shorts_alarm_states.alarm_sent_at THEN EXCLUDED.alarm_sent_at
+                ELSE youtube_community_shorts_alarm_states.alarm_sent_at
+            END`
+
+var alarmStateDeliveryStatusExpr = buildAlarmStateDeliveryStatusExpr(alarmStateFinalAlarmSentExpr)
+
 func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsAlarmState) error {
 	if len(records) == 0 {
 		return nil
@@ -27,13 +37,7 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
 	}
 
 	now := yttimestamp.Normalize(time.Now())
-	finalAlarmSentExpr := `CASE
-                WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
-                WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_community_shorts_alarm_states.alarm_sent_at
-                WHEN EXCLUDED.alarm_sent_at < youtube_community_shorts_alarm_states.alarm_sent_at THEN EXCLUDED.alarm_sent_at
-                ELSE youtube_community_shorts_alarm_states.alarm_sent_at
-            END`
-	query, args := buildAlarmStateUpsertQuery(normalized, now, finalAlarmSentExpr)
+	query, args := buildAlarmStateUpsertQuery(normalized, now, alarmStateFinalAlarmSentExpr, alarmStateDeliveryStatusExpr)
 
 	if _, err := dbx.ExecSQL(ctx, r.db, "upsert alarm state batch: exec query", query, args...); err != nil {
 		return fmt.Errorf("exec SQL: %w", err)
@@ -53,6 +57,7 @@ func buildAlarmStateUpsertQuery(
 	normalized []*domain.YouTubeCommunityShortsAlarmState,
 	now time.Time,
 	finalAlarmSentExpr string,
+	deliveryStatusExpr string,
 ) (string, []any) {
 	const columnsPerRow = 10
 
@@ -60,7 +65,7 @@ func buildAlarmStateUpsertQuery(
 
 	var sb strings.Builder
 
-	sb.WriteString(mustSQL("alarm_state_repository_upsert_0084_01.sql"))
+	sb.WriteString(buildAlarmStateUpsertQuerySQL)
 
 	for i, record := range normalized {
 		if i > 0 {
@@ -83,11 +88,11 @@ func buildAlarmStateUpsertQuery(
 		)
 	}
 
-	sb.WriteString(mustSQL("alarm_state_repository_upsert_0108_02.sql"))
+	sb.WriteString(buildAlarmStateUpsertQuery2SQL)
 	sb.WriteString(finalAlarmSentExpr)
 	sb.WriteString(`,
             delivery_status = `)
-	sb.WriteString(buildAlarmStateDeliveryStatusExpr(finalAlarmSentExpr))
+	sb.WriteString(deliveryStatusExpr)
 	sb.WriteString(`,
             updated_at = EXCLUDED.updated_at
     `)

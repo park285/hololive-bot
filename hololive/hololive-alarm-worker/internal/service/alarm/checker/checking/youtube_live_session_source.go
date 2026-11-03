@@ -109,7 +109,7 @@ func (s *PgYouTubeLiveSessionSource) queryPersistedRecentSessions(
 
 	var rows []domain.YouTubeLiveSession
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0085_01.sql"), channelIDs, domain.LiveStatusLive, liveSince, domain.LiveStatusUpcoming, now.UTC(), upcomingUntil, liveSince); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, queryPersistedRecentSessionsSQL, channelIDs, domain.LiveStatusLive, liveSince, domain.LiveStatusUpcoming, now.UTC(), upcomingUntil, liveSince); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
@@ -159,7 +159,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 
 	var rows []string
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0132_02.sql"), uniqueChannelIDs, domain.LiveStatusLive, liveSince, now.UTC()); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, loadRecentLiveChannelIDsSQL, uniqueChannelIDs, domain.LiveStatusLive, liveSince, now.UTC()); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
@@ -195,7 +195,7 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 
 	var rows []string
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0175_03.sql"), persistedAlarmDispatchEventLiveType, streamIDs, sinces); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, recentlyDispatchedStreamIDsSQL, persistedAlarmDispatchEventLiveType, streamIDs, sinces); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
@@ -281,7 +281,7 @@ func (s *PgYouTubeLiveSessionSource) queryRecentlySettledLiveStreamRooms(
 ) ([]settledLiveStreamRoomRow, error) {
 	var rows []settledLiveStreamRoomRow
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), sinces, terminalFailedDeliveryStatuses, alarmkeys.NotificationCategoryLiveCatchup); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, queryRecentlySettledLiveStreamRoomsSQL, persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), sinces, terminalFailedDeliveryStatuses, alarmkeys.NotificationCategoryLiveCatchup); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
@@ -332,7 +332,7 @@ func (s *PgYouTubeLiveSessionSource) LoadConfirmedPremiereIDs(
 
 	var rows []string
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0293_05.sql"), videoIDs); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, loadConfirmedPremiereIDsSQL, videoIDs); err != nil {
 		return nil, fmt.Errorf("select confirmed premiere ids: %w", err)
 	}
 
@@ -451,7 +451,7 @@ func (s *PgYouTubeLiveSessionSource) loadOfficialCollaboTalentNames(
 ) (map[string][]string, error) {
 	var rows []officialScheduleCollaboTalentRow
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_schedule_collabo_talents_0232_05.sql"), videoIDs); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, loadOfficialCollaboTalentNamesSQL, videoIDs); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
