@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -17,19 +19,53 @@ func (f calendarFinderFunc) FindMembersWithCelebrationsInMonth(ctx context.Conte
 	return f(ctx, month, year)
 }
 
-func TestCachedCalendarFinderFollowerCancellationReturnsBeforeSharedLookup(t *testing.T) {
-	dir := t.TempDir()
+// memoryCalendarCache는 synctest bubble 안에서 쓰는 메모리 공유 cache다. 만료는 bubble의 가짜 시간을 따른다.
+type memoryCalendarCache struct {
+	mu     sync.Mutex
+	values map[string]memoryCalendarCacheValue
+}
 
+type memoryCalendarCacheValue struct {
+	data  []byte
+	until time.Time
+}
+
+func (c *memoryCalendarCache) Get(_ context.Context, key string) ([]byte, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	value, ok := c.values[key]
+	if !ok || !time.Now().Before(value.until) {
+		return nil, false, nil
+	}
+
+	return bytes.Clone(value.data), true, nil
+}
+
+func (c *memoryCalendarCache) Set(_ context.Context, key string, data []byte, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.values == nil {
+		c.values = make(map[string]memoryCalendarCacheValue)
+	}
+
+	c.values[key] = memoryCalendarCacheValue{data: bytes.Clone(data), until: time.Now().Add(ttl)}
+
+	return nil
+}
+
+func TestCachedCalendarFinderFollowerCancellationReturnsBeforeSharedLookup(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		release := make(chan struct{})
-		finder := newCachedCelebrationCalendarFinder(calendarFinderFunc(func(context.Context, int, int) ([]domain.CalendarEntry, error) {
+		finder := NewCachedCelebrationCalendarFinder(calendarFinderFunc(func(context.Context, int, int) ([]domain.CalendarEntry, error) {
 			<-release
 
 			return []domain.CalendarEntry{}, nil
-		}), dir, time.Hour, time.Now)
+		}), &memoryCalendarCache{}, time.Hour)
 
 		if finder == nil {
-			t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+			t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 		}
 
 		leaderResult := make(chan error, 1)
@@ -73,18 +109,16 @@ func TestCachedCalendarFinderFollowerCancellationReturnsBeforeSharedLookup(t *te
 }
 
 func TestCachedCalendarFinderLeaderCancellationDoesNotFailLiveFollower(t *testing.T) {
-	dir := t.TempDir()
-
 	synctest.Test(t, func(t *testing.T) {
 		release := make(chan struct{})
-		finder := newCachedCelebrationCalendarFinder(calendarFinderFunc(func(ctx context.Context, _, _ int) ([]domain.CalendarEntry, error) {
+		finder := NewCachedCelebrationCalendarFinder(calendarFinderFunc(func(ctx context.Context, _, _ int) ([]domain.CalendarEntry, error) {
 			<-release
 
 			return []domain.CalendarEntry{}, ctx.Err()
-		}), dir, time.Hour, time.Now)
+		}), &memoryCalendarCache{}, time.Hour)
 
 		if finder == nil {
-			t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+			t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 		}
 
 		leaderCtx, cancel := context.WithCancel(t.Context())
@@ -120,20 +154,18 @@ func TestCachedCalendarFinderLeaderCancellationDoesNotFailLiveFollower(t *testin
 }
 
 func TestCachedCalendarFinderAbandonedLookupHasOwnedDeadline(t *testing.T) {
-	dir := t.TempDir()
-
 	synctest.Test(t, func(t *testing.T) {
 		finished := make(chan error, 1)
-		finder := newCachedCelebrationCalendarFinder(calendarFinderFunc(func(ctx context.Context, _, _ int) ([]domain.CalendarEntry, error) {
+		finder := NewCachedCelebrationCalendarFinder(calendarFinderFunc(func(ctx context.Context, _, _ int) ([]domain.CalendarEntry, error) {
 			<-ctx.Done()
 
 			finished <- ctx.Err()
 
 			return nil, ctx.Err()
-		}), dir, time.Hour, time.Now)
+		}), &memoryCalendarCache{}, time.Hour)
 
 		if finder == nil {
-			t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+			t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 		}
 
 		ctx, cancel := context.WithCancel(t.Context())
@@ -158,12 +190,12 @@ func TestCachedCalendarFinderAbandonedLookupHasOwnedDeadline(t *testing.T) {
 
 func TestCachedCalendarFinderSharedLookupPanicReturnsError(t *testing.T) {
 	cause := errors.New("calendar repository panic")
-	finder := newCachedCelebrationCalendarFinder(calendarFinderFunc(func(context.Context, int, int) ([]domain.CalendarEntry, error) {
+	finder := NewCachedCelebrationCalendarFinder(calendarFinderFunc(func(context.Context, int, int) ([]domain.CalendarEntry, error) {
 		panic(cause)
-	}), t.TempDir(), time.Hour, time.Now)
+	}), &memoryCalendarCache{}, time.Hour)
 
 	if finder == nil {
-		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+		t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 	}
 
 	_, err := finder.FindMembersWithCelebrationsInMonth(t.Context(), 10, 2026)

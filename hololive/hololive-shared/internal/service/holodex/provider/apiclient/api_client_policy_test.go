@@ -34,7 +34,7 @@ func policyResponse(status int, retryAfter string) *http.Response {
 func newPolicyClient(t *testing.T, cfg settings.HolodexConfig, transport policyTransport) *APIClient {
 	t.Helper()
 
-	client, err := NewHolodexAPIClient(&http.Client{Transport: transport}, "https://holodex.example/api/v2", testAPIKey, slog.Default(), nil, &cfg)
+	client, err := NewHolodexAPIClient(&http.Client{Transport: transport}, "https://holodex.example/api/v2", testAPIKey, slog.Default(), nil, nil, &cfg)
 	if err != nil {
 		t.Fatalf("NewHolodexAPIClient() = %v", err)
 	}
@@ -261,7 +261,7 @@ func TestNewHolodexAPIClientRejectsInvalidConcurrency(t *testing.T) {
 
 			cfg.Concurrency.MaxConcurrentRequests = concurrency
 
-			client, err := NewHolodexAPIClient(nil, "https://holodex.example", testAPIKey, slog.Default(), nil, &cfg)
+			client, err := NewHolodexAPIClient(nil, "https://holodex.example", testAPIKey, slog.Default(), nil, nil, &cfg)
 
 			if client != nil || err == nil || !strings.Contains(err.Error(), "MaxConcurrentRequests") {
 				t.Fatalf("constructor = (%v, %v), want config error", client, err)
@@ -275,9 +275,9 @@ func TestAPIClientRetainsLongestCooldown(t *testing.T) {
 		client := &APIClient{}
 		start := time.Now()
 
-		client.rememberRetryAfter("10")
-		client.rememberRetryAfter("1")
-		client.rememberRetryAfter("malformed")
+		client.rememberRetryAfter(t.Context(), "10")
+		client.rememberRetryAfter(t.Context(), "1")
+		client.rememberRetryAfter(t.Context(), "malformed")
 
 		if err := client.waitForCooldown(t.Context()); err != nil {
 			t.Fatal(err)
@@ -480,10 +480,10 @@ func TestAPIClientCooldownExtensionPreservesRequestSpacing(t *testing.T) {
 
 		start := time.Now()
 
-		client.rememberRetryAfter("5")
+		client.rememberRetryAfter(t.Context(), "5")
 		time.Sleep(time.Second)
 		// 이미 cooldown을 기다리는 호출도 연장된 시각을 재확인해야 합니다.
-		client.rememberRetryAfter("10")
+		client.rememberRetryAfter(t.Context(), "10")
 
 		for range 3 {
 			if err := <-results; err != nil {
@@ -539,7 +539,7 @@ func TestAPIClientRefreshesAdmissionAfterCooldownDuringDistributedWait(t *testin
 			return ratelimitvalkey.Decision{Allowed: true}, nil
 		})
 
-		go func() { time.Sleep(100 * time.Millisecond); client.rememberRetryAfter("5") }()
+		go func() { time.Sleep(100 * time.Millisecond); client.rememberRetryAfter(t.Context(), "5") }()
 
 		if _, err := client.DoRequest(t.Context(), http.MethodGet, "/live", nil); err != nil {
 			t.Fatal(err)
@@ -593,7 +593,7 @@ func TestAPIClientLongDistributedWaitPreservesActualRequestSpacing(t *testing.T)
 
 		synctest.Wait()
 		time.Sleep(100 * time.Millisecond)
-		client.rememberRetryAfter("5")
+		client.rememberRetryAfter(t.Context(), "5")
 
 		for range 3 {
 			if err := <-results; err != nil {
@@ -718,7 +718,7 @@ func TestAPIClientAdmissionCancellationPreservesCooldown(t *testing.T) {
 			t.Fatalf("admission gate cancellation = %v", err)
 		}
 
-		client.rememberRetryAfter("5")
+		client.rememberRetryAfter(t.Context(), "5")
 
 		if err := <-firstResult; !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("distributed wait cancellation = %v", err)

@@ -3,13 +3,8 @@ package handlers
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
@@ -17,9 +12,11 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const (
@@ -28,48 +25,37 @@ const (
 )
 
 type cachedCelebrationCalendarFinder struct {
-	base handlercore.CelebrationCalendarFinder
-	dir  string
-	ttl  time.Duration
-	now  func() time.Time
+	base  handlercore.CelebrationCalendarFinder
+	store sharedcache.Store
+	ttl   time.Duration
 
 	flights singleflight.Group
 }
 
 type calendarEntriesSnapshot struct {
-	Version  int                    `json:"version"`
-	CachedAt time.Time              `json:"cachedAt"`
-	Entries  []domain.CalendarEntry `json:"entries"`
+	Version int                    `json:"version"`
+	Entries []domain.CalendarEntry `json:"entries"`
 }
 
-func NewCachedCelebrationCalendarFinder(base handlercore.CelebrationCalendarFinder, dir string, ttl time.Duration) handlercore.CelebrationCalendarFinder {
-	return newCachedCelebrationCalendarFinder(base, dir, ttl, time.Now)
-}
-
-func newCachedCelebrationCalendarFinder(
+// NewCachedCelebrationCalendarFinder는 월별 기념일 항목을 공유 cache에 ttl 동안 둔다. 만료는 key TTL이 맡는다.
+// 주입한 store가 없거나 ttl이 0 이하이면 cache 없이 base를 그대로 쓴다.
+func NewCachedCelebrationCalendarFinder(
 	base handlercore.CelebrationCalendarFinder,
-	dir string,
+	store sharedcache.Store,
 	ttl time.Duration,
-	now func() time.Time,
 ) handlercore.CelebrationCalendarFinder {
 	if reflectutil.IsNil(base) {
 		return nil
 	}
 
-	dir = strings.TrimSpace(dir)
-	if dir == "" || ttl <= 0 {
+	if reflectutil.IsNil(store) || ttl <= 0 {
 		return base
 	}
 
-	if now == nil {
-		now = time.Now
-	}
-
 	return &cachedCelebrationCalendarFinder{
-		base: base,
-		dir:  dir,
-		ttl:  ttl,
-		now:  now,
+		base:  base,
+		store: store,
+		ttl:   ttl,
 	}
 }
 
@@ -81,19 +67,19 @@ func (f *cachedCelebrationCalendarFinder) FindMembersWithCelebrationsInMonth(
 		return nil, fmt.Errorf("calendar entries request: %w", err)
 	}
 
-	path := f.snapshotPath(month, referenceYear)
-	if entries, ok := f.readSnapshot(path); ok {
+	key := calendarEntriesCacheKey(month, referenceYear)
+	if entries, ok := f.readSnapshot(ctx, key); ok {
 		return entries, nil
 	}
 
-	resultCh := f.flights.DoChan(fmt.Sprintf("%04d-%02d", referenceYear, month), func() (any, error) {
+	resultCh := f.flights.DoChan(key, func() (any, error) {
 		var entries []domain.CalendarEntry
 
 		// DoChan의 goroutine panic은 호출자의 복구 경계를 벗어나므로 공유 조회 안에서 오류로 돌려준다.
 		err := panicguard.RunE(slog.Default(), panicscope.BackgroundTask, "calendar-entry-cache", func() error {
 			var loadErr error
 
-			entries, loadErr = f.loadEntriesSnapshot(ctx, path, month, referenceYear)
+			entries, loadErr = f.loadEntriesSnapshot(ctx, key, month, referenceYear)
 			if loadErr != nil {
 				return fmt.Errorf("load calendar entries snapshot: %w", loadErr)
 			}
@@ -131,8 +117,8 @@ func (f *cachedCelebrationCalendarFinder) FindMembersWithCelebrationsInMonth(
 	return cloneCalendarEntries(entries), nil
 }
 
-func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Context, path string, month, referenceYear int) ([]domain.CalendarEntry, error) {
-	if entries, ok := f.readSnapshot(path); ok {
+func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Context, key string, month, referenceYear int) ([]domain.CalendarEntry, error) {
+	if entries, ok := f.readSnapshot(ctx, key); ok {
 		return entries, nil
 	}
 
@@ -147,19 +133,22 @@ func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Contex
 	}
 
 	cloned := cloneCalendarEntries(entries)
-	f.writeSnapshot(path, cloned)
+	f.writeSnapshot(loadCtx, key, cloned)
 
 	return cloned, nil
 }
 
-func (f *cachedCelebrationCalendarFinder) readSnapshot(path string) ([]domain.CalendarEntry, bool) {
-	info, err := os.Stat(path)
-	if err != nil || info.Size() <= 0 || info.Size() > calendarEntryCacheMaxBytes {
+// readSnapshot의 cache 오류와 손상 값은 miss로 보고 PostgreSQL 조회로 진행한다. 공유 cache는 정본이 아니므로
+// 달력 명령 실패로 올리지 않으며, 저장소 오류만 경고 로그로 드러낸다.
+func (f *cachedCelebrationCalendarFinder) readSnapshot(ctx context.Context, key string) ([]domain.CalendarEntry, bool) {
+	data, ok, err := f.store.Get(ctx, key)
+	if err != nil {
+		logCalendarEntryCacheFailure("read", key, err)
+
 		return nil, false
 	}
 
-	data, err := readCacheFile(path)
-	if err != nil {
+	if !ok || len(data) == 0 || len(data) > calendarEntryCacheMaxBytes {
 		return nil, false
 	}
 
@@ -169,62 +158,37 @@ func (f *cachedCelebrationCalendarFinder) readSnapshot(path string) ([]domain.Ca
 		return nil, false
 	}
 
-	if snapshot.Version != calendarEntryCacheVersion || snapshot.CachedAt.IsZero() {
-		return nil, false
-	}
-
-	if f.now().After(snapshot.CachedAt.Add(f.ttl)) {
+	if snapshot.Version != calendarEntryCacheVersion {
 		return nil, false
 	}
 
 	return cloneCalendarEntries(snapshot.Entries), true
 }
 
-func (f *cachedCelebrationCalendarFinder) writeSnapshot(path string, entries []domain.CalendarEntry) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return
-	}
-
-	snapshot := calendarEntriesSnapshot{
-		Version:  calendarEntryCacheVersion,
-		CachedAt: f.now().UTC(),
-		Entries:  cloneCalendarEntries(entries),
-	}
-	data, err := jsonv2.Marshal(snapshot)
-
+func (f *cachedCelebrationCalendarFinder) writeSnapshot(ctx context.Context, key string, entries []domain.CalendarEntry) {
+	data, err := jsonv2.Marshal(calendarEntriesSnapshot{
+		Version: calendarEntryCacheVersion,
+		Entries: cloneCalendarEntries(entries),
+	})
 	if err != nil || len(data) > calendarEntryCacheMaxBytes {
 		return
 	}
 
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return
-	}
-
-	tmpName := tmp.Name()
-	_, writeErr := tmp.Write(data)
-	closeErr := tmp.Close()
-
-	if writeErr != nil || closeErr != nil {
-		removeFile(tmpName)
-
-		return
-	}
-
-	if err := os.Rename(tmpName, path); err != nil {
-		removeFile(tmpName)
+	if err := f.store.Set(ctx, key, data, f.ttl); err != nil {
+		logCalendarEntryCacheFailure("write", key, err)
 	}
 }
 
-func removeFile(path string) {
-	if err := os.Remove(path); err != nil {
-		return
-	}
+func logCalendarEntryCacheFailure(operation, key string, err error) {
+	slog.Default().Warn("calendar_entry_cache_failed",
+		slog.String("operation", operation),
+		privacylog.CacheKeyAttr(key),
+		slog.Any("error", err),
+	)
 }
 
-func (f *cachedCelebrationCalendarFinder) snapshotPath(month, referenceYear int) string {
-	filename := fmt.Sprintf("%04d-%02d.json", referenceYear, month)
-	return filepath.Join(f.dir, "entries", "v1", filename)
+func calendarEntriesCacheKey(month, referenceYear int) string {
+	return fmt.Sprintf("bot:calendar:entries:v%d:%04d-%02d", calendarEntryCacheVersion, referenceYear, month)
 }
 
 func cloneCalendarEntries(entries []domain.CalendarEntry) []domain.CalendarEntry {
@@ -267,20 +231,4 @@ func cloneCalendarMember(member *domain.Member) *domain.Member {
 	}
 
 	return &cloned
-}
-
-func readCacheFile(path string) ([]byte, error) {
-	cleaned := filepath.Clean(path)
-	dir, name := filepath.Split(cleaned)
-
-	if dir == "" || name == "" || !fs.ValidPath(name) {
-		return nil, errors.New("invalid cache path")
-	}
-
-	out, err := fs.ReadFile(os.DirFS(dir), name)
-	if err != nil {
-		return out, fmt.Errorf("read file: %w", err)
-	}
-
-	return out, nil
 }

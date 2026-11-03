@@ -214,7 +214,7 @@ func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *
 		})
 	}
 
-	renderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(t.TempDir()))
+	renderer := NewCalendarCardRenderer(WithCalendarImageCache(newTestCalendarImageCache(t)))
 
 	first, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
@@ -228,8 +228,8 @@ func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *
 		t.Fatal("globally truncated render was stored in memory cache")
 	}
 
-	if _, ok := renderer.diskCachedImage(cacheKey); ok {
-		t.Fatal("globally truncated render was stored in disk cache")
+	if _, ok := renderer.sharedCachedImage(t.Context(), cacheKey); ok {
+		t.Fatal("globally truncated render was stored in shared cache")
 	}
 
 	second, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
@@ -310,7 +310,7 @@ func TestCalendarCardRendererOrdinaryPhotoFetchFailureStillPopulatesMemoryCache(
 		},
 		Day: 15,
 	}}
-	renderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(t.TempDir()))
+	renderer := NewCalendarCardRenderer(WithCalendarImageCache(newTestCalendarImageCache(t)))
 
 	first, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
@@ -324,8 +324,8 @@ func TestCalendarCardRendererOrdinaryPhotoFetchFailureStillPopulatesMemoryCache(
 		t.Fatal("ordinary photo fetch failure was not stored in memory cache")
 	}
 
-	if _, ok := renderer.diskCachedImage(cacheKey); ok {
-		t.Fatal("ordinary photo fetch failure was stored in disk cache")
+	if _, ok := renderer.sharedCachedImage(t.Context(), cacheKey); ok {
+		t.Fatal("ordinary photo fetch failure was stored in shared cache")
 	}
 
 	second, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)

@@ -56,7 +56,7 @@ func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing
 
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
 
-	client, err := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+	client, err := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, nil, &holodexCfg)
 	if err != nil {
 		t.Fatalf("NewHolodexAPIClient() error = %v", err)
 	}
@@ -155,7 +155,7 @@ func TestNewHolodexAPIClientConfiguresProvidedStandardTransportForHTTP2(t *testi
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
 	provided := httputil.NewProfiledClient(httputil.TransportProfile{Timeout: holodexCfg.Timeout})
 
-	client, err := NewHolodexAPIClient(provided, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+	client, err := NewHolodexAPIClient(provided, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, nil, &holodexCfg)
 	if err != nil {
 		t.Fatalf("NewHolodexAPIClient() error = %v", err)
 	}
@@ -315,7 +315,7 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 
 	// threshold 횟수만큼 실패 → 서킷 열기
 	for range circuitFailureThreshold {
-		client.openCircuit()
+		client.openCircuit(t.Context())
 	}
 
 	// 서킷 열린 상태 확인
@@ -336,7 +336,7 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 
 	// threshold 횟수(3회) 미만에서는 circuit이 열리지 않아야 함
 	for i := 1; i < circuitFailureThreshold; i++ {
-		client.openCircuit()
+		client.openCircuit(t.Context())
 
 		if client.IsCircuitOpen() {
 			t.Errorf("circuit opened after %d failures (threshold=%d)", i, circuitFailureThreshold)
@@ -344,7 +344,7 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	}
 
 	// threshold 도달 시 circuit이 열려야 함
-	client.openCircuit()
+	client.openCircuit(t.Context())
 
 	if !client.IsCircuitOpen() {
 		t.Errorf("circuit should be open after %d failures", circuitFailureThreshold)
@@ -427,7 +427,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 
 	// threshold 도달 → circuit open
 	for range circuitFailureThreshold {
-		client.openCircuit()
+		client.openCircuit(t.Context())
 	}
 
 	if !client.IsCircuitOpen() {
@@ -440,7 +440,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		t.Fatal("should allow after timeout")
 	}
 
-	client.openCircuit()
+	client.openCircuit(t.Context())
 
 	if client.IsCircuitOpen() {
 		t.Fatalf("single failure after reset must not re-open (threshold=%d)", circuitFailureThreshold)

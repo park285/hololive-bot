@@ -13,9 +13,11 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func setupCalendarTestRenderer(t *testing.T) *serviceTemplate.Renderer {
@@ -204,17 +206,17 @@ func TestCalendarCommand_Execute_PreviousMonthAcrossYear(t *testing.T) {
 }
 
 func TestCachedCelebrationCalendarFinder_ReusesSnapshotAcrossInstances(t *testing.T) {
-	now := time.Date(2026, time.June, 4, 12, 0, 0, 0, time.UTC)
-	dir := t.TempDir()
+	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
+	store := sharedcache.NewValkeyStore(client)
 	entries := []domain.CalendarEntry{
 		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: testMemberPekora}, Day: 15},
 	}
 
 	repo := &calendarRepoStub{entries: entries}
-	finder := newCachedCelebrationCalendarFinder(repo, dir, time.Hour, func() time.Time { return now })
+	finder := NewCachedCelebrationCalendarFinder(repo, store, time.Hour)
 
 	if finder == nil {
-		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+		t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 	}
 
 	first, err := finder.FindMembersWithCelebrationsInMonth(t.Context(), 6, 2026)
@@ -226,13 +228,16 @@ func TestCachedCelebrationCalendarFinder_ReusesSnapshotAcrossInstances(t *testin
 		t.Fatalf("repo calls after first lookup = %d, want 1", repo.calls)
 	}
 
+	if ttl := mini.TTL(calendarEntriesCacheKey(6, 2026)); ttl != time.Hour {
+		t.Fatalf("calendar entries cache TTL = %s, want 1h", ttl)
+	}
+
+	// 같은 Valkey를 쓰는 두 번째 finder는 다른 인스턴스나 재시작한 프로세스를 뜻한다.
 	cachedRepo := &calendarRepoStub{err: errors.New("db should not be called")}
-	cachedFinder := newCachedCelebrationCalendarFinder(cachedRepo, dir, time.Hour, func() time.Time {
-		return now.Add(30 * time.Minute)
-	})
+	cachedFinder := NewCachedCelebrationCalendarFinder(cachedRepo, store, time.Hour)
 
 	if cachedFinder == nil {
-		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+		t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 	}
 
 	second, err := cachedFinder.FindMembersWithCelebrationsInMonth(t.Context(), 6, 2026)
@@ -250,35 +255,35 @@ func TestCachedCelebrationCalendarFinder_ReusesSnapshotAcrossInstances(t *testin
 }
 
 func TestCachedCelebrationCalendarFinder_RefreshesExpiredSnapshot(t *testing.T) {
-	now := time.Date(2026, time.June, 4, 12, 0, 0, 0, time.UTC)
-	dir := t.TempDir()
+	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
+	store := sharedcache.NewValkeyStore(client)
 
 	repo := &calendarRepoStub{
 		entries: []domain.CalendarEntry{
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: testMemberPekora}, Day: 15},
 		},
 	}
-	finder := newCachedCelebrationCalendarFinder(repo, dir, time.Hour, func() time.Time { return now })
+	finder := NewCachedCelebrationCalendarFinder(repo, store, time.Hour)
 
 	if finder == nil {
-		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+		t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 	}
 
 	if _, err := finder.FindMembersWithCelebrationsInMonth(t.Context(), 6, 2026); err != nil {
 		t.Fatalf("first FindMembersWithCelebrationsInMonth() error = %v", err)
 	}
 
+	mini.FastForward(time.Hour)
+
 	refreshedRepo := &calendarRepoStub{
 		entries: []domain.CalendarEntry{
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5},
 		},
 	}
-	refreshedFinder := newCachedCelebrationCalendarFinder(refreshedRepo, dir, time.Hour, func() time.Time {
-		return now.Add(2 * time.Hour)
-	})
+	refreshedFinder := NewCachedCelebrationCalendarFinder(refreshedRepo, store, time.Hour)
 
 	if refreshedFinder == nil {
-		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+		t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
 	}
 
 	refreshed, err := refreshedFinder.FindMembersWithCelebrationsInMonth(t.Context(), 6, 2026)
@@ -292,6 +297,37 @@ func TestCachedCelebrationCalendarFinder_RefreshesExpiredSnapshot(t *testing.T) 
 
 	if len(refreshed) != 1 || refreshed[0].Member.ShortKoreanName != "미코" {
 		t.Fatalf("refreshed entries = %#v, want refreshed repo snapshot", refreshed)
+	}
+}
+
+// cache는 정본이 아니므로 Valkey 오류는 PostgreSQL 조회로 진행하고 달력 명령 실패로 올리지 않는다.
+func TestCachedCelebrationCalendarFinder_ValkeyErrorFallsThroughToRepository(t *testing.T) {
+	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
+	repo := &calendarRepoStub{
+		entries: []domain.CalendarEntry{
+			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: testMemberPekora}, Day: 15},
+		},
+	}
+
+	store := sharedcache.NewValkeyStore(client)
+	if store == nil {
+		t.Fatal("NewValkeyStore() returned nil")
+	}
+
+	finder := NewCachedCelebrationCalendarFinder(repo, store, time.Hour)
+	if finder == nil {
+		t.Fatal("NewCachedCelebrationCalendarFinder() returned nil")
+	}
+
+	mini.SetError("valkey unavailable")
+
+	entries, err := finder.FindMembersWithCelebrationsInMonth(t.Context(), 6, 2026)
+	if err != nil {
+		t.Fatalf("FindMembersWithCelebrationsInMonth() during Valkey error = %v, want repository result", err)
+	}
+
+	if repo.calls != 1 || len(entries) != 1 {
+		t.Fatalf("repo calls = %d entries = %d, want repository lookup", repo.calls, len(entries))
 	}
 }
 

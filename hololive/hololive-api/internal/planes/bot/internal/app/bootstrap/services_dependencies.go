@@ -30,7 +30,6 @@ func BuildBotDependencies(
 		BotSelfUser:           appConfig.Bot.SelfUser,
 		IrisBaseURL:           appConfig.Iris.BaseURL,
 		Notification:          appConfig.Notification,
-		CalendarImageCacheDir: appConfig.Bot.CalendarImageCacheDir,
 		CalendarEntryCacheTTL: appConfig.Bot.CalendarEntryCacheTTL,
 		Logger:                logger,
 		Client:                irisClient,

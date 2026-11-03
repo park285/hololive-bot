@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
@@ -66,6 +67,7 @@ type APIClient struct {
 	nextRequestAt        time.Time
 	semaphore            chan struct{}
 	distributed          distributedRateLimiter
+	shared               sharedState
 	perAttemptTimeout    time.Duration
 	maxResponseBodyBytes int64
 	distributedRLCfg     settings.DistributedRateLimitConfig
@@ -90,6 +92,7 @@ func NewHolodexAPIClient(
 	apiKey string,
 	logger *slog.Logger,
 	distributed distributedRateLimiter,
+	shared sharedState,
 	holodexCfg *settings.HolodexConfig,
 ) (*APIClient, error) {
 	if holodexCfg == nil {
@@ -108,6 +111,11 @@ func NewHolodexAPIClient(
 
 	configureHolodexHTTP2(httpClient)
 
+	// 비활성 설정에서 넘어온 nil 포인터가 interface 안에서 non-nil로 보이지 않게 한다.
+	if reflectutil.IsNil(shared) {
+		shared = nil
+	}
+
 	maxBody := settings.DefaultMaxResponseBodyBytes
 
 	return &APIClient{
@@ -124,6 +132,7 @@ func NewHolodexAPIClient(
 		requestDelay:         holodexCfg.Concurrency.RequestDelay,
 		semaphore:            make(chan struct{}, holodexCfg.Concurrency.MaxConcurrentRequests),
 		distributed:          distributed,
+		shared:               shared,
 		perAttemptTimeout:    holodexCfg.PerAttemptTimeout,
 		maxResponseBodyBytes: maxBody,
 		distributedRLCfg:     holodexCfg.DistributedRateLimit,

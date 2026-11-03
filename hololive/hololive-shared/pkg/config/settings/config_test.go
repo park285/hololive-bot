@@ -317,8 +317,7 @@ func TestLoadBotConfig_SeeMoreFold(t *testing.T) {
 	}
 }
 
-func TestLoadBotConfig_CalendarImageCacheDir(t *testing.T) {
-	t.Setenv("BOT_CALENDAR_IMAGE_CACHE_DIR", "/tmp/calendar-cache")
+func TestLoadBotConfig_CalendarEntryCacheTTL(t *testing.T) {
 	t.Setenv("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", "3600")
 
 	config, err := LoadBotConfig()
@@ -326,23 +325,15 @@ func TestLoadBotConfig_CalendarImageCacheDir(t *testing.T) {
 		t.Fatalf("LoadBotConfig() error = %v", err)
 	}
 
-	if config.CalendarImageCacheDir != "/tmp/calendar-cache" {
-		t.Fatalf("CalendarImageCacheDir = %q, want /tmp/calendar-cache", config.CalendarImageCacheDir)
-	}
-
 	if config.CalendarEntryCacheTTL != time.Hour {
 		t.Fatalf("CalendarEntryCacheTTL = %s, want 1h", config.CalendarEntryCacheTTL)
 	}
 }
 
-func TestLoadBotConfig_DefaultCalendarImageCacheDir(t *testing.T) {
+func TestLoadBotConfig_DefaultCalendarEntryCacheTTL(t *testing.T) {
 	config, err := LoadBotConfig()
 	if err != nil {
 		t.Fatalf("LoadBotConfig() error = %v", err)
-	}
-
-	if config.CalendarImageCacheDir != "data/calendar-cache" {
-		t.Fatalf("CalendarImageCacheDir = %q, want data/calendar-cache", config.CalendarImageCacheDir)
 	}
 
 	if config.CalendarEntryCacheTTL != 24*time.Hour {

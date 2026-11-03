@@ -1,18 +1,35 @@
 package apiclient
 
-import "log/slog"
+import (
+	"context"
+	"log/slog"
+	"time"
+)
 
 // rejectIfCircuitOpen은 Allow() 기반으로 동작합니다.
 // 지정한 timeout이 경과하면 reset side-effect가 발생하므로 자동 reset 후
-// failures=0부터 재카운트가 시작됩니다.
-func (c *APIClient) rejectIfCircuitOpen() error {
-	if c.breaker.Allow() {
+// failures=0부터 재카운트가 시작됩니다. 로컬 circuit이 닫혀 있어도 다른 프로세스가 연 공유 circuit이면 거절합니다.
+func (c *APIClient) rejectIfCircuitOpen(ctx context.Context) error {
+	if !c.breaker.Allow() {
+		return c.circuitOpenError(c.breaker.RetryAfter(), false)
+	}
+
+	return c.rejectIfSharedCircuitOpen(ctx)
+}
+
+// rejectIfSharedCircuitOpen은 다른 프로세스가 연 공유 circuit만 확인합니다. 로컬 breaker의 Allow() reset 부수 효과가
+// 없으므로, 진입 검사를 통과한 요청이 재시도하기 전에도 다시 불러 open 창에 HTTP 요청을 보내지 않게 합니다.
+func (c *APIClient) rejectIfSharedCircuitOpen(ctx context.Context) error {
+	remaining := c.sharedCircuitRemaining(ctx)
+	if remaining <= 0 {
 		return nil
 	}
 
-	remainingMs := c.breaker.RetryAfter().Milliseconds()
+	return c.circuitOpenError(remaining, true)
+}
 
-	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remainingMs))
+func (c *APIClient) circuitOpenError(remaining time.Duration, shared bool) error {
+	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remaining.Milliseconds()), slog.Bool("shared", shared))
 
 	return NewAPIError("Circuit breaker open", 503)
 }
@@ -23,11 +40,12 @@ func (c *APIClient) IsCircuitOpen() bool {
 }
 
 // openCircuit은 실패를 기록하고, open 전이 시 Error 레벨 로그를 방출합니다.
-func (c *APIClient) openCircuit() {
+func (c *APIClient) openCircuit(ctx context.Context) {
 	if opened := c.breaker.RecordFailure(); opened {
 		c.logger.Error("Holodex circuit breaker opened",
 			slog.Int("failure_count", int(c.breaker.Failures())),
 			slog.Duration("reset_timeout", circuitResetTimeout),
+			slog.Bool("shared_opened", c.publishCircuitOpen(ctx)),
 		)
 	}
 }

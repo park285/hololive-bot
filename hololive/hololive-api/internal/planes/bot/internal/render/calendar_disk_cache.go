@@ -2,141 +2,79 @@ package render
 
 import (
 	"bytes"
-	"errors"
+	"context"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
+	"log/slog"
+	"slices"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const (
-	calendarDiskCacheVersion  = "v5"
-	calendarDiskCacheMaxBytes = 8 << 20
+	calendarImageCacheVersion  = "v5"
+	calendarImageCacheMaxBytes = 8 << 20
+	// 월 key 하나를 항목 해시가 바뀔 때 덮어쓴다. 지난 달 key가 영구히 남지 않을 만큼만 둔다.
+	calendarImageCacheTTL = 7 * 24 * time.Hour
 )
 
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
-func (r *CalendarCardRenderer) diskCachedImage(key calendarCacheKey) ([]byte, bool) {
-	r.diskMu.Lock()
-	defer r.diskMu.Unlock()
-
-	path := r.diskCachePath(key)
-	if path == "" {
+// sharedCachedImage는 같은 달·같은 항목 해시로 렌더한 PNG를 공유 cache에서 읽는다. 값은 항목 해시 뒤에 PNG를
+// 붙인 형태라 해시가 다르면(같은 달 이전 항목) miss로 보고 다시 렌더한다. 읽기 중 cache 오류는 miss로 보고
+// 렌더 실패로 올리지 않는다.
+func (r *CalendarCardRenderer) sharedCachedImage(ctx context.Context, key calendarCacheKey) ([]byte, bool) {
+	if r == nil || r.sharedCache == nil {
 		return nil, false
 	}
 
-	info, err := os.Stat(path)
-	if err != nil || info.Size() <= 0 || info.Size() > calendarDiskCacheMaxBytes {
-		return nil, false
-	}
+	cacheKey := calendarImageCacheKey(key)
 
-	data, err := readCalendarDiskCacheFile(path)
-	if err != nil || !isPNGData(data) {
-		return nil, false
-	}
-
-	return data, true
-}
-
-func (r *CalendarCardRenderer) storeDiskCachedImage(key calendarCacheKey, data []byte) {
-	if !isPNGData(data) || len(data) > calendarDiskCacheMaxBytes {
-		return
-	}
-
-	r.diskMu.Lock()
-	defer r.diskMu.Unlock()
-
-	path := r.diskCachePath(key)
-	if path == "" || !writeCalendarDiskCacheFile(path, data) {
-		return
-	}
-
-	r.pruneDiskCacheMonth(key)
-}
-
-func writeCalendarDiskCacheFile(path string, data []byte) bool {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return false
-	}
-
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	data, ok, err := r.sharedCache.Get(ctx, cacheKey)
 	if err != nil {
-		return false
+		logCalendarImageCacheFailure("read", cacheKey, err)
+
+		return nil, false
 	}
 
-	tmpName := tmp.Name()
-
-	_, writeErr := tmp.Write(data)
-	closeErr := tmp.Close()
-
-	if writeErr != nil || closeErr != nil {
-		removeCalendarDiskCacheFile(tmpName)
-
-		return false
+	if !ok || len(data) > len(key.entriesHash)+calendarImageCacheMaxBytes {
+		return nil, false
 	}
 
-	if err := os.Rename(tmpName, path); err != nil {
-		removeCalendarDiskCacheFile(tmpName)
-
-		return false
+	image, found := bytes.CutPrefix(data, []byte(key.entriesHash))
+	if !found || !isPNGData(image) {
+		return nil, false
 	}
 
-	return true
+	return image, true
 }
 
-func (r *CalendarCardRenderer) pruneDiskCacheMonth(key calendarCacheKey) {
-	keep := r.diskCachePath(key)
-	if keep == "" {
+// storeSharedCachedImage는 같은 달 key를 덮어써 이전 항목 해시의 이미지를 대체한다.
+func (r *CalendarCardRenderer) storeSharedCachedImage(ctx context.Context, key calendarCacheKey, data []byte) {
+	if r == nil || r.sharedCache == nil || !isPNGData(data) || len(data) > calendarImageCacheMaxBytes {
 		return
 	}
 
-	pattern := filepath.Join(filepath.Dir(keep), fmt.Sprintf("%04d-%02d-*.png", key.year, key.month))
+	cacheKey := calendarImageCacheKey(key)
+	value := slices.Concat([]byte(key.entriesHash), data)
 
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return
-	}
-
-	for _, match := range matches {
-		if match != keep {
-			removeCalendarDiskCacheFile(match)
-		}
+	if err := r.sharedCache.Set(ctx, cacheKey, value, calendarImageCacheTTL); err != nil {
+		logCalendarImageCacheFailure("write", cacheKey, err)
 	}
 }
 
-func removeCalendarDiskCacheFile(path string) {
-	if err := os.Remove(path); err != nil {
-		return
-	}
+func logCalendarImageCacheFailure(operation, key string, err error) {
+	slog.Default().Warn("calendar_image_cache_failed",
+		slog.String("operation", operation),
+		privacylog.CacheKeyAttr(key),
+		slog.Any("error", err),
+	)
 }
 
-func (r *CalendarCardRenderer) diskCachePath(key calendarCacheKey) string {
-	if r == nil || r.diskCacheDir == "" {
-		return ""
-	}
-
-	filename := fmt.Sprintf("%04d-%02d-%s.png", key.year, key.month, key.entriesHash)
-
-	return filepath.Join(r.diskCacheDir, calendarDiskCacheVersion, filename)
+func calendarImageCacheKey(key calendarCacheKey) string {
+	return fmt.Sprintf("bot:calendar:image:%s:%04d-%02d", calendarImageCacheVersion, key.year, key.month)
 }
 
 func isPNGData(data []byte) bool {
 	return bytes.HasPrefix(data, pngSignature)
-}
-
-func readCalendarDiskCacheFile(path string) ([]byte, error) {
-	cleaned := filepath.Clean(path)
-	dir, name := filepath.Split(cleaned)
-
-	if dir == "" || name == "" || !fs.ValidPath(name) {
-		return nil, errors.New("invalid calendar disk cache path")
-	}
-
-	out, err := fs.ReadFile(os.DirFS(dir), name)
-	if err != nil {
-		return out, fmt.Errorf("read file: %w", err)
-	}
-
-	return out, nil
 }
