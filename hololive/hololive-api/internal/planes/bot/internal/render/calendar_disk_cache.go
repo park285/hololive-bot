@@ -32,7 +32,7 @@ func (r *CalendarCardRenderer) sharedCachedImage(ctx context.Context, key calend
 
 	data, ok, err := r.sharedCache.Get(ctx, cacheKey)
 	if err != nil {
-		logCalendarImageCacheFailure("read", cacheKey, err)
+		logCalendarImageCacheFailure(ctx, "read", cacheKey, err)
 
 		return nil, false
 	}
@@ -59,11 +59,16 @@ func (r *CalendarCardRenderer) storeSharedCachedImage(ctx context.Context, key c
 	value := slices.Concat([]byte(key.entriesHash), data)
 
 	if err := r.sharedCache.Set(ctx, cacheKey, value, calendarImageCacheTTL); err != nil {
-		logCalendarImageCacheFailure("write", cacheKey, err)
+		logCalendarImageCacheFailure(ctx, "write", cacheKey, err)
 	}
 }
 
-func logCalendarImageCacheFailure(operation, key string, err error) {
+// 호출자 취소·기한 만료로 끝난 cache 연산은 Valkey 장애가 아니므로 경고로 남기지 않는다.
+func logCalendarImageCacheFailure(ctx context.Context, operation, key string, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+
 	slog.Default().Warn("calendar_image_cache_failed",
 		slog.String("operation", operation),
 		privacylog.CacheKeyAttr(key),

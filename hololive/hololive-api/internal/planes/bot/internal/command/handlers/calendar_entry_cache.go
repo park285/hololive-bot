@@ -143,7 +143,7 @@ func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Contex
 func (f *cachedCelebrationCalendarFinder) readSnapshot(ctx context.Context, key string) ([]domain.CalendarEntry, bool) {
 	data, ok, err := f.store.Get(ctx, key)
 	if err != nil {
-		logCalendarEntryCacheFailure("read", key, err)
+		logCalendarEntryCacheFailure(ctx, "read", key, err)
 
 		return nil, false
 	}
@@ -175,11 +175,16 @@ func (f *cachedCelebrationCalendarFinder) writeSnapshot(ctx context.Context, key
 	}
 
 	if err := f.store.Set(ctx, key, data, f.ttl); err != nil {
-		logCalendarEntryCacheFailure("write", key, err)
+		logCalendarEntryCacheFailure(ctx, "write", key, err)
 	}
 }
 
-func logCalendarEntryCacheFailure(operation, key string, err error) {
+// 호출자 취소·기한 만료로 끝난 cache 연산은 Valkey 장애가 아니므로 경고로 남기지 않는다.
+func logCalendarEntryCacheFailure(ctx context.Context, operation, key string, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+
 	slog.Default().Warn("calendar_entry_cache_failed",
 		slog.String("operation", operation),
 		privacylog.CacheKeyAttr(key),
