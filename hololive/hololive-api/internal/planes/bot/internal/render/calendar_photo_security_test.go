@@ -8,8 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -98,8 +96,8 @@ func TestFetchMemberPhotoBlocksUnsafeURLsBeforeRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFallback(t *testing.T) {
-	dir := t.TempDir()
+func TestCalendarCardRendererRenderCalendarImageDoesNotShareCacheBlockedPhotoFallback(t *testing.T) {
+	store, mini := newTestCalendarImageCacheWithMini(t)
 	blockedPhotoURL := "https://127.0.0.1/avatar=s88-c"
 	entries := []domain.CalendarEntry{
 		{
@@ -121,7 +119,7 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: calendarPhotoContentTypePNG}
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
-	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+	r := NewCalendarCardRenderer(WithCalendarImageCache(store))
 
 	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
@@ -144,20 +142,16 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	}
 
 	cacheKey := newCalendarCacheKey(6, 2026, entries)
-	if _, ok := r.diskCachedImage(cacheKey); ok {
-		t.Fatal("blocked photo fallback was stored in disk cache")
+	if _, ok := r.sharedCachedImage(t.Context(), cacheKey); ok {
+		t.Fatal("blocked photo fallback was stored in shared cache")
 	}
 
-	if entries, readErr := os.ReadDir(filepath.Join(dir, calendarDiskCacheVersion)); readErr != nil {
-		if !errors.Is(readErr, os.ErrNotExist) {
-			t.Fatalf("read disk cache dir: %v", readErr)
-		}
-	} else if len(entries) != 0 {
-		t.Fatalf("disk cache entries = %d, want 0", len(entries))
+	if keys := mini.Keys(); len(keys) != 0 {
+		t.Fatalf("shared cache keys = %v, want none", keys)
 	}
 
-	if _, ok := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir)).diskCachedImage(cacheKey); ok {
-		t.Fatal("blocked photo fallback was served from disk cache")
+	if _, ok := NewCalendarCardRenderer(WithCalendarImageCache(store)).sharedCachedImage(t.Context(), cacheKey); ok {
+		t.Fatal("blocked photo fallback was served from shared cache")
 	}
 }
 

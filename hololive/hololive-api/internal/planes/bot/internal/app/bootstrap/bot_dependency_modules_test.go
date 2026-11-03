@@ -42,7 +42,6 @@ func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 			SelfUser:              "bot-self",
 			Prefix:                "!",
 			MentionPrefix:         "@bot",
-			CalendarImageCacheDir: "data/test-calendar-cache",
 			CalendarEntryCacheTTL: time.Hour,
 			MarkdownReplies:       true,
 		},
@@ -61,7 +60,6 @@ func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 
 	require.Equal(t, "bot-self", deps.BotSelfUser)
 	require.Equal(t, "http://iris.local", deps.IrisBaseURL)
-	require.Equal(t, "data/test-calendar-cache", deps.CalendarImageCacheDir)
 	require.Equal(t, time.Hour, deps.CalendarEntryCacheTTL)
 	require.Equal(t, []int{15, 3, 1}, deps.Notification.AdvanceMinutes)
 	require.Same(t, cacheClient, deps.Cache)

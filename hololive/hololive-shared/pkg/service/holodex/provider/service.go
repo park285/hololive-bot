@@ -67,7 +67,10 @@ func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey strin
 		IdleConnTimeout:     holodexCfg.Transport.IdleConnTimeout,
 	})
 
-	var distributedLimiter *ratelimitvalkey.SlidingWindowLimiter
+	var (
+		distributedLimiter *ratelimitvalkey.SlidingWindowLimiter
+		sharedDeadline     *ratelimitvalkey.SharedDeadline
+	)
 
 	if holodexCfg.DistributedRateLimit.Enabled {
 		var err error
@@ -76,9 +79,15 @@ func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey strin
 		if err != nil {
 			return nil, fmt.Errorf("initialize holodex distributed rate limiter: %w", err)
 		}
+
+		// 같은 API key를 쓰는 다른 프로세스와 429 대기·circuit open을 함께 지킨다. 분산 rate limit과 같은 설정에 묶는다.
+		sharedDeadline, err = ratelimitvalkey.NewSharedDeadline(cacheClient)
+		if err != nil {
+			return nil, fmt.Errorf("initialize holodex shared deadline: %w", err)
+		}
 	}
 
-	requester, err := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter, holodexCfg)
+	requester, err := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter, sharedDeadline, holodexCfg)
 	if err != nil {
 		return nil, fmt.Errorf("initialize holodex API client: %w", err)
 	}

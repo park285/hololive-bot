@@ -38,6 +38,9 @@ func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
 			return fmt.Errorf("holodex admission canceled: %w", err)
 		}
 
+		// 분산 승인을 기다리는 동안 다른 프로세스가 받은 429도 반영합니다.
+		c.mergeSharedCooldown(ctx)
+
 		if c.cooldownRemaining() <= 0 {
 			// 분산 승인이 늦어져도 다음 요청은 이번 승인 완료 시각부터 간격을 지킵니다.
 			c.nextRequestAt = time.Now().Add(c.requestDelay)

@@ -12,7 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 const (
@@ -203,14 +207,14 @@ func TestCalendarCardRenderer_CoalescesConcurrentColdRenders(t *testing.T) {
 	}
 }
 
-func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers(t *testing.T) {
+func TestCalendarCardRenderer_RenderCalendarImage_ReusesSharedCacheAcrossRenderers(t *testing.T) {
 	var requests atomic.Int32
 
 	server := newPNGServer(t, &requests)
 
 	defer server.Close()
 
-	dir := t.TempDir()
+	store := newTestCalendarImageCache(t)
 	entries := []domain.CalendarEntry{
 		{
 			Kind:   domain.CelebrationKindBirthday,
@@ -219,7 +223,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers
 		},
 	}
 
-	firstRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+	firstRenderer := NewCalendarCardRenderer(WithCalendarImageCache(store))
 
 	first, err := firstRenderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
@@ -228,7 +232,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers
 
 	assertValidPNG(t, first)
 
-	secondRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+	secondRenderer := NewCalendarCardRenderer(WithCalendarImageCache(store))
 
 	second, err := secondRenderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
@@ -242,36 +246,46 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers
 	}
 }
 
-func TestStoreDiskCachedImage_PrunesStaleMonthHashes(t *testing.T) {
-	dir := t.TempDir()
-	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+func TestSharedCachedImage_ReplacesStaleMonthHash(t *testing.T) {
+	store, mini := newTestCalendarImageCacheWithMini(t)
+	r := NewCalendarCardRenderer(WithCalendarImageCache(store))
 	pngBytes := tinyPNG(t)
 
-	old := calendarCacheKey{year: 2026, month: 6, entriesHash: "old"}
-	fresh := calendarCacheKey{year: 2026, month: 6, entriesHash: "new"}
-	otherMonth := calendarCacheKey{year: 2026, month: 7, entriesHash: "keep"}
+	old := calendarCacheKey{year: 2026, month: 6, entriesHash: strings.Repeat("a", 64)}
+	fresh := calendarCacheKey{year: 2026, month: 6, entriesHash: strings.Repeat("b", 64)}
+	otherMonth := calendarCacheKey{year: 2026, month: 7, entriesHash: strings.Repeat("c", 64)}
 
-	r.storeDiskCachedImage(old, pngBytes)
-	r.storeDiskCachedImage(otherMonth, pngBytes)
-	r.storeDiskCachedImage(fresh, pngBytes)
+	r.storeSharedCachedImage(t.Context(), old, pngBytes)
+	r.storeSharedCachedImage(t.Context(), otherMonth, pngBytes)
+	r.storeSharedCachedImage(t.Context(), fresh, pngBytes)
 
-	if _, ok := r.diskCachedImage(old); ok {
-		t.Fatal("stale same-month hash should be pruned")
+	if _, ok := r.sharedCachedImage(t.Context(), old); ok {
+		t.Fatal("stale same-month hash should be replaced")
 	}
 
-	if data, ok := r.diskCachedImage(fresh); !ok || !bytes.Equal(data, pngBytes) {
+	if data, ok := r.sharedCachedImage(t.Context(), fresh); !ok || !bytes.Equal(data, pngBytes) {
 		t.Fatalf("latest same-month hash should remain, got ok=%v", ok)
 	}
 
-	if _, ok := r.diskCachedImage(otherMonth); !ok {
-		t.Fatal("other-month entry must not be pruned")
+	if _, ok := r.sharedCachedImage(t.Context(), otherMonth); !ok {
+		t.Fatal("other-month entry must not be replaced")
+	}
+
+	if ttl := mini.TTL(calendarImageCacheKey(fresh)); ttl != calendarImageCacheTTL {
+		t.Fatalf("image cache TTL = %s, want %s", ttl, calendarImageCacheTTL)
+	}
+
+	mini.SetError("valkey unavailable")
+
+	if _, ok := r.sharedCachedImage(t.Context(), fresh); ok {
+		t.Fatal("shared cache error should be a miss")
 	}
 }
 
-func TestDiskCache_ConcurrentCrossHashStoreServesValidDataOrMiss(t *testing.T) {
+func TestSharedCache_ConcurrentCrossHashStoreServesValidDataOrMiss(t *testing.T) {
 	t.Parallel()
 
-	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(t.TempDir()))
+	r := NewCalendarCardRenderer(WithCalendarImageCache(newTestCalendarImageCache(t)))
 	pngBytes := tinyPNG(t)
 
 	keys := []calendarCacheKey{
@@ -284,9 +298,9 @@ func TestDiskCache_ConcurrentCrossHashStoreServesValidDataOrMiss(t *testing.T) {
 	for _, key := range keys {
 		wg.Go(func() {
 			for range 40 {
-				r.storeDiskCachedImage(key, pngBytes)
+				r.storeSharedCachedImage(t.Context(), key, pngBytes)
 
-				got, ok := r.diskCachedImage(key)
+				got, ok := r.sharedCachedImage(t.Context(), key)
 				if ok && !bytes.Equal(got, pngBytes) {
 					t.Errorf("corrupt data for hash %s", key.entriesHash[:4])
 
@@ -669,4 +683,20 @@ func largePNG(t *testing.T) []byte {
 	}
 
 	return buf.Bytes()
+}
+
+func newTestCalendarImageCache(t *testing.T) sharedcache.Store {
+	t.Helper()
+
+	store, _ := newTestCalendarImageCacheWithMini(t)
+
+	return store
+}
+
+func newTestCalendarImageCacheWithMini(t *testing.T) (sharedcache.Store, *miniredis.Miniredis) {
+	t.Helper()
+
+	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
+
+	return sharedcache.NewValkeyStore(client), mini
 }

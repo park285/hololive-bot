@@ -17,7 +17,7 @@ import (
 const holodexUserAgent = "hololive-bot (Linux; Holodex API client; +https://github.com/park285/hololive-bot)"
 
 func (c *APIClient) DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
-	if err := c.rejectIfCircuitOpen(); err != nil {
+	if err := c.rejectIfCircuitOpen(ctx); err != nil {
 		return nil, fmt.Errorf("reject if circuit open: %w", err)
 	}
 
@@ -79,6 +79,13 @@ func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path s
 		return nil, true, fmt.Errorf("context canceled before request: %w", ctxErr)
 	}
 
+	// 첫 시도는 DoRequest 진입에서 확인했습니다. 재시도 사이에 다른 프로세스가 연 circuit도 따릅니다.
+	if attempt > 0 {
+		if err := c.rejectIfSharedCircuitOpen(ctx); err != nil {
+			return nil, true, fmt.Errorf("reject if shared circuit open: %w", err)
+		}
+	}
+
 	if acquireErr := c.acquireSemaphore(ctx); acquireErr != nil {
 		return nil, true, fmt.Errorf("acquire semaphore: %w", acquireErr)
 	}
@@ -126,7 +133,7 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		c.rememberRetryAfter(resp.Header.Get("Retry-After"))
+		c.rememberRetryAfter(ctx, resp.Header.Get("Retry-After"))
 	}
 
 	if validateErr := validateHolodexResponse(resp); validateErr != nil {

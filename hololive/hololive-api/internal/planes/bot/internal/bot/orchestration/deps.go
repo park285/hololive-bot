@@ -60,7 +60,6 @@ type Dependencies struct {
 	BotSelfUser           string
 	IrisBaseURL           string
 	Notification          configsettings.NotificationConfig
-	CalendarImageCacheDir string
 	CalendarEntryCacheTTL time.Duration
 	Logger                *slog.Logger
 	Client                BotIrisClient

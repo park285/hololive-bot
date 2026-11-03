@@ -64,8 +64,8 @@ func holodexClientError(status int, reqURL string) error {
 	return NewAPIError(reqURL, status)
 }
 
-func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAttempts int) (done bool, err error) {
-	c.openCircuit()
+func (c *APIClient) handleServerError(ctx context.Context, status, attempt, maxAttempts int) (done bool, err error) {
+	c.openCircuit(ctx)
 	c.logger.Warn("Server error",
 		slog.Int("status", status),
 	)

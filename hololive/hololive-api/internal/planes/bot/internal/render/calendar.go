@@ -5,25 +5,26 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"strings"
 	"sync"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type CalendarCardRenderer struct {
-	cacheMu      sync.Mutex
-	cache        map[calendarCacheKey][]byte
-	cacheOrder   []calendarCacheKey
-	renderMu     sync.Mutex
-	inflight     map[calendarCacheKey]*calendarRenderCall
-	diskMu       sync.Mutex
-	diskCacheDir string
-	strings      *messagestrings.Store
+	cacheMu     sync.Mutex
+	cache       map[calendarCacheKey][]byte
+	cacheOrder  []calendarCacheKey
+	renderMu    sync.Mutex
+	inflight    map[calendarCacheKey]*calendarRenderCall
+	sharedCache sharedcache.Store
+	strings     *messagestrings.Store
 }
 
+// calendarCachePolicy의 diskCacheable은 프로세스 밖 공유 cache(Valkey)에 저장해도 되는지다.
+// 저장하면 모든 인스턴스와 재시작 뒤 요청이 같은 이미지를 받는다.
 type calendarCachePolicy struct {
 	memoryCacheable bool
 	diskCacheable   bool
@@ -36,9 +37,10 @@ type renderedCalendarImage struct {
 
 type CalendarCardRendererOption func(*CalendarCardRenderer)
 
-func WithCalendarDiskCacheDir(dir string) CalendarCardRendererOption {
+// WithCalendarImageCache는 렌더한 달력 PNG를 인스턴스와 재시작 사이에서 공유할 cache를 지정한다.
+func WithCalendarImageCache(store sharedcache.Store) CalendarCardRendererOption {
 	return func(r *CalendarCardRenderer) {
-		r.diskCacheDir = strings.TrimSpace(dir)
+		r.sharedCache = store
 	}
 }
 
@@ -89,9 +91,9 @@ func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cach
 		return data, nil
 	}
 
-	if data, ok := r.diskCachedImage(cacheKey); ok {
+	if data, ok := r.sharedCachedImage(ctx, cacheKey); ok {
 		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("after disk cache read: %w", err)
+			return nil, fmt.Errorf("after shared cache read: %w", err)
 		}
 
 		r.storeCachedImage(cacheKey, data)
@@ -108,18 +110,18 @@ func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cach
 		return nil, fmt.Errorf("after calendar image render: %w", err)
 	}
 
-	r.storeRenderedImage(cacheKey, rendered)
+	r.storeRenderedImage(ctx, cacheKey, rendered)
 
 	return rendered.data, nil
 }
 
-func (r *CalendarCardRenderer) storeRenderedImage(cacheKey calendarCacheKey, rendered renderedCalendarImage) {
+func (r *CalendarCardRenderer) storeRenderedImage(ctx context.Context, cacheKey calendarCacheKey, rendered renderedCalendarImage) {
 	if rendered.cachePolicy.memoryCacheable {
 		r.storeCachedImage(cacheKey, rendered.data)
 	}
 
 	if rendered.cachePolicy.diskCacheable {
-		r.storeDiskCachedImage(cacheKey, rendered.data)
+		r.storeSharedCachedImage(ctx, cacheKey, rendered.data)
 	}
 }
 

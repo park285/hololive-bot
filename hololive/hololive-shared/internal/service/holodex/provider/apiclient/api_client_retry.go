@@ -55,7 +55,7 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 		failureKind = "timeout"
 	}
 
-	c.openCircuit()
+	c.openCircuit(ctx)
 
 	if c.IsCircuitOpen() {
 		return false

@@ -11,13 +11,18 @@ import (
 	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
-// rememberRetryAfter는 호출자의 취소와 무관하게 동일 클라이언트의 429 대기를 보존합니다.
-func (c *APIClient) rememberRetryAfter(header string) {
+// rememberRetryAfter는 호출자의 취소와 무관하게 동일 클라이언트와 공유 상태의 429 대기를 보존합니다.
+func (c *APIClient) rememberRetryAfter(ctx context.Context, header string) {
 	until, ok := parseRetryAfter(header, time.Now())
 	if !ok {
 		return
 	}
 
+	c.extendLocalCooldown(until)
+	c.publishCooldown(ctx, until)
+}
+
+func (c *APIClient) extendLocalCooldown(until time.Time) {
 	c.cooldownMu.Lock()
 	defer c.cooldownMu.Unlock()
 
@@ -55,6 +60,8 @@ func (c *APIClient) waitForCooldown(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("holodex cooldown canceled: %w", err)
 		}
+
+		c.mergeSharedCooldown(ctx)
 
 		delay := c.cooldownRemaining()
 

@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -85,8 +86,10 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 
 	var calendarFinder handlercore.CelebrationCalendarFinder
 
+	calendarCache := sharedcache.NewValkeyStore(deps.Cache)
+
 	if deps.MemberRepository != nil {
-		calendarFinder = command.NewCachedCelebrationCalendarFinder(deps.MemberRepository, deps.CalendarImageCacheDir, deps.CalendarEntryCacheTTL)
+		calendarFinder = command.NewCachedCelebrationCalendarFinder(deps.MemberRepository, calendarCache, deps.CalendarEntryCacheTTL)
 	}
 
 	bot := &Bot{
@@ -114,7 +117,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		doneCh:               make(chan struct{}),
 		selfSender:           stringutil.Normalize(deps.BotSelfUser),
 	}
-	bot.initImageRenderers(deps.CalendarImageCacheDir, deps.MessageStrings)
+	bot.initImageRenderers(calendarCache, deps.MessageStrings)
 
 	bot.rooms = newRoomCatalog(bot.postgres, bot.irisClient, bot.logger)
 
@@ -139,8 +142,8 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	return bot, nil
 }
 
-func (b *Bot) initImageRenderers(calendarCacheDir string, strings *messagestrings.Store) {
-	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(calendarCacheDir), render.WithCalendarStrings(strings))
+func (b *Bot) initImageRenderers(calendarCache sharedcache.Store, strings *messagestrings.Store) {
+	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarImageCache(calendarCache), render.WithCalendarStrings(strings))
 }
 
 func (b *Bot) initializeCommands() {
