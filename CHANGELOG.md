@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **SELinux 호스트의 docker-proxy:** `docker-proxy`에 `security_opt: label=type:iris_docker_proxy.process`를 붙였습니다. hololive-seoul이 AlmaLinux 10(SELinux Enforcing)으로 옮겨 기본 `container_t`는 `docker.sock`에 연결하지 못하기 때문입니다. domain 정의는 iris-stack `deploy/rhel-host-security/iris_container.cil`에 있습니다. SELinux가 꺼진 호스트의 Docker는 이 옵션을 무시하고, 다른 서비스와 image는 바뀌지 않습니다. 2026-11-04 전환 때 운영 배포본에 같은 변경을 적용했습니다.
+
 ## v13.3.0 - 2026-11-03
 
 - **알림 발송 대기 단축:** hololive-api가 `notification_delivery_outbox`·`youtube_notification_outbox` 행을 commit한 뒤 payload 없는 Valkey 신호(`notification:delivery:wakeup`, `youtube:delivery:wakeup`)를 보내고, alarm-worker는 빈 조회 뒤 `BRPOP`으로 기다려 신호를 받으면 바로 claim합니다. 처리한 행이 있으면 다음 조회를 250ms 뒤에 시작하므로 연속 backlog도 `poll_interval_ms`보다 짧은 간격으로 소진합니다. 신호는 정본이 아니어서 Valkey 오류·유실 때는 기존처럼 `poll_interval_ms` 주기로 조회하고, 신호 실패가 적재를 실패시키지 않습니다. 배포 선행 조건: Valkey `hololive-api` 계정 `+lpush`(세 노드 적용 완료). schema·설정 key 변경은 없습니다.
