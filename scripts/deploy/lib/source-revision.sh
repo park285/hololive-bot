@@ -30,40 +30,6 @@ deploy_source_revision() {
     printf '%s\n' "${revision}"
 }
 
-deploy_require_single_identifier() {
-    local label="$1"
-    shift
-    local identifier=""
-
-    if ! identifier="$("$@")"; then
-        echo "[ERROR] Failed to resolve ${label}" >&2
-        return 1
-    fi
-    if [[ -z "${identifier}" || "${identifier}" == *$'\n'* ]]; then
-        echo "[ERROR] Expected exactly one ${label}" >&2
-        return 1
-    fi
-    printf '%s\n' "${identifier}"
-}
-
-deploy_service_image_ref() {
-    local service="$1"
-    shift
-
-    deploy_require_single_identifier "image for ${service}" \
-        deploy_compose_service_image "${service}" "$@"
-}
-
-# config --images SERVICE는 depends_on 대상의 image도 함께 출력하므로 렌더링 결과에서 해당 service의 image만 읽는다.
-deploy_compose_service_image() {
-    local service="$1"
-    local rendered=""
-    shift
-
-    rendered="$("$@" config --format json "${service}")" || return 1
-    jq -er --arg service "${service}" '.services[$service].image' <<<"${rendered}"
-}
-
 deploy_verify_object_revision() {
     local container_cli="$1"
     local object_kind="$2"

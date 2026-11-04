@@ -1,0 +1,58 @@
+# 중앙 shortlink ingress다(관리자 웹은 iris-seoul). host network에서 30192 shortlink와 loopback 30193 health를
+# 제공하므로 host input hook의 admin-dashboard-ingress.nft가 HTTP 파싱 전에 source를 제한한다.
+# prestart가 HOLOLIVE_BOT_PORT_BIND_IP로 /run/hololive-bot/admin-dashboard-ingress.conf를 렌더링한다.
+[Unit]
+Description=Hololive central shortlink ingress
+# 런타임 peer는 Wants=로만 끌어온다. Requires=는 명시적 stop/restart를 전파해 primary fence(소비자 유지)와
+# Sentinel HA(로컬 노드 교체)를 깨뜨린다. 방화벽은 보안 전제라 Requires=로 둔다.
+Wants=hololive-api.service
+Requires=admin-dashboard-ingress-firewall.service
+After=hololive-api.service admin-dashboard-ingress-firewall.service tailscaled.service
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=admin-dashboard-ingress
+Image=${NGINX_IMAGE}
+Pull=never
+User=101
+Group=101
+# 호스트 ID와 분리한다(크기는 스택 공통 65536). host network여도 1024 미만 포트는 bind하지 못한다(지금은 30192·30193).
+UserNS=auto:size=65536
+Network=host
+Volume=/run/hololive-bot/admin-dashboard-ingress.conf:/etc/nginx/admin-dashboard-ingress.conf:ro
+Tmpfs=/tmp:size=16m,mode=1777,U,noexec,nosuid,nodev
+Tmpfs=/var/cache/nginx:size=16m,mode=0755,U,noexec,nosuid,nodev
+Tmpfs=/var/run:size=1m,mode=0755,U,noexec,nosuid,nodev
+ReadOnly=true
+ReadOnlyTmpfs=false
+NoNewPrivileges=true
+DropCapability=all
+Memory=32m
+PidsLimit=64
+LogDriver=journald
+HealthCmd=["wget","-q","-O","/dev/null","-T","3","http://127.0.0.1:30193/healthz"]
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=10s
+HealthStartupCmd=["wget","-q","-O","/dev/null","-T","3","http://127.0.0.1:30193/healthz"]
+HealthStartupInterval=2s
+HealthStartupTimeout=5s
+# unhealthy면 StopSignal(SIGQUIT)·StopTimeout으로 정지한 뒤 Restart=always가 다시 띄운다(Docker 시절 deunhealth restart와 같다).
+HealthOnFailure=stop
+Notify=healthy
+Exec=nginx -c /etc/nginx/admin-dashboard-ingress.conf -g "daemon off;"
+
+[Service]
+Environment=NGINX_IMAGE=localhost/iris-stack-nginx:1.31.7-zlib1.3.2-r1
+EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
+ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart admin-dashboard-ingress
+Restart=always
+RestartSec=5s
+TimeoutStartSec=120
+LogRateLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

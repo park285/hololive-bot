@@ -1,0 +1,3 @@
+# 운영 PGDATA다. 기존 Docker volume 이름을 유지하며 컷오버 때 정지 상태로 rsync해 옮긴다.
+[Volume]
+VolumeName=hololive-bot_holo-pg-data

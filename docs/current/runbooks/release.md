@@ -13,11 +13,11 @@ artifact 버전이며 독립 build가 필요하면 서로 달라질 수 있습�
 `VERSION`이 가리키는 전체 source snapshot에만 붙입니다.
 
 collector·PO image도 `hololive/hololive-api/VERSION`을 쓰므로 API를 재빌드하지 않는 collector·PO
-릴리스에서도 이 파일이 올라갈 수 있습니다. 이때 hololive-api image는 이전 build로 남지만, 중앙에서 이후
-전체 `compose up`(재부팅 때의 `systemd-compose-up.sh` 포함)이 돌면 `compose.sh`가 이 파일 값을
-`HOLO_API_VERSION`으로 내보내 hololive-api를 `APP_VERSION=<repo 릴리스>`로 재생성합니다. API가 보고하는
-`APP_VERSION`은 repo 릴리스와 같아지지만 image의 revision·version label은 이전 build를 가리킵니다. API
-source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, API 산출물 판정은 image label로 합니다.
+릴리스에서도 이 파일이 올라갈 수 있습니다. 이때 hololive-api image는 이전 build로 남지만, 중앙의
+`hololive-api.service`가 (재)시작될 때마다(재부팅 포함) Quadlet prestart가 배포 트리의 이 파일 값을
+`APP_VERSION`으로 넘깁니다. API가 보고하는 `APP_VERSION`은 repo 릴리스와 같아지지만 image의 revision·version
+label은 이전 build를 가리킵니다. API source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, API 산출물 판정은
+image label로 합니다.
 
 릴리즈할 때는 다음 순서를 지킵니다.
 
@@ -37,7 +37,7 @@ source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, 
 먼저 구 API/alarm settings·mode를 받는 **10.2.1 호환 baseline을 실제 운영에서 수용**합니다.
 구 프로필 CLI·인증된 loaded hash·atomic source drift·paired rollback 증거 없이 새 settings를
 활성화하지 않습니다. 준비 receipt나 source 통합은 이 수용을 대신하지 않습니다.
-[Compose cutover 절차](../../../deploy/compose/README.md#worker-settings-cutover-1100)는
+[worker settings cutover 절차](../../../deploy/compose/README.md#worker-settings-cutover-1100)는
 11.0.0의 단일 strict schema, 최초 capture, no-build 후보 검사와 복구 bundle을 정의합니다.
 다섯 genuine shared-go v2.14.0 pin/sum과 전체 upstream migration manifest 324까지를 유지하며
 stream-duration·time-finalization·membership·Node·issuer 산출물을 함께 보존합니다.
@@ -59,99 +59,95 @@ persisted 설정 정리도 각 승인·증거를 남깁니다. Valkey noeviction
 
 모든 build·deploy·restart는 `hololive-bot-ops`로 라우팅하고 각각 필요한 승인을
 확인합니다. 검증된 clean revision의 전체 image build-only 진입점은
-`./build-all.sh --no-bump --build-only`입니다. 중앙 service의 실제 배포는 아래의
-build host 생성·검증, image와 deploy tree 전송, runtime host no-build cutover 세 단계를
-분리해 수행합니다.
-
-`./scripts/deploy/compose-redeploy-service.sh`는 실행한 한 호스트에서 build, migration과
-`compose up`을 연속 수행하는 배포 도구입니다. 실행하면 runtime과 DB에 영향을 줄 수 있으므로
-로컬 검증 명령으로 사용하지 않습니다. 중앙 production cutover 진입점이 아니며 build host나
-runtime host 어느 쪽에서도 중앙 배포용으로 실행하지 않습니다.
+`./build-all.sh --no-bump --build-only`(`podman build`)입니다. 중앙 service의 실제 배포는 아래의
+build host 생성·검증, image와 deploy tree 전송, runtime host Quadlet 기동 세 단계를 분리해 수행합니다.
+중앙 unit 정의와 설치는 `deploy/quadlet/README.md`가 소유합니다.
 
 ### 1. 빌드 호스트: 이미지 생성과 검증
 
-검토된 revision에서 clean worktree로 빌드하고, 세 항목이 모두 맞는지 확인합니다.
+검토된 revision에서 clean worktree로 빌드하고, 세 항목이 모두 맞는지 확인합니다. x86_64 build host의
+arm64 빌드는 등록된 qemu-aarch64 binfmt가 있어야 하며 없으면 `build-all.sh`가 빌드 전에 멈춥니다.
 
 ```bash
-docker buildx build --builder <multiarch-builder> --platform linux/arm64 --load \
-  -t <service>:prod-arm64 -f <service-dockerfile> \
-  --build-arg VERSION="$(xargs <VERSION)" --build-arg REVISION="$(git rev-parse HEAD)" .
+HOLOLIVE_BUILD_PLATFORM=linux/arm64 ./build-all.sh --no-bump --build-only
 
-docker image inspect <service>:prod-arm64 \
+podman image inspect localhost/<image>:prod \
   --format '{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}'
 ```
 
 `arch=arm64`가 아니거나 revision이 `unknown`·short SHA이면 중단합니다.
 
-### 2. 롤백 보존, 전송과 승격
+### 2. 전송
 
-현재 `prod` image가 있으면 새 image를 승격하기 전에 UTC timestamp tag로 보존합니다.
-이 tag와 직전 compose tree가 이번 cutover의 1차 rollback artifact입니다.
-
-```bash
-rollback_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-ssh <central-host> "if sudo -n docker image inspect <service>:prod >/dev/null 2>&1; then \
-  sudo -n docker tag <service>:prod <service>:rollback-${rollback_stamp}; fi"
-```
-
-기존 `prod` image가 없는 최초 배포일 때만 `image inspect` 실패를 허용합니다. 기존
-image가 있는데 tag 생성이 실패한 경우에는 전송·승격을 진행하지 않습니다.
+image는 build host에서 `:candidate` 이름으로 저장해 중앙에 적재합니다. 중앙의 `:prod` tag는 옮기지 않습니다.
+API·worker의 실행 image는 worker-profile drop-in이, infra image는 host `compose.env`의 identity가 정합니다
+([image identity 소유](../../../deploy/quadlet/README.md#이미지)). collector c와 PO issuer는 kapu의
+`scripts/deploy/po-central-cutover.sh`가 build·전송·교체를 함께 소유합니다.
 
 ```bash
-docker save <service>:prod-arm64 | gzip -1 \
-  | ssh <central-host> 'gunzip | sudo -n docker load'
-ssh <central-host> 'sudo -n docker tag <service>:prod-arm64 <service>:prod'
+podman tag localhost/<image>:prod localhost/<image>:candidate
+podman image inspect localhost/<image>:candidate --format 'sha256:{{.Id}}'    # build host identity를 기록
+podman save --format docker-archive localhost/<image>:candidate | gzip -1 \
+  | ssh <central-host> 'gunzip | sudo -n podman load'
+ssh <central-host> "sudo -n podman image inspect localhost/<image>:candidate --format 'sha256:{{.Id}}'"
 ```
 
-### 3. 런타임 호스트: no-build cutover
+`build-all.sh`는 `--format docker`로 빌드합니다. `oci-archive`로 옮기면 config가 OCI 형식으로 바뀌어
+수신측 `.Id`가 build host와 달라지므로 `docker-archive`를 씁니다(2026-11-04 리허설 VM 실측). 두 identity가 다르면
+배포하지 않습니다.
 
-`/opt/hololive-bot/compose/current`에서 실행합니다. `compose.sh`는 `--build`를 주지
-않으면 빌드하지 않으며, bind-mount 쓰기 권한·public ingress 렌더·health gate
-preflight가 걸립니다. 부분 `up`에는 항상 `--no-deps`를 붙입니다 — `hololive-api`의
-`depends_on`에 `hololive-alarm-worker`가 있어 생략하면 alarm dispatcher가 함께 뜹니다.
+rollback 기준은 다음과 같습니다. API·worker는 배포 helper가 실행 중이던 image·profile pair를 release 디렉터리와
+`hololive-worker-profile:pair-*` tag로 보존합니다. infra image는 바꾸기 전 `compose.env` 값(이전 identity)과 그 image이며,
+수용 전에는 이전 image를 지우지 않습니다. 직전 배포 트리(`/opt/hololive-bot/compose/current.bak-*`)도 함께 보존합니다.
+
+### 3. 런타임 호스트: Quadlet 기동
+
+배포할 commit의 clean checkout에서 `sudo ./scripts/deploy/sync-opt-current.sh`로 `/opt/hololive-bot/compose/current`와
+unit을 갱신합니다. 이 도구는 배포 트리에 그 commit을 `.source-revision`으로 남기고, host `compose.env`의 PostgreSQL
+연결 예산을 확인하지 못하면 아무것도 설치하지 않습니다. unit은 빌드하지 않으며(`Pull=never`), prestart가 bind 주소·비밀
+파일·방화벽을 확인합니다.
+
+API·worker는 배포 트리의 배포 helper로 교체합니다. helper가 이전 pair 보존, candidate 검사, 활성화 전
+`hololive-db-migrate`(같은 revision의 API image로 고정), drop-in 활성화와 restart, `verify-live`·`NRestarts` 확인을 한
+번에 하고, 활성화 뒤 실패하면 이전 pair로 되돌립니다. 따로 `systemctl start hololive-db-migrate.service`나
+`systemctl restart`를 실행하지 않습니다. 단계와 결과 줄은 [배포 helper](../../../deploy/quadlet/README.md#배포-helper)에 있습니다.
 
 ```bash
-export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
-
-# 마이그레이션 one-shot 먼저, 종료 코드 0 확인
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  run --rm --no-deps hololive-db-migrate
-
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  up -d --no-deps <service>...
+helper=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh
+sudo "$helper" hololive-api sha256:<api-id>
+sudo "$helper" hololive-alarm-worker sha256:<worker-id> sha256:<api-id>
 ```
 
-main-host collector-c는 prod.yml의 `youtube-collector`이므로 위 명령에 서비스 이름을 넣어 같은 파일 조합으로
-재생성합니다. 이를 재선언만 하던 빈 main-ap overlay 2종과 profile은 삭제했습니다(stack-audit 2026-09-26 T11).
+마지막 줄이 `[OUTCOME] deployed`가 아니면 실패입니다. `not_activated`는 실행 중 pair를 바꾸지 않았다는 뜻입니다(migration은
+적용됐을 수 있음). `failed_after_activation`은 candidate가 활성화된 채 남았다는 뜻이며 helper는 자동으로 되돌리지 않습니다.
+release 디렉터리를 보존하고, 스키마·admission 호환성을 승인받은 뒤에만 [rollback 런북](rollback.md)의 `--check`·`--apply`로
+이전 pair를 되살립니다. 호환되지 않으면 fix-forward합니다. helper는 실패한 단계를 재시도하지 않습니다.
+
+런타임 peer는 `Wants=`라 한 unit의 restart가 다른 unit을 재시작하지 않습니다. 다만 멈춰 있는 peer는 함께 시작되므로
+`hololive-api.service`를 시작하면 `hololive-alarm-worker.service`도 시작됩니다. main-host collector-c는
+`hololive-youtube-collector-c.service`이며 `po-central-cutover.sh`가 PO issuer를 먼저 교체·검증한 뒤 collector를
+재시작합니다. infra image는 `compose.env`의 identity를 바꾼 뒤 승인된 창에서 해당 unit만 재시작합니다.
+
+**컷오버 직후**에는 app unit이 아직 drop-in 없이 `:prod`·compose.env 값을 따르므로, 첫 배포 전에
+[첫 고정](../../../deploy/quadlet/README.md#컷오버-직후-첫-고정) 절차로 세 app 서비스의 drop-in을 만듭니다.
 
 ### 4. 수용 증거
 
-recreate 시작 시각을 기록해 두고, 대상 컨테이너의 `StartedAt`이 그 이후이며
-health가 `healthy`, `RestartCount=0`, 실행 중 이미지의 revision이 검토된 SHA와
-일치하는지 확인합니다. 건강한 컨테이너가 다른 이미지 ID로 돌고 있으면 실패한
-rollout입니다. 롤백 태그와 직전 배포 트리는 수용될 때까지 보존합니다.
-PO issuer(`youtube-po-b`, `youtube-po-c`, native `hololive-youtube-po.service`)의 재시작 카운트는
-generation 교체 횟수이므로 `RestartCount=0` 대신 [youtube-collector 런북의 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)을 따릅니다.
+변경 시작 시각을 기록해 두고 다음을 확인합니다.
 
-> 배포 스크립트는 기존 host-network Postgres 런타임에서 live-compat overlay 없이
-> 배포하려는 경로를 fail-closed로 거부한다. live-compat overlay는 이제
-> `network_mode: host` 대신 bridge network를 유지하고 `<tailnet-central>:5433`을
-> container `5432`에 명시 bind한다. 의도적 토폴로지 변경 시에만
-> `ALLOW_POSTGRES_TOPOLOGY_CHANGE=true`를 설정한다.
+- helper의 `[OUTCOME] deployed` 줄(서비스, revision, image identity, release 디렉터리)
+- 대상 container의 `StartedAt`이 변경 시작 이후이고 health가 `healthy`
+- 실행 중 image identity(`sha256:` + `podman inspect --format '{{.Image}}' <container>`)와 revision label이 검토된 SHA와 일치
+- `systemctl show <unit>.service -p NRestarts --value`가 `0`. 명시적 restart가 0으로 되돌리므로 이후 값은 자동
+  재시작(unhealthy 정지·crash) 횟수입니다. Podman은 기동마다 새 container(`--replace --rm`)라 container `RestartCount`는
+  늘 0이어서 기준으로 쓰지 않습니다.
 
-> Security (a691472f): live-compat overlay는 현 호스트의 PostgreSQL/cert
-> 토폴로지를 반영하는 필수 overlay이며 "약화 레이어"가 아니다. 과거 이 overlay가
-> 비-bot 서비스(admin-api 등)에 `/run/hololive-bot/certs` 디렉터리 전체를
-> `!override` 마운트해 불필요한 cert를 노출하던 결함은 파일 단위 마운트로 환원해
-> 해소했다. 단 `postgres-ca.pem`은 모든 app 서비스(admin-api 포함)가
-> PostgreSQL에 `verify-full`로 연결하는 데 필수이므로 파일 단위로
-> 함께 mount한다 — 디렉터리→파일 환원(0c8d4125) 시 이 파일이 누락돼 재배포 컨테이너가
-> `unable to read CA file`로 크래시하던 회귀를 복원한 것이다(06-20 이전 컨테이너는 옛
-> 디렉터리 mount 유지로 미발현). admin-api는 `hololive-h3.{crt,key}`·`iris-ca.pem`·
-> `postgres-ca.pem`을 개별 마운트하고 디렉터리 전체는 더 이상 마운트하지
-> 않는다(검증: `scripts/deploy/test-live-compat-cert-mount-scope.sh`).
+건강한 container가 다른 image ID로 돌고 있으면 실패한 rollout입니다. 이전 pair release 디렉터리와 직전 배포 트리는
+수용될 때까지 보존합니다. PO issuer(`youtube-po-b`, `youtube-po-c`, native `hololive-youtube-po.service`)의 재시작
+카운트는 generation 교체 횟수이므로 `NRestarts=0` 대신 [youtube-collector 런북의 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)을 따릅니다.
+
+> 중앙 Postgres publish 주소·인증서 mount는 `holo-postgres.container`와 app unit이 정의하고 기동 전에 `quadlet-prestart`가
+> topology 정본·Tailscale identity와 대조한다. Docker 시절 live-compat overlay와 그 cert mount 검사는 컷오버로 없어졌다.
 
 Current Go runtime services:
 
@@ -239,21 +235,14 @@ bash scripts/publish-release.sh "$tag" "$previous_tag" edit
 
 ## Smoke test
 
-These scripts do not rebuild, redeploy, or recreate Docker Compose services. `smoke-runtime-health.sh` expects local services to already be running.
+다음 확인은 이미지를 다시 빌드하거나 unit을 재시작하지 않습니다. 중앙 호스트에서 실행 중인 컨테이너를 대상으로 합니다.
 
 ```bash
-./scripts/smoke/smoke-compose-config.sh
-./scripts/smoke/smoke-runtime-health.sh
-```
-
-Equivalent manual checks:
-
-```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T youtube-collector ./bin/healthcheck https://127.0.0.1:30025/health
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
+sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
+sudo podman exec hololive-youtube-collector-c ./bin/healthcheck https://127.0.0.1:30025/health
 ```
 
 ## 관련 문서

@@ -1,4 +1,0 @@
-services:
-  youtube-collector:
-    deploy:
-      replicas: 0

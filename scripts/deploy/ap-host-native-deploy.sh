@@ -165,7 +165,7 @@ sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_
   --goarch amd64 \
   --goamd64 "$AP_GOAMD64"
 issuer_artifact="$artifact_dir/po-sandbox-build"
-"$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" amd64 "$native_revision" "$version" "$issuer_artifact"
+"$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" amd64 "$native_revision" "$version" "$issuer_artifact" rootfs
 mkdir -p "$artifact_dir/po-sandbox"
 cp "$issuer_artifact/rootfs.tar" "$issuer_artifact/rootfs.tar.sha256" \
   "$issuer_artifact/rootfs-manifest.json" "$issuer_artifact/revision" \

@@ -20,7 +20,28 @@ PROFILES = {
     "youtube-collector": "youtube-collector-c.json",
     "youtube-collector-b": "youtube-collector-b.json",
 }
-CLI = os.environ.get("CONTAINER_CLI", "docker")
+# 서비스마다 실행 런타임이 하나로 정해져 있다. 중앙(hololive-seoul)은 rootful Podman Quadlet,
+# Seoul AP는 Docker Compose다. main()이 서비스로 CLI를 정하며 다른 런타임으로 바꿔 시도하지 않는다.
+RUNTIMES = {
+    "hololive-api": "podman",
+    "hololive-alarm-worker": "podman",
+    "youtube-collector": "podman",
+    "youtube-collector-b": "docker",
+}
+# 중앙 서비스의 release 고정은 compose overlay가 아니라 이 unit의 drop-in(DROPIN)이다.
+QUADLET_UNITS = {
+    "hololive-api": "hololive-api.container",
+    "hololive-alarm-worker": "hololive-alarm-worker.container",
+    "youtube-collector": "hololive-youtube-collector-c.container",
+}
+# HOLOLIVE_QUADLET_TEST_ROOT는 quadlet-prestart와 같은 테스트 전용 root 접두어다.
+QUADLET_DIR = Path(os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT", "") + "/etc/containers/systemd/hololive-bot")
+DROPIN = "50-worker-profile.conf"
+# 중앙 pair는 그 image가 실제로 돌던 기본 unit 정의도 함께 보존한다. sync-opt-current.sh는 배포 helper보다 먼저
+# 새 revision의 기본 unit을 설치하므로, 롤백이 image만 되돌리면 이전 image가 새 unit 정의(env·HealthCmd·mount)로 뜬다.
+# Docker 시절 compose-rollback-service.sh가 compose 스냅숏으로 이전 구성 전체를 되살린 것과 같은 경계다.
+UNIT_RECORD = "unit.container"
+CLI = None
 
 
 def run(*args):
@@ -71,6 +92,18 @@ def validate_container_pair(container, before, directory):
         raise ValueError("previous image requires one binary entrypoint")
     command.extend(("--entrypoint", entrypoint[0], before["Image"], "--check-worker-profile"))
     subprocess.run(command, env={**os.environ, **environment}, check=True, timeout=30)
+
+
+def check_pair(directory, pair):
+    # 옛 `compose run --rm --no-deps <service> --check-worker-profile`에 해당하는 후보 검사다.
+    # --check-worker-profile은 STACK_WORKER_PROFILE_FILE만 읽으므로(workercontract.LoadProfileFromEnv) 운영 env·
+    # network·다른 mount 없이 pair image와 release 디렉터리만 붙인다. drop-in이 실행 unit에 붙이는 것과 같은
+    # bind 원본이라 SELinux label 판정도 같다. 실행 중인 container가 없어도(정지·첫 도입) 검사할 수 있다.
+    subprocess.run([CLI, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
+                    "--cap-drop", "all", "--security-opt", "no-new-privileges",
+                    "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly",
+                    "--env", "STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json",
+                    pair["image"], "--check-worker-profile"], check=True, timeout=60)
 
 
 def prepare_native(service, release, host_env, unit):
@@ -173,17 +206,20 @@ def image_identity(image):
     revision = data["Config"]["Labels"].get("org.opencontainers.image.revision", "")
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("profile pair requires a full image revision")
-    return {"image": data["Id"], "revision": revision, "architecture": data["Architecture"], "os": data["Os"]}
+    # Docker .Id는 sha256:<hex>, Podman .Id는 접두어 없는 hex다. identity는 sha256:<hex> 하나로 기록한다.
+    image_id = data["Id"] if CLI == "docker" else "sha256:" + data["Id"]
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+        raise ValueError("profile pair requires a sha256 image identity")
+    return {"image": image_id, "revision": revision, "architecture": data["Architecture"], "os": data["Os"]}
 
 
 def save_pair(directory, service, identity):
     identity.update(service=service, profile_hash=digest(directory / "profile.json"))
     (directory / "pair.json").write_text(json.dumps(identity) + "\n")
+    names = ["profile.json", "pair.json"] + ([UNIT_RECORD] if (directory / UNIT_RECORD).is_file() else [])
     (directory / "SHA256SUMS").write_text(
-        f'{identity["profile_hash"]}  profile.json\n'
-        f'{hashlib.sha256((directory / "pair.json").read_bytes()).hexdigest()}  pair.json\n'
-    )
-    for name in ("profile.json", "pair.json", "SHA256SUMS"):
+        "".join(f"{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}\n" for name in names))
+    for name in names + ["SHA256SUMS"]:
         (directory / name).chmod(0o444)
     return identity
 
@@ -218,7 +254,44 @@ def atomic_publish(files):
             temporary.unlink(missing_ok=True)
 
 
+def dropin(directory, service, pair, output=None, app_version=None):
+    # Quadlet drop-in의 Image=와 같은 키의 Environment=는 기본 unit 값을 교체하고 Volume=은 더해진다.
+    # 기본 unit의 원본 mirror mount는 남겨 desired profile 관측을 유지한다. 값은 unit 문법에 그대로
+    # 들어가므로 systemd specifier(%)·공백·mount 구분자(:)가 없는 경로만 받는다.
+    if re.fullmatch(r"/[A-Za-z0-9._/@+-]+", str(directory)) is None:
+        raise ValueError("profile pair path is not safe for a Quadlet drop-in")
+    lines = [
+        "# worker-profile-pair.py가 생성한 release 고정 drop-in이다. 직접 고치지 않는다.",
+        "[Container]",
+        "Image=" + pair["image"],
+        "Label=" + LABEL + "=" + str(directory),
+        "Environment=STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json",
+        "Environment=STACK_WORKER_PROFILE_SOURCE_FILE=" + TARGET + "/" + PROFILES[service],
+        "Volume=" + str(directory) + ":" + RELEASE_TARGET + ":ro",
+    ]
+    if app_version is not None:
+        # 이전 image로 되돌릴 때 prestart가 배포 트리 VERSION에서 넣는 값 대신 그 image의 값을 보고한다.
+        # Podman은 --env를 --env-file보다 우선한다.
+        if re.fullmatch(r"[0-9A-Za-z.+-]+", app_version) is None:
+            raise ValueError("retained APP_VERSION is not safe for a Quadlet drop-in")
+        lines.append("Environment=APP_VERSION=" + app_version)
+    atomic_publish([(output or directory / DROPIN, ("\n".join(lines) + "\n").encode("utf-8"))])
+
+
+def quadlet_slot(service, unit):
+    # 후보 profile은 기본 unit이 원본 mirror를 읽기 전용으로 붙이고 서비스 slot 파일을 가리킬 때만 고정한다.
+    lines = [line.strip() for line in unit.splitlines()]
+    if lines.count("Environment=STACK_WORKER_PROFILE_FILE=" + TARGET + "/" + PROFILES[service]) != 1:
+        raise ValueError("candidate profile env does not match its service slot")
+    mounts = [line for line in lines if line.startswith("Volume=") and line.split(":")[1:2] == [TARGET]]
+    if mounts != ["Volume=" + SOURCE + ":" + TARGET + ":ro"]:
+        raise ValueError("candidate profile directory does not match its service slot")
+
+
 def overlay(directory, service, pair, config=None, output=None):
+    if service in QUADLET_UNITS:
+        dropin(directory, service, pair, output)
+        return
     settings = {
         "image": pair["image"],
         "pull_policy": "never",
@@ -269,6 +342,8 @@ def capture(container, service, directory, root):
         if before["State"]["Running"] and container_profile_hash(service, container, before) != pair["profile_hash"]:
             raise ValueError("running process differs from its retained profile pair")
         (directory / "profile.json").write_bytes(profile_bytes(prior / "profile.json"))
+        if (prior / UNIT_RECORD).is_file():
+            (directory / UNIT_RECORD).write_bytes((prior / UNIT_RECORD).read_bytes())
     else:
         # 첫 도입은 기존 프로세스가 로드한 바이트를 증명할 수 있을 때만 허용한다.
         if not before["State"]["Running"]:
@@ -278,7 +353,15 @@ def capture(container, service, directory, root):
         if profile_path != TARGET + "/" + PROFILES[service]:
             raise ValueError("unexpected previous profile path")
         running_hash = container_profile_hash(service, container, before)
-        run(CLI, "cp", container + ":" + profile_path, str(directory / "profile.json"))
+        if CLI == "podman":
+            # UserNS=auto container에서는 idmap 없는 bind의 root 소유 파일을 podman cp가 꺼내지 못한다
+            # (host ID 0 cannot be mapped). profile 디렉터리는 bind라 그 host 원본이 container가 읽는 파일과 같다.
+            sources = [mount.get("Source") for mount in before.get("Mounts") or [] if mount.get("Destination") == TARGET]
+            if sources != [SOURCE]:
+                raise ValueError("unexpected previous profile mount")
+            (directory / "profile.json").write_bytes(profile_bytes(Path(SOURCE) / PROFILES[service]))
+        else:
+            run(CLI, "cp", container + ":" + profile_path, str(directory / "profile.json"))
         if running_hash != digest(directory / "profile.json"):
             raise ValueError("previous profile bytes differ from the running process; writer unchanged")
         after = inspect("container", container)
@@ -286,6 +369,11 @@ def capture(container, service, directory, root):
                 after["Id"], after["State"]["StartedAt"], after["Image"]):
             raise ValueError("previous process changed during profile capture")
         pair = image_identity(before["Image"])
+        # 첫 도입은 설치된 기본 unit을 기록한다. 컷오버 직후처럼 실행 중 container가 그 unit으로 기동했을 때만 정확하므로
+        # 첫 도입(prepare)은 기본 unit을 설치하고 기동한 직후에 한다.
+        installed = QUADLET_DIR / QUADLET_UNITS[service] if service in QUADLET_UNITS else None
+        if installed is not None and installed.is_file():
+            (directory / UNIT_RECORD).write_bytes(installed.read_bytes())
     (directory / "profile.json").chmod(0o444)
     validate_container_pair(container, before, directory)
     pair["retained_image"] = "hololive-worker-profile:pair-" + hashlib.sha256(str(directory).encode()).hexdigest()[:24]
@@ -303,14 +391,19 @@ def activate(directory, service, root, prepared_overlay=None):
     if not directory.resolve().is_relative_to(releases):
         raise ValueError("active profile pair must live under artifacts/worker-profile/releases")
     verify(directory, service)
-    contents = (prepared_overlay or directory / "compose.yml").read_bytes()
+    name = DROPIN if service in QUADLET_UNITS else "compose.yml"
+    contents = (prepared_overlay or directory / name).read_bytes()
     active = Path(root) / "artifacts/worker-profile/active"
     active.mkdir(mode=0o755, parents=True, exist_ok=True)
-    files = [(directory / "compose.yml", contents)] if prepared_overlay is not None else []
-    files.extend([
-        (active / (service + ".yml"), contents),
-        (active / (service + ".pair"), (str(directory) + "\n").encode("utf-8")),
-    ])
+    files = [(directory / name, contents)] if prepared_overlay is not None else []
+    if service in QUADLET_UNITS:
+        # 중앙 unit은 이 drop-in을 읽는다. daemon-reload와 재시작은 승인된 배포 절차가 한다.
+        unit_dropins = QUADLET_DIR / (QUADLET_UNITS[service] + ".d")
+        unit_dropins.mkdir(mode=0o755, parents=True, exist_ok=True)
+        files.append((unit_dropins / DROPIN, contents))
+    else:
+        files.append((active / (service + ".yml"), contents))
+    files.append((active / (service + ".pair"), (str(directory) + "\n").encode("utf-8")))
     atomic_publish(files)
 
 
@@ -324,20 +417,32 @@ def main():
         return
     if service not in PROFILES:
         raise ValueError("unsupported profile service")
+    global CLI
+    CLI = RUNTIMES[service]
     directory = Path(raw_directory).resolve()
     if action == "candidate":
-        config = json.load(sys.stdin)
-        svc = config["services"][service]
-        expected = TARGET + "/" + PROFILES[service]
-        if svc["environment"]["STACK_WORKER_PROFILE_FILE"] != expected:
-            raise ValueError("candidate profile env does not match its service slot")
-        mounts = [v for v in svc["volumes"] if v["target"] == TARGET]
-        if len(mounts) != 1 or mounts[0]["source"] != SOURCE or not mounts[0].get("read_only"):
-            raise ValueError("candidate profile directory does not match its service slot")
+        if service in QUADLET_UNITS:
+            # 중앙: 기본 unit 텍스트를 stdin으로, 배포할 image identity를 인자로 받는다.
+            unit_text = sys.stdin.read()
+            quadlet_slot(service, unit_text)
+            image = rest[0]
+        else:
+            config = json.load(sys.stdin)
+            svc = config["services"][service]
+            expected = TARGET + "/" + PROFILES[service]
+            if svc["environment"]["STACK_WORKER_PROFILE_FILE"] != expected:
+                raise ValueError("candidate profile env does not match its service slot")
+            mounts = [v for v in svc["volumes"] if v["target"] == TARGET]
+            if len(mounts) != 1 or mounts[0]["source"] != SOURCE or not mounts[0].get("read_only"):
+                raise ValueError("candidate profile directory does not match its service slot")
+            image = svc["image"]
         directory.mkdir(mode=0o755, parents=True, exist_ok=False)
+        if service in QUADLET_UNITS:
+            # 이 candidate가 활성화되면 이 기본 unit으로 돈다. 다음 release의 capture가 롤백용으로 이어받는다.
+            (directory / UNIT_RECORD).write_text(unit_text)
         source = Path(SOURCE) / PROFILES[service]
         (directory / "profile.json").write_bytes(profile_bytes(source))
-        pair = save_pair(directory, service, image_identity(svc["image"]))
+        pair = save_pair(directory, service, image_identity(image))
         overlay(directory, service, pair)
     elif action in ("capture", "prepare"):
         capture(rest[0], service, directory, rest[1])
@@ -346,14 +451,21 @@ def main():
             overlay(directory, service, pair)
             activate(directory, service, rest[1])
     elif action == "rollback":
-        overlay(directory, service, verify(directory, service), json.load(sys.stdin),
-                Path(rest[0]) if rest else None)
+        pair = verify(directory, service)
+        output = Path(rest[0]) if rest else None
+        if service in QUADLET_UNITS:
+            dropin(directory, service, pair, output,
+                   pair["app_version"] if service == "hololive-api" else None)
+        else:
+            overlay(directory, service, pair, json.load(sys.stdin), output)
     elif action == "verify-source":
         pair = verify(directory, service)
         if pair["profile_hash"] != digest(Path(SOURCE) / PROFILES[service]):
             raise ValueError("candidate source changed during profile validation; writer unchanged")
     elif action == "verify":
         verify(directory, service, rest[0] if rest else None)
+    elif action == "check":
+        check_pair(directory, verify(directory, service))
     elif action == "verify-live":
         before = inspect("container", rest[0])
         pair = verify(directory, service, before["Image"])

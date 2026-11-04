@@ -1,0 +1,3 @@
+# 비활성 참고 설정이다. 재활성화는 새 pg_basebackup으로 이 volume을 시딩한 뒤에만 한다.
+[Volume]
+VolumeName=hololive-bot_holo-pg-standby-data

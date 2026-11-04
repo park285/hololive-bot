@@ -1,0 +1,56 @@
+# 중앙 Valkey HA의 hololive 그룹 노드다. 역할(primary/replica)은 /data/valkey.conf가 소유하고
+# 앱은 Sentinel discovery로만 찾는다. TLS·ACL·seed 파일은 stack-secrets가 UID 999 읽기 권한으로 둔다.
+[Unit]
+Description=Hololive central Valkey HA node (hololive group)
+After=tailscaled.service
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=valkey-cache
+Image=${VALKEY_IMAGE}
+Pull=never
+User=999
+Group=1000
+GroupAdd=1000
+# 호스트 ID와 분리한다(크기는 스택 공통 65536). data·비밀은 :idmap으로 on-disk 999:1000을 그대로 쓴다.
+UserNS=auto:size=65536
+Network=hololive-net.network
+PublishPort=${VALKEY_BIND_IP}:16379:16379
+Volume=valkey-ha-data.volume:/data:idmap
+Volume=/etc/stack-secrets/valkey/hololive:/run/valkey:ro,idmap
+Volume=/etc/stack-secrets/valkey/certs:/run/valkey-certs:ro,idmap
+Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
+ReadOnly=true
+ReadOnlyTmpfs=false
+NoNewPrivileges=true
+DropCapability=all
+Sysctl=net.core.somaxconn=1024
+Memory=512m
+PidsLimit=256
+PodmanArgs=--oom-score-adj=-300
+LogDriver=journald
+HealthCmd=["valkey-runtime","health","/run/valkey/health-password","/run/valkey-certs/ca.pem","16379"]
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartupCmd=["valkey-runtime","health","/run/valkey/health-password","/run/valkey-certs/ca.pem","16379"]
+HealthStartupInterval=2s
+HealthStartupTimeout=5s
+# unhealthy면 StopTimeout을 지키는 정지 뒤 Restart=always가 다시 띄운다(Docker 시절 deunhealth restart와 같다).
+HealthOnFailure=stop
+Notify=healthy
+Exec=valkey-runtime server /run/valkey/server.conf /data/valkey.conf
+
+[Service]
+Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.3.2-r2
+EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
+ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart valkey-cache
+Restart=always
+RestartSec=5s
+TimeoutStartSec=300
+LogRateLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

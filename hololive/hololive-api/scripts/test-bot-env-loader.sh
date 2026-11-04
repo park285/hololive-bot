@@ -47,7 +47,7 @@ EOF
 chmod +x "${fakebin}/podman"
 
 run_bot() {
-  PATH="${fakebin}:${PATH}" CONTAINER_CLI=podman "${fixture_module}/scripts/bot.sh" "$@" >"${TMP_DIR}/out" 2>"${TMP_DIR}/err"
+  PATH="${fakebin}:${PATH}" "${fixture_module}/scripts/bot.sh" "$@" >"${TMP_DIR}/out" 2>"${TMP_DIR}/err"
 }
 
 if run_bot start; then

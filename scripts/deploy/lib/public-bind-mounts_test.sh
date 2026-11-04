@@ -14,7 +14,6 @@ printf 'events {}\nhttp { server { listen @BIND_IP@:30192; allow @BIND_IP@; } }\
 config="${tmpdir}/rendered/admin-dashboard-ingress.conf"
 export HOLOLIVE_INGRESS_CONF="${config}"
 export HOLOLIVE_BOT_PORT_BIND_IP="100.100.1.9"
-unset COMPOSE_ENV_FILE
 
 prepare_admin_dashboard_ingress_bind_mount "${tmpdir}"
 [[ "$(stat -c '%a' "${config}")" == "644" ]]
@@ -65,13 +64,5 @@ if prepare_admin_dashboard_ingress_bind_mount "${tmpdir}" >/dev/null 2>&1; then
     exit 1
 fi
 echo "[PASS] non-literal bind IP fails closed before template rendering"
-
-env_file="${tmpdir}/compose.env"
-printf 'HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.7\n' >"${env_file}"
-unset HOLOLIVE_BOT_PORT_BIND_IP
-export COMPOSE_ENV_FILE="${env_file}"
-prepare_admin_dashboard_ingress_bind_mount "${tmpdir}"
-grep -q 'listen 100.100.1.7:30192;' "${config}"
-echo "[PASS] bind IP falls back to COMPOSE_ENV_FILE"
 
 echo "public ingress bind mount checks passed"

@@ -36,29 +36,18 @@ expect_failure "untracked changes must fail closed" deploy_source_revision "${fi
 
 fakebin="${fixture}/fakebin"
 mkdir -p "${fakebin}"
-cat >"${fakebin}/docker" <<'EOF'
+cat >"${fakebin}/podman" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "${FAKE_REVISION_LABEL:-}"
 EOF
-cat >"${fakebin}/compose" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%b' "${FAKE_COMPOSE_IDS:-}"
-EOF
-chmod +x "${fakebin}/docker" "${fakebin}/compose"
+chmod +x "${fakebin}/podman"
 
 verify_object_fixture() {
     local label="$1"
     local expected="$2"
     FAKE_REVISION_LABEL="${label}" \
-        deploy_verify_object_revision "${fakebin}/docker" image image:fixture "${expected}"
-}
-
-single_identifier_fixture() {
-    local identifiers="$1"
-    FAKE_COMPOSE_IDS="${identifiers}" \
-        deploy_require_single_identifier fixture "${fakebin}/compose"
+        deploy_verify_object_revision "${fakebin}/podman" image image:fixture "${expected}"
 }
 
 verify_object_fixture "${expected_revision}" "${expected_revision}" \
@@ -69,42 +58,6 @@ expect_failure "missing image revision must fail" \
     verify_object_fixture "" "${expected_revision}"
 expect_failure "mismatched image revision must fail" \
     verify_object_fixture 0000000000000000000000000000000000000000 "${expected_revision}"
-[[ "$(single_identifier_fixture one)" == one ]] \
-    || fail "single compose mapping must resolve its identifier"
-expect_failure "missing compose mapping must fail" \
-    single_identifier_fixture ""
-expect_failure "multiple compose mappings must fail" \
-    single_identifier_fixture 'one\ntwo\n'
-
-cat >"${fixture}/compose.yml" <<'EOF'
-services:
-  valkey-cache:
-    image: ${FIXTURE_SOURCE_IMAGE:-fixture-cache:default}
-    depends_on:
-      - docker-proxy
-  docker-proxy:
-    image: fixture-proxy:default
-EOF
-cat >"${fixture}/compose override.yml" <<'EOF'
-services:
-  docker-proxy:
-    image: ${FIXTURE_PROXY_IMAGE:?fixture proxy image required}
-EOF
-printf 'FIXTURE_SOURCE_IMAGE=fixture-cache:env-override\nFIXTURE_PROXY_IMAGE=fixture-proxy:file-override\n' \
-    >"${fixture}/compose images.env"
-compose_cmd=(docker compose --project-name revision-fixture \
-    --env-file "${fixture}/compose images.env" -f "${fixture}/compose.yml")
-[[ "$(deploy_service_image_ref valkey-cache "${compose_cmd[@]}")" == fixture-cache:env-override ]] \
-    || fail "image resolution must use the caller's Compose env file"
-[[ "$(deploy_service_image_ref docker-proxy "${compose_cmd[@]}" \
-    -f "${fixture}/compose override.yml")" == fixture-proxy:file-override ]] \
-    || fail "image resolution must use every caller-supplied Compose file"
-expect_failure "unknown Compose service must fail" \
-    deploy_service_image_ref unknown-service "${compose_cmd[@]}"
-FAKE_COMPOSE_IDS='' expect_failure "empty Compose image output must fail" \
-    deploy_service_image_ref valkey-cache "${fakebin}/compose"
-FAKE_COMPOSE_IDS='one\ntwo\n' expect_failure "multiple Compose images must fail" \
-    deploy_service_image_ref valkey-cache "${fakebin}/compose"
 
 dockerfiles=(
     hololive/hololive-api/Dockerfile

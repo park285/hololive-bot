@@ -156,7 +156,7 @@ po_manifest=backups/po-sandbox-current-b.json
 test -r \"\$po_manifest\"
 po_revision=\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"source_revision\"])' \"\$po_manifest\")
 [[ \"\$po_revision\" =~ ^[0-9a-f]{40}\$ ]]
-po_verify_image hololive-youtube-po-sandbox:prod \"\$po_manifest\" \"\$po_revision\" arm64 backups/po-sandbox-current-b.image-id
+po_verify_image docker hololive-youtube-po-sandbox:prod \"\$po_manifest\" \"\$po_revision\" arm64 backups/po-sandbox-current-b.image-id
 [[ \$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' hololive-youtube-po-b) == \"\$po_revision\" ]]
 po_version=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' hololive-youtube-po-sandbox:prod)
 [[ \"\$po_version\" == \$(cat hololive/hololive-api/VERSION) ]]

@@ -35,13 +35,13 @@ Osaka의 적용 기록은 당시 증거로 보존하되, 해당 VM은 삭제했�
 
 ```bash
 bash scripts/ci/test-infra-images.sh
-docker buildx build --platform linux/arm64 --target test \
-  --build-arg REVISION="$(git rev-parse HEAD)" --output type=cacheonly deploy/images/postgres
-docker buildx build --platform linux/arm64 --target runtime \
-  --build-arg REVISION="$(git rev-parse HEAD)" --provenance=false --sbom=false \
-  --load --tag hololive-postgres:observability-candidate deploy/images/postgres
-docker image inspect --format '{{.Id}} arch={{.Architecture}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}' \
-  hololive-postgres:observability-candidate
+podman build --platform linux/arm64 --target test \
+  --build-arg REVISION="$(git rev-parse HEAD)" deploy/images/postgres
+podman build --platform linux/arm64 --format docker --target runtime \
+  --build-arg REVISION="$(git rev-parse HEAD)" \
+  --tag localhost/hololive-postgres:observability-candidate deploy/images/postgres
+podman image inspect --format 'sha256:{{.Id}} arch={{.Architecture}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}' \
+  localhost/hololive-postgres:observability-candidate
 ```
 
 root/UID 999 시작, preload 누락 거부, CPU 계측, sleep/행 잠금 표본, 권한, 재시작,
@@ -55,7 +55,7 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
    readiness와 동일 구간 DB 지표를 확인한다. 기존 image ID/tag와 deploy tree, env의 해당
    비밀 아닌 설정 값을 복구점으로 기록한다. env 전체나 credentials를 출력하지 않는다.
 2. 검증한 arm64 이미지와 필요한 배포 파일만 전송한다. 새 image의 architecture·전체 SHA와
-   Compose config를 대조한다. 기존 이미지와 volume은 보존한다.
+   설치된 `holo-postgres.container`를 대조한다. 기존 이미지와 volume은 보존한다.
 3. `stack-secrets/hosts/hololive-seoul/hololive-bot/compose.env` 마스터에서 아래 비밀 아닌
    키만 승인 범위에서 갱신한다. `sync-host.sh hololive-seoul --stack hololive-bot` dry-run의
    파일 범위·삭제 부재를 확인한 뒤 `--apply`로 배포한다. 호스트
@@ -66,18 +66,21 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
    HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain
    ```
 
-   Compose는 kcache `track=top`, planning off, wait `profile_pid=off`,
+   `holo-postgres.container`의 `Exec=`는 kcache `track=top`, planning off, wait `profile_pid=off`,
    `profile_queries=top`, `sample_cpu=off`, profile 20ms/history 100ms·20,000 entries를 사용한다.
    auto_explain은 1초 이상 문장을 nested 포함으로 기록하며 `log_analyze`·`log_buffers`는 켜고
    `log_timing`은 끈다. 바인드 값은 statement log와 같이 남기지 않는다(`log_parameter_max_length=0`).
    기본 비활성 상태의 custom GUC placeholder와 활성 상태 모두 로컬 기동을 검증한다.
-4. 승인된 새 이미지를 선택한 현재 prod+live-compat 파일 세트로 `config --quiet` 후
-   `up -d --no-build --no-deps holo-postgres`만 실행한다. DB 연결이 잠시 끊기고 진행 중인
+4. 승인된 새 이미지를 root store에 load하고, stack-platform-ops 절차로 compose.env master의 `POSTGRES_IMAGE`를
+   `sha256:`+`podman image inspect --format '{{.Id}}'` 값으로 바꿔 sync한 뒤(이전 값은 롤백용으로 기록)
+   `sudo systemctl restart holo-postgres.service`만 실행한다. unit은 compose.env의 identity만 쓰므로 `:prod` 재태그는 효과가 없다
+   ([Quadlet README](../../../deploy/quadlet/README.md)의 image identity 표). 런타임 peer는 `Wants=`라 함께 재시작하지 않는다.
+   DB 연결이 잠시 끊기고 진행 중인
    transaction은 중단될 수 있다. 앱의 재연결과 작업 재시도를 확인한다. AP·앱 이미지는 바꾸지 않는다.
 5. 정상 시작 뒤 관리자 socket으로 다음 파일을 실행한다. 기존 volume에도 직접 실행해야 한다.
 
    ```bash
-   sudo docker exec holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
+   sudo podman exec holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
      -f /usr/local/share/hololive/enable-observability.sql
    ```
 
@@ -95,7 +98,7 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
 관리자 또는 기존 통계 역할로 두 번의 제한된 snapshot을 수집한다.
 
 ```bash
-sudo docker exec -e PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000' \
+sudo podman exec -e PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000' \
   holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/read-observability.sql
 ```
@@ -131,13 +134,13 @@ sudo docker exec -e PGOPTIONS='-c default_transaction_read_only=on -c statement_
 `RESTRICT`가 외부 의존 객체 때문에 실패하면 중단하고 그 객체를 검토한다. `CASCADE`로 우회하지 않는다.
 
 ```bash
-sudo docker exec holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
+sudo podman exec holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/disable-observability.sql
 ```
 
-auto_explain만 끌 때는 preload에서 `auto_explain`을 빼고 같은 이미지로 재생성한다. contrib이라
+auto_explain만 끌 때는 preload에서 `auto_explain`을 빼고 같은 이미지로 `holo-postgres.service`를 재시작한다. contrib이라
 모든 이미지에 모듈이 있다. 해당 env 키를 종전 값(이번 도입 전에는 미설정/`pg_stat_statements`)으로 복구하고 이전
-image ID/tag와 deploy tree로 같은 `--no-build --no-deps holo-postgres` 재생성을 수행한다.
+image identity(compose.env `POSTGRES_IMAGE`를 기록해 둔 이전 `sha256:` 값으로 되돌림)와 deploy tree로 같은 `systemctl restart holo-postgres.service`를 수행한다.
 같은 PGDATA volume을 유지하고 readiness·앱 재연결·기존 통계를 확인한다.
 새 preload를 남긴 채 모듈 없는 이전 이미지로 바꾸면 시작에 실패한다.
 

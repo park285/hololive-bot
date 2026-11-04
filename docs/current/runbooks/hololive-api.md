@@ -2,7 +2,7 @@
 
 ## Role
 
-`hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 한 프로세스(단일 compose service `hololive-api`)에서 호스팅하는 통합 runtime입니다.
+`hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 한 프로세스(중앙 Quadlet unit `hololive-api.service` 하나)에서 호스팅하는 통합 runtime입니다.
 
 - Bot plane: Kakao/Iris webhook ingress, 사용자 명령 routing, reply orchestration (port `30001`).
 - LLM plane: major event/member news scheduling, LLM digest 생성, bot plane에 구독·digest 서비스를 in-process로 제공 (port `30003`, container 안 health·ready 전용).
@@ -30,11 +30,11 @@
 | selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
-## Compose 재생성 주의
+## DB unit 재시작 주의
 
-R-12의 `log_autovacuum_min_duration=10s`는 `holo-postgres`의 compose `command` 변경입니다. 변경된 compose를 사용하는 전체 `up`이나 의존성을 시작하는 명령은 DB 컨테이너를 재생성할 수 있으며, DB 중단·재연결을 포함한 별도 운영 승인이 필요합니다.
+R-12의 `log_autovacuum_min_duration=10s`는 `holo-postgres.container`의 `Exec=` 인자 변경입니다. `sync-opt-current.sh`의 unit 설치와 `daemon-reload`는 실행 중인 DB에 반영하지 않으며, `holo-postgres.service`를 재시작하거나 멈춘 DB가 다시 시작될 때 적용됩니다. 그 재시작은 DB 중단·재연결을 포함한 별도 운영 승인이 필요합니다.
 
-특히 `compose-redeploy-service.sh hololive-api`도 앱의 최종 `up -d --no-deps` 전에 `run --rm hololive-db-migrate`를 실행합니다. 이 선행 명령에는 `--no-deps`가 없고 migrator는 `holo-postgres`에 의존하므로, 앱만 지정했다고 DB 재생성이 배제되는 것은 아닙니다. DB 재생성 승인이 없다면 이 compose 변경을 포함한 배포를 시작하지 않습니다. SQL 최적화 wave의 로컬 코드 승인은 R-12의 운영 활성화 승인이 아닙니다.
+앱 unit의 restart는 `Wants=` 관계라 실행 중인 `holo-postgres`를 재시작하지 않습니다. 다만 `holo-postgres`가 멈춰 있으면 `hololive-db-migrate.service`(`Requires=`)나 앱 unit의 start가 바뀐 정의로 DB를 기동합니다. DB 재시작 승인이 없다면 이 unit 변경을 포함한 설치를 시작하지 않습니다. SQL 최적화 wave의 로컬 코드 승인은 R-12의 운영 활성화 승인이 아닙니다.
 
 ## Source observation replay epoch activation
 
@@ -44,22 +44,16 @@ Epoch activation은 irreversible production data write이고 통합 `hololive-ap
 
 1. 모든 collector publish를 quiesce하고 API가 이미 claim한 observation을 drain합니다. active claim과 current queue 상태를 read-only로 감사합니다.
 2. `hololive-api`를 중지하고 epoch-aware image revision이 사전 관찰한 revision과 같은지 다시 확인합니다. `hololive-alarm-worker` compatibility writer는 계속 실행합니다.
-3. 아래 one-shot을 한 번 실행합니다. `activated-by`와 `reason`에는 계정/변경 ticket처럼 비밀이 아닌 bounded audit metadata만 넣습니다.
+3. `source-observation-replay-epoch` one-shot을 한 번 실행합니다. `activated-by`와 `reason`에는 계정/변경 ticket처럼 비밀이 아닌 bounded audit metadata만 넣습니다.
 
-```bash
-export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
-./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  run --rm --no-deps \
-  --entrypoint ./bin/source-observation-replay-epoch \
-  hololive-api \
-  --activated-by='<operator-handle>' \
-  --reason='<approved-change-ticket>'
-```
+   중앙 Quadlet에는 옛 `compose run --rm --no-deps hololive-api`처럼 앱 unit의 env·network·비밀을 그대로 쓰는 일회성 실행 경로가 없고, 저장소에도 이 one-shot unit이 아직 없습니다. 실행 전에 `hololive-db-migrate.container`와 같은 형식(`[Install]` 없음, `Type=oneshot`, `Entrypoint=./bin/source-observation-replay-epoch`, `hololive-api.container`와 같은 DB 연결 env·비밀 env 파일)의 unit을 `hololive-bot-ops` 절차로 정의·검토하고 승인받습니다. 인자는 다음 두 개입니다.
+
+   ```text
+   --activated-by='<operator-handle>' --reason='<approved-change-ticket>'
+   ```
 
 4. 출력의 `activated=true`와 non-zero `cutoff_received_at`을 확인합니다. 재실행에서 `activated=false`이면 기존 cutoff와 attribution이 그대로인지 확인하며 새 epoch로 간주하지 않습니다.
-5. 같은 epoch-aware `hololive-api`를 `--no-build --no-deps`로 시작하고 health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
+5. 같은 epoch-aware `hololive-api`를 `sudo systemctl start hololive-api.service`로 시작하고(alarm-worker는 실행 중이므로 `Wants=`가 새로 띄우는 peer는 없습니다) health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
 6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. Migration 227은 적용 시점에 완료 전제를 검사합니다. 적용 전 singleton 원본·복구 SQL을 보존한 뒤 migration 229는 227 적용 기록과 현재 singleton 완료 상태를 잠금 아래 다시 검사하고, state DROP과 229 적용 기록을 한 transaction으로 커밋합니다. 229 적용 기록 없이 table이 사라진 상태는 자동 복구하지 않습니다. Runner의 별도 checksum 기록이 연결 단절로 빠지면 다음 실행은 실패하므로 적용 기록과 checksum을 조사한 뒤 복구합니다.
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
@@ -94,7 +88,7 @@ RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 
 
 `youtube_channel_profile_evidence`·`youtube_channel_photo_variants`는 slot별 감사 이력이고 런타임은 head 표만 읽습니다. 원본 kind(`YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS`·`YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS`, 기본 30일)와 같은 기간이 지난 `received_at` 행을 지웁니다. `source_observation_provenances`는 시각 열이 없어 어떤 원본도 참조하지 않는 사전 행만 id 순 창으로 지웁니다. collector_instance가 프로세스마다 달라 collector를 재시작·배포할 때마다 새 사전 행이 생기기 때문입니다. resolver가 재사용 중인 행은 건너뛰고, 정리가 먼저 잠근 행은 resolver가 정리 커밋 뒤 새 행을 만듭니다. 네 표의 삭제량은 `hololive_youtube_plane_retention_deleted_total{table=...}`로 봅니다(migration `362`~`366`).
 
-운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-seoul/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간(`hololive_youtube_plane_retention_tick_seconds{phase=source|projection}`, 슬롯 획득 뒤 실행분만 포함하며 슬롯을 얻지 못한 phase는 오류로만 셉니다), `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
+운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-seoul/hololive-bot/compose.env`를 수정해 sync한 뒤 `sudo systemctl restart hololive-api.service`로 재시작합니다(빌드하지 않고 다른 unit을 재시작하지 않습니다). `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간(`hololive_youtube_plane_retention_tick_seconds{phase=source|projection}`, 슬롯 획득 뒤 실행분만 포함하며 슬롯을 얻지 못한 phase는 오류로만 셉니다), `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
 
 `hololive_youtube_plane_retention_backlog_age_seconds`는 삭제 후 `source_observations`의 가장 오래된 삭제 가능 행 나이를 초로 표시합니다. 보존기간을 초과한 시간은 아닙니다. 종류별 인덱스 선두 1,000행에 큐·종료 근거, CURRENT/STAGING generation·ACTIVE lease·활성 세션 보호를 적용합니다. application은 원본과 CASCADE 삭제되므로 별도 backlog/delete counter 대상이 아닙니다. 적격 후보가 없다고 확정하면 0으로 갱신합니다. 보호된 행이 조회 한도를 채우거나 조회가 실패하면 시계열을 생략하므로 지표 없음은 적체 없음이 아닙니다. 뒤 단계가 실패해도 앞 단계의 커밋된 삭제량은 counter에 남고 오류 counter는 실패한 테이블에만 증가합니다.
 
@@ -154,7 +148,7 @@ Manifest의 **244 → 234–243** 순서와 API·collector fleet a/b/c/d·alarm-
 6. `db-migrate`를 다시 실행합니다. 241은 마지막 최대 1000건과 전체 참조 검증 후 FK/NOT NULL을 적용하고 구 payload/hash 열과 backfill 함수를 제거합니다. 242는 미처리 행 전용 임시 index를, 243은 contract 퇴역 참조 인덱스를 각각 동시 제거합니다. Cutover transaction에는 전체 FK/NULL 검증이 있으므로 대형 DB에서 짧은 종료 시간을 가정하지 않습니다. JSONB 사전의 hash는 32바이트이고 외부 hex 표현은 유지합니다. 모든 새 writer/reader를 함께 배포하고 API의 새 projection이 활성화된 뒤 collector를 재개합니다.
 7. 정상 metadata profile/photo와 live/schedule/content 발행, queue age, canonical/intent·중복 방지, GC·retention 오류, p95/p99를 확인합니다. 새 TTL 적용은 master 수정/sync/재생성 승인을 별도로 따릅니다. 오류·결과 불일치, 여유 20 GiB 미만, 6시간에 5 GiB 이상 감소, 반복 timeout이면 추가 backfill/정리를 중지합니다.
 
-`db-migrate --statement-timeout=10m`은 승인된 대용량 DDL 점검 창에만 명시적으로 사용합니다. 생략하거나 `0`이면 기존 문장당 4분이며, 음수와 10분 초과는 DB 접속 전에 거절합니다. 전체 명령 15분·세션 lock 10초와 각 migration의 더 짧은 lock budget은 유지합니다. 전역 DB 설정이나 Compose 기본값에는 이 예외를 저장하지 않습니다. 늘린 한도에서도 timeout이면 자동 증액·반복 실행하지 않고 정지 상태와 복구점을 보존한 채 다음 조치를 승인받습니다.
+`db-migrate --statement-timeout=10m`은 승인된 대용량 DDL 점검 창에만 명시적으로 사용합니다. 생략하거나 `0`이면 기존 문장당 4분이며, 음수와 10분 초과는 DB 접속 전에 거절합니다. 전체 명령 15분·세션 lock 10초와 각 migration의 더 짧은 lock budget은 유지합니다. 전역 DB 설정이나 Quadlet unit 기본값에는 이 예외를 저장하지 않습니다. 늘린 한도에서도 timeout이면 자동 증액·반복 실행하지 않고 정지 상태와 복구점을 보존한 채 다음 조치를 승인받습니다.
 
 추가 공간 상한을 사전 과소평가하지 않습니다. backfill 중 구 payload와 고유 payload·새 index가 함께 존재하며 UPDATE dead tuple/WAL이 발생합니다. 사전 표본 이득은 최대 공간 보장이 아닙니다. `DELETE`나 `DROP COLUMN` 뒤 relation 파일이 즉시 줄어들지 않을 수 있습니다. VACUUM FULL/파일 재작성은 강한 lock·임시 여유·중단 창·복구 계획을 별도로 승인받아 시행합니다. active `pg_wal`은 직접 삭제하지 않습니다.
 
@@ -173,7 +167,7 @@ Manifest의 **244 → 234–243** 순서와 API·collector fleet a/b/c/d·alarm-
 ## Logs
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-api
+sudo journalctl -u hololive-api.service -f
 ```
 
 ## Metrics
@@ -183,10 +177,10 @@ Manifest의 **244 → 234–243** 순서와 API·collector fleet a/b/c/d·alarm-
 ### Container resource / health
 
 ```bash
-docker stats --no-stream hololive-api hololive-alarm-worker valkey-cache holo-postgres
-docker inspect hololive-api --format '{{.RestartCount}} {{json .State.Health}}'
-docker logs --tail=300 hololive-api
-docker logs --tail=100 deunhealth        # restart-on-unhealthy 작동 이력
+sudo podman stats --no-stream hololive-api hololive-alarm-worker valkey-cache holo-postgres
+sudo podman inspect hololive-api --format '{{json .State.Health}}'
+sudo systemctl show hololive-api.service -p NRestarts   # 마지막 명시적 restart 뒤 unhealthy 정지(HealthOnFailure=stop)·종료 후 systemd 재시작 횟수
+sudo journalctl -u hololive-api.service -n 300
 ```
 
 ### Go runtime metrics (Prometheus)
@@ -196,7 +190,7 @@ docker logs --tail=100 deunhealth        # restart-on-unhealthy 작동 이력
 ```bash
 # 키 출처는 실행 중 컨테이너의 실제 env(metrics 서버가 검증에 쓰는 값과 동일).
 # process substitution으로 키를 호스트 argv/ps에 노출하지 않는다.
-curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(docker exec hololive-api printenv API_SECRET_KEY)") \
+curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(sudo podman exec hololive-api printenv API_SECRET_KEY)") \
   http://127.0.0.1:30091/metrics \
   | grep -E 'process_resident_memory_bytes|go_memstats_heap_inuse_bytes|go_memstats_heap_idle_bytes|go_gc_duration_seconds|go_goroutines'
 ```
@@ -225,23 +219,25 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(docker exec hololive-api
 컨테이너 내부 socket-trust로 admin user(`POSTGRES_ADMIN_USER`, 기본 `postgres_admin`)로 접속해 조회합니다.
 
 ```bash
-docker exec holo-postgres psql -U postgres_admin -d hololive -c \
+sudo podman exec holo-postgres psql -U postgres_admin -d hololive -c \
   "SELECT usename, client_addr, state, count(*) \
      FROM pg_stat_activity WHERE datname='hololive' \
     GROUP BY usename, client_addr, state ORDER BY usename, client_addr, state;"
 ```
 
 - **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/llm 3 plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin/llm 각 max 4, 합 최대 12)으로 추적합니다.
-- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector 4×7=28 + migrator 1 + postgres_exporter 2 + nightly 2 = 55로 셉니다. reserve는 `max_connections=61`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 58 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 3이고 gate 하한도 3입니다. exporter 2는 postgres_exporter 0.20.x가 legacy 연결 1개를 유지한 채 scrape마다 collector 연결 1개를 더 여는 동작에 맞춘 값으로, 1이면 매 scrape가 `too many connections for role`로 끝나 pg_up만 남습니다(2026-10-19~24 실측). 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. compose가 `superuser_reserved_connections`를 바꾸면 `--verify-compose`가 policy pin과 불일치로 거부합니다.
+- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector 4×7=28 + migrator 1 + postgres_exporter 2 + nightly 2 = 55로 셉니다. reserve는 `max_connections=61`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 58 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 3이고 gate 하한도 3입니다. exporter 2는 postgres_exporter 0.20.x가 legacy 연결 1개를 유지한 채 scrape마다 collector 연결 1개를 더 여는 동작에 맞춘 값으로, 1이면 매 scrape가 `too many connections for role`로 끝나 pg_up만 남습니다(2026-10-19~24 실측). 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. `holo-postgres.container`가 `superuser_reserved_connections`를 바꾸면 `--verify-quadlet`이 policy pin과 불일치로 거부합니다.
 
 ### Valkey latency / slowlog
 
-비밀번호를 호스트 process list에 노출하지 않도록 컨테이너 내부 env(`CACHE_PASSWORD`)로 인증합니다.
+중앙 `valkey-cache`는 Valkey HA hololive 그룹 노드라 unix socket 없이 TLS `16379`만 열고, 운영 명령은 `operator` ACL 사용자로 인증합니다.
+비밀번호는 argv·호스트 process list에 남지 않도록 컨테이너 안의 마운트 파일(`/run/valkey/operator-password`)에서 읽습니다.
 
 ```bash
-docker exec valkey-cache sh -c 'REDISCLI_AUTH="$CACHE_PASSWORD" valkey-cli -s /var/run/valkey/valkey-cache.sock slowlog get 25'
-docker exec valkey-cache sh -c 'REDISCLI_AUTH="$CACHE_PASSWORD" valkey-cli -s /var/run/valkey/valkey-cache.sock --latency'   # Ctrl-C로 종료
-docker exec valkey-cache sh -c 'REDISCLI_AUTH="$CACHE_PASSWORD" valkey-cli -s /var/run/valkey/valkey-cache.sock info commandstats'
+vk() { sudo podman exec -i valkey-cache sh -c 'VALKEYCLI_AUTH="$(cat /run/valkey/operator-password)" exec valkey-cli --no-auth-warning --tls --cacert /run/valkey-certs/ca.pem --user operator -h 127.0.0.1 -p 16379 "$@"' vk "$@"; }
+vk slowlog get 25
+vk --latency   # Ctrl-C로 종료
+vk info commandstats
 ```
 
 ## Common failure modes
@@ -249,16 +245,16 @@ docker exec valkey-cache sh -c 'REDISCLI_AUTH="$CACHE_PASSWORD" valkey-cli -s /v
 ### 1. Health check fails
 
 Symptoms:
-- Compose marks `hololive-api` unhealthy.
+- Podman healthcheck marks `hololive-api` unhealthy; `HealthOnFailure=stop` stops it with SIGTERM within `StopTimeout` (45s) and systemd restarts the unit.
 - Webhook replies, admin dashboard calls, or scheduler triggers stop.
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps hololive-api
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-api
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
+sudo systemctl status hololive-api.service
+sudo journalctl -u hololive-api.service -n 200
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ```
 
 Mitigation:
@@ -276,8 +272,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-api
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
+sudo journalctl -u hololive-api.service -n 300
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
 ```
 
 Mitigation:
@@ -285,7 +281,7 @@ Mitigation:
 - Use `LLM_PROVIDER=gemini` for Gemini native `google_search`; routing Gemini through CLIProxy does not satisfy the MajorEvent search-call contract.
 - The native Gemini path uses the beta Interactions API and fails closed on non-`completed`, malformed, empty, or non-JSON output. Use `LLM_PROVIDER=cliproxy` with the retained CLIProxy settings for rollback.
 - For exit 2 (`notification already in progress`), wait for the active run to finish; investigate a stuck scheduler if the conflict persists.
-- A scheduled major event digest whose summary fails (LLM error, empty result, or external-content guard failure) is not enqueued and is not retried automatically; the only trace is a `Failed to send weekly notification` / `Failed to send monthly notification` error log. The next scheduled run uses the next week or month key, so re-run it with `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/hololive-api --rerun-notification=majorevent-weekly` (or `=majorevent-monthly`) within the same KST week or month after fixing the cause (`DEC-20260926-hololive-source-fallbacks-retirement`). The command prints the enqueue result JSON; exit 2 means the same run is still in progress, exit 1 is a failure (see [trigger contract](../contracts/trigger.md)).
+- A scheduled major event digest whose summary fails (LLM error, empty result, or external-content guard failure) is not enqueued and is not retried automatically; the only trace is a `Failed to send weekly notification` / `Failed to send monthly notification` error log. The next scheduled run uses the next week or month key, so re-run it with `sudo podman exec hololive-api ./bin/hololive-api --rerun-notification=majorevent-weekly` (or `=majorevent-monthly`) within the same KST week or month after fixing the cause (`DEC-20260926-hololive-source-fallbacks-retirement`). The command prints the enqueue result JSON; exit 2 means the same run is still in progress, exit 1 is a failure (see [trigger contract](../contracts/trigger.md)).
 
 Rollback:
 - Roll back the plane/contract/config change that introduced failures.
@@ -369,36 +365,35 @@ DB maintenance 명령(아래 `db-maintenance-exec.sh`로 실행하는 migration�
 
 ### 4. Process lifecycle startup or shutdown fails
 
-`hololive-api`는 youtube-collector·alarm-worker와 같은 shared-go `bootstrap`·`lifecycle.Run`으로 기동·종료합니다. aggregate `Runtime.Run`이 유일한 process signal owner이며 별도 lifecycle mode나 fallback은 없습니다. plane 내부 계약과 운영 endpoint는 바뀌지 않습니다. 정상 SIGTERM은 `Received shutdown signal` → `hololive-api draining runtime planes`를 남기고 exit 0으로 끝납니다. runtime fatal은 발생 즉시 `hololive-api runtime error`로 원인을 남기고, 종료 처리가 끝나면 runtime·drain·회수 오류를 합친 요약을 `Runtime stopped with error`로 남긴 뒤 exit 1로 끝납니다. drain 중 두 번째 SIGTERM/SIGINT는 정리 없이 프로세스를 즉시 끝냅니다(collector·alarm-worker와 같은 shared lifecycle 동작). `docker stop`은 신호를 한 번만 보냅니다.
+`hololive-api`는 youtube-collector·alarm-worker와 같은 shared-go `bootstrap`·`lifecycle.Run`으로 기동·종료합니다. aggregate `Runtime.Run`이 유일한 process signal owner이며 별도 lifecycle mode나 fallback은 없습니다. plane 내부 계약과 운영 endpoint는 바뀌지 않습니다. 정상 SIGTERM은 `Received shutdown signal` → `hololive-api draining runtime planes`를 남기고 exit 0으로 끝납니다. runtime fatal은 발생 즉시 `hololive-api runtime error`로 원인을 남기고, 종료 처리가 끝나면 runtime·drain·회수 오류를 합친 요약을 `Runtime stopped with error`로 남긴 뒤 exit 1로 끝납니다. drain 중 두 번째 SIGTERM/SIGINT는 정리 없이 프로세스를 즉시 끝냅니다(collector·alarm-worker와 같은 shared lifecycle 동작). `systemctl stop`(Podman stop)은 신호를 한 번만 보냅니다.
 
 | Log diagnostic | Meaning | Required response |
 |---|---|---|
 | `Failed to assemble hololive-api runtime` | telemetry 또는 aggregate runtime 조립이 서비스 시작 전에 실패했습니다 | Redacted error metadata로 실패한 단계를 확인하고 config/dependency 원인을 수정합니다. 이미 생성된 plane은 once-only cleanup되고 telemetry provider는 종료됩니다. |
 | `hololive-api runtime error` (즉시), 이어서 `Runtime stopped with error` | listener/runtime component가 fatal error를 보고해 process가 종료됐습니다. listener bind 실패도 이 경로입니다 | 최초 runtime error를 원인으로 조사합니다. 일부 plane만 살아 있는 상태를 정상으로 간주하지 않습니다. scheduled job의 자체 처리 오류는 이 경로의 process-fatal이 아닙니다. YouTube 관측 Retry·DeadLetter 기록이 일시 오류(DB slot timeout, 연결·잠금 경합)로 실패하면 종료하지 않고 `awaiting lease recovery` ERROR 로그와 `retry_error`·`dead_letter_error` 지표만 남기며, `PROCESSING` 행은 lease 만료 뒤 claim이 회수합니다. 그 밖의 기록 실패는 계속 이 경로로 종료합니다. |
 | `Runtime stopped with error`, error에 `shutdown runtime planes` 또는 deadline | 10-second plane drain에서 하나 이상 실패했습니다. 남은 plane과 자원 회수는 계속 시도됩니다. | bot → admin → llm → YouTube 순서의 shutdown 진단을 확인하고 실패한 plane의 listener 또는 background loop를 조사합니다. |
-| `Runtime stopped with error`, error에 `stop aggregate runtime` 또는 `join aggregate resource cleanup`과 deadline | drain과 자원 회수를 합친 30-second hard stop 상한이 만료됐습니다. 끝나지 않은 drain·회수는 기다리지 않고 프로세스가 종료됩니다. | 같은 resource에 concurrent forced cleanup을 실행하지 않습니다. Compose의 45-second grace 이후 종료 결과와 다음 기동 상태를 확인합니다. |
+| `Runtime stopped with error`, error에 `stop aggregate runtime` 또는 `join aggregate resource cleanup`과 deadline | drain과 자원 회수를 합친 30-second hard stop 상한이 만료됐습니다. 끝나지 않은 drain·회수는 기다리지 않고 프로세스가 종료됩니다. | 같은 resource에 concurrent forced cleanup을 실행하지 않습니다. unit의 `StopTimeout=45` 이후 종료 결과와 다음 기동 상태를 확인합니다. |
 
 진단 문자열은 redacted `error` field로 기록됩니다. raw config, token, DSN, certificate, secret을 로그에 복사하지 않습니다. 아래 기존 log 명령과 health smoke를 사용하며, restart/redeploy/rollback은 별도 승인 후 이 runbook의 기존 절차를 따릅니다.
 
 ## Smoke test
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30003/internal/ready
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
+sudo podman exec hololive-api ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30003/internal/ready
+sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ```
 
 ## Rollback
 
 - Use `docs/current/runbooks/rollback.md`.
 - migration 231~233 적용 뒤 v6.0.x image로 되돌릴 때는 교체 직전에 `auth:sess:*`를 모두 `UNLINK`해 관리자
-  재로그인을 강제하고, `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 TTL로 둡니다. image만 `--no-deps`로
-  교체하고 구 `hololive-db-migrate`는 실행하지 않습니다(`rollback.md`의 Valkey 2차 축소 절). retag하면 migrate도 같은
-  `hololive-api:prod` image의 구 runner가 되므로, rollback 창에는 중앙 host를 재부팅하지 않고 `hololive-compose.service`를
-  disable합니다. 재부팅의 `systemd-compose-up.sh`는 `--no-deps` 없는 `up`이라 구 runner가 거절되고 API·worker·중앙
-  collector가 기동하지 못하며, 복구는 7.0.0 image로 재전진입니다. 이 동안 `APP_VERSION`은 트리 값 7.0.0을 보고하므로
-  판정은 image label로 합니다.
+  재로그인을 강제하고, `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 TTL로 둡니다. image만 교체해
+  `systemctl restart hololive-api.service`로 재시작하고 구 `hololive-db-migrate`는 실행하지 않습니다(`rollback.md`의
+  Valkey 2차 축소 절). retag하면 migrate도 같은 `HOLOLIVE_API_IMAGE`의 구 runner가 되므로 rollback 창에는
+  `hololive-db-migrate.service`를 시작하지 않습니다. 이 unit은 `[Install]`이 없고 다른 unit이 끌어오지 않아 재부팅이
+  실행하지 않습니다. 이 동안 `APP_VERSION`은 트리 값 7.0.0을 보고하므로 판정은 image label로 합니다.
 - Durable runtime cutover 이후 기본 복구 전략은 현재 image의 fix-forward입니다. 이전 image는 durable queue를 소비하지 않으므로 backlog가 남아 있으면 재배포하지 않습니다.
 - 이전 `hololive-api` image/config가 반드시 필요하면 Iris webhook ingress를 먼저 quiesce하고 현재 durable runtime으로 queue를 drain한 뒤 아래 preflight가 성공해야 합니다. 하나라도 0이 아니면 현재 image를 유지하고 roll forward합니다.
 
@@ -419,18 +414,18 @@ bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spik
 
 ### 단일 프로세스 blast-radius (먼저 인지할 것)
 
-- 3 plane이 한 프로세스이므로 **한 plane의 자원 폭주(OOM/goroutine leak/GC thrash)가 전체 컨테이너를 끌어내립니다.** healthcheck(`30001/health`·`30003/internal/ready`·`30006/health`)는 각 URL을 순차 검사해 하나라도 실패하면 exit 1 → unhealthy → deunhealth가 컨테이너 전체를 재시작합니다.
+- 3 plane이 한 프로세스이므로 **한 plane의 자원 폭주(OOM/goroutine leak/GC thrash)가 전체 컨테이너를 끌어내립니다.** healthcheck(`30001/health`·`30003/internal/ready`·`30006/health`)는 각 URL을 순차 검사해 하나라도 실패하면 exit 1 → unhealthy → `HealthOnFailure=stop`으로 컨테이너가 SIGTERM·`StopTimeout`(45초) 안에 종료되고 systemd(`Restart=always`)가 unit 전체를 다시 시작합니다.
 - `30003/internal/ready`는 인증된 dependency readiness(PostgreSQL/Valkey)를 포함합니다. 외부에서 접근 가능한 `/ready`는 dependency ping 없이 process health만 반환합니다.
 
 ### 경계값 (initial threshold — 실측으로 보정)
 
 아래 수치는 운영 시작 기준선입니다. 실측 baseline 확보 후 조정합니다.
 
-- **RSS**: `docker stats`의 MEM USAGE가 **1.1GiB(limit 1280m 대비)를 5분 이상 초과** 시 경고. limit(1280m)·`pids: 512` 근접 시 OOM/pid-kill 위험 → incident.
+- **RSS**: `podman stats`의 MEM USAGE가 **1.1GiB(limit 1280m 대비)를 5분 이상 초과** 시 경고. limit(1280m)·`pids: 512` 근접 시 OOM/pid-kill 위험 → incident.
 - **Heap vs GOMEMLIMIT**: `go_memstats_heap_inuse_bytes`가 `GOMEMLIMIT`(1024MiB)에 지속 근접하면 GC thrash 구간 → `go_gc_duration_seconds` 증가율 동반 확인. GC가 CPU의 ~10%를 지속 점유하면 조사(정확한 GC-CPU metric 이름은 `grep go_`로 확인).
 - **bot webhook p99**: Iris webhook 타임아웃(5s) 기준. **p99가 2s를 지속 초과하면 경고, 5s에 근접하면 reply drop → incident.**
 - **pgx acquire latency**: plane별 pool max 4라 contention 민감. **acquire p99 > 50ms 지속 → 경고, > 500ms → pool 고갈 임박(incident).**
-- **deunhealth restart**: `docker inspect hololive-api`의 `RestartCount ≥ 1` 또는 deunhealth restart 로그 발생 시 **즉시 incident triage**(정상 운영 중에는 0이어야 함).
+- **unit restart**: `systemctl show hololive-api.service -p NRestarts`가 1 이상이거나 journal에 unhealthy 정지·재시작이 남으면 **즉시 incident triage**(정상 운영 중에는 0이어야 함).
 
 ### 관찰 항목
 
@@ -438,7 +433,7 @@ bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spik
 - PostgreSQL connection 수 — plane별 pool 합산(bot/admin/llm 각 max 4 + YouTube plane max 2 = 최대 14) + alarm-worker(max 8)/collector AP 4×8=32/migration 포함 전체 budget. plane 단위 구분은 불가(같은 client_addr/usename — `Metrics` 절 참조)
 - pgx acquire latency, Valkey command latency(slowlog/--latency), H3 handshake error rate
 - bot webhook p95/p99, admin API p95/p99, LLM scheduler job lag
-- deunhealth 재시작 빈도 — 잦은 재시작은 H3 listener hang/5s 타임아웃/GC pause를 의심
+- unit 재시작 빈도(`NRestarts`) — 잦은 재시작은 H3 listener hang/5s 타임아웃/GC pause를 의심
 
 ## Related contracts
 

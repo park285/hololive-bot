@@ -28,26 +28,38 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var composeQueryExecModePattern = regexp.MustCompile(`POSTGRES_QUERY_EXEC_MODE:\s*\$\{POSTGRES_QUERY_EXEC_MODE:-([a-z_]+)\}`)
+// 중앙 Quadlet unit은 [Service] Environment=로 compose.env가 비었을 때의 기본값을 둔다.
+var quadletQueryExecModePattern = regexp.MustCompile(`(?m)^Environment=POSTGRES_QUERY_EXEC_MODE=([a-z_]+)$`)
 
 func TestProductionComposePinsTheTestPoolQueryExecMode(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile("../../deploy/compose/docker-compose.prod.yml")
+	unitDir, err := os.OpenRoot("../../deploy/quadlet/hololive-bot")
 	if err != nil {
-		t.Fatalf("read production compose: %v", err)
+		t.Fatalf("open production Quadlet unit directory: %v", err)
 	}
 
-	match := composeQueryExecModePattern.FindSubmatch(raw)
-	if match == nil {
-		t.Fatal("production compose no longer declares a POSTGRES_QUERY_EXEC_MODE default; update the test pool contract together")
-	}
+	defer func() {
+		if closeErr := unitDir.Close(); closeErr != nil {
+			t.Fatalf("close production Quadlet unit directory: %v", closeErr)
+		}
+	}()
 
-	composeDefault := string(match[1])
+	for _, unit := range []string{"hololive-api", "hololive-alarm-worker", "hololive-youtube-collector-c"} {
+		raw, err := unitDir.ReadFile(unit + ".container")
+		if err != nil {
+			t.Fatalf("read production Quadlet unit %s: %v", unit, err)
+		}
 
-	if composeDefault != productionComposeQueryExecModeName {
-		t.Fatalf("production compose default query exec mode = %q, test pools run %q — keep both sides in one commit",
-			composeDefault, productionComposeQueryExecModeName)
+		match := quadletQueryExecModePattern.FindSubmatch(raw)
+		if match == nil {
+			t.Fatalf("%s no longer declares a POSTGRES_QUERY_EXEC_MODE default; update the test pool contract together", unit)
+		}
+
+		if unitDefault := string(match[1]); unitDefault != productionComposeQueryExecModeName {
+			t.Fatalf("%s default query exec mode = %q, test pools run %q — keep both sides in one commit",
+				unit, unitDefault, productionComposeQueryExecModeName)
+		}
 	}
 
 	modesByName := map[string]pgx.QueryExecMode{

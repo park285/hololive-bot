@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Docker compose AP(iris-seoul)용 wrapper다. 중앙(hololive-seoul)은 Podman Quadlet unit으로 운영하므로
+# 이 스크립트를 쓰지 않는다. AP 호스트 런타임은 scripts/deploy/ap-hosts/*.conf의 AP_CONTAINER_RUNTIME이 정한다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -9,10 +11,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-paths.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
-. "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
-. "${ROOT_DIR}/scripts/deploy/lib/public-bind-mounts.sh"
-. "${ROOT_DIR}/scripts/deploy/lib/admin-bind.sh"
 
 compose_export_release_versions "${ROOT_DIR}"
 
@@ -134,39 +133,17 @@ if [[ -n "${previous}" ]]; then
 fi
 
 if [[ ${#compose_files[@]} -eq 0 ]]; then
-    compose_files=(deploy/compose/docker-compose.prod.yml)
-    compose_args=(-f deploy/compose/docker-compose.prod.yml "${compose_args[@]}")
-    if (( compose_command_index >= 0 )); then
-        compose_command_index=$((compose_command_index + 2))
-    fi
-fi
-
-if ! assert_kapu_alarm_worker_start_allowed "$(hostname -s)" "${compose_command_index}" "${compose_args[@]}"; then
+    echo "[ERROR] Pass the AP compose file with -f (for example deploy/compose/docker-compose.seoul.yml)" >&2
     exit 1
 fi
 
-CONTAINER_CLI="${CONTAINER_CLI:-docker}"
-case "${CONTAINER_CLI}" in
-    docker|podman) ;;
-    *)
-        echo "[ERROR] Unsupported CONTAINER_CLI: ${CONTAINER_CLI}" >&2
-        echo "        Allowed values: docker, podman" >&2
-        exit 1
-        ;;
-esac
-
-if ! command -v "${CONTAINER_CLI}" >/dev/null 2>&1; then
-    echo "[ERROR] Container CLI not found: ${CONTAINER_CLI}" >&2
+if ! docker compose version >/dev/null 2>&1; then
+    echo "[ERROR] 'docker compose' is unavailable" >&2
     exit 1
 fi
-
-COMPOSE_CMD=("${CONTAINER_CLI}" compose)
-if [[ "${CONTAINER_CLI}" == "podman" ]] && command -v podman-compose >/dev/null 2>&1; then
-    COMPOSE_CMD=(podman-compose)
-elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
-    echo "[ERROR] '${CONTAINER_CLI} compose' is unavailable" >&2
-    exit 1
-fi
+COMPOSE_CMD=(docker compose)
+# health-gate.sh가 container inspect에 쓰는 CLI다. 이 wrapper의 대상은 Docker AP뿐이다.
+CONTAINER_CLI=docker
 
 if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then
     exit 1
@@ -175,41 +152,6 @@ export COMPOSE_ENV_FILE
 
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
-
-# 중앙 HA와 kapu의 독립 보조 캐시는 서로 다른 명시적 배포 경로를 사용한다.
-valkey_ha_value="0"
-if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_VALKEY_HA_ENABLED"; then
-    valkey_ha_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_VALKEY_HA_ENABLED")"
-fi
-case "${valkey_ha_value}" in
-    0) ;;
-    1)
-        valkey_overlays=("deploy/compose/docker-compose.valkey-ha.yml")
-        if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "VALKEY_SENTINEL_ADDRS" &&
-           [[ -n "$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "VALKEY_SENTINEL_ADDRS")" ]]; then
-            valkey_overlays+=("deploy/compose/docker-compose.valkey-sentinel.yml")
-        fi
-        for valkey_overlay in "${valkey_overlays[@]}"; do
-            valkey_overlay_present=false
-            for file in "${compose_files[@]}"; do
-                if [[ "${file##*/}" == "${valkey_overlay##*/}" ]]; then
-                    valkey_overlay_present=true
-                    break
-                fi
-            done
-            if [[ "${valkey_overlay_present}" == false ]]; then
-                compose_files+=("${valkey_overlay}")
-                if (( compose_command_index >= 0 )); then
-                    compose_args=("${compose_args[@]:0:compose_command_index}" -f "${valkey_overlay}" "${compose_args[@]:compose_command_index}")
-                    compose_command_index=$((compose_command_index + 2))
-                else
-                    compose_args+=(-f "${valkey_overlay}")
-                fi
-            fi
-        done
-        ;;
-    *) echo "[ERROR] HOLOLIVE_VALKEY_HA_ENABLED must be 0 or 1" >&2; exit 1 ;;
-esac
 
 # 릴리스 pair overlay는 재부팅에도 유지한다. 배포 사전 검사는 명시한 후보 overlay만 사용한다.
 profile_overlays=()
@@ -244,105 +186,13 @@ for profile_overlay in "${profile_overlays[@]}"; do
         compose_args+=(-f "$profile_overlay")
     fi
 done
-# 승인된 host 설정이 있으면 재기동과 수동 compose에도 같은 관리 H3 publish를 유지한다.
-if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_ADMIN_API_PORT_BIND_IP"; then
-    admin_web_overlay="deploy/compose/docker-compose.admin-web.yml"
-    admin_web_present=false
-    for file in "${compose_files[@]}"; do
-        if [[ "${file##*/}" == "${admin_web_overlay##*/}" ]]; then
-            admin_web_present=true
-            break
-        fi
-    done
-    if [[ "${admin_web_present}" == false ]]; then
-        compose_files+=("${admin_web_overlay}")
-        if (( compose_command_index >= 0 )); then
-            compose_args=(
-                "${compose_args[@]:0:compose_command_index}"
-                -f "${admin_web_overlay}"
-                "${compose_args[@]:compose_command_index}"
-            )
-            compose_command_index=$((compose_command_index + 2))
-        else
-            compose_args+=(-f "${admin_web_overlay}")
-        fi
-    fi
-fi
-
-# 호스트의 명시적 활성화 값으로 재부팅·수동 배포의 세션 키와 대상 설정을 유지한다.
-x_spaces_value="0"
-if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_ENABLED"; then
-    x_spaces_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_ENABLED")"
-fi
-case "${x_spaces_value}" in
-    0) ;;
-    1)
-        x_spaces_overlay="deploy/compose/docker-compose.x-spaces.yml"
-        x_spaces_present=false
-        for file in "${compose_files[@]}"; do
-            if [[ "${file##*/}" == "${x_spaces_overlay##*/}" ]]; then
-                x_spaces_present=true
-                break
-            fi
-        done
-        if [[ "${x_spaces_present}" == false ]]; then
-            compose_files+=("${x_spaces_overlay}")
-            if (( compose_command_index >= 0 )); then
-                compose_args=("${compose_args[@]:0:compose_command_index}" -f "${x_spaces_overlay}" "${compose_args[@]:compose_command_index}")
-                compose_command_index=$((compose_command_index + 2))
-            else
-                compose_args+=(-f "${x_spaces_overlay}")
-            fi
-        fi
-        ;;
-    *) echo "[ERROR] HOLOLIVE_X_SPACES_ENABLED must be 0 or 1" >&2; exit 1 ;;
-esac
-
-
-collector_disable_value="${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}"
-if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR"; then
-    collector_disable_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR")"
-fi
-case "${collector_disable_value}" in
-    ""|0) ;;
-    1)
-        collector_disable_overlay="deploy/compose/docker-compose.youtube-collector-disabled.yml"
-        collector_disable_present=false
-        for file in "${compose_files[@]}"; do
-            if [[ "${file##*/}" == "${collector_disable_overlay##*/}" ]]; then
-                collector_disable_present=true
-                break
-            fi
-        done
-        if [[ "${collector_disable_present}" == false ]]; then
-            compose_files+=("${collector_disable_overlay}")
-            if (( compose_command_index >= 0 )); then
-                compose_args=(
-                    "${compose_args[@]:0:compose_command_index}"
-                    -f "${collector_disable_overlay}"
-                    "${compose_args[@]:compose_command_index}"
-                )
-            else
-                compose_args+=(-f "${collector_disable_overlay}")
-            fi
-        fi
-        ;;
-    *)
-        echo "[ERROR] HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR must be 0 or 1" >&2
-        exit 1
-        ;;
-esac
-
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
 
 if [[ "${compose_requires_capacity}" == true ]]; then
-    admin_network_preflight "${ROOT_DIR}" "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
     postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}" "${compose_scale_overrides[@]}"
 fi
 
 if [[ "${compose_invokes_up}" == true ]]; then
-    compose_env_assert_live_compat_for_host_networked_postgres "${compose_files[@]}"
-
     up_index=-1
     for index in "${!compose_args[@]}"; do
         if [[ "${compose_args[$index]}" == "up" ]]; then
@@ -386,49 +236,19 @@ if [[ "${compose_invokes_up}" == true ]]; then
         esac
     done
 
-    bind_preflight_required=false
-    public_ingress_preflight_required=false
-    gate_targets=()
+    # AP 배포는 항상 대상 service를 지정한다. 전체 up은 health gate 대상을 알 수 없어 거부한다.
     if [[ ${#up_service_targets[@]} -eq 0 ]]; then
-        bind_preflight_required=true
-        collector_disabled=false
-        for file in "${compose_files[@]}"; do
-            if [[ "${file##*/}" == "docker-compose.youtube-collector-disabled.yml" ]]; then
-                collector_disabled=true
-                break
-            fi
-        done
-        gate_targets=(hololive-api hololive-alarm-worker)
-        if [[ "${collector_disabled}" == false ]]; then
-            gate_targets+=(youtube-collector)
-        fi
-        for file in "${compose_files[@]}"; do
-            if [[ "${file##*/}" == "docker-compose.live-compat.yml" ]]; then
-                public_ingress_preflight_required=true
-                gate_targets+=(admin-dashboard-ingress)
-                break
-            fi
-        done
-    else
-        for service in "${up_service_targets[@]}"; do
-            if cutover_service_uses_app_writable_bind_mount "${service}"; then
-                bind_preflight_required=true
-                gate_targets+=("${service}")
-            fi
-            if [[ "${service}" == "admin-dashboard-ingress" ]]; then
-                public_ingress_preflight_required=true
-                gate_targets+=("${service}")
-            fi
-        done
+        echo "[ERROR] AP compose up must name its services" >&2
+        exit 1
     fi
-
-    if [[ "${public_ingress_preflight_required}" == true ]]; then
-        echo "[PREFLIGHT] Preparing public ingress bind source mode"
-        if ! prepare_admin_dashboard_ingress_bind_mount "${ROOT_DIR}"; then
-            echo "[ERROR] public ingress bind source preflight failed before cutover" >&2
-            exit 1
+    bind_preflight_required=false
+    gate_targets=()
+    for service in "${up_service_targets[@]}"; do
+        if cutover_service_uses_app_writable_bind_mount "${service}"; then
+            bind_preflight_required=true
+            gate_targets+=("${service}")
         fi
-    fi
+    done
 
     echo "[PREFLIGHT] Rendering Compose before start"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_prefix[@]}" config --quiet

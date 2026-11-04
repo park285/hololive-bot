@@ -17,7 +17,7 @@
 
 1. owning ops/PG runbook과 현재 대상·효과 승인을 확인합니다. `default_transaction_read_only=on`을 증명한 연결에서 `scripts/maintenance/preview-terminal-live-heads.sql`을 실행합니다. 결과의 rows는 operational identifier를 포함하므로 공유 출력에 노출하지 않고 mode 0700 디렉터리의 0600 파일에 저장합니다.
 2. count/digest와 모든 원본 행을 검토합니다. 2026-09-28의 승인·실제 적용 범위는 24건이었습니다. 다른 후보를 과거 승인에 포함하지 않습니다.
-3. `bash scripts/runtime/test-terminal-live-head-repair.sh`를 kapu에서 실행합니다. 설치된 `postgres:18.6-alpine`만 사용하며 네트워크/host port 없는 테스트 컨테이너를 종료 시 제거합니다.
+3. `bash scripts/runtime/test-terminal-live-head-repair.sh`를 kapu에서 실행합니다. rootless Podman에 이미 있는 digest 고정 `postgres:18.6-alpine`만 사용하며 네트워크/host port 없는 테스트 컨테이너를 종료 시 제거합니다.
 4. 승인된 쓰기 연결에서 아래 SQL을 **한 번** 실행합니다. 본문과 expected 값은 검증한 파일/preview에서 사용합니다. 권한 상승이나 재시도는 도구가 수행하지 않습니다.
 
    ```text

@@ -1,16 +1,16 @@
 # PostgreSQL extension experiments
 
-kapu의 새 합성 DB만 사용한다. 운영 접속 옵션, 실제 데이터 복제, 포트 공개는 없다.
+kapu rootless Podman의 새 합성 DB만 사용한다. 운영 접속 옵션, 실제 데이터 복제, 포트 공개는 없다.
 컨테이너는 실행별 고유 이름·tmpfs·자원 제한을 사용하고 종료 시 해당 컨테이너만 제거한다.
 
 ## 계측 비용 재현
 
 ```bash
-docker buildx build --platform linux/amd64 --target runtime \
-  --build-arg REVISION="$(git rev-parse HEAD)" --provenance=false --sbom=false \
-  --load --tag hololive-postgres:extension-experiment deploy/images/postgres
+podman build --platform linux/amd64 --target runtime \
+  --build-arg REVISION="$(git rev-parse HEAD)" \
+  --tag localhost/hololive-postgres:extension-experiment deploy/images/postgres
 python3 -B scripts/experiments/postgres-extensions/benchmark.py \
-  --image hololive-postgres:extension-experiment --seconds 8 --output /tmp/pg-extension-results.json
+  --image localhost/hololive-postgres:extension-experiment --seconds 8 --output /tmp/pg-extension-results.json
 ```
 
 PostgreSQL 18.6/Alpine, kapu amd64, 컨테이너 CPU 2개·메모리 1536MiB,
@@ -46,12 +46,12 @@ tmpfs 실험은 실제 디스크 I/O를 대표하지 않는다. ARM64는 kapu Bu
 ## JSON Schema 실험
 
 ```bash
-docker buildx build --platform linux/amd64 \
+podman build --platform linux/amd64 \
   --file scripts/experiments/postgres-extensions/Dockerfile.jsonschema \
-  --provenance=false --sbom=false --load --tag hololive-postgres-jsonschema:experiment \
+  --tag localhost/hololive-postgres-jsonschema:experiment \
   scripts/experiments/postgres-extensions
 python3 -B scripts/experiments/postgres-extensions/jsonschema.py \
-  --image hololive-postgres-jsonschema:experiment --output /tmp/pg-jsonschema-results.json
+  --image localhost/hololive-postgres-jsonschema:experiment --output /tmp/pg-jsonschema-results.json
 ```
 
 [pg_jsonschema v0.3.4](https://github.com/supabase/pg_jsonschema/releases/tag/v0.3.4)의

@@ -1,0 +1,88 @@
+# 비활성 참고 설정이다. 현재 주 서버는 deploy/topology/hosts.conf의 central이며 실행·동기화 중인 대기 서버는 없다.
+# 새 대기 서버 준비·HBA·슬롯·장애 전환은 별도 승인이 필요하다. 절차: docs/current/runbooks/postgres-replication.md
+# 중앙 묶음(deploy/quadlet/hololive-bot)과 함께 설치하지 않으며 [Install]이 없어 부팅 때 기동하지 않는다.
+[Unit]
+Description=Hololive PostgreSQL physical standby (reactivation reference)
+After=tailscaled.service
+
+[Container]
+ContainerName=holo-postgres-standby
+Image=${POSTGRES_IMAGE}
+Pull=never
+# alpine 이미지의 postgres는 uid 70이지만 스택 공통으로 999를 쓴다(TwentyQ·ChatBotGo와 동일).
+User=999
+Group=999
+# 호스트 ID와 분리한다(크기는 스택 공통 65536). data·TLS·pgpass는 :idmap으로 on-disk 999를 그대로 쓴다.
+UserNS=auto:size=65536
+PublishPort=${HOLOLIVE_STANDBY_POSTGRES_BIND_IP}:${HOLOLIVE_STANDBY_POSTGRES_PORT}:5432
+Volume=holo-pg-standby-data.volume:/var/lib/postgresql:idmap
+Volume=/opt/hololive-bot/compose/current/deploy/postgres/pg_hba.conf:/run/hololive-bot/postgres/pg_hba.conf:ro
+Volume=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+Volume=/etc/stack-secrets/hololive-bot/postgres/pgpass:/run/hololive-bot/postgres/pgpass:ro,idmap
+Volume=/etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro,idmap
+Volume=/var/lib/hololive-postgres-failover:/run/hololive-bot/postgres-failover:ro
+# user 지정 시 entrypoint의 root 준비 단계가 빠지므로 소켓 tmpfs를 U로 컨테이너 사용자 소유로 만든다(podman --tmpfs는 uid=를 받지 않는다).
+Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
+Tmpfs=/var/run/postgresql:size=16m,mode=3775,U,noexec,nosuid,nodev
+ReadOnly=true
+ReadOnlyTmpfs=false
+NoNewPrivileges=true
+DropCapability=all
+AddCapability=SETUID SETGID CHOWN FOWNER DAC_OVERRIDE
+# ReadOnlyTmpfs=false는 /dev/shm도 읽기 전용으로 만든다(Docker read_only와 다름). PostgreSQL posix 공유 메모리용
+# 쓰기 가능한 /dev/shm은 따로 tmpfs로 준다(2026-11-04 리허설 VM에서 ShmSize만으로는 기동 실패).
+Tmpfs=/dev/shm:size=256m,noexec,nosuid,nodev
+Memory=1g
+PidsLimit=256
+StopTimeout=60
+LogDriver=journald
+Environment=PGDATA=/var/lib/postgresql/pgdata
+Environment=PGPORT=5432
+# standby는 recovery 상태이며 승격 표시가 없어야 한다.
+# 승격 노드는 전용 제어기가 pg_promote() 완료 뒤 영속 표시를 남겼을 때만 정상이다.
+HealthCmd=role="$$(psql -U postgres_admin -d hololive -p 5432 -Atc 'select pg_is_in_recovery()')" && case "$$role" in t) test ! -e /run/hololive-bot/postgres-failover/health.signal ;; f) grep -qx 'role=primary' /run/hololive-bot/postgres-failover/health.signal ;; *) exit 1 ;; esac
+HealthInterval=30s
+HealthTimeout=7s
+HealthRetries=3
+HealthStartPeriod=30s
+Notify=healthy
+# primary보다 작으면 standby가 기동을 거부한다. max_connections는 prod primary와 동일하게 둔다.
+Exec=postgres \
+  -c hba_file=/run/hololive-bot/postgres/pg_hba.conf \
+  -c hot_standby=on \
+  -c hot_standby_feedback=on \
+  -c max_connections=61 \
+  -c shared_buffers=256MB \
+  -c effective_cache_size=768MB \
+  -c maintenance_work_mem=64MB \
+  -c work_mem=4MB \
+  -c tcp_keepalives_idle=60 \
+  -c tcp_keepalives_interval=10 \
+  -c tcp_keepalives_count=6 \
+  -c checkpoint_timeout=900s \
+  -c max_wal_size=2GB \
+  -c wal_compression=lz4 \
+  -c log_lock_waits=on \
+  -c log_temp_files=1MB \
+  -c log_min_duration_statement=1s \
+  -c log_parameter_max_length=0 \
+  -c log_parameter_max_length_on_error=0 \
+  -c ssl=on \
+  -c ssl_cert_file=/run/hololive-bot/postgres-tls/server.crt \
+  -c ssl_key_file=/run/hololive-bot/postgres-tls/server.key \
+  -c "primary_conninfo=host=${HOLOLIVE_PRIMARY_HOST} port=${HOLOLIVE_PRIMARY_PORT} user=${HOLOLIVE_REPLICATOR_USER} sslmode=verify-full sslrootcert=/run/hololive-bot/certs/postgres-ca.pem passfile=/run/hololive-bot/postgres/pgpass application_name=${HOLOLIVE_STANDBY_SLOT}" \
+  -c primary_slot_name=${HOLOLIVE_STANDBY_SLOT}
+
+[Service]
+Environment=POSTGRES_IMAGE=localhost/hololive-postgres:prod
+Environment=HOLOLIVE_STANDBY_POSTGRES_BIND_IP=127.0.0.1
+Environment=HOLOLIVE_STANDBY_POSTGRES_PORT=5434
+Environment=HOLOLIVE_PRIMARY_PORT=5433
+Environment=HOLOLIVE_REPLICATOR_USER=hololive_replicator
+Environment=HOLOLIVE_STANDBY_SLOT=iris_seoul_standby
+# 대기 서버 호스트는 AP용 env를 쓴다. HOLOLIVE_PRIMARY_HOST는 hosts.conf의 승인된 primary여야 한다.
+EnvironmentFile=/etc/stack-secrets/hololive-bot/ap-compose.env
+Restart=always
+RestartSec=5s
+TimeoutStartSec=600
+LogRateLimitIntervalSec=0

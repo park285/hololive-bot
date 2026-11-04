@@ -17,7 +17,7 @@ prod_source="$(cat "$backup/prod-compose-source-path")"
 ap_source="$(cat "$backup/ap-compose-source-path")"
 # 기록된 배치는 이전 이미지·프로필·소스 조합의 일부다.
 case "$prod_source" in
-  deploy/compose/docker-compose.prod.yml|deploy/compose/docker-compose.collector.yml) ;;
+  deploy/compose/docker-compose.collector.yml) ;;
   *) exit 2 ;;
 esac
 [[ "$ap_source" == "$ap_file" ]] || exit 2
@@ -25,9 +25,6 @@ old_prod="$backup/$prod_source.prechange"
 old_ap="$backup/$ap_file.prechange"
 compose=("$rollback_root/scripts/deploy/compose.sh" --project-directory "$HOME/hololive-bot/$(dirname "$prod_source")")
 restore_files=(-f "$HOME/hololive-bot/$ap_source")
-if [[ "$prod_source" == deploy/compose/docker-compose.prod.yml ]]; then
-  restore_files=(-f "$HOME/hololive-bot/$prod_source" "${restore_files[@]}")
-fi
 old_collector_tag=''
 old_po_tag=''
 po_state="$(cat "$backup/po-sandbox-prechange.state")"
@@ -51,7 +48,7 @@ if [[ "$po_state" == present ]]; then
   old_po_tag="$(cat "$backup/rollback-po-image-tag")"
   [[ "$old_po_tag" =~ ^hololive-youtube-po-sandbox:rollback-[0-9]{8}T[0-9]{6}Z$ ]] || exit 1
   old_po_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_revision"])' "$backup/po-sandbox-prechange-manifest.json")"
-  po_verify_image "$old_po_tag" "$backup/po-sandbox-prechange-manifest.json" "$old_po_revision" arm64 "$backup/po-sandbox-prechange.image-id"
+  po_verify_image docker "$old_po_tag" "$backup/po-sandbox-prechange-manifest.json" "$old_po_revision" arm64 "$backup/po-sandbox-prechange.image-id"
 else
   [[ ! -e "$backup/rollback-po-image-tag" && ! -e "$backup/po-sandbox-prechange-manifest.json" && ! -e "$backup/po-sandbox-prechange.image-id" ]] || exit 1
 fi
@@ -64,9 +61,6 @@ mkdir -p "$preflight/deploy/compose"
 cp "$old_prod" "$preflight/deploy/compose/$(basename "$prod_source")"
 cp "$old_ap" "$preflight/deploy/compose/$(basename "$ap_file")"
 preflight_files=(-f "$preflight/deploy/compose/$(basename "$ap_file")")
-if [[ "$prod_source" == deploy/compose/docker-compose.prod.yml ]]; then
-  preflight_files=(-f "$preflight/deploy/compose/$(basename "$prod_source")" "${preflight_files[@]}")
-fi
 ap_prechange_config sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
   "${compose[@]}" "${preflight_files[@]}" config --format json \
   | sudo -n python3 "$pair_tool" rollback "$service" "$profile_pair" "$preflight/worker-profile.yml"

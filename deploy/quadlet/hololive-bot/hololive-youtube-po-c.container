@@ -1,0 +1,53 @@
+# 중앙 collector c의 격리 PO issuer다. network·앱 비밀·DB 없이 private Unix socket만 제공한다.
+# 재시작 카운트는 issuer generation 교체 횟수이므로 unhealthy 자동 kill을 두지 않는다.
+[Unit]
+Description=Hololive isolated PO issuer for central collector c
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=hololive-youtube-po-c
+Image=${HOLOLIVE_YOUTUBE_PO_IMAGE}
+Pull=never
+User=65532
+Group=1000
+# 호스트 ID와 분리한다. collector-c와 같이 크기 65536·socket :idmap이어야 on-disk 65532:1000이 유지돼 client가 접속한다.
+UserNS=auto:size=65536
+Network=none
+Volume=youtube-po-c-socket.volume:/run/hololive-youtube-po:idmap
+Tmpfs=/tmp:size=64m,mode=1777,U,noexec,nosuid,nodev
+ReadOnly=true
+ReadOnlyTmpfs=false
+NoNewPrivileges=true
+DropCapability=all
+Ulimit=core=0:0
+Memory=512m
+PidsLimit=32
+PodmanArgs=--cpus=1.0
+LogDriver=journald
+Environment=HOME=/tmp
+Environment=TMPDIR=/tmp
+Environment=TZ=UTC
+Environment=LANG=C
+# Dockerfile.po-sandbox의 HEALTHCHECK와 같은 검사다. 이미지 healthcheck 메타데이터에 기대지 않는다.
+HealthCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtube-po/worker.sock"]
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=5s
+HealthStartupCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtube-po/worker.sock"]
+HealthStartupInterval=2s
+HealthStartupTimeout=5s
+Notify=healthy
+
+[Service]
+Environment=HOLOLIVE_YOUTUBE_PO_IMAGE=localhost/hololive-youtube-po-sandbox:prod
+EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
+Restart=always
+RestartSec=5s
+TimeoutStartSec=120
+LogRateLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

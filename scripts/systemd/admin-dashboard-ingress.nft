@@ -21,7 +21,8 @@ table inet admin_dashboard_ingress {
 		tcp dport 5433 reject with tcp reset
 	}
 
-	# Docker DNAT 트래픽은 input을 지나지 않는다. 원래 publish port와 변환된
+	# Podman(netavark) publish의 DNAT 트래픽은 input을 지나지 않는다. DNAT 표시는 어느 table이 바꿨든
+	# conntrack에 남으므로 interface 이름에 기대지 않는다. 원래 publish port와 변환된
 	# container port를 함께 검사해 다른 서비스의 같은 내부 port를 건드리지 않는다.
 	chain forward {
 		type filter hook forward priority -20; policy accept;

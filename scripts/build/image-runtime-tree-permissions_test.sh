@@ -17,14 +17,17 @@ pass() {
   echo "[PASS] $*"
 }
 
-# 빌드는 kapu에서만 하므로 docker가 없으면 통과로 넘기지 않고 실패한다.
-docker version >/dev/null 2>&1 || fail "docker daemon unavailable; run this image build check on kapu"
+# 빌드는 kapu의 rootless Podman에서만 하므로 Podman이 없으면 통과로 넘기지 않고 실패한다.
+if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] ||
+  [[ "$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" != true ]]; then
+  fail "local rootless Podman unavailable; run this image build check on kapu"
+fi
 
 TMP_DIR="$(mktemp -d)"
 tags=()
 cleanup() {
   if ((${#tags[@]} > 0)); then
-    docker image rm -f "${tags[@]}" >/dev/null 2>&1 || true
+    podman image rm -f "${tags[@]}" >/dev/null 2>&1 || true
   fi
   rm -rf "${TMP_DIR}"
 }
@@ -71,12 +74,12 @@ if (denied.length > 0) { console.error(denied.slice(0, 20).join("\n")); process.
 
 check_stage() {
   local dockerfile="$1" target="$2" tree="$3" user="$4" tag
-  tag="hololive-umask-check-$$-${target}"
+  tag="localhost/hololive-umask-check-$$-${target}"
   tags+=("${tag}")
-  docker buildx build --quiet --load --provenance=false --target "${target}" --tag "${tag}" \
+  podman build --quiet --target "${target}" --tag "${tag}" \
     --file "${checkout}/${dockerfile}" "${checkout}" >/dev/null ||
     fail "${dockerfile} --target ${target} build failed"
-  if ! docker run --rm --label io.iris.observability.logs=exclude --network none --user "${user}" --entrypoint /usr/local/bin/node "${tag}" \
+  if ! podman run --rm --pull=never --network none --user "${user}" --entrypoint /usr/local/bin/node "${tag}" \
     -e "${walker}" "${tree}"; then
     fail "${dockerfile} ${target}: ${tree} is not readable by runtime user ${user} after a umask 077 checkout"
   fi

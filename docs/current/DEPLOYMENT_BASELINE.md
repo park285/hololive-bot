@@ -4,6 +4,13 @@
 
 현재 production은 중앙 호스트와 Seoul collector `b`의 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`의 host-native systemd로 운영합니다. 중앙은 `deploy/compose/docker-compose.prod.yml`과 `docker-compose.live-compat.yml`을 함께 사용합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
 
+### 준비된 Podman Quadlet 중앙 배치 — 미배포
+
+저장소의 중앙 정의는 `deploy/compose/docker-compose.prod.yml`·`docker-compose.live-compat.yml`에서
+`deploy/quadlet/hololive-bot/`의 rootful Podman Quadlet unit으로 바뀌었습니다(설치·운영: `deploy/quadlet/README.md`).
+`hololive-compose.service`, deunhealth·docker-proxy, `DOCKER_SOCKET_GID`는 이 정의에 없습니다. 아래의 운영 기록은
+중앙 컷오버 증거가 대체할 때까지 실제 배포된 Docker 배치를 기준으로 남깁니다. Seoul `b`는 Docker Compose로 유지합니다.
+
 ### Prepared 11.0.0 worker/DB cutover — not activated
 
 After actual old-profile-compatible 10.2.0 acceptance, the 11.0.0 source prepares
@@ -79,9 +86,8 @@ schema migration은 실행하지 않았습니다. 새 호스트의 `hololive-com
 `<build-control-host>`는 `x86_64`라 현재 `aarch64` primary의 물리 standby 역할을 맡지 않습니다.
 이 호스트의 `hololive-compose.service`는 `disabled`로 두어 재부팅이 두 번째 alarm
 dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결정을 요구합니다.
-표준 `compose.sh`와 `compose-redeploy-service.sh`도 hostname이 `kapu`이면
-`hololive-alarm-worker`의 직접·전체·dependency 경유 기동을 거부합니다. 승인된 롤백에서만
-해당 명령에 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1`을 일시 지정합니다.
+중앙 unit 설치(`sync-opt-current.sh`)와 API·worker 교체(`quadlet-redeploy-service.sh`)도 hostname이 `kapu`이면
+거부합니다. 승인된 롤백에서만 해당 명령에 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1`을 일시 지정합니다.
 
 2026-09-08 사용자 결정으로 Seoul physical standby와 failover controller를 제거했습니다.
 2026-10-07 이전 이후에는 새 Seoul 중앙 `holo-postgres` 하나만 권위 primary입니다.
@@ -96,7 +102,7 @@ timer·service·apply drop-in과 Osaka의 `iris_seoul_standby` physical slot을 
 당시 제거한 `svc:hololive-postgres` serve route는 이번 이전에서도 재생성하지 않았습니다.
 주소를 승계한 새 primary에 consumer들이 직접 재접속하며 TLS `verify-full`을 유지합니다.
 
-`deploy/compose/docker-compose.standby.yml`과 failover 구현은 재활성화 참고 자료로만
+`deploy/quadlet/hololive-bot-standby/`(Docker 시절 `docker-compose.standby.yml`을 옮긴 unit)과 failover 구현은 재활성화 참고 자료로만
 유지합니다. 다시 사용하려면 대상·데이터 비용·fencing·route 영향에 대한 명시적 승인을 새로
 받고, 당시의 현재 primary에서 새 `pg_basebackup`을 생성해 standby를 재시딩한 뒤
 `runbooks/postgres-replication.md`의 전체 검증을 통과해야 합니다. 삭제한 PGDATA나 예전
@@ -169,7 +175,7 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 
 | 설정 | 현재 값 | 영속 설정 소유 경로 |
 |---|---|---|
-| 컨테이너 메모리 한도 | 4GiB | `deploy/compose/docker-compose.prod.yml`의 `holo-postgres.deploy.resources.limits.memory`; 운영 deploy tree도 동일 |
+| 컨테이너 메모리 한도 | 4GiB | 운영 기록은 Docker Compose `holo-postgres.deploy.resources.limits.memory`; 준비된 정의는 `deploy/quadlet/hololive-bot/holo-postgres.container`의 `Memory=4g` |
 | `shared_buffers` | 1GB | Compose 시작 인자; 컨테이너 한도의 25%를 배정하고 프로세스·파일 캐시 여유 유지 |
 | `wal_buffers` | 64MB | Compose 시작 인자; 피크의 WAL 버퍼 포화에 대비 |
 | `effective_cache_size` | 3GB | Compose 시작 인자; 공유 버퍼와 파일 캐시를 고려한 planner 추정치이며 별도 메모리 할당 아님 |
@@ -242,10 +248,9 @@ domain socket monitor connection remained outside the TCP TLS scope.
 
 ## Related Files
 
-- `deploy/compose/docker-compose.prod.yml`
-- `deploy/compose/docker-compose.live-compat.yml`
+- `deploy/quadlet/hololive-bot/`
 - `deploy/compose/docker-compose.seoul.yml`
 - `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`
-- `deploy/compose/docker-compose.standby.yml`
+- `deploy/quadlet/hololive-bot-standby/`
 - `docs/current/PROJECT_MAP.md`
 - `docs/current/runbooks/postgres-replication.md`

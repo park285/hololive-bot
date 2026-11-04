@@ -6,7 +6,7 @@
 |---|---|
 | Module | `hololive-api` |
 | Binary | `hololive-api` |
-| Compose service | `hololive-api` |
+| Quadlet unit | `hololive-api.service` (container `hololive-api`) |
 | Port | `30001` (bot) / `30003` (llm, container 안 health·ready 전용, host publish 없음) / `30006` (admin) |
 | Health endpoint | `https://127.0.0.1:30001/health` through container `./bin/healthcheck` |
 | Ready endpoint | `https://127.0.0.1:30003/internal/ready` through container `./bin/healthcheck --api-key-env API_SECRET_KEY` (llm plane dependencies) |
@@ -223,7 +223,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 ## Shutdown behavior
 
 - The aggregate `Runtime.Run` (shared-go `lifecycle.Run`) is the single process signal owner. It builds llm, then bot, then admin (each borrows the earlier planes' in-process instances), starts the optional YouTube plane, then llm, admin, and bot; shutdown cancels the runtime context and drains bot, admin, llm, then the optional YouTube plane.
-- Stop HTTP/H3 ingress and scheduler workers within one shared 10-second plane-drain budget. Drain plus plane cleanup is a hard 30-second cap: as with the former Fx stop timeout, a plane that ignores cancellation is abandoned at the deadline and the bootstrap `Close` does not re-join unfinished cleanup. Only the telemetry flush (at most 5 seconds) and logger close follow, inside the Compose 45-second grace period.
+- Stop HTTP/H3 ingress and scheduler workers within one shared 10-second plane-drain budget. Drain plus plane cleanup is a hard 30-second cap: as with the former Fx stop timeout, a plane that ignores cancellation is abandoned at the deadline and the bootstrap `Close` does not re-join unfinished cleanup. Only the telemetry flush (at most 5 seconds) and logger close follow, inside the unit's 45-second `StopTimeout`.
 - Plane `CloseContext` receives the remaining process-stop context. Each plane joins its background tasks before releasing owned member-cache/DB/cache resources; bot durable samplers are included. A join timeout preserves live resources and the error; the process then exits without re-joining or starting concurrent cleanup, and cleanup that has not started by the stop deadline is not started.
 - LLM HTTP/H3 (health·ready only) shutdown has one active owner. A caller deadline returns control to the remaining planes; the original shutdown error remains observable. LLM resources are released only after the actual HTTP handlers and scheduler have joined, including metrics/pprof handlers.
 - YouTube claim release waits for the claim producer to finish registering its returned batch. Registration and fenced release share the existing settlement budget; if registration times out, a later `CloseContext` can finish that release. An attempted release failure is retained without automatic retry, and DB cleanup still waits for all workers to join.
@@ -234,7 +234,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 ## Observability
 
-- Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-api`
+- Logs: `sudo journalctl -u hololive-api.service -f`
 - Health: `https://127.0.0.1:30001/health`, `https://127.0.0.1:30003/health`, `https://127.0.0.1:30006/health` through container `./bin/healthcheck`
 - Ready: `https://127.0.0.1:30003/internal/ready` through container `./bin/healthcheck --api-key-env API_SECRET_KEY`
 - Metrics: 검토 필요

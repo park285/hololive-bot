@@ -5,7 +5,7 @@
 GitHub Release 게시·본문 수정: `bash scripts/publish-release.sh <tag> <previous-tag> [preview|create|edit]`. 기본은 미리보기이며 [릴리즈 runbook](../docs/current/runbooks/release.md)의 승인·검증 절차를 따릅니다.
 
 ## 1. ci/
-로컬 CI gate 진입점입니다. `build-all.sh`는 Docker build 전에 이 gate를 실행합니다.
+로컬 CI gate 진입점입니다. `build-all.sh`는 image build(`podman build`) 전에 이 gate를 실행합니다.
 
 - `./scripts/ci/local-ci.sh`
 
@@ -21,9 +21,12 @@ PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니
   - `check-shared-go-boundary.sh`
 
 ## 3. deploy/
-Docker Compose 운영 재배포 스크립트입니다.
+중앙 Quadlet 설치와 AP 배포 스크립트입니다.
 
-- `./scripts/deploy/compose-redeploy-service.sh <service>`
+- `sudo ./scripts/deploy/sync-opt-current.sh` - 중앙 배포 트리·Quadlet unit·prestart 설치(`deploy/quadlet/README.md`)
+- `scripts/deploy/quadlet-prestart.sh` - 중앙 unit의 ExecStartPre/ExecCondition helper
+- `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh <hololive-api|hololive-alarm-worker> <image> [<api-image>]` - 중앙 API·worker image 교체(이전 pair 보존, 활성화 전 migration, 실패 시 이전 pair 복원)
+- `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-rollback-service.sh <release> [--check|--apply]` - 보존한 이전 pair로 API·worker rollback
 - 원격 AP(`youtube-collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
   - Seoul Compose: `./scripts/deploy/ap-deploy.sh seoul [--dry-run|--apply]`
   - Osaka/Osaka2 native: `./scripts/deploy/ap-host-native-deploy.sh <osaka|osaka2> [--dry-run|--apply]`
@@ -63,24 +66,17 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/runtime/alarm-dispatch-outbox-retention.sh`
 - `./scripts/runtime/set-iris-base-url.sh`
 
-## 7. smoke/
-Compose 설정과 런타임 readiness/health smoke test 스크립트입니다.
-
-- `./scripts/smoke/smoke-compose-config.sh`
-- `./scripts/smoke/smoke-runtime-health.sh`
-
-## 8. maintenance/
+## 7. maintenance/
 수동 적용용 PostgreSQL 유지보수 SQL입니다.
 
 - `hololive_msa_hot_path_observability.sql`
 
-## 9. ops/
-Valkey self-heal 및 PostgreSQL failover 운영 자산입니다.
+## 8. ops/
+PostgreSQL failover 운영 자산입니다.
 
-- `./scripts/ops/valkey-selfheal.sh` (+ `valkey-selfheal.service`/`.timer`)
 - `./scripts/ops/postgres-failover.sh` (+ non-root launcher, `.service`/`.timer`, apply/env examples, `postgres-failover_test.sh`)
 - `./scripts/ops/postgres-failover-fence-ssh.sh` - reachable primary용 reference fence hook
-- `./scripts/ops/postgres-primary-fence.sh` - 구 primary에서 compose/DB 재기동을 영속 차단하는 remote action
+- `./scripts/ops/postgres-primary-fence.sh` - 구 primary에서 Quadlet unit/DB 재기동을 영속 차단하는 remote action
 - `./scripts/ops/postgres-primary-unfence.sh` - 재시딩·streaming 검증 뒤 fence generation을 안전하게 해제하는 root helper
 - `./scripts/maintenance/postgres-failover-db-role.sql` - controller DB role에 CONNECT와 `pg_promote()`만 부여하는 수동 bootstrap
 
@@ -89,18 +85,18 @@ unit은 dry-run입니다. 실제 승격은 승인된 external fencing과
 route hook을 모두 준비한 뒤 apply drop-in을 설치해야 합니다. 운영 계약은
 `docs/current/runbooks/postgres-replication.md`가 소유합니다.
 
-## 10. refactor/
+## 9. refactor/
 리팩터링 보조 가드 스크립트입니다.
 
 - `./scripts/refactor/grep-sensitive-logs.sh`
 
-## 11. systemd/
+## 10. systemd/
 호스트 배포용 systemd unit 정본입니다.
 
-- `hololive-compose.service` (+ `hololive-compose.service.d/`)
+- 중앙 container unit은 `deploy/quadlet/hololive-bot/`(Quadlet)이 소유합니다. `admin-dashboard-ingress-firewall.service`는 여기 있습니다.
 - `hololive-daily-log-rollup.service`/`.timer`, `hololive-osaka-daily-log-rollup.service`/`.timer`
 - `hololive-main-log-mirror@.service`/`.timer`
-- `admin-dashboard-ingress`는 Compose의 host-networked Nginx 서비스로 중앙 단축 링크 `100.100.1.8:30192`만 제공합니다. 관리 앱은 iris-seoul의 Iris Console(`iris-console.service`)이 소유합니다.
+- `admin-dashboard-ingress`는 중앙 Quadlet의 host-networked Nginx 컨테이너로 중앙 단축 링크 `100.100.1.8:30192`만 제공합니다. 관리 앱은 iris-seoul의 Iris Console(`iris-console.service`)이 소유합니다.
 
 정리 원칙:
 - retired/no-op 스크립트는 유지하지 않습니다.

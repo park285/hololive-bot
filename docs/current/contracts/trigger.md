@@ -21,7 +21,7 @@
 ## Invocation
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api \
+sudo podman exec hololive-api \
   ./bin/hololive-api --rerun-notification=majorevent-weekly
 ```
 

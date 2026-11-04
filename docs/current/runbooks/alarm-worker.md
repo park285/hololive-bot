@@ -3,7 +3,7 @@
 ## Role
 
 `hololive-alarm-worker`는 alarm checker/scheduler, dispatch queue publishing, dispatch queue consumption, generic notification delivery outbox consumption, YouTube outbox egress를 담당합니다.
-proactive notification egress의 배타성은 별도 lease가 아니라 PostgreSQL row-claim(`FOR UPDATE SKIP LOCKED`) 조율과 compose 단일 인스턴스 배치(`container_name: hololive-alarm-worker`, 고정 host port `127.0.0.1:30007`)가 함께 보장합니다.
+proactive notification egress의 배타성은 별도 lease가 아니라 PostgreSQL row-claim(`FOR UPDATE SKIP LOCKED`) 조율과 중앙 Quadlet 단일 인스턴스 배치(`ContainerName=hololive-alarm-worker`, 고정 host port `127.0.0.1:30007`)가 함께 보장합니다.
 
 ## Normal status
 
@@ -73,15 +73,15 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 ## Logs
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker
+sudo journalctl -u hololive-alarm-worker.service -f
 ```
 
 ## Readiness
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/ready
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30097/diagnostics/workers
+sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/ready
+sudo podman exec hololive-alarm-worker ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready
+sudo podman exec hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30097/diagnostics/workers
 ```
 
 `/ready` fails closed when PostgreSQL or Valkey is unavailable. Worker enablement and effective executor/queue state are reported by the authenticated metrics-plane `/diagnostics/workers`; production requires all three profile executors enabled.
@@ -123,9 +123,9 @@ migration 331은 `youtube_community_shorts_alarm_states`의 발송 전 선점 �
 
 - 적용 조건: claim 제거 릴리스가 `hololive-api`와 `hololive-alarm-worker` 모두에 운영 반영되고, 그 이전 image로
   도는 컨테이너가 0개일 때만 별도 승인을 받아 적용합니다.
-- 순서: [릴리즈 runbook](release.md#3-런타임-호스트-no-build-cutover)의 일반 순서를 따릅니다. (1) 331을 포함한
-  manifest로 `hololive-db-migrate` one-shot을 실행하고 종료 코드 0을 확인합니다. (2) 331을 포함한 릴리스의 worker와
-  API를 `up -d --no-deps`로 올립니다. migrate가 실패하면 새 image를 올려 계속하지 않고, 원인을 확인한 뒤 migrate부터
+- 순서: [릴리즈 runbook](release.md#3-런타임-호스트-quadlet-기동)의 일반 순서를 따릅니다. (1) 331을 포함한
+  manifest로 `hololive-db-migrate.service` one-shot을 실행하고 종료 코드 0을 확인합니다. (2) 331을 포함한 릴리스의 worker와
+  API unit을 `systemctl restart`로 교체합니다. migrate가 실패하면 새 image를 올려 계속하지 않고, 원인을 확인한 뒤 migrate부터
   다시 실행합니다. migrate와 앱 교체 사이에 도는 claim 제거 릴리스의 API·worker는 이 열을 참조하지 않으므로 정상
   동작합니다.
 - 331은 표를 3초 `lock_timeout`으로 잠그는 짧은 트랜잭션 뒤에 어휘 CHECK 검증을 별도 문장으로 실행합니다. 어느
@@ -211,17 +211,17 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30097/diagnostics/workers
+sudo journalctl -u hololive-alarm-worker.service -n 300
+sudo podman exec hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30097/diagnostics/workers
 ```
 
 Mitigation:
 - Check PostgreSQL, Valkey, scheduler role, and alarm state.
-- Verify exactly one alarm-worker instance is running: `docker ps --filter name=hololive-alarm-worker --format '{{.Names}}\t{{.Status}}'`.
+- Verify exactly one alarm-worker instance is running: `sudo podman ps --filter name=hololive-alarm-worker --format '{{.Names}}\t{{.Status}}'`.
 - Verify PostgreSQL row-claim state is draining and not stuck after its lock expires:
 
 ```bash
-docker exec -i holo-postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+sudo podman exec -i holo-postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
 SELECT status,
        count(*),
        min(next_attempt_at) AS oldest_next_attempt,
@@ -248,7 +248,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-alarm-worker
+sudo journalctl -u hololive-alarm-worker.service -n 200
 ```
 
 Mitigation:
@@ -266,7 +266,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker printenv ALARM_SHORT_LINK_BASE_URL
+sudo podman exec hololive-alarm-worker printenv ALARM_SHORT_LINK_BASE_URL
 ./scripts/deploy/shortlink-smoke.sh
 ```
 
@@ -366,20 +366,20 @@ Rollback:
 ## Smoke test
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/ready
+sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
+sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/ready
 ./scripts/deploy/shortlink-smoke.sh
 ```
 
 ## Rollback
 
 - Use `docs/current/runbooks/rollback.md`.
-- migration 231~233 적용 뒤의 rollback은 image만 되돌리고 `--no-deps`로 `hololive-alarm-worker`·`hololive-api`를
-  함께 교체하며 구 `hololive-db-migrate`를 실행하지 않습니다(`rollback.md`의 Valkey 2차 축소 절). 구 worker는 관리자
+- migration 231~233 적용 뒤의 rollback은 image만 되돌리고 `hololive-alarm-worker.service`·`hololive-api.service`를
+  함께 재시작하며 구 `hololive-db-migrate`를 실행하지 않습니다(`rollback.md`의 Valkey 2차 축소 절). 구 worker는 관리자
   방 이름을 Valkey `alarm:room_names`에만 쓰므로 rollback 기간에도 Console 방 이름 변경 동결을 유지합니다.
-  retag하면 `hololive-db-migrate`(`hololive-api:prod`)도 구 runner가 되므로, rollback 창에는 중앙 host를 재부팅하지
-  않고 `hololive-compose.service`를 disable합니다. 재부팅의 `systemd-compose-up.sh`는 `--no-deps` 없는 `up`이라 구
-  runner가 거절되고 API·worker·중앙 collector가 기동하지 못합니다. 이때 복구는 7.0.0 image로 재전진입니다(`rollback.md`).
+  retag하면 `hololive-db-migrate`(`HOLOLIVE_API_IMAGE`)도 구 runner가 되므로 rollback 창에는
+  `hololive-db-migrate.service`를 시작하지 않습니다. 이 unit은 `[Install]`이 없고 다른 unit이 끌어오지 않아 재부팅이
+  실행하지 않습니다. 구 runner를 실행해 거절됐다면 복구는 7.0.0 image로 재전진입니다(`rollback.md`).
 - 관리자 방 별칭 이관(`HGETALL alarm:room_names` export → migration 232 뒤 차이 값만 `alarm_room_display_names`에
   `ON CONFLICT DO NOTHING`)과 폐기 key 회수 순서는
   [Valkey 축소 계획](../plans/2026-09-28-valkey-dependency-reduction.md#2차-전환-관리자-방-별칭-이관)을 따릅니다.

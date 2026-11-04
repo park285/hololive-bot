@@ -19,7 +19,7 @@ ARG NODE_VERSION=26.12.1
 
 FROM gcr.io/distroless/static-debian13@sha256:15f8637509792e05b97d83451b0b6ccfa4abd548f997e406ac1e72c87fe1fa78 AS runtime-base
 
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS xspaces-build
+FROM --platform=$BUILDPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS xspaces-build
 WORKDIR /app/xspaces
 # checkout umask와 무관하게 runtime uid가 읽도록 context 파일 모드를 정규화한다.
 # 기호 COPY --chmod는 BuildKit 전용이라 CONTAINER_CLI=podman(buildah)에서도 같은 결과가 나오도록 RUN chmod로 맞춘다.
@@ -29,14 +29,14 @@ RUN --mount=type=cache,target=/root/.npm chmod u=rwX,go=rX package.json package-
 COPY hololive/hololive-alarm-worker/xspaces/src ./src
 RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
-FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS xspaces-runtime
+FROM --platform=$TARGETPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS xspaces-runtime
 
 # node base(alpine 3.24.2)의 musl 1.2.6-r2 로더 대신 alpine 3.24.3의 musl 1.2.6-r3(CVE-2026-107891) 로더를 쓴다.
 # 고정 이미지에서 복사만 하므로 build-time apk 설치와 대상 아키텍처 실행이 없다.
 # node base가 musl 1.2.6-r3 이상을 담으면 이 단계를 지우고 로더도 node 단계에서 복사한다.
-FROM --platform=$TARGETPLATFORM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS musl-loader
+FROM --platform=$TARGETPLATFORM docker.io/library/alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS musl-loader
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS builder
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown

@@ -33,6 +33,7 @@ ap_host_load() {
     AP_SSH_HOST_KEY_ALIAS=""
     AP_COMPOSE_FILE=""
     AP_RUNTIME_MODE=""
+    AP_CONTAINER_RUNTIME=""
     AP_SERVICES=()
     AP_CONTAINERS=()
     AP_PORTS=()
@@ -85,12 +86,22 @@ ap_host_load() {
     # Compose overlay는 compose 모드 호스트만 소유한다. native 호스트의 실행 정본은 systemd unit이다.
     if [[ "$AP_RUNTIME_MODE" == compose ]]; then
         : "${AP_COMPOSE_FILE:?missing AP_COMPOSE_FILE in $conf}"
+        # 원격 compose 명령과 image load는 docker 문자열로 고정돼 있다. 다른 런타임 host는 별도 경로가
+        # 생길 때까지 거부한다(Podman host는 Quadlet으로 운영한다).
+        # TODO(kapu): hololive-seoul 수용 뒤 AP_CONTAINER_RUNTIME 검사와 seoul.conf 변수를 삭제한다. 전환 회귀 방지용(빅뱅 계획 F절)
+        if [[ "${AP_CONTAINER_RUNTIME}" != docker ]]; then
+            echo "AP_CONTAINER_RUNTIME must be docker for AP_RUNTIME_MODE=compose in $conf" >&2
+            return 2
+        fi
         if [[ ! -r "$repo_root/$AP_COMPOSE_FILE" ]]; then
             echo "AP_COMPOSE_FILE not readable: $repo_root/$AP_COMPOSE_FILE" >&2
             return 2
         fi
     elif [[ -n "$AP_COMPOSE_FILE" ]]; then
         echo "AP_COMPOSE_FILE is only valid for AP_RUNTIME_MODE=compose in $conf" >&2
+        return 2
+    elif [[ -n "$AP_CONTAINER_RUNTIME" ]]; then
+        echo "AP_CONTAINER_RUNTIME is only valid for AP_RUNTIME_MODE=compose in $conf" >&2
         return 2
     fi
 

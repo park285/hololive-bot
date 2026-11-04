@@ -1,0 +1,7 @@
+# 중앙 앱·DB·캐시 bridge다. 기존 Docker network 이름과 대역을 유지해 pg_hba·central-local-access 경계가 그대로 맞는다.
+# InterfaceName은 rhel-host-security의 firewalld zone 'podman'이 참조하는 고정 이름이다.
+[Network]
+NetworkName=hololive-bot_hololive-net
+Subnet=172.23.0.0/16
+Gateway=172.23.0.1
+InterfaceName=pm-holo

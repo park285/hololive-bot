@@ -112,10 +112,10 @@ func testCliproxyBaseURL() string {
 	}
 
 	if baseURL == "" {
-		baseURL = "http://172.17.0.1:8787/v1"
+		baseURL = "http://127.0.0.1:8787/v1"
 	}
 
-	return strings.Replace(baseURL, "host.docker.internal", "172.17.0.1", 1)
+	return strings.Replace(baseURL, "host.docker.internal", "127.0.0.1", 1)
 }
 
 func newTestMemberNewsClient(t *testing.T) LLMClient {

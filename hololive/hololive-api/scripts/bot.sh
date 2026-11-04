@@ -27,18 +27,6 @@ Commands:
 EOF
 }
 
-validate_container_cli() {
-  local container_cli="${1:-docker}"
-  case "${container_cli}" in
-    docker|podman) ;;
-    *)
-      echo "[ERROR] Unsupported CONTAINER_CLI: ${container_cli}"
-      echo "Allowed values: docker, podman"
-      exit 1
-      ;;
-  esac
-}
-
 find_bot_pids() {
   pgrep -f "bin/bot" 2>/dev/null | while read -r pid; do
     local dir=""
@@ -63,7 +51,6 @@ load_env_file_literal() {
 }
 
 cmd_start() {
-  local container_cli="${CONTAINER_CLI:-docker}"
   local old_pid=""
   local running_pids=""
   local required_vars="IRIS_BASE_URL HOLODEX_API_KEY CACHE_HOST"
@@ -87,8 +74,6 @@ cmd_start() {
         ;;
     esac
   done
-
-  validate_container_cli "${container_cli}"
 
   echo "[START] Starting Hololive KakaoTalk Bot (Go)..."
 
@@ -152,20 +137,20 @@ cmd_start() {
     fi
   fi
 
+  # kapu 로컬 의존 컨테이너는 Podman으로 띄운다. 런타임 선택 변수는 두지 않는다.
   echo "[CHECK] Checking Redis connection..."
-  if ! command -v "${container_cli}" >/dev/null 2>&1; then
-    echo "[ERROR] Container CLI not found: ${container_cli}"
-    echo "Set CONTAINER_CLI=docker or CONTAINER_CLI=podman"
+  if ! command -v podman >/dev/null 2>&1; then
+    echo "[ERROR] podman not found"
     exit 1
   fi
 
-  if ! "${container_cli}" ps | grep "holo-valkey" | grep -q "Up"; then
+  if ! podman ps | grep "holo-valkey" | grep -q "Up"; then
     echo "[WARN] Valkey container (holo-valkey) is not running!"
-    echo "Start it with: ${container_cli} start holo-valkey"
+    echo "Start it with: podman start holo-valkey"
     exit 1
   fi
 
-  if ! timeout 3 "${container_cli}" exec holo-valkey valkey-cli ping >/dev/null 2>&1; then
+  if ! timeout 3 podman exec holo-valkey valkey-cli ping >/dev/null 2>&1; then
     echo "[WARN] Valkey container is running but not responding"
     exit 1
   fi
@@ -360,7 +345,6 @@ cmd_rebuild() {
 }
 
 cmd_status() {
-  local container_cli="${CONTAINER_CLI:-docker}"
   local bot_pid=""
   local uptime=""
   local mem=""
@@ -372,8 +356,6 @@ cmd_status() {
   local log_lines=""
   local nohup_size=""
   local nohup_lines=""
-
-  validate_container_cli "${container_cli}"
 
   echo "[STATUS] Hololive KakaoTalk Bot (Go) Status"
   echo "========================================"
@@ -408,8 +390,8 @@ cmd_status() {
   echo "Dependencies:"
   echo "-------------"
 
-  if command -v "${container_cli}" >/dev/null 2>&1 && "${container_cli}" ps | grep "holo-valkey" | grep -q "Up"; then
-    if timeout 2 "${container_cli}" exec holo-valkey valkey-cli ping >/dev/null 2>&1; then
+  if command -v podman >/dev/null 2>&1 && podman ps | grep "holo-valkey" | grep -q "Up"; then
+    if timeout 2 podman exec holo-valkey valkey-cli ping >/dev/null 2>&1; then
       cache_port="$(grep "^CACHE_PORT=" .env 2>/dev/null | cut -d'=' -f2- || echo "6379")"
       echo "Redis: [CONNECTED] (host port ${cache_port} -> container port 6379)"
     else

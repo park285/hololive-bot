@@ -10,10 +10,10 @@
 |---|---|---|---:|---|---|---|
 | Osaka `a` | `youtube-collector-a` | host-native `hololive-youtube-collector@youtube-collector-a.service` | 30005 | `https://127.0.0.1:30005/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_scraper` |
 | Seoul `b` | `youtube-collector-b` | Compose | 30015 | `https://127.0.0.1:30015/ready` | `HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE` | `hololive_scraper` |
-| Central `c` | `youtube-collector` | Compose | 30025 | `https://127.0.0.1:30025/ready` | `HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE` | `hololive_scraper` |
+| Central `c` | `youtube-collector` | Podman Quadlet `hololive-youtube-collector-c.service` | 30025 | `https://127.0.0.1:30025/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_scraper` |
 | Osaka2 `d` | `youtube-collector-d` | host-native `hololive-youtube-collector@youtube-collector-d.service` | 30035 | `https://127.0.0.1:30035/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_scraper` |
 
-Completion is `scripts/deploy/ap-completion-check.sh <host>` for APs and compose `/ready` for central `c`.
+Completion is `scripts/deploy/ap-completion-check.sh <host>` for APs and `po-central-cutover.sh check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for central `c`.
 
 ## Normal status
 
@@ -139,7 +139,7 @@ Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailab
 
 `youtube_observation_accept_interval_seconds`는 실제 checkpoint가 전진한 수락 간격이며 첫 표본·중복·collision·정상 empty completion과 구분합니다. 마지막 수락 gauge만으로 탭 부재를 장애로 판정하지 않습니다. publish superseded 비율은 empty를 제외한 전체 publish 결과를 분모로 하며 publish 이전 폐기는 포함하지 않는 하한입니다. 여섯 작업의 due/stale·필수 metric 부재와 실제 RPC admission pressure를 함께 확인합니다. 85% admission은 여유 부족 신호이지 완전 포화나 재시도 포함 총 수요의 측정값이 아닙니다.
 
-Collector loader와 Compose는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS`와 `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`가 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
+Collector loader와 Compose·Quadlet 정의는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS`와 `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`가 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
 
 ### Viewer 저장소 완전 제거
 
@@ -179,7 +179,7 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 ## Isolated PO Token lifecycle
 
-`DEC-20260927-hololive-egress-po-production`에 따라 정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 30.1.2` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Compose issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
+`DEC-20260927-hololive-egress-po-production`에 따라 정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 30.1.2` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Compose(b)·Quadlet(c) issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
 
 - issuer는 요청을 받기 전에 같은 격리 worker에서 신뢰된 SDK import를 완료하고 `loaded` 확인을 기다립니다. 이 기동 준비 단계의 별도 상한은 30초이며, 실패하면 worker와 listener를 종료합니다. HTTP health 성공은 이 준비가 끝난 뒤에만 가능하고 UA/JSDOM 준비·외부 interpreter 실행은 이후 요청이 소유합니다. native 배포/복원은 Compose와 동일한 30회/2초 간격의 health 관측 후 collector를 시작하며, native 완료 검사도 같은 bounded 준비 대기를 사용합니다. 이 관측은 PO 발급이나 upstream 요청을 만들지 않습니다.
 - IPC는 `/run/hololive-youtube-po/worker.sock`만 사용합니다. private protocol 1의 순서는 `session`(UA/JSDOM prepare) → WAA Create → `challenge`(snapshot) → GenerateIT → `activate` → 영상별 `mint`입니다. worker 초기화 완료 전에 challenge를 요청하지 않습니다. collector와 issuer는 반드시 같은 full source SHA로 전환합니다.
@@ -189,21 +189,21 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 - 준비 실패·만료·worker 장애에는 stale/cold-start/fallback token을 쓰지 않습니다. 기존 단일 무토큰 player를 그대로 수행하며 재시도나 UNKNOWN의 음성 확정은 추가하지 않습니다. 채널 확인의 resolve 1회+player 최대 1회, 영상 확인의 player 1회 상한도 유지합니다.
 - helper UDS의 `GET /health`에서 `proof.state`, `bootstrap_attempts`, `bootstrap_successes`, `upstream_requests`, `minted_total`, `attached_total`을 확인합니다. `last_error`는 최초 발급·mint 실패를 보존하고(collector RPC 취소로 중단된 mint는 `mint_aborted`이며, broker가 그 세대를 퇴역시키므로 helper도 세대를 버리고 다음 발급을 기다립니다), 후속 정리 실패는 별도의 `cleanup_error`에 안전한 오류 코드로 남깁니다. 새 발급 cycle은 두 오류를 초기화합니다. 같은 값은 collector metrics의 `youtubejs_po_proof_state{state}`, `youtubejs_po_proof_last_error{code}`, `youtubejs_po_proof_*_total`로 scrape 시점에 노출되며, helper `/health`를 읽지 못하면 `youtubejs_helper_health_scrape_success`가 0입니다. 앱 `/ready` 성공은 PO 준비 완료나 provider 가용성 보장이 아닙니다. token/program/snapshot/visitor data나 원시 worker stderr는 로그·파일에 남기지 않습니다.
 
-빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. 중앙의 `compose-redeploy-service.sh youtube-collector`와 `youtube-po-c`도 같은 paired cutover로 연결되며 같은 env가 필요합니다. 이 스크립트의 포괄적 `all` 전환은 지원하지 않습니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
+빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. c는 kapu에서 `podman build --platform linux/arm64`·`podman save --format docker-archive`로 만든 collector·issuer archive를 중앙에서 `podman load`(`:candidate` tag)하고, identity(`sha256:` + Podman `.Id`)·revision·architecture·version을 대조한 뒤 candidate pair와 `50-worker-profile.conf` drop-in을 만들어 issuer부터 `systemctl restart`합니다. `:prod` tag는 cutover에서만 옮깁니다. Quadlet은 정지한 unit의 container를 지우므로 collector c를 멈춘 채 교체하는 점검 모드는 지원하지 않으며 실행 중이 아니면 변경 전에 거절합니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
 
 native a/d 산출물(collector binary와 issuer rootfs의 `po-broker --version`·`po-sandbox/version`)의 version은 `HOLO_BOT_VERSION`입니다. 값이 없으면 `ap-host-native-deploy.sh`가 12자리 short SHA를 씁니다. 릴리스 배포는 `HOLO_BOT_VERSION="$(xargs <hololive/hololive-api/VERSION)" scripts/deploy/ap-host-native-deploy.sh <ap-host> --apply`처럼 Compose image와 같은 version을 명시합니다.
 
-중앙 paired deploy는 Compose가 해석한 collector·migrator의 DB host/port/database 일치를 먼저 확인합니다. 해당 migrator의 접속·TLS 설정과 읽기 전용 CA mount, network를 쓰는 일회성 PostgreSQL client로 운영 ledger의 `222_drop_youtube_job_lease_legacy_failure_trigger.sql` checksum과 read-only guard `on`을 확인합니다. 로컬 `holo-postgres` socket의 ledger로 외부 DB override를 대신 검증하지 않습니다. client는 로컬에 이미 있는 PostgreSQL image만 사용하며 종료 시 자신이 생성한 container·volume을 제거합니다. 적용 부재·checksum 불일치·조회 실패면 기존 서비스 container·source를 바꾸지 않습니다. 이 읽기 전용 검증을 통과하면 issuer와 collector를 순서대로 교체합니다. 이 배포 스크립트는 migration을 실행하지 않으며, 필요한 migration이 미적용 상태라면 별도로 승인된 중앙 migration 절차를 먼저 완료해야 합니다.
+중앙 paired deploy는 실행 중인 collector c가 로컬 주 서버(`POSTGRES_HOST=holo-postgres`, `POSTGRES_PORT=5432`, `POSTGRES_DB=hololive`)를 가리키는지 먼저 확인합니다. 외부 DB override를 쓰면 로컬 socket의 ledger로 대신 검증하지 않고 거절합니다. 그다음 `hololive-db-migrate.container`와 같은 migrator 역할과 관리 socket volume(`hololive-bot_holo-pg-admin-socket`, 읽기 전용, pg_hba local trust)을 쓰는 일회성 PostgreSQL client(network none, read-only)로 운영 ledger의 `222_drop_youtube_job_lease_legacy_failure_trigger.sql` checksum과 read-only guard `on`을 확인합니다. client는 실행 중인 `holo-postgres`의 image만 사용하며 종료 시 자신이 생성한 container를 제거합니다. 적용 부재·checksum 불일치·조회 실패면 기존 서비스 container·source를 바꾸지 않습니다. 이 읽기 전용 검증을 통과하면 issuer와 collector를 순서대로 교체합니다. 이 배포 스크립트는 migration을 실행하지 않으며, 필요한 migration이 미적용 상태라면 별도로 승인된 중앙 migration 절차를 먼저 완료해야 합니다.
 
-중앙 issuer 기준 영수증 `/opt/hololive-bot/compose/po-current-c/`(`rootfs-manifest.json`, `image-id`)은 `current` 밖의 호스트 상태입니다. 중앙 paired cutover는 실행 중인 issuer의 이 영수증으로 이전 pair의 rollback 기준점을 만들므로, issuer 이미지가 있는데 영수증이 없으면 백업·rollback 태그를 만들기 전에 `central issuer receipt missing`으로 거절합니다. 중앙 호스트를 교체할 때는 `current`와 함께 이 디렉터리를 root 소유 0644 그대로 옮깁니다. 이미 유실했다면 같은 issuer 산출물의 kapu 검토 영수증(Compose AP 배포 백업의 `po-sandbox-candidate-manifest.json`·`po-sandbox-candidate.image-id` 등)을 찾습니다. kapu에서 실행 중인 issuer의 `docker save` 아카이브와 실행 이미지 ID로 `scripts/build/po-sandbox-manifest.py image-ids`를 계산해 영수증의 `image-id` 두 줄과 모두 같을 때만, 같은 경로에 root 0644로 설치하고 `po_verify_image`로 대조한 뒤 cutover를 다시 실행합니다. 일치하는 검토 영수증이 없으면 실행 이미지에서 영수증을 새로 만들지 않습니다. 검토 근거가 실행 이미지 자신이 되기 때문이며, 이때는 cutover를 멈추고 복구 방법을 별도로 승인받습니다. 2026-10-08 v7.2.10 배포에서는 같은 날 중앙 VM 교체 때 영수증이 누락되었고, Seoul `b`의 10-07 배포 백업에 남은 같은 7.2.3 산출물의 영수증으로 이 절차를 거쳐 복원했습니다.
+중앙 issuer 기준 영수증 `/opt/hololive-bot/compose/po-current-c/`(`rootfs-manifest.json`, `image-id`)은 `current` 밖의 호스트 상태입니다. 중앙 paired cutover는 실행 중인 issuer의 이 영수증으로 이전 pair의 rollback 기준점을 만들므로, issuer 이미지가 있는데 영수증이 없으면 백업·rollback 태그를 만들기 전에 `central issuer receipt missing`으로 거절합니다. 중앙 호스트를 교체할 때는 `current`와 함께 이 디렉터리를 root 소유 0644 그대로 옮깁니다. 이미 유실했다면 같은 issuer 산출물의 kapu 검토 영수증(Compose AP 배포 백업의 `po-sandbox-candidate-manifest.json`·`po-sandbox-candidate.image-id` 등)을 찾습니다. kapu에 남은 같은 issuer image의 `podman save --format docker-archive` 아카이브와 `sha256:` + `podman image inspect --format '{{.Id}}'`로 `scripts/build/po-sandbox-manifest.py image-ids`를 계산해 그 config digest가 영수증의 `image-id`(Docker buildx 시절 영수증은 manifest·config 두 줄)에 있을 때만, 같은 경로에 root 0644로 설치하고 `po_verify_image podman`으로 대조한 뒤 cutover를 다시 실행합니다. 일치하는 검토 영수증이 없으면 실행 이미지에서 영수증을 새로 만들지 않습니다. 검토 근거가 실행 이미지 자신이 되기 때문이며, 이때는 cutover를 멈추고 복구 방법을 별도로 승인받습니다. 2026-10-08 v7.2.10 배포에서는 같은 날 중앙 VM 교체 때 영수증이 누락되었고, Seoul `b`의 10-07 배포 백업에 남은 같은 7.2.3 산출물의 영수증으로 이 절차를 거쳐 복원했습니다.
 
-issuer를 먼저 기동·검증한 뒤 collector만 `--no-build --no-deps`로 교체합니다. b는 이미지를 빌드하지 않고 kapu가 빌드한 collector·issuer 이미지 아카이브를 받습니다. 그래서 b로 보내는 소스(`scripts/deploy/ap-rsync-files.txt`)는 AP가 읽거나 실행하는 Compose 파일, `compose.sh`와 그 lib, 원격 검증·rollback 스크립트, runtime VERSION만 담고 Go 소스·모듈 파일·shared-go는 담지 않습니다. `scripts/deploy/check-ap-rsync-manifest.sh`가 이 목록을 검사합니다. b의 소스는 별도 후보 디렉터리에 전송·대조한 뒤 승격하며, 실패 시 snapshot이 이전 파일 내용·mode·symlink·파일 부재까지 복원합니다. `rsync --files-from`은 목록 밖 파일을 지우지 않으므로 이전 배포가 남긴 `~/hololive-bot`의 Go 소스와 `~/shared-go` 사본은 그대로 남습니다. 현재 revision의 명령은 이 사본을 읽지 않지만, snapshot 복원이나 변경 전 백업으로 rollback하면 되돌아온 이전 `compose.sh`가 `~/shared-go`를 필수로 확인합니다. 따라서 변경 전 백업이 모두 만료되고 live `compose.sh`가 새 revision으로 확정될 때까지 `~/shared-go`를 지우지 않습니다. rollback은 이전 VERSION/실행 파일과 collector+issuer image/rootfs를 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
+issuer를 먼저 기동·검증한 뒤 collector만 교체합니다(b는 `--no-build --no-deps` 재생성, c는 `systemctl restart`). b는 이미지를 빌드하지 않고 kapu가 빌드한 collector·issuer 이미지 아카이브를 받습니다. 그래서 b로 보내는 소스(`scripts/deploy/ap-rsync-files.txt`)는 AP가 읽거나 실행하는 Compose 파일, `compose.sh`와 그 lib, 원격 검증·rollback 스크립트, runtime VERSION만 담고 Go 소스·모듈 파일·shared-go는 담지 않습니다. `scripts/deploy/check-ap-rsync-manifest.sh`가 이 목록을 검사합니다. b의 소스는 별도 후보 디렉터리에 전송·대조한 뒤 승격하며, 실패 시 snapshot이 이전 파일 내용·mode·symlink·파일 부재까지 복원합니다. `rsync --files-from`은 목록 밖 파일을 지우지 않으므로 이전 배포가 남긴 `~/hololive-bot`의 Go 소스와 `~/shared-go` 사본은 그대로 남습니다. 현재 revision의 명령은 이 사본을 읽지 않지만, snapshot 복원이나 변경 전 백업으로 rollback하면 되돌아온 이전 `compose.sh`가 `~/shared-go`를 필수로 확인합니다. 따라서 변경 전 백업이 모두 만료되고 live `compose.sh`가 새 revision으로 확정될 때까지 `~/shared-go`를 지우지 않습니다. rollback은 이전 VERSION/실행 파일과 collector+issuer image/rootfs를 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
 
 Compose 첫 배포에서 collector 기준점 없이 issuer만 존재하면 전환 전에 거절합니다. 둘 다 없던 첫 배포가 실패하면 새 collector·issuer를 멈추고 비활성을 확인한 뒤 그 container·candidate image tag·active issuer receipt만 제거하고 source snapshot을 복원합니다. volume·backup archive는 보존합니다. 정지·정리·복원이 실패하면 실패 상태를 유지하므로 운영자가 원인을 해결해야 하며 자동 재시도하지 않습니다.
 
 native issuer의 `RootDirectory`는 패키징 때 불변 release 경로로 확정합니다. systemd 249에서는 같은 rootfs라도 symlink 경유 시 226/NAMESPACE가 발생하고 실제 경로는 기동되는 것을 관측했으므로 `current` symlink를 쓰지 않습니다. 설치 unit은 변경 없이 보존하며, `systemd-analyze verify`가 RootDirectory를 고려하지 않는 실행 파일 검사에는 실제 rootfs 실행 경로로 해석한 임시 검사용 사본을 사용합니다. 실제 실행 파일 부재·unit 오류는 계속 차단합니다. verifier가 RootDirectory를 직접 해석하도록 바뀌면 이 검사용 경로 변환을 제거합니다.
 
-Compose의 `image-id` 근거는 검증한 단일 이미지 archive에 묶인 Docker identity 집합입니다. containerd store의 manifest digest와 classic store의 config digest를 최대 두 줄로 기록하고, manifest→config 결합도 검증합니다. 같은 daemon의 rollback snapshot은 실제 ID 한 줄을 기록합니다. 수신측은 이 집합에 없는 ID를 거부하며 full SHA·architecture·version·archive hash와 실행 중 image 일치 검사를 계속 적용합니다. 서울 classic store와 kapu/중앙 containerd store의 표현 차이만 처리하며 임의 image 대체나 검증 생략은 없습니다.
+b·c의 `image-id` 근거는 kapu가 `podman build --format docker`로 만들고 `podman save --format docker-archive`로 내보낸 단일 이미지 archive의 config digest 한 줄(`sha256:` + Podman `.Id`)입니다. `po-sandbox-manifest.py image-ids`는 archive의 config blob digest가 이 값과 다르면 거절합니다. 중앙 Podman은 `sha256:` + `.Id`로, Seoul AP Docker는 classic overlay2 image store일 때 `.Id`로 같은 값을 보고합니다. AP Docker가 containerd image store(`docker info`의 Driver가 `overlay2`가 아님)면 load 때 만든 manifest digest를 보고해 대조할 수 없으므로 `ap-deploy.sh`가 빌드 전과 적재 직전에 거절합니다. 같은 daemon의 rollback snapshot은 실제 ID 한 줄을 기록하고, Docker buildx 시절 영수증(manifest·config 두 줄)도 rollback 대조에 그대로 받습니다. 수신측은 이 집합에 없는 ID를 거부하며 full SHA·architecture·version·archive hash와 실행 중 image 일치 검사를 계속 적용합니다. 임의 image 대체나 검증 생략은 없습니다.
 
 비정상 generation/늦은 응답/취소는 해당 연산의 실제 admission 단계에 따라 처리합니다. 작업 시작 전 취소는 다른 호출의 준비된 세대를 폐기하지 않으며, 실제 worker 연산 중 실패는 전체 VM을 종료합니다. provider TTL 필드, 고정 시계 경계 시험, 실제 장시간 만료·갱신 관측은 서로 다른 증거입니다.
 
@@ -215,16 +215,18 @@ Compose의 `image-id` 근거는 검증한 단일 이미지 archive에 묶인 Doc
 - lease 만료
 - worker 실패나 연산 timeout
 
-native의 `Restart=always`(`RestartSec=1s`)와 Compose의 `restart: unless-stopped`가 exit 0 뒤 새 generation으로 다시 기동합니다. 따라서 Docker `RestartCount`와 systemd `NRestarts`는 generation 교체 횟수이며 실패 횟수가 아닙니다. 0이 아니라는 이유만으로 incident로 판정하지 않고, 카운터를 지우려고 container를 재생성하지 않습니다. 비 0 exit와 OOM은 계속 실패입니다.
+native의 `Restart=always`(`RestartSec=1s`), 중앙 Quadlet의 `Restart=always`(`RestartSec=5s`), Seoul Compose의 `restart: unless-stopped`가 exit 0 뒤 새 generation으로 다시 기동합니다. 따라서 Docker `RestartCount`와 systemd `NRestarts`는 generation 교체 횟수이며 실패 횟수가 아닙니다. 0이 아니라는 이유만으로 incident로 판정하지 않고, 카운터를 지우려고 container를 재생성하지 않습니다. 비 0 exit와 OOM은 계속 실패입니다.
 
-v6.0.1 collector·PO 산출물부터 `po-broker`는 종료할 때 `po-broker exit reason=<reason> generation=<id>` 한 줄을 남깁니다(`docker logs <container>`, `journalctl -u hololive-youtube-po.service`). Compose는 image version 6.0.1 이상, native는 `HOLO_BOT_VERSION` 6.0.1 이상이거나 short SHA 산출물이면 revision `12d78df8a` 이후인지로 판별합니다. `reason`은 퇴역·종료 사유의 고정 어휘이며 정확한 목록은 `po-broker` 코드가 소유합니다. `worker_failed`는 요청이 직렬 슬롯을 쥔 동안의 worker 종료(worker IO 전후의 검증·상태 응답 중 포함), `worker_exited`는 직렬 슬롯이 비어 있을 때의 종료입니다. 이 줄에는 token·payload·worker stderr가 없습니다. 기록 대상은 SIGTERM·SIGINT 종료, 퇴역, listener·기동 실패뿐입니다. SIGHUP·SIGQUIT·panic·SIGKILL 종료와 signal 감시 설치 전(기동 직후 수 µs)의 종료는 줄이 없으므로 exit 상태로 판정합니다. v6.0.2부터 기동 때 상속한 무시(SIG_IGN) signal은 감시하지 않아 계속 무시됩니다. v6.0.0 이하 issuer는 종료 사유를 남기지 않으므로 exit 상태와 collector 종료 시각을 대조합니다.
+v6.0.1 collector·PO 산출물부터 `po-broker`는 종료할 때 `po-broker exit reason=<reason> generation=<id>` 한 줄을 남깁니다(b는 `docker logs <container>`, c는 `journalctl -u hololive-youtube-po-c.service`, native는 `journalctl -u hololive-youtube-po.service`). Compose·Quadlet은 image version 6.0.1 이상, native는 `HOLO_BOT_VERSION` 6.0.1 이상이거나 short SHA 산출물이면 revision `12d78df8a` 이후인지로 판별합니다. `reason`은 퇴역·종료 사유의 고정 어휘이며 정확한 목록은 `po-broker` 코드가 소유합니다. `worker_failed`는 요청이 직렬 슬롯을 쥔 동안의 worker 종료(worker IO 전후의 검증·상태 응답 중 포함), `worker_exited`는 직렬 슬롯이 비어 있을 때의 종료입니다. 이 줄에는 token·payload·worker stderr가 없습니다. 기록 대상은 SIGTERM·SIGINT 종료, 퇴역, listener·기동 실패뿐입니다. SIGHUP·SIGQUIT·panic·SIGKILL 종료와 signal 감시 설치 전(기동 직후 수 µs)의 종료는 줄이 없으므로 exit 상태로 판정합니다. v6.0.2부터 기동 때 상속한 무시(SIG_IGN) signal은 감시하지 않아 계속 무시됩니다. v6.0.0 이하 issuer는 종료 사유를 남기지 않으므로 exit 상태와 collector 종료 시각을 대조합니다.
 
 issuer rollout 수용 기준은 `RestartCount=0`/`NRestarts=0`이 아니라 아래 항목을 모두 만족하는 것입니다.
 
 | Runtime | 확인 | 기대값 |
 |---|---|---|
-| Compose `youtube-po-b`/`youtube-po-c` | `docker inspect <container> --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Health.Status}}'` | `0 false healthy` |
+| Compose `youtube-po-b` | `docker inspect <container> --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Health.Status}}'` | `0 false healthy` |
 | Compose, 재시작한 경우 | `docker events --since <container .Created> --until <지금> --filter container=<container> --filter event=die --filter event=oom --format '{{.Action}} {{index .Actor.Attributes "exitCode"}}'` | 모든 `die`가 `0`이고 `oom`이 없음 |
+| Quadlet `hololive-youtube-po-c.service` | `systemctl show hololive-youtube-po-c.service -p Result -p ExecMainStatus -p ActiveState`와 `sudo podman inspect hololive-youtube-po-c --format '{{.State.Health.Status}}'` | `Result=success`, `ExecMainStatus=0`, `ActiveState=active`, `healthy` |
+| Quadlet, 재시작한 경우 | `journalctl -u hololive-youtube-po-c.service --since <change_started_at>` | 모든 종료가 exit 0이고 `Failed with result`가 없음 |
 | native `hololive-youtube-po.service` | `systemctl show hololive-youtube-po.service -p Result -p ExecMainStatus -p ActiveState` | `Result=success`, `ExecMainStatus=0`, `ActiveState=active` |
 | native, 재시작한 경우 | `journalctl -u hololive-youtube-po.service --since <change_started_at>` | 모든 종료가 `Deactivated successfully`이고 `Failed with result`가 없음 |
 | 공통 | broker socket `GET /health` | `state`가 `IDLE` 또는 `READY` |
@@ -232,7 +234,7 @@ issuer rollout 수용 기준은 `RestartCount=0`/`NRestarts=0`이 아니라 아�
 
 Docker는 자동 재시작 때 `State.ExitCode`와 `State.OOMKilled`를 초기화하고 systemd도 새 기동에서 `Result`와 `ExecMainStatus`를 다시 씁니다. 그래서 재시작이 있었다면 그 사이의 종료는 `docker events`나 journal로 확인합니다.
 
-Compose b/c의 paired cutover(`ap-deploy.sh`, `po-central-remote.sh`)는 issuer를 먼저 force-recreate하고 healthy를 확인한 뒤 collector를 교체합니다. issuer가 실패하면 이전 collector를 그대로 두기 위한 순서이므로 유지합니다. 그 사이 이전 collector가 새 issuer의 generation을 잡으면 SIGTERM 종료에서 그 generation을 퇴역시키므로, 새 issuer는 이전 collector 종료 시각에 exit 0과 재시작 1회를 보일 수 있습니다. 이 1회는 예상된 교체입니다. 이 밖의 교체는 exit reason 줄로 사유를 확인합니다.
+b·c의 paired cutover(`ap-deploy.sh`, `po-central-remote.sh`)는 issuer를 먼저 교체(b는 force-recreate, c는 `systemctl restart`)하고 healthy를 확인한 뒤 collector를 교체합니다. issuer가 실패하면 이전 collector를 그대로 두기 위한 순서이므로 유지합니다. 그 사이 이전 collector가 새 issuer의 generation을 잡으면 SIGTERM 종료에서 그 generation을 퇴역시키므로, 새 issuer는 이전 collector 종료 시각에 exit 0과 재시작 1회를 보일 수 있습니다. 이 1회는 예상된 교체입니다. 이 밖의 교체는 exit reason 줄로 사유를 확인합니다.
 
 native a/d cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다. 이 경고 뒤에는 issuer가 멈춰 있고 collector unit이 disabled일 수 있으므로, 아래 절차로 실행 중 변경과 guard를 확인·해소한 뒤 `scripts/deploy/ap-host-native-rollback.sh <ap> --apply`로 `previous` release와 그 issuer를 다시 적용하고 완료 검사를 확인합니다.
 
@@ -252,7 +254,7 @@ current·previous와 previous의 `rollback-contract/previous-before-cutover`가 
 ## Logs
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f youtube-collector
+sudo journalctl -u hololive-youtube-collector-c.service -f
 ```
 
 ## Common failure modes
@@ -320,8 +322,8 @@ Retained connection policy and unpatched-kernel history:
 ## Smoke test
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T youtube-collector ./bin/healthcheck https://127.0.0.1:30025/health
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T youtube-collector ./bin/healthcheck https://127.0.0.1:30025/ready
+sudo podman exec hololive-youtube-collector-c ./bin/healthcheck https://127.0.0.1:30025/health
+sudo podman exec hololive-youtube-collector-c ./bin/healthcheck https://127.0.0.1:30025/ready
 ```
 
 ## Rollback
@@ -333,21 +335,17 @@ Config and topology rollback is an exact repository revision. Restore the follow
 ```text
 collector Go binary/image
 bundled Node helper/package-lock
-Compose base and AP overlays
+central Quadlet units and Seoul AP Compose files
 host-native env generator/wrapper
 service and runbook contract
 ```
 
-- 이전 `hololive-youtube-collector:rollback-<UTC timestamp>` tag가 있으면 [`rollback.md`](rollback.md#runtime-rollback)의 revision 확인·`prod` 재승격 절차를 사용한 뒤 collector만 무빌드 재생성합니다. Compose overlay와 host-native generator는 같은 revision tree를 써야 합니다.
+- 중앙 c는 paired cutover 백업으로 `PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_ROLLBACK=true scripts/deploy/po-central-cutover.sh rollback <backup>`을 실행합니다. 이전 pair의 drop-in(`50-worker-profile.conf`)·rollback tag·issuer 영수증을 함께 되돌리고 issuer부터 재시작합니다. 그 밖에 이전 `hololive-youtube-collector:rollback-<UTC timestamp>` tag가 있으면 [`rollback.md`](rollback.md#runtime-rollback)의 revision 확인·`prod` 재승격 절차를 사용한 뒤 collector만 무빌드로 다시 시작합니다. Quadlet unit·Compose 파일과 host-native generator는 같은 revision tree를 써야 합니다.
 - AP rollback 기준점은 Compose AP 백업의 `rollback-image-tag`와 `deploy/compose` 경로 prechange 사본, host-native AP의 `previous` collector release 하나입니다. 기준점이 없는 호스트는 되돌릴 이전 collector가 없으므로 `ap-rollback.sh`·`ap-host-native-rollback.sh`가 거절하고 fix-forward합니다. Compose AP 배포가 cutover 뒤 검증에 실패하면, 기준점이 있을 때는 `ap-rollback.sh`가 이전 collector와 issuer를 함께 자동 복원합니다. 기준점이 없는 첫 배포는 새 collector와 issuer 컨테이너를 멈추고 비활성을 확인한 뒤 fix-forward를 안내합니다. host-native AP는 unit을 멈추고 `previous` release와 그 issuer로 자동 복원합니다. 퇴역 producer 첫 cutover 상태를 기록·복원하던 경로와 repo 루트 compose 경로 폴백은 삭제했습니다(stack-audit 2026-09-26 T11).
 - schema 점검 창에서 b를 정지한 채 배포할 때는 `AP_COLLECTOR_MAINTENANCE_STOPPED=true`를 함께 줍니다. `--dry-run`도 같은 사전 검사를 합니다. 사전 검사는 b가 정지(`exited`·`created`)되어 있는지만 확인하고, 실행 중이면 거절합니다. 이 값이 없으면 정지한 b는 계속 거절합니다. 기준점 기록은 b가 현재 `:prod` image로 만들어졌는지 확인하고 백업에 `collector-prechange.state=stopped`를 남깁니다. cutover 뒤 검증이 실패하면 `ap-rollback.sh`가 이전 collector·issuer image와 source를 복원합니다. 이때 collector는 `up --no-start`로 만들기만 하고 시작하지 않습니다. 새 schema 위에서 구 writer를 띄우지 않는 계약([`hololive-api.md`](hololive-api.md))을 지키기 위해서입니다. issuer는 DB에 쓰지 않으므로 이전 image로 다시 띄웁니다. 기준점의 collector와 issuer의 revision·version이 다르면 rollback을 걸기 전에 거절하므로, 그런 경우 재시작 없이 끝납니다. 성공하면 새 b를 바로 시작하므로 schema 전환을 마친 뒤에 실행합니다. issuer b는 DB에 쓰지 않으므로 점검 창에서도 실행 중이어야 하며, 정지 모드에서도 issuer b가 실행 중이 아니면 거절합니다. 기준점 짝 검사 같은 변경 전 거절은 rollback tag와 일부만 채운 백업 디렉터리를 남깁니다. 이 디렉터리가 가장 최근 백업이 되어 `ap-rollback.sh`의 기본 선택에서 실패하므로, 수동 rollback에는 `BACKUP_DIR`로 이전 백업을 지정합니다. 짝이 맞지 않는 기준점은 일반 배포와 정지 배포를 모두 막습니다. 이 경우 issuer b를 collector b와 같은 revision의 검증된 산출물로 먼저 맞춘 뒤 배포합니다. host-native a/d 배포는 이 값이 필요 없습니다. 변경 전 collector unit의 실행·활성화 상태를 기록하고, 실패 복원은 실행 중이던 unit만 `previous` release로 다시 시작합니다. 점검 창에서 멈춰 둔 unit과 변경 전에 실패(`failed`)해 있던 unit은 `previous` release로 되돌리고 변경 전 활성화 상태만 복원하며 시작하지 않습니다(`ActiveState=…`를 포함한 `restored … without starting it` 안내). schema가 복원한 release와 맞는지 확인한 뒤 시작합니다. 수동 `ap-host-native-rollback.sh`는 이 기록을 쓰지 않고 collector를 시작하므로, 점검 창에서는 schema가 이전 release와 맞을 때만 실행합니다.
 
 ```bash
-export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
-sudo -n env COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  up -d --no-build --no-deps --force-recreate youtube-collector
+sudo systemctl restart hololive-youtube-collector-c.service
 ```
 
-- 승인된 stack-secrets 변경 절차로 중앙 host의 `compose.env`에 `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1`을 설정하면 tracked disable overlay가 replicas를 0으로 유지합니다.
+- 승인된 stack-secrets 변경 절차로 중앙 host의 `compose.env`에 `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1`을 설정하면 unit의 `ExecCondition`(`quadlet-prestart collector-enabled`)이 collector c 기동을 건너뜁니다. 실행 중인 collector는 `sudo systemctl stop hololive-youtube-collector-c.service`로 멈춥니다.

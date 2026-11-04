@@ -11,7 +11,7 @@ GOVULNCHECK_VERSION=v1.9.0
 govulncheck_bin="$(ensure_govulncheck)"
 report_dir="$(mktemp -d "${TMPDIR:-/tmp}/hololive-image-scan.XXXXXX")"
 container_id=
-trap 'if [[ -n "$container_id" ]]; then docker rm "$container_id" >/dev/null; fi' EXIT
+trap 'if [[ -n "$container_id" ]]; then podman rm "$container_id" >/dev/null; fi' EXIT
 echo "final image scan evidence: $report_dir"
 image_index=0
 
@@ -33,14 +33,14 @@ while IFS='|' read -r source platform image; do
   }
   case "$source" in
     local)
-      actual_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
+      actual_platform="$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
       [[ "$actual_platform" == "$platform" ]] || {
         echo "final image platform mismatch: $image is $actual_platform, want $platform" >&2
         exit 1
       }
-      scan_args+=(--image-src docker --platform "$platform")
+      scan_args+=(--image-src podman --platform "$platform")
       # 태그가 바뀌어도 Trivy와 바이너리 추출이 같은 불변 이미지를 사용한다.
-      image="$(docker image inspect --format '{{.Id}}' "$image")"
+      image="$(podman image inspect --format '{{.Id}}' "$image")"
       ;;
     remote)
       [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || {
@@ -80,13 +80,13 @@ while IFS='|' read -r source platform image; do
       exit 1
     }
     if [[ -z "$container_id" ]]; then
-      if [[ "$source" == remote ]]; then docker pull --platform "$platform" "$image"; fi
-      container_id="$(docker create --platform "$platform" "$image")"
+      if [[ "$source" == remote ]]; then podman pull --platform "$platform" "$image"; fi
+      container_id="$(podman create --platform "$platform" "$image")"
     fi
     binary_index=$((binary_index + 1))
     artifact="$report_dir/$image_index.$binary_index"
     printf '%s\n' "$image" "$target" >"$artifact.identity"
-    docker cp "$container_id:/$target" "$artifact.bin"
+    podman cp "$container_id:/$target" "$artifact.bin"
     [[ -f "$artifact.bin" && ! -L "$artifact.bin" ]]
     sha256sum "$artifact.bin" >"$artifact.sha256"
     "$govulncheck_bin" -mode=extract "$artifact.bin" >"$artifact.extract.json"
@@ -103,7 +103,7 @@ while IFS='|' read -r source platform image; do
     echo "Go finding verified: $target (raw findings retained in $report)"
   done <"$report_dir/$image_index.targets"
   if [[ -n "$container_id" ]]; then
-    docker rm "$container_id" >/dev/null
+    podman rm "$container_id" >/dev/null
     container_id=
   fi
 done <"$manifest"

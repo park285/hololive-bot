@@ -1,10 +1,10 @@
 deploy/compose/.env.seoul.example	central
-deploy/compose/docker-compose.live-compat.yml	workstation,seoul
-deploy/compose/docker-compose.prod.yml	seoul
 deploy/compose/docker-compose.seoul.yml	seoul
-deploy/compose/postgres/pg_hba.conf	central,workstation,seoul,osaka,osaka2
 deploy/nginx/admin-dashboard-ingress.conf.template	seoul
 deploy/nginx/holoshi-public-shortlink.conf	central
+deploy/postgres/pg_hba.conf	central,workstation,seoul,osaka,osaka2
+deploy/quadlet/hololive-bot/hololive-alarm-worker.container	seoul
+deploy/quadlet/hololive-bot/hololive-api.container	workstation,seoul
 scripts/deploy/ap-hosts/osaka.conf	osaka
 scripts/deploy/ap-hosts/osaka2.conf	osaka2
 scripts/deploy/ap-hosts/seoul.conf	seoul

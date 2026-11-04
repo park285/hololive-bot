@@ -28,11 +28,11 @@ DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
 ```bash
 # 1. read-only guard 증명: 결과가 정확히 `on`이 아니면 중단합니다.
 ssh 100.100.1.8 \
-  'sudo docker exec -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1 -At -c "show transaction_read_only"'
+  'sudo podman exec -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1 -At -c "show transaction_read_only"'
 
-# 2. 같은 guard로 집계합니다. SQL을 표준 입력으로 넘기므로 docker exec에 -i를 씁니다.
+# 2. 같은 guard로 집계합니다. SQL을 표준 입력으로 넘기므로 podman exec에 -i를 씁니다.
 ssh 100.100.1.8 \
-  'sudo docker exec -i -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1' <<'SQL'
+  'sudo podman exec -i -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1' <<'SQL'
 WITH periods(label, period_start_at, period_end_at) AS (
     VALUES
         ('last_1h', NOW() - INTERVAL '1 hour', NOW()),

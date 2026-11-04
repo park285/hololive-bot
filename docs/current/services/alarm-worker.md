@@ -6,7 +6,7 @@
 |---|---|
 | Module | `hololive-alarm-worker` |
 | Binary | `alarm-worker` |
-| Compose service | `hololive-alarm-worker` |
+| Quadlet unit | `hololive-alarm-worker.service` (container `hololive-alarm-worker`) |
 | Port | `30007` |
 | Health endpoint | `https://127.0.0.1:30007/health` over H3 |
 | Ready endpoint | `https://127.0.0.1:30007/ready`; diagnostic `https://127.0.0.1:30007/internal/ready` with `X-API-Key` |
@@ -20,7 +20,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Alarm HTTP provider route registration for `/internal/alarm/*` (`internal/service/alarm/httpapi`: handler, route registrar, binding DTO)
 - YouTube alarm checking and scheduling loops
 - Dispatch queue publish path
-- Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Compose instance
+- Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Quadlet instance
 - Generic `notification_delivery_outbox` consume/send path for major event/member news notification rows
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send under the `youtube_delivery` profile executor
@@ -69,8 +69,8 @@ YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim �
 `DEC-20260926-youtube-only-stream-providers`에 따라 Chzzk·Twitch client와 조회 루프, platform mapping 동기화는 제거했습니다. 관련 자격 증명과 `ALARM_TWITCH_ENABLED`를 소비하지 않습니다. 보관된 비유튜브 방송 envelope는 전송 전에 기존 실패 경로로 거부하며 YouTube URL로 바꾸지 않습니다. 기존 retry 상한과 DLQ 전이는 유지합니다. X Spaces·celebration·digest 알림과 YouTube 상태 소유권은 별도 계약대로 유지합니다.
 
 - PostgreSQL and Valkey availability
-- `NOTIFICATION_SCHEDULER_ROLE=worker` in the current deployment; the production validator accepts `worker|off`, and Compose pins `worker` so the single instance always runs the alarm checker/scheduler
-- A single running instance: proactive egress exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims plus the Compose `container_name`/fixed host port, not from a Valkey lease
+- `NOTIFICATION_SCHEDULER_ROLE=worker` in the current deployment; the production validator accepts `worker|off`, and the Quadlet unit pins `worker` so the single instance always runs the alarm checker/scheduler
+- A single running instance: proactive egress exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims plus the Quadlet `ContainerName=`/fixed host port, not from a Valkey lease
 - `STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profiles/alarm-worker.json`
 - production profile executors `alarm_dispatch`, `notification_delivery`, and `youtube_delivery` enabled; v1 `youtube_delivery` and v2 `notification_delivery` are canonical direct-egress pipelines, not v3 handoff sources (`DEC-20260926-hololive-outbox-v3-convergence`)
 - no `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` or `DELIVERY_OUTBOX_V3_HANDOFF_MODE` key in the runtime env; the retired guard rejects the key even with an empty value
@@ -166,7 +166,7 @@ request snapshot/generation을 보존하지 못하는 구버전 바이너리로 
 
 ## Observability
 
-- Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker`
+- Logs: `sudo journalctl -u hololive-alarm-worker.service -f`
 - Health: `https://127.0.0.1:30007/health`
 - Ready: `https://127.0.0.1:30007/ready`; authenticated `/diagnostics/workers` reports profile match, executors, and real queue snapshots.
 - Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority. `notification_delivery`·`youtube_delivery` executor는 `notification:delivery:wakeup`·`youtube:delivery:wakeup`을 `BRPOP`으로 기다리고 Valkey 오류 때 `poll_interval_ms`로 조회합니다. 대기 결과는 `hololive_delivery_wakeup_waits_total{channel,result}`입니다.
