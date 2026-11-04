@@ -1,0 +1,7 @@
+# hololive YouTube collector 전용 bridge. Docker 쪽 hololive-net과 분리한다.
+# kapu Docker가 FORWARD 기본 정책을 DROP으로 둬 tailnet 게시 포트로는 들어올 수 없다. Prometheus(obs Docker)는
+# 고정 컨테이너 IP로 직접 수집한다(10.89.15.<slot>: a=11 b=12 d=14).
+[Network]
+NetworkName=hololive-collector
+Subnet=10.89.15.0/24
+Gateway=10.89.15.1
