@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **Seoul AP 로그를 journald로:** iris-seoul의 collector-b·po-b가 `json-file` 대신 Docker `journald` 로그 드라이버를 씁니다. iris-seoul Alloy가 Docker API(inspect는 컨테이너 env의 비밀까지 보여 줌) 없이 system journal에서 로그를 읽게 하려는 것입니다. 보존 기간은 journald 설정을 따릅니다.
 - **`!라이브` 조회 rate limit:** `!라이브`도 방송 이력 조회와 같은 한도(사용자당 분 3회, 방당 분 12회)를 별도 버킷으로 적용합니다. 한도를 넘으면 "방송 조회 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."로 답합니다(이력 명령의 문구도 같은 문장으로 바뀝니다). 제한기를 쓸 수 없거나 사용자·방 식별자가 불안정하면 이력 명령처럼 실행하지 않습니다.
 - **local CI 패키지 선택:** `hololive-api/scripts/migrations/` 아래 변경은 `hololive-dbtest`를 쓰는 모든 모듈의 테스트를 고르고, `*.tpl` 변경은 해당 모듈 테스트를 고릅니다.
 - **Podman 전환 가드 정리(빅뱅 계획 F절):** hololive-seoul 수용 뒤 Docker 시절 상태로 첫 기동하지 않게 넣었던 가드를 지웁니다. `sync-opt-current.sh`의 `hololive-compose.service` active·enabled 거부와 compose.env 빈 값 거부, `quadlet-prestart.sh`의 compose와 해석이 갈리는 따옴표·`$`·backtick·` #` 거부(compose.env와 서비스 env 파일), `ap-host.sh`의 `AP_CONTAINER_RUNTIME` 검사와 `seoul.conf` 변수입니다. `KEY=VALUE` 형식·유효한 key·중복 key·앞뒤 공백 검사는 Podman 해석에 필요하므로 남깁니다.
