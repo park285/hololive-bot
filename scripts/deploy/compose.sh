@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Docker compose AP(iris-seoul)용 wrapper다. 중앙(hololive-seoul)은 Podman Quadlet unit으로 운영하므로
-# 이 스크립트를 쓰지 않는다. AP 호스트 런타임은 scripts/deploy/ap-hosts/*.conf의 AP_CONTAINER_RUNTIME이 정한다.
+# 이 스크립트를 쓰지 않는다. compose AP(AP_RUNTIME_MODE=compose)는 Docker다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

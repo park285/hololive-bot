@@ -38,7 +38,7 @@ the recorded deployed layout until new rollout evidence replaces it.
 | `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | Central Quadlet `hololive-alarm-worker.service` | 30007 | `https://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
 | `youtube-collector` | `hololive-youtube-collector` | `youtube-collector` | Central Quadlet `hololive-youtube-collector-c.service` (`c`), Seoul Compose `youtube-collector-b`, Osaka native systemd `a`, kapu Quadlet `hololive-youtube-collector-d.service` (`d`) | 30005/30015/30025/30015(kapu) | `https://127.0.0.1:30025/ready` (central `c`; 원격 AP는 각 호스트 로컬 H3 `/ready`) | `services/youtube-collector.md` | `runbooks/youtube-collector.md` |
 
-AP execution mode is owned by `scripts/deploy/ap-hosts/*.conf`: `seoul=compose` (`AP_CONTAINER_RUNTIME=docker`),
+AP execution mode is owned by `scripts/deploy/ap-hosts/*.conf`: `seoul=compose` (Docker),
 `osaka=native`. kapu `d` is a manually installed Quadlet (`deploy/podman/kapu/`), not an ap-hosts target. The native collector runs as
 `hololive-youtube-collector@youtube-collector-a.service` and has no Compose or Quadlet
 definition. The management web runs separately on iris-seoul as

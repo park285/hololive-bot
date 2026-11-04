@@ -39,7 +39,6 @@ sudo ./scripts/deploy/sync-opt-current.sh
 설치 도구는 다음을 확인한 뒤에만 unit을 설치합니다.
 
 - hostname이 `kapu`이면 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1` 없이 거부합니다(두 번째 dispatcher 방지).
-- 옛 `hololive-compose.service`가 active이거나 enabled이면 거부합니다. 옛 unit 파일은 롤백 창 동안 지우지 않습니다.
 - `compose.env`에 `HOLOLIVE_VALKEY_HA_ENABLED=1`과 비어 있지 않은 `VALKEY_SENTINEL_ADDRS`가 있어야 합니다.
 - `HOLOLIVE_X_SPACES_ENABLED`는 `0` 또는 `1`이며, 그 값에 따라 x-spaces drop-in을 설치하거나 지웁니다.
 - `compose.env`의 PostgreSQL pool 값이 연결 예산(`scripts/deploy/lib/postgres-capacity.sh`)을 넘으면 거부합니다.
@@ -58,8 +57,8 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 
 - 모든 unit이 `[Service] EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env`를 읽습니다.
   `[Service] Environment=`는 compose의 `${VAR:-기본값}` 기본값이며 compose.env가 우선합니다.
-- compose.env는 compose와 systemd가 같게 읽는 문법만 허용합니다. 값 안의 `$`, `\`, 따옴표 혼용,
-  앞뒤 공백은 prestart가 키 이름만 보고하고 거부합니다.
+- compose.env는 `KEY=VALUE` 줄만 받습니다. 잘못된 key, 중복 key, 값의 앞뒤 공백은 prestart가 키 이름만 보고하고
+  거부합니다. `KEY=` 빈 줄은 unit 기본값을 빈 값으로 덮으므로 기본값을 쓰려면 줄을 지웁니다.
 - 비밀번호·API key는 `podman run` 인자에 남지 않도록 prestart가
   `/run/hololive-bot/quadlet-env/<container>.env`(디렉터리 0700, 파일 0600)에 써서 `EnvironmentFile=`로 넘깁니다.
   서비스별 env 파일(`bot.env`, `alarm-worker.env`, `youtube-collector.env`) 다음 순서라 compose의

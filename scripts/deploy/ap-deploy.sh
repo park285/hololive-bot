@@ -133,7 +133,7 @@ if [[ "$REVISION" != "$transfer_revision" ]]; then
 fi
 export REVISION
 
-# compose AP는 Docker다(ap_host_load가 AP_CONTAINER_RUNTIME=docker를 강제). kapu는 Podman으로 빌드해 docker-archive로
+# compose AP는 Docker다. kapu는 Podman으로 빌드해 docker-archive로
 # 보내며, 빌드 이름을 docker.io/library/로 고정해야 docker load가 AP compose의 짧은 이름(IMAGE_REF)으로 등록한다.
 IMAGE_REF="hololive-youtube-collector:prod"
 BUILD_IMAGE_REF="docker.io/library/$IMAGE_REF"

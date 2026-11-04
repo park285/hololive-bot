@@ -7,8 +7,8 @@
 - `docker-compose.seoul.yml`: standalone AP composition for collector/issuer `b` (`extends` the collector base).
 - `.env.seoul.example`: AP interpolation keys (`/etc/stack-secrets/hololive-bot/ap-compose.env`).
 
-AP host runtime is explicit in `scripts/deploy/ap-hosts/seoul.conf` (`AP_RUNTIME_MODE=compose`,
-`AP_CONTAINER_RUNTIME=docker`). Use the wrapper with the AP file only:
+AP host runtime is explicit in `scripts/deploy/ap-hosts/seoul.conf` (`AP_RUNTIME_MODE=compose`; compose APs run Docker).
+Use the wrapper with the AP file only:
 
 ```bash
 COMPOSE_PROFILES=oracle COMPOSE_ENV_FILE=<ap-env> ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.seoul.yml config --quiet

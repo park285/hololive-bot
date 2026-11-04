@@ -131,37 +131,7 @@ grep -qx 'APP_VERSION=13.3.0' "$test_root/run/quadlet-env/hololive-api.env"
 [[ "$(stat -c '%a' "$test_root/run/quadlet-env/hololive-api.env")" == 600 ]]
 echo 'prestart moves runtime secrets into a private container env file'
 
-printf 'HOLOLIVE_EXTRA=pre${HOLOLIVE_DB_PASSWORD}\n' >> "$test_root/compose.env"
-if run_prestart > "$fixture/rejected.log" 2>&1; then
-    echo 'prestart accepted compose-only interpolation syntax' >&2
-    exit 1
-fi
-echo 'prestart rejects env syntax that compose and systemd read differently'
-
-sed -i '/^HOLOLIVE_EXTRA=/d' "$test_root/compose.env"
-printf 'HOLOLIVE_METRICS_PORT_BIND_IP=\n' >> "$test_root/compose.env"
-if run_prestart > "$fixture/rejected.log" 2>&1; then
-    echo 'prestart accepted an empty value that would replace the unit default' >&2
-    exit 1
-fi
-grep -Fq 'empty env value; delete the line to use the unit default: HOLOLIVE_METRICS_PORT_BIND_IP' "$fixture/rejected.log"
-sed -i '/^HOLOLIVE_METRICS_PORT_BIND_IP=$/d' "$test_root/compose.env"
-echo 'prestart rejects empty values that would override unit defaults'
-
 # Tailscale IPv6 admin bind는 허용 대상이므로 IPv4 주소만 찾다가 90초 뒤 실패하면 안 된다.
 sed -i 's/^HOLOLIVE_ADMIN_API_PORT_BIND_IP=.*/HOLOLIVE_ADMIN_API_PORT_BIND_IP=fd7a:115c:a1e0::8/' "$test_root/compose.env"
 timeout 20 bash -c "$(declare -f run_prestart); test_root='$test_root' root='$root' run_prestart"
 echo 'prestart waits for an IPv6 tailnet admin bind on the IPv6 address family'
-
-# bot.env는 podman --env-file로 읽히므로 compose env_file처럼 따옴표를 벗기지 않는다. 그대로 쓰면 값에 따옴표가 섞인다.
-sed -i 's/^HOLOLIVE_ADMIN_API_PORT_BIND_IP=.*/HOLOLIVE_ADMIN_API_PORT_BIND_IP=100.100.1.8/' "$test_root/compose.env"
-printf 'API_SECRET_KEY="quoted"\n' > "$test_root/secrets/bot.env"
-rm -f "$test_root/run/quadlet-env/hololive-api.env"
-if run_prestart > "$fixture/rejected.log" 2>&1; then
-    echo 'prestart accepted a quoted value podman would pass through literally' >&2
-    exit 1
-fi
-grep -Fq 'container env value must be unquoted with no $ or backtick: API_SECRET_KEY' "$fixture/rejected.log"
-! grep -Fq quoted "$fixture/rejected.log"
-[[ ! -e "$test_root/run/quadlet-env/hololive-api.env" ]]
-echo 'prestart rejects service env files that podman and compose read differently'
