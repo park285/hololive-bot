@@ -3,11 +3,12 @@ x-seoul-ap-db-env: &seoul-ap-db-env
   POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:?HOLOLIVE_CENTRAL_POSTGRES_HOST is required for an AP overlay}
   POSTGRES_PORT: ${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5433}
 
+# iris-seoul Alloy는 Docker API 없이 system journal에서 컨테이너 로그를 읽는다(observability-stack alloy/iris-seoul.alloy).
+# Docker API 조회(inspect)를 열어 두면 컨테이너 env의 비밀까지 읽히므로 journald 드라이버로 보낸다. 보존은 journald가 맡는다.
 x-seoul-ap-logging: &seoul-ap-logging
-  driver: "json-file"
+  driver: "journald"
   options:
-    max-size: "5m"
-    max-file: "3"
+    tag: "{{.Name}}"
 
 services:
   youtube-po-b:
@@ -18,6 +19,7 @@ services:
     container_name: hololive-youtube-po-b
     volumes: !override
       - youtube-po-b-socket:/run/hololive-youtube-po
+    logging: *seoul-ap-logging
 
   youtube-collector-b:
     extends:
