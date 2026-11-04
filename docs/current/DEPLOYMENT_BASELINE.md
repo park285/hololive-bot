@@ -2,14 +2,20 @@
 
 ## Scope
 
-현재 production은 중앙 호스트와 Seoul collector `b`의 Docker Compose, Osaka collector `a`의 host-native systemd, kapu collector `d`의 rootful Podman Quadlet으로 운영합니다. 중앙은 `deploy/compose/docker-compose.prod.yml`과 `docker-compose.live-compat.yml`을 함께 사용합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
+현재 production은 중앙 호스트와 kapu collector `d`의 rootful Podman Quadlet, Seoul collector `b`의 Docker Compose, Osaka collector `a`의 host-native systemd로 운영합니다. 중앙은 `deploy/quadlet/hololive-bot/`의 unit을 사용합니다(설치·운영: `deploy/quadlet/README.md`). 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
 
-### 준비된 Podman Quadlet 중앙 배치 — 미배포
+### 중앙 Podman Quadlet 컷오버 — 2026-11-04
 
-저장소의 중앙 정의는 `deploy/compose/docker-compose.prod.yml`·`docker-compose.live-compat.yml`에서
-`deploy/quadlet/hololive-bot/`의 rootful Podman Quadlet unit으로 바뀌었습니다(설치·운영: `deploy/quadlet/README.md`).
-`hololive-compose.service`, deunhealth·docker-proxy, `DOCKER_SOCKET_GID`는 이 정의에 없습니다. 아래의 운영 기록은
-중앙 컷오버 증거가 대체할 때까지 실제 배포된 Docker 배치를 기준으로 남깁니다. Seoul `b`는 Docker Compose로 유지합니다.
+2026-11-04 22:35 KST 중앙을 Docker Compose에서 rootful Podman Quadlet으로 옮겼습니다. Docker는 정지·mask했고
+`hololive-compose.service`는 disabled입니다. 순서는 Valkey master를 kapu로 넘기고, 암호화 DB dump(kapu 보관, `pg_restore`
+판독 확인)를 만든 뒤, Docker를 멈추고 volume 4개를 Podman volume으로 옮기고, `holo-postgres` → `hololive-db-migrate`
+(applied=0, skipped=227) → 나머지 unit 순으로 기동했습니다. 첫 고정은 Docker 시절 `artifacts/worker-profile/active`를
+`active.docker-era-20261104`로 옮긴 뒤 했고, 세 app 서비스의 drop-in `Image=`가 실행 중 image와 같습니다.
+배포 트리는 `68c766bb8`(`.source-revision`)입니다.
+
+Docker 시절 `docker-proxy`·`deunhealth`는 없어졌고 unit의 `HealthOnFailure=stop`과 `Restart=always`가 대신합니다.
+host `compose.env`의 `DOCKER_SOCKET_GID`는 Quadlet이 읽지 않습니다. 수용 전 롤백 자료는 Docker image·volume,
+`/opt/hololive-bot/compose/current.docker-era`, 위 DB dump입니다. Seoul `b`는 Docker Compose로 유지합니다.
 
 ### Prepared 11.0.0 worker/DB cutover — not activated
 
@@ -39,7 +45,7 @@ state distinct from the target configuration documented in the repository.
 
 | 역할 | 호스트 | 내용 |
 |---|---|---|
-| 서울 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | 서울의 별도 A1 2 OCPU·12GB·50GB VM. Compose의 `hololive-api`, `hololive-alarm-worker`, `holo-postgres`, `valkey-cache`, shortlink ingress, autoheal, collector fleet member `youtube-collector` (`c` on 30025)와 격리 issuer `youtube-po-c`. 권위 PostgreSQL이 여기 있습니다. |
+| 서울 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | 서울의 별도 A1 2 OCPU·12GB·50GB VM. rootful Podman Quadlet의 `hololive-api`, `hololive-alarm-worker`, `holo-postgres`, `valkey-cache`, shortlink ingress(`admin-dashboard-ingress`), collector fleet member `hololive-youtube-collector-c` (`c` on 30025)와 격리 issuer `hololive-youtube-po-c`. 권위 PostgreSQL이 여기 있습니다. |
 | 서울 AP·관리 웹 | `<tailnet-seoul-ap>` (`aarch64`) | Compose의 `youtube-collector-b`와 격리 issuer `youtube-po-b`, host service `iris-console.service`의 통합 관리자 웹. PostgreSQL standby나 자동 failover 대상으로 사용하지 않습니다. |
 | Osaka AP `a` | `<tailnet-osaka-a>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-a.service`와 격리 issuer `hololive-youtube-po.service`. |
 | kapu AP `d` | `<tailnet-kapu>` (`x86_64`) | rootful Podman Quadlet `hololive-youtube-collector-d.service`와 격리 issuer `hololive-youtube-po-d.service`. osaka2는 2026-11-04부터 공개 진입점만 맡습니다. |
@@ -94,7 +100,7 @@ dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결�
 동기화된 대기 복구나 자동 승격은 없으며, 보존한 Osaka DB는 전환 시점의 정지 사본입니다.
 부분 객체 dump를 전체 백업으로 대체하거나, 오래된 사본을 현재 primary로 오인하지 않습니다.
 
-API, alarm worker와 중앙 collector `c`는 같은 Docker network의 `holo-postgres:5432`에
+API, alarm worker와 중앙 collector `c`는 같은 Podman network(`hololive-net`)의 `holo-postgres:5432`에
 직접 연결하고, 원격 collector `a/b/d`는 Seoul 중앙 Tailscale IP `100.100.1.8:5433`에 직접
 연결합니다. 여섯 consumer 모두 TLS `verify-full`을 유지하며 DB용 Tailscale Service 중계를
 사용하지 않습니다. Seoul의 standby container·전용 PGDATA volume, failover
@@ -111,32 +117,29 @@ timeline을 그대로 재기동하지 않습니다.
 호스트마다 달라지는 배포 값은 Compose 기본값이 아니라 각 호스트의
 `/etc/stack-secrets/hololive-bot/compose.env`가 소유합니다: `HOLOLIVE_*_PORT_BIND_IP`,
 `HOLOLIVE_METRICS_PORT_BIND_IP`(메트릭 리스너를 tailnet에 노출해 중앙 Prometheus가
-스크레이프할 수 있게 하는 값), 그리고 `DOCKER_SOCKET_GID`(Docker 그룹 gid는 호스트마다
-다릅니다).
+스크레이프할 수 있게 하는 값). `DOCKER_SOCKET_GID`는 Docker 시절 `docker-proxy`용이었고 지금은 쓰지 않습니다.
 
 ## Runtime Services
 
 | Runtime | 실행 대상 | Port | Env groups | 자산 | 기동 의존성 |
 |---|---|---:|---|---|---|
-| `hololive-api` | 중앙 Compose `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, `hololive-alarm-worker` |
-| `alarm-worker` | 중앙 Compose `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-collector` | 중앙 Compose `youtube-collector` (`c`), Seoul Compose `youtube-collector-b`, Osaka native `a`, kapu Quadlet `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30015(kapu loopback) | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 Compose의 DB·migration 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
+| `hololive-api` | 중앙 Quadlet `hololive-api.service` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey, `hololive-alarm-worker`(`Wants=`). migration은 배포 helper가 활성화 전에 실행합니다. |
+| `alarm-worker` | 중앙 Quadlet `hololive-alarm-worker.service` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey |
+| `youtube-collector` | 중앙 Quadlet `hololive-youtube-collector-c` (`c`), Seoul Compose `youtube-collector-b`, Osaka native `a`, kapu Quadlet `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30015(kapu loopback) | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 DB 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
 
-`hololive-api`는 `hololive-net`만 사용하며 Docker socket·`DOCKER_HOST`·`docker-proxy-net`에 접근하지 않습니다. 중앙 `docker-proxy`의 유일한 소비자는 `deunhealth`입니다. Collector와 issuer의 동일 source SHA 및 paired deploy/rollback 계약은 [collector runbook](runbooks/youtube-collector.md#isolated-po-token-lifecycle)을 따릅니다.
+`hololive-api`는 `hololive-net`만 사용하며 컨테이너 런타임 socket에 접근하지 않습니다. Collector와 issuer의 동일 source SHA 및 paired deploy/rollback 계약은 [collector runbook](runbooks/youtube-collector.md#isolated-po-token-lifecycle)을 따릅니다.
 
 ## Infra Services
 
 | Service | Purpose | Current notes |
 |---|---|---|
-| `holo-postgres` | Primary PostgreSQL | Bridge-networked; live-compat publishes `<tailnet-central>:5433` explicitly to container `5432`; TLS `ssl=on`; server certificate mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` |
-| `holo-postgres-standby` | 재활성화 참고용 Compose 대상 | Production에서 제거했습니다. 재도입하려면 새 base backup과 명시적 승인이 필요합니다. |
+| `holo-postgres` | Primary PostgreSQL | Bridge-networked; unit `PublishPort=${POSTGRES_PORT_BIND_IP}:5433:5432` publishes `<tailnet-central>:5433`; TLS `ssl=on`; server certificate mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` |
+| `holo-postgres-standby` | 재활성화 참고용 Quadlet 대상(`deploy/quadlet/hololive-bot-standby/`) | Production에서 제거했습니다. 재도입하려면 새 base backup과 명시적 승인이 필요합니다. |
 | `postgres-failover.service` | 재활성화 참고용 fail-closed controller | Production unit과 timer는 제거했습니다. 저장소의 코드·unit template과 기존 원격 helper·정적 설정은 재구축 참고용으로 보존하며 자동 실행하지 않습니다. |
-| `hololive-db-migrate` | Migration job | Runs before app services; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
+| `hololive-db-migrate` | Migration job | `[Install]`이 없어 부팅 때 실행하지 않고 배포 helper가 app 활성화 전에 실행합니다; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
-| `admin-dashboard-ingress` | 중앙 shortlink ingress | `docker-compose.live-compat.yml`이 정의합니다. 30192의 source-restricted shortlink와 loopback 30193의 health를 제공하며 관리자 웹을 호스팅하지 않습니다. |
-| `youtube-po-c` / `youtube-po-b` | Compose의 격리 PO issuer | 중앙 `c`와 Seoul `b` collector에 private Unix socket을 제공합니다. 앱 비밀·DB·helper socket을 공유하지 않습니다. native `a`/`d`의 issuer는 각 호스트의 `hololive-youtube-po.service`입니다. |
-| `docker-proxy` | Restricted Docker API proxy | internal `docker-proxy-net`에서 `deunhealth`에만 Docker API를 제공합니다. `hololive-api`와 관리자 웹은 접근하지 않습니다. |
-| `deunhealth` | Autoheal sidecar | Restarts unhealthy labeled containers; old-primary fencing 동작은 비활성 HA 참고 절차에만 해당합니다. |
+| `admin-dashboard-ingress` | 중앙 shortlink ingress | `admin-dashboard-ingress.container`가 정의합니다. 30192의 source-restricted shortlink와 loopback 30193의 health를 제공하며 관리자 웹을 호스팅하지 않습니다. |
+| `hololive-youtube-po-c` / `youtube-po-b` / `hololive-youtube-po-d` | 격리 PO issuer | 중앙 Quadlet `c`, Seoul Compose `b`, kapu Quadlet `d` collector에 private Unix socket을 제공합니다. 앱 비밀·DB·helper socket을 공유하지 않습니다. native `a`의 issuer는 osaka1의 `hololive-youtube-po.service`입니다. |
 
 ## External Boundaries
 
@@ -230,10 +233,10 @@ that directory read-only at `/run/hololive-bot/postgres-tls/`. Reissuance and
 reload are approval-gated `stack-secrets-operations` work; no agent renews it in
 place.
 
-The Compose client set uses `verify-full` with
+The container client set uses `verify-full` with
 `/run/hololive-bot/certs/postgres-ca.pem`: `hololive-api`, `alarm-worker`,
-central `youtube-collector`, `hololive-db-migrate`, and Seoul `youtube-collector-b`.
-Native Osaka APs `youtube-collector-a`/`youtube-collector-d`도 `verify-full`을 사용하며,
+central `youtube-collector`, `hololive-db-migrate`, Seoul `youtube-collector-b`, and kapu `youtube-collector-d`.
+Native Osaka AP `youtube-collector-a`도 `verify-full`을 사용하며,
 CA 경로는 host env generator가 지정하는 `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`입니다.
 
 Operational evidence from the 2026-06-07 transition showed all 35 TCP
