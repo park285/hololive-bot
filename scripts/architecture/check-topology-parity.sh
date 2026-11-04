@@ -166,11 +166,18 @@ assert_assignment "seoul AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$seoul" "$roo
 
 assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/compose/docker-compose.seoul.yml"
 
-assert_count "central ingress source" 1 "allow $seoul;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
+# 30192 shortlink 출처는 공개 ingress 역할이다. osaka2로 블루그린 전환하는 동안에는 blue(seoul)와
+# green(osaka2)을 함께 허용한다. 30006/udp admin API 출처는 Console이 남는 seoul만 둔다.
+public_ingress_sources=("$seoul" "$osaka2")
+for source in "${public_ingress_sources[@]}"; do
+  assert_count "central ingress public gateway source" 1 "allow $source;" \
+    "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
+done
 assert_count "central ingress loopback" 1 "allow 127.0.0.1;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
 assert_count "central ingress bind owner" 1 "allow @BIND_IP@;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
-[[ "$(grep -Ec '^[[:space:]]*allow[[:space:]]+' "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template")" -eq 3 ]] ||
-  fail "central ingress allow directive set"
+[[ "$(grep -Ec '^[[:space:]]*allow[[:space:]]+' "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template")" -eq \
+  $((2 + ${#public_ingress_sources[@]})) ]] || fail "central ingress allow directive set"
+public_ingress_nft="$(printf 'iifname "tailscale0" ip saddr %s tcp dport 30192 accept\n' "${public_ingress_sources[@]}")"
 # 전체 문법과 순서를 고정해 source/target/DNAT 조건의 삭제나 넓은 accept를 거절한다.
 postgres_sources="$(printf '%s\n' "$central" "$workstation" "$seoul" "$osaka" "$osaka2" | LC_ALL=C sort | paste -sd, - | sed 's/,/, /g')"
 cat >"$tmpdir/expected-nft-grammar" <<EOF
@@ -182,7 +189,7 @@ elements = { $postgres_sources }
 chain input {
 type filter hook input priority -20; policy accept;
 iifname "lo" tcp dport 30192 accept
-iifname "tailscale0" ip saddr $seoul tcp dport 30192 accept
+$public_ingress_nft
 tcp dport { 30191, 30192 } reject with tcp reset
 iifname "lo" udp dport 30006 accept
 iifname "tailscale0" ip saddr $seoul udp dport 30006 accept

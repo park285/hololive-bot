@@ -9,7 +9,7 @@ http {
     access_log /dev/stdout;
     error_log /dev/stderr warn;
 
-    # Seoul gateway가 proxy.conf에서 $proxy_add_x_forwarded_for로 자기 $remote_addr를
+    # 공개 gateway(iris-seoul, osaka2)가 proxy.conf에서 $proxy_add_x_forwarded_for로 자기 $remote_addr를
     # 목록 끝에 덧붙이므로 마지막 항목만 gateway가 쓴 값이다. 앞쪽 항목은 클라이언트가
     # 위조할 수 있어 rate limit 키로 쓰면 그대로 우회된다.
     map $http_x_forwarded_for $shortlink_client {
@@ -52,7 +52,9 @@ http {
 
         allow 127.0.0.1;
         allow @BIND_IP@;
+        # 공개 ingress. osaka2로 블루그린 전환하는 동안에는 iris-seoul과 osaka2를 함께 허용한다.
         allow 100.100.1.5;
+        allow 100.100.1.2;
         deny all;
 
         location = /healthz {
