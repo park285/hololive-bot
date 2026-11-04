@@ -43,7 +43,7 @@ admin_network_assert_firewall() {
     if ! jq -e '
         [.nftables[] | .set // empty | select(.name == "postgres_sources")] as $sources |
         ($sources | length == 1) and
-        ($sources[0].elem | sort == ["100.100.1.2", "100.100.1.3", "100.100.1.5", "100.100.1.6", "100.100.1.8"]) and
+        ($sources[0].elem | sort == ["100.100.1.3", "100.100.1.5", "100.100.1.6", "100.100.1.8"]) and
         any(.nftables[]; .chain.hook == "forward" and .chain.name == "forward" and .chain.prio == -20) and
         ([.nftables[] | .rule // empty | select(.chain == "forward")] | length == 4)
     ' <<<"${rules}" >/dev/null; then

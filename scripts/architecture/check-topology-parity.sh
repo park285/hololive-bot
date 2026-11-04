@@ -159,8 +159,6 @@ done <"$manifest"
 
 assert_assignment "osaka AP host" AP_SSH_HOST "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
 assert_assignment "osaka AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
-assert_assignment "osaka2 AP host" AP_SSH_HOST "$osaka2" "$root_dir/scripts/deploy/ap-hosts/osaka2.conf"
-assert_assignment "osaka2 AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$osaka2" "$root_dir/scripts/deploy/ap-hosts/osaka2.conf"
 assert_assignment "seoul AP host" AP_SSH_HOST "$seoul" "$root_dir/scripts/deploy/ap-hosts/seoul.conf"
 assert_assignment "seoul AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$seoul" "$root_dir/scripts/deploy/ap-hosts/seoul.conf"
 
@@ -179,7 +177,8 @@ assert_count "central ingress bind owner" 1 "allow @BIND_IP@;" "$root_dir/deploy
   $((2 + ${#public_ingress_sources[@]})) ]] || fail "central ingress allow directive set"
 public_ingress_nft="$(printf 'iifname "tailscale0" ip saddr %s tcp dport 30192 accept\n' "${public_ingress_sources[@]}")"
 # 전체 문법과 순서를 고정해 source/target/DNAT 조건의 삭제나 넓은 accept를 거절한다.
-postgres_sources="$(printf '%s\n' "$central" "$workstation" "$seoul" "$osaka" "$osaka2" | LC_ALL=C sort | paste -sd, - | sed 's/,/, /g')"
+# osaka2는 2026-11-04 collector를 내리고 공개 ingress만 맡아 DB 출처에서 빠졌다.
+postgres_sources="$(printf '%s\n' "$central" "$workstation" "$seoul" "$osaka" | LC_ALL=C sort | paste -sd, - | sed 's/,/, /g')"
 cat >"$tmpdir/expected-nft-grammar" <<EOF
 table inet admin_dashboard_ingress {
 set postgres_sources {

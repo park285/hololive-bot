@@ -80,12 +80,6 @@ expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-a" "osaka AP contain
 expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
-ap_host_load "${ROOT_DIR}" osaka2 || fail "osaka2 ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-collector-d" "osaka2 AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-d" "osaka2 AP containers"
-expect_eq "${AP_PORTS[*]}" "30035" "osaka2 AP ports"
-expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY" "osaka2 AP deploy approval var"
-
 ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-collector-b" "seoul AP services"
 expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-b" "seoul AP containers"
@@ -122,14 +116,9 @@ pass "quic udp lib applies sysctl.conf as final override"
 expect_fail_contains "osaka Compose deploy rejects native runtime" \
     "use ./scripts/deploy/ap-host-native-deploy.sh osaka" \
     "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka --dry-run
-expect_fail_contains "osaka2 Compose deploy rejects native runtime" \
-    "use ./scripts/deploy/ap-host-native-deploy.sh osaka2" \
-    "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka2 --dry-run
 expect_fail "seoul active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" seoul --apply
 expect_fail "osaka Compose rollback rejects native runtime" \
     "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --dry-run
-expect_fail "osaka2 Compose rollback rejects native runtime" \
-    "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka2 --dry-run
 expect_fail_contains "Seoul native deploy rejects Compose runtime" \
     "use ./scripts/deploy/ap-deploy.sh seoul" \
     "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh" seoul --dry-run

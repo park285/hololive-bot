@@ -29,10 +29,10 @@ PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니
 - `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-rollback-service.sh <release> [--check|--apply]` - 보존한 이전 pair로 API·worker rollback
 - 원격 AP(`youtube-collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
   - Seoul Compose: `./scripts/deploy/ap-deploy.sh seoul [--dry-run|--apply]`
-  - Osaka/Osaka2 native: `./scripts/deploy/ap-host-native-deploy.sh <osaka|osaka2> [--dry-run|--apply]`
+  - Osaka native: `./scripts/deploy/ap-host-native-deploy.sh osaka [--dry-run|--apply]`
   - `./scripts/deploy/ap-completion-check.sh <host>`
   - Seoul Compose rollback: `./scripts/deploy/ap-rollback.sh seoul [--dry-run|--apply]`
-  - Osaka/Osaka2 native rollback: `./scripts/deploy/ap-host-native-rollback.sh <osaka|osaka2> [--dry-run|--apply]`
+  - Osaka native rollback: `./scripts/deploy/ap-host-native-rollback.sh osaka [--dry-run|--apply]`
   - `./scripts/deploy/ap-iris-h3-trust-preflight.sh <host>`
 
 ## 4. logs/
@@ -46,7 +46,7 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh prune`
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
-- `./scripts/logs/ap-status.sh <host>` (seoul, osaka, osaka2)
+- `./scripts/logs/ap-status.sh <host>` (seoul, osaka)
 - `./scripts/logs/ap-logs.sh <host> [youtube-collector|all]`
 - `./scripts/logs/ap-smoke.sh seoul` (Compose AP 전용, native 호스트는 `./scripts/deploy/ap-completion-check.sh <host>`)
 

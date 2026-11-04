@@ -29,7 +29,7 @@ const (
 type preparedSenderSpy struct {
 	prepareErr          error
 	body, route         string
-	preparedMu          sync.Mutex // dispatcher는 방마다 동시에 준비한다.
+	preparedMu          sync.Mutex // dispatcher는 방마다 동시에 준비·발송한다. prepared와 발송 기록을 함께 보호한다.
 	prepared            []delivery.MessageVariants
 	ids, bodies, routes []string
 	err                 error
@@ -59,9 +59,7 @@ func (s *preparedSenderSpy) recordPrepared(message delivery.MessageVariants) {
 
 // SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
 func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, route, id string) (string, error) {
-	s.ids = append(s.ids, id)
-	s.bodies = append(s.bodies, body)
-	s.routes = append(s.routes, route)
+	s.recordSent(id, body, route)
 
 	if s.onSend != nil {
 		s.onSend()
@@ -72,6 +70,15 @@ func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, rout
 	}
 
 	return preparedSpyIrisRequestID(id), nil
+}
+
+func (s *preparedSenderSpy) recordSent(id, body, route string) {
+	s.preparedMu.Lock()
+	defer s.preparedMu.Unlock()
+
+	s.ids = append(s.ids, id)
+	s.bodies = append(s.bodies, body)
+	s.routes = append(s.routes, route)
 }
 
 func preparedSpyIrisRequestID(clientRequestID string) string {

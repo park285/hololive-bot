@@ -127,16 +127,17 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 |---|---|---|
 | 중앙 API·worker·collector `c`·infra | Podman Quadlet `deploy/quadlet/hololive-bot/` ([설치·운영](../../deploy/quadlet/README.md)) | [release runbook](runbooks/release.md); collector `c`와 issuer는 [paired cutover](runbooks/youtube-collector.md#isolated-po-token-lifecycle) |
 | Seoul collector `b` | `docker-compose.seoul.yml`(`docker-compose.collector.yml` 확장), issuer `youtube-po-b` | `scripts/deploy/ap-deploy.sh seoul`; [collector runbook](runbooks/youtube-collector.md) |
-| Osaka collector `a`·Osaka2 collector `d` | native `hololive-youtube-collector@youtube-collector-{a,d}.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 또는 `osaka2` 대상; [collector runbook](runbooks/youtube-collector.md) |
+| Osaka collector `a` | native `hololive-youtube-collector@youtube-collector-a.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 대상; [collector runbook](runbooks/youtube-collector.md) |
+| kapu collector `d` | rootful Podman Quadlet `hololive-youtube-collector-d.service`와 격리 issuer `hololive-youtube-po-d.service` | 수동 설치(`deploy/podman/kapu/README.md`). osaka2는 2026-11-04 공개 진입점으로 바뀌어 collector를 두지 않습니다. |
 | 통합 관리자 웹 | iris-seoul의 `iris-console.service` | Iris Console 운영 절차; 이 저장소의 [연결 경계](runbooks/admin-dashboard.md) |
 
-`scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Seoul에 `compose`, Osaka·Osaka2에 `native`를 지정합니다. `AP_COMPOSE_FILE`은 `compose` 호스트에만 둡니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
+`scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Seoul에 `compose`, Osaka에 `native`를 지정합니다. kapu `d`는 ap-hosts 대상이 아닙니다. `AP_COMPOSE_FILE`은 `compose` 호스트에만 둡니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
 
 Live deploy, restart, rollback, secret writes, and production config mutation require explicit operator approval.
 
 ## YouTube Collector Fleet Notes
 
-`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, Quadlet, 30025), Osaka2 `d` (host-native, 30035). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
+`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, Quadlet, 30025), kapu `d` (rootful Podman Quadlet, 30015 loopback·metrics `10.89.15.14:30096`). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
 
 - collector owns fetch/normalize/lease/checkpoint/`source_observations` Publish only;
 - `hololive-api` YouTube plane owns claim/finalize, canonical persist, notification intent, live-end finalizer, and retention;
