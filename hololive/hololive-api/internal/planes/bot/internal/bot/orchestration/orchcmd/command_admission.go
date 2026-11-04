@@ -40,7 +40,7 @@ const (
 	expensiveHistoryUserLimit        = 3
 	expensiveHistoryRoomLimit        = 12
 	expensiveHistoryWindow           = time.Minute
-	expensiveHistoryRateLimitMessage = "방송 이력 조회 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
+	expensiveHistoryRateLimitMessage = "방송 조회 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
 	unstableCommandUserID            = "unknown"
 )
 
@@ -116,7 +116,8 @@ func newCommandAdmissionPolicy(cacheClient cache.LowLevelCache) *commandAdmissio
 }
 
 func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *botcommand.CommandContext, commandKey string) error {
-	if !isExpensiveHistoryCommand(commandKey) {
+	scope := expensiveCommandAdmissionScope(commandKey)
+	if scope == "" {
 		return nil
 	}
 
@@ -130,8 +131,8 @@ func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *botcommand.C
 	}
 
 	checks := []commandAdmissionCheck{
-		{bucket: commandAdmissionBucket("history:room", cmdCtx.Room), limit: expensiveHistoryRoomLimit},
-		{bucket: commandAdmissionBucket("history:user", cmdCtx.UserID), limit: expensiveHistoryUserLimit},
+		{bucket: commandAdmissionBucket(scope+":room", cmdCtx.Room), limit: expensiveHistoryRoomLimit},
+		{bucket: commandAdmissionBucket(scope+":user", cmdCtx.UserID), limit: expensiveHistoryUserLimit},
 	}
 
 	decision, err := p.limiter.Admit(ctx, member, checks)
@@ -277,12 +278,16 @@ func parseCommandAdmissionResult(result valkey.ValkeyResult) (commandAdmissionDe
 	return commandAdmissionDecision{Allowed: allowed == 1, RetryAfter: time.Duration(retryAfterMS) * time.Millisecond}, nil
 }
 
-func isExpensiveHistoryCommand(commandKey string) bool {
+// expensiveCommandAdmissionScope는 저장소 조회 비용이 큰 명령의 rate limit 버킷 이름을 돌려준다. 빈 값이면 제한하지 않는다.
+// !라이브는 보존된 pending-end 이력을 훑는 PG 질의를 실행하므로 이력 명령과 같은 한도를 쓰되 버킷은 분리한다.
+func expensiveCommandAdmissionScope(commandKey string) string {
 	switch commandKey {
 	case "broadcast_history", "broadcast_thumbnail":
-		return true
+		return "history"
+	case "live":
+		return "live"
 	default:
-		return false
+		return ""
 	}
 }
 
