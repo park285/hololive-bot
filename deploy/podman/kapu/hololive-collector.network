@@ -1,5 +1,4 @@
-# hololive YouTube collector 전용 bridge. Docker 쪽 hololive-net과 분리한다.
-# kapu Docker가 FORWARD 기본 정책을 DROP으로 둬 tailnet 게시 포트로는 들어올 수 없다. Prometheus(obs Docker)는
+# hololive YouTube collector 전용 bridge. metrics는 게시하지 않고 Prometheus(obs-prometheus)가
 # 고정 컨테이너 IP로 직접 수집한다(10.89.15.<slot>: a=11 b=12 d=14).
 # InterfaceName은 rhel-host-security kapu.conf의 PODMAN_IFACES가 firewalld podman zone에 넣는다. 목록에 없는
 # bridge는 firewalld reload 뒤 public zone으로 떨어져 DNS와 egress를 잃는다.

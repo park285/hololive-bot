@@ -57,8 +57,14 @@ expect_load_rejected missing-mode "missing AP_RUNTIME_MODE" '/^AP_RUNTIME_MODE=/
 expect_load_rejected native-overlay "AP_COMPOSE_FILE is only valid for AP_RUNTIME_MODE=compose" \
   's/^AP_RUNTIME_MODE=native$/&\nAP_COMPOSE_FILE=deploy\/compose\/docker-compose.seoul.yml/'
 expect_load_rejected compose-no-overlay "missing AP_COMPOSE_FILE" 's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose/'
+expect_load_rejected compose-no-runtime "AP_CONTAINER_RUNTIME must be docker" \
+  's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose\nAP_COMPOSE_FILE=deploy\/compose\/docker-compose.seoul.yml/'
+expect_load_rejected compose-podman-runtime "AP_CONTAINER_RUNTIME must be docker" \
+  's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose\nAP_COMPOSE_FILE=deploy\/compose\/docker-compose.seoul.yml\nAP_CONTAINER_RUNTIME=podman/'
+expect_load_rejected native-runtime "AP_CONTAINER_RUNTIME is only valid for AP_RUNTIME_MODE=compose" \
+  's/^AP_RUNTIME_MODE=native$/&\nAP_CONTAINER_RUNTIME=docker/'
 sed -e 's/^AP_NAME=osaka$/AP_NAME=compose-host/' \
-  -e 's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose\nAP_COMPOSE_FILE=deploy\/compose\/docker-compose.seoul.yml/' \
+  -e 's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose\nAP_COMPOSE_FILE=deploy\/compose\/docker-compose.seoul.yml\nAP_CONTAINER_RUNTIME=docker/' \
   "$fixture_root/scripts/deploy/ap-hosts/osaka.conf" > "$fixture_root/scripts/deploy/ap-hosts/compose-host.conf"
 (SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" compose-host)
 

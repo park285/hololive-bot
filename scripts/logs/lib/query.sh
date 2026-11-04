@@ -1,5 +1,12 @@
 # shellcheck shell=bash
 
+# 중앙 container는 rootful Podman store에 있다. 비root로 rootless store를 조회하면 container가 없어
+# 빈 결과가 나오므로 db-maintenance-exec.sh처럼 sudo로 같은 store를 읽는다.
+LOGS_PODMAN=(podman)
+if [[ "$(id -u)" -ne 0 ]]; then
+  LOGS_PODMAN=(sudo -n podman)
+fi
+
 compose_query_output() {
   local service_key="$1"
   local since="$2"
@@ -9,16 +16,14 @@ compose_query_output() {
   local service_name
   local output
 
-  resolve_compose_cmd
   service_name="$(resolve_service "${service_key}")"
 
   if [[ "${quiet}" != "true" ]]; then
-    echo "query: service=${service_name} since=${since} limit=${limit} mode=${COMPOSE_MODE}" >&2
+    echo "query: container=${service_name} since=${since} limit=${limit} mode=podman logs" >&2
   fi
 
-  output="$("${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" logs \
-    --no-color \
-    --no-log-prefix \
+  # 중앙 container는 journald log driver를 쓰므로 podman logs가 같은 journal을 읽는다.
+  output="$("${LOGS_PODMAN[@]}" logs \
     --timestamps \
     --since "${since}" \
     --tail "${limit}" \
@@ -119,13 +124,10 @@ cmd_tail() {
     exit 1
   fi
 
-  resolve_compose_cmd
   service_name="$(resolve_service "${service}")"
-  echo "tail: service=${service_name} since=${since} tail=${tail_lines} mode=${COMPOSE_MODE}" >&2
-  exec "${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" logs \
+  echo "tail: container=${service_name} since=${since} tail=${tail_lines} mode=podman logs" >&2
+  exec "${LOGS_PODMAN[@]}" logs \
     --follow \
-    --no-color \
-    --no-log-prefix \
     --timestamps \
     --since "${since}" \
     --tail "${tail_lines}" \

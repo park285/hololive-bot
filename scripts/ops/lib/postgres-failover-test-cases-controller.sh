@@ -7,21 +7,9 @@ fi
 LAUNCHER="${ROOT_DIR}/scripts/ops/postgres-failover-launch.sh"
 
 static_deployment_contracts_are_wired() {
-  local standby_compose="${ROOT_DIR}/deploy/compose/docker-compose.standby.yml"
-  local compose_unit="${ROOT_DIR}/scripts/systemd/hololive-compose.service"
   local pattern
-  for pattern in 'HOLOLIVE_STANDBY_POSTGRES_BIND_IP' 'health.signal' 'pg_is_in_recovery()'; do
-    grep -Fq "${pattern}" "${standby_compose}" || { fail "standby compose missing contract: ${pattern}"; return; }
-  done
   grep -Fq 'User=hololive-pg-failover' "${ROOT_DIR}/scripts/ops/postgres-failover.service" || { fail "failover controller is not assigned to its dedicated user"; return; }
   grep -Fq 'POSTGRES_FAILOVER_PSQL_PATH:-/usr/lib/postgresql/18/bin/psql' "${ROOT_DIR}/scripts/ops/postgres-failover.sh" || { fail "failover controller does not pin the canonical PostgreSQL 18 client"; return; }
-  if grep -Fq 'docker exec' "${ROOT_DIR}/scripts/ops/postgres-failover.sh" "${ROOT_DIR}/scripts/ops/lib/postgres-failover-lib.sh" "${ROOT_DIR}/scripts/ops/lib/postgres-failover-transition-lib.sh"; then
-    fail "failover controller still depends on root-equivalent Docker access"
-    return
-  fi
-  for pattern in 'ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent' 'ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced'; do
-    grep -Fq "${pattern}" "${compose_unit}" || { fail "compose unit missing fence condition: ${pattern}"; return; }
-  done
   for pattern in 'postgres-failover-launch.sh' 'UnsetEnvironment=BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH' \
     'RuntimeDirectory=hololive-postgres-failover' 'RuntimeDirectoryMode=0700' 'RuntimeDirectoryPreserve=no'; do
     grep -Fq "${pattern}" "${ROOT_DIR}/scripts/ops/postgres-failover.service" || { fail "failover unit missing trusted launcher contract: ${pattern}"; return; }

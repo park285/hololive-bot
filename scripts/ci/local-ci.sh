@@ -135,7 +135,16 @@ run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
-run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
+# budget 벤치마크도 hololive-dbtest를 쓴다. DB를 주지 않으면 testcontainers가 Docker 소켓을 찾으므로
+# Docker가 없는 kapu에서도 돌도록 rootless Podman 일회용 PostgreSQL을 먼저 띄운다.
+# subshell에서 실행해 TEST_DATABASE_URL이 뒤의 테스트 선택으로 새지 않고, 종료 시 컨테이너를 지운다.
+run_youtube_plane_budget() {
+    if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
+        provision_integration_test_database
+    fi
+    ./scripts/perf/check-youtube-plane-budget.sh
+}
+(run_step "YouTube plane performance budget" run_youtube_plane_budget)
 # hololive-dbtest는 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 패키지들이 PostgreSQL 하나를 공유한다.
 # 패키지마다 testcontainers PostgreSQL을 띄우면 기동 비용과 남는 컨테이너 때문에 -p를 낮춰야 했다.
 # subshell에서 실행해 TEST_DATABASE_URL이 뒤의 통합 테스트 선택으로 새지 않고, 종료 시 컨테이너를 지운다.

@@ -5,28 +5,73 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "${script_dir}/../.." && pwd)"
 . "${script_dir}/python-runtime.sh"
 repo_python_init
-compose_file="${1:-${root}/deploy/compose/docker-compose.prod.yml}"
+unit_dir="${1:-${root}/deploy/quadlet/hololive-bot}"
 policy_file="${2:-${root}/scripts/ci/postgres-capacity-policy.tsv}"
 target_env_file="${3:-}"
-mode="${4:---verify-compose}"
+mode="${4:---verify-quadlet}"
 tmp="$(mktemp)"
 trap 'rm -f "${tmp}"' EXIT
 
 case "${mode}" in
-    --verify-compose)
-        container_cli="${CONTAINER_CLI:-docker}"
-        compose_cmd=("${container_cli}" compose)
-        if [[ "${container_cli}" == "podman" ]] && command -v podman-compose >/dev/null 2>&1; then
-            compose_cmd=(podman-compose)
-        fi
-        "${compose_cmd[@]}" -f "${compose_file}" config --no-interpolate --no-env-resolution --format json >"${tmp}"
+    --verify-quadlet)
+        # 배포 원본인 Quadlet unit의 Exec 인자와 Environment 기본값을 검증 입력으로 쓴다.
+        # [Container] Environment=KEY=${VAR}와 [Service] Environment=VAR=기본값을 ${VAR:-기본값}으로 합친다.
+        "${CI_PYTHON_BIN}" - "${unit_dir}" >"${tmp}" <<'PY'
+import json
+import re
+import shlex
+import sys
+from pathlib import Path
+
+services = {}
+for unit in sorted(Path(sys.argv[1]).glob("*.container")):
+    sections: dict[str, list[str]] = {}
+    current = None
+    pending = ""
+    for raw in unit.read_text().splitlines():
+        line = pending + raw.strip()
+        if line.endswith("\\"):
+            pending = line[:-1] + " "
+            continue
+        pending = ""
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line[1:-1]
+            continue
+        sections.setdefault(current, []).append(line)
+
+    def assignments(section: str, key: str) -> list[str]:
+        return [line.split("=", 1)[1] for line in sections.get(section, []) if line.split("=", 1)[0] == key]
+
+    def env_pairs(section: str) -> dict[str, str]:
+        pairs = {}
+        for value in assignments(section, "Environment"):
+            for item in shlex.split(value):
+                name, _, val = item.partition("=")
+                pairs[name] = val
+        return pairs
+
+    defaults = env_pairs("Service")
+    environment = {}
+    for name, value in env_pairs("Container").items():
+        match = re.fullmatch(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", value)
+        if match and match.group(1) in defaults:
+            value = f"${{{match.group(1)}:-{defaults[match.group(1)]}}}"
+        environment[name] = value
+    command = []
+    for value in assignments("Container", "Exec"):
+        command.extend(shlex.split(value))
+    services[unit.stem] = {"command": command, "environment": environment}
+print(json.dumps({"services": services}))
+PY
         ;;
     --target-env-only)
         [[ -n "${target_env_file}" ]] || { echo "[pg-capacity] --target-env-only requires a target env file" >&2; exit 2; }
         printf '{"services":{}}\n' >"${tmp}"
         ;;
     *)
-        echo "usage: $0 [compose-file] [policy-file] [target-env-file] [--verify-compose|--target-env-only]" >&2
+        echo "usage: $0 [quadlet-unit-dir] [policy-file] [target-env-file] [--verify-quadlet|--target-env-only]" >&2
         exit 2
         ;;
 esac
@@ -41,7 +86,7 @@ compose = json.loads(Path(sys.argv[1]).read_text())
 policy = Path(sys.argv[2]).read_text().splitlines()
 services = compose.get("services", {})
 target_env_path = Path(sys.argv[3]) if sys.argv[3] else None
-verify_compose = sys.argv[4] == "--verify-compose"
+verify_compose = sys.argv[4] == "--verify-quadlet"
 scale_overrides: dict[str, int] = {}
 for argument in sys.argv[5:]:
     match = re.fullmatch(r"--scale=([A-Za-z0-9][A-Za-z0-9_.-]*)=([0-9]+)", argument)
@@ -86,7 +131,7 @@ superuser_reserved_text = superuser_rows[0].split("|", 1)[1]
 if not re.fullmatch(r"0|[1-9][0-9]*", superuser_reserved_text):
     raise SystemExit("[pg-capacity] policy has an invalid @superuser-reserved")
 superuser_reserved = int(superuser_reserved_text)
-# compose가 superuser_reserved_connections를 지정하지 않으면 PostgreSQL 기본값 3이 적용된다.
+# unit이 superuser_reserved_connections를 지정하지 않으면 PostgreSQL 기본값 3이 적용된다.
 postgres_default_superuser_reserved = 3
 if verify_compose:
     postgres = services.get("holo-postgres", {})
@@ -131,7 +176,7 @@ for line in policy:
     if verify_compose and service_name:
         service = services.get(service_name)
         if service is None:
-            raise SystemExit(f"[pg-capacity] missing Compose service: {service_name}")
+            raise SystemExit(f"[pg-capacity] missing Quadlet unit: {service_name}")
         if env_key:
             environment = service.get("environment", {})
             if isinstance(environment, list):
@@ -186,7 +231,7 @@ if reserve < min_reserve:
         f"[pg-capacity] connection budget exhausted: max={server_limit} superuser_reserved={superuser_reserved} "
         f"allocated={used} reserve={reserve}, want reserve >= {min_reserve}"
     )
-source = f"target-env:{target_env_path}" if target_env_path is not None else "compose-defaults"
+source = f"target-env:{target_env_path}" if target_env_path is not None else "quadlet-defaults"
 print(
     f"[pg-capacity] source={source} max={server_limit} superuser_reserved={superuser_reserved} "
     f"allocated={used} reserve={reserve}; runtime, migrator, exporter and nightly allocations included"

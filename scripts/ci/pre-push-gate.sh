@@ -159,17 +159,31 @@ run_content_gates() {
     return 0
   fi
 
-  run_if_changed scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/compose.sh \
-    scripts/deploy/compose-redeploy-service.sh build-all.sh scripts/systemd/admin-dashboard-ingress.nft
-  run_if_changed scripts/deploy/admin-network_test.sh deploy/compose/docker-compose.prod.yml deploy/compose/docker-compose.live-compat.yml
+  run_if_changed scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/quadlet-prestart.sh \
+    scripts/deploy/lib/public-bind-mounts.sh scripts/systemd/admin-dashboard-ingress.nft
+  # 중앙 Quadlet 원본이 systemd unit으로 생성되지 않으면 해당 서비스가 기동되지 않는다.
+  if echo "$changed_files" | grep -q '^deploy/quadlet/'; then
+    for quadlet_dir in deploy/quadlet/hololive-bot deploy/quadlet/hololive-bot-standby; do
+      # 상대 경로를 주면 quadlet은 unit을 하나도 읽지 않고 rc=0으로 끝난다(2026-11-04 실측).
+      QUADLET_UNIT_DIRS="${ROOT_DIR}/${quadlet_dir}" /usr/libexec/podman/quadlet -dryrun >/dev/null
+    done
+  fi
+  run_if_changed scripts/deploy/sync-opt-current_test.sh \
+    scripts/deploy/sync-opt-current.sh scripts/deploy/lib/compose-env.sh deploy/quadlet \
+    scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv
+  run_if_changed scripts/deploy/quadlet-redeploy-service_test.sh \
+    scripts/deploy/quadlet-redeploy-service.sh scripts/deploy/quadlet-rollback-service.sh \
+    scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv deploy/quadlet
   run_if_changed scripts/ci/check-recurring-security-scan-contract.sh \
     scripts/ci/run-final-image-scan.sh scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt \
-    scripts/ci/disabled-bake-attestations.jq scripts/ci/npm-audit-manifest.txt scripts/ci/go-tooling.sh \
-    .github/workflows/security.yml deploy/compose
+    scripts/ci/npm-audit-manifest.txt scripts/ci/go-tooling.sh \
+    .github/workflows/security.yml deploy/quadlet
   echo "[pre-push] deploy/runtime script tests (run when the test or its target changed)"
   run_if_changed scripts/build/build-youtube-collector-go_test.sh \
     scripts/build/build-youtube-collector-go.sh scripts/build/check-youtube-collector-go-artifact.sh \
     scripts/ci/public-pr-go-gate.sh scripts/ci/python-runtime.sh hololive/hololive-youtube-collector/Makefile
+  run_if_changed scripts/build/build-all_test.sh \
+    build-all.sh scripts/deploy/lib/source-revision.sh scripts/deploy/lib/compose-services.sh
   run_if_changed scripts/build/image-runtime-tree-permissions_test.sh \
     hololive/hololive-youtube-collector/Dockerfile.po-sandbox hololive/hololive-youtube-collector/Dockerfile \
     hololive/hololive-alarm-worker/Dockerfile
@@ -185,42 +199,26 @@ run_content_gates() {
     scripts/deploy/lib/po-ap-rollback-remote.sh scripts/deploy/lib/ap-prechange-config.sh scripts/deploy/lib/ap-host.sh \
     scripts/logs/ap-status.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh \
-    scripts/deploy/lib/source-revision.sh deploy/compose/docker-compose.prod.yml \
+    scripts/deploy/lib/source-revision.sh \
     hololive/hololive-api/Dockerfile hololive/hololive-alarm-worker/Dockerfile hololive/hololive-youtube-collector/Dockerfile
-  run_if_changed scripts/deploy/source-revision-entrypoints_test.sh \
-    build-all.sh scripts/deploy/compose-redeploy-service.sh scripts/deploy/lib
   run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
-  run_if_changed scripts/deploy/test-postgres-capacity-entrypoints.sh \
-    scripts/ci/check-postgres-capacity.sh scripts/deploy/compose-redeploy-service.sh \
-    scripts/deploy/compose.sh scripts/deploy/lib/postgres-capacity.sh deploy/compose/docker-compose.prod.yml
   run_if_changed hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback_test.sh \
     hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
-  run_if_changed scripts/deploy/test-compose-security-defaults.sh deploy/compose deploy/images/nginx deploy/nginx \
-    scripts/ci/public-pr-frontend-gate.sh scripts/ci/python-runtime.sh scripts/deploy/lib/public-bind-mounts.sh
-  run_if_changed scripts/ops/postgres-failover_test.sh scripts/ops scripts/systemd deploy/compose/docker-compose.standby.yml
+  run_if_changed scripts/ops/postgres-failover_test.sh scripts/ops scripts/systemd deploy/quadlet
   run_if_changed scripts/logs/test-stream-mirror-retention.sh scripts/logs/lib/stream.sh
   run_if_changed scripts/deploy/verify-exec-tree-ownership_test.sh scripts/deploy/verify-exec-tree-ownership.sh
-  run_if_changed scripts/deploy/systemd-compose-up_test.sh \
-    scripts/deploy/systemd-compose-up.sh scripts/deploy/systemd-compose-down.sh scripts/deploy/compose.sh \
-    scripts/deploy/sync-opt-current.sh scripts/systemd deploy/compose/docker-compose.live-compat.yml \
-    deploy/compose/docker-compose.youtube-collector-disabled.yml
   run_if_changed scripts/deploy/lib/public-bind-mounts_test.sh scripts/deploy/lib/public-bind-mounts.sh deploy/nginx
-  run_if_changed scripts/deploy/x-spaces-overlay_test.sh \
-    scripts/deploy/compose.sh scripts/deploy/lib deploy/compose/docker-compose.x-spaces.yml
   run_if_changed scripts/runtime/set-iris-base-url_test.sh scripts/runtime/set-iris-base-url.sh
   run_if_changed scripts/deploy/ap-host-native-deploy_test.sh \
     scripts/deploy/ap-host-native-deploy.sh scripts/deploy/ap-host-native-rollback.sh \
+    scripts/deploy/collector-cutover-failure_test.sh \
     scripts/deploy/ap-completion-check.sh \
     scripts/deploy/lib scripts/logs/ap-host-native-status.sh
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib deploy/compose
-
-  if echo "$changed_files" | grep -qE '^(deploy/compose/|scripts/ci/public-pr-frontend-gate.sh)'; then
-    bash scripts/ci/public-pr-frontend-gate.sh
-  fi
 
   echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
   LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \

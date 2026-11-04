@@ -97,10 +97,6 @@ jobs:
         if: matrix.module == 'hololive/hololive-youtube-collector'
         run: bash scripts/ci/public-pr-collector-helper-install.sh
 
-      - name: Docker Compose
-        if: matrix.module == 'hololive/hololive-shared'
-        uses: ./.github/actions/docker-compose
-
       - name: Module tidy drift
         run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" tidy
 
@@ -109,26 +105,6 @@ jobs:
 
       - name: Module race tests
         run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" race
-
-  frontend:
-    name: frontend
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Checkout hololive-bot
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
-      - name: Docker Compose
-        uses: ./.github/actions/docker-compose
-
-      - name: Web runtime ownership and capability gate
-        run: bash scripts/ci/public-pr-frontend-gate.sh
 
   collector-helper:
     name: collector-helper
@@ -160,7 +136,6 @@ jobs:
     needs:
       - policy
       - go-modules
-      - frontend
       - collector-helper
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -172,10 +147,8 @@ jobs:
         env:
           POLICY_RESULT: ${{ needs.policy.result }}
           GO_MODULES_RESULT: ${{ needs.go-modules.result }}
-          FRONTEND_RESULT: ${{ needs.frontend.result }}
           COLLECTOR_HELPER_RESULT: ${{ needs.collector-helper.result }}
         run: |
           test "${POLICY_RESULT}" = "success"
           test "${GO_MODULES_RESULT}" = "success"
-          test "${FRONTEND_RESULT}" = "success"
           test "${COLLECTOR_HELPER_RESULT}" = "success"

@@ -10,10 +10,11 @@ INTEGRATION_TAG_PACKAGES=(
     ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
     ./hololive/hololive-api/internal/planes/admin/internal/service/dispatchops
 )
-INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}"
-INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11}"
+INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-docker.io/library/postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}"
+INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-docker.io/valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11}"
 INTEGRATION_TEST_DB_CONTAINER=""
 INTEGRATION_TEST_VALKEY_CONTAINER=""
+# 일회용 PostgreSQL·Valkey는 rootless Podman으로 띄운다. short-name 해석에 기대지 않도록 image는 전체 이름이다.
 
 check_integration_tag_compilation() {
     run_step "Integration-tag vet" \
@@ -27,7 +28,7 @@ cleanup_integration_test_database() {
 
     local container="${INTEGRATION_TEST_DB_CONTAINER}"
     INTEGRATION_TEST_DB_CONTAINER=""
-    if ! docker rm --force --volumes "${container}" >/dev/null; then
+    if ! podman rm --force --volumes "${container}" >/dev/null; then
         echo "failed to remove integration test PostgreSQL container ${container}" >&2
         return 1
     fi
@@ -40,7 +41,7 @@ cleanup_integration_test_valkey() {
 
     local container="${INTEGRATION_TEST_VALKEY_CONTAINER}"
     INTEGRATION_TEST_VALKEY_CONTAINER=""
-    if ! docker rm --force --volumes "${container}" >/dev/null; then
+    if ! podman rm --force --volumes "${container}" >/dev/null; then
         echo "failed to remove integration test Valkey container ${container}" >&2
         return 1
     fi
@@ -62,7 +63,7 @@ provision_integration_test_database() {
     local published_port
     local owner_token
 
-    INTEGRATION_TEST_DB_CONTAINER="$(docker run --detach --rm \
+    INTEGRATION_TEST_DB_CONTAINER="$(podman run --detach --rm \
         --label io.iris.observability.logs=exclude \
         --publish 127.0.0.1::5432 \
         --env POSTGRES_USER="${postgres_user}" \
@@ -76,12 +77,12 @@ provision_integration_test_database() {
     trap cleanup_integration_test_services EXIT
 
     for _ in {1..60}; do
-        if docker exec "${INTEGRATION_TEST_DB_CONTAINER}" \
+        if podman exec "${INTEGRATION_TEST_DB_CONTAINER}" \
             pg_isready --host 127.0.0.1 --username "${postgres_user}" --dbname "${postgres_database}" >/dev/null 2>&1; then
             ready=true
             break
         fi
-        if [[ "$(docker inspect --format '{{.State.Running}}' "${INTEGRATION_TEST_DB_CONTAINER}" 2>/dev/null || true)" != "true" ]]; then
+        if [[ "$(podman inspect --format '{{.State.Running}}' "${INTEGRATION_TEST_DB_CONTAINER}" 2>/dev/null || true)" != "true" ]]; then
             break
         fi
         sleep 1
@@ -91,7 +92,7 @@ provision_integration_test_database() {
         return 1
     fi
 
-    published_address="$(docker port "${INTEGRATION_TEST_DB_CONTAINER}" 5432/tcp)"
+    published_address="$(podman port "${INTEGRATION_TEST_DB_CONTAINER}" 5432/tcp)"
     published_port="${published_address##*:}"
     if [[ ! "${published_port}" =~ ^[0-9]+$ ]]; then
         echo "invalid integration test PostgreSQL port: ${published_address}" >&2
@@ -99,7 +100,7 @@ provision_integration_test_database() {
     fi
 
     owner_token="local-ci-${INTEGRATION_TEST_DB_CONTAINER}"
-    docker exec "${INTEGRATION_TEST_DB_CONTAINER}" \
+    podman exec "${INTEGRATION_TEST_DB_CONTAINER}" \
         psql --set ON_ERROR_STOP=1 --host 127.0.0.1 --username "${postgres_user}" --dbname "${postgres_database}" \
         --command "CREATE TABLE ci_ephemeral_sentinel (token TEXT NOT NULL); INSERT INTO ci_ephemeral_sentinel(token) VALUES ('${owner_token}');" \
         >/dev/null
@@ -114,18 +115,18 @@ provision_integration_test_valkey() {
     local published_address
     local published_port
 
-    INTEGRATION_TEST_VALKEY_CONTAINER="$(docker run --detach --rm \
+    INTEGRATION_TEST_VALKEY_CONTAINER="$(podman run --detach --rm \
         --label io.iris.observability.logs=exclude \
         --publish 127.0.0.1::6379 \
         "${INTEGRATION_VALKEY_IMAGE}")"
     trap cleanup_integration_test_services EXIT
 
     for _ in {1..60}; do
-        if docker exec "${INTEGRATION_TEST_VALKEY_CONTAINER}" valkey-cli ping 2>/dev/null | grep -qx PONG; then
+        if podman exec "${INTEGRATION_TEST_VALKEY_CONTAINER}" valkey-cli ping 2>/dev/null | grep -qx PONG; then
             ready=true
             break
         fi
-        if [[ "$(docker inspect --format '{{.State.Running}}' "${INTEGRATION_TEST_VALKEY_CONTAINER}" 2>/dev/null || true)" != "true" ]]; then
+        if [[ "$(podman inspect --format '{{.State.Running}}' "${INTEGRATION_TEST_VALKEY_CONTAINER}" 2>/dev/null || true)" != "true" ]]; then
             break
         fi
         sleep 1
@@ -135,7 +136,7 @@ provision_integration_test_valkey() {
         return 1
     fi
 
-    published_address="$(docker port "${INTEGRATION_TEST_VALKEY_CONTAINER}" 6379/tcp)"
+    published_address="$(podman port "${INTEGRATION_TEST_VALKEY_CONTAINER}" 6379/tcp)"
     published_port="${published_address##*:}"
     if [[ ! "${published_port}" =~ ^[0-9]+$ ]]; then
         echo "invalid integration test Valkey port: ${published_address}" >&2

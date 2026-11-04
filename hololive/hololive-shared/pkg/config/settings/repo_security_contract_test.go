@@ -67,40 +67,6 @@ func TestRepoEnvExample_DefaultsToProductionAppEnv(t *testing.T) {
 	}
 }
 
-func assertShortLinkIngressBoundary(t *testing.T, cfg renderedCompose) {
-	t.Helper()
-
-	content := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf.template")
-	listener := "listen " + centralIngressBindPlaceholder + ":30192;"
-	server := nginxBlockContaining(t, content, "server {", listener)
-
-	assertExactNginxDirectives(t, server, "allow", []string{"127.0.0.1", centralIngressBindPlaceholder, "100.100.1.5"})
-	assertExactNginxDirectives(t, server, "deny", []string{"all"})
-
-	locationAnchor := "location ^~ " + shortlinkcontracts.YouTubePathPrefix
-	location := nginxBlockContaining(t, server, locationAnchor, "proxy_pass")
-	listenerAddr := composeEnvironment(t, cfg, serviceHololiveAPI)["HOLOLIVE_SHORT_LINK_ADDR"]
-	wantProxy := "http://127.0.0.1" + listenerAddr
-	assertExactNginxDirectives(t, location, "proxy_pass", []string{wantProxy})
-	assertExactNginxDirectives(t, location, "limit_req", []string{"zone=shortlink_requests burst=40 nodelay"})
-	assertExactNginxDirectives(t, location, "limit_conn", []string{"shortlink_connections 32"})
-
-	catchAll := nginxBlockContaining(t, server, "location /", "return 404;")
-	assertExactNginxDirectives(t, catchAll, "return", []string{"404"})
-
-	for _, required := range []string{
-		"map $http_x_forwarded_for $shortlink_client {",
-		"limit_req_zone $shortlink_client zone=shortlink_requests:1m rate=20r/s;",
-		"limit_conn_zone $shortlink_client zone=shortlink_connections:1m;",
-		"limit_req_status 429;",
-		"limit_conn_status 429;",
-	} {
-		if !strings.Contains(content, required) {
-			t.Fatalf("short-link ingress missing admission control %q", required)
-		}
-	}
-}
-
 func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 	publicTemplate := readRepoFile(t, "deploy/nginx/holoshi-public-shortlink.conf")
 	if count := len(nginxLocationPattern.FindAllString(publicTemplate, -1)); count != 3 {

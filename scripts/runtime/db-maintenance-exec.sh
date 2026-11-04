@@ -5,8 +5,8 @@ usage() {
   cat >&2 <<'EOF'
 usage: db-maintenance-exec.sh <command> [args...]
 
-  중앙 런타임 호스트에서 실행합니다. 그 호스트에는 psql 이 없고 libpq-connection.sh 가
-  PGPASSWORD 와 connection URI 를 금지하므로, PostgreSQL 이미지를 일회성으로 띄워
+  중앙 런타임 호스트(rootful Podman)에서 실행합니다. 그 호스트에는 psql 이 없고 libpq-connection.sh 가
+  PGPASSWORD 와 connection URI 를 금지하므로, 실행 중인 holo-postgres 이미지를 일회성으로 띄워
   file-only 계약(PGSERVICE + PGPASSFILE)만으로 접속합니다.
   마운트된 migrations 디렉터리는 /migrations 입니다.
 
@@ -24,9 +24,10 @@ SECRETS_DIR="${SECRETS_DIR:-/etc/stack-secrets/hololive-bot}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-${OPT_CURRENT}/hololive/hololive-api/scripts/migrations}"
 PG_SERVICE="${PG_SERVICE:-hololive-db-maintenance}"
 
-DOCKER=(docker)
+# 중앙 컨테이너는 rootful Podman이 소유한다. 비root 실행은 sudo로 같은 store를 쓴다.
+PODMAN=(podman)
 if [[ "$(id -u)" -ne 0 ]]; then
-  DOCKER=(sudo -n docker)
+  PODMAN=(sudo -n podman)
 fi
 
 TEST=(test -e)
@@ -41,13 +42,16 @@ for path in "${MIGRATIONS_DIR}" "${SECRETS_DIR}/postgres/pg_service.conf" \
   fi
 done
 
-image="$("${DOCKER[@]}" inspect "${DB_CONTAINER}" -f '{{.Config.Image}}')" || {
+# Podman .Image는 실행 중인 container의 image ID다. 같은 image를 tag 변경과 무관하게 쓴다.
+image="$("${PODMAN[@]}" inspect "${DB_CONTAINER}" -f '{{.Image}}')" || {
   echo "cannot resolve image from ${DB_CONTAINER}" >&2; exit 1; }
-network="$("${DOCKER[@]}" inspect "${DB_CONTAINER}" \
+network="$("${PODMAN[@]}" inspect "${DB_CONTAINER}" \
   -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{break}}{{end}}')" || {
   echo "cannot resolve network from ${DB_CONTAINER}" >&2; exit 1; }
+[[ -n "${image}" && -n "${network}" ]] || { echo "cannot resolve image/network from ${DB_CONTAINER}" >&2; exit 1; }
 
-exec "${DOCKER[@]}" run --rm --network "${network}" --user 0:0 \
+# bind 원본의 SELinux label은 rhel-host-security fcontext가 소유하므로 :z/:Z로 relabel하지 않는다.
+exec "${PODMAN[@]}" run --rm --pull=never --network "${network}" --user 0:0 \
   --read-only --tmpfs /tmp:size=64m \
   -v "${MIGRATIONS_DIR}:/migrations:ro" \
   -v "${SECRETS_DIR}/postgres:/run/hololive-bot/postgres:ro" \

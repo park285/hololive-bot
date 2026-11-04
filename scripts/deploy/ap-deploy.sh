@@ -10,6 +10,7 @@ EXCLUDES="${EXCLUDES:-$REPO_ROOT/scripts/deploy/ap-rsync-excludes.txt}"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 . "$REPO_ROOT/scripts/deploy/lib/ap-prechange-config.sh"
 . "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
+. "$REPO_ROOT/scripts/deploy/lib/po-sandbox-image.sh"
 
 AP_HOST_ARG="${1:-}"
 MODE="${2:---dry-run}"
@@ -111,7 +112,7 @@ transfer_revision=""
 image_archive=""
 issuer_build_root=""
 collector_check_id=""
-trap 'rm -f "$preview_file" "$rsync_files_from"; rm -rf "$transfer_root"; [[ -z "$image_archive" ]] || rm -f "$image_archive"; [[ -z "$issuer_build_root" ]] || rm -rf "$issuer_build_root"; [[ -z "$collector_check_id" ]] || docker rm "$collector_check_id" >/dev/null' EXIT
+trap 'rm -f "$preview_file" "$rsync_files_from"; rm -rf "$transfer_root"; [[ -z "$image_archive" ]] || rm -f "$image_archive"; [[ -z "$issuer_build_root" ]] || rm -rf "$issuer_build_root"; [[ -z "$collector_check_id" ]] || podman rm "$collector_check_id" >/dev/null' EXIT
 
 stage_transfer_workspace
 build_rsync_files_from
@@ -132,10 +133,15 @@ if [[ "$REVISION" != "$transfer_revision" ]]; then
 fi
 export REVISION
 
+# compose AP는 Docker다(ap_host_load가 AP_CONTAINER_RUNTIME=docker를 강제). kapu는 Podman으로 빌드해 docker-archive로
+# 보내며, 빌드 이름을 docker.io/library/로 고정해야 docker load가 AP compose의 짧은 이름(IMAGE_REF)으로 등록한다.
 IMAGE_REF="hololive-youtube-collector:prod"
+BUILD_IMAGE_REF="docker.io/library/$IMAGE_REF"
 PO_IMAGE_REF="hololive-youtube-po-sandbox:prod"
 TARGET_PLATFORM="$(
   remote "set -euo pipefail
+$(declare -f po_require_docker_config_digest_store)
+po_require_docker_config_digest_store
 runtime_arch=\$(sudo -n docker info --format '{{.Architecture}}')
 case \"\$runtime_arch\" in
   aarch64|arm64) printf '%s\\n' linux/arm64 ;;
@@ -148,30 +154,29 @@ case \"\$runtime_arch\" in
 esac"
 )"
 
-echo "[BUILD] Building $IMAGE_REF for $TARGET_PLATFORM"
-docker buildx build \
+[[ "$TARGET_PLATFORM" == linux/arm64 ]] || { echo 'Seoul issuer deployment requires arm64' >&2; exit 1; }
+echo "[BUILD] Building $BUILD_IMAGE_REF for $TARGET_PLATFORM"
+# docker 형식은 AP Docker가 쓰는 HEALTHCHECK를 보존하고 docker-archive 저장 때 config를 바꾸지 않는다.
+podman build \
   --platform "$TARGET_PLATFORM" \
-  --provenance=false \
-  --sbom=false \
-  --load \
-  --tag "$IMAGE_REF" \
+  --format docker \
+  --tag "$BUILD_IMAGE_REF" \
   --file "$REPO_ROOT/hololive/hololive-youtube-collector/Dockerfile" \
   --build-arg "VERSION=$HOLO_API_VERSION" \
   --build-arg "REVISION=$REVISION" \
   "$REPO_ROOT"
-built_revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE_REF")"
+built_revision="$(podman image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$BUILD_IMAGE_REF")"
 [[ "$built_revision" == "$REVISION" ]]
-built_platform="$(docker image inspect -f '{{.Os}}/{{.Architecture}}{{if .Variant}}/{{.Variant}}{{end}}' "$IMAGE_REF")"
+built_platform="$(podman image inspect -f '{{.Os}}/{{.Architecture}}' "$BUILD_IMAGE_REF")"
 [[ "$built_platform" == "$TARGET_PLATFORM" ]]
-[[ "$TARGET_PLATFORM" == linux/arm64 ]] || { echo 'Seoul issuer deployment requires arm64' >&2; exit 1; }
 issuer_build_root="$(mktemp -d)"
-"$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" arm64 "$REVISION" "$HOLO_API_VERSION" "$issuer_build_root/issuer"
+"$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" arm64 "$REVISION" "$HOLO_API_VERSION" "$issuer_build_root/issuer" docker
 test -s "$issuer_build_root/issuer/image.tar"
 mkdir -p "$issuer_build_root/collector-check"
-collector_check_id="$(docker create "$IMAGE_REF")"
-docker cp "$collector_check_id:/app/manifest.json" "$issuer_build_root/collector-check/manifest.json"
-docker cp "$collector_check_id:/app/bin/youtube-collector" "$issuer_build_root/collector-check/youtube-collector"
-docker rm "$collector_check_id" >/dev/null
+collector_check_id="$(podman create "$BUILD_IMAGE_REF")"
+podman cp "$collector_check_id:/app/manifest.json" "$issuer_build_root/collector-check/manifest.json"
+podman cp "$collector_check_id:/app/bin/youtube-collector" "$issuer_build_root/collector-check/youtube-collector"
+podman rm "$collector_check_id" >/dev/null
 collector_check_id=""
 python3 - "$issuer_build_root/collector-check/manifest.json" "$issuer_build_root/collector-check/youtube-collector" "$REVISION" "$HOLO_API_VERSION" <<'PY'
 import hashlib, json, sys
@@ -179,9 +184,10 @@ m=json.load(open(sys.argv[1])); assert (m['source_revision'],m['version'],m['go'
 assert hashlib.sha256(open(sys.argv[2], 'rb').read()).hexdigest() == m['files']['bin/youtube-collector']
 PY
 image_archive="$(mktemp)"
-docker save --output "$image_archive" "$IMAGE_REF"
+podman save --format docker-archive --output "$image_archive" "$BUILD_IMAGE_REF"
 test -s "$image_archive"
-collector_image_id="$(python3 "$REPO_ROOT/scripts/build/po-sandbox-manifest.py" image-ids "$image_archive" "$(docker image inspect -f '{{.Id}}' "$IMAGE_REF")")"
+# identity는 config digest 한 줄이며 AP의 classic overlay2 store(po_require_docker_config_digest_store)에서만 대조된다.
+collector_image_id="$(python3 "$REPO_ROOT/scripts/build/po-sandbox-manifest.py" image-ids "$image_archive" "sha256:$(podman image inspect -f '{{.Id}}' "$BUILD_IMAGE_REF")")"
 collector_archive_sha="$(sha256sum "$image_archive")"
 collector_archive_sha="${collector_archive_sha%% *}"
 [[ "$collector_archive_sha" =~ ^[0-9a-f]{64}$ ]]
@@ -189,7 +195,6 @@ collector_archive_sha="${collector_archive_sha%% *}"
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"
-PROD_COMPOSE_FILE="deploy/compose/docker-compose.prod.yml"
 
 change_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
@@ -254,10 +259,7 @@ else
   printf 'absent\n' > '$backup_dir/po-sandbox-prechange.state'
 fi
 # compose 파일은 deploy/compose에서 읽는다.
-prod_prechange_file='$PROD_COMPOSE_FILE'
-if [[ -f deploy/compose/docker-compose.collector.yml ]]; then
-  prod_prechange_file=deploy/compose/docker-compose.collector.yml
-fi
+prod_prechange_file=deploy/compose/docker-compose.collector.yml
 ap_prechange_file='$AP_COMPOSE_FILE'
 test -r \"\$prod_prechange_file\"
 test -r \"\$ap_prechange_file\"
@@ -272,9 +274,6 @@ sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 $(declare -f ap_prechange_config)
 prechange_files=(-f \"\$ap_prechange_file\")
-if [[ \"\$prod_prechange_file\" == '$PROD_COMPOSE_FILE' ]]; then
-  prechange_files=(-f \"\$prod_prechange_file\" \"\${prechange_files[@]}\")
-fi
 ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh \"\${prechange_files[@]}\" config --quiet
 echo backup_dir='$backup_dir'"
 # 사전 mirror sync 전에 보존한 pair 또는 실행 중 loaded hash로 입증한 bytes만 백업한다.
@@ -409,7 +408,7 @@ cd ~/hololive-bot
 . scripts/deploy/lib/po-sandbox-image.sh
 if [[ \$(cat '$backup_dir/po-sandbox-prechange.state') == present ]]; then
   previous_po_revision=\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"source_revision\"])' '$backup_dir/po-sandbox-prechange-manifest.json')
-  po_verify_image '$rollback_po_image_tag' '$backup_dir/po-sandbox-prechange-manifest.json' \"\$previous_po_revision\" arm64 '$backup_dir/po-sandbox-prechange.image-id'
+  po_verify_image docker '$rollback_po_image_tag' '$backup_dir/po-sandbox-prechange-manifest.json' \"\$previous_po_revision\" arm64 '$backup_dir/po-sandbox-prechange.image-id'
 fi
 (cd '$backup_dir' && sha256sum --check --strict image.tar.sha256)
 [[ \$(sha256sum '$backup_dir/hololive-youtube-collector-prod.tar' | cut -d' ' -f1) == '$collector_archive_sha' ]]"
@@ -421,8 +420,9 @@ fi
 remote "set -euo pipefail
 cd ~/hololive-bot
 . scripts/deploy/lib/po-sandbox-image.sh
+po_require_docker_config_digest_store
 sudo -n docker load --input '$backup_dir/image.tar'
-po_verify_image '$PO_IMAGE_REF' '$backup_dir/po-sandbox-candidate-manifest.json' '$REVISION' arm64 '$backup_dir/po-sandbox-candidate.image-id'
+po_verify_image docker '$PO_IMAGE_REF' '$backup_dir/po-sandbox-candidate-manifest.json' '$REVISION' arm64 '$backup_dir/po-sandbox-candidate.image-id'
 [[ \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$PO_IMAGE_REF') == '$HOLO_API_VERSION' ]]
 image_archive='$backup_dir/hololive-youtube-collector-prod.tar'
 trap 'rm -f \"\$image_archive\"' EXIT

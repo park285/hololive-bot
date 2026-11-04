@@ -35,7 +35,7 @@ HTTP 401 또는 X 오류 번호 32/89는 인증 거부다. 일반 403은 접근 
 }
 ```
 
-사용자 ID와 채널 매핑은 검증된 실제 값을 넣는다. 알림의 멤버 이름은 설정에 적지 않고 발송 때 `channel_id`로 members 정본에서 정한다([멤버 표시명 예외 계약](../contracts/alarm.md#멤버-표시명-예외-계약)). 알 수 없는 필드는 시작 오류이므로, 이 변경(2026-10-05)을 배포할 때 운영 설정의 `member_name`을 함께 지운다. 최대 100개 계정, 조회 간격 120~3600초이며 계정·채널 중복은 허용하지 않는다. 호스트 `compose.env`의 `HOLOLIVE_X_SPACES_ENABLED=1`로 활성화하면 기존 Compose 진입점이 `deploy/compose/docker-compose.x-spaces.yml`을 추가한다. 기본값은 비활성이며 재부팅·수동 배포에서도 같은 구성을 유지한다. 새 DB migration을 먼저 적용하고 API·worker·관리자 웹의 호환 버전을 함께 배포한다. cookie 자체는 배포 파일에 포함하지 않고 관리자에서 연결한다.
+사용자 ID와 채널 매핑은 검증된 실제 값을 넣는다. 알림의 멤버 이름은 설정에 적지 않고 발송 때 `channel_id`로 members 정본에서 정한다([멤버 표시명 예외 계약](../contracts/alarm.md#멤버-표시명-예외-계약)). 알 수 없는 필드는 시작 오류이므로, 이 변경(2026-10-05)을 배포할 때 운영 설정의 `member_name`을 함께 지운다. 최대 100개 계정, 조회 간격 120~3600초이며 계정·채널 중복은 허용하지 않는다. 호스트 `compose.env`의 `HOLOLIVE_X_SPACES_ENABLED=1`이면 `scripts/deploy/sync-opt-current.sh`가 `deploy/quadlet/optional/x-spaces/`의 `40-x-spaces.conf` drop-in을 API·worker unit에 설치하고, `0`이면 지운다. 기본값은 비활성이며 설치된 drop-in이 재부팅·unit 재시작에서도 같은 구성을 유지한다. 새 DB migration을 먼저 적용하고 API·worker·관리자 웹의 호환 버전을 함께 배포한다. cookie 자체는 배포 파일에 포함하지 않고 관리자에서 연결한다.
 
 ## 발송과 실패 경계
 

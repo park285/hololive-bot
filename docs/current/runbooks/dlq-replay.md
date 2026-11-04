@@ -29,7 +29,7 @@ Alarm dispatch의 DLQ·격리 delivery를 확인하고 재처리 가능성을 �
 관리자 발송 원장 API([admin dispatch operations](admin-dispatch-operations.md))로 상태별 건수, `status=dlq`·`status=quarantined` 목록, delivery 상세와 같은 send unit 묶음을 조회합니다.
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
+sudo journalctl -u hololive-alarm-worker.service -n 300
 ```
 
 ## Replay Safety Checklist

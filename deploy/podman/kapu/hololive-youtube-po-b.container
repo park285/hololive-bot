@@ -5,11 +5,15 @@ Description=hololive YouTube PO issuer for collector b
 [Container]
 ContainerName=hololive-youtube-po-b
 Image=docker.io/library/hololive-youtube-po-sandbox:prod
+Pull=never
 Exec=--socket /run/hololive-youtube-po/worker.sock
 User=65532:1000
+# 호스트 ID와 분리한다. collector-b와 같이 크기 65536·socket :idmap이어야 on-disk 65532:1000이 유지돼 client가 접속한다.
+UserNS=auto:size=65536
 Network=none
 ReadOnly=true
-Tmpfs=/tmp:size=64m,mode=1777
+ReadOnlyTmpfs=false
+Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
 DropCapability=ALL
 NoNewPrivileges=true
 Ulimit=core=0:0
@@ -17,11 +21,12 @@ PidsLimit=32
 Memory=512m
 PodmanArgs=--cpus=1
 ShmSize=64m
-Volume=hololive-youtube-po-b.volume:/run/hololive-youtube-po
+Volume=hololive-youtube-po-b.volume:/run/hololive-youtube-po:idmap
 HealthCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtube-po/worker.sock"]
 HealthInterval=30s
 HealthStartPeriod=30s
-HealthOnFailure=kill
+# 중앙 po-c와 같이, 재시작 카운트가 issuer generation 교체 횟수라 unhealthy 자동 kill을 두지 않는다
+# (Docker 시절에도 po 컨테이너에는 deunhealth label이 없었다).
 
 [Service]
 Restart=always

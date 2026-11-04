@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 제한된 sudo·SSH 명령으로 이전 primary에서 실행한다.
-# 영속 격리 표시로 재부팅 후 Compose 기동을 막고, 소비자는 유지한 채 Autoheal·PostgreSQL을 중지한다.
+# 영속 격리 표시로 재부팅·의존 기동에서 PostgreSQL unit을 막고, 소비자는 유지한 채 PostgreSQL만 중지한다.
 
 set -euo pipefail
 
@@ -9,10 +9,11 @@ EXPECTED_PRIMARY_HOST="${2:-}"
 NEW_PRIMARY_HOST="${3:-}"
 NEW_PRIMARY_PORT="${4:-}"
 TAILSCALE_SERVICE="${5:-}"
-COMPOSE_UNIT="${POSTGRES_PRIMARY_FENCE_COMPOSE_UNIT:-hololive-compose.service}"
-POSTGRES_CONTAINER="${POSTGRES_PRIMARY_FENCE_CONTAINER:-holo-postgres}"
-AUTOHEAL_CONTAINER="${POSTGRES_PRIMARY_FENCE_AUTOHEAL_CONTAINER:-deunhealth}"
+POSTGRES_UNIT=holo-postgres.service
 TAILSCALE_PATH="${POSTGRES_PRIMARY_FENCE_TAILSCALE_PATH:-/usr/bin/tailscale}"
+PODMAN_PATH="${POSTGRES_PRIMARY_FENCE_PODMAN_PATH:-/usr/bin/podman}"
+POSTGRES_CONTAINER=holo-postgres
+POSTGRES_DATA_VOLUME=hololive-bot_holo-pg-data
 STATE_DIR="${POSTGRES_PRIMARY_FENCE_STATE_DIR:-/var/lib/hololive-postgres-fence}"
 ALLOW_TEST_STATE_DIR="${POSTGRES_PRIMARY_FENCE_ALLOW_TEST_STATE_DIR:-0}"
 ALLOW_NON_ROOT_TEST="${POSTGRES_PRIMARY_FENCE_ALLOW_NON_ROOT_FOR_TEST:-0}"
@@ -23,8 +24,6 @@ NOW="${POSTGRES_PRIMARY_FENCE_NOW:-$(/usr/bin/date +%s)}"
 
 is_token() { [[ "$1" =~ ^[A-Za-z0-9._:-]{8,128}$ ]]; }
 is_host() { [[ "$1" =~ ^[A-Za-z0-9._:-]+$ ]]; }
-is_unit() { [[ "$1" =~ ^[A-Za-z0-9_.@:-]+\.service$ ]]; }
-is_container() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 is_tailscale_service() { [[ "$1" =~ ^svc:[a-z0-9][a-z0-9-]{0,62}$ ]]; }
 
 trusted_executable() {
@@ -76,9 +75,6 @@ if [[ ! "${NEW_PRIMARY_PORT}" =~ ^[0-9]+$ || ${#NEW_PRIMARY_PORT} -gt 5 ]] \
   exit 2
 fi
 NEW_PRIMARY_PORT=$((10#${NEW_PRIMARY_PORT}))
-is_unit "${COMPOSE_UNIT}" || { echo "invalid compose unit" >&2; exit 2; }
-is_container "${POSTGRES_CONTAINER}" || { echo "invalid postgres container" >&2; exit 2; }
-is_container "${AUTOHEAL_CONTAINER}" || { echo "invalid autoheal container" >&2; exit 2; }
 is_tailscale_service "${TAILSCALE_SERVICE}" || { echo "invalid Tailscale Service" >&2; exit 2; }
 [[ "${TAILSCALE_SERVICE}" == "svc:hololive-postgres" ]] || { echo "unexpected Tailscale Service" >&2; exit 2; }
 [[ "${NOW}" =~ ^[0-9]+$ ]] || { echo "invalid timestamp" >&2; exit 2; }
@@ -97,6 +93,7 @@ fi
 }
 [[ "${STATE_DIR}" == /* ]] || { echo "state dir must be absolute" >&2; exit 2; }
 trusted_executable "Tailscale binary" "${TAILSCALE_PATH}" || exit 1
+trusted_executable "Podman binary" "${PODMAN_PATH}" || exit 1
 
 # 잘못 라우팅된 SSH가 다른 호스트를 격리하지 않도록 요청 주소가 이 호스트에 있는지 확인한다.
 if ! ip -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | grep -Fxq -- "${EXPECTED_PRIMARY_HOST}"; then
@@ -135,21 +132,23 @@ atomic_write() {
   sync -f "${STATE_DIR}"
 }
 
-# 재부팅 후에도 격리가 유지되어야 성공이다. Compose를 다시 기동하는 구형 unit에서는 거부한다.
-need_daemon_reload="$(systemctl show "${COMPOSE_UNIT}" -p NeedDaemonReload --value)" || {
-  echo "cannot inspect reload state for ${COMPOSE_UNIT}" >&2
+# 재부팅 후에도 격리가 유지되어야 성공이다. 표식 조건이 없는 unit은 Wants= 의존·부팅에서 다시
+# 기동되므로 거부한다. Restart=always는 명시적 stop 뒤에는 동작하지 않고, 이후 명시적 start와 의존 start job은
+# 조건이 막는다. 자동 재시작은 조건을 다시 평가하지 않으므로 표식을 쓴 뒤 반드시 명시적으로 멈춘다.
+need_daemon_reload="$(systemctl show "${POSTGRES_UNIT}" -p NeedDaemonReload --value)" || {
+  echo "cannot inspect reload state for ${POSTGRES_UNIT}" >&2
   exit 1
 }
 [[ "${need_daemon_reload}" == "no" ]] || {
-  echo "${COMPOSE_UNIT} requires daemon-reload before fencing" >&2
+  echo "${POSTGRES_UNIT} requires daemon-reload before fencing" >&2
   exit 1
 }
-unit_text="$(systemctl cat "${COMPOSE_UNIT}")" || { echo "cannot inspect ${COMPOSE_UNIT}" >&2; exit 1; }
+unit_text="$(systemctl cat "${POSTGRES_UNIT}")" || { echo "cannot inspect ${POSTGRES_UNIT}" >&2; exit 1; }
 for condition in \
   'ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent' \
   'ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced'; do
   grep -Fqx -- "${condition}" <<<"${unit_text}" || {
-    echo "${COMPOSE_UNIT} is missing persistent fence condition: ${condition}" >&2
+    echo "${POSTGRES_UNIT} is missing persistent fence condition: ${condition}" >&2
     exit 1
   }
 done
@@ -173,113 +172,63 @@ if [[ -r "${FENCED_MARKER}" ]]; then
   fence_token="${existing_token}"
 fi
 
-docker info >/dev/null 2>&1 || { echo "cannot verify Docker state" >&2; exit 1; }
-
-container_is_absent() {
-  local container="$1" names
-  names="$(docker ps -a --filter "name=^/${container}$" --format '{{.Names}}')" || return 1
-  ! grep -Fxq -- "${container}" <<<"${names}"
+unit_state() {
+  systemctl show "${POSTGRES_UNIT}" -p ActiveState --value 2>/dev/null || printf 'unknown\n'
 }
-
-declare -A ORIGINAL_PRESENT=()
-declare -A ORIGINAL_RUNNING=()
-declare -A ORIGINAL_RESTART=()
-
-capture_container_state() {
-  local container="$1" raw running restart_name restart_max restart_spec extra
-  if ! docker inspect "${container}" >/dev/null 2>&1; then
-    container_is_absent "${container}" || return 1
-    ORIGINAL_PRESENT["${container}"]=0
-    ORIGINAL_RUNNING["${container}"]=false
-    ORIGINAL_RESTART["${container}"]=no
-    return 0
-  fi
-  raw="$(docker inspect -f '{{.State.Running}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.RestartPolicy.MaximumRetryCount}}' "${container}")" || return 1
-  IFS='|' read -r running restart_name restart_max extra <<<"${raw}"
-  [[ -z "${extra:-}" && ( "${running}" == "true" || "${running}" == "false" ) \
-    && "${restart_max}" =~ ^[0-9]+$ ]] || return 1
-  case "${restart_name}" in
-    no|always|unless-stopped) restart_spec="${restart_name}" ;;
-    on-failure) restart_spec="on-failure:${restart_max}" ;;
-    *) return 1 ;;
-  esac
-  ORIGINAL_PRESENT["${container}"]=1
-  ORIGINAL_RUNNING["${container}"]="${running}"
-  ORIGINAL_RESTART["${container}"]="${restart_spec}"
-}
-
-restore_container_state() {
-  local container="$1" expected_running expected_restart running restart_name restart_max actual_restart
-  [[ "${ORIGINAL_PRESENT[${container}]}" == "1" ]] || return 0
-  expected_running="${ORIGINAL_RUNNING[${container}]}"
-  expected_restart="${ORIGINAL_RESTART[${container}]}"
-  docker update "--restart=${expected_restart}" "${container}" >/dev/null || return 1
-  running="$(docker inspect -f '{{.State.Running}}' "${container}" 2>/dev/null || printf 'unknown')"
-  if [[ "${expected_running}" == "true" && "${running}" == "false" ]]; then
-    docker start "${container}" >/dev/null || return 1
-  elif [[ "${expected_running}" == "false" && "${running}" == "true" ]]; then
-    docker stop -t 15 "${container}" >/dev/null || return 1
-  fi
-  running="$(docker inspect -f '{{.State.Running}}' "${container}" 2>/dev/null || printf 'unknown')"
-  restart_name="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "${container}" 2>/dev/null || printf 'unknown')"
-  restart_max="$(docker inspect -f '{{.HostConfig.RestartPolicy.MaximumRetryCount}}' "${container}" 2>/dev/null || printf 'unknown')"
-  actual_restart="${restart_name}"
-  [[ "${restart_name}" != "on-failure" ]] || actual_restart="on-failure:${restart_max}"
-  [[ "${running}" == "${expected_running}" && "${actual_restart}" == "${expected_restart}" ]]
-}
-
-capture_container_state "${AUTOHEAL_CONTAINER}" || { echo "cannot capture autoheal state" >&2; exit 1; }
-capture_container_state "${POSTGRES_CONTAINER}" || { echo "cannot capture PostgreSQL state" >&2; exit 1; }
+ORIGINAL_STATE="$(unit_state)"
+case "${ORIGINAL_STATE}" in
+  active|inactive|failed) ;;
+  *) echo "${POSTGRES_UNIT} is transitioning (${ORIGINAL_STATE}); retry after it settles" >&2; exit 1 ;;
+esac
 
 MUTATION_STARTED=0
 SERVICE_ROUTE_MUTATED=0
 restore_service_after_incomplete_fence() {
-  local rc=$? running rollback_ok=1
+  local rc=$? rollback_ok=1
   trap - EXIT
-  if (( rc != 0 && MUTATION_STARTED == 1 )) && [[ ! -r "${FENCED_MARKER}" ]]; then
-    running="$(docker inspect -f '{{.State.Running}}' "${POSTGRES_CONTAINER}" 2>/dev/null || printf 'unknown')"
-    if [[ "${running}" == "true" && "${ORIGINAL_PRESENT[${POSTGRES_CONTAINER}]}" == "1" \
-      && "${ORIGINAL_RUNNING[${POSTGRES_CONTAINER}]}" == "true" ]]; then
-      restore_container_state "${POSTGRES_CONTAINER}" || rollback_ok=0
-      restore_container_state "${AUTOHEAL_CONTAINER}" || rollback_ok=0
-      if (( rollback_ok == 1 && SERVICE_ROUTE_MUTATED == 1 )) \
-        && ! "${TAILSCALE_PATH}" serve advertise "${TAILSCALE_SERVICE}" >/dev/null 2>&1; then
-        rollback_ok=0
-      fi
-      if (( rollback_ok == 1 )); then
-        rm -f -- "${INTENT_MARKER}" || rollback_ok=0
-        sync -f "${STATE_DIR}" || rollback_ok=0
-      fi
-      (( rollback_ok == 1 )) || echo "failed to restore the primary after incomplete fence" >&2
+  # PostgreSQL이 아직 원래대로 실행 중일 때만 되돌린다. 이미 멈췄다면 intent를 남겨 fail-closed로 둔다.
+  if (( rc != 0 && MUTATION_STARTED == 1 )) && [[ ! -r "${FENCED_MARKER}" ]] \
+    && [[ "${ORIGINAL_STATE}" == active && "$(unit_state)" == active ]]; then
+    if (( SERVICE_ROUTE_MUTATED == 1 )) \
+      && ! "${TAILSCALE_PATH}" serve advertise "${TAILSCALE_SERVICE}" >/dev/null 2>&1; then
+      rollback_ok=0
     fi
+    if (( rollback_ok == 1 )); then
+      rm -f -- "${INTENT_MARKER}" || rollback_ok=0
+      sync -f "${STATE_DIR}" || rollback_ok=0
+    fi
+    (( rollback_ok == 1 )) || echo "failed to restore the primary after incomplete fence" >&2
   fi
   exit "${rc}"
 }
 trap restore_service_after_incomplete_fence EXIT
-disable_container_restart() {
-  local container="$1" restart_policy
-  if ! docker inspect "${container}" >/dev/null 2>&1; then
-    container_is_absent "${container}" || { echo "container lookup was inconsistent: ${container}" >&2; return 1; }
-    return 0
-  fi
-  docker update --restart=no "${container}" >/dev/null || return 1
-  restart_policy="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "${container}" 2>/dev/null || printf 'unknown')"
-  [[ "${restart_policy}" == "no" ]] || { echo "container restart policy is not fenced: ${container}" >&2; return 1; }
+# unit이 inactive·failed여도 같은 이름의 수동 container나 PGDATA volume을 쓰는 다른 container가 돌 수 있다.
+# Docker 시절 fence처럼 container 실행 여부를 직접 확인하고, 조회가 실패하면 격리 성공으로 보지 않는다.
+postgres_containers_stopped() {
+  local filter rows name state
+  for filter in "name=^${POSTGRES_CONTAINER}\$" "volume=${POSTGRES_DATA_VOLUME}"; do
+    rows="$("${PODMAN_PATH}" ps -a --filter "${filter}" --format '{{.Names}} {{.State}}')" || {
+      echo "cannot verify PostgreSQL containers (${filter})" >&2
+      return 1
+    }
+    while read -r name state; do
+      [[ -n "${name}" ]] || continue
+      case "${state}" in
+        exited|created|stopped|configured) ;;
+        *) echo "PostgreSQL container ${name} is still ${state}" >&2; return 1 ;;
+      esac
+    done <<<"${rows}"
+  done
 }
-durably_stop_container() {
-  local container="$1" timeout="$2" running restart_policy
-  disable_container_restart "${container}" || return 1
-  if ! docker inspect "${container}" >/dev/null 2>&1; then
-    container_is_absent "${container}" || { echo "container lookup was inconsistent: ${container}" >&2; return 1; }
-    return 0
-  fi
-  docker stop -t "${timeout}" "${container}" >/dev/null || true
-  running="$(docker inspect -f '{{.State.Running}}' "${container}" 2>/dev/null || printf 'unknown')"
-  restart_policy="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "${container}" 2>/dev/null || printf 'unknown')"
-  [[ "${running}" == "false" && "${restart_policy}" == "no" ]] || {
-    echo "container is not durably stopped: ${container}" >&2
+durably_stop_postgres() {
+  local state
+  systemctl stop "${POSTGRES_UNIT}" >/dev/null || true
+  state="$(unit_state)"
+  [[ "${state}" == inactive || "${state}" == failed ]] || {
+    echo "${POSTGRES_UNIT} is not durably stopped (${state})" >&2
     return 1
   }
+  postgres_containers_stopped
 }
 
 if [[ ! -r "${FENCED_MARKER}" ]]; then
@@ -309,18 +258,14 @@ EOF_INTENT
   MUTATION_STARTED=1
 fi
 
-disable_container_restart "${AUTOHEAL_CONTAINER}" || exit 1
-disable_container_restart "${POSTGRES_CONTAINER}" || exit 1
-
 SERVICE_ROUTE_MUTATED=1
 if ! "${TAILSCALE_PATH}" serve drain "${TAILSCALE_SERVICE}" >/dev/null 2>&1; then
   echo "cannot drain Tailscale Service: ${TAILSCALE_SERVICE}" >&2
   exit 1
 fi
 
-# PostgreSQL보다 Autoheal을 먼저 중지한다. 소비자는 같은 접속 주소를 유지하며 라우팅 변경 뒤 재연결한다.
-durably_stop_container "${AUTOHEAL_CONTAINER}" 15 || exit 1
-durably_stop_container "${POSTGRES_CONTAINER}" 60 || exit 1
+# 소비자는 Wants=로만 묶여 있어 함께 멈추지 않는다. 같은 접속 주소를 유지하며 라우팅 변경 뒤 재연결한다.
+durably_stop_postgres || exit 1
 
 if [[ ! -r "${FENCED_MARKER}" ]]; then
   atomic_write "${FENCED_MARKER}" <<EOF_FENCED

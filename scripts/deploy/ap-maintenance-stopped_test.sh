@@ -61,7 +61,7 @@ run_restore() {
   cat > "$case_dir/run.sh" <<RUN
 set -euo pipefail
 compose=("$tmp/bin/compose")
-collector_state='$collector_state' prod_source=deploy/compose/docker-compose.prod.yml ap_source=deploy/compose/docker-compose.seoul.yml
+collector_state='$collector_state' prod_source=deploy/compose/docker-compose.collector.yml ap_source=deploy/compose/docker-compose.seoul.yml
 restore_files=(-f "\$HOME/hololive-bot/deploy/compose/docker-compose.seoul.yml")
 service=youtube-collector-b container=hololive-youtube-collector-b port=30015 old_revision=old-revision
 $restore_body
@@ -131,7 +131,7 @@ render_capture() {
     rollback_image_tag=hololive-youtube-collector:rollback-20261016T000000Z \
     rollback_po_image_tag=hololive-youtube-po-sandbox:rollback-20261016T000000Z \
     po_manifest_active=backups/po-sandbox-current-b.json po_image_id_active=backups/po-sandbox-current-b.image-id \
-    PROD_COMPOSE_FILE=deploy/compose/docker-compose.prod.yml AP_COMPOSE_FILE=deploy/compose/docker-compose.seoul.yml
+    AP_COMPOSE_FILE=deploy/compose/docker-compose.seoul.yml
   eval "printf '%s\n' \"$capture_block\""
 }
 mkdir -p "$tmp/capture-bin"
@@ -185,7 +185,7 @@ run_capture() {
   printf 'running sha256:%064d\n' 2 > "$case_dir/containers/hololive-youtube-po-b"
   printf '{"source_revision": "%s"}\n' "$issuer_revision" > "$repo/backups/po-sandbox-current-b.json"
   printf 'sha256:%064d\n' 2 > "$repo/backups/po-sandbox-current-b.image-id"
-  touch "$repo/deploy/compose/docker-compose.prod.yml" "$repo/deploy/compose/docker-compose.seoul.yml"
+  touch "$repo/deploy/compose/docker-compose.collector.yml" "$repo/deploy/compose/docker-compose.seoul.yml"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/scripts/deploy/compose.sh"
   chmod +x "$repo/scripts/deploy/compose.sh"
   render_capture "$maintenance" > "$case_dir/capture.sh"

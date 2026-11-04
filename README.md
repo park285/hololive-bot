@@ -10,17 +10,17 @@
 
 ## 시스템 아키텍처 (Architecture Overview)
 
-본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`와 Seoul collector `b`는 Docker Compose로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
+본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`는 rootful Podman Quadlet([deploy/quadlet](deploy/quadlet/README.md))으로, Seoul collector `b`는 Docker Compose로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
 
 현재 배포 대상과 실행 방식은 [PROJECT_MAP](docs/current/PROJECT_MAP.md)과 [Deployment Baseline](docs/current/DEPLOYMENT_BASELINE.md), 작업 절차는 [Current Runbooks](docs/current/runbooks/README.md)를 따릅니다. 과거 기록과 설계 문서의 전환 절차를 현재 배포 작업으로 실행하지 않습니다.
 
 ### 런타임 컴포넌트 일람 (Runtime Services)
 
-| 런타임 모듈명 | 소스 디렉토리 | Compose 서비스명 | 가동 포트 | 주요 역할 |
+| 런타임 모듈명 | 소스 디렉토리 | 중앙 컨테이너명 | 가동 포트 | 주요 역할 |
 |---|---|---|---:|---|
 | hololive-api | hololive-api | hololive-api | 30001/30003/30006 | bot/admin/llm plane 통합 런타임: Kakao/Iris 웹훅 라우팅·챗 명령어 파싱(bot), 관리자 API 컨트롤 플레인(admin), 이벤트/뉴스 정규화 및 LLM 스케줄러(llm) |
 | alarm-worker | hololive-alarm-worker | hololive-alarm-worker | 30007 | 방송 정보 주기적 분석, 발송 대기열 소비 및 Iris outbound 호출 |
-| youtube-collector | hololive-youtube-collector | youtube-collector | 30005/15/25/35 | 유튜브 수집 AP fleet: fetch/normalize/lease/Publish. PostgreSQL만 소비하며 Valkey를 요구하지 않습니다. |
+| youtube-collector | hololive-youtube-collector | hololive-youtube-collector-c | 30005/15/25/35 | 유튜브 수집 AP fleet: fetch/normalize/lease/Publish. PostgreSQL만 소비하며 Valkey를 요구하지 않습니다. |
 
 ### 공유 라이브러리 (Shared Libraries)
 
@@ -47,7 +47,7 @@
 * Go 1.27 계열
 * PostgreSQL (영속 저장소)
 * Valkey (세션 및 큐)
-* Docker Compose (로컬 개발 및 통합 검증용)
+* Podman (image build, 통합 검증, 중앙 Quadlet 운영)
 
 ### 1. 전체 소스 코드 컴파일 (Build)
 
@@ -106,19 +106,14 @@ dbtest와 진단은 `scripts/maintenance/queries/*_drift.sql`의 독립 오라�
 rollout 소유자만 활성화합니다.
 
 ```bash
-# 프로덕션 전체 이미지 build 및 live deploy (clean tree, version bump 금지)
-./build-all.sh --no-bump
+# 전체 production image를 podman build (clean tree면 revision label을 검증)
+./build-all.sh --no-bump --build-only
 
-# local/dev 전체 이미지 build만 수행 (dirty tree 및 version bump 허용)
-./build-all.sh --build-only
-
-# 특정 개별 서비스 단위 컨테이너 롤아웃 재배포
-./scripts/deploy/compose-redeploy-service.sh hololive-api
-./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
-
-# 유튜브 collector 중앙 fleet member 재배포
-./scripts/deploy/compose-redeploy-service.sh youtube-collector
+# 개별 image만 빌드
+./build-all.sh --no-bump hololive-api
 ```
+
+중앙 배포(image 전송·Quadlet 기동)는 [릴리즈 runbook](docs/current/runbooks/release.md)을 `hololive-bot-ops`로 라우팅하십시오.
 
 원격 인프라 노드(`youtube-collector-b`) 작업은 [youtube-collector runbook](docs/current/runbooks/youtube-collector.md)을 `hololive-bot-ops`로 라우팅하십시오.
 
@@ -126,7 +121,7 @@ rollout 소유자만 활성화합니다.
 
 ## 서비스 상태 진단 (Logs & Health Check)
 
-* 로그 분석 표준(SSOT): 개발 및 문제 원인 추적 시 각 서비스의 표준 출력/표준 에러(stdout/stderr) 및 Docker Compose의 raw 로그 출력을 1순위 데이터로 다룹니다.
+* 로그 분석 표준(SSOT): 개발 및 문제 원인 추적 시 각 서비스의 표준 출력/표준 에러(stdout/stderr)를 1순위 데이터로 다룹니다. 중앙은 journald(`journalctl -u <unit>`), Seoul AP는 Docker 로그입니다.
 * 로컬 파일 로그: 디버깅 시 참고용 보조 미러 정보로만 취급합니다.
 
 ### 서비스별 상태 진단 엔드포인트
@@ -140,11 +135,11 @@ rollout 소유자만 활성화합니다.
 | youtube-collector | `https://127.0.0.1:30025/ready` via container `./bin/healthcheck` (Main 노드) |
 
 ```bash
-# Docker Compose 컨테이너 동작 상태 점검
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps
+# 중앙 unit 상태 점검
+sudo systemctl status hololive-api.service hololive-alarm-worker.service hololive-youtube-collector-c.service
 
-# 실시간 컨테이너 로그 분석
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f <service_name>
+# 실시간 로그
+sudo journalctl -u <unit>.service -f
 
 # 특정 시점 범위의 로그 필터링 쿼리
 ./scripts/logs/logs.sh query <service_name> --since 1h --limit 1000

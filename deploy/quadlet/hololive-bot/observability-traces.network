@@ -1,0 +1,6 @@
+# hololive-seoul에서는 hololive-bot이 소유한다. alarm-worker·collector가 같은 호스트의 trace 수집 agent와 연결된다.
+[Network]
+NetworkName=observability-traces
+Subnet=172.18.0.0/16
+Gateway=172.18.0.1
+InterfaceName=pm-otraces

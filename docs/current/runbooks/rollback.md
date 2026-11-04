@@ -2,7 +2,7 @@
 
 ## Role
 
-중앙·Seoul의 Docker Compose, Osaka·Osaka2 AP의 native systemd runtime rollback과 contract/document rollback 판단 기준입니다. Collector의 paired issuer 복원 절차는 [collector runbook](youtube-collector.md#rollback)을 따릅니다.
+중앙의 Podman Quadlet, Seoul의 Docker Compose, Osaka·Osaka2 AP의 native systemd runtime rollback과 contract/document rollback 판단 기준입니다. Collector의 paired issuer 복원 절차는 [collector runbook](youtube-collector.md#rollback)을 따릅니다.
 
 ## Before Rollback
 
@@ -12,25 +12,36 @@
 
 ## Runtime Rollback
 
-API/alarm rollback의 단위는 **이전 image + 정확한 worker profile + 보존 Compose 입력**입니다.
+API/alarm rollback의 단위는 **이전 image + 정확한 worker profile + 그 image가 실행되던 unit 정의**입니다.
 image tag만 바꾸거나 stack-secrets master에 삭제된 settings를 다시 넣지 않습니다.
 먼저 pairing/preflight baseline을 운영에 배포·수용해야 하며, 첫 adoption에는 현재
 실행 중인 바이너리의 인증된 loaded-profile hash 증거가 필요합니다.
 
-보존 backup 디렉터리로 검사한 뒤, 승인된 창에서 같은 pair를 적용합니다.
+중앙 API·worker의 이전 pair는 배포 helper(`quadlet-redeploy-service.sh`)가 배포마다
+`/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/<SERVICE>-<UTC>-<suffix>/previous`에 보존합니다.
+`SERVICE`는 `hololive-api` 또는 `hololive-alarm-worker`이고 unit과 container 이름은 서비스 이름과 같습니다.
+배포 중 활성화 뒤 실패(`[OUTCOME] failed_after_activation`)도, 수용한 뒤의 rollback도 helper가 자동으로 되돌리지 않습니다.
+배포 트리의 rollback helper로 먼저 검사하고, 스키마·admission 호환성을 포함한 별도 운영 rollback 승인 뒤에만 적용합니다.
 
 ```bash
-export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
-sudo -n ./scripts/deploy/compose-rollback-service.sh <backup-directory> --check
+rollback=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-rollback-service.sh
+release=/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/<SERVICE>-<UTC>-<suffix>
+# 검사: checksum·image identity 대조와 이전 image의 실제 --check-worker-profile(network none)
+sudo "$rollback" "$release" --check
 # 별도 운영 rollback 승인 후에만 실행합니다.
-sudo -n ./scripts/deploy/compose-rollback-service.sh <backup-directory> --apply
+sudo "$rollback" "$release" --apply
 ```
 
-인자를 생략한 mode는 `--check`입니다. 도구는 `hololive-api`와
-`hololive-alarm-worker`만 받으며 이전 image/profile checksum, 보존 Compose 구성,
-**이전 image의 실제 `--check-worker-profile`**을 검증합니다. 적용 시 원래 실행 중이던
-writer만 기동하며, 이전에 정지해 있던 writer는 정지 상태로 복원합니다. DB migration,
-schema/data rollback, secret mirror/master 복원은 수행하지 않습니다.
+`--apply`는 배포 때 pair 디렉터리에 만든 rollback drop-in(이전 image identity `Image=sha256:<id>`와 보존 profile,
+`hololive-api`는 그 image의 `APP_VERSION`도 고정)을 `/etc/containers/systemd/hololive-bot/<SERVICE>.container.d/`에
+게시하고 `daemon-reload` 뒤 unit을 재시작합니다. 그 뒤 실행 중 profile(`verify-live`)과 `NRestarts=0`을 확인합니다.
+primary fence 표식이 있으면 적용하지 않습니다. 정지해 있던 writer를 정지 상태로 되돌려야 하면 이 helper 대신
+`worker-profile-pair.py`의 `verify`·`check`·`activate`와 `daemon-reload`만 실행하고 unit을 시작하지 않습니다.
+런타임 peer는 `Wants=`라 멈춰 있는 peer를 함께 시작하므로(`hololive-api` 시작은 `hololive-alarm-worker`도 시작) 정지 상태를
+유지해야 하는 writer가 있으면 순서를 먼저 확인합니다. unit 정의 자체가 바뀐 revision이면 이전 revision의
+clean checkout에서 `sudo ./scripts/deploy/sync-opt-current.sh`로 배포 트리와 unit을 다시 설치한 뒤(이 도구는
+checkout의 HEAD만 배포합니다) 위 순서를 따릅니다. DB migration, schema/data rollback, secret mirror/master 복원과
+migrator drop-in(`hololive-db-migrate.container.d/50-migrator-image.conf`) 복원은 수행하지 않습니다.
 
 profile pair 검증은 DB 호환성 검사가 아닙니다. 아래 durable/receipt 경계와 현재 schema,
 admission·send-unit·projection 계약을 먼저 확인합니다. pair가 없거나 손상됐거나
@@ -39,11 +50,11 @@ admission·send-unit·projection 계약을 먼저 확인합니다. pair가 없�
 전송 절차를 사용하되 원래 paired profile과 revision/architecture를 함께 검증합니다.
 
 복원 후 container image ID/revision, 실제 loaded profile hash, health, `StartedAt`,
-`RestartCount`를 확인합니다. desired source는 최신 상태로 유지하므로 rollback 뒤
+unit의 `NRestarts`(`systemctl show <SERVICE>.service -p NRestarts`)를 확인합니다. desired source는 최신 상태로 유지하므로 rollback 뒤
 `profile_file_changed`는 정상적인 차이 표시이며 reload/fallback 사유가 아닙니다.
 backup pair와 실패한 release는 원인 분석이 끝날 때까지 보존합니다.
 
-Collector Compose/native는 [collector runbook](youtube-collector.md#rollback)의
+Collector Quadlet(c)·Compose(b)·native(a/d)는 [collector runbook](youtube-collector.md#rollback)의
 binary/image·Node helper·issuer·프로필 짝을 사용합니다. PO issuer는
 [`RestartCount`가 아닌 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)으로 판정합니다.
 
@@ -75,7 +86,7 @@ Runtime service names:
 - `hololive-alarm-worker`
 - `youtube-collector`
 
-`youtube-collector` rollback은 Go binary/image, bundled Node helper, worker profile, Compose base/AP overlays 또는 native release, paired issuer를 함께 보존한 revision 단위입니다. Binary-only rollback과 schema/data rollback은 허용하지 않습니다. migration 218 이후에는 typed `last_failure_*`를 쓰지 않는 pre-177 collector image가 rollback 대상이 아닙니다. 실제 fleet/DB 계약을 만족하는 pair만 사용하며, 이 문서의 로컬 준비가 운영 canary·rollback 실행을 뜻하지 않습니다.
+`youtube-collector` rollback은 Go binary/image, bundled Node helper, worker profile, 중앙 drop-in·Seoul Compose base/AP overlay 또는 native release, paired issuer를 함께 보존한 revision 단위입니다. Binary-only rollback과 schema/data rollback은 허용하지 않습니다. migration 218 이후에는 typed `last_failure_*`를 쓰지 않는 pre-177 collector image가 rollback 대상이 아닙니다. 실제 fleet/DB 계약을 만족하는 pair만 사용하며, 이 문서의 로컬 준비가 운영 canary·rollback 실행을 뜻하지 않습니다.
 
 `hololive-api`가 durable bot admission migration 123~136을 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 
@@ -95,8 +106,8 @@ migration 231~233 이전 image의 image-only rollback, session 일괄 삭제, sy
 [Valkey 축소 계획](../plans/2026-09-28-valkey-dependency-reduction.md#2차-rollback-규칙migration-231233-적용-뒤)과 Git 이력에 보존합니다.
 
 현재 schema·migration ledger·방 이름 정본을 이해하지
-못하는 이전 image는 pair가 있더라도 적용하지 않습니다. 구 migrator 실행이나
-`--no-deps` 누락으로 dependencies를 다시 기동하지 않으며, 실패한 migration은
+못하는 이전 image는 pair가 있더라도 적용하지 않습니다. 구 migrator(`hololive-db-migrate.service`) 실행이나
+정지한 peer unit의 연쇄 기동으로 dependencies를 다시 기동하지 않으며, 실패한 migration은
 소유자의 검증·복구 절차로 처리합니다. 데이터/세션 파괴나 서비스 자동 기동 정책 변경을
 routine rollback에 묶지 않습니다. 호환성이 입증되지 않으면 현재 revision으로 fix-forward합니다.
 
@@ -110,8 +121,12 @@ routine rollback에 묶지 않습니다. 호환성이 입증되지 않으면 현
 ## Post-Rollback Smoke Tests
 
 ```bash
-./scripts/smoke/smoke-compose-config.sh
-./scripts/smoke/smoke-runtime-health.sh
+# 중앙: 설치된 unit 정의가 생성되는지, unit이 active이고 container health가 healthy인지
+sudo /usr/libexec/podman/quadlet -dryrun >/dev/null
+systemctl is-active hololive-api.service hololive-alarm-worker.service hololive-youtube-collector-c.service
+for c in hololive-api hololive-alarm-worker hololive-youtube-collector-c; do
+  sudo podman inspect "$c" --format '{{.Name}} {{.State.Health.Status}}'
+done
 ```
 
 ## Related documents

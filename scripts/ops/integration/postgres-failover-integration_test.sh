@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-POSTGRES_IMAGE="postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+POSTGRES_IMAGE="docker.io/library/postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
 
 # shellcheck source=scripts/ops/integration/lib/postgres-failover-integration-lib.sh
 source "${SCRIPT_DIR}/lib/postgres-failover-integration-lib.sh"
@@ -23,49 +23,49 @@ while IFS='=' read -r name _; do
   exit 2
 done < <(/usr/bin/env)
 unset PGSERVICE PGHOST PGPORT PGUSER PGDATABASE PGSSLMODE PGSSLROOTCERT PGPASSFILE
-if [[ -n "${DOCKER_HOST:-}" || -n "${DOCKER_CONTEXT:-}" || -n "${DOCKER_CONFIG:-}" ]]; then
-  printf '%s\n' 'refusing Docker environment overrides; the harness requires the local default Docker context' >&2
+# kapu 사용자 계정의 rootless Podman에서만 실행한다. 원격 연결이나 rootful store(운영 컨테이너)를 건드리지 않는다.
+if [[ -n "${CONTAINER_HOST:-}" || -n "${CONTAINER_CONNECTION:-}" ]]; then
+  printf '%s\n' 'refusing Podman connection overrides; the harness requires local rootless Podman' >&2
   exit 2
 fi
-unset DOCKER_HOST DOCKER_CONTEXT DOCKER_CONFIG
 
-DOCKER_PATH="$(command -v docker || true)"
-if [[ -z "${DOCKER_PATH}" || ! -x "${DOCKER_PATH}" ]]; then
-  printf '%s\n' '[SKIP] Docker is unavailable' >&2
+PODMAN_PATH="$(command -v podman || true)"
+if [[ -z "${PODMAN_PATH}" || ! -x "${PODMAN_PATH}" ]]; then
+  printf '%s\n' '[SKIP] Podman is unavailable' >&2
   exit 77
 fi
-DOCKER_PATH="$(realpath -e -- "${DOCKER_PATH}")"
-[[ "$("${DOCKER_PATH}" context show 2>/dev/null || true)" == default ]] || {
-  printf '%s\n' 'refusing a non-default Docker context' >&2
-  exit 2
-}
-docker_endpoint="$("${DOCKER_PATH}" context inspect default --format '{{(index .Endpoints "docker").Host}}' 2>/dev/null || true)"
-[[ "${docker_endpoint}" == unix://* ]] || {
-  printf '%s\n' 'refusing a non-local Docker endpoint' >&2
-  exit 2
-}
+PODMAN_PATH="$(realpath -e -- "${PODMAN_PATH}")"
 OPENSSL_PATH="$(command -v openssl || true)"
 if [[ -z "${OPENSSL_PATH}" || ! -x "${OPENSSL_PATH}" ]]; then
   printf '%s\n' '[SKIP] OpenSSL is unavailable' >&2
   exit 77
 fi
 OPENSSL_PATH="$(realpath -e -- "${OPENSSL_PATH}")"
-"${DOCKER_PATH}" info >/dev/null 2>&1 || { printf '%s\n' '[SKIP] Docker daemon is unavailable' >&2; exit 77; }
+podman_rootless="$("${PODMAN_PATH}" info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" || {
+  printf '%s\n' '[SKIP] Podman is unavailable' >&2
+  exit 77
+}
+[[ "${podman_rootless}" == true ]] || {
+  printf '%s\n' 'refusing rootful Podman; run the harness as an unprivileged user' >&2
+  exit 2
+}
 
 RUN_ID="$(date +%s)-${BASHPID}-${RANDOM}"
 BASE_NAME="hololive-pg-failover-it-${RUN_ID}"
 TMP_DIR="$(mktemp -d "/tmp/${BASE_NAME}.XXXXXX")"
 chmod 0700 "${TMP_DIR}"
 PSQL_PATH="${TMP_DIR}/psql"
+# rootless Podman의 컨테이너 root는 호스트의 실행 사용자이므로 0600 pgpass를 그대로 읽는다.
+# 임시 파일을 relabel하지 않도록 bind mount를 쓰는 컨테이너는 SELinux label을 끈다.
 cat >"${PSQL_PATH}" <<'EOF_PSQL_CLIENT'
 #!/usr/bin/env bash
 set -euo pipefail
-: "${HOLOLIVE_FAILOVER_IT_DOCKER_PATH:?}"
+: "${HOLOLIVE_FAILOVER_IT_PODMAN_PATH:?}"
 : "${HOLOLIVE_FAILOVER_IT_POSTGRES_IMAGE:?}"
 : "${PGPASSFILE:?}"
 : "${PGSSLROOTCERT:?}"
-exec "${HOLOLIVE_FAILOVER_IT_DOCKER_PATH}" run --rm --network "${HOLOLIVE_FAILOVER_IT_NETWORK:?}" \
-  --user "$(/usr/bin/id -u):$(/usr/bin/id -g)" \
+exec "${HOLOLIVE_FAILOVER_IT_PODMAN_PATH}" run --rm --pull=never --network "${HOLOLIVE_FAILOVER_IT_NETWORK:?}" \
+  --user 0:0 --security-opt label=disable \
   --volume "${PGPASSFILE}:/run/hololive-failover/pgpass:ro" \
   --volume "${PGSSLROOTCERT}:/run/hololive-failover/ca.pem:ro" \
   --env PGPASSFILE=/run/hololive-failover/pgpass \
@@ -77,7 +77,7 @@ exec "${HOLOLIVE_FAILOVER_IT_DOCKER_PATH}" run --rm --network "${HOLOLIVE_FAILOV
   "${HOLOLIVE_FAILOVER_IT_POSTGRES_IMAGE}" "$@"
 EOF_PSQL_CLIENT
 chmod 0700 "${PSQL_PATH}"
-export HOLOLIVE_FAILOVER_IT_DOCKER_PATH="${DOCKER_PATH}"
+export HOLOLIVE_FAILOVER_IT_PODMAN_PATH="${PODMAN_PATH}"
 export HOLOLIVE_FAILOVER_IT_POSTGRES_IMAGE="${POSTGRES_IMAGE}"
 NETWORK_NAME="${BASE_NAME}-net"
 export HOLOLIVE_FAILOVER_IT_NETWORK="${NETWORK_NAME}"
@@ -102,7 +102,7 @@ trap 'exit 130' INT TERM
 
 start_primary() {
   refuse_existing container "${PRIMARY_CONTAINER}"
-  "${DOCKER_PATH}" run --detach --user root --name "${PRIMARY_CONTAINER}" --restart=no \
+  "${PODMAN_PATH}" run --detach --pull=never --security-opt label=disable --user root --name "${PRIMARY_CONTAINER}" --restart=no \
     --label "${LABEL_KEY}=${LABEL_VALUE}" --network "${NETWORK_NAME}" --network-alias primary-db \
     --shm-size 128m \
     --env POSTGRES_DB="${DB_NAME}" --env POSTGRES_USER="${ADMIN_USER}" \
@@ -117,24 +117,24 @@ start_primary() {
   PRIMARY_CONTAINER_CREATED=1
 }
 prepare_standby() {
-  "${DOCKER_PATH}" run --rm --user 0 -v "${STANDBY_VOLUME}:/var/lib/postgresql" \
+  "${PODMAN_PATH}" run --rm --pull=never --security-opt label=disable --user 0 -v "${STANDBY_VOLUME}:/var/lib/postgresql" \
     -v "${PGPASS_FILE}:/input/pgpass:ro" "${POSTGRES_IMAGE}" sh -ec \
     'mkdir -p /var/lib/postgresql/pgdata; cp /input/pgpass /var/lib/postgresql/pgpass-basebackup; chown -R postgres:postgres /var/lib/postgresql; chmod 0600 /var/lib/postgresql/pgpass-basebackup'
-  "${DOCKER_PATH}" run --rm --user postgres --network "${NETWORK_NAME}" \
+  "${PODMAN_PATH}" run --rm --pull=never --user postgres --network "${NETWORK_NAME}" \
     -v "${STANDBY_VOLUME}:/var/lib/postgresql" -v "${PRIMARY_TLS_VOLUME}:/etc/postgres-tls:ro" \
     --env PGDATA=/var/lib/postgresql/pgdata --env PGPASSFILE=/var/lib/postgresql/pgpass-basebackup \
     --env PGSSLMODE=verify-full --env PGSSLROOTCERT=/etc/postgres-tls/ca.crt \
     "${POSTGRES_IMAGE}" pg_basebackup -h primary-db -p 5432 -U "${REPLICATOR_USER}" \
     -D /var/lib/postgresql/pgdata -X stream -S "${REPLICATION_SLOT}" -R -P -v \
     >"${TMP_DIR}/pg_basebackup.log" 2>&1
-  "${DOCKER_PATH}" run --rm --user 0 -v "${STANDBY_VOLUME}:/var/lib/postgresql" \
+  "${PODMAN_PATH}" run --rm --pull=never --security-opt label=disable --user 0 -v "${STANDBY_VOLUME}:/var/lib/postgresql" \
     -v "${PGPASS_FILE}:/input/pgpass:ro" -v "${TMP_DIR}/standby.auto.conf:/input/standby.auto.conf:ro" \
     "${POSTGRES_IMAGE}" sh -ec \
     'test -f /var/lib/postgresql/pgdata/standby.signal; cp /input/pgpass /var/lib/postgresql/pgdata/pgpass; cp /input/standby.auto.conf /var/lib/postgresql/pgdata/postgresql.auto.conf; rm -f /var/lib/postgresql/pgpass-basebackup; chmod 0600 /var/lib/postgresql/pgdata/pgpass; chown postgres:postgres /var/lib/postgresql/pgdata/pgpass /var/lib/postgresql/pgdata/postgresql.auto.conf /var/lib/postgresql/pgdata/standby.signal'
 }
 start_standby() {
   refuse_existing container "${STANDBY_CONTAINER}"
-  "${DOCKER_PATH}" run --detach --user root --name "${STANDBY_CONTAINER}" --restart=no \
+  "${PODMAN_PATH}" run --detach --pull=never --security-opt label=disable --user root --name "${STANDBY_CONTAINER}" --restart=no \
     --label "${LABEL_KEY}=${LABEL_VALUE}" --network "${NETWORK_NAME}" --network-alias standby-db \
     --shm-size 128m --env PGDATA=/var/lib/postgresql/pgdata \
     -v "${STANDBY_VOLUME}:/var/lib/postgresql" \
@@ -155,12 +155,12 @@ set -euo pipefail
 : "${POSTGRES_FAILOVER_PRIMARY_HOST:?}"
 : "${POSTGRES_FAILOVER_NEW_PRIMARY_HOST:?}"
 : "${POSTGRES_FAILOVER_NEW_PRIMARY_PORT:?}"
-: "${HARNESS_DOCKER:?}"
+: "${HARNESS_PODMAN:?}"
 : "${HARNESS_PRIMARY_CONTAINER:?}"
 : "${HARNESS_FENCE_MARKER:?}"
 : "${HARNESS_FENCE_LABEL:?}"
 [[ "${HARNESS_PRIMARY_CONTAINER}" == hololive-pg-failover-it-*-primary ]] || exit 1
-label="$("${HARNESS_DOCKER}" inspect --format '{{index .Config.Labels "com.hololive.postgres-failover-integration"}}' "${HARNESS_PRIMARY_CONTAINER}")"
+label="$("${HARNESS_PODMAN}" inspect --format '{{index .Config.Labels "com.hololive.postgres-failover-integration"}}' "${HARNESS_PRIMARY_CONTAINER}")"
 [[ "${label}" == "${HARNESS_FENCE_LABEL}" ]] || exit 1
 fence_token=''
 if [[ -r "${HARNESS_FENCE_MARKER}" ]]; then
@@ -172,14 +172,14 @@ fi
 if [[ -z "${fence_token}" ]]; then
   fence_token="fence-${POSTGRES_FAILOVER_NEW_PRIMARY_PORT}-${RANDOM}-${RANDOM}"
 fi
-paused="$("${HARNESS_DOCKER}" inspect --format '{{.State.Paused}}' "${HARNESS_PRIMARY_CONTAINER}")"
-[[ "${paused}" != true ]] || "${HARNESS_DOCKER}" unpause "${HARNESS_PRIMARY_CONTAINER}" >/dev/null
-running="$("${HARNESS_DOCKER}" inspect --format '{{.State.Running}}' "${HARNESS_PRIMARY_CONTAINER}")"
+paused="$("${HARNESS_PODMAN}" inspect --format '{{.State.Paused}}' "${HARNESS_PRIMARY_CONTAINER}")"
+[[ "${paused}" != true ]] || "${HARNESS_PODMAN}" unpause "${HARNESS_PRIMARY_CONTAINER}" >/dev/null
+running="$("${HARNESS_PODMAN}" inspect --format '{{.State.Running}}' "${HARNESS_PRIMARY_CONTAINER}")"
 if [[ "${running}" == true ]]; then
-  "${HARNESS_DOCKER}" update --restart=no "${HARNESS_PRIMARY_CONTAINER}" >/dev/null
-  "${HARNESS_DOCKER}" stop --time=5 "${HARNESS_PRIMARY_CONTAINER}" >/dev/null
+  "${HARNESS_PODMAN}" update --restart=no "${HARNESS_PRIMARY_CONTAINER}" >/dev/null
+  "${HARNESS_PODMAN}" stop --time=5 "${HARNESS_PRIMARY_CONTAINER}" >/dev/null
 fi
-running="$("${HARNESS_DOCKER}" inspect --format '{{.State.Running}}' "${HARNESS_PRIMARY_CONTAINER}")"
+running="$("${HARNESS_PODMAN}" inspect --format '{{.State.Running}}' "${HARNESS_PRIMARY_CONTAINER}")"
 [[ "${running}" == false ]] || exit 1
 umask 077
 tmp="${HARNESS_FENCE_MARKER}.tmp.$$"
@@ -257,7 +257,7 @@ run_controller() {
     POSTGRES_FAILOVER_ROUTE_HOOK_TIMEOUT_SEC=30 POSTGRES_FAILOVER_REQUIRE_ROUTE_HOOK=1 \
     POSTGRES_FAILOVER_FENCE_COMMAND="${FENCE_HOOK}" POSTGRES_FAILOVER_ROUTE_COMMAND="${ROUTE_HOOK}" \
     POSTGRES_FAILOVER_NOW="${now}" POSTGRES_FAILOVER_POST_FENCE_NOW="${now}" \
-    HARNESS_DOCKER="${DOCKER_PATH}" HARNESS_PRIMARY_CONTAINER="${PRIMARY_CONTAINER}" \
+    HARNESS_PODMAN="${PODMAN_PATH}" HARNESS_PRIMARY_CONTAINER="${PRIMARY_CONTAINER}" \
     HARNESS_FENCE_MARKER="${FENCE_MARKER}" HARNESS_FENCE_LABEL="${LABEL_VALUE}" \
     HARNESS_PSQL="${PSQL_PATH}" HARNESS_PGPASS="${PGPASS_FILE}" HARNESS_CA="${CA_FILE}" \
     HARNESS_DB="${DB_NAME}" HARNESS_USER="${REPLICATOR_USER}" HARNESS_ROUTE_MARKER="${ROUTE_MARKER}" \
@@ -332,7 +332,7 @@ last_healthy="$(awk -F '\t' '{print $4}' "${state_file}")"
 [[ "${last_healthy}" =~ ^[0-9]+$ && "${last_healthy}" != 0 ]] || fail 'controller did not record a fresh healthy observation'
 pass 'real host controller recorded a zero-known-lag healthy observation'
 
-"${DOCKER_PATH}" pause "${PRIMARY_CONTAINER}" >/dev/null
+"${PODMAN_PATH}" pause "${PRIMARY_CONTAINER}" >/dev/null
 sleep 1
 FAILOVER_NOW=$((NOW + 1))
 if ! run_controller "${FAILOVER_NOW}" "${TMP_DIR}/controller-failover.out" "${TMP_DIR}/controller-failover.err"; then
@@ -340,8 +340,8 @@ if ! run_controller "${FAILOVER_NOW}" "${TMP_DIR}/controller-failover.out" "${TM
   fail 'controller did not complete fenced promotion and route'
 fi
 
-primary_running="$("${DOCKER_PATH}" inspect --format '{{.State.Running}}' "${PRIMARY_CONTAINER}")"
-primary_restarting="$("${DOCKER_PATH}" inspect --format '{{.State.Restarting}}' "${PRIMARY_CONTAINER}")"
+primary_running="$("${PODMAN_PATH}" inspect --format '{{.State.Running}}' "${PRIMARY_CONTAINER}")"
+primary_restarting="$("${PODMAN_PATH}" inspect --format '{{.State.Restarting}}' "${PRIMARY_CONTAINER}")"
 assert_equal false "${primary_running}" 'old primary stopped by fence hook'
 assert_equal false "${primary_restarting}" 'old primary remains stopped'
 if run_psql primary-db "${PRIMARY_PORT}" 'SELECT 1' >/dev/null 2>&1; then

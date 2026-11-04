@@ -5,29 +5,30 @@ maintenance_dir=$(cd "$script_dir/../maintenance" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
 work=$(mktemp -d)
 name="iris-terminal-head-test-$$"
+# kapu rootless Podman에 이미 있는 고정 image만 쓴다(local CI 통합 DB와 같은 참조).
+image=docker.io/library/postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
 cid=
 cleanup() {
-  if [[ -n "$cid" ]]; then docker rm -f -v "$cid" >/dev/null; fi
+  if [[ -n "$cid" ]]; then podman rm -f -v "$cid" >/dev/null; fi
   rm -rf "$work"
 }
 trap cleanup EXIT
-cid=$(docker run -d --pull=never --name "$name" --network=none --memory=512m --cpus=2 \
-  --label io.iris.observability.logs=exclude \
-  --tmpfs /var/lib/postgresql -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=hololive postgres:18.6-alpine)
+cid=$(podman run -d --pull=never --name "$name" --network=none --memory=512m --cpus=2 \
+  --tmpfs /var/lib/postgresql -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=hololive "$image")
 ready=false
 for ((i=0;i<60;i++)); do
-  if docker exec "$cid" sh -c 'test "$(cat /proc/1/comm)" = postgres' >/dev/null 2>&1 &&
-    docker exec "$cid" psql -U postgres -d hololive -X -qAt -c 'SELECT 1' >/dev/null 2>&1; then
+  if podman exec "$cid" sh -c 'test "$(cat /proc/1/comm)" = postgres' >/dev/null 2>&1 &&
+    podman exec "$cid" psql -U postgres -d hololive -X -qAt -c 'SELECT 1' >/dev/null 2>&1; then
     ready=true; break
   fi
   sleep 0.2
 done
 [[ "$ready" == true ]]
-psql_test() { docker exec -i "$cid" psql -U postgres -d hololive -X -qAt -v ON_ERROR_STOP=1 "$@"; }
+psql_test() { podman exec -i "$cid" psql -U postgres -d hololive -X -qAt -v ON_ERROR_STOP=1 "$@"; }
 # 운영과 같은 runner로 전역 잠금·수명 모델 갱신 함수·FK를 적용한다. 컨테이너 내부 Unix socket의 trust 인증이라 TLS와 비밀번호는 쓰지 않는다.
 (cd "$repo_root" && CGO_ENABLED=0 go build -trimpath -o "$work/db-migrate" ./hololive/hololive-api/cmd/db-migrate)
-docker cp "$work/db-migrate" "$cid:/tmp/db-migrate"
-docker exec -e PGHOST=/var/run/postgresql -e PGPORT=5432 -e PGDATABASE=hololive -e PGUSER=postgres \
+podman cp "$work/db-migrate" "$cid:/tmp/db-migrate"
+podman exec -e PGHOST=/var/run/postgresql -e PGPORT=5432 -e PGDATABASE=hololive -e PGUSER=postgres \
   -e PGPASSWORD=unused-local-trust -e PGSSLMODE=disable "$cid" /tmp/db-migrate >"$work/migration.log" 2>&1 || {
   cat "$work/migration.log" >&2
   exit 1

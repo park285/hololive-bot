@@ -31,7 +31,7 @@ def command(args, *, timeout=60, input_text=None):
 
 def sql(container, statement):
     return command([
-        "docker", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
+        "podman", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
         "-v", "ON_ERROR_STOP=1", "-At", "-c", statement,
     ])
 
@@ -40,11 +40,11 @@ def wait_ready(container):
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
         ready = subprocess.run(
-            ["docker", "exec", container, "pg_isready", "-U", "postgres"],
+            ["podman", "exec", container, "pg_isready", "-U", "postgres"],
             capture_output=True, timeout=5,
         )
         # entrypoint의 임시 서버를 지나 최종 PID 1 서버가 시작될 때까지 기다립니다.
-        pid = command(["docker", "exec", container, "sh", "-c",
+        pid = command(["podman", "exec", container, "sh", "-c",
                        'if test -f "$PGDATA/postmaster.pid"; then head -1 "$PGDATA/postmaster.pid"; fi'])
         if ready.returncode == 0 and pid.strip() == "1":
             return
@@ -84,13 +84,13 @@ def statistics_snapshot(container, extensions):
 
 
 def run_workload(container, workload, seconds, extensions):
-    base = ["docker", "exec", container, "pgbench", "-n", "-U", "postgres", "-d", "postgres",
+    base = ["podman", "exec", container, "pgbench", "-n", "-U", "postgres", "-d", "postgres",
             "-c", "4", "-j", "2", "-M", "prepared", "-f", f"/benchmark/testqueries/{workload}.sql"]
     command(base + ["-T", "2"], timeout=15)
     reset_statistics(container, extensions)
     output = command(base + ["-T", str(seconds), "-l", "--log-prefix", f"/tmp/bench-{workload}"],
                      timeout=seconds + 30)
-    logs = command(["docker", "exec", container, "sh", "-c", f"cat /tmp/bench-{workload}.*"])
+    logs = command(["podman", "exec", container, "sh", "-c", f"cat /tmp/bench-{workload}.*"])
     latencies = sorted(int(line.split()[2]) / 1000 for line in logs.splitlines())
     if not latencies:
         raise RuntimeError("pgbench produced no transaction latency samples")
@@ -110,12 +110,14 @@ def run_variant(image, variant, seconds, trial):
     container = f"hololive-pg-extension-bench-{uuid.uuid4().hex[:12]}"
     extensions = VARIANTS[variant]
     libraries = ",".join(("pg_stat_statements",) + extensions)
+    # kapu rootless Podman 기준이다. --tmpfs는 uid=/gid=를 받지 않아 U로 --user 소유를 맞추고,
+    # 저장소 bind를 relabel하지 않도록 SELinux label을 끈다.
     args = [
-        "docker", "run", "-d", "--rm", "--name", container, "--network", "none", "--read-only",
+        "podman", "run", "-d", "--rm", "--pull=never", "--name", container, "--network", "none", "--read-only",
         "--cpus", "2", "--memory", "1536m", "--pids-limit", "256", "--user", "999:999",
-        "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-        "--tmpfs", "/var/lib/postgresql:rw,uid=999,gid=999,mode=0755",
-        "--tmpfs", "/var/run/postgresql:rw,uid=999,gid=999,mode=0755",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--security-opt", "label=disable",
+        "--tmpfs", "/var/lib/postgresql:rw,mode=0755,U",
+        "--tmpfs", "/var/run/postgresql:rw,mode=0755,U",
         "--tmpfs", "/tmp:rw,mode=1777,size=128m",
         "--mount", f"type=bind,src={ROOT},dst=/benchmark,readonly",
         "-e", "PGDATA=/var/lib/postgresql/testdata", "-e", "POSTGRES_HOST_AUTH_METHOD=trust",
@@ -135,7 +137,7 @@ def run_variant(image, variant, seconds, trial):
         sql(container, "CREATE EXTENSION pg_stat_statements")
         for extension in extensions:
             sql(container, f"CREATE EXTENSION {extension}")
-        command(["docker", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
+        command(["podman", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
                  "-v", "ON_ERROR_STOP=1", "-f", "/benchmark/testqueries/fixture.sql"], timeout=120)
         results = []
         for workload in WORKLOADS:
@@ -145,12 +147,12 @@ def run_variant(image, variant, seconds, trial):
             print(json.dumps(result), flush=True)
         return results
     except Exception:
-        logs = subprocess.run(["docker", "logs", "--tail", "40", container],
+        logs = subprocess.run(["podman", "logs", "--tail", "40", container],
                               capture_output=True, text=True, timeout=10)
         print(logs.stderr, flush=True)
         raise
     finally:
-        subprocess.run(["docker", "rm", "-f", container],
+        subprocess.run(["podman", "rm", "-f", container],
                        capture_output=True, timeout=30, check=False)
 
 

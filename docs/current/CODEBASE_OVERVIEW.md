@@ -4,7 +4,7 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙과 Seoul collector `b`는 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙은 rootful Podman Quadlet, Seoul collector `b`는 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
 
 ## 큰 구조
 
@@ -18,9 +18,11 @@
 │   └── hololive-dbtest/            # PostgreSQL test harness and migration replay
 ├── docs/current/                   # current architecture, service, contract, runbook docs
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
-└── deploy/compose/                 # Docker Compose baselines and overlays
-    ├── docker-compose.prod.yml     # production compose baseline
-    ├── docker-compose.live-compat.yml # main-host live wiring overlay (always applied; owns collector-c ports/volumes)
+├── deploy/quadlet/                 # central Podman Quadlet units
+│   ├── hololive-bot/               # installed to /etc/containers/systemd/hololive-bot/
+│   └── optional/x-spaces/          # drop-ins installed only when HOLOLIVE_X_SPACES_ENABLED=1
+└── deploy/compose/                 # Seoul AP Docker Compose
+    ├── docker-compose.collector.yml # shared collector/issuer definitions
     └── docker-compose.seoul.yml    # Seoul Compose AP (youtube-collector-b + youtube-po-b)
 ```
 
@@ -123,8 +125,8 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 
 | 대상 | 실행 방식·설정 | 배포·검증 절차 |
 |---|---|---|
-| 중앙 API·worker·collector `c`·infra | `deploy/compose/docker-compose.prod.yml` + `docker-compose.live-compat.yml` | [release runbook](runbooks/release.md); collector `c`와 issuer는 [paired cutover](runbooks/youtube-collector.md#isolated-po-token-lifecycle) |
-| Seoul collector `b` | `docker-compose.prod.yml` + `docker-compose.seoul.yml`, issuer `youtube-po-b` | `scripts/deploy/ap-deploy.sh seoul`; [collector runbook](runbooks/youtube-collector.md) |
+| 중앙 API·worker·collector `c`·infra | Podman Quadlet `deploy/quadlet/hololive-bot/` ([설치·운영](../../deploy/quadlet/README.md)) | [release runbook](runbooks/release.md); collector `c`와 issuer는 [paired cutover](runbooks/youtube-collector.md#isolated-po-token-lifecycle) |
+| Seoul collector `b` | `docker-compose.seoul.yml`(`docker-compose.collector.yml` 확장), issuer `youtube-po-b` | `scripts/deploy/ap-deploy.sh seoul`; [collector runbook](runbooks/youtube-collector.md) |
 | Osaka collector `a`·Osaka2 collector `d` | native `hololive-youtube-collector@youtube-collector-{a,d}.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 또는 `osaka2` 대상; [collector runbook](runbooks/youtube-collector.md) |
 | 통합 관리자 웹 | iris-seoul의 `iris-console.service` | Iris Console 운영 절차; 이 저장소의 [연결 경계](runbooks/admin-dashboard.md) |
 
@@ -134,7 +136,7 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 
 ## YouTube Collector Fleet Notes
 
-`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, 30025), Osaka2 `d` (host-native, 30035). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
+`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, Quadlet, 30025), Osaka2 `d` (host-native, 30035). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
 
 - collector owns fetch/normalize/lease/checkpoint/`source_observations` Publish only;
 - `hololive-api` YouTube plane owns claim/finalize, canonical persist, notification intent, live-end finalizer, and retention;
@@ -149,7 +151,7 @@ Current operational details live in `docs/current/services/youtube-collector.md`
 |---|---|
 | Find runtime ownership | `docs/current/SERVICE_OWNERSHIP.md` |
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
-| Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-youtube-collector.service` |
+| Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/quadlet/`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-youtube-collector.service` |
 | Release, rollback, or deploy | `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/`, `hololive/hololive-api/internal/contracts/` |
 | Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/apifoundation/`, `internal/app/`, `cmd/hololive-api/`; each plane's `runtime/` |
@@ -171,7 +173,7 @@ go build ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api
 go test ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/... ./hololive/hololive-dbtest/...
 ```
 
-Run the deploying `./build-all.sh --no-bump` path only with explicit operator approval because it can recreate live Compose services.
+`./build-all.sh --no-bump --build-only` only builds Podman images; it never deploys. Central rollout follows the release runbook with explicit operator approval.
 
 For documentation-only changes, review the diff and verify referenced source/command paths. For implementation changes affecting runtime ownership, use the existing product boundary checks:
 
@@ -184,6 +186,6 @@ For documentation-only changes, review the diff and verify referenced source/com
 - Start from the nearest `AGENTS.md`; subtree rules override broad repository rules.
 - Keep service ownership boundaries intact.
 - Do not import another service's `internal` package to bypass a contract.
-- Keep generated files, runbooks, and compose docs aligned when changing runtime shape.
+- Keep generated files, runbooks, Quadlet units, and Seoul AP compose docs aligned when changing runtime shape.
 - Use `slog` for Go logging and avoid logging secrets.
 - Prefer small, reversible changes with targeted tests before broad build/test runs.

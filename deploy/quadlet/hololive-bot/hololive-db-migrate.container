@@ -1,0 +1,54 @@
+# 스키마 migration one-shot이다. 부팅에 묶지 않으며([Install] 없음) 배포 절차가 명시적으로
+# `systemctl start hololive-db-migrate.service`를 실행하고 종료 결과를 확인한다.
+# scripts/deploy/quadlet-redeploy-service.sh는 실행 전에 drop-in(50-migrator-image.conf)의 Image=로
+# 배포할 revision의 API image identity를 고정한다. 그 Image=가 아래 ${HOLOLIVE_API_IMAGE}보다 우선한다.
+# 권한 있는 Unix socket만 쓰며 network는 없다.
+[Unit]
+Description=Hololive schema migration (one-shot)
+Requires=holo-postgres.service
+After=holo-postgres.service
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
+
+[Container]
+ContainerName=hololive-db-migrate
+Image=${HOLOLIVE_API_IMAGE}
+Pull=never
+User=1000
+Group=1000
+# 호스트 ID와 분리한다(크기는 스택 공통 65536). 관리 socket이 0777이라 socket mount에는 :idmap이 필요 없다.
+UserNS=auto:size=65536
+Network=none
+Entrypoint=/app/bin/db-migrate
+Volume=/opt/hololive-bot/compose/current/hololive/hololive-api/scripts/migrations:/migrations:ro
+Volume=holo-pg-admin-socket.volume:/var/run/postgresql:ro
+Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
+ReadOnly=true
+ReadOnlyTmpfs=false
+NoNewPrivileges=true
+DropCapability=all
+# 마이그레이션 도중 OOM-kill을 피하려 memory 상한은 두지 않고 pids만 제한한다(fork 방어).
+PidsLimit=256
+StopTimeout=10
+LogDriver=journald
+Environment=PGHOST=/var/run/postgresql
+Environment=PGPORT=5432
+Environment=PGDATABASE=hololive
+Environment=PGUSER=${HOLOLIVE_MIGRATOR_USER}
+Environment=PGSSLMODE=disable
+Environment=PGAPPNAME=hololive-db-migrate
+Environment=POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}
+Environment=MIGRATION_BASELINE_THROUGH=${MIGRATION_BASELINE_THROUGH}
+Environment=MIGRATION_ALLOW_BLOCKING_INDEX_DROP=${MIGRATION_ALLOW_BLOCKING_INDEX_DROP}
+EnvironmentFile=/run/hololive-bot/quadlet-env/hololive-db-migrate.env
+
+[Service]
+Type=oneshot
+Environment=HOLOLIVE_API_IMAGE=localhost/hololive-api:prod
+Environment=HOLOLIVE_MIGRATOR_USER=hololive_migrator
+Environment=POSTGRES_ADMIN_USER=postgres_admin
+Environment=MIGRATION_BASELINE_THROUGH=
+Environment=MIGRATION_ALLOW_BLOCKING_INDEX_DROP=false
+EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
+ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart hololive-db-migrate
+LogRateLimitIntervalSec=0

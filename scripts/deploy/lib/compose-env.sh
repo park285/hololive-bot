@@ -153,7 +153,7 @@ compose_env_list_interpolation_keys_from_files() {
     # central-c 서비스를 선택하지 않고 치환 키만 포함한다.
     for file in "$@"; do
         case "${file##*/}" in
-            docker-compose.prod.yml|docker-compose.seoul.yml)
+            docker-compose.seoul.yml)
                 collector_base="$(dirname "$file")/docker-compose.collector.yml"
                 [[ ! -f "$collector_base" ]] || inputs+=("$collector_base")
                 ;;
@@ -226,62 +226,4 @@ compose_env_assert_no_shell_shadow_for_compose_files() {
             return 1
         fi
     done < <(compose_env_list_interpolation_keys_from_files "$@")
-}
-
-compose_postgres_runtime_network_mode() {
-    local cli="${CONTAINER_CLI:-docker}"
-    "${cli}" inspect holo-postgres --format '{{.HostConfig.NetworkMode}}' 2>/dev/null || true
-}
-
-compose_postgres_runtime_published_host_ips() {
-    local cli="${CONTAINER_CLI:-docker}"
-    "${cli}" inspect holo-postgres \
-        --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostIp}}{{println}}{{end}}{{end}}' \
-        2>/dev/null || true
-}
-
-compose_env_assert_live_compat_for_host_networked_postgres() {
-    local path=""
-    for path in "$@"; do
-        case "${path##*/}" in
-            docker-compose.live-compat.yml)
-                return 0
-                ;;
-        esac
-    done
-
-    # base prod.yml 은 holo-postgres 를 publish 하지 않으므로, host-network 이거나 non-loopback 으로
-    # publish 돼 있으면 live-compat overlay 가 활성이라는 신호다(2026-06-27·2026-06-29 사건).
-    local live_compat_active=""
-    if [[ "$(compose_postgres_runtime_network_mode)" == "host" ]]; then
-        live_compat_active="host-networked holo-postgres"
-    else
-        local ip=""
-        while IFS= read -r ip; do
-            case "${ip}" in
-                ""|127.0.0.1|::1) ;;
-                *)
-                    live_compat_active="holo-postgres published on ${ip}"
-                    break
-                    ;;
-            esac
-        done < <(compose_postgres_runtime_published_host_ips)
-    fi
-
-    if [[ -z "${live_compat_active}" ]]; then
-        return 0
-    fi
-
-    if [[ "${ALLOW_POSTGRES_TOPOLOGY_CHANGE:-}" == "true" ]]; then
-        echo "[WARN] live-compat topology active (${live_compat_active}) but no live-compat overlay is set;" >&2
-        echo "       proceeding because ALLOW_POSTGRES_TOPOLOGY_CHANGE=true." >&2
-        return 0
-    fi
-
-    echo "[ERROR] live-compat topology is active (${live_compat_active}) but COMPOSE_FILE has no" >&2
-    echo "        live-compat overlay. Deploying now would recreate holo-postgres/valkey on loopback-only" >&2
-    echo "        bindings and drop AP (osaka/seoul/osaka2) off the central valkey/postgres bind IP." >&2
-    echo "        Add deploy/compose/docker-compose.live-compat.yml, or set" >&2
-    echo "        ALLOW_POSTGRES_TOPOLOGY_CHANGE=true only for an intentional topology change." >&2
-    return 1
 }

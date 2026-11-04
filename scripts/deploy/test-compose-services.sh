@@ -55,32 +55,16 @@ expect_fail_contains() {
     pass "${label}"
 }
 
-"${ROOT_DIR}/scripts/deploy/test-compose-postgres-routing.sh"
-
 expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" "build target hololive-api"
 expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
 expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
 expect_eq "$(compose_service_resolve_build_target youtube-collector-c)" "youtube-collector" "build alias youtube-collector-c"
 
-expect_eq "$(compose_service_resolve_redeploy_target hololive-api)" "hololive-api" "redeploy target hololive-api"
-expect_eq "$(compose_service_resolve_redeploy_target alarm-worker)" "hololive-alarm-worker" "redeploy alias alarm-worker"
-expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
-expect_fail "redeploy rejects unpaired all-service cutover" compose_service_resolve_redeploy_target all
-expect_eq "$(compose_service_resolve_redeploy_target youtube-collector-c)" "youtube-collector" "redeploy alias youtube-collector-c"
-expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"
-expect_fail_contains "docker-compose.seoul.yml rejects explicit collector redeploy" \
-    "youtube-collector is central-only" \
-    env COMPOSE_FILE="deploy/compose/docker-compose.seoul.yml" \
-    "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" youtube-collector
-expect_fail "docker-compose.seoul.yml rejects topology-unsafe all-service redeploy" \
-    env COMPOSE_FILE="deploy/compose/docker-compose.seoul.yml" \
-    "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" all
-
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
-expect_eq "$(compose_service_resolve_log_target youtube-collector)" "youtube-collector" "log target youtube-collector"
-expect_eq "$(compose_service_resolve_log_target youtube-collector-c)" "youtube-collector" "log alias youtube-collector-c"
+expect_eq "$(compose_service_resolve_log_target youtube-collector)" "hololive-youtube-collector-c" "log target youtube-collector"
+expect_eq "$(compose_service_resolve_log_target youtube-collector-c)" "hololive-youtube-collector-c" "log alias youtube-collector-c"
 
 . "${ROOT_DIR}/scripts/deploy/lib/ap-host.sh"
 

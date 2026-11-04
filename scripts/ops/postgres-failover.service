@@ -2,8 +2,7 @@
 # 기본은 관측 전용이며 두 훅 준비 후 검토한 postgres-failover-apply.conf.example로 변경을 활성화한다.
 [Unit]
 Description=Hololive PostgreSQL failover controller (single evaluation)
-After=docker.service tailscaled.service network-online.target
-Requires=docker.service
+After=tailscaled.service network-online.target
 Wants=network-online.target
 
 [Service]

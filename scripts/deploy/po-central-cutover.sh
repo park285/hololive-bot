@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 격리 issuer와 중앙 수집기 c를 kapu에서 빌드하고 검증된 이미지를 전송한다.
+# 격리 issuer와 중앙 수집기 c를 kapu에서 Podman으로 빌드하고 검증된 이미지를 전송한다.
+# 중앙(hololive-seoul)은 rootful Podman Quadlet이며 원격 교체는 lib/po-central-remote.sh가 소유한다.
 set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$root/scripts/deploy/lib/source-revision.sh"
@@ -26,26 +27,28 @@ if [[ "$mode" == deploy ]]; then
   staging="$remote_root/po-staging-$change_id"
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
-  "$root/scripts/build/build-po-sandbox-artifact.sh" arm64 "$revision" "$version" "$local_stage/issuer"
-  docker buildx build --platform linux/arm64 --provenance=false --sbom=false --load \
-    --tag hololive-youtube-collector:prod \
+  "$root/scripts/build/build-po-sandbox-artifact.sh" arm64 "$revision" "$version" "$local_stage/issuer" podman
+  # 원격 podman load가 :prod를 바로 옮기지 않도록 :candidate 이름으로 저장한다. :prod는 원격 cutover가 옮긴다.
+  collector_image=localhost/hololive-youtube-collector:candidate
+  podman build --platform linux/arm64 --format docker \
+    --tag "$collector_image" \
     --file "$root/hololive/hololive-youtube-collector/Dockerfile" \
     --build-arg "REVISION=$revision" --build-arg "VERSION=$version" "$root"
-  [[ "$(docker image inspect -f '{{.Os}}/{{.Architecture}}' hololive-youtube-collector:prod)" == linux/arm64 ]]
-  [[ "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' hololive-youtube-collector:prod)" == "$revision" ]]
-  collector_id="$(docker create hololive-youtube-collector:prod)"
-  docker cp "$collector_id:/app/bin/youtube-collector" "$local_stage/collector-binary"
-  docker cp "$collector_id:/app/manifest.json" "$local_stage/collector-manifest.json"
-  docker rm "$collector_id" >/dev/null
+  [[ "$(podman image inspect -f '{{.Os}}/{{.Architecture}}' "$collector_image")" == linux/arm64 ]]
+  [[ "$(podman image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$collector_image")" == "$revision" ]]
+  collector_id="$(podman create "$collector_image")"
+  podman cp "$collector_id:/app/bin/youtube-collector" "$local_stage/collector-binary"
+  podman cp "$collector_id:/app/manifest.json" "$local_stage/collector-manifest.json"
+  podman rm "$collector_id" >/dev/null
   python3 - "$local_stage/collector-manifest.json" "$local_stage/collector-binary" "$revision" <<'PY'
 import hashlib, json, sys
 m=json.load(open(sys.argv[1])); assert m['source_revision'] == sys.argv[3] and m['go']['goarch'] == 'arm64'
 assert hashlib.sha256(open(sys.argv[2], 'rb').read()).hexdigest() == m['files']['bin/youtube-collector']
 PY
-  docker save --output "$local_stage/collector-image.tar" hololive-youtube-collector:prod
+  podman save --format docker-archive --output "$local_stage/collector-image.tar" "$collector_image"
   (cd "$local_stage" && sha256sum collector-image.tar > collector-image.tar.sha256)
   python3 "$root/scripts/build/po-sandbox-manifest.py" image-ids "$local_stage/collector-image.tar" \
-    "$(docker image inspect -f '{{.Id}}' hololive-youtube-collector:prod)" > "$local_stage/collector-image-id"
+    "sha256:$(podman image inspect -f '{{.Id}}' "$collector_image")" > "$local_stage/collector-image-id"
   ssh "$ssh_target" "sudo -n install -d -o root -g root -m 0700 '$staging'"
   rsync -a --rsync-path='sudo -n rsync' \
     --files-from="$root/scripts/deploy/po-central-files.txt" "$root/" "$ssh_target:$staging/"

@@ -45,7 +45,7 @@ cd ~/hololive-bot
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-  ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f "$compose_file" \
+  ./scripts/deploy/compose.sh -f "$compose_file" \
   ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}' "${services[@]}"
 REMOTE
 

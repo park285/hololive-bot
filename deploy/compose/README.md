@@ -1,46 +1,44 @@
-# Compose Files
+# Compose Files (Seoul Docker AP)
 
-- `docker-compose.prod.yml`: production baseline for the main host.
-- `docker-compose.live-compat.yml`: live wiring overlay the main host always applies with the production
-  baseline (ports, volumes, and the main-host `youtube-collector-c`, which is `youtube-collector` in
-  `docker-compose.prod.yml`).
+이 디렉터리는 Docker로 남는 Seoul AP(iris-seoul) 정의만 둡니다. 중앙(hololive-seoul)은 Podman Quadlet으로
+운영하며 정의·설치·운영은 [deploy/quadlet/README.md](../quadlet/README.md)가 소유합니다.
+
 - `docker-compose.collector.yml`: shared collector/issuer definitions only; no central credentials.
-- `docker-compose.seoul.yml`: standalone AP composition for collector/issuer `b`.
-- `docker-compose.remote-cache.yml`: optional BuildKit registry cache overlay. Export is fixed to
-  `mode=min`, so only final-image cache records are published; intermediate build stages and copied
-  source trees must not be exported by this operational overlay.
+- `docker-compose.seoul.yml`: standalone AP composition for collector/issuer `b` (`extends` the collector base).
+- `.env.seoul.example`: AP interpolation keys (`/etc/stack-secrets/hololive-bot/ap-compose.env`).
 
-Prefer repository wrappers over raw `docker compose`:
+AP host runtime is explicit in `scripts/deploy/ap-hosts/seoul.conf` (`AP_RUNTIME_MODE=compose`,
+`AP_CONTAINER_RUNTIME=docker`). Use the wrapper with the AP file only:
 
 ```bash
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml config
-./scripts/deploy/compose-redeploy-service.sh <service>
+COMPOSE_PROFILES=oracle COMPOSE_ENV_FILE=<ap-env> ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.seoul.yml config --quiet
 ```
 
-AP uses only its host file, for example `COMPOSE_PROFILES=oracle COMPOSE_ENV_FILE=<ap-env> ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.seoul.yml config --quiet`.
-Do not combine AP with the production file or select the collector base itself: `extends`
-reuses definitions without starting central `c`. Central production adds only its DB/migration dependencies.
-The transfer and rollback sets retain the collector base beside the selected host file.
-The recorded previous layout, image and checked profile are restored together; an old
-production-based rollback may still need old interpolation keys. Removing AP central keys
-from the secret master/mirror requires separate approval after that rollback window closes.
+`extends` reuses definitions without starting central `c`. The transfer and rollback sets retain the
+collector base beside the selected host file. The recorded previous layout, image and checked profile are
+restored together.
+
+> 아래 절은 AP와 중앙에 함께 걸린 계약(worker profile, DB·TLS 정책, env 소유)을 다룹니다. 중앙 unit 정의·설치·
+> 재시작 명령은 [Quadlet README](../quadlet/README.md)와 `docs/current/runbooks/`가 소유합니다.
 
 ## Worker profile release pairing
 
-Worker profiles are non-secret artifacts. Compose mounts only
+Worker profiles are non-secret artifacts. The AP Compose files and central Quadlet units mount only
 `/etc/stack-secrets/hololive-bot/worker-profiles` read-only as a directory; certificate
 and credential mounts remain individually scoped. Atomic mirror replacement is therefore
-visible to the worker-profile drift checker. The live overlay changes only `/app/logs`
-through normal Compose volume-target merging.
+visible to the worker-profile drift checker.
 
-Central API/alarm deployment and the paired central/Seoul collector cutovers run the
-candidate's `--check-worker-profile` with the actual rendered service mounts before
-migration or writer replacement. They retain the checked exact bytes, image identity,
+Every candidate runs its `--check-worker-profile` before migration or writer replacement.
+The Seoul collector cutover uses the actual rendered service (`compose.sh ... run --rm --no-deps`).
+Central cutovers use `worker-profile-pair.py check SERVICE PAIR_DIR`, which runs the pair image
+with only the release directory and `STACK_WORKER_PROFILE_FILE` (the only input that CLI reads)
+and no network. They retain the checked exact bytes, image identity,
 revision/architecture and checksums under the deployment's release/backup directory.
 The running container labels identify this retained pair.
-`artifacts/worker-profile/active/*.yml` keeps the selected pair across wrapper-driven
-reboot/recreate. These root-owned regular files are verified as part of the boot execution
-tree and preserved by exec-tree sync; they are not writable runtime backups or source-transfer
+On the AP `artifacts/worker-profile/active/*.yml` keeps the selected pair across reboot/recreate;
+centrally the `/etc/containers/systemd/hololive-bot/<unit>.container.d/50-worker-profile.conf`
+drop-in does (`Image=sha256:<id>`). These root-owned regular files are preserved by deploy-tree
+sync and `sync-opt-current.sh`; they are not writable runtime backups or source-transfer
 inputs. Do not delete these artifacts or retained image
 tags during the rollback window.
 
@@ -52,23 +50,26 @@ while the canonical profile directory stays mounted at `/run/hololive-bot/worker
 Rollback never copies profile bytes into `/etc/stack-secrets`. A desired/effective mismatch
 is diagnostic and does not prevent a valid previous pair from starting.
 
-Central API/alarm manual rollback is
-`scripts/deploy/compose-rollback-service.sh <printed-backup-directory> --check`, then
-`--apply` within the approved rollback scope. Collector rollback continues through
+Central API/alarm manual rollback regenerates the previous pair's drop-in with
+`worker-profile-pair.py rollback SERVICE PREVIOUS_PAIR_DIR` (hololive-api also pins the previous
+`APP_VERSION`), publishes it with `activate`, then runs `systemctl daemon-reload` and restarts only
+the approved unit. Collector rollback continues through
 `po-central-cutover.sh rollback <backup>` or `ap-rollback.sh seoul --apply` with its
-existing approval variables. An originally stopped collector is recreated without
-starting it; schema compatibility must be restored before an explicit start.
+existing approval variables. On the Seoul AP an originally stopped collector is recreated without
+starting it; schema compatibility must be restored before an explicit start. The central
+cutover refuses a stopped collector because Quadlet removes the container of a stopped unit,
+so the previous profile can only be proven from a running process.
 
-Central capture requires a valid `collector-prechange.state` in its completed backup;
-missing state fails closed rather than assuming the old writer was running. A restoration
-activation failure is reported before removing the issuer. Retain that backup and inspect
-the installed candidate files before explicit recovery; a failed restoration is not a
-successful source rollback.
+A central restoration activation failure is reported before any unit restart. Retain that
+backup and inspect the installed drop-in before explicit recovery; a failed restoration is not
+a successful rollback.
 
-Preparation can load candidate image tags before writer cutover is armed. If image/profile
-validation then fails, central and AP restore both source and the recorded tag baseline:
+AP preparation can load candidate image tags before writer cutover is armed. If image/profile
+validation then fails, the AP restores both source and the recorded tag baseline:
 present tags return to their rollback references; tags absent at baseline are removed by
 exact reference. This includes AP first deployment and an issuer-absent baseline.
+The central cutover loads archives under `:candidate` tags and moves `:prod`, the drop-in and
+the issuer receipt only at cutover, so a failed candidate check leaves them unchanged.
 Failed inventory lookup is not treated as absence. A failed lookup/removal is reported
 while preserving the original deployment exit status; no automatic retry, runtime restart,
 container/volume deletion, receipt invention or rollback-archive deletion occurs in this path.
@@ -90,7 +91,7 @@ runtime fails without changing the writer. No credential value is printed or sav
 The explicit service selects `API_SECRET_KEY` for API/alarm diagnostics and
 `METRICS_API_KEY` for collector diagnostics. There is no credential fallback.
 
-For a separately approved preparation on a Compose host, run from its deployment root:
+For a separately approved preparation on the AP or the central host, run from its deployment root:
 
 ```bash
 sudo python3 scripts/deploy/lib/worker-profile-pair.py prepare \
@@ -116,16 +117,16 @@ the previous release's checksums and binary/profile pair before starting it.
 10.2.1 binary with `STACK_WORKER_PROFILE_SOURCE_FILE` before incompatible settings
 changes. Preparation receipts alone do not prove that baseline was accepted.
 
-Local verification ownership: run the Compose H3/mount render checks, existing native/AP
-cutover and maintenance-stopped behavior tests, and real candidate/previous-binary smoke
+Local verification ownership: run the existing native/AP/central cutover and
+maintenance-stopped behavior tests, and real candidate/previous-binary smoke
 checks for invalid settings, missing/corrupt pairs, profile-only changes, atomic mirror
 replacement, and failed cutover restoration. No live operation is implied by these edits.
 
 
 ## Owned ingress image
 
-`admin-dashboard-ingress` uses the local-only `iris-stack-nginx:1.31.7-zlib1.3.2-r1`
-image (`pull_policy: never`). Its only build context is `deploy/images/nginx`; the
+`admin-dashboard-ingress` uses the local-only `localhost/iris-stack-nginx:1.31.7-zlib1.3.2-r1`
+image (`Pull=never`). Its only build context is `deploy/images/nginx`; the
 immutable official Nginx base retains its entrypoint, configuration and users,
 with Alpine 3.24 `zlib=1.3.2-r1` (CVE-2026-85091) and `musl=1.2.6-r3`/`musl-utils=1.2.6-r3`
 (CVE-2026-107891) applied. `ca-certificates-bundle=20261020-r0` keeps the CA bundle free of the
@@ -134,14 +135,12 @@ built image needs no separate CA derivation. The PostgreSQL and Valkey runtimes 
 zlib, musl and CA bundle pins; PostgreSQL adds `brotli-libs=1.2.1-r0`, `libcurl=8.23.0-r0` and
 `nghttp2-libs=1.70.0-r0`.
 
-Build the ingress explicitly with the production and live-compat Compose files
-and the `admin-dashboard-ingress` build target; `build-all.sh` only selects the
-base production file. For isolated local builds without runtime env inputs:
+`./build-all.sh --build-only` builds it with `podman build` together with the other central
+images. For isolated local builds without runtime env inputs:
 
 ```bash
-docker buildx build --platform linux/arm64 --build-arg REVISION=unknown \
-  --provenance=false --sbom=false --load \
-  --tag iris-stack-nginx:1.31.7-zlib1.3.2-r1 deploy/images/nginx
+podman build --platform linux/arm64 --format docker --build-arg REVISION=unknown \
+  --tag localhost/iris-stack-nginx:1.31.7-zlib1.3.2-r1 deploy/images/nginx
 ```
 
 Use the full committed image-source revision instead of `unknown` only after the
@@ -150,15 +149,11 @@ image rather than maintain a second recipe or pull the unpatched official tag.
 The existing ingress behavior checks build an isolated temporary tag from this
 context; `NGINX_TEST_PLATFORM` selects the architecture (default `linux/amd64`).
 
-`valkey-cache` and `docker-proxy` also use local-only owned images:
-`iris-stack-valkey:9.1.3-zlib1.3.2-r1` applies the same zlib, musl and CA bundle pins to the pinned official
-Valkey base, while `iris-stack-socket-proxy:1.13.1-go1.27.2` rebuilds the checksum-pinned
-upstream 1.13.1 source with Go 1.27.2. The latter replaces the vulnerable Go 1.26.6
-standard library without changing CLI flags, UID 65534, socket paths or request policy.
-Their contexts are `deploy/images/valkey` and `deploy/images/socket-proxy`; both are
-included in the base production build. ChatBotGo must load the same owned Valkey
-image for its host architecture. No official-image fallback or live-data mutation
-is performed by building these candidates.
+`valkey-cache` also uses a local-only owned image:
+`localhost/iris-stack-valkey:9.1.3-zlib1.3.2-r2` applies the same zlib, musl and CA bundle pins to the pinned official
+Valkey base. Its context is `deploy/images/valkey` and it is included in `build-all.sh --build-only`.
+ChatBotGo must load the same owned Valkey image for its host architecture. No official-image
+fallback or live-data mutation is performed by building these candidates.
 
 Valkey 9.1.3은 잘못된 `RESTORE` 문자열 길이로 서버가 종료되는 결함과
 Cluster Pub/Sub의 힙 버퍼 오버플로를 수정합니다. 버전 업데이트는 기존
@@ -219,21 +214,24 @@ release pair, not as extra keys or aliases in the new profile.
    and changes only the host-owned effective/source paths, without restarting.
 3. After 10.2.1 acceptance and retention of each previous pair, sync the approved
    final desired profiles and transfer verified 11.0.0 candidate artifacts.
-   Render prod+live-compat (central) or standalone `docker-compose.seoul.yml` (b) with
+   For b, render standalone `docker-compose.seoul.yml` with
    `WORKER_PROFILE_OVERRIDE_FILE=none`, pipe `config --format json` to
    `worker-profile-pair.py candidate SERVICE ABSOLUTE_PAIR_DIR`, then select that
-   directory's `compose.yml` using `WORKER_PROFILE_OVERRIDE_FILE`. Run
-   `compose.sh ... run --rm --no-deps --pull never SERVICE --check-worker-profile`
-   and `worker-profile-pair.py verify-source SERVICE ABSOLUTE_PAIR_DIR`.
+   directory's `compose.yml` using `WORKER_PROFILE_OVERRIDE_FILE` and run
+   `compose.sh ... run --rm --no-deps --pull never SERVICE --check-worker-profile`.
+   Centrally, pipe the installed unit to `worker-profile-pair.py candidate SERVICE
+   ABSOLUTE_PAIR_DIR sha256:<id> < /etc/containers/systemd/hololive-bot/<unit>.container`
+   and run `worker-profile-pair.py check SERVICE ABSOLUTE_PAIR_DIR`. Both then run
+   `worker-profile-pair.py verify-source SERVICE ABSOLUTE_PAIR_DIR`.
    A CLI check proves no DB/schema compatibility; never implicitly migrate.
-4. Activate using `worker-profile-pair.py activate SERVICE ABSOLUTE_PAIR_DIR ROOT`
-   and recreate only approved services with `up -d --no-build --no-deps`.
-   Central API/alarm use the release runbook's no-build path, **not** the local
-   build-and-deploy `compose-redeploy-service.sh`. Existing collector wrappers
+4. Activate using `worker-profile-pair.py activate SERVICE ABSOLUTE_PAIR_DIR ROOT`.
+   The AP recreates only approved services with `up -d --no-build --no-deps`; centrally
+   run `systemctl daemon-reload` and restart only the approved units through the release
+   runbook's Quadlet path. Existing collector wrappers
    retain issuer-first ordering and provenance checks. Native apply also writes
    host infrastructure, so it is not a read-only CLI preflight.
 5. Verify running image/binary revision and authenticated loaded profile hash.
-   `verify-live SERVICE PAIR_DIR CONTAINER` checks Compose; `verify-native SERVICE
+   `verify-live SERVICE PAIR_DIR CONTAINER` checks the Docker AP or central Podman container; `verify-native SERVICE
    RELEASE_DIR UNIT` also checks `/proc/PID/exe`, PID/start identity, checksums
    and effective/source paths. Native deploy/completion invoke this check.
    Prove atomic desired-file replacement is detected within the 60-second
@@ -246,34 +244,32 @@ The desired directory is mounted read-only so atomic replacement remains visible
 individual file mounts would pin the old inode. Effective profiles live in the
 immutable release mount and `STACK_WORKER_PROFILE_SOURCE_FILE` names only the
 desired service slot. Profiles must contain no passwords, env exports or tokens.
-Active overlays/receipts under `artifacts/worker-profile` survive deploy-tree sync
-and boot. Preserve the release directories, retained image tags and deployment
+Active overlays/receipts under `artifacts/worker-profile` and the central `50-worker-profile.conf`
+drop-ins survive deploy-tree sync and boot. Preserve the release directories, retained image tags and deployment
 inputs until acceptance; per-file atomic publication is not a whole-deploy lock.
 
-A prepared pair alone is **not** an API/alarm rollback bundle. Preserve `service`,
-`previous-state`, `previous/{profile.json,pair.json,SHA256SUMS,compose.yml}`,
-numbered `compose/*.yml` snapshots, the sibling collector base used by `extends`,
-and `project-directory` as assembled by
-`compose-redeploy-service.sh`. Check with `compose-rollback-service.sh BACKUP
---check`; only an approved `--apply` restores the pair. Collector c/b and native
-a/d retain their existing rollback entrypoints and stopped-state behavior.
+A prepared pair alone is **not** an API/alarm rollback bundle. Preserve the previous pair
+directory (`previous/{profile.json,pair.json,SHA256SUMS}`), its retained image tag and the unit
+revision it ran under. `worker-profile-pair.py verify SERVICE PREVIOUS_PAIR_DIR` and `check`
+prove the pair; only an approved `rollback`/`activate` plus unit restart restores it. Collector c/b
+and native a/d retain their existing rollback entrypoints; the AP keeps its stopped-state behavior.
 Rollback never writes the desired mirror or synthesizes removed keys; verify
 the restored loaded hash, not health alone. A known schema-incompatible old
 writer must stay stopped even when its profile CLI succeeds.
 
 ## 중앙 Valkey 영속 TLS·Sentinel 전환
 
-`HOLOLIVE_VALKEY_HA_ENABLED=1`은 중앙의 `docker-compose.valkey-ha.yml`을 선택합니다.
-기본 prod의 kapu 보조 standalone/UDS 경로는 바꾸지 않습니다.
-`VALKEY_BIND_IP=100.100.1.8`과 검증된 `VALKEY_IMAGE`를 지정하고 `VALKEY_SENTINEL_ADDRS`를 비우면
-API·worker는 역할별 ACL과 기존 내부 CA로 `100.100.1.8:16379`에 직접 TLS 접속합니다.
+중앙 Quadlet은 Valkey HA 노드(`valkey-cache.container`)와 Sentinel 접속만 정의합니다. `sync-opt-current.sh`는
+compose.env에 `HOLOLIVE_VALKEY_HA_ENABLED=1`과 비어 있지 않은 `VALKEY_SENTINEL_ADDRS`가 없으면 unit을 설치하지 않으며,
+옛 standalone/UDS나 Sentinel 없는 직접 TLS 단계의 정의는 남아 있지 않습니다.
+`VALKEY_BIND_IP=100.100.1.8`과 검증된 `VALKEY_IMAGE`를 지정합니다.
 `valkey-cache` 물리 슬롯은 `hololive-bot_valkey-ha-data`를 사용하며 역할은 native `/data/valkey.conf`가 소유합니다.
 
 두 그룹 primary와 각 복제본 2개의 초기 동기화를 수용하고 세 Sentinel/quorum 2를 확인한 뒤
 `VALKEY_SENTINEL_ADDRS=100.100.1.3:26379,100.100.1.8:26379,100.86.97.95:26379`를 설정합니다.
-같은 wrapper가 `docker-compose.valkey-sentinel.yml`을 추가하여 앱의 직접 host/socket을 비우고
-master `hololive`, discovery 계정 `hololive-discovery`로 전환합니다. 직접 endpoint fallback은 없습니다.
-두 overlay는 활성 worker profile overlay보다 먼저 적용되며 `LIVE_LOGS_PATH`의 로그 bind를 유지합니다.
+앱 unit은 직접 host/socket을 비우고 master `hololive`, discovery 계정 `hololive-discovery`로 접속합니다.
+직접 endpoint fallback은 없습니다. worker profile drop-in(`50-worker-profile.conf`)은 image·profile 경로만 바꾸며
+`LIVE_LOGS_PATH`의 로그 bind는 기본 unit에 남습니다.
 
 secret 정본은 `stack-secrets/hosts/<host>/valkey/`와 각 host manifest입니다.
 서버 TLS·seed·ACL·복제·health 파일은 UID 999가 읽고, operator password는 호스트 root 전용입니다.
@@ -289,31 +285,29 @@ host profile에 `sentinel`을 추가합니다. 준비 중에는 unit을 enable�
 
 기존 메모리-only 원본은 writer 정지와 승인된 임시 replication donor를 거쳐 영속 volume으로 옮깁니다.
 원본→donor의 기존 plaintext/auth 경로와 donor→영속 노드의 TLS/replication-auth 경로를 구분합니다.
-앱 재개 뒤에는 과거 donor·빈 AOF·이전 비영속 Compose로 데이터 rollback하지 않습니다.
+앱 재개 뒤에는 과거 donor·빈 AOF·이전 비영속 정의로 데이터 rollback하지 않습니다.
 최신 데이터와 호환되는 image/profile/transport로 복구하며 기존 PostgreSQL 포함 unit은 유지합니다.
 비동기 복제·AOF everysec·min-replicas는 무손실 동기 커밋이나 외부 부수효과 fencing이 아닙니다.
 정기 백업 중단 정책은 변경하지 않습니다.
 
 ## Runtime Env Inputs
 
-`scripts/deploy/compose.sh` injects one Compose interpolation env file with `--env-file`.
-The host default is:
-
-```text
-/etc/stack-secrets/hololive-bot/compose.env
-```
-
-Use `COMPOSE_ENV_FILE=<path>` for local tests or transition-period compatibility. The
-legacy monolithic `env` file is no longer a production `env_file` default.
-AP deploy/rollback wrappers set `COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env`
+Central Quadlet units read `/etc/stack-secrets/hololive-bot/compose.env` through
+`[Service] EnvironmentFile=`; `quadlet-prestart` rejects syntax that Compose and systemd
+would read differently and moves passwords/API keys into root-only `--env-file`s.
+On the Seoul AP, `scripts/deploy/compose.sh` injects one Compose interpolation env file
+with `--env-file`. AP deploy/rollback wrappers set
+`COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env`
 so AP hosts do not receive Iris egress tokens in their Compose interpolation file.
+The legacy monolithic `env` file is not a production env file.
 
-Application-only env is scoped per service:
+Application-only env is scoped per service. Central units use the fixed files below;
+the AP collector reads `HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE` (default the same path):
 
 ```text
-HOLOLIVE_API_ENV_FILE=/etc/stack-secrets/hololive-bot/bot.env
-HOLOLIVE_ALARM_WORKER_ENV_FILE=/etc/stack-secrets/hololive-bot/alarm-worker.env
-HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE=/etc/stack-secrets/hololive-bot/youtube-collector.env
+/etc/stack-secrets/hololive-bot/bot.env
+/etc/stack-secrets/hololive-bot/alarm-worker.env
+/etc/stack-secrets/hololive-bot/youtube-collector.env
 ```
 
 ### Central endpoint ownership
@@ -339,8 +333,8 @@ The AP overlay uses only `youtube-collector.env` for `youtube-collector` instanc
 egress tokens stay out of AP collector containers. The Seoul AP host also uses
 `ap-compose.env`, which excludes `IRIS_WEBHOOK_TOKEN` and `IRIS_BOT_TOKEN`.
 The central unsuffixed `youtube-collector` (`c`) also uses scoped
-`youtube-collector.env`; it still must not receive Iris egress tokens or the
-monolithic Compose env file as an `env_file`.
+`youtube-collector.env`; it still must not receive Iris egress tokens, and `compose.env`
+is only a `[Service]` interpolation file, never a container env file.
 
 `youtube-collector.env` must provide a non-empty `METRICS_API_KEY`, the shared
 `HOLOLIVE_OTLP_GRPC_ENDPOINT`, and `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true`
@@ -354,9 +348,9 @@ are rejected instead of being reinterpreted with a second URL grammar. This is a
 permanent contract, not a retirement guard: it has no removal condition
 (`DEC-20260926-hololive-legacy-env-config-retirement`).
 
-The live API does not join `observability-traces`. Its approved host/Tailscale OTLP
+The API unit does not join `observability-traces`. Its approved host/Tailscale OTLP
 endpoint must be explicitly present in `compose.env`; a container DNS endpoint on
-the removed network will not work. Other observability peers cannot reach the API
+that network will not work. Other observability peers cannot reach the API
 through that external network. Admin/LLM loopback bindings remain unchanged.
 `HOLOLIVE_ADMIN_API_PORT_BIND_IP` must match `tailscale ip --assert` on the deployment
 host before any build/start/restart. The approved current IPv4 binding remains
@@ -366,13 +360,13 @@ broad private CIDRs and wildcard source overrides fail preflight.
 AP collectors no longer use Valkey (see the collector cache-topology contract).
 The obsolete tailnet 6379 publish is removed; central private Unix socket, internal
 network/password authentication and loopback remain. PostgreSQL AP access retains
-TLS with `verify-full`/SCRAM. Role-specific HBA rules remain restrictive even when Docker
-source NAT presents AP traffic as a bridge gateway; source-IP rules alone are not isolation.
-The tracked ingress nftables policy now filters both host input and Docker DNAT
+TLS with `verify-full`/SCRAM. Role-specific HBA rules remain restrictive even when
+container NAT presents AP traffic as a bridge gateway; source-IP rules alone are not isolation.
+The tracked ingress nftables policy filters both host input and Podman (netavark) DNAT
 forward paths for admin UDP 30006 and PostgreSQL TCP 5433. Mutation preflight requires
 the reviewed installed file, active firewall unit, and loaded DB source/forward rules.
 An empty source set, stale unit, or unavailable firewall inspection stops cutover.
-Applying the firewall, host OTLP configuration, or Compose changes requires the
+Applying the firewall, host OTLP configuration, or unit/Compose changes requires the
 separately authorized service deployment workflow; source validation activates none of them.
 
 ## Prepared database policy (not activated)
@@ -404,8 +398,8 @@ native host.env), or stop for a new capacity decision; restoring the old 58-slot
 is not made safe by restoring a valid binary/profile pair.
 
 The central migration job and its admin bootstrap use `/var/run/postgresql` with explicit
-`PGSSLMODE=disable` and `network_mode: none`. Only DB/migrator mount the private tmpfs volume;
-ordinary runtime containers never do. Operator/health/nightly `docker exec` sockets remain
+`PGSSLMODE=disable` and `Network=none`. Only DB/migrator mount the private tmpfs volume;
+ordinary runtime containers never do. Operator/health/nightly `podman exec` sockets remain
 available. The Go transport validation and socket mount must ship **before/with** HBA denying
 admin/migrator SQL and replication TCP. Network clients retain verify-full; do not loosen
 network TLS to repair a socket rollout. The central collector migration-ledger proof also
@@ -417,7 +411,7 @@ local contract cutover. A differently named existing login requires separately a
 credential/ownership migration; there is no membership alias or automatic role rename.
 There is no active replication TCP allow rule, including the retired `.5` standby route.
 Standby reactivation requires a separately approved explicit TLS transport/address rule;
-the retained standby Compose file is not authorization to enable replication access.
+the retained standby Quadlet reference unit is not authorization to enable replication access.
 
 Server command flags prepare TCP keepalive 60/10/6, lock waits, all temp files, slow statements
 at 1s, and bind-parameter lengths 0 for normal/error logging. SQL literals/comments can still
@@ -426,7 +420,7 @@ No global runtime lock timeout is introduced. Existing WAL settings are explicit
 checkpoint 900s, max WAL 2GB, compression lz4, also in the inactive standby reference.
 Persisted `postgresql.auto.conf` cleanup is a **separately approved operation**: capture old
 values/sources and rollback flags, remove only the three approved entries (never RESET ALL),
-then verify `source='command line'` and `pending_restart` after approved recreation.
+then verify `source='command line'` and `pending_restart` after an approved `holo-postgres.service` restart.
 
 **Valkey activation BLOCKED:** eviction policy and maxmemory are unchanged. There is no real
 Valkey scrape/alert rule and the supplied memory queries were empty. The existing application
@@ -443,13 +437,14 @@ Collector compatibility env pairs use `${NEW-${OLD-default}}` / `${OLD-${NEW-def
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored
 `compose.env` or `ap-compose.env` plus the per-service env files to the target host.
 
-`scripts/deploy/lib/postgres-capacity.sh`가 production mutation entrypoint의 공통 owner입니다.
-`scripts/deploy/compose.sh ... up`, `build-all.sh`, `scripts/deploy/compose-redeploy-service.sh`는
-build/migration/up보다 먼저 이 gate를 호출해 `COMPOSE_ENV_FILE`의 PostgreSQL pool override key만 읽고
-stack 전체 connection budget을 다시 계산합니다. Target-rendered allocation이 `max_connections=60`에서 superuser 예약
-3(`@superuser-reserved`)을 뺀 비슈퍼유저 슬롯 대비 최소 3개 control reserve를 남기지 않으면 어떤 표준 배포 경로도 진행하지 않습니다. 이 배포-host preflight는 Bash와 전송된 policy만 사용하며 CI용 uv/Python runtime을 요구하지 않습니다. Default policy만 확인할 때는
-`scripts/ci/check-postgres-capacity.sh`를, 특정 render 결과를 확인할 때는 세 번째 인자로 해당
-Compose env file을 전달합니다. 이 검사는 다른 env 값이나 secret을 출력하지 않습니다.
+`scripts/deploy/lib/postgres-capacity.sh`는 AP Compose mutation entrypoint의 공통 gate입니다.
+`scripts/deploy/compose.sh ... up`은 up보다 먼저 이 gate를 호출해 `COMPOSE_ENV_FILE`의 PostgreSQL pool override key만 읽고
+stack 전체 connection budget을 다시 계산합니다. Target allocation이 `max_connections=60`에서 superuser 예약
+3(`@superuser-reserved`)을 뺀 비슈퍼유저 슬롯 대비 최소 3개 control reserve를 남기지 않으면 진행하지 않습니다. 이 배포-host preflight는 Bash와 전송된 policy만 사용하며 CI용 uv/Python runtime을 요구하지 않습니다.
+중앙도 같은 gate를 host `compose.env`에 대해 실행합니다. `sync-opt-current.sh`는 unit 설치 전에, `quadlet-redeploy-service.sh`는
+API·worker 교체 preflight에서 실행하며 실패하면 아무것도 바꾸지 않습니다. 중앙 unit의 기본 pool 값은
+`scripts/ci/check-postgres-capacity.sh`(기본 `--verify-quadlet`)가 `deploy/quadlet/hololive-bot`을 원본으로 확인하며,
+특정 host env 값을 확인할 때는 세 번째 인자로 해당 env file을 전달합니다. 이 검사는 다른 env 값이나 secret을 출력하지 않습니다.
 
 ## PostgreSQL TLS
 
@@ -468,25 +463,20 @@ Fresh-PGDATA psql initialization is a separate controlled bootstrap boundary: it
 suppresses normal/slow/error statement logging while setting role passwords; the ordinary
 Go bootstrap sends client-generated SCRAM verifiers. Synthetic failure/log checks are required.
 
-Local acceptance (not run by this preparation): `bash scripts/deploy/test-compose-postgres-routing.sh`,
-`bash scripts/ci/check-postgres-capacity.sh`, and
+Local acceptance (not run by this preparation): `bash scripts/ci/check-postgres-capacity.sh` and
 `bash scripts/deploy/test-postgres-access-policy.sh`. The latter requires the already-built
-repository PG18.6 image (`POSTGRES_POLICY_TEST_IMAGE` may select its tag), Docker and OpenSSL;
+repository PG18.6 image (`POSTGRES_POLICY_TEST_IMAGE` may select its tag), rootless Podman and OpenSSL;
 it uses a disposable internal network, tmpfs database/socket and synthetic certificates only,
 publishes no ports, and proves HBA rejection, runtime/exporter TLS, migration/nightly socket
 access and aggregate role limits. It never reads runtime env files or pulls/builds images.
 
 ## Requirements
 
-- Docker Compose v2.24.4+ — 오버레이의 `!override` YAML 태그가 이 버전부터 지원된다.
-  build `provenance`/`sbom` 속성도 지원해야 한다.
-- Scheduled/manual final-image scanning uses `docker-compose.security-scan.yml` only to disable
-  attestations that the hosted runner's disposable Docker image store cannot retain. The scanned
-  runtime layers and image tags remain the production build targets; ordinary production builds
-  keep `provenance: mode=max` and `sbom: true`.
-- BuildKit 활성 Docker Engine — Dockerfile들의 `# syntax=docker/dockerfile:1.28.0@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b`
-  (cache mount, `COPY --link`, per-Dockerfile `.dockerignore`) 전제.
+- Seoul AP: Docker Compose v2.24.4+ — AP worker profile overlay의 `!override` YAML 태그가 이 버전부터 지원된다.
+- 중앙: rootful Podman 5.x와 Quadlet. unit 원본은 `QUADLET_UNIT_DIRS=<dir> /usr/libexec/podman/quadlet -dryrun`을 통과해야 한다.
+- 이미지 빌드는 kapu의 `podman build --format docker`(`./build-all.sh`)다. arm64 대상은 등록된 qemu-aarch64 binfmt가 필요하다.
+  Dockerfile의 cache mount와 per-Dockerfile `.dockerignore`를 그대로 쓴다.
 - production Go build는 `GOWORK=off`로 각 `go.mod`의 stable published external pin만 사용한다.
   로컬 sibling checkout은 image source가 아니다.
-- 호스트 호환성 확인: `docker compose -f deploy/compose/docker-compose.prod.yml config` 가
-  에러 없이 렌더되는지로 검증한다.
+- 호스트 호환성 확인: AP는 `compose.sh -f deploy/compose/docker-compose.seoul.yml config --quiet`, 중앙은 위
+  `quadlet -dryrun`이 에러 없이 끝나는지로 검증한다.

@@ -6,12 +6,12 @@
 |---|---|
 | Module | `hololive-youtube-collector` |
 | Binary | `youtube-collector` |
-| Execution | Central `c`: Compose `youtube-collector`; Seoul `b`: Compose `youtube-collector-b`; Osaka `a` / Osaka2 `d`: host-native systemd `hololive-youtube-collector@youtube-collector-{a,d}.service` |
+| Execution | Central `c`: Podman Quadlet `hololive-youtube-collector-c.service` (fleet service `youtube-collector`); Seoul `b`: Compose `youtube-collector-b`; Osaka `a` / Osaka2 `d`: host-native systemd `hololive-youtube-collector@youtube-collector-{a,d}.service` |
 | Ports | `a` 30005, `b` 30015, `c` 30025, `d` 30035 |
 | Health endpoint | `https://127.0.0.1:<port>/health` over H3 |
 | Ready endpoint | `https://127.0.0.1:<port>/ready` over H3 |
 | DB role | `hololive_scraper` |
-| TLS | `POSTGRES_SSLMODE=verify-full`; Compose CA `/run/hololive-bot/certs/postgres-ca.pem`, native CA `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem` |
+| TLS | `POSTGRES_SSLMODE=verify-full`; container CA (Quadlet `c`, Compose `b`) `/run/hololive-bot/certs/postgres-ca.pem`, native CA `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem` |
 
 ## Role
 
@@ -123,7 +123,7 @@ player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체�
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
 | Source observations | PostgreSQL | `source_observations` / `source_observation_queue` | `hololive-api` YouTube plane |
-| Collector health/ready | H3 | `/health`, `/ready` | Compose/systemd healthcheck |
+| Collector health/ready | H3 | `/health`, `/ready` | Podman/Compose/systemd healthcheck |
 
 ## Consumes
 
@@ -145,8 +145,8 @@ player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체�
 - `YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-{a,b,c,d}`
 - `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
-- `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the Compose/native CA path above
-- Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` for fleet member `c` and issuer `youtube-po-c`. Seoul uses `docker-compose.prod.yml` + `docker-compose.seoul.yml` for `youtube-collector-b` and issuer `youtube-po-b`; the AP overlay pins central services to `central-only`. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
+- `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the container/native CA path above
+- Central startup uses the Quadlet units `hololive-youtube-collector-c.container` and `hololive-youtube-po-c.container` (`deploy/quadlet/hololive-bot/`) for fleet member `c` and its issuer. Seoul uses the standalone `docker-compose.seoul.yml` (extending `docker-compose.collector.yml`) for `youtube-collector-b` and issuer `youtube-po-b`. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
 
 ## Shutdown behavior
 
@@ -171,7 +171,7 @@ Holodex와 Official Schedule fetch는 collector-owned `providerhttp` transport�
 
 ## Observability
 
-- Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f youtube-collector`
+- Logs: `sudo journalctl -u hololive-youtube-collector-c.service -f` (central `c`)
 - Health: `https://127.0.0.1:30025/health`
 - Ready: `https://127.0.0.1:30025/ready`
 - Metrics: live-compat publishes `:30096` on `HOLOLIVE_METRICS_PORT_BIND_IP`

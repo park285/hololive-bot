@@ -18,9 +18,13 @@ Iris Console이 소유하며 이 저장소에는 독립 `admin-dashboard` 서비
 ## 중앙 호스트의 역할
 
 - `hololive-api`와 업무 봇은 Osaka에서 기존 이미지와 데이터·인증서를 사용합니다.
-- `docker-compose.admin-web.yml`은 중앙 H3 관리 API의 승인된 Tailscale publish입니다. 통합 웹의 API 연결에 필요한 overlay입니다.
+- 중앙 `hololive-api.container`의 `${HOLOLIVE_ADMIN_API_PORT_BIND_IP}:30006/udp` publish가 H3 관리 API의 승인된 Tailscale publish입니다. 통합 웹의 API 연결에 필요합니다.
 - `admin-dashboard-ingress`는 기존 shortlink 소비자를 위해 이름을 유지합니다. 30192의 단축 링크와 30193의 health만 제공합니다.
-- 중앙 `docker-proxy`는 internal network에서 `deunhealth`에만 Docker API를 제공합니다. `hololive-api`와 통합 관리자 웹에는 Docker socket·proxy 접근을 부여하지 않습니다. PostgreSQL·Valkey와 collector fleet은 각 runtime의 운영 경계를 따릅니다.
+- source 제한은 `admin-dashboard-ingress-firewall.service`가 `/etc/nftables.d/admin-dashboard-ingress.nft`로 적용합니다.
+  규칙 갱신은 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 합니다. reload는 table을 한 nft
+  transaction으로 다시 적재하고, `restart`·`stop`과 달리 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·
+  `admin-dashboard-ingress`를 재시작하지 않습니다([중앙 Quadlet unit](../../../deploy/quadlet/README.md#기동정지의존)).
+- 중앙에는 container runtime socket·proxy가 없습니다. 어떤 컨테이너도 Podman/Docker socket을 mount하지 않습니다. PostgreSQL·Valkey와 collector fleet은 각 runtime의 운영 경계를 따릅니다.
 
 공개 HTTPS와 Certbot 갱신은 스택 `deploy/holoshi-nginx`가, 내부 신뢰는 기존 공통 CA와 서비스별 leaf가 소유합니다.
 공개 인증서를 내부 H3 private key와 공유하지 않으며 TLS 검증을 끄지 않습니다. 관리 API key와 공통 로그인 hash는
@@ -32,8 +36,7 @@ Iris의 플랫폼 secret master/manifest를 거쳐 전달하며 여기에서 중
 대표 origin을 확인하고, 운영 변경은 승인된 효과에 한정합니다. 기존 native generation·공개 ingress 설정·
 Osaka deploy snapshot과 secret 복구 자료를 보존합니다. 웹 변경 승인만으로 DB migration이나 봇 재시작을 실행하지 않습니다.
 
-`public-pr-frontend-gate.sh`는 `deunhealth`의 공유 `docker-proxy` 연결과 shortlink ingress 보존을 검사합니다.
-영향받는 저장소의 검증과 이 저장소의 Compose/실제 Nginx 검사를 마친 뒤 kapu의 검증된 빌드 산출물만 호스트에 전송합니다.
+영향받는 저장소의 검증과 이 저장소의 Quadlet/실제 Nginx 검사를 마친 뒤 kapu의 검증된 빌드 산출물만 호스트에 전송합니다.
 공통 인증 조회·SSR·권한 거절·logout/PWA와 기존 봇·단축 링크 상태를 확인하고 임시 조회 계정은 정확한 ID로 폐기합니다.
 실제 AI 호출·메시지/푸시 발송·iOS 실기기 검증을 자동 smoke에 포함하지 않습니다.
 

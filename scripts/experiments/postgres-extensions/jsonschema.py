@@ -17,11 +17,11 @@ def main():
     args = parser.parse_args()
     container = f"hololive-pg-jsonschema-bench-{uuid.uuid4().hex[:12]}"
     command([
-        "docker", "run", "-d", "--rm", "--name", container, "--network", "none", "--read-only",
+        "podman", "run", "-d", "--rm", "--pull=never", "--name", container, "--network", "none", "--read-only",
         "--cpus", "2", "--memory", "512m", "--pids-limit", "128", "--user", "999:999",
-        "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-        "--tmpfs", "/var/lib/postgresql:rw,uid=999,gid=999,mode=0755",
-        "--tmpfs", "/var/run/postgresql:rw,uid=999,gid=999,mode=0755",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--security-opt", "label=disable",
+        "--tmpfs", "/var/lib/postgresql:rw,mode=0755,U",
+        "--tmpfs", "/var/run/postgresql:rw,mode=0755,U",
         "--tmpfs", "/tmp:rw,mode=1777,size=64m",
         "--mount", f"type=bind,src={ROOT},dst=/benchmark,readonly",
         "-e", "PGDATA=/var/lib/postgresql/testdata", "-e", "POSTGRES_HOST_AUTH_METHOD=trust",
@@ -29,7 +29,7 @@ def main():
     ])
     try:
         wait_ready(container)
-        print(command(["docker", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
+        print(command(["podman", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
                        "-v", "ON_ERROR_STOP=1", "-f", "/benchmark/testqueries/jsonschema.sql"]))
         results = []
         for trial in range(4):
@@ -46,12 +46,12 @@ def main():
                 print(json.dumps(result), flush=True)
         args.output.write_text(json.dumps(results, indent=2) + "\n")
     except Exception:
-        logs = subprocess.run(["docker", "logs", "--tail", "30", container],
+        logs = subprocess.run(["podman", "logs", "--tail", "30", container],
                               capture_output=True, text=True, timeout=10)
         print(logs.stderr, flush=True)
         raise
     finally:
-        subprocess.run(["docker", "rm", "-f", container],
+        subprocess.run(["podman", "rm", "-f", container],
                        capture_output=True, timeout=30, check=False)
 
 

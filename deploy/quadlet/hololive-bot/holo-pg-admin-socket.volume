@@ -1,0 +1,8 @@
+# postgres와 일회성 migrator만 mount하는 권한 있는 Unix socket 경로다. 내용은 보존하지 않는다.
+[Volume]
+VolumeName=hololive-bot_holo-pg-admin-socket
+Device=tmpfs
+Type=tmpfs
+# rootful Podman은 tmpfs volume을 context 없이 마운트해 tmpfs_t가 되고, container_t는 거기에 socket을 만들거나
+# chmod하지 못한다(2026-11-04 리허설 VM AVC: sock_file create, dir setattr). named volume과 같은 label을 준다.
+Options=size=16m,mode=3775,uid=999,gid=999,context=system_u:object_r:container_file_t:s0

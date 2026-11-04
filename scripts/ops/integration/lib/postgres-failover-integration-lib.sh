@@ -7,19 +7,19 @@ fi
 cleanup_container() {
   local name="${1}" created="${2}"
   [[ "${created}" == 1 ]] || return 0
-  [[ "$("${DOCKER_PATH}" inspect --format '{{index .Config.Labels "com.hololive.postgres-failover-integration"}}' "${name}" 2>/dev/null || true)" == "${LABEL_VALUE}" ]] || return 0
-  "${DOCKER_PATH}" rm --force "${name}" >/dev/null 2>&1 || true
+  [[ "$("${PODMAN_PATH}" inspect --format '{{index .Config.Labels "com.hololive.postgres-failover-integration"}}' "${name}" 2>/dev/null || true)" == "${LABEL_VALUE}" ]] || return 0
+  "${PODMAN_PATH}" rm --force "${name}" >/dev/null 2>&1 || true
 }
 cleanup_volume() {
   local name="${1}" created="${2}"
   [[ "${created}" == 1 ]] || return 0
-  [[ "$("${DOCKER_PATH}" volume inspect --format '{{index .Labels "com.hololive.postgres-failover-integration"}}' "${name}" 2>/dev/null || true)" == "${LABEL_VALUE}" ]] || return 0
-  "${DOCKER_PATH}" volume rm "${name}" >/dev/null 2>&1 || true
+  [[ "$("${PODMAN_PATH}" volume inspect --format '{{index .Labels "com.hololive.postgres-failover-integration"}}' "${name}" 2>/dev/null || true)" == "${LABEL_VALUE}" ]] || return 0
+  "${PODMAN_PATH}" volume rm "${name}" >/dev/null 2>&1 || true
 }
 cleanup_network() {
   [[ "${NETWORK_CREATED}" == 1 ]] || return 0
-  [[ "$("${DOCKER_PATH}" network inspect --format '{{index .Labels "com.hololive.postgres-failover-integration"}}' "${NETWORK_NAME}" 2>/dev/null || true)" == "${LABEL_VALUE}" ]] || return 0
-  "${DOCKER_PATH}" network rm "${NETWORK_NAME}" >/dev/null 2>&1 || true
+  [[ "$("${PODMAN_PATH}" network inspect --format '{{index .Labels "com.hololive.postgres-failover-integration"}}' "${NETWORK_NAME}" 2>/dev/null || true)" == "${LABEL_VALUE}" ]] || return 0
+  "${PODMAN_PATH}" network rm "${NETWORK_NAME}" >/dev/null 2>&1 || true
 }
 cleanup() {
   local rc=$?
@@ -48,19 +48,19 @@ assert_file_value() {
 refuse_existing() {
   local kind="${1}" name="${2}"
   case "${kind}" in
-    container) if "${DOCKER_PATH}" inspect "${name}" >/dev/null 2>&1; then fail "refusing pre-existing ${kind} name ${name}"; fi ;;
-    volume) if "${DOCKER_PATH}" volume inspect "${name}" >/dev/null 2>&1; then fail "refusing pre-existing ${kind} name ${name}"; fi ;;
-    network) if "${DOCKER_PATH}" network inspect "${name}" >/dev/null 2>&1; then fail "refusing pre-existing ${kind} name ${name}"; fi ;;
-    *) fail "unknown Docker resource kind ${kind}" ;;
+    container) if "${PODMAN_PATH}" inspect "${name}" >/dev/null 2>&1; then fail "refusing pre-existing ${kind} name ${name}"; fi ;;
+    volume) if "${PODMAN_PATH}" volume inspect "${name}" >/dev/null 2>&1; then fail "refusing pre-existing ${kind} name ${name}"; fi ;;
+    network) if "${PODMAN_PATH}" network inspect "${name}" >/dev/null 2>&1; then fail "refusing pre-existing ${kind} name ${name}"; fi ;;
+    *) fail "unknown container resource kind ${kind}" ;;
   esac
 }
 create_volume() {
   refuse_existing volume "${1}"
-  "${DOCKER_PATH}" volume create --label "${LABEL_KEY}=${LABEL_VALUE}" "${1}" >/dev/null
+  "${PODMAN_PATH}" volume create --label "${LABEL_KEY}=${LABEL_VALUE}" "${1}" >/dev/null
 }
 create_network() {
   refuse_existing network "${NETWORK_NAME}"
-  "${DOCKER_PATH}" network create --internal --label "${LABEL_KEY}=${LABEL_VALUE}" "${NETWORK_NAME}" >/dev/null
+  "${PODMAN_PATH}" network create --internal --label "${LABEL_KEY}=${LABEL_VALUE}" "${NETWORK_NAME}" >/dev/null
   NETWORK_CREATED=1
 }
 run_psql() {
@@ -78,7 +78,7 @@ wait_for_psql() {
       pass "${name} accepts TLS verify-full psql"
       return 0
     fi
-    [[ "$("${DOCKER_PATH}" inspect --format '{{.State.Running}}' "${name}" 2>/dev/null || true)" == false ]] && break
+    [[ "$("${PODMAN_PATH}" inspect --format '{{.State.Running}}' "${name}" 2>/dev/null || true)" == false ]] && break
     sleep 1
   done
   fail "${name} did not accept a host psql connection"
@@ -114,7 +114,7 @@ write_tls_material() {
   chmod 0644 "${dir}/server.crt" "${dir}/ca.crt"
 }
 stage_tls_volume() {
-  "${DOCKER_PATH}" run --rm --user 0 -v "${1}:/tls" -v "${TMP_DIR}/certs/${2}:/input:ro" \
+  "${PODMAN_PATH}" run --rm --pull=never --security-opt label=disable --user 0 -v "${1}:/tls" -v "${TMP_DIR}/certs/${2}:/input:ro" \
     "${POSTGRES_IMAGE}" sh -ec \
     'cp /input/server.crt /tls/server.crt; cp /input/server.key /tls/server.key; cp /input/ca.crt /tls/ca.crt; chown postgres:postgres /tls/server.crt /tls/server.key /tls/ca.crt; chmod 0644 /tls/server.crt /tls/ca.crt; chmod 0600 /tls/server.key'
 }

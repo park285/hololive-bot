@@ -43,7 +43,6 @@ require() {
 # scripts/logs/ap-status.sh, scripts/logs/ap-smoke.sh다.
 for path in \
   deploy/compose/docker-compose.collector.yml \
-  deploy/compose/docker-compose.prod.yml \
   hololive/hololive-api/VERSION \
   scripts/deploy/compose.sh \
   scripts/deploy/lib/ap-collector-readiness.sh \

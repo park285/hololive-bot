@@ -42,7 +42,7 @@ read -r -a ports <<< "$ports_list"
 
 idx=0
 sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-  ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f "$ap_compose_file" ps "${services[@]}"
+  ./scripts/deploy/compose.sh -f "$ap_compose_file" ps "${services[@]}"
 
 for container in "${containers[@]}"; do
   ready="$(docker exec "$container" ./bin/healthcheck --body "https://127.0.0.1:${ports[$idx]}/ready")"

@@ -83,7 +83,8 @@ LC_ALL=C cut -f1 "$manifest" | LC_ALL=C sort -u >"$tmpdir/registered"
     deploy/compose/*.yml
     deploy/compose/*.example
     deploy/compose/.*.example
-    deploy/compose/postgres/pg_hba.conf
+    deploy/quadlet/*/*.container
+    deploy/postgres/pg_hba.conf
     deploy/nginx/*.conf
     deploy/nginx/*.template
     scripts/systemd/*.nft
@@ -164,10 +165,6 @@ assert_assignment "seoul AP host" AP_SSH_HOST "$seoul" "$root_dir/scripts/deploy
 assert_assignment "seoul AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$seoul" "$root_dir/scripts/deploy/ap-hosts/seoul.conf"
 
 assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/compose/docker-compose.seoul.yml"
-assert_count "prod Iris host aliases" 2 ":$seoul\"" "$root_dir/deploy/compose/docker-compose.prod.yml"
-assert_count "live-compat Iris allowlist" 2 "IRIS_BASE_URL_ALLOWED_HOSTS:-$seoul" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
-assert_count "live-compat H3 identity" 1 "HOLOLIVE_H3_SERVER_NAME:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
-assert_count "live-compat H3 bind" 2 "HOLOLIVE_API_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 
 assert_count "central ingress source" 1 "allow $seoul;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
 assert_count "central ingress loopback" 1 "allow 127.0.0.1;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"

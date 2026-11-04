@@ -1,0 +1,141 @@
+# 권위 primary PostgreSQL이다. 원격 격리 표식이 남아 있으면 이전 주 서버가 쓰기 서버로 돌아오지 않도록 기동하지 않는다.
+[Unit]
+Description=Hololive central PostgreSQL primary
+After=tailscaled.service admin-dashboard-ingress-firewall.service
+Requires=admin-dashboard-ingress-firewall.service
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=holo-postgres
+Image=${POSTGRES_IMAGE}
+Pull=never
+# alpine 이미지의 postgres는 uid 70이지만 스택 공통으로 999를 쓴다(TwentyQ·ChatBotGo와 동일).
+User=999
+Group=999
+# 호스트 ID와 분리한다(크기는 스택 공통 65536). data·socket·TLS는 :idmap으로 on-disk 999를 그대로 쓴다.
+UserNS=auto:size=65536
+Network=hololive-net.network
+PublishPort=${POSTGRES_PORT_BIND_IP}:5433:5432
+Volume=holo-pg-data.volume:/var/lib/postgresql:idmap
+Volume=holo-pg-admin-socket.volume:/var/run/postgresql:idmap
+Volume=/opt/hololive-bot/compose/current/backups:/backups
+Volume=/opt/hololive-bot/compose/current/hololive/hololive-api/scripts/init-db:/docker-entrypoint-initdb.d:ro
+Volume=/opt/hololive-bot/compose/current/deploy/postgres/pg_hba.conf:/run/hololive-bot/postgres/pg_hba.conf:ro
+Volume=/etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro,idmap
+# fence 뒤 재시드한 구 primary를 unfence helper가 이 unit으로 넘기면 --replace가 수동 container를 교체한다.
+# 그 standby의 primary_conninfo(sslrootcert)가 이 unit에서도 읽히도록 CA를 둔다. passfile은 data volume 안에 둔다
+# (docs/current/runbooks/postgres-replication.md "Reactivation and retirement reference").
+Volume=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+# Podman은 옵션을 준 --tmpfs에 Docker와 달리 noexec·nosuid·nodev를 붙이지 않으므로 명시한다.
+Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
+ReadOnly=true
+ReadOnlyTmpfs=false
+NoNewPrivileges=true
+DropCapability=all
+# postgres entrypoint의 root->postgres 강하는 setuid 비트가 아닌 CAP_SETUID 기반이라 NNP와 공존한다.
+AddCapability=SETUID SETGID CHOWN FOWNER DAC_OVERRIDE
+# ReadOnlyTmpfs=false는 /dev/shm도 읽기 전용으로 만든다(Docker read_only와 다름). PostgreSQL posix 공유 메모리용
+# 쓰기 가능한 /dev/shm은 따로 tmpfs로 준다(2026-11-04 리허설 VM에서 ShmSize만으로는 기동 실패).
+Tmpfs=/dev/shm:size=512m,noexec,nosuid,nodev
+# DB 버퍼·프로세스뿐 아니라 cgroup에 계상되는 파일 캐시에도 여유를 둔다.
+Memory=4g
+PidsLimit=256
+PodmanArgs=--oom-score-adj=-300
+# 운영 재생성 절차가 쓰던 --timeout 120과 같게 fast shutdown checkpoint 여유를 둔다.
+StopTimeout=120
+LogDriver=journald
+Environment=POSTGRES_DB=hololive
+Environment=POSTGRES_USER=${POSTGRES_ADMIN_USER}
+Environment=POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}
+Environment=HOLOLIVE_MIGRATOR_USER=${HOLOLIVE_MIGRATOR_USER}
+Environment=HOLOLIVE_REPLICATOR_USER=${HOLOLIVE_REPLICATOR_USER}
+Environment="POSTGRES_INITDB_ARGS=--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8 --data-checksums"
+Environment=PGDATA=/var/lib/postgresql/pgdata
+Environment=PGPORT=5432
+# 비밀번호는 ExecStart 인자에 남지 않도록 prestart가 root 전용 env 파일로 넘긴다.
+EnvironmentFile=/run/hololive-bot/quadlet-env/holo-postgres.env
+HealthCmd=pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=10s
+HealthStartupCmd=pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t
+HealthStartupInterval=2s
+HealthStartupTimeout=5s
+# unhealthy면 StopSignal(SIGINT)·StopTimeout으로 정지한 뒤 Restart=always가 다시 띄운다(Docker 시절 deunhealth restart와
+# 같다). kill(SIGKILL)은 checkpoint 없이 끊어 crash recovery를 거치게 한다.
+HealthOnFailure=stop
+Notify=healthy
+# 추가 계측은 승인된 재시작에서만 켠다. 절차: docs/current/runbooks/postgres-observability.md
+# auto_explain은 preload에 있을 때만 적용된다. ALTER SYSTEM으로 바꾸면 unit과 drift가 생기므로 여기서만 바꾼다.
+# 4GiB 한도에서 공유 버퍼는 25%만 사용하고 프로세스·파일 캐시 여유를 남긴다.
+Exec=postgres \
+  -c shared_preload_libraries=${HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES} \
+  -c pg_stat_kcache.track=top \
+  -c pg_stat_kcache.track_planning=off \
+  -c pg_wait_sampling.profile_pid=off \
+  -c pg_wait_sampling.profile_queries=top \
+  -c pg_wait_sampling.sample_cpu=off \
+  -c pg_wait_sampling.profile_period=20 \
+  -c pg_wait_sampling.history_period=100 \
+  -c pg_wait_sampling.history_size=20000 \
+  -c auto_explain.log_min_duration=1s \
+  -c auto_explain.log_analyze=on \
+  -c auto_explain.log_buffers=on \
+  -c auto_explain.log_timing=off \
+  -c auto_explain.log_nested_statements=on \
+  -c auto_explain.log_parameter_max_length=0 \
+  -c pg_stat_statements.track=all \
+  -c pg_stat_statements.track_utility=off \
+  -c pg_stat_statements.max=5000 \
+  -c compute_query_id=on \
+  -c track_io_timing=on \
+  -c track_wal_io_timing=on \
+  -c log_autovacuum_min_duration=10s \
+  -c tcp_keepalives_idle=60 \
+  -c tcp_keepalives_interval=10 \
+  -c tcp_keepalives_count=6 \
+  -c log_lock_waits=on \
+  -c log_temp_files=1MB \
+  -c log_min_duration_statement=1s \
+  -c log_parameter_max_length=0 \
+  -c log_parameter_max_length_on_error=0 \
+  -c checkpoint_timeout=900s \
+  -c max_wal_size=2GB \
+  -c wal_compression=lz4 \
+  -c shared_buffers=1GB \
+  -c effective_cache_size=3GB \
+  -c wal_buffers=64MB \
+  -c maintenance_work_mem=128MB \
+  -c work_mem=4MB \
+  -c max_connections=61 \
+  -c io_method=worker \
+  -c io_workers=3 \
+  -c effective_io_concurrency=16 \
+  -c maintenance_io_concurrency=16 \
+  -c ssl=on \
+  -c ssl_cert_file=/run/hololive-bot/postgres-tls/server.crt \
+  -c ssl_key_file=/run/hololive-bot/postgres-tls/server.key \
+  -c hba_file=/run/hololive-bot/postgres/pg_hba.conf
+
+[Service]
+Environment=POSTGRES_IMAGE=localhost/hololive-postgres:prod
+Environment=HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements
+Environment=POSTGRES_ADMIN_USER=postgres_admin
+Environment=HOLOLIVE_MIGRATOR_USER=hololive_migrator
+Environment=HOLOLIVE_REPLICATOR_USER=hololive_replicator
+# 호스트 값은 compose.env가 소유하며 위 기본값보다 우선한다.
+EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
+ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart holo-postgres
+Restart=always
+RestartSec=5s
+# crash recovery의 WAL replay가 끝나 healthy가 될 때까지 기다린다.
+TimeoutStartSec=600
+# ExecStop(podman rm)이 StopTimeout 120초를 다 쓰기 전에 systemd 기본 90초가 끊지 않도록 여유를 둔다.
+TimeoutStopSec=150
+LogRateLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

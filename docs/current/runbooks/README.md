@@ -10,7 +10,7 @@
 | `alarm-worker` | `alarm-worker.md` |
 | `youtube-collector` | `youtube-collector.md` |
 
-Collector runbook은 중앙 `c`·Seoul `b`의 Compose와 Osaka `a`·Osaka2 `d`의 native systemd 절차를 함께 소유합니다.
+Collector runbook은 중앙 `c`의 Podman Quadlet, Seoul `b`의 Docker Compose와 Osaka `a`·Osaka2 `d`의 native systemd 절차를 함께 소유합니다.
 통합 관리자 웹은 iris-seoul의 `iris-console.service`가 소유하며, 이 저장소의 연결·shortlink 경계는
 [`admin-dashboard.md`](admin-dashboard.md)를 따릅니다.
 

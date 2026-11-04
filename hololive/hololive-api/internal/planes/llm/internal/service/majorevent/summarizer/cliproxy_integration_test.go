@@ -111,11 +111,11 @@ func testCliproxyBaseURL() string {
 	}
 
 	if baseURL == "" {
-		baseURL = "http://172.17.0.1:8787/v1"
+		baseURL = "http://127.0.0.1:8787/v1"
 	}
 
-	// 호스트에서 실행하는 통합 테스트는 host.docker.internal 해석이 안 될 수 있다.
-	return strings.Replace(baseURL, "host.docker.internal", "172.17.0.1", 1)
+	// 호스트에서 실행하는 통합 테스트는 container용 host.docker.internal 대신 같은 호스트의 loopback으로 붙는다.
+	return strings.Replace(baseURL, "host.docker.internal", "127.0.0.1", 1)
 }
 
 func newTestClient(t *testing.T, model string) *llm.OpenAIClient {
