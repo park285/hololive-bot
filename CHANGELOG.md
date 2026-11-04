@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **Quadlet 컷오버 첫 고정 절차:** Docker에서 넘어온 호스트는 `artifacts/worker-profile/active`가 Docker 시절 pair를 가리켜 `prepare`가 `profile pair image identity mismatch`로 멈춥니다(hololive-seoul 컷오버에서 발생). 첫 고정 전에 이 디렉터리를 `active.docker-era-<날짜>`로 옮기는 단계를 `deploy/quadlet/README.md`에 넣었습니다.
 - **short.holoshi.com 공개 ingress 출처:** 중앙 30192 shortlink listener가 iris-seoul(`100.100.1.5`)에 더해 osaka2(`100.100.1.2`)의 접속도 받습니다(nft input 규칙과 nginx `allow`). 공개 진입점을 osaka2로 블루그린 전환하는 동안 두 호스트를 함께 허용하며, 30006/udp admin API와 PostgreSQL 출처는 바뀌지 않습니다.
 
 - **RHEL 계열 native AP:** `ap_remote_bash`가 원격 스크립트 앞에 `/usr/local/sbin:/usr/sbin:/sbin`을 PATH에 붙입니다. RHEL 계열 sshd의 비대화식 PATH에는 sbin이 없어, osaka AP를 AlmaLinux 10으로 옮기면 remote apply의 `swapon` 확인이 재배포 때 실패하고 `sysctl -n` 출력이 비게 됩니다. 새 호스트에서도 collector unit의 `ReadWritePaths`가 요구하는 `/var/lib/hololive-bot`을 remote apply가 만듭니다(없으면 226/NAMESPACE로 기동 실패).

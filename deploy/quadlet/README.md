@@ -160,9 +160,16 @@ helper는 다음 순서로 진행하며 어느 단계도 재시도하지 않습�
 않습니다. 세 app unit이 healthy가 된 직후 실행 중 container 기준으로 `prepare`해 첫 drop-in을 만듭니다. 실행 중인
 image를 그대로 고정하므로 재시작하지 않습니다.
 
+Docker에서 넘어온 호스트는 `artifacts/worker-profile/active/<service>.pair`가 Docker 시절 pair를 가리킵니다.
+`prepare`는 label 없는 container의 이전 pair를 이 포인터에서 찾으므로, Docker image identity와 달라
+`profile pair image identity mismatch`로 멈춥니다(2026-11-04 hololive-seoul). 첫 고정 전에 이 디렉터리를
+`active.docker-era-<날짜>`로 옮깁니다. release 디렉터리와 Docker 롤백 자료는 그대로 남습니다.
+
 ```bash
 root=/opt/hololive-bot/compose/current
 pair="$root/scripts/deploy/lib/worker-profile-pair.py"
+[[ -d $root/artifacts/worker-profile/active ]] && \
+  sudo mv "$root/artifacts/worker-profile/active" "$root/artifacts/worker-profile/active.docker-era-$(date -u +%Y%m%d)"
 release="$root/artifacts/worker-profile/releases/cutover-$(date -u +%Y%m%dT%H%M%SZ)"
 sudo python3 "$pair" prepare hololive-api "$release/hololive-api/previous" hololive-api "$root"
 sudo python3 "$pair" prepare hololive-alarm-worker "$release/hololive-alarm-worker/previous" hololive-alarm-worker "$root"
