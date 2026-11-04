@@ -1,0 +1,31 @@
+# youtube-collector-b의 PO issuer. iris-seoul compose youtube-po-b와 같은 격리 조건이다.
+[Unit]
+Description=hololive YouTube PO issuer for collector b
+
+[Container]
+ContainerName=hololive-youtube-po-b
+Image=docker.io/library/hololive-youtube-po-sandbox:prod
+Exec=--socket /run/hololive-youtube-po/worker.sock
+User=65532:1000
+Network=none
+ReadOnly=true
+Tmpfs=/tmp:size=64m,mode=1777
+DropCapability=ALL
+NoNewPrivileges=true
+Ulimit=core=0:0
+PidsLimit=32
+Memory=512m
+PodmanArgs=--cpus=1
+ShmSize=64m
+Volume=hololive-youtube-po-b.volume:/run/hololive-youtube-po
+HealthCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtube-po/worker.sock"]
+HealthInterval=30s
+HealthStartPeriod=30s
+HealthOnFailure=kill
+
+[Service]
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
