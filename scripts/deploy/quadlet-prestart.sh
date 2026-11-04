@@ -33,8 +33,8 @@ else
     installed_firewall="${test_root}/installed.nft"
 fi
 
-# compose .env와 systemd EnvironmentFile의 해석이 갈리는 문법을 거부한다. 같은 파일을 두 문법이
-# 다르게 읽으면 Docker 시절과 다른 값으로 조용히 기동하기 때문이다(값은 출력하지 않는다).
+# systemd EnvironmentFile로 읽히는 compose.env의 형식(KEY=VALUE, 유효한 key, 중복 없음, 앞뒤 공백 없음)을 확인한다.
+# 메시지에는 key 이름만 남긴다.
 validate_env_file_syntax() {
     local file="$1"
     [[ -f "$file" && ! -L "$file" && -s "$file" ]] || die "compose env must be a non-empty regular file: ${file}"
@@ -49,23 +49,14 @@ validate_env_file_syntax() {
             value = substr(line, eq + 1)
             if (key !~ /^[A-Za-z_][A-Za-z0-9_]*$/) { print "[quadlet-prestart] invalid env key at line " NR > "/dev/stderr"; bad = 1; next }
             if (seen[key]++) { print "[quadlet-prestart] duplicate env key: " key > "/dev/stderr"; bad = 1; next }
-            # unit은 [Service] Environment= 기본값 위에 이 파일을 덮는다. KEY= 빈 줄은 compose의 ${KEY:-기본값}과 달리
-            # 기본값을 빈 값으로 바꾸므로(예: metrics bind 주소) 줄을 지워 기본값을 쓰게 한다.
-            # TODO(kapu): hololive-seoul 수용 뒤 이 줄과 아래 따옴표·$ 검사(compose와 해석 차이)를 삭제한다. 전환 회귀 방지용(빅뱅 계획 F절)
-            if (value == "" || value == "\"\"" || value == "\x27\x27") { print "[quadlet-prestart] empty env value; delete the line to use the unit default: " key > "/dev/stderr"; bad = 1; next }
             if (value ~ /^[[:space:]]|[[:space:]]$/) { print "[quadlet-prestart] env value has surrounding whitespace: " key > "/dev/stderr"; bad = 1; next }
-            if (value ~ /^\x27[^\x27\\]*\x27$/) next
-            if (value ~ /^"[^"\\$`]*"$/) next
-            if (value ~ /["\x27\\$`]/ || value ~ / #/) { print "[quadlet-prestart] env value needs compose/systemd-neutral quoting: " key > "/dev/stderr"; bad = 1 }
         }
         END { exit bad }
-    ' "$file" || die "compose env syntax is not shared by compose and systemd: ${file}"
+    ' "$file" || die "compose env file is invalid: ${file}"
 }
 
-# bot.env 같은 서비스별 비밀 파일은 [Container] EnvironmentFile=(podman --env-file)로 읽힌다. Podman은 compose env_file과
-# 달리 따옴표를 벗기지 않고 ${VAR}도 보간하지 않으며 '='가 없는 줄은 호스트 env를 끌어온다. 그 차이가 값에 그대로
-# 섞이지 않도록 두 해석이 같은 줄만 받는다. 메시지에는 key 이름만 남긴다.
-# TODO(kapu): hololive-seoul 수용 뒤 따옴표·$·backtick 검사만 삭제한다('=' 없는 줄·중복 key 검사는 유지). 전환 회귀 방지용(빅뱅 계획 F절)
+# bot.env 같은 서비스별 비밀 파일은 [Container] EnvironmentFile=(podman --env-file)로 읽힌다. podman은 '='가 없는 줄을
+# 호스트 env에서 끌어오므로 KEY=VALUE 줄만 받고 중복 key를 거부한다. 메시지에는 key 이름만 남긴다.
 validate_container_env_file() {
     local file="$1"
     [[ -f "$file" && ! -L "$file" && -s "$file" ]] || die "secret file is missing or empty: ${file}"
@@ -80,10 +71,9 @@ validate_container_env_file() {
             value = substr(line, eq + 1)
             if (key !~ /^[A-Za-z_][A-Za-z0-9_]*$/) { print "[quadlet-prestart] invalid env key at line " NR > "/dev/stderr"; bad = 1; next }
             if (seen[key]++) { print "[quadlet-prestart] duplicate env key: " key > "/dev/stderr"; bad = 1; next }
-            if (value ~ /^["\x27]|[$`]/) { print "[quadlet-prestart] container env value must be unquoted with no $ or backtick: " key > "/dev/stderr"; bad = 1 }
         }
         END { exit bad }
-    ' "$file" || die "container env syntax differs between compose env_file and podman --env-file: ${file}"
+    ' "$file" || die "container env file is invalid: ${file}"
 }
 
 require_values() {

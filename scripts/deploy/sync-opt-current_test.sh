@@ -28,7 +28,7 @@ cat >"${fakebin}/hostname" <<'EOF'
 #!/usr/bin/env bash
 echo hololive-seoul
 EOF
-# 옛 compose unit은 inactive·disabled로 보고, 나머지 호출은 기록만 한다.
+# unit 상태 조회는 inactive·disabled로 보고, 나머지 호출은 기록만 한다.
 cat >"${fakebin}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf 'systemctl %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
@@ -193,13 +193,5 @@ printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >>"${host}/etc-stack-secrets/hololive-
 assert_rejected_without_change "${host}" "${base_repo}" "connection budget" \
   "PostgreSQL connection budget check failed"
 pass "an exhausted PostgreSQL connection budget leaves /opt, prestart, units and daemon state untouched"
-
-# 5. KEY= 빈 줄은 unit 기본값을 지우므로(compose의 ${KEY:-기본값}과 다름) 설치 전에 거부한다.
-host="${tmp}/host-empty"
-make_host "${host}" 0
-printf 'HOLOLIVE_METRICS_PORT_BIND_IP=\n' >>"${host}/etc-stack-secrets/hololive-bot/compose.env"
-assert_rejected_without_change "${host}" "${base_repo}" "empty value" \
-  "delete these lines: HOLOLIVE_METRICS_PORT_BIND_IP"
-pass "an empty compose.env value that would replace a unit default leaves the host untouched"
 
 echo "all sync-opt-current checks passed"

@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **Podman 전환 가드 정리(빅뱅 계획 F절):** hololive-seoul 수용 뒤 Docker 시절 상태로 첫 기동하지 않게 넣었던 가드를 지웁니다. `sync-opt-current.sh`의 `hololive-compose.service` active·enabled 거부와 compose.env 빈 값 거부, `quadlet-prestart.sh`의 compose와 해석이 갈리는 따옴표·`$`·backtick·` #` 거부(compose.env와 서비스 env 파일), `ap-host.sh`의 `AP_CONTAINER_RUNTIME` 검사와 `seoul.conf` 변수입니다. `KEY=VALUE` 형식·유효한 key·중복 key·앞뒤 공백 검사는 Podman 해석에 필요하므로 남깁니다.
 - **배포 기준 문서에 중앙 Podman 컷오버 반영:** `docs/current/DEPLOYMENT_BASELINE.md`가 중앙을 아직 Docker Compose(Quadlet 미배포)로 적고 있었습니다. 2026-11-04 컷오버 순서·첫 고정·롤백 자료와 Quadlet unit 기준의 서비스·의존성 표로 고쳤고, 없어진 `docker-proxy`·`deunhealth` 행과 osaka2 `d` 서술을 지웠습니다.
 - **Quadlet 컷오버 첫 고정 절차:** Docker에서 넘어온 호스트는 `artifacts/worker-profile/active`가 Docker 시절 pair를 가리켜 `prepare`가 `profile pair image identity mismatch`로 멈춥니다(hololive-seoul 컷오버에서 발생). 첫 고정 전에 이 디렉터리를 `active.docker-era-<날짜>`로 옮기는 단계를 `deploy/quadlet/README.md`에 넣었습니다.
 - **collector slot 교환과 osaka2 collector 퇴역:** osaka2가 공개 진입점이 되면서 collector를 두지 않습니다. kapu Quadlet을 slot `b`에서 `d`로 바꾸고(`hololive-youtube-collector-d`·`hololive-youtube-po-d`, 비밀 `collector-d`, 고정 IP `10.89.15.14`), `b`는 iris-seoul compose(Seoul AP 경로)로 되돌립니다. 중앙 `pg_hba.conf`와 ingress nft `postgres_sources`에서 `100.100.1.2`를 뺐습니다(30192 공개 ingress 출처는 유지). `ap-hosts/osaka2.conf`, 로그 동기화의 osaka2 대상, worker profile 도구의 native `d`를 지웠습니다.

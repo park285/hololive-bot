@@ -7,7 +7,6 @@ OPT_CURRENT="${OPT_ROOT}/current"
 QUADLET_DIR=/etc/containers/systemd/hololive-bot
 LIBEXEC_DIR=/usr/local/libexec/hololive-bot
 COMPOSE_ENV=/etc/stack-secrets/hololive-bot/compose.env
-LEGACY_UNIT=hololive-compose.service
 
 log() { printf '[sync-opt-current] %s\n' "$*"; }
 die() { printf '[sync-opt-current] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -18,13 +17,6 @@ die() { printf '[sync-opt-current] ERROR: %s\n' "$*" >&2; exit 1; }
 # 두 번째 alarm-worker가 뜨므로 승인된 rollback 표시 없이는 거부한다.
 if [[ "$(hostname -s)" == kapu && "${HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED:-}" != 1 ]]; then
   die "refusing to install central Quadlet units on build-control host kapu; set HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1 only for an approved rollback"
-fi
-
-# Docker compose stack과 Quadlet stack은 같은 container 이름·port를 쓴다. 롤백 창 동안 옛 unit 파일은
-# 남겨 두되, 켜져 있거나 부팅에 묶여 있으면 설치하지 않는다.
-# TODO(kapu): hololive-seoul 수용 뒤 삭제한다. 전환 회귀 방지용(빅뱅 계획 F절)
-if systemctl is-active --quiet "$LEGACY_UNIT" || systemctl is-enabled --quiet "$LEGACY_UNIT" 2>/dev/null; then
-  die "$LEGACY_UNIT is still active or enabled; stop and disable the Docker compose stack first"
 fi
 
 assert_clean() {
@@ -70,12 +62,6 @@ log "staged tracked tree ($(find "$STAGING" -type f | wc -l) files)"
 # shellcheck source=scripts/deploy/lib/compose-env.sh
 . "$STAGING/scripts/deploy/lib/compose-env.sh"
 compose_env_validate_file_format "$COMPOSE_ENV"
-# unit의 [Service] Environment= 기본값 위에 compose.env를 덮으므로 KEY= 빈 줄은 compose의 ${KEY:-기본값}과 달리 기본값을
-# 지운다. quadlet-prestart도 같은 줄을 거부하므로 설치 전에 key 이름만 알린다(값은 출력하지 않는다).
-# TODO(kapu): hololive-seoul 수용 뒤 삭제한다. 전환 회귀 방지용(빅뱅 계획 F절)
-empty_keys="$(awk '/^[[:space:]]*(#|$)/ { next } { line = $0; sub(/\r$/, "", line); eq = index(line, "="); value = substr(line, eq + 1)
-  if (value == "" || value == "\"\"" || value == "\x27\x27") printf "%s ", substr(line, 1, eq - 1) }' "$COMPOSE_ENV")"
-[[ -z "$empty_keys" ]] || die "empty values in $COMPOSE_ENV would replace unit defaults; delete these lines: ${empty_keys% }"
 env_value() {
   if compose_env_key_exists_in_file "$COMPOSE_ENV" "$1"; then
     compose_env_read_value_from_file "$COMPOSE_ENV" "$1"
