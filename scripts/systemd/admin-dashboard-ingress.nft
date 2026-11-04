@@ -9,9 +9,7 @@ table inet admin_dashboard_ingress {
 		type filter hook input priority -20; policy accept;
 
 		iifname "lo" tcp dport 30192 accept
-		# short.holoshi.com 공개 ingress 출처다. osaka2로 블루그린 전환하는 동안에는 iris-seoul(blue)과
-		# osaka2(green)를 함께 허용한다. postgres_sources와 별개이며 blue를 걷어낼 때 iris-seoul 줄을 지운다.
-		iifname "tailscale0" ip saddr 100.100.1.5 tcp dport 30192 accept
+		# short.holoshi.com 공개 ingress(osaka2) 출처다. postgres_sources와 별개다.
 		iifname "tailscale0" ip saddr 100.100.1.2 tcp dport 30192 accept
 		tcp dport { 30191, 30192 } reject with tcp reset
 
