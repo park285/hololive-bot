@@ -62,6 +62,8 @@ require_node_version /usr/bin/node
 sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
 sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
+# collector unit의 ReadWritePaths가 이 경로를 요구한다. 새 호스트에 없으면 systemd가 226/NAMESPACE로 기동을 거부한다.
+sudo -n install -d -m 0755 -o root -g root /var/lib/hololive-bot
 sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
 # collector 로그는 앱(shared-go logging의 lumberjack)이 LOG_MAX_SIZE_MB(기본 5)마다 회전하고 압축 백업을 archive로
 # 옮긴다. 이 설정은 앱 회전이 멈춰 파일이 10M를 넘었을 때만 회전하는 안전망이다. daily나 maxsize를 두면 앱 회전과

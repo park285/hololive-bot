@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **RHEL 계열 native AP:** `ap_remote_bash`가 원격 스크립트 앞에 `/usr/local/sbin:/usr/sbin:/sbin`을 PATH에 붙입니다. RHEL 계열 sshd의 비대화식 PATH에는 sbin이 없어, osaka AP를 AlmaLinux 10으로 옮기면 remote apply의 `swapon` 확인이 재배포 때 실패하고 `sysctl -n` 출력이 비게 됩니다. 새 호스트에서도 collector unit의 `ReadWritePaths`가 요구하는 `/var/lib/hololive-bot`을 remote apply가 만듭니다(없으면 226/NAMESPACE로 기동 실패).
+
 - youtube-collector-b를 iris-seoul compose에서 kapu(RHEL 10)의 rootful Podman quadlet으로 옮겼습니다(`deploy/podman/kapu/`). 중앙 `pg_hba.conf`에 `hololive_scraper 100.100.1.3/32`를 추가했습니다. kapu Docker의 FORWARD DROP 때문에 netavark iptables 드라이버를 쓰고, metrics는 고정 컨테이너 IP로 수집합니다. bridge 인터페이스 이름은 firewalld podman zone이 참조하도록 `pm-hcollect`로 고정합니다.
 
 - **SELinux 호스트의 docker-proxy:** `docker-proxy`에 `security_opt: label=type:iris_docker_proxy.process`를 붙였습니다. hololive-seoul이 AlmaLinux 10(SELinux Enforcing)으로 옮겨 기본 `container_t`는 `docker.sock`에 연결하지 못하기 때문입니다. domain 정의는 iris-stack `deploy/rhel-host-security/iris_container.cil`에 있습니다. SELinux가 꺼진 호스트의 Docker는 이 옵션을 무시하고, 다른 서비스와 image는 바뀌지 않습니다. 2026-11-04 전환 때 운영 배포본에 같은 변경을 적용했습니다.
