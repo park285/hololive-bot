@@ -126,6 +126,8 @@ PY
 # 운영 태그를 덮어쓰지 않고 같은 소스를 대상 아키텍처로 빌드하여 실제 nginx 동작을 검사합니다.
 nginx_platform="${NGINX_TEST_PLATFORM:-linux/amd64}"
 nginx_image="${nginx_image}-test-$$"
+# SELinux 호스트(kapu RHEL)에서는 TMPDIR 아래 임시 파일을 컨테이너가 읽지 못하므로 bind에 :z를 붙인다.
+# 시험이 끝나면 지우는 파일이라 relabel해도 되고, SELinux가 꺼진 호스트에서는 :z가 아무 일도 하지 않는다.
 nginx_test_dir="$(mktemp -d)"
 trap 'rm -rf -- "${nginx_test_dir}"; docker image rm --no-prune "${nginx_image}" >/dev/null 2>&1 || true' EXIT
 docker buildx build --platform "${nginx_platform}" --build-arg REVISION=test \
@@ -142,7 +144,7 @@ docker run --rm --pull=never --platform "${nginx_platform}" \
   --tmpfs /tmp:size=16m \
   --tmpfs /var/cache/nginx:size=16m \
   --tmpfs /var/run:size=1m \
-  -v "${nginx_test_dir}/admin-dashboard-ingress.conf:/etc/nginx/admin-dashboard-ingress.conf:ro" \
+  -v "${nginx_test_dir}/admin-dashboard-ingress.conf:/etc/nginx/admin-dashboard-ingress.conf:ro,z" \
   "${nginx_image}" \
   nginx -t -c /etc/nginx/admin-dashboard-ingress.conf \
   || fail "admin-dashboard-ingress nginx -t failed"
@@ -154,7 +156,7 @@ sed '/location \^~ \/l\//i\        location = /__client { return 200 "$shortlink
 timeout 30 docker run --rm --pull=never --platform "${nginx_platform}" --network none --read-only \
   --label io.iris.observability.logs=exclude \
   --tmpfs /tmp:size=16m --tmpfs /var/cache/nginx:size=16m --tmpfs /var/run:size=1m \
-  -v "${nginx_test_dir}/admin-client.test.conf:/etc/nginx/admin-client.test.conf:ro" \
+  -v "${nginx_test_dir}/admin-client.test.conf:/etc/nginx/admin-client.test.conf:ro,z" \
   --entrypoint sh "${nginx_image}" -ec '
     nginx -c /etc/nginx/admin-client.test.conf -g "daemon off;" &
     nginx_pid=$!
@@ -202,8 +204,8 @@ docker run --rm --pull=never --platform "${nginx_platform}" \
   --tmpfs /tmp:size=16m \
   --tmpfs /var/cache/nginx:size=16m \
   --tmpfs /var/run:size=1m \
-  -v "${nginx_test_dir}/holoshi-public-test.conf:/etc/nginx/holoshi-public-test.conf:ro" \
-  -v "${nginx_test_dir}/holoshi-public-shortlink.test.conf:/etc/nginx/holoshi-public-shortlink.test.conf:ro" \
+  -v "${nginx_test_dir}/holoshi-public-test.conf:/etc/nginx/holoshi-public-test.conf:ro,z" \
+  -v "${nginx_test_dir}/holoshi-public-shortlink.test.conf:/etc/nginx/holoshi-public-shortlink.test.conf:ro,z" \
   "${nginx_image}" \
   nginx -t -c /etc/nginx/holoshi-public-test.conf \
   || fail "holoshi public ingress nginx -t failed"

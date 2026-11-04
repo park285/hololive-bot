@@ -663,6 +663,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt:
       - no-new-privileges:true
+      # SELinux 호스트에서 docker.sock 접근을 이 서비스에만 허용하는 domain(stack deploy/rhel-host-security).
+      # SELinux가 꺼진 호스트의 Docker는 label 옵션을 무시한다.
+      - label=type:iris_docker_proxy.process
     cap_drop:
       - ALL
     deploy: *deploy-64m
