@@ -58,7 +58,7 @@ alarm-worker의 grouped message path는 방 유형과 무관하게 YouTube 원�
 Provider-first 순서를 지켜 아래 단계를 앞 단계가 검증된 뒤에만 진행합니다.
 
 1. `hololive-api` short-link listener(`127.0.0.1:30101`)를 먼저 활성화합니다.
-2. 중앙 `admin-dashboard-ingress`의 source-restricted `/l/*` listener(`100.100.1.8:30192`)를 활성화합니다. 출처는 loopback과 공개 ingress 호스트만 허용합니다. 공개 ingress를 iris-seoul(`100.100.1.5`)에서 osaka2(`100.100.1.2`)로 블루그린 전환하는 동안에는 두 호스트를 모두 허용합니다.
+2. 중앙 `admin-dashboard-ingress`의 source-restricted `/l/*` listener(`100.100.1.8:30192`)를 활성화합니다. 출처는 loopback과 공개 ingress 호스트 osaka2(`100.100.1.2`)만 허용합니다.
 3. Seoul Nginx의 `http` context에 `deploy/nginx/holoshi-public-shortlink.conf`를 적용해 전용 `short.holoshi.com` TLS/HTTP3 endpoint의 `/l/*`만 `30192`로 전달합니다.
 4. 중앙 호스트에서 `scripts/deploy/shortlink-smoke.sh`를 실행해 listener, central ingress, public ingress의 `302`/`403`/`404` 계약을 모두 검증합니다.
 5. 모든 provider 검증이 통과한 뒤에만 `hololive-alarm-worker` runtime file에 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 설정하고 consumer를 재기동합니다.

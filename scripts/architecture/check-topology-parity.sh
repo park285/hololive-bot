@@ -164,9 +164,8 @@ assert_assignment "seoul AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$seoul" "$roo
 
 assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/compose/docker-compose.seoul.yml"
 
-# 30192 shortlink 출처는 공개 ingress 역할이다. osaka2로 블루그린 전환하는 동안에는 blue(seoul)와
-# green(osaka2)을 함께 허용한다. 30006/udp admin API 출처는 Console이 남는 seoul만 둔다.
-public_ingress_sources=("$seoul" "$osaka2")
+# 30192 shortlink 출처는 공개 ingress 역할(osaka2)이다. 30006/udp admin API 출처는 Console이 남는 seoul만 둔다.
+public_ingress_sources=("$osaka2")
 for source in "${public_ingress_sources[@]}"; do
   assert_count "central ingress public gateway source" 1 "allow $source;" \
     "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"

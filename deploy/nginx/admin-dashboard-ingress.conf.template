@@ -52,8 +52,7 @@ http {
 
         allow 127.0.0.1;
         allow @BIND_IP@;
-        # 공개 ingress. osaka2로 블루그린 전환하는 동안에는 iris-seoul과 osaka2를 함께 허용한다.
-        allow 100.100.1.5;
+        # 공개 ingress(osaka2).
         allow 100.100.1.2;
         deny all;
 
