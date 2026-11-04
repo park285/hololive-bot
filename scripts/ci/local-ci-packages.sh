@@ -79,7 +79,12 @@ changed_go_package_patterns() {
                     done < <(go_package_patterns_for_file "${file}")
                 fi
                 ;;
-            *.json|*.tmpl|*.sql|*.png|*.ttf)
+            # hololive-dbtest가 이 디렉터리를 파일시스템에서 직접 적용하므로, dbtest를 쓰는 모든 모듈의 DB 테스트 입력이다.
+            hololive/hololive-api/scripts/migrations/*)
+                needs_all=true
+                ;;
+            # go:embed 입력이다. queries/*.sql.tpl만 바뀌어도 소비 패키지를 검사한다.
+            *.json|*.tmpl|*.sql|*.tpl|*.png|*.ttf)
                 for module in "${GO_MODULES[@]}"; do
                     if [[ "${file}" != "${module}/"* ]]; then
                         continue

@@ -193,6 +193,31 @@ func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 	}
 }
 
+func TestCommandAdmissionLimitsLiveQueriesInSeparateBucket(t *testing.T) {
+	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
+	ctx := t.Context()
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID}
+
+	for index := range expensiveHistoryUserLimit {
+		cmdCtx.MessageID = messageIDForIndex(index)
+		if err := policy.Admit(ctx, cmdCtx, "live"); err != nil {
+			t.Fatalf("live admission %d error = %v", index, err)
+		}
+	}
+
+	cmdCtx.MessageID = messageIDForIndex(expensiveHistoryUserLimit)
+	if err := policy.Admit(ctx, cmdCtx, "live"); !errors.Is(err, errCommandRateLimited) {
+		t.Fatalf("live over-limit error = %v, want rate limit", err)
+	}
+
+	assertSortedSetSize(t, mini, limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID)), 0)
+
+	cmdCtx.MessageID = messageIDForIndex(expensiveHistoryUserLimit + 1)
+	if err := policy.Admit(ctx, cmdCtx, "broadcast_history"); err != nil {
+		t.Fatalf("history admission after live denials error = %v, want allowed", err)
+	}
+}
+
 func TestCommandAdmissionRoomDenialDoesNotConsumeUserQuota(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	ctx := t.Context()
