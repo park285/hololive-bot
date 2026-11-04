@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **short.holoshi.com 공개 ingress 출처:** 중앙 30192 shortlink listener가 iris-seoul(`100.100.1.5`)에 더해 osaka2(`100.100.1.2`)의 접속도 받습니다(nft input 규칙과 nginx `allow`). 공개 진입점을 osaka2로 블루그린 전환하는 동안 두 호스트를 함께 허용하며, 30006/udp admin API와 PostgreSQL 출처는 바뀌지 않습니다.
+
 - **RHEL 계열 native AP:** `ap_remote_bash`가 원격 스크립트 앞에 `/usr/local/sbin:/usr/sbin:/sbin`을 PATH에 붙입니다. RHEL 계열 sshd의 비대화식 PATH에는 sbin이 없어, osaka AP를 AlmaLinux 10으로 옮기면 remote apply의 `swapon` 확인이 재배포 때 실패하고 `sysctl -n` 출력이 비게 됩니다. 새 호스트에서도 collector unit의 `ReadWritePaths`가 요구하는 `/var/lib/hololive-bot`을 remote apply가 만듭니다(없으면 226/NAMESPACE로 기동 실패).
 - **rootful 리허설(격리 VM) 결함 수정:** `holo-postgres`·standby의 `ShmSize=`를 `Tmpfs=/dev/shm:size=…`로 바꿨습니다(Podman은 `ReadOnly=true`+`ReadOnlyTmpfs=false`에서 `/dev/shm`까지 읽기 전용으로 마운트해 postgres가 shared memory를 열지 못했습니다). `holo-pg-admin-socket.volume`에 `context=system_u:object_r:container_file_t:s0`를 넣었습니다(rootful Podman tmpfs volume은 `tmpfs_t`라 socket 생성이 AVC로 거부됐습니다). release runbook의 이미지 전송은 `docker-archive`로 바꿨습니다(`--format docker` 산출물을 `oci-archive`로 옮기면 `.Id`가 바뀝니다). Quadlet 설치는 배포할 commit의 clean checkout에서 실행합니다.
 - **Dockerfile 기반 이미지 전체 이름:** 모든 `FROM`을 `docker.io/...` 전체 이름으로 바꿨습니다. RHEL 계열 Podman은 short-name 별칭이 없는 이름(`postgres`, `valkey/valkey`)을 TTY 없이 거부해 `holo-postgres`·`valkey-cache` 빌드가 실패했습니다. 별칭이 있는 `golang`·`node`·`alpine`도 호스트마다 결과가 달라지지 않도록 함께 고정했습니다.
