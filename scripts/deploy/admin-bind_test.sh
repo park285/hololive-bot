@@ -41,7 +41,7 @@ systemctl() { [[ "${inactive:-false}" == false ]]; }
 nft() { cat "$fixture/firewall.json"; }
 cat > "$fixture/valid.json" <<'JSON'
 {"nftables":[
-  {"set":{"name":"postgres_sources","elem":["100.100.1.2","100.100.1.3","100.100.1.5","100.100.1.6","100.100.1.8"]}},
+  {"set":{"name":"postgres_sources","elem":["100.100.1.3","100.100.1.5","100.100.1.6","100.100.1.8"]}},
   {"chain":{"hook":"forward","name":"forward","prio":-20}},
   {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
   {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}}

@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **collector slot 교환과 osaka2 collector 퇴역:** osaka2가 공개 진입점이 되면서 collector를 두지 않습니다. kapu Quadlet을 slot `b`에서 `d`로 바꾸고(`hololive-youtube-collector-d`·`hololive-youtube-po-d`, 비밀 `collector-d`, 고정 IP `10.89.15.14`), `b`는 iris-seoul compose(Seoul AP 경로)로 되돌립니다. 중앙 `pg_hba.conf`와 ingress nft `postgres_sources`에서 `100.100.1.2`를 뺐습니다(30192 공개 ingress 출처는 유지). `ap-hosts/osaka2.conf`, 로그 동기화의 osaka2 대상, worker profile 도구의 native `d`를 지웠습니다.
 - **short.holoshi.com 공개 ingress 출처:** 중앙 30192 shortlink listener가 iris-seoul(`100.100.1.5`)에 더해 osaka2(`100.100.1.2`)의 접속도 받습니다(nft input 규칙과 nginx `allow`). 공개 진입점을 osaka2로 블루그린 전환하는 동안 두 호스트를 함께 허용하며, 30006/udp admin API와 PostgreSQL 출처는 바뀌지 않습니다.
 
 - **RHEL 계열 native AP:** `ap_remote_bash`가 원격 스크립트 앞에 `/usr/local/sbin:/usr/sbin:/sbin`을 PATH에 붙입니다. RHEL 계열 sshd의 비대화식 PATH에는 sbin이 없어, osaka AP를 AlmaLinux 10으로 옮기면 remote apply의 `swapon` 확인이 재배포 때 실패하고 `sysctl -n` 출력이 비게 됩니다. 새 호스트에서도 collector unit의 `ReadWritePaths`가 요구하는 `/var/lib/hololive-bot`을 remote apply가 만듭니다(없으면 226/NAMESPACE로 기동 실패).

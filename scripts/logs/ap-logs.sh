@@ -79,7 +79,7 @@ ap_container_for_service() {
 
 ap_file_log_dir() {
   case "$AP_NAME" in
-    osaka|osaka2) printf '%s\n' "/var/log/hololive-bot" ;;
+    osaka) printf '%s\n' "/var/log/hololive-bot" ;;
     *) printf '%s\n' "/home/ubuntu/hololive-bot/logs" ;;
   esac
 }
