@@ -36,12 +36,11 @@ the recorded deployed layout until new rollout evidence replaces it.
 |---|---|---|---|---:|---|---|---|
 | `hololive-api` | `hololive-api` | `hololive-api` | Central Quadlet `hololive-api.service` | 30001/30003/30006 | `https://127.0.0.1:30001/health` | `services/hololive-api.md` | `runbooks/hololive-api.md` |
 | `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | Central Quadlet `hololive-alarm-worker.service` | 30007 | `https://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
-| `youtube-collector` | `hololive-youtube-collector` | `youtube-collector` | Central Quadlet `hololive-youtube-collector-c.service` (`c`), Seoul Compose `youtube-collector-b`, Osaka/Osaka2 native systemd `a`/`d` | 30005/30015/30025/30035 | `https://127.0.0.1:30025/ready` (central `c`; 원격 AP는 각 호스트 로컬 H3 `/ready`) | `services/youtube-collector.md` | `runbooks/youtube-collector.md` |
+| `youtube-collector` | `hololive-youtube-collector` | `youtube-collector` | Central Quadlet `hololive-youtube-collector-c.service` (`c`), Seoul Compose `youtube-collector-b`, Osaka native systemd `a`, kapu Quadlet `hololive-youtube-collector-d.service` (`d`) | 30005/30015/30025/30015(kapu) | `https://127.0.0.1:30025/ready` (central `c`; 원격 AP는 각 호스트 로컬 H3 `/ready`) | `services/youtube-collector.md` | `runbooks/youtube-collector.md` |
 
 AP execution mode is owned by `scripts/deploy/ap-hosts/*.conf`: `seoul=compose` (`AP_CONTAINER_RUNTIME=docker`),
-`osaka=native`, `osaka2=native`. Native collectors run as
-`hololive-youtube-collector@youtube-collector-a.service` and
-`hololive-youtube-collector@youtube-collector-d.service` and have no Compose or Quadlet
+`osaka=native`. kapu `d` is a manually installed Quadlet (`deploy/podman/kapu/`), not an ap-hosts target. The native collector runs as
+`hololive-youtube-collector@youtube-collector-a.service` and has no Compose or Quadlet
 definition. The management web runs separately on iris-seoul as
 `iris-console.service`; [its runbook](runbooks/admin-dashboard.md) documents the Hololive connection boundary.
 
@@ -58,7 +57,7 @@ and single-primary fence.
 | `holo-postgres` | PostgreSQL data store | Bridge-networked PostgreSQL (`hololive-net`); publishes `${POSTGRES_PORT_BIND_IP}:5433` to container `5432`; `ssl=on`; `iris-stack internal CA` server cert mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` at `/run/hololive-bot/postgres-tls/` |
 | `hololive-db-migrate` | Migration bootstrap/apply job | One-shot unit with `Network=none` and an isolated admin Unix socket volume; no TCP admin/migrator route. Production activation is recorded separately in the deployment baseline |
 | `valkey-cache` | Valkey HA node (hololive group) | TLS TCP `${VALKEY_BIND_IP}:16379`; apps discover the primary through Sentinel |
-| `hololive-youtube-po-c` / `youtube-po-b` | Isolated PO issuer for central / Seoul collectors | Private Unix sockets; native Osaka/Osaka2 use `hololive-youtube-po.service` |
+| `hololive-youtube-po-c` / `youtube-po-b` | Isolated PO issuer for central / Seoul collectors | Private Unix sockets; native Osaka uses `hololive-youtube-po.service`; kapu `d` uses `hololive-youtube-po-d.service` |
 | `admin-dashboard-ingress` | Central shortlink ingress (the web runs on iris-seoul) | Not part of the 3 app runtime set |
 
 ## Cross-Runtime Contracts
@@ -114,5 +113,5 @@ not a parallel MQ configuration type.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-collector AP fleet). `hololive-api` hosts the bot/admin/llm planes in one process on ports 30001/30003/30006.
 - Central startup uses the Quadlet units in `deploy/quadlet/hololive-bot/` and starts `hololive-api`, `hololive-alarm-worker`, fleet member `c` (`hololive-youtube-collector-c`, 30025), its isolated issuer and central infra; unhealthy containers are stopped gracefully by `HealthOnFailure=stop` (StopSignal and StopTimeout) and restarted by systemd (collector and issuer excepted). Runtime hosts use verified images with no builds, following the release runbook; `hololive-api` and `hololive-alarm-worker` are replaced only through `scripts/deploy/quadlet-redeploy-service.sh`.
-- Prepared Seoul Compose uses `docker-compose.collector.yml` + `docker-compose.seoul.yml`, with no central service interpolation or dependencies. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
+- Prepared Seoul Compose uses `docker-compose.collector.yml` + `docker-compose.seoul.yml`, with no central service interpolation or dependencies. Osaka `a` runs only as a native systemd unit and kapu `d` as a Quadlet; neither has a Compose overlay. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`, `youtube-producer`.

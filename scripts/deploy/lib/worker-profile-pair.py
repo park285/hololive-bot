@@ -107,7 +107,7 @@ def check_pair(directory, pair):
 
 
 def prepare_native(service, release, host_env, unit):
-    if service not in ("youtube-collector-a", "youtube-collector-d"):
+    if service != "youtube-collector-a":
         raise ValueError("unsupported native slot")
     if release.parent != Path("/opt/hololive-bot/youtube-collector/releases"):
         raise ValueError("native release must be release-owned")
@@ -159,7 +159,7 @@ def prepare_native(service, release, host_env, unit):
 
 
 def verify_native(service, release, unit):
-    if service not in ("youtube-collector-a", "youtube-collector-d"):
+    if service != "youtube-collector-a":
         raise ValueError("unsupported native slot")
     if release.parent != Path("/opt/hololive-bot/youtube-collector/releases"):
         raise ValueError("native release must be release-owned")

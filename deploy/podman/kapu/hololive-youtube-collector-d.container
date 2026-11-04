@@ -1,13 +1,13 @@
-# kapu의 youtube-collector-b. 2026-11-04 iris-seoul compose에서 옮겼다(Podman quadlet).
-# 비밀은 /etc/stack-secrets/hololive-bot/collector-b(master hosts/kapu)에서 읽는다.
+# kapu의 youtube-collector-d. 2026-11-04 osaka2를 공개 진입점으로 바꾸면서 slot b를 iris-seoul로 되돌리고 kapu는 d를 맡는다.
+# 비밀은 /etc/stack-secrets/hololive-bot/collector-d(master hosts/kapu)에서 읽는다.
 [Unit]
-Description=hololive YouTube collector b
-Requires=hololive-youtube-po-b.service
-After=hololive-youtube-po-b.service network-online.target tailscaled.service
+Description=hololive YouTube collector d
+Requires=hololive-youtube-po-d.service
+After=hololive-youtube-po-d.service network-online.target tailscaled.service
 Wants=network-online.target
 
 [Container]
-ContainerName=hololive-youtube-collector-b
+ContainerName=hololive-youtube-collector-d
 Image=docker.io/library/hololive-youtube-collector:kapu-13.3.0
 Pull=never
 User=1000:1000
@@ -15,7 +15,7 @@ GroupAdd=1002
 # 호스트 ID와 분리한다. 크기 65536은 PO socket 소유자 65532 매핑에 필요하고, root:1002 비밀은 collector-c와 같이 GID를 그대로 매핑해 읽는다.
 UserNS=auto:size=65536,gidmapping=1002:1002:1
 Network=hololive-collector.network
-IP=10.89.15.12
+IP=10.89.15.14
 DNS=100.100.100.100
 DNS=8.8.8.8
 DNS=1.1.1.1
@@ -29,10 +29,10 @@ Memory=1g
 ShmSize=64m
 PublishPort=127.0.0.1:30015:30015/tcp
 PublishPort=127.0.0.1:30015:30015/udp
-EnvironmentFile=/etc/stack-secrets/hololive-bot/collector-b/youtube-collector.env
+EnvironmentFile=/etc/stack-secrets/hololive-bot/collector-d/youtube-collector.env
 Environment=TZ=Asia/Seoul
 Environment=STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profile-release/profile.json
-Environment=STACK_WORKER_PROFILE_SOURCE_FILE=/run/hololive-bot/worker-profiles/youtube-collector-b.json
+Environment=STACK_WORKER_PROFILE_SOURCE_FILE=/run/hololive-bot/worker-profiles/youtube-collector-d.json
 Environment=YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS=30
 Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement
 Environment=GIN_MODE=release
@@ -49,7 +49,7 @@ Environment=PHOTO_SYNC_ENABLED=false
 Environment=GOMEMLIMIT=640MiB
 Environment=LOG_MAX_AGE_DAYS=30
 Environment=HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
-Environment=YOUTUBE_COLLECTOR_LOG_FILE_NAME=youtube-collector-b.log
+Environment=YOUTUBE_COLLECTOR_LOG_FILE_NAME=youtube-collector-d.log
 Environment=HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key
 Environment=SERVER_PORT=30015
 Environment=POSTGRES_POOL_MIN_CONNS=2
@@ -69,24 +69,24 @@ Environment=YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS=1
 Environment=YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true
 Environment=HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
 Environment=HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
-Environment=PGAPPNAME=youtube-collector-b
+Environment=PGAPPNAME=youtube-collector-d
 Environment=YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS=10000
 Environment=HOLOLIVE_H3_ADDR=:30015
 Environment=HOLOLIVE_METRICS_ADDR=:30096
 Environment=YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS=3
-Environment=YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-b
+Environment=YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-d
 Environment=POSTGRES_SOCKET_PATH=
 Environment=POSTGRES_POOL_MAX_CONNS=7
 Environment=YOUTUBEJS_NODE=/usr/local/bin/node
 Environment=YOUTUBEJS_SCRIPT=/app/youtubejs/src/server.mjs
-Volume=/var/lib/hololive-collectors/b/data:/app/data:idmap
-Volume=/var/lib/hololive-collectors/b/logs:/app/logs:idmap
-Volume=/etc/stack-secrets/hololive-bot/collector-b/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-Volume=/etc/stack-secrets/hololive-bot/collector-b/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-Volume=/etc/stack-secrets/hololive-bot/collector-b/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-Volume=/etc/stack-secrets/hololive-bot/collector-b/worker-profiles:/run/hololive-bot/worker-profiles:ro
-Volume=/etc/hololive-bot/collector-b/worker-profile-release:/run/hololive-bot/worker-profile-release:ro
-Volume=hololive-youtube-po-b.volume:/run/hololive-youtube-po:ro,idmap
+Volume=/var/lib/hololive-collectors/d/data:/app/data:idmap
+Volume=/var/lib/hololive-collectors/d/logs:/app/logs:idmap
+Volume=/etc/stack-secrets/hololive-bot/collector-d/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+Volume=/etc/stack-secrets/hololive-bot/collector-d/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+Volume=/etc/stack-secrets/hololive-bot/collector-d/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+Volume=/etc/stack-secrets/hololive-bot/collector-d/worker-profiles:/run/hololive-bot/worker-profiles:ro
+Volume=/etc/hololive-bot/collector-d/worker-profile-release:/run/hololive-bot/worker-profile-release:ro
+Volume=hololive-youtube-po-d.volume:/run/hololive-youtube-po:ro,idmap
 HealthCmd=["./bin/healthcheck","https://127.0.0.1:30015/ready"]
 HealthInterval=30s
 HealthStartPeriod=180s

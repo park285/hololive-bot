@@ -13,13 +13,12 @@ usage() {
 Usage:
   remote-sync-main-logs.sh once central
   remote-sync-main-logs.sh once osaka
-  remote-sync-main-logs.sh once osaka2
   remote-sync-main-logs.sh once seoul
-  remote-sync-main-logs.sh daemon <central|osaka|osaka2|seoul> [--interval 30]
-  remote-sync-main-logs.sh status <central|osaka|osaka2|seoul>
-  remote-sync-main-logs.sh query <central|osaka|osaka2|seoul> <service> [--tail 500] [--grep pattern]
-  remote-sync-main-logs.sh tail <central|osaka|osaka2|seoul> <service>
-  remote-sync-main-logs.sh docker-tail <osaka|osaka2|seoul> <service> [--since 15m] [--tail 200]
+  remote-sync-main-logs.sh daemon <central|osaka|seoul> [--interval 30]
+  remote-sync-main-logs.sh status <central|osaka|seoul>
+  remote-sync-main-logs.sh query <central|osaka|seoul> <service> [--tail 500] [--grep pattern]
+  remote-sync-main-logs.sh tail <central|osaka|seoul> <service>
+  remote-sync-main-logs.sh docker-tail <osaka|seoul> <service> [--since 15m] [--tail 200]
 Environment:
   LOG_ROOT=<repo>/logs
   HOL_LOG_CENTRAL_USER_HOST=ubuntu@100.100.1.8
@@ -32,11 +31,6 @@ Environment:
   HOL_LOG_OSAKA_HOST_KEY_ALIAS=100.100.1.6
   HOL_LOG_OSAKA_LOG_DIR=/var/log/hololive-bot
   HOL_LOG_OSAKA_SERVICES=youtube-collector-a
-  HOL_LOG_OSAKA2_USER_HOST=ubuntu@100.100.1.2
-  HOL_LOG_OSAKA2_SSH_KEY=~/.ssh/KR.key
-  HOL_LOG_OSAKA2_HOST_KEY_ALIAS=100.100.1.2
-  HOL_LOG_OSAKA2_LOG_DIR=/var/log/hololive-bot
-  HOL_LOG_OSAKA2_SERVICES=youtube-collector-d
   HOL_LOG_SEOUL_USER_HOST=ubuntu@100.100.1.5
   HOL_LOG_SEOUL_SSH_KEY=~/.ssh/KR.key
   HOL_LOG_SEOUL_HOST_KEY_ALIAS=100.100.1.5
@@ -53,7 +47,6 @@ target_services() {
 	case "${target}" in
 	    central) printf '%s\n' "${CENTRAL_SERVICES}" ;;
 	    osaka) printf '%s\n' "${OSAKA_SERVICES}" ;;
-	    osaka2) printf '%s\n' "${OSAKA2_SERVICES}" ;;
 	    seoul) printf '%s\n' "${SEOUL_SERVICES}" ;;
 	    *) echo "ERROR: unknown target: ${target}" >&2; exit 1 ;;
 	esac
@@ -63,7 +56,7 @@ target_value() {
   local suffix="$2"
   local name
   case "${target}" in
-    central|osaka|osaka2|seoul) ;;
+    central|osaka|seoul) ;;
     *) echo "ERROR: unknown target: ${target}" >&2; exit 1 ;;
   esac
   name="${target^^}_${suffix}"
@@ -73,7 +66,6 @@ remote_log_service_name() {
   local target="$1"
   local service="$2"
   case "${target}:${service}" in
-    osaka2:youtube-collector-d) printf '%s\n' "youtube-collector-d" ;;
     *) printf '%s\n' "${service}" ;;
   esac
 }
@@ -126,7 +118,6 @@ container_for() {
   local service="$2"
   case "${target}:${service}" in
     osaka:youtube-collector-a) printf '%s\n' "hololive-youtube-collector-a" ;;
-    osaka2:youtube-collector-d) printf '%s\n' "hololive-youtube-collector-d" ;;
     seoul:youtube-collector-b) printf '%s\n' "hololive-youtube-collector-b" ;;
     *) echo "ERROR: unknown service for ${target}: ${service}" >&2; exit 1 ;;
   esac

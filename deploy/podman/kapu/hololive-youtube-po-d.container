@@ -1,14 +1,14 @@
-# youtube-collector-b의 PO issuer. iris-seoul compose youtube-po-b와 같은 격리 조건이다.
+# youtube-collector-d의 PO issuer. iris-seoul compose youtube-po-b와 같은 격리 조건이다.
 [Unit]
-Description=hololive YouTube PO issuer for collector b
+Description=hololive YouTube PO issuer for collector d
 
 [Container]
-ContainerName=hololive-youtube-po-b
+ContainerName=hololive-youtube-po-d
 Image=docker.io/library/hololive-youtube-po-sandbox:prod
 Pull=never
 Exec=--socket /run/hololive-youtube-po/worker.sock
 User=65532:1000
-# 호스트 ID와 분리한다. collector-b와 같이 크기 65536·socket :idmap이어야 on-disk 65532:1000이 유지돼 client가 접속한다.
+# 호스트 ID와 분리한다. collector-d와 같이 크기 65536·socket :idmap이어야 on-disk 65532:1000이 유지돼 client가 접속한다.
 UserNS=auto:size=65536
 Network=none
 ReadOnly=true
@@ -21,7 +21,7 @@ PidsLimit=32
 Memory=512m
 PodmanArgs=--cpus=1
 ShmSize=64m
-Volume=hololive-youtube-po-b.volume:/run/hololive-youtube-po:idmap
+Volume=hololive-youtube-po-d.volume:/run/hololive-youtube-po:idmap
 HealthCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtube-po/worker.sock"]
 HealthInterval=30s
 HealthStartPeriod=30s

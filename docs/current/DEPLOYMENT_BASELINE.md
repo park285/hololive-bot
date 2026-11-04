@@ -2,7 +2,7 @@
 
 ## Scope
 
-현재 production은 중앙 호스트와 Seoul collector `b`의 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`의 host-native systemd로 운영합니다. 중앙은 `deploy/compose/docker-compose.prod.yml`과 `docker-compose.live-compat.yml`을 함께 사용합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
+현재 production은 중앙 호스트와 Seoul collector `b`의 Docker Compose, Osaka collector `a`의 host-native systemd, kapu collector `d`의 rootful Podman Quadlet으로 운영합니다. 중앙은 `deploy/compose/docker-compose.prod.yml`과 `docker-compose.live-compat.yml`을 함께 사용합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
 
 ### 준비된 Podman Quadlet 중앙 배치 — 미배포
 
@@ -42,10 +42,10 @@ state distinct from the target configuration documented in the repository.
 | 서울 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | 서울의 별도 A1 2 OCPU·12GB·50GB VM. Compose의 `hololive-api`, `hololive-alarm-worker`, `holo-postgres`, `valkey-cache`, shortlink ingress, autoheal, collector fleet member `youtube-collector` (`c` on 30025)와 격리 issuer `youtube-po-c`. 권위 PostgreSQL이 여기 있습니다. |
 | 서울 AP·관리 웹 | `<tailnet-seoul-ap>` (`aarch64`) | Compose의 `youtube-collector-b`와 격리 issuer `youtube-po-b`, host service `iris-console.service`의 통합 관리자 웹. PostgreSQL standby나 자동 failover 대상으로 사용하지 않습니다. |
 | Osaka AP `a` | `<tailnet-osaka-a>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-a.service`와 격리 issuer `hololive-youtube-po.service`. |
-| Osaka2 AP `d` | `<tailnet-osaka2-d>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-d.service`와 격리 issuer `hololive-youtube-po.service`. |
+| kapu AP `d` | `<tailnet-kapu>` (`x86_64`) | rootful Podman Quadlet `hololive-youtube-collector-d.service`와 격리 issuer `hololive-youtube-po-d.service`. osaka2는 2026-11-04부터 공개 진입점만 맡습니다. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
 
-Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용합니다. Osaka `a`·Osaka2 `d`는 Compose overlay 없이 native systemd unit 하나로만 기동합니다. 실행 방식의 설정은 `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`의 `AP_RUNTIME_MODE`가 소유합니다.
+Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용합니다. Osaka `a`는 Compose overlay 없이 native systemd unit 하나로만 기동합니다. 실행 방식의 설정은 `scripts/deploy/ap-hosts/{seoul,osaka}.conf`의 `AP_RUNTIME_MODE`가 소유합니다. kapu `d`는 `deploy/podman/kapu/`의 Quadlet을 수동 설치합니다.
 
 2026-10-07 중앙 runtime과 PostgreSQL을 Osaka에서 Seoul로 이전했습니다. 새 VM이 기존 중앙
 주소 `100.100.1.8`을 승계했으므로 AP·Iris webhook·관리 gateway·DB exporter·shortlink의
@@ -120,7 +120,7 @@ timeline을 그대로 재기동하지 않습니다.
 |---|---|---:|---|---|---|
 | `hololive-api` | 중앙 Compose `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, `hololive-alarm-worker` |
 | `alarm-worker` | 중앙 Compose `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-collector` | 중앙 Compose `youtube-collector` (`c`), Seoul Compose `youtube-collector-b`, Osaka native `a`, Osaka2 native `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30035 | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 Compose의 DB·migration 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
+| `youtube-collector` | 중앙 Compose `youtube-collector` (`c`), Seoul Compose `youtube-collector-b`, Osaka native `a`, kapu Quadlet `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30015(kapu loopback) | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 Compose의 DB·migration 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
 
 `hololive-api`는 `hololive-net`만 사용하며 Docker socket·`DOCKER_HOST`·`docker-proxy-net`에 접근하지 않습니다. 중앙 `docker-proxy`의 유일한 소비자는 `deunhealth`입니다. Collector와 issuer의 동일 source SHA 및 paired deploy/rollback 계약은 [collector runbook](runbooks/youtube-collector.md#isolated-po-token-lifecycle)을 따릅니다.
 
@@ -250,7 +250,7 @@ domain socket monitor connection remained outside the TCP TLS scope.
 
 - `deploy/quadlet/hololive-bot/`
 - `deploy/compose/docker-compose.seoul.yml`
-- `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`
+- `scripts/deploy/ap-hosts/{seoul,osaka}.conf`
 - `deploy/quadlet/hololive-bot-standby/`
 - `docs/current/PROJECT_MAP.md`
 - `docs/current/runbooks/postgres-replication.md`
