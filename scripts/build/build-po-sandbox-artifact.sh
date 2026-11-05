@@ -51,6 +51,26 @@ mkdir -p "$working/rootfs"
 podman export "$container" --output "$output/rootfs.tar"
 python3 "$root/scripts/build/po-sandbox-manifest.py" verify-socket-owner "$output/rootfs.tar"
 tar -xf "$output/rootfs.tar" -C "$working/rootfs" --no-same-owner --same-permissions
+if [[ "$target" == rootfs ]]; then
+  # systemd가 RootDirectory에 만드는 API 파일시스템 mountpoint를 검증 전에 포함한다.
+  # 이미지에 없는 디렉터리를 기동 때 추가하면 배포 후 불변 rootfs 검사가 실패한다.
+  mountpoints=()
+  for name in dev proc sys; do
+    if [[ -e "$working/rootfs/$name" || -L "$working/rootfs/$name" ]]; then
+      [[ -d "$working/rootfs/$name" && ! -L "$working/rootfs/$name" ]] || {
+        echo "native API filesystem mountpoint must be a directory: $name" >&2
+        exit 1
+      }
+    else
+      install -d -m0555 "$working/rootfs/$name"
+      mountpoints+=("$name")
+    fi
+  done
+  if (( ${#mountpoints[@]} )); then
+    tar --append --file "$output/rootfs.tar" --directory "$working/rootfs" \
+      --numeric-owner --owner=0 --group=0 "${mountpoints[@]}"
+  fi
+fi
 python3 "$root/scripts/build/po-sandbox-manifest.py" create "$working/rootfs" "$output/rootfs-manifest.json" "$revision" "$arch"
 python3 "$root/scripts/build/po-sandbox-manifest.py" verify "$working/rootfs" "$output/rootfs-manifest.json" "$revision" "$arch"
 (cd "$output" && sha256sum rootfs.tar > rootfs.tar.sha256)

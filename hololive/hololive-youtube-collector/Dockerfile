@@ -15,9 +15,9 @@
 
 ARG GO_VERSION=1.27.3
 ARG ALPINE_VERSION=3.24
-ARG NODE_VERSION=26.12.1
+ARG NODE_VERSION=26.13.0
 
-FROM --platform=$BUILDPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS youtubejs-build
+FROM --platform=$BUILDPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 AS youtubejs-build
 WORKDIR /app/youtubejs
 # checkout umask와 무관하게 runtime uid가 읽도록 context 파일 모드를 정규화한다.
 # 기호 COPY --chmod는 BuildKit 전용이라 CONTAINER_CLI=podman(buildah)에서도 같은 결과가 나오도록 RUN chmod로 맞춘다.
@@ -29,12 +29,7 @@ RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
 # npm은 빌드 호스트에서 실행하고 배포할 Node·라이브러리는 대상 플랫폼에서 가져온다.
 # 따라서 x86_64에서 빌드해도 linux/arm64 릴리스의 아키텍처가 일치한다.
-FROM --platform=$TARGETPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS youtubejs-runtime
-
-# node base(alpine 3.24.2)의 musl 1.2.6-r2 로더 대신 alpine 3.24.3의 musl 1.2.6-r3(CVE-2026-107891) 로더를 쓴다.
-# 고정 이미지에서 복사만 하므로 build-time apk 설치와 대상 아키텍처 실행이 없다.
-# node base가 musl 1.2.6-r3 이상을 담으면 이 단계를 지우고 로더도 node 단계에서 복사한다.
-FROM --platform=$TARGETPLATFORM docker.io/library/alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS musl-loader
+FROM --platform=$TARGETPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 AS youtubejs-runtime
 
 FROM --platform=$BUILDPLATFORM docker.io/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS builder
 
@@ -105,7 +100,7 @@ WORKDIR /app
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
 COPY --from=builder --link /tmp/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=musl-loader --link /lib/ld-musl-*.so.1 /lib/
+COPY --from=youtubejs-runtime --link /lib/ld-musl-*.so.1 /lib/
 COPY --from=youtubejs-runtime --link /usr/lib/libgcc_s.so.1 /usr/lib/
 COPY --from=youtubejs-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
 COPY --from=youtubejs-runtime --link /usr/lib/libatomic.so.1* /usr/lib/
