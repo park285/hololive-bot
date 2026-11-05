@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 	_ "time/tzdata"
 
 	"github.com/park285/shared-go/v2/pkg/envutil"
@@ -36,6 +38,11 @@ func main() {
 		return nil
 	}); handled {
 		os.Exit(exitCode)
+	}
+
+	startupTimeout, ok := parseStartupTimeout(os.Args[1:])
+	if !ok {
+		os.Exit(2)
 	}
 
 	os.Exit(bootstrap.Options[*collectorconfig.RuntimeConfig, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
@@ -70,7 +77,7 @@ func main() {
 		StartupFields: func(appConfig *collectorconfig.RuntimeConfig) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
-		BuildTimeout: constants.AppTimeout.Build,
+		BuildTimeout: startupTimeout,
 		BuildRuntime: func(
 			ctx context.Context,
 			appConfig *collectorconfig.RuntimeConfig,
@@ -89,6 +96,20 @@ func main() {
 		},
 		BuildErrorMessage: "Failed to build youtube collector runtime",
 	}.Run())
+}
+
+// parseStartupTimeout은 native의 명시적 준비 예산만 허용하며 다른 실행 방식의 기본값은 유지합니다.
+func parseStartupTimeout(args []string) (time.Duration, bool) {
+	timeout := constants.AppTimeout.Build
+	flags := flag.NewFlagSet("youtube-collector", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.DurationVar(&timeout, "startup-timeout", timeout, "runtime build timeout (positive, at most 90s)")
+
+	if flags.Parse(args) != nil || flags.NArg() != 0 || timeout <= 0 || timeout > 90*time.Second {
+		return 0, false
+	}
+
+	return timeout, true
 }
 
 func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
