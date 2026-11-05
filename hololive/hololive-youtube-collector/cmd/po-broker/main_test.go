@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -108,6 +109,31 @@ func TestWatchTerminationRecordsAndExitsBySignal(t *testing.T) {
 			require.Equal(t, tt.want, status.Signal())
 			require.Equal(t, line, stderr.String())
 			require.NotErrorIs(t, ctx.Err(), context.DeadlineExceeded, "helper swallowed the termination signal")
+		})
+	}
+}
+
+func TestStartupFailureReportRedactsUnderlyingErrors(t *testing.T) {
+	const privateOutput = "fixture-worker-output"
+
+	tests := []struct {
+		name           string
+		err            error
+		classification string
+	}{
+		{"deadline", errors.Join(errors.New(privateOutput), context.DeadlineExceeded), "deadline"},
+		{"canceled", errors.Join(errors.New(privateOutput), context.Canceled), "canceled"},
+		{"unknown", errors.New(privateOutput), "unclassified"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+
+			reportStartupFailure(&output, tt.err)
+
+			require.NotContains(t, output.String(), privateOutput)
+			require.Contains(t, output.String(), "startup_failure="+tt.classification)
 		})
 	}
 }

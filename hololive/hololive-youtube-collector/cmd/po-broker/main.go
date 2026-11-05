@@ -92,6 +92,9 @@ func run(args []string) int {
 	}
 
 	serveErr := broker.Serve(listener)
+	if broker.ExitReason() == pobroker.ExitStartupFailed {
+		reportStartupFailure(os.Stderr, serveErr)
+	}
 
 	// signal 감시를 멈추기 전에 기록해, 그 사이 도착한 signal도 원인 줄을 남긴 뒤 종료하게 합니다.
 	report(broker.ExitReason())
@@ -104,6 +107,23 @@ func run(args []string) int {
 	}
 
 	return 0
+}
+
+// reportStartupFailure는 고정 분류만 기록하며 원본 오류·워커 출력·요청은 노출하지 않습니다.
+func reportStartupFailure(w io.Writer, err error) {
+	classification := "unclassified"
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		classification = "deadline"
+	case errors.Is(err, context.Canceled):
+		classification = "canceled"
+	}
+
+	// 진단 기록 실패는 기존 종료 상태를 바꾸지 않습니다.
+	if _, writeErr := fmt.Fprintf(w, "po-broker startup_failure=%s\n", classification); writeErr != nil {
+		return
+	}
 }
 
 // exitReporter는 프로세스 종료 원인을 stderr에 한 줄만 기록합니다. 고정 어휘의
