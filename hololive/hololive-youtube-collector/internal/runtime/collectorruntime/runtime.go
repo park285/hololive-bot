@@ -38,7 +38,7 @@ type Runtime struct {
 	cleanupReported bool
 }
 
-func Build(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger) (*Runtime, error) {
+func Build(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger, waitForDatabase bool) (*Runtime, error) {
 	if err := validateBuildInputs(appConfig, logger); err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
@@ -52,7 +52,7 @@ func Build(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger
 		return out, nil
 	}
 
-	infra, err := initInfrastructure(ctx, appConfig, logger)
+	infra, err := initInfrastructure(ctx, appConfig, logger, waitForDatabase)
 	if err != nil {
 		return nil, fmt.Errorf("init infrastructure: %w", err)
 	}

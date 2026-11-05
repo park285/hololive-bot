@@ -40,7 +40,7 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	startupTimeout, ok := parseStartupTimeout(os.Args[1:])
+	startup, ok := parseStartupOptions(os.Args[1:])
 	if !ok {
 		os.Exit(2)
 	}
@@ -77,7 +77,7 @@ func main() {
 		StartupFields: func(appConfig *collectorconfig.RuntimeConfig) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
-		BuildTimeout: startupTimeout,
+		BuildTimeout: startup.timeout,
 		BuildRuntime: func(
 			ctx context.Context,
 			appConfig *collectorconfig.RuntimeConfig,
@@ -90,7 +90,7 @@ func main() {
 				&traceConfig,
 				logger,
 				func(ctx context.Context) (*collectorruntime.Runtime, error) {
-					return collectorruntime.Build(ctx, appConfig, logger)
+					return collectorruntime.Build(ctx, appConfig, logger, startup.waitForDatabase)
 				},
 			)
 		},
@@ -98,18 +98,24 @@ func main() {
 	}.Run())
 }
 
-// parseStartupTimeout은 native의 명시적 준비 예산만 허용하며 다른 실행 방식의 기본값은 유지합니다.
-func parseStartupTimeout(args []string) (time.Duration, bool) {
-	timeout := constants.AppTimeout.Build
+type startupOptions struct {
+	timeout         time.Duration
+	waitForDatabase bool
+}
+
+// parseStartupOptions는 native의 명시적 준비 정책만 허용하며 다른 실행 방식의 기본값은 유지합니다.
+func parseStartupOptions(args []string) (startupOptions, bool) {
+	options := startupOptions{timeout: constants.AppTimeout.Build}
 	flags := flag.NewFlagSet("youtube-collector", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	flags.DurationVar(&timeout, "startup-timeout", timeout, "runtime build timeout (positive, at most 90s)")
+	flags.DurationVar(&options.timeout, "startup-timeout", options.timeout, "runtime build timeout (positive, at most 90s)")
+	flags.BoolVar(&options.waitForDatabase, "wait-for-database", false, "wait for initial database connection deadlines within the startup budget")
 
-	if flags.Parse(args) != nil || flags.NArg() != 0 || timeout <= 0 || timeout > 90*time.Second {
-		return 0, false
+	if flags.Parse(args) != nil || flags.NArg() != 0 || options.timeout <= 0 || options.timeout > 90*time.Second {
+		return startupOptions{}, false
 	}
 
-	return timeout, true
+	return options, true
 }
 
 func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
