@@ -37,6 +37,66 @@ func TestAlarmDispatchCloseoutReceiptPreservesOriginalAndSurvivesRetention(t *te
 	assertCloseoutReceiptAppendOnlyAndRetentionUnchanged(t, pool, fixture)
 }
 
+// handoff 결과 불명 격리는 Iris에 넘긴 시각(sent_at)이 남아도 재발송 없이 종료로 기록할 수 있어야 한다.
+// 같은 handoff 오류라도 격리되지 않은 행은 여전히 거부한다.
+func TestAlarmDispatchCloseoutReceiptAcceptsHandoffUnconfirmedQuarantine(t *testing.T) {
+	t.Parallel()
+
+	pool := NewPool(t)
+	ctx := t.Context()
+
+	var eventID int64
+
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO alarm_dispatch_events
+		    (event_key, payload_hash, alarm_type, channel_id, stream_id, category, payload)
+		VALUES ('handoff-event', repeat('c', 64), 'LIVE', 'handoff-channel', 'handoff-stream', 'handoff', '{}'::jsonb)
+		RETURNING id`).Scan(&eventID))
+
+	seedUnit := func(key, status string) int64 {
+		var unitID, deliveryID int64
+
+		require.NoError(t, pool.QueryRow(ctx, `
+			INSERT INTO alarm_dispatch_send_units (unit_key, dispatch_group_key, room_id, client_request_id)
+			VALUES (encode(sha256(convert_to($1, 'UTF8')), 'hex'), $1, 'handoff-room', $1)
+			RETURNING id`, key).Scan(&unitID))
+		require.NoError(t, pool.QueryRow(ctx, `
+			INSERT INTO alarm_dispatch_deliveries
+			    (event_id, room_id, dedupe_key, status, sent_at, quarantined_at, send_unit_id,
+			     dispatch_group_key, delivery_context, last_error_code)
+			VALUES ($1, 'handoff-room', $2, $3, now(), CASE WHEN $3 = 'quarantined' THEN now() END, $4,
+			        $2, '{}'::jsonb, 'handoff_unconfirmed')
+			RETURNING id`, eventID, key, status, unitID).Scan(&deliveryID))
+
+		return deliveryID
+	}
+
+	record := func(receiptID string, deliveryID int64) error {
+		var (
+			ids    []int64
+			digest string
+		)
+
+		require.NoError(t, pool.QueryRow(ctx, `SELECT target_ids, original_sha256
+			FROM alarm_dispatch_closeout_snapshot($1)`, deliveryID).Scan(&ids, &digest))
+
+		tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+		require.NoError(t, err)
+
+		if _, err = tx.Exec(ctx, closeoutCall, receiptID, deliveryID, ids, digest); err != nil {
+			require.NoError(t, pgxdb.Rollback(ctx, tx))
+
+			return err
+		}
+
+		return tx.Commit(ctx)
+	}
+
+	require.NoError(t, record("123e4567-e89b-42d3-a456-426614174010", seedUnit("handoff-quarantined", "quarantined")))
+	require.ErrorContains(t, record("123e4567-e89b-42d3-a456-426614174011", seedUnit("handoff-sent", "sent")),
+		"requires only quarantined")
+}
+
 func seedCloseoutReceiptFixture(t *testing.T, pool *pgxpool.Pool) closeoutReceiptFixture {
 	t.Helper()
 
