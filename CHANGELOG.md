@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **전달 확인 불명 격리의 종료 기록:** Iris에 넘긴 뒤 수락을 확인하지 못해 격리된 알림(`handoff_unconfirmed`, `sent_at` 기록됨)도 closeout receipt로 재발송 없는 종료를 기록할 수 있습니다(migration 367). 이전 기록 함수는 `sent_at`이 있으면 거부해 이런 행이 보존 기간(180일) 내내 미검토 격리로 남고 `HololiveDispatchQuarantineRetained` 경보가 계속 울렸습니다.
 - **서비스 런타임 최신화:** 내부 ingress의 공식 Nginx base를 1.31.8로, collector·PO issuer·X Spaces의 Node base와 CI 실행판을 26.13.0으로 고정합니다. Node의 amd64·arm64 이미지가 수정된 musl 1.2.6-r3를 포함하므로 별도 로더 보정 stage를 제거하고 같은 Node 이미지에서 로더를 가져옵니다. CA 차단·UID·entrypoint와 JavaScript 의존성 잠금은 유지합니다. Node의 호환 하한 `^26.12.1`은 26.13.0을 이미 허용하므로 불필요하게 올리지 않습니다. 소스 변경만으로 운영 배포 완료를 뜻하지 않습니다.
 - **Native issuer rootfs 불변성:** native용 artifact에는 systemd가 `RootDirectory`에서 만드는 `dev`·`proc`·`sys` mountpoint를 manifest 생성 전에 포함합니다. 없던 디렉터리만 `0555`로 추가하고 archive의 기존 파일·소유권과 Compose/Quadlet image는 유지합니다. Node 갱신 후 기동 자체는 성공해도 이 세 경로 때문에 완료 검사가 실패하던 문제를 고쳤으며, 실제 systemd `RootDirectory`에서 Node 26.13.0 실행 뒤 전체 rootfs 검사가 유지되는 것을 확인했습니다. 검증 경로를 제외하거나 운영 manifest를 다시 써서 통과시키지 않습니다.
 - **Seoul AP 로그를 journald로:** iris-seoul의 collector-b·po-b가 `json-file` 대신 Docker `journald` 로그 드라이버를 씁니다. iris-seoul Alloy가 Docker API(inspect는 컨테이너 env의 비밀까지 보여 줌) 없이 system journal에서 로그를 읽게 하려는 것입니다. 보존 기간은 journald 설정을 따릅니다.
