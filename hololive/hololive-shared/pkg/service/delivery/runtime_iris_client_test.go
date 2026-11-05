@@ -148,6 +148,7 @@ func TestRuntimeIrisClientPreservesBaseURLFileDeploymentPrefix(t *testing.T) {
 		if r.Method == http.MethodGet && r.URL.Path == "/tenant/iris/auth/epoch" {
 			w.Header().Set("Content-Type", "application/json")
 			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+
 			return
 		}
 
@@ -199,6 +200,7 @@ func TestRuntimeIrisClientDefaultsToReplyRetry(t *testing.T) {
 		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
 			w.Header().Set("Content-Type", "application/json")
 			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+
 			return
 		}
 
@@ -235,6 +237,7 @@ func TestRuntimeIrisClientKeepsRotatedClientUntilInFlightCallReleases(t *testing
 		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
 			w.Header().Set("Content-Type", "application/json")
 			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+
 			return
 		}
 
@@ -602,6 +605,7 @@ func newRuntimeIrisReplyCounter(t *testing.T, newServer func(http.Handler) *http
 		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
 			w.Header().Set("Content-Type", "application/json")
 			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+
 			return
 		}
 
@@ -675,6 +679,7 @@ func TestRuntimeIrisClientSendMessageAcceptedReturnsRequestID(t *testing.T) {
 				if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
 					w.Header().Set("Content-Type", "application/json")
 					writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+
 					return
 				}
 

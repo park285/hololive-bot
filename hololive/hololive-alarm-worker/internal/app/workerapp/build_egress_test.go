@@ -151,8 +151,10 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
 			w.Header().Set("Content-Type", "application/json")
+
 			_, err := io.WriteString(w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
 			assert.NoError(t, err)
+
 			return
 		}
 

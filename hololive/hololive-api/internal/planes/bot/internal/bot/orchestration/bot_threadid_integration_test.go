@@ -117,6 +117,7 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ca
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth/epoch", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		if err := jsonv2.MarshalWrite(w, map[string]string{"epoch": "0123456789abcdef0123456789abcdef"}); err != nil {
 			t.Errorf("encode epoch response: %v", err)
 		}

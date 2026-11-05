@@ -18,9 +18,11 @@ func IrisHTTPError(ctx context.Context, t *testing.T, status int, body string) e
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
 			w.Header().Set("Content-Type", "application/json")
+
 			if _, err := io.WriteString(w, `{"epoch":"0123456789abcdef0123456789abcdef"}`); err != nil {
 				t.Errorf("write epoch: %v", err)
 			}
+
 			return
 		}
 

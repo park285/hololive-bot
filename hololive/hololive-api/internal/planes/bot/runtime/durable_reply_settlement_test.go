@@ -100,26 +100,32 @@ func TestEpochBootstrapFailurePreservesStoredReplyPayload(t *testing.T) {
 		ClientRequestID: transport.ReplyClientRequestID("message:epoch-bootstrap", 0),
 	})
 	require.NoError(t, err)
+
 	claim, err := repository.Claim(t.Context(), "epoch-bootstrap-token", time.Minute)
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 
 	var discoveries, protected atomic.Int32
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
 			discoveries.Add(1)
 		} else {
 			protected.Add(1)
 		}
+
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
+
 	defer server.Close()
+
 	client, err := iris.NewClient(
 		iris.WithBaseURL(server.URL), iris.WithBotToken("fixture-token"),
 		iris.WithHTTPClient(server.Client()), iris.WithReplyRetry(3),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
 	requestID, dispatchErr := transport.DispatchStoredReply(t.Context(), client, claim.RoomID, claim.Payload, claim.ClientRequestID)
 	require.Error(t, dispatchErr)
 	require.Equal(t, int32(1), discoveries.Load())
@@ -130,9 +136,14 @@ func TestEpochBootstrapFailurePreservesStoredReplyPayload(t *testing.T) {
 	applied, err := runtime.settleOutboxDispatch(t.Context(), claim, "epoch-bootstrap-token", status, requestID, dispatchErr)
 	require.NoError(t, err)
 	require.True(t, applied)
-	var rowStatus string
-	var payloadKept bool
+
+	var (
+		rowStatus   string
+		payloadKept bool
+	)
+
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT status, payload IS NOT NULL FROM bot_reply_outbox WHERE id = $1", claim.ID).Scan(&rowStatus, &payloadKept))
+
 	if rowStatus != durability.ReplyOutboxRetryablePreDispatch || !payloadKept {
 		t.Fatalf("temporary bootstrap failure settled as %q with payload_kept=%t", rowStatus, payloadKept)
 	}
