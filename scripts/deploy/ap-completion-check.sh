@@ -78,11 +78,9 @@ fi
 systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
 sub_state="$(systemctl show "$unit" -p SubState --value)"
-restart_count="$(systemctl show "$unit" -p NRestarts --value)"
 environment_files="$(systemctl show "$unit" -p EnvironmentFiles --value)"
 [[ "$active_state" == active ]]
 [[ "$sub_state" == running ]]
-[[ "$restart_count" == 0 ]]
 [[ "$environment_files" == *'/etc/stack-secrets/hololive-bot/youtube-collector.env'* ]]
 [[ "$environment_files" == *'/etc/hololive-bot/youtube-collector-host.env'* ]]
 [[ "$environment_files" != *'compose.env'* ]]
@@ -111,6 +109,10 @@ sudo -n -u hololive env \
   "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health" >/dev/null
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
+[[ "$(systemctl show "$unit" -p NRestarts --value)" == 0 ]]
+if [[ "$po_expected_presence" == present ]]; then
+  [[ "$(systemctl show hololive-youtube-po.service -p NRestarts --value)" == 0 ]]
+fi
 
 if [[ -n "$change_started_at" ]]; then
   journal_since="${change_started_at/T/ }"

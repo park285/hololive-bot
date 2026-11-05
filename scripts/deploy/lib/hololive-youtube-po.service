@@ -9,7 +9,7 @@ StartLimitBurst=20
 Type=simple
 DynamicUser=yes
 RootDirectory=/opt/hololive-bot/youtube-collector/releases/@RELEASE_ID@/po-sandbox/rootfs
-ExecStart=/app/bin/po-broker --listen-fd 3
+ExecStart=/app/bin/po-broker --listen-fd 3 --startup-timeout 90s
 Environment=HOME=/tmp TMPDIR=/tmp TZ=UTC LANG=C
 PrivateNetwork=yes
 RestrictAddressFamilies=AF_UNIX

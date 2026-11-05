@@ -34,12 +34,13 @@ var (
 func main() { os.Exit(run(os.Args[1:])) }
 
 type options struct {
-	listenFD    int
-	socket      string
-	node        string
-	worker      string
-	showVersion bool
-	healthcheck bool
+	listenFD       int
+	socket         string
+	node           string
+	worker         string
+	startupTimeout time.Duration
+	showVersion    bool
+	healthcheck    bool
 }
 
 func parseOptions(args []string) (*options, bool) {
@@ -51,10 +52,11 @@ func parseOptions(args []string) (*options, bool) {
 	flags.StringVar(&opts.socket, "socket", "", "Unix socket")
 	flags.StringVar(&opts.node, "node", "/usr/local/bin/node", "Node executable")
 	flags.StringVar(&opts.worker, "worker", "/app/po-sandbox/src/worker.mjs", "isolated worker")
+	flags.DurationVar(&opts.startupTimeout, "startup-timeout", 30*time.Second, "worker loaded timeout (positive, at most 90s)")
 	flags.BoolVar(&opts.showVersion, "version", false, "print build identity")
 	flags.BoolVar(&opts.healthcheck, "healthcheck", false, "check broker over Unix socket")
 
-	if flags.Parse(args) != nil || flags.NArg() != 0 {
+	if flags.Parse(args) != nil || flags.NArg() != 0 || opts.startupTimeout <= 0 || opts.startupTimeout > 90*time.Second {
 		return nil, false
 	}
 
@@ -91,7 +93,7 @@ func run(args []string) int {
 		return 1
 	}
 
-	serveErr := broker.Serve(listener)
+	serveErr := broker.Serve(listener, opts.startupTimeout)
 	if broker.ExitReason() == pobroker.ExitStartupFailed {
 		reportStartupFailure(os.Stderr, serveErr)
 	}
