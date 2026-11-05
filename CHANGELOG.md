@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **서비스 런타임 최신화:** 내부 ingress의 공식 Nginx base를 1.31.8로, collector·PO issuer·X Spaces의 Node base와 CI 실행판을 26.13.0으로 고정합니다. Node의 amd64·arm64 이미지가 수정된 musl 1.2.6-r3를 포함하므로 별도 로더 보정 stage를 제거하고 같은 Node 이미지에서 로더를 가져옵니다. CA 차단·UID·entrypoint와 JavaScript 의존성 잠금은 유지합니다. Node의 호환 하한 `^26.12.1`은 26.13.0을 이미 허용하므로 불필요하게 올리지 않습니다. 소스 변경만으로 운영 배포 완료를 뜻하지 않습니다.
 - **Seoul AP 로그를 journald로:** iris-seoul의 collector-b·po-b가 `json-file` 대신 Docker `journald` 로그 드라이버를 씁니다. iris-seoul Alloy가 Docker API(inspect는 컨테이너 env의 비밀까지 보여 줌) 없이 system journal에서 로그를 읽게 하려는 것입니다. 보존 기간은 journald 설정을 따릅니다.
 - **`!라이브` 조회 rate limit:** `!라이브`도 방송 이력 조회와 같은 한도(사용자당 분 3회, 방당 분 12회)를 별도 버킷으로 적용합니다. 한도를 넘으면 "방송 조회 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."로 답합니다(이력 명령의 문구도 같은 문장으로 바뀝니다). 제한기를 쓸 수 없거나 사용자·방 식별자가 불안정하면 이력 명령처럼 실행하지 않습니다.
 - **local CI 패키지 선택:** `hololive-api/scripts/migrations/` 아래 변경은 `hololive-dbtest`를 쓰는 모든 모듈의 테스트를 고르고, `*.tpl` 변경은 해당 모듈 테스트를 고릅니다.

@@ -125,7 +125,7 @@ replacement, and failed cutover restoration. No live operation is implied by the
 
 ## Owned ingress image
 
-`admin-dashboard-ingress` uses the local-only `localhost/iris-stack-nginx:1.31.7-zlib1.3.2-r1`
+`admin-dashboard-ingress` uses the local-only `localhost/iris-stack-nginx:1.31.8-zlib1.3.2-r1`
 image (`Pull=never`). Its only build context is `deploy/images/nginx`; the
 immutable official Nginx base retains its entrypoint, configuration and users,
 with Alpine 3.24 `zlib=1.3.2-r1` (CVE-2026-85091) and `musl=1.2.6-r3`/`musl-utils=1.2.6-r3`
@@ -140,7 +140,7 @@ images. For isolated local builds without runtime env inputs:
 
 ```bash
 podman build --platform linux/arm64 --format docker --build-arg REVISION=unknown \
-  --tag localhost/iris-stack-nginx:1.31.7-zlib1.3.2-r1 deploy/images/nginx
+  --tag localhost/iris-stack-nginx:1.31.8-zlib1.3.2-r1 deploy/images/nginx
 ```
 
 Use the full committed image-source revision instead of `unknown` only after the
