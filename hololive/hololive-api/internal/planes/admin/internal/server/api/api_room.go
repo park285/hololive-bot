@@ -29,7 +29,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"

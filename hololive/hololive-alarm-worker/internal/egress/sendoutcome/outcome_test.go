@@ -8,7 +8,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )

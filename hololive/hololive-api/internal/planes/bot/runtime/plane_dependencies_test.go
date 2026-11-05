@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v4/iris"
-	"github.com/park285/iris-client-go/v4/webhook"
+	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v5/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"

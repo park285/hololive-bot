@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 )
 
 // IrisHTTPError는 전체 HTTP 응답을 실제 SDK로 읽어 만든 오류를 반환한다.
@@ -15,7 +15,15 @@ import (
 func IrisHTTPError(ctx context.Context, t *testing.T, status int, body string) error {
 	t.Helper()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := io.WriteString(w, `{"epoch":"0123456789abcdef0123456789abcdef"}`); err != nil {
+				t.Errorf("write epoch: %v", err)
+			}
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 

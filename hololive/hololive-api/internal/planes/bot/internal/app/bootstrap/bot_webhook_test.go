@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/webhook"
-	"github.com/park285/iris-client-go/v4/webhooksign"
+	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v5/webhooksign"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

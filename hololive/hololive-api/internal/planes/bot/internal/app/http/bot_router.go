@@ -27,7 +27,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/iris-client-go/v4/webhook"
+	"github.com/park285/iris-client-go/v5/webhook"
 	"github.com/park285/shared-go/v2/pkg/health"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"

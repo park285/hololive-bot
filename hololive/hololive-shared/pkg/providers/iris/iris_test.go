@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	irisclient "github.com/park285/iris-client-go/v4/iris"
+	irisclient "github.com/park285/iris-client-go/v5/iris"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
@@ -28,6 +28,13 @@ func newCountingIrisServer(t *testing.T, label string, useTLS bool) *countingIri
 	counting := &countingIrisServer{label: label}
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := w.Write([]byte(`{"epoch":"0123456789abcdef0123456789abcdef"}`)); err != nil {
+				t.Errorf("write %s epoch: %v", label, err)
+			}
+			return
+		}
 		if r.URL.Path != irisclient.PathReply {
 			t.Fatalf("%s server path = %q", label, r.URL.Path)
 		}
@@ -118,6 +125,13 @@ func TestProvideIrisClient_RejectsInvalidBaseURLFileAtConstruction(t *testing.T)
 func TestProvideIrisClient_AllowsBaseURLFileWithoutFallbackURL(t *testing.T) {
 	ctx := t.Context()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := w.Write([]byte(`{"epoch":"0123456789abcdef0123456789abcdef"}`)); err != nil {
+				t.Errorf("write epoch: %v", err)
+			}
+			return
+		}
 		if r.URL.Path != irisclient.PathReply {
 			t.Fatalf("server path = %q", r.URL.Path)
 		}

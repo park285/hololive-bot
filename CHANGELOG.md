@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **Iris 기동 epoch 인증 동시 전환(파괴적):** API·alarm-worker·shared의 SDK import와 pin, collector의 간접 pin을 `iris-client-go/v5 v5.0.0`으로 옮깁니다. 보호 호출은 같은 H3/TLS 대상의 `/auth/epoch`를 먼저 확인하고, `401 AUTH_EPOCH_MISMATCH`에서만 원래 deadline·본문·`ClientRequestID`를 유지해 논리 호출당 최대 한 번 새 epoch로 재서명합니다. bootstrap 실패는 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다. 기존 owner 재시도·handoff·결과 불명·webhook v3·inbox 계약은 유지합니다. 새 Iris와 소비자를 같은 배포 창에서 교체해야 하며, SDK 정식 tag 게시와 공식 Go checksum 생성 전에는 운영 빌드·배포하지 않습니다.
 - **Seoul AP 로그를 journald로:** iris-seoul의 collector-b·po-b가 `json-file` 대신 Docker `journald` 로그 드라이버를 씁니다. iris-seoul Alloy가 Docker API(inspect는 컨테이너 env의 비밀까지 보여 줌) 없이 system journal에서 로그를 읽게 하려는 것입니다. 보존 기간은 journald 설정을 따릅니다.
 - **`!라이브` 조회 rate limit:** `!라이브`도 방송 이력 조회와 같은 한도(사용자당 분 3회, 방당 분 12회)를 별도 버킷으로 적용합니다. 한도를 넘으면 "방송 조회 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."로 답합니다(이력 명령의 문구도 같은 문장으로 바뀝니다). 제한기를 쓸 수 없거나 사용자·방 식별자가 불안정하면 이력 명령처럼 실행하지 않습니다.
 - **local CI 패키지 선택:** `hololive-api/scripts/migrations/` 아래 변경은 `hololive-dbtest`를 쓰는 모든 모듈의 테스트를 고르고, `*.tpl` 변경은 해당 모듈 테스트를 고릅니다.

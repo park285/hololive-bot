@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -145,6 +145,12 @@ func TestRuntimeIrisClientUsesBaseURLFileOverrideAndReloads(t *testing.T) {
 
 func TestRuntimeIrisClientPreservesBaseURLFileDeploymentPrefix(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/tenant/iris/auth/epoch" {
+			w.Header().Set("Content-Type", "application/json")
+			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+			return
+		}
+
 		if got, want := r.URL.Path, "/tenant/iris/reply"; got != want {
 			t.Errorf("request path = %q, want %q", got, want)
 		}
@@ -190,6 +196,12 @@ func TestRuntimeIrisClientDefaultsToReplyRetry(t *testing.T) {
 	var attempts atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+			w.Header().Set("Content-Type", "application/json")
+			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+			return
+		}
+
 		if r.URL.Path != iris.PathReply {
 			t.Errorf("path = %q, want %q", r.URL.Path, iris.PathReply)
 		}
@@ -219,7 +231,13 @@ func TestRuntimeIrisClientKeepsRotatedClientUntilInFlightCallReleases(t *testing
 	entered := make(chan struct{})
 	unblock := make(chan struct{})
 
-	first := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	first := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+			w.Header().Set("Content-Type", "application/json")
+			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+			return
+		}
+
 		close(entered)
 		<-unblock
 		w.WriteHeader(http.StatusOK)
@@ -581,6 +599,12 @@ func newRuntimeIrisReplyCounter(t *testing.T, newServer func(http.Handler) *http
 	counter := &runtimeIrisReplyCounter{}
 
 	counter.server = newServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+			w.Header().Set("Content-Type", "application/json")
+			writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+			return
+		}
+
 		if r.URL.Path != iris.PathReply {
 			t.Errorf("reply server path = %q", r.URL.Path)
 		}
@@ -648,6 +672,12 @@ func TestRuntimeIrisClientSendMessageAcceptedReturnsRequestID(t *testing.T) {
 			)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+					w.Header().Set("Content-Type", "application/json")
+					writeRuntimeIrisResponse(t, w, `{"epoch":"0123456789abcdef0123456789abcdef"}`)
+					return
+				}
+
 				gotPath = r.URL.Path
 				if r.Header.Get("X-Iris-Signature") == "" {
 					t.Error("missing iris signature")
