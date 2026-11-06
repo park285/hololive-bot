@@ -19,11 +19,6 @@ esac
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
-if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
-  echo "Refusing host-native AP rollback for $AP_NAME (runtime=$AP_RUNTIME_MODE); use ./scripts/deploy/ap-rollback.sh $AP_NAME" >&2
-  exit 2
-fi
-
 if [[ ${#AP_SERVICES[@]} -ne 1 || ${#AP_PORTS[@]} -ne 1 ]]; then
   echo "host-native rollback currently supports exactly one AP service per host" >&2
   exit 2

@@ -2,7 +2,7 @@
 
 ## Scope
 
-현재 production은 중앙 호스트와 kapu collector `d`의 rootful Podman Quadlet, Seoul collector `b`의 Docker Compose, Osaka collector `a`의 host-native systemd로 운영합니다. 중앙은 `deploy/quadlet/hololive-bot/`의 unit을 사용합니다(설치·운영: `deploy/quadlet/README.md`). 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
+현재 production은 중앙 호스트와 kapu collector `d`의 rootful Podman Quadlet, iris-seoul collector `b`의 rootful Podman Quadlet(2026-11-06 Docker Compose에서 전환), Osaka collector `a`의 host-native systemd로 운영합니다. 중앙은 `deploy/quadlet/hololive-bot/`의 unit을 사용합니다(설치·운영: `deploy/quadlet/README.md`). 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
 
 ### 중앙 Podman Quadlet 컷오버 — 2026-11-04
 
@@ -15,13 +15,13 @@
 
 Docker 시절 `docker-proxy`·`deunhealth`는 없어졌고 unit의 `HealthOnFailure=stop`과 `Restart=always`가 대신합니다.
 host `compose.env`의 `DOCKER_SOCKET_GID`는 Quadlet이 읽지 않습니다. 수용 전 롤백 자료는 Docker image·volume,
-`/opt/hololive-bot/compose/current.docker-era`, 위 DB dump입니다. Seoul `b`는 Docker Compose로 유지합니다.
+`/opt/hololive-bot/compose/current.docker-era`, 위 DB dump입니다. Seoul `b`는 2026-11-06 iris-seoul Podman Quadlet으로 옮겼습니다(`deploy/podman/iris-seoul/README.md`).
 
 ### Prepared 11.0.0 worker/DB cutover — not activated
 
 After actual old-profile-compatible 10.2.0 acceptance, the 11.0.0 source prepares
-immutable worker profile pairs, the standalone `docker-compose.collector.yml` AP
-base, private Unix-socket migration, role-based TCP rejection, keepalive/logging/WAL
+immutable worker profile pairs, the standalone AP collector base (replaced on 2026-11-06 by
+the iris-seoul Quadlet units), private Unix-socket migration, role-based TCP rejection, keepalive/logging/WAL
 command settings, and revised pool budgets.
 It does **not** establish that production has accepted those changes. Preserve the
 deployment facts below until an approved rollout records fresh image/profile,
@@ -46,12 +46,12 @@ state distinct from the target configuration documented in the repository.
 | 역할 | 호스트 | 내용 |
 |---|---|---|
 | 서울 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | 서울의 별도 A1 2 OCPU·12GB·50GB VM. rootful Podman Quadlet의 `hololive-api`, `hololive-alarm-worker`, `holo-postgres`, `valkey-cache`, shortlink ingress(`admin-dashboard-ingress`), collector fleet member `hololive-youtube-collector-c` (`c` on 30025)와 격리 issuer `hololive-youtube-po-c`. 권위 PostgreSQL이 여기 있습니다. |
-| 서울 AP·관리 웹 | `<tailnet-seoul-ap>` (`aarch64`) | Compose의 `youtube-collector-b`와 격리 issuer `youtube-po-b`, host service `iris-console.service`의 통합 관리자 웹. PostgreSQL standby나 자동 failover 대상으로 사용하지 않습니다. |
+| 서울 AP·관리 웹 | `<tailnet-seoul-ap>` (`aarch64`) | Podman Quadlet의 `hololive-youtube-collector-b`와 격리 issuer `hololive-youtube-po-b`(Docker에는 Redroid만 남음), host service `iris-console.service`의 통합 관리자 웹. PostgreSQL standby나 자동 failover 대상으로 사용하지 않습니다. |
 | Osaka AP `a` | `<tailnet-osaka-a>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-a.service`와 격리 issuer `hololive-youtube-po.service`. |
 | kapu AP `d` | `<tailnet-kapu>` (`x86_64`) | rootful Podman Quadlet `hololive-youtube-collector-d.service`와 격리 issuer `hololive-youtube-po-d.service`. osaka2는 2026-11-04부터 공개 진입점만 맡습니다. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
 
-Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용합니다. Osaka `a`는 Compose overlay 없이 native systemd unit 하나로만 기동합니다. 실행 방식의 설정은 `scripts/deploy/ap-hosts/{seoul,osaka}.conf`의 `AP_RUNTIME_MODE`가 소유합니다. kapu `d`는 `deploy/podman/kapu/`의 Quadlet을 수동 설치합니다.
+Seoul `b`는 `deploy/podman/iris-seoul/`의 Quadlet unit을 사용하고 `po-central-cutover.sh b`로 배포합니다. Osaka `a`는 native systemd unit 하나로만 기동하며 실행 방식은 `scripts/deploy/ap-hosts/osaka.conf`의 `AP_RUNTIME_MODE=native`가 소유합니다. kapu `d`는 `deploy/podman/kapu/`의 Quadlet을 수동 설치합니다.
 
 2026-10-07 중앙 runtime과 PostgreSQL을 Osaka에서 Seoul로 이전했습니다. 새 VM이 기존 중앙
 주소 `100.100.1.8`을 승계했으므로 AP·Iris webhook·관리 gateway·DB exporter·shortlink의
@@ -125,7 +125,7 @@ timeline을 그대로 재기동하지 않습니다.
 |---|---|---:|---|---|---|
 | `hololive-api` | 중앙 Quadlet `hololive-api.service` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey, `hololive-alarm-worker`(`Wants=`). migration은 배포 helper가 활성화 전에 실행합니다. |
 | `alarm-worker` | 중앙 Quadlet `hololive-alarm-worker.service` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey |
-| `youtube-collector` | 중앙 Quadlet `hololive-youtube-collector-c` (`c`), Seoul Compose `youtube-collector-b`, Osaka native `a`, kapu Quadlet `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30015(kapu loopback) | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 DB 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
+| `youtube-collector` | 중앙 Quadlet `hololive-youtube-collector-c` (`c`), iris-seoul Quadlet `hololive-youtube-collector-b` (`b`), Osaka native `a`, kapu Quadlet `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30015(kapu loopback) | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 DB 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
 
 `hololive-api`는 `hololive-net`만 사용하며 컨테이너 런타임 socket에 접근하지 않습니다. Collector와 issuer의 동일 source SHA 및 paired deploy/rollback 계약은 [collector runbook](runbooks/youtube-collector.md#isolated-po-token-lifecycle)을 따릅니다.
 
@@ -139,7 +139,7 @@ timeline을 그대로 재기동하지 않습니다.
 | `hololive-db-migrate` | Migration job | `[Install]`이 없어 부팅 때 실행하지 않고 배포 helper가 app 활성화 전에 실행합니다; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard-ingress` | 중앙 shortlink ingress | `admin-dashboard-ingress.container`가 정의합니다. 30192의 source-restricted shortlink와 loopback 30193의 health를 제공하며 관리자 웹을 호스팅하지 않습니다. |
-| `hololive-youtube-po-c` / `youtube-po-b` / `hololive-youtube-po-d` | 격리 PO issuer | 중앙 Quadlet `c`, Seoul Compose `b`, kapu Quadlet `d` collector에 private Unix socket을 제공합니다. 앱 비밀·DB·helper socket을 공유하지 않습니다. native `a`의 issuer는 osaka1의 `hololive-youtube-po.service`입니다. |
+| `hololive-youtube-po-c` / `hololive-youtube-po-b` / `hololive-youtube-po-d` | 격리 PO issuer | 중앙 Quadlet `c`, iris-seoul Quadlet `b`, kapu Quadlet `d` collector에 private Unix socket을 제공합니다. 앱 비밀·DB·helper socket을 공유하지 않습니다. native `a`의 issuer는 osaka1의 `hololive-youtube-po.service`입니다. |
 
 ## External Boundaries
 
@@ -252,8 +252,8 @@ domain socket monitor connection remained outside the TCP TLS scope.
 ## Related Files
 
 - `deploy/quadlet/hololive-bot/`
-- `deploy/compose/docker-compose.seoul.yml`
-- `scripts/deploy/ap-hosts/{seoul,osaka}.conf`
+- `deploy/podman/iris-seoul/`
+- `scripts/deploy/ap-hosts/osaka.conf`
 - `deploy/quadlet/hololive-bot-standby/`
 - `docs/current/PROJECT_MAP.md`
 - `docs/current/runbooks/postgres-replication.md`

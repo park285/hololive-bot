@@ -187,17 +187,7 @@ run_content_gates() {
   run_if_changed scripts/build/image-runtime-tree-permissions_test.sh \
     hololive/hololive-youtube-collector/Dockerfile.po-sandbox hololive/hololive-youtube-collector/Dockerfile \
     hololive/hololive-alarm-worker/Dockerfile
-  run_if_changed scripts/deploy/lib/ap-prechange-config_test.sh \
-    scripts/deploy/lib/ap-prechange-config.sh scripts/deploy/ap-deploy.sh scripts/deploy/ap-rollback.sh
-  run_if_changed scripts/deploy/ap-deploy-version_test.sh \
-    scripts/deploy/lib/ap-compose-version.sh scripts/deploy/check-ap-rsync-preview.sh
   run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
-  run_if_changed scripts/deploy/ap-deploy-cutover-failure_test.sh \
-    scripts/deploy/ap-deploy.sh scripts/deploy/lib
-  run_if_changed scripts/deploy/ap-maintenance-stopped_test.sh \
-    scripts/deploy/ap-collector-preflight.sh scripts/deploy/ap-deploy.sh scripts/deploy/ap-rollback.sh \
-    scripts/deploy/lib/po-ap-rollback-remote.sh scripts/deploy/lib/ap-prechange-config.sh scripts/deploy/lib/ap-host.sh \
-    scripts/logs/ap-status.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh \
     scripts/deploy/lib/source-revision.sh \
     hololive/hololive-api/Dockerfile hololive/hololive-alarm-worker/Dockerfile hololive/hololive-youtube-collector/Dockerfile
@@ -218,7 +208,7 @@ run_content_gates() {
     scripts/deploy/ap-completion-check.sh \
     scripts/deploy/lib scripts/logs/ap-host-native-status.sh
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
-    scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib deploy/compose
+    scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib
 
   echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
   LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \

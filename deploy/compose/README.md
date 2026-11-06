@@ -1,43 +1,27 @@
-# Compose Files (Seoul Docker AP)
+# Shared runtime contracts
 
-이 디렉터리는 Docker로 남는 Seoul AP(iris-seoul) 정의만 둡니다. 중앙(hololive-seoul)은 Podman Quadlet으로
-운영하며 정의·설치·운영은 [deploy/quadlet/README.md](../quadlet/README.md)가 소유합니다.
+이 디렉터리에는 실행 정의가 더 이상 없습니다. 중앙(hololive-seoul)은 [deploy/quadlet](../quadlet/README.md),
+Seoul AP collector b는 2026-11-06부터 iris-seoul rootful Podman Quadlet([deploy/podman/iris-seoul](../podman/iris-seoul/README.md)),
+Osaka a/d는 host-native systemd입니다. Docker Compose AP 정의와 `compose.sh`·`ap-deploy.sh`는 그 전환으로 지웠습니다.
 
-- `docker-compose.collector.yml`: shared collector/issuer definitions only; no central credentials.
-- `docker-compose.seoul.yml`: standalone AP composition for collector/issuer `b` (`extends` the collector base).
-- `.env.seoul.example`: AP interpolation keys (`/etc/stack-secrets/hololive-bot/ap-compose.env`).
-
-AP host runtime is explicit in `scripts/deploy/ap-hosts/seoul.conf` (`AP_RUNTIME_MODE=compose`; compose APs run Docker).
-Use the wrapper with the AP file only:
-
-```bash
-COMPOSE_PROFILES=oracle COMPOSE_ENV_FILE=<ap-env> ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.seoul.yml config --quiet
-```
-
-`extends` reuses definitions without starting central `c`. The transfer and rollback sets retain the
-collector base beside the selected host file. The recorded previous layout, image and checked profile are
-restored together.
-
-> 아래 절은 AP와 중앙에 함께 걸린 계약(worker profile, DB·TLS 정책, env 소유)을 다룹니다. 중앙 unit 정의·설치·
-> 재시작 명령은 [Quadlet README](../quadlet/README.md)와 `docs/current/runbooks/`가 소유합니다.
+> 아래 절은 AP와 중앙에 함께 걸린 계약(worker profile, DB·TLS 정책, env 소유)을 다룹니다. unit 정의·설치·
+> 재시작 명령은 위 README들과 `docs/current/runbooks/`가 소유합니다.
 
 ## Worker profile release pairing
 
-Worker profiles are non-secret artifacts. The AP Compose files and central Quadlet units mount only
+Worker profiles are non-secret artifacts. The Quadlet units (central and iris-seoul) mount only
 `/etc/stack-secrets/hololive-bot/worker-profiles` read-only as a directory; certificate
 and credential mounts remain individually scoped. Atomic mirror replacement is therefore
 visible to the worker-profile drift checker.
 
 Every candidate runs its `--check-worker-profile` before migration or writer replacement.
-The Seoul collector cutover uses the actual rendered service (`compose.sh ... run --rm --no-deps`).
-Central cutovers use `worker-profile-pair.py check SERVICE PAIR_DIR`, which runs the pair image
+Quadlet cutovers use `worker-profile-pair.py check SERVICE PAIR_DIR`, which runs the pair image
 with only the release directory and `STACK_WORKER_PROFILE_FILE` (the only input that CLI reads)
 and no network. They retain the checked exact bytes, image identity,
 revision/architecture and checksums under the deployment's release/backup directory.
 The running container labels identify this retained pair.
-On the AP `artifacts/worker-profile/active/*.yml` keeps the selected pair across reboot/recreate;
-centrally the `/etc/containers/systemd/hololive-bot/<unit>.container.d/50-worker-profile.conf`
-drop-in does (`Image=sha256:<id>`). These root-owned regular files are preserved by deploy-tree
+The `/etc/containers/systemd/hololive-bot/<unit>.container.d/50-worker-profile.conf`
+drop-in keeps the selected pair across reboot/recreate (`Image=sha256:<id>`). These root-owned regular files are preserved by deploy-tree
 sync and `sync-opt-current.sh`; they are not writable runtime backups or source-transfer
 inputs. Do not delete these artifacts or retained image
 tags during the rollback window.
@@ -54,9 +38,7 @@ Central API/alarm manual rollback regenerates the previous pair's drop-in with
 `worker-profile-pair.py rollback SERVICE PREVIOUS_PAIR_DIR` (hololive-api also pins the previous
 `APP_VERSION`), publishes it with `activate`, then runs `systemctl daemon-reload` and restarts only
 the approved unit. Collector rollback continues through
-`po-central-cutover.sh rollback <backup>` or `ap-rollback.sh seoul --apply` with its
-existing approval variables. On the Seoul AP an originally stopped collector is recreated without
-starting it; schema compatibility must be restored before an explicit start. The central
+`po-central-cutover.sh <c|b> rollback <backup>` with its slot's approval variable. The Quadlet
 cutover refuses a stopped collector because Quadlet removes the container of a stopped unit,
 so the previous profile can only be proven from a running process.
 
@@ -64,19 +46,13 @@ A central restoration activation failure is reported before any unit restart. Re
 backup and inspect the installed drop-in before explicit recovery; a failed restoration is not
 a successful rollback.
 
-AP preparation can load candidate image tags before writer cutover is armed. If image/profile
-validation then fails, the AP restores both source and the recorded tag baseline:
-present tags return to their rollback references; tags absent at baseline are removed by
-exact reference. This includes AP first deployment and an issuer-absent baseline.
-The central cutover loads archives under `:candidate` tags and moves `:prod`, the drop-in and
+The Quadlet cutover loads archives under `:candidate` tags and moves `:prod`, the drop-in and
 the issuer receipt only at cutover, so a failed candidate check leaves them unchanged.
 Failed inventory lookup is not treated as absence. A failed lookup/removal is reported
 while preserving the original deployment exit status; no automatic retry, runtime restart,
 container/volume deletion, receipt invention or rollback-archive deletion occurs in this path.
 
-AP rollback check renders and validates a temporary overlay without rewriting the retained
-pair. Apply publishes those exact validated bytes, still referencing the retained release
-directory. Publication uses invocation-owned temporary files in each destination directory,
+Pair publication uses invocation-owned temporary files in each destination directory,
 staging all outputs before individual renames and publishing the pair pointer last.
 Abandoned fixed `.next` files are not deleted or reused. These renames do not form an atomic
 multi-file transaction or serialize overlapping deployments.
@@ -91,15 +67,17 @@ runtime fails without changing the writer. No credential value is printed or sav
 The explicit service selects `API_SECRET_KEY` for API/alarm diagnostics and
 `METRICS_API_KEY` for collector diagnostics. There is no credential fallback.
 
-For a separately approved preparation on the AP or the central host, run from its deployment root:
+For a separately approved preparation, run from the deployment root (central
+`/opt/hololive-bot/compose/current`, iris-seoul `/opt/hololive-bot/collector-b/current`, where the tool is copied from the
+reviewed revision because that root holds no source tree):
 
 ```bash
 sudo python3 scripts/deploy/lib/worker-profile-pair.py prepare \
-  youtube-collector-b "$PWD/artifacts/worker-profile/releases/prepared-b-$(date -u +%Y%m%dT%H%M%SZ)" \
-  hololive-youtube-collector-b "$PWD"
+  youtube-collector "$PWD/artifacts/worker-profile/releases/prepared-c-$(date -u +%Y%m%dT%H%M%SZ)" \
+  hololive-youtube-collector-c "$PWD"
 ```
 
-Use `youtube-collector` / `hololive-youtube-collector-c` centrally, or `hololive-api` /
+Use `youtube-collector-b` / `hololive-youtube-collector-b` on iris-seoul, or `hololive-api` /
 `hololive-api` and `hololive-alarm-worker` / `hololive-alarm-worker`. Preparation preserves
 the original container identity in the receipt, retains its image, and does not restart it.
 The ordinary deployment can also perform this first capture while the original bytes are
@@ -117,8 +95,7 @@ the previous release's checksums and binary/profile pair before starting it.
 10.2.1 binary with `STACK_WORKER_PROFILE_SOURCE_FILE` before incompatible settings
 changes. Preparation receipts alone do not prove that baseline was accepted.
 
-Local verification ownership: run the existing native/AP/central cutover and
-maintenance-stopped behavior tests, and real candidate/previous-binary smoke
+Local verification ownership: run the existing native and Quadlet cutover behavior tests, and real candidate/previous-binary smoke
 checks for invalid settings, missing/corrupt pairs, profile-only changes, atomic mirror
 replacement, and failed cutover restoration. No live operation is implied by these edits.
 
@@ -205,7 +182,7 @@ release pair, not as extra keys or aliases in the new profile.
 1. While each old process still runs and its exact loaded bytes are available,
    prepare its pair with the reviewed helper:
    `python3 scripts/deploy/lib/worker-profile-pair.py prepare SERVICE ABSOLUTE_PAIR_DIR CONTAINER ROOT`.
-   Supported Compose services are `hololive-api`, `hololive-alarm-worker`,
+   Supported Quadlet services are `hololive-api`, `hololive-alarm-worker`,
    `youtube-collector` (c), and `youtube-collector-b`. First adoption authenticates
    the bounded `/diagnostics/workers` v1 `profile.hash`, compares exact bytes, rechecks process identity and
    runs the old image CLI with no network. Missing/mutated bytes or an unpaired
@@ -216,24 +193,18 @@ release pair, not as extra keys or aliases in the new profile.
    and changes only the host-owned effective/source paths, without restarting.
 3. After 10.2.1 acceptance and retention of each previous pair, sync the approved
    final desired profiles and transfer verified 11.0.0 candidate artifacts.
-   For b, render standalone `docker-compose.seoul.yml` with
-   `WORKER_PROFILE_OVERRIDE_FILE=none`, pipe `config --format json` to
-   `worker-profile-pair.py candidate SERVICE ABSOLUTE_PAIR_DIR`, then select that
-   directory's `compose.yml` using `WORKER_PROFILE_OVERRIDE_FILE` and run
-   `compose.sh ... run --rm --no-deps --pull never SERVICE --check-worker-profile`.
-   Centrally, pipe the installed unit to `worker-profile-pair.py candidate SERVICE
+   Pipe the installed unit to `worker-profile-pair.py candidate SERVICE
    ABSOLUTE_PAIR_DIR sha256:<id> < /etc/containers/systemd/hololive-bot/<unit>.container`
-   and run `worker-profile-pair.py check SERVICE ABSOLUTE_PAIR_DIR`. Both then run
+   and run `worker-profile-pair.py check SERVICE ABSOLUTE_PAIR_DIR`, then
    `worker-profile-pair.py verify-source SERVICE ABSOLUTE_PAIR_DIR`.
    A CLI check proves no DB/schema compatibility; never implicitly migrate.
 4. Activate using `worker-profile-pair.py activate SERVICE ABSOLUTE_PAIR_DIR ROOT`.
-   The AP recreates only approved services with `up -d --no-build --no-deps`; centrally
-   run `systemctl daemon-reload` and restart only the approved units through the release
+   Run `systemctl daemon-reload` and restart only the approved units through the release
    runbook's Quadlet path. Existing collector wrappers
    retain issuer-first ordering and provenance checks. Native apply also writes
    host infrastructure, so it is not a read-only CLI preflight.
 5. Verify running image/binary revision and authenticated loaded profile hash.
-   `verify-live SERVICE PAIR_DIR CONTAINER` checks the Docker AP or central Podman container; `verify-native SERVICE
+   `verify-live SERVICE PAIR_DIR CONTAINER` checks the Podman container; `verify-native SERVICE
    RELEASE_DIR UNIT` also checks `/proc/PID/exe`, PID/start identity, checksums
    and effective/source paths. Native deploy/completion invoke this check.
    Prove atomic desired-file replacement is detected within the 60-second
@@ -254,7 +225,7 @@ A prepared pair alone is **not** an API/alarm rollback bundle. Preserve the prev
 directory (`previous/{profile.json,pair.json,SHA256SUMS}`), its retained image tag and the unit
 revision it ran under. `worker-profile-pair.py verify SERVICE PREVIOUS_PAIR_DIR` and `check`
 prove the pair; only an approved `rollback`/`activate` plus unit restart restores it. Collector c/b
-and native a/d retain their existing rollback entrypoints; the AP keeps its stopped-state behavior.
+and native a/d retain their existing rollback entrypoints.
 Rollback never writes the desired mirror or synthesizes removed keys; verify
 the restored loaded hash, not health alone. A known schema-incompatible old
 writer must stay stopped even when its profile CLI succeeds.
@@ -297,14 +268,10 @@ host profile에 `sentinel`을 추가합니다. 준비 중에는 unit을 enable�
 Central Quadlet units read `/etc/stack-secrets/hololive-bot/compose.env` through
 `[Service] EnvironmentFile=`; `quadlet-prestart` rejects syntax that Compose and systemd
 would read differently and moves passwords/API keys into root-only `--env-file`s.
-On the Seoul AP, `scripts/deploy/compose.sh` injects one Compose interpolation env file
-with `--env-file`. AP deploy/rollback wrappers set
-`COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env`
-so AP hosts do not receive Iris egress tokens in their Compose interpolation file.
-The legacy monolithic `env` file is not a production env file.
+The iris-seoul collector b unit has no interpolation file; its fixed values live in the unit and its
+secrets only in `youtube-collector.env`. The legacy monolithic `env` file is not a production env file.
 
-Application-only env is scoped per service. Central units use the fixed files below;
-the AP collector reads `HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE` (default the same path):
+Application-only env is scoped per service. Quadlet units use the fixed files below:
 
 ```text
 /etc/stack-secrets/hololive-bot/bot.env
@@ -314,26 +281,13 @@ the AP collector reads `HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE` (default the same p
 
 ### Central endpoint ownership
 
-The AP overlay `docker-compose.seoul.yml` never hardcodes the central address. It reads one
-key family and fails the render when it is absent, so a host move cannot leave an AP silently pointed at the
-retired address:
+Collector b on iris-seoul names the central primary in its unit (`POSTGRES_HOST=100.100.1.8`, `POSTGRES_PORT=5433`)
+and reads the dedicated scraper password from `youtube-collector.env` (`POSTGRES_PASSWORD`). It has no cache mounts
+or DB/cache dependencies. The non-secret primary address owner is `deploy/topology/hosts.conf`
+(`central=100.100.1.8`). Native generation reads that owner and `scripts/ci/postgres-capacity-policy.tsv`,
+not a second address/pool literal. CLIProxy/OTLP workstation addresses are unrelated to the primary DB route.
 
-```text
-HOLOLIVE_CENTRAL_POSTGRES_HOST   required
-HOLOLIVE_CENTRAL_POSTGRES_PORT   default 5433
-```
-
-AP rendering requires the dedicated scraper password, explicit primary endpoint and the
-collector inputs only; `DB_PASSWORD`, `HOLOLIVE_DB_PASSWORD`, `CACHE_PASSWORD`, central
-runtime env files and alarm version are not interpolated. The collector has no cache mounts
-or DB/cache dependencies. `ap-compose.env` owns the endpoint; the non-secret primary address
-owner is `deploy/topology/hosts.conf` (`central=100.100.1.8`). Native generation reads that
-owner and `scripts/ci/postgres-capacity-policy.tsv`, not a second address/pool literal.
-CLIProxy/OTLP workstation addresses are unrelated to the primary DB route.
-
-The AP overlay uses only `youtube-collector.env` for `youtube-collector` instances, so Iris
-egress tokens stay out of AP collector containers. The Seoul AP host also uses
-`ap-compose.env`, which excludes `IRIS_WEBHOOK_TOKEN` and `IRIS_BOT_TOKEN`.
+Collectors use only `youtube-collector.env`, so Iris egress tokens stay out of collector containers.
 The central unsuffixed `youtube-collector` (`c`) also uses scoped
 `youtube-collector.env`; it still must not receive Iris egress tokens, and `compose.env`
 is only a `[Service]` interpolation file, never a container env file.
@@ -437,13 +391,12 @@ Different logical DB numbers do not isolate instance-wide eviction. Nothing here
 Collector compatibility env pairs use `${NEW-${OLD-default}}` / `${OLD-${NEW-default}}` interpolation. This preserves explicit empty values so the collector loader fails closed, while unset, new-only, old-only, equal, and conflicting inputs retain the truth table documented in [`youtube-collector.md`](../../docs/current/runbooks/youtube-collector.md#key-environment-variables).
 
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored
-`compose.env` or `ap-compose.env` plus the per-service env files to the target host.
+`compose.env` (central) plus the per-service env files to the target host.
 
-`scripts/deploy/lib/postgres-capacity.sh`는 AP Compose mutation entrypoint의 공통 gate입니다.
-`scripts/deploy/compose.sh ... up`은 up보다 먼저 이 gate를 호출해 `COMPOSE_ENV_FILE`의 PostgreSQL pool override key만 읽고
-stack 전체 connection budget을 다시 계산합니다. Target allocation이 `max_connections=60`에서 superuser 예약
+`scripts/deploy/lib/postgres-capacity.sh`는 host env의 PostgreSQL pool override key만 읽고 stack 전체 connection
+budget을 다시 계산하는 공통 gate입니다. Target allocation이 `max_connections=60`에서 superuser 예약
 3(`@superuser-reserved`)을 뺀 비슈퍼유저 슬롯 대비 최소 3개 control reserve를 남기지 않으면 진행하지 않습니다. 이 배포-host preflight는 Bash와 전송된 policy만 사용하며 CI용 uv/Python runtime을 요구하지 않습니다.
-중앙도 같은 gate를 host `compose.env`에 대해 실행합니다. `sync-opt-current.sh`는 unit 설치 전에, `quadlet-redeploy-service.sh`는
+중앙은 이 gate를 host `compose.env`에 대해 실행합니다. `sync-opt-current.sh`는 unit 설치 전에, `quadlet-redeploy-service.sh`는
 API·worker 교체 preflight에서 실행하며 실패하면 아무것도 바꾸지 않습니다. 중앙 unit의 기본 pool 값은
 `scripts/ci/check-postgres-capacity.sh`(기본 `--verify-quadlet`)가 `deploy/quadlet/hololive-bot`을 원본으로 확인하며,
 특정 host env 값을 확인할 때는 세 번째 인자로 해당 env file을 전달합니다. 이 검사는 다른 env 값이나 secret을 출력하지 않습니다.
@@ -474,11 +427,9 @@ access and aggregate role limits. It never reads runtime env files or pulls/buil
 
 ## Requirements
 
-- Seoul AP: Docker Compose v2.24.4+ — AP worker profile overlay의 `!override` YAML 태그가 이 버전부터 지원된다.
-- 중앙: rootful Podman 5.x와 Quadlet. unit 원본은 `QUADLET_UNIT_DIRS=<dir> /usr/libexec/podman/quadlet -dryrun`을 통과해야 한다.
+- 중앙·iris-seoul: rootful Podman 5.x와 Quadlet. unit 원본은 `QUADLET_UNIT_DIRS=<dir> /usr/libexec/podman/quadlet -dryrun`을 통과해야 한다.
 - 이미지 빌드는 kapu의 `podman build --format docker`(`./build-all.sh`)다. arm64 대상은 등록된 qemu-aarch64 binfmt가 필요하다.
   Dockerfile의 cache mount와 per-Dockerfile `.dockerignore`를 그대로 쓴다.
 - production Go build는 `GOWORK=off`로 각 `go.mod`의 stable published external pin만 사용한다.
   로컬 sibling checkout은 image source가 아니다.
-- 호스트 호환성 확인: AP는 `compose.sh -f deploy/compose/docker-compose.seoul.yml config --quiet`, 중앙은 위
-  `quadlet -dryrun`이 에러 없이 끝나는지로 검증한다.
+- 호스트 호환성 확인: 위 `quadlet -dryrun`이 에러 없이 끝나는지로 검증한다.

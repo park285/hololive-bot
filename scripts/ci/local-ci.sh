@@ -133,7 +133,6 @@ fi
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
-run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
 # budget 벤치마크도 hololive-dbtest를 쓴다. DB를 주지 않으면 testcontainers가 Docker 소켓을 찾으므로
 # Docker가 없는 kapu에서도 돌도록 rootless Podman 일회용 PostgreSQL을 먼저 띄운다.

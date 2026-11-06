@@ -31,7 +31,6 @@ ap_host_load() {
     AP_NAME=""
     AP_SSH_HOST=""
     AP_SSH_HOST_KEY_ALIAS=""
-    AP_COMPOSE_FILE=""
     AP_RUNTIME_MODE=""
     AP_SERVICES=()
     AP_CONTAINERS=()
@@ -66,10 +65,11 @@ ap_host_load() {
         echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must have matching lengths in $conf" >&2
         return 2
     fi
+    # 2026-11-06 Seoul b가 iris-seoul Podman Quadlet(po-central-cutover.sh b)으로 옮겨 AP host는 모두 native다.
     case "${AP_RUNTIME_MODE}" in
-        compose|native) ;;
+        native) ;;
         *)
-            echo "AP_RUNTIME_MODE must be compose or native in $conf" >&2
+            echo "AP_RUNTIME_MODE must be native in $conf" >&2
             return 2
             ;;
     esac
@@ -82,18 +82,6 @@ ap_host_load() {
             return 2
             ;;
     esac
-    # Compose overlay는 compose 모드 호스트만 소유한다. native 호스트의 실행 정본은 systemd unit이다.
-    if [[ "$AP_RUNTIME_MODE" == compose ]]; then
-        : "${AP_COMPOSE_FILE:?missing AP_COMPOSE_FILE in $conf}"
-        if [[ ! -r "$repo_root/$AP_COMPOSE_FILE" ]]; then
-            echo "AP_COMPOSE_FILE not readable: $repo_root/$AP_COMPOSE_FILE" >&2
-            return 2
-        fi
-    elif [[ -n "$AP_COMPOSE_FILE" ]]; then
-        echo "AP_COMPOSE_FILE is only valid for AP_RUNTIME_MODE=compose in $conf" >&2
-        return 2
-    fi
-
     SSH_KEY="${SSH_KEY:-$HOME/.ssh/KR.key}"
     if [[ ! -r "$SSH_KEY" ]]; then
         echo "SSH key not readable: $SSH_KEY" >&2

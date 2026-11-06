@@ -80,17 +80,9 @@ expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-a" "osaka AP contain
 expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
-ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-collector-b" "seoul AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-b" "seoul AP containers"
-expect_eq "${AP_PORTS[*]}" "30015" "seoul AP ports"
-expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.seoul.yml" "seoul AP compose file"
-expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY" "seoul AP deploy approval var"
-
 expect_fail "ap-host loader rejects unknown host" ap_host_load "${ROOT_DIR}" nonexistent-host
-
-"${ROOT_DIR}/scripts/deploy/check-ap-rsync-manifest.sh" >/dev/null || fail "ap active-active transfer list covers the Compose AP runtime inputs"
-pass "ap active-active transfer list covers the Compose AP runtime inputs"
+# Seoul b는 2026-11-06 iris-seoul Podman Quadlet(po-central-cutover.sh b)으로 옮겨 AP host가 아니다.
+expect_fail "ap-host loader has no seoul host" ap_host_load "${ROOT_DIR}" seoul
 ap_udp_lib="scripts/deploy/lib/require-quic-udp-buffer.sh"
 
 # persisted 검증은 sysctl --system 적용 의미론(last-wins: sysctl.d lexical 순서 후 sysctl.conf 최종)을 따라야 한다.
@@ -113,16 +105,3 @@ if AP_SYSCTL_ROOT="${quic_fixture_root}" bash "${ROOT_DIR}/${ap_udp_lib}" 1024 f
     fail "${ap_udp_lib} must treat /etc/sysctl.conf as the final persisted assignment (sysctl --system order)"
 fi
 pass "quic udp lib applies sysctl.conf as final override"
-expect_fail_contains "osaka Compose deploy rejects native runtime" \
-    "use ./scripts/deploy/ap-host-native-deploy.sh osaka" \
-    "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka --dry-run
-expect_fail "seoul active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" seoul --apply
-expect_fail "osaka Compose rollback rejects native runtime" \
-    "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --dry-run
-expect_fail_contains "Seoul native deploy rejects Compose runtime" \
-    "use ./scripts/deploy/ap-deploy.sh seoul" \
-    "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh" seoul --dry-run
-expect_fail_contains "Seoul native rollback rejects Compose runtime" \
-    "use ./scripts/deploy/ap-rollback.sh seoul" \
-    "${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh" seoul --dry-run
-expect_fail "seoul active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --apply

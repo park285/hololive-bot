@@ -159,10 +159,8 @@ done <"$manifest"
 
 assert_assignment "osaka AP host" AP_SSH_HOST "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
 assert_assignment "osaka AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
-assert_assignment "seoul AP host" AP_SSH_HOST "$seoul" "$root_dir/scripts/deploy/ap-hosts/seoul.conf"
-assert_assignment "seoul AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$seoul" "$root_dir/scripts/deploy/ap-hosts/seoul.conf"
-
-assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/compose/docker-compose.seoul.yml"
+# Seoul collector b는 iris-seoul Podman Quadlet이다(2026-11-06). metrics 게시 주소가 seoul tailnet 주소인지 본다.
+assert_count "seoul collector b metrics bind" 1 "PublishPort=$seoul:30096:30096/tcp" "$root_dir/deploy/podman/iris-seoul/hololive-youtube-collector-b.container"
 
 # 30192 shortlink 출처는 공개 ingress 역할(osaka2)이다. 30006/udp admin API 출처는 Console이 남는 seoul만 둔다.
 public_ingress_sources=("$osaka2")

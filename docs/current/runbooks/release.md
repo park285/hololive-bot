@@ -82,7 +82,8 @@ podman image inspect localhost/<image>:prod \
 image는 build host에서 `:candidate` 이름으로 저장해 중앙에 적재합니다. 중앙의 `:prod` tag는 옮기지 않습니다.
 API·worker의 실행 image는 worker-profile drop-in이, infra image는 host `compose.env`의 identity가 정합니다
 ([image identity 소유](../../../deploy/quadlet/README.md#이미지)). collector c와 PO issuer는 kapu의
-`scripts/deploy/po-central-cutover.sh`가 build·전송·교체를 함께 소유합니다.
+`scripts/deploy/po-central-cutover.sh c`가 build·전송·교체를 함께 소유합니다. iris-seoul collector b는 같은
+release의 c 배포 뒤 `po-central-cutover.sh b`로 배포합니다([iris-seoul README](../../../deploy/podman/iris-seoul/README.md#배포)).
 
 ```bash
 podman tag localhost/<image>:prod localhost/<image>:candidate

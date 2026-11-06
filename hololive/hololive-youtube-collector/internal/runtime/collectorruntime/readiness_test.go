@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -440,28 +438,6 @@ func TestRDY014StaleFreshnessDoesNotFailReadiness(t *testing.T) {
 
 	if body.State != ReadyReady || readinessHTTPStatus(&body) != http.StatusOK {
 		t.Fatalf("stale freshness must not 503: %+v", body)
-	}
-}
-
-func TestRDY016PR366SameRemoteReadinessBlock(t *testing.T) {
-	t.Parallel()
-
-	script, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "scripts", "deploy", "ap-deploy.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	text := string(script)
-	source := strings.Index(text, ". scripts/deploy/lib/ap-collector-readiness.sh")
-	validate := strings.Index(text, "collector_readiness_validate")
-
-	if source < 0 || validate < 0 || source >= validate {
-		t.Fatal("readiness helper source must precede collector_readiness_validate")
-	}
-
-	cwd := strings.LastIndex(text[:source], "cd ~/hololive-bot")
-	if cwd < 0 {
-		t.Fatal("remote repository cwd must precede readiness helper source")
 	}
 }
 
