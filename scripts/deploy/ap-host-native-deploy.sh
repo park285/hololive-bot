@@ -39,11 +39,6 @@ PO_UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.service"
 PO_SOCKET_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.socket"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
-if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
-  echo "Refusing host-native AP deploy for $AP_NAME (runtime=$AP_RUNTIME_MODE); use ./scripts/deploy/ap-deploy.sh $AP_NAME" >&2
-  exit 2
-fi
-
 if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
   echo "AP_REQUIRED_UDP_BUFFER_BYTES must be an integer" >&2
   exit 2

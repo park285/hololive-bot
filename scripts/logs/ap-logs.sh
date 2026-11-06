@@ -29,9 +29,9 @@ Environment:
 
 Examples:
   ap-logs.sh osaka youtube-collector
-  SINCE=2h PATTERN='pre-send claim|ERR' ap-logs.sh seoul youtube-collector
+  SOURCE=file SINCE=2h PATTERN='pre-send claim|ERR' ap-logs.sh osaka youtube-collector
   FOLLOW=1 ap-logs.sh osaka all
-  FULL=1 ap-logs.sh seoul all
+  SOURCE=file FULL=1 ap-logs.sh osaka all
   SOURCE=file TAIL=500 ap-logs.sh osaka all
 USAGE
 }

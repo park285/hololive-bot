@@ -21,9 +21,8 @@
 ├── deploy/quadlet/                 # central Podman Quadlet units
 │   ├── hololive-bot/               # installed to /etc/containers/systemd/hololive-bot/
 │   └── optional/x-spaces/          # drop-ins installed only when HOLOLIVE_X_SPACES_ENABLED=1
-└── deploy/compose/                 # Seoul AP Docker Compose
-    ├── docker-compose.collector.yml # shared collector/issuer definitions
-    └── docker-compose.seoul.yml    # Seoul Compose AP (youtube-collector-b + youtube-po-b)
+├── deploy/podman/iris-seoul/       # iris-seoul collector b + issuer b Quadlet units
+└── deploy/compose/                 # shared runtime contracts (README only)
 ```
 
 `go.work` ties the Go runtime/shared/dbtest modules under `hololive/` and sibling modules `../shared-go` and `../iris-client-go` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
@@ -126,18 +125,18 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 | 대상 | 실행 방식·설정 | 배포·검증 절차 |
 |---|---|---|
 | 중앙 API·worker·collector `c`·infra | Podman Quadlet `deploy/quadlet/hololive-bot/` ([설치·운영](../../deploy/quadlet/README.md)) | [release runbook](runbooks/release.md); collector `c`와 issuer는 [paired cutover](runbooks/youtube-collector.md#isolated-po-token-lifecycle) |
-| Seoul collector `b` | `docker-compose.seoul.yml`(`docker-compose.collector.yml` 확장), issuer `youtube-po-b` | `scripts/deploy/ap-deploy.sh seoul`; [collector runbook](runbooks/youtube-collector.md) |
+| Seoul collector `b` | iris-seoul Quadlet `deploy/podman/iris-seoul/`, issuer `hololive-youtube-po-b` | `scripts/deploy/po-central-cutover.sh b`; [collector runbook](runbooks/youtube-collector.md) |
 | Osaka collector `a` | native `hololive-youtube-collector@youtube-collector-a.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 대상; [collector runbook](runbooks/youtube-collector.md) |
 | kapu collector `d` | rootful Podman Quadlet `hololive-youtube-collector-d.service`와 격리 issuer `hololive-youtube-po-d.service` | 수동 설치(`deploy/podman/kapu/README.md`). osaka2는 2026-11-04 공개 진입점으로 바뀌어 collector를 두지 않습니다. |
 | 통합 관리자 웹 | iris-seoul의 `iris-console.service` | Iris Console 운영 절차; 이 저장소의 [연결 경계](runbooks/admin-dashboard.md) |
 
-`scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Seoul에 `compose`, Osaka에 `native`를 지정합니다. kapu `d`는 ap-hosts 대상이 아닙니다. `AP_COMPOSE_FILE`은 `compose` 호스트에만 둡니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
+`scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Osaka에 `native`를 지정하며 다른 값은 받지 않습니다. iris-seoul `b`와 kapu `d`는 ap-hosts 대상이 아닙니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
 
 Live deploy, restart, rollback, secret writes, and production config mutation require explicit operator approval.
 
 ## YouTube Collector Fleet Notes
 
-`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, Quadlet, 30025), kapu `d` (rootful Podman Quadlet, 30015 loopback·metrics `10.89.15.14:30096`). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
+`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (iris-seoul Podman Quadlet, 30015), central unsuffixed `youtube-collector` (`c`, Quadlet, 30025), kapu `d` (rootful Podman Quadlet, 30015 loopback·metrics `10.89.15.14:30096`). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
 
 - collector owns fetch/normalize/lease/checkpoint/`source_observations` Publish only;
 - `hololive-api` YouTube plane owns claim/finalize, canonical persist, notification intent, live-end finalizer, and retention;
@@ -187,6 +186,6 @@ For documentation-only changes, review the diff and verify referenced source/com
 - Start from the nearest `AGENTS.md`; subtree rules override broad repository rules.
 - Keep service ownership boundaries intact.
 - Do not import another service's `internal` package to bypass a contract.
-- Keep generated files, runbooks, Quadlet units, and Seoul AP compose docs aligned when changing runtime shape.
+- Keep generated files, runbooks and Quadlet units (central and iris-seoul) aligned when changing runtime shape.
 - Use `slog` for Go logging and avoid logging secrets.
 - Prefer small, reversible changes with targeted tests before broad build/test runs.

@@ -115,13 +115,13 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
         print(f'[PASS] native {case}: exit={result.returncode}, current={expected_current}, previous={expected_previous}, runtime={expected_runtime}')
 
 
-# 중앙은 rootful Podman Quadlet이다. 실제 원격 본문을 가짜 podman·systemctl·pair tool로 실행해
-# issuer 우선 교체, 이전 drop-in 복원, 후보 검사 실패의 무변경을 검증한다.
+# 중앙(c)과 iris-seoul(b)은 rootful Podman Quadlet이다. 실제 원격 본문을 가짜 podman·systemctl·pair tool로 실행해
+# issuer 우선 교체, 이전 drop-in 복원, 후보 검사 실패의 무변경을 검증한다. b는 slot별 이름과 원장 증명 생략만 본다.
 central_functions = '\n'.join(
     match.group() for match in re.finditer(r'^([a-z_]+)\(\) \{\n.*?^\}', central, re.M | re.S)
     if match.group(1) not in ('require_collector_lease_migration', 'restore_after_failed_cutover')
 )
-central_config = central[central.index('manifest=../'):central.index('[[ "$(stat')]
+central_config = central[central.index('manifest="../'):central.index('[[ "$(stat')]
 central_main = central[central.index('# 이 본문은 ssh bash -s'):]
 old_revision, new_revision = 'a' * 40, 'b' * 40
 old_id, new_id = 'sha256:' + 'a' * 64, 'sha256:' + 'b' * 64
@@ -130,7 +130,7 @@ central_setup = r'''
 set -Eeuo pipefail
 fixture_root="$1" fixture_case="$2"
 . "$3/scripts/deploy/lib/po-sandbox-image.sh"
-current="$fixture_root/current" staging="$fixture_root/staging" backup="$fixture_root/po-c-20261003T000000Z"
+current="$fixture_root/current" staging="$fixture_root/staging" backup="$fixture_root/po-$slot-20261003T000000Z"
 unit_dir="$fixture_root/units"
 revision=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb version=6.0.1
 pair_tool="$staging/scripts/deploy/lib/worker-profile-pair.py"
@@ -178,7 +178,7 @@ stat() { printf '65532:1000 770\n'; }
 date() {
   if [[ "$*" == '-u +%Y-%m-%dT%H:%M:%SZ' ]]; then printf '2026-10-03T00:01:00Z\n'; else command date "$@"; fi
 }
-require_collector_lease_migration() { :; }
+require_collector_lease_migration() { printf 'lease-proof\n' >>"$fixture_root/calls"; }
 podman() {
   local object kind value format file
   printf 'podman %s\n' "$*" >>"$fixture_root/calls"
@@ -293,13 +293,23 @@ central_cases = {
     'missing_receipt': (1, False), 'collector_stopped': (1, False), 'inventory_failure': (1, False),
     'rollback': (0, True), 'check_success': (0, False), 'check_error_log': (1, False),
 }
-for case, (expected_status, restored) in central_cases.items():
+slots = {
+    'c': ('youtube-collector', 30025, 'central'),
+    'b': ('youtube-collector-b', 30015, 'iris-seoul'),
+}
+runs = [('c', case) for case in central_cases] + [('b', case) for case in ('success', 'rollback', 'check_success')]
+for slot, case in runs:
+    expected_status, restored = central_cases[case]
+    service, port, host_label = slots[slot]
+    slot_vars = f'slot={slot} service={service} port={port} host_label={host_label}\n'
+    collector_unit, issuer_unit = f'hololive-youtube-collector-{slot}.service', f'hololive-youtube-po-{slot}.service'
+    label = f'{slot} {case}'
     with tempfile.TemporaryDirectory(prefix='central-cutover-test-') as raw:
         state = Path(raw)
-        current, staging, backup = state / 'current', state / 'staging', state / f'po-c-{change}'
-        for directory in (current, staging, state / 'images', state / 'units', state / 'po-current-c'):
+        current, staging, backup = state / 'current', state / 'staging', state / f'po-{slot}-{change}'
+        for directory in (current, staging, state / 'images', state / 'units', state / f'po-current-{slot}'):
             directory.mkdir()
-        (state / 'units/hololive-youtube-collector-c.container').write_text('[Container]\n')
+        (state / f'units/hololive-youtube-collector-{slot}.container').write_text('[Container]\n')
         is_check, is_rollback = case.startswith('check_'), case.startswith('rollback')
         issuer_absent = 'absent' in case
         initial = 'new' if is_check or is_rollback else 'old'
@@ -318,7 +328,7 @@ for case, (expected_status, restored) in central_cases.items():
             (staging / (prefix + 'image.tar.sha256')).write_text(f'{digest}  {tar.name}\n')
             (staging / (prefix + 'image-id')).write_text(new_id)
             (staging / ('rootfs-manifest.json' if issuer else 'collector-manifest.json')).write_text(manifest(new_revision, new_id))
-        live_po = state / 'po-current-c'
+        live_po = state / f'po-current-{slot}'
         if case != 'missing_receipt' and not issuer_absent:
             (live_po / 'rootfs-manifest.json').write_text(manifest(new_revision if initial == 'new' else old_revision, new_id if initial == 'new' else old_id))
             (live_po / 'image-id').write_text(new_id if initial == 'new' else old_id)
@@ -327,7 +337,7 @@ for case, (expected_status, restored) in central_cases.items():
             image_file(state, issuer_rollback).write_text('old')
             backup.mkdir()
             (backup / 'snapshot-complete').touch()
-            previous_pair = current / 'artifacts/worker-profile/releases' / backup.name / 'youtube-collector/previous'
+            previous_pair = current / 'artifacts/worker-profile/releases' / backup.name / service / 'previous'
             previous_pair.mkdir(parents=True)
             (previous_pair / 'profile.json').write_text('retained profile')
             # 이전 image가 돌던 기본 unit. sync가 이미 새 revision의 unit을 설치한 상황을 만든다.
@@ -339,45 +349,47 @@ for case, (expected_status, restored) in central_cases.items():
             (backup / 'po-prechange-manifest.json').write_text(manifest(old_revision, old_id))
             (backup / 'po-prechange.image-id').write_text(old_id)
             (backup / 'change-started-at').write_text('2026-10-03T00:00:00Z')
-        result = run(central_setup + central_config + central_functions + '\n' + central_main, state, case)
-        require(result.returncode == expected_status, f'central {case}: original status', result)
+        result = run(slot_vars + central_setup + central_config + central_functions + '\n' + central_main, state, case)
+        require(result.returncode == expected_status, f'{label}: original status', result)
         calls = (state / 'calls').read_text().splitlines() if (state / 'calls').exists() else []
         changed = [call for call in calls if call.startswith(mutations)]
         restarts = [call for call in calls if call.startswith('systemctl restart ')]
         expected_warning = case in ('restore_failure', 'activation_failure')
-        require(('automatic restoration failed' in result.stderr) == expected_warning, f'central {case}: restoration warning', result)
+        require(('automatic restoration failed' in result.stderr) == expected_warning, f'{label}: restoration warning', result)
         if case in ('missing_receipt', 'collector_stopped', 'inventory_failure'):
             # 이전 pair 기준점을 만들 수 없으면 백업·태그·적재 전에 원인을 남기고 멈춘다.
-            require(not backup.exists() and not changed, f'central {case}: no partial backup or runtime change', result)
+            require(not backup.exists() and not changed, f'{label}: no partial backup or runtime change', result)
         elif is_check:
-            require(not changed, f'central {case}: check has no mutations', result)
+            require(not changed, f'{label}: check has no mutations', result)
         elif case in ('candidate_check_failure', 'absent_candidate_check_failure', 'activation_failure'):
             # 후보 검사·drop-in 게시 실패는 :prod tag·drop-in·실행 중 pair를 바꾸지 않는다.
-            require(not restarts, f'central {case}: no unit restart', result)
-            require(image_file(state, collector_prod).read_text() == 'old', f'central {case}: collector tag baseline', result)
-            require((image_file(state, issuer_prod).exists()) != issuer_absent, f'central {case}: issuer tag baseline', result)
-            require((state / 'dropin').read_text() == 'initial', f'central {case}: drop-in unchanged', result)
-            require(image_file(state, 'localhost/hololive-youtube-collector:candidate').read_text() == 'new', f'central {case}: candidate retained for inspection', result)
+            require(not restarts, f'{label}: no unit restart', result)
+            require(image_file(state, collector_prod).read_text() == 'old', f'{label}: collector tag baseline', result)
+            require((image_file(state, issuer_prod).exists()) != issuer_absent, f'{label}: issuer tag baseline', result)
+            require((state / 'dropin').read_text() == 'initial', f'{label}: drop-in unchanged', result)
+            require(image_file(state, 'localhost/hololive-youtube-collector:candidate').read_text() == 'new', f'{label}: candidate retained for inspection', result)
         if case in ('success', 'absent_success'):
-            require(restarts == [f'systemctl restart {unit}' for unit in ('hololive-youtube-po-c.service', 'hololive-youtube-collector-c.service')], f'central {case}: issuer-first restart order', result)
-            require((state / 'dropin').read_text().strip() == 'candidate', f'central {case}: candidate drop-in active', result)
-            require(json.loads((live_po / 'rootfs-manifest.json').read_text())['source_revision'] == new_revision, f'central {case}: issuer receipt promoted', result)
-            require(calls.index('systemctl daemon-reload') < calls.index('systemctl restart hololive-youtube-po-c.service'), f'central {case}: drop-in reloaded before restart', result)
+            require(restarts == [f'systemctl restart {unit}' for unit in (issuer_unit, collector_unit)], f'{label}: issuer-first restart order', result)
+            # 원장 증명은 중앙 주 서버의 관리 socket이 있는 c에서만 한다.
+            require(('lease-proof' in calls) == (slot == 'c'), f'{label}: lease proof only on central', result)
+            require((state / 'dropin').read_text().strip() == 'candidate', f'{label}: candidate drop-in active', result)
+            require(json.loads((live_po / 'rootfs-manifest.json').read_text())['source_revision'] == new_revision, f'{label}: issuer receipt promoted', result)
+            require(calls.index('systemctl daemon-reload') < calls.index(f'systemctl restart {issuer_unit}'), f'{label}: drop-in reloaded before restart', result)
         if restored:
-            require((state / 'dropin').read_text().strip() == 'previous', f'central {case}: previous drop-in restored', result)
-            require(image_file(state, collector_prod).read_text() == 'old' and image_file(state, issuer_prod).read_text() == 'old', f'central {case}: previous tags restored', result)
-            require(json.loads((live_po / 'rootfs-manifest.json').read_text())['source_revision'] == old_revision, f'central {case}: previous issuer receipt restored', result)
+            require((state / 'dropin').read_text().strip() == 'previous', f'{label}: previous drop-in restored', result)
+            require(image_file(state, collector_prod).read_text() == 'old' and image_file(state, issuer_prod).read_text() == 'old', f'{label}: previous tags restored', result)
+            require(json.loads((live_po / 'rootfs-manifest.json').read_text())['source_revision'] == old_revision, f'{label}: previous issuer receipt restored', result)
         if case == 'restore_failure':
-            require((state / 'collector.runtime').read_text() == 'old', f'central {case}: failed restore leaves the unrestarted collector', result)
+            require((state / 'collector.runtime').read_text() == 'old', f'{label}: failed restore leaves the unrestarted collector', result)
         if case == 'rollback':
             # 이전 image를 새 unit 정의로 띄우지 않도록 보존한 기본 unit도 되돌리고, 바뀐 unit은 release에 남긴다.
-            release_dir = current / 'artifacts/worker-profile/releases' / backup.name / 'youtube-collector'
-            require((state / 'units/hololive-youtube-collector-c.container').read_text() == '[Container]\n# previous revision\n', f'central {case}: previous base unit restored', result)
-            require((release_dir / 'rollback-replaced-hololive-youtube-collector-c.container').read_text() == '[Container]\n', f'central {case}: replaced base unit retained', result)
-            require(calls.index('systemctl daemon-reload') > -1, f'central {case}: units reloaded', result)
+            release_dir = current / 'artifacts/worker-profile/releases' / backup.name / service
+            require((state / f'units/hololive-youtube-collector-{slot}.container').read_text() == '[Container]\n# previous revision\n', f'{label}: previous base unit restored', result)
+            require((release_dir / f'rollback-replaced-hololive-youtube-collector-{slot}.container').read_text() == '[Container]\n', f'{label}: replaced base unit retained', result)
+            require(calls.index('systemctl daemon-reload') > -1, f'{label}: units reloaded', result)
         expected_runtime = 'new' if is_check or case in ('success', 'absent_success') else 'old'
-        require((state / 'collector.runtime').read_text() == expected_runtime, f'central {case}: collector runtime', result)
+        require((state / 'collector.runtime').read_text() == expected_runtime, f'{label}: collector runtime', result)
         expected_issuer = 'new' if case == 'restore_failure' else 'absent' if case == 'absent_candidate_check_failure' else expected_runtime
-        require((state / 'issuer.runtime').read_text() == expected_issuer, f'central {case}: issuer runtime', result)
-        print(f'[PASS] central {case}: exit={result.returncode}, collector={(state / "collector.runtime").read_text()}, issuer={(state / "issuer.runtime").read_text()}')
+        require((state / 'issuer.runtime').read_text() == expected_issuer, f'{label}: issuer runtime', result)
+        print(f'[PASS] {label}: exit={result.returncode}, collector={(state / "collector.runtime").read_text()}, issuer={(state / "issuer.runtime").read_text()}')
 PY

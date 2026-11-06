@@ -28,12 +28,11 @@ PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니
 - `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh <hololive-api|hololive-alarm-worker> <image> [<api-image>]` - 중앙 API·worker image 교체(이전 pair 보존, 활성화 전 migration, 실패 시 이전 pair 복원)
 - `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-rollback-service.sh <release> [--check|--apply]` - 보존한 이전 pair로 API·worker rollback
 - 원격 AP(`youtube-collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
-  - Seoul Compose: `./scripts/deploy/ap-deploy.sh seoul [--dry-run|--apply]`
   - Osaka native: `./scripts/deploy/ap-host-native-deploy.sh osaka [--dry-run|--apply]`
   - `./scripts/deploy/ap-completion-check.sh <host>`
-  - Seoul Compose rollback: `./scripts/deploy/ap-rollback.sh seoul [--dry-run|--apply]`
   - Osaka native rollback: `./scripts/deploy/ap-host-native-rollback.sh osaka [--dry-run|--apply]`
   - `./scripts/deploy/ap-iris-h3-trust-preflight.sh <host>`
+- Quadlet collector b(iris-seoul)·c(중앙): `PO_<B|C>_SSH_TARGET=<host> APPROVE_PO_<B|C>_DEPLOY=true ./scripts/deploy/po-central-cutover.sh <b|c> deploy`, `check|rollback <backup>`
 
 ## 4. logs/
 Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
@@ -46,9 +45,7 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh prune`
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
-- `./scripts/logs/ap-status.sh <host>` (seoul, osaka)
 - `./scripts/logs/ap-logs.sh <host> [youtube-collector|all]`
-- `./scripts/logs/ap-smoke.sh seoul` (Compose AP 전용, native 호스트는 `./scripts/deploy/ap-completion-check.sh <host>`)
 
 ## 5. review/
 리뷰 전달용 source/full bundle export와 사후 검증 스크립트입니다.

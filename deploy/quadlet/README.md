@@ -1,7 +1,8 @@
 # 중앙 Quadlet unit
 
 중앙 호스트(hololive-seoul, `deploy/topology/hosts.conf`의 `central`)는 rootful Podman과 systemd
-Quadlet으로 운영합니다. Seoul AP(iris-seoul)는 Docker로 남으며 `deploy/compose/`의 AP compose만 씁니다.
+Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도 unit([deploy/podman/iris-seoul](../podman/iris-seoul/README.md))이며
+배포·롤백은 중앙 c와 같은 `po-central-cutover.sh`(slot `b`)가 소유합니다.
 
 ## 구성
 
@@ -130,7 +131,7 @@ release별 image·worker profile 고정은 `scripts/deploy/lib/worker-profile-pa
 ### 배포 helper
 
 API·worker image 교체는 배포 트리 사본의 `scripts/deploy/quadlet-redeploy-service.sh`로 root로 실행합니다.
-다른 위치의 사본은 거부합니다. collector c는 `po-central-cutover.sh`가 소유합니다.
+다른 위치의 사본은 거부합니다. collector c(와 iris-seoul b)는 `po-central-cutover.sh <c|b>`가 소유합니다.
 
 ```bash
 helper=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh

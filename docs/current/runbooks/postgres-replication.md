@@ -63,10 +63,9 @@ network allows. This target is not live acceptance evidence. Operator and nightl
 containers. The recorded active primary has no physical replication slots.
 
 The central credential/config master owner is `hosts/hololive-seoul/hololive-bot/compose.env`.
-The AP `ap-compose.env` endpoint is `100.100.1.8:5433`; native host.env is generated from
-the non-secret topology owner, with pool maximum from the capacity policy. The
-11.0.0 AP Compose target uses only its standalone collector/issuer host file,
-not the central production file; verify the actual deployed layout at cutover.
+The iris-seoul collector b unit names `100.100.1.8:5433` (`deploy/podman/iris-seoul/`); native host.env is generated from
+the non-secret topology owner, with pool maximum from the capacity policy. Collector b reads only its scoped
+`youtube-collector.env`, not the central production file; verify the actual deployed layout at cutover.
 The workstation `.3` is not a PostgreSQL fallback. A route rollback needs explicit
 authorization and all affected consumers/certificates; binary rollback alone is not
 authorization to reinstate retired DNS routes.

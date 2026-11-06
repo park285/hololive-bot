@@ -1,34 +1,41 @@
 #!/usr/bin/env bash
-# kapu에서 SSH로 호출하며 검증된 중앙 collector c·PO issuer pair의 교체만 수행한다.
-# 중앙(hololive-seoul)은 rootful Podman Quadlet이다. collector image는 worker-profile-pair.py가 만드는
-# drop-in(50-worker-profile.conf, Image=sha256:<id>)이 고정하고, issuer는 unit 기본 Image=의 localhost :prod tag를 쓴다.
-# unit 정의 설치는 sync-opt-current.sh가 소유하므로 이 스크립트는 배포 트리 파일을 바꾸지 않는다.
+# kapu에서 SSH로 호출하며 검증된 Quadlet collector·PO issuer pair의 교체만 수행한다.
+# slot c는 중앙(hololive-seoul), slot b는 iris-seoul이며 둘 다 rootful Podman Quadlet이다. collector image는
+# worker-profile-pair.py가 만드는 drop-in(50-worker-profile.conf, Image=sha256:<id>)이 고정하고, issuer는 unit 기본
+# Image=의 localhost :prod tag를 쓴다. unit 정의 설치는 c는 sync-opt-current.sh, b는 deploy/podman/iris-seoul 절차가
+# 소유하므로 이 스크립트는 unit 파일을 설치하지 않는다(롤백의 기본 unit 복원만 예외).
 set -Eeuo pipefail
-[[ $# -eq 5 ]] || exit 2
-mode="$1" staging="$2" backup="$3" revision="$4" version="$5"
+[[ $# -eq 6 ]] || exit 2
+slot="$1" mode="$2" staging="$3" backup="$4" revision="$5" version="$6"
+case "$slot" in
+  c) remote_root=/opt/hololive-bot/compose service=youtube-collector port=30025 host_label=central ;;
+  b) remote_root=/opt/hololive-bot/collector-b service=youtube-collector-b port=30015 host_label=iris-seoul ;;
+  *) exit 2 ;;
+esac
 [[ "$mode" == deploy || "$mode" == rollback || "$mode" == check ]] || exit 2
-[[ "$staging" =~ ^/opt/hololive-bot/compose/po-staging-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
-[[ "$backup" =~ ^/opt/hololive-bot/compose/backups/po-c-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
+[[ "$staging" =~ ^$remote_root/po-staging-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
+[[ "$backup" =~ ^$remote_root/backups/po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 2
-current=/opt/hololive-bot/compose/current
+current="$remote_root/current"
 unit_dir=/etc/containers/systemd/hololive-bot
-manifest=../po-current-c/rootfs-manifest.json
-image_id_file=../po-current-c/image-id
+manifest="../po-current-$slot/rootfs-manifest.json"
+image_id_file="../po-current-$slot/image-id"
+change_id="${backup##*/po-"$slot"-}"
 # 활성 pair는 백업 정리 뒤에도 bind되므로 release 저장소에 둔다.
-profile_release="$current/artifacts/worker-profile/releases/po-c-${backup##*/po-c-}/youtube-collector"
+profile_release="$current/artifacts/worker-profile/releases/po-$slot-$change_id/$service"
 collector=localhost/hololive-youtube-collector:prod
 issuer=localhost/hololive-youtube-po-sandbox:prod
 # kapu archive는 :candidate 이름으로 적재된다. Quadlet은 재시작할 때마다 Image= tag를 다시 읽으므로
 # :prod는 cutover에서만 옮겨 issuer가 cutover 전에 스스로 재시작해도 이전 image로 뜨게 한다.
 collector_candidate=localhost/hololive-youtube-collector:candidate
 issuer_candidate=localhost/hololive-youtube-po-sandbox:candidate
-collector_rollback="localhost/hololive-youtube-collector:rollback-${backup##*/po-c-}"
-issuer_rollback="localhost/hololive-youtube-po-sandbox:rollback-${backup##*/po-c-}"
-collector_container=hololive-youtube-collector-c
-issuer_container=hololive-youtube-po-c
-collector_unit=hololive-youtube-collector-c.service
-issuer_unit=hololive-youtube-po-c.service
-[[ "$(stat -c '%u:%g %a' "$staging")" == '0:0 700' ]] || { echo 'central staged artifacts are not root-private' >&2; exit 1; }
+collector_rollback="localhost/hololive-youtube-collector:rollback-$change_id"
+issuer_rollback="localhost/hololive-youtube-po-sandbox:rollback-$change_id"
+collector_container="hololive-youtube-collector-$slot"
+issuer_container="hololive-youtube-po-$slot"
+collector_unit="$collector_container.service"
+issuer_unit="$issuer_container.service"
+[[ "$(stat -c '%u:%g %a' "$staging")" == '0:0 700' ]] || { echo "$host_label staged artifacts are not root-private" >&2; exit 1; }
 cd "$current"
 . "$staging/scripts/deploy/lib/po-sandbox-image.sh"
 pair_tool="$staging/scripts/deploy/lib/worker-profile-pair.py"
@@ -56,7 +63,7 @@ issuer_presence() {
   case "$status" in
     0) printf 'present\n' ;;
     1) printf 'absent\n' ;;
-    *) echo "central issuer image inventory failed (status=$status)" >&2; return 1 ;;
+    *) echo "$host_label issuer image inventory failed (status=$status)" >&2; return 1 ;;
   esac
 }
 verify_collector() {
@@ -91,7 +98,7 @@ verify_collector_runtime() {
   running="$(container_image_id "$collector_container")" || return 1
   tagged="$(image_id "$collector")" || return 1
   [[ "$running" == "$tagged" ]]
-  podman exec "$collector_container" ./bin/healthcheck https://127.0.0.1:30025/ready >/dev/null
+  podman exec "$collector_container" ./bin/healthcheck "https://127.0.0.1:$port/ready" >/dev/null
 }
 started_since() {
   local since_epoch="$1" container="$2"
@@ -113,18 +120,18 @@ require_post_cutover_logs() {
   fi
 }
 restore_collector_base_unit() {
-  local recorded="$profile_release/previous/unit.container" installed="$unit_dir/hololive-youtube-collector-c.container" tmp
+  local recorded="$profile_release/previous/unit.container" installed="$unit_dir/$collector_container.container" tmp
   [[ -f "$recorded" ]] || { echo "[WARN] $recorded is missing; the installed collector unit definition stays as is" >&2; return 0; }
   ! cmp -s -- "$recorded" "$installed" || return 0
-  cp -p -- "$installed" "$profile_release/rollback-replaced-hololive-youtube-collector-c.container" || return
-  tmp="$(mktemp "$unit_dir/.hololive-youtube-collector-c.container.XXXXXX")" || return
+  cp -p -- "$installed" "$profile_release/rollback-replaced-$collector_container.container" || return
+  tmp="$(mktemp "$unit_dir/.$collector_container.container.XXXXXX")" || return
   install -m 0644 -- "$recorded" "$tmp" && mv -f -- "$tmp" "$installed" || { rm -f -- "$tmp"; return 1; }
-  echo "[ROLLBACK] restored the collector base unit the previous image ran with; run sync-opt-current.sh for the intended revision before the next deployment" >&2
+  echo "[ROLLBACK] restored the collector base unit the previous image ran with; reinstall the intended revision's unit before the next deployment" >&2
 }
 restore() {
   local old_revision old_po_revision state issuer_now
   trap - ERR INT TERM HUP
-  [[ -r "$backup/snapshot-complete" ]] || { echo 'central rollback snapshot incomplete' >&2; return 1; }
+  [[ -r "$backup/snapshot-complete" ]] || { echo "$host_label rollback snapshot incomplete" >&2; return 1; }
   state="$(cat "$backup/issuer.state")"
   old_revision="$(cat "$backup/collector.revision")"
   verify_collector "$collector_rollback" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
@@ -134,10 +141,10 @@ restore() {
   else
     [[ "$state" == absent ]] || return 1
   fi
-  python3 "$pair_tool" verify youtube-collector "$profile_release/previous" "$collector_rollback"
-  python3 "$pair_tool" check youtube-collector "$profile_release/previous"
+  python3 "$pair_tool" verify "$service" "$profile_release/previous" "$collector_rollback"
+  python3 "$pair_tool" check "$service" "$profile_release/previous"
   # 복원 drop-in 게시가 실패하면 실행 중인 issuer·collector를 건드리지 않는다.
-  python3 "$pair_tool" activate youtube-collector "$profile_release/previous" "$current" || return
+  python3 "$pair_tool" activate "$service" "$profile_release/previous" "$current" || return
   # pair는 이전 image가 돌던 기본 unit(unit.container, verify가 checksum 확인)도 보존한다. sync-opt-current.sh가 새
   # revision의 unit을 이미 설치했으면 이전 image를 새 정의(env·mount·healthcheck)로 띄우지 않게 함께 되돌린다
   # (quadlet-rollback-service.sh와 같은 규칙). 바뀐 unit은 release에 남긴다.
@@ -158,7 +165,7 @@ restore() {
   fi
   systemctl restart "$collector_unit" || return
   verify_collector_runtime "$old_revision" || return
-  echo "central previous collector/issuer restored from $backup"
+  echo "$host_label previous collector/issuer restored from $backup"
 }
 require_collector_lease_migration() {
   local migration=222_drop_youtube_job_lease_legacy_failure_trigger.sql expected observed collector_env
@@ -225,28 +232,31 @@ if [[ "$mode" == check ]]; then
     started_since "$since_epoch" "$container"
     require_post_cutover_logs "$since" "$container"
   done
-  echo "central collector/issuer completion verified revision=$revision backup=$backup"
+  echo "$host_label collector/issuer completion verified revision=$revision backup=$backup"
   exit 0
 fi
 # Quadlet은 정지한 unit의 container를 지운다(--rm). 이전 pair의 profile은 실행 중인 collector에서만 증명할 수 있어
-# collector를 멈춘 채 교체하는 점검 모드는 중앙에서 지원하지 않는다.
+# collector를 멈춘 채 교체하는 점검 모드는 지원하지 않는다.
 systemctl is-active --quiet "$collector_unit" || {
-  echo "central collector must be running for a paired cutover; $collector_unit is not active" >&2
+  echo "$host_label collector must be running for a paired cutover; $collector_unit is not active" >&2
   exit 1
 }
 # W4 collector는 옛 lease failure 진단 복원 코드를 제거했으므로 222 적용 증명 전에는 교체하지 않는다.
-require_collector_lease_migration
+# 원장은 중앙 주 서버의 관리 socket으로만 읽을 수 있어 c에서 증명한다. b는 같은 release의 c 배포 뒤에 배포한다.
+if [[ "$slot" == c ]]; then
+  require_collector_lease_migration
+fi
 [[ -r "$staging/image.tar" && -r "$staging/image.tar.sha256" && -r "$staging/image-id" &&
    -r "$staging/collector-image.tar" && -r "$staging/collector-image.tar.sha256" && -r "$staging/collector-image-id" &&
    -r "$staging/rootfs-manifest.json" && -r "$staging/collector-manifest.json" ]] || exit 1
 issuer_state="$(issuer_presence)"
-# issuer 기준 영수증(po-current-c)은 current 밖의 호스트 상태다. issuer 이미지가 있는데 영수증이 없으면 이전 pair를
+# issuer 기준 영수증(po-current-<slot>)은 current 밖의 호스트 상태다. issuer 이미지가 있는데 영수증이 없으면 이전 pair를
 # 복원할 근거가 없으므로, 백업·rollback 태그를 만들기 전에 원인을 남기고 거절한다(호스트 교체 때 누락된 사례).
 if [[ "$issuer_state" == present ]] && [[ ! -r "$current/$manifest" || ! -r "$current/$image_id_file" ]]; then
-  echo "central issuer receipt missing: restore the reviewed $current/$manifest and $current/$image_id_file before cutover" >&2
+  echo "$host_label issuer receipt missing: restore the reviewed $current/$manifest and $current/$image_id_file before cutover" >&2
   exit 1
 fi
-[[ ! -e "$backup" ]] || { echo 'central backup path already exists' >&2; exit 1; }
+[[ ! -e "$backup" ]] || { echo "$host_label backup path already exists" >&2; exit 1; }
 install -d -m 0700 -o root -g root "$backup"
 old_image_id="$(image_id "$collector")"
 running_image_id="$(container_image_id "$collector_container")"
@@ -259,9 +269,9 @@ import json, sys
 json.dump({'schema_version': 1, 'source_revision': sys.argv[1], 'go': {'goarch': 'arm64'}, 'image_id': sys.argv[2], 'version': sys.argv[3]}, open(sys.argv[4], 'w'))
 PY
 verify_collector "$collector" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
-python3 "$pair_tool" capture youtube-collector "$profile_release/previous" "$collector_container" "$current"
-python3 "$pair_tool" rollback youtube-collector "$profile_release/previous"
-python3 "$pair_tool" check youtube-collector "$profile_release/previous"
+python3 "$pair_tool" capture "$service" "$profile_release/previous" "$collector_container" "$current"
+python3 "$pair_tool" rollback "$service" "$profile_release/previous"
+python3 "$pair_tool" check "$service" "$profile_release/previous"
 printf '%s\n' "$old_revision" > "$backup/collector.revision"
 podman tag "$collector" "$collector_rollback"
 if [[ "$issuer_state" == present ]]; then
@@ -303,7 +313,7 @@ restore_after_failed_cutover() {
     restore_status=0
   fi
   if [[ "$restore_status" -ne 0 ]]; then
-    echo "central automatic restoration failed; retain $backup" >&2
+    echo "$host_label automatic restoration failed; retain $backup" >&2
   fi
   exit "$status"
 }
@@ -320,12 +330,12 @@ verify_collector "$collector_candidate" "$staging/collector-manifest.json" "$rev
 [[ "$(image_label "$issuer_candidate" version)" == "$version" ]]
 [[ "$(image_label "$collector_candidate" version)" == "$version" ]]
 candidate_image="$(image_id "$collector_candidate")"
-python3 "$pair_tool" candidate youtube-collector "$profile_release/candidate" "$candidate_image" \
-  < "$unit_dir/hololive-youtube-collector-c.container"
-python3 "$pair_tool" check youtube-collector "$profile_release/candidate"
-python3 "$pair_tool" verify-source youtube-collector "$profile_release/candidate"
+python3 "$pair_tool" candidate "$service" "$profile_release/candidate" "$candidate_image" \
+  < "$unit_dir/$collector_container.container"
+python3 "$pair_tool" check "$service" "$profile_release/candidate"
+python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
 cutover_started=true
-python3 "$pair_tool" activate youtube-collector "$profile_release/candidate" "$current"
+python3 "$pair_tool" activate "$service" "$profile_release/candidate" "$current"
 podman tag "$issuer_candidate" "$issuer"
 podman tag "$collector_candidate" "$collector"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -337,12 +347,12 @@ install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
 install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
 systemctl restart "$collector_unit"
 verify_collector_runtime "$revision"
-python3 "$pair_tool" verify-live youtube-collector "$profile_release/candidate" "$collector_container"
+python3 "$pair_tool" verify-live "$service" "$profile_release/candidate" "$collector_container"
 since_epoch="$(date -u -d "$started_at" +%s)"
 for container in "$issuer_container" "$collector_container"; do
   started_since "$since_epoch" "$container"
   require_post_cutover_logs "$started_at" "$container"
 done
 trap - ERR INT TERM HUP
-printf 'central issuer-first cutover verified revision=%s backup=%s started_at=%s\n' "$revision" "$backup" "$started_at"
+printf '%s issuer-first cutover verified revision=%s backup=%s started_at=%s\n' "$host_label" "$revision" "$backup" "$started_at"
 }

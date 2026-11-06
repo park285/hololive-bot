@@ -213,4 +213,4 @@ bash "$verifier" "${exec_tree[@]}" || die "exec-tree ownership verification fail
 log "exec-tree ownership verified"
 
 log "SSOT sync complete (HEAD=$HEAD_SHA)"
-log "next: api/alarm-worker release -> sudo $OPT_CURRENT/scripts/deploy/quadlet-redeploy-service.sh <service> <image> [<migrator-image>]; collector c -> po-central-cutover.sh; other unit changes apply on an approved restart"
+log "next: api/alarm-worker release -> sudo $OPT_CURRENT/scripts/deploy/quadlet-redeploy-service.sh <service> <image> [<migrator-image>]; collector c -> po-central-cutover.sh c (from kapu); other unit changes apply on an approved restart"

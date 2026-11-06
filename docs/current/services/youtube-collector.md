@@ -6,7 +6,7 @@
 |---|---|
 | Module | `hololive-youtube-collector` |
 | Binary | `youtube-collector` |
-| Execution | Central `c`: Podman Quadlet `hololive-youtube-collector-c.service` (fleet service `youtube-collector`); Seoul `b`: Compose `youtube-collector-b`; Osaka `a` / Osaka2 `d`: host-native systemd `hololive-youtube-collector@youtube-collector-{a,d}.service` |
+| Execution | Central `c`: Podman Quadlet `hololive-youtube-collector-c.service` (fleet service `youtube-collector`); Seoul `b`: iris-seoul Podman Quadlet `hololive-youtube-collector-b.service`; Osaka `a` / Osaka2 `d`: host-native systemd `hololive-youtube-collector@youtube-collector-{a,d}.service` |
 | Ports | `a` 30005, `b` 30015, `c` 30025, `d` 30035 |
 | Health endpoint | `https://127.0.0.1:<port>/health` over H3 |
 | Ready endpoint | `https://127.0.0.1:<port>/ready` over H3 |
@@ -146,7 +146,7 @@ player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체�
 - `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
 - `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the container/native CA path above
-- Central startup uses the Quadlet units `hololive-youtube-collector-c.container` and `hololive-youtube-po-c.container` (`deploy/quadlet/hololive-bot/`) for fleet member `c` and its issuer. Seoul uses the standalone `docker-compose.seoul.yml` (extending `docker-compose.collector.yml`) for `youtube-collector-b` and issuer `youtube-po-b`. Osaka `a` and Osaka2 `d` run only as native systemd units and have no Compose overlay. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
+- Central startup uses the Quadlet units `hololive-youtube-collector-c.container` and `hololive-youtube-po-c.container` (`deploy/quadlet/hololive-bot/`) for fleet member `c` and its issuer. iris-seoul uses the Quadlet units in `deploy/podman/iris-seoul/` for `youtube-collector-b` and issuer `hololive-youtube-po-b`. Osaka `a` and Osaka2 `d` run only as native systemd units. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
 
 ## Shutdown behavior
 

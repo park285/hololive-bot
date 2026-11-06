@@ -1,0 +1,7 @@
+# iris-seoul collector-b 전용 bridge(2026-11-06 Docker Compose에서 전환). 컨테이너 대역은 DB pg_hba와 무관하다
+# (중앙 PG는 tailnet 출처 100.100.1.5를 본다). Docker 대역과 겹치지 않게 별도 대역을 쓴다.
+[Network]
+NetworkName=hololive-collector-b
+Subnet=10.89.16.0/24
+Gateway=10.89.16.1
+InterfaceName=pm-collector-b

@@ -2,7 +2,7 @@
 
 ## Role
 
-중앙의 Podman Quadlet, Seoul의 Docker Compose, Osaka·Osaka2 AP의 native systemd runtime rollback과 contract/document rollback 판단 기준입니다. Collector의 paired issuer 복원 절차는 [collector runbook](youtube-collector.md#rollback)을 따릅니다.
+중앙·iris-seoul(collector b)의 Podman Quadlet, Osaka·Osaka2 AP의 native systemd runtime rollback과 contract/document rollback 판단 기준입니다. Collector의 paired issuer 복원 절차는 [collector runbook](youtube-collector.md#rollback)을 따릅니다.
 
 ## Before Rollback
 
@@ -86,7 +86,7 @@ Runtime service names:
 - `hololive-alarm-worker`
 - `youtube-collector`
 
-`youtube-collector` rollback은 Go binary/image, bundled Node helper, worker profile, 중앙 drop-in·Seoul Compose base/AP overlay 또는 native release, paired issuer를 함께 보존한 revision 단위입니다. Binary-only rollback과 schema/data rollback은 허용하지 않습니다. migration 218 이후에는 typed `last_failure_*`를 쓰지 않는 pre-177 collector image가 rollback 대상이 아닙니다. 실제 fleet/DB 계약을 만족하는 pair만 사용하며, 이 문서의 로컬 준비가 운영 canary·rollback 실행을 뜻하지 않습니다.
+`youtube-collector` rollback은 Go binary/image, bundled Node helper, worker profile, Quadlet drop-in(c·b) 또는 native release, paired issuer를 함께 보존한 revision 단위입니다. Binary-only rollback과 schema/data rollback은 허용하지 않습니다. migration 218 이후에는 typed `last_failure_*`를 쓰지 않는 pre-177 collector image가 rollback 대상이 아닙니다. 실제 fleet/DB 계약을 만족하는 pair만 사용하며, 이 문서의 로컬 준비가 운영 canary·rollback 실행을 뜻하지 않습니다.
 
 `hololive-api`가 durable bot admission migration 123~136을 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 

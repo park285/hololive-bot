@@ -10,7 +10,7 @@
 
 ## 시스템 아키텍처 (Architecture Overview)
 
-본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`는 rootful Podman Quadlet([deploy/quadlet](deploy/quadlet/README.md))으로, Seoul collector `b`는 Docker Compose로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
+본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`는 rootful Podman Quadlet([deploy/quadlet](deploy/quadlet/README.md))으로, Seoul collector `b`는 iris-seoul rootful Podman Quadlet([deploy/podman/iris-seoul](deploy/podman/iris-seoul/README.md))으로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
 
 현재 배포 대상과 실행 방식은 [PROJECT_MAP](docs/current/PROJECT_MAP.md)과 [Deployment Baseline](docs/current/DEPLOYMENT_BASELINE.md), 작업 절차는 [Current Runbooks](docs/current/runbooks/README.md)를 따릅니다. 과거 기록과 설계 문서의 전환 절차를 현재 배포 작업으로 실행하지 않습니다.
 
@@ -130,7 +130,7 @@ rollout 소유자만 활성화합니다.
 
 ## 서비스 상태 진단 (Logs & Health Check)
 
-* 로그 분석 표준(SSOT): 개발 및 문제 원인 추적 시 각 서비스의 표준 출력/표준 에러(stdout/stderr)를 1순위 데이터로 다룹니다. 중앙은 journald(`journalctl -u <unit>`), Seoul AP는 Docker 로그입니다.
+* 로그 분석 표준(SSOT): 개발 및 문제 원인 추적 시 각 서비스의 표준 출력/표준 에러(stdout/stderr)를 1순위 데이터로 다룹니다. 중앙과 iris-seoul collector b는 journald(`journalctl -u <unit>`), host-native a/d도 journald입니다.
 * 로컬 파일 로그: 디버깅 시 참고용 보조 미러 정보로만 취급합니다.
 
 ### 서비스별 상태 진단 엔드포인트

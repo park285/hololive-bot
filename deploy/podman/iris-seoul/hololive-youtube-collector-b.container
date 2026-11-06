@@ -1,0 +1,115 @@
+# iris-seoul의 youtube-collector-b(2026-11-06 Docker Compose `oracle` profile에서 전환).
+# 비밀은 /etc/stack-secrets/hololive-bot(master hosts/iris-seoul)에서 읽는다. compose 보간이 없어 env 파일에 POSTGRES_PASSWORD를 둔다.
+# Docker 시절과 같게 호스트 uid·gid(1000)와 보조 그룹 1002로 실행한다(UserNS 없음, AppArmor 호스트).
+# 실행 image와 release profile은 worker-profile-pair.py가 만드는 drop-in(50-worker-profile.conf)이 고정한다.
+# 이 기본 unit의 :prod tag와 원본 profile mirror는 drop-in이 없을 때(첫 고정 전)만 쓰인다.
+[Unit]
+Description=hololive YouTube collector b
+# issuer는 collector session이 끝나면 generation을 바꾸려고 스스로 종료하고 Restart=로 다시 뜬다. Requires=는 그 재시작을
+# collector 정지로 전파하므로 Wants=로만 끌어온다(중앙 c는 의존 없이 둔다).
+Wants=hololive-youtube-po-b.service network-online.target
+After=hololive-youtube-po-b.service network-online.target tailscaled.service
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=hololive-youtube-collector-b
+Image=localhost/hololive-youtube-collector:prod
+Pull=never
+User=1000
+Group=1000
+GroupAdd=1002
+Network=hololive-collector-b.network:alias=youtube-collector,alias=youtube-collector-b
+DNS=100.100.100.100
+DNS=8.8.8.8
+DNS=1.1.1.1
+AddHost=host.docker.internal:host-gateway
+Entrypoint=./bin/youtube-collector
+ReadOnly=true
+ReadOnlyTmpfs=false
+Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
+DropCapability=ALL
+NoNewPrivileges=true
+PidsLimit=256
+Memory=1g
+ShmSize=64m
+PublishPort=127.0.0.1:30015:30015/tcp
+PublishPort=127.0.0.1:30015:30015/udp
+PublishPort=100.100.1.5:30096:30096/tcp
+EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env
+Environment=TZ=Asia/Seoul
+Environment=HOME=/tmp
+Environment=STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profiles/youtube-collector-b.json
+Environment=GIN_MODE=release
+Environment=GOGC=100
+Environment=GOMEMLIMIT=640MiB
+Environment=HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+Environment=HEALTHCHECK_SERVER_NAME=100.100.1.3
+Environment=HOLOLIVE_H3_ADDR=:30015
+Environment=HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+Environment=HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key
+Environment=HOLOLIVE_HTTP_TRANSPORTS=h3
+Environment=HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+Environment=HOLOLIVE_INTERNAL_H3_SERVER_NAME=100.100.1.3
+Environment=HOLOLIVE_METRICS_ADDR=:30096
+Environment=LOG_COMPRESS=true
+Environment=LOG_DIR=/app/logs
+Environment=LOG_LEVEL=info
+Environment=LOG_MAX_AGE_DAYS=30
+Environment=LOG_MAX_BACKUPS=5
+Environment=LOG_MAX_SIZE_MB=5
+Environment=NOTIFICATION_EGRESS_ROLE=off
+Environment=PGAPPNAME=youtube-collector-b
+Environment=PHOTO_SYNC_ENABLED=false
+Environment=POSTGRES_DB=hololive
+Environment=POSTGRES_HOST=100.100.1.8
+Environment=POSTGRES_POOL_MAX_CONNS=7
+Environment=POSTGRES_POOL_MIN_CONNS=2
+Environment=POSTGRES_PORT=5433
+Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement
+Environment=POSTGRES_SOCKET_PATH=
+Environment=POSTGRES_SSLMODE=verify-full
+Environment=POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
+Environment=POSTGRES_USER=hololive_scraper
+Environment=SERVER_PORT=30015
+Environment=YOUTUBEJS_NODE=/usr/local/bin/node
+Environment=YOUTUBEJS_SCRIPT=/app/youtubejs/src/server.mjs
+Environment=YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS=1
+Environment=YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-b
+Environment=YOUTUBE_COLLECTOR_LOG_FILE_NAME=youtube-collector-b.log
+Environment=YOUTUBE_COLLECTOR_MAX_PAGES=1
+Environment=YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES=1048576
+Environment=YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS=10000
+Environment=YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS=2
+Environment=YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS=1
+Environment=YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true
+Environment=YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS=30
+Environment=YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS=3
+Environment=YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS=30
+Volume=/var/lib/hololive-collectors/b/data:/app/data
+Volume=/var/lib/hololive-collectors/b/logs:/app/logs
+Volume=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+Volume=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+Volume=/etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+Volume=/etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
+Volume=hololive-youtube-po-b.volume:/run/hololive-youtube-po:ro
+HealthCmd=["./bin/healthcheck","https://127.0.0.1:30015/ready"]
+HealthInterval=30s
+HealthTimeout=7s
+HealthRetries=3
+# 이전 인스턴스의 60초 lease 만료와 첫 publish가 끝날 때까지 기동 유예를 둔다.
+HealthStartPeriod=180s
+HealthStartupCmd=["./bin/healthcheck","https://127.0.0.1:30015/ready"]
+HealthStartupInterval=5s
+HealthStartupTimeout=7s
+# 배포 도구(po-central-cutover.sh b)는 systemctl restart가 healthy까지 기다리는 것을 전제로 한다.
+Notify=healthy
+LogDriver=journald
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
