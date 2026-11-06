@@ -1,5 +1,6 @@
 // @ts-check
 
+import { isCalendarRFC3339 } from "./rfc3339.mjs";
 import { RpcRequestError, RpcResponseError, RpcProtocolError } from "./rpc-errors.mjs";
 import {
   arrayField,
@@ -61,7 +62,7 @@ function validateContentRequest(value) {
 
 const channelRequestKeys = keySchema(
   ["protocol_version", "channel_id", "kind", "max_success_response_bytes"],
-  ["max_pages", "max_schedule_lookups"],
+  ["max_pages", "max_schedule_lookups", "scheduled_for"],
 );
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelRequest} */
@@ -80,12 +81,19 @@ function validateChannelRequest(value) {
   if (lookups !== undefined && (!Number.isSafeInteger(lookups) || Number(lookups) < 0 || Number(lookups) > maxScheduleMetadataLookups)) {
     throw new RpcRequestError(`max_schedule_lookups must be an integer between 0 and ${maxScheduleMetadataLookups}`);
   }
+  // collector lease 슬롯 시각입니다. 재사용 일정의 원래 관측 시각을 API의 관측 시각과 같은 시계로 남기는 데만 씁니다.
+  const scheduledFor = record.scheduled_for;
+  if (scheduledFor !== undefined && (kind !== "live" || typeof scheduledFor !== "string" ||
+      !isCalendarRFC3339(scheduledFor) || !Number.isFinite(Date.parse(scheduledFor)))) {
+    throw new RpcRequestError("scheduled_for must be an RFC3339 timestamp on live requests");
+  }
   return {
     protocol_version: protocolVersion(record),
     channel_id: requiredString(record, "channel_id"),
     kind,
     ...optionalPositiveIntegers(record, ["max_pages"]),
     ...(lookups === undefined ? {} : { max_schedule_lookups: Number(lookups) }),
+    ...(scheduledFor === undefined ? {} : { scheduled_for: scheduledFor }),
     max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
   };
 }
@@ -273,7 +281,7 @@ const communityPostKeys = keySchema(
 );
 const thumbnailKeys = keySchema(["url", "width", "height"]);
 const contentItemKeys = keySchema(["video_id", "channel_id", "title"], ["published_at", "scheduled_for", "is_upcoming"]);
-const liveSessionKeys = keySchema(["video_id", "channel_id", "status"], ["title", "thumbnail_url", "scheduled_at", "started_at", "ended_at"]);
+const liveSessionKeys = keySchema(["video_id", "channel_id", "status"], ["title", "thumbnail_url", "scheduled_at", "schedule_observed_at", "started_at", "ended_at"]);
 const photoKeys = keySchema(["kind", "url", "width", "height"]);
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").CommunityPost} */
@@ -328,13 +336,19 @@ function validateContentItem(value) {
 function validateLiveSession(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, liveSessionKeys);
+  const status = validateLiveStatus(record);
+  // 재사용 일정의 원래 조회 시각은 시각이 있는 UPCOMING 행에만 붙습니다.
+  if (Object.hasOwn(record, "schedule_observed_at") && (status !== "UPCOMING" || !Object.hasOwn(record, "scheduled_at"))) {
+    throw new RpcResponseError("schedule_observed_at requires an upcoming scheduled_at");
+  }
   return {
     video_id: nonemptyStringField(record, "video_id"),
     channel_id: nonemptyStringField(record, "channel_id"),
-    status: validateLiveStatus(record),
+    status,
     ...optionalResponseString(record, "title"),
     ...optionalResponseString(record, "thumbnail_url"),
     ...optionalRFC3339(record, "scheduled_at"),
+    ...optionalRFC3339(record, "schedule_observed_at"),
     ...optionalRFC3339(record, "started_at"),
     ...optionalRFC3339(record, "ended_at"),
   };

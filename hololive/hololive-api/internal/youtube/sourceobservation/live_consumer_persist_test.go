@@ -504,13 +504,13 @@ func liveSnapshotEnvelopeFromProviderAtGeneration(
 	statuses := make([]string, 0, len(sessions))
 	seen := map[string]struct{}{}
 
-	for _, session := range sessions {
-		if _, ok := seen[session.Status]; ok {
+	for i := range sessions {
+		if _, ok := seen[sessions[i].Status]; ok {
 			continue
 		}
 
-		seen[session.Status] = struct{}{}
-		statuses = append(statuses, session.Status)
+		seen[sessions[i].Status] = struct{}{}
+		statuses = append(statuses, sessions[i].Status)
 	}
 
 	if len(statuses) == 0 {

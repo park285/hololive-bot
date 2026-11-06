@@ -33,6 +33,8 @@ export async function fetchChannelFeed({
   maxScheduleLookups = maxScheduleMetadataLookups,
   maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
+  scheduleCache,
+  scheduledFor,
 } = {}) {
   const id = String(channelId ?? "").trim();
   if (id === "") {
@@ -48,6 +50,10 @@ export async function fetchChannelFeed({
     throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "schedule lookup budget is outside the protocol limit");
   }
   assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
+  const slotAt = Date.parse(scheduledFor ?? "");
+  const cache = kind === "live" && Number.isFinite(slotAt) ? scheduleCache : undefined;
+  // upstream을 기다리기 전에 슬롯을 기록해, 이 요청보다 늦게 끝난 앞 슬롯의 조회가 캐시를 채우지 못하게 합니다.
+  cache?.beginSlot(id, slotAt);
   const channel = await runUpstream(() => innertube.getChannel(id));
   // Metadata 작업은 streams/player 장애와 독립적이며 live 작업에는 about 조회가 필요 없습니다.
   const about = kind === "metadata" && typeof channel.getAbout === "function" ? await runUpstream(() => channel.getAbout()) : {};
@@ -67,7 +73,7 @@ export async function fetchChannelFeed({
     ...(query === undefined ? {} : { schedule_lookups: 0, live_query: { ...query, access_restricted: true } }) });
   const { sessions: liveSessions, minimumBytes } = collectLiveSnapshot(liveFeed, id, maxSuccessResponseBytes, reserveBytes);
   const { unavailable, lookups } = await enrichUpcomingSchedules(
-    liveSessions, innertube, minimumBytes, maxSuccessResponseBytes, maxScheduleLookups);
+    liveSessions, innertube, minimumBytes, maxSuccessResponseBytes, maxScheduleLookups, cache, slotAt);
   const unavailableIDs = new Set(unavailable.map((item) => item.video_id));
   if (unavailable.length > 0) {
     logUnavailableSchedules(id, unavailable);
@@ -113,13 +119,21 @@ function logUnavailableSchedules(channelId, unavailable) {
   })}\n`);
 }
 
-async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuccessResponseBytes, maxLookups) {
+/**
+ * 재사용은 collector lease 슬롯 시각이 있는 요청에서만 합니다. 캐시는 그 슬롯 시각을 조회 시각으로 기록해,
+ * API가 재사용 행을 원래 관측과 같은 시계로 더 새 관측과 비교하게 합니다.
+ * @param {import("./schedule-cache.mjs").ScheduleLookupCache | undefined} cache 슬롯 시각이 있는 live 요청에서만 전달합니다.
+ * @param {number} slotAt
+ */
+async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuccessResponseBytes, maxLookups, cache, slotAt) {
   const candidates = new Map();
   const confirmedIDs = new Set();
   let liveRowCount = 0;
   for (const session of sessions) {
     if (session.status !== "UPCOMING" || session.scheduled_at != null) {
       confirmedIDs.add(session.video_id);
+      // 목록이 시각이나 다른 상태를 직접 보였으므로, 다시 미확정으로 보이면 player로 새로 확인합니다.
+      cache?.forget(session.channel_id, session.video_id, slotAt);
       liveRowCount++;
       continue;
     }
@@ -138,10 +152,21 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
   let pendingCount = candidates.size;
   let lookups = 0;
   for (const [videoId, rows] of candidates) {
-    lookups++;
-    recordScheduleLookup();
-    const metadata = await fetchLiveMetadata(innertube, videoId);
-    const identity = { video_id: videoId, channel_id: rows[0].channel_id };
+    const channelId = rows[0].channel_id;
+    // 상한 검사는 후보 전체에 그대로 적용하고, 재사용은 실제 player 요청만 줄입니다.
+    // 더 앞선 슬롯에서 확인한 값만 재사용하므로, 같은 슬롯의 재시도와 겹친 요청은 player로 다시 확인합니다.
+    const reused = cache?.reuse(channelId, videoId, slotAt);
+    /** @type {{ scheduleUnavailableReason?: string, isLive?: boolean, isUpcoming?: boolean, startTimestamp?: string | null }} */
+    let metadata;
+    if (reused === undefined) {
+      lookups++;
+      recordScheduleLookup();
+      cache?.forget(channelId, videoId, slotAt);
+      metadata = await fetchLiveMetadata(innertube, videoId);
+    } else {
+      metadata = reused;
+    }
+    const identity = { video_id: videoId, channel_id: channelId };
     minimumBytes -= encodedSize(identity);
     pendingCount--;
     if (metadata.scheduleUnavailableReason === "access_restricted") {
@@ -172,11 +197,19 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
             throw error;
           }
           session.scheduled_at = metadata.startTimestamp;
+          // 재사용한 시각은 원래 확인 슬롯의 관측입니다. API는 이 시각으로 더 새 일정과 비교합니다.
+          if (reused !== undefined) {
+            session.schedule_observed_at = reused.observedAt;
+          }
         }
         minimumBytes += encodedSize(session);
       }
       minimumBytes += rows.length - 1;
       liveRowCount += rows.length;
+    }
+    // 검증을 통과한 새 결과만 기록합니다. 접근 제한·LIVE 판정과 실패한 조회는 항목이 비어 다음 poll이 다시 확인합니다.
+    if (reused === undefined) {
+      cache?.remember(channelId, videoId, metadata, slotAt);
     }
     // 원래 단일 배열 하한에서 identity만 실제 표현으로 교체합니다. 미해결 중복은
     // 여전히 하나로 셉니다. 두 배열이 모두 차면 분리 지점의 쉼표 하나를 뺍니다.

@@ -61,6 +61,8 @@ export interface ChannelRequest {
   max_pages?: number;
   /** live 요청에만 있으며, 예정 영상 player 조회 수의 상한입니다. collector가 호출 예산으로 소유합니다. */
   max_schedule_lookups?: number;
+  /** live 요청에만 있으며, collector lease 슬롯 시각입니다. 재사용 일정의 원래 관측 시각으로 씁니다. */
+  scheduled_for?: string;
   max_success_response_bytes: number;
 }
 
@@ -80,6 +82,7 @@ export interface ChannelFetchOptions {
   kind: "live" | "metadata";
   maxPages?: number;
   maxScheduleLookups?: number;
+  scheduledFor?: string;
   maxSuccessResponseBytes: number;
 }
 
@@ -238,6 +241,8 @@ export interface LiveSessionItem {
   title?: string;
   thumbnail_url?: string;
   scheduled_at?: string;
+  /** helper가 이전 poll에서 확인한 `scheduled_at`을 재사용할 때만 싣는, 그 확인 요청의 lease 슬롯 시각입니다. */
+  schedule_observed_at?: string;
   started_at?: string;
   ended_at?: string;
 }

@@ -105,14 +105,16 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem,
 
 	for _, session := range sessions {
 		item := contract.LiveSessionV1{
-			VideoID:      session.VideoID,
-			ChannelID:    channelID,
-			Status:       session.Status,
-			ScheduledAt:  session.ScheduledAt,
-			StartedAt:    session.StartedAt,
-			EndedAt:      session.EndedAt,
-			Title:        session.Title,
-			ThumbnailURL: session.ThumbnailURL,
+			VideoID:     session.VideoID,
+			ChannelID:   channelID,
+			Status:      session.Status,
+			ScheduledAt: session.ScheduledAt,
+			// 재사용 일정의 원래 관측 시각을 그대로 넘겨 API가 더 새 일정과 비교하게 합니다.
+			ScheduleObservedAt: session.ScheduleObservedAt,
+			StartedAt:          session.StartedAt,
+			EndedAt:            session.EndedAt,
+			Title:              session.Title,
+			ThumbnailURL:       session.ThumbnailURL,
 		}
 
 		mapped = append(mapped, item)

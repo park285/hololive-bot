@@ -66,13 +66,15 @@ type EndEvidence struct {
 }
 
 type SessionFact struct {
-	VideoID            string
-	ChannelID          string
-	Status             string
-	Title              string
-	TopicID            string
-	ThumbnailURL       string
-	ScheduledAt        *time.Time
+	VideoID      string
+	ChannelID    string
+	Status       string
+	Title        string
+	TopicID      string
+	ThumbnailURL string
+	ScheduledAt  *time.Time
+	// ScheduleObservedAt은 ScheduledAt을 앞선 lease 슬롯에서 확인해 재사용한 행에만 있는 그 슬롯 시각이다.
+	ScheduleObservedAt *time.Time
 	StartedAt          *time.Time
 	EndedAt            *time.Time
 	LiveStartConfirmed bool

@@ -264,6 +264,8 @@ type ChannelRequest struct {
 	// MaxScheduleLookups는 FetchChannel이 live 요청에만 채웁니다. helper는 live 요청에서 이 값이 없으면 거부합니다.
 	MaxScheduleLookups      int `json:"max_schedule_lookups,omitzero"`
 	MaxSuccessResponseBytes int `json:"max_success_response_bytes"`
+	// ScheduledFor는 live 요청의 lease 슬롯 시각입니다. helper는 재사용 일정의 원래 관측 시각을 이 시계로 기록합니다.
+	ScheduledFor *time.Time `json:"scheduled_for,omitzero"`
 }
 
 type LiveSessionItem struct {
@@ -273,8 +275,10 @@ type LiveSessionItem struct {
 	Title        string     `json:"title,omitempty"`
 	ThumbnailURL string     `json:"thumbnail_url,omitempty"`
 	ScheduledAt  *time.Time `json:"scheduled_at,omitempty"`
-	StartedAt    *time.Time `json:"started_at,omitempty"`
-	EndedAt      *time.Time `json:"ended_at,omitempty"`
+	// ScheduleObservedAt은 helper가 앞선 슬롯에서 확인한 ScheduledAt을 재사용했을 때만 그 슬롯 시각을 싣습니다.
+	ScheduleObservedAt *time.Time `json:"schedule_observed_at,omitzero"`
+	StartedAt          *time.Time `json:"started_at,omitempty"`
+	EndedAt            *time.Time `json:"ended_at,omitempty"`
 }
 
 type ChannelProfileItem struct {

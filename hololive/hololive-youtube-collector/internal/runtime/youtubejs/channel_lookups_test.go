@@ -212,3 +212,36 @@ func TestFetchChannelReservesLookupBudgetOnlyWhenTheCountIsLost(t *testing.T) {
 		})
 	}
 }
+
+// lease 슬롯 시각은 재사용 일정의 관측 시각에만 쓰이므로 live 요청에만 실리고 metadata 요청에서는 빠진다.
+func TestFetchChannelSendsLeaseSlotOnlyForLiveRequests(t *testing.T) {
+	t.Parallel()
+
+	slot := time.Date(2026, time.November, 6, 1, 0, 0, 0, time.UTC)
+
+	for _, kind := range []string{"live", "metadata"} {
+		var sent ChannelRequest
+
+		client := NewRPC(&http.Client{Transport: metricsTransport(func(req *http.Request) (*http.Response, error) {
+			raw, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+
+			if err := jsonv2.Unmarshal(raw, &sent, jsonv2.RejectUnknownMembers(true)); err != nil {
+				return nil, err
+			}
+
+			return jsonResponse(http.StatusInternalServerError, `{"protocol_version":1,"error_code":"helper_internal_invariant","error_class":"INTERNAL","message":"stop"}`), nil
+		})}, "http://helper", nil)
+
+		// helper 오류 본문으로 요청만 기록하고 끝냅니다.
+		if _, err := client.FetchChannel(t.Context(), ChannelRequest{ChannelID: lookupChannelID, Kind: kind, MaxPages: 1, ScheduledFor: new(slot)}); err == nil {
+			t.Fatalf("%s request unexpectedly succeeded", kind)
+		}
+
+		if live := kind == "live"; (sent.ScheduledFor != nil) != live || (live && !sent.ScheduledFor.Equal(slot)) {
+			t.Fatalf("%s request scheduled_for = %v", kind, sent.ScheduledFor)
+		}
+	}
+}
