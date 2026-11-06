@@ -7,7 +7,6 @@ import { Utils } from "youtubei.js";
 import { fetchChannelFeed, liveSessionRows, mapPhoto, mapProfile } from "./fetch-channel.mjs";
 import { handleChannelRequest } from "./rpc-boundary.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
-import { ScheduleLookupCache } from "./schedule-cache.mjs";
 
 const liveBadges = [{ style: "BADGE_STYLE_TYPE_LIVE_NOW" }];
 const lockupFixture = JSON.parse(
@@ -66,68 +65,6 @@ test("a restricted-only feed preserves its unresolved identity and is rechecked 
   assert.equal(second.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
   assert.equal(second.unavailable_live_sessions, undefined);
   assert.equal(calls, 2);
-});
-
-test("a reused far-future schedule skips the player and reports no lookup through the RPC", async () => {
-  // fixture 예정 시각(11:00Z)보다 10시간 앞이므로 재사용 구간에 듭니다.
-  const scheduleCache = new ScheduleLookupCache({ now: () => Date.parse("2026-09-01T01:00:00Z") });
-  const calls = [];
-  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
-    calls.push(videoId);
-    return rawPlayerResponse(videoId);
-  });
-  const request = JSON.stringify({
-    protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1048576,
-  });
-  const fetcher = (options) => fetchChannelFeed({ ...options, innertube, scheduleCache });
-  const first = await handleChannelRequest(request, fetcher);
-  const second = await handleChannelRequest(request, fetcher);
-  assert.equal(first.body.schedule_lookups, 1);
-  assert.equal(second.status, 200);
-  assert.equal(second.body.schedule_lookups, 0);
-  assert.deepEqual(second.body.live_sessions, first.body.live_sessions);
-  assert.equal(second.body.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
-  assert.deepEqual(calls, ["later"]);
-});
-
-test("near-start schedules and player LIVE transitions are rechecked every poll", async () => {
-  const scheduleCache = new ScheduleLookupCache({ now: () => Date.parse("2026-09-01T10:40:00Z") });
-  const calls = [];
-  const innertube = stubChannel({ videos: [
-    { id: "soon", is_upcoming: true },
-    { id: "early-start", is_upcoming: true },
-  ] }, async (_, { videoId }) => {
-    calls.push(videoId);
-    return videoId === "early-start"
-      ? rawPlayerResponse(videoId, { isLive: true, isUpcoming: false, startTimestamp: "2026-09-01T10:39:00Z" })
-      : rawPlayerResponse(videoId);
-  });
-  for (let poll = 0; poll < 2; poll++) {
-    const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache });
-    assert.equal(result.schedule_lookups, 2);
-    assert.deepEqual(result.live_sessions.map((item) => [item.video_id, item.status]), [["soon", "UPCOMING"], ["early-start", "LIVE"]]);
-  }
-  assert.deepEqual(calls, ["soon", "early-start", "soon", "early-start"]);
-  assert.equal(scheduleCache.size, 0);
-});
-
-test("a reused restriction keeps the unavailable identity and logs only the observed poll", async (t) => {
-  const logs = [];
-  t.mock.method(process.stderr, "write", (line) => { logs.push(JSON.parse(line)); return true; });
-  const scheduleCache = new ScheduleLookupCache({ now: () => Date.parse("2026-09-01T01:00:00Z") });
-  let calls = 0;
-  const innertube = stubChannel({ videos: [{ id: "restricted-fixture", is_upcoming: true }] }, async () => {
-    calls++;
-    return { success: true, status_code: 200, data: restrictedFixture };
-  });
-  const first = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache });
-  const second = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache });
-  assert.deepEqual(second.unavailable_live_sessions, first.unavailable_live_sessions);
-  assert.equal(second.live_query.access_restricted, true);
-  assert.equal(second.schedule_lookups, 0);
-  assert.equal(calls, 1);
-  assert.equal(logs.length, 1);
-  assert.deepEqual(logs[0].video_ids, ["restricted-fixture"]);
 });
 
 test("restricted filtering never hides a conflicting duplicate or foreign channel row", async (t) => {

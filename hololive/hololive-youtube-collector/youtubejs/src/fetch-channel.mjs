@@ -33,7 +33,6 @@ export async function fetchChannelFeed({
   maxScheduleLookups = maxScheduleMetadataLookups,
   maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
-  scheduleCache,
 } = {}) {
   const id = String(channelId ?? "").trim();
   if (id === "") {
@@ -67,12 +66,11 @@ export async function fetchChannelFeed({
   const reserveBytes = encodedSize({ protocol_version: 1, live_sessions: [], profile: {}, photo: [], ...pagination,
     ...(query === undefined ? {} : { schedule_lookups: 0, live_query: { ...query, access_restricted: true } }) });
   const { sessions: liveSessions, minimumBytes } = collectLiveSnapshot(liveFeed, id, maxSuccessResponseBytes, reserveBytes);
-  const { unavailable, observedUnavailable, lookups } = await enrichUpcomingSchedules(
-    liveSessions, innertube, minimumBytes, maxSuccessResponseBytes, maxScheduleLookups, scheduleCache);
+  const { unavailable, lookups } = await enrichUpcomingSchedules(
+    liveSessions, innertube, minimumBytes, maxSuccessResponseBytes, maxScheduleLookups);
   const unavailableIDs = new Set(unavailable.map((item) => item.video_id));
-  // WARN은 원천 관측 기록이므로 이번 poll의 player가 확인한 제한만 남깁니다. 재사용한 판정은 결과 목록에만 둡니다.
-  if (observedUnavailable.length > 0) {
-    logUnavailableSchedules(id, observedUnavailable);
+  if (unavailable.length > 0) {
+    logUnavailableSchedules(id, unavailable);
   }
   // streams 조회 한 페이지의 현행 호출 예산을 유지한다. continuation이 남거나
   // 종료 플래그가 없으면 전체 범위를 완료한 것으로 주장하지 않는다.
@@ -115,10 +113,7 @@ function logUnavailableSchedules(channelId, unavailable) {
   })}\n`);
 }
 
-/**
- * @param {import("./schedule-cache.mjs").ScheduleLookupCache | undefined} scheduleCache
- */
-async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuccessResponseBytes, maxLookups, scheduleCache) {
+async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuccessResponseBytes, maxLookups) {
   const candidates = new Map();
   const confirmedIDs = new Set();
   let liveRowCount = 0;
@@ -140,20 +135,13 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
   }
 
   const unavailable = new Map();
-  const observedUnavailable = [];
   let pendingCount = candidates.size;
   let lookups = 0;
   for (const [videoId, rows] of candidates) {
-    const channelId = rows[0].channel_id;
-    // 상한 검사는 후보 전체에 그대로 적용하고, 재사용은 실제 player 요청만 줄입니다.
-    const reused = scheduleCache?.reuse(channelId, videoId);
-    let metadata = reused;
-    if (metadata === undefined) {
-      lookups++;
-      recordScheduleLookup();
-      metadata = await fetchLiveMetadata(innertube, videoId);
-    }
-    const identity = { video_id: videoId, channel_id: channelId };
+    lookups++;
+    recordScheduleLookup();
+    const metadata = await fetchLiveMetadata(innertube, videoId);
+    const identity = { video_id: videoId, channel_id: rows[0].channel_id };
     minimumBytes -= encodedSize(identity);
     pendingCount--;
     if (metadata.scheduleUnavailableReason === "access_restricted") {
@@ -169,7 +157,6 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
         reason: metadata.scheduleUnavailableReason,
       };
       unavailable.set(videoId, item);
-      if (reused === undefined) observedUnavailable.push(item);
       minimumBytes += encodedSize(item);
     } else {
       for (const session of rows) {
@@ -191,8 +178,6 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
       minimumBytes += rows.length - 1;
       liveRowCount += rows.length;
     }
-    // 검증을 통과한 새 결과만 저장합니다. LIVE 판정은 저장하지 않아 다음 poll이 다시 확인합니다.
-    if (reused === undefined) scheduleCache?.remember(channelId, videoId, metadata);
     // 원래 단일 배열 하한에서 identity만 실제 표현으로 교체합니다. 미해결 중복은
     // 여전히 하나로 셉니다. 두 배열이 모두 차면 분리 지점의 쉼표 하나를 뺍니다.
     const splitBytes = unavailable.size === 0 ? 0
@@ -209,7 +194,7 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
     error.code = "parser_drift";
     throw error;
   }
-  return { unavailable: [...unavailable.values()], observedUnavailable, lookups };
+  return { unavailable: [...unavailable.values()], lookups };
 }
 
 export function* liveSessionRows(feed, channelId) {

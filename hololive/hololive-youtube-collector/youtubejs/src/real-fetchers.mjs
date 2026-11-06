@@ -5,7 +5,6 @@ import { fetchChannelFeed } from "./fetch-channel.mjs";
 import { createLiveCheckInnertube, fetchChannelLiveCheck, fetchVideoLiveCheck } from "./live-check.mjs";
 import { ProofController } from "./proof-controller.mjs";
 import { ProofError } from "./proof-broker.mjs";
-import { ScheduleLookupCache } from "./schedule-cache.mjs";
 
 /** @typedef {import("./contracts.d.ts").FetcherSet} FetcherSet */
 /** @typedef {import("./upstream-feeds.d.ts").InnertubeFetch} InnertubeFetch */
@@ -30,8 +29,6 @@ export function createRealFetchers(options = {}) {
   let liveCheckInnertubePromise;
   /** @type {ProofController | undefined} */
   let proof;
-  // 예정 영상 일정 확인은 helper 프로세스 수명 동안 채널 RPC 사이에서 재사용합니다.
-  const scheduleCache = new ScheduleLookupCache();
 
   async function innertubeClient() {
     if (innertubePromise == null) {
@@ -82,7 +79,6 @@ export function createRealFetchers(options = {}) {
       return fetchChannelFeed({
         ...fetchOptions,
         innertube: await innertubeClient(),
-        scheduleCache,
       });
     },
     async fetchChannelLiveCheck(fetchOptions) {
