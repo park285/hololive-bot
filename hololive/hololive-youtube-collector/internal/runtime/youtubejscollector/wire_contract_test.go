@@ -61,7 +61,8 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 		}
 
 		var body struct {
-			LiveSessions []jsontext.Value `json:"live_sessions"`
+			LiveSessions            []jsontext.Value `json:"live_sessions"`
+			UnavailableLiveSessions []jsontext.Value `json:"unavailable_live_sessions"`
 		}
 
 		if err := jsonv2.Unmarshal(valid.Body, &body); err != nil {
@@ -84,7 +85,8 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if len(payload.Sessions) != len(body.LiveSessions) || payload.Query == nil || !payload.Query.AccessRestricted {
+		if len(payload.Sessions) != len(body.LiveSessions) || payload.Query == nil ||
+			payload.Query.AccessRestricted != (len(body.UnavailableLiveSessions) > 0) {
 			t.Fatalf("%s: payload = %#v", valid.Name, payload)
 		}
 	}

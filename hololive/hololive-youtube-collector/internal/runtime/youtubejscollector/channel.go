@@ -110,6 +110,7 @@ func fetchChannelPage(
 		Kind:                    kind,
 		MaxPages:                input.MaxPages(),
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
+		ScheduledFor:            new(input.Lease().ScheduledFor),
 	})
 	if err != nil {
 		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("fetch channel: %w", err)

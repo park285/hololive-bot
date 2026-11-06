@@ -165,6 +165,22 @@ Channel RPC의 필수 `kind=live|metadata`가 수집 범위를 지정합니다. 
 
 Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`, `CANCELLED`는 schedule 보강 대상이 아닙니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
 
+helper는 같은 채널·video ID의 player 예정 시각을 프로세스 메모리(`schedule-cache.mjs`, 최대 512건)에서 재사용합니다. Go는 live 요청에 lease 슬롯 시각 `scheduled_for`를 싣고, helper는 확인한 슬롯을 함께 기록합니다. 재사용한 행에는 그 슬롯 시각을 `schedule_observed_at`으로 싣습니다. API reducer는 이 시각으로 저장된 `schedule_observed_at`과 비교하므로, 다른 AP나 provider가 그 뒤에 관측한 새 일정을 옛 일정으로 되돌리지 않습니다.
+
+재사용 조건은 다음과 같습니다.
+- 목록이 그 영상을 여전히 시각 없는 `UPCOMING`으로 보이고, 더 앞선 슬롯에서 확인한 값만 재사용합니다.
+- 재사용 기간은 남은 시간의 1/6이며 5~10분입니다.
+- 시작 30분 이내·시작 시각 경과·player `LIVE` 판정·접근 제한·오류는 저장하지 않아 매 poll 다시 조회합니다.
+- 목록이 시각이나 다른 상태를 직접 보이면 해당 항목을 지웁니다.
+
+재사용 중에는 canonical `schedule_observed_at`이 나아가지 않습니다. 상한 10분은 알람 checker(UPCOMING 관측 15분 이내)와 생일 방송 조회(30분 이내)의 최신성 창 안에 fleet의 마지막 실제 확인을 남기기 위한 값입니다. 늘리려면 두 창을 함께 검토합니다. 먼 예정 영상의 일정 변경은 이 AP에서 최대 10분 늦게 보일 수 있습니다.
+
+재사용한 행은 `schedule_lookups`에 세지 않으므로 limiter slot을 지불하지 않습니다. 캐시는 AP·helper 재시작마다 비어 시작합니다. 32건 후보 상한은 재사용 여부와 무관하게 후보 전체에 적용합니다.
+
+**배포·롤백 순서:** `schedule_observed_at`을 모르는 API는 이 필드가 있는 live snapshot을 claim 단계에서 `invalid_payload`로 dead letter 처리합니다.
+- 배포는 hololive-api(shared 계약 포함)를 먼저 하고, collector를 나중에 합니다.
+- 롤백은 collector를 먼저 되돌린 뒤 API를 되돌립니다. API를 되돌리기 전에, 새 collector가 발행한 live snapshot이 모두 claim되어 처리됐는지(미처리 0) 확인합니다. 남은 관측은 옛 API가 dead letter 처리합니다.
+
 로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean을 검증합니다. 예정 시각은 RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`를 우선 사용하고, 이 값이 없으면 동일 video ID의 `playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate.liveStreamOfflineSlateRenderer.scheduledStartTime` epoch seconds를 사용합니다. 두 값이 모두 있으면 같은 시각이어야 합니다. 표시 문자열은 사용하지 않습니다. Content 목록은 helper 내부에서 player를 추가 호출하지 않습니다. Go content runner가 별도로 제한된 video-live-check RPC를 호출하여 `isUpcoming=true`, `isLiveContent=false`와 검증된 예정 시각을 신규 최초공개 근거로 사용합니다.
 
 접근 제한 예외는 `UNPLAYABLE`과 `errorScreen.playerLegacyDesktopYpcOfferRenderer`, 정확한 video ID, `isUpcoming=true`, `isLiveContent=true`가 확인되며 두 예정 시각이 모두 없는 경우에만 적용합니다. 해당 행은 `unavailable_live_sessions`의 ID·채널·`access_restricted` 사유로 분리하고 helper가 `youtubejs_live_schedule_unavailable` WARN에 공개 식별자와 사유를 기록합니다. 번역된 가입 안내문으로 분류하지 않습니다. 멤버십 영상에도 기계가독 시각이 있으면 정상 수집합니다.

@@ -8,6 +8,13 @@
 
 ## 미출시
 
+- **예정 영상 일정 확인 재사용(API 먼저 배포):** collector helper가 같은 채널·영상의 player 예정 시각을 프로세스 메모리에서 최대 10분(남은 시간의 1/6, 최소 5분) 재사용하고, 그만큼 limiter slot을 지불하지 않습니다.
+  - 운영 지표상 slot의 약 26%(초당 0.83)가 같은 영상의 반복 조회였고, AP 1대가 빠지면 남은 AP가 포화되어 `channel_live_check` 대상이 최대 약 50초 늦었습니다.
+  - 처음 구현(`cf7043073`)은 재사용한 옛 시각이 이번 관측 시각으로 발행되었습니다. 그래서 다른 AP·provider가 반영한 새 일정을 되돌릴 수 있어 되돌렸습니다(`47ae294cb`).
+  - 이번에는 Go가 live 요청에 lease 슬롯 시각을 싣습니다. helper는 재사용 행에 원래 확인 슬롯 시각을 `schedule_observed_at`으로 싣습니다. shared 계약(live snapshot generation 3)이 이 필드를 검증하고, API reducer가 이 시각으로 일정을 비교합니다.
+  - 상한 10분은 알람 checker(15분)와 생일 방송 조회(30분)의 `schedule_observed_at` 최신성 창을 지키는 값입니다.
+  - 시작 30분 이내·시작 시각 경과·`LIVE` 판정·접근 제한·오류는 매 poll 다시 조회합니다.
+  - 옛 API는 이 필드를 `invalid_payload`로 dead letter 처리하므로 API를 먼저 배포하고, 롤백은 collector부터 합니다.
 - **수집 client 정리:** 운영 경로에서 쓰지 않던 수집 client의 `getBasicInfo` 노출을 지웠습니다.
 - **collector·PO issuer 의존성 갱신:** PO issuer의 `jsdom`을 31.0.0으로 올립니다(undici 8.12.4, parse5 8.1.0 동반). 31은 CSS 엔진 교체·blocking script에서의 파싱 일시정지·canvas backend 교체가 주요 변경입니다. issuer는 script 없는 빈 문서만 만들고 canvas를 쓰지 않으므로 앞의 두 변경은 해당하지 않습니다. 다만 CSS 계산값이 달라질 수 있어, BotGuard 발급 성공은 운영 canary로 확인해야 합니다. helper는 `@types/node` 26.6.6, `@bufbuild/protobuf` 2.17.0, `meriyah` 7.4.1로, 두 package의 `packageManager`는 npm 12.2.2로 올립니다. collector·PO issuer 이미지의 Node 26.13.0 base digest는 Alpine 3.24.4로 다시 만든 판으로 바꿉니다(Node 버전은 같고, 설치 package 차이는 `apk-tools` 3.0.9뿐입니다). Go builder digest는 그대로 둡니다. Alpine 3.24.4판 Go 이미지의 `ca-certificates-bundle` 20261020에는 `scripts/build/ca-distrust.sha256`의 차단 루트가 이미 없어, `ca-distrust.sh`가 일부러 빌드를 멈추기 때문입니다. 이 갱신은 차단 목록 검토와 함께 진행해야 합니다. 다른 서비스 이미지의 base digest도 그대로 둡니다.
 

@@ -349,3 +349,67 @@ func TestCanEndMatchesContract(t *testing.T) {
 		t.Fatal("equal-time explicit end must not end")
 	}
 }
+
+func TestReduceReusedScheduleNeverRevertsANewerObservation(t *testing.T) {
+	t.Parallel()
+
+	reusedAt := time.Date(2026, time.November, 6, 1, 0, 0, 0, time.UTC)
+	newerAt := reusedAt.Add(2 * time.Minute)
+	original := reusedAt.Add(10 * time.Hour)
+	moved := original.Add(-time.Hour)
+	state := emptyState()
+
+	state.Sessions[testVideoID] = SessionState{
+		VideoID: testVideoID, ChannelID: channelCoverage().RequestedChannelIDs[0],
+		Status: domain.LiveStatusUpcoming, LifecycleOrigin: OriginObserved, Present: true,
+		ScheduledStartTime: new(moved), ScheduleObservedAt: new(newerAt),
+		Clock: LiveEvidenceClock{LastUpcomingPositiveAt: new(newerAt)},
+	}
+
+	// 다른 AP가 newerAt에 옮겨진 일정을 반영한 뒤, 캐시를 가진 AP가 reusedAt에 확인한 옛 일정을 다시 싣는다.
+	fact := sessionFact("UPCOMING")
+
+	fact.ScheduledAt = new(original)
+	fact.ScheduleObservedAt = new(reusedAt)
+
+	incoming := liveEvidence(2, newerAt.Add(2*time.Minute), contract.CompletenessComplete, contract.ContinuityContiguous, fact)
+	got := sessionOf(mustReduceAll(t, state, []Evidence{incoming}, 0))
+
+	if !got.ScheduledStartTime.Equal(moved) || !got.ScheduleObservedAt.Equal(newerAt) {
+		t.Fatalf("reused schedule replaced a newer observation: %#v", got)
+	}
+}
+
+func TestReduceReusedScheduleKeepsItsOriginalObservationTime(t *testing.T) {
+	t.Parallel()
+
+	storedAt := time.Date(2026, time.November, 6, 1, 0, 0, 0, time.UTC)
+	reusedAt := storedAt.Add(2 * time.Minute)
+	effectiveAt := reusedAt.Add(4 * time.Minute)
+	scheduled := storedAt.Add(10 * time.Hour)
+	state := emptyState()
+
+	state.Sessions[testVideoID] = SessionState{
+		VideoID: testVideoID, ChannelID: channelCoverage().RequestedChannelIDs[0],
+		Status: domain.LiveStatusUpcoming, LifecycleOrigin: OriginObserved, Present: true,
+		ScheduledStartTime: new(scheduled.Add(time.Hour)), ScheduleObservedAt: new(storedAt),
+		Clock: LiveEvidenceClock{LastUpcomingPositiveAt: new(storedAt)},
+	}
+
+	fact := sessionFact("UPCOMING")
+
+	fact.ScheduledAt = new(scheduled)
+	fact.ScheduleObservedAt = new(reusedAt)
+
+	incoming := liveEvidence(2, effectiveAt, contract.CompletenessComplete, contract.ContinuityContiguous, fact)
+	got := sessionOf(mustReduceAll(t, state, []Evidence{incoming}, 0))
+
+	if !got.ScheduledStartTime.Equal(scheduled) || !got.ScheduleObservedAt.Equal(reusedAt) {
+		t.Fatalf("reused schedule did not keep its original observation time: %#v", got)
+	}
+
+	created := sessionOf(mustReduceAll(t, emptyState(), []Evidence{incoming}, 0))
+	if !created.ScheduledStartTime.Equal(scheduled) || !created.ScheduleObservedAt.Equal(reusedAt) {
+		t.Fatalf("new session did not keep the reused observation time: %#v", created)
+	}
+}
