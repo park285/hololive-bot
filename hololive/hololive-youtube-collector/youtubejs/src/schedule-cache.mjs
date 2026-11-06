@@ -53,8 +53,7 @@ export class ScheduleLookupCache {
     if (latest !== undefined && latest >= observedAt) return;
     this.#channelSlots.delete(channelId);
     this.#channelSlots.set(channelId, observedAt);
-    // 채널 수가 상한보다 훨씬 적어 축출은 사실상 없고, 일어나도 그 채널의 겹친 요청 보호만 잃습니다.
-    // 그때도 재사용 행은 원래 슬롯 시각을 실어 API가 더 새 일정을 지킵니다.
+    // 채널 수가 상한보다 훨씬 적어 축출은 사실상 없고, 일어나면 그 채널은 다음 슬롯이 시작될 때까지 기록하지 않습니다.
     evictOldest(this.#channelSlots, this.#maxEntries);
   }
 
@@ -86,13 +85,16 @@ export class ScheduleLookupCache {
   /**
    * `observedAt` 슬롯에서 player로 새로 확인한 결과를 기록합니다. 재사용할 수 없는 결과는 기존 항목을 지웁니다.
    * 채널의 더 늦은 슬롯이 이미 시작했거나 더 늦은 슬롯의 항목이 있으면 기록하지 않습니다.
+   * 요청은 조회 전에 항상 `beginSlot`을 부르므로, 채널 기록이 없으면 상한 축출로 그 뒤 슬롯의 무효화를
+   * 알 수 없게 된 것으로 보고 기록하지 않습니다.
    * @param {string} channelId
    * @param {string} videoId
    * @param {ScheduleMetadata} metadata
    * @param {number} observedAt
    */
   remember(channelId, videoId, metadata, observedAt) {
-    if ((this.#channelSlots.get(channelId) ?? -Infinity) > observedAt) return;
+    const latestSlot = this.#channelSlots.get(channelId);
+    if (latestSlot === undefined || latestSlot > observedAt) return;
     const key = cacheKey(channelId, videoId);
     if ((this.#entries.get(key)?.observedAt ?? -Infinity) > observedAt) return;
     this.#entries.delete(key);
