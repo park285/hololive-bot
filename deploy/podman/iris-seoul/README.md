@@ -51,4 +51,5 @@ PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_ROLLBACK=true scripts/deploy/po-central-
 4. 실행 중 container 기준으로 `worker-profile-pair.py prepare youtube-collector-b …/releases/podman-cutover-20261106T1148Z/youtube-collector-b/previous`로
    첫 drop-in을 만들고 재시작해 `verify-live`를 확인했다. profile hash는 Docker 시절과 같다.
 
-Docker 쪽 컨테이너·compose 파일·`~/hololive-bot` 배포 트리는 롤백용으로 남겨 두었다. 삭제는 별도 승인 뒤에 한다.
+같은 날 사용자 승인으로 Docker 쪽 b 컨테이너·볼륨·이미지·compose 네트워크와 compose 파일, `~/hololive-bot` 배포 트리를 지웠다.
+Docker 전환 이전 상태로의 롤백 경로는 더 없다. Docker에는 Redroid와 그 이미지만 남는다.
