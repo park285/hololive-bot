@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/require"
 
 	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"

@@ -27,7 +27,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/park285/iris-client-go/v4/webhook"
+	"github.com/park285/iris-client-go/v5/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

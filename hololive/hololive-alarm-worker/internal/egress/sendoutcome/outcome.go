@@ -7,7 +7,7 @@ import (
 	"net"
 	"slices"
 
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 )
 
 // Kind는 발송 결과의 증거를 나타냅니다. 재시도 허용은 각 저장소 정책이 결정합니다. Success는 Iris durable

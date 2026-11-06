@@ -4,7 +4,7 @@
 # DB migration·schema·secret mirror는 되돌리지 않는다. 호환성 판정은 docs/current/runbooks/rollback.md를 따른다.
 #   --check(기본): pair checksum·image identity 대조와 이전 image의 --check-worker-profile(network none)만 한다.
 #   --apply: 이전 pair drop-in을 게시하고 daemon-reload 뒤 unit을 재시작해 실행 중 profile과 NRestarts를 확인한다.
-# quadlet-redeploy-service.sh는 활성화 뒤 실패하면 이 스크립트를 --apply로 한 번 호출한다.
+# 배포 helper는 자동으로 호출하지 않는다. --apply는 호환성과 실제 unit 상태를 검토한 별도 승인 뒤에만 실행한다.
 set -Eeuo pipefail
 
 die() { echo "[quadlet-rollback] $*" >&2; exit 1; }

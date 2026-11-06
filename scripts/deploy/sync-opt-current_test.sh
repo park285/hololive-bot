@@ -96,6 +96,7 @@ host_snapshot() {
 
 run_sync() {
   local host="$1" repo="$2"
+  shift 2
   : >"${host}/events"
   # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
   unshare --user --map-root-user --mount bash -c '
@@ -110,7 +111,7 @@ run_sync() {
     exec "$@"
   ' _ "${host}" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
     REPO_ROOT="${repo}" OPT_ROOT="${host}/opt" \
-    bash "${ROOT_DIR}/scripts/deploy/sync-opt-current.sh" >"${host}/out" 2>&1
+    bash "${ROOT_DIR}/scripts/deploy/sync-opt-current.sh" "$@" >"${host}/out" 2>&1
 }
 
 assert_rejected_without_change() {
@@ -193,5 +194,63 @@ printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >>"${host}/etc-stack-secrets/hololive-
 assert_rejected_without_change "${host}" "${base_repo}" "connection budget" \
   "PostgreSQL connection budget check failed"
 pass "an exhausted PostgreSQL connection budget leaves /opt, prestart, units and daemon state untouched"
+
+# 5. artifact-only 갱신은 현재 runtime bytes·mode를 유지하고 작업 트리의 미검토 설정을 복사하지 않는다.
+host="${tmp}/host-preserved-runtime"
+make_host "${host}" 0
+for path in data logs backups runtime-config artifacts/worker-profile; do
+  mkdir -p "${host}/opt/current/${path}"
+  printf 'runtime-owned\n' >"${host}/opt/current/${path}/retained"
+  chmod 0660 "${host}/opt/current/${path}/retained"
+done
+mkdir -p "${base_repo}/runtime-config"
+printf 'unreviewed\n' >"${base_repo}/runtime-config/unreviewed"
+runtime_snapshot() {
+  (cd "$1/opt/current" && find data logs backups runtime-config artifacts/worker-profile \
+    -printf '%p %m %U:%G\n' -type f -exec sha256sum {} + | LC_ALL=C sort)
+}
+runtime_before="$(runtime_snapshot "${host}")"
+run_sync "${host}" "${base_repo}" --preserve-runtime ||
+  { cat "${host}/out" >&2; fail "runtime-preserving sync failed"; }
+[[ "$(runtime_snapshot "${host}")" == "${runtime_before}" ]] ||
+  fail "artifact-only sync changed runtime bytes, ownership or mode"
+for backup in "${host}/opt/"current.bak-*; do
+  [[ ! -e "${backup}/runtime-config" ]] || fail "artifact-only backup copied runtime configuration"
+done
+pass "artifact-only sync preserves runtime bytes and metadata without copying runtime configuration"
+
+# 6. 같은 revision을 다시 반영해도 기존 backup을 덮거나 보존 개수만으로 지우지 않는다.
+host="${tmp}/host-retained-backups"
+make_host "${host}" 0
+for number in 1 2 3 4; do
+  mkdir -p "${host}/opt/current.bak-old-${number}"
+  printf 'retained-%s\n' "${number}" >"${host}/opt/current.bak-old-${number}/marker"
+done
+run_sync "${host}" "${base_repo}" || { cat "${host}/out" >&2; fail "first retained-backup sync failed"; }
+initial_recovery=""
+for backup in "${host}/opt/"current.bak-*; do
+  if [[ -f "${backup}/marker" && "$(<"${backup}/marker")" == "old current" ]]; then
+    initial_recovery="${backup}"
+  fi
+done
+[[ -f "${initial_recovery}/marker" && "$(<"${initial_recovery}/marker")" == "old current" ]] ||
+  fail "first sync did not retain the original execution tree"
+run_sync "${host}" "${base_repo}" || { cat "${host}/out" >&2; fail "repeated retained-backup sync failed"; }
+[[ -f "${initial_recovery}/marker" && "$(<"${initial_recovery}/marker")" == "old current" ]] ||
+  fail "same-revision sync replaced the original recovery point"
+for number in 1 2 3 4; do
+  [[ "$(cat "${host}/opt/current.bak-old-${number}/marker")" == "retained-${number}" ]] ||
+    fail "repeated sync changed a previous backup"
+done
+source_recovery=""
+for backup in "${host}/opt/"current.bak-*; do
+  if [[ -f "${backup}/.source-revision" ]]; then
+    source_recovery="${backup}"
+  fi
+done
+[[ -f "${source_recovery}/.source-revision" &&
+  "$(<"${source_recovery}/.source-revision")" == "$(git -C "${base_repo}" rev-parse HEAD)" ]] ||
+  fail "repeated sync did not retain the previously deployed source"
+pass "repeated sync retains every earlier recovery point"
 
 echo "all sync-opt-current checks passed"

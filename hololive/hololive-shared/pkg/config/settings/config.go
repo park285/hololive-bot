@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"

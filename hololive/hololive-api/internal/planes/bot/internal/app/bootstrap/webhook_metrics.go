@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/webhook"
+	"github.com/park285/iris-client-go/v5/webhook"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

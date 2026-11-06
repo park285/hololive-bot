@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 )
 
 const (

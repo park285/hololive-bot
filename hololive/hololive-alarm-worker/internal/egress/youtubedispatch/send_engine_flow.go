@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/iris"
+	"github.com/park285/iris-client-go/v5/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"

@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v4/iris"
-	"github.com/park285/iris-client-go/v4/webhook"
+	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v5/webhook"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -115,6 +115,13 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ca
 	reqCh := make(chan capturedReplyRequest, capacity)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /auth/epoch", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := jsonv2.MarshalWrite(w, map[string]string{"epoch": "0123456789abcdef0123456789abcdef"}); err != nil {
+			t.Errorf("encode epoch response: %v", err)
+		}
+	})
 	mux.HandleFunc("/reply", func(w http.ResponseWriter, r *http.Request) {
 		var req capturedReplyRequest
 

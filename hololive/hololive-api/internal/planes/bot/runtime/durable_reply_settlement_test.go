@@ -5,9 +5,13 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
@@ -84,6 +88,64 @@ func TestReplySettlementAfterCancellationHoldsRoomOrder(t *testing.T) {
 				require.Zero(t, totals.Failed)
 			}
 		})
+	}
+}
+
+func TestEpochBootstrapFailurePreservesStoredReplyPayload(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	repository := newTestReplyOutboxRepository(t, pool)
+	_, err := repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
+		MessageID: "message:epoch-bootstrap", Phase: transport.ReplyPhase, RoomID: testRoomID,
+		Payload:         []byte(`{"kind":"text","message":"answer"}`),
+		ClientRequestID: transport.ReplyClientRequestID("message:epoch-bootstrap", 0),
+	})
+	require.NoError(t, err)
+
+	claim, err := repository.Claim(t.Context(), "epoch-bootstrap-token", time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+
+	var discoveries, protected atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/auth/epoch" {
+			discoveries.Add(1)
+		} else {
+			protected.Add(1)
+		}
+
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+
+	defer server.Close()
+
+	client, err := iris.NewClient(
+		iris.WithBaseURL(server.URL), iris.WithBotToken("fixture-token"),
+		iris.WithHTTPClient(server.Client()), iris.WithReplyRetry(3),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	requestID, dispatchErr := transport.DispatchStoredReply(t.Context(), client, claim.RoomID, claim.Payload, claim.ClientRequestID)
+	require.Error(t, dispatchErr)
+	require.Equal(t, int32(1), discoveries.Load())
+	require.Zero(t, protected.Load())
+
+	runtime := &durableRuntime{outbox: repository, settlementTimeout: 3 * time.Second, outboxMaxAttempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts}
+	status := replyOutboxSettlementStatusWithMaxAttempts(claim.Attempts, runtime.outboxMaxAttempts, dispatchErr)
+	applied, err := runtime.settleOutboxDispatch(t.Context(), claim, "epoch-bootstrap-token", status, requestID, dispatchErr)
+	require.NoError(t, err)
+	require.True(t, applied)
+
+	var (
+		rowStatus   string
+		payloadKept bool
+	)
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT status, payload IS NOT NULL FROM bot_reply_outbox WHERE id = $1", claim.ID).Scan(&rowStatus, &payloadKept))
+
+	if rowStatus != durability.ReplyOutboxRetryablePreDispatch || !payloadKept {
+		t.Fatalf("temporary bootstrap failure settled as %q with payload_kept=%t", rowStatus, payloadKept)
 	}
 }
 
