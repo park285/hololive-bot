@@ -263,6 +263,10 @@ func normalizeLiveSessionTimes(session *LiveSessionV1) error {
 		return fmt.Errorf("live scheduled at: %w", err)
 	}
 
+	if err := normalizeOptionalTime(&session.ScheduleObservedAt); err != nil {
+		return fmt.Errorf("live schedule observed at: %w", err)
+	}
+
 	if err := normalizeOptionalTime(&session.StartedAt); err != nil {
 		return fmt.Errorf("live started at: %w", err)
 	}

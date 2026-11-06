@@ -7,6 +7,7 @@ import { Utils } from "youtubei.js";
 import { fetchChannelFeed, liveSessionRows, mapPhoto, mapProfile } from "./fetch-channel.mjs";
 import { handleChannelRequest } from "./rpc-boundary.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
+import { ScheduleLookupCache } from "./schedule-cache.mjs";
 
 const liveBadges = [{ style: "BADGE_STYLE_TYPE_LIVE_NOW" }];
 const lockupFixture = JSON.parse(
@@ -65,6 +66,199 @@ test("a restricted-only feed preserves its unresolved identity and is rechecked 
   assert.equal(second.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
   assert.equal(second.unavailable_live_sessions, undefined);
   assert.equal(calls, 2);
+});
+
+function steppingClock(startIso) {
+  let now = Date.parse(startIso);
+  return { now: () => now, advance: (ms) => { now += ms; } };
+}
+
+test("a reused far-future schedule skips the player, reports no lookup, and keeps its lookup time", async () => {
+  // fixture 예정 시각(11:00Z)보다 10시간 앞이므로 재사용 구간에 듭니다.
+  const time = steppingClock("2026-09-01T01:00:00Z");
+  const scheduleCache = new ScheduleLookupCache({ now: time.now });
+  const calls = [];
+  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+    calls.push(videoId);
+    return rawPlayerResponse(videoId);
+  });
+  const request = (scheduledFor) => JSON.stringify({
+    protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32,
+    scheduled_for: scheduledFor, max_success_response_bytes: 1048576,
+  });
+  const fetcher = (options) => fetchChannelFeed({ ...options, innertube, scheduleCache });
+  const first = await handleChannelRequest(request("2026-09-01T00:59:30Z"), fetcher);
+  time.advance(2 * 60_000);
+  const second = await handleChannelRequest(request("2026-09-01T01:01:30Z"), fetcher);
+  // 같은 슬롯의 재시도는 재사용하지 않고 player로 다시 확인합니다.
+  const retry = await handleChannelRequest(request("2026-09-01T00:59:30Z"), fetcher);
+  assert.equal(first.body.schedule_lookups, 1);
+  assert.equal(first.body.live_sessions[0].schedule_observed_at, undefined);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.schedule_lookups, 0);
+  assert.deepEqual(second.body.live_sessions, [{
+    ...first.body.live_sessions[0], schedule_observed_at: "2026-09-01T00:59:30.000Z",
+  }]);
+  assert.equal(retry.body.schedule_lookups, 1);
+  assert.equal(retry.body.live_sessions[0].schedule_observed_at, undefined);
+  assert.deepEqual(calls, ["later", "later"]);
+});
+
+test("near-start schedules, player LIVE transitions, and restrictions are rechecked every poll", async (t) => {
+  t.mock.method(process.stderr, "write", () => true);
+  const time = steppingClock("2026-09-01T10:40:00Z");
+  const scheduleCache = new ScheduleLookupCache({ now: time.now });
+  const calls = [];
+  const innertube = stubChannel({ videos: [
+    { id: "soon", is_upcoming: true },
+    { id: "early-start", is_upcoming: true },
+    { id: "restricted-fixture", is_upcoming: true },
+  ] }, async (_, { videoId }) => {
+    calls.push(videoId);
+    if (videoId === "restricted-fixture") return { success: true, status_code: 200, data: restrictedFixture };
+    return videoId === "early-start"
+      ? rawPlayerResponse(videoId, { isLive: true, isUpcoming: false, startTimestamp: "2026-09-01T10:39:00Z" })
+      : rawPlayerResponse(videoId);
+  });
+  for (let poll = 0; poll < 2; poll++) {
+    const scheduledFor = new Date(time.now()).toISOString();
+    const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor });
+    assert.equal(result.schedule_lookups, 3);
+    assert.deepEqual(result.live_sessions.map((item) => [item.video_id, item.status, item.schedule_observed_at]),
+      [["soon", "UPCOMING", undefined], ["early-start", "LIVE", undefined]]);
+    time.advance(2 * 60_000);
+  }
+  assert.equal(calls.length, 6);
+});
+
+test("a schedule the streams tab shows directly clears the reused lookup", async () => {
+  const time = steppingClock("2026-09-01T01:00:00Z");
+  const scheduleCache = new ScheduleLookupCache({ now: time.now });
+  let feed = { videos: [{ id: "later", is_upcoming: true }] };
+  let calls = 0;
+  const innertube = {
+    getChannel: async () => channelFixture({
+      getAbout: async () => ({}),
+      getLiveStreams: async () => channelFixture({ has_continuation: undefined, ...feed }),
+    }),
+    actions: { execute: async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); } },
+  };
+  await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:00:00Z" });
+  assert.equal(scheduleCache.size, 1);
+  feed = { videos: [{ id: "later", is_upcoming: true, upcoming: new Date("2026-09-01T12:00:00Z") }] };
+  time.advance(2 * 60_000);
+  await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:02:00Z" });
+  // 목록이 다시 시각을 감추면 재사용하지 않고 player로 확인합니다.
+  feed = { videos: [{ id: "later", is_upcoming: true }] };
+  time.advance(2 * 60_000);
+  const next = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:04:00Z" });
+  assert.equal(next.schedule_lookups, 1);
+  assert.equal(calls, 2);
+});
+
+test("a slower lookup from an earlier slot never revives an entry a later slot invalidated", async () => {
+  const time = steppingClock("2026-09-01T01:00:00Z");
+  const scheduleCache = new ScheduleLookupCache({ now: time.now });
+  let releaseEarlier = () => {};
+  const earlier = new Promise((resolve) => { releaseEarlier = resolve; });
+  let earlierStarted = () => {};
+  const started = new Promise((resolve) => { earlierStarted = resolve; });
+  let calls = 0;
+  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+    calls++;
+    if (calls === 1) {
+      earlierStarted();
+      await earlier;
+      return rawPlayerResponse(videoId);
+    }
+    // 다음 슬롯은 시작이 임박한 옮겨진 일정을 확인하므로 재사용하지 않고 매 poll 다시 확인해야 합니다.
+    return rawPlayerResponse(videoId, { startTimestamp: "2026-09-01T01:15:00Z" });
+  });
+  const poll = (scheduledFor) => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor });
+  const slow = poll("2026-09-01T01:00:00Z");
+  await started;
+  time.advance(2 * 60_000);
+  const moved = await poll("2026-09-01T01:02:00Z");
+  releaseEarlier();
+  const stale = await slow;
+  time.advance(2 * 60_000);
+  const next = await poll("2026-09-01T01:04:00Z");
+  assert.equal(moved.live_sessions[0].scheduled_at, "2026-09-01T01:15:00.000Z");
+  assert.equal(stale.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
+  assert.equal(next.schedule_lookups, 1);
+  assert.equal(next.live_sessions[0].scheduled_at, "2026-09-01T01:15:00.000Z");
+  assert.equal(next.live_sessions[0].schedule_observed_at, undefined);
+});
+
+test("a later slot that sees the schedule in the listing stops an earlier slot from caching", async () => {
+  const time = steppingClock("2026-09-01T01:00:00Z");
+  const scheduleCache = new ScheduleLookupCache({ now: time.now });
+  let releaseEarlier = () => {};
+  const earlier = new Promise((resolve) => { releaseEarlier = resolve; });
+  let earlierStarted = () => {};
+  const started = new Promise((resolve) => { earlierStarted = resolve; });
+  const untimed = { videos: [{ id: "later", is_upcoming: true }] };
+  const listings = [
+    async () => { earlierStarted(); await earlier; return untimed; },
+    async () => ({ videos: [{ id: "later", is_upcoming: true, upcoming: new Date("2026-09-01T01:15:00Z") }] }),
+    async () => untimed,
+  ];
+  let calls = 0;
+  const innertube = {
+    getChannel: async () => channelFixture({
+      getAbout: async () => ({}),
+      getLiveStreams: async () => channelFixture({ has_continuation: undefined, ...await listings.shift()() }),
+    }),
+    actions: { execute: async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); } },
+  };
+  const poll = (scheduledFor) => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor });
+  // 앞 슬롯이 streams 응답을 기다리는 동안 뒤 슬롯이 목록에서 시각을 직접 봅니다. 그 영상은 아직 캐시에 없습니다.
+  const slow = poll("2026-09-01T01:00:00Z");
+  await started;
+  time.advance(2 * 60_000);
+  await poll("2026-09-01T01:02:00Z");
+  releaseEarlier();
+  const stale = await slow;
+  time.advance(2 * 60_000);
+  const next = await poll("2026-09-01T01:04:00Z");
+  assert.equal(stale.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
+  assert.equal(next.schedule_lookups, 1);
+  assert.equal(next.live_sessions[0].schedule_observed_at, undefined);
+  assert.equal(calls, 2);
+});
+
+test("a failed same-slot recheck stops reuse until the player confirms again", async () => {
+  const time = steppingClock("2026-09-01T01:00:00Z");
+  const scheduleCache = new ScheduleLookupCache({ now: time.now });
+  let calls = 0;
+  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+    calls++;
+    if (calls === 2) throw new Error("upstream reset");
+    return rawPlayerResponse(videoId);
+  });
+  const poll = (scheduledFor) => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor });
+  await poll("2026-09-01T01:00:00Z");
+  await assert.rejects(poll("2026-09-01T01:00:00Z"), /upstream reset/);
+  time.advance(2 * 60_000);
+  const next = await poll("2026-09-01T01:02:00Z");
+  assert.equal(next.schedule_lookups, 1);
+  assert.equal(next.live_sessions[0].schedule_observed_at, undefined);
+  assert.equal(calls, 3);
+});
+
+test("without a lease slot time the helper neither reuses nor records schedules", async () => {
+  const scheduleCache = new ScheduleLookupCache({ now: () => Date.parse("2026-09-01T01:00:00Z") });
+  let calls = 0;
+  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+    calls++;
+    return rawPlayerResponse(videoId);
+  });
+  for (let poll = 0; poll < 2; poll++) {
+    const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache });
+    assert.equal(result.schedule_lookups, 1);
+  }
+  assert.equal(calls, 2);
+  assert.equal(scheduleCache.size, 0);
 });
 
 test("restricted filtering never hides a conflicting duplicate or foreign channel row", async (t) => {
@@ -419,13 +613,16 @@ test("a failed live RPC reports the player lookups sent before the failure", asy
   assert.equal(result.body.schedule_lookups, 2);
 });
 
-test("live requests carry the lookup budget and metadata requests never do", async () => {
+test("live requests carry the lookup budget and lease slot, and metadata requests never do", async () => {
   const fetcher = async () => { throw new Error("unexpected fetch"); };
   for (const body of [
     { kind: "live", channel_id: "UC_TEST" },
     { kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 33 },
     { kind: "live", channel_id: "UC_TEST", max_schedule_lookups: -1 },
     { kind: "metadata", channel_id: "UC_TEST", max_schedule_lookups: 0 },
+    { kind: "metadata", channel_id: "UC_TEST", scheduled_for: "2026-09-01T01:00:00Z" },
+    { kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, scheduled_for: "yesterday" },
+    { kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, scheduled_for: 1_788_000_000_000 },
   ]) {
     const result = await handleChannelRequest(JSON.stringify({ protocol_version: 1, max_success_response_bytes: 1048576, ...body }), fetcher);
     assert.equal(result.status, 400, JSON.stringify(body));

@@ -65,6 +65,7 @@ func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error
 			TopicID:            payload.Sessions[i].TopicID,
 			ThumbnailURL:       payload.Sessions[i].ThumbnailURL,
 			ScheduledAt:        payload.Sessions[i].ScheduledAt,
+			ScheduleObservedAt: payload.Sessions[i].ScheduleObservedAt,
 			StartedAt:          payload.Sessions[i].StartedAt,
 			EndedAt:            payload.Sessions[i].EndedAt,
 			LiveStartConfirmed: liveStartConfirmed(observation.Provider, &payload.Sessions[i]),

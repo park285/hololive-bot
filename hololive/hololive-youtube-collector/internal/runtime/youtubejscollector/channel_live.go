@@ -70,7 +70,7 @@ func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *col
 		return nil, fmt.Errorf("fetch channel page: %w", err)
 	}
 
-	if validateErr := validateLiveSchedules(result.LiveSessions); validateErr != nil {
+	if validateErr := validateLiveSchedules(result.LiveSessions, input.Lease().ScheduledFor); validateErr != nil {
 		return nil, fmt.Errorf("validate live schedules: %w", validateErr)
 	}
 

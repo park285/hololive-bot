@@ -12,6 +12,7 @@ type payloadDecodeInput struct {
 	subjectKey         string
 	completeness       Completeness
 	contractGeneration int64
+	scheduledFor       time.Time
 	observedAt         time.Time
 	schemaVersion      int16
 }
@@ -52,6 +53,7 @@ func canonicalPayloadAndScope(envelope *Envelope) (payloadJSON, coverageJSON []b
 		subjectKey:         envelope.SubjectKey,
 		completeness:       envelope.Completeness,
 		contractGeneration: envelope.ContractGeneration,
+		scheduledFor:       envelope.ScheduledFor,
 		observedAt:         envelope.ObservedAt,
 		schemaVersion:      envelope.SchemaVersion,
 	})
@@ -168,7 +170,38 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 		return nil, nil, err
 	}
 
+	if err := validateLiveScheduleObservations(&value, input); err != nil {
+		return nil, nil, err
+	}
+
 	return value, value.Coverage, nil
+}
+
+// validateLiveScheduleObservations는 재사용 일정의 원래 관측 시각이 effective time과 같은 lease 슬롯 시계에서
+// 이번 슬롯보다 앞서는지 확인한다. 같거나 늦은 값은 재사용 일정이 더 새 관측을 덮어쓰게 하므로 거부한다.
+func validateLiveScheduleObservations(value *LiveSnapshotV1, input payloadDecodeInput) error {
+	for i := range value.Sessions {
+		observed := value.Sessions[i].ScheduleObservedAt
+		if observed == nil {
+			continue
+		}
+
+		if input.contractGeneration != LiveSnapshotQueryContractGeneration {
+			return errors.New("only streams-query live snapshots can carry schedule observation times")
+		}
+
+		if value.Sessions[i].Status != "UPCOMING" || value.Sessions[i].ScheduledAt == nil {
+			return errors.New("schedule observation time requires an upcoming scheduled time")
+		}
+
+		slot := input.scheduledFor.UTC()
+		if !observed.Before(slot) || observed.Before(slot.Add(-LiveScheduleObservationMaxAge)) {
+			return fmt.Errorf("schedule observation time %s is outside the reuse window before %s",
+				observed.Format(time.RFC3339Nano), slot.Format(time.RFC3339Nano))
+		}
+	}
+
+	return nil
 }
 
 func validateLiveSnapshotQueryProof(value *LiveSnapshotV1, input payloadDecodeInput) error {

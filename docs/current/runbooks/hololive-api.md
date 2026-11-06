@@ -195,7 +195,7 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(sudo podman exec hololiv
   | grep -E 'process_resident_memory_bytes|go_memstats_heap_inuse_bytes|go_memstats_heap_idle_bytes|go_gc_duration_seconds|go_goroutines'
 ```
 
-- GC 압력은 `go_gc_duration_seconds`(pause 합) 증가율과 `go_memstats_heap_inuse_bytes`가 `GOMEMLIMIT`(1024MiB)에 근접하는지로 본다. GC-CPU 비중 metric의 정확한 이름은 빌드된 client_golang 버전에 따라 다르므로 `curl … | grep go_` 로 실제 노출 항목을 먼저 확인한다(검증 필요).
+- GC 압력은 `go_gc_duration_seconds`(pause 합) 증가율과 `go_memstats_heap_inuse_bytes`가 `GOMEMLIMIT`(600MiB)에 근접하는지로 본다. GC-CPU 비중 metric의 정확한 이름은 빌드된 client_golang 버전에 따라 다르므로 `curl … | grep go_` 로 실제 노출 항목을 먼저 확인한다(검증 필요).
 - pprof는 `:30061`(`HOLOLIVE_API_PPROF_ADDR`)에 있고 동일하게 `X-API-Key`가 필요하다.
 
 ### DB pool·YouTube plane DB 슬롯 지표
@@ -421,15 +421,15 @@ bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spik
 
 아래 수치는 운영 시작 기준선입니다. 실측 baseline 확보 후 조정합니다.
 
-- **RSS**: `podman stats`의 MEM USAGE가 **1.1GiB(limit 1280m 대비)를 5분 이상 초과** 시 경고. limit(1280m)·`pids: 512` 근접 시 OOM/pid-kill 위험 → incident.
-- **Heap vs GOMEMLIMIT**: `go_memstats_heap_inuse_bytes`가 `GOMEMLIMIT`(1024MiB)에 지속 근접하면 GC thrash 구간 → `go_gc_duration_seconds` 증가율 동반 확인. GC가 CPU의 ~10%를 지속 점유하면 조사(정확한 GC-CPU metric 이름은 `grep go_`로 확인).
+- **RSS**: `podman stats`의 MEM USAGE가 **650MiB(limit 768m 대비)를 5분 이상 초과** 시 경고. limit(768m)·`pids: 512` 근접 시 OOM/pid-kill 위험 → incident. 2026-11-06 기준 30일 최대 RSS는 308MiB다.
+- **Heap vs GOMEMLIMIT**: `go_memstats_heap_inuse_bytes`가 `GOMEMLIMIT`(600MiB)에 지속 근접하면 GC thrash 구간 → `go_gc_duration_seconds` 증가율 동반 확인. GC가 CPU의 ~10%를 지속 점유하면 조사(정확한 GC-CPU metric 이름은 `grep go_`로 확인).
 - **bot webhook p99**: Iris webhook 타임아웃(5s) 기준. **p99가 2s를 지속 초과하면 경고, 5s에 근접하면 reply drop → incident.**
 - **pgx acquire latency**: plane별 pool max 4라 contention 민감. **acquire p99 > 50ms 지속 → 경고, > 500ms → pool 고갈 임박(incident).**
 - **unit restart**: `systemctl show hololive-api.service -p NRestarts`가 1 이상이거나 journal에 unhealthy 정지·재시작이 남으면 **즉시 incident triage**(정상 운영 중에는 0이어야 함).
 
 ### 관찰 항목
 
-- Go RSS / heap inuse·idle, GC pause·GC CPU 비중 (GOMEMLIMIT 1024MiB, 컨테이너 limit 1280m·pids 512 대비 여유) — `Metrics` 절 명령 사용
+- Go RSS / heap inuse·idle, GC pause·GC CPU 비중 (GOMEMLIMIT 600MiB, 컨테이너 limit 768m·pids 512 대비 여유) — `Metrics` 절 명령 사용
 - PostgreSQL connection 수 — plane별 pool 합산(bot/admin/llm 각 max 4 + YouTube plane max 2 = 최대 14) + alarm-worker(max 8)/collector AP 4×8=32/migration 포함 전체 budget. plane 단위 구분은 불가(같은 client_addr/usename — `Metrics` 절 참조)
 - pgx acquire latency, Valkey command latency(slowlog/--latency), H3 handshake error rate
 - bot webhook p95/p99, admin API p95/p99, LLM scheduler job lag

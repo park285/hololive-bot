@@ -105,6 +105,8 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 	request.MaxScheduleLookups = 0
 	if request.Kind == "live" {
 		request.MaxScheduleLookups = ChannelLiveMaxScheduleLookups
+	} else {
+		request.ScheduledFor = nil
 	}
 
 	// helper에 요청을 다 보냈는지 기록합니다. 보낸 뒤 조회 수를 받지 못하면 상한만큼 지불해야 합니다.

@@ -189,6 +189,25 @@
           }
         },
         {
+          "name": "live snapshot with a schedule reused from an earlier lease slot",
+          "subject": "UCchannelReuse",
+          "kind": "live",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [
+              { "video_id": "upcoming001", "channel_id": "UCchannelReuse", "status": "UPCOMING", "title": "Upcoming", "scheduled_at": "2099-01-01T00:00:00.000Z", "schedule_observed_at": "2026-08-14T00:58:00.000Z" }
+            ],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "schedule_lookups": 0,
+            "live_query": { "channel_id": "UCchannelReuse", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
+          }
+        },
+        {
           "name": "metadata profile and photo",
           "subject": "UCchannelMeta",
           "kind": "metadata",
@@ -208,6 +227,23 @@
         }
       ],
       "invalid": [
+        {
+          "name": "reused schedule observation time on a live row",
+          "subject": "UCchannelLive",
+          "go_rejects_at": "envelope",
+          "body": {
+            "protocol_version": 1,
+            "live_sessions": [{ "video_id": "liveVideo01", "channel_id": "UCchannelLive", "status": "LIVE", "scheduled_at": "2026-08-14T00:30:00.000Z", "schedule_observed_at": "2026-08-14T00:58:00.000Z" }],
+            "profile": {},
+            "photo": [],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "NOT_APPLICABLE",
+            "termination_reason": "exhausted",
+            "schedule_lookups": 0,
+            "live_query": { "channel_id": "UCchannelLive", "source": "streams", "statuses": ["ENDED", "LIVE", "UPCOMING"], "exhausted": true, "access_restricted": false, "page_count": 1 }
+          }
+        },
         {
           "name": "unknown live session field",
           "go_rejects_at": "decode",

@@ -20,7 +20,6 @@ export function createCollectionClient(client) {
   return {
     actions: client.actions,
     session: client.session,
-    getBasicInfo: client.getBasicInfo.bind(client),
     async getChannel(channelId) {
       return runUpstream(async () => {
         throwIfAborted();

@@ -61,7 +61,8 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 		}
 
 		var body struct {
-			LiveSessions []jsontext.Value `json:"live_sessions"`
+			LiveSessions            []jsontext.Value `json:"live_sessions"`
+			UnavailableLiveSessions []jsontext.Value `json:"unavailable_live_sessions"`
 		}
 
 		if err := jsonv2.Unmarshal(valid.Body, &body); err != nil {
@@ -84,8 +85,26 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if len(payload.Sessions) != len(body.LiveSessions) || payload.Query == nil || !payload.Query.AccessRestricted {
+		if len(payload.Sessions) != len(body.LiveSessions) || payload.Query == nil ||
+			payload.Query.AccessRestricted != (len(body.UnavailableLiveSessions) > 0) {
 			t.Fatalf("%s: payload = %#v", valid.Name, payload)
+		}
+
+		// 재사용 일정의 원래 확인 슬롯이 발행 payload까지 그대로 전달되어야 reducer가 더 새 일정을 지킵니다.
+		for i := range body.LiveSessions {
+			var session struct {
+				ScheduleObservedAt *time.Time `json:"schedule_observed_at"`
+			}
+
+			if err := jsonv2.Unmarshal(body.LiveSessions[i], &session); err != nil {
+				t.Fatal(err)
+			}
+
+			got := payload.Sessions[i].ScheduleObservedAt
+			if (session.ScheduleObservedAt == nil) != (got == nil) ||
+				(got != nil && !got.Equal(*session.ScheduleObservedAt)) {
+				t.Fatalf("%s: session %d schedule observed at = %v, want %v", valid.Name, i, got, session.ScheduleObservedAt)
+			}
 		}
 	}
 }

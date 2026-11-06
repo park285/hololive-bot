@@ -8,7 +8,7 @@ Wants=network-online.target
 
 [Container]
 ContainerName=hololive-youtube-collector-d
-Image=docker.io/library/hololive-youtube-collector:kapu-13.3.0
+Image=docker.io/library/hololive-youtube-collector:kapu-14.0.0
 Pull=never
 User=1000:1000
 GroupAdd=1002

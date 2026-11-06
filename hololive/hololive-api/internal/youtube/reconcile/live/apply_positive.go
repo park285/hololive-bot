@@ -1,6 +1,10 @@
 package live
 
-import "github.com/kapu/hololive-shared/pkg/domain"
+import (
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
 
 func applyUpcomingPositive(session *reduceSession, fact *SessionFact) {
 	existing, ok := session.state.Sessions[fact.VideoID]
@@ -29,7 +33,7 @@ func applyUpcomingPositive(session *reduceSession, fact *SessionFact) {
 	}
 
 	if existing.Clock.LastUpcomingPositiveAt != nil && session.evidence.EffectiveAt.Before(*existing.Clock.LastUpcomingPositiveAt) {
-		recordApplication(session, fact.VideoID, "OLDER_POSITIVE_RETAINED")
+		applyLateSchedule(session, &existing, fact)
 
 		return
 	}
@@ -154,10 +158,48 @@ func newSession(fact *SessionFact, status domain.LiveStatus, evidence *Evidence)
 	}
 
 	if fact.ScheduledAt != nil {
-		created.ScheduleObservedAt = copyTime(evidence.EffectiveAt)
+		created.ScheduleObservedAt = copyTime(scheduleObservedAt(fact, evidence))
 	}
 
 	return created
+}
+
+// applyLateSchedule은 상태 관측으로는 늦게 도착한 앞 슬롯의 UPCOMING 사실에서 일정만 비교해 반영한다.
+// 재사용 일정은 더 늦은 슬롯에 실려 상태 시계를 먼저 올리지만 원래 확인 시각은 이르므로, 상태 시계 순서만으로
+// 버리면 그 사이에 다른 AP·provider가 확인한 새 일정이 사라진다. 상태·제목·시계는 더 늦은 관측의 값을 유지한다.
+func applyLateSchedule(session *reduceSession, existing *SessionState, fact *SessionFact) {
+	observed, newer := newerScheduleObservation(existing, fact, session.evidence)
+	if !newer {
+		recordApplication(session, fact.VideoID, "OLDER_POSITIVE_RETAINED")
+
+		return
+	}
+
+	updated := *existing
+
+	updated.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
+	updated.ScheduleObservedAt = copyTime(observed)
+	session.state.Sessions[fact.VideoID] = updated
+	markDirty(session, fact.VideoID)
+	recordApplication(session, fact.VideoID, "APPLIED")
+}
+
+// newerScheduleObservation은 사실의 일정 확인 시각과, 그 일정이 저장된 일정보다 나중에 확인한 값인지를 돌려준다.
+func newerScheduleObservation(existing *SessionState, fact *SessionFact, evidence *Evidence) (time.Time, bool) {
+	observed := scheduleObservedAt(fact, evidence)
+
+	return observed, fact.ScheduledAt != nil &&
+		(existing.ScheduleObservedAt == nil || observed.After(*existing.ScheduleObservedAt))
+}
+
+// scheduleObservedAt은 예정 시각을 실제로 확인한 시각이다. 재사용 행은 원래 확인 슬롯 시각을 싣고,
+// 그 밖의 행은 이 관측의 effective time에 확인한 값이다. 둘은 같은 lease 슬롯 시계라 그대로 비교한다.
+func scheduleObservedAt(fact *SessionFact, evidence *Evidence) time.Time {
+	if fact.ScheduleObservedAt != nil && fact.ScheduleObservedAt.Before(evidence.EffectiveAt) {
+		return *fact.ScheduleObservedAt
+	}
+
+	return evidence.EffectiveAt
 }
 
 func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Evidence) SessionState {
@@ -181,9 +223,10 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 		merged.ThumbnailURL = fact.ThumbnailURL
 	}
 
-	if fact.ScheduledAt != nil && (existing.ScheduleObservedAt == nil || evidence.EffectiveAt.After(*existing.ScheduleObservedAt)) {
+	// 재사용 일정은 원래 확인 시각으로 비교해, 그 뒤에 다른 AP·provider가 관측한 새 일정을 되돌리지 않는다.
+	if observed, newer := newerScheduleObservation(existing, fact, evidence); newer {
 		merged.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
-		merged.ScheduleObservedAt = copyTime(evidence.EffectiveAt)
+		merged.ScheduleObservedAt = copyTime(observed)
 	}
 
 	// 유지된 LIVE/ENDED나 시작 미확정 metadata를 새 상태 관측으로 해석하지 않는다.

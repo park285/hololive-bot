@@ -1845,7 +1845,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 - 한 instance의 global job과 YouTube.js worker가 공유하는 total concurrency는 bounded semaphore 하나가 소유한다.
 - provider별 request budget과 total worker limit을 모두 통과해야 외부 호출을 시작한다.
 - local queue는 bounded channel 또는 scheduler-owned bounded set을 사용한다. target 전체를 무제한 goroutine으로 펼치지 않는다.
-- YouTube.js channel 목록에서 `UPCOMING`이지만 기계가독 `scheduled_at`이 없는 고유 video ID만 raw `/player`로 순차 보강한다. 한 channel collection의 상세 조회 후보는 최대 32개이며, 목록이 이미 시각을 제공하거나 상태가 `LIVE`/`ENDED`/`CANCELLED`이면 상세 조회하지 않는다.
+- YouTube.js channel 목록에서 `UPCOMING`이지만 기계가독 `scheduled_at`이 없는 고유 video ID만 raw `/player`로 순차 보강한다. 한 channel collection의 상세 조회 후보는 최대 32개이며, 목록이 이미 시각을 제공하거나 상태가 `LIVE`/`ENDED`/`CANCELLED`이면 상세 조회하지 않는다. 앞선 lease 슬롯에서 확인한 예정 시각을 helper가 재사용한 행은 그 슬롯 시각을 `schedule_observed_at`으로 싣는다. 이 값은 generation 3에서만 허용되며, 이번 슬롯보다 앞서고 `LiveScheduleObservationMaxAge` 안에 있어야 한다. reducer는 이 시각으로 일정의 최신 여부를 판정하며, 상태 시계보다 늦게 도착한 앞 슬롯의 UPCOMING 관측도 일정만은 이 비교로 반영한다.
 - Channel RPC는 필수 `kind=live|metadata`로 요청 범위를 지정한다. metadata는 streams/player를 조회하지 않고 live는 about을 조회하지 않는다. Go binary와 helper의 private RPC 변경은 같은 bundle로 교체한다.
 - convergence 구현 동안 collector는 Go로 유지한다. 8개 YouTube.js kind가 실제 활성화된 뒤 helper RPC call 수·latency·CPU 또는 failure amplification이 동일 workload 측정에서 material bottleneck일 때만 TypeScript collector를 검토한다.
 - TypeScript 검토의 선행 조건은 Go와 TypeScript 양쪽이 `source-observation-canonical-json-v1` fixture를 통과하는 것이다. fixture conformance 없이 runtime 언어를 바꾸지 않는다.
