@@ -34,6 +34,15 @@
 * LLM 뉴스 분석 연계: `hololive-api` admin/bot plane 내장 클라이언트 -> `hololive-api` (llm plane) 내부 API
 * 유튜브 신작 감지: `youtube-collector -> source_observations -> hololive-api YouTube plane -> alarm-worker`
 
+Iris 연결은 `iris-client-go/v5 v5.0.0`을 사용하며 기동 epoch 인증을 지원하는 Iris가 필수입니다.
+SDK는 보호 호출 전 같은 H3/TLS 대상의 공개 `GET /auth/epoch`를 조회·검증·캐시하고,
+bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다.
+`401`과 검증된 `AUTH_EPOCH_MISMATCH`가 함께 온 경우만 원래 deadline·본문·`ClientRequestID`를 유지해
+논리 호출당 최대 한 번 epoch를 갱신하고 재서명합니다. 일반 401·5xx·전송 오류는 이 인증 복구 경로로
+재시도하지 않으며 기존 owner 재시도·handoff·결과 불명·webhook v3·inbox 계약은 그대로입니다.
+새 Iris와 소비자를 같은 배포 창에서 교체하고 롤백도 인증 호환 조합으로 수행해야 합니다.
+정식 SDK tag 게시 뒤 공식 Go 도구로 checksum을 생성하기 전에는 운영 빌드·배포하지 않습니다.
+
 ---
 
 ## 모듈 경로 계약 (Module Path Contract)

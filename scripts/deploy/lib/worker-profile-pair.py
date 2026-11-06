@@ -254,7 +254,7 @@ def atomic_publish(files):
             temporary.unlink(missing_ok=True)
 
 
-def dropin(directory, service, pair, output=None, app_version=None):
+def dropin_contents(directory, service, pair, app_version=None):
     # Quadlet drop-in의 Image=와 같은 키의 Environment=는 기본 unit 값을 교체하고 Volume=은 더해진다.
     # 기본 unit의 원본 mirror mount는 남겨 desired profile 관측을 유지한다. 값은 unit 문법에 그대로
     # 들어가므로 systemd specifier(%)·공백·mount 구분자(:)가 없는 경로만 받는다.
@@ -275,7 +275,11 @@ def dropin(directory, service, pair, output=None, app_version=None):
         if re.fullmatch(r"[0-9A-Za-z.+-]+", app_version) is None:
             raise ValueError("retained APP_VERSION is not safe for a Quadlet drop-in")
         lines.append("Environment=APP_VERSION=" + app_version)
-    atomic_publish([(output or directory / DROPIN, ("\n".join(lines) + "\n").encode("utf-8"))])
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def dropin(directory, service, pair, output=None, app_version=None):
+    atomic_publish([(output or directory / DROPIN, dropin_contents(directory, service, pair, app_version))])
 
 
 def quadlet_slot(service, unit):
@@ -407,6 +411,39 @@ def activate(directory, service, root, prepared_overlay=None):
     atomic_publish(files)
 
 
+def verify_retained(directory, service, candidate, root):
+    """정지된 중앙 서비스가 보존한 이전 pair나 이번 후보에만 결합돼 있는지 확인한다."""
+    if service not in ("hololive-api", "hololive-alarm-worker"):
+        raise ValueError("coordinated resume supports central Iris consumers only")
+    previous = verify(directory, service)
+    prepared = verify(candidate, service)
+    releases = (Path(root) / "artifacts/worker-profile/releases").resolve()
+    pointer = Path(root) / "artifacts/worker-profile/active" / (service + ".pair")
+    active = Path(profile_bytes(pointer).decode("utf-8").strip()).resolve()
+    if not active.is_relative_to(releases):
+        raise ValueError("retained active pair escaped the release store")
+    current = verify(active, service)
+    identity = ("image", "revision", "architecture", "os", "profile_hash")
+    if not any(all(current[key] == expected[key] for key in identity) for expected in (previous, prepared)):
+        raise ValueError("installed pair changed after coordinated preparation")
+    candidate_dropin = dropin_contents(candidate, service, prepared)
+    if profile_bytes(candidate / DROPIN) != candidate_dropin:
+        raise ValueError("prepared candidate drop-in changed")
+    active_dropin = profile_bytes(active / DROPIN)
+    # 일반 활성화와 명시적 rollback이 만드는 두 형태만 인정한다.
+    expected_active = [dropin_contents(active, service, current)]
+    if service == "hololive-api" and "app_version" in current:
+        expected_active.append(dropin_contents(active, service, current, current["app_version"]))
+    if active_dropin not in expected_active:
+        raise ValueError("retained active drop-in changed")
+    installed = QUADLET_DIR / (QUADLET_UNITS[service] + ".d") / DROPIN
+    # drop-in 게시 뒤 active 포인터 갱신 전에 중단된 경우도 두 unit을 정지한 채 재개할 수 있다.
+    if profile_bytes(installed) not in (active_dropin, candidate_dropin):
+        raise ValueError("installed drop-in no longer belongs to the retained deployment")
+    if profile_bytes(candidate / UNIT_RECORD) != profile_bytes(QUADLET_DIR / QUADLET_UNITS[service]):
+        raise ValueError("installed base unit changed after coordinated preparation")
+
+
 def main():
     action, service, raw_directory, *rest = sys.argv[1:]
     if action == "prepare-native":
@@ -462,6 +499,8 @@ def main():
         pair = verify(directory, service)
         if pair["profile_hash"] != digest(Path(SOURCE) / PROFILES[service]):
             raise ValueError("candidate source changed during profile validation; writer unchanged")
+    elif action == "verify-retained":
+        verify_retained(directory, service, Path(rest[0]).resolve(), rest[1])
     elif action == "verify":
         verify(directory, service, rest[0] if rest else None)
     elif action == "check":

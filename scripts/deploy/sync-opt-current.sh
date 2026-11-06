@@ -11,6 +11,13 @@ COMPOSE_ENV=/etc/stack-secrets/hololive-bot/compose.env
 log() { printf '[sync-opt-current] %s\n' "$*"; }
 die() { printf '[sync-opt-current] ERROR: %s\n' "$*" >&2; exit 1; }
 
+preserve_runtime=false
+case "$#:${1:-}" in
+  0:) ;;
+  1:--preserve-runtime) preserve_runtime=true ;;
+  *) die "usage: $0 [--preserve-runtime]" ;;
+esac
+
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
 
 # 알림 dispatcher는 중앙 하나뿐이다. build-control host kapu에 중앙 unit을 설치하면 부팅 때
@@ -36,13 +43,19 @@ HEAD_REVISION="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
 HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
 
+if [[ "$preserve_runtime" == true ]]; then
+  for d in data logs backups runtime-config; do
+    [[ -d "$OPT_CURRENT/$d" ]] || die "--preserve-runtime requires an existing runtime directory: $OPT_CURRENT/$d"
+  done
+fi
+
 if [[ -d "$OPT_CURRENT" ]]; then
-  BACKUP="${OPT_CURRENT}.bak-${HEAD_SHA}"
-  rm -rf "$BACKUP"
-  mkdir -p "$BACKUP"
-  rsync -a --delete --exclude=/data --exclude=/logs --exclude=/backups --exclude=/artifacts/worker-profile "$OPT_CURRENT/" "$BACKUP/"
-  ls -dt "${OPT_CURRENT}".bak-* 2>/dev/null | tail -n +4 | xargs -r rm -rf
-  log "backup -> $BACKUP (exec tree only, latest 3 kept)"
+  # 기존 복구점은 덮거나 정리하지 않는다. 보존 정리는 별도 승인된 운영 절차가 소유한다.
+  BACKUP="$(mktemp -d "${OPT_CURRENT}.bak-${HEAD_SHA}-XXXXXX")"
+  backup_exclusions=(--exclude=/data --exclude=/logs --exclude=/backups --exclude=/artifacts/worker-profile)
+  [[ "$preserve_runtime" != true ]] || backup_exclusions+=(--exclude=/runtime-config)
+  rsync -a "${backup_exclusions[@]}" "$OPT_CURRENT/" "$BACKUP/"
+  log "backup -> $BACKUP (previous recovery points retained)"
 fi
 
 mkdir -p "$OPT_ROOT"
@@ -57,6 +70,14 @@ git -C "$REPO_ROOT" archive "$HEAD_REVISION" | tar -x -C "$STAGING"
 # quadlet-redeploy-service.sh가 배포 트리의 revision과 image revision label을 대조하는 기준이다.
 printf '%s\n' "$HEAD_REVISION" >"$STAGING/.source-revision"
 log "staged tracked tree ($(find "$STAGING" -type f | wc -l) files)"
+
+if [[ "$preserve_runtime" == true ]]; then
+  bash "$STAGING/scripts/deploy/verify-exec-tree-ownership.sh" "$OPT_CURRENT" ||
+    die "existing execution tree ownership is unsafe; nothing was installed"
+  # rsync가 보호 디렉터리의 부모 mode·group까지 바꾸지 않도록 새 staging root만 맞춘다.
+  chmod --reference="$OPT_CURRENT" "$STAGING"
+  chown --reference="$OPT_CURRENT" "$STAGING"
+fi
 
 # 설치 대상 값은 /opt 반영 전에 확인한다. 실패하면 현재 트리와 unit을 그대로 둔다.
 # shellcheck source=scripts/deploy/lib/compose-env.sh
@@ -110,31 +131,32 @@ rsync -a --delete \
   --exclude=/data --exclude=/logs --exclude=/backups --exclude=/runtime-config --exclude=/artifacts/worker-profile \
   "$STAGING/" "$OPT_CURRENT/"
 
-# runtime-config 는 tracked 템플릿과 gitignored 런타임 설정(iris_base_url, iris-ca.pem)이 섞여
-# 있고 git archive 는 후자를 빠뜨려 alarm-worker 의 IRIS_BASE_URL_FILE 로딩이 깨진다.
-# --ignore-existing: cutover 후 /opt 가 정본이고 dev tree 는 stale 이 되므로, 최초 시드 이후
-# 재실행에서 live 런타임 데이터를 stale dev 값으로 덮어쓰지 않는다(멱등).
-for d in data runtime-config; do
-  if [[ -d "$REPO_ROOT/$d" ]]; then
-    mkdir -p "$OPT_CURRENT/$d"
-    rsync -a --ignore-existing "$REPO_ROOT/$d/" "$OPT_CURRENT/$d/"
-  fi
-done
-mkdir -p "$OPT_CURRENT/logs" "$OPT_CURRENT/backups"
-log "synced current (runtime data + runtime-config preserved)"
+if [[ "$preserve_runtime" == true ]]; then
+  # runtime-config·data의 시드와 기존 데이터 권한 변경은 artifact-only 갱신의 범위 밖이다.
+  log "synced execution tree (runtime bytes and ownership unchanged)"
+else
+  # 전체 동기화는 승인된 작업 트리에서 아직 없는 runtime 입력만 시드한다.
+  for d in data runtime-config; do
+    if [[ -d "$REPO_ROOT/$d" ]]; then
+      mkdir -p "$OPT_CURRENT/$d"
+      rsync -a --ignore-existing "$REPO_ROOT/$d/" "$OPT_CURRENT/$d/"
+    fi
+  done
+  mkdir -p "$OPT_CURRENT/logs" "$OPT_CURRENT/backups"
+  log "synced current (runtime data + runtime-config preserved)"
 
-# 권한: root systemd 가 실행하는 exec_tree 와 그 부모 chain 은 root-owned·non-writable 여야
-# verify-exec-tree-ownership 를 통과한다(03e6dca8/4d57f81c). 런타임 데이터만 컨테이너 uid 1000.
-chown -R root:root "$OPT_CURRENT"
-chmod -R go-w "$OPT_CURRENT"
-if [[ -d "$OPT_CURRENT/runtime-config" ]]; then
-  chmod 0755 "$OPT_CURRENT/runtime-config"
+  # 전체 동기화는 root 실행 트리와 컨테이너 uid 1000의 데이터 권한을 준비한다.
+  chown -R root:root "$OPT_CURRENT"
+  chmod -R go-w "$OPT_CURRENT"
+  if [[ -d "$OPT_CURRENT/runtime-config" ]]; then
+    chmod 0755 "$OPT_CURRENT/runtime-config"
+  fi
+  for d in data logs backups; do
+    [[ -d "$OPT_CURRENT/$d" ]] && chown -R 1000:1000 "$OPT_CURRENT/$d"
+  done
+  chown root:root "$OPT_ROOT" "$(dirname "$OPT_ROOT")"
+  log "ownership normalized (exec tree root, runtime data uid 1000)"
 fi
-for d in data logs backups; do
-  [[ -d "$OPT_CURRENT/$d" ]] && chown -R 1000:1000 "$OPT_CURRENT/$d"
-done
-chown root:root "$OPT_ROOT" "$(dirname "$OPT_ROOT")"
-log "ownership normalized (exec tree root, runtime data uid 1000)"
 
 # root 로 설치되는 systemd 자료(Quadlet unit·prestart)는 $REPO_ROOT(작업 트리)가 아니라 $STAGING(git
 # archive HEAD 스냅샷)에서만 가져온다. 작업 트리에 심어진 untracked unit/drop-in이 root systemd에

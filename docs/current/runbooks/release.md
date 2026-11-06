@@ -106,10 +106,12 @@ rollback 기준은 다음과 같습니다. API·worker는 배포 helper가 실�
 unit을 갱신합니다. 이 도구는 배포 트리에 그 commit을 `.source-revision`으로 남기고, host `compose.env`의 PostgreSQL
 연결 예산을 확인하지 못하면 아무것도 설치하지 않습니다. unit은 빌드하지 않으며(`Pull=never`), prestart가 bind 주소·비밀
 파일·방화벽을 확인합니다.
+기존 runtime data/config/권한 변경을 승인하지 않은 갱신은 `--preserve-runtime`을 명시합니다.
+새 고유 exec-tree backup만 만들며 과거 backup을 덮거나 자동 정리하지 않습니다.
 
 API·worker는 배포 트리의 배포 helper로 교체합니다. helper가 이전 pair 보존, candidate 검사, 활성화 전
 `hololive-db-migrate`(같은 revision의 API image로 고정), drop-in 활성화와 restart, `verify-live`·`NRestarts` 확인을 한
-번에 하고, 활성화 뒤 실패하면 이전 pair로 되돌립니다. 따로 `systemctl start hololive-db-migrate.service`나
+번에 합니다. 활성화 뒤 실패해도 자동으로 이전 pair를 복원하지 않습니다. 따로 `systemctl start hololive-db-migrate.service`나
 `systemctl restart`를 실행하지 않습니다. 단계와 결과 줄은 [배포 helper](../../../deploy/quadlet/README.md#배포-helper)에 있습니다.
 
 ```bash
@@ -117,6 +119,10 @@ helper=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service
 sudo "$helper" hololive-api sha256:<api-id>
 sudo "$helper" hololive-alarm-worker sha256:<worker-id> sha256:<api-id>
 ```
+
+Iris와 인증 계약을 함께 전환할 때는 위 단일 서비스 호출 대신
+[동시 전환의 `--quiesce`/`--resume`](../../../deploy/quadlet/README.md#iris-소비자-동시-전환)을 사용합니다.
+정지 완료와 배포 완료를 구분하고 두 후보 drop-in을 모두 설치하기 전에는 peer를 기동하지 않습니다.
 
 마지막 줄이 `[OUTCOME] deployed`가 아니면 실패입니다. `not_activated`는 실행 중 pair를 바꾸지 않았다는 뜻입니다(migration은
 적용됐을 수 있음). `failed_after_activation`은 candidate가 활성화된 채 남았다는 뜻이며 helper는 자동으로 되돌리지 않습니다.

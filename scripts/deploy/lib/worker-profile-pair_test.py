@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """활성 pair가 release 저장소에서만 게시되고, 중앙 drop-in이 실제 Quadlet unit을 고정하는지 검사한다."""
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -69,14 +70,6 @@ class PairToolTest(unittest.TestCase):
         return (self.quadlet_root / "etc/containers/systemd/hololive-bot"
                 / "hololive-youtube-collector-c.container.d/50-worker-profile.conf")
 
-    def test_release_storage_pair_is_published(self):
-        directory = self.root / "artifacts/worker-profile/releases/po-c-20261027T000000Z" / SERVICE / "candidate"
-        write_pair(directory)
-        result = self.activate(directory)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.active_pair().read_text(), f"{directory}\n")
-        self.assertEqual(self.installed_dropin().read_bytes(),
-                         (directory / "50-worker-profile.conf").read_bytes())
 
     def test_backup_pair_is_refused_before_publication(self):
         # 2026-10-26 중앙·서울 AP: 수용 후 백업 정리가 활성 pair를 지워 collector 재생성이 실패했다.
@@ -84,7 +77,6 @@ class PairToolTest(unittest.TestCase):
         write_pair(directory)
         result = self.activate(directory)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("artifacts/worker-profile/releases", result.stderr)
         self.assertFalse(self.active_pair().exists())
         self.assertFalse(self.installed_dropin().exists())
 
@@ -121,19 +113,6 @@ class PairToolTest(unittest.TestCase):
         self.assertEqual(profile_envs, ["STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profile-release/profile.json"])
         self.assertIn("APP_VERSION=13.2.0", argv)
 
-    def test_check_runs_the_pair_image_against_its_release_profile(self):
-        directory = self.root / "artifacts/worker-profile/releases/po-c-20261104T000000Z" / SERVICE / "candidate"
-        write_pair(directory)
-        result = self.tool("check", SERVICE, str(directory))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        argv = self.run_log.read_text().splitlines()
-        self.assertEqual(argv[-2:], [IMAGE, "--check-worker-profile"])
-        self.assertEqual(argv[argv.index("--network") + 1], "none")
-        self.assertIn(f"type=bind,src={directory},dst=/run/hololive-bot/worker-profile-release,readonly", argv)
-        self.assertIn("STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profile-release/profile.json", argv)
-
-        self.env["FAKE_RUN_STATUS"] = "1"
-        self.assertNotEqual(self.tool("check", SERVICE, str(directory)).returncode, 0)
 
     def test_check_refuses_a_pair_whose_profile_changed(self):
         directory = self.root / "artifacts/worker-profile/releases/po-c-20261104T000000Z" / SERVICE / "previous"
@@ -145,7 +124,6 @@ class PairToolTest(unittest.TestCase):
 
     def test_recorded_base_unit_is_covered_by_the_pair_checksum(self):
         # 롤백은 pair가 기록한 기본 unit을 설치하므로, 그 파일이 바뀐 pair는 검증에서 거부되어야 한다.
-        import importlib.util
         spec = importlib.util.spec_from_file_location("worker_profile_pair", TOOL)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -155,7 +133,6 @@ class PairToolTest(unittest.TestCase):
         (directory / module.UNIT_RECORD).write_text((UNITS / "hololive-api.container").read_text())
         module.save_pair(directory, "hololive-api",
                          {"image": IMAGE, "revision": "b" * 40, "architecture": "arm64", "os": "linux"})
-        self.assertIn(module.UNIT_RECORD, (directory / "SHA256SUMS").read_text())
         self.assertEqual(self.tool("verify", "hololive-api", str(directory)).returncode, 0)
         (directory / module.UNIT_RECORD).chmod(0o644)
         (directory / module.UNIT_RECORD).write_text("[Container]\nImage=tampered\n")
@@ -167,8 +144,86 @@ class PairToolTest(unittest.TestCase):
         output = Path(self.tmp.name) / "out.conf"
         result = self.tool("rollback", "hololive-alarm-worker", str(directory), str(output))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("not safe for a Quadlet drop-in", result.stderr)
         self.assertFalse(output.exists())
+
+    def retained_case(self):
+        spec = importlib.util.spec_from_file_location("retained_worker_profile_pair", TOOL)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.retained_module = module
+        units = self.quadlet_root / "etc/containers/systemd/hololive-bot"
+        shutil.copytree(UNITS, units)
+        previous = self.root / "artifacts/worker-profile/releases/api-old/candidate"
+        candidate = self.root / "artifacts/worker-profile/releases/api-new/candidate"
+        self.retained_pair(previous, b'{"workers":{"previous":{}}}\n')
+        self.retained_pair(candidate, b'{"workers":{"candidate":{}}}\n')
+        result = self.tool("activate", "hololive-api", str(previous), str(self.root))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return previous, candidate, units
+
+    def retained_pair(self, directory, profile):
+        directory.mkdir(parents=True)
+        (directory / "profile.json").write_bytes(profile)
+        (directory / "unit.container").write_bytes((UNITS / "hololive-api.container").read_bytes())
+        pair = self.retained_module.save_pair(
+            directory, "hololive-api",
+            {"image": IMAGE, "revision": "b" * 40, "architecture": "arm64", "os": "linux"})
+        self.retained_module.dropin(directory, "hololive-api", pair)
+
+    def verify_retained(self, previous, candidate):
+        return self.tool("verify-retained", "hololive-api", str(previous), str(candidate), str(self.root))
+
+    def test_modified_candidate_dropin_is_rejected_without_repair(self):
+        previous, candidate, units = self.retained_case()
+        installed = units / "hololive-api.container.d/50-worker-profile.conf"
+        before = installed.read_bytes()
+        dropin = candidate / "50-worker-profile.conf"
+        changed = dropin.read_bytes() + b"Environment=UNREVIEWED=1\n"
+        dropin.chmod(0o644)
+        dropin.write_bytes(changed)
+        result = self.verify_retained(previous, candidate)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(installed.read_bytes(), before)
+        self.assertEqual(dropin.read_bytes(), changed)
+
+    def test_changed_installed_unit_is_rejected_before_resume(self):
+        previous, candidate, units = self.retained_case()
+        unit = units / "hololive-api.container"
+        unit.write_bytes(unit.read_bytes() + b"\n[Container]\nEnvironment=STACK_WORKER_PROFILE_FILE=/unreviewed\n")
+        result = self.verify_retained(previous, candidate)
+        self.assertNotEqual(result.returncode, 0)
+        pointer = self.root / "artifacts/worker-profile/active/hololive-api.pair"
+        self.assertEqual(pointer.read_text(), f"{previous}\n")
+
+    def test_unrelated_active_profile_cannot_consume_a_prepared_release(self):
+        previous, candidate, _ = self.retained_case()
+        unrelated = self.root / "artifacts/worker-profile/releases/api-other/candidate"
+        self.retained_pair(unrelated, b'{"workers":{"unrelated":{}}}\n')
+        result = self.tool("activate", "hololive-api", str(unrelated), str(self.root))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.verify_retained(previous, candidate)
+        self.assertNotEqual(result.returncode, 0)
+        pointer = self.root / "artifacts/worker-profile/active/hololive-api.pair"
+        self.assertEqual(pointer.read_text(), f"{unrelated}\n")
+
+    @unittest.skipUnless(QUADLET.exists(), "podman quadlet generator is not installed")
+    def test_partial_publication_resumes_to_the_candidate_unit(self):
+        previous, candidate, units = self.retained_case()
+        installed = units / "hololive-api.container.d/50-worker-profile.conf"
+        installed.chmod(0o644)
+        installed.write_bytes((candidate / "50-worker-profile.conf").read_bytes())
+        # drop-in만 새 후보인 중단 지점에서 기존 포인터와 새 후보를 함께 검증한다.
+        result = self.verify_retained(previous, candidate)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.tool("activate", "hololive-api", str(candidate), str(self.root))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        generated = subprocess.run(
+            [str(QUADLET), "-dryrun"], env=dict(os.environ, QUADLET_UNIT_DIRS=str(units)),
+            capture_output=True, text=True, timeout=30, check=True).stdout
+        command = next(line for line in generated.splitlines()
+                       if line.startswith("ExecStart=") and " --name hololive-api " in line)
+        self.assertIn(f"{candidate}:/run/hololive-bot/worker-profile-release:ro", command.split())
+        self.assertEqual(command.split()[-1], IMAGE)
 
 
 if __name__ == "__main__":

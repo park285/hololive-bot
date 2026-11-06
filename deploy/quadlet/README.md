@@ -36,6 +36,13 @@ git 저장소가 아니므로 거기서 실행하면 `repo git tree missing`으�
 sudo ./scripts/deploy/sync-opt-current.sh
 ```
 
+기존 운영 데이터·설정·권한을 바꾸지 않는 artifact-only 갱신에는
+`sudo ./scripts/deploy/sync-opt-current.sh --preserve-runtime`을 사용합니다. 이 모드는 기존
+`data`·`logs`·`backups`·`runtime-config` 디렉터리가 있어야 하며, runtime 입력을 backup/seed하지 않고
+보호 디렉터리와 worker-profile 저장소의 bytes·owner·mode를 유지합니다. 기본 전체 동기화의 시드·권한 준비는
+그 효과까지 승인된 설치에만 사용합니다. 두 모드 모두 새 고유 exec-tree 복구점을 만들며 기존 backup을
+덮거나 보존 개수만으로 삭제하지 않습니다. 과거 복구점 정리는 별도 승인 절차입니다.
+
 설치 도구는 다음을 확인한 뒤에만 unit을 설치합니다.
 
 - hostname이 `kapu`이면 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1` 없이 거부합니다(두 번째 dispatcher 방지).
@@ -151,6 +158,31 @@ helper는 다음 순서로 진행하며 어느 단계도 재시도하지 않습�
    끝납니다. candidate pair와 release 디렉터리는 그대로 둡니다. 이번 배포가 migration을 적용했을 수 있으므로, 이전 pair 복원은
    스키마·admission 호환성 승인 뒤 `scripts/deploy/quadlet-rollback-service.sh <release> --check`와 `--apply`로 합니다.
    migration과 schema는 어느 경우에도 되돌리지 않습니다.
+
+### Iris 소비자 동시 전환
+
+인증 계약처럼 API·alarm-worker와 외부 Iris를 같은 창에서 바꿔야 하면 두 소비자를 먼저 보존·정지합니다.
+단일 서비스 helper를 정지된 unit에 억지로 적용하거나 API의 `Wants`가 구형 worker를 기동하게 두지 않습니다.
+
+```bash
+helper=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh
+sudo "$helper" --quiesce sha256:<api-id> sha256:<worker-id>
+# quiesced 결과의 두 release 경로를 보존하고, 승인된 다른 소비자·Iris 전환을 완료한다.
+sudo "$helper" --resume '<api-release-dir>' '<alarm-release-dir>'
+```
+
+- `--quiesce`는 실행 중 이전 pair와 후보를 모두 검증·보존한 뒤 두 unit을 함께 정지하고 영속 mask합니다.
+  호스트 재부팅 뒤에도 명시적 재개 전에는 구형 writer를 기동하지 않습니다. `[OUTCOME] quiesced`는 writer
+  정지만 증명하며 migration·후보 활성화·배포 완료를 뜻하지 않습니다.
+- `--resume`은 두 unit이 masked/inactive인지, 배포 revision·image·desired profile·보존 pair·설치 drop-in·기본 unit이
+  준비한 대상과 일치하는지 확인합니다. 같은 후보 API image로 migration을 실행하고 두 후보 drop-in을 모두 게시한
+  뒤에만 mask를 해제합니다. worker→API 순으로 기동하므로 `Wants`도 새 후보만 시작합니다.
+- 완료는 exit 0과 두 서비스의 `[OUTCOME] deployed`, 실제 image/profile·health·`NRestarts=0`으로 확인합니다.
+  실행 중 pair를 잃은 뒤 과거 파일 이름만으로 복구점을 만들지 않습니다.
+- 준비 뒤 drift·부분 게시·실패는 성공으로 바꾸지 않습니다. 기동 전 실패는 hold를 유지하며, 부분 mask나
+  기동 후 실패는 실제 unit 상태를 먼저 확인합니다. 자동 unmask·rollback은 없습니다. 원인을 해결한 명시적
+  재개도 두 unit의 hold와 같은 보존 pair를 요구하며, 다른 pair나 배포 revision은 거부합니다.
+
 
 ### 컷오버 직후 첫 고정
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -207,6 +208,8 @@ func preparePostgresRetry(
 
 func startPostgresContainer(ctx context.Context, image string) (*postgres.PostgresContainer, error) {
 	out, err := postgres.Run(ctx, image,
+		// 교차 빌드의 캐시가 테스트 DB를 다른 아키텍처의 에뮬레이션 이미지로 바꾸지 않게 한다.
+		testcontainers.WithImagePlatform("linux/"+runtime.GOARCH),
 		postgres.WithDatabase("dbtest"),
 		postgres.WithUsername("dbtest"),
 		postgres.WithPassword("dbtest"),

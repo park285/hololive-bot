@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	iris "github.com/park285/iris-client-go/v4/iris"
+	iris "github.com/park285/iris-client-go/v5/iris"
 )
 
 func TestReissuedReplyClientRequestIDRejectsOutOfRangeAndNestedBases(t *testing.T) {

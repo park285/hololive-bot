@@ -180,10 +180,12 @@ release pair, not as extra keys or aliases in the new profile.
 
 ### Build and CLI prerequisites
 
-- All five consumers pin the published shared-go `v2.18.0` and its sums; api,
-  alarm-worker and shared also pin `github.com/park285/iris-client-go/v4`
-  `v4.0.0`. Both tags must exist before a production build. No
-  unpublished external replace or invented tag is a production input.
+- 다섯 소비자는 shared-go `v2.19.0`과 공식 checksum을 고정합니다.
+  api·alarm-worker·shared는 `github.com/park285/iris-client-go/v5 v5.0.0`을 직접,
+  collector는 간접 의존성으로 고정합니다. 두 정식 tag와 공식 Go 도구로 생성한 checksum이
+  운영 빌드 전에 있어야 하며, 미게시 외부 replace나 가짜 tag·checksum은 운영 입력이 아닙니다.
+  SDK v5는 H3 `GET /auth/epoch`를 지원하는 Iris와 같은 배포 창에서 교체하며,
+  롤백도 인증 호환 조합으로 수행합니다. webhook v3와 inbox 저장 형식은 바꾸지 않습니다.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
   production builds. Use root/API/alarm version `11.0.0`, a clean full
   40-character source revision, and the architecture/Node/issuer manifests.

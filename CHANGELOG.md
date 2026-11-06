@@ -8,6 +8,11 @@
 
 ## 미출시
 
+- **Iris 기동 epoch 인증 동시 전환(파괴적):** API·alarm-worker·shared의 SDK import와 pin, collector의 간접 pin을 `iris-client-go/v5 v5.0.0`으로 옮깁니다. 보호 호출은 같은 H3/TLS 대상의 `/auth/epoch`를 먼저 확인하고, `401 AUTH_EPOCH_MISMATCH`에서만 원래 deadline·본문·`ClientRequestID`를 유지해 논리 호출당 최대 한 번 새 epoch로 재서명합니다. bootstrap 실패는 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다. 기존 owner 재시도·handoff·결과 불명·webhook v3·inbox 계약은 유지합니다. 새 Iris와 소비자를 같은 배포 창에서 교체해야 하며, SDK 정식 tag 게시와 공식 Go checksum 생성 전에는 운영 빌드·배포하지 않습니다.
+- **중앙 Iris 소비자 정지·재개:** 배포 helper의 `--quiesce`는 실행 중 API·alarm-worker의 이전 pair와 후보를 보존한 뒤 두 unit을 함께 정지·영속 mask합니다. 재부팅도 이 hold를 해제하지 않습니다. 외부 Iris 전환 뒤 `--resume`은 revision·image·profile·설치 상태를 다시 검증하고, 두 후보 drop-in을 모두 게시한 뒤에만 worker→API를 기동합니다. 정지·부분 실패를 배포 성공으로 처리하거나 자동 rollback하지 않습니다.
+- **운영 데이터·복구점 보존:** `sync-opt-current.sh --preserve-runtime`은 runtime-config를 backup/seed하지 않고 기존 runtime bytes·owner·mode를 유지합니다. 모든 동기화는 고유 exec-tree backup을 만들며 같은 revision의 이전 복구점을 덮거나 오래된 backup을 자동 삭제하지 않습니다.
+- **테스트 DB 아키텍처 고정:** PostgreSQL testcontainers가 실행 중 Go 호스트의 `linux/<GOARCH>`를 명시합니다. 같은 multi-arch digest의 ARM64 배포 이미지가 amd64 테스트 캐시에 남아도 native variant를 선택하며, 테스트 deadline이나 데이터 경계는 바꾸지 않습니다.
+
 ## v14.0.0 - 2026-11-06
 
 - **전달 확인 불명 격리의 종료 기록:** Iris에 넘긴 뒤 수락을 확인하지 못해 격리된 알림(`handoff_unconfirmed`, `sent_at` 기록됨)도 closeout receipt로 재발송 없는 종료를 기록할 수 있습니다(migration 367). 이전 기록 함수는 `sent_at`이 있으면 거부해 이런 행이 보존 기간(180일) 내내 미검토 격리로 남고 `HololiveDispatchQuarantineRetained` 경보가 계속 울렸습니다.
