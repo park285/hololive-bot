@@ -300,7 +300,10 @@ func fetchWire(ctx context.Context, rpc *RPC, path, subject, kind string, limit 
 	case "/v1/content":
 		return wireResult(rpc.FetchContent(ctx, ContentRequest{ChannelID: subject, Kind: "videos", MaxResults: 10, MaxPages: 1, MaxSuccessResponseBytes: limit}))
 	case "/v1/channel":
-		return wireResult(rpc.FetchChannel(ctx, ChannelRequest{ChannelID: subject, Kind: kind, MaxPages: 1, MaxSuccessResponseBytes: limit}))
+		// 실제 helper 요청 검증기가 Go의 RFC3339Nano lease 슬롯 시각을 받는지도 함께 확인합니다.
+		slot := time.Date(2026, time.August, 14, 1, 0, 0, 123456789, time.UTC)
+
+		return wireResult(rpc.FetchChannel(ctx, ChannelRequest{ChannelID: subject, Kind: kind, MaxPages: 1, MaxSuccessResponseBytes: limit, ScheduledFor: new(slot)}))
 	case "/v1/channel_live_check":
 		return wireResult(rpc.FetchChannelLiveCheck(ctx, ChannelLiveCheckRequest{ChannelID: subject, MaxSuccessResponseBytes: limit}))
 	case "/v1/video_live_check":

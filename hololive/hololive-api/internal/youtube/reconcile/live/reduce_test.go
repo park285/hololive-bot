@@ -413,3 +413,46 @@ func TestReduceReusedScheduleKeepsItsOriginalObservationTime(t *testing.T) {
 		t.Fatalf("new session did not keep the reused observation time: %#v", created)
 	}
 }
+
+func TestReduceLateNewerScheduleReplacesAnEarlierAppliedReuse(t *testing.T) {
+	t.Parallel()
+
+	reusedAt := time.Date(2026, time.November, 6, 1, 0, 0, 0, time.UTC)
+	confirmedAt := reusedAt.Add(2 * time.Minute)
+	reuseSlot := reusedAt.Add(4 * time.Minute)
+	original := reusedAt.Add(10 * time.Hour)
+	moved := original.Add(-time.Hour)
+	state := emptyState()
+
+	state.Sessions[testVideoID] = SessionState{
+		VideoID: testVideoID, ChannelID: channelCoverage().RequestedChannelIDs[0],
+		Status: domain.LiveStatusUpcoming, LifecycleOrigin: OriginObserved, Present: true,
+		ScheduledStartTime: new(original), ScheduleObservedAt: new(reusedAt),
+		Clock:           LiveEvidenceClock{LastUpcomingPositiveAt: new(reusedAt)},
+		IgnoredAbsences: LoadedIgnoredAbsences(nil),
+	}
+
+	// 캐시를 가진 AP의 재사용 관측(reuseSlot)이 먼저 처리되고, 그보다 앞 슬롯(confirmedAt)에
+	// 다른 AP가 player로 확인한 옮겨진 일정이 늦게 도착한다.
+	reused := sessionFact("UPCOMING")
+
+	reused.ScheduledAt = new(original)
+	reused.ScheduleObservedAt = new(reusedAt)
+
+	confirmed := sessionFact("UPCOMING")
+
+	confirmed.ScheduledAt = new(moved)
+
+	got := sessionOf(mustReduceAll(t, state, []Evidence{
+		liveEvidence(2, reuseSlot, contract.CompletenessComplete, contract.ContinuityContiguous, reused),
+		liveEvidence(3, confirmedAt, contract.CompletenessComplete, contract.ContinuityContiguous, confirmed),
+	}, 0))
+
+	if !got.ScheduledStartTime.Equal(moved) || !got.ScheduleObservedAt.Equal(confirmedAt) {
+		t.Fatalf("late newer schedule was dropped behind a reused one: %#v", got)
+	}
+
+	if got.Clock.LastUpcomingPositiveAt == nil || !got.Clock.LastUpcomingPositiveAt.Equal(reuseSlot) {
+		t.Fatalf("late schedule moved the status clock: %#v", got.Clock)
+	}
+}

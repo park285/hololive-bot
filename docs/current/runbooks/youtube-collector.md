@@ -165,13 +165,14 @@ Channel RPC의 필수 `kind=live|metadata`가 수집 범위를 지정합니다. 
 
 Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`, `CANCELLED`는 schedule 보강 대상이 아닙니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
 
-helper는 같은 채널·video ID의 player 예정 시각을 프로세스 메모리(`schedule-cache.mjs`, 최대 512건)에서 재사용합니다. Go는 live 요청에 lease 슬롯 시각 `scheduled_for`를 싣고, helper는 확인한 슬롯을 함께 기록합니다. 재사용한 행에는 그 슬롯 시각을 `schedule_observed_at`으로 싣습니다. API reducer는 이 시각으로 저장된 `schedule_observed_at`과 비교하므로, 다른 AP나 provider가 그 뒤에 관측한 새 일정을 옛 일정으로 되돌리지 않습니다.
+helper는 같은 채널·video ID의 player 예정 시각을 프로세스 메모리(`schedule-cache.mjs`, 최대 512건)에서 재사용합니다. Go는 live 요청에 lease 슬롯 시각 `scheduled_for`를 싣고, helper는 확인한 슬롯을 함께 기록합니다. 재사용한 행에는 그 슬롯 시각을 `schedule_observed_at`으로 싣습니다. API reducer는 이 시각으로 저장된 `schedule_observed_at`과 비교하므로, 다른 AP나 provider가 그 뒤에 관측한 새 일정을 옛 일정으로 되돌리지 않습니다. 재사용 행이 더 늦은 슬롯으로 상태 시계를 먼저 올린 뒤 앞 슬롯의 실제 확인이 늦게 도착해도, reducer는 그 관측의 상태는 버리되 일정은 확인 시각으로 비교해 반영합니다.
 
 재사용 조건은 다음과 같습니다.
 - 목록이 그 영상을 여전히 시각 없는 `UPCOMING`으로 보이고, 더 앞선 슬롯에서 확인한 값만 재사용합니다.
-- 재사용 기간은 남은 시간의 1/6이며 5~10분입니다.
-- 시작 30분 이내·시작 시각 경과·player `LIVE` 판정·접근 제한·오류는 저장하지 않아 매 poll 다시 조회합니다.
-- 목록이 시각이나 다른 상태를 직접 보이면 해당 항목을 지웁니다.
+- 재사용 기간은 남은 시간의 1/6(5~10분)이고 시작 30분 전에 끝납니다. 따라서 시작까지 30~35분 남은 영상은 5분보다 짧게 재사용합니다.
+- 시작 30분 이내·시작 시각 경과·player `LIVE` 판정·접근 제한·오류는 재사용하지 않아 매 poll 다시 조회합니다. 같은 슬롯 재시도의 조회가 실패해도 이후 슬롯은 다시 조회합니다.
+- 목록이 시각이나 다른 상태를 직접 보이면 해당 항목을 무효화합니다.
+- 조회를 시작하거나 무효화한 슬롯은 예정 시각 없는 표식으로 남깁니다. 그래서 늦게 끝난 앞 슬롯의 조회가 그 뒤의 무효화를 되돌리지 못합니다.
 
 재사용 중에는 canonical `schedule_observed_at`이 나아가지 않습니다. 상한 10분은 알람 checker(UPCOMING 관측 15분 이내)와 생일 방송 조회(30분 이내)의 최신성 창 안에 fleet의 마지막 실제 확인을 남기기 위한 값입니다. 늘리려면 두 창을 함께 검토합니다. 먼 예정 영상의 일정 변경은 이 AP에서 최대 10분 늦게 보일 수 있습니다.
 

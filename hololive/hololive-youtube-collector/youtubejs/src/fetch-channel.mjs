@@ -131,7 +131,7 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
     if (session.status !== "UPCOMING" || session.scheduled_at != null) {
       confirmedIDs.add(session.video_id);
       // 목록이 시각이나 다른 상태를 직접 보였으므로, 다시 미확정으로 보이면 player로 새로 확인합니다.
-      cache?.forget(session.channel_id, session.video_id);
+      cache?.forget(session.channel_id, session.video_id, slotAt);
       liveRowCount++;
       continue;
     }
@@ -159,6 +159,7 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
     if (reused === undefined) {
       lookups++;
       recordScheduleLookup();
+      cache?.beginLookup(channelId, videoId, slotAt);
       metadata = await fetchLiveMetadata(innertube, videoId);
     } else {
       metadata = reused;
@@ -204,7 +205,7 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
       minimumBytes += rows.length - 1;
       liveRowCount += rows.length;
     }
-    // 검증을 통과한 새 결과만 기록합니다. 접근 제한·LIVE 판정은 기존 항목을 지워 다음 poll이 다시 확인합니다.
+    // 검증을 통과한 새 결과만 기록합니다. 접근 제한·LIVE 판정과 실패한 조회는 표식으로 남아 다음 poll이 다시 확인합니다.
     if (reused === undefined) {
       cache?.remember(channelId, videoId, metadata, slotAt);
     }

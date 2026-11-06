@@ -14,6 +14,9 @@ sudo systemctl start hololive-youtube-po-d.service hololive-youtube-collector-d.
 
 ## 호스트 전제
 
+- 이미지 tag 규칙: `<VERSION>`은 루트 `VERSION` 값이라, 미출시 변경을 배포할 때도 같은 tag를 다시 씁니다. 그때는 실행 중이던
+  이미지에 먼저 `localhost/hololive-youtube-collector-d:runtime-before-<날짜>`(PO는 `localhost/hololive-youtube-po-d:…`) tag를
+  붙여 rollback 지점으로 남긴 뒤 tag를 옮깁니다. 실제 코드 판별은 image revision label로 합니다.
 - 이미지: `hololive-youtube-collector:kapu-<VERSION>`(Dockerfile, linux/amd64)과 `hololive-youtube-po-sandbox:prod`
   (`scripts/build/build-po-sandbox-artifact.sh amd64 ...`)를 rootful Podman에 load한다. 원격 build는 하지 않는다.
 - 비밀: stack-secrets `hosts/kapu/hololive-bot/collector-d/` → `/etc/stack-secrets/hololive-bot/collector-d/`.
