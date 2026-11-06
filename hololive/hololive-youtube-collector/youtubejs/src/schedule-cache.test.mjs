@@ -59,62 +59,39 @@ test("near-start, live, unscheduled, past, and restricted results are never reus
   }
 });
 
-test("an invalidated or in-progress slot blocks a slower lookup from an earlier slot", () => {
-  const time = clock();
-  const cache = new ScheduleLookupCache({ now: time.now });
-  // 다음 슬롯이 목록에서 시각을 직접 보거나 LIVE·임박 판정을 받은 뒤, 앞 슬롯의 느린 조회가 끝납니다.
-  cache.remember("UC_A", "listed", upcoming(start + 600 * minute), start);
-  cache.forget("UC_A", "listed", start + 2 * minute);
+test("once a later slot of the channel starts, an earlier slot's lookup is never stored", () => {
+  const cache = new ScheduleLookupCache({ now: () => start });
+  // 다음 슬롯이 목록에서 시각을 직접 보거나 LIVE·임박 판정을 받는 동안, 앞 슬롯의 느린 조회가 끝납니다.
+  // 그 영상이 캐시에 없었고 목록 단계에서 아무것도 남기지 않았어도 앞 슬롯의 결과는 저장하지 않습니다.
+  cache.beginSlot("UC_A", start + 2 * minute);
   cache.remember("UC_A", "listed", upcoming(start + 600 * minute), start + minute);
-  cache.remember("UC_A", "went-live", { isLive: true, isUpcoming: false, startTimestamp: null }, start + 2 * minute);
-  cache.remember("UC_A", "went-live", upcoming(start + 600 * minute), start + minute);
-  // 다음 슬롯의 조회가 아직 진행 중이어도 앞 슬롯의 결과는 저장하지 않습니다.
-  cache.beginLookup("UC_A", "pending", start + 2 * minute);
-  cache.remember("UC_A", "pending", upcoming(start + 600 * minute), start + minute);
-  for (const id of ["listed", "went-live", "pending"]) {
-    assert.equal(cache.reuse("UC_A", id, start + 4 * minute), undefined, id);
-  }
-  // 그 슬롯의 조회가 끝나면 정상으로 기록합니다.
-  cache.remember("UC_A", "pending", upcoming(start + 600 * minute), start + 2 * minute);
-  assert.equal(cache.reuse("UC_A", "pending", start + 4 * minute).observedAt, new Date(start + 2 * minute).toISOString());
+  assert.equal(cache.reuse("UC_A", "listed", start + 4 * minute), undefined);
+  // 다른 채널과 그 슬롯 자신의 결과는 그대로 기록합니다.
+  cache.remember("UC_B", "listed", upcoming(start + 600 * minute), start + minute);
+  cache.remember("UC_A", "current", upcoming(start + 600 * minute), start + 2 * minute);
+  assert.notEqual(cache.reuse("UC_B", "listed", start + 4 * minute), undefined);
+  assert.equal(cache.reuse("UC_A", "current", start + 4 * minute).observedAt, new Date(start + 2 * minute).toISOString());
 });
 
-test("a failed recheck leaves its marker so later slots look up again", () => {
+test("evicting reusable entries keeps the channel slot that rejects earlier lookups", () => {
+  const cache = new ScheduleLookupCache({ maxEntries: 2, now: () => start });
+  cache.beginSlot("UC_A", start + 2 * minute);
+  for (const id of ["v1", "v2", "v3"]) cache.remember("UC_A", id, upcoming(start + 600 * minute), start + 2 * minute);
+  assert.equal(cache.size, 2);
+  cache.remember("UC_A", "late", upcoming(start + 600 * minute), start + minute);
+  assert.equal(cache.reuse("UC_A", "late", start + 4 * minute), undefined);
+});
+
+test("a recheck clears the entry first, so a failed lookup leaves nothing to reuse", () => {
   const cache = new ScheduleLookupCache({ now: () => start });
   cache.remember("UC_A", "v1", upcoming(start + 600 * minute), start);
-  // 같은 슬롯의 재시도가 조회를 시작한 뒤 실패해 결과를 기록하지 못합니다.
-  cache.beginLookup("UC_A", "v1", start);
+  // 같은 슬롯의 재시도가 조회 전에 항목을 비운 뒤 실패해 결과를 기록하지 못합니다.
+  cache.forget("UC_A", "v1", start);
   assert.equal(cache.reuse("UC_A", "v1", start + 2 * minute), undefined);
-});
-
-test("forgetting an absent entry stores nothing, and markers expire with the reuse bound", () => {
-  const time = clock();
-  const cache = new ScheduleLookupCache({ now: time.now });
-  cache.forget("UC_A", "listed-only", start);
-  assert.equal(cache.size, 0);
-  cache.beginLookup("UC_A", "v1", start);
-  time.advance(10 * minute);
-  cache.remember("UC_A", "v1", upcoming(start + 600 * minute), start - minute);
-  assert.notEqual(cache.reuse("UC_A", "v1", start), undefined);
-});
-
-test("an entry stored after a request started is not reused by that request", () => {
-  const time = clock();
-  const cache = new ScheduleLookupCache({ now: time.now });
-  const requestStartedAt = time.now();
-  time.advance(1000);
-  cache.remember("UC_A", "v1", upcoming(start + 600 * minute), time.now());
-  assert.equal(cache.reuse("UC_A", "v1", requestStartedAt), undefined);
-  assert.notEqual(cache.reuse("UC_A", "v1", time.now() + 1), undefined);
-});
-
-test("a slower older lookup never replaces a newer one, but a newer unreusable result clears it", () => {
-  const cache = new ScheduleLookupCache({ now: () => start + 2 * minute });
-  cache.remember("UC_A", "v1", upcoming(start + 600 * minute), start + minute);
-  cache.remember("UC_A", "v1", upcoming(start + 300 * minute), start);
-  assert.equal(cache.reuse("UC_A", "v1", start + 3 * minute).startTimestamp, new Date(start + 600 * minute).toISOString());
-  cache.remember("UC_A", "v1", { isLive: true, isUpcoming: false, startTimestamp: null }, start + 2 * minute);
-  assert.equal(cache.reuse("UC_A", "v1", start + 3 * minute), undefined);
+  // 더 늦은 슬롯이 기록한 항목은 앞 슬롯의 무효화가 지우지 않습니다.
+  cache.remember("UC_A", "v2", upcoming(start + 600 * minute), start + 2 * minute);
+  cache.forget("UC_A", "v2", start + minute);
+  assert.notEqual(cache.reuse("UC_A", "v2", start + 4 * minute), undefined);
 });
 
 test("entries are scoped by channel, can be forgotten, and the oldest is evicted past the bound", () => {
@@ -122,7 +99,7 @@ test("entries are scoped by channel, can be forgotten, and the oldest is evicted
   cache.remember("UC_A", "v1", upcoming(start + 600 * minute), start);
   assert.equal(cache.reuse("UC_B", "v1", start + 1), undefined);
   cache.forget("UC_A", "v1", start);
-  assert.equal(cache.reuse("UC_A", "v1", start + 1), undefined);
+  assert.equal(cache.size, 0);
   for (const id of ["v1", "v2", "v3"]) cache.remember("UC_A", id, upcoming(start + 600 * minute), start);
   assert.equal(cache.size, 2);
   assert.equal(cache.reuse("UC_A", "v1", start + 1), undefined);

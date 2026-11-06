@@ -190,6 +190,43 @@ test("a slower lookup from an earlier slot never revives an entry a later slot i
   assert.equal(next.live_sessions[0].schedule_observed_at, undefined);
 });
 
+test("a later slot that sees the schedule in the listing stops an earlier slot from caching", async () => {
+  const time = steppingClock("2026-09-01T01:00:00Z");
+  const scheduleCache = new ScheduleLookupCache({ now: time.now });
+  let releaseEarlier = () => {};
+  const earlier = new Promise((resolve) => { releaseEarlier = resolve; });
+  let earlierStarted = () => {};
+  const started = new Promise((resolve) => { earlierStarted = resolve; });
+  const untimed = { videos: [{ id: "later", is_upcoming: true }] };
+  const listings = [
+    async () => { earlierStarted(); await earlier; return untimed; },
+    async () => ({ videos: [{ id: "later", is_upcoming: true, upcoming: new Date("2026-09-01T01:15:00Z") }] }),
+    async () => untimed,
+  ];
+  let calls = 0;
+  const innertube = {
+    getChannel: async () => channelFixture({
+      getAbout: async () => ({}),
+      getLiveStreams: async () => channelFixture({ has_continuation: undefined, ...await listings.shift()() }),
+    }),
+    actions: { execute: async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); } },
+  };
+  const poll = (scheduledFor) => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor });
+  // 앞 슬롯이 streams 응답을 기다리는 동안 뒤 슬롯이 목록에서 시각을 직접 봅니다. 그 영상은 아직 캐시에 없습니다.
+  const slow = poll("2026-09-01T01:00:00Z");
+  await started;
+  time.advance(2 * 60_000);
+  await poll("2026-09-01T01:02:00Z");
+  releaseEarlier();
+  const stale = await slow;
+  time.advance(2 * 60_000);
+  const next = await poll("2026-09-01T01:04:00Z");
+  assert.equal(stale.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
+  assert.equal(next.schedule_lookups, 1);
+  assert.equal(next.live_sessions[0].schedule_observed_at, undefined);
+  assert.equal(calls, 2);
+});
+
 test("a failed same-slot recheck stops reuse until the player confirms again", async () => {
   const time = steppingClock("2026-09-01T01:00:00Z");
   const scheduleCache = new ScheduleLookupCache({ now: time.now });

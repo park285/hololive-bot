@@ -438,10 +438,12 @@ func TestReduceLateNewerScheduleReplacesAnEarlierAppliedReuse(t *testing.T) {
 
 	reused.ScheduledAt = new(original)
 	reused.ScheduleObservedAt = new(reusedAt)
+	reused.Title = "latest title"
 
 	confirmed := sessionFact("UPCOMING")
 
 	confirmed.ScheduledAt = new(moved)
+	confirmed.Title = "earlier title"
 
 	got := sessionOf(mustReduceAll(t, state, []Evidence{
 		liveEvidence(2, reuseSlot, contract.CompletenessComplete, contract.ContinuityContiguous, reused),
@@ -452,7 +454,9 @@ func TestReduceLateNewerScheduleReplacesAnEarlierAppliedReuse(t *testing.T) {
 		t.Fatalf("late newer schedule was dropped behind a reused one: %#v", got)
 	}
 
-	if got.Clock.LastUpcomingPositiveAt == nil || !got.Clock.LastUpcomingPositiveAt.Equal(reuseSlot) {
-		t.Fatalf("late schedule moved the status clock: %#v", got.Clock)
+	// 늦게 도착한 관측은 일정만 반영하고 상태·제목·시계는 더 늦은 관측의 값을 유지한다.
+	if got.Clock.LastUpcomingPositiveAt == nil || !got.Clock.LastUpcomingPositiveAt.Equal(reuseSlot) ||
+		got.StatusObservedAt == nil || !got.StatusObservedAt.Equal(reuseSlot) || got.Title != "latest title" {
+		t.Fatalf("late schedule changed more than the schedule: %#v", got)
 	}
 }

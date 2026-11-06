@@ -13,7 +13,7 @@ const defaultMaxEntries = 512;
 
 /**
  * @typedef {{ isLive?: boolean, isUpcoming?: boolean, startTimestamp?: string | null, scheduleUnavailableReason?: string }} ScheduleMetadata
- * @typedef {{ startTimestamp: string | undefined, observedAt: number, expiresAt: number }} ScheduleEntry
+ * @typedef {{ startTimestamp: string, observedAt: number, reuseUntil: number }} ScheduleEntry
  * @typedef {{ isLive: false, isUpcoming: true, startTimestamp: string, observedAt: string }} ReusedSchedule
  */
 
@@ -21,12 +21,15 @@ const defaultMaxEntries = 512;
  * 시각 없는 예정 영상의 player 예정 시각을 helper 프로세스 안에서 재사용합니다.
  * 항목은 확인한 요청의 collector lease 슬롯 시각(`observedAt`)을 함께 보관해, 발행 행이 이번 poll이 아닌
  * 그 슬롯의 관측임을 API와 같은 시계로 밝힙니다. 재사용 기한은 helper 벽시계로 계산합니다.
- * 접근 제한·LIVE 판정·오류·진행 중인 조회는 예정 시각 없이 슬롯만 남긴 표식으로 보관합니다. 표식은 재사용하지 않고,
- * 늦게 끝난 앞 슬롯의 조회가 그 뒤의 무효화를 되돌리지 못하게 합니다. 재시작하면 비며 AP마다 따로 유지됩니다.
+ * 채널마다 시작한 가장 늦은 슬롯을 따로 기록해, 겹친 요청에서 늦게 끝난 앞 슬롯의 조회가 그 뒤 슬롯의
+ * 무효화나 재확인을 되돌리지 못하게 합니다. 접근 제한·LIVE 판정·오류는 저장하지 않습니다.
+ * 재시작하면 비며 AP마다 따로 유지됩니다.
  */
 export class ScheduleLookupCache {
   /** @type {Map<string, ScheduleEntry>} */
   #entries = new Map();
+  /** @type {Map<string, number>} */
+  #channelSlots = new Map();
   #maxEntries;
   #now;
 
@@ -40,6 +43,22 @@ export class ScheduleLookupCache {
   }
 
   /**
+   * 채널의 `observedAt` 슬롯 수집이 시작됐음을 기록합니다. 그보다 앞 슬롯의 조회 결과는 이후 저장하지 않습니다.
+   * 겹친 요청이 드물어 앞 슬롯 결과를 버리는 비용은 다음 poll의 조회 한 번뿐입니다.
+   * @param {string} channelId
+   * @param {number} observedAt
+   */
+  beginSlot(channelId, observedAt) {
+    const latest = this.#channelSlots.get(channelId);
+    if (latest !== undefined && latest >= observedAt) return;
+    this.#channelSlots.delete(channelId);
+    this.#channelSlots.set(channelId, observedAt);
+    // 채널 수가 상한보다 훨씬 적어 축출은 사실상 없고, 일어나도 그 채널의 겹친 요청 보호만 잃습니다.
+    // 그때도 재사용 행은 원래 슬롯 시각을 실어 API가 더 새 일정을 지킵니다.
+    evictOldest(this.#channelSlots, this.#maxEntries);
+  }
+
+  /**
    * 유효하고 `observedBefore`보다 앞선 슬롯에서 확인한 예정 시각이 있으면 돌려줍니다.
    * 같은 슬롯의 재시도나 겹친 요청은 재사용하지 않아, 재사용 행의 관측 시각이 항상 이번 관측보다 앞섭니다.
    * @param {string} channelId
@@ -48,8 +67,14 @@ export class ScheduleLookupCache {
    * @returns {ReusedSchedule | undefined}
    */
   reuse(channelId, videoId, observedBefore) {
-    const entry = this.#current(cacheKey(channelId, videoId));
-    if (entry?.startTimestamp === undefined || entry.observedAt >= observedBefore) return undefined;
+    const key = cacheKey(channelId, videoId);
+    const entry = this.#entries.get(key);
+    if (entry === undefined) return undefined;
+    if (this.#now() >= entry.reuseUntil) {
+      this.#entries.delete(key);
+      return undefined;
+    }
+    if (entry.observedAt >= observedBefore) return undefined;
     return {
       isLive: false,
       isUpcoming: true,
@@ -59,86 +84,52 @@ export class ScheduleLookupCache {
   }
 
   /**
-   * `observedAt` 슬롯의 player 조회를 시작하기 전에 표식을 남깁니다. 조회가 끝나기 전에는 앞 슬롯의 결과를 받지 않고,
-   * 조회나 검증이 실패해 결과를 기록하지 못하면 표식이 남아 다음 슬롯도 player로 다시 확인합니다.
-   * @param {string} channelId
-   * @param {string} videoId
-   * @param {number} observedAt
-   */
-  beginLookup(channelId, videoId, observedAt) {
-    this.#mark(cacheKey(channelId, videoId), observedAt);
-  }
-
-  /**
-   * `observedAt` 슬롯에서 player로 새로 확인한 결과를 기록합니다. 재사용할 수 없는 결과는 표식으로 바꿉니다.
-   * 더 늦은 슬롯의 항목은 늦게 끝난 앞 슬롯의 조회가 덮어쓰지 않습니다.
+   * `observedAt` 슬롯에서 player로 새로 확인한 결과를 기록합니다. 재사용할 수 없는 결과는 기존 항목을 지웁니다.
+   * 채널의 더 늦은 슬롯이 이미 시작했거나 더 늦은 슬롯의 항목이 있으면 기록하지 않습니다.
    * @param {string} channelId
    * @param {string} videoId
    * @param {ScheduleMetadata} metadata
    * @param {number} observedAt
    */
   remember(channelId, videoId, metadata, observedAt) {
+    if ((this.#channelSlots.get(channelId) ?? -Infinity) > observedAt) return;
     const key = cacheKey(channelId, videoId);
-    if ((this.#current(key)?.observedAt ?? -Infinity) > observedAt) return;
+    if ((this.#entries.get(key)?.observedAt ?? -Infinity) > observedAt) return;
+    this.#entries.delete(key);
     const reuseUntil = reuseDeadline(metadata, this.#now());
-    if (reuseUntil === undefined || typeof metadata.startTimestamp !== "string") {
-      this.#mark(key, observedAt);
-      return;
-    }
-    this.#store(key, { startTimestamp: metadata.startTimestamp, observedAt, expiresAt: reuseUntil });
+    if (reuseUntil === undefined || typeof metadata.startTimestamp !== "string") return;
+    this.#entries.set(key, { startTimestamp: metadata.startTimestamp, observedAt, reuseUntil });
+    // 만료 기한이 상한 10분이라 삽입 순서 제거로 충분합니다.
+    evictOldest(this.#entries, this.#maxEntries);
   }
 
   /**
-   * 목록이 시각을 직접 보이거나 다른 상태로 바뀐 영상은 다음 미확정 관측에서 player로 다시 확인합니다.
-   * 진행 중인 조회는 항상 표식을 남기므로, 항목이 없으면 되살릴 조회도 없어 아무것도 저장하지 않습니다.
-   * 그래서 목록의 확정 행이 매 poll 캐시를 채우지 않습니다.
+   * `observedAt` 슬롯 이전에 확인한 항목을 지웁니다. 목록이 시각이나 다른 상태를 직접 보인 영상과,
+   * player로 다시 확인하기 직전의 영상에 씁니다. 그래서 재확인이 실패하면 다음 슬롯도 다시 조회합니다.
    * @param {string} channelId
    * @param {string} videoId
    * @param {number} observedAt
    */
   forget(channelId, videoId, observedAt) {
     const key = cacheKey(channelId, videoId);
-    if (this.#current(key) !== undefined) this.#mark(key, observedAt);
+    if ((this.#entries.get(key)?.observedAt ?? Infinity) <= observedAt) this.#entries.delete(key);
   }
 
   get size() {
     return this.#entries.size;
   }
+}
 
-  /** @param {string} key */
-  #current(key) {
-    const entry = this.#entries.get(key);
-    if (entry !== undefined && this.#now() >= entry.expiresAt) {
-      this.#entries.delete(key);
-      return undefined;
-    }
-    return entry;
-  }
-
-  /**
-   * 표식은 재사용 상한만큼 둡니다. 만료 뒤 앞 슬롯의 조회가 다시 기록해도 그 행은 원래 슬롯 시각을 실어
-   * API가 더 새 일정을 지키므로, 이 기한은 메모리 상한일 뿐 정확성 경계가 아닙니다.
-   * @param {string} key
-   * @param {number} observedAt
-   */
-  #mark(key, observedAt) {
-    if ((this.#current(key)?.observedAt ?? -Infinity) > observedAt) return;
-    this.#store(key, { startTimestamp: undefined, observedAt, expiresAt: this.#now() + scheduleReuseMaxMs });
-  }
-
-  /**
-   * @param {string} key
-   * @param {ScheduleEntry} entry
-   */
-  #store(key, entry) {
-    this.#entries.delete(key);
-    this.#entries.set(key, entry);
-    // 모든 항목의 기한이 재사용 상한 10분 이내라 삽입 순서 제거로 충분합니다.
-    while (this.#entries.size > this.#maxEntries) {
-      const oldest = this.#entries.keys().next().value;
-      if (oldest === undefined) break;
-      this.#entries.delete(oldest);
-    }
+/**
+ * @template V
+ * @param {Map<string, V>} map
+ * @param {number} maxEntries
+ */
+function evictOldest(map, maxEntries) {
+  while (map.size > maxEntries) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
   }
 }
 
