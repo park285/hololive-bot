@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **예정 영상 일정 확인 재사용:** collector helper가 같은 채널·영상의 player 일정 확인 결과를 프로세스 메모리에서 재사용합니다. 예정 시각은 시작 30분 전까지 남은 시간의 1/6(5~60분), 접근 제한은 30분 재사용하고, 시작 30분 이내·시작 시각 경과·player `LIVE` 판정·오류는 매 poll 다시 조회합니다. 운영 지표상 limiter slot의 약 26%(초당 0.83)가 같은 영상의 반복 조회였고, AP 1대가 빠지면 남은 AP가 포화되어 `channel_live_check` 대상이 최대 약 50초 늦었습니다. 먼 예정 영상의 일정 변경은 재사용 기간만큼 늦게 반영될 수 있습니다. 접근 제한 WARN은 player로 새로 확인한 poll에만 남깁니다. 쓰지 않던 수집 client의 `getBasicInfo` 노출도 지웠습니다.
+
 ## v14.0.0 - 2026-11-06
 
 - **전달 확인 불명 격리의 종료 기록:** Iris에 넘긴 뒤 수락을 확인하지 못해 격리된 알림(`handoff_unconfirmed`, `sent_at` 기록됨)도 closeout receipt로 재발송 없는 종료를 기록할 수 있습니다(migration 367). 이전 기록 함수는 `sent_at`이 있으면 거부해 이런 행이 보존 기간(180일) 내내 미검토 격리로 남고 `HololiveDispatchQuarantineRetained` 경보가 계속 울렸습니다.

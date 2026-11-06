@@ -10,6 +10,7 @@ interface YouTubeJSFetchOptions {
   maxScheduleLookups?: number;
   maxSuccessResponseBytes?: number;
   innertube?: any;
+  scheduleCache?: import("./schedule-cache.mjs").ScheduleLookupCache;
   postType?: any;
   fetchImpl?: any;
 }

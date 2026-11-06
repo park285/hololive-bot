@@ -402,13 +402,12 @@ test("request cancellation stops before the first request, a tab load, or anothe
   }
 });
 
-test("metadata keeps its original about tab and player methods retain their native receiver", async () => {
+test("metadata keeps its original about tab and shares the native actions and session", async () => {
   const about = { channelAboutFullMetadataRenderer: {
     channelId: "UC_TEST", title: { simpleText: "Channel" }, description: { simpleText: "About the channel" },
   } };
   const { client, native, requests } = await localClient([
     page([tabNode("about", true, [about])]),
-    { videoDetails: { videoId: "video-1", title: "Video" }, playabilityStatus: { status: "OK" } },
   ]);
   const result = await fetchChannelFeed({ channelId: "UC_TEST", kind: "metadata", innertube: client });
   assert.equal(result.profile.description, "About the channel");
@@ -416,8 +415,4 @@ test("metadata keeps its original about tab and player methods retain their nati
   assert.equal(requests.length, 1);
   assert.equal(client.actions, native.actions);
   assert.equal(client.session, native.session);
-  const info = await client.getBasicInfo("video-1");
-  assert.equal(info.basic_info.id, "video-1");
-  assert.equal(requests.length, 2);
-  assert.equal(requests[1].body.videoId, "video-1");
 });
