@@ -5,14 +5,14 @@ StartLimitIntervalSec=0
 
 [Container]
 ContainerName=hololive-youtube-po-b
-Image=docker.io/library/hololive-youtube-po-sandbox:prod
+Image=localhost/hololive-youtube-po-sandbox:prod
 Pull=never
-Exec=--socket /run/hololive-youtube-po/worker.sock
-User=65532:1000
+User=65532
+Group=1000
 Network=none
 ReadOnly=true
 ReadOnlyTmpfs=false
-Tmpfs=/tmp:size=64m,mode=1777,uid=65532,gid=1000,noexec,nosuid,nodev
+Tmpfs=/tmp:size=64m,mode=1777,U,noexec,nosuid,nodev
 DropCapability=ALL
 NoNewPrivileges=true
 Ulimit=core=0:0
@@ -25,11 +25,16 @@ HealthCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtub
 HealthInterval=30s
 HealthTimeout=5s
 HealthStartPeriod=5s
+HealthStartupCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtube-po/worker.sock"]
+HealthStartupInterval=2s
+HealthStartupTimeout=5s
+Notify=healthy
 LogDriver=journald
 
 [Service]
 Restart=always
 RestartSec=5
+TimeoutStartSec=120
 
 [Install]
 WantedBy=multi-user.target

@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
-# 격리 issuer와 중앙 수집기 c를 kapu에서 Podman으로 빌드하고 검증된 이미지를 전송한다.
-# 중앙(hololive-seoul)은 rootful Podman Quadlet이며 원격 교체는 lib/po-central-remote.sh가 소유한다.
+# 격리 issuer와 Quadlet 수집기(c: 중앙 hololive-seoul, b: iris-seoul)를 kapu에서 Podman으로 빌드하고 검증된 이미지를
+# 전송한다. 두 호스트 모두 rootful Podman Quadlet이며 원격 교체는 lib/po-central-remote.sh가 소유한다.
 set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$root/scripts/deploy/lib/source-revision.sh"
 [[ "$(hostname -s)" == kapu ]] || { echo 'image build/export is restricted to kapu' >&2; exit 1; }
-[[ $# -ge 1 && $# -le 2 ]] || { echo "Usage: $0 deploy | rollback|check /opt/hololive-bot/compose/backups/po-c-TIMESTAMP" >&2; exit 2; }
+usage() { echo "Usage: $0 <c|b> deploy | <c|b> rollback|check <remote-root>/backups/po-<slot>-TIMESTAMP" >&2; exit 2; }
+[[ $# -ge 2 && $# -le 3 ]] || usage
+slot="$1"
+shift
+# slot마다 원격 호스트·배포 루트가 고정된다. 승인·SSH 대상 변수도 slot 이름을 담아 다른 slot에 새지 않게 한다.
+case "$slot" in
+  c) remote_root=/opt/hololive-bot/compose ;;
+  b) remote_root=/opt/hololive-bot/collector-b ;;
+  *) usage ;;
+esac
+slot_upper="${slot^^}"
+ssh_var="PO_${slot_upper}_SSH_TARGET" deploy_var="APPROVE_PO_${slot_upper}_DEPLOY" rollback_var="APPROVE_PO_${slot_upper}_ROLLBACK"
 mode="$1"
-[[ "$mode" == deploy || "$mode" == rollback || "$mode" == check ]] || exit 2
-ssh_target="${PO_C_SSH_TARGET:?set PO_C_SSH_TARGET to the approved central SSH host}"
+[[ "$mode" == deploy || "$mode" == rollback || "$mode" == check ]] || usage
+ssh_target="${!ssh_var:-}"
+[[ -n "$ssh_target" ]] || { echo "set $ssh_var to the approved collector $slot SSH host" >&2; exit 2; }
 [[ "$ssh_target" =~ ^[A-Za-z0-9@._-]+$ ]] || exit 2
 if [[ "$mode" == deploy ]]; then
-  [[ $# -eq 1 && "${APPROVE_PO_C_DEPLOY:-}" == true ]] || { echo 'APPROVE_PO_C_DEPLOY=true required' >&2; exit 2; }
+  [[ $# -eq 1 && "${!deploy_var:-}" == true ]] || { echo "$deploy_var=true required" >&2; exit 2; }
 elif [[ "$mode" == rollback ]]; then
-  [[ $# -eq 2 && "${APPROVE_PO_C_ROLLBACK:-}" == true ]] || { echo 'APPROVE_PO_C_ROLLBACK=true required' >&2; exit 2; }
+  [[ $# -eq 2 && "${!rollback_var:-}" == true ]] || { echo "$rollback_var=true required" >&2; exit 2; }
 else
   [[ $# -eq 2 ]] || exit 2
 fi
 version="$(cat "$root/hololive/hololive-api/VERSION")"
 [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
-remote_root=/opt/hololive-bot/compose
 if [[ "$mode" == deploy ]]; then
   revision="$(deploy_source_revision "$root")"
   change_id="$(date -u +%Y%m%dT%H%M%SZ)"
-  backup="$remote_root/backups/po-c-$change_id"
+  backup="$remote_root/backups/po-$slot-$change_id"
   staging="$remote_root/po-staging-$change_id"
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
@@ -60,13 +71,13 @@ PY
   ssh "$ssh_target" "sudo -n chown -R root:root '$staging' && sudo -n chmod -R go-w '$staging'"
 else
   backup="$2"
-  [[ "$backup" =~ ^/opt/hololive-bot/compose/backups/po-c-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
-  change_id="${backup##*/po-c-}"
+  [[ "$backup" =~ ^$remote_root/backups/po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
+  change_id="${backup##*/po-"$slot"-}"
   staging="$remote_root/po-staging-$change_id"
   revision="$(ssh "$ssh_target" "sudo -n cat '$backup/candidate.revision'")"
   version="$(ssh "$ssh_target" "sudo -n cat '$backup/candidate.version'")"
   [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
 fi
-ssh "$ssh_target" sudo -n bash -s -- "$mode" "$staging" "$backup" "$revision" "$version" \
+ssh "$ssh_target" sudo -n bash -s -- "$slot" "$mode" "$staging" "$backup" "$revision" "$version" \
   < "$root/scripts/deploy/lib/po-central-remote.sh"
-printf 'central %s: source=%s backup=%s staging=%s\n' "$mode" "$revision" "$backup" "$staging"
+printf 'collector %s %s: source=%s backup=%s staging=%s\n' "$slot" "$mode" "$revision" "$backup" "$staging"
