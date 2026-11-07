@@ -246,9 +246,10 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	)
 
 	cmd := NewLiveCommand(&handlercore.Dependencies{
-		LiveQuery: streamProvider,
-		Matcher:   matcherService,
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		LiveQuery:     streamProvider,
+		Matcher:       matcherService,
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(ctx context.Context, _, message string) error {
 			sendMessageState.record(ctx)
 

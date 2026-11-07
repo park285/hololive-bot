@@ -235,8 +235,8 @@ func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string,
 	return nil
 }
 
-// withMemberDisplayNames는 members에 등록된 채널의 스트림 이름을 명령 응답 표시명으로 바꾼 사본을 돌려준다.
-// Holodex 응답은 캐시와 공유될 수 있어 원본을 고치지 않는다. 등록되지 않은 채널은 기존처럼 응답 이름을 그대로 둔다.
+// withMemberDisplayNames는 members에 등록된 채널의 스트림 이름을 명령 응답 표시명으로 바꾸고 콜라보 출연자 표시명을 붙인
+// 사본을 돌려준다. Holodex 응답은 캐시와 공유될 수 있어 원본을 고치지 않는다. 등록되지 않은 채널은 기존처럼 응답 이름을 그대로 둔다.
 func (c *UpcomingCommand) withMemberDisplayNames(ctx context.Context, streams []*domain.Stream) ([]*domain.Stream, error) {
 	channelIDs := make([]string, 0, len(streams))
 	for _, stream := range streams {
@@ -265,12 +265,17 @@ func (c *UpcomingCommand) withMemberDisplayNames(ctx context.Context, streams []
 		}
 	}
 
-	return named, nil
+	return withCollabMembers(ctx, c.Deps().CollabMembers, named)
 }
 
-// replyDisplayNameFailure는 표시명 조회 실패를 원천 이름으로 덮지 않고 예정 조회 실패로 알린다.
+// replyDisplayNameFailure는 표시명·콜라보 출연자 조회 실패를 원천 이름이나 출연자 생략으로 덮지 않고 예정 조회 실패로 알린다.
 func (c *UpcomingCommand) replyDisplayNameFailure(ctx context.Context, roomID string, cause error) error {
-	c.Deps().Logger.Error("Failed to resolve upcoming member display names", slog.Any("error", cause))
+	// 요청 취소는 조회 실패가 아니므로 오류 응답과 ERROR 로그 없이 취소로 돌려준다(live와 같은 처리).
+	if ctx.Err() != nil {
+		return fmt.Errorf("upcoming display names canceled: %w", ctx.Err())
+	}
+
+	c.Deps().Logger.Error("Failed to resolve upcoming display names", slog.Any("error", cause))
 
 	if err := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); err != nil {
 		return fmt.Errorf("send error: %w", err)
@@ -284,7 +289,7 @@ func (c *UpcomingCommand) ensureDeps() error {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Holodex == nil || c.Deps().Formatter == nil || c.Deps().Matcher == nil {
+	if c.Deps().Holodex == nil || c.Deps().Formatter == nil || c.Deps().Matcher == nil || c.Deps().CollabMembers == nil {
 		return errors.New("upcoming command services not configured")
 	}
 

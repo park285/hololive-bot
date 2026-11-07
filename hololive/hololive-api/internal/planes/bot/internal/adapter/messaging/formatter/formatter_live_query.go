@@ -10,7 +10,8 @@ import (
 
 // LiveQuery는 확정 방송만 표시하고 채널별 조회 진단과 조회 시각은 응답에 붙이지 않는다.
 // 전체 scope가 확인되지 않은 빈 결과만 '확인할 수 없음'으로 남겨 방송 없음과 구분한다.
-func (f *ResponseFormatter) LiveQuery(ctx context.Context, result livequery.Result, memberName string) string {
+// 영상 ID별 콜라보 출연자 표시명은 collabMembers로 받는다.
+func (f *ResponseFormatter) LiveQuery(ctx context.Context, result livequery.Result, memberName string, collabMembers map[string][]string) string {
 	if len(result.Items) == 0 {
 		if result.Status != livequery.Complete {
 			return "현재 방송 상태를 확인할 수 없습니다."
@@ -26,7 +27,8 @@ func (f *ResponseFormatter) LiveQuery(ctx context.Context, result livequery.Resu
 		streams[i] = &domain.Stream{
 			ID: item.VideoID, ChannelID: item.ChannelID, ChannelName: item.ChannelName,
 			Title: item.Title, Status: domain.StreamStatusLive, StartActual: item.StartedAt,
-			Channel: &domain.Channel{ID: item.ChannelID, Name: item.ChannelName, Org: new(item.Org)},
+			Channel:            &domain.Channel{ID: item.ChannelID, Name: item.ChannelName, Org: new(item.Org)},
+			CollaboTalentNames: collabMembers[item.VideoID],
 		}
 	}
 

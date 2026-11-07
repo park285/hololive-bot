@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **방송 목록의 콜라보 출연자 조회(템플릿 적용 전 준비):** `!라이브`·`!예정`·`!일정` 응답의 각 방송에 공식 스케줄(`youtube_schedule_items.collabo_talent_names`)의 출연자 표시명을 `CollabMembers` 뷰 필드로 넘깁니다. 호스트는 빼고 멤버 표시명으로 바꿉니다. 출연자 조회나 멤버 적재가 실패하면 출연자를 뺀 목록 대신 각 명령의 조회 실패로 응답하고, 요청 취소는 오류 응답 없이 끝냅니다. 표준 템플릿은 아직 이 필드를 쓰지 않으므로 화면 변화는 후속 migration 369가 적용된 뒤에 나타납니다.
 - **Iris 기동 epoch 인증 동시 전환(파괴적):** API·alarm-worker·shared의 SDK import와 pin, collector의 간접 pin을 `iris-client-go/v5 v5.0.0`으로 옮깁니다. 보호 호출은 같은 H3/TLS 대상의 `/auth/epoch`를 먼저 확인하고, `401 AUTH_EPOCH_MISMATCH`에서만 원래 deadline·본문·`ClientRequestID`를 유지해 논리 호출당 최대 한 번 새 epoch로 재서명합니다. bootstrap 실패는 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다. 기존 owner 재시도·handoff·결과 불명·webhook v3·inbox 계약은 유지합니다. 새 Iris와 소비자를 같은 배포 창에서 교체해야 하며, SDK 정식 tag 게시와 공식 Go checksum 생성 전에는 운영 빌드·배포하지 않습니다.
 - **중앙 Iris 소비자 정지·재개:** 배포 helper의 `--quiesce`는 실행 중 API·alarm-worker의 이전 pair와 후보를 보존한 뒤 두 unit을 함께 정지·영속 mask합니다. 재부팅도 이 hold를 해제하지 않습니다. 외부 Iris 전환 뒤 `--resume`은 revision·image·profile·설치 상태를 다시 검증하고, 두 후보 drop-in을 모두 게시한 뒤에만 worker→API를 기동합니다. 정지·부분 실패를 배포 성공으로 처리하거나 자동 rollback하지 않습니다.
 - **운영 데이터·복구점 보존:** `sync-opt-current.sh --preserve-runtime`은 runtime-config를 backup/seed하지 않고 기존 runtime bytes·owner·mode를 유지합니다. 모든 동기화는 고유 exec-tree backup을 만들며 같은 revision의 이전 복구점을 덮거나 오래된 backup을 자동 삭제하지 않습니다.

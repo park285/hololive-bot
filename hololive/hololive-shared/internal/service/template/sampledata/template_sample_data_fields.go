@@ -33,6 +33,7 @@ const (
 	fieldEmoji        = "Emoji"
 	fieldBell         = "Bell"
 	fieldAlarm        = "Alarm"
+	fieldCollab       = "CollabMembers"
 
 	sampleMemberMiko   = "사쿠라 미코"
 	sampleMemberFubuki = "시라카미 후부키"

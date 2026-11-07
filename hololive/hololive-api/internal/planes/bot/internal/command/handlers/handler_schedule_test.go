@@ -86,9 +86,10 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -115,9 +116,10 @@ func TestScheduleCommand_Execute_NoMemberName(t *testing.T) {
 	var sentError string
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &scheduleStreamProviderStub{},
-		Matcher:   &matcher.Matcher{},
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       &scheduleStreamProviderStub{},
+		Matcher:       &matcher.Matcher{},
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -144,9 +146,10 @@ func TestScheduleCommand_Execute_NoMemberName_SuppressedByMemberToken(t *testing
 	sendErrorCalled := false
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &scheduleStreamProviderStub{},
-		Matcher:   &matcher.Matcher{},
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       &scheduleStreamProviderStub{},
+		Matcher:       &matcher.Matcher{},
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -184,9 +187,10 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -217,9 +221,10 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 	memberProvider := newContextAwareMemberProvider(nil)
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &scheduleStreamProviderStub{},
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       &scheduleStreamProviderStub{},
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true
 			return nil
@@ -257,9 +262,10 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil

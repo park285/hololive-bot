@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/collabmembers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -86,6 +87,7 @@ func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *ha
 	deps := &handlercore.Dependencies{
 		Holodex:             v.holodex,
 		LiveQuery:           livequery.New(v.postgres),
+		CollabMembers:       collabmembers.New(v.postgres, v.membersData),
 		Alarm:               v.alarm,
 		Matcher:             v.matcher,
 		MemberNews:          v.memberNews,

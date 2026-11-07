@@ -137,12 +137,12 @@ func TestLiveQueryKeepsTruncationNoticeAboveFold(t *testing.T) {
 
 	out := kakaoformat.Render(f.LiveQuery(t.Context(), livequery.Result{
 		Items: items, Status: livequery.Partial, Truncated: true, AsOf: time.Unix(1, 0),
-	}, ""))
+	}, "", nil))
 
 	padding := strings.Repeat(kakaotext.ZeroWidthSpace, templateview.KakaoSeeMorePadding)
 	withoutNotice := kakaoformat.Render(f.LiveQuery(t.Context(), livequery.Result{
 		Items: items, Status: livequery.Partial, Truncated: false, AsOf: time.Unix(1, 0),
-	}, ""))
+	}, "", nil))
 	head, body, folded := strings.Cut(out, padding)
 	plainHead, plainBody, plainFolded := strings.Cut(withoutNotice, padding)
 

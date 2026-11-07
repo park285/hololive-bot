@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -43,6 +44,8 @@ type liveStreamView struct {
 	URL         string
 	// Elapsed는 조회 시각 기준 경과 표기다. 시작 시각을 믿을 수 없으면 비워 템플릿이 생략하게 한다.
 	Elapsed string
+	// CollabMembers는 호스트를 뺀 콜라보 출연자 표시명이다. 없으면 비워 템플릿이 줄을 생략하게 한다.
+	CollabMembers string
 }
 
 const streamListDisplayLimit = 100
@@ -53,10 +56,11 @@ type liveStreamsTemplateData struct {
 }
 
 type upcomingStreamView struct {
-	ChannelName string
-	Title       string
-	TimeInfo    string
-	URL         string
+	ChannelName   string
+	Title         string
+	TimeInfo      string
+	URL           string
+	CollabMembers string
 }
 
 type upcomingStreamsTemplateData struct {
@@ -66,10 +70,11 @@ type upcomingStreamsTemplateData struct {
 }
 
 type scheduleEntryView struct {
-	IsLive   bool
-	Title    string
-	TimeInfo string
-	URL      string
+	IsLive        bool
+	Title         string
+	TimeInfo      string
+	URL           string
+	CollabMembers string
 }
 
 type channelScheduleTemplateData struct {
@@ -117,6 +122,8 @@ func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.S
 		Title:       f.truncateTitle(stream.Title),
 		URL:         stream.GetYouTubeURL(),
 		Elapsed:     liveElapsed(stream.StartActual, asOf),
+		// 명령 핸들러가 CollaboTalentNames를 표시명으로 바꿔 넘긴다.
+		CollabMembers: officialidentity.Format(stream.CollaboTalentNames),
 	}
 }
 
@@ -145,10 +152,11 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 		data.Streams = make([]upcomingStreamView, len(streams))
 		for i, stream := range streams {
 			data.Streams[i] = upcomingStreamView{
-				ChannelName: f.formatChannelName(ctx, stream),
-				Title:       f.truncateTitle(stream.Title),
-				TimeInfo:    f.streamTimeInfo(ctx, stream),
-				URL:         stream.GetYouTubeURL(),
+				ChannelName:   f.formatChannelName(ctx, stream),
+				Title:         f.truncateTitle(stream.Title),
+				TimeInfo:      f.streamTimeInfo(ctx, stream),
+				URL:           stream.GetYouTubeURL(),
+				CollabMembers: officialidentity.Format(stream.CollaboTalentNames),
 			}
 		}
 	}
@@ -213,8 +221,9 @@ func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domai
 	}
 
 	entry := scheduleEntryView{
-		Title: f.truncateTitle(title),
-		URL:   stream.GetYouTubeURL(),
+		Title:         f.truncateTitle(title),
+		URL:           stream.GetYouTubeURL(),
+		CollabMembers: officialidentity.Format(stream.CollaboTalentNames),
 	}
 	if stream.IsLive() {
 		entry.IsLive = true

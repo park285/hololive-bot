@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -96,8 +97,24 @@ func (c *ScheduleCommand) executeMemberSchedule(ctx context.Context, room, membe
 
 	streams, err := c.Deps().Holodex.GetChannelSchedule(ctx, channel.ID, hours, true)
 	if err != nil {
-		if err := c.Deps().SendError(ctx, room, messaging.ErrScheduleQueryFailed); err != nil {
-			return fmt.Errorf("send error: %w", err)
+		if sendErr := c.Deps().SendError(ctx, room, messaging.ErrScheduleQueryFailed); sendErr != nil {
+			return fmt.Errorf("send error: %w", sendErr)
+		}
+
+		return nil
+	}
+
+	streams, err = withCollabMembers(ctx, c.Deps().CollabMembers, streams)
+	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("collab members query canceled: %w", ctx.Err())
+		}
+
+		// 출연자를 뺀 일정으로 덮지 않고 일정 조회 실패로 알린다.
+		c.Deps().Logger.Error("Failed to resolve schedule collab members", slog.Any("error", err))
+
+		if sendErr := c.Deps().SendError(ctx, room, messaging.ErrScheduleQueryFailed); sendErr != nil {
+			return fmt.Errorf("send error: %w", sendErr)
 		}
 
 		return nil
@@ -165,7 +182,7 @@ func (c *ScheduleCommand) ensureDeps() error {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().Holodex == nil || c.Deps().Formatter == nil {
+	if c.Deps().Matcher == nil || c.Deps().Holodex == nil || c.Deps().Formatter == nil || c.Deps().CollabMembers == nil {
 		return errors.New("schedule command services not configured")
 	}
 

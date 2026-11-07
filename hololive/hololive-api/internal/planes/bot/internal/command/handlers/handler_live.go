@@ -29,6 +29,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/collabmembers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -126,7 +127,28 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 		)
 	}
 
-	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.LiveQuery(ctx, result, request.MemberName)); err != nil {
+	videos := make([]collabmembers.Video, len(result.Items))
+	for i, item := range result.Items {
+		videos[i] = collabmembers.Video{ID: item.VideoID, HostChannelID: item.ChannelID}
+	}
+
+	collab, err := c.Deps().CollabMembers.DisplayNames(ctx, videos)
+	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("collab members query canceled: %w", ctx.Err())
+		}
+
+		// 출연자를 뺀 목록으로 덮지 않고 방송 조회 실패로 알린다.
+		c.Deps().Logger.ErrorContext(ctx, "Failed to resolve live collab members", slog.Any("error", err))
+
+		if sendErr := c.Deps().SendError(ctx, room, messaging.ErrLiveStreamQueryFailed); sendErr != nil {
+			return fmt.Errorf("send collab members error: %w", sendErr)
+		}
+
+		return nil
+	}
+
+	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.LiveQuery(ctx, result, request.MemberName, collab)); err != nil {
 		return fmt.Errorf("send live query result: %w", err)
 	}
 
@@ -138,7 +160,7 @@ func (c *LiveCommand) ensureDeps() error {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().LiveQuery == nil || c.Deps().Formatter == nil {
+	if c.Deps().Matcher == nil || c.Deps().LiveQuery == nil || c.Deps().Formatter == nil || c.Deps().CollabMembers == nil {
 		return errors.New("live command services not configured")
 	}
 

@@ -88,9 +88,10 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 	)
 
 	deps := &handlercore.Dependencies{
-		LiveQuery: &liveQueryStub{},
-		Matcher:   newAmbiguousMatcher(),
-		Formatter: newSeededTestFormatter(t),
+		CollabMembers: collabMembersStub{},
+		LiveQuery:     &liveQueryStub{},
+		Matcher:       newAmbiguousMatcher(),
+		Formatter:     newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			gotMessage = message
 			return nil
@@ -119,9 +120,10 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 	)
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &scheduleStreamProviderStub{},
-		Matcher:   newAmbiguousMatcher(),
-		Formatter: newSeededTestFormatter(t),
+		CollabMembers: collabMembersStub{},
+		Holodex:       &scheduleStreamProviderStub{},
+		Matcher:       newAmbiguousMatcher(),
+		Formatter:     newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			gotMessage = message
 			return nil
@@ -150,9 +152,10 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 	)
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &upcomingStreamProviderStub{},
-		Matcher:   newAmbiguousMatcher(),
-		Formatter: newSeededTestFormatter(t),
+		CollabMembers: collabMembersStub{},
+		Holodex:       &upcomingStreamProviderStub{},
+		Matcher:       newAmbiguousMatcher(),
+		Formatter:     newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			gotMessage = message
 			return nil

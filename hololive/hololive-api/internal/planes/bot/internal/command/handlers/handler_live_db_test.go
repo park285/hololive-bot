@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/collabmembers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -50,6 +51,7 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 
 	deps.Formatter = formatter.NewResponseFormatter("!", template.NewRenderer(pool, deps.Logger))
 	deps.LiveQuery = livequery.New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
+	deps.CollabMembers = collabmembers.New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, nil)
 
 	provider := &forbiddenLiveProvider{}
 
