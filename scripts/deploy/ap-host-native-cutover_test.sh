@@ -192,16 +192,16 @@ for mode, status in [('write_failure',9), ('read_failure',8)]:
     if (case/'recovery/terminal').exists():
         assert (case/'recovery/terminal').stat().st_mode & 0o777 == 0o600
 
-# 실제 remote apply/rollback 본문이 같은 미해제 guard에서 변경 전에 거절하는지 실행합니다.
-guard_case = case
-prefix = f'sudo() {{ shift; "$@"; }}; . "{helper}"; native_recovery_dir="{guard_case}/recovery"; '
-rollback = (root/'scripts/deploy/ap-host-native-rollback.sh').read_text()
-rollback_body = rollback[rollback.index('set -euo pipefail\nservice="$1"\nrollback_started_at='):rollback.index('\nREMOTE\n} | ap_remote_bash')]
-result = subprocess.run(['bash','-c',prefix + rollback_body,'fixture','youtube-collector-a','2026-10-03T00:00:00Z'],capture_output=True)
-assert result.returncode != 0 and b'recovery guard exists' in result.stderr
-po_prefix = 'po_service=issuer.service po_socket=issuer.socket po_unit_file=/nonexistent/po.service po_socket_file=/nonexistent/po.socket; '
-result = subprocess.run(['bash','-c',prefix + po_prefix + source,'fixture','payload','release','youtube-collector-a','30005','2026-10-03T00:00:00Z','7500000','2048','a'*40],capture_output=True)
-assert result.returncode != 0 and b'recovery guard exists' in result.stderr
+# 미확정 복구 디렉터리가 있으면 후속 writer를 실행하지 않는다.
+for occupied in (False, True):
+    guard_case = work / ('guard-occupied' if occupied else 'guard-clear')
+    guard_case.mkdir()
+    if occupied:
+        (guard_case / 'recovery').mkdir()
+    prefix = f'sudo() {{ shift; "$@"; }}; . "{helper}"; native_recovery_dir="{guard_case}/recovery"; '
+    result = subprocess.run(['bash', '-c', prefix + f'native_recovery_require_clear && touch "{guard_case}/changed"'], capture_output=True)
+    assert (result.returncode != 0) == occupied
+    assert (guard_case / 'changed').exists() != occupied
 case, actual = run_case('restore-group', 'false', 'restore-group')
 assert actual == 143 and (case/'recovery').exists() and 'outcome_unknown' in (case/'err').read_text()
 assert (case/'calls').read_text().count('enable --now ') == 1

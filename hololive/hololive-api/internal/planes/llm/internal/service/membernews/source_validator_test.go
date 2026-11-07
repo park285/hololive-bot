@@ -184,3 +184,102 @@ func TestSourceValidator_HasCorroboration(t *testing.T) {
 		t.Fatal("expected corroboration to be false")
 	}
 }
+
+func TestSourceValidatorRejectsAmbiguousSocialPaths(t *testing.T) {
+	t.Parallel()
+
+	validator := &SourceValidator{xAllowlist: map[string]struct{}{"hololivetv": {}}}
+
+	for _, source := range []string{
+		"https://x.com/hololivetv/../attacker/status/1",
+		"https://x.com/hololivetv/./status/1",
+		"https://x.com/hololivetv/%2e%2e/attacker/status/1",
+		"https://x.com/hololivetv/.%2E/attacker/status/1",
+		"https://twitter.com/hololivetv/%2e./attacker/status/1",
+		"https://x.com/hololivetv/%2e/status/1",
+		`https://x.com/hololivetv/..\attacker/status/1`,
+		"https://x.com/hololivetv/%5c../attacker/status/1",
+		"https://x.com/hololivetv%2f../attacker/status/1",
+		"https://x.com//hololivetv/status/1",
+		"https://x.com/%20hololivetv/status/1",
+		"https://x.com/hololivetv/%",
+		"https:///x.com/hololivetv",
+		"https://[x.com/hololivetv",
+		"https:\\\\x.com\\hololivetv",
+		"https://x.com:invalid/hololivetv",
+	} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+
+			tier, normalized, err := validator.ValidateSourceURL(source)
+			if err == nil || tier != model.SourceTierCommunity || normalized != "" {
+				t.Errorf("ambiguous source = (%s, %q, %v), want rejection", tier, normalized, err)
+			}
+
+			if validator.HasCorroboration("출처: " + source) {
+				t.Errorf("ambiguous source counted as corroboration: %q", source)
+			}
+		})
+	}
+}
+
+func TestSourceValidatorPreservesTrustedSocialURLs(t *testing.T) {
+	t.Parallel()
+
+	validator := &SourceValidator{xAllowlist: map[string]struct{}{"hololivetv": {}}}
+
+	for _, source := range []string{
+		"https://x.com/hololivetv/status/1",
+		"http://twitter.com/hololivetv/status/1?lang=en#details",
+		"https://www.x.com/hololivetv/",
+	} {
+		tier, normalized, err := validator.ValidateSourceURL(source)
+		if err != nil || tier != model.SourceTierOfficial || normalized != source {
+			t.Errorf("trusted source = (%s, %q, %v), want original official URL", tier, normalized, err)
+		}
+	}
+}
+
+func TestSourceValidatorRejectsAmbiguousYouTubePaths(t *testing.T) {
+	t.Parallel()
+
+	validator := &SourceValidator{
+		ytChannelIDs: map[string]struct{}{"UC_TEST_OFFICIAL": {}},
+		ytHandles:    map[string]struct{}{"hololive": {}},
+	}
+
+	for _, source := range []string{
+		"https://www.youtube.com/@hololive/../@attacker",
+		"https://www.youtube.com/@hololive/%2e%2e/@attacker",
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/../../@attacker",
+		"https://www.youtube.com/c/hololive/./../../@attacker",
+		`https://www.youtube.com/@hololive/..\@attacker`,
+		"https://www.youtube.com/@hololive%2f../@attacker",
+		"https://www.youtube.com//@hololive",
+	} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+
+			tier, _, err := validator.ValidateSourceURL(source)
+			if err == nil && tier == model.SourceTierOfficial {
+				t.Errorf("ambiguous youtube source classified official: %q", source)
+			}
+
+			if validator.HasCorroboration("출처: " + source) {
+				t.Errorf("ambiguous youtube source counted as corroboration: %q", source)
+			}
+		})
+	}
+
+	for _, source := range []string{
+		"https://www.youtube.com/@hololive",
+		"https://www.youtube.com/@hololive/videos",
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/",
+		"https://www.youtube.com/c/hololive",
+	} {
+		tier, _, err := validator.ValidateSourceURL(source)
+		if err != nil || tier != model.SourceTierOfficial {
+			t.Errorf("trusted youtube source = (%s, %v), want official: %q", tier, err, source)
+		}
+	}
+}

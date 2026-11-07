@@ -21,6 +21,10 @@
   - 옛 API는 이 필드를 `invalid_payload`로 dead letter 처리하므로 API를 먼저 배포하고, 롤백은 collector부터 합니다.
 - **수집 client 정리:** 운영 경로에서 쓰지 않던 수집 client의 `getBasicInfo` 노출을 지웠습니다.
 - **collector·PO issuer 의존성 갱신:** PO issuer의 `jsdom`을 31.0.0으로 올립니다(undici 8.12.4, parse5 8.1.0 동반). 31은 CSS 엔진 교체·blocking script에서의 파싱 일시정지·canvas backend 교체가 주요 변경입니다. issuer는 script 없는 빈 문서만 만들고 canvas를 쓰지 않으므로 앞의 두 변경은 해당하지 않습니다. 다만 CSS 계산값이 달라질 수 있어, BotGuard 발급 성공은 운영 canary로 확인해야 합니다. helper는 `@types/node` 26.6.6, `@bufbuild/protobuf` 2.17.0, `meriyah` 7.4.1로, 두 package의 `packageManager`는 npm 12.2.2로 올립니다. collector·PO issuer 이미지의 Node 26.13.0 base digest는 Alpine 3.24.4로 다시 만든 판으로 바꿉니다(Node 버전은 같고, 설치 package 차이는 `apk-tools` 3.0.9뿐입니다). Go builder digest는 그대로 둡니다. Alpine 3.24.4판 Go 이미지의 `ca-certificates-bundle` 20261020에는 `scripts/build/ca-distrust.sha256`의 차단 루트가 이미 없어, `ca-distrust.sh`가 일부러 빌드를 멈추기 때문입니다. 이 갱신은 차단 목록 검토와 함께 진행해야 합니다. 다른 서비스 이미지의 base digest도 그대로 둡니다.
+- **서울 collector 로그 미러 복구:** kapu의 원격 미러 기본 경로를 iris-seoul Podman bind 원본 `/var/lib/hololive-collectors/b/logs`로 맞췄습니다. 이전 홈 디렉터리 경로로 발생하던 rsync 실패를 해소하며 서비스·로그 파일 이름은 유지합니다.
+- **Native 암호화 저장소 경계:** 배포·rsync·profile preparation·수동 rollback을 실제 mount/swap 검증과 공유 writer 잠금으로 감쌌습니다. 새 staging은 암호화 state 경계로 이동하고 기존 경로 재사용을 거부합니다. 평문 `/swapfile` 생성·활성화·fstab 추가를 제거하고 collector core limit을 0으로 고정했습니다. 저장소 전환의 배타 잠금과 부팅 의존성은 stack helper가 소유하며 앱 rollback이 저장소를 평문으로 되돌리지 않습니다.
+- **공식 출처 URL 경로 검증:** major event와 member news의 소셜 계정 판정에서 dot segment, encoded separator, 역슬래시·경계 공백·중복 slash를 거절합니다. URL 파싱 실패를 일반 출처 토큰으로 재해석하지 않으며 정상 공식 URL과 허용된 plain token은 유지합니다.
+- **H3 본문 수신 상한:** bot webhook과 공통 runtime H3에 기존 15초 읽기 예산을 적용합니다. 인증 전 무기한 본문 대기를 끝내되 본문 완료 후 긴 응답·SSE의 context와 write deadline은 바꾸지 않습니다.
 
 ## v14.0.0 - 2026-11-06
 

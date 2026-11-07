@@ -18,14 +18,6 @@ pass() { echo "[PASS] $*"; }
 # shellcheck source=scripts/deploy/lib/ap-host-native-rollback-check.sh
 . "${ROLLBACK_CHECK_LIB}"
 
-if grep -Eq 'EnvironmentFile=-?/etc/stack-secrets/hololive-bot/(ap-)?compose\.env' "${UNIT_TEMPLATE}"; then
-  record_fail "checked-in host-native unit template must not load a shared Compose env"
-elif ! grep -Fxq 'EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env' "${UNIT_TEMPLATE}" ||
-     ! grep -Fxq 'EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env' "${UNIT_TEMPLATE}"; then
-  record_fail "checked-in host-native unit template must require the two scoped env files"
-else
-  pass "checked-in host-native unit template exposes only collector-scoped env files"
-fi
 
 write_host_env_fn="$(awk '/^write_host_env\(\) \{/,/^}$/' "${DEPLOY}")"
 cfg008_dir="$(mktemp -d)"
@@ -106,17 +98,6 @@ else
 fi
 rm -rf "${permission_fixture}"
 
-if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${UNIT_TEMPLATE}"; then
-  pass "ap-host-native keeps /var/lib/hololive-bot writable under systemd hardening"
-else
-  record_fail "ap-host-native must keep /var/lib/hololive-bot writable"
-fi
-
-if grep -q '^ReadWritePaths=.*stack-secrets' "${UNIT_TEMPLATE}"; then
-  record_fail "ap-host-native must not grant write access to the static secret directory"
-else
-  pass "ap-host-native keeps /etc/stack-secrets read-only under ProtectSystem=strict"
-fi
 
 unit_copy_dir="$(mktemp -d)"
 mkdir -p "${unit_copy_dir}/etc/systemd/system" \

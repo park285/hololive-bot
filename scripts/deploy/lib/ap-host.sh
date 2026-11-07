@@ -118,6 +118,6 @@ ap_remote_bash() {
     for arg in "$@"; do
         remote_cmd+=" $(printf '%q' "$arg")"
     done
-    # RHEL 계열 sshd의 비대화식 PATH에는 sbin이 없다. 원격 조각은 sudo 없이 swapon·sysctl을 부르므로 스크립트 앞에 붙인다.
+    # RHEL 계열 sshd의 비대화식 PATH에는 sbin이 없다. 원격 조각은 sudo 없이 sysctl을 부르므로 스크립트 앞에 붙인다.
     { printf '%s\n' "PATH=\"\$PATH:/usr/local/sbin:/usr/sbin:/sbin\""; cat; } | "${AP_SSH[@]}" "$remote_cmd"
 }
