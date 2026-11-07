@@ -255,9 +255,9 @@ native 배포는 root 소유 `/opt/hololive-bot/youtube-collector/cutover-recove
 
 guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니다. 준비 중 실패와 복원 실패도 guard를 보존하며 rollback `--dry-run`은 기존 payload 진단에 사용할 수 있습니다. 운영 변경 승인을 받은 뒤 기록의 worker와 자식 process group, 잔존 systemd job 및 collector/issuer 상태를 확인하고 변경 완료 여부를 확정하십시오. PID는 재사용될 수 있으므로 PID 숫자만으로 다른 프로세스를 종료하지 않습니다. 5초 뒤 worker group에 TERM을 전달해도 신호를 무시하는 클라이언트나 daemon 작업의 종료를 보장하지 않습니다. 복구가 확정된 뒤에만 guard를 해제하고 필요한 rollback/fix-forward를 적용합니다. 새 release와 `previous`의 rollback 자료는 이 확인이 끝날 때까지 보존합니다.
 
-native 저장소 전환 이후 배포·수동 rollback·profile preparation·rsync는 `/usr/local/libexec/iris-storage writer --config /etc/iris-storage/config.json -- ...`를 통해 실행합니다. 이 helper는 실제 LUKS/mount·암호화 swap을 검증하고 `/run/lock/iris-storage-writers.lock`의 공유 잠금을 실행 종료까지 유지합니다. 저장소 유지보수는 같은 파일의 배타 잠금을 잡으며, 충돌·누락·잘못된 mount는 쓰기 전에 거부합니다. 일반 writer 경로에서 lock 파일을 삭제·교체하지 않습니다.
+native 배포·수동 rollback·profile preparation은 기존 SSH와 `sudo -n` 경로를 사용합니다. env·인증서·profile 소비 경로와 immutable release의 current/previous 계약은 유지하며 별도 암호화 저장소 helper를 요구하지 않습니다.
 
-새 전송 staging은 암호화 경계 안의 `/var/lib/hololive-bot/deploy-staging/<release_id>`이며 기존 경로를 덮어쓰지 않습니다. 앱 배포는 `/swapfile`을 생성하거나 `/etc/fstab`에 추가하지 않습니다. swap의 생성·기동과 mount/소비자 drop-in은 stack 저장소 전환이 소유하며 앱 rollback이 이를 평문 상태로 복원하지 않습니다. 이전 release·staging·원본 데이터의 삭제는 별도 승인 대상입니다.
+전송 staging은 SSH 사용자 홈의 `.hololive-host-native-<AP_NAME>-<release_id>`입니다. 배포는 기존 `/swapfile`을 유지하고, 없으면 `AP_SWAPFILE_SIZE_MIB` 크기(기본 2048MiB)의 파일을 준비하여 활성화하고 `/etc/fstab`에 등록합니다. 값은 양수여야 합니다. 이전 release·staging·원본 데이터 삭제는 별도 승인 대상입니다.
 
 ### Native AP 배포 산출물 보존
 
