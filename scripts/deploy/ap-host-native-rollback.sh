@@ -17,7 +17,6 @@ case "$MODE" in
 esac
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
-. "$REPO_ROOT/scripts/deploy/lib/ap-host-native-storage.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ ${#AP_SERVICES[@]} -ne 1 || ${#AP_PORTS[@]} -ne 1 ]]; then
@@ -115,7 +114,7 @@ sudo -n systemctl enable --now "$unit"
 echo "rollback_started_at=$rollback_started_at"
 native_cutover_release_guard
 REMOTE
-} | native_storage_remote_bash "$service" "$rollback_started_at"
+} | ap_remote_bash "$service" "$rollback_started_at"
 
 po_expected_presence="$(ap_remote_bash <<'REMOTE'
 set -euo pipefail
