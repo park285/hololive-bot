@@ -188,7 +188,7 @@ func (v *SourceValidator) classifyYouTubeSourceURL(parsed *url.URL) (model.Sourc
 }
 
 func (v *SourceValidator) classifyXSource(parsed *url.URL) (model.SourceTier, string, error) {
-	account := extractXAccount(parsed.Path)
+	account := extractXAccount(parsed.EscapedPath())
 	if account == "" {
 		return model.SourceTierCommunity, "", errors.New("x.com account not found")
 	}
@@ -225,8 +225,8 @@ func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (model.SourceTi
 		return model.SourceTierCommunity, "", errors.New("youtube url is nil")
 	}
 
-	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	if v.isAllowedYouTubeSourcePath(segments) {
+	segments, ok := decodedPathSegments(parsed.EscapedPath())
+	if ok && v.isAllowedYouTubeSourcePath(segments) {
 		return model.SourceTierOfficial, parsed.String(), nil
 	}
 
@@ -404,18 +404,36 @@ func normalizeXAccount(raw string) string {
 	return trimmed
 }
 
+// decodedPathSegments는 브라우저가 제거하는 dot segment나 경계가 달라지는 인코딩·역슬래시가 있으면
+// 정규화하지 않고 거절한다. 앞 segment만 보고 판정하면 뒤의 ..가 다른 계정으로 이동시킬 수 있다.
+func decodedPathSegments(escapedPath string) ([]string, bool) {
+	trimmed, ok := strings.CutPrefix(escapedPath, "/")
+	if !ok || trimmed == "" || strings.Contains(trimmed, "//") {
+		return nil, false
+	}
+
+	segments := strings.Split(strings.TrimSuffix(trimmed, "/"), "/")
+	for i, segment := range segments {
+		decoded, err := url.PathUnescape(segment)
+		if err != nil || decoded == "" || decoded == "." || decoded == ".." ||
+			strings.ContainsAny(decoded, "/\\\t\r\n\x00") || strings.TrimSpace(decoded) != decoded {
+			return nil, false
+		}
+
+		segments[i] = decoded
+	}
+
+	return segments, true
+}
+
 func extractXAccount(path string) string {
-	segments := strings.Split(strings.Trim(path, "/"), "/")
-	if len(segments) == 0 {
+	segments, ok := decodedPathSegments(path)
+	if !ok {
 		return ""
 	}
 
 	account := normalizeXAccount(segments[0])
-	if account == "" {
-		return ""
-	}
-
-	if account == "home" || account == "explore" || account == "i" || account == "search" {
+	if account == "" || account == "home" || account == "explore" || account == "i" || account == "search" {
 		return ""
 	}
 

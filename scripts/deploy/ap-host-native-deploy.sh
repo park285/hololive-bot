@@ -5,7 +5,6 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
-AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
 # 별도 주소 기본값 없이 비밀이 아닌 주 서버 소유 정보만 읽는다.
 AP_POSTGRES_HOST=""
 while IFS='=' read -r host_name host_address; do
@@ -29,6 +28,7 @@ esac
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
+. "$REPO_ROOT/scripts/deploy/lib/ap-host-native-storage.sh"
 . "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
 REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
@@ -41,10 +41,6 @@ ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
   echo "AP_REQUIRED_UDP_BUFFER_BYTES must be an integer" >&2
-  exit 2
-fi
-if [[ ! "$AP_SWAPFILE_SIZE_MIB" =~ ^[1-9][0-9]*$ ]]; then
-  echo "AP_SWAPFILE_SIZE_MIB must be a positive integer" >&2
   exit 2
 fi
 if [[ ! "$AP_POSTGRES_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#${AP_POSTGRES_PORT} < 1 || 10#${AP_POSTGRES_PORT} > 65535 )); then
@@ -63,7 +59,7 @@ if [[ "$MODE" != "--dry-run" && "${!AP_APPROVE_DEPLOY_VAR:-}" != "true" ]]; then
 fi
 if [[ "$MODE" == --prepare-profile ]]; then
   service="${AP_SERVICES[0]}"
-  "${AP_SSH[@]}" "sudo -n python3 - prepare-native '$service' /opt/hololive-bot/youtube-collector/current /etc/hololive-bot/youtube-collector-host.env 'hololive-youtube-collector@$service.service'" \
+  "${AP_SSH[@]}" "sudo -n /usr/local/libexec/iris-storage writer --config /etc/iris-storage/config.json -- /usr/bin/python3 - prepare-native '$service' /opt/hololive-bot/youtube-collector/current /etc/hololive-bot/youtube-collector-host.env 'hololive-youtube-collector@$service.service'" \
     < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
   exit 0
 fi
@@ -85,7 +81,7 @@ fi
 service="${AP_SERVICES[0]}"
 port="${AP_PORTS[0]}"
 artifact_dir="${ARTIFACT_DIR:-$REPO_ROOT/artifacts/ap-host-native/$release_id}"
-payload_name=".hololive-host-native-${AP_NAME}-${release_id}"
+payload_path="/var/lib/hololive-bot/deploy-staging/${release_id}"
 version="${HOLO_BOT_VERSION:-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)}"
 
 write_host_env() {
@@ -187,12 +183,17 @@ cp "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
 RSYNC_RSH="$(ap_rsync_rsh)"
 
 if [[ "$MODE" == "--dry-run" ]]; then
-  rsync -ani --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
+  rsync -ani --delete --rsync-path="$NATIVE_STORAGE_RSYNC" "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "$payload_path/")"
   echo "[DRY-RUN] Built $artifact_dir; no remote files or services changed."
   exit 0
 fi
 
-rsync -ai --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
+native_storage_remote_bash "$payload_path" <<'REMOTE'
+set -euo pipefail
+install -d -m 0700 -o root -g root /var/lib/hololive-bot/deploy-staging
+mkdir -m 0700 -- "$1"
+REMOTE
+rsync -ai --delete --rsync-path="$NATIVE_STORAGE_RSYNC" "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "$payload_path/")"
 change_started_at="$(ap_remote_bash <<'REMOTE'
 date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE
@@ -206,7 +207,7 @@ REMOTE
   cat "$NODE_VERSION_LIB"
   cat "$READINESS_LIB"
   cat "$REMOTE_APPLY_LIB"
-} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision"
+} | native_storage_remote_bash "$payload_path" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$native_revision"
 
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

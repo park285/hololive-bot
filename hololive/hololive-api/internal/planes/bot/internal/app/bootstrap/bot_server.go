@@ -70,5 +70,5 @@ func buildBotHTTP3ServerWithReloaderOptions(
 
 	// Run은 넘긴 ctx가 끝날 때까지 블로킹하므로 bot runtime이 tasksWG와 panicguard로 수명을 소유한다.
 	// 실패는 reloader가 logger로 중복 없이 남긴다.
-	return sharedh3.NewServerWithTLSConfig(appConfig.Server.H3Addr, botRouter, tlsConfig), certReloader.Run, nil
+	return sharedh3.NewServerWithTLSConfig(appConfig.Server.H3Addr, sharedserver.WithRuntimeBodyReadTimeout(botRouter), tlsConfig), certReloader.Run, nil
 }

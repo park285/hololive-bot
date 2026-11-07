@@ -59,6 +59,12 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	return servers, nil
 }
 
+// WithRuntimeBodyReadTimeout은 기존 서버 읽기 예산으로 H3 본문 수신만 제한한다.
+// 요청 context와 응답 쓰기는 제한하지 않아 본문 수신 이후의 긴 작업과 SSE를 보존한다.
+func WithRuntimeBodyReadTimeout(handler http.Handler) http.Handler {
+	return runtimehttpserver.WithBodyReadTimeout(handler, serverReadTimeout)
+}
+
 func newH3Server(addr string, handler http.Handler, certFile, keyFile, operation string,
 	traceFilters ...func(*http.Request) bool,
 ) (*http3.Server, error) {
@@ -69,6 +75,7 @@ func newH3Server(addr string, handler http.Handler, certFile, keyFile, operation
 	traceFilter := firstTraceFilter(traceFilters)
 
 	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{Filter: traceFilter})
+	handler = WithRuntimeBodyReadTimeout(handler)
 
 	out, err := sharedh3.NewServer(addr, handler, certFile, keyFile)
 	if err != nil {

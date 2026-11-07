@@ -1,7 +1,6 @@
 package summarizer
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
 
@@ -14,36 +13,34 @@ func isTrustedDiscoveredSource(source string) bool {
 		return false
 	}
 
-	// bare domain의 auto-prepend 우회를 막기 위해 URL 형식만 검증한다.
-	if strings.HasPrefix(normalized, "http://") || strings.HasPrefix(normalized, "https://") {
-		if trusted, handled := isTrustedURLSource(normalized); handled {
-			return trusted
-		}
+	// URL로 시작한 입력은 파싱 실패도 거절하며 일반 출처 토큰으로 재해석하지 않는다.
+	if strings.HasPrefix(normalized, "http:") || strings.HasPrefix(normalized, "https:") {
+		return isTrustedURLSource(normalized)
 	}
 
-	return isTrustedTextSource(normalized)
+	return isTrustedTextSocialSource(normalized)
 }
 
-func isTrustedURLSource(source string) (trusted, handled bool) {
-	parsed, err := parseSourceURL(source)
-	if err != nil || parsed == nil || parsed.Hostname() == "" {
-		return false, false
+func isTrustedURLSource(source string) bool {
+	parsed, err := url.Parse(source)
+	if err != nil || parsed.Hostname() == "" {
+		return false
 	}
 
 	host := normalizeHost(parsed.Hostname())
 	if host == "" {
-		return false, true
+		return false
 	}
 
 	if isTrustedDomainHost(host) {
-		return true, true
+		return true
 	}
 
 	if !isSocialHost(host) {
-		return false, true
+		return false
 	}
 
-	return isTrustedURLSocialAccount(parsed.Path), true
+	return isTrustedURLSocialAccount(parsed.EscapedPath())
 }
 
 func isTrustedURLSocialAccount(path string) bool {
@@ -54,25 +51,6 @@ func isTrustedURLSocialAccount(path string) bool {
 
 	for _, trustedAccount := range constants.MajorEventConfig.TrustedSocialAccounts {
 		if account == strings.ToLower(strings.TrimSpace(trustedAccount)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func isTrustedTextSource(source string) bool {
-	return isTrustedTextDomainSource(source) || isTrustedTextSocialSource(source)
-}
-
-func isTrustedTextDomainSource(source string) bool {
-	for _, domain := range constants.MajorEventConfig.TrustedSourceDomains {
-		token := normalizeHost(domain)
-		if token == "" {
-			continue
-		}
-
-		if source == "https://"+token || source == "http://"+token {
 			return true
 		}
 	}
@@ -96,43 +74,7 @@ func isTrustedTextSocialSource(source string) bool {
 }
 
 func isTrustedTextSocialToken(source, token string) bool {
-	if source == "@"+token {
-		return true
-	}
-
-	host := trimURLScheme(source)
-
-	return host == "x.com/"+token || host == "twitter.com/"+token
-}
-
-func trimURLScheme(raw string) string {
-	if trimmed, ok := strings.CutPrefix(raw, "https://"); ok {
-		return trimmed
-	}
-
-	if trimmed, ok := strings.CutPrefix(raw, "http://"); ok {
-		return trimmed
-	}
-
-	return raw
-}
-
-func parseSourceURL(raw string) (*url.URL, error) {
-	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		parsed, err := url.Parse(raw)
-		if err != nil {
-			return nil, fmt.Errorf("parse source url: %w", err)
-		}
-
-		return parsed, nil
-	}
-
-	parsed, err := url.Parse("https://" + raw)
-	if err != nil {
-		return nil, fmt.Errorf("parse source url with default scheme: %w", err)
-	}
-
-	return parsed, nil
+	return source == "@"+token || source == "x.com/"+token || source == "twitter.com/"+token
 }
 
 func normalizeHost(host string) string {
@@ -163,17 +105,26 @@ func isSocialHost(host string) bool {
 }
 
 func extractSocialAccount(path string) string {
-	trimmed := strings.Trim(strings.TrimSpace(path), "/")
-	if trimmed == "" {
+	trimmed, ok := strings.CutPrefix(path, "/")
+	if !ok || trimmed == "" || strings.Contains(trimmed, "//") {
 		return ""
 	}
 
-	parts := strings.Split(trimmed, "/")
-	if len(parts) == 0 {
+	// 브라우저가 제거하는 dot segment와 경계가 달라지는 인코딩·역슬래시는 정규화하지 않고 거절한다.
+	for segment := range strings.SplitSeq(trimmed, "/") {
+		decoded, err := url.PathUnescape(segment)
+		if err != nil || decoded == "." || decoded == ".." ||
+			strings.ContainsAny(decoded, "/\\\t\r\n\x00") || strings.TrimSpace(decoded) != decoded {
+			return ""
+		}
+	}
+
+	first, _, _ := strings.Cut(trimmed, "/")
+
+	account, err := url.PathUnescape(first)
+	if err != nil {
 		return ""
 	}
 
-	account := strings.TrimPrefix(parts[0], "@")
-
-	return strings.ToLower(strings.TrimSpace(account))
+	return strings.ToLower(strings.TrimPrefix(account, "@"))
 }

@@ -1,20 +1,19 @@
 # shellcheck shell=bash
 set -Eeuo pipefail
-payload_name="$1"
+payload="$1"
 release_id="$2"
 service="$3"
 port="$4"
 change_started_at="$5"
 required_udp_buffer="$6"
-swapfile_size_mib="$7"
-EXPECTED_REVISION="$8"
+EXPECTED_REVISION="$7"
 [[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'full native release revision required' >&2; exit 1; }
 # 앞서 불러온 ap-host-native-po.sh가 이 값을 소유한다.
 po_service="${po_service:?PO helper fragment must be loaded}"
 po_socket="${po_socket:?PO helper fragment must be loaded}"
 po_unit_file="${po_unit_file:?PO helper fragment must be loaded}"
 po_socket_file="${po_socket_file:?PO helper fragment must be loaded}"
-payload="$HOME/$payload_name"
+[[ "$payload" == "/var/lib/hololive-bot/deploy-staging/$release_id" ]] || { echo 'encrypted native staging path required' >&2; exit 1; }
 release_path_lib="$payload/bin/ap-host-native-release-path.sh"
 releases_root="/opt/hololive-bot/youtube-collector/releases"
 current_link="/opt/hololive-bot/youtube-collector/current"
@@ -24,7 +23,6 @@ unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
 unit="hololive-youtube-collector@${service}.service"
 po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
-swapfile="/swapfile"
 native_recovery_require_clear
 
 normalize_runtime_payload_permissions() {
@@ -88,28 +86,8 @@ net.core.rmem_max = ${required_udp_buffer}
 net.core.wmem_max = ${required_udp_buffer}
 SYSCTL
 sudo -n sysctl -w "net.core.rmem_max=${required_udp_buffer}" "net.core.wmem_max=${required_udp_buffer}" >/dev/null
-if ! sudo -n test -f "$swapfile"; then
-  if command -v fallocate >/dev/null 2>&1; then
-    sudo -n fallocate -l "${swapfile_size_mib}M" "$swapfile" || sudo -n dd if=/dev/zero of="$swapfile" bs=1M count="$swapfile_size_mib" status=none
-  else
-    sudo -n dd if=/dev/zero of="$swapfile" bs=1M count="$swapfile_size_mib" status=none
-  fi
-fi
-sudo -n chown root:root "$swapfile"
-sudo -n chmod 600 "$swapfile"
-if ! sudo -n file "$swapfile" | grep -q 'swap file'; then
-  sudo -n mkswap "$swapfile" >/dev/null
-fi
-if ! swapon --noheadings --show=NAME | grep -Fxq "$swapfile"; then
-  sudo -n swapon "$swapfile"
-fi
-if ! sudo -n grep -Eq '^/swapfile[[:space:]]+none[[:space:]]+swap[[:space:]]+' /etc/fstab; then
-  printf '/swapfile none swap sw 0 0\n' | sudo -n tee -a /etc/fstab >/dev/null
-fi
-sudo -n tee /etc/sysctl.d/99-hololive-swap.conf >/dev/null <<'SYSCTL'
-vm.swappiness = 10
-SYSCTL
-sudo -n sysctl -w vm.swappiness=10 >/dev/null
+# swap의 생성·기동은 암호화 저장소 unit이 소유하며 앱 배포가 평문 swap을 재생성하지 않는다.
+sudo -n /usr/local/libexec/iris-storage verify-swap --config /etc/iris-storage/config.json
 
 native_cutover_claim "$releases_root/$release_id"
 # 준비 중 실패도 guard와 산출물을 남깁니다. 다음 apply 전에 소유 worker와 runtime을 확인합니다.
