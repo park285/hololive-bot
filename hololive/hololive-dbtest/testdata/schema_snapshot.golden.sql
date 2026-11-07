@@ -1254,6 +1254,7 @@ TABLE youtube_live_pending_ends
   CONSTRAINT chk_youtube_live_pending_ends_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
   CONSTRAINT youtube_live_pending_ends_pkey PRIMARY KEY (video_id)
   CONSTRAINT uq_youtube_live_pending_end_observation UNIQUE (video_id, observation_id)
+  INDEX CREATE INDEX idx_youtube_live_pending_end_observation ON public.youtube_live_pending_ends USING btree (observation_id)
 
 TABLE youtube_live_reconciliation_heads
   COLUMN video_id text NOT NULL

@@ -12,6 +12,7 @@
 - **중앙 Iris 소비자 정지·재개:** 배포 helper의 `--quiesce`는 실행 중 API·alarm-worker의 이전 pair와 후보를 보존한 뒤 두 unit을 함께 정지·영속 mask합니다. 재부팅도 이 hold를 해제하지 않습니다. 외부 Iris 전환 뒤 `--resume`은 revision·image·profile·설치 상태를 다시 검증하고, 두 후보 drop-in을 모두 게시한 뒤에만 worker→API를 기동합니다. 정지·부분 실패를 배포 성공으로 처리하거나 자동 rollback하지 않습니다.
 - **운영 데이터·복구점 보존:** `sync-opt-current.sh --preserve-runtime`은 runtime-config를 backup/seed하지 않고 기존 runtime bytes·owner·mode를 유지합니다. 모든 동기화는 고유 exec-tree backup을 만들며 같은 revision의 이전 복구점을 덮거나 오래된 backup을 자동 삭제하지 않습니다.
 - **테스트 DB 아키텍처 고정:** PostgreSQL testcontainers가 실행 중 Go 호스트의 `linux/<GOARCH>`를 명시합니다. 같은 multi-arch digest의 ARM64 배포 이미지가 amd64 테스트 캐시에 남아도 native variant를 선택하며, 테스트 deadline이나 데이터 경계는 바꾸지 않습니다.
+- **보존 보호 판정의 pending-end 조회 인덱스:** migration 368이 `youtube_live_pending_ends(observation_id)`에 비고유 B-tree를 동시 생성합니다. 기존 복합 unique의 선두는 `video_id`라 원본 관측 ID만 찾는 반복 조회가 전체 순회를 했습니다. 기존 인덱스·FK·보존 조건과 PostgreSQL 이미지·확장·설정은 유지하며, 운영 적용은 API 배포 helper의 내장 migrator가 수행합니다.
 - **예정 영상 일정 확인 재사용(API 먼저 배포):** collector helper가 같은 채널·영상의 player 예정 시각을 프로세스 메모리에서 최대 10분(남은 시간의 1/6, 시작 30분 전까지) 재사용하고, 그만큼 limiter slot을 지불하지 않습니다.
   - 운영 지표상 slot의 약 26%(초당 0.83)가 같은 영상의 반복 조회였고, AP 1대가 빠지면 남은 AP가 포화되어 `channel_live_check` 대상이 최대 약 50초 늦었습니다.
   - 처음 구현(`cf7043073`)은 재사용한 옛 시각이 이번 관측 시각으로 발행되었습니다. 그래서 다른 AP·provider가 반영한 새 일정을 되돌릴 수 있어 되돌렸습니다(`47ae294cb`).
