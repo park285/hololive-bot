@@ -22,6 +22,7 @@ package template
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 	texttemplate "text/template"
@@ -233,6 +234,52 @@ func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 				t.Errorf("독립 URL 소실: %q", got)
 			}
 		})
+	}
+}
+
+// 방송 목록 세 명령은 알림과 같은 "콜라보: …" 줄을 해당 방송 제목 아래에만 두고, 출연자가 없으면 줄을 만들지 않는다.
+func TestSeedTemplates_StreamListsShowCollabMembersUnderTitle(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	const (
+		collab    = "**스이세이**_[테스트], 미코"
+		collabURL = "https://youtu.be/collab0001"
+	)
+
+	entries := func(extra map[string]any) []map[string]any {
+		first := map[string]any{fieldChannelName: "츠즈리", fieldTitle: "콜라보 방송", fieldURL: collabURL, fieldCollabMembers: collab}
+		second := map[string]any{fieldChannelName: "두 번째 채널", fieldTitle: "혼자 방송", fieldURL: "", fieldCollabMembers: ""}
+
+		for key, value := range extra {
+			first[key], second[key] = value, value
+		}
+
+		return []map[string]any{first, second}
+	}
+
+	cases := map[domain.TemplateKey]map[string]any{
+		domain.TemplateKeyCmdLiveStreams:     {fieldCount: 2, fieldStreams: entries(map[string]any{fieldElapsed: ""})},
+		domain.TemplateKeyCmdUpcomingStreams: {fieldCount: 2, "Hours": 24, fieldStreams: entries(map[string]any{"TimeInfo": "11/07 21:00"})},
+		domain.TemplateKeyCmdChannelSchedule: {fieldCount: 2, "Days": 7, fieldChannelName: "츠즈리", fieldStreams: entries(map[string]any{"IsLive": false, "TimeInfo": "11/07 21:00"})},
+	}
+
+	for _, format := range templateFormats {
+		for key, data := range cases {
+			t.Run(string(format)+"/"+string(key), func(t *testing.T) {
+				got := renderSeedBody(t, key, seedBody(t, pool, key, format), data)
+				lines := strings.Split(kakaoformat.Render(got), "\n")
+
+				title := slices.IndexFunc(lines, func(line string) bool { return strings.Contains(line, "콜라보 방송") })
+				if title < 0 || title+2 >= len(lines) || lines[title+1] != "콜라보: "+collab ||
+					strings.TrimPrefix(lines[title+2], kakaotext.ZeroWidthSpace) != collabURL {
+					t.Fatalf("콜라보 줄이 제목과 URL 사이에 없음: %q", got)
+				}
+
+				if strings.Count(got, "콜라보:") != 1 {
+					t.Fatalf("출연자 없는 방송에 콜라보 줄이 생김: %q", got)
+				}
+			})
+		}
 	}
 }
 
