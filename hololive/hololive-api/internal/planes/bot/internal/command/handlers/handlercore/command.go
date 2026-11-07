@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/collabmembers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
@@ -136,9 +137,15 @@ type AlarmService interface {
 	ClearRoomAlarms(context.Context, string) (int, error)
 }
 
+// CollabMemberReader는 방송 목록 명령이 소비하는 콜라보 출연자 표시명 조회다.
+type CollabMemberReader interface {
+	DisplayNames(ctx context.Context, videos []collabmembers.Video) (map[string][]string, error)
+}
+
 type Dependencies struct {
 	Holodex             domain.StreamProvider
 	LiveQuery           livequery.Reader
+	CollabMembers       CollabMemberReader
 	Alarm               AlarmService
 	Matcher             *matcher.Matcher
 	MemberNews          MemberNewsService

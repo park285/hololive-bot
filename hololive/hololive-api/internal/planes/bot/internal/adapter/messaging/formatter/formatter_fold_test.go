@@ -95,10 +95,10 @@ func TestListFoldingUsesDisplayedCountRegardlessOfLength(t *testing.T) {
 
 			calls := map[string]func(*ResponseFormatter) string{
 				"live": func(f *ResponseFormatter) string {
-					return f.LiveQuery(t.Context(), livequery.Result{Items: items, Status: livequery.Complete}, "")
+					return f.LiveQuery(t.Context(), livequery.Result{Items: items, Status: livequery.Complete}, "", nil)
 				},
 				"member live": func(f *ResponseFormatter) string {
-					return f.LiveQuery(t.Context(), livequery.Result{Items: items, Status: livequery.Complete}, "멤버")
+					return f.LiveQuery(t.Context(), livequery.Result{Items: items, Status: livequery.Complete}, "멤버", nil)
 				},
 				"upcoming": func(f *ResponseFormatter) string { return f.UpcomingStreams(t.Context(), streams, 24) },
 				"schedule": func(f *ResponseFormatter) string {
@@ -151,7 +151,7 @@ func TestFilteredEmptyAndUnknownResultsStayUnfolded(t *testing.T) {
 	assert.Equal(t, strings.TrimRight(body, "\n"), f.MemberDirectory(t.Context(), []MemberDirectoryGroup{{Members: []MemberDirectoryEntry{{PrimaryName: " "}, {SecondaryName: " "}}}}, 100))
 	assert.Equal(t, strings.TrimRight(body, "\n"), f.CelebrationCalendar(t.Context(), 10, 2026, []domain.CalendarEntry{{}, {}}))
 	assert.Equal(t, strings.TrimRight(body, "\n"), f.ChannelSchedule(t.Context(), nil, []*domain.Stream{{Title: "a"}, {Title: "b"}}, 7))
-	assert.Equal(t, "현재 방송 상태를 확인할 수 없습니다.", f.LiveQuery(t.Context(), livequery.Result{Status: livequery.Partial}, ""))
+	assert.Equal(t, "현재 방송 상태를 확인할 수 없습니다.", f.LiveQuery(t.Context(), livequery.Result{Status: livequery.Partial}, "", nil))
 }
 
 func TestDetailAndNewsSummaryFolding(t *testing.T) {

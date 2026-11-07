@@ -50,6 +50,7 @@ const (
 	fieldTitle           = "Title"
 	fieldURL             = "URL"
 	fieldElapsed         = "Elapsed"
+	fieldCollabMembers   = "CollabMembers"
 	fieldStreams         = "Streams"
 	fieldScheduleMessage = "ScheduleMessage"
 )
@@ -183,7 +184,7 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 			live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
 				fieldCount: 1,
 				fieldStreams: []map[string]any{
-					{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0, fieldElapsed: ""},
+					{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0, fieldElapsed: "", fieldCollabMembers: ""},
 				},
 			})
 
@@ -209,8 +210,8 @@ func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 			got := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
 				fieldCount: 2,
 				fieldStreams: []map[string]any{
-					{fieldChannelName: "츠즈리", fieldTitle: "잡담 방송", fieldURL: url, fieldElapsed: "1시간 23분째"},
-					{fieldChannelName: "두 번째 채널", fieldTitle: "노래 방송", fieldURL: "", fieldElapsed: ""},
+					{fieldChannelName: "츠즈리", fieldTitle: "잡담 방송", fieldURL: url, fieldElapsed: "1시간 23분째", fieldCollabMembers: ""},
+					{fieldChannelName: "두 번째 채널", fieldTitle: "노래 방송", fieldURL: "", fieldElapsed: "", fieldCollabMembers: ""},
 				},
 			})
 

@@ -202,22 +202,22 @@ func addTemplateCommandStreamSamples(data map[domain.TemplateKey]any) {
 
 func templateLiveStreamSamples() []map[string]any {
 	return []map[string]any{
-		{fieldChannelName: sampleMemberMiko, fieldTitle: "마인크래프트 건축 배틀", fieldURL: "https://youtu.be/live123", "Elapsed": "1시간 23분째"},
-		// 시작 시각을 알 수 없는 방송은 Elapsed가 비어 경과 표기가 생략된다.
-		{fieldChannelName: "오오조라 스바루", fieldTitle: "잡담 방송", fieldURL: "https://youtu.be/live456", "Elapsed": ""},
+		{fieldChannelName: sampleMemberMiko, fieldTitle: "마인크래프트 건축 배틀", fieldURL: "https://youtu.be/live123", "Elapsed": "1시간 23분째", fieldCollab: "스이세이, 스바루"},
+		// 시작 시각을 알 수 없는 방송은 Elapsed가 비어 경과 표기가 생략되고, 출연자가 없으면 콜라보 줄도 생략된다.
+		{fieldChannelName: "오오조라 스바루", fieldTitle: "잡담 방송", fieldURL: "https://youtu.be/live456", "Elapsed": "", fieldCollab: ""},
 	}
 }
 
 func templateUpcomingStreamSamples() []map[string]any {
 	return []map[string]any{
-		{fieldChannelName: sampleMemberFubuki, fieldTitle: "노래방 방송", "TimeInfo": "30분 후", fieldURL: "https://youtu.be/upcoming123"},
+		{fieldChannelName: sampleMemberFubuki, fieldTitle: "노래방 방송", "TimeInfo": "30분 후", fieldURL: "https://youtu.be/upcoming123", fieldCollab: "미코"},
 	}
 }
 
 func templateChannelScheduleSamples() []map[string]any {
 	return []map[string]any{
-		{"IsLive": true, fieldTitle: "마인크래프트", "TimeInfo": "방송 중", fieldURL: "https://youtu.be/live123"},
-		{"IsLive": false, fieldTitle: "게임 방송", "TimeInfo": "오늘 22:00", fieldURL: "https://youtu.be/upcoming456"},
+		{"IsLive": true, fieldTitle: "마인크래프트", "TimeInfo": "방송 중", fieldURL: "https://youtu.be/live123", fieldCollab: "스이세이"},
+		{"IsLive": false, fieldTitle: "게임 방송", "TimeInfo": "오늘 22:00", fieldURL: "https://youtu.be/upcoming456", fieldCollab: ""},
 	}
 }
 
@@ -253,7 +253,7 @@ func addTemplateAlarmDispatchSamples(data map[domain.TemplateKey]any) {
 		fieldMemberName:   sampleMemberMiko,
 		fieldMinutesUntil: 5,
 		fieldTitle:        "마인크래프트 건축",
-		"CollabMembers":   "",
+		fieldCollab:       "",
 		"ScheduleMessage": "",
 		fieldURL:          "https://youtu.be/stream123",
 	}
@@ -262,8 +262,8 @@ func addTemplateAlarmDispatchSamples(data map[domain.TemplateKey]any) {
 		fieldMinutesUntil: 5,
 		"AllPremiere":     false,
 		"Entries": []map[string]any{
-			{"IsStarting": false, "IsScheduled": false, "IsPremiere": false, fieldMemberName: sampleMemberMiko, fieldMinutesUntil: 5, fieldTitle: "마인크래프트 건축", "CollabMembers": "스이세이, 스바루", "ScheduleMessage": "", fieldURL: "https://youtu.be/stream123"},
-			{"IsStarting": false, "IsScheduled": true, "IsPremiere": true, fieldMemberName: "호시마치 스이세이", fieldMinutesUntil: 0, fieldTitle: "노래 방송", "CollabMembers": "", "ScheduleMessage": "21:00 시작 예정", fieldURL: ""},
+			{"IsStarting": false, "IsScheduled": false, "IsPremiere": false, fieldMemberName: sampleMemberMiko, fieldMinutesUntil: 5, fieldTitle: "마인크래프트 건축", fieldCollab: "스이세이, 스바루", "ScheduleMessage": "", fieldURL: "https://youtu.be/stream123"},
+			{"IsStarting": false, "IsScheduled": true, "IsPremiere": true, fieldMemberName: "호시마치 스이세이", fieldMinutesUntil: 0, fieldTitle: "노래 방송", fieldCollab: "", "ScheduleMessage": "21:00 시작 예정", fieldURL: ""},
 		},
 	}
 }

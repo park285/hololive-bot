@@ -64,6 +64,7 @@ func runDisplayNameCommand(t *testing.T, deps *handlercore.Dependencies, execute
 		return nil
 	}
 	deps.Logger = slog.New(slog.DiscardHandler)
+	deps.CollabMembers = collabMembersStub{}
 
 	if err := execute(deps); err != nil {
 		t.Fatalf("Execute() error = %v", err)

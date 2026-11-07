@@ -41,7 +41,7 @@ func TestLiveQueryShowsElapsedSinceQueryTime(t *testing.T) {
 					VideoID: "live0000001", ChannelID: "UC_live", ChannelName: "츠즈리", Title: "잡담 방송", StartedAt: tc.startedAt,
 				}},
 				Status: livequery.Complete, AsOf: tc.asOf,
-			}, "")
+			}, "", nil)
 
 			if elapsed := liveElapsed(tc.startedAt, tc.asOf); elapsed != tc.want {
 				t.Errorf("조회 시각 기준 경과 불일치: %q, want %q", elapsed, tc.want)

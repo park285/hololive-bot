@@ -51,7 +51,7 @@ func setupUpcomingTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 		SELECT $1, NULL, variant, $2 FROM unnest(ARRAY['plain', 'richtext']) AS variant
 		ON CONFLICT (template_key, format_variant) WHERE channel_id IS NULL
 		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
-	`, domain.TemplateKeyCmdUpcomingStreams, "예정 목록 ({{.Hours}}시간)\n{{range .Streams}}{{.ChannelName}}|{{.Title}}\n{{end}}"); err != nil {
+	`, domain.TemplateKeyCmdUpcomingStreams, "예정 목록 ({{.Hours}}시간)\n{{range .Streams}}{{.ChannelName}}|{{.Title}}|{{.CollabMembers}}\n{{end}}"); err != nil {
 		t.Fatalf("seed upcoming template: %v", err)
 	}
 
@@ -88,7 +88,8 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex: holodex,
+		CollabMembers: collabMembersStub{names: map[string][]string{"s1": {"미코", "스이세이"}}},
+		Holodex:       holodex,
 		Matcher: newUpcomingTestMatcher([]*domain.Member{
 			{ChannelID: testChannelSora, Name: "Tokino Sora", NameKo: "토키노 소라", ShortKoreanName: "소라"},
 		}),
@@ -109,7 +110,8 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 	}
 
 	// members 등록 채널은 정본 표시명, 미등록 채널은 응답 이름을 쓰며 공유될 수 있는 원천 스트림은 바꾸지 않는다.
-	for _, want := range []string{"소라|테스트 방송 1", "Guest Ch.|테스트 방송 2"} {
+	// 콜라보 출연자는 해당 방송에만 붙는다.
+	for _, want := range []string{"소라|테스트 방송 1|미코, 스이세이\n", "Guest Ch.|테스트 방송 2|"} {
 		if !strings.Contains(sentMessage, want) {
 			t.Fatalf("upcoming message = %q, want %q", sentMessage, want)
 		}
@@ -124,9 +126,10 @@ func TestUpcomingCommand_Execute_DisplayNameLookupError(t *testing.T) {
 	var sentError string
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &upcomingStreamProviderStub{upcomingStreams: []*domain.Stream{{ID: "s1", ChannelID: testChannelSora, ChannelName: "Sora Ch."}}},
-		Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: errors.New("member repository unavailable")}, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       &upcomingStreamProviderStub{upcomingStreams: []*domain.Stream{{ID: "s1", ChannelID: testChannelSora, ChannelName: "Sora Ch."}}},
+		Matcher:       matcher.NewMatcher(&failedMemberDataProvider{err: errors.New("member repository unavailable")}, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			t.Fatal("upcoming list must not be sent with source names after display name lookup failure")
 
@@ -159,9 +162,10 @@ func TestUpcomingCommand_Execute_AllUpcoming_WithOverflow(t *testing.T) {
 	holodex := &upcomingStreamProviderStub{upcomingStreams: streams}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   newUpcomingTestMatcher(nil),
-		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       newUpcomingTestMatcher(nil),
+		Formatter:     formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -192,9 +196,10 @@ func TestUpcomingCommand_Execute_AllUpcoming_QueryError(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   newUpcomingTestMatcher(nil),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       newUpcomingTestMatcher(nil),
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -233,9 +238,10 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -273,9 +279,10 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: newSeededTestFormatter(t),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -311,9 +318,10 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       holodex,
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -344,9 +352,10 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 	memberProvider := newContextAwareMemberProvider(nil)
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &upcomingStreamProviderStub{},
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		CollabMembers: collabMembersStub{},
+		Holodex:       &upcomingStreamProviderStub{},
+		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true
 			return nil
