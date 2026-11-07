@@ -225,7 +225,7 @@ func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 					t.Errorf("다른 방송에 경과 시간이 붙음: %q", line)
 				}
 
-				if strings.Contains(line, "두 번째 채널") && strings.Contains(line, "⏱") {
+				if strings.Contains(line, "두 번째 채널") && strings.HasSuffix(line, " · ") {
 					t.Errorf("알 수 없는 경과 시간이 만들어짐: %q", line)
 				}
 			}

@@ -27,7 +27,6 @@ func TestStreamListCollabMembersMigrationUpdatesStandardDefaultsOnly(t *testing.
 	t.Parallel()
 
 	pool := NewPool(t)
-	ctx := t.Context()
 
 	dir, err := resolveMigrationsDir()
 	require.NoError(t, err)
@@ -35,42 +34,12 @@ func TestStreamListCollabMembersMigrationUpdatesStandardDefaultsOnly(t *testing.
 	seeds := loadStreamListCollabSeeds(t, dir)
 	restoreStreamListCollabStandardRows(t, pool, dir, seeds)
 
-	const (
-		defaultQuery  = `SELECT template_key||'/'||format_variant,id,row_version,body FROM notification_templates WHERE channel_id IS NULL`
-		overrideQuery = `SELECT template_key||'/'||format_variant,id,row_version,body FROM notification_templates WHERE channel_id IS NOT NULL`
-	)
-
-	before := templateFormatRows(t, pool, defaultQuery)
-	overridesBefore := templateFormatRows(t, pool, overrideQuery)
-	protected := templateFormatProtectedSnapshot(t, pool)
-
-	require.Len(t, overridesBefore, 1)
-	require.NoError(t, applyMigrationFile(ctx, pool, dir, streamListCollabMigration))
-
-	after := templateFormatRows(t, pool, defaultQuery)
-	require.Len(t, after, len(before))
-
 	changed := make(map[string]string, len(seeds))
 	for _, seed := range seeds {
 		changed[seed.key+"/"+seed.variant] = seed.body
 	}
 
-	for key, row := range before {
-		body, ok := changed[key]
-		if !ok || key == streamListCollabCustomKey+"/plain" {
-			require.Equal(t, row, after[key], key)
-
-			continue
-		}
-
-		require.Equal(t, row.id, after[key].id, key)
-		require.Equal(t, row.version+1, after[key].version, key)
-		require.Equal(t, body, after[key].body, key)
-	}
-
-	require.Equal(t, overridesBefore, templateFormatRows(t, pool, overrideQuery))
-	require.Equal(t, protected, templateFormatProtectedSnapshot(t, pool))
-	assertTemplateReplayStable(t, pool, dir, streamListCollabMigration)
+	assertTemplateMigrationUpdatesStandardDefaults(t, pool, dir, streamListCollabMigration, changed, streamListCollabCustomKey+"/plain")
 }
 
 func loadStreamListCollabSeeds(t *testing.T, dir string) []streamListCollabSeed {
