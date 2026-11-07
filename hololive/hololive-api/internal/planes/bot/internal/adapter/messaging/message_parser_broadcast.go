@@ -55,6 +55,23 @@ func (ma *MessageAdapter) isBroadcastHistoryCommand(cmd string) bool {
 	return stringutil.ContainsString(broadcastHistoryCommandAliases, cmd)
 }
 
+var broadcastTimeCommandAliases = []string{"방송시간", "broadcast_time"}
+
+// tryBroadcastTimeCommand는 !방송시간 뒤의 인자 전체를 멤버 이름으로 받는다.
+func (ma *MessageAdapter) tryBroadcastTimeCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
+	if !stringutil.ContainsString(broadcastTimeCommandAliases, command) {
+		return nil, false
+	}
+
+	params := make(map[string]any)
+
+	if member := stringutil.TrimSpace(strings.Join(args, " ")); member != "" {
+		params[paramMember] = member
+	}
+
+	return &ParsedCommand{Type: botcommand.CommandBroadcastTime, Params: params, RawMessage: raw}, true
+}
+
 var broadcastThumbnailCommandAliases = []string{"방송썸네일", "썸네일", "썸네일다운", "썸네일다운로드", "thumbnail", "thumbnail_download", "thumbnaildownload", "broadcast_thumbnail"}
 
 func (ma *MessageAdapter) isBroadcastThumbnailCommand(cmd string) bool {

@@ -118,6 +118,7 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 		info.NewMemberInfoCommand(deps),
 		handlers.NewBroadcastHistoryCommand(deps),
 		handlers.NewBroadcastThumbnailCommand(deps),
+		handlers.NewBroadcastTimeCommand(deps),
 	}
 
 	if v.memberRepository != nil {

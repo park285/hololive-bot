@@ -282,7 +282,7 @@ func parseCommandAdmissionResult(result valkey.ValkeyResult) (commandAdmissionDe
 // !라이브는 보존된 pending-end 이력을 훑는 PG 질의를 실행하므로 이력 명령과 같은 한도를 쓰되 버킷은 분리한다.
 func expensiveCommandAdmissionScope(commandKey string) string {
 	switch commandKey {
-	case "broadcast_history", "broadcast_thumbnail":
+	case "broadcast_history", "broadcast_thumbnail", "broadcast_time":
 		return "history"
 	case "live":
 		return "live"

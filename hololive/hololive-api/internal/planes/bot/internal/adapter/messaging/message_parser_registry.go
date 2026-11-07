@@ -36,6 +36,7 @@ func defaultCommandParsers(ma *MessageAdapter) []CommandParser {
 		commandParserFunc(ma.tryUpcomingCommand),
 		commandParserFunc(ma.tryScheduleCommand),
 		commandParserFunc(ma.tryBroadcastHistoryCommand),
+		commandParserFunc(ma.tryBroadcastTimeCommand),
 		commandParserFunc(ma.tryAlarmCommand),
 		commandParserFunc(func(command string, _ []string, raw string) (*ParsedCommand, bool) {
 			return ma.tryHelpCommand(command, raw)

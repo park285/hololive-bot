@@ -39,6 +39,7 @@ const (
 	CommandCalendar               CommandType = "calendar"
 	CommandBroadcastHistory       CommandType = "broadcast_history"
 	CommandBroadcastThumbnail     CommandType = "broadcast_thumbnail"
+	CommandBroadcastTime          CommandType = "broadcast_time"
 	CommandUnknown                CommandType = "unknown"
 )
 
@@ -54,7 +55,7 @@ func (c CommandType) IsValid() bool {
 		CommandMemberNews, CommandMemberNewsSubscription,
 		CommandMajorEvent,
 		CommandCalendar,
-		CommandBroadcastHistory, CommandBroadcastThumbnail,
+		CommandBroadcastHistory, CommandBroadcastThumbnail, CommandBroadcastTime,
 		CommandUnknown:
 		return true
 	default:
