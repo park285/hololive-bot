@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **템플릿 신뢰 링크 helper(템플릿 갱신 전 준비):** 템플릿 함수 `trustedlink`를 추가합니다. 방송 알림 템플릿 4개가 URL마다 인라인으로 계산하던 신뢰 출처 판정(YouTube·짧은 링크·Twitch·치지직, YouTube+치지직 동시 송출의 두 줄 분리, 구분 문자 거절)을 같은 결과로 한 번에 수행합니다. 표준 본문은 아직 바꾸지 않으며, 후속 migration이 이 함수를 쓰므로 API와 alarm-worker를 먼저 배포해야 합니다.
 - **방송 목록의 콜라보 출연자 조회(템플릿 적용 전 준비):** `!라이브`·`!예정`·`!일정` 응답의 각 방송에 공식 스케줄(`youtube_schedule_items.collabo_talent_names`)의 출연자 표시명을 `CollabMembers` 뷰 필드로 넘깁니다. 호스트는 빼고 멤버 표시명으로 바꿉니다. 출연자 조회나 멤버 적재가 실패하면 출연자를 뺀 목록 대신 각 명령의 조회 실패로 응답하고, 요청 취소는 오류 응답 없이 끝냅니다. 표준 템플릿은 아직 이 필드를 쓰지 않으므로 화면 변화는 후속 migration 369가 적용된 뒤에 나타납니다.
 - **방송 목록 템플릿의 콜라보 줄(바이너리 먼저 배포):** migration 369가 `!라이브`·`!예정`·`!일정`의 표준 plain·richtext 기본 본문에서 각 방송 제목 아래에 알림과 같은 `콜라보: 이름, 이름` 줄을 둡니다. 출연자가 없으면 줄을 생략합니다. 358·359가 쓴 표준 본문(sha256)만 바꾸고 사용자 지정 본문과 채널 override는 유지합니다. 본문이 `CollabMembers` 뷰 필드를 참조하므로 이 필드를 가진 API 바이너리가 운영에 올라간 뒤 적용해야 하며, 먼저 적용하면 이전 바이너리에서 세 명령의 렌더링이 실패합니다.
 - **Iris 기동 epoch 인증 동시 전환(파괴적):** API·alarm-worker·shared의 SDK import와 pin, collector의 간접 pin을 `iris-client-go/v5 v5.0.0`으로 옮깁니다. 보호 호출은 같은 H3/TLS 대상의 `/auth/epoch`를 먼저 확인하고, `401 AUTH_EPOCH_MISMATCH`에서만 원래 deadline·본문·`ClientRequestID`를 유지해 논리 호출당 최대 한 번 새 epoch로 재서명합니다. bootstrap 실패는 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다. 기존 owner 재시도·handoff·결과 불명·webhook v3·inbox 계약은 유지합니다. 새 Iris와 소비자를 같은 배포 창에서 교체해야 하며, SDK 정식 tag 게시와 공식 Go checksum 생성 전에는 운영 빌드·배포하지 않습니다.

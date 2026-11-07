@@ -75,11 +75,12 @@ func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID
 
 // templateFuncs는 공용 함수와 크기를 늘릴 수 있는 builtin(print·printf·println·html·js·urlquery)의 제한판입니다.
 // 결과가 입력보다 커질 수 있는 함수는 모두 파생 값 불변식(renderer_guard.go)을 지키며, 상한 안에서는 원래 함수와
-// 같은 결과를 냅니다. Trim·displayline·default·contains·hasPrefix·formatNumber·timeAgo·add는 결과가 입력 크기를
-// 넘지 않거나 고정 길이입니다.
+// 같은 결과를 냅니다. Trim·displayline·trustedlink·default·contains·hasPrefix·formatNumber·timeAgo·add는 결과가 입력
+// 크기를 넘지 않거나 고정 길이입니다.
 var templateFuncs = template.FuncMap{
 	"truncate":       boundedTruncate,
 	"displayline":    normalizeTemplateDisplayLine,
+	"trustedlink":    trustedLink,
 	"trim":           strings.TrimSpace,
 	"upper":          guardStringFunc("upper", strings.ToUpper),
 	"lower":          guardStringFunc("lower", strings.ToLower),
