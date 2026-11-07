@@ -5,12 +5,12 @@
       "id": "broadcast",
       "title": "방송 · 일정",
       "asset": "help-broadcast.png",
-      "sha256": "6f9f49bdb201b3592821672ef420db65d84bb1841d4aa08a0816d68f65bed826",
+      "sha256": "dc9563ca1f2e14cfcb9d400ed57d5d24daf0a609a63532309a75ead68cfc799a",
       "entries": [
         {"syntax": "!라이브 [멤버명]", "description": "현재 방송 · 멤버 방송"},
         {"syntax": "!예정 [멤버명]", "description": "예정 방송 · 멤버 예정"},
         {"syntax": "!멤버 [이름]", "description": "최근 방송 일정"},
-        {"syntax": "!방송시간 [멤버명]", "description": "최근 방송 시각"},
+        {"syntax": "!방송시간 [멤버명] [N일]", "description": "방송 시간 합계 (기본 7일)"},
         {"syntax": "!방송이력 [멤버명] [타입]", "description": "종료된 방송 이력"},
         {"syntax": "!방송이력 카테고리:<타입>", "description": "기간 · 개수 상세 필터"},
         {"syntax": "!방송이력 썸네일 <video_id>", "description": "종료 방송 썸네일"}

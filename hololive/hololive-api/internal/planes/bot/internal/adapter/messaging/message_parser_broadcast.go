@@ -57,15 +57,26 @@ func (ma *MessageAdapter) isBroadcastHistoryCommand(cmd string) bool {
 
 var broadcastTimeCommandAliases = []string{"방송시간", "broadcast_time"}
 
-// tryBroadcastTimeCommand는 !방송시간 뒤의 인자 전체를 멤버 이름으로 받는다.
+// tryBroadcastTimeCommand는 "N일" 형식 인자를 합산 기간으로, 나머지 인자를 멤버 이름으로 받는다.
 func (ma *MessageAdapter) tryBroadcastTimeCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
 	if !stringutil.ContainsString(broadcastTimeCommandAliases, command) {
 		return nil, false
 	}
 
 	params := make(map[string]any)
+	memberTokens := make([]string, 0, len(args))
 
-	if member := stringutil.TrimSpace(strings.Join(args, " ")); member != "" {
+	for _, arg := range args {
+		if days, ok := parseBroadcastHistoryDaysToken(arg); ok {
+			params[paramDays] = days
+
+			continue
+		}
+
+		memberTokens = append(memberTokens, arg)
+	}
+
+	if member := stringutil.TrimSpace(strings.Join(memberTokens, " ")); member != "" {
 		params[paramMember] = member
 	}
 

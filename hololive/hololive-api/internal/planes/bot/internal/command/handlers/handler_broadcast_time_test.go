@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -34,28 +35,53 @@ func newBroadcastTimeTestDeps(repo *stubBroadcastHistoryRepository, sent *[]stri
 	}
 }
 
-func TestBroadcastTimeCommandQueriesMemberRecentYear(t *testing.T) {
+// 기간을 주지 않으면 최근 7일, "N일"을 주면 그 기간의 방송을 합산 상한까지 조회한다.
+func TestBroadcastTimeCommandQueriesMemberPeriod(t *testing.T) {
 	t.Parallel()
 
-	repo := &stubBroadcastHistoryRepository{entries: []handlercore.BroadcastHistoryEntry{{VideoID: "AqxEw3kXcgU", BroadcastType: "game"}}}
+	for _, tc := range []struct {
+		params   map[string]any
+		wantDays int
+	}{
+		{map[string]any{paramMember: broadcastTimeTestMember}, defaultBroadcastTimeDays},
+		{map[string]any{paramMember: broadcastTimeTestMember, paramDays: 30}, 30},
+	} {
+		repo := &stubBroadcastHistoryRepository{entries: []handlercore.BroadcastHistoryEntry{{VideoID: "AqxEw3kXcgU", BroadcastType: "game"}}}
+
+		var sent []string
+
+		before := time.Now().AddDate(0, 0, -tc.wantDays).Add(-2 * time.Second)
+
+		err := NewBroadcastTimeCommand(newBroadcastTimeTestDeps(repo, &sent)).Execute(t.Context(),
+			&botcommand.CommandContext{Room: testHistoryRoom}, tc.params)
+		require.NoError(t, err)
+
+		after := time.Now().AddDate(0, 0, -tc.wantDays).Add(2 * time.Second)
+
+		require.Equal(t, 1, repo.listCalls)
+		require.Equal(t, testChannelMiko, repo.listQuery.ChannelID)
+		require.Equal(t, broadcastTimeMaxEntries, repo.listQuery.Limit)
+		require.Empty(t, repo.listQuery.Type)
+		require.True(t, !repo.listQuery.Since.Before(before) && !repo.listQuery.Since.After(after), repo.listQuery.Since)
+		require.Len(t, sent, 1)
+		require.Contains(t, sent[0], fmt.Sprintf("📅 사쿠라 미코 방송시간 · 최근 %d일\n합계 ", tc.wantDays))
+	}
+}
+
+// 합산 상한만큼 모이면 기간 안에 더 있을 수 있으므로 일부만 합산했다고 밝힌다.
+func TestBroadcastTimeCommandMarksPartialAtCap(t *testing.T) {
+	t.Parallel()
+
+	entries := make([]handlercore.BroadcastHistoryEntry, broadcastTimeMaxEntries)
+	repo := &stubBroadcastHistoryRepository{entries: entries}
 
 	var sent []string
-
-	before := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(-2 * time.Second)
 
 	err := NewBroadcastTimeCommand(newBroadcastTimeTestDeps(repo, &sent)).Execute(t.Context(),
 		&botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{paramMember: broadcastTimeTestMember})
 	require.NoError(t, err)
-
-	after := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(2 * time.Second)
-
-	require.Equal(t, 1, repo.listCalls)
-	require.Equal(t, testChannelMiko, repo.listQuery.ChannelID)
-	require.Equal(t, broadcastTimeLimit, repo.listQuery.Limit)
-	require.Empty(t, repo.listQuery.Type)
-	require.True(t, !repo.listQuery.Since.Before(before) && !repo.listQuery.Since.After(after), repo.listQuery.Since)
 	require.Len(t, sent, 1)
-	require.Contains(t, sent[0], "📅 사쿠라 미코 방송시간 · 최근 1개")
+	require.Contains(t, sent[0], "조회 한도에 도달해 최근 방송 일부만 합산했습니다.")
 }
 
 func TestBroadcastTimeCommandWithoutMemberSendsUsage(t *testing.T) {

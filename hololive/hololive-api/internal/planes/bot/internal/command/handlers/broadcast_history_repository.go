@@ -40,8 +40,11 @@ type pgBroadcastHistoryRepository struct {
 }
 
 const (
-	defaultBroadcastHistoryLimit       = 8
-	maxBroadcastHistoryLimit           = 20
+	defaultBroadcastHistoryLimit = 8
+	maxBroadcastHistoryLimit     = 20
+	// 저장소 한 번 조회의 결과 상한이다. !방송이력의 사용자 지정 개수는 handler가
+	// maxBroadcastHistoryLimit로 먼저 줄이고, !방송시간 합산은 이 상한까지 모은다.
+	maxBroadcastHistoryQueryLimit      = 50
 	broadcastHistoryPageSize           = 100
 	maxBroadcastHistoryPages           = 5
 	maxBroadcastHistoryProcessedRows   = broadcastHistoryPageSize * maxBroadcastHistoryPages
@@ -91,7 +94,11 @@ func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, 
 		return handlercore.BroadcastHistoryResult{}, errors.New("broadcast history query is required")
 	}
 
-	limit := normalizeBroadcastHistoryLimit(query.Limit)
+	limit := min(query.Limit, maxBroadcastHistoryQueryLimit)
+	if limit <= 0 {
+		limit = defaultBroadcastHistoryLimit
+	}
+
 	since := broadcastHistorySinceCursor(query)
 	queryCtx, cancel := context.WithTimeout(ctx, r.elapsedQueryBudget())
 

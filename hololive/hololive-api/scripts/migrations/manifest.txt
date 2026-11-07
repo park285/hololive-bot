@@ -230,3 +230,4 @@
 230 369_stream_list_collab_members.sql
 231 370_template_style_unify.sql
 232 371_help_broadcast_time.sql
+233 372_help_broadcast_time_sum.sql

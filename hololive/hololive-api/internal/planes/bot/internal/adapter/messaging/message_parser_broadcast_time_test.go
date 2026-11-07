@@ -15,8 +15,9 @@ func TestParseMessage_BroadcastTime(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
 
 	for msg, want := range map[string]map[string]any{
-		"!방송시간 사쿠라 미코": {paramMember: "사쿠라 미코"},
-		"!방송시간":        {},
+		"!방송시간 사쿠라 미코":     {paramMember: "사쿠라 미코"},
+		"!방송시간 사쿠라 미코 30일": {paramMember: "사쿠라 미코", paramDays: 30},
+		"!방송시간":            {},
 	} {
 		result := adapter.ParseMessage(&webhook.Message{Msg: msg})
 		require.NotNil(t, result, msg)

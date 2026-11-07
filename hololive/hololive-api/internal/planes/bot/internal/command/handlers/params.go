@@ -1,6 +1,9 @@
 package handlers
 
-const paramMember = "member"
+const (
+	paramMember = "member"
+	paramDays   = "days"
+)
 
 func stringParam(params map[string]any, key string) string {
 	value, ok := params[key]
