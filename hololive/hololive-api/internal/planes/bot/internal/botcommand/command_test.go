@@ -47,6 +47,7 @@ func TestCommandType_IsValid(t *testing.T) {
 		botcommand.CommandCalendar,
 		botcommand.CommandBroadcastHistory,
 		botcommand.CommandBroadcastThumbnail,
+		botcommand.CommandBroadcastTime,
 		botcommand.CommandUnknown,
 	}
 
