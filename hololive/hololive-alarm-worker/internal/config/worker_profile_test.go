@@ -290,3 +290,40 @@ func TestLoadWorkerProfileNotificationDeliveryTimingBoundaries(t *testing.T) {
 		})
 	}
 }
+
+// Iris는 발송을 최소 2.5초 간격으로 처리하므로 일괄 발송의 handoff 완료가 발송 attempt_timeout보다 늦을 수 있다.
+// 확인 기한은 별도 설정으로 요구하고, 발송 시도 시간보다 짧은 값은 기동 전에 거부한다.
+func TestValidateWorkerProfileAlarmHandoffHorizonCoversAttemptTimeout(t *testing.T) {
+	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
+
+	profile, err := LoadWorkerProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	attempt := *profile.Loaded.Profile.Workers[WorkerAlarmDispatch].Executor.AttemptTimeout.Milliseconds
+
+	for _, tc := range []struct {
+		name      string
+		horizonMS int64
+		valid     bool
+	}{
+		{name: "missing horizon", horizonMS: 0},
+		{name: "horizon one millisecond below attempt timeout", horizonMS: attempt - 1},
+		{name: "horizon equals attempt timeout", horizonMS: attempt, valid: true},
+		{name: "horizon covers queued burst", horizonMS: 300_000, valid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile.AlarmDispatch.HandoffHorizonMS = tc.horizonMS
+
+			err := validateWorkerProfile(profile)
+			if tc.valid && err != nil {
+				t.Fatalf("validateWorkerProfile() error = %v, want horizon accepted", err)
+			}
+
+			if !tc.valid && (err == nil || !strings.Contains(err.Error(), "handoff_horizon_ms")) {
+				t.Fatalf("validateWorkerProfile() error = %v, want handoff_horizon_ms rejected", err)
+			}
+		})
+	}
+}

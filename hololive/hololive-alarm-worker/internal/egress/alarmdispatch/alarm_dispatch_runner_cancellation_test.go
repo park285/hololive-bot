@@ -273,7 +273,7 @@ func TestAlarmDispatchLaterSerialGroupCannotSendAfterLeaseExpiry(t *testing.T) {
 		return expireErr
 	}}
 	totals := &workercontract.Counters{}
-	runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client), attemptTimeout: time.Second, workerTotals: totals}
+	runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client), attemptTimeout: time.Second, handoffHorizon: time.Second, workerTotals: totals}
 	require.NoError(t, runner.dispatchGroups(ctx, groups))
 	require.Equal(t, 1, client.handoffs)
 

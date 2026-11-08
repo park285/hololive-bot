@@ -31,6 +31,7 @@ const NotificationDeliveryFinalizeTimeout = 5 * time.Second
 type AlarmDispatchWorkerSettings struct {
 	LeaseMS               int64 `json:"lease_ms"`
 	QuarantineThresholdMS int64 `json:"quarantine_threshold_ms"`
+	HandoffHorizonMS      int64 `json:"handoff_horizon_ms"`
 	RecoveryIntervalMS    int64 `json:"recovery_interval_ms"`
 	RecoveryBatchSize     int   `json:"recovery_batch_size"`
 	MaxBatch              int   `json:"max_batch"`

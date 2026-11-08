@@ -60,6 +60,7 @@ func positiveValueProblems(profile *AlarmWorkerProfile) []string {
 	return runtimepolicy.PositiveValueProblems(map[string]int64{
 		"alarm_dispatch.lease_ms":                               profile.AlarmDispatch.LeaseMS,
 		"alarm_dispatch.quarantine_threshold_ms":                profile.AlarmDispatch.QuarantineThresholdMS,
+		"alarm_dispatch.handoff_horizon_ms":                     profile.AlarmDispatch.HandoffHorizonMS,
 		"alarm_dispatch.recovery_interval_ms":                   profile.AlarmDispatch.RecoveryIntervalMS,
 		"alarm_dispatch.poll_interval_ms":                       profile.AlarmDispatch.PollIntervalMS,
 		"alarm_dispatch.idle_backoff_min_ms":                    profile.AlarmDispatch.IdleBackoffMinMS,
@@ -118,6 +119,11 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 
 	if timeout := alarm.Executor.AttemptTimeout.Milliseconds; timeout != nil && *timeout >= profile.AlarmDispatch.LeaseMS {
 		problems = append(problems, "alarm_dispatch attempt_timeout must be less than lease_ms")
+	}
+
+	// Iris는 발송을 최소 간격으로 차례대로 처리하므로 일괄 발송의 handoff 완료는 발송 시도 시간보다 늦을 수 있다.
+	if timeout := alarm.Executor.AttemptTimeout.Milliseconds; timeout != nil && profile.AlarmDispatch.HandoffHorizonMS < *timeout {
+		problems = append(problems, "alarm_dispatch handoff_horizon_ms must be at least attempt_timeout")
 	}
 
 	// stale sending 격리 기준이 lease보다 짧으면 lease가 살아 있는 진행 중 발송을 격리한다. dispatch consumer도 같은 관계를

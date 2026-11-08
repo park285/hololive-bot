@@ -73,6 +73,7 @@ type Runner struct {
 	logger            *slog.Logger
 	members           domain.MemberDataProvider
 	attemptTimeout    time.Duration
+	handoffHorizon    time.Duration
 	workerTracker     *workercontract.ExecutorTracker
 	workerTotals      *workercontract.Counters
 }
@@ -83,6 +84,7 @@ type RunnerConfig struct {
 	MaxBatchesPerWake int
 	Members           domain.MemberDataProvider
 	AttemptTimeout    time.Duration
+	HandoffHorizon    time.Duration
 	WorkerTracker     *workercontract.ExecutorTracker
 	WorkerTotals      *workercontract.Counters
 }
@@ -108,6 +110,7 @@ func NewRunner(
 		logger:            logger,
 		members:           config.Members,
 		attemptTimeout:    config.AttemptTimeout,
+		handoffHorizon:    config.HandoffHorizon,
 		workerTracker:     config.WorkerTracker,
 		workerTotals:      config.WorkerTotals,
 	}
@@ -250,10 +253,10 @@ func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup,
 	}
 }
 
-// markDispatched는 발송 성공을 정산한다. 정산의 handoff 지평은 handoff reconciler와 같은 발송 attempt timeout이다.
+// markDispatched는 발송 성공을 정산한다. 정산의 handoff 지평은 handoff reconciler와 같은 profile handoff_horizon_ms다.
 func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
-		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID, r.attemptTimeout); err != nil {
+		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID, r.handoffHorizon); err != nil {
 			return fmt.Errorf("mark alarm dispatch sent: %w", err)
 		}
 

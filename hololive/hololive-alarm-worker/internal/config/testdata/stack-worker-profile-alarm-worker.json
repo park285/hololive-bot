@@ -17,6 +17,7 @@
       "settings": {
         "lease_ms": 60000,
         "quarantine_threshold_ms": 180000,
+        "handoff_horizon_ms": 300000,
         "recovery_interval_ms": 30000,
         "recovery_batch_size": 100,
         "max_batch": 50,
