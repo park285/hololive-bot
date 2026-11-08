@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **DB maintenance 실행기의 접속 거부 해소:** `scripts/runtime/db-maintenance-exec.sh`가 Compose 시절처럼 `hololive-bot_hololive-net` TCP로 `hololive_migrator` 접속을 시도해, `pg_hba.conf`의 특권 역할 TCP 거부 규칙에 막혔습니다(`pg_hba.conf rejects connection for host ..., user "hololive_migrator"`). closeout·rollback preflight 같은 운영 SQL을 문서 경로로 실행할 수 없었습니다. 이제 `hololive-db-migrate`처럼 network 없이 `holo-postgres`의 관리 socket volume을 read-only로 마운트해 접속합니다. pg_hba 정책은 그대로입니다. 배포 시 `stack-secrets`의 `hololive-db-maintenance` service를 `host=/var/run/postgresql`, `sslmode=disable`로 함께 바꿉니다.
+
 - **alarm dispatch handoff 확인 기한 분리:** handoff 확인 기한이 발송 `attempt_timeout`(30초)과 같아, Iris가 최소 2.5초 간격으로 차례로 넘기는 일괄 발송의 뒤쪽 요청이 완료 전에 `handoff_unconfirmed`로 격리됐습니다(2026-11-08 00:00 KST 기념일 알림 15건 중 3건이 31~36초에 완료). worker profile `alarm_dispatch.settings.handoff_horizon_ms`(필수, `attempt_timeout` 이상, 운영 300000)를 새로 두어 발송 정산과 reconciler가 이 기한을 씁니다. 발송 시도 시간·lease·격리 기준은 그대로입니다. profile은 strict decode이므로 새 alarm-worker와 갱신한 profile을 함께 배포해야 합니다.
 
 - **`!방송시간` 기간 합계:** 기간을 주지 않으면 최근 7일, `!방송시간 쿄코 30일`처럼 `N일`을 주면 그 기간(최대 365일)에 끝난 방송을 모아 머리 문단에 `합계 N시간 M분 · K회`를 둡니다. 합계는 시작·종료가 확인된 방송만 더하고, 종료 미확인 방송은 횟수에만 넣어 그 수를 밝힙니다. 미분류 방송도 합계와 목록에 들어갑니다. 방송 목록은 1건이어도 전체보기 뒤에 두고, 시작이 올해면 연도를 생략합니다. 합산은 한 번에 최대 50회이며, 상한이나 조회 예산에 걸리면 일부만 합산했다고 안내합니다. 저장소 한 번 조회의 결과 상한을 50으로 분리했고, `!방송이력`의 사용자 지정 개수 상한(20)은 그대로입니다. migration 372가 텍스트 도움말의 `!방송시간` 줄을 기간 인자·합계 설명으로 바꾸고, 도움말 카드 이미지도 같은 문구로 바꿉니다.

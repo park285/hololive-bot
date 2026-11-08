@@ -358,10 +358,12 @@ Epoch-1/R1 artifact로 되돌리는 rollback 창은 `DEC-20260926-hololive-retir
 DB maintenance 명령(아래 `db-maintenance-exec.sh`로 실행하는 migration·preflight SQL, 예: [Rollback](#rollback)의 durable preflight)은 libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
 
 > 중앙 런타임 호스트에는 `psql`이 없습니다. `scripts/runtime/db-maintenance-exec.sh`가
-> PostgreSQL 이미지를 일회성으로 띄워 `/migrations`와 `stack-secrets`의 service/pgpass·CA를
-> read-only로 마운트하고 그 안에서 명령을 실행합니다. libpq service 정본은
-> `/etc/stack-secrets/hololive-bot/postgres/{pg_service.conf,pgpass}`(둘 다 `0600 root:root`)이며
-> `hololive_migrator`로 `verify-full` 접속합니다. 이 스크립트를 중앙 런타임 호스트에서 실행하십시오.
+> PostgreSQL 이미지를 network 없이 일회성으로 띄워 `/migrations`, `stack-secrets`의 service/pgpass,
+> `holo-postgres`의 관리 socket volume을 read-only로 마운트하고 그 안에서 명령을 실행합니다. libpq service
+> 정본은 `/etc/stack-secrets/hololive-bot/postgres/{pg_service.conf,pgpass}`(둘 다 `0600 root:root`)이며
+> `hololive_migrator`로 `host=/var/run/postgresql` socket에 접속합니다. `pg_hba.conf`는 `postgres_admin`과
+> `hololive_migrator`의 TCP를 모두 거부하므로 `hololive-db-migrate`와 같은 socket 경로만 씁니다.
+> 이 스크립트를 중앙 런타임 호스트에서 실행하십시오.
 
 ### 4. Process lifecycle startup or shutdown fails
 
