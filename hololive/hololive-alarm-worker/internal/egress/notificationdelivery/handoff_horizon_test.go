@@ -16,7 +16,7 @@ func TestNotificationHandoffFirstCheckClipsShortHorizon(t *testing.T) {
 
 	dispatcher := mustNewDispatcher(t, repo, &preparedSenderSpy{body: testPinnedBody, route: testPreparedText}, dispatcherLogger(), nil)
 
-	dispatcher.config.AttemptTimeout = 1500 * time.Millisecond
+	dispatcher.config.HandoffHorizon = 1500 * time.Millisecond
 	dispatcher.processReady(t.Context())
 
 	var (
@@ -28,5 +28,5 @@ func TestNotificationHandoffFirstCheckClipsShortHorizon(t *testing.T) {
 		floor(EXTRACT(EPOCH FROM (handoff_next_check_at - sent_at)) * 1000)::BIGINT
 		FROM notification_delivery_outbox WHERE period_key = 'short-horizon'`).Scan(&status, &delayMS))
 	require.Equal(t, string(domain.DeliveryStatusSent), status)
-	require.Equal(t, dispatcher.config.AttemptTimeout.Milliseconds(), delayMS)
+	require.Equal(t, dispatcher.config.HandoffHorizon.Milliseconds(), delayMS)
 }

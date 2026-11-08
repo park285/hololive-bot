@@ -48,6 +48,7 @@ type Config struct {
 	TelemetryFlushBatch         int           // telemetry 버퍼 플러시 최대 건수
 	TelemetryRetryBackoff       time.Duration // telemetry 플러시 실패 재시도 간격
 	TelemetryRetention          time.Duration // telemetry 버퍼 최소 보존 기간
+	HandoffHorizon              time.Duration // Iris handoff 확인 기한. Iris 큐 대기 때문에 DeliverySendTimeout보다 길 수 있다.
 }
 
 // Validate는 dispatcher가 쓰는 주기·한도·병렬성이 양수인지와, claim 신선도 기간이 revive 기간과 주기의 합 이상인지
@@ -73,6 +74,7 @@ func (c *Config) Validate() error {
 		{"telemetry flush batch", c.TelemetryFlushBatch > 0},
 		{"telemetry retry backoff", c.TelemetryRetryBackoff > 0},
 		{"telemetry retention", c.TelemetryRetention > 0},
+		{"handoff horizon", c.HandoffHorizon > 0},
 	}
 
 	var invalid []string

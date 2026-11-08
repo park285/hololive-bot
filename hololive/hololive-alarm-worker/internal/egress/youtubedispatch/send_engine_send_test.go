@@ -1735,7 +1735,7 @@ func TestNewDispatcherRejectsMissingOrInvalidConfig(t *testing.T) {
 
 func newOutcomeUnknownTestEngine(sender messagedelivery.PreparedMessageSender, renderer *template.Renderer, timeout time.Duration) *SendEngine {
 	logger := slog.New(slog.DiscardHandler)
-	cfg := &Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
+	cfg := &Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2, HandoffHorizon: timeout}
 	auditLogger := newAuditLogger(nil, nil, logger, cfg)
 	formatter := format.NewMessageFormatter(renderer, staticMemberNames{}, nil)
 

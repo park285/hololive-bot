@@ -25,6 +25,7 @@ func validConfig() Config {
 		TelemetryFlushBatch:         200,
 		TelemetryRetryBackoff:       30 * time.Second,
 		TelemetryRetention:          24 * time.Hour,
+		HandoffHorizon:              5 * time.Minute,
 	}
 }
 

@@ -327,3 +327,57 @@ func TestValidateWorkerProfileAlarmHandoffHorizonCoversAttemptTimeout(t *testing
 		})
 	}
 }
+
+// notification_delivery·youtube_delivery도 같은 Iris 발송 큐를 거치므로 handoff 확인 기한을 발송 시도 시간과 따로 둔다.
+func TestValidateWorkerProfileDeliveryHandoffHorizonCoversAttemptTimeout(t *testing.T) {
+	for _, worker := range []struct {
+		name    string
+		key     string
+		id      string
+		horizon func(*AlarmWorkerProfile) *int64
+	}{
+		{
+			name: "notification_delivery", key: "notification_delivery handoff_horizon_ms", id: WorkerNotificationDelivery,
+			horizon: func(p *AlarmWorkerProfile) *int64 { return &p.NotificationDelivery.HandoffHorizonMS },
+		},
+		{
+			name: "youtube_delivery", key: "youtube_delivery handoff_horizon_ms", id: WorkerYouTubeDelivery,
+			horizon: func(p *AlarmWorkerProfile) *int64 { return &p.YouTubeDelivery.HandoffHorizonMS },
+		},
+	} {
+		t.Run(worker.name, func(t *testing.T) {
+			settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
+
+			profile, err := LoadWorkerProfile()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			attempt := *profile.Loaded.Profile.Workers[worker.id].Executor.AttemptTimeout.Milliseconds
+
+			for _, tc := range []struct {
+				name      string
+				horizonMS int64
+				valid     bool
+			}{
+				{name: "missing horizon", horizonMS: 0},
+				{name: "horizon one millisecond below attempt timeout", horizonMS: attempt - 1},
+				{name: "horizon equals attempt timeout", horizonMS: attempt, valid: true},
+				{name: "horizon covers queued burst", horizonMS: 300_000, valid: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					*worker.horizon(profile) = tc.horizonMS
+
+					err := validateWorkerProfile(profile)
+					if tc.valid && err != nil {
+						t.Fatalf("validateWorkerProfile() error = %v, want horizon accepted", err)
+					}
+
+					if !tc.valid && (err == nil || !strings.Contains(strings.ReplaceAll(err.Error(), ".", " "), worker.key)) {
+						t.Fatalf("validateWorkerProfile() error = %v, want %s rejected", err, worker.key)
+					}
+				})
+			}
+		})
+	}
+}

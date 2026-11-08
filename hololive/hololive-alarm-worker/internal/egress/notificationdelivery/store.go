@@ -135,7 +135,7 @@ func (r *Store) MarkSending(ctx context.Context, id int64, workerID string, atte
 // 결과를 잃지 않도록 lease 만료는 보지 않는다. PENDING 행은 발송 전이를 거치지 않았으므로 소유자가 같아도 전이하지 않는다.
 // 같은 문장에서 Iris가 admission을 증명한 requestId와 첫 handoff 확인 시각(DB 시각 + min(handoffcheck.FirstCheckDelay,
 // handoffHorizon))을 기록하며, 확인이 끝날 때까지 같은 방의 후행 행은 claim되지 않는다. 지평 handoffHorizon은 handoff
-// reconciler와 같은 executor attempt_timeout이라 첫 확인도 admission + 지평을 넘지 않는다. 확인할 requestId가
+// reconciler와 같은 profile handoff_horizon_ms라 첫 확인도 admission + 지평을 넘지 않는다. 확인할 requestId가
 // 없거나 지평이 양수가 아니면 전이하지 않고 오류다.
 func (r *Store) MarkSent(ctx context.Context, id int64, workerID string, attemptCount int, irisRequestID string, handoffHorizon time.Duration) error {
 	if irisRequestID == "" {

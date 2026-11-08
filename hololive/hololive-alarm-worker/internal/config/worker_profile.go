@@ -71,6 +71,7 @@ func positiveValueProblems(profile *AlarmWorkerProfile) []string {
 		"notification_delivery.cleanup_interval_ms":             profile.NotificationDelivery.CleanupIntervalMS,
 		"notification_delivery.stale_sending_after_ms":          profile.NotificationDelivery.StaleSendingAfterMS,
 		"notification_delivery.stale_sending_sweep_interval_ms": profile.NotificationDelivery.StaleSendingSweepIntervalMS,
+		"notification_delivery.handoff_horizon_ms":              profile.NotificationDelivery.HandoffHorizonMS,
 		"youtube_delivery.lock_timeout_ms":                      profile.YouTubeDelivery.LockTimeoutMS,
 		"youtube_delivery.poll_interval_ms":                     profile.YouTubeDelivery.PollIntervalMS,
 		"youtube_delivery.retry_backoff_ms":                     profile.YouTubeDelivery.RetryBackoffMS,
@@ -81,6 +82,7 @@ func positiveValueProblems(profile *AlarmWorkerProfile) []string {
 		"youtube_delivery.telemetry_poll_interval_ms":           profile.YouTubeDelivery.TelemetryPollIntervalMS,
 		"youtube_delivery.telemetry_retry_backoff_ms":           profile.YouTubeDelivery.TelemetryRetryBackoffMS,
 		"youtube_delivery.telemetry_retention_ms":               profile.YouTubeDelivery.TelemetryRetentionMS,
+		"youtube_delivery.handoff_horizon_ms":                   profile.YouTubeDelivery.HandoffHorizonMS,
 	})
 }
 
@@ -122,8 +124,18 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 	}
 
 	// Iris는 발송을 최소 간격으로 차례대로 처리하므로 일괄 발송의 handoff 완료는 발송 시도 시간보다 늦을 수 있다.
-	if timeout := alarm.Executor.AttemptTimeout.Milliseconds; timeout != nil && profile.AlarmDispatch.HandoffHorizonMS < *timeout {
-		problems = append(problems, "alarm_dispatch handoff_horizon_ms must be at least attempt_timeout")
+	// 세 발송 경로가 같은 Iris 큐를 쓰므로 확인 기한은 모두 발송 시도 시간 이상이어야 한다.
+	for _, horizon := range []struct {
+		worker    string
+		horizonMS int64
+	}{
+		{WorkerAlarmDispatch, profile.AlarmDispatch.HandoffHorizonMS},
+		{WorkerNotificationDelivery, profile.NotificationDelivery.HandoffHorizonMS},
+		{WorkerYouTubeDelivery, profile.YouTubeDelivery.HandoffHorizonMS},
+	} {
+		if timeout := workers[horizon.worker].Executor.AttemptTimeout.Milliseconds; timeout != nil && horizon.horizonMS < *timeout {
+			problems = append(problems, horizon.worker+" handoff_horizon_ms must be at least attempt_timeout")
+		}
 	}
 
 	// stale sending 격리 기준이 lease보다 짧으면 lease가 살아 있는 진행 중 발송을 격리한다. dispatch consumer도 같은 관계를

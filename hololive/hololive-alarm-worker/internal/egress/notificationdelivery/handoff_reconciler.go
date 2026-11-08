@@ -55,7 +55,7 @@ type HandoffSettler interface {
 
 var _ HandoffStore = (*Store)(nil)
 
-// HandoffReconcilerConfig의 Horizon은 notification_delivery executor attempt timeout, PollInterval은
+// HandoffReconcilerConfig의 Horizon은 notification_delivery profile handoff_horizon_ms, PollInterval은
 // notification_delivery poll 주기다. MaxRetries·RetryBackoff는 발송 실패 정책과 같은 profile 값이며 failed 재발급의
 // 시도 예산과 다음 시도 지연이다.
 type HandoffReconcilerConfig struct {

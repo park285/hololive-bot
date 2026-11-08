@@ -70,7 +70,7 @@ func sendYouTubeHandoffFixture(t *testing.T) youtubeHandoffFixture {
 
 	config := testDispatchConfig()
 
-	config.DeliverySendTimeout = testYouTubeHandoffHorizon
+	config.HandoffHorizon = testYouTubeHandoffHorizon
 
 	sender := &frozenProviderSender{body: "handoff body", route: testPreparedTextRoute}
 	engine := &SendEngine{sender: sender, transition: transition, config: config, logger: logger}

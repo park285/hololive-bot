@@ -102,6 +102,8 @@ type DispatcherConfig struct {
 	StaleSendingAfter         time.Duration
 	StaleSendingSweepInterval time.Duration
 	StaleSendingSweepLimit    int
+	// HandoffHorizon은 Iris handoff 확인 기한이다. Iris 큐 대기 때문에 AttemptTimeout보다 길 수 있다.
+	HandoffHorizon time.Duration
 }
 
 // idleWaiter는 빈 조회 뒤 다음 조회까지 기다린다. Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
@@ -190,6 +192,7 @@ func (c *DispatcherConfig) validate() error {
 		{"cleanup interval", c.CleanupInterval > 0},
 		{"stale sending sweep interval", c.StaleSendingSweepInterval > 0},
 		{"stale sending sweep limit", c.StaleSendingSweepLimit > 0},
+		{"handoff horizon", c.HandoffHorizon > 0},
 	}
 
 	var invalid []string
@@ -411,9 +414,9 @@ func (d *Dispatcher) markItemSending(ctx context.Context, item *domain.Notificat
 }
 
 // markItemSent는 발송 성공과 Iris requestId를 함께 기록해 handoff 확인을 예약한다. 지평은 handoff reconciler와 같은
-// attempt timeout이다.
+// HandoffHorizon이다.
 func (d *Dispatcher) markItemSent(ctx context.Context, item *domain.NotificationDeliveryOutbox, irisRequestID string) {
-	if err := d.repository.MarkSent(ctx, item.ID, d.workerID, item.AttemptCount, irisRequestID, d.config.AttemptTimeout); err != nil {
+	if err := d.repository.MarkSent(ctx, item.ID, d.workerID, item.AttemptCount, irisRequestID, d.config.HandoffHorizon); err != nil {
 		d.reportTransitionError(item.ID, err, "Failed to mark outbox item as sent")
 	}
 }
