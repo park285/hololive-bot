@@ -101,8 +101,10 @@ check. When `MarkSent` does not apply to every member, the unit records no check
 `alarm-dispatch-handoff-reconciler` claims due units with `FOR UPDATE SKIP LOCKED` and moves `handoff_next_check_at`
 15s ahead as a soft-claim token. It queries `/reply-status` outside any transaction, then applies the observation in
 one statement that locks the unit before its members and rechecks the token, `client_request_id`,
-`handoff_request_id` and that every pinned member is still `sent`. The horizon is the `alarm_dispatch` executor
-`attempt_timeout`.
+`handoff_request_id` and that every pinned member is still `sent`. The horizon is the `alarm_dispatch` worker
+setting `handoff_horizon_ms`, which must be at least the executor `attempt_timeout`. Iris hands replies to KakaoTalk
+one at a time at its minimum send interval (2.5s), so a burst's last handoff can complete well after the admission
+attempt; the horizon must cover that queue drain. Production uses 300000 (about 120 queued sends).
 
 | Observation | Ledger action |
 |---|---|
@@ -463,7 +465,8 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - HTTP client timeout: 10 seconds for alarm client.
 - HTTP/H3 options are passed explicitly from the consuming plane's loaded `BotPlaneConfig.InternalH3` or `AdminPlaneConfig.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
 - Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
-- 발송 시도: `alarm_dispatch` executor `attempt_timeout`은 Iris admission 호출(SDK admission 재시도 포함)에만 걸립니다. `lease_ms`보다 짧아야 하며 handoff 확인 지평으로도 쓰입니다.
+- 발송 시도: `alarm_dispatch` executor `attempt_timeout`은 Iris admission 호출(SDK admission 재시도 포함)에만 걸립니다. `lease_ms`보다 짧아야 합니다.
+- handoff 확인 기한: `handoff_horizon_ms`(필수, `attempt_timeout` 이상)가 발송 정산의 첫 확인 예약과 handoff reconciler 지평을 정합니다. Iris가 발송을 최소 2.5초 간격으로 차례로 넘기므로 일괄 발송의 대기열 소진 시간보다 길어야 합니다.
 - handoff 확인: handoff를 확인하지 못한 `sent` 단위는 `alarm-dispatch-handoff-reconciler`가 [Iris handoff reconciliation](#iris-handoff-reconciliation) 규칙으로 확인합니다. sender는 handoff를 기다리지 않습니다.
 - stale `sending` 격리: `quarantine_threshold_ms`는 `lease_ms` 이상이어야 합니다. 프로필 검증이 더 작은 값을 기동 시 거부하고, dispatch consumer도 생략·0·음수를 포함해 lease보다 작은 기준을 lease에서 계산한 값으로 바꾸지 않고 생성 오류로 거부합니다.
 - Retry: a failed delivery returns to `retry` with `next_attempt_at` set from the transition's single database clock plus `retry_after_ms` (members of one send unit share it); the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.

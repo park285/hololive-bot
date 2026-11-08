@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v5/iris"
@@ -230,6 +231,18 @@ func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 	runnerConfig := alarmDispatchRunnerConfig(config)
 	assert.Equal(t, 9, runnerConfig.MaxBatch)
 	assert.Equal(t, 3, runnerConfig.MaxBatchesPerWake)
+}
+
+// handoff 확인 기한은 발송 attempt_timeout이 아니라 profile의 handoff_horizon_ms를 따른다.
+func TestAlarmDispatchHandoffHorizonFollowsProfileSetting(t *testing.T) {
+	config, _ := alarmWorkerTestConfig(t)
+
+	config.AlarmWorkerProfile.AlarmDispatch.HandoffHorizonMS = 300_000
+
+	runnerConfig := alarmDispatchRunnerConfig(config)
+	assert.Equal(t, 5*time.Minute, runnerConfig.HandoffHorizon)
+	assert.Equal(t, 5*time.Minute, alarmDispatchHandoffHorizon(config))
+	assert.Less(t, runnerConfig.AttemptTimeout, runnerConfig.HandoffHorizon)
 }
 
 // dispatcher가 기본값을 채우지 않으므로, 운영 profile 형상이 두 dispatcher의 생성 검증을 통과하는지 확인한다.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
@@ -208,10 +209,8 @@ func buildAlarmDispatchHandoffReconciler(
 		return nil, fmt.Errorf("new alarm dispatch handoff consumer: %w", err)
 	}
 
-	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerAlarmDispatch]
-
 	reconciler, err := alarmdispatch.NewHandoffReconciler(consumer, statusClient, alarmdispatch.HandoffReconcilerConfig{
-		Horizon:      workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),
+		Horizon:      alarmDispatchHandoffHorizon(appConfig),
 		PollInterval: workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.PollIntervalMS),
 	}, logger)
 	if err != nil {
@@ -442,7 +441,13 @@ func alarmDispatchRunnerConfig(appConfig *workerconfig.RuntimeConfig) alarmdispa
 		MaxBatch:          profile.MaxBatch,
 		MaxBatchesPerWake: profile.MaxBatchesPerWake,
 		AttemptTimeout:    workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),
+		HandoffHorizon:    alarmDispatchHandoffHorizon(appConfig),
 	}
+}
+
+// alarmDispatchHandoffHorizon은 발송 정산과 handoff reconciler가 함께 쓰는 Iris handoff 확인 기한이다.
+func alarmDispatchHandoffHorizon(appConfig *workerconfig.RuntimeConfig) time.Duration {
+	return workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.HandoffHorizonMS)
 }
 
 // loadEgressMessageStrings는 알림 발송 runner들이 함께 쓰는 message_strings를 기동 때 한 번 적재하고
