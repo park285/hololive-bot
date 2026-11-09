@@ -46,7 +46,7 @@ Notify=healthy
 Exec=nginx -c /etc/nginx/admin-dashboard-ingress.conf -g "daemon off;"
 
 [Service]
-Environment=NGINX_IMAGE=localhost/iris-stack-nginx:1.31.8-zlib1.3.2-r1
+Environment=NGINX_IMAGE=localhost/iris-stack-nginx:1.31.8-zlib1.4-r0
 EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
 ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart admin-dashboard-ingress
 Restart=always

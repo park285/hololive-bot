@@ -44,7 +44,7 @@ Notify=healthy
 Exec=valkey-runtime server /run/valkey/server.conf /data/valkey.conf
 
 [Service]
-Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.3.2-r2
+Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.4-r0
 EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
 ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart valkey-cache
 Restart=always
