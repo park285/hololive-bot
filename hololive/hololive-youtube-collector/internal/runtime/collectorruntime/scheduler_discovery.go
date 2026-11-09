@@ -120,6 +120,17 @@ func (s *leaseScheduler) discoveryRunners() []RegisteredRunner {
 }
 
 func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, startCursor int) {
+	s.cycleMu.Lock()
+
+	// 제외 키를 복사하기 전에 revision을 고정해야 조회 시작 전의 작업 종료도 보존된다.
+	for id, state := range s.candidatePolls {
+		state.snapshotRevision = state.revision
+		s.candidatePolls[id] = state
+	}
+
+	startCursor = s.rotationCursor
+	s.cycleMu.Unlock()
+
 	s.queueMu.Lock()
 
 	queued := len(s.queued)
@@ -132,11 +143,6 @@ func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, start
 	}
 
 	s.queueMu.Unlock()
-
-	s.cycleMu.Lock()
-
-	startCursor = s.rotationCursor
-	s.cycleMu.Unlock()
 
 	return free, excluded, startCursor
 }
@@ -158,7 +164,10 @@ func (s *leaseScheduler) setProjection(generation int64) {
 	s.cycleMu.Lock()
 
 	if s.projection != generation {
-		clear(s.candidatePolls)
+		for id, state := range s.candidatePolls {
+			state.skipUntil = time.Time{}
+			s.candidatePolls[id] = state
+		}
 	}
 
 	s.projection = generation

@@ -11,8 +11,9 @@ import (
 const maxCandidatePollSkip = 10 * time.Second
 
 type candidatePollState struct {
-	skipUntil time.Time
-	revision  uint64
+	skipUntil        time.Time
+	revision         uint64
+	snapshotRevision uint64
 }
 
 func (s *leaseScheduler) skipCandidatePoll(id collection.JobID, now time.Time) bool {
@@ -22,11 +23,11 @@ func (s *leaseScheduler) skipCandidatePoll(id collection.JobID, now time.Time) b
 	return now.Before(s.candidatePolls[id].skipUntil)
 }
 
-func (s *leaseScheduler) candidatePollRevision(id collection.JobID) uint64 {
+func (s *leaseScheduler) candidatePollSnapshotRevision(id collection.JobID) uint64 {
 	s.cycleMu.Lock()
 	defer s.cycleMu.Unlock()
 
-	return s.candidatePolls[id].revision
+	return s.candidatePolls[id].snapshotRevision
 }
 
 func (s *leaseScheduler) recordCandidatePoll(id collection.JobID, generation int64, revision uint64, started time.Time, page joblease.CandidatePage, limit int, err error) {
@@ -34,7 +35,7 @@ func (s *leaseScheduler) recordCandidatePoll(id collection.JobID, generation int
 	defer s.cycleMu.Unlock()
 
 	state := s.candidatePolls[id]
-	// 조회 중 끝난 작업의 무효화를 오래된 snapshot의 힌트가 덮어쓰지 않는다.
+	// exclusion snapshot 이후 끝난 작업의 무효화를 오래된 후보 응답이 덮어쓰지 않는다.
 	if s.projection != generation || state.revision != revision {
 		return
 	}

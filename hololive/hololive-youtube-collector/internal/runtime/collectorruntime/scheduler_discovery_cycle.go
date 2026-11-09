@@ -269,7 +269,7 @@ func (s *leaseScheduler) queryRunnerPage(
 
 		id := runners[runner].Contract().ID()
 		started := time.Now()
-		revision := s.candidatePollRevision(id)
+		revision := s.candidatePollSnapshotRevision(id)
 
 		dbCtx, cancel := context.WithTimeout(ctx, s.dbTimeout)
 

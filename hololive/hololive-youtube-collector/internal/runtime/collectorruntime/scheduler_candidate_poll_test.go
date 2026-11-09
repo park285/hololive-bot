@@ -115,13 +115,33 @@ func TestCandidatePollingCompletionDuringQueryDoesNotRestoreHint(t *testing.T) {
 	s.setProjection(1)
 
 	id := collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "community_collect"}
-	revision := s.candidatePollRevision(id)
+	revision := s.candidatePollSnapshotRevision(id)
 	s.invalidateCandidatePoll(id)
 	s.recordCandidatePoll(id, 1, revision, time.Now(), joblease.CandidatePage{}, 2, nil)
 	require.False(t, s.skipCandidatePoll(id, time.Now()))
 	s.setProjection(2)
-	s.recordCandidatePoll(id, 1, s.candidatePollRevision(id), time.Now(), joblease.CandidatePage{}, 2, nil)
+	s.recordCandidatePoll(id, 1, s.candidatePollSnapshotRevision(id), time.Now(), joblease.CandidatePage{}, 2, nil)
 	require.False(t, s.skipCandidatePoll(id, time.Now()), "구 generation의 응답은 대기를 복구하지 않음")
+}
+
+func TestCandidatePollingCompletionAfterExclusionSnapshotDoesNotRestoreHint(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newLifecycleScheduler(t)
+		stub := newEmptyCandidateStub(t)
+
+		s.candidates = stub
+		s.discoverOnce(t.Context())
+
+		_, excluded, _ := s.discoverySnapshot()
+		runners := s.discoveryRunners()
+		id := runners[0].Contract().ID()
+		s.invalidateCandidatePoll(id)
+		s.setProjection(2)
+
+		_, err := s.queryRunnerPage(t.Context(), stub, 2, runners)(0, excluded, 2)
+		require.NoError(t, err)
+		require.False(t, s.skipCandidatePoll(id, time.Now()), "조회 전 종료·generation 교체도 무효화를 보존")
+	})
 }
 
 func TestCandidatePollingSkippedRunnerPreservesCapacityRotation(t *testing.T) {
