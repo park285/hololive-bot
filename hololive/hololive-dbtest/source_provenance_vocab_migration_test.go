@@ -133,7 +133,7 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 
 	var mismatched, kinds, decisions int
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(a.id) FROM source_observation_applications a
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(a.observation_id) FROM source_observation_applications a
 		JOIN source_observation_entity_kinds k ON k.id=a.entity_kind_id
 		JOIN source_observation_decisions d ON d.id=a.decision_id
 		JOIN source_observations o ON o.id=a.observation_id
@@ -159,7 +159,17 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 	}
 
 	require.NoError(t, rows.Err())
-	require.Equal(t, []string{"idx_source_application_entity_latest", "source_observation_applications_pkey", "uq_source_observation_application_entity"}, indexes)
+	require.Equal(t, []string{"idx_source_application_entity_latest", "source_observation_applications_pkey"}, indexes)
+
+	var primaryKey []string
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT array_agg(attribute.attname::text ORDER BY key.ordinality)
+		FROM pg_constraint AS constraint_row
+		CROSS JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS key(attnum, ordinality)
+		JOIN pg_attribute AS attribute ON attribute.attrelid=constraint_row.conrelid AND attribute.attnum=key.attnum
+		WHERE constraint_row.conrelid='public.source_observation_applications'::regclass
+		  AND constraint_row.contype='p'`).Scan(&primaryKey))
+	require.Equal(t, []string{"observation_id", "entity_kind_id", "entity_key"}, primaryKey)
 
 	live := observationIDBySubject(t, pool, "live")
 	require.True(t, retentionProtected(t, pool, live), "LIVE session 감사 보호는 코드 표 조인으로 유지된다")
@@ -168,7 +178,7 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 		VALUES ($1,source_observation_entity_kind_id('youtube_live_session'),'vocab-live',source_observation_decision_id('REPLAY'))
 		ON CONFLICT (observation_id,entity_kind_id,entity_key) DO NOTHING`, live)
 	require.NoError(t, err)
-	require.Zero(t, tag.RowsAffected(), "같은 원본·kind·key 감사는 코드 index가 중복을 막는다")
+	require.Zero(t, tag.RowsAffected(), "같은 원본·kind·key 감사는 자연 키 PK가 중복을 막는다")
 
 	tag, err = pool.Exec(ctx, `INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
 		VALUES ($1,source_observation_entity_kind_id('youtube_video'),'vocab-live',source_observation_decision_id('APPLIED'))`, live)
@@ -189,7 +199,7 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 
 	var remaining int
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(id) FROM source_observation_applications WHERE observation_id=$1`, live).Scan(&remaining))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(observation_id) FROM source_observation_applications WHERE observation_id=$1`, live).Scan(&remaining))
 	require.Zero(t, remaining, "원본 CASCADE는 유지된다")
 }
 
