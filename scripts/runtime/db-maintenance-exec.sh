@@ -11,7 +11,6 @@ usage: db-maintenance-exec.sh <command> [args...]
   거부하므로 hololive-db-migrate 처럼 network 없이 관리 Unix socket 으로만 접속합니다.
   마운트된 migrations 디렉터리는 /migrations 입니다.
 
-  db-maintenance-exec.sh bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
   db-maintenance-exec.sh psql -w -X -v ON_ERROR_STOP=1 -c 'select 1'
 EOF
   exit 2
