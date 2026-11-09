@@ -68,7 +68,7 @@ and single-primary fence.
 - YouTube notification split: `youtube-collector` AP fleet owns external fetch/normalize/collection lease/checkpoint/`source_observation` Publish; `hololive-api` YouTube plane owns observation consume, canonical persist, notification intent, live-end finalizer, and retention/replay; `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
 - Birthday stream split: collector publishes live evidence; `hololive-api` YouTube plane owns live session/end reconciliation; `alarm-worker` resolves recipients from `status='sent'` deliveries of the matching birthday greeting event and relies on the dispatch ledger for late-room convergence.
 - X Spaces: alarm-worker의 선택적 Node helper가 무료 웹 내부 API 관측을 수행하고 기존 dispatch ledger로 LIVE 구독 방에 시작 링크를 보낸다. Iris Console은 후보 세션 제출·상태 화면을, hololive-api는 암호화된 후보 저장을, worker는 검증·승격을 소유한다. 상세 계약은 `services/x-spaces.md`를 따른다.
-- X Spaces 연결 복구는 `DEC-20260924-x-spaces-auto-login-fadeout`에 따라 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 과거 자동 로그인 시도 이력은 연결 상태의 읽기 전용 정보로 남긴다.
+- X Spaces 연결 복구는 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 연결 상태는 현재 세션과 후보 검증 결과만 제공한다.
 
 ## Implementation Ownership
 
