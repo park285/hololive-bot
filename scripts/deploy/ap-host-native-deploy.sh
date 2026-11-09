@@ -112,6 +112,7 @@ write_host_env() {
     printf 'PHOTO_SYNC_ENABLED=false\n'
     printf 'YOUTUBEJS_NODE=/usr/bin/node\n'
     printf 'YOUTUBEJS_SCRIPT=/opt/hololive-bot/youtube-collector/current/youtubejs/src/server.mjs\n'
+    printf 'YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS=90\n'
     printf 'POSTGRES_USER=hololive_scraper\n'
     printf 'POSTGRES_HOST=%s\n' "$AP_POSTGRES_HOST"
     printf 'POSTGRES_PORT=%s\n' "$AP_POSTGRES_PORT"

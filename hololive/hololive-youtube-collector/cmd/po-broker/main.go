@@ -34,12 +34,13 @@ var (
 func main() { os.Exit(run(os.Args[1:])) }
 
 type options struct {
-	listenFD    int
-	socket      string
-	node        string
-	worker      string
-	showVersion bool
-	healthcheck bool
+	listenFD       int
+	socket         string
+	node           string
+	worker         string
+	startupTimeout time.Duration
+	showVersion    bool
+	healthcheck    bool
 }
 
 func parseOptions(args []string) (*options, bool) {
@@ -51,10 +52,11 @@ func parseOptions(args []string) (*options, bool) {
 	flags.StringVar(&opts.socket, "socket", "", "Unix socket")
 	flags.StringVar(&opts.node, "node", "/usr/local/bin/node", "Node executable")
 	flags.StringVar(&opts.worker, "worker", "/app/po-sandbox/src/worker.mjs", "isolated worker")
+	flags.DurationVar(&opts.startupTimeout, "startup-timeout", 30*time.Second, "worker loaded timeout (positive, at most 90s)")
 	flags.BoolVar(&opts.showVersion, "version", false, "print build identity")
 	flags.BoolVar(&opts.healthcheck, "healthcheck", false, "check broker over Unix socket")
 
-	if flags.Parse(args) != nil || flags.NArg() != 0 {
+	if flags.Parse(args) != nil || flags.NArg() != 0 || opts.startupTimeout <= 0 || opts.startupTimeout > 90*time.Second {
 		return nil, false
 	}
 
@@ -91,7 +93,10 @@ func run(args []string) int {
 		return 1
 	}
 
-	serveErr := broker.Serve(listener)
+	serveErr := broker.Serve(listener, opts.startupTimeout)
+	if broker.ExitReason() == pobroker.ExitStartupFailed {
+		reportStartupFailure(os.Stderr, serveErr)
+	}
 
 	// signal 감시를 멈추기 전에 기록해, 그 사이 도착한 signal도 원인 줄을 남긴 뒤 종료하게 합니다.
 	report(broker.ExitReason())
@@ -104,6 +109,23 @@ func run(args []string) int {
 	}
 
 	return 0
+}
+
+// reportStartupFailure는 고정 분류만 기록하며 원본 오류·워커 출력·요청은 노출하지 않습니다.
+func reportStartupFailure(w io.Writer, err error) {
+	classification := "unclassified"
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		classification = "deadline"
+	case errors.Is(err, context.Canceled):
+		classification = "canceled"
+	}
+
+	// 진단 기록 실패는 기존 종료 상태를 바꾸지 않습니다.
+	if _, writeErr := fmt.Fprintf(w, "po-broker startup_failure=%s\n", classification); writeErr != nil {
+		return
+	}
 }
 
 // exitReporter는 프로세스 종료 원인을 stderr에 한 줄만 기록합니다. 고정 어휘의

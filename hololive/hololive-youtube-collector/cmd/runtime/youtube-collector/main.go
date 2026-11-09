@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 	_ "time/tzdata"
 
 	"github.com/park285/shared-go/v2/pkg/envutil"
@@ -36,6 +38,11 @@ func main() {
 		return nil
 	}); handled {
 		os.Exit(exitCode)
+	}
+
+	startup, ok := parseStartupOptions(os.Args[1:])
+	if !ok {
+		os.Exit(2)
 	}
 
 	os.Exit(bootstrap.Options[*collectorconfig.RuntimeConfig, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
@@ -70,7 +77,7 @@ func main() {
 		StartupFields: func(appConfig *collectorconfig.RuntimeConfig) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
-		BuildTimeout: constants.AppTimeout.Build,
+		BuildTimeout: startup.timeout,
 		BuildRuntime: func(
 			ctx context.Context,
 			appConfig *collectorconfig.RuntimeConfig,
@@ -83,12 +90,32 @@ func main() {
 				&traceConfig,
 				logger,
 				func(ctx context.Context) (*collectorruntime.Runtime, error) {
-					return collectorruntime.Build(ctx, appConfig, logger)
+					return collectorruntime.Build(ctx, appConfig, logger, startup.waitForDatabase)
 				},
 			)
 		},
 		BuildErrorMessage: "Failed to build youtube collector runtime",
 	}.Run())
+}
+
+type startupOptions struct {
+	timeout         time.Duration
+	waitForDatabase bool
+}
+
+// parseStartupOptions는 native의 명시적 준비 정책만 허용하며 다른 실행 방식의 기본값은 유지합니다.
+func parseStartupOptions(args []string) (startupOptions, bool) {
+	options := startupOptions{timeout: constants.AppTimeout.Build}
+	flags := flag.NewFlagSet("youtube-collector", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.DurationVar(&options.timeout, "startup-timeout", options.timeout, "runtime build timeout (positive, at most 90s)")
+	flags.BoolVar(&options.waitForDatabase, "wait-for-database", false, "wait for initial database connection deadlines within the startup budget")
+
+	if flags.Parse(args) != nil || flags.NArg() != 0 || options.timeout <= 0 || options.timeout > 90*time.Second {
+		return startupOptions{}, false
+	}
+
+	return options, true
 }
 
 func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
