@@ -28,7 +28,7 @@ func TestServeDoesNotReportHealthyBeforeWorkerLoads(t *testing.T) {
 
 	done := make(chan error, 1)
 
-	go func() { done <- broker.Serve(listener) }()
+	go func() { done <- broker.Serve(listener, 30*time.Second) }()
 
 	t.Cleanup(func() {
 		broker.retire(ExitSignal)
@@ -86,7 +86,7 @@ func TestInvalidStartupFrameClosesListenerAndReapsWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := broker.Serve(listener); err == nil {
+	if err := broker.Serve(listener, 30*time.Second); err == nil {
 		t.Fatal("invalid startup frame was accepted")
 	}
 
@@ -116,7 +116,7 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- broker.Serve(listener)
+		done <- broker.Serve(listener, time.Second)
 
 		close(done)
 	}()
@@ -137,11 +137,11 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 
 	process := waitForStartedWorker(t, broker)
 
-	// 실제 30초 기동 deadline을 사용한다. 테스트용 가변 상한이나 runtime 분기는 추가하지 않는다.
+	// 운영과 같은 기동 예산 전달 경로로 deadline 뒤 listener와 worker가 회수되는지 확인한다.
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, context.DeadlineExceeded)
-	case <-time.After(40 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("silent worker exceeded the startup bound")
 	}
 
@@ -217,7 +217,7 @@ func serveKeepAliveBroker(t *testing.T) (broker *Broker, socket string, done <-c
 	served := make(chan error, 1)
 
 	go func() {
-		served <- broker.Serve(listener)
+		served <- broker.Serve(listener, 30*time.Second)
 
 		close(served)
 	}()

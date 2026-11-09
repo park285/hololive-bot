@@ -29,12 +29,12 @@ type collectorInfrastructure struct {
 	closeErr     error
 }
 
-func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger) (*collectorInfrastructure, error) {
+func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger, waitForDatabase bool) (*collectorInfrastructure, error) {
 	if appConfig == nil {
 		return nil, errors.New("build collector infra: config is nil")
 	}
 
-	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, databaseproviders.RuntimePool{Name: "collector", ReservedConns: 1}, logger)
+	databaseResources, cleanupDB, err := provideCollectorDatabase(ctx, appConfig, logger, waitForDatabase)
 	if err != nil {
 		return nil, fmt.Errorf("build collector infra: %w", err)
 	}
@@ -62,6 +62,58 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 	helper.EnableMetrics(nil)
 
 	return collectorInfra, nil
+}
+
+// provideCollectorDatabase는 초기 Ping의 deadline만 기다리며 운영 pool 정책을 바꾸지 않는다.
+// 실패한 pool은 provider가 닫고 반환하므로 재시도 사이에 이전 연결이나 통계 등록이 남지 않는다.
+func provideCollectorDatabase(
+	ctx context.Context,
+	appConfig *collectorconfig.RuntimeConfig,
+	logger *slog.Logger,
+	waitForDatabase bool,
+) (*databaseproviders.DatabaseResources, func(), error) {
+	if waitForDatabase {
+		if deadline, bounded := ctx.Deadline(); !bounded || time.Until(deadline) > 90*time.Second {
+			return nil, nil, errors.New("database startup wait requires a deadline of at most 90s")
+		}
+	}
+
+	var timer *time.Timer
+
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+
+		resources, cleanup, err := databaseproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, databaseproviders.RuntimePool{Name: "collector", ReservedConns: 1}, logger)
+		if err == nil {
+			return resources, cleanup, nil
+		}
+
+		if !waitForDatabase || ctx.Err() != nil || !errors.Is(err, context.DeadlineExceeded) {
+			return nil, nil, fmt.Errorf("initialize collector database: %w", err)
+		}
+
+		logger.LogAttrs(ctx, slog.LevelWarn, "collector_database_startup_wait", slog.String("reason", "connection_deadline"))
+
+		if timer == nil {
+			timer = time.NewTimer(5 * time.Second)
+		} else {
+			timer.Reset(5 * time.Second)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, nil, errors.Join(err, ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 func (i *collectorInfrastructure) buildProviderClients(

@@ -209,19 +209,11 @@ func TestUpcomingCandidatesCommitResponseLossReturnsNoCandidates(t *testing.T) {
 // batch 시작 전에도 같은 fault를 주입하여 SELECT부터 저장까지의 잠금을 확인한다.
 func (tx candidateApplyTx) SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults {
 	if err := tx.beforeApply(ctx); err != nil {
-		return candidateFailedBatch{err: err}
+		return pgx.FailedBatchResults(batch, err)
 	}
 
 	return tx.Tx.SendBatch(ctx, batch)
 }
-
-type candidateFailedBatch struct{ err error }
-
-func (b candidateFailedBatch) Exec() (pgconn.CommandTag, error) { return pgconn.CommandTag{}, b.err }
-func (b candidateFailedBatch) Query() (pgx.Rows, error)         { return nil, b.err }
-func (b candidateFailedBatch) QueryRow() pgx.Row                { return b }
-func (b candidateFailedBatch) Scan(...any) error                { return b.err }
-func (b candidateFailedBatch) Close() error                     { return b.err }
 
 func TestUpcomingCandidatesDecodeFailurePreservesCommittedOutcomes(t *testing.T) {
 	pool := dbtest.NewPool(t)

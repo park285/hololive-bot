@@ -15,10 +15,9 @@ import (
 )
 
 const (
-	protocolVersion    = 1
-	operationLimit     = 8 * time.Second
-	workerStartupLimit = 30 * time.Second
-	requestLimit       = 1 << 20
+	protocolVersion = 1
+	operationLimit  = 8 * time.Second
+	requestLimit    = 1 << 20
 	// HTTP IdleTimeout인 idleConnectionLimit은 client free-socket timeout(youtubejs/src/proof-broker.mjs, 1초)보다
 	// 훨씬 길어야 합니다. Node event loop가 수 초 멈춰도 client가 먼저 유휴 연결을 닫을 여유를 두어,
 	// 서버가 이미 닫은 socket을 재사용하다 EPIPE(broker_unavailable)를 받는 경쟁을 줄입니다.
@@ -123,7 +122,7 @@ func (b *Broker) Generation() string { return b.generation }
 
 // Serve는 종료할 때까지 listener를 소유한다. 반환 후 Broker를 재사용하지 말고 프로세스를 끝내야 한다.
 // 정상 종료는 nil을 반환한다. VM·listener 정리를 확인하지 못하면 워커 출력을 제외한 오류를 반환한다.
-func (b *Broker) Serve(listener net.Listener) error {
+func (b *Broker) Serve(listener net.Listener, startupTimeout time.Duration) error {
 	// 연결 재사용과 client 우선 유휴 종료를 위해 keep-alive를 유지합니다.
 	// AppArmor 경쟁(b1aea2c19607)의 과거 완화책이었으며, 운영 커널 수정 확인은 runbook §4에 기록합니다.
 	// 유휴 연결은 client(youtubejs/src/proof-broker.mjs)가 idleConnectionLimit보다 먼저 닫도록 하고,
@@ -135,9 +134,9 @@ func (b *Broker) Serve(listener net.Listener) error {
 		MaxHeaderBytes: 8 << 10, ErrorLog: log.New(io.Discard, "", 0),
 	}
 
-	// 신뢰된 SDK의 cold import는 서비스 준비 단계가 소유한다. 요청의 8초
-	// 예산에 VM 기동을 섞지 않고 loaded 확인 전에는 health도 제공하지 않는다.
-	ctx, cancel := context.WithTimeout(context.Background(), workerStartupLimit)
+	// 신뢰된 SDK의 cold import는 호출자가 정한 기동 준비 예산을 사용한다.
+	// 요청의 8초 예산과 분리하며 loaded 확인 전에는 health도 제공하지 않는다.
+	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	initErr := b.initializeWorker(ctx)
 
 	cancel()
