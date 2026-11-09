@@ -101,6 +101,8 @@ func measuredCandidatePool(t *testing.T, base *pgxpool.Pool) (*pgxpool.Pool, *ca
 	config := base.Config()
 
 	config.MaxConns, config.MinConns = 1, 0
+	// SQL page의 wire 비용만 비교한다. 호스트 부하에 따라 달라지는 유휴 연결 ping은 측정에서 제외한다.
+	config.ShouldPing = func(context.Context, pgxpool.ShouldPingParams) bool { return false }
 
 	dial := config.ConnConfig.DialFunc
 

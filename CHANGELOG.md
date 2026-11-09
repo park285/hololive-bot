@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **의존성 갱신:** Go 모듈 5개의 pgx v5.12.0, grpc v1.85.0, goldmark v2.1.15, yaml v3.0.6와 xspaces `x-client-transaction-id` 0.3.3을 올렸습니다. 실행 중인 운영 이미지는 다음 배포부터 반영됩니다.
 - **DB maintenance 실행기의 접속 거부 해소:** `scripts/runtime/db-maintenance-exec.sh`가 Compose 시절처럼 `hololive-bot_hololive-net` TCP로 `hololive_migrator` 접속을 시도해, `pg_hba.conf`의 특권 역할 TCP 거부 규칙에 막혔습니다(`pg_hba.conf rejects connection for host ..., user "hololive_migrator"`). closeout·rollback preflight 같은 운영 SQL을 문서 경로로 실행할 수 없었습니다. 이제 `hololive-db-migrate`처럼 network 없이 `holo-postgres`의 관리 socket volume을 read-only로 마운트해 접속합니다. pg_hba 정책은 그대로입니다. 배포 시 `stack-secrets`의 `hololive-db-maintenance` service를 `host=/var/run/postgresql`, `sslmode=disable`로 함께 바꿉니다.
 
 - **notification·youtube delivery handoff 확인 기한 분리:** 두 발송 경로도 handoff 확인 기한이 발송 `attempt_timeout`(운영 10초)과 같았습니다. 같은 Iris 발송 큐(최소 2.5초 간격)를 거치므로, 일괄 발송이나 다른 경로와 겹친 대기 때문에 이미 전달된 알림이 `handoff_unconfirmed`로 격리될 수 있었습니다. alarm dispatch와 같이 worker profile `notification_delivery.settings.handoff_horizon_ms`·`youtube_delivery.settings.handoff_horizon_ms`(필수, `attempt_timeout` 이상)를 두고, 발송 정산의 첫 확인 예약과 각 handoff reconciler 지평이 이 값을 씁니다. 운영 값은 300000입니다. 발송 시도 시간과 youtube 발송 컨텍스트 timeout(`delivery_send_timeout_ms`)은 그대로입니다. 새 키가 없는 profile은 기동 전에 거부되므로 profile과 바이너리를 함께 반영합니다.
