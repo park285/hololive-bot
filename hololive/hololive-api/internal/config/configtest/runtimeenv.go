@@ -48,7 +48,6 @@ func SetRequiredLoadEnv(t *testing.T) {
 	t.Helper()
 	settingstest.UseProfileFixture(t, APIProfileFixture(t))
 	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
 	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")

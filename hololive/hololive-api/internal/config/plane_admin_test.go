@@ -23,7 +23,6 @@ func setAdminPlaneEnv(t *testing.T) {
 	t.Setenv(settingstest.IrisBotTokenEnv, "")
 	t.Setenv("IRIS_BASE_URL", "")
 	t.Setenv("IRIS_BASE_URL_FILE", "")
-	t.Setenv("YOUTUBE_API_KEY", "")
 }
 
 // loadAdminPlaneRuntime은 LoadRuntime이 admin plane에 적용하는 공통 env 단계와 역할 검증을 그대로 거친다.

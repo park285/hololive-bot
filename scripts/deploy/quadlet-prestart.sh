@@ -195,7 +195,8 @@ case "$target" in
     hololive-api)
         validate_env_file_syntax "$compose_env"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS HOLOLIVE_OTLP_GRPC_ENDPOINT \
-            HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP
+            HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME \
+            CLIPROXY_BASE_URL
         validate_container_env_file "${secrets_dir}/bot.env"
         wait_for_tailnet_address HOLOLIVE_API_PORT_BIND_IP
         wait_for_tailnet_address HOLOLIVE_ADMIN_API_PORT_BIND_IP

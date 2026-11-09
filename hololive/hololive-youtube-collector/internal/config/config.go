@@ -73,7 +73,7 @@ func DefaultConfig() Config {
 		MaxPages:                 1,
 		MaxSuccessResponseBytes:  youtubeCollectorMaxSuccessResponseBytes,
 		MaxTargetRosterRows:      10_000,
-		RequestInterval:          2 * time.Second,
+		RequestInterval:          1 * time.Second,
 	}
 }
 

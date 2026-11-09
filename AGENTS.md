@@ -1,7 +1,7 @@
 # Hololive
 
 - Read ../AGENTS.md in iris-stack and affected subtree guidance. Run from root; [PROJECT_MAP](docs/current/PROJECT_MAP.md) owns topology. No standalone dashboard; web/credentials/native deployment belong to `iris-console` (Iris Console).
-- Current deployment is central Podman Quadlet ([deploy/quadlet](deploy/quadlet/README.md)), iris-seoul collector b Podman Quadlet ([deploy/podman/iris-seoul](deploy/podman/iris-seoul/README.md)) and Osaka/Osaka2 collector host-native systemd. Select deployment procedures from [current runbooks](docs/current/runbooks/README.md); history, design, changelog and captured prompts do not define current deployment work.
+- Current deployment is central Podman Quadlet ([deploy/quadlet](deploy/quadlet/README.md)), iris-seoul collector b and kapu collector d Podman Quadlet ([deploy/podman/iris-seoul](deploy/podman/iris-seoul/README.md), [deploy/podman/kapu](deploy/podman/kapu/README.md)) and Osaka collector a host-native systemd. Select deployment procedures from [current runbooks](docs/current/runbooks/README.md); history, design, changelog and captured prompts do not define current deployment work.
 - Compile/test/build only on kapu; host compose.env owns bind addresses. hololive-bot-ops owns verified no-build remote cutovers.
 - Select ./build-all.sh --build-only --no-bump, affected Go/shared module tests or youtubejs npm test; docs need diff review. Publication requires scripts/ci/pre-push-gate.sh; preserve [README](README.md) verification ownership.
 - GitHub Release create/edit: follow the [release runbook](docs/current/runbooks/release.md) through `scripts/publish-release.sh` only (preview first, GitHub-generated notes only).

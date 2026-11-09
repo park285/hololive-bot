@@ -11,7 +11,7 @@ INTEGRATION_TAG_PACKAGES=(
     ./hololive/hololive-api/internal/planes/admin/internal/service/dispatchops
 )
 INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-docker.io/library/postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}"
-INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-docker.io/valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11}"
+INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-docker.io/valkey/valkey:9.1.3-alpine3.24@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b}"
 INTEGRATION_TEST_DB_CONTAINER=""
 INTEGRATION_TEST_VALKEY_CONTAINER=""
 # 일회용 PostgreSQL·Valkey는 rootless Podman으로 띄운다. short-name 해석에 기대지 않도록 image는 전체 이름이다.

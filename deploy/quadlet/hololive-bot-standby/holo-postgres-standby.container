@@ -70,17 +70,17 @@ Exec=postgres \
   -c ssl=on \
   -c ssl_cert_file=/run/hololive-bot/postgres-tls/server.crt \
   -c ssl_key_file=/run/hololive-bot/postgres-tls/server.key \
-  -c "primary_conninfo=host=${HOLOLIVE_PRIMARY_HOST} port=${HOLOLIVE_PRIMARY_PORT} user=${HOLOLIVE_REPLICATOR_USER} sslmode=verify-full sslrootcert=/run/hololive-bot/certs/postgres-ca.pem passfile=/run/hololive-bot/postgres/pgpass application_name=${HOLOLIVE_STANDBY_SLOT}" \
+  -c "primary_conninfo=host=${HOLOLIVE_CENTRAL_POSTGRES_HOST} port=${HOLOLIVE_CENTRAL_POSTGRES_PORT} user=${HOLOLIVE_REPLICATOR_USER} sslmode=verify-full sslrootcert=/run/hololive-bot/certs/postgres-ca.pem passfile=/run/hololive-bot/postgres/pgpass application_name=${HOLOLIVE_STANDBY_SLOT}" \
   -c primary_slot_name=${HOLOLIVE_STANDBY_SLOT}
 
 [Service]
 Environment=POSTGRES_IMAGE=localhost/hololive-postgres:prod
 Environment=HOLOLIVE_STANDBY_POSTGRES_BIND_IP=127.0.0.1
 Environment=HOLOLIVE_STANDBY_POSTGRES_PORT=5434
-Environment=HOLOLIVE_PRIMARY_PORT=5433
 Environment=HOLOLIVE_REPLICATOR_USER=hololive_replicator
 Environment=HOLOLIVE_STANDBY_SLOT=iris_seoul_standby
-# 대기 서버 호스트는 AP용 env를 쓴다. HOLOLIVE_PRIMARY_HOST는 hosts.conf의 승인된 primary여야 한다.
+# 대기 서버 호스트는 AP용 env를 쓴다. primary 주소는 중앙 unit과 같은 HOLOLIVE_CENTRAL_POSTGRES_HOST·PORT이며
+# hosts.conf의 승인된 central이어야 한다.
 EnvironmentFile=/etc/stack-secrets/hololive-bot/ap-compose.env
 Restart=always
 RestartSec=5s
