@@ -125,12 +125,12 @@ may see a unit whose handoff is still unconfirmed for up to the horizon.
 
 Notification delivery keeps the same check on its own ledger, `notification_delivery_outbox` (migrations 330 and
 338); it is not merged into alarm dispatch. `MarkSent` stores the 202 Iris request ID in `handoff_request_id` and
-schedules `handoff_next_check_at` min(5s, `notification_delivery` executor `attempt_timeout`) after `sent_at` in the
+schedules `handoff_next_check_at` min(5s, `notification_delivery` setting `handoff_horizon_ms`) after `sent_at` in the
 statement that moves the row `SENDING → SENT`, on that statement's database clock. An empty request ID applies
 nothing; the row stays `SENDING` for the stale sweep.
 `notification-delivery-handoff-reconciler` runs only when the `notification_delivery` executor is enabled and uses
 the same soft claim, outside-transaction status query, budgets, ladder, and decision as alarm dispatch, with the
-`notification_delivery` executor `attempt_timeout` as the horizon. Each settlement is one statement that locks the
+`notification_delivery` setting `handoff_horizon_ms` as the horizon. Each settlement is one statement that locks the
 row and rechecks status `SENT`, the soft-claim token, `handoff_request_id`, and the pinned request generation (owner
 and lease are not part of this fence; a miss is `version_changed`, `request_changed`, or `status_changed` and
 applies nothing). Outcomes:
@@ -157,11 +157,12 @@ YouTube delivery keeps the check on its pinned request, `youtube_notification_se
 its member deliveries (the claim order), requires the request generation and member set to equal the started
 owners, and in the same transaction as the `SENT` transition, tracking marks, telemetry and the `SENT` ledger stores
 the 202 Iris request ID in `handoff_request_id` and schedules `handoff_next_check_at` min(5s, `youtube_delivery`
-executor `attempt_timeout`) after the owners' `sent_at`, on the transition's database clock. A mismatched request or
+setting `handoff_horizon_ms`) after the owners' `sent_at`, on the transition's database clock. A mismatched request or
 an empty request ID applies nothing; the rows stay `SENDING` for the stale sweep.
 `youtube-delivery-handoff-reconciler` runs only when the `youtube_delivery` executor is enabled and uses the same
-soft claim, outside-transaction status query, budgets, ladder, and decision, with that `attempt_timeout` as the
-horizon. A settlement is one transaction that locks the pinned request, then the parent `youtube_notification_outbox`
+soft claim, outside-transaction status query, budgets, ladder, and decision, with that `handoff_horizon_ms` as the
+horizon. Both delivery horizons, like alarm dispatch, must be at least their executor `attempt_timeout` because
+they share the Iris send queue; production uses 300000. A settlement is one transaction that locks the pinned request, then the parent `youtube_notification_outbox`
 rows of the members' logical groups (ascending id, with the outbox projector's lock statement), then the logical group
 deliveries, then the ledger, and rechecks the soft-claim token, `handoff_request_id`, generation, body hash, pinned
 members and each member's `row_version` from the claim. Parents are read before the group lock with the same candidate

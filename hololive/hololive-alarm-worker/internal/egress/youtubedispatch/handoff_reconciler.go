@@ -55,7 +55,7 @@ type handoffSettler interface {
 	QuarantineAfterHandoff(ctx context.Context, claim *store.HandoffClaim, code, detail string) (store.ApplyResult, error)
 }
 
-// handoffReconcilerConfig의 Horizon은 youtube_delivery executor attempt_timeout(DeliverySendTimeout), PollInterval은
+// handoffReconcilerConfig의 Horizon은 youtube_delivery profile handoff_horizon_ms(HandoffHorizon), PollInterval은
 // youtube_delivery poll 주기, MaxRetries는 발송 실패 정책과 같은 시도 예산이다.
 type handoffReconcilerConfig struct {
 	Horizon      time.Duration
@@ -76,7 +76,7 @@ type HandoffReconciler struct {
 	logger       *slog.Logger
 }
 
-// NewHandoffReconciler는 youtube_delivery dispatcher와 같은 설정으로 전이 저장소를 만든다. 지평은 DeliverySendTimeout이다.
+// NewHandoffReconciler는 youtube_delivery dispatcher와 같은 설정으로 전이 저장소를 만든다. 지평은 HandoffHorizon이다.
 func NewHandoffReconciler(
 	db deliverysql.DeliveryDB,
 	client handoffcheck.ReplyStatusClient,
@@ -109,7 +109,7 @@ func NewHandoffReconciler(
 		transitionStore,
 		client,
 		handoffReconcilerConfig{
-			Horizon: validConfig.DeliverySendTimeout, PollInterval: validConfig.PollInterval, MaxRetries: validConfig.MaxRetries,
+			Horizon: validConfig.HandoffHorizon, PollInterval: validConfig.PollInterval, MaxRetries: validConfig.MaxRetries,
 		},
 		logger,
 	)

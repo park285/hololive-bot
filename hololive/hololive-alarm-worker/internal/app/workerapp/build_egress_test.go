@@ -245,6 +245,21 @@ func TestAlarmDispatchHandoffHorizonFollowsProfileSetting(t *testing.T) {
 	assert.Less(t, runnerConfig.AttemptTimeout, runnerConfig.HandoffHorizon)
 }
 
+func TestDeliveryHandoffHorizonsFollowProfileSettings(t *testing.T) {
+	config, _ := alarmWorkerTestConfig(t)
+
+	config.AlarmWorkerProfile.NotificationDelivery.HandoffHorizonMS = 240_000
+	config.AlarmWorkerProfile.YouTubeDelivery.HandoffHorizonMS = 180_000
+
+	notification := notificationDeliveryDispatcherConfig(config)
+	assert.Equal(t, 4*time.Minute, notification.HandoffHorizon)
+	assert.Less(t, notification.AttemptTimeout, notification.HandoffHorizon)
+
+	youtube := youtubeDispatchConfig(config)
+	assert.Equal(t, 3*time.Minute, youtube.HandoffHorizon)
+	assert.Less(t, youtube.DeliverySendTimeout, youtube.HandoffHorizon)
+}
+
 // dispatcher가 기본값을 채우지 않으므로, 운영 profile 형상이 두 dispatcher의 생성 검증을 통과하는지 확인한다.
 func TestProfileShapedDispatcherConfigsPassValidation(t *testing.T) {
 	config, _ := alarmWorkerTestConfig(t)

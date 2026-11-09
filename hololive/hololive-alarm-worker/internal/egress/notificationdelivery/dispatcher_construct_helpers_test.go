@@ -26,6 +26,7 @@ func testDispatcherConfig() DispatcherConfig {
 		StaleSendingAfter:         workerconfig.NotificationDeliveryLease,
 		StaleSendingSweepInterval: workerconfig.NotificationDeliveryLease,
 		StaleSendingSweepLimit:    100,
+		HandoffHorizon:            5 * time.Minute,
 	}
 }
 
@@ -51,6 +52,7 @@ func withTestDispatcherDefaults(config *DispatcherConfig) *DispatcherConfig {
 		StaleSendingAfter:         cmp.Or(config.StaleSendingAfter, base.StaleSendingAfter),
 		StaleSendingSweepInterval: cmp.Or(config.StaleSendingSweepInterval, base.StaleSendingSweepInterval),
 		StaleSendingSweepLimit:    cmp.Or(config.StaleSendingSweepLimit, base.StaleSendingSweepLimit),
+		HandoffHorizon:            cmp.Or(config.HandoffHorizon, base.HandoffHorizon),
 	}
 }
 

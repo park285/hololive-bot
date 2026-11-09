@@ -53,6 +53,7 @@ type NotificationDeliveryWorkerSettings struct {
 	StaleSendingAfterMS         int64 `json:"stale_sending_after_ms"`
 	StaleSendingSweepIntervalMS int64 `json:"stale_sending_sweep_interval_ms"`
 	StaleSendingSweepLimit      int   `json:"stale_sending_sweep_limit"`
+	HandoffHorizonMS            int64 `json:"handoff_horizon_ms"`
 }
 
 type YouTubeDeliveryWorkerSettings struct {
@@ -72,6 +73,7 @@ type YouTubeDeliveryWorkerSettings struct {
 	TelemetryFlushBatch         int   `json:"telemetry_flush_batch"`
 	TelemetryRetryBackoffMS     int64 `json:"telemetry_retry_backoff_ms"`
 	TelemetryRetentionMS        int64 `json:"telemetry_retention_ms"`
+	HandoffHorizonMS            int64 `json:"handoff_horizon_ms"`
 }
 
 type AlarmWorkerProfile struct {

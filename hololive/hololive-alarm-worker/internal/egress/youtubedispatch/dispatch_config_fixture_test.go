@@ -28,6 +28,7 @@ func testDispatchConfig() Config {
 		TelemetryFlushBatch:         200,
 		TelemetryRetryBackoff:       30 * time.Second,
 		TelemetryRetention:          24 * time.Hour,
+		HandoffHorizon:              5 * time.Minute,
 	}
 }
 
@@ -60,6 +61,7 @@ func withTestDispatchConfigDefaults(config *Config) *Config {
 		TelemetryFlushBatch:         cmp.Or(config.TelemetryFlushBatch, base.TelemetryFlushBatch),
 		TelemetryRetryBackoff:       cmp.Or(config.TelemetryRetryBackoff, base.TelemetryRetryBackoff),
 		TelemetryRetention:          cmp.Or(config.TelemetryRetention, base.TelemetryRetention),
+		HandoffHorizon:              cmp.Or(config.HandoffHorizon, base.HandoffHorizon),
 	}
 
 	out.ClaimFreshnessWindow = max(out.ClaimFreshnessWindow, out.ReviveFreshnessWindow+out.ReviveInterval)

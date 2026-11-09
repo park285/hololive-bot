@@ -259,7 +259,7 @@ func appendNotificationDeliveryRunner(
 	), nil
 }
 
-// buildNotificationDeliveryHandoffReconciler의 지평은 notification_delivery executor attempt timeout이고, idle 주기와
+// buildNotificationDeliveryHandoffReconciler의 지평은 notification_delivery profile handoff_horizon_ms이고, idle 주기와
 // failed 재발급의 시도 예산·지연은 dispatcher와 같은 notification_delivery profile 값이다. PostgreSQL 확인은 먼저 만든
 // dispatcher가 한다.
 func buildNotificationDeliveryHandoffReconciler(
@@ -274,7 +274,7 @@ func buildNotificationDeliveryHandoffReconciler(
 		notificationdelivery.NewStore(infra.Postgres.GetPool()),
 		statusClient,
 		notificationdelivery.HandoffReconcilerConfig{
-			Horizon:      dispatcherConfig.AttemptTimeout,
+			Horizon:      dispatcherConfig.HandoffHorizon,
 			PollInterval: dispatcherConfig.PollInterval,
 			MaxRetries:   dispatcherConfig.MaxRetries,
 			RetryBackoff: dispatcherConfig.RetryBackoff,
@@ -349,6 +349,7 @@ func notificationDeliveryDispatcherConfig(appConfig *workerconfig.RuntimeConfig)
 		StaleSendingAfter:         workercontract.Milliseconds(profile.StaleSendingAfterMS),
 		StaleSendingSweepInterval: workercontract.Milliseconds(profile.StaleSendingSweepIntervalMS),
 		StaleSendingSweepLimit:    profile.StaleSendingSweepLimit,
+		HandoffHorizon:            workercontract.Milliseconds(profile.HandoffHorizonMS),
 	}
 }
 
@@ -558,5 +559,6 @@ func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) youtubedispatc
 		TelemetryFlushBatch:         profile.TelemetryFlushBatch,
 		TelemetryRetryBackoff:       workercontract.Milliseconds(profile.TelemetryRetryBackoffMS),
 		TelemetryRetention:          workercontract.Milliseconds(profile.TelemetryRetentionMS),
+		HandoffHorizon:              workercontract.Milliseconds(profile.HandoffHorizonMS),
 	}
 }
