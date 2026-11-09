@@ -345,17 +345,15 @@ sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-a
 
 `discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 replay artifact와 144시간 cutoff를 사용합니다.
 
-Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. Migration 133은 inbox terminal payload scrub과 CHECK를 도입했고, 현재 inbox writer는 terminal 전이에서 payload를 직접 비웁니다(호환 trigger는 230에서 폐기). Migration 134의 command terminal summary trigger는 그대로 유지합니다. 주기 maintenance는 scrub scan을 반복하지 않고 retention 대상만 찾으며, terminal ledger는 Iris admission retention(7일)보다 긴 8일 뒤 batch 삭제합니다. `manual_review`와 그 replay audit은 판단·처리 이력을 위해 해당 outbox row의 retention 동안 함께 보존합니다.
+Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. epoch-3 baseline은 현행 terminal payload CHECK를 유지하며 구 status-only writer를 위한 scrub trigger는 제공하지 않습니다.
+현행 네 writer가 종결 payload를 직접 비워야 합니다. 스키마 변경은 새 forward migration으로만 진행합니다.
 
-Migration 133은 과거 runtime cutover 전에 terminal payload scrub trigger를 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate했습니다. Migration 223은 trigger가 구 status-only writer를 만날 때 WARNING을 남기도록 했습니다. 2026-09-28 읽기 전용 검증에서는 중앙 API 이미지 21개(서로 다른 revision 20개)와 문서화된 rollback 이미지 2개가 모두 terminal payload를 직접 비우는 네 writer(`inbox_complete.sql`, `inbox_abandon.sql`, `inbox_release.sql`, `inbox_reclaim_expired.sql`)를 포함했습니다. 이 증거는 이미지 label을 source revision에 대응시킨 것이며 바이너리 역공학이나 장기 로그 관측은 아닙니다. Migration 230은 이 지원 집합을 전제로 호환 `bot_webhook_inbox_terminal_payload_scrub` trigger와 `scrub_bot_webhook_inbox_terminal_payload()` 함수만 원자적으로 지웁니다. 검증된 `chk_bot_webhook_inbox_terminal_payload_scrubbed` CHECK는 유지합니다. 구 status-only writer는 이제 CHECK에 거절됩니다. 네 현행 writer는 terminal 전이에서 `{}`를 직접 쓰고 retry에서는 payload를 보존해야 합니다.
+기존 DB 전환에는 epoch-2 372 head의 233개 파일명·sha256 원장이 정확히 필요합니다. 신규 이미지의 `db-migrate`가
+원장을 epoch-3로 원자 전환한 뒤 `002_drop_x_space_login_attempts.sql`을 적용합니다. 부분 원장이나 알 수 없는
+checksum은 먼저 이전 릴리스로 복구해야 합니다. [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 따릅니다.
 
-Migration 230은 적용 전 catalog에서 정확한 trigger/function 관계와 CHECK 정의·검증 상태를 확인합니다. 누락·변형·추가 의존성·락 실패는 적용을 중단하고 DROP을 롤백합니다. 지원 중인 두 rollback 이미지는 같은 CHECK를 직접 만족하므로 바이너리 rollback에 trigger 재설치는 필요하지 않습니다. Schema를 되돌려야 하면 다음 번호의 forward migration으로 처리하거나 ledger와 schema가 함께 일치하는 전체 복원만 별도로 검토합니다. 230 적용 기록을 둔 채 수동으로 백업 DDL만 재설치하면 runner가 230을 skip하는 schema drift가 되므로 정상 rollback 절차가 아닙니다.
-
-Migration 125 이후 runtime은 `bot_webhook_heads`와 `ordering_key` advisory lock을 함께 사용합니다. Schema rollback은 이전 runtime으로 먼저 전환해 writer를 quiesce한 뒤에만 `bot_webhook_heads`/`available_at`을 제거해야 하며, 현재 runtime이 쓰는 동안 migration 125~136을 되돌리면 안 됩니다.
-
-Epoch-1/R1 artifact로 되돌리는 rollback 창은 `DEC-20260926-hololive-retired-rollback-tooling`으로 닫혔고, migration 114 재적용 preflight와 074~082 message contract repair 도구는 없습니다. T18(2026-09-26)에서 운영 `schema_migrations`에 `001_schema_epoch2_baseline`·`182_epoch2_legacy_ledger_cleanup`이 기록되고 epoch-1 파일명 행이 0건이며 epoch-1 이미지가 보존되지 않음을 확인했습니다.
-
-DB maintenance 명령(아래 `db-maintenance-exec.sh`로 실행하는 migration·preflight SQL, 예: [Rollback](#rollback)의 durable preflight)은 libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
+DB maintenance 명령은 libpq service와 password file로 실행하며 운영 쓰기에는 별도 승인이 필요합니다.
+`PGPASSWORD`나 connection URI 대신 file-only 접속을 사용하고 `psql -w`로 대화형 입력을 막습니다.
 
 > 중앙 런타임 호스트에는 `psql`이 없습니다. `scripts/runtime/db-maintenance-exec.sh`가
 > PostgreSQL 이미지를 network 없이 일회성으로 띄워 `/migrations`, `stack-secrets`의 service/pgpass,
@@ -389,26 +387,12 @@ sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 
 ## Rollback
 
-- Use `docs/current/runbooks/rollback.md`.
-- migration 231~233 적용 뒤 v6.0.x image로 되돌릴 때는 교체 직전에 `auth:sess:*`를 모두 `UNLINK`해 관리자
-  재로그인을 강제하고, `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 TTL로 둡니다. image만 교체해
-  `systemctl restart hololive-api.service`로 재시작하고 구 `hololive-db-migrate`는 실행하지 않습니다(`rollback.md`의
-  Valkey 2차 축소 절). retag하면 migrate도 같은 `HOLOLIVE_API_IMAGE`의 구 runner가 되므로 rollback 창에는
-  `hololive-db-migrate.service`를 시작하지 않습니다. 이 unit은 `[Install]`이 없고 다른 unit이 끌어오지 않아 재부팅이
-  실행하지 않습니다. 이 동안 `APP_VERSION`은 트리 값 7.0.0을 보고하므로 판정은 image label로 합니다.
-- Durable runtime cutover 이후 기본 복구 전략은 현재 image의 fix-forward입니다. 이전 image는 durable queue를 소비하지 않으므로 backlog가 남아 있으면 재배포하지 않습니다.
-- 이전 `hololive-api` image/config가 반드시 필요하면 Iris webhook ingress를 먼저 quiesce하고 현재 durable runtime으로 queue를 drain한 뒤 아래 preflight가 성공해야 합니다. 하나라도 0이 아니면 현재 image를 유지하고 roll forward합니다.
-
-  ```bash
-  sudo -n ./scripts/runtime/db-maintenance-exec.sh \
-    bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
-  ```
-
-- Migration 326 이후 binary를 그 이전 binary로 되돌리면 lease 없는 `accepted` 행은 이전 reclaim(`lease_until <= now`)에 걸리지 않아 같은 방의 후속 응답을 영구히 막습니다. Ingress를 quiesce한 뒤 `bot_reply_outbox` executor `attempt_timeout` 지평 동안 reconciler가 `accepted`를 0으로 배수하면 위 preflight가 통과합니다. Preflight는 `accepted`가 남은 rollback을 막습니다. Migration 332 이후에는 326 이전 binary가 쓰는 lease 있는 `accepted`를 엄격 CHECK가 거부하므로 그 binary로는 되돌리지 않고, 326·333을 포함한 직전 릴리스까지만 되돌립니다.
-
-- iris-client-go v4로 올린 binary부터 `bot_webhook_inbox.payload`는 Iris 원본 webhook 본문이고 claim 때 `webhook.DecodeMessage`로 복원합니다. v3 binary가 저장한 Message JSON 행은 새 binary가 복원하지 못해 poison으로 abandon하고, 반대로 v4 행은 v3 binary가 읽지 못합니다. 어느 방향으로 바꾸든 교체 전에 Iris webhook ingress를 quiesce하고 현재 binary로 inbox 비종결 행(`pending`·`processing`·`retry`)을 0으로 배수합니다. `retry` 행도 claim 대상이라 남아 있으면 새 binary가 복원하지 못해 abandon합니다. 전진 배포에서도 판정은 위 `db-maintenance-exec.sh bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced`의 `inbox=0`으로 하고, 0이 아니면 교체하지 않습니다.
-- Preflight 성공과 ingress quiescence를 같은 maintenance window에서 유지한 경우에만 이전 image를 재배포합니다. Schema rollback은 계속 [`Migration ordering`](#3-durable-webhook-or-reply-backlog-grows)의 writer quiescence 규칙을 따릅니다.
-- Recheck Iris webhook/reply, scheduler-dependent commands, manual triggers, and dashboard health after rollback.
+- [rollback runbook](rollback.md)을 따르되 epoch-3 전환 이후에는 epoch-2 migrator와 `x_space_login_attempts`를 읽는 앱을 실행하지 않습니다.
+- 기본 복구는 현행 이미지의 forward-fix입니다. epoch-2로 돌아가야 하면 별도 승인 아래 이전 이미지와 전환 전 전체 DB 백업을
+  함께 복원합니다. 원장만 되돌리거나 baseline SQL을 기존 DB에 다시 실행하지 않습니다.
+- 비-durable runtime, 구형 accepted lease 모양, Iris v3 webhook payload로 돌아가는 과거 rollback 창과 전용 preflight는 폐기했습니다.
+  현행 webhook 원본·lease 없는 accepted 계약을 만족하는 릴리스만 같은 DB를 사용할 수 있습니다.
+- 복구 뒤 webhook/reply, scheduler 명령, 수동 trigger, dashboard health를 확인합니다.
 
 ## Post-deploy monitoring (unified runtime)
 
