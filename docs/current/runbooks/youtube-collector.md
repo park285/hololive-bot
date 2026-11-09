@@ -11,9 +11,9 @@
 | Osaka `a` | `youtube-collector-a` | host-native `hololive-youtube-collector@youtube-collector-a.service` | 30005 | `https://127.0.0.1:30005/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_scraper` |
 | Seoul `b` | `youtube-collector-b` | iris-seoul Podman Quadlet `hololive-youtube-collector-b.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_scraper` |
 | Central `c` | `youtube-collector` | Podman Quadlet `hololive-youtube-collector-c.service` | 30025 | `https://127.0.0.1:30025/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_scraper` |
-| Osaka2 `d` | `youtube-collector-d` | host-native `hololive-youtube-collector@youtube-collector-d.service` | 30035 | `https://127.0.0.1:30035/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_scraper` |
+| kapu `d` | `youtube-collector-d` | kapu Podman Quadlet `hololive-youtube-collector-d.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/collector-d/youtube-collector.env` | `hololive_scraper` |
 
-Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs and `po-central-cutover.sh <c|b> check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for Quadlet `c`·`b`.
+Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs and `po-central-cutover.sh <c|b> check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for Quadlet `c`·`b`. kapu `d` is a manually installed Quadlet ([deploy/podman/kapu](../../../deploy/podman/kapu/README.md)); check `hololive-youtube-collector-d.service` health and `/ready`.
 
 ## Normal status
 

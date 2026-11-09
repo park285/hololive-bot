@@ -1,8 +1,8 @@
 # kapu Podman collector
 
-2026-11-04 `youtube-collector-b`를 iris-seoul compose에서 kapu(RHEL 10, SELinux Enforcing)의 rootful Podman quadlet으로 옮겼다.
-같은 날 osaka2를 공개 진입점으로 바꾸면서 kapu는 slot d를 맡고 b는 iris-seoul compose로 되돌렸다(slot 글자만 바꿔 Seoul
-AP 경로의 b 고정을 그대로 쓴다). osaka 호스트를 다시 설치하는 동안에도 a·d를 kapu에 임시로 띄우지 않는다.
+kapu(RHEL 10, SELinux Enforcing)는 2026-11-04부터 slot d를 rootful Podman Quadlet으로 실행한다(loopback 30015).
+같은 날 osaka2는 공개 진입점으로 바뀌어 collector를 두지 않고, b는 iris-seoul Quadlet(`deploy/podman/iris-seoul/`)이 맡는다.
+osaka 호스트를 다시 설치하는 동안에도 a를 kapu에 임시로 띄우지 않는다.
 
 ## 설치
 

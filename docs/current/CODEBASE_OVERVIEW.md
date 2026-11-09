@@ -4,7 +4,7 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙은 rootful Podman Quadlet, Seoul collector `b`는 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙은 rootful Podman Quadlet, Seoul collector `b`와 kapu collector `d`도 rootful Podman Quadlet, Osaka collector `a`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
 
 ## 큰 구조
 
@@ -35,7 +35,7 @@ The current production runtime set is three Go binaries:
 |---|---|---|---:|
 | `hololive-api` | `hololive/hololive-api/` | Bot/admin/llm planes plus YouTube consume/canonical persist | 30001/30003/30006 |
 | `alarm-worker` | `hololive/hololive-alarm-worker/` | Alarm checks, queue consumption, proactive notification egress | 30007 |
-| `youtube-collector` | `hololive/hololive-youtube-collector/` | AP fleet fetch/normalize/lease/Publish (`a`/`b`/`c`/`d`) | 30005/30015/30025/30035 |
+| `youtube-collector` | `hololive/hololive-youtube-collector/` | AP fleet fetch/normalize/lease/Publish (`a`/`b`/`c`/`d`) | 30005/30015/30025/30015(kapu) |
 
 ## Shared Libraries
 

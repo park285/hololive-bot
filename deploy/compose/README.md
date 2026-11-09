@@ -239,7 +239,7 @@ compose.env에 `HOLOLIVE_VALKEY_HA_ENABLED=1`과 비어 있지 않은 `VALKEY_SE
 `valkey-cache` 물리 슬롯은 `hololive-bot_valkey-ha-data`를 사용하며 역할은 native `/data/valkey.conf`가 소유합니다.
 
 두 그룹 primary와 각 복제본 2개의 초기 동기화를 수용하고 세 Sentinel/quorum 2를 확인한 뒤
-`VALKEY_SENTINEL_ADDRS=100.100.1.3:26379,100.100.1.8:26379,100.86.97.95:26379`를 설정합니다.
+`VALKEY_SENTINEL_ADDRS=100.100.1.3:26379,100.100.1.8:26379,100.100.1.5:26379`를 설정합니다.
 앱 unit은 직접 host/socket을 비우고 master `hololive`, discovery 계정 `hololive-discovery`로 접속합니다.
 직접 endpoint fallback은 없습니다. worker profile drop-in(`50-worker-profile.conf`)은 image·profile 경로만 바꾸며
 `LIVE_LOGS_PATH`의 로그 bind는 기본 unit에 남습니다.

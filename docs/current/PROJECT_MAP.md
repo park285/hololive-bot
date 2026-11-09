@@ -11,7 +11,7 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `hololive-alarm-worker` | Go 1.27 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
 | `hololive-api` | Go 1.27 | `hololive/hololive-api/` | Unified runtime hosting bot/admin/llm planes and the YouTube consume plane | 30001/30003/30006 |
 | `hololive-dbtest` | Go 1.27 | `hololive/hololive-dbtest/` | PostgreSQL testcontainers harness and production migration replay support | - |
-| `hololive-youtube-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30035 |
+| `hololive-youtube-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30015(kapu) |
 | `hololive-shared` | Go 1.27 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.27 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
 | `iris-console` | Go gateway + Android Kotlin | `../iris-console/` (iris-stack submodule) | Unified Iris/ChatBotGo/Hololive app source with account scopes; this technology inventory does not assert deployment completion. Host control API `iris-admin` belongs to Iris | 8878 (loopback) |
