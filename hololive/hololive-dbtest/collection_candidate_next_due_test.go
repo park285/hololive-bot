@@ -2,6 +2,8 @@ package dbtest
 
 import (
 	"database/sql"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,7 +12,7 @@ import (
 )
 
 const (
-	candidateNextDueMigration = "373_youtube_collection_candidate_next_due.sql"
+	candidateNextDueMigration = "005_youtube_collection_candidate_next_due.sql"
 	candidateHintJobKey       = "collector:youtubejs:youtubejs_content:channel:a"
 )
 
@@ -184,7 +186,15 @@ func TestCollectionCandidateNextDueAcrossBundles(t *testing.T) {
 func TestCollectionCandidateNextDueMigrationPreservesPreparedReaders(t *testing.T) {
 	t.Parallel()
 
-	pool, dir := projectionMigrationPoolBefore(t, candidateNextDueMigration)
+	pool := NewBlankPool(t)
+	dir, err := resolveMigrationsDir()
+	require.NoError(t, err)
+	require.NoError(t, ensureDBTestMigrationLedger(t.Context(), pool))
+	require.NoError(t, applyManifestMigration(t.Context(), pool, dir, epoch3BaselineMigration))
+
+	migration, err := os.ReadFile(filepath.Join(dir, candidateNextDueMigration))
+	require.NoError(t, err)
+
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)
 
@@ -216,7 +226,7 @@ func TestCollectionCandidateNextDueMigrationPreservesPreparedReaders(t *testing.
 	}
 
 	for range 2 {
-		require.NoError(t, applyMigrationFile(t.Context(), pool, dir, candidateNextDueMigration))
+		require.NoError(t, applyMigrationContent(t.Context(), pool, candidateNextDueMigration, string(migration)))
 
 		for i, name := range []string{"old_subject", "old_global"} {
 			rows, queryErr := conn.Query(t.Context(), name)
