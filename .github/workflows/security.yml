@@ -19,7 +19,7 @@ env:
   GOCACHE: /tmp/go-cache
   GOTMPDIR: /tmp
   GOVULNCHECK_VERSION: v1.9.0
-  GOSEC_VERSION: v2.29.0
+  GOSEC_VERSION: v2.30.0
   NILAWAY_VERSION: v0.0.0-20260918162853-acb8859b9031
 
 jobs:
@@ -109,8 +109,8 @@ jobs:
       - name: Install exact Trivy
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
-          TRIVY_VERSION: "0.76.0"
-          TRIVY_LINUX_AMD64_SHA256: e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_LINUX_AMD64_SHA256: bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
         run: |
           archive="${RUNNER_TEMP}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           extract_dir="${RUNNER_TEMP}/trivy-extract"
