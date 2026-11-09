@@ -2,6 +2,6 @@ deploy/nginx/admin-dashboard-ingress.conf.template	osaka2
 deploy/nginx/holoshi-public-shortlink.conf	central
 deploy/postgres/pg_hba.conf	central,workstation,seoul,osaka
 deploy/quadlet/hololive-bot/hololive-alarm-worker.container	seoul
-deploy/quadlet/hololive-bot/hololive-api.container	workstation,seoul
+deploy/quadlet/hololive-bot/hololive-api.container	seoul
 scripts/deploy/ap-hosts/osaka.conf	osaka
 scripts/systemd/admin-dashboard-ingress.nft	central,workstation,seoul,osaka,osaka2
