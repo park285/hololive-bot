@@ -62,6 +62,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 		remaining:   free,
 		batch:       s.acquisitionBatch,
 		excluded:    excluded,
+		skip:        func(runner int) bool { return s.skipCandidatePoll(runners[runner].Contract().ID(), started) },
 		query:       s.queryRunnerPage(ctx, source, generation, runners),
 		enqueue:     func(spec *joblease.JobSpec) EnqueueResult { return s.enqueueDiscovered(ctx, spec) },
 		warnFull:    s.warnQueueFullOnce(),
@@ -75,7 +76,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 		s.logRunnerDiscoveryFailure(ctx, failure, runners)
 	}
 
-	s.recoverDiscovery(ctx, succeededRunnerKeys(runners, start, &outcome))
+	s.recoverDiscovery(ctx, succeededRunnerKeys(runners, &outcome))
 	s.metrics.ObserveDiscoveryCycle(failed)
 }
 
@@ -156,6 +157,10 @@ func (s *leaseScheduler) beginCycle(started time.Time, queueFull bool) {
 func (s *leaseScheduler) setProjection(generation int64) {
 	s.cycleMu.Lock()
 
+	if s.projection != generation {
+		clear(s.candidatePolls)
+	}
+
 	s.projection = generation
 	s.cycleMu.Unlock()
 }
@@ -232,24 +237,13 @@ func (s *leaseScheduler) logRunnerDiscoveryFailure(ctx context.Context, failure 
 }
 
 // succeededRunnerKeys는 이번 cycle에서 실제로 조회했고 실패하지 않은 runner의 ID를 돌려준다.
-func succeededRunnerKeys(runners []RegisteredRunner, start int, outcome *capacityCycleResult) []string {
+func succeededRunnerKeys(runners []RegisteredRunner, outcome *capacityCycleResult) []string {
 	if len(runners) == 0 || outcome.queried == 0 {
 		return nil
 	}
 
-	failed := make(map[int]struct{}, len(outcome.failures))
-	for _, failure := range outcome.failures {
-		failed[failure.runner] = struct{}{}
-	}
-
-	keys := make([]string, 0, outcome.queried)
-
-	for offset := range min(outcome.queried, len(runners)) {
-		index := (start + offset) % len(runners)
-		if _, ok := failed[index]; ok {
-			continue
-		}
-
+	keys := make([]string, 0, len(outcome.succeeded))
+	for _, index := range outcome.succeeded {
 		keys = append(keys, runners[index].Contract().ID().String())
 	}
 

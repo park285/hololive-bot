@@ -15,6 +15,16 @@
 
 Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs and `po-central-cutover.sh <c|b> check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for Quadlet `c`·`b`. kapu `d` is a manually installed Quadlet ([deploy/podman/kapu](../../../deploy/podman/kapu/README.md)); check `hololive-youtube-collector-d.service` health and `/ready`.
 
+## 후보 next due 힌트 전환
+
+`*_youtube_collection_candidate_next_due.sql`은 API 이미지의 `cmd/db-migrate`가 적용합니다. 중앙 `scripts/deploy/quadlet-redeploy-service.sh`는 앱 활성화 전에 해당 API 이미지로 `hololive-db-migrate.service`를 실행합니다([Quadlet 배포 계약](../../../deploy/quadlet/README.md)). collector a/b/c/d는 별도로 전환하므로 동시 교체를 전제하지 않습니다.
+
+1. 이 migration을 담은 API 이미지의 승인된 migrator를 먼저 실행하고 적용 완료를 확인합니다. 두 함수의 DROP·재정의·scraper EXECUTE 부여는 한 트랜잭션입니다. 구 collector는 `SELECT is_current, subject_key, min_interval_ms, max_interval_ms`를 명시하므로 추가된 `next_due_at`을 읽지 않으며, 기존 prepared statement도 같은 네 열을 반환합니다. 이 성질은 실제 migration 전후 같은 연결의 prepared reader 시험으로 고정합니다.
+2. 그 뒤 새 collector를 a/b/c/d에 순차 반영합니다. 새 collector를 migration보다 먼저 시작하면 `next_due_at` 열이 없어 조회가 실패하므로 순서를 뒤집지 않습니다. 기존 cadence 1000ms·profile 값은 바꾸지 않습니다.
+3. CURRENT generation 조회는 계속 수행하고, candidate 함수 호출 수와 runner별 due backlog·freshness를 비교합니다. 힌트 기반 대기는 최대 10초이고 작업 종료·generation 교체는 즉시 무효화합니다. 실제 due 발견에는 다음 1초 tick 정렬과 실행 지연이 더해질 수 있습니다.
+
+이 개정만 되돌릴 때는 collector 바이너리부터 이전판으로 복원할 수 있고 migration은 되돌리지 않습니다. 같은 이름의 정본 함수만 남기므로 새 이름·영구 호환 shim·자동 fallback·추가 retry가 없습니다. 다른 migration의 별도 drain·동시 전환 조건은 이 절차로 면제되지 않습니다. 운영 적용·배포는 별도 승인 대상입니다.
+
 ## Normal status
 
 HTTP trace는 `service.name=youtube-collector`를 유지하고

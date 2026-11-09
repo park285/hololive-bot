@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -132,9 +131,9 @@ func measuredCandidatePool(t *testing.T, base *pgxpool.Pool) (*pgxpool.Pool, *ca
 	return pool, traffic
 }
 
-// TestProjectionCandidateTraffic는 이전 260 스키마와 현재 261 스키마에서 동일 입력을 비교합니다.
+// TestProjectionCandidateTraffic는 이전 260 스키마와 현재 스키마의 후보 의미를 비교합니다.
 // 이전 SQL 원출처는 bd498868a의 joblease/queries이며 testqueries에 원문 그대로 보관합니다.
-// 각 AP는 독립 pool을 사용합니다. 준비·fixture 트래픽은 제외하고 page 손실과 wire 증가를 검출합니다.
+// 각 AP는 독립 pool을 사용합니다. 다음 due 힌트 추가 이후 wire byte는 측정값이지 비증가 계약이 아닙니다.
 // 지연과 EXPLAIN 실행시간은 측정값이며 CPU 사용률 또는 운영 환경 성능을 뜻하지 않습니다.
 func TestProjectionCandidateTraffic(t *testing.T) {
 	for _, count := range []int{620, 1240, contract.MaxProjectionTargetCount} {
@@ -176,7 +175,7 @@ func compareCandidateTrafficState(t *testing.T, current, legacy *candidateTraffi
 		pages := current.cycle(t)
 
 		for ap := range pages {
-			if !reflect.DeepEqual(pages[ap], oldPages[ap]) {
+			if !slices.Equal(pages[ap].Jobs, oldPages[ap].Jobs) || pages[ap].Truncated != oldPages[ap].Truncated {
 				t.Fatalf("상태=%s cycle=%d AP=%d: 현재 page=%+v 이전 page=%+v", state, cycle, ap, pages[ap], oldPages[ap])
 			}
 
@@ -184,10 +183,8 @@ func compareCandidateTrafficState(t *testing.T, current, legacy *candidateTraffi
 		}
 	}
 
-	oldBytes, currentBytes := legacy.report(t, state, started), current.report(t, state, started)
-	if currentBytes > oldBytes {
-		t.Fatalf("동일 page의 warm wire 회귀: 현재=%d 이전260=%d", currentBytes, oldBytes)
-	}
+	legacy.report(t, state, started)
+	current.report(t, state, started)
 
 	legacy.explain(t, state)
 	current.explain(t, state)
@@ -384,7 +381,18 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 	}
 	defer rows.Close()
 
-	return collectCandidatePage(rows, f.job, 10)
+	return collectCandidatePage(candidate260Rows{rows}, f.job, 10)
+}
+
+// 이전 SQL의 네 열 wire를 그대로 측정하고, 당시 없던 힌트는 zero 값으로 둡니다.
+type candidate260Rows struct{ pgx.Rows }
+
+func (r candidate260Rows) Scan(dest ...any) error {
+	if err := r.Rows.Scan(dest[:4]...); err != nil {
+		return fmt.Errorf("scan schema 260 candidate: %w", err)
+	}
+
+	return nil
 }
 
 func (f *candidateTrafficFleet) arguments() []any {
@@ -446,10 +454,8 @@ func assertCandidateTrafficPage(t *testing.T, page CandidatePage, state string, 
 	}
 }
 
-func (f *candidateTrafficFleet) report(t *testing.T, state string, started time.Time) int64 {
+func (f *candidateTrafficFleet) report(t *testing.T, state string, started time.Time) {
 	t.Helper()
-
-	var total int64
 
 	for ap, traffic := range f.traffic {
 		traffic.report(t, fmt.Sprintf("%s-schema260=%t-AP%d", state, f.legacy, ap), started)
@@ -463,11 +469,7 @@ func (f *candidateTrafficFleet) report(t *testing.T, state string, started time.
 		if traffic.headers.Load() != 120 || reads != 120 {
 			t.Fatalf("불완전한 동시 cycle: AP%d header=%d candidate=%d", ap, traffic.headers.Load(), reads)
 		}
-
-		total += traffic.rx.Load() + traffic.tx.Load()
 	}
-
-	return total
 }
 
 func (f *candidateTrafficFleet) explain(t *testing.T, state string) {

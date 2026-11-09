@@ -27,6 +27,7 @@ func candidateContractError(err error) error {
 type CandidatePage struct {
 	Jobs      []JobSpec
 	Truncated bool
+	NextDueAt time.Time
 }
 
 func (r *Repository) CurrentProjectionGeneration(ctx context.Context) (int64, error) {
@@ -196,6 +197,8 @@ func collectCandidatePage(
 	sawRow := false
 	projectionCurrent := false
 
+	var nextDueAt time.Time
+
 	var contractErr error
 
 	for rows.Next() {
@@ -206,6 +209,7 @@ func collectCandidatePage(
 
 		sawRow = true
 		projectionCurrent = row.current
+		nextDueAt = row.nextDueAt
 
 		if !row.current || row.subject == "" {
 			continue
@@ -241,29 +245,35 @@ func collectCandidatePage(
 		jobs = jobs[:limit]
 	}
 
-	return CandidatePage{Jobs: jobs, Truncated: truncated}, nil
+	return CandidatePage{Jobs: jobs, Truncated: truncated, NextDueAt: nextDueAt}, nil
 }
 
 type candidateRow struct {
-	current bool
-	subject string
-	minMS   int64
-	maxMS   int64
+	current   bool
+	subject   string
+	minMS     int64
+	maxMS     int64
+	nextDueAt time.Time
 }
 
 func scanCandidateRow(rows interface{ Scan(dest ...any) error }) (candidateRow, error) {
 	var (
-		current bool
-		subject sql.NullString
-		minMS   sql.NullInt64
-		maxMS   sql.NullInt64
+		current   bool
+		subject   sql.NullString
+		minMS     sql.NullInt64
+		maxMS     sql.NullInt64
+		nextDueAt sql.NullTime
 	)
 
-	if err := rows.Scan(&current, &subject, &minMS, &maxMS); err != nil {
+	if err := rows.Scan(&current, &subject, &minMS, &maxMS, &nextDueAt); err != nil {
 		return candidateRow{}, fmt.Errorf("list collection job candidates: scan target: %w", err)
 	}
 
 	row := candidateRow{current: current}
+
+	if nextDueAt.Valid {
+		row.nextDueAt = nextDueAt.Time
+	}
 
 	if subject.Valid {
 		row.subject = subject.String

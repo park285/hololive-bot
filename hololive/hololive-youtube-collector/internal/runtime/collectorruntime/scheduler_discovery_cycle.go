@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -18,6 +19,7 @@ type capacityCycleRequest struct {
 	remaining   int
 	batch       int
 	excluded    []string
+	skip        func(runner int) bool
 	query       func(runner int, excluded []string, limit int) (joblease.CandidatePage, error)
 	enqueue     func(*joblease.JobSpec) EnqueueResult
 	warnFull    func()
@@ -32,6 +34,8 @@ type capacityCycleResult struct {
 	canceled      bool
 	stoppedEarly  bool
 	queried       int
+	visited       int
+	succeeded     []int
 	queryErr      error
 	globalFailure bool
 	failures      []runnerQueryFailure
@@ -82,6 +86,12 @@ func (s *capacityCycleState) runStep(req *capacityCycleRequest, index, total int
 		return true
 	}
 
+	s.result.visited++
+
+	if req.skip != nil && req.skip((req.start+index)%total) {
+		return false
+	}
+
 	page, err := s.queryPage(req, index, total)
 	if err != nil {
 		s.result.queryErr = errors.Join(s.result.queryErr, err)
@@ -93,6 +103,8 @@ func (s *capacityCycleState) runStep(req *capacityCycleRequest, index, total int
 
 		return s.result.globalFailure
 	}
+
+	s.result.succeeded = append(s.result.succeeded, (req.start+index)%total)
 
 	stop, applied := applyCandidatePage(page, s.remaining, s.excluded, req.enqueue, req.warnFull)
 	s.mergePage(applied)
@@ -141,7 +153,7 @@ func nextRotationCursor(start, total int, outcome *capacityCycleResult) int {
 	}
 
 	if outcome.stoppedEarly && outcome.queried > 0 {
-		return (start + outcome.queried) % total
+		return (start + outcome.visited) % total
 	}
 
 	return (start + 1) % total
@@ -255,11 +267,16 @@ func (s *leaseScheduler) queryRunnerPage(
 			return joblease.CandidatePage{}, fmt.Errorf("query runner page: %w", err)
 		}
 
+		id := runners[runner].Contract().ID()
+		started := time.Now()
+		revision := s.candidatePollRevision(id)
+
 		dbCtx, cancel := context.WithTimeout(ctx, s.dbTimeout)
 
 		defer cancel()
 
 		page, err := source.CandidatesForProjection(dbCtx, generation, runners[runner].Contract(), excluded, limit)
+		s.recordCandidatePoll(id, generation, revision, started, page, limit, errors.Join(err, ctx.Err()))
 
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return joblease.CandidatePage{}, fmt.Errorf("query runner page: %w", errors.Join(err, ctxErr))

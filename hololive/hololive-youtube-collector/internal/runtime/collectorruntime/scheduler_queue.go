@@ -12,6 +12,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
@@ -166,7 +167,10 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *queuedJob) {
 		return
 	}
 
-	defer s.unmarkQueued(spec.JobKey)
+	defer func() {
+		s.unmarkQueued(spec.JobKey)
+		s.invalidateCandidatePoll(collection.JobID{Provider: spec.Provider, Kind: collection.JobKind(spec.CollectionJobKind)})
+	}()
 
 	if ctx.Err() != nil {
 		s.workerTotals.RecordDiscard(workercontract.DiscardShutdown)
