@@ -1,4 +1,4 @@
 001 001_schema_epoch3_baseline.sql
 002 002_drop_x_space_login_attempts.sql
-003 373_source_retention_protected_set.sql
-004 374_source_application_natural_key.sql
+003 003_source_retention_protected_set.sql
+004 004_source_application_natural_key.sql
