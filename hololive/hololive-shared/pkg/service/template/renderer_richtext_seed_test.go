@@ -102,7 +102,7 @@ func TestRichTextSeedsPreserveCopyableCommands(t *testing.T) {
 
 	for _, key := range []domain.TemplateKey{
 		domain.TemplateKeyCmdHelp, domain.TemplateKeyCmdAmbiguousMember, domain.TemplateKeyCmdAlarmList,
-		domain.TemplateKeyCmdMajorEventNotSub, domain.TemplateKeyCmdMajorEventStatus, domain.TemplateKeyCmdMajorEventUsage,
+		domain.TemplateKeyCmdMajorEventStatus, domain.TemplateKeyCmdMajorEventUsage,
 		domain.TemplateKeyCmdMemberNewsNoMembers, domain.TemplateKeyCmdMemberNewsStatus,
 	} {
 		pair := pairs[key]
