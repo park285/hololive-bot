@@ -191,8 +191,8 @@ fi
 build_service() {
     local service="$1"
     local image="${IMAGE_BY_SERVICE[$service]}"
-    # iris-seoul(Docker)은 collector·PO image를 docker-archive로 받으므로 HEALTHCHECK 등 Docker 전용
-    # 메타데이터를 보존하는 docker 형식으로 만든다. identity는 형식과 무관하게 config digest다.
+    # HEALTHCHECK 등 docker 형식 메타데이터를 보존하고 docker-archive 저장 전후 config digest(identity)가 같도록
+    # docker 형식으로 만든다.
     local -a args=(build "${platform_args[@]}" --format docker --tag "${image}" --build-arg "REVISION=${REVISION}")
 
     if [[ -n "${DOCKERFILE_BY_SERVICE[$service]:-}" ]]; then

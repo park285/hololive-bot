@@ -33,7 +33,7 @@ func (r *Runner) runStep(ctx context.Context) bool {
 	if !processed {
 		r.batchesSinceWake = 0
 		if r.idleWaiter != nil {
-			observeAlarmDispatchRunnerEmptyPoll("pg")
+			observeAlarmDispatchRunnerEmptyPoll()
 
 			return r.idleWaiter.Wait(ctx)
 		}

@@ -24,8 +24,8 @@ Node/React SSR generation has not been reverified here, and Go/Android runtime
 acceptance is unknown. Runtime/deployment records, staged acceptance gates, and
 rollback requirements remain authoritative and unchanged.
 
-The standalone AP Compose base and private migration socket are prepared 11.0.0
-source contracts, not evidence of live activation. Actual 10.2.0 pairing-baseline
+The private migration socket is a prepared 11.0.0
+source contract, not evidence of live activation. Actual 10.2.0 pairing-baseline
 acceptance must precede the final settings cutover; the deployment baseline retains
 the recorded deployed layout until new rollout evidence replaces it.
 

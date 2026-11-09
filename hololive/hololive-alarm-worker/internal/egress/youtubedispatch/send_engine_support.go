@@ -156,8 +156,8 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	defer cancel()
 
-	if req.frozen == nil || (req.frozen.Route != "text" && req.frozen.Route != "richtext" && req.frozen.Route != "markdown") {
-		return "", errors.New("send frozen delivery: stored text, richtext or markdown request required")
+	if req.frozen == nil || (req.frozen.Route != "text" && req.frozen.Route != "richtext") {
+		return "", errors.New("send frozen delivery: stored text or richtext request required")
 	}
 
 	finish := d.beginProviderAttempt()

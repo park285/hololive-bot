@@ -8,6 +8,11 @@
 
 ## 미출시
 
+- **Docker·Compose 시절 호환 경로 퇴역:** 중앙·iris-seoul·kapu가 모두 Podman Quadlet으로 옮겨 Docker 분기를 지웠습니다. `ap-logs.sh`는 native 파일 로그만, `remote-sync-main-logs.sh`는 `docker-tail`·docker 그룹 처리 없이 동작합니다. PO 이미지 검증(`po_verify_image`)은 runtime 인자 없이 Podman identity 한 줄만 대조하며, Docker buildx 시절 두 줄 영수증은 받지 않습니다(운영 영수증은 모두 한 줄). 쓰이지 않는 `compose-paths.sh`, `.github/actions/docker-compose`, 짝 잃은 seccomp 라이선스와 Compose 전용 parity·CI 경로 패턴을 지웠습니다. collector c·b의 Compose 시절 network alias `youtube-collector`를 지웠습니다(stack-secrets 소비 없음, 다음 collector 재기동부터 반영).
+- **빌드·로그 대상 이름 정본화:** `build-all.sh`·`logs.sh`는 정본 이름(`hololive-api`, `hololive-alarm-worker`, `youtube-collector`, `youtube-po-c`)만 받습니다. `alarm-worker`, `youtube-collector-c`, 옛 이름 `po-sandbox`는 거절합니다.
+- **markdown 발송 경로 퇴역:** alarm-worker의 저장 요청 `markdown` route와 bot reply outbox의 `markdown` kind 읽기 경로를 지웠습니다. 운영 원장에 `markdown` 행이 0건이고 생산자가 없음을 확인했습니다. 남은 행이 있다면 지원하지 않는 route로 거절합니다. DB CHECK 제약은 바꾸지 않았습니다.
+- **호환 입력·label 정리:** init-db는 `POSTGRES_PASSWORD` 대신 `POSTGRES_ADMIN_PASSWORD`만 읽습니다. integration 시험은 `TEST_VALKEY_HOST` 없이 `TEST_VALKEY_ADDR`만 씁니다. 대시보드 호환 고정 label `alarm_dispatch_publish_*_total{mode="pg_first"}`와 `alarm_dispatch_runner_*{consumer_mode="pg"}`를 지웠습니다(`wait_mode`는 유지). 이 label을 고정해 쓰는 대시보드·alert는 없습니다.
+
 - **의존성 갱신:** Go 모듈 5개의 pgx v5.12.0, grpc v1.85.0, goldmark v2.1.15, yaml v3.0.6와 xspaces `x-client-transaction-id` 0.3.3을 올렸습니다. 실행 중인 운영 이미지는 다음 배포부터 반영됩니다.
 - **DB maintenance 실행기의 접속 거부 해소:** `scripts/runtime/db-maintenance-exec.sh`가 Compose 시절처럼 `hololive-bot_hololive-net` TCP로 `hololive_migrator` 접속을 시도해, `pg_hba.conf`의 특권 역할 TCP 거부 규칙에 막혔습니다(`pg_hba.conf rejects connection for host ..., user "hololive_migrator"`). closeout·rollback preflight 같은 운영 SQL을 문서 경로로 실행할 수 없었습니다. 이제 `hololive-db-migrate`처럼 network 없이 `holo-postgres`의 관리 socket volume을 read-only로 마운트해 접속합니다. pg_hba 정책은 그대로입니다. 배포 시 `stack-secrets`의 `hololive-db-maintenance` service를 `host=/var/run/postgresql`, `sslmode=disable`로 함께 바꿉니다.
 

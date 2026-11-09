@@ -2,7 +2,6 @@ package workerapp
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -59,10 +58,6 @@ func (s *clientRequestIDRecordingIrisSender) SendRichText(_ context.Context, roo
 	s.richTextOpts = len(opts)
 
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
-}
-
-func (s *clientRequestIDRecordingIrisSender) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, errors.New("unexpected legacy markdown send")
 }
 
 type workerappEgressTestPostgres struct{ pool *pgxpool.Pool }

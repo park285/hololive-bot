@@ -25,7 +25,6 @@ type irisSenderTestCall struct {
 type irisSenderTestClient struct {
 	textCalls           []irisSenderTestCall
 	richTextCalls       []irisSenderTestCall
-	markdownCalls       []irisSenderTestCall
 	textAccepted        *iris.ReplyAcceptedResponse
 	textAcceptedSet     bool
 	richTextErr         error
@@ -48,15 +47,6 @@ func (c *irisSenderTestClient) SendRichText(_ context.Context, roomID, markdown 
 		return nil, c.richTextErr
 	}
 
-	if c.richTextAcceptedSet {
-		return c.richTextAccepted, nil
-	}
-
-	return &iris.ReplyAcceptedResponse{Success: true, Delivery: irisSenderQueued, RequestID: "markdown-request-1"}, nil
-}
-
-func (c *irisSenderTestClient) SendMarkdown(_ context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	c.markdownCalls = append(c.markdownCalls, irisSenderTestCall{roomID: roomID, message: markdown, opts: len(opts)})
 	if c.richTextAcceptedSet {
 		return c.richTextAccepted, nil
 	}

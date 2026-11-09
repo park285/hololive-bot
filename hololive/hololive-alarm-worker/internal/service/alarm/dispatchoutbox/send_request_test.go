@@ -1,7 +1,6 @@
 package dispatchoutbox
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"sync"
 	"testing"
@@ -97,41 +96,6 @@ func TestSendRequestMustBePinnedBeforeSending(t *testing.T) {
 	request, err := repository.PinSendRequest(ctx, unit, claims, "owner", records[0].ClientRequestID, SendRequest{Body: "new", Route: SendRouteText})
 	require.NoError(t, err)
 	require.NotNil(t, request)
-}
-
-func TestLegacySendRequestReplayDoesNotRepinRichText(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	repository := newTestRepository(t, pool)
-	ctx := t.Context()
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("legacy-room", "legacy")}})
-	require.NoError(t, err)
-
-	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
-	require.NoError(t, err)
-	require.Len(t, records, 1)
-
-	unit := records[0].SendUnitID
-	claims := recordClaims(records...)
-	requestID := records[0].ClientRequestID
-
-	const body = "**원문** @사용자_이름"
-
-	bodyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(body)))
-
-	// 구버전이 저장한 행을 복원한다. 새 pin은 markdown을 생성하지 않는다.
-	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_send_units SET request_body=$2,request_route='markdown',
-request_body_hash=$4,request_delivery_ids=$3,base_client_request_id=client_request_id WHERE id=$1`, unit, body, []int64{records[0].ID}, bodyHash)
-	require.NoError(t, err)
-
-	stored, err := repository.LoadSendRequest(ctx, unit, claims, "owner", requestID)
-	require.NoError(t, err)
-
-	replayed, err := newTestRepository(t, pool).PinSendRequest(ctx, unit, claims, "owner", requestID, SendRequest{Body: "새 본문", Route: SendRouteRichText})
-	require.NoError(t, err)
-	require.Equal(t, stored, replayed)
-	require.Equal(t, SendRouteMarkdown, replayed.Route)
-	require.Equal(t, body, replayed.Body)
-	require.Equal(t, requestID, replayed.ClientRequestID)
 }
 
 func TestSendRequestCanPinAfterKnownUnsentFailure(t *testing.T) {

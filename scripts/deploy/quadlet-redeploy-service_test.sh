@@ -361,8 +361,8 @@ for case_name in migration_failure fence_during_migration; do
   pass "${case_name}: the change stops before activation and leaves the running pair"
 done
 
-# 4·5. 활성화 뒤 실패(restart health gate 실패, verify 중 자동 재시작): Docker 시절 compose-redeploy-service.sh처럼
-# 자동으로 되돌리지 않는다. 이번 배포가 migration을 적용했을 수 있으므로 이전 image 복원은 스키마·admission 호환성
+# 4·5. 활성화 뒤 실패(restart health gate 실패, verify 중 자동 재시작)은 자동으로
+# 되돌리지 않는다. 이번 배포가 migration을 적용했을 수 있으므로 이전 image 복원은 스키마·admission 호환성
 # 승인 뒤 운영자가 quadlet-rollback-service.sh로 한다. 승인 뒤 --apply는 이전 pair를 되살려 다시 확인한다.
 for case_name in health_failure auto_restart; do
   root="${tmp}/${case_name}"

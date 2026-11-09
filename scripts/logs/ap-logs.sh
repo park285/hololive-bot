@@ -7,32 +7,27 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 AP_HOST_ARG="${1:-}"
 SERVICE="${2:-all}"
-SINCE="${SINCE:-30m}"
 TAIL="${TAIL:-300}"
 PATTERN="${PATTERN:-}"
-FOLLOW="${FOLLOW:-0}"
 FULL="${FULL:-0}"
-SOURCE="${SOURCE:-docker}"
 
 usage() {
   cat <<'USAGE'
 Usage:
   ap-logs.sh <ap-host> [youtube-collector|<ap-service>|all]
 
+Reads the native AP file logs.
+
 Environment:
-  SINCE=30m              docker log since window
-  TAIL=300               fallback/file tail line count
+  TAIL=300               tail line count
   PATTERN='ERR|panic'    optional grep -E pattern
-  FOLLOW=1               follow docker logs
-  FULL=1                 print all available logs; ignores SINCE and TAIL
-  SOURCE=docker|file     read docker logs or AP file logs
+  FULL=1                 print the whole log file; ignores TAIL
 
 Examples:
   ap-logs.sh osaka youtube-collector
-  SOURCE=file SINCE=2h PATTERN='pre-send claim|ERR' ap-logs.sh osaka youtube-collector
-  FOLLOW=1 ap-logs.sh osaka all
-  SOURCE=file FULL=1 ap-logs.sh osaka all
-  SOURCE=file TAIL=500 ap-logs.sh osaka all
+  PATTERN='pre-send claim|ERR' ap-logs.sh osaka youtube-collector
+  FULL=1 ap-logs.sh osaka all
+  TAIL=500 ap-logs.sh osaka all
 USAGE
 }
 
@@ -65,31 +60,12 @@ case "$SERVICE" in
     ;;
 esac
 
-ap_container_for_service() {
-  local service="$1"
-  local i
-  for i in "${!AP_SERVICES[@]}"; do
-    if [[ "${AP_SERVICES[$i]}" == "$service" ]]; then
-      printf '%s\n' "${AP_CONTAINERS[$i]}"
-      return 0
-    fi
-  done
-  return 1
-}
-
-ap_file_log_dir() {
-  case "$AP_NAME" in
-    osaka) printf '%s\n' "/var/log/hololive-bot" ;;
-    *) printf '%s\n' "/home/ubuntu/hololive-bot/logs" ;;
-  esac
-}
-
+# native AP는 collector 로그를 /var/log/hololive-bot/<service>.log로 남긴다.
 for service in "${services[@]}"; do
   echo "== $service =="
-  if [[ "$SOURCE" == "file" ]]; then
-    logfile="$(ap_file_log_dir)/${service}.log"
-    if [[ "$FULL" == "1" ]]; then
-      ap_remote_bash "$logfile" "$PATTERN" <<'REMOTE'
+  logfile="/var/log/hololive-bot/${service}.log"
+  if [[ "$FULL" == "1" ]]; then
+    ap_remote_bash "$logfile" "$PATTERN" <<'REMOTE'
 set -euo pipefail
 logfile="$1"; pattern="$2"
 if [[ -n "$pattern" ]]; then
@@ -98,10 +74,10 @@ else
   sudo -n cat "$logfile"
 fi
 REMOTE
-      echo
-      continue
-    fi
-    ap_remote_bash "$logfile" "$PATTERN" "$TAIL" <<'REMOTE'
+    echo
+    continue
+  fi
+  ap_remote_bash "$logfile" "$PATTERN" "$TAIL" <<'REMOTE'
 set -euo pipefail
 logfile="$1"; pattern="$2"; tail_n="$3"
 if [[ -n "$pattern" ]]; then
@@ -110,20 +86,5 @@ else
   sudo -n tail -n "$tail_n" "$logfile"
 fi
 REMOTE
-  else
-    container=$(ap_container_for_service "$service")
-    ap_remote_bash "$FOLLOW" "$FULL" "$SINCE" "$TAIL" "$PATTERN" "$container" <<'REMOTE'
-set -euo pipefail
-follow="$1"; full="$2"; since="$3"; tail_n="$4"; pattern="$5"; container="$6"
-args=(logs)
-if [[ "$follow" == "1" ]]; then args+=(-f); fi
-if [[ "$full" != "1" ]]; then args+=(--since "$since" --tail "$tail_n"); fi
-if [[ -n "$pattern" ]]; then
-  docker "${args[@]}" "$container" 2>&1 | grep -E "$pattern" || true
-else
-  docker "${args[@]}" "$container" 2>&1
-fi
-REMOTE
-  fi
   echo
 done

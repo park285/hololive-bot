@@ -166,7 +166,7 @@ check_integration_tests() {
             run_step "Provision integration test PostgreSQL" provision_integration_test_database
             provisioned_services=true
         fi
-        if [[ -z "${TEST_VALKEY_ADDR:-}" && -z "${TEST_VALKEY_HOST:-}" ]]; then
+        if [[ -z "${TEST_VALKEY_ADDR:-}" ]]; then
             run_step "Provision integration test Valkey" provision_integration_test_valkey
             provisioned_services=true
         fi

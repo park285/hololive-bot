@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 중앙(hololive-seoul) hololive-api·hololive-alarm-worker의 image 교체 helper다. Docker 시절
-# compose-redeploy-service.sh가 보장하던 순서를 Quadlet drop-in으로 지킨다. collector c는 po-central-cutover.sh가 소유한다.
+# 중앙(hololive-seoul) hololive-api·hololive-alarm-worker의 image 교체 helper다. 아래 순서를 Quadlet drop-in으로
+# 지킨다. collector c는 po-central-cutover.sh가 소유한다.
 #  1. preflight: root, 배포 트리 revision(sync-opt-current.sh의 .source-revision)과 image revision label 일치,
 #     image 존재·platform, primary fence 부재, unit 실행 중, PostgreSQL 연결 예산
 #  2. 실행 중 이전 pair 보존(capture). drop-in이 없는 첫 도입은 prepare로 실행 중 image를 먼저 고정해 이후 자동
@@ -8,7 +8,7 @@
 #  3. candidate pair·--check-worker-profile·verify-source
 #  4. 활성화 전에 hololive-db-migrate의 image를 drop-in(50-migrator-image.conf)으로 고정하고 migration 실행
 #  5. candidate drop-in 활성화, daemon-reload, restart(Notify=healthy가 health gate), verify-live·NRestarts
-# 활성화를 시작한 뒤 실패하면 Docker 시절처럼 자동으로 되돌리지 않고 failed_after_activation으로 보고한다. 이전 pair
+# 활성화를 시작한 뒤 실패하면 자동으로 되돌리지 않고 failed_after_activation으로 보고한다. 이전 pair
 # 복원은 스키마·admission 호환성 승인 뒤 quadlet-rollback-service.sh --check·--apply로 한다. 어느 단계도 재시도하지 않는다.
 # --quiesce는 두 Iris 소비자의 pair를 보존한 뒤 함께 정지·영속 mask한다. 외부 Iris 전환 뒤
 # --resume은 같은 release를 재검증하고 두 후보를 모두 설치한 다음에만 mask를 해제한다.

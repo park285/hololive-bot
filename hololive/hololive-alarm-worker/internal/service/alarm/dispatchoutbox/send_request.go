@@ -22,7 +22,6 @@ import (
 const (
 	SendRouteText     = "text"
 	SendRouteRichText = "richtext"
-	SendRouteMarkdown = "markdown"
 )
 
 // SendRequest는 하나의 send unit이 모든 세대에서 공유하는 최종 외부 요청이다.

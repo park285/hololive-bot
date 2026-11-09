@@ -137,7 +137,7 @@ restore() {
   verify_collector "$collector_rollback" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
   if [[ "$state" == present ]]; then
     old_po_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_revision"])' "$backup/po-prechange-manifest.json")"
-    po_verify_image podman "$issuer_rollback" "$backup/po-prechange-manifest.json" "$old_po_revision" arm64 "$backup/po-prechange.image-id"
+    po_verify_image "$issuer_rollback" "$backup/po-prechange-manifest.json" "$old_po_revision" arm64 "$backup/po-prechange.image-id"
   else
     [[ "$state" == absent ]] || return 1
   fi
@@ -219,7 +219,7 @@ if [[ "$mode" == rollback ]]; then
 fi
 if [[ "$mode" == check ]]; then
   [[ -r "$backup/snapshot-complete" && -r "$current/$manifest" ]]
-  po_verify_image podman "$issuer" "$current/$manifest" "$revision" arm64 "$current/$image_id_file"
+  po_verify_image "$issuer" "$current/$manifest" "$revision" arm64 "$current/$image_id_file"
   verify_collector "$collector" "$staging/collector-manifest.json" "$revision" "$staging/collector-image-id"
   [[ "$(image_label "$issuer" version)" == "$version" ]]
   [[ "$(image_label "$collector" version)" == "$version" ]]
@@ -279,7 +279,7 @@ if [[ "$issuer_state" == present ]]; then
   issuer_image_id="$(image_id "$issuer")"
   [[ "$running_issuer_id" == "$issuer_image_id" ]] || exit 1
   old_po_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_revision"])' "$current/$manifest")"
-  po_verify_image podman "$issuer" "$current/$manifest" "$old_po_revision" arm64 "$current/$image_id_file"
+  po_verify_image "$issuer" "$current/$manifest" "$old_po_revision" arm64 "$current/$image_id_file"
   [[ "$old_po_revision" == "$old_revision" ]]
   old_po_version="$(image_label "$issuer" version)"
   old_version="$(image_label "$collector" version)"
@@ -325,7 +325,7 @@ trap 'restore_after_failed_cutover 129' HUP
 (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
 podman load --input "$staging/image.tar"
 podman load --input "$staging/collector-image.tar"
-po_verify_image podman "$issuer_candidate" "$staging/rootfs-manifest.json" "$revision" arm64 "$staging/image-id"
+po_verify_image "$issuer_candidate" "$staging/rootfs-manifest.json" "$revision" arm64 "$staging/image-id"
 verify_collector "$collector_candidate" "$staging/collector-manifest.json" "$revision" "$staging/collector-image-id"
 [[ "$(image_label "$issuer_candidate" version)" == "$version" ]]
 [[ "$(image_label "$collector_candidate" version)" == "$version" ]]

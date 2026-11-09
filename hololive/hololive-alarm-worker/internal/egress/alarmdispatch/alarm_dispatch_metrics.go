@@ -11,7 +11,7 @@ import (
 var (
 	alarmDispatchRunnerMetricsOnce sync.Once
 
-	alarmDispatchRunnerEmptyPollsTotal           *prometheus.CounterVec
+	alarmDispatchRunnerEmptyPollsTotal           prometheus.Counter
 	alarmDispatchRunnerIdleWaitSeconds           *prometheus.HistogramVec
 	alarmDispatchRunnerWakeupConsumedTotal       prometheus.Counter
 	alarmDispatchRunnerWakeupTimeoutTotal        prometheus.Counter
@@ -86,20 +86,17 @@ func initAlarmDispatchRunnerMetrics() {
 }
 
 func initAlarmDispatchRunnerLoopMetrics() {
-	alarmDispatchRunnerEmptyPollsTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "alarm_dispatch_runner_empty_polls_total",
-			Help: "Alarm dispatch runner empty batch observations.",
-		},
-		[]string{"consumer_mode"},
-	)
+	alarmDispatchRunnerEmptyPollsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "alarm_dispatch_runner_empty_polls_total",
+		Help: "Alarm dispatch runner empty batch observations.",
+	})
 	alarmDispatchRunnerIdleWaitSeconds = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "alarm_dispatch_runner_idle_wait_seconds",
-			Help:    "Alarm dispatch runner idle wait duration by consumer mode and wait mode.",
+			Help:    "Alarm dispatch runner idle wait duration by wait mode.",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{"consumer_mode", "wait_mode"},
+		[]string{"wait_mode"},
 	)
 	alarmDispatchRunnerWakeupConsumedTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "alarm_dispatch_runner_wakeup_consumed_total",
@@ -141,9 +138,14 @@ func initAlarmDispatchRetentionMetrics() {
 	})
 }
 
-func observeAlarmDispatchRunnerEmptyPoll(consumerMode string) {
+func observeAlarmDispatchRunnerEmptyPoll() {
 	initAlarmDispatchRunnerMetrics()
-	alarmDispatchRunnerEmptyPollsTotal.WithLabelValues(consumerMode).Inc()
+
+	if alarmDispatchRunnerEmptyPollsTotal == nil {
+		return
+	}
+
+	alarmDispatchRunnerEmptyPollsTotal.Inc()
 }
 
 func observeAlarmDispatchRunnerPostSendQuarantined(rows int) {
@@ -170,9 +172,9 @@ func observeAlarmDispatchRetryAfterClamped() {
 	alarmDispatchRetryAfterClampedTotal.Inc()
 }
 
-func observeAlarmDispatchRunnerIdleWait(consumerMode, waitMode string, duration time.Duration) {
+func observeAlarmDispatchRunnerIdleWait(waitMode string, duration time.Duration) {
 	initAlarmDispatchRunnerMetrics()
-	alarmDispatchRunnerIdleWaitSeconds.WithLabelValues(consumerMode, waitMode).Observe(duration.Seconds())
+	alarmDispatchRunnerIdleWaitSeconds.WithLabelValues(waitMode).Observe(duration.Seconds())
 }
 
 func observeAlarmDispatchRunnerWakeupConsumed() {

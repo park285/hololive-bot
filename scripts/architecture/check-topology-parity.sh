@@ -80,9 +80,6 @@ LC_ALL=C cut -f1 "$manifest" | LC_ALL=C sort -u >"$tmpdir/registered"
   shopt -s nullglob
   candidates=(
     scripts/deploy/ap-hosts/*.conf
-    deploy/compose/*.yml
-    deploy/compose/*.example
-    deploy/compose/.*.example
     deploy/quadlet/*/*.container
     deploy/postgres/pg_hba.conf
     deploy/nginx/*.conf

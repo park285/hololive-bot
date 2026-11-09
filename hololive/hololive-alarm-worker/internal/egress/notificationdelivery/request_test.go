@@ -188,7 +188,7 @@ func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 }
 
 func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
-	for _, route := range []string{testPreparedText, testPreparedRichText, "markdown"} {
+	for _, route := range []string{testPreparedText, testPreparedRichText} {
 		t.Run(route, func(t *testing.T) {
 			testGenericGenerationReplay(t, route)
 		})

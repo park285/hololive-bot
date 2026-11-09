@@ -20,7 +20,7 @@ Group=1000
 GroupAdd=${HOLOLIVE_RUNTIME_GID}
 # 호스트 ID와 분리한다. 크기 65536은 PO socket 소유자 65532 매핑에 필요하고, 그룹 비밀은 GID를 그대로 매핑해 읽는다(worker-profile-pair.py가 profile mount 줄을 비교).
 UserNS=auto:size=65536,gidmapping=${HOLOLIVE_RUNTIME_GID}:${HOLOLIVE_RUNTIME_GID}:1
-Network=hololive-net.network:alias=youtube-collector,alias=youtube-collector-c
+Network=hololive-net.network:alias=youtube-collector-c
 Network=observability-traces.network
 PublishPort=127.0.0.1:30025:30025
 PublishPort=127.0.0.1:30025:30025/udp

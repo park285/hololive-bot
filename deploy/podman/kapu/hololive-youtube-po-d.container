@@ -25,8 +25,7 @@ Volume=hololive-youtube-po-d.volume:/run/hololive-youtube-po:idmap
 HealthCmd=["/app/bin/po-broker","--healthcheck","--socket","/run/hololive-youtube-po/worker.sock"]
 HealthInterval=30s
 HealthStartPeriod=30s
-# 중앙 po-c와 같이, 재시작 카운트가 issuer generation 교체 횟수라 unhealthy 자동 kill을 두지 않는다
-# (Docker 시절에도 po 컨테이너에는 deunhealth label이 없었다).
+# 중앙 po-c와 같이, 재시작 카운트가 issuer generation 교체 횟수라 unhealthy 자동 kill을 두지 않는다.
 
 [Service]
 Restart=always
