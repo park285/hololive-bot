@@ -60,7 +60,6 @@ jobs:
           go-version-file: hololive-bot/go.work
           cache-dependency-path: |
             hololive-bot/go.work.sum
-            hololive-bot/go.sum
             hololive-bot/hololive/*/go.sum
             shared-go/go.sum
             iris-client-go/go.sum
@@ -78,7 +77,7 @@ jobs:
       - name: Resolve workspace package patterns
         run: |
           source scripts/ci/go-workspace-modules.sh
-          owned_pkgs=(./...)
+          owned_pkgs=()
           for module in "${GO_OWNED_MODULES[@]}"; do
             owned_pkgs+=("./${module}/...")
           done
