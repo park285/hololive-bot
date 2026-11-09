@@ -15,6 +15,7 @@ import (
 // 기본 권한이 넓어도 runtime과 별도 기록 역할만 refresh를 실행할 수 있습니다.
 func TestLiveRuntimeRefreshPrivileges(t *testing.T) {
 	t.Parallel()
+
 	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
 	// 기록 역할의 기본 실행 권한이 새 의존 함수에도 이어지는지 확인합니다.
@@ -22,8 +23,11 @@ func TestLiveRuntimeRefreshPrivileges(t *testing.T) {
 		_, err := pool.Exec(t.Context(), "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO "+pgx.Identifier{role}.Sanitize())
 		require.NoError(t, err)
 	}
+
 	applyBaselineForRoles(t, pool, roles)
+
 	var recorderDependencies bool
+
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT
  has_function_privilege('pg_monitor','record_youtube_live_review(uuid,text,text,text,text)','EXECUTE')
  AND has_function_privilege('pg_monitor','refresh_youtube_live_runtime_state(text[])','EXECUTE')

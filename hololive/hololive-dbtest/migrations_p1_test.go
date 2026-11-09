@@ -58,6 +58,7 @@ func TestTelemetryHotTableAutovacuumTuned(t *testing.T) {
 
 func TestSourceObservationGrantsAreLeastPrivilege(t *testing.T) {
 	t.Parallel()
+
 	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
 	applyBaselineForRoles(t, pool, roles)
@@ -71,14 +72,17 @@ func TestSourceObservationGrantsAreLeastPrivilege(t *testing.T) {
 
 func applyBaselineForRoles(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
 	t.Helper()
+
 	dir, err := resolveMigrationsDir()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw, err := fs.ReadFile(os.DirFS(dir), epoch3BaselineMigration)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	content := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
 	if err := applyMigrationContent(t.Context(), pool, epoch3BaselineMigration, content); err != nil {
 		t.Fatal(err)
@@ -87,8 +91,10 @@ func applyBaselineForRoles(t *testing.T, pool *pgxpool.Pool, roles observationGr
 
 func grantBroadBaselineDefaults(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
 	t.Helper()
+
 	for _, role := range []string{roles.runtime, roles.scraper} {
 		quoted := pgx.Identifier{role}.Sanitize()
+
 		for _, objects := range []string{"TABLES", "SEQUENCES", "FUNCTIONS"} {
 			if _, err := pool.Exec(t.Context(), "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON "+objects+" TO "+quoted); err != nil {
 				t.Fatal(err)

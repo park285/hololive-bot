@@ -30,7 +30,6 @@ func TestYouTubeSendRequestHandoffShape(t *testing.T) {
 	}
 
 	for _, attempt := range []string{"baseline"} {
-
 		for i, tc := range cases {
 			baseID := fmt.Sprintf("youtube:%s-%d", attempt, i)
 

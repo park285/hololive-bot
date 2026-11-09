@@ -21,55 +21,6 @@ const (
 	methodUnknown           = "unknown"
 )
 
-// 218 이전 허용 목록으로 되돌리고, consumer offset은 첫 단계(NOT VALID 추가) 뒤 중단된 상태로 둔다.
-// 이미 적용된 DB에서 이전 상태를 재현해 업그레이드와 중단 재개 경로를 검증한다.
-const restorePreLiveAbsenceKindVocabSQL = `
-ALTER TABLE public.observation_contract_generations
-	DROP CONSTRAINT chk_observation_contract_kind_vocab;
-ALTER TABLE public.observation_contract_generations
-	ADD CONSTRAINT chk_observation_contract_kind_vocab CHECK (observation_kind IN (
-		'community_page', 'video_list', 'shorts_list', 'live_snapshot', 'viewer_sample',
-		'channel_stats', 'channel_profile', 'channel_photo', 'schedule_snapshot'));
-ALTER TABLE public.youtube_collection_targets
-	DROP CONSTRAINT chk_youtube_collection_target_kind_vocab;
-ALTER TABLE public.youtube_collection_targets
-	ADD CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK (observation_kind IN (
-		'community_page', 'video_list', 'shorts_list', 'live_snapshot', 'viewer_sample',
-		'channel_stats', 'channel_profile', 'channel_photo', 'schedule_snapshot'));
-ALTER TABLE public.source_observation_consumer_offsets
-	DROP CONSTRAINT chk_source_observation_consumer_offset_kind_vocab;
-ALTER TABLE public.source_observation_consumer_offsets
-	ADD CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK (observation_kind IN (
-		'community_page', 'video_list', 'shorts_list', 'live_snapshot', 'viewer_sample',
-		'channel_stats', 'channel_profile', 'channel_photo', 'schedule_snapshot'));
-ALTER TABLE public.source_observation_consumer_offsets
-	ADD CONSTRAINT chk_source_observation_consumer_offset_kind_vocab_next CHECK (observation_kind IN (
-		'community_page', 'video_list', 'shorts_list', 'live_snapshot', 'viewer_sample',
-		'channel_stats', 'channel_profile', 'channel_photo', 'schedule_snapshot',
-		'channel_live_check', 'video_live_check')) NOT VALID`
-
-func assertObservationContract(t *testing.T, pool *pgxpool.Pool, kind string, wantSchema int16, wantGeneration int64, wantUpdatedBy string) {
-	t.Helper()
-
-	var (
-		schemaVersion int16
-		generation    int64
-		updatedBy     string
-	)
-
-	if err := pool.QueryRow(t.Context(), `
-		SELECT current_schema_version, current_generation, updated_by
-		FROM public.observation_contract_generations
-		WHERE provider = 'youtubejs' AND observation_kind = $1`, kind).Scan(&schemaVersion, &generation, &updatedBy); err != nil {
-		t.Fatalf("read %s contract: %v", kind, err)
-	}
-
-	if schemaVersion != wantSchema || generation != wantGeneration || updatedBy != wantUpdatedBy {
-		t.Fatalf("%s contract = schema %d generation %d by %q, want schema %d generation %d by %q",
-			kind, schemaVersion, generation, updatedBy, wantSchema, wantGeneration, wantUpdatedBy)
-	}
-}
-
 type channelLiveCheckRow struct {
 	provider        string
 	outcome         string

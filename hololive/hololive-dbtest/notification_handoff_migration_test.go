@@ -8,7 +8,7 @@ import (
 )
 
 // notification handoff shape CHECK는 확인 대기 SENT 행, 확인을 끝낸 행, handoff 없는 행을 받는다. 빈 requestId,
-// requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, SENT가 아닌 행의 예정 시각, 예정 시각 없는 확인 대기 SENT
+// requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, SENT가 아닌 행의 예정 시각, 예정 시각 없는 확인 대기 SENT는 거부한다.
 func TestNotificationHandoffShape(t *testing.T) {
 	t.Parallel()
 
@@ -32,7 +32,6 @@ func TestNotificationHandoffShape(t *testing.T) {
 	}
 
 	for _, attempt := range []string{"baseline"} {
-
 		for i, tc := range cases {
 			periodKey := fmt.Sprintf("%s-%d", attempt, i)
 

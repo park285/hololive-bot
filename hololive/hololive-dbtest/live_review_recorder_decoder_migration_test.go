@@ -28,6 +28,7 @@ func TestLiveReviewRecorderDecoderMigrationPreservesRestrictedRecording(t *testi
 	require.NoError(t, err)
 	seedLiveReviewComparison(t, pool)
 	RefreshAllLiveRuntimeState(t, pool)
+
 	for _, receiptID := range []string{"50000000-0000-0000-0000-000000000002", "50000000-0000-0000-0000-000000000003"} {
 		_, beforeReceipts := liveReviewComparisonState(t, pool)
 		assertRestrictedRecorderReopens(t, pool, roles, receiptID, beforeReceipts)

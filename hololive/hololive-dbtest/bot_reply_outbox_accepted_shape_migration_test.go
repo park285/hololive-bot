@@ -66,7 +66,6 @@ func TestBotReplyOutboxAcceptedShape(t *testing.T) {
 	}
 
 	for _, attempt := range []string{"baseline"} {
-
 		for i, tc := range cases {
 			err := insertBotReplyOutboxShape(ctx, t, pool, fmt.Sprintf("message:%s-%d", attempt, i), tc.set)
 			if tc.accepted {

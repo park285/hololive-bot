@@ -33,7 +33,6 @@ func TestAlarmSendUnitHandoffShape(t *testing.T) {
 	}
 
 	for _, attempt := range []string{"baseline"} {
-
 		for i, tc := range cases {
 			clientRequestID := fmt.Sprintf("hololive-alarm:%s-%d", attempt, i)
 

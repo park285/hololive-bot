@@ -14,6 +14,7 @@ const (
 
 func TestTemplateFormatConstraints(t *testing.T) {
 	t.Parallel()
+
 	pool := NewPool(t)
 	_, err := pool.Exec(t.Context(), `INSERT INTO notification_templates(template_key,channel_id,body,format_variant) VALUES($1,$2,'본문','plain')`, templateFormatCustomKey, templateFormatOverrideChannel)
 	require.NoError(t, err)

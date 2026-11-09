@@ -19,6 +19,7 @@ func TestPayloadPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 	roles := createObservationGrantRoles(t, pool)
 	grantBroadBaselineDefaults(t, pool, roles)
 	applyBaselineForRoles(t, pool, roles)
+
 	_, err := pool.Exec(ctx, "CREATE TABLE unrelated_payload_acl_probe (id bigint)")
 	require.NoError(t, err)
 

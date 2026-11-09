@@ -57,6 +57,7 @@ func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 		_, err := pool.Exec(ctx, "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "+pgx.Identifier{role}.Sanitize())
 		require.NoError(t, err)
 	}
+
 	applyBaselineForRoles(t, pool, roles)
 
 	for _, check := range []struct {
