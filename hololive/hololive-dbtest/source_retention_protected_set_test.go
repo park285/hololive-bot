@@ -9,15 +9,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSourceRetentionProtectedSetMatchesScalarAndDeletion(t *testing.T) {
-	t.Parallel()
+func seedProtectedRetentionSet(t *testing.T, pool *pgxpool.Pool, base time.Time) ([]int64, []int64, []int64) {
+	t.Helper()
 
-	pool := NewPool(t)
-	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	keys := []string{"queue", "head", "current", "staging", "leased", "older", "live", "upcoming", "pending-live", "pending-upcoming", "ended", "eligible"}
 	ids := make([]int64, 0, len(keys))
 	protected := make([]int64, 0, 9)
@@ -25,6 +24,7 @@ func TestSourceRetentionProtectedSetMatchesScalarAndDeletion(t *testing.T) {
 
 	for _, key := range keys {
 		id := insertRetentionObservation(t, pool, communityPageKind, base, key)
+
 		ids = append(ids, id)
 
 		if key == "older" || key == "ended" || key == "eligible" {
@@ -70,6 +70,16 @@ func TestSourceRetentionProtectedSetMatchesScalarAndDeletion(t *testing.T) {
 		FROM source_observations WHERE subject_key IN ('pending-live','pending-upcoming','ended')`)
 	require.NoError(t, err)
 
+	return ids, protected, eligible
+}
+
+func TestSourceRetentionProtectedSetMatchesScalarAndDeletion(t *testing.T) {
+	t.Parallel()
+
+	pool := NewPool(t)
+	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	ids, protected, eligible := seedProtectedRetentionSet(t, pool, base)
+
 	var setIDs, scalarIDs []int64
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT array_agg(id ORDER BY id)
@@ -85,8 +95,10 @@ func TestSourceRetentionProtectedSetMatchesScalarAndDeletion(t *testing.T) {
 		source_observation_retention_protected_ids(ARRAY[$1,$1,NULL,0]::bigint[])`, protected[0]).Scan(&duplicateIDs))
 	require.Equal(t, protected[:1], duplicateIDs)
 
-	var emptyCount int
-	var nullProtected bool
+	var (
+		emptyCount    int
+		nullProtected bool
+	)
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM source_observation_retention_protected_ids(NULL::bigint[])),
@@ -94,9 +106,11 @@ func TestSourceRetentionProtectedSetMatchesScalarAndDeletion(t *testing.T) {
 	require.Zero(t, emptyCount)
 	require.False(t, nullProtected)
 
-	var deleted []int64
-	var passed int
-	var completed bool
+	var (
+		deleted   []int64
+		passed    int
+		completed bool
+	)
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT deleted_ids,passed,traversal_completed
 		FROM delete_source_observation_retention_window($1,$2,1000)`,
@@ -123,9 +137,11 @@ func TestSourceRetentionProtectedSetSkipsLocksAndAdvancesCursor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	var deleted []int64
-	var passed int
-	var completed bool
+	var (
+		deleted   []int64
+		passed    int
+		completed bool
+	)
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT deleted_ids,passed,traversal_completed
 		FROM delete_source_observation_retention_window($1,$2,1)`,
@@ -156,6 +172,7 @@ func TestSourceRetentionProtectedSetRuntimePrivileges(t *testing.T) {
 	require.NoError(t, err)
 
 	migration := strings.ReplaceAll(string(raw), "hololive_runtime", roles.runtime)
+
 	for range 2 {
 		require.NoError(t, applyMigrationContent(t.Context(), pool, files[0], migration))
 	}
@@ -168,8 +185,11 @@ func TestSourceRetentionProtectedSetRuntimePrivileges(t *testing.T) {
 
 	for _, role := range []string{roles.runtime, roles.scraper} {
 		t.Run(role, func(t *testing.T) {
+			t.Parallel()
+
 			tx, beginErr := pool.Begin(t.Context())
 			require.NoError(t, beginErr)
+
 			defer rollbackRetentionTransaction(t, tx)
 
 			_, roleErr := tx.Exec(t.Context(), `SET LOCAL ROLE `+pgx.Identifier{role}.Sanitize())
@@ -178,8 +198,10 @@ func TestSourceRetentionProtectedSetRuntimePrivileges(t *testing.T) {
 			var protected bool
 
 			callErr := tx.QueryRow(t.Context(), `SELECT source_observation_retention_protected(0)`).Scan(&protected)
+
 			if role == roles.scraper {
 				require.ErrorContains(t, callErr, "SQLSTATE 42501")
+
 				return
 			}
 

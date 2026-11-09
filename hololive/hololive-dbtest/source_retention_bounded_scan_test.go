@@ -48,8 +48,10 @@ func TestSourceRetentionBoundsWindowAndRollsBackCursor(t *testing.T) {
 
 	defer rollbackRetentionTransaction(t, tx)
 
-	var deleted, passed int
-	var completed bool
+	var (
+		deleted, passed int
+		completed       bool
+	)
 
 	require.NoError(t, tx.QueryRow(t.Context(), `SELECT cardinality(deleted_ids),passed,traversal_completed
 		FROM delete_source_observation_retention_window($1,$2,1000)`,
