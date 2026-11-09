@@ -192,8 +192,6 @@ run_content_gates() {
   run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
-  run_if_changed hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback_test.sh \
-    hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
   run_if_changed scripts/ops/postgres-failover_test.sh scripts/ops scripts/systemd deploy/quadlet
   run_if_changed scripts/logs/test-stream-mirror-retention.sh scripts/logs/lib/stream.sh

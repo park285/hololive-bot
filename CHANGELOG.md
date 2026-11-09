@@ -10,7 +10,7 @@
 
 - **DB epoch-3 기준선:** epoch-2 372 head의 233개 migration을 정본 baseline으로 합쳤습니다. 기존 DB는 봉인된 파일명·sha256 원장이 모두 일치할 때만 SQL 재실행 없이 원장을 원자 전환하고, 후속 migration이 `x_space_login_attempts`를 삭제합니다. 부분 원장·불명 행·checksum 불일치는 이전 릴리스로 372까지 올린 뒤 다시 실행해야 합니다. 구형 rollback 도구·과거 업그레이드 전용 시험은 제거하고 현행 동작 시험은 baseline에 맞췄습니다. 새 migrator 실행 뒤에는 이전 이미지와 전환 전 DB 백업의 별도 복원 없이 epoch-2로 되돌릴 수 없습니다. 운영 적용은 하지 않았습니다.
 - **X Spaces 자동 로그인 이력 퇴역:** 연결 상태에서 `recovery`와 과거 로그인 이력 조회를 제거했습니다. 수동 쿠키 제출·후보 검증·현재 세션 상태는 유지합니다. 이력 테이블은 같은 릴리스의 migration `002`가 삭제합니다. 배포 helper가 API 교체 직전에 migration을 실행하므로, 그 사이 구 API의 X Spaces 연결 상태 조회(Console 요청 시에만 읽음)는 실패할 수 있습니다.
-- **제품 결함 중심 gate 정리:** shared-go·notification egress의 import·심볼 소유권 검사와 문서 문자열 검사를 제거했습니다. SQL 안전·보안 설정·의존성·성능·실제 동작 검증은 유지하며, SQL 파일 위치를 강제하는 구조 검사는 제거했습니다.
+- **제품 결함 중심 gate 정리:** shared-go·notification egress의 import·심볼 소유권 검사와 문서 문자열 검사를 제거했습니다. SQL 안전·보안 설정·의존성·성능·실제 동작 검증은 유지하며, SQL 파일 위치를 강제하는 구조 검사와 삭제된 rollback preflight 시험의 호출을 제거했습니다. epoch 전환 시험은 현행 manifest의 모든 후속 migration 적용·재개·재실행 건수를 검증합니다.
 - **원본 보존 보호 판정 집합화:** migration 003은 삭제 창의 최대 1,000개 원본을 집합 함수로 판정합니다. 여섯 보호 사유의 정본을 한 곳에 두고 backlog의 단건 지연 평가는 유지합니다. 잠금 전·삭제 직전의 별도 snapshot, SKIP LOCKED, 커서와 순회 완료 의미는 그대로입니다.
 - **원본 적용 감사의 자연 키 승격:** migration 004는 `(observation_id, entity_kind_id, entity_key)` unique 인덱스를 PK로 재사용하고 미사용 `id`·sequence·단일 열 PK 인덱스를 제거합니다. 기존 API의 INSERT/ON CONFLICT·조회는 자연 키만 사용하므로 바이너리 선배포는 필요 없습니다. 네 백만 행을 재작성하거나 다시 인덱싱하지 않지만 ACCESS EXCLUSIVE 잠금은 commit까지 유지하며 `lock_timeout=3s`를 넘으면 전체 변경이 실패합니다. 관측 원본 삭제의 CASCADE와 어휘 FK는 유지하고, 사용량 0인 나머지 소형 인덱스는 트래픽 부재만으로 제거하지 않습니다.
 

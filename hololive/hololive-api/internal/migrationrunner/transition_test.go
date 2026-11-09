@@ -53,13 +53,14 @@ CREATE INDEX IF NOT EXISTS idx_x_space_login_attempts_started_at ON x_space_logi
 }
 
 func TestEpoch2HeadTransitionMatchesFreshSchema(t *testing.T) {
+	entries := manifestEntries(t)
 	old := epoch2HeadFixture(t)
 	_, err := old.Exec(t.Context(), `UPDATE notification_templates SET body='운영 사용자 본문' WHERE template_key='CMD_HELP' AND channel_id IS NULL AND format_variant='plain'`)
 	require.NoError(t, err)
 	result, err := Run(t.Context(), old, migrations.FS, Config{})
 	require.NoError(t, err)
-	require.Equal(t, Result{Applied: 1, Skipped: 1, Total: 2}, result)
-	assertLedger(t, old, manifestEntries(t))
+	require.Equal(t, Result{Applied: len(entries) - 1, Skipped: 1, Total: len(entries)}, result)
+	assertLedger(t, old, entries)
 	assertTableAbsent(t, old, "x_space_login_attempts")
 	var body string
 	require.NoError(t, old.QueryRow(t.Context(), `SELECT body FROM notification_templates WHERE template_key='CMD_HELP' AND channel_id IS NULL AND format_variant='plain'`).Scan(&body))
@@ -73,7 +74,7 @@ func TestEpoch2HeadTransitionMatchesFreshSchema(t *testing.T) {
 	require.Equal(t, want, got)
 	result, err = Run(t.Context(), old, migrations.FS, Config{})
 	require.NoError(t, err)
-	require.Equal(t, Result{Skipped: 2, Total: 2}, result)
+	require.Equal(t, Result{Skipped: len(entries), Total: len(entries)}, result)
 }
 
 func TestEpoch2TransitionRejectsUnsealedReceiptsBeforeSQL(t *testing.T) {
@@ -118,6 +119,7 @@ func TestEpochTransitionReceiptFailureRollsBackBothLedgers(t *testing.T) {
 }
 
 func TestEpochTransitionDropFailureCanResumeWithoutBaselineReplay(t *testing.T) {
+	total := len(manifestEntries(t))
 	pool := epoch2HeadFixture(t)
 	_, err := pool.Exec(t.Context(), `CREATE VIEW login_attempt_dependency AS SELECT id FROM x_space_login_attempts`)
 	require.NoError(t, err)
@@ -129,11 +131,12 @@ func TestEpochTransitionDropFailureCanResumeWithoutBaselineReplay(t *testing.T) 
 	require.NoError(t, err)
 	result, err := Run(t.Context(), pool, migrations.FS, Config{})
 	require.NoError(t, err)
-	require.Equal(t, Result{Applied: 1, Skipped: 1, Total: 2}, result)
+	require.Equal(t, Result{Applied: total - 1, Skipped: 1, Total: total}, result)
 	assertTableAbsent(t, pool, "x_space_login_attempts")
 }
 
 func TestEpoch3RecoveryWatermarkUsesCurrentManifest(t *testing.T) {
+	total := len(manifestEntries(t))
 	pool := dbtest.NewBlankPool(t)
 	runMigrations(t, pool, realManifestThrough(t, epoch3Baseline), "")
 	_, err := pool.Exec(t.Context(), `DELETE FROM schema_migration_checksums; DELETE FROM schema_migrations`)
@@ -142,5 +145,5 @@ func TestEpoch3RecoveryWatermarkUsesCurrentManifest(t *testing.T) {
 	require.ErrorContains(t, err, "not a manifest migration")
 	result, err := Run(t.Context(), pool, migrations.FS, Config{BaselineThrough: epoch3Baseline})
 	require.NoError(t, err)
-	require.Equal(t, Result{Applied: 1, Skipped: 1, Total: 2}, result)
+	require.Equal(t, Result{Applied: total - 1, Skipped: 1, Total: total}, result)
 }
