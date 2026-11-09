@@ -68,14 +68,8 @@ func main() {
 				slog.Int("llm_port", config.LLM.Server.Port),
 			}
 		},
-		BuildTimeout: constants.AppTimeout.Build,
-		BuildRuntime: func(
-			ctx context.Context,
-			config *apiconfig.RuntimeConfig,
-			logger *slog.Logger,
-		) (*runtimeapp.Runtime, error) {
-			return runtimeapp.BuildRuntime(ctx, config, logger)
-		},
+		BuildTimeout:      constants.AppTimeout.Build,
+		BuildRuntime:      runtimeapp.BuildRuntime,
 		BuildErrorMessage: "Failed to assemble hololive-api runtime",
 	}.Run())
 }

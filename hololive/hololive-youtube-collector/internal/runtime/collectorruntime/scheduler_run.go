@@ -47,8 +47,9 @@ func (e *collectionExecutor) runSpec(ctx context.Context, job *queuedJob) {
 		return
 	}
 
-	// 결과와 오류는 runAcquired가 지표·lease 처리로 기록합니다.
-	_, _ = e.runAcquired(ctx, job.registration, spec, lease)
+	if err := e.runAcquired(ctx, job.registration, spec, lease); err != nil {
+		return // runAcquired가 실패를 지표·lease 정리·로그로 이미 기록했습니다.
+	}
 }
 
 func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.JobSpec) (joblease.Lease, error) {
@@ -87,16 +88,12 @@ func (e *collectionExecutor) observeAcquireError(ctx context.Context, spec *jobl
 	e.logFailure(ctx, "acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
 }
 
-func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) (*collection.CollectResult, error) {
-	var collected *collection.CollectResult
-
+func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) error {
 	proof := lease.Proof()
 	started := time.Now()
 	attemptID := e.workerTracker.BeginAttempt(started)
 	runResult := e.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
-		var err error
-
-		collected, err = e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
+		_, err := e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
 
 		return err
 	})
@@ -111,17 +108,16 @@ func (e *collectionExecutor) runAcquired(ctx context.Context, registration Regis
 	}
 
 	if e.handleLeaseRunOutcome(ctx, runResult, spec, &proof) {
-		// callback 완료 통지를 받은 경우만 결과를 읽는다. 취소 후 남은 callback과 경합하지 않는다.
 		if runResult.Outcome == joblease.LeaseRunCallbackCompleted {
-			return collected, nil
+			return nil
 		}
 
-		return nil, err
+		return err
 	}
 
 	e.handleRunError(ctx, lease, spec, &proof, err)
 
-	return nil, err
+	return err
 }
 
 func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
@@ -296,7 +292,6 @@ func (e *collectionExecutor) collectAndPublish(
 	}
 
 	validationErr := ValidateCollectResult(&input, registration, &result, fatal)
-
 	if validationErr != nil {
 		return nil, &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
 	}

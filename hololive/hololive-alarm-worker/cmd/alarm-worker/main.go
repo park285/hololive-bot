@@ -21,7 +21,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -79,15 +78,9 @@ func main() {
 		LoggerLevel: func(appConfig *workerconfig.RuntimeConfig) string {
 			return appConfig.Logging.Level
 		},
-		StartupMessage: "Hololive Alarm Worker starting...",
-		BuildTimeout:   constants.AppTimeout.Build,
-		BuildRuntime: func(
-			ctx context.Context,
-			appConfig *workerconfig.RuntimeConfig,
-			logger *slog.Logger,
-		) (*workerruntime.AlarmWorkerRuntime, error) {
-			return workerapp.BuildAlarmWorkerRuntime(ctx, appConfig, logger)
-		},
+		StartupMessage:    "Hololive Alarm Worker starting...",
+		BuildTimeout:      constants.AppTimeout.Build,
+		BuildRuntime:      workerapp.BuildAlarmWorkerRuntime,
 		BuildErrorMessage: "Failed to assemble alarm worker runtime",
 	}.Run())
 }

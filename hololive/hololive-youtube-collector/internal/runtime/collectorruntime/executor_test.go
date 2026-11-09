@@ -108,7 +108,7 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
-	_, runErr := executor.runAcquired(t.Context(), registration, spec, counted)
+	runErr := executor.runAcquired(t.Context(), registration, spec, counted)
 
 	if failure, ok := errors.AsType[*FatalRuntimeError](runErr); !ok || failure.Phase != "result_validation" {
 		t.Fatalf("runAcquired error = %v, want result_validation FatalRuntimeError", runErr)
@@ -169,7 +169,7 @@ func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 
-	if _, runErr := executor.runAcquired(t.Context(), registration, spec, counted); !errors.Is(runErr, collecterr.ErrInvalidFailureTuple) {
+	if runErr := executor.runAcquired(t.Context(), registration, spec, counted); !errors.Is(runErr, collecterr.ErrInvalidFailureTuple) {
 		t.Fatalf("runAcquired error = %v, want invalid failure tuple", runErr)
 	}
 
@@ -319,7 +319,7 @@ func checkRunnerFailure(t *testing.T, test runnerFailureCase) {
 		registration.profile.collectTimeout = time.Millisecond
 	}
 
-	_, runErr := executor.runAcquired(t.Context(), registration, spec, counted)
+	runErr := executor.runAcquired(t.Context(), registration, spec, counted)
 	if runErr == nil || fatalCollectionError(runErr) != test.wantFatal {
 		t.Fatalf("runAcquired error = %v, want failure with fatal=%t", runErr, test.wantFatal)
 	}
