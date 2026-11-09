@@ -65,9 +65,9 @@ changed_go_package_patterns() {
             scripts/ci/go-tooling.sh|scripts/ci/go-test-nonrace.sh|scripts/ci/local-ci.sh|scripts/ci/local-ci-nilaway.sh|scripts/ci/nilaway-inputs.sh|scripts/ci/pre-push-gate.sh)
                 needs_all=true
                 ;;
-            # compose/.env.example은 hololive-shared settings의 repo 계약 테스트 입력이라
+            # .env.example은 hololive-shared settings의 repo 계약 테스트 입력이라
             # Go 파일이 안 바뀌어도 해당 모듈 테스트를 선택해야 한다 (61e1c75f 회귀 재발 방지).
-            docker-compose*.yml|deploy/compose/docker-compose*.yml|.env.example)
+            .env.example)
                 package_patterns+=("./hololive/hololive-shared/...")
                 ;;
             *.go)

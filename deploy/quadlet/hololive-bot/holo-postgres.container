@@ -64,8 +64,8 @@ HealthStartPeriod=10s
 HealthStartupCmd=pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t
 HealthStartupInterval=2s
 HealthStartupTimeout=5s
-# unhealthy면 StopSignal(SIGINT)·StopTimeout으로 정지한 뒤 Restart=always가 다시 띄운다(Docker 시절 deunhealth restart와
-# 같다). kill(SIGKILL)은 checkpoint 없이 끊어 crash recovery를 거치게 한다.
+# unhealthy면 StopSignal(SIGINT)·StopTimeout으로 정지한 뒤 Restart=always가 다시 띄운다.
+# kill(SIGKILL)은 checkpoint 없이 끊어 crash recovery를 거치게 한다.
 HealthOnFailure=stop
 Notify=healthy
 # 추가 계측은 승인된 재시작에서만 켠다. 절차: docs/current/runbooks/postgres-observability.md

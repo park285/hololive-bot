@@ -38,8 +38,8 @@ func (s *IrisMessageSender) SendPreparedMessage(ctx context.Context, roomID, bod
 	}
 
 	switch route {
-	case "richtext", "markdown":
-		return s.sendFormatted(ctx, roomID, body, route, iris.WithClientRequestID(clientRequestID))
+	case "richtext":
+		return s.sendRichText(ctx, roomID, body, iris.WithClientRequestID(clientRequestID))
 	case "text":
 		requestID, err := s.sendText(ctx, roomID, body, iris.WithClientRequestID(clientRequestID))
 		if err != nil {

@@ -26,9 +26,9 @@ func TestPayloadPreservesStoredWireBytes(t *testing.T) {
 		{
 			name: "pinned initial request",
 			payload: Payload{Message: "source", Request: &Request{
-				Body: `{"text":"알림"}`, Route: "markdown", BaseID: "delivery:1",
+				Body: `{"text":"알림"}`, Route: "richtext", BaseID: "delivery:1",
 			}},
-			wire: `{"message":"source","request":{"body":"{\"text\":\"알림\"}","route":"markdown","base_id":"delivery:1","generation":0}}`,
+			wire: `{"message":"source","request":{"body":"{\"text\":\"알림\"}","route":"richtext","base_id":"delivery:1","generation":0}}`,
 		},
 		{
 			name: "exhausted request",

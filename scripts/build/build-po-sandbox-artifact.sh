@@ -35,8 +35,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# docker 형식은 Seoul AP Docker가 쓰는 HEALTHCHECK 메타데이터를 보존하고, docker-archive 저장 때 config를
-# 변환하지 않아 identity(config digest)가 save 전후로 같다.
+# docker 형식은 HEALTHCHECK 메타데이터를 보존하고, docker-archive 저장 때 config를 변환하지 않아
+# identity(config digest)가 save 전후로 같다.
 podman build --platform "linux/$arch" --format docker \
   --tag "$image" \
   --file "$root/hololive/hololive-youtube-collector/Dockerfile.po-sandbox" \

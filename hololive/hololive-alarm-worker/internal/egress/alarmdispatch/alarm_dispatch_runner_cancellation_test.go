@@ -76,10 +76,6 @@ func (c *alarmDispatchCancellationIrisClient) SendMessageAccepted(ctx context.Co
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "cancellation-request"}, nil
 }
 
-func (*alarmDispatchCancellationIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, errors.New("unexpected markdown send")
-}
-
 func (*alarmDispatchCancellationIrisClient) SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, errors.New("unexpected richtext send")
 }

@@ -823,21 +823,16 @@ func cleanupOutbox(t *testing.T, db *pgxpool.Pool) {
 func setupCacheService(t *testing.T) *cache.Service {
 	t.Helper()
 
-	valkeyHost := os.Getenv("TEST_VALKEY_HOST")
-	valkeyPort := 6379
-
-	if valkeyAddr := os.Getenv("TEST_VALKEY_ADDR"); valkeyAddr != "" {
-		host, port, err := net.SplitHostPort(valkeyAddr)
-		require.NoError(t, err)
-
-		valkeyHost = host
-		valkeyPort, err = strconv.Atoi(port)
-		require.NoError(t, err)
+	valkeyAddr := os.Getenv("TEST_VALKEY_ADDR")
+	if valkeyAddr == "" {
+		valkeyAddr = "localhost:6379"
 	}
 
-	if valkeyHost == "" {
-		valkeyHost = "localhost"
-	}
+	valkeyHost, port, err := net.SplitHostPort(valkeyAddr)
+	require.NoError(t, err)
+
+	valkeyPort, err := strconv.Atoi(port)
+	require.NoError(t, err)
 
 	config := cache.Config{
 		Host:              valkeyHost,

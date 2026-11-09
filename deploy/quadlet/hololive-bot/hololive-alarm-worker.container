@@ -128,8 +128,8 @@ HealthStartPeriod=30s
 HealthStartupCmd=["./bin/healthcheck","https://127.0.0.1:30007/health"]
 HealthStartupInterval=3s
 HealthStartupTimeout=7s
-# unhealthy면 SIGTERM·StopTimeout(45초)으로 정지한 뒤 Restart=always가 다시 띄운다(Docker 시절 deunhealth restart와
-# 같다). kill(SIGKILL)은 배치 디스패치·전송을 끊는다.
+# unhealthy면 SIGTERM·StopTimeout(45초)으로 정지한 뒤 Restart=always가 다시 띄운다.
+# kill(SIGKILL)은 배치 디스패치·전송을 끊는다.
 HealthOnFailure=stop
 Notify=healthy
 

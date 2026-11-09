@@ -97,7 +97,7 @@ case "${x_spaces:-0}" in
   *) die "HOLOLIVE_X_SPACES_ENABLED must be 0 or 1" ;;
 esac
 X_SPACES_UNITS=(hololive-api hololive-alarm-worker)
-# Docker 시절 compose.sh가 기동마다 하던 연결 예산 검사다. 호스트 compose.env의 pool 값이 max_connections 여유를
+# 연결 예산 검사다. 호스트 compose.env의 pool 값이 max_connections 여유를
 # 넘으면 unit을 설치하지 않는다. 출력은 key 이름과 합계만 담는다.
 # shellcheck source=scripts/deploy/lib/postgres-capacity.sh
 . "$STAGING/scripts/deploy/lib/postgres-capacity.sh"

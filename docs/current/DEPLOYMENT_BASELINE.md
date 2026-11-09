@@ -13,8 +13,7 @@
 `active.docker-era-20261104`로 옮긴 뒤 했고, 세 app 서비스의 drop-in `Image=`가 실행 중 image와 같습니다.
 배포 트리는 `68c766bb8`(`.source-revision`)입니다.
 
-Docker 시절 `docker-proxy`·`deunhealth`는 없어졌고 unit의 `HealthOnFailure=stop`과 `Restart=always`가 대신합니다.
-host `compose.env`의 `DOCKER_SOCKET_GID`는 Quadlet이 읽지 않습니다. 수용 전 롤백 자료는 Docker image·volume,
+unit의 `HealthOnFailure=stop`과 `Restart=always`가 자동 복구를 맡습니다. 수용 전 롤백 자료는 Docker image·volume,
 `/opt/hololive-bot/compose/current.docker-era`, 위 DB dump입니다. Seoul `b`는 2026-11-06 iris-seoul Podman Quadlet으로 옮겼습니다(`deploy/podman/iris-seoul/README.md`).
 
 ### Prepared 11.0.0 worker/DB cutover — not activated
@@ -108,16 +107,16 @@ timer·service·apply drop-in과 Osaka의 `iris_seoul_standby` physical slot을 
 당시 제거한 `svc:hololive-postgres` serve route는 이번 이전에서도 재생성하지 않았습니다.
 주소를 승계한 새 primary에 consumer들이 직접 재접속하며 TLS `verify-full`을 유지합니다.
 
-`deploy/quadlet/hololive-bot-standby/`(Docker 시절 `docker-compose.standby.yml`을 옮긴 unit)과 failover 구현은 재활성화 참고 자료로만
+`deploy/quadlet/hololive-bot-standby/` unit과 failover 구현은 재활성화 참고 자료로만
 유지합니다. 다시 사용하려면 대상·데이터 비용·fencing·route 영향에 대한 명시적 승인을 새로
 받고, 당시의 현재 primary에서 새 `pg_basebackup`을 생성해 standby를 재시딩한 뒤
 `runbooks/postgres-replication.md`의 전체 검증을 통과해야 합니다. 삭제한 PGDATA나 예전
 timeline을 그대로 재기동하지 않습니다.
 
-호스트마다 달라지는 배포 값은 Compose 기본값이 아니라 각 호스트의
+호스트마다 달라지는 배포 값은 unit 기본값이 아니라 각 호스트의
 `/etc/stack-secrets/hololive-bot/compose.env`가 소유합니다: `HOLOLIVE_*_PORT_BIND_IP`,
 `HOLOLIVE_METRICS_PORT_BIND_IP`(메트릭 리스너를 tailnet에 노출해 중앙 Prometheus가
-스크레이프할 수 있게 하는 값). `DOCKER_SOCKET_GID`는 Docker 시절 `docker-proxy`용이었고 지금은 쓰지 않습니다.
+스크레이프할 수 있게 하는 값).
 
 ## Runtime Services
 
@@ -178,11 +177,11 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 
 | 설정 | 현재 값 | 영속 설정 소유 경로 |
 |---|---|---|
-| 컨테이너 메모리 한도 | 4GiB | 운영 기록은 Docker Compose `holo-postgres.deploy.resources.limits.memory`; 준비된 정의는 `deploy/quadlet/hololive-bot/holo-postgres.container`의 `Memory=4g` |
-| `shared_buffers` | 1GB | Compose 시작 인자; 컨테이너 한도의 25%를 배정하고 프로세스·파일 캐시 여유 유지 |
-| `wal_buffers` | 64MB | Compose 시작 인자; 피크의 WAL 버퍼 포화에 대비 |
-| `effective_cache_size` | 3GB | Compose 시작 인자; 공유 버퍼와 파일 캐시를 고려한 planner 추정치이며 별도 메모리 할당 아님 |
-| `work_mem` / `maintenance_work_mem` | 4MB / 128MB | 기존 Compose 시작 인자 유지; 동시 쿼리·autovacuum의 메모리 배수를 고려 |
+| 컨테이너 메모리 한도 | 4GiB | `deploy/quadlet/hololive-bot/holo-postgres.container`의 `Memory=4g` |
+| `shared_buffers` | 1GB | `holo-postgres.container` 시작 인자; 컨테이너 한도의 25%를 배정하고 프로세스·파일 캐시 여유 유지 |
+| `wal_buffers` | 64MB | `holo-postgres.container` 시작 인자; 피크의 WAL 버퍼 포화에 대비 |
+| `effective_cache_size` | 3GB | `holo-postgres.container` 시작 인자; 공유 버퍼와 파일 캐시를 고려한 planner 추정치이며 별도 메모리 할당 아님 |
+| `work_mem` / `maintenance_work_mem` | 4MB / 128MB | `holo-postgres.container` 시작 인자; 동시 쿼리·autovacuum의 메모리 배수를 고려 |
 | `max_wal_size` | 2GB | 기존 `holo-pg-data`의 `pgdata/postgresql.auto.conf`; `ALTER SYSTEM`과 설정 reload로 적용 |
 | `checkpoint_timeout` / `checkpoint_completion_target` | 15min / 0.9 | 기존 `postgresql.auto.conf` / PostgreSQL 기본값 유지 |
 | `wal_compression` | `lz4` | 기존 `postgresql.auto.conf` 유지 |

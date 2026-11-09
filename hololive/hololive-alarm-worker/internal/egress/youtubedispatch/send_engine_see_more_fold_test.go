@@ -32,10 +32,6 @@ func (c *seeMoreFoldEgressClient) SendMessageAccepted(_ context.Context, _, mess
 	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "see-more-request"}, nil
 }
 
-func (*seeMoreFoldEgressClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, errors.New("markdown lane is not configured")
-}
-
 func (*seeMoreFoldEgressClient) SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, errors.New("richtext lane is not configured")
 }

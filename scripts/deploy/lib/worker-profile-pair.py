@@ -34,7 +34,6 @@ QUADLET_DIR = Path(os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT", "") + "/etc/cont
 DROPIN = "50-worker-profile.conf"
 # 중앙 pair는 그 image가 실제로 돌던 기본 unit 정의도 함께 보존한다. sync-opt-current.sh는 배포 helper보다 먼저
 # 새 revision의 기본 unit을 설치하므로, 롤백이 image만 되돌리면 이전 image가 새 unit 정의(env·HealthCmd·mount)로 뜬다.
-# Docker 시절 compose-rollback-service.sh가 compose 스냅숏으로 이전 구성 전체를 되살린 것과 같은 경계다.
 UNIT_RECORD = "unit.container"
 
 

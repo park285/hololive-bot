@@ -16,7 +16,6 @@ import (
 type IrisClient interface {
 	SendMessageAccepted(ctx context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendRichText(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-	SendMarkdown(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 }
 
 // OpenChat은 Markdown lane을 결정하는 확인된 Kakao 오픈채팅 여부를 제공합니다.
@@ -82,29 +81,21 @@ func (s *IrisMessageSender) sendText(ctx context.Context, roomID, message string
 	return requestID, nil
 }
 
-// sendFormatted는 서식 응답의 202가 성공·queued·requestId를 모두 갖추면 handoff를 기다리지 않고 그 requestId를
-// 돌려준다.
-func (s *IrisMessageSender) sendFormatted(ctx context.Context, roomID, message, route string, opts ...iris.SendOption) (string, error) {
-	send := s.client.SendRichText
-
-	if route == "markdown" {
-		// alarm/notificationdelivery/youtubedispatch 원장이 소유하는 기존 markdown 요청은
-		// 같은 ID의 body·semantic hash를 유지한다. 기존 행이 모두 drain된 뒤에만 제거한다.
-		send = s.client.SendMarkdown
-	}
-
-	accepted, err := send(ctx, roomID, message, opts...)
+// sendRichText는 RichText 응답의 202가 성공·queued·requestId를 모두 갖추면 handoff를 기다리지 않고 그
+// requestId를 돌려준다.
+func (s *IrisMessageSender) sendRichText(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
+	accepted, err := s.client.SendRichText(ctx, roomID, message, opts...)
 	if err != nil {
 		return "", fmt.Errorf("iris send message: %w", err)
 	}
 
 	if accepted == nil {
-		return "", fmt.Errorf("%w: %s admission response is empty", sendoutcome.ErrAdmissionOutcomeUnknown, route)
+		return "", fmt.Errorf("%w: richtext admission response is empty", sendoutcome.ErrAdmissionOutcomeUnknown)
 	}
 
 	requestID, err := acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
 	if err != nil {
-		return "", fmt.Errorf("validate iris %s admission: %w", route, err)
+		return "", fmt.Errorf("validate iris richtext admission: %w", err)
 	}
 
 	return requestID, nil

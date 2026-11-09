@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # quadlet-redeploy-service.sh가 release 디렉터리에 보존한 이전 image·worker profile pair로 중앙
-# hololive-api·hololive-alarm-worker를 되돌린다. Docker 시절 compose-rollback-service.sh와 같은 경계로
-# DB migration·schema·secret mirror는 되돌리지 않는다. 호환성 판정은 docs/current/runbooks/rollback.md를 따른다.
+# hololive-api·hololive-alarm-worker를 되돌린다. DB migration·schema·secret mirror는 되돌리지 않는다. 호환성 판정은 docs/current/runbooks/rollback.md를 따른다.
 #   --check(기본): pair checksum·image identity 대조와 이전 image의 --check-worker-profile(network none)만 한다.
 #   --apply: 이전 pair drop-in을 게시하고 daemon-reload 뒤 unit을 재시작해 실행 중 profile과 NRestarts를 확인한다.
 # 배포 helper는 자동으로 호출하지 않는다. --apply는 호환성과 실제 unit 상태를 검토한 별도 승인 뒤에만 실행한다.

@@ -27,7 +27,7 @@ sudo systemctl daemon-reload
   `youtube-collector.env`에 `POSTGRES_PASSWORD`를 둔다.
 - 배포 루트: `/opt/hololive-bot/collector-b/{current,backups,po-current-b}`. `current/artifacts/worker-profile/`에
   release pair와 활성 포인터가 있고, `po-current-b/`는 실행 중 issuer의 검토 영수증이다.
-- 쓰기 경로: `/var/lib/hololive-collectors/b/{data,logs}`(1000:1000). UserNS 없이 Docker 시절과 같은 uid·gid로 실행한다.
+- 쓰기 경로: `/var/lib/hololive-collectors/b/{data,logs}`(1000:1000). UserNS 없이 호스트 uid·gid로 실행한다.
 - 네트워크: `hololive-collector-b`(10.89.16.0/24). 중앙 PostgreSQL은 tailnet 출처(`100.100.1.5`)로 접속하므로
   컨테이너 대역은 `pg_hba`와 무관하다. metrics는 `100.100.1.5:30096`에 게시한다.
 - issuer는 collector session이 끝나면 generation을 바꾸려고 스스로 종료한다. collector는 issuer를 `Wants=`로만 끌어온다.
@@ -46,7 +46,7 @@ PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_ROLLBACK=true scripts/deploy/po-central-
 
 1. Docker의 `:prod` 두 image를 `docker save | podman load`로 옮겼다. image ID가 같다(collector `dc2f1776…`, issuer `785dc3e7…`).
 2. issuer 영수증 `~/hololive-bot/backups/po-sandbox-current-b.{json,image-id}`를 `po-current-b/`에 설치하고
-   `po_verify_image podman`으로 대조했다.
+   `po_verify_image`로 대조했다.
 3. Docker 컨테이너 둘을 `docker stop`하고(삭제하지 않음) unit을 기동했다. 수집 중단은 약 25초였다.
 4. 실행 중 container 기준으로 `worker-profile-pair.py prepare youtube-collector-b …/releases/podman-cutover-20261106T1148Z/youtube-collector-b/previous`로
    첫 drop-in을 만들고 재시작해 `verify-live`를 확인했다. profile hash는 Docker 시절과 같다.

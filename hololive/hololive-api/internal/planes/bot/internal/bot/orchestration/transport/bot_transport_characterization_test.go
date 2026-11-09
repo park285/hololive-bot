@@ -88,7 +88,6 @@ type stubBotClient struct {
 
 	acceptCalls          int
 	richTextCalls        int
-	markdownCalls        int
 	imageCalls           int
 	multiImageCalls      int
 	statusCalls          int
@@ -194,13 +193,6 @@ func (c *stubBotClient) SendRichText(_ context.Context, room, markdown string, o
 	if c.accepted != nil {
 		return c.accepted, nil
 	}
-
-	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
-}
-
-func (c *stubBotClient) SendMarkdown(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	c.markdownCalls++
-	c.recordSend(room, markdown, opts)
 
 	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
 }

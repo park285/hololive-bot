@@ -37,7 +37,6 @@ type StoredReplyKind string
 const (
 	StoredReplyKindText     StoredReplyKind = "text"
 	StoredReplyKindRichText StoredReplyKind = "richtext"
-	StoredReplyKindMarkdown StoredReplyKind = "markdown"
 	StoredReplyKindImage    StoredReplyKind = "image"
 	StoredReplyKindImages   StoredReplyKind = "images"
 )
@@ -60,7 +59,6 @@ type ReplyOutboxEntry struct {
 type ReplyClient interface {
 	SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-	SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendMultipleImages(context.Context, string, [][]byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 }
@@ -132,11 +130,6 @@ func postStoredReply(ctx context.Context, client ReplyClient, room string, reply
 	senders := map[StoredReplyKind]func() (*iris.ReplyAcceptedResponse, error){
 		StoredReplyKindRichText: func() (*iris.ReplyAcceptedResponse, error) {
 			return client.SendRichText(ctx, room, reply.Message, opts...)
-		},
-		// bot reply outbox가 소유하는 기존 markdown 행은 같은 ID의 body·semantic hash를 보존한다.
-		// 기존 행이 모두 drain된 뒤에만 이 읽기 경로를 제거하며 richtext로 재해석하지 않는다.
-		StoredReplyKindMarkdown: func() (*iris.ReplyAcceptedResponse, error) {
-			return client.SendMarkdown(ctx, room, reply.Message, opts...)
 		},
 		StoredReplyKindImage: func() (*iris.ReplyAcceptedResponse, error) { return client.SendImage(ctx, room, reply.Image, opts...) },
 		StoredReplyKindImages: func() (*iris.ReplyAcceptedResponse, error) {

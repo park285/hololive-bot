@@ -15,7 +15,7 @@ Allowed at root:
 - Go workspace: `go.work` and `go.work.sum`. The root holds no Go module; every module lives under `hololive/`
 - Repository config: `.gitignore`, `.golangci.yml`, `.go-version`, `.python-version`, `.tool-versions`, `.dockerignore`
 - Build entry script: `build-all.sh`
-- Canonical env sample: `.env.example` (region- and host-specific `.env.*.example` live beside their compose files under `deploy/compose/`)
+- Canonical env sample: `.env.example`
 - Reserved local-runtime placeholders: `logs/`, `runtime-config/`, `artifacts/` (see §Local Runtime Data and §Artifacts)
 - Module and content directories: `.github/`, `hololive/`, `deploy/`, `docs/`, `scripts/`
 

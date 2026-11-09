@@ -83,7 +83,7 @@ func (w *WakeupWaiter) waitWithWakeup(ctx context.Context) bool {
 	startedAt := time.Now()
 	result, err := w.waitWakeup(ctx, waitDuration)
 
-	observeAlarmDispatchRunnerIdleWait("pg", "wakeup", time.Since(startedAt))
+	observeAlarmDispatchRunnerIdleWait("wakeup", time.Since(startedAt))
 
 	if err != nil {
 		return w.handleWakeupError(ctx, err)
@@ -137,7 +137,7 @@ func (w *WakeupWaiter) sleepFallback(ctx context.Context, waitMode string) bool 
 	startedAt := time.Now()
 	ok := w.sleep(ctx, waitDuration)
 
-	observeAlarmDispatchRunnerIdleWait("pg", waitMode, time.Since(startedAt))
+	observeAlarmDispatchRunnerIdleWait(waitMode, time.Since(startedAt))
 
 	return ok
 }

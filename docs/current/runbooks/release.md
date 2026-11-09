@@ -51,11 +51,11 @@ persisted 설정 정리도 각 승인·증거를 남깁니다. Valkey noeviction
 활성화하지 않습니다. 이 문서는 새 운영 적용 증거를 주장하지 않습니다.
 
 
-## Compose service 재배포
+## 중앙 service 재배포
 
 빌드 호스트와 중앙 런타임 호스트는 서로 다른 머신입니다. 중앙 런타임 호스트에서는
 어떤 빌드도 돌리지 않습니다 — 이미지는 빌드 호스트에서 만들어 전송하고, 런타임
-호스트는 이미 적재된 이미지로 recreate만 합니다.
+호스트는 이미 적재된 이미지로 재기동만 합니다.
 
 모든 build·deploy·restart는 `hololive-bot-ops`로 라우팅하고 각각 필요한 승인을
 확인합니다. 검증된 clean revision의 전체 image build-only 진입점은

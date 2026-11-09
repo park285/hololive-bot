@@ -16,7 +16,7 @@ import (
 const testFrozenTextRoute = "text"
 
 func TestFrozenRequestPreservesBodyRouteGenerationAndMembership(t *testing.T) {
-	for _, route := range []string{testFrozenTextRoute, "richtext", "markdown"} {
+	for _, route := range []string{testFrozenTextRoute, "richtext"} {
 		t.Run(route, func(t *testing.T) {
 			testFrozenRequestPreservesSnapshot(t, route)
 		})

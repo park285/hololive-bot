@@ -56,15 +56,15 @@ expect_fail_contains() {
 }
 
 expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" "build target hololive-api"
-expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
 expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
-expect_eq "$(compose_service_resolve_build_target youtube-collector-c)" "youtube-collector" "build alias youtube-collector-c"
+expect_eq "$(compose_service_resolve_build_target youtube-po-c)" "youtube-po-c" "build target youtube-po-c"
+expect_fail "build target rejects unknown service" compose_service_resolve_build_target alarm-worker
 
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
-expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
+expect_eq "$(compose_service_resolve_log_target hololive-alarm-worker)" "hololive-alarm-worker" "log target hololive-alarm-worker"
 expect_eq "$(compose_service_resolve_log_target youtube-collector)" "hololive-youtube-collector-c" "log target youtube-collector"
-expect_eq "$(compose_service_resolve_log_target youtube-collector-c)" "hololive-youtube-collector-c" "log alias youtube-collector-c"
+expect_fail "log target rejects unknown service" compose_service_resolve_log_target youtube-collector-c
 
 . "${ROOT_DIR}/scripts/deploy/lib/ap-host.sh"
 

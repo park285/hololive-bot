@@ -203,7 +203,7 @@ restore_service_after_incomplete_fence() {
 }
 trap restore_service_after_incomplete_fence EXIT
 # unit이 inactive·failed여도 같은 이름의 수동 container나 PGDATA volume을 쓰는 다른 container가 돌 수 있다.
-# Docker 시절 fence처럼 container 실행 여부를 직접 확인하고, 조회가 실패하면 격리 성공으로 보지 않는다.
+# container 실행 여부를 직접 확인하고, 조회가 실패하면 격리 성공으로 보지 않는다.
 postgres_containers_stopped() {
   local filter rows name state
   for filter in "name=^${POSTGRES_CONTAINER}\$" "volume=${POSTGRES_DATA_VOLUME}"; do

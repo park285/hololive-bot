@@ -46,7 +46,7 @@ Epoch activation은 irreversible production data write이고 통합 `hololive-ap
 2. `hololive-api`를 중지하고 epoch-aware image revision이 사전 관찰한 revision과 같은지 다시 확인합니다. `hololive-alarm-worker` compatibility writer는 계속 실행합니다.
 3. `source-observation-replay-epoch` one-shot을 한 번 실행합니다. `activated-by`와 `reason`에는 계정/변경 ticket처럼 비밀이 아닌 bounded audit metadata만 넣습니다.
 
-   중앙 Quadlet에는 옛 `compose run --rm --no-deps hololive-api`처럼 앱 unit의 env·network·비밀을 그대로 쓰는 일회성 실행 경로가 없고, 저장소에도 이 one-shot unit이 아직 없습니다. 실행 전에 `hololive-db-migrate.container`와 같은 형식(`[Install]` 없음, `Type=oneshot`, `Entrypoint=./bin/source-observation-replay-epoch`, `hololive-api.container`와 같은 DB 연결 env·비밀 env 파일)의 unit을 `hololive-bot-ops` 절차로 정의·검토하고 승인받습니다. 인자는 다음 두 개입니다.
+   중앙 Quadlet에는 앱 unit의 env·network·비밀을 그대로 쓰는 일회성 실행 경로가 없고, 저장소에도 이 one-shot unit이 아직 없습니다. 실행 전에 `hololive-db-migrate.container`와 같은 형식(`[Install]` 없음, `Type=oneshot`, `Entrypoint=./bin/source-observation-replay-epoch`, `hololive-api.container`와 같은 DB 연결 env·비밀 env 파일)의 unit을 `hololive-bot-ops` 절차로 정의·검토하고 승인받습니다. 인자는 다음 두 개입니다.
 
    ```text
    --activated-by='<operator-handle>' --reason='<approved-change-ticket>'

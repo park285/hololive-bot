@@ -18,7 +18,6 @@ Usage:
   remote-sync-main-logs.sh status <central|osaka|seoul>
   remote-sync-main-logs.sh query <central|osaka|seoul> <service> [--tail 500] [--grep pattern]
   remote-sync-main-logs.sh tail <central|osaka|seoul> <service>
-  remote-sync-main-logs.sh docker-tail <osaka|seoul> <service> [--since 15m] [--tail 200]
 Environment:
   LOG_ROOT=<repo>/logs
   HOL_LOG_CENTRAL_USER_HOST=ubuntu@100.100.1.8
@@ -90,18 +89,6 @@ validate_target_service() {
   echo "ERROR: unknown service for ${target}: ${service}" >&2
   exit 1
 }
-validate_docker_service() {
-  local target="$1"
-  local service="$2"
-  local candidate
-  for candidate in $(target_value "${target}" DOCKER_SERVICES); do
-    if [[ "${candidate}" == "${service}" ]]; then
-      return 0
-    fi
-  done
-  echo "ERROR: unknown docker service for ${target}: ${service}" >&2
-  exit 1
-}
 is_default_target_service() {
   local target="$1"
   local service="$2"
@@ -112,15 +99,6 @@ is_default_target_service() {
     fi
   done
   return 1
-}
-container_for() {
-  local target="$1"
-  local service="$2"
-  case "${target}:${service}" in
-    osaka:youtube-collector-a) printf '%s\n' "hololive-youtube-collector-a" ;;
-    seoul:youtube-collector-b) printf '%s\n' "hololive-youtube-collector-b" ;;
-    *) echo "ERROR: unknown service for ${target}: ${service}" >&2; exit 1 ;;
-  esac
 }
 ssh_base() {
   local target="$1"
@@ -161,9 +139,6 @@ ensure_log_root() {
 }
 normalize_mirror_permissions() {
   local dst="$1"
-  if getent group docker >/dev/null 2>&1; then
-    chgrp -R docker "${dst}" || true
-  fi
   find "${dst}" -type d -exec chmod 2750 {} +
   find "${dst}" -type f -exec chmod 0640 {} +
 }
@@ -324,46 +299,6 @@ tail_service() {
   fi
   exec tail -F "${file}"
 }
-docker_tail_remote() {
-  local target="$1"
-  local service="$2"
-  shift || true
-  shift || true
-  local container
-  local since="15m"
-  local tail_lines="200"
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --since)
-        since="${2:-15m}"
-        shift 2
-        ;;
-      --tail|--limit)
-        tail_lines="${2:-200}"
-        shift 2
-        ;;
-      *)
-        echo "ERROR: unknown arg: $1" >&2
-        exit 1
-        ;;
-    esac
-  done
-  if [[ ! "${tail_lines}" =~ ^[0-9]+$ ]]; then
-    echo "ERROR: --tail must be a positive integer" >&2
-    exit 1
-  fi
-  if [[ ! "${since}" =~ ^[A-Za-z0-9_.:+-]+$ ]]; then
-    echo "ERROR: --since contains unsupported characters" >&2
-    exit 1
-  fi
-  local ssh_cmd
-  local user_host
-  container="$(container_for "${target}" "${service}")"
-  ssh_cmd="$(ssh_base "${target}")"
-  user_host="$(target_value "${target}" USER_HOST)"
-  # shellcheck disable=SC2029
-  ${ssh_cmd} "${user_host}" "docker logs --timestamps --since '${since}' --tail '${tail_lines}' '${container}' 2>&1"
-}
 cmd="${1:-help}"
 case "${cmd}" in
   once)
@@ -398,15 +333,6 @@ case "${cmd}" in
     [[ -n "${service}" ]] || { echo "ERROR: service is required" >&2; exit 1; }
     validate_target_service "${target}" "${service}"
     tail_service "${target}" "${service}"
-    ;;
-  docker-tail)
-    target="${2:-}"
-    service="${3:-}"
-    [[ -n "${target}" ]] || { echo "ERROR: target is required" >&2; exit 1; }
-    [[ -n "${service}" ]] || { echo "ERROR: service is required" >&2; exit 1; }
-    validate_docker_service "${target}" "${service}"
-    shift 3 || true
-    docker_tail_remote "${target}" "${service}" "$@"
     ;;
   help|-h|--help)
     usage

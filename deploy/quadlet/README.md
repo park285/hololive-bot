@@ -81,8 +81,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - 상시 unit은 `WantedBy=multi-user.target`이며 `Notify=healthy`라 start job은 healthy가 된 뒤 끝납니다.
 - `HealthOnFailure=stop` + `Restart=always`가 자동 복구입니다. unhealthy container는 StopSignal(PostgreSQL `SIGINT`,
   ingress `SIGQUIT`, 나머지 `SIGTERM`)과 `StopTimeout`(api·worker 45초, PostgreSQL 120초)을 지켜 멈춘 뒤 systemd가 다시
-  띄웁니다. Docker 시절 deunhealth의 restart와 같은 동작이며, `kill`(SIGKILL)은 배치 전송과 checkpoint를 끊으므로 쓰지
-  않습니다. collector c와 PO issuer는 예외(unhealthy만으로 멈추지 않음)입니다.
+  띄웁니다. `kill`(SIGKILL)은 배치 전송과 checkpoint를 끊으므로 쓰지 않습니다. collector c와 PO issuer는 예외(unhealthy만으로 멈추지 않음)입니다.
 - `holo-postgres`는 `TimeoutStopSec=150`입니다. `ExecStop`(`podman rm`)이 `StopTimeout=120`을 다 쓰기 전에 systemd
   기본 90초가 끊지 않게 합니다.
 - `Tmpfs=`에는 `noexec,nosuid,nodev`를 적습니다. Podman은 옵션을 준 `--tmpfs`에 Docker처럼 이 옵션을 붙이지 않습니다.
@@ -155,7 +154,7 @@ helper는 다음 순서로 진행하며 어느 단계도 재시도하지 않습�
    전후 모두 fence 표식이 없어야 합니다. 실패하면 활성화하지 않고 `[OUTCOME] not_activated`로 끝납니다.
 5. candidate drop-in을 활성화하고 `daemon-reload`, `NRestarts` 기준 기록, `systemctl restart`(`Notify=healthy`가
    health gate) 뒤 `verify-live`와 `NRestarts=0`(명시적 restart가 0으로 되돌림)을 확인합니다.
-6. 활성화 뒤 실패하면 Docker 시절 `compose-redeploy-service.sh`처럼 자동으로 되돌리지 않고 `[OUTCOME] failed_after_activation`으로
+6. 활성화 뒤 실패하면 자동으로 되돌리지 않고 `[OUTCOME] failed_after_activation`으로
    끝납니다. candidate pair와 release 디렉터리는 그대로 둡니다. 이번 배포가 migration을 적용했을 수 있으므로, 이전 pair 복원은
    스키마·admission 호환성 승인 뒤 `scripts/deploy/quadlet-rollback-service.sh <release> --check`와 `--apply`로 합니다.
    migration과 schema는 어느 경우에도 되돌리지 않습니다.
@@ -192,16 +191,9 @@ sudo "$helper" --resume '<api-release-dir>' '<alarm-release-dir>'
 않습니다. 세 app unit이 healthy가 된 직후 실행 중 container 기준으로 `prepare`해 첫 drop-in을 만듭니다. 실행 중인
 image를 그대로 고정하므로 재시작하지 않습니다.
 
-Docker에서 넘어온 호스트는 `artifacts/worker-profile/active/<service>.pair`가 Docker 시절 pair를 가리킵니다.
-`prepare`는 label 없는 container의 이전 pair를 이 포인터에서 찾으므로, Docker image identity와 달라
-`profile pair image identity mismatch`로 멈춥니다(2026-11-04 hololive-seoul). 첫 고정 전에 이 디렉터리를
-`active.docker-era-<날짜>`로 옮깁니다. release 디렉터리와 Docker 롤백 자료는 그대로 남습니다.
-
 ```bash
 root=/opt/hololive-bot/compose/current
 pair="$root/scripts/deploy/lib/worker-profile-pair.py"
-[[ -d $root/artifacts/worker-profile/active ]] && \
-  sudo mv "$root/artifacts/worker-profile/active" "$root/artifacts/worker-profile/active.docker-era-$(date -u +%Y%m%d)"
 release="$root/artifacts/worker-profile/releases/cutover-$(date -u +%Y%m%dT%H%M%SZ)"
 sudo python3 "$pair" prepare hololive-api "$release/hololive-api/previous" hololive-api "$root"
 sudo python3 "$pair" prepare hololive-alarm-worker "$release/hololive-alarm-worker/previous" hololive-alarm-worker "$root"
@@ -245,7 +237,7 @@ binfmt가 필요)입니다.
 | PO issuer(`hololive-youtube-po-c`) | unit 기본 `localhost/hololive-youtube-po-sandbox:prod` tag |
 
 - infra image(`POSTGRES_IMAGE`, `VALKEY_IMAGE`, `NGINX_IMAGE`)는 compose.env에 `sha256:` + `podman image inspect --format '{{.Id}}'`로
-  둡니다. Docker 시절 `name:tag@sha256:<digest>` 값은 Podman store에서 찾지 못해 `Pull=never` unit이 5초 간격 재시작만
+  둡니다. `name:tag@sha256:<digest>` 형식은 Podman store에서 찾지 못해 `Pull=never` unit이 5초 간격 재시작만
   반복합니다. 값은 stack-secrets master(`hosts/hololive-seoul/hololive-bot/compose.env`)에 반영해 `sync-host.sh` 미러가
   되돌리지 않게 합니다. 교체는 load → build host identity 대조 → compose.env 갱신 → 승인된 restart 순서입니다.
 - PO issuer는 `:prod` tag를 따르며 `:prod`는 `scripts/deploy/lib/po-central-remote.sh`만 옮깁니다(`:candidate`로 적재해

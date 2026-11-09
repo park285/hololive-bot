@@ -151,8 +151,6 @@ PG dispatch outbox(`alarm_dispatch_events`·`alarm_dispatch_deliveries`)가 유�
   재발급 세대가 남아 있을 때만 다시 발급합니다. 미수락(Iris 429·502·503) 실패와, 저장된 최종 요청과 send-unit
   `client_request_id`로 같은 요청을 다시 보낼 수 있는 transport 모호 실패만 같은 요청으로 재시도합니다. 그 밖은 격리합니다.
   `MarkDispatched` 실패는 외부 발송 뒤이므로 재시도하지 않습니다.
-- metric label `alarm_dispatch_publish_*_total{mode="pg_first"}`과 `alarm_dispatch_runner_*{consumer_mode="pg"}`는 대시보드
-  호환을 위해 남긴 고정값이며 mode 선택을 뜻하지 않습니다.
 
 상태 점검(읽기 전용):
 
