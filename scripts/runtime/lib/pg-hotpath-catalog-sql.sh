@@ -400,13 +400,18 @@ youtube_outbox_claim_sql() {
 BEGIN;
 SET LOCAL statement_timeout = '5s';
 EXPLAIN (ANALYZE, BUFFERS)
-WITH claim AS (
+WITH clock AS MATERIALIZED (
+    SELECT sampled.at,
+           sampled.at - INTERVAL '5 minutes' AS lock_cutoff,
+           sampled.at - INTERVAL '2 hours' AS fresh_cutoff
+    FROM (SELECT clock_timestamp() AS at) AS sampled
+), claim AS (
     SELECT outbox.id
     FROM youtube_notification_outbox AS outbox
     WHERE outbox.status = 'PENDING'
-      AND (outbox.locked_at IS NULL OR outbox.locked_at < NOW() - INTERVAL '5 minutes')
-      AND outbox.next_attempt_at <= NOW()
-      AND outbox.created_at >= NOW() - INTERVAL '2 hours'
+      AND (outbox.locked_at IS NULL OR outbox.locked_at < (SELECT lock_cutoff FROM clock))
+      AND outbox.next_attempt_at <= (SELECT at FROM clock)
+      AND outbox.created_at >= (SELECT fresh_cutoff FROM clock)
       AND NOT EXISTS (
           SELECT 1
           FROM youtube_notification_delivery AS delivery
@@ -417,7 +422,7 @@ WITH claim AS (
     FOR UPDATE OF outbox SKIP LOCKED
 ), updated AS (
     UPDATE youtube_notification_outbox AS outbox
-    SET locked_at = NOW()
+    SET locked_at = (SELECT at FROM clock)
     FROM claim
     WHERE outbox.id = claim.id
       AND outbox.status = 'PENDING'

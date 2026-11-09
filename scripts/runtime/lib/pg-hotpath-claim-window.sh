@@ -33,20 +33,23 @@ start_claims AS MATERIALIZED (
     CROSS JOIN pg_stat_statements statements
     CROSS JOIN LATERAL (
         SELECT
-            statements.query ~* 'WITH[[:space:]]+due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+clock[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*unit_candidates[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*picked[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+alarm_dispatch_deliveries[[:space:]]+d[[:space:]]+SET'
-            AND statements.query ~* 'lock_expires_at[[:space:]]*=[[:space:]]*NOW[[:space:]]*[(][)][[:space:]]*[+]'
+            AND statements.query ~* 'lock_expires_at[[:space:]]*=[[:space:]]*clock[.]now[[:space:]]*[+]'
             AND statements.query ~* 'RETURNING[[:space:]]+d[.]id[[:space:]]*,[[:space:]]*d[.]event_id'
             AND statements.query ~* 'd[.]claim_keys'
             AND statements.query ~* 'd[.]delivery_context'
             AND statements.query ~* 'FROM[[:space:]]+updated'
             AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+u[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
-            statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+clock[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
             AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id'
@@ -99,20 +102,23 @@ finish_claims AS MATERIALIZED (
     CROSS JOIN pg_stat_statements statements
     CROSS JOIN LATERAL (
         SELECT
-            statements.query ~* 'WITH[[:space:]]+due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+clock[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*unit_candidates[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*picked[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+alarm_dispatch_deliveries[[:space:]]+d[[:space:]]+SET'
-            AND statements.query ~* 'lock_expires_at[[:space:]]*=[[:space:]]*NOW[[:space:]]*[(][)][[:space:]]*[+]'
+            AND statements.query ~* 'lock_expires_at[[:space:]]*=[[:space:]]*clock[.]now[[:space:]]*[+]'
             AND statements.query ~* 'RETURNING[[:space:]]+d[.]id[[:space:]]*,[[:space:]]*d[.]event_id'
             AND statements.query ~* 'd[.]claim_keys'
             AND statements.query ~* 'd[.]delivery_context'
             AND statements.query ~* 'FROM[[:space:]]+updated'
             AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+u[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
-            statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+clock[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
             AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id'
@@ -309,14 +315,16 @@ claim_query_matches_target() {
   fi
 
   if query_matches_all_patterns "${normalized_query}" \
-        'with[[:space:]]+due_window[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
+        'with[[:space:]]+clock[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*unit_candidates[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*picked[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+as[[:space:]]*[(]' \
         'update[[:space:]]+alarm_dispatch_deliveries[[:space:]]+d[[:space:]]+set' \
-        'lock_expires_at[[:space:]]*=[[:space:]]*now[[:space:]]*[(][)][[:space:]]*[+]' \
+        'lock_expires_at[[:space:]]*=[[:space:]]*clock[.]now[[:space:]]*[+]' \
         'returning[[:space:]]+d[.]id[[:space:]]*,[[:space:]]*d[.]event_id' \
         'd[.]claim_keys' \
         'd[.]delivery_context' \
@@ -325,7 +333,8 @@ claim_query_matches_target() {
     is_alarm=true
   fi
   if query_matches_all_patterns "${normalized_query}" \
-        'with[[:space:]]+claim[[:space:]]+as[[:space:]]*[(]' \
+        'with[[:space:]]+clock[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*claim[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+as[[:space:]]*[(]' \
         'update[[:space:]]+youtube_notification_outbox[[:space:]]+as[[:space:]]+outbox[[:space:]]+set[[:space:]]+locked_at' \
         'from[[:space:]]+claim[[:space:]]+where[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id' \
