@@ -168,7 +168,7 @@ restore() {
   echo "$host_label previous collector/issuer restored from $backup"
 }
 require_collector_lease_migration() {
-  local migration=222_drop_youtube_job_lease_legacy_failure_trigger.sql expected observed collector_env
+  local migration=001_schema_epoch3_baseline.sql expected observed collector_env
   local migrator_user postgres_image owner leftover status=0
   expected="$(sha256sum "$staging/hololive/hololive-api/scripts/migrations/$migration")"
   expected="${expected%% *}"
@@ -241,7 +241,7 @@ systemctl is-active --quiet "$collector_unit" || {
   echo "$host_label collector must be running for a paired cutover; $collector_unit is not active" >&2
   exit 1
 }
-# W4 collector는 옛 lease failure 진단 복원 코드를 제거했으므로 222 적용 증명 전에는 교체하지 않는다.
+# 현행 lease 스키마를 포함한 epoch-3 baseline 적용 증명 전에는 수집기를 교체하지 않는다.
 # 원장은 중앙 주 서버의 관리 socket으로만 읽을 수 있어 c에서 증명한다. b는 같은 release의 c 배포 뒤에 배포한다.
 if [[ "$slot" == c ]]; then
   require_collector_lease_migration

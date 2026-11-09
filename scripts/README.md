@@ -14,11 +14,10 @@ GitHub Release 게시·본문 수정: `bash scripts/publish-release.sh <tag> <pr
 `pre-push-gate.sh`가 배포·운영 스크립트 테스트와 `govulncheck`를 추가로 실행합니다. `RUN_INTEGRATION_TESTS=true`이면 일회용 PostgreSQL·Valkey를 생성해 integration 테스트를 실행하고 회수합니다. `TEST_DATABASE_URL`을 지정한 경우 해당 DB의 소유권 검증을 거쳐 dispatch outbox integration 테스트를 실행합니다.
 
 ## 2. architecture/
-PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니다. 공개 GitHub Release 본문은 [릴리즈 runbook](../docs/current/runbooks/release.md)의 GitHub 자동 생성 절차를 따릅니다. `render-release-notes.sh`는 별도 운영 기록용입니다.
+PR/릴리스 전 제품 결함 게이트와 운영 검증 기록 렌더링 도구입니다. 공개 GitHub Release 본문은 [릴리즈 runbook](../docs/current/runbooks/release.md)의 GitHub 자동 생성 절차를 따릅니다. `render-release-notes.sh`는 별도 운영 기록용입니다.
 
 - 표준 진입점: `./scripts/architecture/ci-boundary-gate.sh`
-- 세부 체크:
-  - `check-shared-go-boundary.sh`
+- 검사별 유지 근거: [CI gates](../docs/current/architecture/ci-gates.md)
 
 ## 3. deploy/
 중앙 Quadlet 설치와 AP 배포 스크립트입니다.
@@ -55,6 +54,10 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `INCLUDE_UNTRACKED=true ./scripts/review/export-full-bundle.sh [output_dir]`
 - `./scripts/review/verify-full-bundle.sh <bundle.tar.gz>`
 
+full exporter는 현재도 `mode: full`과 합산 `content_sha256` manifest를 만듭니다.
+verifier의 `legacy` 명칭 분기는 이 현행 생산 형식이며 제거하지 않습니다.
+source exporter의 `hololive-review-bundle-v1`도 같은 verifier로 검증합니다.
+
 ## 6. runtime/
 운영 중 런타임 상태 조회와 안전한 보정 작업용 스크립트입니다.
 
@@ -83,7 +86,7 @@ route hook을 모두 준비한 뒤 apply drop-in을 설치해야 합니다. 운�
 `docs/current/runbooks/postgres-replication.md`가 소유합니다.
 
 ## 9. refactor/
-리팩터링 보조 가드 스크립트입니다.
+인증 값·응답 원문의 로그 유출을 검사합니다.
 
 - `./scripts/refactor/grep-sensitive-logs.sh`
 

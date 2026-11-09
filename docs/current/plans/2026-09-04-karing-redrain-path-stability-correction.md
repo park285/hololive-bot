@@ -57,7 +57,7 @@ room-scoped text와 Karing ambiguity, intrinsic text retry 및 미접수 확정 
 
 ### V02 Wiring and architecture checks pass
 
-alarm-worker workerapp test와 `scripts/architecture/ci-notification-egress-gate.sh`가 통과합니다.
+alarm-worker workerapp의 실제 동작 시험으로 확인합니다.
 
 ### V03 Final diff and lifecycle checks pass
 

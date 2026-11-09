@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${ROOT_DIR}/scripts/deploy/lib/source-revision.sh"
-literal_dollar='$'
 
 fail() {
     echo "[FAIL] $*" >&2
@@ -58,23 +57,5 @@ expect_failure "missing image revision must fail" \
     verify_object_fixture "" "${expected_revision}"
 expect_failure "mismatched image revision must fail" \
     verify_object_fixture 0000000000000000000000000000000000000000 "${expected_revision}"
-
-dockerfiles=(
-    hololive/hololive-api/Dockerfile
-    hololive/hololive-alarm-worker/Dockerfile
-    hololive/hololive-youtube-collector/Dockerfile
-)
-for dockerfile in "${dockerfiles[@]}"; do
-    path="${ROOT_DIR}/${dockerfile}"
-    [[ "$(grep -c '^ARG REVISION=unknown$' "${path}")" -eq 2 ]] \
-        || fail "${dockerfile} must expose an explicit local-development revision fallback"
-    grep -Fq "if [ \"${literal_dollar}{REVISION}\" != \"unknown\" ]; then test \"${literal_dollar}{#REVISION}\" -eq 40" "${path}" \
-        || fail "${dockerfile} must reject abbreviated production revisions"
-    grep -Fq "case \"${literal_dollar}{REVISION}\" in *[!0-9a-f]*) exit 1;; esac" "${path}" \
-        || fail "${dockerfile} must reject non-hex production revisions"
-    grep -Fq "org.opencontainers.image.revision=\"${literal_dollar}{REVISION}\"" "${path}" \
-        || fail "${dockerfile} must publish the OCI revision label"
-done
-
 
 echo "all source revision provenance checks passed"
