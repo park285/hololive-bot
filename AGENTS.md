@@ -7,7 +7,7 @@
 - GitHub Release create/edit: follow the [release runbook](docs/current/runbooks/release.md) through `scripts/publish-release.sh` only (preview first, GitHub-generated notes only).
 - PR/main: secret-free staged fast-gate; security.yml: non-PR main/schedule/manual. Keep heavy checks local; local-ci.sh excludes dependency hygiene.
 - Language work must apply the corresponding installed modern-language skill (Go: `modern-go-guidelines:use-modern-go`; JavaScript/TypeScript: `modern-javascript-typescript`) alongside task skills.
-- Korean public contracts/side effects and reason comments; masked slog, fmt.Errorf("action: context: %w", err), context.Context first.
+- Comment in Korean only what names and signatures cannot show (contracts, side effects, reasons, invariants); never restate code. Go doc comments are short prose starting with the name, without @param-style tags. Masked slog, fmt.Errorf("action: context: %w", err), context.Context first.
 - Fix causes before suppressing findings; existing debt needs scoped fix or command/finding report. Bypasses require named false positive or approved emergency, smallest scope/reason/linter, nolintlint and retained regression check. Never hide directories/classes/test files; existing generated/third-party exclusions may remain.
 - Stage 3/prerequisites and applicable NilAway/race stay blocking. Gate changes read stage configuration; never weaken product checks.
 - Migrations: [conventions](hololive/hololive-api/scripts/migrations/CONVENTIONS.md).
