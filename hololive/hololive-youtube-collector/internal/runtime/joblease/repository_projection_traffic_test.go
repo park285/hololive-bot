@@ -388,6 +388,10 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 type candidate260Rows struct{ pgx.Rows }
 
 func (r candidate260Rows) Scan(dest ...any) error {
+	if len(dest) != 5 {
+		return fmt.Errorf("scan schema 260 candidate: expected five destinations, got %d", len(dest))
+	}
+
 	if err := r.Rows.Scan(dest[:4]...); err != nil {
 		return fmt.Errorf("scan schema 260 candidate: %w", err)
 	}
