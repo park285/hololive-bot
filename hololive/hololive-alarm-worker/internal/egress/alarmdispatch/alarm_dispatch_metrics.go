@@ -140,6 +140,11 @@ func initAlarmDispatchRetentionMetrics() {
 
 func observeAlarmDispatchRunnerEmptyPoll() {
 	initAlarmDispatchRunnerMetrics()
+
+	if alarmDispatchRunnerEmptyPollsTotal == nil {
+		return
+	}
+
 	alarmDispatchRunnerEmptyPollsTotal.Inc()
 }
 
