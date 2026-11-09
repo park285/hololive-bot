@@ -221,7 +221,7 @@ func TestCollectDeadlinePreservesClassifiedRunnerFailure(t *testing.T) {
 
 			proof := lease.Proof()
 
-			_, err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
+			err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
 
 			if !errors.Is(err, cause) || !errors.Is(err, context.DeadlineExceeded) || !fatalCollectionError(err) {
 				t.Fatalf("collect = %v, want classified cause and deadline", err)

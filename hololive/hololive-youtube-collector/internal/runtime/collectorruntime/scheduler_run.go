@@ -93,9 +93,7 @@ func (e *collectionExecutor) runAcquired(ctx context.Context, registration Regis
 	started := time.Now()
 	attemptID := e.workerTracker.BeginAttempt(started)
 	runResult := e.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
-		_, err := e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
-
-		return err
+		return e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
 	})
 	err := runResult.Err
 
@@ -285,26 +283,26 @@ func (e *collectionExecutor) collectAndPublish(
 	spec *joblease.JobSpec,
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
-) (*collection.CollectResult, error) {
+) error {
 	input, result, fatal, err := e.collectWithAdmission(ctx, registration, spec, proof)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	validationErr := ValidateCollectResult(&input, registration, &result, fatal)
 	if validationErr != nil {
-		return nil, &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
+		return &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
 	}
 
 	if fatal != nil {
-		return nil, fatal
+		return fatal
 	}
 
 	if err := e.commitCollectResult(ctx, spec, lease, proof, &result); err != nil {
-		return nil, fmt.Errorf("commit collect result: %w", err)
+		return fmt.Errorf("commit collect result: %w", err)
 	}
 
-	return &result, nil
+	return nil
 }
 
 // collectWithAdmission은 provider gate를 얻은 뒤 실행 입력 적재와 수집만 gate 안에서 수행합니다.
