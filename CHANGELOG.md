@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **zlib 보안 갱신(CVE-2026-4738):** Alpine 3.24가 `zlib=1.3.2-r1`을 내리고 보안 업그레이드 `1.4-r0`을 배포해 PostgreSQL·Valkey·Nginx 이미지 빌드가 `apk add` 단계에서 실패했습니다. 세 이미지의 고정을 `zlib=1.4-r0`으로 올리고 소유 이미지 태그를 `localhost/iris-stack-nginx:1.31.8-zlib1.4-r0`, `localhost/iris-stack-valkey:9.1.3-zlib1.4-r0`으로 바꿨습니다(Quadlet 기본값·최종 이미지 스캔 manifest 포함). 운영 unit은 host `compose.env`의 sha256 identity를 쓰므로 실행 중인 이미지는 승인된 재빌드·적재·identity 갱신·재시작 전까지 그대로입니다.
 - **Docker·Compose 시절 호환 경로 퇴역:** 중앙·iris-seoul·kapu가 모두 Podman Quadlet으로 옮겨 Docker 분기를 지웠습니다. `ap-logs.sh`는 native 파일 로그만, `remote-sync-main-logs.sh`는 `docker-tail`·docker 그룹 처리 없이 동작합니다. PO 이미지 검증(`po_verify_image`)은 runtime 인자 없이 Podman identity 한 줄만 대조하며, Docker buildx 시절 두 줄 영수증은 받지 않습니다(운영 영수증은 모두 한 줄). 쓰이지 않는 `compose-paths.sh`, `.github/actions/docker-compose`, 짝 잃은 seccomp 라이선스와 Compose 전용 parity·CI 경로 패턴을 지웠습니다. collector c·b의 Compose 시절 network alias `youtube-collector`를 지웠습니다(stack-secrets 소비 없음, 다음 collector 재기동부터 반영).
 - **빌드·로그 대상 이름 정본화:** `build-all.sh`·`logs.sh`는 정본 이름(`hololive-api`, `hololive-alarm-worker`, `youtube-collector`, `youtube-po-c`)만 받습니다. `alarm-worker`, `youtube-collector-c`, 옛 이름 `po-sandbox`는 거절합니다.
 - **markdown 발송 경로 퇴역:** alarm-worker의 저장 요청 `markdown` route와 bot reply outbox의 `markdown` kind 읽기 경로를 지웠습니다. 운영 원장에 `markdown` 행이 0건이고 생산자가 없음을 확인했습니다. 남은 행이 있다면 지원하지 않는 route로 거절합니다. DB CHECK 제약은 바꾸지 않았습니다.
