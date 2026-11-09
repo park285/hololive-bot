@@ -181,13 +181,13 @@ HOT 비율이 낮다는 사실만으로 장애라고 판단하면 안 됩니다.
 
 ### 4.3 `youtube_collection_job_leases`: 작은 테이블이어도 write churn이 큼
 
-관련 SQL:
+관련 SQL(`hololive/hololive-youtube-collector/internal/runtime/joblease/queries/`):
 
-- `repository_lease_acquire_0001_schema_epoch3_baseline.sql`
-- `repository_lease_renew_0001_schema_epoch3_baseline.sql`
-- `repository_lease_release_0001_schema_epoch3_baseline.sql`
-- `repository_lease_complete_0001_schema_epoch3_baseline.sql`
-- `repository_lease_defer_0001_schema_epoch3_baseline.sql`
+- `repository_lease_acquire.sql.tpl`
+- `renew_tx.sql`
+- `release.sql`
+- `complete_current_lease.sql`
+- `defer.sql`
 
 같은 job row가 반복해서 다음 상태를 오갑니다.
 
@@ -253,9 +253,8 @@ DROP INDEX CONCURRENTLY IF EXISTS idx_youtube_collection_job_due;
 
 이 변경은 lease renew의 index write 하나를 제거할 수 있어 실제 write amplification 감소 효과가 큽니다.
 
-2026-10-05 판정에서 남은 사용 9회가 수동 진단과 migrator 사전 점검뿐임을 확인했고,
-`001_schema_epoch3_baseline.sql`이 이 인덱스를 제거합니다(`docs/current/plans/2026-10-05-db-hotpath-optimization.md` B2).
-운영 적용과 적용 후 비교는 별도 승인 절차를 따릅니다.
+2026-10-05 판정에서 남은 사용 9회가 수동 진단과 migrator 사전 점검뿐임을 확인해 이 인덱스를 제거했고
+(`docs/current/plans/2026-10-05-db-hotpath-optimization.md` B2), `001_schema_epoch3_baseline.sql`에는 이 인덱스가 없습니다.
 
 ### 4.4 `source_collection_checkpoints`: HOT 가능성을 측정할 대상
 
@@ -282,8 +281,8 @@ UPSERT 시 위 key는 유지하고 다음 값들을 갱신합니다.
 
 2026-10-05 운영 확인 결과, 보존 삭제용 `idx_source_collection_checkpoints_updated_identity`(migration 186)가
 `updated_at`을 key로 가져 HOT 비율이 2.2%였고, 10분 측정에서는 UPDATE 1,616건 중 HOT이 0건이었습니다.
-보존 삭제는 현행 분포에서 이미 seq scan을 고르므로 `001_schema_epoch3_baseline.sql`이 이 인덱스를
-제거합니다(같은 계획 B4).
+보존 삭제는 현행 분포에서 이미 seq scan을 고르므로 이 인덱스를 제거했고(같은 계획 B4),
+`001_schema_epoch3_baseline.sql`에는 이 인덱스가 없습니다.
 
 판정 순서:
 
