@@ -1,9 +1,6 @@
 package migrationrunner
 
 import (
-	"fmt"
-	"io/fs"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -11,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
-	"github.com/kapu/hololive-api/scripts/migrations"
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
@@ -63,35 +59,6 @@ func TestBlockingIndexDropSourcePolicy(t *testing.T) {
 				t.Fatalf("validateMigrationSource() error = %v", err)
 			}
 		})
-	}
-}
-
-func TestCommittedMigrationsAfter114AvoidBlockingIndexDrops(t *testing.T) {
-	entries, err := dbmigrate.Manifest(migrations.FS)
-	if err != nil {
-		t.Fatalf("read migration manifest: %v", err)
-	}
-
-	exec := &guardedExecer{}
-
-	for _, name := range entries {
-		number, numberErr := migrationNumber(name)
-		if numberErr != nil {
-			t.Fatalf("parse migration number %q: %v", name, numberErr)
-		}
-
-		if number <= 114 {
-			continue
-		}
-
-		content, readErr := fs.ReadFile(migrations.FS, name)
-		if readErr != nil {
-			t.Fatalf("read migration %s: %v", name, readErr)
-		}
-
-		if validateErr := exec.validateMigrationSource(name, string(content)); validateErr != nil {
-			t.Fatalf("migration %s violates blocking index-drop policy: %v", name, validateErr)
-		}
 	}
 }
 
@@ -161,24 +128,6 @@ func TestExistingDatabaseAllowsConcurrentIndexDrop(t *testing.T) {
 
 	assertBlockingIndexPresence(t, pool, false)
 	assertMigrationRecorded(t, pool, "drop.sql", true)
-}
-
-func migrationNumber(name string) (int, error) {
-	end := 0
-	for end < len(name) && name[end] >= '0' && name[end] <= '9' {
-		end++
-	}
-
-	if end == 0 {
-		return 0, strconv.ErrSyntax
-	}
-
-	out, err := strconv.Atoi(name[:end])
-	if err != nil {
-		return out, fmt.Errorf("atoi: %w", err)
-	}
-
-	return out, nil
 }
 
 func setupBlockingIndexDropProbe(t *testing.T, pool *pgxpool.Pool) {

@@ -7,18 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const youtubeSendRequestHandoffMigration = "336_youtube_send_request_handoff_check.sql"
-
 // youtube 고정 요청 handoff shape CHECK는 확인 대기·확인 완료 요청과 handoff가 없는 요청을 받고, 빈 requestId,
-// requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, 예정 시각도 확인 시각도 없는 requestId는 거부한다. 재적용은
 // 제약을 바꾸지 않는다.
 func TestYouTubeSendRequestHandoffShape(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	pool := NewPool(t)
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
 
 	cases := []struct {
 		name, set string
@@ -34,10 +29,7 @@ func TestYouTubeSendRequestHandoffShape(t *testing.T) {
 		{name: "next check after checked", set: `handoff_request_id = 'iris-1', handoff_next_check_at = now(), handoff_checked_at = now()`},
 	}
 
-	for index, attempt := range []string{"initial", "reapplication"} {
-		if index > 0 {
-			require.NoError(t, applyMigrationFile(ctx, pool, dir, youtubeSendRequestHandoffMigration))
-		}
+	for _, attempt := range []string{"baseline"} {
 
 		for i, tc := range cases {
 			baseID := fmt.Sprintf("youtube:%s-%d", attempt, i)

@@ -9,40 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const liveRuntimeUpdateFilterMigration = "316_youtube_live_runtime_update_filter.sql"
-
-func TestLiveRuntimeUpdateFilterMigrationPreservesDataAndPrivileges(t *testing.T) {
-	t.Parallel()
-
-	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeUpdateFilterMigration)
-	seedLiveReviewComparison(t, pool)
-	seedRecordedLiveReviews(t, pool)
-
-	beforeState, beforeReceipts := liveReviewComparisonState(t, pool)
-	beforeSecurity := liveRuntimeRefreshSecurity(t, pool)
-
-	for range 2 {
-		require.NoError(t, applyMigrationFile(t.Context(), pool, dir, liveRuntimeUpdateFilterMigration))
-		assertLiveRuntimeState(t, pool)
-
-		afterState, afterReceipts := liveReviewComparisonState(t, pool)
-		require.JSONEq(t, beforeState, afterState)
-		require.Equal(t, beforeReceipts, afterReceipts)
-		require.JSONEq(t, beforeSecurity, liveRuntimeRefreshSecurity(t, pool))
-	}
-}
-
-func liveRuntimeRefreshSecurity(t *testing.T, db LiveRuntimeStateReader) string {
-	t.Helper()
-
-	var security string
-
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT jsonb_build_array(proowner::regrole::text,proacl::text,prosecdef,provolatile,proconfig)::text
- FROM pg_proc WHERE oid='public.refresh_youtube_live_runtime_state_statement()'::regprocedure`).Scan(&security))
-
-	return security
-}
-
 func TestLiveRuntimeUpdateFilterInvalidatesCandidateReceiptFields(t *testing.T) {
 	pool := NewPool(t)
 	seedRecordedLiveReviews(t, pool)

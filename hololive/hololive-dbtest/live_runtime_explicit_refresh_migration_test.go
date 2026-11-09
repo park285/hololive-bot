@@ -3,9 +3,6 @@ package dbtest
 import (
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -15,67 +12,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const liveRuntimeExplicitRefreshMigration = "328_youtube_live_runtime_explicit_refresh.sql"
-
-// 트리거 기간에 어긋난 행도 전체 재계산으로 맞추고, 재적용해도 원본·영수증과 권한 경계가 같아야 한다.
-func TestLiveRuntimeExplicitRefreshMigrationRecomputesAndRemovesTriggers(t *testing.T) {
+// 기본 권한이 넓어도 runtime과 별도 기록 역할만 refresh를 실행할 수 있습니다.
+func TestLiveRuntimeRefreshPrivileges(t *testing.T) {
 	t.Parallel()
-
-	pool, dir := projectionMigrationPoolBefore(t, liveRuntimeExplicitRefreshMigration)
-	ctx := t.Context()
+	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
-	runtime := pgx.Identifier{roles.runtime}.Sanitize()
-	scraper := pgx.Identifier{roles.scraper}.Sanitize()
-
-	seedLiveReviewComparison(t, pool)
-	seedRecordedLiveReviews(t, pool)
-
-	// scraper 대역을 기존 별도 기록 역할로도 써서 기록 함수가 부르는 refresh 권한 보충을 확인한다.
-	_, err := pool.Exec(ctx, `GRANT EXECUTE ON FUNCTION record_youtube_live_review(uuid,text,text,text,text) TO `+scraper+`;
-		UPDATE youtube_live_runtime_state SET channel_id='corrupted' WHERE video_id='array'`)
-	require.NoError(t, err)
-	require.Equal(t, [3]int64{0, 0, 1}, LiveRuntimeStateDrift(t, pool))
-
-	beforeState, beforeReceipts := liveReviewComparisonState(t, pool)
-	beforeRecordACL := liveReviewRecordACL(t, pool)
-
-	raw, err := fs.ReadFile(os.DirFS(dir), liveRuntimeExplicitRefreshMigration)
-	require.NoError(t, err)
-
-	migration := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
-
-	for range 2 {
-		require.NoError(t, applyMigrationContent(ctx, pool, liveRuntimeExplicitRefreshMigration, migration))
-		assertLiveRuntimeState(t, pool)
-
-		afterState, afterReceipts := liveReviewComparisonState(t, pool)
-		require.JSONEq(t, beforeState, afterState)
-		require.Equal(t, beforeReceipts, afterReceipts)
-		require.Equal(t, beforeRecordACL, liveReviewRecordACL(t, pool))
+	// 기록 역할의 기본 실행 권한이 새 의존 함수에도 이어지는지 확인합니다.
+	for _, role := range []string{roles.runtime, roles.scraper, "pg_monitor"} {
+		_, err := pool.Exec(t.Context(), "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO "+pgx.Identifier{role}.Sanitize())
+		require.NoError(t, err)
 	}
-
-	assertLiveRuntimeTriggersRemoved(t, pool)
-	assertLiveRuntimeRefreshPrivileges(t, pool, roles)
-	assertRuntimeRoleRefreshesLiveRuntimeState(t, pool, runtime)
-}
-
-func assertLiveRuntimeTriggersRemoved(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	var triggers int
-
-	var guardTable, statementFunction, guardFunction bool
-
+	applyBaselineForRoles(t, pool, roles)
+	var recorderDependencies bool
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT
-		(SELECT count(oid) FROM pg_trigger WHERE tgname LIKE 'youtube_live_runtime%'),
-		to_regclass('public.youtube_live_runtime_state_guard') IS NOT NULL,
-		to_regprocedure('public.refresh_youtube_live_runtime_state_statement()') IS NOT NULL,
-		to_regprocedure('public.guard_youtube_live_runtime_state()') IS NOT NULL`).
-		Scan(&triggers, &guardTable, &statementFunction, &guardFunction))
-	require.Zero(t, triggers)
-	require.False(t, guardTable)
-	require.False(t, statementFunction)
-	require.False(t, guardFunction)
+ has_function_privilege('pg_monitor','record_youtube_live_review(uuid,text,text,text,text)','EXECUTE')
+ AND has_function_privilege('pg_monitor','refresh_youtube_live_runtime_state(text[])','EXECUTE')
+ AND has_function_privilege('pg_monitor','lock_youtube_live_runtime_state()','EXECUTE')
+ AND has_function_privilege('pg_monitor','youtube_live_review_receipt_value(jsonb)','EXECUTE')`).Scan(&recorderDependencies))
+	require.True(t, recorderDependencies)
+	assertLiveRuntimeRefreshPrivileges(t, pool, roles)
+	assertRuntimeRoleRefreshesLiveRuntimeState(t, pool, pgx.Identifier{roles.runtime}.Sanitize())
 }
 
 func assertLiveRuntimeRefreshPrivileges(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
@@ -90,7 +46,7 @@ func assertLiveRuntimeRefreshPrivileges(t *testing.T, pool *pgxpool.Pool, roles 
 			has_function_privilege($1,'lock_youtube_live_runtime_state_shared()','EXECUTE')`, role).
 			Scan(&write, &refresh, &shared))
 		require.False(t, write, role)
-		require.True(t, refresh, "관측 writer와 기록 역할은 refresh를 실행해야 합니다: %s", role)
+		require.Equal(t, role == roles.runtime, refresh, role)
 		require.Equal(t, role == roles.runtime, shared, role)
 	}
 }
@@ -162,15 +118,4 @@ func acquireLiveRuntimeLockWithTimeout(t *testing.T, pool *pgxpool.Pool, functio
 	}
 
 	return nil
-}
-
-func liveReviewRecordACL(t *testing.T, pool *pgxpool.Pool) string {
-	t.Helper()
-
-	var acl string
-
-	require.NoError(t, pool.QueryRow(t.Context(),
-		`SELECT proacl::text FROM pg_proc WHERE oid='record_youtube_live_review(uuid,text,text,text,text)'::regprocedure`).Scan(&acl))
-
-	return acl
 }

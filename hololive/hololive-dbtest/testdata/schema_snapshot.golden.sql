@@ -13,7 +13,7 @@ TABLE acl_rooms
   COLUMN id integer NOT NULL DEFAULT nextval('acl_rooms_id_seq'::regclass)
   COLUMN room_id character varying(100) NOT NULL
   COLUMN list_type character varying(16) NOT NULL DEFAULT 'whitelist'::character varying
-  CONSTRAINT chk_acl_rooms_list_type_vocab CHECK (((list_type)::text = ANY ((ARRAY['whitelist'::character varying, 'blacklist'::character varying])::text[])))
+  CONSTRAINT chk_acl_rooms_list_type_vocab CHECK (((list_type)::text = ANY (ARRAY[('whitelist'::character varying)::text, ('blacklist'::character varying)::text])))
   CONSTRAINT chk_acl_rooms_room_id_chat_id CHECK (
 CASE
     WHEN ((room_id)::text ~ '^(0|-?[1-9][0-9]{0,18})$'::text) THEN (((room_id)::numeric >= ('-9223372036854775808'::bigint)::numeric) AND ((room_id)::numeric <= ('9223372036854775807'::bigint)::numeric))
@@ -60,9 +60,9 @@ TABLE alarm_dispatch_closeout_receipts
   COLUMN recorded_at timestamp with time zone NOT NULL DEFAULT clock_timestamp()
   CONSTRAINT alarm_dispatch_closeout_receipts_digest_check CHECK ((original_sha256 ~ '^[0-9a-f]{64}$'::text))
   CONSTRAINT alarm_dispatch_closeout_receipts_disposition_check CHECK ((disposition = 'closed_without_replay'::text))
-  CONSTRAINT alarm_dispatch_closeout_receipts_operator_check CHECK ((((length(operator_id) >= 1) AND (length(operator_id) <= 128)) AND (operator_id = btrim(operator_id)) AND (operator_id !~ '[[:cntrl:]]'::text)))
-  CONSTRAINT alarm_dispatch_closeout_receipts_reason_check CHECK ((((length(reason) >= 1) AND (length(reason) <= 1024)) AND (reason = btrim(reason)) AND (reason !~ '[[:cntrl:]]'::text)))
-  CONSTRAINT alarm_dispatch_closeout_receipts_targets_check CHECK ((((cardinality(target_ids) >= 1) AND (cardinality(target_ids) <= 100)) AND (jsonb_array_length(target_revisions) = cardinality(target_ids)) AND (jsonb_array_length(status_metadata) = cardinality(target_ids))))
+  CONSTRAINT alarm_dispatch_closeout_receipts_operator_check CHECK (((length(operator_id) >= 1) AND (length(operator_id) <= 128) AND (operator_id = btrim(operator_id)) AND (operator_id !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT alarm_dispatch_closeout_receipts_reason_check CHECK (((length(reason) >= 1) AND (length(reason) <= 1024) AND (reason = btrim(reason)) AND (reason !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT alarm_dispatch_closeout_receipts_targets_check CHECK (((cardinality(target_ids) >= 1) AND (cardinality(target_ids) <= 100) AND (jsonb_array_length(target_revisions) = cardinality(target_ids)) AND (jsonb_array_length(status_metadata) = cardinality(target_ids))))
   CONSTRAINT alarm_dispatch_closeout_receipts_pkey PRIMARY KEY (receipt_id)
   CONSTRAINT alarm_dispatch_closeout_receipts_send_unit_id_key UNIQUE (send_unit_id)
   TRIGGER CREATE TRIGGER alarm_dispatch_closeout_receipts_immutable BEFORE DELETE OR UPDATE ON alarm_dispatch_closeout_receipts FOR EACH ROW EXECUTE FUNCTION reject_alarm_dispatch_closeout_receipt_change()
@@ -184,7 +184,7 @@ TABLE alarm_dispatch_send_units
   CONSTRAINT alarm_dispatch_send_units_group_key_check CHECK (((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768)))
   CONSTRAINT alarm_dispatch_send_units_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
   CONSTRAINT alarm_dispatch_send_units_unit_key_check CHECK ((unit_key ~ '^[0-9a-f]{64}$'::text))
-  CONSTRAINT chk_alarm_send_request_shape CHECK ((((request_generation >= 0) AND (request_generation <= 2)) AND (((request_body IS NULL) AND (request_route IS NULL) AND (request_body_hash IS NULL) AND (request_delivery_ids IS NULL) AND (base_client_request_id IS NULL) AND (request_generation = 0)) OR ((request_body IS NOT NULL) AND (request_route IS NOT NULL) AND (request_route = ANY (ARRAY['text'::text, 'markdown'::text, 'richtext'::text])) AND (request_body_hash IS NOT NULL) AND (request_body_hash ~ '^[0-9a-f]{64}$'::text) AND (request_delivery_ids IS NOT NULL) AND ((cardinality(request_delivery_ids) >= 1) AND (cardinality(request_delivery_ids) <= 10)) AND (base_client_request_id IS NOT NULL) AND (base_client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text)))))
+  CONSTRAINT chk_alarm_send_request_shape CHECK (((request_generation >= 0) AND (request_generation <= 2) AND (((request_body IS NULL) AND (request_route IS NULL) AND (request_body_hash IS NULL) AND (request_delivery_ids IS NULL) AND (base_client_request_id IS NULL) AND (request_generation = 0)) OR ((request_body IS NOT NULL) AND (request_route IS NOT NULL) AND (request_route = ANY (ARRAY['text'::text, 'markdown'::text, 'richtext'::text])) AND (request_body_hash IS NOT NULL) AND (request_body_hash ~ '^[0-9a-f]{64}$'::text) AND (request_delivery_ids IS NOT NULL) AND ((cardinality(request_delivery_ids) >= 1) AND (cardinality(request_delivery_ids) <= 10)) AND (base_client_request_id IS NOT NULL) AND (base_client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text)))))
   CONSTRAINT chk_alarm_send_unit_handoff_shape CHECK ((((handoff_request_id IS NULL) OR ((length(handoff_request_id) >= 1) AND (length(handoff_request_id) <= 256))) AND ((handoff_request_id IS NULL) OR (request_body_hash IS NOT NULL)) AND ((handoff_next_check_at IS NULL) OR ((handoff_request_id IS NOT NULL) AND (handoff_checked_at IS NULL))) AND ((handoff_checked_at IS NULL) OR (handoff_request_id IS NOT NULL))))
   CONSTRAINT alarm_dispatch_send_units_pkey PRIMARY KEY (id)
   CONSTRAINT alarm_dispatch_send_units_client_request_id_key UNIQUE (client_request_id)
@@ -318,7 +318,7 @@ TABLE bot_reply_outbox_replay_audit
   CONSTRAINT chk_bot_reply_outbox_replay_audit_actor CHECK ((actor ~ '^[A-Za-z0-9._:@-]{1,64}$'::text))
   CONSTRAINT chk_bot_reply_outbox_replay_audit_event_type CHECK ((event_type = ANY (ARRAY['granted'::text, 'replayed'::text])))
   CONSTRAINT chk_bot_reply_outbox_replay_audit_grant_number CHECK ((grant_number > 0))
-  CONSTRAINT chk_bot_reply_outbox_replay_audit_reason CHECK ((((octet_length(reason) >= 1) AND (octet_length(reason) <= 256)) AND (reason !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT chk_bot_reply_outbox_replay_audit_reason CHECK (((octet_length(reason) >= 1) AND (octet_length(reason) <= 256) AND (reason !~ '[[:cntrl:]]'::text)))
   CONSTRAINT bot_reply_outbox_replay_audit_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES bot_reply_outbox(id) ON DELETE CASCADE
   CONSTRAINT bot_reply_outbox_replay_audit_pkey PRIMARY KEY (id)
   CONSTRAINT bot_reply_outbox_replay_audit_outbox_id_grant_number_event__key UNIQUE (outbox_id, grant_number, event_type)
@@ -336,7 +336,7 @@ TABLE bot_reply_outbox_resolution_audit
   CONSTRAINT chk_bot_reply_outbox_resolution_audit_actor CHECK ((actor ~ '^[A-Za-z0-9._:@-]{1,64}$'::text))
   CONSTRAINT chk_bot_reply_outbox_resolution_audit_decision CHECK ((decision = 'discarded_without_replay'::text))
   CONSTRAINT chk_bot_reply_outbox_resolution_audit_iris_state CHECK ((observed_iris_state = ANY (ARRAY['queued'::text, 'preparing'::text, 'prepared'::text, 'sending'::text, 'handoff_completed'::text, 'failed'::text, 'outcome_unknown'::text, 'not_found'::text])))
-  CONSTRAINT chk_bot_reply_outbox_resolution_audit_reason CHECK ((((octet_length(reason) >= 1) AND (octet_length(reason) <= 256)) AND (reason !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT chk_bot_reply_outbox_resolution_audit_reason CHECK (((octet_length(reason) >= 1) AND (octet_length(reason) <= 256) AND (reason !~ '[[:cntrl:]]'::text)))
   CONSTRAINT bot_reply_outbox_resolution_audit_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES bot_reply_outbox(id) ON DELETE CASCADE
   CONSTRAINT bot_reply_outbox_resolution_audit_pkey PRIMARY KEY (id)
   CONSTRAINT bot_reply_outbox_resolution_audit_outbox_id_key UNIQUE (outbox_id)
@@ -569,7 +569,7 @@ TABLE source_collection_checkpoints
   COLUMN last_error_at timestamp with time zone
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_source_checkpoint_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(last_observation_key) >= 1) AND (length(last_observation_key) <= 512)) AND ((last_error_code IS NULL) OR ((length(last_error_code) >= 1) AND (length(last_error_code) <= 128)))))
+  CONSTRAINT chk_source_checkpoint_bounds CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256) AND ((length(last_observation_key) >= 1) AND (length(last_observation_key) <= 512)) AND ((last_error_code IS NULL) OR ((length(last_error_code) >= 1) AND (length(last_error_code) <= 128)))))
   CONSTRAINT chk_source_checkpoint_continuity_vocab CHECK ((continuity = ANY (ARRAY['CONTIGUOUS'::text, 'GAP_UNRESOLVED'::text, 'NOT_APPLICABLE'::text])))
   CONSTRAINT chk_source_checkpoint_cursor CHECK (((cursor IS NULL) OR ((jsonb_typeof(cursor) = 'object'::text) AND (octet_length((cursor)::text) <= 16384))))
   CONSTRAINT chk_source_checkpoint_error_shape CHECK (((last_error_code IS NULL) = (last_error_at IS NULL)))
@@ -611,7 +611,7 @@ TABLE source_observation_collisions
   COLUMN job_key text NOT NULL
   COLUMN fence_epoch bigint NOT NULL
   COLUMN occurred_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_source_observation_collision_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(collector_instance) >= 1) AND (length(collector_instance) <= 128)) AND ((length(job_key) >= 1) AND (length(job_key) <= 512))))
+  CONSTRAINT chk_source_observation_collision_bounds CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(collector_instance) >= 1) AND (length(collector_instance) <= 128)) AND ((length(job_key) >= 1) AND (length(job_key) <= 512))))
   CONSTRAINT chk_source_observation_collision_hashes CHECK (((existing_evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (attempted_evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (attempted_payload_sha256 ~ '^[0-9a-f]{64}$'::text)))
   CONSTRAINT source_observation_collisions_contract_generation_check CHECK ((contract_generation > 0))
   CONSTRAINT source_observation_collisions_fence_epoch_check CHECK ((fence_epoch > 0))
@@ -682,7 +682,7 @@ TABLE source_observation_provenances
   COLUMN job_key text NOT NULL
   COLUMN collector_instance text NOT NULL
   COLUMN collection_job_kind text NOT NULL
-  CONSTRAINT chk_source_observation_provenance_bounds CHECK ((((length(job_key) >= 1) AND (length(job_key) <= 512)) AND ((length(collector_instance) >= 1) AND (length(collector_instance) <= 128)) AND ((length(collection_job_kind) >= 1) AND (length(collection_job_kind) <= 128))))
+  CONSTRAINT chk_source_observation_provenance_bounds CHECK (((length(job_key) >= 1) AND (length(job_key) <= 512) AND ((length(collector_instance) >= 1) AND (length(collector_instance) <= 128)) AND ((length(collection_job_kind) >= 1) AND (length(collection_job_kind) <= 128))))
   CONSTRAINT source_observation_provenances_pkey PRIMARY KEY (id)
   CONSTRAINT uq_source_observation_provenance UNIQUE (job_key, collector_instance, collection_job_kind)
 
@@ -716,7 +716,7 @@ TABLE source_observation_replay_epoch
   COLUMN cutoff_received_at timestamp with time zone NOT NULL
   COLUMN activated_by text NOT NULL
   COLUMN reason text NOT NULL
-  CONSTRAINT chk_source_observation_replay_epoch_attribution CHECK ((((length(btrim(activated_by)) >= 1) AND (length(btrim(activated_by)) <= 128)) AND (activated_by = btrim(activated_by)) AND ((length(btrim(reason)) >= 1) AND (length(btrim(reason)) <= 1024)) AND (reason = btrim(reason))))
+  CONSTRAINT chk_source_observation_replay_epoch_attribution CHECK (((length(btrim(activated_by)) >= 1) AND (length(btrim(activated_by)) <= 128) AND (activated_by = btrim(activated_by)) AND ((length(btrim(reason)) >= 1) AND (length(btrim(reason)) <= 1024)) AND (reason = btrim(reason))))
   CONSTRAINT chk_source_observation_replay_epoch_singleton CHECK (singleton)
   CONSTRAINT source_observation_replay_epoch_pkey PRIMARY KEY (singleton)
 
@@ -800,30 +800,13 @@ TABLE source_reconciliation_conflicts
   COLUMN attempted_value_sha256 text NOT NULL
   COLUMN decision text NOT NULL
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_source_reconciliation_conflict_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(entity_kind) >= 1) AND (length(entity_kind) <= 64)) AND ((length(entity_key) >= 1) AND (length(entity_key) <= 256)) AND ((length(field_name) >= 1) AND (length(field_name) <= 128))))
+  CONSTRAINT chk_source_reconciliation_conflict_bounds CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(entity_kind) >= 1) AND (length(entity_kind) <= 64)) AND ((length(entity_key) >= 1) AND (length(entity_key) <= 256)) AND ((length(field_name) >= 1) AND (length(field_name) <= 128))))
   CONSTRAINT chk_source_reconciliation_conflict_hashes CHECK (((evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (existing_value_sha256 ~ '^[0-9a-f]{64}$'::text) AND (attempted_value_sha256 ~ '^[0-9a-f]{64}$'::text)))
   CONSTRAINT source_reconciliation_conflicts_decision_check CHECK ((decision = ANY (ARRAY['KEEP_EXISTING'::text, 'UNRESOLVED'::text])))
   CONSTRAINT fk_source_reconciliation_conflict_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_reconciliation_conflicts_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT source_reconciliation_conflicts_pkey PRIMARY KEY (id)
   CONSTRAINT uq_source_reconciliation_conflict UNIQUE (observation_id, entity_kind, entity_key, field_name)
-
-TABLE x_space_login_attempts
-  COLUMN id bigint NOT NULL GENERATED ALWAYS AS IDENTITY
-  COLUMN configuration_revision bigint NOT NULL
-  COLUMN session_revision bigint NOT NULL
-  COLUMN submitted_revision bigint
-  COLUMN status text NOT NULL
-  COLUMN error_code text NOT NULL DEFAULT ''::text
-  COLUMN started_at timestamp with time zone NOT NULL DEFAULT now()
-  COLUMN finished_at timestamp with time zone
-  CONSTRAINT chk_x_space_login_attempts_error_code_vocab CHECK ((error_code = ANY (ARRAY[''::text, 'additional_authentication'::text, 'login_rejected'::text, 'browser_failed'::text, 'outcome_unknown'::text, 'interrupted'::text, 'candidate_rejected'::text, 'manual_override'::text])))
-  CONSTRAINT chk_x_space_login_attempts_status_vocab CHECK ((status = ANY (ARRAY['running'::text, 'submitted'::text, 'connected'::text, 'login_required'::text, 'outcome_unknown'::text, 'manual_override'::text])))
-  CONSTRAINT x_space_login_attempts_configuration_revision_check CHECK ((configuration_revision > 0))
-  CONSTRAINT x_space_login_attempts_session_revision_check CHECK ((session_revision >= 0))
-  CONSTRAINT x_space_login_attempts_pkey PRIMARY KEY (id)
-  CONSTRAINT uq_x_space_login_attempts_generation UNIQUE (configuration_revision, session_revision)
-  INDEX CREATE INDEX idx_x_space_login_attempts_started_at ON public.x_space_login_attempts USING btree (started_at)
 
 TABLE x_space_session
   COLUMN id integer NOT NULL
@@ -867,7 +850,7 @@ TABLE youtube_channel_live_checks
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_youtube_channel_live_checks_effective_clock CHECK ((effective_at = scheduled_for))
   CONSTRAINT chk_youtube_channel_live_checks_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
-  CONSTRAINT chk_youtube_channel_live_checks_identity CHECK ((((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64)) AND ((selected_video_id IS NULL) OR ((length((selected_video_id)::text) >= 1) AND (length((selected_video_id)::text) <= 20)))))
+  CONSTRAINT chk_youtube_channel_live_checks_identity CHECK (((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64) AND ((selected_video_id IS NULL) OR ((length((selected_video_id)::text) >= 1) AND (length((selected_video_id)::text) <= 20)))))
   CONSTRAINT chk_youtube_channel_live_checks_outcome_shape CHECK ((((outcome = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((outcome = 'UNKNOWN'::text) OR channel_identity_confirmed) AND ((outcome <> 'CHANNEL_PAGE'::text) OR (selected_video_id IS NULL)) AND ((outcome <> ALL (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text])) OR (selected_video_id IS NOT NULL)) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT channel_identity_confirmed))))
   CONSTRAINT chk_youtube_channel_live_checks_outcome_vocab CHECK ((outcome = ANY (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text, 'CHANNEL_PAGE'::text, 'UNKNOWN'::text])))
   CONSTRAINT chk_youtube_channel_live_checks_provider CHECK ((provider = 'youtubejs'::text))
@@ -912,11 +895,11 @@ TABLE youtube_channel_photo_variants
   COLUMN effective_at timestamp with time zone NOT NULL
   COLUMN received_at timestamp with time zone NOT NULL
   CONSTRAINT chk_youtube_photo_variant_channel CHECK (((length(channel_id) >= 1) AND (length(channel_id) <= 64)))
-  CONSTRAINT chk_youtube_photo_variant_dims CHECK ((((width >= 0) AND (width <= 20000)) AND ((height >= 0) AND (height <= 20000))))
+  CONSTRAINT chk_youtube_photo_variant_dims CHECK (((width >= 0) AND (width <= 20000) AND ((height >= 0) AND (height <= 20000))))
   CONSTRAINT chk_youtube_photo_variant_identity CHECK (((length(stable_media_id) <= 512) AND ((content_fingerprint = ''::text) OR (content_fingerprint ~ '^[0-9a-f]{64}$'::text))))
   CONSTRAINT chk_youtube_photo_variant_kind CHECK ((kind = ANY (ARRAY['avatar'::text, 'banner'::text])))
   CONSTRAINT chk_youtube_photo_variant_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
-  CONSTRAINT chk_youtube_photo_variant_url CHECK ((((length(url) >= 8) AND (length(url) <= 2048)) AND (url ~~ 'https://%'::text)))
+  CONSTRAINT chk_youtube_photo_variant_url CHECK (((length(url) >= 8) AND (length(url) <= 2048) AND (url ~~ 'https://%'::text)))
   CONSTRAINT youtube_channel_photo_variants_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_channel_photo_variants_pkey PRIMARY KEY (channel_id, kind, provider, scheduled_for)
   INDEX CREATE INDEX idx_youtube_channel_photo_variants_observation_id ON public.youtube_channel_photo_variants USING btree (observation_id)
@@ -1005,7 +988,7 @@ TABLE youtube_collection_job_leases
   COLUMN membership_kinds text[] NOT NULL DEFAULT '{}'::text[]
   COLUMN membership_exact_subject boolean NOT NULL DEFAULT false
   COLUMN membership_target_count integer NOT NULL DEFAULT 0
-  CONSTRAINT chk_youtube_collection_job_identity CHECK ((((length(job_key) >= 1) AND (length(job_key) <= 512)) AND ((length(collection_job_kind) >= 1) AND (length(collection_job_kind) <= 128)) AND ((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((owner_instance IS NULL) OR ((length(owner_instance) >= 1) AND (length(owner_instance) <= 128))) AND ((last_error_code IS NULL) OR ((length(last_error_code) >= 1) AND (length(last_error_code) <= 128)))))
+  CONSTRAINT chk_youtube_collection_job_identity CHECK (((length(job_key) >= 1) AND (length(job_key) <= 512) AND ((length(collection_job_kind) >= 1) AND (length(collection_job_kind) <= 128)) AND ((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((owner_instance IS NULL) OR ((length(owner_instance) >= 1) AND (length(owner_instance) <= 128))) AND ((last_error_code IS NULL) OR ((length(last_error_code) >= 1) AND (length(last_error_code) <= 128)))))
   CONSTRAINT chk_youtube_collection_job_last_failure_shape CHECK ((((last_failure_code IS NULL) AND (last_failure_class IS NULL) AND (last_failure_detail IS NULL) AND (last_failure_at IS NULL)) OR ((last_failure_code IS NOT NULL) AND ((length(last_failure_code) >= 1) AND (length(last_failure_code) <= 128)) AND (last_failure_class IS NOT NULL) AND (last_failure_class ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$'::text) AND (last_failure_detail IS NOT NULL) AND (octet_length(last_failure_detail) <= 2048) AND (last_failure_at IS NOT NULL))))
   CONSTRAINT chk_youtube_collection_job_membership_count CHECK ((membership_target_count >= 0))
   CONSTRAINT chk_youtube_collection_job_provider_vocab CHECK ((provider = ANY (ARRAY['holodex'::text, 'youtubejs'::text, 'hololive_official'::text])))
@@ -1064,7 +1047,7 @@ TABLE youtube_collection_target_reasons
   COLUMN observation_kind text NOT NULL
   COLUMN reason_kind text NOT NULL
   COLUMN reason_key text NOT NULL
-  CONSTRAINT chk_youtube_collection_target_reason_bounds CHECK ((((length(reason_kind) >= 1) AND (length(reason_kind) <= 128)) AND ((length(reason_key) >= 1) AND (length(reason_key) <= 512))))
+  CONSTRAINT chk_youtube_collection_target_reason_bounds CHECK (((length(reason_kind) >= 1) AND (length(reason_kind) <= 128) AND ((length(reason_key) >= 1) AND (length(reason_key) <= 512))))
   CONSTRAINT youtube_collection_target_rea_projection_generation_subjec_fkey FOREIGN KEY (projection_generation, subject_key, observation_kind) REFERENCES youtube_collection_targets(projection_generation, subject_key, observation_kind) ON DELETE CASCADE
   CONSTRAINT youtube_collection_target_reasons_pkey PRIMARY KEY (projection_generation, subject_key, observation_kind, reason_kind, reason_key)
 
@@ -1222,7 +1205,7 @@ TABLE youtube_content_watermarks
   COLUMN initialized boolean NOT NULL DEFAULT false
   COLUMN last_content_id character varying(50)
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_content_watermarks_watermark_type_vocab CHECK (((watermark_type)::text = ANY ((ARRAY['VIDEO'::character varying, 'SHORT'::character varying, 'COMMUNITY_POST'::character varying])::text[])))
+  CONSTRAINT chk_youtube_content_watermarks_watermark_type_vocab CHECK (((watermark_type)::text = ANY (ARRAY[('VIDEO'::character varying)::text, ('SHORT'::character varying)::text, ('COMMUNITY_POST'::character varying)::text])))
   CONSTRAINT youtube_content_watermarks_pkey PRIMARY KEY (channel_id, watermark_type)
 
 TABLE youtube_live_absence_slots
@@ -1312,9 +1295,9 @@ TABLE youtube_live_review_receipts
   COLUMN reason text NOT NULL
   COLUMN recorded_at timestamp with time zone NOT NULL DEFAULT clock_timestamp()
   CONSTRAINT youtube_live_review_receipts_disposition_check CHECK ((disposition = 'closed_unresolved'::text))
-  CONSTRAINT youtube_live_review_receipts_operator_id_check CHECK ((((length(operator_id) >= 1) AND (length(operator_id) <= 128)) AND (operator_id = btrim(operator_id)) AND (operator_id !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT youtube_live_review_receipts_operator_id_check CHECK (((length(operator_id) >= 1) AND (length(operator_id) <= 128) AND (operator_id = btrim(operator_id)) AND (operator_id !~ '[[:cntrl:]]'::text)))
   CONSTRAINT youtube_live_review_receipts_original_snapshot_check CHECK ((octet_length((original_snapshot)::text) <= 262144))
-  CONSTRAINT youtube_live_review_receipts_reason_check CHECK ((((length(reason) >= 1) AND (length(reason) <= 1024)) AND (reason = btrim(reason)) AND (reason !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT youtube_live_review_receipts_reason_check CHECK (((length(reason) >= 1) AND (length(reason) <= 1024) AND (reason = btrim(reason)) AND (reason !~ '[[:cntrl:]]'::text)))
   CONSTRAINT youtube_live_review_receipts_snapshot_sha256_check CHECK ((snapshot_sha256 ~ '^[0-9a-f]{64}$'::text))
   CONSTRAINT youtube_live_review_receipts_pkey PRIMARY KEY (receipt_id)
   CONSTRAINT youtube_live_review_receipts_video_id_snapshot_sha256_key UNIQUE (video_id, snapshot_sha256)
@@ -1389,7 +1372,7 @@ TABLE youtube_live_time_finalizations
   COLUMN enqueued_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN completed_at timestamp with time zone
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_live_time_finalizations_counts CHECK ((((attempts >= 0) AND (attempts <= 4)) AND ((deferrals >= 0) AND (deferrals <= 12))))
+  CONSTRAINT chk_youtube_live_time_finalizations_counts CHECK (((attempts >= 0) AND (attempts <= 4) AND ((deferrals >= 0) AND (deferrals <= 12))))
   CONSTRAINT chk_youtube_live_time_finalizations_outcome_vocab CHECK ((outcome = ANY (ARRAY['pending'::text, 'finalized'::text, 'exhausted'::text, 'conflict'::text, 'members_only'::text, 'reverted'::text])))
   CONSTRAINT chk_youtube_live_time_finalizations_queue_vocab CHECK ((queue = ANY (ARRAY['new'::text, 'backlog'::text])))
   CONSTRAINT chk_youtube_live_time_finalizations_reason CHECK (((reason IS NULL) OR ((length(reason) >= 1) AND (length(reason) <= 64))))
@@ -1540,7 +1523,7 @@ TABLE youtube_schedule_items
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN collabo_talent_names text[] NOT NULL DEFAULT '{}'::text[]
   COLUMN observed_at timestamp with time zone
-  CONSTRAINT chk_youtube_schedule_item_bounds CHECK ((((length(group_key) >= 1) AND (length(group_key) <= 256)) AND ((length(external_id) >= 1) AND (length(external_id) <= 256)) AND (length(video_id) <= 128) AND (length(channel_id) <= 256) AND ((length(title) >= 1) AND (length(title) <= 4096))))
+  CONSTRAINT chk_youtube_schedule_item_bounds CHECK (((length(group_key) >= 1) AND (length(group_key) <= 256) AND ((length(external_id) >= 1) AND (length(external_id) <= 256)) AND (length(video_id) <= 128) AND (length(channel_id) <= 256) AND ((length(title) >= 1) AND (length(title) <= 4096))))
   CONSTRAINT chk_youtube_schedule_item_collabo_talent_names CHECK (youtube_schedule_collabo_talent_names_valid(collabo_talent_names))
   CONSTRAINT chk_youtube_schedule_item_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
   CONSTRAINT youtube_schedule_items_pkey PRIMARY KEY (group_key, provider, external_id)
@@ -1563,7 +1546,7 @@ TABLE youtube_video_availability
   CONSTRAINT chk_youtube_video_availability_availability_vocab CHECK ((availability = ANY (ARRAY['PUBLIC'::text, 'MEMBERS_ONLY'::text, 'PUBLIC_UNAVAILABLE'::text, 'UNKNOWN'::text])))
   CONSTRAINT chk_youtube_video_availability_effective_clock CHECK ((effective_at = scheduled_for))
   CONSTRAINT chk_youtube_video_availability_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
-  CONSTRAINT chk_youtube_video_availability_identity CHECK ((((length((video_id)::text) >= 1) AND (length((video_id)::text) <= 20)) AND ((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64))))
+  CONSTRAINT chk_youtube_video_availability_identity CHECK (((length((video_id)::text) >= 1) AND (length((video_id)::text) <= 20) AND ((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64))))
   CONSTRAINT chk_youtube_video_availability_method_vocab CHECK ((method = ANY (ARRAY['player_public'::text, 'player_members_only'::text, 'player_private'::text, 'unknown'::text])))
   CONSTRAINT chk_youtube_video_availability_provider CHECK ((provider = 'youtubejs'::text))
   CONSTRAINT chk_youtube_video_availability_shape CHECK (((((availability = 'PUBLIC'::text) AND (method = 'player_public'::text)) OR ((availability = 'MEMBERS_ONLY'::text) AND (method = 'player_members_only'::text)) OR ((availability = 'PUBLIC_UNAVAILABLE'::text) AND (method = 'player_private'::text)) OR ((availability = 'UNKNOWN'::text) AND (method = 'unknown'::text))) AND ((availability = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((availability = 'UNKNOWN'::text) OR identity_confirmed) AND ((unknown_reason IS DISTINCT FROM 'availability_unclassified'::text) OR identity_confirmed) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT identity_confirmed))))
@@ -1645,8 +1628,6 @@ SEQUENCE source_observation_provenances_id_seq AS integer START 1 INCREMENT 1 MI
 SEQUENCE source_observations_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_observations.id
 
 SEQUENCE source_reconciliation_conflicts_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_reconciliation_conflicts.id
-
-SEQUENCE x_space_login_attempts_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY x_space_login_attempts.id
 
 SEQUENCE youtube_collection_projection_generations_generation_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY youtube_collection_projection_generations.generation
 

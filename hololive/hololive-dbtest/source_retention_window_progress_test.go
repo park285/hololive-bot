@@ -1,9 +1,6 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,8 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
-
-const sourceRetentionWindowMigration = "341_source_retention_window_progress.sql"
 
 type retentionWindow struct {
 	deleted   int
@@ -55,23 +50,9 @@ func TestSourceRetentionWindowReportsProgressAndTraversal(t *testing.T) {
 func TestSourceRetentionWindowMigrationGrantsRuntimeOnly(t *testing.T) {
 	t.Parallel()
 
-	pool := NewPool(t)
+	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	_, err = pool.Exec(t.Context(), `GRANT EXECUTE ON FUNCTION delete_source_observation_retention_batch(text[],timestamptz[],integer) TO `+
-		pgx.Identifier{roles.runtime}.Sanitize())
-	require.NoError(t, err)
-
-	raw, err := fs.ReadFile(os.DirFS(dir), sourceRetentionWindowMigration)
-	require.NoError(t, err)
-
-	migration := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
-
-	for range 2 {
-		require.NoError(t, applyMigrationContent(t.Context(), pool, sourceRetentionWindowMigration, migration))
-	}
+	applyBaselineForRoles(t, pool, roles)
 
 	for role, want := range map[string]bool{roles.runtime: true, roles.scraper: false} {
 		var window, batch bool

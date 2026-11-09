@@ -120,9 +120,9 @@ func applyEntry(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledge
 		return fmt.Errorf("validate migration source: %w", err)
 	}
 
-	if source.name == epoch2Baseline {
-		if err := applyEpoch2Baseline(ctx, exec, ledger, source); err != nil {
-			return fmt.Errorf("apply epoch2 baseline: %w", err)
+	if source.name == epoch3Baseline {
+		if err := applyEpoch3Baseline(ctx, exec, ledger, source); err != nil {
+			return fmt.Errorf("apply epoch3 baseline: %w", err)
 		}
 
 		return nil
@@ -143,14 +143,14 @@ func applyEntry(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledge
 	return nil
 }
 
-func applyEpoch2Baseline(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, source migrationSource) error {
+func applyEpoch3Baseline(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, source migrationSource) error {
 	segments, err := sqlsplit.Segments(source.content)
 	if err != nil {
 		return fmt.Errorf("exec %s: %w", source.name, err)
 	}
 
 	if len(segments) != 1 || !segments[0].Transactional {
-		return fmt.Errorf("exec %s: epoch-2 baseline must be one top-level transaction", source.name)
+		return fmt.Errorf("exec %s: epoch-3 baseline must be one top-level transaction", source.name)
 	}
 
 	tx, err := exec.conn.Begin(ctx)

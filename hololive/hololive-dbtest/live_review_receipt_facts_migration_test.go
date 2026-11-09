@@ -1,9 +1,6 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -11,8 +8,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
-
-const liveReviewReceiptFactsMigration = "279_youtube_live_review_receipt_facts.sql"
 
 // liveReviewReceiptSideFactsSQL은 270 youtube_live_review_current_receipt가 호출마다 영수증에서 다시 계산하던 식이다.
 const liveReviewReceiptSideFactsSQL = `public.youtube_live_review_semantic_facts(
@@ -22,58 +17,6 @@ const liveReviewReceiptSideFactsSQL = `public.youtube_live_review_semantic_facts
 	END)`
 
 // 기존 246·262 형식 영수증의 판정은 저장 사실로 바꾼 뒤에도 같고, 저장 사실은 270 영수증 쪽 식과 같다.
-func TestLiveReviewReceiptFactsMigrationPreservesDecisions(t *testing.T) {
-	t.Parallel()
-
-	pool, dir := projectionMigrationPoolBefore(t, liveReviewReceiptFactsMigration)
-	ctx := t.Context()
-
-	seedLiveReviewComparison(t, pool)
-	seedRecordedLiveReviews(t, pool)
-
-	beforeResults, beforeReceipts := liveReviewComparisonState(t, pool)
-
-	for range 2 {
-		require.NoError(t, applyMigrationFile(ctx, pool, dir, liveReviewReceiptFactsMigration))
-
-		afterResults, afterReceipts := liveReviewComparisonState(t, pool)
-		require.JSONEq(t, beforeResults, afterResults)
-		require.Equal(t, beforeReceipts, afterReceipts, "migration must not rewrite receipts")
-		assertLiveReviewReceiptFactsMatchReceipts(t, pool)
-	}
-
-	var legacyLatest, recorded, reopened, unreviewed bool
-
-	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT (SELECT reviewed_at='2026-10-01T02:00:00Z'::timestamptz FROM youtube_live_review_current_receipt('array')),
-		       (SELECT reviewed_at IS NOT NULL FROM youtube_live_review_current_receipt('recorded')),
-		       (SELECT reviewed_at IS NULL FROM youtube_live_review_current_receipt('reopened')),
-		       (SELECT reviewed_at IS NULL FROM youtube_live_review_current_receipt('none'))
-	`).Scan(&legacyLatest, &recorded, &reopened, &unreviewed))
-	require.True(t, legacyLatest, "246 형식 영수증의 최신 일치 기록 시각이 유지되어야 합니다")
-	require.True(t, recorded, "262 형식 영수증이 현재 사실과 일치해야 합니다")
-	require.True(t, reopened, "검토 뒤 의미 사실이 바뀐 영상은 다시 열려야 합니다")
-	require.True(t, unreviewed)
-
-	// 영수증 쪽 판정 입력은 저장 사실뿐이다. 의미 사실 정의를 바꾸고 다시 채우지 않은 상태처럼 비우면
-	// 면제가 모두 풀리는 안전한 방향이고, 같은 backfill을 다시 적용하면 같은 판정으로 돌아온다.
-	_, err := pool.Exec(ctx, `TRUNCATE youtube_live_review_receipt_facts`)
-	require.NoError(t, err)
-
-	var stillReviewed int
-
-	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT count(review.reviewed_at)
-		FROM youtube_live_sessions session
-		CROSS JOIN LATERAL youtube_live_review_current_receipt(session.video_id) review`).Scan(&stillReviewed))
-	require.Zero(t, stillReviewed, "저장 사실이 없으면 어떤 영수증도 현재 원본을 면제하지 않아야 합니다")
-
-	require.NoError(t, applyMigrationFile(ctx, pool, dir, liveReviewReceiptFactsMigration))
-
-	refilledResults, _ := liveReviewComparisonState(t, pool)
-	require.JSONEq(t, beforeResults, refilledResults)
-	assertLiveReviewReceiptFactsMatchReceipts(t, pool)
-}
 
 // 기록 함수와 직접 INSERT 모두 같은 트랜잭션에서 사실을 저장하고, 저장 사실은 영수증처럼 변경·삭제를 거부한다.
 func TestLiveReviewReceiptFactsStoredOnRecordAndImmutable(t *testing.T) {
@@ -105,32 +48,16 @@ func TestLiveReviewReceiptFactsStoredOnRecordAndImmutable(t *testing.T) {
 func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 	t.Parallel()
 
-	pool, dir := projectionMigrationPoolBefore(t, liveReviewReceiptFactsMigration)
+	pool := NewBlankPool(t)
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)
 	runtime := pgx.Identifier{roles.runtime}.Sanitize()
-	scraper := pgx.Identifier{roles.scraper}.Sanitize()
-
-	// 운영 runtime이 이미 가진 판정 입력 조회·실행 권한과, 운영 기본 ACL(init-db 기준 runtime CRUD)보다 넓은 상위 집합을 재현합니다.
-	for _, statement := range []string{
-		`GRANT SELECT ON youtube_live_sessions, youtube_live_reconciliation_heads, youtube_live_pending_ends,
-		       youtube_video_availability, youtube_live_review_receipts TO ` + runtime,
-		`GRANT EXECUTE ON FUNCTION youtube_live_review_semantic_facts(jsonb), youtube_live_review_current_receipt(text) TO ` + runtime,
-		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO " + runtime,
-		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO " + scraper,
-	} {
-		_, err := pool.Exec(ctx, statement)
+	// 이 시험은 테이블 기본 권한만 넓혀 invoker 기록 함수 실행 권한은 주지 않습니다.
+	for _, role := range []string{roles.runtime, roles.scraper} {
+		_, err := pool.Exec(ctx, "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "+pgx.Identifier{role}.Sanitize())
 		require.NoError(t, err)
 	}
-
-	raw, err := fs.ReadFile(os.DirFS(dir), liveReviewReceiptFactsMigration)
-	require.NoError(t, err)
-
-	migration := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
-
-	for range 2 {
-		require.NoError(t, applyMigrationContent(ctx, pool, liveReviewReceiptFactsMigration, migration))
-	}
+	applyBaselineForRoles(t, pool, roles)
 
 	for _, check := range []struct {
 		role       string
@@ -217,7 +144,7 @@ func recordLiveReviewInSeoul(t *testing.T, pool *pgxpool.Pool, receiptID, videoI
 	t.Helper()
 
 	ctx := t.Context()
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: liveReviewRecordIsolation(t, pool)})
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	require.NoError(t, err)
 
 	defer rollbackLiveReviewReceiptFactsTx(t, tx)
@@ -230,23 +157,6 @@ func recordLiveReviewInSeoul(t *testing.T, pool *pgxpool.Pool, receiptID, videoI
 		FROM youtube_live_review_snapshot($2) snapshot`, receiptID, videoID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
-}
-
-// liveReviewRecordIsolation은 적용된 기록 함수 판이 요구하는 격리 수준이다.
-// 328부터는 잠금 뒤 최신 커밋을 읽도록 READ COMMITTED를, 그 이전 판은 SERIALIZABLE을 요구한다.
-func liveReviewRecordIsolation(t *testing.T, pool *pgxpool.Pool) pgx.TxIsoLevel {
-	t.Helper()
-
-	var explicitRefresh bool
-
-	require.NoError(t, pool.QueryRow(t.Context(),
-		`SELECT to_regprocedure('public.lock_youtube_live_runtime_state_shared()') IS NOT NULL`).Scan(&explicitRefresh))
-
-	if explicitRefresh {
-		return pgx.ReadCommitted
-	}
-
-	return pgx.Serializable
 }
 
 // assertLiveReviewReceiptFactsMatchReceipts는 영수증마다 저장 사실이 하나 있고 270 영수증 쪽 식과 같은지 확인한다.
