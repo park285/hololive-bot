@@ -83,28 +83,6 @@ func TestRunWorkerProfileCheck(t *testing.T) {
 	}
 }
 
-func TestHololiveAPITelemetryConfigUsesFixedIdentity(t *testing.T) {
-	config := &apiconfig.RuntimeConfig{
-		Bot: &apiconfig.BotPlaneConfig{Environment: "production"},
-		Tracing: settings.TracingConfig{
-			Enabled:    true,
-			Endpoint:   "otel-collector:4317",
-			Insecure:   true,
-			SampleRate: 0.25,
-		},
-	}
-
-	got := hololiveAPITelemetryConfig(config, "1.2.3")
-
-	if got.ServiceName != "hololive-api" || got.ServiceVersion != "1.2.3" || got.Environment != "production" {
-		t.Fatalf("telemetry identity = %#v, want fixed hololive-api identity", got)
-	}
-
-	if !got.Enabled || got.OTLPEndpoint != "otel-collector:4317" || !got.OTLPInsecure || got.SampleRate != 0.25 {
-		t.Fatalf("telemetry config = %#v, want tracing settings preserved", got)
-	}
-}
-
 // 수동 재실행은 kind를 그대로 넘기고, 실행 중 충돌(exit 2)과 그 밖의 실패(exit 1)를 구분하며 결과를 stdout에 남긴다.
 func TestRunNotificationRerunMapsOutcomes(t *testing.T) {
 	tests := []struct {

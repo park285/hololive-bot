@@ -1,4 +1,4 @@
-# bot/admin/llm plane을 한 process로 실행한다. observability peer와 분리하므로 OTLP는 승인된 host/Tailscale 주소를 쓴다.
+# bot/admin/llm plane을 한 process로 실행한다.
 # alarm-worker를 Wants로 끌어오므로 이 unit을 시작하면 worker도 함께 시작된다.
 [Unit]
 Description=Hololive API (bot/admin/llm planes)
@@ -152,7 +152,6 @@ Environment=GOMEMLIMIT=600MiB
 Environment=GIN_MODE=release
 Environment=IRIS_BASE_URL_ALLOWED_HOSTS=${IRIS_BASE_URL_ALLOWED_HOSTS}
 Environment=HOLOLIVE_SHORT_LINK_ADDR=:30101
-Environment=HOLOLIVE_OTLP_GRPC_ENDPOINT=${HOLOLIVE_OTLP_GRPC_ENDPOINT}
 Environment=CACHE_SENTINEL_MASTER_SET=hololive
 Environment=CACHE_SENTINEL_ADDRS=${VALKEY_SENTINEL_ADDRS}
 Environment=CACHE_SENTINEL_USERNAME=hololive-discovery

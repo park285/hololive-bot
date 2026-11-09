@@ -14,7 +14,6 @@ import (
 func setBotPlaneEnv(t *testing.T) {
 	t.Helper()
 	settingstest.ClearRuntimeRoleEnv(t)
-	settingstest.ClearTracingEnv(t)
 	configtest.SetRequiredLoadEnv(t)
 }
 

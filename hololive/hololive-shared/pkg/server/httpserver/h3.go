@@ -11,7 +11,6 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	runtimehttpserver "github.com/park285/shared-go/v2/pkg/runtime/httpserver"
-	"github.com/park285/shared-go/v2/pkg/telemetry"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 
@@ -26,9 +25,8 @@ type RuntimeHTTPServers struct {
 	h3Requests *h3RequestDrain
 }
 
-func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerConfig, handler http.Handler, operation string,
+func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerConfig, handler http.Handler,
 	workerRegistry *workercontract.Registry,
-	traceFilters ...func(*http.Request) bool,
 ) (*RuntimeHTTPServers, error) {
 	if serverConfig == nil {
 		return nil, errors.New("server config is nil")
@@ -39,7 +37,7 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	if serverConfig.TransportEnabled("h3") {
 		drain := &h3RequestDrain{}
 
-		h3Server, err := newH3Server(runtimeH3Addr(serverConfig), drain.wrap(handler), serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
+		h3Server, err := newH3Server(runtimeH3Addr(serverConfig), drain.wrap(handler), serverConfig.H3CertFile, serverConfig.H3KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("H3 server: %w", err)
 		}
@@ -65,16 +63,11 @@ func WithRuntimeBodyReadTimeout(handler http.Handler) http.Handler {
 	return runtimehttpserver.WithBodyReadTimeout(handler, serverReadTimeout)
 }
 
-func newH3Server(addr string, handler http.Handler, certFile, keyFile, operation string,
-	traceFilters ...func(*http.Request) bool,
-) (*http3.Server, error) {
+func newH3Server(addr string, handler http.Handler, certFile, keyFile string) (*http3.Server, error) {
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
 
-	traceFilter := firstTraceFilter(traceFilters)
-
-	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{Filter: traceFilter})
 	handler = WithRuntimeBodyReadTimeout(handler)
 
 	out, err := sharedh3.NewServer(addr, handler, certFile, keyFile)

@@ -141,11 +141,12 @@ func (c *Config) validateEnvPolicy(holodexTimeout, officialTimeout time.Duration
 }
 
 func (c *Config) validateInstanceID() error {
-	if _, err := tracingEnabledEnvForInstance(c.InstanceID); err != nil {
-		return err
+	switch c.InstanceID {
+	case "youtube-collector-a", "youtube-collector-b", "youtube-collector-c", "youtube-collector-d":
+		return nil
+	default:
+		return errors.New("YOUTUBE_COLLECTOR_INSTANCE_ID must be one of youtube-collector-a, youtube-collector-b, youtube-collector-c, youtube-collector-d")
 	}
-
-	return nil
 }
 
 func (c *Config) validateLeaseTiming() error {

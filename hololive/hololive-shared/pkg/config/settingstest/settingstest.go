@@ -10,7 +10,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
@@ -102,24 +101,6 @@ func ClearIrisAndRoomEnv(t *testing.T) {
 		"IRIS_BASE_URL_FILE",
 		"KAKAO_ROOMS",
 	} {
-		t.Setenv(key, "")
-	}
-}
-
-// ClearTracingEnv: OTEL endpoint와 런타임별 토글을 모두 비워 호스트 환경 영향을 없앤다.
-func ClearTracingEnv(t *testing.T) {
-	t.Helper()
-
-	for _, key := range append([]string{
-		envload.OTLPEndpointEnv,
-		envload.OTLPTracesEndpointEnv,
-		envload.HololiveOTLPGRPCEndpointEnv,
-		envload.OTLPInsecureEnv,
-		envload.OTELSampleRateEnv,
-		"OTEL_ENABLED",
-		"OTEL_SERVICE_NAME",
-		"OTEL_SERVICE_VERSION",
-	}, envload.TracingEnabledEnvKeys()...) {
 		t.Setenv(key, "")
 	}
 }

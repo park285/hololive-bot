@@ -27,11 +27,6 @@ Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs
 
 ## Normal status
 
-HTTP trace는 `service.name=youtube-collector`를 유지하고
-`youtube.collector.instance_id` span 속성에 검증된 `YOUTUBE_COLLECTOR_INSTANCE_ID`를 기록합니다.
-Grafana Traces의 AP별 수신 패널과 `observability_trace_instance_*` 지표는 이 속성으로 Jaeger를 검색합니다.
-조회 실패와 성공했지만 trace가 없는 상태는 구분하며, 다른 AP의 trace로 누락 AP를 대체하지 않습니다.
-
 | Check | Expected |
 |---|---|
 | Health | `https://127.0.0.1:<port>/health` returns success over H3 |
@@ -107,15 +102,8 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 |---|---|---|
 | `SERVER_PORT` | per-host H3 port | yes |
 | `METRICS_API_KEY` | H3 internal routes and non-loopback `/metrics` authentication | production yes |
-| `HOLOLIVE_OTLP_GRPC_ENDPOINT` | collector trace export endpoint (`host:port`, gRPC) | production yes |
-| `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true` | per-slot trace enablement (`A`/`B`/`C`/`D`) | production yes |
 | `STACK_WORKER_PROFILE_FILE` | slot-specific strict `hololive/youtube-collector` profile; `collection.executor.enabled` owns worker enablement | yes |
 | `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true` | must be true only on collector hosts | yes |
-
-`OTEL_EXPORTER_OTLP_ENDPOINT`와 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`는 URL 문법을
-자동 적용하므로 Hololive runtime에서는 지원하지 않습니다. 둘 중 하나가 non-empty이면
-`HOLOLIVE_OTLP_GRPC_ENDPOINT` 존재 여부와 무관하게 startup validation이 실패합니다. 이 거부는 퇴역 가드가 아니라
-외부 표준 이름을 막는 영구 계약이라 제거 조건이 없습니다(`DEC-20260926-hololive-legacy-env-config-retirement`).
 | `YOUTUBE_COLLECTOR_INSTANCE_ID` | fleet identity `youtube-collector-a/b/c/d` | yes |
 | `PHOTO_SYNC_ENABLED=false` | photo product path stays on hololive-api admin | yes |
 | `POSTGRES_USER=hololive_scraper` | lease/observation insert only | yes |
@@ -287,18 +275,17 @@ sudo journalctl -u hololive-youtube-collector-c.service -f
 
 ## Common failure modes
 
-### 1. Metrics authentication or tracing config rejection
+### 1. Metrics authentication rejection
 
 Symptoms:
 - startup rejects a missing `METRICS_API_KEY`
-- startup names a missing `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true`
 
 Diagnosis:
 - `youtube-collector.env`의 key 이름만 확인하고 raw value를 출력하지 않습니다.
-- `METRICS_API_KEY`와 canonical collector OTEL toggle을 stack-secrets master에서 수정한 뒤 승인된 sync 절차를 사용합니다.
+- `METRICS_API_KEY`를 stack-secrets master에서 수정한 뒤 승인된 sync 절차를 사용합니다.
 
 Mitigation:
-- static secret sync와 collector restart/deploy를 같은 승인된 변경으로 수행하고 `/metrics` target 및 Jaeger `youtube-collector` service를 재검증합니다.
+- static secret sync와 collector restart/deploy를 같은 승인된 변경으로 수행하고 `/metrics` target을 재검증합니다.
 
 ### 2. Projection/lease load failure
 

@@ -20,7 +20,6 @@ type RuntimeConfig struct {
 
 	Server   settings.ServerConfig
 	Logging  settings.LoggingConfig
-	Tracing  settings.TracingConfig
 	Postgres settings.PostgresConfig
 
 	RuntimeOwnership RuntimeOwnershipConfig
@@ -79,18 +78,13 @@ func buildRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load youtube collector config: %w", err)
 	}
 
-	tracingConfig, err := loadTracingConfig(collector.InstanceID)
-	if err != nil {
-		return nil, fmt.Errorf("load tracing config: %w", err)
-	}
-
 	ownership, err := loadRuntimeOwnershipConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load collector runtime ownership config: %w", err)
 	}
 
 	// 아래 공통 구획 다섯 개는 모두 읽은 뒤 오류를 합쳐 잘못된 env를 한 번의 기동 실패로 보인다.
-	// 그 앞의 worker profile·collector·tracing·ownership 로더는 첫 오류에서 반환한다.
+	// 그 앞의 worker profile·collector·ownership 로더는 첫 오류에서 반환한다.
 	server, serverErr := settings.LoadServerConfigWithAPIKey(sharedenv.String("METRICS_API_KEY", ""))
 	logging, loggingErr := settings.LoadLoggingConfig()
 	postgres, postgresErr := settings.LoadPostgresConfig()
@@ -106,7 +100,6 @@ func buildRuntimeConfig() (*RuntimeConfig, error) {
 		Version:          sharedenv.String("APP_VERSION", "1.1.0-go"),
 		Server:           server,
 		Logging:          logging,
-		Tracing:          tracingConfig,
 		Postgres:         postgres,
 		RuntimeOwnership: ownership,
 		WorkerProfile:    workerProfile,
@@ -177,10 +170,6 @@ func (c *RuntimeConfig) Validate() error {
 		return fmt.Errorf("validate server: %w", err)
 	}
 
-	if err := c.validateTracing(); err != nil {
-		return fmt.Errorf("validate tracing: %w", err)
-	}
-
 	if err := c.validateOwnership(); err != nil {
 		return fmt.Errorf("validate ownership: %w", err)
 	}
@@ -226,23 +215,6 @@ func validateCollectorMetricsAPIKey(environment, apiKey string) error {
 	}
 
 	return errors.New("METRICS_API_KEY is required in production")
-}
-
-func (c *RuntimeConfig) validateTracing() error {
-	if err := settings.ValidateTracingConfig(c.Tracing); err != nil {
-		return fmt.Errorf("validate tracing config: %w", err)
-	}
-
-	if !runtimepolicy.IsProduction(c.Environment) || c.Tracing.Enabled {
-		return nil
-	}
-
-	enabledEnv, err := tracingEnabledEnvForInstance(c.Collector.InstanceID)
-	if err != nil {
-		return fmt.Errorf("youtube collector tracing enabled env: %w", err)
-	}
-
-	return fmt.Errorf("%s=true is required in production", enabledEnv)
 }
 
 func (c *RuntimeConfig) validateOwnership() error {

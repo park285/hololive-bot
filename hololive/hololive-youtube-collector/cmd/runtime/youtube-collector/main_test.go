@@ -5,9 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestYouTubeCollectorLogFileNameUsesExplicitEnv(t *testing.T) {
@@ -40,26 +37,5 @@ func TestYouTubeCollectorLogFileNameRejectsPathSeparators(t *testing.T) {
 
 	if got := youtubeCollectorLogFileName(); got != "youtube-collector.log" {
 		t.Fatalf("youtubeCollectorLogFileName() = %q, want youtube-collector.log", got)
-	}
-}
-
-func TestYouTubeCollectorTelemetryServiceNameIsStable(t *testing.T) {
-	cfg := &collectorconfig.RuntimeConfig{
-		Environment: "production",
-		Tracing: settings.TracingConfig{
-			Enabled:    true,
-			Endpoint:   "otel-collector:4317",
-			Insecure:   true,
-			SampleRate: 0.1,
-		},
-	}
-	got := youtubeCollectorTelemetryConfig(cfg, "3.4.5")
-
-	if got.ServiceName != "youtube-collector" {
-		t.Fatalf("ServiceName = %q, want youtube-collector", got.ServiceName)
-	}
-
-	if got.ServiceVersion != "3.4.5" || got.Environment != "production" {
-		t.Fatalf("telemetry identity = %#v, want version and environment preserved", got)
 	}
 }

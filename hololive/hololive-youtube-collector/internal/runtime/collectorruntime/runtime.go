@@ -110,13 +110,12 @@ func assembleDisabledRuntime(
 		readiness.configure(options)
 
 		options.WorkerRegistry = workerRegistry
-		options.PreRouteUse = append(options.PreRouteUse, collectorTraceIdentity(appConfig.Collector.InstanceID).handle)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build disabled youtube collector router: %w", err)
 	}
 
-	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http", workerRegistry)
+	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, workerRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("runtime HTTP servers: %w", err)
 	}
@@ -155,14 +154,13 @@ func assembleRuntime(
 			readiness.configure(options)
 
 			options.WorkerRegistry = workerRegistry
-			options.PreRouteUse = append(options.PreRouteUse, collectorTraceIdentity(appConfig.Collector.InstanceID).handle)
 		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector router: %w", err)
 	}
 
-	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http", workerRegistry)
+	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, workerRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("runtime HTTP servers: %w", err)
 	}

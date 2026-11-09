@@ -242,8 +242,7 @@ func buildAlarmWorkerHTTPRuntime(
 		xSpaces:        xSpaces.scheduler,
 	}
 
-	servers, err = sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, "hololive-alarm-worker.http",
-		nil, sharedserver.LocalPlaneTraceFilter)
+	servers, err = sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, nil)
 	if err != nil {
 		return nil, alarmWorkerBackgroundRunners{}, "http servers", fmt.Errorf("runtime HTTP servers: %w", err)
 	}

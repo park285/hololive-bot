@@ -40,19 +40,10 @@ type WebhookConfig struct {
 }
 
 // LoadBotPlaneRuntime은 bot plane 설정만 단독으로 읽고 검증한다. 전체 hololive-api 기동은 LoadRuntime을 쓰고,
-// 이 함수는 bot plane DB 설정만 필요한 운영 명령이 같은 env 계약(형식·tracing·역할 검증)을 거치게 한다.
+// 이 함수는 bot plane DB 설정만 필요한 운영 명령이 같은 env 계약(형식·역할 검증)을 거치게 한다.
 func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	if err := loadProcessEnv(); err != nil {
 		return nil, err
-	}
-
-	tracing, err := settings.LoadTracingConfig(envload.TracingHololiveAPIEnabledEnv)
-	if err != nil {
-		return nil, fmt.Errorf("load tracing config: %w", err)
-	}
-
-	if err = settings.ValidateTracingConfig(tracing); err != nil {
-		return nil, fmt.Errorf("validate tracing config: %w", err)
 	}
 
 	config, err := loadBotPlaneConfig()

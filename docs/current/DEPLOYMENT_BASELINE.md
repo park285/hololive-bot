@@ -76,8 +76,8 @@ schema migration은 실행하지 않았습니다. 새 호스트의 `hololive-com
 새 호스트의 Docker socket GID는 `987`이며 secret master와 운영 mirror의 비밀 아닌 값도 일치합니다.
 
 `<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, CLIProxy와 observability
-스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
-의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `HOLOLIVE_OTLP_GRPC_ENDPOINT`가
+스택(Prometheus, Loki, Alertmanager, exporter)이 중앙 데이터 평면 이전 때
+의도적으로 남았습니다 — `CLIPROXY_BASE_URL`이
 `<build-control-host>`를 가리키는 것은 이전 누락이 아니라 named exception입니다.
 둘째, 원격 primary의 일일 암호화 논리 백업과 주간 격리 복원을 소유합니다.
 과거 로컬 `holo-postgres` container·volume과 시간별 dump/restore는 복구하지 않습니다.

@@ -16,8 +16,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
@@ -71,9 +69,6 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message, body [
 	}
 
 	messageID := durability.MessageIdentity(msg.JSON.MessageID)
-	if id := strings.TrimSpace(msg.JSON.MessageID); id != "" {
-		trace.SpanFromContext(ctx).SetAttributes(attribute.String("iris.message_id", id))
-	}
 
 	roomID := strings.TrimSpace(msg.Room)
 

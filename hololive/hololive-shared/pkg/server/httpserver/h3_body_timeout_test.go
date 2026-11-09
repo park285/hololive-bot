@@ -63,7 +63,7 @@ func assertRuntimeBodyTimeout(t *testing.T, certFile, keyFile string, slowBody b
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { serveLongBodyTimeoutResponse(t, w, r) })
 
-	server, err := newH3Server(testLoopbackAddr, handler, certFile, keyFile, "test.body-timeout")
+	server, err := newH3Server(testLoopbackAddr, handler, certFile, keyFile)
 	if err != nil {
 		t.Fatal(err)
 	}

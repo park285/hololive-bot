@@ -285,29 +285,19 @@ Collector b on iris-seoul names the central primary in its unit (`POSTGRES_HOST=
 and reads the dedicated scraper password from `youtube-collector.env` (`POSTGRES_PASSWORD`). It has no cache mounts
 or DB/cache dependencies. The non-secret primary address owner is `deploy/topology/hosts.conf`
 (`central=100.100.1.8`). Native generation reads that owner and `scripts/ci/postgres-capacity-policy.tsv`,
-not a second address/pool literal. CLIProxy/OTLP workstation addresses are unrelated to the primary DB route.
+not a second address/pool literal. CLIProxy workstation addresses are unrelated to the primary DB route.
 
 Collectors use only `youtube-collector.env`, so Iris egress tokens stay out of collector containers.
 The central unsuffixed `youtube-collector` (`c`) also uses scoped
 `youtube-collector.env`; it still must not receive Iris egress tokens, and `compose.env`
 is only a `[Service]` interpolation file, never a container env file.
 
-`youtube-collector.env` must provide a non-empty `METRICS_API_KEY`, the shared
-`HOLOLIVE_OTLP_GRPC_ENDPOINT`, and `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true`
-for every deployed slot. Host-native `a`/`d` bind metrics to their tailnet
-address, so omitting `METRICS_API_KEY` is a startup configuration error rather
-than a keyless metrics mode.
+`youtube-collector.env` must provide a non-empty `METRICS_API_KEY` for every
+deployed slot. Host-native `a`/`d` bind metrics to their tailnet address, so
+omitting `METRICS_API_KEY` is a startup configuration error rather than a
+keyless metrics mode.
 
-`HOLOLIVE_OTLP_GRPC_ENDPOINT` uses the gRPC `host:port` form. The generic
-`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` variables
-are rejected instead of being reinterpreted with a second URL grammar. This is a
-permanent contract, not a retirement guard: it has no removal condition
-(`DEC-20260926-hololive-legacy-env-config-retirement`).
-
-The API unit does not join `observability-traces`. Its approved host/Tailscale OTLP
-endpoint must be explicitly present in `compose.env`; a container DNS endpoint on
-that network will not work. Other observability peers cannot reach the API
-through that external network. Admin/LLM loopback bindings remain unchanged.
+Admin/LLM loopback bindings remain unchanged.
 `HOLOLIVE_ADMIN_API_PORT_BIND_IP` must match `tailscale ip --assert` on the deployment
 host before any build/start/restart. The approved current IPv4 binding remains
 `100.100.1.8:30006/udp`. Admin sources are loopback and the Iris Console host (iris-seoul) `100.100.1.5/32`;
@@ -322,7 +312,7 @@ The tracked ingress nftables policy filters both host input and Podman (netavark
 forward paths for admin UDP 30006 and PostgreSQL TCP 5433. Mutation preflight requires
 the reviewed installed file, active firewall unit, and loaded DB source/forward rules.
 An empty source set, stale unit, or unavailable firewall inspection stops cutover.
-Applying the firewall, host OTLP configuration, or unit/Compose changes requires the
+Applying the firewall or unit/Compose changes requires the
 separately authorized service deployment workflow; source validation activates none of them.
 
 ## Prepared database policy (not activated)

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
@@ -81,12 +80,6 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 			H3Addr:         ":30025",
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
 			H3KeyFile:      settingstest.HololiveH3KeyPath,
-		},
-		Tracing: settings.TracingConfig{
-			Enabled:    true,
-			Endpoint:   "otel-collector:4317",
-			Insecure:   true,
-			SampleRate: 0.1,
 		},
 		Postgres: settings.PostgresConfig{
 			User:         runtimepolicy.PostgresScraperRoleUser,
@@ -230,11 +223,6 @@ func collectorRuntimeServerValidateCases() []collectorRuntimeValidateCase {
 			name:    "metrics key empty",
 			mutate:  func(c *RuntimeConfig) { c.Server.APIKey = "" },
 			wantSub: "METRICS_API_KEY",
-		},
-		{
-			name:    "tracing disabled",
-			mutate:  func(c *RuntimeConfig) { c.Tracing.Enabled = false },
-			wantSub: envload.TracingYouTubeCollectorCEnabledEnv,
 		},
 		{
 			name:    "h3 cert missing",

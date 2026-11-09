@@ -354,8 +354,7 @@ func buildLLMSchedulerHTTPServers(
 		return nil, err
 	}
 
-	out, err := sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, "hololive-llm-sched.http",
-		nil, sharedserver.LocalPlaneTraceFilter)
+	out, err := sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, nil)
 	if err != nil {
 		return nil, fmt.Errorf("runtime HTTP servers: %w", err)
 	}
