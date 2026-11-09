@@ -175,8 +175,8 @@ func TestObservationRetirementRestorePreservesNotificationState(t *testing.T) {
 	require.NoError(t, err)
 
 	updated, err := pool.Exec(ctx, `INSERT INTO source_observation_applications
-		(id,observation_id,entity_kind_id,entity_key,decision_id,applied_at) OVERRIDING SYSTEM VALUE
-		SELECT id,observation_id,entity_kind_id,entity_key,decision_id,applied_at
+		(observation_id,entity_kind_id,entity_key,decision_id,applied_at)
+		SELECT observation_id,entity_kind_id,entity_key,decision_id,applied_at
 		FROM jsonb_populate_recordset(NULL::source_observation_applications,$1)`, applications)
 	require.NoError(t, err)
 	require.Positive(t, updated.RowsAffected())

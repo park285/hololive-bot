@@ -38,7 +38,7 @@ func TestSourceRetentionProgressesPastProtectedPrefixAndRevisits(t *testing.T) {
 	requireRetentionCount(t, pool, 0)
 }
 
-func TestSourceRetentionBoundsProtectionChecksAndRollsBackCursor(t *testing.T) {
+func TestSourceRetentionBoundsWindowAndRollsBackCursor(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -48,31 +48,31 @@ func TestSourceRetentionBoundsProtectionChecksAndRollsBackCursor(t *testing.T) {
 
 	defer rollbackRetentionTransaction(t, tx)
 
-	_, err = tx.Exec(t.Context(), `SET LOCAL track_functions = 'all'`)
-	require.NoError(t, err)
+	var deleted, passed int
+	var completed bool
 
-	var deleted int
-
-	require.NoError(t, tx.QueryRow(t.Context(), `SELECT count(*) FROM delete_source_observation_retention_batch($1,$2,1000)`,
-		[]string{communityPageKind}, []time.Time{base.Add(time.Hour)}).Scan(&deleted))
+	require.NoError(t, tx.QueryRow(t.Context(), `SELECT cardinality(deleted_ids),passed,traversal_completed
+		FROM delete_source_observation_retention_window($1,$2,1000)`,
+		[]string{communityPageKind}, []time.Time{base.Add(time.Hour)}).Scan(&deleted, &passed, &completed))
 	require.Zero(t, deleted)
+	require.Equal(t, 1000, passed, "보호 prefix도 한 창의 후보 상한까지만 지나간다")
+	require.False(t, completed)
 
-	var calls, cursor int64
+	var cursor, windowEnd int64
 
-	require.NoError(t, tx.QueryRow(t.Context(), `SELECT calls FROM pg_stat_xact_user_functions
-		WHERE funcid='source_observation_retention_protected(bigint)'::regprocedure`).Scan(&calls))
-	require.EqualValues(t, 1000, calls, "only the bounded window may undergo protection checks")
+	require.NoError(t, tx.QueryRow(t.Context(), `SELECT id FROM source_observations
+		ORDER BY received_at,id OFFSET 999 LIMIT 1`).Scan(&windowEnd))
 	require.NoError(t, tx.QueryRow(t.Context(), `SELECT cursor_id FROM source_observation_retention_state`).Scan(&cursor))
-	require.Positive(t, cursor)
+	require.Equal(t, windowEnd, cursor)
 	require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT cursor_id FROM source_observation_retention_state`).Scan(&cursor))
-	require.Zero(t, cursor, "rollback must not lose the uncommitted scan window")
+	require.Zero(t, cursor, "rollback은 commit되지 않은 창의 진척을 남기지 않는다")
 	requireRetentionCount(t, pool, 11000)
 
 	// 새 연결도 같은 영속 커서를 이어받으며 다시 첫 1000개만 검사한다.
-	require.Empty(t, deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{base.Add(time.Hour)}, 1000))
+	require.Equal(t, retentionWindow{passed: 1000}, deleteRetentionWindow(t, pool, base.Add(time.Hour), 1000))
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT cursor_id FROM source_observation_retention_state`).Scan(&cursor))
-	require.Positive(t, cursor)
+	require.Equal(t, windowEnd, cursor)
 }
 
 func TestSourceRetentionBoundsLockedWindowAndRevisits(t *testing.T) {
