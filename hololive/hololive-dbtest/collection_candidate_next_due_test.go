@@ -2,8 +2,8 @@ package dbtest
 
 import (
 	"database/sql"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -192,7 +192,7 @@ func TestCollectionCandidateNextDueMigrationPreservesPreparedReaders(t *testing.
 	require.NoError(t, ensureDBTestMigrationLedger(t.Context(), pool))
 	require.NoError(t, applyManifestMigration(t.Context(), pool, dir, epoch3BaselineMigration))
 
-	migration, err := os.ReadFile(filepath.Join(dir, candidateNextDueMigration))
+	migration, err := fs.ReadFile(os.DirFS(dir), candidateNextDueMigration)
 	require.NoError(t, err)
 
 	seedCollectionBundleHeaders(t, pool)

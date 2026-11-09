@@ -66,11 +66,11 @@ func (c *candidateTraffic) TraceQueryStart(ctx context.Context, _ *pgx.Conn, dat
 	c.statements.Add(1)
 
 	switch data.SQL {
-	case currentProjectionGenerationSQL, projection260Bd498868aSQL:
+	case currentProjectionGenerationSQL:
 		c.headers.Add(1)
 	case subjectCandidatesForProjectionSQL, globalCandidatesForProjectionSQL:
 		c.candidates.Add(1)
-	case candidate260Bd498868aSQL:
+	case candidateBaselineSQL:
 		c.oracle.Add(1)
 	}
 
@@ -131,15 +131,15 @@ func measuredCandidatePool(t *testing.T, base *pgxpool.Pool) (*pgxpool.Pool, *ca
 	return pool, traffic
 }
 
-// TestProjectionCandidateTraffic는 이전 260 스키마와 현재 스키마의 후보 의미를 비교합니다.
-// 이전 SQL 원출처는 bd498868a의 joblease/queries이며 testqueries에 원문 그대로 보관합니다.
+// TestProjectionCandidateTraffic는 epoch-3 baseline과 현행 후보 함수의 결과·제한된 전송을 비교합니다.
+// Baseline에도 같은 production header 조회와 네 열을 명시한 후보 reader를 사용합니다.
 // 각 AP는 독립 pool을 사용합니다. 다음 due 힌트 추가 이후 wire byte는 측정값이지 비증가 계약이 아닙니다.
 // 지연과 EXPLAIN 실행시간은 측정값이며 CPU 사용률 또는 운영 환경 성능을 뜻하지 않습니다.
 func TestProjectionCandidateTraffic(t *testing.T) {
 	for _, count := range []int{620, 1240, contract.MaxProjectionTargetCount} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			current := newCandidateTrafficFleet(t, dbtest.NewPool(t), count, false)
-			legacy := newCandidateTrafficFleet(t, candidateSchema260Pool(t), count, true)
+			legacy := newCandidateTrafficFleet(t, candidateBaselinePool(t), count, true)
 
 			for _, state := range []string{"new", "not-due", "due", "mixed", "distinct-due", "eligibility"} {
 				compareCandidateTrafficState(t, current, legacy, count, state)
@@ -220,15 +220,9 @@ func newCandidateTrafficFleet(t *testing.T, pool *pgxpool.Pool, count int, legac
 
 	fleet.generation = seedProjection(t, pool, nil)
 
-	columns, expiry := "", ""
-
-	if legacy {
-		columns, expiry = ",valid_until", ",TIMESTAMPTZ '2099-01-01 00:00:00+00'"
-	}
-
 	query := `INSERT INTO youtube_collection_targets
-		(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,member_since_generation` + columns + `)
-		SELECT $1,'channel:'||lpad(i::text,5,'0'),'community_page',50,60000,true,$1` + expiry + `
+		(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,member_since_generation)
+		SELECT $1,'channel:'||lpad(i::text,5,'0'),'community_page',50,60000,true,$1
 		FROM generate_series(1,$2::int) i`
 	if _, err := pool.Exec(t.Context(), query, fleet.generation, count); err != nil {
 		t.Fatal(err)
@@ -246,9 +240,8 @@ func newCandidateTrafficFleet(t *testing.T, pool *pgxpool.Pool, count int, legac
 	return fleet
 }
 
-// 261을 역변환하지 않고 빈 DB에 260까지 실제 migration을 재생합니다.
-// 260까지의 migration은 bd498868a와 동일하며 임시 manifest는 DB 격리에만 사용합니다.
-func candidateSchema260Pool(t *testing.T) *pgxpool.Pool {
+// 현재 manifest의 첫 baseline만 재생해 힌트 도입 전 정본 함수와 비교한다.
+func candidateBaselinePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	_, file, _, ok := runtime.Caller(0)
@@ -278,9 +271,8 @@ func candidateSchema260Pool(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 
-	cutoff := slices.Index(entries, "260_youtube_video_novelty_evidence.sql")
-	if cutoff < 0 {
-		t.Fatal("260 migration이 없습니다")
+	if len(entries) == 0 {
+		t.Fatal("baseline migration이 없습니다")
 	}
 
 	dir := t.TempDir()
@@ -298,7 +290,7 @@ func candidateSchema260Pool(t *testing.T) *pgxpool.Pool {
 
 	var selected strings.Builder
 
-	for i, filename := range entries[:cutoff+1] {
+	for i, filename := range entries[:1] {
 		body, readErr := fs.ReadFile(sourceRoot.FS(), filename)
 		if readErr != nil {
 			t.Fatal(readErr)
@@ -344,7 +336,7 @@ func (f *candidateTrafficFleet) cycle(t *testing.T) [4]CandidatePage {
 
 	for ap, err := range errs {
 		if err != nil {
-			t.Fatalf("이전260=%t AP=%d: %v", f.legacy, ap, err)
+			t.Fatalf("baseline=%t AP=%d: %v", f.legacy, ap, err)
 		}
 	}
 
@@ -367,7 +359,7 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 
 	var generation int64
 
-	if err := f.pools[ap].QueryRow(ctx, projection260Bd498868aSQL).Scan(&generation); err != nil {
+	if err := f.pools[ap].QueryRow(ctx, currentProjectionGenerationSQL).Scan(&generation); err != nil {
 		return CandidatePage{}, err
 	}
 
@@ -375,25 +367,25 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 		return CandidatePage{}, fmt.Errorf("이전 generation=%d 예상=%d", generation, f.generation)
 	}
 
-	rows, err := f.pools[ap].Query(ctx, candidate260Bd498868aSQL, f.arguments()...)
+	rows, err := f.pools[ap].Query(ctx, candidateBaselineSQL, f.arguments()...)
 	if err != nil {
 		return CandidatePage{}, err
 	}
 	defer rows.Close()
 
-	return collectCandidatePage(candidate260Rows{rows}, f.job, 10)
+	return collectCandidatePage(baselineCandidateRows{rows}, f.job, 10)
 }
 
 // 이전 SQL의 네 열 wire를 그대로 측정하고, 당시 없던 힌트는 zero 값으로 둡니다.
-type candidate260Rows struct{ pgx.Rows }
+type baselineCandidateRows struct{ pgx.Rows }
 
-func (r candidate260Rows) Scan(dest ...any) error {
+func (r baselineCandidateRows) Scan(dest ...any) error {
 	if len(dest) != 5 {
-		return fmt.Errorf("scan schema 260 candidate: expected five destinations, got %d", len(dest))
+		return fmt.Errorf("scan baseline candidate: expected five destinations, got %d", len(dest))
 	}
 
 	if err := r.Rows.Scan(dest[:4]...); err != nil {
-		return fmt.Errorf("scan schema 260 candidate: %w", err)
+		return fmt.Errorf("scan baseline candidate: %w", err)
 	}
 
 	return nil
@@ -412,10 +404,8 @@ func (f *candidateTrafficFleet) advanceEligibility(t *testing.T, cycle int) {
 		t.Fatal(err)
 	}
 
-	if !f.legacy {
-		if _, err := f.base.Exec(t.Context(), `UPDATE youtube_collection_projection_generations SET eligibility_version=eligibility_version+1 WHERE generation=$1`, f.generation); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := f.base.Exec(t.Context(), `UPDATE youtube_collection_projection_generations SET eligibility_version=eligibility_version+1 WHERE generation=$1`, f.generation); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -462,7 +452,7 @@ func (f *candidateTrafficFleet) report(t *testing.T, state string, started time.
 	t.Helper()
 
 	for ap, traffic := range f.traffic {
-		traffic.report(t, fmt.Sprintf("%s-schema260=%t-AP%d", state, f.legacy, ap), started)
+		traffic.report(t, fmt.Sprintf("%s-baseline=%t-AP%d", state, f.legacy, ap), started)
 
 		reads := traffic.candidates.Load()
 
@@ -472,6 +462,13 @@ func (f *candidateTrafficFleet) report(t *testing.T, state string, started time.
 
 		if traffic.headers.Load() != 120 || reads != 120 {
 			t.Fatalf("불완전한 동시 cycle: AP%d header=%d candidate=%d", ap, traffic.headers.Load(), reads)
+		}
+
+		// 11개 sentinel 포함 후보와 header만 전송하며 대상 수가 커져도 전체 roster를 보내지 않는다.
+		const bytesPerCycle = 8 * 1024
+
+		if bytes := traffic.rx.Load() + traffic.tx.Load(); bytes > 120*bytesPerCycle {
+			t.Fatalf("제한된 후보 wire 예산 초과: AP%d bytes=%d budget=%d", ap, bytes, 120*bytesPerCycle)
 		}
 	}
 }
@@ -490,7 +487,7 @@ func (f *candidateTrafficFleet) explainMode(t *testing.T, state, mode string) {
 	query := subjectCandidatesForProjectionSQL
 
 	if f.legacy {
-		query = candidate260Bd498868aSQL
+		query = candidateBaselineSQL
 	}
 
 	tx, err := f.base.Begin(t.Context())
@@ -552,7 +549,7 @@ func requireCandidatePlanMode(t *testing.T, tx pgx.Tx, state string, legacy bool
 		t.Fatalf("실제 prepared plan 불일치: mode=%s generic=%d custom=%d", mode, generic, custom)
 	}
 
-	t.Logf("schema260=%t 상태=%s plan=%s generic_plans=%d custom_plans=%d", legacy, state, mode, generic, custom)
+	t.Logf("baseline=%t 상태=%s plan=%s generic_plans=%d custom_plans=%d", legacy, state, mode, generic, custom)
 }
 
 func reportCandidatePlan(t *testing.T, state string, legacy bool, mode string, raw []byte) {
@@ -576,7 +573,7 @@ func reportCandidatePlan(t *testing.T, state string, legacy bool, mode string, r
 		t.Fatalf("EXPLAIN 결과 수=%d", len(plans))
 	}
 
-	t.Logf("종류=community_collect 상태=%s schema260=%t plan=%s 예열=1 실행_ms=%.3f shared_hit=%d shared_read=%d temp_read=%d temp_write=%d", state, legacy, mode, plans[0].ExecutionMS, plans[0].Plan.Hits, plans[0].Plan.Reads, plans[0].Plan.TempReads, plans[0].Plan.TempWrites)
+	t.Logf("종류=community_collect 상태=%s baseline=%t plan=%s 예열=1 실행_ms=%.3f shared_hit=%d shared_read=%d temp_read=%d temp_write=%d", state, legacy, mode, plans[0].ExecutionMS, plans[0].Plan.Hits, plans[0].Plan.Reads, plans[0].Plan.TempReads, plans[0].Plan.TempWrites)
 }
 
 func seedCandidateTrafficState(t *testing.T, pool *pgxpool.Pool, generation int64, state string) {
