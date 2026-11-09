@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"go.opentelemetry.io/otel"
-
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
@@ -29,10 +27,6 @@ func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output 
 }
 
 func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contract.Provider) (resultErr error) {
-	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.provider.wait")
-
-	defer func() { finishCollectionSpan(span, resultErr) }()
-
 	gate := e.gates[provider]
 	if gate == nil {
 		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider gate is not configured")

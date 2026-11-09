@@ -21,7 +21,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -30,13 +29,11 @@ import (
 	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/v2/pkg/telemetry"
 
 	"github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -53,7 +50,7 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	os.Exit(bootstrap.Options[*workerconfig.RuntimeConfig, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
+	os.Exit(bootstrap.Options[*workerconfig.RuntimeConfig, *workerruntime.AlarmWorkerRuntime]{
 		Version: Version,
 		Initialize: func(version string) {
 			health.Init(version)
@@ -68,12 +65,12 @@ func main() {
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}, "alarm-worker.log", sharedlogging.Options{OTel: appConfig.Tracing.Enabled, AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
+			}, "alarm-worker.log", sharedlogging.Options{AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 			if err != nil {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}
 
-			// otel export 오류처럼 slog.Default()로 기록하는 라이브러리 경로도 같은 JSON 파일·sanitize lane을 타게 한다.
+			// slog.Default()로 기록하는 라이브러리 경로도 같은 JSON 파일·sanitize lane을 타게 한다.
 			slog.SetDefault(logger)
 
 			return logger, closer, nil
@@ -81,24 +78,9 @@ func main() {
 		LoggerLevel: func(appConfig *workerconfig.RuntimeConfig) string {
 			return appConfig.Logging.Level
 		},
-		StartupMessage: "Hololive Alarm Worker starting...",
-		BuildTimeout:   constants.AppTimeout.Build,
-		BuildRuntime: func(
-			ctx context.Context,
-			appConfig *workerconfig.RuntimeConfig,
-			logger *slog.Logger,
-		) (*observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime], error) {
-			traceConfig := alarmWorkerTelemetryConfig(appConfig, Version)
-
-			return observability.BuildRuntime(
-				ctx,
-				&traceConfig,
-				logger,
-				func(ctx context.Context) (*workerruntime.AlarmWorkerRuntime, error) {
-					return workerapp.BuildAlarmWorkerRuntime(ctx, appConfig, logger)
-				},
-			)
-		},
+		StartupMessage:    "Hololive Alarm Worker starting...",
+		BuildTimeout:      constants.AppTimeout.Build,
+		BuildRuntime:      workerapp.BuildAlarmWorkerRuntime,
 		BuildErrorMessage: "Failed to assemble alarm worker runtime",
 	}.Run())
 }
@@ -121,16 +103,4 @@ func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (
 	}
 
 	return true, 0
-}
-
-func alarmWorkerTelemetryConfig(appConfig *workerconfig.RuntimeConfig, version string) telemetry.Config {
-	return telemetry.Config{
-		Enabled:        appConfig.Tracing.Enabled,
-		ServiceName:    "hololive-alarm-worker",
-		ServiceVersion: version,
-		Environment:    appConfig.Environment,
-		OTLPEndpoint:   appConfig.Tracing.Endpoint,
-		OTLPInsecure:   appConfig.Tracing.Insecure,
-		SampleRate:     appConfig.Tracing.SampleRate,
-	}
 }

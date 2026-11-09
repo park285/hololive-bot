@@ -87,7 +87,7 @@ func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
 		MetricsAddr:    testLoopbackAddr,
-	}, http.NotFoundHandler(), "test.http", registry)
+	}, http.NotFoundHandler(), registry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestNewRuntimeHTTPServersBuildsMetricsServerFromConfig(t *testing.T) {
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
 		MetricsAddr:    testLoopbackAddr,
-	}, http.NotFoundHandler(), "test.http", nil)
+	}, http.NotFoundHandler(), nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeHTTPServers() error = %v", err)
 	}
@@ -219,7 +219,7 @@ func TestNewRuntimeHTTPServersBuildsMetricsServerFromConfig(t *testing.T) {
 		H3Addr:         testLoopbackAddr,
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
-	}, http.NotFoundHandler(), "test.http", nil)
+	}, http.NotFoundHandler(), nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeHTTPServers() error = %v", err)
 	}

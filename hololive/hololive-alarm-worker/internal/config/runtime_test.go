@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -49,27 +48,6 @@ func TestLoadRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 
 	if _, err := LoadRuntime(); err != nil {
 		t.Fatalf("LoadRuntime() error = %v, want success when collector env is invalid", err)
-	}
-}
-
-func TestLoadRuntimeSelectsAlarmWorkerTracingToggle(t *testing.T) {
-	setRuntimeEnv(t)
-	settingstest.ClearTracingEnv(t)
-	t.Setenv(envload.HololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
-	t.Setenv(envload.TracingHololiveAPIEnabledEnv, "not-a-bool")
-	t.Setenv(envload.TracingAlarmWorkerEnabledEnv, "true")
-
-	for _, key := range envload.TracingEnabledEnvKeys()[2:] {
-		t.Setenv(key, "not-a-bool")
-	}
-
-	config, err := LoadRuntime()
-	if err != nil {
-		t.Fatalf("LoadRuntime() error = %v", err)
-	}
-
-	if !config.Tracing.Enabled {
-		t.Fatal("TracingConfig.Enabled = false, want true")
 	}
 }
 

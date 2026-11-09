@@ -24,8 +24,7 @@ func BuildShortLinkServer(addr string) *http.Server {
 		return nil
 	}
 
-	return sharedserver.NewHTTPServer(addr, apphttp.ProvideShortLinkHandler(), "hololive-bot.shortlink",
-		sharedserver.LocalPlaneTraceFilter)
+	return sharedserver.NewHTTPServer(addr, apphttp.ProvideShortLinkHandler())
 }
 
 func BuildBotHTTP3Server(

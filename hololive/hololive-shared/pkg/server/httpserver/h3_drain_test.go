@@ -67,7 +67,7 @@ func startH3ShutdownFixture(t *testing.T, handler http.Handler) *h3ShutdownFixtu
 		H3Addr:         testLoopbackAddr,
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
-	}, handler, "test.h3.shutdown", nil)
+	}, handler, nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeHTTPServers() error = %v", err)
 	}

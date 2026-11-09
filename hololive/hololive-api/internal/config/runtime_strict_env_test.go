@@ -65,7 +65,6 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 	} {
 		t.Run(key, func(t *testing.T) {
 			settingstest.ClearRuntimeRoleEnv(t)
-			settingstest.ClearTracingEnv(t)
 			configtest.SetRequiredLoadEnv(t)
 			clearConfigurePlanesIntEnv(t)
 			t.Setenv("APP_ENV", "development")
@@ -86,7 +85,6 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 
 func TestLoadRuntimeIgnoresGenericPoolKeys(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
-	settingstest.ClearTracingEnv(t)
 	configtest.SetRequiredLoadEnv(t)
 	clearConfigurePlanesIntEnv(t)
 	t.Setenv("APP_ENV", "development")

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/config/configtest"
-	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
@@ -99,30 +98,6 @@ func TestLoadLLMSchedulerRuntimeEnvApplied(t *testing.T) {
 
 	if config.Bot.Prefix != "#" {
 		t.Fatalf("Bot.Prefix = %q, want %q", config.Bot.Prefix, "#")
-	}
-}
-
-func TestLoadRuntimeSelectsHololiveAPITracingToggle(t *testing.T) {
-	settingstest.ClearRuntimeRoleEnv(t)
-	settingstest.ClearTracingEnv(t)
-	configtest.SetRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
-	t.Setenv(envload.HololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
-	t.Setenv(envload.TracingHololiveAPIEnabledEnv, "true")
-	t.Setenv(envload.TracingAlarmWorkerEnabledEnv, "not-a-bool")
-
-	for _, key := range envload.TracingEnabledEnvKeys()[2:] {
-		t.Setenv(key, "not-a-bool")
-	}
-
-	config, err := LoadRuntime()
-	if err != nil {
-		t.Fatalf("LoadRuntime() error = %v", err)
-	}
-
-	if !config.Tracing.Enabled {
-		t.Fatalf("RuntimeConfig tracing = %#v, want enabled", config.Tracing)
 	}
 }
 

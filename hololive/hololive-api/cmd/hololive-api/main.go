@@ -14,13 +14,11 @@ import (
 	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/v2/pkg/telemetry"
 
 	runtimeapp "github.com/kapu/hololive-api/internal/app"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -51,7 +49,7 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	os.Exit(bootstrap.Options[*apiconfig.RuntimeConfig, *observability.ManagedRuntime[*runtimeapp.Runtime]]{
+	os.Exit(bootstrap.Options[*apiconfig.RuntimeConfig, *runtimeapp.Runtime]{
 		Version: Version,
 		Initialize: func(version string) {
 			health.Init(version)
@@ -70,23 +68,8 @@ func main() {
 				slog.Int("llm_port", config.LLM.Server.Port),
 			}
 		},
-		BuildTimeout: constants.AppTimeout.Build,
-		BuildRuntime: func(
-			ctx context.Context,
-			config *apiconfig.RuntimeConfig,
-			logger *slog.Logger,
-		) (*observability.ManagedRuntime[*runtimeapp.Runtime], error) {
-			traceConfig := hololiveAPITelemetryConfig(config, Version)
-
-			return observability.BuildRuntime(
-				ctx,
-				&traceConfig,
-				logger,
-				func(ctx context.Context) (*runtimeapp.Runtime, error) {
-					return runtimeapp.BuildRuntime(ctx, config, logger)
-				},
-			)
-		},
+		BuildTimeout:      constants.AppTimeout.Build,
+		BuildRuntime:      runtimeapp.BuildRuntime,
 		BuildErrorMessage: "Failed to assemble hololive-api runtime",
 	}.Run())
 }
@@ -99,27 +82,15 @@ func newHololiveAPILogger(config *apiconfig.RuntimeConfig) (*slog.Logger, io.Clo
 		MaxBackups: config.Logging.MaxBackups,
 		MaxAgeDays: config.Logging.MaxAgeDays,
 		Compress:   config.Logging.Compress,
-	}, "hololive-api.log", sharedlogging.Options{OTel: config.Tracing.Enabled, AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
+	}, "hololive-api.log", sharedlogging.Options{AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 	if err != nil {
 		return nil, nil, fmt.Errorf("enable file logging: %w", err)
 	}
 
-	// slog.Default()로 기록하는 의존성(otel export 오류 등)도 같은 JSON 파일과 마스킹 경로로 보낸다.
+	// slog.Default()로 기록하는 의존성도 같은 JSON 파일과 마스킹 경로로 보낸다.
 	slog.SetDefault(logger)
 
 	return logger, closer, nil
-}
-
-func hololiveAPITelemetryConfig(config *apiconfig.RuntimeConfig, version string) telemetry.Config {
-	return telemetry.Config{
-		Enabled:        config.Tracing.Enabled,
-		ServiceName:    "hololive-api",
-		ServiceVersion: version,
-		Environment:    config.Bot.Environment,
-		OTLPEndpoint:   config.Tracing.Endpoint,
-		OTLPInsecure:   config.Tracing.Insecure,
-		SampleRate:     config.Tracing.SampleRate,
-	}
 }
 
 func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
@@ -238,7 +209,7 @@ func newRerunNotificationLogger(config *apiconfig.RuntimeConfig) (*slog.Logger, 
 
 	logger, _, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
 		Level: config.Logging.Level,
-	}, "hololive-api.log", sharedlogging.Options{OTel: false, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
+	}, "hololive-api.log", sharedlogging.Options{PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 	if err != nil {
 		return nil, fmt.Errorf("enable console logging: %w", err)
 	}

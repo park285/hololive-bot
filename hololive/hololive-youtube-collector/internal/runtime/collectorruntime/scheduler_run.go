@@ -10,9 +10,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
@@ -44,33 +41,15 @@ func (e *collectionExecutor) runSpec(ctx context.Context, job *queuedJob) {
 	defer cancel()
 
 	spec := &job.JobSpec
-	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.attempt", trace.WithAttributes(
-		attribute.String("youtube.collector.instance_id", e.collector.InstanceID),
-		attribute.String("collection.provider", string(spec.Provider)),
-		attribute.String("collection.job_kind", spec.CollectionJobKind),
-	))
-
-	var (
-		result       *collection.CollectResult
-		operationErr error
-	)
-
-	defer func() { finishCollectionResultSpan(span, result, operationErr) }()
-
-	registration := job.registration
 
 	lease, err := e.acquireLease(ctx, spec)
 	if err != nil || lease == nil {
-		if errors.Is(err, joblease.ErrNotAcquired) {
-			span.SetAttributes(attribute.String("collection.admission", "not_acquired"))
-		} else {
-			operationErr = err
-		}
-
 		return
 	}
 
-	result, operationErr = e.runAcquired(ctx, registration, spec, lease)
+	if err := e.runAcquired(ctx, job.registration, spec, lease); err != nil {
+		return // runAcquired가 실패를 지표·lease 정리·로그로 이미 기록했습니다.
+	}
 }
 
 func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.JobSpec) (joblease.Lease, error) {
@@ -109,18 +88,12 @@ func (e *collectionExecutor) observeAcquireError(ctx context.Context, spec *jobl
 	e.logFailure(ctx, "acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
 }
 
-func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) (*collection.CollectResult, error) {
-	var collected *collection.CollectResult
-
+func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) error {
 	proof := lease.Proof()
 	started := time.Now()
 	attemptID := e.workerTracker.BeginAttempt(started)
 	runResult := e.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
-		var err error
-
-		collected, err = e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
-
-		return err
+		return e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
 	})
 	err := runResult.Err
 
@@ -132,20 +105,17 @@ func (e *collectionExecutor) runAcquired(ctx context.Context, registration Regis
 		e.metrics.ObserveInvalidFailureTuple(spec.Provider, spec.CollectionJobKind)
 	}
 
-	trace.SpanFromContext(ctx).SetAttributes(attribute.String("collection.lease_outcome", string(runResult.Outcome)))
-
 	if e.handleLeaseRunOutcome(ctx, runResult, spec, &proof) {
-		// callback 완료 통지를 받은 경우만 결과를 읽는다. 취소 후 남은 callback과 경합하지 않는다.
 		if runResult.Outcome == joblease.LeaseRunCallbackCompleted {
-			return collected, nil
+			return nil
 		}
 
-		return nil, err
+		return err
 	}
 
 	e.handleRunError(ctx, lease, spec, &proof, err)
 
-	return nil, err
+	return err
 }
 
 func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
@@ -313,29 +283,26 @@ func (e *collectionExecutor) collectAndPublish(
 	spec *joblease.JobSpec,
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
-) (*collection.CollectResult, error) {
+) error {
 	input, result, fatal, err := e.collectWithAdmission(ctx, registration, spec, proof)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	_, validationSpan := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.validate")
 	validationErr := ValidateCollectResult(&input, registration, &result, fatal)
-	finishCollectionSpan(validationSpan, validationErr)
-
 	if validationErr != nil {
-		return nil, &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
+		return &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
 	}
 
 	if fatal != nil {
-		return nil, fatal
+		return fatal
 	}
 
 	if err := e.commitCollectResult(ctx, spec, lease, proof, &result); err != nil {
-		return nil, fmt.Errorf("commit collect result: %w", err)
+		return fmt.Errorf("commit collect result: %w", err)
 	}
 
-	return &result, nil
+	return nil
 }
 
 // collectWithAdmission은 provider gate를 얻은 뒤 실행 입력 적재와 수집만 gate 안에서 수행합니다.
@@ -363,11 +330,7 @@ func (e *collectionExecutor) collectWithAdmission(
 		return collection.RunInput{}, collection.CollectResult{}, nil, fmt.Errorf("start collect: %w", ctxErr)
 	}
 
-	inputCtx, inputSpan := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.input.load")
-
-	input, err = e.buildRunInput(inputCtx, registration, spec, proof)
-	finishCollectionSpan(inputSpan, err)
-
+	input, err = e.buildRunInput(ctx, registration, spec, proof)
 	if err != nil {
 		return collection.RunInput{}, collection.CollectResult{}, nil, fmt.Errorf("build run input: %w", err)
 	}
@@ -389,10 +352,6 @@ func (e *collectionExecutor) collectWithAdmission(
 }
 
 func (e *collectionExecutor) runCollector(ctx context.Context, runner collection.JobRunner, input *collection.RunInput) (result collection.CollectResult, resultErr error) {
-	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.fetch")
-
-	defer func() { finishCollectionResultSpan(span, &result, resultErr) }()
-
 	var collectErr error
 
 	returned := false
@@ -459,10 +418,6 @@ func (e *collectionExecutor) commitCollectResult(
 	proof *contract.LeaseProof,
 	result *collection.CollectResult,
 ) (resultErr error) {
-	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.publish")
-
-	defer func() { finishCollectionSpan(span, resultErr) }()
-
 	output := result.Output()
 	if result.Kind() == collection.CollectComplete && output.Empty() {
 		dbCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), e.collector.DBTimeout)

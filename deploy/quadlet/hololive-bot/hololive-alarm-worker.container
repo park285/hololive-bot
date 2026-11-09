@@ -21,7 +21,6 @@ GroupAdd=1000
 # 호스트 ID와 분리한다(크기는 스택 공통 65536). 그룹 비밀은 :idmap 대신 GID를 그대로 매핑해 읽는다(worker-profile-pair.py가 profile mount 줄을 비교).
 UserNS=auto:size=65536,gidmapping=${HOLOLIVE_RUNTIME_GID}:${HOLOLIVE_RUNTIME_GID}:1
 Network=hololive-net.network
-Network=observability-traces.network
 PublishPort=127.0.0.1:30007:30007
 PublishPort=127.0.0.1:30007:30007/udp
 PublishPort=${HOLOLIVE_METRICS_PORT_BIND_IP}:30097:30097

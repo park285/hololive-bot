@@ -282,7 +282,7 @@ func checkGateRelease(t *testing.T, test gateReleaseCase) {
 
 	proof := lease.Proof()
 
-	_, err = executor.collectAndPublish(ctx, registration, spec, lease, &proof)
+	err = executor.collectAndPublish(ctx, registration, spec, lease, &proof)
 
 	if (err != nil) != test.wantErr {
 		t.Fatalf("collectAndPublish error = %v, want error %t", err, test.wantErr)
@@ -417,7 +417,7 @@ func startCollectAndPublish(ctx context.Context, executor *collectionExecutor, s
 
 	proof := lease.Proof()
 
-	go func() { _, err := executor.collectAndPublish(ctx, registration, spec, lease, &proof); done <- err }()
+	go func() { done <- executor.collectAndPublish(ctx, registration, spec, lease, &proof) }()
 
 	return done
 }

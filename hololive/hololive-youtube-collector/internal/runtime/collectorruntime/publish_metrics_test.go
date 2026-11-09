@@ -34,7 +34,7 @@ func TestCollectAndPublishRecordsPublishDurationAndEncodedBytes(t *testing.T) {
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	proof := lease.Proof()
 
-	if _, err := executor.collectAndPublish(t.Context(), registration, spec, lease, &proof); err != nil {
+	if err := executor.collectAndPublish(t.Context(), registration, spec, lease, &proof); err != nil {
 		t.Fatalf("collect and publish: %v", err)
 	}
 

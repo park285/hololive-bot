@@ -21,7 +21,6 @@ type RuntimeConfig struct {
 	Postgres     settings.PostgresConfig
 	Notification settings.NotificationConfig
 	Logging      settings.LoggingConfig
-	Tracing      settings.TracingConfig
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath string
 	// MarkdownReplies: BOT_MARKDOWN_REPLIES. 예약 알림 본문도 bot 응답과 같은 Markdown 표시 정책을 쓴다.
@@ -60,11 +59,6 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load iris config: %w", err)
 	}
 
-	tracing, err := settings.LoadTracingConfig(envload.TracingAlarmWorkerEnabledEnv)
-	if err != nil {
-		return nil, fmt.Errorf("load tracing config: %w", err)
-	}
-
 	// alarm-worker는 room ACL을 소비하지 않지만 compose 계약상 Iris egress runtime이라 KAKAO_ROOMS·KAKAO_ACL_* 입력을
 	// bot plane과 같은 기준으로 거절한다. 값은 보관하지 않는다.
 	kakao, err := settings.LoadKakaoConfig()
@@ -78,7 +72,6 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 	}
 
 	config.Iris = iris
-	config.Tracing = tracing
 
 	if err := validateEgressInputs(kakao.Rooms, &config.Iris, config.Holodex.APIKey); err != nil {
 		return nil, fmt.Errorf("validate required: %w", err)
@@ -180,10 +173,6 @@ func (c *RuntimeConfig) validate() error {
 
 	if err := runtimepolicy.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
-	}
-
-	if err := settings.ValidateTracingConfig(c.Tracing); err != nil {
-		return fmt.Errorf("validate tracing config: %w", err)
 	}
 
 	if err := settings.ValidateHolodexConfig(&c.Holodex); err != nil {

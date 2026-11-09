@@ -33,7 +33,6 @@ type RuntimeConfig struct {
 	LLM     *LLMSchedulerConfig
 	YouTube YouTubePlaneConfig
 	Logging settings.LoggingConfig
-	Tracing settings.TracingConfig
 }
 
 func LoadRuntime() (*RuntimeConfig, error) {
@@ -44,11 +43,6 @@ func LoadRuntime() (*RuntimeConfig, error) {
 	logging, err := settings.LoadLoggingConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load hololive-api logging config: %w", err)
-	}
-
-	tracing, err := settings.LoadTracingConfig(envload.TracingHololiveAPIEnabledEnv)
-	if err != nil {
-		return nil, fmt.Errorf("load hololive-api tracing config: %w", err)
 	}
 
 	botConfig, err := loadBotPlaneConfig()
@@ -83,7 +77,6 @@ func LoadRuntime() (*RuntimeConfig, error) {
 		LLM:     llmConfig,
 		YouTube: youtubeConfig,
 		Logging: logging,
-		Tracing: tracing,
 	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("hololive-api config validation failed: %w", err)
@@ -172,10 +165,6 @@ func (c *RuntimeConfig) Validate() error {
 }
 
 func (c *RuntimeConfig) validateSharedPlanes() error {
-	if err := settings.ValidateTracingConfig(c.Tracing); err != nil {
-		return fmt.Errorf("validate tracing config: %w", err)
-	}
-
 	if err := c.validatePlaneRuntimes(); err != nil {
 		return fmt.Errorf("validate plane runtimes: %w", err)
 	}

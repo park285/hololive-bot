@@ -11,7 +11,6 @@ import (
 func setAdminPlaneEnv(t *testing.T) {
 	t.Helper()
 	settingstest.ClearRuntimeRoleEnv(t)
-	settingstest.ClearTracingEnv(t)
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("API_SECRET_KEY", "test-api-key")

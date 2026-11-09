@@ -15,10 +15,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/v2/pkg/telemetry"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
@@ -45,7 +43,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	os.Exit(bootstrap.Options[*collectorconfig.RuntimeConfig, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
+	os.Exit(bootstrap.Options[*collectorconfig.RuntimeConfig, *collectorruntime.Runtime]{
 		Version: Version,
 		Initialize: func(version string) {
 			health.Init(version)
@@ -60,12 +58,12 @@ func main() {
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}, youtubeCollectorLogFileName(), sharedlogging.Options{OTel: appConfig.Tracing.Enabled, AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
+			}, youtubeCollectorLogFileName(), sharedlogging.Options{AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 			if err != nil {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}
 
-			// slog.Default()로 기록하는 의존성(otel export 오류 등)도 같은 JSON 파일과 마스킹 경로로 보낸다.
+			// slog.Default()로 기록하는 의존성도 같은 JSON 파일과 마스킹 경로로 보낸다.
 			slog.SetDefault(logger)
 
 			return logger, closer, nil
@@ -82,17 +80,8 @@ func main() {
 			ctx context.Context,
 			appConfig *collectorconfig.RuntimeConfig,
 			logger *slog.Logger,
-		) (*observability.ManagedRuntime[*collectorruntime.Runtime], error) {
-			traceConfig := youtubeCollectorTelemetryConfig(appConfig, Version)
-
-			return observability.BuildRuntime(
-				ctx,
-				&traceConfig,
-				logger,
-				func(ctx context.Context) (*collectorruntime.Runtime, error) {
-					return collectorruntime.Build(ctx, appConfig, logger, startup.waitForDatabase)
-				},
-			)
+		) (*collectorruntime.Runtime, error) {
+			return collectorruntime.Build(ctx, appConfig, logger, startup.waitForDatabase)
 		},
 		BuildErrorMessage: "Failed to build youtube collector runtime",
 	}.Run())
@@ -136,18 +125,6 @@ func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (
 	}
 
 	return true, 0
-}
-
-func youtubeCollectorTelemetryConfig(appConfig *collectorconfig.RuntimeConfig, version string) telemetry.Config {
-	return telemetry.Config{
-		Enabled:        appConfig.Tracing.Enabled,
-		ServiceName:    "youtube-collector",
-		ServiceVersion: version,
-		Environment:    appConfig.Environment,
-		OTLPEndpoint:   appConfig.Tracing.Endpoint,
-		OTLPInsecure:   appConfig.Tracing.Insecure,
-		SampleRate:     appConfig.Tracing.SampleRate,
-	}
 }
 
 func youtubeCollectorLogFileName() string {

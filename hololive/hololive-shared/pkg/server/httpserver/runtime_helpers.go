@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/health"
 	"github.com/park285/shared-go/v2/pkg/httputil"
-	"github.com/park285/shared-go/v2/pkg/telemetry"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/internal/workerobservability"
@@ -59,16 +58,10 @@ func NewHealthOnlyRuntimeRouter(
 	return out, nil
 }
 
-func NewHTTPServer(addr string, handler http.Handler, operation string,
-	traceFilters ...func(*http.Request) bool,
-) *http.Server {
+func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
-
-	traceFilter := firstTraceFilter(traceFilters)
-
-	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{Filter: traceFilter})
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -151,9 +144,6 @@ func installRuntimeMiddleware(ctx context.Context, router *gin.Engine, logger *s
 		opts = &RuntimeRouterOptions{}
 	}
 
-	// "/__observability/*"는 로깅에서만 제외한다. observability-stack의
-	// collect-runtime-metrics.sh가 liveness 근거로 쓸 404 span을 만들려고 일부러
-	// 호출하는 경로이므로, LocalPlaneTraceFilter에는 절대 추가하면 안 된다.
 	ApplyBaseMiddleware(ctx, router, logger, BaseMiddlewareOptions{
 		SkipLogPaths: append(
 			[]string{"/health", "/ready", "/internal/ready", "/metrics", "/__observability/*"},
@@ -198,23 +188,4 @@ func registerRuntimeInternalReadyRoute(router *gin.Engine, apiKey string, readyR
 	internal := router.Group("/internal")
 	internal.Use(middleware.APIKeyAuthMiddleware(apiKey))
 	internal.GET("/ready", readyResponder)
-}
-
-func LocalPlaneTraceFilter(r *http.Request) bool {
-	switch r.URL.Path {
-	case "/health", "/ready", "/internal/ready", "/metrics", "/diagnostics/workers":
-		return false
-	default:
-		return true
-	}
-}
-
-func firstTraceFilter(filters []func(*http.Request) bool) func(*http.Request) bool {
-	for _, filter := range filters {
-		if filter != nil {
-			return filter
-		}
-	}
-
-	return nil
 }
