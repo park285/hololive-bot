@@ -107,6 +107,7 @@ type leaseScheduler struct {
 	lastCycleOperationCode collecterr.OperationCode
 	// discoveryFailures는 cycleMu가 보호하는 후보 탐색 연속 실패 상태다. 키는 전역 실패(globalDiscoveryKey)나 runner ID다.
 	discoveryFailures map[string]*discoveryFailureStreak
+	candidatePolls    map[collection.JobID]candidatePollState
 }
 
 func (s *leaseScheduler) Start(parent context.Context) error {

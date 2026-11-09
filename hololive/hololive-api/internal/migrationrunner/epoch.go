@@ -12,7 +12,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 )
 
-const epoch2Baseline = "001_schema_epoch2_baseline.sql"
+const epoch3Baseline = "001_schema_epoch3_baseline.sql"
 
 // reconcileBaseline은 삭제된 셸 러너 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
 // 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직
@@ -166,7 +166,7 @@ func hasLegacyResidue(ctx context.Context, conn *pgxpool.Conn, entries []string)
 }
 
 func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) error {
-	if baseline != epoch2Baseline || !applied {
+	if baseline != epoch3Baseline || !applied {
 		return nil
 	}
 
@@ -181,7 +181,7 @@ func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, basel
 
 	return fmt.Errorf(
 		"epoch baseline %s is recorded without its checksum; "+
-			"refusing to trust a marker that cannot be proven by a completed R2 application",
+			"refusing to trust a marker without a completed baseline application",
 		baseline)
 }
 

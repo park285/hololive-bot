@@ -46,17 +46,6 @@ func TestTemplateRowVersionMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for range 2 {
-		if err := applyMigrationFile(ctx, pool, dir, "209_template_row_version.sql"); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	var body string
 
 	if err := pool.QueryRow(ctx, `SELECT body,row_version FROM notification_templates WHERE id=$1`, id).Scan(&body, &version); err != nil {
@@ -64,7 +53,7 @@ func TestTemplateRowVersionMigration(t *testing.T) {
 	}
 
 	if version != 3 || body != "original" {
-		t.Fatalf("rollback/replay changed row: %s/%d", body, version)
+		t.Fatalf("rollback changed row: %s/%d", body, version)
 	}
 
 	if err := pool.QueryRow(ctx, `UPDATE notification_templates SET channel_id='new-channel' WHERE id=$1 RETURNING row_version`, id).Scan(&version); err != nil {

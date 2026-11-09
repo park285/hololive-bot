@@ -604,7 +604,7 @@ func (s *stubCandidateSource) CandidatesForProjection(
 		truncated = true
 	}
 
-	return joblease.CandidatePage{Jobs: jobs, Truncated: truncated}, nil
+	return joblease.CandidatePage{Jobs: jobs, Truncated: truncated, NextDueAt: page.NextDueAt}, nil
 }
 
 type panickingCandidateSource struct {

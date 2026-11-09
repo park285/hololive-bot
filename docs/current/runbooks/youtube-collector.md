@@ -15,6 +15,16 @@
 
 Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs and `po-central-cutover.sh <c|b> check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for Quadlet `c`·`b`. kapu `d` is a manually installed Quadlet ([deploy/podman/kapu](../../../deploy/podman/kapu/README.md)); check `hololive-youtube-collector-d.service` health and `/ready`.
 
+## 후보 next due 힌트 전환
+
+`*_youtube_collection_candidate_next_due.sql`은 API 이미지의 `cmd/db-migrate`가 적용합니다. 중앙 `scripts/deploy/quadlet-redeploy-service.sh`는 앱 활성화 전에 해당 API 이미지로 `hololive-db-migrate.service`를 실행합니다([Quadlet 배포 계약](../../../deploy/quadlet/README.md)). collector a/b/c/d는 별도로 전환하므로 동시 교체를 전제하지 않습니다.
+
+1. 이 migration을 담은 API 이미지의 승인된 migrator를 먼저 실행하고 적용 완료를 확인합니다. 두 함수의 DROP·재정의·scraper EXECUTE 부여는 한 트랜잭션입니다. 구 collector는 `SELECT is_current, subject_key, min_interval_ms, max_interval_ms`를 명시하므로 추가된 `next_due_at`을 읽지 않으며, 기존 prepared statement도 같은 네 열을 반환합니다. 이 성질은 실제 migration 전후 같은 연결의 prepared reader 시험으로 고정합니다.
+2. 그 뒤 새 collector를 a/b/c/d에 순차 반영합니다. 새 collector를 migration보다 먼저 시작하면 `next_due_at` 열이 없어 조회가 실패하므로 순서를 뒤집지 않습니다. 기존 cadence 1000ms·profile 값은 바꾸지 않습니다.
+3. CURRENT generation 조회는 계속 수행하고, candidate 함수 호출 수와 runner별 due backlog·freshness를 비교합니다. 힌트 기반 대기는 최대 10초이고 작업 종료·generation 교체는 즉시 무효화합니다. 실제 due 발견에는 다음 1초 tick 정렬과 실행 지연이 더해질 수 있습니다.
+
+이 개정만 되돌릴 때는 collector 바이너리부터 이전판으로 복원할 수 있고 migration은 되돌리지 않습니다. 같은 이름의 정본 함수만 남기므로 새 이름·영구 호환 shim·자동 fallback·추가 retry가 없습니다. 다른 migration의 별도 drain·동시 전환 조건은 이 절차로 면제되지 않습니다. 운영 적용·배포는 별도 승인 대상입니다.
+
 ## Normal status
 
 HTTP trace는 `service.name=youtube-collector`를 유지하고
@@ -211,7 +221,7 @@ helper는 같은 채널·video ID의 player 예정 시각을 프로세스 메모
 
 native a/d 산출물(collector binary와 issuer rootfs의 `po-broker --version`·`po-sandbox/version`)의 version은 `HOLO_BOT_VERSION`입니다. 값이 없으면 `ap-host-native-deploy.sh`가 12자리 short SHA를 씁니다. 릴리스 배포는 `HOLO_BOT_VERSION="$(xargs <hololive/hololive-api/VERSION)" scripts/deploy/ap-host-native-deploy.sh <ap-host> --apply`처럼 Compose image와 같은 version을 명시합니다.
 
-중앙 paired deploy는 실행 중인 collector c가 로컬 주 서버(`POSTGRES_HOST=holo-postgres`, `POSTGRES_PORT=5432`, `POSTGRES_DB=hololive`)를 가리키는지 먼저 확인합니다. 외부 DB override를 쓰면 로컬 socket의 ledger로 대신 검증하지 않고 거절합니다. 그다음 `hololive-db-migrate.container`와 같은 migrator 역할과 관리 socket volume(`hololive-bot_holo-pg-admin-socket`, 읽기 전용, pg_hba local trust)을 쓰는 일회성 PostgreSQL client(network none, read-only)로 운영 ledger의 `222_drop_youtube_job_lease_legacy_failure_trigger.sql` checksum과 read-only guard `on`을 확인합니다. client는 실행 중인 `holo-postgres`의 image만 사용하며 종료 시 자신이 생성한 container를 제거합니다. 적용 부재·checksum 불일치·조회 실패면 기존 서비스 container·source를 바꾸지 않습니다. 이 읽기 전용 검증을 통과하면 issuer와 collector를 순서대로 교체합니다. 이 배포 스크립트는 migration을 실행하지 않으며, 필요한 migration이 미적용 상태라면 별도로 승인된 중앙 migration 절차를 먼저 완료해야 합니다. b는 중앙 관리 socket이 없어 이 원장 검증을 하지 않으므로 같은 release의 c 배포가 끝난 뒤 배포합니다.
+중앙 paired deploy는 실행 중인 collector c가 로컬 주 서버(`POSTGRES_HOST=holo-postgres`, `POSTGRES_PORT=5432`, `POSTGRES_DB=hololive`)를 가리키는지 먼저 확인합니다. 외부 DB override를 쓰면 로컬 socket의 ledger로 대신 검증하지 않고 거절합니다. 그다음 `hololive-db-migrate.container`와 같은 migrator 역할과 관리 socket volume(`hololive-bot_holo-pg-admin-socket`, 읽기 전용, pg_hba local trust)을 쓰는 일회성 PostgreSQL client(network none, read-only)로 운영 ledger의 `001_schema_epoch3_baseline.sql` checksum과 read-only guard `on`을 확인합니다. baseline에는 현행 collector lease 스키마가 포함됩니다. client는 실행 중인 `holo-postgres`의 image만 사용하며 종료 시 자신이 생성한 container를 제거합니다. 적용 부재·checksum 불일치·조회 실패면 기존 서비스 container·source를 바꾸지 않습니다. 이 읽기 전용 검증을 통과하면 issuer와 collector를 순서대로 교체합니다. 이 배포 스크립트는 migration을 실행하지 않으며, epoch-3 전환이 미적용 상태라면 별도로 승인된 중앙 migration 절차를 먼저 완료해야 합니다. b는 중앙 관리 socket이 없어 이 원장 검증을 하지 않으므로 같은 release의 c 배포가 끝난 뒤 배포합니다.
 
 issuer 기준 영수증(중앙 `/opt/hololive-bot/compose/po-current-c/`, iris-seoul `/opt/hololive-bot/collector-b/po-current-b/`; `rootfs-manifest.json`, `image-id`)은 `current` 밖의 호스트 상태입니다. 중앙 paired cutover는 실행 중인 issuer의 이 영수증으로 이전 pair의 rollback 기준점을 만들므로, issuer 이미지가 있는데 영수증이 없으면 백업·rollback 태그를 만들기 전에 `central issuer receipt missing`으로 거절합니다. 중앙 호스트를 교체할 때는 `current`와 함께 이 디렉터리를 root 소유 0644 그대로 옮깁니다. 이미 유실했다면 같은 issuer 산출물의 kapu 검토 영수증(Compose AP 배포 백업의 `po-sandbox-candidate-manifest.json`·`po-sandbox-candidate.image-id` 등)을 찾습니다. kapu에 남은 같은 issuer image의 `podman save --format docker-archive` 아카이브와 `sha256:` + `podman image inspect --format '{{.Id}}'`로 `scripts/build/po-sandbox-manifest.py image-ids`를 계산해 그 config digest가 영수증의 `image-id` 한 줄과 같을 때만, 같은 경로에 root 0644로 설치하고 `po_verify_image`로 대조한 뒤 cutover를 다시 실행합니다. 일치하는 검토 영수증이 없으면 실행 이미지에서 영수증을 새로 만들지 않습니다. 검토 근거가 실행 이미지 자신이 되기 때문이며, 이때는 cutover를 멈추고 복구 방법을 별도로 승인받습니다. 2026-10-08 v7.2.10 배포에서는 같은 날 중앙 VM 교체 때 영수증이 누락되었고, Seoul `b`의 10-07 배포 백업에 남은 같은 7.2.3 산출물의 영수증으로 이 절차를 거쳐 복원했습니다.
 

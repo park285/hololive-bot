@@ -16,8 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
-
-	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
 const sourceObservationsTable = "source_observations"
@@ -58,139 +56,13 @@ func TestTelemetryHotTableAutovacuumTuned(t *testing.T) {
 	}
 }
 
-var sourceObservationReplayMigrations = []string{
-	"144_source_observation_outbox.sql",
-	"145_source_observation_projection_current_index.sql",
-	"146_source_observation_job_due_index.sql",
-	"147_source_observation_queue_claim_index.sql",
-	"148_source_observation_queue_lease_recovery_index.sql",
-	"149_source_observation_queue_terminal_retention_index.sql",
-	"150_source_observations_subject_time_index.sql",
-	"151_source_observations_received_index.sql",
-	"152_source_observations_kind_id_index.sql",
-	"153_source_observation_collisions_occurred_index.sql",
-	"154_source_observation_replay_pending_index.sql",
-	"155_youtube_live_reconciliation_due_index.sql",
-	"156_source_observation_lock_api.sql",
-	"157_source_observations_kind_received_index.sql",
-	"158_source_observation_collision_fk_index.sql",
-	"159_source_observation_replay_fk_index.sql",
-	"160_youtube_live_reconciliation_candidate_fk_index.sql",
-	"161_source_observation_subject_heads.sql",
-	"162_youtube_content_evidence_clocks.sql",
-	"163_youtube_live_viewer_schedule_canonical.sql",
-	"191_source_observation_replay_epoch.sql",
-	"192_live_reconciliation_evidence.sql",
-	"193_live_absence_slot_channel_index.sql",
-	"218_live_absence_evidence_contract.sql",
-}
-
-func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.T) {
+func TestSourceObservationGrantsAreLeastPrivilege(t *testing.T) {
 	t.Parallel()
 
-	pool, _ := channelStatisticsRemovalPool(t)
-	ctx := t.Context()
-
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		t.Fatalf("resolve migrations dir: %v", err)
-	}
-
-	if _, err := pool.Exec(ctx, `
-		UPDATE observation_contract_generations
-		SET current_schema_version = 7,
-		    current_generation = 42,
-		    updated_by = 'later-migration'
-		WHERE provider = 'youtubejs' AND observation_kind = 'community_page'`); err != nil {
-		t.Fatalf("bump seeded contract: %v", err)
-	}
-
-	if _, err := pool.Exec(ctx, `
-		DELETE FROM observation_contract_generations
-		WHERE provider = 'holodex' AND observation_kind = 'channel_photo'`); err != nil {
-		t.Fatalf("remove contract for missing-row replay check: %v", err)
-	}
-
-	for replay := 1; replay <= 2; replay++ {
-		for _, migration := range sourceObservationReplayMigrations {
-			if err := applyMigrationFile(ctx, pool, dir, migration); err != nil {
-				t.Fatalf("replay migration %s pass %d: %v", migration, replay, err)
-			}
-		}
-	}
-
-	assertObservationContractsSurvivedReplay(t, pool)
-}
-
-func assertObservationContractsSurvivedReplay(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	var (
-		schemaVersion int16
-		generation    int64
-		updatedBy     string
-	)
-
-	if err := pool.QueryRow(ctx, `
-		SELECT current_schema_version, current_generation, updated_by
-		FROM observation_contract_generations
-		WHERE provider = 'youtubejs' AND observation_kind = 'community_page'`).Scan(
-		&schemaVersion, &generation, &updatedBy); err != nil {
-		t.Fatalf("read bumped observation contract: %v", err)
-	}
-
-	if schemaVersion != 7 || generation != 42 || updatedBy != "later-migration" {
-		t.Fatalf("replayed migration regressed observation contract: schema=%d generation=%d updated_by=%q", schemaVersion, generation, updatedBy)
-	}
-}
-
-func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
-	t.Parallel()
-
-	pool, _ := channelStatisticsRemovalPool(t)
-	ctx := t.Context()
+	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
-
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		t.Fatalf("resolve migrations dir: %v", err)
-	}
-
-	grantPreexistingScraperPrivileges(t, pool, roles.scraper)
-
-	sql := strings.NewReplacer(
-		"hololive_scraper", roles.scraper,
-		"hololive_runtime", roles.runtime,
-	).Replace(readObservationGrantMigrations(t, dir))
-	if _, err := pool.Exec(ctx, sql); err != nil {
-		t.Fatalf("apply source observation migration with isolated roles: %v", err)
-	}
-
+	applyBaselineForRoles(t, pool, roles)
 	assertPreexistingScraperPrivilegesRevoked(t, pool, roles.scraper)
-	grantBroadObservationPrivileges(t, pool, roles)
-
-	if _, err := pool.Exec(ctx, sql); err != nil {
-		t.Fatalf("reapply source observation migration after broad grants: %v", err)
-	}
-
-	assertPreexistingScraperPrivilegesRevoked(t, pool, roles.scraper)
-
-	// 234 이전 기준선 위에 실제 collector·API 쿼리가 요구하는 최소 현재 schema만 올린다. 259는 156의
-	// 이전 lock 함수를 지우므로 144~218 묶음 재적용 뒤에 두고, 재적용 안전성을 위해 두 번 적용한다.
-	for _, filename := range observationGrantPostBaselineMigrations {
-		raw, readErr := fs.ReadFile(os.DirFS(dir), filename)
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-
-		content := strings.NewReplacer("hololive_scraper", roles.scraper, "hololive_runtime", roles.runtime).Replace(string(raw))
-		if err := applyMigrationContent(ctx, pool, filename, content); err != nil {
-			t.Fatalf("apply post-baseline privilege migration %s: %v", filename, err)
-		}
-	}
-
 	assertObservationGrantMatrix(t, pool, roles)
 	assertObservationLockAPIAccess(t, pool, roles)
 	assertObservationRetentionAPIAccess(t, pool, roles)
@@ -198,101 +70,36 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	assertCollectionMembershipAPIAccess(t, pool, roles)
 }
 
-var observationGrantPostBaselineMigrations = []string{
-	channelStatisticsRemovalMigration,
-	"238_source_observation_payload_prepare.sql",
-	"239_source_observation_payload_index.sql",
-	"240_source_observation_payload_backfill_index.sql",
-	"241_source_observation_payload_cutover.sql",
-	"242_drop_payload_backfill_index.sql",
-	collectionMembershipMigration,
-	collectionMembershipMigration,
-	projectionHeaderMigration,
-	projectionHeaderMigration,
-	retiredViewerRemovalMigration,
-	applicationCascadeMigration,
-	binaryHashesMigration,
-	collectionRuntimeBundlesMigration,
-	provenanceCompactionMigration,
-	applicationVocabMigration,
-	"319_source_application_entity_index.sql",
-	"320_source_application_active_index_drop.sql",
-	"321_source_application_vocab_cutover.sql",
-}
-
-// 이어 붙이는 순서가 grant/revoke 결과를 결정하므로 파일 번호순이 아니라 적용 순서대로 나열한다.
-var observationGrantMigrationFiles = []string{
-	"144_source_observation_outbox.sql",
-	"156_source_observation_lock_api.sql",
-	"161_source_observation_subject_heads.sql",
-	"162_youtube_content_evidence_clocks.sql",
-	"163_youtube_live_viewer_schedule_canonical.sql",
-	"174_youtube_projection_retention_grant.sql",
-	"175_youtube_runtime_lock_retention_api.sql",
-	"187_youtube_dependent_retention_api.sql",
-	"176_youtube_projection_retention_revoke_delete.sql",
-	"178_youtube_schedule_collabo_talent_names.sql",
-	"191_source_observation_replay_epoch.sql",
-	"192_live_reconciliation_evidence.sql",
-	"218_live_absence_evidence_contract.sql",
-}
-
-func readObservationGrantMigrations(t *testing.T, dir string) string {
+func applyBaselineForRoles(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
 	t.Helper()
-
-	migrations := os.DirFS(dir)
-	parts := make([]string, 0, len(observationGrantMigrationFiles))
-
-	for _, name := range observationGrantMigrationFiles {
-		raw, err := fs.ReadFile(migrations, name)
-		if err != nil {
-			t.Fatalf("read %s observation grant migration: %v", name, err)
-		}
-
-		parts = append(parts, string(raw))
-	}
-
-	return strings.Join(parts, "\n")
-}
-
-func grantBroadObservationPrivileges(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	for _, role := range []string{roles.scraper, roles.runtime} {
-		quoted := pgx.Identifier{role}.Sanitize()
-		if _, err := pool.Exec(ctx, "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "+quoted); err != nil {
-			t.Fatalf("seed broad table privileges for %s: %v", role, err)
-		}
-
-		if _, err := pool.Exec(ctx, "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "+quoted); err != nil {
-			t.Fatalf("seed broad sequence privileges for %s: %v", role, err)
-		}
-	}
-}
-
-func TestSourceObservationLockAPIMigrationIsAtomic(t *testing.T) {
-	t.Parallel()
 
 	dir, err := resolveMigrationsDir()
 	if err != nil {
-		t.Fatalf("resolve migrations dir: %v", err)
+		t.Fatal(err)
 	}
 
-	// #nosec G304 -- 리포 내 마이그레이션 SSOT 디렉터리의 고정 파일명만 읽는다(사용자 입력 아님).
-	raw, err := os.ReadFile(filepath.Join(dir, "156_source_observation_lock_api.sql"))
+	raw, err := fs.ReadFile(os.DirFS(dir), epoch3BaselineMigration)
 	if err != nil {
-		t.Fatalf("read 156 source observation lock API migration: %v", err)
+		t.Fatal(err)
 	}
 
-	segments, err := sqlsplit.Segments(string(raw))
-	if err != nil {
-		t.Fatalf("parse 156 source observation lock API migration: %v", err)
+	content := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
+	if err := applyMigrationContent(t.Context(), pool, epoch3BaselineMigration, content); err != nil {
+		t.Fatal(err)
 	}
+}
 
-	if len(segments) != 1 || !segments[0].Transactional {
-		t.Fatalf("156 migration segments = %#v, want one transactional segment", segments)
+func grantBroadBaselineDefaults(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
+	t.Helper()
+
+	for _, role := range []string{roles.runtime, roles.scraper} {
+		quoted := pgx.Identifier{role}.Sanitize()
+
+		for _, objects := range []string{"TABLES", "SEQUENCES", "FUNCTIONS"} {
+			if _, err := pool.Exec(t.Context(), "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON "+objects+" TO "+quoted); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
@@ -369,23 +176,6 @@ var preexistingScraperTables = []string{
 
 var preexistingScraperSequences = []string{
 	"major_events_id_seq",
-}
-
-func grantPreexistingScraperPrivileges(t *testing.T, pool *pgxpool.Pool, role string) {
-	t.Helper()
-
-	quotedRole := pgx.Identifier{role}.Sanitize()
-	for _, statement := range []string{
-		"GRANT SELECT, INSERT, UPDATE ON TABLE public.major_events TO " + quotedRole,
-		"GRANT USAGE, SELECT ON SEQUENCE public.major_events_id_seq TO " + quotedRole,
-		"GRANT SELECT ON TABLE public.major_event_subscriptions TO " + quotedRole,
-		"GRANT SELECT ON TABLE public.alarms TO " + quotedRole,
-		"GRANT SELECT ON TABLE public.youtube_notification_outbox TO " + quotedRole,
-	} {
-		if _, err := pool.Exec(t.Context(), statement); err != nil {
-			t.Fatalf("seed preexisting scraper privilege with %q: %v", statement, err)
-		}
-	}
 }
 
 func assertPreexistingScraperPrivilegesRevoked(t *testing.T, pool *pgxpool.Pool, role string) {
@@ -546,7 +336,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_content_absence_slots":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_content_channel_heads":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_schedule_items":                    observationPrivileges("SELECT", "INSERT", "UPDATE"),
-			"youtube_live_sessions":                     observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
+			"youtube_live_sessions":                     observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_channel_live_checks":               observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_video_availability":                observationPrivileges("SELECT", "INSERT", "UPDATE"),
 		},

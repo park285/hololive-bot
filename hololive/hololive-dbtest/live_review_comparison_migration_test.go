@@ -8,23 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLiveReviewComparisonMigrationPreservesReceiptsAndReplays(t *testing.T) {
+func TestLiveReviewComparisonUsesLatestMatchingReceipt(t *testing.T) {
 	t.Parallel()
 
-	const migration = "270_youtube_live_review_compact_comparison.sql"
-
-	pool, dir := projectionMigrationPoolBefore(t, migration)
+	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
-
-	beforeResults, beforeReceipts := liveReviewComparisonState(t, pool)
-
-	for range 2 {
-		require.NoError(t, applyMigrationFile(t.Context(), pool, dir, migration))
-
-		afterResults, afterReceipts := liveReviewComparisonState(t, pool)
-		require.JSONEq(t, beforeResults, afterResults)
-		require.Equal(t, beforeReceipts, afterReceipts, "migration must not rewrite receipts")
-	}
 
 	var matched, unmatched, latest bool
 

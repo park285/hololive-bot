@@ -204,9 +204,10 @@ func assertCollectionCadenceCandidates(t *testing.T, pool *pgxpool.Pool, query s
 			valid            bool
 			subject          *string
 			minimum, maximum *int64
+			nextDueAt        *time.Time
 		)
 
-		if err := rows.Scan(&valid, &subject, &minimum, &maximum); err != nil {
+		if err := rows.Scan(&valid, &subject, &minimum, &maximum, &nextDueAt); err != nil {
 			t.Fatal(err)
 		}
 

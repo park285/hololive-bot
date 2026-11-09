@@ -82,7 +82,7 @@ LLM 최종 검토·캐시의 평문은 formatter 진입에서 보호하며 정�
 - bot outbox와 alarm/notification/YouTube 원장은 새 요청에 `richtext`를 저장합니다. 기존 `markdown`·`text` 요청은
   저장된 본문·타입·thread·clientRequestId로만 재생합니다. 이는 실패 fallback이 아니며 각 원장이 기존 요청의
   drain·재시도 종료를 확인한 뒤에만 구형 읽기 경로를 제거할 수 있습니다.
-- writer 배포 전에 migration `345_alarm_richtext_immutable_request.sql`과 `346_youtube_richtext_immutable_request.sql`을
+- writer 배포 전에 migration `001_schema_epoch3_baseline.sql`을
   적용합니다. 기존 행은 갱신하지 않습니다. 새 RichText 요청 저장 후에는 해당 kind/route를 모르는 구형 writer로
   롤백하지 않고 forward-fix합니다. 로컬 검증 완료와 운영 적용 여부는 별개입니다.
 

@@ -1941,18 +1941,7 @@ payload, message body, token, secret와 전체 description을 log하지 않는�
 소유 파일:
 
 ```text
-hololive/hololive-api/scripts/migrations/144_source_observation_outbox.sql
-hololive/hololive-api/scripts/migrations/145_source_observation_projection_current_index.sql
-hololive/hololive-api/scripts/migrations/146_source_observation_job_due_index.sql
-hololive/hololive-api/scripts/migrations/147_source_observation_queue_claim_index.sql
-hololive/hololive-api/scripts/migrations/148_source_observation_queue_lease_recovery_index.sql
-hololive/hololive-api/scripts/migrations/149_source_observation_queue_terminal_retention_index.sql
-hololive/hololive-api/scripts/migrations/150_source_observations_subject_time_index.sql
-hololive/hololive-api/scripts/migrations/151_source_observations_received_index.sql
-hololive/hololive-api/scripts/migrations/152_source_observations_kind_id_index.sql
-hololive/hololive-api/scripts/migrations/153_source_observation_collisions_occurred_index.sql
-hololive/hololive-api/scripts/migrations/154_source_observation_replay_pending_index.sql
-hololive/hololive-api/scripts/migrations/155_youtube_live_reconciliation_due_index.sql
+hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql
 hololive/hololive-api/scripts/migrations/manifest.txt
 hololive/hololive-dbtest/migrations_p1_test.go
 hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql

@@ -6,7 +6,7 @@
 
 | Area | Finding | Resolution | Verification |
 | --- | --- | --- | --- |
-| Standalone notification dispatcher | `hololive-dispatcher-go`, `dispatcher-go`, `legacy-dispatcher-go`가 활성 compose, docs, CI, build path에 남아 있을 수 있었음 | standalone dispatcher runtime, compose profile, deploy/log/runbook references removed | `ci-notification-egress-gate.sh`, active `rg` scan |
+| 퇴역 dispatcher | 독립 dispatcher와 옛 운영 연결 | 코드·배포·문서 연결 제거 | 현행 발송 동작 시험 |
 | Go workspace module lists | CI/build commands carried repeated module package lists | `scripts/ci/go-workspace-modules.sh` owns active Go module package expansion | `go test` and architecture gate use the helper |
 | Compose service aliases | `build-all.sh`, `compose-redeploy-service.sh`, and logs tooling had separate alias maps | `scripts/deploy/lib/compose-services.sh` owns build, redeploy, and log target resolution | `scripts/deploy/test-compose-services.sh` in architecture gate |
 | Compose env source | build, redeploy, and direct compose could diverge on env resolution | `scripts/deploy/lib/compose-env.sh` and `scripts/deploy/compose.sh` enforce one env policy | `scripts/deploy/test-compose-env.sh` in architecture gate |
@@ -29,6 +29,6 @@
 
 - New service aliases must be added through `scripts/deploy/lib/compose-services.sh`.
 - Compose env policy changes must be added through `scripts/deploy/lib/compose-env.sh`.
-- Removed runtime code is deleted; architecture gates validate active ownership boundaries.
+- 퇴역 코드는 삭제하며, gate는 제품 동작·보안 설정 결함만 검사합니다.
 - Go implementation subpackages use role-specific names reviewed alongside their behavior tests.
 - Refactor changes must keep production deploy commands on repository scripts, not raw `docker compose`.

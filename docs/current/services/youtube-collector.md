@@ -94,11 +94,15 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 
 후보 조회는 관계형 bundle·due 필터·정렬과 기존 `LIMIT+1`을 유지합니다. 같은 statement의 DB 시각으로 IDLE/DEFERRED/ACTIVE due와 `not_before`를 검사하고, 신규 대상 우선·영상 LIVE 우선·subject tie-break·queue exclusion을 적용한 뒤 제한된 후보만 전송합니다. collector의 cadence 검증·job key 생성·runner capacity/rotation은 유지합니다. 전체 key 전송, 전체 target 캐시, eligibility delta 및 전체 lease 사실의 AP 정렬은 비용 회귀로 채택하지 않았습니다. 조회 오류나 만료는 빈 성공이나 오래된 캐시로 대체하지 않습니다.
 
+각 runner의 성공 조회가 `jobs < limit`이고 truncated가 아니면 다음 due 힌트와 조회 시작 시각+10초 중 이른 시각까지 후보 조회를 건너뜁니다. 힌트가 NULL이면 10초이며, 꽉 찬 page·truncated·오류에는 대기하지 않습니다. `collection.acquisition_cadence_ms=1000`과 cycle별 CURRENT generation 조회는 그대로입니다. generation 교체는 모든 대기를, 이 프로세스의 작업 종료(성공·실패·DEFERRED·superseded release·acquire 실패)는 해당 runner의 대기를 무효화합니다. 조회 도중 끝난 작업의 무효화도 보존하며 재시작 시 대기는 비어 있습니다.
+
+힌트는 제외 키가 아닌 enabled bundle마다 `max(최초 not_before 입장 시각, lease effective due)`를 구한 뒤 지금보다 미래인 값의 최솟값입니다. 지금 due인 bundle은 힌트에 포함하지 않습니다. 10초 상한은 다른 프로세스의 `not_before` 앞당김이나 ACTIVE 만료보다 이른 DEFERRED 전환의 반영 지연을 제한합니다. 실제 조회는 다음 acquisition tick에서 실행되므로 tick 정렬·스케줄링 지연이 별도로 더해질 수 있습니다. lease 선점·fence·publish 권한을 캐시하지 않습니다.
+
 후보 조회는 선점권이나 발행권이 아닙니다. acquire는 guard 이후 target bundle statement에서도 header 만료를 확인하며 DB lease·slot·fence·membership 검증을 유지합니다. Publish/renew/snapshot도 현재 header 만료를 사용하고 `not_before`로 이미 입장한 작업을 취소하지 않습니다. 재시작은 기존 DB lease/checkpoint/retry 상태에서 복구하며 로컬 내구 저장소나 새 fallback은 없습니다.
 
 261은 target의 `valid_until` 열을 제거하므로 기존 API/collector binary와 혼합 운용할 수 없습니다. 실제 적용은 별도 승인된 drain → 호환 API/collector와 migration 261의 조정된 전환 → 재개 순서가 필요합니다. 과거 259/260을 수정하거나 구 binary만 재기동하는 rollback은 하지 않습니다.
 
-성능 검증은 격리 PG의 `joblease.TestProjectionCandidateTraffic`으로 실제 260/261 스키마와 620/1,240/10,000 target을 비교합니다. 260까지의 migration과 `bd498868a` 원본 SQL을 재생하고, 양쪽 모두 독립 pool 4개의 동시 120-cycle·동일 예열·header 조회를 사용합니다. 신규·not-due·동일 due·혼합·서로 다른 due 시각·매 cycle eligibility 변경에서 `Jobs`/`Truncated` 일치와 실제 수신·송신 byte 비증가를 검사합니다. PREPARE/EXECUTE의 custom/generic 카운터를 확인한 EXPLAIN 실행시간·buffer I/O도 기록합니다. `paired_elapsed`는 양쪽 실행을 합친 시간이며 개별 AP/버전 지연 비교값이 아닙니다. 전체 facts를 multirange로 압축한 안은 10,000개 서로 다른 due 시각에서 408,243,360 byte 대 관계형 464,160 byte로 회귀해 제외했습니다. 이 합성 결과는 운영 CPU/RSS/TLS 지연이나 보존 기간 전체의 관측을 대신하지 않습니다.
+성능 검증은 격리 PG의 `joblease.TestProjectionCandidateTraffic`으로 epoch-3 baseline의 힌트 도입 전 함수와 현재 함수에 같은 620/1,240/10,000 target을 넣어 비교합니다. 양쪽 모두 독립 pool 4개의 동시 120-cycle·동일 예열·header 조회를 사용합니다. 신규·not-due·동일 due·혼합·서로 다른 due 시각·매 cycle eligibility 변경에서 `Jobs`/`Truncated` 일치를 검사하고 실제 수신·송신 byte를 기록합니다. 대상 수와 무관하게 이 fixture의 AP당 cycle 전송은 header·최대 11개 sentinel 포함 후보의 8 KiB 예산 안에 있어야 합니다. 다음 due 열을 추가했으므로 이전 함수 대비 byte 비증가는 계약이 아닙니다. PREPARE/EXECUTE의 custom/generic 카운터와 EXPLAIN 실행시간·buffer I/O도 기록합니다. `paired_elapsed`는 양쪽 실행을 합친 시간이며 개별 AP/버전 지연 비교값이 아닙니다. 이 합성 결과는 운영 CPU/RSS/TLS 지연이나 보존 기간 전체의 관측을 대신하지 않습니다.
 
 `collection.queue.max_age`의 fixed 상한을 넘긴 로컬 항목은 dequeue 시 lease 취득 전에 폐기합니다. stale discard·경고를 기록하고 queue 표식을 해제한 뒤 다음 항목을 계속 처리하며, DB terminal이나 즉시 재시도는 만들지 않습니다. Collector `internal/config`는 profile-only preflight와 runtime이 동일한 profile 수치 정책을 적용하도록 소유합니다.
 

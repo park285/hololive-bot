@@ -118,6 +118,10 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 		return Result{}, fmt.Errorf("reconcile baseline: %w", reconcileErr)
 	}
 
+	if transitionErr := transitionEpoch2(ctx, conn, fsys, ledger, entries); transitionErr != nil {
+		return Result{}, fmt.Errorf("transition epoch-2: %w", transitionErr)
+	}
+
 	if guardErr := guardEpochResidue(ctx, conn, ledger, entries); guardErr != nil {
 		return Result{}, fmt.Errorf("guard epoch residue: %w", guardErr)
 	}

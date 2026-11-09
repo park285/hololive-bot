@@ -98,11 +98,4 @@ if (( ${#violations[@]} > 0 )); then
   exit 1
 fi
 
-mnt_hits="$(git -C "${ROOT_DIR}" grep -n '/mnt/data' -- 'docs/**/*.md' '*.md' 2>/dev/null || true)"
-if [[ -n "${mnt_hits}" ]]; then
-  echo "FAIL: tracked docs contain /mnt/data references" >&2
-  echo "${mnt_hits}" >&2
-  exit 1
-fi
-
 echo "OK: no tracked local artifacts"

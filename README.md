@@ -100,6 +100,17 @@ dbtest와 진단은 `scripts/maintenance/queries/*_drift.sql`의 독립 오라�
 테스트 전용 설정이며, 컨테이너 중지 시 데이터가 사라지고 crash durability 검증에는 사용할 수 없습니다.
 외부 `TEST_DATABASE_URL`과 운영 PostgreSQL 설정은 변경하지 않습니다.
 
+DB 기준선은 epoch-3입니다. 기존 epoch-2 DB는 372 head의 233개 파일명·checksum 원장이 모두 일치할 때만 전환합니다.
+부분 적용 백업은 이전 릴리스로 먼저 올려야 하며, 신규 migrator 실행 후의 롤백은 전환 전 백업의 별도 복원이 필요합니다.
+[적용·복구 규약](hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 먼저 확인합니다.
+
+```bash
+go test ./hololive/hololive-dbtest/... \
+  ./hololive/hololive-api/internal/migrationrunner/... \
+  ./hololive/hololive-api/cmd/db-migrate/...
+bash scripts/architecture/check-migration-manifest.sh
+```
+
 배포 스크립트(`./build-all.sh`) 기동 시, Docker 이미지 빌드 단계 진입 전에 `local-ci.sh` 품질 게이트가 자동으로 선행 수행됩니다. 해당 품질 검사(golangci-lint, NilAway, 경합 테스트 등) 중 하나라도 실패하면 빌드 프로세스가 강제 차단됩니다. 의존성 취약점 진단(`govulncheck`)과 배포 스크립트 테스트는 `scripts/ci/pre-push-gate.sh`가 push 시점에 실행합니다.
 
 ---
@@ -110,8 +121,8 @@ dbtest와 진단은 `scripts/maintenance/queries/*_drift.sql`의 독립 오라�
 
 11.0.0 worker/DB 전환은 구 프로필 호환 10.2.0의 실제 수용 뒤에만 진행합니다.
 [단일 settings schema·pairing·DB 정책 순서](deploy/compose/README.md#worker-settings-cutover-1100)를
-따르며 source 통합을 운영 수용으로 간주하지 않습니다. 전체 migration manifest 324까지를
-보존하고 구 manifest로 되돌리지 않습니다. Role limit은 네 collector의 max 7 수용 뒤
+따르며 source 통합을 운영 수용으로 간주하지 않습니다. epoch-3 전환은 위 migration 규약을 따르며
+구 manifest로 되돌리지 않습니다. Role limit은 네 collector의 max 7 수용 뒤
 rollout 소유자만 활성화합니다.
 
 ```bash

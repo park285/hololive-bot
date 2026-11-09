@@ -5,13 +5,12 @@ usage() {
   cat >&2 <<'EOF'
 usage: db-maintenance-exec.sh <command> [args...]
 
-  중앙 런타임 호스트(rootful Podman)에서 실행합니다. 그 호스트에는 psql 이 없고 libpq-connection.sh 가
-  PGPASSWORD 와 connection URI 를 금지하므로, 실행 중인 holo-postgres 이미지를 일회성으로 띄워
+  중앙 런타임 호스트(rootful Podman)에서 실행합니다. 호스트의 psql 대신 실행 중인
+  holo-postgres 이미지를 일회성으로 띄우며 PGPASSWORD 와 connection URI 없이
   file-only 계약(PGSERVICE + PGPASSFILE)만으로 접속합니다. pg_hba 는 hololive_migrator 의 TCP 를
   거부하므로 hololive-db-migrate 처럼 network 없이 관리 Unix socket 으로만 접속합니다.
   마운트된 migrations 디렉터리는 /migrations 입니다.
 
-  db-maintenance-exec.sh bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
   db-maintenance-exec.sh psql -w -X -v ON_ERROR_STOP=1 -c 'select 1'
 EOF
   exit 2

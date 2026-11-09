@@ -447,7 +447,6 @@ go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/...
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/store/... ./internal/egress/youtubedispatch/...
 go -C hololive/hololive-shared test ./pkg/service/youtube/outbox/...
-bash scripts/architecture/check-shared-go-boundary.sh
 ```
 
 ### V05 — Migration manifest and schema snapshot
@@ -528,7 +527,6 @@ rg -n "UPDATE youtube_notification_(outbox|delivery)|ON CONFLICT|status[[:space:
 ### V15 — Architecture and repository gates
 
 ```bash
-bash scripts/architecture/ci-notification-egress-gate.sh
 bash scripts/architecture/ci-boundary-gate.sh
 bash scripts/architecture/check-file-loc.sh
 ```

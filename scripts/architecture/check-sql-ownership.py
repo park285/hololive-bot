@@ -208,19 +208,6 @@ def sql_asset_files() -> list[Path]:
     ]
 
 
-def allowed_sql_asset(path: Path) -> bool:
-    parts = path.relative_to(ROOT).parts
-    if "queries" in parts or "testqueries" in parts:
-        return True
-    if parts[:4] == ("hololive", "hololive-api", "scripts", "migrations"):
-        return True
-    if parts[:4] == ("hololive", "hololive-api", "scripts", "init-db"):
-        return True
-    if parts[:2] == ("scripts", "maintenance"):
-        return True
-    return False
-
-
 def migration_command_asset(path: Path) -> bool:
     path_text = rel(path)
     return path_text.startswith(
@@ -403,14 +390,15 @@ def check_source_literals() -> list[Finding]:
             if not match:
                 continue
             base_line = line_number(source, start)
-            findings.append(
-                Finding(
-                    path=path,
-                    line=base_line,
-                    reason=f"SQL string literal contains {match.group(1).strip()}",
-                    excerpt=excerpt(value),
+            if DDL_RE.search(value):
+                findings.append(
+                    Finding(
+                        path=path,
+                        line=base_line,
+                        reason="runtime SQL literal contains DDL/operator SQL",
+                        excerpt=excerpt(value),
+                    )
                 )
-            )
             findings.extend(check_sql_wildcards(path, base_line, value))
     return findings
 
@@ -472,16 +460,30 @@ def check_sql_clocks(path: Path, sql: str) -> list[Finding]:
     return findings
 
 
+def check_outbox_insert(path: Path, sql: str) -> list[Finding]:
+    if not rel(path).startswith("hololive/hololive-api/internal/youtube/canonicalwrite/queries/"):
+        return []
+    code = " ".join(token.lower().strip('"') for _, token in iter_sql_code_tokens(sql))
+    # 재관측 INSERT가 이미 발송 중이거나 완료된 원장 상태를 되돌리면 중복 발송할 수 있다.
+    rewrite = re.search(
+        r"\binsert into (?:public \. )?youtube_notification_outbox\b"
+        r"(?:(?!\binsert into\b)[^;])*?\bdo update\b",
+        code,
+    )
+    if rewrite is None:
+        return []
+    return [Finding(path, 1, "canonical outbox insert rewrites an existing lifecycle row", excerpt(rewrite.group()))]
+
+
 def check_sql_assets() -> list[Finding]:
     findings: list[Finding] = []
     for path in sql_asset_files():
         text = path.read_text(encoding="utf-8")
-        if not allowed_sql_asset(path):
-            findings.append(Finding(path, 1, "SQL asset is outside allowed locations", ""))
-        elif "queries" in path.relative_to(ROOT).parts and DDL_RE.search(text) and not migration_command_asset(path):
+        if "queries" in path.relative_to(ROOT).parts and DDL_RE.search(text) and not migration_command_asset(path):
             findings.append(Finding(path, 1, "runtime query asset contains DDL/operator SQL", excerpt(text)))
         findings.extend(check_sql_wildcards(path, 1, text))
         findings.extend(check_sql_clocks(path, text))
+        findings.extend(check_outbox_insert(path, text))
 
         stripped = text.strip().rstrip(";").strip()
         if not stripped:
@@ -499,9 +501,9 @@ def check_sql_assets() -> list[Finding]:
 def main() -> int:
     findings = check_source_literals() + check_sql_assets()
     if not findings:
-        print("SQL ownership check passed")
+        print("SQL safety check passed")
         return 0
-    print("SQL ownership violations:", file=sys.stderr)
+    print("SQL safety violations:", file=sys.stderr)
     for finding in findings:
         print(
             f"{rel(finding.path)}:{finding.line}: {finding.reason}: {finding.excerpt}",

@@ -3,9 +3,6 @@ package dbtest
 import (
 	"context"
 	"errors"
-	"io/fs"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,21 +14,14 @@ import (
 )
 
 func TestPayloadPrivilegesOverrideBroadDefaultACL(t *testing.T) {
-	pool, dir := channelStatisticsRemovalPool(t)
+	pool := NewBlankPool(t)
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)
-	replacer := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper)
-	prepareBroadPayloadACL(t, pool, dir, replacer, roles)
+	grantBroadBaselineDefaults(t, pool, roles)
+	applyBaselineForRoles(t, pool, roles)
 
 	_, err := pool.Exec(ctx, "CREATE TABLE unrelated_payload_acl_probe (id bigint)")
 	require.NoError(t, err)
-
-	raw, err := fs.ReadFile(os.DirFS(dir), "255_payload_dictionary_least_privilege.sql")
-	require.NoError(t, err)
-
-	for range 2 {
-		require.NoError(t, applyMigrationContent(ctx, pool, "255_payload_dictionary_least_privilege.sql", replacer.Replace(string(raw))))
-	}
 
 	for _, role := range []string{roles.runtime, roles.scraper} {
 		var unrelatedInsert bool
@@ -43,37 +33,6 @@ func TestPayloadPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 
 	assertPayloadDirectWritesDenied(t, pool, roles)
 	assertPayloadPublicationAndGCAuthorized(t, pool, roles)
-}
-
-func prepareBroadPayloadACL(t *testing.T, pool *pgxpool.Pool, dir string, replacer *strings.Replacer, roles observationGrantRoles) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	// 운영과 같은 기본 ACL을 먼저 설정해야 CREATE TABLE이 상속하는 과도한 권한을 재현합니다.
-	for _, role := range []string{roles.runtime, roles.scraper} {
-		quoted := pgx.Identifier{role}.Sanitize()
-		_, err := pool.Exec(ctx, "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "+quoted)
-		require.NoError(t, err)
-
-		_, err = pool.Exec(ctx, "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "+quoted)
-		require.NoError(t, err)
-	}
-
-	for _, filename := range []string{
-		"238_source_observation_payload_prepare.sql", "239_source_observation_payload_index.sql",
-		"240_source_observation_payload_backfill_index.sql", "241_source_observation_payload_cutover.sql",
-	} {
-		raw, err := fs.ReadFile(os.DirFS(dir), filename)
-		require.NoError(t, err)
-		require.NoError(t, applyMigrationContent(ctx, pool, filename, replacer.Replace(string(raw))))
-	}
-
-	var inheritedDelete bool
-
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT has_table_privilege($1, 'source_observation_payloads', 'DELETE')", roles.runtime).Scan(&inheritedDelete))
-	require.True(t, inheritedDelete, "기본 ACL에 의한 실제 운영 권한 확대를 재현해야 합니다")
 }
 
 func assertPayloadDirectWritesDenied(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {

@@ -7,18 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const notificationHandoffMigration = "330_notification_delivery_handoff_check.sql"
-
 // notification handoff shape CHECK는 확인 대기 SENT 행, 확인을 끝낸 행, handoff 없는 행을 받는다. 빈 requestId,
-// requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, SENT가 아닌 행의 예정 시각, 예정 시각 없는 확인 대기 SENT
-// 행은 거부한다. 재적용은 제약을 바꾸지 않는다.
+// requestId 없는 확인 예정·완료, 끝난 확인의 예정 시각, SENT가 아닌 행의 예정 시각, 예정 시각 없는 확인 대기 SENT는 거부한다.
 func TestNotificationHandoffShape(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	pool := NewPool(t)
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
 
 	cases := []struct {
 		name, set string
@@ -36,11 +31,7 @@ func TestNotificationHandoffShape(t *testing.T) {
 		{name: "unconfirmed sent without next check", set: `status = 'SENT', handoff_request_id = 'iris-1'`},
 	}
 
-	for application, attempt := range []string{"applied", "reapplied"} {
-		if application > 0 {
-			require.NoError(t, applyMigrationFile(ctx, pool, dir, notificationHandoffMigration))
-		}
-
+	for _, attempt := range []string{"baseline"} {
 		for i, tc := range cases {
 			periodKey := fmt.Sprintf("%s-%d", attempt, i)
 
@@ -50,7 +41,7 @@ func TestNotificationHandoffShape(t *testing.T) {
 				VALUES ('MEMBER_NEWS_WEEKLY', $1::text, 'room-1', $1::text || ':room-1', '{"message":"m"}'::jsonb)
 				RETURNING id`, periodKey).Scan(&id))
 
-			_, err = pool.Exec(ctx, `UPDATE notification_delivery_outbox SET `+tc.set+` WHERE id = $1`, id)
+			_, err := pool.Exec(ctx, `UPDATE notification_delivery_outbox SET `+tc.set+` WHERE id = $1`, id)
 			if tc.accepted {
 				require.NoError(t, err, "%s: %s", attempt, tc.name)
 

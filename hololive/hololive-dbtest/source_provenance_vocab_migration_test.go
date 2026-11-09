@@ -1,7 +1,6 @@
 package dbtest
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
@@ -11,19 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	provenanceCompactionMigration = "317_source_observation_provenance_compaction.sql"
-	applicationVocabMigration     = "318_source_application_vocab_codes.sql"
-)
-
-var applicationVocabCutoverMigrations = []string{
-	applicationVocabMigration,
-	"319_source_application_entity_index.sql",
-	"320_source_application_active_index_drop.sql",
-	"321_source_application_vocab_cutover.sql",
-}
-
-// seedProvenanceCutoverRows는 317 이전 schema에 출처 문자열·hex 키를 가진 원본 3건과 보호 주변 행을 넣는다.
+// 서로 다른 출처와 보존 보호 조건을 가진 원본 세 건을 만듭니다.
 func seedProvenanceCutoverRows(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -32,10 +19,10 @@ func seedProvenanceCutoverRows(t *testing.T, pool *pgxpool.Pool) {
 		VALUES ('community_page',1,'source-observation-canonical-json-v1',decode(repeat('b',64),'hex'),'{}') RETURNING id
 	) INSERT INTO source_observations(provider,observation_kind,subject_key,observation_key,schema_version,contract_generation,
 		scheduled_for,observed_at,scope_sha256,completeness,continuity,payload_id,evidence_sha256,
-		collector_instance,job_key,collection_job_kind,fence_epoch,projection_generation)
-	SELECT 'youtubejs','community_page',row.subject,encode(sha256(row.subject::bytea),'hex'),1,1,now(),now(),
+		provenance_id,fence_epoch,projection_generation)
+	SELECT 'youtubejs','community_page',row.subject,sha256(row.subject::bytea),1,1,now(),now(),
 		decode(repeat('a',64),'hex'),'COMPLETE','CONTIGUOUS',payload.id,decode(repeat('c',64),'hex'),
-		row.instance,row.job,'community_collect',1,1
+		source_observation_provenance_id(row.job,row.instance,'community_collect'),1,1
 	FROM payload CROSS JOIN (VALUES
 		('leased','collector-a','job-leased'),
 		('live','collector-a','job-live'),
@@ -50,11 +37,11 @@ func seedProvenanceCutoverRows(t *testing.T, pool *pgxpool.Pool) {
 		 slot_state,scheduled_for,next_due_at,owner_instance,lease_expires_at)
 	VALUES ('job-leased','youtubejs','SUBJECT','community_collect','leased',9103,120000,
 		'ACTIVE',now(),now(),'collector-a',now()+interval '1 minute');
-	INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('vocab-live','UC_vocab','LIVE');
-	INSERT INTO source_observation_applications(observation_id,entity_kind,entity_key,decision)
-	SELECT id,'youtube_live_session','vocab-live','APPLIED' FROM source_observations WHERE subject_key='live';
-	INSERT INTO source_observation_applications(observation_id,entity_kind,entity_key,decision)
-	SELECT id,'community_window','UC_vocab','CANONICALIZED' FROM source_observations WHERE subject_key='shared'`)
+	INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin) VALUES ('vocab-live','UC_vocab','LIVE','observed');
+	INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
+	SELECT id,source_observation_entity_kind_id('youtube_live_session'),'vocab-live',source_observation_decision_id('APPLIED') FROM source_observations WHERE subject_key='live';
+	INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
+	SELECT id,source_observation_entity_kind_id('community_window'),'UC_vocab',source_observation_decision_id('CANONICALIZED') FROM source_observations WHERE subject_key='shared'`)
 	require.NoError(t, err)
 }
 
@@ -78,23 +65,12 @@ func retentionProtected(t *testing.T, pool *pgxpool.Pool, id int64) bool {
 	return protected
 }
 
-func applyMigrationsTwice(ctx context.Context, t *testing.T, pool *pgxpool.Pool, dir string, files ...string) {
-	t.Helper()
-
-	for _, filename := range files {
-		for range 2 {
-			require.NoError(t, applyMigrationFile(ctx, pool, dir, filename), filename)
-		}
-	}
-}
-
 func TestProvenanceCompactionMigrationPreservesIdentityAndProtection(t *testing.T) {
 	t.Parallel()
 
-	pool, dir := projectionMigrationPoolBefore(t, provenanceCompactionMigration)
+	pool := NewPool(t)
 	ctx := t.Context()
 	seedProvenanceCutoverRows(t, pool)
-	applyMigrationsTwice(ctx, t, pool, dir, provenanceCompactionMigration)
 
 	var provenances, mismatched int
 
@@ -106,13 +82,6 @@ func TestProvenanceCompactionMigrationPreservesIdentityAndProtection(t *testing.
 		   OR p.job_key<>CASE o.subject_key WHEN 'live' THEN 'job-live' ELSE 'job-leased' END
 		   OR octet_length(o.observation_key)<>32 OR o.observation_key<>sha256(o.subject_key::bytea)`).Scan(&mismatched))
 	require.Zero(t, mismatched, "출처 문자열과 hex 키는 손실 없이 복원된다")
-
-	var column int
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(attname) FROM pg_attribute
-		WHERE attrelid='source_observations'::regclass AND NOT attisdropped
-		  AND attname IN ('collector_instance','job_key','collection_job_kind')`).Scan(&column))
-	require.Zero(t, column)
 
 	leased := observationIDBySubject(t, pool, "leased")
 	leasedKey := hexSHA256("leased")
@@ -155,41 +124,16 @@ func TestProvenanceCompactionMigrationPreservesIdentityAndProtection(t *testing.
 	require.Error(t, err, "빈 job_key는 사전 bounds가 거부한다")
 }
 
-func TestProvenanceCompactionMigrationRejectsNonHexObservationKey(t *testing.T) {
-	t.Parallel()
-
-	pool, dir := projectionMigrationPoolBefore(t, provenanceCompactionMigration)
-	ctx := t.Context()
-	seedProvenanceCutoverRows(t, pool)
-
-	_, err := pool.Exec(ctx, `UPDATE source_observations SET observation_key='not-a-digest' WHERE subject_key='shared'`)
-	require.NoError(t, err)
-	require.Error(t, applyMigrationFile(ctx, pool, dir, provenanceCompactionMigration))
-
-	var textKeys int
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(attname) FROM pg_attribute
-		WHERE attrelid='source_observations'::regclass AND attname='observation_key' AND atttypid='text'::regtype`).Scan(&textKeys))
-	require.Equal(t, 1, textKeys, "변환 실패는 bytea 전환 블록을 롤백한다")
-
-	_, err = pool.Exec(ctx, `UPDATE source_observations SET observation_key=encode(sha256('shared'::bytea),'hex') WHERE subject_key='shared'`)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationFile(ctx, pool, dir, provenanceCompactionMigration), "수정 뒤 재실행은 남은 블록만 적용한다")
-	require.True(t, retentionProtected(t, pool, observationIDBySubject(t, pool, "leased")))
-}
-
 func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 	t.Parallel()
 
-	pool, dir := projectionMigrationPoolBefore(t, provenanceCompactionMigration)
+	pool := NewPool(t)
 	ctx := t.Context()
 	seedProvenanceCutoverRows(t, pool)
-	applyMigrationsTwice(ctx, t, pool, dir, provenanceCompactionMigration)
-	applyMigrationsTwice(ctx, t, pool, dir, applicationVocabCutoverMigrations...)
 
 	var mismatched, kinds, decisions int
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(a.id) FROM source_observation_applications a
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(a.observation_id) FROM source_observation_applications a
 		JOIN source_observation_entity_kinds k ON k.id=a.entity_kind_id
 		JOIN source_observation_decisions d ON d.id=a.decision_id
 		JOIN source_observations o ON o.id=a.observation_id
@@ -200,12 +144,6 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 		(SELECT count(id) FROM source_observation_decisions)`).Scan(&kinds, &decisions))
 	require.Equal(t, 2, kinds)
 	require.Equal(t, 2, decisions)
-
-	var column int
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(attname) FROM pg_attribute
-		WHERE attrelid='source_observation_applications'::regclass AND NOT attisdropped AND attname IN ('entity_kind','decision')`).Scan(&column))
-	require.Zero(t, column)
 
 	var indexes []string
 
@@ -221,7 +159,17 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 	}
 
 	require.NoError(t, rows.Err())
-	require.Equal(t, []string{"source_observation_applications_pkey", "uq_source_observation_application_entity"}, indexes)
+	require.Equal(t, []string{"idx_source_application_entity_latest", "source_observation_applications_pkey"}, indexes)
+
+	var primaryKey []string
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT array_agg(attribute.attname::text ORDER BY key.ordinality)
+		FROM pg_constraint AS constraint_row
+		CROSS JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS key(attnum, ordinality)
+		JOIN pg_attribute AS attribute ON attribute.attrelid=constraint_row.conrelid AND attribute.attnum=key.attnum
+		WHERE constraint_row.conrelid='public.source_observation_applications'::regclass
+		  AND constraint_row.contype='p'`).Scan(&primaryKey))
+	require.Equal(t, []string{"observation_id", "entity_kind_id", "entity_key"}, primaryKey)
 
 	live := observationIDBySubject(t, pool, "live")
 	require.True(t, retentionProtected(t, pool, live), "LIVE session 감사 보호는 코드 표 조인으로 유지된다")
@@ -230,7 +178,7 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 		VALUES ($1,source_observation_entity_kind_id('youtube_live_session'),'vocab-live',source_observation_decision_id('REPLAY'))
 		ON CONFLICT (observation_id,entity_kind_id,entity_key) DO NOTHING`, live)
 	require.NoError(t, err)
-	require.Zero(t, tag.RowsAffected(), "같은 원본·kind·key 감사는 코드 index가 중복을 막는다")
+	require.Zero(t, tag.RowsAffected(), "같은 원본·kind·key 감사는 자연 키 PK가 중복을 막는다")
 
 	tag, err = pool.Exec(ctx, `INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
 		VALUES ($1,source_observation_entity_kind_id('youtube_video'),'vocab-live',source_observation_decision_id('APPLIED'))`, live)
@@ -251,7 +199,7 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 
 	var remaining int
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(id) FROM source_observation_applications WHERE observation_id=$1`, live).Scan(&remaining))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(observation_id) FROM source_observation_applications WHERE observation_id=$1`, live).Scan(&remaining))
 	require.Zero(t, remaining, "원본 CASCADE는 유지된다")
 }
 

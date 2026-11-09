@@ -2,22 +2,13 @@ package dbtest
 
 import (
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const timeFinalizationMigration = "323_youtube_live_time_finalization.sql"
-
-func TestTimeFinalizationMigrationGuardsProgressShapeAndReplays(t *testing.T) {
+func TestTimeFinalizationGuardsProgressShape(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
 	ctx := t.Context()
-
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	if _, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id,channel_id,status,started_at,ended_at,lifecycle_origin)
         SELECT 'tf-'||n,'UC_tf','ENDED',now()-interval '3 hours',now()-interval '1 hour','observed' FROM generate_series(1,4) n`); err != nil {
@@ -57,16 +48,6 @@ func TestTimeFinalizationMigrationGuardsProgressShapeAndReplays(t *testing.T) {
 		}
 	}
 
-	versions := liveRowVersions(t, pool)
-
-	if err := applyMigrationFile(ctx, pool, dir, timeFinalizationMigration); err != nil {
-		t.Fatalf("replay %s: %v", timeFinalizationMigration, err)
-	}
-
-	if got := liveRowVersions(t, pool); got != versions {
-		t.Fatal("replaying the finalization migration rewrote rows")
-	}
-
 	var validated bool
 
 	if err := pool.QueryRow(ctx, `SELECT convalidated FROM pg_constraint
@@ -76,16 +57,3 @@ func TestTimeFinalizationMigrationGuardsProgressShapeAndReplays(t *testing.T) {
 }
 
 // liveRowVersions는 세션·확정 진행 행의 행 버전 목록이다. 재적용이 행을 다시 쓰면 바뀐다.
-func liveRowVersions(t *testing.T, pool *pgxpool.Pool) string {
-	t.Helper()
-
-	var versions string
-
-	if err := pool.QueryRow(t.Context(), `SELECT string_agg(video_id||':'||xmin::text, ',' ORDER BY video_id)
-        FROM (SELECT video_id, xmin FROM youtube_live_sessions UNION ALL
-              SELECT video_id, xmin FROM youtube_live_time_finalizations) rows`).Scan(&versions); err != nil {
-		t.Fatal(err)
-	}
-
-	return versions
-}

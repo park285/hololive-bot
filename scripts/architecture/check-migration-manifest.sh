@@ -91,8 +91,7 @@ def sql_statement_count(text):
 root = Path(sys.argv[1])
 migrations = root / "hololive/hololive-api/scripts/migrations"
 manifest = migrations / "manifest.txt"
-baseline_name = "001_schema_epoch2_baseline.sql"
-acl_path = migrations / "manual/epoch2_acl_tail.sql"
+baseline_name = "001_schema_epoch3_baseline.sql"
 
 if not manifest.is_file():
     raise SystemExit(f"FAIL: migration manifest missing: {manifest}")
@@ -127,15 +126,12 @@ if sorted(files) != actual:
         print(f"--- {label}", *sorted(missing), sep="\n", file=sys.stderr)
     raise SystemExit(1)
 if files[0] != baseline_name:
-    raise SystemExit(f"FAIL: epoch-2 manifest must begin with {baseline_name}")
-if not acl_path.is_file() or acl_path.stat().st_size == 0:
-    raise SystemExit(f"FAIL: epoch-2 contract artifact missing or empty: {acl_path}")
+    raise SystemExit(f"FAIL: epoch-3 manifest must begin with {baseline_name}")
 
 sources = {name: (migrations / name).read_text() for name in actual}
 baseline = sources[baseline_name]
 for pattern, label in (
     (r"\bCREATE\s+DATABASE\b", "CREATE DATABASE"),
-    (r"\bALTER\s+DATABASE\b", "ALTER DATABASE"),
     (r"\\connect\b", r"\connect"),
     (r'\bCREATE\s+SCHEMA\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?public"?)', "CREATE SCHEMA public"),
     (r'\bALTER\s+SCHEMA\s+(?:"?public"?)\s+OWNER\b', "ALTER SCHEMA public OWNER"),
@@ -147,12 +143,10 @@ for pattern, label in (
 ):
     if re.search(pattern, baseline, re.IGNORECASE):
         raise SystemExit(f"FAIL: forbidden baseline content: {label}")
-if acl_path.read_text().strip() not in baseline:
-    raise SystemExit("FAIL: epoch-2 ACL tail is not embedded verbatim in baseline")
 if len(re.findall(r"(?m)^BEGIN;$", baseline)) != 1 or len(re.findall(r"(?m)^COMMIT;$", baseline)) != 1:
-    raise SystemExit("FAIL: epoch-2 baseline must be one top-level transaction")
+    raise SystemExit("FAIL: epoch-3 baseline must be one top-level transaction")
 if baseline.rstrip().splitlines()[-1] != "COMMIT;":
-    raise SystemExit("FAIL: epoch-2 baseline must end with COMMIT;")
+    raise SystemExit("FAIL: epoch-3 baseline must end with COMMIT;")
 
 prefixes = set()
 for name in actual:

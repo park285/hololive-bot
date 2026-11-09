@@ -89,7 +89,7 @@ const (
 	// 자동 탐색을 우회하는 override env다.
 	migrationsDirEnv = "HOLOLIVE_MIGRATIONS_DIR"
 
-	epoch2BaselineMigration = "001_schema_epoch2_baseline.sql"
+	epoch3BaselineMigration = "001_schema_epoch3_baseline.sql"
 	dbtestLedgerSchema      = "hololive_dbtest_internal"
 )
 
@@ -169,7 +169,7 @@ func applyManifestMigration(ctx context.Context, pool *pgxpool.Pool, dir, filena
 }
 
 func applyUnrecordedMigration(ctx context.Context, pool *pgxpool.Pool, filename, content, checksum string) error {
-	if filename == epoch2BaselineMigration {
+	if filename == epoch3BaselineMigration {
 		if err := applyAtomicBaseline(ctx, pool, filename, content, checksum); err != nil {
 			return fmt.Errorf("apply atomic baseline: %w", err)
 		}
@@ -232,28 +232,6 @@ func applyAtomicBaseline(ctx context.Context, pool *pgxpool.Pool, filename, cont
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("apply migrations: commit %s: %w", filename, err)
-	}
-
-	return nil
-}
-
-// applyMigrationFile은 단일 migration 파일을 읽어 statement 단위로 적용한다.
-//
-// 각 statement를 개별 Exec한다. 멀티-statement 문자열을 pool.Exec에 넘기면
-// simple query protocol이 암묵 트랜잭션 블록으로 감싸 CREATE INDEX CONCURRENTLY가
-// "cannot run inside a transaction block"으로 실패한다(019/060/061). 반대로 statement
-// 단위로 보내면 각 statement가 autocommit으로 실행되어 CONCURRENTLY가 동작한다.
-// 소스의 top-level BEGIN;/COMMIT; 블록은 prod Go 러너(hololive-api migrationrunner)와
-// 동일하게 단일 커넥션의 실제 트랜잭션으로 감싼다 — pool.Exec로 BEGIN을 보내면
-// pgxpool이 tx 상태 커넥션을 release 시 파기해 블록이 침묵 해체된다.
-func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, dir, filename string) error {
-	sql, readErr := fs.ReadFile(os.DirFS(dir), filename)
-	if readErr != nil {
-		return fmt.Errorf("apply migrations: read %s: %w", filename, readErr)
-	}
-
-	if err := applyMigrationContent(ctx, pool, filename, string(sql)); err != nil {
-		return fmt.Errorf("apply migration content: %w", err)
 	}
 
 	return nil

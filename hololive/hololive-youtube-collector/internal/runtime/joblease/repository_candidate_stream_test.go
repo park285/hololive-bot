@@ -36,7 +36,7 @@ func TestPartialCandidateStreamDoesNotReturnPage(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
 	for _, maxMS := range []int64{60000, 120000} {
-		rows, err := pool.Query(t.Context(), `SELECT true,'channel:a'::text,60000::bigint,$1::bigint`, maxMS)
+		rows, err := pool.Query(t.Context(), `SELECT true,'channel:a'::text,60000::bigint,$1::bigint,NULL::timestamptz`, maxMS)
 		if err != nil {
 			t.Fatal(err)
 		}

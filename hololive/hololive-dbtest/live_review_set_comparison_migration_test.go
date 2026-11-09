@@ -1,9 +1,6 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -11,35 +8,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const liveReviewSetMigration = "304_youtube_live_review_set_comparison.sql"
-
 // 기존 판정·최신 일치 시각·원본 영수증은 재적용과 집합 호출에서도 그대로다.
 func TestLiveReviewSetMigrationPreservesDecisions(t *testing.T) {
-	pool, dir := projectionMigrationPoolBefore(t, liveReviewSetMigration)
+	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
 	seedRecordedLiveReviews(t, pool)
 	seedLiveReviewTypedFacts(t, pool)
 
 	beforeResults, beforeReceipts := liveReviewComparisonState(t, pool)
 
-	for range 2 {
-		require.NoError(t, applyMigrationFile(t.Context(), pool, dir, liveReviewSetMigration))
+	afterResults, afterReceipts := liveReviewComparisonState(t, pool)
+	require.JSONEq(t, beforeResults, afterResults)
+	require.Equal(t, beforeReceipts, afterReceipts)
+	assertLiveReviewReceiptFactsMatchReceipts(t, pool)
 
-		afterResults, afterReceipts := liveReviewComparisonState(t, pool)
-		require.JSONEq(t, beforeResults, afterResults)
-		require.Equal(t, beforeReceipts, afterReceipts)
-		assertLiveReviewReceiptFactsMatchReceipts(t, pool)
+	var setResults string
 
-		var setResults string
-
-		require.NoError(t, pool.QueryRow(t.Context(), `
-			WITH reviewed AS MATERIALIZED (
-			    SELECT video_id, reviewed_at FROM youtube_live_review_current_receipts(ARRAY(SELECT video_id FROM youtube_live_sessions))
-			)
-			SELECT jsonb_object_agg(session.video_id,reviewed.reviewed_at)::text
-			FROM youtube_live_sessions session LEFT JOIN reviewed USING(video_id)`).Scan(&setResults))
-		require.JSONEq(t, beforeResults, setResults)
-	}
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		WITH reviewed AS MATERIALIZED (
+		    SELECT video_id, reviewed_at FROM youtube_live_review_current_receipts(ARRAY(SELECT video_id FROM youtube_live_sessions))
+		)
+		SELECT jsonb_object_agg(session.video_id,reviewed.reviewed_at)::text
+		FROM youtube_live_sessions session LEFT JOIN reviewed USING(video_id)`).Scan(&setResults))
+	require.JSONEq(t, beforeResults, setResults)
 
 	var typedDecisions string
 
@@ -184,19 +175,10 @@ func seedLiveReviewTypedFacts(t *testing.T, pool *pgxpool.Pool) {
 func TestLiveReviewSetMigrationPrivileges(t *testing.T) {
 	t.Parallel()
 
-	pool, dir := projectionMigrationPoolBefore(t, liveReviewSetMigration)
+	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
 	runtime := pgx.Identifier{roles.runtime}.Sanitize()
-
-	_, err := pool.Exec(t.Context(), `GRANT SELECT ON youtube_live_sessions,youtube_live_reconciliation_heads,
-		youtube_live_pending_ends,youtube_video_availability,youtube_live_review_receipt_facts TO `+runtime)
-	require.NoError(t, err)
-
-	raw, err := fs.ReadFile(os.DirFS(dir), liveReviewSetMigration)
-	require.NoError(t, err)
-
-	migration := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
-	require.NoError(t, applyMigrationContent(t.Context(), pool, liveReviewSetMigration, migration))
+	applyBaselineForRoles(t, pool, roles)
 	seedLiveReviewComparison(t, pool)
 
 	for _, function := range []string{"youtube_live_review_current_facts(text[])", "youtube_live_review_current_receipts(text[])", "youtube_live_review_current_receipt(text)"} {

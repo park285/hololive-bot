@@ -45,14 +45,12 @@ proactive notification egress의 배타성을 무엇이 소유하는지, 그리�
 
 lease 삭제와 scheduler role 완화의 결과로, **validator는 더 이상 여러 alarm-worker 인스턴스가 동시에 `egress=owner`인 것을 막지 않습니다.** 이전에는 Valkey lease가 그 역할을 명목상 맡고 있었습니다. `{scheduler=worker, egress=owner}`와 `{scheduler=off, egress=owner}`를 **함께** 배포하면 그것은 이름만 다른 replica>1이며, D-002의 게이트 목록이 그대로 적용됩니다.
 
-이 조합을 막는 것은 validator가 아니라 compose 단일 인스턴스 구성(`container_name` + 고정 호스트 포트)과 deploy 계층 게이트뿐입니다. 현행 배포는 단일 인스턴스이므로 이 경계가 실제로 성립합니다.
+현행 중앙 배포의 단일 worker unit은 `deploy/quadlet/hololive-bot/`가 소유합니다. replica 확장은 별도 운영 승인과 아래 동시성 검증을 요구합니다.
 
-### deploy 계층 단언
+### 배포 기준
 
-deploy 계층에서는 `scripts/architecture/ci-notification-egress-gate.sh`가 prod·live-compat을 병합한 compose 렌더의 alarm-worker 서비스에 대해 다음을 단언합니다.
-
-- `NOTIFICATION_SCHEDULER_ROLE`을 `worker`로 고정할 것. validator가 `off`를 허용하게 되었으므로, 이 값이 유일 인스턴스를 감지기 없이 기동시키는 오배포를 막는 deploy 계층 방어선입니다.
-- `container_name`과 고정 loopback 호스트 포트를 유지하고 `replicas`를 선언하지 않을 것. 이 셋이 단일 인스턴스를 보장합니다.
+현재 배포 구성과 검증 절차는 [PROJECT_MAP](../PROJECT_MAP.md)과
+[alarm-worker runbook](../runbooks/alarm-worker.md)을 따릅니다.
 
 ### 코드 위치
 
@@ -72,9 +70,6 @@ hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_
 
 deploy/compose/docker-compose.prod.yml
   hololive-alarm-worker 서비스 블록: container_name, ports, NOTIFICATION_* env
-
-scripts/architecture/ci-notification-egress-gate.sh
-  lease env 부재 단언 + NOTIFICATION_SCHEDULER_ROLE 리터럴 단언
 ```
 
 ---

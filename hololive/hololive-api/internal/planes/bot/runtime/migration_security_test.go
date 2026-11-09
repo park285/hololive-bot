@@ -1,60 +1,42 @@
 package botruntime
 
 import (
-	"io/fs"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
+	"errors"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-func TestEpoch2BaselineDoesNotSeedRuntimeACLBehavior(t *testing.T) {
-	sql := readMigrationSQL(t, "scripts/migrations/001_schema_epoch2_baseline.sql")
+func TestBaselinePreservesUnconfiguredACLAndRoomUniqueness(t *testing.T) {
+	t.Parallel()
 
-	required := []string{
-		"list_type character varying(16) DEFAULT 'whitelist'::character varying NOT NULL,",
-		"CREATE UNIQUE INDEX idx_room_list ON public.acl_rooms USING btree (room_id, list_type);",
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+
+	var settings, rooms int
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM acl_settings), (SELECT count(*) FROM acl_rooms)`).Scan(&settings, &rooms))
+	require.Zero(t, settings, "migration은 운영 ACL 정책을 임의로 켜지 않는다")
+	require.Zero(t, rooms, "migration은 허용·차단 방을 임의로 등록하지 않는다")
+
+	var listType string
+
+	require.NoError(t, pool.QueryRow(ctx, `INSERT INTO acl_rooms(room_id) VALUES ('42') RETURNING list_type`).Scan(&listType))
+	require.Equal(t, "whitelist", listType)
+
+	_, err := pool.Exec(ctx, `INSERT INTO acl_rooms(room_id) VALUES ('42')`)
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+
+	if !ok || pgErr == nil {
+		t.Fatalf("중복 ACL 방은 PostgreSQL unique 위반이어야 함: %v", err)
 	}
 
-	for _, snippet := range required {
-		if !strings.Contains(sql, snippet) {
-			t.Fatalf("expected ACL migration to contain %q", snippet)
-		}
-	}
+	require.Equal(t, "23505", pgErr.Code)
 
-	forbidden := []string{
-		"INSERT INTO public.acl_settings",
-		"INSERT INTO public.acl_rooms",
-	}
-
-	for _, snippet := range forbidden {
-		if strings.Contains(sql, snippet) {
-			t.Fatalf("ACL migration must not seed runtime ACL state: found %q", snippet)
-		}
-	}
-}
-
-func readMigrationSQL(t *testing.T, relativePath string) string {
-	t.Helper()
-
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-
-	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", "..", ".."))
-	root := filepath.Join(moduleRoot, "scripts", "migrations")
-	rel, err := filepath.Rel(root, filepath.Join(moduleRoot, relativePath))
-
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) || !fs.ValidPath(filepath.ToSlash(rel)) {
-		t.Fatalf("invalid migration path %s: %v", relativePath, err)
-	}
-
-	content, err := fs.ReadFile(os.DirFS(root), filepath.ToSlash(rel))
-	if err != nil {
-		t.Fatalf("read migration %s: %v", relativePath, err)
-	}
-
-	return string(content)
+	_, err = pool.Exec(ctx, `INSERT INTO acl_rooms(room_id,list_type) VALUES ('42','blacklist')`)
+	require.NoError(t, err, "같은 방의 서로 다른 목록은 독립 identity다")
 }

@@ -1,158 +1,78 @@
 # 마이그레이션 작성 규약
 
-2026-07 SQL 리뷰(스키마 검진 + 문장 시간복잡도 비판)의 처방을 규약화한 것.
-`scripts/architecture/check-migration-manifest.sh`가 일부를 기계 검증한다.
+## epoch-3 적용과 복구 하한
 
-## 러너 의미론 (모든 규칙의 전제)
+- manifest의 첫 파일은 `001_schema_epoch3_baseline.sql`, 다음 파일은 `002_drop_x_space_login_attempts.sql`입니다.
+  baseline은 epoch-2의 372 head 스키마·시드·시퀀스 값·권한·주석·DB 기본값을 통합하되 자동 로그인 시도 표는 제외합니다.
+- 빈 DB는 baseline을 실행합니다. `schema_migrations`와 checksum 기록까지 같은 트랜잭션으로 커밋합니다.
+- 기존 DB는 **epoch-2 manifest 전체 233개 파일의 이름과 sha256이 모두 일치할 때만** baseline SQL 실행 없이
+  두 원장을 epoch-3 baseline 한 항목으로 원자 교체합니다. 봉인 목록은 러너에 포함된
+  `internal/migrationrunner/epoch2_head.sha256`이며 삭제된 SQL을 다시 실행하는 경로는 없습니다.
+- 부분 적용, manifest 밖 행, 누락·불일치 checksum은 새 migration SQL 실행 전에 거부합니다.
+  **이전 릴리스로 372까지 올리고 정상 적용 기록을 확인한 뒤 새 릴리스를 실행**해야 합니다.
+  epoch-1 checkpoint와 잔재를 수용하거나 임의로 원장을 지우는 복구는 지원하지 않습니다.
+- 원장 교체 뒤 `002`가 `x_space_login_attempts`를 멱등적으로 삭제합니다. 기존 운영 1행의 삭제는 승인된 변경입니다.
+  의존 객체 등으로 DROP이 실패하면 baseline 원장은 유지되며 다음 실행은 DROP부터 재개합니다. CASCADE는 쓰지 않습니다.
+- 빈 원장과 기존 스키마는 자동 추정하지 않습니다. 확인된 epoch-3 스키마의 마지막 파일을
+  `MIGRATION_BASELINE_THROUGH`에 지정하면 해당 지점까지 checksum·원장을 원자 기록하고 나머지를 실행합니다.
+  옛 파일명은 watermark로 사용할 수 없습니다.
+- 신규 migrator 이미지의 `db-migrate`가 실행되는 시점에 전환됩니다. 배포 전에 이전 릴리스와 백업을 보존하고
+  Go의 자동 로그인 복구 읽기 제거·Console 복구 표시 제거를 함께 준비합니다. 새 스키마에 옛 migrator를 실행하거나
+  삭제된 표를 읽는 옛 앱으로 되돌릴 수 없습니다. 롤백에는 이전 이미지와 **전환 전 백업의 별도 복원**이 필요합니다.
+- 수동 `epoch2_acl_tail.sql`은 옛 baseline 생성 보조물이므로 제거했습니다.
+  `manual/youtube_live_lifecycle_cutover.sql`은 ladder가 아닌 source 계약 활성화 운영 SQL로 유지합니다.
+  baseline은 372 head와 동일하게 YouTube.js live_snapshot schema1/gen2·video_live_check schema1/gen1을 시드합니다.
+  최초 활성화는 queue drain·collector quiescence·검증한 bundle·별도 승인 뒤 이 SQL로 gen3/2를 설정합니다.
+  기존 DB의 운영 세대는 baseline 전환이 변경하지 않습니다.
 
-- 프로덕션 적용은 Go 러너(`hololive-api/internal/migrationrunner`, `cmd/db-migrate` → compose `hololive-db-migrate`)가
-  수행하고, dbtest 재생(`hololive/hololive-dbtest`)도 같은 의미론이다. 파일을 statement 단위로 분할
-  (`hololive-shared/pkg/sqlsplit`)해 개별 autocommit Exec로 보내고, `schema_migrations` ledger로 적용 완료
-  파일을 skip한다. **파일 중간 실패 시 ledger 미기록 → 재실행 때 그 파일 전체가 재적용**된다.
-- top-level `BEGIN;`/`COMMIT;` 블록은 단일 커넥션의 실제 트랜잭션으로 실행된다(`sqlsplit.Segments`).
-  블록 안 문장이 실패하면 블록 전체가 롤백되고, `COMMIT;` 이후 문장은 autocommit으로 이어진다(017 선례).
-  `ROLLBACK`/`SAVEPOINT`/isolation 지정 `BEGIN` 등 그 외 트랜잭션 제어문은 러너가 명시적 에러로 거부한다.
-- 따라서: ① 모든 문장은 멱등이어야 한다(`IF [NOT] EXISTS`, `NOT VALID` 재적용 가드, 조건부 DO 블록).
-  ② `CREATE/DROP INDEX CONCURRENTLY` 사용 가능(autocommit 문장). ③ `BEGIN;/COMMIT;` 블록 안에는
-  CONCURRENTLY를 넣을 수 없다 — 러너와 `check-migration-manifest.sh`가 명시적 에러로 거부한다.
-- 기존 ledger가 있는 DB에서는 plain `DROP INDEX`를 SQL 실행 전에 거부한다. 새 migration은
-  `DROP INDEX CONCURRENTLY`를 사용한다. 이미 존재하는 maintenance-only migration을 적용해야 할 때만
-  서비스 quiescence를 확인한 전용 점검 창에서 `MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true`를 명시한다.
-  빈 DB의 fresh bootstrap은 전체 manifest 재생을 위해 plain drop을 허용한다.
-- 적용된 파일은 주석을 포함해 고치지 않는다. 러너는 ledger에 기록된 파일의 sha256을 checksum 원장과 비교하므로,
-  고친 파일에 이르면 skip하지 않고 `migration <file> checksum mismatch`로 실행을 멈춘다(뒤 파일도 적용하지 않는다).
-  프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다(예: 183의 DB 기본값을 다시 선언한 271).
-- 적용 경로는 `db-migrate` 하나다. checksum, epoch residue, atomic baseline ledger 계약은 Go 러너만 소유하므로
-  local·production·복구 적용은 모두 `db-migrate`를 사용하며 셸 러너는 없다.
-- manifest 밖 `schema_migrations` 행(이전 epoch 잔재 포함)이 있으면 러너는 SQL을 실행하기 전에 거부한다.
-  epoch-1 ledger 잔재를 `182_epoch2_legacy_ledger_cleanup.sql`이 같은 실행 안에서 지우도록 182 적용 전까지 허용하던
-  창과 epoch-1 checkpoint baseline 수용은 닫혔다. 제거 조건이던 "운영 `schema_migrations`에 001·182가 기록되고
-  epoch-1 파일명 행이 0건"은 T18(2026-09-26)에서 확인했고, `DEC-20260926-hololive-retired-rollback-tooling`이
-  epoch-1 rollback 창을 종료했다(stack-audit 2026-09-26 T17). 182보다 오래된 백업을 복원한 DB는 잔재 행의 출처를
-  확인해 수동으로 지운 뒤 다시 적용한다. 이 거부는 ledger 무결성 계약이라 제거 조건이 없다. 빈 ledger용
-  `MIGRATION_BASELINE_THROUGH` 경로는 복구 runbook이 소유하므로 유지한다.
+## 러너 의미론
 
-## 번호
+- 적용 경로는 `hololive-api/cmd/db-migrate` 하나입니다. 운영 one-shot `hololive-db-migrate`와 로컬·복구가 같은 러너를 씁니다.
+  dbtest도 같은 statement/transaction 의미론으로 실행합니다.
+- 파일은 `hololive-shared/pkg/sqlsplit`으로 나누어 autocommit 실행합니다. 파일 중간 실패 시 원장을 기록하지 않으므로
+  다시 실행하면 파일 전체를 재적용합니다. 각 문장은 멱등이어야 합니다.
+- top-level `BEGIN;`/`COMMIT;`는 pinned connection의 실제 트랜잭션입니다. 실패한 블록은 롤백하고,
+  COMMIT 뒤 문장은 autocommit으로 이어집니다. `ROLLBACK`·`SAVEPOINT`·isolation 지정 BEGIN 등은 거부합니다.
+- `CREATE/DROP INDEX CONCURRENTLY`는 단일 문장 파일로 둡니다. 트랜잭션 안에서는 사용할 수 없습니다.
+  기존 DB의 plain `DROP INDEX`는 SQL 실행 전에 거부합니다. 점검 창에서 서비스 정지를 확인한 경우만
+  `MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true`를 명시합니다. fresh bootstrap은 plain drop을 허용합니다.
+- 노출된 migration은 주석까지 불변입니다. 적용 파일 checksum이 다르면 skip하지 않고 실패합니다.
+  새 변경은 새 파일로 추가합니다. 현행 epoch 밖 원장은 명시된 233개 전환 이외에는 거부합니다.
+- 순서는 `manifest.txt`가 소유합니다. 형식은 `<001부터 연속 ordinal> <파일명.sql>`이며 파일 프리픽스는 중복 없이
+  기존 최대 번호+1을 씁니다.
 
-- 새 파일은 `max(기존 번호)+1`. 번호 프리픽스가 중복되면 `check-migration-manifest.sh`가 예외 없이 거부한다.
-- 실행 순서의 SSOT는 manifest.txt이며 파일명 정렬이 아니다.
+## SQL 안전 정책
 
-## 락과 시간복잡도 (문장 품질)
+`scripts/architecture/check-migration-manifest.sh`는 누락·중복·잘못된 적용 순서, 위험한 baseline 명령,
+온라인 인덱스 생성 및 트랜잭션 규칙, 무방비 NOT NULL 변경을 검사합니다. 함수·권한·제약 동작은 DB 시험이 검증합니다.
+소스·문서 문구, 과거 파일 hash 일치, 검사기 자체 시험을 gate로 만들지 않습니다.
 
-DB에서 문장 비용은 세 축으로 본다: 읽기 복잡도(몇 행을 만지나) / 쓰기 증폭(행 1개 변경이
-인덱스 포함 몇 번의 쓰기가 되나) / **락 보유 시간**(다른 트랜잭션을 얼마나 세워두나).
-마이그레이션에서는 셋째가 가장 치명적이다.
+- `SET NOT NULL` 전에 `CHECK (col IS NOT NULL) NOT VALID`와 `VALIDATE CONSTRAINT`를 적용합니다.
+  큰 표에서는 ADD와 VALIDATE를 별도 autocommit 문장으로 두어 ACCESS EXCLUSIVE 잠금이 전 행 검증까지 이어지지 않게 합니다.
+  PostgreSQL 18의 NOT NULL NOT VALID 제약도 사용할 수 있습니다. `lock_timeout`은 획득 대기만 제한합니다.
+- 대형 backfill은 keyset 배치로 나눕니다. top-level DO에서 batch COMMIT을 쓰면 바깥 BEGIN으로 감싸지 않습니다.
+  실패 전 완료 batch는 남고 재실행은 미완료 행만 처리해야 합니다. statement timeout은 DO 전체에 적용됩니다.
+- 값이 같으면 UPDATE하지 않도록 `IS DISTINCT FROM`을 사용합니다. 반복하는 비싼 정규화·조회는 같은 migration의
+  임시 표로 한 번만 계산합니다. 임시 객체는 종료 전에 제거합니다.
+- 시드는 multi-VALUES와 명시적인 conflict arbiter 또는 `WHERE NOT EXISTS`로 보호합니다.
+  대상 없는 `ON CONFLICT DO NOTHING`은 금지합니다. members의 slug arbiter는 `idx_members_slug`입니다.
+- 템플릿 개정은 `channel_id IS NULL AND body = old`의 CAS UPDATE로 사용자 본문을 보존합니다.
+  운영에 한 번도 기록되지 않은 같은 key의 연속 개정만 병합 전에 합칠 수 있습니다. 배포된 checksum은 고치지 않습니다.
+- 대량 보존 삭제는 배치 또는 파티셔닝을 사용합니다. 인덱스 수에 비례하는 쓰기 비용·WAL·vacuum도 고려합니다.
+- 라이브 원본 행 변경은 원본 잠금 전에 `SELECT public.lock_youtube_live_runtime_state();`를 실행하고,
+  같은 READ COMMITTED 트랜잭션 끝에서 변경 전후 video_id를 모두 넣어 `refresh_youtube_live_runtime_state(ARRAY[...])`를
+  호출합니다. 누락은 `scripts/maintenance/queries/live_runtime_state_drift.sql`로 확인합니다.
 
-### SET NOT NULL — NOT VALID CHECK + VALIDATE CONSTRAINT 선행 (무방비 사용은 `check-migration-manifest.sh`가 거부)
+## 스키마와 시험
 
-`ALTER COLUMN … SET NOT NULL`은 ACCESS EXCLUSIVE 락(모든 접근 차단)을 쥔 채 전 행을 스캔한다.
-유효한 CHECK가 선재하면 PG가 스캔을 생략하므로 다음 레시피를 쓴다:
-
-```sql
-ALTER TABLE t ADD CONSTRAINT t_col_nn CHECK (col IS NOT NULL) NOT VALID;  -- 락 순간적
-ALTER TABLE t VALIDATE CONSTRAINT t_col_nn;                               -- SHARE UPDATE EXCLUSIVE (쓰기 허용)
-ALTER TABLE t ALTER COLUMN col SET NOT NULL;                              -- 유효 CHECK 존재 → 스캔 생략
-ALTER TABLE t DROP CONSTRAINT t_col_nn;
-```
-
-PG 18에서는 NOT NULL 제약을 `NOT VALID`로 직접 추가해 2단계로 줄일 수 있다.
-
-`VALIDATE CONSTRAINT`의 잠금 완화는 앞 문장과 다른 트랜잭션일 때만 성립한다. PostgreSQL은 잠금을 트랜잭션 끝까지
-유지하므로, 같은 top-level `BEGIN;`/`COMMIT;` 블록 안에서 `ADD COLUMN`·`ADD/DROP CONSTRAINT`가 잡은 ACCESS EXCLUSIVE가
-VALIDATE 전 행 스캔과 COMMIT까지 이어진다. 큰 표에서는 `VALIDATE CONSTRAINT`를 블록 밖 autocommit 문장으로 둔다
-(선례 178). `lock_timeout`은 잠금 획득 대기만 끊고 스캔 시간은 줄이지 않는다. 280은 3,962행 표라 한 트랜잭션으로 적용했다.
-
-### 대형 backfill — 단일 UPDATE 한 방 금지
-
-문장 하나 = 트랜잭션 하나: 대상 전 행 락을 문장 끝까지 보유(O(N)), WAL 스파이크, dead tuple 일시불.
-keyset 배치 루프로 쪼갠다(러너가 statement별 autocommit이라 궁합이 맞다):
-
-```sql
--- 0 rows가 나올 때까지 반복
-UPDATE big_table t
-SET    col = …
-WHERE  t.id IN (
-    SELECT id FROM big_table
-    WHERE col IS NULL
-    ORDER BY id
-    LIMIT 5000
-);
-```
-
-317·318은 top-level `DO` 안에서 keyset batch마다 `COMMIT`합니다. 이를 바깥 `BEGIN` 블록으로 감싸면
-transaction control이 실패하므로 단독 autocommit 문장으로 실행해야 합니다. 준비 단계·완료 batch는 실패 뒤에도
-남고, 파일 재실행은 기존 값을 다시 쓰지 않은 채 나머지를 채워야 합니다. 문장 timeout은 DO 전체에 적용되므로
-batch commit이 문장·명령 실행 한도를 연장하지 않습니다. FK/NOT NULL 검증과 파괴적 cutover는 backfill 뒤에 둡니다.
-
-### 병합/정규화 UPDATE — IS DISTINCT FROM 가드 필수
-
-PG의 UPDATE는 값이 같아도 새 행 버전을 쓴다(dead tuple + 전 인덱스 갱신 후보).
-바뀌는 행만 만진다 (062의 선례):
-
-```sql
-WHERE m.slug = s.slug
-  AND (m.a, m.b) IS DISTINCT FROM (s.a, s.b)
-```
-
-같은 비싼 계산(정규화 + 상관 EXISTS)을 여러 문장이 반복하면 `CREATE TEMP TABLE … AS`로 1회 계산 후 재사용.
-
-### 시드 — multi-VALUES 한 문장 + 명시적 멱등 가드
-
-INSERT를 문장 단위로 쪼개면 커밋(fsync) N회 + 중간 실패 시 부분 적용이다. VALUES 리스트 한 문장으로 쓰고,
-멱등 가드는 **대상 없는 `ON CONFLICT DO NOTHING`을 금지**하고 `ON CONFLICT (arbiter)` 또는
-`INSERT … SELECT … WHERE NOT EXISTS`(064/068/016/017/018 참조)를 쓴다.
-members 시드의 arbiter는 `idx_members_slug`(UNIQUE, 097 복원)다.
-
-### 템플릿 CAS 개정 — 병합 전 key당 한 파일 (권고)
-
-템플릿 본문 개정은 `(template_key, $old$…$old$, $new$…$new$)` 튜플과 `channel_id IS NULL AND body = old`
-가드의 CAS UPDATE로 쓴다(217 참고). 한 브랜치 안에서 같은 key를 여러 migration이 연달아 고치면 중간 본문은
-운영 DB에 머문 적이 없는데 파일과 테스트만 늘어난다(204–208 사례: 5파일 118,865 B, 튜플 101개가 key 45개를
-갱신했고 key마다 첫 old와 마지막 new만 남기면 약 42 KB). 그래서 **운영 ledger에 한 번도 기록되지 않은**
-템플릿 CAS migration은 병합 전에 key당 한 파일로 합치기를 권한다.
-
-- 판정 기준은 origin/main 존재 여부가 아니라 운영 ledger 기록 여부다. 브랜치에서 먼저 배포돼 운영에 적용된
-  파일(release checksum 기록)은 병합 전이라도 고정한다. 고치면 러너가 checksum mismatch로 거부한다.
-- 바이너리 선배포가 필요한 개정(새 렌더 함수에 기대는 본문 등)은 릴리스가 나뉘므로 PR을 나눈다.
-- 합칠 때는 파일별 dbtest(`hololive-dbtest/*_migration_test.go`)도 같은 변경에서 합친다.
-- 거부 게이트가 아닌 권고다. 템플릿을 seed 자산으로 옮기는 결정이 채택되면 이 권고는 폐기한다.
-
-### 보존(retention) 삭제
-
-인덱스가 많은 테이블의 대량 DELETE는 힙 N + 인덱스 엔트리 N×인덱스수 + vacuum 후불이다.
-주기 삭제는 배치 루프(위 keyset)로, 대량·정기 보존은 파티셔닝(파티션 DROP은 O(1))을 검토한다
-— `docs/history/architecture/outbox-v3-convergence-roadmap-20260703.md`의 Phase 3 참고.
-
-### 라이브 원본 데이터 변경 — 전역 잠금 뒤 변경 key로 수명 모델 갱신
-
-`youtube_live_runtime_state`는 트리거가 아니라 writer가 같은 트랜잭션에서 명시적으로 갱신한다(328). 따라서
-`youtube_live_sessions`·`youtube_live_reconciliation_heads`·`youtube_live_pending_ends`·`youtube_video_availability`·
-`youtube_live_review_receipts`·`youtube_live_review_receipt_facts`의 행을 바꾸는 migration은 원본 잠금보다 먼저
-`SELECT public.lock_youtube_live_runtime_state();`(exclusive)를 잡고, 마지막에 바꾼 이전·새 `video_id`를 모두 넣어
-`SELECT public.refresh_youtube_live_runtime_state(ARRAY[...]);`를 호출한다. 러너의 READ COMMITTED 트랜잭션에서만 성공하며,
-key를 빠뜨리면 `scripts/maintenance/queries/live_runtime_state_drift.sql`이 누락·값 변경으로 센다.
-
-## 스키마 문서
-
-통합 스키마 문서는 생성물이다. `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`
-(pg_catalog 직렬화 골든 — enum·table·column·constraint·index·reloptions·trigger·sequence·function)이 문서이며 `TestSchemaSnapshotGolden`이
-manifest 전체 적용 결과와의 드리프트를 차단한다. pg_dump 출력이 아니라 catalog 직렬화인 이유:
-pg_dump 텍스트는 patch·도구 버전마다 헤더와 구문이 달라 결정성을 깬다. dbtest는 PG 18.6 이미지 하나만 고정하며
-버전 폴백은 없다.
-갱신: `SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest`.
-
-## 스키마 표준
-
-컬럼 타입은 세 원칙으로 통일한다(098 기준). ① 내부 생성 어휘 컬럼(status·kind·delivery_status·alarm_type)은 값 집합을
-`chk_<table>_<col>_vocab` CHECK로 못박는다 — 폭 상한이 아니라 값 자체가 계약이고, 코드 상수 세트로부터 전수 검증된
-값만 기록되기 때문이다(alarm_dispatch_deliveries.status의 TEXT+CHECK 선례와 동형). TEXT 전환은 098(kind 전 컬럼·
-major_events.status)과 099(잔여 status·delivery_status·alarm_type 8컬럼)로 완결됐다. ② 사용자 입력이 닿는 표시명은 VARCHAR 폭을 통일한다 —
-member_name=TEXT, room_name=VARCHAR(255)(subscription 테이블과 정렬). ③ 표준 식별자 폭(channel_id=64·room_id=100)과
-video_id/post_id·alarm_type ENUM·content_id는 건드리지 않는다. VARCHAR→TEXT와 VARCHAR 확대는 테이블 무-rewrite지만
-해당 컬럼 인덱스는 재빌드된다. TEXT→VARCHAR·축소는 금지한다.
-
-④ 대량 표에서 행마다 반복되는 저카디널리티 문자열은 사전 표 + 정수 FK로 저장할 수 있다(317 출처 3열, 318–321 감사
-entity_kind·decision 선례). 이때도 공개 SQL/Go 표현은 문자열을 유지하고 읽기 경로가 사전 표를 조인해 복원하며, 사전 행은
-`SECURITY DEFINER` resolver 함수(`source_observation_*_id`)만 만든다. 사전의 `UNIQUE (name)`은 같은 어휘의 중복만 막으며
-허용 값 집합 검증을 대신하지 않는다. 기존 값 집합·폭 제약을 보존하고, 닫힌 어휘 계약에는 ①의 원칙을 그대로 적용한다.
-계약상 항상 sha256 hex인 식별 열은 308·317처럼 `bytea(32)`로 저장하고 API 경계에서 `encode/decode(…, 'hex')`한다.
+- `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`은 catalog 직렬화 문서입니다.
+  `TestSchemaSnapshotGolden`과 전환 시험이 같은 `dbtest.SnapshotSchema`로 비교합니다.
+- PostgreSQL 18.6 고정 일회용 DB에서 실행하며 버전 fallback은 없습니다. 외부 DB는 폐기 가능한 서버임을
+  `ALLOW_EXTERNAL_TEST_DB=true` 또는 소유 sentinel로 증명해야 합니다. 운영 DSN은 사용하지 않습니다.
+- 갱신: `SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest`.
+  수동 역사 재생 시험은 남기지 않고 현행 함수·트리거·제약·권한의 행동을 baseline 위에서 시험합니다.
+- 내부 어휘는 TEXT+CHECK 또는 정수 FK 사전으로 제한합니다. 사전 UNIQUE는 허용 어휘 검증을 대신하지 않습니다.
+  공개 SQL·Go 값은 문자열을 유지하며 사전 생성은 SECURITY DEFINER resolver가 소유합니다.
+  sha256 식별자는 bytea(32)로 저장하고 경계에서 hex encode/decode합니다.
+- 표시명은 member_name TEXT·room_name VARCHAR(255), channel_id 64·room_id 100 규약을 유지합니다.
+  식별자·alarm_type enum을 임의 변경하지 않습니다. VARCHAR 축소·TEXT→VARCHAR는 금지합니다.

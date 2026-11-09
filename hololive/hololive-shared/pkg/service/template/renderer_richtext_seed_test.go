@@ -1,66 +1,59 @@
 package template
 
 import (
-	"io/fs"
 	"maps"
-	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
-var (
-	templateFormatPairPattern      = regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '[0-9a-f]{64}', \$plain\$(.*?)\$plain\$, \$rich\$(.*?)\$rich\$\)`)
-	templateRichTextSummaryPattern = regexp.MustCompile(`(?s)\('([A-Z0-9_]+)', '[0-9a-f]{64}', \$rich\$(.*?)\$rich\$\)`)
-)
+type templateSeedPair struct{ oldBody, newBody string }
 
 // loadTemplateFormatPairs는 현행 표준 본문을 oldBody=plain, newBody=richtext로 돌려준다.
-// 358이 두 변형을 정하고, 359가 일부 키의 richtext 본문을 바꾼다.
 func loadTemplateFormatPairs(tb testing.TB) map[domain.TemplateKey]templateSeedPair {
 	tb.Helper()
 
-	dir := os.DirFS(filepath.Join("..", "..", "..", "..", "hololive-api", "scripts", "migrations"))
+	pool := dbtest.NewPool(tb)
 
-	raw, err := fs.ReadFile(dir, "358_template_format_variants.sql")
+	rows, err := pool.Query(tb.Context(), `SELECT plain.template_key, plain.body, rich.body
+		FROM notification_templates AS plain
+		JOIN notification_templates AS rich ON rich.template_key=plain.template_key
+		WHERE plain.channel_id IS NULL AND plain.format_variant='plain'
+		  AND rich.channel_id IS NULL AND rich.format_variant='richtext'`)
 	if err != nil {
 		tb.Fatal(err)
 	}
+	defer rows.Close()
 
-	rows := templateFormatPairPattern.FindAllStringSubmatch(string(raw), -1)
-	pairs := make(map[domain.TemplateKey]templateSeedPair, len(rows))
+	pairs := make(map[domain.TemplateKey]templateSeedPair)
 
-	for _, row := range rows {
-		pairs[domain.TemplateKey(row[1])] = templateSeedPair{row[2], row[3]}
-	}
+	for rows.Next() {
+		var (
+			key  domain.TemplateKey
+			pair templateSeedPair
+		)
 
-	raw, err = fs.ReadFile(dir, "359_richtext_collapsed_summary.sql")
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	for _, row := range templateRichTextSummaryPattern.FindAllStringSubmatch(string(raw), -1) {
-		key := domain.TemplateKey(row[1])
-
-		pair, exists := pairs[key]
-		if !exists {
-			tb.Fatalf("359가 358에 없는 키를 바꿈: %s", key)
+		if err := rows.Scan(&key, &pair.oldBody, &pair.newBody); err != nil {
+			tb.Fatal(err)
 		}
 
-		pair.newBody = row[2]
 		pairs[key] = pair
+	}
+
+	if err := rows.Err(); err != nil {
+		tb.Fatal(err)
 	}
 
 	return pairs
 }
 
-// DB 없이 strict parse와 제한 실행 경로에 현행 RichText 본문을 전달한다.
+// 실제 baseline의 본문을 strict parse와 제한 실행 경로에서 검증한다.
 func TestRichTextSeedsPreviewAllKeys(t *testing.T) {
 	pairs := loadTemplateFormatPairs(t)
 	keys := sampledata.GetAllTemplateKeys()
@@ -109,7 +102,7 @@ func TestRichTextSeedsPreserveCopyableCommands(t *testing.T) {
 
 	for _, key := range []domain.TemplateKey{
 		domain.TemplateKeyCmdHelp, domain.TemplateKeyCmdAmbiguousMember, domain.TemplateKeyCmdAlarmList,
-		domain.TemplateKeyCmdMajorEventNotSub, domain.TemplateKeyCmdMajorEventStatus, domain.TemplateKeyCmdMajorEventUsage,
+		domain.TemplateKeyCmdMajorEventStatus, domain.TemplateKeyCmdMajorEventUsage,
 		domain.TemplateKeyCmdMemberNewsNoMembers, domain.TemplateKeyCmdMemberNewsStatus,
 	} {
 		pair := pairs[key]
@@ -387,7 +380,7 @@ func TestRichTextSeedsSummarizeCollapsedPreview(t *testing.T) {
 
 	t.Run("빈 이름은 요약에서 뺀다", func(t *testing.T) {
 		stream := func(name string) map[string]any {
-			return map[string]any{"ChannelName": name, "Elapsed": "", "Title": "제목", "URL": ""}
+			return map[string]any{"ChannelName": name, "Elapsed": "", "Title": "제목", "URL": "", "CollabMembers": ""}
 		}
 		data := map[string]any{"Count": 3, "Streams": []map[string]any{stream("페코라"), stream(" "), stream("미코")}}
 

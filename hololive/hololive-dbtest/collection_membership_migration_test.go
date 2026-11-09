@@ -8,57 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const collectionMembershipMigration = "259_youtube_collection_job_membership.sql"
-
 // TestCollectionMembershipMigrationInitializesOnlyCurrent는 재적용 가능한 259가 CURRENT의 bounded target만
 // membership을 초기화하고 과거 generation은 backfill하지 않으며, 이전 lock 함수를 제거하는지 확인한다.
-func TestCollectionMembershipMigrationInitializesOnlyCurrent(t *testing.T) {
-	t.Parallel()
-
-	pool, dir := projectionMigrationPoolBefore(t, collectionMembershipMigration)
-	ctx := t.Context()
-
-	_, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
-		VALUES ('RETIRED',1,repeat('b',64),now()+interval '1 hour',now()-interval '1 hour'),
-		       ('CURRENT',1,repeat('a',64),now()+interval '1 hour',now());
-		INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
-		SELECT generation,'channel:a','community_page',40,120000,true,now()+interval '1 hour'
-		FROM youtube_collection_projection_generations;
-	`)
-	require.NoError(t, err)
-
-	require.NoError(t, applyMigrationFile(ctx, pool, dir, collectionMembershipMigration))
-	require.NoError(t, applyMigrationFile(ctx, pool, dir, collectionMembershipMigration))
-
-	var currentInitialized, retiredNull, guards int
-
-	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT count(*) FILTER (WHERE g.status='CURRENT' AND t.member_since_generation = g.generation),
-		       count(*) FILTER (WHERE g.status='RETIRED' AND t.member_since_generation IS NULL),
-		       (SELECT count(*) FROM youtube_collection_projection_guard)
-		FROM youtube_collection_targets t
-		JOIN youtube_collection_projection_generations g ON g.generation = t.projection_generation
-	`).Scan(&currentInitialized, &retiredNull, &guards))
-	require.Equal(t, 1, currentInitialized)
-	require.Equal(t, 1, retiredNull)
-	require.Equal(t, 1, guards)
-
-	var oldLockPresent bool
-
-	require.NoError(t, pool.QueryRow(ctx,
-		`SELECT to_regprocedure('public.lock_youtube_collection_projection(bigint)') IS NOT NULL`).Scan(&oldLockPresent))
-	require.False(t, oldLockPresent)
-
-	// 이전 collector가 만든 lease 기본값은 새 유효성 규칙에서 항상 거짓이다.
-	var legacyValid bool
-
-	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT public.youtube_collection_membership_valid('{}'::text[], false, 'channel:a', 0, generation)
-		FROM youtube_collection_projection_generations WHERE status='CURRENT'
-	`).Scan(&legacyValid))
-	require.False(t, legacyValid)
-}
 
 // TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent는 refresh가 guard를 쥔 채 CURRENT를 교체하면
 // collector lock 함수가 기다렸다가 0행이 아니라 새 CURRENT generation을 돌려주는지 확인한다.

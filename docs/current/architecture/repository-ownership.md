@@ -39,16 +39,16 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 | `hololive-api` YouTube plane | Observation consume, canonical persist, notification intent | External scraping, proactive egress |
 
 Duplicated polling prevention is enforced by PostgreSQL collection leases. Each collector uses a slot-specific Stack Worker Profile v1 with `collection.executor.enabled=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.
-Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery`, and the Iris proactive sender `NewIrisMessageSender` exists only in `hololive-alarm-worker/internal/egress`.
+중복 발송은 dispatch 원장의 claim·fence·정산 동작으로 제어하며, Iris proactive sender는 `hololive-alarm-worker/internal/egress`가 소유합니다.
 Canonical 저장 함수는 `hololive-api/internal/youtube/canonicalwrite`에 있으므로 collector에서 import할 수 없습니다.
 
-YouTube outbox dispatcher와 범용 notification delivery dispatcher도 각각 `hololive-alarm-worker/internal/egress/{youtubedispatch,notificationdelivery}`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. 삭제된 dispatcher·batchrepo 이름의 재등장을 찾는 grep은 두지 않습니다. 반면 `pkg/service/delivery`의 producer enqueue 저장소·sender interface·Iris transport는 API llm plane producer와 worker consumer가 함께 쓰므로 collector의 직접 사용을 scoped gate로 제한합니다.
+YouTube outbox dispatcher와 범용 notification delivery dispatcher도 각각 `hololive-alarm-worker/internal/egress/{youtubedispatch,notificationdelivery}`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. `pkg/service/delivery`의 producer enqueue 저장소·sender interface·Iris transport는 API llm plane producer와 worker consumer가 함께 씁니다.
 
 ## Compiler and Gate Guarantees
 
 - API canonical writer와 worker dispatcher의 module 소유권은 Go `internal/` 컴파일러 경계가 보장합니다.
-- `pkg/service/delivery`, `ProvideIrisClient`, `iris.WithBaseURL`, `iris.WithBotToken`, `IrisClient:`는 합법적인 shared package 또는 SDK 표면이므로 compiler만으로 runtime capability ownership을 제한할 수 없습니다. scoped architecture gate가 직접 보장하며, worker 내부의 `NewIrisMessageSender` 사용 위치도 같은 gate가 `internal/{egress,app}`으로 제한합니다.
-- `repository-ownership.allowlist`는 PostgreSQL table의 owner/writer/reader 선언이며 import allowlist가 아닙니다. table 접근은 `check-sql-ownership.py`, module import와 egress capability는 `check-repository-ownership.sh` 및 `ci-notification-egress-gate.sh`가 검증합니다.
+- 공유 SDK 표면의 import 위치를 고정하는 문자열 gate는 두지 않습니다. 발송·저장 동작의 회귀는 해당 패키지 시험으로 확인합니다.
+- `repository-ownership.allowlist`는 PostgreSQL table의 owner/writer/reader 선언이며 gate 입력이 아닙니다. `check-sql-ownership.py`는 SQL 안전 정책을, `check-repository-ownership.sh`는 API·template의 native 실행 권한 제한을 검사합니다.
 
 ## Validation
 

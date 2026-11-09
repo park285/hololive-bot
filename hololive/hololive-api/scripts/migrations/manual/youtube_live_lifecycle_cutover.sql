@@ -1,3 +1,4 @@
+-- epoch-3도 372 head의 fresh seed를 보존하므로 최초 계약 활성화는 별도 운영 승인으로 실행합니다.
 -- 승인된 cutover 전용이다. API/schema 준비, 기존 관측 queue drain, collector a/b/c/d
 -- quiescence와 검증한 bundle 준비를 확인한 뒤 owning operator가 적용한다.
 -- 일반 migration manifest에 넣지 않으며 generation 2/1 관측의 의미를 변경하지 않는다.

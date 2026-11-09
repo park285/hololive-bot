@@ -1,9 +1,6 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -11,65 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCollectionRuntimeBundlesMigrationBackfillAndReapply(t *testing.T) {
-	for _, populated := range []bool{false, true} {
-		name := "empty"
-
-		if populated {
-			name = "populated"
-		}
-
-		t.Run(name, func(t *testing.T) {
-			pool, dir := projectionMigrationPoolBefore(t, collectionRuntimeBundlesMigration)
-
-			if populated {
-				seedCollectionBundleHeaders(t, pool)
-				seedCollectionBundleTargets(t, pool)
-			}
-
-			before := projectionUpgradeSnapshot(t, pool)
-
-			for range 2 {
-				require.NoError(t, applyMigrationFile(t.Context(), pool, dir, collectionRuntimeBundlesMigration))
-				assertCollectionRuntimeBundles(t, pool)
-				require.Equal(t, before, projectionUpgradeSnapshot(t, pool), "backfill은 원본 tuple이나 기존 함수 권한을 바꾸지 않습니다")
-			}
-		})
-	}
-}
-
-func prepareCollectionBundleBroadDefaults(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
-	t.Helper()
-
-	runtime := pgx.Identifier{roles.runtime}.Sanitize()
-	scraper := pgx.Identifier{roles.scraper}.Sanitize()
-
-	// init-db의 migrator 기본 권한을 재현하여 새 SECURITY DEFINER 함수가 런타임에 새지 않게 한다.
-	execCollectionBundleSQL(t, pool, `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO `+runtime+`, `+scraper+`;
-		ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO `+runtime+`, `+scraper+`;
-		GRANT SELECT,UPDATE ON youtube_collection_projection_guard TO `+runtime+`;
-		GRANT EXECUTE ON FUNCTION delete_retired_youtube_projection_batch(timestamptz,integer) TO `+runtime+`;
-		GRANT EXECUTE ON FUNCTION lock_current_youtube_collection_projection() TO `+scraper+`;
-		GRANT INSERT,SELECT,UPDATE,DELETE ON youtube_collection_targets TO `+runtime+`;
-		GRANT SELECT ON youtube_collection_projection_generations TO `+runtime)
-}
-
 func TestCollectionRuntimeBundlesMigrationRuntimeACL(t *testing.T) {
 	t.Parallel()
 
-	pool, dir := projectionMigrationPoolBefore(t, collectionRuntimeBundlesMigration)
+	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
-	prepareCollectionBundleBroadDefaults(t, pool, roles)
+	grantBroadBaselineDefaults(t, pool, roles)
+	applyBaselineForRoles(t, pool, roles)
 	seedCollectionBundleHeaders(t, pool)
-
-	raw, err := fs.ReadFile(os.DirFS(dir), collectionRuntimeBundlesMigration)
-	require.NoError(t, err)
-
-	migration := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
-
-	for range 2 {
-		require.NoError(t, applyMigrationContent(t.Context(), pool, collectionRuntimeBundlesMigration, migration))
-	}
 
 	assertCollectionBundleInternalACL(t, pool, roles)
 	assertCollectionBundleRuntimeOperations(t, pool, roles.runtime)

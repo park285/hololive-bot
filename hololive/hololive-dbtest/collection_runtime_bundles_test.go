@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const collectionRuntimeBundlesMigration = "313_youtube_collection_runtime_bundles.sql"
-
 type collectionBundleDB interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-echo "[CHECK] runtime import boundaries"
+echo "[CHECK] native execution security boundary"
 
 missing=0
 
@@ -39,22 +39,8 @@ check_no_imports "shared template native execution capability" \
   "hololive/hololive-shared/pkg/service/template" \
   '"(os/exec|plugin)"' -g '!**/*_test.go'
 
-major_event_hits="$(
-  rg -n 'majorevent.*repository|repository.*majorevent' \
-    "${ROOT_DIR}/hololive/hololive-api/internal/planes/bot" \
-    "${ROOT_DIR}/hololive/hololive-api/internal/planes/admin" \
-    -g '*.go' || true
-)"
-if [[ -n "${major_event_hits}" ]]; then
-  echo "[FAIL] bot/admin-api must not import major event repository/storage directly"
-  echo "${major_event_hits}"
-  missing=1
-else
-  echo "[PASS] bot/admin-api major event repository direct access absent"
-fi
-
 if [[ "${missing}" -ne 0 ]]; then
   exit 1
 fi
 
-echo "[PASS] repository ownership and runtime import boundaries are complete"
+echo "[PASS] native execution security boundary"

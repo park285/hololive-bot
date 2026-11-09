@@ -55,7 +55,7 @@ func TestLiveEndBeforePositiveSurvivesPersist(t *testing.T) {
 	}
 }
 
-func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
+func TestLivePendingEndSurvivesMigrationReplay(t *testing.T) {
 	t.Parallel()
 
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
@@ -69,34 +69,12 @@ func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
 	fact.EndedAt = &endedAt
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, fact)
 
-	// helper가 소유한 DB에서만 이전 저장 형태로 되돌려 production migration을 재생한다.
-	if _, err := pool.Exec(ctx, `
-		ALTER TABLE source_observations ADD COLUMN payload JSONB;
-		UPDATE source_observations observation SET payload = dictionary.payload
-		FROM source_observation_payloads dictionary WHERE dictionary.id = observation.payload_id;
-		ALTER TABLE youtube_live_reconciliation_heads DROP CONSTRAINT fk_youtube_live_head_pending_end;
-		DROP TABLE youtube_live_pending_ends, youtube_live_absence_slots;
-		ALTER TABLE youtube_live_reconciliation_heads
-			DROP COLUMN first_absence_scheduled_for, DROP COLUMN second_absence_scheduled_for,
-			DROP COLUMN last_absence_observation_id, DROP COLUMN ignored_absence_scheduled_for,
-			ADD CONSTRAINT youtube_live_reconciliation_h_end_candidate_observation_id_fkey
-			FOREIGN KEY (end_candidate_observation_id) REFERENCES source_observations(id) ON DELETE RESTRICT;
-		DELETE FROM hololive_dbtest_internal.schema_migrations
-		WHERE filename IN ('192_live_reconciliation_evidence.sql', '193_live_absence_slot_channel_index.sql');
-	`); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := dbtest.ApplyMigrations(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := dbtest.ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("idempotent migration replay: %v", err)
-	}
-
-	if _, err := pool.Exec(ctx, `ALTER TABLE source_observations DROP COLUMN payload`); err != nil {
-		t.Fatal(err)
 	}
 
 	var restored time.Time
@@ -106,7 +84,7 @@ func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
 	}
 
 	if !restored.Equal(endedAt) {
-		t.Fatalf("restored ended_at=%s want %s", restored, endedAt)
+		t.Fatalf("pending ended_at=%s want %s", restored, endedAt)
 	}
 
 	if _, err := pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads SET last_live_positive_seen_at=NOW()-INTERVAL '2 hours', next_end_check_at=NOW() WHERE video_id=$1`, testVideoID); err != nil {
@@ -115,7 +93,7 @@ func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
 
 	processed, err := repo.FinalizeNextDueLiveEnd(ctx, time.Hour)
 	if err != nil || !processed {
-		t.Fatalf("upgraded finalizer processed=%t err=%v", processed, err)
+		t.Fatalf("finalizer processed=%t err=%v", processed, err)
 	}
 
 	if got := liveSessionStatus(t, pool); got != testStatusEnded {

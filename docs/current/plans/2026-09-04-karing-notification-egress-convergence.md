@@ -189,7 +189,6 @@ From `hololive-bot`, then `iris-stack`:
 
 ```bash
 bash scripts/architecture/check-contract-map.sh
-bash scripts/architecture/ci-notification-egress-gate.sh
 git diff --check
 bash ../tools/checks/check-decision-catalog.sh check --submodules
 ```
