@@ -44,6 +44,8 @@ type Record struct {
 	DispatchGroupKey string
 	SendUnitID       int64
 	ClientRequestID  string
+	// RequestUnpinned는 조회 시점에 send unit의 요청이 아직 고정되지 않았다는 뜻이다.
+	RequestUnpinned  bool
 	Status           Status
 	AttemptCount     int
 	NextAttemptAt    time.Time

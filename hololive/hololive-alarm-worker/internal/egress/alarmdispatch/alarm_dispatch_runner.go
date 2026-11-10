@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
@@ -326,13 +327,17 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 }
 
 func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGroup) (*dispatchoutbox.SendRequest, error) {
-	request, err := r.consumer.LoadSendRequest(ctx, group.envelopes)
-	if err == nil {
-		return request, nil
-	}
+	// claim 때 미고정이던 단위는 lease 동안 이 worker만 고정할 수 있으므로 load 왕복을 생략한다.
+	// 그 사이 고정됐더라도 PinSendRequest가 저장된 요청을 돌려준다.
+	if !slices.ContainsFunc(group.envelopes, func(envelope domain.AlarmQueueEnvelope) bool { return envelope.RequestUnpinned }) {
+		request, err := r.consumer.LoadSendRequest(ctx, group.envelopes)
+		if err == nil {
+			return request, nil
+		}
 
-	if !errors.Is(err, dispatchoutbox.ErrSendRequestUnpinned) {
-		return nil, fmt.Errorf("load immutable request: %w", err)
+		if !errors.Is(err, dispatchoutbox.ErrSendRequestUnpinned) {
+			return nil, fmt.Errorf("load immutable request: %w", err)
+		}
 	}
 
 	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, r.shortLinkBaseURL, group)
@@ -345,7 +350,7 @@ func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGro
 		return nil, fmt.Errorf("prepare request route: %w", err)
 	}
 
-	request, err = r.consumer.PinSendRequest(ctx, group.envelopes, dispatchoutbox.SendRequest{Body: body, Route: route, RoomID: group.roomID})
+	request, err := r.consumer.PinSendRequest(ctx, group.envelopes, dispatchoutbox.SendRequest{Body: body, Route: route, RoomID: group.roomID})
 	if err != nil {
 		return nil, fmt.Errorf("pin immutable request: %w", err)
 	}

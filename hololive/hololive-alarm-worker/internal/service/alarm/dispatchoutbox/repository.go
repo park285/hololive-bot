@@ -142,6 +142,7 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 		&dispatchGroupKey,
 		&sendUnitID,
 		&record.ClientRequestID,
+		&record.RequestUnpinned,
 		&status,
 		&record.AttemptCount,
 		&record.NextAttemptAt,

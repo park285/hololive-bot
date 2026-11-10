@@ -285,3 +285,33 @@ func unitRetryUpdates(records []*Record) []FailureUpdate {
 
 	return updates
 }
+
+func TestClaimReportsUnpinnedRequestOnlyUntilPinned(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	repository := newTestRepository(t, pool)
+	ctx := t.Context()
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("claim-pin-room", "title")}})
+	require.NoError(t, err)
+
+	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.True(t, records[0].RequestUnpinned)
+
+	_, err = repository.PinSendRequest(ctx, records[0].SendUnitID, recordClaims(records...), "owner", records[0].ClientRequestID, SendRequest{Body: "pinned", Route: SendRouteText})
+	require.NoError(t, err)
+
+	// 고정 직후 worker가 죽으면 attempt는 0인 채 lease만 만료돼 다시 claim된다.
+	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET locked_at=NOW()-INTERVAL '2 minutes',lock_expires_at=NOW()-INTERVAL '1 minute'`)
+	require.NoError(t, err)
+
+	recovered, err := repository.RecoverExpiredLeased(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, recovered)
+
+	records, err = repository.ClaimDue(ctx, "next-owner", 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Zero(t, records[0].AttemptCount)
+	require.False(t, records[0].RequestUnpinned)
+}

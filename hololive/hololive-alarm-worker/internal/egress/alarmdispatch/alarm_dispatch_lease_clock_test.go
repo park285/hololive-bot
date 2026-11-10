@@ -171,6 +171,9 @@ func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpoo
 	if phase != "pin" {
 		_, err = base.PinSendRequest(ctx, envelopes, dispatchoutbox.SendRequest{Body: "frozen body", Route: dispatchoutbox.SendRouteText})
 		require.NoError(t, err)
+
+		// runner 밖에서 고정했으므로 봉투를 고정된 단위를 claim한 상태로 맞춘다.
+		envelopes[0].RequestUnpinned = false
 	}
 
 	consumer := &alarmLeaseClockConsumer{Consumer: base, phase: phase, entered: make(chan struct{}), resume: make(chan struct{})}
