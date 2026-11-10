@@ -33,6 +33,10 @@ func (r *Runtime) runRetentionLoop(ctx context.Context, errCh chan<- error) {
 
 func (r *Runtime) stopAfterRetentionError(ctx context.Context, _ chan<- error, err error) bool {
 	if err == nil {
+		if r.retentionFailed.CompareAndSwap(true, false) {
+			r.publishHealth()
+		}
+
 		return false
 	}
 
@@ -41,7 +45,7 @@ func (r *Runtime) stopAfterRetentionError(ctx context.Context, _ chan<- error, e
 	}
 
 	if !retryableObservationError(err) {
-		r.ready.Store(false)
+		r.retentionFailed.Store(true)
 		r.publishHealth()
 	}
 

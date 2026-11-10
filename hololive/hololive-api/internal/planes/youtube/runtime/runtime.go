@@ -84,6 +84,9 @@ type Runtime struct {
 	started   atomic.Bool
 	claiming  atomic.Bool
 	ready     atomic.Bool
+	// retention 실패는 ready와 따로 두고 Ready()가 합친다.
+	// retention 성공이 다른 루프가 내린 ready를 되살리지 않게 하기 위해서다.
+	retentionFailed atomic.Bool
 	// degraded 상태는 원인별로 따로 갱신하고 Degraded()가 OR로 합친다.
 	// projection refresh 성공이 DEAD_LETTER backlog 신호를 지우지 않게 하기 위해서다.
 	projectionDegraded atomic.Bool
@@ -573,7 +576,7 @@ func youtubePlaneClaimKinds() []contract.ObservationKind {
 }
 
 func (r *Runtime) Ready() bool {
-	return r != nil && r.ready.Load()
+	return r != nil && r.ready.Load() && !r.retentionFailed.Load()
 }
 
 func (r *Runtime) Degraded() bool {
