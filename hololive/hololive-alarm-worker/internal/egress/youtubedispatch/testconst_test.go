@@ -8,6 +8,7 @@ const (
 	testRoomShort     = "room-short"
 	testRoomOld       = "room-old"
 	testRoomA         = "room-a"
+	testRoomB         = "room-b"
 	testRoomOne       = "room-1"
 	testRoom1         = "room1"
 	testRoom2         = "room2"
