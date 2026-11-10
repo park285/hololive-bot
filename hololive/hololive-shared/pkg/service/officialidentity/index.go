@@ -68,6 +68,11 @@ func DisplayNames(ctx context.Context, membersData domain.MemberDataProvider, of
 		return nil, fmt.Errorf("display names: %w", err)
 	}
 
+	return index.DisplayNames(ctx, membersData, officialNames, hostChannelID)
+}
+
+// DisplayNames는 이미 만든 색인으로 공식 표기명 목록을 표시명으로 바꾼다. 규칙은 패키지 함수 DisplayNames와 같다.
+func (index Index) DisplayNames(ctx context.Context, membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) ([]string, error) {
 	hostChannelID = strings.TrimSpace(hostChannelID)
 
 	out := make([]string, 0, len(officialNames))

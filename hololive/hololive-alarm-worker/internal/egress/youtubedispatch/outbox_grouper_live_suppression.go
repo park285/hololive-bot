@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
@@ -31,15 +33,27 @@ func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
 		return rooms
 	}
 
-	filtered := make(map[string]bool, len(rooms))
+	scheduledAt := liveSuppressionScheduledAt(&payload).UTC()
+	roomIDs := make([]string, 0, len(rooms))
+	commands := make([]valkey.Completed, 0, len(rooms))
+
 	for roomID, selected := range rooms {
 		if !selected {
 			continue
 		}
 
-		suppressed := g.wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, item.ChannelID, &payload)
-		if !suppressed {
-			filtered[roomID] = true
+		roomIDs = append(roomIDs, roomID)
+		commands = append(commands, g.cache.B().Get().Key(keys.BuildUpcomingEventKey(roomID, item.ChannelID, payload.VideoID, payload.Title, scheduledAt)).Build())
+	}
+
+	filtered := make(map[string]bool, len(roomIDs))
+	if len(commands) == 0 {
+		return filtered
+	}
+
+	for index, result := range g.cache.DoMulti(ctx, commands...) {
+		if !g.wasLiveCatchupRecentlyCoveredByUpcoming(roomIDs[index], item.ChannelID, &payload, result) {
+			filtered[roomIDs[index]] = true
 		}
 	}
 
@@ -66,21 +80,23 @@ func liveStreamPayloadForSuppression(item *domain.YouTubeNotificationOutbox) (yo
 }
 
 func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
-	ctx context.Context,
 	roomID string,
 	channelID string,
 	payload *youtubeoutbox.Video,
+	result valkey.ValkeyResult,
 ) bool {
-	scheduledAt := liveSuppressionScheduledAt(payload)
-	if scheduledAt == nil || scheduledAt.IsZero() {
+	raw, err := result.AsBytes()
+	if valkey.IsValkeyNil(err) {
 		return false
 	}
 
-	key := keys.BuildUpcomingEventKey(roomID, channelID, payload.VideoID, payload.Title, scheduledAt.UTC())
-
 	var data liveUpcomingSuppressionData
 
-	if err := g.cache.Get(ctx, key, &data); err != nil {
+	if err == nil {
+		err = jsonv2.Unmarshal(raw, &data)
+	}
+
+	if err != nil {
 		g.logger.Warn("Failed to read live catchup upcoming suppression marker",
 			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", channelID),

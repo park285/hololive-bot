@@ -1,8 +1,6 @@
 package youtubedispatch
 
 import (
-	"context"
-	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -13,7 +11,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func newLiveCatchupSuppressionItem(t *testing.T) (domain.YouTubeNotificationOutbox, time.Time) {
@@ -31,8 +29,21 @@ func newLiveCatchupSuppressionItem(t *testing.T) (domain.YouTubeNotificationOutb
 	}, scheduledAt
 }
 
-func newLiveCatchupSuppressionGrouper(cache *cachemocks.Client) *OutboxGrouper {
+// newLiveCatchupSuppressionGrouper는 roomID별 upcoming marker 원문을 miniredis에 넣은 grouper를 만든다.
+func newLiveCatchupSuppressionGrouper(t *testing.T, item *domain.YouTubeNotificationOutbox, scheduledAt time.Time, markers map[string]string) *OutboxGrouper {
+	t.Helper()
+
+	cache, mini := sharedtestutil.NewTestCacheServiceWithMini(t.Context(), t)
+
+	for roomID, marker := range markers {
+		require.NoError(t, mini.Set(keys.BuildUpcomingEventKey(roomID, item.ChannelID, "live-1", "Live One", scheduledAt), marker))
+	}
+
 	return newOutboxGrouper(nil, cache, slog.New(slog.DiscardHandler), withTestDispatchConfigDefaults(nil))
+}
+
+func notifiedMarker(at time.Time) string {
+	return `{"notified_at":"` + at.UTC().Format(time.RFC3339) + `"}`
 }
 
 func liveCatchupSuppressionCount(t *testing.T, result string) int64 {
@@ -44,26 +55,15 @@ func liveCatchupSuppressionCount(t *testing.T, result string) int64 {
 
 func TestFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t *testing.T) {
 	item, scheduledAt := newLiveCatchupSuppressionItem(t)
-	suppressedKey := keys.BuildUpcomingEventKey("room-suppressed", item.ChannelID, "live-1", "Live One", scheduledAt)
-	cache := cachemocks.NewStrictClient()
-
-	cache.GetFunc = func(_ context.Context, key string, dest any) error {
-		data, ok := dest.(*liveUpcomingSuppressionData)
-		require.True(t, ok)
-
-		if key == suppressedKey {
-			data.NotifiedAt = time.Now().UTC().Format(time.RFC3339)
-		}
-
-		return nil
-	}
-
-	grouper := newLiveCatchupSuppressionGrouper(cache)
+	grouper := newLiveCatchupSuppressionGrouper(t, &item, scheduledAt, map[string]string{
+		"room-suppressed": notifiedMarker(time.Now()),
+	})
 	suppressedBefore := liveCatchupSuppressionCount(t, liveCatchupSuppressionResultSuppressed)
 
 	filtered := grouper.filterLiveCatchupSuppressedRooms(t.Context(), &item, map[string]bool{
 		"room-suppressed": true,
 		"room-live-only":  true,
+		"room-unselected": false,
 	})
 
 	require.Equal(t, map[string]bool{"room-live-only": true}, filtered)
@@ -71,74 +71,50 @@ func TestFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t *testing.T) 
 }
 
 func TestFilterLiveCatchupSuppressedRoomsFailsOpenOnCacheError(t *testing.T) {
-	item, _ := newLiveCatchupSuppressionItem(t)
-	cache := cachemocks.NewStrictClient()
+	item, scheduledAt := newLiveCatchupSuppressionItem(t)
+	cache, mini := sharedtestutil.NewTestCacheServiceWithMini(t.Context(), t)
+	require.NoError(t, mini.Set(keys.BuildUpcomingEventKey(testRoomA, item.ChannelID, "live-1", "Live One", scheduledAt), notifiedMarker(time.Now())))
+	mini.SetError("redis down")
 
-	cache.GetFunc = func(_ context.Context, _ string, _ any) error {
-		return errors.New("redis down")
-	}
-
-	grouper := newLiveCatchupSuppressionGrouper(cache)
+	grouper := newOutboxGrouper(nil, cache, slog.New(slog.DiscardHandler), withTestDispatchConfigDefaults(nil))
 	cacheErrorBefore := liveCatchupSuppressionCount(t, liveCatchupSuppressionResultCacheError)
 	suppressedBefore := liveCatchupSuppressionCount(t, liveCatchupSuppressionResultSuppressed)
 
 	filtered := grouper.filterLiveCatchupSuppressedRooms(t.Context(), &item, map[string]bool{
 		testRoomA: true,
-		"room-b":  true,
+		testRoomB: true,
 	})
 
-	require.Equal(t, map[string]bool{testRoomA: true, "room-b": true}, filtered)
+	require.Equal(t, map[string]bool{testRoomA: true, testRoomB: true}, filtered)
 	require.Equal(t, cacheErrorBefore+2, liveCatchupSuppressionCount(t, liveCatchupSuppressionResultCacheError))
 	require.Equal(t, suppressedBefore, liveCatchupSuppressionCount(t, liveCatchupSuppressionResultSuppressed))
 }
 
 func TestFilterLiveCatchupSuppressedRoomsFailsOpenOnInvalidMarker(t *testing.T) {
-	item, _ := newLiveCatchupSuppressionItem(t)
-	cache := cachemocks.NewStrictClient()
-
-	cache.GetFunc = func(_ context.Context, _ string, dest any) error {
-		data, ok := dest.(*liveUpcomingSuppressionData)
-		require.True(t, ok)
-
-		data.NotifiedAt = "not-a-timestamp"
-
-		return nil
-	}
-
-	grouper := newLiveCatchupSuppressionGrouper(cache)
+	item, scheduledAt := newLiveCatchupSuppressionItem(t)
+	grouper := newLiveCatchupSuppressionGrouper(t, &item, scheduledAt, map[string]string{
+		testRoomA: `{"notified_at":"not-a-timestamp"}`,
+		testRoomB: `not json`,
+	})
 	invalidBefore := liveCatchupSuppressionCount(t, liveCatchupSuppressionResultInvalidMarker)
+	cacheErrorBefore := liveCatchupSuppressionCount(t, liveCatchupSuppressionResultCacheError)
 
 	filtered := grouper.filterLiveCatchupSuppressedRooms(t.Context(), &item, map[string]bool{
 		testRoomA: true,
+		testRoomB: true,
 	})
 
-	require.Equal(t, map[string]bool{testRoomA: true}, filtered)
+	require.Equal(t, map[string]bool{testRoomA: true, testRoomB: true}, filtered)
 	require.Equal(t, invalidBefore+1, liveCatchupSuppressionCount(t, liveCatchupSuppressionResultInvalidMarker))
+	require.Equal(t, cacheErrorBefore+1, liveCatchupSuppressionCount(t, liveCatchupSuppressionResultCacheError))
 }
 
 func TestFilterLiveCatchupSuppressedRoomsLeavesNotCoveredUncounted(t *testing.T) {
 	item, scheduledAt := newLiveCatchupSuppressionItem(t)
-	expiredAt := time.Now().UTC().Add(-tier.LiveCatchupSuppressWindow - time.Minute).Format(time.RFC3339)
-	markers := map[string]string{
-		"room-empty":   "",
-		"room-expired": expiredAt,
-	}
-	cache := cachemocks.NewStrictClient()
-
-	cache.GetFunc = func(_ context.Context, key string, dest any) error {
-		data, ok := dest.(*liveUpcomingSuppressionData)
-		require.True(t, ok)
-
-		for roomID, marker := range markers {
-			if key == keys.BuildUpcomingEventKey(roomID, item.ChannelID, "live-1", "Live One", scheduledAt) {
-				data.NotifiedAt = marker
-			}
-		}
-
-		return nil
-	}
-
-	grouper := newLiveCatchupSuppressionGrouper(cache)
+	grouper := newLiveCatchupSuppressionGrouper(t, &item, scheduledAt, map[string]string{
+		"room-empty":   `{"notified_at":""}`,
+		"room-expired": notifiedMarker(time.Now().Add(-tier.LiveCatchupSuppressWindow - time.Minute)),
+	})
 	results := []string{
 		liveCatchupSuppressionResultSuppressed,
 		liveCatchupSuppressionResultCacheError,
@@ -153,9 +129,10 @@ func TestFilterLiveCatchupSuppressedRoomsLeavesNotCoveredUncounted(t *testing.T)
 	filtered := grouper.filterLiveCatchupSuppressedRooms(t.Context(), &item, map[string]bool{
 		"room-empty":   true,
 		"room-expired": true,
+		"room-missing": true,
 	})
 
-	require.Equal(t, map[string]bool{"room-empty": true, "room-expired": true}, filtered)
+	require.Equal(t, map[string]bool{"room-empty": true, "room-expired": true, "room-missing": true}, filtered)
 
 	for _, result := range results {
 		require.Equal(t, before[result], liveCatchupSuppressionCount(t, result), result)

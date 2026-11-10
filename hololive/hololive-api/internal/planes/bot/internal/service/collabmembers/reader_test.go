@@ -28,6 +28,19 @@ func (m membersFake) FindMemberByChannelID(_ context.Context, channelID string) 
 	return nil, domain.ErrMemberNotFound
 }
 
+// countingMembers는 요청 하나가 멤버 전체를 몇 번 적재했는지 센다.
+type countingMembers struct {
+	membersFake
+
+	loads int
+}
+
+func (m *countingMembers) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
+	m.loads++
+
+	return m.membersFake.LoadAllMembers(ctx)
+}
+
 func (membersFake) GetChannelIDs(context.Context) ([]string, error) { return nil, nil }
 
 func (membersFake) FindMemberByName(context.Context, string) (*domain.Member, error) {
@@ -57,22 +70,26 @@ INSERT INTO youtube_schedule_items(group_key, provider, external_id, video_id, c
  ('g', 'hololive_official', 'old', 'collab00001', 'UC_miko', '방송', now(), ARRAY['Gawr Gura'], now() - interval '1 hour'),
  ('g', 'hololive_official', 'new', 'collab00001', 'UC_miko', '방송', now(), ARRAY['さくらみこ', '星街すいせい', 'Gawr Gura'], now()),
  ('g', 'holodex', 'other', 'collab00002', 'UC_miko', '방송', now(), ARRAY['星街すいせい'], now()),
+ ('g', 'hololive_official', 'second', 'collab00003', 'UC_miko', '방송', now(), ARRAY['星街すいせい'], now()),
  ('g', 'hololive_official', 'solo', 'solo0000001', 'UC_miko', '방송', now(), '{}', now())`)
 	require.NoError(t, err)
 
-	reader := New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, membersFake{
+	members := &countingMembers{membersFake: membersFake{
 		{ChannelID: testHostChannel, NameJa: "さくらみこ", ShortKoreanName: "미코"},
 		{ChannelID: "UC_sui", NameJa: "星街すいせい", ShortKoreanName: "스이세이"},
-	})
+	}}
+	reader := New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, members)
 
 	got, err := reader.DisplayNames(t.Context(), []Video{
 		{ID: "collab00001", HostChannelID: testHostChannel},
 		{ID: "collab00002", HostChannelID: testHostChannel},
+		{ID: "collab00003", HostChannelID: testHostChannel},
 		{ID: "solo0000001", HostChannelID: testHostChannel},
 		{ID: " ", HostChannelID: testHostChannel},
 	})
 	require.NoError(t, err)
-	require.Equal(t, map[string][]string{"collab00001": {"스이세이", "Gawr Gura"}}, got)
+	require.Equal(t, map[string][]string{"collab00001": {"스이세이", "Gawr Gura"}, "collab00003": {"스이세이"}}, got)
+	require.Equal(t, 1, members.loads, "member index must be built once per request")
 
 	empty, err := New(nil, nil).DisplayNames(t.Context(), nil)
 	require.NoError(t, err)
