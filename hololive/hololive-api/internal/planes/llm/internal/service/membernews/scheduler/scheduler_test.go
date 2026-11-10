@@ -125,6 +125,8 @@ type mockOutboxRepository struct {
 	mu            sync.Mutex
 	enqueuedItems []enqueueRecord
 	enqueueErr    map[string]error
+	enqueued      map[string]bool
+	enqueuedErr   map[string]error
 }
 
 type enqueueRecord struct {
@@ -136,8 +138,17 @@ type enqueueRecord struct {
 
 func newMockOutboxRepository() *mockOutboxRepository {
 	return &mockOutboxRepository{
-		enqueueErr: make(map[string]error),
+		enqueueErr:  make(map[string]error),
+		enqueued:    make(map[string]bool),
+		enqueuedErr: make(map[string]error),
 	}
+}
+
+func (m *mockOutboxRepository) Enqueued(_ context.Context, _ domain.DeliveryOutboxKind, _, roomID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.enqueued[roomID], m.enqueuedErr[roomID]
 }
 
 func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message delivery.MessageVariants) error {

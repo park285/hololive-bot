@@ -156,6 +156,49 @@ func TestEnqueue_FailedRetry(t *testing.T) {
 	}
 }
 
+func TestEnqueuedMatchesRowsEnqueueLeavesUnchanged(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+	kind := domain.DeliveryKindMemberNewsWeekly
+
+	enqueued := func(roomID string) bool {
+		t.Helper()
+
+		got, err := repository.Enqueued(ctx, kind, "2026-W08", roomID)
+		if err != nil {
+			t.Fatalf("enqueued %s: %v", roomID, err)
+		}
+
+		return got
+	}
+
+	if enqueued("room1") {
+		t.Fatal("missing row must not be reported as enqueued")
+	}
+
+	for _, roomID := range []string{"room1", "failed", "exhausted"} {
+		if err := repository.Enqueue(ctx, kind, "2026-W08", roomID, testMessage("msg")); err != nil {
+			t.Fatalf("enqueue %s: %v", roomID, err)
+		}
+	}
+
+	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE content_id = ANY($1)", []string{"2026-W08:failed", "2026-W08:exhausted"}); err != nil {
+		t.Fatalf("set failed status: %v", err)
+	}
+
+	if _, err := repository.pool.Exec(ctx, `UPDATE notification_delivery_outbox SET payload = payload || '{"request":{"exhausted":"true"}}' WHERE content_id = $1`, "2026-W08:exhausted"); err != nil {
+		t.Fatalf("set exhausted request: %v", err)
+	}
+
+	if !enqueued("room1") || enqueued("failed") || !enqueued("exhausted") {
+		t.Fatalf("enqueued pending=%t failed=%t exhausted=%t, want true false true", enqueued("room1"), enqueued("failed"), enqueued("exhausted"))
+	}
+
+	if got, err := repository.Enqueued(ctx, domain.DeliveryKindMemberNewsMonthly, "2026-W08", "room1"); err != nil || got {
+		t.Fatalf("other kind enqueued = %t, %v; want false", got, err)
+	}
+}
+
 func TestEnqueueBatch(t *testing.T) {
 	tests := []struct {
 		name  string

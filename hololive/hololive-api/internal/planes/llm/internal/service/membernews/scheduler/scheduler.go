@@ -48,6 +48,7 @@ const (
 )
 
 type outboxEnqueuer interface {
+	Enqueued(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string) (bool, error)
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message delivery.MessageVariants) error
 }
 
