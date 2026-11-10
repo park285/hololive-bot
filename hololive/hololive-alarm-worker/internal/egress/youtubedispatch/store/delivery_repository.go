@@ -57,10 +57,6 @@ func AsDeliveryDB(db any) deliverysql.DeliveryDB {
 	return nil
 }
 
-func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, outboxID int64) error {
-	return r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID})
-}
-
 const outboxAggregateFailedErrorText = "per-room delivery failed"
 
 // UpdateOutboxAggregateStatuses는 부모 outbox 집계를 자체 READ COMMITTED 트랜잭션 하나로 다시 계산한다. 부모를 ID

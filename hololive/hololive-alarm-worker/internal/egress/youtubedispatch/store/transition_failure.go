@@ -37,35 +37,6 @@ func (s *TransitionStore) ApplyStartedFailure(
 	return result, nil
 }
 
-func (s *TransitionStore) ScheduleKnownRetry(
-	ctx context.Context,
-	operation StartedOperation,
-	reason lifecycle.Reason,
-	retryAfter time.Duration,
-	mode DeliveryMode,
-) (ApplyResult, error) {
-	result, err := s.ApplyStartedFailure(ctx, operation, lifecycle.FailureRetryable, reason, retryAfter, mode)
-	if err != nil {
-		return result, fmt.Errorf("schedule known retry: %w", err)
-	}
-
-	return result, nil
-}
-
-func (s *TransitionStore) CompleteFailed(
-	ctx context.Context,
-	operation StartedOperation,
-	reason lifecycle.Reason,
-	mode DeliveryMode,
-) (ApplyResult, error) {
-	result, err := s.ApplyStartedFailure(ctx, operation, lifecycle.FailurePermanent, reason, 0, mode)
-	if err != nil {
-		return result, fmt.Errorf("complete failed: %w", err)
-	}
-
-	return result, nil
-}
-
 func (s *TransitionStore) ApplyPreparedFailure(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
