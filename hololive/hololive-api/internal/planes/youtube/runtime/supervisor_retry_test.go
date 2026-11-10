@@ -274,3 +274,13 @@ func TestDeadLetterDegradationOutlivesProjectionRefresh(t *testing.T) {
 		t.Fatal("resolved dead letter backlog left the plane degraded")
 	}
 }
+
+func TestBoundedErrorPreservesUTF8(t *testing.T) {
+	t.Parallel()
+
+	// 3바이트 문자 683개는 2049바이트라 2048바이트 상한이 문자 중간에 걸린다.
+	got := boundedError(errors.New(strings.Repeat("가", 683)))
+	if want := strings.Repeat("가", 682); got != want {
+		t.Fatalf("bounded error = %d bytes, want %d bytes of valid UTF-8", len(got), len(want))
+	}
+}
