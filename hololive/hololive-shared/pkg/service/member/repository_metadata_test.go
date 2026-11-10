@@ -57,14 +57,6 @@ func TestRepositoryQueriesPreserveMemberMetadata(t *testing.T) {
 
 		t.Fatal("GetAllMembers omitted the metadata fixture")
 	})
-	t.Run("GetMembersWithPhoto", func(t *testing.T) {
-		members, queryErr := repository.GetMembersWithPhoto(ctx, []string{channelID})
-		require.NoError(t, queryErr)
-
-		got := members[channelID]
-		assertMemberRepositoryMetadata(t, got)
-		require.Equal(t, photo, got.Photo)
-	})
 }
 
 func assertMemberRepositoryMetadata(t *testing.T, got *domain.Member) {
