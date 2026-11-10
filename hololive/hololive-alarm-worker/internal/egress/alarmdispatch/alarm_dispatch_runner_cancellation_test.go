@@ -335,6 +335,11 @@ func claimFrozenAlarmDispatchSerialGroups(t *testing.T, pool *pgxpool.Pool, cons
 		require.NoError(t, pinErr)
 
 		requests[group.envelopes[0].SendUnitID] = request
+
+		// runner 밖에서 고정했으므로 봉투를 고정된 단위를 claim한 상태로 맞춘다.
+		for i := range group.envelopes {
+			group.envelopes[i].RequestUnpinned = false
+		}
 	}
 
 	return groups, requests

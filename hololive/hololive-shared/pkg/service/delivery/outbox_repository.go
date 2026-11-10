@@ -112,13 +112,11 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 
 	rows := make([]outboxBatchRow, 0, len(items))
 	for _, item := range items {
-		contentID := item.PeriodKey + ":" + item.RoomID
-
 		rows = append(rows, outboxBatchRow{
 			Kind:      item.Kind,
 			PeriodKey: item.PeriodKey,
 			RoomID:    item.RoomID,
-			ContentID: contentID,
+			ContentID: outboxContentID(item.PeriodKey, item.RoomID),
 			Payload:   deliverypayload.Payload{Message: item.Message.Plain, RichTextMessage: item.Message.RichText},
 		})
 	}
@@ -140,6 +138,26 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 	}
 
 	return nil
+}
+
+// Enqueued는 같은 (kind, periodKey, roomID)를 Enqueue해도 바뀌지 않는 행이 이미 있는지 조회한다.
+// FAILED 행은 exhausted가 아니면 Enqueue가 rearm하므로 false다.
+func (r *OutboxRepository) Enqueued(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string) (bool, error) {
+	if err := r.ensurePool(); err != nil {
+		return false, fmt.Errorf("ensure pool: %w", err)
+	}
+
+	var enqueued bool
+
+	if err := r.pool.QueryRow(ctx, outboxEnqueuedSQL, kind, outboxContentID(periodKey, roomID)).Scan(&enqueued); err != nil {
+		return false, fmt.Errorf("query enqueued: %w", err)
+	}
+
+	return enqueued, nil
+}
+
+func outboxContentID(periodKey, roomID string) string {
+	return periodKey + ":" + roomID
 }
 
 func (r *OutboxRepository) ensurePool() error {

@@ -90,6 +90,7 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	envelope.DispatchGroupKey = record.DispatchGroupKey
 	envelope.SendUnitID = record.SendUnitID
 	envelope.ClientRequestID = record.ClientRequestID
+	envelope.RequestUnpinned = record.RequestUnpinned
 	envelope.ClaimKeys = record.ClaimKeys
 
 	if record.AttemptCount > 0 {

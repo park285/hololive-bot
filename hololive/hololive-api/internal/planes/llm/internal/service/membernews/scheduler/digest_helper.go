@@ -88,6 +88,21 @@ func processDigestForRoom(
 		logger = slog.Default()
 	}
 
+	// digest 생성은 외부 검색과 LLM을 호출하므로, Enqueue가 버릴 중복은 생성 전에 거른다.
+	enqueued, err := outbox.Enqueued(ctx, kind, periodKey, roomID)
+	if err != nil {
+		logger.Error("Failed to look up enqueued member news",
+			sharedprivacylog.RoomIDAttr(roomID),
+			slog.String("period", string(period)),
+			slog.Any("error", err))
+
+		return failedRoomResult(roomID)
+	}
+
+	if enqueued {
+		return digestEnqueueResult{Attempted: 1, Queued: 1}
+	}
+
 	digest, err := service.GenerateRoomDigest(ctx, roomID, period)
 	if err != nil {
 		return digestGenerationFailure(logger, roomID, period, err)

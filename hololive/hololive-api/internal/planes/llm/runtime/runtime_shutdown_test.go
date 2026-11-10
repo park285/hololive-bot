@@ -13,6 +13,8 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type blockedRuntimeDigest struct{ entered, release chan struct{} }
@@ -32,6 +34,16 @@ func (s *blockedRuntimeDigest) GenerateRoomDigest(context.Context, string, model
 	return nil, model.ErrNoSubscribedMembers
 }
 
+type runtimeDigestOutbox struct{}
+
+func (runtimeDigestOutbox) Enqueued(context.Context, domain.DeliveryOutboxKind, string, string) (bool, error) {
+	return false, nil
+}
+
+func (runtimeDigestOutbox) Enqueue(context.Context, domain.DeliveryOutboxKind, string, string, delivery.MessageVariants) error {
+	return nil
+}
+
 type runtimeDigestLocker struct{}
 
 func (runtimeDigestLocker) TryAcquire(context.Context, string, time.Duration) (string, bool, error) {
@@ -46,7 +58,7 @@ func TestLLMCloseContextTimeoutKeepsActiveSchedulerResourcesOpen(t *testing.T) {
 
 	runtime := &LLMSchedulerRuntime{
 		Managed: lifecycle.NewManaged(func() { cleanups.Add(1) }), Logger: testRuntimeLogger(),
-		MemberNewsScheduler: mnscheduler.NewScheduler(service, nil, runtimeDigestLocker{}, nil, testRuntimeLogger(), mnscheduler.WithOutputGuard(outputguard.NewGuard())),
+		MemberNewsScheduler: mnscheduler.NewScheduler(service, nil, runtimeDigestLocker{}, runtimeDigestOutbox{}, testRuntimeLogger(), mnscheduler.WithOutputGuard(outputguard.NewGuard())),
 	}
 	runtime.MemberNewsScheduler.SetClock(func() time.Time { return time.Date(2000, time.January, 3, 0, 0, 0, 0, time.UTC) })
 	runtime.Start(t.Context(), make(chan error, 1))

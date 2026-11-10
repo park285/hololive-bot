@@ -236,6 +236,8 @@ type AlarmQueueEnvelope struct {
 	Version          uint8                          `json:"version"`
 	Retry            *AlarmQueueRetryMetadata       `json:"retry,omitempty"`
 	SourcePayloadRaw string                         `json:"source_payload,omitempty"`
+	// RequestUnpinned는 claim이 본 send unit 요청의 미고정 여부다. 큐 payload에는 싣지 않는다.
+	RequestUnpinned bool `json:"-"`
 }
 
 type AlarmQueueRetryMetadata struct {
