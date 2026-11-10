@@ -186,16 +186,6 @@ func (b *circuitBreaker) RetryAfter() time.Duration {
 	return remaining
 }
 
-// SetOpenedAtForTest는 테스트에서 openedAt을 강제 설정합니다.
-// 프로덕션 코드에서 호출하지 마세요.
-func (b *circuitBreaker) SetOpenedAtForTest(t time.Time) {
-	if b == nil {
-		return
-	}
-
-	b.openedAt.Store(t)
-}
-
 func (b *circuitBreaker) openedAtTime() time.Time {
 	openedAt, ok := b.openedAt.Load().(time.Time)
 	if !ok {

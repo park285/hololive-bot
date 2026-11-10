@@ -108,15 +108,6 @@ func (s *Service) FetchUpcomingStreams(ctx context.Context, hours int) ([]*domai
 	return filterScheduleWindow(streams, hours, false, s.now()), nil
 }
 
-func (s *Service) ValidateStructure(ctx context.Context) error {
-	_, err := s.fetchAllStreams(ctx)
-	if err != nil {
-		return fmt.Errorf("validate official schedule API: %w", err)
-	}
-
-	return nil
-}
-
 type StructureChangedError struct {
 	Message     string
 	InvalidRows int
