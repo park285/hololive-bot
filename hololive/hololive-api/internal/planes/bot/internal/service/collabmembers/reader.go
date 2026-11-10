@@ -75,9 +75,17 @@ func (r *Reader) DisplayNames(ctx context.Context, videos []Video) (map[string][
 	}
 
 	out := make(map[string][]string, len(officialNames))
+	if len(officialNames) == 0 {
+		return out, nil
+	}
+
+	index, err := officialidentity.Build(ctx, r.members)
+	if err != nil {
+		return nil, fmt.Errorf("resolve collab members: %w", err)
+	}
 
 	for videoID, names := range officialNames {
-		labels, err := officialidentity.DisplayNames(ctx, r.members, names, hosts[videoID])
+		labels, err := index.DisplayNames(ctx, r.members, names, hosts[videoID])
 		if err != nil {
 			return nil, fmt.Errorf("resolve collab members %q: %w", videoID, err)
 		}
