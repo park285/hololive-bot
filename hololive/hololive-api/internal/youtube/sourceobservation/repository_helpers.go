@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -24,7 +25,12 @@ func boundedErrorDetail(value string) string {
 		return value
 	}
 
-	return value[:maxErrorTextBytes]
+	end := maxErrorTextBytes
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
+
+	return value[:end]
 }
 
 // lockLiveRuntimeState는 관측 writer의 shared 전역 잠금을 claim·정본 행보다 먼저 잡는다. 증거 retention·수동 영수증·

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -199,9 +200,14 @@ func boundedError(err error) string {
 	}
 
 	text := err.Error()
-	if len(text) > 2048 {
-		return text[:2048]
+	if len(text) <= 2048 {
+		return text
 	}
 
-	return text
+	end := 2048
+	for end > 0 && !utf8.RuneStart(text[end]) {
+		end--
+	}
+
+	return text[:end]
 }

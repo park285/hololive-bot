@@ -118,25 +118,3 @@ func (r *Repository) CountMembers(ctx context.Context) (int, error) {
 
 	return count, nil
 }
-
-func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []string) (map[string]*domain.Member, error) {
-	if len(channelIDs) == 0 {
-		return make(map[string]*domain.Member), nil
-	}
-
-	query := getMembersWithPhotoSQL
-
-	rows, err := r.pool.Query(ctx, query, channelIDs)
-	if err != nil {
-		return nil, fmt.Errorf("query members with photo: %w", err)
-	}
-	defer rows.Close()
-
-	out, err := r.collectMembersWithPhotoFromRows(rows)
-	if err != nil {
-		//nolint:nilnil // collectMembersWithPhotoFromRows와 동일하게 부분 성공 결과를 오류와 함께 그대로 전달한다.
-		return out, fmt.Errorf("collect members with photo from rows: %w", err)
-	}
-
-	return out, nil
-}

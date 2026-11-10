@@ -48,7 +48,6 @@ func NewRevivePolicy(enabled bool, freshnessWindow time.Duration, batchLimit int
 
 func (p RevivePolicy) Enabled() bool                  { return p.enabled }
 func (p RevivePolicy) FreshnessWindow() time.Duration { return p.freshnessWindow }
-func (p RevivePolicy) BatchLimit() int                { return p.batchLimit }
 
 // RowSnapshot은 DB 스냅샷에서 복사한 불변 정책 입력이다.
 type RowSnapshot struct {

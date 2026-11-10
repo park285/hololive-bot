@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **membernews 출처 판정에서 YouTube 핸들 신뢰 제거:** X 허용 목록의 계정명을 YouTube 핸들 허용 목록으로도 쓰던 것을 없앴습니다. 플랫폼이 달라 같은 이름이 같은 소유자를 뜻하지 않으므로, YouTube 출처는 등록된 채널 ID(`/channel/<id>`)일 때만 official이고 `/@handle`·`/c/`·`/user/` URL은 community입니다. 공식 채널의 핸들 URL도 community로 내려갑니다.
+- **YouTube plane retention 실패 뒤 readiness 복구:** retention이 재시도할 수 없는 오류를 한 번 내면 재시작 전까지 `/ready`가 503이던 것을 고쳤습니다. 실패 동안 unready인 것은 그대로이고, 다음 retention tick이 성공하면 ready로 돌아옵니다. 다른 루프가 내린 ready는 retention 성공으로 복구되지 않습니다.
 - **OpenTelemetry tracing 퇴역(Jaeger 퇴역):** hololive-api·alarm-worker·youtube-collector의 OTLP trace export, HTTP·발송·수집 span, 로그의 `trace_id`·`span_id` 상관을 제거했습니다. `HOLOLIVE_OTLP_GRPC_ENDPOINT`·`OTEL_EXPORTER_OTLP_INSECURE`·`OTEL_SAMPLE_RATE`·`OTEL_HOLOLIVE_API_ENABLED`·`OTEL_HOLOLIVE_ALARM_WORKER_ENABLED`·`OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED`는 더 읽지 않고, production collector가 slot 토글을 요구하던 기동 검사와 표준 `OTEL_EXPORTER_OTLP_*ENDPOINT` 거부(`DEC-20260926`의 영구 계약)도 함께 지웠습니다. hololive-api prestart는 `HOLOLIVE_OTLP_GRPC_ENDPOINT`를 요구하지 않습니다. alarm-worker·collector-c는 `observability-traces` network에서 빠지며 이 network 정의를 지웠습니다. 남은 env 키는 무시되므로 새 바이너리 안정화 뒤 stack-secrets에서 정리합니다. 이전 바이너리로 되돌리면 collector가 slot 토글을 다시 요구하므로 env 정리 전에만 되돌릴 수 있습니다.
 - **의존성:** shared-go v2.20.0(OpenTelemetry 계측 제거)과 iris-client-go v5.0.1(OTLP 관련 간접 의존성 제거)로 올렸습니다. 남은 `go.opentelemetry.io` 모듈은 외부 SDK의 간접 의존성뿐입니다.
 - **CI 도구 갱신:** CI Python을 CPython 3.15.2로, 로컬 runner uv 하한을 0.13.7로, 보안 워크플로의 gosec을 v2.30.0으로, 최종 이미지 스캔 Trivy를 0.76.2로 올렸습니다. 제품 코드와 운영 이미지는 바뀌지 않습니다.

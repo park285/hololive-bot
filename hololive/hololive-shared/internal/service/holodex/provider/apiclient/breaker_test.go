@@ -144,7 +144,6 @@ func TestBreaker_NilSafe(t *testing.T) {
 
 	b.RecordFailure()
 	b.RecordSuccess()
-	b.SetOpenedAtForTest(time.Now())
 }
 
 func TestBreaker_ConcurrentRecordFailure(t *testing.T) {
@@ -294,4 +293,9 @@ func TestBreaker_AllowResetsOnTimeout(t *testing.T) {
 			t.Fatal("breaker should be closed after Allow() triggered reset")
 		}
 	})
+}
+
+// SetOpenedAtForTest는 openedAt을 강제 설정합니다.
+func (b *circuitBreaker) SetOpenedAtForTest(t time.Time) {
+	b.openedAt.Store(t)
 }

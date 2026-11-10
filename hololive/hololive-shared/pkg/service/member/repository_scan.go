@@ -114,32 +114,6 @@ func scanMemberFullRow(scanner memberRowScanner) (memberRow, error) {
 	return row, nil
 }
 
-func scanMemberPhotoQueryRow(scanner memberRowScanner) (memberRow, error) {
-	var row memberRow
-
-	err := scanner.Scan(
-		&row.id,
-		&row.channelID,
-		&row.englishName,
-		&row.japaneseName,
-		&row.koreanName,
-		&row.shortKoreanName,
-		&row.isGraduated,
-		&row.aliasesJSON,
-		&row.photo,
-		&row.org,
-		&row.suborg,
-		&row.syncSource,
-		&row.twitchUserID,
-		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
-	)
-	if err != nil {
-		return row, fmt.Errorf("scan member photo columns: %w", err)
-	}
-
-	return row, nil
-}
-
 func (r *Repository) parseMemberRow(row *memberRow) (*domain.Member, error) {
 	member, err := r.scanMember(
 		row.id,
@@ -160,46 +134,6 @@ func (r *Repository) parseMemberRow(row *memberRow) (*domain.Member, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan member: %w", err)
-	}
-
-	member.Units = row.units
-	if row.chzzkChannelID != nil {
-		member.ChzzkChannelID = *row.chzzkChannelID
-	}
-
-	if row.officialURL != nil {
-		member.OfficialURL = *row.officialURL
-	}
-
-	if row.birthday != nil {
-		member.Birthday = row.birthday
-	}
-
-	if row.debutDate != nil {
-		member.DebutDate = row.debutDate
-	}
-
-	return member, nil
-}
-
-func (r *Repository) parseMemberPhotoRow(row *memberRow) (*domain.Member, error) {
-	member, err := r.scanMemberWithPhoto(
-		row.id,
-		row.channelID,
-		row.englishName,
-		row.japaneseName,
-		row.koreanName,
-		row.shortKoreanName,
-		row.isGraduated,
-		row.aliasesJSON,
-		row.photo,
-		row.org,
-		row.suborg,
-		row.syncSource,
-		row.twitchUserID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("scan member with photo: %w", err)
 	}
 
 	member.Units = row.units
@@ -272,51 +206,6 @@ func (r *Repository) collectMembersFromRows(
 	}
 
 	return out, nil
-}
-
-type photoMemberRow struct {
-	channelID *string
-	member    *domain.Member
-}
-
-func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]*domain.Member, error) {
-	collected, err := collectJoinedRows(rows, "rows iteration error", func(rows pgx.Rows) (photoMemberRow, error) {
-		channelID, member, scanErr := r.collectMemberWithPhotoRow(rows)
-		if scanErr != nil {
-			return photoMemberRow{}, fmt.Errorf("collect member with photo row: %w", scanErr)
-		}
-
-		return photoMemberRow{channelID: channelID, member: member}, nil
-	})
-
-	result := make(map[string]*domain.Member)
-
-	for _, row := range collected {
-		if row.channelID != nil && preferChannelMember(result[*row.channelID], row.member) {
-			result[*row.channelID] = row.member
-		}
-	}
-
-	if err != nil {
-		//nolint:nilnil // 일부 행만 실패해도 성공한 행은 함께 돌려주는 것이 이 함수의 계약이라, 오류와 유효한 map을 같이 반환한다.
-		return result, fmt.Errorf("collect members with photo rows: %w", err)
-	}
-
-	return result, nil
-}
-
-func (r *Repository) collectMemberWithPhotoRow(rows pgx.Rows) (*string, *domain.Member, error) {
-	row, err := scanMemberPhotoQueryRow(rows)
-	if err != nil {
-		return nil, nil, fmt.Errorf("scan member row: %w", err)
-	}
-
-	member, err := r.parseMemberPhotoRow(&row)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse member row %q: %w", row.englishName, err)
-	}
-
-	return row.channelID, member, nil
 }
 
 // scanMember: DB 조회 결과를 domain.Member로 변환함.

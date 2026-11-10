@@ -14,7 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-func TestSearchChannels_UsesPaginatedHololiveChannelListCache(t *testing.T) {
+func TestFetchHololiveChannelList_PaginatesOnceAndServesListCache(t *testing.T) {
 	t.Parallel()
 
 	hololive := constants.HolodexAPIParams.OrgHololive
@@ -25,32 +25,28 @@ func TestSearchChannels_UsesPaginatedHololiveChannelListCache(t *testing.T) {
 	requester := newPaginatedChannelListRequester(t, hololive, firstPage, secondPage, &recorder)
 	service := newServiceForFallbackTest(requester)
 
-	firstResult, err := service.SearchChannels(t.Context(), " aqua ")
+	firstResult, err := service.fetchHololiveChannelList(t.Context())
 	if err != nil {
-		t.Fatalf("SearchChannels(aqua) error = %v", err)
+		t.Fatalf("fetchHololiveChannelList() error = %v", err)
 	}
 
-	if len(firstResult) != 1 || firstResult[0].ID != "minato-aqua" {
-		t.Fatalf("SearchChannels(aqua) = %+v, want minato-aqua only", firstResult)
+	gotIDs := make(map[string]bool, len(firstResult))
+	for _, channel := range firstResult {
+		gotIDs[channel.ID] = true
 	}
 
-	secondResult, err := service.SearchChannels(t.Context(), "member 01")
+	if !gotIDs["channel-00"] || !gotIDs["minato-aqua"] {
+		t.Fatalf("fetchHololiveChannelList() = %d channels, want channels from both pages", len(firstResult))
+	}
+
+	// 목록 캐시 덕분에 두 번째 조회는 upstream 목록을 다시 받지 않는다.
+	repeatResult, err := service.fetchHololiveChannelList(t.Context())
 	if err != nil {
-		t.Fatalf("SearchChannels(member 01) error = %v", err)
-	}
-
-	if len(secondResult) != 1 || secondResult[0].ID != "channel-01" {
-		t.Fatalf("SearchChannels(member 01) = %+v, want channel-01 only", secondResult)
-	}
-
-	// query별 결과 캐시 없이도 같은 query는 같은 결과를 내고, 목록 캐시 덕분에 upstream 목록을 다시 받지 않는다.
-	repeatResult, err := service.SearchChannels(t.Context(), "AQUA")
-	if err != nil {
-		t.Fatalf("SearchChannels(AQUA) error = %v", err)
+		t.Fatalf("fetchHololiveChannelList() repeat error = %v", err)
 	}
 
 	if !reflect.DeepEqual(repeatResult, firstResult) {
-		t.Fatalf("SearchChannels(AQUA) = %+v, want same result as first search %+v", repeatResult, firstResult)
+		t.Fatal("repeat channel list differs from the first result")
 	}
 
 	gotOffsets := recorder.snapshot()

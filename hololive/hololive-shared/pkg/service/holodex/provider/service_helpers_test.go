@@ -21,10 +21,7 @@
 package holodexprovider
 
 import (
-	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const (
@@ -32,27 +29,6 @@ const (
 	testVideoID              = "video-1"
 	testChannelID            = "channel-1"
 )
-
-func TestSearchQueryAttrPseudonymizesRawQuery(t *testing.T) {
-	t.Parallel()
-
-	const query = "private room search"
-
-	attr := searchQueryAttr(query)
-
-	if attr.Key != "query_token" {
-		t.Fatalf("searchQueryAttr key = %q, want query_token", attr.Key)
-	}
-
-	value := attr.Value.String()
-	if value != privacylog.Pseudonym(query) {
-		t.Fatalf("searchQueryAttr value = %q, want privacylog pseudonym", value)
-	}
-
-	if strings.Contains(value, query) {
-		t.Fatalf("searchQueryAttr value contains raw query %q", query)
-	}
-}
 
 func TestNormalizeStreamOrg_TrimsSpaceAndBang(t *testing.T) {
 	t.Parallel()

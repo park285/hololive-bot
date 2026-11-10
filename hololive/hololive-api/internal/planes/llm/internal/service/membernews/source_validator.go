@@ -42,7 +42,6 @@ type SourceValidator struct {
 	mediaDomains    map[string]struct{}
 	xAllowlist      map[string]struct{}
 	ytChannelIDs    map[string]struct{}
-	ytHandles       map[string]struct{}
 	logger          *slog.Logger
 }
 
@@ -63,7 +62,6 @@ func NewSourceValidator(
 		mediaDomains:    defaultMediaDomains(),
 		xAllowlist:      make(map[string]struct{}),
 		ytChannelIDs:    make(map[string]struct{}),
-		ytHandles:       make(map[string]struct{}),
 		logger:          logger,
 	}
 
@@ -87,7 +85,6 @@ func NewSourceValidator(
 		}
 
 		validator.xAllowlist[normalized] = struct{}{}
-		validator.ytHandles[normalized] = struct{}{}
 	}
 
 	return validator, nil
@@ -230,34 +227,19 @@ func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (model.SourceTi
 		return model.SourceTierOfficial, parsed.String(), nil
 	}
 
-	// watch / shorts / live / youtu.be — 채널 식별 불가 → community
+	// watch / shorts / live / youtu.be와 핸들(/@, /c/, /user/) URL — 채널 ID를 확인할 수 없음 → community
 	// SSOT: youtube.com(공식 채널)만 official, 동영상 링크는 채널 특정 불가
 	return model.SourceTierCommunity, parsed.String(), nil
 }
 
 func (v *SourceValidator) isAllowedYouTubeSourcePath(segments []string) bool {
-	if len(segments) >= 2 && segments[0] == "channel" {
-		channelID := strings.TrimSpace(segments[1])
-		return channelID != "" && v.isAllowedYouTubeChannelID(channelID)
-	}
-
-	if len(segments) == 0 {
+	if len(segments) < 2 || segments[0] != "channel" {
 		return false
 	}
 
-	return v.isAllowedYouTubeHandlePath(segments)
-}
+	channelID := strings.TrimSpace(segments[1])
 
-func (v *SourceValidator) isAllowedYouTubeHandlePath(segments []string) bool {
-	first := strings.TrimSpace(segments[0])
-	switch {
-	case strings.HasPrefix(first, "@"):
-		return v.isAllowedYouTubeHandle(strings.TrimPrefix(first, "@"))
-	case (first == "user" || first == "c") && len(segments) >= 2:
-		return v.isAllowedYouTubeHandle(segments[1])
-	default:
-		return false
-	}
+	return channelID != "" && v.isAllowedYouTubeChannelID(channelID)
 }
 
 func (v *SourceValidator) isAllowedXAccount(account string) bool {
@@ -278,17 +260,6 @@ func (v *SourceValidator) isAllowedYouTubeChannelID(channelID string) bool {
 	}
 
 	_, ok := v.ytChannelIDs[normalized]
-
-	return ok
-}
-
-func (v *SourceValidator) isAllowedYouTubeHandle(handle string) bool {
-	normalized := normalizeXAccount(handle)
-	if normalized == "" {
-		return false
-	}
-
-	_, ok := v.ytHandles[normalized]
 
 	return ok
 }

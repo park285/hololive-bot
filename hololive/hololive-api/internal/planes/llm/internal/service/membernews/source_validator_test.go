@@ -124,6 +124,34 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	}
 }
 
+func TestSourceValidatorDoesNotTrustYouTubeHandleNamedLikeAllowedXAccount(t *testing.T) {
+	allowlistPath := filepath.Join(t.TempDir(), "allowlist.json")
+
+	if err := os.WriteFile(allowlistPath, []byte(`{"official_accounts":["hololivetv"]}`), 0o600); err != nil {
+		t.Fatalf("write allowlist: %v", err)
+	}
+
+	validator, err := NewSourceValidator(t.Context(), allowlistPath, nil, nil)
+	if err != nil {
+		t.Fatalf("new source validator: %v", err)
+	}
+
+	for _, source := range []string{
+		"https://www.youtube.com/@hololivetv",
+		"https://www.youtube.com/c/hololivetv",
+		"https://www.youtube.com/user/hololivetv",
+	} {
+		tier, _, err := validator.ValidateSourceURL(source)
+		if err != nil || tier != model.SourceTierCommunity {
+			t.Errorf("youtube handle named like an allowed x account = (%s, %v), want community: %q", tier, err, source)
+		}
+
+		if validator.HasCorroboration("출처: " + source) {
+			t.Errorf("youtube handle named like an allowed x account counted as corroboration: %q", source)
+		}
+	}
+}
+
 func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	memberData := &stubMemberDataProvider{channelIDs: []string{"UC_TEST_OFFICIAL"}}
 
@@ -245,17 +273,16 @@ func TestSourceValidatorRejectsAmbiguousYouTubePaths(t *testing.T) {
 
 	validator := &SourceValidator{
 		ytChannelIDs: map[string]struct{}{"UC_TEST_OFFICIAL": {}},
-		ytHandles:    map[string]struct{}{"hololive": {}},
 	}
 
 	for _, source := range []string{
-		"https://www.youtube.com/@hololive/../@attacker",
-		"https://www.youtube.com/@hololive/%2e%2e/@attacker",
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/../UC_ATTACKER",
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/%2e%2e/UC_ATTACKER",
 		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/../../@attacker",
-		"https://www.youtube.com/c/hololive/./../../@attacker",
-		`https://www.youtube.com/@hololive/..\@attacker`,
-		"https://www.youtube.com/@hololive%2f../@attacker",
-		"https://www.youtube.com//@hololive",
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/./../../channel/UC_ATTACKER",
+		`https://www.youtube.com/channel/UC_TEST_OFFICIAL/..\UC_ATTACKER`,
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL%2f../UC_ATTACKER",
+		"https://www.youtube.com//channel/UC_TEST_OFFICIAL",
 	} {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
@@ -272,10 +299,9 @@ func TestSourceValidatorRejectsAmbiguousYouTubePaths(t *testing.T) {
 	}
 
 	for _, source := range []string{
-		"https://www.youtube.com/@hololive",
-		"https://www.youtube.com/@hololive/videos",
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL",
 		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/",
-		"https://www.youtube.com/c/hololive",
+		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/videos",
 	} {
 		tier, _, err := validator.ValidateSourceURL(source)
 		if err != nil || tier != model.SourceTierOfficial {

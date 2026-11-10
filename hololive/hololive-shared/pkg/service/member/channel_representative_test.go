@@ -63,19 +63,6 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 	}
 }
 
-func TestPhotoQueriesUseTheChannelRepresentative(t *testing.T) {
-	repo, owner := seedSharedReviewMembers(t)
-
-	photos, err := repo.GetMembersWithPhoto(t.Context(), []string{sharedReviewChannel})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if photos[sharedReviewChannel] == nil || photos[sharedReviewChannel].ID != owner.ID {
-		t.Fatal("batch photo representative differs")
-	}
-}
-
 // snapshot 없이 개인 멤버를 이름·별칭으로 먼저 조회해도 공유 채널 index는 SQL 채널 대표만 채운다.
 func TestColdIndividualLookupsDoNotClaimSharedChannel(t *testing.T) {
 	repo, owner := seedSharedReviewMembers(t)

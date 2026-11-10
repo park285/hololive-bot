@@ -194,50 +194,6 @@ func TestCollectMembersFromRows_All_ReturnsJoinedRowErrors(t *testing.T) {
 	}
 }
 
-func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
-	repository := newTestMemberRepository()
-	rows := &fakeMemberRows{rows: []fakeMemberRow{
-		{scan: func(...any) error {
-			return errors.New("scan mismatch")
-		}},
-		{scan: func(dest ...any) error {
-			assignScanDest(dest[0], 2)
-
-			channelID := testChannelUC2
-			assignScanDest(dest[1], &channelID)
-			assignScanDest(dest[2], testMemberMiko)
-			assignScanDest[*string](dest[3], nil)
-			assignScanDest[*string](dest[4], nil)
-			assignScanDest[*string](dest[5], nil)
-			assignScanDest(dest[6], false)
-			assignScanDest(dest[7], []byte(`{"ko":["미코"]}`))
-
-			photo := "https://example.com/miko.jpg"
-			assignScanDest(dest[8], &photo)
-			assignScanDest(dest[9], "hololive")
-			assignScanDest[*string](dest[10], nil)
-			assignScanDest(dest[11], "holodex")
-			assignScanDest[*string](dest[12], nil)
-
-			return nil
-		}},
-	}}
-
-	members, err := repository.collectMembersWithPhotoFromRows(rows)
-	if err == nil {
-		t.Fatal("collectMembersWithPhotoFromRows error = nil, want non-nil")
-	}
-
-	member := members[testChannelUC2]
-	if member == nil || member.Photo != "https://example.com/miko.jpg" {
-		t.Fatalf("members = %#v, want UC2 photo member", members)
-	}
-
-	if got := err.Error(); got == "" || !containsAll(got, []string{"scan member row", "scan mismatch"}) {
-		t.Fatalf("error = %q, want joined scan error context", got)
-	}
-}
-
 func TestCollectMembersFromRows_ByName_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{

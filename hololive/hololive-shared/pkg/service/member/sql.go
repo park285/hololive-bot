@@ -23,7 +23,6 @@ var (
 	getAllChannelIDsSQL           = mustSQL("get_all_channel_ids.sql")
 	getAllMembersSQL              = mustSQL("get_all_members.sql")
 	getMembersNeedingPhotoSyncSQL = mustSQL("get_members_needing_photo_sync.sql")
-	getMembersWithPhotoSQL        = mustSQL("get_members_with_photo.sql")
 	matchCreatedMemberSQL         = mustSQL("match_created_member.sql")
 	removeAliasSQL                = mustSQL("remove_alias.sql")
 	setGraduationSQL              = mustSQL("set_graduation.sql")
