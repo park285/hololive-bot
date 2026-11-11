@@ -86,10 +86,8 @@ func TestIrisDurableContract(t *testing.T) {
 	})
 }
 
-// contractProfileRetention은 runtime이 bot_webhook_inbox.terminal_retention_ms로 받는 종단 보존과
-// bot_reply_outbox.automatic_replay_horizon_ms로 받는 자동 replay 지평을 API worker profile fixture에서 역할 소유
-// loader를 거쳐 읽는다. DurableLedgerRepository.Maintain은 inbox·command·reply outbox 종단 행을 같은
-// terminalRetention으로 정리한다.
+// contractProfileRetention은 API worker profile fixture에서 역할 소유 loader로 종단 보존과 자동 replay 지평을 읽는다.
+// Maintain은 inbox·command·reply outbox 종단 행을 같은 보존 기간으로 정리한다.
 func contractProfileRetention(t *testing.T) (terminalRetention, automaticReplayHorizon time.Duration) {
 	t.Helper()
 

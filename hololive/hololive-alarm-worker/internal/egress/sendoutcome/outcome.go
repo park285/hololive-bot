@@ -91,9 +91,8 @@ type AttemptRules struct {
 	UnclassifiedOutcomeUnknown bool
 }
 
-// AttemptOutcome은 시작된 provider 호출 한 번의 결과를 attempt outcome으로 바꿉니다. 명시적 결과 불명 증거는 결합된
-// deadline·취소보다 우선하고, 그다음 timeout, canceled, 응답 소실 가능 오류, 확정 실패 순입니다. 호출 중 panic은
-// 호출자가 셉니다.
+// AttemptOutcome은 시작된 provider 호출 한 번의 결과를 바꿉니다. 우선순위는 명시적 결과 불명 증거, timeout, canceled,
+// 응답 소실 가능 오류, 확정 실패 순이며 호출 중 panic은 호출자가 셉니다.
 func AttemptOutcome(err error, rules AttemptRules) workercontract.AttemptOutcome {
 	kind := Classify(err)
 

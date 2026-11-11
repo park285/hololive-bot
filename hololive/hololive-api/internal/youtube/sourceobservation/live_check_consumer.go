@@ -304,11 +304,8 @@ func (c *Consumer) videoLifecycleOrUnresolvableFact(
 	return fact, "", nil
 }
 
-// unresolvableVideoCandidate는 identity를 확인할 수 없는 확인을 해소 불가 추적에 들인다. 비공개·삭제 전환 영상은
-// 익명 player에 videoDetails가 없어 다른 UNKNOWN 사유와 달리 identity_missing만 남긴다. 시작을 관측한 LIVE는
-// identity_missing만 대상이며 종료까지 간다. UPCOMING은 identity_missing과 채널 불일치(identity_mismatch)를 추적해
-// 재확인 주기를 늦추는 근거로만 쓰고 끝내지 않는다. 추적을 저장할 수 없는 세션(live.UnresolvableTrackable)과
-// 그 밖의 request_failed 등은 기존 IDENTITY_UNCONFIRMED·IDENTITY_MISMATCH 결정으로 남는다.
+// unresolvableVideoCandidate는 비공개·삭제 전환 영상이 남기는 identity_missing을 해소 불가 추적에 들인다. LIVE는 종료까지 가고,
+// UPCOMING은 identity_mismatch도 추적하되 재확인 주기 근거로만 쓰며, 추적할 수 없는 세션은 기존 IDENTITY_* 결정으로 남는다.
 func unresolvableVideoCandidate(payload *contract.VideoLiveCheckV1, session *live.SessionState, skipped string) bool {
 	if !live.UnresolvableTrackable(session) {
 		return false

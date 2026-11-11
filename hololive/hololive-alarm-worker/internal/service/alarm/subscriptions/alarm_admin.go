@@ -29,9 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetAllAlarmKeys는 관리 목록을 PG에서 만든다. 방·채널 쌍마다 한 항목이며, 방 이름은 관리자 지정 이름 → Kakao 방 이름
-// → 방 ID 순으로 정한다. 멤버 표시명은 members 정본의 DisplayName이고 members에 없는 채널은 빈 이름이다.
-// 멤버 조회 실패는 이름 없는 목록으로 바꾸지 않고 목록 오류로 돌려준다.
+// GetAllAlarmKeys는 방·채널 쌍마다 한 항목을 PG에서 만든다. 방 이름은 관리자 지정 이름 → Kakao 방 이름 → 방 ID 순이고,
+// 멤버 조회 실패는 이름 없는 목록이 아니라 오류다.
 func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	entries, err := as.alarmRepository.ListAlarmEntries(ctx)
 	if err != nil {

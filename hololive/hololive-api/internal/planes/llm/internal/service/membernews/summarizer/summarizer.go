@@ -177,9 +177,7 @@ func (s *SummarizerImpl) searchContext(ctx context.Context, input *newsmodel.Sum
 	return formatSearchContext(results), nil
 }
 
-// validateAndBuildDigest: LLM 출력을 재검증합니다.
-// FilterCandidates에서 입력 후보를 사전 검증하지만, LLM이 source_url을 변형하거나
-// 허용 범위 외 항목을 생성할 수 있으므로 출력에 대한 이중 검증이 의도적으로 적용됩니다.
+// validateAndBuildDigest는 LLM이 source_url을 바꾸거나 허용 범위 밖 항목을 만들 수 있으므로 사전 검증과 별도로 출력을 다시 검증합니다.
 func (s *SummarizerImpl) validateAndBuildDigest(input *newsmodel.SummarizeInput, response *summaryResponse) *model.Digest {
 	return validateAndBuildDigestFromResponse(input, response, s.validator)
 }

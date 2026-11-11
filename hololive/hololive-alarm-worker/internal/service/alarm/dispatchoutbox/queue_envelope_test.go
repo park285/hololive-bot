@@ -79,7 +79,7 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 func TestAlarmQueueEnvelope_WireFormatDecode(t *testing.T) {
 	t.Parallel()
 
-	// 저장 payload의 snake_case wire 형식. 퇴역한 Rust producer의 alarm_type 없는 형식은 더 이상 받지 않는다.
+	// 저장 payload의 snake_case wire 형식이며 alarm_type이 없으면 decode가 거절한다.
 	wireJSON := `{
 		"notification": {
 			"alarm_type": "LIVE",

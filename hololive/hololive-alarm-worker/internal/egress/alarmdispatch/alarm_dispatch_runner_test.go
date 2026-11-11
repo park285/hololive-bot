@@ -73,9 +73,8 @@ func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]di
 	return withAlarmDispatchTestSendUnitIdentity(batch), nil
 }
 
-// 운영 claim은 send unit이 저장된 delivery만 돌려주고, dispatchoutbox는 dispatch group key마다 send unit과
-// client_request_id를 저장한다. 식별자를 직접 지정하지 않은 테스트 봉투에는 생산자와 같은 dispatch group key로 결정적인
-// send unit과 ID를 붙여 그 계약을 흉내 낸다.
+// 운영 claim은 send unit이 저장된 delivery만 돌려주므로, 식별자 없는 테스트 봉투에는 생산자와 같은 dispatch group key로
+// 결정적인 send unit과 client_request_id를 붙인다.
 func withAlarmDispatchTestSendUnitIdentity(batch []dispatchoutbox.AlarmQueueEnvelope) []dispatchoutbox.AlarmQueueEnvelope {
 	out := make([]dispatchoutbox.AlarmQueueEnvelope, len(batch))
 	for i := range batch {

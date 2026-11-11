@@ -176,7 +176,7 @@
 | WP-69 | migration 007(route CHECK를 `text`·`richtext`로, `alarm_types` 빈 배열 거절), 빈 배열 해석·`rich_text_message` 대체·`delivery_digest` 소비 경로 삭제. 보존 처리량·빈 제목 대체 문구 유지 | markdown·sender route, 빈 `alarm_types`, rich text 없는 미발송 행, digest dispatch 행 모두 0건. dispatch 원장 1,706행으로 backlog 없음. 빈 제목 UPCOMING 1행 존재 |
 | WP-70 | 유지 | 90일 fallback hit 지표를 확보하지 못함 |
 | WP-71 | 유지 | Quadlet 전송 기본값이 모두 `h3`, 운영 env에 해당 키 없음, 컨테이너에 `.env` 경로 없음. 별칭 축소·로더 삭제는 runbook 계약 표 변경을 동반 |
-| WP-72 | XGATE-1(보안 스캔 형제 모듈 SHA)은 rebase 뒤 반영. XGATE-5·6 유지 | release runbook 절차와 함께 바꿔야 함 |
+| WP-72 | XGATE-1은 main(#773)에서 반영됨. XGATE-5·6 유지 | release runbook 절차와 함께 바꿔야 함 |
 | WP-73 | 판단 불가 | 2026-12-31 이후 지표가 필요 |
 | WP-74 | 소유권 문서·allowlist에 admin plane을 제한된 reader·writer로 기록 | 내부 계약 확장(A안)은 provider 선배포가 필요해 이득에 비해 비용이 큼 |
 | WP-53 | 유지 | 진입점 통합에 제품 결정이 필요 |

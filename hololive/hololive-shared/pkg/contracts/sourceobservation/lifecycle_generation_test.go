@@ -55,7 +55,7 @@ func TestVideoLifecycleRequiresCurrentSchemaAndGeneration(t *testing.T) {
 	}
 }
 
-// 저장된 퇴역 generation 1 video_live_check는 consume 전 검증의 decode 단계에서 거부된다.
+// 저장된 generation 1 video_live_check는 consume 전 검증의 decode 단계에서 거부된다.
 // API consumer는 이 거부에 기대어 video_live_check 세대를 다시 확인하지 않는다.
 func TestStoredRetiredVideoLiveCheckRejectedAtDecode(t *testing.T) {
 	prepared, err := PrepareEnvelope(newLiveCheckEnvelope(t, KindVideoLiveCheck, publicEndedVideoCheck(), CompletenessPartial))

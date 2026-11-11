@@ -73,12 +73,8 @@ type FormattedMessage struct {
 	Err     error
 }
 
-// FormatMessages는 outbox 항목을 각 항목의 template과 채널 override로 렌더링한다. 표시명은 호출 안에서 channel_id마다
-// 한 번 조회하고 그 결과(오류 포함)를 같은 채널의 모든 항목에 쓴다. Template 버전 확인은 표시명 조회가 끝난 뒤 호출당
-// 한 SQL 문장이며, 호출 시작 전에 끝난 template 저장은 모든 항목에 보인다.
-// 한 outbox를 여러 방이 받으므로 두 본문 변형을 모두 렌더하고, 방마다 발송기가 변형 하나를 고른다.
-// 결과는 items와 같은 순서·길이다. 표시명 조회·payload·template 부재·렌더 실패는 항목별 Err이고(대체 문구 없음),
-// renderer 부재·template 버전 조회 실패·취소는 결과 없이 오류다. 호출자는 오류를 모든 항목의 포맷 실패로 다룬다.
+// FormatMessages는 항목마다 두 본문 변형을 items와 같은 순서로 렌더한다. 표시명은 channel_id마다 한 번 조회해 오류도 공유하고,
+// payload·template·렌더 실패는 항목별 Err, renderer 부재·template 버전 조회 실패·취소는 전체 오류다.
 func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.YouTubeNotificationOutbox) ([]FormattedMessage, error) {
 	results := make([]FormattedMessage, len(items))
 	requests := make([]template.RenderRequest, 0, 2*len(items))
