@@ -26,10 +26,8 @@
   Go의 자동 로그인 복구 읽기 제거·Console 복구 표시 제거를 함께 준비합니다. 새 스키마에 옛 migrator를 실행하거나
   삭제된 표를 읽는 옛 앱으로 되돌릴 수 없습니다. 롤백에는 이전 이미지와 **전환 전 백업의 별도 복원**이 필요합니다.
 - 수동 `epoch2_acl_tail.sql`은 옛 baseline 생성 보조물이므로 제거했습니다.
-  `manual/youtube_live_lifecycle_cutover.sql`은 ladder가 아닌 source 계약 활성화 운영 SQL로 유지합니다.
-  baseline은 372 head와 동일하게 YouTube.js live_snapshot schema1/gen2·video_live_check schema1/gen1을 시드합니다.
-  최초 활성화는 queue drain·collector quiescence·검증한 bundle·별도 승인 뒤 이 SQL로 gen3/2를 설정합니다.
-  기존 DB의 운영 세대는 baseline 전환이 변경하지 않습니다.
+  baseline은 372 head와 동일하게 YouTube.js live_snapshot schema1/gen2·video_live_check schema1/gen1을 시드하고,
+  migration 008이 구세대 행만 현행 schema1/gen3·schema2/gen2로 올립니다. 이미 전환된 DB에서는 바뀌는 행이 없습니다.
 
 ## 러너 의미론
 

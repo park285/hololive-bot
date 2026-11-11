@@ -334,7 +334,7 @@ func (c *Consumer) unresolvableVideoFact(
 ) (live.SessionFact, error) {
 	fact := live.SessionFact{VideoID: payload.VideoID, ChannelID: session.ChannelID, Status: live.StatusUnresolvable}
 
-	since := session.Clock.ActiveUnresolvableSince()
+	since := session.Clock.UnresolvableSince
 	if session.Status != domain.LiveStatusLive || since == nil || claimed.EffectiveAt.Before(since.Add(c.unresolvableGrace)) {
 		return fact, nil
 	}

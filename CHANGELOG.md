@@ -24,6 +24,8 @@
 - **migration 006:** UNIQUE(message_id, phase, ordinal)와 겹치고 운영 사용 횟수가 0인 `idx_bot_reply_outbox_message`를 `DROP INDEX CONCURRENTLY`로 지웁니다. bot 명령 실행 원장은 `result_summary`를 더 쓰지 않으며, 값은 기존 trigger가 terminal 전이 때 status로 채웁니다. 열과 member news 대체 문구 행 삭제는 이전 이미지 롤백을 깨므로 다음 릴리스에서 합니다.
 - **migration 007:** `alarm_dispatch_send_units.request_route`와 `youtube_notification_send_request.route` CHECK를 `text`·`richtext`로 좁히고, `alarms.alarm_types` 빈 배열을 `chk_alarms_alarm_types_nonempty`로 거절합니다. 운영에 해당 행이 없음을 적용 전에 확인했습니다. alarm-worker 구독 조회는 빈 `alarm_types`를 기본 종류로 해석하지 않습니다.
 - **알림 발송 호환 분기 삭제:** generic notification delivery는 `rich_text_message`가 없는 행을 일반 본문으로 대신 보내지 않고 준비 실패(`rich_text_message is required`)로 기록합니다. 생산자가 없는 alarm dispatch `delivery_digest` 출처의 decode·검증·렌더 경로를 지웠습니다. 남은 행이 있으면 `source_kind`에 발송 경로가 없다는 발송 전 실패로 처리됩니다.
+- **migration 008:** baseline이 시드한 YouTube.js `live_snapshot` 1/2·`video_live_check` 1/1 세대를 현행 1/3·2/2로 올립니다. 이미 전환된 운영 DB에서는 바뀌는 행이 없고, 수동 `manual/youtube_live_lifecycle_cutover.sql`은 지웠습니다.
+- **해소 불가 추적:** positive보다 이른 `unresolvable_since`를 이전 바이너리 잔여값으로 보고 무시하던 필터를 지웠습니다. 운영에 그런 행이 없음을 확인했습니다.
 - **빌드·게이트:** `build-all.sh`는 runtime VERSION이 없거나 `MAJOR.MINOR.PATCH` 형식이 아니면 빌드 전에 실패합니다. 도구 버전 핀을 한 곳으로 모았습니다. SQL 안전 게이트의 `COUNT(*)` 금지 규칙을 지웠고, migration manifest 검사는 Python 재구현 대신 dbmigrate 파서를 씁니다.
 
 ## v15.0.0 - 2026-11-10

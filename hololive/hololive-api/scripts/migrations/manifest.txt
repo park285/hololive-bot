@@ -5,3 +5,4 @@
 005 005_youtube_collection_candidate_next_due.sql
 006 006_drop_bot_reply_outbox_message_index.sql
 007 007_narrow_send_route_and_alarm_types_checks.sql
+008 008_youtubejs_live_contract_generation.sql
