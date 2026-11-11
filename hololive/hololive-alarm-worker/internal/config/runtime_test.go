@@ -48,7 +48,7 @@ func TestLoadRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	}
 }
 
-// LLM·Exa·사진 동기화처럼 hololive-api만 읽는 env는 worker가 검사하지 않는다.
+// 사진 동기화처럼 hololive-api만 읽는 env는 worker가 검사하지 않는다.
 func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	for key, value := range map[string]string{
 		"BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS": "1d",

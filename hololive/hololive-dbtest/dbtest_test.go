@@ -30,7 +30,7 @@ func TestNewPool_AppliesProdMigrations(t *testing.T) {
 	pool := NewPool(t)
 	ctx := t.Context()
 
-	for _, table := range []string{"acl_settings", "acl_rooms", "major_events"} {
+	for _, table := range []string{"acl_settings", "acl_rooms", "alarms"} {
 		var exists bool
 
 		err := pool.QueryRow(ctx, `

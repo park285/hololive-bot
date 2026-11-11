@@ -2,21 +2,21 @@
 
 ## Decision
 
-`#023`은 현재의 통합 구조를 수용합니다. Bot, admin, LLM plane은 하나의
+`#023`은 현재의 통합 구조를 수용합니다. Bot, admin, YouTube plane은 하나의
 `hololive-api` binary와 address space를 공유하며 별도의 OS 보안 경계로 취급하지 않습니다.
 
 One process is one trust domain.
 
 ## Required controls
 
-- LLM listener는 host loopback에만 publish합니다. Admin은 loopback 또는 host가 실제
+- Admin은 loopback 또는 host가 실제
   소유한 승인된 Tailscale 주소에만 publish하며 정확한 source allowlist와 host firewall을
   함께 검증합니다. 기본 transport는 `h3`로 유지합니다.
-- Admin route와 llm plane의 `/internal/ready`·`/metrics`는 비어 있지 않은 `API_SECRET_KEY`를 요구합니다.
+- Admin route와 bot plane의 `/internal/ready`·`/metrics`는 비어 있지 않은 `API_SECRET_KEY`를 요구합니다.
 - `hololive-api`는 `docker-proxy-net`에 가입하거나 Docker socket 또는 `DOCKER_HOST`를
   받아서는 안 됩니다.
-- No admin or LLM endpoint may load native plugins, spawn processes, invoke shells, or execute
-  user-controlled native commands. LLM output과 일반 사용자 입력은 data로만 처리하며 runtime
+- No admin endpoint may load native plugins, spawn processes, invoke shells, or execute
+  user-controlled native commands. 일반 사용자 입력은 data로만 처리하며 runtime
   extension, shell command, script, 또는 plugin entry point로 해석하지 않습니다.
 
 Template 본문을 HTTP로 저장·미리보기하는 관리 경로는 없습니다(Console 계약에 없어 삭제). 운영자가 DB에 넣은
@@ -42,7 +42,7 @@ A process-level compromise in any plane exposes credentials available to all thr
 
 ## Split trigger
 
-Split trigger: if admin-plane or LLM-plane compromise must not expose bot egress credentials,
+Split trigger: if admin-plane compromise must not expose bot egress credentials,
 `hololive-api`를 별도 process/container로 분리하고 각 runtime에 필요한 최소 credential만
 주입하는 migration을 먼저 설계해야 합니다. 이 요구가 생기면 통합 구조에 기능을 덧붙여
 우회하지 않고 별도 migration plan과 rollout 승인을 거칩니다.

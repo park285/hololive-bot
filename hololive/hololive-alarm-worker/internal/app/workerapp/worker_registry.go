@@ -11,7 +11,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
@@ -33,16 +32,15 @@ func newAlarmWorkerRegistryState(profile *workerconfig.AlarmWorkerProfile, pool 
 
 	state := &alarmWorkerRegistryState{
 		checker:  workercontract.NewProfileFileChecker(profile.Loaded, time.Now()),
-		trackers: make(map[string]*workercontract.ExecutorTracker, 3),
-		samplers: make(map[string]*workercontract.QueueSampler, 3),
-		totals:   make(map[string]*workercontract.Counters, 3),
+		trackers: make(map[string]*workercontract.ExecutorTracker, 2),
+		samplers: make(map[string]*workercontract.QueueSampler, 2),
+		totals:   make(map[string]*workercontract.Counters, 2),
 		workers:  profile.Loaded.Profile.Workers,
 	}
 
 	state.samplers[workerconfig.WorkerAlarmDispatch] = workercontract.NewQueueSampler(func(ctx context.Context) (workercontract.QueueValues, error) {
 		return dispatchoutbox.ReadySnapshot(ctx, pool)
 	})
-	state.samplers[workerconfig.WorkerNotificationDelivery] = workercontract.NewQueueSampler(notificationdelivery.NewStore(pool).ReadySnapshot)
 
 	youtubeLockTimeout := workercontract.Milliseconds(profile.YouTubeDelivery.LockTimeoutMS)
 	youtubeFreshness, _ := profile.Loaded.Profile.Workers[workerconfig.WorkerYouTubeDelivery].Queue.MaxAge.FixedDuration()
@@ -50,7 +48,7 @@ func newAlarmWorkerRegistryState(profile *workerconfig.AlarmWorkerProfile, pool 
 	state.samplers[workerconfig.WorkerYouTubeDelivery] = newYouTubeQueueSampler(pool, youtubeLockTimeout, youtubeFreshness, profile.YouTubeDelivery.BatchSize)
 	state.registry = workercontract.NewRegistry(profile.Loaded, state.checker)
 
-	for _, workerID := range []string{workerconfig.WorkerAlarmDispatch, workerconfig.WorkerNotificationDelivery, workerconfig.WorkerYouTubeDelivery} {
+	for _, workerID := range []string{workerconfig.WorkerAlarmDispatch, workerconfig.WorkerYouTubeDelivery} {
 		tracker := workercontract.NewExecutorTracker()
 		counters := &workercontract.Counters{}
 

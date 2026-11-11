@@ -8,6 +8,10 @@
 
 ## 미출시
 
+- **LLM 기능과 llm plane 삭제(breaking):** 행사 알림(공식 RSS 수집·링크 점검·주간·월간 요약)과 멤버 뉴스(웹 검색·요약·주간 digest)를 지웁니다. 봇 명령 `!행사`·`!이벤트`·`!뉴스`·`!뉴스알림`은 응답하지 않고, 운영 CLI `--rerun-notification`과 llm plane listener(30003), `llm_scheduler` pool, `LLM_*`·`CLIPROXY_*`·`GEMINI_*`·`MAJOREVENT_*`·`MEMBER_NEWS_*` 설정을 더 읽지 않습니다. hololive-api healthcheck는 `30001/internal/ready`와 `30006/health`를 봅니다. 도움말 텍스트와 이미지 카드에서는 뉴스·행사 항목만 빠지며, 이미지 카드는 `멤버 · 알람`·`기념일 · 기타`로 바뀝니다(기존 카드에 남아 있던 `!구독자` 타일도 지웠습니다).
+- **알림 발송 경로 삭제(breaking):** 행사·뉴스 전용 발송 원장(`notification_delivery_outbox`), alarm-worker의 `notification_delivery` executor·handoff reconciler, Valkey 신호 `notification:delivery:wakeup`을 지웁니다. alarm-worker는 worker 집합이 정확히 일치하는 profile만 받으므로, 배포 전에 운영 profile 원본(`/etc/stack-secrets/hololive-bot/worker-profiles/alarm-worker.json`)에서 `notification_delivery` 항목을 지워야 합니다. 이전 image는 새 profile을, 새 image는 이전 profile을 거부합니다.
+- **migration 009:** `major_events`·`major_event_subscriptions`·`member_news_subscriptions`·`notification_delivery_outbox`를 DROP하고, `CMD_MAJOR_EVENT_*`·`CMD_MEMBER_NEWS_*` 템플릿 15종과 `newscat`·뉴스·행사 `message_strings` 20행을 지웁니다. `CMD_HELP` 기본 본문은 뉴스·행사 구획이 표준 문구와 정확히 같을 때만 그 구획을 지우고, 사용자가 고친 본문은 그대로 둡니다. 이전 image는 DROP한 표를 읽으므로 migration 뒤로는 되돌릴 수 없고, 롤백하려면 이전 image와 migration 전 백업을 함께 복원해야 합니다.
+
 ## v16.0.0 - 2026-11-11
 
 - **Go 1.27.4 갱신:** 모듈·빌드 이미지·분석 도구의 Go 고정 버전을 올립니다(1.27.3 → 1.27.4).

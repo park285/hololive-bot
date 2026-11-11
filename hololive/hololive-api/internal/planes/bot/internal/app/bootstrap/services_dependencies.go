@@ -44,7 +44,5 @@ func BuildBotDependencies(
 		Matcher:               ProvideMatcher(infra.MemberCache, logger),
 		MembersData:           infra.MemberCache,
 		ACL:                   integrationServices.ACLService,
-		MajorEventRepository:  integrationServices.MajorEventRepository,
-		MemberNews:            integrationServices.MemberNewsService,
 	}
 }

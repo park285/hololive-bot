@@ -11,7 +11,7 @@
 - `repo-refactor-audit.md` - active refactor findings, completed cleanup, and deferred risk register
 - `app-bootstrap-boundary-guide.md` - Kakao bot bootstrap boundary guide
 - `review-bundles.md` - review source/full bundle export policy
-- `hololive-api-trust-domain.md` - consolidated bot/admin/LLM process boundary, controls, and split trigger
+- `hololive-api-trust-domain.md` - consolidated bot/admin/YouTube process boundary, controls, and split trigger
 - `non-secret-history-risk-decisions-20260713.md` - separate #087/#088 current-tree and Git-history risk decisions
 - `alarm-egress-scale-out-decisions-20260730.md` - alarm-worker egress lease removal, production role profiles, and the replica>1 gate list
 - `youtube-egress-lifecycle-transition-ownership-20260831.md` - YouTube outbox/delivery 전이 정책과 PostgreSQL 집행의 소유권, package·schema 경계

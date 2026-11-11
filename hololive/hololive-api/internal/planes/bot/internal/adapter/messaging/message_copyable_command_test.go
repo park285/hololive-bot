@@ -83,10 +83,6 @@ func TestSeedCommandPrefixesRemainCopyable(t *testing.T) {
 		key     domain.TemplateKey
 		command string
 	}{
-		{domain.TemplateKeyCmdMajorEventStatus, "행사 켜기"},
-		{domain.TemplateKeyCmdMajorEventUsage, "행사 켜기"},
-		{domain.TemplateKeyCmdMemberNewsNoMembers, "알람 추가 페코라"},
-		{domain.TemplateKeyCmdMemberNewsStatus, "뉴스알림 켜기"},
 		{domain.TemplateKeyCmdAmbiguousMember, "라이브 미코"},
 		{domain.TemplateKeyCmdAlarmList, "알람 추가 페코라"},
 	} {

@@ -13,7 +13,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
@@ -100,11 +99,6 @@ func buildEgressRunners(
 	runners, err = appendYouTubeDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append youtube delivery runner: %w", err)
-	}
-
-	runners, err = appendNotificationDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, logger, workerState)
-	if err != nil {
-		return nil, fmt.Errorf("append notification delivery runner: %w", err)
 	}
 
 	return runners, nil
@@ -217,70 +211,6 @@ func buildAlarmDispatchHandoffReconciler(
 	return reconciler, nil
 }
 
-func appendNotificationDeliveryRunner(
-	runners []workerruntime.NamedScheduler,
-	appConfig *workerconfig.RuntimeConfig,
-	infra *sharedmodules.InfraModule,
-	irisSender *egress.IrisMessageSender,
-	statusClient handoffcheck.ReplyStatusClient,
-	logger *slog.Logger,
-	workerState *alarmWorkerRegistryState,
-) ([]workerruntime.NamedScheduler, error) {
-	if !alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerNotificationDelivery) {
-		logWorkerDisabled(logger, "Notification delivery outbox dispatcher disabled")
-
-		return runners, nil
-	}
-
-	dispatcher, err := buildDeliveryOutboxDispatcher(appConfig, infra, irisSender, logger, workerState)
-	if err != nil {
-		return nil, fmt.Errorf("build delivery outbox dispatcher: %w", err)
-	}
-
-	reconciler, err := buildNotificationDeliveryHandoffReconciler(appConfig, infra, statusClient, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build notification delivery handoff reconciler: %w", err)
-	}
-
-	return append(runners,
-		workerruntime.NamedScheduler{
-			Name:      "notification-delivery-outbox",
-			Scheduler: workerState.wrap(workerconfig.WorkerNotificationDelivery, dispatcher),
-		},
-		workerruntime.NamedScheduler{
-			Name:      "notification-delivery-handoff-reconciler",
-			Scheduler: reconciler,
-		},
-	), nil
-}
-
-// PostgreSQL 확인은 먼저 만든 dispatcher가 한다.
-func buildNotificationDeliveryHandoffReconciler(
-	appConfig *workerconfig.RuntimeConfig,
-	infra *sharedmodules.InfraModule,
-	statusClient handoffcheck.ReplyStatusClient,
-	logger *slog.Logger,
-) (*notificationdelivery.HandoffReconciler, error) {
-	dispatcherConfig := notificationDeliveryDispatcherConfig(appConfig)
-
-	reconciler, err := notificationdelivery.NewHandoffReconciler(
-		notificationdelivery.NewStore(infra.Postgres.GetPool()),
-		statusClient,
-		notificationdelivery.HandoffReconcilerConfig{
-			Horizon:      dispatcherConfig.HandoffHorizon,
-			PollInterval: dispatcherConfig.PollInterval,
-			MaxRetries:   dispatcherConfig.MaxRetries,
-			RetryBackoff: dispatcherConfig.RetryBackoff,
-		},
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new notification delivery handoff reconciler: %w", err)
-	}
-
-	return reconciler, nil
-}
-
 func alarmWorkerExecutorEnabled(appConfig *workerconfig.RuntimeConfig, workerID string) bool {
 	return appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerID].Executor.Enabled
 }
@@ -288,60 +218,6 @@ func alarmWorkerExecutorEnabled(appConfig *workerconfig.RuntimeConfig, workerID 
 func logWorkerDisabled(logger *slog.Logger, message string) {
 	if logger != nil {
 		logger.Info(message)
-	}
-}
-
-func buildDeliveryOutboxDispatcher(
-	appConfig *workerconfig.RuntimeConfig,
-	infra *sharedmodules.InfraModule,
-	sender delivery.PreparedMessageSender,
-	logger *slog.Logger,
-	workerState *alarmWorkerRegistryState,
-) (workerruntime.Scheduler, error) {
-	if infra == nil || infra.Postgres == nil {
-		return nil, errors.New("postgres is required")
-	}
-
-	dispatcherConfig := notificationDeliveryDispatcherConfig(appConfig)
-
-	dispatcher, err := notificationdelivery.NewDispatcher(
-		notificationdelivery.NewStore(infra.Postgres.GetPool()),
-		sender,
-		logger,
-		&dispatcherConfig,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
-	}
-
-	if err := dispatcher.SetWakeupCache(infra.Cache); err != nil {
-		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
-	}
-
-	dispatcher.SetWorkerInstrumentation(workerState.trackers[workerconfig.WorkerNotificationDelivery], workerState.totals[workerconfig.WorkerNotificationDelivery])
-
-	return workerruntime.NewDeliveryOutboxDispatcherRunner(dispatcher, logger), nil
-}
-
-// 시도 시간은 executor의 fixed attempt_timeout이며, profile 스키마가 fixed 모드와 값을 요구하므로 dispatcher 기본값을 쓰지 않는다.
-func notificationDeliveryDispatcherConfig(appConfig *workerconfig.RuntimeConfig) notificationdelivery.DispatcherConfig {
-	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerNotificationDelivery]
-	profile := appConfig.AlarmWorkerProfile.NotificationDelivery
-
-	return notificationdelivery.DispatcherConfig{
-		AttemptTimeout:            workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),
-		BatchSize:                 profile.BatchSize,
-		MaxConcurrent:             worker.Executor.ConfiguredWorkers,
-		MaxRetries:                profile.MaxRetries,
-		PollInterval:              workercontract.Milliseconds(profile.PollIntervalMS),
-		RetryBackoff:              workercontract.Milliseconds(profile.RetryBackoffMS),
-		CleanupAfter:              workercontract.Milliseconds(profile.CleanupAfterMS),
-		CleanupInterval:           workercontract.Milliseconds(profile.CleanupIntervalMS),
-		CleanupEnabled:            profile.CleanupEnabled,
-		StaleSendingAfter:         workercontract.Milliseconds(profile.StaleSendingAfterMS),
-		StaleSendingSweepInterval: workercontract.Milliseconds(profile.StaleSendingSweepIntervalMS),
-		StaleSendingSweepLimit:    profile.StaleSendingSweepLimit,
-		HandoffHorizon:            workercontract.Milliseconds(profile.HandoffHorizonMS),
 	}
 }
 

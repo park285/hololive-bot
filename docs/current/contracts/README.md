@@ -8,9 +8,6 @@
 
 ## Contract Documents
 
-- `membernews.md` - member news subscription/digest in-process contract
-- `majorevent.md` - major event subscription in-process contract
-- `trigger.md` - manual notification rerun operator CLI
 - `alarm.md` - alarm HTTP API and PostgreSQL alarm dispatch outbox
 - `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and grouped message rendering contract
 - `settings.md` - admin settings API and alarm advance apply path

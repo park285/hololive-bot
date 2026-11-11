@@ -6,7 +6,6 @@ import (
 	"github.com/park285/iris-client-go/v5/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -33,19 +32,14 @@ type IrisRoomLister interface {
 }
 
 // PlaneDependencies는 process 조립이 소유하고 bot plane이 빌려 쓰는 in-process 의존성이다.
-// ACL은 admin plane과 같은 인스턴스이고, MajorEvent·MemberNews는 같은 프로세스 llm plane의 구독 저장소와
-// digest 서비스다. 둘 중 하나가 nil이면 해당 명령은 꺼진다.
+// ACL은 admin plane과 같은 인스턴스다.
 type PlaneDependencies struct {
-	ACL        *acl.Service
-	Holodex    *holodexprovider.Service
-	MajorEvent handlercore.MajorEventRepository
-	MemberNews handlercore.MemberNewsService
+	ACL     *acl.Service
+	Holodex *holodexprovider.Service
 }
 
 type CoreIntegrationServices struct {
-	ACLService           *acl.Service
-	MajorEventRepository handlercore.MajorEventRepository
-	MemberNewsService    handlercore.MemberNewsService
+	ACLService *acl.Service
 }
 
 type BotWebhookRuntimeDependencies struct {

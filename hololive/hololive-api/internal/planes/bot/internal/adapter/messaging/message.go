@@ -44,16 +44,6 @@ const (
 	paramLimit  = "limit"
 )
 
-const (
-	actionStatus = "status" // 공통: 구독 상태 조회
-	actionOn     = "on"
-	actionOff    = "off"
-
-	memberNewsActionStatus = actionStatus
-	memberNewsActionOn     = actionOn
-	memberNewsActionOff    = actionOff
-)
-
 func normalizeCommandPrefix(prefix string) string {
 	trimmed := stringutil.TrimSpace(prefix)
 	if trimmed == "" {

@@ -193,7 +193,7 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 	return out, nil
 }
 
-// 재처리는 LLM 출력과 가변 상태에서 바이트를 다시 만들어 내므로 같은 슬롯에 같은 바이트가 온다는
+// 재처리는 가변 상태에서 바이트를 다시 만들어 내므로 같은 슬롯에 같은 바이트가 온다는
 // 보장이 없다. 불일치를 실패로 돌려주면 저장본 재발송까지 막혀 아무것도 전달되지 않으므로,
 // 여기서는 관측 신호로만 강등하고 발송 권한은 계속 저장본이 갖는다.
 func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, entry *ReplyOutboxEntry, payloadHash string) (ReplyOutboxInsertOutcome, error) {

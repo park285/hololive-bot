@@ -12,7 +12,6 @@ import (
 const (
 	lifecycleAdminName   = "admin"
 	lifecycleBotName     = "bot"
-	lifecycleLLMName     = "llm"
 	lifecycleYouTubeName = "youtube"
 )
 
@@ -37,15 +36,15 @@ func TestRuntimeStartPropagatesContextAndErrorChannel(t *testing.T) {
 
 func TestRuntimeShutdownPreservesJoinedErrorsAndAttemptsAllPlanes(t *testing.T) {
 	firstErr := errors.New("admin shutdown")
-	secondErr := errors.New("llm shutdown")
+	secondErr := errors.New("youtube shutdown")
 
 	var calls []string
 
 	group := newPlaneGroup(slog.Default(),
 		planeComponent{
-			Name: lifecycleLLMName,
+			Name: lifecycleYouTubeName,
 			Shutdown: func(context.Context) error {
-				calls = append(calls, lifecycleLLMName)
+				calls = append(calls, lifecycleYouTubeName)
 
 				return secondErr
 			},
@@ -67,7 +66,7 @@ func TestRuntimeShutdownPreservesJoinedErrorsAndAttemptsAllPlanes(t *testing.T) 
 		t.Fatalf("Shutdown() error = %v, want both component errors", err)
 	}
 
-	if want := []string{lifecycleAdminName, lifecycleLLMName}; !reflect.DeepEqual(calls, want) {
+	if want := []string{lifecycleAdminName, lifecycleYouTubeName}; !reflect.DeepEqual(calls, want) {
 		t.Fatalf("Shutdown() calls = %v, want %v", calls, want)
 	}
 }
@@ -86,7 +85,7 @@ func TestRuntimePlaneOrder(t *testing.T) {
 		t.Fatalf("Shutdown() error = %v", err)
 	}
 
-	wantStart := []string{lifecycleYouTubeName, lifecycleLLMName, lifecycleAdminName, lifecycleBotName}
+	wantStart := []string{lifecycleYouTubeName, lifecycleAdminName, lifecycleBotName}
 	if !reflect.DeepEqual(starts, wantStart) {
 		t.Fatalf("Start() order = %v, want %v", starts, wantStart)
 	}
@@ -105,14 +104,13 @@ func TestRuntimeCloseIsIdempotentAndOrdered(t *testing.T) {
 	runtime := &Runtime{closeSteps: []func(context.Context) error{
 		func(context.Context) error { calls = append(calls, lifecycleBotName); return nil },
 		func(context.Context) error { calls = append(calls, lifecycleAdminName); return nil },
-		func(context.Context) error { calls = append(calls, lifecycleLLMName); return nil },
 		func(context.Context) error { calls = append(calls, lifecycleYouTubeName); return nil },
 	}}
 
 	runtime.Close()
 	runtime.Close()
 
-	if want := []string{lifecycleBotName, lifecycleAdminName, lifecycleLLMName, lifecycleYouTubeName}; !reflect.DeepEqual(calls, want) {
+	if want := []string{lifecycleBotName, lifecycleAdminName, lifecycleYouTubeName}; !reflect.DeepEqual(calls, want) {
 		t.Fatalf("Close() calls = %v, want %v", calls, want)
 	}
 }
@@ -137,7 +135,7 @@ func (g *runtimeGroupStub) Shutdown(ctx context.Context) error {
 }
 
 func lifecycleTestComponents(starts, stops *[]string) []planeComponent {
-	names := []string{lifecycleYouTubeName, lifecycleLLMName, lifecycleAdminName, lifecycleBotName}
+	names := []string{lifecycleYouTubeName, lifecycleAdminName, lifecycleBotName}
 
 	components := make([]planeComponent, 0, len(names))
 	for _, name := range names {

@@ -92,13 +92,13 @@ COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
 COPY --from=builder --link --chown=1000:1000 /dist ./
 
-EXPOSE 30001/tcp 30001/udp 30003/tcp 30003/udp 30006/tcp 30006/udp 30061/tcp 30091/tcp
+EXPOSE 30001/tcp 30001/udp 30006/tcp 30006/udp 30061/tcp 30091/tcp
 
-# compose 헬스체크와 동일한 3-엔드포인트 검사를 이미지에도 내장해 단독 `docker run` 시에도 동작을 일치시킨다.
+# compose 헬스체크와 동일한 2-엔드포인트 검사를 이미지에도 내장해 단독 `docker run` 시에도 동작을 일치시킨다.
 # (API_SECRET_KEY 미지정 단독 실행 시 unhealthy가 정상 — compose 환경에서는 env_file이 주입한다)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
     CMD ["./bin/healthcheck", "--api-key-env", "API_SECRET_KEY", \
-         "https://127.0.0.1:30001/health", "https://127.0.0.1:30003/internal/ready", "https://127.0.0.1:30006/health"]
+         "https://127.0.0.1:30001/internal/ready", "https://127.0.0.1:30006/health"]
 
 USER 1000:1000
 ENTRYPOINT ["./bin/hololive-api"]

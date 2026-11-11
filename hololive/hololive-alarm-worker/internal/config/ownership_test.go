@@ -108,7 +108,7 @@ func TestLoadRuntimeReadsNotificationRoles(t *testing.T) {
 }
 
 func TestValidateProductionAlarmExecutorsRejectsDisabledProfileExecutor(t *testing.T) {
-	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
+	for _, workerID := range []string{"alarm_dispatch", "youtube_delivery"} {
 		t.Run(workerID, func(t *testing.T) {
 			profile := alarmWorkerProfileFixture(t)
 			worker := profile.Loaded.Profile.Workers[workerID]

@@ -42,9 +42,6 @@ func defaultCommandParsers(ma *MessageAdapter) []CommandParser {
 			return ma.tryHelpCommand(command, raw)
 		}),
 		commandParserFunc(ma.tryMemberInfoCommand),
-		commandParserFunc(ma.tryMemberNewsSubscriptionCommand),
-		commandParserFunc(ma.tryMemberNewsCommand),
-		commandParserFunc(ma.tryMajorEventCommand),
 		commandParserFunc(ma.tryCelebrationCalendarCommand),
 	}
 }

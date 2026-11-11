@@ -40,15 +40,12 @@ DDL_RE = re.compile(
     re.IGNORECASE,
 )
 SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
-LEADING_SQL_FRAGMENT_RE = re.compile(r"^(?:ON\s+CONFLICT|VALUES|AND|OR|WHERE|SET|RETURNING)\b", re.IGNORECASE)
-TRAILING_SQL_FRAGMENT_RE = re.compile(r"\b(?:VALUES|WHERE|AND|OR|SET|FROM|JOIN|ON)\s*$", re.IGNORECASE)
 
 # lease 유효성은 wall clock, 후보·projection 조회는 문장 시각을 쓴다.
 # 잠금 완료 뒤 평가되는지는 SQL 토큰만으로 증명하지 않고 기존 DB 경합 시험이 맡는다.
 COLLECTOR_LEASE_QUERIES = "hololive/hololive-youtube-collector/internal/runtime/joblease/queries"
 ALARM_DISPATCH_QUERIES = "hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries"
 YOUTUBE_RUNTIME_QUERIES = "hololive/hololive-api/internal/planes/youtube/runtime/queries"
-NOTIFICATION_DELIVERY_QUERIES = "hololive/hololive-alarm-worker/internal/egress/notificationdelivery/queries"
 YOUTUBE_DELIVERY_QUERIES = "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries"
 CLOCK_QUERY_POLICIES = (
     (f"{COLLECTOR_LEASE_QUERIES}/repository_lease_*.sql", "clock_timestamp"),
@@ -75,16 +72,6 @@ CLOCK_QUERY_POLICIES = (
     )),
     (f"{ALARM_DISPATCH_QUERIES}/repository_terminal_*.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/send_request_*.sql", "clock_timestamp"),
-    (f"{NOTIFICATION_DELIVERY_QUERIES}/cleanup_in_batches.sql", "statement_timestamp"),
-    (f"{NOTIFICATION_DELIVERY_QUERIES}/outbox_*.sql", "clock_timestamp"),
-    *((f"{NOTIFICATION_DELIVERY_QUERIES}/{name}", "clock_timestamp") for name in (
-        "count_failed.sql",
-        "mark_failed.sql",
-        "mark_sending.sql",
-        "mark_sent.sql",
-        "quarantine_stale_sending.sql",
-    )),
-    (f"{NOTIFICATION_DELIVERY_QUERIES}/handoff_*.sql", "clock_timestamp"),
     (f"{YOUTUBE_DELIVERY_QUERIES}/*.sql", "clock_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_target_*.sql", "statement_timestamp"),
     *((f"{COLLECTOR_LEASE_QUERIES}/{name}", "statement_timestamp") for name in (
@@ -210,15 +197,6 @@ def migration_command_asset(path: Path) -> bool:
         (
             "hololive/hololive-api/cmd/db-migrate/queries/",
             "hololive/hololive-api/internal/migrationrunner/queries/",
-        )
-    )
-
-
-def complete_query_required(path: Path) -> bool:
-    return rel(path).startswith(
-        (
-            "hololive/hololive-shared/pkg/service/delivery/queries/",
-            "hololive/hololive-alarm-worker/internal/egress/notificationdelivery/queries/",
         )
     )
 
@@ -471,16 +449,8 @@ def check_sql_assets() -> list[Finding]:
         findings.extend(check_sql_clocks(path, text))
         findings.extend(check_outbox_insert(path, text))
 
-        stripped = text.strip().rstrip(";").strip()
-        if not stripped:
+        if not text.strip().rstrip(";").strip():
             findings.append(Finding(path, 1, "SQL asset is empty", ""))
-            continue
-        if not complete_query_required(path):
-            continue
-        if LEADING_SQL_FRAGMENT_RE.search(stripped):
-            findings.append(Finding(path, 1, "SQL asset starts with a continuation fragment", excerpt(stripped)))
-        if TRAILING_SQL_FRAGMENT_RE.search(stripped):
-            findings.append(Finding(path, 1, "SQL asset ends with a continuation fragment", excerpt(stripped)))
     return findings
 
 

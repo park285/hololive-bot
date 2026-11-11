@@ -57,7 +57,6 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 				PprofAddr:     ":30061",
 			}},
 			Admin: &AdminPlaneConfig{Server: settings.ServerConfig{Port: 30006, H3Addr: ":30006"}},
-			LLM:   &LLMSchedulerConfig{Server: settings.ServerConfig{Port: 30003, H3Addr: ":30003"}},
 		}
 	}
 
@@ -104,11 +103,11 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 	t.Run("h3 address must match configured plane port", func(t *testing.T) {
 		config := newConfig(":30101")
 
-		config.LLM.Server.H3Addr = ":30004"
+		config.Admin.Server.H3Addr = ":30004"
 
 		err := validateListenerPorts(config)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "llm-h3 listener: address port 30004 must match configured port 30003")
+		assert.Contains(t, err.Error(), "admin-h3 listener: address port 30004 must match configured port 30006")
 	})
 }
 
@@ -121,7 +120,6 @@ func TestValidatePlanePool(t *testing.T) {
 	require.ErrorContains(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 1}), "at least 2")
 	require.NoError(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 2}))
 	require.NoError(t, validatePlanePool("admin", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 1}))
-	require.NoError(t, validatePlanePool("llm", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 1}))
 }
 
 func TestValidateYouTubePlaneDatabaseRole(t *testing.T) {
@@ -140,10 +138,9 @@ func TestHololiveAPIYouTubePlaneComposeBudgetLeavesReservedCapacity(t *testing.T
 
 	bot := 4
 	admin := 4
-	llm := 4
 	youtubeCompose := 2
 
-	if bot+admin+llm+youtubeCompose > 16 {
-		t.Fatalf("hololive-api process pool sum %d exceeds the reviewed 16-connection envelope", bot+admin+llm+youtubeCompose)
+	if bot+admin+youtubeCompose > 16 {
+		t.Fatalf("hololive-api process pool sum %d exceeds the reviewed 16-connection envelope", bot+admin+youtubeCompose)
 	}
 }

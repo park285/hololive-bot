@@ -1,1 +1,0 @@
-DELETE FROM major_event_subscriptions WHERE room_id = $1

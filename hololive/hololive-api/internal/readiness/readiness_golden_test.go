@@ -48,13 +48,13 @@ func TestGoldenReadyDependencyDown(t *testing.T) {
 func TestGoldenReadyNoChecksKeepsEmptyDependencies(t *testing.T) {
 	t.Parallel()
 
-	code, body := serveReadyGolden(t, GinHandler(t.Context(), sharedreadiness.NewProbe("llm")))
+	code, body := serveReadyGolden(t, GinHandler(t.Context(), sharedreadiness.NewProbe("admin")))
 
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
 	}
 
-	want := `{"dependencies":{},"goroutines":0,"plane":"llm","status":"ready","uptime":"UPTIME","version":"VERSION"}`
+	want := `{"dependencies":{},"goroutines":0,"plane":"admin","status":"ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/ready body = %s, want %s", body, want)
 	}

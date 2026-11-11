@@ -2,10 +2,9 @@
 
 ## Role
 
-`hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 한 프로세스(중앙 Quadlet unit `hololive-api.service` 하나)에서 호스팅하는 통합 runtime입니다.
+`hololive-api`는 bot/admin plane과 YouTube consume plane을 한 프로세스(중앙 Quadlet unit `hololive-api.service` 하나)에서 호스팅하는 통합 runtime입니다.
 
 - Bot plane: Kakao/Iris webhook ingress, 사용자 명령 routing, reply orchestration (port `30001`).
-- LLM plane: major event/member news scheduling, LLM digest 생성, bot plane에 구독·digest 서비스를 in-process로 제공 (port `30003`, container 안 health·ready 전용).
 - Admin plane: dashboard-facing admin HTTP control plane, worker alarm HTTP client, `members.photo` Holodex PhotoSync (port `30006`).
 - YouTube plane: observation claim/finalize, canonical persist, notification intent, live-end finalizer, retention. YouTube channel photos는 `channel_photo` reducer.
 
@@ -14,20 +13,18 @@
 | Check | Expected |
 |---|---|
 | Health (bot) | `https://127.0.0.1:30001/health` returns success through container `./bin/healthcheck` |
-| Health (llm) | `https://127.0.0.1:30003/health` returns success through container `./bin/healthcheck` |
-| Ready (llm) | `https://127.0.0.1:30003/internal/ready` with `X-API-Key` returns success through container `./bin/healthcheck` |
+| Ready (bot) | `https://127.0.0.1:30001/internal/ready` with `X-API-Key` returns success through container `./bin/healthcheck` |
 | Health (admin) | `https://127.0.0.1:30006/health` returns success through container `./bin/healthcheck` |
-| Logs | no repeated webhook, Iris, DB, Valkey, LLM, or trigger errors |
-| Queue | webhook를 `bot_webhook_inbox`에 commit한 뒤 처리하고 reply를 `bot_reply_outbox`에서 Iris로 전달합니다. `notification_delivery_outbox` dispatch는 소유하지 않습니다. |
+| Logs | no repeated webhook, Iris, DB, or Valkey errors |
+| Queue | webhook를 `bot_webhook_inbox`에 commit한 뒤 처리하고 reply를 `bot_reply_outbox`에서 Iris로 전달합니다. proactive 알림 outbox dispatch는 소유하지 않습니다. |
 
 ## Dependencies
 
 | Dependency | Required | Failure impact |
 |---|---|---|
-| PostgreSQL | yes | commands, admin reads/writes, subscriptions, summaries, outbox fail |
+| PostgreSQL | yes | commands, admin reads/writes, subscriptions, outbox fail |
 | Valkey | yes | cache/config/session/PubSub behavior degrades |
 | Iris | yes | Kakao ingress/reply fails |
-| selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
 ## DB unit 재시작 주의
@@ -63,22 +60,17 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | Env | Purpose | Required |
 |---|---|---|
 | `SERVER_PORT` | bot plane HTTP/H3 port (`30001`) | yes |
-| `LLM_SCHEDULER_PORT` | llm plane HTTP port (`30003`) | yes |
 | `HOLOLIVE_HTTP_TRANSPORTS` | enabled transports | yes |
 | `IRIS_*` | Iris URL/certs/tokens | yes |
-| `LLM_PROVIDER` | `cliproxy` or native `gemini` provider selection | partial |
-| `CLIPROXY_*` | CLIProxy endpoint, credential, model, and reasoning settings | required when `LLM_PROVIDER=cliproxy` |
-| `GEMINI_*` | native Gemini endpoint, credential, model, and thinking settings | required when `LLM_PROVIDER=gemini` |
-| `MAJOREVENT_*` | major event scrape/schedule config | partial |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/api` profile for `bot_webhook_inbox`, `bot_reply_outbox`, `source_observation` | yes |
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
-| `BOT_SEE_MORE_FOLD` | bot·llm plane의 조회·보고서 2건 이상과 프로필·전체 도움말 텍스트에 전체보기 패딩 적용; 0·1건 목록과 알림은 펼침. 기본 `true`, `false`는 자동 패딩 차단 (`docs/current/architecture/MESSAGE_STYLE_GUIDE.md` §8) | no |
+| `BOT_SEE_MORE_FOLD` | bot plane의 조회·보고서 2건 이상과 프로필·전체 도움말 텍스트에 전체보기 패딩 적용; 0·1건 목록과 알림은 펼침. 기본 `true`, `false`는 자동 패딩 차단 (`docs/current/architecture/MESSAGE_STYLE_GUIDE.md` §8) | no |
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 새 응답을 `SendRichText`로 전송. 미설정은 `false`; RichText 운영 시 API·알람 워커 양쪽에 `true` 명시 | RichText 운영 시 필수 |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 | `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
 | `YOUTUBE_PLANE_RETENTION_CONTENT_ABSENCE_SLOTS_DAYS` | `youtube_content_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
 
-RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 방 유형별 `plain`·`richtext` 변형으로 나뉘어 있고(epoch-3 baseline 포함), bot plane은 요청마다 방 유형을 한 번 판정해 같은 값으로 변형과 발송 경로를 고릅니다. llm plane 예약 알림은 두 변형을 모두 적재합니다. 변형별 본문은 표준 기본 템플릿만 다르고, 사용자 지정 기본값·채널 override는 같은 본문을 두 변형에 두며 저장된 답변은 그대로입니다. API와 알람 워커는 같은 창에서 함께 교체합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며, 행사 요약은 최종 검토·캐시까지 평문으로 유지한 후 formatter에서 보호합니다. 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
+RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 방 유형별 `plain`·`richtext` 변형으로 나뉘어 있고(epoch-3 baseline 포함), bot plane은 요청마다 방 유형을 한 번 판정해 같은 값으로 변형과 발송 경로를 고릅니다. 변형별 본문은 표준 기본 템플릿만 다르고, 사용자 지정 기본값·채널 override는 같은 본문을 두 변형에 두며 저장된 답변은 그대로입니다. API와 알람 워커는 같은 창에서 함께 교체합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
 
 ## YouTube 관측 보존
 
@@ -185,7 +177,7 @@ sudo journalctl -u hololive-api.service -n 300
 
 ### Go runtime metrics (Prometheus)
 
-`/metrics`는 **bot plane만** 평문 HTTP/1.1로 `:30091`에 노출합니다(admin/llm plane은 metrics listener 없음). Go runtime collector가 프로세스 전체(3 plane 합산)를 커버합니다. prod에서는 `API_SECRET_KEY`가 설정되어 있어 `:30091`이 loopback bypass 대상이 아니므로 `X-API-Key` 헤더가 필요합니다.
+`/metrics`는 **bot plane만** 평문 HTTP/1.1로 `:30091`에 노출합니다(admin plane은 metrics listener 없음). Go runtime collector가 프로세스 전체(3 plane 합산)를 커버합니다. prod에서는 `API_SECRET_KEY`가 설정되어 있어 `:30091`이 loopback bypass 대상이 아니므로 `X-API-Key` 헤더가 필요합니다.
 
 ```bash
 # 키 출처는 실행 중 컨테이너의 실제 env(metrics 서버가 검증에 쓰는 값과 동일).
@@ -200,7 +192,7 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(sudo podman exec hololiv
 
 ### DB pool·YouTube plane DB 슬롯 지표
 
-- `hololive_db_pool_*{pool}`: pgxpool 통계를 scrape마다 읽습니다. API는 `bot`·`admin`·`llm_scheduler`·`youtube_plane`, alarm-worker는 `alarm_worker`, collector는 `collector` pool을 냅니다. 일회성 CLI(`source-observation-replay-epoch`)는 내지 않습니다. counter는 `acquires_total`, `acquire_duration_seconds_total`, `empty_acquires_total`(idle 연결이 없어 기다린 획득), `empty_acquire_wait_seconds_total`, `canceled_acquires_total`이고, gauge는 `conns{state=acquired|idle|constructing}`, `max_conns`입니다. pool 포화는 `conns{state="acquired"} / max_conns`, 빈 pool 대기는 `rate(…_empty_acquire_wait_seconds_total[5m]) / rate(…_empty_acquires_total[5m])`로 봅니다.
+- `hololive_db_pool_*{pool}`: pgxpool 통계를 scrape마다 읽습니다. API는 `bot`·`admin`·`youtube_plane`, alarm-worker는 `alarm_worker`, collector는 `collector` pool을 냅니다. 일회성 CLI(`source-observation-replay-epoch`)는 내지 않습니다. counter는 `acquires_total`, `acquire_duration_seconds_total`, `empty_acquires_total`(idle 연결이 없어 기다린 획득), `empty_acquire_wait_seconds_total`, `canceled_acquires_total`이고, gauge는 `conns{state=acquired|idle|constructing}`, `max_conns`입니다. pool 포화는 `conns{state="acquired"} / max_conns`, 빈 pool 대기는 `rate(…_empty_acquire_wait_seconds_total[5m]) / rate(…_empty_acquires_total[5m])`로 봅니다.
 - `hololive_youtube_plane_db_slot_wait_seconds{operation}`, `hololive_youtube_plane_db_slot_hold_seconds{operation}`: YouTube plane 앱 DB 슬롯(`DBOperationConcurrency`)의 대기와 보유 시간입니다. operation은 `probe`, `claim`, `consume`, `retry`, `dead_letter`, `live_end`, `projection_refresh`, `retention_source`, `retention_projection`, `queue_snapshot`, `collection_snapshot`입니다. 대기는 획득에 실패한 경우(`acquire DB slot: context deadline exceeded`)도 포함하고, 보유는 획득한 작업만 기록합니다. 전용 pool의 최대 연결 수가 슬롯 수보다 커서 슬롯 포화는 `pool="youtube_plane"` 지표에 드러나지 않으므로, 슬롯 고갈은 이 두 지표의 operation별 분포로 진단합니다.
 - 슬롯을 잡는 claim·consume·retry·dead letter·live end·projection refresh·retention은 슬롯 대기와 실행을 합쳐 `TransactionTimeout`(기본 10초) 안에 끝나야 합니다. 넘으면 슬롯을 돌려주고 `context deadline exceeded` 오류를 남기며, 각 loop는 기존 분류대로 오류 로그를 남기고 다음 주기를 계속합니다. 기동 중 첫 projection refresh가 이 시한을 넘으면 YouTube plane 생성이 실패합니다. startup claim probe와 queue·collection 관측 조회는 이 시한을 쓰지 않습니다.
 - `hololive_youtube_plane_consume_total{result}`, `hololive_youtube_plane_retention_errors_total{table}`, `hololive_youtube_plane_retention_deleted_total{table}`는 알려진 라벨 값을 기동 때 0으로 노출하므로, 재시작 뒤 첫 retry·dead letter·retention 실패도 `increase()`에 잡힙니다.
@@ -224,8 +216,8 @@ sudo podman exec holo-postgres psql -U postgres_admin -d hololive -c \
     GROUP BY usename, client_addr, state ORDER BY usename, client_addr, state;"
 ```
 
-- **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/llm 3 plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin/llm 각 max 4, 합 최대 12)으로 추적합니다.
-- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector 4×7=28 + migrator 1 + postgres_exporter 2 + nightly 2 = 55로 셉니다. reserve는 `max_connections=61`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 58 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 3이고 gate 하한도 3입니다. exporter 2는 postgres_exporter 0.20.x가 legacy 연결 1개를 유지한 채 scrape마다 collector 연결 1개를 더 여는 동작에 맞춘 값으로, 1이면 매 scrape가 `too many connections for role`로 끝나 pg_up만 남습니다(2026-10-19~24 실측). 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. `holo-postgres.container`가 `superuser_reserved_connections`를 바꾸면 `scripts/ci/check-postgres-capacity.sh`가 policy pin과 불일치로 거부합니다.
+- **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/YouTube plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin 각 max 4, YouTube max 2, 합 최대 10)으로 추적합니다.
+- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin 8 + YouTube plane 2 + `alarm-worker` 8 + collector 4×7=28 + migrator 1 + postgres_exporter 2 + nightly 2 = 51로 셉니다. reserve는 `max_connections=61`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 58 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 7이고 gate 하한은 3입니다. exporter 2는 postgres_exporter 0.20.x가 legacy 연결 1개를 유지한 채 scrape마다 collector 연결 1개를 더 여는 동작에 맞춘 값으로, 1이면 매 scrape가 `too many connections for role`로 끝나 pg_up만 남습니다(2026-10-19~24 실측). 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. `holo-postgres.container`가 `superuser_reserved_connections`를 바꾸면 `scripts/ci/check-postgres-capacity.sh`가 policy pin과 불일치로 거부합니다.
 
 ### Valkey latency / slowlog
 
@@ -246,14 +238,13 @@ vk info commandstats
 
 Symptoms:
 - Podman healthcheck marks `hololive-api` unhealthy; `HealthOnFailure=stop` stops it with SIGTERM within `StopTimeout` (45s) and systemd restarts the unit.
-- Webhook replies, admin dashboard calls, or scheduler triggers stop.
+- Webhook replies or admin dashboard calls stop.
 
 Diagnosis:
 ```bash
 sudo systemctl status hololive-api.service
 sudo journalctl -u hololive-api.service -n 200
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
-sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ```
 
@@ -264,29 +255,7 @@ Mitigation:
 Rollback:
 - Use `docs/current/runbooks/rollback.md`. Durable runtime cutover 이후에는 이 문서의 [Rollback](#rollback) backlog preflight 없이 이전 `hololive-api` image/config를 재배포하지 않습니다.
 
-### 2. Member news / major event command or manual trigger fails
-
-Symptoms:
-- Bot-plane command path returns scheduler/internal API errors.
-- Admin manual trigger endpoint returns failure or `409 notification_in_progress`.
-
-Diagnosis:
-```bash
-sudo journalctl -u hololive-api.service -n 300
-sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
-```
-
-Mitigation:
-- Validate the selected LLM provider and member news/major event source state.
-- Use `LLM_PROVIDER=gemini` for Gemini native `google_search`; routing Gemini through CLIProxy does not satisfy the MajorEvent search-call contract.
-- The native Gemini path uses the beta Interactions API and fails closed on non-`completed`, malformed, empty, or non-JSON output. Use `LLM_PROVIDER=cliproxy` with the retained CLIProxy settings for rollback.
-- For exit 2 (`notification already in progress`), wait for the active run to finish; investigate a stuck scheduler if the conflict persists.
-- A scheduled major event digest whose summary fails (LLM error, empty result, or external-content guard failure) is not enqueued and is not retried automatically; the only trace is a `Failed to send weekly notification` / `Failed to send monthly notification` error log. The next scheduled run uses the next week or month key, so re-run it with `sudo podman exec hololive-api ./bin/hololive-api --rerun-notification=majorevent-weekly` (or `=majorevent-monthly`) within the same KST week or month after fixing the cause (`DEC-20260926-hololive-source-fallbacks-retirement`). The command prints the enqueue result JSON; exit 2 means the same run is still in progress, exit 1 is a failure (see [trigger contract](../contracts/trigger.md)).
-
-Rollback:
-- Roll back the plane/contract/config change that introduced failures.
-
-### 3. Durable webhook or reply backlog grows
+### 2. Durable webhook or reply backlog grows
 
 `bot_webhook_inbox`의 `pending`/`retry`와 `bot_reply_outbox`의 `pending`/`retryable_pre_dispatch`가 지속 증가하면 PostgreSQL, command handler, Iris 상태를 함께 확인합니다. `dead`는 poison payload 또는 bounded retry 소진, `outcome_unknown`은 부수 효과 결과를 확정할 수 없어 자동 재실행하지 않은 상태입니다. `accepted`는 Iris `202` admission과 `requestId` 저장을 마치고 lease 없이 handoff 확인을 기다리는 상태입니다. lease heartbeat가 살아 있는 command는 reclaim 대상이 아닙니다.
 
@@ -363,7 +332,7 @@ DB maintenance 명령은 libpq service와 password file로 실행하며 운영 �
 > `hololive_migrator`의 TCP를 모두 거부하므로 `hololive-db-migrate`와 같은 socket 경로만 씁니다.
 > 이 스크립트를 중앙 런타임 호스트에서 실행하십시오.
 
-### 4. Process lifecycle startup or shutdown fails
+### 3. Process lifecycle startup or shutdown fails
 
 `hololive-api`는 youtube-collector·alarm-worker와 같은 shared-go `bootstrap`·`lifecycle.Run`으로 기동·종료합니다. aggregate `Runtime.Run`이 유일한 process signal owner이며 별도 lifecycle mode나 fallback은 없습니다. plane 내부 계약과 운영 endpoint는 바뀌지 않습니다. 정상 SIGTERM은 `Received shutdown signal` → `hololive-api draining runtime planes`를 남기고 exit 0으로 끝납니다. runtime fatal은 발생 즉시 `hololive-api runtime error`로 원인을 남기고, 종료 처리가 끝나면 runtime·drain·회수 오류를 합친 요약을 `Runtime stopped with error`로 남긴 뒤 exit 1로 끝납니다. drain 중 두 번째 SIGTERM/SIGINT는 정리 없이 프로세스를 즉시 끝냅니다(collector·alarm-worker와 같은 shared lifecycle 동작). `systemctl stop`(Podman stop)은 신호를 한 번만 보냅니다.
 
@@ -371,7 +340,7 @@ DB maintenance 명령은 libpq service와 password file로 실행하며 운영 �
 |---|---|---|
 | `Failed to assemble hololive-api runtime` | telemetry 또는 aggregate runtime 조립이 서비스 시작 전에 실패했습니다 | Redacted error metadata로 실패한 단계를 확인하고 config/dependency 원인을 수정합니다. 이미 생성된 plane은 once-only cleanup되고 telemetry provider는 종료됩니다. |
 | `hololive-api runtime error` (즉시), 이어서 `Runtime stopped with error` | listener/runtime component가 fatal error를 보고해 process가 종료됐습니다. listener bind 실패도 이 경로입니다 | 최초 runtime error를 원인으로 조사합니다. 일부 plane만 살아 있는 상태를 정상으로 간주하지 않습니다. scheduled job의 자체 처리 오류는 이 경로의 process-fatal이 아닙니다. YouTube 관측 Retry·DeadLetter 기록이 일시 오류(DB slot timeout, 연결·잠금 경합)로 실패하면 종료하지 않고 `awaiting lease recovery` ERROR 로그와 `retry_error`·`dead_letter_error` 지표만 남기며, `PROCESSING` 행은 lease 만료 뒤 claim이 회수합니다. 그 밖의 기록 실패는 계속 이 경로로 종료합니다. |
-| `Runtime stopped with error`, error에 `shutdown runtime planes` 또는 deadline | 10-second plane drain에서 하나 이상 실패했습니다. 남은 plane과 자원 회수는 계속 시도됩니다. | bot → admin → llm → YouTube 순서의 shutdown 진단을 확인하고 실패한 plane의 listener 또는 background loop를 조사합니다. |
+| `Runtime stopped with error`, error에 `shutdown runtime planes` 또는 deadline | 10-second plane drain에서 하나 이상 실패했습니다. 남은 plane과 자원 회수는 계속 시도됩니다. | bot → admin → YouTube 순서의 shutdown 진단을 확인하고 실패한 plane의 listener 또는 background loop를 조사합니다. |
 | `Runtime stopped with error`, error에 `stop aggregate runtime` 또는 `join aggregate resource cleanup`과 deadline | drain과 자원 회수를 합친 30-second hard stop 상한이 만료됐습니다. 끝나지 않은 drain·회수는 기다리지 않고 프로세스가 종료됩니다. | 같은 resource에 concurrent forced cleanup을 실행하지 않습니다. unit의 `StopTimeout=45` 이후 종료 결과와 다음 기동 상태를 확인합니다. |
 
 진단 문자열은 redacted `error` field로 기록됩니다. raw config, token, DSN, certificate, secret을 로그에 복사하지 않습니다. 아래 기존 log 명령과 health smoke를 사용하며, restart/redeploy/rollback은 별도 승인 후 이 runbook의 기존 절차를 따릅니다.
@@ -380,8 +349,7 @@ DB maintenance 명령은 libpq service와 password file로 실행하며 운영 �
 
 ```bash
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
-sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
-sudo podman exec hololive-api ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30003/internal/ready
+sudo podman exec hololive-api ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30001/internal/ready
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ```
 
@@ -392,16 +360,16 @@ sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
   함께 복원합니다. 원장만 되돌리거나 baseline SQL을 기존 DB에 다시 실행하지 않습니다.
 - 비-durable runtime, 구형 accepted lease 모양, Iris v3 webhook payload로 돌아가는 과거 rollback 창과 전용 preflight는 폐기했습니다.
   현행 webhook 원본·lease 없는 accepted 계약을 만족하는 릴리스만 같은 DB를 사용할 수 있습니다.
-- 복구 뒤 webhook/reply, scheduler 명령, 수동 trigger, dashboard health를 확인합니다.
+- 복구 뒤 webhook/reply, 봇 명령, dashboard health를 확인합니다.
 
 ## Post-deploy monitoring (unified runtime)
 
-bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spike(예: LLM weekly digest + admin stats 조회 + bot 이미지 렌더링 동시 발생)가 중요하다. 컷오버 후 최소 24시간 관찰:
+bot/admin/YouTube plane을 한 프로세스에 묶었으므로 평균값보다 동시 spike(예: YouTube 관측 backlog 처리 + admin stats 조회 + bot 이미지 렌더링 동시 발생)가 중요하다. 컷오버 후 최소 24시간 관찰:
 
 ### 단일 프로세스 blast-radius (먼저 인지할 것)
 
-- 3 plane이 한 프로세스이므로 **한 plane의 자원 폭주(OOM/goroutine leak/GC thrash)가 전체 컨테이너를 끌어내립니다.** healthcheck(`30001/health`·`30003/internal/ready`·`30006/health`)는 각 URL을 순차 검사해 하나라도 실패하면 exit 1 → unhealthy → `HealthOnFailure=stop`으로 컨테이너가 SIGTERM·`StopTimeout`(45초) 안에 종료되고 systemd(`Restart=always`)가 unit 전체를 다시 시작합니다.
-- `30003/internal/ready`는 인증된 dependency readiness(PostgreSQL/Valkey)를 포함합니다. 외부에서 접근 가능한 `/ready`는 dependency ping 없이 process health만 반환합니다.
+- 3 plane이 한 프로세스이므로 **한 plane의 자원 폭주(OOM/goroutine leak/GC thrash)가 전체 컨테이너를 끌어내립니다.** healthcheck(`30001/internal/ready`·`30006/health`)는 각 URL을 순차 검사해 하나라도 실패하면 exit 1 → unhealthy → `HealthOnFailure=stop`으로 컨테이너가 SIGTERM·`StopTimeout`(45초) 안에 종료되고 systemd(`Restart=always`)가 unit 전체를 다시 시작합니다.
+- `30001/internal/ready`는 인증된 dependency readiness(PostgreSQL/Valkey)를 포함합니다. 외부에서 접근 가능한 `/ready`는 dependency ping 없이 process health만 반환합니다.
 
 ### 경계값 (initial threshold — 실측으로 보정)
 
@@ -416,17 +384,14 @@ bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spik
 ### 관찰 항목
 
 - Go RSS / heap inuse·idle, GC pause·GC CPU 비중 (GOMEMLIMIT 600MiB, 컨테이너 limit 768m·pids 512 대비 여유) — `Metrics` 절 명령 사용
-- PostgreSQL connection 수 — plane별 pool 합산(bot/admin/llm 각 max 4 + YouTube plane max 2 = 최대 14) + alarm-worker(max 8)/collector AP 4×8=32/migration 포함 전체 budget. plane 단위 구분은 불가(같은 client_addr/usename — `Metrics` 절 참조)
+- PostgreSQL connection 수 — plane별 pool 합산(bot/admin 각 max 4 + YouTube plane max 2 = 최대 10) + alarm-worker(max 8)/collector AP 4×8=32/migration 포함 전체 budget. plane 단위 구분은 불가(같은 client_addr/usename — `Metrics` 절 참조)
 - pgx acquire latency, Valkey command latency(slowlog/--latency), H3 handshake error rate
-- bot webhook p95/p99, admin API p95/p99, LLM scheduler job lag
+- bot webhook p95/p99, admin API p95/p99
 - unit 재시작 빈도(`NRestarts`) — 잦은 재시작은 H3 listener hang/5s 타임아웃/GC pause를 의심
 
 ## Related contracts
 
 - `member-cache-v2-rollout.md`
 - `../contracts/iris-boundary.md`
-- `../contracts/membernews.md`
-- `../contracts/majorevent.md`
-- `../contracts/trigger.md`
 - `../contracts/settings.md`
 - `../contracts/alarm.md`

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
 INTEGRATION_TEST_PACKAGES=(
-    ./hololive/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer
-    ./hololive/hololive-api/internal/planes/llm/internal/service/membernews/summarizer
     ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch
     ./hololive/hololive-youtube-collector/internal/runtime/joblease
 )

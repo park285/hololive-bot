@@ -28,30 +28,6 @@
         "wakeup_enabled": true
       }
     },
-    "notification_delivery": {
-      "executor": {
-        "enabled": true,
-        "configured_workers": 4,
-        "attempt_timeout": {"mode": "fixed", "milliseconds": 10000}
-      },
-      "queue": {
-        "capacity": {"mode": "unbounded", "items": null},
-        "max_age": {"mode": "none", "milliseconds": null}
-      },
-      "settings": {
-        "batch_size": 50,
-        "max_retries": 3,
-        "poll_interval_ms": 30000,
-        "retry_backoff_ms": 60000,
-        "cleanup_after_ms": 604800000,
-        "cleanup_interval_ms": 3600000,
-        "cleanup_enabled": true,
-        "stale_sending_after_ms": 60000,
-        "stale_sending_sweep_interval_ms": 60000,
-        "stale_sending_sweep_limit": 100,
-        "handoff_horizon_ms": 300000
-      }
-    },
     "youtube_delivery": {
       "executor": {
         "enabled": true,

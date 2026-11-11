@@ -1,1 +1,0 @@
-SELECT EXISTS(SELECT 1 FROM major_event_subscriptions WHERE room_id = $1)

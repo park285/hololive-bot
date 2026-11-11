@@ -248,7 +248,6 @@ bash scripts/publish-release.sh "$tag" "$previous_tag" edit
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
-sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
 sudo podman exec hololive-youtube-collector-c ./bin/healthcheck https://127.0.0.1:30025/health
 ```
 

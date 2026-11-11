@@ -8,10 +8,8 @@
 
 | Data area | Owner | Direct writers | Allowed readers | Required access path |
 |---|---|---|---|---|
-| `major_event_subscriptions` | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | in-process 주입 계약 `majorevent.subscription`(bot `handlercore.MajorEventRepository`) |
-| `membernews` state | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | in-process 주입 계약 `membernews.subscription`, `membernews.digest`(bot `handlercore.MemberNewsService`) |
 | alarm dispatch outbox (`alarm_dispatch_events`, `alarm_dispatch_deliveries`) | `alarm-worker` | `alarm-worker`; `hololive-api` admin plane은 운영자 조치(requeue·settle)로 격리·DLQ 행의 상태만 바꾸고 `alarm_dispatch_admin_actions`에 기록 | `alarm-worker`, `hololive-api` admin plane(`dispatchops` 조회), `hololive-api` bot plane(방송 이력이 세션에 없는 topic·thumbnail을 최신 LIVE event payload에서 보충), observability consumers | `alarm.dispatch` 계약(PostgreSQL dispatch outbox + payload 없는 Valkey wakeup `alarm:dispatch:wakeup`). admin 직접 접근은 `runbooks/admin-dispatch-operations.md` 절차로 한정 |
-| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `alarm.state.read`: YouTube plane `notification_channel_ids.sql`, llm plane membernews read SQL. bot/admin plane은 필수 `ALARM_INTERNAL_URL`의 `alarm.http`를 사용하며 in-process 주입 분기는 정상 기동에서 도달 불가 |
+| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `alarm.state.read`: YouTube plane `notification_channel_ids.sql`. bot/admin plane은 필수 `ALARM_INTERNAL_URL`의 `alarm.http`를 사용하며 in-process 주입 분기는 정상 기동에서 도달 불가 |
 | YouTube outbox/tracking | `hololive-api` YouTube plane production, `alarm-worker` egress | `hololive-api` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `hololive-api` writes notification intent, `alarm-worker` owns final send state |
 
 Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
@@ -26,7 +24,6 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 
 - The `hololive-api` bot plane must not import `hololive-alarm-worker/internal`; cross-runtime access uses documented internal HTTP/queue contracts.
 - `shared-go` must not import any `hololive/*` module.
-- major event 저장소는 `hololive-api/internal/planes/llm/internal/service/majorevent`에 있어 Go `internal` 가시성 규칙상 다른 plane이 import할 수 없습니다. bot plane은 `internal/app`이 주입한 `handlercore.MajorEventRepository`로만 접근하며 admin plane은 major event를 읽지 않습니다.
 - alarms 저장소 `alarmstore.Repository`(`Add`/`Remove`/`ClearByRoom` write 메서드 포함)는 `hololive-alarm-worker/internal/service/alarm/alarmstore`에 있어 Go `internal` 가시성 규칙상 다른 module이 import할 수 없다. alarms를 읽어야 하는 read 전용 경로는 소유 plane의 SQL asset으로 직접 읽는다(예: YouTube plane `notification_channel_ids.sql`).
 - Shared data ownership changes must update `repository-ownership.allowlist`.
 
@@ -41,7 +38,7 @@ Duplicated polling prevention is enforced by PostgreSQL collection leases. Each 
 중복 발송은 dispatch 원장의 claim·fence·정산 동작으로 제어하며, Iris proactive sender는 `hololive-alarm-worker/internal/egress`가 소유합니다.
 Canonical 저장 함수는 `hololive-api/internal/youtube/canonicalwrite`에 있으므로 collector에서 import할 수 없습니다.
 
-YouTube outbox dispatcher와 범용 notification delivery dispatcher도 각각 `hololive-alarm-worker/internal/egress/{youtubedispatch,notificationdelivery}`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. `pkg/service/delivery`의 요청·결과 타입(`MessageVariants`, `SendResult`)과 Iris transport(`NewRuntimeIrisClient`)는 API와 worker가 함께 쓰고, sender interface(`PreparedMessageSender`)는 worker가 씁니다. producer enqueue 저장소(`OutboxRepository`)를 운영에서 쓰는 곳은 API llm plane 하나이며, 같은 payload를 소비하는 worker 쪽 저장소는 `internal/egress/notificationdelivery`의 `Store`입니다.
+YouTube outbox dispatcher도 `hololive-alarm-worker/internal/egress/youtubedispatch`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. `pkg/service/delivery`의 요청·결과 타입(`MessageVariants`, `SendResult`)과 Iris transport(`NewRuntimeIrisClient`)는 API와 worker가 함께 쓰고, sender interface(`PreparedMessageSender`)는 worker가 씁니다.
 
 ## Compiler and Gate Guarantees
 

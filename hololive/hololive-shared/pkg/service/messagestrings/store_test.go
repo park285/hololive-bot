@@ -51,8 +51,6 @@ func TestStore_LookupSeededValues(t *testing.T) {
 		{messagestrings.NamespaceOrg, "Nijisanji", "니지산지"},
 		{messagestrings.NamespaceAlarmType, "LIVE", "방송"},
 		{messagestrings.NamespaceAlarmType, "ANNIVERSARY", "주년"},
-		{messagestrings.NamespaceNewsCat, "birthday_live", "생일 라이브"},
-		{messagestrings.NamespaceNewsCat, "other", "기타"},
 		{messagestrings.NamespaceMisc, "chzzk_title", "치지직 라이브"},
 	}
 	for _, c := range cases {

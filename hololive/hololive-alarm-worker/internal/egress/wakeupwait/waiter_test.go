@@ -116,7 +116,7 @@ func TestDeliveryWaiterFallsBackToPollInterval(t *testing.T) {
 		waitC func() *Waiter
 	}{
 		{name: "no cache", waitC: func() *Waiter {
-			waiter, err := NewDelivery(nil, wakeup.NotificationDelivery, 30*time.Second, nil)
+			waiter, err := NewDelivery(nil, wakeup.YouTubeDelivery, 30*time.Second, nil)
 			if err != nil {
 				t.Fatalf("NewDelivery(nil) error = %v", err)
 			}
@@ -126,7 +126,7 @@ func TestDeliveryWaiterFallsBackToPollInterval(t *testing.T) {
 		{name: "valkey error", waitC: func() *Waiter {
 			mini.SetError("valkey unavailable")
 
-			waiter, err := NewDelivery(client, wakeup.NotificationDelivery, 30*time.Second, nil)
+			waiter, err := NewDelivery(client, wakeup.YouTubeDelivery, 30*time.Second, nil)
 			if err != nil {
 				t.Fatalf("NewDelivery() error = %v", err)
 			}
@@ -154,12 +154,12 @@ func TestDeliveryWaiterFallsBackToPollInterval(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	waiter, err := NewDelivery(nil, wakeup.NotificationDelivery, 30*time.Second, nil)
+	waiter, err := NewDelivery(nil, wakeup.YouTubeDelivery, 30*time.Second, nil)
 	if err != nil || waiter.Wait(ctx) {
 		t.Fatalf("Wait(canceled) = true, %v; want false", err)
 	}
 
-	if _, err := NewDelivery(nil, wakeup.NotificationDelivery, 0, nil); err == nil {
+	if _, err := NewDelivery(nil, wakeup.YouTubeDelivery, 0, nil); err == nil {
 		t.Fatal("NewDelivery(poll interval 0) error = nil")
 	}
 

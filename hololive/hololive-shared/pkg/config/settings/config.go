@@ -242,7 +242,7 @@ const (
 	seeMoreFoldDefault = true
 )
 
-// LoadSeeMoreFold는 bot·llm plane이 공유하는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
+// LoadSeeMoreFold는 bot plane이 쓰는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
 // 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다.
 func LoadSeeMoreFold() (bool, error) {
 	var env envload.StrictEnv

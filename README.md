@@ -10,7 +10,7 @@
 
 ## 시스템 아키텍처 (Architecture Overview)
 
-본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`는 rootful Podman Quadlet([deploy/quadlet](deploy/quadlet/README.md))으로, Seoul collector `b`는 iris-seoul rootful Podman Quadlet([deploy/podman/iris-seoul](deploy/podman/iris-seoul/README.md))으로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
+본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`는 rootful Podman Quadlet([deploy/quadlet](deploy/quadlet/README.md))으로, Seoul collector `b`는 iris-seoul rootful Podman Quadlet([deploy/podman/iris-seoul](deploy/podman/iris-seoul/README.md))으로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
 
 현재 배포 대상과 실행 방식은 [PROJECT_MAP](docs/current/PROJECT_MAP.md)과 [Deployment Baseline](docs/current/DEPLOYMENT_BASELINE.md), 작업 절차는 [Current Runbooks](docs/current/runbooks/README.md)를 따릅니다. 과거 기록과 설계 문서의 전환 절차를 현재 배포 작업으로 실행하지 않습니다.
 
@@ -18,7 +18,7 @@
 
 | 런타임 모듈명 | 소스 디렉토리 | 중앙 컨테이너명 | 가동 포트 | 주요 역할 |
 |---|---|---|---:|---|
-| hololive-api | hololive-api | hololive-api | 30001/30003/30006 | bot/admin/llm plane 통합 런타임: Kakao/Iris 웹훅 라우팅·챗 명령어 파싱(bot), 관리자 API 컨트롤 플레인(admin), 이벤트/뉴스 정규화 및 LLM 스케줄러(llm) |
+| hololive-api | hololive-api | hololive-api | 30001/30006 | bot/admin/YouTube plane 통합 런타임: Kakao/Iris 웹훅 라우팅·챗 명령어 파싱(bot), 관리자 API 컨트롤 플레인(admin), YouTube observation 소비·정본 저장(YouTube) |
 | alarm-worker | hololive-alarm-worker | hololive-alarm-worker | 30007 | 방송 정보 주기적 분석, 발송 대기열 소비 및 Iris outbound 호출 |
 | youtube-collector | hololive-youtube-collector | hololive-youtube-collector-c | 30005/15/25/35 | 유튜브 수집 AP fleet: fetch/normalize/lease/Publish. PostgreSQL만 소비하며 Valkey를 요구하지 않습니다. |
 
@@ -31,7 +31,6 @@
 
 * 인바운드 메시지 처리: `Iris Core -> hololive-api (bot plane) -> Command/Service -> PostgreSQL & Valkey`
 * 실시간 알림 발송: `alarm-worker -> PostgreSQL dispatch outbox (Valkey wakeup) -> alarm-worker egress -> Iris Core -> 카카오톡`
-* LLM 뉴스 분석 연계: `hololive-api` admin/bot plane 내장 클라이언트 -> `hololive-api` (llm plane) 내부 API
 * 유튜브 신작 감지: `youtube-collector -> source_observations -> hololive-api YouTube plane -> alarm-worker`
 
 Iris 연결은 `iris-client-go/v5 v5.0.0`을 사용하며 기동 epoch 인증을 지원하는 Iris가 필수입니다.
@@ -148,7 +147,6 @@ rollout 소유자만 활성화합니다.
 | 런타임 모듈 | 상태 검증 URI (Health Check) |
 |---|---|
 | hololive-api (bot) | `https://127.0.0.1:30001/health` via container `./bin/healthcheck` |
-| hololive-api (llm) | `https://127.0.0.1:30003/health` via container `./bin/healthcheck` |
 | hololive-api (admin) | `https://127.0.0.1:30006/health` via container `./bin/healthcheck` |
 | alarm-worker | `https://127.0.0.1:30007/health` via container `./bin/healthcheck` |
 | youtube-collector | `https://127.0.0.1:30025/ready` via container `./bin/healthcheck` (Main 노드) |

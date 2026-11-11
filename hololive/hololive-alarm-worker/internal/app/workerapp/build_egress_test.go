@@ -17,7 +17,6 @@ import (
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -72,12 +71,12 @@ func alarmWorkerTestConfig(t *testing.T) (*workerconfig.RuntimeConfig, *alarmWor
 	profile.AlarmDispatch.WakeupEnabled = false
 
 	state := &alarmWorkerRegistryState{
-		trackers: make(map[string]*workercontract.ExecutorTracker, 3),
-		totals:   make(map[string]*workercontract.Counters, 3),
+		trackers: make(map[string]*workercontract.ExecutorTracker, 2),
+		totals:   make(map[string]*workercontract.Counters, 2),
 		workers:  profile.Loaded.Profile.Workers,
 	}
 
-	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
+	for _, workerID := range []string{"alarm_dispatch", "youtube_delivery"} {
 		state.trackers[workerID] = workercontract.NewExecutorTracker()
 		state.totals[workerID] = &workercontract.Counters{}
 	}
@@ -238,15 +237,10 @@ func TestAlarmDispatchHandoffHorizonFollowsProfileSetting(t *testing.T) {
 	assert.Less(t, runnerConfig.AttemptTimeout, runnerConfig.HandoffHorizon)
 }
 
-func TestDeliveryHandoffHorizonsFollowProfileSettings(t *testing.T) {
+func TestYouTubeDeliveryHandoffHorizonFollowsProfileSetting(t *testing.T) {
 	config, _ := alarmWorkerTestConfig(t)
 
-	config.AlarmWorkerProfile.NotificationDelivery.HandoffHorizonMS = 240_000
 	config.AlarmWorkerProfile.YouTubeDelivery.HandoffHorizonMS = 180_000
-
-	notification := notificationDeliveryDispatcherConfig(config)
-	assert.Equal(t, 4*time.Minute, notification.HandoffHorizon)
-	assert.Less(t, notification.AttemptTimeout, notification.HandoffHorizon)
 
 	youtube := youtubeDispatchConfig(config)
 	assert.Equal(t, 3*time.Minute, youtube.HandoffHorizon)
@@ -258,17 +252,12 @@ func TestProfileShapedDispatcherConfigsPassValidation(t *testing.T) {
 
 	youtubeConfig := youtubeDispatchConfig(config)
 	require.NoError(t, youtubeConfig.Validate())
-
-	deliveryConfig := notificationDeliveryDispatcherConfig(config)
-
-	_, err := notificationdelivery.NewDispatcher(&notificationdelivery.Store{}, egress.NewIrisMessageSender(nil), nil, &deliveryConfig)
-	require.NoError(t, err)
 }
 
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
 
-	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
+	for _, workerID := range []string{"alarm_dispatch", "youtube_delivery"} {
 		worker := config.AlarmWorkerProfile.Loaded.Profile.Workers[workerID]
 
 		worker.Executor.Enabled = false
@@ -305,11 +294,6 @@ func TestBuildEgressDispatchersRejectMissingInfraWhenEnabled(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
 	assert.Contains(t, err.Error(), "infra is required")
-
-	scheduler, err = buildDeliveryOutboxDispatcher(config, nil, egress.NewIrisMessageSender(nil), nil, state)
-	require.Error(t, err)
-	assert.Nil(t, scheduler)
-	assert.Contains(t, err.Error(), "postgres is required")
 
 	scheduler, err = buildYouTubeOutboxDispatcher(config, nil, egress.NewIrisMessageSender(nil), nil, nil, state)
 	require.Error(t, err)

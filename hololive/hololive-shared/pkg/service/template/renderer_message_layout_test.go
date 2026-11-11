@@ -26,8 +26,6 @@ func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
 				domain.TemplateKeyOutboxShortsGroup, domain.TemplateKeyCelebrationBirthdayStream, domain.TemplateKeyXSpaceStarted,
 				domain.TemplateKeyAlarmDispatchNotification, domain.TemplateKeyAlarmDispatchNotificationGroup,
 				domain.TemplateKeyOutboxCommunity, domain.TemplateKeyOutboxCommunityGroup,
-				domain.TemplateKeyCmdMajorEventWeeklySummary, domain.TemplateKeyCmdMajorEventMonthlySummary,
-				domain.TemplateKeyCmdMemberNewsDigest,
 			}
 
 			for _, key := range keys {
@@ -74,8 +72,7 @@ func literalTitleData(title, url string) map[string]any {
 		"StreamTitle": title, "StreamURL": url, "ScheduledStartKST": "",
 		"Kind": string(domain.OutboxKindNewVideo), "IsStarting": true, "AllPremiere": false, fieldIsPremiere: false,
 		"IsUpcomingPremiere": false, "MinutesUntilPremiere": 0, fieldMinutesUntil: 0, "IsScheduled": false, "CollabMembers": "",
-		"ContentText": title, "LLMSummary": "", "Events": []map[string]any{entry},
-		"Headline": "뉴스", "TopItems": []map[string]any{entry}, "MoreSummary": "",
+		"ContentText": title,
 	}
 }
 
@@ -124,7 +121,6 @@ func TestSeedTemplates_EmptyStatesDoNotInventEntries(t *testing.T) {
 				{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: "", fieldStreams: []any{hidden}}},
 				{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: "미코", fieldCount: 0, "Days": 7, fieldStreams: []any{hidden}}},
 				{domain.TemplateKeyCmdAlarmList, map[string]any{fieldCount: 0, "Prefix": "!", "Alarms": []any{hidden}}},
-				{domain.TemplateKeyCmdMemberNewsDigest, map[string]any{"Headline": " ", "TopItems": []any{}, "MoreSummary": hidden}},
 				{domain.TemplateKeyCmdCalendar, map[string]any{fieldCount: 0, "Year": 2026, "Month": 9, "Days": []any{hidden}}},
 				{domain.TemplateKeyCmdMemberDirectory, map[string]any{"Total": 0, "Groups": []any{}}},
 			} {

@@ -36,12 +36,8 @@ func (c Channel) Queue() string {
 	return c.queue
 }
 
-var (
-	// NotificationDelivery는 hololive-api가 notification_delivery_outbox에 행을 적재한 뒤 alarm-worker를 깨운다.
-	NotificationDelivery = Channel{name: "notification_delivery", queue: "notification:delivery:wakeup", guard: "notification:delivery:wakeup:guard"}
-	// YouTubeDelivery는 hololive-api YouTube plane이 youtube_notification_outbox 행을 commit한 뒤 alarm-worker를 깨운다.
-	YouTubeDelivery = Channel{name: "youtube_delivery", queue: "youtube:delivery:wakeup", guard: "youtube:delivery:wakeup:guard"}
-)
+// YouTubeDelivery는 hololive-api YouTube plane이 youtube_notification_outbox 행을 commit한 뒤 alarm-worker를 깨운다.
+var YouTubeDelivery = Channel{name: "youtube_delivery", queue: "youtube:delivery:wakeup", guard: "youtube:delivery:wakeup:guard"}
 
 const (
 	// 신호 guard는 짧은 시간 안의 반복 신호를 하나로 줄인다. 억제된 행은 consumer가 깨어난 뒤의 짧은 재조회가 잡는다.

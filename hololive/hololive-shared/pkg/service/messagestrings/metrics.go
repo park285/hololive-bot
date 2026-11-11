@@ -15,7 +15,6 @@ const (
 var knownNamespaces = []string{
 	NamespaceOrg,
 	NamespaceAlarmType,
-	NamespaceNewsCat,
 	NamespaceMisc,
 	NamespaceError,
 	NamespaceNotify,

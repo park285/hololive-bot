@@ -53,16 +53,14 @@ Consumer behavior:
 - Replay of `dlq`/`quarantined` deliveries uses the audited requeue in `runbooks/admin-dispatch-operations.md`.
 - The retired Redis queue keys `alarm:dispatch:queue`, `alarm:dispatch:retry`, and `alarm:dispatch:dlq` have no reader or writer; their reserved constants were removed in stack-audit 2026-09-26 T11.
 - The `last_error_code` vocabulary (send error classes, recovery codes, and Iris handoff reconciliation codes) is defined once in `contracts/alarm.md` under "Timeout and retry policy".
-- `notification_delivery_outbox` keeps its own Iris handoff check (`handoff_request_id`, `handoff_next_check_at`, `handoff_checked_at`; migrations 330 and 338). It has no `last_error_code`; the handoff codes prefix `error` instead. The contract is in `contracts/alarm.md` under "Iris handoff reconciliation".
 - `youtube_notification_send_request` (the YouTube pinned request) keeps the YouTube Iris handoff check (`handoff_request_id`, `handoff_next_check_at`, `handoff_checked_at`; migrations 336 and 339), recorded by `CompleteSent` and settled by `youtube-delivery-handoff-reconciler`. Settlement reverts the logical group's `SENT` rows, deletes only the owner-sourced `SENT` ledger row and recomputes the parent outbox aggregate in the same transaction; post-level tracking marks are not reverted. The contract is in `contracts/alarm.md` under "Iris handoff reconciliation".
 
 ## Delivery Outbox Wakeup
 
-`hololive-api`는 `notification_delivery_outbox`와 `youtube_notification_outbox` 행을 PostgreSQL에 commit한 뒤 payload 없는 Valkey 신호로 `alarm-worker`를 깨웁니다. 신호는 정본이 아니며, 유실·중복·축출돼도 worker가 `poll_interval_ms` 안에 PostgreSQL에서 행을 claim합니다. 신호 key 계약(`Channel`)과 producer(`Signaler`)는 `hololive/hololive-shared/pkg/service/wakeup`에, consumer 대기 구현은 `hololive/hololive-alarm-worker/internal/egress/wakeupwait`에 있습니다.
+`hololive-api`는 `youtube_notification_outbox` 행을 PostgreSQL에 commit한 뒤 payload 없는 Valkey 신호로 `alarm-worker`를 깨웁니다. 신호는 정본이 아니며, 유실·중복·축출돼도 worker가 `poll_interval_ms` 안에 PostgreSQL에서 행을 claim합니다. 신호 key 계약(`Channel`)과 producer(`Signaler`)는 `hololive/hololive-shared/pkg/service/wakeup`에, consumer 대기 구현은 `hololive/hololive-alarm-worker/internal/egress/wakeupwait`에 있습니다.
 
 | Channel | Producer 시점 | Queue / guard key | Consumer |
 |---|---|---|---|
-| `notification_delivery` | `delivery.OutboxRepository.EnqueueBatch`가 행을 삽입하거나 `FAILED` 행을 다시 `PENDING`으로 바꾼 뒤 | `notification:delivery:wakeup` / `notification:delivery:wakeup:guard` | `notification_delivery` executor |
 | `youtube_delivery` | YouTube plane `ConsumeClaim`의 Finalize가 알림 행을 담고 commit된 뒤 | `youtube:delivery:wakeup` / `youtube:delivery:wakeup:guard` | `youtube_delivery` executor |
 
 - Producer: `SET <guard> 1 NX EX 3`이 성공할 때만 `LPUSH <queue> 1`과 `EXPIRE <queue> 5`를 보냅니다. 호출자 취소와 분리해 500ms 안에서 보내고, 실패는 경고 로그와 `hololive_delivery_wakeup_signals_total{channel,result}`로만 드러내며 적재 결과를 바꾸지 않습니다.

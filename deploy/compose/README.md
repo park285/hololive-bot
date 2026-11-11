@@ -285,7 +285,7 @@ Collector b on iris-seoul names the central primary in its unit (`POSTGRES_HOST=
 and reads the dedicated scraper password from `youtube-collector.env` (`POSTGRES_PASSWORD`). It has no cache mounts
 or DB/cache dependencies. The non-secret primary address owner is `deploy/topology/hosts.conf`
 (`central=100.100.1.8`). Native generation reads that owner and `scripts/ci/postgres-capacity-policy.tsv`,
-not a second address/pool literal. CLIProxy workstation addresses are unrelated to the primary DB route.
+not a second address/pool literal.
 
 Collectors use only `youtube-collector.env`, so Iris egress tokens stay out of collector containers.
 The central unsuffixed `youtube-collector` (`c`) also uses scoped
@@ -297,7 +297,7 @@ deployed slot. Host-native `a`/`d` bind metrics to their tailnet address, so
 omitting `METRICS_API_KEY` is a startup configuration error rather than a
 keyless metrics mode.
 
-Admin/LLM loopback bindings remain unchanged.
+Admin loopback bindings remain unchanged.
 `HOLOLIVE_ADMIN_API_PORT_BIND_IP` must match `tailscale ip --assert` on the deployment
 host before any build/start/restart. The approved current IPv4 binding remains
 `100.100.1.8:30006/udp`. Admin sources are loopback and the Iris Console host (iris-seoul) `100.100.1.5/32`;

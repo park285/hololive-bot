@@ -7,24 +7,22 @@
 | Module | `hololive-api` |
 | Binary | `hololive-api` |
 | Quadlet unit | `hololive-api.service` (container `hololive-api`) |
-| Port | `30001` (bot) / `30003` (llm, container 안 health·ready 전용, host publish 없음) / `30006` (admin) |
+| Port | `30001` (bot) / `30006` (admin) |
 | Health endpoint | `https://127.0.0.1:30001/health` through container `./bin/healthcheck` |
-| Ready endpoint | `https://127.0.0.1:30003/internal/ready` through container `./bin/healthcheck --api-key-env API_SECRET_KEY` (llm plane dependencies) |
+| Ready endpoint | `https://127.0.0.1:30001/internal/ready` through container `./bin/healthcheck --api-key-env API_SECRET_KEY` (bot plane PostgreSQL·Valkey) |
 
 ## Role
 
-bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서 호스팅하는 통합 runtime입니다.
+bot/admin plane과 YouTube Community consume plane을 한 프로세스에서 호스팅하는 통합 runtime입니다.
 
 - Bot plane: Kakao/Iris webhook ingress와 사용자 명령 routing, reply orchestration.
-- LLM plane: major event/member news scheduling, LLM digest 생성, bot plane에 구독 저장소·digest 서비스를 in-process로 제공.
 - Admin plane: dashboard-facing admin HTTP control plane, worker alarm HTTP client.
 
 ## Owns
 
 - Kakao/Iris webhook ingress, user-facing command routing and reply orchestration (bot plane)
-- Major event/member news subscription, digest generation, operator rerun (`--rerun-notification`), LLM summary cache and notification intent production (llm plane)
 - Dashboard-facing admin HTTP API and the worker alarm client (admin plane)
-- Bot-side alarm client; major event·member news는 llm plane 인스턴스를 직접 호출
+- Bot-side alarm client
 - Process-owned single ACL `Service` (bot pool, bot-plane `KAKAO_*` seed) shared by bot ingress and admin ACL routes
 - Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention (YouTube plane)
 - `members.photo` Holodex PhotoSync product path (admin plane). YouTube channel photos are the `channel_photo` reducer.
@@ -34,9 +32,6 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
 | Iris webhook boundary | external HTTP/H3 | webhook/reply/send | Iris / Redroid |
-| membernews | in-process | `handlercore.MemberNewsService` | `hololive-api` (bot plane) |
-| majorevent | in-process | `handlercore.MajorEventRepository` | `hololive-api` (bot plane) |
-| trigger.manual | operator CLI | `./bin/hololive-api --rerun-notification=<kind>` | 운영자 |
 | Admin HTTP API | HTTP JSON | `/api/holo/*` (Console 계약 `iris-console/contracts/hololive/openapi.json`에 있는 operation만) | `iris-console` |
 | settings.update | HTTP JSON + `settings.json` | `POST /api/holo/settings` | `iris-console`, `alarm-worker` |
 
@@ -44,18 +39,15 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | command/domain/admin data, subscriptions, summaries, outbox | command/admin/scheduling failures, stale reads |
+| PostgreSQL | command/domain/admin data, subscriptions, outbox | command/admin failures, stale reads |
 | Valkey | cache, rate limit, outbox wakeup, member epoch Pub/Sub, coordination(job lock) | degraded command, admin, and cache behavior |
 | Iris | KakaoTalk ingress/reply automation | webhook/reply delivery failure |
-| cliproxy/LLM | external summary generation where configured | summary generation degradation |
 | Alarm API | alarm CRUD/query | alarm commands and admin operations fail |
 
-API 설정은 `internal/config`가 소유합니다. process 공유 자원(Valkey client, 멤버 캐시, bot·admin·llm PostgreSQL pool,
+API 설정은 `internal/config`가 소유합니다. process 공유 자원(Valkey client, 멤버 캐시, bot·admin PostgreSQL pool,
 ACL `Service`, Holodex·공식 일정 Service)의 조립과 정리는 `internal/app`의 `buildAPIInfrastructure`가 소유합니다.
-운영 CLI `--rerun-notification`은 `buildLLMInfrastructure`로 llm plane이 쓰는 자원(bot·llm pool, Valkey client,
-멤버 캐시)만 만들고 admin pool·ACL·Holodex는 만들지 않습니다.
 Admin 조립·수명은 `internal/planes/admin/runtime`, router와 Stream handler는
-`internal/planes/admin/internal/httpapi`에 있습니다. plane 사이 의존(bot→llm 구독·digest, admin→bot Iris 방 목록,
+`internal/planes/admin/internal/httpapi`에 있습니다. plane 사이 의존(admin→bot Iris 방 목록,
 admin·bot ACL)은 `internal/app`이 같은 프로세스 인스턴스를 주입하며 loopback HTTP를 쓰지 않습니다.
 Observation consume·canonical/retention과 private reducer는 `internal/youtube/`가 소유합니다.
 Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-process alarm service를 생성하지 않습니다.
@@ -63,13 +55,13 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 ## Must not own
 
 - Alarm checker/scheduler loops owned by `alarm-worker`
-- Claim and consumption of the PostgreSQL proactive delivery outboxes (`alarm_dispatch_deliveries`, `notification_delivery_outbox`, `youtube_notification_outbox`) owned by `alarm-worker`
+- Claim and consumption of the PostgreSQL proactive delivery outboxes (`alarm_dispatch_deliveries`, `youtube_notification_outbox`) owned by `alarm-worker`
 - Proactive Iris/Kakao notification egress owned by `alarm-worker`
 
 ## 관리자 멤버 쓰기
 
 - 멤버 생성은 `CreateMemberRequest`로 저장 가능한 선택 입력을 유지하면서 이름·채널 식별자의 앞뒤 공백을 정리합니다. 이름은 필수이며 slug의 100자 한도와 각 저장 열의 문자 수 한도를 검증합니다. Unicode 문자 수 기준이며 선택 필드를 필수로 바꾸지 않습니다.
-- `MemberAdminService`가 생성·졸업·이름·채널·별명 추가/삭제의 정본 저장 → 활동 기록 → 캐시 동기화를 소유합니다. 도메인 HTTP 핸들러는 필요한 의존성만 보유하며, 멤버 핸들러는 ACL·Iris·LLM 없이 구성됩니다.
+- `MemberAdminService`가 생성·졸업·이름·채널·별명 추가/삭제의 정본 저장 → 활동 기록 → 캐시 동기화를 소유합니다. 도메인 HTTP 핸들러는 필요한 의존성만 보유하며, 멤버 핸들러는 ACL·Iris 없이 구성됩니다.
 - 생성은 HTTP 201, 나머지 변경은 HTTP 200과 기존 `status`·`message`를 유지합니다. 응답의 `persisted`, `cacheSynced`, `memberId`, `replayed`가 저장·전파·동일 요청 복구를 구분합니다. 저장 후 캐시 오류는 저장 실패 500으로 바꾸지 않고 `persisted=true`, `cacheSynced=false`와 경고 문구를 반환합니다.
 - 생성 재요청은 slug 유일성 충돌 뒤 **모든 저장 입력과 현재 정본이 같은 경우만** 기존 ID로 캐시 동기화를 수행합니다. 새 행과 생성 활동 기록을 중복 추가하지 않습니다. 한 필드라도 다르면 HTTP 409 `Member already exists with different values`이며 기존 행을 덮어쓰지 않습니다. 자동 재시도·새 원천 fallback·마이그레이션은 없습니다.
 - 동시 변경이 다른 요청의 snapshot warmup을 무효화한 경우에도 `cacheSynced=false`를 보존합니다. 오류를 성공으로 숨기거나 반복 갱신하지 않습니다. 요청 유실 뒤에도 동일 생성 요청으로 현재 정본 일치를 확인할 수 있습니다.
@@ -100,14 +92,13 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 - 영속 reply INSERT의 접수 결과 불명(`ErrReplyStagingFailed`)과 Iris 전송 결과 불명은 같은 추가 응답 억제 규칙을 따릅니다. 도움말·달력 이미지 실패의 대체 텍스트나 공통 오류 응답을 추가하지 않고 명령 결과 불명을 보존합니다.
 - Reply 발송은 Iris `202` admission과 `requestId` 저장에서 끝나고 행은 lease 없는 `accepted`가 됩니다. handoff 확인은 bot plane의 reply handoff reconciler가 맡으며 `failed`는 같은 행의 `:r1`/`:r2` 재발급(세대 상한 2, 예산 소진 시 `dead`), `outcome_unknown`·`404`·지평 미확인은 자동 재발송 없는 `manual_review`로 정산합니다. `last_error` 어휘는 `handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, `handoff_unconfirmed`입니다. 발송 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다. Reply outbox attempt `success`는 admission 완료를 뜻하고 handoff 완료 지표는 없으며 reconciler 결과는 로그와 manual review backlog로 관측합니다. 엄격 shape CHECK(migration 332)는 lease 있는 `accepted`를 거부하고, 만료 lease reclaim은 `submitting`만 다룹니다. `bot_reply_outbox_accepted_reclaimed_total`은 삭제했습니다. 확인 간격·전이표·관측·적용 전제·rollback 조건은 [API runbook](../runbooks/hololive-api.md#3-durable-webhook-or-reply-backlog-grows)을 따릅니다.
-- 멤버 조회 backend 오류는 미발견 응답으로 바꾸지 않습니다. 달력 cache miss의 공유 조회는 기존 bot 명령 시간 예산으로 제한하고, 각 대기 요청은 자신의 context 취소에 따라 반환합니다. 달력 항목 스냅샷(`bot:calendar:entries:v1:<YYYY-MM>`, TTL `BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS`)과 렌더한 PNG(`bot:calendar:image:v5:<YYYY-MM>`, 값 앞에 항목 해시, TTL 7일)는 Valkey에 두어 인스턴스와 재시작 사이에서 공유합니다. 같은 달 항목이 바뀌면 PNG 월 key를 덮어쓰고, 차단 사진 대체 이미지처럼 공유하면 안 되는 렌더 결과는 저장하지 않습니다. 이 cache는 정본이 아니므로 Valkey 오류와 손상 값은 miss로 보고 PostgreSQL 조회·렌더로 진행하며 `render_failed`로 세지 않고 `calendar_entry_cache_failed`·`calendar_image_cache_failed` Warn 로그로만 드러냅니다. 호출자 취소·기한 만료로 끝난 cache 연산은 Valkey 장애가 아니므로 이 경고를 남기지 않습니다. 공유 멤버 캐시의 epoch 구독·재조회 작업은 공유 Valkey client와 bot·admin·llm pool을 닫기 전에 종료합니다.
+- 멤버 조회 backend 오류는 미발견 응답으로 바꾸지 않습니다. 달력 cache miss의 공유 조회는 기존 bot 명령 시간 예산으로 제한하고, 각 대기 요청은 자신의 context 취소에 따라 반환합니다. 달력 항목 스냅샷(`bot:calendar:entries:v1:<YYYY-MM>`, TTL `BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS`)과 렌더한 PNG(`bot:calendar:image:v5:<YYYY-MM>`, 값 앞에 항목 해시, TTL 7일)는 Valkey에 두어 인스턴스와 재시작 사이에서 공유합니다. 같은 달 항목이 바뀌면 PNG 월 key를 덮어쓰고, 차단 사진 대체 이미지처럼 공유하면 안 되는 렌더 결과는 저장하지 않습니다. 이 cache는 정본이 아니므로 Valkey 오류와 손상 값은 miss로 보고 PostgreSQL 조회·렌더로 진행하며 `render_failed`로 세지 않고 `calendar_entry_cache_failed`·`calendar_image_cache_failed` Warn 로그로만 드러냅니다. 호출자 취소·기한 만료로 끝난 cache 연산은 Valkey 장애가 아니므로 이 경고를 남기지 않습니다. 공유 멤버 캐시의 epoch 구독·재조회 작업은 공유 Valkey client와 bot·admin pool을 닫기 전에 종료합니다.
 - bot·worker의 공유 방 Catalog는 같은 인스턴스에서 겹친 전체 HTTP 조회와 per-room 저장 순회를 공유합니다. owner의 전체 예산은 기존 `QueryTimeout.Default` 5초이며 initiator/follower는 각자 취소할 수 있습니다. owner가 저장 중 만료돼도 살아 있는 waiter는 이미 확보한 방 정보를 사용합니다. 완료 뒤의 miss는 새 조회가 가능하고 negative cache는 없습니다. DB 조회 오류의 HTTP fallback 금지, 명시적 webhook metadata 우선, unknown의 plain 처리와 동일 metadata의 `Observe` 저장 재시도는 유지합니다.
 
 `DEC-20260926-hololive-source-fallbacks-retirement`(PLN-20260926-stack-audit-refactoring T19)에 따라 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꿨습니다. T18(2026-09-26) 30일 로그에서 아래 경로의 fallback·fail-open 경고는 0건이었습니다.
 
 - Holodex `GetChannelSchedule`은 YouTube·공식 일정으로 보충하거나 그 결과를 캐시하지 않습니다([공식 일정 계약](../contracts/schedule-hololive-tv-api.md)). YouTube scraper로 부분 Channel을 만들던 `GetChannel`은 그 뒤 호출자가 없어 삭제했습니다.
 - 멤버 matcher의 부분 일치 결과는 roster(`MemberDataProvider.LoadAllMembers`로 적재한 멤버 데이터) 이름을 채널명 정본으로 씁니다. Holodex 조회 보강과 그 실패 시 후보명·알림 멤버명 캐시로 채우던 체인은 없습니다. 정확 일치 결과와 같은 이름을 씁니다.
-- major event 주간·월간 요약은 LLM 실패·빈 결과·외부 내용 guard 실패를 이벤트 목록만 보내는 대체 경로로 바꾸지 않습니다. 요약 실패는 스케줄러 오류이며 enqueue도 이벤트 표시도 하지 않습니다. 자동 재시도는 없습니다. 스케줄러는 `Failed to send weekly notification`·`Failed to send monthly notification` error 로그만 남기고 다음 실행을 일주일·한 달 뒤로 잡으며, 다음 실행은 새 주(KST 월–일)·새 달 키로 조회하므로 실패한 주기의 digest는 다시 보내지 않습니다. 복구는 같은 KST 주·달 안에 `./bin/hololive-api --rerun-notification=majorevent-weekly`·`--rerun-notification=majorevent-monthly` 운영 CLI로만 합니다([trigger 계약](../contracts/trigger.md), [hololive-api runbook](../runbooks/hololive-api.md)). LLM이 설정되지 않은 모드(`llm == nil`)만 이벤트 목록을 보냅니다.
 - `/api/holo` rate limit은 fail-closed입니다. rate limit이 켜져 있는데 cache가 없거나 limiter 초기화에 실패하면 admin API가 기동하지 않고, 판정 실패는 503으로 거절하며 `hololive_admin_rate_limit_check_failures_total`로 셉니다. `hololive_admin_rate_limit_fail_open_total`은 삭제했습니다.
 - `domain.MemberDataProvider`는 오류를 돌려주는 `LoadAllMembers` 하나로 전체 멤버를 적재합니다. 공식 일정 식별 색인·멤버 목록 응답·alarm 콜라보 표시명은 멤버 적재 실패를 빈 결과로 바꾸지 않고 오류로 드러냅니다.
 - 알림 멤버 표시명 폴백만 예외 계약으로 남습니다([alarm 계약](../contracts/alarm.md)의 멤버 표시명 예외 계약).
@@ -140,8 +131,8 @@ admin plane PhotoSync는 `PHOTO_SYNC_ENABLED`(admin plane 기본 true)가 켜져
 
 ## Plane별 공유 자원
 
-- `internal/app`의 `buildAPIInfrastructure`가 bot plane 설정으로 Valkey client 1개, `bot` PostgreSQL pool, 멤버 캐시 1개를 만들고(`BuildInfraModule`), admin·llm plane용으로는 PostgreSQL pool(`admin`, `llm_scheduler`)만 따로 만듭니다. admin·llm plane은 Valkey client와 멤버 캐시를 bot 것과 같은 인스턴스로 빌립니다. YouTube plane은 자기 `youtube_plane` pool을 만들고, 공유 Valkey client는 알림 행 commit 뒤 alarm-worker를 깨우는 신호에만 씁니다. 한 프로세스 안에 Valkey client 1개, 멤버 캐시 1개, PostgreSQL pool 4개(`bot`, `admin`, `llm_scheduler`, `youtube_plane`)가 있으며 `TestAPIInfrastructureSharesCacheButSeparatesRuntimePools`가 이 공유와 pool 분리를 검증합니다.
-- plane에 넘긴 공유 자원에는 종료 권한이 없습니다. bot·admin·llm·YouTube plane의 `CloseContext`가 각자 작업을 join하고(YouTube plane은 자기 pool도 닫음) 나면 process 조립이 공유 자원을 한 번 닫습니다. 순서는 공유 Holodex Service 정지 → 멤버 캐시(epoch 작업 정지와 대기) → `llm_scheduler` pool → `admin` pool → `bot` pool → Valkey client이며, 멤버 캐시의 epoch 작업이 Valkey client를 쓰기 때문입니다. bot·admin·llm 가운데 자원 사용 작업이 join되지 않은 plane이 있으면 공유 자원을 닫지 않고 오류를 남깁니다.
+- `internal/app`의 `buildAPIInfrastructure`가 bot plane 설정으로 Valkey client 1개, `bot` PostgreSQL pool, 멤버 캐시 1개를 만들고(`BuildInfraModule`), admin plane용으로는 PostgreSQL pool(`admin`)만 따로 만듭니다. admin plane은 Valkey client와 멤버 캐시를 bot 것과 같은 인스턴스로 빌립니다. YouTube plane은 자기 `youtube_plane` pool을 만들고, 공유 Valkey client는 알림 행 commit 뒤 alarm-worker를 깨우는 신호에만 씁니다. 한 프로세스 안에 Valkey client 1개, 멤버 캐시 1개, PostgreSQL pool 3개(`bot`, `admin`, `youtube_plane`)가 있으며 `TestAPIInfrastructureSharesCacheButSeparatesRuntimePools`가 이 공유와 pool 분리를 검증합니다.
+- plane에 넘긴 공유 자원에는 종료 권한이 없습니다. bot·admin·YouTube plane의 `CloseContext`가 각자 작업을 join하고(YouTube plane은 자기 pool도 닫음) 나면 process 조립이 공유 자원을 한 번 닫습니다. 순서는 공유 Holodex Service 정지 → 멤버 캐시(epoch 작업 정지와 대기) → `admin` pool → `bot` pool → Valkey client이며, 멤버 캐시의 epoch 작업이 Valkey client를 쓰기 때문입니다. bot·admin 가운데 자원 사용 작업이 join되지 않은 plane이 있으면 공유 자원을 닫지 않고 오류를 남깁니다.
 - PostgreSQL pool을 plane별로 나누는 근거(장애 격리와 독립 drain)는 `DEC-20260825-hololive-api-dedicated-plane-pools`가 소유합니다. Valkey client와 멤버 캐시는 `DEC-20260626-hololive-api-three-runtime-consolidation`의 "shared Valkey client 1개" 조항대로 process에 하나만 둡니다. 2026-10-02에 plane별로 나눴던 Valkey client와 멤버 캐시는 v11.0.0(2026-10-19)에서 한 소유자로 다시 합쳤습니다.
 - 멤버 캐시 비용은 시작 때 멤버 적재 1회, epoch 구독 연결 1개, 15초마다 epoch 조회 1회이며, 적재·재조회는 `bot` pool을 씁니다.
 
@@ -162,13 +153,6 @@ admin plane PhotoSync는 `PHOTO_SYNC_ENABLED`(admin plane 기본 true)가 켜져
 - 기준 이후 처음 발견한 영상은 신뢰 가능한 게시 시각이 기준 이후일 때만 알립니다. 과거에 게시됐지만 처음 목록에 나타난 영상은 알리지 않습니다. 게시 근거가 없으면 pending으로 저장하며 후속 증거가 확인되면 한 번 알립니다. 이미 알려진 canonical ID·다른 채널/Shorts에서 먼저 저장된 ID는 자동 backfill하지 않습니다.
 - 새 미래 최초공개는 검증된 예정 시각으로 신규성만 닫고 발견 시 `NEW_VIDEO`를 만들지 않습니다. 같은 관측으로 확정한 live 세션(`is_premiere=true`)의 분 전·시작 알림이 공개 알림을 소유합니다(`contracts/alarm.md`). 기준 목록에 있던 최초공개와 공개 전환도 알리지 않습니다. 부분 목록은 끝까지 COMPLETE 부재 근거와 구분합니다.
 - 요청 상한 안에서 증거를 확보하지 못하거나 목록 범위를 벗어난 영상의 알림 복구를 보장하지 않습니다. 이 정책은 알림 누락을 감수하고 과거 영상의 오알림을 막습니다.
-
-## Major event RSS 저장
-
-- 증분 수집은 현재 feed의 `external_id`를 type별로 조회하며 `IncrementalLimit`(기본 200)은 조회 chunk 크기입니다. 모든 chunk를 처리하고 최신 `pub_date`보다 오래됐다는 이유로 미등록 ID를 제외하지 않습니다.
-- 개별 저장 오류는 `ScrapeResult.FailedEvents`와 반환 오류에 보존합니다. 다른 항목의 성공 commit은 유지하고 기존 scheduler의 실패·예약 retry 계약을 사용하며 새 retry 계층은 없습니다. 다음 수집에도 feed에 남아 있는 누락 ID만 복구할 수 있고, feed에서 사라진 항목을 위한 별도 durable replay는 없습니다.
-- 이미 예약된 retry에서 일부 feed만 실패하면 다른 feed의 성공으로 복구 완료를 단정하지 않고 남은 예약 시각을 그대로 보존합니다. 추가 횟수·재예약·지연·timeout 증가는 없으며 마지막 실패로 예산이 소진되면 종료합니다. 모든 feed가 성공한 retry는 남은 예약을 취소하고, regular 실행의 기존 부분 성공 정책은 유지합니다.
-- 복구된 panic도 예약 source의 `FeedsAttempted`·`FeedsFailed`에 반영합니다. 전체 source 실패와 저장 실패로 반환하는 오류에는 source/stage와 취소·deadline·typed DB 원인을 보존합니다. 건강한 source의 저장은 유지하고 regular 부분 성공은 계속 nil을 반환하므로 새로운 retry를 예약하지 않습니다. 조회 실패를 `FailedEvents`로 세거나 실패한 source의 앞 chunk만 따로 저장하지 않습니다.
 
 ## Collection projection heartbeat와 eligibility
 
@@ -232,15 +216,13 @@ admin plane PhotoSync는 `PHOTO_SYNC_ENABLED`(admin plane 기본 true)가 켜져
 - PostgreSQL and Valkey availability
 - `ALARM_INTERNAL_URL` and API key configuration for the alarm-worker client
 - Internal HTTP/H3 client options (alarm-worker client) are loaded once into `BotPlaneConfig.InternalH3` and `AdminPlaneConfig.InternalH3` and passed explicitly; each plane owns timeout and transport cleanup. Iris URL-file dynamic reload remains on its existing path.
-- CLIPROXY/LLM settings where enabled
 - The process lifecycle uses the same shared-go `bootstrap` and `lifecycle.Run` assembly as youtube-collector and alarm-worker. It is not an operator-selectable mode and does not change ports, routes, config keys, or dependency readiness requirements.
 
 ## Shutdown behavior
 
-- 통합 `Runtime.Run`(shared-go `lifecycle.Run`)이 process signal의 유일한 소유자입니다. 조립은 process 공유 자원(`buildAPIInfrastructure`) → llm → bot → admin → YouTube plane 순서이며, 뒤 plane은 앞에서 만든 in-process 인스턴스를 빌립니다. YouTube plane은 worker profile의 `source_observation` executor가 꺼져 있어도 항상 만들고 시작하며, 이때는 영속 큐 표본 수집만 돌립니다. 시작은 YouTube → llm → admin → bot 순서이고, 종료는 runtime context를 취소한 뒤 bot → admin → llm → YouTube 순서로 drain합니다.
+- 통합 `Runtime.Run`(shared-go `lifecycle.Run`)이 process signal의 유일한 소유자입니다. 조립은 process 공유 자원(`buildAPIInfrastructure`) → bot → admin → YouTube plane 순서이며, 뒤 plane은 앞에서 만든 in-process 인스턴스를 빌립니다. YouTube plane은 worker profile의 `source_observation` executor가 꺼져 있어도 항상 만들고 시작하며, 이때는 영속 큐 표본 수집만 돌립니다. 시작은 YouTube → admin → bot 순서이고, 종료는 runtime context를 취소한 뒤 bot → admin → YouTube 순서로 drain합니다.
 - Stop HTTP/H3 ingress and scheduler workers within one shared 10-second plane-drain budget. Drain plus plane cleanup is a hard 30-second cap: as with the former Fx stop timeout, a plane that ignores cancellation is abandoned at the deadline and the bootstrap `Close` does not re-join unfinished cleanup. Only the telemetry flush (at most 5 seconds) and logger close follow, inside the unit's 45-second `StopTimeout`.
-- Plane `CloseContext` receives the remaining process-stop context. Each plane joins its background tasks before releasing the resources it owns (the YouTube plane also closes its `youtube_plane` pool); bot durable samplers are included. The shared Valkey client, member cache and bot·admin·llm pools are released once afterwards by the process assembly (see "Plane별 공유 자원"). A join timeout preserves live resources and the error; the process then exits without re-joining or starting concurrent cleanup, and cleanup that has not started by the stop deadline is not started.
-- LLM HTTP/H3 (health·ready only) shutdown has one active owner. A caller deadline returns control to the remaining planes; the original shutdown error remains observable. LLM resources are released only after the actual HTTP handlers and scheduler have joined, including metrics/pprof handlers.
+- Plane `CloseContext` receives the remaining process-stop context. Each plane joins its background tasks before releasing the resources it owns (the YouTube plane also closes its `youtube_plane` pool); bot durable samplers are included. The shared Valkey client, member cache and bot·admin pools are released once afterwards by the process assembly (see "Plane별 공유 자원"). A join timeout preserves live resources and the error; the process then exits without re-joining or starting concurrent cleanup, and cleanup that has not started by the stop deadline is not started.
 - YouTube claim release waits for the claim producer to finish registering its returned batch. Registration and fenced release share the existing settlement budget; if registration times out, a later `CloseContext` can finish that release. An attempted release failure is retained without automatic retry, and DB cleanup still waits for all workers to join.
 - Bot readiness cancellation is normal only when its error matches the runtime's actual shutdown cancellation. An independent readiness deadline or a joined operational error remains fatal.
 - A runtime fatal, plane-drain failure, or process-stop timeout remains process-fatal. Cleanup is attempted once and no legacy lifecycle fallback is selected.
@@ -250,9 +232,9 @@ admin plane PhotoSync는 `PHOTO_SYNC_ENABLED`(admin plane 기본 true)가 켜져
 ## Observability
 
 - Logs: `sudo journalctl -u hololive-api.service -f`
-- Health: `https://127.0.0.1:30001/health`, `https://127.0.0.1:30003/health`, `https://127.0.0.1:30006/health` through container `./bin/healthcheck`
-- Ready: `https://127.0.0.1:30003/internal/ready` through container `./bin/healthcheck --api-key-env API_SECRET_KEY`
-- Metrics: bot plane이 `HOLOLIVE_METRICS_ADDR`에 평문 HTTP/1.1 `/metrics` 리스너를 엽니다(값이 비면 열지 않음). admin·llm plane은 metrics 리스너를 두지 않습니다. 운영 주소·인증과 조회 명령은 [API runbook](../runbooks/hololive-api.md#go-runtime-metrics-prometheus)을 따릅니다.
+- Health: `https://127.0.0.1:30001/health`, `https://127.0.0.1:30006/health` through container `./bin/healthcheck`
+- Ready: `https://127.0.0.1:30001/internal/ready` through container `./bin/healthcheck --api-key-env API_SECRET_KEY`
+- Metrics: bot plane이 `HOLOLIVE_METRICS_ADDR`에 평문 HTTP/1.1 `/metrics` 리스너를 엽니다(값이 비면 열지 않음). admin plane은 metrics 리스너를 두지 않습니다. 운영 주소·인증과 조회 명령은 [API runbook](../runbooks/hololive-api.md#go-runtime-metrics-prometheus)을 따릅니다.
 
 ## Related documents
 

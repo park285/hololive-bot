@@ -24,4 +24,4 @@ Valkey is an ephemeral cache, wakeup, index, and fast-path layer. PostgreSQL is 
 - External send failures after `sending` are ambiguous by default and must quarantine in the PG consumer path.
 - `sent`, `dlq`, `quarantined`, and `cancelled` rows must not be reset to `pending` by dedupe conflict handling.
 - Valkey wakeup uses a fixed list token, not Pub/Sub payload delivery. Wakeup loss must not lose a dispatch; PG fallback polling must still claim due rows.
-- The same rule covers the delivery outbox wakeups `notification:delivery:wakeup` and `youtube:delivery:wakeup` (`QUEUE_AND_PUBSUB_CONTRACTS.md`): producers signal only after the PostgreSQL commit and never fail the write on a signal error.
+- The same rule covers the delivery outbox wakeup `youtube:delivery:wakeup` (`QUEUE_AND_PUBSUB_CONTRACTS.md`): producers signal only after the PostgreSQL commit and never fail the write on a signal error.

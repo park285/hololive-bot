@@ -56,28 +56,9 @@ const (
 	TemplateKeyCmdMemberNotFound   TemplateKey = "CMD_MEMBER_NOT_FOUND"
 	TemplateKeyCmdAmbiguousMember  TemplateKey = "CMD_AMBIGUOUS_MEMBER"
 
-	// CMD_MAJOR_EVENT_* : 대형 행사 알림 명령어.
-	TemplateKeyCmdMajorEventWeeklySummary  TemplateKey = "CMD_MAJOR_EVENT_WEEKLY_SUMMARY"
-	TemplateKeyCmdMajorEventMonthlySummary TemplateKey = "CMD_MAJOR_EVENT_MONTHLY_SUMMARY"
-	TemplateKeyCmdMajorEventSubscribed     TemplateKey = "CMD_MAJOR_EVENT_SUBSCRIBED"
-	TemplateKeyCmdMajorEventUnsubscribed   TemplateKey = "CMD_MAJOR_EVENT_UNSUBSCRIBED"
-	TemplateKeyCmdMajorEventAlreadySub     TemplateKey = "CMD_MAJOR_EVENT_ALREADY_SUB"
-	TemplateKeyCmdMajorEventNotSub         TemplateKey = "CMD_MAJOR_EVENT_NOT_SUB"
-	TemplateKeyCmdMajorEventStatus         TemplateKey = "CMD_MAJOR_EVENT_STATUS"
-	TemplateKeyCmdMajorEventUsage          TemplateKey = "CMD_MAJOR_EVENT_USAGE"
-
 	TemplateKeyCelebrationBirthday       TemplateKey = "CELEBRATION_BIRTHDAY"
 	TemplateKeyCelebrationAnniversary    TemplateKey = "CELEBRATION_ANNIVERSARY"
 	TemplateKeyCelebrationBirthdayStream TemplateKey = "CELEBRATION_BIRTHDAY_STREAM"
-
-	// CMD_MEMBER_NEWS_* : 구독 멤버 뉴스.
-	TemplateKeyCmdMemberNewsDigest       TemplateKey = "CMD_MEMBER_NEWS_DIGEST"
-	TemplateKeyCmdMemberNewsNoMembers    TemplateKey = "CMD_MEMBER_NEWS_NO_MEMBERS"
-	TemplateKeyCmdMemberNewsSubscribed   TemplateKey = "CMD_MEMBER_NEWS_SUBSCRIBED"
-	TemplateKeyCmdMemberNewsUnsubscribed TemplateKey = "CMD_MEMBER_NEWS_UNSUBSCRIBED"
-	TemplateKeyCmdMemberNewsAlreadySub   TemplateKey = "CMD_MEMBER_NEWS_ALREADY_SUB"
-	TemplateKeyCmdMemberNewsNotSub       TemplateKey = "CMD_MEMBER_NEWS_NOT_SUB"
-	TemplateKeyCmdMemberNewsStatus       TemplateKey = "CMD_MEMBER_NEWS_STATUS"
 )
 
 // TemplateFormat은 같은 템플릿 키의 방 유형별 본문 변형입니다. 카카오 일반채팅은 RichText 서식을 표시하지 않으므로

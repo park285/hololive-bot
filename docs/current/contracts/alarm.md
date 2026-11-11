@@ -2,11 +2,11 @@
 
 ## Summary
 
-Alarm domain currently has HTTP JSON APIs, the PostgreSQL alarm dispatch outbox, generic notification delivery outbox egress, and the YouTube notification outbox egress path owned by `alarm-worker`.
+Alarm domain currently has HTTP JSON APIs, the PostgreSQL alarm dispatch outbox and the YouTube notification outbox egress path owned by `alarm-worker`.
 
 관리 통계는 인증된 `GET /internal/alarm/count`로 `{"success":true,"data":{"count":3}}`를 받는다. `count`는 `/keys` 목록과 같은 서로 다른 `(room_id, channel_id)` 쌍의 개수이며 host 구독 중복은 한 번만 센다. 누락·null·음수 count는 client가 오류로 거절한다. 이 조회는 멤버 이름 조회와 전체 목록 직렬화를 거치지 않는다. 기존 `/keys`는 관리 목록용으로 유지한다. 새 API를 배포하기 전에 worker의 count route를 먼저 활성화한다.
 
-Generic notification과 YouTube dispatcher는 `PreparedMessageSender`만 받는다. 새 요청은 최종 본문·text/richtext 경로·client request ID를 고정한다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절한다. 일반 SendMessage나 ID만 받는 sender로 내려가지 않는다. 결과 불명 증거는 결합된 확정 실패보다 우선하고 알려진 실패 저장 전이를 만들지 않는다. 2026-10-06 중앙 읽기 전용 확인에서 YouTube 저장 요청 40건은 모두 text였으며 generic outbox는 비어 있었다. 과거 요청 증거가 없는 행의 격리는 유지한다.
+YouTube dispatcher는 `PreparedMessageSender`만 받는다. 새 요청은 최종 본문·text/richtext 경로·client request ID를 고정한다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절한다. 일반 SendMessage나 ID만 받는 sender로 내려가지 않는다. 결과 불명 증거는 결합된 확정 실패보다 우선하고 알려진 실패 저장 전이를 만들지 않는다. 2026-10-06 중앙 읽기 전용 확인에서 YouTube 저장 요청 40건은 모두 text였다. 과거 요청 증거가 없는 행의 격리는 유지한다.
 
 X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한다. 기존 `LIVE` 구독을 사용하되 YouTube stream payload와 섞지 않는다. 이벤트 키는 `x-space:start:<space-id>`, delivery는 기존 방별 키이며 최초 관측 스냅샷을 사용해 제목 변경에 따른 payload 충돌을 막는다. 발송은 기존 텍스트 egress와 receipt·미상 결과 계약을 따른다. [인증·관측·보존 경계](../services/x-spaces.md).
 
@@ -34,7 +34,6 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 - Dispatch outbox consumer: `alarm-worker` (`dispatchoutbox.Consumer`).
 - `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 다음 경로로 직접 읽습니다.
   - YouTube plane: `internal/planes/youtube/runtime/queries/notification_channel_ids.sql`을 projection transaction 안에서 실행합니다. `members` JOIN으로 졸업 멤버를 제외하고 `MaxInputChannelCount+1`로 상한을 둡니다.
-  - llm plane membernews: `get_room_members.sql`이 방별 구독 멤버 이름을 읽습니다.
   - bot/admin plane은 `alarm.http`를 사용합니다. 통합 API의 `internal/config.RuntimeConfig.Validate`와 두 plane의 builder가 빈 `ALARM_INTERNAL_URL`을 거부합니다. URL 미설정 시 in-process service/repository를 주입하는 분기는 없습니다.
   - `Add`/`Remove`/`ClearByRoom`을 함께 노출하는 alarms 저장소 `alarmstore.Repository`는 alarm-worker의 `internal/service/alarm/alarmstore`에 있으므로, Go `internal` 가시성 규칙에 따라 youtube-collector와 hololive-api는 import할 수 없습니다.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery
@@ -70,9 +69,9 @@ Iris를 호출하지 않고 지원하지 않는 route로 거절합니다. 아래
 handoff 확인 대상입니다. Markdown `202`는 `success`, `delivery=queued`, 비어 있지 않은 request ID를 모두 갖춰야 하고,
 텍스트 `202`는 비어 있지 않은 request ID만 요구합니다(아래 참고). admission을 증명하지 못한 `202`는
 `sendoutcome.ErrAdmissionOutcomeUnknown`이며 구조화된 `409 CLIENT_REQUEST_ID_OUTCOME_UNKNOWN`과 같은
-`OutcomeUnknown`입니다. alarm dispatch는 격리하고, YouTube는 결과 불명으로 행을 `SENDING`에 두며, notification은 행을
-`QUARANTINED`로 옮깁니다. handoff 결과(`handoff_completed`, `failed`, `outcome_unknown`, 진행 중)는 아래 세 handoff
-reconciler만 각자의 원장(alarm dispatch send unit, notification delivery 행, YouTube 고정 요청)에서 관측하며, 발송
+`OutcomeUnknown`입니다. alarm dispatch는 격리하고, YouTube는 결과 불명으로 행을 `SENDING`에 둡니다.
+handoff 결과(`handoff_completed`, `failed`, `outcome_unknown`, 진행 중)는 아래 두 handoff
+reconciler만 각자의 원장(alarm dispatch send unit, YouTube 고정 요청)에서 관측하며, 발송
 경로는 handoff 결과를 갖지 않습니다.
 
 Alarm-worker does not send Karing templates
@@ -91,7 +90,7 @@ rows keep the existing quarantine and stale-sweeper contract (T18 2026-09-26: 0 
 
 Text and Markdown admission both retain the 202 Iris request ID. A text 202 needs only a non-empty request ID, the same
 rule as the bot plane text path, because the Iris contract does not define the text 202 `delivery` value; this applies
-to every text send through the shared sender (alarm dispatch, YouTube, notification). A Markdown 202 still needs
+to every text send through the shared sender (alarm dispatch, YouTube). A Markdown 202 still needs
 `success`, `delivery=queued` and a request ID. Anything less is `sendoutcome.ErrAdmissionOutcomeUnknown`. `MarkSent` stores
 the ID on the send unit (`handoff_request_id`) in the same
 statement that moves every member to `sent`, and schedules the first check (`handoff_next_check_at`) min(5s, horizon)
@@ -123,35 +122,6 @@ and the reconciler logs `check closed without transition` at error level with th
 after the soft claim decides again under the token CAS, so it is logged as a warning. Readers of `sent` deliveries
 may see a unit whose handoff is still unconfirmed for up to the horizon.
 
-Notification delivery keeps the same check on its own ledger, `notification_delivery_outbox` (migrations 330 and
-338); it is not merged into alarm dispatch. `MarkSent` stores the 202 Iris request ID in `handoff_request_id` and
-schedules `handoff_next_check_at` min(5s, `notification_delivery` setting `handoff_horizon_ms`) after `sent_at` in the
-statement that moves the row `SENDING → SENT`, on that statement's database clock. An empty request ID applies
-nothing; the row stays `SENDING` for the stale sweep.
-`notification-delivery-handoff-reconciler` runs only when the `notification_delivery` executor is enabled and uses
-the same soft claim, outside-transaction status query, budgets, ladder, and decision as alarm dispatch, with the
-`notification_delivery` setting `handoff_horizon_ms` as the horizon. Each settlement is one statement that locks the
-row and rechecks status `SENT`, the soft-claim token, `handoff_request_id`, and the pinned request generation (owner
-and lease are not part of this fence; a miss is `version_changed`, `request_changed`, or `status_changed` and
-applies nothing). Outcomes:
-
-| Observation | Notification ledger action |
-|---|---|
-| `handoff_completed` | close the check (`handoff_checked_at`); the row stays `SENT` |
-| pending state, or a query error other than 404, before the horizon | next check on the ladder, never after `sent_at` + horizon |
-| `failed` with request generation < 2 and `notification_delivery.max_retries` attempt budget left (same rule as a send failure) | `PENDING`, attempt + 1, `next_attempt_at` = clock + `retry_backoff_ms`, request generation + 1, `sent_at` and handoff columns cleared; the next claim resends the pinned body with the next SDK request ID (`:r1`/`:r2`) |
-| `failed` otherwise | `FAILED`, attempt + 1, pinned request `exhausted=true` so producer rearm does not revive it |
-| outcome unknown, unrecognized, empty or mismatched state, 404, pending at the horizon | `QUARANTINED` |
-
-The ledger has no `last_error_code`; `error` starts with the same handoff code followed by `: ` and the detail
-(`handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, `handoff_unconfirmed`). Room order: a `SENT`
-row whose handoff is unconfirmed (`handoff_request_id` set, `handoff_checked_at` null) holds later rows of the same
-room like a `SENDING` row until its check ends. The migration 330 CHECK makes such a row exactly a row with a
-non-null `handoff_next_check_at`, so the hold cannot be orphaned and the claim predicate tests that column, the same
-predicate as the migration 338 partial index; the horizon bounds the hold. A reissued row re-enters the existing
-`(next_attempt_at, created_at, id)` room order by its new `next_attempt_at`, like a retried send failure; a later row
-of the same room that is already due may therefore go first, so strict creation order is not guaranteed.
-
 YouTube delivery keeps the check on its pinned request, `youtube_notification_send_request` (migrations 336 and
 339), because one Iris request carries every pinned member of a room. `CompleteSent` locks the pinned request before
 its member deliveries (the claim order), requires the request generation and member set to equal the started
@@ -161,7 +131,7 @@ setting `handoff_horizon_ms`) after the owners' `sent_at`, on the transition's d
 an empty request ID applies nothing; the rows stay `SENDING` for the stale sweep.
 `youtube-delivery-handoff-reconciler` runs only when the `youtube_delivery` executor is enabled and uses the same
 soft claim, outside-transaction status query, budgets, ladder, and decision, with that `handoff_horizon_ms` as the
-horizon. Both delivery horizons, like alarm dispatch, must be at least their executor `attempt_timeout` because
+horizon. The delivery horizon, like alarm dispatch, must be at least their executor `attempt_timeout` because
 they share the Iris send queue; production uses 300000. A settlement is one transaction that locks the pinned request, then the parent `youtube_notification_outbox`
 rows of the members' logical groups (ascending id, with the outbox projector's lock statement), then the logical group
 deliveries, then the ledger, and rechecks the soft-claim token, `handoff_request_id`, generation, body hash, pinned
@@ -289,7 +259,7 @@ type AlarmQueueRetryMetadata struct {
 
 Live alarm notifications keep using `Notification` and `ValidateLiveDispatchRoute`.
 YouTube 예정 최초공개는 발견 시 알리지 않는다. hololive-api는 `UPCOMING_PREMIERE` 영상에 `NEW_VIDEO` outbox를 만들지 않으며, 공개 전환 뒤에도 만들지 않는다. 구독자 알림은 live 세션(`youtube_live_sessions.is_premiere=true`)이 일반 방송과 같은 규칙으로 소유한다: upcoming 분 전 알림(`선행공개 N분 전`)과 일정 변경 알림, 그리고 분 전 target을 모두 지난 뒤 발견돼 분 전 알림을 받지 못한 방의 live catchup 시작 알림(`선행공개 시작`)이다. 이 계약은 `DEC-20260830-hololive-premiere-content-owned-notifications`의 `NEW_VIDEO` 소유와 live 후보 제외를 대체한다.
-Major event/member news rows are produced in `notification_delivery_outbox`; `alarm-worker` claims those rows and sends them through Iris/Kakao. YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with `internal/egress/youtubedispatch/format`, sends through Iris/Kakao, and writes per-room delivery state. After committing rows to either table `hololive-api` sends a payload-free Valkey wakeup (`notification:delivery:wakeup`, `youtube:delivery:wakeup`); polling still claims rows without it (`QUEUE_AND_PUBSUB_CONTRACTS.md`).
+YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with `internal/egress/youtubedispatch/format`, sends through Iris/Kakao, and writes per-room delivery state. After committing rows `hololive-api` sends a payload-free Valkey wakeup (`youtube:delivery:wakeup`); polling still claims rows without it (`QUEUE_AND_PUBSUB_CONTRACTS.md`).
 
 Birthday stream notifications use `SourceKind=celebration`, `AlarmType=BIRTHDAY`, and `Celebration.Kind=birthday_stream`. Their recipient contract is the set of rooms whose matching `celebration:birthday:member-{memberID}:{date}` delivery is already `sent`; an audience lookup failure must not widen delivery to other rooms. Re-publishing a known birthday stream event is permitted so a newly eligible room can add its missing delivery through the existing event/delivery dedupe keys. The birthday window for a KST birthday date runs from 21:00 KST on the previous day to 17:00 KST on the following day so that members in time zones behind or ahead of KST keep their local birthday streams. The runner evaluates a date only from KST midnight and keeps evaluating the previous date until that window closes, so a session that started before midnight is announced only while it is still `UPCOMING` or `LIVE` after the greeting is sent. A stream starting on another KST date shows its start as `01/02 15:04`. A session on the birthday member's own channel inside that window becomes a birthday stream only when its NFKC-normalized, lower-cased title contains a birthday keyword (`birthday`, `bday`, `b-day`, `誕生日`, `誕生祭`, `誕生会`, `生誕`, `たんじょうび`, `バースデー`, `バースデイ`, `バースディ`, `생일`, `ulang tahun`, `ultah`); birthday streams without such a keyword are not announced. The per-member, per-day cap of three counts only published events whose stored title passes the same check, and only those events are re-evaluated after a later title change. A published event whose stored title fails the check is never re-sent, even if the current title later passes.
 
@@ -369,7 +339,7 @@ YouTube outbox dispatch의 `MemberNameSource`는 `alarmstore.Repository.GetMembe
 members를 조회하며, Holodex 채널 제목·X 스페이스 설정의 이름은 쓰지 않는다. 조회 오류는 렌더 실패(발송 전 재시도)다.
 X 스페이스 payload(`x_space_starts`, dispatch 원장)는 이름을 담지 않는다.
 
-`alarms.member_name`은 2026-10-05부터 읽거나 쓰지 않는다. 멤버 뉴스 구독 이름도 members에서만 읽는다. 1단계 배포를 확인한 뒤
+`alarms.member_name`은 2026-10-05부터 읽거나 쓰지 않는다. 1단계 배포를 확인한 뒤
 migration 269가 컬럼과 읽지 않는 `misc/alarm_unknown_member` 문구를 지웠다.
 
 알람 목록(`/room/:id/view`)과 관리 목록(`/keys`)의 멤버 이름은 members 정본을 `domain.Member.DisplayName` 순서

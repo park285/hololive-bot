@@ -29,10 +29,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
-const (
-	CommandKeyAlarm            = "alarm"
-	CommandKeyNewsSubscription = "news_subscription"
-)
+const CommandKeyAlarm = "alarm"
 
 func NormalizeCommandKey(cmdType botcommand.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
 	typeStr := stringutil.Normalize(cmdType.String())
@@ -48,20 +45,6 @@ func NormalizeCommandKey(cmdType botcommand.CommandType, params map[string]any) 
 		if _, hasAction := params["action"]; !hasAction {
 			newParams := cloneParamsWithAction(params, "list")
 			return CommandKeyAlarm, newParams
-		}
-	}
-
-	if after, ok := strings.CutPrefix(typeStr, "news_subscription_"); ok {
-		action := after
-		newParams := cloneParamsWithAction(params, action)
-
-		return CommandKeyNewsSubscription, newParams
-	}
-
-	if typeStr == CommandKeyNewsSubscription {
-		if _, hasAction := params["action"]; !hasAction {
-			newParams := cloneParamsWithAction(params, "status")
-			return CommandKeyNewsSubscription, newParams
 		}
 	}
 

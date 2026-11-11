@@ -72,8 +72,6 @@ admin handler 오류는 `acl_mode_changed`(409)를 빼면 status(400, 404, 409, 
 
 ## Related Contract Codes
 
-- `contracts/membernews.md` documents the in-process `ErrNoSubscribedMembers`.
-- `contracts/trigger.md` documents the operator CLI exit codes (exit 2 = `ErrNotificationInProgress`).
 - `contracts/alarm.md` documents current alarm envelope errors.
 
 ## Known Gaps

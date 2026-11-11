@@ -54,7 +54,7 @@ func TestApprovedHelpCardsMatchCatalogMetadata(t *testing.T) {
 		t.Fatalf("approved help cards = %d, want 3", len(approvedHelpCards))
 	}
 
-	wantIDs := []string{"broadcast", "member-alarm-news", "events-more"}
+	wantIDs := []string{"broadcast", "member-alarm", "anniversary-more"}
 	for index, wantID := range wantIDs {
 		card := approvedHelpCards[index]
 		if card.id != wantID || card.asset == "" || card.sha256 == "" {

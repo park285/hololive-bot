@@ -2,7 +2,7 @@
 
 ## Role
 
-`hololive-alarm-worker`는 alarm checker/scheduler, dispatch queue publishing, dispatch queue consumption, generic notification delivery outbox consumption, YouTube outbox egress를 담당합니다.
+`hololive-alarm-worker`는 alarm checker/scheduler, dispatch queue publishing, dispatch queue consumption, YouTube outbox egress를 담당합니다.
 proactive notification egress의 배타성은 별도 lease가 아니라 PostgreSQL row-claim(`FOR UPDATE SKIP LOCKED`) 조율과 중앙 Quadlet 단일 인스턴스 배치(`ContainerName=hololive-alarm-worker`, 고정 host port `127.0.0.1:30007`)가 함께 보장합니다.
 
 ## Normal status
@@ -10,10 +10,9 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | Check | Expected |
 |---|---|
 | Health | `https://127.0.0.1:30007/health` returns success over H3 |
-| Ready | `https://127.0.0.1:30007/ready` returns `status=ready`; authenticated `http://127.0.0.1:30097/diagnostics/workers` reports the exact three-worker registry |
+| Ready | `https://127.0.0.1:30007/ready` returns `status=ready`; authenticated `http://127.0.0.1:30097/diagnostics/workers` reports the exact two-worker registry (`alarm_dispatch`, `youtube_delivery`) |
 | Logs | scheduler/checker loops run without repeated DB/cache errors |
 | Queue | publishes to and consumes due rows from `alarm_dispatch_deliveries`; Valkey wakeup tokens are only a polling optimization |
-| Delivery outbox | consumes `notification_delivery_outbox` rows for major event/member news proactive sends |
 | Egress instance | exactly one `hololive-alarm-worker` container is running; `NOTIFICATION_EGRESS_ROLE=owner` and `NOTIFICATION_SCHEDULER_ROLE=worker` |
 
 ## Dependencies
@@ -30,7 +29,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 |---|---|---|
 | `SERVER_PORT` | HTTP health port | yes |
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
-| `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery`. `alarm_dispatch.quarantine_threshold_ms`가 `lease_ms`보다 작으면 기동에 실패하므로 배포 전에 운영 프로필 값을 확인합니다 | yes |
+| `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `youtube_delivery`. `alarm_dispatch.quarantine_threshold_ms`가 `lease_ms`보다 작으면 기동에 실패하므로 배포 전에 운영 프로필 값을 확인합니다 | yes |
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 카카오 네이티브 Markdown 전송 여부; 기본값 `false`. 명령 응답과 알림에 공통 적용 | no |
 | `BOT_SEE_MORE_FOLD` | worker 렌더에는 쓰지 않음. 공통 설정 로딩이 bool로 검증하므로 잘못된 값이면 worker도 기동 실패; 기본 `true` | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
@@ -52,11 +51,11 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=true` | `richtext` 템플릿 변형을 `SendRichText`로 전달하고 Iris가 본문·네이티브 서식으로 변환 |
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=false` | `plain` 변형, 일반 텍스트 |
 | 방 유형 미확인 | `plain` 변형, 일반 텍스트 |
-| celebration, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
+| celebration, YouTube milestone | 위 방 유형 규칙 적용 |
 
-워커는 두 변형을 모두 렌더하고 발송 요청을 고정할 때(`PrepareMessageRequest`) 방 유형을 한 번 판정해 하나를 고릅니다. 고정한 요청의 본문·route는 재시도와 재시작에서 그대로 재사용합니다. generic notification delivery는 producer가 적재한 `message`(plain)와 `rich_text_message`(richtext)를 쓰며, `rich_text_message`가 없는 행은 발송하지 않고 준비 실패로 기록합니다.
+워커는 두 변형을 모두 렌더하고 발송 요청을 고정할 때(`PrepareMessageRequest`) 방 유형을 한 번 판정해 하나를 고릅니다. 고정한 요청의 본문·route는 재시도와 재시작에서 그대로 재사용합니다.
 
-일반 텍스트는 `kakaoformat.Render`를 거칩니다. 방 resolver는 오픈채팅 여부만 제공합니다. 텍스트·RichText sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·notification·youtube handoff reconciler만 합니다. 저장된 `text`·`richtext` 고정 요청은 저장한 형식 그대로 재생합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절됩니다.
+일반 텍스트는 `kakaoformat.Render`를 거칩니다. 방 resolver는 오픈채팅 여부만 제공합니다. 텍스트·RichText sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·youtube handoff reconciler만 합니다. 저장된 `text`·`richtext` 고정 요청은 저장한 형식 그대로 재생합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절됩니다.
 
 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
@@ -104,7 +103,7 @@ sudo podman exec hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_
 
 ## Outbox 파이프라인 소유
 
-v1 YouTube 알림(`youtube_delivery`, `youtube_notification_delivery`)과 v2 digest(`notification_delivery`, `notification_delivery_outbox`)는 v3 alarm-dispatch ledger로 넘기지 않는 정본 파이프라인이고 각 executor가 direct egress를 소유합니다(`DEC-20260926-hololive-outbox-v3-convergence`). v3 handoff(`off`/`shadow`/`cutover`), 비교 전용 `shadowed` 상태, handoff metric은 삭제했습니다.
+v1 YouTube 알림(`youtube_delivery`, `youtube_notification_delivery`)은 v3 alarm-dispatch ledger로 넘기지 않는 정본 파이프라인이고 executor가 direct egress를 소유합니다(`DEC-20260926-hololive-outbox-v3-convergence`). v3 handoff(`off`/`shadow`/`cutover`), 비교 전용 `shadowed` 상태, handoff metric은 삭제했습니다.
 
 ### YouTube 알람 상태 선점 열 삭제(migration 331)
 
@@ -282,8 +281,8 @@ Rollback:
 ### 4. Iris admission 이후 handoff가 확인되지 않음
 
 Symptoms:
-- Iris `202`로 admission된 alarm dispatch 단위가 `sent`인데 `alarm_dispatch_send_units.handoff_next_check_at`이 지평(`alarm_dispatch` `handoff_horizon_ms`)을 넘겨 남아 있거나, 멤버가 `handoff_*` 코드로 격리·DLQ됩니다. notification·youtube도 같은 확인 대기 열이 남거나 `error`가 `handoff_*`로 시작합니다.
-- `202`가 admission을 증명하지 못한 결과 불명(`iris reply admission outcome unknown`)이 로그에 있고 alarm dispatch는 quarantine되거나, notification이 `QUARANTINED`가 되거나, YouTube delivery가 `SENDING`에 남습니다.
+- Iris `202`로 admission된 alarm dispatch 단위가 `sent`인데 `alarm_dispatch_send_units.handoff_next_check_at`이 지평(`alarm_dispatch` `handoff_horizon_ms`)을 넘겨 남아 있거나, 멤버가 `handoff_*` 코드로 격리·DLQ됩니다. youtube도 같은 확인 대기 열이 남거나 `error`가 `handoff_*`로 시작합니다.
+- `202`가 admission을 증명하지 못한 결과 불명(`iris reply admission outcome unknown`)이 로그에 있고 alarm dispatch는 quarantine되거나 YouTube delivery가 `SENDING`에 남습니다.
 
 Diagnosis:
 - Raw `requestId`를 로그나 응답에 복사하지 않고 bounded alarm-worker/Iris 로그에서 status state와 오류 class만 확인합니다.
@@ -293,8 +292,6 @@ Diagnosis:
 - 확인 결과 코드는 `last_error_code`의 `handoff_failed`(세대·시도 예산 안이면 `:r1`/`:r2` 재발송, 아니면 DLQ), `handoff_outcome_unknown`, `handoff_status_missing`(404), `handoff_unconfirmed`(지평 미확인)입니다. 뒤의 세 코드는 격리이며 재발송하지 않습니다.
 - `alarm dispatch handoff check closed without transition` 오류 로그는 토큰·요청은 맞지만 운영 SQL·관리 조치·retention 삭제로 멤버가 더 이상 모두 `sent`가 아니어서(멤버가 모두 지워진 단위 포함) 확인이 영구히 닫힌 단위입니다. 다시 확인하지 않으므로 로그의 `observed_action`·`reason`(관측한 Iris 결과)과 멤버 상태를 맞춰 보고 수동 처리를 정합니다. `lost its claim or send unit` 경고는 다음 확인이나 다른 정산이 이어받는 소유 상실이고, `settlement exceeded its budget` 경고는 정산 슬롯 대기·연결 획득·문장이 정산 예산 5s를 넘겨 soft claim 뒤 다음 확인이 다시 판정하는 지연이라 조치가 필요 없습니다. 같은 경고가 주기마다 이어지면 DB 지연을 먼저 봅니다.
 - `alarm dispatch handoff check failed` 오류 로그의 오류가 `handoff dlq committed but claim keys not released`를 담으면 DLQ 전이는 기록됐지만 미발송 멤버의 dedup claim 키 해제(정산과 별도인 예산 5s)가 실패한 단위입니다. 확인이 닫혀 다시 해제하지 않으므로 키는 TTL까지 남습니다. Valkey 상태를 먼저 확인합니다.
-- notification delivery의 확인 대기 행은 `notification_delivery_outbox`에서 `status='SENT'`이고 `handoff_request_id`가 있으며 `handoff_checked_at`이 없는 행이고, migration 330 CHECK상 `handoff_next_check_at`이 있는 행과 같습니다. `notification-delivery-handoff-reconciler`가 `handoff_next_check_at`마다 확인하며(첫 확인은 admission 뒤 min(5s, `handoff_horizon_ms`)), 확인이 끝날 때까지 같은 방의 후행 notification은 발송되지 않습니다. 지평(`notification_delivery` `handoff_horizon_ms`)을 넘긴 확인 대기 행이 남아 있으면 reconciler 로그와 Iris 상태 조회 오류를 먼저 확인합니다. 확인 결과 코드는 `last_error_code` 대신 `error`의 앞부분(`handoff_failed: …` 등)에 남습니다. `handoff_failed`는 세대·시도 예산 안이면 `PENDING`으로 돌아가 `:r1`/`:r2`로 재발송되고, 아니면 종료 `FAILED`(producer rearm 대상 아님)입니다. 나머지 세 코드는 `QUARANTINED`이며 재발송하지 않습니다.
-- `notification delivery handoff check lost its claim; not applied` 경고는 soft claim 토큰·요청이 바뀌어 아무것도 적용하지 않은 확인으로, 다음 확인이 다시 판정합니다. `notification delivery handoff settlement exceeded its budget; the next check decides again` 경고도 같습니다. `notification delivery handoff failed; requeued with the next request generation` 경고는 재발급입니다. `notification delivery handoff outcome unknown; quarantined`·`notification delivery handoff failed; reissue budget exhausted` 오류 로그는 행을 `QUARANTINED`·`FAILED`로 끝낸 확인입니다. 확인 대기 행을 수동으로 `handoff_checked_at`만 채우지 않습니다. migration 330 CHECK가 확인 시각과 상태의 조합을 강제합니다.
 - youtube delivery의 확인 대기 요청은 `youtube_notification_send_request`에서 `handoff_request_id`가 있고 `handoff_checked_at`이 없는 행이며, migration 336 CHECK상 `handoff_next_check_at`이 있는 행과 같습니다. `youtube-delivery-handoff-reconciler`가 `handoff_next_check_at`마다 확인합니다(첫 확인은 admission 뒤 min(5s, `youtube_delivery` `handoff_horizon_ms`)). 지평을 넘긴 확인 대기 요청이 남아 있으면 reconciler 로그와 Iris 상태 조회 오류를 먼저 확인합니다. 결과 코드는 멤버 delivery `error`의 앞부분(`handoff_failed: …` 등)에 남습니다. `handoff_failed`는 세대·시도 예산 안이면 논리 그룹의 SENT 행이 `PENDING`으로 돌아가 같은 고정 본문을 `:r1`/`:r2`로 재발송하고, 아니면 `FAILED`입니다. 나머지 세 코드는 `QUARANTINED`(같은 출처의 QUARANTINED 원장)이며 재발송하지 않습니다. 부모 `youtube_notification_outbox` 집계는 같은 정산 트랜잭션에서 바뀌므로 delivery와 따로 어긋나지 않습니다. 부모 `sent_at`은 지우지 않아 FAILED·PENDING 부모에도 처음 SENT 시각이 남습니다. post 단위 tracking·알람 발송 표시는 되돌리지 않으므로, 재발송이 실패로 끝난 post의 표시는 수동으로 판단합니다.
 - `youtube delivery handoff check closed; frozen members changed since admission` 오류 로그는 토큰·요청은 맞지만 멤버 row_version·상태, 논리 그룹(SENDING·QUARANTINED 행, 한도 초과) 또는 원장 출처가 admission 때와 달라 전이 없이 확인을 영구히 닫은 요청입니다. 로그의 `delivery_ids`·`observed_action`·`reason`으로 멤버와 원장을 맞춰 보고 수동 처리를 정합니다. `youtube delivery handoff check lost its claim or logical group changed; not applied`·`settlement exceeded its budget` 경고는 다음 확인이 다시 판정합니다. 앞의 경고 중 오류에 `membership_changed`가 담긴 것은 정산이 부모 outbox를 미리 잠근 뒤 같은 논리 키의 follower·outbox가 들어와 부모 집합이 늘어난 경우로, 아무것도 바꾸지 않고 확인을 열어 두었으므로 soft claim(15s) 뒤 다음 확인이 늘어난 집합으로 정산합니다. `youtube delivery handoff check failed` 오류 로그 중 commit 응답 유실이 아닌 것(부모 outbox 집계 실패 포함)은 정산 트랜잭션 전체가 되돌아가 claim 토큰이 남은 확인이며, soft claim(15s) 뒤 다음 확인이 다시 정산합니다. 같은 요청에서 반복되면 오류 원문의 DB 오류를 먼저 해결합니다. 로그에는 Iris requestId가 남지 않으므로 필요하면 요청의 `handoff_request_id`를 DB에서 읽습니다.
 

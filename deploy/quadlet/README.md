@@ -21,7 +21,7 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 | `valkey-cache.container` | `valkey-cache` | Valkey HA hololive 그룹 노드. 역할은 `/data/valkey.conf`가 소유 |
 | `hololive-db-migrate.container` | `hololive-db-migrate` | one-shot. `[Install]` 없음 |
 | `hololive-alarm-worker.container` | `hololive-alarm-worker` | 알림 dispatcher(단일 인스턴스) |
-| `hololive-api.container` | `hololive-api` | bot/admin/llm plane |
+| `hololive-api.container` | `hololive-api` | bot/admin/YouTube plane |
 | `hololive-youtube-po-c.container` | `hololive-youtube-po-c` | collector c의 격리 PO issuer |
 | `hololive-youtube-collector-c.container` | `hololive-youtube-collector-c` | collector fleet c. network alias `youtube-collector` |
 | `admin-dashboard-ingress.container` | `admin-dashboard-ingress` | host network shortlink ingress |

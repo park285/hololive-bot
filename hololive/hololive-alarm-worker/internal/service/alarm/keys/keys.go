@@ -96,7 +96,7 @@ func normalizedScheduledUnix(t time.Time) int64 {
 	return NormalizeScheduledMinute(t).Unix()
 }
 
-// NormalizeKey 전역 수정 시 멤버 검색/LLM 필터 side effect 발생하므로 분리.
+// NormalizeKey 전역 수정 시 멤버 검색 side effect 발생하므로 분리.
 func normalizeTitleForFingerprint(title string) string {
 	base := stringutil.NormalizeKey(title)
 	if base == "" {

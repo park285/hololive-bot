@@ -6,8 +6,8 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 ## 1. 범위와 SSOT
 
 - 정적 문구의 정본은 DB 카탈로그 `notification_templates`(Go text/template 본문)와 `message_strings`(namespace/key/value)입니다. 방송 이력처럼 기존 formatter가 구조를 조합하는 표면은 해당 formatter가 소유하며 카탈로그와 같은 문자 보호·강조·링크·접기 규칙을 적용합니다.
-- `message_strings`는 bot plane·llm plane·alarm-worker가 기동 때 한 번 적재하고, 코드가 쓰는 타입 있는 key(`messagestrings.Key`)와 동적 조회 namespace를 검증한다. 누락되면 기동에 실패하며, 코드 대체 문구·조회 중 재적재·sentinel 대체 값은 없다. 템플릿 렌더 실패 응답은 `error/command_processing_failed` 문구를 쓰고, 예약 알림은 렌더에 실패하면 발송하지 않는다(`DEC-20260926-hololive-message-strings-startup-validation`). 새 key를 추가하면 `messagestrings` key 목록과 시드 SQL 계약 테스트(format 인자 수 포함)를 함께 갱신한다.
-- 소비 plane은 4곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), llm plane scheduler(`hololive-api/internal/planes/llm/runtime/formatter_llm_scheduler.go`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), alarm-worker YouTube outbox formatter(`hololive-alarm-worker/internal/egress/youtubedispatch/format`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
+- `message_strings`는 bot plane·alarm-worker가 기동 때 한 번 적재하고, 코드가 쓰는 타입 있는 key(`messagestrings.Key`)와 동적 조회 namespace를 검증한다. 누락되면 기동에 실패하며, 코드 대체 문구·조회 중 재적재·sentinel 대체 값은 없다. 템플릿 렌더 실패 응답은 `error/command_processing_failed` 문구를 쓰고, 예약 알림은 렌더에 실패하면 발송하지 않는다(`DEC-20260926-hololive-message-strings-startup-validation`). 새 key를 추가하면 `messagestrings` key 목록과 시드 SQL 계약 테스트(format 인자 수 포함)를 함께 갱신한다.
+- 소비 plane은 3곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), alarm-worker YouTube outbox formatter(`hololive-alarm-worker/internal/egress/youtubedispatch/format`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
 - 템플릿 렌더러(`hololive-shared/pkg/service/template`)는 호출마다 현재 template `row_version`을 확인하고, YouTube outbox `FormatMessages`는 `RenderBatch`로 묶음 전체의 버전을 한 SQL 문장에서 확인한다. 본문·렌더 결과는 각각 64KiB, 실행 예산은 1초·100,000 단계·`{{template}}` 중첩 64단계다. 초과나 호출자 `ctx` 취소는 부분 결과 없이 실패한다. 시간·취소는 action 경계에서 확인하므로 실행 중인 Go 함수·method를 강제 중단하는 sandbox는 아니다.
 - 파생 값은 64KiB와 가장 큰 입력 값의 측정 크기 중 큰 값을 상한으로 삼는다. `printf` padding·인자 재사용·미사용 인자 출력, `dict` 중첩, split/join·치환은 결과 확장량을 할당 전에 검사한다. UTF-8 보정·escape처럼 입력의 상수배로 늘어나는 함수는 실행 직후 크기를 확인한다. 임의 Go method나 애플리케이션이 전달한 대형 데이터 자체의 실행·할당은 이 제한의 격리 대상이 아니다.
 
@@ -29,7 +29,6 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 | ⏰ | 시간·예정 | 시간 정보 행, 방송 예정 푸시 헤더 |
 | 📅 | 일정·달력 | 예정 목록·채널 일정·기념일 달력 헤더 |
 | 👤 | 멤버 | 멤버 목록·프로필 헤더 |
-| 📰 | 뉴스 | 뉴스 다이제스트 헤더 |
 | 📊 | 통계 | 구독자·순위 헤더 |
 | 🔔 | 알림·알람 | 알람 목록 헤더, 일반 알림 푸시 헤더, 상태 ON |
 | 🔕 | 알림 꺼짐 | 상태 OFF |
@@ -54,7 +53,6 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 - 확인된 오픈채팅(room type이 `O`로 시작하거나 room link가 있음)이고 `BOT_MARKDOWN_REPLIES=true`일 때만 `richtext` 변형을 RichText 경로로 보냅니다. 일반채팅·방 유형 미확인·비활성은 `plain` 변형을 `kakaoformat.Render`로 바꿔 텍스트 경로로 보냅니다.
 - 방 유형 판정은 한 곳에서 한 번만 합니다. 알람 워커는 두 변형을 렌더해 `delivery.MessageVariants`로 넘기고 `PrepareMessageRequest`가 하나를 고릅니다. bot plane은 요청 진입 때 `CommandTransport.WithReplyFormat`으로 판정을 ctx에 고정하며, formatter의 변형 선택과 `SendMessage`의 경로 선택이 같은 값을 씁니다. 판정을 고정하지 않은 bot 경로는 formatter와 `SendMessage` 모두 `plain`을 씁니다.
-- llm plane 예약 알림과 YouTube outbox처럼 한 본문을 여러 방에 보내는 경로는 두 변형을 모두 렌더해 저장합니다(`notification_delivery_outbox.payload`의 `message`·`rich_text_message`). 출력 guard는 두 변형을 모두 검사합니다.
 - 요청한 변형 행이 없으면 다른 변형으로 대체하지 않고 `ErrTemplateNotFound`로 실패합니다. 채널 override를 추가할 때는 두 변형을 함께 넣습니다.
 - `plain` 변형은 347 이전 일반 텍스트 본문입니다. 강조 없이 항목을 `N · ` 번호로 구분하고 동적 필드 보호는 아래 규칙을 따릅니다.
 - 두 변형은 같은 줄 구성(머리 문단의 요약 줄, 시간·날짜 위치, 항목 행의 필드 순서)을 가집니다. `plain`은 강조를 빼고 항목 번호 `N · `를 붙이며, 동적 값으로 시작하는 줄 앞에 ZWSP 보호를 둡니다(migration 370). 그 밖의 차이를 두지 않습니다.
@@ -73,7 +71,6 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 - 사용 안내는 글리프 없이 `예) {{.Prefix}}알람 추가 페코라` 형식, 또는 명령 나열. 안내 예시 멤버명은 `페코라`로 고정.
 - 동적 필드는 `displayline` 등 표시 정규화 후 `mdsafe`로 한 번만 보호합니다. `mdsafe`는 `MarkdownLiteral`을 사용하며 문자 뒤에 ZWSP를 끼워 넣던 방식은 사용하지 않습니다. 들여쓰기 코드블록은 첫 공백·탭을 문자 참조로 전달하여 복사 시 원래 문자를 보존합니다.
 - 정규화한 표시값이 비어 있으면 강조 구문을 만들지 않습니다. 복사할 명령은 `mdescape`를 유지하고 명령·URL 전체를 강조하지 않습니다. 일반 텍스트 경로의 강조는 기존 `kakaoformat.Render`의 Unicode/괄호 표현을 따릅니다.
-- LLM 생성·최종 검토·캐시는 평문 데이터입니다. formatter가 표시 전에 한 번 보호하고, 표시값이 비어 있으면 기존 행사 목록을 사용합니다. 완성된 메시지·전체보기 패딩·저장된 요청에 문자 보호를 다시 적용하지 않습니다.
 
 ## 5. org 라벨 정책 — unmarked default
 
@@ -88,8 +85,6 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 | 기능 | canonical | 파서 수용 별칭(참고) |
 |---|---|---|
 | 도움말 | `{{.Prefix}}도움말` | 도움말·도움·help·명령어·commands |
-| 행사 알림 | `{{.Prefix}}행사 켜기 / 끄기 / 상태` | 행사·행사알림·이벤트·이벤트알림 × 켜기/on/구독 등 |
-| 뉴스 알림 | `{{.Prefix}}뉴스알림 켜기 / 끄기 / 상태` | — |
 | 알람 | `{{.Prefix}}알람 추가/제거/목록/초기화 [멤버명]` | — |
 
 ## 7. 시간·숫자 표기
@@ -102,13 +97,11 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 ## 8. '전체보기' 접기(fold) 정책
 
 - `internal/templateview.FoldForSeeMore(text)`는 글자 수 임계 없이 머리 문단(첫 빈 줄 앞, 최대 4줄) 끝에 ZWSP 500개를 붙입니다. 4줄 안에 빈 줄이 없으면 첫 줄만 남깁니다. 빈 본문·한 줄 본문·이미 패딩된 본문은 그대로 유지합니다.
-- `BOT_SEE_MORE_FOLD`는 bot·llm plane의 기능별 접기 스위치입니다. 기본 `true`이며 `false`이면 프로그램이 자동 패딩을 넣지 않습니다. 카카오톡 자체의 긴 메시지 접기는 제어하지 않습니다.
+- `BOT_SEE_MORE_FOLD`는 bot plane의 기능별 접기 스위치입니다. 기본 `true`이며 `false`이면 프로그램이 자동 패딩을 넣지 않습니다. 카카오톡 자체의 긴 메시지 접기는 제어하지 않습니다.
 - 라이브·예정 방송·채널 일정·방송 이력·알람 목록·멤버 목록·캘린더 텍스트는 표시 결과 0건이면 안내문, 1건이면 펼침, 2건 이상이면 접습니다. 멤버 지정 조회에도 동일하게 적용합니다. 멤버 목록은 정규화 후 유효 멤버 수, 캘린더는 nil 멤버를 제외한 표시 건수를 셉니다. 표시 한도·필터 안내는 별도 항목으로 세지 않습니다.
 - 방송시간은 머리 문단(기간·방송 시간 합계·횟수)이 요약이므로 1건이어도 접고, 방송 목록은 전체보기 뒤에 둡니다.
-- 뉴스 직접 조회와 예약 뉴스는 공통 `templateview.BuildMemberNewsDigest`를 사용합니다. 표시 블록은 `TopItems` 수와 `MoreSummary`가 있으면 한 블록을 합친 값이며, 1블록은 펼침·2블록 이상은 접습니다. `TotalCount`는 접기 기준이 아닙니다. 정상 빈 뉴스는 템플릿 안내문을 펼쳐 보냅니다.
-- 주간·월간 행사 요약은 LLM formatter가 소유합니다. 원본 행사 1건은 펼침·2건 이상은 접으며, 빈 행사는 기존 미발송 계약을 유지합니다. LLM 요약이 있으면 행사 목록을 함께 반복하지 않습니다. 예약 뉴스·행사의 렌더 오류와 빈/공백 본문은 enqueue하지 않습니다.
 - 프로필과 전체 도움말 텍스트는 유효 본문이 있으면 길이와 무관하게 접습니다. 도움말·캘린더 이미지 성공 시 기존 이미지 발송을 유지하며, 텍스트 대체 경로에만 이 정책을 적용합니다.
-- 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 패딩을 넣지 않습니다. 구독 상태·추가/삭제 결과·후보 선택·사용법·오류·졸업 안내도 펼칩니다. `행사 목록`은 구독 상태 안내입니다.
+- 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 패딩을 넣지 않습니다. 추가/삭제 결과·후보 선택·사용법·오류·졸업 안내도 펼칩니다.
 - 머리 문단의 개수·기간·표시 한도·일부 결과 안내와 펼친 화면의 가시 문자·URL·순서를 보존합니다. 일반 방의 `kakaoformat.Render`도 연속 ZWSP 패딩을 보존합니다.
 - 사용자 template/채널 override에 직접 넣은 패딩은 제거하거나 중복 삽입하지 않습니다. 저장된 요청의 본문·route·ID와 예약 `PreRenderedMessage`는 다시 렌더하지 않습니다. 새 정책은 새로 렌더하는 메시지에 적용합니다. 실제 카카오톡 화면은 별도 승인된 테스트 방 수신으로 확인합니다.
 
@@ -135,8 +128,6 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 | 키 패밀리 | 키 수 | 소비자 |
 |---|---:|---|
 | 일반 `CMD_*` | 15 | bot plane |
-| `CMD_MAJOR_EVENT_*` | 8 | bot·llm plane |
-| `CMD_MEMBER_NEWS_*` | 7 | bot·llm plane |
 | `OUTBOX_*` | 6 | 알람 워커 YouTube formatter |
 | `ALARM_DISPATCH_*` | 2 | 알람 워커 |
 | `CELEBRATION_*` | 3 | 알람 워커 |

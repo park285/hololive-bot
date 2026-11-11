@@ -41,17 +41,7 @@ var (
 	CalendarUnknown          = key(NamespaceCalendar, "unknown", 0)
 )
 
-// 멤버 뉴스 알림 응답.
-var (
-	NotifyMemberNewsNoMembers         = key(NamespaceNotify, "member_news_no_members", 0)
-	NotifyMemberNewsSubscribed        = key(NamespaceNotify, "member_news_subscribed", 0)
-	NotifyMemberNewsAlreadySubscribed = key(NamespaceNotify, "member_news_already_subscribed", 0)
-	NotifyMemberNewsUnsubscribed      = key(NamespaceNotify, "member_news_unsubscribed", 0)
-	NotifyMemberNewsNotSubscribed     = key(NamespaceNotify, "member_news_not_subscribed", 0)
-	NotifyMemberNewsStatusOn          = key(NamespaceNotify, "member_news_status_on", 0)
-	NotifyMemberNewsStatusOff         = key(NamespaceNotify, "member_news_status_off", 0)
-	NotifyGraduatedMemberWarning      = key(NamespaceNotify, "graduated_member_warning", 0)
-)
+var NotifyGraduatedMemberWarning = key(NamespaceNotify, "graduated_member_warning", 0)
 
 // AlarmTypeAll은 모든 알람 종류를 뜻하는 표시값이다. 개별 종류는 domain.AlarmType 문자열로 동적 조회한다.
 var AlarmTypeAll = key(NamespaceAlarmType, "ALL", 0)
@@ -70,11 +60,7 @@ func CalendarKeys() []Key {
 }
 
 func NotifyKeys() []Key {
-	return []Key{
-		NotifyMemberNewsNoMembers, NotifyMemberNewsSubscribed, NotifyMemberNewsAlreadySubscribed,
-		NotifyMemberNewsUnsubscribed, NotifyMemberNewsNotSubscribed, NotifyMemberNewsStatusOn,
-		NotifyMemberNewsStatusOff, NotifyGraduatedMemberWarning,
-	}
+	return []Key{NotifyGraduatedMemberWarning}
 }
 
 // AlarmWorkerEgressRequirements는 alarm-worker가 기동 시 확인하는 알람·YouTube 발송 문구 계약이다.

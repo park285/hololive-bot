@@ -9,7 +9,6 @@ const (
 	RuntimeBot              = "bot"
 	RuntimeAlarmWorker      = "alarm-worker"
 	RuntimeAdminAPI         = "admin-api"
-	RuntimeLLMScheduler     = "llm-scheduler"
 	RuntimeYouTubeCollector = "youtube-collector"
 
 	NotificationEgressRoleEnv       = "NOTIFICATION_EGRESS_ROLE"

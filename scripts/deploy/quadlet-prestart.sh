@@ -195,8 +195,7 @@ case "$target" in
     hololive-api)
         validate_env_file_syntax "$compose_env"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS \
-            HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME \
-            CLIPROXY_BASE_URL
+            HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME
         validate_container_env_file "${secrets_dir}/bot.env"
         wait_for_tailnet_address HOLOLIVE_API_PORT_BIND_IP
         wait_for_tailnet_address HOLOLIVE_ADMIN_API_PORT_BIND_IP
@@ -208,8 +207,6 @@ case "$target" in
         write_secret_env hololive-api \
             'APP_VERSION=APP_VERSION_VALUE!' \
             'POSTGRES_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
-            'CLIPROXY_API_KEY=CLIPROXY_API_KEY' \
-            'GEMINI_API_KEY=GEMINI_API_KEY' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-youtube-collector-c)
