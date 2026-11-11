@@ -44,7 +44,8 @@ if [[ "$mode" == deploy ]]; then
   podman build --platform linux/arm64 --format docker \
     --tag "$collector_image" \
     --file "$root/hololive/hololive-youtube-collector/Dockerfile" \
-    --build-arg "REVISION=$revision" --build-arg "VERSION=$version" "$root"
+    --build-arg "REVISION=$revision" --label "org.opencontainers.image.revision=$revision" \
+    --build-arg "VERSION=$version" "$root"
   [[ "$(podman image inspect -f '{{.Os}}/{{.Architecture}}' "$collector_image")" == linux/arm64 ]]
   [[ "$(podman image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$collector_image")" == "$revision" ]]
   collector_id="$(podman create "$collector_image")"

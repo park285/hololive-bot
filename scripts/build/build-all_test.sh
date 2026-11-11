@@ -23,7 +23,7 @@ git -C "$repo" add -A
 git -C "$repo" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm fixture
 head="$(git -C "$repo" rev-parse HEAD)"
 
-# build는 --build-arg REVISION 값(또는 FAKE_LABEL)을 tag의 label로 저장하고 image inspect가 돌려준다.
+# build는 --label의 revision 값(또는 FAKE_LABEL)을 tag의 label로 저장하고 image inspect가 돌려준다.
 cat > "$fakebin/podman" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -34,7 +34,8 @@ case "$1" in
     while (($#)); do
       case "$1" in
         --tag) tag="$2"; shift ;;
-        --build-arg) [[ "$2" != REVISION=* ]] || revision="${2#REVISION=}"; shift ;;
+        --label) [[ "$2" != org.opencontainers.image.revision=* ]] || revision="${2#*=}"; shift ;;
+        --build-arg) shift ;;
       esac
       shift
     done

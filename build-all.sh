@@ -193,7 +193,8 @@ build_service() {
     local image="${IMAGE_BY_SERVICE[$service]}"
     # HEALTHCHECK 등 docker 형식 메타데이터를 보존하고 docker-archive 저장 전후 config digest(identity)가 같도록
     # docker 형식으로 만든다.
-    local -a args=(build "${platform_args[@]}" --format docker --tag "${image}" --build-arg "REVISION=${REVISION}")
+    local -a args=(build "${platform_args[@]}" --format docker --tag "${image}"
+        --build-arg "REVISION=${REVISION}" --label "org.opencontainers.image.revision=${REVISION}")
 
     if [[ -n "${DOCKERFILE_BY_SERVICE[$service]:-}" ]]; then
         local version="${HOLO_API_VERSION}"
