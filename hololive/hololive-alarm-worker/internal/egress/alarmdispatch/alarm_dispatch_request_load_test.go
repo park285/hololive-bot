@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type loadCountingConsumer struct {
@@ -16,7 +15,7 @@ type loadCountingConsumer struct {
 	loads int
 }
 
-func (c *loadCountingConsumer) LoadSendRequest(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
+func (c *loadCountingConsumer) LoadSendRequest(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
 	c.loads++
 
 	return c.alarmDispatchRunnerTestConsumer.LoadSendRequest(ctx, envelopes)
@@ -36,7 +35,7 @@ func TestAlarmDispatchRunnerLoadsRequestOnlyWhenClaimDidNotSeeItUnpinned(t *test
 
 			envelope.RequestUnpinned = item.unpinned
 
-			consumer := &loadCountingConsumer{alarmDispatchRunnerTestConsumer: &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}}
+			consumer := &loadCountingConsumer{alarmDispatchRunnerTestConsumer: &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{envelope}}}}
 			sender := &alarmDispatchRunnerTestSender{}
 			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 

@@ -37,6 +37,8 @@ import (
 const (
 	AlarmDispatchWakeupQueue    = "alarm:dispatch:wakeup"
 	alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
+	// 신호는 outbox 적재 뒤 부가 작업이므로 Valkey 지연이 발행 루프를 오래 붙잡지 않게 한다. 이 상한은 shared wakeup.Signaler와 같다.
+	alarmDispatchWakeupSignalTimeout = 500 * time.Millisecond
 )
 
 type PublishConfig struct {
@@ -87,15 +89,6 @@ func NewPublisher(c WakeupCache, outbox dispatchoutbox.Writer, config PublishCon
 	}, nil
 }
 
-func (p *Publisher) Publish(ctx context.Context, notification *domain.AlarmNotification, claimKeys []string) (dispatchoutbox.PublishBatchResult, error) {
-	out, err := p.PublishBatch(ctx, []*domain.AlarmNotification{notification}, [][]string{claimKeys})
-	if err != nil {
-		return out, fmt.Errorf("publish batch: %w", err)
-	}
-
-	return out, nil
-}
-
 func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.AlarmNotification, claimKeys [][]string) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
 
@@ -103,7 +96,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 		return dispatchoutbox.PublishBatchResult{}, nil
 	}
 
-	if len(claimKeys) > 0 && len(claimKeys) != len(notifications) {
+	if len(claimKeys) != len(notifications) {
 		return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("publish alarm queue batch: claim key count %d does not match notification count %d", len(claimKeys), len(notifications))
 	}
 
@@ -126,7 +119,8 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 	return result, nil
 }
 
-func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+// PublishDispatchBatch는 envelope을 pending delivery로 저장한다.
+func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
 
 	if len(envelopes) == 0 {
@@ -151,7 +145,7 @@ func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain
 	return result, nil
 }
 
-func (p *Publisher) prepareDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) error {
+func (p *Publisher) prepareDispatchEnvelopes(envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	for i := range envelopes {
 		if err := envelopes[i].ValidateCanonicalDispatch(); err != nil {
 			return fmt.Errorf("publish alarm dispatch batch: validate envelope %d: %w", i, err)
@@ -174,8 +168,8 @@ func (p *Publisher) prepareDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelo
 func (p *Publisher) buildPublishBatchEnvelopes(
 	notifications []*domain.AlarmNotification,
 	claimKeys [][]string,
-) ([]domain.AlarmQueueEnvelope, error) {
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(notifications))
+) ([]dispatchoutbox.AlarmQueueEnvelope, error) {
+	envelopes := make([]dispatchoutbox.AlarmQueueEnvelope, 0, len(notifications))
 	for i, notification := range notifications {
 		envelope, err := p.buildPublishBatchEnvelope(i, notification, claimKeys)
 		if err != nil {
@@ -192,17 +186,13 @@ func (p *Publisher) buildPublishBatchEnvelope(
 	index int,
 	notification *domain.AlarmNotification,
 	claimKeys [][]string,
-) (domain.AlarmQueueEnvelope, error) {
+) (dispatchoutbox.AlarmQueueEnvelope, error) {
 	if notification == nil {
-		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: notification %d is nil", index)
+		return dispatchoutbox.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: notification %d is nil", index)
 	}
 
 	if err := notification.ValidateLiveDispatchRoute(); err != nil {
-		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: validate live dispatch route: %w", err)
-	}
-
-	if len(claimKeys) == 0 {
-		return p.buildEnvelope(notification, nil), nil
+		return dispatchoutbox.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: validate live dispatch route: %w", err)
 	}
 
 	return p.buildEnvelope(notification, claimKeys[index]), nil
@@ -210,7 +200,7 @@ func (p *Publisher) buildPublishBatchEnvelope(
 
 func (p *Publisher) publishEnvelopes(
 	ctx context.Context,
-	envelopes []domain.AlarmQueueEnvelope,
+	envelopes []dispatchoutbox.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
 	result, err := p.insertOutboxChunks(ctx, envelopes)
 
@@ -227,7 +217,7 @@ func (p *Publisher) publishEnvelopes(
 	return result, nil
 }
 
-func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	var total dispatchoutbox.PublishBatchResult
 
 	limit := p.publishConfig.MaxDeliveriesPerBatch
@@ -261,8 +251,8 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 	return total, nil
 }
 
-func (p *Publisher) buildEnvelope(notification *domain.AlarmNotification, claimKeys []string) domain.AlarmQueueEnvelope {
-	return domain.AlarmQueueEnvelope{
+func (p *Publisher) buildEnvelope(notification *domain.AlarmNotification, claimKeys []string) dispatchoutbox.AlarmQueueEnvelope {
+	return dispatchoutbox.AlarmQueueEnvelope{
 		Notification: *notification,
 		ClaimKeys:    claimKeys,
 		EnqueuedAt:   p.now().UTC().Format(time.RFC3339),
@@ -270,10 +260,15 @@ func (p *Publisher) buildEnvelope(notification *domain.AlarmNotification, claimK
 	}
 }
 
+// publishWakeup은 outbox 적재가 끝난 뒤에만 부른다. 호출자 취소와 분리해 짧은 상한 안에서 보내고, 실패는 metric과
+// Warn으로만 드러내며 적재 결과를 바꾸지 않는다.
 func (p *Publisher) publishWakeup(ctx context.Context) {
 	if p.cache == nil {
 		return
 	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), alarmDispatchWakeupSignalTimeout)
+	defer cancel()
 
 	acquired, err := p.cache.SetNX(ctx, alarmDispatchWakeupGuardKey, "1", 3*time.Second)
 	if err != nil {

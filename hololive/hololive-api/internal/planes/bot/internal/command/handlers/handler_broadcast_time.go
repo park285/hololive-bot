@@ -59,7 +59,7 @@ func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.C
 		return fmt.Errorf("find member: %w", err)
 	}
 
-	days := normalizeBroadcastHistoryDays(intBroadcastHistoryParam(params, paramDays, defaultBroadcastTimeDays))
+	days := normalizeBroadcastHistoryDays(intParam(params, paramDays, defaultBroadcastTimeDays))
 	now := time.Now()
 
 	result, err := c.Deps().BroadcastHistory.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{

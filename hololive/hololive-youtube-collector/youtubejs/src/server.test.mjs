@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
-  listenUnix,
-} from "./server.mjs";
+} from "./rpc-boundary.mjs";
+import { listenUnix } from "./server.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 
 const channelIDMessagePattern = /channel_id/;
@@ -58,7 +60,7 @@ test("handleCommunityRequest returns pagination metadata from the injected fetch
 
 test("handleCommunityRequest reports an ordinary upstream failure without a success result", async () => {
   const result = await handleCommunityRequest(
-    rpcBody({ channel_id: "UC_FAIL" }),
+    rpcBody({ channel_id: "UC_FAIL", max_results: 10, max_pages: 1 }),
     async () => {
       throw new Error("innertube down");
     },
@@ -81,7 +83,7 @@ test("handleChannelRequest reports the typed parser response error class", async
 
 test("handleCommunityRequest does not infer an internal defect from a custom error name", async () => {
   const result = await handleCommunityRequest(
-    rpcBody({ channel_id: "UC_TEST" }),
+    rpcBody({ channel_id: "UC_TEST", max_results: 10, max_pages: 1 }),
     async () => {
       const error = new Error("custom failure");
       error.name = "invalid custom name";
@@ -98,9 +100,40 @@ test("handleCommunityRequest rejects invalid JSON", async () => {
 });
 
 test("handleCommunityRequest rejects coercible non-string ids", async () => {
-  const result = await handleCommunityRequest(rpcBody({ channel_id: { toString: "UC_FAKE" } }), async () => ({}));
+  const result = await handleCommunityRequest(rpcBody({ channel_id: { toString: "UC_FAKE" }, max_results: 10, max_pages: 1 }), async () => ({}));
   assert.equal(result.status, 400);
   assert.match(result.body.error.message, channelIDMessagePattern);
+});
+
+test("collection requests reject untrimmed or oversized channel ids instead of normalizing them", async () => {
+  const unreachable = async () => { throw new Error("invalid request reached fetcher"); };
+  for (const channelId of [" UC_TEST", "UC_TEST\n", "U".repeat(257)]) {
+    for (const [handle, fields] of [
+      [handleCommunityRequest, { max_results: 10, max_pages: 1 }],
+      [handleContentRequest, { kind: "videos", max_results: 10, max_pages: 1 }],
+      [handleChannelRequest, { kind: "metadata" }],
+    ]) {
+      const result = await handle(rpcBody({ channel_id: channelId, ...fields }), unreachable);
+      assert.equal(result.status, 400, `${handle.name} ${JSON.stringify(channelId)}`);
+      assert.equal(result.body.error.code, "invalid_request");
+      assert.match(result.body.error.message, channelIDMessagePattern);
+    }
+  }
+});
+
+test("list RPCs require page limits and the channel RPC rejects the page limit it never applies", async () => {
+  const unreachable = async () => { throw new Error("invalid request reached fetcher"); };
+  for (const [handle, fields] of [
+    [handleCommunityRequest, { channel_id: "UC_TEST", max_pages: 1 }],
+    [handleCommunityRequest, { channel_id: "UC_TEST", max_results: 10 }],
+    [handleContentRequest, { channel_id: "UC_TEST", kind: "videos", max_pages: 1 }],
+    [handleContentRequest, { channel_id: "UC_TEST", kind: "videos", max_results: 10 }],
+    [handleChannelRequest, { channel_id: "UC_TEST", kind: "metadata", max_pages: 1 }],
+  ]) {
+    const result = await handle(rpcBody(fields), unreachable);
+    assert.equal(result.status, 400, `${handle.name} ${JSON.stringify(fields)}`);
+    assert.equal(result.body.error.code, "invalid_request");
+  }
 });
 
 test("handleContentRequest requires kind", async () => {
@@ -114,11 +147,11 @@ test("handleContentRequest passes the upcoming flag and rejects the retired prem
     items, page_count: 1, exhausted: true, continuity: "CONTIGUOUS", termination_reason: "exhausted",
   });
   const item = { video_id: "v", channel_id: "UC_TEST", title: "T" };
-  const ok = await handleContentRequest(rpcBody({ channel_id: "UC_TEST", kind: "videos" }), page([{ ...item, is_upcoming: true }]));
+  const ok = await handleContentRequest(rpcBody({ channel_id: "UC_TEST", kind: "videos", max_results: 10, max_pages: 1 }), page([{ ...item, is_upcoming: true }]));
   assert.equal(ok.status, 200);
   assert.deepEqual(ok.body.items, [{ ...item, is_upcoming: true }]);
   for (const leaked of [{ ...item, is_premiere: true }, { ...item, is_upcoming: false }]) {
-    const result = await handleContentRequest(rpcBody({ channel_id: "UC_TEST", kind: "videos" }), page([leaked]));
+    const result = await handleContentRequest(rpcBody({ channel_id: "UC_TEST", kind: "videos", max_results: 10, max_pages: 1 }), page([leaked]));
     assert.equal(result.status, 422);
     assert.equal(result.body.error.code, "parser_drift");
   }
@@ -273,10 +306,10 @@ test("RPC-012 client disconnect aborts only the matching request context", async
       headers: { "content-type": "application/json" },
     });
     hangClient.on("error", () => {});
-    hangClient.write(rpcBody({ channel_id: "UC_HANG" }));
+    hangClient.write(rpcBody({ channel_id: "UC_HANG", max_results: 10, max_pages: 1 }));
     hangClient.end();
     await hangReady;
-    const peer = request(http, helper.socketPath, "POST", "/v1/community", rpcBody({ channel_id: "UC_PEER" }));
+    const peer = request(http, helper.socketPath, "POST", "/v1/community", rpcBody({ channel_id: "UC_PEER", max_results: 10, max_pages: 1 }));
     await new Promise((resolve) => setTimeout(resolve, 10));
     hangClient.destroy();
     const peerResult = await peer;
@@ -285,6 +318,45 @@ test("RPC-012 client disconnect aborts only the matching request context", async
     assert.equal(peerSignal?.aborted, false);
   } finally {
     await helper.close();
+  }
+});
+
+for (const [name, args, message] of [
+  ["missing socket", ["--protocol-version", "1", "--request-read-timeout-ms", "30000"], "--socket is required"],
+  ["missing protocol version", ["--socket", "{socket}", "--request-read-timeout-ms", "30000"], "--protocol-version must be a positive integer"],
+  ["missing request read timeout", ["--socket", "{socket}", "--protocol-version", "1"], "--request-read-timeout-ms must be a positive integer"],
+  ["non-numeric request read timeout", ["--socket", "{socket}", "--protocol-version", "1", "--request-read-timeout-ms", "abc"], "--request-read-timeout-ms must be a positive integer"],
+  ["zero request read timeout", ["--socket", "{socket}", "--protocol-version", "1", "--request-read-timeout-ms", "0"], "--request-read-timeout-ms must be a positive integer"],
+  ["negative request read timeout", ["--socket", "{socket}", "--protocol-version", "1", "--request-read-timeout-ms", "-1"], "--request-read-timeout-ms must be a positive integer"],
+  ["fractional request read timeout", ["--socket", "{socket}", "--protocol-version", "1", "--request-read-timeout-ms", "1.5"], "--request-read-timeout-ms must be a positive integer"],
+]) {
+  test(`helper process exits 1 on ${name}`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "youtubejs-args-"));
+    try {
+      const socketPath = join(dir, "helper.sock");
+      // 쓸 수 있는 socket 경로를 주어, 인자를 대체값으로 받아 기동하면 listen 실패가 아니라 timeout 종료로 드러나게 합니다.
+      const result = spawnSync(
+        process.execPath,
+        [fileURLToPath(new URL("./server.mjs", import.meta.url)), ...args.map((arg) => arg === "{socket}" ? socketPath : arg)],
+        { encoding: "utf8", timeout: 10_000 },
+      );
+      assert.equal(result.status, 1);
+      assert.equal(result.stderr, `${message}\n`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test("listenUnix rejects a missing request read timeout before listening", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "youtubejs-helper-"));
+  try {
+    await assert.rejects(
+      listenUnix(join(dir, "helper.sock"), { fetchers: {} }),
+      { message: "requestReadTimeoutMs must be a positive integer" },
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });
 
@@ -303,7 +375,7 @@ async function startHelper(fetchers = {}) {
   /** @type {import("node:http").Server} */
   let server;
   try {
-    server = await listenUnix(socketPath, { fetchers });
+    server = await listenUnix(socketPath, { requestReadTimeoutMs: 30_000, fetchers });
   } catch (error) {
     await rm(dir, { recursive: true, force: true });
     throw error;

@@ -104,10 +104,13 @@ func TestLoadLLMProviderConfigGeminiExplicit(t *testing.T) {
 	}
 }
 
+// 기본값과 소문자화는 적재 단계에서만 적용하므로 검증은 빈 이름이나 정규화 전 이름을 cliproxy로 바꾸지 않는다.
 func TestValidateLLMProviderRejectsInvalidSelection(t *testing.T) {
-	err := validateLLMProvider(LLMProviderConfig{Name: "unknown"})
-	if err == nil || !strings.Contains(err.Error(), "LLM_PROVIDER") {
-		t.Fatalf("validateLLMProvider() error = %v, want LLM_PROVIDER error", err)
+	for _, name := range []string{"unknown", "", " Gemini "} {
+		err := validateLLMProvider(LLMProviderConfig{Name: name})
+		if err == nil || !strings.Contains(err.Error(), "LLM_PROVIDER") {
+			t.Fatalf("validateLLMProvider(%q) error = %v, want LLM_PROVIDER error", name, err)
+		}
 	}
 }
 

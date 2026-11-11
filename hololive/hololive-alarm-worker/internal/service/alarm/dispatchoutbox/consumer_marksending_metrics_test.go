@@ -13,14 +13,13 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // 전역 등록 counter를 교체하거나 병렬 실행하지 않아 전체 suite에서도 delta를 격리합니다.
 func TestConsumerMarkSendingRegisteredCounterWithPGFence(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)
-	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("metric-room", "metric")}})
+	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{receiptEnvelope("metric-room", "metric")}})
 	require.NoError(t, err)
 
 	consumer := mustNewConsumer(t, repository, nil, nil, WithWorkerID("metric-owner"))
@@ -38,7 +37,7 @@ func TestConsumerMarkSendingRegisteredCounterWithPGFence(t *testing.T) {
 
 	before := consumerRegisteredMarkSendingFailures(t)
 	require.NoError(t, consumer.MarkSending(t.Context(), nil))
-	require.NoError(t, consumer.MarkSending(t.Context(), []domain.AlarmQueueEnvelope{}))
+	require.NoError(t, consumer.MarkSending(t.Context(), []AlarmQueueEnvelope{}))
 	require.Zero(t, counting.calls)
 	require.InDelta(t, before, consumerRegisteredMarkSendingFailures(t), 0)
 
@@ -70,7 +69,7 @@ func TestConsumerMarkSendingRegisteredCounterPreservesErrorChains(t *testing.T) 
 			repository := &consumerBeginSendingMetricRepository{Repository: &consumerTestRepository{}, failure: fmt.Errorf("database operation: %w", cause)}
 			consumer := mustNewConsumer(t, repository, nil, nil, WithWorkerID("metric-owner"))
 			before := consumerRegisteredMarkSendingFailures(t)
-			err := consumer.MarkSending(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 1}, {DispatchOutboxID: 2}})
+			err := consumer.MarkSending(t.Context(), []AlarmQueueEnvelope{{DispatchOutboxID: 1}, {DispatchOutboxID: 2}})
 			require.ErrorIs(t, err, cause)
 
 			if pgCause, ok := errors.AsType[*pgconn.PgError](cause); ok {

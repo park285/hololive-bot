@@ -13,7 +13,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -30,7 +29,7 @@ func (f *fakeCollector) Collect(context.Context, sessions.Cookies, []string) ([]
 
 type ledgerPublisher struct{ repo *dispatchoutbox.PgxRepository }
 
-func (p ledgerPublisher) PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+func (p ledgerPublisher) PublishDispatchBatch(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	for i := range envelopes {
 		envelopes[i].Version = 1
 	}
@@ -166,9 +165,7 @@ func verifyRunnerReconnection(t *testing.T, store *sessions.Store, collector *fa
 }
 
 func TestConfigDisabledAndInvalidTargets(t *testing.T) {
-	t.Setenv("X_SPACES_CONFIG_FILE", "")
-
-	config, err := LoadConfig()
+	config, err := LoadConfig("")
 	require.ErrorIs(t, err, ErrDisabled)
 	require.Nil(t, config)
 

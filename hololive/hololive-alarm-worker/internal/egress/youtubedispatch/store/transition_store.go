@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
@@ -33,9 +34,8 @@ type TransitionStore struct {
 	afterCommit func(operation string) error
 }
 
-func NewTransitionStore(db any, logger *slog.Logger, config TransitionConfig) (*TransitionStore, error) {
-	deliveryDB := AsDeliveryDB(db)
-	if deliveryDB == nil {
+func NewTransitionStore(db deliverysql.DeliveryDB, logger *slog.Logger, config TransitionConfig) (*TransitionStore, error) {
+	if db == nil || reflectutil.IsNil(db) {
 		return nil, errors.New("new transition store: db is nil")
 	}
 
@@ -67,7 +67,7 @@ func NewTransitionStore(db any, logger *slog.Logger, config TransitionConfig) (*
 		return nil, errors.New("new transition store: logical group limit must be positive")
 	}
 
-	return &TransitionStore{db: deliveryDB, logger: logger, config: config}, nil
+	return &TransitionStore{db: db, logger: logger, config: config}, nil
 }
 
 // ClaimPending은 claim 가능한 PENDING 행을 이 인스턴스 소유로 잠그며, lease 만료·due·신선도 판정과 새 locked_at을
@@ -148,40 +148,62 @@ func (s *TransitionStore) resolveClaimedGroups(
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: requested keys: %w", err)
 	}
 
+	claimFence := func(rows []transitionRow) error {
+		return checkClaimFence(operation, claimed, rows)
+	}
+
+	resolved, err := s.resolveLogicalGroups(ctx, db, requested, deliveryIDSet(claimed), claimFence)
+	if err != nil {
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: %w", err)
+	}
+
+	return resolved, nil
+}
+
+// resolveLogicalGroups는 요청 키의 논리 그룹 행을 같은 트랜잭션에서 잠가 다시 읽고 ledger와 함께 해석한다. 이번 claim
+// batch 행(currentIDs)은 InCurrentBatch로 표시하고 정체성이 깨졌으면 오류로 보며, 다른 행의 깨진 정체성은 그룹 밖으로
+// 건너뛴다. 잠근 행 전체는 키별 한도 확인 뒤, ledger 조회 전에 checkLocked로 검사하며 claim이 없는 경로는 nil을 넘긴다.
+func (s *TransitionStore) resolveLogicalGroups(
+	ctx context.Context,
+	db dbx.Querier,
+	requested []requestedLogicalGroup,
+	currentIDs map[int64]struct{},
+	checkLocked func(rows []transitionRow) error,
+) (resolvedLogicalGroups, error) {
 	rows, err := s.loadLogicalGroupRows(ctx, db, requested)
 	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: load rows: %w", err)
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve logical groups: load rows: %w", err)
 	}
 
 	if !s.logicalGroupWindowComplete(len(requested), len(rows)) {
-		return resolvedLogicalGroups{}, errors.New("resolve claimed groups: logical group window is incomplete")
+		return resolvedLogicalGroups{}, errors.New("resolve logical groups: logical group window is incomplete")
 	}
 
-	currentIDs := deliveryIDSet(claimed)
 	requestedKeys, requestedSet := requestedLogicalKeys(requested)
 
 	// 조회 창의 완전성을 확인한 뒤 키별 행 한도를 검사한다. 다른 키의 별칭 후보가 창을 채운 경우도 앞에서 거부한다.
-	rowsByID, snapshots, err := s.claimedResolutionSnapshots(rows, currentIDs, requestedSet)
+	rowsByID, snapshots, err := s.resolutionSnapshots(rows, currentIDs, requestedSet)
 	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: build snapshots: %w", err)
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve logical groups: build snapshots: %w", err)
 	}
 
-	if fenceErr := checkClaimFence(operation, claimed, rows); fenceErr != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: claim fence: %w", fenceErr)
+	if checkLocked != nil {
+		if lockedErr := checkLocked(rows); lockedErr != nil {
+			return resolvedLogicalGroups{}, fmt.Errorf("resolve logical groups: check locked rows: %w", lockedErr)
+		}
 	}
 
 	ledgerByKey, evidence, err := loadTransitionLedger(ctx, db, requestedKeys)
 	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: load ledger: %w", err)
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve logical groups: load ledger: %w", err)
 	}
 
 	resolver, err := preparation.NewResolver(preparation.ResolverConfig{
 		LogicalGroupScanLimit: s.config.LogicalGroupLimit,
 		LockTimeout:           s.config.LockTimeout,
-		RequireTerminalLedger: true,
 	})
 	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: resolver: %w", err)
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve logical groups: create resolver: %w", err)
 	}
 
 	return resolvedLogicalGroups{
@@ -209,7 +231,7 @@ func requestedLogicalKeys(
 	return keys, keySet
 }
 
-func (s *TransitionStore) claimedResolutionSnapshots(
+func (s *TransitionStore) resolutionSnapshots(
 	rows []transitionRow,
 	currentIDs map[int64]struct{},
 	requestedSet map[ytcontentid.LogicalKey]struct{},
@@ -219,9 +241,9 @@ func (s *TransitionStore) claimedResolutionSnapshots(
 	countsByKey := make(map[ytcontentid.LogicalKey]int, len(requestedSet))
 
 	for i := range rows {
-		key, snapshot, include, err := claimedResolutionSnapshot(rows[i], currentIDs, requestedSet)
+		key, snapshot, include, err := resolutionSnapshot(rows[i], currentIDs, requestedSet)
 		if err != nil {
-			return nil, nil, fmt.Errorf("resolve claimed groups: row snapshot: %w", err)
+			return nil, nil, fmt.Errorf("build resolution snapshots: row snapshot: %w", err)
 		}
 
 		if !include {
@@ -230,7 +252,7 @@ func (s *TransitionStore) claimedResolutionSnapshots(
 
 		countsByKey[key]++
 		if countsByKey[key] > s.config.LogicalGroupLimit {
-			return nil, nil, fmt.Errorf("resolve claimed groups: logical group %s exceeds limit %d", key.Hash(), s.config.LogicalGroupLimit)
+			return nil, nil, fmt.Errorf("build resolution snapshots: logical group %s exceeds limit %d", key.Hash(), s.config.LogicalGroupLimit)
 		}
 
 		rowsByID[rows[i].ID] = rows[i]
@@ -241,7 +263,7 @@ func (s *TransitionStore) claimedResolutionSnapshots(
 	return rowsByID, snapshots, nil
 }
 
-func claimedResolutionSnapshot(
+func resolutionSnapshot(
 	row transitionRow,
 	currentIDs map[int64]struct{},
 	requestedSet map[ytcontentid.LogicalKey]struct{},
@@ -251,7 +273,7 @@ func claimedResolutionSnapshot(
 
 	if err != nil {
 		if current {
-			return ytcontentid.LogicalKey{}, preparation.DeliverySnapshot{}, false, fmt.Errorf("resolve claimed groups: current row identity: %w", err)
+			return ytcontentid.LogicalKey{}, preparation.DeliverySnapshot{}, false, fmt.Errorf("build resolution snapshot: current row identity: %w", err)
 		}
 
 		return ytcontentid.LogicalKey{}, preparation.DeliverySnapshot{}, false, nil

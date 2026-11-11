@@ -17,30 +17,28 @@ type CacheWarmSummary struct {
 	ChannelCount int
 }
 
+// subscriberCacheWarmSource는 rebuild가 읽는 정본 구독 스냅샷이다. *Repository가 구현한다.
 type subscriberCacheWarmSource interface {
 	LoadAll(ctx context.Context) ([]*domain.Alarm, error)
-	GetAllMemberNames(ctx context.Context) (map[string]string, error)
 }
 
 const cacheScanBatchSize int64 = 100
 
-// 방 목록·방 이름·사용자 이름은 PG가 원천이라 subscriber cache에 두지 않는다.
+// subscriberCacheStaticKeys는 rebuild가 지우고 다시 채우는 고정 이름 key다. 방 목록·방 이름·사용자 이름·멤버
+// 표시명은 PG가 원천이라 subscriber cache에 두지 않는다.
 var subscriberCacheStaticKeys = []string{
 	alarmkeys.AlarmChannelRegistryKey,
 	alarmkeys.AlarmSubscriberCacheEmptyKey,
-	alarmkeys.MemberNameKey,
 }
 
 var subscriberCacheKeyPatterns = []string{
 	alarmkeys.ChannelSubscribersKeyPrefix + "*",
-	alarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
 }
 
 // SubscriberCacheStore는 subscriber cache 전체 rebuild가 요구하는 작업이다. 이름공간 SCAN·삭제(ScanKeyPages·DelMany),
-// 빈 상태 marker(Set·Del), 멤버 이름 hash(HMSet), 구독 set pipeline(B·DoMulti)을 쓴다.
+// 빈 상태 marker(Set·Del), 구독 set pipeline(B·DoMulti)을 쓴다.
 type SubscriberCacheStore interface {
 	cache.KeyValueCache
-	cache.HashWriter
 	cache.LowLevelCache
 }
 
@@ -86,13 +84,6 @@ func loadSubscriberCacheWarmData(ctx context.Context, source subscriberCacheWarm
 	}
 
 	warmData.summary = warmData.finish()
-
-	memberNames, err := source.GetAllMemberNames(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("rebuild subscriber cache from repository: load member names: %w", err)
-	}
-
-	warmData.memberNames = memberNames
 
 	return warmData, nil
 }
@@ -175,10 +166,6 @@ func normalizedWarmAlarmIdentity(alarmRecord *domain.Alarm) (normalizedRoomID, n
 func writeSubscriberCacheWarmData(ctx context.Context, cacheClient SubscriberCacheStore, data *subscriberCacheWarmData) error {
 	if err := writeSubscriberCacheSets(ctx, cacheClient, data); err != nil {
 		return fmt.Errorf("write subscriber cache sets: %w", err)
-	}
-
-	if err := writeWarmHash(ctx, cacheClient, alarmkeys.MemberNameKey, data.memberNames); err != nil {
-		return fmt.Errorf("warm subscriber cache from alarms: cache member names: %w", err)
 	}
 
 	if err := markSubscriberCacheEmptyState(ctx, cacheClient, data.summary.AlarmCount == 0); err != nil {

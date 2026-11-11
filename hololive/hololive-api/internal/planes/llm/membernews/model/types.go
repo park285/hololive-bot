@@ -21,15 +21,11 @@
 package model
 
 import (
-	"context"
 	"errors"
-	"time"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 var ErrNoSubscribedMembers = errors.New("no subscribed members")
@@ -40,51 +36,6 @@ const (
 	PeriodWeekly  Period = "weekly"
 	PeriodMonthly Period = "monthly"
 )
-
-type SourceTier string
-
-const (
-	SourceTierOfficial  SourceTier = "official"
-	SourceTierMedia     SourceTier = "media"
-	SourceTierCommunity SourceTier = "community"
-)
-
-type SourceURLValidator interface {
-	ValidateSourceURL(rawURL string) (SourceTier, string, error)
-	HasCorroboration(text string) bool
-}
-
-type Category string
-
-const (
-	CategoryBirthdayLive Category = "birthday_live"
-	CategorySoloLive     Category = "solo_live"
-	CategoryCollab       Category = "collab"
-	CategoryEvent        Category = "event"
-	CategoryGoods        Category = "goods"
-	CategoryOther        Category = "other"
-)
-
-type Candidate struct {
-	ID             int
-	Type           domain.MajorEventType
-	Title          string
-	Description    string
-	Members        []string
-	PubDate        *time.Time
-	EventStartDate *time.Time
-	SourceURL      string
-}
-
-type FilteredCandidate struct {
-	Candidate      Candidate
-	EffectiveDate  time.Time
-	MatchedMembers []string
-	MemberText     string
-	Category       Category
-	SourceTier     SourceTier
-	SourceURL      string
-}
 
 type SummaryItem struct {
 	Member    string `json:"member"`
@@ -105,40 +56,6 @@ type Digest struct {
 	TotalCount   int                           `json:"total_count"`
 }
 
-type SummarizeInput struct {
-	Period      Period
-	Now         time.Time
-	RoomID      string
-	RoomMembers []string
-	Candidates  []FilteredCandidate
-}
-
-type SubscribedRoom struct {
-	ID        int
-	RoomID    string
-	RoomName  string
-	CreatedAt time.Time
-}
-
-type Summarizer interface {
-	Summarize(ctx context.Context, input *SummarizeInput) (*Digest, error)
-}
-
-// DigestFormatter의 렌더 실패는 오류다. 호출자는 실패한 방을 enqueue하지 않고 실패로 센다.
-type DigestFormatter interface {
-	FormatMemberNewsDigest(ctx context.Context, digest *Digest) (delivery.MessageVariants, error)
-}
-
-type DigestGenerator interface {
-	GenerateRoomDigest(ctx context.Context, roomID string, period Period) (*Digest, error)
-}
-
-type DigestService interface {
-	DigestGenerator
-	ListSubscribedRooms(ctx context.Context) ([]SubscribedRoom, error)
-	PrepareDigestRun(ctx context.Context, period Period, now time.Time) (DigestGenerator, error)
-}
-
 func NormalizePeriod(period Period) Period {
 	normalized := stringutil.Normalize(string(period))
 	switch normalized {
@@ -146,16 +63,5 @@ func NormalizePeriod(period Period) Period {
 		return PeriodMonthly
 	default:
 		return PeriodWeekly
-	}
-}
-
-func DefaultHeadline(period Period) string {
-	switch NormalizePeriod(period) {
-	case PeriodMonthly:
-		return "📅 이번달 구독 멤버 뉴스"
-	case PeriodWeekly:
-		return "🗞️ 이번주 구독 멤버 뉴스"
-	default:
-		return "🗞️ 이번주 구독 멤버 뉴스"
 	}
 }

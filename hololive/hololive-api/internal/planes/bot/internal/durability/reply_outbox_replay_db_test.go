@@ -187,7 +187,7 @@ func assertReplayHorizonSendsAmbiguousRowToManualReview(
 	_, err = pool.Exec(ctx, `UPDATE bot_reply_outbox
 		SET first_attempt_at = clock_timestamp() - ($2::bigint * INTERVAL '1 millisecond'),
 		    available_at = clock_timestamp()
-		WHERE id = $1`, claim.ID, int64(ReplyOutboxAutomaticReplayHorizon/time.Millisecond))
+		WHERE id = $1`, claim.ID, repo.automaticReplayHorizon.Milliseconds())
 	require.NoError(t, err)
 
 	resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
@@ -242,13 +242,13 @@ func assertFinalCrashedAttemptIsNotRequeued(
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
 	_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET attempts = $2 - 1 WHERE client_request_id = $1`,
-		entry.ClientRequestID, ReplyOutboxMaxAttempts)
+		entry.ClientRequestID, repo.maxAttempts)
 	require.NoError(t, err)
 
 	claim, err := repo.Claim(ctx, "token-final", time.Millisecond)
 	require.NoError(t, err)
 	require.NotNil(t, claim)
-	assert.Equal(t, ReplyOutboxMaxAttempts, claim.Attempts)
+	assert.Equal(t, repo.maxAttempts, claim.Attempts)
 	time.Sleep(20 * time.Millisecond)
 
 	reclaim, err := repo.ReclaimExpired(ctx, 100)

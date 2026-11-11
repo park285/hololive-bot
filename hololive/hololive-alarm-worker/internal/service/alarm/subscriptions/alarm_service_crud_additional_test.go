@@ -88,7 +88,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, added)
 
-	roomAlarms, err := as.GetRoomAlarms(ctx, testRoomID)
+	roomAlarms, err := roomChannelIDs(ctx, as, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{testChannelID}, roomAlarms)
 
@@ -100,7 +100,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, removed)
 
-	roomAlarms, err = as.GetRoomAlarms(ctx, testRoomID)
+	roomAlarms, err = roomChannelIDs(ctx, as, testRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, roomAlarms)
 }
@@ -139,7 +139,7 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 
-	alarms, err := as.GetRoomAlarms(ctx, testRoomID)
+	alarms, err := roomChannelIDs(ctx, as, testRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, alarms)
 

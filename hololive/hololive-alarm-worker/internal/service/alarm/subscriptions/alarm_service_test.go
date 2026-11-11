@@ -51,44 +51,13 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, added)
 
-	subscribers, err := as.GetChannelSubscribersByType(ctx, testUCChannelID, domain.AlarmTypeLive)
+	subscribers, err := channelSubscriberRooms(ctx, as, testUCChannelID, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	assert.Equal(t, []string{testAltRoomID}, subscribers)
 
 	channelReg, err := as.cache.SMembers(ctx, alarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.Contains(t, channelReg, testUCChannelID)
-
-	name, err := as.cache.HGet(ctx, alarmkeys.MemberNameKey, testUCChannelID)
-	require.NoError(t, err)
-	assert.Empty(t, name)
-}
-
-func TestAddAlarm_CacheWriteUsesShortKoreanMemberName(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-
-	as.memberData = &mockMemberDataProvider{members: []*domain.Member{{
-		ChannelID:       testUCChannelID,
-		Name:            "Juufuutei Raden",
-		NameKo:          "주후테이 라덴",
-		ShortKoreanName: "라덴",
-	}}}
-
-	added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
-		RoomID:    testAltRoomID,
-		UserID:    "user1",
-		ChannelID: testUCChannelID,
-		RoomName:  "테스트 방",
-		UserName:  "테스트 사용자",
-	})
-	require.NoError(t, err)
-	require.True(t, added)
-
-	name, err := as.cache.HGet(t.Context(), alarmkeys.MemberNameKey, testUCChannelID)
-	require.NoError(t, err)
-	assert.Equal(t, "라덴", name)
 }
 
 func TestAddAlarm_ClearsEmptySubscriberCacheMarker(t *testing.T) {
@@ -157,11 +126,11 @@ func TestRemoveAlarm_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, removed)
 
-	channels, err := as.GetRoomAlarms(ctx, testAltRoomID)
+	channels, err := roomChannelIDs(ctx, as, testAltRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, channels)
 
-	subscribers, err := as.GetChannelSubscribersByType(ctx, testUCChannelID, domain.AlarmTypeLive)
+	subscribers, err := channelSubscriberRooms(ctx, as, testUCChannelID, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	assert.Empty(t, subscribers)
 }
@@ -180,7 +149,7 @@ func TestRemoveAlarm_NotFound(t *testing.T) {
 	assert.False(t, removed)
 }
 
-func TestGetRoomAlarms_WithAlarms(t *testing.T) {
+func TestGetRoomAlarmsWithTypes_WithAlarms(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
@@ -197,20 +166,20 @@ func TestGetRoomAlarms_WithAlarms(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	channels, err := as.GetRoomAlarms(ctx, testAltRoomID)
+	alarms, err := as.GetRoomAlarmsWithTypes(ctx, testAltRoomID)
 	require.NoError(t, err)
-	assert.Len(t, channels, 3)
+	assert.Len(t, alarms, 3)
 }
 
-func TestGetRoomAlarms_EmptyRoom(t *testing.T) {
+func TestGetRoomAlarmsWithTypes_EmptyRoom(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
 	ctx := t.Context()
 
-	channels, err := as.GetRoomAlarms(ctx, "room_empty")
+	alarms, err := as.GetRoomAlarmsWithTypes(ctx, "room_empty")
 	require.NoError(t, err)
-	assert.Empty(t, channels)
+	assert.Empty(t, alarms)
 }
 
 func TestClearRoomAlarms_ClearsAll(t *testing.T) {
@@ -234,11 +203,11 @@ func TestClearRoomAlarms_ClearsAll(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, cleared)
 
-	channels, err := as.GetRoomAlarms(ctx, testAltRoomID)
+	channels, err := roomChannelIDs(ctx, as, testAltRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, channels)
 
-	subscribers, err := as.GetChannelSubscribersByType(ctx, "UC_A", domain.AlarmTypeLive)
+	subscribers, err := channelSubscriberRooms(ctx, as, "UC_A", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	assert.Empty(t, subscribers)
 }
@@ -276,20 +245,6 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 
 	got := as.GetTargetMinutes()
 	assert.Equal(t, result.TargetMinutes, got)
-}
-
-func TestCacheMemberName_RoundTrip(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	err := as.CacheMemberName(ctx, testUCChannelID, "페코라")
-	require.NoError(t, err)
-
-	name, err := as.GetMemberName(ctx, testUCChannelID)
-	require.NoError(t, err)
-	assert.Equal(t, "페코라", name)
 }
 
 func TestGetAllAlarmKeys(t *testing.T) {

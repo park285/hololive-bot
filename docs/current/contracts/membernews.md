@@ -62,11 +62,11 @@ bot은 provider와 같은 `model.Digest`를 받으므로 `ResultType`(`primary`,
 
 - Timeout: bot 명령 실행 시한(worker profile `bot_webhook_inbox` executor `attempt_timeout`)을 그대로 따릅니다. 별도 client 시한은 없습니다.
 - Retry: 자동 재시도는 없습니다.
-- Idempotency: subscription operations are expected to be safe at service level; exact DB idempotency 검토 필요.
+- Idempotency: 구독(`queries/subscribe.sql`)은 `ON CONFLICT (room_id) DO UPDATE`라 반복해도 방마다 행이 하나이며, 비어 있지 않은 새 방 이름만 기존 이름을 덮어씁니다. 해지(`queries/unsubscribe.sql`)는 `room_id` 행 `DELETE`라 반복해도 결과가 같고, 없는 방을 해지해도 오류가 아닙니다.
 
 ## Compatibility policy
 
-- 이전의 llm plane `/internal/membernews/*` HTTP 경로와 `internal/contracts/membernews` DTO는 삭제했습니다. 값 타입은 `planes/llm/membernews/model` 하나입니다.
+- 이전의 llm plane `/internal/membernews/*` HTTP 경로와 `internal/contracts/membernews` DTO는 삭제했습니다. 값 타입은 `planes/llm/membernews/model` 하나이며 Provider에 적은 이름만 담습니다. 후보·출처 등급·요약 입력·구독 방 목록·요약기와 formatter 인터페이스 같은 llm plane 내부 타입은 `internal/planes/llm/internal/service/membernews/newsmodel`에 있고 이 계약에 속하지 않습니다.
 - 값 타입을 바꾸면 컴파일이 bot·llm·templateview 소비자를 함께 드러냅니다.
 
 ## Tests

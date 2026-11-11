@@ -89,13 +89,13 @@ func runStagedUpcomingCandidateCheck(
 	provider, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cacheClient, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cacheClient, provider, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, []int{5}, logger), []int{5}, 0, newPgYouTubeLiveSessionSource(pool, PgYouTubeLiveSessionSourceOptions{}), pool, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cacheClient, provider, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, logger), 0, &PgYouTubeLiveSessionSource{pool: pool}, pool, logger)
 	require.NoError(t, err)
 
 	_, err = cacheClient.SAdd(ctx, alarmkeys.AlarmChannelRegistryKey, []string{stream.ChannelID})
 	require.NoError(t, err)
 
-	recovered, err := checker.Check(ctx)
+	recovered, err := checker.Check(ctx, testTargetPolicy(5))
 	require.NoError(t, err)
 
 	var outcome string

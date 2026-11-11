@@ -48,10 +48,17 @@ func TestConsumerRejectsPayloadBeforeReleasingClaims(t *testing.T) {
 	for _, fixture := range []struct {
 		name   string
 		record Record
+		events map[int64]EventRecord
 	}{
-		{name: "invalid JSON", record: Record{Payload: []byte("{")}},
-		{name: "invalid delivery context", record: Record{Payload: []byte(minimalEnvelopePayload), DeliveryContext: []byte("{")}},
+		{name: "invalid JSON", record: Record{EventID: 1}, events: map[int64]EventRecord{1: {ID: 1, Payload: []byte("{")}}},
+		{
+			name:   "invalid delivery context",
+			record: Record{EventID: 1, DeliveryContext: []byte("{")},
+			events: map[int64]EventRecord{1: {ID: 1, Payload: []byte(minimalEnvelopePayload)}},
+		},
 		{name: "missing event", record: Record{EventID: 1}},
+		// event_id가 없는 행은 스키마(NOT NULL)상 생기지 않지만, 생겨도 event 누락과 같이 DLQ로 격리한다.
+		{name: "no event id", record: Record{}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			t.Parallel()
@@ -60,14 +67,14 @@ func TestConsumerRejectsPayloadBeforeReleasingClaims(t *testing.T) {
 				t.Run(failure, func(t *testing.T) {
 					t.Parallel()
 
-					checkPayloadCleanup(t, fixture.record, failure)
+					checkPayloadCleanup(t, fixture.record, fixture.events, failure)
 				})
 			}
 		})
 	}
 }
 
-func checkPayloadCleanup(t *testing.T, record Record, failure string) {
+func checkPayloadCleanup(t *testing.T, record Record, events map[int64]EventRecord, failure string) {
 	t.Helper()
 
 	record.ID = 7
@@ -77,6 +84,7 @@ func checkPayloadCleanup(t *testing.T, record Record, failure string) {
 		claimDueFunc: func(context.Context, string, int, time.Duration) ([]*Record, error) {
 			return []*Record{&record}, nil
 		},
+		events: events,
 	}}
 	wantOperations := []string{"dlq", "release"}
 
@@ -111,11 +119,12 @@ func checkPayloadCleanup(t *testing.T, record Record, failure string) {
 func TestConsumerAcceptsPayloadWithoutReleasingClaims(t *testing.T) {
 	t.Parallel()
 
-	record := &Record{ID: 9, Payload: []byte(minimalEnvelopePayload), ClaimKeys: []string{"notified:claim:room-2:stream-1:100:live"}}
+	record := &Record{ID: 9, EventID: 3, ClaimKeys: []string{"notified:claim:room-2:stream-1:100:live"}}
 	recorder := &payloadCleanupRecorder{consumerTestRepository: &consumerTestRepository{
 		claimDueFunc: func(context.Context, string, int, time.Duration) ([]*Record, error) {
 			return []*Record{record}, nil
 		},
+		events: map[int64]EventRecord{3: {ID: 3, Payload: []byte(minimalEnvelopePayload)}},
 	}}
 	consumer := mustNewConsumer(t, recorder, recorder, slog.New(slog.DiscardHandler))
 	envelopes, err := consumer.DrainBatch(t.Context(), 1)

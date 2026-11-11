@@ -9,7 +9,7 @@ import (
 )
 
 func TestSocketReadinessWaitsForListenAfterBind(t *testing.T) {
-	socketPath := filepath.Join(t.TempDir(), "helper.sock")
+	socketPath := filepath.Join(shortRuntimeBase(t), "helper.sock")
 
 	fd, socketErr := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
 	if socketErr != nil {

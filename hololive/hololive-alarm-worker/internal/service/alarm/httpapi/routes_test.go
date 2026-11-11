@@ -47,9 +47,13 @@ func TestNewInternalRouteRegistrarAppliesAPIKeyAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestNewInternalRouteRegistrarSkipsWhenRouterOrAlarmCRUDMissing(t *testing.T) {
-	require.NoError(t, NewInternalRouteRegistrar("secret", nil, slog.New(slog.DiscardHandler))(gin.New()))
-	require.NoError(t, NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))(nil))
+// router나 alarm service가 없으면 route 없이 기동하지 않도록 registrar가 router 생성을 실패시킨다.
+func TestNewInternalRouteRegistrarFailsWhenRouterOrAlarmServiceMissing(t *testing.T) {
+	router := gin.New()
+
+	require.ErrorContains(t, NewInternalRouteRegistrar("secret", nil, slog.New(slog.DiscardHandler))(router), "alarm service is nil")
+	assert.Empty(t, router.Routes())
+	require.ErrorContains(t, NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))(nil), "router is nil")
 }
 
 func routeKeys(routes gin.RoutesInfo) []string {

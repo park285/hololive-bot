@@ -274,12 +274,26 @@ func TestDeadLetterDegradationOutlivesProjectionRefresh(t *testing.T) {
 	}
 }
 
-func TestBoundedErrorPreservesUTF8(t *testing.T) {
+func TestBoundedError(t *testing.T) {
 	t.Parallel()
 
-	// 3바이트 문자 683개는 2049바이트라 2048바이트 상한이 문자 중간에 걸린다.
-	got := boundedError(errors.New(strings.Repeat("가", 683)))
-	if want := strings.Repeat("가", 682); got != want {
-		t.Fatalf("bounded error = %d bytes, want %d bytes of valid UTF-8", len(got), len(want))
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "nil", err: nil, want: "youtube plane retry"},
+		// 3바이트 문자 683개는 2049바이트라 2048바이트 상한이 문자 중간에 걸린다.
+		{name: "over detail limit", err: errors.New(strings.Repeat("가", 683)), want: strings.Repeat("가", 682)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := boundedError(tc.err); got != tc.want {
+				t.Fatalf("boundedError() = %d bytes, want %d bytes", len(got), len(tc.want))
+			}
+		})
 	}
 }

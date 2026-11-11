@@ -160,7 +160,7 @@ func TestRuntimeShutdownStopsMetricsWhileH3WaitsForIdleConnections(t *testing.T)
 		t.Fatalf("listen metrics: %v", err)
 	}
 
-	fixture.servers.Metrics = NewMetricsServer(t.Context(), testLoopbackAddr, "")
+	fixture.servers.Metrics = NewMetricsServer(t.Context(), testLoopbackAddr, "", nil)
 
 	metricsServed := make(chan error, 1)
 

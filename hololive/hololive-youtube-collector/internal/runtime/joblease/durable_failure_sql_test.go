@@ -20,6 +20,17 @@ func TestOrdinaryDeferSQLHasClosedValuesWhitelist(t *testing.T) {
 	}
 }
 
+func TestCompleteWithErrorSQLHasClosedValuesWhitelist(t *testing.T) {
+	t.Parallel()
+
+	got := extractDurableFailureTuples(completeCurrentLeaseWithErrorSQL)
+	want := contract.CompleteErrorFailureTuples()
+
+	if !failureTupleSetsEqual(got, want) {
+		t.Fatalf("complete-with-error SQL tuples = %#v, want %#v", got, want)
+	}
+}
+
 func failureTupleSetsEqual(got, want []contract.FailureTuple) bool {
 	g := slices.Clone(got)
 	w := slices.Clone(want)

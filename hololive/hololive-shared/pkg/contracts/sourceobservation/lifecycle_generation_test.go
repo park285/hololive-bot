@@ -1,6 +1,7 @@
 package sourceobservation
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,23 @@ func TestVideoLifecycleRequiresCurrentSchemaAndGeneration(t *testing.T) {
 		if _, err := PrepareEnvelope(invalid); err == nil {
 			t.Fatalf("unsupported video lifecycle schema=%d generation=%d accepted", version.schema, version.generation)
 		}
+	}
+}
+
+// 저장된 퇴역 generation 1 video_live_check는 consume 전 검증의 decode 단계에서 거부된다.
+// API consumer는 이 거부에 기대어 video_live_check 세대를 다시 확인하지 않는다.
+func TestStoredRetiredVideoLiveCheckRejectedAtDecode(t *testing.T) {
+	prepared, err := PrepareEnvelope(newLiveCheckEnvelope(t, KindVideoLiveCheck, publicEndedVideoCheck(), CompletenessPartial))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stored := prepared
+
+	stored.SchemaVersion, stored.ContractGeneration = SchemaVersionV1, 1
+
+	_, err = stored.ValidateAndCanonicalPayload()
+	if err == nil || !strings.Contains(err.Error(), "unsupported video live check contract generation 1") {
+		t.Fatalf("ValidateAndCanonicalPayload(schema 1, generation 1) error = %v, want decode rejection", err)
 	}
 }

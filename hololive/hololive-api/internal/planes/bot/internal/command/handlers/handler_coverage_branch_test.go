@@ -33,10 +33,6 @@ import (
 
 type stubCoverageStreamProvider struct{}
 
-func (s *stubCoverageStreamProvider) GetLiveStreams(_ context.Context) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
 func (s *stubCoverageStreamProvider) GetUpcomingStreams(_ context.Context, _ int) ([]*domain.Stream, error) {
 	return nil, nil
 }
@@ -45,11 +41,7 @@ func (s *stubCoverageStreamProvider) GetChannelSchedule(_ context.Context, _ str
 	return nil, nil
 }
 
-func (s *stubCoverageStreamProvider) GetChannel(_ context.Context, _ string) (*domain.Channel, error) {
-	return nil, errTestStubNoChannel
-}
-
-func TestParseUpcomingIntParam(t *testing.T) {
+func TestIntParam(t *testing.T) {
 	tests := []struct {
 		name         string
 		params       map[string]any
@@ -96,7 +88,7 @@ func TestParseUpcomingIntParam(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := parseUpcomingIntParam(tc.params, tc.key, tc.defaultValue)
+			got := intParam(tc.params, tc.key, tc.defaultValue)
 			if got != tc.want {
 				t.Fatalf("expected %d, got %d", tc.want, got)
 			}

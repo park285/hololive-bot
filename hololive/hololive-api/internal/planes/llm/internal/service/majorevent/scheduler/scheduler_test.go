@@ -199,19 +199,22 @@ func TestGetWeekRange_MondayKST(t *testing.T) {
 }
 
 type mockEventRepository struct {
-	rooms          []*domain.EventRoomSubscription
-	roomsErr       error
-	events         []*domain.MajorEvent
-	eventsErr      error
-	monthlyEvents  []*domain.MajorEvent
-	monthlyErr     error
-	markedWeekly   bool
-	markedMonthly  bool
-	markWeeklyErr  error
-	markMonthlyErr error
-	markedEventIDs []int
-	markedWeekKey  string
-	markedMonthKey string
+	rooms           []*domain.EventRoomSubscription
+	roomsErr        error
+	events          []*domain.MajorEvent
+	eventsErr       error
+	monthlyEvents   []*domain.MajorEvent
+	monthlyErr      error
+	markedWeekly    bool
+	markedMonthly   bool
+	markWeeklyErr   error
+	markMonthlyErr  error
+	markedEventIDs  []int
+	markedWeekKey   string
+	markedMonthKey  string
+	queriedYear     int
+	queriedMonth    int
+	queriedMonthKey string
 }
 
 func (m *mockEventRepository) GetSubscribedRooms(_ context.Context) ([]*domain.EventRoomSubscription, error) {
@@ -222,7 +225,11 @@ func (m *mockEventRepository) GetEventsByDateRange(_ context.Context, _, _ time.
 	return m.events, m.eventsErr
 }
 
-func (m *mockEventRepository) GetEventsByMonth(_ context.Context, _, _ int, _ string) ([]*domain.MajorEvent, error) {
+func (m *mockEventRepository) GetEventsByMonth(_ context.Context, year, month int, monthKey string) ([]*domain.MajorEvent, error) {
+	m.queriedYear = year
+	m.queriedMonth = month
+	m.queriedMonthKey = monthKey
+
 	return m.monthlyEvents, m.monthlyErr
 }
 
@@ -453,6 +460,51 @@ func TestSendMonthlyNotification_PartialFailure_NoMarking(t *testing.T) {
 
 	if repository.markedMonthly {
 		t.Error("expected events NOT to be marked on partial failure")
+	}
+}
+
+// 실행 도중 시계가 KST 월 경계를 넘어도 조회 연·월, monthKey, outbox period key는 실행 시작 시각 한 번으로 정해진다.
+func TestSendMonthlyNotification_MonthBoundaryUsesSingleClockRead(t *testing.T) {
+	kst := time.FixedZone("KST", 9*60*60)
+	readings := []time.Time{
+		time.Date(2026, time.January, 31, 23, 59, 59, 0, kst),
+		time.Date(2026, time.February, 1, 0, 0, 0, 0, kst),
+	}
+	calls := 0
+
+	repository := &mockEventRepository{
+		rooms:         testRooms(testRoomID1),
+		monthlyEvents: testEvents(10),
+	}
+	outbox := newMockOutboxRepository()
+	locker := &mockNotificationLocker{acquireAcquired: true}
+	scheduler := newTestMonthlyScheduler(repository, outbox, locker)
+	scheduler.SetClock(func() time.Time {
+		reading := readings[min(calls, len(readings)-1)]
+		calls++
+
+		return reading
+	})
+
+	if _, err := scheduler.SendMonthlyNotification(t.Context()); err != nil {
+		t.Fatalf("SendMonthlyNotification() error = %v", err)
+	}
+
+	if repository.queriedYear != 2026 || repository.queriedMonth != 1 || repository.queriedMonthKey != "2026-01" {
+		t.Fatalf("GetEventsByMonth(year=%d, month=%d, key=%q), want 2026, 1, \"2026-01\"",
+			repository.queriedYear, repository.queriedMonth, repository.queriedMonthKey)
+	}
+
+	if repository.markedMonthKey != "2026-01" {
+		t.Fatalf("marked month key = %q, want 2026-01", repository.markedMonthKey)
+	}
+
+	if len(outbox.enqueuedItems) != 1 || outbox.enqueuedItems[0].PeriodKey != "2026-01" {
+		t.Fatalf("enqueued items = %+v, want one item with period key 2026-01", outbox.enqueuedItems)
+	}
+
+	if calls != 1 {
+		t.Fatalf("clock reads = %d, want 1", calls)
 	}
 }
 

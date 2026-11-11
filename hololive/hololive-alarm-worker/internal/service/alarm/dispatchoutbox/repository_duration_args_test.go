@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestPgxRepositoryRejectsSubMillisecondDurationsBeforeDatabase(t *testing.T) {
@@ -51,7 +50,7 @@ func TestPgxRepositoryKeepsMillisecondLeasesAndThresholds(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)
 	ctx := t.Context()
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("lease-ms-room", "lease-ms")}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{receiptEnvelope("lease-ms-room", "lease-ms")}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, "owner", 10, 1500*time.Millisecond)

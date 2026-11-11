@@ -36,20 +36,15 @@ import (
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type Bot struct {
-	botSelfUser           string
 	irisBaseURL           string
-	notification          settings.NotificationConfig
 	logger                *slog.Logger
 	irisClient            BotIrisClient
 	messageAdapter        *messagingadapter.MessageAdapter
@@ -58,19 +53,8 @@ type Bot struct {
 	markdownReplies       bool
 	cache                 BotCache
 	postgres              database.Client
-	holodex               domain.StreamProvider
-	alarm                 handlercore.AlarmService
-	matcher               *matcher.Matcher
-	commandRegistry       *command.Registry
 	acl                   *acl.Service
-	majorEventRepository  handlercore.MajorEventRepository
-	memberNews            handlercore.MemberNewsService
-	commandBuilders       []orchcmd.CommandBuilder
-	membersData           domain.MemberDataProvider
-	memberRepository      handlercore.CelebrationCalendarFinder
 	calendarImageRenderer handlercore.CalendarImageRenderer
-	stopCh                chan struct{}
-	doneCh                chan struct{}
 	selfSender            string
 	ingress               *ingress.MessageIngress
 	commandExecutor       *orchcmd.CommandRouter
@@ -93,29 +77,17 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	}
 
 	bot := &Bot{
-		botSelfUser:          deps.BotSelfUser,
-		irisBaseURL:          deps.IrisBaseURL,
-		notification:         deps.Notification,
-		logger:               deps.Logger,
-		irisClient:           deps.Client,
-		messageAdapter:       deps.MessageAdapter,
-		formatter:            deps.Formatter,
-		messageStrings:       deps.MessageStrings,
-		markdownReplies:      deps.MarkdownReplies,
-		cache:                deps.Cache,
-		postgres:             deps.Postgres,
-		holodex:              deps.Holodex,
-		alarm:                deps.Alarm,
-		matcher:              deps.Matcher,
-		acl:                  deps.ACL,
-		majorEventRepository: deps.MajorEventRepository,
-		memberNews:           deps.MemberNews,
-		commandBuilders:      orchcmd.CloneCommandBuilders(deps.CommandBuilders),
-		membersData:          deps.MembersData,
-		memberRepository:     calendarFinder,
-		stopCh:               make(chan struct{}),
-		doneCh:               make(chan struct{}),
-		selfSender:           stringutil.Normalize(deps.BotSelfUser),
+		irisBaseURL:     deps.IrisBaseURL,
+		logger:          deps.Logger,
+		irisClient:      deps.Client,
+		messageAdapter:  deps.MessageAdapter,
+		formatter:       deps.Formatter,
+		messageStrings:  deps.MessageStrings,
+		markdownReplies: deps.MarkdownReplies,
+		cache:           deps.Cache,
+		postgres:        deps.Postgres,
+		acl:             deps.ACL,
+		selfSender:      stringutil.Normalize(deps.BotSelfUser),
 	}
 	bot.initImageRenderers(calendarCache, deps.MessageStrings)
 
@@ -128,16 +100,9 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		transport.WithRoomChatLookup(bot.rooms),
 	)
 	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender, ingress.WithRoomObserver(bot.rooms))
-	bot.lifecycle = lifecycle.NewBotLifecycle(
-		bot.logger,
-		bot.cache,
-		bot.irisClient,
-		bot.irisBaseURL,
-		bot.stopCh,
-		bot.doneCh,
-	)
+	bot.lifecycle = lifecycle.NewBotLifecycle(bot.logger, bot.cache, bot.irisClient, bot.irisBaseURL)
 
-	bot.initializeCommands()
+	bot.initializeCommands(deps, calendarFinder)
 
 	return bot, nil
 }
@@ -146,15 +111,13 @@ func (b *Bot) initImageRenderers(calendarCache sharedcache.Store, strings *messa
 	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarImageCache(calendarCache), render.WithCalendarStrings(strings))
 }
 
-func (b *Bot) initializeCommands() {
+func (b *Bot) initializeCommands(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder) {
 	registry := command.NewRegistry()
 
-	b.commandRegistry = registry
+	view := b.commandInitView(deps, calendarFinder)
+	commandDeps := view.toCommandDependencies()
 
-	view := b.commandInitView()
-	deps := view.toCommandDependencies(registry)
-
-	commandsList := view.buildCommands(deps)
+	commandsList := view.buildCommands(commandDeps)
 	for _, cmd := range commandsList {
 		registry.Register(cmd)
 	}
@@ -164,7 +127,7 @@ func (b *Bot) initializeCommands() {
 }
 
 func (b *Bot) Start(ctx context.Context) error {
-	if err := b.ensureLifecycle().Start(ctx); err != nil {
+	if err := b.lifecycle.Start(ctx); err != nil {
 		return fmt.Errorf("start: %w", err)
 	}
 
@@ -172,7 +135,7 @@ func (b *Bot) Start(ctx context.Context) error {
 }
 
 func (b *Bot) Shutdown(ctx context.Context) error {
-	if err := b.ensureLifecycle().Shutdown(ctx); err != nil {
+	if err := b.lifecycle.Shutdown(ctx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 

@@ -37,8 +37,8 @@ var bannedLogAttrKeys = map[string]string{
 }
 
 var privacylogOnlyAttrKeys = map[string]string{
-	sharedprivacylog.KeyRoomID:     "privacylog.RoomIDAttr/RoomAttr",
-	sharedprivacylog.KeyChatID:     "privacylog.ChatIDAttr/ChatAttr",
+	sharedprivacylog.KeyRoomID:     "privacylog.RoomIDAttr",
+	sharedprivacylog.KeyChatID:     "privacylog.ChatIDAttr",
 	sharedprivacylog.KeyCacheKey:   "privacylog.CacheKeyAttr",
 	sharedprivacylog.KeyCacheField: "privacylog.CacheFieldAttr",
 }

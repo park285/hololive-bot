@@ -13,6 +13,7 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -23,8 +24,9 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 		t.Context(),
 		testRouterConfig(),
 		slog.New(slog.DiscardHandler),
-		(&server.Handler{}).DomainHandlers(),
+		testDomainHandlers(),
 		sharedtestutil.NewTestCacheService(t.Context(), t),
+		sharedreadiness.NewProbe("admin"),
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
@@ -53,7 +55,7 @@ func TestValidateAPIRouterInputsRejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
 
 	validConfig := testRouterConfig()
-	validDomains := (&server.Handler{}).DomainHandlers()
+	validDomains := testDomainHandlers()
 
 	tests := []struct {
 		name    string
@@ -102,7 +104,7 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			domains := *(&server.Handler{}).DomainHandlers()
+			domains := *testDomainHandlers()
 			tt.mutate(&domains)
 
 			err := validateDomainHandlers(&domains)
@@ -116,7 +118,7 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 		})
 	}
 
-	if err := validateDomainHandlers((&server.Handler{}).DomainHandlers()); err != nil {
+	if err := validateDomainHandlers(testDomainHandlers()); err != nil {
 		t.Fatalf("validateDomainHandlers() valid error = %v", err)
 	}
 }
@@ -124,11 +126,17 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 func TestNewAPIRouterValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	if router, err := newAPIRouter(t.Context(), nil, nil); err == nil || router != nil {
+	probe := sharedreadiness.NewProbe("admin")
+
+	if router, err := newAPIRouter(t.Context(), nil, nil, probe); err == nil || router != nil {
 		t.Fatalf("newAPIRouter(nil) router=%v error=%v", router, err)
 	}
 
-	router, err := newAPIRouter(t.Context(), testRouterConfig(), nil)
+	if router, err := newAPIRouter(t.Context(), testRouterConfig(), nil, nil); err == nil || router != nil {
+		t.Fatalf("newAPIRouter(nil probe) router=%v error=%v", router, err)
+	}
+
+	router, err := newAPIRouter(t.Context(), testRouterConfig(), nil, probe)
 	if err != nil {
 		t.Fatalf("newAPIRouter() error = %v", err)
 	}
@@ -177,8 +185,9 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 		t.Context(),
 		testRouterConfig(),
 		nil,
-		(&server.Handler{}).DomainHandlers(),
+		testDomainHandlers(),
 		sharedtestutil.NewTestCacheService(t.Context(), t),
+		sharedreadiness.NewProbe("admin"),
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
@@ -200,6 +209,18 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("wrong api key status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+// testDomainHandlers는 route 등록과 인증만 검사하는 시험용이다. 각 handler의 의존성이 비어 있어 본문은 호출할 수 없다.
+func testDomainHandlers() *server.DomainHandlers {
+	return &server.DomainHandlers{
+		Member:   &server.MemberHandler{},
+		Alarm:    &server.AlarmHandler{},
+		Room:     &server.RoomHandler{},
+		Stream:   &server.StreamHandler{},
+		Stats:    &server.StatsHandler{},
+		Settings: &server.SettingsHandler{},
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 
 func (c *Service) HSet(ctx context.Context, key, field, value string) error {
 	if err := c.client.Do(ctx, c.client.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()).Error(); err != nil {
-		c.logger.Error("Cache hset failed", privacylog.CacheKeyAttr(key), privacylog.CacheFieldAttr(key, field), slog.Any("error", err))
+		c.logger.Error("Cache hset failed", privacylog.CacheKeyAttr(key), privacylog.CacheFieldAttr(field), slog.Any("error", err))
 
 		return NewCacheError("hset", key, err)
 	}
@@ -48,7 +48,7 @@ func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 	}
 
 	if resp.Error() != nil {
-		c.logger.Error("Cache hash get failed", privacylog.CacheKeyAttr(key), privacylog.CacheFieldAttr(key, field), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache hash get failed", privacylog.CacheKeyAttr(key), privacylog.CacheFieldAttr(field), slog.Any("error", resp.Error()))
 
 		return "", NewCacheError("hget", key, resp.Error())
 	}
@@ -101,21 +101,6 @@ func (c *Service) BatchHGet(ctx context.Context, key string, fields []string) (m
 	}
 
 	return values, nil
-}
-
-func (c *Service) HDel(ctx context.Context, key string, fields ...string) error {
-	if len(fields) == 0 {
-		return nil
-	}
-
-	cmd := c.client.B().Hdel().Key(key).Field(fields...).Build()
-	if err := c.client.Do(ctx, cmd).Error(); err != nil {
-		c.logger.Error("Cache hdel failed", privacylog.CacheKeyAttr(key), slog.Int("fields", len(fields)), slog.Any("error", err))
-
-		return NewCacheError("hdel", key, err)
-	}
-
-	return nil
 }
 
 func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, error) {

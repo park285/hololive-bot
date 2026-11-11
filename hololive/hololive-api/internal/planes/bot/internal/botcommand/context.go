@@ -20,28 +20,20 @@
 
 package botcommand
 
-import "time"
-
 type CommandContext struct {
-	Room        string
-	RoomName    string
-	ThreadID    *string
-	UserID      string
-	UserName    string
-	IsGroupChat bool
-	Message     string
-	MessageID   string
-	Timestamp   time.Time
+	Room      string
+	ThreadID  *string
+	UserID    string
+	UserName  string
+	Message   string
+	MessageID string
 }
 
-func NewCommandContext(room, roomName, userID, userName, message string, isGroupChat bool) *CommandContext {
+func NewCommandContext(room, userID, userName, message string) *CommandContext {
 	return &CommandContext{
-		Room:        room,
-		RoomName:    roomName,
-		UserID:      userID,
-		UserName:    userName,
-		IsGroupChat: isGroupChat,
-		Message:     message,
-		Timestamp:   time.Now(),
+		Room:     room,
+		UserID:   userID,
+		UserName: userName,
+		Message:  message,
 	}
 }

@@ -224,7 +224,7 @@ func (r *Runner) scheduleEnvelope(
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) (*contract.Envelope, error) {
-	allowedSubject, err := subjectAllowed(input, contract.KindSchedule, officialScheduleSubject)
+	allowedSubject, err := subjectAllowed(input, contract.KindSchedule, collection.ScheduleSubject)
 	if err != nil {
 		return nil, fmt.Errorf("subject allowed: %w", err)
 	}
@@ -238,7 +238,7 @@ func (r *Runner) scheduleEnvelope(
 		return nil, nil
 	}
 
-	envelope, err := r.envelope(input, contract.KindSchedule, officialScheduleSubject, payload)
+	envelope, err := r.envelope(input, contract.KindSchedule, collection.ScheduleSubject, payload)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: %w", err)
 	}

@@ -163,7 +163,7 @@ func rejectFinalizeObservation(
 			ObservationID: observation.ID,
 			LeaseToken:    observation.LeaseToken,
 			ErrorCode:     "invalid_payload",
-			ErrorDetail:   boundedErrorDetail(err.Error()),
+			ErrorDetail:   BoundedErrorDetail(err.Error()),
 		}); dlErr != nil {
 			return true, ReconcileResult{}, fmt.Errorf("dead letter tx: %w", dlErr)
 		}
@@ -191,7 +191,7 @@ func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation *Observat
 		ObservationID: observation.ID,
 		LeaseToken:    observation.LeaseToken,
 		ErrorCode:     "unsupported_contract",
-		ErrorDetail: boundedErrorDetail(fmt.Sprintf(
+		ErrorDetail: BoundedErrorDetail(fmt.Sprintf(
 			"provider=%s kind=%s schema=%d generation=%d",
 			observation.Provider,
 			observation.ObservationKind,

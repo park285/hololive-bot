@@ -132,7 +132,6 @@ func (mm *Matcher) buildSnapshot(ctx context.Context) (*matcherSnapshot, error) 
 		builtAt:      time.Now(),
 		exactNames:   make(map[string][]*snapshotEntry),
 		exactAliases: make(map[string][]*snapshotEntry),
-		tokenIndex:   make(map[string][]*snapshotEntry),
 	}
 
 	if provider == nil {
@@ -220,9 +219,5 @@ func (mm *Matcher) storeSnapshotEntry(
 
 	for _, aliasNorm := range entry.aliasNorms {
 		appendSnapshotEntry(snapshot.exactAliases, aliasNorm, current)
-	}
-
-	for _, token := range snapshotTokens(entry.nameNorm, entry.aliasNorms) {
-		appendSnapshotEntry(snapshot.tokenIndex, token, current)
 	}
 }

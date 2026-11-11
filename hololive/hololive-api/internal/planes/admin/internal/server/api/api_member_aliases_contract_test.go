@@ -35,6 +35,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 // 소비자인 iris-console은 부재·null 보정을 지우고 null을 거절하므로 소유 API가 이 계약을 지킨다.
@@ -43,14 +44,16 @@ func TestGetMembersAlwaysReturnsAliasesObject(t *testing.T) {
 
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
-	repo := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repo := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
 
-	cache, err := member.NewMemberCache(t.Context(), repo, nil, logger, member.CacheConfig{})
+	cache, err := member.NewMemberCache(t.Context(), repo, sharedtestutil.NewTestCacheService(t.Context(), t), logger, member.CacheConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	handler := (&Handler{repository: repo, memberCache: cache, logger: logger}).DomainHandlers().Member
+	t.Cleanup(cache.Close)
+
+	handler := newMemberHandler(Deps{Repository: repo, MemberCache: cache, Logger: logger})
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)

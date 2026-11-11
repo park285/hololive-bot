@@ -10,10 +10,11 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
 type sqlPublishFenceVerifier struct {
-	jobs collection.JobContractSet
+	jobs collection.StaticJobContracts
 }
 
 // 발행 트랜잭션은 항상 pgxpool에서 시작하므로 이 능력이 없으면 순차 경로로 바꾸지 않고 오류로 드러낸다.
@@ -63,7 +64,7 @@ func publishVerificationBatch(
 	contracts []byte,
 ) *pgx.Batch {
 	subjects, kinds := publishTargetKeys(observations)
-	membershipQuery, membershipArgs := collection.LeaseMembershipQuery(proof, scope)
+	membershipQuery, membershipArgs := joblease.LeaseMembershipQuery(proof, scope)
 	batch := &pgx.Batch{}
 
 	batch.Queue(publishVerificationBatchSQL)
@@ -99,7 +100,7 @@ func (v sqlPublishFenceVerifier) verifyPublishResults(
 		return fmt.Errorf("verify projection: %w", projectionErr)
 	}
 
-	if err := collection.ScanLeaseMembership(results.QueryRow()); err != nil {
+	if err := joblease.ScanLeaseMembership(results.QueryRow()); err != nil {
 		return fmt.Errorf("verify lease membership: %w", err)
 	}
 
@@ -355,10 +356,6 @@ func (r *Repository) verifyPreparedPublish(
 	}
 
 	if err := r.applyPublishFault(ctx, tx, faultAfterFenceVerify); err != nil {
-		return fmt.Errorf("apply publish fault: %w", err)
-	}
-
-	if err := r.applyPublishFault(ctx, tx, faultAfterContractCheck); err != nil {
 		return fmt.Errorf("apply publish fault: %w", err)
 	}
 

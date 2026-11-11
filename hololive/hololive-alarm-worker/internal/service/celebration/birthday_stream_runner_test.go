@@ -35,10 +35,11 @@ const (
 	testBirthdayTitle  = "【#生誕祭2026】Birthday Live"
 )
 
-func testPublishedBirthdayStreams(titlesByVideoID map[string]string) map[string]domain.AlarmQueueEnvelope {
-	events := make(map[string]domain.AlarmQueueEnvelope, len(titlesByVideoID))
+// testPublishedBirthdayStreams는 videoID별 저장 제목으로 기발행 birthday stream event를 만든다.
+func testPublishedBirthdayStreams(titlesByVideoID map[string]string) map[string]dispatchoutbox.AlarmQueueEnvelope {
+	events := make(map[string]dispatchoutbox.AlarmQueueEnvelope, len(titlesByVideoID))
 	for videoID, title := range titlesByVideoID {
-		events[birthdayStreamEventKey(testMemberIDA, testBirthdayDate, videoID)] = domain.AlarmQueueEnvelope{
+		events[birthdayStreamEventKey(testMemberIDA, testBirthdayDate, videoID)] = dispatchoutbox.AlarmQueueEnvelope{
 			SourceKind: domain.AlarmDispatchSourceKindCelebration,
 			Celebration: &domain.CelebrationDispatchPayload{
 				Kind:        domain.CelebrationKindBirthdayStream,
@@ -77,7 +78,7 @@ type birthdayStreamTestStore struct {
 	sessionsErrQueue               []error
 	sessionCalls                   []birthdayStreamSessionQuery
 	listCalls                      []string
-	publishedEvents                map[string]domain.AlarmQueueEnvelope
+	publishedEvents                map[string]dispatchoutbox.AlarmQueueEnvelope
 	publishedEventsErr             error
 	publishedCelebrationEventCalls [][]string
 	publishedCelebrationEventsErr  error
@@ -114,13 +115,13 @@ func (s *birthdayStreamTestStore) FindBirthdaySessions(
 func (s *birthdayStreamTestStore) ListPublishedBirthdayStreamEvents(
 	_ context.Context,
 	keyPrefix string,
-) (map[string]domain.AlarmQueueEnvelope, error) {
+) (map[string]dispatchoutbox.AlarmQueueEnvelope, error) {
 	s.listCalls = append(s.listCalls, keyPrefix)
 	if s.publishedEventsErr != nil {
 		return nil, s.publishedEventsErr
 	}
 
-	events := make(map[string]domain.AlarmQueueEnvelope)
+	events := make(map[string]dispatchoutbox.AlarmQueueEnvelope)
 
 	for eventKey := range s.publishedEvents {
 		if strings.HasPrefix(eventKey, keyPrefix) {
@@ -134,7 +135,7 @@ func (s *birthdayStreamTestStore) ListPublishedBirthdayStreamEvents(
 func (s *birthdayStreamTestStore) FindPublishedCelebrationEvents(
 	_ context.Context,
 	eventKeys []string,
-) (map[string]domain.AlarmQueueEnvelope, error) {
+) (map[string]dispatchoutbox.AlarmQueueEnvelope, error) {
 	s.publishedCelebrationEventCalls = append(
 		s.publishedCelebrationEventCalls,
 		append([]string(nil), eventKeys...),
@@ -143,7 +144,7 @@ func (s *birthdayStreamTestStore) FindPublishedCelebrationEvents(
 		return nil, s.publishedCelebrationEventsErr
 	}
 
-	events := make(map[string]domain.AlarmQueueEnvelope, len(eventKeys))
+	events := make(map[string]dispatchoutbox.AlarmQueueEnvelope, len(eventKeys))
 	for _, eventKey := range eventKeys {
 		if envelope, ok := s.publishedEvents[eventKey]; ok {
 			events[eventKey] = envelope
@@ -177,18 +178,18 @@ func (s *birthdayStreamTestStore) FindSentRoomsByEventKeys(_ context.Context, ev
 }
 
 type birthdayStreamTestPublisher struct {
-	batches [][]domain.AlarmQueueEnvelope
+	batches [][]dispatchoutbox.AlarmQueueEnvelope
 	result  dispatchoutbox.PublishBatchResult
 	err     error
 }
 
-func (p *birthdayStreamTestPublisher) PublishDispatchBatch(_ context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+func (p *birthdayStreamTestPublisher) PublishDispatchBatch(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	p.batches = append(p.batches, envelopes)
 	return p.result, p.err
 }
 
-func (p *birthdayStreamTestPublisher) allEnvelopes() []domain.AlarmQueueEnvelope {
-	var all []domain.AlarmQueueEnvelope
+func (p *birthdayStreamTestPublisher) allEnvelopes() []dispatchoutbox.AlarmQueueEnvelope {
+	var all []dispatchoutbox.AlarmQueueEnvelope
 
 	for _, batch := range p.batches {
 		all = append(all, batch...)
@@ -742,7 +743,7 @@ func TestBirthdayStreamRunOnceRepublishesKnownEventForLateSentRoom(t *testing.T)
 	canonicalEnvelope.Notification.RoomID = ""
 	canonicalEnvelope.Notification.Users = nil
 
-	store.publishedEvents = map[string]domain.AlarmQueueEnvelope{
+	store.publishedEvents = map[string]dispatchoutbox.AlarmQueueEnvelope{
 		birthdayStreamEventKey(testMemberIDA, testBirthdayDate, testVideoA): canonicalEnvelope,
 	}
 	store.sentRoomsByEventKey[greetingKey] = []string{testRoom1, testRoom2}

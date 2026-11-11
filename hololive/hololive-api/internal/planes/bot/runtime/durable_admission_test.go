@@ -82,6 +82,8 @@ func (safeDurableTestError) SafeReason() string       { return "database_operati
 func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 	t.Parallel()
 
+	maxAttempts := testDurableProfile(t).BotReplyOutbox.MaxAttempts
+
 	cases := []struct {
 		name     string
 		err      error
@@ -93,15 +95,15 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 		{name: "unknown local error", err: errors.New("bug"), want: durability.ReplyOutboxDead},
 		{name: "invalid stored payload", err: transport.ErrStoredReplyInvalid, want: durability.ReplyOutboxManualReview},
 		{name: "reissue ladder exhausted conflict", err: sharedtestutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), want: durability.ReplyOutboxPermanentConflict},
-		{name: "retry exhausted", attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
+		{name: "retry exhausted", attempts: maxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
 		{name: "unknown", err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxOutcomeUnknown},
-		{name: "unknown exhausted", attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},
+		{name: "unknown exhausted", attempts: maxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := replyOutboxSettlementStatusWithMaxAttempts(tc.attempts, durability.ReplyOutboxMaxAttempts, tc.err); got != tc.want {
+			if got := replyOutboxSettlementStatusWithMaxAttempts(tc.attempts, maxAttempts, tc.err); got != tc.want {
 				t.Fatalf("replyOutboxSettlementStatusWithMaxAttempts() = %q, want %q", got, tc.want)
 			}
 		})
@@ -1146,8 +1148,8 @@ func TestAdmitMessageRejectsWithoutOptionalCounters(t *testing.T) {
 func newTestReplyOutboxRepository(t *testing.T, pool *pgxpool.Pool) *durability.ReplyOutboxRepository {
 	t.Helper()
 
-	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(pool, durability.ReplyOutboxMaxAttempts, durability.ReplyOutboxAutomaticReplayHorizon)
+	outbox, err := newDurableReplyOutbox(pool, testDurableProfile(t))
 	require.NoError(t, err)
 
-	return repository
+	return outbox.repository
 }

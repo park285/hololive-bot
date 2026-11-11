@@ -8,6 +8,7 @@ import (
 	"time"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
@@ -134,7 +135,7 @@ Rules:
 - Do not guess unknown facts.`
 }
 
-func buildMemberNewsUserPrompt(input *model.SummarizeInput, searchContext string) (string, error) {
+func buildMemberNewsUserPrompt(input *newsmodel.SummarizeInput, searchContext string) (string, error) {
 	payload, err := marshalPromptJSON("candidate events", buildPromptCandidates(input))
 	if err != nil {
 		return "", err

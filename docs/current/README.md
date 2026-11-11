@@ -6,10 +6,9 @@
 
 - `PROJECT_MAP.md` - 현재 module/runtime 운영 인벤토리
 - `CODEBASE_OVERVIEW.md` - 코드베이스 온보딩용 구조/흐름 요약
-- `DEPLOYMENT_BASELINE.md` - 운영 중인 중앙·Seoul Docker Compose와 Osaka AP native systemd baseline, 준비된 중앙 Podman Quadlet 배치
+- `DEPLOYMENT_BASELINE.md` - 중앙·iris-seoul collector `b`·kapu collector `d`의 rootful Podman Quadlet과 Osaka collector `a` native systemd 운영 baseline
 - `SERVICE_OWNERSHIP.md` - 3개 app runtime ownership 기준
-- `CONTRACT_MAP.md` - 내부 HTTP/Queue/PubSub/external boundary 계약 지도
-- `CONTRACT_MANIFEST.txt` - contract ID/provider/consumer/package/doc 검증 manifest
+- `CONTRACT_MAP.md` - 내부 HTTP·in-process 주입·PostgreSQL outbox·Pub/Sub·external boundary 계약 지도
 - `ERROR_CONTRACT.md` - 내부 API error response와 client 해석 규칙
 - `QUEUE_AND_PUBSUB_CONTRACTS.md` - alarm dispatch outbox(PostgreSQL)·delivery outbox Valkey wakeup 계약과 Pub/Sub 전달 의미 (settings Pub/Sub 제거, ACL은 in-process 전파)
 
@@ -18,6 +17,7 @@
 - `services/hololive-api.md`
 - `services/alarm-worker.md`
 - `services/youtube-collector.md`
+- `services/x-spaces.md`
 
 ## Contracts
 
@@ -28,7 +28,11 @@
 - `contracts/trigger.md`
 - `contracts/alarm.md`
 - `contracts/settings.md`
+- `contracts/admin-api.md`
+- `contracts/shortlink.md`
 - `contracts/iris-boundary.md`
+- `contracts/source-observation-canonical-json-v1.md`
+- `contracts/valkey_ephemeral_contract.md`
 
 ## Runbooks
 
@@ -53,19 +57,6 @@
 ## Active Implementation Plans
 
 - `plans/2026-08-31-youtube-egress-lifecycle-implementation.md` - canonical identity, internal transition store, ledger backfill, writer/cleanup cutover와 검증 순서
-- [알람 워커·YouTube 컬렉터 신뢰성 개선](plans/2026-09-30-alarm-worker-collector-reliability.md) - 재현한 13개 문제의 조치·회귀 검증, 구현 의존성·완료 조건·운영 적용 경계. [상세 리뷰 및 검증 기록](../history/architecture/2026-09-30-alarm-worker-collector-reliability-review.md)을 함께 봅니다.
-- [SQL·DB 리뷰 후속 작업 인계](plans/2026-10-15-sql-db-review-handoff.md) - 운영 source retention 실패, 알림 정리·집계 경합, RSS·due 지표 수정과 N1–N7, 315·316, 재측정·구조 압축 결정 기록. 로컬 구현·검증 완료, 운영 미적용.
-- [SQL 구조 압축(317–321) 세션 인계](plans/2026-10-16-sql-compaction-handoff.md) - 작업 트리 상태, migration 317–321·SQL·테스트 변경, 검증 결과, 발행·점검 창 적용 절차와 승인 경계.
 - [상태머신·최소 한 번 처리 로직의 AP 이관 계획](plans/2026-10-19-ap-state-machine-consolidation.md) - Go/SQL 정책 중복, inbox/outbox·lease·재시도·복구, 동기 파생 모델의 단계별 이관안과 검증·승인 경계. #667로 main 병합·운영 적용 완료. [인계 기록](plans/2026-10-19-ap-state-machine-consolidation-handoff.md)에 단계별 검증·운영 적용·남은 위험이 있습니다.
-- [YouTube 수집 경계 정리와 DB 보존 적체 해소 통합 계획](plans/2026-10-25-youtube-collection-and-retention-remediation.md) - collector Go·JS 경계 결함과 DB 보존 적체·보호 이력·인덱스 회수의 단계 순서, 의존, 검증·승인 경계. 세부 근거는 [DB 계획](plans/2026-10-25-db-growth-and-retention-remediation.md)과 [경계 리뷰 기록](../history/architecture/2026-10-25-youtube-collector-go-js-boundary-review.md)에 있습니다. 미구현.
-
-## Compatibility Bridges
-
-아래 파일은 기존 링크를 보존하기 위한 bridge입니다. current bridge는 짧은 이동 안내만 허용하며 historical 본문과 historical status body marker는 둘 수 없습니다.
-
-- `ALARM_DISPATCH_REMEDIATION_20260414.md`
-- `RUNTIME_SPLIT_HANDOFF_20260416.md`
-- `RUNTIME_SPLIT_PR07_BLOCKERS_20260416.md`
-- `CRITICAL_REVIEW_RESIDUAL_ISSUES_20260415.md`
-- `REMAINING_RISKS_EXECUTION_GUIDE_20260415.md`
-- `LEGACY_LINT_RESUME_20260415.md`
+- [YouTube 수집 경계 정리와 DB 보존 적체 해소 통합 계획](plans/2026-10-25-youtube-collection-and-retention-remediation.md) - collector Go·JS 경계 결함과 DB 보존 적체·보호 이력·인덱스 회수의 단계 순서, 의존, 검증·승인 경계. 세부 근거는 [DB 계획](plans/2026-10-25-db-growth-and-retention-remediation.md)과 [경계 리뷰 기록](../history/architecture/2026-10-25-youtube-collector-go-js-boundary-review.md)에 있습니다. 1~3단계 운영 적용, 4~6단계 미실행.
+- [구조·성능·계약 정리와 호환 잔재 fadeout 리팩토링안](plans/2026-11-11-hololive-structure-fadeout-refactor.md) - 정본 문서 정정, 계약 위반 수정, 호출자 없는 호환 경로 삭제, 중복 구현 통합의 실행 WP 60개와 순서·범위 조정, 승인·운영 증거 대기 WP-62~74. 실행 WP 구현과 로컬 검증 완료, 미커밋.

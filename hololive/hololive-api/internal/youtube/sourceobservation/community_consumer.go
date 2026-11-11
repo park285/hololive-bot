@@ -3,7 +3,6 @@ package sourceobservation
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"time"
 
@@ -70,27 +69,6 @@ func (c *Consumer) WithWakeup(signaler *wakeup.Signaler) *Consumer {
 	c.wakeup = signaler
 
 	return c
-}
-
-func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {
-	if c == nil || c.repo == nil {
-		return ErrInvalidRepository
-	}
-
-	batch, err := c.repo.ClaimBatch(ctx, options)
-	if err != nil {
-		return fmt.Errorf("claim batch: %w", err)
-	}
-
-	var consumeErrors []error
-
-	for i := range batch.Claims {
-		if err := c.ConsumeClaim(ctx, batch.Claims[i].Claim(batch.ConsumerName)); err != nil {
-			consumeErrors = append(consumeErrors, err)
-		}
-	}
-
-	return errors.Join(consumeErrors...)
 }
 
 func (c *Consumer) ConsumeClaim(ctx context.Context, claim Claim) error {

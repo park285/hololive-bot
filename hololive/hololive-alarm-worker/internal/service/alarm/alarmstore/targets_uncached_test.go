@@ -1,18 +1,14 @@
 package alarmstore
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -54,72 +50,35 @@ func TestResolveUncachedChannelSubscribersByType_RecoversChannelsInOneQuery(t *t
 	require.NoError(t, err)
 	require.Empty(t, warmed)
 
-	// 구독 없는 조회도 캐시를 쓰지 않으며 다음 조회에서 DB를 다시 확인한다.
-	knownEmpty, err := cacheClient.Exists(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(uncachedChannelC, domain.AlarmTypeLive))
-	require.NoError(t, err)
-	require.False(t, knownEmpty)
-
+	// 구독 없는 채널도 캐시에 기록하지 않으며 다음 조회에서 DB를 다시 확인해 같은 결과를 낸다.
 	got, err = resolver.ResolveUncachedChannelSubscribersByType(ctx, []string{uncachedChannelC}, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Empty(t, got)
 	require.Equal(t, 2, queries)
 }
 
-func TestResolveUncachedChannelSubscribersByType_KnownEmptyWithoutDatabase(t *testing.T) {
+func TestResolveUncachedChannelSubscribersByType_RequiresDatabase(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cacheClient := testutil.NewTestCacheService(ctx, t)
-	require.NoError(t, cacheClient.Set(ctx, alarmkeys.BuildChannelSubscriberEmptyKey("UC_known_empty", domain.AlarmTypeLive), "1", time.Minute))
+	cacheOnly := NewSubscriberResolver(testutil.NewTestCacheService(ctx, t), nil)
 
-	cacheOnly := NewSubscriberResolver(cacheClient, nil)
-	got, err := cacheOnly.ResolveUncachedChannelSubscribersByType(ctx, []string{"UC_known_empty"}, domain.AlarmTypeLive)
+	got, err := cacheOnly.ResolveUncachedChannelSubscribersByType(ctx, []string{"", " "}, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Empty(t, got)
 
-	_, err = cacheOnly.ResolveUncachedChannelSubscribersByType(ctx, []string{"UC_known_empty", "UC_evicted"}, domain.AlarmTypeLive)
+	// 빈 set은 eviction과 구분되지 않으므로 cache만으로 구독 0을 확정하지 않는다.
+	_, err = cacheOnly.ResolveUncachedChannelSubscribersByType(ctx, []string{"UC_evicted"}, domain.AlarmTypeLive)
 	require.ErrorContains(t, err, "database is nil")
 }
 
-type markerProbeCache struct {
-	cache.Client
-
-	existsCalls  int
-	doMultiCalls int
-	commands     int
-	results      func(cmds []valkey.Completed) []valkey.ValkeyResult
-}
-
-func (c *markerProbeCache) Exists(ctx context.Context, key string) (bool, error) {
-	c.existsCalls++
-
-	exists, err := c.Client.Exists(ctx, key)
-	if err != nil {
-		return false, fmt.Errorf("exists: %w", err)
-	}
-
-	return exists, nil
-}
-
-func (c *markerProbeCache) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
-	c.doMultiCalls++
-
-	c.commands += len(cmds)
-
-	if c.results != nil {
-		return c.results(cmds)
-	}
-
-	return c.Client.DoMulti(ctx, cmds...)
-}
-
-func TestResolveUncachedChannelSubscribersByType_PipelinesEmptyMarkerProbes(t *testing.T) {
+// 빈 set 채널은 cache를 다시 묻지 않고 정규화·중복 제거한 채널 전체를 한 번의 DB 조회로 확정한다. 결과는 입력 채널과
+// 정확히 대응해야 한다.
+func TestResolveUncachedChannelSubscribersByType_ResolvesAllChannelsInOneQueryWithoutCache(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	db := newAlarmTargetLookupTestDB(t)
-	baseCache := testutil.NewTestCacheService(ctx, t)
-	probeCache := &markerProbeCache{Client: baseCache}
 
 	const channelCount = 100
 
@@ -127,71 +86,32 @@ func TestResolveUncachedChannelSubscribersByType_PipelinesEmptyMarkerProbes(t *t
 	wantRooms := map[string][]string{}
 
 	for i := range channelCount {
-		channelID := fmt.Sprintf("UC_marker_%03d", i)
-		roomID := "room-" + channelID
-		requireAlarmRecord(t, db, &domain.Alarm{RoomID: roomID, ChannelID: channelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
-
-		if i%2 == 0 {
-			require.NoError(t, baseCache.Set(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(channelID, domain.AlarmTypeLive), "1", time.Minute))
-		} else {
-			wantRooms[channelID] = []string{roomID}
-		}
+		channelID := fmt.Sprintf("UC_uncached_%03d", i)
 
 		channelIDs = append(channelIDs, channelID)
 
 		if i%10 == 0 {
 			channelIDs = append(channelIDs, " "+channelID+" ", channelID, "")
 		}
+
+		if i%2 == 0 {
+			continue
+		}
+
+		roomID := "room-" + channelID
+
+		wantRooms[channelID] = []string{roomID}
+
+		requireAlarmRecord(t, db, &domain.Alarm{RoomID: roomID, ChannelID: channelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
 	}
 
 	queries := 0
 
 	registerAlarmQueryHook(t, db, func() { queries++ })
 
-	got, err := NewSubscriberResolver(probeCache, db).ResolveUncachedChannelSubscribersByType(ctx, channelIDs, domain.AlarmTypeLive)
+	// strict mock은 설정하지 않은 cache 호출에서 panic하므로 cache 왕복이 없음을 함께 확인한다.
+	got, err := NewSubscriberResolver(cachemocks.NewStrictClient(), db).ResolveUncachedChannelSubscribersByType(ctx, channelIDs, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Equal(t, wantRooms, got)
-	require.Zero(t, probeCache.existsCalls, "marker probes must not fall back to serial EXISTS")
-	require.Equal(t, 1, probeCache.doMultiCalls)
-	require.Equal(t, channelCount, probeCache.commands, "duplicate and blank channels must not be probed")
 	require.Equal(t, 1, queries)
-}
-
-func TestResolveUncachedChannelSubscribersByType_MarkerProbeFailureIsNotKnownEmpty(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newAlarmTargetLookupTestDB(t)
-	baseCache := testutil.NewTestCacheService(ctx, t)
-	probeErr := errors.New("marker probe failed")
-
-	channels := []string{"UC_probe_fail_a", "UC_probe_fail_b"}
-	for _, channelID := range channels {
-		requireAlarmRecord(t, db, &domain.Alarm{RoomID: "room-" + channelID, ChannelID: channelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
-		require.NoError(t, baseCache.Set(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(channelID, domain.AlarmTypeLive), "1", time.Minute))
-	}
-
-	for name, results := range map[string]func([]valkey.Completed) []valkey.ValkeyResult{
-		"per-command error": func(cmds []valkey.Completed) []valkey.ValkeyResult {
-			out := make([]valkey.ValkeyResult, len(cmds))
-			for i := range out {
-				out[i] = valkey.NewErrorResult(probeErr)
-			}
-
-			return out
-		},
-		"missing results": func([]valkey.Completed) []valkey.ValkeyResult { return nil },
-	} {
-		probeCache := &markerProbeCache{Client: baseCache, results: results}
-
-		got, err := NewSubscriberResolver(probeCache, db).ResolveUncachedChannelSubscribersByType(ctx, channels, domain.AlarmTypeLive)
-		require.NoError(t, err, name)
-		require.Equal(t, map[string][]string{
-			channels[0]: {"room-" + channels[0]},
-			channels[1]: {"room-" + channels[1]},
-		}, got, name)
-
-		_, err = NewSubscriberResolver(probeCache, nil).ResolveUncachedChannelSubscribersByType(ctx, channels, domain.AlarmTypeLive)
-		require.ErrorContains(t, err, "check empty subscriber cache", name)
-	}
 }

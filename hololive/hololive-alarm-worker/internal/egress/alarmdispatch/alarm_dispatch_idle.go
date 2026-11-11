@@ -1,27 +1,20 @@
 package alarmdispatch
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/backoff"
-	"github.com/park285/shared-go/v2/pkg/retry"
-	"github.com/valkey-io/valkey-go"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/wakeupwait"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-type alarmDispatchWakeupWaitResult string
-
-const (
-	alarmDispatchWakeupConsumed alarmDispatchWakeupWaitResult = "consumed"
-	alarmDispatchWakeupTimeout  alarmDispatchWakeupWaitResult = "timeout"
-)
-
+// WakeupConfig는 worker profile alarm_dispatch의 빈 대기 설정이다. BRPOP 상한은 BackoffMin(idle_backoff_min_ms)에서
+// BackoffMax(idle_backoff_max_ms)까지 늘고, wakeup을 끄거나 BRPOP이 실패하면 PollInterval(poll_interval_ms)만큼 잠든다.
 type WakeupConfig struct {
 	WakeupEnabled bool
 	PollInterval  time.Duration
@@ -29,145 +22,51 @@ type WakeupConfig struct {
 	BackoffMax    time.Duration
 }
 
-type WakeupWaiter struct {
-	cache         cache.LowLevelCache
-	wakeupEnabled bool
-	pollInterval  time.Duration
-	backoffMin    time.Duration
-	backoffMax    time.Duration
-	currentWait   time.Duration
-	waitWakeup    func(context.Context, time.Duration) (alarmDispatchWakeupWaitResult, error)
-	sleep         func(context.Context, time.Duration) bool
-	logger        *slog.Logger
-}
-
-func NewWakeupWaiterWithConfig(c cache.LowLevelCache, logger *slog.Logger, config WakeupConfig) (*WakeupWaiter, error) {
-	if config.PollInterval <= 0 || config.BackoffMin <= 0 || config.BackoffMax < config.BackoffMin {
-		return nil, errors.New("build alarm dispatch wakeup waiter: invalid polling or backoff configuration")
-	}
-
-	if config.WakeupEnabled && c == nil {
+// NewWakeupWaiterWithConfig는 alarm:dispatch:wakeup을 기다리는 runner 대기를 만든다. 켜진 wakeup에 cache가 없으면
+// polling으로 바꾸지 않고 생성 오류로 드러낸다.
+func NewWakeupWaiterWithConfig(c cache.LowLevelCache, logger *slog.Logger, config WakeupConfig) (*wakeupwait.Waiter, error) {
+	if !config.WakeupEnabled {
+		c = nil
+	} else if reflectutil.IsNil(c) {
 		return nil, errors.New("build alarm dispatch wakeup waiter: Valkey cache is required when wakeup is enabled")
 	}
 
-	waiter := &WakeupWaiter{
-		cache:         c,
-		wakeupEnabled: config.WakeupEnabled,
-		pollInterval:  config.PollInterval,
-		backoffMin:    config.BackoffMin,
-		backoffMax:    config.BackoffMax,
-		sleep:         retry.Sleep,
-		logger:        logger,
+	waiter, err := wakeupwait.New(c, wakeupwait.Config{
+		Queue:        queue.AlarmDispatchWakeupQueue,
+		PollInterval: config.PollInterval,
+		BackoffMin:   config.BackoffMin,
+		BackoffMax:   config.BackoffMax,
+	}, wakeupObserver{}, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build alarm dispatch wakeup waiter: %w", err)
 	}
-
-	waiter.currentWait = waiter.backoffMin
-	waiter.waitWakeup = waiter.waitForValkeyWakeup
 
 	return waiter, nil
 }
 
-func (w *WakeupWaiter) Wait(ctx context.Context) bool {
-	if ctx.Err() != nil {
-		return false
-	}
+// wakeupObserver는 대기 결과를 alarm_dispatch_runner_* 지표로 남긴다. 지표의 wait_mode는 BRPOP 대기 wakeup, wakeup을
+// 끈 대기 poll, BRPOP 실패 뒤 대기 fallback이다.
+type wakeupObserver struct{}
 
-	if !w.wakeupEnabled || (w.cache == nil && w.waitWakeup == nil) {
-		return w.sleepFallback(ctx, "poll")
-	}
+func (wakeupObserver) SignalWait(result wakeupwait.Result, elapsed time.Duration) {
+	observeAlarmDispatchRunnerIdleWait("wakeup", elapsed)
 
-	return w.waitWithWakeup(ctx)
-}
-
-func (w *WakeupWaiter) waitWithWakeup(ctx context.Context) bool {
-	waitDuration := w.currentWait
-	startedAt := time.Now()
-	result, err := w.waitWakeup(ctx, waitDuration)
-
-	observeAlarmDispatchRunnerIdleWait("wakeup", time.Since(startedAt))
-
-	if err != nil {
-		return w.handleWakeupError(ctx, err)
-	}
-
-	return w.handleWakeupResult(ctx, result)
-}
-
-func (w *WakeupWaiter) handleWakeupError(ctx context.Context, err error) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-
-	observeAlarmDispatchRunnerWakeupError()
-
-	if w.logger != nil {
-		w.logger.Warn("Alarm dispatch wakeup wait failed", slog.Any("error", err))
-	}
-
-	w.increaseBackoff()
-
-	return w.sleepFallback(ctx, "fallback")
-}
-
-func (w *WakeupWaiter) handleWakeupResult(ctx context.Context, result alarmDispatchWakeupWaitResult) bool {
 	switch result {
-	case alarmDispatchWakeupConsumed:
+	case wakeupwait.Consumed:
 		observeAlarmDispatchRunnerWakeupConsumed()
-		w.Reset()
-
-		return ctx.Err() == nil
-	case alarmDispatchWakeupTimeout:
+	case wakeupwait.Timeout:
 		observeAlarmDispatchRunnerWakeupTimeout()
-		w.increaseBackoff()
-
-		return ctx.Err() == nil
-	default:
+	case wakeupwait.Failed:
 		observeAlarmDispatchRunnerWakeupError()
-		w.increaseBackoff()
-
-		return w.sleepFallback(ctx, "fallback")
 	}
 }
 
-func (w *WakeupWaiter) Reset() {
-	w.currentWait = w.backoffMin
-}
+func (wakeupObserver) PollSleep(afterFailure bool, elapsed time.Duration) {
+	waitMode := "poll"
 
-func (w *WakeupWaiter) sleepFallback(ctx context.Context, waitMode string) bool {
-	waitDuration := w.pollInterval
-	startedAt := time.Now()
-	ok := w.sleep(ctx, waitDuration)
-
-	observeAlarmDispatchRunnerIdleWait(waitMode, time.Since(startedAt))
-
-	return ok
-}
-
-func (w *WakeupWaiter) waitForValkeyWakeup(ctx context.Context, timeout time.Duration) (alarmDispatchWakeupWaitResult, error) {
-	cmd := w.cache.B().Brpop().Key(queue.AlarmDispatchWakeupQueue).Timeout(timeout.Seconds()).Build()
-	results := w.cache.DoMulti(ctx, cmd)
-
-	if len(results) != 1 {
-		return alarmDispatchWakeupTimeout, fmt.Errorf("unexpected result count: %d", len(results))
+	if afterFailure {
+		waitMode = "fallback"
 	}
 
-	values, err := results[0].AsStrSlice()
-	if err != nil {
-		if errors.Is(err, valkey.Nil) {
-			return alarmDispatchWakeupTimeout, nil
-		}
-
-		return alarmDispatchWakeupTimeout, fmt.Errorf("as str slice: %w", err)
-	}
-
-	if len(values) == 0 {
-		return alarmDispatchWakeupTimeout, nil
-	}
-
-	return alarmDispatchWakeupConsumed, nil
-}
-
-func (w *WakeupWaiter) increaseBackoff() {
-	w.currentWait = backoff.NextExponentialBackoff(
-		w.currentWait, w.backoffMax, w.backoffMin,
-	)
+	observeAlarmDispatchRunnerIdleWait(waitMode, elapsed)
 }

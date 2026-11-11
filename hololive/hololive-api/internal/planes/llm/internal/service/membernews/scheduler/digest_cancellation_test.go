@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/synctest"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 )
 
 func TestCanceledDigestDispatchJoinsAndCountsUnstartedRooms(t *testing.T) {
@@ -13,7 +13,7 @@ func TestCanceledDigestDispatchJoinsAndCountsUnstartedRooms(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
-		rooms := []model.SubscribedRoom{
+		rooms := []newsmodel.SubscribedRoom{
 			{RoomID: "accepted"},
 			{RoomID: "room-2"},
 			{RoomID: "room-3"},

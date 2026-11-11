@@ -48,10 +48,12 @@ func TestAlarmSchedulerEnabled(t *testing.T) {
 }
 
 func TestRuntimeSchedulerDisabledSkipsDependencyConstruction(t *testing.T) {
-	t.Setenv(notificationSchedulerRoleEnv, "off")
+	t.Parallel()
+
+	appConfig := &workerconfig.RuntimeConfig{NotificationRoles: workerconfig.NotificationRoles{Scheduler: "off"}}
 
 	result := buildOptionalRuntimeScheduler(
-		&workerconfig.RuntimeConfig{}, &sharedmodules.InfraModule{}, &alarmFoundation{}, queue.PublishConfig{}, slog.New(slog.DiscardHandler),
+		appConfig, &sharedmodules.InfraModule{}, &alarmFoundation{}, queue.PublishConfig{}, slog.New(slog.DiscardHandler),
 	)
 	require.NoError(t, result.err)
 	require.Nil(t, result.scheduler)

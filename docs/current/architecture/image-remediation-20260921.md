@@ -12,19 +12,19 @@ scanner는 로컬 태그를 불변 image ID로 고정하고, Trivy가 보고한 
 
 ## 소유 경로
 
-- nginx는 공식 `1.31.8-alpine-slim`의 multi-arch index `f45171d36c76a8b2f5ef97108a3a8a2294248a6578a0a180edc2d78f7d2edc26`를 사용한다.
-- socket-proxy는 공식 `1.13.1` index `3935b709275e4ec35d6ed5a5c4a1f0d01ed31eec5e7234efc3357ecd47689002`를 사용한다.
+- `deploy/images/nginx`는 공식 `1.31.8-alpine-slim`의 multi-arch index `f45171d36c76a8b2f5ef97108a3a8a2294248a6578a0a180edc2d78f7d2edc26`를 기반으로 Alpine 보안 패키지(`ca-certificates-bundle`·`musl`·`zlib`) 고정값만 더하고 공식 entrypoint·설정·UID를 보존한다.
+- `deploy/images/valkey`는 공식 `9.1.3-alpine3.24` index `bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b`를 기반으로 같은 보안 패키지 고정값과 `valkey-runtime.sh`를 더하고 공식 서버·UID를 유지한다.
 - `deploy/images/postgres`는 공식 PostgreSQL 18.6 index `77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873`를 기반으로 한다. gosu 1.19 source `40506998e34a7a679e6dae41374c1b7aa37eb73f`를 Go 1.27.2·x/sys v0.49.0·moby/sys/user v0.4.1로 재빌드해 `/usr/local/bin/gosu`만 교체한다. 기존 PostgreSQL entrypoint·PGDATA·사용자·initdb contract는 유지한다.
-- `deploy/images/deunhealth`는 upstream source `37e5bd45036a29867fa71e68db3975c0b971c708`를 checksum으로 고정한다. `client.patch`는 Docker/Moby 의존성을 분리된 API v1.56.1·client v0.6.1로 이행하고 새 client의 기본 API negotiation을 사용한다. daemon 코드와 취약한 x/net graph를 제거하며 OTel은 1.47.0으로 갱신한다. 이벤트/label/health 필터·재시작·취소·healthcheck는 보존한다.
+- 이 문서 작성 당시 쓰던 socket-proxy 공식 image와 `deploy/images/deunhealth` 재빌드 image는 2026-11-04 중앙 런타임의 Podman Quadlet 전환(#735)에서 제거했다.
 
 `dependencies.mod`·`dependencies.sum`은 재빌드의 module graph 정본이다. upstream module zip은 Go proxy에서 받고 Dockerfile의 SHA-256으로 검증한다. Docker build에서는 `GOTOOLCHAIN=local`, compiler identity 검사, `-mod=readonly`로 추가 버전 선택을 막는다. 업스트림 라이선스는 최종 이미지에 포함한다.
 
 ## 빌드·검증·전달
 
-모든 빌드와 검증은 kapu에서 수행한다. `scripts/ci/test-infra-images.sh`는 fake Docker API의 negotiation·filter·event·restart 실패·취소 race test와 임시 PostgreSQL root/UID 999 시작·SQL 검사를 소유하며 recurring security job이 실행한다. PostgreSQL 테스트는 `--network none`, tmpfs와 bounded PID/memory만 사용하고 Docker socket·운영 저장소·운영 credential을 연결하지 않는다. 테스트의 trust 인증은 이 격리된 일회성 DB에만 적용된다.
+모든 빌드와 검증은 kapu에서 수행한다. `scripts/ci/test-infra-images.sh`는 임시 PostgreSQL을 root와 UID 999로 시작해 `deploy/images/postgres/test.sh`의 SQL 검사를 실행하며 recurring security job이 실행한다. PostgreSQL 테스트는 `--network none`, tmpfs와 bounded PID/memory만 사용하고 Docker socket·운영 저장소·운영 credential을 연결하지 않는다. 테스트의 trust 인증은 이 격리된 일회성 DB에만 적용된다.
 
-`build-all.sh --no-bump --build-only`는 기존 서비스와 함께 `hololive-postgres:prod`·`hololive-deunhealth:prod`를 빌드하고 실제 소스 revision label을 검증한다. 게시용 빌드는 깨끗한 reviewed revision, ARM64, provenance·SBOM 및 전체 검증이 필요하다. validation-only 빌드의 `working-tree`·`test` revision은 배포용 근거가 아니다.
+`build-all.sh --no-bump --build-only`는 기존 서비스와 함께 인프라 image `hololive-postgres:prod`·`iris-stack-valkey:9.1.3-zlib1.4-r0`·`iris-stack-nginx:1.31.8-zlib1.4-r0`를 빌드하고 실제 소스 revision label을 검증한다. 게시용 빌드는 깨끗한 reviewed revision, ARM64, provenance·SBOM 및 전체 검증이 필요하다. validation-only 빌드의 `working-tree`·`test` revision은 배포용 근거가 아니다.
 
-중앙과 standby는 같은 소스 빌드 PostgreSQL 이미지를 소비한다. 인프라를 교체할 때는 두 인프라 이미지도 검증·전달한 후에만 기존 no-build cutover를 사용할 수 있다. standby에서 빌드하거나 이전 공식 이미지로 자동 대체하지 않는다. 부분 배포는 승인된 서비스만 `--no-build --no-deps`로 교체하며 이미지 목록 갱신만으로 실행 중 인프라의 취약점이 해소됐다고 보고하지 않는다.
+중앙 primary와 비활성 standby 참고 unit(`deploy/quadlet/hololive-bot-standby/`)은 같은 `POSTGRES_IMAGE`를 쓴다. 인프라 image(PostgreSQL·Valkey·nginx) 교체는 [Quadlet README](../../../deploy/quadlet/README.md#이미지)의 load → build host identity 대조 → `compose.env` 갱신 → 승인된 restart 순서를 따른다. standby에서 빌드하거나 이전 공식 이미지로 자동 대체하지 않으며, 이미지 목록 갱신만으로 실행 중 인프라의 취약점이 해소됐다고 보고하지 않는다.
 
-최종 이미지 검증에서는 scanner DB 시각과 coverage 한계를 보존하며 알려지지 않은 취약점까지 없다고 주장하지 않는다. upstream의 수정된 호환 공식 이미지가 제공되면 이 재빌드·patch를 제거할 수 있는지 재검토한다.
+최종 이미지 검증에서는 scanner DB 시각과 coverage 한계를 보존하며 알려지지 않은 취약점까지 없다고 주장하지 않는다. upstream의 수정된 호환 공식 이미지가 제공되면 이 재빌드와 보안 패키지 고정값을 제거할 수 있는지 재검토한다.

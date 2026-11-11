@@ -8,10 +8,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 )
 
-func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptguard.Guard, logger *slog.Logger) ([]model.FilteredCandidate, error) {
+func filterPromptCandidates(candidates []newsmodel.FilteredCandidate, guard *promptguard.Guard, logger *slog.Logger) ([]newsmodel.FilteredCandidate, error) {
 	if len(candidates) == 0 {
 		return candidates, nil
 	}
@@ -24,7 +24,7 @@ func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptg
 		logger = slog.Default()
 	}
 
-	filtered := make([]model.FilteredCandidate, 0, len(candidates))
+	filtered := make([]newsmodel.FilteredCandidate, 0, len(candidates))
 	for i := range candidates {
 		candidate := &candidates[i]
 		parts := make([]string, 0, 3+len(candidate.Candidate.Members))

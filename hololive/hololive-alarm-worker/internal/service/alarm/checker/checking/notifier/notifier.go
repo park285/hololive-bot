@@ -30,7 +30,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -39,7 +39,6 @@ import (
 type Notifier struct {
 	dedupService   *dedup.Service
 	queuePublisher *queue.Publisher
-	tierScheduler  *tier.TieredScheduler
 	logger         *slog.Logger
 }
 
@@ -47,7 +46,6 @@ type Notifier struct {
 func NewNotifier(
 	dedupService *dedup.Service,
 	queuePublisher *queue.Publisher,
-	tierScheduler *tier.TieredScheduler,
 	logger *slog.Logger,
 ) (*Notifier, error) {
 	if dedupService == nil {
@@ -61,14 +59,18 @@ func NewNotifier(
 	return &Notifier{
 		dedupService:   dedupService,
 		queuePublisher: queuePublisher,
-		tierScheduler:  tierScheduler,
 		logger:         checking.SafeLogger(logger),
 	}, nil
 }
 
-// 단일 큐 발행 실패가 전체 배치를 중단하지 않도록 실패는 집계하고 나머지 알림은 계속 처리한다.
-func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error) {
-	result, prepared, errs := n.prepareSendBatch(ctx, notifications)
+// Send는 알림 목록을 독립 처리한다. 단일 큐 발행 실패가 전체 배치를 중단하지 않도록
+// 실패는 집계하고 나머지 알림은 계속 처리한다.
+func (n *Notifier) Send(
+	ctx context.Context,
+	notifications []*domain.AlarmNotification,
+	targetPolicy targetpolicy.TargetMinutePolicy,
+) (delivery.SendResult, error) {
+	result, prepared, errs := n.prepareSendBatch(ctx, notifications, targetPolicy)
 
 	if len(prepared) > 0 {
 		errs = n.publishPreparedBatch(ctx, prepared, &result, errs)

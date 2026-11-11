@@ -161,7 +161,7 @@ HTTP `429`는 fetch transport에서 응답 body를 폐기한 뒤 기존 `cooldow
 
 Channel RPC의 필수 `kind=live|metadata`가 수집 범위를 지정합니다. live 작업은 streams/player만, metadata 작업은 about과 채널 정보만 조회하므로 일정 접근 제한이 통계·프로필·사진 수집을 중단시키지 않습니다. 변경된 Go binary와 Node helper는 같은 bundle로 교체합니다.
 
-Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`, `CANCELLED`는 schedule 보강 대상이 아닙니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
+Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`는 schedule 보강 대상이 아닙니다. streams 목록에는 취소를 나타내는 구조화된 표시가 없어 helper는 `CANCELLED` 행을 만들지 않습니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
 
 helper는 같은 채널·video ID의 player 예정 시각을 프로세스 메모리(`schedule-cache.mjs`, 최대 512건)에서 재사용합니다. Go는 live 요청에 lease 슬롯 시각 `scheduled_for`를 싣고, helper는 확인한 슬롯을 함께 기록합니다. 재사용한 행에는 그 슬롯 시각을 `schedule_observed_at`으로 싣습니다. API reducer는 이 시각으로 저장된 `schedule_observed_at`과 비교하므로, 다른 AP나 provider가 그 뒤에 관측한 새 일정을 옛 일정으로 되돌리지 않습니다. 재사용 행이 더 늦은 슬롯으로 상태 시계를 먼저 올린 뒤 앞 슬롯의 실제 확인이 늦게 도착해도, reducer는 그 관측의 상태는 버리되 일정은 확인 시각으로 비교해 반영합니다.
 

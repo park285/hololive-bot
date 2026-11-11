@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // 이 attempt가 어긋나면 DLQ 전이가 fence에 막혀 배치 반환과 재claim이 반복된다.
@@ -16,7 +15,7 @@ func TestConsumerDrainMovesUndecodableRetriedRowToDLQ(t *testing.T) {
 	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("decode-dlq-room", "decode-dlq")}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{receiptEnvelope("decode-dlq-room", "decode-dlq")}})
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET status='retry', attempt_count=2`)

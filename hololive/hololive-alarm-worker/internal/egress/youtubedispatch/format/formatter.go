@@ -73,16 +73,20 @@ type FormattedMessage struct {
 	Err     error
 }
 
-// Template 버전 확인은 표시명 조회가 끝난 뒤 호출당 한 SQL 문장이며, 호출 시작 전에 끝난 template 저장은 모든 항목에 보인다. 한 outbox를 여러 방이 받으므로 두 본문 변형을 모두
-// 렌더하고, 방마다 발송기가 변형 하나를 고른다. 결과는 items와 같은 순서·길이다. 표시명 조회·payload·template 부재·렌더 실패는 항목별 Err이고(대체 문구 없음), renderer
-// 부재·template 버전 조회 실패·취소는 결과 없이 오류다. 호출자는 오류를 모든 항목의 포맷 실패로 다룬다.
+// FormatMessages는 outbox 항목을 각 항목의 template과 채널 override로 렌더링한다. 표시명은 호출 안에서 channel_id마다
+// 한 번 조회하고 그 결과(오류 포함)를 같은 채널의 모든 항목에 쓴다. Template 버전 확인은 표시명 조회가 끝난 뒤 호출당
+// 한 SQL 문장이며, 호출 시작 전에 끝난 template 저장은 모든 항목에 보인다.
+// 한 outbox를 여러 방이 받으므로 두 본문 변형을 모두 렌더하고, 방마다 발송기가 변형 하나를 고른다.
+// 결과는 items와 같은 순서·길이다. 표시명 조회·payload·template 부재·렌더 실패는 항목별 Err이고(대체 문구 없음),
+// renderer 부재·template 버전 조회 실패·취소는 결과 없이 오류다. 호출자는 오류를 모든 항목의 포맷 실패로 다룬다.
 func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.YouTubeNotificationOutbox) ([]FormattedMessage, error) {
 	results := make([]FormattedMessage, len(items))
 	requests := make([]template.RenderRequest, 0, 2*len(items))
 	requestItems := make([]int, 0, len(items))
+	memberNames := make(map[string]memberNameLookup)
 
 	for i := range items {
-		data, err := mf.messageTemplateData(ctx, &items[i])
+		data, err := mf.messageTemplateData(ctx, &items[i], memberNames)
 		if err != nil {
 			results[i].Err = err
 
@@ -131,14 +135,25 @@ func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.Y
 	return results, nil
 }
 
-// 조회 오류는 대체 문구로 바꾸지 않고 포맷 실패로 돌려준다.
-func (mf *MessageFormatter) messageTemplateData(ctx context.Context, item *domain.YouTubeNotificationOutbox) (TemplateData, error) {
-	memberName, err := mf.GetMemberName(ctx, item.ChannelID)
-	if err != nil {
-		return TemplateData{}, fmt.Errorf("get member name: %w", err)
+type memberNameLookup struct {
+	name string
+	err  error
+}
+
+// messageTemplateData는 단일 항목 template 입력을 만든다. 표시명은 memberNames에 없을 때만 조회해 넣는다. 조회 오류는
+// 대체 문구로 바꾸지 않고 포맷 실패로 돌려준다.
+func (mf *MessageFormatter) messageTemplateData(ctx context.Context, item *domain.YouTubeNotificationOutbox, memberNames map[string]memberNameLookup) (TemplateData, error) {
+	lookup, ok := memberNames[item.ChannelID]
+	if !ok {
+		lookup.name, lookup.err = mf.GetMemberName(ctx, item.ChannelID)
+		memberNames[item.ChannelID] = lookup
 	}
 
-	data, err := mf.BuildTemplateData(mf.DisplayMemberName(memberName), item)
+	if lookup.err != nil {
+		return TemplateData{}, fmt.Errorf("get member name: %w", lookup.err)
+	}
+
+	data, err := mf.BuildTemplateData(mf.DisplayMemberName(lookup.name), item)
 	if err != nil {
 		return TemplateData{}, fmt.Errorf("build template data: %w", err)
 	}
@@ -146,23 +161,30 @@ func (mf *MessageFormatter) messageTemplateData(ctx context.Context, item *domai
 	return data, nil
 }
 
-// 어느 변형을 보낼지는 발송기가 방 유형으로 정한다.
+// renderTemplate는 같은 자료로 두 본문 변형을 렌더하고 두 변형의 template 버전을 한 문장으로 확인한다. 어느 변형을
+// 보낼지는 발송기가 방 유형으로 정한다.
 func (mf *MessageFormatter) renderTemplate(ctx context.Context, templateKey domain.TemplateKey, channelID string, data any) (delivery.MessageVariants, error) {
 	if mf.Renderer == nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render template %s: renderer is nil", templateKey)
 	}
 
-	plain, err := mf.Renderer.Render(ctx, templateKey, channelID, domain.TemplateFormatPlain, data)
+	results, err := mf.Renderer.RenderBatch(ctx, []template.RenderRequest{
+		{Key: templateKey, ChannelID: channelID, Format: domain.TemplateFormatPlain, Data: data},
+		{Key: templateKey, ChannelID: channelID, Format: domain.TemplateFormatRichText, Data: data},
+	})
 	if err != nil {
+		return delivery.MessageVariants{}, fmt.Errorf("render template %s: %w", templateKey, err)
+	}
+
+	if err := results[0].Err; err != nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render plain template %s: %w", templateKey, err)
 	}
 
-	richText, err := mf.Renderer.Render(ctx, templateKey, channelID, domain.TemplateFormatRichText, data)
-	if err != nil {
+	if err := results[1].Err; err != nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render richtext template %s: %w", templateKey, err)
 	}
 
-	return delivery.MessageVariants{Plain: plain, RichText: richText}, nil
+	return delivery.MessageVariants{Plain: results[0].Text, RichText: results[1].Text}, nil
 }
 
 type TemplateData struct {

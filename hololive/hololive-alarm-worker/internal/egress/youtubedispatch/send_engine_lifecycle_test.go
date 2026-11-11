@@ -39,6 +39,9 @@ type lifecycleTransitionSpy struct {
 
 	preparedFailuresMu sync.Mutex
 	preparedFailures   []string
+
+	startedFailuresMu sync.Mutex
+	startedFailures   []string
 }
 
 func (s *lifecycleTransitionSpy) recordMode(operation string, mode store.DeliveryMode) {
@@ -87,13 +90,14 @@ func (s *lifecycleTransitionSpy) ApplyPreparedFailure(
 func (s *lifecycleTransitionSpy) ApplyStartedFailure(
 	_ context.Context,
 	_ store.StartedOperation,
-	_ ytlifecycle.FailureKind,
-	_ ytlifecycle.Reason,
-	_ time.Duration,
+	kind ytlifecycle.FailureKind,
+	reason ytlifecycle.Reason,
+	retryAfter time.Duration,
 	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
 	s.startedFailureCalls.Add(1)
 	s.recordMode("started_failure", mode)
+	s.recordStartedFailure(kind, reason, retryAfter, mode)
 
 	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
@@ -241,7 +245,7 @@ func (s *lifecycleTransitionSpy) recordPreparedFailure(kind ytlifecycle.FailureK
 	s.preparedFailuresMu.Lock()
 	defer s.preparedFailuresMu.Unlock()
 
-	s.preparedFailures = append(s.preparedFailures, fmt.Sprintf("%v/%v/%v", kind, reason, mode))
+	s.preparedFailures = append(s.preparedFailures, preparedFailureRecord(kind, reason, mode))
 }
 
 func (s *lifecycleTransitionSpy) recordedPreparedFailures() []string {
@@ -249,6 +253,46 @@ func (s *lifecycleTransitionSpy) recordedPreparedFailures() []string {
 	defer s.preparedFailuresMu.Unlock()
 
 	return slices.Clone(s.preparedFailures)
+}
+
+// recordStartedFailure는 발송 시작 뒤 실패 전이를 "kind/reason/retryAfter/mode" 형태로 모은다.
+func (s *lifecycleTransitionSpy) recordStartedFailure(
+	kind ytlifecycle.FailureKind,
+	reason ytlifecycle.Reason,
+	retryAfter time.Duration,
+	mode store.DeliveryMode,
+) {
+	s.startedFailuresMu.Lock()
+	defer s.startedFailuresMu.Unlock()
+
+	s.startedFailures = append(s.startedFailures, startedFailureRecord(kind, reason, retryAfter, mode))
+}
+
+func (s *lifecycleTransitionSpy) recordedStartedFailures() []string {
+	s.startedFailuresMu.Lock()
+	defer s.startedFailuresMu.Unlock()
+
+	return slices.Clone(s.startedFailures)
+}
+
+func startedFailureRecord(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, retryAfter time.Duration, mode store.DeliveryMode) string {
+	return fmt.Sprintf("%v/%v/%s/%v", kind, reason, retryAfter, mode)
+}
+
+func preparedFailureRecord(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, mode store.DeliveryMode) string {
+	return fmt.Sprintf("%v/%v/%v", kind, reason, mode)
+}
+
+// transitionSpy는 단위 전이 대역으로 만든 dispatcher의 spy를 돌려준다.
+func transitionSpy(t *testing.T, d *Dispatcher) *lifecycleTransitionSpy {
+	t.Helper()
+
+	spy, ok := d.send.transition.(*lifecycleTransitionSpy)
+	if !ok {
+		t.Fatalf("transition = %T, want *lifecycleTransitionSpy", d.send.transition)
+	}
+
+	return spy
 }
 
 func (s *lifecycleTestSender) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {

@@ -58,9 +58,7 @@ export function thumbnailsOf(value) {
     ? value
     : Array.isArray(value?.thumbnails)
       ? value.thumbnails
-      : Array.isArray(value?.sources)
-        ? value.sources
-        : [];
+      : [];
   const mapped = [];
   for (const row of rows) {
     const rawUrl = textOf(row?.url).trim();
@@ -89,7 +87,7 @@ export function mapPost(post) {
   if (post == null) {
     return null;
   }
-  const postId = textOf(post.id || post.postId).trim();
+  const postId = textOf(post.id).trim();
   if (postId === "") {
     return null;
   }
@@ -102,28 +100,12 @@ export function mapPost(post) {
     authorPhoto: thumbnailsOf(post.author?.thumbnails),
     contentText: textOf(post.content),
     publishedText: textOf(post.published),
-    likeCount: parseShortNumber(textOf(post.vote_count ?? post.voteCount)),
-    commentCount: commentCountOf(post),
+    likeCount: parseShortNumber(textOf(post.vote_count)),
+    // SDK 게시물의 댓글 수는 CommentActionButtons.reply_button 문구에만 있습니다.
+    commentCount: parseShortNumber(textOf(post.action_buttons?.reply_button?.text)),
     images: attachment.images,
     videoId: attachment.videoId,
   };
-}
-
-function commentCountOf(post) {
-  const candidates = [
-    post.comment_count,
-    post.commentCount,
-    post.action_buttons?.comment_count,
-    post.action_buttons?.reply_button?.text,
-    post.action_buttons?.replyButton?.text,
-  ];
-  for (const candidate of candidates) {
-    const parsed = parseShortNumber(textOf(candidate));
-    if (parsed > 0) {
-      return parsed;
-    }
-  }
-  return 0;
 }
 
 function mapAttachment(attachment) {

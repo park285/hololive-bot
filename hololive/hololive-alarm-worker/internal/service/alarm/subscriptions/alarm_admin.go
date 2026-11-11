@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 멤버 표시명만 subscriber cache의 member name hash에서 읽고, 그 조회 실패는 이름 없이 목록을 낸다.
+// GetAllAlarmKeys는 관리 목록을 PG에서 만든다. 방·채널 쌍마다 한 항목이며, 방 이름은 관리자 지정 이름 → Kakao 방 이름
+// → 방 ID 순으로 정한다. 멤버 표시명은 members 정본의 DisplayName이고 members에 없는 채널은 빈 이름이다.
+// 멤버 조회 실패는 이름 없는 목록으로 바꾸지 않고 목록 오류로 돌려준다.
 func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	entries, err := as.alarmRepository.ListAlarmEntries(ctx)
 	if err != nil {
@@ -50,11 +51,9 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 		channelIDs = append(channelIDs, entry.ChannelID)
 	}
 
-	memberNames, err := as.getMemberNamesBatch(ctx, channelIDs)
+	memberNames, err := as.memberDisplayNames(ctx, channelIDs)
 	if err != nil {
-		as.logger.Warn("failed to load member names", slog.Any("error", err))
-
-		memberNames = map[string]string{}
+		return nil, fmt.Errorf("resolve alarm entry member names: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -64,6 +63,7 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	return entries, nil
 }
 
+// CountAlarmEntries는 멤버 표시명 조회와 목록 직렬화를 거치지 않고 관리 통계의 알림 개수를 반환한다.
 func (as *AlarmService) CountAlarmEntries(ctx context.Context) (int, error) {
 	count, err := as.alarmRepository.CountAlarmEntries(ctx)
 	if err != nil {

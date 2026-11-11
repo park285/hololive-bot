@@ -6,7 +6,6 @@ import { Innertube } from "youtubei.js";
 
 import { createFetchTransport, FetchTransportError } from "./fetch-transport.mjs";
 import { fetchChannelLiveCheck, fetchVideoLiveCheck } from "./live-check.mjs";
-import { parseRawLiveMetadata } from "./live-metadata.mjs";
 import { handleChannelLiveCheckRequest, handleVideoLiveCheckRequest } from "./rpc-boundary.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import {
@@ -407,27 +406,6 @@ test("canceled live checks remain RPC cancellations", async () => {
     ));
   assert.equal(result.status, 408);
   assert.equal(result.body.error.code, "collection_canceled");
-});
-
-test("legacy raw metadata additionally exposes channel, isLiveNow and end facts without changing admission", () => {
-  const premiere = videoScenarios.get("ended_premiere_measured");
-  assert.deepEqual(parseRawLiveMetadata(premiere.player, premiere.video_id), {
-    videoId: "H9Sutl-r6YY",
-    channelId: "UC_SANITIZED_PREMIERE_CHANNEL",
-    isLiveNow: false,
-    isLiveContent: false,
-    startTimestamp: "2026-09-20T10:00:00.000Z",
-    endTimestamp: "2026-09-20T10:05:00.000Z",
-  });
-  const malformedEnd = structuredClone(premiere.player);
-  malformedEnd.microformat.playerMicroformatRenderer.liveBroadcastDetails.endTimestamp = "yesterday";
-  malformedEnd.microformat.playerMicroformatRenderer.liveBroadcastDetails.isLiveNow = "no";
-  malformedEnd.videoDetails.channelId = 42;
-  assert.deepEqual(parseRawLiveMetadata(malformedEnd, premiere.video_id), {
-    videoId: "H9Sutl-r6YY",
-    isLiveContent: false,
-    startTimestamp: "2026-09-20T10:00:00.000Z",
-  });
 });
 
 test("single-attempt checks do not follow redirects into an extra upstream request", async (t) => {

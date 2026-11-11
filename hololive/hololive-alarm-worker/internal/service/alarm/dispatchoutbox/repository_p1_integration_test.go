@@ -18,7 +18,7 @@ func insertClaimedEnvelope(t *testing.T, repository *PgxRepository, workerID str
 	t.Helper()
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-dlq-1",
@@ -27,7 +27,7 @@ func insertClaimedEnvelope(t *testing.T, repository *PgxRepository, workerID str
 		},
 		Version: 1,
 	}
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, workerID, 10, time.Minute)
@@ -77,9 +77,9 @@ func TestLoadExistingEventRows_ReturnsRowsInEventKeyOrder(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, 4)
+	envelopes := make([]AlarmQueueEnvelope, 0, 4)
 	for _, streamID := range []string{"stream-d", "stream-a", "stream-c", "stream-b"} {
-		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+		envelopes = append(envelopes, AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    "room-order",

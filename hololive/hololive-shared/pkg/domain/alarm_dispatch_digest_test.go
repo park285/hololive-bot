@@ -3,7 +3,6 @@ package domain
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	jsonv2 "encoding/json/v2"
 	"testing"
 )
 
@@ -57,39 +56,6 @@ func TestDeliveryDigestDispatchPayloadIdentityAndValidation(t *testing.T) {
 
 	if (&DeliveryDigestDispatchPayload{Kind: payload.Kind, PeriodKey: payload.PeriodKey}).ContentIdentity() != "" {
 		t.Fatal("empty message produced a content identity")
-	}
-}
-
-func TestAlarmQueueEnvelopeRoundTripsDeliveryDigest(t *testing.T) {
-	t.Parallel()
-
-	envelope := AlarmQueueEnvelope{
-		Notification: AlarmNotification{AlarmType: AlarmTypeCommunity, RoomID: "room-1"},
-		SourceKind:   AlarmDispatchSourceKindDeliveryDigest,
-		DeliveryDigest: &DeliveryDigestDispatchPayload{
-			Kind:               DeliveryKindMemberNewsMonthly,
-			PeriodKey:          "2026-08",
-			PreRenderedMessage: "8월 멤버 뉴스",
-		},
-		Version: 1,
-	}
-	if err := envelope.ValidateCanonicalDispatch(); err != nil {
-		t.Fatalf("ValidateCanonicalDispatch() error = %v", err)
-	}
-
-	raw, err := jsonv2.Marshal(envelope)
-	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
-	}
-
-	var decoded AlarmQueueEnvelope
-
-	if err := jsonv2.Unmarshal(raw, &decoded); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
-
-	if decoded.DeliveryDigest == nil || decoded.DeliveryDigest.PreRenderedMessage != "8월 멤버 뉴스" {
-		t.Fatalf("DeliveryDigest = %#v", decoded.DeliveryDigest)
 	}
 }
 

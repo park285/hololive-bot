@@ -26,42 +26,41 @@ func TestNewProbeFiltersAndNormalizesChecks(t *testing.T) {
 	probe := NewProbe("  bot  ",
 		Check{Name: "nil-probe"},
 		Check{Name: "   ", Probe: func(context.Context) error { return nil }},
-		Check{Name: "  postgres  ", Group: "unknown", Probe: func(context.Context) error { return nil }},
+		Check{Name: "  postgres  ", Probe: func(context.Context) error { return nil }},
 	)
 
 	if probe.Name() != "bot" {
 		t.Fatalf("Name() = %q, want %q", probe.Name(), "bot")
 	}
 
-	ready, groups := probe.Evaluate(t.Context())
+	ready, dependencies := probe.Evaluate(t.Context())
 	if !ready {
 		t.Fatal("Evaluate ready = false, want true")
 	}
 
-	if got := groups[GroupDependencies]; len(got) != 1 || !got["postgres"] {
+	if got := dependencies; len(got) != 1 || !got["postgres"] {
 		t.Fatalf("dependencies = %v, want only trimmed postgres", got)
 	}
 }
 
-func TestEvaluateSeedsDependenciesWhenEmpty(t *testing.T) {
+func TestEvaluateReturnsEmptyDependenciesWhenNoChecks(t *testing.T) {
 	t.Parallel()
 
-	ready, groups := NewProbe("bot").Evaluate(t.Context())
+	ready, dependencies := NewProbe("bot").Evaluate(t.Context())
 
 	if !ready {
 		t.Fatal("Evaluate ready = false, want true")
 	}
 
-	deps, ok := groups[GroupDependencies]
-	if !ok || len(deps) != 0 {
-		t.Fatalf("dependencies group = %v (present=%v), want present and empty", deps, ok)
+	if dependencies == nil || len(dependencies) != 0 {
+		t.Fatalf("dependencies = %#v, want non-nil empty map", dependencies)
 	}
 }
 
 func TestEvaluateFailingCheckNotReady(t *testing.T) {
 	t.Parallel()
 
-	ready, groups := NewProbe("bot",
+	ready, dependencies := NewProbe("bot",
 		okCheck("postgres"),
 		failCheck("valkey", errors.New("connection refused")),
 	).Evaluate(t.Context())
@@ -70,11 +69,11 @@ func TestEvaluateFailingCheckNotReady(t *testing.T) {
 		t.Fatal("Evaluate ready = true, want false")
 	}
 
-	if !groups[GroupDependencies]["postgres"] {
+	if !dependencies["postgres"] {
 		t.Fatal("postgres = false, want true")
 	}
 
-	if groups[GroupDependencies]["valkey"] {
+	if dependencies["valkey"] {
 		t.Fatal("valkey = true, want false")
 	}
 }
@@ -109,21 +108,11 @@ func TestEvaluateHangingCheckBoundedByTimeout(t *testing.T) {
 func TestDependencyChecksNilClientsFailClosed(t *testing.T) {
 	t.Parallel()
 
-	postgres := PostgresCheck(nil)
-	if postgres.Group != GroupDependencies {
-		t.Fatalf("PostgresCheck group = %q, want %q", postgres.Group, GroupDependencies)
-	}
-
-	if err := postgres.Probe(t.Context()); err == nil {
+	if err := PostgresCheck(nil).Probe(t.Context()); err == nil {
 		t.Fatal("PostgresCheck(nil) probe error = nil, want non-nil")
 	}
 
-	valkey := ValkeyCheck(nil)
-	if valkey.Group != GroupDependencies {
-		t.Fatalf("ValkeyCheck group = %q, want %q", valkey.Group, GroupDependencies)
-	}
-
-	if err := valkey.Probe(t.Context()); err == nil {
+	if err := ValkeyCheck(nil).Probe(t.Context()); err == nil {
 		t.Fatal("ValkeyCheck(nil) probe error = nil, want non-nil")
 	}
 }

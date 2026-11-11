@@ -5,45 +5,24 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 type fakeOutboxRepository struct {
-	insertPendingCalls int
-	insertBatchCalls   int
-	lastBatchInput     dispatchoutbox.PublishBatchInput
-	batchInputs        []dispatchoutbox.PublishBatchInput
-	pendingRecord      *dispatchoutbox.Record
-	pendingResult      dispatchoutbox.InsertResult
-	batchResult        dispatchoutbox.PublishBatchResult
-	batchResults       []dispatchoutbox.PublishBatchResult
-	batchErrors        []error
-	pendingErr         error
-	batchErr           error
-}
-
-func (r *fakeOutboxRepository) InsertPending(_ context.Context, _ *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
-	r.insertPendingCalls++
-	if r.pendingErr != nil {
-		return nil, "", r.pendingErr
-	}
-
-	result := r.pendingResult
-	if result == "" {
-		result = dispatchoutbox.Inserted
-	}
-
-	record := r.pendingRecord
-	if record == nil {
-		record = &dispatchoutbox.Record{ID: 12, Status: dispatchoutbox.StatusPending}
-	}
-
-	return record, result, nil
+	insertBatchCalls int
+	lastBatchInput   dispatchoutbox.PublishBatchInput
+	batchInputs      []dispatchoutbox.PublishBatchInput
+	batchResult      dispatchoutbox.PublishBatchResult
+	batchResults     []dispatchoutbox.PublishBatchResult
+	batchErrors      []error
+	batchErr         error
 }
 
 func (r *fakeOutboxRepository) InsertBatch(_ context.Context, input dispatchoutbox.PublishBatchInput) (dispatchoutbox.PublishBatchResult, error) {
@@ -101,13 +80,12 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 	}}
 	publisher := newTestPublisher(t, cacheClient, repository, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000})
 
-	result, err := publisher.Publish(t.Context(), &domain.AlarmNotification{
+	result, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{{
 		AlarmType: domain.AlarmTypeLive,
 		RoomID:    "room-duplicate",
-	}, nil)
+	}}, [][]string{nil})
 	require.NoError(t, err)
 	assert.Equal(t, 1, repository.insertBatchCalls)
-	assert.Equal(t, 0, repository.insertPendingCalls)
 	assert.Equal(t, 1, result.ProcessedDeliveries)
 	assert.Equal(t, 1, result.DuplicateDeliveries)
 	assert.Equal(t, 0, result.InsertedDeliveries)
@@ -123,7 +101,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 	result, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"},
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"},
-	}, nil)
+	}, make([][]string, 2))
 	require.Error(t, err)
 
 	assert.Equal(t, 2, repository.insertBatchCalls)
@@ -146,7 +124,6 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 	}, [][]string{{"claim:event"}, {"claim:event"}, {"claim:event"}})
 	require.NoError(t, err)
 	assert.Equal(t, 1, repository.insertBatchCalls)
-	assert.Equal(t, 0, repository.insertPendingCalls)
 	assert.Len(t, repository.lastBatchInput.Envelopes, 3)
 	assert.Equal(t, []string{"1"}, queueItemsByKeyOrEmpty(t, mini, AlarmDispatchWakeupQueue))
 }
@@ -171,7 +148,7 @@ func TestPublisherPreservesNonPrefixReceiptsAcrossChunkError(t *testing.T) {
 		notifications[i] = &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room"}
 	}
 
-	result, err := publisher.PublishBatch(t.Context(), notifications, nil)
+	result, err := publisher.PublishBatch(t.Context(), notifications, make([][]string, len(notifications)))
 	require.ErrorContains(t, err, "commit response unavailable")
 	require.Len(t, result.Receipts, 3)
 	require.Equal(t, 0, result.Receipts[0].Ordinal)
@@ -181,6 +158,23 @@ func TestPublisherPreservesNonPrefixReceiptsAcrossChunkError(t *testing.T) {
 	require.True(t, result.Receipts[1].Accepted())
 	require.True(t, result.Receipts[2].Accepted())
 	require.Equal(t, 3, result.ProcessedDeliveries)
+}
+
+// claimKeys가 notification과 길이가 다르면 비어 있더라도 claim 없는 envelope으로 채우지 않고 저장 전에 거절한다.
+func TestPublisherPublishBatchRejectsClaimKeyCountMismatch(t *testing.T) {
+	t.Parallel()
+
+	for _, claimKeys := range [][][]string{nil, {{"claim:room-1"}}} {
+		repository := &fakeOutboxRepository{}
+		publisher := newTestPublisher(t, nil, repository, PublishConfig{MaxDeliveriesPerBatch: 1000})
+
+		_, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{
+			{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"},
+			{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"},
+		}, claimKeys)
+		require.ErrorContains(t, err, "claim key count")
+		require.Zero(t, repository.insertBatchCalls)
+	}
 }
 
 func newTestPublisher(t *testing.T, c WakeupCache, outbox dispatchoutbox.Writer, config PublishConfig) *Publisher {
@@ -202,4 +196,35 @@ func TestNewPublisherRejectsMissingOutboxAndNonPositiveBatchLimit(t *testing.T) 
 		_, err := NewPublisher(nil, &fakeOutboxRepository{}, PublishConfig{MaxDeliveriesPerBatch: limit}, nil)
 		require.ErrorContains(t, err, "max deliveries per batch must be positive")
 	}
+}
+
+// wakeup은 outbox 적재 뒤 부가 작업이므로 호출자 취소와 분리하고, Valkey 지연이 발행 루프를 붙잡지 않게 짧은 상한 안에서 보낸다.
+func TestPublisherWakeupIgnoresCallerCancellationWithinShortDeadline(t *testing.T) {
+	t.Parallel()
+
+	var (
+		guardErr    error
+		deadline    time.Time
+		hasDeadline bool
+	)
+
+	client := cachemocks.NewStrictClient()
+
+	client.SetNXFunc = func(ctx context.Context, _, _ string, _ time.Duration) (bool, error) {
+		guardErr = ctx.Err()
+		deadline, hasDeadline = ctx.Deadline()
+
+		return false, nil
+	}
+
+	publisher := newTestPublisher(t, client, &fakeOutboxRepository{}, PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := publisher.PublishBatch(ctx, []*domain.AlarmNotification{{AlarmType: domain.AlarmTypeLive, RoomID: "room-wakeup"}}, [][]string{nil})
+	require.NoError(t, err)
+	require.NoError(t, guardErr)
+	require.True(t, hasDeadline, "wakeup context has no deadline")
+	assert.False(t, deadline.After(time.Now().Add(alarmDispatchWakeupSignalTimeout)), "wakeup deadline %s exceeds %s", deadline, alarmDispatchWakeupSignalTimeout)
 }

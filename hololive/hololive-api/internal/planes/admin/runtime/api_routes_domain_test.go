@@ -26,16 +26,15 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
-	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
+	domainHandlers := testAdminDomainHandlers()
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -43,7 +42,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -65,12 +64,11 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 
 func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 	ctx := t.Context()
-	apiHandler := &server.Handler{}
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: testAPIKey},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), apiHandler.DomainHandlers(), sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), testAdminDomainHandlers(), sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}

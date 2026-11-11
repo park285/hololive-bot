@@ -30,11 +30,3 @@ type Channel struct {
 	Suborg      *string `json:"suborg,omitempty"`
 	Group       *string `json:"group,omitempty"`
 }
-
-func (c *Channel) HasPhoto() bool {
-	if c == nil {
-		return false
-	}
-
-	return c.Photo != nil && *c.Photo != ""
-}

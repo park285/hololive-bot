@@ -28,30 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInitAlarmDispatchRunnerMetricsIsIdempotent(t *testing.T) {
-	t.Parallel()
-
-	require.NotPanics(t, func() {
-		initAlarmDispatchRunnerMetrics()
-		initAlarmDispatchRunnerMetrics()
-	})
-	assert.NotNil(t, alarmDispatchRunnerEmptyPollsTotal)
-	assert.NotNil(t, alarmDispatchRunnerIdleWaitSeconds)
-	assert.NotNil(t, alarmDispatchRunnerWakeupConsumedTotal)
-	assert.NotNil(t, alarmDispatchRunnerWakeupTimeoutTotal)
-	assert.NotNil(t, alarmDispatchRunnerWakeupErrorTotal)
-	assert.NotNil(t, alarmDispatchRunnerPostSendQuarantinedTotal)
-	assert.NotNil(t, alarmDispatchPGRetentionDeletedRowsTotal)
-	assert.NotNil(t, alarmDispatchPGRetentionFailedTotal)
-	assert.NotNil(t, alarmDispatchPGBacklogObservationFailedTotal)
-	assert.NotNil(t, alarmDispatchPGBacklogRows)
-	assert.NotNil(t, alarmDispatchPGOldestPendingAgeSeconds)
-	assert.NotNil(t, alarmDispatchPGOldestRetryAgeSeconds)
-	assert.NotNil(t, alarmDispatchPGOldestSendingAgeSeconds)
-}
-
 func TestObserveAlarmDispatchBacklogObservationFailureIncrementsCounter(t *testing.T) {
-	initAlarmDispatchRunnerMetrics()
+	alarmDispatchRunnerMetrics()
 
 	before := alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total")
 
@@ -62,7 +40,7 @@ func TestObserveAlarmDispatchBacklogObservationFailureIncrementsCounter(t *testi
 
 func alarmDispatchCounterMetricValue(t *testing.T, name string) float64 {
 	t.Helper()
-	initAlarmDispatchRunnerMetrics()
+	alarmDispatchRunnerMetrics()
 
 	families, err := prometheus.DefaultGatherer.Gather()
 	require.NoError(t, err)

@@ -108,7 +108,6 @@ DB 기준선은 epoch-3입니다. 기존 epoch-2 DB는 372 head의 233개 파일
 go test ./hololive/hololive-dbtest/... \
   ./hololive/hololive-api/internal/migrationrunner/... \
   ./hololive/hololive-api/cmd/db-migrate/...
-bash scripts/architecture/check-migration-manifest.sh
 ```
 
 배포 스크립트(`./build-all.sh`) 기동 시, Docker 이미지 빌드 단계 진입 전에 `local-ci.sh` 품질 게이트가 자동으로 선행 수행됩니다. 해당 품질 검사(golangci-lint, NilAway, 경합 테스트 등) 중 하나라도 실패하면 빌드 프로세스가 강제 차단됩니다. 의존성 취약점 진단(`govulncheck`)과 배포 스크립트 테스트는 `scripts/ci/pre-push-gate.sh`가 push 시점에 실행합니다.

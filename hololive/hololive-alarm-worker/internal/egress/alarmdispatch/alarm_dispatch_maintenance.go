@@ -17,10 +17,7 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-const (
-	alarmDispatchRetentionMaxLimit = 10000
-	alarmDispatchRetentionLockKey  = 781512042
-)
+const alarmDispatchRetentionLockKey = 781512042
 
 type alarmDispatchMaintenanceStore interface {
 	WithAdvisoryLock(ctx context.Context, key int64, fn func(context.Context, alarmDispatchMaintenanceDataStore) error) error
@@ -80,19 +77,14 @@ type alarmDispatchMaintenancePgxStore struct {
 	beginner *pgxpool.Pool
 }
 
+// NewMaintenanceRunner는 PostgreSQL pool이 있는 infra를 받는다. 조립 쪽(buildNotificationEgress)이 기동 때 pool을 먼저
+// 확인하고, 보존 limit은 config가 1~10000으로 맞춘 값을 SQL LIMIT으로 그대로 쓴다.
 func NewMaintenanceRunner(
 	infra *sharedmodules.InfraModule,
 	retentionConfig workerconfig.DispatchRetentionConfig,
 	logger *slog.Logger,
 ) Scheduler {
-	if infra == nil || infra.Postgres == nil {
-		return nil
-	}
-
 	pool := infra.Postgres.GetPool()
-	if pool == nil {
-		return nil
-	}
 
 	return &alarmDispatchMaintenanceRunner{
 		store:            alarmDispatchMaintenancePgxStore{db: pool, beginner: pool},
@@ -135,10 +127,6 @@ func (r *alarmDispatchMaintenanceRunner) reportFailure(ctx context.Context, err 
 }
 
 func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
-	if r.store == nil {
-		return nil
-	}
-
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("retention sweep aborted: %w", err)
 	}
@@ -301,7 +289,7 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 
 	// picked CTE는 행을 잠그지 않고 EvalPlanQual 때 다시 계산되지 않습니다. 바깥 DELETE가 status와
 	// 보존 시각을 다시 검사해야 대기 중에 requeue로 commit된 행을 최신 버전 기준으로 건너뜁니다.
-	tag, err := s.db.Exec(ctx, query, retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	tag, err := s.db.Exec(ctx, query, retentionDays, limit)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}
@@ -310,12 +298,12 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (alarmDispatchOrphanEventCounts, error) {
-	deletedCandidates, err := dispatchoutbox.NewUpcomingCandidates(s.db).Cleanup(ctx, retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	deletedCandidates, err := dispatchoutbox.NewUpcomingCandidates(s.db).Cleanup(ctx, retentionDays, limit)
 	if err != nil {
 		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("cleanup upcoming candidates: %w", err)
 	}
 
-	tag, err := s.db.Exec(ctx, deleteOrphanEventsSQL, retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	tag, err := s.db.Exec(ctx, deleteOrphanEventsSQL, retentionDays, limit)
 	if err != nil {
 		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("exec: %w", err)
 	}
@@ -324,22 +312,10 @@ func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error) {
-	tag, err := s.db.Exec(ctx, deleteOrphanSendUnitsSQL, clampAlarmDispatchRetentionLimit(limit))
+	tag, err := s.db.Exec(ctx, deleteOrphanSendUnitsSQL, limit)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}
 
 	return tag.RowsAffected(), nil
-}
-
-func clampAlarmDispatchRetentionLimit(limit int) int {
-	if limit <= 0 {
-		return 1000
-	}
-
-	if limit > alarmDispatchRetentionMaxLimit {
-		return alarmDispatchRetentionMaxLimit
-	}
-
-	return limit
 }

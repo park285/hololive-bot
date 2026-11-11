@@ -23,29 +23,29 @@ package filter
 import (
 	"strings"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 )
 
 func resolveSource(
-	candidate *model.Candidate,
-	sourceValidator model.SourceURLValidator,
-) (model.SourceTier, string, bool) {
+	candidate *newsmodel.Candidate,
+	sourceValidator newsmodel.SourceURLValidator,
+) (newsmodel.SourceTier, string, bool) {
 	sourceURL := strings.TrimSpace(candidate.SourceURL)
 	if sourceURL == "" {
-		return model.SourceTierCommunity, "", false
+		return newsmodel.SourceTierCommunity, "", false
 	}
 
 	if sourceValidator == nil {
-		return model.SourceTierCommunity, sourceURL, true
+		return newsmodel.SourceTierCommunity, sourceURL, true
 	}
 
 	tier, normalizedURL, validateErr := sourceValidator.ValidateSourceURL(sourceURL)
 	if validateErr != nil {
-		return model.SourceTierCommunity, "", false
+		return newsmodel.SourceTierCommunity, "", false
 	}
 
-	if tier == model.SourceTierCommunity && !sourceValidator.HasCorroboration(candidate.Description) {
-		return model.SourceTierCommunity, "", false
+	if tier == newsmodel.SourceTierCommunity && !sourceValidator.HasCorroboration(candidate.Description) {
+		return newsmodel.SourceTierCommunity, "", false
 	}
 
 	return tier, normalizedURL, true

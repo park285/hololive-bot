@@ -13,7 +13,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -235,7 +234,7 @@ func TestMessageIngressNeverLogsRoomTitleAsRoomID(t *testing.T) {
 			t.Parallel()
 
 			logger, snapshot := newCapturingLogger()
-			ing := NewMessageIngress(messaging.NewMessageAdapter("!", ""), nil, logger, stringutil.Normalize(selfSender))
+			ing := NewMessageIngress(messaging.NewMessageAdapter("!"), nil, logger, stringutil.Normalize(selfSender))
 
 			if _, ok := ing.Prepare(t.Context(), tc.message); ok {
 				t.Fatal("expected the message to be rejected")
@@ -267,7 +266,7 @@ func TestMessageIngressKeepsCanonicalRoomIDReadable(t *testing.T) {
 
 	sender := "닉네임-" + privacySentinel
 	logger, snapshot := newCapturingLogger()
-	ing := NewMessageIngress(messaging.NewMessageAdapter("!", ""), nil, logger, "")
+	ing := NewMessageIngress(messaging.NewMessageAdapter("!"), nil, logger, "")
 
 	message := &webhook.Message{
 		Msg:    "!없는명령",
@@ -291,7 +290,7 @@ func TestMessageIngressCommandReceivedLogKeepsEventWithoutContentOrNickname(t *t
 	t.Parallel()
 
 	logger, snapshot := newCapturingLogger()
-	ing := NewMessageIngress(messaging.NewMessageAdapter("!", ""), nil, logger, "")
+	ing := NewMessageIngress(messaging.NewMessageAdapter("!"), nil, logger, "")
 
 	sender := "닉네임-" + privacySentinel
 	message := &webhook.Message{
@@ -329,7 +328,7 @@ func TestMessageIngressUnknownCommandLogKeepsEventWithoutContentOrNickname(t *te
 	t.Parallel()
 
 	logger, snapshot := newCapturingLogger()
-	ing := NewMessageIngress(messaging.NewMessageAdapter("!", ""), nil, logger, "")
+	ing := NewMessageIngress(messaging.NewMessageAdapter("!"), nil, logger, "")
 
 	sender := "닉네임-" + privacySentinel
 	message := &webhook.Message{
@@ -362,7 +361,7 @@ func TestMessageIngressSelfSenderLogOmitsNickname(t *testing.T) {
 
 	selfSender := "봇계정-" + privacySentinel
 	logger, snapshot := newCapturingLogger()
-	ing := NewMessageIngress(messaging.NewMessageAdapter("!", ""), nil, logger, stringutil.Normalize(selfSender))
+	ing := NewMessageIngress(messaging.NewMessageAdapter("!"), nil, logger, stringutil.Normalize(selfSender))
 
 	message := &webhook.Message{
 		Msg:    "!member 검색어-" + privacySentinel,
@@ -387,24 +386,4 @@ func TestMessageIngressSelfSenderLogOmitsNickname(t *testing.T) {
 	assertNoSentinelInLogs(t, records)
 	assertNoLogAttrKey(t, records, "user")
 	assertNoLogAttrKey(t, records, "user_name")
-}
-
-func TestRoomLogAttrMatchesTheSharedCorrelationDefinition(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct{ chatID, roomName string }{
-		{"", "상대방닉네임 님과의 대화"},
-		{"   ", "상대방닉네임 님과의 대화"},
-		{testMaxUint64RoomID, "상대방닉네임 님과의 대화"},
-		{"", ""},
-	}
-
-	for _, tc := range cases {
-		got := roomLogAttr(tc.chatID, tc.roomName)
-		want := privacylog.RoomAttr(tc.chatID, tc.roomName)
-
-		if got.Key != want.Key || got.Value.String() != want.Value.String() {
-			t.Fatalf("roomLogAttr(%q, %q) = %v, want %v", tc.chatID, tc.roomName, got, want)
-		}
-	}
 }

@@ -31,8 +31,8 @@ import (
 )
 
 // RecoveryMiddleware는 HTTP boundary에서 발생한 panic이 프로세스 밖으로 전파되지 않도록
-// 공통 복구 정책을 적용합니다. ApplyBaseMiddleware가 이 미들웨어를 항상 설치하므로 신규
-// gin.Engine 작성자가 gin.Recovery를 별도로 기억하지 않아도 됩니다.
+// 공통 복구 정책을 적용합니다. NewRuntimeRouter·NewMetricsServer·NewPprofServer가 만드는 router는
+// 이 미들웨어를 항상 설치하므로 신규 gin.Engine 작성자가 gin.Recovery를 별도로 기억하지 않아도 됩니다.
 func RecoveryMiddleware(ctx context.Context, logger *slog.Logger) gin.HandlerFunc {
 	log := logger
 	if log == nil {

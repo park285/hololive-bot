@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
@@ -63,14 +62,6 @@ func (c *AlarmCommand) Description() string {
 func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
-	if c.Deps().Alarm == nil {
-		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrAlarmServiceNotInitialized); err != nil {
-			return fmt.Errorf("send error: %w", err)
-		}
-
-		return nil
 	}
 
 	if err := c.executeAction(ctx, cmdCtx, params, alarmAction(params)); err != nil {
@@ -247,20 +238,16 @@ func (c *AlarmCommand) resolveAlarmAddMember(ctx context.Context, room, memberNa
 		return nil, handlercore.ErrMemberLookupHandled
 	}
 
-	graduated, err := c.isGraduatedMember(ctx, channel.ChannelID)
+	blocked, err := handlercore.BlockGraduatedMember(ctx, c.Deps(), room, channel.ChannelID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("block graduated member: %w", err)
 	}
 
-	if !graduated {
-		return channel, nil
+	if blocked {
+		return nil, handlercore.ErrMemberLookupHandled
 	}
 
-	if sendErr := c.Deps().SendError(ctx, room, messaging.ErrGraduatedMemberBlocked); sendErr != nil {
-		return nil, fmt.Errorf("send error: %w", sendErr)
-	}
-
-	return nil, handlercore.ErrMemberLookupHandled
+	return channel, nil
 }
 
 func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *botcommand.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {
@@ -268,7 +255,6 @@ func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *botcommand.
 		RoomID:     cmdCtx.Room,
 		ChannelID:  channel.ChannelID,
 		HostID:     channel.HostID,
-		RoomName:   cmdCtx.RoomName,
 		AlarmTypes: alarmTypes,
 	})
 	if err != nil {
@@ -293,71 +279,19 @@ func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *botcommand.
 	return nil
 }
 
-// 사용자-facing 응답을 이미 보낸 경우 handlercore.ErrMemberLookupHandled를 반환한다.
+// 사용자-facing 응답을 이미 보낸 경우 handlercore.ErrMemberLookupHandled를 반환한다. 구독 전용 host를 matcher보다 먼저 찾는다.
 func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName string) (*alarmTarget, error) {
 	if channelID, host, ok := mekparkhost.FindSubscriptionMember(memberName); ok {
 		return &alarmTarget{ChannelID: channelID, HostID: host.ID, Name: host.Name}, nil
 	}
 
-	channel, found, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
+	// 동명이인 안내 예시는 삭제 명령에서도 "알람 추가"다.
+	channel, err := handlercore.FindMemberWithCandidatesOrError(ctx, c.Deps(), room, memberName, "알람 추가")
 	if err != nil {
-		if replyErr := c.replyAlarmMemberLookupFailure(ctx, room, err); replyErr != nil {
-			return nil, fmt.Errorf("reply alarm member lookup failure: %w", replyErr)
-		}
-
-		return nil, handlercore.ErrMemberLookupHandled
-	}
-
-	if !found || channel == nil {
-		if replyErr := c.replyAlarmMemberNotFound(ctx, room, memberName); replyErr != nil {
-			return nil, fmt.Errorf("reply alarm member not found: %w", replyErr)
-		}
-
-		return nil, handlercore.ErrMemberLookupHandled
+		return nil, fmt.Errorf("find alarm member: %w", err)
 	}
 
 	return &alarmTarget{ChannelID: channel.ID, Name: channel.Name}, nil
-}
-
-// 동명이인만 사용자 응답으로 처리한다. 원천 조회 실패는 "멤버 없음"으로 바꾸지 않고 원인 오류로 돌려준다.
-func (c *AlarmCommand) replyAlarmMemberLookupFailure(ctx context.Context, room string, lookupErr error) error {
-	ambiguousErr, ok := stdErrors.AsType[*matcher.AmbiguousMatchError](lookupErr)
-	if !ok {
-		return fmt.Errorf("find alarm member candidates: %w", lookupErr)
-	}
-
-	message := c.Deps().Formatter.FormatAmbiguousMembers(ctx, ambiguousErr.Candidates, "알람 추가")
-	if err := c.Deps().SendMessage(ctx, room, message); err != nil {
-		return fmt.Errorf("send message: %w", err)
-	}
-
-	return nil
-}
-
-func (c *AlarmCommand) replyAlarmMemberNotFound(ctx context.Context, room, memberName string) error {
-	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, memberName)); err != nil {
-		return fmt.Errorf("send message: %w", err)
-	}
-
-	return nil
-}
-
-// 대표가 없으면 졸업이 아니고, 조회 실패는 추측하지 않고 오류다.
-func (c *AlarmCommand) isGraduatedMember(ctx context.Context, channelID string) (bool, error) {
-	if c.Deps().Matcher == nil {
-		return false, nil
-	}
-
-	member, err := c.Deps().Matcher.GetMemberByChannelID(ctx, channelID)
-	if stdErrors.Is(err, domain.ErrMemberNotFound) {
-		return false, nil
-	}
-
-	if err != nil {
-		return false, fmt.Errorf("check graduated member: %w", err)
-	}
-
-	return member.IsGraduated, nil
 }
 
 func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *botcommand.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {

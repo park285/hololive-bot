@@ -10,6 +10,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
@@ -18,12 +19,12 @@ import (
 )
 
 func TestXSpaceRenderingAndIsolation(t *testing.T) {
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		SourceKind:   domain.AlarmDispatchSourceKindXSpace,
 		Notification: domain.AlarmNotification{RoomID: "room-a", AlarmType: domain.AlarmTypeLive},
 		XSpace:       &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: testAlarmChannelID, Title: "이야기", StartedAt: time.Now().UTC()},
 	}
-	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), newAlarmDispatchTestRenderer(t), nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), newAlarmDispatchTestRenderer(t), nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, alarmDispatchGroup{envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 	require.True(t, handled)
 
@@ -34,25 +35,18 @@ func TestXSpaceRenderingAndIsolation(t *testing.T) {
 
 	require.NoError(t, alarmDispatchEnvelopeError(&envelope))
 
-	other := envelope
-
-	other.XSpace = new(*envelope.XSpace)
-	other.XSpace.SpaceID = "1def"
-	require.NotEqual(t, alarmDispatchGroupKey(&envelope), alarmDispatchGroupKey(&other))
-	require.NotEqual(t, alarmDispatchGroupKey(&envelope), alarmDispatchGroupKey(&domain.AlarmQueueEnvelope{Notification: envelope.Notification}))
-
 	envelope.XSpace.SpaceID = "bad/path"
-	_, _, err = renderAlarmDispatchGroupSource(t.Context(), nil, nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, _, err = renderAlarmDispatchGroupSource(t.Context(), nil, nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, alarmDispatchGroup{envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope}})
 	require.Error(t, err)
 }
 
 func TestXSpaceDispatchUsesTextAndRecordsCompletion(t *testing.T) {
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		SourceKind:   domain.AlarmDispatchSourceKindXSpace,
 		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeLive},
 		XSpace:       &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: testAlarmChannelID, Title: "이야기", StartedAt: time.Now().UTC()},
 	}
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{members: xSpaceTestMembers{testAlarmChannelID: "소라"}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
@@ -79,12 +73,12 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 				SpaceID: "1abc", CreatorID: "123", ChannelID: testAlarmChannelID,
 				Title: title, StartedAt: time.Now().UTC(),
 			}
-			envelope := domain.AlarmQueueEnvelope{
+			envelope := dispatchoutbox.AlarmQueueEnvelope{
 				SourceKind:   domain.AlarmDispatchSourceKindXSpace,
 				Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeLive},
 				XSpace:       payload,
 			}
-			message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, nil, xSpaceTestMembers{testAlarmChannelID: markdownMemberName}, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
+			message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, nil, xSpaceTestMembers{testAlarmChannelID: markdownMemberName}, alarmDispatchGroup{envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope}})
 			require.NoError(t, err)
 			require.True(t, handled)
 
@@ -100,7 +94,7 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 
 func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		SourceKind:   domain.AlarmDispatchSourceKindXSpace,
 		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeLive},
 		XSpace:       &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: testAlarmChannelID, StartedAt: time.Now().UTC()},
@@ -108,7 +102,7 @@ func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 	_, err := pool.Exec(t.Context(), `UPDATE notification_templates SET body = format_variant || ' {{.MemberName}}: {{.URL}}' WHERE template_key = $1 AND channel_id IS NULL`, domain.TemplateKeyXSpaceStarted)
 	require.NoError(t, err)
 
-	group := alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}}
+	group := alarmDispatchGroup{envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope}}
 	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, xSpaceTestMembers{testAlarmChannelID: "소라"}, group)
 	require.NoError(t, err)
 	require.True(t, handled)
@@ -141,14 +135,6 @@ func (xSpaceTestMembers) FindMemberByName(context.Context, string) (*domain.Memb
 
 func (xSpaceTestMembers) FindMemberByAlias(context.Context, string) (*domain.Member, error) {
 	return nil, domain.ErrMemberNotFound
-}
-
-func (xSpaceTestMembers) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
-}
-
-func (xSpaceTestMembers) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
 }
 
 func (xSpaceTestMembers) GetChannelIDs(context.Context) ([]string, error) { return nil, nil }

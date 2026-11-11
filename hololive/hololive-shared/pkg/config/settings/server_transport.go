@@ -82,8 +82,8 @@ func normalizeServerHTTPTransport(raw string) (string, bool) {
 	return transport, false
 }
 
-// IsHTTP3Transport는 HTTP/3 전송 별칭(h3·http3·http/3·quic)을 대소문자·앞뒤 공백과 무관하게 판정한다.
-// 서버 전송 목록과 Iris 런타임 전송 설정이 같은 별칭 집합을 쓴다.
+// IsHTTP3Transport는 서버 전송 목록(ServerConfig.HTTPTransports)의 HTTP/3 별칭(h3·http3·http/3·quic)을
+// 대소문자·앞뒤 공백과 무관하게 판정한다. IRIS_TRANSPORT는 이 별칭을 받지 않고 parseIrisTransport가 따로 해석한다.
 func IsHTTP3Transport(raw string) bool {
 	switch strings.TrimSpace(strings.ToLower(raw)) {
 	case "h3", "http3", "http/3", "quic":

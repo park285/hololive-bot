@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 func TestAlarmDispatchRunnerMultiEnvelope503StillRetries(t *testing.T) {
@@ -20,7 +20,7 @@ func TestAlarmDispatchRunnerMultiEnvelope503StillRetries(t *testing.T) {
 
 	second.DispatchOutboxID = 12
 
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{first, second}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: &iris.HTTPError{StatusCode: 503}}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
@@ -46,7 +46,7 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousStreamFailure(t *te
 	second.SendUnitID = first.SendUnitID
 	second.ClientRequestID = first.ClientRequestID
 
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{first, second}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
@@ -60,10 +60,7 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousStreamFailure(t *te
 
 	groups := groupAlarmDispatchEnvelopesForDelivery(consumer.scheduledSendingRetry)
 	require.Len(t, groups, 1)
-
-	retryID, err := alarmDispatchClientRequestID(groups[0])
-	require.NoError(t, err)
-	assert.Equal(t, testRetryClientRequestID, retryID)
+	assert.Equal(t, testRetryClientRequestID, groups[0].envelopes[0].ClientRequestID)
 }
 
 func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailure(t *testing.T) {
@@ -80,7 +77,7 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailur
 	second.SendUnitID = first.SendUnitID
 	second.ClientRequestID = first.ClientRequestID
 
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{first, second}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
@@ -93,71 +90,5 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailur
 
 	groups := groupAlarmDispatchEnvelopesForDelivery(consumer.scheduledSendingRetry)
 	require.Len(t, groups, 1)
-
-	retryID, err := alarmDispatchClientRequestID(groups[0])
-	require.NoError(t, err)
-	assert.Equal(t, first.ClientRequestID, retryID)
-}
-
-func TestAlarmDispatchRunnerRefusesGroupWithoutPersistedSendUnitIdentity(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name      string
-		configure func(first, second *domain.AlarmQueueEnvelope)
-	}{
-		{
-			name:      "missing",
-			configure: func(_, _ *domain.AlarmQueueEnvelope) {},
-		},
-		{
-			name: "mismatched",
-			configure: func(first, second *domain.AlarmQueueEnvelope) {
-				first.ClientRequestID = testRetryClientRequestID
-				second.ClientRequestID = testRetryClientRequestID + "-other"
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: alarmDispatchMaxAttempts})
-			second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: alarmDispatchMaxAttempts})
-
-			first.DispatchOutboxID = 41
-			first.SendUnitID = 9
-			second.DispatchOutboxID = 42
-			second.SendUnitID = 9
-			tc.configure(&first, &second)
-
-			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
-			sender := &alarmDispatchRunnerTestSender{}
-			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
-
-			processed, err := runner.runOnce(t.Context())
-
-			require.NoError(t, err)
-			assert.True(t, processed)
-			assert.Empty(t, sender.messages)
-			assert.Empty(t, sender.clientRequestIDs)
-			assert.Empty(t, consumer.markSending)
-			require.Len(t, consumer.movedDLQ, 2)
-		})
-	}
-}
-
-func TestAlarmDispatchClientRequestIDRequiresPersistedSendUnitIdentity(t *testing.T) {
-	t.Parallel()
-
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-
-	_, err := alarmDispatchClientRequestID(alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: []domain.AlarmQueueEnvelope{envelope}})
-	require.ErrorIs(t, err, errAlarmDispatchSendUnitIdentityMissing)
-
-	envelope.SendUnitID = 5
-	envelope.ClientRequestID = testRetryClientRequestID
-
-	got, err := alarmDispatchClientRequestID(alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: []domain.AlarmQueueEnvelope{envelope}})
-	require.NoError(t, err)
-	assert.Equal(t, testRetryClientRequestID, got)
+	assert.Equal(t, first.ClientRequestID, groups[0].envelopes[0].ClientRequestID)
 }

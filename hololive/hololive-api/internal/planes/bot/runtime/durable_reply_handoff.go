@@ -77,7 +77,7 @@ type replyHandoffDecision struct {
 //     되돌린다. 다음 claim의 reissue ladder가 409 CLIENT_REQUEST_ID_FAILED를 받고 :r1/:r2로 올라가며,
 //     세대 상한은 ladder가 지킨다. 예산이 없으면 dead다.
 //   - outcome_unknown, 모르는 상태, 빈 응답, requestId 불일치, 404는 결과 불명이라 payload를 보존한
-//     manual_review다.
+//     manual_review다. 상태는 Iris wire 값과 정확히 일치할 때만 인정하므로 대소문자·공백이 다른 값도 모르는 상태다.
 //   - 진행 중 상태와 404가 아닌 조회 오류는 지평 전까지 전이 없이 다시 확인하고, 지평에 닿으면
 //     handoff 미확인으로 manual_review다.
 func decideReplyHandoff(
@@ -99,8 +99,7 @@ func decideReplyHandoff(
 		return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: replyHandoffErrorOutcomeUnknown}
 	}
 
-	// 대소문자·공백 허용은 기존 봇 정책이며 SDK의 정확한 wire 분류와 분리한다.
-	switch iris.ClassifyReplyStatus(strings.ToLower(strings.TrimSpace(snapshot.State))) {
+	switch iris.ClassifyReplyStatus(snapshot.State) {
 	case iris.ReplyStatusHandoffCompleted:
 		return replyHandoffDecision{status: durability.ReplyOutboxHandoffCompleted}
 	case iris.ReplyStatusFailed:

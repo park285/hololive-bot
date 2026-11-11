@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type stubBotCommand struct {
@@ -27,36 +26,6 @@ func (c *stubBotCommand) Execute(context.Context, *botcommand.CommandContext, ma
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
-}
-
-func TestCloneCommandBuildersNilSourceReturnsNil(t *testing.T) {
-	if got := orchcmd.CloneCommandBuilders(nil); got != nil {
-		t.Fatalf("CloneCommandBuilders(nil) = %v, want nil", got)
-	}
-}
-
-func TestCloneCommandBuildersProducesIndependentSlice(t *testing.T) {
-	first := &stubBotCommand{name: "first"}
-	second := &stubBotCommand{name: "second"}
-	src := []orchcmd.CommandBuilder{
-		func(*handlercore.Dependencies) handlercore.Command { return first },
-		func(*handlercore.Dependencies) handlercore.Command { return second },
-	}
-
-	clone := orchcmd.CloneCommandBuilders(src)
-	if len(clone) != len(src) {
-		t.Fatalf("clone len = %d, want %d", len(clone), len(src))
-	}
-
-	if got := clone[1](nil); got != handlercore.Command(second) {
-		t.Fatalf("clone[1]() = %v, want the original second builder result", got)
-	}
-
-	clone[0] = func(*handlercore.Dependencies) handlercore.Command { return second }
-
-	if got := src[0](nil); got != handlercore.Command(first) {
-		t.Fatal("mutating the clone changed the source builders")
-	}
 }
 
 func TestCommandRouterExecuteWithoutRegistryFails(t *testing.T) {

@@ -183,10 +183,10 @@ test("real undici body termination uses the same first-page and continuation cla
     assert.equal(result.body.error.class, "TRANSIENT");
 
     const partial = await paginate({
-      firstPage: { items: [{ id: "first" }], continuation: "next" },
+      firstPage: { items: [{ id: "first" }], has_continuation: true },
       mapPage: (page) => ({ recognized_shape: true, items: page.items }),
       getContinuation: async () => { throw bodyFailure; },
-      maxPages: 2, reservedEnvelopeBytes: paginationEnvelopeReserve({ items: [] }),
+      maxPages: 2, maxResults: 10, reservedEnvelopeBytes: paginationEnvelopeReserve({ items: [] }),
     });
     assert.equal(partial.termination_reason, "continuation_transient");
     assert.equal(partial.continuity, "GAP_UNRESOLVED");

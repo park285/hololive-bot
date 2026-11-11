@@ -24,7 +24,7 @@ func TestBuildAlarmDispatchGroupViewUsesShortLinksForYouTube(t *testing.T) {
 		},
 	}
 
-	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, group, builder)
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, group, builder)
 	require.NoError(t, err)
 
 	require.Len(t, view.Entries, 2)
@@ -39,7 +39,7 @@ func TestBuildAlarmDispatchGroupViewFallsBackForInvalidVideoID(t *testing.T) {
 	require.NoError(t, err)
 
 	notification := alarmShortLinkNotification("invalid", "Fallback")
-	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{notification},
 	}, builder)
@@ -53,7 +53,7 @@ func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {
 	t.Parallel()
 
 	notification := alarmShortLinkNotification("dQw4w9WgXcQ", "Single")
-	view, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &notification, -1)
+	view, err := buildAlarmDispatchItemView(t.Context(), nil, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, &notification, -1)
 	require.NoError(t, err)
 
 	assert.Equal(t, domain.YouTubeWatchURL("dQw4w9WgXcQ"), view.URL)
@@ -69,7 +69,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, alarmShortLinkOrigin, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, alarmShortLinkOrigin, group)
 
 	require.NoError(t, err)
 
@@ -90,7 +90,7 @@ func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *te
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, "http://go.example.com", group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, "http://go.example.com", group)
 
 	require.Error(t, err)
 	assert.Empty(t, message)

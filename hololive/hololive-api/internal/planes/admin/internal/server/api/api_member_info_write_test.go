@@ -17,6 +17,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestMemberCreatePreservesBasicInfoOnReadback(t *testing.T) {
@@ -24,14 +25,16 @@ func TestMemberCreatePreservesBasicInfoOnReadback(t *testing.T) {
 
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
-	repo := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repo := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
 
-	cache, err := member.NewMemberCache(t.Context(), repo, nil, logger, member.CacheConfig{})
+	cache, err := member.NewMemberCache(t.Context(), repo, sharedtestutil.NewTestCacheService(t.Context(), t), logger, member.CacheConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	handler := (&Handler{repository: repo, memberCache: cache, logger: logger}).DomainHandlers().Member
+	t.Cleanup(cache.Close)
+
+	handler := newMemberHandler(Deps{Repository: repo, MemberCache: cache, Logger: logger})
 	body := `{"name":"Created Info Member","nameKo":"등록 멤버","org":"New Org","units":["Gen 1","GAMERS"],"officialUrl":"https://example.com/member","birthday":"2000-02-29T00:00:00Z","debutDate":"2025-10-15T00:00:00Z","shortKoreanName":"등록","chzzkChannelId":"registered-chzzk","aliases":{"ko":["등록"],"ja":[]}}`
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)

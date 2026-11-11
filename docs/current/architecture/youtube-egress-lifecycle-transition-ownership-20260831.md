@@ -294,7 +294,7 @@ Ledger는 초기 범위에서 자동 삭제하지 않습니다. Retention은 pro
 
 ### D-018. worker 전용 persistence를 alarm-worker internal로 회수한다
 
-현재 `hololive-shared/pkg/service/youtube/outbox/store`의 production importer는 alarm-worker 하나입니다.
+결정 당시 `hololive-shared/pkg/service/youtube/outbox/store`의 production importer는 alarm-worker 하나였습니다. 이 store는 아래 위치로 옮겼고 shared 경로는 남아 있지 않습니다.
 
 ```text
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store
@@ -302,9 +302,9 @@ hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store
 
 Claim/transition SQL, group query, aggregate sync, tracking transaction, worker row DTO를 internal owner로 이동합니다. Cross-runtime 계약과 진성 다중 소비자만 shared에 남깁니다.
 
-다만 `hololive-shared/pkg/service/youtube/poller/runtime/batchrepo`는 store를 import하지 않고도 FAILED outbox/delivery를 직접 `PENDING/SENT`로 변경합니다. `repository_batch_writes_0244_06.sql`, `repository_batch_delivery_state_0198_02.sql`, `repository_batch_completed_finalize_*.sql`을 writer inventory에 포함하고, compatibility writer 가동과 fixed-high-water 캡처 전에 lifecycle field mutation을 제거합니다. Post-level tracking은 same-room delivery 증거가 아니므로 이 경로에서 delivery `SENT`를 추정할 수 없습니다. Group-safe worker revive가 준비되기 전에는 이 rearm의 liveness를 일시 중단합니다.
+다만 결정 당시 `hololive-shared/pkg/service/youtube/poller/runtime/batchrepo`는 store를 import하지 않고도 FAILED outbox/delivery를 직접 `PENDING/SENT`로 변경했습니다. `repository_batch_writes_0244_06.sql`, `repository_batch_delivery_state_0198_02.sql`, `repository_batch_completed_finalize_*.sql`을 writer inventory에 포함하고, compatibility writer 가동과 fixed-high-water 캡처 전에 lifecycle field mutation을 제거합니다. Post-level tracking은 same-room delivery 증거가 아니므로 이 경로에서 delivery `SENT`를 추정할 수 없습니다. Group-safe worker revive가 준비되기 전에는 이 rearm의 liveness를 일시 중단합니다. 이 package와 위 SQL은 이후 삭제되어 현재 tree에 없습니다.
 
-Community/Shorts canonicalization은 hololive-api와 alarm-worker가 함께 사용합니다. 현재 `hololive-shared/internal/service/youtube/contentid` 구현을 하나의 cross-runtime public pure package로 옮기고 모든 caller를 한 번에 전환한 뒤 store를 이동합니다. Old-path re-export나 raw-ID fallback은 두지 않습니다.
+Community/Shorts canonicalization은 hololive-api와 alarm-worker가 함께 사용합니다. 결정 당시 `hololive-shared/internal/service/youtube/contentid`에 있던 구현을 하나의 cross-runtime public pure package로 옮기고 모든 caller를 한 번에 전환한 뒤 store를 이동합니다. Old-path re-export나 raw-ID fallback은 두지 않습니다. 현재 위치는 `hololive/hololive-shared/pkg/service/youtube/contentid`입니다.
 
 ### D-019. 범용 FSM library를 현재 도입하지 않는다
 
@@ -317,6 +317,8 @@ Community/Shorts canonicalization은 hololive-api와 alarm-worker가 함께 사�
 Computed logical owner와 current coordinator는 replica=1을 전제로 합니다. Replica>1에서는 persisted logical affinity/lock이 추가로 필요합니다. 기존 scale-out 결정에 따라 단일 인스턴스를 유지합니다.
 
 ## 현재 구조에서 확인된 문제
+
+2026-08-31 결정 당시 구조에서 확인한 문제입니다. 아래에 나오는 `poller/runtime/batchrepo`는 이후 삭제됐습니다.
 
 ### Policy 분산
 

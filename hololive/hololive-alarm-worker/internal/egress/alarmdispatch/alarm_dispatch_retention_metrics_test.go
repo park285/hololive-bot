@@ -195,12 +195,15 @@ func seedAlarmDispatchRetentionMetrics(t *testing.T, pool *pgxpool.Pool) {
 	start := time.Now().UTC().Add(time.Hour)
 
 	for i := range 2 {
+		streamID := fmt.Sprintf("retention-metric-stream-%d", i)
 		notification := domain.NewAlarmNotification("retention-metric-room", &domain.Channel{ID: "retention-metric-channel"}, &domain.Stream{
-			ID: fmt.Sprintf("retention-metric-stream-%d", i), ChannelID: "retention-metric-channel", Status: domain.StreamStatusUpcoming, StartScheduled: &start,
+			ID: streamID, ChannelID: "retention-metric-channel", Status: domain.StreamStatusUpcoming, StartScheduled: &start,
 		}, 5, nil, "")
 		require.NoError(t, candidates.Stage(t.Context(), "retention-metric-channel", start.Add(-time.Hour), []*domain.AlarmNotification{notification}))
 
-		key := dispatchoutbox.BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: *notification})
+		var key string
+
+		require.NoError(t, pool.QueryRow(t.Context(), "SELECT dedupe_key FROM alarm_upcoming_candidates WHERE stream_id = $1", streamID).Scan(&key))
 		require.NoError(t, candidates.Finish(t.Context(), map[string][]string{"subscription_removed": {key}}, old))
 	}
 
@@ -241,7 +244,7 @@ func assertAlarmDispatchRetentionFixtureRows(t *testing.T, pool *pgxpool.Pool, d
 
 func alarmDispatchRetentionMetricValues(t *testing.T) map[string]float64 {
 	t.Helper()
-	initAlarmDispatchRunnerMetrics()
+	alarmDispatchRunnerMetrics()
 
 	values := map[string]float64{"sent": 0, "dlq": 0, "quarantined": 0, string(dispatchoutbox.StatusCancelled): 0, "send_unit": 0, "event": 0, "upcoming_candidates": 0}
 	families, err := prometheus.DefaultGatherer.Gather()

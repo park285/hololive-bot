@@ -27,7 +27,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	common "github.com/kapu/hololive-shared/pkg/contracts/common"
 )
@@ -129,25 +128,6 @@ func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
 	}
 }
 
-func TestAuthMiddlewareExplicitDisabled(t *testing.T) {
-	t.Parallel()
-	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-	router.Use(AuthMiddleware(httputil.AdminAuthConfig{Disabled: true}))
-	router.GET("/test", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test", http.NoBody)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-}
-
 func TestNoRouteAuthHandler(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -237,21 +217,5 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 
 	if got := payload["message"]; got != "invalid API key" {
 		t.Fatalf("message = %v, want %q", got, "invalid API key")
-	}
-}
-
-func TestNoRouteHandlerExplicitDisabled(t *testing.T) {
-	t.Parallel()
-	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-	router.NoRoute(noRouteHandler(httputil.AdminAuthConfig{Disabled: true}))
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }

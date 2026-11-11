@@ -32,6 +32,7 @@ import (
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	newssummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -40,7 +41,7 @@ import (
 
 type Service struct {
 	repository      *Repository
-	summarizer      model.Summarizer
+	summarizer      newsmodel.Summarizer
 	sourceValidator *SourceValidator
 	promptGuard     *promptguard.Guard
 	membersData     domain.MemberDataProvider
@@ -58,7 +59,7 @@ func WithPromptGuard(guard *promptguard.Guard) ServiceOption {
 
 func NewService(
 	repository *Repository,
-	summarizer model.Summarizer,
+	summarizer newsmodel.Summarizer,
 	sourceValidator *SourceValidator,
 	membersData domain.MemberDataProvider,
 	logger *slog.Logger,
@@ -130,6 +131,8 @@ func (s *Service) generatePreparedRoomDigest(ctx context.Context, roomID string,
 	}
 
 	if len(filtered) == 0 {
+		observeDigestResult(sharedmodel.SummaryResultEmpty, digestFallbackReasonNone)
+
 		return emptyDigest(period), nil
 	}
 
@@ -163,7 +166,7 @@ func emptyDigest(period model.Period) *model.Digest {
 	return &model.Digest{
 		ResultType:   sharedmodel.SummaryResultEmpty,
 		Period:       period,
-		Headline:     model.DefaultHeadline(period),
+		Headline:     newsmodel.DefaultHeadline(period),
 		TopItems:     []model.SummaryItem{},
 		MoreSummary:  "",
 		OmittedCount: 0,
@@ -174,12 +177,12 @@ func emptyDigest(period model.Period) *model.Digest {
 // summarizeRoomDigest는 결정적 fallback digest를 만드는 유일한 곳이다. 요약기(summarizer)는 실패를 오류로만 알리고,
 // 여기서 사유를 bounded enum으로 분류해 result_type과 함께 metric과 로그에 남긴다.
 // 호출자 context가 끝났으면 fallback digest를 만들지 않고 취소를 돌려준다.
-func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate, now time.Time) (*model.Digest, error) {
+func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []newsmodel.FilteredCandidate, now time.Time) (*model.Digest, error) {
 	if s.summarizer == nil {
 		return s.fallbackDigest(roomID, period, filtered, digestFallbackReasonLLMDisabled, nil), nil
 	}
 
-	digest, err := s.summarizer.Summarize(ctx, &model.SummarizeInput{
+	digest, err := s.summarizer.Summarize(ctx, &newsmodel.SummarizeInput{
 		Period:      period,
 		Now:         now,
 		RoomID:      roomID,
@@ -214,7 +217,7 @@ func digestFallbackReasonFor(err error) string {
 	}
 }
 
-func (s *Service) fallbackDigest(roomID string, period model.Period, filtered []model.FilteredCandidate, reason string, cause error) *model.Digest {
+func (s *Service) fallbackDigest(roomID string, period model.Period, filtered []newsmodel.FilteredCandidate, reason string, cause error) *model.Digest {
 	digest := newssummarizer.BuildDeterministicFallback(period, filtered)
 
 	digest.TotalCount = len(filtered)
@@ -238,7 +241,7 @@ func (s *Service) fallbackDigest(roomID string, period model.Period, filtered []
 func normalizeDigest(digest *model.Digest, period model.Period, totalCount int) {
 	digest.Period = period
 	if digest.Headline == "" {
-		digest.Headline = model.DefaultHeadline(period)
+		digest.Headline = newsmodel.DefaultHeadline(period)
 	}
 
 	if digest.OmittedCount < 0 {
@@ -285,7 +288,7 @@ func (s *Service) IsRoomSubscribed(ctx context.Context, roomID string) (bool, er
 	return subscribed, nil
 }
 
-func (s *Service) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
+func (s *Service) ListSubscribedRooms(ctx context.Context) ([]newsmodel.SubscribedRoom, error) {
 	if s == nil || s.repository == nil {
 		return nil, errors.New("membernews repository is nil")
 	}

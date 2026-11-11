@@ -26,35 +26,20 @@ func NewExecutionProfile(
 	rateInterval time.Duration,
 	providerInflight int,
 	overhead time.Duration,
-	configuredCollectTimeout time.Duration,
 ) (ExecutionProfile, error) {
 	profile := ExecutionProfile{
 		maxUpstreamCalls: maxCalls, requestTimeout: requestTimeout, rateInterval: rateInterval,
-		providerInflight: providerInflight, overhead: overhead, collectTimeout: configuredCollectTimeout,
-	}
-	if configuredCollectTimeout == 0 {
-		minimum, err := profile.minimum()
-		if err != nil {
-			return ExecutionProfile{}, fmt.Errorf("minimum: %w", err)
-		}
-
-		profile.collectTimeout = minimum
+		providerInflight: providerInflight, overhead: overhead,
 	}
 
-	if err := profile.Validate(); err != nil {
-		return ExecutionProfile{}, fmt.Errorf("validate: %w", err)
+	minimum, err := profile.minimum()
+	if err != nil {
+		return ExecutionProfile{}, fmt.Errorf("minimum: %w", err)
 	}
+
+	profile.collectTimeout = minimum
 
 	return profile, nil
-}
-
-func (p ExecutionProfile) MinimumCollectTimeout() time.Duration {
-	value, err := p.minimum()
-	if err != nil {
-		return 0
-	}
-
-	return value
 }
 
 func (p ExecutionProfile) CollectTimeout() time.Duration {
@@ -185,7 +170,7 @@ func NewRegistryWithProfiles(profiles map[collection.JobID]ExecutionProfile, run
 
 func registerRunner(
 	registry *Registry,
-	contracts collection.JobContractSet,
+	contracts collection.StaticJobContracts,
 	seenContracts map[collection.JobID]struct{},
 	profiles map[collection.JobID]ExecutionProfile,
 	runner collection.JobRunner,

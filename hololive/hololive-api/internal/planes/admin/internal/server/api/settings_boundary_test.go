@@ -10,7 +10,7 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
@@ -21,13 +21,13 @@ type boundarySettingsApplier struct {
 	calls int
 }
 
-func (a *boundarySettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (sharedsettings.AlarmAdvanceMinutesApplyResult, error) {
+func (a *boundarySettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (adminsettings.AlarmAdvanceMinutesApplyResult, error) {
 	a.calls++
 	return a.testSettingsApplier.ApplyAlarmAdvanceMinutes(ctx, minutes)
 }
 
 func TestSettingsRejectUnknownFieldsBeforePersistenceOrApply(t *testing.T) {
-	store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())
+	store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5})
 	applier := &boundarySettingsApplier{}
 	h := &SettingsHandler{Logger: newDiscardLogger(), Settings: store, SettingsApplier: applier}
 

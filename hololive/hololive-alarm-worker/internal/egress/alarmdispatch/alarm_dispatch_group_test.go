@@ -21,47 +21,47 @@
 package alarmdispatch
 
 import (
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 func TestGroupAlarmDispatchEnvelopesForDelivery(t *testing.T) {
 	t.Parallel()
 
-	firstStart := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	secondStart := firstStart.Add(time.Minute)
+	sendUnitEnvelope := func(sendUnitID int64, minutesUntil int) dispatchoutbox.AlarmQueueEnvelope {
+		envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
+		envelope.SendUnitID = sendUnitID
+		envelope.Notification.MinutesUntil = minutesUntil
+
+		return envelope
+	}
+	undeliverable := sendUnitEnvelope(7, 5)
+
+	undeliverable.Notification.Stream = nil
 
 	testCases := []struct {
 		name      string
-		envelopes []domain.AlarmQueueEnvelope
+		envelopes []dispatchoutbox.AlarmQueueEnvelope
 		want      []alarmDispatchGroupSummary
 	}{
 		{
-			name: "groups text notifications by scheduled minute bucket",
-			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart),
-				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeCommunity, 5, secondStart),
-				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
-			},
+			name:      "groups envelopes by persisted send unit",
+			envelopes: []dispatchoutbox.AlarmQueueEnvelope{sendUnitEnvelope(7, 5), sendUnitEnvelope(8, 5), sendUnitEnvelope(7, 3)},
 			want: []alarmDispatchGroupSummary{
+				{roomID: testAlarmRoomID, minutesUntil: 3, envelopeCount: 2, notificationCount: 2},
 				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 2, notificationCount: 2},
 			},
 		},
 		{
-			name: "splits live catchup and prelive minute buckets",
-			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestStartedEnvelope(domain.AlarmTypeLive, 5, firstStart),
-				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
-			},
+			name:      "keeps undeliverable envelopes apart from the same send unit",
+			envelopes: []dispatchoutbox.AlarmQueueEnvelope{sendUnitEnvelope(7, 5), undeliverable, sendUnitEnvelope(7, 5)},
 			want: []alarmDispatchGroupSummary{
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 2, notificationCount: 2},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1, undeliverable: true},
 			},
 		},
 	}
@@ -73,38 +73,6 @@ func TestGroupAlarmDispatchEnvelopesForDelivery(t *testing.T) {
 			groups := groupAlarmDispatchEnvelopesForDelivery(tc.envelopes)
 
 			assert.Equal(t, tc.want, summarizeAlarmDispatchGroups(groups))
-		})
-	}
-}
-
-func TestAlarmDispatchGroupKey(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, time.May, 14, 10, 0, 30, 0, time.FixedZone("KST", 9*60*60))
-	minuteBucket := start.UTC().Unix() / 60
-
-	testCases := []struct {
-		name     string
-		envelope domain.AlarmQueueEnvelope
-		want     string
-	}{
-		{
-			name:     "scheduled stream with StartScheduled",
-			envelope: alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 10, start),
-			want:     fmt.Sprintf("room-1|scheduled|%d", minuteBucket),
-		},
-		{
-			name:     "fallback to minutes",
-			envelope: alarmDispatchGroupTestEnvelope(domain.AlarmTypeLive, 15),
-			want:     "room-1|minutes|15",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tc.want, alarmDispatchGroupKey(&tc.envelope))
 		})
 	}
 }
@@ -138,6 +106,7 @@ type alarmDispatchGroupSummary struct {
 	minutesUntil      int
 	envelopeCount     int
 	notificationCount int
+	undeliverable     bool
 }
 
 func summarizeAlarmDispatchGroups(groups []alarmDispatchGroup) []alarmDispatchGroupSummary {
@@ -148,41 +117,9 @@ func summarizeAlarmDispatchGroups(groups []alarmDispatchGroup) []alarmDispatchGr
 			minutesUntil:      group.minutesUntil,
 			envelopeCount:     len(group.envelopes),
 			notificationCount: len(group.notifications),
+			undeliverable:     group.envelopeErr != nil,
 		})
 	}
 
 	return summaries
-}
-
-func alarmDispatchGroupTestEnvelope(alarmType domain.AlarmType, minutesUntil int) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-
-	envelope.Notification.AlarmType = alarmType
-	envelope.Notification.MinutesUntil = minutesUntil
-
-	return envelope
-}
-
-func alarmDispatchGroupTestScheduledEnvelope(
-	alarmType domain.AlarmType,
-	minutesUntil int,
-	start time.Time,
-) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchGroupTestEnvelope(alarmType, minutesUntil)
-
-	envelope.Notification.Stream.StartScheduled = &start
-
-	return envelope
-}
-
-func alarmDispatchGroupTestStartedEnvelope(
-	alarmType domain.AlarmType,
-	minutesUntil int,
-	start time.Time,
-) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchGroupTestEnvelope(alarmType, minutesUntil)
-
-	envelope.Notification.Stream.StartActual = &start
-
-	return envelope
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/retry"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
@@ -183,7 +184,7 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, kstDay time.Time)
 func (r *BirthdayStreamRunner) publishCandidates(
 	ctx context.Context,
 	candidates []birthdayStreamCandidate,
-	publishedEvents map[string]domain.AlarmQueueEnvelope,
+	publishedEvents map[string]dispatchoutbox.AlarmQueueEnvelope,
 	dateStr string,
 	memberCount int,
 ) error {
@@ -247,7 +248,7 @@ func (r *BirthdayStreamRunner) publishCandidates(
 func (r *BirthdayStreamRunner) findSentRoomsForPublishedStreams(
 	ctx context.Context,
 	candidates []birthdayStreamCandidate,
-	publishedEvents map[string]domain.AlarmQueueEnvelope,
+	publishedEvents map[string]dispatchoutbox.AlarmQueueEnvelope,
 	dateStr string,
 ) (map[string][]string, error) {
 	streamEventKeys := make([]string, 0, len(candidates))
@@ -278,7 +279,7 @@ func (r *BirthdayStreamRunner) filterMembersWithChannel(ctx context.Context, mem
 			// Handle에 넘기는 ctx(Background)를 바꾸지 않도록 Enabled만 ctx로 묻고 Debug는 그대로 쓴다.
 			if r.logger != nil && r.logger.Enabled(ctx, slog.LevelDebug) {
 				r.logger.Debug("Birthday stream runner skipped member without YouTube channel",
-					slog.String("member", resolveCelebrationMemberName(m)))
+					slog.String("member", m.DisplayName()))
 			}
 
 			continue
@@ -310,7 +311,7 @@ func (r *BirthdayStreamRunner) selectPublishableSessions(
 	members []*domain.Member,
 	sessions []BirthdayStreamSession,
 	dateStr string,
-) ([]birthdayStreamCandidate, map[string]domain.AlarmQueueEnvelope, error) {
+) ([]birthdayStreamCandidate, map[string]dispatchoutbox.AlarmQueueEnvelope, error) {
 	byChannel := make(map[string][]BirthdayStreamSession, len(members))
 
 	for _, session := range sessions {
@@ -318,7 +319,7 @@ func (r *BirthdayStreamRunner) selectPublishableSessions(
 	}
 
 	candidates := make([]birthdayStreamCandidate, 0, len(sessions))
-	publishedEvents := make(map[string]domain.AlarmQueueEnvelope)
+	publishedEvents := make(map[string]dispatchoutbox.AlarmQueueEnvelope)
 
 	for _, m := range members {
 		channelSessions := byChannel[m.ChannelID]
@@ -348,7 +349,7 @@ func selectBirthdayStreamSessionsWithinDailyCap(
 	memberID int,
 	dateStr string,
 	sessions []BirthdayStreamSession,
-	published map[string]domain.AlarmQueueEnvelope,
+	published map[string]dispatchoutbox.AlarmQueueEnvelope,
 ) []BirthdayStreamSession {
 	counted := 0
 

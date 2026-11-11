@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 // Kind는 발송 결과의 증거를 나타냅니다. 재시도 허용은 각 저장소 정책이 결정합니다. Success는 Iris durable
@@ -72,6 +73,54 @@ func Classify(err error) Kind {
 	return Failed
 }
 
+// Reissuable은 오류가 Iris의 확정 pre-handoff 실패(409 `CLIENT_REQUEST_ID_FAILED`)이고 결합된 결과 불명·응답 소실
+// 증거가 없을 때만 참입니다. 이때만 새 요청 세대로 다시 보내도 중복 발화가 생기지 않습니다.
+func Reissuable(err error) bool {
+	return Classify(err) == Failed && iris.IsPreHandoffClientRequestIDConflict(err)
+}
+
+// AttemptRules는 원장마다 다른 attempt outcome 판정 입력입니다. 영값은 원장 고유 오류가 없고 미분류 오류를 failed로
+// 셉니다.
+type AttemptRules struct {
+	// TimeoutCause는 원장이 자체 발송 예산 초과에 붙이는 오류이며 context.DeadlineExceeded와 같이 timeout입니다.
+	TimeoutCause error
+	// OutcomeUnknownCause는 원장이 결과 불명으로 판정한 발송 오류에 붙이는 오류입니다.
+	OutcomeUnknownCause error
+	// UnclassifiedOutcomeUnknown이 참이면 Iris 실패 sentinel이 없는 오류를 원장이 결과 불명으로 다루므로
+	// outcome_unknown으로 셉니다.
+	UnclassifiedOutcomeUnknown bool
+}
+
+// AttemptOutcome은 시작된 provider 호출 한 번의 결과를 attempt outcome으로 바꿉니다. 명시적 결과 불명 증거는 결합된
+// deadline·취소보다 우선하고, 그다음 timeout, canceled, 응답 소실 가능 오류, 확정 실패 순입니다. 호출 중 panic은
+// 호출자가 셉니다.
+func AttemptOutcome(err error, rules AttemptRules) workercontract.AttemptOutcome {
+	kind := Classify(err)
+
+	switch {
+	case kind == Success:
+		return workercontract.AttemptSuccess
+	case kind == OutcomeUnknown:
+		return workercontract.AttemptOutcomeUnknown
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, rules.TimeoutCause):
+		return workercontract.AttemptTimeout
+	case errors.Is(err, context.Canceled):
+		return workercontract.AttemptCanceled
+	case kind == TransportAmbiguous, errors.Is(err, rules.OutcomeUnknownCause):
+		return workercontract.AttemptOutcomeUnknown
+	case rules.UnclassifiedOutcomeUnknown && !irisFailure(err):
+		return workercontract.AttemptOutcomeUnknown
+	default:
+		return workercontract.AttemptFailed
+	}
+}
+
+func irisFailure(err error) bool {
+	return errors.Is(err, iris.ErrPermanent) || errors.Is(err, iris.ErrAuthFailed) || errors.Is(err, iris.ErrRateLimited) ||
+		errors.Is(err, iris.ErrTransport) || errors.Is(err, iris.ErrNotSent)
+}
+
+// TransportError 자체의 결합 원인은 모든 분기가 전달 전 실패를 증명해야 한다.
 func transportCauseKnownUnsent(err error) bool {
 	if joined, ok := errors.AsType[interface {
 		error

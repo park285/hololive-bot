@@ -23,30 +23,30 @@ package filter
 import (
 	"strings"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 )
 
-var categoryPriority = map[model.Category]int{
-	model.CategoryBirthdayLive: 0,
-	model.CategorySoloLive:     1,
-	model.CategoryCollab:       2,
-	model.CategoryEvent:        3,
-	model.CategoryGoods:        4,
-	model.CategoryOther:        5,
+var categoryPriority = map[newsmodel.Category]int{
+	newsmodel.CategoryBirthdayLive: 0,
+	newsmodel.CategorySoloLive:     1,
+	newsmodel.CategoryCollab:       2,
+	newsmodel.CategoryEvent:        3,
+	newsmodel.CategoryGoods:        4,
+	newsmodel.CategoryOther:        5,
 }
 
-func classifyCategory(candidate *model.Candidate) model.Category {
+func classifyCategory(candidate *newsmodel.Candidate) newsmodel.Category {
 	text := strings.ToLower(candidate.Title + " " + candidate.Description)
 
 	keywordRules := []struct {
-		category model.Category
+		category newsmodel.Category
 		keywords []string
 	}{
-		{category: model.CategoryBirthdayLive, keywords: []string{"生誕", "생일", "birthday"}},
-		{category: model.CategorySoloLive, keywords: []string{"ソロライブ", "solo live", "단독 라이브"}},
-		{category: model.CategoryCollab, keywords: []string{"コラボ", "콜라보", "collaboration"}},
-		{category: model.CategoryGoods, keywords: []string{"グッズ", "굿즈", "merchandise"}},
-		{category: model.CategoryEvent, keywords: []string{"fes", "expo", "live", "concert", "event"}},
+		{category: newsmodel.CategoryBirthdayLive, keywords: []string{"生誕", "생일", "birthday"}},
+		{category: newsmodel.CategorySoloLive, keywords: []string{"ソロライブ", "solo live", "단독 라이브"}},
+		{category: newsmodel.CategoryCollab, keywords: []string{"コラボ", "콜라보", "collaboration"}},
+		{category: newsmodel.CategoryGoods, keywords: []string{"グッズ", "굿즈", "merchandise"}},
+		{category: newsmodel.CategoryEvent, keywords: []string{"fes", "expo", "live", "concert", "event"}},
 	}
 
 	for _, rule := range keywordRules {
@@ -55,7 +55,7 @@ func classifyCategory(candidate *model.Candidate) model.Category {
 		}
 	}
 
-	return model.CategoryOther
+	return newsmodel.CategoryOther
 }
 
 func containsAny(text string, keywords []string) bool {

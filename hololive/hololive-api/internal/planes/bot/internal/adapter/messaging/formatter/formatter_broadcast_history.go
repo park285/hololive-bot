@@ -44,7 +44,6 @@ type BroadcastHistoryFilter struct {
 	TopicID    string
 	Days       int
 	Limit      int
-	IncludeAll bool
 	Truncated  bool
 }
 
@@ -243,9 +242,7 @@ func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {
 		parts = append(parts, "topic: "+broadcastHistoryDisplayLine(filter.TopicID))
 	}
 
-	if filter.IncludeAll {
-		parts = append(parts, "기간: 전체")
-	} else if filter.Days > 0 {
+	if filter.Days > 0 {
 		parts = append(parts, fmt.Sprintf("기간: 최근 %d일", filter.Days))
 	}
 

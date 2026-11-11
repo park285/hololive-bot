@@ -17,18 +17,18 @@ import (
 func TestStatsCountsMembersAndAlarmEntriesWithoutAlarmList(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
-	repository := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repository := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
 	members, err := repository.GetAllMembers(t.Context())
 	require.NoError(t, err)
 
-	h := (&Handler{repository: repository, logger: logger, alarm: &stubAlarmCRUDForServer{
+	h := &StatsHandler{repository: repository, logger: logger, alarm: &stubAlarmCRUDForServer{
 		countAlarmEntries: func(context.Context) (int, error) { return 7, nil },
 		getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
 			t.Error("stats loaded full alarm list")
 
 			return nil, nil
 		},
-	}}).DomainHandlers().Stats
+	}}
 	memberCount, alarmCount, memberErr, alarmErr := h.collectStats(t.Context())
 	require.NoError(t, memberErr)
 	require.NoError(t, alarmErr)

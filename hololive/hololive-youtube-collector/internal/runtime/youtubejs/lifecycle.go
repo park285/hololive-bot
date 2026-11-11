@@ -66,10 +66,6 @@ func (h *Helper) closeWaited() {
 }
 
 func shutdownContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		timeout = defaultShutdownTimeout
-	}
-
 	if ctx.Err() != nil {
 		return context.WithTimeout(context.Background(), timeout)
 	}
@@ -92,7 +88,7 @@ func (h *Helper) signalTerm() error {
 		return nil
 	}
 
-	if err := h.cmd.Process.Signal(syscall.SIGTERM); err != nil && !isFinished(err) {
+	if err := h.cmd.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return fmt.Errorf("stop youtube.js helper: %w", err)
 	}
 
@@ -106,7 +102,7 @@ func (h *Helper) signalKill() error {
 
 	h.forcedKills.Add(1)
 
-	if err := h.cmd.Process.Kill(); err != nil && !isFinished(err) {
+	if err := h.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return fmt.Errorf("stop youtube.js helper: %w", err)
 	}
 

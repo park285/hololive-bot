@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	xspacesworker "github.com/kapu/hololive-alarm-worker/internal/service/xspaces"
@@ -14,8 +15,8 @@ import (
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
-func buildXSpacesRunner(infra *sharedmodules.InfraModule, foundation *alarmFoundation, publishConfig queue.PublishConfig, logger *slog.Logger) optionalRuntimeSchedulerResult {
-	config, err := xspacesworker.LoadConfig()
+func buildXSpacesRunner(xSpaces workerconfig.XSpacesConfig, infra *sharedmodules.InfraModule, foundation *alarmFoundation, publishConfig queue.PublishConfig, logger *slog.Logger) optionalRuntimeSchedulerResult {
+	config, err := xspacesworker.LoadConfig(xSpaces.ConfigFile)
 	if errors.Is(err, xspacesworker.ErrDisabled) {
 		return optionalRuntimeSchedulerResult{}
 	}
@@ -24,17 +25,9 @@ func buildXSpacesRunner(infra *sharedmodules.InfraModule, foundation *alarmFound
 		return optionalRuntimeSchedulerResult{err: fmt.Errorf("load X spaces config: %w", err)}
 	}
 
-	if infra == nil || infra.Postgres == nil {
-		return optionalRuntimeSchedulerResult{err: errors.New("x spaces database unavailable")}
-	}
-
-	store, err := sessions.LoadStore(infra.Postgres.GetPool())
+	store, err := sessions.LoadStore(infra.Postgres.GetPool(), xSpaces.KeyFile)
 	if err != nil {
 		return optionalRuntimeSchedulerResult{err: fmt.Errorf("load X spaces sessions: %w", err)}
-	}
-
-	if store == nil {
-		return optionalRuntimeSchedulerResult{err: errors.New("x spaces config requires X_SPACES_KEY_FILE")}
 	}
 
 	pub, err := queue.NewPublisher(infra.Cache, foundation.Outbox, publishConfig, logger)

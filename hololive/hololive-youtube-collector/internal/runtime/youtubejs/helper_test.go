@@ -12,8 +12,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -180,7 +182,7 @@ func TestStartFailsWithoutNode(t *testing.T) {
 	_, _, err := Start(t.Context(), &Config{
 		NodePath:       "/no/such/node",
 		ScriptPath:     "/no/such/server.mjs",
-		RuntimeBaseDir: t.TempDir(),
+		RuntimeBaseDir: shortRuntimeBase(t),
 	})
 	if err == nil {
 		t.Fatal("Start must fail when node is missing")
@@ -261,7 +263,7 @@ func TestHelperExitStateBecomesObservable(t *testing.T) {
 }
 
 func TestHLP001(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -295,16 +297,14 @@ func TestHLP001(t *testing.T) {
 }
 
 func TestHLP002(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	regular := filepath.Join(base, "regular")
 
 	if err := os.WriteFile(regular, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err := Start(t.Context(), &Config{
-		NodePath: nodePath(t), ScriptPath: helperScriptPath(t), RuntimeBaseDir: regular,
-	})
+	_, _, err := Start(t.Context(), liveHelperConfig(t, regular))
 	if err == nil {
 		t.Fatal("Start must fail when runtime base dir is a regular file")
 	}
@@ -323,9 +323,7 @@ func TestHLP002(t *testing.T) {
 		t.Fatal(symlinkErr)
 	}
 
-	_, _, err = Start(t.Context(), &Config{
-		NodePath: nodePath(t), ScriptPath: helperScriptPath(t), RuntimeBaseDir: link,
-	})
+	_, _, err = Start(t.Context(), liveHelperConfig(t, link))
 	if err == nil {
 		t.Fatal("Start must fail when runtime base dir is a symlink")
 	}
@@ -359,7 +357,7 @@ func TestHLP002(t *testing.T) {
 }
 
 func TestHLP003(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	cfg := fixtureConfig(t, base, "insecure")
 
 	_, _, err := Start(t.Context(), cfg)
@@ -375,16 +373,14 @@ func TestHLP003(t *testing.T) {
 }
 
 func TestHLP004(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	long := filepath.Join(base, strings.Repeat("a", 80))
 
 	if err := os.Mkdir(long, 0o700); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err := Start(t.Context(), &Config{
-		NodePath: nodePath(t), ScriptPath: helperScriptPath(t), RuntimeBaseDir: long, MaxInflight: 4,
-	})
+	_, _, err := Start(t.Context(), liveHelperConfig(t, long))
 	if err == nil {
 		t.Fatal("Start must fail when socket path exceeds 100 bytes")
 	}
@@ -397,7 +393,7 @@ func TestHLP004(t *testing.T) {
 }
 
 func TestHLP005(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 
 	_, _, err := Start(t.Context(), fixtureConfig(t, base, "reject-bootstrap"))
 	if err == nil {
@@ -412,7 +408,7 @@ func TestHLP005(t *testing.T) {
 }
 
 func TestHLP006(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -446,7 +442,7 @@ func TestHLP006(t *testing.T) {
 }
 
 func TestHLP007(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -476,7 +472,7 @@ func TestHLP007(t *testing.T) {
 }
 
 func TestHLP008(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -514,8 +510,28 @@ func TestHLP008(t *testing.T) {
 	}
 }
 
+// wait goroutine이 waited를 닫기 전에 child가 이미 회수된 경우에도 종료 신호 실패를 정리 오류로 올리지 않는다.
+func TestSignalAfterChildReapedIsNotAnError(t *testing.T) {
+	t.Parallel()
+
+	cmd := exec.CommandContext(t.Context(), "true")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	helper := &Helper{cmd: cmd, waited: make(chan struct{})}
+
+	if err := helper.signalTerm(); err != nil {
+		t.Fatalf("signalTerm after reap = %v", err)
+	}
+
+	if err := helper.signalKill(); err != nil {
+		t.Fatalf("signalKill after reap = %v", err)
+	}
+}
+
 func TestHLP009(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -530,8 +546,8 @@ func TestHLP009(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	if helper.ForcedKillCount() != 0 {
-		t.Fatalf("SIGKILL count = %d, want 0", helper.ForcedKillCount())
+	if helper.forcedKills.Load() != 0 {
+		t.Fatalf("SIGKILL count = %d, want 0", helper.forcedKills.Load())
 	}
 
 	if !helper.Exited() {
@@ -546,7 +562,7 @@ func TestHLP009(t *testing.T) {
 }
 
 func TestHLP010(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	cfg := fixtureConfig(t, base, "ignore-term")
 
 	cfg.ShutdownTimeout = 200 * time.Millisecond
@@ -564,8 +580,8 @@ func TestHLP010(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	if helper.ForcedKillCount() != 1 {
-		t.Fatalf("SIGKILL count = %d, want 1", helper.ForcedKillCount())
+	if helper.forcedKills.Load() != 1 {
+		t.Fatalf("SIGKILL count = %d, want 1", helper.forcedKills.Load())
 	}
 
 	if !helper.Exited() {
@@ -576,7 +592,7 @@ func TestHLP010(t *testing.T) {
 }
 
 func TestWaitErr(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -590,15 +606,15 @@ func TestWaitErr(t *testing.T) {
 		t.Fatalf("Close error = %v, want child exit status", err)
 	}
 
-	if helper.ForcedKillCount() != 0 {
-		t.Fatalf("SIGKILL count = %d, want 0", helper.ForcedKillCount())
+	if helper.forcedKills.Load() != 0 {
+		t.Fatalf("SIGKILL count = %d, want 0", helper.forcedKills.Load())
 	}
 
 	assertNoResidue(t, base)
 }
 
 func TestHLP011(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -626,8 +642,8 @@ func TestHLP011(t *testing.T) {
 		}
 	}
 
-	if helper.ForcedKillCount() != 0 {
-		t.Fatalf("duplicate Close forced extra SIGKILL: %d", helper.ForcedKillCount())
+	if helper.forcedKills.Load() != 0 {
+		t.Fatalf("duplicate Close forced extra SIGKILL: %d", helper.forcedKills.Load())
 	}
 
 	assertNoResidue(t, base)
@@ -635,7 +651,7 @@ func TestHLP011(t *testing.T) {
 
 // collector가 spawn한 Node helper의 V8 heap 한도가 Node 몫으로 제한되는지 실제 프로세스로 확인한다.
 func TestHLP013(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -661,7 +677,7 @@ func TestHLP012(t *testing.T) {
 }
 
 func testHLP012MissingBin(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 
 	_, _, err := Start(t.Context(), &Config{
 		NodePath: "/no/such/node", ScriptPath: "/no/such/server.mjs", RuntimeBaseDir: base,
@@ -674,7 +690,7 @@ func testHLP012MissingBin(t *testing.T) {
 }
 
 func testHLP012ChildExit(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 
 	_, _, err := Start(t.Context(), fixtureConfig(t, base, "exit-now"))
 	if err == nil {
@@ -689,7 +705,7 @@ func testHLP012ChildExit(t *testing.T) {
 }
 
 func testHLP012InsecureSocket(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 
 	_, _, err := Start(t.Context(), fixtureConfig(t, base, "insecure"))
 	if err == nil {
@@ -700,7 +716,7 @@ func testHLP012InsecureSocket(t *testing.T) {
 }
 
 func testHLP012NoChild(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 
 	dir, socketPath, err := createRuntimeDir(base)
 	if err != nil {
@@ -728,7 +744,7 @@ func testHLP012NoChild(t *testing.T) {
 }
 
 func testHLP012SpawnFail(t *testing.T) {
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 	node := filepath.Join(base, "not-node")
 
 	if err := os.WriteFile(node, []byte("#!not-a-binary\n"), 0o600); err != nil {
@@ -737,13 +753,11 @@ func testHLP012SpawnFail(t *testing.T) {
 
 	started := time.Now()
 
-	_, _, err := Start(t.Context(), &Config{
-		NodePath:        node,
-		ScriptPath:      helperScriptPath(t),
-		RuntimeBaseDir:  base,
-		ShutdownTimeout: 3 * time.Second,
-		MaxInflight:     4,
-	})
+	cfg := liveHelperConfig(t, base)
+
+	cfg.NodePath = node
+
+	_, _, err := Start(t.Context(), cfg)
 	if err == nil {
 		t.Fatal("expected spawn failure")
 	}
@@ -757,6 +771,50 @@ func testHLP012SpawnFail(t *testing.T) {
 	}
 
 	assertNoResidue(t, base)
+}
+
+// shortRuntimeRoot는 TestMain이 TMPDIR 바로 아래 만든 짧은 디렉터리로, 시험 이름이 경로에 들어가는
+// t.TempDir를 쓰면 긴 TMPDIR에서 helper socket 경로가 maxUnixSocketPathBytes를 넘기 때문에 둔다.
+var (
+	shortRuntimeRoot string
+	shortRuntimeSeq  atomic.Int64
+)
+
+func TestMain(m *testing.M) {
+	root, err := os.MkdirTemp("", "yjs")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create short runtime root: %v\n", err)
+		os.Exit(1)
+	}
+
+	shortRuntimeRoot = root
+
+	code := m.Run()
+
+	if err := os.RemoveAll(root); err != nil {
+		fmt.Fprintf(os.Stderr, "remove short runtime root: %v\n", err)
+
+		code = max(code, 1)
+	}
+
+	os.Exit(code)
+}
+
+func shortRuntimeBase(t *testing.T) string {
+	t.Helper()
+
+	dir := filepath.Join(shortRuntimeRoot, strconv.FormatInt(shortRuntimeSeq.Add(1), 10))
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("remove runtime base: %v", err)
+		}
+	})
+
+	return dir
 }
 
 func liveHelperConfig(t *testing.T, base string) *Config {
@@ -818,23 +876,6 @@ func assertPrivateRuntime(t *testing.T, helper *Helper) {
 	if socket.Mode().Type() != os.ModeSocket || socket.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("socket mode = %v", socket.Mode())
 	}
-}
-
-func shortRuntimeBaseDir(t *testing.T) string {
-	t.Helper()
-
-	dir, err := os.MkdirTemp("", "yjs") //nolint:usetesting // t.TempDir는 테스트 이름을 경로에 넣어 TMPDIR가 조금만 길어도 socket 경로가 100바이트 한도를 넘는다.
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Error(err)
-		}
-	})
-
-	return dir
 }
 
 func assertNoResidue(t *testing.T, base string) {

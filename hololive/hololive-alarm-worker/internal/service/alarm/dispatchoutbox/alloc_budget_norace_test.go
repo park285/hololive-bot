@@ -11,16 +11,16 @@ const (
 	eventKeyAllocBudget  = 2
 )
 
-func TestBuildDedupeKeyAllocationBudget(t *testing.T) {
+func TestDedupeKeyAllocationBudget(t *testing.T) {
 	input := benchPreparedDedupeInput()
 
 	dedupeAllocs := testing.AllocsPerRun(100, func() {
-		if key := BuildDedupeKey(&input); key == "" {
-			t.Fatal("BuildDedupeKey returned empty key")
+		if key := buildDedupeKey(input.RoomID, BuildEventKey(&input)); key == "" {
+			t.Fatal("buildDedupeKey returned empty key")
 		}
 	})
 	if dedupeAllocs > dedupeKeyAllocBudget {
-		t.Errorf("BuildDedupeKey allocs/op = %.1f, want <= %d", dedupeAllocs, dedupeKeyAllocBudget)
+		t.Errorf("event+dedupe key allocs/op = %.1f, want <= %d", dedupeAllocs, dedupeKeyAllocBudget)
 	}
 
 	eventAllocs := testing.AllocsPerRun(100, func() {

@@ -12,7 +12,3 @@ type HolodexConfig struct {
 	Concurrency          HolodexConcurrencyConfig
 	DistributedRateLimit DistributedRateLimitConfig
 }
-
-type IngestionConfig struct {
-	PhotoSyncEnabled bool
-}

@@ -214,34 +214,6 @@ func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
 	return out, nil
 }
 
-func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, error) {
-	query := getAllMemberNamesSQL
-
-	rows, err := r.pool.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("get all member names: %w", err)
-	}
-	defer rows.Close()
-
-	result := make(map[string]string)
-
-	for rows.Next() {
-		var channelID, memberName string
-
-		if err := rows.Scan(&channelID, &memberName); err != nil {
-			return nil, fmt.Errorf("scan member name: %w", err)
-		}
-
-		result[channelID] = memberName
-	}
-
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, fmt.Errorf("iterate member names: %w", rowsErr)
-	}
-
-	return result, nil
-}
-
 func (r *Repository) scanAlarms(rows pgx.Rows) ([]*domain.Alarm, error) {
 	var alarms []*domain.Alarm
 

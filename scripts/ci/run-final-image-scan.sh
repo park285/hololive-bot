@@ -7,7 +7,6 @@ root_dir="$(git rev-parse --show-toplevel)"
 manifest="${1:-$root_dir/scripts/ci/final-image-scan-manifest.txt}"
 . "$root_dir/scripts/ci/go-tooling.sh"
 . "$root_dir/scripts/ci/final-image-scan-policy.sh"
-GOVULNCHECK_VERSION=v1.9.0
 govulncheck_bin="$(ensure_govulncheck)"
 report_dir="$(mktemp -d "${TMPDIR:-/tmp}/hololive-image-scan.XXXXXX")"
 container_id=
@@ -42,13 +41,6 @@ while IFS='|' read -r source platform image; do
       # 태그가 바뀌어도 Trivy와 바이너리 추출이 같은 불변 이미지를 사용한다.
       image="$(podman image inspect --format '{{.Id}}' "$image")"
       ;;
-    remote)
-      [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || {
-        echo "remote final image scan requires an immutable digest" >&2
-        exit 1
-      }
-      scan_args+=(--image-src remote --platform "$platform")
-      ;;
     *)
       echo "unsupported final image scan source: $source" >&2
       exit 1
@@ -80,7 +72,6 @@ while IFS='|' read -r source platform image; do
       exit 1
     }
     if [[ -z "$container_id" ]]; then
-      if [[ "$source" == remote ]]; then podman pull --platform "$platform" "$image"; fi
       container_id="$(podman create --platform "$platform" "$image")"
     fi
     binary_index=$((binary_index + 1))

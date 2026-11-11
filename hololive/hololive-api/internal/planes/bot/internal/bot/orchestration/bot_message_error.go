@@ -22,14 +22,11 @@ package orchestration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	appErrors "github.com/kapu/hololive-api/internal/planes/bot/internal/apperrors"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -83,16 +80,4 @@ func (b *Bot) skipErrorResponseOnUnknownOutcome(ctx context.Context, chatID, com
 	sharedlog.Warn(ctx, b.logger, EventBotReplyOutcomeUnknown, "iris reply outcome unknown; suppressing error response", attrs...)
 
 	return true
-}
-
-func (b *Bot) getErrorMessage(err error) string {
-	if err == nil {
-		return ""
-	}
-
-	if serviceErr, ok := errors.AsType[*appErrors.ServiceError](err); ok && serviceErr.Service == serviceNameIris {
-		return messaging.ErrIrisConnectionFailed
-	}
-
-	return messaging.ErrCommandProcessingFailed
 }

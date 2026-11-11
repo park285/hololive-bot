@@ -49,6 +49,9 @@ const (
 	contentTabShorts = "shorts"
 )
 
+// ContentJobKind는 content runner의 job 종류입니다. 실행 profile은 이 값으로 공개 근거 RPC 상한을 더합니다.
+const ContentJobKind collection.JobKind = "youtubejs_content"
+
 var contentKinds = []contentKind{
 	{kind: contract.KindVideoList, tab: contentTabVideos},
 	{kind: contract.KindShortsList, tab: contentTabShorts},
@@ -59,7 +62,7 @@ func NewContentRunner(client ContentClient, cursors ContentCursorReader, publica
 }
 
 func (r *ContentRunner) JobID() collection.JobID {
-	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_content"}
+	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: ContentJobKind}
 }
 
 func (r *ContentRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
@@ -114,7 +117,7 @@ func (r *ContentRunner) collectAllowedKinds(
 
 		if err != nil {
 			// 부분 결과로 발행할 수 없는 실패면 근거 조회 RPC를 쓰지 않고 바로 실패합니다.
-			if ctx.Err() != nil || !contentPartialFailureAllowed(collecterr.ClassOf(err)) {
+			if ctx.Err() != nil || !collection.PartialFailureClassAllowed(collecterr.ClassOf(err)) {
 				return partialContentResultForError(ctx, nil, started, item.kind, err)
 			}
 
@@ -251,15 +254,11 @@ func partialContentResult(
 	kind contract.ObservationKind,
 	err error,
 ) (collection.CollectResult, error) {
-	if ctx.Err() != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return collection.CollectResult{}, fmt.Errorf("collect content: %w", ctxErr)
-		}
-
-		return collection.CollectResult{}, nil
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return collection.CollectResult{}, fmt.Errorf("collect content: %w", ctxErr)
 	}
 
-	if len(observations) == 0 || !contentPartialFailureAllowed(collecterr.ClassOf(err)) {
+	if len(observations) == 0 || !collection.PartialFailureClassAllowed(collecterr.ClassOf(err)) {
 		return collection.CollectResult{}, err
 	}
 

@@ -421,7 +421,7 @@ func TestProcessPendingDeliveriesSentLedgerAfterPrepareBlocksSend(t *testing.T) 
 
 	recordServedClaimGateDelivery(t, db, &outbox, postID, row.RoomID, now.Add(-time.Second))
 
-	result := dispatcher.claim.dispatchDeliveryRows(ctx, prepared.ActiveRows, outboxByID)
+	result := dispatcher.claim.executor.dispatchDeliveryRows(ctx, prepared.ActiveRows, outboxByID)
 
 	require.Zero(t, sender.messageCount())
 	require.Empty(t, result.SuccessDeliveryIDs)

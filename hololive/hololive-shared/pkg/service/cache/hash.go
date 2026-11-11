@@ -31,7 +31,6 @@ type HashReader interface {
 type HashWriter interface {
 	HSet(ctx context.Context, key, field, value string) error
 	HMSet(ctx context.Context, key string, fields map[string]any) error
-	HDel(ctx context.Context, key string, fields ...string) error
 }
 
 type HashCache interface {

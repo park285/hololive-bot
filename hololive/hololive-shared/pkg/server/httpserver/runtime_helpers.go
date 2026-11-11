@@ -10,7 +10,6 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/health"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/internal/workerobservability"
@@ -19,9 +18,7 @@ import (
 
 type RuntimeRouterOptions struct {
 	APIKey                 string
-	DisableMetricsAuth     bool
 	EnableGzip             bool
-	Operation              string
 	SkipLogPaths           []string
 	PreRouteUse            []gin.HandlerFunc
 	RegisterRoutes         func(*gin.Engine) error
@@ -95,10 +92,7 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRou
 	registerRuntimeInternalReadyRoute(router, opts.APIKey, opts.InternalReadyResponder)
 
 	metrics := router.Group("")
-	metrics.Use(middleware.AuthMiddleware(httputil.AdminAuthConfig{
-		APIKey:   opts.APIKey,
-		Disabled: opts.DisableMetricsAuth,
-	}))
+	metrics.Use(middleware.APIKeyAuthMiddleware(opts.APIKey))
 
 	metrics.GET("/metrics", gin.WrapH(runtimeMetricsHandler(opts.WorkerRegistry)))
 
@@ -144,11 +138,9 @@ func installRuntimeMiddleware(ctx context.Context, router *gin.Engine, logger *s
 		opts = &RuntimeRouterOptions{}
 	}
 
-	ApplyBaseMiddleware(ctx, router, logger, BaseMiddlewareOptions{
-		SkipLogPaths: append(
-			[]string{"/health", "/ready", "/internal/ready", "/metrics", "/__observability/*"},
-			opts.SkipLogPaths...),
-	})
+	applyBaseMiddleware(ctx, router, logger, append(
+		[]string{"/health", "/ready", "/internal/ready", "/metrics", "/__observability/*"},
+		opts.SkipLogPaths...)...)
 
 	if opts.EnableGzip {
 		router.Use(gzip.Gzip(gzip.DefaultCompression))

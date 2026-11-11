@@ -47,16 +47,12 @@ var identifierKeyRules = []identifierKeyRule{
 	{prefix: "notified:claim:", keepTrailing: 3},
 }
 
-var identifierFieldKeys = map[string]struct{}{
-	"membernews:room_names": {},
-}
-
 func CacheKeyAttr(key string) slog.Attr {
 	return slog.String(KeyCacheKey, RedactCacheKey(key))
 }
 
-func CacheFieldAttr(key, field string) slog.Attr {
-	return slog.String(KeyCacheField, RedactCacheField(key, field))
+func CacheFieldAttr(field string) slog.Attr {
+	return slog.String(KeyCacheField, field)
 }
 
 func RedactCacheKey(key string) string {
@@ -66,14 +62,6 @@ func RedactCacheKey(key string) string {
 	}
 
 	return rule.prefix + pseudonymizeLeadingSegments(key[len(rule.prefix):], rule.keepTrailing)
-}
-
-func RedactCacheField(key, field string) string {
-	if _, sensitive := identifierFieldKeys[strings.TrimSpace(key)]; !sensitive {
-		return field
-	}
-
-	return IdentifierToken(field)
 }
 
 func longestIdentifierKeyRule(key string) (identifierKeyRule, bool) {

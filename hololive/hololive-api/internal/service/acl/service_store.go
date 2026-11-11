@@ -44,8 +44,8 @@ type aclRoomStore interface {
 	ListRooms(ctx context.Context) ([]Room, error)
 	// CreateRoom은 (roomID, listType) 방 행을 삽입한다. 이미 있으면 쓰지 않고 created=false를 돌려준다.
 	CreateRoom(ctx context.Context, roomID, listType string) (created bool, err error)
-	// DeleteRoom은 (roomID, listType) 방 행을 삭제한다.
-	DeleteRoom(ctx context.Context, roomID, listType string) error
+	// DeleteRoom은 (roomID, listType) 방 행을 삭제한다. 삭제한 행이 없으면 deleted=false를 돌려준다.
+	DeleteRoom(ctx context.Context, roomID, listType string) (deleted bool, err error)
 }
 
 type aclStore interface {
@@ -121,13 +121,14 @@ func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) (
 	return tag.RowsAffected() == 1, nil
 }
 
-func (s *pgxACLStore) DeleteRoom(ctx context.Context, roomID, listType string) error {
-	if _, err := s.pool.Exec(ctx,
+func (s *pgxACLStore) DeleteRoom(ctx context.Context, roomID, listType string) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
 		deleteRoomSQL,
 		roomID, listType,
-	); err != nil {
-		return fmt.Errorf("delete acl room %q/%q: %w", roomID, listType, err)
+	)
+	if err != nil {
+		return false, fmt.Errorf("delete acl room %q/%q: %w", roomID, listType, err)
 	}
 
-	return nil
+	return tag.RowsAffected() > 0, nil
 }

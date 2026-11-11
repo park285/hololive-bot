@@ -65,7 +65,7 @@ stdout에는 `notification.Result` JSON 한 줄만 씁니다. 진행 로그는 s
 ## Compatibility policy
 
 - 이전의 llm plane `/internal/trigger/*` HTTP 경로와 admin `/api/holo/majorevent/*trigger`·`/api/holo/settings/llm` run-now는 삭제했습니다. 운영 재실행은 이 CLI 하나입니다.
-- 새 kind를 추가하면 이 문서, `CONTRACT_MAP.md`, `CONTRACT_MANIFEST.txt`, `RerunNotification`을 함께 갱신합니다.
+- 새 kind를 추가하면 이 문서, `CONTRACT_MAP.md`, `RerunNotification`을 함께 갱신합니다.
 
 ## Tests
 

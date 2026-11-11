@@ -32,6 +32,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
@@ -46,15 +47,15 @@ const (
 
 type testSourceValidator struct{}
 
-func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
+func (v *testSourceValidator) ValidateSourceURL(rawURL string) (newsmodel.SourceTier, string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return model.SourceTierCommunity, "", errors.New("source url is empty")
+		return newsmodel.SourceTierCommunity, "", errors.New("source url is empty")
 	}
 
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return model.SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
+		return newsmodel.SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
 	}
 
 	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
@@ -63,11 +64,11 @@ func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier
 
 	switch host {
 	case "hololive.hololivepro.com", "hololivepro.com", "cover-corp.com":
-		return model.SourceTierOfficial, parsed.String(), nil
+		return newsmodel.SourceTierOfficial, parsed.String(), nil
 	case "prtimes.jp", "oricon.co.jp", "natalie.mu", "famitsu.com", "4gamer.net", "animate.tv", "dengekionline.com":
-		return model.SourceTierMedia, parsed.String(), nil
+		return newsmodel.SourceTierMedia, parsed.String(), nil
 	default:
-		return model.SourceTierCommunity, parsed.String(), nil
+		return newsmodel.SourceTierCommunity, parsed.String(), nil
 	}
 }
 
@@ -133,15 +134,8 @@ func (m *mockMemberDataForFilter) LoadAllMembers(context.Context) ([]*domain.Mem
 	return []*domain.Member{}, nil
 }
 
-func (m *mockMemberDataForFilter) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func (m *mockMemberDataForFilter) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func mustFilterCandidates(t *testing.T, candidates []model.Candidate, now time.Time, roomMembers []string, validator model.SourceURLValidator) []model.FilteredCandidate {
+// mustFilterCandidates는 멤버 데이터 없이 주간 기간으로 후보를 고른다.
+func mustFilterCandidates(t *testing.T, candidates []newsmodel.Candidate, now time.Time, roomMembers []string, validator newsmodel.SourceURLValidator) []newsmodel.FilteredCandidate {
 	t.Helper()
 
 	filtered, err := PrepareCandidates(candidates, model.PeriodWeekly, now).Filter(t.Context(), roomMembers, nil, validator)
@@ -189,7 +183,7 @@ func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	targetDate := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 	farFuture := time.Date(2026, time.June, 1, 12, 0, 0, 0, timeutil.KSTZone)
 
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{
 			Type:           testCandidateEvent,
 			Title:          "사쿠라 미코 공식 행사",
@@ -217,11 +211,11 @@ func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 		t.Fatalf("expected 2 candidates in weekly range, got %d", len(filtered))
 	}
 
-	if filtered[0].SourceTier != model.SourceTierOfficial {
+	if filtered[0].SourceTier != newsmodel.SourceTierOfficial {
 		t.Fatalf("expected first candidate official tier, got %s", filtered[0].SourceTier)
 	}
 
-	if filtered[1].SourceTier != model.SourceTierCommunity {
+	if filtered[1].SourceTier != newsmodel.SourceTierCommunity {
 		t.Fatalf("expected second candidate community tier, got %s", filtered[1].SourceTier)
 	}
 }
@@ -231,40 +225,40 @@ func TestClassifyCategory(t *testing.T) {
 		name        string
 		title       string
 		description string
-		want        model.Category
+		want        newsmodel.Category
 	}{
-		{"生誕 in title", "生誕ライブ開催", "", model.CategoryBirthdayLive},
-		{"생일 keyword", "사쿠라 미코 생일", "", model.CategoryBirthdayLive},
-		{"birthday in description", "special event", "birthday celebration", model.CategoryBirthdayLive},
-		{"birthday priority over live/event", "Birthday Live Concert event", "", model.CategoryBirthdayLive},
+		{"生誕 in title", "生誕ライブ開催", "", newsmodel.CategoryBirthdayLive},
+		{"생일 keyword", "사쿠라 미코 생일", "", newsmodel.CategoryBirthdayLive},
+		{"birthday in description", "special event", "birthday celebration", newsmodel.CategoryBirthdayLive},
+		{"birthday priority over live/event", "Birthday Live Concert event", "", newsmodel.CategoryBirthdayLive},
 
-		{"ソロライブ", "ソロライブ開催", "", model.CategorySoloLive},
-		{"solo live", "solo live announced", "", model.CategorySoloLive},
-		{"단독 라이브", "단독 라이브 개최", "", model.CategorySoloLive},
-		{"solo live priority over event keyword", "solo live concert event", "", model.CategorySoloLive},
+		{"ソロライブ", "ソロライブ開催", "", newsmodel.CategorySoloLive},
+		{"solo live", "solo live announced", "", newsmodel.CategorySoloLive},
+		{"단독 라이브", "단독 라이브 개최", "", newsmodel.CategorySoloLive},
+		{"solo live priority over event keyword", "solo live concert event", "", newsmodel.CategorySoloLive},
 
-		{"コラボ", "コラボイベント", "", model.CategoryCollab},
-		{"콜라보", "콜라보 카페", "", model.CategoryCollab},
-		{"collaboration in description", "event info", "collaboration details", model.CategoryCollab},
+		{"コラボ", "コラボイベント", "", newsmodel.CategoryCollab},
+		{"콜라보", "콜라보 카페", "", newsmodel.CategoryCollab},
+		{"collaboration in description", "event info", "collaboration details", newsmodel.CategoryCollab},
 
-		{"グッズ", "新グッズ販売", "", model.CategoryGoods},
-		{"굿즈", "굿즈 판매", "", model.CategoryGoods},
-		{"merchandise", "new merchandise", "", model.CategoryGoods},
+		{"グッズ", "新グッズ販売", "", newsmodel.CategoryGoods},
+		{"굿즈", "굿즈 판매", "", newsmodel.CategoryGoods},
+		{"merchandise", "new merchandise", "", newsmodel.CategoryGoods},
 
-		{"fes keyword", "hololive fes 2026", "", model.CategoryEvent},
-		{"expo keyword", "SUPER EXPO 2026", "", model.CategoryEvent},
-		{"concert keyword", "holo concert", "", model.CategoryEvent},
-		{"event keyword", "special event announcement", "", model.CategoryEvent},
-		{"live keyword without qualifier", "big live show", "", model.CategoryEvent},
+		{"fes keyword", "hololive fes 2026", "", newsmodel.CategoryEvent},
+		{"expo keyword", "SUPER EXPO 2026", "", newsmodel.CategoryEvent},
+		{"concert keyword", "holo concert", "", newsmodel.CategoryEvent},
+		{"event keyword", "special event announcement", "", newsmodel.CategoryEvent},
+		{"live keyword without qualifier", "big live show", "", newsmodel.CategoryEvent},
 
-		{"no match → CategoryOther", "一般的なお知らせ", "追加情報なし", model.CategoryOther},
+		{"no match → CategoryOther", "一般的なお知らせ", "追加情報なし", newsmodel.CategoryOther},
 
-		{"title+desc combined: solo in title, live in desc", "special solo", "live show details", model.CategorySoloLive},
+		{"title+desc combined: solo in title, live in desc", "special solo", "live show details", newsmodel.CategorySoloLive},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := classifyCategory(&model.Candidate{Title: tt.title, Description: tt.description})
+			got := classifyCategory(&newsmodel.Candidate{Title: tt.title, Description: tt.description})
 			if got != tt.want {
 				t.Errorf("classifyCategory(title=%q, desc=%q) = %q, want %q",
 					tt.title, tt.description, got, tt.want)
@@ -275,7 +269,7 @@ func TestClassifyCategory(t *testing.T) {
 
 type matchMembersCase struct {
 	name      string
-	candidate model.Candidate
+	candidate newsmodel.Candidate
 	profiles  []memberProfile
 	wantLen   int
 	want      []string // nil이면 길이만 확인
@@ -285,41 +279,41 @@ func matchMembersCases() []matchMembersCase {
 	return []matchMembersCase{
 		{
 			name:      "candidate.Members token exact match",
-			candidate: model.Candidate{Members: []string{testMemberMiko}, Title: "unrelated", Description: "info"},
+			candidate: newsmodel.Candidate{Members: []string{testMemberMiko}, Title: "unrelated", Description: "info"},
 			profiles:  []memberProfile{{display: testMemberMiko, tokens: []string{testMemberMikoAlias}}},
 			wantLen:   1,
 			want:      []string{testMemberMiko},
 		},
 		{
 			name:      "body match via title",
-			candidate: model.Candidate{Title: "사쿠라 미코 solo live", Description: "details"},
+			candidate: newsmodel.Candidate{Title: "사쿠라 미코 solo live", Description: "details"},
 			profiles:  []memberProfile{{display: testMemberMiko, tokens: []string{testMemberMikoAlias}}},
 			wantLen:   1,
 			want:      []string{testMemberMiko},
 		},
 		{
 			name:      "body match via description",
-			candidate: model.Candidate{Title: "event announcement", Description: "featuring 사쿠라 미코"},
+			candidate: newsmodel.Candidate{Title: "event announcement", Description: "featuring 사쿠라 미코"},
 			profiles:  []memberProfile{{display: testMemberMiko, tokens: []string{testMemberMikoAlias}}},
 			wantLen:   1,
 			want:      []string{testMemberMiko},
 		},
 		{
 			name:      "alias token match via Members field",
-			candidate: model.Candidate{Members: []string{"sakuramiko"}, Title: testCandidateEvent, Description: "info"},
+			candidate: newsmodel.Candidate{Members: []string{"sakuramiko"}, Title: testCandidateEvent, Description: "info"},
 			profiles:  []memberProfile{{display: testMemberMiko, tokens: []string{testMemberMikoAlias, "sakuramiko"}}},
 			wantLen:   1,
 			want:      []string{testMemberMiko},
 		},
 		{
 			name:      "empty profiles returns nil",
-			candidate: model.Candidate{Members: []string{testMemberMiko}, Title: testCandidateEvent},
+			candidate: newsmodel.Candidate{Members: []string{testMemberMiko}, Title: testCandidateEvent},
 			profiles:  nil,
 			wantLen:   0,
 		},
 		{
 			name:      "dedup: same display name from duplicate profiles",
-			candidate: model.Candidate{Members: []string{testMemberMiko}, Title: "사쿠라 미코 event"},
+			candidate: newsmodel.Candidate{Members: []string{testMemberMiko}, Title: "사쿠라 미코 event"},
 			profiles: []memberProfile{
 				{display: testMemberMiko, tokens: []string{testMemberMikoAlias}},
 				{display: testMemberMiko, tokens: []string{testMemberMikoAlias}},
@@ -329,13 +323,13 @@ func matchMembersCases() []matchMembersCase {
 		},
 		{
 			name:      "no match returns empty",
-			candidate: model.Candidate{Members: []string{"unknown"}, Title: "unrelated", Description: "desc"},
+			candidate: newsmodel.Candidate{Members: []string{"unknown"}, Title: "unrelated", Description: "desc"},
 			profiles:  []memberProfile{{display: testMemberMiko, tokens: []string{testMemberMikoAlias}}},
 			wantLen:   0,
 		},
 		{
 			name: "multiple members match preserves order",
-			candidate: model.Candidate{
+			candidate: newsmodel.Candidate{
 				Members: []string{testMemberMiko, testMemberSuisei},
 				Title:   "collab event",
 			},
@@ -389,7 +383,7 @@ func testApplyPeriodFilterWeekly(t *testing.T) {
 
 	inRange := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 	outOfRange := time.Date(2026, time.June, 1, 12, 0, 0, 0, timeutil.KSTZone)
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{EventStartDate: &inRange, Type: domain.MajorEventTypeEvent},
 		{EventStartDate: &outOfRange, Type: domain.MajorEventTypeEvent},
 	}
@@ -405,7 +399,7 @@ func testApplyPeriodFilterMonthly(t *testing.T) {
 
 	inRange := time.Date(2026, time.February, 15, 12, 0, 0, 0, timeutil.KSTZone)
 	outOfRange := time.Date(2026, time.March, 5, 12, 0, 0, 0, timeutil.KSTZone)
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{EventStartDate: &inRange, Type: domain.MajorEventTypeEvent},
 		{EventStartDate: &outOfRange, Type: domain.MajorEventTypeEvent},
 	}
@@ -421,7 +415,7 @@ func testApplyPeriodFilterNewsPubDate(t *testing.T) {
 
 	pubDate := time.Date(2026, time.February, 15, 12, 0, 0, 0, timeutil.KSTZone)
 	eventDate := time.Date(2026, time.June, 1, 12, 0, 0, 0, timeutil.KSTZone) // 범위 밖
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{Type: domain.MajorEventTypeNews, PubDate: &pubDate, EventStartDate: &eventDate},
 	}
 	result := applyPeriodFilter(candidates, model.PeriodWeekly, now)
@@ -440,7 +434,7 @@ func testApplyPeriodFilterEventStartDate(t *testing.T) {
 
 	pubDate := time.Date(2026, time.June, 1, 12, 0, 0, 0, timeutil.KSTZone)        // 범위 밖
 	eventDate := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone) // 범위 내
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{Type: domain.MajorEventTypeEvent, PubDate: &pubDate, EventStartDate: &eventDate},
 	}
 	result := applyPeriodFilter(candidates, model.PeriodWeekly, now)
@@ -457,7 +451,7 @@ func testApplyPeriodFilterEventStartDate(t *testing.T) {
 func testApplyPeriodFilterBothDatesNil(t *testing.T) {
 	now := periodFilterNow()
 
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{Type: domain.MajorEventTypeEvent},
 	}
 	result := applyPeriodFilter(candidates, model.PeriodWeekly, now)
@@ -553,7 +547,7 @@ func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{Title: "사쿠라 미코 event", EventStartDate: &date, Type: domain.MajorEventTypeEvent, SourceURL: ""},
 		{Title: "사쿠라 미코 event2", EventStartDate: &date, Type: domain.MajorEventTypeEvent, SourceURL: "  "},
 	}
@@ -570,7 +564,7 @@ func TestFilterCandidates_CommunityWithoutCorroboration(t *testing.T) {
 	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{
 			Title:          "사쿠라 미코 event",
 			Description:    "비공식 정보만 포함됨",
@@ -593,7 +587,7 @@ func TestFilterCandidates_SortStability(t *testing.T) {
 	date1 := time.Date(2026, time.February, 18, 12, 0, 0, 0, timeutil.KSTZone)
 	date2 := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{
 			Title: "Z-title 사쿠라 미코 event", Description: "official",
 			EventStartDate: &date2, Type: domain.MajorEventTypeEvent,
@@ -635,7 +629,7 @@ func TestFilterCandidates_MultipleMatchedMembers(t *testing.T) {
 	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 
-	candidates := []model.Candidate{
+	candidates := []newsmodel.Candidate{
 		{
 			Title:          "사쿠라 미코 호시마치 스이세이 콜라보",
 			Description:    "official collab",

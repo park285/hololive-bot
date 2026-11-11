@@ -69,7 +69,7 @@ func newStreamFillTestService(t *testing.T, requester *MockRequester) *Service {
 	return &Service{
 		requester:    requester,
 		logger:       logger,
-		cacheManager: NewCacheManager(streamFillTestCache{KeyValueCache: store}, logger),
+		cacheManager: newCacheManager(streamFillTestCache{KeyValueCache: store}, logger),
 		mapper:       streammapping.NewStreamMapper(logger),
 		filter:       streammapping.NewStreamFilter(logger),
 	}
@@ -89,6 +89,12 @@ func startStreamFillTestCall(ctx context.Context, call func(context.Context) ([]
 	}()
 
 	return result
+}
+
+func hololiveLiveStreams(service *Service) func(context.Context) ([]*domain.Stream, error) {
+	return func(ctx context.Context) ([]*domain.Stream, error) {
+		return service.GetLiveStreamsByOrg(ctx, constants.HolodexAPIParams.OrgHololive)
+	}
 }
 
 func streamFillTestPayload(t *testing.T, status domain.StreamStatus, org string) []byte {
@@ -295,12 +301,12 @@ func TestStreamCacheFill_OwnerFailureDoesNotPoisonFollower(t *testing.T) {
 
 			defer cancelOwner()
 
-			owner := startStreamFillTestCall(ownerCtx, service.GetLiveStreams)
+			owner := startStreamFillTestCall(ownerCtx, hololiveLiveStreams(service))
 
 			<-entered
 
 			followerCtx := &streamFillReadObserver{waiting: make(chan struct{})}
-			follower := startStreamFillTestCall(context.WithValue(t.Context(), streamFillObservationKey{}, followerCtx), service.GetLiveStreams)
+			follower := startStreamFillTestCall(context.WithValue(t.Context(), streamFillObservationKey{}, followerCtx), hololiveLiveStreams(service))
 			<-followerCtx.waiting
 
 			wantErr := originErr
@@ -319,7 +325,7 @@ func TestStreamCacheFill_OwnerFailureDoesNotPoisonFollower(t *testing.T) {
 
 			assertStreamFillResult(t, <-follower, domain.StreamStatusLive, false)
 
-			streams, err := service.GetLiveStreams(t.Context())
+			streams, err := service.GetLiveStreamsByOrg(t.Context(), constants.HolodexAPIParams.OrgHololive)
 			assertStreamFillResult(t, streamFillTestResult{streams: streams, err: err}, domain.StreamStatusLive, false)
 
 			if got := calls.Load(); got != 2 {
@@ -351,7 +357,7 @@ func TestStreamCacheFill_DifferentKeysProgressIndependently(t *testing.T) {
 	}}
 	service := newStreamFillTestService(t, requester)
 	queries := []func(context.Context) ([]*domain.Stream, error){
-		service.GetLiveStreams,
+		hololiveLiveStreams(service),
 		func(ctx context.Context) ([]*domain.Stream, error) {
 			return service.GetLiveStreamsByOrg(ctx, constants.HolodexAPIParams.OrgVSpo)
 		},
@@ -434,14 +440,14 @@ func TestStreamCacheFill_FailedCallersEachFetchOnce(t *testing.T) {
 
 	results := make([]<-chan streamFillTestResult, callers)
 
-	results[0] = startStreamFillTestCall(t.Context(), service.GetLiveStreams)
+	results[0] = startStreamFillTestCall(t.Context(), hololiveLiveStreams(service))
 
 	<-entered
 
 	for i := 1; i < callers; i++ {
 		ctx := &streamFillReadObserver{waiting: make(chan struct{})}
 
-		results[i] = startStreamFillTestCall(context.WithValue(t.Context(), streamFillObservationKey{}, ctx), service.GetLiveStreams)
+		results[i] = startStreamFillTestCall(context.WithValue(t.Context(), streamFillObservationKey{}, ctx), hololiveLiveStreams(service))
 		<-ctx.waiting
 	}
 
@@ -460,7 +466,7 @@ func TestStreamCacheFill_FailedCallersEachFetchOnce(t *testing.T) {
 	assertStreamFillIdle(t, service)
 	healthy.Store(true)
 
-	streams, err := service.GetLiveStreams(t.Context())
+	streams, err := service.GetLiveStreamsByOrg(t.Context(), constants.HolodexAPIParams.OrgHololive)
 	assertStreamFillResult(t, streamFillTestResult{streams: streams, err: err}, domain.StreamStatusLive, true)
 
 	if got := calls.Load(); got != callers+1 {
@@ -575,12 +581,12 @@ func TestStreamCacheFillCacheFailuresPreserveEachCaller(t *testing.T) {
 
 			service.cacheManager.cache = streamFillFaultCache{cacheManagerStore: service.cacheManager.cache, readFails: readFails, writeFails: !readFails}
 
-			owner := startStreamFillTestCall(t.Context(), service.GetLiveStreams)
+			owner := startStreamFillTestCall(t.Context(), hololiveLiveStreams(service))
 
 			<-entered
 
 			observer := &streamFillReadObserver{waiting: make(chan struct{})}
-			follower := startStreamFillTestCall(context.WithValue(t.Context(), streamFillObservationKey{}, observer), service.GetLiveStreams)
+			follower := startStreamFillTestCall(context.WithValue(t.Context(), streamFillObservationKey{}, observer), hololiveLiveStreams(service))
 			<-observer.waiting
 			close(release)
 			assertStreamFillResult(t, <-owner, domain.StreamStatusLive, false)

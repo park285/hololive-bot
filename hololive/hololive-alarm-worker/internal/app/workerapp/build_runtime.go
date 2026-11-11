@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/park285/shared-go/v2/pkg/envutil"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
@@ -27,10 +26,7 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
-const (
-	notificationSchedulerRoleEnv = "NOTIFICATION_SCHEDULER_ROLE"
-	runtimeRoleWorker            = "worker"
-)
+const runtimeRoleWorker = "worker"
 
 type alarmFoundation struct {
 	HolodexService *holodexprovider.Service
@@ -97,7 +93,12 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
-	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, publishConfig, logger)
+	backgroundRunners, stage, err := buildAlarmWorkerBackgroundRunners(appConfig, infra, foundation, publishConfig, logger)
+	if err != nil {
+		return nil, failAlarmWorkerBuild(infra, stage, err)
+	}
+
+	servers, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, stage, err)
 	}
@@ -169,7 +170,7 @@ func buildOptionalRuntimeScheduler(
 	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
 ) optionalRuntimeSchedulerResult {
-	if runtimeSchedulerDisabled(envutil.String(notificationSchedulerRoleEnv, ""), logger) {
+	if runtimeSchedulerDisabled(appConfig.NotificationRoles.Scheduler, logger) {
 		return optionalRuntimeSchedulerResult{}
 	}
 
@@ -190,20 +191,13 @@ func buildOptionalRuntimeScheduler(
 	return optionalRuntimeSchedulerResult{scheduler: scheduler}
 }
 
-type alarmWorkerBackgroundRunners struct {
-	celebration    workerruntime.Scheduler
-	birthdayStream workerruntime.Scheduler
-	xSpaces        workerruntime.Scheduler
-}
-
 func buildAlarmWorkerHTTPRuntime(
 	ctx context.Context,
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
-	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
-) (servers *sharedserver.RuntimeHTTPServers, runners alarmWorkerBackgroundRunners, stage string, err error) {
+) (servers *sharedserver.RuntimeHTTPServers, stage string, err error) {
 	readyProbe := newAlarmWorkerReadyProbe(infra)
 
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
@@ -217,37 +211,15 @@ func buildAlarmWorkerHTTPRuntime(
 		),
 	})
 	if err != nil {
-		return nil, alarmWorkerBackgroundRunners{}, "router", fmt.Errorf("runtime router: %w", err)
-	}
-
-	xSpaces := buildXSpacesRunner(infra, foundation, publishConfig, logger)
-
-	if xSpaces.err != nil {
-		return nil, alarmWorkerBackgroundRunners{}, "X spaces", xSpaces.err
-	}
-
-	celebrationRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
-	if celebrationRunner.err != nil {
-		return nil, alarmWorkerBackgroundRunners{}, "celebration runner", celebrationRunner.err
-	}
-
-	birthdayStreamRunner := buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger)
-	if birthdayStreamRunner.err != nil {
-		return nil, alarmWorkerBackgroundRunners{}, "birthday stream runner", birthdayStreamRunner.err
-	}
-
-	runners = alarmWorkerBackgroundRunners{
-		celebration:    celebrationRunner.scheduler,
-		birthdayStream: birthdayStreamRunner.scheduler,
-		xSpaces:        xSpaces.scheduler,
+		return nil, "router", fmt.Errorf("runtime router: %w", err)
 	}
 
 	servers, err = sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, nil)
 	if err != nil {
-		return nil, alarmWorkerBackgroundRunners{}, "http servers", fmt.Errorf("runtime HTTP servers: %w", err)
+		return nil, "http servers", fmt.Errorf("runtime HTTP servers: %w", err)
 	}
 
-	return servers, runners, "", nil
+	return servers, "", nil
 }
 
 func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness.Probe {

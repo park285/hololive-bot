@@ -37,7 +37,7 @@ proactive notification egress의 배타성을 무엇이 소유하는지, 그리�
 | 층위 | 소유 장치 |
 |---|---|
 | 행 단위 | PG `FOR UPDATE SKIP LOCKED` row-claim (`ClaimDue`) |
-| 인스턴스 단위 | compose 단일 인스턴스 (`container_name` + 고정 호스트 포트) |
+| 인스턴스 단위 | Quadlet 단일 unit (`ContainerName` + 고정 호스트 포트) |
 
 ### profile 열거의 범위 — 동시 운영 승인이 아니다
 
@@ -61,15 +61,17 @@ hololive/hololive-alarm-worker/internal/service/workerruntime/runtime_alarm_work
 hololive/hololive-alarm-worker/internal/egress/lease.go
   삭제됨. NotificationEgressLeaseKey / AcquireNotificationEgressLease / RenewLoop / Release
 
-hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go
-  validateProductionAlarmWorkerOwnership — egress role은 owner 강제
-  requireNotificationRoleEnv(notificationSchedulerRoleEnv, worker, off) — scheduler role 두 값 열거
+hololive/hololive-alarm-worker/internal/config/ownership.go
+  validateOwnership — production에서 egress role은 owner 강제, scheduler role은 worker·off 두 값 열거
+
+hololive/hololive-shared/pkg/config/runtimepolicy/roles.go
+  RequireNotificationRoleEnv / ValidateNotificationRoleEnvValues — 역할 env 값 검증
 
 hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_claim.go
   PgxRepository.ClaimDue — 행 단위 배타성의 실제 소유자
 
-deploy/compose/docker-compose.prod.yml
-  hololive-alarm-worker 서비스 블록: container_name, ports, NOTIFICATION_* env
+deploy/quadlet/hololive-bot/hololive-alarm-worker.container
+  ContainerName, PublishPort, NOTIFICATION_* env
 ```
 
 ---
@@ -88,7 +90,7 @@ deploy/compose/docker-compose.prod.yml
 
 `ClaimDue`는 send unit 단위로 배타적입니다. `claim_due.sql`이 due delivery가 있는 send unit 행을 `FOR UPDATE OF u SKIP LOCKED`로 잠그고, 잠근 unit의 대기(`pending`·`retry`) delivery를 `next_attempt_at`과 관계없이 같은 statement에서 모두 `leased`로 전이합니다. 실패 정산은 문장 하나의 DB clock에 `retry_after_ms`를 더해 같은 unit 멤버에 같은 재시도 시각을 쓰지만, 시각이 어긋난 기존 행이 있어도 unit 일부만 claim되지 않게 하기 위해서입니다. claim 이후 모든 소유자 전이는 `(status, locked_by, attempt_count)` tuple과 잠금 뒤 채취한 단일 `clock_timestamp()`로 fence하며, 미스는 대상별 원인을 담은 `*sendfence.MissError`입니다. `attempt_count`는 claim·반환·만료 회수에서 바뀌지 않으므로 claim마다 바뀌는 토큰은 `locked_by`이고, 같은 worker ID가 같은 attempt의 행을 다시 claim하지 않는 것은 runner가 한 배치를 정산한 뒤에만 다음 claim을 하는 직렬 루프이기 때문입니다. runner를 병렬화하거나 replica를 늘리려면 claim별 토큰이 먼저 필요합니다. 배치 상한은 unit 경계에서 자르며 첫 unit은 상한을 넘어도 통째로 가져갑니다(`ordinal = 1`). `ClaimDue`는 명시적 트랜잭션 없는 단일 auto-commit statement라 반환 시점에 row lock은 이미 풀려 있고, 이후 배타성은 `leased` 상태와 `locked_by` fence가 맡습니다.
 
-alarm-worker는 claim한 봉투를 send unit별로 묶고(`alarmDispatchRegroupKey`), 저장된 send-unit `client_request_id`를 그대로 씁니다(`alarmDispatchClientRequestID`). 그룹 구성(envelope `DispatchOutboxID`와 범위)에서 ID를 파생하던 경로는 지웠습니다(stack-audit 2026-09-26 T17). 저장 ID가 비었거나 한 그룹에 서로 다른 ID가 섞이면 보내지 않고 발송 전 실패로 드러냅니다. karing 경로는 `DEC-20260926-hololive-karing-egress-disposition`에 따라 삭제했습니다(stack-audit 2026-09-26 T19). 모든 방은 message path를 씁니다.
+alarm-worker는 claim한 봉투를 send unit별로 묶고(`groupAlarmDispatchEnvelopesForDelivery`의 `send-unit|<id>`), send unit에 저장된 `client_request_id`를 그대로 씁니다. 요청 읽기·고정(`LoadSendRequest`·`PinSendRequest`)은 claim에서 본 ID까지 fence합니다. 그룹 구성(envelope `DispatchOutboxID`와 범위)에서 ID를 파생하던 경로는 지웠습니다(stack-audit 2026-09-26 T17). claim은 send unit이 있는 delivery만 돌려주고 send unit의 `client_request_id`는 NOT NULL·형식 CHECK를 받으므로, 저장 ID가 없거나 한 그룹에 서로 다른 ID가 섞이는 봉투는 생기지 않습니다. 그래서 egress의 send unit 식별 재검사도 지웠습니다. karing 경로는 `DEC-20260926-hololive-karing-egress-disposition`에 따라 삭제했습니다(stack-audit 2026-09-26 T19). 모든 방은 message path를 씁니다.
 
 따라서 동시 claim이 한 send unit을 쪼개 서로 다른 `ClientRequestID`를 만드는 경로는 코드와 아래 통합 테스트 기준으로 없습니다. 같은 unit을 다시 보내는 경우(재시도, `RecoverExpiredLeased`의 lease 만료 회수)는 같은 저장 ID를 쓰므로 Iris admission 중복 제거에 기댑니다. replica=1을 유지하는 이유는 이 재발송 구간의 cross-instance 경합이 테스트로 고정되지 않았고 (a)~(i) 게이트가 남아 있기 때문입니다.
 
@@ -99,21 +101,21 @@ alarm-worker는 claim한 봉투를 send unit별로 묶고(`alarmDispatchRegroupK
 - `TestPgxRepositoryClaimDue_ConcurrentWorkersKeepOneCanonicalGroupAtomic` — 같은 room, 같은 minute bucket의 3행(한 send unit)을 worker-1과 worker-2가 각각 `limit=2`로 동시에 claim합니다. 단언은 합집합=3행, 교집합=∅, 행을 가져간 워커는 정확히 1개(한 send unit은 한 워커가 소유).
 - `TestPgxRepositoryClaimDue_ConcurrentWorkersClaimDisjointRows` — 서로 다른 room 10행에서 행 단위 배타성(합집합=전체, 교집합=∅)을 고정합니다.
 
-alarm-worker 쪽은 `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_retry_regroup_test.go`의 `TestAlarmDispatchClientRequestIDRequiresPersistedSendUnitIdentity`와 `TestAlarmDispatchRunnerRefusesGroupWithoutPersistedSendUnitIdentity`가 저장 ID만 쓰고 없으면 보내지 않는 계약을 고정합니다.
+alarm-worker 쪽은 `hololive/hololive-alarm-worker/internal/egress/alarmdispatch/alarm_dispatch_text_request_id_test.go`의 `TestAlarmDispatchTextPathSendsPersistedSendUnitClientRequestID`가 send unit 크기와 무관하게 저장 ID 하나로 보내는 계약을 고정합니다.
 
 ### 게이트 목록
 
 **(a) send unit 재발송 구간의 cross-instance 경합.** 동시 claim에서 한 send unit이 한 워커에만 가는 것은 위 통합 테스트가 고정합니다. claim의 row lock은 statement가 끝나면 풀리므로, 그 뒤의 재시도·`RecoverExpiredLeased`(lease 만료 회수)·`QuarantineStaleSending` 경로에서 두 인스턴스가 같은 send unit을 다루는 경우는 테스트로 고정되지 않았습니다. 같은 unit의 재발송은 같은 저장 `ClientRequestID`를 쓰므로 Iris admission 중복 제거가 전제이며, replica>1 전에 이 전제를 경합 테스트로 확인해야 합니다.
 
-**(b) YouTube dispatcher 내부 background loop 조율.** `Dispatcher.Start`가 `aggregateSyncLoop`, `telemetryLoop`, `cleanupLoop`, `reviveLoop`를 인스턴스마다 무조건 기동합니다. 인스턴스가 늘면 이 루프들이 그대로 중복 수행됩니다.
+**(b) YouTube dispatcher 내부 background loop 조율.** `Dispatcher.Run`이 `aggregateSyncLoop`, `telemetryLoop`, `cleanupLoop`, `reviveLoop`를 인스턴스 간 조율 없이 인스턴스마다 기동합니다(`cleanupLoop`·`reviveLoop`는 설정으로 켠 경우). 인스턴스가 늘면 이 루프들이 그대로 중복 수행됩니다.
 
-**(c) compose `container_name`과 고정 호스트 포트.** 현재 단일 인스턴스를 강제하는 바로 그 장치가 replica>1을 물리적으로 막습니다. 스케일 배선 자체가 선행 작업입니다.
+**(c) Quadlet `ContainerName`과 고정 호스트 포트.** 현재 단일 인스턴스를 강제하는 바로 그 장치가 replica>1을 물리적으로 막습니다. 스케일 배선 자체가 선행 작업입니다.
 
 **(d) dedup `LocalFallback` fail-open.** `LocalFallback.TryClaimOnOutage`는 공유 백엔드 오류 시 프로세스 로컬 맵으로 claim을 시도하고 그 결과를 그대로 반환합니다. 인스턴스가 늘수록 조율 백엔드 장애 구간에서 중복이 통과할 확률이 커집니다.
 
 **(e) 분절·재발송 관측 counter 부재.** `alarm_dispatch_metrics.go`의 메트릭에는 한 알림 묶음이 여러 send unit으로 나뉜 경우나 같은 send unit의 인스턴스 간 재발송을 세는 지표가 없습니다. 이런 일이 실제로 일어났는지 운영에서 알 방법이 없으면 게이트 해소 여부를 측정할 수 없고, 전환 판단도 할 수 없습니다.
 
-**(f) `dispatchrun` 쪽 cross-instance 테스트 부재.** `dispatchrun` 테스트는 한 runner 안에서 저장 ID만 쓰는 계약(위 근거 테스트)과 ambiguous 실패의 저장 ID 재시도를 고정합니다. 두 runner가 같은 send unit의 재발송을 경합하는 시나리오를 구성하는 테스트는 `hololive/hololive-alarm-worker/internal/service/dispatchrun`에 없습니다.
+**(f) `alarmdispatch` 쪽 cross-instance 테스트 부재.** `alarmdispatch` 테스트는 한 runner 안에서 저장 ID만 쓰는 계약(위 근거 테스트)과 ambiguous 실패의 저장 ID 재시도를 고정합니다. 두 runner가 같은 send unit의 재발송을 경합하는 시나리오를 구성하는 테스트는 `hololive/hololive-alarm-worker/internal/egress/alarmdispatch`에 없습니다.
 
 **(g) 근거 테스트가 기본 pre-push 게이트에서 실행되지 않는다.** `scripts/ci/local-ci.sh`의 `RUN_INTEGRATION_TESTS` 기본값이 `false`이고 `scripts/ci/pre-push-gate.sh`는 `local-ci.sh` 호출 시 `RUN_RACE_TESTS`만 전달할 뿐 `RUN_INTEGRATION_TESTS`를 설정하지 않습니다. 따라서 위 두 통합 테스트는 `RUN_INTEGRATION_TESTS=true`와 PostgreSQL이 있을 때만 돕니다. 평시 무조건 도는 것은 `check_integration_tag_compilation`의 `go vet -tags=integration` 컴파일 검증뿐입니다. 또한 race 스텝은 `-tags=integration` 없이 `go test -race`를 돌리므로 이 동시성 테스트들은 상시 race 대상이 아닙니다. 이는 이번 변경이 만든 문제가 아니라 기존 CI 인프라의 성질이며 이번 범위에서 고치지 않습니다. 다만 "이 테스트들이 replica>1을 자동으로 막아 주지는 않는다"는 사실을 기록해 둡니다.
 
@@ -123,7 +125,7 @@ alarm-worker 쪽은 `hololive/hololive-alarm-worker/internal/service/dispatchrun
 |---|---|---|
 | alarm dispatch outbox (`dispatchoutbox`) | `claim_due.sql`의 send unit `FOR UPDATE OF u SKIP LOCKED` | 행 단위 배타성과 동시 claim의 send unit 원자성. 재발송 구간 경합은 미확인 — (a) 참조 |
 | generic notification delivery outbox (`alarm-worker/internal/egress/notificationdelivery`) | `outbox_claim_ready.sql`의 방별 선행 항목 선택과 `FOR UPDATE` + `locked_by`/`lock_expires_at` lease | 방별 순서, lease 만료 회수, stale worker fence, 정산 경합은 해당 패키지의 DB 회귀로 검증한다. 여러 프로세스에서 같은 방의 발송과 독립 maintenance를 함께 수행하는 조건은 확장 전 별도 검증 대상이다. |
-| YouTube delivery lifecycle (`alarm-worker/internal/egress/youtubedispatch/store`) | `transition_claim_pending.sql`의 `FOR UPDATE OF delivery SKIP LOCKED`와 `row_version` fence | 별개 `Dispatcher` 인스턴스 2개가 하나의 DB를 공유해 같은 delivery row를 경합해도 post당 1회만 전송이 시작됨 — `TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOncePerPost`. community post와 short kind에 한함 |
+| YouTube delivery lifecycle (`alarm-worker/internal/egress/youtubedispatch/store`) | `transition_claim_pending.sql`의 `FOR UPDATE OF delivery SKIP LOCKED`와 `row_version` fence | 별개 `Dispatcher` 인스턴스 2개가 하나의 DB를 공유해 같은 delivery row를 경합해도 post당 1회만 전송이 시작됨 — `TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce`. community post와 short kind에 한함 |
 
 "락이 있다"와 "중복 전송이 불가능하다"는 다른 명제입니다. `dispatchoutbox`의 claim 락은 동시 claim에서 send unit을 쪼개지 않지만, 락이 풀린 뒤의 재발송 구간은 (a)처럼 따로 확인해야 합니다. 세 경로 중 cross-instance 중복 전송 불가가 테스트로 고정된 것은 YouTube outbox 경로뿐이며, 그것도 두 kind에 한정됩니다. egress 전용 인스턴스를 실제로 띄우기 전에 나머지 두 경로를 각각 확인해야 합니다.
 
@@ -139,8 +141,8 @@ hololive/hololive-alarm-worker/internal/egress/notificationdelivery/store.go
   Store.fetchReadyAndLock — 방별 첫 due 항목의 단일 statement claim
 hololive/hololive-alarm-worker/internal/egress/notificationdelivery/queries/outbox_claim_ready.sql
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries/transition_claim_pending.sql
-hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_claim_gate_test.go
-  두 Dispatcher 인스턴스 경합 테스트
+hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_integration_test.go
+  TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce — 두 Dispatcher 인스턴스 경합 테스트
 
 hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/claim_due.sql
   send unit FOR UPDATE OF u SKIP LOCKED / unit 경계 LIMIT / 잠근 unit의 대기(pending·retry) delivery 전체 status='leased' 전이
@@ -151,20 +153,20 @@ hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/dispatch_gr
 hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_integration_test.go
   send unit 원자성 및 행 배타성 근거 테스트 (//go:build integration)
 
-hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go
-  alarmDispatchRegroupKey — send-unit|<id> (send unit 없는 봉투만 alarmDispatchTimeGroupKey 등 keyFunc)
+hololive/hololive-alarm-worker/internal/egress/alarmdispatch/alarm_dispatch_group.go
+  groupAlarmDispatchEnvelopesForDelivery — send-unit|<id> (발송할 수 없는 봉투는 invalid|send-unit|<id>)
 
-hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_client_request_id.go
-  alarmDispatchClientRequestID(저장된 send-unit client_request_id)
+hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/consumer_send_request.go
+  Consumer.LoadSendRequest / PinSendRequest — 저장된 send-unit client_request_id를 claim에서 본 ID로 fence
 
-hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_runner.go
-  sendAlarmDispatchMessage(text 경로)
+hololive/hololive-alarm-worker/internal/egress/alarmdispatch/alarm_dispatch_runner.go
+  Runner.dispatchMessageGroup(message 경로)
 
-hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_metrics.go
+hololive/hololive-alarm-worker/internal/egress/alarmdispatch/alarm_dispatch_metrics.go
   현재 메트릭 집합 — 분절 counter 없음
 
-hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher.go
-  Dispatcher.Start — aggregateSyncLoop / telemetryLoop / cleanupLoop / reviveLoop
+hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_run.go, dispatcher.go
+  Dispatcher.Run → startBackgroundLoopsWithWait — aggregateSyncLoop / telemetryLoop / cleanupLoop / reviveLoop
 
 hololive/hololive-shared/pkg/service/alarm/dedup/fallback.go (`2bc32799f`에서 삭제)
   LocalFallback.TryClaimOnOutage — fail-open

@@ -9,21 +9,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
 type failingDigestSummarizer struct{ err error }
 
-func (f failingDigestSummarizer) Summarize(context.Context, *model.SummarizeInput) (*model.Digest, error) {
+func (f failingDigestSummarizer) Summarize(context.Context, *newsmodel.SummarizeInput) (*model.Digest, error) {
 	return nil, f.err
 }
 
-func digestFallbackCandidates() []model.FilteredCandidate {
-	return []model.FilteredCandidate{{
-		Candidate:     model.Candidate{Title: "EXPO"},
+func digestFallbackCandidates() []newsmodel.FilteredCandidate {
+	return []newsmodel.FilteredCandidate{{
+		Candidate:     newsmodel.Candidate{Title: "EXPO"},
 		EffectiveDate: time.Date(2026, time.February, 20, 10, 0, 0, 0, time.UTC),
 		MemberText:    "사쿠라 미코",
-		Category:      model.CategoryEvent,
+		Category:      newsmodel.CategoryEvent,
 		SourceURL:     "https://hololive.hololivepro.com/news/1",
 	}}
 }
@@ -75,6 +77,40 @@ func memberNewsDigestResultCount(t *testing.T, resultType, reason string) float6
 	return 0
 }
 
+type countingDigestSummarizer struct{ calls int }
+
+func (c *countingDigestSummarizer) Summarize(context.Context, *newsmodel.SummarizeInput) (*model.Digest, error) {
+	c.calls++
+
+	return nil, errors.New("unexpected summarize call")
+}
+
+// 검증된 후보가 0건이면 요약기를 부르지 않고 result_type=empty digest를 metric에 남긴다.
+func TestGeneratePreparedRoomDigestRecordsEmptyResult(t *testing.T) {
+	summarizer := &countingDigestSummarizer{}
+	service := NewService(nil, summarizer, nil, nil, nil)
+	now := time.Date(2026, time.February, 20, 10, 0, 0, 0, time.UTC)
+	before := memberNewsDigestResultCount(t, "empty", "")
+
+	digest, err := service.generatePreparedRoomDigest(t.Context(), "room-1", model.PeriodWeekly, now, []string{"사쿠라 미코"}, filter.PrepareCandidates(nil, model.PeriodWeekly, now))
+	if err != nil {
+		t.Fatalf("generatePreparedRoomDigest() error = %v", err)
+	}
+
+	if digest == nil || digest.ResultType != sharedmodel.SummaryResultEmpty || len(digest.TopItems) != 0 {
+		t.Fatalf("digest = %#v, want empty digest", digest)
+	}
+
+	if summarizer.calls != 0 {
+		t.Fatalf("summarizer calls = %d, want 0", summarizer.calls)
+	}
+
+	if after := memberNewsDigestResultCount(t, "empty", ""); after != before+1 {
+		t.Fatalf("hololive_member_news_digest_result_total{result_type=empty,reason=\"\"} = %v, want %v", after, before+1)
+	}
+}
+
+// 호출자 취소는 fallback digest로 숨기지 않는다.
 func TestSummarizeRoomDigestPropagatesCallerCancellation(t *testing.T) {
 	service := NewService(nil, failingDigestSummarizer{err: context.Canceled}, nil, nil, nil)
 

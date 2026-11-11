@@ -65,7 +65,7 @@ func enqueueNotification(ctx context.Context, notification notificationEnqueue) 
 
 	notification.logger.Info(notification.enqueueLogMsg,
 		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
+		slog.Int("queued", result.Sent),
 		slog.Int("failed", result.Failed),
 		slog.Int("event_count", notification.eventCount))
 
@@ -76,7 +76,7 @@ func enqueueNotification(ctx context.Context, notification notificationEnqueue) 
 
 	if !shouldMark {
 		notification.logger.Warn(notification.deferLogMsg,
-			slog.Int("sent", result.Sent),
+			slog.Int("queued", result.Sent),
 			slog.Int("failed", result.Failed),
 			slog.Any("failed_rooms", result.FailedRooms))
 	}

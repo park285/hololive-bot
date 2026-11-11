@@ -135,9 +135,14 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	return messages, failures
 }
 
+// errDeliverySendRequestInvalid는 provider 호출 전에 요청을 거절한 실패다. 요청이 나가지 않았으므로 결과 불명이 아니며,
+// iris.ErrPermanent와 달리 grouped fallback의 trigger가 아니다.
+var errDeliverySendRequestInvalid = errors.New("delivery send request is invalid")
+
+// sendDeliveryMessage는 고정 요청을 보내고 202가 증명한 Iris requestId를 돌려준다.
 func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) (irisRequestID string, sendErr error) {
 	if err := validateDeliverySendRequest(req); err != nil {
-		return "", fmt.Errorf("validate delivery send request: %w", err)
+		return "", fmt.Errorf("validate delivery send request: %w: %w", errDeliverySendRequestInvalid, err)
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -154,7 +159,12 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 	defer cancel()
 
 	if req.frozen == nil || (req.frozen.Route != "text" && req.frozen.Route != "richtext") {
-		return "", errors.New("send frozen delivery: stored text or richtext request required")
+		return "", fmt.Errorf("send frozen delivery: stored text or richtext request required: %w", errDeliverySendRequestInvalid)
+	}
+
+	// client request ID는 Iris admission 중복 제거 키이며 고정 요청에서만 온다. 비었으면 보내지 않는다.
+	if req.clientRequestID == "" {
+		return "", fmt.Errorf("send frozen delivery: client request id required: %w", errDeliverySendRequestInvalid)
 	}
 
 	finish := d.beginProviderAttempt()
@@ -162,7 +172,7 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	defer func() { finish(sendErr, completed) }()
 
-	irisRequestID, err := d.sender.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
+	irisRequestID, err := d.sender.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.clientRequestID)
 
 	completed = true
 
@@ -185,7 +195,7 @@ func (d *SendEngine) wrapDeliverySendError(sendCtx context.Context, err error) e
 	return fmt.Errorf("send delivery message: %w", err)
 }
 
-// 결과 미확정(outcome unknown) 송신은 claim 해제도, FailureBuckets/Success 기록도 하지 않는다.
+// 결과 미확정(outcome unknown) 송신은 claim 해제도, 실패·성공 집계도 하지 않는다.
 // 행이 SENDING+locked 상태로 남아야 QuarantineStaleSending(LockTimeout)이 격리하며,
 // 여기서 실패로 처리하면 이미 Iris에 도달했을 수 있는 메시지가 재전송되어 중복 게시된다.
 func (d *SendEngine) recordPerRoomSendOutcomeUnknown(
@@ -217,12 +227,4 @@ func (d *SendEngine) recordGroupedSendOutcomeUnknown(
 		slog.Any("outbox_ids", collectDeliveryOutboxIDs(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
-}
-
-func (r deliverySendRequest) requestID() string {
-	if r.clientRequestID != "" {
-		return r.clientRequestID
-	}
-
-	return deliveryClientRequestID(r.roomID, r.dedupeKeys)
 }

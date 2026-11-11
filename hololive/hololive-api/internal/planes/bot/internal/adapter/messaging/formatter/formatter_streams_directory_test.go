@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -46,7 +45,7 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	orgHololive := "Hololive"
 	future := time.Now().Add(2 * time.Hour)
 	viewer := 1234
-	longTitle := strings.Repeat("가", constants.StringLimits.StreamTitle+20)
+	longTitle := strings.Repeat("가", streamTitleMaxRunes+20)
 	streams := []*domain.Stream{
 		{
 			ID:             "abc123",
@@ -129,9 +128,9 @@ func TestStreamHelpers(t *testing.T) {
 	t.Run("truncate title", func(t *testing.T) {
 		t.Parallel()
 
-		input := strings.Repeat("A", constants.StringLimits.StreamTitle+30)
+		input := strings.Repeat("A", streamTitleMaxRunes+30)
 		got := formatter.truncateTitle(input)
-		assert.LessOrEqual(t, len([]rune(got)), constants.StringLimits.StreamTitle+3)
+		assert.LessOrEqual(t, len([]rune(got)), streamTitleMaxRunes+3)
 	})
 
 	t.Run("streamTimeInfo branches", func(t *testing.T) {

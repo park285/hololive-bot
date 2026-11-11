@@ -31,43 +31,13 @@ var AppTimeout = struct {
 }
 
 var RequestTimeout = struct {
-	AdminRequest      time.Duration
-	BotCommand        time.Duration
-	BotAlarmCheck     time.Duration
-	WebhookProcessing time.Duration
-	AlarmService      time.Duration
-	DatabasePing      time.Duration
+	AdminRequest time.Duration
+	BotCommand   time.Duration
+	DatabasePing time.Duration
 }{
-	AdminRequest:      10 * time.Second,
-	BotCommand:        10 * time.Second,
-	BotAlarmCheck:     2 * time.Minute,
-	WebhookProcessing: 30 * time.Second,
-	AlarmService:      10 * time.Second,
-	DatabasePing:      5 * time.Second,
-}
-
-var LLMHTTPTimeout = struct {
-	Request        time.Duration
-	Dial           time.Duration
-	TLSHandshake   time.Duration
-	ResponseHeader time.Duration
-	IdleConn       time.Duration
-}{
-	Request:        2 * time.Minute,
-	Dial:           5 * time.Second,
-	TLSHandshake:   5 * time.Second,
-	ResponseHeader: 60 * time.Second, // GPT-5.4 요약 요청은 첫 헤더까지 수십 초가 걸릴 수 있다.
-	IdleConn:       90 * time.Second,
-}
-
-var IrisConnection = struct {
-	ReadyTimeout  time.Duration
-	RetryInterval time.Duration
-	PingTimeout   time.Duration
-}{
-	ReadyTimeout:  10 * time.Minute,
-	RetryInterval: 2 * time.Second,
-	PingTimeout:   3 * time.Second,
+	AdminRequest: 10 * time.Second,
+	BotCommand:   10 * time.Second,
+	DatabasePing: 5 * time.Second,
 }
 
 var DatabaseConfig = struct {
@@ -89,22 +59,18 @@ var DatabaseConfig = struct {
 
 var QueryTimeout = struct {
 	Default time.Duration
-	Long    time.Duration
 }{
 	Default: 5 * time.Second,
-	Long:    30 * time.Second,
 }
 
 var DatabaseDefaults = struct {
 	Host     string
 	Port     int
 	User     string
-	Password string
 	Database string
 }{
 	Host:     "postgres",
 	Port:     5432,
 	User:     "hololive_runtime",
-	Password: "",         // 반드시 환경변수로 설정 필요
 	Database: "hololive", // hololive-kakao-bot-go 전용 DB
 }

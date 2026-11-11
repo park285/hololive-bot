@@ -84,7 +84,7 @@ func (e *collectionExecutor) observeAcquireError(ctx context.Context, spec *jobl
 	e.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultError)
 
 	proof := contract.LeaseProof{}
-	e.logFailure(ctx, "acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
+	e.logFailure(ctx, "acquire", string(collecterr.OperationLeaseAcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
 }
 
 func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) error {
@@ -237,7 +237,7 @@ func (e *collectionExecutor) deferFailedRun(
 
 	schedule, scheduleErr := e.retrySchedule(err)
 	if scheduleErr != nil {
-		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(scheduleErr)), collecterr.DiagnosticOf(scheduleErr).Detail(), spec, proof)
+		e.logFailure(ctx, "defer", string(collecterr.OperationLeaseDeferFailed), string(collecterr.ClassOf(scheduleErr)), collecterr.DiagnosticOf(scheduleErr).Detail(), spec, proof)
 
 		return
 	}
@@ -248,7 +248,7 @@ func (e *collectionExecutor) deferFailedRun(
 	detail := diagnostic.Detail()
 
 	if deferErr := e.deferLease(cleanupCtx, lease, diagnostic, schedule); deferErr != nil && !errors.Is(deferErr, collection.ErrFenceLost) {
-		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
+		e.logFailure(ctx, "defer", string(collecterr.OperationLeaseDeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 
 		return
 	}
@@ -495,13 +495,13 @@ func (e *collectionExecutor) deferInvariant(
 
 	schedule, scheduleErr := collection.NewRetryAtSchedule(time.Now().UTC().Add(e.retryBounds.Maximum))
 	if scheduleErr != nil {
-		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(scheduleErr)), collecterr.DiagnosticOf(scheduleErr).Detail(), spec, proof)
+		e.logFailure(ctx, "defer", string(collecterr.OperationLeaseDeferFailed), string(collecterr.ClassOf(scheduleErr)), collecterr.DiagnosticOf(scheduleErr).Detail(), spec, proof)
 
 		return
 	}
 
 	if deferErr := e.deferLease(cleanupCtx, lease, collecterr.DiagnosticOf(err), schedule); deferErr != nil &&
 		!errors.Is(deferErr, collection.ErrFenceLost) {
-		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
+		e.logFailure(ctx, "defer", string(collecterr.OperationLeaseDeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 	}
 }

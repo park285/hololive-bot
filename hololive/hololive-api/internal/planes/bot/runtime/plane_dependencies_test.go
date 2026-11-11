@@ -102,7 +102,7 @@ func newInjectedDependencyBot(t *testing.T, memberNews *recordingMemberNews, maj
 		Logger:               logger,
 		Client:               &acceptingIrisClient{},
 		ReplyOutbox:          dispatchingReplyOutbox{client: &acceptingIrisClient{}},
-		MessageAdapter:       messaging.NewMessageAdapter("!", ""),
+		MessageAdapter:       messaging.NewMessageAdapter("!"),
 		Formatter:            formatter.NewResponseFormatter("!", nil),
 		Cache:                sharedtestutil.NewTestCacheService(t.Context(), t),
 		Postgres:             postgres,

@@ -93,7 +93,7 @@ func TestReplyReclaimRollsBackBatchWhenHorizonPassesBeforeWrite(t *testing.T) {
 
 	seedReclaimHorizonRows(ctx, t, pool, repo)
 
-	horizonMS := ReplyOutboxAutomaticReplayHorizon.Milliseconds()
+	horizonMS := repo.automaticReplayHorizon.Milliseconds()
 	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		candidates, err := lockedReplyReclaimCandidates(ctx, tx, 10, horizonMS)
 		require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestReplyReclaimRollsBackBatchWhenHorizonPassesBeforeWrite(t *testing.T) {
 		_, err = pool.Exec(ctx, `SELECT pg_sleep(2.1)`)
 		require.NoError(t, err)
 
-		_, err = applyReplyReclaim(ctx, tx, candidates, ReplyOutboxMaxAttempts, horizonMS)
+		_, err = applyReplyReclaim(ctx, tx, candidates, repo.maxAttempts, horizonMS)
 
 		return err
 	})

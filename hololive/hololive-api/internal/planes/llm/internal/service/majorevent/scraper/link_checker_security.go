@@ -68,8 +68,7 @@ func isBlockedLinkError(err error) bool {
 
 	return errors.Is(err, netguard.ErrBlockedIP) ||
 		errors.Is(err, netguard.ErrHostNotAllowed) ||
-		errors.Is(err, netguard.ErrUnsupportedScheme) ||
-		strings.Contains(strings.ToLower(err.Error()), "unsupported scheme")
+		errors.Is(err, netguard.ErrUnsupportedScheme)
 }
 
 func withValidatedDialPolicy(client *http.Client, resolver hostResolver, timeout time.Duration) *http.Client {

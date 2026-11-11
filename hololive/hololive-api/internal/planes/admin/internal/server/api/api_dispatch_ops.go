@@ -35,10 +35,6 @@ type DispatchOperations interface {
 	Requeue(context.Context, string, dispatchops.RequeueRequest) (dispatchops.RequeueResult, error)
 }
 
-// SetDispatchOperations는 라우트 등록 전 생성 단계에서만 운영 저장소를 연결합니다.
-// 요청 처리 중 교체하거나 nil 의존성을 성공 응답으로 대체하지 않습니다.
-func (h *AlarmHandler) SetDispatchOperations(ops DispatchOperations) { h.dispatchOps = ops }
-
 func (h *AlarmHandler) dispatchReady(c *gin.Context) bool {
 	c.Header("Cache-Control", "no-store")
 

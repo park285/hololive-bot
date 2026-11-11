@@ -23,14 +23,9 @@ package holodexprovider
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"net/url"
-	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	apiclient "github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient"
@@ -80,7 +75,7 @@ func newServiceForFallbackTest(requester apiclient.Requester) *Service {
 	return &Service{
 		requester:    requester,
 		logger:       logger,
-		cacheManager: NewCacheManager(cacheClient, logger),
+		cacheManager: newCacheManager(cacheClient, logger),
 		mapper:       streammapping.NewStreamMapper(logger),
 		filter:       streammapping.NewStreamFilter(logger),
 	}
@@ -92,44 +87,4 @@ func newServiceForFallbackTestWithScraper(requester apiclient.Requester, scraper
 	service.scraper = scraperService
 
 	return service
-}
-
-func TestGetChannel_DoesNotFallbackOnNonRetryableAPIError(t *testing.T) {
-	mockReq := &MockRequester{
-		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != http.MethodGet {
-				return nil, fmt.Errorf("unexpected method: %s", method)
-			}
-
-			if path != "/channels/c1" {
-				return nil, fmt.Errorf("unexpected path: %s", path)
-			}
-
-			return nil, &apiclient.APIError{
-				Operation:  "get_channel",
-				StatusCode: http.StatusBadRequest,
-				Err:        errors.New("bad request"),
-			}
-		},
-	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "")
-
-	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
-
-	channel, err := service.GetChannel(t.Context(), "c1")
-	if err == nil {
-		t.Fatal("GetChannel() error = nil, want non-nil")
-	}
-
-	if !strings.Contains(err.Error(), "get channel") {
-		t.Fatalf("GetChannel() error = %v, want contains %q", err, "get channel")
-	}
-
-	if strings.Contains(err.Error(), "scraper fallback failed") {
-		t.Fatalf("GetChannel() error = %v, want no scraper fallback attempt", err)
-	}
-
-	if channel != nil {
-		t.Fatalf("GetChannel() channel = %#v, want nil", channel)
-	}
 }

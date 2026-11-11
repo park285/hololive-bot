@@ -24,36 +24,29 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )
 
-func TestInitAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
+// alarm provider URL이 없으면 in-process AlarmService로 대신하지 않고 기동을 실패시킨다.
+func TestNewAlarmClientRequiresAlarmProviderURL(t *testing.T) {
 	t.Parallel()
 
-	components, err := InitAlarmModeComponents(&apiconfig.BotPlaneConfig{}, &membermocks.DataProvider{}, slog.New(slog.DiscardHandler))
+	client, err := newAlarmClient(&apiconfig.BotPlaneConfig{}, slog.New(slog.DiscardHandler))
 
-	require.Nil(t, components)
+	require.Nil(t, client)
 	require.EqualError(t, err, "alarm provider URL (ALARM_INTERNAL_URL) is required")
 }
 
-func TestInitAlarmModeComponentsUsesAlarmWorkerClient(t *testing.T) {
+func TestNewAlarmClientUsesAlarmWorkerURL(t *testing.T) {
 	t.Parallel()
 
-	memberProvider := &membermocks.DataProvider{}
-
-	components, err := InitAlarmModeComponents(
+	client, err := newAlarmClient(
 		&apiconfig.BotPlaneConfig{AlarmServiceURL: "http://127.0.0.1:8081"},
-		memberProvider,
 		slog.New(slog.DiscardHandler),
 	)
 
 	require.NoError(t, err)
-	require.NotNil(t, components)
-	assert.IsType(t, &alarmhttp.Client{}, components.AlarmCRUD)
-	assert.Same(t, memberProvider, components.MemberDataSource)
+	require.NotNil(t, client)
 }

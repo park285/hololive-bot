@@ -2,6 +2,7 @@ package youtubedispatch
 
 import (
 	"sync"
+	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -20,6 +21,9 @@ type deliveryAttempt struct {
 	request       deliverySendRequest
 	operation     store.StartedOperation
 	irisRequestID string
+
+	// sendingStartedAt은 operation을 만든 BeginSending 호출 직전 시각이다. grouped fallback은 이 시각부터 남은 lease를 잰다.
+	sendingStartedAt time.Time
 
 	// 기존 영속 전이·formatter·audit API에 넘기는 읽기 전용 투영이다.
 	// 생성 때 한 번 만들고 singleton은 같은 backing array를 사용한다.
@@ -60,6 +64,5 @@ func newDeliveryDispatchResult(capacity int) deliveryDispatchResult {
 	return deliveryDispatchResult{
 		SuccessDeliveryIDs: make([]int64, 0, capacity),
 		TouchedOutboxIDs:   make([]int64, 0, capacity),
-		FailureBuckets:     make(map[string][]int64),
 	}
 }

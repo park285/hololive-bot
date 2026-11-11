@@ -19,7 +19,7 @@ func TestPrepareOneReportsDedupStoreErrorAsFailed(t *testing.T) {
 			return false, errors.New("valkey unreachable")
 		},
 	}
-	notifier := &Notifier{dedupService: dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())}
+	notifier := &Notifier{dedupService: dedup.NewService(cacheClient, newCheckerTestLogger())}
 
 	start := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Minute)
 	stream := &domain.Stream{
@@ -32,7 +32,7 @@ func TestPrepareOneReportsDedupStoreErrorAsFailed(t *testing.T) {
 	}
 	notification := domain.NewAlarmNotification("room1", stream.Channel, stream, 5, []string{}, "")
 
-	prepared, err := notifier.prepareOne(t.Context(), notification)
+	prepared, err := notifier.prepareOne(t.Context(), notification, testTargetPolicy(5, 3, 1))
 	if err == nil {
 		t.Fatal("prepareOne() error = nil, want dedup store error")
 	}

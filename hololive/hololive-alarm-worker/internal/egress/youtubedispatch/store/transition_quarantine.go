@@ -339,60 +339,33 @@ func loadStaleSendingCandidates(
 	return candidates, checkedAt, nil
 }
 
+// resolveStaleSendingGroups는 stale 후보의 논리 그룹을 같은 트랜잭션에서 잠가 다시 읽고 해석한다. 후보는 claim 행이
+// 아니므로 claim fence가 없고, 조회 창의 깨진 정체성 행은 오류 없이 그룹 밖으로 건너뛴다.
 func (s *TransitionStore) resolveStaleSendingGroups(
 	ctx context.Context,
 	db dbx.Querier,
 	candidates []transitionRow,
 ) (resolvedLogicalGroups, error) {
-	requested, requestedKeys, err := staleRequestedLogicalGroups(candidates)
+	requested, err := staleRequestedLogicalGroups(candidates)
 	if err != nil {
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: build requests: %w", err)
 	}
 
-	rows, err := s.loadLogicalGroupRows(ctx, db, requested)
+	resolved, err := s.resolveLogicalGroups(ctx, db, requested, nil, nil)
 	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: load rows: %w", err)
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: %w", err)
 	}
 
-	if !s.logicalGroupWindowComplete(len(requested), len(rows)) {
-		return resolvedLogicalGroups{}, errors.New("resolve stale sending groups: logical group window is incomplete")
-	}
-
-	rowsByID, snapshots, err := staleResolutionSnapshots(rows, requestedKeys, s.config.LogicalGroupLimit)
-	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: build snapshots: %w", err)
-	}
-
-	ledgerByKey, evidence, err := loadTransitionLedger(ctx, db, requestedKeys)
-	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: load ledger: %w", err)
-	}
-
-	resolver, err := preparation.NewResolver(preparation.ResolverConfig{
-		LogicalGroupScanLimit: s.config.LogicalGroupLimit,
-		LockTimeout:           s.config.LockTimeout,
-		RequireTerminalLedger: true,
-	})
-	if err != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve stale sending groups: create resolver: %w", err)
-	}
-
-	return resolvedLogicalGroups{
-		resolutions: resolver.ResolveGroups(snapshots, evidence, requestedKeys),
-		rowsByID:    rowsByID, ledgerByKey: ledgerByKey,
-	}, nil
+	return resolved, nil
 }
 
-func staleRequestedLogicalGroups(
-	candidates []transitionRow,
-) ([]requestedLogicalGroup, []ytcontentid.LogicalKey, error) {
+func staleRequestedLogicalGroups(candidates []transitionRow) ([]requestedLogicalGroup, error) {
 	requested := make([]requestedLogicalGroup, 0, len(candidates))
-	keys := make([]ytcontentid.LogicalKey, 0, len(candidates))
 
 	for i := range candidates {
 		key, err := candidates[i].logicalKey()
 		if err != nil {
-			return nil, nil, fmt.Errorf("resolve stale sending groups: %w", err)
+			return nil, fmt.Errorf("resolve stale sending groups: %w", err)
 		}
 
 		outbox := candidates[i].domainOutbox()
@@ -401,47 +374,9 @@ func staleRequestedLogicalGroups(
 			key: key, delivery: candidates[i].domainDelivery(), outbox: outbox,
 			candidate: logicalIdentityCandidates(key, outbox),
 		})
-		keys = append(keys, key)
 	}
 
-	return requested, uniqueLogicalKeys(keys), nil
-}
-
-func staleResolutionSnapshots(
-	rows []transitionRow,
-	requestedKeys []ytcontentid.LogicalKey,
-	logicalGroupLimit int,
-) (map[int64]transitionRow, []preparation.DeliverySnapshot, error) {
-	requested := make(map[ytcontentid.LogicalKey]struct{}, len(requestedKeys))
-	for i := range requestedKeys {
-		requested[requestedKeys[i]] = struct{}{}
-	}
-
-	rowsByID := make(map[int64]transitionRow, len(rows))
-	snapshots := make([]preparation.DeliverySnapshot, 0, len(rows))
-	counts := make(map[ytcontentid.LogicalKey]int, len(requestedKeys))
-
-	for i := range rows {
-		key, keyErr := rows[i].logicalKey()
-		if keyErr != nil {
-			continue
-		}
-
-		if _, wanted := requested[key]; !wanted {
-			continue
-		}
-
-		counts[key]++
-		if counts[key] > logicalGroupLimit {
-			return nil, nil, fmt.Errorf("resolve stale sending groups: logical group %s exceeds limit %d", key.Hash(), logicalGroupLimit)
-		}
-
-		rowsByID[rows[i].ID] = rows[i]
-
-		snapshots = append(snapshots, rows[i].snapshot(false))
-	}
-
-	return rowsByID, snapshots, nil
+	return requested, nil
 }
 
 func quarantineTransition(row transitionRow) rowTransition {

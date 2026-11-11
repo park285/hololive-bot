@@ -1,6 +1,7 @@
 package workerapp
 
 import (
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -72,18 +73,14 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 
 	logger := slog.New(slog.DiscardHandler)
 
-	// API admin이 저장하는 형식 그대로 기록한 뒤 무관한 필드만 갱신한다.
-	service, err := settings.NewSettingsService(settingsPath, settings.Settings{AlarmAdvanceMinutes: 30, TargetMinutes: []int{30, 15, 5, 1}}, logger)
+	// API admin writer는 settings.Settings를 그대로 기록한다. alarmAdvanceMinutes만 바뀐 파일도 저장된 target 목록을 쓴다.
+	raw, err := jsonv2.Marshal(settings.Settings{AlarmAdvanceMinutes: 15, TargetMinutes: []int{30, 15, 5, 1}})
 	if err != nil {
-		t.Fatalf("NewSettingsService() error = %v", err)
+		t.Fatalf("marshal settings: %v", err)
 	}
 
-	current := service.Get()
-
-	current.AlarmAdvanceMinutes = 15
-
-	if err = service.Update(current); err != nil {
-		t.Fatalf("update settings: %v", err)
+	if err = os.WriteFile(settingsPath, raw, 0o600); err != nil {
+		t.Fatalf("write settings file: %v", err)
 	}
 
 	got, err := resolvePersistedTargetMinutes(settingsPath, []int{30, 15, 5, 1}, logger)

@@ -7,76 +7,23 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
-. "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/source-revision.sh"
 
 read_version() {
-    local dir_path="$1"
-    local fallback="$2"
-    local value=""
+    local file="$1/VERSION"
+    local -a lines=()
 
-    if [[ -f "${dir_path}/VERSION" ]]; then
-        value="$(xargs <"${dir_path}/VERSION")"
+    if [[ ! -f "${file}" ]]; then
+        echo "[ERROR] Missing ${file}" >&2
+        return 1
     fi
-    if [[ -n "${value}" ]]; then
-        printf '%s\n' "${value}"
-    else
-        printf '%s\n' "${fallback}"
+    mapfile -t lines <"${file}"
+    if [[ "${#lines[@]}" -ne 1 || ! "${lines[0]}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+        echo "[ERROR] ${file} must hold one MAJOR.MINOR.PATCH line" >&2
+        return 1
     fi
+    printf '%s\n' "${lines[0]}"
 }
-
-usage() {
-    cat <<'EOF'
-Usage: ./build-all.sh [--no-bump] [--skip-local-ci] (--build-only | <target>...)
-
-Options:
-  --no-bump        Keep runtime VERSION files unchanged.
-  --build-only     Build every production image.
-  --skip-local-ci  Skip scripts/ci/local-ci.sh before building.
-
-Environment:
-  HOLOLIVE_BUILD_PLATFORM  Target platform such as linux/arm64. Empty builds for this host.
-EOF
-    echo
-    echo "Build targets:"
-    compose_service_build_targets_text | sed 's/^/  /'
-}
-
-NO_BUMP=false
-BUILD_ONLY=false
-SKIP_LOCAL_CI=false
-TARGET_SERVICES=()
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --no-bump) NO_BUMP=true ;;
-        --build-only) BUILD_ONLY=true ;;
-        --skip-local-ci) SKIP_LOCAL_CI=true ;;
-        --help|-h)
-            usage
-            exit 0
-            ;;
-        --*)
-            echo "[ERROR] Unknown option: $1" >&2
-            exit 1
-            ;;
-        *)
-            if ! service="$(compose_service_resolve_build_target "$1")"; then
-                echo "[ERROR] Unknown build target: $1" >&2
-                usage >&2
-                exit 1
-            fi
-            TARGET_SERVICES+=("${service}")
-            ;;
-    esac
-    shift
-done
-
-if [[ "${BUILD_ONLY}" == false && ${#TARGET_SERVICES[@]} -eq 0 ]]; then
-    echo "[ERROR] build-all.sh only builds images; pass --build-only or a target." >&2
-    echo "        Central deployment follows docs/current/runbooks/release.md (image transfer + Quadlet units)." >&2
-    exit 2
-fi
 
 # 이미지 이름은 Quadlet unit의 기본 Image=와 같다. 중앙 unit은 배포 때 sha256 identity로 고정한다.
 declare -A IMAGE_BY_SERVICE=(
@@ -107,6 +54,59 @@ declare -A VERSION_DIR_BY_SERVICE=(
     [hololive-api]="hololive/hololive-api"
     [hololive-alarm-worker]="hololive/hololive-alarm-worker"
 )
+
+usage() {
+    cat <<'EOF'
+Usage: ./build-all.sh [--no-bump] [--skip-local-ci] (--build-only | <target>...)
+
+Options:
+  --no-bump        Keep runtime VERSION files unchanged.
+  --build-only     Build every production image.
+  --skip-local-ci  Skip scripts/ci/local-ci.sh before building.
+
+Environment:
+  HOLOLIVE_BUILD_PLATFORM  Target platform such as linux/arm64. Empty builds for this host.
+EOF
+    echo
+    echo "Build targets:"
+    printf '  %s\n' "${!DOCKERFILE_BY_SERVICE[@]}" | LC_ALL=C sort
+}
+
+NO_BUMP=false
+BUILD_ONLY=false
+SKIP_LOCAL_CI=false
+TARGET_SERVICES=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-bump) NO_BUMP=true ;;
+        --build-only) BUILD_ONLY=true ;;
+        --skip-local-ci) SKIP_LOCAL_CI=true ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        --*)
+            echo "[ERROR] Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "${DOCKERFILE_BY_SERVICE[$1]:-}" ]]; then
+                echo "[ERROR] Unknown build target: $1" >&2
+                usage >&2
+                exit 1
+            fi
+            TARGET_SERVICES+=("$1")
+            ;;
+    esac
+    shift
+done
+
+if [[ "${BUILD_ONLY}" == false && ${#TARGET_SERVICES[@]} -eq 0 ]]; then
+    echo "[ERROR] build-all.sh only builds images; pass --build-only or a target." >&2
+    echo "        Central deployment follows docs/current/runbooks/release.md (image transfer + Quadlet units)." >&2
+    exit 2
+fi
 
 # arm64 image의 RUN은 x86_64 build host에서 binfmt 등록이 있어야 실행된다. 자동 설치는 host 변경이므로
 # 하지 않고 등록이 없으면 빌드 전에 멈춘다.
@@ -158,17 +158,17 @@ if [[ "${NO_BUMP}" == false ]]; then
             echo "[ERROR] Version contract missing in ${dir}" >&2
             exit 1
         fi
-        old_version="$(read_version "${dir}" dev)"
+        old_version="$(read_version "${dir}")"
         make -C "${dir}" bump-patch --no-print-directory >/dev/null
-        new_version="$(read_version "${dir}" dev)"
+        new_version="$(read_version "${dir}")"
         echo "  ${dir}: ${old_version} -> ${new_version}"
     done
 else
     echo "[SKIP] Version bump disabled by --no-bump"
 fi
 
-HOLO_API_VERSION="$(read_version hololive/hololive-api dev)"
-HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker "${HOLO_API_VERSION}")"
+HOLO_API_VERSION="$(read_version hololive/hololive-api)"
+HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker)"
 REVISION=unknown
 if ! build_worktree_state="$(git -C "${REPO_ROOT}" status --porcelain=v1 --untracked-files=all)"; then
     echo "[ERROR] Failed to inspect build source worktree" >&2
@@ -221,5 +221,6 @@ echo "[DONE] Image build complete"
 echo
 echo "[VERSIONS]"
 for dir in "${VERSION_DIRS[@]}"; do
-    printf "  %-40s : %s\n" "${dir}" "$(read_version "${dir}" dev)"
+    version="$(read_version "${dir}")"
+    printf "  %-40s : %s\n" "${dir}" "${version}"
 done

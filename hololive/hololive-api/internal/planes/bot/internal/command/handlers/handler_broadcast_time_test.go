@@ -25,7 +25,7 @@ func newBroadcastTimeTestDeps(repo *stubBroadcastHistoryRepository, sent *[]stri
 	return &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
-		Matcher:          matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:          matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			*sent = append(*sent, message)
 			return nil

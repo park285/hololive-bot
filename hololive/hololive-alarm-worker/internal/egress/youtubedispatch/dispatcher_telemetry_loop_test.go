@@ -59,7 +59,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 	require.Nil(t, rows[0].LoggedAt)
 }
 
-func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
+func TestDispatcherRun_FlushesTelemetryInBackground(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -90,7 +90,7 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 		TelemetryPollInterval: 10 * time.Millisecond,
 	})
 
-	dispatcher.Start(ctx)
+	runDispatcherInBackground(t, dispatcher)
 
 	require.Eventually(t, func() bool {
 		var rows []deliveryTelemetryTestBufferModel

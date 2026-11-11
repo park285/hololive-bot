@@ -4,13 +4,13 @@
 
 ## Gate Documents
 
-- `ci-gates.md` - architecture/doc gate 목적, 실패 조건, 실행 순서
+- `ci-gates.md` - architecture gate 목적, 실패 조건, 실행 순서
+- `self-hosted-ci.md` - GitHub Actions runner 경계, workflow 분담, 로컬 pre-push gate 단계
 - `llm-work-rules.md` - LLM 문서/계약 작업 규칙
 - `repo-tree-policy.md` - repository tree classification and cleanup policy
 - `repo-refactor-audit.md` - active refactor findings, completed cleanup, and deferred risk register
 - `app-bootstrap-boundary-guide.md` - Kakao bot bootstrap boundary guide
 - `review-bundles.md` - review source/full bundle export policy
-- `h3-runtime-smoke-cross-debate-20260630.md` - H3 runtime smoke cross-debate result and remaining closure checklist
 - `hololive-api-trust-domain.md` - consolidated bot/admin/LLM process boundary, controls, and split trigger
 - `non-secret-history-risk-decisions-20260713.md` - separate #087/#088 current-tree and Git-history risk decisions
 - `alarm-egress-scale-out-decisions-20260730.md` - alarm-worker egress lease removal, production role profiles, and the replica>1 gate list
@@ -24,4 +24,3 @@
 
 - 현재 governance 자산은 이 인덱스에서 추적 가능해야 합니다.
 - CI에서 쓰는 기준 파일은 current-layer에서 발견 가능해야 합니다.
-- 문서/계약 gate는 `scripts/architecture/ci-boundary-gate.sh`를 통해 실행되어야 합니다.

@@ -36,9 +36,6 @@ import (
 //go:embed Pretendard-Regular.ttf
 var pretendardRegularData []byte
 
-//go:embed Pretendard-SemiBold.ttf
-var pretendardSemiBoldData []byte
-
 //go:embed NotoSansJP-Regular-subset.ttf
 var notoSansJPData []byte
 
@@ -46,9 +43,8 @@ var (
 	fontsOnce    sync.Once
 	errFontsLoad error
 
-	pretendardRegular  *opentype.Font
-	pretendardSemiBold *opentype.Font
-	notoSansJP         *opentype.Font
+	pretendardRegular *opentype.Font
+	notoSansJP        *opentype.Font
 
 	captionFaceCache sync.Map
 )
@@ -56,7 +52,7 @@ var (
 // 반환되는 Face는 내부 sfnt.Buffer와 래스터 상태를 공유해 동시 사용에 안전하지 않다 —
 // 호출자는 render.fontMu처럼 렌더 전 구간을 단일 뮤텍스로 직렬화해야 한다(기존 계약).
 func CaptionFaceSized(size float64) (font.Face, error) {
-	out, err := captionFace("regular", size)
+	out, err := captionFace(size)
 	if err != nil {
 		return nil, fmt.Errorf("caption face: %w", err)
 	}
@@ -64,7 +60,7 @@ func CaptionFaceSized(size float64) (font.Face, error) {
 	return out, nil
 }
 
-func captionFace(weight string, size float64) (font.Face, error) {
+func captionFace(size float64) (font.Face, error) {
 	if size <= 0 {
 		size = 24
 	}
@@ -73,14 +69,14 @@ func captionFace(weight string, size float64) (font.Face, error) {
 		return nil, fmt.Errorf("load fonts: %w", err)
 	}
 
-	cacheKey := fmt.Sprintf("%s:%.2f", weight, size)
+	cacheKey := fmt.Sprintf("%.2f", size)
 	if face, ok := captionFaceCache.Load(cacheKey); ok {
 		if cached, ok := face.(font.Face); ok {
 			return cached, nil
 		}
 	}
 
-	combined, err := buildCaptionFace(weight, size)
+	combined, err := buildCaptionFace(size)
 	if err != nil {
 		return nil, fmt.Errorf("build caption face: %w", err)
 	}
@@ -95,18 +91,13 @@ func captionFace(weight string, size float64) (font.Face, error) {
 	return actualFace, nil
 }
 
-func buildCaptionFace(weight string, size float64) (font.Face, error) {
+func buildCaptionFace(size float64) (font.Face, error) {
 	primary := pretendardRegular
-
-	if weight == "semibold" {
-		primary = pretendardSemiBold
-	}
-
 	opts := &opentype.FaceOptions{Size: size, DPI: 96, Hinting: font.HintingFull}
 
 	primaryFace, err := opentype.NewFace(primary, opts)
 	if err != nil {
-		return nil, fmt.Errorf("create %s caption face size %.2f: %w", weight, size, err)
+		return nil, fmt.Errorf("create caption face size %.2f: %w", size, err)
 	}
 
 	jpFace, err := opentype.NewFace(notoSansJP, opts)
@@ -138,7 +129,6 @@ func loadFonts() error {
 		}
 
 		pretendardRegular = parse("pretendard-regular", pretendardRegularData)
-		pretendardSemiBold = parse("pretendard-semibold", pretendardSemiBoldData)
 		notoSansJP = parse("noto-sans-jp", notoSansJPData)
 	})
 

@@ -29,6 +29,10 @@ type RuntimeConfig struct {
 	DispatchRetention  DispatchRetentionConfig
 	// AlarmDispatchPublish: ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH. wakeup 여부는 worker profile alarm_dispatch.wakeup_enabled가 소유한다.
 	AlarmDispatchPublish AlarmDispatchPublishConfig
+	NotificationRoles    NotificationRoles
+	Celebration          CelebrationRunnerConfig
+	BirthdayStream       BirthdayStreamRunnerConfig
+	XSpaces              XSpacesConfig
 }
 
 // AlarmDispatchPublishConfig는 알림 발행자가 outbox에 한 번에 넣는 delivery 상한이다.
@@ -59,13 +63,6 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load iris config: %w", err)
 	}
 
-	// alarm-worker는 room ACL을 소비하지 않지만 compose 계약상 Iris egress runtime이라 KAKAO_ROOMS·KAKAO_ACL_* 입력을
-	// bot plane과 같은 기준으로 거절한다. 값은 보관하지 않는다.
-	kakao, err := settings.LoadKakaoConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load Kakao config: %w", err)
-	}
-
 	config, err := loadRuntimeSections()
 	if err != nil {
 		return nil, err
@@ -73,7 +70,7 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 
 	config.Iris = iris
 
-	if err := validateEgressInputs(kakao.Rooms, &config.Iris, config.Holodex.APIKey); err != nil {
+	if err := validateEgressInputs(&config.Iris, config.Holodex.APIKey); err != nil {
 		return nil, fmt.Errorf("validate required: %w", err)
 	}
 
@@ -112,6 +109,8 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	}, nil
 }
 
+// loadRoleSections는 alarm-worker의 worker profile, dispatch retention, 발행 batch 한도, 알림 역할과
+// background runner 설정을 채운다.
 func loadRoleSections(config *RuntimeConfig) error {
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -129,20 +128,32 @@ func loadRoleSections(config *RuntimeConfig) error {
 		return fmt.Errorf("load alarm dispatch publish config: %w", err)
 	}
 
+	celebration, err := loadCelebrationRunnerConfig()
+	if err != nil {
+		return fmt.Errorf("load celebration runner config: %w", err)
+	}
+
+	birthdayStream, err := loadBirthdayStreamRunnerConfig()
+	if err != nil {
+		return fmt.Errorf("load birthday stream runner config: %w", err)
+	}
+
 	config.AlarmWorkerProfile = profile
 	config.DispatchRetention = retention
 	config.AlarmDispatchPublish = AlarmDispatchPublishConfig{MaxDeliveriesPerBatch: maxDeliveries}
+	config.NotificationRoles = loadNotificationRoles()
+	config.Celebration = celebration
+	config.BirthdayStream = birthdayStream
+	config.XSpaces = loadXSpacesConfig()
 
 	return nil
 }
 
-func validateEgressInputs(rooms []string, iris *settings.IrisConfig, holodexAPIKey string) error {
-	if err := settings.ValidateKakaoRooms(rooms); err != nil {
-		return fmt.Errorf("validate kakao rooms: %w", err)
-	}
-
-	if err := settings.ValidateIrisEgressInputs(iris); err != nil {
-		return fmt.Errorf("validate iris egress inputs: %w", err)
+// validateEgressInputs는 발송 입력만 요구한다. Webhook을 받지 않고 room ACL도 소비하지 않는 alarm-worker는
+// IRIS_WEBHOOK_TOKEN은 settings.LoadIrisConfig가 읽지만 검사·사용하지 않고, KAKAO_ROOMS·KAKAO_ACL_*는 읽지 않는다.
+func validateEgressInputs(iris *settings.IrisConfig, holodexAPIKey string) error {
+	if err := settings.ValidateIrisClientInputs(iris); err != nil {
+		return fmt.Errorf("validate iris client inputs: %w", err)
 	}
 
 	if err := runtimepolicy.ValidateHolodexAPIKey(holodexAPIKey); err != nil {
@@ -181,8 +192,12 @@ func (c *RuntimeConfig) validate() error {
 		return errors.New("alarm-worker runtime requires Stack Worker Profile v1")
 	}
 
-	if err := validateOwnership(c.Environment); err != nil {
+	if err := validateOwnership(c.Environment, c.NotificationRoles); err != nil {
 		return fmt.Errorf("validate alarm worker ownership: %w", err)
+	}
+
+	if err := c.XSpaces.validate(); err != nil {
+		return fmt.Errorf("validate X spaces config: %w", err)
 	}
 
 	if !runtimepolicy.IsProduction(c.Environment) {

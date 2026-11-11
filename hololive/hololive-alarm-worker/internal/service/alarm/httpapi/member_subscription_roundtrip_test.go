@@ -29,10 +29,10 @@ func newMemberSubscriptionAPIClient(t *testing.T) (*alarmhttp.Client, <-chan dom
 			removed <- domain.Alarm{RoomID: roomID, ChannelID: channelID, HostID: hostID, AlarmTypes: types}
 			return true, nil
 		},
-		getRoomAlarmsWithTypesFn: func(_ context.Context, roomID string) ([]*domain.Alarm, error) {
-			return []*domain.Alarm{
-				{RoomID: roomID, ChannelID: testUnitBChannel, HostID: testMiraHostID},
-				{RoomID: roomID, ChannelID: testUnitBChannel, HostID: testNeonHostID},
+		listRoomAlarmsViewFn: func(context.Context, string) ([]domain.AlarmListView, error) {
+			return []domain.AlarmListView{
+				{ChannelID: testUnitBChannel, HostID: testMiraHostID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
+				{ChannelID: testUnitBChannel, HostID: testNeonHostID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 			}, nil
 		},
 	}
@@ -72,14 +72,11 @@ func TestMemberSubscriptionClientAndAPIRoundTrip(t *testing.T) {
 	require.Empty(t, channelRemoval.HostID)
 	require.Equal(t, testUnitBChannel, memberRemoval.ChannelID)
 
-	alarms, err := client.GetRoomAlarmsWithTypes(ctx, testRoomID)
+	views, err := client.ListRoomAlarmsView(ctx, testRoomID)
 	require.NoError(t, err)
-	require.Len(t, alarms, 2)
-	require.Equal(t, testMiraHostID, alarms[0].HostID)
-
-	channels, err := client.GetRoomAlarms(ctx, testRoomID)
-	require.NoError(t, err)
-	require.Equal(t, []string{testUnitBChannel}, channels)
+	require.Len(t, views, 2)
+	require.Equal(t, []string{testMiraHostID, testNeonHostID}, []string{views[0].HostID, views[1].HostID})
+	require.Equal(t, testUnitBChannel, views[0].ChannelID)
 
 	for _, hostID := range []string{"unknown-member", " "} {
 		_, invalidErr := client.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: testRoomID, ChannelID: testUnitBChannel, HostID: hostID})

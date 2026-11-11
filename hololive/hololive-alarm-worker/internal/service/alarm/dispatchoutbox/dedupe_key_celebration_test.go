@@ -43,7 +43,7 @@ func TestBuildEventKeyCelebrationIncludesDate(t *testing.T) {
 }
 
 func TestEnvelopeDedupeInputCelebration(t *testing.T) {
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
 			RoomID:    testRoomID,
@@ -78,7 +78,7 @@ func TestEnvelopeDedupeInputCelebration(t *testing.T) {
 }
 
 func TestBuildLedgerRowsCelebrationEventKey(t *testing.T) {
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
 			RoomID:    testRoomID,
@@ -122,14 +122,12 @@ func TestBuildLedgerRowsCelebrationEventKey(t *testing.T) {
 		t.Fatal("event payload missing celebration field")
 	}
 
-	if err := validateEventPayloadRoomAgnostic(event.Payload); err != nil {
-		t.Fatalf("validateEventPayloadRoomAgnostic() = %v", err)
-	}
+	assertEventPayloadRoomAgnostic(t, event.Payload)
 }
 
 func TestBuildLedgerRowsCelebrationSameEventKeyAcrossRooms(t *testing.T) {
-	makeEnvelope := func(roomID string) domain.AlarmQueueEnvelope {
-		return domain.AlarmQueueEnvelope{
+	makeEnvelope := func(roomID string) AlarmQueueEnvelope {
+		return AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeBirthday,
 				RoomID:    roomID,

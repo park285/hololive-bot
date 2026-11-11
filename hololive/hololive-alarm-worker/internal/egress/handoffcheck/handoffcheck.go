@@ -85,7 +85,7 @@ type Input struct {
 	RequestID string
 	Snapshot  *iris.ReplyStatusSnapshot
 	QueryErr  error
-	// Elapsed는 원장 DB 시계로 잰 admission 뒤 경과, Horizon은 확인 지평(원장 executor attempt timeout)이다.
+	// Elapsed는 원장 DB 시계로 잰 admission 뒤 경과, Horizon은 확인 지평(원장 worker settings handoff_horizon_ms)이다.
 	Elapsed time.Duration
 	Horizon time.Duration
 	// Generation은 지금 요청의 재발급 세대이고, RetryBudgetLeft는 원장 시도 예산으로 한 번 더 보낼 수 있는지다.
@@ -104,7 +104,8 @@ type Decision struct {
 //   - handoff_completed는 확인 완료다.
 //   - failed는 Iris가 dispatch 전에 포기한 요청이다. 세대가 iris.ReplyReissueMaxGenerations 미만이고 시도 예산이
 //     남으면 재발급, 아니면 소진이다.
-//   - outcome_unknown, 모르는 상태, 빈 응답, requestId 불일치, 404는 결과 불명이라 격리한다.
+//   - outcome_unknown, 모르는 상태, 빈 응답, requestId 불일치, 404는 결과 불명이라 격리한다. 상태는 Iris wire 값과
+//     정확히 일치할 때만 인정하므로 대소문자·공백이 다른 값도 모르는 상태다.
 //   - 진행 중 상태와 404가 아닌 조회 오류는 지평 전까지 전이 없이 다시 확인하고, 지평에 닿으면 handoff 미확인으로
 //     격리한다.
 func Decide(in Input) Decision {
@@ -124,8 +125,7 @@ func Decide(in Input) Decision {
 		return Decision{Action: ActionQuarantine, Code: CodeOutcomeUnknown, Detail: "iris reply status request id does not match"}
 	}
 
-	// 대소문자·공백 허용은 기존 발송 경로의 정책이며 SDK의 정확한 wire 분류와 분리한다.
-	state := strings.ToLower(strings.TrimSpace(in.Snapshot.State))
+	state := in.Snapshot.State
 
 	switch iris.ClassifyReplyStatus(state) {
 	case iris.ReplyStatusHandoffCompleted:

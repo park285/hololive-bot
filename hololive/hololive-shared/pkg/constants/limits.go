@@ -22,92 +22,10 @@ package constants
 
 import "time"
 
-var StringLimits = struct {
-	StreamTitle int
-}{
-	StreamTitle: 100,
-}
-
 var ValkeyTimeout = struct {
 	ConnWriteTimeout time.Duration
 	DialTimeout      time.Duration
 }{
 	ConnWriteTimeout: 3 * time.Second,
 	DialTimeout:      5 * time.Second,
-}
-
-var APIRateLimitConfig = struct {
-	Enabled bool
-	Limit   int
-	Window  time.Duration
-}{
-	Enabled: true,
-	Limit:   60, // 분당 60회
-	Window:  time.Minute,
-}
-
-var MajorEventConfig = struct {
-	TrustedSourceDomains   []string
-	TrustedSocialAccounts  []string
-	SearchSourceSites      []string
-	SearchOfficialAccounts []string
-	SearchPartnerKeywords  []string
-	ScheduleHourKST        int
-	ScheduleWeekday        time.Weekday
-	MonthlyScheduleHourKST int
-	MonthlyScheduleDay     int
-}{
-	TrustedSourceDomains: []string{
-		"hololive.hololivepro.com",
-		"hololivepro.com",
-		"cover-corp.com",
-		"hololive.tv",
-		"schedule.hololive.tv",
-		"shop.hololivepro.com",
-		"hololive-official-cardgame.com",
-		"aniplustv.com",
-		"aniplus.co.kr",
-		"animate.co.jp",
-		"lawson.co.jp",
-	},
-	TrustedSocialAccounts: []string{
-		"hololivetv",
-		"hololive_en",
-		"hololive_id",
-		"holostarsen",
-		"hololive_ocg_en",
-		"aniplus_shop",
-		"v_square_kr",
-		"agf_korea",
-	},
-	SearchSourceSites: []string{
-		"hololive.hololivepro.com",
-		"hololivepro.com",
-		"x.com",
-		"twitter.com",
-		"schedule.hololive.tv",
-		"shop.hololivepro.com",
-		"hololive-official-cardgame.com",
-		"aniplustv.com",
-		"aniplus.co.kr",
-	},
-	SearchOfficialAccounts: []string{
-		"hololivetv",
-		"hololive_en",
-		"hololive_id",
-		"HOLOSTARSen",
-		"hololive_OCG_EN",
-		"ANIPLUS_SHOP",
-		"v_square_kr",
-	},
-	SearchPartnerKeywords: []string{
-		"ANIPLUS",
-		"V-SQUARE",
-		"AGF Korea",
-		"collaboration cafe",
-	},
-	ScheduleHourKST:        9,
-	ScheduleWeekday:        time.Monday,
-	MonthlyScheduleHourKST: 10,
-	MonthlyScheduleDay:     1,
 }

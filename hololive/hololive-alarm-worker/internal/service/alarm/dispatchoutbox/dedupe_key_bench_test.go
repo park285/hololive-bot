@@ -9,7 +9,7 @@ import (
 
 func benchPreparedDedupeInput() DedupeInput {
 	startScheduled := time.Date(2026, time.June, 12, 12, 0, 0, 0, time.UTC)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			RoomID:    "1234567890123456789",
 			AlarmType: domain.AlarmTypeLive,
@@ -33,14 +33,14 @@ func benchPreparedDedupeInput() DedupeInput {
 	return EnvelopeDedupeInput(&envelope)
 }
 
-func BenchmarkBuildDedupeKey(b *testing.B) {
+func BenchmarkDedupeKey(b *testing.B) {
 	input := benchPreparedDedupeInput()
 
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if key := BuildDedupeKey(&input); key == "" {
-			b.Fatal("BuildDedupeKey returned empty key")
+		if key := buildDedupeKey(input.RoomID, BuildEventKey(&input)); key == "" {
+			b.Fatal("buildDedupeKey returned empty key")
 		}
 	}
 }

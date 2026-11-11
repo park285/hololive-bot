@@ -38,6 +38,7 @@ type observationClaimer interface {
 	ProbeClaim(context.Context, sourceobservation.ClaimOptions) error
 	EnsureClaimBudget(context.Context, sourceobservation.Claim, time.Duration) error
 	Retry(context.Context, sourceobservation.RetryInput) (contract.Status, error)
+	DeadLetter(context.Context, sourceobservation.DeadLetterInput) error
 }
 
 type observationConsumer interface {

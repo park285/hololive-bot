@@ -9,7 +9,7 @@ import (
 )
 
 func providerCooldown(message, retryAfter string) error {
-	return collecterr.WithRetry(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), collecterr.ParseRetryAfter(retryAfter, time.Time{}))
+	return collecterr.WithRetry(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), collecterr.ParseRetryAfter(retryAfter))
 }
 
 func cooldownAt(t *testing.T, message string, at time.Time) error {

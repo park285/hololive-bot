@@ -31,6 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -46,8 +47,8 @@ const (
 
 type MonthlyScheduler struct {
 	digest           *schedulerkit.DigestScheduler
-	service          model.DigestService
-	formatter        model.DigestFormatter
+	service          newsmodel.DigestService
+	formatter        newsmodel.DigestFormatter
 	outboxRepository outboxEnqueuer
 	outputGuard      *outputguard.Guard
 }
@@ -61,8 +62,8 @@ func WithMonthlyOutputGuard(guard *outputguard.Guard) MonthlySchedulerOption {
 }
 
 func NewMonthlyScheduler(
-	service model.DigestService,
-	formatter model.DigestFormatter,
+	service newsmodel.DigestService,
+	formatter newsmodel.DigestFormatter,
 	locker executionlock.Locker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
@@ -163,7 +164,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) (notification.
 	return result, nil
 }
 
-func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, monthKey, roomID string) digestEnqueueResult {
+func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, generator newsmodel.DigestGenerator, monthKey, roomID string) digestEnqueueResult {
 	return processDigestForRoom(ctx, generator, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
 		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID)
 }

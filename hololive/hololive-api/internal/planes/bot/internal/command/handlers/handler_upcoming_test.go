@@ -22,20 +22,12 @@ type upcomingStreamProviderStub struct {
 	upcomingErr     error
 }
 
-func (s *upcomingStreamProviderStub) GetLiveStreams(_ context.Context) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
 func (s *upcomingStreamProviderStub) GetUpcomingStreams(_ context.Context, _ int) ([]*domain.Stream, error) {
 	return s.upcomingStreams, s.upcomingErr
 }
 
 func (s *upcomingStreamProviderStub) GetChannelSchedule(_ context.Context, _ string, _ int, _ bool) ([]*domain.Stream, error) {
 	return nil, nil
-}
-
-func (s *upcomingStreamProviderStub) GetChannel(_ context.Context, _ string) (*domain.Channel, error) {
-	return nil, errTestStubNoChannel
 }
 
 func setupUpcomingTestRenderer(t *testing.T) *serviceTemplate.Renderer {
@@ -73,7 +65,7 @@ func TestUpcomingCommand_Description(t *testing.T) {
 }
 
 func newUpcomingTestMatcher(members []*domain.Member) *matcher.Matcher {
-	return matcher.NewMatcher(newContextAwareMemberProvider(members), nil, slog.New(slog.DiscardHandler))
+	return matcher.NewMatcher(newContextAwareMemberProvider(members), slog.New(slog.DiscardHandler))
 }
 
 func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
@@ -128,7 +120,7 @@ func TestUpcomingCommand_Execute_DisplayNameLookupError(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       &upcomingStreamProviderStub{upcomingStreams: []*domain.Stream{{ID: "s1", ChannelID: testChannelSora, ChannelName: "Sora Ch."}}},
-		Matcher:       matcher.NewMatcher(&failedMemberDataProvider{err: errors.New("member repository unavailable")}, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(&failedMemberDataProvider{err: errors.New("member repository unavailable")}, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			t.Fatal("upcoming list must not be sent with source names after display name lookup failure")
@@ -240,7 +232,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       holodex,
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -281,7 +273,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       holodex,
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -320,7 +312,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       holodex,
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
@@ -354,7 +346,7 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       &upcomingStreamProviderStub{},
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true

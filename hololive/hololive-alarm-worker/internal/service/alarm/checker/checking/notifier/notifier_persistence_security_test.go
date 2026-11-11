@@ -22,7 +22,7 @@ func TestPrepareOneRejectsPersistenceInvalidIdentityBeforeDedup(t *testing.T) {
 		},
 	}
 
-	prepared, err := (&Notifier{}).prepareOne(t.Context(), notification)
+	prepared, err := (&Notifier{}).prepareOne(t.Context(), notification, testTargetPolicy())
 	if err == nil {
 		t.Fatal("prepareOne() error = nil")
 	}

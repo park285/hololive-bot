@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
@@ -48,7 +49,7 @@ Rules:
 - severity=info: stylistic suggestions.`
 }
 
-func buildReviewUserPrompt(input *model.SummarizeInput, digest *model.Digest) (string, error) {
+func buildReviewUserPrompt(input *newsmodel.SummarizeInput, digest *model.Digest) (string, error) {
 	candidatesJSON, err := marshalPromptJSON("candidates", buildPromptCandidates(input))
 	if err != nil {
 		return "", err
@@ -71,7 +72,7 @@ Review the summary against the original candidates. Return only schema JSON.`,
 	), nil
 }
 
-func buildPromptCandidates(input *model.SummarizeInput) []promptCandidate {
+func buildPromptCandidates(input *newsmodel.SummarizeInput) []promptCandidate {
 	if input == nil {
 		return nil
 	}
@@ -109,7 +110,7 @@ Rules:
 }
 
 func buildAdjudicatorUserPrompt(
-	input *model.SummarizeInput,
+	input *newsmodel.SummarizeInput,
 	digest *model.Digest,
 	verdict *consensus.ReviewVerdict,
 ) (string, error) {

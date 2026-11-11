@@ -23,25 +23,25 @@ import (
 
 // RequestConsumer의 fence 미스는 *sendfence.MissError이고, 재발급 세대 소진은 sendfence.ErrGenerationExhausted다.
 type RequestConsumer interface {
-	LoadSendRequest(context.Context, []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error)
-	PinSendRequest(context.Context, []domain.AlarmQueueEnvelope, dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error)
-	ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error
+	LoadSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error)
+	PinSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope, dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error)
+	ReissueSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error
 }
 
 type QueueConsumer interface {
-	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
-	MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error
-	ReleaseLeased(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	DrainBatch(ctx context.Context, maxItems int) ([]dispatchoutbox.AlarmQueueEnvelope, error)
+	MarkSending(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error
+	MarkDispatched(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error
+	ReleaseLeased(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
 }
 
 type FailureRouter interface {
-	RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error
-	RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error
-	RequeuePreSend(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error
+	RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope) error
+	RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope) error
+	RequeuePreSend(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error
+	Requeue(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error
+	Quarantine(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) error
 }
 
 type Consumer interface {
@@ -87,6 +87,10 @@ type RunnerConfig struct {
 	WorkerTotals      *workercontract.Counters
 }
 
+// errAlarmDispatchSendUnitRoomMismatch는 저장된 send unit 요청의 room이 claim한 group과 다른 상태다.
+var errAlarmDispatchSendUnitRoomMismatch = errors.New("alarm dispatch stored send unit room differs from the claimed group")
+
+// NewRunner는 consumer·sender·idleWaiter가 빠진 runner를 조용히 끄지 않고 기동 오류로 드러낸다.
 func NewRunner(
 	consumer Consumer,
 	sender delivery.PreparedMessageSender,
@@ -95,7 +99,11 @@ func NewRunner(
 	idleWaiter IdleWaiter,
 	config RunnerConfig,
 	logger *slog.Logger,
-) *Runner {
+) (*Runner, error) {
+	if consumer == nil || sender == nil || idleWaiter == nil {
+		return nil, errors.New("alarm dispatch runner requires consumer, sender and idle waiter")
+	}
+
 	return &Runner{
 		consumer:          consumer,
 		sender:            sender,
@@ -111,7 +119,7 @@ func NewRunner(
 		handoffHorizon:    config.HandoffHorizon,
 		workerTracker:     config.WorkerTracker,
 		workerTotals:      config.WorkerTotals,
-	}
+	}, nil
 }
 
 func (r *Runner) runOnce(ctx context.Context) (bool, error) {
@@ -132,24 +140,9 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func dispatchAttemptOutcome(err error) workercontract.AttemptOutcome {
-	switch {
-	case err == nil:
-		return workercontract.AttemptSuccess
-	case sendoutcome.Classify(err) == sendoutcome.OutcomeUnknown:
-		return workercontract.AttemptOutcomeUnknown
-	case errors.Is(err, context.DeadlineExceeded):
-		return workercontract.AttemptTimeout
-	case errors.Is(err, context.Canceled):
-		return workercontract.AttemptCanceled
-	case sendoutcome.Classify(err) == sendoutcome.TransportAmbiguous:
-		return workercontract.AttemptOutcomeUnknown
-	default:
-		return workercontract.AttemptFailed
-	}
-}
-
 func (r *Runner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup) error {
+	members := &alarmDispatchMembers{provider: r.members}
+
 	for _, group := range groups {
 		// 부모 종료 시 남은 그룹은 leased로 둔다. 각 그룹의 MarkSending은
 		// 만료된 소유권을 거부하고 성공한 경우에만 기존 SENDING lease를 부여한다.
@@ -157,7 +150,7 @@ func (r *Runner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup
 			return fmt.Errorf("dispatch alarm groups: %w", err)
 		}
 
-		if err := r.dispatchGroup(ctx, group); err != nil {
+		if err := r.dispatchGroup(ctx, group, members); err != nil {
 			return fmt.Errorf("dispatch group: %w", err)
 		}
 	}
@@ -237,8 +230,8 @@ func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup,
 	}
 }
 
-// 정산의 handoff 지평은 handoff reconciler와 같은 profile handoff_horizon_ms다.
-func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
+// markDispatched는 발송 성공을 정산한다. 정산의 handoff 지평은 handoff reconciler와 같은 profile handoff_horizon_ms다.
+func (r *Runner) markDispatched(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, irisRequestID string) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
 		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID, r.handoffHorizon); err != nil {
 			return fmt.Errorf("mark alarm dispatch sent: %w", err)
@@ -248,7 +241,7 @@ func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQue
 	})
 }
 
-func (r *Runner) routePreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *Runner) routePreSendFailure(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
 		return r.persistPreSendFailure(stateCtx, envelopes, cause)
 	})
@@ -260,7 +253,7 @@ func (r *Runner) routePostSendingFailure(ctx context.Context, group alarmDispatc
 	})
 }
 
-func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
+func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup, members *alarmDispatchMembers) error {
 	if err := alarmDispatchGroupError(group); err != nil {
 		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
 			return fmt.Errorf("route invalid egress group: %w", routeErr)
@@ -269,32 +262,16 @@ func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) er
 		return nil
 	}
 
-	if err := r.dispatchMessageGroup(ctx, group); err != nil {
+	if err := r.dispatchMessageGroup(ctx, group, members); err != nil {
 		return fmt.Errorf("dispatch message group: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
-	if _, err := alarmDispatchClientRequestID(group); err != nil {
-		// 드레인 종단이 아니라 위반 표시다. 운영에서 보이면 저장된 send-unit 식별자가 비었거나 섞인 그룹이 claim됐다는 뜻이다.
-		if r.logger != nil {
-			r.logger.Error("alarm dispatch group lacks a persisted send unit; not sending",
-				privacylog.RoomIDAttr(group.roomID),
-				slog.Int("envelopes", len(group.envelopes)),
-				slog.Any("error", err))
-		}
-
-		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
-			return fmt.Errorf("route missing send unit identity: %w", routeErr)
-		}
-
-		return nil
-	}
-
+func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup, members *alarmDispatchMembers) error {
 	// 요청 읽기·고정 fence는 claim에서 본 client_request_id까지 확인하므로 다른 세대를 보내지 않는다.
-	request, err := r.prepareGroupRequest(ctx, group)
+	request, err := r.prepareGroupRequest(ctx, group, members)
 	if err != nil {
 		if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
 			return r.routePreSendMiss(ctx, group, miss)
@@ -322,10 +299,10 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 	return r.dispatchPreparedMessageGroup(ctx, group, request)
 }
 
-func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGroup) (*dispatchoutbox.SendRequest, error) {
+func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGroup, members *alarmDispatchMembers) (*dispatchoutbox.SendRequest, error) {
 	// claim 때 미고정이던 단위는 lease 동안 이 worker만 고정할 수 있으므로 load 왕복을 생략한다.
 	// 그 사이 고정됐더라도 PinSendRequest가 저장된 요청을 돌려준다.
-	if !slices.ContainsFunc(group.envelopes, func(envelope domain.AlarmQueueEnvelope) bool { return envelope.RequestUnpinned }) {
+	if !slices.ContainsFunc(group.envelopes, func(envelope dispatchoutbox.AlarmQueueEnvelope) bool { return envelope.RequestUnpinned }) {
 		request, err := r.consumer.LoadSendRequest(ctx, group.envelopes)
 		if err == nil {
 			return request, nil
@@ -336,7 +313,7 @@ func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGro
 		}
 	}
 
-	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, r.shortLinkBaseURL, group)
+	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, members, r.shortLinkBaseURL, group)
 	if err != nil {
 		return nil, fmt.Errorf("render request: %w", err)
 	}
@@ -399,7 +376,7 @@ func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbo
 		outcome := workercontract.AttemptPanic
 
 		if completed {
-			outcome = dispatchAttemptOutcome(err)
+			outcome = sendoutcome.AttemptOutcome(err, sendoutcome.AttemptRules{})
 		}
 
 		r.workerTotals.RecordAttempt(outcome)

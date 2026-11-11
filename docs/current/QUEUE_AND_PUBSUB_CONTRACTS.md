@@ -14,8 +14,8 @@ Alarm dispatch outbox의 current contract와 Pub/Sub 전달 의미를 기록합�
 | Retry / DLQ / quarantine | delivery `status` `retry` (`next_attempt_at`), `dlq`, `quarantined` |
 | Wakeup | `alarm:dispatch:wakeup` payload-free Valkey list token; polling still claims due rows without it |
 | Current envelope version | `QueueEnvelopeVersionV1 = 1` |
-| Contract package | `hololive/hololive-shared/pkg/contracts/alarm` |
-| Fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
+| Contract package | envelope type `AlarmQueueEnvelope`, canonical validation and fixtures: `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox`; version constant: `hololive/hololive-shared/pkg/contracts/alarm` |
+| Fixtures | `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/envelope_v1.json` |
 
 Current envelope:
 
@@ -59,7 +59,7 @@ Consumer behavior:
 
 ## Delivery Outbox Wakeup
 
-`hololive-api`는 `notification_delivery_outbox`와 `youtube_notification_outbox` 행을 PostgreSQL에 commit한 뒤 payload 없는 Valkey 신호로 `alarm-worker`를 깨웁니다. 신호는 정본이 아니며, 유실·중복·축출돼도 worker가 `poll_interval_ms` 안에 PostgreSQL에서 행을 claim합니다. 공용 구현은 `hololive/hololive-shared/pkg/service/wakeup`입니다.
+`hololive-api`는 `notification_delivery_outbox`와 `youtube_notification_outbox` 행을 PostgreSQL에 commit한 뒤 payload 없는 Valkey 신호로 `alarm-worker`를 깨웁니다. 신호는 정본이 아니며, 유실·중복·축출돼도 worker가 `poll_interval_ms` 안에 PostgreSQL에서 행을 claim합니다. 신호 key 계약(`Channel`)과 producer(`Signaler`)는 `hololive/hololive-shared/pkg/service/wakeup`에, consumer 대기 구현은 `hololive/hololive-alarm-worker/internal/egress/wakeupwait`에 있습니다.
 
 | Channel | Producer 시점 | Queue / guard key | Consumer |
 |---|---|---|---|
@@ -70,6 +70,13 @@ Consumer behavior:
 - Consumer: 조회한 행이 있으면 다음 대기를 250ms부터 시작하고, 빈 조회 뒤에는 `BRPOP <queue>`로 기다리되 timeout을 `poll_interval_ms`까지 두 배씩 늘립니다. Valkey 오류나 cache 미설정 때는 `poll_interval_ms`만큼 잠듭니다. 결과는 `hololive_delivery_wakeup_waits_total{channel,result}`입니다.
 - 처리 직후 대기가 250ms부터 다시 시작하므로, 처리할 행이 이어지는 동안에는 `poll_interval_ms`보다 짧은 간격으로 조회합니다. `poll_interval_ms`는 빈 대기의 상한이며 발송 속도 제한이 아닙니다.
 - Valkey ACL: `hololive-api` 계정에 `+set`(NX EX)·`+lpush`·`+expire`, `hololive-worker` 계정에 `+brpop`이 필요합니다.
+
+`alarm_dispatch` executor도 같은 대기 구현으로 `alarm:dispatch:wakeup`을 기다립니다. 신호는 같은 `alarm-worker`의 dispatch publisher가 worker profile `alarm_dispatch.wakeup_enabled`가 켜져 있을 때 새 delivery 행을 넣은 뒤 guard key `alarm:dispatch:wakeup:guard`로 위 Producer 규칙대로 보내며, 결과는 `alarm_dispatch_wakeup_{sent,suppressed,failed,expire_failed}_total`입니다. 대기 규칙은 worker profile `alarm_dispatch` 값이 정합니다.
+
+- 처리한 행이 있으면 다음 `BRPOP` timeout을 `idle_backoff_min_ms`부터 시작하고, 빈 조회 뒤에는 `idle_backoff_max_ms`까지 두 배씩 늘립니다.
+- `wakeup_enabled`가 false이거나 `BRPOP`이 실패하면 `poll_interval_ms`만큼 잠듭니다. wakeup을 켰는데 Valkey cache가 없으면 runner 생성 오류입니다.
+- 대기 결과는 `alarm_dispatch_runner_wakeup_{consumed,timeout,error}_total`과 `alarm_dispatch_runner_idle_wait_seconds{wait_mode}`(`wakeup`·`poll`·`fallback`)입니다.
+- 신호도 `hololive-worker` 계정이 보내므로, 코드가 보내는 명령(`SET NX EX`·`LPUSH`·`EXPIRE`) 기준으로 이 계정에는 `alarm:dispatch:wakeup*` key의 `+set`·`+lpush`·`+expire`도 필요합니다. 운영 ACL 값은 stack 플랫폼이 소유합니다.
 
 ## X 스페이스 시작 알림
 

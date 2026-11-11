@@ -52,7 +52,7 @@ var (
 // NonceStore는 nil이다 — hololive의 HMAC nonce store는 iris-client-go의 Valkey
 // valkeydedup.NewNonceStore(internal/app/bootstrap/bot_webhook.go)라 PostgreSQL 원장이 아니다.
 func TestIrisDurableContract(t *testing.T) {
-	terminalRetention := contractTerminalRetention(t)
+	terminalRetention, automaticReplayHorizon := contractProfileRetention(t)
 
 	contracttest.Run(t, contracttest.Suite{
 		Admitter: func(t *testing.T) irisdurable.Admitter {
@@ -80,14 +80,17 @@ func TestIrisDurableContract(t *testing.T) {
 			IrisAdmissionRetention:     iris.ReplyAdmissionRetention,
 			IrisAutomaticReplayHorizon: iris.ReplyAutomaticReplayHorizon,
 			ReplyOutboxRetention:       terminalRetention,
-			AutomaticReplayHorizon:     ReplyOutboxAutomaticReplayHorizon,
+			AutomaticReplayHorizon:     automaticReplayHorizon,
 			InboxTerminalRetention:     terminalRetention,
 		},
 	})
 }
 
-// DurableLedgerRepository.Maintain은 inbox·command·reply outbox 종단 행을 같은 terminalRetention으로 정리한다.
-func contractTerminalRetention(t *testing.T) time.Duration {
+// contractProfileRetention은 runtime이 bot_webhook_inbox.terminal_retention_ms로 받는 종단 보존과
+// bot_reply_outbox.automatic_replay_horizon_ms로 받는 자동 replay 지평을 API worker profile fixture에서 역할 소유
+// loader를 거쳐 읽는다. DurableLedgerRepository.Maintain은 inbox·command·reply outbox 종단 행을 같은
+// terminalRetention으로 정리한다.
+func contractProfileRetention(t *testing.T) (terminalRetention, automaticReplayHorizon time.Duration) {
 	t.Helper()
 
 	fixture := configtest.APIProfileFixture(t)
@@ -97,8 +100,10 @@ func contractTerminalRetention(t *testing.T) time.Duration {
 	profile, err := apiconfig.LoadAPIWorkerProfile()
 	require.NoError(t, err)
 	require.Positive(t, profile.BotWebhookInbox.TerminalRetentionMS)
+	require.Positive(t, profile.BotReplyOutbox.AutomaticReplayHorizonMS)
 
-	return time.Duration(profile.BotWebhookInbox.TerminalRetentionMS) * time.Millisecond
+	return time.Duration(profile.BotWebhookInbox.TerminalRetentionMS) * time.Millisecond,
+		time.Duration(profile.BotReplyOutbox.AutomaticReplayHorizonMS) * time.Millisecond
 }
 
 func contractIrisConflict(t *testing.T, code string) error {

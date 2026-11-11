@@ -27,6 +27,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/wakeupwait"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
@@ -88,7 +89,7 @@ func NewDispatcher(deps Dependencies, logger *slog.Logger, config *Config) (*Dis
 		return nil, fmt.Errorf("initialize youtube dispatcher: telemetry repository: %w", err)
 	}
 
-	idle, err := wakeup.NewWaiter(deps.WakeupCache, wakeup.YouTubeDelivery, validConfig.PollInterval, logger)
+	idle, err := wakeupwait.NewDelivery(deps.WakeupCache, wakeup.YouTubeDelivery, validConfig.PollInterval, logger)
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}

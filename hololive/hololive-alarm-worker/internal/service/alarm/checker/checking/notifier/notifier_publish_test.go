@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -45,9 +44,8 @@ func TestNotifierPublishBatchAndMarkEmpty(t *testing.T) {
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
 	notifier, err := NewNotifier(
-		dedup.NewService(cache, []int{10}, logger),
+		dedup.NewService(cache, logger),
 		newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -62,12 +60,11 @@ func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, logger)
 	outbox := &notifierBatchOutbox{}
 	notifier, err := NewNotifier(
 		dedupService,
 		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -80,19 +77,19 @@ func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
 	assert.Equal(t, 1, processed)
 	assert.Equal(t, 1, outbox.insertBatchCalls)
 
-	alreadyNotified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-success", start, 10)
+	notifiedStreams, err := dedupService.RecentlyNotifiedStreamIDs(t.Context(), []string{"stream-success"})
 	require.NoError(t, err)
-	assert.True(t, alreadyNotified)
+	assert.Contains(t, notifiedStreams, "stream-success")
 
-	upcomingNotified, err := dedupService.WasUpcomingEventNotifiedRecently(
+	upcomingNotified, failed := dedupService.RecentlyNotifiedUpcomingRooms(
 		t.Context(),
-		"room-success",
+		[]string{"room-success"},
 		"channel-success",
 		item.payload.notification.Stream,
 		time.Hour,
 	)
-	require.NoError(t, err)
-	assert.True(t, upcomingNotified)
+	require.Empty(t, failed)
+	assert.Contains(t, upcomingNotified, "room-success")
 }
 
 func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T) {
@@ -100,12 +97,11 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, logger)
 	outbox := &notifierBatchOutbox{batchErrors: []error{nil, errors.New("pg unavailable")}}
 	notifier, err := NewNotifier(
 		dedupService,
 		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -117,7 +113,7 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 	}
 
 	for i := range items {
-		claimKey, claimed := claimNotificationPair(t, notifier, items[i].payload)
+		claimKey, claimed := claimNotificationPair(t, notifier, items[i].payload, testTargetPolicy(10))
 		require.True(t, claimed)
 
 		items[i].claimKeys = []string{claimKey}
@@ -129,19 +125,15 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 	require.ErrorContains(t, err, "publish queue batch")
 	assert.Equal(t, 2, outbox.insertBatchCalls)
 
-	_, firstClaimedAgain := claimNotificationPair(t, notifier, items[0].payload)
+	_, firstClaimedAgain := claimNotificationPair(t, notifier, items[0].payload, testTargetPolicy(10))
 	assert.False(t, firstClaimedAgain)
 
-	_, secondClaimedAgain := claimNotificationPair(t, notifier, items[1].payload)
+	_, secondClaimedAgain := claimNotificationPair(t, notifier, items[1].payload, testTargetPolicy(10))
 	assert.True(t, secondClaimedAgain)
 
-	firstNotified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-partial-1", start, 10)
+	notifiedStreams, err := dedupService.RecentlyNotifiedStreamIDs(t.Context(), []string{"stream-partial-1", "stream-partial-2"})
 	require.NoError(t, err)
-	assert.True(t, firstNotified)
-
-	secondNotified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-partial-2", start, 10)
-	require.NoError(t, err)
-	assert.False(t, secondNotified)
+	assert.Equal(t, map[string]struct{}{"stream-partial-1": {}}, notifiedStreams)
 }
 
 func newNotifierPublishTestItem(
@@ -178,11 +170,10 @@ func TestNotifierPublishBatchAndMarkWritesStreamMarkOncePerSchedule(t *testing.T
 
 	cache := &hmsetCountingCache{Client: newCheckerTestCacheClient(t), calls: map[string]int{}}
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, logger)
 	notifier, err := NewNotifier(
 		dedupService,
 		newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -198,12 +189,10 @@ func TestNotifierPublishBatchAndMarkWritesStreamMarkOncePerSchedule(t *testing.T
 	assert.Equal(t, 2, processed)
 	assert.Equal(t, 1, cache.hmsetCalls(alarmkeys.NotifiedKey("stream-shared")))
 
-	for _, room := range []string{"room-a", "room-b"} {
-		upcomingNotified, err := dedupService.WasUpcomingEventNotifiedRecently(
-			t.Context(), room, "channel-shared", items[0].payload.notification.Stream, time.Hour)
-		require.NoError(t, err)
-		assert.True(t, upcomingNotified, room)
-	}
+	upcomingNotified, failed := dedupService.RecentlyNotifiedUpcomingRooms(
+		t.Context(), []string{"room-a", "room-b"}, "channel-shared", items[0].payload.notification.Stream, time.Hour)
+	require.Empty(t, failed)
+	assert.Equal(t, map[string]struct{}{"room-a": {}, "room-b": {}}, upcomingNotified)
 }
 
 func TestNotifierPublishBatchAndMarkRewritesStreamMarkAfterScheduleChange(t *testing.T) {
@@ -211,11 +200,10 @@ func TestNotifierPublishBatchAndMarkRewritesStreamMarkAfterScheduleChange(t *tes
 
 	cache := &hmsetCountingCache{Client: newCheckerTestCacheClient(t), calls: map[string]int{}}
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, logger)
 	notifier, err := NewNotifier(
 		dedupService,
 		newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -233,9 +221,9 @@ func TestNotifierPublishBatchAndMarkRewritesStreamMarkAfterScheduleChange(t *tes
 	assert.Equal(t, 3, processed)
 	assert.Equal(t, 3, cache.hmsetCalls(alarmkeys.NotifiedKey("stream-moved")))
 
-	notified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-moved", start, 10)
+	fields, err := cache.HGetAll(t.Context(), alarmkeys.NotifiedKey("stream-moved"))
 	require.NoError(t, err)
-	assert.True(t, notified)
+	assert.Equal(t, map[string]string{"start_scheduled": alarmkeys.FormatScheduled(start), "10": "1"}, fields)
 }
 
 type hmsetCountingCache struct {

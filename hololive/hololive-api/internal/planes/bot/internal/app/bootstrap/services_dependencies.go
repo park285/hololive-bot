@@ -3,13 +3,13 @@ package bootstrap
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
@@ -17,8 +17,8 @@ import (
 func BuildBotDependencies(
 	appConfig *apiconfig.BotPlaneConfig,
 	infra *sharedmodules.InfraModule,
-	foundation *apifoundation.ScraperHolodexFoundation,
-	alarmYouTubeStack *AlarmYouTubeStackComponents,
+	holodex *holodexprovider.Service,
+	alarm handlercore.AlarmService,
 	integrationServices *CoreIntegrationServices,
 	messageAdapter *messaging.MessageAdapter,
 	formatter *messageformatter.ResponseFormatter,
@@ -29,7 +29,6 @@ func BuildBotDependencies(
 	return &orchestration.Dependencies{
 		BotSelfUser:           appConfig.Bot.SelfUser,
 		IrisBaseURL:           appConfig.Iris.BaseURL,
-		Notification:          appConfig.Notification,
 		CalendarEntryCacheTTL: appConfig.Bot.CalendarEntryCacheTTL,
 		Logger:                logger,
 		Client:                irisClient,
@@ -40,13 +39,12 @@ func BuildBotDependencies(
 		Cache:                 infra.Cache,
 		Postgres:              infra.Postgres,
 		MemberRepository:      infra.MemberRepository,
-		Holodex:               foundation.HolodexService,
-		Alarm:                 alarmYouTubeStack.AlarmMode.AlarmCRUD,
-		Matcher:               alarmYouTubeStack.Matcher,
-		MembersData:           alarmYouTubeStack.AlarmMode.MemberDataSource,
+		Holodex:               holodex,
+		Alarm:                 alarm,
+		Matcher:               ProvideMatcher(infra.MemberCache, logger),
+		MembersData:           infra.MemberCache,
 		ACL:                   integrationServices.ACLService,
 		MajorEventRepository:  integrationServices.MajorEventRepository,
 		MemberNews:            integrationServices.MemberNewsService,
-		CommandBuilders:       orchcmd.CloneCommandBuilders(integrationServices.CommandBuilders),
 	}
 }

@@ -15,15 +15,10 @@ func (r *InboxRepository) beginLockedMessageTx(ctx context.Context, messageID st
 		return nil, fmt.Errorf("begin webhook transition: %w", err)
 	}
 
-	var orderingKey string
-
-	err = tx.QueryRow(ctx, inboxOrderingKeyByMessageSQL, messageID).Scan(&orderingKey)
-	if err != nil {
-		return nil, errors.Join(err, rollbackInboxTx(ctx, tx))
-	}
-
-	if err := lockInboxOrderingKey(ctx, tx, orderingKey); err != nil {
-		return nil, errors.Join(err, rollbackInboxTx(ctx, tx))
+	// pg_advisory_xact_lock의 void 값은 버린다. message가 없으면 pgx.ErrNoRows를 감싸 돌려주고,
+	// 정산 호출자는 이를 소유하지 않은 행으로 판정한다.
+	if err := tx.QueryRow(ctx, inboxMessageOrderingLockSQL, messageID).Scan(nil); err != nil {
+		return nil, errors.Join(fmt.Errorf("lock webhook message ordering key: %w", err), rollbackInboxTx(ctx, tx))
 	}
 
 	return tx, nil

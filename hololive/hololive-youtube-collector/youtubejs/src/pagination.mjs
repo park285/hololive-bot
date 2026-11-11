@@ -7,8 +7,8 @@ export const continuityContiguous = "CONTIGUOUS";
 export const continuityGap = "GAP_UNRESOLVED";
 export const continuityNotApplicable = "NOT_APPLICABLE";
 
-const maxPagesLimit = 100;
-const maxResultsLimit = 10_000;
+export const maxPagesLimit = 100;
+export const maxResultsLimit = 10_000;
 const terminationReasons = new Set([
   "exhausted",
   "max_pages",
@@ -23,8 +23,6 @@ export function continuationToken(feed) {
     return "";
   }
   const token = readUpstream(() => {
-    const explicitToken = feed.continuation ?? feed.continuation_token ?? feed.continuationToken;
-    if (explicitToken != null) return explicitToken;
     if (feed instanceof Mixins.Feed && feed.has_continuation) {
       const headerContinuations = feed.page.header_memo?.getType(YTNodes.ContinuationItem, YTNodes.ContinuationItemView) ?? [];
       // about 조회에 쓰는 header continuation은 목록의 이어보기 토큰이 아닙니다.
@@ -34,23 +32,11 @@ export function continuationToken(feed) {
     }
     return "";
   });
-  if (typeof token === "string") {
-    return token.trim();
-  }
-  if (typeof token?.token === "string") {
-    return token.token.trim();
-  }
-  return "";
+  return typeof token === "string" ? token.trim() : "";
 }
 
 export function hasContinuation(feed) {
-  if (feed == null) {
-    return false;
-  }
-  if (readUpstream(() => feed.has_continuation === true || feed.hasContinuation === true)) {
-    return true;
-  }
-  return continuationToken(feed) !== "";
+  return feed != null && readUpstream(() => feed.has_continuation === true);
 }
 
 export function encodedSize(value) {
@@ -123,40 +109,39 @@ export function paginationResult({
   reason,
   continuity,
 }) {
-  if (!Number.isSafeInteger(pageCount) || pageCount < 1 || pageCount > maxPagesLimit) {
-    throw protocolFault("page count is outside the pagination contract");
-  }
-  if (!terminationReasons.has(reason)) {
-    throw protocolFault("termination reason is outside the pagination contract");
-  }
-  let resolvedContinuity = continuity;
-  if (reason === "cursor_loop" || reason === "continuation_transient") {
-    if (continuity != null && continuity !== continuityGap) {
-      throw protocolFault("termination reason and continuity are inconsistent");
-    }
-    resolvedContinuity = continuityGap;
-  } else if (resolvedContinuity == null) {
-    resolvedContinuity = reason === "exhausted" ? continuityContiguous : continuityGap;
-  }
-  if (
-    resolvedContinuity !== continuityContiguous &&
-    resolvedContinuity !== continuityGap &&
-    resolvedContinuity !== continuityNotApplicable
-  ) {
-    throw protocolFault("continuity is outside the pagination contract");
-  }
-  if (reason === "exhausted" && resolvedContinuity === continuityGap) {
-    throw protocolFault("exhausted pagination cannot have unresolved continuity");
-  }
-  if (reason !== "exhausted" && resolvedContinuity === continuityContiguous) {
-    throw protocolFault("partial pagination cannot be contiguous");
-  }
-  return {
+  return validatedPagination({
     page_count: pageCount,
     exhausted: reason === "exhausted",
-    continuity: resolvedContinuity,
+    continuity: continuity ?? (reason === "exhausted" ? continuityContiguous : continuityGap),
     termination_reason: reason,
-  };
+  });
+}
+
+// pagination 네 필드는 이 모듈의 paginationResult만 만들므로, 생성기와 RPC 응답 검증기가 같은 규칙으로 확인하고
+// 위반은 upstream 데이터가 아니라 helper 자체 결함(helper_internal_invariant)으로 분류합니다.
+export function validatedPagination({ page_count, exhausted, continuity, termination_reason }) {
+  if (!Number.isSafeInteger(page_count) || page_count < 1 || page_count > maxPagesLimit) {
+    throw invariantFault("page_count is outside the pagination contract");
+  }
+  if (!terminationReasons.has(termination_reason)) {
+    throw invariantFault("termination_reason is outside the pagination contract");
+  }
+  if (continuity !== continuityContiguous && continuity !== continuityGap && continuity !== continuityNotApplicable) {
+    throw invariantFault("continuity is outside the pagination contract");
+  }
+  if (exhausted !== (termination_reason === "exhausted")) {
+    throw invariantFault("termination_reason and exhausted are inconsistent");
+  }
+  if ((termination_reason === "cursor_loop" || termination_reason === "continuation_transient") && continuity !== continuityGap) {
+    throw invariantFault("termination_reason and continuity are inconsistent");
+  }
+  if (termination_reason === "exhausted" && continuity === continuityGap) {
+    throw invariantFault("exhausted pagination cannot have unresolved continuity");
+  }
+  if (termination_reason !== "exhausted" && continuity === continuityContiguous) {
+    throw invariantFault("partial pagination cannot be contiguous");
+  }
+  return { page_count, exhausted, continuity, termination_reason };
 }
 
 export async function paginate({
@@ -169,8 +154,8 @@ export async function paginate({
   reservedEnvelopeBytes,
   buildResult = (items, pagination) => ({ items, ...pagination }),
 }) {
-  const pages = boundedInteger(maxPages, 1, maxPagesLimit, 1, "max_pages");
-  const resultLimit = boundedInteger(maxResults, 1, maxResultsLimit, maxResultsLimit, "max_results");
+  const pages = boundedInteger(maxPages, maxPagesLimit, "max_pages");
+  const resultLimit = boundedInteger(maxResults, maxResultsLimit, "max_results");
   const reserve = nonnegativeSafeInteger(reservedEnvelopeBytes, "reserved envelope bytes");
   assertResponseBudget(maxSuccessResponseBytes, reserve);
   const budget = new EncodedArrayBudget(maxSuccessResponseBytes, reserve);
@@ -287,32 +272,29 @@ function continuationFailure(error) {
   return Object.assign(new Error("continuation response could not be processed", { cause: error }), { code: "parser_drift" });
 }
 
-function boundedInteger(value, minimum, maximum, fallback, field) {
-  if (value == null) {
-    return fallback;
-  }
-  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw protocolFault(`${field} is outside the protocol limit`);
+function boundedInteger(value, maximum, field) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
+    throw invariantFault(`${field} is outside the protocol limit`);
   }
   return value;
 }
 
 function positiveSafeInteger(value, field) {
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw protocolFault(`${field} must be a positive integer`);
+    throw invariantFault(`${field} must be a positive integer`);
   }
   return value;
 }
 
 function nonnegativeSafeInteger(value, field) {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw protocolFault(`${field} must be a non-negative integer`);
+    throw invariantFault(`${field} must be a non-negative integer`);
   }
   return value;
 }
 
-function protocolFault(message) {
-  return codedError("helper_protocol_mismatch", message);
+function invariantFault(message) {
+  return codedError("helper_internal_invariant", message);
 }
 
 function codedError(code, message) {

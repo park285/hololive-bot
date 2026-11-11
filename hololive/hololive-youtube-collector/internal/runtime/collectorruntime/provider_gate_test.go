@@ -336,7 +336,7 @@ func TestDeferFailedRunKeepsLeaseActiveForNonDeferableDiagnostic(t *testing.T) {
 	}
 
 	logs := logged.String()
-	if !strings.Contains(logs, "phase=defer") || !strings.Contains(logs, "error_code="+string(collecterr.DeferFailed)) ||
+	if !strings.Contains(logs, "phase=defer") || !strings.Contains(logs, "error_code="+string(collecterr.OperationLeaseDeferFailed)) ||
 		strings.Contains(logs, "phase=collect") {
 		t.Fatalf("defer failure log = %s", logs)
 	}

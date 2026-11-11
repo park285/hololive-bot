@@ -14,7 +14,7 @@ import (
 )
 
 func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
-	server := NewMetricsServer(t.Context(), testLoopbackAddr, "test-key")
+	server := NewMetricsServer(t.Context(), testLoopbackAddr, "test-key", nil)
 
 	if server.Addr != testLoopbackAddr {
 		t.Fatalf("Addr = %q, want 127.0.0.1:0", server.Addr)
@@ -109,7 +109,7 @@ func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T
 }
 
 func TestNewMetricsServerRejectsMissingAndWrongAPIKey(t *testing.T) {
-	server := NewMetricsServer(t.Context(), testLoopbackAddr, "test-key")
+	server := NewMetricsServer(t.Context(), testLoopbackAddr, "test-key", nil)
 
 	missing := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 	missingRecorder := httptest.NewRecorder()
@@ -131,7 +131,7 @@ func TestNewMetricsServerRejectsMissingAndWrongAPIKey(t *testing.T) {
 }
 
 func TestNewMetricsServerRejectsAdminKeyWhenMetricsKeyDiffers(t *testing.T) {
-	server := NewMetricsServer(t.Context(), testLoopbackAddr, "metrics-key")
+	server := NewMetricsServer(t.Context(), testLoopbackAddr, "metrics-key", nil)
 
 	adminRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 	adminRequest.Header.Set(common.APIKeyHeader, "admin-key")
@@ -155,7 +155,7 @@ func TestNewMetricsServerRejectsAdminKeyWhenMetricsKeyDiffers(t *testing.T) {
 }
 
 func TestNewMetricsServerExposesOnlyMetricsRoute(t *testing.T) {
-	server := NewMetricsServer(t.Context(), testLoopbackAddr, "")
+	server := NewMetricsServer(t.Context(), testLoopbackAddr, "", nil)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 	recorder := httptest.NewRecorder()
@@ -171,7 +171,7 @@ func TestNewMetricsServerKeylessDeniedOnNonLoopback(t *testing.T) {
 
 	denied := []string{"0.0.0.0:30095", ":30095", "192.168.1.5:30095"}
 	for _, addr := range denied {
-		server := NewMetricsServer(t.Context(), addr, "")
+		server := NewMetricsServer(t.Context(), addr, "", nil)
 		rec := httptest.NewRecorder()
 		server.Handler.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/metrics", http.NoBody))
 
@@ -182,7 +182,7 @@ func TestNewMetricsServerKeylessDeniedOnNonLoopback(t *testing.T) {
 
 	allowed := []string{"127.0.0.1:30095", "[::1]:30095", "localhost:30095"}
 	for _, addr := range allowed {
-		server := NewMetricsServer(t.Context(), addr, "")
+		server := NewMetricsServer(t.Context(), addr, "", nil)
 		rec := httptest.NewRecorder()
 		server.Handler.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/metrics", http.NoBody))
 

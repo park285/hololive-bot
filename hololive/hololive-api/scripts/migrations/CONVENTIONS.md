@@ -11,6 +11,12 @@
 - 부분 적용, manifest 밖 행, 누락·불일치 checksum은 새 migration SQL 실행 전에 거부합니다.
   **이전 릴리스로 372까지 올리고 정상 적용 기록을 확인한 뒤 새 릴리스를 실행**해야 합니다.
   epoch-1 checkpoint와 잔재를 수용하거나 임의로 원장을 지우는 복구는 지원하지 않습니다.
+- epoch-2 원장 전환 코드(`internal/migrationrunner/transition.go`, 봉인 목록 `epoch2_head.sha256`, `runner.go`의
+  `transitionEpoch2` 호출)는 `hololive-api` migration runner(`internal/migrationrunner`, `cmd/db-migrate`)가 소유합니다.
+  제거 조건은 운영 DB를 포함해 이 러너로 올릴 수 있는 모든 DB에서 `schema_migrations`의 첫 항목이
+  `001_schema_epoch3_baseline.sql`이고 manifest 밖 행이 0임을 `stack-platform-ops` 경유 읽기 전용 조회로 확인하는 것입니다.
+  전환 전 백업의 보존 기한과 epoch-2 복원 경로의 폐기 시점은 운영 결정이므로 별도 승인이 필요합니다.
+  manifest 밖 원장을 거부하는 `epoch.go`의 `guardEpochResidue`·`hasLegacyResidue`는 현행 계약이며 제거 대상이 아닙니다.
 - 원장 교체 뒤 `002`가 `x_space_login_attempts`를 멱등적으로 삭제합니다. 기존 운영 1행의 삭제는 승인된 변경입니다.
   의존 객체 등으로 DROP이 실패하면 baseline 원장은 유지되며 다음 실행은 DROP부터 재개합니다. CASCADE는 쓰지 않습니다.
 - 빈 원장과 기존 스키마는 자동 추정하지 않습니다. 확인된 epoch-3 스키마의 마지막 파일을
@@ -43,8 +49,9 @@
 
 ## SQL 안전 정책
 
-`scripts/architecture/check-migration-manifest.sh`는 누락·중복·잘못된 적용 순서, 위험한 baseline 명령,
-온라인 인덱스 생성 및 트랜잭션 규칙, 무방비 NOT NULL 변경을 검사합니다. 함수·권한·제약 동작은 DB 시험이 검증합니다.
+`internal/migrationrunner`의 DB 없는 시험 `TestEmbeddedMigrationsFollowConventions`는 내장 migration에
+러너와 같은 manifest 파서(`dbmigrate.Manifest`)와 문장 분리기(`sqlsplit`)를 적용해 누락·중복·잘못된 적용 순서,
+위험한 baseline 명령, 온라인 인덱스 생성 및 트랜잭션 규칙, 무방비 NOT NULL 변경을 검사합니다. 함수·권한·제약 동작은 DB 시험이 검증합니다.
 소스·문서 문구, 과거 파일 hash 일치, 검사기 자체 시험을 gate로 만들지 않습니다.
 
 - `SET NOT NULL` 전에 `CHECK (col IS NOT NULL) NOT VALID`와 `VALIDATE CONSTRAINT`를 적용합니다.

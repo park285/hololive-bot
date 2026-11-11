@@ -45,7 +45,7 @@ func TestYouTubeCheckerTier1ChannelEvaluatedEveryTickWithUncappedWindow(t *testi
 			assert.False(t, work.window.Capped, "tick %d", index)
 		}
 
-		_, err := checker.collectDueYouTubeNotifications(t.Context(), due, streams, nil, subscribers, nil, now)
+		_, err := checker.collectDueYouTubeNotifications(t.Context(), testTargetPolicy(), due, streams, nil, subscribers, nil, now)
 		require.NoError(t, err)
 	}
 }

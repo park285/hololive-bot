@@ -15,7 +15,7 @@ func TestBuildLedgerRowsDeliveryDigestSharesRoomAgnosticEvent(t *testing.T) {
 		PeriodKey:          testDigestPeriodKey,
 		PreRenderedMessage: "8월 주요 이벤트",
 	}
-	first := domain.AlarmQueueEnvelope{
+	first := AlarmQueueEnvelope{
 		Notification:   domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: testRoomID},
 		SourceKind:     domain.AlarmDispatchSourceKindDeliveryDigest,
 		DeliveryDigest: payload,
@@ -52,7 +52,7 @@ func TestBuildLedgerRowsDeliveryDigestSharesRoomAgnosticEvent(t *testing.T) {
 func TestBuildLedgerRowsDeliveryDigestSeparatesRenderedMessages(t *testing.T) {
 	t.Parallel()
 
-	first := domain.AlarmQueueEnvelope{
+	first := AlarmQueueEnvelope{
 		Notification:   domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: testRoomID},
 		SourceKind:     domain.AlarmDispatchSourceKindDeliveryDigest,
 		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: testDigestPeriodKey, PreRenderedMessage: "8월 멤버 뉴스 A"},
@@ -85,7 +85,7 @@ func TestBuildLedgerRowsDeliveryDigestSeparatesRenderedMessages(t *testing.T) {
 func TestDeliveryDigestContentIdentityPropagatesThroughPendingSendIdentity(t *testing.T) {
 	t.Parallel()
 
-	first := domain.AlarmQueueEnvelope{
+	first := AlarmQueueEnvelope{
 		Notification:   domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: testRoomID},
 		SourceKind:     domain.AlarmDispatchSourceKindDeliveryDigest,
 		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: testDigestPeriodKey, PreRenderedMessage: "8월 멤버 뉴스 A"},

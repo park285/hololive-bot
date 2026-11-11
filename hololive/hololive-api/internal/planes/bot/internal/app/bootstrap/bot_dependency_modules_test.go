@@ -3,25 +3,21 @@ package bootstrap
 import (
 	"context"
 	"log/slog"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
@@ -30,47 +26,41 @@ func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	cacheClient := cachemocks.NewLenientClient()
 	postgres := &databasemocks.Client{}
-	memberData := &membermocks.DataProvider{}
+	memberCache := &member.Cache{}
 	alarmCRUD := &stubAlarmCRUD{targetMinutes: []int{15, 3, 1}}
 	irisClient := &stubBotIrisClient{}
-	messageAdapter := messaging.NewMessageAdapter("!", "@bot")
+	messageAdapter := messaging.NewMessageAdapter("!")
 	formatter := messageformatter.NewResponseFormatter("!", nil)
-	commandBuilders := []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
 
 	appConfig := &apiconfig.BotPlaneConfig{
 		Bot: configsettings.BotConfig{
 			SelfUser:              "bot-self",
 			Prefix:                "!",
-			MentionPrefix:         "@bot",
 			CalendarEntryCacheTTL: time.Hour,
 			MarkdownReplies:       true,
 		},
-		Iris:         configsettings.IrisConfig{BaseURL: "http://iris.local"},
-		Notification: configsettings.NotificationConfig{AdvanceMinutes: []int{15, 3, 1}},
+		Iris: configsettings.IrisConfig{BaseURL: "http://iris.local"},
 	}
 
 	deps := BuildBotDependencies(appConfig,
-		&sharedmodules.InfraModule{Cache: cacheClient, Postgres: postgres},
-		&apifoundation.ScraperHolodexFoundation{},
-		&AlarmYouTubeStackComponents{AlarmMode: &AlarmModeComponents{AlarmCRUD: alarmCRUD, MemberDataSource: memberData}},
-		&CoreIntegrationServices{CommandBuilders: commandBuilders}, messageAdapter, formatter, nil, irisClient, logger,
+		&sharedmodules.InfraModule{Cache: cacheClient, Postgres: postgres, MemberCache: memberCache},
+		nil,
+		alarmCRUD,
+		&CoreIntegrationServices{}, messageAdapter, formatter, nil, irisClient, logger,
 	)
-
-	commandBuilders[0] = stubCommandBuilderThree
 
 	require.Equal(t, "bot-self", deps.BotSelfUser)
 	require.Equal(t, "http://iris.local", deps.IrisBaseURL)
 	require.Equal(t, time.Hour, deps.CalendarEntryCacheTTL)
-	require.Equal(t, []int{15, 3, 1}, deps.Notification.AdvanceMinutes)
 	require.Same(t, cacheClient, deps.Cache)
 	require.Same(t, postgres, deps.Postgres)
-	require.Same(t, memberData, deps.MembersData)
+	require.Same(t, memberCache, deps.MembersData)
+	require.NotNil(t, deps.Matcher)
 	require.Same(t, alarmCRUD, deps.Alarm)
 	require.Same(t, irisClient, deps.Client)
 	require.Same(t, messageAdapter, deps.MessageAdapter)
 	require.Same(t, formatter, deps.Formatter)
 	require.True(t, deps.MarkdownReplies)
-	assertCommandBuilderPointers(t, deps.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
 type stubBotIrisClient struct{}
@@ -127,14 +117,6 @@ func (s *stubAlarmCRUD) RemoveHostAlarm(context.Context, string, string, string,
 	return false, nil
 }
 
-func (s *stubAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
-func (s *stubAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
-	return nil, nil
-}
-
 func (s *stubAlarmCRUD) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
 	return nil, nil
 }
@@ -162,30 +144,4 @@ func (s *stubAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, 
 
 func (s *stubAlarmCRUD) WarmCacheFromDB(context.Context) error {
 	return nil
-}
-
-func stubCommandBuilderOne(*handlercore.Dependencies) handlercore.Command {
-	return nil
-}
-
-func stubCommandBuilderTwo(*handlercore.Dependencies) handlercore.Command {
-	return nil
-}
-
-func stubCommandBuilderThree(*handlercore.Dependencies) handlercore.Command {
-	return nil
-}
-
-func assertCommandBuilderPointers(t *testing.T, got, want []orchcmd.CommandBuilder) {
-	t.Helper()
-
-	if len(got) != len(want) {
-		t.Fatalf("CommandBuilders len = %d, want %d", len(got), len(want))
-	}
-
-	for i := range got {
-		if reflect.ValueOf(got[i]).Pointer() != reflect.ValueOf(want[i]).Pointer() {
-			t.Fatalf("CommandBuilders[%d] pointer mismatch", i)
-		}
-	}
 }

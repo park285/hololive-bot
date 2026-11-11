@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -264,73 +263,6 @@ func TestValidatePublishBatchResultExactCardinalityAndOrdinal(t *testing.T) {
 
 func clonePublishBatchResult(source PublishBatchResult) PublishBatchResult {
 	return PublishBatchResult{Results: slices.Clone(source.Results)}
-}
-
-func TestERR003AtomicAndCompleteErrorSQLMatchGoTuples(t *testing.T) {
-	t.Parallel()
-
-	deferTuples := extractDurableFailureTuples(deferCollectionJobSQL)
-	if !failureTupleSetsEqual(deferTuples, contract.DeferFailureTuples()) {
-		t.Fatalf("atomic defer SQL tuples = %#v, want %#v", deferTuples, contract.DeferFailureTuples())
-	}
-
-	completeTuples := extractDurableFailureTuples(completeCollectionJobWithErrorSQL)
-	if !failureTupleSetsEqual(completeTuples, contract.CompleteErrorFailureTuples()) {
-		t.Fatalf("complete-with-error SQL tuples = %#v, want %#v", completeTuples, contract.CompleteErrorFailureTuples())
-	}
-}
-
-var durableFailureTuplePattern = regexp.MustCompile(`\(\s*'([a-z0-9_]+)'\s*,\s*'([A-Z_]+)'\s*\)`)
-
-func extractDurableFailureTuples(sql string) []contract.FailureTuple {
-	upper := strings.ToUpper(sql)
-	valuesAt := strings.Index(upper, "VALUES")
-
-	if valuesAt < 0 {
-		return nil
-	}
-
-	matches := durableFailureTuplePattern.FindAllStringSubmatch(sql[valuesAt:], -1)
-	tuples := make([]contract.FailureTuple, 0, len(matches))
-
-	for _, match := range matches {
-		tuples = append(tuples, contract.FailureTuple{
-			Code:  contract.CollectionErrorCode(match[1]),
-			Class: contract.FailureClass(match[2]),
-		})
-	}
-
-	return tuples
-}
-
-func failureTupleSetsEqual(got, want []contract.FailureTuple) bool {
-	g := slices.Clone(got)
-	w := slices.Clone(want)
-
-	slices.SortFunc(g, compareTestFailureTuple)
-	slices.SortFunc(w, compareTestFailureTuple)
-
-	return slices.Equal(g, w)
-}
-
-func compareTestFailureTuple(a, b contract.FailureTuple) int {
-	if a.Code != b.Code {
-		if a.Code < b.Code {
-			return -1
-		}
-
-		return 1
-	}
-
-	if a.Class == b.Class {
-		return 0
-	}
-
-	if a.Class < b.Class {
-		return -1
-	}
-
-	return 1
 }
 
 func mustTestDeferInput(t *testing.T, code contract.CollectionErrorCode, class contract.FailureClass, detail string) collection.DeferCollectionInput {

@@ -17,6 +17,7 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
 type bodyTimeoutWebhookEffects struct {
@@ -59,7 +60,7 @@ func TestBotHTTP3SlowWebhookBodyExitsBeforeAuthentication(t *testing.T) {
 
 		defer func() { require.NoError(t, handler.Close()) }()
 
-		server, _, err := BuildBotHTTP3Server(t.Context(), cfg, handler, slog.New(slog.DiscardHandler))
+		server, _, err := BuildBotHTTP3Server(t.Context(), cfg, handler, slog.New(slog.DiscardHandler), sharedreadiness.NewProbe("bot"))
 		if err != nil {
 			t.Fatal(err)
 		}

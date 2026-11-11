@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -63,19 +62,14 @@ func NewAlarmService(
 
 	targetPolicy := targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(advanceMinutes))
 
-	service := &AlarmService{
+	return &AlarmService{
 		cache:           cacheClient,
 		memberData:      memberData,
 		alarmRepository: alarmRepository,
 		alarmWriter:     alarmRepository,
 		logger:          logger,
 		targetPolicy:    targetPolicy,
-	}
-	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
-
-	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
-
-	return service, nil
+	}, nil
 }
 
 func (as *AlarmService) getTargetMinutes() []int {

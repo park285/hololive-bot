@@ -116,25 +116,26 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/
   channel_photo_v1.go
   schedule_snapshot_v1.go
 
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/          # collector 발행(2026-10-02 분리)
+hololive/hololive-youtube-collector/internal/runtime/sourceobservation/  # collector 발행
   repository.go
   repository_publish.go
   queries/*.sql
 
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/consume/  # API 소비(2026-10-02 분리)
+hololive/hololive-api/internal/youtube/sourceobservation/                # API 소비
   repository.go
   repository_claim.go
   repository_finalize.go
-  repository_replay.go
   repository_retention.go
   queries/*.sql
 
-hololive/hololive-shared/pkg/service/youtube/reconcile/
-  community/
+hololive/hololive-api/internal/youtube/reconcile/
   content/
   live/
-  channel/
+  profile/
+  photo/
   schedule/
+
+hololive/hololive-api/internal/youtube/community/
 
 hololive/hololive-youtube-collector/internal/runtime/
   collectorruntime/
@@ -222,7 +223,7 @@ const (
 | completeness / continuity | 알려진 결과 COMPLETE, UNKNOWN은 UNKNOWN / NOT_APPLICABLE | 알려진 결과 PARTIAL, UNKNOWN은 UNKNOWN / NOT_APPLICABLE |
 | absence 권한 | POSITIVE_ONLY; reducer 호출 금지 | POSITIVE_ONLY; absence slot 생성 금지 |
 
-2026-09-30 수명 정합성 개정은 [실행 계획의 명시적 사용자 승인](../plans/2026-09-30-live-reconciliation-lifecycle.md)에 따라 영상 확인 schema 2/generation 2와 YouTube.js snapshot generation 3을 추가합니다. 위 표와 아래의 prior LIVE positive·grace 조건은 보관된 영상 확인 schema 1/generation 1의 의미로 유지합니다. 새 collector의 발행 세대 전환은 API·DB 준비와 분리한 승인된 cutover이며 채널 확인과 Holodex 세대는 바꾸지 않습니다.
+2026-09-30 수명 정합성 개정은 [실행 계획의 명시적 사용자 승인](../plans/2026-09-30-live-reconciliation-lifecycle.md)에 따라 영상 확인 schema 2/generation 2와 YouTube.js snapshot generation 3을 추가합니다. 위 표는 2026-09-26 최초 계약입니다. 채널 확인 열은 현행입니다. 영상 확인 열의 schema/generation 칸과 대상 칸은 이 개정을 따르며, 그 밖의 영상 확인 칸보다 아래 항목이 우선합니다. 현행 영상 확인 대상은 활성 operational roster 채널의 LIVE 영상과, 검토 결정이 없는(`reviewed_at IS NULL`) UPCOMING 중 예정 시각이 지난 영상 또는 예정 시각이 없는 `legacy_unknown` 영상입니다(`hololive/hololive-api/internal/planes/youtube/runtime/queries/live_check_videos.sql`). positive·가용성 관측의 신선도는 대상 포함 여부가 아니라 확인을 시작할 수 있는 시각(`NotBefore`)을 정합니다. 영상 확인 schema 1/generation 1과 YouTube.js snapshot generation 2는 2026-10-06 운영 저장행을 정리·확인한 뒤 consumer 지원 항목을 제거해 API가 받지 않습니다. 영상 확인 schema 1 decoder도 제거했고, snapshot generation 2 decoder는 현행 Holodex 계약이 쓰므로 남아 있습니다([canonical JSON 계약](../contracts/source-observation-canonical-json-v1.md), [폐기 기록](../plans/2026-10-06-verified-refactoring.md)). 현행 영상 확인 세대의 차이는 아래 항목을 따릅니다. 세대 활성화는 API·DB 준비와 분리한 승인된 cutover이며 채널 확인과 Holodex 세대는 바꾸지 않습니다.
 
 - 새 영상 세대는 지난 UPCOMING·출처 미상도 기존 lease·projection·1,000건 상한 안에서 확인합니다. LIVE가 우선이며 미래 UPCOMING 전수 polling과 새 retry/worker를 추가하지 않습니다.
 - 요청 영상·canonical 채널 identity, 신뢰와 현재 사실의 무모순성, 관측 시각 이하의 유효 ended_at, 더 새로운 positive/pending 부재를 확인한 영상별 명시적 종료만 시작 미관측 수명을 정산합니다. LIVE positive clock이 없는 이 시작 미관측 경로는 ended_at 이후의 positive가 grace 안에서 관측된 동안만 종료를 미루고, grace가 지나도록 더 새로운 positive가 없으면 공급자 지연으로 보고 끝냅니다(2026-10-08 개정. 이전의 신선도 없는 ended_at 직접 비교는 1초 송출 뒤 공급자가 잠시 UPCOMING을 유지한 영상을 영구히 남겼습니다). 기존 LIVE positive가 있는 경로는 관측 시각 이후 positive가 없으면 일반 명시적 종료 계약(관측 시각 기준 positive 비교와 grace)을 따릅니다. 수집 예정 시각을 EffectiveAt으로 쓰는 provider positive가 실제 ended_at보다 늦다는 이유로 종료를 거부하지 않습니다. 시작 근거가 없으면 started_at·positive clock은 NULL이며 과거 시작 알림을 만들지 않습니다.
@@ -666,7 +667,7 @@ API refresh transaction은 다음 순서를 따른다.
 1. 모든 authoritative input을 읽는다. 하나라도 실패하면 rollback한다.
 2. normalized `TargetSpec`을 `(subject_key, observation_kind)`로 deterministic sort/dedup하고 projection SHA-256을 계산한다. hash 입력은 subject, kind, priority, poll interval, enabled만 포함한다. `valid_until`, 다음 admission 시각 `not_before`, 진단용 reason은 제외한다.
 3. 고정 projection guard를 `FOR UPDATE`로 잠근 뒤 기존 CURRENT를 잠근다. authoritative input 조회는 guard를 잡기 전에 끝낸다.
-4. row count와 hash가 같으면 새 generation을 만들지 않는다. generation과 target의 validity heartbeat를 보존하고 `not_before` 및 변경된 reason을 같은 transaction에서 갱신한다. heartbeat가 validity를 연장하므로 target 전체 UPDATE는 남지만, freshness만 바뀔 때 전체 snapshot INSERT·history 증가는 없다.
+4. row count와 hash가 같으면 새 generation을 만들지 않습니다. validity heartbeat는 generation header의 `valid_until`·`validity_refreshed_at`만 갱신합니다(migration 261). target은 실제 `not_before`가 바뀐 행만 UPDATE하고, 그런 행이 있으면 같은 transaction에서 header의 `eligibility_version`을 한 번 올립니다. 변경된 reason도 같은 transaction에서 교체합니다. 변경 없는 heartbeat는 target·reason 행을 쓰지 않으며, freshness만 바뀔 때 전체 snapshot INSERT·history 증가는 없습니다.
 5. row count 또는 hash가 다르면 새 generation을 `STAGING`으로 insert한다.
 6. target과 reason을 bulk insert한다. scheduling identity가 같은 직전 CURRENT target만 `member_since_generation`과 논리적 `created_at`을 이어받으며, 새 대상·변경·ABA 재등록은 이번 generation에서 시작한다.
 7. insert row count와 generation row count가 같고 projection hash가 재계산 결과와 같은지 확인한다.
@@ -1487,7 +1488,7 @@ type ContentEvidenceClock struct {
 
 채널의 처음 수락된 비어 있지 않은 목록 또는 COMPLETE 빈 목록은 `earliest_baseline_effective_at`으로 저장하고 알리지 않습니다. PARTIAL은 complete anchor나 부재 근거를 만들지 않습니다. 기존 complete anchor가 더 이르면 이를 유지하고, year-1 레거시 clock·이미 저장된 영상·다른 채널이나 Shorts로 알려진 ID는 새 알림 기준으로 승격하지 않습니다. 기준 이후 처음 본 후보는 신규성 근거가 없으면 canonical과 `novelty_pending`만 보존합니다. 나중에 기준 이후의 유효 공개 시각이 생기면 한 번만 NEW_VIDEO를 만들고 pending을 닫습니다. 기준 이후의 미래 예정 최초공개 근거는 pending만 닫고 NEW_VIDEO를 만들지 않습니다(공개 알림은 아래 최초공개 알림 소유권). 오래된 공개 시각이 확인되면 무알림으로 닫습니다. 첫 기준에 포함된 최초공개와 신규성을 닫은 최초공개의 공개 전환도 NEW_VIDEO를 만들지 않습니다.
 
-generation 1은 보존 관측의 canonical consume/replay를 위해 해석하지만 `publication`을 실을 수 없고 그 관측만으로 NEW_VIDEO를 새로 생성하지 않습니다. video_list도 같은 채널의 진행 가능한 앞선 목록을 먼저 claim합니다. 뒤늦게 삽입된 관측·DLQ/replay까지 임의 도착 순서로 재정렬하거나 과거 누락을 자동 backfill하는 보장은 없습니다.
+`video_list` generation 1은 2026-10-06 운영 저장행을 폐기한 뒤 decoder와 consumer 지원 항목을 제거해 받지 않습니다([폐기 기록](../plans/2026-10-06-verified-refactoring.md)). video_list도 같은 채널의 진행 가능한 앞선 목록을 먼저 claim합니다. 뒤늦게 삽입된 관측·DLQ/replay까지 임의 도착 순서로 재정렬하거나 과거 누락을 자동 backfill하는 보장은 없습니다.
 
 `video_list`의 `is_premiere=true`는 이미 확정된 최초공개(Premiere) positive fact이며, 같은 observation finalize transaction에서 기존 live projection에도 병합한다. 이 교차 projection은 다음 경계를 따른다.
 
@@ -1496,7 +1497,7 @@ generation 1은 보존 관측의 canonical consume/replay를 위해 해석하지
 - live row가 없으면 `UPCOMING`, content channel/title/scheduled time, observation `received_at`, `is_premiere=true`로 생성하되 live reconciliation head는 만들지 않는다. 조회 뒤 다른 writer가 row를 먼저 생성한 conflict에서는 content write mode가 기존 field를 모두 보존하고 classification만 병합한다.
 - 기존 row는 `is_premiere=NULL`일 때만 `true`로 채운다. status, metadata, scheduled/started/ended time, `live_first_seen_at`, `last_seen_at`과 live head는 content evidence로 변경하지 않는다.
 - 기존 `true`는 replay no-op이고, 기존 `false`와 새 `true`는 기존 값을 유지하면서 `source_reconciliation_conflicts`에 `is_premiere`/`KEEP_EXISTING`을 기록한다. 필드 부재와 `false` content는 live row를 만들거나 변경하지 않는다.
-- live snapshot, schedule merge와 due-finalizer가 사용하는 공용 live-session upsert는 `COALESCE(existing.is_premiere, incoming.is_premiere)`로 최초 non-`NULL`을 보존한다. 추가 YouTube 조회, 새 schema/table, alarm-side join이나 renderer 변경은 이 병합에 포함하지 않는다.
+- live snapshot, schedule merge와 due-finalizer가 사용하는 공용 live-session 저장은 잠금 안에서 읽은 행 전체를 비교하는 UPDATE와 행이 없을 때만의 INSERT입니다. 이 reducer들은 읽은 `is_premiere`를 그대로 쓰며, 그 사이 다른 writer가 행을 바꾸면 0행으로 끝나 충돌로 보고합니다. `is_premiere`는 content 경로의 별도 SQL이 `NULL`일 때만 채우므로 최초 non-`NULL`이 보존됩니다. 추가 YouTube 조회, 새 schema/table, alarm-side join이나 renderer 변경은 이 병합에 포함하지 않는다.
 
 #### 최초공개 알림 소유권
 
@@ -1845,7 +1846,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 - 한 instance의 global job과 YouTube.js worker가 공유하는 total concurrency는 bounded semaphore 하나가 소유한다.
 - provider별 request budget과 total worker limit을 모두 통과해야 외부 호출을 시작한다.
 - local queue는 bounded channel 또는 scheduler-owned bounded set을 사용한다. target 전체를 무제한 goroutine으로 펼치지 않는다.
-- YouTube.js channel 목록에서 `UPCOMING`이지만 기계가독 `scheduled_at`이 없는 고유 video ID만 raw `/player`로 순차 보강한다. 한 channel collection의 상세 조회 후보는 최대 32개이며, 목록이 이미 시각을 제공하거나 상태가 `LIVE`/`ENDED`/`CANCELLED`이면 상세 조회하지 않는다. 앞선 lease 슬롯에서 확인한 예정 시각을 helper가 재사용한 행은 그 슬롯 시각을 `schedule_observed_at`으로 싣는다. 이 값은 generation 3에서만 허용되며, 이번 슬롯보다 앞서고 `LiveScheduleObservationMaxAge` 안에 있어야 한다. reducer는 이 시각으로 일정의 최신 여부를 판정하며, 상태 시계보다 늦게 도착한 앞 슬롯의 UPCOMING 관측도 일정만은 이 비교로 반영한다.
+- YouTube.js channel 목록에서 `UPCOMING`이지만 기계가독 `scheduled_at`이 없는 고유 video ID만 raw `/player`로 순차 보강한다. 한 channel collection의 상세 조회 후보는 최대 32개이며, 목록이 이미 시각을 제공하거나 상태가 `LIVE`/`ENDED`이면 상세 조회하지 않는다. streams 목록에는 취소 표시가 없어 helper는 `CANCELLED` 행을 만들지 않는다. 앞선 lease 슬롯에서 확인한 예정 시각을 helper가 재사용한 행은 그 슬롯 시각을 `schedule_observed_at`으로 싣는다. 이 값은 generation 3에서만 허용되며, 이번 슬롯보다 앞서고 `LiveScheduleObservationMaxAge` 안에 있어야 한다. reducer는 이 시각으로 일정의 최신 여부를 판정하며, 상태 시계보다 늦게 도착한 앞 슬롯의 UPCOMING 관측도 일정만은 이 비교로 반영한다.
 - Channel RPC는 필수 `kind=live|metadata`로 요청 범위를 지정한다. metadata는 streams/player를 조회하지 않고 live는 about을 조회하지 않는다. Go binary와 helper의 private RPC 변경은 같은 bundle로 교체한다.
 - convergence 구현 동안 collector는 Go로 유지한다. 8개 YouTube.js kind가 실제 활성화된 뒤 helper RPC call 수·latency·CPU 또는 failure amplification이 동일 workload 측정에서 material bottleneck일 때만 TypeScript collector를 검토한다.
 - TypeScript 검토의 선행 조건은 Go와 TypeScript 양쪽이 `source-observation-canonical-json-v1` fixture를 통과하는 것이다. fixture conformance 없이 runtime 언어를 바꾸지 않는다.
@@ -1933,6 +1934,8 @@ payload, message body, token, secret와 전체 description을 log하지 않는�
 - collision audit와 error detail은 bounded text만 저장한다.
 
 ## 18. 구현 순서
+
+아래 task의 소유 파일과 검증 명령은 구현 당시 경로입니다. `hololive-shared/pkg/service/youtube/{sourceobservation,community}`는 지금 없으며, 현재 소유는 §2의 파일 경계를 따릅니다.
 
 각 task는 정상·실패·경계 경로를 함께 완료해야 다음 task로 진행한다. 각 kind 전환 wave는 대체된 producer fetch/persist registration을 같은 task에서 삭제한다.
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -51,6 +52,11 @@ func main() {
 		LoadConfig:             collectorconfig.LoadRuntime,
 		LoadConfigErrorMessage: "Failed to load youtube collector config",
 		NewLogger: func(appConfig *collectorconfig.RuntimeConfig) (*slog.Logger, io.Closer, error) {
+			logFileName, err := youtubeCollectorLogFileName()
+			if err != nil {
+				return nil, nil, fmt.Errorf("resolve log file name: %w", err)
+			}
+
 			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
 				Level:      appConfig.Logging.Level,
 				Dir:        appConfig.Logging.Dir,
@@ -58,7 +64,7 @@ func main() {
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}, youtubeCollectorLogFileName(), sharedlogging.Options{AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
+			}, logFileName, sharedlogging.Options{AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
 			if err != nil {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}
@@ -126,11 +132,15 @@ func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (
 	return true, 0
 }
 
-func youtubeCollectorLogFileName() string {
+func youtubeCollectorLogFileName() (string, error) {
 	fileName := envutil.String("YOUTUBE_COLLECTOR_LOG_FILE_NAME", "")
-	if fileName == "" || strings.Contains(fileName, "/") || strings.Contains(fileName, "\\") {
-		return "youtube-collector.log"
+	if fileName == "" {
+		return "youtube-collector.log", nil
 	}
 
-	return fileName
+	if strings.ContainsAny(fileName, `/\`) {
+		return "", errors.New("YOUTUBE_COLLECTOR_LOG_FILE_NAME must be a file name without path separators")
+	}
+
+	return fileName, nil
 }

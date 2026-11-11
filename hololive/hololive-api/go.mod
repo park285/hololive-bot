@@ -11,7 +11,6 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/kapu/hololive-youtube-collector v0.0.0
 	github.com/mmcdole/gofeed v1.5.0
-	github.com/openai/openai-go/v3 v3.86.0
 	github.com/park285/iris-client-go/v5 v5.0.1
 	github.com/park285/shared-go/v2 v2.20.1
 	github.com/prometheus/client_golang v1.25.0
@@ -82,6 +81,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/openai/openai-go/v3 v3.86.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect

@@ -26,8 +26,6 @@ type capacityCycleRequest struct {
 
 type capacityCycleResult struct {
 	discovered    int
-	enqueued      int
-	deduped       int
 	truncated     bool
 	queueFull     bool
 	canceled      bool
@@ -135,9 +133,6 @@ func (s *capacityCycleState) mergePage(applied pageApplyResult) {
 	s.remaining = applied.remaining
 	s.excluded = applied.excluded
 
-	s.result.enqueued += applied.enqueued
-	s.result.deduped += applied.deduped
-
 	s.result.queueFull = s.result.queueFull || applied.queueFull
 	s.result.canceled = s.result.canceled || applied.canceled
 }
@@ -161,8 +156,6 @@ func nextRotationCursor(start, total int, outcome *capacityCycleResult) int {
 type pageApplyResult struct {
 	remaining int
 	excluded  []string
-	enqueued  int
-	deduped   int
 	queueFull bool
 	canceled  bool
 }
@@ -201,14 +194,11 @@ func applyCandidate(
 		applied.excluded = addExcludedKey(applied.excluded, spec.JobKey)
 		applied.remaining--
 
-		applied.enqueued++
-
 		return false
 	}
 
 	if result == EnqueueDeduped {
 		applied.excluded = addExcludedKey(applied.excluded, spec.JobKey)
-		applied.deduped++
 
 		return false
 	}

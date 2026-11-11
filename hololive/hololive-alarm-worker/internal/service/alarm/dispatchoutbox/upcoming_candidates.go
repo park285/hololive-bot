@@ -68,7 +68,7 @@ func (s *UpcomingCandidates) Stage(ctx context.Context, channelID string, now ti
 			continue
 		}
 
-		envelope := domain.AlarmQueueEnvelope{Notification: *n, Version: 1}
+		envelope := AlarmQueueEnvelope{Notification: *n, Version: 1}
 
 		event, delivery, err := buildLedgerRows(&envelope)
 		if err != nil {

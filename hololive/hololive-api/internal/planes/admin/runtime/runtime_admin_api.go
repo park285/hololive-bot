@@ -27,10 +27,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
-
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -39,8 +36,6 @@ type photoSyncTask interface {
 }
 
 type AdminAPIRuntime struct {
-	lifecycle.Managed
-
 	Config *apiconfig.AdminPlaneConfig
 	Logger *slog.Logger
 
@@ -66,20 +61,7 @@ type AdminAPIRuntime struct {
 	cleanupErr    error
 }
 
-func (r *AdminAPIRuntime) Close() {
-	if r == nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
-	defer cancel()
-
-	if err := r.CloseContext(ctx); err != nil && r.Logger != nil {
-		r.Logger.Error("admin_runtime_close_failed", slog.Any("error", err))
-	}
-}
-
-// Join 실패에서 DB·cache를 닫지 않는다.
+// CloseContext는 live 작업을 cancel/join한 뒤 같은 자원 owner를 한 번 실행한다. Join 실패에서 DB·cache를 닫지 않는다.
 func (r *AdminAPIRuntime) CloseContext(ctx context.Context) error {
 	if r == nil {
 		return nil
@@ -109,8 +91,6 @@ func (r *AdminAPIRuntime) CloseContext(ctx context.Context) error {
 
 			if r.cleanup != nil {
 				r.cleanupErr = r.cleanup()
-			} else {
-				r.Managed.Close()
 			}
 		}()
 	})

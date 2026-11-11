@@ -29,3 +29,13 @@ func newTestRepository(tb testing.TB, pool *pgxpool.Pool) *PgxRepository {
 
 	return repository
 }
+
+// ledgerDedupeKey는 envelope을 적재할 때 쓰는 방별 delivery key다.
+func ledgerDedupeKey(tb testing.TB, envelope *AlarmQueueEnvelope) string {
+	tb.Helper()
+
+	_, delivery, err := buildLedgerRows(envelope)
+	require.NoError(tb, err)
+
+	return delivery.DedupeKey
+}

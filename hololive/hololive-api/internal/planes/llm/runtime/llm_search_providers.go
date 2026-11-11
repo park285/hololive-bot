@@ -31,6 +31,7 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/websearch"
 )
 
 func provideExaSearcher(exaConfig apiconfig.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
@@ -45,7 +46,7 @@ func provideExaSearcher(exaConfig apiconfig.ExaConfig, logger *slog.Logger) shar
 	}
 
 	httpClient := httputil.NewExternalAPIClient(15 * time.Second)
-	client := mesummarizer.NewExaMCPClient(exaConfig.Endpoint, exaConfig.APIKey, httpClient, logger)
+	client := websearch.NewExaMCPClient(exaConfig.Endpoint, exaConfig.APIKey, httpClient, logger)
 	logger.Info("Exa search enabled", slog.String("endpoint", exaConfig.Endpoint))
 
 	return client

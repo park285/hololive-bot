@@ -31,6 +31,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -468,7 +469,8 @@ func claimOne(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, en
 	return claim
 }
 
-// 두 상수는 NewReplyOutboxRepositoryWithPolicy 검증을 통과하는 값이다.
+// newTestReplyOutboxRepository는 API worker profile fixture의 bot_reply_outbox 정책(max_attempts 5, 자동 replay 지평
+// iris.ReplyAutomaticReplayHorizon)으로 저장소를 만든다. 두 값은 NewReplyOutboxRepositoryWithPolicy 검증을 통과한다.
 func newTestReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
-	return &ReplyOutboxRepository{pool: pool, maxAttempts: ReplyOutboxMaxAttempts, automaticReplayHorizon: ReplyOutboxAutomaticReplayHorizon}
+	return &ReplyOutboxRepository{pool: pool, maxAttempts: 5, automaticReplayHorizon: iris.ReplyAutomaticReplayHorizon}
 }

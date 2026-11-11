@@ -39,16 +39,12 @@ func reachedWithSlack(now, at time.Time) bool {
 }
 
 type channelScheduleState struct {
-	nextCheckAt      time.Time
-	lastCheckedAt    time.Time
-	nearestStartAt   *time.Time
-	forceDue         bool
-	lastStreamsCount int
-	lastNotifiedAt   *time.Time
+	nextCheckAt   time.Time
+	lastCheckedAt time.Time
 }
 
 func (s *channelScheduleState) isDue(now time.Time) bool {
-	return s.forceDue || reachedWithSlack(now, s.nextCheckAt)
+	return reachedWithSlack(now, s.nextCheckAt)
 }
 
 type TieredScheduler struct {
@@ -109,25 +105,14 @@ func (ts *TieredScheduler) SelectDueChannels(now time.Time, channelIDs []string)
 func (ts *TieredScheduler) UpdateChannelState(now time.Time, channelID string, streams []*domain.Stream) {
 	nearest := nearestUpcomingStart(streams, now)
 
+	nextAt := ComputeNextCheckAt(now, nearest)
+
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	// 기존 lastNotifiedAt 보존
-	var lastNotifiedAt *time.Time
-
-	if existing, ok := ts.states[channelID]; ok {
-		lastNotifiedAt = existing.lastNotifiedAt
-	}
-
-	nextAt := ComputeNextCheckAt(now, nearest, lastNotifiedAt)
-
 	ts.states[channelID] = &channelScheduleState{
-		nextCheckAt:      nextAt,
-		lastCheckedAt:    now,
-		nearestStartAt:   nearest,
-		forceDue:         false,
-		lastStreamsCount: len(streams),
-		lastNotifiedAt:   lastNotifiedAt,
+		nextCheckAt:   nextAt,
+		lastCheckedAt: now,
 	}
 
 	ts.logger.Debug("Channel schedule state updated",
@@ -170,56 +155,4 @@ func (ts *TieredScheduler) LastCheckedAt(channelID string) time.Time {
 	}
 
 	return st.lastCheckedAt
-}
-
-func (ts *TieredScheduler) MarkChannelDue(channelID string) {
-	now := time.Now()
-
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
-	if st, ok := ts.states[channelID]; ok {
-		st.forceDue = true
-		st.nextCheckAt = now
-	} else {
-		ts.states[channelID] = &channelScheduleState{
-			nextCheckAt:   now,
-			lastCheckedAt: time.Time{},
-			forceDue:      true,
-		}
-	}
-
-	ts.logger.Debug("Channel marked due", slog.String("channel_id", channelID))
-}
-
-func (ts *TieredScheduler) MarkChannelRecentlyNotified(channelID string) {
-	now := time.Now()
-
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
-	if st, ok := ts.states[channelID]; ok {
-		st.lastNotifiedAt = &now
-	} else {
-		ts.states[channelID] = &channelScheduleState{
-			nextCheckAt:    now,
-			lastCheckedAt:  time.Time{},
-			lastNotifiedAt: &now,
-		}
-	}
-}
-
-func (ts *TieredScheduler) ForgetChannel(channelID string) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
-	delete(ts.states, channelID)
-	ts.logger.Debug("Channel schedule state forgotten", slog.String("channel_id", channelID))
-}
-
-func (ts *TieredScheduler) ChannelCount() int {
-	ts.mu.RLock()
-	defer ts.mu.RUnlock()
-
-	return len(ts.states)
 }

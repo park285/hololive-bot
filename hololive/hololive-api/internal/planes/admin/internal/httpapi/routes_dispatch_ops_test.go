@@ -16,7 +16,7 @@ func TestDispatchRoutesRequireAPIKey(t *testing.T) {
 	router := gin.New()
 	group := router.Group("/api/holo")
 	group.Use(middleware.APIKeyAuthMiddleware("dispatch-ops-test-key"))
-	registerAlarmRoutes(group, (&api.Handler{}).DomainHandlers().Alarm)
+	registerAlarmRoutes(group, &api.AlarmHandler{})
 
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/api/holo/dispatch/summary"},

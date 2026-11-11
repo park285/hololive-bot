@@ -80,11 +80,16 @@ func (c *Cache) resetMemoryLocked() {
 	c.allMembersSnapshot.Store(nil)
 }
 
-// epochStore가 nil이면 epoch 조정 없는 프로세스 로컬 캐시가 된다. 설정에 따라 생성 시점에 snapshot을 미리 적재한다.
-// PostgreSQL pool 없는 repository는 첫 조회에서 panic하므로 구성 단계에서 거절한다.
+// NewMemberCache는 epochStore의 durable epoch로 다른 프로세스와 무효화를 조정하는 캐시를 만들고, 설정에 따라 생성
+// 시점에 snapshot을 미리 적재한다. Epoch 조정 없는 캐시는 다른 프로세스의 변경을 놓치므로 epochStore 없이는 만들지
+// 않는다. PostgreSQL pool 없는 repository는 첫 조회에서 panic하므로 구성 단계에서 거절한다.
 func NewMemberCache(ctx context.Context, repository *Repository, epochStore cache.LowLevelCache, logger *slog.Logger, config CacheConfig) (*Cache, error) {
 	if repository != nil && repository.pool == nil {
 		return nil, errors.New("member repository has no PostgreSQL pool")
+	}
+
+	if epochStore == nil {
+		return nil, errors.New("member cache requires an epoch store")
 	}
 
 	config = normalizeMemberCacheConfig(config)
@@ -124,10 +129,6 @@ func newMemberCache(repository *Repository, logger *slog.Logger, config CacheCon
 }
 
 func (c *Cache) configureEpoch(ctx context.Context, epochStore cache.LowLevelCache) error {
-	if epochStore == nil {
-		return nil
-	}
-
 	client := epochStore.GetClient()
 	if client == nil {
 		return errors.New("member cache requires low-level Valkey access for epoch coordination")

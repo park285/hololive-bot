@@ -74,79 +74,6 @@ func TestValidateHolodexConfigRejectsNonPositiveTimeout(t *testing.T) {
 	}
 }
 
-func TestKakaoConfig_IsRoomAllowed(t *testing.T) {
-	t.Run("ACL disabled allows all", func(t *testing.T) {
-		config := KakaoConfig{
-			Rooms:      []string{"room-a"},
-			ACLEnabled: false,
-		}
-
-		if !config.IsRoomAllowed("other-room", "999") {
-			t.Fatal("expected room to be allowed when ACL is disabled")
-		}
-	})
-
-	t.Run("Matches by chat ID only", func(t *testing.T) {
-		config := KakaoConfig{
-			Rooms:      []string{"1234567890"},
-			ACLEnabled: true,
-		}
-
-		if !config.IsRoomAllowed("테스트방", "1234567890") {
-			t.Fatal("expected room to be allowed by chat ID")
-		}
-
-		if config.IsRoomAllowed("1234567890", "other-id") {
-			t.Fatal("expected room to be denied - only chatID should be checked")
-		}
-	})
-
-	t.Run("Empty chatID denies", func(t *testing.T) {
-		config := KakaoConfig{
-			Rooms:      []string{"테스트방"},
-			ACLEnabled: true,
-		}
-
-		if config.IsRoomAllowed("테스트방", "") {
-			t.Fatal("expected room to be denied when chatID is empty")
-		}
-	})
-
-	t.Run("No match denies", func(t *testing.T) {
-		config := KakaoConfig{
-			Rooms:      []string{"allowed-room"},
-			ACLEnabled: true,
-		}
-
-		if config.IsRoomAllowed("other-room", "999") {
-			t.Fatal("expected room to be denied when no match exists")
-		}
-	})
-}
-
-func TestKakaoConfig_AddRemoveRoom(t *testing.T) {
-	config := KakaoConfig{
-		Rooms:      []string{"123"},
-		ACLEnabled: true,
-	}
-
-	if !config.AddRoom(" 456 ") {
-		t.Fatal("expected AddRoom to succeed")
-	}
-
-	if config.AddRoom("456") {
-		t.Fatal("expected duplicate AddRoom to fail")
-	}
-
-	if !config.RemoveRoom(" 456 ") {
-		t.Fatal("expected RemoveRoom to succeed")
-	}
-
-	if config.RemoveRoom("456") {
-		t.Fatal("expected RemoveRoom to fail for non-existing room")
-	}
-}
-
 func TestLoadIrisConfigUsesSeparateTrimmedTokens(t *testing.T) {
 	t.Setenv(irisWebhookTokenEnv, " webhook-token ")
 	t.Setenv(irisBotTokenEnv, " bot-token ")
@@ -212,6 +139,33 @@ func TestValidateIrisEgressInputs(t *testing.T) {
 
 			if err := ValidateIrisEgressInputs(&config); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("ValidateIrisEgressInputs() error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// 발송만 하는 runtime은 webhook 토큰 없이 통과하지만 bot 토큰·base URL 원천·URL 파일 허용 집합은 그대로 요구한다.
+func TestValidateIrisClientInputsDoesNotRequireWebhookToken(t *testing.T) {
+	valid := IrisConfig{BaseURL: "https://iris.example.invalid", BotToken: "b"}
+	if err := ValidateIrisClientInputs(&valid); err != nil {
+		t.Fatalf("ValidateIrisClientInputs(no webhook token) error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*IrisConfig)
+		want   string
+	}{
+		{name: "bot token", mutate: func(c *IrisConfig) { c.BotToken = " " }, want: "IRIS_BOT_TOKEN is required"},
+		{name: "base URL", mutate: func(c *IrisConfig) { c.BaseURL = "" }, want: "IRIS_BASE_URL or IRIS_BASE_URL_FILE is required"},
+		{name: "base URL file without allowlist", mutate: func(c *IrisConfig) { c.BaseURLFile = "/run/iris_base_url" }, want: "IRIS_BASE_URL_FILE requires IRIS_H3_SERVER_NAME or IRIS_BASE_URL_ALLOWED_HOSTS"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := valid
+			tc.mutate(&config)
+
+			if err := ValidateIrisClientInputs(&config); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("ValidateIrisClientInputs() error = %v, want %q", err, tc.want)
 			}
 		})
 	}

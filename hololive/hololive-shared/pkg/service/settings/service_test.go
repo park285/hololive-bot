@@ -21,233 +21,32 @@
 package settings
 
 import (
-	"bytes"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 )
 
-func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "settings.json")
-	logger := slog.New(slog.DiscardHandler)
-
-	defaults := Settings{
-		AlarmAdvanceMinutes: 5,
-	}
-	service := mustNewSettingsService(t, filePath, defaults, logger)
-	got := service.Get()
-
-	if got.AlarmAdvanceMinutes != 5 {
-		t.Fatalf("expected default 5, got %d", got.AlarmAdvanceMinutes)
-	}
-
-	updated := Settings{AlarmAdvanceMinutes: 12, TargetMinutes: []int{12, 3, 1}}
-	if err := service.Update(updated); err != nil {
-		t.Fatalf("update failed: %v", err)
-	}
-
-	got = service.Get()
-	if got.AlarmAdvanceMinutes != 12 || !slices.Equal(got.TargetMinutes, updated.TargetMinutes) {
-		t.Fatalf("published settings = %+v, want %+v", got, updated)
-	}
-
-	reloaded := mustNewSettingsService(t, filePath, defaults, logger)
-
-	got = reloaded.Get()
-
-	if got.AlarmAdvanceMinutes != 12 || !slices.Equal(got.TargetMinutes, updated.TargetMinutes) {
-		t.Fatalf("persisted settings = %+v, want %+v", got, updated)
-	}
-}
-
-func TestSettingsService_IgnoresUnknownStoredFieldsAndDropsThemOnUpdate(t *testing.T) {
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "settings.json")
-
+// 저장 파일의 알 수 없는 필드는 기동을 막지 않는다. 다시 저장할 때 남지 않는 것은 writer 쪽 시험이 확인한다.
+func TestReadFile_IgnoresUnknownStoredFields(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "settings.json")
 	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"unknownToggle":true,"targetMinutes":[5,1]}`), 0o600); err != nil {
 		t.Fatalf("write settings: %v", err)
 	}
 
-	service := mustNewSettingsService(t, filePath, Settings{}, slog.New(slog.DiscardHandler))
-	if got := service.Get(); got.AlarmAdvanceMinutes != 5 || !slices.Equal(got.TargetMinutes, []int{5, 1}) {
+	got, found, err := ReadFile(filePath)
+	if err != nil || !found {
+		t.Fatalf("ReadFile() = %+v, %v, %v; want stored settings", got, found, err)
+	}
+
+	if got.AlarmAdvanceMinutes != 5 || !slices.Equal(got.TargetMinutes, []int{5, 1}) {
 		t.Fatalf("settings = %+v, want alarmAdvanceMinutes=5 targetMinutes=[5 1]", got)
 	}
-
-	if err := service.Update(Settings{AlarmAdvanceMinutes: 7, TargetMinutes: []int{7}}); err != nil {
-		t.Fatalf("update failed: %v", err)
-	}
-
-	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
-	if err != nil {
-		t.Fatalf("read settings: %v", err)
-	}
-
-	if bytes.Contains(raw, []byte("unknownToggle")) {
-		t.Fatalf("updated settings file kept an unknown field: %s", raw)
-	}
 }
 
-func TestSettingsService_PreservesTargetMinutesOnReload(t *testing.T) {
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "settings.json")
-	logger := slog.New(slog.DiscardHandler)
-
-	defaults := Settings{
-		AlarmAdvanceMinutes: 30,
-		TargetMinutes:       []int{30, 15, 5, 1},
-	}
-	service := mustNewSettingsService(t, filePath, defaults, logger)
-	current := service.Get()
-
-	if err := service.Update(current); err != nil {
-		t.Fatalf("update failed: %v", err)
-	}
-
-	reloaded := mustNewSettingsService(t, filePath, Settings{}, logger)
-	got := reloaded.Get()
-	want := []int{30, 15, 5, 1}
-
-	if len(got.TargetMinutes) != len(want) {
-		t.Fatalf("expected target minutes len %d, got %d (%v)", len(want), len(got.TargetMinutes), got.TargetMinutes)
-	}
-
-	for i := range want {
-		if got.TargetMinutes[i] != want[i] {
-			t.Fatalf("expected target minutes %v, got %v", want, got.TargetMinutes)
-		}
-	}
-}
-
-func TestSettingsService_PreservesExplicitStoredTargetMinutesOnReload(t *testing.T) {
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "settings.json")
-	logger := slog.New(slog.DiscardHandler)
-
-	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"targetMinutes":[5,1]}`), 0o600); err != nil {
-		t.Fatalf("write settings: %v", err)
-	}
-
-	reloaded := mustNewSettingsService(t, filePath, Settings{}, logger)
-	got := reloaded.Get()
-	want := []int{5, 1}
-
-	if len(got.TargetMinutes) != len(want) {
-		t.Fatalf("expected target minutes len %d, got %d (%v)", len(want), len(got.TargetMinutes), got.TargetMinutes)
-	}
-
-	for i := range want {
-		if got.TargetMinutes[i] != want[i] {
-			t.Fatalf("expected target minutes %v, got %v", want, got.TargetMinutes)
-		}
-	}
-}
-
-func TestSettingsService_DoesNotRewriteExplicitTargetMinutesOnReload(t *testing.T) {
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "settings.json")
-	logger := slog.New(slog.DiscardHandler)
-
-	original := `{"alarmAdvanceMinutes":5,"targetMinutes":[5,1]}`
-	if err := os.WriteFile(filePath, []byte(original), 0o600); err != nil {
-		t.Fatalf("write settings: %v", err)
-	}
-
-	_ = mustNewSettingsService(t, filePath, Settings{}, logger)
-
-	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
-	if err != nil {
-		t.Fatalf("read settings: %v", err)
-	}
-
-	if string(raw) != original {
-		t.Fatalf("expected explicit settings file unchanged, got %q", string(raw))
-	}
-}
-
-func TestSettingsService_UpdateLeavesNoTempFileBehind(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
-	service := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
-
-	if err := service.Update(Settings{AlarmAdvanceMinutes: 7}); err != nil {
-		t.Fatalf("Update() error = %v", err)
-	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("ReadDir() error = %v", err)
-	}
-
-	for _, entry := range entries {
-		if entry.Name() != "settings.json" {
-			t.Fatalf("unexpected leftover file %q after Update()", entry.Name())
-		}
-	}
-
-	reloaded := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
-	if got := reloaded.Get(); got.AlarmAdvanceMinutes != 7 {
-		t.Fatalf("reloaded settings = %+v, want AlarmAdvanceMinutes=7", got)
-	}
-}
-
-func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOnly(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root bypasses directory write permissions")
-	}
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
-	service := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
-
-	previous := Settings{AlarmAdvanceMinutes: 9, TargetMinutes: []int{9, 5, 1}}
-	if err := service.Update(previous); err != nil {
-		t.Fatalf("seed Update() error = %v", err)
-	}
-
-	before, readErr := fs.ReadFile(os.DirFS(dir), "settings.json")
-	if readErr != nil {
-		t.Fatalf("read seeded settings: %v", readErr)
-	}
-
-	// 디렉터리는 탐색에 x 비트가 필요해 0600 이하로 낮출 수 없다.
-	if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // G302: 쓰기 불가 디렉터리 재현용 모드
-		t.Fatalf("Chmod() error = %v", err)
-	}
-
-	t.Cleanup(func() {
-		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // G302: t.TempDir() 정리를 위한 모드 복구
-			t.Errorf("restore dir mode: %v", err)
-		}
-	})
-
-	if err := service.Update(Settings{AlarmAdvanceMinutes: 11, TargetMinutes: []int{11, 3, 1}}); err == nil {
-		t.Fatal("Update() error = nil, want failure on a read-only directory")
-	}
-
-	if got := service.Get(); got.AlarmAdvanceMinutes != previous.AlarmAdvanceMinutes || !slices.Equal(got.TargetMinutes, previous.TargetMinutes) {
-		t.Fatalf("published settings after failed Update = %+v, want %+v", got, previous)
-	}
-
-	after, readErr := fs.ReadFile(os.DirFS(dir), "settings.json")
-	if readErr != nil {
-		t.Fatalf("read settings after failed Update: %v", readErr)
-	}
-
-	if !bytes.Equal(after, before) {
-		t.Fatalf("settings file changed on failed Update: before=%s after=%s", before, after)
-	}
-
-	reloaded := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
-	if got := reloaded.Get(); got.AlarmAdvanceMinutes != previous.AlarmAdvanceMinutes || !slices.Equal(got.TargetMinutes, previous.TargetMinutes) {
-		t.Fatalf("persisted settings after failed Update = %+v, want %+v", got, previous)
-	}
-}
-
-func TestSettingsService_RejectsUnsupportedStoredFile(t *testing.T) {
+// 구형 형식(targetMinutes 없음)이나 읽을 수 없는 파일을 기본값으로 대신하지 않고 오류로 드러낸다.
+func TestReadFile_RejectsUnsupportedStoredFile(t *testing.T) {
 	for name, content := range map[string]string{
 		"legacy advance-only format": `{"alarmAdvanceMinutes":1}`,
 		"missing advance minute":     `{"targetMinutes":[5,1]}`,
@@ -260,14 +59,15 @@ func TestSettingsService_RejectsUnsupportedStoredFile(t *testing.T) {
 				t.Fatalf("write settings: %v", err)
 			}
 
-			if service, err := NewSettingsService(filePath, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler)); err == nil {
-				t.Fatalf("NewSettingsService() = %+v, nil; want error", service.Get())
+			if stored, found, err := ReadFile(filePath); err == nil {
+				t.Fatalf("ReadFile() = %+v, %v, nil; want error", stored, found)
 			}
 		})
 	}
 }
 
-func TestSettingsService_DoesNotRewriteNonCanonicalTargetMinutes(t *testing.T) {
+// 정규화 결과가 저장값과 달라도 파일을 다시 쓰지 않는다. 다음 저장이 정규화된 값을 기록한다.
+func TestReadFile_NormalizesTargetMinutesWithoutRewriting(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "settings.json")
 	original := `{"alarmAdvanceMinutes":5,"targetMinutes":[1,5,5]}`
@@ -276,9 +76,13 @@ func TestSettingsService_DoesNotRewriteNonCanonicalTargetMinutes(t *testing.T) {
 		t.Fatalf("write settings: %v", err)
 	}
 
-	service := mustNewSettingsService(t, filePath, Settings{}, slog.New(slog.DiscardHandler))
-	if got := service.Get().TargetMinutes; !slices.Equal(got, []int{5, 1}) {
-		t.Fatalf("TargetMinutes = %v, want normalized [5 1]", got)
+	got, found, err := ReadFile(filePath)
+	if err != nil || !found {
+		t.Fatalf("ReadFile() = %+v, %v, %v; want stored settings", got, found, err)
+	}
+
+	if !slices.Equal(got.TargetMinutes, []int{5, 1}) {
+		t.Fatalf("TargetMinutes = %v, want normalized [5 1]", got.TargetMinutes)
 	}
 
 	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
@@ -287,17 +91,6 @@ func TestSettingsService_DoesNotRewriteNonCanonicalTargetMinutes(t *testing.T) {
 	}
 
 	if string(raw) != original {
-		t.Fatalf("settings file rewritten on load: %q", string(raw))
+		t.Fatalf("settings file rewritten on read: %q", string(raw))
 	}
-}
-
-func mustNewSettingsService(t *testing.T, filePath string, defaults Settings, logger *slog.Logger) *Service {
-	t.Helper()
-
-	service, err := NewSettingsService(filePath, defaults, logger)
-	if err != nil {
-		t.Fatalf("NewSettingsService() error = %v", err)
-	}
-
-	return service
 }

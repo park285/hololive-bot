@@ -22,12 +22,10 @@ package llm
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"testing"
 
-	"github.com/openai/openai-go/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,12 +36,11 @@ func TestSafeProviderErrorError(t *testing.T) {
 	err := safeProviderError{
 		statusCode: http.StatusBadRequest,
 		code:       " invalid_request ",
-		param:      " messages ",
-		apiType:    " invalid_request_error ",
-		errType:    " openai.Error ",
+		apiType:    " gemini ",
+		errType:    " interaction_not_completed ",
 	}
 
-	assert.Equal(t, "llm provider request failed status_code=400 code=invalid_request api_type=invalid_request_error param=messages error_type=openai.Error", err.Error())
+	assert.Equal(t, "llm provider request failed status_code=400 code=invalid_request api_type=gemini error_type=interaction_not_completed", err.Error())
 }
 
 func TestSafeLLMProviderError(t *testing.T) {
@@ -53,25 +50,6 @@ func TestSafeLLMProviderError(t *testing.T) {
 		t.Parallel()
 
 		assert.NoError(t, safeLLMProviderError(nil))
-	})
-
-	t.Run("empty output maps to empty output type", func(t *testing.T) {
-		t.Parallel()
-
-		err := safeLLMProviderError(fmt.Errorf("wrapped: %w", errOpenAIEmptyOutput))
-
-		require.Error(t, err)
-		assert.Equal(t, "llm provider request failed error_type=openai_empty_output", err.Error())
-	})
-
-	t.Run("openai error maps to safe error", func(t *testing.T) {
-		t.Parallel()
-
-		apiErr := newProviderErrorsOpenAIError()
-		err := safeLLMProviderError(fmt.Errorf("wrapped: %w", apiErr))
-
-		require.Error(t, err)
-		assert.Equal(t, "llm provider request failed status_code=429 code=rate_limit api_type=rate_limit_error param=messages error_type=apierror.Error", err.Error())
 	})
 
 	// 분류는 오류 타입으로만 한다. 문구가 안전한 진단처럼 보여도 타입이 없으면 원문을 옮기지 않는다.
@@ -94,28 +72,21 @@ func TestLLMProviderErrorAttrs(t *testing.T) {
 		assert.Nil(t, llmProviderErrorAttrs(nil))
 	})
 
-	t.Run("empty output returns type attr", func(t *testing.T) {
+	t.Run("safe provider error returns provider attrs", func(t *testing.T) {
 		t.Parallel()
 
-		attrs := llmProviderErrorAttrs(fmt.Errorf("wrapped: %w", errOpenAIEmptyOutput))
+		attrs := llmProviderErrorAttrs(safeProviderError{
+			statusCode: http.StatusTooManyRequests,
+			code:       " RESOURCE_EXHAUSTED ",
+			apiType:    "gemini",
+			errType:    "interaction_not_completed",
+		})
 
 		assert.Equal(t, map[string]any{
-			"error_type": "openai_empty_output",
-		}, slogAttrsByKey(attrs))
-	})
-
-	t.Run("openai error returns provider attrs", func(t *testing.T) {
-		t.Parallel()
-
-		attrs := llmProviderErrorAttrs(fmt.Errorf("wrapped: %w", newProviderErrorsOpenAIError()))
-
-		assert.Equal(t, map[string]any{
-			"error_type":           "apierror.Error",
-			"provider_error":       true,
-			"status_code":          http.StatusTooManyRequests,
-			"error_code":           "rate_limit",
-			"provider_error_type":  "rate_limit_error",
-			"provider_error_param": "messages",
+			"error_type":          "interaction_not_completed",
+			"status_code":         http.StatusTooManyRequests,
+			"error_code":          "RESOURCE_EXHAUSTED",
+			"provider_error_type": "gemini",
 		}, slogAttrsByKey(attrs))
 	})
 }
@@ -146,38 +117,6 @@ func TestLLMErrorType(t *testing.T) {
 
 			assert.Equal(t, tt.want, llmErrorType(tt.err))
 		})
-	}
-}
-
-func TestOpenAIError(t *testing.T) {
-	t.Parallel()
-
-	t.Run("extracts wrapped openai error", func(t *testing.T) {
-		t.Parallel()
-
-		apiErr := newProviderErrorsOpenAIError()
-		got, ok := openAIError(fmt.Errorf("wrapped: %w", apiErr))
-
-		require.True(t, ok)
-		assert.Same(t, apiErr, got)
-	})
-
-	t.Run("returns false for non-openai error", func(t *testing.T) {
-		t.Parallel()
-
-		got, ok := openAIError(errors.New("plain"))
-
-		assert.False(t, ok)
-		assert.Nil(t, got)
-	})
-}
-
-func newProviderErrorsOpenAIError() *openai.Error {
-	return &openai.Error{
-		StatusCode: http.StatusTooManyRequests,
-		Code:       " rate_limit ",
-		Param:      " messages ",
-		Type:       " rate_limit_error ",
 	}
 }
 

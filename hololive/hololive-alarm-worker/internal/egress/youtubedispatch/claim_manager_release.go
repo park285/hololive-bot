@@ -66,13 +66,8 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 // 보존 기간이 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가 config invariant로
 // 보장되지 않으므로, 삭제 대상을 항상 fanout claim의 신선도 하한(DB 시계 - ClaimFreshnessWindow)보다 오래된 outbox로
 // 묶어 다시 claim될 수 없게 한다. 보존 기간과 lease 만료는 claim과 같은 DB 시계로 판정한다.
-// ClaimFreshnessWindow<=0이면 claim에 신선도 하한이 없어 안전한 기준이 없으므로 건너뛴다.
 // NOT EXISTS delivery 가드는 ON DELETE CASCADE로 인한 delivery/telemetry 동반 삭제를 막는다.
 func (d *ClaimManager) cleanupExpiredFanoutOutboxes(ctx context.Context) {
-	if d.config.ClaimFreshnessWindow <= 0 {
-		return
-	}
-
 	var total int
 
 	for {
@@ -102,10 +97,6 @@ func (d *ClaimManager) cleanupExpiredFanoutOutboxes(ctx context.Context) {
 
 func (d *ClaimManager) orphanPendingCutoff() time.Duration {
 	return max(d.config.CleanupAfter, d.config.ClaimFreshnessWindow)
-}
-
-func (d *ClaimManager) quarantineStaleSendingDeliveries(ctx context.Context) {
-	d.quarantineStaleLogicalGroups(ctx)
 }
 
 func (d *ClaimManager) quarantineStaleLogicalGroups(ctx context.Context) {

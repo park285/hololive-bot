@@ -1,4 +1,4 @@
-import { channelFixture } from "./test-fixtures/channel.mjs";
+import { channelFixture } from "../test-fixtures/channel.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -38,6 +38,16 @@ test("PAG-008 rejects an undersized response budget before fetching", async () =
       innertube,
     }),
     (error) => error.code === "response_too_large",
+  );
+  assert.equal(calls, 0);
+});
+
+test("an unvalidated content kind is a helper invariant failure, not upstream parser drift", async () => {
+  let calls = 0;
+  const innertube = { getChannel: async () => { calls += 1; return {}; } };
+  await assert.rejects(
+    () => fetchContentFeed({ channelId: "UC_TEST", kind: "streams", maxResults: 10, maxPages: 1, innertube }),
+    (error) => error.code === "helper_internal_invariant",
   );
   assert.equal(calls, 0);
 });
@@ -90,6 +100,8 @@ test("fetchContentFeed fail-closes when every row is missing video id", async ()
       fetchContentFeed({
         channelId: "UC_TEST",
         kind: "videos",
+        maxResults: 10,
+        maxPages: 1,
         innertube,
       }),
     (err) => err.code === "parser_drift",
@@ -122,6 +134,8 @@ test("fetchContentFeed paginates videos from a stub channel", async () => {
   const result = await fetchContentFeed({
     channelId: "UC_TEST",
     kind: "videos",
+    maxResults: 10,
+    maxPages: 1,
     innertube,
   });
   assert.equal(result.items[0].video_id, "vid-1");
@@ -147,7 +161,7 @@ test("videos content RPC makes no per-row player calls and drops lockup-derived 
     actions: { execute: async () => assert.fail("content RPC must not hide per-video player requests") },
   };
 
-  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", innertube });
+  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", maxResults: 10, maxPages: 1, innertube });
 
   assert.deepEqual(result.items, [{ video_id: "premiere-1", channel_id: "UC_TEST", title: "Premiere", is_upcoming: true }]);
 });
@@ -155,13 +169,13 @@ test("videos content RPC makes no per-row player calls and drops lockup-derived 
 test("content result budget stops before validating unselected rows", async () => {
   const innertube = {
     getChannel: async () => channelFixture({ getVideos: async () => channelFixture({ videos: [
-      { id: "first", is_upcoming: true },
-      { id: "second", is_upcoming: true },
+      { id: "first" },
+      { id: "second" },
       { title: "unselected malformed row" },
     ] }) }),
     actions: { execute: async () => assert.fail("content RPC must not request player metadata") },
   };
-  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", maxResults: 1, innertube });
+  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", maxResults: 1, maxPages: 1, innertube });
   assert.equal(result.termination_reason, "max_results");
   assert.deepEqual(result.items.map((item) => item.video_id), ["first"]);
 });
@@ -169,11 +183,11 @@ test("content result budget stops before validating unselected rows", async () =
 test("shorts result budget skips unselected normalization without metadata requests", async () => {
   const innertube = {
     getChannel: async () => channelFixture({ getShorts: async () => channelFixture({ videos: [
-      { id: "first", is_upcoming: true }, { title: "unselected malformed" },
+      { id: "first" }, { title: "unselected malformed" },
     ] }) }),
     actions: { execute: async () => assert.fail("shorts must not request premiere metadata") },
   };
-  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "shorts", maxResults: 1, innertube });
+  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "shorts", maxResults: 1, maxPages: 1, innertube });
   assert.equal(result.items[0].video_id, "first");
   assert.equal(result.termination_reason, "max_results");
 });

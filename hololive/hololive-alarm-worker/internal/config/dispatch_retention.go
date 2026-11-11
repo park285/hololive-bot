@@ -1,4 +1,4 @@
-// Package alarmworker: alarm-worker 런타임 전용 설정을 소유한다.
+// Package config는 alarm-worker 런타임 전용 설정을 소유한다.
 // proactive notification egress와 alarm scheduler 역할은 이 런타임만 가진다.
 package config
 
@@ -62,6 +62,8 @@ func loadDispatchRetentionConfig() (DispatchRetentionConfig, error) {
 	return config, nil
 }
 
+// dispatchRetentionLimit은 10000을 넘는 값을 기동 오류로 보지 않고 10000으로 줄인다. 보존 maintenance는 이 값을
+// SQL LIMIT으로 그대로 쓴다.
 func dispatchRetentionLimit() (int, error) {
 	limit, err := envload.RequiredPositiveIntEnv("ALARM_DISPATCH_RETENTION_LIMIT", 1000)
 	if err != nil {

@@ -4,9 +4,9 @@
 
 Alarm domain currently has HTTP JSON APIs, the PostgreSQL alarm dispatch outbox, generic notification delivery outbox egress, and the YouTube notification outbox egress path owned by `alarm-worker`.
 
-관리 통계는 인증된 `GET /internal/alarm/count`로 `{"success":true,"data":{"count":3}}`를 받는다. `count`는 `/keys` 목록과 같은 서로 다른 `(room_id, channel_id)` 쌍의 개수이며 host 구독 중복은 한 번만 센다. 누락·null·음수 count는 client가 오류로 거절한다. 이 조회는 이름 캐시와 전체 목록 직렬화를 거치지 않는다. 기존 `/keys`는 관리 목록용으로 유지한다. 새 API를 배포하기 전에 worker의 count route를 먼저 활성화한다.
+관리 통계는 인증된 `GET /internal/alarm/count`로 `{"success":true,"data":{"count":3}}`를 받는다. `count`는 `/keys` 목록과 같은 서로 다른 `(room_id, channel_id)` 쌍의 개수이며 host 구독 중복은 한 번만 센다. 누락·null·음수 count는 client가 오류로 거절한다. 이 조회는 멤버 이름 조회와 전체 목록 직렬화를 거치지 않는다. 기존 `/keys`는 관리 목록용으로 유지한다. 새 API를 배포하기 전에 worker의 count route를 먼저 활성화한다.
 
-Generic notification과 YouTube dispatcher는 `PreparedMessageSender`만 받는다. 새 요청은 최종 본문·text/richtext 경로·client request ID를 고정하며 기존 markdown 요청은 저장된 타입 그대로 재생한다. 일반 SendMessage나 ID만 받는 sender로 내려가지 않는다. 결과 불명 증거는 결합된 확정 실패보다 우선하고 알려진 실패 저장 전이를 만들지 않는다. 2026-10-06 중앙 읽기 전용 확인에서 YouTube 저장 요청 40건은 모두 text였으며 generic outbox는 비어 있었다. 과거 요청 증거가 없는 행의 격리와 send-unit 없는 종단 행 조회는 유지한다.
+Generic notification과 YouTube dispatcher는 `PreparedMessageSender`만 받는다. 새 요청은 최종 본문·text/richtext 경로·client request ID를 고정한다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절한다. 일반 SendMessage나 ID만 받는 sender로 내려가지 않는다. 결과 불명 증거는 결합된 확정 실패보다 우선하고 알려진 실패 저장 전이를 만들지 않는다. 2026-10-06 중앙 읽기 전용 확인에서 YouTube 저장 요청 40건은 모두 text였으며 generic outbox는 비어 있었다. 과거 요청 증거가 없는 행의 격리는 유지한다.
 
 X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한다. 기존 `LIVE` 구독을 사용하되 YouTube stream payload와 섞지 않는다. 이벤트 키는 `x-space:start:<space-id>`, delivery는 기존 방별 키이며 최초 관측 스냅샷을 사용해 제목 변경에 따른 payload 충돌을 막는다. 발송은 기존 텍스트 egress와 receipt·미상 결과 계약을 따른다. [인증·관측·보존 경계](../services/x-spaces.md).
 
@@ -59,11 +59,11 @@ Gateway는 운영자 ID를 인증 세션에서 결합합니다. `dlq`·`quaranti
 운영자·사유·변경 전후 상태를 남깁니다. 결과 불명은 상세·감사 재조회로 확인합니다.
 기존 보존 기간은 유지하며 별도 DB migration은 필요하지 않습니다.
 
-### Iris RichText 및 기존 Markdown admission
+### Iris RichText admission
 
-새 Markdown 발송은 `richtext`로 고정하며, 기존 frozen `markdown`만 기존 SDK 경로로 재생합니다.
-아래 Markdown admission·handoff 규칙은 두 서식 타입에 동일하게 적용됩니다. writer 전에 migration
-`345`·`346`으로 저장 경로 제약을 확장해야 하며 기존 행의 본문·타입·ID는 변경하지 않습니다.
+새 Markdown 발송은 `richtext`로 고정합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은
+Iris를 호출하지 않고 지원하지 않는 route로 거절합니다. 아래 Markdown admission·handoff 규칙은 `richtext` 경로에
+적용됩니다. `richtext` 저장 경로 제약은 epoch-3 baseline에 포함되어 있으며 기존 행의 본문·타입·ID는 변경하지 않습니다.
 
 공유 sender는 Markdown·텍스트 모두 Iris `202`가 durable admission을 증명하면 바로 반환하며 `/reply-status`를 조회하지
 않습니다. 따라서 sender 성공(`sendoutcome.Success`)은 durable admission만 뜻하고, 돌려준 Iris request ID가 이후
@@ -80,7 +80,7 @@ Alarm-worker does not send Karing templates
 `DEC-20260904-hololive-karing-regular-chat-egress`). The Karing chunk planner,
 per-chunk request IDs, and the `karing.kakaolink` contract were removed with it.
 Alarm dispatch는 `BeginSending` 전에 최종 본문·text/richtext 경로·멤버·base ID·generation을 고정합니다.
-이미 저장된 markdown을 포함해 재시도와 재시작은 고정 요청을 그대로 재사용합니다.
+재시도와 재시작은 고정 요청을 그대로 재사용합니다.
 Transport ambiguity may retry with the stored ID and identical request for every
 source kind; structured `OUTCOME_UNKNOWN` and unknown handoff remain quarantined.
 Only confirmed pre-handoff `CLIENT_REQUEST_ID_FAILED` or a reconciled `failed` reply status (see below) permits
@@ -204,8 +204,8 @@ remain eligible. Rejected entries do not affect send-unit boundaries or request
 IDs. `InsertBatch` exposes `HashConflictEvents` and per-input `Receipts` with ordinal,
 delivery key and committed outcome. Only inserted, duplicate-active and duplicate-SENT
 receipts satisfy publishing; collision and other terminal outcomes do not. A later chunk
-failure preserves earlier committed receipts. `InsertPending` returns
-`ErrEventPayloadConflict` and no existing record for a conflicting single input.
+failure preserves earlier committed receipts. A conflicting input gets a
+`rejected_collision` receipt and creates no delivery.
 The canonical event payload omits per-observation metrics (`stream.viewer_count`): they
 change between selections without changing the rendered message, so a later room joining
 the same event is not rejected as a collision. Rendered fields such as the title still collide.
@@ -229,8 +229,8 @@ Canonical 상태·일정의 최신성은 실제 `status_observed_at`·`schedule_
 
 제목과 예정 시각의 갱신 순서는 각각 `title_observed_at`·`schedule_observed_at`으로
 독립 판정합니다. reducer와 DB UPSERT 모두 더 새로운 유효 관측만 반영하며 같은 시각의
-충돌은 기존 값을 유지합니다. migration 257은 nullable 제목 관측 시각을 추가하고 기존
-제목의 시각을 추정하지 않습니다. 새 API 실행 전 migration 적용이 필요합니다.
+충돌은 기존 값을 유지합니다. 제목 관측 시각(`title_observed_at`)은 nullable이며 기존
+제목의 시각을 추정하지 않습니다.
 
 `PUT /room-name` stores the admin-assigned room display name in PostgreSQL
 `alarm_room_display_names` (migration 232). `room_name` is required; a blank value
@@ -253,12 +253,12 @@ the stored target list is absent/empty under the existing settings contract.
 
 | Field | Value |
 |---|---|
-| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/settings`, `/room-name`, `/keys` |
+| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/settings`, `/room-name`, `/keys`, `/count` |
 | Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
 | Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
 | Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |
-| Contract package | `hololive/hololive-shared/pkg/contracts/alarm` owns the route constants and the single request/response wire types (`AddRequest`, `RemoveRequest`, `ClearRequest`, `UpdateAdvanceMinutesRequest`, `SetRoomNameRequest`, `*Response`, `Envelope`) used by both the `alarmhttp` client and the worker handler; required-field checks (`room_id`, `channel_id`, `minutes >= 1`, present `room_name`) live in the worker handler in `hololive/hololive-alarm-worker/internal/service/alarm/httpapi` |
-| Envelope fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
+| Contract package | `hololive/hololive-shared/pkg/contracts/alarm` owns the route constants, `QueueEnvelopeVersionV1` and the single request/response wire types (`AddRequest`, `RemoveRequest`, `ClearRequest`, `UpdateAdvanceMinutesRequest`, `SetRoomNameRequest`, `*Response`, `EntryCount`, `Envelope`) used by both the `alarmhttp` client and the worker handler; the queue envelope type `AlarmQueueEnvelope`, its canonical validation and the envelope fixtures are in `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox`; required-field checks (`room_id`, `channel_id`, `minutes >= 1`, present `room_name`) live in the worker handler in `hololive/hololive-alarm-worker/internal/service/alarm/httpapi` |
+| Envelope fixtures | `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/envelope_v1.json` |
 
 ## Request
 
@@ -294,7 +294,7 @@ Major event/member news rows are produced in `notification_delivery_outbox`; `al
 
 Birthday stream notifications use `SourceKind=celebration`, `AlarmType=BIRTHDAY`, and `Celebration.Kind=birthday_stream`. Their recipient contract is the set of rooms whose matching `celebration:birthday:member-{memberID}:{date}` delivery is already `sent`; an audience lookup failure must not widen delivery to other rooms. Re-publishing a known birthday stream event is permitted so a newly eligible room can add its missing delivery through the existing event/delivery dedupe keys. The birthday window for a KST birthday date runs from 21:00 KST on the previous day to 17:00 KST on the following day so that members in time zones behind or ahead of KST keep their local birthday streams. The runner evaluates a date only from KST midnight and keeps evaluating the previous date until that window closes, so a session that started before midnight is announced only while it is still `UPCOMING` or `LIVE` after the greeting is sent. A stream starting on another KST date shows its start as `01/02 15:04`. A session on the birthday member's own channel inside that window becomes a birthday stream only when its NFKC-normalized, lower-cased title contains a birthday keyword (`birthday`, `bday`, `b-day`, `誕生日`, `誕生祭`, `誕生会`, `生誕`, `たんじょうび`, `バースデー`, `バースデイ`, `バースディ`, `생일`, `ulang tahun`, `ultah`); birthday streams without such a keyword are not announced. The per-member, per-day cap of three counts only published events whose stored title passes the same check, and only those events are re-evaluated after a later title change. A published event whose stored title fails the check is never re-sent, even if the current title later passes.
 
-HTTP request binding DTOs are defined in `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/dto.go`, and the client-local request structs in `hololive/hololive-shared/pkg/service/alarmhttp/client.go`.
+HTTP 요청·응답 wire 타입은 패키지 `hololive/hololive-shared/pkg/contracts/alarm` 한 곳(`wire.go`, `/count` 응답 `EntryCount`는 `contracts.go`)에 있으며 worker handler와 `alarmhttp` client가 같은 타입을 씁니다. 필수 값 검사는 worker handler(`hololive/hololive-alarm-worker/internal/service/alarm/httpapi/handler.go`)가 합니다.
 
 ### UNIT B member subscriptions
 
@@ -311,21 +311,21 @@ HTTP request binding DTOs are defined in `hololive/hololive-alarm-worker/interna
 취급하지 않는다. 구독 DB 오류나 손상된 outbox payload는 이 fail-open의 대상이 아니다.
 
 `alarm-worker` YouTube checker의 채널별 LIVE 구독 방은 `alarm:channel_subscribers:{channel}` set을 먼저 읽는다.
-set이 비어 있으면 `alarm:channel_subscribers_empty:LIVE:{channel}` marker(30초)가 있는 채널만 구독 0으로 본다.
-marker가 없는 채널은 set 유실(eviction 등)로 보고 해당 주기의 미확정 채널을 한 번의 DB 조회로 확정한다.
+TTL 없는 set은 유실(eviction 등)되면 빈 set과 구분되지 않으므로, set이 빈 채널을 구독 0으로 단정하지 않고 해당 주기의
+빈 set 채널을 한 번의 batch DB 조회로 확정합니다. 채널별 빈 구독 marker는 두지 않습니다.
 `SubscriberResolver`는 cache·DB pool별로 생성하여 재사용한다. 같은 resolver의 동일 채널·종류 조회만 singleflight로 합치며 다른 DB의 결과·오류는 공유하지 않는다. 호출자 취소는 해당 대기만 끝내고, 공유 DB 조회는 기존 5초 예산으로 끝난다.
 
-`ResolveChannelSubscribersByType`와 `ResolveUncachedChannelSubscribersByType` 메서드의 DB 결과는 이번 조회에만 사용하며 set이나 빈 구독 marker를 쓰지 않는다. 늦은 SADD가 해지를 되돌리거나 늦은 marker가 새 구독을 숨기는 경합을 방지한다. 유실된 set은 다음 전체 rebuild까지 DB에서 확인하며, checker는 주기마다 미확정 채널의 empty marker를 한 pipeline으로 확인한 뒤 batch DB 조회 1회로 확정한다.
+`ResolveChannelSubscribersByType`와 `ResolveUncachedChannelSubscribersByType` 메서드의 DB 결과는 이번 조회에만 사용하며 set을 다시 채우지 않는다. 늦은 SADD가 해지를 되돌리는 경합을 방지한다. 유실된 set은 다음 전체 rebuild까지 DB에서 확인하며, checker는 주기마다 set이 빈 채널을 batch DB 조회 1회로 확정한다.
 set 조회 오류와 이 DB 조회 오류는 해당 check 주기 오류로 반환하며, 확정하지 못한 채널을 구독 0으로 기록하지 않는다.
 
-구독 추가·종류 변경·삭제·전체 해지는 DB 변경 전에 영향받는 종류의 빈 구독 marker를
-먼저 지우고 positive set을 무효화합니다. 무효화를 확인하지 못하면 DB를 변경하지 않습니다.
+구독 추가·종류 변경·삭제·전체 해지는 DB 변경 전에 영향받는 종류의 positive set을
+무효화합니다. 무효화를 확인하지 못하면 DB를 변경하지 않습니다.
 추가는 DB 변경 전에 채널을 registry에 등록하고 전역 빈 구독 marker도 지웁니다.
 종류별 set은 부분 갱신하지 않으며, 다음 전체 rebuild까지 기존 DB read-through를 사용합니다.
 변경과 전체 rebuild는 같은 mutation mutex로 직렬화한다. rebuild는 `ScanKeyPages`로 받은 페이지를 즉시 삭제하고, 모든 삭제가 끝난 뒤 DB snapshot을 적재한다. 키 전체를 메모리에 모으지 않으며 SCAN COUNT는 서버의 hint이므로 실제 페이지 크기는 달라질 수 있다. 이 직렬화는 단일 worker를 전제로 하며, replica를 늘리기 전에는 프로세스 간 변경·rebuild fence가 필요하다.
 
-DB commit 뒤 캐시 후처리와 기존 실패 복구는 요청 취소와 분리된 최대 5초 context를
-사용합니다. 실패는 호출자에게 반환하되 DB 변경을 되돌리지 않습니다. 무효화된 set은
+삭제·종류 해지·전체 해지의 DB commit 뒤 캐시 후처리와 기존 실패 복구는 요청 취소와 분리된 최대 5초 context를
+사용합니다. 실패는 호출자에게 반환하되 DB 변경을 되돌리지 않습니다. 추가는 commit 뒤 캐시 작업이 없습니다. 무효화된 set은
 이후 조회에서 DB로 확인하므로 기존 positive set이 추가·해지를 가리지 않습니다.
 새 영속 상태·재시도 큐·별도 캐시 복구 루프는 없습니다.
 
@@ -335,9 +335,9 @@ DB에 구독 채널이 없을 때만 신규 채널 하나로 registry를 초기�
 유실되면 DB 변경 전에 실패합니다. DB 미반영 채널이 일시적으로 registry에 남아도
 실제 수신자는 DB 구독으로 제한됩니다.
 
-신규 구독을 허용하기 전에 migration 194–196, 양쪽 HTTP provider, worker의 대상 선정 코드를
-함께 전환해야 한다. 196 이후에는 이전 `(room_id, channel_id)` upsert를 실행할 수 없다.
-운영 전환 조건과 검증은 [변경 보고서](../../review/unit-b-member-subscriptions-20260906.md)에 있다.
+UNIT B 구독 스키마(`alarms.host_id`와 그 어휘 CHECK, `(room_id, channel_id, host_id)` 고유 색인)는 epoch-3 baseline에
+포함되어 있다. `(room_id, channel_id)`만의 고유 색인은 없으므로 이전 `(room_id, channel_id)` upsert는 실행할 수 없다.
+당시 운영 전환 조건과 검증은 [변경 보고서](../../review/unit-b-member-subscriptions-20260906.md)에 있다.
 
 ### 멤버 표시명 예외 계약
 
@@ -356,20 +356,28 @@ members 한국어 표시명을 가졌다. 그래서 중간 단계(최신 `alarms
 | Owner | hololive-bot alarm(`hololive-alarm-worker/internal/service/alarm/alarmstore`의 `Repository.GetMemberName`, `hololive-alarm-worker/internal/egress/youtubedispatch/format`의 `DisplayMemberName`, `hololive-alarm-worker/internal/egress/alarmdispatch`의 `alarmContractMemberName`) |
 | 검토 조건 | 지표가 0이 아니면 해당 채널의 members 한국어 표시명을 등록한다. 90일 동안 0이면 종단 문구 대신 포맷 실패로 바꿀지 다시 결정한다 |
 
-코드 근거는 `alarmstore.Repository.GetMemberName` 주석과 같은 package의 `queries/get_member_name.sql`, `queries/get_all_member_names.sql`이다.
+코드 근거는 `alarmstore.Repository.GetMemberName` 주석과 같은 package의 `queries/get_member_name.sql`이다.
 
-YouTube outbox dispatch의 `MemberNameSource`는 표시명을 Valkey `alarm:member_names`에서 읽지 않고 메시지마다 `alarmstore.Repository.GetMemberName`으로
-PostgreSQL 정본을 조회한다(2026-10-02). 조회 오류는 이 예외 계약의 trigger가 아니다. 대체 문구로 보내지 않고
+YouTube outbox dispatch의 `MemberNameSource`는 `alarmstore.Repository.GetMemberName`으로 PostgreSQL 정본을
+조회한다(2026-10-02). 개별 발송 사전 포맷은 배치마다 채널당 한 번, 묶음 발송은 묶음마다 한 번 조회한다.
+조회 오류는 이 예외 계약의 trigger가 아니다. 대체 문구로 보내지 않고
 재시도 가능한 `format_message` 실패로 전이하며, grouped 발송이면 group 전체를 같은 실패로 전이한다. 조회 결과가 빈
 문자열일 때만 `misc/vtuber_fallback` 문구를 쓴다.
 
+이 예외는 이름 조회가 성공했으나 값이 없는 경우에만 적용합니다. YouTube 단건·묶음 formatter는 이름 저장소 조회 실패를 포맷 오류로 반환하며 대체 표시명으로 성공을 만들지 않습니다.
+
 방송(live·upcoming) 알림과 X 스페이스 시작 알림도 같은 계약을 따른다(2026-10-05). alarm dispatch 렌더가 `channel_id`로
-members를 조회하며, Holodex 채널 제목·Valkey 이름 캐시·X 스페이스 설정의 이름은 쓰지 않는다. 조회 오류는 렌더 실패(발송 전 재시도)다.
+members를 조회하며, Holodex 채널 제목·X 스페이스 설정의 이름은 쓰지 않는다. 조회 오류는 렌더 실패(발송 전 재시도)다.
 X 스페이스 payload(`x_space_starts`, dispatch 원장)는 이름을 담지 않는다.
 
-`alarms.member_name`은 2026-10-05부터 읽거나 쓰지 않는다. 알람 목록은 이름 캐시에 없는 채널을 members
-(`short_korean_name`→`korean_name`→`english_name`)로 채우고, members에도 없으면 채널 ID를 보여 준다. 멤버 뉴스 구독 이름도
-members에서만 읽는다. 1단계 배포를 확인한 뒤 migration 269가 컬럼과 읽지 않는 `misc/alarm_unknown_member` 문구를 지웠다.
+`alarms.member_name`은 2026-10-05부터 읽거나 쓰지 않는다. 멤버 뉴스 구독 이름도 members에서만 읽는다. 1단계 배포를 확인한 뒤
+migration 269가 컬럼과 읽지 않는 `misc/alarm_unknown_member` 문구를 지웠다.
+
+알람 목록(`/room/:id/view`)과 관리 목록(`/keys`)의 멤버 이름은 members 정본을 `domain.Member.DisplayName` 순서
+(`short_korean_name`→`korean_name`→`english_name`)로 읽습니다. 같은 채널은 요청마다 한 번만 조회합니다. members에 없는
+채널은 알람 목록에서 채널 ID, 관리 목록에서 빈 이름으로 보입니다. members 조회 오류는 다른 이름이나 빈 이름으로 덮지 않고
+목록 오류(`get_room_alarms_view_failed`, `get_all_alarm_keys_failed`)로 돌려줍니다. Valkey 멤버 이름 hash
+`alarm:member_names`는 2026-11-11에 쓰기·읽기를 모두 없앴습니다.
 
 ### 명령 응답 멤버 표시명
 
@@ -417,29 +425,15 @@ live checker는 Holodex live 상태와 collector가 저장한 `youtube_live_sess
 | Owner | hololive-bot alarm-worker live checker(`internal/service/alarm/checker/checking`) |
 | 검토 조건 | Holodex 없이 live 상태를 판정하는 단일 원천이 생기면 이 예외를 지운다. `holodex_error_continued`가 늘어나는데 알림 누락 보고가 있으면 한도(15분·30분)를 다시 검토한다. |
 
-이 예외는 이름 조회가 성공했으나 값이 없는 경우에만 적용합니다. YouTube 단건·묶음 formatter는 이름 저장소 조회 실패를 포맷 오류로 반환하며 대체 표시명으로 성공을 만들지 않습니다.
-
-### Live catchup 억제 marker의 실패 처리
-
-upcoming 알림의 최근 전송 marker는 추가 catchup을 줄이는 보조 증거입니다. marker를 읽지 못한 사실을 이미 알림을 받았다는 증거로 쓰지 않습니다. 다음은 기존 동작과 `TestFilterLiveCatchupSuppressedRoomsFailsOpenOnCacheError`·`TestFilterLiveCatchupSuppressedRoomsFailsOpenOnInvalidMarker`가 재현하는 예외입니다.
-
-| 항목 | 계약 |
-|---|---|
-| Trigger | upcoming 억제 marker의 캐시 조회 오류 또는 `notified_at` 형식 오류 |
-| 한도 | 해당 LIVE_STREAM outbox의 기존 구독 방에만 적용합니다. 정상 marker의 억제 창은 `LiveCatchupSuppressWindow` 15분이며, 이 예외가 새 수집·재시도·수신 방을 만들지 않습니다. |
-| 종단 동작 | 억제를 적용하지 않고 기존 delivery 원장·멱등성·발송 상태 전이를 따릅니다. 별도 upcoming 알림 뒤 catchup 알림이 추가될 수 있습니다. |
-| Telemetry | `hololive_youtube_outbox_live_catchup_suppression_total{result="cache_error"}` 또는 `result="invalid_marker"`와 기존 Warn 로그 |
-| Owner | alarm-worker의 YouTube OutboxGrouper |
-| 재검토 조건 | 억제 증거 저장소 변경, 중복 upcoming/catchup 사례 확인, 또는 delivery 원장만으로 억제를 판정할 수 있게 될 때 이 예외를 재검토합니다. |
-
 ## Response
 
 ```go
-type APIResponse struct {
-    Success bool        `json:"success"`
-    Error   string      `json:"error,omitempty"`
-    Message string      `json:"message,omitempty"`
-    Data    interface{} `json:"data,omitempty"`
+// hololive/hololive-shared/pkg/contracts/alarm/wire.go
+type Envelope[T any] struct {
+    Success bool   `json:"success"`
+    Error   string `json:"error,omitempty"`
+    Message string `json:"message,omitempty"`
+    Data    T      `json:"data,omitempty"`
 }
 ```
 
@@ -458,6 +452,8 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 | `clear_room_alarms_failed` | 500 | provider clear failed | retry/manual diagnosis |
 | `set_room_name_failed` | 500 | provider room name update failed | retry/manual diagnosis |
 | `get_all_alarm_keys_failed` | 500 | provider key listing failed | retry/manual diagnosis |
+| `count_alarm_entries_failed` | 500 | provider entry count failed; the count is not replaced with 0 | retry/manual diagnosis |
+| `alarm_advance_update_failed` | 500 | provider error, rejected or unknown apply outcome, or invalid stored targets; the change may already be applied | retry/manual diagnosis |
 | unsupported envelope version | n/a | publisher rejects the batch before insert | fix the producer; nothing is stored |
 | Invalid stored payload | n/a | consumer cannot decode the event payload or delivery context | delivery moves to `dlq` with the decode error |
 
@@ -465,7 +461,7 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 
 - HTTP client timeout: 10 seconds for alarm client.
 - HTTP/H3 options are passed explicitly from the consuming plane's loaded `BotPlaneConfig.InternalH3` or `AdminPlaneConfig.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
-- Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
+- Dispatch claim: consumer는 row lease로 due `pending`/`retry` delivery를 claim합니다. 빈 claim 뒤에는 `BRPOP alarm:dispatch:wakeup`으로 기다립니다. timeout은 worker profile `alarm_dispatch.idle_backoff_min_ms`에서 시작해 빈 대기마다 `idle_backoff_max_ms`까지 두 배로 늘고, 처리한 행이 있으면 다시 `idle_backoff_min_ms`로 돌아갑니다. `wakeup_enabled`가 false이거나 `BRPOP`이 실패하면 `poll_interval_ms`만큼 잠듭니다([Delivery Outbox Wakeup](../QUEUE_AND_PUBSUB_CONTRACTS.md#delivery-outbox-wakeup)).
 - 발송 시도: `alarm_dispatch` executor `attempt_timeout`은 Iris admission 호출(SDK admission 재시도 포함)에만 걸립니다. `lease_ms`보다 짧아야 합니다.
 - handoff 확인 기한: `handoff_horizon_ms`(필수, `attempt_timeout` 이상)가 발송 정산의 첫 확인 예약과 handoff reconciler 지평을 정합니다. Iris가 발송을 최소 2.5초 간격으로 차례로 넘기므로 일괄 발송의 대기열 소진 시간보다 길어야 합니다.
 - handoff 확인: handoff를 확인하지 못한 `sent` 단위는 `alarm-dispatch-handoff-reconciler`가 [Iris handoff reconciliation](#iris-handoff-reconciliation) 규칙으로 확인합니다. sender는 handoff를 기다리지 않습니다.
@@ -483,8 +479,8 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 ## Tests
 
 - Contract constants: `hololive/hololive-shared/pkg/contracts/alarm/contracts_test.go`
-- Envelope fixtures: `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json`
-- Publish validation: `hololive/hololive-alarm-worker/internal/service/alarm/queue/queue_test.go`
+- Envelope fixtures: `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/testdata/envelope_v1.json`; decode and canonical validation tests: `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queue_envelope_test.go`
+- Publish validation, including rejection of unsupported envelope versions: `hololive/hololive-alarm-worker/internal/service/alarm/queue/queue_test.go`
 - Dispatch outbox and canonical clock: `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/*_test.go`
 - Actual subscription service and worker/client roundtrip: `hololive/hololive-alarm-worker/internal/service/alarm/subscriptions/*_test.go`, including `client_advance_integration_test.go` without a build tag.
 - Alarm runner and formatter: `hololive/hololive-alarm-worker/internal/egress/alarmdispatch/*_test.go`, `hololive/hololive-alarm-worker/internal/egress/youtubedispatch/format/*_test.go`
@@ -494,7 +490,3 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - Handler/client envelope roundtrip: `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/client_roundtrip_test.go`
 - Member subscription HTTP roundtrip: `hololive/hololive-alarm-worker/internal/service/alarm/httpapi/member_subscription_roundtrip_test.go`
 - Member selection and fail-open: `hololive/hololive-alarm-worker/internal/service/alarm/alarmstore/member_subscriptions_test.go`
-
-## Known gaps
-
-- Alarm HTTP API DTOs are not yet represented by a dedicated `pkg/contracts/alarm` DTO package.

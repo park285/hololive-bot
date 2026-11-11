@@ -38,18 +38,10 @@ type alarmDispatchBacklogObserver struct {
 	logger       *slog.Logger
 }
 
+// NewBacklogObserver는 PostgreSQL pool이 있는 infra를 받는다. 조립 쪽(buildNotificationEgress)이 기동 때 pool을 먼저 확인한다.
 func NewBacklogObserver(infra *sharedmodules.InfraModule, logger *slog.Logger) Scheduler {
-	if infra == nil || infra.Postgres == nil {
-		return nil
-	}
-
-	pool := infra.Postgres.GetPool()
-	if pool == nil {
-		return nil
-	}
-
 	return &alarmDispatchBacklogObserver{
-		store:        alarmDispatchMaintenancePgxStore{db: pool},
+		store:        alarmDispatchMaintenancePgxStore{db: infra.Postgres.GetPool()},
 		interval:     alarmDispatchBacklogObservationInterval,
 		queryTimeout: alarmDispatchBacklogObservationTimeout,
 		logger:       logger,

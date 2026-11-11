@@ -45,10 +45,10 @@ func TestAPI002JobContractGettersAreDefensiveCopies(t *testing.T) {
 	}
 }
 
-func TestAPI007JobContractSetDefinitionUsesJobID(t *testing.T) {
+func TestAPI007StaticJobContractsDefinitionUsesJobID(t *testing.T) {
 	t.Parallel()
 
-	var set JobContractSet = InitialJobContracts()
+	set := InitialJobContracts()
 
 	id := JobID{Provider: contract.ProviderHolodex, Kind: "holodex_live"}
 	job, ok := set.Definition(id)

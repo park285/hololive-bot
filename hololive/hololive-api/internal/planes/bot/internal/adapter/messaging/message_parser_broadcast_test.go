@@ -9,7 +9,7 @@ import (
 )
 
 func TestParseMessage_BroadcastHistory(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 게임 30일 20 topic:Forza 페코라"}
 
 	result := adapter.ParseMessage(msg)
@@ -43,7 +43,7 @@ func TestParseMessage_BroadcastHistory(t *testing.T) {
 }
 
 func TestParseMessage_BroadcastHistoryCategoryAlias(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 카테고리:잡담 멤버:페코라"}
 
 	result := adapter.ParseMessage(msg)
@@ -65,7 +65,7 @@ func TestParseMessage_BroadcastHistoryCategoryAlias(t *testing.T) {
 }
 
 func TestParseMessage_BroadcastHistoryMembershipTypeAlias(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 멤버십"}
 
 	result := adapter.ParseMessage(msg)
@@ -107,7 +107,7 @@ func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			adapter := NewMessageAdapter("!", "")
+			adapter := NewMessageAdapter("!")
 			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
 
 			if result == nil {
@@ -138,7 +138,7 @@ func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
 }
 
 func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 경마 20"}
 
 	result := adapter.ParseMessage(msg)
@@ -168,7 +168,7 @@ func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
 }
 
 func TestParseMessage_BroadcastHistoryExplicitLimitFilter(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 경마 limit:20"}
 
 	result := adapter.ParseMessage(msg)
@@ -190,7 +190,7 @@ func TestParseMessage_BroadcastHistoryExplicitLimitFilter(t *testing.T) {
 }
 
 func TestParseMessage_BroadcastHistoryLegacyLimitBeforeDays(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 게임 20 기간:30"}
 
 	result := adapter.ParseMessage(msg)
@@ -234,7 +234,7 @@ func TestParseMessage_BroadcastHistoryAliasVariants(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			adapter := NewMessageAdapter("!", "")
+			adapter := NewMessageAdapter("!")
 			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
 
 			if result == nil {
@@ -257,7 +257,7 @@ func TestParseMessage_BroadcastHistoryAliasVariants(t *testing.T) {
 }
 
 func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 카테고리: 게임 멤버: 사쿠라 미코 14일 10"}
 
 	result := adapter.ParseMessage(msg)
@@ -293,7 +293,7 @@ func TestParseMessage_BroadcastHistoryAllIsCappedToOneYear(t *testing.T) {
 		t.Run(token, func(t *testing.T) {
 			t.Parallel()
 
-			adapter := NewMessageAdapter("!", "")
+			adapter := NewMessageAdapter("!")
 			result := adapter.ParseMessage(&webhook.Message{Msg: "!방송이력 " + token})
 
 			if result == nil {
@@ -312,7 +312,7 @@ func TestParseMessage_BroadcastHistoryAllIsCappedToOneYear(t *testing.T) {
 }
 
 func TestParseMessage_BroadcastHistoryAttachedMemberFilterConsumesNameUntilType(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송기록 멤버:사쿠라 미코 게임"}
 
 	result := adapter.ParseMessage(msg)
@@ -334,7 +334,7 @@ func TestParseMessage_BroadcastHistoryAttachedMemberFilterConsumesNameUntilType(
 }
 
 func TestParseMessage_BroadcastHistoryExplicitMemberFilterWinsOverTrailingBareToken(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송기록 멤버:페코라 타입:게임 미코"}
 
 	result := adapter.ParseMessage(msg)
@@ -356,7 +356,7 @@ func TestParseMessage_BroadcastHistoryExplicitMemberFilterWinsOverTrailingBareTo
 }
 
 func TestParseMessage_BroadcastThumbnail(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!방송이력 썸네일 AqxEw3kXcgU"}
 
 	result := adapter.ParseMessage(msg)
@@ -374,7 +374,7 @@ func TestParseMessage_BroadcastThumbnail(t *testing.T) {
 }
 
 func TestParseMessage_StandaloneBroadcastThumbnail(t *testing.T) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	msg := &webhook.Message{Msg: "!썸네일 AqxEw3kXcgU"}
 
 	result := adapter.ParseMessage(msg)
@@ -409,7 +409,7 @@ func TestParseMessage_StandaloneBroadcastThumbnailYouTubeURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			adapter := NewMessageAdapter("!", "")
+			adapter := NewMessageAdapter("!")
 			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
 
 			if result == nil {

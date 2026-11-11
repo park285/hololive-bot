@@ -38,10 +38,10 @@ func TestUpcomingExpiresDuringDedupClaim(t *testing.T) {
 		outbox := &notifierBatchOutbox{}
 		logger := newCheckerTestLogger()
 		claimCache := &expiryClaimCache{}
-		n, err := NewNotifier(dedup.NewService(claimCache, []int{5}, logger), newCheckerTestPublisher(t, claimCache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}), nil, logger)
+		n, err := NewNotifier(dedup.NewService(claimCache, logger), newCheckerTestPublisher(t, claimCache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}), logger)
 		require.NoError(t, err)
 
-		result, err := n.Send(t.Context(), []*domain.AlarmNotification{item.payload.notification})
+		result, err := n.Send(t.Context(), []*domain.AlarmNotification{item.payload.notification}, testTargetPolicy(5))
 		require.NoError(t, err)
 		require.Zero(t, outbox.insertBatchCalls)
 		require.Equal(t, SendResult{Skipped: 1}, result)
@@ -56,9 +56,9 @@ func TestPublishPreparedBatchSkipsExpiredAndKeepsActiveReceipt(t *testing.T) {
 	active := newNotifierPublishTestItem("active-room", "active-stream", "expiry-channel", now.Add(time.Minute), 5, []string{"active-claim"})
 	cacheClient := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	service := dedup.NewService(cacheClient, []int{5}, logger)
+	service := dedup.NewService(cacheClient, logger)
 	outbox := &notifierBatchOutbox{}
-	n, err := NewNotifier(service, newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}), nil, logger)
+	n, err := NewNotifier(service, newCheckerTestPublisher(t, cacheClient, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}), logger)
 	require.NoError(t, err)
 	require.NoError(t, cacheClient.Set(ctx, "expired-claim", "1", time.Minute))
 	require.NoError(t, cacheClient.Set(ctx, "active-claim", "1", time.Minute))
@@ -79,8 +79,10 @@ func TestPublishPreparedBatchSkipsExpiredAndKeepsActiveReceipt(t *testing.T) {
 	require.True(t, activeHeld)
 
 	for _, item := range []claimedSend{expired, active} {
-		marked, markErr := service.WasUpcomingEventNotifiedRecently(ctx, item.payload.notification.RoomID, item.payload.channelID, item.payload.notification.Stream, time.Hour)
-		require.NoError(t, markErr)
+		recent, failed := service.RecentlyNotifiedUpcomingRooms(ctx, []string{item.payload.notification.RoomID}, item.payload.channelID, item.payload.notification.Stream, time.Hour)
+		require.Empty(t, failed)
+
+		_, marked := recent[item.payload.notification.RoomID]
 		require.Equal(t, item.payload.notification.RoomID == "active-room", marked)
 	}
 }

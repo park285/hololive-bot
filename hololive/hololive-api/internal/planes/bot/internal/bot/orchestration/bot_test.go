@@ -29,15 +29,16 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
 )
 
 const (
-	testSenderName          = "user"
-	testRoomID              = "room-1"
-	testUserID              = "user-1"
-	testExternalCommandName = "external"
-	testHelpCommandName     = "help"
-	testDeliveryQueued      = "queued"
+	testSenderName      = "user"
+	testRoomID          = "room-1"
+	testUserID          = "user-1"
+	testHelpCommandName = "help"
+	testDeliveryQueued  = "queued"
 )
 
 type fakeIrisClient struct {
@@ -91,12 +92,9 @@ func TestWaitUntilIrisReady_SucceedsAfterRetry(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeIrisClient{failCount: 2}
-	b := &Bot{
-		irisClient: client,
-		logger:     slog.New(slog.DiscardHandler),
-	}
+	botLifecycle := lifecycle.NewBotLifecycle(slog.New(slog.DiscardHandler), nil, client, "")
 
-	err := b.ensureLifecycle().WaitUntilIrisReady(t.Context(), 300*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
+	err := botLifecycle.WaitUntilIrisReady(t.Context(), 300*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("waitUntilIrisReady failed: %v", err)
 	}
@@ -110,12 +108,9 @@ func TestWaitUntilIrisReady_TimesOut(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeIrisClient{failCount: 1000}
-	b := &Bot{
-		irisClient: client,
-		logger:     slog.New(slog.DiscardHandler),
-	}
+	botLifecycle := lifecycle.NewBotLifecycle(slog.New(slog.DiscardHandler), nil, client, "")
 
-	err := b.ensureLifecycle().WaitUntilIrisReady(t.Context(), 70*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
+	err := botLifecycle.WaitUntilIrisReady(t.Context(), 70*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}

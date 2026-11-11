@@ -9,10 +9,6 @@ import (
 )
 
 func (r *Runner) Start(ctx context.Context) error {
-	if r.consumer == nil || r.sender == nil {
-		return nil
-	}
-
 	for {
 		if !r.runStep(ctx) {
 			return nil
@@ -32,18 +28,13 @@ func (r *Runner) runStep(ctx context.Context) bool {
 
 	if !processed {
 		r.batchesSinceWake = 0
-		if r.idleWaiter != nil {
-			observeAlarmDispatchRunnerEmptyPoll()
 
-			return r.idleWaiter.Wait(ctx)
-		}
+		observeAlarmDispatchRunnerEmptyPoll()
 
-		return retry.Sleep(ctx, 25*time.Millisecond)
+		return r.idleWaiter.Wait(ctx)
 	}
 
-	if r.idleWaiter != nil {
-		r.idleWaiter.Reset()
-	}
+	r.idleWaiter.Reset()
 
 	r.batchesSinceWake++
 	if r.maxBatchesPerWake > 0 && r.batchesSinceWake >= r.maxBatchesPerWake {

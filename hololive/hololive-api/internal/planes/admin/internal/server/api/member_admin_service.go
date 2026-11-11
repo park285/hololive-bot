@@ -11,7 +11,7 @@ import (
 
 type memberAdminCache interface {
 	Refresh(context.Context) error
-	InvalidateAliasCache(context.Context, string) error
+	InvalidateAll(context.Context) error
 }
 
 // MemberMutationResult는 정본 저장과 캐시 전파 결과를 구분한다.
@@ -95,7 +95,7 @@ func (s *MemberAdminService) committed(ctx context.Context, id int, replayed boo
 	var err error
 
 	if alias != "" {
-		err = s.cache.InvalidateAliasCache(ctx, alias)
+		err = s.cache.InvalidateAll(ctx)
 	} else {
 		err = s.cache.Refresh(ctx)
 	}

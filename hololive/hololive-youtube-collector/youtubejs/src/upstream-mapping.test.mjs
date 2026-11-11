@@ -72,8 +72,9 @@ test("real ChannelMetadata vanity URLs distinguish handles from legacy channel p
     ["not-a-url", null],
   ]) {
     const metadata = new YTNodes.ChannelMetadata({ vanityChannelUrl: url });
+    const header = new YTNodes.C4TabbedHeader({ title: "channel", channelHandleText: { simpleText: "@provided" } });
     assert.equal(mapProfile({ metadata }, {}).handle, expected, url);
-    assert.equal(mapProfile({ metadata }, { handle: "@provided" }).handle, "@provided", url);
+    assert.equal(mapProfile({ header, metadata }, {}).handle, "@provided", url);
   }
 });
 
@@ -153,19 +154,34 @@ test("real Video lockups map to videos items without list-derived times", () => 
   const video = (videoId, extra = {}) => new YTNodes.Video({ videoId, title: { simpleText: videoId }, ...extra });
   const feed = { videos: [
     video("future-premiere", { upcomingEventData: { startTime: "4102444800" }, publishedTimeText: { simpleText: "Premieres Jan 1, 2100" } }),
-    // 예정 시각이 지난 대기 영상은 예정 표시를 잃고, collector는 저장된 Premiere 근거를 재사용하지 않고 다시 확인합니다.
+    // 예정 시각이 지난 대기 영상도 streams 판정과 같이 예정 표시를 유지합니다. 현재 시각에 따라 바뀌는 SDK getter를 쓰지 않습니다.
     video("stale-premiere", { upcomingEventData: { startTime: "1758362400" } }),
     video("relative", { publishedTimeText: { simpleText: "3 hours ago" } }),
     video("absolute-text", { publishedTimeText: { simpleText: "Premiered Sep 20, 2026" } }),
   ] };
   assert.deepEqual(mapContentItems(feed, channelId, "videos"), [
     { video_id: "future-premiere", channel_id: channelId, title: "future-premiere", is_upcoming: true },
-    { video_id: "stale-premiere", channel_id: channelId, title: "stale-premiere" },
+    { video_id: "stale-premiere", channel_id: channelId, title: "stale-premiere", is_upcoming: true },
     { video_id: "relative", channel_id: channelId, title: "relative" },
     { video_id: "absolute-text", channel_id: channelId, title: "absolute-text" },
   ]);
-  const [relativeShort] = mapContentItems({ videos: [feed.videos[2]] }, channelId, "shorts");
-  assert.equal(relativeShort.published_at, undefined);
+});
+
+test("real shorts rows map to shorts items without list-derived times", () => {
+  const shortsLockup = new YTNodes.ShortsLockupView({
+    entityId: "shorts-entity",
+    onTap: { innertubeCommand: { reelWatchEndpoint: { videoId: "short-lockup" } } },
+    thumbnail: { sources: [{ url: "https://i.ytimg.com/vi/short-lockup/frame0.jpg", width: 405, height: 720 }] },
+    overlayMetadata: { primaryText: { content: "short-lockup" } },
+  });
+  const reel = new YTNodes.ReelItem({ videoId: "short-reel", headline: { simpleText: "short-reel" } });
+  const dated = new YTNodes.Video({ videoId: "short-dated", title: { simpleText: "short-dated" },
+    publishedTimeText: { simpleText: "Sep 20, 2026" }, upcomingEventData: { startTime: "4102444800" } });
+  assert.deepEqual(mapContentItems({ videos: [shortsLockup, reel, dated] }, channelId, "shorts"), [
+    { video_id: "short-lockup", channel_id: channelId, title: "short-lockup" },
+    { video_id: "short-reel", channel_id: channelId, title: "short-reel" },
+    { video_id: "short-dated", channel_id: channelId, title: "short-dated" },
+  ]);
 });
 
 function continuationNode(token, view = false) {

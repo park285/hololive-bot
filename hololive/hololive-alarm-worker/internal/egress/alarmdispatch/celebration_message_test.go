@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -23,7 +24,7 @@ func TestRenderCelebrationMessageBirthday(t *testing.T) {
 	t.Parallel()
 
 	renderer := newCelebrationTestRenderer(t)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
 			MemberName: "시라카미 후부키",
@@ -44,7 +45,7 @@ func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
 	t.Parallel()
 
 	renderer := newCelebrationTestRenderer(t)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
 			MemberName: "리오나",
@@ -67,7 +68,7 @@ func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 	t.Parallel()
 
 	renderer := newCelebrationTestRenderer(t)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindAnniversary,
 			MemberName: "토키노 소라",
@@ -90,7 +91,7 @@ func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
 	t.Parallel()
 
 	renderer := newCelebrationTestRenderer(t)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:              domain.CelebrationKindBirthdayStream,
 			MemberName:        "시라카미 후부키",
@@ -116,7 +117,7 @@ func TestRenderCelebrationMessageBirthdayStreamWithoutOptionalFields(t *testing.
 	t.Parallel()
 
 	renderer := newCelebrationTestRenderer(t)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthdayStream,
 			MemberName: "시라카미 후부키",
@@ -137,7 +138,7 @@ func TestRenderCelebrationMessageBirthdayStreamWithoutOptionalFields(t *testing.
 func TestRenderCelebrationMessageNilPayload(t *testing.T) {
 	t.Parallel()
 
-	_, err := renderCelebrationMessage(t.Context(), newCelebrationTestRenderer(t), &domain.AlarmQueueEnvelope{})
+	_, err := renderCelebrationMessage(t.Context(), newCelebrationTestRenderer(t), &dispatchoutbox.AlarmQueueEnvelope{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "payload is nil")
 }
@@ -145,7 +146,7 @@ func TestRenderCelebrationMessageNilPayload(t *testing.T) {
 func TestRenderCelebrationMessageAnniversaryZeroYears(t *testing.T) {
 	t.Parallel()
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:  domain.CelebrationKindAnniversary,
 			Years: 0,
@@ -160,7 +161,7 @@ func TestRenderCelebrationMessageAnniversaryZeroYears(t *testing.T) {
 func TestRenderCelebrationMessageUnknownKind(t *testing.T) {
 	t.Parallel()
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{Kind: "unknown"},
 	}
 
@@ -169,85 +170,8 @@ func TestRenderCelebrationMessageUnknownKind(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown kind")
 }
 
-func TestAlarmDispatchGroupKeyCelebration(t *testing.T) {
-	t.Parallel()
-
-	envelope := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{
-			AlarmType: domain.AlarmTypeBirthday,
-			RoomID:    testAlarmRoomID,
-		},
-		SourceKind: domain.AlarmDispatchSourceKindCelebration,
-		Celebration: &domain.CelebrationDispatchPayload{
-			Kind:      domain.CelebrationKindBirthday,
-			MemberID:  101,
-			ChannelID: testCelebrationChannelID,
-		},
-	}
-
-	got := alarmDispatchGroupKey(&envelope)
-	assert.Equal(t, "room-1|celebration|birthday|member-101", got)
-}
-
-func TestAlarmDispatchGroupKeyCelebrationPerMember(t *testing.T) {
-	t.Parallel()
-
-	member1 := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
-		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: 101, ChannelID: "UC_a"},
-	}
-	member2 := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
-		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: 202, ChannelID: "UC_b"},
-	}
-
-	groups := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{member1, member2})
-	assert.Len(t, groups, 2)
-}
-
-func TestAlarmDispatchGroupKeyCelebrationBirthdayStreamVideoID(t *testing.T) {
-	t.Parallel()
-
-	envelope := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
-		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-		Celebration: &domain.CelebrationDispatchPayload{
-			Kind:      domain.CelebrationKindBirthdayStream,
-			MemberID:  101,
-			ChannelID: testCelebrationChannelID,
-			VideoID:   "video-1",
-		},
-	}
-
-	got := alarmDispatchGroupKey(&envelope)
-	assert.Equal(t, "room-1|celebration|birthday_stream|member-101|video-1", got)
-}
-
-func TestAlarmDispatchGroupKeyCelebrationPerVideo(t *testing.T) {
-	t.Parallel()
-
-	frame := func(videoID string) domain.AlarmQueueEnvelope {
-		return domain.AlarmQueueEnvelope{
-			Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
-			SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-			Celebration: &domain.CelebrationDispatchPayload{
-				Kind:      domain.CelebrationKindBirthdayStream,
-				ChannelID: "UC_a",
-				VideoID:   videoID,
-			},
-		}
-	}
-
-	groups := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{frame("video-1"), frame("video-2"), frame("video-1")})
-	require.Len(t, groups, 2)
-	assert.Len(t, groups[0].envelopes, 2)
-	assert.Len(t, groups[1].envelopes, 1)
-}
-
 func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
 			RoomID:    testAlarmRoomID,
@@ -262,7 +186,7 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 		},
 	}
 
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
@@ -279,7 +203,7 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 	t.Parallel()
 
 	renderer := newCelebrationTestRenderer(t)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindAnniversary,
@@ -290,10 +214,10 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 	}
 	group := alarmDispatchGroup{
 		roomID:    testAlarmRoomID,
-		envelopes: []domain.AlarmQueueEnvelope{envelope},
+		envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope},
 	}
 
-	variants, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", group)
+	variants, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, &alarmDispatchMembers{}, "", group)
 	require.NoError(t, err)
 
 	for _, msg := range messageTexts(variants) {

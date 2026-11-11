@@ -99,11 +99,6 @@ func LoadPostgresConfig() (PostgresConfig, error) {
 
 // LoadPostgresEndpointConfig는 plane별 pool 정책과 독립적인 연결 설정만 읽는다.
 func LoadPostgresEndpointConfig() (PostgresConfig, error) {
-	password := sharedenv.StringRaw("POSTGRES_PASSWORD", "")
-	if strings.TrimSpace(password) == "" {
-		password = constants.DatabaseDefaults.Password
-	}
-
 	var env envload.StrictEnv
 
 	config := PostgresConfig{
@@ -111,7 +106,7 @@ func LoadPostgresEndpointConfig() (PostgresConfig, error) {
 		Port:          env.Int("POSTGRES_PORT", constants.DatabaseDefaults.Port),
 		SocketPath:    sharedenv.String("POSTGRES_SOCKET_PATH", ""),
 		User:          sharedenv.String("POSTGRES_USER", constants.DatabaseDefaults.User),
-		Password:      password,
+		Password:      sharedenv.StringRaw("POSTGRES_PASSWORD", ""),
 		Database:      sharedenv.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
 		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", runtimepolicy.PostgresSSLModeVerifyFull),
 		SSLRootCert:   sharedenv.String("POSTGRES_SSLROOTCERT", ""),

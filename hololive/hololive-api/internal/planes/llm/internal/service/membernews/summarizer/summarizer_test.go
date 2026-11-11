@@ -32,6 +32,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
@@ -59,15 +60,15 @@ type testSourceValidator struct {
 	allowedXAccounts map[string]struct{}
 }
 
-func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
+func (v *testSourceValidator) ValidateSourceURL(rawURL string) (newsmodel.SourceTier, string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return model.SourceTierCommunity, "", errors.New("source url is empty")
+		return newsmodel.SourceTierCommunity, "", errors.New("source url is empty")
 	}
 
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return model.SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
+		return newsmodel.SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
 	}
 
 	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
@@ -77,24 +78,24 @@ func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier
 	if host == "x.com" || host == "twitter.com" {
 		segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 		if len(segments) == 0 || strings.TrimSpace(segments[0]) == "" {
-			return model.SourceTierCommunity, "", errors.New("x.com account not found")
+			return newsmodel.SourceTierCommunity, "", errors.New("x.com account not found")
 		}
 
 		account := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(segments[0])), "@")
 		if _, ok := v.allowedXAccounts[account]; !ok {
-			return model.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
+			return newsmodel.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
 		}
 
-		return model.SourceTierOfficial, parsed.String(), nil
+		return newsmodel.SourceTierOfficial, parsed.String(), nil
 	}
 
 	switch host {
 	case "hololive.hololivepro.com", "hololivepro.com", "cover-corp.com":
-		return model.SourceTierOfficial, parsed.String(), nil
+		return newsmodel.SourceTierOfficial, parsed.String(), nil
 	case "prtimes.jp", "oricon.co.jp", "natalie.mu", "famitsu.com", "4gamer.net", "animate.tv", "dengekionline.com":
-		return model.SourceTierMedia, parsed.String(), nil
+		return newsmodel.SourceTierMedia, parsed.String(), nil
 	default:
-		return model.SourceTierCommunity, parsed.String(), nil
+		return newsmodel.SourceTierCommunity, parsed.String(), nil
 	}
 }
 
@@ -132,7 +133,7 @@ func TestSummarizer_SchemaSuccess(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
+	input := newsmodel.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
@@ -166,7 +167,7 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
+	input := newsmodel.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
@@ -186,7 +187,7 @@ func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
+	input := newsmodel.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err == nil || digest != nil {
@@ -197,7 +198,7 @@ func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 func TestSummarizer_NilLLMReturnsUnavailable(t *testing.T) {
 	s := NewSummarizer(nil, nil, mustValidatorWithAllowlist(t), nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
+	input := newsmodel.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	if _, err := s.Summarize(t.Context(), &input); !errors.Is(err, ErrLLMUnavailable) {
 		t.Fatalf("Summarize() error = %v, want ErrLLMUnavailable", err)
@@ -216,35 +217,35 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
   "omitted_count":99
 }`}, nil, validator, nil)
 
-	candidates := []model.FilteredCandidate{
+	candidates := []newsmodel.FilteredCandidate{
 		sampleCandidates()[0],
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "SUISIEI LIVE",
 				Description: "official event",
 			},
 			EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, timeutil.KSTZone),
 			MemberText:     testMemberSuisei,
 			MatchedMembers: []string{testMemberSuisei},
-			Category:       model.CategorySoloLive,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategorySoloLive,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/2",
 		},
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "Miko Goods",
 				Description: "official goods",
 			},
 			EffectiveDate:  time.Date(2026, time.February, 22, 12, 0, 0, 0, timeutil.KSTZone),
 			MemberText:     testMemberMiko,
 			MatchedMembers: []string{testMemberMiko},
-			Category:       model.CategoryGoods,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategoryGoods,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/3",
 		},
 	}
 
-	input := model.SummarizeInput{
+	input := newsmodel.SummarizeInput{
 		Period:     model.PeriodWeekly,
 		Now:        time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		Candidates: candidates,
@@ -268,7 +269,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 	}
 }
 
-func mustValidatorWithAllowlist(t *testing.T) model.SourceURLValidator {
+func mustValidatorWithAllowlist(t *testing.T) newsmodel.SourceURLValidator {
 	t.Helper()
 
 	validator := &testSourceValidator{
@@ -311,21 +312,18 @@ func TestBuildDeterministicFallback_NaturalFormat(t *testing.T) {
 	}
 }
 
-func TestSummarizer_EmptyCandidatesUsesEmptyResultType(t *testing.T) {
-	validator := mustValidatorWithAllowlist(t)
-	s := NewSummarizer(&fakeLLM{response: "{}"}, nil, validator, nil)
+// 후보 0건의 empty digest는 service가 소유하므로 요약기는 LLM을 부르지 않고 오류를 돌려준다.
+func TestSummarizer_EmptyCandidatesReturnsErrorWithoutLLMCall(t *testing.T) {
+	llm := &fakeLLMWithCounter{response: "{}"}
+	s := NewSummarizer(llm, nil, mustValidatorWithAllowlist(t), nil)
 
-	digest, err := s.Summarize(t.Context(), &model.SummarizeInput{Period: model.PeriodWeekly})
-	if err != nil {
-		t.Fatalf("summarize error: %v", err)
+	digest, err := s.Summarize(t.Context(), &newsmodel.SummarizeInput{Period: model.PeriodWeekly})
+	if !errors.Is(err, errNoCandidates) || digest != nil {
+		t.Fatalf("Summarize() = (%#v, %v), want (nil, %v)", digest, err, errNoCandidates)
 	}
 
-	if digest.ResultType != sharedmodel.SummaryResultEmpty {
-		t.Fatalf("result_type = %q, want %q", digest.ResultType, sharedmodel.SummaryResultEmpty)
-	}
-
-	if len(digest.TopItems) != 0 {
-		t.Fatalf("expected empty top items, got %d", len(digest.TopItems))
+	if got := llm.callCount.Load(); got != 0 {
+		t.Fatalf("llm calls = %d, want 0", got)
 	}
 }
 
@@ -351,20 +349,20 @@ func TestMemberNewsSystemPrompt_ContainsGuide(t *testing.T) {
 	}
 }
 
-func sampleCandidates() []model.FilteredCandidate {
+func sampleCandidates() []newsmodel.FilteredCandidate {
 	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 
-	return []model.FilteredCandidate{
+	return []newsmodel.FilteredCandidate{
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "EXPO",
 				Description: "official news",
 			},
 			EffectiveDate:  date,
 			MemberText:     testMemberMiko,
 			MatchedMembers: []string{testMemberMiko},
-			Category:       model.CategoryEvent,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategoryEvent,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      testSourceURLNews1,
 		},
 	}

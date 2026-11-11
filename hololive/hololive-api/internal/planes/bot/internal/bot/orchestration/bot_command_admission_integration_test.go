@@ -46,15 +46,14 @@ func TestBotProcessMessageRejectsUnknownIngressUserForExpensiveCommand(t *testin
 		},
 	})
 
-	b := &Bot{
-		logger:          newBotTestLogger(),
-		commandRegistry: registry,
-		messageAdapter:  messaging.NewMessageAdapter("!", ""),
-		irisClient:      &testIrisClient{},
-		formatter:       formatter.NewResponseFormatter("!", nil),
-		transport:       newDispatchingTransport(&testIrisClient{}, formatter.NewResponseFormatter("!", nil)),
-		cache:           cacheClient,
-	}
+	b := withMessagePath(&Bot{
+		logger:         newBotTestLogger(),
+		messageAdapter: messaging.NewMessageAdapter("!"),
+		irisClient:     &testIrisClient{},
+		formatter:      formatter.NewResponseFormatter("!", nil),
+		transport:      newDispatchingTransport(&testIrisClient{}, formatter.NewResponseFormatter("!", nil)),
+		cache:          cacheClient,
+	}, registry)
 	sender := testSenderName
 	message := &webhook.Message{
 		Msg:    "!방송이력",

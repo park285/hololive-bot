@@ -39,7 +39,8 @@ func ValidateKakaoRooms(rooms []string) error {
 	return nil
 }
 
-// ValidateIrisEgressInputs는 Iris로 직접 발송하는 runtime이 webhook·bot 토큰과 base URL 원천을 모두 받았는지 검사한다.
+// ValidateIrisEgressInputs는 Iris webhook을 받아 Iris로 직접 응답하는 runtime이 webhook·bot 토큰과 base URL 원천을
+// 모두 받았는지 검사한다.
 func ValidateIrisEgressInputs(iris *IrisConfig) error {
 	if iris == nil {
 		return errors.New("iris config is required")
@@ -47,6 +48,15 @@ func ValidateIrisEgressInputs(iris *IrisConfig) error {
 
 	if strings.TrimSpace(iris.WebhookToken) == "" {
 		return errors.New("IRIS_WEBHOOK_TOKEN is required")
+	}
+
+	return ValidateIrisClientInputs(iris)
+}
+
+// ValidateIrisClientInputs는 webhook을 받지 않고 Iris로 발송만 하는 runtime이 bot 토큰과 base URL 원천을 받았는지 검사한다.
+func ValidateIrisClientInputs(iris *IrisConfig) error {
+	if iris == nil {
+		return errors.New("iris config is required")
 	}
 
 	if strings.TrimSpace(iris.BotToken) == "" {

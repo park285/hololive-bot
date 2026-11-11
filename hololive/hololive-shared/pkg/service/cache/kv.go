@@ -27,7 +27,6 @@ import (
 
 type KeyValueReader interface {
 	Get(ctx context.Context, key string, dest any) error
-	GetString(ctx context.Context, key string) (string, bool, error)
 	Exists(ctx context.Context, key string) (bool, error)
 	// ScanKeyPages는 pattern에 맞는 key를 SCAN page 단위로 visit에 넘긴다. 비원자적 순회이며 visit 오류는 순회를 멈춘다.
 	ScanKeyPages(ctx context.Context, pattern string, batchSize int64, visit func(keys []string) error) error

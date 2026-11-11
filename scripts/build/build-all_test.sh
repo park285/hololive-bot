@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # build-all.sh를 가짜 podman으로 실행한다. 배포 절차는 image revision label을 출처로 대조하므로
 # clean source revision이 build-arg로 들어가고 label로 확인되는지, collector가 PO issuer와 같은 revision으로
-# 짝지어 빌드되는지, dirty worktree가 검증된 revision을 주장하지 않는지 확인한다.
+# 짝지어 빌드되는지, dirty worktree가 검증된 revision을 주장하지 않는지, 모르는 target이나
+# runtime VERSION 누락·형식 오류가 빌드 전에 실패하는지 확인한다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -14,8 +15,7 @@ export FAKE_PODMAN_LOG="$tmp/podman.log" FAKE_PODMAN_STATE="$tmp/images"
 mkdir -p "$repo/scripts/deploy/lib" "$repo/hololive/hololive-api" "$repo/hololive/hololive-alarm-worker" \
   "$fakebin" "$FAKE_PODMAN_STATE"
 cp "$ROOT_DIR/build-all.sh" "$repo/build-all.sh"
-cp "$ROOT_DIR/scripts/deploy/lib/compose-services.sh" "$ROOT_DIR/scripts/deploy/lib/source-revision.sh" \
-  "$repo/scripts/deploy/lib/"
+cp "$ROOT_DIR/scripts/deploy/lib/source-revision.sh" "$repo/scripts/deploy/lib/"
 printf '1.2.3\n' > "$repo/hololive/hololive-api/VERSION"
 printf '1.2.4\n' > "$repo/hololive/hololive-alarm-worker/VERSION"
 git -C "$repo" init -q
@@ -87,3 +87,23 @@ if run_build; then
 fi
 [[ ! -s "$FAKE_PODMAN_LOG" ]] || fail 'refused build-all invoked podman'
 echo '[PASS] build-all without targets refuses before building'
+
+if run_build alarm-worker; then
+  fail 'unknown build target must fail'
+fi
+[[ ! -s "$FAKE_PODMAN_LOG" ]] || fail 'unknown build target invoked podman'
+echo '[PASS] unknown build target is rejected before building'
+
+for content in '' 'dev' '1.2'; do
+  printf '%s\n' "$content" > "$repo/hololive/hololive-alarm-worker/VERSION"
+  if run_build hololive-api; then
+    fail "runtime VERSION '$content' must fail the build"
+  fi
+  [[ ! -s "$FAKE_PODMAN_LOG" ]] || fail "runtime VERSION '$content' invoked podman"
+done
+rm "$repo/hololive/hololive-alarm-worker/VERSION"
+if run_build hololive-api; then
+  fail 'missing runtime VERSION must fail the build'
+fi
+[[ ! -s "$FAKE_PODMAN_LOG" ]] || fail 'missing runtime VERSION invoked podman'
+echo '[PASS] missing or malformed runtime VERSION fails before building'

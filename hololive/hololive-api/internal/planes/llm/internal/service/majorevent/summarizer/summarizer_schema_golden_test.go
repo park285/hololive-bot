@@ -90,29 +90,6 @@ func wantDiscoveredItemSchema() map[string]any {
 	}
 }
 
-func wantReviewIssueSchema() map[string]any {
-	return map[string]any{
-		wantKeyType:                 wantTypeObject,
-		wantKeyAdditionalProperties: false,
-		wantKeyProperties: map[string]any{
-			"field": map[string]any{
-				wantKeyType: wantTypeString,
-			},
-			"item_index": map[string]any{
-				wantKeyType: "integer",
-			},
-			"severity": map[string]any{
-				wantKeyType: wantTypeString,
-				"enum":      []string{severityCritical, severityWarning, severityInfo},
-			},
-			"description": map[string]any{
-				wantKeyType: wantTypeString,
-			},
-		},
-		wantKeyRequired: []string{"field", "item_index", "severity", "description"},
-	}
-}
-
 func TestSummaryResponseSchema_Golden(t *testing.T) {
 	t.Parallel()
 
@@ -165,42 +142,6 @@ func TestSummaryDiscoveredItemSchema_Golden(t *testing.T) {
 
 	if got := summaryDiscoveredItemSchema(); !reflect.DeepEqual(got, wantDiscoveredItemSchema()) {
 		t.Fatalf("summaryDiscoveredItemSchema() golden mismatch\n got: %#v\nwant: %#v", got, wantDiscoveredItemSchema())
-	}
-}
-
-func TestReviewSummarySchema_Golden(t *testing.T) {
-	t.Parallel()
-
-	want := map[string]any{
-		wantKeyType:                 wantTypeObject,
-		wantKeyAdditionalProperties: false,
-		wantKeyProperties: map[string]any{
-			"approved": map[string]any{
-				wantKeyType: "boolean",
-			},
-			"confidence": map[string]any{
-				wantKeyType: "number",
-				"minimum":   0,
-				"maximum":   1,
-			},
-			"issues": map[string]any{
-				wantKeyType: wantTypeArray,
-				"items":     wantReviewIssueSchema(),
-			},
-		},
-		wantKeyRequired: []string{"approved", "confidence", "issues"},
-	}
-
-	if got := reviewSummarySchema(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("reviewSummarySchema() golden mismatch\n got: %#v\nwant: %#v", got, want)
-	}
-}
-
-func TestReviewIssueSchema_Golden(t *testing.T) {
-	t.Parallel()
-
-	if got := reviewIssueSchema(); !reflect.DeepEqual(got, wantReviewIssueSchema()) {
-		t.Fatalf("reviewIssueSchema() golden mismatch\n got: %#v\nwant: %#v", got, wantReviewIssueSchema())
 	}
 }
 

@@ -1,6 +1,9 @@
 package telemetry
 
 import (
+	"time"
+
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -12,23 +15,23 @@ type postDeliveryTimelineScanRow struct {
 	ChannelID                  string                                   `db:"channel_id"`
 	PostID                     string                                   `db:"post_id"`
 	ContentID                  string                                   `db:"content_id"`
-	ActualPublishedAt          scannableTime                            `db:"actual_published_at"`
-	DetectedAt                 scannableTime                            `db:"detected_at"`
-	QueueEnqueuedAt            scannableTime                            `db:"queue_enqueued_at"`
-	FirstAttemptStartedAt      scannableTime                            `db:"first_attempt_started_at"`
-	LastAttemptStartedAt       scannableTime                            `db:"last_attempt_started_at"`
-	FirstAttemptFinishedAt     scannableTime                            `db:"first_attempt_finished_at"`
-	LastAttemptFinishedAt      scannableTime                            `db:"last_attempt_finished_at"`
-	AlarmSentAt                scannableTime                            `db:"alarm_sent_at"`
-	FirstSuccessAt             scannableTime                            `db:"first_success_at"`
-	LastSuccessAt              scannableTime                            `db:"last_success_at"`
-	LastFailureAt              scannableTime                            `db:"last_failure_at"`
-	NextRetryAt                scannableTime                            `db:"next_retry_at"`
+	ActualPublishedAt          *time.Time                               `db:"actual_published_at"`
+	DetectedAt                 *time.Time                               `db:"detected_at"`
+	QueueEnqueuedAt            *time.Time                               `db:"queue_enqueued_at"`
+	FirstAttemptStartedAt      *time.Time                               `db:"first_attempt_started_at"`
+	LastAttemptStartedAt       *time.Time                               `db:"last_attempt_started_at"`
+	FirstAttemptFinishedAt     *time.Time                               `db:"first_attempt_finished_at"`
+	LastAttemptFinishedAt      *time.Time                               `db:"last_attempt_finished_at"`
+	AlarmSentAt                *time.Time                               `db:"alarm_sent_at"`
+	FirstSuccessAt             *time.Time                               `db:"first_success_at"`
+	LastSuccessAt              *time.Time                               `db:"last_success_at"`
+	LastFailureAt              *time.Time                               `db:"last_failure_at"`
+	NextRetryAt                *time.Time                               `db:"next_retry_at"`
 	SuccessSendCount           int64                                    `db:"success_send_count"`
 	FailedAttemptCount         int64                                    `db:"failed_attempt_count"`
 	MaxAttemptOrdinal          int64                                    `db:"max_attempt_ordinal"`
 	AlarmLatencyMillis         *int64                                   `db:"alarm_latency_millis"`
-	AlarmLatencyExceeded       scannableBool                            `db:"alarm_latency_exceeded"`
+	AlarmLatencyExceeded       *bool                                    `db:"alarm_latency_exceeded"`
 	StoredClassificationStatus timeline.PostLatencyClassificationStatus `db:"latency_classification_status"`
 	StoredDelaySource          timeline.PostDelaySource                 `db:"delay_source"`
 	StoredInternalDelayCause   timeline.PostInternalDelayCause          `db:"internal_delay_cause"`
@@ -44,23 +47,23 @@ func buildPostDeliveryTimelinesFromScanRows(scanned []postDeliveryTimelineScanRo
 			ChannelID:                  scanned[i].ChannelID,
 			PostID:                     scanned[i].PostID,
 			ContentID:                  scanned[i].ContentID,
-			ActualPublishedAt:          scanned[i].ActualPublishedAt.Ptr(),
-			DetectedAt:                 scanned[i].DetectedAt.Ptr(),
-			QueueEnqueuedAt:            scanned[i].QueueEnqueuedAt.Ptr(),
-			FirstAttemptStartedAt:      scanned[i].FirstAttemptStartedAt.Ptr(),
-			LastAttemptStartedAt:       scanned[i].LastAttemptStartedAt.Ptr(),
-			FirstAttemptFinishedAt:     scanned[i].FirstAttemptFinishedAt.Ptr(),
-			LastAttemptFinishedAt:      scanned[i].LastAttemptFinishedAt.Ptr(),
-			AlarmSentAt:                scanned[i].AlarmSentAt.Ptr(),
-			FirstSuccessAt:             scanned[i].FirstSuccessAt.Ptr(),
-			LastSuccessAt:              scanned[i].LastSuccessAt.Ptr(),
-			LastFailureAt:              scanned[i].LastFailureAt.Ptr(),
-			NextRetryAt:                scanned[i].NextRetryAt.Ptr(),
+			ActualPublishedAt:          deliverysql.CloneUTCTimePtr(scanned[i].ActualPublishedAt),
+			DetectedAt:                 deliverysql.CloneUTCTimePtr(scanned[i].DetectedAt),
+			QueueEnqueuedAt:            deliverysql.CloneUTCTimePtr(scanned[i].QueueEnqueuedAt),
+			FirstAttemptStartedAt:      deliverysql.CloneUTCTimePtr(scanned[i].FirstAttemptStartedAt),
+			LastAttemptStartedAt:       deliverysql.CloneUTCTimePtr(scanned[i].LastAttemptStartedAt),
+			FirstAttemptFinishedAt:     deliverysql.CloneUTCTimePtr(scanned[i].FirstAttemptFinishedAt),
+			LastAttemptFinishedAt:      deliverysql.CloneUTCTimePtr(scanned[i].LastAttemptFinishedAt),
+			AlarmSentAt:                deliverysql.CloneUTCTimePtr(scanned[i].AlarmSentAt),
+			FirstSuccessAt:             deliverysql.CloneUTCTimePtr(scanned[i].FirstSuccessAt),
+			LastSuccessAt:              deliverysql.CloneUTCTimePtr(scanned[i].LastSuccessAt),
+			LastFailureAt:              deliverysql.CloneUTCTimePtr(scanned[i].LastFailureAt),
+			NextRetryAt:                deliverysql.CloneUTCTimePtr(scanned[i].NextRetryAt),
 			SuccessSendCount:           scanned[i].SuccessSendCount,
 			FailedAttemptCount:         scanned[i].FailedAttemptCount,
 			MaxAttemptOrdinal:          scanned[i].MaxAttemptOrdinal,
 			AlarmLatencyMillis:         scanned[i].AlarmLatencyMillis,
-			AlarmLatencyExceeded:       scanned[i].AlarmLatencyExceeded.Ptr(),
+			AlarmLatencyExceeded:       scanned[i].AlarmLatencyExceeded,
 			StoredClassificationStatus: scanned[i].StoredClassificationStatus,
 			StoredDelaySource:          scanned[i].StoredDelaySource,
 			StoredInternalDelayCause:   scanned[i].StoredInternalDelayCause,

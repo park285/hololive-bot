@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -112,7 +113,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
+				send: func(context.Context, []*domain.AlarmNotification, targetpolicy.TargetMinutePolicy) (delivery.SendResult, error) {
 					calls.Add(1)
 
 					return delivery.SendResult{}, nil
@@ -121,7 +122,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		require.NoError(t, s.dispatchNotifications(t.Context(), nil))
+		require.NoError(t, s.dispatchNotifications(t.Context(), nil, targetpolicy.TargetMinutePolicy{}))
 		assert.Equal(t, int32(0), calls.Load())
 	})
 
@@ -137,7 +138,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
-				send: func(_ context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error) {
+				send: func(_ context.Context, notifications []*domain.AlarmNotification, _ targetpolicy.TargetMinutePolicy) (delivery.SendResult, error) {
 					calls.Add(1)
 
 					gotNotifications = notifications
@@ -148,7 +149,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		require.NoError(t, s.dispatchNotifications(t.Context(), notifications))
+		require.NoError(t, s.dispatchNotifications(t.Context(), notifications, targetpolicy.TargetMinutePolicy{}))
 		assert.Equal(t, int32(1), calls.Load())
 		assert.Equal(t, notifications, gotNotifications)
 	})
@@ -163,7 +164,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
+				send: func(context.Context, []*domain.AlarmNotification, targetpolicy.TargetMinutePolicy) (delivery.SendResult, error) {
 					calls.Add(1)
 
 					return delivery.SendResult{Sent: 1, Failed: 1}, sendErr
@@ -172,58 +173,11 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		err := s.dispatchNotifications(t.Context(), notifications)
+		err := s.dispatchNotifications(t.Context(), notifications, targetpolicy.TargetMinutePolicy{})
 
 		require.ErrorIs(t, err, sendErr)
 		assert.Contains(t, err.Error(), "send notifications: sent=1 failed=1:")
 		assert.Equal(t, int32(1), calls.Load())
-	})
-}
-
-func TestRuntimeSchedulerSyncYouTubeTargetMinutes(t *testing.T) {
-	t.Parallel()
-
-	t.Run("no op when target minutes source is nil", func(t *testing.T) {
-		t.Parallel()
-
-		youtubeUpdater := &targetMinutesUpdaterStub{}
-		dedupUpdater := &targetMinutesUpdaterStub{}
-		s := &RuntimeScheduler{
-			youtubeTargetUpdater: youtubeUpdater,
-			dedupTargetUpdater:   dedupUpdater,
-		}
-
-		s.syncYouTubeTargetMinutes()
-
-		assert.Empty(t, youtubeUpdater.calls)
-		assert.Empty(t, dedupUpdater.calls)
-	})
-
-	t.Run("updates youtube and dedup target updaters", func(t *testing.T) {
-		t.Parallel()
-
-		youtubeUpdater := &targetMinutesUpdaterStub{}
-		dedupUpdater := &targetMinutesUpdaterStub{}
-		s := &RuntimeScheduler{
-			youtubeTargetUpdater: youtubeUpdater,
-			dedupTargetUpdater:   dedupUpdater,
-			targetMinutesSource:  &targetMinutesSourceStub{targets: []int{12, 5, 1}},
-		}
-
-		s.syncYouTubeTargetMinutes()
-
-		assert.Equal(t, [][]int{{12, 5, 1}}, youtubeUpdater.calls)
-		assert.Equal(t, [][]int{{12, 5, 1}}, dedupUpdater.calls)
-	})
-
-	t.Run("handles nil updaters gracefully", func(t *testing.T) {
-		t.Parallel()
-
-		s := &RuntimeScheduler{
-			targetMinutesSource: &targetMinutesSourceStub{targets: []int{10, 3, 1}},
-		}
-
-		require.NotPanics(t, s.syncYouTubeTargetMinutes)
 	})
 }
 

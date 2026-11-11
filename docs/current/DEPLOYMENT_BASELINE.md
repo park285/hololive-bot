@@ -136,7 +136,7 @@ timeline을 그대로 재기동하지 않습니다.
 | `holo-postgres-standby` | 재활성화 참고용 Quadlet 대상(`deploy/quadlet/hololive-bot-standby/`) | Production에서 제거했습니다. 재도입하려면 새 base backup과 명시적 승인이 필요합니다. |
 | `postgres-failover.service` | 재활성화 참고용 fail-closed controller | Production unit과 timer는 제거했습니다. 저장소의 코드·unit template과 기존 원격 helper·정적 설정은 재구축 참고용으로 보존하며 자동 실행하지 않습니다. |
 | `hololive-db-migrate` | Migration job | `[Install]`이 없어 부팅 때 실행하지 않고 배포 helper가 app 활성화 전에 실행합니다; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
-| `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
+| `valkey-cache` | Cache, outbox wakeup 신호, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard-ingress` | 중앙 shortlink ingress | `admin-dashboard-ingress.container`가 정의합니다. 30192의 source-restricted shortlink와 loopback 30193의 health를 제공하며 관리자 웹을 호스팅하지 않습니다. |
 | `hololive-youtube-po-c` / `hololive-youtube-po-b` / `hololive-youtube-po-d` | 격리 PO issuer | 중앙 Quadlet `c`, iris-seoul Quadlet `b`, kapu Quadlet `d` collector에 private Unix socket을 제공합니다. 앱 비밀·DB·helper socket을 공유하지 않습니다. native `a`의 issuer는 osaka1의 `hololive-youtube-po.service`입니다. |
 
@@ -146,8 +146,8 @@ timeline을 그대로 재기동하지 않습니다.
 |---|---|---|
 | Iris / Redroid KakaoTalk automation | `hololive-api`, `alarm-worker` | `contracts/iris-boundary.md` |
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-api/scripts/migrations` |
-| Valkey | cache, sessions/rate limit, alarm dispatch and delivery outbox wakeup, member epoch Pub/Sub, job locks (no settings/ACL Pub/Sub) | `contracts/valkey_ephemeral_contract.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md` |
-| CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api` where configured | 검토 필요 |
+| Valkey | cache, rate limit, alarm dispatch and delivery outbox wakeup, member epoch Pub/Sub, job locks (no settings/ACL Pub/Sub) | `contracts/valkey_ephemeral_contract.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md` |
+| CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api` where configured | 별도 계약 문서 없음; 의존과 장애 영향은 `services/hololive-api.md`의 Dependency 표 |
 
 ## PostgreSQL Observability
 

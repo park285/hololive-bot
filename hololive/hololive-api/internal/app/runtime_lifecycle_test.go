@@ -5,9 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"reflect"
+	"slices"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
 const (
@@ -42,8 +41,8 @@ func TestRuntimeShutdownPreservesJoinedErrorsAndAttemptsAllPlanes(t *testing.T) 
 
 	var calls []string
 
-	group := applifecycle.NewGroupRuntime(slog.Default(),
-		applifecycle.GroupComponent{
+	group := newPlaneGroup(slog.Default(),
+		planeComponent{
 			Name: lifecycleLLMName,
 			Shutdown: func(context.Context) error {
 				calls = append(calls, lifecycleLLMName)
@@ -51,7 +50,7 @@ func TestRuntimeShutdownPreservesJoinedErrorsAndAttemptsAllPlanes(t *testing.T) 
 				return secondErr
 			},
 		},
-		applifecycle.GroupComponent{
+		planeComponent{
 			Name: lifecycleAdminName,
 			Shutdown: func(context.Context) error {
 				calls = append(calls, lifecycleAdminName)
@@ -74,44 +73,29 @@ func TestRuntimeShutdownPreservesJoinedErrorsAndAttemptsAllPlanes(t *testing.T) 
 }
 
 func TestRuntimePlaneOrder(t *testing.T) {
-	tests := []struct {
-		name      string
-		youtube   bool
-		wantStart []string
-	}{
-		{name: "partially built without youtube", wantStart: []string{lifecycleLLMName, lifecycleAdminName, lifecycleBotName}},
-		{name: "youtube enabled", youtube: true, wantStart: []string{lifecycleYouTubeName, lifecycleLLMName, lifecycleAdminName, lifecycleBotName}},
+	var (
+		starts []string
+		stops  []string
+	)
+
+	runtime := &Runtime{group: newPlaneGroup(slog.Default(), lifecycleTestComponents(&starts, &stops)...)}
+
+	runtime.Start(t.Context(), make(chan error, 1))
+
+	if err := runtime.Shutdown(t.Context()); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var (
-				starts []string
-				stops  []string
-			)
+	wantStart := []string{lifecycleYouTubeName, lifecycleLLMName, lifecycleAdminName, lifecycleBotName}
+	if !reflect.DeepEqual(starts, wantStart) {
+		t.Fatalf("Start() order = %v, want %v", starts, wantStart)
+	}
 
-			components := lifecycleTestComponents(test.youtube, &starts, &stops)
-			runtime := &Runtime{group: applifecycle.NewGroupRuntime(slog.Default(), components...)}
+	wantStops := slices.Clone(wantStart)
+	slices.Reverse(wantStops)
 
-			runtime.Start(t.Context(), make(chan error, 1))
-
-			if err := runtime.Shutdown(t.Context()); err != nil {
-				t.Fatalf("Shutdown() error = %v", err)
-			}
-
-			if !reflect.DeepEqual(starts, test.wantStart) {
-				t.Fatalf("Start() order = %v, want %v", starts, test.wantStart)
-			}
-
-			wantStops := append([]string(nil), test.wantStart...)
-			for left, right := 0, len(wantStops)-1; left < right; left, right = left+1, right-1 {
-				wantStops[left], wantStops[right] = wantStops[right], wantStops[left]
-			}
-
-			if !reflect.DeepEqual(stops, wantStops) {
-				t.Fatalf("Shutdown() order = %v, want %v", stops, wantStops)
-			}
-		})
+	if !reflect.DeepEqual(stops, wantStops) {
+		t.Fatalf("Shutdown() order = %v, want %v", stops, wantStops)
 	}
 }
 
@@ -152,16 +136,12 @@ func (g *runtimeGroupStub) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func lifecycleTestComponents(withYouTube bool, starts, stops *[]string) []applifecycle.GroupComponent {
-	names := []string{lifecycleLLMName, lifecycleAdminName, lifecycleBotName}
+func lifecycleTestComponents(starts, stops *[]string) []planeComponent {
+	names := []string{lifecycleYouTubeName, lifecycleLLMName, lifecycleAdminName, lifecycleBotName}
 
-	if withYouTube {
-		names = append([]string{lifecycleYouTubeName}, names...)
-	}
-
-	components := make([]applifecycle.GroupComponent, 0, len(names))
+	components := make([]planeComponent, 0, len(names))
 	for _, name := range names {
-		components = append(components, applifecycle.GroupComponent{
+		components = append(components, planeComponent{
 			Name: name,
 			Start: func(context.Context, chan<- error) {
 				*starts = append(*starts, name)

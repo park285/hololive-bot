@@ -89,7 +89,7 @@ func TestYouTubeCheckerBuildUpcomingNotificationsSelectsPremiereFiveMinuteCandid
 		End:   now,
 	}
 
-	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), testTargetPolicy(), &domain.Stream{
 		ID:             "premiere-upcoming",
 		ChannelID:      testChIDShort1,
 		Status:         domain.StreamStatusUpcoming,
@@ -113,7 +113,7 @@ func TestYouTubeCheckerBuildUpcomingNotificationsKeepsOrdinaryFiveMinuteCandidat
 		End:   now,
 	}
 
-	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), testTargetPolicy(), &domain.Stream{
 		ID:             "ordinary-upcoming",
 		ChannelID:      testChIDShort1,
 		Status:         domain.StreamStatusUpcoming,
@@ -139,7 +139,7 @@ func TestYouTubeCheckerBuildUpcomingNotificationsReportsPremiereScheduleChange(t
 		End:   now,
 	}
 
-	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), testTargetPolicy(), &domain.Stream{
 		ID:             "premiere-delay",
 		ChannelID:      testChIDShort1,
 		Status:         domain.StreamStatusUpcoming,
@@ -162,7 +162,7 @@ func TestYouTubeCheckerBuildLiveCatchupNotificationsIncludesPremiere(t *testing.
 			checker, _, now := newYouTubeBuilderFixture(t)
 			start := now.Add(-3 * time.Minute)
 
-			notifications, err := checker.buildLiveCatchupNotifications(t.Context(), testChIDLive, &domain.Stream{
+			notifications, err := checker.buildLiveCatchupNotifications(t.Context(), testTargetPolicy(), testChIDLive, &domain.Stream{
 				ID:             name + "-live",
 				Title:          name + " live",
 				ChannelID:      testChIDLive,

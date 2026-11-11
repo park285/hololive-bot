@@ -29,7 +29,7 @@ type Service struct {
 	requester    apiclient.Requester
 	scraper      *htmlscraper.Service
 	logger       *slog.Logger
-	cacheManager *CacheManager
+	cacheManager *cacheManager
 	mapper       *streammapping.StreamMapper
 	filter       *streammapping.StreamFilter
 	retry        *retryScheduler
@@ -100,7 +100,7 @@ func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey strin
 		requester:    requester,
 		scraper:      scraperService,
 		logger:       logger,
-		cacheManager: NewCacheManager(cacheClient, logger),
+		cacheManager: newCacheManager(cacheClient, logger),
 		mapper:       streammapping.NewStreamMapper(logger),
 		filter:       streammapping.NewStreamFilter(logger),
 		concurrency:  holodexCfg.Concurrency,

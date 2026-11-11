@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification) (preparedSend, error) {
+func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification, targetPolicy targetpolicy.TargetMinutePolicy) (preparedSend, error) {
 	payload := resolveSendInput(notif, time.Now().UTC())
 	if payload == nil {
 		return preparedSend{outcome: sendOutcomeSkipped}, nil
@@ -24,7 +25,7 @@ func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotificati
 		return preparedSend{outcome: sendOutcomeFailed}, fmt.Errorf("send one: validate live dispatch persistence identity: %w", err)
 	}
 
-	claimKeys, claimed, err := n.claimDedup(ctx, payload)
+	claimKeys, claimed, err := n.claimDedup(ctx, payload, targetPolicy)
 	if err != nil {
 		return preparedSend{outcome: sendOutcomeFailed}, fmt.Errorf("send one: claim dedup: %w", err)
 	}

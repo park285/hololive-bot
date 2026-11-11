@@ -3,6 +3,8 @@ package xspaces
 import (
 	"bytes"
 	jsonv2 "encoding/json/v2"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +140,28 @@ func TestAuthenticationConfirmationSurvivesStoreRestart(t *testing.T) {
 	require.Equal(t, "authentication_pending", snapshot.LastError)
 	require.Equal(t, next, snapshot.NextCheckAt.UTC())
 	require.Equal(t, cookies, *snapshot.Active)
+}
+
+// LoadStore는 호출자가 넘긴 키 경로만 쓴다. 빈 경로는 env에 키가 있어도 비활성이다.
+func TestLoadStoreUsesGivenKeyPath(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	keyPath := filepath.Join(t.TempDir(), "key")
+	require.NoError(t, os.WriteFile(keyPath, []byte(strings.Repeat("ab", 32)+"\n"), 0o600))
+	t.Setenv("X_SPACES_KEY_FILE", keyPath)
+
+	store, err := LoadStore(pool, "")
+	require.ErrorIs(t, err, ErrDisabled)
+	require.Nil(t, store)
+
+	store, err = LoadStore(pool, keyPath)
+	require.NoError(t, err)
+
+	status, err := store.Status(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "unconfigured", status.State)
+
+	_, err = LoadStore(pool, "relative/key")
+	require.Error(t, err)
 }
 
 func TestSessionCipherNoncesAndSafeErrors(t *testing.T) {

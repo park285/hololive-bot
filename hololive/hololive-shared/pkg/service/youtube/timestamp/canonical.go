@@ -6,37 +6,7 @@ import (
 	"time"
 )
 
-type Field string
-
-const (
-	FieldPublishedAt Field = "published_at"
-	FieldSentAt      Field = "sent_at"
-)
-
-type Rule struct {
-	Field   Field
-	Meaning string
-}
-
-type Policy struct {
-	Location    *time.Location
-	Layout      string
-	PublishedAt Rule
-	SentAt      Rule
-}
-
-var Canonical = Policy{
-	Location: time.UTC,
-	Layout:   time.RFC3339Nano,
-	PublishedAt: Rule{
-		Field:   FieldPublishedAt,
-		Meaning: "actual_youtube_publish_time",
-	},
-	SentAt: Rule{
-		Field:   FieldSentAt,
-		Meaning: "first_successful_alarm_dispatch_time",
-	},
-}
+const Layout = time.RFC3339Nano
 
 var publishedAtParseLayouts = []string{
 	time.RFC3339Nano,
@@ -60,7 +30,7 @@ func NormalizePtr(value *time.Time) *time.Time {
 }
 
 func Format(value time.Time) string {
-	return Normalize(value).Format(Canonical.Layout)
+	return Normalize(value).Format(Layout)
 }
 
 func ParsePublishedAt(value string) (*time.Time, bool) {

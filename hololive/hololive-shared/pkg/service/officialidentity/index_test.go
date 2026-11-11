@@ -44,7 +44,7 @@ func TestDisplayNamesMapsKoreanAndKeepsUnmapped(t *testing.T) {
 		{Name: "Hoshimachi Suisei", NameJa: "星街すいせい", ShortKoreanName: "스이세이", ChannelID: "ch-sui"},
 	}}
 
-	got, err := DisplayNames(t.Context(), members, []string{testOfficialMiko, "星街すいせい", "Gawr Gura"}, "ch-miko")
+	got, err := mustBuild(t, members).DisplayNames(t.Context(), members, []string{testOfficialMiko, "星街すいせい", "Gawr Gura"}, "ch-miko")
 	if err != nil {
 		t.Fatalf("DisplayNames() error = %v", err)
 	}
@@ -64,17 +64,14 @@ type testMembers struct {
 	lookupErr error
 }
 
-func TestDisplayNamesReturnsMemberLoadError(t *testing.T) {
+// 멤버 적재 실패는 빈 색인으로 바꾸지 않고 오류다.
+func TestBuildReturnsMemberLoadError(t *testing.T) {
 	t.Parallel()
 
 	loadErr := errors.New("member cache unavailable")
 
-	if got, err := DisplayNames(t.Context(), testMembers{err: loadErr}, []string{testOfficialMiko}, ""); !errors.Is(err, loadErr) {
-		t.Fatalf("DisplayNames() = (%#v, %v), want member load error", got, err)
-	}
-
-	if got, err := DisplayNames(t.Context(), testMembers{err: loadErr}, nil, ""); err != nil || got != nil {
-		t.Fatalf("DisplayNames(no names) = (%#v, %v), want no member load", got, err)
+	if index, err := Build(t.Context(), testMembers{err: loadErr}); !errors.Is(err, loadErr) || index != nil {
+		t.Fatalf("Build() = (%#v, %v), want member load error", index, err)
 	}
 }
 
@@ -84,16 +81,29 @@ func TestDisplayNamesSeparatesLookupFailureFromNotFound(t *testing.T) {
 	members := []*domain.Member{{Name: "Sakura Miko", NameJa: testOfficialMiko, ShortKoreanName: "미코", ChannelID: "ch-miko"}}
 	lookupErr := errors.New("member cache unavailable")
 
-	if got, err := DisplayNames(t.Context(), testMembers{members: members, lookupErr: lookupErr}, []string{testOfficialMiko}, ""); !errors.Is(err, lookupErr) {
+	index := mustBuild(t, testMembers{members: members})
+
+	if got, err := index.DisplayNames(t.Context(), testMembers{members: members, lookupErr: lookupErr}, []string{testOfficialMiko}, ""); !errors.Is(err, lookupErr) {
 		t.Fatalf("DisplayNames(lookup failure) = (%#v, %v), want lookup error", got, err)
 	}
 
 	notFound := testMembers{members: members, lookupErr: domain.ErrMemberNotFound}
 
-	got, err := DisplayNames(t.Context(), notFound, []string{testOfficialMiko}, "")
+	got, err := index.DisplayNames(t.Context(), notFound, []string{testOfficialMiko}, "")
 	if err != nil || len(got) != 1 || got[0] != testOfficialMiko {
 		t.Fatalf("DisplayNames(not found) = (%#v, %v), want official name", got, err)
 	}
+}
+
+func mustBuild(t *testing.T, members testMembers) Index {
+	t.Helper()
+
+	index, err := Build(t.Context(), members)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	return index
 }
 
 func (m testMembers) LoadAllMembers(context.Context) ([]*domain.Member, error) {
@@ -123,11 +133,3 @@ func (testMembers) FindMemberByAlias(context.Context, string) (*domain.Member, e
 }
 
 func (testMembers) GetChannelIDs(context.Context) ([]string, error) { return []string{}, nil }
-
-func (testMembers) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func (testMembers) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}

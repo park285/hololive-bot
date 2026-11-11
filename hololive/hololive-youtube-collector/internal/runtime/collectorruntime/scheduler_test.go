@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,23 @@ func TestLeaseConfigFromUsesCollectorBudgets(t *testing.T) {
 		scheduler.pollCadence != cfg.AcquisitionCadence || scheduler.queueMaxAge != cfg.QueueMaxAge {
 		t.Fatalf("scheduler policy = workers %d queue %d/%d cadence %s max age %s",
 			scheduler.workers, scheduler.queueCapacity, cap(scheduler.queue), scheduler.pollCadence, scheduler.queueMaxAge)
+	}
+}
+
+func TestNewCollectorOwnerRequiresInstanceID(t *testing.T) {
+	t.Parallel()
+
+	if owner, err := newCollectorOwner(" "); err == nil {
+		t.Fatalf("blank instance ID produced owner %q", owner)
+	}
+
+	owner, err := newCollectorOwner("youtube-collector-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if prefix, token, ok := strings.Cut(owner, ":"); !ok || prefix != "youtube-collector-a" || len(token) != 32 {
+		t.Fatalf("owner = %q, want instance ID and 128-bit hex token", owner)
 	}
 }
 

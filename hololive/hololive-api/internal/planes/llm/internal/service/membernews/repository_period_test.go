@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -29,7 +30,7 @@ WHERE status = 'active'
   AND type IN ('news', 'event')
   AND COALESCE(link_status, 'unchecked') NOT IN ('failed', 'blocked')`
 
-func listAllActiveMajorEvents(ctx context.Context, repository *Repository) ([]model.Candidate, error) {
+func listAllActiveMajorEvents(ctx context.Context, repository *Repository) ([]newsmodel.Candidate, error) {
 	return repository.listActiveMajorEvents(ctx, allActiveMajorEventsSQL)
 }
 
@@ -141,7 +142,7 @@ type candidateQueryCost struct {
 	err                error
 }
 
-func candidateStringsSize(candidates []model.Candidate) int {
+func candidateStringsSize(candidates []newsmodel.Candidate) int {
 	size := 0
 
 	for i := range candidates {
@@ -159,7 +160,7 @@ func candidateQueryIteration(ctx context.Context, repository *Repository, now ti
 	}
 
 	var (
-		candidates []model.Candidate
+		candidates []newsmodel.Candidate
 		err        error
 	)
 
@@ -178,7 +179,8 @@ func candidateQueryIteration(ctx context.Context, repository *Repository, now ti
 	return candidateQueryCost{rows: len(candidates), bytes: candidateStringsSize(candidates), final: len(filtered), err: err}
 }
 
-func filterMikoCandidates(tb testing.TB, candidates []model.Candidate, period model.Period, now time.Time) []model.FilteredCandidate {
+// filterMikoCandidates와 filterPreparedMiko는 멤버 데이터 없이 "미코" 방 기준으로 후보를 고른다.
+func filterMikoCandidates(tb testing.TB, candidates []newsmodel.Candidate, period model.Period, now time.Time) []newsmodel.FilteredCandidate {
 	tb.Helper()
 
 	filtered, err := filter.PrepareCandidates(candidates, period, now).Filter(tb.Context(), []string{"미코"}, nil, nil)
@@ -189,7 +191,7 @@ func filterMikoCandidates(tb testing.TB, candidates []model.Candidate, period mo
 	return filtered
 }
 
-func filterPreparedMiko(tb testing.TB, prepared *filter.PreparedCandidates) []model.FilteredCandidate {
+func filterPreparedMiko(tb testing.TB, prepared *filter.PreparedCandidates) []newsmodel.FilteredCandidate {
 	tb.Helper()
 
 	filtered, err := prepared.Filter(tb.Context(), []string{"미코"}, nil, nil)

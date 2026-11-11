@@ -28,6 +28,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -53,6 +54,11 @@ const (
 
 func newCheckerTestLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
+}
+
+// testTargetPolicy는 runtime scheduler가 반복마다 만드는 것과 같은 규칙으로 target minute 정책을 만든다.
+func testTargetPolicy(targetMinutes ...int) targetpolicy.TargetMinutePolicy {
+	return targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes))
 }
 
 func newCheckerTestCacheClient(t *testing.T) cache.Client {

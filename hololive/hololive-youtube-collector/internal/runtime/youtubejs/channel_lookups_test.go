@@ -18,7 +18,7 @@ import (
 
 const lookupChannelID = "UC_TEST"
 
-var liveChannelRequest = ChannelRequest{ChannelID: lookupChannelID, Kind: "live", MaxPages: 1}
+var liveChannelRequest = ChannelRequest{ChannelID: lookupChannelID, Kind: "live"}
 
 const liveChannelBody = `{"protocol_version":1,"live_sessions":[],"profile":{},"photo":[],"page_count":1,"exhausted":true,` +
 	`"continuity":"NOT_APPLICABLE","termination_reason":"exhausted","schedule_lookups":%d,` +
@@ -105,7 +105,7 @@ func TestFetchChannelRejectsLookupsOutsideTheRequestedBudget(t *testing.T) {
 	}
 
 	metadata := channelLookupRPC(t, nil, http.StatusOK, fmt.Sprintf(liveChannelBody, 1), &requested)
-	if _, err := metadata.FetchChannel(t.Context(), ChannelRequest{ChannelID: lookupChannelID, Kind: "metadata", MaxPages: 1}); collecterr.CodeOf(err) != contract.ErrorHelperProtocolMismatch {
+	if _, err := metadata.FetchChannel(t.Context(), ChannelRequest{ChannelID: lookupChannelID, Kind: "metadata"}); collecterr.CodeOf(err) != contract.ErrorHelperProtocolMismatch {
 		t.Fatalf("metadata error = %v, want protocol mismatch", err)
 	}
 
@@ -230,7 +230,7 @@ func TestFetchChannelSendsLeaseSlotOnlyForLiveRequests(t *testing.T) {
 		})}, "http://helper", nil)
 
 		// helper 오류 본문으로 요청만 기록하고 끝냅니다.
-		if _, err := client.FetchChannel(t.Context(), ChannelRequest{ChannelID: lookupChannelID, Kind: kind, MaxPages: 1, ScheduledFor: new(slot)}); err == nil {
+		if _, err := client.FetchChannel(t.Context(), ChannelRequest{ChannelID: lookupChannelID, Kind: kind, ScheduledFor: new(slot)}); err == nil {
 			t.Fatalf("%s request unexpectedly succeeded", kind)
 		}
 

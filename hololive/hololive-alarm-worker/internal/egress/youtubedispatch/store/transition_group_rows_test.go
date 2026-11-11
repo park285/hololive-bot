@@ -141,7 +141,7 @@ func TestTransitionLogicalGroupRowsPreservesIdentityCandidatesAndDirectIDs(t *te
 
 	_, requestedSet := requestedLogicalKeys(requested[:1])
 
-	_, _, err = transition.claimedResolutionSnapshots(rows[:len(rows)-1], map[int64]struct{}{wanted[2]: {}}, requestedSet)
+	_, _, err = transition.resolutionSnapshots(rows[:len(rows)-1], map[int64]struct{}{wanted[2]: {}}, requestedSet)
 	require.Error(t, err, "matching malformed payloads must still reach identity validation")
 }
 
@@ -193,7 +193,7 @@ func TestTransitionLogicalGroupRowsPreservesScanLimit(t *testing.T) {
 
 	_, requestedSet := requestedLogicalKeys(requested)
 
-	_, _, err = transition.claimedResolutionSnapshots(rows, nil, requestedSet)
+	_, _, err = transition.resolutionSnapshots(rows, nil, requestedSet)
 	require.ErrorContains(t, err, "exceeds limit 1")
 }
 

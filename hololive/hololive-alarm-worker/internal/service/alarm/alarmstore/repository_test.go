@@ -61,6 +61,7 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 	requireAlarmRoomIDs(t, subscribers, []string{"room-live", "room-empty"})
 }
 
+// 표시명은 members 정본만 쓴다. 멤버 데이터에 한국어 표시명이 없는 채널은 빈 값이다.
 func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 	t.Parallel()
 
@@ -103,19 +104,6 @@ func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 
 	if missingName != "" {
 		t.Fatalf("member name without members display name = %q, want empty", missingName)
-	}
-
-	names, err := repository.GetAllMemberNames(ctx)
-	if err != nil {
-		t.Fatalf("GetAllMemberNames() error = %v", err)
-	}
-
-	if names["UC_display_name"] != "표시" {
-		t.Fatalf("all member names display = %q, want 표시", names["UC_display_name"])
-	}
-
-	if name, ok := names["UC_alarm_fallback"]; ok {
-		t.Fatalf("all member names include channel without members display name: %q", name)
 	}
 }
 

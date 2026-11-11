@@ -26,7 +26,6 @@ import (
 	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type memberNewsSubscriptionTemplateData struct {
@@ -34,20 +33,8 @@ type memberNewsSubscriptionTemplateData struct {
 	IsSubscribed bool
 }
 
-func (f *ResponseFormatter) memberNewsNotify(key messagestrings.Key) string {
-	if f == nil {
-		return f.renderFailureText()
-	}
-
-	return f.messageStrings.Text(key)
-}
-
 func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernewsmodel.Digest) string {
 	if digest == nil {
-		return f.renderFailureText()
-	}
-
-	if f == nil || f.renderer == nil {
 		return f.renderFailureText()
 	}
 
@@ -57,90 +44,58 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 }
 
 func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) string {
-	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNoMembers)
-	}
-
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNoMembers, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNoMembers)
+		return f.renderFailureText()
 	}
 
 	return message
 }
 
 func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) string {
-	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsSubscribed)
-	}
-
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsSubscribed, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsSubscribed)
+		return f.renderFailureText()
 	}
 
 	return message
 }
 
 func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Context) string {
-	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsAlreadySubscribed)
-	}
-
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsAlreadySub, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsAlreadySubscribed)
+		return f.renderFailureText()
 	}
 
 	return message
 }
 
 func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) string {
-	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsUnsubscribed)
-	}
-
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsUnsubscribed, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsUnsubscribed)
+		return f.renderFailureText()
 	}
 
 	return message
 }
 
 func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) string {
-	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNotSubscribed)
-	}
-
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNotSub, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNotSubscribed)
+		return f.renderFailureText()
 	}
 
 	return message
 }
 
 func (f *ResponseFormatter) FormatMemberNewsStatus(ctx context.Context, isSubscribed bool) string {
-	if f == nil || f.renderer == nil {
-		return f.memberNewsStatusFallback(ctx, isSubscribed)
-	}
-
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsStatus, memberNewsSubscriptionTemplateData{
 		Prefix:       f.prefix,
 		IsSubscribed: isSubscribed,
 	})
 	if err != nil {
-		return f.memberNewsStatusFallback(ctx, isSubscribed)
+		return f.renderFailureText()
 	}
 
 	return message
-}
-
-func (f *ResponseFormatter) memberNewsStatusFallback(_ context.Context, isSubscribed bool) string {
-	if isSubscribed {
-		return f.memberNewsNotify(messagestrings.NotifyMemberNewsStatusOn)
-	}
-
-	return f.memberNewsNotify(messagestrings.NotifyMemberNewsStatusOff)
 }

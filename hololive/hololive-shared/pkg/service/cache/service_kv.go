@@ -51,22 +51,6 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 	return true, nil
 }
 
-func (c *Service) GetString(ctx context.Context, key string) (string, bool, error) {
-	resp, hit, err := c.getResult(ctx, key)
-	if err != nil || !hit {
-		return "", hit, err
-	}
-
-	value, err := resp.ToString()
-	if err != nil {
-		c.logger.Error("Cache value conversion failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
-
-		return "", false, NewCacheError("get", key, err)
-	}
-
-	return value, true, nil
-}
-
 // getResult는 GET 응답을 돌려주며 miss는 (false, nil)로 구분한다.
 func (c *Service) getResult(ctx context.Context, key string) (valkey.ValkeyResult, bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())

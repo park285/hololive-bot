@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -82,10 +83,12 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	require.Contains(t, logs.String(), `reason=database_operation_failed`)
 }
 
+// newTestReplyOutboxRepository는 API worker profile fixture의 bot_reply_outbox 정책(max_attempts 5, 자동 replay 지평
+// iris.ReplyAutomaticReplayHorizon)으로 저장소를 만든다.
 func newTestReplyOutboxRepository(t *testing.T, pool *pgxpool.Pool) *durability.ReplyOutboxRepository {
 	t.Helper()
 
-	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(pool, durability.ReplyOutboxMaxAttempts, durability.ReplyOutboxAutomaticReplayHorizon)
+	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(pool, 5, iris.ReplyAutomaticReplayHorizon)
 	require.NoError(t, err)
 
 	return repository

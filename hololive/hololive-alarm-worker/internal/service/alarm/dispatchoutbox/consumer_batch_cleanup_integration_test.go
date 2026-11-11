@@ -55,10 +55,10 @@ func prepareBatchCleanupIntegration(
 	t.Helper()
 
 	start := time.Date(2026, time.May, 12, 3, 0, 0, 0, time.UTC)
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, 3)
+	envelopes := make([]AlarmQueueEnvelope, 0, 3)
 
 	for i := range 3 {
-		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+		envelopes = append(envelopes, AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    testRoomID,

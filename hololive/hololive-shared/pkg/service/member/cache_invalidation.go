@@ -27,30 +27,24 @@ import (
 )
 
 func (c *Cache) InvalidateAll(ctx context.Context) error {
-	if c.epochCoordinated() {
-		if err := c.invalidateCoordinated(ctx); err != nil {
-			return fmt.Errorf("invalidate coordinated: %w", err)
-		}
+	if !c.epochCoordinated() {
+		c.invalidateLocal()
 
 		return nil
 	}
 
-	if err := c.invalidateLocal(); err != nil {
-		return fmt.Errorf("invalidate local: %w", err)
+	if err := c.invalidateCoordinated(ctx); err != nil {
+		return fmt.Errorf("invalidate coordinated: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Cache) invalidateLocal() error {
+func (c *Cache) invalidateLocal() {
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
 
 	c.resetMemoryLocked()
-
-	c.logger.Info("Member cache invalidated", slog.Int("keys_deleted", 0))
-
-	return nil
 }
 
 func (c *Cache) invalidateCoordinated(ctx context.Context) error {
@@ -102,16 +96,6 @@ func (c *Cache) Refresh(ctx context.Context) error {
 	if err := c.WarmUpCache(ctx); err != nil {
 		return fmt.Errorf("warm up cache: %w", err)
 	}
-
-	return nil
-}
-
-func (c *Cache) InvalidateAliasCache(ctx context.Context, alias string) error {
-	if err := c.InvalidateAll(ctx); err != nil {
-		return fmt.Errorf("invalidate alias cache: %w", err)
-	}
-
-	c.logger.Info("Alias cache invalidated", slog.String("alias", alias))
 
 	return nil
 }

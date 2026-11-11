@@ -50,16 +50,10 @@ func respondWithError(c *gin.Context, status int, code, message string) {
 	ginjson.Respond(c, status, errorPayload(code, message))
 }
 
-func AuthMiddleware(config httputil.AdminAuthConfig) gin.HandlerFunc {
-	expected := strings.TrimSpace(config.APIKey)
+func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
+	expected := strings.TrimSpace(apiKey)
 
 	return func(c *gin.Context) {
-		if config.Disabled {
-			c.Next()
-
-			return
-		}
-
 		if expected == "" {
 			abortWithError(c, http.StatusServiceUnavailable, "auth_not_configured", "API key not configured")
 
@@ -83,20 +77,10 @@ func AuthMiddleware(config httputil.AdminAuthConfig) gin.HandlerFunc {
 	}
 }
 
-func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
-	return AuthMiddleware(httputil.AdminAuthConfig{APIKey: apiKey})
-}
-
-func noRouteHandler(config httputil.AdminAuthConfig) gin.HandlerFunc {
-	expected := strings.TrimSpace(config.APIKey)
+func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
+	expected := strings.TrimSpace(apiKey)
 
 	return func(c *gin.Context) {
-		if config.Disabled {
-			respondWithError(c, http.StatusNotFound, "not_found", "endpoint not found")
-
-			return
-		}
-
 		if expected == "" {
 			respondWithError(c, http.StatusServiceUnavailable, "auth_not_configured", "API key not configured")
 
@@ -118,8 +102,4 @@ func noRouteHandler(config httputil.AdminAuthConfig) gin.HandlerFunc {
 
 		respondWithError(c, http.StatusNotFound, "not_found", "endpoint not found")
 	}
-}
-
-func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
-	return noRouteHandler(httputil.AdminAuthConfig{APIKey: apiKey})
 }

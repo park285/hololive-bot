@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
@@ -32,7 +32,7 @@ type orderedSettingsApplier struct {
 	release chan struct{}
 }
 
-func (a *orderedSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (sharedsettings.AlarmAdvanceMinutesApplyResult, error) {
+func (a *orderedSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (adminsettings.AlarmAdvanceMinutesApplyResult, error) {
 	if minutes == 7 {
 		close(a.entered)
 
@@ -40,7 +40,7 @@ func (a *orderedSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, m
 		case <-a.release:
 
 		case <-ctx.Done():
-			return sharedsettings.AlarmAdvanceMinutesApplyResult{AlarmRequestedAdvanceMinutes: minutes}, ctx.Err()
+			return adminsettings.AlarmAdvanceMinutesApplyResult{AlarmRequestedAdvanceMinutes: minutes}, ctx.Err()
 		}
 	}
 
@@ -52,17 +52,17 @@ func (a *orderedSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, m
 
 	a.mu.Unlock()
 
-	return sharedsettings.AlarmAdvanceMinutesApplyResult{
+	return adminsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes, AlarmApplied: true, AlarmTargetMinutes: slices.Clone(targets),
 	}, nil
 }
 
-func (a *orderedSettingsApplier) SettingsRuntimeState() sharedsettings.SettingsRuntimeStateResult {
+func (a *orderedSettingsApplier) SettingsRuntimeState() adminsettings.SettingsRuntimeStateResult {
 	a.mu.Lock()
 
 	defer a.mu.Unlock()
 
-	return sharedsettings.SettingsRuntimeStateResult{AlarmTargetMinutes: slices.Clone(a.targets)}
+	return adminsettings.SettingsRuntimeStateResult{AlarmTargetMinutes: slices.Clone(a.targets)}
 }
 
 func newOrderedSettingsRequest(ctx context.Context, body string) *http.Request {
@@ -72,7 +72,7 @@ func newOrderedSettingsRequest(ctx context.Context, body string) *http.Request {
 	return request
 }
 
-func settingsRequestDone(h *SettingsAPIHandler, request *http.Request) (<-chan struct{}, *httptest.ResponseRecorder) {
+func settingsRequestDone(h *SettingsHandler, request *http.Request) (<-chan struct{}, *httptest.ResponseRecorder) {
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
 
@@ -101,7 +101,7 @@ func requireSettingsRequestWaiting(t *testing.T, done <-chan struct{}) {
 
 func TestSettingsAPIHandlerSerializesSaveApplyAndGetSnapshot(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())
+		store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5})
 
 		applier := &orderedSettingsApplier{targets: []int{5, 3, 1}, entered: make(chan struct{}), release: make(chan struct{})}
 
@@ -109,7 +109,7 @@ func TestSettingsAPIHandlerSerializesSaveApplyAndGetSnapshot(t *testing.T) {
 
 		defer release()
 
-		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: store, settingsApplier: applier}).DomainHandlers().Settings
+		h := newSettingsHandler(Deps{Logger: newDiscardLogger(), Activity: newActivityLoggerForTest(t), Settings: store, Applier: applier})
 
 		firstDone, firstRec := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -174,7 +174,7 @@ func assertCoherentSettingsResponse(t *testing.T, rec *httptest.ResponseRecorder
 }
 
 type gatedSettingsReadWriter struct {
-	settingssvc.ReadWriter
+	adminsettings.ReadWriter
 
 	readOnce atomic.Bool
 	entered  chan struct{}
@@ -207,7 +207,7 @@ func (w *gatedSettingsReadWriter) Update(next settingssvc.Settings) error {
 func TestSettingsAPIHandlerEmptyRequestDoesNotOverwriteConcurrentUpdate(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		writer := &gatedSettingsReadWriter{
-			ReadWriter: mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger()),
+			ReadWriter: mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}),
 			entered:    make(chan struct{}), release: make(chan struct{}),
 		}
 
@@ -217,7 +217,7 @@ func TestSettingsAPIHandlerEmptyRequestDoesNotOverwriteConcurrentUpdate(t *testi
 
 		defer release()
 
-		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: testSettingsApplier{}}).DomainHandlers().Settings
+		h := newSettingsHandler(Deps{Logger: newDiscardLogger(), Activity: newActivityLoggerForTest(t), Settings: writer, Applier: testSettingsApplier{}})
 
 		emptyDone, emptyRec := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{}`))
 
@@ -247,7 +247,7 @@ func TestSettingsAPIHandlerEmptyRequestDoesNotOverwriteConcurrentUpdate(t *testi
 
 func TestSettingsAPIHandlerCanceledQueuedGetAndUpdateDoNotReadOrWrite(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		writer := &countingSettingsWriter{ReadWriter: mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())}
+		writer := &countingSettingsWriter{ReadWriter: mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5})}
 
 		applier := &orderedSettingsApplier{targets: []int{5, 3, 1}, entered: make(chan struct{}), release: make(chan struct{})}
 
@@ -255,7 +255,7 @@ func TestSettingsAPIHandlerCanceledQueuedGetAndUpdateDoNotReadOrWrite(t *testing
 
 		defer release()
 
-		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: applier}).DomainHandlers().Settings
+		h := newSettingsHandler(Deps{Logger: newDiscardLogger(), Activity: newActivityLoggerForTest(t), Settings: writer, Applier: applier})
 
 		firstDone, _ := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -308,7 +308,7 @@ func TestSettingsAPIHandlerSaveApplyOrderingWithWorkerHTTP(t *testing.T) {
 
 	t.Cleanup(server.Close)
 
-	store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())
+	store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5})
 
 	writer := &savedSettingsGate{ReadWriter: store, entered: make(chan struct{}), release: make(chan struct{})}
 
@@ -316,7 +316,7 @@ func TestSettingsAPIHandlerSaveApplyOrderingWithWorkerHTTP(t *testing.T) {
 
 	defer release()
 
-	h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, server.URL))}).DomainHandlers().Settings
+	h := newSettingsHandler(Deps{Logger: newDiscardLogger(), Activity: newActivityLoggerForTest(t), Settings: writer, Applier: adminsettings.NewSettingsApplier(newTestAlarmClient(t, server.URL))})
 
 	firstDone, firstRec := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -354,7 +354,7 @@ func TestSettingsAPIHandlerSaveApplyOrderingWithWorkerHTTP(t *testing.T) {
 }
 
 type savedSettingsGate struct {
-	settingssvc.ReadWriter
+	adminsettings.ReadWriter
 
 	entered chan struct{}
 	release chan struct{}
@@ -380,7 +380,7 @@ type remainingBudgetApplier struct {
 	remaining chan time.Duration
 }
 
-func (a remainingBudgetApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (sharedsettings.AlarmAdvanceMinutesApplyResult, error) {
+func (a remainingBudgetApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (adminsettings.AlarmAdvanceMinutesApplyResult, error) {
 	if minutes != 10 {
 		return a.testSettingsApplier.ApplyAlarmAdvanceMinutes(ctx, minutes)
 	}
@@ -391,7 +391,7 @@ func (a remainingBudgetApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, mi
 
 	<-ctx.Done()
 
-	return sharedsettings.AlarmAdvanceMinutesApplyResult{
+	return adminsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 		AlarmReason:                  "alarm worker outcome_unknown: request deadline",
 	}, ctx.Err()
@@ -399,7 +399,7 @@ func (a remainingBudgetApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, mi
 
 func TestSettingsAPIHandlerOperationBudgetIncludesCoordinatorWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())
+		store := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5})
 
 		writer := &savedSettingsGate{ReadWriter: store, entered: make(chan struct{}), release: make(chan struct{})}
 
@@ -409,7 +409,7 @@ func TestSettingsAPIHandlerOperationBudgetIncludesCoordinatorWait(t *testing.T) 
 
 		applier := remainingBudgetApplier{remaining: make(chan time.Duration, 1)}
 
-		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: applier}).DomainHandlers().Settings
+		h := newSettingsHandler(Deps{Logger: newDiscardLogger(), Activity: newActivityLoggerForTest(t), Settings: writer, Applier: applier})
 
 		firstDone, _ := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -456,7 +456,7 @@ func TestSettingsAPIHandlerCanceledDuringReadDoesNotReturnPastSnapshotOrPersist(
 		t.Run(method, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				writer := &gatedSettingsReadWriter{
-					ReadWriter: mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger()),
+					ReadWriter: mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}),
 					entered:    make(chan struct{}), release: make(chan struct{}),
 				}
 
@@ -466,7 +466,7 @@ func TestSettingsAPIHandlerCanceledDuringReadDoesNotReturnPastSnapshotOrPersist(
 
 				defer release()
 
-				h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: testSettingsApplier{}}).DomainHandlers().Settings
+				h := newSettingsHandler(Deps{Logger: newDiscardLogger(), Activity: newActivityLoggerForTest(t), Settings: writer, Applier: testSettingsApplier{}})
 
 				ctx, cancel := context.WithCancel(t.Context())
 

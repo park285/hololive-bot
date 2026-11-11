@@ -17,10 +17,9 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 	started := time.Now().UTC()
 	free, excluded, startCursor := s.discoverySnapshot()
-	s.beginCycle(started, free == 0)
+	s.beginCycle(free == 0)
 
 	if free == 0 {
-		s.finishCycle(started, collecterr.OperationCode(""), false)
 		s.metrics.ObserveDiscoveryCycle(false)
 
 		return
@@ -28,7 +27,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 	source := s.projectionSource()
 	if source == nil {
-		s.failCycle(ctx, started, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "discovery cycle: candidate source is missing"))
+		s.failCycle(ctx, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "discovery cycle: candidate source is missing"))
 
 		return
 	}
@@ -39,7 +38,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 	cancel()
 
 	if err != nil {
-		s.failCycle(ctx, started, err)
+		s.failCycle(ctx, err)
 
 		return
 	}
@@ -49,7 +48,6 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 	runners := s.discoveryRunners()
 	if len(runners) == 0 {
-		s.finishCycle(started, collecterr.OperationCode(""), true)
 		s.metrics.ObserveDiscoveryCycle(false)
 
 		return
@@ -67,7 +65,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 		enqueue:     func(spec *joblease.JobSpec) EnqueueResult { return s.enqueueDiscovered(ctx, spec) },
 		warnFull:    s.warnQueueFullOnce(),
 	})
-	s.recordCycle(started, generation, &outcome, start, len(runners))
+	s.recordCycle(generation, &outcome, start, len(runners))
 
 	failed := false
 
@@ -147,16 +145,12 @@ func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, start
 	return free, excluded, startCursor
 }
 
-func (s *leaseScheduler) beginCycle(started time.Time, queueFull bool) {
+func (s *leaseScheduler) beginCycle(queueFull bool) {
 	s.cycleMu.Lock()
 
-	s.cycleStartedAt = started
 	s.discovered = 0
-	s.enqueued = 0
-	s.deduped = 0
 	s.queueFull = queueFull
 	s.discoveryTruncated = false
-	s.lastCycleOperationCode = ""
 	s.cycleMu.Unlock()
 }
 
@@ -175,27 +169,16 @@ func (s *leaseScheduler) setProjection(generation int64) {
 }
 
 func (s *leaseScheduler) recordCycle(
-	started time.Time,
 	generation int64,
 	outcome *capacityCycleResult,
 	start, total int,
 ) {
 	s.cycleMu.Lock()
 
-	s.cycleStartedAt = started
 	s.projection = generation
 	s.discovered = outcome.discovered
-	s.enqueued = outcome.enqueued
-	s.deduped = outcome.deduped
 	s.queueFull = outcome.queueFull
 	s.discoveryTruncated = outcome.truncated
-	s.lastCycleCompletedAt = time.Now().UTC()
-
-	if outcome.queryErr != nil {
-		s.lastCycleOperationCode = collecterr.OperationCandidateLoadFailed
-	} else {
-		s.lastCycleOperationCode = ""
-	}
 
 	if total > 0 {
 		s.rotationCursor = nextRotationCursor(start, total, outcome)
@@ -204,35 +187,7 @@ func (s *leaseScheduler) recordCycle(
 	s.cycleMu.Unlock()
 }
 
-func (s *leaseScheduler) finishCycle(started time.Time, code collecterr.OperationCode, rotate bool) {
-	s.cycleMu.Lock()
-
-	s.cycleStartedAt = started
-	s.lastCycleCompletedAt = time.Now().UTC()
-	s.lastCycleOperationCode = code
-
-	if rotate {
-		total := 0
-
-		if s.executor.registry != nil {
-			total = len(s.executor.registry.Runners())
-		}
-
-		if total > 0 {
-			s.rotationCursor = (s.rotationCursor + 1) % total
-		}
-	}
-
-	s.cycleMu.Unlock()
-}
-
-func (s *leaseScheduler) failCycle(ctx context.Context, started time.Time, err error) {
-	s.cycleMu.Lock()
-
-	s.cycleStartedAt = started
-	s.lastCycleCompletedAt = time.Now().UTC()
-	s.lastCycleOperationCode = collecterr.OperationCandidateLoadFailed
-	s.cycleMu.Unlock()
+func (s *leaseScheduler) failCycle(ctx context.Context, err error) {
 	s.metrics.ObserveDiscoveryCycle(!supersededError(err))
 	s.reportDiscoveryFailure(ctx, globalDiscoveryKey, nil, err)
 }

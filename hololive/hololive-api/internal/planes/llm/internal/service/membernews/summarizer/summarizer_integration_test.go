@@ -33,6 +33,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
@@ -147,70 +148,70 @@ func newTestMemberNewsClient(t *testing.T) LLMClient {
 	return client
 }
 
-func integrationCandidates() []model.FilteredCandidate {
+func integrationCandidates() []newsmodel.FilteredCandidate {
 	date := func(m, d int) time.Time {
 		return time.Date(2026, time.Month(m), d, 12, 0, 0, 0, kst)
 	}
 
-	return []model.FilteredCandidate{
+	return []newsmodel.FilteredCandidate{
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "hololive SUPER EXPO 2026",
 				Description: "마쿠하리 메세에서 개최되는 홀로라이브 최대 규모 행사",
 			},
 			EffectiveDate:  date(3, 6),
 			MatchedMembers: []string{testMemberMiko, testMemberSuisei},
 			MemberText:     "사쿠라 미코, 호시마치 스이세이",
-			Category:       model.CategoryEvent,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategoryEvent,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/events/expo2026",
 		},
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "Hoshimachi Suisei Live SuperNova: REBOOT",
 				Description: "호시마치 스이세이 솔로 라이브 콘서트",
 			},
 			EffectiveDate:  date(2, 20),
 			MatchedMembers: []string{testMemberSuisei},
 			MemberText:     testMemberSuisei,
-			Category:       model.CategorySoloLive,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategorySoloLive,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/events/suisei2026",
 		},
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "사쿠라 미코 생일 기념 굿즈",
 				Description: "사쿠라 미코 생일 기념 한정 굿즈 판매",
 			},
 			EffectiveDate:  date(3, 5),
 			MatchedMembers: []string{testMemberMiko},
 			MemberText:     testMemberMiko,
-			Category:       model.CategoryGoods,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategoryGoods,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/miko-birthday-goods",
 		},
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "hololive DEV_IS NEW WAVE POP UP STORE",
 				Description: "DEV_IS 소속 멤버 팝업스토어 개최",
 			},
 			EffectiveDate:  date(2, 14),
 			MatchedMembers: []string{testMemberMiko},
 			MemberText:     testMemberMiko,
-			Category:       model.CategoryOther,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategoryOther,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/devis-popup",
 		},
 		{
-			Candidate: model.Candidate{
+			Candidate: newsmodel.Candidate{
 				Title:       "ホロライブ バレンタイン 2026",
 				Description: "HMV&BOOKS SHIBUYA 팝업 이벤트",
 			},
 			EffectiveDate:  date(2, 7),
 			MatchedMembers: []string{testMemberSuisei},
 			MemberText:     testMemberSuisei,
-			Category:       model.CategoryEvent,
-			SourceTier:     model.SourceTierOfficial,
+			Category:       newsmodel.CategoryEvent,
+			SourceTier:     newsmodel.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/valentine2026",
 		},
 	}
@@ -223,7 +224,7 @@ func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(client, nil, validator, nil)
 
-	input := model.SummarizeInput{
+	input := newsmodel.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko, testMemberSuisei},
@@ -263,7 +264,7 @@ func TestIntegration_MemberNewsSummarize_Monthly(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(client, nil, validator, nil)
 
-	input := model.SummarizeInput{
+	input := newsmodel.SummarizeInput{
 		Period:      model.PeriodMonthly,
 		Now:         time.Date(2026, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko, testMemberSuisei},
@@ -299,7 +300,7 @@ func TestIntegration_MemberNewsSummarize_SchemaCompliance(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(client, nil, validator, nil)
 
-	input := model.SummarizeInput{
+	input := newsmodel.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko},
@@ -382,7 +383,7 @@ func TestIntegration_Consensus_FullPipeline(t *testing.T) {
 		nil,
 	)
 
-	input := model.SummarizeInput{
+	input := newsmodel.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko, testMemberSuisei},

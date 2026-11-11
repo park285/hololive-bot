@@ -29,7 +29,8 @@ func TestDecideRoutesEveryObservation(t *testing.T) {
 		wantCode   string
 	}{
 		{"handoff completed", Input{Snapshot: snapshot("handoff_completed")}, ActionComplete, ""},
-		{"completed state is normalized", Input{Snapshot: snapshot("  HANDOFF_COMPLETED ")}, ActionComplete, ""},
+		{"padded upper-case completed is not a wire state", Input{Snapshot: snapshot("  HANDOFF_COMPLETED ")}, ActionQuarantine, CodeOutcomeUnknown},
+		{"capitalized failed is not reissued", Input{Snapshot: snapshot("Failed"), RetryBudgetLeft: true}, ActionQuarantine, CodeOutcomeUnknown},
 		{"failed with generation and budget left", Input{Snapshot: snapshot("failed"), Generation: 1, RetryBudgetLeft: true}, ActionReissue, CodeFailed},
 		{"failed at the last generation", Input{Snapshot: snapshot("failed"), Generation: iris.ReplyReissueMaxGenerations, RetryBudgetLeft: true}, ActionExhausted, CodeFailed},
 		{"failed without attempt budget", Input{Snapshot: snapshot("failed"), RetryBudgetLeft: false}, ActionExhausted, CodeFailed},

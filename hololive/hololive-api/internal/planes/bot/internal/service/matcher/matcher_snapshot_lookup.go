@@ -29,34 +29,6 @@ func appendSnapshotEntry(target map[string][]*snapshotEntry, key string, entry *
 	target[key] = append(target[key], entry)
 }
 
-func snapshotTokens(nameNorm string, aliasNorms []string) []string {
-	values := make([]string, 0, 1+len(aliasNorms))
-
-	if nameNorm != "" {
-		values = append(values, nameNorm)
-	}
-
-	values = append(values, aliasNorms...)
-
-	seen := make(map[string]struct{})
-
-	tokens := make([]string, 0, len(values))
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-
-		if _, exists := seen[value]; exists {
-			continue
-		}
-
-		seen[value] = struct{}{}
-		tokens = append(tokens, value)
-	}
-
-	return tokens
-}
-
 func pickPreferredSnapshotCandidate(entries []*snapshotEntry) *matchCandidate {
 	if len(entries) == 0 {
 		return nil
@@ -178,11 +150,6 @@ func snapshotMemberForEntry(entry *snapshotEntry, org string) *domain.Member {
 func (mm *Matcher) findSnapshotCandidates(snapshot *matcherSnapshot, queryNorm string) []*snapshotEntry {
 	if snapshot == nil || queryNorm == "" {
 		return nil
-	}
-
-	candidates := snapshot.tokenIndex[queryNorm]
-	if len(candidates) > 0 {
-		return candidates
 	}
 
 	return snapshot.entries

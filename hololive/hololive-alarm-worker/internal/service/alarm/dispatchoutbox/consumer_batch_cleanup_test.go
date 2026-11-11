@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type batchCleanupRepository struct {
@@ -66,15 +64,27 @@ type batchCleanupTestCase struct {
 	wantKeyCalls                             int
 }
 
+const (
+	batchCleanupValidEventID   int64 = 10
+	batchCleanupInvalidEventID int64 = 11
+)
+
+func batchCleanupEvents() map[int64]EventRecord {
+	return map[int64]EventRecord{
+		batchCleanupValidEventID:   {ID: batchCleanupValidEventID, Payload: []byte(minimalEnvelopePayload)},
+		batchCleanupInvalidEventID: {ID: batchCleanupInvalidEventID, Payload: []byte("{")},
+	}
+}
+
 func batchCleanupRecords(valid bool) []*Record {
 	records := []*Record{
-		{ID: 1, Status: StatusLeased, Payload: []byte(minimalEnvelopePayload), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-before"}},
-		{ID: 2, Status: StatusLeased, Payload: []byte("{"), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:invalid"}},
-		{ID: 3, Status: StatusLeased, Payload: []byte(minimalEnvelopePayload), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-after"}},
+		{ID: 1, Status: StatusLeased, EventID: batchCleanupValidEventID, AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-before"}},
+		{ID: 2, Status: StatusLeased, EventID: batchCleanupInvalidEventID, AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:invalid"}},
+		{ID: 3, Status: StatusLeased, EventID: batchCleanupValidEventID, AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-after"}},
 	}
 
 	if valid {
-		records[1].Payload = []byte(minimalEnvelopePayload)
+		records[1].EventID = batchCleanupValidEventID
 	}
 
 	return records
@@ -102,7 +112,7 @@ func assertBatchCleanupResult(
 	repo *batchCleanupRepository,
 	releaser *fakeClaimKeyReleaser,
 	records []*Record,
-	out []domain.AlarmQueueEnvelope,
+	out []AlarmQueueEnvelope,
 	err error,
 	cleanupDone <-chan struct{},
 ) {
@@ -178,6 +188,7 @@ func TestConsumerDrainBatchFailedBatchCleanup(t *testing.T) {
 			records := batchCleanupRecords(tt.valid)
 			repo := &batchCleanupRepository{consumerTestRepository: &consumerTestRepository{
 				claimDueFunc: func(context.Context, string, int, time.Duration) ([]*Record, error) { return records, nil },
+				events:       batchCleanupEvents(),
 			}, loadErr: tt.loadErr, terminalErr: tt.terminalErr, releaseErr: tt.cleanupErr}
 
 			var cleanupDone <-chan struct{}

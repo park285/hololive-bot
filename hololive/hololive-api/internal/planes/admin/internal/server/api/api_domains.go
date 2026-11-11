@@ -21,16 +21,14 @@
 package api
 
 import (
-	"context"
+	"errors"
 	"log/slog"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -55,51 +53,37 @@ type RoomHandler struct {
 	logger   *slog.Logger
 }
 
-type StreamHandler struct {
-	holodex *holodexprovider.Service
-	logger  *slog.Logger
-}
-
 type StatsHandler struct {
-	repository        *member.Repository
-	alarm             AlarmManager
-	acl               *acl.Service
-	memberIndexLoader func(context.Context) ([]*domain.Member, error)
-	logger            *slog.Logger
-}
-
-type SettingsAPIHandler struct {
-	settings           settings.ReadWriter
-	settingsApplier    sharedsettings.SettingsApplier
-	settingsOperations *settingsOperationGate
-	roomNames          RoomNameSetter
-	xSpaceSessions     *xspaces.Store
-	activity           *activity.Logger
-	logger             *slog.Logger
+	repository *member.Repository
+	alarm      AlarmManager
+	acl        *acl.Service
+	logger     *slog.Logger
 }
 
 func NewMemberHandler(repository *member.Repository, service *MemberAdminService, logger *slog.Logger) *MemberHandler {
 	return &MemberHandler{repository: repository, service: service, logger: logger}
 }
 
-func NewAlarmHandler(common CommonDeps, alarm AlarmManager) *AlarmHandler {
-	return &AlarmHandler{alarm: alarm, activity: common.Activity, logger: common.Logger}
-}
+// Deps는 admin route handler 조립 입력이다. Repository·Holodex·Alarm·RoomNames·ACL·Settings는 필수이고
+// 요청 처리에서 다시 확인하지 않는다. MemberCache·Applier가 없으면 해당 endpoint가 503을 돌려주고,
+// Iris가 없으면 joined-rooms가 503, DispatchOps가 없으면 원장 운영 endpoint가 503, XSpaceSessions가 없으면
+// X 세션 관리가 비활성 응답을 돌려준다.
+type Deps struct {
+	Logger   *slog.Logger
+	Activity *activity.Logger
 
-func NewRoomHandler(common CommonDeps, access *acl.Service, iris IrisRoomLister) *RoomHandler {
-	return &RoomHandler{acl: access, iris: iris, activity: common.Activity, logger: common.Logger}
-}
+	Repository  *member.Repository
+	MemberCache *member.Cache
+	Holodex     *holodexprovider.Service
+	Alarm       AlarmManager
+	RoomNames   RoomNameSetter
+	ACL         *acl.Service
+	Settings    adminsettings.ReadWriter
+	Applier     adminsettings.SettingsApplier
 
-func NewStreamHandler(logger *slog.Logger, holodex *holodexprovider.Service) *StreamHandler {
-	return &StreamHandler{logger: logger, holodex: holodex}
-}
-
-func NewStatsHandler(logger *slog.Logger, repository *member.Repository, alarm AlarmManager, access *acl.Service, loadMembers func(context.Context) ([]*domain.Member, error)) *StatsHandler {
-	return &StatsHandler{logger: logger, repository: repository, alarm: alarm, acl: access, memberIndexLoader: loadMembers}
-}
-
-func NewSettingsAPIHandler(common CommonDeps, deps SettingsDeps, sessions *xspaces.Store) *SettingsAPIHandler {
-	return &SettingsAPIHandler{logger: common.Logger, activity: common.Activity, settings: deps.Settings, settingsApplier: deps.Applier, roomNames: deps.RoomNames, xSpaceSessions: sessions, settingsOperations: &settingsOperationGate{}}
+	Iris           IrisRoomLister
+	DispatchOps    DispatchOperations
+	XSpaceSessions *xspaces.Store
 }
 
 type DomainHandlers struct {
@@ -108,35 +92,73 @@ type DomainHandlers struct {
 	Room     *RoomHandler
 	Stream   *StreamHandler
 	Stats    *StatsHandler
-	Settings *SettingsAPIHandler
+	Settings *SettingsHandler
 }
 
-func (h *Handler) DomainHandlers() *DomainHandlers {
-	h = h.ensureDefaults()
-
-	common := CommonDeps{Logger: h.logger, Activity: h.activity}
-	settingsHandler := NewSettingsAPIHandler(common, SettingsDeps{Settings: h.settings, Applier: h.settingsApplier, RoomNames: h.roomNames}, h.xSpaceSessions)
-
-	settingsHandler.settingsOperations = &h.settingsOperations
-
-	var cache memberAdminCache
-
-	if h.memberCache != nil {
-		cache = h.memberCache
-	}
-
-	var activityLog SettingsActivityLogger
-
-	if h.activity != nil {
-		activityLog = h.activity
+// NewDomainHandlers는 admin route handler를 한 번 만든다. 필수 의존성이 없으면 조립 오류를 돌려준다.
+func NewDomainHandlers(deps Deps) (*DomainHandlers, error) {
+	if err := deps.validate(); err != nil {
+		return nil, err
 	}
 
 	return &DomainHandlers{
-		Member:   NewMemberHandler(h.repository, NewMemberAdminService(h.repository, cache, activityLog, h.logger), h.logger),
-		Alarm:    NewAlarmHandler(common, h.alarm),
-		Room:     NewRoomHandler(common, h.acl, h.iris),
-		Stream:   NewStreamHandler(h.logger, h.holodex),
-		Stats:    NewStatsHandler(h.logger, h.repository, h.alarm, h.acl, h.memberIndexLoader),
-		Settings: settingsHandler,
+		Member:   newMemberHandler(deps),
+		Alarm:    &AlarmHandler{alarm: deps.Alarm, dispatchOps: deps.DispatchOps, activity: deps.Activity, logger: deps.Logger},
+		Room:     &RoomHandler{acl: deps.ACL, iris: deps.Iris, activity: deps.Activity, logger: deps.Logger},
+		Stream:   &StreamHandler{holodex: deps.Holodex, logger: deps.Logger},
+		Stats:    &StatsHandler{repository: deps.Repository, alarm: deps.Alarm, acl: deps.ACL, logger: deps.Logger},
+		Settings: newSettingsHandler(deps),
+	}, nil
+}
+
+func (d Deps) validate() error {
+	required := []struct {
+		missing bool
+		err     string
+	}{
+		{d.Repository == nil, "member repository must not be nil"},
+		{d.Holodex == nil, "holodex service must not be nil"},
+		{d.Alarm == nil, "alarm client must not be nil"},
+		{d.RoomNames == nil, "room name setter must not be nil"},
+		{d.ACL == nil, "acl service must not be nil"},
+		{d.Settings == nil, "settings service must not be nil"},
+	}
+	for _, dependency := range required {
+		if dependency.missing {
+			return errors.New(dependency.err)
+		}
+	}
+
+	return nil
+}
+
+// activityLog는 nil *activity.Logger를 nil이 아닌 interface로 넘기지 않는다.
+func (d Deps) activityLog() SettingsActivityLogger {
+	if d.Activity == nil {
+		return nil
+	}
+
+	return d.Activity
+}
+
+func newMemberHandler(deps Deps) *MemberHandler {
+	var cache memberAdminCache
+
+	if deps.MemberCache != nil {
+		cache = deps.MemberCache
+	}
+
+	return NewMemberHandler(deps.Repository, NewMemberAdminService(deps.Repository, cache, deps.activityLog(), deps.Logger), deps.Logger)
+}
+
+func newSettingsHandler(deps Deps) *SettingsHandler {
+	return &SettingsHandler{
+		SettingsApplier: deps.Applier,
+		Logger:          deps.Logger,
+		Alarm:           deps.RoomNames,
+		Activity:        deps.activityLog(),
+		Settings:        deps.Settings,
+		xSpaceSessions:  deps.XSpaceSessions,
+		operations:      newSettingsOperationGate(),
 	}
 }

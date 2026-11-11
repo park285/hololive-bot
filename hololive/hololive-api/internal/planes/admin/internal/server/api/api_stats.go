@@ -88,10 +88,6 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members, alarmKeys int
 }
 
 func (h *StatsHandler) GetStats(c *gin.Context) {
-	if !h.requireStatsDeps(c) {
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -105,20 +101,13 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 		return
 	}
 
-	// ACL 서비스에서 rooms 수 조회
-	var roomCount int
-
-	if h.acl != nil {
-		_, _, rooms := h.acl.GetACLStatus()
-
-		roomCount = len(rooms)
-	}
+	_, _, rooms := h.acl.GetACLStatus()
 
 	ginjson.Respond(c, http.StatusOK, statsResponse{
 		Status:  "ok",
 		Members: members,
 		Alarms:  alarmKeys,
-		Rooms:   roomCount,
+		Rooms:   len(rooms),
 		Version: health.GetVersion(),
 		Uptime:  health.GetUptime(),
 	})

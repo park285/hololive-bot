@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -61,12 +60,15 @@ type commitMutationCase struct {
 	wantCommunity []string
 	wantShorts    []string
 	wantNew       []string
+	// noCacheAfterCommit은 commit 전에 cache 무효화를 끝내 commit 뒤 cache 장애가 결과에 드러나지 않는 변경이다.
+	noCacheAfterCommit bool
 }
 
 func commitMutationCases() []commitMutationCase {
 	return []commitMutationCase{
 		{
-			name: "add-room",
+			name:               "add-room",
+			noCacheAfterCommit: true,
 			mutate: func(ctx context.Context, service *AlarmService) error {
 				_, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: testNewRoomC, ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
 				return err
@@ -74,7 +76,8 @@ func commitMutationCases() []commitMutationCase {
 			wantLive: []string{testExistingRoomA, testExistingRoomB, testNewRoomC}, wantCommunity: []string{testExistingRoomA, testExistingRoomB},
 		},
 		{
-			name: "add-type",
+			name:               "add-type",
+			noCacheAfterCommit: true,
 			mutate: func(ctx context.Context, service *AlarmService) error {
 				_, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: testExistingRoomA, ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}})
 				return err
@@ -106,7 +109,8 @@ func commitMutationCases() []commitMutationCase {
 			wantLive: []string{testExistingRoomB}, wantCommunity: []string{testExistingRoomB},
 		},
 		{
-			name: "add-new-channel",
+			name:               "add-new-channel",
+			noCacheAfterCommit: true,
 			mutate: func(ctx context.Context, service *AlarmService) error {
 				_, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: testNewRoomC, ChannelID: "new-channel", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
 				return err
@@ -141,7 +145,6 @@ func newCommitBoundaryService(t *testing.T) (*AlarmService, *pgxpool.Pool, *cach
 func failCommittedCacheWrites(client *cachemocks.Client) {
 	cacheErr := errors.New("cache unavailable after commit")
 
-	client.HDelFunc = func(context.Context, string, ...string) error { return cacheErr }
 	client.HSetFunc = func(context.Context, string, string, string) error { return cacheErr }
 	client.DelFunc = func(context.Context, string) error { return cacheErr }
 	client.ScanKeyPagesFunc = func(context.Context, string, int64, func([]string) error) error { return cacheErr }
@@ -174,7 +177,7 @@ func TestSubscriptionCommitBoundaryPreservesRecipients(t *testing.T) {
 
 					require.True(t, committed)
 
-					if failure == "request-canceled" {
+					if failure == "request-canceled" || mutation.noCacheAfterCommit {
 						require.NoError(t, err)
 					} else {
 						require.Error(t, err)
@@ -214,17 +217,16 @@ func assertCommittedRecipients(t *testing.T, service *AlarmService, pool *pgxpoo
 	}
 }
 
-func TestFailedNegativeInvalidationLeavesDatabaseAndRecipientsUnchanged(t *testing.T) {
+func TestFailedSubscriberSetInvalidationLeavesDatabaseAndRecipientsUnchanged(t *testing.T) {
 	service, pool, client := newCommitBoundaryService(t)
 	ctx := t.Context()
-	emptyKey := alarmkeys.BuildChannelSubscriberEmptyKey(testChannelID, domain.AlarmTypeLive)
-	require.NoError(t, client.Set(ctx, emptyKey, "1", time.Minute))
+	subscriberKey := alarmkeys.BuildChannelSubscriberKey(testChannelID, domain.AlarmTypeLive)
 
 	originalDel := client.DelFunc
-	cacheErr := errors.New("negative marker invalidation failed")
+	cacheErr := errors.New("subscriber set invalidation failed")
 
 	client.DelFunc = func(ctx context.Context, key string) error {
-		if key == emptyKey {
+		if key == subscriberKey {
 			return cacheErr
 		}
 

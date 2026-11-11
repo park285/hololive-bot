@@ -60,7 +60,7 @@ func TestRunOutputDefensivelyClonesPayload(t *testing.T) {
 	}
 }
 
-func TestPartialResultRejectsFatalOnlyClasses(t *testing.T) {
+func TestPartialResultRejectsNonDegradableClasses(t *testing.T) {
 	t.Parallel()
 
 	output, err := NewRunOutput([]contract.Envelope{{ObservationKind: contract.KindVideoList}}, time.Second)
@@ -72,9 +72,11 @@ func TestPartialResultRejectsFatalOnlyClasses(t *testing.T) {
 		context.Canceled,
 		collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "protocol"),
 		collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "internal"),
+		collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "parser drift"),
+		collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "configuration"),
 	} {
 		if result, resultErr := NewPartialResult(output, cause, contract.KindShortsList); resultErr == nil || !result.IsZero() {
-			t.Fatalf("fatal-only cause accepted as PARTIAL: %v", cause)
+			t.Fatalf("non-degradable cause accepted as PARTIAL: %v", cause)
 		}
 	}
 }

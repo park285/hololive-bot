@@ -97,12 +97,11 @@ func TestPgBroadcastHistoryRepositoryReviewedClassification(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, entry)
 	require.Equal(t, string(broadcasttype.Talk), entry.BroadcastType)
-	require.Equal(t, testTypeSourceReviewed, entry.BroadcastTypeSource)
 	require.Empty(t, entry.TopicID)
 	require.Equal(t, "Prisuners, hello", entry.Title)
 
 	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
-		ChannelID: reviewedTalkChannelID, Type: string(broadcasttype.Talk), Limit: 1, IncludeAll: true,
+		ChannelID: reviewedTalkChannelID, Type: string(broadcasttype.Talk), Limit: 1,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Entries, 1)

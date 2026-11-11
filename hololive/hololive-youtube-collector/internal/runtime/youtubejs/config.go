@@ -18,9 +18,6 @@ const (
 )
 
 const (
-	defaultHelperTimeout   = 30 * time.Second
-	defaultHealthTimeout   = time.Second
-	defaultShutdownTimeout = 3 * time.Second
 	maxHelperInflight      = 64
 	maxUnixSocketPathBytes = 100
 	helperRuntimeDirPrefix = "youtubejs-helper-"
@@ -66,30 +63,6 @@ func applyConfigDefaults(cfg *Config) {
 	if strings.TrimSpace(cfg.RuntimeBaseDir) == "" {
 		cfg.RuntimeBaseDir = os.TempDir()
 	}
-
-	if cfg.RequestTimeout <= 0 {
-		cfg.RequestTimeout = defaultHelperTimeout
-	}
-
-	if cfg.StartupTimeout <= 0 {
-		cfg.StartupTimeout = cfg.RequestTimeout
-	}
-
-	if cfg.HealthTimeout <= 0 {
-		cfg.HealthTimeout = defaultHealthTimeout
-	}
-
-	if cfg.ShutdownTimeout <= 0 {
-		cfg.ShutdownTimeout = defaultShutdownTimeout
-	}
-
-	if cfg.RequestBodyLimit <= 0 {
-		cfg.RequestBodyLimit = DefaultRequestBodyLimit
-	}
-
-	if cfg.ResponseBodyLimit <= 0 {
-		cfg.ResponseBodyLimit = DefaultResponseBodyLimit
-	}
 }
 
 func validateResolvedConfig(cfg *Config) error {
@@ -107,6 +80,15 @@ func validateResolvedConfig(cfg *Config) error {
 
 	if cfg.RequestBodyLimit <= 0 || cfg.ResponseBodyLimit <= 0 {
 		return errors.New("body limits must be positive")
+	}
+
+	// helper 기동 인자는 요청 읽기 기한을 밀리초 정수로 받으므로 1ms 미만은 0으로 잘린다.
+	if cfg.RequestTimeout < time.Millisecond {
+		return errors.New("request timeout must be at least 1ms")
+	}
+
+	if cfg.StartupTimeout <= 0 || cfg.HealthTimeout <= 0 || cfg.ShutdownTimeout <= 0 {
+		return errors.New("startup, health and shutdown timeouts must be positive")
 	}
 
 	if err := validateRuntimeBaseDir(cfg.RuntimeBaseDir); err != nil {

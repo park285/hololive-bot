@@ -107,7 +107,6 @@ func fetchChannelPage(
 	result, err := client.FetchChannel(ctx, youtubejs.ChannelRequest{
 		ChannelID:               input.Subject(),
 		Kind:                    kind,
-		MaxPages:                input.MaxPages(),
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 		ScheduledFor:            new(input.Lease().ScheduledFor),
 	})

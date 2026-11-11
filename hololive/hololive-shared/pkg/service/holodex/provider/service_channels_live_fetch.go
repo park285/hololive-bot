@@ -14,6 +14,24 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// HololiveChannelPhotos는 Hololive 채널 ID별 Holodex 사진 URL을 돌려준다. 사진이 비어 있는 채널은 넣지 않는다.
+// 채널 목록은 5분 목록 캐시를 함께 쓴다.
+func (h *Service) HololiveChannelPhotos(ctx context.Context) (map[string]string, error) {
+	channels, err := h.fetchHololiveChannelList(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch hololive channel list: %w", err)
+	}
+
+	photos := make(map[string]string, len(channels))
+	for _, channel := range channels {
+		if channel.Photo != nil && *channel.Photo != "" {
+			photos[channel.ID] = *channel.Photo
+		}
+	}
+
+	return photos, nil
+}
+
 func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Channel, error) {
 	if cached, found := h.cacheManager.GetHololiveChannelList(ctx); found {
 		return cached, nil

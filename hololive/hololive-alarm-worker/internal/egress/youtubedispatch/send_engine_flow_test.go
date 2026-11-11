@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,7 +16,9 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
+	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -67,21 +70,28 @@ func TestDeliveryRetryAfterClampsExcessiveHTTPRetryAfter(t *testing.T) {
 	}
 }
 
-func TestMetricsRecorderRecordDeliveryFailureStoresLongestRetryAfter(t *testing.T) {
+func TestDispatchDeliveryRowsPassesProviderRetryAfterToFailureTransition(t *testing.T) {
 	t.Parallel()
 
-	result := &deliveryDispatchResult{}
-	recorder := &MetricsRecorder{}
+	sender := &testSender{
+		failRoom: map[string]bool{testRoom1: true},
+		failErr:  fmt.Errorf("wrap: %w", &iris.HTTPError{StatusCode: 429, RetryAfter: 2 * time.Second}),
+	}
+	d := newTestDispatcherForSend(t, sender)
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
+	}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	recorder.recordDeliveryFailureWithRetryAfter(result, "rate-limited", 10, 100, 2*time.Second)
-	recorder.recordDeliveryFailureWithRetryAfter(result, "rate-limited", 11, 101, time.Second)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
-	if got := result.FailureRetryAfter["rate-limited"]; got != 2*time.Second {
-		t.Fatalf("FailureRetryAfter[rate-limited] = %s, want 2s", got)
+	if result.FailedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	if got := result.FailureBuckets["rate-limited"]; len(got) != 2 || got[0] != 10 || got[1] != 11 {
-		t.Fatalf("FailureBuckets[rate-limited] = %#v, want [10 11]", got)
+	want := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 2*time.Second, store.DeliveryModePerRoom)}
+	if got := transitionSpy(t, d).recordedStartedFailures(); !slices.Equal(got, want) {
+		t.Fatalf("started failures = %v, want %v", got, want)
 	}
 }
 
@@ -153,10 +163,11 @@ func newFlowTestSendEngine(sender *flowTestSender, timeout time.Duration) *SendE
 
 func flowTestSendRequest(roomID string) deliverySendRequest {
 	return deliverySendRequest{
-		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
-		roomID:     roomID,
-		message:    testMessageHello,
-		dedupeKeys: []string{"youtube-notification:NEW_SHORT:" + roomID},
+		frozen:          &store.FrozenRequest{Route: testPreparedTextRoute},
+		clientRequestID: testClientRequestID,
+		roomID:          roomID,
+		message:         testMessageHello,
+		dedupeKeys:      []string{"youtube-notification:NEW_SHORT:" + roomID},
 	}
 }
 

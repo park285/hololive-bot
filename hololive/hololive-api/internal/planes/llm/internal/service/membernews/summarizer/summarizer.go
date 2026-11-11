@@ -33,35 +33,38 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 var kst = timeutil.KSTZone
 
-var categoryLabels = map[model.Category]string{
-	model.CategoryBirthdayLive: "생일 라이브",
-	model.CategorySoloLive:     "솔로 라이브",
-	model.CategoryCollab:       "콜라보",
-	model.CategoryEvent:        "이벤트",
-	model.CategoryGoods:        "굿즈",
+var categoryLabels = map[newsmodel.Category]string{
+	newsmodel.CategoryBirthdayLive: "생일 라이브",
+	newsmodel.CategorySoloLive:     "솔로 라이브",
+	newsmodel.CategoryCollab:       "콜라보",
+	newsmodel.CategoryEvent:        "이벤트",
+	newsmodel.CategoryGoods:        "굿즈",
 }
 
-var normalizedCategories = map[string]model.Category{
-	string(model.CategoryBirthdayLive): model.CategoryBirthdayLive,
-	string(model.CategorySoloLive):     model.CategorySoloLive,
-	string(model.CategoryCollab):       model.CategoryCollab,
-	string(model.CategoryEvent):        model.CategoryEvent,
-	string(model.CategoryGoods):        model.CategoryGoods,
+var normalizedCategories = map[string]newsmodel.Category{
+	string(newsmodel.CategoryBirthdayLive): newsmodel.CategoryBirthdayLive,
+	string(newsmodel.CategorySoloLive):     newsmodel.CategorySoloLive,
+	string(newsmodel.CategoryCollab):       newsmodel.CategoryCollab,
+	string(newsmodel.CategoryEvent):        newsmodel.CategoryEvent,
+	string(newsmodel.CategoryGoods):        newsmodel.CategoryGoods,
 }
 
 // ErrLLMUnavailable은 요약 LLM client 없이 Summarize가 호출됐음을 뜻한다.
 // ErrNoValidatedItems는 LLM 출력이 재검증에서 모두 버려졌음을 뜻한다.
-// 요약기는 결정적 digest를 스스로 만들지 않고 이 오류들을 돌려준다. 결정적 fallback digest는 membernews.Service가
-// 한 곳에서 소유한다.
+// 요약기는 후보 0건의 empty digest와 결정적 fallback digest를 만들지 않고 오류를 돌려준다. 두 digest는
+// membernews.Service가 한 곳에서 소유한다.
 var (
 	ErrLLMUnavailable   = errors.New("member news summarizer LLM unavailable")
 	ErrNoValidatedItems = errors.New("member news summary has no validated items")
+
+	errNoCandidates = errors.New("member news summarize input has no candidates")
 )
 
 // LLMClient는 지시를 계층으로만 받는다.
@@ -73,7 +76,7 @@ type LLMClient interface {
 type SummarizerImpl struct {
 	llm         LLMClient
 	searcher    sharedmodel.WebSearcher
-	validator   model.SourceURLValidator
+	validator   newsmodel.SourceURLValidator
 	promptGuard *promptguard.Guard
 	logger      *slog.Logger
 }
@@ -89,7 +92,7 @@ func WithPromptGuard(guard *promptguard.Guard) SummarizerOption {
 func NewSummarizer(
 	llm LLMClient,
 	searcher sharedmodel.WebSearcher,
-	validator model.SourceURLValidator,
+	validator newsmodel.SourceURLValidator,
 	logger *slog.Logger,
 	opts ...SummarizerOption,
 ) *SummarizerImpl {
@@ -111,13 +114,9 @@ func NewSummarizer(
 	return summarizer
 }
 
-func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeInput) (*model.Digest, error) {
-	if input == nil {
-		return newEmptyDigest(model.PeriodWeekly, 0), nil
-	}
-
-	if len(input.Candidates) == 0 {
-		return newEmptyDigest(input.Period, 0), nil
+func (s *SummarizerImpl) Summarize(ctx context.Context, input *newsmodel.SummarizeInput) (*model.Digest, error) {
+	if input == nil || len(input.Candidates) == 0 {
+		return nil, errNoCandidates
 	}
 
 	if s == nil || s.llm == nil {
@@ -156,7 +155,7 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 	return digest, nil
 }
 
-func (s *SummarizerImpl) searchContext(ctx context.Context, input *model.SummarizeInput) (string, error) {
+func (s *SummarizerImpl) searchContext(ctx context.Context, input *newsmodel.SummarizeInput) (string, error) {
 	if s.searcher == nil {
 		return "", nil
 	}
@@ -178,27 +177,17 @@ func (s *SummarizerImpl) searchContext(ctx context.Context, input *model.Summari
 	return formatSearchContext(results), nil
 }
 
-func newEmptyDigest(period model.Period, totalCount int) *model.Digest {
-	return &model.Digest{
-		ResultType:   sharedmodel.SummaryResultEmpty,
-		Period:       period,
-		Headline:     model.DefaultHeadline(period),
-		TopItems:     []model.SummaryItem{},
-		MoreSummary:  "",
-		OmittedCount: 0,
-		TotalCount:   totalCount,
-	}
-}
-
-// FilterCandidates에서 입력 후보를 사전 검증하지만, LLM이 source_url을 변형하거나 허용 범위 외 항목을 생성할 수 있으므로 출력에 대한 이중 검증이 의도적으로 적용됩니다.
-func (s *SummarizerImpl) validateAndBuildDigest(input *model.SummarizeInput, response *summaryResponse) *model.Digest {
+// validateAndBuildDigest: LLM 출력을 재검증합니다.
+// FilterCandidates에서 입력 후보를 사전 검증하지만, LLM이 source_url을 변형하거나
+// 허용 범위 외 항목을 생성할 수 있으므로 출력에 대한 이중 검증이 의도적으로 적용됩니다.
+func (s *SummarizerImpl) validateAndBuildDigest(input *newsmodel.SummarizeInput, response *summaryResponse) *model.Digest {
 	return validateAndBuildDigestFromResponse(input, response, s.validator)
 }
 
 func validateAndBuildDigestFromResponse(
-	input *model.SummarizeInput,
+	input *newsmodel.SummarizeInput,
 	response *summaryResponse,
-	validator model.SourceURLValidator,
+	validator newsmodel.SourceURLValidator,
 ) *model.Digest {
 	validatedItems := make([]model.SummaryItem, 0, len(response.TopItems))
 
@@ -212,7 +201,7 @@ func validateAndBuildDigestFromResponse(
 
 	headline := strings.TrimSpace(response.Headline)
 	if headline == "" {
-		headline = model.DefaultHeadline(input.Period)
+		headline = newsmodel.DefaultHeadline(input.Period)
 	}
 
 	remaining := max(len(input.Candidates)-len(validatedItems), 0)
@@ -235,7 +224,7 @@ func validateAndBuildDigestFromResponse(
 	}
 }
 
-func appendValidatedSummaryItem(items *[]model.SummaryItem, item *summaryResponseItem, candidates []model.FilteredCandidate, validator model.SourceURLValidator) {
+func appendValidatedSummaryItem(items *[]model.SummaryItem, item *summaryResponseItem, candidates []newsmodel.FilteredCandidate, validator newsmodel.SourceURLValidator) {
 	if !summaryResponseItemHasRequiredFields(item) || !summaryItemMatchesCandidate(item, candidates) {
 		return
 	}
@@ -257,7 +246,7 @@ func appendValidatedSummaryItem(items *[]model.SummaryItem, item *summaryRespons
 
 // 도메인이 신뢰되는 URL도 LLM이 만든 경로나 다른 멤버에게 귀속한 후보면 승인하지 않는다.
 // 출처와 멤버를 같은 입력 후보에 묶어 primary·adjudicator 양쪽에서 검증한다.
-func summaryItemMatchesCandidate(item *summaryResponseItem, candidates []model.FilteredCandidate) bool {
+func summaryItemMatchesCandidate(item *summaryResponseItem, candidates []newsmodel.FilteredCandidate) bool {
 	for i := range candidates {
 		candidate := &candidates[i]
 		if item.SourceURL != candidate.SourceURL {
@@ -321,7 +310,7 @@ func summaryResponseItemHasRequiredFields(item *summaryResponseItem) bool {
 		strings.TrimSpace(item.SourceURL) != ""
 }
 
-func validateSummaryResponseItemSource(item *summaryResponseItem, validator model.SourceURLValidator) (string, bool) {
+func validateSummaryResponseItemSource(item *summaryResponseItem, validator newsmodel.SourceURLValidator) (string, bool) {
 	normalizedURL := strings.TrimSpace(item.SourceURL)
 
 	if validator == nil {
@@ -333,14 +322,15 @@ func validateSummaryResponseItemSource(item *summaryResponseItem, validator mode
 		return "", false
 	}
 
-	if tier == model.SourceTierCommunity && !validator.HasCorroboration(item.Summary) {
+	if tier == newsmodel.SourceTierCommunity && !validator.HasCorroboration(item.Summary) {
 		return "", false
 	}
 
 	return sourceURL, true
 }
 
-func categoryLabel(cat model.Category) string {
+// categoryLabel: Category를 한국어 레이블로 변환.
+func categoryLabel(cat newsmodel.Category) string {
 	if label, ok := categoryLabels[cat]; ok {
 		return label
 	}
@@ -348,7 +338,7 @@ func categoryLabel(cat model.Category) string {
 	return "기타"
 }
 
-func BuildDeterministicFallback(period model.Period, candidates []model.FilteredCandidate) *model.Digest {
+func BuildDeterministicFallback(period model.Period, candidates []newsmodel.FilteredCandidate) *model.Digest {
 	items := make([]model.SummaryItem, 0, min(5, len(candidates)))
 	for idx := range candidates {
 		if idx >= 5 {
@@ -386,7 +376,7 @@ func BuildDeterministicFallback(period model.Period, candidates []model.Filtered
 	return &model.Digest{
 		ResultType:   sharedmodel.SummaryResultFallback,
 		Period:       model.NormalizePeriod(period),
-		Headline:     model.DefaultHeadline(period),
+		Headline:     newsmodel.DefaultHeadline(period),
 		TopItems:     items,
 		MoreSummary:  moreSummary,
 		OmittedCount: omitted,
@@ -394,11 +384,11 @@ func BuildDeterministicFallback(period model.Period, candidates []model.Filtered
 	}
 }
 
-func normalizeCategory(raw string) model.Category {
+func normalizeCategory(raw string) newsmodel.Category {
 	normalized := strings.TrimSpace(strings.ToLower(raw))
 	if category, ok := normalizedCategories[normalized]; ok {
 		return category
 	}
 
-	return model.CategoryOther
+	return newsmodel.CategoryOther
 }

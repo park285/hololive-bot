@@ -90,10 +90,9 @@ func NewStore(pool *pgxpool.Pool, key []byte) (*Store, error) {
 	return &Store{pool: pool, aead: aead}, nil
 }
 
-// LoadStore는 X_SPACES_KEY_FILE이 없으면 비활성화한다. 설정된 잘못된 키는 오류다.
-// 키 파일은 static secret master에서 배포한 private regular file이어야 한다.
-func LoadStore(pool *pgxpool.Pool) (store *Store, retErr error) {
-	path := os.Getenv("X_SPACES_KEY_FILE")
+// LoadStore는 각 runtime 설정 로더가 X_SPACES_KEY_FILE에서 읽은 키 파일 경로 path가 비어 있으면 ErrDisabled를
+// 돌려준다. 설정된 잘못된 키는 오류다. 키 파일은 static secret master에서 배포한 private regular file이어야 한다.
+func LoadStore(pool *pgxpool.Pool, path string) (store *Store, retErr error) {
 	if path == "" {
 		return nil, ErrDisabled
 	}

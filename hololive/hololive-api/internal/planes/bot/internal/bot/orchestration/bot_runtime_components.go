@@ -23,28 +23,9 @@ package orchestration
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 )
-
-func (b *Bot) ensureCommandExecutor() *orchcmd.CommandRouter {
-	if b.commandExecutor == nil {
-		b.commandExecutor = orchcmd.NewCommandRouter(b.commandRegistry, b.logger, b.sendMessage, b.messageStrings, b.cache)
-	}
-
-	return b.commandExecutor
-}
-
-func (b *Bot) ensureIngress() *ingress.MessageIngress {
-	if b.ingress == nil {
-		b.ingress = ingress.NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender, ingress.WithRoomObserver(b.rooms))
-	}
-
-	return b.ingress
-}
 
 func newRoomCatalog(postgres database.Client, irisClient BotIrisClient, logger *slog.Logger) *kakaoroom.Catalog {
 	if postgres == nil || postgres.GetPool() == nil {
@@ -52,19 +33,4 @@ func newRoomCatalog(postgres database.Client, irisClient BotIrisClient, logger *
 	}
 
 	return kakaoroom.New(postgres.GetPool(), kakaoroom.NewIrisLister(irisClient), logger)
-}
-
-func (b *Bot) ensureLifecycle() *lifecycle.BotLifecycle {
-	if b.lifecycle == nil {
-		b.lifecycle = lifecycle.NewBotLifecycle(
-			b.logger,
-			b.cache,
-			b.irisClient,
-			b.irisBaseURL,
-			b.stopCh,
-			b.doneCh,
-		)
-	}
-
-	return b.lifecycle
 }

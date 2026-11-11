@@ -20,8 +20,6 @@
 
 package settings
 
-import "time"
-
 // IrisConfig는 Iris egress client의 typed 입력이다. SDK(iris-client-go v4)는 IRIS_* env를 읽지 않으므로
 // 이 값이 client 옵션(WithBaseURL·WithBotToken·WithTransport·WithH3CACertFile·WithH3ServerName)의 유일한 원천이다.
 type IrisConfig struct {
@@ -29,7 +27,6 @@ type IrisConfig struct {
 	BaseURLFile  string
 	WebhookToken string // env: IRIS_WEBHOOK_TOKEN
 	BotToken     string // env: IRIS_BOT_TOKEN
-	HTTPTimeout  time.Duration
 	// Transport는 iris.ParseTransport로 검증한 h3 또는 http1이다. env를 비우면 SDK 기본인 h3이다.
 	Transport    string // env: IRIS_TRANSPORT
 	H3CACertFile string // env: IRIS_H3_CA_CERT_FILE

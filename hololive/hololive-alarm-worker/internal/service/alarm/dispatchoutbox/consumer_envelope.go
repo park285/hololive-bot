@@ -4,12 +4,10 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"fmt"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (c *Consumer) envelopesFromRecords(ctx context.Context, records []*Record, events map[int64]EventRecord) ([]domain.AlarmQueueEnvelope, error) {
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(records))
+func (c *Consumer) envelopesFromRecords(ctx context.Context, records []*Record, events map[int64]EventRecord) ([]AlarmQueueEnvelope, error) {
+	envelopes := make([]AlarmQueueEnvelope, 0, len(records))
 	for _, record := range records {
 		envelope, ok, err := c.envelopeFromRecord(ctx, record, events)
 		if err != nil {
@@ -26,32 +24,32 @@ func (c *Consumer) envelopesFromRecords(ctx context.Context, records []*Record, 
 	return envelopes, nil
 }
 
-func (c *Consumer) envelopeFromRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (domain.AlarmQueueEnvelope, bool, error) {
+func (c *Consumer) envelopeFromRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (AlarmQueueEnvelope, bool, error) {
 	payload, ok, err := c.payloadForRecord(ctx, record, events)
 	if err != nil {
-		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("payload for record: %w", err)
+		return AlarmQueueEnvelope{}, false, fmt.Errorf("payload for record: %w", err)
 	}
 
 	if !ok {
-		return domain.AlarmQueueEnvelope{}, false, nil
+		return AlarmQueueEnvelope{}, false, nil
 	}
 
 	envelope, ok, err := c.decodeEnvelopePayload(ctx, record, payload)
 	if err != nil {
-		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("decode envelope payload: %w", err)
+		return AlarmQueueEnvelope{}, false, fmt.Errorf("decode envelope payload: %w", err)
 	}
 
 	if !ok {
-		return domain.AlarmQueueEnvelope{}, false, nil
+		return AlarmQueueEnvelope{}, false, nil
 	}
 
 	ok, err = c.rehydrateEnvelope(ctx, record, &envelope)
 	if err != nil {
-		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("rehydrate envelope: %w", err)
+		return AlarmQueueEnvelope{}, false, fmt.Errorf("rehydrate envelope: %w", err)
 	}
 
 	if !ok {
-		return domain.AlarmQueueEnvelope{}, false, nil
+		return AlarmQueueEnvelope{}, false, nil
 	}
 
 	attachRecordMetadata(&envelope, record)
@@ -59,21 +57,21 @@ func (c *Consumer) envelopeFromRecord(ctx context.Context, record *Record, event
 	return envelope, true, nil
 }
 
-func (c *Consumer) decodeEnvelopePayload(ctx context.Context, record *Record, payload []byte) (domain.AlarmQueueEnvelope, bool, error) {
-	var envelope domain.AlarmQueueEnvelope
+func (c *Consumer) decodeEnvelopePayload(ctx context.Context, record *Record, payload []byte) (AlarmQueueEnvelope, bool, error) {
+	var envelope AlarmQueueEnvelope
 
 	if err := jsonv2.Unmarshal(payload, &envelope); err != nil {
 		if dlqErr := c.moveRecordToDLQ(ctx, record, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); dlqErr != nil {
-			return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("move record to DLQ: %w", dlqErr)
+			return AlarmQueueEnvelope{}, false, fmt.Errorf("move record to DLQ: %w", dlqErr)
 		}
 
-		return domain.AlarmQueueEnvelope{}, false, nil
+		return AlarmQueueEnvelope{}, false, nil
 	}
 
 	return envelope, true, nil
 }
 
-func (c *Consumer) rehydrateEnvelope(ctx context.Context, record *Record, envelope *domain.AlarmQueueEnvelope) (bool, error) {
+func (c *Consumer) rehydrateEnvelope(ctx context.Context, record *Record, envelope *AlarmQueueEnvelope) (bool, error) {
 	if err := rehydrateDeliveryContext(envelope, record); err != nil {
 		if dlqErr := c.moveRecordToDLQ(ctx, record, fmt.Sprintf("invalid delivery context: %v", err), "move invalid delivery context to dlq"); dlqErr != nil {
 			return false, fmt.Errorf("move record to DLQ: %w", dlqErr)
@@ -85,7 +83,7 @@ func (c *Consumer) rehydrateEnvelope(ctx context.Context, record *Record, envelo
 	return true, nil
 }
 
-func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
+func attachRecordMetadata(envelope *AlarmQueueEnvelope, record *Record) {
 	envelope.DispatchOutboxID = record.ID
 	envelope.DispatchGroupKey = record.DispatchGroupKey
 	envelope.SendUnitID = record.SendUnitID
@@ -94,7 +92,7 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	envelope.ClaimKeys = record.ClaimKeys
 
 	if record.AttemptCount > 0 {
-		envelope.Retry = &domain.AlarmQueueRetryMetadata{
+		envelope.Retry = &AlarmQueueRetryMetadata{
 			Attempt:       record.AttemptCount,
 			LastError:     record.Error,
 			LastErrorCode: record.ErrorCode,
@@ -103,10 +101,6 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 }
 
 func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events map[int64]EventRecord) ([]byte, bool, error) {
-	if record.EventID <= 0 {
-		return record.Payload, true, nil
-	}
-
 	event, ok := events[record.EventID]
 	if ok {
 		return event.Payload, true, nil
@@ -163,7 +157,7 @@ func distinctEventIDs(records []*Record) []int64 {
 	return ids
 }
 
-func rehydrateDeliveryContext(envelope *domain.AlarmQueueEnvelope, record *Record) error {
+func rehydrateDeliveryContext(envelope *AlarmQueueEnvelope, record *Record) error {
 	envelope.Notification.RoomID = record.RoomID
 	if len(record.DeliveryContext) == 0 {
 		return nil

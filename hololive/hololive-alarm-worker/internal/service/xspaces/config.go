@@ -29,9 +29,9 @@ type Config struct {
 // ErrDisabled는 감시 설정을 지정하지 않아 수집이 꺼져 있음을 나타낸다.
 var ErrDisabled = errors.New("x spaces collection disabled")
 
-// LoadConfig는 X_SPACES_CONFIG_FILE이 없으면 비활성화하고 잘못된 설정은 거부한다.
-func LoadConfig() (result *Config, retErr error) {
-	path := os.Getenv("X_SPACES_CONFIG_FILE")
+// LoadConfig는 runtime 설정 로더가 X_SPACES_CONFIG_FILE에서 읽은 설정 파일 경로 path가 비어 있으면 ErrDisabled를
+// 돌려주고 잘못된 설정은 거부한다.
+func LoadConfig(path string) (result *Config, retErr error) {
 	if path == "" {
 		return nil, ErrDisabled
 	}

@@ -27,7 +27,6 @@ import (
 type addAlarmMutation struct {
 	record          *domain.Alarm
 	newlyAddedTypes domain.AlarmTypes
-	existing        bool
 }
 
 type removeAlarmMutation struct {

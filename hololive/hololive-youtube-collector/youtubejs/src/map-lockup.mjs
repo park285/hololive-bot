@@ -72,7 +72,19 @@ export function lockupBadgeTexts(row) {
     .filter(Boolean);
 }
 
+// 행 종류별 SDK 썸네일 배열입니다. Video·GridVideo·ReelItem은 thumbnails, ShortsLockupView는 thumbnail,
+// LockupView는 ThumbnailView.image에 있습니다.
+export function videoThumbnailsOf(row) {
+  return row?.thumbnails ?? row?.thumbnail ?? lockupThumbnailView(row)?.image;
+}
+
 function lockupBadges(row) {
-  const overlays = Array.isArray(row?.content_image?.overlays) ? row.content_image.overlays : [];
-  return overlays.flatMap((overlay) => (Array.isArray(overlay?.badges) ? overlay.badges : []));
+  const overlays = lockupThumbnailView(row)?.overlays;
+  return Array.isArray(overlays) ? overlays.flatMap((overlay) => (Array.isArray(overlay?.badges) ? overlay.badges : [])) : [];
+}
+
+// CollectionThumbnailView는 primary_thumbnail에 ThumbnailView를 담습니다. SDK LockupView.duration과 같은 규칙입니다.
+function lockupThumbnailView(row) {
+  const image = row?.content_image;
+  return image?.type === "CollectionThumbnailView" ? image.primary_thumbnail : image;
 }

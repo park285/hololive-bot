@@ -29,22 +29,23 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 func TestPgxRepositoryInsertBatchKeepsCanonicalPayloadAfterConflictingCandidate(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
-	seed := domain.AlarmQueueEnvelope{
+	seed := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive, RoomID: testRoomID, Channel: &domain.Channel{ID: testChannelID},
 			Stream: &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "winner"},
 		},
 		Version: 1,
 	}
-	_, _, err := repository.InsertPending(t.Context(), &seed)
+	seeded, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{seed}})
 	require.NoError(t, err)
+	require.Equal(t, 1, seeded.InsertedDeliveries)
 	conflict := seed
 	conflict.Notification.RoomID = testOtherRoomID
 	conflict.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "conflicting"}
 	matching := seed
 	matching.Notification.RoomID = testOtherRoomID
 	result, err := repository.InsertBatch(t.Context(), PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{conflict, matching},
+		Envelopes: []AlarmQueueEnvelope{conflict, matching},
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.HashConflictEvents)
@@ -54,9 +55,11 @@ func TestPgxRepositoryInsertBatchKeepsCanonicalPayloadAfterConflictingCandidate(
 		JOIN alarm_dispatch_events e ON e.id=d.event_id WHERE d.room_id=$1`, testOtherRoomID).Scan(&payload))
 	require.Contains(t, string(payload), "winner")
 	require.NotContains(t, string(payload), "conflicting")
-	record, _, err := repository.InsertPending(t.Context(), &conflict)
-	require.ErrorIs(t, err, ErrEventPayloadConflict)
-	require.Nil(t, record, "a rejected single entry must not receive the winner record")
+	single, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{conflict}})
+	require.NoError(t, err)
+	require.Len(t, single.Receipts, 1)
+	require.Equal(t, PublishRejectedCollision, single.Receipts[0].Outcome)
+	require.False(t, single.Receipts[0].Accepted(), "a rejected single entry must not be accepted as the winner delivery")
 }
 
 func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
@@ -64,9 +67,9 @@ func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, 1000)
+	envelopes := make([]AlarmQueueEnvelope, 0, 1000)
 	for i := range 1000 {
-		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+		envelopes = append(envelopes, AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    fmt.Sprintf("room-%04d", i),
@@ -111,7 +114,7 @@ func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
-	first := domain.AlarmQueueEnvelope{
+	first := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -124,7 +127,7 @@ func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	second.Notification.RoomID = testOtherRoomID
 	second.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "second"}
 
-	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first, second}})
 	if err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
@@ -166,7 +169,7 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
-	first := domain.AlarmQueueEnvelope{
+	first := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -179,10 +182,10 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	second.Notification.RoomID = testOtherRoomID
 	second.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "second"}
 
-	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first}}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first}}); err != nil {
 		t.Fatalf("first InsertBatch() error = %v", err)
 	}
-	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{second}})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{second}})
 	if err != nil {
 		t.Fatalf("second InsertBatch() error = %v", err)
 	}
@@ -254,7 +257,7 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOnl
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 
-	eventA := domain.AlarmQueueEnvelope{
+	eventA := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -264,7 +267,7 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOnl
 		Version: 1,
 	}
 
-	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{eventA}}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{eventA}}); err != nil {
 		t.Fatalf("step 1 InsertBatch() error = %v", err)
 	}
 
@@ -272,7 +275,7 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOnl
 	conflictA.Notification.RoomID = testOtherRoomID
 	conflictA.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "changed"}
 
-	eventB := domain.AlarmQueueEnvelope{
+	eventB := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-3",
@@ -282,7 +285,7 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOnl
 		Version: 1,
 	}
 
-	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{conflictA, eventB}})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{conflictA, eventB}})
 	if err != nil {
 		t.Fatalf("step 2 InsertBatch() error = %v", err)
 	}
@@ -341,7 +344,7 @@ func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 
-	original := domain.AlarmQueueEnvelope{
+	original := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -350,12 +353,12 @@ func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing
 		},
 		Version: 1,
 	}
-	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{original}}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{original}}); err != nil {
 		t.Fatalf("seed InsertBatch() error = %v", err)
 	}
 
 	conflictRooms := []string{testOtherRoomID, "room-4", "room-5"}
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(conflictRooms))
+	envelopes := make([]AlarmQueueEnvelope, 0, len(conflictRooms))
 	for _, roomID := range conflictRooms {
 		env := original
 		env.Notification.RoomID = roomID
@@ -399,7 +402,7 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 
-	winner := domain.AlarmQueueEnvelope{
+	winner := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -416,7 +419,7 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	driftedRoom3.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "second"}
 
 	result, err := repository.InsertBatch(ctx, PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{winner, driftedRoom2, driftedRoom3},
+		Envelopes: []AlarmQueueEnvelope{winner, driftedRoom2, driftedRoom3},
 	})
 	if err != nil {
 		t.Fatalf("InsertBatch() error = %v (duplicate (event_key, incoming_payload_hash) collision rows must be deduped, not abort the batch)", err)
@@ -471,7 +474,7 @@ func TestPgxRepositoryInsertBatch_DedupesDuplicateDedupeKeyWithinBatch(t *testin
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -481,7 +484,7 @@ func TestPgxRepositoryInsertBatch_DedupesDuplicateDedupeKeyWithinBatch(t *testin
 		Version: 1,
 	}
 
-	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope, envelope}})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope, envelope}})
 	if err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
@@ -523,7 +526,7 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -533,7 +536,7 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 		Version: 1,
 	}
 
-	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}}); err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
 	claimed, err := repository.ClaimDue(ctx, "worker-1", 1, time.Minute)
@@ -565,7 +568,7 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 	workerID := "worker-jsonb"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	envelopes := []domain.AlarmQueueEnvelope{
+	envelopes := []AlarmQueueEnvelope{
 		{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
@@ -664,7 +667,7 @@ func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
 	workerID := "worker-jsonb-quarantine"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-quarantine",
@@ -676,7 +679,7 @@ func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
 	}
 
 	_, err := repository.InsertBatch(ctx, PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{envelope},
+		Envelopes: []AlarmQueueEnvelope{envelope},
 	})
 	require.NoError(t, err)
 
@@ -715,7 +718,7 @@ func TestPgxRepositoryRouteSendingFailures_TransitionsSendingToRetry(t *testing.
 	workerID := "worker-sending-retry"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-sending-retry",
@@ -726,7 +729,7 @@ func TestPgxRepositoryRouteSendingFailures_TransitionsSendingToRetry(t *testing.
 		Version:   1,
 	}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
@@ -773,7 +776,7 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 	workerID := "worker-sending-retry-terminal"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	sent := domain.AlarmQueueEnvelope{
+	sent := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-sent",
@@ -782,7 +785,7 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 		},
 		Version: 1,
 	}
-	quarantined := domain.AlarmQueueEnvelope{
+	quarantined := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-quarantined",
@@ -792,7 +795,7 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 		Version: 1,
 	}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{sent, quarantined}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{sent, quarantined}})
 	require.NoError(t, err)
 
 	claimed, err := repository.ClaimDue(ctx, workerID, 2, time.Minute)
@@ -834,7 +837,7 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseStillTransitions(t *testi
 	workerID := "worker-expired-lease"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-expired",
@@ -845,7 +848,7 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseStillTransitions(t *testi
 		Version:   1,
 	}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
@@ -895,7 +898,7 @@ func TestPgxRepositoryMarkSent_ExpiredLeaseStillTransitions(t *testing.T) {
 	workerID := "worker-marksent-expired"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-marksent-expired",
@@ -906,7 +909,7 @@ func TestPgxRepositoryMarkSent_ExpiredLeaseStillTransitions(t *testing.T) {
 		Version:   1,
 	}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
@@ -940,7 +943,7 @@ func TestPgxRepositoryMarkSent_RequiresOwner(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-marksent-owner",
@@ -950,7 +953,7 @@ func TestPgxRepositoryMarkSent_RequiresOwner(t *testing.T) {
 		Version: 1,
 	}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	claimed, err := repository.ClaimDue(ctx, "worker-owner", 1, time.Minute)
@@ -975,7 +978,7 @@ func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsFenceMiss(t *te
 	workerID := "worker-quarantine-race"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-quarantine-race",
@@ -985,7 +988,7 @@ func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsFenceMiss(t *te
 		Version: 1,
 	}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
 	require.NoError(t, err)
@@ -1020,7 +1023,7 @@ func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -1030,7 +1033,7 @@ func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
 		Version: 1,
 	}
 
-	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}}); err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
 	claimed, err := repository.ClaimDue(ctx, "worker-1", 1, time.Minute)
@@ -1059,9 +1062,9 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersClaimDisjointRows(t *testing.T) 
 	start := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
 
 	const totalDeliveries = 10
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, totalDeliveries)
+	envelopes := make([]AlarmQueueEnvelope, 0, totalDeliveries)
 	for i := range totalDeliveries {
-		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+		envelopes = append(envelopes, AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    fmt.Sprintf("room-concurrent-%02d", i),
@@ -1149,10 +1152,10 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersKeepOneCanonicalGroupAtomic(t *t
 			"fixture must keep every delivery inside one minute bucket")
 	}
 
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(starts))
+	envelopes := make([]AlarmQueueEnvelope, 0, len(starts))
 	dedupeKeys := make(map[string]struct{}, len(starts))
 	for i, start := range starts {
-		envelope := domain.AlarmQueueEnvelope{
+		envelope := AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    roomID,
@@ -1165,7 +1168,7 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersKeepOneCanonicalGroupAtomic(t *t
 			},
 			Version: 1,
 		}
-		dedupeKeys[BuildDedupeKeyFromEnvelope(&envelope)] = struct{}{}
+		dedupeKeys[ledgerDedupeKey(t, &envelope)] = struct{}{}
 		envelopes = append(envelopes, envelope)
 	}
 	require.Len(t, dedupeKeys, len(starts), "fixture rows must not dedupe into each other")
@@ -1249,7 +1252,7 @@ func insertAndClaimRoutingRecord(t *testing.T, repository *PgxRepository, worker
 	t.Helper()
 	ctx := context.Background()
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    roomID,
@@ -1259,7 +1262,7 @@ func insertAndClaimRoutingRecord(t *testing.T, repository *PgxRepository, worker
 		ClaimKeys: []string{"claim-" + roomID},
 		Version:   1,
 	}
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
 	require.NoError(t, err)
@@ -1535,16 +1538,16 @@ func TestConsumerRouteFailures_ChokepointTruncatesSanitizesAndRecordsCode(t *tes
 	id := insertAndClaimRoutingRow(t, repository, workerID, "room-chokepoint", "stream-chokepoint")
 
 	consumer := mustNewConsumer(t, repository, nil, nil, WithWorkerID(workerID))
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		DispatchOutboxID: id,
-		Retry: &domain.AlarmQueueRetryMetadata{
+		Retry: &AlarmQueueRetryMetadata{
 			Attempt:       1,
 			RetryAfterMS:  int64(time.Minute / time.Millisecond),
 			LastError:     "Bearer secret-token-value " + strings.Repeat("한", 900),
 			LastErrorCode: ErrorCodeHTTP5xx,
 		},
 	}
-	require.NoError(t, consumer.RouteFailures(ctx, []domain.AlarmQueueEnvelope{envelope}, nil))
+	require.NoError(t, consumer.RouteFailures(ctx, []AlarmQueueEnvelope{envelope}, nil))
 
 	var status, lastError, lastErrorCode string
 	var errorBytes int

@@ -1,11 +1,9 @@
 package member
 
 import (
-	"log/slog"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -18,13 +16,12 @@ func newPGXRepository(t *testing.T) (*Repository, *pgxpool.Pool) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
-	logger := slog.New(slog.DiscardHandler)
 
 	return NewMemberRepository(&databasemocks.Client{
 		GetPoolFunc: func() *pgxpool.Pool {
 			return pool
 		},
-	}, logger), pool
+	}), pool
 }
 
 func TestRepositoryPGXMutationsPreserveMemberSemantics(t *testing.T) {
@@ -42,8 +39,8 @@ func TestRepositoryPGXCreateMemberWithoutAliasesAcceptsAliasMutations(t *testing
 	ctx := t.Context()
 
 	member := &domain.Member{Name: "Alias Less Member"}
-	if err := repository.CreateMember(ctx, member); err != nil {
-		t.Fatalf("CreateMember(without aliases) error = %v, want nil", err)
+	if replayed, err := repository.CreateMemberOrMatch(ctx, member); err != nil || replayed {
+		t.Fatalf("CreateMemberOrMatch(without aliases) = %t, %v; want new member", replayed, err)
 	}
 
 	var (
@@ -104,8 +101,8 @@ func assertCreatedMemberDefaults(t *testing.T, repository *Repository, pool *pgx
 		IsGraduated: false,
 		Aliases:     &domain.Aliases{Ko: []string{"페이즈"}, Ja: []string{"フェーズ"}},
 	}
-	if err := repository.CreateMember(ctx, member); err != nil {
-		t.Fatalf("CreateMember() error = %v, want nil", err)
+	if replayed, err := repository.CreateMemberOrMatch(ctx, member); err != nil || replayed {
+		t.Fatalf("CreateMemberOrMatch() = %t, %v; want new member", replayed, err)
 	}
 
 	var (
@@ -164,8 +161,8 @@ func assertGraduationTransitions(t *testing.T, repository *Repository, pool *pgx
 		IsGraduated: true,
 		Aliases:     &domain.Aliases{Ko: []string{}, Ja: []string{}},
 	}
-	if err := repository.CreateMember(ctx, graduated); err != nil {
-		t.Fatalf("CreateMember(graduated) error = %v, want nil", err)
+	if replayed, err := repository.CreateMemberOrMatch(ctx, graduated); err != nil || replayed {
+		t.Fatalf("CreateMemberOrMatch(graduated) = %t, %v; want new member", replayed, err)
 	}
 
 	var graduatedID int
@@ -266,46 +263,4 @@ func assertMemberMutationError(t *testing.T, name string, err error) {
 	if !strings.Contains(err.Error(), "member -1 not found") {
 		t.Fatalf("%s error = %q, want member -1 not found", name, err)
 	}
-}
-
-func TestRepositoryPGXPhotoOperationsPreserveSemantics(t *testing.T) {
-	ctx := t.Context()
-	repository, pool := newPGXRepository(t)
-
-	now := time.Now().Add(-2 * time.Hour)
-	fresh := time.Now()
-
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO members (slug, channel_id, english_name, japanese_name, korean_name, status, is_graduated, aliases, org, sync_source, photo, photo_updated_at)
-		VALUES
-			('pgx-photo-null', 'UC_PGX_NULL', 'PGX Photo Null', NULL, NULL, 'active', false, '{"ko":[],"ja":[]}', 'Hololive', 'manual', NULL, NULL),
-			('pgx-photo-stale', 'UC_PGX_STALE', 'PGX Photo Stale', NULL, NULL, 'active', false, '{"ko":[],"ja":[]}', 'Hololive', 'manual', 'old', $1),
-			('pgx-photo-fresh', 'UC_PGX_FRESH', 'PGX Photo Fresh', NULL, NULL, 'active', false, '{"ko":[],"ja":[]}', 'Hololive', 'manual', 'fresh', $2),
-			('pgx-photo-no-channel', NULL, 'PGX Photo No Channel', NULL, NULL, 'active', false, '{"ko":[],"ja":[]}', 'Hololive', 'manual', NULL, NULL)
-	`, now, fresh); err != nil {
-		t.Fatalf("insert photo fixtures: %v", err)
-	}
-
-	if err := repository.UpdatePhoto(ctx, "UC_PGX_NULL", "https://example.com/photo=s1024"); err != nil {
-		t.Fatalf("UpdatePhoto() error = %v, want nil", err)
-	}
-
-	var got string
-
-	if err := pool.QueryRow(ctx, `SELECT photo FROM members WHERE channel_id = 'UC_PGX_NULL'`).Scan(&got); err != nil || got != "https://example.com/photo=s1024" {
-		t.Fatalf("photo after UpdatePhoto = %q, %v; want updated photo nil", got, err)
-	}
-
-	needingSync, err := repository.GetMembersNeedingPhotoSync(ctx, time.Hour)
-	if err != nil {
-		t.Fatalf("GetMembersNeedingPhotoSync() error = %v, want nil", err)
-	}
-
-	if !containsString(needingSync, "UC_PGX_STALE") || containsString(needingSync, "UC_PGX_FRESH") {
-		t.Fatalf("needing sync = %#v, want stale and not fresh", needingSync)
-	}
-}
-
-func containsString(values []string, want string) bool {
-	return slices.Contains(values, want)
 }

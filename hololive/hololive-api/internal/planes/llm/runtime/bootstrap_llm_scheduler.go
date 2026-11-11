@@ -36,7 +36,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -97,14 +96,14 @@ func (r *LLMSchedulerRuntime) startSchedulers(ctx context.Context) {
 		r.MajorEventScheduler.Start(ctx)
 		r.Logger.Info("Major event weekly scheduler started",
 			slog.String("schedule", fmt.Sprintf("%s %02d:00 KST",
-				constants.MajorEventConfig.ScheduleWeekday, constants.MajorEventConfig.ScheduleHourKST)))
+				mescheduler.WeeklyScheduleWeekday, mescheduler.WeeklyScheduleHourKST)))
 	}
 
 	if r.MajorEventMonthlyScheduler != nil {
 		r.MajorEventMonthlyScheduler.Start(ctx)
 		r.Logger.Info("Major event monthly scheduler started",
 			slog.String("schedule", fmt.Sprintf("%dth %02d:00 KST",
-				constants.MajorEventConfig.MonthlyScheduleDay, constants.MajorEventConfig.MonthlyScheduleHourKST)))
+				mescheduler.MonthlyScheduleDay, mescheduler.MonthlyScheduleHourKST)))
 	}
 
 	if r.MajorEventScraperScheduler != nil {

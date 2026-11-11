@@ -552,6 +552,59 @@ func TestGuardWaitersEvaluateFreshSnapshotAfterTransition(t *testing.T) {
 	}
 }
 
+// API 전환이 lease 소유 subject의 대상을 제거하면, guard를 기다린 snapshot의 membership 판정도 잠금 이후
+// snapshot에서 이뤄져 전환 전 membership으로 통과하지 않고 superseded로 거절된다.
+func TestGuardWaiterSeesOwnMembershipRemovedByTransition(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	first := seedProjection(t, pool, contentTargets(subjectUCA))
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+	proof := lease.Proof()
+	job := jobContractFor(t, spec)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
+			t.Errorf("rollback projection transition: %v", rollbackErr)
+		}
+	}()
+
+	applyProjectionChange(t, tx, first, projectionChange{
+		dropped: []leaseTarget{{subjectUCA, contract.KindShortsList, time.Minute, true}},
+	})
+
+	loaded := make(chan error, 1)
+
+	go func() {
+		_, loadErr := repository.LoadTargetSnapshot(ctx, &proof, spec, job, 10)
+		loaded <- loadErr
+	}()
+
+	select {
+	case got := <-loaded:
+		t.Fatalf("snapshot did not wait for the projection guard: %v", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-loaded; !errors.Is(err, collection.ErrTargetDisabled) {
+		t.Fatalf("guard waiter snapshot error = %v, want membership superseded", err)
+	}
+}
+
+// 전역 CURRENT_PROJECTION 작업은 자기 roster kind 전체가 범위다. 다른 kind 변경은 무관하고, 같은 kind의 subject 추가는
+// roster를 바꾸므로 superseded다.
 func TestGlobalProjectionJobScopeCoversRosterKinds(t *testing.T) {
 	t.Parallel()
 

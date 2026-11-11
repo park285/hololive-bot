@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 // dispatchoutbox.assignSendUnits가 한 send unit에 묶는 delivery 상한이다(maxDeliveriesPerSendUnit).
 const alarmDispatchTestMaxDeliveriesPerSendUnit = 10
 
-func alarmDispatchPersistedTextSendUnitEnvelopes(count int, build func() domain.AlarmQueueEnvelope) []domain.AlarmQueueEnvelope {
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, count)
+func alarmDispatchPersistedTextSendUnitEnvelopes(count int, build func() dispatchoutbox.AlarmQueueEnvelope) []dispatchoutbox.AlarmQueueEnvelope {
+	envelopes := make([]dispatchoutbox.AlarmQueueEnvelope, 0, count)
 
 	for i := range count {
 		envelope := build()
@@ -45,10 +45,10 @@ func TestAlarmDispatchTextPathSendsPersistedSendUnitClientRequestID(t *testing.T
 		t.Run(fmt.Sprintf("envelopes=%d", count), func(t *testing.T) {
 			t.Parallel()
 
-			envelopes := alarmDispatchPersistedTextSendUnitEnvelopes(count, func() domain.AlarmQueueEnvelope {
+			envelopes := alarmDispatchPersistedTextSendUnitEnvelopes(count, func() dispatchoutbox.AlarmQueueEnvelope {
 				return alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 			})
-			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
+			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{envelopes}}
 			sender := &alarmDispatchRunnerTestSender{}
 			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: alarmDispatchTestMaxDeliveriesPerSendUnit}
 
@@ -70,7 +70,7 @@ func TestAlarmDispatchRunnerPersistedTextSendUnitRetriesAmbiguousFailure(t *test
 
 	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
 	envelopes := alarmDispatchPersistedTextSendUnitEnvelopes(5, alarmDispatchRunnerIntrinsicTextEnvelope)
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{envelopes}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: alarmDispatchTestMaxDeliveriesPerSendUnit}
 
@@ -84,26 +84,5 @@ func TestAlarmDispatchRunnerPersistedTextSendUnitRetriesAmbiguousFailure(t *test
 
 	groups := groupAlarmDispatchEnvelopesForDelivery(consumer.scheduledSendingRetry)
 	require.Len(t, groups, 1)
-
-	retryID, err := alarmDispatchClientRequestID(groups[0])
-	require.NoError(t, err)
-	assert.Equal(t, testRetryClientRequestID, retryID)
-}
-
-func TestHasPersistedClientRequestIDMatchesTextIDActuallySent(t *testing.T) {
-	t.Parallel()
-
-	for _, count := range []int{1, 4, 5, alarmDispatchTestMaxDeliveriesPerSendUnit} {
-		envelopes := alarmDispatchPersistedTextSendUnitEnvelopes(count, func() domain.AlarmQueueEnvelope {
-			return alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-		})
-		group := alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: envelopes}
-		sentID, err := alarmDispatchClientRequestID(group)
-		require.NoError(t, err)
-
-		sentIsPersisted := sentID == envelopes[0].ClientRequestID
-
-		assert.Equal(t, sentIsPersisted, hasPersistedClientRequestID(envelopes),
-			"재시도 허가는 실제로 전송된 ClientRequestID가 persisted ID일 때만 참이어야 한다 (envelopes=%d)", count)
-	}
+	assert.Equal(t, testRetryClientRequestID, groups[0].envelopes[0].ClientRequestID)
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// errorCodeExpression은 목록 표시와 실패 필터·집계가 공유하는 공개 오류 분류식입니다.
+// errorCodeExpression은 목록·상세·묶음 표시와 실패 필터·집계가 공유하는 공개 오류 분류식입니다.
 const errorCodeExpression = "(CASE WHEN d.last_error_code ~ '^[A-Za-z0-9_.:-]{1,128}$' THEN d.last_error_code WHEN d.last_error_code = '' THEN '' ELSE 'unclassified' END)"
 
 // buildListQuery는 고정 projection과 실제 필터만 조합합니다. 사용자 값은 SQL에 보간하지 않습니다.

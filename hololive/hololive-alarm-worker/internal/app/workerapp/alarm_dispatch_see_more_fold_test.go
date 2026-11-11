@@ -30,13 +30,13 @@ const (
 )
 
 type seeMoreFoldConsumer struct {
-	batch      []domain.AlarmQueueEnvelope
+	batch      []dispatchoutbox.AlarmQueueEnvelope
 	dispatched int
 	failures   []string
 	cancel     context.CancelFunc
 }
 
-func (c *seeMoreFoldConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
+func (c *seeMoreFoldConsumer) DrainBatch(context.Context, int) ([]dispatchoutbox.AlarmQueueEnvelope, error) {
 	batch := c.batch
 
 	c.batch = nil
@@ -44,11 +44,11 @@ func (c *seeMoreFoldConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQu
 	return batch, nil
 }
 
-func (*seeMoreFoldConsumer) MarkSending(context.Context, []domain.AlarmQueueEnvelope) error {
+func (*seeMoreFoldConsumer) MarkSending(context.Context, []dispatchoutbox.AlarmQueueEnvelope) error {
 	return nil
 }
 
-func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope, _ string, _ time.Duration) error {
+func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, _ string, _ time.Duration) error {
 	c.dispatched += len(envelopes)
 	return nil
 }
@@ -57,7 +57,7 @@ func (*seeMoreFoldConsumer) ReleaseClaimKeys(context.Context, []string) error {
 	return nil
 }
 
-func (c *seeMoreFoldConsumer) ReleaseLeased(context.Context, []domain.AlarmQueueEnvelope) error {
+func (c *seeMoreFoldConsumer) ReleaseLeased(context.Context, []dispatchoutbox.AlarmQueueEnvelope) error {
 	return c.unexpected("release leased")
 }
 
@@ -68,23 +68,23 @@ func (c *seeMoreFoldConsumer) unexpected(route string) error {
 	return fmt.Errorf("unexpected dispatch route: %s", route)
 }
 
-func (c *seeMoreFoldConsumer) RouteFailures(context.Context, []domain.AlarmQueueEnvelope, []domain.AlarmQueueEnvelope) error {
+func (c *seeMoreFoldConsumer) RouteFailures(context.Context, []dispatchoutbox.AlarmQueueEnvelope, []dispatchoutbox.AlarmQueueEnvelope) error {
 	return c.unexpected("retry or dead letter")
 }
 
-func (c *seeMoreFoldConsumer) RouteSendingFailures(context.Context, []domain.AlarmQueueEnvelope, []domain.AlarmQueueEnvelope) error {
+func (c *seeMoreFoldConsumer) RouteSendingFailures(context.Context, []dispatchoutbox.AlarmQueueEnvelope, []dispatchoutbox.AlarmQueueEnvelope) error {
 	return c.unexpected("sending retry or dead letter")
 }
 
-func (c *seeMoreFoldConsumer) RequeuePreSend(context.Context, []domain.AlarmQueueEnvelope) error {
+func (c *seeMoreFoldConsumer) RequeuePreSend(context.Context, []dispatchoutbox.AlarmQueueEnvelope) error {
 	return c.unexpected("pre-send requeue")
 }
 
-func (c *seeMoreFoldConsumer) Requeue(context.Context, []domain.AlarmQueueEnvelope) error {
+func (c *seeMoreFoldConsumer) Requeue(context.Context, []dispatchoutbox.AlarmQueueEnvelope) error {
 	return c.unexpected("requeue")
 }
 
-func (c *seeMoreFoldConsumer) Quarantine(context.Context, []domain.AlarmQueueEnvelope, error) error {
+func (c *seeMoreFoldConsumer) Quarantine(context.Context, []dispatchoutbox.AlarmQueueEnvelope, error) error {
 	return c.unexpected("quarantine")
 }
 
@@ -101,8 +101,8 @@ func (unregisteredMembers) FindMemberByChannelID(context.Context, string) (*doma
 	return nil, domain.ErrMemberNotFound
 }
 
-func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
-	return domain.AlarmQueueEnvelope{
+func alarmDispatchRunnerTestEnvelope(roomID string, retry *dispatchoutbox.AlarmQueueRetryMetadata) dispatchoutbox.AlarmQueueEnvelope {
+	return dispatchoutbox.AlarmQueueEnvelope{
 		SendUnitID:      1,
 		ClientRequestID: "hololive-alarm:0123456789abcdef0123456789abcdef",
 		Notification: domain.AlarmNotification{
@@ -149,7 +149,8 @@ func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]stri
 	return template.NewRenderer(pool, logger), store
 }
 
-func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store *messagestrings.Store, envelopes ...domain.AlarmQueueEnvelope) string {
+// runSeeMoreFoldFinalPayload는 실제 DB template와 Runner 렌더링을 거쳐 Iris 텍스트 lane에 넘어간 최종 문자열을 반환한다.
+func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store *messagestrings.Store, envelopes ...dispatchoutbox.AlarmQueueEnvelope) string {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -157,8 +158,9 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 
 	client := &seeMoreFoldIrisClient{}
 	consumer := &seeMoreFoldConsumer{batch: envelopes, cancel: cancel}
-	runner := alarmdispatch.NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, consumer,
+	runner, err := alarmdispatch.NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, consumer,
 		alarmdispatch.RunnerConfig{MaxBatch: len(envelopes), Members: unregisteredMembers{}}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
 
 	require.NoError(t, runner.Start(ctx))
 	require.Empty(t, consumer.failures)
@@ -180,7 +182,7 @@ func TestAlarmDispatchRunnerKeepsLongAlarmNotificationGroupUnfoldedAtFinalPayloa
 
 	renderer, store := newSeeMoreFoldRendering(t, nil)
 	start := time.Date(2026, time.September, 27, 12, 0, 0, 0, time.UTC)
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, 6)
+	envelopes := make([]dispatchoutbox.AlarmQueueEnvelope, 0, 6)
 
 	for i := range 6 {
 		envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
@@ -226,15 +228,15 @@ func TestAlarmDispatchRunnerKeepsPreRenderedDigestUnpadded(t *testing.T) {
 	require.Equal(t, kakaoformat.Render(storedMessage), final)
 }
 
-func (*seeMoreFoldConsumer) LoadSendRequest(context.Context, []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
+func (*seeMoreFoldConsumer) LoadSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
 	return nil, dispatchoutbox.ErrSendRequestUnpinned
 }
 
-func (*seeMoreFoldConsumer) PinSendRequest(_ context.Context, envelopes []domain.AlarmQueueEnvelope, request dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error) {
+func (*seeMoreFoldConsumer) PinSendRequest(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, request dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error) {
 	request.ClientRequestID = envelopes[0].ClientRequestID
 	return &request, nil
 }
 
-func (c *seeMoreFoldConsumer) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
+func (c *seeMoreFoldConsumer) ReissueSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
 	return c.unexpected("reissue")
 }

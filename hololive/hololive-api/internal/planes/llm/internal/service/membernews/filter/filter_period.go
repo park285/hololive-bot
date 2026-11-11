@@ -23,11 +23,12 @@ package filter
 import (
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func applyPeriodFilter(candidates []model.Candidate, period model.Period, now time.Time) []datedCandidate {
+func applyPeriodFilter(candidates []newsmodel.Candidate, period model.Period, now time.Time) []datedCandidate {
 	rangeStart, rangeEnd := periodRange(period, now)
 
 	result := make([]datedCandidate, 0, len(candidates))
@@ -69,7 +70,7 @@ func withinRange(candidateDate, rangeStart, rangeEnd time.Time) bool {
 	return !candidateDate.Before(rangeStart) && !candidateDate.After(rangeEnd)
 }
 
-func resolveCandidateDate(candidate *model.Candidate) (time.Time, bool) {
+func resolveCandidateDate(candidate *newsmodel.Candidate) (time.Time, bool) {
 	if candidate.Type == domain.MajorEventTypeNews {
 		return firstAvailableDate(candidate.PubDate, candidate.EventStartDate)
 	}

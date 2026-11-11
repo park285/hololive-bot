@@ -39,9 +39,6 @@ DDL_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
-SQL_WILDCARD_PATTERNS = (
-    ("COUNT wildcard aggregate", re.compile(r"\bCOUNT\s*\(\s*\*\s*\)", re.IGNORECASE)),
-)
 SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
 LEADING_SQL_FRAGMENT_RE = re.compile(r"^(?:ON\s+CONFLICT|VALUES|AND|OR|WHERE|SET|RETURNING)\b", re.IGNORECASE)
 TRAILING_SQL_FRAGMENT_RE = re.compile(r"\b(?:VALUES|WHERE|AND|OR|SET|FROM|JOIN|ON)\s*$", re.IGNORECASE)
@@ -67,7 +64,6 @@ CLOCK_QUERY_POLICIES = (
     (f"{ALARM_DISPATCH_QUERIES}/handoff_*.sql", "clock_timestamp"),
     *((f"{ALARM_DISPATCH_QUERIES}/{name}", "clock_timestamp") for name in (
         "claim_due.sql",
-        "find_by_dedupe_key.sql",
         "load_events_by_id.sql",
         "mark_sent.sql",
         "quarantine_stale_sending.sql",
@@ -368,16 +364,6 @@ def check_sql_wildcards(path: Path, base_line: int, sql: str) -> list[Finding]:
                 excerpt=excerpt(sql[max(0, offset - 80) : offset + 80]),
             )
         )
-    for reason, pattern in SQL_WILDCARD_PATTERNS:
-        for match in pattern.finditer(sql):
-            findings.append(
-                Finding(
-                    path=path,
-                    line=base_line + line_number(sql, match.start()) - 1,
-                    reason=f"{reason} is not allowed; name the required column(s)",
-                    excerpt=excerpt(sql[max(0, match.start() - 80) : match.end() + 80]),
-                )
-            )
     return findings
 
 

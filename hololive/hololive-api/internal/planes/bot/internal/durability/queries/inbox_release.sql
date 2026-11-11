@@ -16,21 +16,6 @@ WHERE message_id = $1
   AND status = 'processing'
   AND attempts = $5
 RETURNING message_id, ordering_key, status
-), successor AS MATERIALIZED (
-SELECT settled.message_id AS old_message_id, settled.ordering_key, settled.status, next_row.message_id
-FROM settled LEFT JOIN LATERAL (
-    SELECT message_id FROM bot_webhook_inbox
-    WHERE ordering_key = settled.ordering_key AND message_id <> settled.message_id
-      AND status IN ('pending', 'processing', 'retry')
-    ORDER BY id LIMIT 1
-) AS next_row ON settled.status = 'dead'
-), advanced AS (
-UPDATE bot_webhook_heads AS head SET message_id = successor.message_id, updated_at = clock_timestamp()
-FROM successor WHERE successor.status = 'dead' AND head.ordering_key = successor.ordering_key
-  AND head.message_id = successor.old_message_id AND successor.message_id IS NOT NULL
-), removed AS (
-DELETE FROM bot_webhook_heads AS head USING successor
-WHERE successor.status = 'dead' AND head.ordering_key = successor.ordering_key
-  AND head.message_id = successor.old_message_id AND successor.message_id IS NULL
-)
+),
+{{inbox_head_advance}}
 SELECT status FROM settled

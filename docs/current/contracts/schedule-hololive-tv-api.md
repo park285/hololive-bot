@@ -2,7 +2,7 @@
 
 ## 상태와 소유권
 
-`Holodex`는 live/upcoming/channel identity의 primary source입니다. 공식 일정 source는 `Holodex`가 실패한 경우 org upcoming을 보충하는 secondary source입니다. channel schedule(`GetChannelSchedule`)과 channel 조회(`GetChannel`)는 Holodex만 원천으로 쓰고 실패를 그대로 돌려줍니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
+`Holodex`는 live/upcoming/channel identity의 primary source입니다. 공식 일정 source는 `Holodex`가 실패한 경우 org upcoming을 보충하는 secondary source입니다. channel schedule(`GetChannelSchedule`)은 Holodex만 원천으로 쓰고 실패를 그대로 돌려줍니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
 
 공식 일정 source는 `GET https://schedule.hololive.tv/api/list/2`만 소비합니다. `/lives/hololive` HTML scraper, source mode, API-to-HTML fallback 및 관련 rollback branch는 지원하지 않습니다.
 
@@ -129,10 +129,6 @@ channel cache -> Holodex /live?channel_id=...
 
 Holodex 실패를 YouTube channel source나 공식 API로 보충하던 경로, 그 보충 결과를 5분(`CacheTTL.ChannelSchedule`) 다시 캐시하던 provider 경로, htmlscraper의 1분 보충 TTL은 `DEC-20260926-hololive-source-fallbacks-retirement`(PLN-20260926-stack-audit-refactoring T19)로 함께 삭제했습니다. 성공한 Holodex 결과만 `CacheTTL.ChannelSchedule` 동안 캐시합니다. T18(2026-09-26) 30일 로그에서 이 경로의 fallback 경고는 0건이었습니다.
 
-### Channel
-
-`GetChannel`은 Holodex `/channels/{id}` 하나만 원천으로 쓰고, 실패를 YouTube scraper로 만든 부분 Channel(구독자 수·아바타만 채운 값)로 보충하거나 캐시하지 않습니다.
-
 ### Live
 
 Holodex live primary가 실패하면 source failure를 반환합니다. 공식 일정의 upcoming-only 결과로 success-empty를 만들지 않습니다. `GetChannelsLiveStatus`의 YouTube live-status scraper fallback은 `DEC-20260926-hololive-live-status-scraper-fallback-removal`로 삭제했으며, alarm-worker는 이 source failure를 받으면 persisted live session으로 판단합니다.
@@ -151,7 +147,7 @@ cache에 저장하거나 caller에게 반환할 때 `domain.Stream`과 pointer f
 hololive_holodex_official_schedule_fallback_total{operation,outcome,reason}
 ```
 
-`hololive_fallback_primary_total{service="youtube",operation="channel_schedule",outcome}`도 같은 이유로 더 생기지 않습니다. 호출자 취소로 끝난 primary는 실패가 아니라 `outcome="canceled"`입니다. `outcome="canceled"`는 호출자 context 취소만 뜻합니다. 호출자와 분리된 자체 단계 예산이 끝나 못 마친 target(예: `channel_statistics`의 scraper 단계 timeout)은 원천 실패이므로 `failed`/`partial`로 기록합니다.
+`hololive_fallback_primary_total{service="youtube",operation="channel_schedule",outcome}`도 같은 이유로 더 생기지 않습니다. 호출자 취소로 끝난 primary는 실패가 아니라 `outcome="canceled"`입니다. `outcome="canceled"`는 호출자 context 취소만 뜻합니다. 호출자와 분리된 자체 단계 예산이 끝나 못 마친 target은 원천 실패이므로 `failed`/`partial`로 기록합니다.
 
 API source 관측 metric은 다음과 같습니다.
 

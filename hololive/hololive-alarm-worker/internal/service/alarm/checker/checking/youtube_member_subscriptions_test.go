@@ -52,8 +52,8 @@ func newMemberSubscriptionChecker(t *testing.T) *YouTubeChecker {
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(
-		cache, holodexService, tier.NewTieredScheduler(logger), dedup.NewService(cache, []int{5, 3, 1}, logger),
-		[]int{5, 3, 1}, 75*time.Second, nil, pool, logger,
+		cache, holodexService, tier.NewTieredScheduler(logger), dedup.NewService(cache, logger),
+		75*time.Second, nil, pool, logger,
 	)
 	require.NoError(t, err)
 
@@ -77,7 +77,7 @@ func TestYouTubeCheckerMemberSubscriptionsForUpcomingAndLiveCatchup(t *testing.T
 		stream.Channel = &domain.Channel{ID: checkerUnitBChannel, Name: "유닛 B"}
 	}
 
-	notifications, err := checker.buildChannelNotifications(ctx, checkerUnitBChannel, coarseRooms, streams, window, now,
+	notifications, err := checker.buildChannelNotifications(ctx, testTargetPolicy(), checkerUnitBChannel, coarseRooms, streams, window, now,
 		map[string]map[string]struct{}{checkerMiraLiveID: {checkerWholeRoom: {}}},
 	)
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestYouTubeCheckerMemberSubscriptionsForUpcomingAndLiveCatchup(t *testing.T
 	lookupErr := errors.New("subscription database unavailable")
 
 	checker.lookupSubscribers = func(context.Context, string, string, domain.AlarmType) ([]string, error) { return nil, lookupErr }
-	notifications, err = checker.buildChannelNotifications(ctx, checkerUnitBChannel, coarseRooms, streams[:1], window, now, nil)
+	notifications, err = checker.buildChannelNotifications(ctx, testTargetPolicy(), checkerUnitBChannel, coarseRooms, streams[:1], window, now, nil)
 	require.ErrorIs(t, err, lookupErr)
 	require.Nil(t, notifications)
 }

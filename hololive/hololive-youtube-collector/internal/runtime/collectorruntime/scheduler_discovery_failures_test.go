@@ -48,6 +48,8 @@ func checkLocalFailureProgress(t *testing.T, failedIndex, capacity int) {
 	failures := 0
 
 	for range 10 {
+		accepted := 0
+
 		outcome := runCapacityAwareCycle(&capacityCycleRequest{
 			runnerCount: len(ids), start: cursor, remaining: capacity, batch: capacity,
 			query: func(runner int, excluded []string, limit int) (joblease.CandidatePage, error) {
@@ -60,11 +62,14 @@ func checkLocalFailureProgress(t *testing.T, failedIndex, capacity int) {
 			},
 			enqueue: func(spec *joblease.JobSpec) EnqueueResult {
 				seen[spec.JobKey]++
+
+				accepted++
+
 				return EnqueueAccepted
 			},
 		})
-		if outcome.globalFailure || outcome.canceled || outcome.enqueued > capacity {
-			t.Fatalf("outcome = %+v", outcome)
+		if outcome.globalFailure || outcome.canceled || accepted > capacity {
+			t.Fatalf("outcome = %+v accepted = %d", outcome, accepted)
 		}
 
 		if len(outcome.failures) > 0 && !errors.Is(outcome.queryErr, joblease.ErrCandidateContract) {
@@ -132,6 +137,7 @@ func TestDiscoveryLocalFailureDedupAndQueueFullKeepBudget(t *testing.T) {
 			t.Parallel()
 
 			warned := 0
+			attempts := make(map[string]int)
 			ids := []string{brokenRunnerID, healthyRunnerID, "later"}
 			outcome := runCapacityAwareCycle(&capacityCycleRequest{
 				runnerCount: len(ids), remaining: 1, batch: 4,
@@ -153,6 +159,8 @@ func TestDiscoveryLocalFailureDedupAndQueueFullKeepBudget(t *testing.T) {
 					return joblease.CandidatePage{Jobs: []joblease.JobSpec{{JobKey: "later"}}}, nil
 				},
 				enqueue: func(spec *joblease.JobSpec) EnqueueResult {
+					attempts[spec.JobKey]++
+
 					if spec.JobKey == "duplicate" {
 						return EnqueueDeduped
 					}
@@ -162,15 +170,15 @@ func TestDiscoveryLocalFailureDedupAndQueueFullKeepBudget(t *testing.T) {
 				warnFull: func() { warned++ },
 			})
 
-			if outcome.queried != 3 || outcome.deduped != 1 || !outcome.queueFull || outcome.globalFailure {
-				t.Fatalf("outcome=%+v", outcome)
+			if outcome.queried != 3 || attempts["duplicate"] != 1 || attempts["later"] != 1 || !outcome.queueFull || outcome.globalFailure {
+				t.Fatalf("outcome=%+v attempts=%v", outcome, attempts)
 			}
 
-			if result == EnqueueAccepted && (outcome.enqueued != 1 || warned != 0) {
+			if result == EnqueueAccepted && warned != 0 {
 				t.Fatalf("accepted outcome=%+v warned=%d", outcome, warned)
 			}
 
-			if result == EnqueueFull && (outcome.enqueued != 0 || warned != 1) {
+			if result == EnqueueFull && warned != 1 {
 				t.Fatalf("full outcome=%+v warned=%d", outcome, warned)
 			}
 		})
@@ -225,12 +233,12 @@ func TestDiscoveryRecordsFailureWhileAdvancingCursor(t *testing.T) {
 	scheduler.queue = make(chan queuedJob, len(ids))
 	scheduler.discoverOnce(t.Context())
 
-	if scheduler.rotationCursor == 0 || scheduler.Snapshot().LastCycleOperationCode != collecterr.OperationCandidateLoadFailed {
+	if scheduler.rotationCursor == 0 {
 		t.Fatalf("cursor=%d snapshot=%+v", scheduler.rotationCursor, scheduler.Snapshot())
 	}
 
-	if scheduler.Snapshot().Enqueued != len(ids)-1 || scheduler.Snapshot().LastCycleCompletedAt.IsZero() {
-		t.Fatalf("progress not recorded: %+v", scheduler.Snapshot())
+	if len(scheduler.queue) != len(ids)-1 {
+		t.Fatalf("progress not recorded: queue depth %d, want %d", len(scheduler.queue), len(ids)-1)
 	}
 
 	if !strings.Contains(logged.String(), "job_kind="+string(runners[0].Contract().ID().Kind)) ||
@@ -258,8 +266,8 @@ func TestDiscoveryParentCancelWinsOverLocalError(t *testing.T) {
 	scheduler.candidates = source
 	scheduler.discoverOnce(ctx)
 
-	if source.queries != 0 || scheduler.rotationCursor != 0 || scheduler.Snapshot().Enqueued != 0 {
-		t.Fatalf("canceled cycle kept progressing: queries=%d cursor=%d snapshot=%+v", source.queries, scheduler.rotationCursor, scheduler.Snapshot())
+	if source.queries != 0 || scheduler.rotationCursor != 0 || len(scheduler.queue) != 0 {
+		t.Fatalf("canceled cycle kept progressing: queries=%d cursor=%d queue=%d", source.queries, scheduler.rotationCursor, len(scheduler.queue))
 	}
 }
 

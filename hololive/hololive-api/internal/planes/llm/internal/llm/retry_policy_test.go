@@ -23,7 +23,7 @@ func TestLLMClientsDoNotRetryRetryableStatus(t *testing.T) {
 		return server, &requests
 	}
 
-	t.Run("openai compatible", func(t *testing.T) {
+	t.Run("responses", func(t *testing.T) {
 		server, requests := newUnavailableServer(t)
 		client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler), WithWebSearch(false))
 
@@ -36,14 +36,10 @@ func TestLLMClientsDoNotRetryRetryableStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("preset", func(t *testing.T) {
+	t.Run("chat completions", func(t *testing.T) {
 		server, requests := newUnavailableServer(t)
-
-		client, err := NewPresetClient(server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler),
+		client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler),
 			WithSchemaName("member_news_summary"), WithChatCompletions(), WithWebSearch(false))
-		if err != nil {
-			t.Fatalf("NewPresetClient() error = %v", err)
-		}
 
 		if _, err := client.GenerateJSON(t.Context(), testWirePromptLayers(), testObjectSchema()); err == nil {
 			t.Fatal("GenerateJSON() error = nil, want 503 failure")

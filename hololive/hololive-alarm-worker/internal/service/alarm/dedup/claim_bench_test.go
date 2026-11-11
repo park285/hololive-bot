@@ -23,7 +23,7 @@ func TestTryClaimKeyInfoLevelAllocationBudget(t *testing.T) {
 	var sink bytes.Buffer
 
 	logger := slog.New(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	service := NewService(client, []int{10}, logger)
+	service := NewService(client, logger)
 	ctx := t.Context()
 
 	allocs := testing.AllocsPerRun(1000, func() {
@@ -57,7 +57,7 @@ func BenchmarkTryClaimKey(b *testing.B) {
 			var sink bytes.Buffer
 
 			logger := slog.New(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: level.level}))
-			service := NewService(client, []int{10}, logger)
+			service := NewService(client, logger)
 			ctx := b.Context()
 
 			b.ReportAllocs()

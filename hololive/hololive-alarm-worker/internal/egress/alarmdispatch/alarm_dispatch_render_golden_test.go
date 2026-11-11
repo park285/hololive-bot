@@ -87,11 +87,11 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 
 	regular := alarmGoldenNotification("Regular", alarmGoldenStream("regular", "Regular Title"))
 
-	item, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &premiere, 5)
+	item, err := buildAlarmDispatchItemView(t.Context(), nil, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, &premiere, 5)
 	require.NoError(t, err)
 	assert.True(t, item.IsPremiere)
 
-	allPremiere, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
+	allPremiere, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, premiere},
 	}, shortlinkservice.YouTubeBuilder{})
@@ -101,7 +101,7 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 	assert.True(t, allPremiere.Entries[0].IsPremiere)
 	assert.True(t, allPremiere.Entries[1].IsPremiere)
 
-	mixed, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
+	mixed, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, regular},
 	}, shortlinkservice.YouTubeBuilder{})
@@ -119,7 +119,7 @@ func TestRenderAlarmDispatchNotificationIncludesCollabMembers(t *testing.T) {
 	notification.Stream.ChannelID = "ch-miko"
 	notification.Stream.CollaboTalentNames = []string{"星街すいせい", "Gawr Gura"}
 
-	got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, collabTestMembers{}, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &alarmDispatchMembers{provider: collabTestMembers{}}, &notification)
 	require.NoError(t, err)
 
 	for _, text := range messageTexts(got) {
@@ -163,13 +163,6 @@ func (collabTestMembers) FindMemberByAlias(context.Context, string) (*domain.Mem
 	return nil, domain.ErrMemberNotFound
 }
 func (collabTestMembers) GetChannelIDs(context.Context) ([]string, error) { return nil, nil }
-func (collabTestMembers) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
-}
-
-func (collabTestMembers) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
-}
 
 func TestAlarmProducerPreservesLiteralFields(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
@@ -184,10 +177,10 @@ func TestAlarmProducerPreservesLiteralFields(t *testing.T) {
 
 	notification.ScheduleChangeMessage = note
 
-	single, err := renderAlarmDispatchNotification(t.Context(), renderer, store, alarmGoldenMembers{}, &notification)
+	single, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, &notification)
 	require.NoError(t, err)
 
-	grouped, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, "", alarmDispatchGroup{
+	grouped, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, "", alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{notification, notification},
 	})

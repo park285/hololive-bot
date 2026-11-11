@@ -12,8 +12,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
-	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const privacySentinel = "SENTINEL"
@@ -186,7 +184,6 @@ func newPrivacyCommandContext() *botcommand.CommandContext {
 
 	return &botcommand.CommandContext{
 		Room:     "123456789",
-		RoomName: "룸이름-" + privacySentinel,
 		UserID:   testUserID,
 		UserName: "닉네임-" + privacySentinel,
 		Message:  "!help 본문-" + privacySentinel,
@@ -265,34 +262,4 @@ func (c *failingRouterCommand) Name() string        { return c.name }
 func (c *failingRouterCommand) Description() string { return c.name }
 func (c *failingRouterCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
 	return c.err
-}
-
-func TestCommandContextAttrsKeepTheIngressRoomToken(t *testing.T) {
-	t.Parallel()
-
-	const roomName = "상대방닉네임 님과의 대화"
-
-	cmdCtx := botcommand.NewCommandContext("", roomName, testUserID, "닉네임", "!알람", false)
-	attrs := commandContextAttrs(cmdCtx, "alarm")
-
-	var roomToken string
-
-	for _, attr := range attrs {
-		if attr.Key == sharedprivacylog.KeyRoomID {
-			roomToken = attr.Value.String()
-		}
-	}
-
-	if roomToken == sharedprivacylog.UnknownToken {
-		t.Fatal("chat_id가 빈 경로에서 ingress와 상관 키가 갈렸다")
-	}
-
-	if roomToken != privacylog.RoomAttr("", roomName).Value.String() {
-		t.Fatalf("room token = %q, want the ingress token %q",
-			roomToken, privacylog.RoomAttr("", roomName).Value.String())
-	}
-
-	if strings.Contains(roomToken, roomName) {
-		t.Fatalf("방 제목이 평문으로 남았다: %q", roomToken)
-	}
 }

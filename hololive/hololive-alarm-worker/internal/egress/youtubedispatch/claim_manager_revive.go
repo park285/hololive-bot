@@ -33,31 +33,6 @@ import (
 // reviveStaleFailedOutbox는 ledger가 없고 모든 구성원이 적격이며 활성 잠금·발송 증거가 없을 때만 그룹을 복구한다.
 // 하위 행이 없는 fanout 실패에도 같은 유효 기간을 적용한다.
 func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWindow time.Duration, batchSize int) (int64, error) {
-	if d == nil || d.transition == nil {
-		return 0, nil
-	}
-
-	if freshnessWindow <= 0 {
-		return 0, nil
-	}
-
-	if batchSize <= 0 {
-		batchSize = d.config.BatchSize
-	}
-
-	revived, err := d.reviveFailedLifecycleGroups(ctx, freshnessWindow, batchSize)
-	if err != nil {
-		return 0, fmt.Errorf("revive stale failed outbox: %w", err)
-	}
-
-	return revived, nil
-}
-
-func (d *ClaimManager) reviveFailedLifecycleGroups(
-	ctx context.Context,
-	freshnessWindow time.Duration,
-	batchSize int,
-) (int64, error) {
 	deliveryResult, err := d.transition.ReviveFailedLogicalGroups(ctx, freshnessWindow, batchSize)
 	observeLifecycleApply("revive_logical_group", deliveryResult.ApplyResult, err, max(deliveryResult.RevivedLogicalGroups, 1))
 
@@ -91,13 +66,7 @@ func (d *ClaimManager) reviveFailedLifecycleGroups(
 	}
 
 	touched := slices.Concat(deliveryResult.TouchedOutboxIDs, fanoutResult.TouchedOutboxIDs)
-	projector := d.projector
-
-	if projector == nil {
-		projector = newOutboxAggregateProjector(d.delivery)
-	}
-
-	if err := projector.Project(ctx, touched); err != nil {
+	if err := d.projector.Project(ctx, touched); err != nil {
 		d.logger.Warn("Immediate aggregate projection failed after logical group revive", slog.Any("error", err))
 	}
 

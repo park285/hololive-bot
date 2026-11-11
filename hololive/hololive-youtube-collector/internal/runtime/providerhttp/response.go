@@ -26,10 +26,6 @@ type ProviderResponsePolicy struct {
 }
 
 func DefaultJSONPolicy(maxSuccessBodyBytes int64) ProviderResponsePolicy {
-	if maxSuccessBodyBytes <= 0 {
-		maxSuccessBodyBytes = 1 << 20
-	}
-
 	return ProviderResponsePolicy{
 		SuccessStatus:       http.StatusOK,
 		SuccessContentTypes: []string{"application/json"},

@@ -159,31 +159,6 @@ func TestRedactCacheKeyFailsClosedOnTruncatedKeys(t *testing.T) {
 	}
 }
 
-func TestRedactCacheFieldOnlyTouchesIdentifierKeyedHashes(t *testing.T) {
-	t.Parallel()
-
-	for _, key := range []string{"membernews:room_names"} {
-		got := RedactCacheField(key, plainRoom)
-		if strings.Contains(got, plainRoom) {
-			t.Errorf("RedactCacheField(%q, room) = %q, plaintext survived", key, got)
-		}
-
-		if !strings.HasPrefix(got, PseudonymPrefix) {
-			t.Errorf("RedactCacheField(%q, room) = %q, want a pseudonym", key, got)
-		}
-
-		if got := RedactCacheField(key, canonicalRoom); got != canonicalRoom {
-			t.Errorf("RedactCacheField(%q, canonical) = %q, want %q", key, got, canonicalRoom)
-		}
-	}
-
-	for _, key := range []string{"hololive:members", "alarm:member_names", "alarm:twitch_logins"} {
-		if got := RedactCacheField(key, "Gawr Gura:Hololive EN"); got != "Gawr Gura:Hololive EN" {
-			t.Errorf("RedactCacheField(%q, member) = %q, want the field unchanged", key, got)
-		}
-	}
-}
-
 func TestCacheAttrsKeepTheirWireNames(t *testing.T) {
 	t.Parallel()
 
@@ -194,9 +169,9 @@ func TestCacheAttrsKeepTheirWireNames(t *testing.T) {
 		t.Errorf("CacheKeyAttr = %v, want key %q carrying the redacted value", keyAttr, KeyCacheKey)
 	}
 
-	fieldAttr := CacheFieldAttr("membernews:room_names", plainRoom)
-	if fieldAttr.Key != KeyCacheField || strings.Contains(fieldAttr.Value.String(), plainRoom) {
-		t.Errorf("CacheFieldAttr = %v, want key %q carrying the redacted value", fieldAttr, KeyCacheField)
+	fieldAttr := CacheFieldAttr(channelID)
+	if fieldAttr.Key != KeyCacheField || fieldAttr.Value.String() != channelID {
+		t.Errorf("CacheFieldAttr = %v, want key %q carrying the field", fieldAttr, KeyCacheField)
 	}
 }
 

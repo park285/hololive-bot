@@ -18,7 +18,9 @@ func TestAlarmDispatchRetentionIncludesTerminatedCandidates(t *testing.T) {
 	n := domain.NewAlarmNotification("cleanup-room", &domain.Channel{ID: "cleanup-channel"}, &domain.Stream{ID: "cleanup-stream", ChannelID: "cleanup-channel", Status: domain.StreamStatusUpcoming, StartScheduled: &start}, 5, nil, "")
 	require.NoError(t, candidates.Stage(t.Context(), "cleanup-channel", start.Add(-time.Hour), []*domain.AlarmNotification{n}))
 
-	key := dispatchoutbox.BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: *n})
+	var key string
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT dedupe_key FROM alarm_upcoming_candidates WHERE stream_id = $1", "cleanup-stream").Scan(&key))
 	require.NoError(t, candidates.Finish(t.Context(), map[string][]string{"subscription_removed": {key}}, start.Add(-72*time.Hour)))
 
 	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}

@@ -9,8 +9,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
-
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
 )
 
@@ -29,7 +27,6 @@ func TestRuntimeCloseContextResumesActualPlaneCleanupAfterDeadline(t *testing.T)
 		var cleanups atomic.Int32
 
 		admin := &adminruntime.AdminAPIRuntime{
-			Managed: lifecycle.NewManaged(func() { cleanups.Add(1) }),
 			PhotoSync: aggregatePhotoTask(func(ctx context.Context) {
 				close(entered)
 				<-ctx.Done()
@@ -39,7 +36,14 @@ func TestRuntimeCloseContextResumesActualPlaneCleanupAfterDeadline(t *testing.T)
 		admin.Start(t.Context(), nil)
 		<-entered
 
-		runtime := &Runtime{closeSteps: []func(context.Context) error{admin.CloseContext}}
+		runtime := &Runtime{closeSteps: []func(context.Context) error{
+			admin.CloseContext,
+			func(context.Context) error {
+				cleanups.Add(1)
+
+				return nil
+			},
+		}}
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 
 		defer cancel()
@@ -52,7 +56,7 @@ func TestRuntimeCloseContextResumesActualPlaneCleanupAfterDeadline(t *testing.T)
 		finish()
 		synctest.Wait()
 
-		// 실제 plane은 종료 오류를 보존하면서도 완료된 photo 작업의 자원을 회수한다.
+		// 실제 plane이 photo 작업을 join하면 첫 종료 오류를 보존한 채 뒤 회수 단계를 한 번 실행한다.
 		for range 2 {
 			if err := runtime.CloseContext(t.Context()); !errors.Is(err, firstErr) {
 				t.Fatalf("resumed close lost its first error: %v", err)

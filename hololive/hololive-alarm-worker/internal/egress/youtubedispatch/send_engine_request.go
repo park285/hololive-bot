@@ -9,6 +9,7 @@ import (
 
 	"github.com/park285/iris-client-go/v5/iris"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -77,7 +78,7 @@ func (d *SendEngine) sendFrozenDelivery(ctx context.Context, attempt *deliveryAt
 		return nil
 	}
 
-	if errors.Is(err, errDeliverySendOutcomeUnknown) || !iris.IsPreHandoffClientRequestIDConflict(err) {
+	if errors.Is(err, errDeliverySendOutcomeUnknown) || !sendoutcome.Reissuable(err) {
 		return err
 	}
 
@@ -174,13 +175,9 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 
 	attempt.request = req
 
-	operation, begun := d.beginLifecycleOperation(ctx, attempt.rows, attempt.outboxes, result)
-
-	if !begun {
+	if !d.beginLifecycleOperation(ctx, &attempt, result) {
 		return
 	}
-
-	attempt.operation = operation
 
 	mode := store.DeliveryModeGrouped
 

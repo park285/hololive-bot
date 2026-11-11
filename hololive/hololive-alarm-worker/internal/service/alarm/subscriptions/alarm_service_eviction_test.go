@@ -2,7 +2,6 @@ package subscriptions
 
 import (
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -39,8 +38,6 @@ func TestAddAlarmAfterSubscriberEvictionPreservesEveryRecipient(t *testing.T) {
 			}
 
 			require.NoError(t, service.cache.Del(ctx, alarmkeys.BuildChannelSubscriberKey(testChannelID, kind)))
-			// 빈 구독 표식도 새 구독 뒤에는 정본 조회를 가리면 안 된다.
-			require.NoError(t, service.cache.Set(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(testChannelID, kind), "1", time.Minute))
 
 			added, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: testNewRoomC, ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{kind}})
 			require.NoError(t, err)
@@ -105,21 +102,4 @@ func TestAddAlarmAfterRegistryEvictionRestoresAllSubscribedChannels(t *testing.T
 	channels, err := service.cache.SMembers(ctx, alarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{testChannelID, testOtherChannelID, "new-channel"}, channels)
-}
-
-func TestAddAlarmCacheFailureKeepsCommittedRecipients(t *testing.T) {
-	service, pool := newEvictionAlarmService(t)
-	ctx := t.Context()
-	_, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "existing", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
-	require.NoError(t, err)
-
-	// commit 뒤 cache 갱신을 잘못된 자료형으로 실패시켜도, 먼저 commit한 구독은 수신 대상에 포함되어야 한다.
-	require.NoError(t, service.cache.Set(ctx, alarmkeys.MemberNameKey, "wrong-type", time.Minute))
-
-	_, err = service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "committed", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
-	require.Error(t, err)
-
-	rooms, err := alarmstore.NewSubscriberResolver(service.cache, pool).ResolveEventSubscribers(ctx, testChannelID, "", domain.AlarmTypeLive)
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"existing", "committed"}, rooms)
 }

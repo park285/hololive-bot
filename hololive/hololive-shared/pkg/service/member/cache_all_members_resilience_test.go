@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestCacheAllMembers_SharedLoadHasOwnedDeadline(t *testing.T) {
@@ -365,7 +366,7 @@ func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 
 	for range waiters - 1 {
 		wg.Go(func() {
-			_, err := c.FindMembersByName(t.Context(), testMemberNameOld)
+			_, err := c.LoadAllMembers(t.Context())
 			errs <- err
 		})
 	}
@@ -397,7 +398,17 @@ func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 }
 
 func TestNewMemberCacheRejectsRepositoryWithoutPool(t *testing.T) {
-	cache, err := NewMemberCache(t.Context(), &Repository{}, nil, slog.New(slog.DiscardHandler), CacheConfig{WarmUp: true})
+	epochStore := testutil.NewTestCacheService(t.Context(), t)
+
+	cache, err := NewMemberCache(t.Context(), &Repository{}, epochStore, slog.New(slog.DiscardHandler), CacheConfig{WarmUp: true})
+	if err == nil || cache != nil {
+		t.Fatalf("NewMemberCache() = %v, %v; want configuration error", cache, err)
+	}
+}
+
+// Epoch 조정 없는 캐시는 다른 프로세스의 멤버 변경을 놓치므로 구성 단계에서 거절한다.
+func TestNewMemberCacheRequiresEpochStore(t *testing.T) {
+	cache, err := NewMemberCache(t.Context(), nil, nil, slog.New(slog.DiscardHandler), CacheConfig{})
 	if err == nil || cache != nil {
 		t.Fatalf("NewMemberCache() = %v, %v; want configuration error", cache, err)
 	}

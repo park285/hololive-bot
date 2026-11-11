@@ -190,17 +190,11 @@ func (j JobContract) Validate() error {
 		return fmt.Errorf("validate class membership: %w", err)
 	}
 
-	if err := validateKindSlices(j.definition.emissions, j.definition.cadenceKinds, j.definition.rosterKinds); err != nil {
+	if err := validateKindSlices(j.definition.emissions, j.definition.cadenceKinds); err != nil {
 		return fmt.Errorf("validate kind slices: %w", err)
 	}
 
 	return nil
-}
-
-type JobContractSet interface {
-	Definition(JobID) (JobContract, bool)
-	IDs() []JobID
-	Allows(JobID, contract.ObservationKind) bool
 }
 
 type StaticJobContracts map[JobID]JobContract
@@ -210,17 +204,6 @@ type StaticJobContracts map[JobID]JobContract
 func (s StaticJobContracts) Definition(id JobID) (JobContract, bool) {
 	definition, ok := s[id]
 	return definition, ok
-}
-
-func (s StaticJobContracts) IDs() []JobID {
-	ids := make([]JobID, 0, len(s))
-	for id := range s {
-		ids = append(ids, id)
-	}
-
-	slices.SortFunc(ids, compareJobID)
-
-	return ids
 }
 
 func (s StaticJobContracts) Allows(id JobID, kind contract.ObservationKind) bool {
@@ -323,11 +306,7 @@ func validateGlobalMembership(
 	return nil
 }
 
-func validateKindSlices(
-	emissions []contract.ObservationKind,
-	cadence []contract.ObservationKind,
-	roster []contract.ObservationKind,
-) error {
+func validateKindSlices(emissions, cadence []contract.ObservationKind) error {
 	cadenceSet := make(map[contract.ObservationKind]struct{}, len(cadence))
 	for _, kind := range cadence {
 		cadenceSet[kind] = struct{}{}
@@ -338,8 +317,6 @@ func validateKindSlices(
 			return fmt.Errorf("validate job contract: emission %q is missing from cadence", kind)
 		}
 	}
-
-	_ = roster
 
 	return nil
 }
@@ -360,24 +337,4 @@ func unionObservationKinds(left, right []contract.ObservationKind) []contract.Ob
 	slices.Sort(out)
 
 	return out
-}
-
-func compareJobID(a, b JobID) int {
-	if a.Provider != b.Provider {
-		if a.Provider < b.Provider {
-			return -1
-		}
-
-		return 1
-	}
-
-	if a.Kind == b.Kind {
-		return 0
-	}
-
-	if a.Kind < b.Kind {
-		return -1
-	}
-
-	return 1
 }

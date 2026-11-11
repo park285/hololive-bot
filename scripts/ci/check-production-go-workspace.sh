@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="${PRODUCTION_GO_WORKSPACE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 dockerfiles=(
   "hololive/hololive-api/Dockerfile"

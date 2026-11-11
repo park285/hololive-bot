@@ -7,20 +7,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestCreateMemberPreservesDuplicateErrorForExistingCallers(t *testing.T) {
+func TestCreateMemberOrMatchReplaysIdenticalMember(t *testing.T) {
 	repository, _ := newPGXRepository(t)
 	first := &domain.Member{Name: "Ordinary Create"}
 
-	if err := repository.CreateMember(t.Context(), first); err != nil {
-		t.Fatal(err)
+	if replayed, err := repository.CreateMemberOrMatch(t.Context(), first); err != nil || replayed {
+		t.Fatalf("first create replayed=%t err=%v; want new member", replayed, err)
 	}
 
 	if first.ID <= 0 {
 		t.Fatal("create did not return committed member ID")
-	}
-
-	if err := repository.CreateMember(t.Context(), &domain.Member{Name: first.Name}); err == nil {
-		t.Fatal("ordinary create must not silently replay a duplicate")
 	}
 
 	replayed := &domain.Member{Name: first.Name}
@@ -44,8 +40,8 @@ func TestCreateMemberRecoveryComparesCanonicalDefaultsAndCurrentName(t *testing.
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			created := &domain.Member{Name: "Canonical " + tc.name}
-			if err := repository.CreateMember(t.Context(), created); err != nil {
-				t.Fatal(err)
+			if replayed, err := repository.CreateMemberOrMatch(t.Context(), created); err != nil || replayed {
+				t.Fatalf("create replayed=%t err=%v; want new member", replayed, err)
 			}
 
 			if _, err := pool.Exec(t.Context(), tc.update, created.ID); err != nil {

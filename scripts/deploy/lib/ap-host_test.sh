@@ -55,6 +55,11 @@ expect_load_rejected() {
 }
 expect_load_rejected missing-mode "missing AP_RUNTIME_MODE" '/^AP_RUNTIME_MODE=/d'
 expect_load_rejected compose-mode "AP_RUNTIME_MODE must be native" 's/^AP_RUNTIME_MODE=native$/AP_RUNTIME_MODE=compose/'
+if (SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" nonexistent-host) 2>"$tmp/unknown.err"; then
+  echo "[FAIL] unknown AP host must be rejected" >&2
+  exit 1
+fi
+grep -Fq "Unknown AP host: nonexistent-host" "$tmp/unknown.err"
 
 rsync_rsh="$(ap_rsync_rsh)"
 read -r -a parsed_rsync_rsh <<<"$rsync_rsh"
@@ -80,3 +85,8 @@ grep -Fq -- '-o BatchMode=yes' "$tmp/ssh.argv"
 grep -Fq -- '-o ConnectTimeout=10' "$tmp/ssh.argv"
 
 echo "[PASS] AP SSH and rsync share one bounded transport contract"
+
+for conf in "$ROOT_DIR"/scripts/deploy/ap-hosts/*.conf; do
+  SSH_KEY="$fixture_root/KR.key" ap_host_load "$ROOT_DIR" "$(basename "$conf" .conf)"
+done
+echo "[PASS] repository AP host confs pass the loader checks"

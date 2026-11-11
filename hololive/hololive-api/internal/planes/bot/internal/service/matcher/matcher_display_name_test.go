@@ -25,7 +25,7 @@ func newDisplayNameTestMatcher() *Matcher {
 		{ChannelID: displayTestInaChannel, Name: "Ninomae Inanis", Org: orgHololive},
 		{ChannelID: displayTestMikoHoloChan, Name: "Miko", ShortKoreanName: "미코", Org: orgHololive},
 		{ChannelID: displayTestMikoIndieChan, Name: "Miko", NameKo: "인디 미코", Org: displayTestIndependentOrg},
-	}), nil, slog.New(slog.DiscardHandler))
+	}), slog.New(slog.DiscardHandler))
 }
 
 func assertLookupChannel(t *testing.T, lookup string, channel *domain.Channel, found bool, err error, channelID, name string) {

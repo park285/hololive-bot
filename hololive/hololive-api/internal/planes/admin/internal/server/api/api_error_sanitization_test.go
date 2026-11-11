@@ -39,10 +39,7 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	logger := slog.New(slog.DiscardHandler)
-	base := &Handler{
-		logger: logger,
-		acl:    &acl.Service{},
-	}
+	room := &RoomHandler{logger: logger, acl: &acl.Service{}}
 
 	testCases := []struct {
 		name   string
@@ -50,11 +47,11 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 		params gin.Params
 		call   gin.HandlerFunc
 	}{
-		{"alarm delete", "/api/holo/alarm/delete", nil, base.DomainHandlers().Alarm.DeleteAlarm},
-		{"room add", "/api/holo/rooms/add", nil, base.DomainHandlers().Room.AddRoom},
-		{"room remove", "/api/holo/rooms/remove", nil, base.DomainHandlers().Room.RemoveRoom},
-		{"room acl", "/api/holo/rooms/acl", nil, base.DomainHandlers().Room.SetACL},
-		{"member add", "/api/holo/members", nil, base.DomainHandlers().Member.AddMember},
+		{"alarm delete", "/api/holo/alarm/delete", nil, (&AlarmHandler{logger: logger}).DeleteAlarm},
+		{"room add", "/api/holo/rooms/add", nil, room.AddRoom},
+		{"room remove", "/api/holo/rooms/remove", nil, room.RemoveRoom},
+		{"room acl", "/api/holo/rooms/acl", nil, room.SetACL},
+		{"member add", "/api/holo/members", nil, newMemberHandler(Deps{Logger: logger}).AddMember},
 	}
 
 	for _, tc := range testCases {

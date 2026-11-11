@@ -8,30 +8,19 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type recordingCommand struct {
-	name    string
-	err     error
-	calls   int
-	mutate  bool
-	gotKeys []string
+	name  string
+	err   error
+	calls int
 }
 
 func (c *recordingCommand) Name() string        { return c.name }
 func (c *recordingCommand) Description() string { return c.name }
 
-func (c *recordingCommand) Execute(_ context.Context, _ *botcommand.CommandContext, params map[string]any) error {
+func (c *recordingCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
 	c.calls++
-
-	for key := range params {
-		c.gotKeys = append(c.gotKeys, key)
-	}
-
-	if c.mutate && params != nil {
-		params["mutated"] = true
-	}
 
 	return c.err
 }
@@ -85,111 +74,5 @@ func TestRegistryExecuteWrapsHandlerFailure(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "command live") {
 		t.Fatalf("error = %q, want command name in wrapping", err)
-	}
-}
-
-func passthroughNormalize(cmdType botcommand.CommandType, params map[string]any) (key string, normalized map[string]any) {
-	return string(cmdType), params
-}
-
-func TestSequentialDispatcherPublishSkipsUnknownEvents(t *testing.T) {
-	registry := handlers.NewRegistry()
-	help := &recordingCommand{name: "help"}
-	registry.Register(help)
-
-	dispatcher := handlers.NewSequentialDispatcher(registry, passthroughNormalize)
-
-	executed, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
-		handlercore.Event{Type: botcommand.CommandUnknown},
-		handlercore.Event{Type: botcommand.CommandHelp},
-	)
-	if err != nil {
-		t.Fatalf("Publish() error = %v", err)
-	}
-
-	if executed != 1 {
-		t.Fatalf("executed = %d, want 1", executed)
-	}
-
-	if help.calls != 1 {
-		t.Fatalf("help handler calls = %d, want 1", help.calls)
-	}
-}
-
-func TestSequentialDispatcherPublishStopsAtFirstFailure(t *testing.T) {
-	sentinel := errors.New("first handler failed")
-	registry := handlers.NewRegistry()
-	failing := &recordingCommand{name: "first", err: sentinel}
-	untouched := &recordingCommand{name: "second"}
-
-	registry.Register(failing)
-	registry.Register(untouched)
-
-	normalize := func(_ botcommand.CommandType, params map[string]any) (key string, normalized map[string]any) {
-		key, ok := params["key"].(string)
-		if !ok {
-			return "", params
-		}
-
-		return key, params
-	}
-
-	dispatcher := handlers.NewSequentialDispatcher(registry, normalize)
-	executed, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
-		handlercore.Event{Type: botcommand.CommandHelp, Params: map[string]any{"key": "first"}},
-		handlercore.Event{Type: botcommand.CommandHelp, Params: map[string]any{"key": "second"}},
-	)
-
-	if !errors.Is(err, sentinel) {
-		t.Fatalf("error = %v, want first handler sentinel in chain", err)
-	}
-
-	if executed != 0 {
-		t.Fatalf("executed = %d, want 0", executed)
-	}
-
-	if untouched.calls != 0 {
-		t.Fatalf("second handler calls = %d, want 0", untouched.calls)
-	}
-}
-
-func TestSequentialDispatcherPublishClonesEventParams(t *testing.T) {
-	registry := handlers.NewRegistry()
-	registry.Register(&recordingCommand{name: "help", mutate: true})
-
-	original := map[string]any{"member": "미즈미야"}
-	dispatcher := handlers.NewSequentialDispatcher(registry, passthroughNormalize)
-
-	if _, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
-		handlercore.Event{Type: botcommand.CommandHelp, Params: original},
-	); err != nil {
-		t.Fatalf("Publish() error = %v", err)
-	}
-
-	if _, leaked := original["mutated"]; leaked {
-		t.Fatal("handler mutation leaked into the original event params")
-	}
-
-	if len(original) != 1 {
-		t.Fatalf("original params len = %d, want 1", len(original))
-	}
-}
-
-func TestSequentialDispatcherWithoutNormalizeFuncFails(t *testing.T) {
-	dispatcher := handlers.NewSequentialDispatcher(handlers.NewRegistry(), nil)
-
-	executed, err := dispatcher.Publish(t.Context(), &botcommand.CommandContext{},
-		handlercore.Event{Type: botcommand.CommandHelp},
-	)
-	if err == nil {
-		t.Fatal("expected configuration error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "dispatcher not configured") {
-		t.Fatalf("error = %q, want dispatcher not configured", err)
-	}
-
-	if executed != 0 {
-		t.Fatalf("executed = %d, want 0", executed)
 	}
 }

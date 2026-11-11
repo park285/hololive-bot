@@ -42,14 +42,13 @@ func TestBotCommittedReplyWithLostReceiptDoesNotStageErrorResponse(t *testing.T)
 	cause := errors.New("reply commit acknowledgement lost")
 	writer := &lostReplyReceiptWriter{repo: newTestReplyOutboxRepository(t, pool), cause: cause}
 	registry := command.NewRegistry()
-	bot := &Bot{
-		logger:          newBotTestLogger(),
-		commandRegistry: registry,
-		messageAdapter:  messaging.NewMessageAdapter("!", ""),
-		irisClient:      &testIrisClient{},
+	bot := withMessagePath(&Bot{
+		logger:         newBotTestLogger(),
+		messageAdapter: messaging.NewMessageAdapter("!"),
+		irisClient:     &testIrisClient{},
 		transport: transport.NewCommandTransport(writer,
 			messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t)))),
-	}
+	}, registry)
 	registry.Register(&testCommand{
 		name: testHelpCommandName,
 		execute: func(ctx context.Context, commandContext *botcommand.CommandContext, _ map[string]any) error {

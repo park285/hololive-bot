@@ -159,15 +159,14 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ca
 	require.NoError(t, err)
 
 	messageStrings := loadSeededBotMessageStrings(t)
-	b := &Bot{
-		logger:          newBotTestLogger(),
-		commandRegistry: command.NewRegistry(),
-		messageAdapter:  messaging.NewMessageAdapter("!", ""),
-		irisClient:      irisClient,
-		formatter:       formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings)),
-		transport:       newDispatchingTransport(irisClient, formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings))),
-		messageStrings:  messageStrings,
-	}
+	b := withMessagePath(&Bot{
+		logger:         newBotTestLogger(),
+		messageAdapter: messaging.NewMessageAdapter("!"),
+		irisClient:     irisClient,
+		formatter:      formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings)),
+		transport:      newDispatchingTransport(irisClient, formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings))),
+		messageStrings: messageStrings,
+	}, command.NewRegistry())
 
 	return b, reqCh
 }

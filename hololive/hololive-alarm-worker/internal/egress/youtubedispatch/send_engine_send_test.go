@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
+	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	telemetry "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
@@ -330,6 +332,31 @@ func TestValidateOutboxPayload(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "community canonical post id only",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindCommunityPost, Payload: `{"canonical_post_id":"community:p1","content_text":"c"}`},
+			wantOK: true,
+		},
+		{
+			name:   "video url without video id",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: `{"url":"https://youtu.be/v1","title":"t"}`},
+			wantOK: false,
+		},
+		{
+			name:   "community url without content text",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindCommunityPost, Payload: `{"post_id":"p1","url":"https://www.youtube.com/post/p1"}`},
+			wantOK: false,
+		},
+		{
+			name:   "video field type outside contract",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"t","view_count":"many"}`},
+			wantOK: false,
+		},
+		{
+			name:   "community missing post id",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindCommunityPost, Payload: `{"content_text":"c"}`},
+			wantOK: false,
+		},
+		{
 			name:   "invalid json",
 			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: `{broken`},
 			wantOK: false,
@@ -410,6 +437,10 @@ func TestSendDeliveryMessageRejectsMissingDedupeKeysWithoutSending(t *testing.T)
 		t.Fatalf("sendDeliveryMessage() error = %v, want ErrDeliveryDedupeKeyRequired", err)
 	}
 
+	if !errors.Is(err, errDeliverySendRequestInvalid) {
+		t.Fatalf("sendDeliveryMessage() error = %v, want errDeliverySendRequestInvalid", err)
+	}
+
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
 
@@ -438,6 +469,10 @@ func TestSendDeliveryMessageRejectsBlankDedupeKeyWithoutSending(t *testing.T) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want ErrDeliveryDedupeKeyRequired", err)
 	}
 
+	if !errors.Is(err, errDeliverySendRequestInvalid) {
+		t.Fatalf("sendDeliveryMessage() error = %v, want errDeliverySendRequestInvalid", err)
+	}
+
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
 
@@ -446,17 +481,97 @@ func TestSendDeliveryMessageRejectsBlankDedupeKeyWithoutSending(t *testing.T) {
 	}
 }
 
+func TestSendDeliveryMessageRejectsMissingClientRequestIDWithoutSending(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	d := newTestDispatcherForSend(t, sender)
+
+	_, err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
+		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
+		roomID:     testRoom1,
+		message:    "message",
+		dedupeKeys: []string{testDedupeKeyShortOne},
+	})
+	require.ErrorContains(t, err, "client request id required")
+	require.ErrorIs(t, err, errDeliverySendRequestInvalid)
+
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+
+	if len(sender.messages) != 0 {
+		t.Fatalf("sender message count = %d, want 0", len(sender.messages))
+	}
+}
+
+// 발송 전 검증이 거절한 요청은 provider에 닿지 않았으므로 결과 불명이 아니라 invalid_send_request 영구 실패다.
+func TestLifecycleProviderFailureClassifiesPreSendRejectionAsInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	valid := deliverySendRequest{
+		frozen:          &store.FrozenRequest{Route: testPreparedTextRoute},
+		clientRequestID: testClientRequestID,
+		roomID:          testRoom1,
+		message:         "message",
+		dedupeKeys:      []string{testDedupeKeyShortOne},
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*deliverySendRequest)
+	}{
+		{name: "empty room", mutate: func(req *deliverySendRequest) { req.roomID = " " }},
+		{name: "empty message", mutate: func(req *deliverySendRequest) { req.message = " " }},
+		{name: "missing dedupe keys", mutate: func(req *deliverySendRequest) { req.dedupeKeys = nil }},
+		{name: "missing client request id", mutate: func(req *deliverySendRequest) { req.clientRequestID = "" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sender := &testSender{failRoom: map[string]bool{}}
+			d := newTestDispatcherForSend(t, sender)
+			req := valid
+			tt.mutate(&req)
+
+			_, err := d.send.sendDeliveryMessage(t.Context(), req)
+			require.ErrorIs(t, err, errDeliverySendRequestInvalid)
+
+			kind, reason, after := lifecycleProviderFailure(err)
+			require.Equal(t, ytlifecycle.FailurePermanent, kind)
+			require.Equal(t, lifecycleReasonRequest, reason)
+			require.Zero(t, after)
+
+			sender.mu.Lock()
+			defer sender.mu.Unlock()
+
+			require.Empty(t, sender.messages)
+		})
+	}
+}
+
 func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 	t.Parallel()
 
 	sender := &testSender{failRoom: map[string]bool{}}
 	dispatcher := newTestDispatcherForSend(t, sender)
-	req := deliverySendRequest{
-		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
-		roomID:     testRoom1,
-		message:    "message",
-		dedupeKeys: []string{testDedupeKeyShortOne},
+	frozenRequest := func(roomID string) deliverySendRequest {
+		t.Helper()
+
+		frozen, err := dispatcher.send.prepareFrozenRequest(t.Context(), deliverySendRequest{
+			roomID:     roomID,
+			variants:   testMessage("message"),
+			dedupeKeys: []string{testDedupeKeyShortOne},
+		})
+		require.NoError(t, err)
+
+		req, err := deliveryRequestFromFrozen(frozen)
+		require.NoError(t, err)
+
+		return req
 	}
+	req := frozenRequest(testRoom1)
 
 	if _, err := dispatcher.send.sendDeliveryMessage(t.Context(), req); err != nil {
 		t.Fatalf("sendDeliveryMessage() error = %v", err)
@@ -466,9 +581,7 @@ func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 		t.Fatalf("sendDeliveryMessage() repeat error = %v", err)
 	}
 
-	otherRoomReq := req
-
-	otherRoomReq.roomID = testRoom2
+	otherRoomReq := frozenRequest(testRoom2)
 
 	if _, err := dispatcher.send.sendDeliveryMessage(t.Context(), otherRoomReq); err != nil {
 		t.Fatalf("sendDeliveryMessage() other room error = %v", err)
@@ -524,8 +637,9 @@ func TestDispatchDeliveryRows_GroupedFormatFailureDoesNotSend(t *testing.T) {
 		t.Fatalf("success=%v failed=%d; want no success and two format failures", result.SuccessDeliveryIDs, result.FailedDeliveries)
 	}
 
-	if len(result.FailureBuckets["format message"]) != 2 {
-		t.Fatalf("format failure bucket = %v", result.FailureBuckets)
+	wantPrepared := []string{preparedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped)}
+	if got := transitionSpy(t, d).recordedPreparedFailures(); !slices.Equal(got, wantPrepared) {
+		t.Fatalf("prepared failures = %v, want %v", got, wantPrepared)
 	}
 
 	sender.mu.Lock()
@@ -655,8 +769,12 @@ func TestDispatchDeliveryRows_OrphanRows(t *testing.T) {
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	if ids, ok := result.FailureBuckets["outbox row not found"]; !ok || len(ids) != 1 || ids[0] != 101 {
-		t.Fatalf("unexpected failure buckets: %+v", result.FailureBuckets)
+	if got := result.TouchedOutboxIDs; len(got) != 1 || got[0] != 99 {
+		t.Fatalf("touchedOutboxIDs = %#v, want [99]", got)
+	}
+
+	if got := transitionSpy(t, d).recordedModes(); len(got) != 0 {
+		t.Fatalf("transition modes = %#v, want none for a row without outbox", got)
 	}
 }
 
@@ -793,9 +911,9 @@ func TestDispatchDeliveryRows_MultiRoomPartialFailureIsolatesHealthyRoom(t *test
 		t.Fatalf("failedDeliveries = %d, want 1 (failing room only)", result.FailedDeliveries)
 	}
 
-	failedIDs := result.FailureBuckets[deliveryReasonRateLimited]
-	if len(failedIDs) != 1 || failedIDs[0] != 102 {
-		t.Fatalf("failure bucket = %#v, want [102] (failing room only)", result.FailureBuckets)
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0, store.DeliveryModePerRoom)}
+	if got := transitionSpy(t, d).recordedStartedFailures(); !slices.Equal(got, wantStarted) {
+		t.Fatalf("started failures = %v, want %v (failing room only)", got, wantStarted)
 	}
 
 	if healthy := messagesForRoom(t, sender, testRoom1); len(healthy) != 1 {
@@ -822,9 +940,13 @@ func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testi
 		t.Fatalf("first pass successDeliveryIDs = %#v, want [101]", got)
 	}
 
-	failedIDs := first.FailureBuckets[deliveryReasonRateLimited]
-	if len(failedIDs) != 1 || failedIDs[0] != 102 {
-		t.Fatalf("first pass failure bucket = %#v, want [102]", first.FailureBuckets)
+	if first.FailedDeliveries != 1 {
+		t.Fatalf("first pass failedDeliveries = %d, want 1", first.FailedDeliveries)
+	}
+
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0, store.DeliveryModePerRoom)}
+	if got := transitionSpy(t, d).recordedStartedFailures(); !slices.Equal(got, wantStarted) {
+		t.Fatalf("first pass started failures = %v, want %v", got, wantStarted)
 	}
 
 	successByID := make(map[int64]bool, len(first.SuccessDeliveryIDs))
@@ -880,8 +1002,9 @@ func TestDispatchDeliveryRows_InvalidLogicalIdentityFailsBeforeSending(t *testin
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	if ids, ok := result.FailureBuckets[deliveryFailureReasonPreSendClaim]; !ok || len(ids) != 1 || ids[0] != 101 {
-		t.Fatalf("unexpected failure buckets: %+v", result.FailureBuckets)
+	wantPrepared := []string{preparedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonPreSendClaim, store.DeliveryModePerRoom)}
+	if got := transitionSpy(t, d).recordedPreparedFailures(); !slices.Equal(got, wantPrepared) {
+		t.Fatalf("prepared failures = %v, want %v", got, wantPrepared)
 	}
 
 	sender.mu.Lock()
@@ -1616,10 +1739,11 @@ func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 	)
 
 	_, err := dispatcher.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
-		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
-		roomID:     "room-timeout",
-		message:    testMessageHello,
-		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-timeout"},
+		frozen:          &store.FrozenRequest{Route: testPreparedTextRoute},
+		clientRequestID: testClientRequestID,
+		roomID:          "room-timeout",
+		message:         testMessageHello,
+		dedupeKeys:      []string{"youtube-notification:NEW_SHORT:short-timeout"},
 	})
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want timeout")
@@ -1648,10 +1772,11 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 	defer cancel()
 
 	_, err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
-		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
-		roomID:     "room-parent-timeout",
-		message:    testMessageHello,
-		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-parent-timeout"},
+		frozen:          &store.FrozenRequest{Route: testPreparedTextRoute},
+		clientRequestID: testClientRequestID,
+		roomID:          "room-parent-timeout",
+		message:         testMessageHello,
+		dedupeKeys:      []string{"youtube-notification:NEW_SHORT:short-parent-timeout"},
 	})
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want parent deadline error")
@@ -1684,10 +1809,11 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 		sender.parentDone = parentCtx.Done()
 
 		_, err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
-			frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
-			roomID:     "room-child-timeout-first",
-			message:    testMessageHello,
-			dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-child-timeout-first"},
+			frozen:          &store.FrozenRequest{Route: testPreparedTextRoute},
+			clientRequestID: testClientRequestID,
+			roomID:          "room-child-timeout-first",
+			message:         testMessageHello,
+			dedupeKeys:      []string{"youtube-notification:NEW_SHORT:short-child-timeout-first"},
 		})
 		if err == nil {
 			t.Fatal("sendDeliveryMessage() error = nil, want configured timeout")
@@ -1742,8 +1868,8 @@ func newOutcomeUnknownTestEngine(sender messagedelivery.PreparedMessageSender, r
 func assertOutcomeUnknownHold(t *testing.T, result *DispatchResult) {
 	t.Helper()
 
-	if result.FailedDeliveries != 0 || len(result.FailureBuckets) != 0 {
-		t.Fatalf("failedDeliveries = %d, failureBuckets = %#v, want none (row must stay SENDING for stale quarantine)", result.FailedDeliveries, result.FailureBuckets)
+	if result.FailedDeliveries != 0 {
+		t.Fatalf("failedDeliveries = %d, want 0 (row must stay SENDING for stale quarantine)", result.FailedDeliveries)
 	}
 
 	if len(result.SuccessDeliveryIDs) != 0 {
@@ -1774,7 +1900,7 @@ func TestDispatchDeliveryRows_PerRoomOutcomeUnknownHoldsSending(t *testing.T) {
 	assertOutcomeUnknownHold(t, &result)
 }
 
-func TestDispatchClaimedDeliveryRow_PreSendCancelBucketsRetry(t *testing.T) {
+func TestDispatchClaimedDeliveryRow_PreSendCancelSchedulesRetry(t *testing.T) {
 	t.Parallel()
 
 	sender := &flowTestSender{}
@@ -1793,8 +1919,14 @@ func TestDispatchClaimedDeliveryRow_PreSendCancelBucketsRetry(t *testing.T) {
 		t.Fatalf("sender calls = %d, want 0 (request must not leave the client)", got)
 	}
 
-	if got := result.FailureBuckets[deliveryReasonSendMessage]; len(got) != 1 || got[0] != 101 {
-		t.Fatalf("FailureBuckets[%q] = %#v, want [101]", deliveryReasonSendMessage, got)
+	spy, ok := engine.transition.(*lifecycleTransitionSpy)
+	if !ok {
+		t.Fatalf("transition = %T, want *lifecycleTransitionSpy", engine.transition)
+	}
+
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonTransport, 0, store.DeliveryModePerRoom)}
+	if got := spy.recordedStartedFailures(); !slices.Equal(got, wantStarted) {
+		t.Fatalf("started failures = %v, want %v", got, wantStarted)
 	}
 
 	if result.FailedDeliveries != 1 || len(result.SuccessDeliveryIDs) != 0 {

@@ -123,7 +123,7 @@ func recordBaselineEntry(ctx context.Context, fsys fs.FS, ledger dbmigrate.Ledge
 }
 
 // manifest 밖 ledger 항목은 출처를 증명할 수 없어 거절한다. 빈 ledger는 reconcileBaseline이 처리한다.
-func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate.Ledger, entries []string) error {
+func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, entries []string) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -139,17 +139,6 @@ func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate
 				"verify applied migration provenance and use matching reviewed sources and manifest before rerunning")
 	}
 
-	baseline := entries[0]
-
-	applied, err := ledger.Applied(ctx, pgxRowQuerier{conn: conn}, baseline)
-	if err != nil {
-		return fmt.Errorf("applied: %w", err)
-	}
-
-	if err := validateCurrentEpochBaseline(ctx, conn, baseline, applied); err != nil {
-		return fmt.Errorf("validate current epoch baseline: %w", err)
-	}
-
 	return nil
 }
 
@@ -161,26 +150,6 @@ func hasLegacyResidue(ctx context.Context, conn *pgxpool.Conn, entries []string)
 	}
 
 	return residue, nil
-}
-
-func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) error {
-	if baseline != epoch3Baseline || !applied {
-		return nil
-	}
-
-	_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
-	if err != nil {
-		return fmt.Errorf("load migration checksum: %w", err)
-	}
-
-	if checksumPresent {
-		return nil
-	}
-
-	return fmt.Errorf(
-		"epoch baseline %s is recorded without its checksum; "+
-			"refusing to trust a marker without a completed baseline application",
-		baseline)
 }
 
 func containsEntry(entries []string, target string) bool {

@@ -32,9 +32,9 @@ func BuildBotHTTP3Server(
 	appConfig *apiconfig.BotPlaneConfig,
 	webhookHandler *webhook.Handler,
 	logger *slog.Logger,
-	readyProbe ...*sharedreadiness.Probe,
+	readyProbe *sharedreadiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	server, startReloader, err := buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, logger, sharedh3.CertificateReloaderOptions{}, readyProbe...)
+	server, startReloader, err := buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, logger, sharedh3.CertificateReloaderOptions{}, readyProbe)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build bot HTTP3 server with reloader options: %w", err)
 	}
@@ -48,9 +48,9 @@ func buildBotHTTP3ServerWithReloaderOptions(
 	webhookHandler *webhook.Handler,
 	logger *slog.Logger,
 	reloaderOptions sharedh3.CertificateReloaderOptions,
-	readyProbe ...*sharedreadiness.Probe,
+	readyProbe *sharedreadiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, readyProbe...)
+	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, readyProbe)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
 	}

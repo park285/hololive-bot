@@ -26,7 +26,6 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -38,23 +37,11 @@ type DeliveryRepository struct {
 	logger *slog.Logger
 }
 
-func NewDeliveryRepository(db any, logger *slog.Logger) *DeliveryRepository {
+func NewDeliveryRepository(db deliverysql.DeliveryDB, logger *slog.Logger) *DeliveryRepository {
 	return &DeliveryRepository{
-		db:     AsDeliveryDB(db),
+		db:     db,
 		logger: logger,
 	}
-}
-
-func AsDeliveryDB(db any) deliverysql.DeliveryDB {
-	if reflectutil.IsNil(db) {
-		return nil
-	}
-
-	if typed, ok := db.(deliverysql.DeliveryDB); ok {
-		return typed
-	}
-
-	return nil
 }
 
 const outboxAggregateFailedErrorText = "per-room delivery failed"

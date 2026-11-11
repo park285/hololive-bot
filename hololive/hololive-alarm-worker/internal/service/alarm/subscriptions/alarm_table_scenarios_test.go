@@ -59,7 +59,7 @@ func alarmAddRegistryScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScen
 				t.Helper()
 				assert.True(t, changed)
 
-				roomChannels, err := service.GetRoomAlarms(ctx, baseReq.RoomID)
+				roomChannels, err := roomChannelIDs(ctx, service, baseReq.RoomID)
 				require.NoError(t, err)
 				assert.Equal(t, []string{baseReq.ChannelID}, roomChannels)
 
@@ -83,15 +83,15 @@ func alarmAddRegistryScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScen
 				t.Helper()
 				assert.True(t, changed)
 
-				communitySubs, err := service.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeCommunity)
+				communitySubs, err := channelSubscriberRooms(ctx, service, baseReq.ChannelID, domain.AlarmTypeCommunity)
 				require.NoError(t, err)
 				assert.Contains(t, communitySubs, baseReq.RoomID)
 
-				liveSubs, err := service.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeLive)
+				liveSubs, err := channelSubscriberRooms(ctx, service, baseReq.ChannelID, domain.AlarmTypeLive)
 				require.NoError(t, err)
 				assert.Empty(t, liveSubs)
 
-				shortsSubs, err := service.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeShorts)
+				shortsSubs, err := channelSubscriberRooms(ctx, service, baseReq.ChannelID, domain.AlarmTypeShorts)
 				require.NoError(t, err)
 				assert.Empty(t, shortsSubs)
 			},
@@ -119,7 +119,7 @@ func alarmAddDuplicateScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheSce
 				t.Helper()
 				assert.False(t, changed)
 
-				roomChannels, err := service.GetRoomAlarms(ctx, baseReq.RoomID)
+				roomChannels, err := roomChannelIDs(ctx, service, baseReq.RoomID)
 				require.NoError(t, err)
 				assert.Equal(t, []string{baseReq.ChannelID}, roomChannels)
 			},
@@ -159,7 +159,7 @@ func alarmRemovePartialScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheSc
 				t.Helper()
 				assert.True(t, changed)
 
-				roomChannels, err := service.GetRoomAlarms(ctx, baseReq.RoomID)
+				roomChannels, err := roomChannelIDs(ctx, service, baseReq.RoomID)
 				require.NoError(t, err)
 				assert.ElementsMatch(t, []string{"UC_TEST_2"}, roomChannels)
 
@@ -192,11 +192,11 @@ func alarmRemoveTerminalScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheS
 				t.Helper()
 				assert.True(t, changed)
 
-				roomChannels, err := service.GetRoomAlarms(ctx, baseReq.RoomID)
+				roomChannels, err := roomChannelIDs(ctx, service, baseReq.RoomID)
 				require.NoError(t, err)
 				assert.Empty(t, roomChannels)
 
-				liveSubs, err := service.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeLive)
+				liveSubs, err := channelSubscriberRooms(ctx, service, baseReq.ChannelID, domain.AlarmTypeLive)
 				require.NoError(t, err)
 				assert.Empty(t, liveSubs)
 			},

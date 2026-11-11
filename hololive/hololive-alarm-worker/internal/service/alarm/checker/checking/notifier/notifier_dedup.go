@@ -7,11 +7,16 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKeys []string, claimed bool, err error) {
-	notifyKey, logicalKey := n.notificationDedupKeys(payload)
+func (n *Notifier) claimDedup(
+	ctx context.Context,
+	payload *sendInput,
+	targetPolicy targetpolicy.TargetMinutePolicy,
+) (claimKeys []string, claimed bool, err error) {
+	notifyKey, logicalKey := notificationDedupKeys(payload, targetPolicy)
 
 	notifyClaimed, logicalClaimed, err := n.dedupService.TryClaimPair(
 		ctx, notifyKey, logicalKey, constants.CacheTTL.NotificationSent,
@@ -57,9 +62,9 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKey
 	return append(claimKeys, scheduleClaimKeys...), true, nil
 }
 
-func (n *Notifier) notificationDedupKeys(payload *sendInput) (string, string) {
+func notificationDedupKeys(payload *sendInput, targetPolicy targetpolicy.TargetMinutePolicy) (string, string) {
 	category := keys.NotificationCategory(
-		n.dedupService.TargetMinutesSnapshot(),
+		targetPolicy.Clone(),
 		payload.notification.MinutesUntil,
 	)
 	dedupeScheduled := payload.startScheduled

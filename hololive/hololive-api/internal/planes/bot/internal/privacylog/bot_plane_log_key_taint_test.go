@@ -17,7 +17,7 @@ import (
 )
 
 var keyTaintSanitizers = map[string]struct{}{
-	"Pseudonym": {}, "IdentifierToken": {}, "RoomIDAttr": {}, "ChatIDAttr": {}, "RoomAttr": {}, "ChatAttr": {},
+	"Pseudonym": {}, "IdentifierToken": {}, "RoomIDAttr": {}, "ChatIDAttr": {},
 }
 
 type keyTaint struct {

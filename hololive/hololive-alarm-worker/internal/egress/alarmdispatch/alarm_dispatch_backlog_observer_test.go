@@ -59,12 +59,12 @@ func TestAlarmDispatchBacklogObserverFailureKeepsLastValuesAndLowersSuccess(t *t
 
 	observer.observeOnce(t.Context())
 	require.True(t, store.sawDeadline.Load())
-	require.InDelta(t, 70, testutil.ToFloat64(alarmDispatchPGOldestPendingAgeSeconds), 0.000001)
-	require.InDelta(t, 7, testutil.ToFloat64(alarmDispatchPGBacklogRows.WithLabelValues(string(dispatchoutbox.StatusPending))), 0.000001)
-	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess), 0.000001)
+	require.InDelta(t, 70, testutil.ToFloat64(alarmDispatchRunnerMetrics().oldestPendingAgeSeconds), 0.000001)
+	require.InDelta(t, 7, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogRows.WithLabelValues(string(dispatchoutbox.StatusPending))), 0.000001)
+	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotSuccess), 0.000001)
 	require.Empty(t, logs.String())
 
-	lastSuccess := testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess)
+	lastSuccess := testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotLastSuccess)
 
 	tests := []struct {
 		name           string
@@ -85,10 +85,10 @@ func TestAlarmDispatchBacklogObserverFailureKeepsLastValuesAndLowersSuccess(t *t
 			observer.observeOnce(t.Context())
 
 			assert.InDelta(t, before+1, alarmDispatchCounterMetricValue(t, alarmDispatchBacklogObservationFailedMetric), 0)
-			assert.Zero(t, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess))
-			assert.InDelta(t, 70, testutil.ToFloat64(alarmDispatchPGOldestPendingAgeSeconds), 0.000001)
-			assert.InDelta(t, 7, testutil.ToFloat64(alarmDispatchPGBacklogRows.WithLabelValues(string(dispatchoutbox.StatusPending))), 0.000001)
-			assert.InDelta(t, lastSuccess, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess), 0)
+			assert.Zero(t, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotSuccess))
+			assert.InDelta(t, 70, testutil.ToFloat64(alarmDispatchRunnerMetrics().oldestPendingAgeSeconds), 0.000001)
+			assert.InDelta(t, 7, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogRows.WithLabelValues(string(dispatchoutbox.StatusPending))), 0.000001)
+			assert.InDelta(t, lastSuccess, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotLastSuccess), 0)
 			assert.Contains(t, logs.String(), "alarm dispatch backlog observation failed")
 		})
 	}

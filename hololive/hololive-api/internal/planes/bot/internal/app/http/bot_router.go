@@ -22,18 +22,16 @@ package apphttp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/iris-client-go/v5/webhook"
-	"github.com/park285/shared-go/v2/pkg/health"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/readiness"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -43,12 +41,16 @@ func ProvideBotRouter(
 	appConfig *apiconfig.BotPlaneConfig,
 	logger *slog.Logger,
 	webhookHandler *webhook.Handler,
-	readyProbe ...*sharedreadiness.Probe,
+	readyProbe *sharedreadiness.Probe,
 ) (*gin.Engine, error) {
+	if readyProbe == nil {
+		return nil, errors.New("ready probe must not be nil")
+	}
+
 	out, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:                 appConfig.Server.APIKey,
 		SkipLogPaths:           []string{"/l/*"},
-		InternalReadyResponder: botReadyResponder(ctx, readiness.Pick(readyProbe...)),
+		InternalReadyResponder: readiness.GinHandler(ctx, readyProbe),
 		RegisterRoutes:         botRouteRegistrar(webhookHandler),
 	})
 	if err != nil {
@@ -56,16 +58,6 @@ func ProvideBotRouter(
 	}
 
 	return out, nil
-}
-
-func botReadyResponder(ctx context.Context, probe *sharedreadiness.Probe) func(*gin.Context) {
-	if probe != nil {
-		return readiness.GinHandler(ctx, probe)
-	}
-
-	return func(c *gin.Context) {
-		ginjson.Respond(c, http.StatusOK, gin.H{"health": health.Get()})
-	}
 }
 
 func botRouteRegistrar(webhookHandler *webhook.Handler) func(*gin.Engine) error {

@@ -41,14 +41,14 @@ func birthdayStreamEventKeyPrefix(memberID int, dateStr string) string {
 func buildBirthdayStreamEnvelopes(
 	candidates []birthdayStreamCandidate,
 	roomsByBirthdayEventKey map[string][]string,
-	publishedEvents map[string]domain.AlarmQueueEnvelope,
+	publishedEvents map[string]dispatchoutbox.AlarmQueueEnvelope,
 	sentRoomsByStreamEventKey map[string][]string,
 	dateStr string,
-) []domain.AlarmQueueEnvelope {
-	var envelopes []domain.AlarmQueueEnvelope
+) []dispatchoutbox.AlarmQueueEnvelope {
+	var envelopes []dispatchoutbox.AlarmQueueEnvelope
 
 	for _, candidate := range candidates {
-		displayName := resolveCelebrationMemberName(candidate.member)
+		displayName := candidate.member.DisplayName()
 		rooms := roomsByBirthdayEventKey[birthdayGreetingEventKey(candidate.member.ID, dateStr)]
 		streamEventKey := birthdayStreamEventKey(candidate.member.ID, dateStr, candidate.session.VideoID)
 		published, wasPublished := publishedEvents[streamEventKey]
@@ -77,8 +77,8 @@ func birthdayStreamEnvelope(
 	displayName string,
 	roomID string,
 	dateStr string,
-) domain.AlarmQueueEnvelope {
-	return domain.AlarmQueueEnvelope{
+) dispatchoutbox.AlarmQueueEnvelope {
+	return dispatchoutbox.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
 			RoomID:    roomID,
@@ -102,9 +102,9 @@ func birthdayStreamEnvelope(
 }
 
 func birthdayStreamEnvelopeFromPublished(
-	published domain.AlarmQueueEnvelope,
+	published dispatchoutbox.AlarmQueueEnvelope,
 	roomID string,
-) domain.AlarmQueueEnvelope {
+) dispatchoutbox.AlarmQueueEnvelope {
 	published.Notification.RoomID = roomID
 	published.Notification.Users = nil
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
@@ -48,7 +49,7 @@ type snapshotDigestSummarizer struct {
 	titles  []string
 }
 
-func (s *snapshotDigestSummarizer) Summarize(_ context.Context, input *model.SummarizeInput) (*model.Digest, error) {
+func (s *snapshotDigestSummarizer) Summarize(_ context.Context, input *newsmodel.SummarizeInput) (*model.Digest, error) {
 	s.now = input.Now
 	s.members = append(s.members, slices.Clone(input.Candidates[0].MatchedMembers))
 	s.titles = append(s.titles, input.Candidates[0].Candidate.Title)

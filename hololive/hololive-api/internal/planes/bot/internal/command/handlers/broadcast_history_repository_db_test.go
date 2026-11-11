@@ -77,8 +77,20 @@ func TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks(t *testing.T) 
 			}
 
 			require.Equal(t, tc.want, got)
+			// 4번째 행은 같은 시각(at(4))의 v-started라 표시 건수+1행 경계가 동률 안에 놓인다.
+			requireHistoryListHead(t, repo, tc.channelID, since, tc.want[:3])
 		})
 	}
+}
+
+// requireHistoryListHead는 필터 없는 목록이 표시 건수+1행만 읽고도 커서 페이지와 같은 첫 행들을 돌려주는지 확인한다.
+func requireHistoryListHead(t *testing.T, repo *pgBroadcastHistoryRepository, channelID string, since time.Time, want []string) {
+	t.Helper()
+
+	result, err := repo.ListEndedBroadcasts(t.Context(), &handlercore.BroadcastHistoryQuery{ChannelID: channelID, Limit: len(want), Since: since})
+	require.NoError(t, err)
+	require.False(t, result.Truncated)
+	require.Equal(t, want, historyVideoIDs(result.Entries))
 }
 
 const (

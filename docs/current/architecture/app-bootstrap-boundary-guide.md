@@ -16,10 +16,12 @@ HTTP 서버 시작·종료 helper는 `internal/planes/bot/runtime/http_server_he
 
 ## 현재 자원과 구성 소유권
 
-[통합 리팩토링 계획](../../design/2026-10-02-hololive-api-refactoring.md)에 따라 공통 서비스 생성은 접근 가능한
-`internal/apifoundation`, API 설정은 `internal/config`가 소유합니다. 각 plane의 DB pool·인스턴스는 별도로 유지합니다.
+Bot·admin plane이 빌려 쓰는 공통 서비스(ACL·Holodex·공식 일정) 생성은 `internal/app`, API 설정은 `internal/config`가
+소유합니다. plane별 pool(`bot`·`admin`·`llm_scheduler`·`youtube_plane`)은 따로 두고, Valkey client·member cache·ACL·Holodex는
+process가 하나만 두며 plane은 빌려 씁니다.
 Bot의 획득 자원은 즉시 rollback owner에 등록하고 성공 시 같은 owner를 runtime에 이전합니다.
-Orchestration의 readiness 포트에는 Close가 없으며 DB/cache/Holodex 수명은 plane이 관리합니다.
+Orchestration의 readiness 포트에는 Close가 없습니다. Holodex·member cache·Valkey와 `bot`·`admin`·`llm_scheduler` pool의 회수는
+`internal/app` process 조립(`apiInfrastructure.close`)이 맡고, `youtube_plane` pool은 그 pool을 연 `internal/planes/youtube/runtime`이 회수합니다.
 Durable sampler·certificate reload 등 background task를 cancel/join한 뒤 member-cache 작업을 끝내고
 PG/cache를 해제합니다. `CloseContext`가 공유된 남은 종료 예산을 사용하며, join 미완료에서 자원을 닫거나
 동일 cleanup을 병렬로 다시 시작하지 않습니다. Fatal/drain/cleanup 오류는 합쳐서 보존합니다.

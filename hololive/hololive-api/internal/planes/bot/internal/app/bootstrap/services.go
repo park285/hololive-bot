@@ -9,7 +9,6 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	irisproviders "github.com/kapu/hololive-shared/pkg/providers/iris"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -64,30 +63,28 @@ func buildBotInfrastructureServices(
 		return nil, fmt.Errorf("load bot message strings: %w", err)
 	}
 
-	messageAdapter := messaging.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
-	formatter := messageformatter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, messageformatter.WithMessageStrings(messageStrings), messageformatter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
+	messageAdapter := messaging.NewMessageAdapter(appConfig.Bot.Prefix)
+	formatter := messageformatter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, messageformatter.WithMessageStrings(messageStrings), messageformatter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold), messageformatter.WithLogger(logger))
 
-	foundation := planeDeps.Holodex
-	if foundation == nil || foundation.HolodexService == nil {
-		return nil, errors.New("holodex foundation must not be nil")
+	if planeDeps.Holodex == nil {
+		return nil, errors.New("holodex service must not be nil")
 	}
 
-	alarmYouTubeStack, err := InitAlarmYouTubeStack(appConfig, foundation, logger)
+	alarmClient, err := newAlarmClient(appConfig, logger)
 	if err != nil {
-		return nil, fmt.Errorf("init alarm youtube stack: %w", err)
+		return nil, fmt.Errorf("init alarm client: %w", err)
 	}
 
-	owner.internalClients = append(owner.internalClients, alarmYouTubeStack.AlarmMode.AlarmClient)
+	owner.internalClients = append(owner.internalClients, alarmClient)
 
 	integrationServices := &CoreIntegrationServices{
 		ACLService:           planeDeps.ACL,
 		MajorEventRepository: planeDeps.MajorEvent,
 		MemberNewsService:    planeDeps.MemberNews,
-		CommandBuilders:      []orchcmd.CommandBuilder{},
 	}
 
 	deps := BuildBotDependencies(
-		appConfig, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, messageStrings, irisClient, logger,
+		appConfig, infra, planeDeps.Holodex, alarmClient, integrationServices, messageAdapter, formatter, messageStrings, irisClient, logger,
 	)
 
 	return &BotInfrastructure{

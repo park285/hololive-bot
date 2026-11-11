@@ -11,6 +11,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -19,11 +20,11 @@ import (
 
 type blockedRuntimeDigest struct{ entered, release chan struct{} }
 
-func (s *blockedRuntimeDigest) ListSubscribedRooms(context.Context) ([]model.SubscribedRoom, error) {
-	return []model.SubscribedRoom{{RoomID: "room-a"}}, nil
+func (s *blockedRuntimeDigest) ListSubscribedRooms(context.Context) ([]newsmodel.SubscribedRoom, error) {
+	return []newsmodel.SubscribedRoom{{RoomID: "room-a"}}, nil
 }
 
-func (s *blockedRuntimeDigest) PrepareDigestRun(context.Context, model.Period, time.Time) (model.DigestGenerator, error) {
+func (s *blockedRuntimeDigest) PrepareDigestRun(context.Context, model.Period, time.Time) (newsmodel.DigestGenerator, error) {
 	return s, nil
 }
 

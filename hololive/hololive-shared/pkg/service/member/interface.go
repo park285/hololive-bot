@@ -20,18 +20,6 @@
 
 package member
 
-import (
-	"context"
+import "github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-)
-
-type CacheProvider interface {
-	WarmUpCache(ctx context.Context) error
-	Refresh(ctx context.Context) error
-}
-
-var (
-	_ domain.MemberDataProvider = (*Cache)(nil)
-	_ CacheProvider             = (*Cache)(nil)
-)
+var _ domain.MemberDataProvider = (*Cache)(nil)

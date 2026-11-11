@@ -88,15 +88,3 @@ func validateCommunityRows(posts []*youtubejs.CommunityPost) error {
 
 	return nil
 }
-
-func contentPartialFailureAllowed(class contract.FailureClass) bool {
-	switch class {
-	case contract.ClassTransient, contract.ClassTimeout, contract.ClassCooldown, contract.ClassResourceLimit:
-		return true
-	case contract.ClassCanceled, contract.ClassDataContract, contract.ClassConfiguration,
-		contract.ClassProtocol, contract.ClassSuperseded, contract.ClassInternal:
-		return false
-	}
-
-	return false
-}

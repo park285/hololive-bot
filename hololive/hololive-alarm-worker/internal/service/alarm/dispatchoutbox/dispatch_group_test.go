@@ -49,9 +49,9 @@ func TestAssignSendUnitsIsDeterministicAndBounded(t *testing.T) {
 }
 
 func TestBuildDispatchGroupKeySeparatesRoomsAndKeepsEquivalentEventsTogether(t *testing.T) {
-	first := &domain.AlarmQueueEnvelope{Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeLive, MinutesUntil: 5}}
-	second := &domain.AlarmQueueEnvelope{Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeLive, MinutesUntil: 5}}
-	otherRoom := &domain.AlarmQueueEnvelope{Notification: domain.AlarmNotification{RoomID: testOtherRoomID, AlarmType: domain.AlarmTypeLive, MinutesUntil: 5}}
+	first := &AlarmQueueEnvelope{Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeLive, MinutesUntil: 5}}
+	second := &AlarmQueueEnvelope{Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeLive, MinutesUntil: 5}}
+	otherRoom := &AlarmQueueEnvelope{Notification: domain.AlarmNotification{RoomID: testOtherRoomID, AlarmType: domain.AlarmTypeLive, MinutesUntil: 5}}
 
 	if BuildDispatchGroupKeyFromEnvelope(first) != BuildDispatchGroupKeyFromEnvelope(second) {
 		t.Fatal("equivalent delivery events must share a dispatch group")
@@ -65,7 +65,7 @@ func TestBuildDispatchGroupKeySeparatesRoomsAndKeepsEquivalentEventsTogether(t *
 func TestBuildDispatchGroupKeyDeliveryDigestUsesContentIdentity(t *testing.T) {
 	t.Parallel()
 
-	first := &domain.AlarmQueueEnvelope{
+	first := &AlarmQueueEnvelope{
 		Notification:   domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeCommunity},
 		SourceKind:     domain.AlarmDispatchSourceKindDeliveryDigest,
 		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: testDigestPeriodKey, PreRenderedMessage: "8월 멤버 뉴스 A"},
@@ -95,11 +95,11 @@ func TestBuildDispatchGroupKeyDeliveryDigestUsesContentIdentity(t *testing.T) {
 func TestBuildDispatchGroupKeyCelebrationUsesMemberIDOnly(t *testing.T) {
 	t.Parallel()
 
-	envelope := func(memberID int, channelID string) *domain.AlarmQueueEnvelope {
-		return &domain.AlarmQueueEnvelope{
+	envelope := func(memberID int, channelID string) *AlarmQueueEnvelope {
+		return &AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeBirthday},
 			SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-			Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: memberID, ChannelID: channelID, Date: "2026-05-26"},
+			Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: memberID, ChannelID: channelID, Date: fixtureCelebrationDate},
 		}
 	}
 
@@ -110,5 +110,29 @@ func TestBuildDispatchGroupKeyCelebrationUsesMemberIDOnly(t *testing.T) {
 
 	if BuildDispatchGroupKeyFromEnvelope(envelope(101, "UC_shared")) == BuildDispatchGroupKeyFromEnvelope(envelope(202, "UC_shared")) {
 		t.Fatal("members sharing a channel must not share a celebration group")
+	}
+}
+
+func TestBuildDispatchGroupKeyBirthdayStreamSeparatesVideoIDs(t *testing.T) {
+	t.Parallel()
+
+	envelope := func(videoID string) *AlarmQueueEnvelope {
+		return &AlarmQueueEnvelope{
+			Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeBirthday},
+			SourceKind:   domain.AlarmDispatchSourceKindCelebration,
+			Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthdayStream, MemberID: 101, ChannelID: "UC_member", Date: fixtureCelebrationDate, VideoID: videoID},
+		}
+	}
+
+	videoA := BuildDispatchGroupKeyFromEnvelope(envelope("video-a"))
+	sameVideoA := BuildDispatchGroupKeyFromEnvelope(envelope("video-a"))
+	videoB := BuildDispatchGroupKeyFromEnvelope(envelope("video-b"))
+
+	if videoA != sameVideoA {
+		t.Fatal("same birthday stream video must share a celebration group")
+	}
+
+	if videoA == videoB {
+		t.Fatal("different birthday stream videos of one member must not share a celebration group")
 	}
 }

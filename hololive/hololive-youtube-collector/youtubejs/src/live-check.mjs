@@ -3,17 +3,16 @@
 // UNKNOWN 결과로 돌려줍니다. upstream 요청 실패만 typed RPC 실패로 전파합니다.
 import { classifyUpstreamError, failureTuples, upstreamHTTPFailureCode } from "./upstream-errors.mjs";
 import { FetchTransportError } from "./fetch-transport.mjs";
+import { epochSecondsPattern } from "./live-metadata.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 import { hasRFC3339Shape, isCalendarRFC3339 } from "./rfc3339.mjs";
+import { maxChannelIdentifierBytes, maxVideoIdentifierBytes } from "./rpc-validation-primitives.mjs";
 
 /** @typedef {Omit<import("./contracts.d.ts").VideoLiveCheckResult, "protocol_version">} VideoCheck */
 /** @typedef {Pick<VideoCheck, "availability" | "method" | "unknown_reason">} AvailabilityFacts */
 
-const maxVideoIdBytes = 128;
-const maxChannelIdBytes = 256;
 const playabilityStatuses = new Set(["OK", "UNPLAYABLE", "LIVE_STREAM_OFFLINE", "LOGIN_REQUIRED", "ERROR"]);
 const playerResponseAssignmentPattern = /\bvar ytInitialPlayerResponse\s*=\s*(?=\{)/;
-const epochSecondsPattern = /^[1-9]\d*$/;
 
 /** raw 구조 해석 실패입니다. 호출 경계에서 UNKNOWN 사유로만 변환합니다. */
 class RawStructureError extends Error {
@@ -297,14 +296,14 @@ function playerIdentity(raw, videoId) {
   if (!isRecord(details)) {
     return { ok: false, reason: "structure_unrecognized" };
   }
-  const rawVideoId = rawIdentifier(details, "videoId", maxVideoIdBytes);
+  const rawVideoId = rawIdentifier(details, "videoId", maxVideoIdentifierBytes);
   if (rawVideoId.ok === false) {
     return rawVideoId;
   }
   if (rawVideoId.value !== videoId) {
     return { ok: false, reason: "identity_mismatch" };
   }
-  const rawChannelId = rawIdentifier(details, "channelId", maxChannelIdBytes);
+  const rawChannelId = rawIdentifier(details, "channelId", maxChannelIdentifierBytes);
   if (rawChannelId.ok === false) {
     return rawChannelId;
   }
@@ -507,7 +506,7 @@ function classifyResolvedEndpoint(raw, channelId) {
       throw new RawStructureError("identity_missing", "resolve_url channel endpoint has no browse identity");
     }
     const browse = rawRecord(endpoint.browseEndpoint, "resolve_url browseEndpoint");
-    const browseId = rawIdentifier(browse, "browseId", maxChannelIdBytes);
+    const browseId = rawIdentifier(browse, "browseId", maxChannelIdentifierBytes);
     if (browseId.ok === false) {
       throw new RawStructureError(browseId.reason, "resolve_url browse identity is not usable");
     }
@@ -524,7 +523,7 @@ function classifyResolvedEndpoint(raw, channelId) {
       throw new RawStructureError("identity_missing", "resolve_url watch endpoint has no video identity");
     }
     const watch = rawRecord(endpoint.watchEndpoint, "resolve_url watchEndpoint");
-    const videoId = rawIdentifier(watch, "videoId", maxVideoIdBytes);
+    const videoId = rawIdentifier(watch, "videoId", maxVideoIdentifierBytes);
     if (videoId.ok === false) {
       throw new RawStructureError(videoId.reason, "resolve_url watch identity is not usable");
     }

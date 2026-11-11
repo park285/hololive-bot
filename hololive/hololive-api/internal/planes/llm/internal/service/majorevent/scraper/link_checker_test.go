@@ -37,6 +37,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/netguard"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -266,6 +267,41 @@ func TestLinkCheckerCheckLink_BlockedRedirectToInternalTarget(t *testing.T) {
 	status, err := checker.CheckLink(t.Context(), "https://example.com")
 	if err == nil {
 		t.Fatal("CheckLink() error = nil, want error")
+	}
+
+	if status != domain.MajorEventLinkStatusBlocked {
+		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
+	}
+}
+
+func TestLinkCheckerCheckLink_BlockedRedirectToUnsupportedScheme(t *testing.T) {
+	t.Parallel()
+
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Scheme != "https" {
+			t.Fatalf("redirect target should have been blocked before request: %s", req.URL.String())
+
+			return nil, errUnexpectedOutboundRequest
+		}
+
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Header: http.Header{
+				"Location": []string{"ftp://public.test/file"},
+			},
+			Body: io.NopCloser(strings.NewReader("")),
+		}, nil
+	})}
+
+	checker := NewLinkChecker(client, DefaultLinkCheckerConfig(), nil)
+
+	checker.resolver = staticResolver{"public.test": {net.ParseIP("93.184.216.34")}}
+	checker.client = withBlockedRedirectPolicy(checker.client, checker.resolver, checker.config.Timeout)
+	checker.client = withValidatedDialPolicy(checker.client, checker.resolver, checker.config.Timeout)
+
+	status, err := checker.CheckLink(t.Context(), "https://public.test")
+	if !errors.Is(err, netguard.ErrUnsupportedScheme) {
+		t.Fatalf("CheckLink() error = %v, want %v", err, netguard.ErrUnsupportedScheme)
 	}
 
 	if status != domain.MajorEventLinkStatusBlocked {

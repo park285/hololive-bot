@@ -14,7 +14,7 @@ func newBenchMatcher(tb testing.TB) *Matcher {
 		{ChannelID: "UC-ch1", Name: "sora"},
 		{ChannelID: "UC-ch2", Name: "miko"},
 	})
-	mm := NewMatcher(provider, nil, newMatcherTestLogger())
+	mm := NewMatcher(provider, newMatcherTestLogger())
 
 	if _, _, err := mm.FindBestMatch(tb.Context(), "sora"); err != nil {
 		tb.Fatalf("warmup FindBestMatch: %v", err)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
@@ -19,7 +20,7 @@ type digestRun struct {
 
 // PrepareDigestRun은 공통 후보 조회 실패를 실행 전체 오류로 반환합니다. 이전 후보나 빈 성공으로 대체하지 않습니다.
 // 후보·clock은 run에 고정하고 방 멤버·alias와 guard/요약/render/enqueue 실패 단위는 방별로 유지합니다.
-func (s *Service) PrepareDigestRun(ctx context.Context, period model.Period, now time.Time) (model.DigestGenerator, error) {
+func (s *Service) PrepareDigestRun(ctx context.Context, period model.Period, now time.Time) (newsmodel.DigestGenerator, error) {
 	if s == nil || s.repository == nil {
 		return nil, errors.New("membernews repository is nil")
 	}

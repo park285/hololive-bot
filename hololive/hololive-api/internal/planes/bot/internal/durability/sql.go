@@ -44,6 +44,7 @@ var mustSQL = func() func(string) string {
 	safety := read("reply_safety_expired.sql")
 	inboxClaim := strings.ReplaceAll(read("inbox_claim.sql"), "{{inbox_ready_relation}}", inboxRelation)
 	inboxSnapshot := strings.ReplaceAll(read("inbox_ready_snapshot.sql"), "{{inbox_ready_relation}}", inboxRelation)
+	inboxHeadAdvance := strings.NewReplacer("{{inbox_head_advance}}", read("inbox_head_advance.sql"))
 	replyClaim := strings.NewReplacer("{{reply_ready_relation}}", replyRelation, "{{safety_expired}}",
 		strings.NewReplacer("{{max_attempts}}", "$3", "{{replay_horizon}}", "$4").Replace(safety)).Replace(read("reply_outbox_claim.sql"))
 	replySnapshot := strings.NewReplacer("{{reply_ready_relation}}", replyRelation, "{{safety_expired}}",
@@ -55,6 +56,8 @@ var mustSQL = func() func(string) string {
 			return inboxClaim
 		case "inbox_ready_snapshot.sql":
 			return inboxSnapshot
+		case "inbox_abandon.sql", "inbox_complete.sql", "inbox_reclaim_expired.sql", "inbox_release.sql":
+			return inboxHeadAdvance.Replace(read(name))
 		case "reply_outbox_claim.sql":
 			return replyClaim
 		case "reply_outbox_ready_snapshot.sql":
@@ -78,7 +81,7 @@ var (
 	inboxClaimSQL                   = mustSQL("inbox_claim.sql")
 	inboxCompleteSQL                = mustSQL("inbox_complete.sql")
 	inboxHeartbeatSQL               = mustSQL("inbox_heartbeat.sql")
-	inboxOrderingKeyByMessageSQL    = mustSQL("inbox_ordering_key_by_message.sql")
+	inboxMessageOrderingLockSQL     = mustSQL("inbox_message_ordering_lock.sql")
 	inboxOrderingKeyLockSQL         = mustSQL("inbox_ordering_key_lock.sql")
 	inboxOrderingKeysLockSQL        = mustSQL("inbox_ordering_keys_lock.sql")
 	inboxReadySnapshotSQL           = mustSQL("inbox_ready_snapshot.sql")

@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,64 +35,76 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
-	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 var _ Client = (*OpenAIClient)(nil)
 
-var (
-	errOpenAIEmptyOutput   = errors.New("openai: 응답에 텍스트 출력 없음")
-	errOpenAIRefusalOutput = errors.New("openai: 응답이 안전 정책에 의해 거절됨")
-)
-
+// OpenAIClient는 OpenAI 호환 provider에 openaipreset의 계층 경로(GenerateJSONAs)로만 요청한다. 단일 system prompt 경로는 없다.
+// 오류 원문 제거는 shared-go generator가 맡는다. 여기서 safeLLMProviderError로 다시 분류하면 status_code·code가 사라진다.
 type OpenAIClient struct {
-	generator       sharedllm.JSONGenerator
-	model           string
-	schemaName      string
-	temperature     *float64
-	reasoningEffort string // reasoning 모델용 사고 깊이 (high, xhigh 등)
-	webSearch       bool
-	chatCompletions bool // true=Chat Completions API (cliproxy 호환)
-	logger          *slog.Logger
-	costTracker     CostTracker
+	client *openaipreset.Client
+	// task는 요청의 task·schema 이름이자 prompt cache key 접미사다.
+	task string
 }
 
+// NewClient는 schema 이름이 비어 있으면 client를 만들지 않는다.
 func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) (*OpenAIClient, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	o := &Options{
-		SchemaName: "event_summary",
-	}
+	o := &Options{}
 
 	for _, opt := range opts {
 		opt(o)
 	}
 
-	generator, err := sharedllm.NewOpenAICompatibleJSONGenerator(sharedllm.OpenAICompatibleConfig{
-		BaseURL:    baseURL,
-		APIKey:     apiKey,
-		HTTPClient: newLLMHTTPClient(),
-		MaxRetries: llmMaxRetries,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create openai compatible json generator: %w", err)
+	task := strings.TrimSpace(o.SchemaName)
+	if task == "" {
+		return nil, errors.New("create openai client: schema name is empty")
 	}
 
-	return &OpenAIClient{
-		generator:       generator,
-		model:           model,
-		schemaName:      o.SchemaName,
-		temperature:     o.Temperature,
-		reasoningEffort: o.ReasoningEffort,
-		webSearch:       resolveWebSearch(o),
-		chatCompletions: o.ChatCompletions,
-		logger:          logger,
-		costTracker:     o.CostTracker,
-	}, nil
+	presetOpts := []openaipreset.Option{
+		openaipreset.WithHTTPClient(newLLMHTTPClient()),
+		openaipreset.WithLogger(logger),
+		openaipreset.WithWebSearch(resolveWebSearch(o)),
+		openaipreset.WithMaxRetries(llmMaxRetries),
+	}
+
+	if o.Temperature != nil {
+		presetOpts = append(presetOpts, openaipreset.WithTemperature(*o.Temperature))
+	}
+
+	if o.ReasoningEffort != "" {
+		presetOpts = append(presetOpts, openaipreset.WithReasoningEffort(o.ReasoningEffort))
+	}
+
+	if o.ChatCompletions {
+		presetOpts = append(presetOpts, openaipreset.WithChatCompletions())
+	}
+
+	if o.CostTracker != nil {
+		presetOpts = append(presetOpts, openaipreset.WithUsageReporter(costTrackerUsageReporter{tracker: o.CostTracker}))
+	}
+
+	client, err := openaipreset.New(baseURL, apiKey, model, presetOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("create openai client: %w", err)
+	}
+
+	return &OpenAIClient{client: client, task: task}, nil
+}
+
+// GenerateJSON은 provider 출력이 JSON 값 하나일 때만 원문을 돌려준다. 호출자의 jsonv2 해석과 같은
+// 기준(jsontext.Value 복호)으로 검사하며, 실패 오류에는 provider 출력 원문이 들어가지 않는다.
+// ChatCompletions이면 Chat Completions API, 아니면 Responses API를 쓰고, provider별 역할 매핑은 shared-go가 소유한다.
+func (c *OpenAIClient) GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error) {
+	raw, err := c.client.GenerateJSONAs[jsontext.Value](ctx, c.task, prompts, schema)
+	if err != nil {
+		return "", fmt.Errorf("generate layered JSON: %w", err)
+	}
+
+	return string(raw), nil
 }
 
 // LLM 호출은 응답이 유실되면 과금과 웹 검색 tool 사용이 중복될 수 있는 비멱등 비용 작업이고 재시도를 정당화할 계약·독립 근거가 없으므로 재시도하지 않는다. 실패는 그대로 호출자에게 드러난다.
@@ -99,11 +112,11 @@ const llmMaxRetries = 0
 
 func newLLMHTTPClient() *http.Client {
 	return httputil.NewProfiledClient(httputil.TransportProfile{
-		Timeout:               constants.LLMHTTPTimeout.Request,
-		DialTimeout:           constants.LLMHTTPTimeout.Dial,
-		TLSHandshakeTimeout:   constants.LLMHTTPTimeout.TLSHandshake,
-		ResponseHeaderTimeout: constants.LLMHTTPTimeout.ResponseHeader,
-		IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
+		Timeout:               2 * time.Minute,
+		DialTimeout:           5 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second, // GPT-5.4 요약 요청은 첫 헤더까지 수십 초가 걸릴 수 있다.
+		IdleConnTimeout:       90 * time.Second,
 	})
 }
 
@@ -131,60 +144,6 @@ func (r costTrackerUsageReporter) RecordUsage(ctx context.Context, provider, mod
 	}
 
 	r.tracker.RecordUsage(ctx, provider, model, int64(usage.TotalTokens))
-}
-
-// 지시는 InvariantPrompt/DeveloperPrompt 계층으로만 보내며 provider별 역할 매핑은 shared-go가 소유합니다.
-func (c *OpenAIClient) GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error) {
-	if c == nil {
-		return "", errors.New("openai client is nil")
-	}
-
-	if strings.TrimSpace(c.model) == "" {
-		return "", errors.New("openai model is empty")
-	}
-
-	if schema == nil {
-		return "", errors.New("json schema is nil")
-	}
-
-	attrs := llmPromptSummaryAttrs("openai", c.model, prompts)
-	sharedlog.Debug(ctx, c.logger, "llm.prompt.built", "llm prompt built", attrs...)
-	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
-
-	started := time.Now()
-
-	resp, err := sharedllm.RunJSON(ctx, c.generator, sharedllm.JSONRequest{
-		TaskName:        c.schemaName,
-		InvariantPrompt: prompts.Invariant,
-		DeveloperPrompt: prompts.Developer,
-		UserPrompt:      prompts.User,
-		SchemaName:      c.schemaName,
-		Schema:          schema,
-		Model:           c.model,
-		Temperature:     c.temperature,
-		ReasoningEffort: c.reasoningEffort,
-		WebSearch:       c.webSearch,
-		ChatCompletions: c.chatCompletions,
-	}, "openai", costTrackerUsageReporter{tracker: c.costTracker})
-	if err != nil {
-		safeErr := safeLLMProviderError(err)
-
-		failedAttrs := append([]slog.Attr{}, attrs...)
-
-		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
-		failedAttrs = append(failedAttrs, llmProviderErrorAttrs(err)...)
-		sharedlog.Error(ctx, c.logger, "llm.provider.request.failed", "llm provider request failed", failedAttrs...)
-
-		return "", fmt.Errorf("generate JSON: %w", safeErr)
-	}
-
-	successAttrs := append([]slog.Attr{}, attrs...)
-
-	successAttrs = append(successAttrs, sharedlog.SinceMS(started), slog.Int("result_count", 1))
-	sharedlog.Info(ctx, c.logger, "llm.provider.request.succeeded", "llm provider request succeeded", successAttrs...)
-	sharedlog.Debug(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
-
-	return resp.Text, nil
 }
 
 // 로그에는 원문 대신 계층을 순서대로 이은 길이와 해시 앞 8바이트만 남긴다.

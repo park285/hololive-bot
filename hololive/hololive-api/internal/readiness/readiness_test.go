@@ -109,33 +109,6 @@ func TestGinHandler_DegradedReturns503(t *testing.T) {
 	}
 }
 
-func TestGinHandler_NilProbeStaticReady(t *testing.T) {
-	t.Parallel()
-
-	code, payload := serveReady(t, GinHandler(t.Context(), nil))
-
-	if code != http.StatusOK {
-		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
-	}
-
-	if payload["status"] != "ready" {
-		t.Fatalf("status = %v, want ready", payload["status"])
-	}
-}
-
-func TestPick_FirstNonNil(t *testing.T) {
-	t.Parallel()
-
-	if got := Pick(); got != nil {
-		t.Fatalf("Pick() = %v, want nil", got)
-	}
-
-	probe := sharedreadiness.NewProbe("bot")
-	if got := Pick(nil, probe); got != probe {
-		t.Fatal("Pick(nil, probe) did not return probe")
-	}
-}
-
 func TestDependencyChecks_NilClientsFailClosed(t *testing.T) {
 	t.Parallel()
 

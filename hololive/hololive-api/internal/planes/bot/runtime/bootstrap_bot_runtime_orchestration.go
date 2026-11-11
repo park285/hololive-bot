@@ -46,7 +46,7 @@ func newBotReadyProbe(postgres sharedreadiness.Pinger, cacheClient sharedreadine
 
 func buildBotOptionalServers(ctx context.Context, appConfig *apiconfig.BotPlaneConfig) (metricsServer, pprofServer *http.Server) {
 	if metricsAddr := strings.TrimSpace(appConfig.Server.MetricsAddr); metricsAddr != "" {
-		metricsServer = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey)
+		metricsServer = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey, nil)
 	}
 
 	if pprofAddr := strings.TrimSpace(appConfig.Server.PprofAddr); pprofAddr != "" {

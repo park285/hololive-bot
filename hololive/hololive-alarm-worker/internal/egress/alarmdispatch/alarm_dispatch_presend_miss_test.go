@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 func TestAlarmDispatchRunnerRoutesPreSendMissByReason(t *testing.T) {
@@ -26,7 +26,7 @@ func TestAlarmDispatchRunnerRoutesPreSendMissByReason(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			envelopes := make([]domain.AlarmQueueEnvelope, len(tc.reasons))
+			envelopes := make([]dispatchoutbox.AlarmQueueEnvelope, len(tc.reasons))
 			miss := &sendfence.MissError{Action: "begin_send_request", Expected: len(tc.reasons)}
 
 			for i, reason := range tc.reasons {

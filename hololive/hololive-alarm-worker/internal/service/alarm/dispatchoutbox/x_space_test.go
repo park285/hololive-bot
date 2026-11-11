@@ -12,7 +12,7 @@ import (
 
 func TestXSpaceEventAndRoomDeliveryIdentities(t *testing.T) {
 	payload := &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: "UCtest", Title: "테스트", StartedAt: time.Now().UTC()}
-	first := domain.AlarmQueueEnvelope{
+	first := AlarmQueueEnvelope{
 		SourceKind: domain.AlarmDispatchSourceKindXSpace, XSpace: payload,
 		Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-a"}, Version: 1,
 	}
@@ -29,7 +29,7 @@ func TestXSpaceEventAndRoomDeliveryIdentities(t *testing.T) {
 	require.Equal(t, eventA.Payload, eventB.Payload)
 	require.NotEqual(t, deliveryA.DedupeKey, deliveryB.DedupeKey)
 
-	var restored domain.AlarmQueueEnvelope
+	var restored AlarmQueueEnvelope
 
 	require.NoError(t, jsonv2.Unmarshal(eventA.Payload, &restored))
 	require.Equal(t, payload, restored.XSpace)
@@ -39,5 +39,5 @@ func TestXSpaceEventAndRoomDeliveryIdentities(t *testing.T) {
 	changed.Title = "수정된 제목"
 	second.XSpace = &changed
 	require.Equal(t, EnvelopeDedupeInput(&first).SourceIdentity, EnvelopeDedupeInput(&second).SourceIdentity)
-	require.NotEqual(t, BuildDispatchGroupKeyFromEnvelope(&first), BuildDispatchGroupKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: first.Notification}))
+	require.NotEqual(t, BuildDispatchGroupKeyFromEnvelope(&first), BuildDispatchGroupKeyFromEnvelope(&AlarmQueueEnvelope{Notification: first.Notification}))
 }

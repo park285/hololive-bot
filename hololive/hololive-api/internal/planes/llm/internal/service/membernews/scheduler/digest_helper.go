@@ -34,6 +34,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -75,8 +76,8 @@ type digestDispatchConfig struct {
 
 func processDigestForRoom(
 	ctx context.Context,
-	service model.DigestGenerator,
-	fmtr model.DigestFormatter,
+	service newsmodel.DigestGenerator,
+	fmtr newsmodel.DigestFormatter,
 	outbox outboxEnqueuer,
 	logger *slog.Logger,
 	outputGuard *outputguard.Guard,
@@ -187,7 +188,7 @@ func acquireDigestSlot(ctx context.Context, sem chan struct{}) bool {
 	}
 }
 
-func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config *digestDispatchConfig) digestEnqueueResult {
+func dispatchDigestRooms(ctx context.Context, rooms []newsmodel.SubscribedRoom, config *digestDispatchConfig) digestEnqueueResult {
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
@@ -236,8 +237,8 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 func runMemberNewsDigest(
 	ctx context.Context,
 	digest *schedulerkit.DigestScheduler,
-	service model.DigestService,
-	processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult,
+	service newsmodel.DigestService,
+	processRoom func(context.Context, newsmodel.DigestGenerator, string, string) digestEnqueueResult,
 	config *digestDispatchConfig,
 ) (notification.Result, error) {
 	result := notification.NewResult(0, 0, 0)
@@ -250,12 +251,12 @@ func runMemberNewsDigest(
 
 func buildDigestOp(
 	digest *schedulerkit.DigestScheduler,
-	service model.DigestService,
-	processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult,
+	service newsmodel.DigestService,
+	processRoom func(context.Context, newsmodel.DigestGenerator, string, string) digestEnqueueResult,
 	config *digestDispatchConfig,
 	result *notification.Result,
-) schedulerkit.DigestOp[[]model.SubscribedRoom] {
-	return schedulerkit.DigestOp[[]model.SubscribedRoom]{
+) schedulerkit.DigestOp[[]newsmodel.SubscribedRoom] {
+	return schedulerkit.DigestOp[[]newsmodel.SubscribedRoom]{
 		LockKey: config.lockKey,
 		OnLockNotAcquired: func() error {
 			digest.Logger.Info(config.lockSkipMessage, slog.String(config.periodFieldName, config.periodKey))
@@ -267,8 +268,8 @@ func buildDigestOp(
 	}
 }
 
-func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, config *digestDispatchConfig, processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult) func(context.Context) ([]model.SubscribedRoom, bool, error) {
-	return func(ctx context.Context) ([]model.SubscribedRoom, bool, error) {
+func collectSubscribedRooms(service newsmodel.DigestService, logger *slog.Logger, config *digestDispatchConfig, processRoom func(context.Context, newsmodel.DigestGenerator, string, string) digestEnqueueResult) func(context.Context) ([]newsmodel.SubscribedRoom, bool, error) {
+	return func(ctx context.Context) ([]newsmodel.SubscribedRoom, bool, error) {
 		rooms, err := service.ListSubscribedRooms(ctx)
 		if err != nil {
 			return nil, false, fmt.Errorf("collect digest subscribed rooms: %w", err)
@@ -297,8 +298,8 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, co
 	}
 }
 
-func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig, outcome *notification.Result) func(context.Context, []model.SubscribedRoom) error {
-	return func(ctx context.Context, rooms []model.SubscribedRoom) error {
+func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig, outcome *notification.Result) func(context.Context, []newsmodel.SubscribedRoom) error {
+	return func(ctx context.Context, rooms []newsmodel.SubscribedRoom) error {
 		result := dispatchDigestRooms(ctx, rooms, config)
 		logDigestResult(logger, config, result)
 
@@ -323,7 +324,7 @@ func logDigestResult(logger *slog.Logger, config *digestDispatchConfig, result d
 	)
 }
 
-func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest) (delivery.MessageVariants, error) {
+func renderDigestMessage(ctx context.Context, fmtr newsmodel.DigestFormatter, digest *model.Digest) (delivery.MessageVariants, error) {
 	if fmtr == nil {
 		return delivery.MessageVariants{}, errors.New("format member news digest: formatter not configured")
 	}

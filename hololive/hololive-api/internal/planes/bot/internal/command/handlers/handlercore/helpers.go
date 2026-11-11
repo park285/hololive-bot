@@ -32,7 +32,9 @@ import (
 
 var ErrMemberLookupHandled = errors.New("member lookup handled")
 
-func blockGraduatedMember(ctx context.Context, deps *Dependencies, room, channelID string) (bool, error) {
+// BlockGraduatedMember는 채널 대표가 졸업했으면 졸업 차단 응답을 보내고 true를 반환한다. 대표가 없으면 졸업이 아니고,
+// 조회 실패는 추측하지 않고 오류다.
+func BlockGraduatedMember(ctx context.Context, deps *Dependencies, room, channelID string) (bool, error) {
 	if deps.Matcher == nil {
 		return false, nil
 	}
@@ -80,6 +82,11 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 		return nil, ErrMemberLookupHandled
 	}
 
+	// 응답을 보내지 않았으므로 handled로 보고하지 않고 matcher 불변식 위반을 오류로 드러낸다.
+	if channel == nil {
+		return nil, errors.New("member matcher returned found without channel")
+	}
+
 	return channel, nil
 }
 
@@ -104,12 +111,7 @@ func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependenci
 		return nil, fmt.Errorf("find member with candidates: %w", err)
 	}
 
-	// 응답을 보내지 않았으므로 handled로 보고하지 않고 matcher 불변식 위반을 오류로 드러낸다.
-	if channel == nil {
-		return nil, errors.New("member matcher returned found without channel")
-	}
-
-	blocked, err := blockGraduatedMember(ctx, deps, room, channel.ID)
+	blocked, err := BlockGraduatedMember(ctx, deps, room, channel.ID)
 	if err != nil {
 		return nil, fmt.Errorf("block graduated member: %w", err)
 	}

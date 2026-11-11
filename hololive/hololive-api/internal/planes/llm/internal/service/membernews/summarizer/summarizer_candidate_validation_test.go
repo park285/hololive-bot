@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
@@ -55,15 +56,15 @@ func candidateValidationCases() []candidateValidationCase {
 	}
 }
 
-func candidateValidationInput() *model.SummarizeInput {
-	return &model.SummarizeInput{
+func candidateValidationInput() *newsmodel.SummarizeInput {
+	return &newsmodel.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, time.October, 2, 12, 0, 0, 0, time.UTC),
 		RoomMembers: []string{validationMiko, validationSuisei},
-		Candidates: []model.FilteredCandidate{
-			{MemberText: validationMiko, MatchedMembers: []string{validationMiko}, SourceURL: validationMikoURL, SourceTier: model.SourceTierOfficial},
-			{MemberText: validationSuisei, MatchedMembers: []string{validationSuisei}, SourceURL: validationSuiseiURL, SourceTier: model.SourceTierOfficial},
-			{MemberText: validationMiko + ", " + validationSuisei, MatchedMembers: []string{validationMiko, validationSuisei}, SourceURL: validationCollabURL, SourceTier: model.SourceTierOfficial},
+		Candidates: []newsmodel.FilteredCandidate{
+			{MemberText: validationMiko, MatchedMembers: []string{validationMiko}, SourceURL: validationMikoURL, SourceTier: newsmodel.SourceTierOfficial},
+			{MemberText: validationSuisei, MatchedMembers: []string{validationSuisei}, SourceURL: validationSuiseiURL, SourceTier: newsmodel.SourceTierOfficial},
+			{MemberText: validationMiko + ", " + validationSuisei, MatchedMembers: []string{validationMiko, validationSuisei}, SourceURL: validationCollabURL, SourceTier: newsmodel.SourceTierOfficial},
 		},
 	}
 }
@@ -130,7 +131,7 @@ func TestSummarizerPreservesCommaInCanonicalMemberNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	input.Candidates, err = filter.PrepareCandidates([]model.Candidate{{
+	input.Candidates, err = filter.PrepareCandidates([]newsmodel.Candidate{{
 		Title: "Synthetic event", Members: input.RoomMembers, SourceURL: validationMikoURL,
 		EventStartDate: new(input.Now),
 	}}, input.Period, input.Now).Filter(t.Context(), input.RoomMembers, nil, validator)

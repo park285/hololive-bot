@@ -23,12 +23,8 @@ package membernews
 import (
 	"context"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/subscription"
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
-
-var _ subscription.SubscriptionRepository[model.SubscribedRoom] = (*Repository)(nil)
 
 type rowScanner interface {
 	Scan(dest ...any) error

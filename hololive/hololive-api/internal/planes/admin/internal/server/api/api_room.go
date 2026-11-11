@@ -56,10 +56,6 @@ type setACLResponse struct {
 }
 
 func (h *RoomHandler) GetRooms(c *gin.Context) {
-	if !h.requireACL(c) {
-		return
-	}
-
 	aclEnabled, mode, rooms := h.acl.GetACLStatus()
 	ginjson.Respond(c, http.StatusOK, roomListResponse{
 		Status:     "ok",
@@ -147,10 +143,6 @@ type roomChangeResponse struct {
 const aclModeChangedCode = "acl_mode_changed"
 
 func (h *RoomHandler) AddRoom(c *gin.Context) {
-	if !h.requireACL(c) {
-		return
-	}
-
 	h.changeRoom(c, roomChange{
 		apply:            h.acl.AddRoom,
 		failMessage:      "Failed to add room",
@@ -162,10 +154,6 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 }
 
 func (h *RoomHandler) RemoveRoom(c *gin.Context) {
-	if !h.requireACL(c) {
-		return
-	}
-
 	h.changeRoom(c, roomChange{
 		apply:            h.acl.RemoveRoom,
 		failMessage:      "Failed to remove room",
@@ -228,10 +216,6 @@ func (h *RoomHandler) respondACLMutationError(ctx context.Context, c *gin.Contex
 }
 
 func (h *RoomHandler) SetACL(c *gin.Context) {
-	if !h.requireACL(c) {
-		return
-	}
-
 	req, ok := h.bindSetACLRequest(c)
 	if !ok {
 		return

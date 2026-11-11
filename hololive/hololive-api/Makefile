@@ -1,7 +1,6 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 GOLANGCI_CONFIG ?= ../../.golangci.yml
-IMAGE_NAME ?= hololive-api
 
 VERSION := $(shell cat VERSION)
 VERSION_PARTS := $(subst ., ,$(VERSION))

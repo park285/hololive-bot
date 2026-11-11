@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"strings"
 	"testing"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -165,5 +166,22 @@ func TestTargetSnapshotValidateRequestedAndClone(t *testing.T) {
 
 	if err != nil || !allowed {
 		t.Fatalf("clone mutated source = %t, %v", allowed, err)
+	}
+}
+
+// helper collection RPC는 channel_id를 정규화하지 않고 거부하므로, 실행 subject는 RPC 전에 같은 식별자 규칙으로 걸러집니다.
+func TestExactTargetSnapshotSubjectFollowsHelperIdentifierRule(t *testing.T) {
+	t.Parallel()
+
+	requested := []contract.ObservationKind{contract.KindLiveSnapshot}
+
+	for _, subject := range []string{"", " UC_A", "UC_A\n", strings.Repeat("U", maxSubjectBytes+1)} {
+		if _, err := NewExactTargetSnapshot(1, subject, requested, nil); collecterr.ClassOf(err) != contract.ClassInternal {
+			t.Errorf("subject %q error = %v, want internal invariant", subject, err)
+		}
+	}
+
+	if _, err := NewExactTargetSnapshot(1, strings.Repeat("U", maxSubjectBytes), requested, nil); err != nil {
+		t.Fatalf("subject at the byte limit: %v", err)
 	}
 }

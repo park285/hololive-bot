@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
 type settingsResponse struct {
@@ -42,16 +43,17 @@ type RoomNameSetter interface {
 	SetRoomName(ctx context.Context, roomID, roomName string) error
 }
 
+// SettingsHandler는 settings·방 이름·X 세션 관리 route를 처리한다. 저장·적용 순서 gate는 newSettingsHandler가 채운다.
 type SettingsHandler struct {
-	sharedsettings.SettingsApplier
+	adminsettings.SettingsApplier
 
 	Logger   *slog.Logger
 	Alarm    RoomNameSetter
 	Activity SettingsActivityLogger
-	Settings settingssvc.ReadWriter
+	Settings adminsettings.ReadWriter
 
-	operationGate *settingsOperationGate
-	operations    settingsOperationGate
+	xSpaceSessions *xspaces.Store
+	operations     *settingsOperationGate
 }
 
 // 소비자인 iris-console은 scraperProxyEnabled를 보내지 않고 요청에 들어오면 거절한다.
@@ -76,26 +78,6 @@ func (h *SettingsHandler) logActivity(entryType, summary string, details map[str
 	if h != nil && h.Activity != nil {
 		h.Activity.Log(entryType, summary, details)
 	}
-}
-
-func (h *SettingsHandler) requireAlarm(c *gin.Context) bool {
-	if h == nil || h.Alarm == nil {
-		respondServiceUnavailable(c, "alarm service not available")
-
-		return false
-	}
-
-	return true
-}
-
-func (h *SettingsHandler) requireSettings(c *gin.Context) bool {
-	if h == nil || h.Settings == nil {
-		respondServiceUnavailable(c, "settings service not available")
-
-		return false
-	}
-
-	return true
 }
 
 func (h *SettingsHandler) requireApplier(c *gin.Context) bool {
@@ -130,10 +112,6 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
-		return
-	}
-
-	if !h.requireAlarm(c) {
 		return
 	}
 
@@ -174,7 +152,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 }
 
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
-	if !h.requireSettings(c) || !h.requireApplier(c) {
+	if !h.requireApplier(c) {
 		return
 	}
 
@@ -182,7 +160,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 
 	defer cancel()
 
-	release, err := h.settingsOperationGate().acquire(ctx)
+	release, err := h.operations.acquire(ctx)
 	if err != nil {
 		h.safeLogger().Warn("Failed to get settings", slog.Any("error", err))
 
@@ -215,7 +193,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	if !h.requireSettings(c) || !h.requireApplier(c) {
+	if !h.requireApplier(c) {
 		return
 	}
 
@@ -223,7 +201,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 
 	defer cancel()
 
-	release, err := h.settingsOperationGate().acquire(ctx)
+	release, err := h.operations.acquire(ctx)
 	if err != nil {
 		h.safeLogger().Warn("Failed to update settings", slog.Any("error", err))
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -29,7 +28,9 @@ func (s *TransitionStore) ApplyStartedFailure(
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("apply started failure: %w", err)
 	}
 
-	result, err := s.applyFailure(ctx, "apply started failure", operation, kind, reason, retryAfter, mode)
+	load := func(context.Context, dbx.Querier) (StartedOperation, error) { return operation, nil }
+
+	result, err := s.applyFailure(ctx, "apply started failure", load, kind, reason, retryAfter, mode)
 	if err != nil {
 		return result, fmt.Errorf("apply started failure: %w", err)
 	}
@@ -37,6 +38,8 @@ func (s *TransitionStore) ApplyStartedFailure(
 	return result, nil
 }
 
+// ApplyPreparedFailure는 claim 행의 논리 그룹을 실패 전이와 같은 트랜잭션에서 FOR UPDATE로 다시 읽고 claim fence를
+// 확인한다. COMMIT 응답을 잃어 이전 상태로 판정된 재시도도 재조회부터 다시 한다.
 func (s *TransitionStore) ApplyPreparedFailure(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
@@ -54,33 +57,13 @@ func (s *TransitionStore) ApplyPreparedFailure(
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("apply prepared failure: %w", err)
 	}
 
-	var operation StartedOperation
-
-	err := s.executeTx(ctx, "load prepared failure envelope", func(tx dbx.Querier) error {
-		var loadErr error
-
-		operation, loadErr = s.loadPreparedFailureOperation(ctx, tx, rows, outboxByID)
-		if loadErr != nil {
-			return fmt.Errorf("load prepared failure envelope: transaction body: %w", loadErr)
-		}
-
-		return nil
-	})
-	if err != nil {
-		if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
-			return newApplyResult(fenceMissOutcome(miss), nil), fmt.Errorf("apply prepared failure: load envelope: %w", err)
-		}
-
-		if _, ok := errors.AsType[*transitionConflictError](err); ok {
-			return newApplyResult(ApplyConflict, nil), nil
-		}
-
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("apply prepared failure: load envelope: %w", err)
+	load := func(ctx context.Context, tx dbx.Querier) (StartedOperation, error) {
+		return s.loadPreparedFailureOperation(ctx, tx, rows, outboxByID)
 	}
 
-	result, err := s.applyFailure(ctx, "apply prepared failure", operation, kind, reason, retryAfter, mode)
+	result, err := s.applyFailure(ctx, "apply prepared failure", load, kind, reason, retryAfter, mode)
 	if err != nil {
-		return result, fmt.Errorf("apply prepared failure: apply transition: %w", err)
+		return result, fmt.Errorf("apply prepared failure: %w", err)
 	}
 
 	return result, nil
@@ -146,31 +129,104 @@ func preparedFailureGroup(
 	}, nil
 }
 
+// applyFailure는 load가 이 트랜잭션에서 돌려준 논리 그룹의 실패 전이를 같은 트랜잭션에 기록한다. COMMIT 응답을 잃어
+// 이전 상태로 판정되면 load부터 다시 실행한다. 전이를 만들지 못하면 판정 없이 prepareFailureTransitions가 정한 결과와
+// 오류를 돌려준다.
 func (s *TransitionStore) applyFailure(
 	ctx context.Context,
 	operationName string,
-	operation StartedOperation,
+	load func(ctx context.Context, tx dbx.Querier) (StartedOperation, error),
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
 	mode DeliveryMode,
 ) (ApplyResult, error) {
-	transitions, rules, errorOutcome, err := s.prepareFailureTransitions(
-		operationName, operation, kind, reason, retryAfter,
-	)
+	var priorAdjudication CommitAdjudication
+
+	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
+		var (
+			transitions    []rowTransition
+			rules          []lifecycle.RuleID
+			touched        []int64
+			prepareOutcome ApplyOutcome
+			prepareErr     error
+		)
+
+		applyErr := s.executeTx(ctx, operationName, func(tx dbx.Querier) error {
+			operation, loadErr := load(ctx, tx)
+			if loadErr != nil {
+				return fmt.Errorf("%s: load groups: %w", operationName, loadErr)
+			}
+
+			transitions, rules, prepareOutcome, prepareErr = s.prepareFailureTransitions(
+				operationName, operation, kind, reason, retryAfter,
+			)
+			if prepareErr != nil {
+				return fmt.Errorf("%s: prepare transition: %w", operationName, prepareErr)
+			}
+
+			var rowsErr error
+
+			touched, rowsErr = applyFailureRows(ctx, tx, operationName, operation, transitions, reason, mode)
+
+			return rowsErr
+		})
+		if applyErr == nil {
+			result := newApplyResultWithRules(ApplyApplied, touched, rules)
+
+			result.CommitAdjudication = priorAdjudication
+
+			return result, nil
+		}
+
+		if prepareErr != nil {
+			return newApplyResult(prepareOutcome, nil), applyErr
+		}
+
+		decision := s.adjudicateRowApply(
+			ctx,
+			operationName,
+			"logical group contains mixed pre-state and failure post-state",
+			transitions,
+			rules,
+			applyErr,
+			priorAdjudication,
+			attempt,
+		)
+		if decision.retry {
+			priorAdjudication = decision.prior
+
+			continue
+		}
+
+		return decision.result, decision.err
+	}
+
+	return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("%s: retry loop exhausted", operationName)
+}
+
+// applyFailureRows는 실패 전이와 owner 시도 telemetry를 tx에 함께 기록한다. 시도 종료 시각은 전이 문장의 DB 시계다.
+func applyFailureRows(
+	ctx context.Context,
+	tx dbx.Querier,
+	operationName string,
+	operation StartedOperation,
+	transitions []rowTransition,
+	reason lifecycle.Reason,
+	mode DeliveryMode,
+) ([]int64, error) {
+	touched, failedAt, err := applyRowTransitions(ctx, tx, operationName, transitions)
 	if err != nil {
-		return newApplyResult(errorOutcome, nil), fmt.Errorf("%s: prepare transition: %w", operationName, err)
+		return nil, fmt.Errorf("%s: apply rows: %w", operationName, err)
 	}
 
 	// 실패 전이는 owner의 provider 실패와 prepared failure(message_missing, pre_send_claim 포함)를 모두 시도로 기록한다.
 	attempts := ownerAttempts(operation.groups, attemptResultFailure, reason)
-
-	result, err := s.applyFailureTransitions(ctx, operationName, transitions, rules, attempts, mode)
-	if err != nil {
-		return result, fmt.Errorf("%s: apply transition: %w", operationName, err)
+	if err := recordAttemptTelemetry(ctx, tx, mode, attempts, failedAt); err != nil {
+		return nil, fmt.Errorf("%s: record telemetry: %w", operationName, err)
 	}
 
-	return result, nil
+	return touched, nil
 }
 
 func (s *TransitionStore) prepareFailureTransitions(
@@ -197,68 +253,6 @@ func (s *TransitionStore) prepareFailureTransitions(
 	sortTransitionsByID(transitions)
 
 	return transitions, rules, ApplyApplied, nil
-}
-
-// applyFailureTransitions는 실패 전이와 owner 시도 telemetry를 한 트랜잭션에 기록한다. 시도 종료 시각은 전이 문장의
-// DB 시계다.
-func (s *TransitionStore) applyFailureTransitions(
-	ctx context.Context,
-	operationName string,
-	transitions []rowTransition,
-	rules []lifecycle.RuleID,
-	attempts []deliveryAttempt,
-	mode DeliveryMode,
-) (ApplyResult, error) {
-	var priorAdjudication CommitAdjudication
-
-	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		var touched []int64
-
-		applyErr := s.executeTx(ctx, operationName, func(tx dbx.Querier) error {
-			var (
-				failedAt time.Time
-				err      error
-			)
-
-			touched, failedAt, err = applyRowTransitions(ctx, tx, operationName, transitions)
-			if err != nil {
-				return fmt.Errorf("%s: apply rows: %w", operationName, err)
-			}
-
-			if err := recordAttemptTelemetry(ctx, tx, mode, attempts, failedAt); err != nil {
-				return fmt.Errorf("%s: record telemetry: %w", operationName, err)
-			}
-
-			return nil
-		})
-		if applyErr == nil {
-			result := newApplyResultWithRules(ApplyApplied, touched, rules)
-
-			result.CommitAdjudication = priorAdjudication
-
-			return result, nil
-		}
-
-		decision := s.adjudicateRowApply(
-			ctx,
-			operationName,
-			"logical group contains mixed pre-state and failure post-state",
-			transitions,
-			rules,
-			applyErr,
-			priorAdjudication,
-			attempt,
-		)
-		if decision.retry {
-			priorAdjudication = decision.prior
-
-			continue
-		}
-
-		return decision.result, decision.err
-	}
-
-	return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("%s: retry loop exhausted", operationName)
 }
 
 func buildFailureTransitions(

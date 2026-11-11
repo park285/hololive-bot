@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/valkey-io/valkey-go"
 	"golang.org/x/sync/singleflight"
 
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
@@ -15,10 +14,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// SubscriberCache는 구독자 조회 경로가 cache에 요구하는 작업이다. 구독 set 조회(SMembers), 빈 구독 marker 확인(Exists),
-// 여러 채널의 pipeline 조회(B·DoMulti)를 쓴다. 이 경로를 공유하는 checker·egress 조립도 같은 집합을 받는다.
+// SubscriberCache는 구독자 조회 경로가 cache에 요구하는 작업이다. 조회기는 구독 set 조회(SMembers)만 쓰고,
+// 같은 cache를 받는 egress 조립이 pipeline 조회(B·DoMulti)를 쓴다.
 type SubscriberCache interface {
-	cache.KeyValueReader
 	cache.SetCache
 	cache.LowLevelCache
 }
@@ -88,38 +86,10 @@ func resolveChannelSubscribersFromCache(
 		return nil, false, nil
 	}
 
+	// TTL 없는 set은 eviction으로 사라지면 빈 set과 구분되지 않으므로 빈 set은 구독 0으로 확정하지 않는다.
 	normalizedSubscribers := normalizeSubscriberIDs(subscribers)
-	if len(normalizedSubscribers) > 0 {
-		return normalizedSubscribers, true, nil
-	}
 
-	resolved, err := resolveKnownEmptySubscriberCache(ctx, cacheClient, channelID, alarmType, requireCacheSuccess)
-	if err != nil {
-		return nil, resolved, fmt.Errorf("resolve known empty subscriber cache: %w", err)
-	}
-
-	return nil, resolved, nil
-}
-
-func resolveKnownEmptySubscriberCache(
-	ctx context.Context,
-	cacheClient cache.KeyValueReader,
-	channelID string,
-	alarmType domain.AlarmType,
-	requireCacheSuccess bool,
-) (bool, error) {
-	isKnownEmpty, err := cacheClient.Exists(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
-	if err == nil {
-		return isKnownEmpty, nil
-	}
-
-	observeAlarmSubscriberCacheError("check_empty")
-
-	if requireCacheSuccess {
-		return true, fmt.Errorf("resolve channel subscribers by type: check empty subscriber cache: %w", err)
-	}
-
-	return false, nil
+	return normalizedSubscribers, len(normalizedSubscribers) > 0, nil
 }
 
 func (r *SubscriberResolver) resolveChannelSubscribersFromDB(
@@ -153,23 +123,19 @@ func (r *SubscriberResolver) resolveChannelSubscribersFromDB(
 	return subscribers, nil
 }
 
-// ResolveUncachedChannelSubscribersByType는 구독 cache set이 비어 있던 채널들의 구독자를 확정한다.
-// TTL 없는 set이 eviction으로 사라지면 빈 set과 구분되지 않으므로, empty marker가 있는 채널만 진짜 구독 0으로 보고
-// 나머지는 한 번의 DB 조회로 확정한다. 구독자가 있는 채널만 결과 map에 담는다.
+// ResolveUncachedChannelSubscribersByType는 구독 cache set이 비어 있던 채널들의 구독자를 한 번의 DB 조회로 확정한다.
+// TTL 없는 set이 eviction으로 사라지면 빈 set과 구분되지 않으므로 cache만으로 구독 0을 확정하지 않는다.
+// 구독자가 있는 채널만 결과 map에 담는다.
 //
 // Checker 경로의 read-through라 PG 결과는 이번 호출에만 쓰고 subscriber set을 다시 채우지 않는다. 조회 뒤 SADD하면
 // 그 사이 커밋된 구독 해지의 SREM보다 늦게 도착해 해지된 방이 set에 되살아날 수 있기 때문이다. 대가로 다른 쓰기 경로
-// (구독 변경 동기화·전체 rebuild)가 set을 다시 채울 때까지 evict된 채널은 매 cycle 이 batch PG 조회 1회를 다시 치른다.
-// 빈 구독 marker도 늦은 조회 결과가 새 구독을 숨길 수 있으므로 read-through에서 기록하지 않는다.
+// (구독 변경 동기화·전체 rebuild)가 set을 다시 채울 때까지 set이 빈 채널은 매 cycle 이 batch PG 조회 1회를 다시 치른다.
 func (r *SubscriberResolver) ResolveUncachedChannelSubscribersByType(
 	ctx context.Context,
 	channelIDs []string,
 	alarmType domain.AlarmType,
 ) (map[string][]string, error) {
-	pending, err := filterKnownEmptySubscriberChannels(ctx, r.cache, channelIDs, alarmType, r.db == nil)
-	if err != nil {
-		return nil, fmt.Errorf("resolve uncached channel subscribers: %w", err)
-	}
+	pending := compactUniqueStrings(channelIDs)
 
 	result := make(map[string][]string, len(pending))
 	if len(pending) == 0 {
@@ -199,100 +165,6 @@ func (r *SubscriberResolver) ResolveUncachedChannelSubscribersByType(
 	}
 
 	return result, nil
-}
-
-func filterKnownEmptySubscriberChannels(
-	ctx context.Context,
-	cacheClient cache.LowLevelCache,
-	channelIDs []string,
-	alarmType domain.AlarmType,
-	requireCacheSuccess bool,
-) ([]string, error) {
-	unique := make([]string, 0, len(channelIDs))
-	seen := make(map[string]struct{}, len(channelIDs))
-
-	for _, channelID := range channelIDs {
-		normalizedChannelID := strings.TrimSpace(channelID)
-		if normalizedChannelID == "" {
-			continue
-		}
-
-		if _, exists := seen[normalizedChannelID]; exists {
-			continue
-		}
-
-		seen[normalizedChannelID] = struct{}{}
-		unique = append(unique, normalizedChannelID)
-	}
-
-	if cacheClient == nil || len(unique) == 0 {
-		return unique, nil
-	}
-
-	knownEmpty, err := resolveKnownEmptySubscriberChannels(ctx, cacheClient, unique, alarmType, requireCacheSuccess)
-	if err != nil {
-		return nil, fmt.Errorf("filter known empty subscriber channels: %w", err)
-	}
-
-	pending := unique[:0]
-
-	for i, channelID := range unique {
-		if !knownEmpty[i] {
-			pending = append(pending, channelID)
-		}
-	}
-
-	return pending, nil
-}
-
-// 확인에 실패한 채널은 구독 0으로 단정하지 않는다. DB가 없어 cache 결과만 믿어야 하면(requireCacheSuccess) 실패를 오류로 반환한다.
-func resolveKnownEmptySubscriberChannels(
-	ctx context.Context,
-	cacheClient cache.LowLevelCache,
-	channelIDs []string,
-	alarmType domain.AlarmType,
-	requireCacheSuccess bool,
-) ([]bool, error) {
-	builder := cacheClient.B()
-	cmds := make([]valkey.Completed, len(channelIDs))
-
-	for i, channelID := range channelIDs {
-		cmds[i] = builder.Exists().Key(alarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)).Build()
-	}
-
-	knownEmpty := make([]bool, len(channelIDs))
-
-	results := cacheClient.DoMulti(ctx, cmds...)
-	if len(results) != len(cmds) {
-		observeAlarmSubscriberCacheError("check_empty")
-
-		if requireCacheSuccess {
-			return nil, fmt.Errorf(
-				"resolve channel subscribers by type: check empty subscriber cache: unexpected result count %d for %d channels",
-				len(results),
-				len(cmds),
-			)
-		}
-
-		return knownEmpty, nil
-	}
-
-	for i, result := range results {
-		count, err := result.AsInt64()
-		if err != nil {
-			observeAlarmSubscriberCacheError("check_empty")
-
-			if requireCacheSuccess {
-				return nil, fmt.Errorf("resolve channel subscribers by type: check empty subscriber cache: %w", err)
-			}
-
-			continue
-		}
-
-		knownEmpty[i] = count > 0
-	}
-
-	return knownEmpty, nil
 }
 
 func loadChannelSubscriberAlarmsByChannels(

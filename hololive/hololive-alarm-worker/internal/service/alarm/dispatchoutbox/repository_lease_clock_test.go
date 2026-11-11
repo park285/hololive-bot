@@ -14,7 +14,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestRouteFailuresChecksExpiryAfterAllRowLocks(t *testing.T) {
@@ -80,9 +79,9 @@ func TestRouteFailuresChecksExpiryAfterAllRowLocks(t *testing.T) {
 func seedFailureClockRows(t *testing.T, repo *PgxRepository, count int) []int64 {
 	t.Helper()
 
-	envelopes := make([]domain.AlarmQueueEnvelope, count)
+	envelopes := make([]AlarmQueueEnvelope, count)
 	for i := range count {
-		envelopes[i] = domain.AlarmQueueEnvelope{Notification: *candidateNotification(fmt.Sprintf("clock-room-%d", i), time.Now().UTC().Truncate(time.Minute)), Version: 1}
+		envelopes[i] = AlarmQueueEnvelope{Notification: *candidateNotification(fmt.Sprintf("clock-room-%d", i), time.Now().UTC().Truncate(time.Minute)), Version: 1}
 	}
 
 	_, err := repo.InsertBatch(t.Context(), PublishBatchInput{Envelopes: envelopes})

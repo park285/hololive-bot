@@ -23,8 +23,6 @@ package member
 import (
 	"context"
 	"errors"
-	"log/slog"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,112 +39,6 @@ func TestCache_LoadAllMembers_ReturnsError(t *testing.T) {
 
 	if got := err.Error(); got != "member repository is nil" {
 		t.Fatalf("LoadAllMembers() error = %q, want %q", got, "member repository is nil")
-	}
-}
-
-func TestCache_FindMembersByName_MatchesLocalizedNames(t *testing.T) {
-	cache := newAdapterTestCache(
-		&domain.Member{ID: 1, ChannelID: "suisei", Name: "Suisei", NameKo: "별빛"},
-		&domain.Member{ID: 2, ChannelID: "hoshino", Name: "별빛", NameJa: "ほしの"},
-		&domain.Member{ID: 3, ChannelID: testMemberMikoSlug, Name: testMemberMiko, NameJa: "みこ"},
-	)
-	finder := cache
-
-	got, err := finder.FindMembersByName(t.Context(), "  별빛 ")
-	if err != nil || len(got) != 2 {
-		t.Fatalf("FindMembersByName() = %+v, %v; want 2 members", got, err)
-	}
-
-	if got[0] == nil || got[0].ChannelID != "suisei" {
-		t.Fatalf("FindMembersByName()[0] = %+v, want suisei", got[0])
-	}
-
-	if got[1] == nil || got[1].ChannelID != "hoshino" {
-		t.Fatalf("FindMembersByName()[1] = %+v, want hoshino", got[1])
-	}
-
-	got[0] = nil
-
-	again, err := finder.FindMembersByName(t.Context(), "별빛")
-	if err != nil || len(again) != 2 || again[0] == nil || again[0].ChannelID != "suisei" {
-		t.Fatalf("FindMembersByName() should return cloned slice, got %+v, %v", again, err)
-	}
-
-	none, err := finder.FindMembersByName(t.Context(), "없는이름")
-	if err != nil || none == nil || len(none) != 0 {
-		t.Fatalf("FindMembersByName(missing) = %#v, %v; want empty non-nil slice and nil error", none, err)
-	}
-}
-
-func TestCache_FindMembersByAlias_ReturnsAllAliasMatches(t *testing.T) {
-	cache := newAdapterTestCache(
-		&domain.Member{
-			ID:        1,
-			ChannelID: "aqua",
-			Name:      "Aqua",
-			Aliases:   &domain.Aliases{Ko: []string{"Aqua"}},
-		},
-		&domain.Member{
-			ID:        2,
-			ChannelID: "marine",
-			Name:      "Marine",
-			Aliases:   &domain.Aliases{Ja: []string{" aqua "}},
-		},
-		&domain.Member{
-			ID:        3,
-			ChannelID: "pekora",
-			Name:      testMemberPekora,
-			Aliases:   &domain.Aliases{Ko: []string{"Usada"}},
-		},
-	)
-	finder := cache
-
-	got, err := finder.FindMembersByAlias(t.Context(), "  AQUA ")
-	if err != nil || len(got) != 2 {
-		t.Fatalf("FindMembersByAlias() = %+v, %v; want 2 members", got, err)
-	}
-
-	if got[0] == nil || got[0].ChannelID != "aqua" {
-		t.Fatalf("FindMembersByAlias()[0] = %+v, want aqua", got[0])
-	}
-
-	if got[1] == nil || got[1].ChannelID != "marine" {
-		t.Fatalf("FindMembersByAlias()[1] = %+v, want marine", got[1])
-	}
-
-	got[1] = nil
-
-	again, err := finder.FindMembersByAlias(t.Context(), "aqua")
-	if err != nil || len(again) != 2 || again[1] == nil || again[1].ChannelID != "marine" {
-		t.Fatalf("FindMembersByAlias() should return cloned slice, got %+v, %v", again, err)
-	}
-}
-
-func TestCache_MultiFinderPropagatesLoadFailure(t *testing.T) {
-	wantErr := errors.New("members table unavailable")
-
-	var calls atomic.Int64
-
-	cache := &Cache{
-		logger: slog.New(slog.DiscardHandler),
-		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			calls.Add(1)
-
-			return nil, wantErr
-		},
-	}
-	finder := cache
-
-	if got, err := finder.FindMembersByName(t.Context(), " \t"); err != nil || len(got) != 0 || calls.Load() != 0 {
-		t.Fatalf("blank query = %+v, %v, loads %d; want empty without loading", got, err, calls.Load())
-	}
-
-	if got, err := finder.FindMembersByName(t.Context(), testMemberMiko); !errors.Is(err, wantErr) || got != nil {
-		t.Fatalf("FindMembersByName() = %+v, %v; want load failure", got, err)
-	}
-
-	if got, err := finder.FindMembersByAlias(t.Context(), "미코"); !errors.Is(err, wantErr) || got != nil {
-		t.Fatalf("FindMembersByAlias() = %+v, %v; want load failure", got, err)
 	}
 }
 
@@ -169,7 +61,7 @@ func TestCache_BypassHonorsCallerCancellation(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := finder.FindMembersByName(ctx, testMemberMiko)
+		_, err := finder.LoadAllMembers(ctx)
 		done <- err
 	}()
 
@@ -186,49 +78,24 @@ func TestCache_BypassHonorsCallerCancellation(t *testing.T) {
 	}
 }
 
-func TestCache_BypassUsesSameSearchRules(t *testing.T) {
+// 우회 경로의 전체 멤버 조회는 PostgreSQL 결과로 답하되 snapshot을 게시하지 않는다.
+func TestCache_BypassDoesNotPublishSnapshot(t *testing.T) {
 	cache := newEpochTestCache(&fakeMemberEpochAuthority{epoch: 1})
 	cache.authorityHealthy.Store(false)
 
 	cache.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
 		return []*domain.Member{
-			{ID: 1, Name: testMemberMiko, Aliases: &domain.Aliases{Ko: []string{"엘리트"}}},
-			{ID: 2, Name: "MIKO ", Aliases: &domain.Aliases{Ja: []string{" 엘리트 "}}},
+			{ID: 1, Name: testMemberMiko},
+			{ID: 2, Name: testMemberPekora},
 		}, nil
 	}
 
-	finder := cache
-
-	names, err := finder.FindMembersByName(t.Context(), " miko")
-	if err != nil || len(names) != 2 {
-		t.Fatalf("bypass FindMembersByName() = %+v, %v; want both same-name members", names, err)
-	}
-
-	aliases, err := finder.FindMembersByAlias(t.Context(), "엘리트")
-	if err != nil || len(aliases) != 2 {
-		t.Fatalf("bypass FindMembersByAlias() = %+v, %v; want both shared-alias members", aliases, err)
+	members, err := cache.LoadAllMembers(t.Context())
+	if err != nil || len(members) != 2 {
+		t.Fatalf("bypass LoadAllMembers() = %+v, %v; want both members", members, err)
 	}
 
 	if cache.allMembersSnapshot.Load() != nil {
 		t.Fatal("bypass published a snapshot while epoch authority was uncertain")
 	}
-}
-
-func newAdapterTestCache(members ...*domain.Member) *Cache {
-	cache := &Cache{logger: slog.New(slog.DiscardHandler)}
-	snapshot := make([]*domain.Member, 0, len(members))
-
-	for _, member := range members {
-		if member == nil {
-			continue
-		}
-
-		snapshot = append(snapshot, member)
-	}
-
-	cache.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
-		return snapshot, nil
-	}
-
-	return cache
 }

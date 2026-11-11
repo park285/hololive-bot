@@ -10,7 +10,6 @@ type subscriberCacheWarmData struct {
 	rooms              map[string]struct{}
 	channels           map[string]struct{}
 	channelSubscribers map[string][]string
-	memberNames        map[string]string
 	channelRegistry    []string
 }
 

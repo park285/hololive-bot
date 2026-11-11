@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
@@ -129,24 +128,13 @@ func (t *CommandTransport) recordTextReply(
 }
 
 // postReplyWithReissue는 pre-handoff conflict에서만 replyReissueLadder로 세대를 올린다. Conflict는
-// 원문 오류 그대로 돌려줘 호출자가 Iris code로 정산하고, clientRequestId가 없는 발송은 재발급할
-// 정체성이 없으므로 한 번만 보낸다.
+// 원문 오류 그대로 돌려줘 호출자가 Iris code로 정산한다. 저장된 clientRequestId는 outbox 기록 검증이
+// 형식을 보장한 값이다.
 func postReplyWithReissue(
 	ctx context.Context,
 	clientRequestID string,
 	post func(string) (*iris.ReplyAcceptedResponse, error),
 ) (*iris.ReplyAcceptedResponse, error) {
-	clientRequestID = strings.TrimSpace(clientRequestID)
-
-	if clientRequestID == "" {
-		accepted, err := post("")
-		if err != nil {
-			return nil, replyPostError(err)
-		}
-
-		return accepted, nil
-	}
-
 	var accepted *iris.ReplyAcceptedResponse
 
 	_, err := replyReissueLadder.Run(ctx, clientRequestID, 0, func(_ context.Context, generationID string, _ int) error {

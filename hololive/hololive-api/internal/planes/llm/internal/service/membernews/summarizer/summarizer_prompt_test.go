@@ -24,38 +24,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
-func promptFixtureInput() *model.SummarizeInput {
-	return &model.SummarizeInput{
+func promptFixtureInput() *newsmodel.SummarizeInput {
+	return &newsmodel.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberSuisei, testMemberMiko},
-		Candidates: []model.FilteredCandidate{
+		Candidates: []newsmodel.FilteredCandidate{
 			{
-				Candidate: model.Candidate{
+				Candidate: newsmodel.Candidate{
 					Title:       "EXPO",
 					Description: "official news",
 				},
 				EffectiveDate:  time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone),
 				MemberText:     testMemberMiko,
 				MatchedMembers: []string{testMemberMiko},
-				Category:       model.CategoryEvent,
-				SourceTier:     model.SourceTierOfficial,
+				Category:       newsmodel.CategoryEvent,
+				SourceTier:     newsmodel.SourceTierOfficial,
 				SourceURL:      testSourceURLNews1,
 			},
 			{
-				Candidate: model.Candidate{
+				Candidate: newsmodel.Candidate{
 					Title:       "SUISEI LIVE",
 					Description: "official event",
 				},
 				EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, timeutil.KSTZone),
 				MemberText:     testMemberSuisei,
 				MatchedMembers: []string{testMemberSuisei},
-				Category:       model.CategorySoloLive,
-				SourceTier:     model.SourceTierOfficial,
+				Category:       newsmodel.CategorySoloLive,
+				SourceTier:     newsmodel.SourceTierOfficial,
 				SourceURL:      "https://hololive.hololivepro.com/news/2",
 			},
 		},

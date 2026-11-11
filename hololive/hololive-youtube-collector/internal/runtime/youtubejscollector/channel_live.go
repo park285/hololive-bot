@@ -10,6 +10,9 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
+// ChannelLiveJobKind는 방송 탭 snapshot job 종류입니다. 실행 profile은 이 값으로 예정 영상 조회 상한을 더합니다.
+const ChannelLiveJobKind collection.JobKind = "youtubejs_channel_" + channelKindLive
+
 // ChannelLiveRunner는 방송 탭 live_snapshot만 수집합니다. 채널 /live 확인은 별도 job 슬롯이 담당하므로
 // 방송 탭 실패는 이 job의 슬롯만 재시도하고 확인 관측의 진행을 막지 않습니다.
 type ChannelLiveRunner struct {
@@ -21,7 +24,7 @@ func NewChannelLiveRunner(client ChannelClient) *ChannelLiveRunner {
 }
 
 func (r *ChannelLiveRunner) JobID() collection.JobID {
-	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_" + channelKindLive}
+	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: ChannelLiveJobKind}
 }
 
 func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {

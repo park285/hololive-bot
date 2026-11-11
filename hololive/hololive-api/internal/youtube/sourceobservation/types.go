@@ -15,7 +15,6 @@ const (
 	MaxAttempts       = 64
 	maxErrorCodeBytes = 128
 	maxErrorTextBytes = 2048
-	maxClaimKinds     = 11
 )
 
 var (
@@ -238,8 +237,9 @@ func (o ClaimOptions) validate() error {
 }
 
 func validateClaimKinds(kinds []contract.ObservationKind) error {
-	if len(kinds) == 0 || len(kinds) > maxClaimKinds {
-		return fmt.Errorf("validate source observation claim: kind count must be between 1 and %d", maxClaimKinds)
+	// 중복 없는 유효 kind만 받으므로 개수 상한은 kind 종류 수가 정한다.
+	if len(kinds) == 0 {
+		return errors.New("validate source observation claim: kinds are empty")
 	}
 
 	seen := make(map[contract.ObservationKind]struct{}, len(kinds))

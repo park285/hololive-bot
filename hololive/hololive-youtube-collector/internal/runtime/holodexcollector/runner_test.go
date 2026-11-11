@@ -412,7 +412,7 @@ func holodexInputWithLiveGeneration(
 	enabled := map[contract.ObservationKind][]string{
 		contract.KindLiveSnapshot:   requested,
 		contract.KindChannelPhoto:   requested,
-		contract.KindSchedule:       {officialScheduleSubject},
+		contract.KindSchedule:       {collection.ScheduleSubject},
 		contract.KindChannelProfile: nil,
 	}
 	lease := contract.LeaseProof{

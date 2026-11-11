@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -70,7 +71,7 @@ func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 	}
 	claimKeys := []string{"notified:claim:room-1"}
 
-	_, err := publisher.Publish(t.Context(), notification, claimKeys)
+	_, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{notification}, [][]string{claimKeys})
 	require.NoError(t, err)
 	require.Equal(t, 1, repository.insertBatchCalls)
 	require.Len(t, repository.lastBatchInput.Envelopes, 1)
@@ -93,10 +94,10 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 		t.Run(string(alarmType), func(t *testing.T) {
 			t.Parallel()
 
-			_, err := publisher.Publish(t.Context(), &domain.AlarmNotification{
+			_, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{{
 				AlarmType: alarmType,
 				RoomID:    "room-blocked",
-			}, nil)
+			}}, [][]string{nil})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "live alarm route does not support alarm type")
 			assert.Contains(t, err.Error(), string(alarmType))
@@ -112,7 +113,7 @@ func TestPublisherPublishDispatchBatchAcceptsDeliveryDigestContentEnvelope(t *te
 
 	envelope.Version = contractsalarm.QueueEnvelopeVersionV1
 
-	result, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})
+	result, err := publisher.PublishDispatchBatch(t.Context(), []dispatchoutbox.AlarmQueueEnvelope{envelope})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.RequestedDeliveries)
 }
@@ -124,13 +125,13 @@ func TestPublisherPublishDispatchBatchRejectsMissingEnvelopeVersion(t *testing.T
 	publisher := newTestPublisher(t, cachemocks.NewStrictClient(), outbox, PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000})
 	envelope := queueTestDeliveryDigestEnvelope("room-versionless")
 
-	_, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})
+	_, err := publisher.PublishDispatchBatch(t.Context(), []dispatchoutbox.AlarmQueueEnvelope{envelope})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "envelope version 0 is unsupported")
 }
 
-func queueTestDeliveryDigestEnvelope(roomID string) domain.AlarmQueueEnvelope {
-	return domain.AlarmQueueEnvelope{
+func queueTestDeliveryDigestEnvelope(roomID string) dispatchoutbox.AlarmQueueEnvelope {
+	return dispatchoutbox.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: roomID},
 		SourceKind:   domain.AlarmDispatchSourceKindDeliveryDigest,
 		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{

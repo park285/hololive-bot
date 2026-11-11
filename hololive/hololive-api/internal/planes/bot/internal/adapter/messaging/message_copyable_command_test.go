@@ -37,7 +37,7 @@ func TestSeedHelpCommandsCopyRoundTrip(t *testing.T) {
 					}
 				}
 
-				parsed := NewMessageAdapter(prefix, "").ParseMessage(&webhook.Message{Msg: command})
+				parsed := NewMessageAdapter(prefix).ParseMessage(&webhook.Message{Msg: command})
 				if parsed == nil || parsed.Type != botcommand.CommandHelp {
 					t.Errorf("copy command %q failed: %#v", command, parsed)
 				}
@@ -66,7 +66,7 @@ func TestAmbiguousMemberExampleCopyPreservesArgument(t *testing.T) {
 					}
 				}
 
-				parsed := NewMessageAdapter("#", "").ParseMessage(&webhook.Message{Msg: command})
+				parsed := NewMessageAdapter("#").ParseMessage(&webhook.Message{Msg: command})
 				if parsed == nil || parsed.Type != botcommand.CommandLive || parsed.Params[paramMember] != member.QualifiedName() {
 					t.Errorf("copy example changed member argument: command=%q parsed=%#v", command, parsed)
 				}

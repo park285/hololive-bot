@@ -682,9 +682,9 @@ func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		t.Fatalf("resolve migrations dir for collection membership check: %v", err)
 	}
 
-	// projection guard SQL은 collector sourceobservation, lease membership SQL은 collector collection 패키지가 소유한다.
+	// projection guard SQL은 collector sourceobservation, lease membership SQL은 collector joblease 패키지가 소유한다.
 	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
-	membershipQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "collection", "queries"))
+	membershipQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "joblease", "queries"))
 	refreshQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "planes", "youtube", "targetprojection", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 

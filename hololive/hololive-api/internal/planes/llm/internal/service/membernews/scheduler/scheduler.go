@@ -31,6 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/executionlock"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -54,8 +55,8 @@ type outboxEnqueuer interface {
 
 type Scheduler struct {
 	digest           *schedulerkit.DigestScheduler
-	service          model.DigestService
-	formatter        model.DigestFormatter
+	service          newsmodel.DigestService
+	formatter        newsmodel.DigestFormatter
 	outboxRepository outboxEnqueuer
 	outputGuard      *outputguard.Guard
 }
@@ -69,8 +70,8 @@ func WithOutputGuard(guard *outputguard.Guard) SchedulerOption {
 }
 
 func NewScheduler(
-	service model.DigestService,
-	formatter model.DigestFormatter,
+	service newsmodel.DigestService,
+	formatter newsmodel.DigestFormatter,
 	locker executionlock.Locker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
@@ -171,7 +172,7 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) (notification.Result, 
 	return result, nil
 }
 
-func (s *Scheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, weekKey, roomID string) digestEnqueueResult {
+func (s *Scheduler) processRoomDigest(ctx context.Context, generator newsmodel.DigestGenerator, weekKey, roomID string) digestEnqueueResult {
 	return processDigestForRoom(ctx, generator, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
 		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID)
 }

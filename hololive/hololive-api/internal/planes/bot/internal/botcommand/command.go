@@ -46,37 +46,3 @@ const (
 func (c CommandType) String() string {
 	return string(c)
 }
-
-func (c CommandType) IsValid() bool {
-	switch c {
-	case CommandLive, CommandUpcoming, CommandSchedule, CommandHelp,
-		CommandAlarmAdd, CommandAlarmRemove, CommandAlarmList, CommandAlarmClear, CommandAlarmInvalid,
-		CommandMemberInfo,
-		CommandMemberNews, CommandMemberNewsSubscription,
-		CommandMajorEvent,
-		CommandCalendar,
-		CommandBroadcastHistory, CommandBroadcastThumbnail, CommandBroadcastTime,
-		CommandUnknown:
-		return true
-	default:
-		return false
-	}
-}
-
-type ParseResult struct {
-	Command    CommandType    `json:"command"`
-	Params     map[string]any `json:"params"`
-	Confidence float64        `json:"confidence"`
-	Reasoning  string         `json:"reasoning"`
-}
-
-type ParseResults struct {
-	Single   *ParseResult
-	Multiple []*ParseResult
-}
-
-type ChannelSelection struct {
-	SelectedIndex int     `json:"selectedIndex"`
-	Confidence    float64 `json:"confidence"`
-	Reasoning     string  `json:"reasoning"`
-}

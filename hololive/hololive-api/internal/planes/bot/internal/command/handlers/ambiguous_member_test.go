@@ -23,6 +23,7 @@ package handlers
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,10 +45,11 @@ func ambiguousMembersFixture() []*domain.Member {
 
 func newAmbiguousMatcher() *matcher.Matcher {
 	provider := newContextAwareMemberProvider(ambiguousMembersFixture())
-	return matcher.NewMatcher(provider, nil, slog.New(slog.DiscardHandler))
+	return matcher.NewMatcher(provider, slog.New(slog.DiscardHandler))
 }
 
-func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) string {
+// expectedAmbiguousMessage는 alarm의 동명이인 응답을 기준으로 삼는다. 명령마다 다른 것은 복사 예시의 명령어뿐이다.
+func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher, commandExample string) string {
 	t.Helper()
 
 	var captured string
@@ -75,11 +77,19 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) str
 	require.NoError(t, err)
 	require.NotEmpty(t, captured, "alarm should emit ambiguous-member message")
 
-	return captured
+	for _, member := range ambiguousMembersFixture() {
+		require.Contains(t, captured, member.DisplayName()+" ("+member.GetOrg()+")", "ambiguous-member message should list every candidate")
+	}
+
+	const alarmExample = "!알람 추가 "
+
+	require.Equal(t, 1, strings.Count(captured, alarmExample), "alarm ambiguous-member message should carry one copy example")
+
+	return strings.Replace(captured, alarmExample, "!"+commandExample+" ", 1)
 }
 
 func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
+	want := expectedAmbiguousMessage(t, newAmbiguousMatcher(), "라이브")
 
 	var (
 		gotMessage  string
@@ -111,7 +121,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 }
 
 func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
+	want := expectedAmbiguousMessage(t, newAmbiguousMatcher(), "일정")
 
 	var (
 		gotMessage  string
@@ -143,7 +153,7 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 }
 
 func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
+	want := expectedAmbiguousMessage(t, newAmbiguousMatcher(), "예정")
 
 	var (
 		gotMessage  string

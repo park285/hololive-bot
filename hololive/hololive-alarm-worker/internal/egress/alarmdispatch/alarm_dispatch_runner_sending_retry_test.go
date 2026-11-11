@@ -8,14 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
 	sendErr := &iris.HTTPError{StatusCode: 502, URL: testIrisReplyPath}
 
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
+		batches: [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 	}
 	sender := &alarmDispatchRunnerTestSender{messageErr: sendErr}
 	runner := Runner{
@@ -44,7 +44,7 @@ func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures
 	sendErr := &iris.HTTPError{StatusCode: 503}
 
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
+		batches: [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 	}
 	sender := &alarmDispatchRunnerTestSender{messageErr: sendErr}
 	runner := Runner{
@@ -70,7 +70,7 @@ func TestPrepareDispatchFailureUsesHTTPRetryAfterHintWhenLongerThanAttemptDelay(
 			envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 			cause := &iris.HTTPError{StatusCode: statusCode, RetryAfter: 12 * time.Second}
 
-			retryEnvelopes, dlqEnvelopes := prepareDispatchFailure([]domain.AlarmQueueEnvelope{envelope}, cause)
+			retryEnvelopes, dlqEnvelopes := prepareDispatchFailure([]dispatchoutbox.AlarmQueueEnvelope{envelope}, cause)
 
 			require.Empty(t, dlqEnvelopes)
 			require.Len(t, retryEnvelopes, 1)
@@ -82,7 +82,7 @@ func TestPrepareDispatchFailureUsesHTTPRetryAfterHintWhenLongerThanAttemptDelay(
 }
 
 func TestNextAlarmDispatchRetryKeepsAttemptDelayWhenHTTPRetryAfterHintIsShorter(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: 1})
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &dispatchoutbox.AlarmQueueRetryMetadata{Attempt: 1})
 	cause := &iris.HTTPError{StatusCode: 503, RetryAfter: time.Second}
 
 	retry := nextAlarmDispatchRetry(&envelope, cause)

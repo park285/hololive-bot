@@ -263,7 +263,7 @@ func TestConsumerMarkDispatchedPropagatesPostSendOwnershipChange(t *testing.T) {
 	}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
-	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}}, "iris-request-1", time.Minute)
+	err := consumer.MarkDispatched(t.Context(), []AlarmQueueEnvelope{{DispatchOutboxID: 42}}, "iris-request-1", time.Minute)
 	if !errors.Is(err, miss) {
 		t.Fatalf("MarkDispatched() error = %v, want %v", err, miss)
 	}
@@ -275,9 +275,9 @@ func TestConsumerMarkSendingBeginsWholeUnitWithClaimAttempt(t *testing.T) {
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"), WithLease(1500*time.Millisecond))
 
-	err := consumer.MarkSending(t.Context(), []domain.AlarmQueueEnvelope{
-		{DispatchOutboxID: 42, SendUnitID: 7, ClientRequestID: "request-7", Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}},
-		{DispatchOutboxID: 43, SendUnitID: 7, ClientRequestID: "request-7", Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}},
+	err := consumer.MarkSending(t.Context(), []AlarmQueueEnvelope{
+		{DispatchOutboxID: 42, SendUnitID: 7, ClientRequestID: "request-7", Retry: &AlarmQueueRetryMetadata{Attempt: 1}},
+		{DispatchOutboxID: 43, SendUnitID: 7, ClientRequestID: "request-7", Retry: &AlarmQueueRetryMetadata{Attempt: 1}},
 	})
 	if err != nil {
 		t.Fatalf("MarkSending() error = %v", err)
@@ -294,7 +294,7 @@ func TestConsumerMarkSendingBeginsWholeUnitWithClaimAttempt(t *testing.T) {
 func TestConsumerDrainBatchLoadsDistinctEventsAndRehydratesDeliveryContext(t *testing.T) {
 	t.Parallel()
 
-	eventPayload := mustMarshalTestEnvelope(t, &domain.AlarmQueueEnvelope{
+	eventPayload := mustMarshalTestEnvelope(t, &AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			Channel:      &domain.Channel{ID: testChannelID},
@@ -347,7 +347,7 @@ func TestConsumerDrainBatchLoadsDistinctEventsAndRehydratesDeliveryContext(t *te
 func TestConsumerDrainBatchRestoresAttemptCountForRetryRows(t *testing.T) {
 	t.Parallel()
 
-	eventPayload := mustMarshalTestEnvelope(t, &domain.AlarmQueueEnvelope{
+	eventPayload := mustMarshalTestEnvelope(t, &AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			Channel:      &domain.Channel{ID: testChannelID},
@@ -386,7 +386,7 @@ func TestConsumerDrainBatchRestoresAttemptCountForRetryRows(t *testing.T) {
 	}
 }
 
-func mustMarshalTestEnvelope(t *testing.T, envelope *domain.AlarmQueueEnvelope) []byte {
+func mustMarshalTestEnvelope(t *testing.T, envelope *AlarmQueueEnvelope) []byte {
 	t.Helper()
 
 	payload, err := jsonv2.Marshal(&envelope)
@@ -428,12 +428,6 @@ type consumerBeginSendRequestCall struct {
 	workerID   string
 	expectedID string
 	lease      time.Duration
-}
-
-func (r *consumerTestRepository) InsertPending(context.Context, *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
-	var missing *Record
-
-	return missing, "", nil
 }
 
 func (r *consumerTestRepository) InsertBatch(context.Context, PublishBatchInput) (PublishBatchResult, error) {
@@ -581,21 +575,21 @@ func TestConsumerRouteFailuresConvertsEnvelopesToTargetedUpdates(t *testing.T) {
 
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	retryEnvelope := domain.AlarmQueueEnvelope{
+	retryEnvelope := AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
-		Retry: &domain.AlarmQueueRetryMetadata{
+		Retry: &AlarmQueueRetryMetadata{
 			Attempt:      1,
 			RetryAfterMS: 7500,
 			LastError:    "send failed",
 		},
 	}
-	dlqEnvelope := domain.AlarmQueueEnvelope{
+	dlqEnvelope := AlarmQueueEnvelope{
 		DispatchOutboxID: 22,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 3, LastError: "exhausted"},
+		Retry:            &AlarmQueueRetryMetadata{Attempt: 3, LastError: "exhausted"},
 	}
-	skipped := domain.AlarmQueueEnvelope{DispatchOutboxID: 0}
+	skipped := AlarmQueueEnvelope{DispatchOutboxID: 0}
 
-	if err := consumer.RouteFailures(t.Context(), []domain.AlarmQueueEnvelope{retryEnvelope, skipped}, []domain.AlarmQueueEnvelope{dlqEnvelope}); err != nil {
+	if err := consumer.RouteFailures(t.Context(), []AlarmQueueEnvelope{retryEnvelope, skipped}, []AlarmQueueEnvelope{dlqEnvelope}); err != nil {
 		t.Fatalf("RouteFailures() error = %v", err)
 	}
 
@@ -638,25 +632,25 @@ func TestConsumerRouteFailuresPartialObservesAppliedSubsets(t *testing.T) {
 	}
 
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	retryApplied := domain.AlarmQueueEnvelope{
+	retryApplied := AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
+		Retry:            &AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
 	}
-	retryUnapplied := domain.AlarmQueueEnvelope{
+	retryUnapplied := AlarmQueueEnvelope{
 		DispatchOutboxID: 22,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
+		Retry:            &AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
 	}
-	dlqApplied := domain.AlarmQueueEnvelope{
+	dlqApplied := AlarmQueueEnvelope{
 		DispatchOutboxID: 33,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 3, LastError: "exhausted"},
+		Retry:            &AlarmQueueRetryMetadata{Attempt: 3, LastError: "exhausted"},
 	}
 
 	retryBefore := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal)
 	dlqBefore := testutil.ToFloat64(alarmDispatchPGDLQTotal)
 
 	err := consumer.RouteFailures(t.Context(),
-		[]domain.AlarmQueueEnvelope{retryApplied, retryUnapplied},
-		[]domain.AlarmQueueEnvelope{dlqApplied})
+		[]AlarmQueueEnvelope{retryApplied, retryUnapplied},
+		[]AlarmQueueEnvelope{dlqApplied})
 	if _, ok := errors.AsType[*sendfence.MissError](err); !ok {
 		t.Fatalf("RouteFailures() error = %T %v, want *sendfence.MissError", err, err)
 	}
@@ -678,15 +672,15 @@ func TestConsumerRouteFailuresInfraErrorObservesNothing(t *testing.T) {
 	}
 
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	retry := domain.AlarmQueueEnvelope{
+	retry := AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
+		Retry:            &AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
 	}
 
 	retryBefore := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal)
 	dlqBefore := testutil.ToFloat64(alarmDispatchPGDLQTotal)
 
-	if err := consumer.RouteFailures(t.Context(), []domain.AlarmQueueEnvelope{retry}, nil); err == nil {
+	if err := consumer.RouteFailures(t.Context(), []AlarmQueueEnvelope{retry}, nil); err == nil {
 		t.Fatal("RouteFailures() error = nil, want infra error")
 	}
 
@@ -704,12 +698,12 @@ func TestConsumerRouteSendingFailuresUsesSendingVariant(t *testing.T) {
 
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		DispatchOutboxID: 7,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "502"},
+		Retry:            &AlarmQueueRetryMetadata{Attempt: 1, LastError: "502"},
 	}
 
-	if err := consumer.RouteSendingFailures(t.Context(), []domain.AlarmQueueEnvelope{envelope}, nil); err != nil {
+	if err := consumer.RouteSendingFailures(t.Context(), []AlarmQueueEnvelope{envelope}, nil); err != nil {
 		t.Fatalf("RouteSendingFailures() error = %v", err)
 	}
 
@@ -727,12 +721,12 @@ func TestConsumerRequeuePreSendPreservesAttemptCount(t *testing.T) {
 
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		DispatchOutboxID: 7,
-		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 2, LastError: "mark sending"},
+		Retry:            &AlarmQueueRetryMetadata{Attempt: 2, LastError: "mark sending"},
 	}
 
-	if err := consumer.RequeuePreSend(t.Context(), []domain.AlarmQueueEnvelope{envelope}); err != nil {
+	if err := consumer.RequeuePreSend(t.Context(), []AlarmQueueEnvelope{envelope}); err != nil {
 		t.Fatalf("RequeuePreSend() error = %v", err)
 	}
 
@@ -750,9 +744,9 @@ func TestConsumerRequeueRoutesAllEnvelopesAsRetry(t *testing.T) {
 
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	envelopes := []domain.AlarmQueueEnvelope{
-		{DispatchOutboxID: 1, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}},
-		{DispatchOutboxID: 2, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 3}},
+	envelopes := []AlarmQueueEnvelope{
+		{DispatchOutboxID: 1, Retry: &AlarmQueueRetryMetadata{Attempt: 1}},
+		{DispatchOutboxID: 2, Retry: &AlarmQueueRetryMetadata{Attempt: 3}},
 	}
 
 	if err := consumer.Requeue(t.Context(), envelopes); err != nil {
@@ -781,7 +775,7 @@ func TestConsumerRouteFailuresPropagatesRepositoryError(t *testing.T) {
 	}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
-	err := consumer.RouteFailures(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 1, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}}}, nil)
+	err := consumer.RouteFailures(t.Context(), []AlarmQueueEnvelope{{DispatchOutboxID: 1, Retry: &AlarmQueueRetryMetadata{Attempt: 1}}}, nil)
 	if !errors.Is(err, repositoryErr) {
 		t.Fatalf("RouteFailures() error = %v, want %v", err, repositoryErr)
 	}
@@ -792,16 +786,16 @@ func TestConsumerRouteFailuresSanitizesErrorAndPassesCodeThrough(t *testing.T) {
 
 	repository := &consumerTestRepository{}
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		DispatchOutboxID: 5,
-		Retry: &domain.AlarmQueueRetryMetadata{
+		Retry: &AlarmQueueRetryMetadata{
 			Attempt:       1,
 			LastError:     "post https://iris.internal/reply?auth=abc123 failed: Bearer tok456",
 			LastErrorCode: ErrorCodeHTTP5xx,
 		},
 	}
 
-	if err := consumer.RouteFailures(t.Context(), []domain.AlarmQueueEnvelope{envelope}, nil); err != nil {
+	if err := consumer.RouteFailures(t.Context(), []AlarmQueueEnvelope{envelope}, nil); err != nil {
 		t.Fatalf("RouteFailures() error = %v", err)
 	}
 
@@ -830,7 +824,7 @@ func TestConsumerQuarantineStoresSanitizedCauseAndCode(t *testing.T) {
 	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	cause := fmt.Errorf("send karing content list: %w", &iris.HTTPError{StatusCode: 500, URL: "https://iris.internal/reply?auth=abc123"})
 
-	if err := consumer.Quarantine(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 9}}, cause); err != nil {
+	if err := consumer.Quarantine(t.Context(), []AlarmQueueEnvelope{{DispatchOutboxID: 9}}, cause); err != nil {
 		t.Fatalf("Quarantine() error = %v", err)
 	}
 

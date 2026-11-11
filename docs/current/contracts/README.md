@@ -4,25 +4,14 @@
 
 ## Stable Contract IDs
 
-The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
-
-- `membernews.digest` - member news digest HTTP JSON
-- `membernews.subscription` - member news subscription HTTP JSON
-- `majorevent.subscription` - major event subscription HTTP JSON
-- `trigger.manual` - manual notification trigger HTTP JSON
-- `alarm.http` - alarm internal HTTP JSON
-- `alarm.dispatch` - alarm dispatch Valkey queue/retry/DLQ
-- `shortlink.youtube` - public fixed-target YouTube redirect with KakaoTalk scraper rejection
-- `settings.update` - admin settings API, single apply path to alarm-worker (no Pub/Sub)
-- `admin.api` - admin plane `/api/holo/*` HTTP JSON; producer-owned OpenAPI `admin-api.openapi.json` (producer-verified rooms·ACL operations only)
-- `iris.webhook` - Iris external webhook/send boundary
+계약 ID·provider·consumer·transport·계약 패키지의 정본은 [CONTRACT_MAP](../CONTRACT_MAP.md)의 Contract Inventory입니다.
 
 ## Contract Documents
 
-- `membernews.md` - member news subscription/digest HTTP JSON
-- `majorevent.md` - major event subscription HTTP JSON
-- `trigger.md` - manual notification trigger HTTP JSON
-- `alarm.md` - alarm HTTP API and alarm dispatch queue
+- `membernews.md` - member news subscription/digest in-process contract
+- `majorevent.md` - major event subscription in-process contract
+- `trigger.md` - manual notification rerun operator CLI
+- `alarm.md` - alarm HTTP API and PostgreSQL alarm dispatch outbox
 - `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and grouped message rendering contract
 - `settings.md` - admin settings API and alarm advance apply path
 - `admin-api.md` - admin plane `/api/holo/*` producer contract, OpenAPI source, and console generated-copy path

@@ -187,7 +187,7 @@ func TestBotRuntimeClosePreservesFatalAndResourceErrorsAfterTasksJoin(t *testing
 		Logger:         slog.New(slog.DiscardHandler),
 		Client:         &stubIrisClient{},
 		ReplyOutbox:    dispatchingReplyOutbox{client: &stubIrisClient{}},
-		MessageAdapter: messaging.NewMessageAdapter("!", ""),
+		MessageAdapter: messaging.NewMessageAdapter("!"),
 		Formatter:      formatter.NewResponseFormatter("!", nil),
 		Cache:          &cachemocks.Client{WaitUntilReadyFunc: func(context.Context, time.Duration) error { return fatalErr }},
 		Postgres:       &databasemocks.Client{}, Holodex: &holodexprovider.Service{},

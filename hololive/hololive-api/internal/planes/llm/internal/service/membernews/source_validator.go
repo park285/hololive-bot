@@ -31,7 +31,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/sourcepolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -90,14 +91,14 @@ func NewSourceValidator(
 	return validator, nil
 }
 
-func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
+func (v *SourceValidator) ValidateSourceURL(rawURL string) (newsmodel.SourceTier, string, error) {
 	if v == nil {
-		return model.SourceTierCommunity, "", errors.New("source validator is nil")
+		return newsmodel.SourceTierCommunity, "", errors.New("source validator is nil")
 	}
 
-	parsed, host, err := parseSourceURL(rawURL)
+	parsed, host, err := sourcepolicy.ParseURL(rawURL)
 	if err != nil {
-		return model.SourceTierCommunity, "", fmt.Errorf("parse source URL: %w", err)
+		return newsmodel.SourceTierCommunity, "", fmt.Errorf("parse source URL: %w", err)
 	}
 
 	out1, out2, err := v.classifySourceHost(host, parsed)
@@ -108,32 +109,8 @@ func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, st
 	return out1, out2, nil
 }
 
-func parseSourceURL(rawURL string) (*url.URL, string, error) {
-	trimmed := strings.TrimSpace(rawURL)
-	if trimmed == "" {
-		return nil, "", errors.New("source url is empty")
-	}
-
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return nil, "", fmt.Errorf("parse source url: %w", err)
-	}
-
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return nil, "", fmt.Errorf("unsupported source url scheme: %s", parsed.Scheme)
-	}
-
-	host := normalizeHost(parsed.Hostname())
-	if host == "" {
-		return nil, "", errors.New("source host is empty")
-	}
-
-	return parsed, host, nil
-}
-
-func (v *SourceValidator) classifySourceHost(host string, parsed *url.URL) (model.SourceTier, string, error) {
-	if isXHost(host) {
+func (v *SourceValidator) classifySourceHost(host string, parsed *url.URL) (newsmodel.SourceTier, string, error) {
+	if sourcepolicy.IsXHost(host) {
 		tier, sourceURL, err := v.classifyXSourceURL(parsed)
 		if err != nil {
 			return tier, sourceURL, fmt.Errorf("%w", err)
@@ -152,21 +129,17 @@ func (v *SourceValidator) classifySourceHost(host string, parsed *url.URL) (mode
 	}
 
 	if containsHost(v.officialDomains, host) {
-		return model.SourceTierOfficial, parsed.String(), nil
+		return newsmodel.SourceTierOfficial, parsed.String(), nil
 	}
 
 	if containsHost(v.mediaDomains, host) {
-		return model.SourceTierMedia, parsed.String(), nil
+		return newsmodel.SourceTierMedia, parsed.String(), nil
 	}
 
-	return model.SourceTierCommunity, parsed.String(), nil
+	return newsmodel.SourceTierCommunity, parsed.String(), nil
 }
 
-func isXHost(host string) bool {
-	return host == "x.com" || host == "twitter.com"
-}
-
-func (v *SourceValidator) classifyXSourceURL(parsed *url.URL) (model.SourceTier, string, error) {
+func (v *SourceValidator) classifyXSourceURL(parsed *url.URL) (newsmodel.SourceTier, string, error) {
 	tier, sourceURL, err := v.classifyXSource(parsed)
 	if err != nil {
 		return tier, sourceURL, fmt.Errorf("classify x source: %w", err)
@@ -175,7 +148,7 @@ func (v *SourceValidator) classifyXSourceURL(parsed *url.URL) (model.SourceTier,
 	return tier, sourceURL, nil
 }
 
-func (v *SourceValidator) classifyYouTubeSourceURL(parsed *url.URL) (model.SourceTier, string, error) {
+func (v *SourceValidator) classifyYouTubeSourceURL(parsed *url.URL) (newsmodel.SourceTier, string, error) {
 	tier, sourceURL, err := v.classifyYouTubeSource(parsed)
 	if err != nil {
 		return tier, sourceURL, fmt.Errorf("classify youtube source: %w", err)
@@ -184,17 +157,17 @@ func (v *SourceValidator) classifyYouTubeSourceURL(parsed *url.URL) (model.Sourc
 	return tier, sourceURL, nil
 }
 
-func (v *SourceValidator) classifyXSource(parsed *url.URL) (model.SourceTier, string, error) {
-	account := extractXAccount(parsed.EscapedPath())
+func (v *SourceValidator) classifyXSource(parsed *url.URL) (newsmodel.SourceTier, string, error) {
+	account := sourcepolicy.XAccountFromPath(parsed.EscapedPath())
 	if account == "" {
-		return model.SourceTierCommunity, "", errors.New("x.com account not found")
+		return newsmodel.SourceTierCommunity, "", errors.New("x.com account not found")
 	}
 
 	if !v.isAllowedXAccount(account) {
-		return model.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
+		return newsmodel.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
 	}
 
-	return model.SourceTierOfficial, parsed.String(), nil
+	return newsmodel.SourceTierOfficial, parsed.String(), nil
 }
 
 func (v *SourceValidator) HasCorroboration(text string) bool {
@@ -209,7 +182,7 @@ func (v *SourceValidator) HasCorroboration(text string) bool {
 			continue
 		}
 
-		if tier == model.SourceTierOfficial || tier == model.SourceTierMedia {
+		if tier == newsmodel.SourceTierOfficial || tier == newsmodel.SourceTierMedia {
 			return true
 		}
 	}
@@ -217,19 +190,19 @@ func (v *SourceValidator) HasCorroboration(text string) bool {
 	return false
 }
 
-func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (model.SourceTier, string, error) {
+func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (newsmodel.SourceTier, string, error) {
 	if parsed == nil {
-		return model.SourceTierCommunity, "", errors.New("youtube url is nil")
+		return newsmodel.SourceTierCommunity, "", errors.New("youtube url is nil")
 	}
 
-	segments, ok := decodedPathSegments(parsed.EscapedPath())
+	segments, ok := sourcepolicy.PathSegments(parsed.EscapedPath())
 	if ok && v.isAllowedYouTubeSourcePath(segments) {
-		return model.SourceTierOfficial, parsed.String(), nil
+		return newsmodel.SourceTierOfficial, parsed.String(), nil
 	}
 
 	// watch / shorts / live / youtu.be와 핸들(/@, /c/, /user/) URL — 채널 ID를 확인할 수 없음 → community
 	// SSOT: youtube.com(공식 채널)만 official, 동영상 링크는 채널 특정 불가
-	return model.SourceTierCommunity, parsed.String(), nil
+	return newsmodel.SourceTierCommunity, parsed.String(), nil
 }
 
 func (v *SourceValidator) isAllowedYouTubeSourcePath(segments []string) bool {
@@ -335,13 +308,6 @@ func loadXAllowlist(path string) ([]string, error) {
 	return wrapped.OfficialAccounts, nil
 }
 
-func normalizeHost(host string) string {
-	host = strings.ToLower(strings.TrimSpace(host))
-	host = strings.TrimPrefix(host, "www.")
-
-	return host
-}
-
 func isYouTubeHost(host string) bool {
 	switch host {
 	case "youtube.com", "m.youtube.com", "youtu.be":
@@ -353,8 +319,7 @@ func isYouTubeHost(host string) bool {
 
 func containsHost(domainSet map[string]struct{}, host string) bool {
 	for domain := range domainSet {
-		d := normalizeHost(domain)
-		if host == d || strings.HasSuffix(host, "."+d) {
+		if sourcepolicy.HostMatchesDomain(host, domain) {
 			return true
 		}
 	}
@@ -373,40 +338,4 @@ func normalizeXAccount(raw string) string {
 	trimmed = strings.Trim(trimmed, "/")
 
 	return trimmed
-}
-
-// decodedPathSegments는 브라우저가 제거하는 dot segment나 경계가 달라지는 인코딩·역슬래시가 있으면
-// 정규화하지 않고 거절한다. 앞 segment만 보고 판정하면 뒤의 ..가 다른 계정으로 이동시킬 수 있다.
-func decodedPathSegments(escapedPath string) ([]string, bool) {
-	trimmed, ok := strings.CutPrefix(escapedPath, "/")
-	if !ok || trimmed == "" || strings.Contains(trimmed, "//") {
-		return nil, false
-	}
-
-	segments := strings.Split(strings.TrimSuffix(trimmed, "/"), "/")
-	for i, segment := range segments {
-		decoded, err := url.PathUnescape(segment)
-		if err != nil || decoded == "" || decoded == "." || decoded == ".." ||
-			strings.ContainsAny(decoded, "/\\\t\r\n\x00") || strings.TrimSpace(decoded) != decoded {
-			return nil, false
-		}
-
-		segments[i] = decoded
-	}
-
-	return segments, true
-}
-
-func extractXAccount(path string) string {
-	segments, ok := decodedPathSegments(path)
-	if !ok {
-		return ""
-	}
-
-	account := normalizeXAccount(segments[0])
-	if account == "" || account == "home" || account == "explore" || account == "i" || account == "search" {
-		return ""
-	}
-
-	return account
 }

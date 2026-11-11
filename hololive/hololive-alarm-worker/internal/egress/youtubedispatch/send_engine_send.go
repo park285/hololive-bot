@@ -23,6 +23,7 @@ package youtubedispatch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -44,7 +45,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 ) DispatchResult {
 	result := newDeliveryDispatchResult(len(rows))
 
-	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
+	formattedMessages, formatFailures := d.preFormatMessages(ctx, rowOutboxes(rows, outboxByID))
 
 	frozenGroups, remaining, err := d.frozenDeliveryGroups(ctx, rows, outboxByID)
 	if err != nil {
@@ -59,7 +60,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 	// orphan row 처리
 	for i := range orphanRows {
-		d.recordDeliveryFailure(&result, "outbox row not found", orphanRows[i].ID, orphanRows[i].OutboxID)
+		d.recordDeliveryFailure(&result, orphanRows[i].OutboxID)
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -82,6 +83,20 @@ func (d *SendEngine) dispatchDeliveryRows(
 	}
 
 	return result.DispatchResult
+}
+
+// rowOutboxes는 rows가 가리키는 outbox만 고른다. 호출자의 outboxByID에는 claim했지만 이번에 발송하지 않는 행의 outbox도
+// 있으며, 그 outbox는 렌더하지 않는다.
+func rowOutboxes(rows []domain.YouTubeNotificationDelivery, outboxByID map[int64]domain.YouTubeNotificationOutbox) map[int64]domain.YouTubeNotificationOutbox {
+	out := make(map[int64]domain.YouTubeNotificationOutbox, len(rows))
+
+	for i := range rows {
+		if outbox, ok := outboxByID[rows[i].OutboxID]; ok {
+			out[rows[i].OutboxID] = outbox
+		}
+	}
+
+	return out
 }
 
 func (d *SendEngine) dispatchGroup(
@@ -163,7 +178,7 @@ func (d *SendEngine) dispatchDeliveryRow(
 ) {
 	outbox, ok := outboxByID[row.OutboxID]
 	if !ok {
-		d.recordDeliveryFailure(result, "outbox row not found", row.ID, row.OutboxID)
+		d.recordDeliveryFailure(result, row.OutboxID)
 
 		return
 	}
@@ -194,12 +209,10 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 		return
 	}
 
-	operation, begun := d.beginLifecycleOperation(ctx, attempt.rows, attempt.outboxes, result)
-	if !begun {
+	if !d.beginLifecycleOperation(ctx, attempt, result) {
 		return
 	}
 
-	attempt.operation = operation
 	d.logCommunityShortsDeliveryAttemptStarted(attempt.rows, attempt.outboxes, time.Now().UTC(), "per_room")
 
 	if sendErr := d.sendFrozenDelivery(ctx, attempt); sendErr != nil {
@@ -315,12 +328,10 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 		return
 	}
 
-	operation, begun := d.beginLifecycleOperation(ctx, attempt.rows, attempt.outboxes, result)
-	if !begun {
+	if !d.beginLifecycleOperation(ctx, attempt, result) {
 		return
 	}
 
-	attempt.operation = operation
 	d.logCommunityShortsDeliveryAttemptStarted(attempt.rows, attempt.outboxes, time.Now().UTC(), "grouped")
 
 	if sendErr := d.sendFrozenDelivery(ctx, attempt); sendErr != nil {
@@ -410,6 +421,20 @@ func (d *SendEngine) logGroupedSendFallback(
 		slog.Any("error", sendErr))
 }
 
+// errSendLeaseBudgetExhausted는 남은 lease가 발송 한 번과 정산 여유보다 짧아 provider를 부르지 않은 실패다.
+var errSendLeaseBudgetExhausted = errors.New("send lease budget exhausted")
+
+// checkSendLeaseBudget은 계약의 Send lease budget 규칙이다. 남은 lease가 sendLeaseBudget보다 짧으면 발송 결과를
+// 정산하기 전에 stale sweep이 행을 격리할 수 있으므로 provider를 부르지 않는다.
+func (d *SendEngine) checkSendLeaseBudget(startedAt time.Time) error {
+	remaining := d.config.LockTimeout - time.Since(startedAt)
+	if required := d.config.sendLeaseBudget(); remaining < required {
+		return fmt.Errorf("check send lease budget: remaining %s is below %s: %w", remaining, required, errSendLeaseBudgetExhausted)
+	}
+
+	return nil
+}
+
 func (d *SendEngine) dispatchStartedRowsIndividually(
 	ctx context.Context,
 	attempt *deliveryAttempt,
@@ -460,6 +485,12 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 
 		singleton.operation = rowOperation
 		singleton.request = req
+
+		if budgetErr := d.checkSendLeaseBudget(attempt.sendingStartedAt); budgetErr != nil {
+			d.handlePerRoomSendFailure(ctx, &singleton, budgetErr, result)
+
+			continue
+		}
 
 		if sendErr := d.sendFrozenDelivery(ctx, &singleton); sendErr != nil {
 			d.handlePerRoomSendFailure(ctx, &singleton, sendErr, result)

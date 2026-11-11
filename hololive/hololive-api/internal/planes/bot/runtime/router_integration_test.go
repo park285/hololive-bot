@@ -91,7 +91,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 func TestProvideBotRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil)
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, sharedreadiness.NewProbe("bot"))
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -121,7 +121,7 @@ func TestProvideBotRouter_SkipsScraperShortLinkWarnings(t *testing.T) {
 
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil)
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, sharedreadiness.NewProbe("bot"))
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}

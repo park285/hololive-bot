@@ -76,7 +76,8 @@ func (c *Consumer) reconcileChannelLiveCheck(
 	}}}, nil
 }
 
-// Schema 2/generation 2는 UPCOMING의 검증된 예정·현재 LIVE·명시적 종료도 같은 owner에서 수용한다.
+// reconcileVideoLiveCheck는 요청 영상의 canonical 상태만 잠그고 가용성을 기록한다.
+// UPCOMING의 검증된 예정·현재 LIVE·명시적 종료도 같은 owner에서 수용한다.
 func (c *Consumer) reconcileVideoLiveCheck(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -221,12 +222,11 @@ func videoLifecycleFact(
 	dbNow time.Time,
 	grace time.Duration,
 ) (live.SessionFact, string) {
-	newLifecycle := videoLifecycleGeneration(observation)
-	if reason := videoLifecycleGate(payload, session, newLifecycle); reason != "" {
+	if reason := videoLifecycleGate(payload, session); reason != "" {
 		return live.SessionFact{}, reason
 	}
 
-	if newLifecycle && positiveAtOrAfter(session, observation.EffectiveAt) {
+	if positiveAtOrAfter(session, observation.EffectiveAt) {
 		return live.SessionFact{}, videoLifecycleNewerEndRetained
 	}
 
@@ -248,7 +248,7 @@ func videoLifecycleFact(
 		}, ""
 	}
 
-	if newLifecycle && session.Status == domain.LiveStatusUpcoming && verifiedWaitingState(payload) {
+	if session.Status == domain.LiveStatusUpcoming && verifiedWaitingState(payload) {
 		return live.SessionFact{
 			VideoID: payload.VideoID, ChannelID: session.ChannelID, Status: string(domain.LiveStatusUpcoming),
 			ScheduledAt: payload.ScheduledAt,
@@ -268,7 +268,7 @@ func videoLifecycleFact(
 	// 시작 미관측 terminal 경로는 grace 없이 바로 끝내므로 ended_at 이후의 positive가 grace 안에서
 	// 관측된 동안만 거부한다. provider positive의 EffectiveAt은 수집 예정 시각이라 실제 종료보다
 	// 늦을 수 있어, 신선도 없이 ended_at과 직접 비교하면 검증된 종료를 영구히 거부한다.
-	verifiedTerminal := newLifecycle && session.Clock.LastLivePositiveAt == nil
+	verifiedTerminal := session.Clock.LastLivePositiveAt == nil
 	if verifiedTerminal && live.TerminalEndBlockedByPositive(&session.Clock, endedAt, dbNow, grace) {
 		return live.SessionFact{}, videoLifecycleInvalidEnd
 	}
@@ -282,10 +282,8 @@ func videoLifecycleFact(
 	}, ""
 }
 
-func videoLifecycleGeneration(observation *Observation) bool {
-	return observation.ContractGeneration == contract.VideoLifecycleContractGeneration && observation.SchemaVersion == contract.VideoLifecycleSchemaVersion
-}
-
+// videoLifecycleOrUnresolvableFact는 기존 수명 사실을 먼저 구하고, identity를 확인할 수 없어 건너뛴 확인이
+// 해소 불가 추적 대상이면 해소 불가 사실로 대신한다. 다른 건너뛰기 사유는 그대로 돌려준다.
 func (c *Consumer) videoLifecycleOrUnresolvableFact(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -294,7 +292,7 @@ func (c *Consumer) videoLifecycleOrUnresolvableFact(
 	session *live.SessionState,
 ) (live.SessionFact, string, error) {
 	fact, skipped := videoLifecycleFact(claimed, payload, session, claimed.ReceivedAt, c.liveGrace)
-	if !unresolvableVideoCandidate(claimed, payload, session, skipped) {
+	if !unresolvableVideoCandidate(payload, session, skipped) {
 		return fact, skipped, nil
 	}
 
@@ -306,10 +304,13 @@ func (c *Consumer) videoLifecycleOrUnresolvableFact(
 	return fact, "", nil
 }
 
-// 비공개·삭제 전환 영상은 익명 player에 videoDetails가 없어 다른 UNKNOWN 사유와 달리 identity_missing만 남긴다. 시작을 관측한 LIVE는 identity_missing만 대상이며 종료까지 간다. UPCOMING은 identity_missing과 채널
-// 불일치(identity_mismatch)를 추적해 재확인 주기를 늦추는 근거로만 쓰고 끝내지 않는다.
-func unresolvableVideoCandidate(observation *Observation, payload *contract.VideoLiveCheckV1, session *live.SessionState, skipped string) bool {
-	if !videoLifecycleGeneration(observation) || !live.UnresolvableTrackable(session) {
+// unresolvableVideoCandidate는 identity를 확인할 수 없는 확인을 해소 불가 추적에 들인다. 비공개·삭제 전환 영상은
+// 익명 player에 videoDetails가 없어 다른 UNKNOWN 사유와 달리 identity_missing만 남긴다. 시작을 관측한 LIVE는
+// identity_missing만 대상이며 종료까지 간다. UPCOMING은 identity_missing과 채널 불일치(identity_mismatch)를 추적해
+// 재확인 주기를 늦추는 근거로만 쓰고 끝내지 않는다. 추적을 저장할 수 없는 세션(live.UnresolvableTrackable)과
+// 그 밖의 request_failed 등은 기존 IDENTITY_UNCONFIRMED·IDENTITY_MISMATCH 결정으로 남는다.
+func unresolvableVideoCandidate(payload *contract.VideoLiveCheckV1, session *live.SessionState, skipped string) bool {
+	if !live.UnresolvableTrackable(session) {
 		return false
 	}
 
@@ -371,12 +372,13 @@ func verifiedWaitingState(payload *contract.VideoLiveCheckV1) bool {
 		payload.ScheduledAt != nil && payload.EndedAt == nil && payload.Availability != contract.VideoAvailabilityPublicUnavailable
 }
 
+// videoLifecycleGate는 ENDED 보존, LIVE·UPCOMING 대상, 채널 identity, 수명 사실 신뢰를 확인한다.
 // 가용성만 미상인 경우 외의 UNKNOWN은 reducer를 호출하지 않는다. 저장된 종료도 정산하기 때문이다.
-func videoLifecycleGate(payload *contract.VideoLiveCheckV1, session *live.SessionState, newLifecycle bool) string {
+func videoLifecycleGate(payload *contract.VideoLiveCheckV1, session *live.SessionState) string {
 	switch {
 	case session.Status == domain.LiveStatusEnded:
 		return videoLifecycleKeepEnded
-	case session.Status != domain.LiveStatusLive && (!newLifecycle || session.Status != domain.LiveStatusUpcoming):
+	case session.Status != domain.LiveStatusLive && session.Status != domain.LiveStatusUpcoming:
 		return videoLifecycleSessionNotLive
 	case !payload.IdentityConfirmed:
 		return videoLifecycleIdentityUnverified

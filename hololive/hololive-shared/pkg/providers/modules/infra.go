@@ -68,7 +68,7 @@ func BuildInfraModule(ctx context.Context, options InfraOptions, logger *slog.Lo
 	}()
 
 	postgresService := databaseResources.Service
-	memberRepository := member.NewMemberRepository(postgresService, logger)
+	memberRepository := member.NewMemberRepository(postgresService)
 
 	memberCache, err := member.NewMemberCache(ctx, memberRepository, cacheService, logger, member.CacheConfig{WarmUp: true})
 	if err != nil {

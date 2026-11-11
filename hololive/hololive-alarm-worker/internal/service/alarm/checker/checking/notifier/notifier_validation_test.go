@@ -17,14 +17,14 @@ func TestNewNotifierValidation(t *testing.T) {
 	t.Parallel()
 
 	cache := newCheckerTestCacheClient(t)
-	dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
+	dedupService := dedup.NewService(cache, newCheckerTestLogger())
 	queuePublisher := newCheckerTestPublisher(t, cache, &notifierBatchOutbox{}, queue.PublishConfig{WakeupEnabled: true, MaxDeliveriesPerBatch: 1000})
 
-	_, err := NewNotifier(nil, queuePublisher, nil, newCheckerTestLogger())
+	_, err := NewNotifier(nil, queuePublisher, newCheckerTestLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "dedup service is nil")
 
-	_, err = NewNotifier(dedupService, nil, nil, newCheckerTestLogger())
+	_, err = NewNotifier(dedupService, nil, newCheckerTestLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "queue publisher is nil")
 }
@@ -37,7 +37,7 @@ func TestNotifierReleaseClaimsBestEffort(t *testing.T) {
 			DelManyFunc: func(context.Context, []string) (int64, error) {
 				return 0, errors.New("delmany failed")
 			},
-		}, []int{5, 3, 1}, newCheckerTestLogger()),
+		}, newCheckerTestLogger()),
 		logger: newCheckerTestLogger(),
 	}
 

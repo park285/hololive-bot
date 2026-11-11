@@ -77,29 +77,13 @@ type upcomingOptions struct {
 }
 
 func parseUpcomingOptions(params map[string]any) upcomingOptions {
-	hours := normalizeUpcomingHours(parseUpcomingIntParam(params, "hours", 24))
+	hours := normalizeUpcomingHours(intParam(params, "hours", 24))
 	showAll := boolParam(params, "all")
-	displayLimit := normalizeUpcomingDisplayLimit(parseUpcomingIntParam(params, "limit", 0), showAll)
+	displayLimit := normalizeUpcomingDisplayLimit(intParam(params, "limit", 0), showAll)
 
 	return upcomingOptions{
 		hours:        hours,
 		displayLimit: displayLimit,
-	}
-}
-
-func parseUpcomingIntParam(params map[string]any, key string, defaultValue int) int {
-	raw, ok := params[key]
-	if !ok {
-		return defaultValue
-	}
-
-	switch v := raw.(type) {
-	case int:
-		return v
-	case float64:
-		return int(v)
-	default:
-		return defaultValue
 	}
 }
 

@@ -1,17 +1,12 @@
 package sourceobservation
 
 import (
-	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
@@ -285,34 +280,6 @@ func checkpointBindingForEntry(entry *CheckpointEntry) checkpointBinding {
 		ScheduledFor:       entry.LastScheduledFor.UTC(),
 		Continuity:         entry.Continuity,
 	}
-}
-
-func completeCollectionJob(
-	ctx context.Context,
-	tx dbx.Tx,
-	proof *contract.LeaseProof,
-) error {
-	var jobKey string
-
-	err := tx.QueryRow(
-		ctx,
-		completeCollectionJobSQL,
-		proof.JobKey,
-		proof.OwnerInstance,
-		proof.FenceEpoch,
-		proof.ProjectionGeneration,
-		proof.ScheduledFor,
-	).Scan(&jobKey)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return collection.ErrFenceLost
-	}
-
-	if err != nil {
-		return fmt.Errorf("publish source observation batch: complete collection job: %w", err)
-	}
-
-	return nil
 }
 
 func observationIdentity(observation *contract.Envelope) string {

@@ -70,8 +70,8 @@ func newSubscriberRecoveryChecker(t *testing.T, subscriptionDB dbx.Querier) (*Yo
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(
-		cacheClient, holodexService, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, []int{5, 3, 1}, logger),
-		[]int{5, 3, 1}, 0, nil, subscriptionDB, logger,
+		cacheClient, holodexService, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, logger),
+		0, nil, subscriptionDB, logger,
 	)
 	require.NoError(t, err)
 
@@ -94,10 +94,10 @@ func TestYouTubeCheckerCheck_RecoversEvictedSubscriberSetFromDB(t *testing.T) {
 		require.NoError(t, repo.Add(t.Context(), alarm))
 	}
 
-	// 구독 set이 evict된 상태: registry에는 채널이 있지만 alarm:channel_subscribers:{ch}와 empty marker가 모두 없다.
+	// 구독 set이 evict된 상태: registry에는 채널이 있지만 alarm:channel_subscribers:{ch}가 없다.
 	checker, cacheClient := newSubscriberRecoveryChecker(t, pool)
 
-	notifications, err := checker.Check(t.Context())
+	notifications, err := checker.Check(t.Context(), testTargetPolicy())
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	require.Equal(t, testRoomID1, notifications[0].RoomID)
@@ -108,19 +108,15 @@ func TestYouTubeCheckerCheck_RecoversEvictedSubscriberSetFromDB(t *testing.T) {
 	require.Empty(t, warmed)
 }
 
-func TestYouTubeCheckerCheck_EmptySubscriberMarkerDoesNotHidePendingDBFailure(t *testing.T) {
+func TestYouTubeCheckerCheck_CachedSubscribersDoNotHidePendingDBFailure(t *testing.T) {
 	t.Parallel()
 
 	checker, cacheClient := newSubscriberRecoveryChecker(t, failingSubscriberDB{})
-	require.NoError(t, cacheClient.Set(
-		t.Context(),
-		alarmkeys.BuildChannelSubscriberEmptyKey(recoveryChannelID, domain.AlarmTypeLive),
-		"1",
-		time.Minute,
-	))
+	_, err := cacheClient.SAdd(t.Context(), alarmkeys.BuildChannelSubscriberKey(recoveryChannelID, domain.AlarmTypeLive), []string{testRoomID1})
+	require.NoError(t, err)
 
-	notifications, err := checker.Check(t.Context())
-	// cache의 구독 없음은 durable 미발행 후보가 없다는 증거가 아니다.
+	notifications, err := checker.Check(t.Context(), testTargetPolicy())
+	// cache만으로 구독자를 확정해도 durable 미발행 후보 조회 실패를 숨기지 않는다.
 	require.ErrorIs(t, err, errSubscriberDBUnavailable)
 	require.ErrorContains(t, err, "load pending")
 	require.Empty(t, notifications)
@@ -129,17 +125,12 @@ func TestYouTubeCheckerCheck_EmptySubscriberMarkerDoesNotHidePendingDBFailure(t 
 func TestYouTubeCheckerCheck_SubscriberDBErrorFailsCheck(t *testing.T) {
 	t.Parallel()
 
-	checker, cacheClient := newSubscriberRecoveryChecker(t, failingSubscriberDB{})
+	checker, _ := newSubscriberRecoveryChecker(t, failingSubscriberDB{})
 
-	notifications, err := checker.Check(t.Context())
+	notifications, err := checker.Check(t.Context(), testTargetPolicy())
 	require.ErrorIs(t, err, errSubscriberDBUnavailable)
 	require.ErrorContains(t, err, "load subscriber rooms")
 	require.Nil(t, notifications)
-
-	// DB 오류로 확정하지 못한 채널을 구독 0으로 기록하면 다음 주기까지 알림이 계속 빠진다.
-	knownEmpty, err := cacheClient.Exists(t.Context(), alarmkeys.BuildChannelSubscriberEmptyKey(recoveryChannelID, domain.AlarmTypeLive))
-	require.NoError(t, err)
-	require.False(t, knownEmpty)
 }
 
 func TestYouTubeCheckerIncludesObservationReceivedDuringFailedProviderRequest(t *testing.T) {
@@ -152,7 +143,7 @@ func TestYouTubeCheckerIncludesObservationReceivedDuringFailedProviderRequest(t 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{{
 		VideoID: recoveryStreamID, ChannelID: recoveryChannelID, Status: domain.LiveStatusLive,
 		Title: "fresh during provider request", StartedAt: &startedAt, LiveFirstSeenAt: &startedAt,
-		LastSeenAt: now, StatusObservedAt: new(now.Add(-defaultPersistedLiveSessionRecentWindow - time.Second)),
+		LastSeenAt: now, StatusObservedAt: new(now.Add(-persistedLiveSessionRecentWindow - time.Second)),
 	}})
 
 	logger := newCheckerTestLogger()
@@ -176,12 +167,12 @@ func TestYouTubeCheckerIncludesObservationReceivedDuringFailedProviderRequest(t 
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(
-		cacheClient, holodexService, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, []int{5}, logger),
-		[]int{5}, 0, &PgYouTubeLiveSessionSource{pool: pool}, pool, logger,
+		cacheClient, holodexService, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, logger),
+		0, &PgYouTubeLiveSessionSource{pool: pool}, pool, logger,
 	)
 	require.NoError(t, err)
 
-	notifications, err := checker.Check(ctx)
+	notifications, err := checker.Check(ctx, testTargetPolicy(5))
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	require.Equal(t, recoveryStreamID, notifications[0].Stream.ID)

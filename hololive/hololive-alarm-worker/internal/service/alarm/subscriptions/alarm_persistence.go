@@ -38,14 +38,7 @@ var (
 	}
 )
 
-type alarmUpsertWriter interface {
-	Upsert(ctx context.Context, alarm *domain.Alarm) error
-}
-
-type alarmTypesUpdater interface {
-	UpdateTypes(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) error
-}
-
+// persistAlarm은 구독 추가와 종류 변경을 모두 alarmWriter.Add의 (room_id, channel_id, host_id) upsert로 저장한다.
 func (as *AlarmService) persistAlarm(ctx context.Context, alarm *domain.Alarm) error {
 	if alarm == nil {
 		return nil
@@ -54,67 +47,8 @@ func (as *AlarmService) persistAlarm(ctx context.Context, alarm *domain.Alarm) e
 	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
-	if writer, ok := as.alarmWriter.(alarmUpsertWriter); ok {
-		if err := writer.Upsert(persistCtx, alarm); err != nil {
-			return fmt.Errorf("upsert alarm: %w", err)
-		}
-
-		return nil
-	}
-
 	if err := as.alarmWriter.Add(persistCtx, alarm); err != nil {
 		return fmt.Errorf("persist alarm: %w", err)
-	}
-
-	return nil
-}
-
-func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alarm) error {
-	if alarm == nil {
-		return nil
-	}
-
-	if alarm.HostID != "" {
-		return as.persistAlarm(ctx, alarm)
-	}
-
-	persistCtx, cancel := alarmPersistenceContext(ctx)
-	defer cancel()
-
-	if writer, ok := as.alarmWriter.(alarmTypesUpdater); ok {
-		return persistUpdatedAlarmTypes(persistCtx, writer, alarm)
-	}
-
-	if writer, ok := as.alarmWriter.(alarmUpsertWriter); ok {
-		return persistUpsertedAlarmTypes(persistCtx, writer, alarm)
-	}
-
-	if err := as.alarmWriter.Add(persistCtx, alarm); err != nil {
-		return fmt.Errorf("persist alarm type update: %w", err)
-	}
-
-	return nil
-}
-
-func persistUpdatedAlarmTypes(ctx context.Context, writer alarmTypesUpdater, alarm *domain.Alarm) error {
-	return updateAlarmTypesWithWriter(ctx, writer, alarm)
-}
-
-func persistUpsertedAlarmTypes(ctx context.Context, writer alarmUpsertWriter, alarm *domain.Alarm) error {
-	return upsertAlarmTypeUpdate(ctx, writer, alarm)
-}
-
-func updateAlarmTypesWithWriter(ctx context.Context, writer alarmTypesUpdater, alarm *domain.Alarm) error {
-	if err := writer.UpdateTypes(ctx, alarm.RoomID, alarm.ChannelID, alarm.AlarmTypes); err != nil {
-		return fmt.Errorf("update alarm types: %w", err)
-	}
-
-	return nil
-}
-
-func upsertAlarmTypeUpdate(ctx context.Context, writer alarmUpsertWriter, alarm *domain.Alarm) error {
-	if err := writer.Upsert(ctx, alarm); err != nil {
-		return fmt.Errorf("upsert alarm types: %w", err)
 	}
 
 	return nil

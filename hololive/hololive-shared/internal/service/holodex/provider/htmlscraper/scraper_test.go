@@ -45,14 +45,6 @@ func (testMemberDataProvider) GetChannelIDs(context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
-func (testMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func (testMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {

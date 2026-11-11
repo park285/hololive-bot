@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -64,65 +66,8 @@ func (s *Service) writeNotifiedHashFields(ctx context.Context, key, scheduledStr
 	return nil
 }
 
-func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) (bool, error) {
-	key := keys.NotifiedKey(streamID)
-	scheduledStr := keys.FormatScheduled(startScheduled)
-
-	data, ok, err := s.readNotifiedData(ctx, key)
-	if err != nil {
-		return false, fmt.Errorf("is already notified for schedule: %w", err)
-	}
-
-	if !ok {
-		return false, nil
-	}
-
-	// 스케줄 변경됨 -> 발송 허용
-	if data.StartScheduled != scheduledStr {
-		return false, nil
-	}
-
-	// live catchup: SentAt[0] 확인
-	if minutesUntil == 0 {
-		return data.SentAt[0], nil
-	}
-
-	targetPolicy := s.targetPolicySnapshot()
-	targetMinutes := targetPolicy.Clone()
-
-	if targetPolicy.Contains(minutesUntil) {
-		return targetMinuteAlreadySent(data.SentAt, targetMinutes), nil
-	}
-
-	// non-target: 해당 분만 확인
-	return data.SentAt[minutesUntil], nil
-}
-
-func targetMinuteAlreadySent(sentAt map[int]bool, targetMinutes []int) bool {
-	for _, target := range targetMinutes {
-		if sentAt[target] {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (s *Service) IsAlreadyNotified(ctx context.Context, streamID string) (bool, error) {
-	key := keys.NotifiedKey(streamID)
-
-	data, ok, err := s.readNotifiedData(ctx, key)
-	if err != nil {
-		return false, fmt.Errorf("is already notified: %w", err)
-	}
-
-	if !ok {
-		return false, nil
-	}
-
-	return len(data.SentAt) > 0, nil
-}
-
+// RecentlyNotifiedStreamIDs는 notified hash에 발송한 분이 하나라도 기록된 stream을 HGETALL 묶음 한 번으로 찾는다.
+// 한 stream이라도 조회에 실패하면(구형 string 형상의 WRONGTYPE 포함) 결과 없이 오류를 돌려준다.
 func (s *Service) RecentlyNotifiedStreamIDs(ctx context.Context, streamIDs []string) (map[string]struct{}, error) {
 	result := make(map[string]struct{})
 
@@ -130,13 +75,28 @@ func (s *Service) RecentlyNotifiedStreamIDs(ctx context.Context, streamIDs []str
 		return result, nil
 	}
 
-	for _, streamID := range uniqueNonEmptyStrings(streamIDs) {
-		data, ok, err := s.readNotifiedData(ctx, keys.NotifiedKey(streamID))
+	uniqueStreamIDs := uniqueNonEmptyStrings(streamIDs)
+	if len(uniqueStreamIDs) == 0 {
+		return result, nil
+	}
+
+	cmds := make([]valkey.Completed, 0, len(uniqueStreamIDs))
+	for _, streamID := range uniqueStreamIDs {
+		cmds = append(cmds, s.cache.B().Hgetall().Key(keys.NotifiedKey(streamID)).Build())
+	}
+
+	results := s.cache.DoMulti(ctx, cmds...)
+	if len(results) != len(cmds) {
+		return nil, fmt.Errorf("recently notified stream ids: unexpected result count %d for %d streams", len(results), len(cmds))
+	}
+
+	for i, streamID := range uniqueStreamIDs {
+		fields, err := results[i].AsStrMap()
 		if err != nil {
 			return nil, fmt.Errorf("recently notified stream ids: read %s: %w", streamID, err)
 		}
 
-		if !ok || len(data.SentAt) == 0 {
+		if len(parseNotifiedHash(fields).SentAt) == 0 {
 			continue
 		}
 

@@ -1,6 +1,7 @@
 // Package wakeup은 PostgreSQL outbox commit 뒤 다른 프로세스의 consumer를 깨우는 payload 없는 Valkey 신호다.
 // 신호는 정본이 아니다. 유실·중복·축출돼도 consumer가 poll 주기 안에 PostgreSQL에서 다시 claim하므로 producer는
-// 신호 실패를 적재 실패로 바꾸지 않고(fail-open), consumer는 Valkey 오류 때 poll 주기 대기로 돌아간다.
+// 신호 실패를 적재 실패로 바꾸지 않는다(fail-open). 이 패키지는 신호 key 계약과 producer만 두고, consumer 대기는
+// alarm-worker internal/egress/wakeupwait가 구현한다.
 package wakeup
 
 import (
@@ -23,6 +24,16 @@ type Channel struct {
 	name  string
 	queue string
 	guard string
+}
+
+// Name은 channel을 구분하는 지표 label 값이다.
+func (c Channel) Name() string {
+	return c.name
+}
+
+// Queue는 consumer가 BRPOP으로 기다리는 신호 list key다.
+func (c Channel) Queue() string {
+	return c.queue
 }
 
 var (

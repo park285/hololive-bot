@@ -95,39 +95,6 @@ func (c *Client) removeAlarm(ctx context.Context, body contractsalarm.RemoveRequ
 	return resp.Removed, nil
 }
 
-// GetRoomAlarms는 채널·멤버별 구독을 합쳐 실제 채널 ID를 중복 없이 반환한다.
-func (c *Client) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
-	alarms, err := c.GetRoomAlarmsWithTypes(ctx, roomID)
-	if err != nil {
-		return nil, fmt.Errorf("get room alarms with types: %w", err)
-	}
-
-	ids := make([]string, 0, len(alarms))
-	seen := make(map[string]bool, len(alarms))
-
-	for _, alarm := range alarms {
-		if alarm != nil && !seen[alarm.ChannelID] {
-			seen[alarm.ChannelID] = true
-			ids = append(ids, alarm.ChannelID)
-		}
-	}
-
-	return ids, nil
-}
-
-func (c *Client) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	alarms, err := c.getJSON[[]*domain.Alarm](ctx, contractsalarm.RoomAlarmsPath(roomID))
-	if err != nil {
-		return nil, err
-	}
-
-	if alarms == nil {
-		return []*domain.Alarm{}, nil
-	}
-
-	return alarms, nil
-}
-
 func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
 	entries, err := c.getJSON[[]domain.AlarmListView](ctx, contractsalarm.RoomAlarmsViewPath(roomID))
 	if err != nil {

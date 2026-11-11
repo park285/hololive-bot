@@ -62,13 +62,7 @@ type EventSummarizer struct {
 	logger      *slog.Logger
 }
 
-// SummaryResult의 Text는 원제·공식명·URL을 보존하는 평문이다.
-// 최종 검토와 캐시도 이 계약을 유지하며, Markdown 보호는 소비 formatter가 한 번만 수행한다.
-type SummaryResult struct {
-	Text       string
-	ResultType sharedmodel.SummaryResultType
-}
-
+// SummarizerConsensusConfig는 config loader가 timeout 하한(5초 미만은 기본값)을 보정한 값을 그대로 받는다.
 type SummarizerConsensusConfig struct {
 	Enabled             bool
 	ConfidenceThreshold float64
@@ -88,21 +82,8 @@ func WithSummarizerConsensus(reviewer, adjudicator LLMClient, config SummarizerC
 	return func(s *EventSummarizer) {
 		s.reviewer = reviewer
 		s.adjudicator = adjudicator
-		s.consensus = normalizeConsensusConfig(config)
+		s.consensus = config
 	}
-}
-
-func normalizeConsensusConfig(config SummarizerConsensusConfig) SummarizerConsensusConfig {
-	// ConfidenceThreshold는 config 레이어(clampConfidence)에서 이미 보장됨
-	if config.ReviewTimeout < 5*time.Second {
-		config.ReviewTimeout = 30 * time.Second
-	}
-
-	if config.AdjudicateTimeout < 5*time.Second {
-		config.AdjudicateTimeout = 45 * time.Second
-	}
-
-	return config
 }
 
 // llm이 nil이면 요약이 비활성이고 Summarize()는 빈 문자열과 nil 오류를 반환합니다.
@@ -112,12 +93,12 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.We
 		cache:    cache,
 		searcher: searcher,
 		logger:   logger,
-		consensus: normalizeConsensusConfig(SummarizerConsensusConfig{
+		consensus: SummarizerConsensusConfig{
 			Enabled:             false,
 			ConfidenceThreshold: 0.85,
 			ReviewTimeout:       30 * time.Second,
 			AdjudicateTimeout:   45 * time.Second,
-		}),
+		},
 	}
 
 	for _, opt := range opts {
@@ -129,18 +110,11 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.We
 
 // Summarize는 LLM 요약을 반환한다. LLM 비활성 또는 이벤트 없음은 빈 문자열과 nil 오류다.
 // 활성 LLM의 실패·빈 결과·외부 내용 guard 실패는 오류로 반환한다.
+// 반환 문자열은 원제·공식명·URL을 보존하는 평문이다. 최종 검토와 캐시도 이 계약을 유지하며,
+// Markdown 보호는 소비 formatter가 한 번만 수행한다.
 func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) (string, error) {
-	result, err := s.SummarizeResult(ctx, events, summaryType, periodKey)
-	if err != nil {
-		return "", err
-	}
-
-	return result.Text, nil
-}
-
-func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) (SummaryResult, error) {
 	if s.llm == nil || len(events) == 0 {
-		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}, nil
+		return "", nil
 	}
 
 	cacheKey := s.summaryCacheKey(events, summaryType, periodKey)
@@ -150,12 +124,12 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 
 	searchContext, err := s.runDualSearch(ctx, summaryType, periodKey)
 	if err != nil {
-		return SummaryResult{}, fmt.Errorf("summarize %s major events: external content guard: %w", summaryType, err)
+		return "", fmt.Errorf("summarize %s major events: external content guard: %w", summaryType, err)
 	}
 
 	resp, err := s.buildSummaryResponse(ctx, events, summaryType, periodKey, searchContext)
 	if err != nil {
-		return SummaryResult{}, fmt.Errorf("summarize %s major events: %w", summaryType, err)
+		return "", fmt.Errorf("summarize %s major events: %w", summaryType, err)
 	}
 
 	resp.DiscoveredEvents = filterTrustedDiscoveredEvents(resp.DiscoveredEvents)
@@ -163,17 +137,14 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 
 	result := assembleSummaryText(resp)
 	if result == "" {
-		return SummaryResult{}, fmt.Errorf("summarize %s major events: %w", summaryType, errEmptyMajorEventSummary)
+		return "", fmt.Errorf("summarize %s major events: %w", summaryType, errEmptyMajorEventSummary)
 	}
 
 	result = s.reviewFinalSummaryOutput(ctx, events, summaryType, periodKey, resp, result)
 	s.storeSummaryResult(ctx, cacheKey, result)
 	s.logSummaryResultGenerated(summaryType, events, resp, result)
 
-	return SummaryResult{
-		Text:       result,
-		ResultType: sharedmodel.SummaryResultPrimary,
-	}, nil
+	return result, nil
 }
 
 // 빈 요약은 이벤트 목록 대체 경로로 흘리지 않고 요약 실패로 드러낸다.
@@ -188,22 +159,22 @@ func (s *EventSummarizer) summaryCacheKey(events []domain.MajorEvent, summaryTyp
 	return cacheKey
 }
 
-func (s *EventSummarizer) cachedSummaryResult(ctx context.Context, cacheKey string, summaryType SummaryType, periodKey string) (SummaryResult, bool) {
+func (s *EventSummarizer) cachedSummaryResult(ctx context.Context, cacheKey string, summaryType SummaryType, periodKey string) (string, bool) {
 	if s.cache == nil || cacheKey == "" {
-		return SummaryResult{}, false
+		return "", false
 	}
 
 	var cached string
 
 	if err := s.cache.Get(ctx, cacheKey, &cached); err != nil || cached == "" {
-		return SummaryResult{}, false
+		return "", false
 	}
 
 	s.logger.Info("LLM 요약 캐시 히트",
 		slog.String("type", string(summaryType)),
 		slog.String("period", periodKey))
 
-	return SummaryResult{Text: cached, ResultType: sharedmodel.SummaryResultPrimary}, true
+	return cached, true
 }
 
 func (s *EventSummarizer) applyConsensusReview(

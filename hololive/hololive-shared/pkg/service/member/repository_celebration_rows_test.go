@@ -29,7 +29,6 @@ func scanFullCelebrationRow(dest []any, id int, name, channelID string, aliases 
 }
 
 func TestCollectMembersFromRows_Celebration_ReturnsJoinedRowErrors(t *testing.T) {
-	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			scanFullCelebrationRow(dest, 1, "Suisei", testChannelUC1, []byte("not-json"))
@@ -43,7 +42,7 @@ func TestCollectMembersFromRows_Celebration_ReturnsJoinedRowErrors(t *testing.T)
 		}},
 	}}
 
-	members, err := repository.collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member", scanMemberFullRow)
+	members, err := collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member")
 	if err == nil {
 		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
@@ -58,7 +57,6 @@ func TestCollectMembersFromRows_Celebration_ReturnsJoinedRowErrors(t *testing.T)
 }
 
 func TestCollectMembersFromRows_Celebration_JoinsRowsErr(t *testing.T) {
-	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{
 		err: errors.New("connection reset"),
 		rows: []fakeMemberRow{
@@ -70,7 +68,7 @@ func TestCollectMembersFromRows_Celebration_JoinsRowsErr(t *testing.T) {
 		},
 	}
 
-	members, err := repository.collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member", scanMemberFullRow)
+	members, err := collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member")
 	if err == nil {
 		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}

@@ -28,7 +28,7 @@ func TestMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing.T) {
 	cause := errors.New("member repository unavailable")
 	replies := 0
 	deps := &handlercore.Dependencies{
-		Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: cause}, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: cause}, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			replies++
@@ -55,7 +55,7 @@ func TestAlarmMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing
 			replies := 0
 			deps := &handlercore.Dependencies{
 				Alarm:     &alarmListViewerStub{},
-				Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: cause}, nil, slog.New(slog.DiscardHandler)),
+				Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: cause}, slog.New(slog.DiscardHandler)),
 				Formatter: formatter.NewResponseFormatter("!", nil),
 				SendMessage: func(context.Context, string, string) error {
 					replies++
@@ -97,7 +97,7 @@ func TestGraduationCheckPropagatesMemberLookupFailure(t *testing.T) {
 		err:                        cause,
 	}
 	deps := &handlercore.Dependencies{
-		Matcher:   matcher.NewMatcher(provider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(provider, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			t.Fatal("lookup failure produced a reply")

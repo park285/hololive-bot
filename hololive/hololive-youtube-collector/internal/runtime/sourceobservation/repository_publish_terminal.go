@@ -2,18 +2,18 @@ package sourceobservation
 
 import (
 	"context"
-	"errors"
 	"fmt"
-
-	"github.com/jackc/pgx/v5"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
 const observationCollisionDetail = "observation identity collided with existing evidence"
 
+// completePublishTerminal·deferPublishTerminal의 lease 전이 SQL은 joblease가 소유하며,
+// 발행 검증이 같은 트랜잭션에서 먼저 잡은 lease 행 잠금 아래에서 실행된다.
 func (r *Repository) completePublishTerminal(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -22,7 +22,7 @@ func (r *Repository) completePublishTerminal(
 	hasCollision bool,
 ) error {
 	if !hasCollision {
-		if err := completeCollectionJob(ctx, tx, proof); err != nil {
+		if err := joblease.CompleteLease(ctx, tx, proof); err != nil {
 			return fmt.Errorf("complete collection job: %w", err)
 		}
 
@@ -38,7 +38,7 @@ func (r *Repository) completePublishTerminal(
 		return fmt.Errorf("publish source observation batch: %w", err)
 	}
 
-	if err := completeCollectionJobWithError(ctx, tx, proof, diagnostic); err != nil {
+	if err := joblease.CompleteLeaseWithError(ctx, tx, proof, diagnostic); err != nil {
 		return fmt.Errorf("complete collection job with error: %w", err)
 	}
 
@@ -53,86 +53,10 @@ func (r *Repository) deferPublishTerminal(deferInput collection.DeferCollectionI
 			return r.completePublishTerminal(ctx, tx, proof, result, hasCollision)
 		}
 
-		return deferCollectionJob(ctx, tx, proof, deferInput)
+		if err := joblease.DeferLease(ctx, tx, proof, deferInput); err != nil {
+			return fmt.Errorf("defer collection job: %w", err)
+		}
+
+		return nil
 	}
-}
-
-func completeCollectionJobWithError(
-	ctx context.Context,
-	tx dbx.Tx,
-	proof *contract.LeaseProof,
-	diagnostic contract.FailureDiagnostic,
-) error {
-	if err := diagnostic.ValidateFor(contract.TerminalCompleteError); err != nil {
-		return fmt.Errorf("publish source observation batch: %w", err)
-	}
-
-	var jobKey string
-
-	err := tx.QueryRow(
-		ctx,
-		completeCollectionJobWithErrorSQL,
-		proof.JobKey,
-		proof.OwnerInstance,
-		proof.FenceEpoch,
-		proof.ProjectionGeneration,
-		proof.ScheduledFor,
-		string(diagnostic.Code()),
-		string(diagnostic.Class()),
-		diagnostic.Detail(),
-	).Scan(&jobKey)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return collection.ErrFenceLost
-	}
-
-	if err != nil {
-		return fmt.Errorf("publish source observation batch: complete collection job: %w", err)
-	}
-
-	return nil
-}
-
-func deferCollectionJob(
-	ctx context.Context,
-	tx dbx.Tx,
-	proof *contract.LeaseProof,
-	deferInput collection.DeferCollectionInput,
-) error {
-	if err := deferInput.Validate(); err != nil {
-		return fmt.Errorf("publish source observation batch: %w", err)
-	}
-
-	diagnostic := deferInput.Diagnostic()
-	schedule := deferInput.Schedule()
-	bounds := deferInput.Bounds()
-
-	var jobKey string
-
-	err := tx.QueryRow(
-		ctx,
-		deferCollectionJobSQL,
-		proof.JobKey,
-		proof.OwnerInstance,
-		proof.FenceEpoch,
-		proof.ProjectionGeneration,
-		proof.ScheduledFor,
-		string(diagnostic.Code()),
-		string(diagnostic.Class()),
-		diagnostic.Detail(),
-		schedule.At(),
-		bounds.Minimum.Milliseconds(),
-		bounds.Maximum.Milliseconds(),
-		schedule.IsNotBefore(),
-	).Scan(&jobKey)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return collection.ErrFenceLost
-	}
-
-	if err != nil {
-		return fmt.Errorf("publish source observation batch: defer collection job: %w", err)
-	}
-
-	return nil
 }

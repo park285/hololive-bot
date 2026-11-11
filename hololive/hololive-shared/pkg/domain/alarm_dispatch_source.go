@@ -20,12 +20,6 @@ const (
 	maxDeliveryDigestMessageBytes   = 64 * 1024
 )
 
-var canonicalDispatchValidators = map[AlarmDispatchSourceKind]func(*AlarmQueueEnvelope) error{
-	AlarmDispatchSourceKindCelebration:    (*AlarmQueueEnvelope).validateCelebrationDispatch,
-	AlarmDispatchSourceKindDeliveryDigest: (*AlarmQueueEnvelope).validateDeliveryDigestDispatch,
-	AlarmDispatchSourceKindXSpace:         (*AlarmQueueEnvelope).validateXSpaceDispatch,
-}
-
 type DeliveryDigestDispatchPayload struct {
 	Kind               DeliveryOutboxKind `json:"kind"`
 	PeriodKey          string             `json:"period_key"`
@@ -90,103 +84,4 @@ func (p *DeliveryDigestDispatchPayload) ContentIdentity() string {
 	messageHash := sha256.Sum256([]byte(message))
 
 	return identity + ":message_sha256:" + hex.EncodeToString(messageHash[:])
-}
-
-func (e *AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
-	if e == nil {
-		return errors.New("canonical alarm dispatch: envelope is nil")
-	}
-
-	if e.SourceKind == "" {
-		if err := e.validateLiveDispatch(); err != nil {
-			return fmt.Errorf("validate live dispatch: %w", err)
-		}
-
-		return nil
-	}
-
-	validate, ok := canonicalDispatchValidators[e.SourceKind]
-	if !ok {
-		return fmt.Errorf("canonical alarm dispatch: unsupported source kind %q", e.SourceKind)
-	}
-
-	if err := validate(e); err != nil {
-		return fmt.Errorf("validate: %w", err)
-	}
-
-	return nil
-}
-
-func (e *AlarmQueueEnvelope) validateLiveDispatch() error {
-	if err := validateLiveDispatchAlarmType(e.Notification.AlarmType); err != nil {
-		return fmt.Errorf("validate live dispatch alarm type: %w", err)
-	}
-
-	return nil
-}
-
-func (e *AlarmQueueEnvelope) validateCelebrationDispatch() error {
-	if e.Notification.RoomID == "" {
-		return errors.New("canonical alarm dispatch: celebration room id is empty")
-	}
-
-	at := e.Notification.AlarmType
-	if at != AlarmTypeBirthday && at != AlarmTypeAnniversary {
-		return fmt.Errorf("canonical alarm dispatch: celebration alarm type %q is not birthday or anniversary", at)
-	}
-
-	if e.Celebration == nil {
-		return errors.New("canonical alarm dispatch: celebration payload is nil")
-	}
-
-	if e.Celebration.MemberID <= 0 {
-		return fmt.Errorf("canonical alarm dispatch: celebration member id must be positive, got %d", e.Celebration.MemberID)
-	}
-
-	if e.Celebration.Date == "" {
-		return errors.New("canonical alarm dispatch: celebration date is empty")
-	}
-
-	if e.Celebration.Kind == CelebrationKindBirthdayStream && strings.TrimSpace(e.Celebration.VideoID) == "" {
-		return errors.New("canonical alarm dispatch: celebration birthday stream video id is empty")
-	}
-
-	return nil
-}
-
-func (e *AlarmQueueEnvelope) validateDeliveryDigestDispatch() error {
-	if err := validateCanonicalNotification(&e.Notification); err != nil {
-		return fmt.Errorf("validate canonical notification: %w", err)
-	}
-
-	if e.Notification.AlarmType != AlarmTypeCommunity {
-		return fmt.Errorf("canonical alarm dispatch: delivery digest storage alarm type %q is not community", e.Notification.AlarmType)
-	}
-
-	if e.DeliveryDigest == nil {
-		return errors.New("canonical alarm dispatch: delivery digest payload is nil")
-	}
-
-	if err := e.DeliveryDigest.Validate(); err != nil {
-		return fmt.Errorf("canonical alarm dispatch: %w", err)
-	}
-
-	return nil
-}
-
-func validateCanonicalNotification(notification *AlarmNotification) error {
-	if notification == nil {
-		return errors.New("canonical alarm dispatch: notification is nil")
-	}
-
-	switch {
-	case notification.RoomID == "":
-		return errors.New("canonical alarm dispatch: room id is empty")
-	case notification.AlarmType == "":
-		return errors.New("canonical alarm dispatch: alarm type is empty")
-	case !notification.AlarmType.IsValid():
-		return fmt.Errorf("canonical alarm dispatch: alarm type %q is invalid", notification.AlarmType)
-	default:
-		return nil
-	}
 }

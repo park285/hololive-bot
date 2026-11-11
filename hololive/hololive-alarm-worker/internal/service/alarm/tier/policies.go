@@ -22,27 +22,15 @@ package tier
 
 import "time"
 
-// ComputeNextCheckAt은 now(평가 시각) 기준 다음 점검 시각을 정한다. 가장 가까운 예정 시작(nearestStart)이 nil이면 예정 없음 로직을 적용한다.
-func ComputeNextCheckAt(now time.Time, nearestStart, lastNotifiedAt *time.Time) time.Time {
+// ComputeNextCheckAt은 now(평가 시각) 기준 다음 점검 시각을 정한다. 가장 가까운 예정 시작(nearestStart)이 nil이면 예정 없음 주기를 쓴다.
+func ComputeNextCheckAt(now time.Time, nearestStart *time.Time) time.Time {
 	if nearestStart == nil {
-		return nextCheckAtWithoutUpcoming(now, lastNotifiedAt)
+		return now.Add(noUpcomingInterval)
 	}
 
 	timeToStart := nearestStart.Sub(now)
 
 	return nextCheckAtForTimeToStart(now, timeToStart)
-}
-
-func nextCheckAtWithoutUpcoming(now time.Time, lastNotifiedAt *time.Time) time.Time {
-	if isRecentlyNotified(now, lastNotifiedAt) {
-		return now.Add(min(tier2Interval, noUpcomingInterval))
-	}
-
-	return now.Add(noUpcomingInterval)
-}
-
-func isRecentlyNotified(now time.Time, lastNotifiedAt *time.Time) bool {
-	return lastNotifiedAt != nil && now.Sub(*lastNotifiedAt) <= recentlyNotifiedWindow
 }
 
 func nextCheckAtForTimeToStart(now time.Time, timeToStart time.Duration) time.Time {

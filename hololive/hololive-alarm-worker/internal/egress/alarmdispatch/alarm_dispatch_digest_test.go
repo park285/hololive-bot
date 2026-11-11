@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -19,7 +20,7 @@ func TestAlarmDispatchRunnerSendsPreRenderedDeliveryDigest(t *testing.T) {
 		PreRenderedMessage: "주간 멤버 뉴스",
 	}
 
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
@@ -52,7 +53,7 @@ func TestDeliveryDigestGroupingAndRenderingUsesContentIdentity(t *testing.T) {
 		PreRenderedMessage: "주간 멤버 뉴스 B",
 	}
 
-	groups := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{first, second})
+	groups := groupAlarmDispatchEnvelopesForDelivery(withAlarmDispatchTestSendUnitIdentity([]dispatchoutbox.AlarmQueueEnvelope{first, second}))
 	require.Len(t, groups, 2)
 
 	renderer, messageStrings := newAlarmDispatchTestRendering(t)

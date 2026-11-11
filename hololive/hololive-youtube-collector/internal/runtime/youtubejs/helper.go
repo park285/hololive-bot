@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -148,20 +147,7 @@ func (h *Helper) ExitError() error {
 	return h.waitErr
 }
 
-func (h *Helper) ForcedKillCount() int {
-	if h == nil {
-		return 0
-	}
-
-	return int(h.forcedKills.Load())
-}
-
 func (h *Helper) spawn(cfg *Config) error {
-	timeoutMS := cfg.RequestTimeout.Milliseconds()
-	if timeoutMS <= 0 {
-		timeoutMS = defaultHelperTimeout.Milliseconds()
-	}
-
 	args := make([]string, 0, 9+len(cfg.extraArgs))
 
 	args = append(args,
@@ -170,7 +156,7 @@ func (h *Helper) spawn(cfg *Config) error {
 		cfg.ScriptPath,
 		"--socket", h.socketPath,
 		"--protocol-version", strconv.Itoa(int(ProtocolVersion)),
-		"--request-read-timeout-ms", strconv.FormatInt(timeoutMS, 10),
+		"--request-read-timeout-ms", strconv.FormatInt(cfg.RequestTimeout.Milliseconds(), 10),
 	)
 	args = append(args, cfg.extraArgs...)
 
@@ -200,10 +186,8 @@ func (h *Helper) spawn(cfg *Config) error {
 func (h *Helper) attachRPC(cfg *Config) *RPC {
 	//nolint:revive // unix 소켓 전송이라 URL 호스트는 무시되며, https로 바꾸면 helper가 제공하지 않는 TLS 핸드셰이크를 시도하게 된다.
 	rpc := NewRPC(unixClient(h.socketPath, cfg.RequestTimeout), "http://youtubejs", cfg.Limiter)
-	if cfg.ResponseBodyLimit > 0 {
-		rpc.bodyLimit = cfg.ResponseBodyLimit
-	}
 
+	rpc.bodyLimit = cfg.ResponseBodyLimit
 	h.rpc = rpc
 	h.health = unixClient(h.socketPath, cfg.HealthTimeout)
 	h.endpoint = rpc.endpoint
@@ -340,10 +324,6 @@ func finalizeRuntimeDir(dir string) error {
 }
 
 func unixClient(socketPath string, timeout time.Duration) *http.Client {
-	if timeout <= 0 {
-		timeout = defaultHelperTimeout
-	}
-
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
@@ -374,8 +354,4 @@ func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Co
 	}
 
 	return context.WithTimeout(ctx, timeout)
-}
-
-func isFinished(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "process already finished")
 }

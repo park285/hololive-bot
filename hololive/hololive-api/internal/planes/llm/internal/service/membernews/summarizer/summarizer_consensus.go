@@ -31,6 +31,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
@@ -42,19 +43,19 @@ var (
 )
 
 type ConsensusSummarizer struct {
-	primary     model.Summarizer
+	primary     newsmodel.Summarizer
 	reviewer    LLMClient
 	adjudicator LLMClient // nil이면 stage 3 스킵
-	validator   model.SourceURLValidator
+	validator   newsmodel.SourceURLValidator
 	config      consensus.Config
 	logger      *slog.Logger
 }
 
 func NewConsensusSummarizer(
-	primary model.Summarizer,
+	primary newsmodel.Summarizer,
 	reviewer LLMClient,
 	adjudicator LLMClient,
-	validator model.SourceURLValidator,
+	validator newsmodel.SourceURLValidator,
 	config consensus.Config,
 	logger *slog.Logger,
 ) *ConsensusSummarizer {
@@ -72,7 +73,7 @@ func NewConsensusSummarizer(
 	}
 }
 
-func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.SummarizeInput) (*model.Digest, error) {
+func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *newsmodel.SummarizeInput) (*model.Digest, error) {
 	if input == nil {
 		return nil, errors.New("consensus summarizer input is nil")
 	}
@@ -84,12 +85,7 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 		return nil, fmt.Errorf("consensus primary: %w", err)
 	}
 
-	if primaryDigest == nil || len(primaryDigest.TopItems) == 0 {
-		c.logger.Info("Consensus stage 1: primary returned empty, skipping review")
-
-		return primaryDigest, nil
-	}
-
+	// reviewer nil → consensus 비활성 상태로 primary 직접 반환
 	if c.reviewer == nil {
 		return primaryDigest, nil
 	}
@@ -125,7 +121,7 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 // 반환값이 nil이면 primary를 사용한다.
 func (c *ConsensusSummarizer) runReview(
 	ctx context.Context,
-	input *model.SummarizeInput,
+	input *newsmodel.SummarizeInput,
 	primaryDigest *model.Digest,
 ) *consensus.ReviewVerdict {
 	reviewStart := time.Now()
@@ -173,7 +169,7 @@ func (c *ConsensusSummarizer) runReview(
 
 // 반환값이 nil이면 primary를 사용한다.
 func (c *ConsensusSummarizer) runAdjudication(
-	ctx context.Context, input *model.SummarizeInput,
+	ctx context.Context, input *newsmodel.SummarizeInput,
 	primaryDigest *model.Digest, verdict *consensus.ReviewVerdict,
 	pipelineStart time.Time,
 ) *model.Digest {
@@ -241,7 +237,7 @@ func adjudicationTriggerReason(verdict *consensus.ReviewVerdict) string {
 
 func (c *ConsensusSummarizer) review(
 	ctx context.Context,
-	input *model.SummarizeInput,
+	input *newsmodel.SummarizeInput,
 	digest *model.Digest,
 ) (*consensus.ReviewVerdict, error) {
 	userPrompt, err := buildReviewUserPrompt(input, digest)
@@ -281,7 +277,7 @@ func (c *ConsensusSummarizer) review(
 
 func (c *ConsensusSummarizer) adjudicate(
 	ctx context.Context,
-	input *model.SummarizeInput,
+	input *newsmodel.SummarizeInput,
 	digest *model.Digest,
 	verdict *consensus.ReviewVerdict,
 ) (*summaryResponse, error) {
