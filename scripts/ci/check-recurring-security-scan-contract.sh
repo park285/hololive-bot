@@ -23,13 +23,11 @@ cmp -s "$tmp_dir/manifest-images" "$tmp_dir/final-images" ||
   fail "final image manifest does not cover the exact current production Quadlet image corpus"
 
 if awk -F'|' '
-  NF != 3 || $1 == "" || $2 != "linux/arm64" || $3 == "" { exit 1 }
-  $3 ~ /@sha256:/ && $1 != "remote" { exit 1 }
-  $3 !~ /@sha256:/ && $1 != "local" { exit 1 }
+  NF != 3 || $1 != "local" || $2 != "linux/arm64" || $3 == "" { exit 1 }
 ' scripts/ci/final-image-scan-manifest.txt; then
   :
 else
-  fail "final image manifest must scan arm64 local builds locally and exact arm64 external images remotely"
+  fail "final image manifest must list only arm64 local builds"
 fi
 
 # 최종 이미지 스캔 정책은 발견 시 실패하고 어떤 억제도 두지 않는다.

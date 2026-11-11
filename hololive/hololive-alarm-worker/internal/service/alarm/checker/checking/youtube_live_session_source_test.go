@@ -23,7 +23,7 @@ func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.
 	liveStart := now.Add(-30 * time.Minute)
 	liveFirstSeen := now.Add(-10 * time.Minute)
 	upcomingStart := now.Add(4 * time.Minute)
-	oldSeen := now.Add(-(defaultPersistedLiveSessionRecentWindow + time.Second))
+	oldSeen := now.Add(-(persistedLiveSessionRecentWindow + time.Second))
 	recentSeen := now.Add(-time.Minute)
 	isPremiere := true
 	isNotPremiere := false
@@ -213,7 +213,7 @@ func TestPgYouTubeLiveSessionSourceLoadConfirmedPremiereIDsIncludesStaleUpcoming
 	pool := dbtest.NewPool(t)
 	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	upcomingStart := now.Add(4 * time.Minute)
-	oldSeen := now.Add(-(defaultPersistedLiveSessionRecentWindow + time.Second))
+	oldSeen := now.Add(-(persistedLiveSessionRecentWindow + time.Second))
 	recentSeen := now.Add(-time.Minute)
 	isPremiere := true
 	isNotPremiere := false
@@ -486,9 +486,9 @@ func seedObservedFreshnessSessions(t *testing.T, pool liveSessionPool, now time.
 		valid bool
 	}{
 		{name: "fresh", clock: new(now.Add(-time.Minute)), valid: true},
-		{name: "boundary", clock: new(now.Add(-defaultPersistedLiveSessionRecentWindow)), valid: true},
+		{name: "boundary", clock: new(now.Add(-persistedLiveSessionRecentWindow)), valid: true},
 		{name: "now", clock: new(now), valid: true},
-		{name: "stale", clock: new(now.Add(-defaultPersistedLiveSessionRecentWindow - time.Microsecond))},
+		{name: "stale", clock: new(now.Add(-persistedLiveSessionRecentWindow - time.Microsecond))},
 		{name: "future", clock: new(now.Add(time.Microsecond))},
 		{name: "unknown"},
 	}

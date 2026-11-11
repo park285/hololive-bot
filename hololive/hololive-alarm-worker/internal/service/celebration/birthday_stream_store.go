@@ -9,13 +9,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type birthdayStreamSessionStore interface {
 	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, observedSince, observedUntil time.Time) ([]BirthdayStreamSession, error)
-	ListPublishedBirthdayStreamEvents(ctx context.Context, keyPrefix string) (map[string]domain.AlarmQueueEnvelope, error)
-	FindPublishedCelebrationEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
+	ListPublishedBirthdayStreamEvents(ctx context.Context, keyPrefix string) (map[string]dispatchoutbox.AlarmQueueEnvelope, error)
+	FindPublishedCelebrationEvents(ctx context.Context, eventKeys []string) (map[string]dispatchoutbox.AlarmQueueEnvelope, error)
 	FindSentRoomsByEventKeys(ctx context.Context, eventKeys []string) (map[string][]string, error)
 }
 
@@ -73,7 +74,7 @@ var birthdayStreamLikeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `
 func (s *PgxStore) ListPublishedBirthdayStreamEvents(
 	ctx context.Context,
 	keyPrefix string,
-) (map[string]domain.AlarmQueueEnvelope, error) {
+) (map[string]dispatchoutbox.AlarmQueueEnvelope, error) {
 	pattern := birthdayStreamLikeEscaper.Replace(keyPrefix) + "%"
 
 	events, err := s.findPublishedCelebrationEvents(ctx, listPublishedBirthdayStreamEventsSQL, pattern, validatePublishedBirthdayStreamEvent)
@@ -87,9 +88,9 @@ func (s *PgxStore) ListPublishedBirthdayStreamEvents(
 func (s *PgxStore) FindPublishedCelebrationEvents(
 	ctx context.Context,
 	eventKeys []string,
-) (map[string]domain.AlarmQueueEnvelope, error) {
+) (map[string]dispatchoutbox.AlarmQueueEnvelope, error) {
 	if len(eventKeys) == 0 {
-		return map[string]domain.AlarmQueueEnvelope{}, nil
+		return map[string]dispatchoutbox.AlarmQueueEnvelope{}, nil
 	}
 
 	events, err := s.findPublishedCelebrationEvents(ctx, findPublishedCelebrationEventsSQL, eventKeys, validatePublishedCelebrationEvent)
@@ -104,9 +105,9 @@ func (s *PgxStore) findPublishedCelebrationEvents(
 	ctx context.Context,
 	query string,
 	queryArg any,
-	validate func(string, *domain.AlarmQueueEnvelope) error,
-) (map[string]domain.AlarmQueueEnvelope, error) {
-	events := make(map[string]domain.AlarmQueueEnvelope)
+	validate func(string, *dispatchoutbox.AlarmQueueEnvelope) error,
+) (map[string]dispatchoutbox.AlarmQueueEnvelope, error) {
+	events := make(map[string]dispatchoutbox.AlarmQueueEnvelope)
 
 	rows, err := s.db.Query(ctx, query, queryArg)
 	if err != nil {
@@ -129,7 +130,7 @@ func (s *PgxStore) findPublishedCelebrationEvents(
 			return nil, fmt.Errorf("birthday stream runner: event %q has unsupported payload schema version %d", eventKey, payloadSchemaVersion)
 		}
 
-		var envelope domain.AlarmQueueEnvelope
+		var envelope dispatchoutbox.AlarmQueueEnvelope
 
 		if err := jsonv2.Unmarshal(payload, &envelope); err != nil {
 			return nil, fmt.Errorf("birthday stream runner: decode published event %q: %w", eventKey, err)
@@ -149,7 +150,7 @@ func (s *PgxStore) findPublishedCelebrationEvents(
 	return events, nil
 }
 
-func validatePublishedCelebrationEvent(eventKey string, envelope *domain.AlarmQueueEnvelope) error {
+func validatePublishedCelebrationEvent(eventKey string, envelope *dispatchoutbox.AlarmQueueEnvelope) error {
 	if envelope.SourceKind != domain.AlarmDispatchSourceKindCelebration || envelope.Celebration == nil {
 		return fmt.Errorf("celebration runner: event %q is not a celebration", eventKey)
 	}
@@ -162,7 +163,7 @@ func validatePublishedCelebrationEvent(eventKey string, envelope *domain.AlarmQu
 	return nil
 }
 
-func validatePublishedBirthdayStreamEvent(eventKey string, envelope *domain.AlarmQueueEnvelope) error {
+func validatePublishedBirthdayStreamEvent(eventKey string, envelope *dispatchoutbox.AlarmQueueEnvelope) error {
 	if envelope.SourceKind != domain.AlarmDispatchSourceKindCelebration {
 		return fmt.Errorf("birthday stream runner: event %q has source kind %q", eventKey, envelope.SourceKind)
 	}

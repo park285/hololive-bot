@@ -4,27 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-func (r *PgxRepository) findByDedupeKey(ctx context.Context, dedupeKey string) (*Record, error) {
-	key := strings.TrimSpace(dedupeKey)
-	if key == "" {
-		return nil, errors.New("find dispatch delivery by dedupe key: dedupe key is empty")
-	}
-
-	row := r.pool.QueryRow(ctx, findByDedupeKeySQL, []string{key}, key)
-
-	record, err := scanDeliveryRecord(row)
-	if err != nil {
-		return nil, fmt.Errorf("find dispatch delivery by dedupe key: %w", err)
-	}
-
-	return record, nil
-}
 
 // ClaimDue는 ready 멤버가 하나라도 있는 send unit을 골라 그 unit의 대기(pending·retry) 멤버 전원을 함께 lease한다.
 // 멤버마다 따로 계산된 next_attempt_at이 어긋나도 발송 fence가 요구하는 전체 membership을 한 번에 넘긴다.

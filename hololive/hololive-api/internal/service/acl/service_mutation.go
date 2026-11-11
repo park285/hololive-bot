@@ -150,7 +150,8 @@ func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string
 
 // RemoveRoom은 호출자가 본 모드(expectedMode)의 목록에서 방을 제거한다. 저장 행은 migration 349 이후 모두 chatID이므로
 // AddRoom과 같은 형식을 요구한다. 현재 모드가 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다.
-// 없으면 PG에 쓰지 않고 false를 돌려준다.
+// 과거 경합으로 메모리와 PG가 어긋난 방도 철회되도록 메모리 상태와 무관하게 대상 행을 삭제하고 메모리에서도 지운다.
+// 메모리에 없고 삭제된 행도 없으면 false를 돌려준다.
 func (s *Service) RemoveRoom(ctx context.Context, expectedMode ACLMode, room string) (bool, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -160,43 +161,32 @@ func (s *Service) RemoveRoom(ctx context.Context, expectedMode ACLMode, room str
 		return false, err
 	}
 
-	s.mu.Lock()
+	s.mu.RLock()
 
 	mode := s.mode
-	if mode != expectedMode {
-		s.mu.Unlock()
+	s.mu.RUnlock()
 
+	if mode != expectedMode {
 		return false, ErrACLModeChanged
 	}
 
-	targetRooms := s.roomsMapForMode(mode)
 	listType := string(mode)
 
-	_, exists := targetRooms[room]
-	s.mu.Unlock()
-
-	// 과거 경합으로 메모리에서만 사라진 방도 PG의 권한을 철회할 수 있어야 한다.
-	if !exists {
-		rooms, err := s.loadRoomsFromDatabase(ctx)
-		if err != nil {
-			return false, fmt.Errorf("check persisted ACL room: %w", err)
-		}
-
-		exists = slices.ContainsFunc(rooms, func(stored Room) bool {
-			return stored.RoomID == room && stored.ListType == listType
-		})
-		if !exists {
-			return false, nil
-		}
-	}
-
-	if err := s.store.DeleteRoom(ctx, room, listType); err != nil {
+	deleted, err := s.store.DeleteRoom(ctx, room, listType)
+	if err != nil {
 		return false, fmt.Errorf("remove room from database: %w", err)
 	}
 
 	s.mu.Lock()
-	delete(s.roomsMapForMode(mode), room)
+
+	targetRooms := s.roomsMapForMode(mode)
+	_, inMemory := targetRooms[room]
+	delete(targetRooms, room)
 	s.mu.Unlock()
+
+	if !inMemory && !deleted {
+		return false, nil
+	}
 
 	s.logger.Info("Room removed from ACL list",
 		slog.String("room", room),

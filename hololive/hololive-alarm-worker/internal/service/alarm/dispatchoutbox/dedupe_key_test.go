@@ -77,12 +77,12 @@ func TestEventKeyIgnoresRoomAndDeliveryDedupeIncludesRoom(t *testing.T) {
 		t.Fatalf("BuildEventKey differs by room: %q != %q", got, want)
 	}
 
-	if got, want := BuildDedupeKey(&room1), BuildDedupeKey(&room2); got == want {
-		t.Fatalf("BuildDedupeKey should include room, got same key %q", got)
+	if got, want := buildDedupeKey(room1.RoomID, BuildEventKey(&room1)), buildDedupeKey(room2.RoomID, BuildEventKey(&room2)); got == want {
+		t.Fatalf("buildDedupeKey should include room, got same key %q", got)
 	}
 }
 
-func TestBuildDedupeKeyUsesCanonicalLivePrefix(t *testing.T) {
+func TestDedupeKeyUsesCanonicalLivePrefix(t *testing.T) {
 	input := DedupeInput{
 		RoomID:       testRoomID,
 		ChannelID:    testChannelID,
@@ -92,13 +92,13 @@ func TestBuildDedupeKeyUsesCanonicalLivePrefix(t *testing.T) {
 		Category:     testClaimEventCategory,
 	}
 
-	got := BuildDedupeKey(&input)
+	got := buildDedupeKey(input.RoomID, BuildEventKey(&input))
 	if !strings.Contains(got, ":live:") {
-		t.Fatalf("BuildDedupeKey = %q, want canonical live event segment", got)
+		t.Fatalf("buildDedupeKey = %q, want canonical live event segment", got)
 	}
 
 	if strings.Contains(got, "legacy-live") || strings.Contains(got, "legacy-schedule") {
-		t.Fatalf("BuildDedupeKey = %q, must not produce legacy event prefix", got)
+		t.Fatalf("buildDedupeKey = %q, must not produce legacy event prefix", got)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestLiveCatchupEventKeySeparatesPreliveAndIgnoresScheduleDrift(t *testing.T
 	driftedScheduled := initialScheduled.Add(time.Minute)
 	actualStart := time.Date(2026, time.August, 16, 15, 31, 45, 0, time.UTC)
 
-	prelive := domain.AlarmQueueEnvelope{
+	prelive := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       testRoomID,
@@ -170,7 +170,7 @@ func TestLiveCatchupEventKeySeparatesPreliveAndIgnoresScheduleDrift(t *testing.T
 }
 
 func TestMarshalEventPayloadOmitsRoomSpecificFields(t *testing.T) {
-	payload, err := marshalEventPayload(&domain.AlarmQueueEnvelope{
+	payload, err := marshalEventPayload(&AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       testRoomID,
@@ -200,7 +200,7 @@ func TestBuildLedgerRowsEventKeyIgnoresRoomSpecificClaimKeys(t *testing.T) {
 	stream := &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start}
 	channel := &domain.Channel{ID: testChannelID}
 
-	firstEnvelope := domain.AlarmQueueEnvelope{
+	firstEnvelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       testRoomID,
@@ -218,7 +218,7 @@ func TestBuildLedgerRowsEventKeyIgnoresRoomSpecificClaimKeys(t *testing.T) {
 		t.Fatalf("buildLedgerRows room1 error = %v", err)
 	}
 
-	secondEnvelope := domain.AlarmQueueEnvelope{
+	secondEnvelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       testOtherRoomID,
@@ -250,7 +250,7 @@ func TestBuildLedgerRowsEventPayloadHashIgnoresEnqueuedAt(t *testing.T) {
 	stream := &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start}
 	channel := &domain.Channel{ID: testChannelID}
 
-	base := domain.AlarmQueueEnvelope{
+	base := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       testRoomID,

@@ -12,14 +12,9 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
-type HTTPDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 type ProviderHTTPClient struct {
 	client    *http.Client
 	transport *http.Transport
-	doer      HTTPDoer
 	owned     bool
 	closeOnce sync.Once
 }
@@ -57,20 +52,17 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 	}, nil
 }
 
-func WrapProviderHTTPDoer(doer HTTPDoer) (*ProviderHTTPClient, error) {
-	if doer == nil {
-		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider HTTP doer is nil")
+// WrapProviderHTTPDoer는 주입한 client를 복제해 redirect 거부 정책만 씌웁니다. 주입한 client의 연결은 닫지 않습니다.
+func WrapProviderHTTPDoer(client *http.Client) (*ProviderHTTPClient, error) {
+	if client == nil {
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider HTTP client is nil")
 	}
 
-	if client, ok := doer.(*http.Client); ok {
-		cloned := *client
+	cloned := *client
 
-		cloned.CheckRedirect = rejectRedirect
+	cloned.CheckRedirect = rejectRedirect
 
-		return &ProviderHTTPClient{client: &cloned, owned: false}, nil
-	}
-
-	return &ProviderHTTPClient{doer: doer, owned: false}, nil
+	return &ProviderHTTPClient{client: &cloned, owned: false}, nil
 }
 
 func rejectRedirect(_ *http.Request, _ []*http.Request) error {
@@ -84,15 +76,6 @@ func (c *ProviderHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	if req == nil {
 		return nil, collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, "provider HTTP request is nil")
-	}
-
-	if c.doer != nil {
-		out, err := c.doer.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("do: %w", err)
-		}
-
-		return out, nil
 	}
 
 	if c.client == nil {

@@ -23,14 +23,17 @@ package checking
 import (
 	"context"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
+// Runner와 Sender는 한 반복에서 같은 targetPolicy snapshot을 받아야 한다. 알림 선정과 dedup claim category가 서로 다른
+// 정책으로 계산되면 같은 방송의 target 알림이 "target"과 분 번호 category로 나뉘어 두 번 선점될 수 있다.
 type Runner interface {
-	Check(ctx context.Context) ([]*domain.AlarmNotification, error)
+	Check(ctx context.Context, targetPolicy targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error)
 }
 
 type Sender interface {
-	Send(ctx context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error)
+	Send(ctx context.Context, notifications []*domain.AlarmNotification, targetPolicy targetpolicy.TargetMinutePolicy) (delivery.SendResult, error)
 }

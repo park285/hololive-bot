@@ -2,9 +2,9 @@
 import { createInnertube, fetchCommunityFeed } from "./fetch-community.mjs";
 import { fetchContentFeed } from "./fetch-content.mjs";
 import { fetchChannelFeed } from "./fetch-channel.mjs";
+import { FetchTransportError } from "./fetch-transport.mjs";
 import { createLiveCheckInnertube, fetchChannelLiveCheck, fetchVideoLiveCheck } from "./live-check.mjs";
 import { ProofController } from "./proof-controller.mjs";
-import { ProofError } from "./proof-broker.mjs";
 import { ScheduleLookupCache } from "./schedule-cache.mjs";
 
 /** @typedef {import("./contracts.d.ts").FetcherSet} FetcherSet */
@@ -34,42 +34,33 @@ export function createRealFetchers(options = {}) {
   const scheduleCache = new ScheduleLookupCache();
 
   async function innertubeClient() {
-    if (innertubePromise == null) {
-      innertubePromise = initInnertube({ fetchImpl }).catch((err) => {
-        innertubePromise = undefined;
-        throw err;
-      });
-    }
+    innertubePromise ??= initInnertube({ fetchImpl });
     return innertubePromise;
   }
 
   // 라이브 확인은 기존 수집 Innertube의 재시도 transport를 공유하지 않고, 단일 시도 transport에 묶인 별도 인스턴스를 씁니다.
   async function liveCheckInnertubeClient() {
-    if (liveCheckInnertubePromise == null) {
-      liveCheckInnertubePromise = initLiveCheckInnertube({ fetchImpl: singleAttemptFetchImpl }).then((client) => {
-        const userAgent = client.session.user_agent;
-        if (typeof userAgent !== "string" || userAgent !== client.session.context.client.userAgent) {
-          throw new ProofError("proof_ua_mismatch");
-        }
-        if (typeof singleAttemptFetchImpl !== "function") throw new ProofError("proof_configuration");
-        proof = new ProofController({ fetchImpl: singleAttemptFetchImpl, userAgent });
-        return client;
-      }).catch((err) => {
-        liveCheckInnertubePromise = undefined;
-        throw err;
-      });
-    }
+    liveCheckInnertubePromise ??= initLiveCheckInnertube({ fetchImpl: singleAttemptFetchImpl }).then((client) => {
+      const userAgent = client.session.user_agent;
+      if (typeof userAgent !== "string" || userAgent !== client.session.context.client.userAgent) {
+        throw new FetchTransportError(
+          "helper_internal_invariant",
+          "INTERNAL",
+          "live check session user agent does not match its client context",
+        );
+      }
+      // 단일 시도 transport 부재는 createLiveCheckInnertube와 ProofController 생성자가 각각 거부합니다.
+      proof = new ProofController({ fetchImpl: /** @type {InnertubeFetch} */ (singleAttemptFetchImpl), userAgent });
+      return client;
+    });
     return liveCheckInnertubePromise;
   }
 
   return {
     async fetchCommunity(fetchOptions) {
-      const innertube = await innertubeClient();
-      const youtubejs = await import("youtubei.js");
       return fetchCommunityFeed({
         ...fetchOptions,
-        innertube,
-        postType: youtubejs.YTNodes.BackstagePost,
+        innertube: await innertubeClient(),
       });
     },
     async fetchContent(fetchOptions) {
@@ -91,8 +82,12 @@ export function createRealFetchers(options = {}) {
     async fetchVideoLiveCheck(fetchOptions) {
       return fetchVideoLiveCheck(await liveCheckInnertubeClient(), fetchOptions.videoId, Date.now, proof);
     },
-    // 공유 수집 Innertube는 bootstrap에서 요청 context 밖에 만듭니다. 첫 RPC의 취소·제한 시간에 묶이지 않습니다.
-    async prepare() { await innertubeClient(); },
+    // 수집·라이브 확인 Innertube와 PO 발급 controller는 bootstrap에서 요청 context 밖에 만듭니다. 첫 RPC의 취소·제한 시간에
+    // 묶이지 않고, 생성 실패는 READY 전에 helper를 FAULTED로 끝내므로 실패한 생성을 RPC에서 다시 시도하지 않습니다.
+    async prepare() {
+      await innertubeClient();
+      await liveCheckInnertubeClient();
+    },
     proofStatus() { return proof?.status(); },
     async close() { await proof?.close(); },
   };

@@ -34,15 +34,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Valkey 키 접두사(alarmservice alarm_types.go 별칭과 1:1 대응).
+// alarm worker의 Valkey key 이름과 접두사다.
 const (
 	AlarmChannelRegistryKey           = "alarm:channel_registry"
 	AlarmSubscriberCacheEmptyKey      = "alarm:subscriber_cache_empty"
 	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
 	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
 	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
-	ChannelSubscribersEmptyKeyPrefix  = "alarm:channel_subscribers_empty:"
-	MemberNameKey                     = "alarm:member_names"
 
 	NotifiedKeyPrefix                  = "notified:"
 	NotifyClaimKeyPrefix               = "notified:claim:"
@@ -65,10 +63,6 @@ func BuildChannelSubscriberKey(channelID string, alarmType domain.AlarmType) str
 	default:
 		return ChannelSubscribersKeyPrefix + channelID
 	}
-}
-
-func BuildChannelSubscriberEmptyKey(channelID string, alarmType domain.AlarmType) string {
-	return ChannelSubscribersEmptyKeyPrefix + string(alarmType) + ":" + channelID
 }
 
 func NotifiedKey(streamID string) string {

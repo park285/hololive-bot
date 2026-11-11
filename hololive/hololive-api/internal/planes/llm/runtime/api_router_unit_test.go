@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -68,6 +69,12 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 	assert.Equal(t, "pong", strings.TrimSpace(rr.Body.String()))
 }
 
+func TestBuildLLMSchedulerRouter_RejectsNilReadyProbe(t *testing.T) {
+	router, err := buildLLMSchedulerRouter(t.Context(), newDiscardLogger(), "test-key", nil)
+	require.Error(t, err)
+	assert.Nil(t, router)
+}
+
 func TestBuildLLMSchedulerRouter_Endpoints(t *testing.T) {
 	prevMode := gin.Mode()
 
@@ -75,7 +82,7 @@ func TestBuildLLMSchedulerRouter_Endpoints(t *testing.T) {
 		gin.SetMode(prevMode)
 	})
 
-	router, err := buildLLMSchedulerRouter(t.Context(), newDiscardLogger(), "test-key", nil)
+	router, err := buildLLMSchedulerRouter(t.Context(), newDiscardLogger(), "test-key", sharedreadiness.NewProbe("llm"))
 	require.NoError(t, err)
 	require.NotNil(t, router)
 

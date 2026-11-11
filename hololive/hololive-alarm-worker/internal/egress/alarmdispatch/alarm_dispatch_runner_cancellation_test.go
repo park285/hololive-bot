@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type alarmDispatchCancellationConsumer struct {
@@ -30,7 +29,7 @@ type alarmDispatchCancellationConsumer struct {
 	requeueDeadline bool
 }
 
-func (c *alarmDispatchCancellationConsumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *alarmDispatchCancellationConsumer) MarkSending(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.markCtxErr = ctx.Err()
 	if err := c.Consumer.MarkSending(ctx, envelopes); err != nil {
 		return fmt.Errorf("mark sending: %w", err)
@@ -45,7 +44,7 @@ func (c *alarmDispatchCancellationConsumer) MarkSending(ctx context.Context, env
 	return nil
 }
 
-func (c *alarmDispatchCancellationConsumer) RequeuePreSend(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *alarmDispatchCancellationConsumer) RequeuePreSend(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.requeueCtxErr = ctx.Err()
 	_, c.requeueDeadline = ctx.Deadline()
 
@@ -81,8 +80,8 @@ func (*alarmDispatchCancellationIrisClient) SendRichText(context.Context, string
 }
 
 func alarmDispatchCancellationRequest(attempt int) (alarmDispatchGroup, *dispatchoutbox.SendRequest) {
-	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{
-		alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: attempt}),
+	envelopes := withAlarmDispatchTestSendUnitIdentity([]dispatchoutbox.AlarmQueueEnvelope{
+		alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &dispatchoutbox.AlarmQueueRetryMetadata{Attempt: attempt}),
 	})
 	group := alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: envelopes}
 	request := &dispatchoutbox.SendRequest{Body: "body", RoomID: testAlarmRoomID, Route: dispatchoutbox.SendRouteText, ClientRequestID: envelopes[0].ClientRequestID}
@@ -248,7 +247,7 @@ func TestAlarmDispatchLaterSerialGroupCannotSendAfterLeaseExpiry(t *testing.T) {
 	repo := newOutboxRepository(t, pool)
 
 	for _, room := range []string{testAlarmRoomID, "late-room"} {
-		_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(room, nil)}})
+		_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(room, nil)}})
 		require.NoError(t, err)
 	}
 
@@ -349,7 +348,7 @@ func alarmDispatchCancellationPersistedRequest(t *testing.T, pool *pgxpool.Pool)
 	t.Helper()
 
 	repo := newOutboxRepository(t, pool)
-	_, err := repo.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}})
+	_, err := repo.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{Envelopes: []dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}})
 	require.NoError(t, err)
 
 	_, err = pool.Exec(t.Context(), "UPDATE alarm_dispatch_deliveries SET attempt_count=2")

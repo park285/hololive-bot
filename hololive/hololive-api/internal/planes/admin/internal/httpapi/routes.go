@@ -57,7 +57,7 @@ func registerRoomRoutes(holoAPI *gin.RouterGroup, handler *api.RoomHandler) {
 	holoAPI.POST("/rooms/acl", handler.SetACL)
 }
 
-func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsAPIHandler) {
+func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsHandler) {
 	holoAPI.GET("/settings", handler.GetSettings)
 	holoAPI.POST("/settings", handler.UpdateSettings)
 	holoAPI.GET("/x-spaces/session", handler.GetXSpaceSession)

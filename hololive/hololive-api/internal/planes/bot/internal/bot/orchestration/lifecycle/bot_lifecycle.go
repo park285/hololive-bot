@@ -25,9 +25,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+)
+
+const (
+	irisReadyTimeout       = 10 * time.Minute
+	irisReadyRetryInterval = 2 * time.Second
+	irisReadyPingTimeout   = 3 * time.Second
 )
 
 type BotLifecycle struct {
@@ -35,29 +41,19 @@ type BotLifecycle struct {
 	cache       CacheReadiness
 	irisClient  IrisPinger
 	irisBaseURL string
-	stopCh      chan struct{}
-	doneCh      chan struct{}
-	doneOnce    sync.Once
 }
 
-func NewBotLifecycle(
-	logger *slog.Logger,
-	cacheClient CacheReadiness,
-	irisClient IrisPinger,
-	irisBaseURL string,
-	stopCh chan struct{},
-	doneCh chan struct{},
-) *BotLifecycle {
+func NewBotLifecycle(logger *slog.Logger, cacheClient CacheReadiness, irisClient IrisPinger, irisBaseURL string) *BotLifecycle {
 	return &BotLifecycle{
 		logger:      logger,
 		cache:       cacheClient,
 		irisClient:  irisClient,
 		irisBaseURL: irisBaseURL,
-		stopCh:      stopCh,
-		doneCh:      doneCh,
 	}
 }
 
+// Start는 Valkey 미구성·준비 실패만 기동 오류로 돌려주고, 그 뒤에는 ctx가 끝날 때까지 돌아오지 않는다. Iris 준비
+// 확인 실패는 기동을 막지 않는다. 그동안 기록된 응답의 발송 재시도는 reply outbox가 맡는다.
 func (l *BotLifecycle) Start(ctx context.Context) error {
 	l.logInfo("Starting Hololive KakaoTalk Bot...")
 
@@ -71,14 +67,9 @@ func (l *BotLifecycle) Start(ctx context.Context) error {
 
 	l.logInfo("Valkey connected")
 
-	if err := l.WaitUntilIrisReady(
-		ctx,
-		constants.IrisConnection.ReadyTimeout,
-		constants.IrisConnection.RetryInterval,
-		constants.IrisConnection.PingTimeout,
-	); err != nil {
+	if err := l.WaitUntilIrisReady(ctx, irisReadyTimeout, irisReadyRetryInterval, irisReadyPingTimeout); err != nil {
 		l.logWarn(
-			"Iris server not ready at startup; continuing in degraded mode",
+			"Iris server not ready at startup; continuing, reply outbox retries delivery",
 			slog.String("base_url", l.irisBaseURL),
 			slog.Any("error", err),
 		)
@@ -88,34 +79,17 @@ func (l *BotLifecycle) Start(ctx context.Context) error {
 
 	l.logInfo("Bot started successfully")
 
-	select {
-	case <-ctx.Done():
-		l.logInfo("Context canceled, shutting down...")
+	<-ctx.Done()
+	l.logInfo("Context canceled, shutting down...")
 
-		return fmt.Errorf("start bot: context canceled: %w", ctx.Err())
-	case <-l.stopCh:
-		l.logInfo("Stop signal received")
-
-		return nil
-	}
+	return fmt.Errorf("start bot: context canceled: %w", ctx.Err())
 }
 
 func (l *BotLifecycle) Shutdown(_ context.Context) error {
 	l.logInfo("Shutting down bot...")
-
-	l.closeDoneCh()
-
 	l.logInfo("Bot shutdown complete")
 
 	return nil
-}
-
-func (l *BotLifecycle) closeDoneCh() {
-	l.doneOnce.Do(func() {
-		if l.doneCh != nil {
-			close(l.doneCh)
-		}
-	})
 }
 
 func (l *BotLifecycle) logInfo(msg string, attrs ...slog.Attr) {

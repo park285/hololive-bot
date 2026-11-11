@@ -35,7 +35,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -43,6 +42,7 @@ import (
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/wakeupwait"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -158,7 +158,7 @@ func NewDispatcher(repository deliveryRepository, sender delivery.PreparedMessag
 	}
 
 	// wakeup cache를 받기 전에는 poll_interval_ms 주기로만 조회한다.
-	idle, err := wakeup.NewWaiter(nil, wakeup.NotificationDelivery, cfg.PollInterval, logger)
+	idle, err := wakeupwait.NewDelivery(nil, wakeup.NotificationDelivery, cfg.PollInterval, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
 	}
@@ -168,7 +168,7 @@ func NewDispatcher(repository deliveryRepository, sender delivery.PreparedMessag
 
 // 신호를 놓쳐도 poll_interval_ms 안에 다시 조회한다.
 func (d *Dispatcher) SetWakeupCache(c cache.LowLevelCache) error {
-	idle, err := wakeup.NewWaiter(c, wakeup.NotificationDelivery, d.config.PollInterval, d.logger)
+	idle, err := wakeupwait.NewDelivery(c, wakeup.NotificationDelivery, d.config.PollInterval, d.logger)
 	if err != nil {
 		return fmt.Errorf("set delivery wakeup cache: %w", err)
 	}
@@ -342,7 +342,7 @@ func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationD
 
 	irisRequestID, err := d.sendPrepared(attemptCtx, item, request)
 
-	outcome = deliveryProviderOutcome(err)
+	outcome = sendoutcome.AttemptOutcome(err, sendoutcome.AttemptRules{})
 
 	return irisRequestID, err
 }
@@ -358,7 +358,7 @@ func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDe
 		return
 	}
 
-	if sendoutcome.Classify(err) == sendoutcome.Failed && iris.IsPreHandoffClientRequestIDConflict(err) {
+	if sendoutcome.Reissuable(err) {
 		d.reissueRequest(finalCtx, item, request, err)
 
 		return
@@ -384,19 +384,8 @@ func (d *Dispatcher) markItemQuarantined(ctx context.Context, item *domain.Notif
 	}
 }
 
-func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return workercontract.AttemptTimeout
-	}
-
-	if errors.Is(err, context.Canceled) {
-		return workercontract.AttemptCanceled
-	}
-
-	return workercontract.AttemptFailed
-}
-
-// 미스가 난 행은 현재 소유자·회수 경로의 것이므로 발송하지 않는다.
+// markItemSending은 발송 전 claim을 SENDING으로 옮기고 외부 발송을 시작해도 되는지 보고한다. 미스가 난 행은 현재
+// 소유자·회수 경로의 것이므로 발송하지 않는다.
 func (d *Dispatcher) markItemSending(ctx context.Context, item *domain.NotificationDeliveryOutbox) bool {
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer cancel()
@@ -480,24 +469,4 @@ func notificationDeliveryClientRequestID(item *domain.NotificationDeliveryOutbox
 	sum := sha256.Sum256([]byte(kind + "\x00" + contentID + "\x00" + roomID))
 
 	return "hololive-delivery:" + hex.EncodeToString(sum[:16])
-}
-
-func deliveryProviderOutcome(err error) workercontract.AttemptOutcome {
-	if err == nil {
-		return workercontract.AttemptSuccess
-	}
-
-	outcome := deliveryAttemptFailure(err)
-	if outcome != workercontract.AttemptFailed {
-		return outcome
-	}
-
-	switch sendoutcome.Classify(err) {
-	case sendoutcome.OutcomeUnknown, sendoutcome.TransportAmbiguous:
-		return workercontract.AttemptOutcomeUnknown
-	case sendoutcome.Success, sendoutcome.Failed:
-		return outcome
-	}
-
-	return outcome
 }

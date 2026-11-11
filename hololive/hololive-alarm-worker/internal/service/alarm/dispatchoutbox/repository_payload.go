@@ -3,9 +3,7 @@ package dispatchoutbox
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,12 +12,11 @@ import (
 )
 
 type eventPayloadEnvelope struct {
-	Notification   eventPayloadNotification              `json:"notification"`
-	SourceKind     domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	Celebration    *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
-	DeliveryDigest *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
-	XSpace         *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
-	Version        uint8                                 `json:"version"`
+	Notification eventPayloadNotification           `json:"notification"`
+	SourceKind   domain.AlarmDispatchSourceKind     `json:"source_kind,omitempty"`
+	Celebration  *domain.CelebrationDispatchPayload `json:"celebration,omitempty"`
+	XSpace       *domain.XSpaceDispatchPayload      `json:"x_space,omitempty"`
+	Version      uint8                              `json:"version"`
 }
 
 type eventPayloadNotification struct {
@@ -31,7 +28,7 @@ type eventPayloadNotification struct {
 	ScheduleChangePreviousStart string           `json:"schedule_change_previous_start,omitempty"`
 }
 
-func buildLedgerRows(envelope *domain.AlarmQueueEnvelope) (eventInsert, deliveryInsert, error) {
+func buildLedgerRows(envelope *AlarmQueueEnvelope) (eventInsert, deliveryInsert, error) {
 	if err := envelope.ValidateCanonicalDispatch(); err != nil {
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch ledger rows: validate envelope: %w", err)
 	}
@@ -47,10 +44,6 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope) (eventInsert, delivery
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("marshal event payload: %w", err)
 	}
 
-	if validateErr := validateEventPayloadRoomAgnostic(payload); validateErr != nil {
-		return eventInsert{}, deliveryInsert{}, fmt.Errorf("validate event payload room agnostic: %w", validateErr)
-	}
-
 	hash := sha256.Sum256(payload)
 
 	deliveryContext, err := jsonv2.Marshal(deliveryContext{Users: envelope.Notification.Users})
@@ -64,7 +57,7 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope) (eventInsert, delivery
 }
 
 func assembleLedgerRows(
-	envelope *domain.AlarmQueueEnvelope,
+	envelope *AlarmQueueEnvelope,
 	input *DedupeInput,
 	alarmType domain.AlarmType,
 	eventKey, dedupeKey string,
@@ -109,7 +102,7 @@ func eventCategory(input *DedupeInput) string {
 	return strconv.Itoa(input.MinutesUntil)
 }
 
-func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
+func marshalEventPayload(envelope *AlarmQueueEnvelope) ([]byte, error) {
 	payload := eventPayloadEnvelope{
 		Notification: eventPayloadNotification{
 			AlarmType:                   envelope.Notification.AlarmType,
@@ -119,11 +112,10 @@ func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
 			ScheduleChangeMessage:       envelope.Notification.ScheduleChangeMessage,
 			ScheduleChangePreviousStart: envelope.Notification.ScheduleChangePreviousStart,
 		},
-		SourceKind:     envelope.SourceKind,
-		Celebration:    envelope.Celebration,
-		DeliveryDigest: envelope.DeliveryDigest,
-		XSpace:         envelope.XSpace,
-		Version:        envelope.Version,
+		SourceKind:  envelope.SourceKind,
+		Celebration: envelope.Celebration,
+		XSpace:      envelope.XSpace,
+		Version:     envelope.Version,
 	}
 
 	raw, err := jsonv2.Marshal(payload, jsonv2.Deterministic(true))
@@ -146,43 +138,4 @@ func canonicalEventStream(stream *domain.Stream) *domain.Stream {
 	canonical.ViewerCount = nil
 
 	return &canonical
-}
-
-func validateEventPayloadRoomAgnostic(raw []byte) error {
-	var payload struct {
-		RoomID       jsontext.Value `json:"room_id"`
-		RoomIDCamel  jsontext.Value `json:"roomId"`
-		Room         jsontext.Value `json:"room"`
-		Users        jsontext.Value `json:"users"`
-		Notification struct {
-			RoomID      jsontext.Value `json:"room_id"`
-			RoomIDCamel jsontext.Value `json:"roomId"`
-			Room        jsontext.Value `json:"room"`
-			Users       jsontext.Value `json:"users"`
-		} `json:"notification"`
-	}
-
-	if err := jsonv2.Unmarshal(raw, &payload); err != nil {
-		return fmt.Errorf("validate dispatch event payload: %w", err)
-	}
-
-	if hasDeliverySpecificFields(payload.RoomID, payload.RoomIDCamel, payload.Room, payload.Users) {
-		return errors.New("validate dispatch event payload: delivery-specific top-level field")
-	}
-
-	if hasDeliverySpecificFields(payload.Notification.RoomID, payload.Notification.RoomIDCamel, payload.Notification.Room, payload.Notification.Users) {
-		return errors.New("validate dispatch event payload: delivery-specific notification field")
-	}
-
-	return nil
-}
-
-func hasDeliverySpecificFields(fields ...jsontext.Value) bool {
-	for _, field := range fields {
-		if field != nil {
-			return true
-		}
-	}
-
-	return false
 }

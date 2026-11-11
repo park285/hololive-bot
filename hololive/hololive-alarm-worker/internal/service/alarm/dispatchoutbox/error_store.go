@@ -109,7 +109,7 @@ func classifyInfraErrorCode(cause error) string {
 		return ErrorCodeNetwork
 	}
 
-	// v4의 ErrNotSent(egress 거부·dial 전 resolve 실패)는 ErrTransport가 아니므로 함께 network로 분류한다.
+	// ErrNotSent(egress 거부·dial 전 resolve 실패)는 ErrTransport가 아니므로 함께 network로 분류한다.
 	if errors.Is(cause, iris.ErrTransport) || errors.Is(cause, iris.ErrNotSent) {
 		return ErrorCodeNetwork
 	}

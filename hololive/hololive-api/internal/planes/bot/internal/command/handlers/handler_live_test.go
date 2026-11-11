@@ -56,7 +56,7 @@ func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *handlercore
 	deps = &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		LiveQuery:     &liveQueryStub{result: livequery.Result{Status: livequery.Complete}},
-		Matcher:       matcher.NewMatcher(newContextAwareMemberProvider(members), nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(newContextAwareMemberProvider(members), slog.New(slog.DiscardHandler)),
 		Formatter:     newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			textSent = msg
@@ -104,7 +104,7 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		LiveQuery:     &liveQueryStub{result: livequery.Result{Status: livequery.Complete}},
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			return nil

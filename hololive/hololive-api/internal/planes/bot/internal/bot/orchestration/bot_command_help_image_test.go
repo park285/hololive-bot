@@ -1,14 +1,10 @@
 package orchestration
 
-import (
-	"testing"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-)
+import "testing"
 
 func TestCommandInitViewWiresHelpImageProvider(t *testing.T) {
-	view := (&Bot{}).commandInitView()
-	deps := view.toCommandDependencies(handlers.NewRegistry())
+	view := (&Bot{}).commandInitView(&Dependencies{}, nil)
+	deps := view.toCommandDependencies()
 
 	if deps.HelpImageProvider == nil {
 		t.Fatal("help image provider must be initialized")

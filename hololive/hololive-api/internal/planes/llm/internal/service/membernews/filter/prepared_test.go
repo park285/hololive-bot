@@ -12,12 +12,13 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // 최적화 이전의 eager 정규화 결과를 독립적으로 계산하여 값과 stable 순서를 비교한다.
-func eagerFilterCandidates(ctx context.Context, candidates []model.Candidate, period model.Period, now time.Time, roomMembers []string, membersData domain.MemberDataProvider, validator model.SourceURLValidator) ([]model.FilteredCandidate, error) {
+func eagerFilterCandidates(ctx context.Context, candidates []newsmodel.Candidate, period model.Period, now time.Time, roomMembers []string, membersData domain.MemberDataProvider, validator newsmodel.SourceURLValidator) ([]newsmodel.FilteredCandidate, error) {
 	dated := applyPeriodFilter(candidates, period, now)
 
 	profiles, err := buildMemberProfiles(ctx, roomMembers, membersData)
@@ -25,7 +26,7 @@ func eagerFilterCandidates(ctx context.Context, candidates []model.Candidate, pe
 		return nil, err
 	}
 
-	result := make([]model.FilteredCandidate, 0, len(dated))
+	result := make([]newsmodel.FilteredCandidate, 0, len(dated))
 
 	for i := range dated {
 		item := &dated[i]
@@ -49,7 +50,7 @@ func eagerFilterCandidates(ctx context.Context, candidates []model.Candidate, pe
 			continue
 		}
 
-		result = append(result, model.FilteredCandidate{
+		result = append(result, newsmodel.FilteredCandidate{
 			Candidate: item.candidate, EffectiveDate: item.date, MatchedMembers: matched,
 			MemberText: formatMemberText(matched), Category: classifyCategory(&item.candidate),
 			SourceTier: tier, SourceURL: sourceURL,
@@ -61,10 +62,10 @@ func eagerFilterCandidates(ctx context.Context, candidates []model.Candidate, pe
 	return result, nil
 }
 
-func performanceFilterFixture(count, descriptionRepeats int, now time.Time) []model.Candidate {
-	cs := make([]model.Candidate, count)
+func performanceFilterFixture(count, descriptionRepeats int, now time.Time) []newsmodel.Candidate {
+	cs := make([]newsmodel.Candidate, count)
 	for i := range cs {
-		cs[i] = model.Candidate{
+		cs[i] = newsmodel.Candidate{
 			ID:          i + 1,
 			Type:        domain.MajorEventTypeNews,
 			Title:       fmt.Sprintf("미코 행사 %04d", i),
@@ -87,7 +88,7 @@ func TestPreparedCandidatesPreserveFullValuesAndOrder(t *testing.T) {
 	urls := []string{"https://hololivepro.com/a", "https://prtimes.jp/b", "https://example.com/c", "", " ::invalid:: ", " https://hololivepro.com/trim "}
 	memberSets := [][]string{{"미코"}, {"Sakura_Miko"}, {"아쿠아"}, nil, {"", "미코", "미코"}}
 	dates := []*time.Time{nil, new(now), new(now.AddDate(0, 0, -9)), new(now.AddDate(0, 0, 23)), new(time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC))}
-	cs := make([]model.Candidate, 0, 150)
+	cs := make([]newsmodel.Candidate, 0, 150)
 
 	for i := range 150 {
 		typ := domain.MajorEventTypeNews
@@ -96,11 +97,11 @@ func TestPreparedCandidatesPreserveFullValuesAndOrder(t *testing.T) {
 			typ = domain.MajorEventTypeEvent
 		}
 
-		cs = append(cs, model.Candidate{ID: i + 1, Type: typ, Title: titles[i%len(titles)], Description: bodies[(i/3)%len(bodies)], Members: memberSets[(i/2)%len(memberSets)], PubDate: dates[i%len(dates)], EventStartDate: dates[(i/7)%len(dates)], SourceURL: urls[(i/5)%len(urls)]})
+		cs = append(cs, newsmodel.Candidate{ID: i + 1, Type: typ, Title: titles[i%len(titles)], Description: bodies[(i/3)%len(bodies)], Members: memberSets[(i/2)%len(memberSets)], PubDate: dates[i%len(dates)], EventStartDate: dates[(i/7)%len(dates)], SourceURL: urls[(i/5)%len(urls)]})
 	}
 
 	// 같은 날짜·분류·제목이며 출처가 다른 후보도 원래 입력 순서를 보존합니다.
-	cs = append(cs, model.Candidate{ID: 1001, Type: domain.MajorEventTypeNews, Title: "미코 동률 행사", PubDate: new(now), SourceURL: "https://hololivepro.com/tie-z"}, model.Candidate{ID: 1002, Type: domain.MajorEventTypeNews, Title: "미코 동률 행사", PubDate: new(now), SourceURL: "https://hololivepro.com/tie-a"})
+	cs = append(cs, newsmodel.Candidate{ID: 1001, Type: domain.MajorEventTypeNews, Title: "미코 동률 행사", PubDate: new(now), SourceURL: "https://hololivepro.com/tie-z"}, newsmodel.Candidate{ID: 1002, Type: domain.MajorEventTypeNews, Title: "미코 동률 행사", PubDate: new(now), SourceURL: "https://hololivepro.com/tie-a"})
 
 	cases := 0
 
@@ -109,7 +110,7 @@ func TestPreparedCandidatesPreserveFullValuesAndOrder(t *testing.T) {
 
 		for _, members := range [][]string{{"미코"}, {"사쿠라 미코", "아쿠아"}, {"미코", "사쿠라미코", "미코"}, {"未知", " "}, nil} {
 			for _, data := range []domain.MemberDataProvider{nil, provider} {
-				for _, validator := range []model.SourceURLValidator{nil, &testSourceValidator{}} {
+				for _, validator := range []newsmodel.SourceURLValidator{nil, &testSourceValidator{}} {
 					want, wantErr := eagerFilterCandidates(t.Context(), cs, period, now, members, data, validator)
 					got, gotErr := prepared.Filter(t.Context(), members, data, validator)
 
@@ -172,7 +173,7 @@ func TestPreparedCandidatesOwnInputAndRoomOutput(t *testing.T) {
 	wg.Wait()
 }
 
-func benchmarkMetadataBatch(b *testing.B, candidates []model.Candidate, now time.Time, variant string) {
+func benchmarkMetadataBatch(b *testing.B, candidates []newsmodel.Candidate, now time.Time, variant string) {
 	b.Helper()
 
 	var prepared *PreparedCandidates
@@ -181,7 +182,7 @@ func benchmarkMetadataBatch(b *testing.B, candidates []model.Candidate, now time
 		prepared = PrepareCandidates(candidates, model.PeriodWeekly, now)
 	}
 
-	run := func() ([]model.FilteredCandidate, error) {
+	run := func() ([]newsmodel.FilteredCandidate, error) {
 		switch variant {
 		case "prepared":
 			return prepared.Filter(b.Context(), []string{"미코"}, nil, nil)

@@ -80,11 +80,9 @@ func shortsListPayload(channelID string, items []youtubejs.ContentItem, maxResul
 	videos := make([]contract.VideoListItemV1, 0, len(items))
 	for i := range items {
 		videos = append(videos, contract.VideoListItemV1{
-			VideoID:      items[i].VideoID,
-			ChannelID:    channelID,
-			Title:        items[i].Title,
-			PublishedAt:  items[i].PublishedAt,
-			ScheduledFor: items[i].ScheduledFor,
+			VideoID:   items[i].VideoID,
+			ChannelID: channelID,
+			Title:     items[i].Title,
 		})
 	}
 

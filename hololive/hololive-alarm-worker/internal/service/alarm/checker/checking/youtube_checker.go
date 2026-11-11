@@ -67,8 +67,6 @@ type YouTubeChecker struct {
 	upcomingCandidates  dispatchoutbox.UpcomingCandidateStore
 	unstagedMu          sync.Mutex
 	unstagedUpcoming    map[string]*unstagedYouTubeCandidates
-	targetPolicy        targetpolicy.TargetMinutePolicy
-	targetMinutesMu     sync.RWMutex
 	evaluationWindowCap time.Duration
 	logger              *slog.Logger
 }
@@ -80,7 +78,6 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	holodexService *holodexprovider.Service,
 	tierScheduler *tier.TieredScheduler,
 	dedupService *dedup.Service,
-	targetMinutes []int,
 	evaluationWindowCap time.Duration,
 	persistedLiveSource YouTubeLiveSessionSource,
 	subscriptionDB dbx.Querier,
@@ -119,7 +116,6 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		subscribers:         subscribers,
 		pendingSubscribers:  alarmstore.NewSubscriberResolver(nil, subscriptionDB),
 		lookupSubscribers:   subscribers.ResolveEventSubscribers,
-		targetPolicy:        targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,
 		logger:              SafeLogger(logger),
 	}
@@ -131,14 +127,8 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	return checker, nil
 }
 
-func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
-	c.targetMinutesMu.Lock()
-	defer c.targetMinutesMu.Unlock()
-
-	c.targetPolicy = targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes))
-}
-
-func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
+// Check는 targetPolicy 기준으로 upcoming/live-catchup 알림 후보를 생성한다.
+func (c *YouTubeChecker) Check(ctx context.Context, targetPolicy targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
 	now := time.Now().UTC()
 
 	if err := c.flushUnstagedUpcoming(ctx); err != nil {
@@ -152,6 +142,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 
 	out, err := c.collectDueYouTubeNotifications(
 		ctx,
+		targetPolicy,
 		dueChannels,
 		streamsByChannel,
 		liveEvidence.observedAtByStreamID,
@@ -180,6 +171,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 
 func (c *YouTubeChecker) collectDueYouTubeNotifications(
 	ctx context.Context,
+	targetPolicy targetpolicy.TargetMinutePolicy,
 	dueChannels []string,
 	streamsByChannel map[string][]*domain.Stream,
 	liveObservedAtByStreamID map[string]time.Time,
@@ -200,7 +192,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 			continue
 		}
 
-		c.startYouTubeChannelWorker(egCtx, eg, &work, liveObservedAtByStreamID, settledRoomsByStreamID, now, &mu, &notifications)
+		c.startYouTubeChannelWorker(egCtx, eg, targetPolicy, &work, liveObservedAtByStreamID, settledRoomsByStreamID, now, &mu, &notifications)
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -213,6 +205,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 func (c *YouTubeChecker) startYouTubeChannelWorker(
 	ctx context.Context,
 	eg *errgroup.Group,
+	targetPolicy targetpolicy.TargetMinutePolicy,
 	work *youtubeChannelCheckWork,
 	liveObservedAtByStreamID map[string]time.Time,
 	settledRoomsByStreamID map[string]map[string]struct{},
@@ -224,6 +217,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 		return panicguard.RunE(c.logger, panicscope.BackgroundTask, "youtube-channel-check", func() error {
 			channelNotifications, err := c.buildChannelNotifications(
 				ctx,
+				targetPolicy,
 				work.channelID,
 				work.subscriberRooms,
 				work.streams,
@@ -283,11 +277,4 @@ func (c *YouTubeChecker) prepareYouTubeChannelWork(
 		subscriberRooms: subscriberRooms,
 		window:          targetpolicy.ResolveEvaluationWindow(prevCheckedAt, now, c.evaluationWindowCap),
 	}, true
-}
-
-func (c *YouTubeChecker) targetPolicySnapshot() targetpolicy.TargetMinutePolicy {
-	c.targetMinutesMu.RLock()
-	defer c.targetMinutesMu.RUnlock()
-
-	return c.targetPolicy
 }

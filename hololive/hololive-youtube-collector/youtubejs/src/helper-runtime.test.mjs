@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createHelperRuntime, parseBootstrapRequest, RuntimeState } from "./helper-runtime.mjs";
-import { stubFetchers } from "./test-fixtures/fetchers.mjs";
+import { stubFetchers } from "../test-fixtures/fetchers.mjs";
 
 const unknownFingerprintFieldPattern = /unknown field: fingerprint/;
 const unknownProxyFieldPattern = /unknown field: proxy/;

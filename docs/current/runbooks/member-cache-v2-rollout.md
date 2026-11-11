@@ -17,9 +17,9 @@ Member cache V2는 멤버 데이터를 각 process의 in-memory snapshot(전체 
 
 조회 경로(모든 조회는 `ctx`를 첫 인자로 받습니다):
 
-- `GetByChannelID`: snapshot의 채널 대표(공유 채널이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByChannelID`
-- `GetByName`: snapshot의 `english_name` 정확 일치 index(같은 이름이 여럿이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByName`
-- `FindByAlias`: snapshot index(공식 이름은 대소문자 무시, 명시 별칭은 정확히 일치, 여러 명이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByAlias`
+- `FindMemberByChannelID`: snapshot의 채널 대표(공유 채널이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByChannelID`
+- `FindMemberByName`: snapshot의 `english_name` 정확 일치 index(같은 이름이 여럿이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByName`
+- `FindMemberByAlias`: snapshot index(공식 이름은 대소문자 무시, 명시 별칭은 정확히 일치, 여러 명이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByAlias`
 - 단건 조회에서 멤버가 없으면 `domain.ErrMemberNotFound`를 감싼 오류를 돌려주며 `(nil, nil)`은 없습니다. 조회 실패는 그 밖의 오류로 구분합니다. 미존재 결과는 cache하지 않습니다.
 - 게시된 snapshot과 index는 generation 단위로 불변입니다. snapshot이 아직 없거나 load가 실패하면 PostgreSQL을 직접 조회합니다. PostgreSQL point 조회 결과는 조회 시점 generation의 process 메모리 overlay에만 남고, generation이 바뀌면 통째로 무효가 됩니다.
 
@@ -36,7 +36,7 @@ Valkey 재시작 등으로 authority key가 사라지면 다음 reconcile이 `SE
 
 `hololive-youtube-collector`는 더 이상 member cache를 만들지 않습니다(`collectorruntime` infrastructure가 `BuildInfraModule`/member cache를 쓰지 않음). 아래 Expand rollout과 Contraction 절의 collector `a`/`b`/`c`/`d` 언급은 2026-08-06 당시 기록입니다.
 
-조회 표면은 `*member.Cache`가 직접 구현하는 `domain.MemberDataProvider`(`LoadAllMembers`, `GetChannelIDs`, `FindMemberByChannelID`, `FindMemberByName`, `FindMemberByAlias`, `FindMembersByName`, `FindMembersByAlias`)입니다. Admin plane의 member mutation endpoint만 runtime mutation owner입니다.
+조회 표면은 `*member.Cache`가 직접 구현하는 `domain.MemberDataProvider`(`LoadAllMembers`, `GetChannelIDs`, `FindMemberByChannelID`, `FindMemberByName`, `FindMemberByAlias`)입니다. Admin plane의 member mutation endpoint만 runtime mutation owner입니다.
 
 - create member
 - set graduation status
@@ -44,7 +44,7 @@ Valkey 재시작 등으로 authority key가 사라지면 다음 reconcile이 `SE
 - update member name
 - add/remove alias
 
-각 handler는 PostgreSQL mutation 성공 후 `Refresh` 또는 V2에서 full epoch bump로 동작하는 `InvalidateAliasCache`를 호출합니다. Epoch bump 실패 시 handler는 synchronization failure를 반환하고 해당 process는 cache bypass 상태가 됩니다.
+각 handler는 PostgreSQL mutation 성공 후 add/remove alias면 full epoch bump인 `InvalidateAll`을, 그 밖의 mutation이면 `InvalidateAll` 뒤 snapshot을 다시 적재하는 `Refresh`를 호출합니다. Epoch bump 실패 시 handler는 synchronization failure를 반환하고 해당 process는 cache bypass 상태가 됩니다.
 
 ## Expand rollout (기록용 — 2026-08-06 완료)
 

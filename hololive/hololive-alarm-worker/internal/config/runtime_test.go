@@ -19,8 +19,6 @@ func setRuntimeEnv(t *testing.T) {
 func setWorkerRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
-	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
 	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
 	t.Setenv("IRIS_BASE_URL", "https://iris.example.test")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", settingstest.HololiveH3CertPath)
@@ -66,11 +64,12 @@ func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	}
 }
 
+// alarm-worker는 Iris로 발송하므로 bot 토큰·base URL 원천과 Holodex API 키를 요구한다.
 func TestLoadRuntimeRequiresEgressInputs(t *testing.T) {
 	for key, want := range map[string]string{
-		"KAKAO_ROOMS":                    "KAKAO_ROOMS is required",
-		settingstest.IrisWebhookTokenEnv: "IRIS_WEBHOOK_TOKEN is required",
-		"HOLODEX_API_KEY":                "HOLODEX_API_KEY is required",
+		settingstest.IrisBotTokenEnv: "IRIS_BOT_TOKEN is required",
+		"IRIS_BASE_URL":              "IRIS_BASE_URL or IRIS_BASE_URL_FILE is required",
+		"HOLODEX_API_KEY":            "HOLODEX_API_KEY is required",
 	} {
 		t.Run(key, func(t *testing.T) {
 			setRuntimeEnv(t)
@@ -80,6 +79,17 @@ func TestLoadRuntimeRequiresEgressInputs(t *testing.T) {
 				t.Fatalf("LoadRuntime() error = %v, want %q", err, want)
 			}
 		})
+	}
+}
+
+// alarm-worker는 webhook을 받지 않고 room ACL도 소비하지 않으므로 webhook 토큰과 room seed 없이 기동한다.
+func TestLoadRuntimeDoesNotRequireWebhookTokenOrRoomSeed(t *testing.T) {
+	setRuntimeEnv(t)
+	t.Setenv(settingstest.IrisWebhookTokenEnv, "")
+	t.Setenv("KAKAO_ROOMS", "")
+
+	if _, err := LoadRuntime(); err != nil {
+		t.Fatalf("LoadRuntime() error = %v, want success without IRIS_WEBHOOK_TOKEN and KAKAO_ROOMS", err)
 	}
 }
 

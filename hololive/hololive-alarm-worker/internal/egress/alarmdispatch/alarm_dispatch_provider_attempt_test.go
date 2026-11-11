@@ -3,15 +3,18 @@ package alarmdispatch
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"net/http"
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type alarmAttemptSender struct {
@@ -52,7 +55,7 @@ func TestAlarmProviderAttemptsRecordProviderResultBeforePersistence(t *testing.T
 			sender := &alarmAttemptSender{tracker: tracker, panicValue: tc.panics, messageErr: tc.err}
 			consumer := &alarmDispatchRunnerTestConsumer{}
 			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, workerTracker: tracker, workerTotals: totals}
-			group := alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})}
+			group := alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: withAlarmDispatchTestSendUnitIdentity([]dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})}
 			request := &dispatchoutbox.SendRequest{RoomID: testAlarmRoomID, Body: "body", Route: dispatchoutbox.SendRouteText, ClientRequestID: group.envelopes[0].ClientRequestID}
 			call := func() { require.NoError(t, runner.dispatchPreparedMessageGroup(t.Context(), group, request)) }
 
@@ -72,12 +75,41 @@ func TestAlarmProviderAttemptsRecordProviderResultBeforePersistence(t *testing.T
 	}
 }
 
+func TestAlarmProviderAttemptOutcomeByError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want workercontract.AttemptOutcome
+	}{
+		{name: "unclassified", err: errors.New("provider failed"), want: workercontract.AttemptFailed},
+		{name: "server error", err: &iris.HTTPError{StatusCode: http.StatusServiceUnavailable, URL: testIrisReplyPath}, want: workercontract.AttemptFailed},
+		{name: "known unsent transport", err: &iris.TransportError{Op: "post", Err: &net.OpError{Op: "dial", Err: errors.New("refused")}}, want: workercontract.AttemptFailed},
+		{name: "response lost", err: &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}, want: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown with deadline", err: errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.DeadlineExceeded), want: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown with cancel", err: errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.Canceled), want: workercontract.AttemptOutcomeUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			totals := &workercontract.Counters{}
+			runner := Runner{sender: &alarmDispatchRunnerTestSender{messageErr: tc.err}, workerTracker: workercontract.NewExecutorTracker(), workerTotals: totals}
+			request := &dispatchoutbox.SendRequest{RoomID: testAlarmRoomID, Body: "outcome body", Route: dispatchoutbox.SendRouteText, ClientRequestID: "alarm:outcome"}
+
+			_, err := runner.sendPreparedRequest(t.Context(), request)
+			require.ErrorIs(t, err, tc.err)
+
+			expected := &workercontract.Counters{}
+			expected.RecordAttempt(tc.want)
+			require.Equal(t, expected.Snapshot(), totals.Snapshot())
+		})
+	}
+}
+
 func TestAlarmProviderAttemptsCountGroupsAndSkipPreparation(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	totals := &workercontract.Counters{}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, workerTotals: totals}
-	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
+	envelopes := withAlarmDispatchTestSendUnitIdentity([]dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes}
 	request := &dispatchoutbox.SendRequest{Body: "body", RoomID: testAlarmRoomID, Route: dispatchoutbox.SendRouteText, ClientRequestID: envelopes[0].ClientRequestID}
 

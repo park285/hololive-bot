@@ -87,7 +87,7 @@ func assertAuthorityKeyPair(t *testing.T, input *DedupeInput, wantEvent string) 
 	}
 
 	wantDedupe := "v2:room:" + input.RoomID + ":event:" + wantEvent
-	if got := BuildDedupeKey(input); got != wantDedupe {
-		t.Fatalf("BuildDedupeKey() = %q, want %q", got, wantDedupe)
+	if got := buildDedupeKey(input.RoomID, BuildEventKey(input)); got != wantDedupe {
+		t.Fatalf("buildDedupeKey() = %q, want %q", got, wantDedupe)
 	}
 }

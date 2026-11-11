@@ -7,14 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 var errAlarmDispatchRunnerTestMarkSending = errors.New("mark sending partial update")
 
 func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
+		batches:        [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
 	}
 	sender := &alarmDispatchRunnerTestSender{}
@@ -43,12 +43,12 @@ func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt
 }
 
 func TestAlarmDispatchRunnerMarkSendingFailureDoesNotExhaustExistingAttempt(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: 2})
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &dispatchoutbox.AlarmQueueRetryMetadata{Attempt: 2})
 
 	envelope.ClaimKeys = []string{testAlarmClaimKey}
 
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches:        [][]domain.AlarmQueueEnvelope{{envelope}},
+		batches:        [][]dispatchoutbox.AlarmQueueEnvelope{{envelope}},
 		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
 	}
 	runner := Runner{

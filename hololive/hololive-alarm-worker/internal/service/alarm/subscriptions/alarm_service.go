@@ -27,20 +27,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
-	alarms, err := as.GetRoomAlarmsWithTypes(ctx, roomID)
-	if err != nil {
-		return nil, fmt.Errorf("get room alarms: %w", err)
-	}
-
-	channelIDs := uniqueAlarmChannelIDs(alarms)
-	if channelIDs == nil {
-		return []string{}, nil
-	}
-
-	return channelIDs, nil
-}
-
 func (as *AlarmService) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
 	alarms, err := as.alarmRepository.FindByRoom(ctx, roomID)
 	if err != nil {

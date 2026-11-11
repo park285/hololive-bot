@@ -62,7 +62,7 @@ func (s *leaseScheduler) reportDiscoveryFailure(ctx context.Context, key string,
 	class := string(collecterr.ClassOf(err))
 	attrs := append(append(make([]slog.Attr, 0, len(scope)+6), scope...),
 		slog.String("phase", "candidate_load"),
-		slog.String("error_code", string(collecterr.CandidateFailed)),
+		slog.String("error_code", string(collecterr.OperationCandidateLoadFailed)),
 		slog.String("error_class", class),
 		slog.String("error_detail", collecterr.SanitizeDetail(collecterr.DiagnosticOf(err).Detail())),
 	)

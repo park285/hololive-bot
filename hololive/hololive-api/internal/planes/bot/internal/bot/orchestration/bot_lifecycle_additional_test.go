@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -50,34 +49,13 @@ func (p *lifecycleTestPostgres) Close() error {
 	return p.closeErr
 }
 
-type lifecycleTestHolodex struct {
-	stopCalled bool
-}
-
-func (h *lifecycleTestHolodex) Stop() { h.stopCalled = true }
-func (h *lifecycleTestHolodex) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (h *lifecycleTestHolodex) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (h *lifecycleTestHolodex) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (h *lifecycleTestHolodex) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return &domain.Channel{}, nil
-}
-
 func TestBotLifecycleStartBranches(t *testing.T) {
 	t.Parallel()
 
 	t.Run("cache not configured", func(t *testing.T) {
 		t.Parallel()
 
-		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}))
+		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, &testIrisClient{}, "")
 
 		err := botLifecycle.Start(t.Context())
 		require.Error(t, err)
@@ -90,26 +68,11 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 		cacheClient := &cachemocks.Client{
 			WaitUntilReadyFunc: func(context.Context, time.Duration) error { return errors.New("down") },
 		}
-		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}))
+		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "")
 
 		err := botLifecycle.Start(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "valkey connection timeout")
-	})
-
-	t.Run("degraded mode then stop", func(t *testing.T) {
-		t.Parallel()
-
-		cacheClient := &cachemocks.Client{
-			WaitUntilReadyFunc: func(context.Context, time.Duration) error { return nil },
-		}
-		stopCh := make(chan struct{})
-		close(stopCh)
-
-		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, nil, "http://iris", stopCh, make(chan struct{}))
-
-		err := botLifecycle.Start(t.Context())
-		require.NoError(t, err)
 	})
 }
 
@@ -119,7 +82,7 @@ func TestBotLifecycleStart_ContextCanceled(t *testing.T) {
 	cacheClient := &cachemocks.Client{
 		WaitUntilReadyFunc: func(context.Context, time.Duration) error { return nil },
 	}
-	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), make(chan struct{}))
+	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris")
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -144,30 +107,21 @@ func TestBotLifecycleShutdownBranches(t *testing.T) {
 		},
 	}
 
-	holodex := &lifecycleTestHolodex{}
 	postgres := &lifecycleTestPostgres{}
-	doneCh := make(chan struct{})
 
-	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), doneCh)
+	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris")
 
-	b := &Bot{cache: cacheClient, postgres: postgres, holodex: holodex, lifecycle: botLifecycle}
+	b := &Bot{cache: cacheClient, postgres: postgres, lifecycle: botLifecycle}
 
 	require.NoError(t, b.Shutdown(t.Context()))
 	assert.False(t, cacheClosed)
-	assert.False(t, holodex.stopCalled)
 	assert.False(t, postgres.closeCalled)
-
-	select {
-	case <-doneCh:
-	default:
-		t.Fatal("done channel not closed")
-	}
 }
 
 func TestBotStartAndShutdownDelegateToLifecycle(t *testing.T) {
 	t.Parallel()
 
-	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, nil, "", make(chan struct{}), make(chan struct{}))
+	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, nil, "")
 	b := &Bot{lifecycle: botLifecycle}
 
 	err := b.Start(t.Context())

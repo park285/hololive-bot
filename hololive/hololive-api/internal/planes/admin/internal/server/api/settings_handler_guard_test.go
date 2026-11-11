@@ -5,12 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-
-	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 type recordingSettingsActivityLogger struct {
@@ -33,12 +30,6 @@ func newGuardTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 func TestSettingsHandler_Guards(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	settingsService := mustNewTestSettingsService(t,
-		filepath.Join(t.TempDir(), "settings.json"),
-		settingssvc.Settings{},
-		newDiscardLogger(),
-	)
-
 	cases := []struct {
 		name        string
 		guard       func(h *SettingsHandler, c *gin.Context) bool
@@ -46,20 +37,6 @@ func TestSettingsHandler_Guards(t *testing.T) {
 		okHandler   *SettingsHandler
 		wantMessage string
 	}{
-		{
-			name:        "requireAlarm",
-			guard:       func(h *SettingsHandler, c *gin.Context) bool { return h.requireAlarm(c) },
-			nilHandler:  &SettingsHandler{},
-			okHandler:   &SettingsHandler{Alarm: &stubAlarmCRUDForServer{}},
-			wantMessage: "alarm service not available",
-		},
-		{
-			name:        "requireSettings",
-			guard:       func(h *SettingsHandler, c *gin.Context) bool { return h.requireSettings(c) },
-			nilHandler:  &SettingsHandler{},
-			okHandler:   &SettingsHandler{Settings: settingsService},
-			wantMessage: "settings service not available",
-		},
 		{
 			name:        "requireApplier",
 			guard:       func(h *SettingsHandler, c *gin.Context) bool { return h.requireApplier(c) },

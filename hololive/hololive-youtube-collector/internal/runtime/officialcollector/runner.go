@@ -57,7 +57,7 @@ func (r *Runner) Collect(ctx context.Context, input *collection.RunInput) (colle
 	envelope, err := collection.Envelope(
 		contract.ProviderHololiveOfficial,
 		contract.KindSchedule,
-		officialScheduleSubject,
+		collection.ScheduleSubject,
 		generation,
 		&lease,
 		contract.CompletenessComplete,

@@ -32,24 +32,25 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
+// cacheManagerStore는 cacheManager가 응답 cache에 쓰는 Get·Set 작업이다.
 type cacheManagerStore interface {
 	cache.KeyValueReader
 	cache.KeyValueWriter
 }
 
-type CacheManager struct {
+type cacheManager struct {
 	cache  cacheManagerStore
 	logger *slog.Logger
 }
 
-func NewCacheManager(cacheClient cacheManagerStore, logger *slog.Logger) *CacheManager {
-	return &CacheManager{
+func newCacheManager(cacheClient cacheManagerStore, logger *slog.Logger) *cacheManager {
+	return &cacheManager{
 		cache:  cacheClient,
 		logger: logger,
 	}
 }
 
-func (cm *CacheManager) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, bool) {
+func (cm *cacheManager) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, bool) {
 	var cached []*domain.Stream
 
 	if err := cm.cache.Get(ctx, buildLiveStreamsCacheKey(org), &cached); err == nil && cached != nil {
@@ -59,11 +60,11 @@ func (cm *CacheManager) GetLiveStreamsByOrg(ctx context.Context, org string) ([]
 	return nil, false
 }
 
-func (cm *CacheManager) SetLiveStreamsByOrg(ctx context.Context, org string, streams []*domain.Stream) {
+func (cm *cacheManager) SetLiveStreamsByOrg(ctx context.Context, org string, streams []*domain.Stream) {
 	cm.set(ctx, buildLiveStreamsCacheKey(org), streams, constants.CacheTTL.LiveStreams)
 }
 
-func (cm *CacheManager) GetUpcomingStreamsByOrg(ctx context.Context, org string, hours int) ([]*domain.Stream, bool) {
+func (cm *cacheManager) GetUpcomingStreamsByOrg(ctx context.Context, org string, hours int) ([]*domain.Stream, bool) {
 	cacheKey := buildUpcomingStreamsCacheKey(org, hours)
 
 	var cached []*domain.Stream
@@ -75,12 +76,12 @@ func (cm *CacheManager) GetUpcomingStreamsByOrg(ctx context.Context, org string,
 	return nil, false
 }
 
-func (cm *CacheManager) SetUpcomingStreamsByOrg(ctx context.Context, org string, hours int, streams []*domain.Stream) {
+func (cm *cacheManager) SetUpcomingStreamsByOrg(ctx context.Context, org string, hours int, streams []*domain.Stream) {
 	cacheKey := buildUpcomingStreamsCacheKey(org, hours)
 	cm.set(ctx, cacheKey, streams, constants.CacheTTL.UpcomingStreams)
 }
 
-func (cm *CacheManager) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, bool) {
+func (cm *cacheManager) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, bool) {
 	cacheKey := fmt.Sprintf("channel_schedule_%s_%d_%v", channelID, hours, includeLive)
 
 	var cached []*domain.Stream
@@ -92,29 +93,12 @@ func (cm *CacheManager) GetChannelSchedule(ctx context.Context, channelID string
 	return nil, false
 }
 
-func (cm *CacheManager) SetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool, streams []*domain.Stream, ttl time.Duration) {
+func (cm *cacheManager) SetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool, streams []*domain.Stream, ttl time.Duration) {
 	cacheKey := fmt.Sprintf("channel_schedule_%s_%d_%v", channelID, hours, includeLive)
 	cm.set(ctx, cacheKey, streams, ttl)
 }
 
-func (cm *CacheManager) GetChannel(ctx context.Context, channelID string) (*domain.Channel, bool) {
-	cacheKey := fmt.Sprintf("channel_%s", channelID)
-
-	var cached *domain.Channel
-
-	if err := cm.cache.Get(ctx, cacheKey, &cached); err == nil && cached != nil {
-		return cached, true
-	}
-
-	return nil, false
-}
-
-func (cm *CacheManager) SetChannel(ctx context.Context, channelID string, channel *domain.Channel) {
-	cacheKey := fmt.Sprintf("channel_%s", channelID)
-	cm.set(ctx, cacheKey, channel, constants.CacheTTL.ChannelInfo)
-}
-
-func (cm *CacheManager) GetHololiveChannelList(ctx context.Context) ([]*domain.Channel, bool) {
+func (cm *cacheManager) GetHololiveChannelList(ctx context.Context) ([]*domain.Channel, bool) {
 	var cached []*domain.Channel
 
 	if err := cm.cache.Get(ctx, "hololive_channel_list", &cached); err == nil && cached != nil {
@@ -124,11 +108,11 @@ func (cm *CacheManager) GetHololiveChannelList(ctx context.Context) ([]*domain.C
 	return nil, false
 }
 
-func (cm *CacheManager) SetHololiveChannelList(ctx context.Context, channels []*domain.Channel, ttl time.Duration) {
+func (cm *cacheManager) SetHololiveChannelList(ctx context.Context, channels []*domain.Channel, ttl time.Duration) {
 	cm.set(ctx, "hololive_channel_list", channels, ttl)
 }
 
-func (cm *CacheManager) set(ctx context.Context, key string, value any, ttl time.Duration) {
+func (cm *cacheManager) set(ctx context.Context, key string, value any, ttl time.Duration) {
 	if err := cm.cache.Set(ctx, key, value, ttl); err != nil && cm.logger != nil {
 		cm.logger.Warn("holodex cache set failed", slog.String("key", key), slog.Any("error", err))
 	}

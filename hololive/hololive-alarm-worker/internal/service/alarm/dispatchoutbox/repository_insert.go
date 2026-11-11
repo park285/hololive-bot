@@ -64,7 +64,7 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[str
 		return eventIDs, 0, nil
 	}
 
-	rows, _ := buildEventBatchRows(events)
+	rows := buildEventBatchRows(events)
 
 	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
@@ -79,10 +79,8 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[str
 	return eventIDs, inserted, nil
 }
 
-func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, map[string]string) {
+func buildEventBatchRows(events []eventInsert) []eventBatchRow {
 	rows := make([]eventBatchRow, 0, len(events))
-	expectedHashes := make(map[string]string, len(events))
-
 	for _, event := range events {
 		rows = append(rows, eventBatchRow{
 			EventKey:    event.EventKey,
@@ -93,10 +91,9 @@ func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, map[string]stri
 			Category:    event.Category,
 			Payload:     jsontext.Value(event.Payload).Clone(),
 		})
-		expectedHashes[event.EventKey] = event.PayloadHash
 	}
 
-	return rows, expectedHashes
+	return rows
 }
 
 func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (map[string]int64, int, error) {
@@ -206,7 +203,7 @@ func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected i
 	return selected, inserted, nil
 }
 
-func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, result *PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, error) {
+func prepareInsertBatchRows(envelopes []AlarmQueueEnvelope, result *PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, error) {
 	events := make(map[string]eventInsert, len(envelopes))
 	deliveries := make([]deliveryInsert, 0, len(envelopes))
 	seenDeliveries := make(map[string]struct{}, len(envelopes))
@@ -233,7 +230,7 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, result *Publi
 }
 
 func appendPreparedBatchRow(
-	envelope *domain.AlarmQueueEnvelope,
+	envelope *AlarmQueueEnvelope,
 	events map[string]eventInsert,
 	deliveries *[]deliveryInsert,
 	seenDeliveries map[string]struct{},
@@ -277,7 +274,7 @@ func addPreparedEvent(events map[string]eventInsert, event *eventInsert, result 
 	return nil
 }
 
-func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, preflightCollisions []eventCollision, envelopes []domain.AlarmQueueEnvelope, result *PublishBatchResult) (publishResult PublishBatchResult, err error) {
+func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, preflightCollisions []eventCollision, envelopes []AlarmQueueEnvelope, result *PublishBatchResult) (publishResult PublishBatchResult, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)

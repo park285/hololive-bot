@@ -45,26 +45,3 @@ func NewAPIError(operation string, statusCode int) *APIError {
 		StatusCode: statusCode,
 	}
 }
-
-type KeyRotationError struct {
-	Operation  string
-	StatusCode int
-	Err        error
-}
-
-func (e *KeyRotationError) Error() string {
-	if e.Err == nil {
-		return fmt.Sprintf("holodex: key rotation exhausted: %s: status=%d", e.Operation, e.StatusCode)
-	}
-
-	return fmt.Sprintf("holodex: key rotation exhausted: %s: status=%d: %v", e.Operation, e.StatusCode, e.Err)
-}
-
-func (e *KeyRotationError) Unwrap() error { return e.Err }
-
-func NewKeyRotationError(operation string, statusCode int) *KeyRotationError {
-	return &KeyRotationError{
-		Operation:  operation,
-		StatusCode: statusCode,
-	}
-}

@@ -162,10 +162,10 @@ func newScheduler(executor *collectionExecutor, candidates projectionCandidateSo
 // snapshot은 RPC 1회 안에서 시각 없는 예정 영상마다 player를 조회하고 그 수만큼 limiter를 지불하므로 youtubejs.ChannelLiveMaxScheduleLookups를 더합니다.
 // 채널 확인·영상 확인은 각자 RPC 1회입니다.
 func jobMaxUpstreamCalls(id collection.JobID) int {
-	switch string(id.Kind) {
-	case "youtubejs_content":
+	switch id {
+	case collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: youtubejscollector.ContentJobKind}:
 		return 2 + youtubejscollector.ContentPublicationMaxCalls
-	case "youtubejs_channel_live":
+	case collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: youtubejscollector.ChannelLiveJobKind}:
 		return 1 + youtubejs.ChannelLiveMaxScheduleLookups
 	default:
 		return 1
@@ -223,7 +223,7 @@ func collectorExecutionProfiles(
 		id := runner.JobID()
 		maxCalls, requestTimeout, rateInterval, inflight := executionProfileInputs(id, cfg, holodexTimeout, officialTimeout)
 
-		profile, profileErr := NewExecutionProfile(maxCalls, requestTimeout, rateInterval, inflight, cfg.CollectionOverhead, 0)
+		profile, profileErr := NewExecutionProfile(maxCalls, requestTimeout, rateInterval, inflight, cfg.CollectionOverhead)
 		if profileErr != nil {
 			return nil, fmt.Errorf("build youtube collector: execution profile %s: %w", id, profileErr)
 		}
@@ -271,16 +271,15 @@ func newProviderGates(cfg *collectorconfig.Config) map[contract.Provider]chan st
 }
 
 func newCollectorOwner(instanceID string) (string, error) {
+	id := strings.TrimSpace(instanceID)
+	if id == "" {
+		return "", errors.New("build youtube collector: lease owner requires an instance ID")
+	}
+
 	token := make([]byte, 16)
 	if _, err := rand.Read(token); err != nil {
 		return "", fmt.Errorf("build youtube collector: generate lease owner: %w", err)
 	}
 
-	prefix := runtimeName
-
-	if id := strings.TrimSpace(instanceID); id != "" {
-		prefix = id
-	}
-
-	return prefix + ":" + hex.EncodeToString(token), nil
+	return id + ":" + hex.EncodeToString(token), nil
 }

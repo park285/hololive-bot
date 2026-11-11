@@ -23,18 +23,7 @@ func TestLoadBotConfigAggregatesFoldAndOtherEnvErrors(t *testing.T) {
 	}
 }
 
-func TestLoadIrisConfigRejectsInvalidTimeouts(t *testing.T) {
-	for _, value := range []string{"10s", "99999999999999999"} {
-		t.Run(value, func(t *testing.T) {
-			t.Setenv("IRIS_HTTP_TIMEOUT_SECONDS", value)
-
-			if _, err := LoadIrisConfig(); err == nil || !strings.Contains(err.Error(), "IRIS_HTTP_TIMEOUT_SECONDS") {
-				t.Fatalf("LoadIrisConfig() error = %v, want IRIS_HTTP_TIMEOUT_SECONDS rejection", err)
-			}
-		})
-	}
-}
-
+// 공통 구획 여러 곳의 잘못된 숫자 env는 기본값으로 바뀌지 않고, 한 번의 기동 실패가 잘못된 키를 모두 보인다.
 func TestPostgresPoolSyntaxBelongsToPoolLoader(t *testing.T) {
 	t.Setenv("POSTGRES_POOL_MAX_CONNS", "invalid")
 	t.Setenv("POSTGRES_POOL_MIN_CONNS", "invalid")

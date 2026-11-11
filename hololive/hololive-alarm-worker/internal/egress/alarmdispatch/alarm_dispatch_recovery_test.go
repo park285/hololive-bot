@@ -10,7 +10,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestDefaultRecoveryPreservesImmutableSendUnitMembership(t *testing.T) {
@@ -53,7 +52,7 @@ func seedExpiredPinnedRecoveryUnits(t *testing.T, pool *pgxpool.Pool, repo *disp
 	t.Helper()
 
 	ctx := t.Context()
-	singles := make([]domain.AlarmQueueEnvelope, 99)
+	singles := make([]dispatchoutbox.AlarmQueueEnvelope, 99)
 
 	for i := range singles {
 		singles[i] = alarmDispatchRunnerTestEnvelope(fmt.Sprintf("review-room-%d", i), nil)
@@ -64,7 +63,7 @@ func seedExpiredPinnedRecoveryUnits(t *testing.T, pool *pgxpool.Pool, repo *disp
 	_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: singles})
 	require.NoError(t, err)
 
-	pair := []domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope("review-pair", nil), alarmDispatchRunnerTestEnvelope("review-pair", nil)}
+	pair := []dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope("review-pair", nil), alarmDispatchRunnerTestEnvelope("review-pair", nil)}
 	for i := range pair {
 		pair[i].Notification.Stream.ID = fmt.Sprintf("review-pair-stream-%d", i)
 		pair[i].Notification.Channel.ID = "review-channel"

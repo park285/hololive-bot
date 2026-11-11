@@ -18,6 +18,7 @@ var (
 	loadTerminalCommunityShortsOutboxResults2SQL = mustSQL("load_terminal_community_shorts_outbox_results_2.sql")
 	deliveryLedgerRecordQuarantinedSQL           = mustSQL("delivery_ledger_record_quarantined.sql")
 	deliveryLedgerRecordSentSQL                  = mustSQL("delivery_ledger_record_sent.sql")
+	deliveryExpiredSnapshotSQL                   = mustSQL("delivery_expired_snapshot.sql")
 	findPendingOutboxIDsForAggregateSyncSQL      = mustSQL("find_pending_outbox_ids_for_aggregate_sync.sql")
 	deliveryRepositoryAggregateLockSQL           = mustSQL("delivery_repository_aggregate_lock.sql")
 	deliveryRepositoryAggregateSyncSQL           = mustSQL("delivery_repository_aggregate_sync.sql")

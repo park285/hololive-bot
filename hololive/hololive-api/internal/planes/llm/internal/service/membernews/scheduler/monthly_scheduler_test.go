@@ -27,7 +27,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -85,7 +85,7 @@ func TestMonthlyScheduler_LifecycleNilGuards(t *testing.T) {
 }
 
 func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
+	service := &mockDigestService{rooms: []newsmodel.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone)
@@ -104,7 +104,7 @@ func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
 
 func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 	service := &mockDigestService{
-		rooms: []model.SubscribedRoom{
+		rooms: []newsmodel.SubscribedRoom{
 			{RoomID: "room-fail"},
 			{RoomID: "room-ok"},
 		},

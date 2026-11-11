@@ -348,15 +348,7 @@ func (r *Runtime) handleConsumeFailure(ctx context.Context, work sourceobservati
 }
 
 func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
-	deadLetterer, ok := r.claimer.(observationDeadLetterer)
-	if !ok {
-		youtubeConsumeTotal.WithLabelValues(consumeResultFatal).Inc()
-		r.forget(work)
-
-		return cause
-	}
-
-	deadLetterErr := r.deadLetterObservation(ctx, deadLetterer, work, cause)
+	deadLetterErr := r.deadLetterObservation(ctx, work, cause)
 	r.forget(work)
 
 	if errors.Is(deadLetterErr, sourceobservation.ErrClaimLost) {

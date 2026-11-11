@@ -27,10 +27,12 @@ import (
 	"testing"
 	"time"
 
+	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
+func TestDispatchDeliveryRows_CapturesSuccessAndFailures(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -77,12 +79,10 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
-	if !reflect.DeepEqual(result.FailureBuckets[deliveryReasonRateLimited], []int64{2}) {
-		t.Fatalf("rate-limited failures = %#v, want []int64{2}", result.FailureBuckets[deliveryReasonRateLimited])
-	}
-
-	if !reflect.DeepEqual(result.FailureBuckets["outbox row not found"], []int64{3}) {
-		t.Fatalf("outbox row not found failures = %#v, want []int64{3}", result.FailureBuckets["outbox row not found"])
+	// outbox가 없는 행은 전이 없이 실패로만 센다. provider 실패만 lifecycle 전이로 간다.
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0, store.DeliveryModePerRoom)}
+	if got := transitionSpy(t, dispatcher).recordedStartedFailures(); !slices.Equal(got, wantStarted) {
+		t.Fatalf("started failures = %v, want %v", got, wantStarted)
 	}
 
 	wantTouched := []int64{100, 100, 999}

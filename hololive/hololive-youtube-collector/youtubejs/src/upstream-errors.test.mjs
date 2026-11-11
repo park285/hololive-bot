@@ -10,7 +10,7 @@ import { fetchLiveMetadata } from "./live-metadata.mjs";
 import { handleChannelRequest, handleCommunityRequest, handleContentRequest } from "./rpc-boundary.mjs";
 import { rpcErrorResultFor } from "./rpc-execution.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
-import { channelFixture } from "./test-fixtures/channel.mjs";
+import { channelFixture } from "../test-fixtures/channel.mjs";
 
 const tabCases = [
   { kind: "videos", tab: "videos", getter: "has_videos", method: "getVideos", fetch: fetchContentFeed, handle: handleContentRequest },
@@ -23,7 +23,7 @@ function collect(scenario, getChannel) {
   return scenario.handle(JSON.stringify({
     protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 1048576,
     ...(scenario.kind === undefined ? {} : { kind: scenario.kind }),
-    ...(scenario.kind === "live" ? { max_schedule_lookups: 32 } : {}),
+    ...(scenario.kind === "live" ? { max_schedule_lookups: 32 } : { max_results: 10_000, max_pages: 1 }),
   }), (options) => scenario.fetch({ ...options, innertube: { getChannel } }));
 }
 

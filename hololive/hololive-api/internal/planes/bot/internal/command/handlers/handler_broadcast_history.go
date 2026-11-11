@@ -123,12 +123,12 @@ func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *botcom
 }
 
 func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter formatter.BroadcastHistoryFilter) {
-	days := normalizeBroadcastHistoryDays(intBroadcastHistoryParam(params, "days", defaultBroadcastHistoryDays))
+	days := normalizeBroadcastHistoryDays(intParam(params, "days", defaultBroadcastHistoryDays))
 	if boolParam(params, "all") {
 		days = maxBroadcastHistoryDays
 	}
 
-	limit := normalizeBroadcastHistoryLimit(intBroadcastHistoryParam(params, "limit", defaultBroadcastHistoryLimit))
+	limit := normalizeBroadcastHistoryLimit(intParam(params, "limit", defaultBroadcastHistoryLimit))
 
 	query = handlercore.BroadcastHistoryQuery{
 		Limit:   limit,
@@ -423,22 +423,6 @@ func broadcastHistoryFallbackTime(entry *handlercore.BroadcastHistoryEntry) (tim
 	}
 
 	return entry.LastSeenAt, "마지막 확인"
-}
-
-func intBroadcastHistoryParam(params map[string]any, key string, defaultValue int) int {
-	raw, ok := params[key]
-	if !ok {
-		return defaultValue
-	}
-
-	switch value := raw.(type) {
-	case int:
-		return value
-	case float64:
-		return int(value)
-	default:
-		return defaultValue
-	}
 }
 
 func normalizeBroadcastHistoryDays(days int) int {

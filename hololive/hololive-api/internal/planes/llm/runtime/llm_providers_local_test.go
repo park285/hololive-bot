@@ -435,10 +435,6 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 }
 
 func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
-	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
-
 	t.Setenv("CLIPROXY_ENABLED", "true")
 	t.Setenv("CLIPROXY_API_KEY", "test-api-key")
 	t.Setenv("CLIPROXY_BASE_URL", testProviderBaseURL)
@@ -446,16 +442,21 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 
 	t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
-	appConfig, err := apiconfig.LoadLLMSchedulerRuntime()
+	cliproxy, err := apiconfig.LoadCliproxyConfig()
 	if err != nil {
-		t.Fatalf("apiconfig.LoadLLMSchedulerRuntime() error = %v", err)
+		t.Fatalf("apiconfig.LoadCliproxyConfig() error = %v", err)
+	}
+
+	llmConfig, err := apiconfig.LoadLLMConfig()
+	if err != nil {
+		t.Fatalf("apiconfig.LoadLLMConfig() error = %v", err)
 	}
 
 	var buf bytes.Buffer
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client, err := ProvideMemberNewsLLMClient(cliproxyProvider(appConfig.Cliproxy), &appConfig.LLM, nil, logger)
+	client, err := ProvideMemberNewsLLMClient(cliproxyProvider(cliproxy), &llmConfig, nil, logger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

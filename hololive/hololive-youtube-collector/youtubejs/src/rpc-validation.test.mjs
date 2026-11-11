@@ -8,6 +8,7 @@ import { handleRpcRequest, rpcErrorResult, rpcErrorResultFor } from "./rpc-execu
 import {
   communityEndpoint,
   contentEndpoint,
+  validateChannelResponse,
   validateCommunityResponse,
   validateContentResponse,
 } from "./rpc-collection-validation.mjs";
@@ -37,14 +38,35 @@ test("PAG-013 response validator requires termination_reason and rejects impossi
     continuity: "CONTIGUOUS",
   };
   assert.throws(() => validateCommunityResponse(base), terminationReasonRequiredPattern);
-  assert.throws(
-    () => validateCommunityResponse({
-      ...base,
-      exhausted: false,
-      termination_reason: "exhausted",
-    }),
-    (error) => error.code === "helper_protocol_mismatch",
+  // pagination 필드는 helper 생성기만 만들므로 어떤 위반이든 생성기와 같은 helper_internal_invariant입니다.
+  for (const pagination of [
+    { page_count: 0, termination_reason: "exhausted" },
+    { page_count: 1.5, termination_reason: "exhausted" },
+    { exhausted: false, termination_reason: "exhausted" },
+    { exhausted: "true", termination_reason: "exhausted" },
+    { continuity: "UNKNOWN", termination_reason: "exhausted" },
+    { continuity: "GAP_UNRESOLVED", termination_reason: "exhausted" },
+    { exhausted: false, continuity: "CONTIGUOUS", termination_reason: "max_pages" },
+    { exhausted: false, continuity: "NOT_APPLICABLE", termination_reason: "cursor_loop" },
+    { termination_reason: "done" },
+  ]) {
+    assert.throws(
+      () => validateCommunityResponse({ ...base, ...pagination }),
+      (error) => error.code === "helper_internal_invariant",
+      JSON.stringify(pagination),
+    );
+  }
+});
+
+test("PAG-013 an impossible pagination tuple from a fetcher is an INTERNAL helper failure", async () => {
+  const result = await handleRpcRequest(
+    JSON.stringify({ protocol_version: 1, channel_id: "UC_TEST", max_results: 10, max_pages: 1, max_success_response_bytes: 4096 }),
+    communityEndpoint,
+    async () => ({ posts: [], page_count: 1, exhausted: "true", continuity: "CONTIGUOUS", termination_reason: "exhausted" }),
   );
+  assert.equal(result.status, 500);
+  assert.equal(result.body.error.code, "helper_internal_invariant");
+  assert.equal(result.body.error.class, "INTERNAL");
 });
 
 test("PAG-012 response validator rejects pagination cursors", () => {
@@ -65,7 +87,7 @@ test("PAG-012 response validator rejects pagination cursors", () => {
   }
 });
 
-test("content items carry only a true is_upcoming flag and reject the retired premiere field", () => {
+test("content items carry only a true is_upcoming flag and reject the retired premiere and time fields", () => {
   const page = (items) => ({
     protocol_version: 1, items, page_count: 1, exhausted: true, continuity: "CONTIGUOUS", termination_reason: "exhausted",
   });
@@ -79,11 +101,23 @@ test("content items carry only a true is_upcoming flag and reject the retired pr
     { ...item, is_upcoming: "true" },
     { ...item, is_premiere: true },
     { ...item, published_at: "3 hours ago" },
-    { ...item, published_at: "2026-09-20" },
+    { ...item, published_at: "2026-09-20T00:00:00.000Z" },
+    { ...item, scheduled_for: "2026-09-20T00:00:00.000Z" },
   ]) {
     assert.throws(() => validateContentResponse(page([invalid])), (error) => error.code === "parser_drift",
       JSON.stringify(invalid));
   }
+});
+
+test("live sessions accept only the statuses the streams list can show", () => {
+  const page = (status) => ({
+    protocol_version: 1, live_sessions: [{ video_id: "v", channel_id: "UC_TEST", status }], profile: {}, photo: [],
+    page_count: 1, exhausted: true, continuity: "NOT_APPLICABLE", termination_reason: "exhausted",
+  });
+  for (const status of ["LIVE", "UPCOMING", "ENDED"]) {
+    assert.equal(validateChannelResponse(page(status)).live_sessions[0].status, status);
+  }
+  assert.throws(() => validateChannelResponse(page("CANCELLED")), (error) => error.code === "parser_drift");
 });
 
 test("PAG-004 real library HTTP errors use the existing failure tuples", async () => {
@@ -131,6 +165,8 @@ test("canceled requests do not copy abort reason into the error body", async () 
       JSON.stringify({
         protocol_version: 1,
         channel_id: "UC_TEST",
+        max_results: 10,
+        max_pages: 1,
         max_success_response_bytes: 1048576,
       }),
       communityEndpoint,
@@ -167,6 +203,8 @@ test("RequestInit abort is not misclassified as parent request cancellation", as
       JSON.stringify({
         protocol_version: 1,
         channel_id: "UC_TEST",
+        max_results: 10,
+        max_pages: 1,
         max_success_response_bytes: 1048576,
       }),
       communityEndpoint,
@@ -214,7 +252,7 @@ test("RPC success budget counts encoded UTF-8 bytes including JSON escaping", as
   let calls = 0;
   for (const limit of [encodedBytes, encodedBytes - 1]) {
     const result = await handleRpcRequest(JSON.stringify({
-      protocol_version: 1, channel_id: "UC_TEST", kind: "videos", max_success_response_bytes: limit,
+      protocol_version: 1, channel_id: "UC_TEST", kind: "videos", max_results: 10, max_pages: 1, max_success_response_bytes: limit,
     }), contentEndpoint, async () => {
       calls++;
       return expected;
@@ -232,7 +270,7 @@ test("RPC success budget counts encoded UTF-8 bytes including JSON escaping", as
 });
 
 test("RPC rejects untrusted JSON and impossible budgets before running collection", async () => {
-  const request = { protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 4096 };
+  const request = { protocol_version: 1, channel_id: "UC_TEST", max_results: 10, max_pages: 1, max_success_response_bytes: 4096 };
   let calls = 0;
   const run = async () => { calls++; return {}; };
   for (const raw of [
@@ -255,7 +293,7 @@ test("RPC rejects untrusted JSON and impossible budgets before running collectio
 });
 
 test("RPC classifies synchronous throws and asynchronous rejections identically", async () => {
-  const request = JSON.stringify({ protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 4096 });
+  const request = JSON.stringify({ protocol_version: 1, channel_id: "UC_TEST", max_results: 10, max_pages: 1, max_success_response_bytes: 4096 });
   const failure = Object.assign(new Error("busy"), { code: "helper_busy", retry: { kind: "after", after_ms: 25 } });
   const synchronous = await handleRpcRequest(request, communityEndpoint, () => { throw failure; });
   const asynchronous = await handleRpcRequest(request, communityEndpoint, async () => { throw failure; });

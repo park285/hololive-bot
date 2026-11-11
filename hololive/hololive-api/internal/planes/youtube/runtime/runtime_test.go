@@ -494,13 +494,25 @@ func TestClaimLoopImmediatelyDrainsFullBatch(t *testing.T) {
 const runtimeClaimBatchSizeForTest = 4
 
 func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
-	var retries atomic.Int64
+	var (
+		retries      atomic.Int64
+		deadLettered atomic.Int64
+	)
 
-	runtime := newTestRuntime(t, fakeClaimer{
+	runtime := newTestRuntime(t, deadLetterClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
 			return contract.StatusPending, nil
+		},
+		deadLetter: func(_ context.Context, input sourceobservation.DeadLetterInput) error {
+			deadLettered.Add(1)
+
+			if !strings.Contains(input.ErrorDetail, "unexpected canonical write failure") {
+				t.Errorf("DeadLetter detail = %q", input.ErrorDetail)
+			}
+
+			return nil
 		},
 	}, fakeConsumer{
 		consume: func(context.Context, sourceobservation.Claim) error {
@@ -514,24 +526,31 @@ func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 		SubjectKey:      "UC_FATAL",
 	}
 
-	err := runtime.processClaim(t.Context(), observation)
-	if err == nil || !strings.Contains(err.Error(), "unexpected canonical write failure") {
-		t.Fatalf("processClaim() error = %v", err)
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
+		t.Fatalf("processClaim() error = %v, want nil after dead letter", err)
 	}
 
-	if retries.Load() != 0 {
-		t.Fatalf("unknown error retried %d time(s)", retries.Load())
+	if retries.Load() != 0 || deadLettered.Load() != 1 {
+		t.Fatalf("retries = %d, dead letters = %d; want 0, 1", retries.Load(), deadLettered.Load())
 	}
 }
 
 func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
-	var retries atomic.Int64
+	var (
+		retries      atomic.Int64
+		deadLettered atomic.Int64
+	)
 
-	runtime := newTestRuntime(t, fakeClaimer{
+	runtime := newTestRuntime(t, deadLetterClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
 			return contract.StatusPending, nil
+		},
+		deadLetter: func(context.Context, sourceobservation.DeadLetterInput) error {
+			deadLettered.Add(1)
+
+			return nil
 		},
 	}, fakeConsumer{
 		consume: func(context.Context, sourceobservation.Claim) error {
@@ -545,12 +564,12 @@ func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 		SubjectKey:      "UC_CANCELED",
 	}
 
-	if err := runtime.processClaim(t.Context(), observation); !errors.Is(err, context.Canceled) {
-		t.Fatalf("processClaim() error = %v, want context.Canceled", err)
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
+		t.Fatalf("processClaim() error = %v, want nil after dead letter", err)
 	}
 
-	if retries.Load() != 0 {
-		t.Fatalf("unowned cancellation retried %d time(s)", retries.Load())
+	if retries.Load() != 0 || deadLettered.Load() != 1 {
+		t.Fatalf("unowned cancellation retries = %d, dead letters = %d; want 0, 1", retries.Load(), deadLettered.Load())
 	}
 }
 
@@ -768,6 +787,10 @@ func (f fakeClaimer) Retry(ctx context.Context, input sourceobservation.RetryInp
 	}
 
 	return contract.StatusPending, nil
+}
+
+func (fakeClaimer) DeadLetter(context.Context, sourceobservation.DeadLetterInput) error {
+	return nil
 }
 
 type fakeConsumer struct {

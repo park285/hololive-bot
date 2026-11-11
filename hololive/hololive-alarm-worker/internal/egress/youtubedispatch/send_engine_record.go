@@ -52,12 +52,8 @@ func (d *SendEngine) recordPerRoomSuccess(
 	d.metricsRecorder.recordPerRoomSuccess(ctx, &attempt.rows[0], attempt.rows, attempt.outboxes, attempt.request, result)
 }
 
-func (d *SendEngine) recordDeliveryFailure(
-	result *deliveryDispatchResult,
-	reason string,
-	deliveryID, outboxID int64,
-) {
-	d.metricsRecorder.recordDeliveryFailure(result, reason, deliveryID, outboxID)
+func (d *SendEngine) recordDeliveryFailure(result *deliveryDispatchResult, outboxID int64) {
+	d.metricsRecorder.recordDeliveryFailure(result, outboxID)
 }
 
 func (d *SendEngine) recordGroupedRequestBuildFailure(

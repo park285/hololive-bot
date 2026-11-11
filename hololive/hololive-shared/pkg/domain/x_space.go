@@ -2,7 +2,6 @@ package domain
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -49,20 +48,4 @@ func (p *XSpaceDispatchPayload) Validate() error {
 // URL은 검증된 스페이스의 공개 참여 링크를 반환한다. 외부 제공 URL을 사용하지 않는다.
 func (p *XSpaceDispatchPayload) URL() string {
 	return "https://x.com/i/spaces/" + p.SpaceID
-}
-
-func (e *AlarmQueueEnvelope) validateXSpaceDispatch() error {
-	if err := validateCanonicalNotification(&e.Notification); err != nil {
-		return fmt.Errorf("x space notification: %w", err)
-	}
-
-	if e.Notification.AlarmType != AlarmTypeLive || e.Notification.Channel != nil || e.Notification.Stream != nil {
-		return errors.New("x space dispatch requires LIVE subscription without a stream payload")
-	}
-
-	if e.Celebration != nil || e.DeliveryDigest != nil {
-		return errors.New("x space dispatch contains another source payload")
-	}
-
-	return e.XSpace.Validate()
 }

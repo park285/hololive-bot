@@ -30,7 +30,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v5/iris"
 )
 
 type ReplyOutboxInsertOutcome int
@@ -53,12 +52,6 @@ func (o ReplyOutboxInsertOutcome) String() string {
 		return "unknown"
 	}
 }
-
-const (
-	ReplyOutboxMaxAttempts = int32(5)
-	// 자동 replay 지평은 iris-client-go 공개 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
-	ReplyOutboxAutomaticReplayHorizon = iris.ReplyAutomaticReplayHorizon
-)
 
 const (
 	// ReplyOutboxAccepted는 Iris durable admission이 끝나고 handoff 확인을 기다리는 lease 없는 상태다.

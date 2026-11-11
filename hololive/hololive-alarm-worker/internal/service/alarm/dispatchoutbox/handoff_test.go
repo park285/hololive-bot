@@ -20,7 +20,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const (
@@ -49,7 +48,7 @@ func handoffTestIrisRequestID(unit int64, generation int) string {
 func claimSendingUnits(t *testing.T, repo *PgxRepository, rooms ...string) [][]*Record {
 	t.Helper()
 
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, 2*len(rooms))
+	envelopes := make([]AlarmQueueEnvelope, 0, 2*len(rooms))
 	for _, room := range rooms {
 		first := receiptEnvelope(room, "first")
 		second := receiptEnvelope(room, "second")
@@ -183,7 +182,7 @@ func TestConsumerMarkDispatchedClipsFirstCheckToHorizon(t *testing.T) {
 			records := claimSendingUnits(t, repo, "handoff-first-check")[0]
 			unit := records[0].SendUnitID
 
-			envelopes := make([]domain.AlarmQueueEnvelope, len(records))
+			envelopes := make([]AlarmQueueEnvelope, len(records))
 			for i, record := range records {
 				attachRecordMetadata(&envelopes[i], record)
 			}

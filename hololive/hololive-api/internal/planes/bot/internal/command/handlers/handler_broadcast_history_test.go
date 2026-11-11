@@ -120,7 +120,7 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 
 	after := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(2 * time.Second)
 
-	if repo.listQuery.Type != string(broadcasttype.Game) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 || repo.listQuery.IncludeAll {
+	if repo.listQuery.Type != string(broadcasttype.Game) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 {
 		t.Fatalf("query = %+v", repo.listQuery)
 	}
 
@@ -211,7 +211,7 @@ func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
-		Matcher:          matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:          matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = message
 			return nil
@@ -260,10 +260,6 @@ func TestBroadcastHistoryCommandDefaultDaysIsOneWeek(t *testing.T) {
 	}
 
 	after := time.Now().AddDate(0, 0, -defaultBroadcastHistoryDays).Add(2 * time.Second)
-
-	if repo.listQuery.IncludeAll {
-		t.Fatal("IncludeAll = true, want false")
-	}
 
 	if repo.listQuery.Since.Before(before) || repo.listQuery.Since.After(after) {
 		t.Fatalf("Since = %s, want around one week ago between %s and %s", repo.listQuery.Since, before, after)
@@ -382,32 +378,6 @@ func TestPgBroadcastHistoryRepositoryPushesStableTopicFilterIntoSQL(t *testing.T
 	}
 }
 
-func TestPgBroadcastHistoryRepositoryElapsedBudgetReturnsTruncatedResult(t *testing.T) {
-	repo := &pgBroadcastHistoryRepository{
-		queryTimeout: 20 * time.Millisecond,
-		pageLoader: func(ctx context.Context, _ *handlercore.BroadcastHistoryQuery, _, _ *time.Time, _ string, _ int) ([]handlercore.BroadcastHistoryEntry, error) {
-			<-ctx.Done()
-
-			return nil, ctx.Err()
-		},
-	}
-
-	started := time.Now()
-
-	result, err := repo.ListEndedBroadcasts(t.Context(), &handlercore.BroadcastHistoryQuery{Limit: 1})
-	if err != nil {
-		t.Fatalf("ListEndedBroadcasts() error = %v", err)
-	}
-
-	if !result.Truncated {
-		t.Fatal("Truncated = false, want true after elapsed budget")
-	}
-
-	if elapsed := time.Since(started); elapsed > time.Second {
-		t.Fatalf("elapsed = %s, want bounded query time", elapsed)
-	}
-}
-
 func TestPgBroadcastHistoryRepositoryUsesLiveEventMetadataFallback(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -459,8 +429,8 @@ func TestPgBroadcastHistoryRepositoryUsesLiveEventMetadataFallback(t *testing.T)
 		t.Fatalf("ThumbnailURL = %q, want maxres fallback URL", entry.ThumbnailURL)
 	}
 
-	if entry.BroadcastType != string(broadcasttype.Game) || entry.BroadcastTypeSource != testTypeSourceTopic {
-		t.Fatalf("classification = {%q %q}, want {game topic}", entry.BroadcastType, entry.BroadcastTypeSource)
+	if entry.BroadcastType != string(broadcasttype.Game) {
+		t.Fatalf("BroadcastType = %q, want game", entry.BroadcastType)
 	}
 }
 

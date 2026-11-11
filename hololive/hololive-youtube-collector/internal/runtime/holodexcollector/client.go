@@ -24,6 +24,10 @@ func NewClient(httpClient *providerhttp.ProviderHTTPClient, baseURL, apiKey stri
 		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "holodex HTTP client is not configured")
 	}
 
+	if maxBody <= 0 {
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "holodex max response body must be positive")
+	}
+
 	parsed, err := providerhttp.ParseHolodexBaseURL(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse holodex base URL: %w", err)

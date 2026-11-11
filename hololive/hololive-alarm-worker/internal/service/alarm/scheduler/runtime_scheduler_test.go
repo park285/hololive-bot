@@ -29,19 +29,20 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type fakeRunner struct{}
 
-func (f *fakeRunner) Check(_ context.Context) ([]*domain.AlarmNotification, error) {
+func (f *fakeRunner) Check(context.Context, targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
 	return []*domain.AlarmNotification{}, nil
 }
 
 type fakeSender struct{}
 
-func (f *fakeSender) Send(_ context.Context, _ []*domain.AlarmNotification) (delivery.SendResult, error) {
+func (f *fakeSender) Send(context.Context, []*domain.AlarmNotification, targetpolicy.TargetMinutePolicy) (delivery.SendResult, error) {
 	return delivery.SendResult{}, nil
 }
 
@@ -49,8 +50,9 @@ func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		runtimeScheduler := &RuntimeScheduler{
-			youtubeChecker: &fakeRunner{},
-			notifier:       &fakeSender{},
+			youtubeChecker:      &fakeRunner{},
+			notifier:            &fakeSender{},
+			targetMinutesSource: &targetMinutesSourceStub{targets: []int{5, 3, 1}},
 
 			youtubeInterval: 5 * time.Second,
 

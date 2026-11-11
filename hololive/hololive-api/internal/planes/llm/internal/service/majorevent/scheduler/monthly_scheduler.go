@@ -33,9 +33,13 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+)
+
+const (
+	MonthlyScheduleHourKST = 10
+	MonthlyScheduleDay     = 1
 )
 
 type MonthlyScheduler struct {
@@ -111,12 +115,9 @@ func (s *MonthlyScheduler) Stop() {
 func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
 	nowKST := now.In(kst)
 
-	scheduleHour := constants.MajorEventConfig.MonthlyScheduleHourKST
-	scheduleDay := constants.MajorEventConfig.MonthlyScheduleDay
-
 	target := time.Date(
-		nowKST.Year(), nowKST.Month(), scheduleDay,
-		scheduleHour, 0, 0, 0, kst,
+		nowKST.Year(), nowKST.Month(), MonthlyScheduleDay,
+		MonthlyScheduleHourKST, 0, 0, 0, kst,
 	)
 
 	if !target.After(nowKST) {
@@ -132,14 +133,17 @@ type monthlyCollected struct {
 }
 
 func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) (notification.Result, error) {
-	monthKey := s.getMonthKey()
+	// 조회 연·월과 monthKey(잠금·outbox·표시 키)는 실행 시작 시각 한 번으로 정한다. 실행 중 월 경계를 넘어도 서로 어긋나지 않는다.
+	nowKST := s.digest.Clock().In(kst)
+	year, month := nowKST.Year(), int(nowKST.Month())
+	monthKey := fmt.Sprintf("%d-%02d", year, month)
 	result := notification.NewResult(0, 0, 0)
 
 	if err := s.digest.RunDigest(ctx, schedulerkit.DigestOp[monthlyCollected]{
 		LockKey:           fmt.Sprintf("majorevent:lock:monthly:%s", monthKey),
 		OnLockNotAcquired: func() error { return notification.ErrNotificationInProgress },
 		Collect: func(ctx context.Context) (monthlyCollected, bool, error) {
-			return s.monthlyNotificationInputs(ctx, monthKey)
+			return s.monthlyNotificationInputs(ctx, year, month, monthKey)
 		},
 		Execute: func(ctx context.Context, c monthlyCollected) error {
 			var err error
@@ -157,6 +161,7 @@ func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) (notific
 
 func (s *MonthlyScheduler) monthlyNotificationInputs(
 	ctx context.Context,
+	year, month int,
 	monthKey string,
 ) (monthlyCollected, bool, error) {
 	rooms, err := s.repository.GetSubscribedRooms(ctx)
@@ -169,9 +174,6 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 
 		return monthlyCollected{}, false, nil
 	}
-
-	nowKST := s.digest.Clock().In(kst)
-	year, month := nowKST.Year(), int(nowKST.Month())
 
 	events, err := s.repository.GetEventsByMonth(ctx, year, month, monthKey)
 	if err != nil {
@@ -231,9 +233,4 @@ func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, event
 	}
 
 	return message, nil
-}
-
-func (s *MonthlyScheduler) getMonthKey() string {
-	now := s.digest.Clock().In(kst)
-	return fmt.Sprintf("%d-%02d", now.Year(), now.Month())
 }

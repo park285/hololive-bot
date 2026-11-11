@@ -15,7 +15,7 @@ test("paid-access metadata preserves a known missing schedule without parsing lo
   const raw = structuredClone(restrictedFixture);
   raw.playabilityStatus.reason = "채널 회원 전용 콘텐츠";
   assert.deepEqual(parseRawLiveMetadata(raw, "restricted-fixture"), {
-    videoId: "restricted-fixture", isUpcoming: true, isLiveContent: true,
+    isUpcoming: true, isLiveContent: true,
     scheduleUnavailableReason: "access_restricted",
   });
 });
@@ -60,7 +60,6 @@ test("paid-access metadata never masks malformed identity, state, renderer, or s
 
 test("parseRawLiveMetadata reads the exact matching raw player schedule", () => {
   assert.deepEqual(parseRawLiveMetadata(playerFixture, "upcoming-fixture"), {
-    videoId: "upcoming-fixture",
     isLive: false,
     isUpcoming: true,
     isLiveContent: true,
@@ -88,7 +87,6 @@ test("parseRawLiveMetadata recovers an upcoming schedule from the offline slate"
   };
 
   assert.deepEqual(parseRawLiveMetadata(raw, "upcoming-offline-slate"), {
-    videoId: "upcoming-offline-slate",
     isUpcoming: true,
     isLiveContent: true,
     startTimestamp: "2026-09-01T11:00:00.000Z",
@@ -148,23 +146,19 @@ test("parseRawLiveMetadata rejects disagreeing machine-readable schedules", () =
   );
 });
 
-test("parseRawLiveMetadata keeps distinct policies at the leap-day calendar boundary", () => {
-  const withTimes = (startTimestamp, endTimestamp) => {
+test("parseRawLiveMetadata applies the calendar boundary to the schedule timestamp", () => {
+  const withStart = (startTimestamp) => {
     const raw = structuredClone(playerFixture);
-    raw.microformat.playerMicroformatRenderer.liveBroadcastDetails = { startTimestamp, endTimestamp };
+    raw.microformat.playerMicroformatRenderer.liveBroadcastDetails = { startTimestamp };
     return raw;
   };
 
-  const leap = parseRawLiveMetadata(withTimes("2028-02-29T11:00:00+09:00", "2028-02-29T12:00:00Z"), "upcoming-fixture");
-  assert.equal(leap.startTimestamp, "2028-02-29T02:00:00.000Z");
-  assert.equal(leap.endTimestamp, "2028-02-29T12:00:00.000Z");
-
-  // 필수 시작 시각의 달력 오류는 parser drift이고, 부가 종료 시각의 같은 오류는 생략입니다.
-  const omittedEnd = parseRawLiveMetadata(withTimes("2028-02-29T11:00:00Z", "2100-02-29T12:00:00Z"), "upcoming-fixture");
-  assert.equal(omittedEnd.startTimestamp, "2028-02-29T11:00:00.000Z");
-  assert.equal(Object.hasOwn(omittedEnd, "endTimestamp"), false);
+  assert.equal(
+    parseRawLiveMetadata(withStart("2028-02-29T11:00:00+09:00"), "upcoming-fixture").startTimestamp,
+    "2028-02-29T02:00:00.000Z",
+  );
   assert.throws(
-    () => parseRawLiveMetadata(withTimes("2100-02-29T11:00:00Z", undefined), "upcoming-fixture"),
+    () => parseRawLiveMetadata(withStart("2100-02-29T11:00:00Z"), "upcoming-fixture"),
     (error) => error.code === "parser_drift",
   );
 });

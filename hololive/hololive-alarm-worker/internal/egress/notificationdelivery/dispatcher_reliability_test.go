@@ -3,15 +3,20 @@ package notificationdelivery
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"net/http"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -192,6 +197,39 @@ func TestGenericProviderAttemptEndsBeforeFinalizationPanic(t *testing.T) {
 		d.processItem(t.Context(), &domain.NotificationDeliveryOutbox{ID: 1, Payload: makePayload(t, "hello")})
 	})
 	require.Equal(t, workercontract.AttemptTotals{Success: 1}, totals.Snapshot().Attempts)
+}
+
+func TestGenericProviderAttemptOutcomeByError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want workercontract.AttemptOutcome
+	}{
+		{name: "unclassified", err: errors.New("provider failed"), want: workercontract.AttemptFailed},
+		{name: "server error", err: &iris.HTTPError{StatusCode: http.StatusServiceUnavailable}, want: workercontract.AttemptFailed},
+		{name: "known unsent transport", err: &iris.TransportError{Op: "post", Err: &net.OpError{Op: "dial", Err: errors.New("refused")}}, want: workercontract.AttemptFailed},
+		{name: "response lost", err: &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}, want: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown with deadline", err: errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.DeadlineExceeded), want: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown with cancel", err: errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.Canceled), want: workercontract.AttemptOutcomeUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			totals := &workercontract.Counters{}
+			sender := &mockSender{sendWithClientRequest: func(context.Context, string, string, string) error { return tc.err }}
+			d := mustNewDispatcher(t, &mockDeliveryRepository{}, sender, dispatcherLogger(), nil)
+			d.SetWorkerInstrumentation(workercontract.NewExecutorTracker(), totals)
+
+			item := &domain.NotificationDeliveryOutbox{ID: 1, RoomID: "room"}
+			request := &deliverypayload.Request{Body: testPinnedBody, Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(item)}
+
+			_, err := d.attemptSend(t.Context(), item, request)
+			require.ErrorIs(t, err, tc.err)
+
+			expected := &workercontract.Counters{}
+			expected.RecordAttempt(tc.want)
+			require.Equal(t, expected.Snapshot(), totals.Snapshot())
+		})
+	}
 }
 
 func TestGenericProviderPanicClosesAttempt(t *testing.T) {

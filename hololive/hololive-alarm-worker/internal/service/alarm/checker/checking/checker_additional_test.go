@@ -49,22 +49,22 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		t.Parallel()
 
 		cacheClient := newCheckerTestCacheClient(t)
-		dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
+		dedupService := dedup.NewService(cacheClient, newCheckerTestLogger())
 		tierScheduler := tier.NewTieredScheduler(newCheckerTestLogger())
 
-		_, err := NewYouTubeCheckerWithPersistedLiveSource(nil, &holodexprovider.Service{}, tierScheduler, dedupService, []int{5}, 0, nil, nil, newCheckerTestLogger())
+		_, err := NewYouTubeCheckerWithPersistedLiveSource(nil, &holodexprovider.Service{}, tierScheduler, dedupService, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache service is nil")
 
-		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, nil, tierScheduler, dedupService, []int{5}, 0, nil, nil, newCheckerTestLogger())
+		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, nil, tierScheduler, dedupService, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "holodex service is nil")
 
-		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, &holodexprovider.Service{}, nil, dedupService, []int{5}, 0, nil, nil, newCheckerTestLogger())
+		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, &holodexprovider.Service{}, nil, dedupService, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "tier scheduler is nil")
 
-		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, &holodexprovider.Service{}, tierScheduler, nil, []int{5}, 0, nil, nil, newCheckerTestLogger())
+		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, &holodexprovider.Service{}, tierScheduler, nil, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dedup service is nil")
 
@@ -73,18 +73,13 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 			&holodexprovider.Service{},
 			tierScheduler,
 			dedupService,
-			[]int{10, 0, 10},
 			0,
 			nil,
 			nil,
 			newCheckerTestLogger())
 		require.NoError(t, err)
 		require.NotNil(t, checker)
-		assert.Equal(t, []int{10, 1}, checker.targetPolicySnapshot().Clone())
 		assert.Equal(t, 75*time.Second, checker.evaluationWindowCap)
-
-		checker.UpdateTargetMinutes([]int{15, 0, 15, 3})
-		assert.Equal(t, []int{15, 3, 1}, checker.targetPolicySnapshot().Clone())
 	})
 }
 
@@ -231,10 +226,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		_, err := cacheClient.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{testRoomShort1, testRoomShort2})
 		require.NoError(t, err)
 
-		// 구독 0이 확정된 채널은 empty marker로 표시되어 DB 없이도 결과에서 빠진다.
-		require.NoError(t, cacheClient.Set(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(testChIDShort2, domain.AlarmTypeLive), "1", time.Minute))
-
-		result, err := LoadSubscriberRoomsByChannel(ctx, cacheClient, alarmstore.NewSubscriberResolver(cacheClient, nil), []string{testChIDShort1, testChIDShort1, testChIDShort2})
+		result, err := LoadSubscriberRoomsByChannel(ctx, cacheClient, alarmstore.NewSubscriberResolver(cacheClient, nil), []string{testChIDShort1, testChIDShort1})
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		assert.ElementsMatch(t, []string{testRoomShort1, testRoomShort2}, result[testChIDShort1])
@@ -382,10 +374,9 @@ func newYouTubeBuilderFixture(t *testing.T) (*YouTubeChecker, *dedup.Service, ti
 	t.Helper()
 
 	cacheClient := newCheckerTestCacheClient(t)
-	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
+	dedupService := dedup.NewService(cacheClient, newCheckerTestLogger())
 	checker := &YouTubeChecker{
 		dedupService:        dedupService,
-		targetPolicy:        targetpolicy.NewTargetMinutePolicy([]int{5, 3, 1}),
 		evaluationWindowCap: 75 * time.Second,
 		logger:              newCheckerTestLogger(),
 	}
@@ -413,20 +404,20 @@ func assertBuildUpcomingNotifications(t *testing.T) {
 		End:   now,
 	}
 
-	notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{testRoomShort1, testRoomShort2}, window)
+	notifications, err := checker.buildUpcomingNotifications(ctx, testTargetPolicy(), stream, []string{testRoomShort1, testRoomShort2}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 2)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
 
 	require.NoError(t, dedupService.MarkAsNotified(ctx, stream.ID, start, 5))
 
-	notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{testRoomShort1}, window)
+	notifications, err = checker.buildUpcomingNotifications(ctx, testTargetPolicy(), stream, []string{testRoomShort1}, window)
 	require.NoError(t, err)
 	assert.Len(t, notifications, 1, "global marker must not hide a room candidate")
 
 	nonTarget := now.Add(10 * time.Minute)
 
-	notifications, err = checker.buildUpcomingNotifications(ctx, &domain.Stream{
+	notifications, err = checker.buildUpcomingNotifications(ctx, testTargetPolicy(), &domain.Stream{
 		ID:             "upcoming-2",
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &nonTarget,
@@ -455,7 +446,7 @@ func assertBuildUpcomingCrossedWindow(t *testing.T) {
 		End:   now,
 	}
 
-	notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{testRoomShort1}, window)
+	notifications, err := checker.buildUpcomingNotifications(ctx, testTargetPolicy(), stream, []string{testRoomShort1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
@@ -483,7 +474,7 @@ func assertBuildUpcomingInitialCappedBackfill(t *testing.T) {
 		InitialObservation: true,
 	}
 
-	notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{testRoomShort1}, window)
+	notifications, err := checker.buildUpcomingNotifications(ctx, testTargetPolicy(), stream, []string{testRoomShort1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
@@ -511,7 +502,7 @@ func assertBuildUpcomingCappedRecovery(t *testing.T) {
 		InitialObservation: false,
 	}
 
-	notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{testRoomShort1}, window)
+	notifications, err := checker.buildUpcomingNotifications(ctx, testTargetPolicy(), stream, []string{testRoomShort1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
@@ -534,14 +525,14 @@ func assertBuildLiveCatchupMissedPrimary(t *testing.T) {
 		Channel:        &domain.Channel{ID: testChIDLive, Name: "Live Channel"},
 	}
 
-	notifications, err := checker.buildLiveCatchupNotifications(ctx, testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
+	notifications, err := checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
 	require.NoError(t, err)
 	require.Len(t, notifications, 2)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
 
 	require.NoError(t, dedupService.MarkUpcomingEventNotified(ctx, testRoomShort1, testChIDLive, stream))
 
-	notifications, err = checker.buildLiveCatchupNotifications(ctx, testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
+	notifications, err = checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, testRoomShort2, notifications[0].RoomID)
@@ -549,7 +540,7 @@ func assertBuildLiveCatchupMissedPrimary(t *testing.T) {
 
 	require.NoError(t, dedupService.MarkAsNotified(ctx, stream.ID, start, 5))
 
-	notifications, err = checker.buildLiveCatchupNotifications(ctx, testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
+	notifications, err = checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, testRoomShort2, notifications[0].RoomID)
@@ -558,14 +549,14 @@ func assertBuildLiveCatchupMissedPrimary(t *testing.T) {
 	oldStart := now.Add(-10 * time.Minute)
 	oldStream := &domain.Stream{ID: "live-old", Status: domain.StreamStatusLive, StartScheduled: &oldStart}
 
-	notifications, err = checker.buildLiveCatchupNotifications(ctx, testChIDLive, oldStream, []string{testRoomShort1}, now, nil)
+	notifications, err = checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, oldStream, []string{testRoomShort1}, now, nil)
 	require.NoError(t, err)
 	assert.Empty(t, notifications)
 
 	futureStart := now.Add(2 * time.Minute)
 	futureStream := &domain.Stream{ID: "live-future", Status: domain.StreamStatusLive, StartScheduled: &futureStart}
 
-	notifications, err = checker.buildLiveCatchupNotifications(ctx, testChIDLive, futureStream, []string{testRoomShort1}, now, nil)
+	notifications, err = checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, futureStream, []string{testRoomShort1}, now, nil)
 	require.NoError(t, err)
 	assert.Empty(t, notifications)
 }
@@ -601,7 +592,7 @@ func assertBuildChannelNotifications(t *testing.T) {
 		End:   now,
 	}
 
-	notifications, err := checker.buildChannelNotifications(ctx, testChID1, []string{testRoomShort1, testRoomShort2}, streams, window, now, nil)
+	notifications, err := checker.buildChannelNotifications(ctx, testTargetPolicy(), testChID1, []string{testRoomShort1, testRoomShort2}, streams, window, now, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, notifications)
 }
@@ -943,7 +934,7 @@ func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {
 		Channel:        &domain.Channel{ID: testChIDLive, Name: "Live Channel"},
 	}
 
-	first, err := checker.buildLiveCatchupNotifications(ctx, testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
+	first, err := checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
 	require.NoError(t, err)
 	require.Len(t, first, 2)
 	assert.Equal(t, 5, first[0].MinutesUntil)
@@ -951,7 +942,7 @@ func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {
 	require.NoError(t, dedupService.MarkAsNotified(ctx, stream.ID, start, 5))
 	require.NoError(t, dedupService.MarkUpcomingEventNotified(ctx, testRoomShort1, testChIDLive, stream))
 
-	second, err := checker.buildLiveCatchupNotifications(ctx, testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
+	second, err := checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, stream, []string{testRoomShort1, testRoomShort2}, now, nil)
 	require.NoError(t, err)
 	require.Len(t, second, 1)
 	assert.Equal(t, testRoomShort2, second[0].RoomID)
@@ -979,7 +970,7 @@ func TestLiveCatchupAllowsRescheduledStreamAfterPreviousScheduleNotified(t *test
 		Channel:        &domain.Channel{ID: testChIDLive, Name: "Live Channel"},
 	}
 
-	notifications, err := checker.buildLiveCatchupNotifications(ctx, testChIDLive, stream, []string{testRoomShort1}, now, nil)
+	notifications, err := checker.buildLiveCatchupNotifications(ctx, testTargetPolicy(), testChIDLive, stream, []string{testRoomShort1}, now, nil)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
@@ -1004,6 +995,7 @@ func TestLiveCatchupSuppressesSentRoomAfterScheduleDrift(t *testing.T) {
 
 	notifications, err := checker.buildLiveCatchupNotifications(
 		t.Context(),
+		testTargetPolicy(),
 		testChIDLive,
 		stream,
 		[]string{"room-sent", "room-missed"},
@@ -1054,10 +1046,9 @@ func newTestYouTubeCheckerWithDedup(t *testing.T) (*YouTubeChecker, *dedup.Servi
 	t.Helper()
 
 	cacheClient := newCheckerTestCacheClient(t)
-	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
+	dedupService := dedup.NewService(cacheClient, newCheckerTestLogger())
 	checker := &YouTubeChecker{
 		dedupService:        dedupService,
-		targetPolicy:        targetpolicy.NewTargetMinutePolicy([]int{5, 3, 1}),
 		evaluationWindowCap: 75 * time.Second,
 		logger:              newCheckerTestLogger(),
 	}

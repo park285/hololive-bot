@@ -54,7 +54,7 @@ func TestHandleInvalidAlwaysAnswersWithTheUsageError(t *testing.T) {
 			t.Parallel()
 
 			command, sent, _ := newInvalidAlarmCommand(t)
-			cmdCtx := &botcommand.CommandContext{Room: "123456789", RoomName: "룸제목-" + alarmPrivacySentinel}
+			cmdCtx := &botcommand.CommandContext{Room: "123456789"}
 
 			if err := command.handleInvalid(t.Context(), cmdCtx, params); err != nil {
 				t.Fatalf("handleInvalid() error = %v", err)
@@ -81,7 +81,6 @@ func TestHandleInvalidLogKeepsRoomIDWithoutUserInput(t *testing.T) {
 	command, _, logs := newInvalidAlarmCommand(t)
 	cmdCtx := &botcommand.CommandContext{
 		Room:     "123456789",
-		RoomName: "룸제목-" + alarmPrivacySentinel,
 		UserName: "닉네임-" + alarmPrivacySentinel,
 	}
 	params := map[string]any{"sub_command": "오타-" + alarmPrivacySentinel}

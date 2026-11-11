@@ -203,7 +203,7 @@ func TestWireMinimumSuccessBytesDoNotExceedHelperMinimum(t *testing.T) {
 func TestWireRPC(t *testing.T) {
 	fixture := loadWireFixture(t)
 
-	cfg := liveHelperConfig(t, t.TempDir())
+	cfg := liveHelperConfig(t, shortRuntimeBase(t))
 
 	// limiter 예약 수로 helper가 보고한 예정 영상 조회의 지불을 확인한다.
 	limiter := NewRateLimiter(time.Microsecond)
@@ -300,7 +300,7 @@ func fetchWire(ctx context.Context, rpc *RPC, path, subject, kind string, limit 
 		// 실제 helper 요청 검증기가 Go의 RFC3339Nano lease 슬롯 시각을 받는지도 함께 확인합니다.
 		slot := time.Date(2026, time.August, 14, 1, 0, 0, 123456789, time.UTC)
 
-		return wireResult(rpc.FetchChannel(ctx, ChannelRequest{ChannelID: subject, Kind: kind, MaxPages: 1, MaxSuccessResponseBytes: limit, ScheduledFor: new(slot)}))
+		return wireResult(rpc.FetchChannel(ctx, ChannelRequest{ChannelID: subject, Kind: kind, MaxSuccessResponseBytes: limit, ScheduledFor: new(slot)}))
 	case "/v1/channel_live_check":
 		return wireResult(rpc.FetchChannelLiveCheck(ctx, ChannelLiveCheckRequest{ChannelID: subject, MaxSuccessResponseBytes: limit}))
 	case "/v1/video_live_check":

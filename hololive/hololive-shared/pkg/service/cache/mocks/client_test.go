@@ -157,10 +157,6 @@ func TestClientWriteMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 		t.Fatalf("HMSet() error = %v, want nil", err)
 	}
 
-	if err := client.HDel(t.Context(), "rooms", "name"); err != nil {
-		t.Fatalf("HDel() error = %v, want nil", err)
-	}
-
 	if err := client.Expire(t.Context(), "rooms", time.Second); err != nil {
 		t.Fatalf("Expire() error = %v, want nil", err)
 	}

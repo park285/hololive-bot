@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root_dir="${TOPOLOGY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 owner="$root_dir/deploy/topology/hosts.conf"
 manifest="$root_dir/deploy/topology/consumers.tsv"
 
@@ -81,6 +81,7 @@ LC_ALL=C cut -f1 "$manifest" | LC_ALL=C sort -u >"$tmpdir/registered"
   candidates=(
     scripts/deploy/ap-hosts/*.conf
     deploy/quadlet/*/*.container
+    deploy/podman/*/*.container
     deploy/postgres/pg_hba.conf
     deploy/nginx/*.conf
     deploy/nginx/*.template

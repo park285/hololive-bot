@@ -35,7 +35,7 @@ func TestSnapshotCancellationIsIsolatedPerCaller(t *testing.T) {
 						return nil, ctx.Err()
 					}
 				}}
-				mm := NewMatcher(provider, nil, newMatcherTestLogger())
+				mm := NewMatcher(provider, newMatcherTestLogger())
 				leaderCtx, cancelLeaderCtx := context.WithCancel(t.Context())
 
 				defer cancelLeaderCtx()
@@ -92,7 +92,7 @@ func TestSnapshotSharedLoadHasDeadlineAndPreservesPanicsAsErrors(t *testing.T) {
 
 			return nil, ctx.Err()
 		}}
-		mm := NewMatcher(provider, nil, newMatcherTestLogger())
+		mm := NewMatcher(provider, newMatcherTestLogger())
 
 		if _, err := mm.getSnapshot(t.Context()); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("unbounded shared load: %v", err)
@@ -100,7 +100,7 @@ func TestSnapshotSharedLoadHasDeadlineAndPreservesPanicsAsErrors(t *testing.T) {
 	})
 
 	provider := snapshotLoadProvider{load: func(context.Context) ([]*domain.Member, error) { panic("load failed") }}
-	mm := NewMatcher(provider, nil, newMatcherTestLogger())
+	mm := NewMatcher(provider, newMatcherTestLogger())
 
 	if _, err := mm.getSnapshot(t.Context()); err == nil {
 		t.Fatal("panic became successful snapshot")
@@ -110,7 +110,7 @@ func TestSnapshotSharedLoadHasDeadlineAndPreservesPanicsAsErrors(t *testing.T) {
 func TestMatchResultsFollowSnapshotGeneration(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		provider := newStubMemberProvider([]*domain.Member{{ChannelID: "old-channel", Name: "Existing"}})
-		mm := NewMatcher(provider, nil, newMatcherTestLogger())
+		mm := NewMatcher(provider, newMatcherTestLogger())
 
 		if _, err := mm.getSnapshot(t.Context()); err != nil {
 			t.Fatal(err)

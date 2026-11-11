@@ -35,4 +35,4 @@ build-prod:
 
 .PHONY: clean
 clean:
-	rm -rf bin/ bin-prod/ coverage.out coverage.html
+	rm -rf bin/ coverage.out coverage.html

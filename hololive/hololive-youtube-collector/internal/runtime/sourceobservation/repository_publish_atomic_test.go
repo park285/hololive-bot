@@ -5,16 +5,18 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
 func TestPUB001SuccessfulCompletePreservesPriorFailureDiagnostic(t *testing.T) {
@@ -341,6 +343,7 @@ func TestPUB011CallerMutationDuringTxUsesPreparedClone(t *testing.T) {
 	}
 }
 
+// PARTIAL 발행과 직접 defer는 같은 retry 규칙을 쓴다. 재시도 시각과 실패 기록 시각은 잠금 이후 같은 DB 시각에서 나온다.
 func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -350,49 +353,73 @@ func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 		{name: "past clamps to minimum", at: time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC), want: 200 * time.Millisecond},
 		{name: "future clamps to maximum", at: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC), want: time.Second},
 	} {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := t.Context()
-			pool := dbtest.NewPool(t)
-			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
+		for _, entry := range []struct {
+			name    string
+			partial bool
+		}{
+			{name: "partial publish", partial: true},
+			{name: "direct defer"},
+		} {
+			t.Run(test.name+"/"+entry.name, func(t *testing.T) {
+				assertRetryClampedFromFailureInstant(t, test.at, test.want, entry.partial)
+			})
+		}
+	}
+}
 
-			diagnostic, err := contract.NewFailureDiagnostic(contract.ErrorCooldown, contract.ClassCooldown, "cooldown")
-			if err != nil {
-				t.Fatal(err)
-			}
+func assertRetryClampedFromFailureInstant(t *testing.T, at time.Time, want time.Duration, partial bool) {
+	t.Helper()
 
-			schedule, err := collection.NewRetryAtSchedule(test.at)
-			if err != nil {
-				t.Fatal(err)
-			}
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
-			input, err := collection.NewDeferCollectionInput(diagnostic, collection.RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, schedule)
-			if err != nil {
-				t.Fatal(err)
-			}
+	diagnostic, err := contract.NewFailureDiagnostic(contract.ErrorCooldown, contract.ClassCooldown, "cooldown")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			var before, after time.Time
+	schedule, err := collection.NewRetryAtSchedule(at)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			if err := pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&before); err != nil {
-				t.Fatal(err)
-			}
+	input, err := collection.NewDeferCollectionInput(diagnostic, collection.RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, schedule)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			if _, err := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), input); err != nil {
-				t.Fatal(err)
-			}
+	var before, after time.Time
 
-			if err := pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&after); err != nil {
-				t.Fatal(err)
-			}
+	if err = pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
 
-			got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
-			if !got.scheduledFor.Equal(proof.ScheduledFor) || got.retryAt == nil {
-				t.Fatalf("retry clamp = %#v", got)
-			}
+	if partial {
+		_, err = NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), input)
+	} else {
+		err = joblease.DeferLease(ctx, pool, &proof, input)
+	}
 
-			if got.retryAt.Before(before.Add(test.want)) || got.retryAt.After(after.Add(test.want)) {
-				t.Fatalf("retry_not_before = %s, want postgres clock + %s", got.retryAt, test.want)
-			}
-		})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
+	if !got.scheduledFor.Equal(proof.ScheduledFor) || got.retryAt == nil {
+		t.Fatalf("retry clamp = %#v", got)
+	}
+
+	if got.retryAt.Before(before.Add(want)) || got.retryAt.After(after.Add(want)) {
+		t.Fatalf("retry_not_before = %s, want postgres clock + %s", got.retryAt, want)
+	}
+
+	if !got.retryAt.Equal(got.failureAt.Add(want)) {
+		t.Fatalf("retry_not_before = %s, want last_failure_at %s + %s", got.retryAt, got.failureAt, want)
 	}
 }
 
@@ -423,40 +450,25 @@ func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 	}
 
 	assertPublishSideEffects(t, pool, 0, 0, 0)
-
-	var jobKey string
-
-	err = pool.QueryRow(ctx, deferCollectionJobSQL,
-		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
-		"not_a_code", "TRANSIENT", "detail", time.Now().UTC().Add(200*time.Millisecond), int64(100), int64(1000), false,
-	).Scan(&jobKey)
-
-	if !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("invalid SQL tuple error = %v, want no rows", err)
-	}
-
-	if got := readLeaseTerminal(ctx, t, pool, proof.JobKey); got.state != testSlotStateActive || got.failureCode != "" {
-		t.Fatalf("invalid SQL tuple mutated lease = %#v", got)
-	}
 }
 
-func TestPUB014AtomicDeferStoresConstructorDetailUnchanged(t *testing.T) {
+func TestPUB014AtomicDeferSanitizesDetailLikeDirectDefer(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
-	detail := "helper protocol reset"
+	rawDetail := "youtube.js helper: Authorization: Bearer secret-value"
 
 	if _, err := NewRepository(pool).PublishBatchAndDefer(
 		ctx,
 		publishInput(communityEnvelope(t, &proof, "post-1")),
-		mustTestDeferInput(t, contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, detail),
+		mustTestDeferInput(t, contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, rawDetail),
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	atomic := readLeaseTerminal(ctx, t, pool, proof.JobKey)
-	if atomic.failureDetail != detail || atomic.failureCode != string(contract.ErrorHelperProtocolMismatch) ||
-		atomic.failureClass != string(contract.ClassProtocol) {
+	if atomic.failureDetail != collecterr.SanitizeDetail(rawDetail) || strings.Contains(atomic.failureDetail, "secret-value") ||
+		atomic.failureCode != string(contract.ErrorHelperProtocolMismatch) || atomic.failureClass != string(contract.ClassProtocol) {
 		t.Fatalf("atomic defer diagnostic = %#v", atomic)
 	}
 }

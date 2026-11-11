@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 usage() {
-  echo "usage: $0 <module> <tidy|vet|test|race|test-prod|build-prod>" >&2
+  echo "usage: $0 <module> <tidy|vet|race|test-prod|build-prod>" >&2
   exit 2
 }
 
@@ -14,7 +14,7 @@ module="$1"
 stage="$2"
 
 case "${module}" in
-  .|hololive/hololive-api|hololive/hololive-alarm-worker|hololive/hololive-dbtest|hololive/hololive-shared|hololive/hololive-youtube-collector)
+  hololive/hololive-api|hololive/hololive-alarm-worker|hololive/hololive-dbtest|hololive/hololive-shared|hololive/hololive-youtube-collector)
     ;;
   *)
     echo "unsupported public PR module: ${module}" >&2
@@ -23,7 +23,7 @@ case "${module}" in
 esac
 
 case "${stage}" in
-  tidy|vet|test|race|test-prod|build-prod)
+  tidy|vet|race|test-prod|build-prod)
     ;;
   *)
     echo "unsupported public PR stage: ${stage}" >&2
@@ -41,10 +41,7 @@ if [[ "${stage}" == "test-prod" || "${stage}" == "build-prod" ]]; then
   repo_python_init
 fi
 
-module_dir="${ROOT_DIR}"
-if [[ "${module}" != "." ]]; then
-  module_dir="${ROOT_DIR}/${module}"
-fi
+module_dir="${ROOT_DIR}/${module}"
 
 [[ -f "${module_dir}/go.mod" ]] || {
   echo "go.mod is missing for public PR module: ${module}" >&2
@@ -88,12 +85,6 @@ case "${stage}" in
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
     echo "[public-pr] module=${module} go vet ./..."
     go vet ./...
-    ;;
-  test)
-    export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
-    use_shared_test_database
-    echo "[public-pr] module=${module} go test -count=1 ./..."
-    run_with_failure_tail "unit tests" go test -count=1 ./...
     ;;
   race)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"

@@ -29,25 +29,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
-type BaseMiddlewareOptions struct {
-	SkipLogPaths []string
-	MaxBodyBytes int64
-}
-
 func newReleaseModeEngine() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
 	return gin.New()
 }
 
-func ApplyBaseMiddleware(ctx context.Context, router *gin.Engine, logger *slog.Logger, opts BaseMiddlewareOptions) {
+func applyBaseMiddleware(ctx context.Context, router *gin.Engine, logger *slog.Logger, skipLogPaths ...string) {
 	if router == nil {
 		return
 	}
 
 	router.Use(middleware.RecoveryMiddleware(ctx, logger))
-	router.Use(middleware.LoggerMiddleware(ctx, logger, opts.SkipLogPaths...))
+	router.Use(middleware.LoggerMiddleware(ctx, logger, skipLogPaths...))
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RequestIDMiddleware())
-	router.Use(middleware.MaxBodySizeMiddleware(opts.MaxBodyBytes))
+	router.Use(middleware.MaxBodySizeMiddleware())
 }

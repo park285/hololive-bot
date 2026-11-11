@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -23,13 +22,13 @@ func TestNotifierMixedCollisionOnlyMarksAcceptedRooms(t *testing.T) {
 	require.NoError(t, err)
 
 	publisher := newCheckerTestPublisher(t, cache, repository, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000})
-	service := dedup.NewService(cache, []int{5}, logger)
-	n, err := NewNotifier(service, publisher, tier.NewTieredScheduler(logger), logger)
+	service := dedup.NewService(cache, logger)
+	n, err := NewNotifier(service, publisher, logger)
 	require.NoError(t, err)
 
 	start := time.Now().UTC().Add(5 * time.Minute)
 	first := newNotifierPublishTestItem("room-first", "receipt-stream", "receipt-channel", start, 5, nil)
-	result, err := n.Send(ctx, []*domain.AlarmNotification{first.payload.notification})
+	result, err := n.Send(ctx, []*domain.AlarmNotification{first.payload.notification}, testTargetPolicy(5))
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Sent)
 
@@ -39,21 +38,23 @@ func TestNotifierMixedCollisionOnlyMarksAcceptedRooms(t *testing.T) {
 
 	accepted := newNotifierPublishTestItem("room-accepted", "receipt-stream", "receipt-channel", start, 5, nil)
 
-	result, err = n.Send(ctx, []*domain.AlarmNotification{collision.payload.notification, accepted.payload.notification})
+	result, err = n.Send(ctx, []*domain.AlarmNotification{collision.payload.notification, accepted.payload.notification}, testTargetPolicy(5))
 	require.Error(t, err)
 	require.Equal(t, 1, result.Sent)
 	require.Equal(t, 1, result.Failed)
 
 	for _, item := range []claimedSend{collision, accepted} {
-		marked, markErr := service.WasUpcomingEventNotifiedRecently(ctx, item.payload.notification.RoomID, item.payload.channelID, item.payload.notification.Stream, time.Hour)
-		require.NoError(t, markErr)
+		recent, failed := service.RecentlyNotifiedUpcomingRooms(ctx, []string{item.payload.notification.RoomID}, item.payload.channelID, item.payload.notification.Stream, time.Hour)
+		require.Empty(t, failed)
+
+		_, marked := recent[item.payload.notification.RoomID]
 		require.Equal(t, item.payload.notification.RoomID == "room-accepted", marked)
 	}
 
-	_, claimed := claimNotificationPair(t, n, collision.payload)
+	_, claimed := claimNotificationPair(t, n, collision.payload, testTargetPolicy(5))
 	require.True(t, claimed, "collision claim must be released")
 
-	_, claimed = claimNotificationPair(t, n, accepted.payload)
+	_, claimed = claimNotificationPair(t, n, accepted.payload, testTargetPolicy(5))
 	require.False(t, claimed, "accepted claim must remain")
 
 	var count int
@@ -71,8 +72,8 @@ func TestNotifierPartialCommitRecoversOnlyMissingRoomAndSentReplay(t *testing.T)
 	require.NoError(t, err)
 
 	publisher := newCheckerTestPublisher(t, cache, repository, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1})
-	service := dedup.NewService(cache, []int{5}, logger)
-	n, err := NewNotifier(service, publisher, tier.NewTieredScheduler(logger), logger)
+	service := dedup.NewService(cache, logger)
+	n, err := NewNotifier(service, publisher, logger)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `CREATE FUNCTION reject_second_room() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.room_id='room-second' THEN RAISE EXCEPTION 'injected chunk failure'; END IF; RETURN NEW; END $$;
@@ -83,21 +84,23 @@ func TestNotifierPartialCommitRecoversOnlyMissingRoomAndSentReplay(t *testing.T)
 	first := newNotifierPublishTestItem("room-first", "partial-stream", "partial-channel", start, 5, nil)
 	second := newNotifierPublishTestItem("room-second", "partial-stream", "partial-channel", start, 5, nil)
 	notifications := []*domain.AlarmNotification{first.payload.notification, second.payload.notification}
-	result, err := n.Send(ctx, notifications)
+	result, err := n.Send(ctx, notifications, testTargetPolicy(5))
 	require.ErrorContains(t, err, "injected chunk failure")
 	require.Equal(t, 1, result.Sent)
 	require.Equal(t, 1, result.Failed)
 
 	for _, item := range []claimedSend{first, second} {
-		marked, markErr := service.WasUpcomingEventNotifiedRecently(ctx, item.payload.notification.RoomID, item.payload.channelID, item.payload.notification.Stream, time.Hour)
-		require.NoError(t, markErr)
+		recent, failed := service.RecentlyNotifiedUpcomingRooms(ctx, []string{item.payload.notification.RoomID}, item.payload.channelID, item.payload.notification.Stream, time.Hour)
+		require.Empty(t, failed)
+
+		_, marked := recent[item.payload.notification.RoomID]
 		require.Equal(t, item.payload.notification.RoomID == "room-first", marked)
 	}
 
 	_, err = pool.Exec(ctx, `DROP TRIGGER reject_second_room ON alarm_dispatch_deliveries`)
 	require.NoError(t, err)
 
-	result, err = n.Send(ctx, notifications)
+	result, err = n.Send(ctx, notifications, testTargetPolicy(5))
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Sent)
 	require.Equal(t, 1, result.Skipped)
@@ -112,11 +115,11 @@ func TestNotifierPartialCommitRecoversOnlyMissingRoomAndSentReplay(t *testing.T)
 	require.NoError(t, err)
 
 	replacementCache := newCheckerTestCacheClient(t)
-	replacementService := dedup.NewService(replacementCache, []int{5}, logger)
-	replay, err := NewNotifier(replacementService, publisher, tier.NewTieredScheduler(logger), logger)
+	replacementService := dedup.NewService(replacementCache, logger)
+	replay, err := NewNotifier(replacementService, publisher, logger)
 	require.NoError(t, err)
 
-	result, err = replay.Send(ctx, []*domain.AlarmNotification{first.payload.notification})
+	result, err = replay.Send(ctx, []*domain.AlarmNotification{first.payload.notification}, testTargetPolicy(5))
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Sent)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-first' AND status='sent'`).Scan(&count))

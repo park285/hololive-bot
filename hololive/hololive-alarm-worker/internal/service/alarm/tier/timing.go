@@ -17,9 +17,8 @@ const (
 )
 
 const (
-	noUpcomingInterval     = 1 * time.Minute
-	fullRefreshInterval    = 5 * time.Minute
-	recentlyNotifiedWindow = 15 * time.Minute
+	noUpcomingInterval  = 1 * time.Minute
+	fullRefreshInterval = 5 * time.Minute
 )
 
 // LiveCatchupWindow는 늦게 관측한 라이브 시작을 catch-up 알림 대상으로 인정하는 범위입니다.

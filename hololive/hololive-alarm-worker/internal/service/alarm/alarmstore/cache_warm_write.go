@@ -56,20 +56,3 @@ func verifyWarmSetBatchResults(results []valkey.ValkeyResult, keys []string, sco
 
 	return nil
 }
-
-func writeWarmHash(ctx context.Context, cacheClient cache.HashWriter, key string, values map[string]string) error {
-	if len(values) == 0 {
-		return nil
-	}
-
-	fields := make(map[string]any, len(values))
-	for field, value := range values {
-		fields[field] = value
-	}
-
-	if err := cacheClient.HMSet(ctx, key, fields); err != nil {
-		return fmt.Errorf("h mset %s: %w", key, err)
-	}
-
-	return nil
-}

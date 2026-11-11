@@ -21,13 +21,9 @@
 package alarm_test
 
 import (
-	jsonv2 "encoding/json/v2"
-	"os"
-	"path/filepath"
 	"testing"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestAlarmQueueContractConstants(t *testing.T) {
@@ -53,10 +49,6 @@ func TestAlarmHTTPRouteContracts(t *testing.T) {
 		t.Fatalf("RemovePath = %q, want /internal/alarm/remove", contractsalarm.RemovePath)
 	}
 
-	if got := contractsalarm.RoomAlarmsPath("room1"); got != "/internal/alarm/room/room1" {
-		t.Fatalf("RoomAlarmsPath() = %q, want /internal/alarm/room/room1", got)
-	}
-
 	if got := contractsalarm.RoomAlarmsViewPath("room1"); got != "/internal/alarm/room/room1/view" {
 		t.Fatalf("RoomAlarmsViewPath() = %q, want /internal/alarm/room/room1/view", got)
 	}
@@ -77,203 +69,7 @@ func TestAlarmHTTPRouteContracts(t *testing.T) {
 func TestAlarmHTTPRouteContractsEscapePathParams(t *testing.T) {
 	t.Parallel()
 
-	if got := contractsalarm.RoomAlarmsPath("room/a b"); got != "/internal/alarm/room/room%2Fa%20b" {
-		t.Fatalf("RoomAlarmsPath() = %q, want /internal/alarm/room/room%%2Fa%%20b", got)
-	}
-
 	if got := contractsalarm.RoomAlarmsViewPath("room/a b"); got != "/internal/alarm/room/room%2Fa%20b/view" {
 		t.Fatalf("RoomAlarmsViewPath() = %q, want /internal/alarm/room/room%%2Fa%%20b/view", got)
 	}
-}
-
-func TestAlarmQueueEnvelopeContract(t *testing.T) {
-	t.Parallel()
-
-	env := domain.AlarmQueueEnvelope{
-		DispatchOutboxID: 99,
-		Notification: domain.AlarmNotification{
-			AlarmType: domain.AlarmTypeCommunity,
-			RoomID:    "room-contract",
-		},
-		SourceKind: domain.AlarmDispatchSourceKindDeliveryDigest,
-		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{
-			Kind:               domain.DeliveryKindMajorEventWeekly,
-			PeriodKey:          "2026-W09",
-			PreRenderedMessage: "contract digest",
-		},
-		Version:    contractsalarm.QueueEnvelopeVersionV1,
-		ClaimKeys:  []string{"notified:claim:room-contract"},
-		EnqueuedAt: "2026-02-25T13:00:00Z",
-		Retry: &domain.AlarmQueueRetryMetadata{
-			Attempt:      3,
-			RetryAfterMS: 2500,
-			LastError:    "dispatcher unavailable",
-		},
-	}
-
-	if env.Version != 1 {
-		t.Fatalf("version = %d, want 1", env.Version)
-	}
-
-	if env.Retry == nil || env.Retry.Attempt != 3 {
-		t.Fatalf("retry metadata = %+v", env.Retry)
-	}
-
-	if env.DispatchOutboxID != 99 {
-		t.Fatalf("dispatch_outbox_id = %d, want 99", env.DispatchOutboxID)
-	}
-
-	if env.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest {
-		t.Fatalf("source_kind = %q, want %q", env.SourceKind, domain.AlarmDispatchSourceKindDeliveryDigest)
-	}
-
-	if env.DeliveryDigest == nil {
-		t.Fatal("delivery_digest should be set")
-	}
-}
-
-func decodeAlarmQueueEnvelopeFixture(t *testing.T) domain.AlarmQueueEnvelope {
-	t.Helper()
-
-	raw := readAlarmContractFixture(t, "envelope_v1.json")
-
-	var envelope domain.AlarmQueueEnvelope
-
-	if err := jsonv2.Unmarshal(raw, &envelope); err != nil {
-		t.Fatalf("unmarshal fixture: %v", err)
-	}
-
-	return envelope
-}
-
-func TestAlarmQueueEnvelopeV1FixtureFields(t *testing.T) {
-	t.Parallel()
-
-	envelope := decodeAlarmQueueEnvelopeFixture(t)
-
-	if envelope.Version != contractsalarm.QueueEnvelopeVersionV1 {
-		t.Fatalf("version = %d, want %d", envelope.Version, contractsalarm.QueueEnvelopeVersionV1)
-	}
-
-	if envelope.Notification.RoomID != "room-1" {
-		t.Fatalf("room_id = %q, want room-1", envelope.Notification.RoomID)
-	}
-
-	if envelope.Retry == nil || envelope.Retry.Attempt != 2 {
-		t.Fatalf("retry metadata = %+v, want attempt 2", envelope.Retry)
-	}
-
-	if envelope.DispatchOutboxID != 42 {
-		t.Fatalf("dispatch_outbox_id = %d, want 42", envelope.DispatchOutboxID)
-	}
-
-	if envelope.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest {
-		t.Fatalf("source_kind = %q, want %q", envelope.SourceKind, domain.AlarmDispatchSourceKindDeliveryDigest)
-	}
-
-	if envelope.DeliveryDigest == nil {
-		t.Fatal("delivery_digest should be non-nil")
-	}
-
-	if envelope.DeliveryDigest.PeriodKey != "2026-W09" {
-		t.Fatalf("delivery_digest.period_key = %q, want 2026-W09", envelope.DeliveryDigest.PeriodKey)
-	}
-
-	if envelope.SourcePayload() != `{"version":1}` {
-		t.Fatalf("source_payload = %q, want {\"version\":1}", envelope.SourcePayload())
-	}
-
-	if err := envelope.ValidateCanonicalDispatch(); err != nil {
-		t.Fatalf("ValidateCanonicalDispatch: %v", err)
-	}
-}
-
-func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	envelope := decodeAlarmQueueEnvelopeFixture(t)
-
-	encoded, err := jsonv2.Marshal(envelope)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
-
-	var roundTrip domain.AlarmQueueEnvelope
-
-	if err := jsonv2.Unmarshal(encoded, &roundTrip); err != nil {
-		t.Fatalf("unmarshal round trip: %v", err)
-	}
-
-	if roundTrip.Notification.RoomID != envelope.Notification.RoomID {
-		t.Fatalf("roundTrip room_id = %q, want %q", roundTrip.Notification.RoomID, envelope.Notification.RoomID)
-	}
-
-	if roundTrip.DispatchOutboxID != envelope.DispatchOutboxID {
-		t.Fatalf("roundTrip dispatch_outbox_id = %d, want %d", roundTrip.DispatchOutboxID, envelope.DispatchOutboxID)
-	}
-
-	if roundTrip.SourceKind != envelope.SourceKind {
-		t.Fatalf("roundTrip source_kind = %q, want %q", roundTrip.SourceKind, envelope.SourceKind)
-	}
-
-	if roundTrip.DeliveryDigest == nil || *roundTrip.DeliveryDigest != *envelope.DeliveryDigest {
-		t.Fatal("roundTrip delivery_digest mismatch")
-	}
-
-	if roundTrip.SourcePayload() != envelope.SourcePayload() {
-		t.Fatalf("roundTrip source_payload = %q, want %q", roundTrip.SourcePayload(), envelope.SourcePayload())
-	}
-}
-
-func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	envelope := decodeAlarmQueueEnvelopeFixture(t)
-
-	encoded, err := jsonv2.Marshal(envelope.Retry)
-	if err != nil {
-		t.Fatalf("marshal retry metadata: %v", err)
-	}
-
-	var retry domain.AlarmQueueRetryMetadata
-
-	if err := jsonv2.Unmarshal(encoded, &retry); err != nil {
-		t.Fatalf("unmarshal retry metadata: %v", err)
-	}
-
-	if retry.RetryAfterMS != 30000 {
-		t.Fatalf("retry_after_ms = %d, want 30000", retry.RetryAfterMS)
-	}
-
-	if retry.LastError != "temporary upstream error" {
-		t.Fatalf("last_error = %q, want temporary upstream error", retry.LastError)
-	}
-
-	if retry.Attempt != 2 {
-		t.Fatalf("attempt = %d, want 2", retry.Attempt)
-	}
-}
-
-func readAlarmContractFixture(t *testing.T, name string) []byte {
-	t.Helper()
-
-	var (
-		raw []byte
-		err error
-	)
-
-	switch name {
-	case "envelope_unsupported_version.json":
-		raw, err = os.ReadFile(filepath.Join("testdata", "envelope_unsupported_version.json"))
-	case "envelope_v1.json":
-		raw, err = os.ReadFile(filepath.Join("testdata", "envelope_v1.json"))
-	default:
-		t.Fatalf("fixture %s is not allowed", name)
-	}
-
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", name, err)
-	}
-
-	return raw
 }

@@ -56,19 +56,3 @@ func (c *Service) SMembers(ctx context.Context, key string) ([]string, error) {
 
 	return members, nil
 }
-
-func (c *Service) SIsMember(ctx context.Context, key, member string) (bool, error) {
-	resp := c.client.Do(ctx, c.client.B().Sismember().Key(key).Member(member).Build())
-	if resp.Error() != nil {
-		c.logger.Error("Cache sismember failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
-
-		return false, NewCacheError("sismember", key, resp.Error())
-	}
-
-	exists, err := resp.AsBool()
-	if err != nil {
-		return false, NewCacheError("sismember", key, err)
-	}
-
-	return exists, nil
-}

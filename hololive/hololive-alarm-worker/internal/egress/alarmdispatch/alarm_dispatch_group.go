@@ -12,23 +12,22 @@ type alarmDispatchGroup struct {
 	request       *dispatchoutbox.SendRequest
 	roomID        string
 	minutesUntil  int
-	envelopes     []domain.AlarmQueueEnvelope
+	envelopes     []dispatchoutbox.AlarmQueueEnvelope
 	notifications []domain.AlarmNotification
 	// envelopeErr는 발송할 수 없는 봉투(퇴역 제공자, 대상 없음, 미지원 source)의 사유다. 이런 봉투는 발송 전 실패로 라우팅한다.
 	envelopeErr error
 }
 
-// 모든 봉투를 Text 경로로 보낸다. 오픈채팅은 sender가 Markdown으로 전송한다.
-func groupAlarmDispatchEnvelopesForDelivery(envelopes []domain.AlarmQueueEnvelope) []alarmDispatchGroup {
+// 모든 봉투를 Text 경로로 보낸다. 오픈채팅은 sender가 Markdown으로 전송한다. 저장된 send unit이 있는 delivery만 claim되므로
+// send unit이 발송 경계다.
+func groupAlarmDispatchEnvelopesForDelivery(envelopes []dispatchoutbox.AlarmQueueEnvelope) []alarmDispatchGroup {
 	grouped := make([]alarmDispatchGroup, 0, len(envelopes))
 	index := map[string]int{}
 
 	for i := range envelopes {
 		envelope := &envelopes[i]
 		envelopeErr := alarmDispatchEnvelopeError(envelope)
-		key := alarmDispatchRegroupKey(envelope, func(current *domain.AlarmQueueEnvelope) string {
-			return alarmDispatchDeliveryGroupKey(current, envelopeErr)
-		})
+		key := fmt.Sprintf("send-unit|%d", envelope.SendUnitID)
 
 		// 발송할 수 없는 봉투는 같은 send unit의 발송 가능한 봉투와 섞이지 않게 별도 그룹으로 둔다.
 		if envelopeErr != nil {
@@ -52,31 +51,7 @@ func groupAlarmDispatchEnvelopesForDelivery(envelopes []domain.AlarmQueueEnvelop
 	return grouped
 }
 
-func alarmDispatchDeliveryGroupKey(envelope *domain.AlarmQueueEnvelope, envelopeErr error) string {
-	if envelopeErr != nil {
-		var outboxID int64
-
-		if envelope != nil {
-			outboxID = envelope.DispatchOutboxID
-		}
-
-		return fmt.Sprintf("%s|invalid|%d", alarmDispatchGroupKey(envelope), outboxID)
-	}
-
-	return alarmDispatchGroupKey(envelope)
-}
-
-// 저장된 send unit이 없는 봉투는 keyFunc로 묶이지만 Text 경로는 저장된 client_request_id가 없으면 발송하지
-// 않는다(errAlarmDispatchSendUnitIdentityMissing).
-func alarmDispatchRegroupKey(envelope *domain.AlarmQueueEnvelope, keyFunc func(*domain.AlarmQueueEnvelope) string) string {
-	if envelope != nil && envelope.SendUnitID > 0 {
-		return fmt.Sprintf("send-unit|%d", envelope.SendUnitID)
-	}
-
-	return keyFunc(envelope)
-}
-
-func newAlarmDispatchGroup(envelope *domain.AlarmQueueEnvelope) alarmDispatchGroup {
+func newAlarmDispatchGroup(envelope *dispatchoutbox.AlarmQueueEnvelope) alarmDispatchGroup {
 	if envelope == nil {
 		return alarmDispatchGroup{}
 	}
@@ -84,12 +59,12 @@ func newAlarmDispatchGroup(envelope *domain.AlarmQueueEnvelope) alarmDispatchGro
 	return alarmDispatchGroup{
 		roomID:        envelope.Notification.RoomID,
 		minutesUntil:  envelope.Notification.MinutesUntil,
-		envelopes:     []domain.AlarmQueueEnvelope{*envelope},
+		envelopes:     []dispatchoutbox.AlarmQueueEnvelope{*envelope},
 		notifications: []domain.AlarmNotification{envelope.Notification},
 	}
 }
 
-func appendAlarmDispatchEnvelope(group *alarmDispatchGroup, envelope *domain.AlarmQueueEnvelope) {
+func appendAlarmDispatchEnvelope(group *alarmDispatchGroup, envelope *dispatchoutbox.AlarmQueueEnvelope) {
 	if group == nil || envelope == nil {
 		return
 	}
@@ -99,68 +74,13 @@ func appendAlarmDispatchEnvelope(group *alarmDispatchGroup, envelope *domain.Ala
 	group.notifications = append(group.notifications, envelope.Notification)
 }
 
-func alarmDispatchGroupKey(envelope *domain.AlarmQueueEnvelope) string {
-	if envelope == nil {
-		return ""
-	}
-
-	if key, ok := alarmDispatchSourceGroupKey(envelope); ok {
-		return key
-	}
-
-	return alarmDispatchTimeGroupKey(envelope)
-}
-
-func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, bool) {
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
-		return fmt.Sprintf("%s|source|x_space|%s", envelope.Notification.RoomID, envelope.XSpace.SpaceID), true
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
-		return alarmDispatchCelebrationGroupKey(envelope), true
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
-		return fmt.Sprintf("%s|source|%s|%s|%s",
-			envelope.Notification.RoomID,
-			envelope.SourceKind,
-			envelope.DeliveryDigest.Kind,
-			envelope.DeliveryDigest.ContentIdentity(),
-		), true
-	}
-
-	return "", false
-}
-
-func alarmDispatchCelebrationGroupKey(envelope *domain.AlarmQueueEnvelope) string {
-	key := fmt.Sprintf("%s|celebration|%s|member-%d",
-		envelope.Notification.RoomID,
-		envelope.Celebration.Kind,
-		envelope.Celebration.MemberID,
-	)
-	if envelope.Celebration.VideoID != "" {
-		key += "|" + envelope.Celebration.VideoID
-	}
-
-	return key
-}
-
-func alarmDispatchTimeGroupKey(envelope *domain.AlarmQueueEnvelope) string {
-	if envelope.Notification.Stream != nil && envelope.Notification.Stream.StartScheduled != nil {
-		minuteBucket := envelope.Notification.Stream.StartScheduled.UTC().Unix() / 60
-		return fmt.Sprintf("%s|scheduled|%d", envelope.Notification.RoomID, minuteBucket)
-	}
-
-	return fmt.Sprintf("%s|minutes|%d", envelope.Notification.RoomID, envelope.Notification.MinutesUntil)
-}
-
-func alarmDispatchEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
+func alarmDispatchEnvelopeError(envelope *dispatchoutbox.AlarmQueueEnvelope) error {
 	if envelope == nil {
 		return errors.New("alarm dispatch envelope is nil")
 	}
 
 	switch envelope.SourceKind {
-	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindDeliveryDigest, domain.AlarmDispatchSourceKindXSpace:
+	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindXSpace:
 		return nil
 	case "":
 		return alarmDispatchStreamEnvelopeError(envelope)
@@ -169,7 +89,7 @@ func alarmDispatchEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
 	}
 }
 
-func alarmDispatchStreamEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
+func alarmDispatchStreamEnvelopeError(envelope *dispatchoutbox.AlarmQueueEnvelope) error {
 	stream := envelope.Notification.Stream
 	if stream == nil {
 		return errors.New("alarm notification stream is nil")

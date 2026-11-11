@@ -11,6 +11,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
@@ -169,61 +170,56 @@ func youtubeEvaluationWindowCap(interval time.Duration) time.Duration {
 }
 
 func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
-	s.syncYouTubeTargetMinutes()
+	targetPolicy := s.youtubeTargetPolicy()
 
-	notifications, err := s.youtubeChecker.Check(ctx)
+	notifications, err := s.youtubeChecker.Check(ctx, targetPolicy)
 	if err != nil {
 		if recoveryErr := s.recoverAlarmCacheAfterCheckFailure(ctx, err); recoveryErr != nil {
 			s.logger.Warn("Immediate alarm cache recovery failed after YouTube check error", slog.Any("error", recoveryErr))
 		}
 
 		// 신규 조회 실패와 무관하게 이미 durable 선정된 후보의 발행을 계속한다.
-		if dispatchErr := s.dispatchRecoveredYouTubeNotifications(ctx, notifications); dispatchErr != nil {
+		if dispatchErr := s.dispatchRecoveredYouTubeNotifications(ctx, notifications, targetPolicy); dispatchErr != nil {
 			return fmt.Errorf("run youtube iteration: recover staged candidates: %w", errors.Join(err, dispatchErr))
 		}
 
 		return fmt.Errorf("run youtube iteration: check notifications: %w", err)
 	}
 
-	if err := s.dispatchNotifications(ctx, notifications); err != nil {
+	if err := s.dispatchNotifications(ctx, notifications, targetPolicy); err != nil {
 		return fmt.Errorf("dispatch notifications: %w", err)
 	}
 
 	return nil
 }
 
-func (s *RuntimeScheduler) dispatchRecoveredYouTubeNotifications(ctx context.Context, notifications []*domain.AlarmNotification) error {
-	if len(notifications) == 0 {
-		return nil
-	}
-
-	return s.dispatchNotifications(ctx, notifications)
+// youtubeTargetPolicy는 반복 시작 시점의 target minute 설정 snapshot이다. 반복 중의 설정 변경은 다음 반복부터 반영된다.
+func (s *RuntimeScheduler) youtubeTargetPolicy() targetpolicy.TargetMinutePolicy {
+	return targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(s.targetMinutesSource.GetTargetMinutes()))
 }
 
-func (s *RuntimeScheduler) syncYouTubeTargetMinutes() {
-	if s.targetMinutesSource == nil {
-		return
-	}
-
-	targetMinutes := s.targetMinutesSource.GetTargetMinutes()
-	if s.youtubeTargetUpdater != nil {
-		s.youtubeTargetUpdater.UpdateTargetMinutes(targetMinutes)
-	}
-
-	if s.dedupTargetUpdater != nil {
-		s.dedupTargetUpdater.UpdateTargetMinutes(targetMinutes)
-	}
-}
-
-func (s *RuntimeScheduler) dispatchNotifications(
+func (s *RuntimeScheduler) dispatchRecoveredYouTubeNotifications(
 	ctx context.Context,
 	notifications []*domain.AlarmNotification,
+	targetPolicy targetpolicy.TargetMinutePolicy,
 ) error {
 	if len(notifications) == 0 {
 		return nil
 	}
 
-	sendResult, err := s.notifier.Send(ctx, notifications)
+	return s.dispatchNotifications(ctx, notifications, targetPolicy)
+}
+
+func (s *RuntimeScheduler) dispatchNotifications(
+	ctx context.Context,
+	notifications []*domain.AlarmNotification,
+	targetPolicy targetpolicy.TargetMinutePolicy,
+) error {
+	if len(notifications) == 0 {
+		return nil
+	}
+
+	sendResult, err := s.notifier.Send(ctx, notifications, targetPolicy)
 	if err != nil {
 		attrs := make([]slog.Attr, 0, 5)
 

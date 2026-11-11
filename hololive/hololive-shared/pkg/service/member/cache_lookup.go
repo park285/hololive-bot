@@ -163,37 +163,7 @@ func (c *Cache) findPointInRepository(ctx context.Context, kind pointLookupKind,
 	return member, nil
 }
 
-// FindMembersByName은 english/japanese/korean 이름 중 하나가 앞뒤 공백을 무시한 대소문자 무관 비교(strings.EqualFold)로
-// 일치하는 멤버를 모두 snapshot 순서대로 돌려준다. 공백뿐인 이름은 적재 없이 빈 결과다.
-func (c *Cache) FindMembersByName(ctx context.Context, name string) ([]*domain.Member, error) {
-	return c.searchMembers(ctx, "members_by_name", name, (*memberSnapshotIndex).membersByName)
-}
-
-// FindMembersByAlias는 명시 별칭(ko·ja) 중 하나가 앞뒤 공백을 무시한 대소문자 무관 비교(strings.EqualFold)로 일치하는 멤버를
-// 모두 snapshot 순서대로 돌려준다. 공백뿐인 별칭은 적재 없이 빈 결과다.
-func (c *Cache) FindMembersByAlias(ctx context.Context, alias string) ([]*domain.Member, error) {
-	return c.searchMembers(ctx, "members_by_alias", alias, (*memberSnapshotIndex).membersByAlias)
-}
-
-func (c *Cache) searchMembers(
-	ctx context.Context,
-	operation, query string,
-	lookup func(*memberSnapshotIndex, string) []*domain.Member,
-) ([]*domain.Member, error) {
-	key, ok := searchKey(query)
-	if !ok {
-		return []*domain.Member{}, nil
-	}
-
-	snap, err := c.membersSnapshot(ctx, operation)
-	if err != nil {
-		return nil, err
-	}
-
-	return cloneMemberSlice(lookup(snap.index, key)), nil
-}
-
-// 돌려준 slice는 호출자 소유다.
+// GetChannelIDs는 snapshot의 채널 ID 목록을, snapshot이 없으면 PostgreSQL 목록을 돌려준다. 돌려준 slice는 호출자 소유다.
 func (c *Cache) GetChannelIDs(ctx context.Context) ([]string, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")

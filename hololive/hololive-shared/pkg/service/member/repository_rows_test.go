@@ -3,7 +3,6 @@ package member
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -81,11 +80,10 @@ func (r *fakeMemberRows) Conn() *pgx.Conn { return nil }
 func (r *fakeMemberRows) TypeMap() *pgtype.Map { return pgtype.NewMap() }
 
 func newTestMemberRepository() *Repository {
-	return &Repository{logger: slog.New(slog.DiscardHandler)}
+	return &Repository{}
 }
 
 func TestCollectMembersFromRows_All_PreservesShortKoreanName(t *testing.T) {
-	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			if len(dest) != 20 {
@@ -118,7 +116,7 @@ func TestCollectMembersFromRows_All_PreservesShortKoreanName(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
+	members, err := collectMembersFromRows(rows, memberIterLabel, "member")
 	if err != nil {
 		t.Fatalf("collectMembersFromRows error = %v, want nil", err)
 	}
@@ -133,7 +131,6 @@ func TestCollectMembersFromRows_All_PreservesShortKoreanName(t *testing.T) {
 }
 
 func TestCollectMembersFromRows_All_ReturnsJoinedRowErrors(t *testing.T) {
-	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			assignScanDest(dest[0], 1)
@@ -179,7 +176,7 @@ func TestCollectMembersFromRows_All_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
+	members, err := collectMembersFromRows(rows, memberIterLabel, "member")
 	if err == nil {
 		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
@@ -193,68 +190,20 @@ func TestCollectMembersFromRows_All_ReturnsJoinedRowErrors(t *testing.T) {
 	}
 }
 
-func TestCollectMembersFromRows_ByName_ReturnsJoinedRowErrors(t *testing.T) {
-	repository := newTestMemberRepository()
+func TestCollectChannelIDs_ReturnsScanErrorWithoutPartialList(t *testing.T) {
+	scanErr := errors.New("channel id scan failed")
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
-			assignScanDest(dest[0], 1)
-			assignScanDest(dest[1], "suisei")
-
-			channelID := testChannelUC1
-			assignScanDest(dest[2], &channelID)
-			assignScanDest(dest[3], "Suisei")
-			assignScanDest[*string](dest[4], nil)
-			assignScanDest[*string](dest[5], nil)
-			assignScanDest[*string](dest[6], nil)
-			assignScanDest(dest[7], "active")
-			assignScanDest(dest[8], false)
-			assignScanDest(dest[9], []byte(`{"ko":["스이세이"]}`))
-			assignScanDest(dest[10], "hololive")
-			assignScanDest[*string](dest[11], nil)
-			assignScanDest(dest[12], "holodex")
-			assignScanDest[*string](dest[13], nil)
+			assignScanDest(dest[0], testChannelUC1)
 
 			return nil
 		}},
-		{scan: func(dest ...any) error {
-			assignScanDest(dest[0], 2)
-			assignScanDest(dest[1], testMemberMikoSlug)
-
-			channelID := testChannelUC2
-			assignScanDest(dest[2], &channelID)
-			assignScanDest(dest[3], testMemberMiko)
-			assignScanDest[*string](dest[4], nil)
-			assignScanDest[*string](dest[5], nil)
-			assignScanDest[*string](dest[6], nil)
-			assignScanDest(dest[7], "active")
-			assignScanDest(dest[8], false)
-			assignScanDest(dest[9], []byte("not-json"))
-			assignScanDest(dest[10], "hololive")
-			assignScanDest[*string](dest[11], nil)
-			assignScanDest(dest[12], "holodex")
-			assignScanDest[*string](dest[13], nil)
-
-			return nil
-		}},
+		{scan: func(...any) error { return scanErr }},
 	}}
 
-	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberQueryRow)
-	if err == nil {
-		t.Fatal("collectMembersFromRows error = nil, want non-nil")
-	}
-
-	if len(members) != 1 || members[0] == nil || members[0].ChannelID != testChannelUC1 {
-		t.Fatalf("members = %#v, want one valid member for UC1", members)
-	}
-
-	if got := err.Error(); got == "" || !containsAll(got, []string{"parse member row", testMemberMiko, "unmarshal aliases"}) {
-		t.Fatalf("error = %q, want joined parse error context", got)
-	}
-}
-
-func TestUpgradePhotoResolution_ReplacesKnownSizeWithSingleStandardSuffix(t *testing.T) {
-	if got := UpgradePhotoResolution("https://example.com/avatar=s88=s240"); got != "https://example.com/avatar=s1024=s240" {
-		t.Fatalf("UpgradePhotoResolution() = %q", got)
+	channelIDs, err := collectChannelIDs(rows)
+	if !errors.Is(err, scanErr) || channelIDs != nil {
+		t.Fatalf("collectChannelIDs() = %v, %v; want nil list and scan error", channelIDs, err)
 	}
 }
 

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 var errSendRequestNoDeliveries = errors.New("alarm send request has no deliveries")
@@ -20,7 +18,7 @@ func (c *Consumer) sendRequestRepository() (SendRequestRepository, error) {
 }
 
 // LoadSendRequest는 소유한 전체 send unit의 고정 요청을 읽고 과거 미고정 발송을 거절한다.
-func (c *Consumer) LoadSendRequest(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (*SendRequest, error) {
+func (c *Consumer) LoadSendRequest(ctx context.Context, envelopes []AlarmQueueEnvelope) (*SendRequest, error) {
 	repository, err := c.sendRequestRepository()
 	if err != nil {
 		return nil, err
@@ -39,7 +37,7 @@ func (c *Consumer) LoadSendRequest(ctx context.Context, envelopes []domain.Alarm
 }
 
 // PinSendRequest는 첫 외부 발송 전 본문·경로·membership을 고정한다.
-func (c *Consumer) PinSendRequest(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, request SendRequest) (*SendRequest, error) {
+func (c *Consumer) PinSendRequest(ctx context.Context, envelopes []AlarmQueueEnvelope, request SendRequest) (*SendRequest, error) {
 	repository, err := c.sendRequestRepository()
 	if err != nil {
 		return nil, err
@@ -57,8 +55,9 @@ func (c *Consumer) PinSendRequest(ctx context.Context, envelopes []domain.AlarmQ
 	return pinned, nil
 }
 
-// 인자 request는 이 claim에서 읽은 고정 요청이다. 세대를 모두 썼으면 sendfence.ErrGenerationExhausted, fence 미스는 *sendfence.MissError다.
-func (c *Consumer) ReissueSendRequest(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, request *SendRequest) error {
+// ReissueSendRequest는 retry 예산이 남은 전체 그룹의 generation과 상태를 함께 확정한다. 인자 request는 이 claim에서
+// 읽은 고정 요청이다. 세대를 모두 썼으면 sendfence.ErrGenerationExhausted, fence 미스는 *sendfence.MissError다.
+func (c *Consumer) ReissueSendRequest(ctx context.Context, envelopes []AlarmQueueEnvelope, request *SendRequest) error {
 	repository, err := c.sendRequestRepository()
 	if err != nil {
 		return err

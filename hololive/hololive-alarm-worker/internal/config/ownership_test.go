@@ -23,7 +23,7 @@ func alarmWorkerProfileFixture(t *testing.T) *AlarmWorkerProfile {
 func TestValidateAlarmWorkerOwnershipProductionRequiresOwnerWorkerRoles(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 
-	err := validateOwnership(runtimepolicy.EnvironmentProduction)
+	err := validateOwnership(runtimepolicy.EnvironmentProduction, loadNotificationRoles())
 	if err == nil || !strings.Contains(err.Error(), "alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner") {
 		t.Fatalf("validateOwnership() error = %v, want owner role requirement", err)
 	}
@@ -31,7 +31,7 @@ func TestValidateAlarmWorkerOwnershipProductionRequiresOwnerWorkerRoles(t *testi
 	settingstest.ClearRuntimeRoleEnv(t)
 	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, runtimepolicy.NotificationEgressRoleOwner)
 
-	err = validateOwnership(runtimepolicy.EnvironmentProduction)
+	err = validateOwnership(runtimepolicy.EnvironmentProduction, loadNotificationRoles())
 	if err == nil || !strings.Contains(err.Error(), "alarm-worker production requires NOTIFICATION_SCHEDULER_ROLE=worker|off") {
 		t.Fatalf("validateOwnership() error = %v, want scheduler role enumeration requirement", err)
 	}
@@ -44,7 +44,7 @@ func TestValidateAlarmWorkerOwnershipProductionRejectsNonOwnerEgressRoles(t *tes
 			t.Setenv(runtimepolicy.NotificationEgressRoleEnv, role)
 			t.Setenv(runtimepolicy.NotificationSchedulerRoleEnv, runtimepolicy.NotificationSchedulerRoleWorker)
 
-			err := validateOwnership(runtimepolicy.EnvironmentProduction)
+			err := validateOwnership(runtimepolicy.EnvironmentProduction, loadNotificationRoles())
 			if err == nil || !strings.Contains(err.Error(), "alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner") {
 				t.Fatalf("validateOwnership() error = %v, want owner role requirement", err)
 			}
@@ -55,7 +55,7 @@ func TestValidateAlarmWorkerOwnershipProductionRejectsNonOwnerEgressRoles(t *tes
 func TestValidateAlarmWorkerOwnershipNonProductionSkipsOwnershipRequirements(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 
-	if err := validateOwnership("staging"); err != nil {
+	if err := validateOwnership("staging", loadNotificationRoles()); err != nil {
 		t.Fatalf("validateOwnership() error = %v, want nil", err)
 	}
 }
@@ -65,7 +65,7 @@ func TestValidateAlarmWorkerOwnershipProductionAcceptsSchedulerWorkerProfile(t *
 	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, runtimepolicy.NotificationEgressRoleOwner)
 	t.Setenv(runtimepolicy.NotificationSchedulerRoleEnv, runtimepolicy.NotificationSchedulerRoleWorker)
 
-	if err := validateOwnership(runtimepolicy.EnvironmentProduction); err != nil {
+	if err := validateOwnership(runtimepolicy.EnvironmentProduction, loadNotificationRoles()); err != nil {
 		t.Fatalf("validateOwnership() error = %v, want nil", err)
 	}
 }
@@ -75,7 +75,7 @@ func TestValidateAlarmWorkerOwnershipProductionAcceptsEgressOnlyProfile(t *testi
 	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, runtimepolicy.NotificationEgressRoleOwner)
 	t.Setenv(runtimepolicy.NotificationSchedulerRoleEnv, runtimepolicy.NotificationSchedulerRoleOff)
 
-	if err := validateOwnership(runtimepolicy.EnvironmentProduction); err != nil {
+	if err := validateOwnership(runtimepolicy.EnvironmentProduction, loadNotificationRoles()); err != nil {
 		t.Fatalf("validateOwnership() error = %v, want nil", err)
 	}
 }
@@ -85,9 +85,25 @@ func TestValidateAlarmWorkerOwnershipRejectsUnsupportedSchedulerRole(t *testing.
 	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, runtimepolicy.NotificationEgressRoleOwner)
 	t.Setenv(runtimepolicy.NotificationSchedulerRoleEnv, "bot")
 
-	err := validateOwnership(runtimepolicy.EnvironmentProduction)
+	err := validateOwnership(runtimepolicy.EnvironmentProduction, loadNotificationRoles())
 	if err == nil || !strings.Contains(err.Error(), "unsupported NOTIFICATION_SCHEDULER_ROLE=bot") {
 		t.Fatalf("validateOwnership() error = %v, want unsupported scheduler role rejection", err)
+	}
+}
+
+// LoadRuntime은 알림 역할 env의 앞뒤 공백을 지워 설정에 담는다.
+func TestLoadRuntimeReadsNotificationRoles(t *testing.T) {
+	setRuntimeEnv(t)
+	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, " owner ")
+	t.Setenv(runtimepolicy.NotificationSchedulerRoleEnv, "off")
+
+	config, err := LoadRuntime()
+	if err != nil {
+		t.Fatalf("LoadRuntime() error = %v", err)
+	}
+
+	if want := (NotificationRoles{Egress: "owner", Scheduler: "off"}); config.NotificationRoles != want {
+		t.Fatalf("NotificationRoles = %+v, want %+v", config.NotificationRoles, want)
 	}
 }
 

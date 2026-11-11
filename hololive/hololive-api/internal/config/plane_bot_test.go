@@ -238,6 +238,16 @@ func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
 	}
 }
 
+// 알림 주기·사전 알림 분 설정은 admin plane만 읽는다. 단독으로 적재하는 bot plane 설정은 그 값의 형식 오류로 실패하지 않는다.
+func TestLoadBotPlaneRuntimeDoesNotReadNotificationEnv(t *testing.T) {
+	setBotPlaneEnv(t)
+	t.Setenv("CHECK_INTERVAL_SECONDS", "not-a-number")
+
+	if _, err := LoadBotPlaneRuntime(); err != nil {
+		t.Fatalf("LoadBotPlaneRuntime() error = %v, want success regardless of notification env", err)
+	}
+}
+
 func TestLoadBotPlaneRuntimeDerivesWebhookFromLocalStackWorkerProfile(t *testing.T) {
 	setBotPlaneEnv(t)
 
@@ -282,5 +292,26 @@ func TestBotPlaneValidateRejectsNotificationEgressOwner(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want proactive egress ownership rejection", err)
 			}
 		})
+	}
+}
+
+// 내부 client는 서버용 키를 대신 쓰지 않고 전용 설정만 적재한다. HTTPS 필수값 검증은 client 생성 시점에 한다.
+func TestLoadInternalH3ClientOptionsKeepsDedicatedStartupValues(t *testing.T) {
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/server-only.crt")
+	t.Setenv("HOLOLIVE_H3_SERVER_NAME", "server-only.example")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+
+	blank := loadInternalH3ClientOptions()
+	if blank.CACertFile != "" || blank.ServerName != "" {
+		t.Fatalf("blank internal H3 settings = %+v, want no server-key substitution", blank)
+	}
+
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", " /internal-ca.crt ")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", " internal.example ")
+
+	loaded := loadInternalH3ClientOptions()
+	if loaded.CACertFile != "/internal-ca.crt" || loaded.ServerName != "internal.example" {
+		t.Fatalf("internal H3 settings = %+v, want trimmed dedicated values", loaded)
 	}
 }

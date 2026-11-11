@@ -49,7 +49,7 @@ pass, 2026-09-28).
 | Admin paths | `POST /api/holo/settings` |
 | Worker apply | `PUT /internal/alarm/settings` (see `alarm.md`) |
 | Persisted file | `settings.json` (`alarmAdvanceMinutes`, `targetMinutes`) |
-| Contract package | `hololive/hololive-api/internal/server/settings` |
+| Contract package | `settings.json` 형식·응답 `settings`: `hololive/hololive-shared/pkg/service/settings` (`Settings`, `ReadFile`); `settings.json` 저장·응답 `runtime` 키: `hololive/hololive-api/internal/planes/admin/internal/service/settings` (`Service`, `AlarmAdvanceMinutesApplyResult`, `SettingsRuntimeStateResult`); HTTP 요청·응답 envelope: `hololive/hololive-api/internal/planes/admin/internal/server/api` |
 
 ## Request
 
@@ -116,7 +116,9 @@ application, preserving the distinction from a confirmed worker rejection.
 - Saved settings and unknown outcome after the worker applies but loses its response: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_response_loss_test.go`
 - Worker/client result classification and concurrent request ordering: `hololive/hololive-shared/pkg/service/alarmhttp/client_advance_test.go`, `hololive/hololive-alarm-worker/internal/service/alarm/subscriptions/client_advance_integration_test.go` (both run without build tags)
 - Zero rejection before persistence/apply: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_update_test.go`.
-- Persist-before-publish and stored-file validation: `hololive/hololive-shared/pkg/service/settings/service_test.go`.
+- Response wire and `settings.json` shape: `hololive/hololive-api/internal/planes/admin/internal/server/api/api_settings_update_test.go`.
+- Persist-before-publish: `hololive/hololive-api/internal/planes/admin/internal/service/settings/service_test.go`.
+- Stored-file validation: `hololive/hololive-shared/pkg/service/settings/service_test.go`.
 - ACL concurrent mutations and committed snapshot: `hololive/hololive-api/internal/service/acl/service_concurrency_test.go`
 - Single process ACL instance: `hololive/hololive-api/internal/app/runtime_infrastructure_test.go` (needs `TEST_VALKEY_ADDR`)
 

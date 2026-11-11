@@ -12,8 +12,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// RerunNotification은 운영 CLI의 정기 알림 수동 재실행이다. 실행 중인 hololive-api와 같은 설정·자원 조립으로
-// llm plane scheduler만 만들어 한 번 호출하고, HTTP 서버와 정기 schedule은 시작하지 않는다.
+// RerunNotification은 운영 CLI의 정기 알림 수동 재실행이다. 실행 중인 hololive-api와 같은 설정과 llm plane 자원
+// 조립(buildLLMInfrastructure)으로 llm plane scheduler만 만들어 한 번 호출한다. Admin pool·ACL·Holodex는 만들지 않고,
+// HTTP 서버와 정기 schedule은 시작하지 않는다.
 func RerunNotification(ctx context.Context, appConfig *apiconfig.RuntimeConfig, kind string, logger *slog.Logger) (_ notification.Result, retErr error) {
 	if appConfig == nil {
 		return notification.Result{}, errors.New("hololive-api config must not be nil")
@@ -23,9 +24,9 @@ func RerunNotification(ctx context.Context, appConfig *apiconfig.RuntimeConfig, 
 		return notification.Result{}, errors.New("logger must not be nil")
 	}
 
-	infra, err := buildAPIInfrastructure(ctx, appConfig, logger)
+	infra, err := buildLLMInfrastructure(ctx, appConfig, logger)
 	if err != nil {
-		return notification.Result{}, fmt.Errorf("build process infrastructure: %w", err)
+		return notification.Result{}, fmt.Errorf("build llm infrastructure: %w", err)
 	}
 
 	defer func() {

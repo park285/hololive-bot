@@ -15,7 +15,7 @@ func TestFindBestMatchUsesRosterNameWithoutCachedNameFallback(t *testing.T) {
 	t.Parallel()
 
 	provider := newStubMemberProvider([]*domain.Member{{ChannelID: "ch-sui", Name: rosterTestMemberName, Org: orgHololive}})
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), "hoshimachi")
 	require.NoError(t, err)

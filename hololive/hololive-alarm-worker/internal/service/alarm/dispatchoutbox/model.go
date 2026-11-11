@@ -20,14 +20,6 @@ const (
 	StatusCancelled   Status = "cancelled" //nolint:misspell // dispatch_delivery.status에 저장되는 실제 값이라, canceled로 바꾸면 기존 행과 상태 비교가 어긋난다.
 )
 
-type InsertResult string
-
-const (
-	Inserted          InsertResult = "inserted"
-	DuplicateActive   InsertResult = "duplicate_active"
-	DuplicateTerminal InsertResult = "duplicate_terminal"
-)
-
 type Record struct {
 	ID               int64
 	EventID          int64
@@ -38,7 +30,6 @@ type Record struct {
 	ChannelID        string
 	AlarmType        domain.AlarmType
 	Category         string
-	Payload          []byte
 	ClaimKeys        []string
 	DeliveryContext  []byte
 	DispatchGroupKey string
@@ -80,7 +71,7 @@ type EventRecord struct {
 
 // PublishBatchInput의 delivery는 항상 pending으로 저장한다.
 type PublishBatchInput struct {
-	Envelopes []domain.AlarmQueueEnvelope
+	Envelopes []AlarmQueueEnvelope
 }
 
 // PublishOutcome은 commit으로 확인한 입력별 발행 결과다.
@@ -155,7 +146,6 @@ type TerminalUpdate struct {
 }
 
 type Writer interface {
-	InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error)
 	InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error)
 }
 

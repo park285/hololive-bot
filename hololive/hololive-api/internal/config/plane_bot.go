@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
@@ -26,7 +28,6 @@ type BotPlaneConfig struct {
 	OfficialSchedule settings.OfficialScheduleRuntimeConfig
 	Valkey           settings.ValkeyConfig
 	Postgres         settings.PostgresConfig
-	Notification     settings.NotificationConfig
 	Bot              settings.BotConfig
 	Webhook          WebhookConfig
 	APIWorkerProfile *APIWorkerProfile
@@ -67,6 +68,16 @@ func loadProcessEnv() error {
 	return nil
 }
 
+// loadInternalH3ClientOptions는 bot·admin plane 내부 서비스 H3 client의 TLS 경로와 이름을 전용 키 두 개에서만 읽는다.
+// 공통 서버 키(HOLOLIVE_H3_CERT_FILE, HOLOLIVE_H3_SERVER_NAME)로 대신하지 않는다.
+// 빈 값의 HTTPS 거절과 파일 검증은 client 생성자가 소유하여 HTTP-only runtime 기동을 보존한다.
+func loadInternalH3ClientOptions() sharedh3.ClientOptions {
+	return sharedh3.ClientOptions{
+		CACertFile: strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE")),
+		ServerName: strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME")),
+	}
+}
+
 func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 	iris, err := settings.LoadIrisConfig()
 	if err != nil {
@@ -83,10 +94,9 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 	officialSchedule, officialScheduleErr := settings.LoadOfficialScheduleRuntimeConfig()
 	valkey, valkeyErr := settings.LoadValkeyConfig()
 	postgres, postgresErr := settings.LoadPostgresEndpointConfig()
-	notification, notificationErr := settings.LoadNotificationConfig()
 	bot, botErr := settings.LoadBotConfig()
 
-	if err = errors.Join(serverErr, holodexErr, officialScheduleErr, valkeyErr, postgresErr, notificationErr, botErr); err != nil {
+	if err = errors.Join(serverErr, holodexErr, officialScheduleErr, valkeyErr, postgresErr, botErr); err != nil {
 		return nil, fmt.Errorf("load bot plane sections: %w", err)
 	}
 
@@ -98,22 +108,18 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 	config := &BotPlaneConfig{
 		Environment:      envload.AppEnvironment(),
 		Server:           server,
-		InternalH3:       settings.LoadInternalH3ClientOptions(),
+		InternalH3:       loadInternalH3ClientOptions(),
 		Iris:             iris,
+		Kakao:            kakao,
 		Holodex:          holodex,
 		OfficialSchedule: officialSchedule,
 		Valkey:           valkey,
 		Postgres:         postgres,
-		Notification:     notification,
 		Bot:              bot,
 		Webhook:          webhookConfigFromProfile(profile),
 		APIWorkerProfile: profile,
 		AlarmServiceURL:  sharedenv.String("ALARM_INTERNAL_URL", ""),
 	}
-	// KakaoConfig는 잠금을 포함하므로 값 복사 대신 필드를 옮긴다.
-	config.Kakao.Rooms = kakao.Rooms
-	config.Kakao.ACLEnabled = kakao.ACLEnabled
-	config.Kakao.ACLMode = kakao.ACLMode
 
 	return config, nil
 }

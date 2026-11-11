@@ -25,7 +25,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -55,36 +54,30 @@ type commandInitView struct {
 	majorEventRepository  handlercore.MajorEventRepository
 	memberRepository      handlercore.CelebrationCalendarFinder
 	calendarImageRenderer handlercore.CalendarImageRenderer
-	commandBuilders       []orchcmd.CommandBuilder
 }
 
-func (b *Bot) commandInitView() commandInitView {
-	if b == nil {
-		return commandInitView{}
-	}
-
+func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder) commandInitView {
 	return commandInitView{
-		holodex:               b.holodex,
+		holodex:               deps.Holodex,
 		postgres:              b.postgres,
-		alarm:                 b.alarm,
-		matcher:               b.matcher,
-		memberNews:            b.memberNews,
-		membersData:           b.membersData,
+		alarm:                 deps.Alarm,
+		matcher:               deps.Matcher,
+		memberNews:            deps.MemberNews,
+		membersData:           deps.MembersData,
 		formatter:             b.formatter,
 		sendMessage:           b.sendMessage,
 		sendImage:             b.sendImage,
 		sendImages:            b.sendImages,
 		sendError:             b.sendError,
 		logger:                b.logger,
-		majorEventRepository:  b.majorEventRepository,
-		memberRepository:      b.memberRepository,
+		majorEventRepository:  deps.MajorEventRepository,
+		memberRepository:      calendarFinder,
 		calendarImageRenderer: b.calendarImageRenderer,
-		commandBuilders:       orchcmd.CloneCommandBuilders(b.commandBuilders),
 	}
 }
 
-func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *handlercore.Dependencies {
-	deps := &handlercore.Dependencies{
+func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
+	return &handlercore.Dependencies{
 		Holodex:             v.holodex,
 		LiveQuery:           livequery.New(v.postgres),
 		CollabMembers:       collabmembers.New(v.postgres, v.membersData),
@@ -102,10 +95,6 @@ func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *ha
 		SendError:           v.sendError,
 		Logger:              v.logger,
 	}
-
-	deps.Dispatcher = handlers.NewSequentialDispatcher(registry, orchcmd.NormalizeCommandKey)
-
-	return deps
 }
 
 func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handlercore.Command {
@@ -140,38 +129,7 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 		)
 	}
 
-	commands = v.appendExternalCommands(commands, deps)
-
-	return compactCommands(commands)
-}
-
-func (v *commandInitView) appendExternalCommands(commands []handlercore.Command, deps *handlercore.Dependencies) []handlercore.Command {
-	if len(v.commandBuilders) == 0 {
-		return commands
-	}
-
-	v.logInfo("External command builders enabled", slog.Int("count", len(v.commandBuilders)))
-
-	for _, builder := range v.commandBuilders {
-		if builder != nil {
-			commands = append(commands, builder(deps))
-		}
-	}
-
 	return commands
-}
-
-func compactCommands(commands []handlercore.Command) []handlercore.Command {
-	compacted := make([]handlercore.Command, 0, len(commands))
-	for _, cmd := range commands {
-		if cmd == nil {
-			continue
-		}
-
-		compacted = append(compacted, cmd)
-	}
-
-	return compacted
 }
 
 func (v *commandInitView) logInfo(msg string, args ...any) {

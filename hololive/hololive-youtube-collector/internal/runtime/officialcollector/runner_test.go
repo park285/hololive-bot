@@ -189,14 +189,14 @@ func officialInput(tb testing.TB) *collection.RunInput {
 	}
 
 	targets, err := collection.NewExactTargetSnapshot(
-		lease.ProjectionGeneration, officialScheduleSubject, job.RequestedKinds(),
+		lease.ProjectionGeneration, collection.ScheduleSubject, job.RequestedKinds(),
 		map[contract.ObservationKind]bool{contract.KindSchedule: true},
 	)
 	if err != nil {
 		tb.Fatal(err)
 	}
 
-	input, err := collection.NewRunInput(job, officialScheduleSubject, &lease, snapshot, targets, 1, 1<<20)
+	input, err := collection.NewRunInput(job, collection.ScheduleSubject, &lease, snapshot, targets, 1, 1<<20)
 	if err != nil {
 		tb.Fatal(err)
 	}

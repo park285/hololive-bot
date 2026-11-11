@@ -9,8 +9,8 @@ import (
 // 같은 행을 가리키며, 둘이 같다는 것은 messaging 패키지 테스트가 고정한다.
 var RenderFailureMessageKey = messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: "command_processing_failed"}
 
-// RequiredMessageStrings는 ResponseFormatter가 조회하는 message_strings 계약이다. 이 계약은 bot plane이 기동 때 검증한다.
-// SendError가 쓰는 error namespace key(messaging.Err* 상수)는 호출자가 따로 더한다.
+// RequiredMessageStrings는 bot plane이 기동 때 검증하는 ResponseFormatter의 message_strings 계약이며, SendError의 error key(messaging.Err*)는 호출자가 더한다.
+// NotifyMemberNews* key는 formatter가 더 읽지 않지만 key와 seed를 함께 지우는 migration 전까지 검증 대상에 남는다.
 func RequiredMessageStrings() messagestrings.Requirements {
 	timeFmtKeys := messagestrings.TimeFmtKeys()
 	notifyKeys := messagestrings.NotifyKeys()

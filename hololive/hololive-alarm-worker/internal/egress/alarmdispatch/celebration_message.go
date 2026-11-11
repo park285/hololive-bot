@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func renderCelebrationMessage(ctx context.Context, renderer *template.Renderer, envelope *domain.AlarmQueueEnvelope) (delivery.MessageVariants, error) {
+func renderCelebrationMessage(ctx context.Context, renderer *template.Renderer, envelope *dispatchoutbox.AlarmQueueEnvelope) (delivery.MessageVariants, error) {
 	if envelope.Celebration == nil {
 		return delivery.MessageVariants{}, errors.New("render celebration: payload is nil")
 	}

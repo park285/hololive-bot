@@ -48,8 +48,9 @@ The current production runtime set is three Go binaries:
 - runtime contracts under `pkg/contracts`;
 - PostgreSQL/Valkey clients under `pkg/service/{database,cache}`; module-private implementations (Holodex API client, template sample data, worker observability) under `internal/`.
 
-실행 구현의 조립은 각 module이 소유합니다. API는 `internal/config`와 plane별 인스턴스를 만드는
-`internal/apifoundation`, admin의 `runtime`·`internal/httpapi`, 공통 trigger의 `internal/httpapi`를 사용합니다.
+실행 구현의 조립은 각 module이 소유합니다. API는 설정 적재의 `internal/config`, process 자원과 plane 조립의
+`internal/app`(bot·admin이 빌려 쓰는 ACL·Holodex 서비스 생성 포함), plane별 `internal/planes/*/runtime`을
+사용합니다. admin router는 `internal/planes/admin/internal/httpapi`, 수동 재실행 CLI는 `internal/app`과 llm plane `runtime`에 있습니다.
 Observation publish는 collector `internal/runtime/sourceobservation`, consume와 private reducer는 API
 `internal/youtube/{sourceobservation,reconcile,community}`에 있습니다. Worker의 구독 서비스·private cache,
 dedup·queue·dispatchoutbox, alarm dispatch runner·formatter와 범용 notification delivery dispatcher·store·SQL
@@ -153,8 +154,8 @@ Current operational details live in `docs/current/services/youtube-collector.md`
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
 | Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/quadlet/`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-youtube-collector.service` |
 | Release, rollback, or deploy | `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
-| Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/`, `hololive/hololive-api/internal/contracts/` |
-| Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/apifoundation/`, `internal/app/`, `cmd/hololive-api/`; each plane's `runtime/` |
+| Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
+| Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/app/`, `cmd/hololive-api/`; each plane's `runtime/` |
 | Change YouTube collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change final notification delivery | `docs/current/contracts/alarm.md`, `docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md`, `docs/current/runbooks/alarm-worker.md`, `docs/current/runbooks/dlq-replay.md`, `hololive/hololive-alarm-worker/` |

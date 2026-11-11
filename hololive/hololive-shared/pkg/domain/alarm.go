@@ -22,7 +22,6 @@ package domain
 
 import (
 	"database/sql/driver"
-	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -219,102 +218,4 @@ func validateLiveDispatchAlarmType(alarmType AlarmType) error {
 	}
 
 	return fmt.Errorf("live alarm route does not support alarm type %q", alarmType)
-}
-
-type AlarmQueueEnvelope struct {
-	DispatchOutboxID int64                          `json:"dispatch_outbox_id"`
-	DispatchGroupKey string                         `json:"dispatch_group_key,omitempty"`
-	SendUnitID       int64                          `json:"send_unit_id"`
-	ClientRequestID  string                         `json:"client_request_id,omitempty"`
-	Notification     AlarmNotification              `json:"notification"`
-	SourceKind       AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	Celebration      *CelebrationDispatchPayload    `json:"celebration,omitempty"`
-	DeliveryDigest   *DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
-	XSpace           *XSpaceDispatchPayload         `json:"x_space,omitempty"`
-	ClaimKeys        []string                       `json:"claim_keys"`
-	EnqueuedAt       string                         `json:"enqueued_at"`
-	Version          uint8                          `json:"version"`
-	Retry            *AlarmQueueRetryMetadata       `json:"retry,omitempty"`
-	SourcePayloadRaw string                         `json:"source_payload,omitempty"`
-	// RequestUnpinned는 claim이 본 send unit 요청의 미고정 여부다. 큐 payload에는 싣지 않는다.
-	RequestUnpinned bool `json:"-"`
-}
-
-type AlarmQueueRetryMetadata struct {
-	Attempt       int    `json:"attempt"`
-	RetryAfterMS  int64  `json:"retry_after_ms"`
-	LastError     string `json:"last_error,omitempty"`
-	LastErrorCode string `json:"last_error_code,omitempty"`
-}
-
-type alarmQueueEnvelopeNotificationWire struct {
-	AlarmType                   AlarmType `json:"alarm_type,omitempty"`
-	RoomID                      string    `json:"room_id"`
-	Channel                     *Channel  `json:"channel"`
-	Stream                      *Stream   `json:"stream"`
-	MinutesUntil                int       `json:"minutes_until"`
-	Users                       []string  `json:"users"`
-	ScheduleChangeMessage       string    `json:"schedule_change_message,omitempty"`
-	ScheduleChangePreviousStart string    `json:"schedule_change_previous_start,omitempty"`
-}
-
-type alarmQueueEnvelopeWire struct {
-	DispatchOutboxID int64                              `json:"dispatch_outbox_id"`
-	Notification     alarmQueueEnvelopeNotificationWire `json:"notification"`
-	SourceKind       AlarmDispatchSourceKind            `json:"source_kind,omitempty"`
-	Celebration      *CelebrationDispatchPayload        `json:"celebration,omitempty"`
-	DeliveryDigest   *DeliveryDigestDispatchPayload     `json:"delivery_digest,omitempty"`
-	XSpace           *XSpaceDispatchPayload             `json:"x_space,omitempty"`
-	ClaimKeys        []string                           `json:"claim_keys"`
-	EnqueuedAt       string                             `json:"enqueued_at"`
-	Version          uint8                              `json:"version"`
-	Retry            *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
-	SourcePayload    string                             `json:"source_payload,omitempty"`
-}
-
-func (e *AlarmQueueEnvelope) SourcePayload() string {
-	if e == nil {
-		return ""
-	}
-
-	return e.SourcePayloadRaw
-}
-
-func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
-	var wire alarmQueueEnvelopeWire
-
-	if err := jsonv2.Unmarshal(data, &wire); err != nil {
-		return fmt.Errorf("unmarshal alarm queue envelope: %w", err)
-	}
-
-	// 저장 payload는 발행 시점에 alarm_type을 채운다. 누락을 Live로 간주하지 않고, 다른 알림 종류로 오인해 보내지 않도록
-	// decode 오류로 드러낸다.
-	if wire.Notification.AlarmType == "" {
-		return errors.New("unmarshal alarm queue envelope: notification.alarm_type is empty")
-	}
-
-	*e = AlarmQueueEnvelope{
-		DispatchOutboxID: wire.DispatchOutboxID,
-		Notification: AlarmNotification{
-			AlarmType:                   wire.Notification.AlarmType,
-			RoomID:                      wire.Notification.RoomID,
-			Channel:                     wire.Notification.Channel,
-			Stream:                      wire.Notification.Stream,
-			MinutesUntil:                wire.Notification.MinutesUntil,
-			Users:                       wire.Notification.Users,
-			ScheduleChangeMessage:       wire.Notification.ScheduleChangeMessage,
-			ScheduleChangePreviousStart: wire.Notification.ScheduleChangePreviousStart,
-		},
-		SourceKind:       wire.SourceKind,
-		Celebration:      wire.Celebration,
-		DeliveryDigest:   wire.DeliveryDigest,
-		XSpace:           wire.XSpace,
-		ClaimKeys:        wire.ClaimKeys,
-		EnqueuedAt:       wire.EnqueuedAt,
-		Version:          wire.Version,
-		Retry:            wire.Retry,
-		SourcePayloadRaw: wire.SourcePayload,
-	}
-
-	return nil
 }

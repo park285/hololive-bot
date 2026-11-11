@@ -261,27 +261,6 @@ func TestVideoLifecycleUnresolvableVideoRequiresConfirmedChannelNegative(t *test
 	}
 }
 
-// 7.2.7 롤백 창처럼 positive가 지우지 못한 잔여 추적값(마지막 positive보다 이른 값)은 지속 시간의 근거가 아니다.
-func TestVideoLifecycleUnresolvableVideoRestartsStaleTracking(t *testing.T) {
-	t.Parallel()
-
-	f := startUnresolvable(t)
-
-	if _, err := f.pool.Exec(t.Context(), `UPDATE youtube_live_reconciliation_heads
-		SET unresolvable_since = last_live_positive_at - INTERVAL '30 minutes' WHERE video_id=$1`, testVideoID); err != nil {
-		t.Fatal(err)
-	}
-
-	f.videoProof = advanceLease(t.Context(), t, f.pool, &f.videoProof, 11*time.Minute)
-
-	f.channelNegative(t)
-	f.checkVideo(t, 0, contract.LiveCheckReasonIdentityMissing, "UNRESOLVABLE_TRACKED")
-
-	if since := loadUnresolvableSince(t, f.pool); since == nil || !since.Equal(f.videoProof.ScheduledFor) || liveSessionStatus(t, f.pool) != testStatusLive {
-		t.Fatalf("stale tracking: since=%v status=%s, want LIVE tracked again since %s", since, liveSessionStatus(t, f.pool), f.videoProof.ScheduledFor)
-	}
-}
-
 func TestVideoLifecycleHeadlessMetadataUpcomingKeepsIdentityDecision(t *testing.T) {
 	t.Parallel()
 

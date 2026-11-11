@@ -59,34 +59,8 @@ type memberRowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanMemberQueryRow(scanner memberRowScanner) (memberRow, error) {
-	var row memberRow
-
-	err := scanner.Scan(
-		&row.id,
-		&row.slug,
-		&row.channelID,
-		&row.englishName,
-		&row.japaneseName,
-		&row.koreanName,
-		&row.shortKoreanName,
-		&row.status,
-		&row.isGraduated,
-		&row.aliasesJSON,
-		&row.org,
-		&row.suborg,
-		&row.syncSource,
-		&row.twitchUserID,
-		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
-	)
-	if err != nil {
-		return row, fmt.Errorf("scan member columns: %w", err)
-	}
-
-	return row, nil
-}
-
-func scanMemberFullRow(scanner memberRowScanner) (memberRow, error) {
+// scanMemberRow는 멤버 조회 SQL(get_all_members·find_by_*·기념일 조회)의 공통 열 순서를 읽는다.
+func scanMemberRow(scanner memberRowScanner) (memberRow, error) {
 	var row memberRow
 
 	err := scanner.Scan(
@@ -108,56 +82,52 @@ func scanMemberFullRow(scanner memberRowScanner) (memberRow, error) {
 		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
 	)
 	if err != nil {
-		return row, fmt.Errorf("scan member full columns: %w", err)
+		return row, fmt.Errorf("scan member columns: %w", err)
 	}
 
 	return row, nil
 }
 
-func (r *Repository) parseMemberRow(row *memberRow) (*domain.Member, error) {
-	member, err := r.scanMember(
-		row.id,
-		row.slug,
-		row.channelID,
-		row.englishName,
-		row.japaneseName,
-		row.koreanName,
-		row.shortKoreanName,
-		row.status,
-		row.isGraduated,
-		row.aliasesJSON,
-		row.photo,
-		row.org,
-		row.suborg,
-		row.syncSource,
-		row.twitchUserID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("scan member: %w", err)
+// member는 NULL 열을 빈 값으로 둔 domain.Member를 만든다.
+func (row *memberRow) member() (*domain.Member, error) {
+	var aliases domain.Aliases
+
+	if err := jsonv2.Unmarshal(row.aliasesJSON, &aliases); err != nil {
+		return nil, fmt.Errorf("unmarshal aliases: %w", err)
 	}
 
-	member.Units = row.units
-	if row.chzzkChannelID != nil {
-		member.ChzzkChannelID = *row.chzzkChannelID
+	return &domain.Member{
+		ID:              row.id,
+		ChannelID:       nullableText(row.channelID),
+		Name:            row.englishName,
+		Aliases:         &aliases,
+		NameJa:          nullableText(row.japaneseName),
+		NameKo:          nullableText(row.koreanName),
+		ShortKoreanName: nullableText(row.shortKoreanName),
+		IsGraduated:     row.isGraduated,
+		Photo:           nullableText(row.photo),
+		Units:           row.units,
+		OfficialURL:     nullableText(row.officialURL),
+		Org:             row.org,
+		Suborg:          nullableText(row.suborg),
+		SyncSource:      row.syncSource,
+		ChzzkChannelID:  nullableText(row.chzzkChannelID),
+		TwitchUserID:    nullableText(row.twitchUserID),
+		Birthday:        row.birthday,
+		DebutDate:       row.debutDate,
+	}, nil
+}
+
+func nullableText(value *string) string {
+	if value == nil {
+		return ""
 	}
 
-	if row.officialURL != nil {
-		member.OfficialURL = *row.officialURL
-	}
-
-	if row.birthday != nil {
-		member.Birthday = row.birthday
-	}
-
-	if row.debutDate != nil {
-		member.DebutDate = row.debutDate
-	}
-
-	return member, nil
+	return *value
 }
 
 func (r *Repository) querySingleMember(ctx context.Context, query string, args ...any) (*domain.Member, error) {
-	row, err := scanMemberQueryRow(r.pool.QueryRow(ctx, query, args...))
+	row, err := scanMemberRow(r.pool.QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrMemberNotFound
 	}
@@ -166,7 +136,7 @@ func (r *Repository) querySingleMember(ctx context.Context, query string, args .
 		return nil, fmt.Errorf("scan member query row: %w", err)
 	}
 
-	out, err := r.parseMemberRow(&row)
+	out, err := row.member()
 	if err != nil {
 		return nil, fmt.Errorf("parse member row: %w", err)
 	}
@@ -180,19 +150,16 @@ const (
 	celebrationMemberIterLabel = "celebration member rows iteration"
 )
 
-func (r *Repository) collectMembersFromRows(
-	rows pgx.Rows,
-	iterLabel string,
-	rowLabel string,
-	scan func(memberRowScanner) (memberRow, error),
-) ([]*domain.Member, error) {
+// collectMembersFromRows는 rowLabel로 행 단위 scan/parse 오류를, iterLabel로 rows.Err 오류를 구분해 감쌉니다.
+// 한 행이 실패해도 나머지 행은 계속 수집하고, 오류는 errors.Join으로 함께 반환합니다.
+func collectMembersFromRows(rows pgx.Rows, iterLabel, rowLabel string) ([]*domain.Member, error) {
 	out, err := collectJoinedRows(rows, iterLabel, func(rows pgx.Rows) (*domain.Member, error) {
-		row, err := scan(rows)
+		row, err := scanMemberRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan %s row: %w", rowLabel, err)
 		}
 
-		member, err := r.parseMemberRow(&row)
+		member, err := row.member()
 		if err != nil {
 			return nil, fmt.Errorf("parse %s row %q: %w", rowLabel, row.englishName, err)
 		}
@@ -204,92 +171,4 @@ func (r *Repository) collectMembersFromRows(
 	}
 
 	return out, nil
-}
-
-func (r *Repository) scanMember(
-	id int,
-	_ string,
-	channelID *string,
-	englishName string,
-	japaneseName *string,
-	koreanName *string,
-	shortKoreanName *string,
-	_ string,
-	isGraduated bool,
-	aliasesJSON []byte,
-	photo *string,
-	org string,
-	suborg *string,
-	syncSource string,
-	twitchUserID *string,
-) (*domain.Member, error) {
-	out, err := r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, shortKoreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
-	if err != nil {
-		return nil, fmt.Errorf("scan member with photo: %w", err)
-	}
-
-	return out, nil
-}
-
-// scanMemberWithPhoto: DB 조회 결과를 domain.Member로 변환 (photo 포함).
-
-func (r *Repository) scanMemberWithPhoto(
-	id int,
-	channelID *string,
-	englishName string,
-	japaneseName *string,
-	koreanName *string,
-	shortKoreanName *string,
-	isGraduated bool,
-	aliasesJSON []byte,
-	photo *string,
-	org string,
-	suborg *string,
-	syncSource string,
-	twitchUserID *string,
-) (*domain.Member, error) {
-	var aliases domain.Aliases
-
-	if err := jsonv2.Unmarshal(aliasesJSON, &aliases); err != nil {
-		return nil, fmt.Errorf("unmarshal aliases: %w", err)
-	}
-
-	member := &domain.Member{
-		ID:          id,
-		Name:        englishName,
-		Aliases:     &aliases,
-		IsGraduated: isGraduated,
-		Org:         org,
-		SyncSource:  syncSource,
-	}
-
-	if channelID != nil {
-		member.ChannelID = *channelID
-	}
-
-	if japaneseName != nil {
-		member.NameJa = *japaneseName
-	}
-
-	if koreanName != nil {
-		member.NameKo = *koreanName
-	}
-
-	if shortKoreanName != nil {
-		member.ShortKoreanName = *shortKoreanName
-	}
-
-	if photo != nil {
-		member.Photo = *photo
-	}
-
-	if suborg != nil {
-		member.Suborg = *suborg
-	}
-
-	if twitchUserID != nil {
-		member.TwitchUserID = *twitchUserID
-	}
-
-	return member, nil
 }

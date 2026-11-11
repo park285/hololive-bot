@@ -7,6 +7,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
@@ -16,7 +17,7 @@ func TestSchedulersPrepareOneRunAndUseCapturedClock(t *testing.T) {
 		t.Run(string(period), func(t *testing.T) {
 			prepared := &mockDigestService{}
 			service := &mockDigestService{
-				rooms: []model.SubscribedRoom{{RoomID: "room-a"}, {RoomID: "room-b"}}, generator: prepared,
+				rooms: []newsmodel.SubscribedRoom{{RoomID: "room-a"}, {RoomID: "room-b"}}, generator: prepared,
 				digestErrs: map[string]error{"room-a": errors.New("unprepared service must not generate"), "room-b": errors.New("unprepared service must not generate")},
 			}
 			locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
@@ -56,7 +57,7 @@ func TestSchedulersPrepareOneRunAndUseCapturedClock(t *testing.T) {
 
 func TestSchedulerCommonPreparationFailureStopsRoomsAndReleasesLock(t *testing.T) {
 	cause := errors.New("common candidate DB query failed")
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}, prepareErr: cause}
+	service := &mockDigestService{rooms: []newsmodel.SubscribedRoom{{RoomID: testRoomID}}, prepareErr: cause}
 	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))

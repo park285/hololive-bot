@@ -34,7 +34,6 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		// CSP는 SPA 환경에서 제한적으로 적용
 		c.Header("Content-Security-Policy", "frame-ancestors 'none'")
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		c.Next()
@@ -92,18 +91,13 @@ func sanitizedRequestID(raw string) string {
 	return raw
 }
 
-const defaultMaxBodyBytes int64 = 1 << 20 // 1MiB
+const maxBodyBytes int64 = 1 << 20 // 1MiB
 
-// MaxBodySizeMiddleware 요청 본문 크기를 제한하는 미들웨어.
-// 설정된 maxBytes를 초과하면 413 Payload Too Large를 반환하고, maxBytes가 0 이하이면 defaultMaxBodyBytes를 쓴다.
-func MaxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
-	if maxBytes <= 0 {
-		maxBytes = defaultMaxBodyBytes
-	}
-
+// MaxBodySizeMiddleware는 요청 본문 읽기를 maxBodyBytes까지로 제한한다. 한도를 넘는 읽기는 *http.MaxBytesError로 실패한다.
+func MaxBodySizeMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Body != nil {
-			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodyBytes)
 		}
 
 		c.Next()

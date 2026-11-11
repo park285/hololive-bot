@@ -22,7 +22,7 @@ type birthdayStreamRepositoryPublisher struct {
 
 func (p *birthdayStreamRepositoryPublisher) PublishDispatchBatch(
 	ctx context.Context,
-	envelopes []domain.AlarmQueueEnvelope,
+	envelopes []dispatchoutbox.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
 	result, err := p.repository.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{
 		Envelopes: envelopes,
@@ -44,7 +44,7 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	pool := dbtest.NewPool(t)
 	repository := newOutboxRepository(t, pool)
 	eventKey := birthdayGreetingEventKey(testMemberIDA, testBirthdayDate)
-	envelopes := []domain.AlarmQueueEnvelope{
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{
 		birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, "room-sent"),
 		birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, "room-retry"),
 		birthdayGreetingTestEnvelope(testMemberIDB, testChannelB, "room-other-member"),
@@ -88,7 +88,7 @@ func TestPgxStoreListPublishedBirthdayStreamEventsMatchesMemberDatePrefix(t *tes
 
 	const prefixSharingMemberID = 1010
 
-	streamEnvelope := func(memberID int, dateStr, videoID string) domain.AlarmQueueEnvelope {
+	streamEnvelope := func(memberID int, dateStr, videoID string) dispatchoutbox.AlarmQueueEnvelope {
 		return birthdayStreamEnvelope(&birthdayStreamCandidate{
 			member:  &domain.Member{ID: memberID, ChannelID: testChannelA, Name: testMemberName},
 			session: BirthdayStreamSession{VideoID: videoID, ChannelID: testChannelA, Title: testBirthdayTitle},
@@ -96,7 +96,7 @@ func TestPgxStoreListPublishedBirthdayStreamEventsMatchesMemberDatePrefix(t *tes
 	}
 
 	_, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{
+		Envelopes: []dispatchoutbox.AlarmQueueEnvelope{
 			streamEnvelope(testMemberIDA, testBirthdayDate, testVideoA),
 			streamEnvelope(prefixSharingMemberID, testBirthdayDate, "vid-other-member"),
 			streamEnvelope(testMemberIDA, testNextDate, "vid-other-date"),
@@ -177,7 +177,7 @@ func seedBirthdayStreamTitleDrift(
 	require.NoError(t, err)
 
 	_, err = repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{
+		Envelopes: []dispatchoutbox.AlarmQueueEnvelope{
 			birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, testRoom1),
 			birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, testRoom2),
 		},
@@ -250,8 +250,8 @@ func assertBirthdayStreamCanonicalState(t *testing.T, pool *pgxpool.Pool) {
 	assert.Zero(t, collisionCount)
 }
 
-func birthdayGreetingTestEnvelope(memberID int, channelID, roomID string) domain.AlarmQueueEnvelope {
-	return domain.AlarmQueueEnvelope{
+func birthdayGreetingTestEnvelope(memberID int, channelID, roomID string) dispatchoutbox.AlarmQueueEnvelope {
+	return dispatchoutbox.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
 			RoomID:    roomID,

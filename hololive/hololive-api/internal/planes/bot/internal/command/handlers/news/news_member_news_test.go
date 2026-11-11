@@ -34,10 +34,7 @@ import (
 	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 )
 
-const (
-	testNewsRoomID   = "room-a"
-	testNewsRoomName = "room-name"
-)
+const testNewsRoomID = "room-a"
 
 type stubMemberNewsService struct {
 	digest             *membernewsmodel.Digest
@@ -109,7 +106,7 @@ func TestMemberNewsCommand_NoMembersMessage(t *testing.T) {
 
 	cmd := NewMemberNewsCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}, map[string]any{"period": "weekly"})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testNewsRoomID}, map[string]any{"period": "weekly"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -151,7 +148,7 @@ func TestMemberNewsCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
 	}
 
 	cmd := NewMemberNewsCommand(deps)
-	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}, map[string]any{"period": "weekly"}); err != nil {
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testNewsRoomID}, map[string]any{"period": "weekly"}); err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
@@ -181,7 +178,7 @@ func TestMemberNewsCommand_ServiceErrorUsesSendError(t *testing.T) {
 
 	cmd := NewMemberNewsCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}, map[string]any{"period": "weekly"})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testNewsRoomID}, map[string]any{"period": "weekly"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -209,13 +206,13 @@ func TestMemberNewsSubscriptionCommand_SubscribeAndStatus(t *testing.T) {
 	}
 
 	cmd := NewMemberNewsSubscriptionCommand(deps)
-	ctx := &botcommand.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}
+	ctx := &botcommand.CommandContext{Room: testNewsRoomID}
 
 	if err := cmd.Execute(t.Context(), ctx, map[string]any{"action": "on"}); err != nil {
 		t.Fatalf("subscribe action returned error: %v", err)
 	}
 
-	if stub.subscribedRoomID != testNewsRoomID || stub.subscribedRoomName != testNewsRoomName {
+	if stub.subscribedRoomID != testNewsRoomID || stub.subscribedRoomName != "" {
 		t.Fatalf("subscribe room args mismatch: id=%q name=%q", stub.subscribedRoomID, stub.subscribedRoomName)
 	}
 

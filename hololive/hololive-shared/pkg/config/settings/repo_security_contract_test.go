@@ -55,18 +55,6 @@ func repoLocalPath(t *testing.T, relativePath string) string {
 	return filepath.ToSlash(clean)
 }
 
-func TestRepoEnvExample_DefaultsToProductionAppEnv(t *testing.T) {
-	content := readRepoFile(t, ".env.example")
-
-	if !strings.Contains(content, "APP_ENV=production") {
-		t.Fatal(".env.example missing APP_ENV=production")
-	}
-
-	if strings.Contains(content, "APP_ENV=development") {
-		t.Fatal(".env.example still contains APP_ENV=development")
-	}
-}
-
 func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 	publicTemplate := readRepoFile(t, "deploy/nginx/holoshi-public-shortlink.conf")
 	if count := len(nginxLocationPattern.FindAllString(publicTemplate, -1)); count != 3 {
@@ -169,15 +157,6 @@ func assertPublicKakaoDeepLinkDirectives(t *testing.T, publicTemplate string) {
 	} {
 		if !strings.Contains(publicTemplate, required) {
 			t.Fatalf("public Kakao deep-link ingress missing %q", required)
-		}
-	}
-
-	for _, forbidden := range []string{
-		"$kakao_deep_link_in_app_user_agent",
-		"$kakao_deep_link_in_app_get",
-	} {
-		if strings.Contains(publicTemplate, forbidden) {
-			t.Fatalf("public Kakao deep-link ingress retains browser-denying classifier %q", forbidden)
 		}
 	}
 }

@@ -58,7 +58,7 @@ func TestAPIClientConfiguredRetryCount(t *testing.T) {
 				})
 				_, err := client.DoRequest(t.Context(), http.MethodGet, "/live", nil)
 
-				if _, ok := errors.AsType[*KeyRotationError](err); !ok {
+				if apiErr, ok := errors.AsType[*APIError](err); !ok || apiErr.StatusCode != http.StatusTooManyRequests {
 					t.Fatalf("error = %v, want 429 exhaustion", err)
 				}
 
@@ -261,12 +261,20 @@ func TestNewHolodexAPIClientRejectsInvalidConcurrency(t *testing.T) {
 
 			cfg.Concurrency.MaxConcurrentRequests = concurrency
 
-			client, err := NewHolodexAPIClient(nil, "https://holodex.example", testAPIKey, slog.Default(), nil, nil, &cfg)
+			client, err := NewHolodexAPIClient(&http.Client{}, "https://holodex.example", testAPIKey, slog.Default(), nil, nil, &cfg)
 
 			if client != nil || err == nil || !strings.Contains(err.Error(), "MaxConcurrentRequests") {
 				t.Fatalf("constructor = (%v, %v), want config error", client, err)
 			}
 		})
+	}
+}
+
+func TestNewHolodexAPIClientRejectsNilConfig(t *testing.T) {
+	client, err := NewHolodexAPIClient(&http.Client{}, "https://holodex.example", testAPIKey, slog.Default(), nil, nil, nil)
+
+	if client != nil || err == nil {
+		t.Fatalf("constructor = (%v, %v), want nil config error", client, err)
 	}
 }
 

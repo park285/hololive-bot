@@ -19,13 +19,12 @@ import (
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
-const deliveryFailureReasonPreSendClaim = "pre-send claim"
-
 const (
 	lifecycleReasonPreSendClaim ytlifecycle.Reason = "pre_send_claim"
 	lifecycleReasonFormat       ytlifecycle.Reason = "format_message"
 	lifecycleReasonMessage      ytlifecycle.Reason = "message_missing"
 	lifecycleReasonRequest      ytlifecycle.Reason = "invalid_send_request"
+	lifecycleReasonLeaseBudget  ytlifecycle.Reason = "send_lease_budget"
 	lifecycleReasonAuth         ytlifecycle.Reason = "provider_auth"
 	lifecycleReasonRateLimited  ytlifecycle.Reason = "provider_rate_limited"
 	lifecycleReasonTransport    ytlifecycle.Reason = "provider_transport"
@@ -41,27 +40,32 @@ func deliveryStateContext(ctx context.Context) (context.Context, context.CancelF
 	return context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), deliveryStateTimeout)
 }
 
+// beginLifecycleOperation은 attempt의 행을 SENDING으로 전이하고, 확인되면 attempt.operation과 lease 기준 시각을 채운다.
 func (d *SendEngine) beginLifecycleOperation(
 	ctx context.Context,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
+	attempt *deliveryAttempt,
 	result *deliveryDispatchResult,
-) (store.StartedOperation, bool) {
+) bool {
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), deliveryStateTimeout)
 	defer cancel()
 
-	operation, applied, err := d.transition.BeginSending(ctx, rows, outboxMap(outboxes))
-	observeLifecycleApply("begin_sending", applied, err, len(rows))
+	// DB는 locked_at을 호출 뒤에 채취하므로 이 시각부터 잰 경과 시간은 lease 소비를 작게 잡지 않는다.
+	startedAt := time.Now()
+	operation, applied, err := d.transition.BeginSending(ctx, attempt.rows, outboxMap(attempt.outboxes))
+	observeLifecycleApply("begin_sending", applied, err, len(attempt.rows))
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
-		d.logLifecycleApplyFailure("begin_sending", applied, err, len(rows))
+		d.logLifecycleApplyFailure("begin_sending", applied, err, len(attempt.rows))
 
-		return store.StartedOperation{}, false
+		return false
 	}
 
 	appendLifecycleTouched(result, applied.TouchedOutboxIDs)
 
-	return operation, true
+	attempt.operation = operation
+	attempt.sendingStartedAt = startedAt
+
+	return true
 }
 
 func (d *SendEngine) applyPreparedLifecycleFailure(
@@ -207,12 +211,7 @@ func (d *SendEngine) applyPreSendFailure(
 	}
 
 	for i := range attempt.members {
-		d.recordDeliveryFailure(
-			result,
-			deliveryFailureReasonPreSendClaim,
-			attempt.members[i].row.ID,
-			attempt.members[i].row.OutboxID,
-		)
+		d.recordDeliveryFailure(result, attempt.members[i].row.OutboxID)
 	}
 }
 
@@ -252,6 +251,14 @@ func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.R
 
 	if errors.Is(err, errRequestGenerationsExhausted) {
 		return ytlifecycle.FailurePermanent, ytlifecycle.Reason(errRequestGenerationsExhausted.Error()), 0
+	}
+
+	if errors.Is(err, errDeliverySendRequestInvalid) {
+		return ytlifecycle.FailurePermanent, lifecycleReasonRequest, 0
+	}
+
+	if errors.Is(err, errSendLeaseBudgetExhausted) {
+		return ytlifecycle.FailureRetryable, lifecycleReasonLeaseBudget, 0
 	}
 
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

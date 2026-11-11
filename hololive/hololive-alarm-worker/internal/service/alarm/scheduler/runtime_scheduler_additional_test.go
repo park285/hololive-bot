@@ -43,15 +43,15 @@ import (
 )
 
 type runnerFunc struct {
-	check func(context.Context) ([]*domain.AlarmNotification, error)
+	check func(context.Context, targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error)
 }
 
-func (r *runnerFunc) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
+func (r *runnerFunc) Check(ctx context.Context, targetPolicy targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
 	if r.check == nil {
 		return nil, nil
 	}
 
-	out, err := r.check(ctx)
+	out, err := r.check(ctx, targetPolicy)
 	if err != nil {
 		return out, fmt.Errorf("check: %w", err)
 	}
@@ -60,15 +60,19 @@ func (r *runnerFunc) Check(ctx context.Context) ([]*domain.AlarmNotification, er
 }
 
 type senderFunc struct {
-	send func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error)
+	send func(context.Context, []*domain.AlarmNotification, targetpolicy.TargetMinutePolicy) (delivery.SendResult, error)
 }
 
-func (s *senderFunc) Send(ctx context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error) {
+func (s *senderFunc) Send(
+	ctx context.Context,
+	notifications []*domain.AlarmNotification,
+	targetPolicy targetpolicy.TargetMinutePolicy,
+) (delivery.SendResult, error) {
 	if s.send == nil {
 		return delivery.SendResult{}, nil
 	}
 
-	out, err := s.send(ctx, notifications)
+	out, err := s.send(ctx, notifications, targetPolicy)
 	if err != nil {
 		return out, fmt.Errorf("send: %w", err)
 	}
@@ -82,14 +86,6 @@ type targetMinutesSourceStub struct {
 
 func (s *targetMinutesSourceStub) GetTargetMinutes() []int {
 	return append([]int(nil), s.targets...)
-}
-
-type targetMinutesUpdaterStub struct {
-	calls [][]int
-}
-
-func (s *targetMinutesUpdaterStub) UpdateTargetMinutes(targets []int) {
-	s.calls = append(s.calls, append([]int(nil), targets...))
 }
 
 type alarmCacheWarmerStub struct {
@@ -147,7 +143,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 
 	t.Run("youtube check failure", testYouTubeIterationCheckFailure)
 	t.Run("youtube dispatch failure", testYouTubeIterationDispatchFailure)
-	t.Run("youtube iteration syncs target minutes before check", testYouTubeIterationSyncsTargetMinutes)
+	t.Run("youtube iteration passes one target policy snapshot to check and send", testYouTubeIterationTargetPolicySnapshot)
 	t.Run("youtube iteration picks up updated alarm service targets", testYouTubeIterationUpdatedServiceTargets)
 	t.Run("youtube cache failure triggers immediate cache recovery", testYouTubeIterationCacheFailureRecovery)
 }
@@ -157,12 +153,13 @@ func testYouTubeIterationCheckFailure(t *testing.T) {
 
 	s := &RuntimeScheduler{
 		youtubeChecker: &runnerFunc{
-			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+			check: func(context.Context, targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
 				return nil, errors.New("youtube check failed")
 			},
 		},
-		notifier: &senderFunc{},
-		logger:   testSchedulerLogger(),
+		notifier:            &senderFunc{},
+		targetMinutesSource: &targetMinutesSourceStub{targets: []int{5, 3, 1}},
+		logger:              testSchedulerLogger(),
 	}
 
 	err := s.runYouTubeIteration(t.Context())
@@ -176,16 +173,17 @@ func testYouTubeIterationDispatchFailure(t *testing.T) {
 
 	s := &RuntimeScheduler{
 		youtubeChecker: &runnerFunc{
-			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+			check: func(context.Context, targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
 				return []*domain.AlarmNotification{{RoomID: "room-1"}}, nil
 			},
 		},
 		notifier: &senderFunc{
-			send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
+			send: func(context.Context, []*domain.AlarmNotification, targetpolicy.TargetMinutePolicy) (delivery.SendResult, error) {
 				return delivery.SendResult{}, errors.New("send failed")
 			},
 		},
-		logger: testSchedulerLogger(),
+		targetMinutesSource: &targetMinutesSourceStub{targets: []int{5, 3, 1}},
+		logger:              testSchedulerLogger(),
 	}
 
 	err := s.runYouTubeIteration(t.Context())
@@ -194,27 +192,37 @@ func testYouTubeIterationDispatchFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "dispatch notifications: send notifications")
 }
 
-func testYouTubeIterationSyncsTargetMinutes(t *testing.T) {
+// 반복 중에 설정이 바뀌어도 Check와 Send는 반복 시작 때 읽은 같은 정책을 받는다.
+func testYouTubeIterationTargetPolicySnapshot(t *testing.T) {
 	t.Parallel()
 
-	youtubeUpdater := &targetMinutesUpdaterStub{}
-	dedupUpdater := &targetMinutesUpdaterStub{}
+	source := &targetMinutesSourceStub{targets: []int{10, 3, 1}}
+
+	var checkTargets, sendTargets []int
+
 	s := &RuntimeScheduler{
 		youtubeChecker: &runnerFunc{
-			check: func(context.Context) ([]*domain.AlarmNotification, error) {
-				return nil, nil
+			check: func(_ context.Context, targetPolicy targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
+				checkTargets = targetPolicy.Clone()
+				source.targets = []int{12, 3, 1}
+
+				return []*domain.AlarmNotification{{RoomID: "room-1"}}, nil
 			},
 		},
-		youtubeTargetUpdater: youtubeUpdater,
-		dedupTargetUpdater:   dedupUpdater,
-		targetMinutesSource:  &targetMinutesSourceStub{targets: []int{10, 3, 1}},
-		notifier:             &senderFunc{},
-		logger:               testSchedulerLogger(),
+		notifier: &senderFunc{
+			send: func(_ context.Context, _ []*domain.AlarmNotification, targetPolicy targetpolicy.TargetMinutePolicy) (delivery.SendResult, error) {
+				sendTargets = targetPolicy.Clone()
+
+				return delivery.SendResult{Sent: 1}, nil
+			},
+		},
+		targetMinutesSource: source,
+		logger:              testSchedulerLogger(),
 	}
 
 	require.NoError(t, s.runYouTubeIteration(t.Context()))
-	assert.Equal(t, [][]int{{10, 3, 1}}, youtubeUpdater.calls)
-	assert.Equal(t, [][]int{{10, 3, 1}}, dedupUpdater.calls)
+	assert.Equal(t, []int{10, 3, 1}, checkTargets)
+	assert.Equal(t, []int{10, 3, 1}, sendTargets)
 }
 
 func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
@@ -223,19 +231,19 @@ func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 	alarmService, err := subscriptions.NewAlarmService(cachemocks.NewLenientClient(), nil, &alarmstore.Repository{}, testSchedulerLogger(), []int{5, 3, 1})
 	require.NoError(t, err)
 
-	youtubeUpdater := &targetMinutesUpdaterStub{}
-	dedupUpdater := &targetMinutesUpdaterStub{}
+	var checkTargets []int
+
 	s := &RuntimeScheduler{
 		youtubeChecker: &runnerFunc{
-			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+			check: func(_ context.Context, targetPolicy targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
+				checkTargets = targetPolicy.Clone()
+
 				return nil, nil
 			},
 		},
-		youtubeTargetUpdater: youtubeUpdater,
-		dedupTargetUpdater:   dedupUpdater,
-		targetMinutesSource:  alarmService,
-		notifier:             &senderFunc{},
-		logger:               testSchedulerLogger(),
+		targetMinutesSource: alarmService,
+		notifier:            &senderFunc{},
+		logger:              testSchedulerLogger(),
 	}
 
 	updated, err := alarmService.UpdateAlarmAdvanceMinutes(t.Context(), 12)
@@ -243,8 +251,7 @@ func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 	require.Equal(t, []int{12, 3, 1}, updated.TargetMinutes)
 
 	require.NoError(t, s.runYouTubeIteration(t.Context()))
-	assert.Equal(t, [][]int{{12, 3, 1}}, youtubeUpdater.calls)
-	assert.Equal(t, [][]int{{12, 3, 1}}, dedupUpdater.calls)
+	assert.Equal(t, []int{12, 3, 1}, checkTargets)
 }
 
 func testYouTubeIterationCacheFailureRecovery(t *testing.T) {
@@ -266,14 +273,15 @@ func testYouTubeIterationCacheFailureRecovery(t *testing.T) {
 
 	s := &RuntimeScheduler{
 		youtubeChecker: &runnerFunc{
-			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+			check: func(context.Context, targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
 				return nil, sharedcache.NewCacheError("smembers", alarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
 			},
 		},
-		cacheClient:      cache,
-		alarmCacheWarmer: warmer,
-		notifier:         &senderFunc{},
-		logger:           testSchedulerLogger(),
+		cacheClient:         cache,
+		alarmCacheWarmer:    warmer,
+		notifier:            &senderFunc{},
+		targetMinutesSource: &targetMinutesSourceStub{targets: []int{5, 3, 1}},
+		logger:              testSchedulerLogger(),
 	}
 
 	require.Error(t, s.runYouTubeIteration(t.Context()))

@@ -14,7 +14,7 @@ import (
 
 const maxDeliveriesPerSendUnit = 10
 
-func BuildDispatchGroupKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) string {
+func BuildDispatchGroupKeyFromEnvelope(envelope *AlarmQueueEnvelope) string {
 	if envelope == nil {
 		return ""
 	}
@@ -25,7 +25,7 @@ func BuildDispatchGroupKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) stri
 	return "alarm-group-v1:" + hex.EncodeToString(sum[:])
 }
 
-func dispatchGroupKeyParts(envelope *domain.AlarmQueueEnvelope) []string {
+func dispatchGroupKeyParts(envelope *AlarmQueueEnvelope) []string {
 	sourceParts := dispatchGroupSourceParts(envelope)
 	parts := make([]string, 0, len(sourceParts)+2)
 
@@ -37,17 +37,13 @@ func dispatchGroupKeyParts(envelope *domain.AlarmQueueEnvelope) []string {
 	return append(parts, sourceParts...)
 }
 
-func dispatchGroupSourceParts(envelope *domain.AlarmQueueEnvelope) []string {
+func dispatchGroupSourceParts(envelope *AlarmQueueEnvelope) []string {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
 		return []string{"x-space", envelope.XSpace.SpaceID}
 	}
 
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		return []string{"celebration", string(envelope.Celebration.Kind), strconv.Itoa(envelope.Celebration.MemberID), envelope.Celebration.VideoID}
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
-		return []string{"delivery-digest", string(envelope.DeliveryDigest.Kind), envelope.DeliveryDigest.ContentIdentity()}
 	}
 
 	return notificationDispatchGroupParts(&envelope.Notification)

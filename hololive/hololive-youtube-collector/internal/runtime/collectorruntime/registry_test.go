@@ -55,17 +55,13 @@ func TestNewRegistryAcceptsCompleteAdapterSet(t *testing.T) {
 func TestExecutionProfileMinimumIncludesReservations(t *testing.T) {
 	t.Parallel()
 
-	profile, err := NewExecutionProfile(2, 3*time.Second, time.Second, 4, 2*time.Second, 0)
+	profile, err := NewExecutionProfile(2, 3*time.Second, time.Second, 4, 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if got, want := profile.MinimumCollectTimeout(), 16*time.Second; got != want {
-		t.Fatalf("minimum collect timeout = %s, want %s", got, want)
-	}
-
-	if profile.CollectTimeout() != profile.MinimumCollectTimeout() {
-		t.Fatal("zero configured timeout did not select exact minimum")
+	if got, want := profile.CollectTimeout(), 16*time.Second; got != want {
+		t.Fatalf("collect timeout = %s, want %s", got, want)
 	}
 }
 
@@ -73,7 +69,7 @@ func TestExecutionProfileAllowsRequestAfterPreviousReservation(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		profile, err := NewExecutionProfile(1, 30*time.Second, time.Minute, 1, 5*time.Second, 0)
+		profile, err := NewExecutionProfile(1, 30*time.Second, time.Minute, 1, 5*time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,15 +96,11 @@ func TestExecutionProfileAllowsRequestAfterPreviousReservation(t *testing.T) {
 	})
 }
 
-func TestExecutionProfileRejectsDurationOverflowAndUndersizedTimeout(t *testing.T) {
+func TestExecutionProfileRejectsDurationOverflow(t *testing.T) {
 	t.Parallel()
 
-	if _, err := NewExecutionProfile(math.MaxInt, time.Duration(math.MaxInt64), 0, 2, time.Second, 0); err == nil {
+	if _, err := NewExecutionProfile(math.MaxInt, time.Duration(math.MaxInt64), 0, 2, time.Second); err == nil {
 		t.Fatal("overflowing execution profile was accepted")
-	}
-
-	if _, err := NewExecutionProfile(2, time.Second, time.Second, 2, time.Second, 2*time.Second); err == nil {
-		t.Fatal("undersized collect timeout was accepted")
 	}
 }
 
@@ -143,7 +135,7 @@ func newTestRegistry(runners ...collection.JobRunner) (*Registry, error) {
 			continue
 		}
 
-		profile, err := NewExecutionProfile(jobMaxUpstreamCalls(runner.JobID()), time.Second, 0, 1, time.Second, 0)
+		profile, err := NewExecutionProfile(jobMaxUpstreamCalls(runner.JobID()), time.Second, 0, 1, time.Second)
 		if err != nil {
 			return nil, fmt.Errorf("execution profile: %w", err)
 		}

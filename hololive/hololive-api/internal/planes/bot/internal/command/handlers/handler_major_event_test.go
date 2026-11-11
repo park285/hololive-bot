@@ -96,7 +96,7 @@ func TestMajorEventCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
 }
 
 func TestMajorEventCommand_RepositoryErrorPathsUseSendError(t *testing.T) {
-	cmdCtx := &botcommand.CommandContext{Room: "room-a", RoomName: "room-name"}
+	cmdCtx := &botcommand.CommandContext{Room: "room-a"}
 
 	tests := []struct {
 		name       string

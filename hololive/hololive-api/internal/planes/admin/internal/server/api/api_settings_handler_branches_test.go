@@ -28,21 +28,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 type stubSettingsApplier struct{}
 
-func (s *stubSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) (sharedsettings.AlarmAdvanceMinutesApplyResult, error) {
-	return sharedsettings.AlarmAdvanceMinutesApplyResult{
+func (s *stubSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) (adminsettings.AlarmAdvanceMinutesApplyResult, error) {
+	return adminsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 		AlarmApplied:                 true,
 	}, nil
 }
 
-func (s *stubSettingsApplier) SettingsRuntimeState() sharedsettings.SettingsRuntimeStateResult {
-	return sharedsettings.SettingsRuntimeStateResult{AlarmTargetMinutes: []int{5}}
+func (s *stubSettingsApplier) SettingsRuntimeState() adminsettings.SettingsRuntimeStateResult {
+	return adminsettings.SettingsRuntimeStateResult{AlarmTargetMinutes: []int{5}}
 }
 
 const settingsPath = "/api/holo/settings"
@@ -55,9 +55,9 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 }
 
 func settingsInvalidJSONBranches(t *testing.T) {
-	handler := (&Handler{
-		logger: newDiscardLogger(),
-	}).DomainHandlers().Settings
+	handler := newSettingsHandler(Deps{
+		Logger: newDiscardLogger(),
+	})
 
 	tests := []struct {
 		method string
@@ -80,14 +80,14 @@ func settingsGetAndUpdateSuccess(t *testing.T) {
 	applier := &stubSettingsApplier{}
 	settingsService := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
 		AlarmAdvanceMinutes: 5,
-	}, newDiscardLogger())
+	})
 
-	handler := (&Handler{
-		logger:          newDiscardLogger(),
-		activity:        newActivityLoggerForTest(t),
-		settings:        settingsService,
-		settingsApplier: applier,
-	}).DomainHandlers().Settings
+	handler := newSettingsHandler(Deps{
+		Logger:   newDiscardLogger(),
+		Activity: newActivityLoggerForTest(t),
+		Settings: settingsService,
+		Applier:  applier,
+	})
 
 	tests := []struct {
 		name   string

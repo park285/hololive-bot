@@ -22,7 +22,7 @@ func TestApplyBaseMiddleware_PreservesIncomingRequestID(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	ApplyBaseMiddleware(t.Context(), router, slog.New(slog.DiscardHandler), BaseMiddlewareOptions{})
+	applyBaseMiddleware(t.Context(), router, slog.New(slog.DiscardHandler))
 	router.GET("/ping", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -45,7 +45,7 @@ func TestApplyBaseMiddleware_PreservesIncomingRequestID(t *testing.T) {
 func TestApplyBaseMiddleware_NilInputsNoPanic(t *testing.T) {
 	t.Parallel()
 
-	ApplyBaseMiddleware(t.Context(), nil, nil, BaseMiddlewareOptions{})
+	applyBaseMiddleware(t.Context(), nil, nil)
 }
 
 func TestApplyBaseMiddleware_RecoversHandlerPanic(t *testing.T) {
@@ -59,7 +59,7 @@ func TestApplyBaseMiddleware_RecoversHandlerPanic(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	ApplyBaseMiddleware(t.Context(), router, slog.New(slog.DiscardHandler), BaseMiddlewareOptions{})
+	applyBaseMiddleware(t.Context(), router, slog.New(slog.DiscardHandler))
 	router.GET("/panic", func(_ *gin.Context) {
 		panic("boom")
 	})
@@ -89,7 +89,7 @@ func TestApplyBaseMiddleware_RecoversPanicOutsideLogger(t *testing.T) {
 
 	router := gin.New()
 	logger := slog.New(slog.NewTextHandler(panicOnRequestLogWriter{}, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	ApplyBaseMiddleware(t.Context(), router, logger, BaseMiddlewareOptions{})
+	applyBaseMiddleware(t.Context(), router, logger)
 	router.GET("/panic-outside-logger", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})

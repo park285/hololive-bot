@@ -33,6 +33,8 @@ const (
 	testDedupeKeyShortOne      = "youtube-notification:NEW_SHORT:short-1"
 	testDedupeKeyCommunityPost = "youtube-notification:COMMUNITY_POST:post-community"
 
+	testClientRequestID = "hololive-outbox:test"
+
 	testTableOutbox               = "youtube_notification_outbox"
 	testTableDelivery             = "youtube_notification_delivery"
 	testTableDeliveryTelemetry    = "youtube_notification_delivery_telemetry"

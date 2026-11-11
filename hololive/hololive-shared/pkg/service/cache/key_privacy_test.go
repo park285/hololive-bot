@@ -17,7 +17,6 @@ const (
 	privacyStreamID   = "dQw4w9WgXcQ"
 	privacyClaimKey   = "notified:claim:" + privacyRoomID + ":" + privacyStreamID + ":1785499200:10m"
 	privacyRoomKey    = "notified:schedule:index:" + privacyRoomID + ":" + privacyStreamID + ":1785499200"
-	privacyRoomHash   = "membernews:room_names"
 	privacyOutageWait = 2 * time.Second
 )
 
@@ -68,10 +67,6 @@ func TestCacheOutageLogsNeverCarryRoomPlaintext(t *testing.T) {
 		t.Fatal("Get: expected an outage error")
 	}
 
-	if err := service.HSet(ctx, privacyRoomHash, privacyRoomID, "방 이름"); err == nil {
-		t.Fatal("HSet: expected an outage error")
-	}
-
 	records := sink.String()
 	if records == "" {
 		t.Fatal("no log record was produced; the outage fixture is not exercising the failure path")
@@ -81,7 +76,7 @@ func TestCacheOutageLogsNeverCarryRoomPlaintext(t *testing.T) {
 		t.Errorf("room plaintext reached the log sink:\n%s", records)
 	}
 
-	for _, want := range []string{"notified:claim:", "notified:schedule:index:", privacyStreamID, privacyRoomHash} {
+	for _, want := range []string{"notified:claim:", "notified:schedule:index:", privacyStreamID} {
 		if !strings.Contains(records, want) {
 			t.Errorf("log records lost the diagnostic fragment %q:\n%s", want, records)
 		}

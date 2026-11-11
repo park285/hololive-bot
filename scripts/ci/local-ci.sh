@@ -17,8 +17,6 @@ source "${SCRIPT_DIR}/local-ci-files.sh"
 source "${SCRIPT_DIR}/go-work-sync-drift.sh"
 # local-ci-packages.sh가 이 배열을 입력으로 사용한다.
 # shellcheck disable=SC2034
-mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
-# shellcheck disable=SC2034
 mapfile -t WORKSPACE_GO_PACKAGES < <(go_workspace_package_patterns)
 GO_PACKAGES=()
 source "${SCRIPT_DIR}/local-ci-packages.sh"
@@ -134,25 +132,9 @@ run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hol
 run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
-# budget 벤치마크도 hololive-dbtest를 쓴다. DB를 주지 않으면 testcontainers가 Docker 소켓을 찾으므로
-# Docker가 없는 kapu에서도 돌도록 rootless Podman 일회용 PostgreSQL을 먼저 띄운다.
-# subshell에서 실행해 TEST_DATABASE_URL이 뒤의 테스트 선택으로 새지 않고, 종료 시 컨테이너를 지운다.
-run_youtube_plane_budget() {
-    if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
-        provision_integration_test_database
-    fi
-    ./scripts/perf/check-youtube-plane-budget.sh
-}
-(run_step "YouTube plane performance budget" run_youtube_plane_budget)
-# hololive-dbtest는 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 패키지들이 PostgreSQL 하나를 공유한다.
-# 패키지마다 testcontainers PostgreSQL을 띄우면 기동 비용과 남는 컨테이너 때문에 -p를 낮춰야 했다.
-# subshell에서 실행해 TEST_DATABASE_URL이 뒤의 통합 테스트 선택으로 새지 않고, 종료 시 컨테이너를 지운다.
 run_go_tests() {
     local -a parallel=()
 
-    if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
-        provision_integration_test_database
-    fi
     [[ -z "${RACE_TEST_PARALLEL:-}" ]] || parallel=(-p "${RACE_TEST_PARALLEL}")
     if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
         run_go_package_step "Go race test" go_mod_readonly go test -race "${parallel[@]}" -count=1
@@ -162,14 +144,25 @@ run_go_tests() {
     fi
 }
 
-if has_go_packages; then
-    # 산술 컨텍스트에 넣지 않더라도 go test 인자로 전달되므로 호출 env 값은 양의 정수만 허용한다(82cbfe75).
-    if [[ -n "${RACE_TEST_PARALLEL:-}" && ! "${RACE_TEST_PARALLEL}" =~ ^[1-9][0-9]*$ ]]; then
-        echo "[LOCAL CI] invalid RACE_TEST_PARALLEL=${RACE_TEST_PARALLEL}; expected a positive integer" >&2
-        exit 1
+# budget 벤치마크와 Go 테스트는 hololive-dbtest를 쓴다. dbtest는 테스트마다 템플릿을 복제한 데이터베이스로
+# 격리하므로 두 단계가 rootless Podman 일회용 PostgreSQL 하나를 공유한다. DB를 주지 않으면 testcontainers가 Docker 소켓을 찾는다.
+# subshell에서 실행해 TEST_DATABASE_URL이 뒤의 통합 테스트 선택으로 새지 않고, 종료 시 컨테이너를 지운다.
+run_database_steps() {
+    if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
+        run_step "Provision test PostgreSQL" provision_integration_test_database
     fi
-    (run_go_tests)
+    run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
+    if has_go_packages; then
+        run_go_tests
+    fi
+}
+
+# 산술 컨텍스트에 넣지 않더라도 go test 인자로 전달되므로 호출 env 값은 양의 정수만 허용한다(82cbfe75).
+if has_go_packages && [[ -n "${RACE_TEST_PARALLEL:-}" && ! "${RACE_TEST_PARALLEL}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[LOCAL CI] invalid RACE_TEST_PARALLEL=${RACE_TEST_PARALLEL}; expected a positive integer" >&2
+    exit 1
 fi
+(run_database_steps)
 
 check_integration_tests
 

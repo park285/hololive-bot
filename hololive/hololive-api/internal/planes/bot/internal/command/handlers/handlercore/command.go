@@ -41,15 +41,6 @@ type Command interface {
 	Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error
 }
 
-type Event struct {
-	Type   botcommand.CommandType
-	Params map[string]any
-}
-
-type Dispatcher interface {
-	Publish(ctx context.Context, cmdCtx *botcommand.CommandContext, events ...Event) (int, error)
-}
-
 type MemberNewsService interface {
 	GenerateRoomDigest(ctx context.Context, roomID string, period membernewsmodel.Period) (*membernewsmodel.Digest, error)
 	SubscribeRoom(ctx context.Context, roomID, roomName string) error
@@ -76,12 +67,11 @@ type HelpImageProvider interface {
 }
 
 type BroadcastHistoryQuery struct {
-	ChannelID  string
-	Type       string
-	TopicID    string
-	Limit      int
-	Since      time.Time
-	IncludeAll bool
+	ChannelID string
+	Type      string
+	TopicID   string
+	Limit     int
+	Since     time.Time
 }
 
 type BroadcastThumbnailQuery struct {
@@ -89,18 +79,17 @@ type BroadcastThumbnailQuery struct {
 }
 
 type BroadcastHistoryEntry struct {
-	VideoID             string
-	ChannelID           string
-	MemberName          string
-	Title               string
-	TopicID             string
-	ThumbnailURL        string
-	BroadcastType       string
-	BroadcastTypeSource string
-	ScheduledStartTime  *time.Time
-	StartedAt           *time.Time
-	EndedAt             *time.Time
-	LastSeenAt          time.Time
+	VideoID            string
+	ChannelID          string
+	MemberName         string
+	Title              string
+	TopicID            string
+	ThumbnailURL       string
+	BroadcastType      string
+	ScheduledStartTime *time.Time
+	StartedAt          *time.Time
+	EndedAt            *time.Time
+	LastSeenAt         time.Time
 	// LifecycleOrigin은 youtube_live_sessions.lifecycle_origin이다. legacy_unknown은 수명 추적 도입 전 기록이다.
 	LifecycleOrigin string
 	// LastLivePositiveAt은 마지막으로 방송 중임을 확인한 시각이다. reconciliation head가 없거나 LIVE를 확인하지 못한
@@ -158,8 +147,5 @@ type Dependencies struct {
 	SendImage           func(ctx context.Context, room string, imageData []byte) error
 	SendImages          func(ctx context.Context, room string, images [][]byte) error
 	SendError           func(ctx context.Context, room, message string) error
-	Dispatcher          Dispatcher
 	Logger              *slog.Logger
 }
-
-type NormalizeFunc func(botcommand.CommandType, map[string]any) (string, map[string]any)

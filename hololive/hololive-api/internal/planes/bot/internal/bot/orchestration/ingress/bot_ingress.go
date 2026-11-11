@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/service/acl"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const irisMessageTypeText = "1"
@@ -39,7 +40,6 @@ const irisMessageTypeText = "1"
 type Envelope struct {
 	CommandType string
 	ChatID      string
-	RoomName    string
 	RoomType    string
 	RoomLinkID  string
 	UserID      string
@@ -107,9 +107,10 @@ func (i *MessageIngress) prepare(ctx context.Context, message *webhook.Message, 
 		return nil, false
 	}
 
-	chatID, roomName := resolveRoom(message)
+	chatID := message.Room
 	userID, userName := resolveUser(message)
-	roomAttr := roomLogAttr(chatID, roomName)
+	// chatID가 canonical room id가 아니면 방 제목이 로그로 새므로 로그에는 가명 attr만 넘긴다. ACL과 응답 송신은 raw chatID를 쓴다.
+	roomAttr := sharedprivacylog.RoomIDAttr(chatID)
 
 	if i.shouldSkipSender(ctx, message, roomAttr, userName) {
 		return nil, false
@@ -139,7 +140,6 @@ func (i *MessageIngress) prepare(ctx context.Context, message *webhook.Message, 
 	return &Envelope{
 		CommandType: commandType,
 		ChatID:      chatID,
-		RoomName:    roomName,
 		RoomType:    roomType,
 		RoomLinkID:  roomLinkID,
 		UserID:      userID,

@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -25,7 +25,7 @@ func TestSettingsAPIHandler_UpdateSettings_PersistenceFailurePreservesStateAndSk
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
 	previous := settingssvc.Settings{AlarmAdvanceMinutes: 5, TargetMinutes: []int{5, 1}}
-	service := mustNewTestSettingsService(t, path, previous, newDiscardLogger())
+	service := mustNewTestSettingsService(t, path, previous)
 
 	if err := service.Update(previous); err != nil {
 		t.Fatalf("seed settings: %v", err)
@@ -42,7 +42,8 @@ func TestSettingsAPIHandler_UpdateSettings_PersistenceFailurePreservesStateAndSk
 		Logger:          newDiscardLogger(),
 		Settings:        service,
 		Activity:        activity,
-		SettingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, worker.URL)),
+		SettingsApplier: adminsettings.NewSettingsApplier(newTestAlarmClient(t, worker.URL)),
+		operations:      newSettingsOperationGate(),
 	}
 
 	if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // G302: 쓰기 불가 디렉터리 재현용 모드
@@ -71,7 +72,7 @@ func TestSettingsAPIHandler_UpdateSettings_PersistenceFailurePreservesStateAndSk
 	assertSettingsPersistenceFailureState(t, service, path, previous, before)
 }
 
-func assertSettingsPersistenceFailureState(t *testing.T, service *settingssvc.Service, path string, previous settingssvc.Settings, before []byte) {
+func assertSettingsPersistenceFailureState(t *testing.T, service *adminsettings.Service, path string, previous settingssvc.Settings, before []byte) {
 	t.Helper()
 
 	if got := service.Get(); got.AlarmAdvanceMinutes != previous.AlarmAdvanceMinutes || !slices.Equal(got.TargetMinutes, previous.TargetMinutes) {

@@ -28,7 +28,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // 채널 registry가 유실되면 일부 채널만으로 재생성하지 않고 먼저 DB 전체를 복구한다.
@@ -41,23 +40,6 @@ return redis.call('SADD', KEYS[1], ARGV[1])
 
 // addToExistingChannelRegistryLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
 var addToExistingChannelRegistryLua = valkey.NewLuaScript(addToExistingChannelRegistryScript)
-
-func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) error {
-	if record == nil {
-		return stdErrors.New("alarm is nil")
-	}
-
-	name, err := as.resolveCacheMemberName(ctx, record.ChannelID)
-	if err != nil {
-		return fmt.Errorf("resolve alarm member name: %w", err)
-	}
-
-	if err := as.CacheMemberName(ctx, record.ChannelID, name); err != nil {
-		return fmt.Errorf("cache alarm member name: %w", err)
-	}
-
-	return nil
-}
 
 // 호출자는 mutation mutex를 보유한다. DB가 비어 있었던 경우에만 singleton registry를 만들 수 있다.
 func (as *AlarmService) cacheAlarmChannelRegistry(ctx context.Context, channelID string) error {

@@ -1,48 +1,31 @@
-import { channelFixture } from "./test-fixtures/channel.mjs";
+import { channelFixture } from "../test-fixtures/channel.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  fetchCommunityFeed,
-  listBackstagePosts,
-} from "./fetch-community.mjs";
+import { fetchCommunityFeed } from "./fetch-community.mjs";
 
 const innertubeUnavailablePattern = /innertube unavailable/;
-
-test("listBackstagePosts reads memo.getType", () => {
-  const posts = listBackstagePosts(
-    {
-      memo: {
-        getType: () => [{ id: "post-1" }],
-      },
-    },
-    class BackstagePost {},
-  );
-  assert.equal(posts[0].id, "post-1");
-});
 
 test("fetchCommunityFeed maps stub Innertube posts without live YouTube", async () => {
   const innertube = {
     getChannel: async (channelId) => channelFixture({
       has_community: true,
       getCommunity: async () => channelFixture({
-        posts: undefined,
-        memo: {
-          getType: () => [
-            {
-              id: `${channelId}-post`,
-              author: { id: channelId, name: "Author", thumbnails: [] },
-              content: "hello",
-              published: "now",
-            },
-          ],
-        },
+        posts: [
+          {
+            id: `${channelId}-post`,
+            author: { id: channelId, name: "Author", thumbnails: [] },
+            content: "hello",
+            published: "now",
+          },
+        ],
       }),
     }),
   };
   const result = await fetchCommunityFeed({
     channelId: "UC_TEST",
     maxResults: 10,
+    maxPages: 1,
     innertube,
   });
   assert.equal(result.posts.length, 1);
@@ -97,7 +80,7 @@ test("fetchCommunityFeed fail-closes when a community post id is missing", async
     }),
   };
   await assert.rejects(
-    () => fetchCommunityFeed({ channelId: "UC_TEST", innertube }),
+    () => fetchCommunityFeed({ channelId: "UC_TEST", maxResults: 10, maxPages: 1, innertube }),
     (error) => error.code === "parser_drift",
   );
 });
@@ -107,7 +90,7 @@ test("fetchCommunityFeed preserves continuation metadata across pages", async ()
     getChannel: async () => channelFixture({
       has_community: true,
       getCommunity: async () => channelFixture({
-        continuation: "page-2",
+        has_continuation: true,
         posts: [{ id: "post-1", author: { id: "UC_TEST", name: "Author" }, content: "one" }],
         getContinuation: async () => ({
           posts: [{ id: "post-2", author: { id: "UC_TEST", name: "Author" }, content: "two" }],
@@ -117,6 +100,7 @@ test("fetchCommunityFeed preserves continuation metadata across pages", async ()
   };
   const result = await fetchCommunityFeed({
     channelId: "UC_TEST",
+    maxResults: 10,
     maxPages: 2,
     innertube,
   });

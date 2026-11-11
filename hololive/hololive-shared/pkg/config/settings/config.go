@@ -34,26 +34,19 @@ import (
 )
 
 // LoadIrisConfig는 Iris egress 클라이언트 입력(IRIS_*)을 읽는다. 필수 여부 판단은 runtime이
-// ValidateIrisEgressInputs로 결정한다.
+// ValidateIrisEgressInputs 또는 ValidateIrisClientInputs로 결정한다.
 func LoadIrisConfig() (IrisConfig, error) {
 	webhookToken, botToken := LoadIrisTokens()
-
-	var env envload.StrictEnv
 
 	config := IrisConfig{
 		BaseURL:                 sharedenv.String("IRIS_BASE_URL", ""),
 		BaseURLFile:             sharedenv.String("IRIS_BASE_URL_FILE", ""),
 		WebhookToken:            webhookToken,
 		BotToken:                botToken,
-		HTTPTimeout:             env.Seconds("IRIS_HTTP_TIMEOUT_SECONDS", 10*time.Second),
 		H3CACertFile:            sharedenv.String("IRIS_H3_CA_CERT_FILE", ""),
 		H3ServerName:            sharedenv.String("IRIS_H3_SERVER_NAME", ""),
 		BaseURLAllowedHosts:     splitIrisAllowedHosts(os.Getenv("IRIS_BASE_URL_ALLOWED_HOSTS")),
 		ValidateBaseURLFileStat: strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production"),
-	}
-
-	if err := env.Err(); err != nil {
-		return IrisConfig{}, fmt.Errorf("load iris config: %w", err)
 	}
 
 	transport, err := parseIrisTransport(os.Getenv("IRIS_TRANSPORT"))
@@ -92,20 +85,20 @@ func splitIrisAllowedHosts(raw string) []string {
 	return hosts
 }
 
-// LoadKakaoConfig는 room ACL 초기값을 읽는다. 반환값은 잠금을 포함하므로 호출자는 값 복사 없이 필드를 옮긴다.
-func LoadKakaoConfig() (*KakaoConfig, error) {
+// LoadKakaoConfig는 room ACL 초기값을 읽는다.
+func LoadKakaoConfig() (KakaoConfig, error) {
 	enabled, err := loadKakaoACLEnabled()
 	if err != nil {
-		return nil, fmt.Errorf("load kakao ACL enabled: %w", err)
+		return KakaoConfig{}, fmt.Errorf("load kakao ACL enabled: %w", err)
 	}
 
 	mode, err := loadKakaoACLMode()
 	if err != nil {
-		return nil, fmt.Errorf("load kakao ACL mode: %w", err)
+		return KakaoConfig{}, fmt.Errorf("load kakao ACL mode: %w", err)
 	}
 
 	// KAKAO_ROOMS는 ACL 초기 seed이며 정규 signed i64 chatID 목록이 필수다.
-	return &KakaoConfig{
+	return KakaoConfig{
 		Rooms:      envload.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "")),
 		ACLEnabled: enabled,
 		ACLMode:    mode,
@@ -244,15 +237,6 @@ func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 	return config, nil
 }
 
-func LoadIngestionConfig() (IngestionConfig, error) {
-	photoSyncEnabled, err := sharedenv.BoolE("PHOTO_SYNC_ENABLED", true)
-	if err != nil {
-		return IngestionConfig{}, fmt.Errorf("load ingestion config: %w", err)
-	}
-
-	return IngestionConfig{PhotoSyncEnabled: photoSyncEnabled}, nil
-}
-
 const (
 	seeMoreFoldEnv     = "BOT_SEE_MORE_FOLD"
 	seeMoreFoldDefault = true
@@ -280,7 +264,6 @@ func LoadBotConfig() (BotConfig, error) {
 	config := BotConfig{
 		Prefix:                sharedenv.String("BOT_PREFIX", "!"),
 		SelfUser:              sharedenv.String("BOT_SELF_USER", "iris"),
-		MentionPrefix:         sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		CalendarEntryCacheTTL: env.Seconds("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 24*time.Hour),
 		SeeMoreFold:           seeMoreFold,
 		MarkdownReplies:       env.Bool("BOT_MARKDOWN_REPLIES", false),

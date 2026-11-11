@@ -32,8 +32,8 @@ import (
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -88,7 +88,7 @@ func buildMajorEventComponents(
 
 func buildMemberNewsComponents(
 	memberNews *membernews.Service,
-	formatter model.DigestFormatter,
+	formatter newsmodel.DigestFormatter,
 	locker executionlock.Locker,
 	outboxRepository *delivery.OutboxRepository,
 	outputGuard *outputguard.Guard,

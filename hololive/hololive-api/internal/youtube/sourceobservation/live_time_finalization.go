@@ -132,10 +132,6 @@ func finalizeEndedSessionTimes(
 	payload *contract.VideoLiveCheckV1,
 	session *live.SessionState,
 ) (string, error) {
-	if !videoLifecycleGeneration(claimed) {
-		return videoLifecycleKeepEnded, nil
-	}
-
 	state, err := loadTimeFinalizationState(ctx, tx, session.VideoID)
 	if err != nil {
 		return "", err

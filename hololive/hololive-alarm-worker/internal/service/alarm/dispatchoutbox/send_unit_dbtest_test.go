@@ -24,7 +24,7 @@ func TestAlarmDispatchSendUnitFirstInsertIsAtomic(t *testing.T) {
 	envelope := sendUnitTestEnvelope(roomID, "stream-first")
 
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{envelope},
+		Envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope},
 	})
 
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestAlarmDispatchSendUnitFirstInsertIsAtomic(t *testing.T) {
 func TestAlarmDispatchSendUnitConcurrentClaimKeepsGroupAtomic(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newOutboxRepository(t, pool)
-	envelopes := []domain.AlarmQueueEnvelope{
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{
 		sendUnitTestEnvelope("room-group", "stream-a"),
 		sendUnitTestEnvelope("room-group", "stream-b"),
 		sendUnitTestEnvelope("room-group", "stream-c"),
@@ -106,7 +106,7 @@ func TestAlarmDispatchSendUnitConcurrentClaimKeepsGroupAtomic(t *testing.T) {
 func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newOutboxRepository(t, pool)
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, 7)
+	envelopes := make([]dispatchoutbox.AlarmQueueEnvelope, 0, 7)
 
 	for i := range 7 {
 		envelopes = append(envelopes, sendUnitTestEnvelope(fmt.Sprintf("room-budget-%d", i), fmt.Sprintf("stream-budget-%d", i)))
@@ -130,7 +130,7 @@ func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 	at := time.Now().UTC().Truncate(time.Microsecond)
 	repository := newOutboxRepository(t, fixedNowPool(t, pool, at))
 	result, err := repository.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{
+		Envelopes: []dispatchoutbox.AlarmQueueEnvelope{
 			sendUnitTestEnvelope("room-skew", "stream-skew-a"),
 			sendUnitTestEnvelope("room-skew", "stream-skew-b"),
 		},
@@ -174,7 +174,7 @@ func TestAlarmDispatchClaimLeavesTerminalUnitMembers(t *testing.T) {
 	ctx := t.Context()
 	repository := newOutboxRepository(t, pool)
 	result, err := repository.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{
+		Envelopes: []dispatchoutbox.AlarmQueueEnvelope{
 			sendUnitTestEnvelope("room-terminal", "stream-terminal-a"),
 			sendUnitTestEnvelope("room-terminal", "stream-terminal-b"),
 			sendUnitTestEnvelope("room-terminal", "stream-terminal-c"),
@@ -243,7 +243,7 @@ func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newOutboxRepository(t, pool)
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{sendUnitTestEnvelope("room-status", "stream-status")},
+		Envelopes: []dispatchoutbox.AlarmQueueEnvelope{sendUnitTestEnvelope("room-status", "stream-status")},
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InsertedDeliveries)
@@ -256,10 +256,10 @@ func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {
 	require.Equal(t, "alarm_dispatch_deliveries_status_check", pgErr.ConstraintName)
 }
 
-func sendUnitTestEnvelope(roomID, streamID string) domain.AlarmQueueEnvelope {
+func sendUnitTestEnvelope(roomID, streamID string) dispatchoutbox.AlarmQueueEnvelope {
 	start := time.Date(2026, time.August, 10, 12, 30, 0, 0, time.UTC)
 
-	return domain.AlarmQueueEnvelope{
+	return dispatchoutbox.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       roomID,

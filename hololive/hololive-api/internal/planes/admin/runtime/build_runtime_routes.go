@@ -7,59 +7,57 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops"
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
-func buildAdminHandler(
+func buildAdminHandlers(
 	infra *sharedmodules.InfraModule,
-	foundation *apifoundation.ScraperHolodexFoundation,
-	alarmMode *alarmModeComponents,
-	aclService *acl.Service,
-	irisRooms IrisRoomLister,
-	settingsService settingssvc.ReadWriter,
-	settingsApplier sharedsettings.SettingsApplier,
+	deps Dependencies,
+	alarmClient alarmProvider,
+	adminSettings adminAPISettings,
+	xSpaceSessions *xspaces.Store,
 	logger *slog.Logger,
-) *server.Handler {
-	return server.NewHandler(&server.HandlerDeps{
-		Common: server.CommonDeps{
-			Logger:   logger,
-			Activity: activity.NewActivityLogger(logger),
-		},
-		Member: server.MemberDeps{
-			Repository: infra.MemberRepository,
-			Cache:      infra.MemberCache,
-		},
-		Stream: server.StreamDeps{
-			Holodex: foundation.HolodexService,
-		},
-		Stats: server.StatsDeps{
-			Alarm: alarmMode.AlarmClient,
-			ACL:   aclService,
-			Iris:  irisRooms,
-		},
-		Settings: server.SettingsDeps{
-			Settings:  settingsService,
-			Applier:   settingsApplier,
-			RoomNames: alarmMode.AlarmClient,
-		},
+) (*server.DomainHandlers, error) {
+	var dispatchOps server.DispatchOperations
+
+	if infra.Postgres != nil {
+		dispatchOps = dispatchops.NewRepository(infra.Postgres.GetPool())
+	}
+
+	domains, err := server.NewDomainHandlers(server.Deps{
+		Logger:         logger,
+		Activity:       activity.NewActivityLogger(logger),
+		Repository:     infra.MemberRepository,
+		MemberCache:    infra.MemberCache,
+		Holodex:        deps.Holodex,
+		Alarm:          alarmClient,
+		RoomNames:      alarmClient,
+		ACL:            deps.ACL,
+		Settings:       adminSettings.service,
+		Applier:        adminSettings.applier,
+		Iris:           deps.IrisRooms,
+		DispatchOps:    dispatchOps,
+		XSpaceSessions: xSpaceSessions,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("build admin domain handlers: %w", err)
+	}
+
+	return domains, nil
 }
 
 func buildAdminAPIRouter(
 	ctx context.Context,
 	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
-	handler *server.Handler,
+	domains *server.DomainHandlers,
 	logger *slog.Logger,
 ) (*gin.Engine, error) {
 	readyProbe := sharedreadiness.NewProbe(
@@ -67,12 +65,6 @@ func buildAdminAPIRouter(
 		sharedreadiness.PostgresCheck(infra.Postgres),
 		sharedreadiness.ValkeyCheck(infra.Cache),
 	)
-
-	domains := handler.DomainHandlers()
-
-	if infra.Postgres != nil {
-		domains.Alarm.SetDispatchOperations(dispatchops.NewRepository(infra.Postgres.GetPool()))
-	}
 
 	router, err := apphttp.ProvideAPIRouter(
 		ctx,

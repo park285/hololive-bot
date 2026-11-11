@@ -130,7 +130,7 @@
             "protocol_version": 1,
             "items": [
               { "video_id": "dQw4w9WgXcQ", "channel_id": "UCcontentVideos", "title": "Premiere", "is_upcoming": true },
-              { "video_id": "9bZkp7q19f0", "channel_id": "UCcontentVideos", "title": "Short", "published_at": "2026-10-24T01:02:03.000Z" }
+              { "video_id": "9bZkp7q19f0", "channel_id": "UCcontentVideos", "title": "Short" }
             ],
             "page_count": 1,
             "exhausted": false,
@@ -146,6 +146,30 @@
           "body": {
             "protocol_version": 1,
             "items": [{ "video_id": "dQw4w9WgXcQ", "channel_id": "UCcontentVideos", "title": "Premiere", "is_premiere": true }],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "CONTIGUOUS",
+            "termination_reason": "exhausted"
+          }
+        },
+        {
+          "name": "retired list publication time",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "items": [{ "video_id": "9bZkp7q19f0", "channel_id": "UCcontentVideos", "title": "Short", "published_at": "2026-10-24T01:02:03.000Z" }],
+            "page_count": 1,
+            "exhausted": true,
+            "continuity": "CONTIGUOUS",
+            "termination_reason": "exhausted"
+          }
+        },
+        {
+          "name": "retired list schedule time",
+          "go_rejects_at": "decode",
+          "body": {
+            "protocol_version": 1,
+            "items": [{ "video_id": "9bZkp7q19f0", "channel_id": "UCcontentVideos", "title": "Short", "scheduled_for": "2026-10-24T01:02:03.000Z" }],
             "page_count": 1,
             "exhausted": true,
             "continuity": "CONTIGUOUS",

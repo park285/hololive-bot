@@ -24,7 +24,7 @@ type AlarmRoomRepository interface {
 }
 
 type Publisher interface {
-	PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error)
+	PublishDispatchBatch(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error)
 }
 
 type Runner struct {
@@ -260,8 +260,8 @@ func buildCelebrationEnvelopes(
 	allRooms []string,
 	dateStr string,
 	currentYear int,
-) []domain.AlarmQueueEnvelope {
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, (len(birthdayMembers)+len(anniversaryMembers))*len(allRooms))
+) []dispatchoutbox.AlarmQueueEnvelope {
+	envelopes := make([]dispatchoutbox.AlarmQueueEnvelope, 0, (len(birthdayMembers)+len(anniversaryMembers))*len(allRooms))
 
 	envelopes = appendBirthdayCelebrationEnvelopes(envelopes, birthdayMembers, allRooms, dateStr, currentYear)
 
@@ -269,17 +269,17 @@ func buildCelebrationEnvelopes(
 }
 
 func appendBirthdayCelebrationEnvelopes(
-	envelopes []domain.AlarmQueueEnvelope,
+	envelopes []dispatchoutbox.AlarmQueueEnvelope,
 	birthdayMembers []*domain.Member,
 	allRooms []string,
 	dateStr string,
 	currentYear int,
-) []domain.AlarmQueueEnvelope {
+) []dispatchoutbox.AlarmQueueEnvelope {
 	for _, m := range birthdayMembers {
-		displayName := resolveCelebrationMemberName(m)
+		displayName := m.DisplayName()
 
 		for _, roomID := range allRooms {
-			envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+			envelopes = append(envelopes, dispatchoutbox.AlarmQueueEnvelope{
 				Notification: domain.AlarmNotification{
 					AlarmType: domain.AlarmTypeBirthday,
 					RoomID:    roomID,
@@ -304,18 +304,18 @@ func appendBirthdayCelebrationEnvelopes(
 }
 
 func appendAnniversaryCelebrationEnvelopes(
-	envelopes []domain.AlarmQueueEnvelope,
+	envelopes []dispatchoutbox.AlarmQueueEnvelope,
 	anniversaryMembers []*domain.Member,
 	allRooms []string,
 	dateStr string,
 	currentYear int,
-) []domain.AlarmQueueEnvelope {
+) []dispatchoutbox.AlarmQueueEnvelope {
 	for _, m := range anniversaryMembers {
 		if m.DebutDate == nil {
 			continue
 		}
 
-		displayName := resolveCelebrationMemberName(m)
+		displayName := m.DisplayName()
 		years := currentYear - m.DebutDate.Year()
 
 		if years <= 0 {
@@ -323,7 +323,7 @@ func appendAnniversaryCelebrationEnvelopes(
 		}
 
 		for _, roomID := range allRooms {
-			envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+			envelopes = append(envelopes, dispatchoutbox.AlarmQueueEnvelope{
 				Notification: domain.AlarmNotification{
 					AlarmType: domain.AlarmTypeAnniversary,
 					RoomID:    roomID,
@@ -415,16 +415,4 @@ func countLeapYears(startYear, endYear int) int {
 
 func isLeapYear(year int) bool {
 	return year%400 == 0 || (year%4 == 0 && year%100 != 0)
-}
-
-func resolveCelebrationMemberName(m *domain.Member) string {
-	if m.ShortKoreanName != "" {
-		return m.ShortKoreanName
-	}
-
-	if m.NameKo != "" {
-		return m.NameKo
-	}
-
-	return m.Name
 }

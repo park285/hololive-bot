@@ -95,15 +95,6 @@ export function isRecord(value) {
 }
 
 /** @param {Record<string, unknown>} record @param {string} field */
-export function requiredString(record, field) {
-  const value = record[field];
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new RpcRequestError(`${field} is required`);
-  }
-  return value.trim();
-}
-
-/** @param {Record<string, unknown>} record @param {string} field */
 export function arrayField(record, field) {
   const value = record[field];
   if (!Array.isArray(value)) throw new RpcResponseError(`${field} must be an array`);

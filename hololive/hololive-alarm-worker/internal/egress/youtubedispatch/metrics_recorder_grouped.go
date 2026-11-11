@@ -28,7 +28,7 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key")
 
 	for i := range validRows {
-		mr.recordDeliveryFailure(result, "dedupe key", validRows[i].ID, validRows[i].OutboxID)
+		mr.recordDeliveryFailure(result, validRows[i].OutboxID)
 	}
 }
 
@@ -53,7 +53,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", reason)
 
 	for i := range validRows {
-		mr.recordDeliveryFailureWithRetryAfter(result, reason, validRows[i].ID, validRows[i].OutboxID, deliveryRetryAfter(sendErr))
+		mr.recordDeliveryFailure(result, validRows[i].OutboxID)
 	}
 }
 
@@ -111,6 +111,6 @@ func (mr *MetricsRecorder) recordGroupedFormatFailure(
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, time.Now(), "grouped", "failure", "format message")
 
 	for i := range validRows {
-		mr.recordDeliveryFailure(result, "format message", validRows[i].ID, validRows[i].OutboxID)
+		mr.recordDeliveryFailure(result, validRows[i].OutboxID)
 	}
 }

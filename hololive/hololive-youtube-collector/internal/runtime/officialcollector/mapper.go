@@ -13,12 +13,10 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-const (
-	officialScheduleSubject = "global:hololive-schedule"
-	officialDatetimeLayout  = "2006/01/02 15:04:05"
-)
+const officialDatetimeLayout = "2006/01/02 15:04:05"
 
 var officialScheduleJST = time.FixedZone("Asia/Tokyo", 9*60*60)
 
@@ -41,9 +39,9 @@ func parseScheduleSnapshot(body []byte) (contract.ScheduleSnapshotV1, error) {
 	}
 
 	return contract.ScheduleSnapshotV1{
-		GroupKey: officialScheduleSubject,
+		GroupKey: collection.ScheduleSubject,
 		Items:    items,
-		Coverage: contract.ScheduleCoverageV1{GroupKey: officialScheduleSubject},
+		Coverage: contract.ScheduleCoverageV1{GroupKey: collection.ScheduleSubject},
 	}, nil
 }
 

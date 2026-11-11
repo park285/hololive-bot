@@ -36,13 +36,13 @@ func (r *celebrationTestAlarmRepo) GetAllDistinctRoomIDs(context.Context) ([]str
 }
 
 type celebrationTestPublisher struct {
-	envelopes []domain.AlarmQueueEnvelope
+	envelopes []dispatchoutbox.AlarmQueueEnvelope
 	result    dispatchoutbox.PublishBatchResult
 	err       error
 	onPublish func()
 }
 
-func (p *celebrationTestPublisher) PublishDispatchBatch(_ context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+func (p *celebrationTestPublisher) PublishDispatchBatch(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	p.envelopes = envelopes
 	if p.onPublish != nil {
 		p.onPublish()
@@ -154,14 +154,6 @@ func TestBuildCelebrationEnvelopesZeroYearsSkipped(t *testing.T) {
 	members := []*domain.Member{{ChannelID: "UC_d", Name: "Same Year", DebutDate: &debut}}
 	envelopes := buildCelebrationEnvelopes(nil, members, []string{testRoom1}, "2026-01-01", 2026)
 	assert.Empty(t, envelopes)
-}
-
-func TestResolveCelebrationMemberName(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "후부키", resolveCelebrationMemberName(&domain.Member{ShortKoreanName: "후부키", NameKo: "시라카미 후부키", Name: "Shirakami Fubuki"}))
-	assert.Equal(t, "시라카미 후부키", resolveCelebrationMemberName(&domain.Member{NameKo: "시라카미 후부키", Name: "Shirakami Fubuki"}))
-	assert.Equal(t, "Shirakami Fubuki", resolveCelebrationMemberName(&domain.Member{Name: "Shirakami Fubuki"}))
 }
 
 func TestCelebrationRunnerRunOnceNoMembers(t *testing.T) {

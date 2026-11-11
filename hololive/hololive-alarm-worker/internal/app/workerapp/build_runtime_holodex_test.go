@@ -49,7 +49,7 @@ func TestBuildAlarmHolodexServiceUsesRuntimeHolodexConfig(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		if _, err := w.Write([]byte(`{"id":"UC1","name":"probe"}`)); err != nil {
+		if _, err := w.Write([]byte(`[]`)); err != nil {
 			t.Errorf("write holodex probe response: %v", err)
 		}
 	}))
@@ -71,13 +71,13 @@ func TestBuildAlarmHolodexServiceUsesRuntimeHolodexConfig(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(holodexService.Stop)
 
-	_, err = holodexService.GetChannel(t.Context(), "UC1")
+	_, err = holodexService.GetChannelsLiveStatus(t.Context(), []string{"UC1"})
 	require.NoError(t, err)
 
 	select {
 	case got := <-seen:
 		assert.Equal(t, "configured-key", got.apiKey)
-		assert.Equal(t, "/configured/channels/UC1", got.path)
+		assert.Equal(t, "/configured/users/live", got.path)
 	default:
 		t.Fatal("holodex probe received no request")
 	}

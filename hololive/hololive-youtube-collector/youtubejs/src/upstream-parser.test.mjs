@@ -70,9 +70,9 @@ async function rawClient(respond) {
 
 function collect(scenario, innertube) {
   return scenario.handle(JSON.stringify({
-    protocol_version: 1, channel_id: "UC_TEST", max_pages: 3, max_success_response_bytes: 1048576,
+    protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 1048576,
     ...(scenario.kind === undefined ? {} : { kind: scenario.kind }),
-    ...(scenario.kind === "live" ? { max_schedule_lookups: 32 } : {}),
+    ...(scenario.kind === "live" ? { max_schedule_lookups: 32 } : { max_results: 10_000, max_pages: 3 }),
   }), options => scenario.fetch({ ...options, innertube }));
 }
 

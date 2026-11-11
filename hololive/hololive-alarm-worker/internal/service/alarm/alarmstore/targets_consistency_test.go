@@ -56,7 +56,6 @@ func TestSubscriberReadThroughPreservesConcurrentMutation(t *testing.T) {
 				channel := "UC_snapshot_consistency"
 				room := "snapshot-room"
 				key := alarmkeys.BuildChannelSubscriberKey(channel, domain.AlarmTypeLive)
-				emptyKey := alarmkeys.BuildChannelSubscriberEmptyKey(channel, domain.AlarmTypeLive)
 				record := &domain.Alarm{RoomID: room, ChannelID: channel, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}}
 
 				if !add {
@@ -72,7 +71,6 @@ func TestSubscriberReadThroughPreservesConcurrentMutation(t *testing.T) {
 
 						_, err = client.SAdd(ctx, key, []string{room})
 						require.NoError(t, err)
-						require.NoError(t, client.Del(ctx, emptyKey))
 					} else {
 						_, err := db.Exec(ctx, `DELETE FROM alarms WHERE channel_id=$1 AND room_id=$2`, channel, room)
 						require.NoError(t, err)
@@ -90,7 +88,7 @@ func TestSubscriberReadThroughPreservesConcurrentMutation(t *testing.T) {
 					require.NoError(t, err)
 				}
 
-				// 구독 추가 후 set eviction이 있어도 오래된 empty marker가 DB 확인을 막으면 안 된다.
+				// 구독 추가 후 set eviction이 있어도 다음 조회는 DB에서 새 구독을 확인해야 한다.
 				if add {
 					require.NoError(t, client.Del(ctx, key))
 				}

@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v5/iris"
 
+	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -28,19 +30,22 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		err    error
-		reason string
+		name            string
+		err             error
+		reason          string
+		lifecycleReason ytlifecycle.Reason
 	}{
 		{
-			name:   "auth failed",
-			err:    fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401}),
-			reason: "auth",
+			name:            "auth failed",
+			err:             fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401}),
+			reason:          "auth",
+			lifecycleReason: lifecycleReasonAuth,
 		},
 		{
-			name:   "permanent http",
-			err:    fmt.Errorf("wrapped permanent: %w", &iris.HTTPError{StatusCode: 400}),
-			reason: "http-permanent",
+			name:            "permanent http",
+			err:             fmt.Errorf("wrapped permanent: %w", &iris.HTTPError{StatusCode: 400}),
+			reason:          "http-permanent",
+			lifecycleReason: lifecycleReasonPermanent,
 		},
 	}
 
@@ -79,8 +84,13 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				t.Fatalf("deliveryFailureReasonIsPermanent(%q) = false, want true", tt.reason)
 			}
 
-			if !reflect.DeepEqual(result.FailureBuckets[tt.reason], []int64{101}) {
-				t.Fatalf("failure bucket %q = %#v, want []int64{101}", tt.reason, result.FailureBuckets[tt.reason])
+			if result.FailedDeliveries != 1 {
+				t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
+			}
+
+			want := []string{startedFailureRecord(ytlifecycle.FailurePermanent, tt.lifecycleReason, 0, store.DeliveryModePerRoom)}
+			if got := transitionSpy(t, dispatcher).recordedStartedFailures(); !slices.Equal(got, want) {
+				t.Fatalf("started failures = %v, want %v", got, want)
 			}
 		})
 	}

@@ -14,7 +14,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/testutil"
@@ -48,7 +47,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 
 	envelope.Notification.Channel.ID = "request-channel"
 
-	_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("pin-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
@@ -90,7 +89,7 @@ func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {
 
 			envelope.Notification.Channel.ID = "request-channel"
 
-			_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+			_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope}})
 			require.NoError(t, err)
 
 			consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("reissue-owner"), dispatchoutbox.WithQuarantineThreshold(testAlarmQuarantineThreshold))
@@ -131,7 +130,7 @@ func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {
 func TestAlarmRequestPinnedErrorDoesNotPermitAmbiguousRetryWithoutRequest(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	group := alarmDispatchGroup{envelopes: withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})}
+	group := alarmDispatchGroup{envelopes: withAlarmDispatchTestSendUnitIdentity([]dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})}
 	require.NoError(t, runner.persistPostSendingFailure(t.Context(), group, context.DeadlineExceeded))
 	require.Len(t, consumer.quarantined, 1)
 	require.Empty(t, consumer.scheduledSendingRetry)
@@ -144,7 +143,7 @@ func (requestClaimReleaser) DelMany(context.Context, []string) (int64, error) { 
 func TestAlarmRequestUnknownEvidencePreventsReissueOfJoinedConflict(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
+	envelopes := withAlarmDispatchTestSendUnitIdentity([]dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes, request: &dispatchoutbox.SendRequest{ClientRequestID: envelopes[0].ClientRequestID}}
 	cause := errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))
 	require.NoError(t, runner.persistPostSendingFailure(t.Context(), group, cause))
@@ -155,7 +154,7 @@ func TestAlarmRequestUnknownEvidencePreventsReissueOfJoinedConflict(t *testing.T
 func TestAlarmRequestTimeoutDoesNotReissueJoinedPreHandoffConflict(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
+	envelopes := withAlarmDispatchTestSendUnitIdentity([]dispatchoutbox.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes, request: &dispatchoutbox.SendRequest{ClientRequestID: envelopes[0].ClientRequestID}}
 	cause := errors.Join(context.DeadlineExceeded, testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))
 	require.NoError(t, runner.persistPostSendingFailure(t.Context(), group, cause))

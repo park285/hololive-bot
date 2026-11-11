@@ -32,6 +32,7 @@ import (
 
 func (c *YouTubeChecker) buildChannelNotifications(
 	ctx context.Context,
+	targetPolicy targetpolicy.TargetMinutePolicy,
 	channelID string,
 	subscriberRooms []string,
 	streams []*domain.Stream,
@@ -51,14 +52,14 @@ func (c *YouTubeChecker) buildChannelNotifications(
 			return nil, fmt.Errorf("build channel notifications: %w", err)
 		}
 
-		upcomingNotifications, err := c.buildUpcomingNotifications(ctx, stream, streamRooms, window)
+		upcomingNotifications, err := c.buildUpcomingNotifications(ctx, targetPolicy, stream, streamRooms, window)
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build upcoming notifications: %w", err)
 		}
 
 		notifications = append(notifications, upcomingNotifications...)
 
-		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, streamRooms, now, settledRoomsByStreamID[stream.ID], liveObservedAt(stream, liveObservedAtByStreamID...))
+		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, targetPolicy, channelID, stream, streamRooms, now, settledRoomsByStreamID[stream.ID], liveObservedAt(stream, liveObservedAtByStreamID...))
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build live catchup notifications: %w", err)
 		}

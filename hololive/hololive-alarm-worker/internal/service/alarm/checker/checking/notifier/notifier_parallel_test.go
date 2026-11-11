@@ -30,9 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -53,13 +51,12 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, logger)
 	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupService,
 		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -86,7 +83,7 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 		wantRoomOrder = append(wantRoomOrder, roomID)
 	}
 
-	result, sendErr := notifier.Send(t.Context(), notifications)
+	result, sendErr := notifier.Send(t.Context(), notifications, testTargetPolicy(10))
 	require.NoError(t, sendErr)
 	assert.Equal(t, total, result.Sent)
 	assert.Equal(t, 0, result.Skipped)
@@ -109,13 +106,12 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, logger)
 	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupService,
 		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -139,7 +135,7 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 		notifications = append(notifications, domain.NewAlarmNotification("room-dup", stream.Channel, stream, 10, []string{}, ""))
 	}
 
-	result, sendErr := notifier.Send(t.Context(), notifications)
+	result, sendErr := notifier.Send(t.Context(), notifications, testTargetPolicy(10))
 	require.NoError(t, sendErr)
 
 	assert.Equal(t, 1, result.Sent, "exactly one duplicate must claim and send")
@@ -155,13 +151,12 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, logger)
 	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupService,
 		newCheckerTestPublisher(t, cache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}),
-		tier.NewTieredScheduler(logger),
 		logger,
 	)
 	require.NoError(t, err)
@@ -186,7 +181,7 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // 이미 취소된 ctx: 모든 worker 가 결정적으로 취소 분기를 탄다(타이밍 의존 없음).
 
-	result, sendErr := notifier.Send(ctx, notifications)
+	result, sendErr := notifier.Send(ctx, notifications, testTargetPolicy(10))
 
 	require.Error(t, sendErr, "canceled context must surface a non-nil error to the caller")
 	require.ErrorIs(t, sendErr, context.Canceled, "error must wrap context.Canceled")
@@ -194,5 +189,3 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 	assert.Equal(t, 0, result.Sent, "no notification may be sent under canceled context")
 	assert.Equal(t, 0, outbox.insertBatchCalls, "no publish batch may run under canceled context")
 }
-
-var _ = dispatchoutbox.Inserted

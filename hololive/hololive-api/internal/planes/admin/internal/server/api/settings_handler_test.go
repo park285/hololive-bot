@@ -14,7 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
@@ -22,16 +22,16 @@ import (
 
 type testSettingsApplier struct{}
 
-func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) (sharedsettings.AlarmAdvanceMinutesApplyResult, error) {
-	return sharedsettings.AlarmAdvanceMinutesApplyResult{
+func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) (adminsettings.AlarmAdvanceMinutesApplyResult, error) {
+	return adminsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 		AlarmApplied:                 true,
 		AlarmTargetMinutes:           []int{minutes},
 	}, nil
 }
 
-func (testSettingsApplier) SettingsRuntimeState() sharedsettings.SettingsRuntimeStateResult {
-	return sharedsettings.SettingsRuntimeStateResult{}
+func (testSettingsApplier) SettingsRuntimeState() adminsettings.SettingsRuntimeStateResult {
+	return adminsettings.SettingsRuntimeStateResult{}
 }
 
 type testActivityLogger struct{}
@@ -80,7 +80,7 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 
 	settingsService := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 		AlarmAdvanceMinutes: 5,
-	}, newDiscardLogger())
+	})
 
 	handler := &SettingsHandler{
 		Logger:          newDiscardLogger(),
@@ -192,10 +192,10 @@ func TestSettingsHandler_SetRoomName_LogsMaskedRoomID(t *testing.T) {
 	}
 }
 
-func mustNewTestSettingsService(t *testing.T, filePath string, defaults settingssvc.Settings, logger *slog.Logger) *settingssvc.Service {
+func mustNewTestSettingsService(t *testing.T, filePath string, defaults settingssvc.Settings) *adminsettings.Service {
 	t.Helper()
 
-	service, err := settingssvc.NewSettingsService(filePath, defaults, logger)
+	service, err := adminsettings.NewSettingsService(filePath, defaults)
 	if err != nil {
 		t.Fatalf("NewSettingsService() error = %v", err)
 	}

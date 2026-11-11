@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -77,7 +76,7 @@ func mapUnknownProviderStatus(status int, message string) error {
 }
 
 func mapServiceUnavailable(message, retryAfter string) error {
-	hint := collecterr.ParseRetryAfter(retryAfter, time.Time{})
+	hint := collecterr.ParseRetryAfter(retryAfter)
 	if hint.Kind() == collecterr.RetryDefault {
 		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, message)
 	}
@@ -90,7 +89,7 @@ func mapServiceUnavailable(message, retryAfter string) error {
 }
 
 func withRetryHint(err error, retryAfter string) error {
-	if withErr := collecterr.WithRetry(err, collecterr.ParseRetryAfter(retryAfter, time.Time{})); withErr != nil {
+	if withErr := collecterr.WithRetry(err, collecterr.ParseRetryAfter(retryAfter)); withErr != nil {
 		return fmt.Errorf("with retry: %w", withErr)
 	}
 

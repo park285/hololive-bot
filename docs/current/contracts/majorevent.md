@@ -48,7 +48,7 @@ llm plane의 major event 수집은 이벤트 링크를 HEAD로 확인합니다. 
 
 - Timeout: bot 명령 실행 시한(worker profile `bot_webhook_inbox` executor `attempt_timeout`)을 그대로 따릅니다.
 - Retry: 자동 재시도는 없습니다.
-- Idempotency: subscription operations are expected to be safe at service level; exact DB idempotency 검토 필요.
+- Idempotency: 구독(`hololive/hololive-api/internal/planes/llm/internal/service/majorevent/queries/subscribe.sql`)은 `ON CONFLICT (room_id) DO UPDATE`라 반복해도 방마다 행이 하나이며, 비어 있지 않은 새 방 이름만 기존 이름을 덮어씁니다. 해지(`hololive/hololive-api/internal/planes/llm/internal/service/majorevent/queries/unsubscribe.sql`)는 `room_id` 행 `DELETE`라 반복해도 결과가 같고, 없는 방을 해지해도 오류가 아닙니다.
 
 ## Compatibility policy
 

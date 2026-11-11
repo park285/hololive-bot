@@ -2,7 +2,6 @@ package readiness
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/health"
@@ -11,24 +10,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
-func Pick(probes ...*sharedreadiness.Probe) *sharedreadiness.Probe {
-	for _, p := range probes {
-		if p != nil {
-			return p
-		}
-	}
-
-	return nil
-}
-
+// GinHandler는 plane probe 판정을 /internal/ready 응답으로 낸다. 조립하는 router가 p의 nil 여부를 먼저 검사한다.
 func GinHandler(ctx context.Context, p *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if p == nil {
-			ginjson.Respond(c, http.StatusOK, map[string]any{"status": "ready", "health": health.Get()})
-
-			return
-		}
-
 		statusCode, payload := evaluate(sharedreadiness.RequestContext(ctx, c), p)
 		ginjson.Respond(c, statusCode, payload)
 	}
@@ -36,8 +20,7 @@ func GinHandler(ctx context.Context, p *sharedreadiness.Probe) gin.HandlerFunc {
 
 func evaluate(ctx context.Context, p *sharedreadiness.Probe) (statusCode int, payload map[string]any) {
 	base := health.Get()
-	ready, groups := p.Evaluate(ctx)
-	dependencies := groups[sharedreadiness.GroupDependencies]
+	ready, dependencies := p.Evaluate(ctx)
 	statusCode, status := sharedreadiness.HTTPStatus(ready)
 
 	payload = sharedreadiness.BasePayload(base, status)

@@ -10,7 +10,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestExpiredLeaseRecoveryKeepsSendUnitAtomic(t *testing.T) {
@@ -27,7 +26,7 @@ func TestExpiredLeaseRecoveryKeepsSendUnitAtomic(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
 			repo := newOutboxRepository(t, pool)
-			_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{
+			_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []dispatchoutbox.AlarmQueueEnvelope{
 				sendUnitTestEnvelope("recover-pair", "recover-a"), sendUnitTestEnvelope("recover-pair", "recover-b"),
 			}})
 			require.NoError(t, err)

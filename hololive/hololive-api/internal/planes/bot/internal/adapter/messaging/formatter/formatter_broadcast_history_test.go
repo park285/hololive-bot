@@ -13,10 +13,9 @@ func TestBroadcastHistoryShowsLimitFilter(t *testing.T) {
 
 	formatter := NewResponseFormatter("!", nil)
 	got := formatter.BroadcastHistory(t.Context(), BroadcastHistoryFilter{
-		TypeLabel:  "게임",
-		Days:       14,
-		Limit:      10,
-		IncludeAll: false,
+		TypeLabel: "게임",
+		Days:      14,
+		Limit:     10,
 	}, []BroadcastHistoryEntry{
 		{
 			VideoID:    "AqxEw3kXcgU",
@@ -116,11 +115,11 @@ func TestBroadcastHistoryEmptyShowsLimitFilter(t *testing.T) {
 
 	formatter := NewResponseFormatter("!", nil)
 	got := formatter.BroadcastHistoryEmpty(t.Context(), BroadcastHistoryFilter{
-		IncludeAll: true,
-		Limit:      20,
+		Days:  30,
+		Limit: 20,
 	})
 
-	for _, want := range []string{"기간: 전체", "개수: 최대 20건"} {
+	for _, want := range []string{"기간: 최근 30일", "개수: 최대 20건"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("BroadcastHistoryEmpty() missing %q in:\n%s", want, got)
 		}

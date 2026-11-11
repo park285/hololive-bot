@@ -1,9 +1,5 @@
 package handlers
 
-import "errors"
-
-var errTestStubNoChannel = errors.New("stub stream provider has no channel data")
-
 const (
 	testRoomID       = "room-1"
 	testCalendarRoom = "test-room"

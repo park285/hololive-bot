@@ -17,13 +17,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
-	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -86,7 +85,9 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 		t.Fatalf("runtime.HTTPServers.H3.Addr = %q", runtime.HTTPServers.H3.Addr)
 	}
 
-	runtime.Close()
+	if err := runtime.CloseContext(t.Context()); err != nil {
+		t.Fatalf("CloseContext() error = %v", err)
+	}
 
 	if cleanupCalls != 1 {
 		t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
@@ -151,7 +152,7 @@ func TestBuildAdminAPIHTTPRuntimeCleansUpInfraOnRouterFailure(t *testing.T) {
 		t.Context(),
 		&apiconfig.AdminPlaneConfig{},
 		infra,
-		&server.Handler{},
+		testAdminDomainHandlers(),
 		func() error {
 			infra.Cleanup()
 
@@ -186,32 +187,16 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	infra := &sharedmodules.InfraModule{
 		Postgres: &databasemocks.Client{},
 		// /api/holo rate limit은 cache가 없으면 기동 오류다(fail-closed).
-		Cache: sharedtestutil.NewTestCacheService(t.Context(), t),
-	}
-	foundation := &apifoundation.ScraperHolodexFoundation{}
-	alarmMode := &alarmModeComponents{}
-	settingsApplier := sharedsettings.NewLocalSettingsApplier(nil)
-
-	settingsService, err := sharedsettings.BuildSettingsService(filepath.Join(t.TempDir(), "settings.json"), nil, logger)
-	if err != nil {
-		t.Fatalf("BuildSettingsService() error = %v", err)
+		Cache:            sharedtestutil.NewTestCacheService(t.Context(), t),
+		MemberRepository: &member.Repository{},
 	}
 
-	handler := buildAdminHandler(
-		infra,
-		foundation,
-		alarmMode,
-		nil,
-		nil,
-		settingsService,
-		settingsApplier,
-		logger,
-	)
-	if handler == nil {
-		t.Fatal("buildAdminHandler() returned nil")
+	domains := buildTestAdminHandlers(t, infra, Dependencies{ACL: &acl.Service{}}, logger)
+	if domains.Alarm == nil || domains.Settings == nil {
+		t.Fatalf("buildAdminHandlers() domains = %+v, want all handlers", domains)
 	}
 
-	router, err := buildAdminAPIRouter(t.Context(), appConfig, infra, &server.Handler{}, logger)
+	router, err := buildAdminAPIRouter(t.Context(), appConfig, infra, domains, logger)
 	if err != nil {
 		t.Fatalf("buildAdminAPIRouter() error = %v", err)
 	}
@@ -226,10 +211,6 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 
 	var nilRuntime *AdminAPIRuntime
 
-	if err := nilRuntime.Run(); err != nil {
-		t.Fatalf("nil Run() error = %v", err)
-	}
-
 	nilRuntime.Start(t.Context(), nil)
 	nilRuntime.StartHTTPServer(nil)
 
@@ -239,6 +220,10 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 
 	if err := nilRuntime.ShutdownHTTPServer(t.Context()); err != nil {
 		t.Fatalf("nil ShutdownHTTPServer() error = %v", err)
+	}
+
+	if err := nilRuntime.CloseContext(t.Context()); err != nil {
+		t.Fatalf("nil CloseContext() error = %v", err)
 	}
 
 	runtime := &AdminAPIRuntime{

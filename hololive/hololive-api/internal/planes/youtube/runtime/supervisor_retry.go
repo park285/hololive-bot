@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -110,15 +109,9 @@ func (r *Runtime) markDeadLettered() {
 	}
 }
 
-type observationDeadLetterer interface {
-	DeadLetter(context.Context, sourceobservation.DeadLetterInput) error
-}
-
-var _ observationDeadLetterer = (*sourceobservation.Repository)(nil)
-
-func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observationDeadLetterer, work sourceobservation.ClaimWork, cause error) error {
+func (r *Runtime) deadLetterObservation(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
 	if err := r.withBudgetDB(ctx, dbOperationDeadLetter, func(ctx context.Context) error {
-		return deadLetterer.DeadLetter(ctx, sourceobservation.DeadLetterInput{
+		return r.claimer.DeadLetter(ctx, sourceobservation.DeadLetterInput{
 			ObservationID: work.ObservationID,
 			LeaseToken:    work.LeaseToken,
 			ErrorCode:     "youtube_plane_fatal",
@@ -199,15 +192,5 @@ func boundedError(err error) string {
 		return "youtube plane retry"
 	}
 
-	text := err.Error()
-	if len(text) <= 2048 {
-		return text
-	}
-
-	end := 2048
-	for end > 0 && !utf8.RuneStart(text[end]) {
-		end--
-	}
-
-	return text[:end]
+	return sourceobservation.BoundedErrorDetail(err.Error())
 }

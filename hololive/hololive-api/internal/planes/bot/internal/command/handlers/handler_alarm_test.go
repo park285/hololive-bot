@@ -54,14 +54,6 @@ func (s *alarmListViewerStub) RemoveHostAlarm(context.Context, string, string, s
 	return false, nil
 }
 
-func (s *alarmListViewerStub) GetRoomAlarms(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
-func (s *alarmListViewerStub) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
-	return nil, nil
-}
-
 func (s *alarmListViewerStub) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
 
 func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error) {
@@ -168,18 +160,6 @@ func (p *contextAwareMemberProvider) LoadAllMembers(ctx context.Context) ([]*dom
 	return p.members, nil
 }
 
-func (p *contextAwareMemberProvider) FindMembersByName(ctx context.Context, _ string) ([]*domain.Member, error) {
-	p.record(ctx)
-
-	return []*domain.Member{}, nil
-}
-
-func (p *contextAwareMemberProvider) FindMembersByAlias(ctx context.Context, _ string) ([]*domain.Member, error) {
-	p.record(ctx)
-
-	return []*domain.Member{}, nil
-}
-
 type alarmAddRecorder struct {
 	addCtxs []context.Context
 }
@@ -196,14 +176,6 @@ func (s *alarmAddRecorder) RemoveAlarm(context.Context, string, string, domain.A
 
 func (s *alarmAddRecorder) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
 	return false, nil
-}
-
-func (s *alarmAddRecorder) GetRoomAlarms(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
-func (s *alarmAddRecorder) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
-	return nil, nil
 }
 
 func (s *alarmAddRecorder) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
@@ -316,7 +288,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	alarm := &alarmAddRecorder{}
 	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
@@ -333,7 +305,6 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 
 	err := alarmcmd.NewAlarmCommand(deps).Execute(ctx, &botcommand.CommandContext{
 		Room:     testRoomID,
-		RoomName: "room-name",
 		UserID:   "user-1",
 		UserName: "tester",
 	}, map[string]any{
@@ -359,7 +330,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	sendMessageCalled := false
 	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			sendMessageCalled = true
@@ -373,7 +344,6 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 
 	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{
 		Room:     testRoomID,
-		RoomName: "room-name",
 		UserID:   "user-1",
 		UserName: "tester",
 	}, map[string]any{

@@ -12,13 +12,12 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) error {
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
 
-	if err := r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []domain.AlarmQueueEnvelope) error {
+	if err := r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []dispatchoutbox.AlarmQueueEnvelope) error {
 		if err := r.consumer.RouteFailures(ctx, retry, dlq); err != nil {
 			return fmt.Errorf("route alarm dispatch before send failure: %w", err)
 		}
@@ -33,10 +32,10 @@ func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.A
 
 func (r *Runner) finalizeDispatchFailure(
 	ctx context.Context,
-	retryEnvelopes []domain.AlarmQueueEnvelope,
-	dlqEnvelopes []domain.AlarmQueueEnvelope,
-	routeFn func(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error,
-	requeueFn func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error,
+	retryEnvelopes []dispatchoutbox.AlarmQueueEnvelope,
+	dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope,
+	routeFn func(retryEnvelopes, dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope) error,
+	requeueFn func(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error,
 ) error {
 	routeErr := routeFn(retryEnvelopes, dlqEnvelopes)
 	releasable := dlqEnvelopes
@@ -63,11 +62,11 @@ func (r *Runner) finalizeDispatchFailure(
 
 func (r *Runner) resolveFailureRoute(
 	ctx context.Context,
-	retryEnvelopes []domain.AlarmQueueEnvelope,
-	dlqEnvelopes []domain.AlarmQueueEnvelope,
-	requeueFn func(context.Context, []domain.AlarmQueueEnvelope) error,
+	retryEnvelopes []dispatchoutbox.AlarmQueueEnvelope,
+	dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope,
+	requeueFn func(context.Context, []dispatchoutbox.AlarmQueueEnvelope) error,
 	routeErr error,
-) ([]domain.AlarmQueueEnvelope, bool, error) {
+) ([]dispatchoutbox.AlarmQueueEnvelope, bool, error) {
 	unapplied, partial := unappliedFailureRoutingIDs(routeErr)
 	if !partial {
 		if err := r.preserveAfterPersistenceFailure(ctx, combineEnvelopes(retryEnvelopes, dlqEnvelopes), requeueFn, routeErr); err != nil {
@@ -80,7 +79,7 @@ func (r *Runner) resolveFailureRoute(
 	return envelopesExcludingIDs(dlqEnvelopes, unapplied), false, nil
 }
 
-func (r *Runner) completeFailureFinalization(ctx context.Context, releasable []domain.AlarmQueueEnvelope, routeErr error) error {
+func (r *Runner) completeFailureFinalization(ctx context.Context, releasable []dispatchoutbox.AlarmQueueEnvelope, routeErr error) error {
 	if err := r.consumer.ReleaseClaimKeys(ctx, claimKeysForAlarmDispatchEnvelopes(releasable)); err != nil {
 		if routeErr != nil {
 			return fmt.Errorf("%w: release alarm dispatch dlq claim keys: %w", routeErr, err)
@@ -96,7 +95,7 @@ func (r *Runner) completeFailureFinalization(ctx context.Context, releasable []d
 	return nil
 }
 
-func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) error {
 	requeued := preparePreSendRequeue(envelopes, cause)
 	if err := r.consumer.RequeuePreSend(ctx, requeued); err != nil {
 		return fmt.Errorf("requeue alarm dispatch before send: %w", err)
@@ -113,13 +112,13 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, group alarmDispa
 		return r.quarantinePostSendingFailure(ctx, envelopes, cause)
 	}
 
-	if sendoutcome.Classify(cause) == sendoutcome.Failed && iris.IsPreHandoffClientRequestIDConflict(cause) && group.request != nil {
+	if sendoutcome.Reissuable(cause) && group.request != nil {
 		return r.reissueFailedRequest(ctx, group, cause)
 	}
 
 	// 응답 유실은 저장된 최종 본문·경로·membership·ID를 그대로 재사용할 수 있을 때만 재시도한다.
 	if isAlarmDispatchNotAdmittedRetryableFailure(cause) ||
-		(group.request != nil && hasPersistedClientRequestID(envelopes) && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
+		(group.request != nil && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
 		if err := r.persistSendingRetry(ctx, envelopes, cause); err != nil {
 			return fmt.Errorf("persist sending retry: %w", err)
 		}
@@ -130,7 +129,7 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, group alarmDispa
 	return r.quarantinePostSendingFailure(ctx, envelopes, cause)
 }
 
-func (r *Runner) quarantinePostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *Runner) quarantinePostSendingFailure(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) error {
 	if err := r.consumer.Quarantine(ctx, envelopes, cause); err != nil {
 		return fmt.Errorf("quarantine alarm dispatch after send failure: %w", err)
 	}
@@ -140,20 +139,16 @@ func (r *Runner) quarantinePostSendingFailure(ctx context.Context, envelopes []d
 	return nil
 }
 
-func hasPersistedClientRequestID(envelopes []domain.AlarmQueueEnvelope) bool {
-	return persistedAlarmDispatchClientRequestIDFromEnvelopes(envelopes) != ""
-}
-
-func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) error {
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
 
-	if err := r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []domain.AlarmQueueEnvelope) error {
+	if err := r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []dispatchoutbox.AlarmQueueEnvelope) error {
 		if err := r.consumer.RouteSendingFailures(ctx, retry, dlq); err != nil {
 			return fmt.Errorf("route alarm dispatch sending failure: %w", err)
 		}
 
 		return nil
-	}, func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	}, func(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 		// 'sending' 잔류 행은 leased 전용 Requeue(RouteFailures fence)에 매칭되지 않아
 		// 일시적 infra 오류가 QuarantineStaleSending의 terminal quarantine으로 굳는다.
 		// fallback도 sending fence로 전량 retry 복원한다.
@@ -183,8 +178,8 @@ func isAlarmDispatchAmbiguousPostSendFailure(cause error) bool {
 
 func (r *Runner) preserveAfterPersistenceFailure(
 	ctx context.Context,
-	envelopes []domain.AlarmQueueEnvelope,
-	requeueFn func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error,
+	envelopes []dispatchoutbox.AlarmQueueEnvelope,
+	requeueFn func(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error,
 	persistErr error,
 ) error {
 	if len(envelopes) == 0 {
@@ -198,7 +193,7 @@ func (r *Runner) preserveAfterPersistenceFailure(
 	return persistErr
 }
 
-func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) []string {
+func claimKeysForAlarmDispatchEnvelopes(envelopes []dispatchoutbox.AlarmQueueEnvelope) []string {
 	claimKeys := make([]string, 0, len(envelopes))
 	for i := range envelopes {
 		claimKeys = append(claimKeys, envelopes[i].ClaimKeys...)
@@ -217,15 +212,15 @@ func unappliedFailureRoutingIDs(err error) ([]int64, bool) {
 	return miss.UnappliedDeliveryIDs(), true
 }
 
-func combineEnvelopes(a, b []domain.AlarmQueueEnvelope) []domain.AlarmQueueEnvelope {
-	combined := make([]domain.AlarmQueueEnvelope, 0, len(a)+len(b))
+func combineEnvelopes(a, b []dispatchoutbox.AlarmQueueEnvelope) []dispatchoutbox.AlarmQueueEnvelope {
+	combined := make([]dispatchoutbox.AlarmQueueEnvelope, 0, len(a)+len(b))
 
 	combined = append(combined, a...)
 
 	return append(combined, b...)
 }
 
-func envelopesExcludingIDs(envelopes []domain.AlarmQueueEnvelope, ids []int64) []domain.AlarmQueueEnvelope {
+func envelopesExcludingIDs(envelopes []dispatchoutbox.AlarmQueueEnvelope, ids []int64) []dispatchoutbox.AlarmQueueEnvelope {
 	if len(ids) == 0 {
 		return envelopes
 	}
@@ -235,7 +230,7 @@ func envelopesExcludingIDs(envelopes []domain.AlarmQueueEnvelope, ids []int64) [
 		excluded[id] = struct{}{}
 	}
 
-	kept := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	kept := make([]dispatchoutbox.AlarmQueueEnvelope, 0, len(envelopes))
 	for i := range envelopes {
 		if _, ok := excluded[envelopes[i].DispatchOutboxID]; ok {
 			continue
@@ -266,9 +261,9 @@ func alarmDispatchRetryBackoff(attempt int) time.Duration {
 	return time.Duration(attempt) * 5 * time.Second
 }
 
-func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) {
-	retryEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
-	dlqEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+func prepareDispatchFailure(envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope) {
+	retryEnvelopes = make([]dispatchoutbox.AlarmQueueEnvelope, 0, len(envelopes))
+	dlqEnvelopes = make([]dispatchoutbox.AlarmQueueEnvelope, 0, len(envelopes))
 
 	maxAttempts := alarmDispatchMaxAttemptsForCause(cause)
 
@@ -288,8 +283,8 @@ func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) 
 	return retryEnvelopes, dlqEnvelopes
 }
 
-func preparePreSendRequeue(envelopes []domain.AlarmQueueEnvelope, cause error) []domain.AlarmQueueEnvelope {
-	requeued := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+func preparePreSendRequeue(envelopes []dispatchoutbox.AlarmQueueEnvelope, cause error) []dispatchoutbox.AlarmQueueEnvelope {
+	requeued := make([]dispatchoutbox.AlarmQueueEnvelope, 0, len(envelopes))
 	for i := range envelopes {
 		updated := envelopes[i]
 
@@ -300,8 +295,8 @@ func preparePreSendRequeue(envelopes []domain.AlarmQueueEnvelope, cause error) [
 	return requeued
 }
 
-func sameAttemptAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *domain.AlarmQueueRetryMetadata {
-	retry := &domain.AlarmQueueRetryMetadata{}
+func sameAttemptAlarmDispatchRetry(envelope *dispatchoutbox.AlarmQueueEnvelope, cause error) *dispatchoutbox.AlarmQueueRetryMetadata {
+	retry := &dispatchoutbox.AlarmQueueRetryMetadata{}
 
 	if envelope.Retry != nil {
 		*retry = *envelope.Retry
@@ -316,8 +311,8 @@ func sameAttemptAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause er
 
 const maxHTTPRetryAfter = 5 * time.Minute
 
-func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *domain.AlarmQueueRetryMetadata {
-	retry := &domain.AlarmQueueRetryMetadata{}
+func nextAlarmDispatchRetry(envelope *dispatchoutbox.AlarmQueueEnvelope, cause error) *dispatchoutbox.AlarmQueueRetryMetadata {
+	retry := &dispatchoutbox.AlarmQueueRetryMetadata{}
 
 	if envelope.Retry != nil {
 		*retry = *envelope.Retry

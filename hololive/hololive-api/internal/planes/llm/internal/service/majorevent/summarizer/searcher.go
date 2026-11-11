@@ -25,13 +25,41 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-shared/pkg/constants"
+)
+
+var (
+	searchSourceSites = []string{
+		"hololive.hololivepro.com",
+		"hololivepro.com",
+		"x.com",
+		"twitter.com",
+		"schedule.hololive.tv",
+		"shop.hololivepro.com",
+		"hololive-official-cardgame.com",
+		"aniplustv.com",
+		"aniplus.co.kr",
+	}
+	searchOfficialAccounts = []string{
+		"hololivetv",
+		"hololive_en",
+		"hololive_id",
+		"HOLOSTARSen",
+		"hololive_OCG_EN",
+		"ANIPLUS_SHOP",
+		"v_square_kr",
+	}
+	searchPartnerKeywords = []string{
+		"ANIPLUS",
+		"V-SQUARE",
+		"AGF Korea",
+		"collaboration cafe",
+	}
 )
 
 func buildSearchQuery(summaryType SummaryType, periodKey string) string {
-	sourceScope := buildORScope("site:", constants.MajorEventConfig.SearchSourceSites)
-	accountScope := buildORScope("", constants.MajorEventConfig.SearchOfficialAccounts)
-	partnerScope := buildORScope("", constants.MajorEventConfig.SearchPartnerKeywords)
+	sourceScope := buildORScope("site:", searchSourceSites)
+	accountScope := buildORScope("", searchOfficialAccounts)
+	partnerScope := buildORScope("", searchPartnerKeywords)
 
 	switch summaryType {
 	case SummaryTypeMonthly:

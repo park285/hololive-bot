@@ -122,20 +122,6 @@ func TestBuildTitleFingerprint_FullWidthEquivalence(t *testing.T) {
 	}
 }
 
-func TestGetMemberNamesBatch(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	require.NoError(t, as.cache.HSet(ctx, alarmkeys.MemberNameKey, "UC_ok", "미코"))
-
-	names, err := as.getMemberNamesBatch(ctx, []string{"UC_ok", "UC_missing"})
-	require.NoError(t, err)
-	assert.Equal(t, "미코", names["UC_ok"])
-	assert.Empty(t, names["UC_missing"])
-}
-
 func TestBuildAlarmListViews(t *testing.T) {
 	t.Parallel()
 

@@ -156,12 +156,10 @@ func (r Resolution) Members() []DeliverySnapshot   { return slices.Clone(r.membe
 func (r Resolution) DueFloor() time.Time              { return r.dueFloor }
 func (r Resolution) InvariantReason() InvariantReason { return r.reason }
 func (r Resolution) Detail() string                   { return r.detail }
-func (r Resolution) ProviderAllowed() bool            { return r.kind == LogicalActive }
 
 type ResolverConfig struct {
 	LogicalGroupScanLimit int
 	LockTimeout           time.Duration
-	RequireTerminalLedger bool
 }
 
 type Resolver struct {
@@ -409,7 +407,7 @@ func (r Resolver) groupInvariant(
 		return &invalid
 	}
 
-	if r.config.RequireTerminalLedger && ledger.Status == "" && (counts[lifecycle.StatusSent] > 0 || counts[lifecycle.StatusQuarantined] > 0) {
+	if ledger.Status == "" && (counts[lifecycle.StatusSent] > 0 || counts[lifecycle.StatusQuarantined] > 0) {
 		invalid := breach(key, members, InvariantTerminalLedgerMissing, "retained terminal row has no ledger evidence")
 
 		return &invalid

@@ -6,6 +6,6 @@ x_space_starts|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive
 major_event_subscriptions|owner=llm-scheduler|writers=hololive-api|readers=hololive-api
 membernews_digest|owner=llm-scheduler|writers=hololive-api|readers=hololive-api
 membernews_subscription|owner=llm-scheduler|writers=hololive-api|readers=hololive-api
-alarm_dispatch|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker
+alarm_dispatch|owner=alarm-worker|writers=hololive-alarm-worker,hololive-api|readers=hololive-alarm-worker,hololive-api
 alarm_state|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker,hololive-api
 youtube_outbox|owner=hololive-api|writers=hololive-api|readers=hololive-alarm-worker

@@ -59,11 +59,3 @@ func newClaimManager(
 
 	return manager
 }
-
-func (d *ClaimManager) dispatchDeliveryRows(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-) DispatchResult {
-	return d.executor.dispatchDeliveryRows(ctx, rows, outboxByID)
-}

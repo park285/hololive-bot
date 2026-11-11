@@ -20,95 +20,14 @@
 
 package settings
 
-import (
-	"slices"
-	"sync"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
-)
-
-const aclModeBlacklist = "blacklist"
-
 const (
 	kakaoACLEnabledEnv = "KAKAO_ACL_ENABLED"
 	kakaoACLModeEnv    = "KAKAO_ACL_MODE"
 )
 
+// KakaoConfig는 room ACL 초기 seed다. 실행 중 방 목록 변경과 허용 판정은 hololive-api acl.Service가 소유한다.
 type KakaoConfig struct {
 	Rooms      []string
 	ACLEnabled bool
 	ACLMode    string // "whitelist" 또는 "blacklist"
-
-	mu sync.RWMutex
-}
-
-func (c *KakaoConfig) AddRoom(room string) bool {
-	room = stringutil.TrimSpace(room)
-	if room == "" {
-		return false
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if slices.Contains(c.Rooms, room) {
-		return false
-	}
-
-	c.Rooms = append(c.Rooms, room)
-
-	return true
-}
-
-func (c *KakaoConfig) RemoveRoom(room string) bool {
-	room = stringutil.TrimSpace(room)
-	if room == "" {
-		return false
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	removed := false
-	rooms := make([]string, 0, len(c.Rooms))
-
-	for _, existing := range c.Rooms {
-		if existing == room {
-			removed = true
-			continue
-		}
-
-		rooms = append(rooms, existing)
-	}
-
-	c.Rooms = rooms
-
-	return removed
-}
-
-func (c *KakaoConfig) IsRoomAllowed(_, chatID string) bool {
-	chatID = stringutil.TrimSpace(chatID)
-
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if !c.ACLEnabled {
-		return true
-	}
-
-	// chatID 기반으로만 검증 (roomName은 참고용으로만 유지)
-	if chatID == "" {
-		return false // chatID가 없으면 거부
-	}
-
-	inList := slices.Contains(c.Rooms, chatID)
-
-	switch stringutil.Normalize(c.ACLMode) {
-	case aclModeBlacklist:
-		// 블랙리스트: 목록에 있으면 차단
-		return !inList
-	default:
-		// 화이트리스트: 목록에 있으면 허용
-		return inList
-	}
 }

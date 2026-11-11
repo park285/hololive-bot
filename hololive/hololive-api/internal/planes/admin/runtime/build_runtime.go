@@ -10,12 +10,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
-	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/photosync"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -26,12 +25,8 @@ import (
 type alarmProvider interface {
 	server.AlarmManager
 	server.RoomNameSetter
-	sharedsettings.AlarmAdvanceService
+	adminsettings.AlarmAdvanceService
 	io.Closer
-}
-
-type alarmModeComponents struct {
-	AlarmClient alarmProvider
 }
 
 // IrisRoomLister는 bot plane이 소유한 Iris client의 방 목록 조회다. 같은 프로세스에서 직접 호출하며
@@ -45,7 +40,7 @@ type Dependencies struct {
 	// ACL은 process 하나에 하나뿐인 ACL Service다. 관리 변경은 같은 인스턴스를 쓰는 bot 판정에 바로 보인다.
 	ACL *acl.Service
 	// Holodex는 process 하나의 Holodex·공식 일정 서비스다(bot plane과 공유). 종료는 process 조립이 소유한다.
-	Holodex *apifoundation.ScraperHolodexFoundation
+	Holodex *holodexprovider.Service
 	// IrisRooms가 nil이면 joined-rooms endpoint는 503을 돌려준다.
 	IrisRooms IrisRoomLister
 }
@@ -64,8 +59,8 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, errors.New("acl service must not be nil")
 	}
 
-	if deps.Holodex == nil || deps.Holodex.HolodexService == nil {
-		return nil, errors.New("holodex foundation must not be nil")
+	if deps.Holodex == nil {
+		return nil, errors.New("holodex service must not be nil")
 	}
 
 	resources := &adminRuntimeResources{logger: logger}
@@ -76,18 +71,36 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		}
 	}()
 
-	foundation := deps.Holodex
-
-	alarmMode, err := buildAlarmModeComponents(appConfig, logger)
+	alarmClient, err := buildAlarmProvider(appConfig, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build admin api runtime: alarm mode: %w", err)
+		return nil, fmt.Errorf("build admin api runtime: alarm provider: %w", err)
 	}
 
-	resources.alarm = alarmMode.AlarmClient
+	resources.alarm = alarmClient
 
-	runtime, err := buildAdminAPIRuntimeAfterAlarmMode(ctx, appConfig, infra, deps, foundation, alarmMode, resources, logger)
+	adminSettings, err := buildAdminAPISettings(appConfig, alarmClient, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build admin API runtime after alarm mode: %w", err)
+		return nil, fmt.Errorf("build admin api runtime: settings: %w", err)
+	}
+
+	xSpaceSessions, err := xspaces.LoadStore(infra.Postgres.GetPool(), appConfig.XSpacesKeyFile)
+
+	if err != nil && !errors.Is(err, xspaces.ErrDisabled) {
+		return nil, fmt.Errorf("build admin X session store: %w", err)
+	}
+
+	domains, err := buildAdminHandlers(infra, deps, alarmClient, adminSettings, xSpaceSessions, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build admin api runtime: %w", err)
+	}
+
+	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, domains, resources.Close, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build admin APIHTTP runtime: %w", err)
+	}
+
+	if appConfig.Ingestion.PhotoSyncEnabled {
+		runtime.PhotoSync = photosync.New(deps.Holodex, infra.Postgres.GetPool(), logger)
 	}
 
 	return runtime, nil
@@ -110,54 +123,15 @@ func normalizeAdminAPIRuntimeInputs(
 	return ctx, appConfig, logger, nil
 }
 
-func buildAdminAPIRuntimeAfterAlarmMode(
-	ctx context.Context,
-	appConfig *apiconfig.AdminPlaneConfig,
-	infra *sharedmodules.InfraModule,
-	deps Dependencies,
-	foundation *apifoundation.ScraperHolodexFoundation,
-	alarmMode *alarmModeComponents,
-	resources *adminRuntimeResources,
-	logger *slog.Logger,
-) (*AdminAPIRuntime, error) {
-	adminSettings, err := buildAdminAPISettings(appConfig, alarmMode, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build admin api runtime: settings: %w", err)
-	}
-
-	handler := buildAdminHandler(
-		infra, foundation, alarmMode, deps.ACL, deps.IrisRooms,
-		adminSettings.service, adminSettings.applier, logger,
-	)
-	xSpaceSessions, err := xspaces.LoadStore(infra.Postgres.GetPool())
-
-	if err != nil && !errors.Is(err, xspaces.ErrDisabled) {
-		return nil, fmt.Errorf("build admin X session store: %w", err)
-	}
-
-	handler.SetXSpaceSessions(xSpaceSessions)
-
-	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, handler, resources.Close, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build admin APIHTTP runtime: %w", err)
-	}
-
-	if appConfig.Ingestion.PhotoSyncEnabled {
-		runtime.PhotoSync = holodexprovider.NewPhotoSyncService(foundation.HolodexService, infra.MemberRepository, logger)
-	}
-
-	return runtime, nil
-}
-
 func buildAdminAPIHTTPRuntime(
 	ctx context.Context,
 	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
-	handler *server.Handler,
+	domains *server.DomainHandlers,
 	runtimeCleanup func() error,
 	logger *slog.Logger,
 ) (*AdminAPIRuntime, error) {
-	router, err := buildAdminAPIRouter(ctx, appConfig, infra, handler, logger)
+	router, err := buildAdminAPIRouter(ctx, appConfig, infra, domains, logger)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("build admin api runtime: provide api router: %w", err), runtimeCleanup())
 	}
@@ -191,13 +165,6 @@ func newAdminAPIRuntime(
 		Logger:      logger,
 		ServerAddr:  servers.Addr(),
 		HTTPServers: servers,
-		Managed: lifecycle.NewManaged(func() {
-			if cleanup != nil {
-				if cleanupErr := cleanup(); cleanupErr != nil && logger != nil {
-					logger.Warn("admin_resource_cleanup_failed", slog.Any("error", cleanupErr))
-				}
-			}
-		}),
-		cleanup: cleanup,
+		cleanup:     cleanup,
 	}, nil
 }

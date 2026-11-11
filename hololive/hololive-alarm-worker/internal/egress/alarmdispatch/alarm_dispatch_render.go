@@ -16,24 +16,54 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 어느 변형을 보낼지는 발송기가 방 유형으로 한 번 정한다.
+// renderTemplateVariants는 같은 자료로 두 본문 변형을 렌더하고 두 변형의 template 버전을 한 문장으로 확인한다. 어느 변형을
+// 보낼지는 발송기가 방 유형으로 한 번 정한다.
 func renderTemplateVariants(ctx context.Context, renderer *template.Renderer, key domain.TemplateKey, data any) (delivery.MessageVariants, error) {
-	plain, err := renderer.Render(ctx, key, "", domain.TemplateFormatPlain, data)
+	results, err := renderer.RenderBatch(ctx, []template.RenderRequest{
+		{Key: key, Format: domain.TemplateFormatPlain, Data: data},
+		{Key: key, Format: domain.TemplateFormatRichText, Data: data},
+	})
 	if err != nil {
+		return delivery.MessageVariants{}, fmt.Errorf("render %s: %w", key, err)
+	}
+
+	if err := results[0].Err; err != nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render plain %s: %w", key, err)
 	}
 
-	richText, err := renderer.Render(ctx, key, "", domain.TemplateFormatRichText, data)
-	if err != nil {
+	if err := results[1].Err; err != nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render richtext %s: %w", key, err)
 	}
 
-	return delivery.MessageVariants{Plain: plain, RichText: richText}, nil
+	return delivery.MessageVariants{Plain: results[0].Text, RichText: results[1].Text}, nil
+}
+
+// alarmDispatchMembers는 한 claim 배치의 렌더가 함께 쓰는 멤버 조회다. 콜라보 공식 표기명 색인은 콜라보 이름이 처음 나올 때
+// 만들어 같은 배치의 group이 다시 쓰고 배치와 함께 버리므로, 멤버 변경은 다음 배치부터 반영된다. 색인 적재 실패는 남기지 않는다.
+// Runner가 group을 차례로 렌더하므로 동시에 쓰지 않는다.
+type alarmDispatchMembers struct {
+	provider domain.MemberDataProvider
+	index    officialidentity.Index
+}
+
+func (m *alarmDispatchMembers) collabIndex(ctx context.Context) (officialidentity.Index, error) {
+	if m.index != nil {
+		return m.index, nil
+	}
+
+	index, err := officialidentity.Build(ctx, m.provider)
+	if err != nil {
+		return nil, fmt.Errorf("collab index: %w", err)
+	}
+
+	m.index = index
+
+	return index, nil
 }
 
 // renderAlarmDispatchGroup는 알림을 자동 접기 없이 렌더링하고 사전 렌더된 다이제스트는 그대로 유지한다.
-func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
-	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, members, group); handled {
+func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members *alarmDispatchMembers, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
+	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, members.provider, group); handled {
 		if err != nil {
 			return message, fmt.Errorf("render alarm dispatch group source: %w", err)
 		}
@@ -82,10 +112,6 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 			action: "render celebration message",
 			run:    func() (delivery.MessageVariants, error) { return renderCelebrationMessage(ctx, renderer, envelope) },
 		},
-		domain.AlarmDispatchSourceKindDeliveryDigest: {
-			action: "render delivery digest dispatch",
-			run:    func() (delivery.MessageVariants, error) { return renderAlarmDispatchDeliveryDigest(envelope) },
-		},
 	}
 
 	selected, ok := renderers[envelope.SourceKind]
@@ -99,18 +125,6 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 	}
 
 	return message, true, nil
-}
-
-// 저장된 digest envelope는 변형 도입 전에 한 본문만 담았으므로 그 본문을 두 경로에 그대로 쓴다. 이 저장소에는 새 digest
-// 생산자가 없으므로 남은 envelope가 모두 처리되면 이 분기와 함께 지울 수 있다.
-func renderAlarmDispatchDeliveryDigest(envelope *domain.AlarmQueueEnvelope) (delivery.MessageVariants, error) {
-	if envelope.DeliveryDigest == nil {
-		return delivery.MessageVariants{}, errors.New("payload is nil")
-	}
-
-	message := envelope.DeliveryDigest.PreRenderedMessage
-
-	return delivery.MessageVariants{Plain: message, RichText: message}, nil
 }
 
 type alarmDispatchItemView struct {
@@ -132,7 +146,7 @@ type alarmDispatchGroupView struct {
 	Entries      []alarmDispatchItemView
 }
 
-func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification, groupMinutesUntil int) (alarmDispatchItemView, error) {
+func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, members *alarmDispatchMembers, notification *domain.AlarmNotification, groupMinutesUntil int) (alarmDispatchItemView, error) {
 	starting := notification.IsStarting()
 
 	collabMembers, err := formatAlarmDispatchCollabMembers(ctx, members, notification.Stream)
@@ -140,7 +154,7 @@ func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store
 		return alarmDispatchItemView{}, err
 	}
 
-	memberName, err := resolveAlarmDispatchMemberName(ctx, store, members, notification)
+	memberName, err := resolveAlarmDispatchMemberName(ctx, store, members.provider, notification)
 	if err != nil {
 		return alarmDispatchItemView{}, err
 	}
@@ -159,12 +173,18 @@ func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store
 }
 
 // 콜라보 표시명에 필요한 멤버를 적재하지 못하면 이름을 빼고 보내지 않고 렌더 실패로 돌려준다(발송 전 실패로 재시도).
-func formatAlarmDispatchCollabMembers(ctx context.Context, members domain.MemberDataProvider, stream *domain.Stream) (string, error) {
-	if stream == nil {
+// 콜라보 이름이 없으면 멤버를 적재하지 않는다.
+func formatAlarmDispatchCollabMembers(ctx context.Context, members *alarmDispatchMembers, stream *domain.Stream) (string, error) {
+	if stream == nil || len(stream.CollaboTalentNames) == 0 {
 		return "", nil
 	}
 
-	names, err := officialidentity.DisplayNames(ctx, members, stream.CollaboTalentNames, stream.ChannelID)
+	index, err := members.collabIndex(ctx)
+	if err != nil {
+		return "", fmt.Errorf("format collab members: %w", err)
+	}
+
+	names, err := index.DisplayNames(ctx, members.provider, stream.CollaboTalentNames, stream.ChannelID)
 	if err != nil {
 		return "", fmt.Errorf("format collab members: %w", err)
 	}
@@ -203,7 +223,7 @@ func alarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
 func buildAlarmDispatchGroupViewWithShortLinks(
 	ctx context.Context,
 	store *messagestrings.Store,
-	members domain.MemberDataProvider,
+	members *alarmDispatchMembers,
 	group alarmDispatchGroup,
 	shortLinks shortlinkservice.YouTubeBuilder,
 ) (alarmDispatchGroupView, error) {
@@ -226,7 +246,7 @@ func buildAlarmDispatchGroupViewWithShortLinks(
 	}, nil
 }
 
-func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
+func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members *alarmDispatchMembers, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
 	shortLinks, err := configuredAlarmShortLinkBuilder(shortLinkBaseURL)
 	if err != nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
@@ -245,7 +265,7 @@ func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *templat
 	return message, nil
 }
 
-func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification) (delivery.MessageVariants, error) {
+func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members *alarmDispatchMembers, notification *domain.AlarmNotification) (delivery.MessageVariants, error) {
 	view, err := buildAlarmDispatchItemView(ctx, store, members, notification, -1)
 	if err != nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification: %w", err)

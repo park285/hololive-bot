@@ -66,8 +66,7 @@ func (s *dispatchOpsStub) Requeue(ctx context.Context, _ string, r dispatchops.R
 }
 
 func dispatchTestRouter(ops DispatchOperations) *gin.Engine {
-	h := (&Handler{}).DomainHandlers().Alarm
-	h.SetDispatchOperations(ops)
+	h := &AlarmHandler{dispatchOps: ops}
 
 	router := gin.New()
 	router.GET("/dispatch/summary", h.GetDispatchSummary)

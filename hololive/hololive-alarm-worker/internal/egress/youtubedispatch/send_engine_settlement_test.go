@@ -217,8 +217,11 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 
 	engine.config.MaxRetries = 3
 	engine.config.RetryBackoff = time.Minute
+	// 운영 조립처럼 엔진과 전이 저장소가 같은 lease를 쓰고, fallback 개별 발송 예산(DeliverySendTimeout + 5s)이 남게 한다.
+	engine.config.LockTimeout = time.Minute
+	engine.config.DeliverySendTimeout = 30 * time.Second
 
-	transition, err := store.NewTransitionStore(db, engine.logger, store.TransitionConfig{Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
+	transition, err := store.NewTransitionStore(db, engine.logger, store.TransitionConfig{Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: engine.config.LockTimeout, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
 	require.NoError(t, err)
 
 	t.Cleanup(cancel)

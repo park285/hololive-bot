@@ -109,7 +109,7 @@ type JobSpec struct {
 	PollInterval      time.Duration
 }
 
-func (s *JobSpec) validate(contracts collection.JobContractSet) (collection.JobContract, []contract.ObservationKind, error) {
+func (s *JobSpec) validate(contracts collection.StaticJobContracts) (collection.JobContract, []contract.ObservationKind, error) {
 	if s == nil {
 		return collection.JobContract{}, nil, fmt.Errorf("%w: job is nil", ErrInvalidJob)
 	}

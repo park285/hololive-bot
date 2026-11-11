@@ -8,7 +8,7 @@ import {
   paginationResult,
 } from "./pagination.mjs";
 import { textOf } from "./map-posts.mjs";
-import { assertVideoRowTitled, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
+import { assertVideoRowTitled, hasUpcomingMarker, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 
 const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, items: [] });
 
@@ -17,22 +17,15 @@ const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, it
  * @returns {Promise<Omit<import("./contracts.d.ts").ContentResult, "protocol_version">>}
  */
 export async function fetchContentFeed({
-  channelId,
-  kind,
+  channelId: id,
+  kind: contentKind,
   maxResults,
   maxPages,
   maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
 } = {}) {
-  const id = String(channelId ?? "").trim();
-  const contentKind = String(kind ?? "").trim();
-  if (id === "") {
-    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel id is required");
-  }
   if (contentKind !== "videos" && contentKind !== "shorts") {
-    const err = new Error("content kind must be videos or shorts");
-    err.code = "parser_drift";
-    throw err;
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "content kind must be videos or shorts");
   }
   if (innertube == null || typeof innertube.getChannel !== "function") {
     throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "innertube client is required");
@@ -84,17 +77,12 @@ export function mapContentItems(feed, channelId, kind = "shorts") {
 
 function contentRows(feed) {
   const videos = readUpstream(() => feed?.videos);
-  if (Array.isArray(videos)) {
-    return videos;
-  }
-  const items = readUpstream(() => feed?.items);
-  if (Array.isArray(items)) {
-    return items;
-  } else {
+  if (!Array.isArray(videos)) {
     const error = new Error("content page shape is not recognized");
     error.code = "parser_drift";
     throw error;
   }
+  return videos;
 }
 
 // 예산에 선택되지 않은 항목은 정규화하지 않도록 행을 지연 변환합니다.
@@ -104,9 +92,10 @@ function* mapContentPage(feed, channelId, kind) {
   }
 }
 
-// videos 탭 lockup의 공개 시각은 상대 문자열("3 hours ago")이고 예정 시각은 지역화 문자열이라 절대 시각 근거가 아닙니다.
-// 그래서 videos 항목에는 시각을 싣지 않고, collector가 영상별 video_live_check RPC(호출마다 limiter 1회)로 근거를 얻습니다.
-// is_upcoming은 구조화된 예정 표시일 뿐 시각 근거가 아니며, collector가 저장한 근거가 현재 상태와 맞는지 판단할 때만 씁니다.
+// 목록 행의 공개·예정 시각은 상대·지역화 문자열("3 hours ago")이라 절대 시각 근거가 아니고, shorts 행(ShortsLockupView·
+// ReelItem)에는 시각 필드가 없습니다. 그래서 항목에 시각을 싣지 않으며, collector가 videos 항목만 영상별
+// video_live_check RPC(호출마다 limiter 1회)로 근거를 얻습니다. is_upcoming은 streams 판정과 같은 구조화된 예정 표시일 뿐
+// 시각 근거가 아니며, 저장한 근거가 현재 상태와 맞는지 판단할 때만 씁니다.
 // 이 함수는 upstream 호출을 하지 않으므로 목록 RPC 하나가 숨은 영상별 호출을 만들지 않습니다.
 function mapContentRow(row, channelId, kind) {
   assertVideoRowTitled(row);
@@ -121,30 +110,8 @@ function mapContentRow(row, channelId, kind) {
     channel_id: textOf(row?.author?.id || row?.channel_id || channelId).trim() || channelId,
     title: videoTitleOf(row),
   };
-  if (kind === "videos") {
-    return isUpcomingContentRow(row) ? { ...item, is_upcoming: true } : item;
+  if (kind === "videos" && (hasUpcomingMarker(row) || lockupBadgeTexts(row).includes("upcoming"))) {
+    return { ...item, is_upcoming: true };
   }
-  return {
-    ...item,
-    published_at: optionalTime(row?.published || row?.published_at),
-    scheduled_for: optionalTime(row?.scheduled || row?.scheduled_for),
-  };
-}
-
-function isUpcomingContentRow(row) {
-  return row?.is_upcoming === true ||
-    row?.isUpcoming === true ||
-    lockupBadgeTexts(row).includes("upcoming");
-}
-
-function optionalTime(value) {
-  const text = textOf(value).trim();
-  if (text === "") {
-    return undefined;
-  }
-  const parsed = Date.parse(text);
-  if (!Number.isFinite(parsed)) {
-    return undefined;
-  }
-  return new Date(parsed).toISOString();
+  return item;
 }

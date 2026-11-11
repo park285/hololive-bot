@@ -38,7 +38,32 @@ func (p *dispatcherTickProbe) tick() {
 	}
 }
 
-func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
+// runDispatcherInBackground는 Run을 별도 goroutine에서 돌리고, 시험이 끝날 때 취소한 뒤 Run이 반환하기를 기다린다.
+func runDispatcherInBackground(t *testing.T, dispatcher *Dispatcher) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+
+	go func() {
+		done <- dispatcher.Run(ctx)
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("Run() error = %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("Run did not return after context cancellation")
+		}
+	})
+}
+
+func TestDispatcherRunProcessesPendingOutboxImmediately(t *testing.T) {
 	t.Parallel()
 
 	db := newDeliveryPool(t)
@@ -76,9 +101,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	ctx := t.Context()
-
-	dispatcher.Start(ctx)
+	runDispatcherInBackground(t, dispatcher)
 
 	require.Eventually(t, func() bool {
 		sender.mu.Lock()

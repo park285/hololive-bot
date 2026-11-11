@@ -46,7 +46,6 @@ type alarmHTTPWriter interface {
 }
 
 type alarmHTTPReader interface {
-	GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error)
 	ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error)
 	GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error)
 	CountAlarmEntries(context.Context) (int, error)
@@ -149,7 +148,6 @@ func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal := rg.Group(contractsalarm.BasePath)
 	internal.POST(contractsalarm.AddRoute, h.AddAlarm)
 	internal.POST(contractsalarm.RemoveRoute, h.RemoveAlarm)
-	internal.GET(contractsalarm.RoomRoute, h.GetRoomAlarmsWithTypes)
 	internal.GET(contractsalarm.RoomViewRoute, h.GetRoomAlarmsView)
 	internal.POST(contractsalarm.ClearRoute, h.ClearRoomAlarms)
 	internal.PUT(contractsalarm.SettingsRoute, h.UpdateAlarmAdvanceMinutes)
@@ -264,21 +262,6 @@ func validAlarmHost(channelID, hostID string) bool {
 	_, ok := mekparkhost.SubscriptionMember(strings.TrimSpace(channelID), strings.TrimSpace(hostID))
 
 	return ok
-}
-
-func (h *Handler) GetRoomAlarmsWithTypes(c *gin.Context) {
-	roomID := c.Param("id")
-	ctx := c.Request.Context()
-
-	alarms, err := h.alarm.GetRoomAlarmsWithTypes(ctx, roomID)
-	if err != nil {
-		h.logger.Error("방 알람 조회 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
-		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_room_alarms_failed", "get room alarms failed"))
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: alarms})
 }
 
 func (h *Handler) GetRoomAlarmsView(c *gin.Context) {

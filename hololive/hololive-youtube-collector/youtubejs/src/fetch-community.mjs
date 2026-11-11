@@ -12,19 +12,14 @@ import {
 
 const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, posts: [] });
 
-export function listBackstagePosts(feed, postType) {
+function listBackstagePosts(feed) {
   const posts = readUpstream(() => feed?.posts);
-  if (Array.isArray(posts)) {
-    return posts;
+  if (!Array.isArray(posts)) {
+    const error = new Error("community page shape is not recognized");
+    error.code = "parser_drift";
+    throw error;
   }
-  const memo = readUpstream(() => feed?.memo);
-  if (typeof memo?.getType === "function") {
-    const typed = readUpstream(() => memo.getType(postType)) || [];
-    return [...typed];
-  }
-  const error = new Error("community page shape is not recognized");
-  error.code = "parser_drift";
-  throw error;
+  return posts;
 }
 
 /**
@@ -32,17 +27,12 @@ export function listBackstagePosts(feed, postType) {
  * @returns {Promise<Omit<import("./contracts.d.ts").CommunityResult, "protocol_version">>}
  */
 export async function fetchCommunityFeed({
-  channelId,
+  channelId: id,
   maxResults,
   maxPages,
   maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
-  postType,
 } = {}) {
-  const id = String(channelId ?? "").trim();
-  if (id === "") {
-    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel id is required");
-  }
   if (innertube == null || typeof innertube.getChannel !== "function") {
     throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "innertube client is required");
   }
@@ -65,7 +55,7 @@ export async function fetchCommunityFeed({
     },
     mapPage: (current) => {
       const mapped = [];
-      for (const post of listBackstagePosts(current, postType)) {
+      for (const post of listBackstagePosts(current)) {
         const item = mapPost(post);
         if (item == null) {
           const error = new Error("community post id is missing");
@@ -86,7 +76,7 @@ export async function fetchCommunityFeed({
 }
 
 /** @returns {Omit<import("./contracts.d.ts").CommunityResult, "protocol_version">} */
-export function emptyCommunityPage() {
+function emptyCommunityPage() {
   return {
     posts: [],
     ...paginationResult({

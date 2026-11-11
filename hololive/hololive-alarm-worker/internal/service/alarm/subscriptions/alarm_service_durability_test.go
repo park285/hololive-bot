@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
-	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -84,7 +83,6 @@ func newLenientAlarmCacheMock(
 	cacheMock.GetClientFunc = cacheClient.GetClient
 	cacheMock.DoMultiFunc = cacheClient.DoMulti
 	cacheMock.SMembersFunc = cacheClient.SMembers
-	cacheMock.SIsMemberFunc = cacheClient.SIsMember
 	cacheMock.HGetFunc = cacheClient.HGet
 	cacheMock.HGetAllFunc = cacheClient.HGetAll
 	cacheMock.SetFunc = cacheClient.Set
@@ -92,7 +90,6 @@ func newLenientAlarmCacheMock(
 	cacheMock.DelFunc = cacheClient.Del
 	cacheMock.DelManyFunc = cacheClient.DelMany
 	cacheMock.ScanKeyPagesFunc = cacheClient.ScanKeyPages
-	cacheMock.HDelFunc = cacheClient.HDel
 	cacheMock.HMSetFunc = cacheClient.HMSet
 	cacheMock.ExistsFunc = cacheClient.Exists
 	cacheMock.ExpireFunc = cacheClient.Expire
@@ -148,17 +145,13 @@ func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, added)
 
-	roomAlarms, err := as.GetRoomAlarms(ctx, testRoomID)
+	roomAlarms, err := roomChannelIDs(ctx, as, testRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, roomAlarms)
 
-	liveSubscribers, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeLive)
+	liveSubscribers, err := channelSubscriberRooms(ctx, as, testChannelID, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	assert.Empty(t, liveSubscribers)
-
-	memberName, err := as.cache.HGet(ctx, alarmkeys.MemberNameKey, testChannelID)
-	require.NoError(t, err)
-	assert.Empty(t, memberName)
 }
 
 func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
@@ -235,7 +228,7 @@ func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
 				})
 			},
 			wantEvent: "persist alarm type update before cache removal.failed",
-			wantError: "persist alarm type update: stub add: db down",
+			wantError: "persist alarm: stub add: db down",
 		},
 	}
 
@@ -309,7 +302,7 @@ func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, removed)
 
-	roomAlarms, err := as.GetRoomAlarms(ctx, testRoomID)
+	roomAlarms, err := roomChannelIDs(ctx, as, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{testChannelID}, roomAlarms)
 }

@@ -55,7 +55,7 @@ func LoadRuntime() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load hololive-api admin plane: %w", err)
 	}
 
-	llmConfig, err := LoadLLMSchedulerRuntime()
+	llmConfig, err := buildLLMSchedulerConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load hololive-api llm plane: %w", err)
 	}
@@ -111,6 +111,7 @@ func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig, l
 	adminConfig.Server.H3KeyFile = botConfig.Server.H3KeyFile
 	adminConfig.Server.MetricsAddr = ""
 	adminConfig.Server.PprofAddr = ""
+	adminConfig.AlarmServiceURL = botConfig.AlarmServiceURL
 	adminConfig.Postgres.PoolMinConns = env.Int("ADMIN_API_POSTGRES_POOL_MIN_CONNS", 1)
 	adminConfig.Postgres.PoolMaxConns = env.Int("ADMIN_API_POSTGRES_POOL_MAX_CONNS", 4)
 
@@ -215,10 +216,6 @@ func (c *RuntimeConfig) validatePlaneRuntimes() error {
 func (c *RuntimeConfig) validateAlarmProviders() error {
 	if err := validateAlarmProviderURL(c.Bot.Environment, c.Bot.AlarmServiceURL); err != nil {
 		return fmt.Errorf("validate alarm provider URL: %w", err)
-	}
-
-	if c.Admin.AlarmServiceURL != c.Bot.AlarmServiceURL {
-		return errors.New("bot and admin planes must use the same alarm provider URL")
 	}
 
 	return nil

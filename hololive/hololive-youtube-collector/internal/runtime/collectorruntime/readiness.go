@@ -78,24 +78,14 @@ func evaluateReadiness(ctx context.Context, deps *readinessDeps) readinessRespon
 	return collectionReadiness(ctx, deps, &body)
 }
 
+// newReadinessResponse는 scheduler 관련 필드를 비워 두고, schedulerDependency가 snapshot 한 번으로 채웁니다.
 func newReadinessResponse(deps *readinessDeps) readinessResponse {
-	snap := SchedulerSnapshot{}
-
-	if deps.scheduler != nil {
-		snap = deps.scheduler.Snapshot()
-	}
-
 	return readinessResponse{
-		Runtime:            runtimeName,
-		InstanceID:         deps.instanceID,
-		Helper:             helperNotReady,
-		HandoffStatus:      HandoffNone,
-		DueJobs:            snap.Discovered,
-		DueJobsExact:       false,
-		QueueDepth:         snap.QueueDepth,
-		QueueCapacity:      snap.QueueCapacity,
-		QueueFull:          snap.QueueFull,
-		DiscoveryTruncated: snap.DiscoveryTruncated,
+		Runtime:       runtimeName,
+		InstanceID:    deps.instanceID,
+		Helper:        helperNotReady,
+		HandoffStatus: HandoffNone,
+		DueJobsExact:  false,
 	}
 }
 

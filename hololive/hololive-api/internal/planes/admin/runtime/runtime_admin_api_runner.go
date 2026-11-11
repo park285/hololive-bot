@@ -22,25 +22,12 @@ package adminruntime
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
-
-func (r *AdminAPIRuntime) Run() error {
-	if r == nil {
-		return nil
-	}
-
-	if err := applifecycle.Run(r.Logger, r.Start, r.Shutdown); err != nil {
-		return fmt.Errorf("run: %w", err)
-	}
-
-	return nil
-}
 
 func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {

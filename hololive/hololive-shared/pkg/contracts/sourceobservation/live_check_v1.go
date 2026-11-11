@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// LiveCheckContractGeneration은 channel_live_check·video_live_check의 첫 계약 세대다.
+// LiveCheckContractGeneration은 channel_live_check의 계약 세대이며, video_live_check는 VideoLifecycleContractGeneration을 쓴다.
 // 기존 live_snapshot 세대와 독립적으로 증가한다.
 const LiveCheckContractGeneration int64 = 1
 

@@ -29,6 +29,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -41,14 +42,14 @@ const (
 )
 
 type mockDigestService struct {
-	rooms        []model.SubscribedRoom
+	rooms        []newsmodel.SubscribedRoom
 	digests      map[string]*model.Digest
 	digestErrs   map[string]error
 	prepareCalls int
 	prepareErr   error
 	runPeriod    model.Period
 	runNow       time.Time
-	generator    model.DigestGenerator
+	generator    newsmodel.DigestGenerator
 }
 
 func (m *mockDigestService) GenerateRoomDigest(_ context.Context, roomID string, _ model.Period) (*model.Digest, error) {
@@ -66,11 +67,11 @@ func (m *mockDigestService) GenerateRoomDigest(_ context.Context, roomID string,
 	}, nil
 }
 
-func (m *mockDigestService) ListSubscribedRooms(_ context.Context) ([]model.SubscribedRoom, error) {
+func (m *mockDigestService) ListSubscribedRooms(_ context.Context) ([]newsmodel.SubscribedRoom, error) {
 	return m.rooms, nil
 }
 
-func (m *mockDigestService) PrepareDigestRun(_ context.Context, period model.Period, now time.Time) (model.DigestGenerator, error) {
+func (m *mockDigestService) PrepareDigestRun(_ context.Context, period model.Period, now time.Time) (newsmodel.DigestGenerator, error) {
 	m.prepareCalls++
 
 	m.runPeriod = period
@@ -168,7 +169,7 @@ func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOu
 }
 
 func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
+	service := &mockDigestService{rooms: []newsmodel.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
@@ -186,7 +187,7 @@ func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
 }
 
 func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}, {RoomID: "room-2"}}}
+	service := &mockDigestService{rooms: []newsmodel.SubscribedRoom{{RoomID: testRoomID}, {RoomID: "room-2"}}}
 	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
@@ -204,7 +205,7 @@ func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
 }
 
 func TestScheduler_AllEnqueueFailureReturnsError(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
+	service := &mockDigestService{rooms: []newsmodel.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
 
@@ -265,7 +266,7 @@ func TestScheduler_LifecycleNilGuards(t *testing.T) {
 
 func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 	service := &mockDigestService{
-		rooms: []model.SubscribedRoom{
+		rooms: []newsmodel.SubscribedRoom{
 			{RoomID: "room-fail"},
 			{RoomID: "room-ok"},
 		},
@@ -296,7 +297,7 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 
 func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 	service := &mockDigestService{
-		rooms: []model.SubscribedRoom{{RoomID: "room-no-members"}},
+		rooms: []newsmodel.SubscribedRoom{{RoomID: "room-no-members"}},
 		digestErrs: map[string]error{
 			"room-no-members": model.ErrNoSubscribedMembers,
 		},
@@ -323,7 +324,7 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 }
 
 func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
+	service := &mockDigestService{rooms: []newsmodel.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireToken: "tok-1", acquireAcquired: true}
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
@@ -343,7 +344,7 @@ func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	// Graceful degradation: locker는 Valkey 장애 시 (token, true, nil) 반환.
 	// 스케줄러는 정상 진행.
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
+	service := &mockDigestService{rooms: []newsmodel.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireToken: "degraded", acquireAcquired: true}
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
@@ -363,7 +364,7 @@ func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 func TestDispatchDigestRoomsCountsRecoveredPanicAsFailure(t *testing.T) {
 	t.Parallel()
 
-	rooms := []model.SubscribedRoom{{RoomID: "room-panic"}, {RoomID: "room-ok"}}
+	rooms := []newsmodel.SubscribedRoom{{RoomID: "room-panic"}, {RoomID: "room-ok"}}
 	result := dispatchDigestRooms(t.Context(), rooms, &digestDispatchConfig{
 		periodKey: "2026-W28",
 		processRoom: func(_ context.Context, _, roomID string) digestEnqueueResult {

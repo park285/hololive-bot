@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
@@ -27,12 +28,22 @@ type prepareOutcome struct {
 	err          error
 }
 
-func (n *Notifier) prepareSendBatch(ctx context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, []claimedSend, []error) {
-	outcomes, ctxErr := n.prepareOutcomes(ctx, notifications)
+func (n *Notifier) prepareSendBatch(
+	ctx context.Context,
+	notifications []*domain.AlarmNotification,
+	targetPolicy targetpolicy.TargetMinutePolicy,
+) (delivery.SendResult, []claimedSend, []error) {
+	outcomes, ctxErr := n.prepareOutcomes(ctx, notifications, targetPolicy)
 	return assemblePrepared(outcomes, ctxErr, n)
 }
 
-func (n *Notifier) prepareOutcomes(ctx context.Context, notifications []*domain.AlarmNotification) ([]prepareOutcome, error) {
+// prepareOutcomes: notification 별 prepareOne 을 bounded 병렬로 수행하되, 결과는 입력 인덱스 슬롯에 기록해 순서를 보존한다.
+// 여기서 ctx 취소가 발생하면 errgroup 의 context-done error 를 함께 반환한다(직렬 base 와 동등한 error 전파를 위해).
+func (n *Notifier) prepareOutcomes(
+	ctx context.Context,
+	notifications []*domain.AlarmNotification,
+	targetPolicy targetpolicy.TargetMinutePolicy,
+) ([]prepareOutcome, error) {
 	outcomes := make([]prepareOutcome, len(notifications))
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -49,7 +60,7 @@ func (n *Notifier) prepareOutcomes(ctx context.Context, notifications []*domain.
 					return fmt.Errorf("prepare notification: %w", err)
 				}
 
-				prepared, err := n.prepareOne(egCtx, notification)
+				prepared, err := n.prepareOne(egCtx, notification, targetPolicy)
 
 				outcomes[i] = prepareOutcome{
 					notification: notification,

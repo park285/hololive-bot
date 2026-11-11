@@ -148,7 +148,7 @@ func (s *EventSummarizer) reviewSummary(
 			Developer: reviewSummarySystemPrompt(),
 			User:      userPrompt,
 		},
-		reviewSummarySchema(),
+		consensus.ReviewVerdictSchema(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("reviewer llm call: %w", err)
@@ -369,33 +369,6 @@ Tasks:
 3) Keep section labels if present: [기간 행사], [추가 발견].
 4) Keep all valid links.
 5) Return JSON only.`, summaryType, periodKey, string(eventBytes), assembled), nil
-}
-
-func reviewSummarySchema() map[string]any {
-	return consensus.ObjectSchema(
-		map[string]any{
-			"approved": consensus.TypeSchema("boolean"),
-			"confidence": map[string]any{
-				"type":    "number",
-				"minimum": 0,
-				"maximum": 1,
-			},
-			"issues": consensus.ArraySchema(reviewIssueSchema()),
-		},
-		[]string{"approved", "confidence", "issues"},
-	)
-}
-
-func reviewIssueSchema() map[string]any {
-	return consensus.ObjectSchema(
-		map[string]any{
-			"field":       consensus.TypeSchema("string"),
-			"item_index":  consensus.TypeSchema("integer"),
-			"severity":    consensus.EnumSchema("string", []string{"critical", "warning", "info"}),
-			"description": consensus.TypeSchema("string"),
-		},
-		[]string{"field", "item_index", "severity", "description"},
-	)
 }
 
 func finalOutputReviewSchema() map[string]any {

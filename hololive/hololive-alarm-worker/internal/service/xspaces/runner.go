@@ -26,7 +26,7 @@ type startStore interface {
 	Prune(context.Context) error
 }
 type publisher interface {
-	PublishDispatchBatch(context.Context, []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error)
+	PublishDispatchBatch(context.Context, []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error)
 }
 
 // Runner는 세션 검증, 현재 방송 조회와 LIVE 구독 방 발송 의도를 순차적으로 처리한다.
@@ -229,9 +229,9 @@ func (r *Runner) publishStart(ctx context.Context, payload domain.XSpaceDispatch
 		return fmt.Errorf("resolve X subscription rooms: %w", err)
 	}
 
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(rooms))
+	envelopes := make([]dispatchoutbox.AlarmQueueEnvelope, 0, len(rooms))
 	for _, room := range rooms {
-		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+		envelopes = append(envelopes, dispatchoutbox.AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{RoomID: room, AlarmType: domain.AlarmTypeLive},
 			SourceKind:   domain.AlarmDispatchSourceKindXSpace,
 			XSpace:       &stored,

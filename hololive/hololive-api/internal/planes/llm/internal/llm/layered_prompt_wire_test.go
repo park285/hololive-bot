@@ -181,17 +181,13 @@ func assertSingleSystemLayeredMessages(t *testing.T, messages []map[string]any) 
 	}
 }
 
-func TestPresetClientSendsInstructionLayersAndReturnsRawJSON(t *testing.T) {
+func TestOpenAIClientChatCompletionsReturnsRawJSON(t *testing.T) {
 	const completion = `{"id":"chatcmpl-test","object":"chat.completion","created":0,"model":"gpt-test",` +
 		`"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{\"ok\":true}"}}]}`
 
 	server, captured := newCapturingLLMServer(t, http.StatusOK, completion)
-
-	client, err := NewPresetClient(server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler),
+	client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler),
 		WithSchemaName("member_news_summary"), WithChatCompletions(), WithWebSearch(false))
-	if err != nil {
-		t.Fatalf("NewPresetClient() error = %v", err)
-	}
 
 	got, err := client.GenerateJSON(t.Context(), testWirePromptLayers(), testObjectSchema())
 	if err != nil {
@@ -208,10 +204,4 @@ func TestPresetClientSendsInstructionLayersAndReturnsRawJSON(t *testing.T) {
 	}
 
 	assertSingleSystemLayeredMessages(t, requestMessages(t, body, "messages"))
-}
-
-func TestNewPresetClientRejectsEmptySchemaName(t *testing.T) {
-	if _, err := NewPresetClient("https://example.com/v1", "test-key", "gpt-test", slog.New(slog.DiscardHandler)); err == nil {
-		t.Fatal("NewPresetClient() error = nil, want empty schema name rejection")
-	}
 }

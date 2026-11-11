@@ -12,7 +12,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
-// AddAlarm은 채팅방의 채널·멤버별 알림 종류를 저장하고 캐시를 갱신하며 새 종류가 추가됐는지 반환한다.
+// AddAlarm은 채팅방의 채널·멤버별 알림 종류를 저장하고 새 종류가 추가됐는지 반환한다. 구독 캐시는 DB 변경 전에
+// 무효화하므로 commit 뒤에는 캐시 작업이 없다.
 func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	startedAt := as.lockCacheMutation("add")
 	defer as.cacheMutationMu.Unlock()
@@ -61,28 +62,9 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		return false, fmt.Errorf("persist add alarm mutation: %w", opErr)
 	}
 
-	cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheCleanupTimeout)
-	defer cancel()
-
-	if err := as.cacheAddAlarmMutation(cacheCtx, &mutation); err != nil {
-		opErr = err
-		return false, fmt.Errorf("cache add alarm mutation: %w", err)
-	}
-
 	as.logAlarmAdded(normalizedReq, mutation.newlyAddedTypes)
 
 	return true, nil
-}
-
-func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) error {
-	err := as.cacheAlarm(ctx, mutation.record)
-	if err == nil {
-		return nil
-	}
-
-	opErr := as.rebuildAlarmCacheFromRepository(ctx, "add", fmt.Errorf("add alarm: %w", err))
-
-	return sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild add cache from repository", opErr)
 }
 
 func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequest, error) {
@@ -125,7 +107,7 @@ func (as *AlarmService) prepareAddAlarmMutation(ctx context.Context, req *domain
 
 	record := buildAlarmRecord(req, mergedTypes)
 
-	return addAlarmMutation{record: record, newlyAddedTypes: newlyAddedTypes, existing: existing != nil}, true, nil
+	return addAlarmMutation{record: record, newlyAddedTypes: newlyAddedTypes}, true, nil
 }
 
 func addAlarmTypeMutation(existing *domain.Alarm, requestedTypes domain.AlarmTypes) (merged, newlyAdded domain.AlarmTypes, err error) {
@@ -144,15 +126,7 @@ func addAlarmTypeMutation(existing *domain.Alarm, requestedTypes domain.AlarmTyp
 }
 
 func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) error {
-	var err error
-
-	if mutation.existing {
-		err = as.updateAlarmTypes(ctx, mutation.record)
-	} else {
-		err = as.persistAlarm(ctx, mutation.record)
-	}
-
-	if err != nil {
+	if err := as.persistAlarm(ctx, mutation.record); err != nil {
 		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm before cache write", err)
 	}
 

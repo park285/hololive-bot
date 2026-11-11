@@ -8,9 +8,9 @@
 
 - YouTube outbox dispatcher는 `hololive-alarm-worker/internal/egress/youtubedispatch`가 소유합니다.
 - YouTube 수집 scheduler는 `hololive-youtube-collector/internal/runtime/collectorruntime`, provider별 수집기는 `internal/runtime/{holodexcollector,officialcollector,youtubejscollector}`가 소유합니다.
-- 범용 notification delivery dispatcher·consumer store·maintenance·SQL은 `hololive-alarm-worker/internal/egress/notificationdelivery`가 소유합니다. shared `pkg/service/delivery`에는 API llm plane producer와 worker consumer가 함께 쓰는 producer enqueue 저장소, 요청·결과·sender interface, Iris transport와 locker만 남습니다.
+- 범용 notification delivery dispatcher·consumer store·maintenance·SQL은 `hololive-alarm-worker/internal/egress/notificationdelivery`가 소유합니다. shared `pkg/service/delivery`에는 producer enqueue 저장소(`OutboxRepository`), 요청·결과·sender interface, Iris transport만 남습니다. enqueue 저장소를 운영에서 쓰는 곳은 API llm plane 하나이고 worker는 store 시험 fixture로만 쓰며, 같은 payload를 소비하는 worker 저장소는 `notificationdelivery.Store`입니다. 실행 lock은 API llm plane `internal/planes/llm/internal/executionlock`이 소유합니다.
 - runtime 설정 집계는 API `internal/config`(`BotPlaneConfig`·`AdminPlaneConfig`·`APIWorkerProfile`)와 worker `internal/config`(`RuntimeConfig`·`AlarmWorkerProfile`)가 소유하고, shared `pkg/config/settings`에는 설정 구획 타입·loader·순수 검증만 남습니다. shared provider는 `pkg/providers/{database,holodex,iris,modules}` 하위 package만 두며 root `providers` package는 삭제했습니다.
-- YouTube outbox `analytics`/`deliverysql`/`telemetry`/`timeline`과 tracking/observation은 producer와 consumer 또는 shared 내부 다중-runtime 그래프가 함께 사용하므로 shared에 남습니다. YouTube store·format과 dispatch 설정·결과(`youtubedispatch`)는 alarm-worker `internal/`이 소유합니다.
+- YouTube 발송 원장 SQL·telemetry·timeline은 alarm-worker `internal/egress/youtubeoutbox/{deliverysql,telemetry,timeline}`이 소유합니다. shared `pkg/service/youtube`에는 API와 worker가 함께 쓰는 `tracking/observation`·`contentid`, API·collector와 shared 내부가 쓰는 `timestamp`, worker와 shared `tracking/observation`이 쓰는 `alarmtiming`만 남습니다. YouTube store·format과 dispatch 설정·결과(`youtubedispatch`)는 alarm-worker `internal/`이 소유합니다.
 - alarm HTTP provider(handler·route registrar·binding DTO)는 alarm-worker `internal/service/alarm/httpapi`로 이관을 마쳤습니다. shared `pkg/service/alarmhttp`에는 hololive-api bot/admin이 쓰는 client만 남습니다.
 - `repository-ownership.allowlist`는 table owner/writer/reader 정본이고 import graph로 재해석하지 않습니다.
 

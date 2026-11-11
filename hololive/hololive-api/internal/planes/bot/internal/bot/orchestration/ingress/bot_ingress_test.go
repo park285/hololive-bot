@@ -42,7 +42,7 @@ func TestMessageIngressPrepare_SkipsSelfSender(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	ingress := NewMessageIngress(
-		messaging.NewMessageAdapter("!", ""),
+		messaging.NewMessageAdapter("!"),
 		nil,
 		logger,
 		stringutil.Normalize("봇계정"),
@@ -70,7 +70,7 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	ingress := NewMessageIngress(
-		messaging.NewMessageAdapter("!", ""),
+		messaging.NewMessageAdapter("!"),
 		nil,
 		logger,
 		"",
@@ -97,12 +97,6 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 
 	if envelope.ChatID != "chat-123" {
 		t.Fatalf("chat id = %q, want %q", envelope.ChatID, "chat-123")
-	}
-
-	// Iris webhook에는 방 제목이 없다. 방 이름을 방 ID로 채우면 구독 upsert가 저장된 Kakao 방 이름을 방 ID로 덮어쓰므로
-	// 이름은 모르는 값(빈 문자열)이어야 한다.
-	if envelope.RoomName != "" {
-		t.Fatalf("room name = %q, want empty (Iris supplies no room title)", envelope.RoomName)
 	}
 
 	if envelope.UserID != testUserID {
@@ -133,7 +127,7 @@ func TestMessageIngressPrepare_ObservesRoomChat(t *testing.T) {
 
 	rooms := &recordingRooms{}
 	ingress := NewMessageIngress(
-		messaging.NewMessageAdapter("!", ""),
+		messaging.NewMessageAdapter("!"),
 		nil,
 		slog.New(slog.DiscardHandler),
 		"",
@@ -170,7 +164,7 @@ func TestMessageIngressAcceptsHasNoRoomObservationSideEffect(t *testing.T) {
 
 	rooms := &recordingRooms{}
 	ingress := NewMessageIngress(
-		messaging.NewMessageAdapter("!", ""),
+		messaging.NewMessageAdapter("!"),
 		nil,
 		slog.New(slog.DiscardHandler),
 		"",

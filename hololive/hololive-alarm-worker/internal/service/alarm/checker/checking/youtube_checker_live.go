@@ -9,12 +9,14 @@ import (
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	ctx context.Context,
+	targetPolicy targetpolicy.TargetMinutePolicy,
 	channelID string,
 	stream *domain.Stream,
 	subscriberRooms []string,
@@ -31,7 +33,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 		return nil, nil
 	}
 
-	minutesUntil := c.targetPolicySnapshot().PrimaryAdvanceMinute()
+	minutesUntil := targetPolicy.PrimaryAdvanceMinute()
 	resolvedStream := EnsureScheduledTime(stream, *startAt)
 
 	if resolvedStream == nil {
@@ -88,6 +90,8 @@ func liveObservedRecently(observedAt []*time.Time, now time.Time) bool {
 	return !observed.After(now) && now.Sub(observed) <= tier.LiveCatchupWindow
 }
 
+// unsuppressedLiveCatchupNotifications는 예정 알림 marker 조회에 실패한 방을 이번 평가에서 건너뛴다.
+// 이 정책은 egress의 fail-open과 다르며, context가 끝난 경우에만 오류로 돌려준다.
 func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	ctx context.Context,
 	channelID string,
@@ -98,6 +102,7 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 ) ([]*domain.AlarmNotification, int, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
 	suppressedRooms := 0
+	candidateRooms := make([]string, 0, len(subscriberRooms))
 
 	for _, roomID := range subscriberRooms {
 		// 발송을 마쳤거나 ledger가 실패 종료로 결론 낸 방은 같은 delivery를 다시 만들지 않는다.
@@ -106,10 +111,21 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 			continue
 		}
 
-		recentlyUpcoming, err := c.roomHasRecentUpcomingNotification(ctx, roomID, channelID, stream)
-		if err != nil {
+		candidateRooms = append(candidateRooms, roomID)
+	}
+
+	recentlyUpcoming, failedRooms := c.dedupService.RecentlyNotifiedUpcomingRooms(
+		ctx,
+		candidateRooms,
+		channelID,
+		stream,
+		tier.LiveCatchupSuppressWindow,
+	)
+
+	for _, roomID := range candidateRooms {
+		if err, failed := failedRooms[roomID]; failed {
 			if ctx.Err() != nil {
-				return nil, 0, fmt.Errorf("room has recent upcoming notification: %w", err)
+				return nil, 0, fmt.Errorf("build live catchup notifications: check upcoming suppress window: %w", err)
 			}
 
 			c.logger.Warn("live catchup dedup check failed, skipping room",
@@ -120,7 +136,7 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 			continue
 		}
 
-		if recentlyUpcoming {
+		if _, recent := recentlyUpcoming[roomID]; recent {
 			suppressedRooms++
 			continue
 		}
@@ -129,21 +145,6 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	}
 
 	return notifications, suppressedRooms, nil
-}
-
-func (c *YouTubeChecker) roomHasRecentUpcomingNotification(ctx context.Context, roomID, channelID string, stream *domain.Stream) (bool, error) {
-	recentlyUpcoming, err := c.dedupService.WasUpcomingEventNotifiedRecently(
-		ctx,
-		roomID,
-		channelID,
-		stream,
-		tier.LiveCatchupSuppressWindow,
-	)
-	if err != nil {
-		return false, fmt.Errorf("build live catchup notifications: check upcoming suppress window: %w", err)
-	}
-
-	return recentlyUpcoming, nil
 }
 
 func (c *YouTubeChecker) finalizeLiveCatchupNotifications(

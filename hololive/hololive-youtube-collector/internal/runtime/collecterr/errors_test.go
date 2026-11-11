@@ -21,23 +21,13 @@ import (
 func TestERR004OperationCodeCannotPersistToFailureColumns(t *testing.T) {
 	t.Parallel()
 
-	for _, code := range AllOperationCodes() {
+	for _, code := range []OperationCode{OperationCandidateLoadFailed, OperationLeaseAcquireFailed, OperationLeaseDeferFailed} {
 		if contract.CollectionErrorCode(code).Valid() {
 			t.Fatalf("operation code %q is also a CollectionErrorCode", code)
 		}
 
 		if _, err := contract.NewFailureDiagnostic(contract.CollectionErrorCode(code), contract.ClassTransient, "operation"); err == nil {
 			t.Fatalf("NewFailureDiagnostic accepted operation code %q", code)
-		}
-	}
-
-	for _, leftover := range []string{"pagination_gap", "lease_lost", "lease_not_acquired"} {
-		if contract.CollectionErrorCode(leftover).Valid() {
-			t.Fatalf("%q must not be a CollectionErrorCode", leftover)
-		}
-
-		if OperationCode(leftover).Valid() {
-			t.Fatalf("%q must not be an OperationCode", leftover)
 		}
 	}
 }
@@ -142,17 +132,17 @@ func TestERR009RetryAfterDeltaSecondsAndHTTPDate(t *testing.T) {
 	// 429/503 상태별 오류 분류는 providerhttp 테스트가 소유한다. 여기서는 헤더 해석 경계만 고정한다.
 	now := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
 
-	if delta := ParseRetryAfter("12", now); delta.Kind() != RetryAfter || delta.After() != 12*time.Second {
+	if delta := ParseRetryAfter("12"); delta.Kind() != RetryAfter || delta.After() != 12*time.Second {
 		t.Fatalf("delta-seconds hint = %#v", delta)
 	}
 
 	httpDate := now.Add(30 * time.Second).UTC().Format(http.TimeFormat)
-	if dated := ParseRetryAfter(httpDate, now); dated.Kind() != RetryAt || !dated.At().Equal(now.Add(30*time.Second)) {
+	if dated := ParseRetryAfter(httpDate); dated.Kind() != RetryAt || !dated.At().Equal(now.Add(30*time.Second)) {
 		t.Fatalf("HTTP-date hint = %#v", dated)
 	}
 
 	for _, value := range []string{"", "2147483648", "not-a-date", "0"} {
-		if hint := ParseRetryAfter(value, now); hint.Kind() != RetryDefault {
+		if hint := ParseRetryAfter(value); hint.Kind() != RetryDefault {
 			t.Fatalf("ParseRetryAfter(%q) = %#v, want default", value, hint)
 		}
 	}

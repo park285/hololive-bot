@@ -22,6 +22,10 @@ func NewClient(httpClient *providerhttp.ProviderHTTPClient, baseURL string, maxB
 		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "official schedule HTTP client is not configured")
 	}
 
+	if maxBody <= 0 {
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "official schedule max response body must be positive")
+	}
+
 	parsed, err := providerhttp.ParseOfficialScheduleBaseURL(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse official schedule base URL: %w", err)

@@ -152,3 +152,31 @@ func TestDispatchDeliveryRows_PerRoomMemberNameLookupFailureRetriesWithoutSendin
 		t.Fatalf("prepared failures = %v, want %v", got, want)
 	}
 }
+
+// 사전 렌더는 이번에 발송하는 행의 outbox만 포맷하고, claim했지만 발송하지 않는 행의 outbox는 표시명도 조회하지 않는다.
+func TestDispatchDeliveryRows_PreFormatsOnlyDispatchedRowOutboxes(t *testing.T) {
+	t.Parallel()
+
+	memberNames := &recordingMemberNames{}
+	sender := &testSender{failRoom: map[string]bool{}}
+	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShorts, "{{.MemberName}}|{{.URL}}")
+	d := newDispatcherWithDepsForTest(t, nil, Dependencies{
+		Cache: cachemocks.NewLenientClient(), Sender: sender, Renderer: renderer, MemberNames: memberNames,
+	}, slog.New(slog.DiscardHandler), &Config{BatchSize: 10, DeliveryParallelism: 2})
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelTarget, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
+	}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
+
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
+
+	if !slices.Equal(result.SuccessDeliveryIDs, []int64{101}) {
+		t.Fatalf("successDeliveryIDs = %v, want [101]", result.SuccessDeliveryIDs)
+	}
+
+	if got := memberNames.lookups(); !slices.Equal(got, []string{testChannelCh1}) {
+		t.Fatalf("member name lookups = %v, want only the dispatched row channel", got)
+	}
+}

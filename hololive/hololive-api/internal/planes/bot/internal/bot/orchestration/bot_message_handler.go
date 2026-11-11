@@ -30,11 +30,11 @@ import (
 	"github.com/park285/iris-client-go/v5/webhook"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -77,7 +77,7 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 		}
 	}()
 
-	envelope, ok := b.ensureIngress().Prepare(ctx, message)
+	envelope, ok := b.ingress.Prepare(ctx, message)
 	if !ok {
 		return nil
 	}
@@ -89,18 +89,12 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 	cmdCtx.ThreadID = messageThreadID(message)
 	cmdCtx.MessageID = canonicalReplyIdentity(message)
 
-	if cmdCtx.MessageID == "" {
-		b.rejectWithoutReplyIdentity(ctx, envelope, commandType)
-
-		return nil
-	}
-
 	reqCtx := commandRequestContext(ctx, cmdCtx)
 
 	reqCtx = transport.WithRoomChat(reqCtx, envelope.RoomType, envelope.RoomLinkID)
 	reqCtx = b.transport.WithReplyFormat(reqCtx, envelope.ChatID)
 
-	if err := b.ensureCommandExecutor().Execute(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
+	if err := b.commandExecutor.Execute(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
 		responseErr := b.handleCommandExecutionError(reqCtx, envelope.ChatID, commandType, err)
 		if responseErr != nil {
 			return commandOutcomeUnknownError{cause: errors.Join(err, responseErr)}
@@ -115,17 +109,15 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 // AcceptsMessage는 webhook payload를 durable inbox에 저장하기 전에 ProcessMessage와
 // 동일한 결정적 ingress 조건을 적용합니다.
 func (b *Bot) AcceptsMessage(ctx context.Context, message *webhook.Message) bool {
-	return b.ensureIngress().Accepts(ctx, message)
+	return b.ingress.Accepts(ctx, message)
 }
 
 func newCommandContextFromIngress(envelope *ingress.Envelope) *botcommand.CommandContext {
 	return botcommand.NewCommandContext(
 		envelope.ChatID,
-		envelope.RoomName,
 		envelope.UserID,
 		envelope.UserName,
 		envelope.Parsed.RawMessage,
-		false,
 	)
 }
 
@@ -151,9 +143,9 @@ func commandRequestContext(ctx context.Context, cmdCtx *botcommand.CommandContex
 	return ctx
 }
 
-// Iris는 blank message id로 payload를 만들지 않고(WebhookPayloadError::BlankMessageId),
-// webhook SDK도 X-Iris-Message-Id 없는 요청을 400으로 막는다. 그래도 식별자 없이 도달하면
-// 재전달마다 다른 응답 id가 생겨 중복 발화가 되므로 폴백 없이 빈 값을 돌려준다.
+// canonicalReplyIdentity는 durable inbox와 같은 키 형태의 message id를 응답 정체성으로 쓴다. 빈 message id는
+// durable admit이 inbox에 넣기 전에 거절하므로 여기까지 오지 않는다. 재전달마다 다른 응답 id가 생기면 중복
+// 발화가 되므로 대체 식별자를 만들지 않는다.
 func canonicalReplyIdentity(message *webhook.Message) string {
 	if message == nil || message.JSON == nil {
 		return ""
@@ -162,17 +154,7 @@ func canonicalReplyIdentity(message *webhook.Message) string {
 	return durability.MessageIdentity(message.JSON.MessageID)
 }
 
-func (b *Bot) rejectWithoutReplyIdentity(ctx context.Context, envelope *ingress.Envelope, commandType string) {
-	sharedlog.Warn(ctx, b.logger, EventBotReplyIdentityMissing,
-		"refusing command without canonical message id",
-		privacylog.ChatAttr(envelope.ChatID, envelope.RoomName),
-		slog.String("command", commandType),
-	)
-}
-
 func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) error {
-	errorMsg := b.getErrorMessage(err)
-
 	if chatID == "" {
 		return nil
 	}
@@ -181,7 +163,7 @@ func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandTy
 		return nil
 	}
 
-	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
+	if sendErr := b.sendError(ctx, chatID, messaging.ErrCommandProcessingFailed); sendErr != nil {
 		errorAttrs := sharedlog.ErrorAttrs(sendErr)
 		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
 

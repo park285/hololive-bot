@@ -41,7 +41,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -84,8 +83,6 @@ type distributedRateLimiter interface {
 	Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimitvalkey.Decision, error)
 }
 
-var errNoAPIKeys = stdErrors.New("no Holodex API keys configured")
-
 func NewHolodexAPIClient(
 	httpClient *http.Client,
 	baseURL string,
@@ -96,17 +93,11 @@ func NewHolodexAPIClient(
 	holodexCfg *settings.HolodexConfig,
 ) (*APIClient, error) {
 	if holodexCfg == nil {
-		cfg := settings.DefaultHolodexOperationalConfig()
-
-		holodexCfg = &cfg
+		return nil, stdErrors.New("holodex config is nil")
 	}
 
 	if err := settings.ValidateHolodexRequestConfig(holodexCfg); err != nil {
 		return nil, fmt.Errorf("validate holodex request config: %w", err)
-	}
-
-	if httpClient == nil {
-		httpClient = newHolodexHTTPClient(holodexCfg.Timeout)
 	}
 
 	configureHolodexHTTP2(httpClient)
@@ -139,14 +130,6 @@ func NewHolodexAPIClient(
 	}, nil
 }
 
-func newHolodexHTTPClient(timeout time.Duration) *http.Client {
-	client := httputil.NewExternalAPIClient(timeout)
-
-	configureHolodexHTTP2(client)
-
-	return client
-}
-
 func configureHolodexHTTP2(client *http.Client) {
 	transport, ok := client.Transport.(*http.Transport)
 
@@ -159,8 +142,4 @@ func configureHolodexHTTP2(client *http.Client) {
 	protocols.SetHTTP2(true)
 
 	transport.Protocols = protocols
-}
-
-func (c *APIClient) getNextAPIKey() string {
-	return c.apiKey
 }

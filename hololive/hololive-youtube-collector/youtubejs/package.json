@@ -8,7 +8,6 @@
   },
   "scripts": {
     "test": "node --test --test-concurrency=1 src/*.test.mjs",
-    "test:pagination-performance": "node --expose-gc src/pagination-performance.mjs",
     "start": "node src/server.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p jsconfig.json"
   },

@@ -136,7 +136,7 @@ func validatePublishedAtPayload(label, id string, recordPublishedAt, payloadPubl
 	}
 
 	wantPublishedAt := yttimestamp.Format(*recordPublishedAt)
-	gotPublishedAt := payloadPublishedAt.Format(yttimestamp.Canonical.Layout)
+	gotPublishedAt := payloadPublishedAt.Format(yttimestamp.Layout)
 
 	if gotPublishedAt != wantPublishedAt {
 		return fmt.Errorf("%s %s: payload published_at mismatch: got %s want %s", label, id, gotPublishedAt, wantPublishedAt)

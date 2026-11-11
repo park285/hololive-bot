@@ -203,3 +203,71 @@ func TestRepositoryPostgres_ScrapeRecoversPartialPersistence(t *testing.T) {
 	require.Zero(t, result.StoredEvents)
 	require.Equal(t, 2, result.SkippedKnown)
 }
+
+// 날짜 없는 RSS 행은 주간·월간 조회와 같은 KST 게시일을 행사일로 보고 만료돼야 활성 행과 링크 점검 대상이 계속 늘지 않는다.
+func TestRepositoryPostgres_UpdateExpiredEventsUsesKSTPublicationDateForUndatedRows(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	repository := majorevent.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, nil)
+	ctx := t.Context()
+	now := time.Now()
+	past := now.AddDate(0, 0, -2)
+	future := now.AddDate(0, 0, 2)
+	yesterday := now.AddDate(0, 0, -1)
+
+	for _, event := range []*domain.MajorEvent{
+		{ExternalID: "undated-old", Type: domain.MajorEventTypeNews, PubDate: &past},
+		{ExternalID: "undated-today", Type: domain.MajorEventTypeNews, PubDate: &now},
+		{ExternalID: "ended-event", Type: domain.MajorEventTypeEvent, PubDate: &now, EventStartDate: &past, EventEndDate: &yesterday},
+		{ExternalID: "running-event", Type: domain.MajorEventTypeEvent, PubDate: &past, EventStartDate: &past, EventEndDate: &future},
+	} {
+		event.Title = event.ExternalID
+		event.Link = "https://hololive.hololivepro.com/news/" + event.ExternalID
+		event.Status = domain.MajorEventStatusActive
+		event.Members = []string{}
+
+		require.NoError(t, repository.UpsertEvent(ctx, event))
+	}
+
+	expired, err := repository.UpdateExpiredEvents(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, expired)
+
+	active, err := repository.GetAllActiveEvents(ctx)
+	require.NoError(t, err)
+
+	ids := make([]string, 0, len(active))
+	for _, event := range active {
+		ids = append(ids, event.ExternalID)
+	}
+
+	slices.Sort(ids)
+	require.Equal(t, []string{"running-event", "undated-today"}, ids)
+}
+
+// 날짜 없는 행의 게시 시각은 KST 날짜로 주 범위와 비교한다. UTC로 자르면 KST 월요일 오전 게시가 전날로 밀려 빠진다.
+func TestRepositoryPostgres_GetEventsByDateRangeComparesPublicationDateInKST(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	repository := majorevent.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, nil)
+	ctx := t.Context()
+	kst := time.FixedZone("KST", 9*60*60)
+	mondayMorningKST := time.Date(2026, time.March, 1, 23, 30, 0, 0, time.UTC)
+	sundayNightKST := time.Date(2026, time.March, 1, 14, 30, 0, 0, time.UTC)
+
+	for _, event := range []*domain.MajorEvent{
+		{ExternalID: "monday-morning", Type: domain.MajorEventTypeNews, PubDate: &mondayMorningKST},
+		{ExternalID: "sunday-night", Type: domain.MajorEventTypeNews, PubDate: &sundayNightKST},
+	} {
+		event.Title = event.ExternalID
+		event.Link = "https://hololive.hololivepro.com/news/" + event.ExternalID
+		event.Status = domain.MajorEventStatusActive
+		event.Members = []string{}
+
+		require.NoError(t, repository.UpsertEvent(ctx, event))
+	}
+
+	events, err := repository.GetEventsByDateRange(ctx,
+		time.Date(2026, time.March, 2, 0, 0, 0, 0, kst), time.Date(2026, time.March, 8, 23, 59, 59, 0, kst), "2026-W10")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "monday-morning", events[0].ExternalID)
+}

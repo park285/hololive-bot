@@ -33,13 +33,17 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-api/internal/planes/llm/notification"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 var kst = timeutil.KSTZone
+
+const (
+	WeeklyScheduleWeekday = time.Monday
+	WeeklyScheduleHourKST = 9
+)
 
 // 월요일 발송 기준: 발송 당일(월)부터 일요일까지의 이벤트를 대상으로 합니다.
 func GetWeekRange(now time.Time) (start, end time.Time) {
@@ -149,14 +153,11 @@ func (s *Scheduler) Stop() {
 func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
 	nowKST := now.In(kst)
 
-	scheduleHour := constants.MajorEventConfig.ScheduleHourKST
-	scheduleWeekday := constants.MajorEventConfig.ScheduleWeekday
-
-	daysUntilTarget := (int(scheduleWeekday) - int(nowKST.Weekday()) + 7) % 7
+	daysUntilTarget := (int(WeeklyScheduleWeekday) - int(nowKST.Weekday()) + 7) % 7
 
 	targetDate := time.Date(
 		nowKST.Year(), nowKST.Month(), nowKST.Day()+daysUntilTarget,
-		scheduleHour, 0, 0, 0, kst,
+		WeeklyScheduleHourKST, 0, 0, 0, kst,
 	)
 
 	if !targetDate.After(nowKST) {

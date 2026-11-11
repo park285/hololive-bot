@@ -188,6 +188,8 @@ func appendAlarmDispatchRunner(
 	), nil
 }
 
+// buildAlarmDispatchHandoffReconciler의 지평은 발송 정산과 같은 alarm_dispatch profile handoff_horizon_ms이고 idle 주기는
+// alarm_dispatch poll 주기다. DLQ 뒤 dedup claim 키는 발송 runner와 같은 cache로 해제한다.
 func buildAlarmDispatchHandoffReconciler(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
@@ -387,7 +389,7 @@ func buildAlarmDispatchRunner(
 		return nil, fmt.Errorf("wakeup waiter with config: %w", err)
 	}
 
-	return alarmdispatch.NewRunner(
+	runner, err := alarmdispatch.NewRunner(
 		consumer,
 		sender,
 		template.NewRenderer(infra.Postgres.GetPool(), logger),
@@ -395,7 +397,12 @@ func buildAlarmDispatchRunner(
 		wakeupWaiter,
 		config,
 		logger,
-	), nil
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new alarm dispatch runner: %w", err)
+	}
+
+	return runner, nil
 }
 
 func newAlarmDispatchConsumer(appConfig *workerconfig.RuntimeConfig, infra *sharedmodules.InfraModule, logger *slog.Logger) (*dispatchoutbox.Consumer, error) {
@@ -491,17 +498,12 @@ func newYouTubeOutboxDispatcher(
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 ) (*youtubedispatch.Dispatcher, error) {
-	if appConfig == nil {
-		return nil, errors.New("youtube outbox config is required")
-	}
-
-	if infra == nil || infra.Postgres == nil || infra.Postgres.GetPool() == nil {
+	pool := infra.Postgres.GetPool()
+	if pool == nil {
 		return nil, errors.New("youtube outbox postgres pool is required")
 	}
 
 	dispatchConfig := youtubeDispatchConfig(appConfig)
-
-	pool := infra.Postgres.GetPool()
 
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: pool, Cache: infra.Cache, Sender: sender,

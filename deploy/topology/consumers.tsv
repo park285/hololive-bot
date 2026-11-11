@@ -1,5 +1,7 @@
 deploy/nginx/admin-dashboard-ingress.conf.template	osaka2
 deploy/nginx/holoshi-public-shortlink.conf	central
+deploy/podman/iris-seoul/hololive-youtube-collector-b.container	central,workstation,seoul
+deploy/podman/kapu/hololive-youtube-collector-d.container	central,workstation
 deploy/postgres/pg_hba.conf	central,workstation,seoul,osaka
 deploy/quadlet/hololive-bot/hololive-alarm-worker.container	seoul
 deploy/quadlet/hololive-bot/hololive-api.container	seoul

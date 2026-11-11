@@ -35,7 +35,7 @@ var ErrHandoffCheckClosed = errors.New("youtube handoff check closed without tra
 // HandoffAdmission은 Iris 202가 durable admission을 증명한 고정 요청 발송이다. CompleteSent는 SENT 전이와 같은
 // 트랜잭션에서 이 요청에 Iris requestId와 첫 handoff 확인 시각(admission + min(handoffcheck.FirstCheckDelay, Horizon))을
 // 기록한다. RequestBaseID·RequestGeneration은 보낸 고정 요청이고, Horizon은 handoff reconciler와 같은 youtube_delivery
-// executor attempt_timeout이다.
+// settings의 handoff_horizon_ms다.
 type HandoffAdmission struct {
 	RequestBaseID     string
 	RequestGeneration int

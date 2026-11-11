@@ -163,7 +163,8 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *botcommand.Comm
 }
 
 func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmdCtx *botcommand.CommandContext) error {
-	if err := c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
+	// Iris webhook에는 방 제목이 없어 이름을 비워 넘긴다. 구독 upsert는 빈 이름이면 저장된 방 이름을 유지한다.
+	if err := c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, ""); err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 

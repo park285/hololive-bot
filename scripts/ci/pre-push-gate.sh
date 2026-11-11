@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # pre-push-gate: push 전 필수 품질 게이트.
-# ~/.git-hooks/pre-push 에서 위임 호출됨.
-# 이전 GitHub Actions CI (Verify, Architecture Gates, Dependency Hygiene,
-# Frontend Quality) 를 로컬 게이트로 대체.
+# iris-stack/.githooks/pre-push가 직접 호출한다(전역 hook은 attribution만 검사).
+# PR fast gate(.github/workflows/ci.yml)와 별개로 release 판본 정책, 배포·운영 스크립트 테스트,
+# scripts/ci/local-ci.sh 전체 검증과 govulncheck를 게시 전에 로컬에서 실행한다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -183,7 +183,7 @@ run_content_gates() {
     scripts/build/build-youtube-collector-go.sh scripts/build/check-youtube-collector-go-artifact.sh \
     scripts/ci/public-pr-go-gate.sh scripts/ci/python-runtime.sh hololive/hololive-youtube-collector/Makefile
   run_if_changed scripts/build/build-all_test.sh \
-    build-all.sh scripts/deploy/lib/source-revision.sh scripts/deploy/lib/compose-services.sh
+    build-all.sh scripts/deploy/lib/source-revision.sh
   run_if_changed scripts/build/image-runtime-tree-permissions_test.sh \
     hololive/hololive-youtube-collector/Dockerfile.po-sandbox hololive/hololive-youtube-collector/Dockerfile \
     hololive/hololive-alarm-worker/Dockerfile
@@ -205,6 +205,9 @@ run_content_gates() {
     scripts/deploy/lib scripts/logs/ap-host-native-status.sh
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib
+  run_if_changed scripts/deploy/lib/ap-host_test.sh scripts/deploy/lib/ap-host.sh scripts/deploy/ap-hosts
+  run_if_changed hololive/hololive-api/scripts/test-bot-env-loader.sh \
+    hololive/hololive-api/scripts/bot.sh scripts/deploy/lib/compose-env.sh
 
   echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
   LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \

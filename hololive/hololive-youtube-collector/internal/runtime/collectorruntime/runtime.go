@@ -40,7 +40,7 @@ type Runtime struct {
 
 func Build(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger, waitForDatabase bool) (*Runtime, error) {
 	if err := validateBuildInputs(appConfig, logger); err != nil {
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("validate build inputs: %w", err)
 	}
 
 	if !collectorProfileEnabled(appConfig.WorkerProfile) {

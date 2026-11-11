@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type Consumer struct {
@@ -115,7 +114,7 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 // 복원 실패 시 부분 발송 입력을 반환하지 않고, 확정된 DLQ를 제외한 배치의 lease를
 // 요청 취소와 독립된 최대 5초의 정리로 반환합니다. 정리 오류는 원인 오류와 함께 반환하며
 // attempt, send-unit, 미발송 dedup 키와 이미 확정된 DLQ 전이는 유지합니다.
-func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]AlarmQueueEnvelope, error) {
 	if c == nil || c.repository == nil {
 		return nil, errors.New("drain outbox batch: repository is nil")
 	}
@@ -204,8 +203,8 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	}
 }
 
-// 미스는 *sendfence.MissError로 돌려준다.
-func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+// MarkSending은 그룹 전체 send unit을 고정 요청으로 발송 상태에 넣는다. 미스는 *sendfence.MissError로 돌려준다.
+func (c *Consumer) MarkSending(ctx context.Context, envelopes []AlarmQueueEnvelope) error {
 	claims := claimsFromEnvelopes(envelopes)
 	if len(claims) == 0 || len(envelopes) == 0 {
 		return nil
@@ -225,7 +224,7 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueu
 // min(handoffcheck.FirstCheckDelay, handoffHorizon) 뒤로 예약한다. 지평 handoffHorizon은 handoff reconciler와 같은
 // alarm_dispatch executor attempt_timeout이라 첫 확인도 admission + 지평을 넘지 않는다. 미스는
 // *sendfence.MissError로 돌려준다.
-func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
+func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
 	claims := claimsFromEnvelopes(envelopes)
 	if len(claims) == 0 {
 		return nil
@@ -242,7 +241,7 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQ
 }
 
 // ReleaseLeased는 발송 전 claim을 같은 attempt로 반환해 다음 claim이 send unit 전원을 다시 모으게 한다.
-func (c *Consumer) ReleaseLeased(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *Consumer) ReleaseLeased(ctx context.Context, envelopes []AlarmQueueEnvelope) error {
 	if err := c.repository.ReleaseLeased(ctx, claimsFromEnvelopes(envelopes), c.workerID); err != nil {
 		return fmt.Errorf("release leased: %w", err)
 	}
@@ -250,7 +249,7 @@ func (c *Consumer) ReleaseLeased(ctx context.Context, envelopes []domain.AlarmQu
 	return nil
 }
 
-func (c *Consumer) RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+func (c *Consumer) RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []AlarmQueueEnvelope) error {
 	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
 	if err := observeRoutedFailures(c.repository.RouteFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount); err != nil {
 		return fmt.Errorf("observe routed failures: %w", err)
@@ -259,7 +258,7 @@ func (c *Consumer) RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelop
 	return nil
 }
 
-func (c *Consumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+func (c *Consumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []AlarmQueueEnvelope) error {
 	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
 	if err := observeRoutedFailures(c.repository.RouteSendingFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount); err != nil {
 		return fmt.Errorf("observe routed failures: %w", err)
@@ -268,7 +267,7 @@ func (c *Consumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlq
 	return nil
 }
 
-func (c *Consumer) RequeuePreSend(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *Consumer) RequeuePreSend(ctx context.Context, envelopes []AlarmQueueEnvelope) error {
 	updates, retryCount, _ := failureUpdatesFromEnvelopes(envelopes, nil)
 	if err := observeRoutedFailures(c.repository.RequeuePreSend(ctx, updates, c.workerID), updates, retryCount, 0); err != nil {
 		return fmt.Errorf("observe routed failures: %w", err)
@@ -315,7 +314,7 @@ func appliedFailureCounts(updates []FailureUpdate, unappliedIDs []int64) (retryA
 	return retryApplied, dlqApplied
 }
 
-func failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) (updates []FailureUpdate, retryCount, dlqCount int) {
+func failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes []AlarmQueueEnvelope) (updates []FailureUpdate, retryCount, dlqCount int) {
 	updates = make([]FailureUpdate, 0, len(retryEnvelopes)+len(dlqEnvelopes))
 	updates = appendFailureUpdates(updates, retryEnvelopes, StatusRetry)
 	retryCount = len(updates)
@@ -324,7 +323,7 @@ func failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes []domain.AlarmQueu
 	return updates, retryCount, len(updates) - retryCount
 }
 
-func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueueEnvelope, target Status) []FailureUpdate {
+func appendFailureUpdates(updates []FailureUpdate, envelopes []AlarmQueueEnvelope, target Status) []FailureUpdate {
 	for i := range envelopes {
 		update, ok := failureUpdateFromEnvelope(&envelopes[i], target)
 		if !ok {
@@ -337,8 +336,9 @@ func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueue
 	return updates
 }
 
-// 다음 시도 시각은 SQL이 잠금 뒤 채취한 clock에 RetryAfter를 더해 정하므로 한 문장에서 정산되는 멤버는 같은 기준 시각을 쓴다.
-func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, target Status) (FailureUpdate, bool) {
+// failureUpdateFromEnvelope은 runner가 정한 attempt·오류·지연을 옮긴다. 다음 시도 시각은 SQL이 잠금 뒤 채취한 clock에
+// RetryAfter를 더해 정하므로 한 문장에서 정산되는 멤버는 같은 기준 시각을 쓴다.
+func failureUpdateFromEnvelope(envelope *AlarmQueueEnvelope, target Status) (FailureUpdate, bool) {
 	if envelope.DispatchOutboxID <= 0 {
 		return FailureUpdate{}, false
 	}
@@ -356,7 +356,7 @@ func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, target Statu
 	return update, true
 }
 
-func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *Consumer) Requeue(ctx context.Context, envelopes []AlarmQueueEnvelope) error {
 	if err := c.RouteFailures(ctx, envelopes, nil); err != nil {
 		return fmt.Errorf("route failures: %w", err)
 	}
@@ -364,7 +364,7 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 	return nil
 }
 
-func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (c *Consumer) Quarantine(ctx context.Context, envelopes []AlarmQueueEnvelope, cause error) error {
 	message, code := storedErrorFromCause(cause)
 	updates := make([]TerminalUpdate, 0, len(envelopes))
 

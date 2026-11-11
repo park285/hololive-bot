@@ -16,10 +16,10 @@ Iris / Redroid is an external KakaoTalk automation boundary used for webhook ing
 
 ## Consumers
 
-- Service: `bot`
+- Service: `hololive-api` bot plane
 - Service: `alarm-worker`
 - Usage: Kakao webhook ingress/reply and alarm dispatch send. Proactive alarm egress is owned by `alarm-worker`; exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims on the dispatch/delivery/YouTube outboxes plus the single Quadlet alarm-worker instance.
-- `hololive-shared/pkg/service/delivery.RuntimeIrisClient` and `pkg/providers/iris.ProvideIrisClient` are low-level Iris client construction helpers, not proactive notification sender ownership. The proactive sender and generic notification delivery dispatcher live in `hololive-alarm-worker/internal/egress`. CI gates forbid producer runtimes from using these helpers for proactive egress.
+- `hololive-shared/pkg/service/delivery.RuntimeIrisClient` and `pkg/providers/iris.ProvideIrisClient` are low-level Iris client construction helpers, not proactive notification sender ownership. The proactive sender and generic notification delivery dispatcher live in `hololive-alarm-worker/internal/egress`. 소유 규칙상 proactive egress는 alarm-worker `internal/egress`만 수행합니다. 이 sender·dispatcher는 Go `internal` 가시성 규칙에 따라 다른 모듈이 import할 수 없으며, helper 사용을 따로 검사하는 CI gate는 없습니다.
 
 ## Transport
 
@@ -41,7 +41,7 @@ Iris / Redroid is an external KakaoTalk automation boundary used for webhook ing
 // Do not invent payload fields in this document.
 ```
 
-새 Markdown 응답은 `iris-client-go v3.3.0`의 `SendRichText`로 `/reply`에 `type:"richtext"`와 원문을 보냅니다.
+새 Markdown 응답은 `iris-client-go/v5`(각 모듈 `go.mod`가 고정한 판본)의 `SendRichText`로 `/reply`에 `type:"richtext"`와 원문을 보냅니다.
 서버는 RichText 지원 Iris와 카카오톡 26.9.1 대응 bridge가 필요합니다. 기존 `BOT_MARKDOWN_REPLIES`와
 오픈채팅 판정은 유지하고, 일반 텍스트 및 다른 메시지 유형은 전환하지 않습니다.
 SDK의 기존 `SendMarkdown`·`Sender`·`BotClient` 계약은 변경하지 않으며 필요한 소비자 인터페이스만 확장합니다.
@@ -79,16 +79,17 @@ LLM 최종 검토·캐시의 평문은 formatter 진입에서 보호하며 정�
 - Do not treat Iris as an internal contract package.
 - Env, auth, cert, transport, and route changes require affected runtime runbook updates.
 - External boundary changes should keep rollback guidance in `runbooks/rollback.md`.
-- bot outbox와 alarm/notification/YouTube 원장은 새 요청에 `richtext`를 저장합니다. 기존 `markdown`·`text` 요청은
-  저장된 본문·타입·thread·clientRequestId로만 재생합니다. 이는 실패 fallback이 아니며 각 원장이 기존 요청의
-  drain·재시도 종료를 확인한 뒤에만 구형 읽기 경로를 제거할 수 있습니다.
+- bot outbox와 alarm/notification/YouTube 원장은 새 요청에 `richtext`를 저장합니다. 저장된 `text`·`richtext` 요청은
+  저장된 본문·타입·thread·clientRequestId로만 재생합니다. `markdown` 읽기 경로는 운영 원장 0행을 확인한 뒤 #763에서
+  제거했으며, 남은 `markdown` 요청은 Iris를 호출하지 않고 지원하지 않는 형식으로 거절됩니다.
 - writer 배포 전에 migration `001_schema_epoch3_baseline.sql`을
   적용합니다. 기존 행은 갱신하지 않습니다. 새 RichText 요청 저장 후에는 해당 kind/route를 모르는 구형 writer로
   롤백하지 않고 forward-fix합니다. 로컬 검증 완료와 운영 적용 여부는 별개입니다.
 
 ## Tests
 
-- Bot router/transport tests: 검토 필요
+- Bot webhook route and router tests: `hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/bot_webhook_test.go`, `hololive/hololive-api/internal/planes/bot/runtime/router_integration_test.go`
+- Bot reply transport tests: `hololive/hololive-api/internal/planes/bot/internal/bot/orchestration/transport/*_test.go`
 - Alarm-worker Iris egress sender tests: `hololive/hololive-alarm-worker/internal/egress`
 
 ## Known gaps

@@ -61,7 +61,9 @@ func TestCacheInvalidateAll_WithoutValkeyStillClearsMemory(t *testing.T) {
 	}
 }
 
-func TestCacheSearchOverlayAndInvalidationRace(t *testing.T) {
+// snapshot 전체 조회, point overlay 기록, 무효화가 겹쳐도 데이터 경쟁 없이 각 generation 경계를 지킨다. 무효화 뒤에
+// 이전 generation으로 기록한 point 결과는 응답하지 않는다.
+func TestCacheSnapshotOverlayAndInvalidationRace(t *testing.T) {
 	members := []*domain.Member{
 		{ID: 1, Name: testMemberMiko, ChannelID: "UC_miko", Aliases: &domain.Aliases{Ko: []string{"엘리트"}}},
 		{ID: 2, Name: testMemberMikoSlug, ChannelID: "UC_other", Aliases: &domain.Aliases{Ja: []string{"エリート"}}},
@@ -79,9 +81,9 @@ func TestCacheSearchOverlayAndInvalidationRace(t *testing.T) {
 	for range 4 {
 		wg.Go(func() {
 			for range 200 {
-				got, err := c.FindMembersByName(t.Context(), " MIKO ")
+				got, err := c.LoadAllMembers(t.Context())
 				if err != nil || len(got) != 2 {
-					t.Errorf("MembersByName() = %+v, %v; want both same-name members", got, err)
+					t.Errorf("LoadAllMembers() = %+v, %v; want both members", got, err)
 
 					return
 				}

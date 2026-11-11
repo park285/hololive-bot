@@ -22,6 +22,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -39,13 +40,14 @@ func buildLLMSchedulerRouter(
 	apiKey string,
 	readyProbe *sharedreadiness.Probe,
 ) (*gin.Engine, error) {
-	options := sharedserver.RuntimeRouterOptions{APIKey: apiKey}
-
-	if readyProbe != nil {
-		options.InternalReadyResponder = readiness.GinHandler(ctx, readyProbe)
+	if readyProbe == nil {
+		return nil, errors.New("build llm scheduler router: ready probe must not be nil")
 	}
 
-	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &options)
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
+		APIKey:                 apiKey,
+		InternalReadyResponder: readiness.GinHandler(ctx, readyProbe),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}

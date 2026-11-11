@@ -13,9 +13,9 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
@@ -217,10 +217,6 @@ func TestSCH007AcceptedAndQueryLimitStayWithinCapacity(t *testing.T) {
 	scheduler.queue = make(chan queuedJob, capacity)
 	scheduler.discoverOnce(t.Context())
 
-	if scheduler.Snapshot().Enqueued > capacity {
-		t.Fatalf("accepted = %d, want <= %d", scheduler.Snapshot().Enqueued, capacity)
-	}
-
 	for _, limit := range stub.limits {
 		if limit > capacity {
 			t.Fatalf("query limit %d exceeds capacity %d", limit, capacity)
@@ -241,7 +237,7 @@ func TestSCH008GlobalNotDueDoesNotEnqueue(t *testing.T) {
 	scheduler.candidates = stub
 	scheduler.discoverOnce(t.Context())
 
-	if scheduler.Snapshot().Enqueued != 0 || scheduler.Snapshot().Discovered != 0 {
+	if scheduler.Snapshot().Discovered != 0 {
 		t.Fatalf("snapshot = %+v", scheduler.Snapshot())
 	}
 
@@ -310,8 +306,8 @@ func TestSCH010QueryErrorFailsWholeCycle(t *testing.T) {
 		t.Fatal("query error cycle advanced rotation")
 	}
 
-	if scheduler.Snapshot().LastCycleOperationCode != collecterr.OperationCandidateLoadFailed {
-		t.Fatalf("operation = %s", scheduler.Snapshot().LastCycleOperationCode)
+	if got := testutil.ToFloat64(scheduler.metrics.discoveryCycle.WithLabelValues(discoveryCycleCandidateLoadFailed)); got != 1 {
+		t.Fatalf("candidate load failed cycles = %v, want 1", got)
 	}
 }
 
@@ -397,15 +393,15 @@ func TestSCH013SnapshotKeepsCycleFieldsConsistent(t *testing.T) {
 			scheduler.cycleMu.Lock()
 
 			scheduler.discovered = i
-			scheduler.enqueued = i
+			scheduler.queueFull = i%2 == 1
 			scheduler.cycleMu.Unlock()
 		}
 	})
 	wg.Go(func() {
 		for range 1000 {
 			snap := scheduler.Snapshot()
-			if snap.Discovered != snap.Enqueued {
-				t.Errorf("torn snapshot discovered=%d enqueued=%d", snap.Discovered, snap.Enqueued)
+			if snap.QueueFull != (snap.Discovered%2 == 1) {
+				t.Errorf("torn snapshot discovered=%d queueFull=%t", snap.Discovered, snap.QueueFull)
 
 				return
 			}
@@ -629,7 +625,7 @@ func newEmptyCandidateStub(t *testing.T) *stubCandidateSource {
 
 	pages := make(map[string]joblease.CandidatePage)
 
-	for _, job := range collection.InitialJobContracts().IDs() {
+	for job := range collection.InitialJobContracts() {
 		pages[job.String()] = joblease.CandidatePage{}
 	}
 

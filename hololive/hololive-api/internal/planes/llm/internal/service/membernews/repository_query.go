@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -48,7 +49,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 	return exists, nil
 }
 
-func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
+func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]newsmodel.SubscribedRoom, error) {
 	if r.pool == nil {
 		return nil, errors.New("membernews repository pool is nil")
 	}
@@ -61,10 +62,10 @@ func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.Subscribe
 	}
 	defer rows.Close()
 
-	rooms := make([]model.SubscribedRoom, 0)
+	rooms := make([]newsmodel.SubscribedRoom, 0)
 
 	for rows.Next() {
-		var room model.SubscribedRoom
+		var room newsmodel.SubscribedRoom
 
 		if scanErr := rows.Scan(&room.ID, &room.RoomID, &room.RoomName, &room.CreatedAt); scanErr != nil {
 			return nil, fmt.Errorf("scan member news room: %w", scanErr)
@@ -116,12 +117,12 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 	return members, nil
 }
 
-func (r *Repository) ListActiveMajorEventsForPeriod(ctx context.Context, period model.Period, now time.Time) ([]model.Candidate, error) {
+func (r *Repository) ListActiveMajorEventsForPeriod(ctx context.Context, period model.Period, now time.Time) ([]newsmodel.Candidate, error) {
 	start, end := filter.PeriodBounds(period, now)
 	return r.listActiveMajorEvents(ctx, repositoryQueryPeriodSQL, start, end)
 }
 
-func (r *Repository) listActiveMajorEvents(ctx context.Context, query string, args ...any) ([]model.Candidate, error) {
+func (r *Repository) listActiveMajorEvents(ctx context.Context, query string, args ...any) ([]newsmodel.Candidate, error) {
 	if r.pool == nil {
 		return nil, errors.New("membernews repository pool is nil")
 	}
@@ -132,11 +133,11 @@ func (r *Repository) listActiveMajorEvents(ctx context.Context, query string, ar
 	}
 	defer rows.Close()
 
-	result := make([]model.Candidate, 0)
+	result := make([]newsmodel.Candidate, 0)
 
 	for rows.Next() {
 		var (
-			candidate model.Candidate
+			candidate newsmodel.Candidate
 			eventType string
 			members   []string
 		)

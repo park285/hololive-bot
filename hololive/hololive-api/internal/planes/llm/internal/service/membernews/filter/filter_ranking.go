@@ -23,16 +23,16 @@ package filter
 import (
 	"cmp"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 )
 
-var sourceTierPriority = map[model.SourceTier]int{
-	model.SourceTierOfficial:  0,
-	model.SourceTierMedia:     1,
-	model.SourceTierCommunity: 2,
+var sourceTierPriority = map[newsmodel.SourceTier]int{
+	newsmodel.SourceTierOfficial:  0,
+	newsmodel.SourceTierMedia:     1,
+	newsmodel.SourceTierCommunity: 2,
 }
 
-func compareFilteredCandidate(left, right model.FilteredCandidate) int {
+func compareFilteredCandidate(left, right newsmodel.FilteredCandidate) int {
 	return cmp.Or(
 		left.EffectiveDate.Compare(right.EffectiveDate),
 		cmp.Compare(sourceTierPriority[left.SourceTier], sourceTierPriority[right.SourceTier]),

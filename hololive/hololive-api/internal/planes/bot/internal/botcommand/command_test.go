@@ -26,63 +26,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
-func TestCommandType_IsValid(t *testing.T) {
-	t.Parallel()
-
-	// 유효한 명령어 상수
-	validCmds := []botcommand.CommandType{
-		botcommand.CommandLive,
-		botcommand.CommandUpcoming,
-		botcommand.CommandSchedule,
-		botcommand.CommandHelp,
-		botcommand.CommandAlarmAdd,
-		botcommand.CommandAlarmRemove,
-		botcommand.CommandAlarmList,
-		botcommand.CommandAlarmClear,
-		botcommand.CommandAlarmInvalid,
-		botcommand.CommandMemberInfo,
-		botcommand.CommandMemberNews,
-		botcommand.CommandMemberNewsSubscription,
-		botcommand.CommandMajorEvent,
-		botcommand.CommandCalendar,
-		botcommand.CommandBroadcastHistory,
-		botcommand.CommandBroadcastThumbnail,
-		botcommand.CommandBroadcastTime,
-		botcommand.CommandUnknown,
-	}
-
-	for _, cmd := range validCmds {
-		t.Run(string(cmd)+"_유효", func(t *testing.T) {
-			t.Parallel()
-
-			if !cmd.IsValid() {
-				t.Errorf("IsValid() = false, want true (cmd=%q)", cmd)
-			}
-		})
-	}
-
-	invalidCmds := []struct {
-		name string
-		cmd  botcommand.CommandType
-	}{
-		{"정의되지 않은 명령어", botcommand.CommandType("invalid_cmd")},
-		{"빈 문자열", botcommand.CommandType("")},
-		{"제거된 legacy status 명령어", botcommand.CommandType("settlement" + "_status")},
-		{"제거된 legacy paid 명령어", botcommand.CommandType("settlement" + "_paid")},
-		{"제거된 legacy register 명령어", botcommand.CommandType("settlement" + "_register")},
-	}
-
-	for _, tt := range invalidCmds {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if tt.cmd.IsValid() {
-				t.Errorf("IsValid() = true, want false (cmd=%q)", tt.cmd)
-			}
-		})
-	}
-}
-
 func TestCommandType_String(t *testing.T) {
 	t.Parallel()
 

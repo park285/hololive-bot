@@ -3,7 +3,8 @@
 -- 확인 대기 SENT 행은 handoff_next_check_at IS NOT NULL로 고른다. migration 330 CHECK가 다음 확인 시각을 정확히
 -- SENT·handoff_request_id 있음·handoff_checked_at 없음인 행에만 두므로 같은 집합이고, 이 술어는 부분 index
 -- idx_ndo_handoff_due의 조건과 같아 planner가 그 부분 index를 쓸 수 있다. 확인 대기 행은 handoff reconciler가 확인
--- 완료·재발급·종료 실패·격리로 끝내며, 다음 확인 시각은 admission + 지평(attempt_timeout)을 넘지 않는다.
+-- 완료·재발급·종료 실패·격리로 끝내며, 다음 확인 시각은 admission + 지평(notification_delivery handoff_horizon_ms)을 넘지
+-- 않는다.
 o.status = 'PENDING'
 AND o.next_attempt_at <= now_value.value
 AND (o.locked_at IS NULL OR o.lock_expires_at <= now_value.value)

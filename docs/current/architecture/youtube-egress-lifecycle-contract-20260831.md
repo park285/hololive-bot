@@ -58,6 +58,8 @@ Community/Shorts의 `canonical_post_id`는 claim, telemetry, sibling 조회가 �
 
 같은 감사 행의 빈 `delivery_path` 대체도 제거했습니다. 기록 주체는 `CommunityShortsDeliveryPath`를 명시하며 버퍼 적재는 빈 경로를 batch 전체의 오류로 반환합니다. 방출 로그는 저장된 경로를 trim해서 쓰되 비어 있는 과거 값을 정상 경로로 꾸미지 않습니다. 삭제 전 guarded 운영 조회에서 telemetry 9행의 빈 `post_id`·빈 `delivery_path`는 각각 0건이었으므로 과거 row 호환 변환은 하지 않습니다. 기존 non-empty 값의 trim은 유지합니다.
 
+방출 전 지연 분류(`latency_classification`) 조회가 실패하면 telemetry processor는 Warn 로그 "Failed to load delivery telemetry latency classifications"를 남기고, 그 batch를 분류 필드 없이 방출해 logged로 닫습니다. 분류는 방출 로그의 부가 필드이고, 조회 실패마다 batch를 재시도로 미루면 장애가 이어지는 동안 버퍼가 쌓이기 때문입니다. 방출 자체가 실패한 행(빈 room ID)만 `TelemetryRetryBackoff` 뒤 재시도합니다.
+
 `(outbox_id, room_id)` unique index는 physical duplicate만 막습니다. Community/Shorts에서는 서로 다른 outbox/content ID가 같은 canonical post를 표현할 수 있고, 모든 kind에서 cleanup 뒤 같은 content의 outbox ID가 달라질 수 있으므로 logical duplicate 방어를 대체하지 않습니다.
 
 Canonical resolver는 Community/Shorts의 alias를 하나의 `canonical_post_id`로 정규화하고, 그 밖의 kind는 trim된 non-empty `content_id`를 사용합니다. Invalid payload/identity를 raw ID로 대체하지 않고 preparation 또는 backfill을 fail closed합니다.
@@ -90,7 +92,7 @@ Operation membership과 provider request는 최초 `BeginSending` 전에 `youtub
 
 기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 249는 `request_snapshot_allowed=false`로 기존 행을 구분했습니다. 2026-10-02 운영 조회에서 이 표시를 가진 67행이 모두 `SENT`·`FAILED`(2026-05-17, revive 신선도 창 밖)였으므로 dispatcher의 구분 검사(`ErrLegacyRequestEvidence`)는 지웠습니다. migration 256이 열을 지웠습니다. 표시가 `false`인데 아직 끝나지 않은(`PENDING`·`SENDING`·`QUARANTINED`) 행이 있으면 이 migration은 열을 남기고 실패합니다.
 
-Iris 202는 durable admission만 증명합니다. `CompleteSent`는 고정 요청을 멤버보다 먼저 잠그고 세대·고정 멤버가 이번 발송과 같을 때만, SENT 전이와 같은 트랜잭션에서 고정 요청에 Iris requestId(`handoff_request_id`)와 첫 handoff 확인 시각(`handoff_next_check_at` = SENT 전이 시각 + min(5s, `youtube_delivery` executor `attempt_timeout`))을 기록합니다(migration 336·339). 요청이 다르거나 requestId가 비면 전이하지 않고 SENDING으로 남깁니다. `youtube-delivery-handoff-reconciler`가 `handoffcheck` 판정으로 지평까지 `/reply-status`를 확인합니다. `failed`는 세대 < 2이고 시도 예산(attempt + 1 < `max_retries`)이 남으면 논리 그룹의 SENT 행 전원(고정 멤버 밖 follower 포함)을 `retry_backoff_ms` 뒤 PENDING으로 되돌리고 요청 세대를 올려 같은 본문을 다음 세대 ID로 다시 보내며, 아니면 FAILED입니다. 결과 불명·404·지평 미확인은 QUARANTINED입니다. 세 경우 모두 그 owner를 출처로 한 SENT ledger만 같은 트랜잭션에서 지우고(격리는 같은 출처의 QUARANTINED ledger), 바뀐 delivery의 부모 outbox 집계도 그 트랜잭션 끝에서 canonical 집계 문장으로 다시 계산합니다. 정산의 잠금 순서는 고정 요청 → 영향 부모 outbox(id 순서, 그룹 잠금과 같은 후보 조건으로 미리 읽음) → 논리 그룹 delivery → ledger이고, 집계는 이미 잠근 부모에 다시 잠그지 않고 실행합니다. 정산 도중 같은 논리 키의 follower·outbox가 들어와 부모 집합이 늘면 새 부모를 잠그지 않고 아무것도 바꾸지 않은 `membership_changed` fence 미스로 끝내며 확인을 닫지 않으므로, soft claim 뒤 다음 확인이 늘어난 집합으로 정산합니다. 집계가 실패하면 정산 전체가 rollback되고 soft claim 뒤 다음 확인이 다시 정산합니다. 집계는 outbox `sent_at`을 지우지 않으며, 아래 post 단위 tracking 표시도 되돌리지 않습니다. 발송 경로는 202 admission만 확인하고 handoff를 기다리지 않으므로, handoff 결과는 이 reconciler만 정산합니다.
+Iris 202는 durable admission만 증명합니다. `CompleteSent`는 고정 요청을 멤버보다 먼저 잠그고 세대·고정 멤버가 이번 발송과 같을 때만, SENT 전이와 같은 트랜잭션에서 고정 요청에 Iris requestId(`handoff_request_id`)와 첫 handoff 확인 시각(`handoff_next_check_at` = SENT 전이 시각 + min(5s, `youtube_delivery` settings `handoff_horizon_ms`))을 기록합니다(migration 336·339). 요청이 다르거나 requestId가 비면 전이하지 않고 SENDING으로 남깁니다. `youtube-delivery-handoff-reconciler`가 `handoffcheck` 판정으로 지평(같은 `handoff_horizon_ms`)까지 `/reply-status`를 확인합니다. `failed`는 세대 < 2이고 시도 예산(attempt + 1 < `max_retries`)이 남으면 논리 그룹의 SENT 행 전원(고정 멤버 밖 follower 포함)을 `retry_backoff_ms` 뒤 PENDING으로 되돌리고 요청 세대를 올려 같은 본문을 다음 세대 ID로 다시 보내며, 아니면 FAILED입니다. 결과 불명·404·지평 미확인은 QUARANTINED입니다. 세 경우 모두 그 owner를 출처로 한 SENT ledger만 같은 트랜잭션에서 지우고(격리는 같은 출처의 QUARANTINED ledger), 바뀐 delivery의 부모 outbox 집계도 그 트랜잭션 끝에서 canonical 집계 문장으로 다시 계산합니다. 정산의 잠금 순서는 고정 요청 → 영향 부모 outbox(id 순서, 그룹 잠금과 같은 후보 조건으로 미리 읽음) → 논리 그룹 delivery → ledger이고, 집계는 이미 잠근 부모에 다시 잠그지 않고 실행합니다. 정산 도중 같은 논리 키의 follower·outbox가 들어와 부모 집합이 늘면 새 부모를 잠그지 않고 아무것도 바꾸지 않은 `membership_changed` fence 미스로 끝내며 확인을 닫지 않으므로, soft claim 뒤 다음 확인이 늘어난 집합으로 정산합니다. 집계가 실패하면 정산 전체가 rollback되고 soft claim 뒤 다음 확인이 다시 정산합니다. 집계는 outbox `sent_at`을 지우지 않으며, 아래 post 단위 tracking 표시도 되돌리지 않습니다. 발송 경로는 202 admission만 확인하고 handoff를 기다리지 않으므로, handoff 결과는 이 reconciler만 정산합니다.
 
 그룹 조회의 전역 행 한도는 `요청 수 × (LogicalGroupLimit + 2)`이며, 이 한도에 닿으면 창 밖 형제의 유무를 증명하지 못합니다. 다른 키로 풀리는 별칭 후보도 이 창을 차지하므로, 반환된 행의 키별 개수가 작거나 owner가 잠겼다는 사실만으로 완전성을 판단하지 않습니다. claim 기반 그룹 해석과 stale sweep은 불완전한 창을 원장 조회 전에 오류로 거부합니다. handoff 정산은 부모 집합 증가 미스를 먼저 판정한 뒤, 불완전한 창의 멤버 전원을 membership 거부로 처리해 행·원장·세대 변경 없이 확인만 닫습니다. 빈 요청은 완전한 빈 집합입니다.
 
@@ -474,6 +476,8 @@ LockTimeout >= DeliverySendTimeout + SendingFinalizeGrace
 
 Provider call 전 remaining lease budget이 부족하면 provider를 호출하지 않고 known-not-delivered retryable outcome으로 처리합니다.
 
+현재 상태: alarm-worker는 grouped fallback의 개별 발송마다 provider 호출 전에 이 예산을 확인합니다. Remaining lease budget은 `LockTimeout`에서 `BeginSending` 호출 직전부터 잰 경과 시간을 뺀 값입니다. DB는 `locked_at`을 그 뒤에 채취하므로 실제 남은 lease보다 짧게 잡힙니다. 예산이 `DeliverySendTimeout + SendingFinalizeGrace`보다 작으면 그 행을 `send_lease_budget` 사유의 retryable 실패로 전이하고, 이미 저장한 singleton 요청은 다음 시도가 그대로 씁니다. 최초 grouped·per-room 발송은 `BeginSending` 직후라 이 확인을 하지 않습니다. 위 `LockTimeout` 관계식은 아직 `Config.Validate`가 검사하지 않습니다.
+
 ## Provider outcome taxonomy
 
 ```go
@@ -488,6 +492,8 @@ const (
 ```
 
 Stable request ID의 존재만으로 retry-safe가 되지는 않습니다. Provider의 request rejection, dedupe, result-query 계약이 증거여야 합니다. 공통 `sendoutcome` 분류를 사용하되 각 파이프라인의 상태 전이 정책은 유지합니다.
+
+Provider 호출 전에 발송 경로가 요청을 거절한 오류는 `ProviderKnownNotDeliveredPermanent`입니다. 대상은 빈 room·본문·dedupe key, 저장 요청이 없거나 route가 `text`·`richtext`가 아닌 요청, 빈 client request ID입니다. 요청이 나가지 않았으므로 outcome unknown으로 남기지 않고, owner/group을 `invalid_send_request` 사유의 permanent 실패로 전이합니다. 이 오류는 Iris `ErrPermanent`가 아니므로 grouped fallback의 trigger가 아닙니다. 저장 요청 table CHECK가 아직 허용하는 구형 route(`markdown`, `sender`)도 이 경로로 거절합니다.
 
 `CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK r1/r2 재발급을 허용합니다. generation과 owner/group retry·telemetry는 한 transaction으로 저장하고 다음 정규 attempt에서 전송합니다. 기존 MaxRetries·freshness·시간 한도를 확장하지 않으며 unknown·payload mismatch·already exists·code 없는 409에는 재발급하지 않습니다. generation 소진은 terminal 처리하고 revive로 초기화하지 않습니다.
 

@@ -22,6 +22,7 @@ func validLLMSchedulerRuntimeConfig() *LLMSchedulerConfig {
 		},
 		Postgres:    settings.PostgresConfig{SSLMode: runtimepolicy.PostgresSSLModeVerifyFull},
 		Environment: runtimepolicy.EnvironmentProduction,
+		LLMProvider: LLMProviderCliproxy,
 	}
 }
 
@@ -35,69 +36,52 @@ func TestValidateLLMSchedulerRuntimeRejectsSchedulerWorkerRole(t *testing.T) {
 	}
 }
 
-func TestLoadLLMSchedulerRuntimeAllowsMissingIrisInputs(t *testing.T) {
-	settingstest.ClearIrisAndRoomEnv(t)
-	settingstest.SetRuntimeH3ServerEnv(t)
-	t.Setenv("API_SECRET_KEY", "dummy-secret")
+func TestValidateLLMSchedulerRuntimeProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
+	settingstest.ClearRuntimeRoleEnv(t)
 
-	cfg, err := LoadLLMSchedulerRuntime()
-	if err != nil {
-		t.Fatalf("LoadLLMSchedulerRuntime() error = %v", err)
-	}
+	config := validLLMSchedulerRuntimeConfig()
 
-	if cfg.Server.Port != 30003 {
-		t.Fatalf("Server.Port = %d, want 30003", cfg.Server.Port)
-	}
+	config.Postgres.SSLMode = "require"
 
-	if !cfg.Server.TransportEnabled("h3") {
-		t.Fatal("Server.TransportEnabled(h3) = false, want true")
-	}
-}
-
-// 이 로더는 Iris 입력을 받지 않으므로 Iris env를 비운다.
-func TestLoadLLMSchedulerRuntimeProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
-	settingstest.ClearIrisAndRoomEnv(t)
-	settingstest.SetRuntimeH3ServerEnv(t)
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
-	t.Setenv("POSTGRES_SSLMODE", "require")
-
-	_, err := LoadLLMSchedulerRuntime()
+	err := config.validateRuntime()
 	if err == nil || !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
-		t.Fatalf("LoadLLMSchedulerRuntime() error = %v, want production sslmode rejection", err)
+		t.Fatalf("LLMSchedulerConfig.validateRuntime() error = %v, want production sslmode rejection", err)
 	}
 }
 
-func TestLoadLLMSchedulerRuntimeProductionRequiresAPISecretKey(t *testing.T) {
-	settingstest.ClearIrisAndRoomEnv(t)
-	settingstest.SetRuntimeH3ServerEnv(t)
-	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
-	t.Setenv("API_SECRET_KEY", "")
+func TestValidateLLMSchedulerRuntimeProductionRequiresAPISecretKey(t *testing.T) {
+	settingstest.ClearRuntimeRoleEnv(t)
 
-	_, err := LoadLLMSchedulerRuntime()
+	config := validLLMSchedulerRuntimeConfig()
+
+	config.Server.APIKey = ""
+
+	err := config.validateRuntime()
 	if err == nil || !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
-		t.Fatalf("LoadLLMSchedulerRuntime() error = %v, want production API key requirement", err)
+		t.Fatalf("LLMSchedulerConfig.validateRuntime() error = %v, want production API key requirement", err)
 	}
 }
 
-func TestLoadLLMSchedulerRuntimeEnvApplied(t *testing.T) {
-	settingstest.ClearIrisAndRoomEnv(t)
-	settingstest.SetRuntimeH3ServerEnv(t)
-	t.Setenv("API_SECRET_KEY", "test-api-key")
+// llm plane listener는 configurePlanes의 LLM_SCHEDULER_PORT 한 번 읽기에서, 나머지 구획은 llm plane 로더에서 온다.
+func TestLoadRuntimeAppliesLLMPlaneEnv(t *testing.T) {
+	settingstest.ClearRuntimeRoleEnv(t)
+	configtest.SetRequiredLoadEnv(t)
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
 	t.Setenv("LLM_SCHEDULER_PORT", "39003")
 	t.Setenv("BOT_PREFIX", "#")
 
-	config, err := LoadLLMSchedulerRuntime()
+	config, err := LoadRuntime()
 	if err != nil {
-		t.Fatalf("LoadLLMSchedulerRuntime() error = %v", err)
+		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
-	if config.Server.Port != 39003 {
-		t.Fatalf("Server.Port = %d, want %d", config.Server.Port, 39003)
+	if config.LLM.Server.Port != 39003 || config.LLM.Server.H3Addr != ":39003" {
+		t.Fatalf("LLM server port = %d addr = %q, want 39003 and :39003", config.LLM.Server.Port, config.LLM.Server.H3Addr)
 	}
 
-	if config.Bot.Prefix != "#" {
-		t.Fatalf("Bot.Prefix = %q, want %q", config.Bot.Prefix, "#")
+	if config.LLM.Bot.Prefix != "#" {
+		t.Fatalf("LLM Bot.Prefix = %q, want %q", config.LLM.Bot.Prefix, "#")
 	}
 }
 
@@ -119,9 +103,8 @@ func TestLoadRuntimeCapturesInternalClientAndMemberNewsInputs(t *testing.T) {
 		t.Fatalf("bot internal H3 settings = %+v, want trimmed startup values", config.Bot.InternalH3)
 	}
 
-	if config.Admin.InternalH3.CACertFile != config.Bot.InternalH3.CACertFile || config.Admin.InternalH3.ServerName != config.Bot.InternalH3.ServerName ||
-		config.LLM.InternalH3.CACertFile != config.Bot.InternalH3.CACertFile || config.LLM.InternalH3.ServerName != config.Bot.InternalH3.ServerName {
-		t.Fatal("admin/LLM internal H3 settings differ from loaded bot startup values")
+	if config.Admin.InternalH3.CACertFile != config.Bot.InternalH3.CACertFile || config.Admin.InternalH3.ServerName != config.Bot.InternalH3.ServerName {
+		t.Fatal("admin internal H3 settings differ from loaded bot startup values")
 	}
 
 	if config.LLM.MemberNewsXAllowlistPath != "/member-news-accounts.json" {

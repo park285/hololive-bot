@@ -33,7 +33,6 @@ var ErrMemberNotFound = errors.New("member not found")
 // 직접 받아 취소를 따르며, 실패를 빈 결과로 바꾸지 않고 오류로 돌려준다.
 type MemberDataProvider interface {
 	MemberFinder
-	MemberMultiFinder
 
 	// GetChannelIDs는 채널 ID 목록이다. 조회 실패는 빈 목록이 아니라 오류다.
 	GetChannelIDs(ctx context.Context) ([]string, error)
@@ -47,11 +46,4 @@ type MemberFinder interface {
 	FindMemberByChannelID(ctx context.Context, channelID string) (*Member, error)
 	FindMemberByName(ctx context.Context, name string) (*Member, error)
 	FindMemberByAlias(ctx context.Context, alias string) (*Member, error)
-}
-
-// MemberMultiFinder는 동명이인·공유 별명을 모두 돌려주는 조회 계약이다. 일치하는 멤버가 없으면 nil 오류와 빈 slice를,
-// 조회 실패는 오류를 돌려준다. 돌려준 slice는 호출자 소유다.
-type MemberMultiFinder interface {
-	FindMembersByName(ctx context.Context, name string) ([]*Member, error)
-	FindMembersByAlias(ctx context.Context, alias string) ([]*Member, error)
 }

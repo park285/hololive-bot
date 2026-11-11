@@ -21,28 +21,20 @@
 package llm
 
 import (
-	"bytes"
-	"context"
-	jsonv2 "encoding/json/v2"
+	"encoding/json/jsontext"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"strings"
 	"testing"
-
-	"github.com/openai/openai-go/v3"
-	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
-	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 )
 
+// mustNewClient는 schema 이름을 기본값으로 먼저 넣는다. 뒤에 오는 WithSchemaName이 이를 덮어쓴다.
 func mustNewClient(t *testing.T, baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
 	t.Helper()
 
-	client, err := NewClient(baseURL, apiKey, model, logger, opts...)
+	client, err := NewClient(baseURL, apiKey, model, logger, append([]Option{WithSchemaName(testDefaultSchemaName)}, opts...)...)
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
@@ -73,7 +65,7 @@ func TestNewClientDoesNotFallbackToChatCompletionsOnUnsupportedResponses(t *test
 }
 
 func TestNewClient_EmptyAPIKeyReturnsError(t *testing.T) {
-	client, err := NewClient("https://example.com/v1", "", "gpt-test", slog.New(slog.DiscardHandler))
+	client, err := NewClient("https://example.com/v1", "", "gpt-test", slog.New(slog.DiscardHandler), WithSchemaName(testDefaultSchemaName))
 	if err == nil {
 		t.Fatal("NewClient() error = nil, want generator construction error")
 	}
@@ -83,75 +75,106 @@ func TestNewClient_EmptyAPIKeyReturnsError(t *testing.T) {
 	}
 }
 
-func TestNewClient_DefaultOptions(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "test-key", "gpt-test", slog.New(slog.NewTextHandler(os.Stdout, nil)))
-
-	if client.schemaName != testDefaultSchemaName {
-		t.Errorf("default schemaName = %q, want %q", client.schemaName, testDefaultSchemaName)
-	}
-
-	if client.temperature != nil {
-		t.Errorf("default temperature = %v, want nil", *client.temperature)
-	}
-
-	if client.model != "gpt-test" {
-		t.Errorf("model = %q, want %q", client.model, "gpt-test")
+func TestNewClientRejectsEmptySchemaName(t *testing.T) {
+	if _, err := NewClient("https://example.com/v1", "test-key", "gpt-test", slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("NewClient() error = nil, want empty schema name rejection")
 	}
 }
 
-func TestLLMProviderErrorAttrs_RedactsOpenAIRawJSON(t *testing.T) {
-	apiErr := testOpenAIAPIError(t)
-	wrappedErr := fmt.Errorf("provider failed: %w", apiErr)
+// provider 오류는 shared-go generator가 정제한 status_code·code를 유지하고 provider 원문은 옮기지 않는다.
+func TestOpenAIClientErrorKeepsProviderStatusWithoutRawResponse(t *testing.T) {
+	const rawResponse = "private raw provider response"
 
-	// openai-go v3.71부터 Error()는 원문을 출력하지 않으므로 원문을 보유한 필드로 시험 전제를 확인한다.
-	if !strings.Contains(apiErr.Message, "private raw provider response") ||
-		!strings.Contains(apiErr.RawJSON(), "private raw provider response") {
-		t.Fatalf("test setup expected raw provider response on the API error, got message=%q raw=%q", apiErr.Message, apiErr.RawJSON())
-	}
+	server, _ := newCapturingLLMServer(t, http.StatusTooManyRequests,
+		`{"error":{"message":"`+rawResponse+`","type":"rate_limit_error","code":"rate_limit","param":"messages"}}`)
 
-	var buf bytes.Buffer
+	for _, tt := range []struct {
+		name string
+		opts []Option
+	}{
+		{name: "responses", opts: []Option{WithWebSearch(false)}},
+		{name: "chat completions", opts: []Option{WithChatCompletions()}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler), tt.opts...)
 
-	logger := slog.New(slog.NewTextHandler(&buf, nil))
-	logger.LogAttrs(t.Context(), slog.LevelError, "test", llmProviderErrorAttrs(wrappedErr)...)
+			_, err := client.GenerateJSON(t.Context(), testWirePromptLayers(), testObjectSchema())
+			if err == nil {
+				t.Fatal("GenerateJSON() error = nil, want 429 failure")
+			}
 
-	output := buf.String()
+			if strings.Contains(err.Error(), rawResponse) {
+				t.Fatalf("GenerateJSON() error leaked raw provider response: %v", err)
+			}
 
-	if strings.Contains(output, "private raw provider response") {
-		t.Fatalf("llmProviderErrorAttrs leaked raw provider response: %s", output)
-	}
-
-	if !strings.Contains(output, "status_code=429") {
-		t.Fatalf("llmProviderErrorAttrs missing status_code, got: %s", output)
-	}
-
-	if !strings.Contains(output, "error_code=rate_limit") {
-		t.Fatalf("llmProviderErrorAttrs missing error_code, got: %s", output)
-	}
-
-	if !strings.Contains(output, "provider_error_type=rate_limit_error") {
-		t.Fatalf("llmProviderErrorAttrs missing provider error type, got: %s", output)
+			for _, part := range []string{"status_code=429", "code=rate_limit"} {
+				if !strings.Contains(err.Error(), part) {
+					t.Fatalf("GenerateJSON() error = %v, want %q", err, part)
+				}
+			}
+		})
 	}
 }
 
-func TestSafeLLMProviderError_RedactsOpenAIRawJSON(t *testing.T) {
-	apiErr := testOpenAIAPIError(t)
-	wrappedErr := fmt.Errorf("provider failed: %w", apiErr)
+// provider 출력이 JSON 값 하나가 아니면 원문을 돌려주지 않고, 오류에도 출력 원문을 옮기지 않는다.
+func TestOpenAIClientRejectsNonJSONOutputWithoutRawText(t *testing.T) {
+	const rawOutput = "private raw provider output"
 
-	safeErr := safeLLMProviderError(wrappedErr)
-	if safeErr == nil {
-		t.Fatal("safeLLMProviderError() = nil")
+	server, _ := newCapturingLLMServer(t, http.StatusOK, `{"id":"resp_test","object":"response","created_at":0,"status":"completed","model":"gpt-test",`+
+		`"output":[{"type":"message","id":"msg_test","status":"completed","role":"assistant",`+
+		`"content":[{"type":"output_text","text":"`+rawOutput+`","annotations":[]}]}]}`)
+	client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler), WithWebSearch(false))
+
+	got, err := client.GenerateJSON(t.Context(), testWirePromptLayers(), testObjectSchema())
+	if _, ok := errors.AsType[*jsontext.SyntacticError](err); !ok {
+		t.Fatalf("GenerateJSON() = (%q, %v), want JSON syntax rejection", got, err)
 	}
 
-	if strings.Contains(safeErr.Error(), "private raw provider response") {
-		t.Fatalf("safeLLMProviderError leaked raw provider response: %s", safeErr.Error())
+	if strings.Contains(err.Error(), rawOutput) {
+		t.Fatalf("GenerateJSON() error leaked provider output: %v", err)
+	}
+}
+
+func TestOpenAIClientRecordsProviderUsage(t *testing.T) {
+	server, _ := newCapturingLLMServer(t, http.StatusOK, `{"id":"chatcmpl-test","object":"chat.completion","created":0,"model":"gpt-returned",`+
+		`"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{\"ok\":true}"}}],`+
+		`"usage":{"prompt_tokens":4,"completion_tokens":5,"total_tokens":9}}`)
+	tracker := &fakeCostTracker{}
+	client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler), WithChatCompletions(), WithCostTracker(tracker))
+
+	if _, err := client.GenerateJSON(t.Context(), testWirePromptLayers(), testObjectSchema()); err != nil {
+		t.Fatalf("GenerateJSON() error = %v", err)
 	}
 
-	if !strings.Contains(safeErr.Error(), "status_code=429") {
-		t.Fatalf("safeLLMProviderError missing status_code, got: %s", safeErr.Error())
+	if len(tracker.tokens) != 1 || tracker.tokens[0] != 9 || tracker.models[0] != "gpt-returned" || tracker.providers[0] != "openai" {
+		t.Fatalf("usage tracker = providers:%v models:%v tokens:%v", tracker.providers, tracker.models, tracker.tokens)
+	}
+}
+
+func TestOpenAIClientChatCompletionsPreservesGemini37FlashHigh(t *testing.T) {
+	server, captured := newCapturingLLMServer(t, http.StatusBadRequest, badRequestBody)
+	client := mustNewClient(t, server.URL, "test-key", "gemini-3.7-flash", slog.New(slog.DiscardHandler),
+		WithSchemaName("member_news_summary"), WithChatCompletions(), WithReasoningEffort(testReasoningLevelHigh))
+
+	if _, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema()); err == nil {
+		t.Fatal("GenerateJSON() error = nil, want test server rejection")
 	}
 
-	if !strings.Contains(safeErr.Error(), "code=rate_limit") {
-		t.Fatalf("safeLLMProviderError missing code, got: %s", safeErr.Error())
+	path, body := captured.snapshot()
+	if path != "/chat/completions" {
+		t.Fatalf("path = %q, want /chat/completions", path)
+	}
+
+	if body["model"] != "gemini-3.7-flash" {
+		t.Fatalf("request model = %v, want gemini-3.7-flash", body["model"])
+	}
+
+	if body["reasoning_effort"] != testReasoningLevelHigh {
+		t.Fatalf("request reasoning effort = %v, want high", body["reasoning_effort"])
+	}
+
+	if temperature, ok := body["temperature"]; ok {
+		t.Fatalf("request temperature = %v, want omitted", temperature)
 	}
 }
 
@@ -176,258 +199,6 @@ func TestSafeLLMProviderError_RedactsGenericProviderError(t *testing.T) {
 	}
 }
 
-func testOpenAIAPIError(t *testing.T) *openai.Error {
-	t.Helper()
-
-	apiErr := &openai.Error{}
-	raw := `{"code":"rate_limit","message":"private raw provider response","param":"messages","type":"rate_limit_error"}`
-
-	if err := jsonv2.Unmarshal([]byte(raw), apiErr); err != nil {
-		t.Fatalf("unmarshal openai error: %v", err)
-	}
-
-	apiErr.StatusCode = http.StatusTooManyRequests
-	apiErr.Request = &http.Request{
-		Method: http.MethodPost,
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   "api.openai.com",
-			Path:   "/v1/responses",
-		},
-	}
-	apiErr.Response = &http.Response{StatusCode: http.StatusTooManyRequests}
-
-	return apiErr
-}
-
-func TestNewClient_WithSchemaName(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithSchemaName("custom_schema"))
-
-	if client.schemaName != "custom_schema" {
-		t.Errorf("schemaName = %q, want %q", client.schemaName, "custom_schema")
-	}
-}
-
-func TestNewClient_WithSchemaName_Empty(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithSchemaName(""))
-
-	if client.schemaName != testDefaultSchemaName {
-		t.Errorf("empty WithSchemaName should keep default, got %q", client.schemaName)
-	}
-}
-
-func TestNewClient_WithTemperature_Positive(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithTemperature(0.7))
-
-	if client.temperature == nil {
-		t.Fatal("temperature should be set for positive value")
-	}
-
-	if *client.temperature != 0.7 {
-		t.Errorf("temperature = %v, want 0.7", *client.temperature)
-	}
-}
-
-func TestNewClient_WithTemperature_Zero(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithTemperature(0))
-
-	if client.temperature != nil {
-		t.Errorf("WithTemperature(0) should not set temperature, got %v", *client.temperature)
-	}
-}
-
-func TestNewClient_WithTemperature_Negative(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithTemperature(-1))
-
-	if client.temperature != nil {
-		t.Errorf("WithTemperature(-1) should not set temperature, got %v", *client.temperature)
-	}
-}
-
-func TestNewClient_MultipleOptions(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil,
-		WithSchemaName("member_news_summary"),
-		WithTemperature(0.3),
-	)
-
-	if client.schemaName != "member_news_summary" {
-		t.Errorf("schemaName = %q, want %q", client.schemaName, "member_news_summary")
-	}
-
-	if client.temperature == nil || *client.temperature != 0.3 {
-		t.Error("temperature should be 0.3")
-	}
-}
-
-func TestNewClient_WithWebSearch(t *testing.T) {
-	tests := []struct {
-		name    string
-		opt     Option
-		wantWeb bool
-	}{
-		{
-			name:    "enable",
-			opt:     WithWebSearch(true),
-			wantWeb: true,
-		},
-		{
-			name:    "disable",
-			opt:     WithWebSearch(false),
-			wantWeb: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, tt.opt)
-			if client.webSearch != tt.wantWeb {
-				t.Fatalf("webSearch = %v, want %v", client.webSearch, tt.wantWeb)
-			}
-		})
-	}
-}
-
-func TestNewClient_WithChatCompletions(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithChatCompletions())
-
-	if !client.chatCompletions {
-		t.Fatal("chatCompletions should be enabled")
-	}
-
-	if client.webSearch {
-		t.Fatal("chatCompletions mode should disable webSearch")
-	}
-}
-
-func TestNewClient_WithReasoningEffort(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithReasoningEffort(testReasoningLevelHigh))
-	if client.reasoningEffort != testReasoningLevelHigh {
-		t.Fatalf("reasoningEffort = %q, want %q", client.reasoningEffort, testReasoningLevelHigh)
-	}
-}
-
-func TestNewClient_WithReasoningEffort_EmptyIgnored(t *testing.T) {
-	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil,
-		WithReasoningEffort(testReasoningLevelHigh),
-		WithReasoningEffort(""),
-	)
-	if client.reasoningEffort != testReasoningLevelHigh {
-		t.Fatalf("empty reasoning effort should be ignored, got %q", client.reasoningEffort)
-	}
-}
-
 func TestOpenAIClient_ImplementsClient(t *testing.T) {
 	var _ Client = mustNewClient(t, "https://example.com/v1", "key", "model", nil)
-}
-
-func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
-	temperature := 0.2
-	generator := &fakeJSONGenerator{
-		resp: sharedllm.JSONResponse{
-			Text:  `{"ok":true}`,
-			Model: "gpt-returned",
-			Usage: sharedllm.Usage{TotalTokens: 9},
-		},
-	}
-	tracker := &fakeCostTracker{}
-	client := &OpenAIClient{
-		generator:       generator,
-		model:           "gpt-test",
-		schemaName:      "member_news_summary",
-		temperature:     &temperature,
-		reasoningEffort: testReasoningLevelHigh,
-		webSearch:       false,
-		chatCompletions: true,
-		logger:          slog.New(slog.DiscardHandler),
-		costTracker:     tracker,
-	}
-	schema := testObjectSchema()
-
-	got, err := client.GenerateJSON(t.Context(), openaipreset.PromptLayers{
-		Invariant: "invariant rules",
-		Developer: "developer rules",
-		User:      testWireUserInput,
-	}, schema)
-	if err != nil {
-		t.Fatalf("GenerateJSON() error = %v", err)
-	}
-
-	if got != `{"ok":true}` {
-		t.Fatalf("GenerateJSON() = %q, want JSON text", got)
-	}
-
-	if !generator.called {
-		t.Fatal("shared generator was not called")
-	}
-
-	if generator.req.InvariantPrompt != "invariant rules" || generator.req.DeveloperPrompt != "developer rules" || generator.req.UserPrompt != testWireUserInput {
-		t.Fatalf("request layers = invariant:%q developer:%q user:%q", generator.req.InvariantPrompt, generator.req.DeveloperPrompt, generator.req.UserPrompt)
-	}
-
-	if len(tracker.tokens) == 0 || tracker.tokens[0] != 9 || tracker.models[0] != "gpt-returned" {
-		t.Fatalf("usage tracker = models:%v tokens:%v", tracker.models, tracker.tokens)
-	}
-}
-
-func TestOpenAIClientGenerateJSON_PreservesGemini37FlashHigh(t *testing.T) {
-	generator := &fakeJSONGenerator{resp: sharedllm.JSONResponse{Text: `{"ok":true}`}}
-	client := &OpenAIClient{
-		generator:       generator,
-		model:           "gemini-3.7-flash",
-		schemaName:      "member_news_summary",
-		reasoningEffort: testReasoningLevelHigh,
-		chatCompletions: true,
-		logger:          slog.New(slog.DiscardHandler),
-	}
-
-	if _, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema()); err != nil {
-		t.Fatalf("GenerateJSON() error = %v", err)
-	}
-
-	if generator.req.Model != "gemini-3.7-flash" {
-		t.Fatalf("request model = %q, want gemini-3.7-flash", generator.req.Model)
-	}
-
-	if generator.req.ReasoningEffort != testReasoningLevelHigh {
-		t.Fatalf("request reasoning effort = %q, want high", generator.req.ReasoningEffort)
-	}
-
-	if !generator.req.ChatCompletions {
-		t.Fatal("request must use Chat Completions")
-	}
-
-	if generator.req.Temperature != nil {
-		t.Fatalf("request temperature = %v, want nil", *generator.req.Temperature)
-	}
-}
-
-type fakeJSONGenerator struct {
-	called bool
-	req    sharedllm.JSONRequest
-	resp   sharedllm.JSONResponse
-	err    error
-}
-
-func (f *fakeJSONGenerator) GenerateJSON(_ context.Context, req sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
-	f.called = true
-	f.req = req
-
-	return f.resp, f.err
-}
-
-func TestSafeLLMProviderError_RedactsEmptyOutputDiagnostics(t *testing.T) {
-	rawErr := fmt.Errorf("%w: status=completed refusal=private raw provider response output=message/completed", errOpenAIEmptyOutput)
-
-	safeErr := safeLLMProviderError(rawErr)
-	if safeErr == nil {
-		t.Fatal("safeLLMProviderError() = nil")
-	}
-
-	if strings.Contains(safeErr.Error(), "private raw provider response") {
-		t.Fatalf("safeLLMProviderError leaked empty-output diagnostic: %s", safeErr.Error())
-	}
-
-	if !strings.Contains(safeErr.Error(), "error_type=openai_empty_output") {
-		t.Fatalf("safeLLMProviderError missing empty-output type, got: %s", safeErr.Error())
-	}
 }

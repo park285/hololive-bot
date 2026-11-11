@@ -25,7 +25,7 @@ func TestHLPLeak(t *testing.T) {
 		t.Skip("skip helper leak slope: /proc is unavailable")
 	}
 
-	base := shortRuntimeBaseDir(t)
+	base := shortRuntimeBase(t)
 
 	const (
 		warmup = 10

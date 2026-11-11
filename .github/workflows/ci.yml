@@ -1,7 +1,7 @@
 name: CI
 run-name: CI · ${{ github.sha }}
 
-# PUBLIC 저장소의 canonical PR gate. 비밀이 필요 없는 정책·Go·frontend 검증은
+# PUBLIC 저장소의 canonical PR gate. 비밀이 필요 없는 정책·Go·collector YouTube.js helper 검증은
 # GitHub Actions에서 독립적으로 증적을 남기고, 운영·배포·대용량 분석은 로컬 pre-push와
 # non-PR security workflow가 계속 책임진다.
 
@@ -82,7 +82,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.work
-          # leg별 캐시 키 분리 — 목록 공유 시 7개 leg가 같은 키를 놓고 경쟁해 6개가 영구 캐시 미스가 된다.
+          # leg별 캐시 키 분리 — 목록을 공유하면 모든 leg가 같은 키를 놓고 경쟁해 처음 저장한 leg 외에는 영구 캐시 미스가 된다.
           cache-dependency-path: ${{ format('{0}/go.sum', matrix.module) }}
 
       - name: Setup Node for collector helper integration tests

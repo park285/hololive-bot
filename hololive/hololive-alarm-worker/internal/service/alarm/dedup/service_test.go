@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 var newTestLogger = sharedlogging.NewLogger
@@ -262,15 +263,9 @@ func configureMockDedupStringCache(client *cachemocks.Client, state *mockDedupCa
 	}
 }
 
-func (s *mockDedupCacheState) setRawString(key, value string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.strings[key] = value
-}
-
-func notificationPairKeys(service *Service, roomID, channelID string, stream *domain.Stream, minutesUntil int) (notifyKey, logicalKey string) {
-	category := keys.NotificationCategory(service.TargetMinutesSnapshot(), minutesUntil)
+// notificationPairKeys는 alarm-worker notifier와 같은 규칙으로 notify/logical claim key를 만든다.
+func notificationPairKeys(roomID, channelID string, stream *domain.Stream, minutesUntil int) (notifyKey, logicalKey string) {
+	category := keys.NotificationCategory([]int{5, 3, 1}, minutesUntil)
 
 	return keys.BuildNotifyClaimKey(roomID, stream.ID, *stream.StartScheduled, category),
 		keys.BuildLogicalEventClaimKey(roomID, channelID, stream.ID, stream.Title, *stream.StartScheduled, category)
@@ -278,14 +273,14 @@ func notificationPairKeys(service *Service, roomID, channelID string, stream *do
 
 func TestService_TryClaimPair_NotificationKeyCategoryAndSchedulePolicy(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 9, 15, 5, 0, time.UTC)
 	claim := func(scheduled time.Time, minutesUntil int) (string, bool) {
 		t.Helper()
 
 		stream := &domain.Stream{ID: "vid1", Title: "테스트 방송", StartScheduled: &scheduled}
-		notifyKey, logicalKey := notificationPairKeys(service, "room1", "UC_TEST", stream, minutesUntil)
+		notifyKey, logicalKey := notificationPairKeys("room1", "UC_TEST", stream, minutesUntil)
 
 		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, constants.CacheTTL.NotificationSent)
 		require.NoError(t, err)
@@ -316,13 +311,13 @@ func TestService_TryClaimPair_NotificationKeyCategoryAndSchedulePolicy(t *testin
 
 func TestService_TryClaimPair_LogicalEventBlocksReuploadedStream(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 9, 30, 0, 0, time.UTC)
 	original := &domain.Stream{ID: "stream1", Title: "테스트 방송", StartScheduled: &start}
 	reuploaded := &domain.Stream{ID: "stream2", Title: "테스트 방송", StartScheduled: &start}
 
-	notifyKey, logicalKey := notificationPairKeys(service, "room1", "UC_TEST", original, 5)
+	notifyKey, logicalKey := notificationPairKeys("room1", "UC_TEST", original, 5)
 	assert.Equal(t, keys.BuildLogicalEventClaimKey("room1", "UC_TEST", original.ID, original.Title, start, "target"), logicalKey)
 
 	notifyClaimed, logicalClaimed, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, constants.CacheTTL.NotificationSent)
@@ -330,7 +325,7 @@ func TestService_TryClaimPair_LogicalEventBlocksReuploadedStream(t *testing.T) {
 	assert.True(t, notifyClaimed)
 	assert.True(t, logicalClaimed)
 
-	reNotifyKey, reLogicalKey := notificationPairKeys(service, "room1", "UC_TEST", reuploaded, 3)
+	reNotifyKey, reLogicalKey := notificationPairKeys("room1", "UC_TEST", reuploaded, 3)
 	assert.NotEqual(t, notifyKey, reNotifyKey)
 	assert.Equal(t, logicalKey, reLogicalKey)
 
@@ -340,37 +335,9 @@ func TestService_TryClaimPair_LogicalEventBlocksReuploadedStream(t *testing.T) {
 	assert.False(t, logicalClaimed)
 }
 
-func TestService_DetectScheduleChange(t *testing.T) {
-	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	streamID := "stream-schedule-change"
-	start := time.Date(2026, time.March, 4, 9, 30, 45, 0, time.UTC)
-	delayed := time.Date(2026, time.March, 4, 9, 45, 12, 0, time.UTC)
-	early := time.Date(2026, time.March, 4, 9, 15, 33, 0, time.UTC)
-
-	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 5))
-
-	message, err := service.DetectScheduleChange(t.Context(), streamID, delayed)
-	require.NoError(t, err)
-	assert.Equal(t, "일정이 늦춰졌습니다.", message)
-
-	message, err = service.DetectScheduleChange(t.Context(), streamID, delayed)
-	require.NoError(t, err)
-	assert.Equal(t, "일정이 늦춰졌습니다.", message, "감지는 claim 없이 반복 가능해야 발행 실패 후 재시도할 수 있음")
-
-	message, err = service.DetectScheduleChange(t.Context(), streamID, early)
-	require.NoError(t, err)
-	assert.Equal(t, "일정이 앞당겨졌습니다.", message)
-
-	message, err = service.DetectScheduleChange(t.Context(), streamID, start.Add(10*time.Second))
-	require.NoError(t, err)
-	assert.Empty(t, message, "분 단위가 같으면 변경으로 보지 않음")
-}
-
 func TestService_DetectNotificationScheduleChanges_LogicalWaitingRoomReplacement(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	previousScheduled := time.Date(2026, time.March, 4, 9, 30, 0, 0, time.UTC)
 	currentScheduled := time.Date(2026, time.March, 4, 9, 45, 0, 0, time.UTC)
@@ -399,7 +366,7 @@ func TestService_DetectNotificationScheduleChanges_LogicalWaitingRoomReplacement
 
 func TestService_TryClaimNotificationScheduleChange_PerRoomDedup(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 9, 30, 0, 0, time.UTC)
 	delayed := time.Date(2026, time.March, 4, 9, 45, 0, 0, time.UTC)
@@ -423,91 +390,8 @@ func TestService_TryClaimNotificationScheduleChange_PerRoomDedup(t *testing.T) {
 	assert.True(t, claimed, "다른 방에는 같은 지연 전환을 독립적으로 보낼 수 있어야 함")
 }
 
-func TestService_MarkAsNotified_TargetMinutePolicyAndScheduleReset(t *testing.T) {
-	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	streamID := "vid-notified"
-	start := time.Date(2026, time.March, 4, 10, 0, 12, 0, time.UTC)
-
-	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 5))
-
-	already, err := service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
-	require.NoError(t, err)
-	assert.True(t, already, "target 분은 같은 스케줄에서 1회만 허용")
-
-	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 10)
-	require.NoError(t, err)
-	assert.False(t, already, "non-target 분은 개별 분 기준")
-
-	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 10))
-
-	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 10)
-	require.NoError(t, err)
-	assert.True(t, already)
-
-	anyNotified, err := service.IsAlreadyNotified(t.Context(), streamID)
-	require.NoError(t, err)
-	assert.True(t, anyNotified)
-
-	changed := start.Add(2 * time.Hour)
-
-	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, changed, 5)
-	require.NoError(t, err)
-	assert.False(t, already, "스케줄이 바뀌면 이전 이력은 무시")
-
-	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, changed, 5))
-
-	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
-	require.NoError(t, err)
-	assert.False(t, already, "새 스케줄 기록 후 기존 스케줄은 차단되지 않아야 함")
-
-	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, changed, 5)
-	require.NoError(t, err)
-	assert.True(t, already)
-}
-
-func TestService_UpdateTargetMinutes_AffectsTargetPolicy(t *testing.T) {
-	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	streamID := "vid-dynamic-targets"
-	start := time.Date(2026, time.March, 4, 10, 0, 0, 0, time.UTC)
-
-	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 10))
-
-	already, err := service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
-	require.NoError(t, err)
-	assert.False(t, already, "10분은 아직 target이 아니라서 3분을 막으면 안 됨")
-
-	service.UpdateTargetMinutes([]int{10, 3, 1})
-
-	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
-	require.NoError(t, err)
-	assert.True(t, already, "10분이 target으로 승격되면 같은 스케줄의 3분 target은 차단돼야 함")
-}
-
-func TestIsAlreadyNotified_PropagatesCacheError(t *testing.T) {
-	t.Parallel()
-
-	cacheErr := errors.New("connection refused")
-	mockCache, _ := newMockDedupCache(t)
-
-	mockCache.HGetAllFunc = func(_ context.Context, _ string) (map[string]string, error) {
-		return nil, cacheErr
-	}
-
-	service := NewService(mockCache, []int{5, 3, 1}, newTestLogger())
-
-	_, err := service.IsAlreadyNotified(t.Context(), "stream-error-test")
-	if err == nil {
-		t.Fatal("expected error from IsAlreadyNotified when cache fails, got nil")
-	}
-}
-
 func TestService_RecentlyNotifiedStreamIDs(t *testing.T) {
-	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(testutil.NewTestCacheService(t.Context(), t), newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 12, 0, 0, 0, time.UTC)
 	require.NoError(t, service.MarkAsNotified(t.Context(), "stream-1", start, 5))
@@ -518,8 +402,8 @@ func TestService_RecentlyNotifiedStreamIDs(t *testing.T) {
 }
 
 func TestService_OldStringNotifiedDataFailsClosed(t *testing.T) {
-	cacheMock, state := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	cacheService, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
+	service := NewService(cacheService, newTestLogger())
 
 	streamID := "vid-old-shape"
 	start := time.Date(2026, time.March, 4, 12, 0, 0, 0, time.UTC)
@@ -530,27 +414,22 @@ func TestService_OldStringNotifiedDataFailsClosed(t *testing.T) {
 		SentAt:         map[int]bool{5: true},
 	})
 	require.NoError(t, err)
-	state.setRawString(key, string(oldJSON))
+	require.NoError(t, mini.Set(key, string(oldJSON)))
 
-	_, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
+	_, err = service.RecentlyNotifiedStreamIDs(t.Context(), []string{streamID})
 	require.ErrorContains(t, err, "WRONGTYPE")
 
 	err = service.MarkAsNotified(t.Context(), streamID, start, 3)
 	require.ErrorContains(t, err, "WRONGTYPE")
 
-	state.mu.Lock()
-
-	stored := state.strings[key]
-	_, hasHash := state.hashes[key]
-	state.mu.Unlock()
-
+	stored, err := mini.Get(key)
+	require.NoError(t, err)
 	assert.JSONEq(t, string(oldJSON), stored)
-	assert.False(t, hasHash)
 }
 
-func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
-	cacheMock, state := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+func TestService_RecentlyNotifiedUpcomingRooms_PerRoomOutcomes(t *testing.T) {
+	cacheService, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
+	service := NewService(cacheService, newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 11, 0, 0, 0, time.UTC)
 	stream := &domain.Stream{
@@ -558,46 +437,31 @@ func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
 		Title:          testUpcomingTitle,
 		StartScheduled: &start,
 	}
-
-	require.NoError(t, service.MarkUpcomingEventNotified(t.Context(), "room1", "UC_TEST", stream))
-
-	recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
-	require.NoError(t, err)
-	assert.True(t, recent)
-
-	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
-	stale := UpcomingEventNotifiedData{
-		NotifiedAt: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339),
+	markerKey := func(roomID string) string {
+		return keys.BuildUpcomingEventKey(roomID, "UC_TEST", stream.ID, stream.Title, start)
 	}
-	staleJSON, err := jsonv2.Marshal(stale)
-	require.NoError(t, err)
-	state.setRawString(key, string(staleJSON))
 
-	recent, err = service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
+	require.NoError(t, service.MarkUpcomingEventNotified(t.Context(), "room-recent", "UC_TEST", stream))
+
+	staleJSON, err := jsonv2.Marshal(UpcomingEventNotifiedData{NotifiedAt: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)})
 	require.NoError(t, err)
-	assert.False(t, recent)
+	require.NoError(t, mini.Set(markerKey("room-stale"), string(staleJSON)))
+	require.NoError(t, mini.Set(markerKey("room-empty-time"), `{"notified_at":""}`))
+	require.NoError(t, mini.Set(markerKey("room-bad-time"), `{"notified_at":"invalid-time"}`))
+	require.NoError(t, mini.Set(markerKey("room-bad-json"), "{invalid-json"))
+	mini.HSet(markerKey("room-wrong-type"), "notified_at", "x")
+
+	rooms := []string{"room-recent", "room-stale", "room-missing", "room-empty-time", "room-bad-time", "room-bad-json", "room-wrong-type"}
+	recent, failed := service.RecentlyNotifiedUpcomingRooms(t.Context(), rooms, "UC_TEST", stream, 15*time.Minute)
+
+	assert.Equal(t, map[string]struct{}{"room-recent": {}}, recent)
+	require.Len(t, failed, 2)
+	require.ErrorContains(t, failed["room-bad-json"], "decode upcoming event marker")
+	require.ErrorContains(t, failed["room-wrong-type"], "WRONGTYPE")
 }
 
-func TestService_WasUpcomingEventNotifiedRecently_InvalidPayloadReturnsError(t *testing.T) {
-	cacheMock, state := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	start := time.Date(2026, time.March, 4, 11, 0, 0, 0, time.UTC)
-	stream := &domain.Stream{
-		ID:             testUpcomingStreamID,
-		Title:          testUpcomingTitle,
-		StartScheduled: &start,
-	}
-	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
-	state.setRawString(key, "{invalid-json")
-
-	_, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "was upcoming event notified recently: get cache data")
-}
-
-func TestService_WasUpcomingEventNotifiedRecently_NonPositiveWindowSkipsCache(t *testing.T) {
-	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
+func TestService_RecentlyNotifiedUpcomingRooms_NonPositiveWindowSkipsCache(t *testing.T) {
+	service := NewService(nil, newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 11, 0, 0, 0, time.UTC)
 	stream := &domain.Stream{
@@ -615,63 +479,11 @@ func TestService_WasUpcomingEventNotifiedRecently_NonPositiveWindowSkipsCache(t 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, tt.window)
-			require.NoError(t, err)
-			assert.False(t, recent)
+			recent, failed := service.RecentlyNotifiedUpcomingRooms(t.Context(), []string{"room1"}, "UC_TEST", stream, tt.window)
+			assert.Empty(t, recent)
+			assert.Empty(t, failed)
 		})
 	}
-}
-
-func TestService_WasUpcomingEventNotifiedRecently_MissingNotifiedAtReturnsFalse(t *testing.T) {
-	start := time.Date(2026, time.March, 4, 11, 0, 0, 0, time.UTC)
-	stream := &domain.Stream{
-		ID:             testUpcomingStreamID,
-		Title:          testUpcomingTitle,
-		StartScheduled: &start,
-	}
-	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
-
-	tests := []struct {
-		name string
-		seed func(state *mockDedupCacheState)
-	}{
-		{name: "cache miss", seed: func(*mockDedupCacheState) {}},
-		{name: "empty notified_at", seed: func(state *mockDedupCacheState) {
-			state.setRawString(key, `{"notified_at":""}`)
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cacheMock, state := newMockDedupCache(t)
-			service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-			tt.seed(state)
-
-			recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
-			require.NoError(t, err)
-			assert.False(t, recent)
-		})
-	}
-}
-
-func TestService_WasUpcomingEventNotifiedRecently_MalformedNotifiedAtTreatedAsNotNotified(t *testing.T) {
-	cacheMock, state := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	start := time.Date(2026, time.March, 4, 11, 0, 0, 0, time.UTC)
-	stream := &domain.Stream{
-		ID:             testUpcomingStreamID,
-		Title:          testUpcomingTitle,
-		StartScheduled: &start,
-	}
-	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
-	corrupted, err := jsonv2.Marshal(UpcomingEventNotifiedData{NotifiedAt: "invalid-time"})
-	require.NoError(t, err)
-	state.setRawString(key, string(corrupted))
-
-	recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
-	require.NoError(t, err)
-	assert.False(t, recent)
 }
 
 func TestService_ReleaseClaims_WrapsDelManyError(t *testing.T) {
@@ -681,7 +493,7 @@ func TestService_ReleaseClaims_WrapsDelManyError(t *testing.T) {
 			return 0, expectedErr
 		},
 	}
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	err := service.ReleaseClaims(t.Context(), []string{"claim:key"})
 	require.Error(t, err)
@@ -692,7 +504,7 @@ func TestService_ReleaseClaims_WrapsDelManyError(t *testing.T) {
 
 func TestService_TryClaimPair_BothAcquired(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	a1, a2, err := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
 	require.NoError(t, err)
@@ -702,7 +514,7 @@ func TestService_TryClaimPair_BothAcquired(t *testing.T) {
 
 func TestService_TryClaimPair_Key1AcquiredKey2Exists(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	state.mu.Lock()
 
@@ -717,7 +529,7 @@ func TestService_TryClaimPair_Key1AcquiredKey2Exists(t *testing.T) {
 
 func TestService_TryClaimPair_Key1ContendedNeverTouchesKey2(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	state.mu.Lock()
 
@@ -743,7 +555,7 @@ func TestService_TryClaimPair_SetNXErrorReturnsError(t *testing.T) {
 		return false, errors.New("pipeline broken")
 	}
 
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	a1, a2, err := service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
 	require.ErrorContains(t, err, "pipeline broken")
@@ -763,7 +575,7 @@ func TestService_TryClaimPair_Key2ErrorReturnsErrorWithKey1Acquired(t *testing.T
 		return baseSetNX(ctx, key, value, ttl)
 	}
 
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, newTestLogger())
 
 	// key1은 이미 선점됐으므로 호출자가 release할 수 있게 acquired1=true를 함께 돌려준다.
 	a1, a2, err := service.TryClaimPair(t.Context(), "pk:k1", "pk:k2", 5*time.Minute)

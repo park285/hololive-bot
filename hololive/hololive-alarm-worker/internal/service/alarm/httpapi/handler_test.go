@@ -45,7 +45,6 @@ type mockAlarmCRUD struct {
 	addAlarmFn                  func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
 	removeAlarmFn               func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
 	removeHostAlarmFn           func(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error)
-	getRoomAlarmsWithTypesFn    func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
 	listRoomAlarmsViewFn        func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
 	clearRoomAlarmsFn           func(ctx context.Context, roomID string) (int, error)
 	updateAlarmAdvanceMinutesFn func(minutes int) (domain.AdvanceMinutesResult, error)
@@ -83,15 +82,6 @@ func (m *mockAlarmCRUD) RemoveHostAlarm(ctx context.Context, roomID, channelID, 
 	out, err := m.removeHostAlarmFn(ctx, roomID, channelID, hostID, alarmTypes)
 	if err != nil {
 		return out, fmt.Errorf("remove host alarm fn: %w", err)
-	}
-
-	return out, nil
-}
-
-func (m *mockAlarmCRUD) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	out, err := m.getRoomAlarmsWithTypesFn(ctx, roomID)
-	if err != nil {
-		return out, fmt.Errorf("get room alarms with types fn: %w", err)
 	}
 
 	return out, nil
@@ -283,57 +273,6 @@ func TestRemoveAlarm(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/remove", jsonBody(t, tt.body))
 			req.Header.Set("Content-Type", "application/json")
-			r.ServeHTTP(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
-			}
-
-			resp := decodeResponse(t, rec.Body)
-			if resp.Success != tt.wantOK {
-				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
-			}
-		})
-	}
-}
-
-func TestGetRoomAlarmsWithTypes(t *testing.T) {
-	tests := []struct {
-		name       string
-		roomID     string
-		mockFn     func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
-		wantStatus int
-		wantOK     bool
-	}{
-		{
-			name:   "성공",
-			roomID: testRoomID,
-			mockFn: func(_ context.Context, _ string) ([]*domain.Alarm, error) {
-				return []*domain.Alarm{
-					{RoomID: testRoomID, ChannelID: testChannelID},
-				}, nil
-			},
-			wantStatus: http.StatusOK,
-			wantOK:     true,
-		},
-		{
-			name:   "서비스 에러",
-			roomID: "room2",
-			mockFn: func(_ context.Context, _ string) ([]*domain.Alarm, error) {
-				return nil, errors.New("cache miss")
-			},
-			wantStatus: http.StatusInternalServerError,
-			wantOK:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockAlarmCRUD{getRoomAlarmsWithTypesFn: tt.mockFn}
-			r := newTestHandler(t, mock)
-
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/room/"+tt.roomID, http.NoBody)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {

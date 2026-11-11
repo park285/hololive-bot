@@ -43,13 +43,12 @@ func TestProcessMessageFixesReplyFormatForCommand(t *testing.T) {
 				},
 			})
 
-			b := &Bot{
-				logger:          newBotTestLogger(),
-				commandRegistry: registry,
-				messageAdapter:  messaging.NewMessageAdapter("!", ""),
-				irisClient:      irisClient,
-				transport:       transport,
-			}
+			b := withMessagePath(&Bot{
+				logger:         newBotTestLogger(),
+				messageAdapter: messaging.NewMessageAdapter("!"),
+				irisClient:     irisClient,
+				transport:      transport,
+			}, registry)
 
 			sender := testSenderName
 			require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{

@@ -4,21 +4,25 @@ import (
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 type countingSettingsWriter struct {
-	settingssvc.ReadWriter
+	adminsettings.ReadWriter
 
 	updates atomic.Int32
 }
@@ -69,21 +73,21 @@ func newAlarmWorkerStub(t *testing.T, status int) (*httptest.Server, *atomic.Int
 	return server, &puts
 }
 
-func newSettingsUpdateAPIHandler(t *testing.T, workerURL string) (*SettingsAPIHandler, *countingSettingsWriter) {
+func newSettingsUpdateAPIHandler(t *testing.T, workerURL string) (*SettingsHandler, *countingSettingsWriter) {
 	t.Helper()
 
 	writer := &countingSettingsWriter{
 		ReadWriter: mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 			AlarmAdvanceMinutes: 5,
-		}, newDiscardLogger()),
+		}),
 	}
 
-	handler := (&Handler{
-		logger:          newDiscardLogger(),
-		activity:        newActivityLoggerForTest(t),
-		settings:        writer,
-		settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, workerURL)),
-	}).DomainHandlers().Settings
+	handler := newSettingsHandler(Deps{
+		Logger:   newDiscardLogger(),
+		Activity: newActivityLoggerForTest(t),
+		Settings: writer,
+		Applier:  adminsettings.NewSettingsApplier(newTestAlarmClient(t, workerURL)),
+	})
 
 	return handler, writer
 }
@@ -190,4 +194,45 @@ func TestSettingsAPIHandler_UpdateSettings_RejectsZeroBeforeStoreAndWorker(t *te
 	if got := targetMinutes(); len(got) != 3 || got[0] != 5 {
 		t.Fatalf("worker targets = %v, want preserved [5 3 1]", got)
 	}
+}
+
+// settings.update 응답과 settings.json 형식을 고정한다. 응답 settings와 파일은 shared settings.Settings가, runtime 키는
+// admin settings 결과 타입이 정하므로 두 패키지 중 하나만 바뀌어도 iris-console·alarm-worker 계약이 깨진다.
+func TestSettingsAPIHandler_UpdateSettings_PreservesWireAndStoredFileShape(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	worker, _ := newAlarmWorkerStub(t, http.StatusOK)
+	dir := t.TempDir()
+	handler := newSettingsHandler(Deps{
+		Logger:   newDiscardLogger(),
+		Activity: newActivityLoggerForTest(t),
+		Settings: mustNewTestSettingsService(t, filepath.Join(dir, "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}),
+		Applier:  adminsettings.NewSettingsApplier(newTestAlarmClient(t, worker.URL)),
+	})
+
+	ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":7}`))
+	handler.UpdateSettings(ctx)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.JSONEq(t, `{
+		"status": "ok",
+		"message": "Settings updated",
+		"settings": {"alarmAdvanceMinutes": 7, "targetMinutes": [7, 3, 1]},
+		"runtime": {"alarm_requested_advance_minutes": 7, "alarm_applied": true, "alarm_target_minutes": [7, 3, 1]}
+	}`, rec.Body.String())
+
+	stored, err := fs.ReadFile(os.DirFS(dir), "settings.json")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"alarmAdvanceMinutes": 7, "targetMinutes": [7, 3, 1]}`, string(stored))
+
+	getCtx, getRec := newAPITestContext(http.MethodGet, "/api/holo/settings", nil)
+	handler.GetSettings(getCtx)
+
+	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+	assert.JSONEq(t, `{
+		"status": "ok",
+		"settings": {"alarmAdvanceMinutes": 7, "targetMinutes": [7, 3, 1]},
+		"runtime": {"alarm_target_minutes": [7, 3, 1]}
+	}`, getRec.Body.String())
 }

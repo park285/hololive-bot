@@ -2,19 +2,15 @@ package alarmdispatch
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
@@ -167,25 +163,7 @@ func TestHandoffReconcilerRoutesObservationToLedgerAction(t *testing.T) {
 	}
 }
 
-func TestHandoffReconcilerSkipsLedgerWhenStatusQueryIsCanceled(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	consumer := &handoffTestConsumer{claims: []dispatchoutbox.HandoffClaim{{UnitID: 7, IrisRequestID: testHandoffIrisRequestID}}}
-	client := &handoffTestStatusClient{snapshot: func(string) (*iris.ReplyStatusSnapshot, error) {
-		cancel()
-
-		return nil, context.Canceled
-	}}
-
-	claimed, err := newHandoffTestReconciler(t, consumer, client).RunOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, claimed)
-	require.Empty(t, consumer.calls)
-}
-
+// handoffOutcomeLevels는 reconciler가 단위별 정산 결과로 남긴 로그 수준을 send_unit_id별로 모은다.
 type handoffOutcomeLevels struct {
 	mu     sync.Mutex
 	levels map[int64]slog.Level
@@ -225,107 +203,7 @@ func (h *handoffOutcomeLevels) snapshot() map[int64]slog.Level {
 	return maps.Clone(h.levels)
 }
 
-type gatedHandoffConsumer struct {
-	handoffTestConsumer
-
-	release  chan struct{}
-	inflight atomic.Int32
-}
-
-func (c *gatedHandoffConsumer) CompleteHandoff(ctx context.Context, claim *dispatchoutbox.HandoffClaim) error {
-	c.inflight.Add(1)
-	defer c.inflight.Add(-1)
-
-	<-c.release
-
-	return c.handoffTestConsumer.CompleteHandoff(ctx, claim)
-}
-
-const handoffGatedUnits = 8
-
-type gatedHandoffRun struct {
-	consumer *gatedHandoffConsumer
-	levels   *handoffOutcomeLevels
-	done     chan int
-}
-
-func startGatedHandoffRun(t *testing.T) gatedHandoffRun {
-	t.Helper()
-
-	claims := make([]dispatchoutbox.HandoffClaim, handoffGatedUnits)
-	for i := range claims {
-		claims[i] = dispatchoutbox.HandoffClaim{UnitID: int64(i + 1), IrisRequestID: fmt.Sprintf("iris-%d", i+1)}
-	}
-
-	run := gatedHandoffRun{
-		consumer: &gatedHandoffConsumer{claims: claims, release: make(chan struct{})},
-		levels:   newHandoffOutcomeLevels(),
-		done:     make(chan int),
-	}
-	client := &handoffTestStatusClient{snapshot: handoffStatus("handoff_completed")}
-	reconciler, err := NewHandoffReconciler(run.consumer, client,
-		HandoffReconcilerConfig{Horizon: testHandoffHorizon, PollInterval: time.Second}, slog.New(run.levels))
-	require.NoError(t, err)
-
-	go func() {
-		claimed, runErr := reconciler.RunOnce(t.Context())
-		assert.NoError(t, runErr)
-
-		run.done <- claimed
-	}()
-
-	synctest.Wait()
-
-	client.mu.Lock()
-
-	queried := len(client.queried)
-	client.mu.Unlock()
-
-	require.Equal(t, handoffGatedUnits, queried, "every status query runs before settlement slots free up")
-	require.EqualValues(t, alarmDispatchHandoffSettleConcurrency, run.consumer.inflight.Load())
-
-	return run
-}
-
-func TestHandoffReconcilerBoundsConcurrentSettlements(t *testing.T) {
-	t.Run("queued settlements apply once slots free within budget", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			run := startGatedHandoffRun(t)
-
-			close(run.consumer.release)
-
-			require.Equal(t, handoffGatedUnits, <-run.done)
-			require.Len(t, run.consumer.calls, handoffGatedUnits)
-			require.Empty(t, run.levels.snapshot())
-		})
-	})
-
-	t.Run("settlements waiting past the budget are not applied", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			run := startGatedHandoffRun(t)
-
-			time.Sleep(alarmDispatchStateTimeout + time.Millisecond)
-			close(run.consumer.release)
-
-			require.Equal(t, handoffGatedUnits, <-run.done)
-			require.Len(t, run.consumer.calls, alarmDispatchHandoffSettleConcurrency, "only settlements already holding a slot apply")
-
-			applied := make([]int64, 0, len(run.consumer.calls))
-			for _, call := range run.consumer.calls {
-				applied = append(applied, call.unitID)
-			}
-
-			levels := run.levels.snapshot()
-			require.Len(t, levels, handoffGatedUnits-alarmDispatchHandoffSettleConcurrency)
-
-			for unit, level := range levels {
-				require.NotContains(t, applied, unit)
-				require.Equal(t, slog.LevelWarn, level, "an over-budget settlement is left to the next check")
-			}
-		})
-	})
-}
-
+// failingHandoffConsumer의 완료·dlq 정산은 err를 돌려준다.
 type failingHandoffConsumer struct {
 	handoffTestConsumer
 
@@ -340,6 +218,8 @@ func (c *failingHandoffConsumer) DLQAfterHandoff(context.Context, *dispatchoutbo
 	return c.err
 }
 
+// 저장소의 alarm dispatch 실패 sentinel이 엔진 분류로 이어진다. 확인이 닫힌 미스와 DLQ commit 뒤 claim 키 해제
+// 실패는 다시 판정할 확인이 없으므로 오류이고, 확인을 닫지 않은 소유 상실 미스는 다음 확인이 다시 판정하므로 경고다.
 func TestHandoffReconcilerClassifiesSettlementFailures(t *testing.T) {
 	t.Parallel()
 
@@ -373,23 +253,11 @@ func TestHandoffReconcilerClassifiesSettlementFailures(t *testing.T) {
 			want:   slog.LevelWarn,
 		},
 		{
-			name:   "settlement budget exceeded",
-			status: "handoff_completed",
-			err:    fmt.Errorf("complete alarm handoff check: %w", context.DeadlineExceeded),
-			want:   slog.LevelWarn,
-		},
-		{
 			name:       "dlq claim keys not released by deadline",
 			status:     "failed",
 			generation: iris.ReplyReissueMaxGenerations,
 			err:        fmt.Errorf("release alarm handoff dlq claim keys: %w: %w", dispatchoutbox.ErrHandoffClaimKeysNotReleased, context.DeadlineExceeded),
 			want:       slog.LevelError,
-		},
-		{
-			name:   "store failure",
-			status: "handoff_completed",
-			err:    errors.New("connection refused"),
-			want:   slog.LevelError,
 		},
 	}
 

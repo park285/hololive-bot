@@ -43,65 +43,7 @@ import (
 
 const testAPIKey = "test-key"
 
-func writeAPIResponse(t *testing.T, w http.ResponseWriter, body string) {
-	t.Helper()
-
-	if _, err := w.Write([]byte(body)); err != nil {
-		t.Fatalf("write api response: %v", err)
-	}
-}
-
-func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing.T) {
-	t.Parallel()
-
-	holodexCfg := settings.DefaultHolodexOperationalConfig()
-
-	client, err := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, nil, &holodexCfg)
-	if err != nil {
-		t.Fatalf("NewHolodexAPIClient() error = %v", err)
-	}
-
-	if client == nil {
-		t.Fatal("NewHolodexAPIClient() returned nil")
-	}
-
-	expected := httputil.NewExternalAPIClient(holodexCfg.Timeout)
-	if client.httpClient.Timeout != expected.Timeout {
-		t.Fatalf("Timeout = %s, want %s", client.httpClient.Timeout, expected.Timeout)
-	}
-
-	gotTransport, ok := client.httpClient.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("Transport type = %T, want *http.Transport", client.httpClient.Transport)
-	}
-
-	wantTransport, ok := expected.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected transport type = %T, want *http.Transport", expected.Transport)
-	}
-
-	if gotTransport.MaxConnsPerHost != wantTransport.MaxConnsPerHost {
-		t.Fatalf("MaxConnsPerHost = %d, want %d", gotTransport.MaxConnsPerHost, wantTransport.MaxConnsPerHost)
-	}
-
-	if gotTransport.MaxIdleConnsPerHost != wantTransport.MaxIdleConnsPerHost {
-		t.Fatalf("MaxIdleConnsPerHost = %d, want %d", gotTransport.MaxIdleConnsPerHost, wantTransport.MaxIdleConnsPerHost)
-	}
-
-	if gotTransport.ResponseHeaderTimeout != wantTransport.ResponseHeaderTimeout {
-		t.Fatalf("ResponseHeaderTimeout = %s, want %s", gotTransport.ResponseHeaderTimeout, wantTransport.ResponseHeaderTimeout)
-	}
-
-	if gotTransport.Protocols == nil || gotTransport.Protocols.HTTP1() || !gotTransport.Protocols.HTTP2() {
-		t.Fatalf("Protocols = %v, want encrypted HTTP/2 only", gotTransport.Protocols)
-	}
-
-	if gotTransport.Protocols.UnencryptedHTTP2() {
-		t.Fatal("Protocols unexpectedly enables unencrypted HTTP/2")
-	}
-}
-
-func TestNewHolodexHTTPClientNegotiatesHTTP2(t *testing.T) {
+func TestNewHolodexAPIClientNegotiatesHTTP2(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -113,7 +55,14 @@ func TestNewHolodexHTTPClientNegotiatesHTTP2(t *testing.T) {
 	server.StartTLS()
 	t.Cleanup(server.Close)
 
-	client := newHolodexHTTPClient(time.Second)
+	holodexCfg := settings.DefaultHolodexOperationalConfig()
+
+	apiClient, err := NewHolodexAPIClient(httputil.NewProfiledClient(httputil.TransportProfile{Timeout: time.Second}), server.URL, testAPIKey, slog.Default(), nil, nil, &holodexCfg)
+	if err != nil {
+		t.Fatalf("NewHolodexAPIClient() error = %v", err)
+	}
+
+	client := apiClient.httpClient
 	clientTransport, ok := client.Transport.(*http.Transport)
 
 	if !ok {
@@ -173,24 +122,9 @@ func TestNewHolodexAPIClientConfiguresProvidedStandardTransportForHTTP2(t *testi
 	if transport.Protocols == nil || transport.Protocols.HTTP1() || !transport.Protocols.HTTP2() {
 		t.Fatalf("Protocols = %v, want encrypted HTTP/2 only", transport.Protocols)
 	}
-}
 
-func TestHolodexAPIClientSingleKey(t *testing.T) {
-	logger := slog.Default()
-	client := &APIClient{
-		admissionGate:    make(chan struct{}, 1),
-		maxRetryAttempts: 3,
-		httpClient:       &http.Client{},
-		baseURL:          "https://holodex.net/api/v2",
-		apiKey:           "k1",
-		logger:           logger,
-	}
-
-	for range 5 {
-		got := client.getNextAPIKey()
-		if got != "k1" {
-			t.Fatalf("expected key 'k1', got '%s'", got)
-		}
+	if transport.Protocols.UnencryptedHTTP2() {
+		t.Fatal("Protocols unexpectedly enables unencrypted HTTP/2")
 	}
 }
 
@@ -208,30 +142,6 @@ func newHolodexTestClient(apiKey string) *APIClient {
 	}
 }
 
-func TestHolodexAPIClientDoRequestNoKeys(t *testing.T) {
-	logger := slog.Default()
-	// semaphore 초기화하여 deadlock 방지
-	client := &APIClient{
-		admissionGate:    make(chan struct{}, 1),
-		maxRetryAttempts: 3,
-		httpClient:       &http.Client{},
-		baseURL:          "https://holodex.net/api/v2",
-		apiKey:           "",
-		logger:           logger,
-		requestDelay:     10 * time.Millisecond,
-		semaphore:        make(chan struct{}, 2),
-	}
-
-	_, err := client.DoRequest(t.Context(), http.MethodGet, "/live", nil)
-	if err == nil {
-		t.Fatal("expected error when no API keys configured")
-	}
-
-	if !errors.Is(err, errNoAPIKeys) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 type nilResponseTransport struct{}
 
 func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
@@ -242,14 +152,15 @@ func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
 
 func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 	client := &APIClient{
-		admissionGate:     make(chan struct{}, 1),
-		maxRetryAttempts:  3,
-		httpClient:        &http.Client{Transport: nilResponseTransport{}},
-		baseURL:           "https://holodex.example/api/v2",
-		apiKey:            testAPIKey,
-		logger:            slog.Default(),
-		semaphore:         make(chan struct{}, 5),
-		perAttemptTimeout: time.Second,
+		admissionGate:        make(chan struct{}, 1),
+		maxRetryAttempts:     3,
+		httpClient:           &http.Client{Transport: nilResponseTransport{}},
+		baseURL:              "https://holodex.example/api/v2",
+		apiKey:               testAPIKey,
+		logger:               slog.Default(),
+		semaphore:            make(chan struct{}, 5),
+		perAttemptTimeout:    time.Second,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
 		breaker: newCircuitBreaker(
 			circuitFailureThreshold,
 			circuitResetTimeout,
@@ -263,42 +174,6 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 
 	if got := err.Error(); !strings.Contains(got, "nil *Response") {
 		t.Fatalf("error = %q, want net/http nil *Response cause", got)
-	}
-}
-
-func newTestClientWithHandler(handler http.HandlerFunc, apiKey string) (*APIClient, *httptest.Server) {
-	server := httptest.NewServer(handler)
-	client := &APIClient{
-		admissionGate:    make(chan struct{}, 1),
-		maxRetryAttempts: 3,
-		httpClient:       server.Client(),
-		baseURL:          server.URL,
-		apiKey:           apiKey,
-		logger:           slog.Default(),
-		requestDelay:     10 * time.Millisecond,
-		semaphore:        make(chan struct{}, 5),
-	}
-
-	return client, server
-}
-
-func TestAPIClientWithMockServer_Success(t *testing.T) {
-	expectedBody := `{"status":"ok","data":[]}`
-	client, server := newTestClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		writeAPIResponse(t, w, expectedBody)
-	}, "test-key-1")
-
-	defer server.Close()
-
-	// Mock 서버 URL로 요청 (constants.APIConfig.HolodexBaseURL 대신)
-	// 실제로는 buildRequestURL을 통해 HolodexBaseURL을 사용하므로,
-	// RoundTripper를 커스텀하거나 이 테스트는 단위 테스트 범위에서 제외
-	// 여기서는 getNextAPIKey와 같은 내부 로직만 테스트
-	key := client.getNextAPIKey()
-	if key != "test-key-1" {
-		t.Errorf("expected key 'test-key-1', got '%s'", key)
 	}
 }
 
@@ -367,14 +242,15 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 	defer server.Close()
 
 	client := &APIClient{
-		admissionGate:     make(chan struct{}, 1),
-		maxRetryAttempts:  3,
-		httpClient:        server.Client(),
-		baseURL:           server.URL,
-		apiKey:            testAPIKey,
-		logger:            slog.Default(),
-		semaphore:         make(chan struct{}, 5),
-		perAttemptTimeout: 5 * time.Second,
+		admissionGate:        make(chan struct{}, 1),
+		maxRetryAttempts:     3,
+		httpClient:           server.Client(),
+		baseURL:              server.URL,
+		apiKey:               testAPIKey,
+		logger:               slog.Default(),
+		semaphore:            make(chan struct{}, 5),
+		perAttemptTimeout:    5 * time.Second,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
 		breaker: newCircuitBreaker(
 			circuitFailureThreshold,
 			circuitResetTimeout,
@@ -454,15 +330,16 @@ func TestPerAttemptTimeout(t *testing.T) {
 	holodexCfg.PerAttemptTimeout = 200 * time.Millisecond
 
 	client := &APIClient{
-		admissionGate:     make(chan struct{}, 1),
-		maxRetryAttempts:  3,
-		httpClient:        server.Client(),
-		baseURL:           server.URL,
-		apiKey:            testAPIKey,
-		logger:            slog.Default(),
-		requestDelay:      10 * time.Millisecond,
-		semaphore:         make(chan struct{}, 5),
-		perAttemptTimeout: holodexCfg.PerAttemptTimeout,
+		admissionGate:        make(chan struct{}, 1),
+		maxRetryAttempts:     3,
+		httpClient:           server.Client(),
+		baseURL:              server.URL,
+		apiKey:               testAPIKey,
+		logger:               slog.Default(),
+		requestDelay:         10 * time.Millisecond,
+		semaphore:            make(chan struct{}, 5),
+		perAttemptTimeout:    holodexCfg.PerAttemptTimeout,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
 	}
 
 	start := time.Now()
@@ -497,15 +374,16 @@ func TestTimeoutMaxRetries(t *testing.T) {
 	defer server.Close()
 
 	client := &APIClient{
-		admissionGate:     make(chan struct{}, 1),
-		maxRetryAttempts:  3,
-		httpClient:        server.Client(),
-		baseURL:           server.URL,
-		apiKey:            testAPIKey,
-		logger:            slog.Default(),
-		requestDelay:      10 * time.Millisecond,
-		semaphore:         make(chan struct{}, 5),
-		perAttemptTimeout: 100 * time.Millisecond,
+		admissionGate:        make(chan struct{}, 1),
+		maxRetryAttempts:     3,
+		httpClient:           server.Client(),
+		baseURL:              server.URL,
+		apiKey:               testAPIKey,
+		logger:               slog.Default(),
+		requestDelay:         10 * time.Millisecond,
+		semaphore:            make(chan struct{}, 5),
+		perAttemptTimeout:    100 * time.Millisecond,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
 	}
 
 	start := time.Now()
@@ -654,7 +532,7 @@ func TestProcessHolodexResponse_RateLimitedRetriesBeforeExhaustion(t *testing.T)
 	}
 }
 
-func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *testing.T) {
+func TestProcessHolodexResponse_RateLimitedExhaustionReturnsAPIError(t *testing.T) {
 	client := &APIClient{
 		admissionGate:    make(chan struct{}, 1),
 		maxRetryAttempts: 3,
@@ -677,13 +555,13 @@ func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *
 		t.Fatal("expected final 429 response to return error")
 	}
 
-	rotationErr, ok := errors.AsType[*KeyRotationError](err)
+	apiErr, ok := errors.AsType[*APIError](err)
 	if !ok {
-		t.Fatalf("expected KeyRotationError, got %T", err)
+		t.Fatalf("expected APIError, got %T", err)
 	}
 
-	if rotationErr.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("status = %d, want %d", rotationErr.StatusCode, http.StatusTooManyRequests)
+	if apiErr.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d", apiErr.StatusCode, http.StatusTooManyRequests)
 	}
 }
 
@@ -709,15 +587,16 @@ func TestParentContextCancel(t *testing.T) {
 	defer server.Close()
 
 	client := &APIClient{
-		admissionGate:     make(chan struct{}, 1),
-		maxRetryAttempts:  3,
-		httpClient:        server.Client(),
-		baseURL:           server.URL,
-		apiKey:            testAPIKey,
-		logger:            slog.Default(),
-		requestDelay:      10 * time.Millisecond,
-		semaphore:         make(chan struct{}, 5),
-		perAttemptTimeout: 5 * time.Second,
+		admissionGate:        make(chan struct{}, 1),
+		maxRetryAttempts:     3,
+		httpClient:           server.Client(),
+		baseURL:              server.URL,
+		apiKey:               testAPIKey,
+		logger:               slog.Default(),
+		requestDelay:         10 * time.Millisecond,
+		semaphore:            make(chan struct{}, 5),
+		perAttemptTimeout:    5 * time.Second,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
 	}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
@@ -807,13 +686,14 @@ func TestDoRequestTimeoutErrorOmitsQueryAndKeepsTimeoutClassification(t *testing
 	defer server.Close()
 
 	client := &APIClient{
-		admissionGate:     make(chan struct{}, 1),
-		httpClient:        server.Client(),
-		baseURL:           server.URL,
-		apiKey:            testAPIKey,
-		logger:            slog.Default(),
-		semaphore:         make(chan struct{}, 1),
-		perAttemptTimeout: 50 * time.Millisecond,
+		admissionGate:        make(chan struct{}, 1),
+		httpClient:           server.Client(),
+		baseURL:              server.URL,
+		apiKey:               testAPIKey,
+		logger:               slog.Default(),
+		semaphore:            make(chan struct{}, 1),
+		perAttemptTimeout:    50 * time.Millisecond,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
 	}
 
 	params := url.Values{}

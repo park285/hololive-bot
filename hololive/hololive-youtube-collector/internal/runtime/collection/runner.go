@@ -66,17 +66,6 @@ func (s ContractSnapshot) ValidateKinds(kinds []contract.ObservationKind) error 
 	return nil
 }
 
-func (s ContractSnapshot) Kinds() []contract.ObservationKind {
-	kinds := make([]contract.ObservationKind, 0, len(s.generations))
-	for kind := range s.generations {
-		kinds = append(kinds, kind)
-	}
-
-	slices.Sort(kinds)
-
-	return kinds
-}
-
 // RunInput은 lease가 고정한 job·subject·target 시야와 실행 한도를 runner에 전달합니다.
 type RunInput struct {
 	job                     JobContract

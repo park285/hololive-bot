@@ -244,10 +244,9 @@ func TestContentRunnerNeverAttributesAnotherVideosEvidence(t *testing.T) {
 func TestContentRunnerNeverCarriesListItemTimes(t *testing.T) {
 	t.Parallel()
 
-	lockupAt := testPublishedAt.Add(-24 * time.Hour)
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: contentList(
-		youtubejs.ContentItem{VideoID: "a", ChannelID: restrictedTestChannelID, Title: "A", PublishedAt: new(lockupAt)},
-		youtubejs.ContentItem{VideoID: "b", ChannelID: restrictedTestChannelID, Title: "B", ScheduledFor: new(lockupAt), IsUpcoming: true},
+		youtubejs.ContentItem{VideoID: "a", ChannelID: restrictedTestChannelID, Title: "A"},
+		youtubejs.ContentItem{VideoID: "b", ChannelID: restrictedTestChannelID, Title: "B", IsUpcoming: true},
 	)}}
 
 	payload, _ := collectVideoList(t, fake, nil)

@@ -48,12 +48,7 @@ func (d *ClaimManager) processPerRoomBatch(ctx context.Context, outboxItems []do
 }
 
 func (d *ClaimManager) reconcileTerminalOutboxStatuses(ctx context.Context) {
-	projector := d.projector
-	if projector == nil {
-		projector = newOutboxAggregateProjector(d.delivery)
-	}
-
-	outboxIDs, err := projector.ProjectPending(ctx, d.config.BatchSize)
+	outboxIDs, err := d.projector.ProjectPending(ctx, d.config.BatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to reconcile pending outbox aggregate statuses", slog.Any("error", err))
 
@@ -119,10 +114,6 @@ func (d *ClaimManager) recordOutboxEnqueueStats(claimed int, stats outboxEnqueue
 }
 
 func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
-	return d.processPendingDeliveriesWithLifecycle(ctx)
-}
-
-func (d *ClaimManager) processPendingDeliveriesWithLifecycle(ctx context.Context) int {
 	rows, err := d.transition.ClaimPending(ctx, d.config.BatchSize)
 	if err != nil {
 		d.logger.Error("Failed to claim version-fenced delivery rows", slog.Any("error", err))
@@ -172,10 +163,9 @@ func (d *ClaimManager) processPendingDeliveriesWithLifecycle(ctx context.Context
 	result := DispatchResult{
 		SuccessDeliveryIDs: make([]int64, 0, len(prepared.ActiveRows)),
 		TouchedOutboxIDs:   append([]int64(nil), prepared.TouchedOutboxIDs...),
-		FailureBuckets:     make(map[string][]int64),
 	}
 	if len(prepared.ActiveRows) > 0 {
-		result = d.dispatchDeliveryRows(ctx, prepared.ActiveRows, outboxByID)
+		result = d.executor.dispatchDeliveryRows(ctx, prepared.ActiveRows, outboxByID)
 		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, prepared.TouchedOutboxIDs...)
 	}
 
@@ -187,12 +177,7 @@ func (d *ClaimManager) processPendingDeliveriesWithLifecycle(ctx context.Context
 }
 
 func (d *ClaimManager) reconcileTouchedOutboxes(ctx context.Context, touchedOutboxIDs []int64) int {
-	projector := d.projector
-	if projector == nil {
-		projector = newOutboxAggregateProjector(d.delivery)
-	}
-
-	if err := projector.Project(ctx, touchedOutboxIDs); err != nil {
+	if err := d.projector.Project(ctx, touchedOutboxIDs); err != nil {
 		d.logger.Warn("Failed to update outbox aggregate statuses", slog.Any("error", err))
 
 		return 1

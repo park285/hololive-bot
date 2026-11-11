@@ -48,7 +48,6 @@ export async function handleChannelRequest(rawBody, fetchChannel, maximumSuccess
     return fetchChannel({
       channelId: payload.channel_id,
       kind: payload.kind,
-      maxPages: payload.max_pages,
       ...(payload.max_schedule_lookups === undefined ? {} : { maxScheduleLookups: payload.max_schedule_lookups }),
       ...(payload.scheduled_for === undefined ? {} : { scheduledFor: payload.scheduled_for }),
       maxSuccessResponseBytes: payload.max_success_response_bytes,

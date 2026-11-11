@@ -24,7 +24,7 @@ export interface ProofStatus {
 }
 
 export type Continuity = "CONTIGUOUS" | "GAP_UNRESOLVED" | "NOT_APPLICABLE";
-export type LiveStatus = "LIVE" | "UPCOMING" | "ENDED" | "CANCELLED";
+export type LiveStatus = "LIVE" | "UPCOMING" | "ENDED";
 export type PhotoKind = "avatar" | "banner";
 export type ContentKind = "videos" | "shorts";
 export type TerminationReason =
@@ -45,8 +45,8 @@ export interface Pagination {
 export interface CommunityRequest {
   protocol_version: number;
   channel_id: string;
-  max_results?: number;
-  max_pages?: number;
+  max_results: number;
+  max_pages: number;
   max_success_response_bytes: number;
 }
 
@@ -58,7 +58,6 @@ export interface ChannelRequest {
   protocol_version: number;
   channel_id: string;
   kind: "live" | "metadata";
-  max_pages?: number;
   /** live 요청에만 있으며, 예정 영상 player 조회 수의 상한입니다. collector가 호출 예산으로 소유합니다. */
   max_schedule_lookups?: number;
   /** live 요청에만 있으며, collector lease 슬롯 시각입니다. 재사용 일정의 원래 관측 시각으로 씁니다. */
@@ -68,8 +67,8 @@ export interface ChannelRequest {
 
 export interface CommunityFetchOptions {
   channelId: string;
-  maxResults?: number;
-  maxPages?: number;
+  maxResults: number;
+  maxPages: number;
   maxSuccessResponseBytes: number;
 }
 
@@ -80,7 +79,6 @@ export interface ContentFetchOptions extends CommunityFetchOptions {
 export interface ChannelFetchOptions {
   channelId: string;
   kind: "live" | "metadata";
-  maxPages?: number;
   maxScheduleLookups?: number;
   scheduledFor?: string;
   maxSuccessResponseBytes: number;
@@ -215,15 +213,12 @@ export interface CommunityPost {
 }
 
 /**
- * 목록 lockup 항목입니다. videos 탭은 시각을 싣지 않습니다. 공개·예정 시각은 영상별 video_live_check 응답만 근거로 씁니다.
- * shorts 탭의 선택 시각은 기존 목록 문자열 해석을 유지합니다.
+ * 목록 lockup 항목입니다. 시각을 싣지 않습니다. 공개·예정 시각은 영상별 video_live_check 응답만 근거로 씁니다.
  */
 export interface ContentItem {
   video_id: string;
   channel_id: string;
   title: string;
-  published_at?: string;
-  scheduled_for?: string;
   /** videos 탭 lockup의 구조화된 예정 표시가 있을 때만 true로 싣습니다. 시각 근거가 아닙니다. */
   is_upcoming?: true;
 }

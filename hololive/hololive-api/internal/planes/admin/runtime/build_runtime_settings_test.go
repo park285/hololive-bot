@@ -21,7 +21,7 @@ func TestBuildAdminAPISettingsRejectsMalformedSettingsFile(t *testing.T) {
 	_, err := buildAdminAPISettings(&apiconfig.AdminPlaneConfig{
 		SettingsFilePath: path,
 		Notification:     settings.NotificationConfig{AdvanceMinutes: []int{10, 5, 1}},
-	}, &alarmModeComponents{}, slog.New(slog.DiscardHandler))
+	}, nil, slog.New(slog.DiscardHandler))
 	if err == nil {
 		t.Fatal("malformed settings file must fail admin plane startup")
 	}

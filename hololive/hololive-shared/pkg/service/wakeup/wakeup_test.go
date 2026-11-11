@@ -3,7 +3,6 @@ package wakeup
 import (
 	"context"
 	"testing"
-	"time"
 
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -66,100 +65,5 @@ func TestSignalerIgnoresCallerCancellationAndFailsOpen(t *testing.T) {
 
 	if NewSignaler(nil, YouTubeDelivery, nil) != nil {
 		t.Fatal("NewSignaler(nil) != nil, want nil signaler that leaves polling only")
-	}
-}
-
-func TestWaiterConsumesSignalAndBacksOffOnTimeout(t *testing.T) {
-	client, _ := testutil.NewTestCacheServiceWithMini(t.Context(), t)
-
-	waiter, err := NewWaiter(client, YouTubeDelivery, 2*time.Second, nil)
-	if err != nil {
-		t.Fatalf("NewWaiter() error = %v", err)
-	}
-
-	waiter.sleep = func(context.Context, time.Duration) bool {
-		t.Fatal("waiter slept instead of waiting for the signal")
-
-		return false
-	}
-
-	if !waiter.Wait(t.Context()) || waiter.currentWait != 2*initialBackoff {
-		t.Fatalf("Wait() without signal: currentWait = %s, want %s after timeout", waiter.currentWait, 2*initialBackoff)
-	}
-
-	NewSignaler(client, YouTubeDelivery, nil).Signal(t.Context())
-
-	started := time.Now()
-
-	if !waiter.Wait(t.Context()) || waiter.currentWait != initialBackoff {
-		t.Fatalf("Wait() with signal: currentWait = %s, want reset to %s", waiter.currentWait, initialBackoff)
-	}
-
-	if elapsed := time.Since(started); elapsed >= 2*initialBackoff {
-		t.Fatalf("Wait() with queued signal took %s, want immediate consume", elapsed)
-	}
-
-	for range 6 {
-		waiter.increaseBackoff()
-	}
-
-	if waiter.currentWait != 2*time.Second {
-		t.Fatalf("backoff ceiling = %s, want poll interval", waiter.currentWait)
-	}
-}
-
-func TestWaiterFallsBackToPollInterval(t *testing.T) {
-	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
-
-	for _, tc := range []struct {
-		name  string
-		waitC func() *Waiter
-	}{
-		{name: "no cache", waitC: func() *Waiter {
-			waiter, err := NewWaiter(nil, NotificationDelivery, 30*time.Second, nil)
-			if err != nil {
-				t.Fatalf("NewWaiter(nil) error = %v", err)
-			}
-
-			return waiter
-		}},
-		{name: "valkey error", waitC: func() *Waiter {
-			mini.SetError("valkey unavailable")
-
-			waiter, err := NewWaiter(client, NotificationDelivery, 30*time.Second, nil)
-			if err != nil {
-				t.Fatalf("NewWaiter() error = %v", err)
-			}
-
-			return waiter
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			waiter := tc.waitC()
-
-			var slept time.Duration
-
-			waiter.sleep = func(_ context.Context, d time.Duration) bool {
-				slept = d
-
-				return true
-			}
-
-			if !waiter.Wait(t.Context()) || slept != 30*time.Second {
-				t.Fatalf("Wait() slept %s, want poll interval 30s", slept)
-			}
-		})
-	}
-
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	waiter, err := NewWaiter(nil, NotificationDelivery, 30*time.Second, nil)
-	if err != nil || waiter.Wait(ctx) {
-		t.Fatalf("Wait(canceled) = true, %v; want false", err)
-	}
-
-	if _, err := NewWaiter(nil, NotificationDelivery, 0, nil); err == nil {
-		t.Fatal("NewWaiter(poll interval 0) error = nil")
 	}
 }

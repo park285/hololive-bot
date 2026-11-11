@@ -34,22 +34,19 @@ type Client struct {
 	Lenient bool
 
 	GetFunc          func(ctx context.Context, key string, dest any) error
-	GetStringFunc    func(ctx context.Context, key string) (string, bool, error)
 	SetFunc          func(ctx context.Context, key string, value any, ttl time.Duration) error
 	DelFunc          func(ctx context.Context, key string) error
 	DelManyFunc      func(ctx context.Context, keys []string) (int64, error)
 	ScanKeyPagesFunc func(ctx context.Context, pattern string, batchSize int64, visit func(keys []string) error) error
 
-	SAddFunc      func(ctx context.Context, key string, members []string) (int64, error)
-	SRemFunc      func(ctx context.Context, key string, members []string) (int64, error)
-	SMembersFunc  func(ctx context.Context, key string) ([]string, error)
-	SIsMemberFunc func(ctx context.Context, key, member string) (bool, error)
+	SAddFunc     func(ctx context.Context, key string, members []string) (int64, error)
+	SRemFunc     func(ctx context.Context, key string, members []string) (int64, error)
+	SMembersFunc func(ctx context.Context, key string) ([]string, error)
 
 	HSetFunc      func(ctx context.Context, key, field, value string) error
 	HMSetFunc     func(ctx context.Context, key string, fields map[string]any) error
 	HGetFunc      func(ctx context.Context, key, field string) (string, error)
 	BatchHGetFunc func(ctx context.Context, key string, fields []string) (map[string]string, error)
-	HDelFunc      func(ctx context.Context, key string, fields ...string) error
 	HGetAllFunc   func(ctx context.Context, key string) (map[string]string, error)
 
 	ExpireFunc func(ctx context.Context, key string, ttl time.Duration) error
@@ -103,21 +100,6 @@ func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	m.panicIfUnset("GetFunc")
 
 	return nil
-}
-
-func (m *Client) GetString(ctx context.Context, key string) (string, bool, error) {
-	if m.GetStringFunc != nil {
-		out1, out2, err := m.GetStringFunc(ctx, key)
-		if err != nil {
-			return out1, out2, fmt.Errorf("get string func: %w", err)
-		}
-
-		return out1, out2, nil
-	}
-
-	m.panicIfUnset("GetStringFunc")
-
-	return "", false, nil
 }
 
 func (m *Client) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
@@ -222,21 +204,6 @@ func (m *Client) SMembers(ctx context.Context, key string) ([]string, error) {
 	return nil, nil
 }
 
-func (m *Client) SIsMember(ctx context.Context, key, member string) (bool, error) {
-	if m.SIsMemberFunc != nil {
-		out, err := m.SIsMemberFunc(ctx, key, member)
-		if err != nil {
-			return out, fmt.Errorf("s is member func: %w", err)
-		}
-
-		return out, nil
-	}
-
-	m.panicIfUnset("SIsMemberFunc")
-
-	return false, nil
-}
-
 func (m *Client) HSet(ctx context.Context, key, field, value string) error {
 	if m.HSetFunc != nil {
 		if err := m.HSetFunc(ctx, key, field, value); err != nil {
@@ -294,20 +261,6 @@ func (m *Client) BatchHGet(ctx context.Context, key string, fields []string) (ma
 
 	//nolint:nilnil // lenient mock의 미설정 기본값은 제로값이라는 계약이다. sentinel 오류를 내보내면 이 mock을 쓰는 다른 패키지 테스트가 실패 경로로 갈라진다.
 	return nil, nil
-}
-
-func (m *Client) HDel(ctx context.Context, key string, fields ...string) error {
-	if m.HDelFunc != nil {
-		if err := m.HDelFunc(ctx, key, fields...); err != nil {
-			return fmt.Errorf("h del func: %w", err)
-		}
-
-		return nil
-	}
-
-	m.panicIfUnset("HDelFunc")
-
-	return nil
 }
 
 func (m *Client) HGetAll(ctx context.Context, key string) (map[string]string, error) {

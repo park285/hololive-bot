@@ -44,7 +44,7 @@ func ProvideAPIRouter(
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
 	cacheClient cache.LowLevelCache,
-	readyProbe ...*sharedreadiness.Probe,
+	readyProbe *sharedreadiness.Probe,
 ) (*gin.Engine, error) {
 	if err := validateAPIRouterInputs(appConfig, domainHandlers); err != nil {
 		return nil, fmt.Errorf("validate API router inputs: %w", err)
@@ -54,7 +54,7 @@ func ProvideAPIRouter(
 		logger = slog.Default()
 	}
 
-	router, err := newAPIRouter(ctx, appConfig, logger, readyProbe...)
+	router, err := newAPIRouter(ctx, appConfig, logger, readyProbe)
 	if err != nil {
 		return nil, fmt.Errorf("API router: %w", err)
 	}
@@ -112,15 +112,21 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 	return nil
 }
 
-func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger, readyProbe ...*sharedreadiness.Probe) (*gin.Engine, error) {
+func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger, readyProbe *sharedreadiness.Probe) (*gin.Engine, error) {
 	if appConfig == nil {
 		return nil, errors.New("config must not be nil")
+	}
+
+	if readyProbe == nil {
+		return nil, errors.New("ready probe must not be nil")
 	}
 
 	if logger == nil {
 		logger = slog.Default()
 	}
 
+	// admin API는 Iris Console gateway가 서버 대 서버로 API key를 붙여 호출하므로 CORS·Client Hints 같은
+	// 브라우저용 middleware를 두지 않는다.
 	routerOptions := &sharedserver.RuntimeRouterOptions{
 		APIKey:       appConfig.Server.APIKey,
 		EnableGzip:   true,
@@ -128,15 +134,8 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 신뢰 가능한 클라이언트 IP는
 		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 IP 기준 rate limit을
 		// 우회하지 못하도록 RemoteAddr만 신뢰한다.
-		TrustRemoteAddrOnly: true,
-		// admin API는 Iris Console gateway가 서버 대 서버로 API key를 붙여 호출하므로 브라우저 CORS 표면이 없다.
-		PreRouteUse: []gin.HandlerFunc{
-			middleware.ClientHintsMiddleware(),
-		},
-	}
-
-	if probe := readiness.Pick(readyProbe...); probe != nil {
-		routerOptions.InternalReadyResponder = readiness.GinHandler(ctx, probe)
+		TrustRemoteAddrOnly:    true,
+		InternalReadyResponder: readiness.GinHandler(ctx, readyProbe),
 	}
 
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)

@@ -51,7 +51,16 @@ type Config struct {
 	HandoffHorizon              time.Duration // Iris handoff 확인 기한. Iris 큐 대기 때문에 DeliverySendTimeout보다 길 수 있다.
 }
 
-// 그보다 claim 기간이 짧으면 되살린 PENDING이 primary claim에서 탈락한다.
+// minSendingFinalizeGrace는 계약 SendingFinalizeGrace = max(2*PollInterval, 5s)의 하한이다.
+const minSendingFinalizeGrace = 5 * time.Second
+
+// sendLeaseBudget은 provider 호출 한 번을 시작하는 데 필요한 최소 잔여 lease(DeliverySendTimeout + SendingFinalizeGrace)다.
+func (c *Config) sendLeaseBudget() time.Duration {
+	return c.DeliverySendTimeout + max(2*c.PollInterval, minSendingFinalizeGrace)
+}
+
+// Validate는 dispatcher가 쓰는 주기·한도·병렬성이 양수인지와, claim 신선도 기간이 revive 기간과 주기의 합 이상인지
+// 확인한다. 그보다 claim 기간이 짧으면 되살린 PENDING이 primary claim에서 탈락한다.
 func (c *Config) Validate() error {
 	required := []struct {
 		name  string
@@ -90,6 +99,10 @@ func (c *Config) Validate() error {
 
 	if minimum := c.ReviveFreshnessWindow + c.ReviveInterval; c.ClaimFreshnessWindow < minimum {
 		return fmt.Errorf("claim freshness window %s must be at least revive freshness window plus revive interval (%s)", c.ClaimFreshnessWindow, minimum)
+	}
+
+	if budget := c.sendLeaseBudget(); c.LockTimeout < budget {
+		return fmt.Errorf("lock timeout %s must be at least the send lease budget (%s)", c.LockTimeout, budget)
 	}
 
 	return nil

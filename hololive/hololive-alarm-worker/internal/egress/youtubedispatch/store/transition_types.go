@@ -239,12 +239,10 @@ func splitCheckedTransitionRows(checked []checkedTransitionRow) ([]transitionRow
 }
 
 type startedLogicalGroup struct {
-	key           ytcontentid.LogicalKey
-	ownerBefore   transitionRow
-	ownerAfter    transitionRow
-	followers     []transitionRow
-	ledgerBefore  *DeliveryLedgerRecord
-	providerOwner bool
+	key         ytcontentid.LogicalKey
+	ownerBefore transitionRow
+	ownerAfter  transitionRow
+	followers   []transitionRow
 }
 
 type StartedOperation struct {

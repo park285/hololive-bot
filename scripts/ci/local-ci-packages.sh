@@ -5,7 +5,7 @@ dedupe_lines() {
 }
 
 all_go_package_patterns() {
-    printf '%s\n' "${ROOT_GO_PACKAGES[@]}" "${WORKSPACE_GO_PACKAGES[@]}" | dedupe_lines
+    printf '%s\n' "${WORKSPACE_GO_PACKAGES[@]}" | dedupe_lines
 }
 
 changed_paths() {
@@ -35,8 +35,6 @@ go_package_patterns_for_file() {
             return 0
         fi
     done
-
-    printf '%s\n' "${ROOT_GO_PACKAGES[@]}"
 }
 
 is_shared_module_file() {
@@ -64,11 +62,6 @@ changed_go_package_patterns() {
                 ;;
             scripts/ci/go-tooling.sh|scripts/ci/go-test-nonrace.sh|scripts/ci/local-ci.sh|scripts/ci/local-ci-nilaway.sh|scripts/ci/nilaway-inputs.sh|scripts/ci/pre-push-gate.sh)
                 needs_all=true
-                ;;
-            # .env.example은 hololive-shared settings의 repo 계약 테스트 입력이라
-            # Go 파일이 안 바뀌어도 해당 모듈 테스트를 선택해야 한다 (61e1c75f 회귀 재발 방지).
-            .env.example)
-                package_patterns+=("./hololive/hololive-shared/...")
                 ;;
             *.go)
                 if is_shared_module_file "${file}"; then

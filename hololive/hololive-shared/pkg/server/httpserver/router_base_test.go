@@ -38,9 +38,7 @@ func TestApplyBaseMiddlewareSetsSecurityAndRequestIDHeaders(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	ApplyBaseMiddleware(t.Context(), router, slog.New(slog.DiscardHandler), BaseMiddlewareOptions{
-		SkipLogPaths: []string{"/health", "/ready"},
-	})
+	applyBaseMiddleware(t.Context(), router, slog.New(slog.DiscardHandler), "/health", "/ready")
 
 	for _, path := range []string{"/health", "/ready"} {
 		router.GET(path, func(c *gin.Context) { c.Status(http.StatusOK) })

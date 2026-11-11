@@ -39,11 +39,7 @@ type memberSnapshotIndex struct {
 	// 대소문자 무관(EqualFold) 비교, 명시 별칭은 정확 일치이며, 키마다 가장 작은 영속 ID를 담는다.
 	pointAliasByName  map[string]*domain.Member
 	pointAliasByExact map[string]*domain.Member
-	// namesByKey와 aliasesByKey는 다건 조회 색인이다. 키는 앞뒤 공백을 지운 값의 EqualFold 대표형이고, 값은 snapshot
-	// 순서를 지키며 멤버마다 한 번만 담는다.
-	namesByKey   map[string][]*domain.Member
-	aliasesByKey map[string][]*domain.Member
-	channelIDs   []string
+	channelIDs        []string
 }
 
 func newMemberSnapshotIndex(members []*domain.Member) ([]*domain.Member, *memberSnapshotIndex) {
@@ -52,8 +48,6 @@ func newMemberSnapshotIndex(members []*domain.Member) ([]*domain.Member, *member
 		byName:            make(map[string]*domain.Member, len(members)),
 		pointAliasByName:  make(map[string]*domain.Member, len(members)*3),
 		pointAliasByExact: make(map[string]*domain.Member, len(members)*2),
-		namesByKey:        make(map[string][]*domain.Member, len(members)*3),
-		aliasesByKey:      make(map[string][]*domain.Member, len(members)*2),
 		channelIDs:        make([]string, 0, len(members)),
 	}
 
@@ -70,12 +64,6 @@ func newMemberSnapshotIndex(members []*domain.Member) ([]*domain.Member, *member
 
 		keepSmallestID(index.byName, member.Name, member)
 		index.addPointAliases(member)
-		appendDistinct(index.namesByKey, member, member.Name, member.NameJa, member.NameKo)
-
-		if member.Aliases != nil {
-			appendDistinct(index.aliasesByKey, member, member.Aliases.Ko...)
-			appendDistinct(index.aliasesByKey, member, member.Aliases.Ja...)
-		}
 	}
 
 	index.channelRepresentatives = ChannelRepresentatives(snapshot)
@@ -108,23 +96,6 @@ func keepSmallestID(index map[string]*domain.Member, key string, member *domain.
 	}
 }
 
-// 공백뿐인 값은 공백 아닌 질의와 일치할 수 없으므로 뺀다.
-func appendDistinct(index map[string][]*domain.Member, member *domain.Member, values ...string) {
-	for _, value := range values {
-		key, ok := searchKey(value)
-		if !ok {
-			continue
-		}
-
-		bucket := index[key]
-		if len(bucket) > 0 && bucket[len(bucket)-1] == member {
-			continue
-		}
-
-		index[key] = append(bucket, member)
-	}
-}
-
 // aliasOwner는 repository FindByAlias(find_by_alias.sql)와 같은 기준으로 snapshot에서 별칭 주인을 고른다.
 // 공식 이름은 대소문자를 무시하고, 명시 별칭은 정확히 일치해야 하며, 여러 명이 맞으면 SQL의 ORDER BY id처럼 가장 작은
 // 영속 ID가 이긴다.
@@ -137,24 +108,6 @@ func (index *memberSnapshotIndex) aliasOwner(alias string) *domain.Member {
 	}
 
 	return byName
-}
-
-// membersByName과 membersByAlias의 결과는 게시된 색인을 공유하므로 호출자에게 넘기기 전에 복사한다.
-func (index *memberSnapshotIndex) membersByName(key string) []*domain.Member {
-	return index.namesByKey[key]
-}
-
-func (index *memberSnapshotIndex) membersByAlias(key string) []*domain.Member {
-	return index.aliasesByKey[key]
-}
-
-func searchKey(value string) (string, bool) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return "", false
-	}
-
-	return foldKey(trimmed), true
 }
 
 // foldKey는 strings.EqualFold의 동치류 대표형이다. EqualFold는 rune마다 unicode.SimpleFold 궤도가 같은지 보므로, 각 rune을

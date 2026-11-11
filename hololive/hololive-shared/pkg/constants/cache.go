@@ -26,14 +26,12 @@ var CacheTTL = struct {
 	LiveStreams      time.Duration
 	UpcomingStreams  time.Duration
 	ChannelSchedule  time.Duration
-	ChannelInfo      time.Duration
 	NotificationSent time.Duration
 }{
-	LiveStreams:      5 * time.Minute,  // 5분 - 라이브 스트림 목록
-	UpcomingStreams:  5 * time.Minute,  // 5분 - 예정 스트림 목록
-	ChannelSchedule:  5 * time.Minute,  // 5분 - 채널 스케줄
-	ChannelInfo:      20 * time.Minute, // 20분 - 채널 정보
-	NotificationSent: 24 * time.Hour,   // 24시간 - 알림 발송 기록
+	LiveStreams:      5 * time.Minute, // 5분 - 라이브 스트림 목록
+	UpcomingStreams:  5 * time.Minute, // 5분 - 예정 스트림 목록
+	ChannelSchedule:  5 * time.Minute, // 5분 - 채널 스케줄
+	NotificationSent: 24 * time.Hour,  // 24시간 - 알림 발송 기록
 }
 
 var ValkeyConfig = struct {

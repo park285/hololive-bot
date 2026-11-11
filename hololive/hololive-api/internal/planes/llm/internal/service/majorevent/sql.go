@@ -31,16 +31,16 @@ var (
 	getEventsByDateRangeSQL = majorEventSelectColumnsSQL + `
 		WHERE status = $1
 		  AND type IN ($2, $3)
-		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'UTC')::date) <= $5
-		  AND COALESCE(event_end_date, event_start_date, (pub_date AT TIME ZONE 'UTC')::date) >= $4
+		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'Asia/Seoul')::date) <= $5
+		  AND COALESCE(event_end_date, event_start_date, (pub_date AT TIME ZONE 'Asia/Seoul')::date) >= $4
 		  AND (notified_week IS NULL OR notified_week != $6)
 		ORDER BY event_start_date ASC
 	`
 	getEventsByMonthSQL = majorEventSelectColumnsSQL + `
 		WHERE status = $1
 		  AND type IN ($2, $3)
-		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'UTC')::date) <= $4
-		  AND COALESCE(event_end_date, event_start_date, (pub_date AT TIME ZONE 'UTC')::date) >= $5
+		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'Asia/Seoul')::date) <= $4
+		  AND COALESCE(event_end_date, event_start_date, (pub_date AT TIME ZONE 'Asia/Seoul')::date) >= $5
 		  AND (notified_month IS NULL OR notified_month != $6)
 		ORDER BY event_start_date ASC
 	`

@@ -249,7 +249,7 @@ func (m *mockSender) SendMessageWithClientRequestID(ctx context.Context, roomID,
 func makePayload(t *testing.T, msg string) string {
 	t.Helper()
 
-	b, err := jsonv2.Marshal(deliverypayload.Payload{Message: msg})
+	b, err := jsonv2.Marshal(deliverypayload.Payload{Message: msg, RichTextMessage: msg})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}

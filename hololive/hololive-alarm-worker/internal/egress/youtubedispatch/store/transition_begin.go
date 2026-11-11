@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
 func (s *TransitionStore) BeginSending(
@@ -189,10 +188,7 @@ func buildStartedGroup(
 	}
 
 	after := sendingTransitionRow(before)
-	group := startedLogicalGroup{
-		key: resolution.Key(), ownerBefore: before, ownerAfter: after,
-		followers: followers, ledgerBefore: ledgerRecordPointer(resolved.ledgerByKey, resolution), providerOwner: true,
-	}
+	group := startedLogicalGroup{key: resolution.Key(), ownerBefore: before, ownerAfter: after, followers: followers}
 
 	return group, rowTransition{before: before, after: after, lockFromClock: true}, nil
 }
@@ -229,18 +225,6 @@ func sendingTransitionRow(before transitionRow) transitionRow {
 	after.Error = ""
 
 	return after
-}
-
-func ledgerRecordPointer(
-	ledgerByKey map[ytcontentid.LogicalKey]DeliveryLedgerRecord,
-	resolution preparation.Resolution,
-) *DeliveryLedgerRecord {
-	ledger, ok := ledgerByKey[resolution.Key()]
-	if !ok {
-		return nil
-	}
-
-	return &ledger
 }
 
 type envelopeState uint8

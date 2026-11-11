@@ -69,7 +69,7 @@ var errAllMembersGenerationChanged = errors.New("member snapshot generation chan
 
 // 돌려준 slice는 호출자 소유다. 공유 적재는 호출자 취소와 분리된 상한 안에서 끝까지 진행하고, 기다리던 호출자만 자기 ctx가 끝나면 즉시 ctx 오류로 빠진다.
 func (c *Cache) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
-	snap, err := c.membersSnapshot(ctx, "all_members")
+	snap, err := c.membersSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -77,14 +77,15 @@ func (c *Cache) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	return cloneMemberSlice(snap.members), nil
 }
 
-// Epoch이 불확실하면 게시하지 않는 일회용 상태를 PostgreSQL에서 만들어 같은 색인 규칙으로 답한다.
-func (c *Cache) membersSnapshot(ctx context.Context, operation string) (*allMembersState, error) {
+// membersSnapshot은 전체 멤버 조회가 쓰는 snapshot을 돌려준다. Epoch이 불확실하면 게시하지 않는 일회용 상태를
+// PostgreSQL에서 만들어 같은 색인 규칙으로 답한다.
+func (c *Cache) membersSnapshot(ctx context.Context) (*allMembersState, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")
 	}
 
 	for {
-		if c.cacheBypassRequired(operation) {
+		if c.cacheBypassRequired("all_members") {
 			return c.loadAllMembersBypass(ctx)
 		}
 

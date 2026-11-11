@@ -21,7 +21,7 @@ func admitShortTestJob(t *testing.T, executor *collectionExecutor, spec *jobleas
 	executor.collector.ProviderAdmissionTimeout = 200 * time.Millisecond
 	executor.collector.PublishTimeout = 200 * time.Millisecond
 
-	profile, err := NewExecutionProfile(1, 10*time.Millisecond, 0, 1, 10*time.Millisecond, time.Second)
+	profile, err := NewExecutionProfile(1, 500*time.Millisecond, 0, 1, 500*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

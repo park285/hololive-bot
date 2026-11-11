@@ -10,7 +10,7 @@ import (
 )
 
 func TestMessageAdapterParsesHelpCommand(t *testing.T) {
-	messageAdapter := messaging.NewMessageAdapter("!", "")
+	messageAdapter := messaging.NewMessageAdapter("!")
 
 	for _, tc := range []struct {
 		name    string
@@ -43,7 +43,7 @@ func TestMessageAdapterParsesHelpCommand(t *testing.T) {
 }
 
 func TestMessageAdapterReturnsUnknownForNonCommandInput(t *testing.T) {
-	messageAdapter := messaging.NewMessageAdapter("!", "")
+	messageAdapter := messaging.NewMessageAdapter("!")
 
 	for _, tc := range []struct {
 		name    string
@@ -68,7 +68,7 @@ func TestMessageAdapterReturnsUnknownForNonCommandInput(t *testing.T) {
 }
 
 func TestMessageAdapterBlankPrefixDefaultsToExclamation(t *testing.T) {
-	messageAdapter := messaging.NewMessageAdapter("   ", "")
+	messageAdapter := messaging.NewMessageAdapter("   ")
 
 	parsed := messageAdapter.ParseMessage(&webhook.Message{Msg: "!help"})
 	if parsed.Type != botcommand.CommandHelp {

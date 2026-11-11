@@ -46,13 +46,9 @@ func loadTargetSnapshotTx(
 	job collection.JobContract,
 	maxRosterRows int,
 ) (collection.TargetSnapshot, error) {
-	current, _, err := lockProjectionGuard(ctx, tx)
+	current, err := lockGuardAndVerifyMembership(ctx, tx, proof, collection.MembershipScopeFor(job))
 	if err != nil {
-		return collection.TargetSnapshot{}, fmt.Errorf("lock projection guard: %w", err)
-	}
-
-	if err := collection.VerifyLeaseMembership(ctx, tx, proof, collection.MembershipScopeFor(job)); err != nil {
-		return collection.TargetSnapshot{}, fmt.Errorf("verify lease membership: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("lock guard and verify membership: %w", err)
 	}
 
 	requested := job.RequestedKinds()
@@ -82,6 +78,57 @@ func loadTargetSnapshotTx(
 	default:
 		return collection.TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("target snapshot membership is invalid"))
 	}
+}
+
+// snapshotBatchSender는 pgx 트랜잭션의 pipeline 전송 능력이다. Snapshot 트랜잭션은 항상 pgxpool에서 시작하므로
+// 이 능력이 없으면 순차 경로로 바꾸지 않고 오류로 드러낸다.
+type snapshotBatchSender interface {
+	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
+}
+
+// lockGuardAndVerifyMembership은 guard share 잠금과 lease membership 판정을 한 왕복으로 보내고 잠금 이후 CURRENT
+// generation을 반환한다. 서버는 두 문장을 순서대로 따로 실행하므로 membership은 guard 대기 뒤의 새 snapshot에서
+// 평가되고, guard 문장이 실패하면 membership 문장은 실행되지 않는다. CURRENT가 없으면 0을 반환하며 그 판정은
+// membership이 소유 손실 다음 순위로 보고한다.
+func lockGuardAndVerifyMembership(
+	ctx context.Context,
+	tx dbx.Tx,
+	proof *contract.LeaseProof,
+	scope collection.MembershipScope,
+) (current int64, err error) {
+	sender, ok := tx.(snapshotBatchSender)
+	if !ok {
+		return 0, errors.New("lock guard and verify membership: transaction does not support pipelined batches")
+	}
+
+	membershipQuery, membershipArgs := LeaseMembershipQuery(proof, scope)
+	batch := &pgx.Batch{}
+
+	batch.Queue(lockProjectionGuardShareSQL)
+	batch.Queue(membershipQuery, membershipArgs...)
+
+	results := sender.SendBatch(ctx, batch)
+	if results == nil {
+		return 0, errors.New("lock guard and verify membership: batch results are nil")
+	}
+
+	// 판정이 앞에서 끝나도 남은 응답을 회수해 연결을 target 조회에 쓸 수 있게 한다.
+	defer func() {
+		if closeErr := results.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close snapshot guard batch: %w", closeErr))
+		}
+	}()
+
+	current, _, err = scanProjectionGuard(results.QueryRow())
+	if err != nil {
+		return 0, fmt.Errorf("lock projection guard: %w", err)
+	}
+
+	if err := ScanLeaseMembership(results.QueryRow()); err != nil {
+		return 0, fmt.Errorf("verify lease membership: %w", err)
+	}
+
+	return current, nil
 }
 
 // snapshotQuery는 guard 아래에서 읽은 CURRENT generation으로 target을 읽고, 결과는 획득 generation으로 식별한다.

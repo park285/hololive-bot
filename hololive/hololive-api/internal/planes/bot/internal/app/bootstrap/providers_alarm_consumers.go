@@ -11,5 +11,5 @@ func ProvideMatcher(
 	membersData domain.MemberDataProvider,
 	logger *slog.Logger,
 ) *matcher.Matcher {
-	return matcher.NewMatcher(membersData, nil, logger)
+	return matcher.NewMatcher(membersData, logger)
 }

@@ -27,7 +27,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	model "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -60,14 +60,7 @@ func (s *stubMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Memb
 	return []*domain.Member{}, nil
 }
 
-func (s *stubMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func (s *stubMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
+// 공식 채널 목록을 적재하지 못하면 빈 허용 목록으로 기동하지 않고 오류다.
 func TestSourceValidator_ChannelIDLoadFailureFailsConstruction(t *testing.T) {
 	cause := errors.New("member cache unavailable")
 
@@ -95,7 +88,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 		t.Fatalf("official domain validate error: %v", err)
 	}
 
-	if tier != model.SourceTierOfficial {
+	if tier != newsmodel.SourceTierOfficial {
 		t.Fatalf("expected official tier, got %s", tier)
 	}
 
@@ -104,7 +97,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 		t.Fatalf("media domain validate error: %v", err)
 	}
 
-	if tier != model.SourceTierMedia {
+	if tier != newsmodel.SourceTierMedia {
 		t.Fatalf("expected media tier, got %s", tier)
 	}
 
@@ -118,7 +111,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 		t.Fatalf("allowed x account validate error: %v", err)
 	}
 
-	if tier != model.SourceTierOfficial {
+	if tier != newsmodel.SourceTierOfficial {
 		t.Fatalf("expected x account to be official, got %s", tier)
 	}
 }
@@ -141,7 +134,7 @@ func TestSourceValidatorDoesNotTrustYouTubeHandleNamedLikeAllowedXAccount(t *tes
 		"https://www.youtube.com/user/hololivetv",
 	} {
 		tier, _, err := validator.ValidateSourceURL(source)
-		if err != nil || tier != model.SourceTierCommunity {
+		if err != nil || tier != newsmodel.SourceTierCommunity {
 			t.Errorf("youtube handle named like an allowed x account = (%s, %v), want community: %q", tier, err, source)
 		}
 
@@ -164,7 +157,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 		t.Fatalf("youtube official validate error: %v", err)
 	}
 
-	if tier != model.SourceTierOfficial {
+	if tier != newsmodel.SourceTierOfficial {
 		t.Fatalf("expected official tier for allowed channel, got %s", tier)
 	}
 
@@ -173,7 +166,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 		t.Fatalf("youtube unknown channel validate error: %v", err)
 	}
 
-	if tier != model.SourceTierCommunity {
+	if tier != newsmodel.SourceTierCommunity {
 		t.Fatalf("expected community tier for unknown channel, got %s", tier)
 	}
 
@@ -183,7 +176,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 		t.Fatalf("youtu.be validate error: %v", err)
 	}
 
-	if tier != model.SourceTierCommunity {
+	if tier != newsmodel.SourceTierCommunity {
 		t.Fatalf("expected community tier for youtu.be short link (unverifiable channel), got %s", tier)
 	}
 
@@ -192,7 +185,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 		t.Fatalf("youtube watch validate error: %v", err)
 	}
 
-	if tier != model.SourceTierCommunity {
+	if tier != newsmodel.SourceTierCommunity {
 		t.Fatalf("expected community tier for youtube watch link (unverifiable channel), got %s", tier)
 	}
 }
@@ -239,7 +232,7 @@ func TestSourceValidatorRejectsAmbiguousSocialPaths(t *testing.T) {
 			t.Parallel()
 
 			tier, normalized, err := validator.ValidateSourceURL(source)
-			if err == nil || tier != model.SourceTierCommunity || normalized != "" {
+			if err == nil || tier != newsmodel.SourceTierCommunity || normalized != "" {
 				t.Errorf("ambiguous source = (%s, %q, %v), want rejection", tier, normalized, err)
 			}
 
@@ -261,7 +254,7 @@ func TestSourceValidatorPreservesTrustedSocialURLs(t *testing.T) {
 		"https://www.x.com/hololivetv/",
 	} {
 		tier, normalized, err := validator.ValidateSourceURL(source)
-		if err != nil || tier != model.SourceTierOfficial || normalized != source {
+		if err != nil || tier != newsmodel.SourceTierOfficial || normalized != source {
 			t.Errorf("trusted source = (%s, %q, %v), want original official URL", tier, normalized, err)
 		}
 	}
@@ -287,7 +280,7 @@ func TestSourceValidatorRejectsAmbiguousYouTubePaths(t *testing.T) {
 			t.Parallel()
 
 			tier, _, err := validator.ValidateSourceURL(source)
-			if err == nil && tier == model.SourceTierOfficial {
+			if err == nil && tier == newsmodel.SourceTierOfficial {
 				t.Errorf("ambiguous youtube source classified official: %q", source)
 			}
 
@@ -303,7 +296,7 @@ func TestSourceValidatorRejectsAmbiguousYouTubePaths(t *testing.T) {
 		"https://www.youtube.com/channel/UC_TEST_OFFICIAL/videos",
 	} {
 		tier, _, err := validator.ValidateSourceURL(source)
-		if err != nil || tier != model.SourceTierOfficial {
+		if err != nil || tier != newsmodel.SourceTierOfficial {
 			t.Errorf("trusted youtube source = (%s, %v), want official: %q", tier, err, source)
 		}
 	}

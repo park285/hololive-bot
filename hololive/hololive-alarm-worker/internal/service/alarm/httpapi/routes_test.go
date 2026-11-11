@@ -24,7 +24,6 @@ func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
 	expected := []string{
 		"POST " + contractsalarm.BasePath + contractsalarm.AddRoute,
 		"POST " + contractsalarm.BasePath + contractsalarm.RemoveRoute,
-		"GET " + contractsalarm.BasePath + contractsalarm.RoomRoute,
 		"GET " + contractsalarm.BasePath + contractsalarm.RoomViewRoute,
 		"POST " + contractsalarm.BasePath + contractsalarm.ClearRoute,
 		"PUT " + contractsalarm.BasePath + contractsalarm.SettingsRoute,
@@ -47,9 +46,13 @@ func TestNewInternalRouteRegistrarAppliesAPIKeyAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestNewInternalRouteRegistrarSkipsWhenRouterOrAlarmCRUDMissing(t *testing.T) {
-	require.NoError(t, NewInternalRouteRegistrar("secret", nil, slog.New(slog.DiscardHandler))(gin.New()))
-	require.NoError(t, NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))(nil))
+// router나 alarm service가 없으면 route 없이 기동하지 않도록 registrar가 router 생성을 실패시킨다.
+func TestNewInternalRouteRegistrarFailsWhenRouterOrAlarmServiceMissing(t *testing.T) {
+	router := gin.New()
+
+	require.ErrorContains(t, NewInternalRouteRegistrar("secret", nil, slog.New(slog.DiscardHandler))(router), "alarm service is nil")
+	assert.Empty(t, router.Routes())
+	require.ErrorContains(t, NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))(nil), "router is nil")
 }
 
 func routeKeys(routes gin.RoutesInfo) []string {
@@ -73,10 +76,6 @@ func (fakeAlarmCRUD) RemoveAlarm(context.Context, string, string, domain.AlarmTy
 
 func (fakeAlarmCRUD) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
 	return false, nil
-}
-
-func (fakeAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
-	return nil, nil
 }
 
 func (fakeAlarmCRUD) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {

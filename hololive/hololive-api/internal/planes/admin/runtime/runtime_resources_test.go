@@ -12,12 +12,10 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -30,6 +28,14 @@ const testLoopbackAddr = "127.0.0.1:0"
 type adminCloseFunc func() error
 
 func (f adminCloseFunc) Close() error { return f() }
+
+func countAdminCleanup(cleanups *atomic.Int32) func() error {
+	return func() error {
+		cleanups.Add(1)
+
+		return nil
+	}
+}
 
 type adminPhotoSyncFunc func(context.Context)
 
@@ -53,7 +59,7 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 			}
 
 			infra := &sharedmodules.InfraModule{Cache: sharedtestutil.NewTestCacheService(t.Context(), t), Postgres: &databasemocks.Client{}}
-			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, infra, &server.Handler{}, resources.Close, slog.New(slog.DiscardHandler))
+			runtime, err := buildAdminAPIHTTPRuntime(t.Context(), config, infra, testAdminDomainHandlers(), resources.Close, slog.New(slog.DiscardHandler))
 			require.Nil(t, runtime)
 			require.ErrorIs(t, err, closeErr)
 
@@ -87,7 +93,7 @@ func TestAdminCloseBeforeStartTransfersOwnerExactlyOnce(t *testing.T) {
 	var cleanups, starts atomic.Int32
 
 	runtime := &AdminAPIRuntime{
-		Managed:   lifecycle.NewManaged(func() { cleanups.Add(1) }),
+		cleanup:   countAdminCleanup(&cleanups),
 		PhotoSync: adminPhotoSyncFunc(func(context.Context) { starts.Add(1) }),
 	}
 
@@ -113,7 +119,7 @@ func TestAdminPhotoSyncJoinTimeoutPreservesInfrastructure(t *testing.T) {
 		var cleanups atomic.Int32
 
 		runtime := &AdminAPIRuntime{
-			Managed:   lifecycle.NewManaged(func() { cleanups.Add(1) }),
+			cleanup:   countAdminCleanup(&cleanups),
 			Logger:    slog.New(slog.DiscardHandler),
 			PhotoSync: adminPhotoSyncFunc(func(ctx context.Context) { <-ctx.Done(); <-release }),
 		}
@@ -169,7 +175,7 @@ func newAdminBlockingHTTPRuntime(t *testing.T) (*AdminAPIRuntime, func(), <-chan
 	cleanups := new(atomic.Int32)
 	runtime := &AdminAPIRuntime{
 		started:     true,
-		Managed:     lifecycle.NewManaged(func() { cleanups.Add(1) }),
+		cleanup:     countAdminCleanup(cleanups),
 		Logger:      slog.New(slog.DiscardHandler),
 		HTTPServers: &sharedserver.RuntimeHTTPServers{Metrics: httpServer.Config},
 	}

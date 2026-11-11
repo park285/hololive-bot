@@ -40,29 +40,9 @@ func respondServiceUnavailable(c *gin.Context, message string) {
 	sharedserver.RespondError(c, http.StatusServiceUnavailable, message, nil)
 }
 
-func (h *AlarmHandler) requireAlarm(c *gin.Context) bool {
-	if h == nil || h.alarm == nil {
-		respondServiceUnavailable(c, "alarm service not available")
-
-		return false
-	}
-
-	return true
-}
-
 func (h *MemberHandler) requireMemberDeps(c *gin.Context) bool {
-	if h == nil || h.repository == nil || h.service == nil || h.service.repository == nil || h.service.cache == nil {
+	if h == nil || h.service == nil || h.service.cache == nil {
 		respondServiceUnavailable(c, "member service not available")
-
-		return false
-	}
-
-	return true
-}
-
-func (h *RoomHandler) requireACL(c *gin.Context) bool {
-	if h == nil || h.acl == nil {
-		respondServiceUnavailable(c, "ACL service not available")
 
 		return false
 	}
@@ -73,16 +53,6 @@ func (h *RoomHandler) requireACL(c *gin.Context) bool {
 func (h *RoomHandler) requireIris(c *gin.Context) bool {
 	if h == nil || h.iris == nil {
 		respondServiceUnavailable(c, "iris room listing not available")
-
-		return false
-	}
-
-	return true
-}
-
-func (h *StatsHandler) requireStatsDeps(c *gin.Context) bool {
-	if h == nil || h.repository == nil || h.alarm == nil {
-		respondServiceUnavailable(c, "stats dependencies not available")
 
 		return false
 	}

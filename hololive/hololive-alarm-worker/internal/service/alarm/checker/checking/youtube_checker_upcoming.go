@@ -32,6 +32,7 @@ import (
 
 func (c *YouTubeChecker) buildUpcomingNotifications(
 	ctx context.Context,
+	targetPolicy targetpolicy.TargetMinutePolicy,
 	stream *domain.Stream,
 	subscriberRooms []string,
 	window targetpolicy.EvaluationWindow,
@@ -40,7 +41,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 		return nil, nil
 	}
 
-	selection, err := c.resolveYouTubeUpcomingSelection(ctx, stream, subscriberRooms, window)
+	selection, err := c.resolveYouTubeUpcomingSelection(ctx, targetPolicy, stream, subscriberRooms, window)
 	if err != nil {
 		return nil, fmt.Errorf("resolve youtube upcoming selection: %w", err)
 	}
@@ -73,11 +74,11 @@ type youtubeUpcomingSelection struct {
 
 func (c *YouTubeChecker) resolveYouTubeUpcomingSelection(
 	ctx context.Context,
+	targetPolicy targetpolicy.TargetMinutePolicy,
 	stream *domain.Stream,
 	subscriberRooms []string,
 	window targetpolicy.EvaluationWindow,
 ) (youtubeUpcomingSelection, error) {
-	targetPolicy := c.targetPolicySnapshot()
 	currentMinutesUntil := targetpolicy.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
 	previousMinutesUntil := targetpolicy.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.Start)
 	minutesUntil, targetCrossed := targetPolicy.HighestCrossed(*stream.StartScheduled, window)

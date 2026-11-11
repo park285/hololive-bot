@@ -24,108 +24,78 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
-
+	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
-func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
+func TestProvideBotRouter_RejectsNilReadyProbe(t *testing.T) {
 	t.Parallel()
 
-	rec := serveBotReady(t, botReadyResponder(t.Context(), nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var payload map[string]any
-
-	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
-	}
-
-	if _, ok := payload["health"]; !ok {
-		t.Fatalf("/ready payload missing \"health\": %v", payload)
-	}
-
-	if _, ok := payload["workerProfile"]; ok {
-		t.Fatalf("unauthenticated /ready must omit \"workerProfile\": %v", payload)
-	}
-
-	if _, ok := payload["irisWebhookReceive"]; ok {
-		t.Fatalf("unauthenticated /ready must omit \"irisWebhookReceive\": %v", payload)
+	router, err := ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, slog.New(slog.DiscardHandler), nil, nil)
+	if err == nil || router != nil {
+		t.Fatalf("ProvideBotRouter(nil probe) router=%v error=%v, want nil router and error", router, err)
 	}
 }
 
-func TestBotReadyResponder_DegradedDependencyReturns503(t *testing.T) {
+func TestProvideBotRouter_InternalReadyReportsProbeWithoutDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	probe := sharedreadiness.NewProbe("bot", sharedreadiness.Check{
-		Name:  "postgres",
-		Probe: func(context.Context) error { return errors.New("pool exhausted") },
-	})
+	for _, tc := range []struct {
+		name       string
+		probeErr   error
+		wantCode   int
+		wantStatus string
+	}{
+		{name: "healthy", wantCode: http.StatusOK, wantStatus: "ready"},
+		{name: "degraded", probeErr: errors.New("pool exhausted"), wantCode: http.StatusServiceUnavailable, wantStatus: "not_ready"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	rec := serveBotReady(t, botReadyResponder(t.Context(), probe))
+			probe := sharedreadiness.NewProbe("bot", sharedreadiness.Check{
+				Name:  "postgres",
+				Probe: func(context.Context) error { return tc.probeErr },
+			})
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+			router, err := ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{
+				Server: settings.ServerConfig{APIKey: "test-key"},
+			}, slog.New(slog.DiscardHandler), nil, probe)
+			if err != nil {
+				t.Fatalf("ProvideBotRouter() error = %v", err)
+			}
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/ready", http.NoBody)
+			req.Header.Set(common.APIKeyHeader, "test-key")
+
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Fatalf("/internal/ready status = %d, want %d", rec.Code, tc.wantCode)
+			}
+
+			var payload map[string]any
+
+			if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("/internal/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
+			}
+
+			if payload["status"] != tc.wantStatus || payload["plane"] != "bot" {
+				t.Fatalf("payload = %v, want status %q and plane bot", payload, tc.wantStatus)
+			}
+
+			for _, key := range []string{"workerProfile", "irisWebhookReceive"} {
+				if _, ok := payload[key]; ok {
+					t.Fatalf("/internal/ready must omit %q: %v", key, payload)
+				}
+			}
+		})
 	}
-
-	var payload map[string]any
-
-	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
-	}
-
-	if payload["status"] != "not_ready" {
-		t.Fatalf("status = %v, want not_ready", payload["status"])
-	}
-
-	if _, ok := payload["workerProfile"]; ok {
-		t.Fatalf("degraded /ready must omit \"workerProfile\": %v", payload)
-	}
-}
-
-func TestBotReadyResponder_HealthyDependencyReturns200(t *testing.T) {
-	t.Parallel()
-
-	probe := sharedreadiness.NewProbe("bot", sharedreadiness.Check{
-		Name:  "postgres",
-		Probe: func(context.Context) error { return nil },
-	})
-
-	rec := serveBotReady(t, botReadyResponder(t.Context(), probe))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var payload map[string]any
-
-	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
-	}
-
-	if payload["status"] != "ready" {
-		t.Fatalf("status = %v, want ready", payload["status"])
-	}
-}
-
-func serveBotReady(t *testing.T, handler func(*gin.Context)) *httptest.ResponseRecorder {
-	t.Helper()
-
-	gin.SetMode(gin.ReleaseMode)
-
-	router := gin.New()
-	router.GET("/ready", handler)
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", http.NoBody)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	return rec
 }

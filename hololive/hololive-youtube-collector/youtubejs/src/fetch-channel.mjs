@@ -2,10 +2,9 @@ import { FetchTransportError } from "./fetch-transport.mjs";
 import { readUpstream, runUpstream } from "./upstream-errors.mjs";
 import { fetchChannelTab } from "./channel-tabs.mjs";
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
-import { assertVideoRowTitled, hasDurationMarker, hasLiveMarker, hasUpcomingMarker, isVideoLockup, lockupLiveStatus, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
+import { assertVideoRowTitled, hasDurationMarker, hasLiveMarker, hasUpcomingMarker, isVideoLockup, lockupLiveStatus, videoIDOf, videoThumbnailsOf, videoTitleOf } from "./map-lockup.mjs";
 import { fetchLiveMetadata } from "./live-metadata.mjs";
 import { assertResponseBudget, EncodedArrayBudget, encodedSize, paginationResult, hasContinuation } from "./pagination.mjs";
-import { hasRFC3339Shape } from "./rfc3339.mjs";
 import { recordScheduleLookup } from "./request-context.mjs";
 import { maxScheduleMetadataLookups } from "./rpc-validation-primitives.mjs";
 
@@ -28,7 +27,7 @@ const responseReserveBytes = encodedSize({
  * @returns {Promise<Omit<import("./contracts.d.ts").ChannelResult, "protocol_version">>}
  */
 export async function fetchChannelFeed({
-  channelId,
+  channelId: id,
   kind,
   maxScheduleLookups = maxScheduleMetadataLookups,
   maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
@@ -36,10 +35,6 @@ export async function fetchChannelFeed({
   scheduleCache,
   scheduledFor,
 } = {}) {
-  const id = String(channelId ?? "").trim();
-  if (id === "") {
-    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel id is required");
-  }
   if (kind !== "live" && kind !== "metadata") {
     throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel kind must be live or metadata");
   }
@@ -56,14 +51,12 @@ export async function fetchChannelFeed({
   cache?.beginSlot(id, slotAt);
   const channel = await runUpstream(() => innertube.getChannel(id));
   // Metadata 작업은 streams/player 장애와 독립적이며 live 작업에는 about 조회가 필요 없습니다.
-  const about = kind === "metadata" && typeof channel.getAbout === "function" ? await runUpstream(() => channel.getAbout()) : {};
+  const about = kind === "metadata" ? await runUpstream(() => channel.getAbout()) : {};
   const { liveFeed, missingTab } = kind === "live"
     ? await fetchLiveFeed(channel)
     : { liveFeed: { videos: [] }, missingTab: false };
   const exhausted = kind !== "live" || missingTab ||
-    (!hasContinuation(liveFeed) && readUpstream(() =>
-      ("has_continuation" in liveFeed && liveFeed.has_continuation === false) ||
-      ("hasContinuation" in liveFeed && liveFeed.hasContinuation === false)));
+    (!hasContinuation(liveFeed) && readUpstream(() => "has_continuation" in liveFeed && liveFeed.has_continuation === false));
   const pagination = paginationResult({ pageCount: 1, reason: exhausted ? "exhausted" : "max_pages", continuity: "NOT_APPLICABLE" });
   const query = kind === "live" && !missingTab ? {
     channel_id: id, source: "streams", statuses: ["ENDED", "LIVE", "UPCOMING"], exhausted, page_count: 1,
@@ -231,13 +224,8 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
 }
 
 export function* liveSessionRows(feed, channelId) {
-  let rows;
-  const videos = readUpstream(() => feed?.videos);
-  if (Array.isArray(videos)) {
-    rows = videos;
-  } else if (Array.isArray(readUpstream(() => feed?.items))) {
-    rows = readUpstream(() => feed.items);
-  } else {
+  const rows = readUpstream(() => feed?.videos);
+  if (!Array.isArray(rows)) {
     const error = new Error("live page shape is not recognized");
     error.code = "parser_drift";
     throw error;
@@ -257,7 +245,7 @@ export function* liveSessionRows(feed, channelId) {
       throw err;
     }
     const title = videoTitleOf(row);
-    const thumbnail = firstThumbnail(row?.thumbnails || row?.thumbnail || row?.content_image);
+    const thumbnail = firstThumbnail(videoThumbnailsOf(row));
     const thumbnailURL = optionalHTTPSURL(thumbnail?.url);
     const rowChannelID = textOf(row?.author?.id || channelId).trim() || channelId;
     if (rowChannelID !== channelId) {
@@ -271,9 +259,7 @@ export function* liveSessionRows(feed, channelId) {
       status,
       ...(title === "" ? {} : { title }),
       ...(thumbnailURL === "" ? {} : { thumbnail_url: thumbnailURL }),
-      scheduled_at: optionalTime(row?.scheduled || row?.upcoming),
-      started_at: optionalTime(row?.start_time || row?.started),
-      ended_at: optionalTime(row?.end_time || row?.ended),
+      scheduled_at: scheduledAtOf(row),
     };
   }
 }
@@ -282,7 +268,7 @@ export function* liveSessionRows(feed, channelId) {
 export function mapProfile(channel, about) {
   // 최신 about 응답은 AboutChannel.metadata에 필드를 보관합니다.
   const profile = about?.type === "AboutChannel" ? about.metadata : about;
-  const providedHandle = profile?.handle ?? channel?.header?.channel_handle ?? channel?.handle;
+  const providedHandle = channel?.header?.channel_handle;
   let metadataHandle = null;
   if (providedHandle == null && typeof channel?.metadata?.vanity_channel_url === "string") {
     try {
@@ -299,10 +285,10 @@ export function mapProfile(channel, about) {
     }
   }
   return {
-    handle: optionalText(providedHandle ?? metadataHandle ?? channel?.vanity_channel_url),
-    description: optionalText(profile?.description ?? channel?.metadata?.description ?? channel?.description),
-    country: optionalText(profile?.country ?? channel?.country),
-    joined_date: optionalText(profile?.joined ?? profile?.joined_date ?? channel?.joined),
+    handle: optionalText(providedHandle ?? metadataHandle),
+    description: optionalText(profile?.description ?? channel?.metadata?.description),
+    country: optionalText(profile?.country),
+    joined_date: optionalText(profile?.joined_date),
   };
 }
 
@@ -313,13 +299,11 @@ export function mapPhoto(channel, about) {
   const avatar = firstThumbnail(headerImage?.type === "DecoratedAvatarView" ? headerImage.avatar?.image : headerImage?.image)
     ?? firstThumbnail(header?.author?.thumbnails)
     ?? firstThumbnail(channel?.metadata?.avatar)
-    ?? firstThumbnail(channel?.author?.thumbnails)
     ?? firstThumbnail(about?.avatar);
   if (avatar != null) {
     variants.push({ kind: "avatar", url: avatar.url, width: avatar.width, height: avatar.height });
   }
-  const banner = firstThumbnail(header?.type === "PageHeader" ? header.content?.banner?.image : header?.banner)
-    ?? firstThumbnail(about?.banner);
+  const banner = firstThumbnail(header?.type === "PageHeader" ? header.content?.banner?.image : header?.banner);
   if (banner != null) {
     variants.push({ kind: "banner", url: banner.url, width: banner.width, height: banner.height });
   }
@@ -331,14 +315,8 @@ function mapLiveStatus(row) {
   if (hasLiveMarker(row)) {
     return "LIVE";
   }
-  // is_upcoming 플래그는 테스트 대역 행을 위한 것으로, 실제 Video 노드에서는 upcomingEventData가 있을 때만 참이라
-  // hasUpcomingMarker와 같은 결과입니다.
-  if (row?.is_upcoming === true || row?.isUpcoming === true || hasUpcomingMarker(row)) {
+  if (hasUpcomingMarker(row)) {
     return "UPCOMING";
-  }
-  const status = textOf(row?.status).toUpperCase();
-  if (status === "LIVE" || status === "UPCOMING" || status === "ENDED" || status === "CANCELLED") {
-    return status;
   }
   if (isVideoLockup(row)) {
     return lockupLiveStatus(row);
@@ -357,23 +335,10 @@ function firstThumbnail(value) {
   return rows[0] ?? null;
 }
 
-function optionalTime(value) {
-  if (value instanceof Date) {
-    return Number.isFinite(value.getTime()) ? value.toISOString() : undefined;
-  }
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const text = value.trim();
-  // 생략 정책인 live session 행 시각은 형식만 확인하고 달력 범위는 Date.parse 결과에 맡깁니다.
-  if (!hasRFC3339Shape(text)) {
-    return undefined;
-  }
-  const parsed = Date.parse(text);
-  if (!Number.isFinite(parsed)) {
-    return undefined;
-  }
-  return new Date(parsed).toISOString();
+// 목록이 주는 기계가독 시각은 Video·GridVideo의 upcomingEventData(SDK upcoming)뿐입니다. 시작·종료 시각은 목록에 없습니다.
+function scheduledAtOf(row) {
+  const upcoming = row?.upcoming;
+  return upcoming instanceof Date && Number.isFinite(upcoming.getTime()) ? upcoming.toISOString() : undefined;
 }
 
 function optionalHTTPSURL(value) {

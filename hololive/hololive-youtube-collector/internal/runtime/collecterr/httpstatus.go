@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func ParseRetryAfter(value string, _ time.Time) RetryHint {
+func ParseRetryAfter(value string) RetryHint {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return defaultRetryHint()

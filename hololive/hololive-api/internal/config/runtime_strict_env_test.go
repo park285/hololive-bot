@@ -50,12 +50,14 @@ func TestConfigurePlanesRejectsInvalidEnvValues(t *testing.T) {
 	}
 }
 
-// SERVER_PORT와 LLM_SCHEDULER_PORT는 bot·llm plane 로더가 먼저 읽어 거절하므로 이 경로의 대상이 아니다.
+// configurePlanes에서만 읽는 키는 LoadRuntime 기동 오류로 전파된다. SERVER_PORT는 bot plane 로더가 먼저 읽어
+// 거절하므로 이 경로의 대상이 아니다.
 func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 	for _, key := range []string{
 		"HOLOLIVE_ADMIN_API_PORT",
 		"ADMIN_API_POSTGRES_POOL_MIN_CONNS",
 		"ADMIN_API_POSTGRES_POOL_MAX_CONNS",
+		"LLM_SCHEDULER_PORT",
 		"LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS",
 		"LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS",
 		"BOT_POSTGRES_POOL_MIN_CONNS",

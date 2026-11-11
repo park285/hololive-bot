@@ -10,7 +10,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
@@ -22,7 +21,7 @@ func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 
 	second.Notification.Stream.ID = "second-video"
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first, second}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
@@ -65,7 +64,7 @@ func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 
 		require.NoError(t, err)
 
-		published, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}})
+		published, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first, second}})
 		require.NoError(t, err)
 		require.Equal(t, 2, published.DuplicateDeliveries)
 
@@ -82,7 +81,7 @@ func TestSendRequestMustBePinnedBeforeSending(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)
 	ctx := t.Context()
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("pin-room", "pin")}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{receiptEnvelope("pin-room", "pin")}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
@@ -102,7 +101,7 @@ func TestSendRequestCanPinAfterKnownUnsentFailure(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)
 	ctx := t.Context()
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("pre-render-room", "title")}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{receiptEnvelope("pre-render-room", "title")}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
@@ -187,7 +186,7 @@ func TestReissueRequestRollsBackWholeUnitWhenMemberAttemptFenceFails(t *testing.
 
 	second.Notification.Stream.ID = "rollback-second"
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first, second}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
@@ -251,7 +250,7 @@ func TestFailureTransitionsShareOneClockAcrossUnitMembers(t *testing.T) {
 
 			second.Notification.Stream.ID = "clock-unit-second"
 
-			_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}})
+			_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first, second}})
 			require.NoError(t, err)
 
 			records, err := repository.ClaimDue(t.Context(), "owner", 10, time.Minute)
@@ -289,7 +288,7 @@ func TestClaimReportsUnpinnedRequestOnlyUntilPinned(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)
 	ctx := t.Context()
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("claim-pin-room", "title")}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{receiptEnvelope("claim-pin-room", "title")}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)

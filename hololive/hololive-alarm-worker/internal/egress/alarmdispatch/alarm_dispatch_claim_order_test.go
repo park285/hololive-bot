@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 type alarmDispatchOrderConsumer struct {
@@ -16,19 +16,19 @@ type alarmDispatchOrderConsumer struct {
 	ops []string
 }
 
-func (c *alarmDispatchOrderConsumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+func (c *alarmDispatchOrderConsumer) DrainBatch(ctx context.Context, maxItems int) ([]dispatchoutbox.AlarmQueueEnvelope, error) {
 	c.ops = append(c.ops, "drain")
 
 	return c.alarmDispatchRunnerTestConsumer.DrainBatch(ctx, maxItems)
 }
 
-func (c *alarmDispatchOrderConsumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *alarmDispatchOrderConsumer) MarkSending(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.ops = append(c.ops, "mark-sending")
 
 	return c.alarmDispatchRunnerTestConsumer.MarkSending(ctx, envelopes)
 }
 
-func (c *alarmDispatchOrderConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
+func (c *alarmDispatchOrderConsumer) MarkDispatched(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
 	c.ops = append(c.ops, "mark-sent")
 
 	return c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes, irisRequestID, handoffHorizon)
@@ -39,7 +39,7 @@ func TestAlarmDispatchRunnerClaimsNextBatchOnlyAfterSettlingPrevious(t *testing.
 	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 	second := alarmDispatchRunnerTestEnvelope("room-2", nil)
 	consumer := &alarmDispatchOrderConsumer{alarmDispatchRunnerTestConsumer: &alarmDispatchRunnerTestConsumer{
-		batches: [][]domain.AlarmQueueEnvelope{{first, second}, {first}},
+		batches: [][]dispatchoutbox.AlarmQueueEnvelope{{first, second}, {first}},
 	}}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}

@@ -53,38 +53,14 @@ func (h RetryHint) At() time.Time        { return h.at }
 func (h RetryHint) Validate() error {
 	switch h.kind {
 	case RetryDefault:
-		return h.validateDefaultHint()
+		return h.validateDefault()
 	case RetryAfter:
-		return h.validateAfterHint()
+		return h.validateAfter()
 	case RetryAt:
-		return h.validateAtHint()
+		return h.validateAt()
 	default:
 		return fmt.Errorf("validate retry hint: unknown kind %q", h.kind)
 	}
-}
-
-func (h RetryHint) validateDefaultHint() error {
-	if err := h.validateDefault(); err != nil {
-		return fmt.Errorf("validate default: %w", err)
-	}
-
-	return nil
-}
-
-func (h RetryHint) validateAfterHint() error {
-	if err := h.validateAfter(); err != nil {
-		return fmt.Errorf("validate after: %w", err)
-	}
-
-	return nil
-}
-
-func (h RetryHint) validateAtHint() error {
-	if err := h.validateAt(); err != nil {
-		return fmt.Errorf("validate at: %w", err)
-	}
-
-	return nil
 }
 
 func (h RetryHint) validateDefault() error {

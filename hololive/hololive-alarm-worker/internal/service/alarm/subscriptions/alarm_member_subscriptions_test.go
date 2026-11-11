@@ -1,6 +1,7 @@
 package subscriptions
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ func requireMemberSubscriptionCache(t *testing.T, as *AlarmService, wantTypes do
 	t.Helper()
 
 	for _, alarmType := range domain.AllAlarmTypes {
-		rooms, err := as.GetChannelSubscribersByType(t.Context(), memberSubscriptionChannel, alarmType)
+		rooms, err := channelSubscriberRooms(t.Context(), as, memberSubscriptionChannel, alarmType)
 		require.NoError(t, err)
 
 		if wantTypes.Contains(alarmType) {
@@ -50,9 +51,9 @@ func requireMemberSubscriptionCache(t *testing.T, as *AlarmService, wantTypes do
 		}
 	}
 
-	registered, err := as.cache.SIsMember(t.Context(), alarmkeys.AlarmChannelRegistryKey, memberSubscriptionChannel)
+	registry, err := as.cache.SMembers(t.Context(), alarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
-	require.Equal(t, len(wantTypes) > 0, registered)
+	require.Equal(t, len(wantTypes) > 0, slices.Contains(registry, memberSubscriptionChannel))
 }
 
 func TestMemberSubscriptionsKeepOtherRoomChoicesAndCache(t *testing.T) {
@@ -65,10 +66,6 @@ func TestMemberSubscriptionsKeepOtherRoomChoicesAndCache(t *testing.T) {
 		"":                       {domain.AlarmTypeLive},
 	})
 
-	channelName, err := as.GetMemberName(ctx, memberSubscriptionChannel)
-	require.NoError(t, err)
-	require.Equal(t, "유닛 B", channelName)
-
 	removed, err := as.RemoveHostAlarm(ctx, testRoomID, memberSubscriptionChannel, memberSubscriptionMiraID, domain.AlarmTypes{domain.AlarmTypeLive})
 	require.NoError(t, err)
 	require.True(t, removed)
@@ -77,7 +74,7 @@ func TestMemberSubscriptionsKeepOtherRoomChoicesAndCache(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, removed)
 
-	liveRooms, err := as.GetChannelSubscribersByType(ctx, memberSubscriptionChannel, domain.AlarmTypeLive)
+	liveRooms, err := channelSubscriberRooms(ctx, as, memberSubscriptionChannel, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Equal(t, []string{testRoomID}, liveRooms)
 
@@ -119,7 +116,7 @@ func TestMemberSubscriptionsKeepOtherRoomChoicesAndCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, alarms)
 
-	rooms, err := as.GetRoomAlarms(ctx, testRoomID)
+	rooms, err := roomChannelIDs(ctx, as, testRoomID)
 	require.NoError(t, err)
 	require.Empty(t, rooms)
 }
@@ -139,7 +136,7 @@ func TestMemberSubscriptionsRejectUnavailableOrInvalidTargets(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, removed)
 
-	rooms, err := as.GetRoomAlarms(t.Context(), testRoomID)
+	rooms, err := roomChannelIDs(t.Context(), as, testRoomID)
 	require.NoError(t, err)
 	require.Empty(t, rooms)
 }

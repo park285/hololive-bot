@@ -22,14 +22,15 @@ package subscriptions
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	dbtest "github.com/kapu/hololive-dbtest"
 	targetpolicy "github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -86,14 +87,7 @@ func (m *mockMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Memb
 	return m.members, nil
 }
 
-func (m *mockMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func (m *mockMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
+// newTestAlarmService는 격리된 PG(dbtest)와 miniredis를 쓰는 서비스를 만든다. PG가 구독·방 이름의 원천이다.
 func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 
@@ -103,16 +97,38 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	pool := dbtest.NewPool(t)
 	repository := alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
 
-	service := &AlarmService{
+	return &AlarmService{
 		cache:           cacheClient,
 		alarmRepository: repository,
 		alarmWriter:     repository,
 		logger:          logger,
 		targetPolicy:    targetpolicy.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
 	}
-	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
+}
 
-	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
+// roomChannelIDs는 방이 구독한 채널 ID를 PG 정본에서 중복 없이 읽는다. UNIT B 멤버 구독 행은 채널 하나로 합친다.
+func roomChannelIDs(ctx context.Context, as *AlarmService, roomID string) ([]string, error) {
+	alarms, err := as.GetRoomAlarmsWithTypes(ctx, roomID)
+	if err != nil {
+		return nil, fmt.Errorf("room channel ids: %w", err)
+	}
 
-	return service
+	return uniqueAlarmChannelIDs(alarms), nil
+}
+
+// channelSubscriberRooms는 채널·알림 종류를 구독한 방 ID를 PG 정본에서 정렬·중복 제거해 읽는다.
+func channelSubscriberRooms(ctx context.Context, as *AlarmService, channelID string, alarmType domain.AlarmType) ([]string, error) {
+	alarms, err := as.alarmRepository.FindByChannelAndType(ctx, channelID, alarmType)
+	if err != nil {
+		return nil, fmt.Errorf("channel subscriber rooms: %w", err)
+	}
+
+	rooms := make([]string, 0, len(alarms))
+	for _, alarm := range alarms {
+		rooms = append(rooms, alarm.RoomID)
+	}
+
+	slices.Sort(rooms)
+
+	return slices.Compact(rooms), nil
 }

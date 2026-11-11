@@ -22,24 +22,16 @@ package orchestration
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"slices"
 	"testing"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type stubCommandInitStreamProvider struct{}
-
-func (s *stubCommandInitStreamProvider) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
-	return nil, nil
-}
 
 func (s *stubCommandInitStreamProvider) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
 	return nil, nil
@@ -49,9 +41,6 @@ func (s *stubCommandInitStreamProvider) GetChannelSchedule(context.Context, stri
 	return nil, nil
 }
 
-func (s *stubCommandInitStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return &domain.Channel{}, nil
-}
 func (s *stubCommandInitStreamProvider) Stop() {}
 
 type stubCommandInitMajorEventRepository struct{}
@@ -66,6 +55,12 @@ func (s *stubCommandInitMajorEventRepository) Subscribe(context.Context, string,
 
 func (s *stubCommandInitMajorEventRepository) Unsubscribe(context.Context, string) error {
 	return nil
+}
+
+type stubCommandInitCalendarFinder struct{}
+
+func (s *stubCommandInitCalendarFinder) FindMembersWithCelebrationsInMonth(context.Context, int, int) ([]domain.CalendarEntry, error) {
+	return nil, nil
 }
 
 type stubCommandInitMemberNewsService struct{}
@@ -86,65 +81,16 @@ func (s *stubCommandInitMemberNewsService) IsRoomSubscribed(context.Context, str
 	return false, nil
 }
 
-type stubCommandInitCommand struct {
-	name     string
-	exec     func(context.Context, *botcommand.CommandContext, map[string]any) error
-	executed int
-}
-
-func (s *stubCommandInitCommand) Name() string {
-	return s.name
-}
-
-func (s *stubCommandInitCommand) Description() string {
-	return "stub"
-}
-
-func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	s.executed++
-
-	if s.exec != nil {
-		if err := s.exec(ctx, cmdCtx, params); err != nil {
-			return fmt.Errorf("exec: %w", err)
-		}
-
-		return nil
-	}
-
-	return nil
-}
-
-func TestCommandInitView_DefensiveCopyCommandBuilders(t *testing.T) {
-	external := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command {
-		return &stubCommandInitCommand{name: testExternalCommandName}
-	})
-	b := &Bot{
-		commandBuilders: []orchcmd.CommandBuilder{external},
-		logger:          slog.New(slog.DiscardHandler),
-	}
-
-	view := b.commandInitView()
-	if len(view.commandBuilders) != 1 {
-		t.Fatalf("command builder count = %d, want 1", len(view.commandBuilders))
-	}
-
-	b.commandBuilders[0] = nil
-	if view.commandBuilders[0] == nil {
-		t.Fatal("view command builders must be copied defensively")
-	}
-}
-
 func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 	streamProvider := &stubCommandInitStreamProvider{}
-	b := &Bot{
-		holodex:    streamProvider,
-		memberNews: &stubCommandInitMemberNewsService{},
-		logger:     slog.New(slog.DiscardHandler),
-	}
+	b := &Bot{logger: slog.New(slog.DiscardHandler)}
 
-	view := b.commandInitView()
+	view := b.commandInitView(&Dependencies{
+		Holodex:    streamProvider,
+		MemberNews: &stubCommandInitMemberNewsService{},
+	}, nil)
 
-	deps := view.toCommandDependencies(handlers.NewRegistry())
+	deps := view.toCommandDependencies()
 	if deps == nil {
 		t.Fatal("toCommandDependencies() returned nil")
 	}
@@ -157,30 +103,19 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 		t.Fatal("memberNews mapping mismatch")
 	}
 
-	if deps.Dispatcher == nil {
-		t.Fatal("dispatcher must be initialized")
-	}
-
 	if deps.SendMessage == nil || deps.SendImage == nil || deps.SendImages == nil || deps.SendError == nil {
 		t.Fatal("send function mappings must not be nil")
 	}
 }
 
 func TestCommandInitView_AssemblesCommands(t *testing.T) {
-	registry := handlers.NewRegistry()
-	view := commandInitView{
-		logger:               slog.New(slog.DiscardHandler),
-		majorEventRepository: &stubCommandInitMajorEventRepository{},
-		memberNews:           &stubCommandInitMemberNewsService{},
-		commandBuilders: []orchcmd.CommandBuilder{
-			nil,
-			func(_ *handlercore.Dependencies) handlercore.Command {
-				return &stubCommandInitCommand{name: testExternalCommandName}
-			},
-		},
-	}
+	b := &Bot{logger: slog.New(slog.DiscardHandler)}
+	view := b.commandInitView(&Dependencies{
+		MajorEventRepository: &stubCommandInitMajorEventRepository{},
+		MemberNews:           &stubCommandInitMemberNewsService{},
+	}, &stubCommandInitCalendarFinder{})
 
-	deps := view.toCommandDependencies(registry)
+	deps := view.toCommandDependencies()
 	commands := view.buildCommands(deps)
 
 	gotNames := make([]string, 0, len(commands))
@@ -202,83 +137,19 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 		"broadcast_history",
 		"broadcast_thumbnail",
 		"broadcast_time",
+		"calendar",
 		"major_event",
 		"member_news",
 		"news_subscription",
-		testExternalCommandName,
 	}
 	if !slices.Equal(gotNames, wantNames) {
 		t.Fatalf("command names = %v, want %v", gotNames, wantNames)
 	}
 }
 
-func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testing.T) {
-	registry := handlers.NewRegistry()
-	targetName := botcommand.CommandType("external_target")
-	target := &stubCommandInitCommand{name: string(targetName)}
-	registry.Register(target)
-
-	var builtDeps *handlercore.Dependencies
-
-	builder := orchcmd.CommandBuilder(func(deps *handlercore.Dependencies) handlercore.Command {
-		builtDeps = deps
-
-		return &stubCommandInitCommand{
-			name: testExternalCommandName,
-			exec: func(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
-				if _, err := deps.Dispatcher.Publish(ctx, cmdCtx, handlercore.Event{Type: targetName}); err != nil {
-					return fmt.Errorf("publish dispatcher event: %w", err)
-				}
-
-				return nil
-			},
-		}
-	})
-
-	view := commandInitView{
-		logger:          slog.New(slog.DiscardHandler),
-		commandBuilders: []orchcmd.CommandBuilder{builder},
-	}
-
-	deps := view.toCommandDependencies(registry)
-	commands := view.buildCommands(deps)
-
-	var external handlercore.Command
-
-	for _, cmd := range commands {
-		if cmd.Name() == testExternalCommandName {
-			external = cmd
-			break
-		}
-	}
-
-	if external == nil {
-		t.Fatal("external command was not assembled")
-	}
-
-	if builtDeps != deps {
-		t.Fatal("external builder did not receive current command dependencies")
-	}
-
-	if builtDeps == nil {
-		t.Fatal("external builder did not receive command dependencies")
-	}
-
-	if builtDeps.Dispatcher == nil {
-		t.Fatal("external builder dispatcher was not initialized")
-	}
-
-	if err := external.Execute(t.Context(), &botcommand.CommandContext{}, nil); err != nil {
-		t.Fatalf("external command execute failed: %v", err)
-	}
-
-	if target.executed != 1 {
-		t.Fatalf("dispatcher target executed = %d, want 1", target.executed)
-	}
-}
-
 var (
-	_ domain.StreamProvider            = (*stubCommandInitStreamProvider)(nil)
-	_ handlercore.MajorEventRepository = (*stubCommandInitMajorEventRepository)(nil)
-	_ handlercore.MemberNewsService    = (*stubCommandInitMemberNewsService)(nil)
+	_ domain.StreamProvider                 = (*stubCommandInitStreamProvider)(nil)
+	_ handlercore.CelebrationCalendarFinder = (*stubCommandInitCalendarFinder)(nil)
+	_ handlercore.MajorEventRepository      = (*stubCommandInitMajorEventRepository)(nil)
+	_ handlercore.MemberNewsService         = (*stubCommandInitMemberNewsService)(nil)
 )

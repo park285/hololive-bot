@@ -34,6 +34,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestHandleAliasOperation_NormalizesAliasBeforeRepoCall(t *testing.T) {
@@ -128,7 +129,7 @@ func newAliasOperationTestHandler(t *testing.T) *MemberHandler {
 
 	logger := slog.New(slog.DiscardHandler)
 
-	memberCache, err := member.NewMemberCache(t.Context(), nil, nil, logger, member.CacheConfig{})
+	memberCache, err := member.NewMemberCache(t.Context(), nil, sharedtestutil.NewTestCacheService(t.Context(), t), logger, member.CacheConfig{})
 	if err != nil {
 		t.Fatalf("failed to create member cache: %v", err)
 	}
@@ -137,12 +138,12 @@ func newAliasOperationTestHandler(t *testing.T) *MemberHandler {
 
 	activityLogger := activity.NewActivityLogger(logger)
 
-	return (&Handler{
-		repository:  &member.Repository{},
-		memberCache: memberCache,
-		activity:    activityLogger,
-		logger:      logger,
-	}).DomainHandlers().Member
+	return newMemberHandler(Deps{
+		Repository:  &member.Repository{},
+		MemberCache: memberCache,
+		Activity:    activityLogger,
+		Logger:      logger,
+	})
 }
 
 func newAliasOperationTestContext(method, body string) (*gin.Context, *httptest.ResponseRecorder) {

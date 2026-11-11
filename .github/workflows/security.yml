@@ -18,9 +18,7 @@ concurrency:
 env:
   GOCACHE: /tmp/go-cache
   GOTMPDIR: /tmp
-  GOVULNCHECK_VERSION: v1.9.0
   GOSEC_VERSION: v2.30.0
-  NILAWAY_VERSION: v0.0.0-20260918162853-acb8859b9031
 
 jobs:
   dependency-security:
@@ -42,7 +40,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 34fae00ac1b3f9565932bb6f12ceed03c0250347 # v2.19.0, 릴리스 provenance 검증 완료
+          ref: 6e4bba6a1468b09bd1494f9488715388b20d1c68 # v2.20.1, 릴리스 provenance 검증 완료
           path: shared-go
           persist-credentials: false
 
@@ -50,7 +48,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: 8b8f3b9132aa7226d5373cd988f0fe07456ce4b1 # v5.0.0, 릴리스 provenance 검증 완료
+          ref: 6c4e92711b1c9cb747ea68c3a6e3570f145fdc02 # v5.0.1, 릴리스 provenance 검증 완료
           path: iris-client-go
           persist-credentials: false
 
@@ -68,7 +66,9 @@ jobs:
         run: |
           export GOBIN="${RUNNER_TEMP}/go-tools"
           mkdir -p "${GOBIN}"
-          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          source scripts/ci/go-tooling.sh
+          govulncheck_bin="$(ensure_govulncheck)"
+          printf 'GOVULNCHECK_BIN=%s\n' "${govulncheck_bin}" >> "${GITHUB_ENV}"
           go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
           nilaway_bin="$(bash scripts/ci/nilaway-models/build.sh)"
           printf 'NILAWAY_BIN=%s\n' "${nilaway_bin}" >> "${GITHUB_ENV}"
@@ -103,21 +103,19 @@ jobs:
           mapfile -t modules < <(go work edit -json | jq -r '.Use[].DiskPath')
           for module in "${modules[@]}"; do
             echo "govulncheck ${module}"
-            (cd "${module}" && govulncheck ./...)
+            (cd "${module}" && "${GOVULNCHECK_BIN}" ./...)
           done
 
       - name: Install exact Trivy
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        env:
-          TRIVY_VERSION: "0.76.2"
-          TRIVY_LINUX_AMD64_SHA256: bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
         run: |
-          archive="${RUNNER_TEMP}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          source scripts/ci/final-image-scan-policy.sh
+          archive="${RUNNER_TEMP}/trivy_${FINAL_IMAGE_TRIVY_VERSION}_Linux-64bit.tar.gz"
           extract_dir="${RUNNER_TEMP}/trivy-extract"
           bin_dir="${RUNNER_TEMP}/trivy-bin"
-          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          url="https://github.com/aquasecurity/trivy/releases/download/v${FINAL_IMAGE_TRIVY_VERSION}/trivy_${FINAL_IMAGE_TRIVY_VERSION}_Linux-64bit.tar.gz"
           curl --fail --location --proto '=https' --tlsv1.2 --output "${archive}" "${url}"
-          printf '%s  %s\n' "${TRIVY_LINUX_AMD64_SHA256}" "${archive}" | sha256sum --check -
+          printf '%s  %s\n' "${FINAL_IMAGE_TRIVY_LINUX_AMD64_SHA256}" "${archive}" | sha256sum --check -
           mkdir -p "${extract_dir}" "${bin_dir}"
           tar -xzf "${archive}" -C "${extract_dir}" trivy
           install -m 0755 "${extract_dir}/trivy" "${bin_dir}/trivy"

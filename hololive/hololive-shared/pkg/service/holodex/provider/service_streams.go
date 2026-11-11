@@ -51,15 +51,6 @@ func SupportedStreamOrgParams() []string {
 	return slices.Clone(supportedStreamOrgParams)
 }
 
-func (h *Service) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
-	out, err := h.GetLiveStreamsByOrg(ctx, constants.HolodexAPIParams.OrgHololive)
-	if err != nil {
-		return out, fmt.Errorf("get live streams by org: %w", err)
-	}
-
-	return out, nil
-}
-
 // org 미지정 시 Hololive를 기본값으로 사용합니다.
 func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, error) {
 	resolvedOrg, err := resolveStreamOrg(org)

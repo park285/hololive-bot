@@ -3,7 +3,11 @@ package youtubedispatch
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"net/http"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
@@ -19,6 +23,7 @@ import (
 const (
 	testProviderAttemptRoom = "room"
 	testProviderAttemptBody = "body"
+	testTransportOpDial     = "dial"
 )
 
 type providerAttemptSender struct {
@@ -65,7 +70,7 @@ func TestProviderAttemptTracksActualResultAndPanic(t *testing.T) {
 			var err error
 
 			call := func() {
-				_, err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
+				_, err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, clientRequestID: testClientRequestID, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
 			}
 
 			if tc.panics {
@@ -102,7 +107,7 @@ func TestReissueWaitsForNextDeliveryAttempt(t *testing.T) {
 	d.send.sender = sender
 	d.send.config.MaxRetries = 3
 
-	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:reissue", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
+	req := deliverySendRequest{clientRequestID: "youtube:reissue", roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:reissue", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
 	err := d.send.sendFrozenDelivery(t.Context(), &deliveryAttempt{request: req})
 	require.ErrorIs(t, err, errRequestReissued)
 }
@@ -113,7 +118,7 @@ func TestReissueRejectsMixedUnknownAndPreHandoffFailure(t *testing.T) {
 
 	d.send.sender = sender
 
-	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:mixed", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
+	req := deliverySendRequest{clientRequestID: "youtube:mixed", roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:mixed", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
 	err := d.send.sendFrozenDelivery(t.Context(), &deliveryAttempt{request: req})
 	require.ErrorIs(t, err, errDeliverySendOutcomeUnknown)
 	require.NotErrorIs(t, err, errRequestReissued)
@@ -142,4 +147,65 @@ func (s *providerAttemptSender) PrepareMessageRequest(_ context.Context, _ strin
 
 func (s *providerAttemptSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	return testAdmission(id, s.SendMessage(ctx, room, body))
+}
+
+type outcomeProviderSender struct {
+	send func(context.Context) error
+}
+
+func (s outcomeProviderSender) PrepareMessageRequest(_ context.Context, _ string, body delivery.MessageVariants) (string, string, error) {
+	return body.Plain, testPreparedTextRoute, nil
+}
+
+func (s outcomeProviderSender) SendPreparedMessage(ctx context.Context, _, _, _, id string) (string, error) {
+	return testAdmission(id, s.send(ctx))
+}
+
+func TestProviderAttemptOutcomeByError(t *testing.T) {
+	returns := func(err error) func(context.Context) error {
+		return func(context.Context) error { return err }
+	}
+	afterSendTimeout := func(err error) func(context.Context) error {
+		return func(ctx context.Context) error {
+			<-ctx.Done()
+
+			return err
+		}
+	}
+
+	cases := []struct {
+		name string
+		send func(context.Context) error
+		want workercontract.AttemptOutcome
+	}{
+		{name: "unclassified", send: returns(errors.New("provider failed")), want: workercontract.AttemptOutcomeUnknown},
+		{name: "server error", send: returns(&iris.HTTPError{StatusCode: http.StatusServiceUnavailable}), want: workercontract.AttemptOutcomeUnknown},
+		{name: "pre-handoff conflict", send: returns(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)), want: workercontract.AttemptFailed},
+		{name: "known unsent transport", send: returns(&iris.TransportError{Op: testTransportOpPost, Err: &net.OpError{Op: testTransportOpDial, Err: errors.New("refused")}}), want: workercontract.AttemptFailed},
+		{name: "response lost", send: returns(&iris.TransportError{Op: testTransportOpPost, Err: io.ErrUnexpectedEOF}), want: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown with deadline", send: returns(errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.DeadlineExceeded)), want: workercontract.AttemptOutcomeUnknown},
+		{name: "unknown with cancel", send: returns(errors.Join(sendoutcome.ErrAdmissionOutcomeUnknown, context.Canceled)), want: workercontract.AttemptOutcomeUnknown},
+		{name: "send timeout with known failure", send: afterSendTimeout(iris.ErrPermanent), want: workercontract.AttemptTimeout},
+		{name: "send timeout with unknown evidence", send: afterSendTimeout(sendoutcome.ErrAdmissionOutcomeUnknown), want: workercontract.AttemptOutcomeUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				totals := &workercontract.Counters{}
+				engine := &SendEngine{
+					workerTracker: workercontract.NewExecutorTracker(),
+					workerTotals:  totals,
+					sender:        outcomeProviderSender{send: tc.send},
+					config:        Config{DeliverySendTimeout: time.Second},
+				}
+
+				_, err := engine.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, clientRequestID: testClientRequestID, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}})
+				require.Error(t, err)
+
+				expected := &workercontract.Counters{}
+				expected.RecordAttempt(tc.want)
+				require.Equal(t, expected.Snapshot(), totals.Snapshot())
+			})
+		})
+	}
 }

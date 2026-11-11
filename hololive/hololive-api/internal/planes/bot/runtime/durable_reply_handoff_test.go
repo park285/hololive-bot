@@ -55,7 +55,8 @@ func TestDecideReplyHandoff(t *testing.T) {
 		wantCode  string
 	}{
 		{name: "handoff completed confirms the reply", claim: inFlight, snapshot: snapshot("handoff_completed"), wantState: durability.ReplyOutboxHandoffCompleted},
-		{name: "state tolerates case and padding", claim: inFlight, snapshot: snapshot("  HANDOFF_COMPLETED "), wantState: durability.ReplyOutboxHandoffCompleted},
+		{name: "padded upper-case completed needs review", claim: inFlight, snapshot: snapshot("  HANDOFF_COMPLETED "), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
+		{name: "capitalized failed needs review instead of reissue", claim: inFlight, snapshot: snapshot("Failed"), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
 		{name: "failed with budget is reissued", claim: inFlight, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxRetryablePreDispatch, wantCode: replyHandoffErrorFailed},
 		{name: "failed with operator grant is reissued", claim: granted, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxRetryablePreDispatch, wantCode: replyHandoffErrorFailed},
 		{name: "failed with exhausted attempts is dead", claim: exhausted, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxDead, wantCode: replyHandoffErrorFailed},

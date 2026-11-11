@@ -163,25 +163,6 @@ func TestReduceUnresolvableVideoKeepsTrackingForOlderPositive(t *testing.T) {
 	}
 }
 
-func TestReduceUnresolvableVideoRestartsStaleTracking(t *testing.T) {
-	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), liveA()))
-	session := state.Sessions[testVideoID]
-	stale := time.Date(2026, time.August, 14, 1, 30, 0, 0, time.UTC)
-
-	session.Clock.UnresolvableSince = &stale
-	state.Sessions[testVideoID] = session
-
-	verified := sessionFact(StatusUnresolvable)
-
-	verified.VerifiedTerminal = true
-
-	restarted, next := reduceAt(t, &state, videoCheckEvidence(43, unresolvableLaterAt, verified), time.Hour)
-	if got := next.Sessions[testVideoID]; !hasDecision(&restarted, "UNRESOLVABLE_TRACKED") || got.Status != domain.LiveStatusLive ||
-		got.Clock.UnresolvableSince == nil || !got.Clock.UnresolvableSince.Equal(unresolvableLaterAt) {
-		t.Fatalf("stale tracking = %+v decisions=%+v, want tracking restarted at %s", got, restarted.Applications, unresolvableLaterAt)
-	}
-}
-
 func TestReduceUnresolvableVideoIgnoresHeadlessMetadataUpcoming(t *testing.T) {
 	state := emptyState()
 

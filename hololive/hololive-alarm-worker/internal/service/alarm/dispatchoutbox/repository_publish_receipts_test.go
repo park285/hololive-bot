@@ -11,10 +11,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func receiptEnvelope(room, title string) domain.AlarmQueueEnvelope {
+func receiptEnvelope(room, title string) AlarmQueueEnvelope {
 	start := time.Date(2026, time.September, 30, 12, 0, 0, 0, time.UTC)
 
-	return domain.AlarmQueueEnvelope{Version: 1, Notification: domain.AlarmNotification{
+	return AlarmQueueEnvelope{Version: 1, Notification: domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive, RoomID: room, MinutesUntil: 5,
 		Channel: &domain.Channel{ID: "receipt-channel"},
 		Stream:  &domain.Stream{ID: "receipt-video", ChannelID: "receipt-channel", Title: title, StartScheduled: &start},
@@ -28,7 +28,7 @@ func TestPublishReceiptsDistinguishMixedCommittedInputs(t *testing.T) {
 	active := receiptEnvelope("room-active", "canonical")
 	sent := receiptEnvelope("room-sent", "canonical")
 	terminal := receiptEnvelope("room-terminal", "canonical")
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{active, sent, terminal}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{active, sent, terminal}})
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET status='sent', sent_at=NOW() WHERE room_id=$1`, sent.Notification.RoomID)
@@ -37,7 +37,7 @@ func TestPublishReceiptsDistinguishMixedCommittedInputs(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET status='quarantined', quarantined_at=NOW() WHERE room_id=$1`, terminal.Notification.RoomID)
 	require.NoError(t, err)
 
-	batch := []domain.AlarmQueueEnvelope{receiptEnvelope("room-collision", "changed"), active, receiptEnvelope("room-new", "canonical"), sent, terminal}
+	batch := []AlarmQueueEnvelope{receiptEnvelope("room-collision", "changed"), active, receiptEnvelope("room-new", "canonical"), sent, terminal}
 	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: batch})
 	require.NoError(t, err)
 	require.Len(t, result.Receipts, len(batch))
@@ -46,7 +46,7 @@ func TestPublishReceiptsDistinguishMixedCommittedInputs(t *testing.T) {
 
 	for i, receipt := range result.Receipts {
 		require.Equal(t, i, receipt.Ordinal)
-		require.Equal(t, BuildDedupeKeyFromEnvelope(&batch[i]), receipt.DedupeKey)
+		require.Equal(t, ledgerDedupeKey(t, &batch[i]), receipt.DedupeKey)
 		require.Equal(t, want[i], receipt.Outcome)
 	}
 
@@ -69,7 +69,7 @@ func TestPublishIgnoresViewerCountInSharedEventIdentity(t *testing.T) {
 
 	first.Notification.Stream.ViewerCount = new(771)
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first}})
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET status='sent', sent_at=NOW() WHERE room_id=$1`, first.Notification.RoomID)
@@ -83,7 +83,7 @@ func TestPublishIgnoresViewerCountInSharedEventIdentity(t *testing.T) {
 
 	joined.Notification.Stream.ViewerCount = new(1744)
 
-	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{resent, joined}})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{resent, joined}})
 	require.NoError(t, err)
 	require.Zero(t, result.HashConflictEvents)
 	require.Len(t, result.Receipts, 2)
@@ -101,11 +101,11 @@ func TestPublishCommitReconciliationVerifiesLedgerAndLeavesMissingUnresolved(t *
 	repository := newTestRepository(t, pool)
 	ctx := t.Context()
 	committed := receiptEnvelope("room-committed", "canonical")
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{committed}})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{committed}})
 	require.NoError(t, err)
 
 	lost := errors.New("commit response lost")
-	result, err := repository.reconcilePublishCommit(ctx, []domain.AlarmQueueEnvelope{receiptEnvelope("room-missing", "canonical"), committed}, lost)
+	result, err := repository.reconcilePublishCommit(ctx, []AlarmQueueEnvelope{receiptEnvelope("room-missing", "canonical"), committed}, lost)
 	require.ErrorIs(t, err, lost)
 	require.Len(t, result.Receipts, 1)
 	require.Equal(t, 1, result.Receipts[0].Ordinal)
@@ -120,7 +120,7 @@ func TestPublishRolledBackChunkHasNoAcceptedReceipts(t *testing.T) {
  CREATE TRIGGER reject_receipt_delivery BEFORE INSERT ON alarm_dispatch_deliveries FOR EACH ROW EXECUTE FUNCTION reject_receipt_delivery()`)
 	require.NoError(t, err)
 
-	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("room-rollback", "canonical")}})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []AlarmQueueEnvelope{receiptEnvelope("room-rollback", "canonical")}})
 	require.ErrorContains(t, err, "injected rollback")
 	require.Empty(t, result.Receipts)
 	require.Zero(t, result.InsertedDeliveries)

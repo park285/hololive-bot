@@ -1,15 +1,42 @@
-import { channelFixture } from "./test-fixtures/channel.mjs";
+import { channelFixture } from "../test-fixtures/channel.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { Utils } from "youtubei.js";
+import { Utils, YTNodes } from "youtubei.js";
 
-import { fetchChannelFeed, liveSessionRows, mapPhoto, mapProfile } from "./fetch-channel.mjs";
+import { fetchChannelFeed, liveSessionRows, mapProfile } from "./fetch-channel.mjs";
 import { handleChannelRequest } from "./rpc-boundary.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { ScheduleLookupCache } from "./schedule-cache.mjs";
 
 const liveBadges = [{ style: "BADGE_STYLE_TYPE_LIVE_NOW" }];
+
+// 실제 SDK Video 노드입니다. 예정 표시는 UPCOMING time-status overlay이고, scheduledAt이 있으면 upcomingEventData로
+// 목록 시각을 싣습니다. 나머지 값은 원시 videoRenderer 필드입니다.
+function upcomingVideo(videoId, { scheduledAt, title = videoId, ...raw } = {}) {
+  return new YTNodes.Video({
+    videoId,
+    title: { simpleText: title },
+    thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: "UPCOMING", text: { simpleText: "UPCOMING" } } }],
+    ...(scheduledAt === undefined ? {} : { upcomingEventData: { startTime: String(Date.parse(scheduledAt) / 1000) } }),
+    ...raw,
+  });
+}
+
+// 재생 시간 time-status overlay만 가진 종료 방송 Video 노드입니다.
+function endedVideo(videoId) {
+  return new YTNodes.Video({
+    videoId,
+    title: { simpleText: videoId },
+    thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: "DEFAULT", text: { simpleText: "1:23:45" } } }],
+  });
+}
+
+// 상태 표시가 하나도 없는 Video 노드입니다.
+function unmarkedVideo(videoId) {
+  return new YTNodes.Video({ videoId, title: { simpleText: videoId } });
+}
+
 const lockupFixture = JSON.parse(
   await readFile(new URL("../testdata/lockup-upcoming.json", import.meta.url), "utf8"),
 );
@@ -25,9 +52,9 @@ test("one restricted schedule preserves normal upcoming and live rows through th
   t.mock.method(process.stderr, "write", (line) => { logs.push(JSON.parse(line)); return true; });
   const calls = [];
   const innertube = stubChannel({ videos: [
-    { id: "upcoming-a", is_upcoming: true },
-    { id: "restricted-fixture", is_upcoming: true },
-    { id: "upcoming-b", is_upcoming: true },
+    upcomingVideo("upcoming-a"),
+    upcomingVideo("restricted-fixture"),
+    upcomingVideo("upcoming-b"),
     { id: "already-live", badges: liveBadges },
   ] }, async (_, { videoId }) => {
     calls.push(videoId);
@@ -55,7 +82,7 @@ test("one restricted schedule preserves normal upcoming and live rows through th
 test("a restricted-only feed preserves its unresolved identity and is rechecked next poll", async (t) => {
   t.mock.method(process.stderr, "write", () => true);
   let calls = 0;
-  const innertube = stubChannel({ videos: [{ id: "restricted-fixture", is_upcoming: true }] }, async () => {
+  const innertube = stubChannel({ videos: [upcomingVideo("restricted-fixture")] }, async () => {
     calls++;
     return calls === 1 ? { success: true, status_code: 200, data: restrictedFixture } : rawPlayerResponse("restricted-fixture");
   });
@@ -78,7 +105,7 @@ test("a reused far-future schedule skips the player, reports no lookup, and keep
   const time = steppingClock("2026-09-01T01:00:00Z");
   const scheduleCache = new ScheduleLookupCache({ now: time.now });
   const calls = [];
-  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+  const innertube = stubChannel({ videos: [upcomingVideo("later")] }, async (_, { videoId }) => {
     calls.push(videoId);
     return rawPlayerResponse(videoId);
   });
@@ -110,9 +137,9 @@ test("near-start schedules, player LIVE transitions, and restrictions are rechec
   const scheduleCache = new ScheduleLookupCache({ now: time.now });
   const calls = [];
   const innertube = stubChannel({ videos: [
-    { id: "soon", is_upcoming: true },
-    { id: "early-start", is_upcoming: true },
-    { id: "restricted-fixture", is_upcoming: true },
+    upcomingVideo("soon"),
+    upcomingVideo("early-start"),
+    upcomingVideo("restricted-fixture"),
   ] }, async (_, { videoId }) => {
     calls.push(videoId);
     if (videoId === "restricted-fixture") return { success: true, status_code: 200, data: restrictedFixture };
@@ -134,7 +161,7 @@ test("near-start schedules, player LIVE transitions, and restrictions are rechec
 test("a schedule the streams tab shows directly clears the reused lookup", async () => {
   const time = steppingClock("2026-09-01T01:00:00Z");
   const scheduleCache = new ScheduleLookupCache({ now: time.now });
-  let feed = { videos: [{ id: "later", is_upcoming: true }] };
+  let feed = { videos: [upcomingVideo("later")] };
   let calls = 0;
   const innertube = {
     getChannel: async () => channelFixture({
@@ -145,11 +172,11 @@ test("a schedule the streams tab shows directly clears the reused lookup", async
   };
   await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:00:00Z" });
   assert.equal(scheduleCache.size, 1);
-  feed = { videos: [{ id: "later", is_upcoming: true, upcoming: new Date("2026-09-01T12:00:00Z") }] };
+  feed = { videos: [upcomingVideo("later", { scheduledAt: "2026-09-01T12:00:00Z" })] };
   time.advance(2 * 60_000);
   await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:02:00Z" });
   // 목록이 다시 시각을 감추면 재사용하지 않고 player로 확인합니다.
-  feed = { videos: [{ id: "later", is_upcoming: true }] };
+  feed = { videos: [upcomingVideo("later")] };
   time.advance(2 * 60_000);
   const next = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:04:00Z" });
   assert.equal(next.schedule_lookups, 1);
@@ -164,7 +191,7 @@ test("a slower lookup from an earlier slot never revives an entry a later slot i
   let earlierStarted = () => {};
   const started = new Promise((resolve) => { earlierStarted = resolve; });
   let calls = 0;
-  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+  const innertube = stubChannel({ videos: [upcomingVideo("later")] }, async (_, { videoId }) => {
     calls++;
     if (calls === 1) {
       earlierStarted();
@@ -197,10 +224,10 @@ test("a later slot that sees the schedule in the listing stops an earlier slot f
   const earlier = new Promise((resolve) => { releaseEarlier = resolve; });
   let earlierStarted = () => {};
   const started = new Promise((resolve) => { earlierStarted = resolve; });
-  const untimed = { videos: [{ id: "later", is_upcoming: true }] };
+  const untimed = { videos: [upcomingVideo("later")] };
   const listings = [
     async () => { earlierStarted(); await earlier; return untimed; },
-    async () => ({ videos: [{ id: "later", is_upcoming: true, upcoming: new Date("2026-09-01T01:15:00Z") }] }),
+    async () => ({ videos: [upcomingVideo("later", { scheduledAt: "2026-09-01T01:15:00Z" })] }),
     async () => untimed,
   ];
   let calls = 0;
@@ -231,7 +258,7 @@ test("a failed same-slot recheck stops reuse until the player confirms again", a
   const time = steppingClock("2026-09-01T01:00:00Z");
   const scheduleCache = new ScheduleLookupCache({ now: time.now });
   let calls = 0;
-  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+  const innertube = stubChannel({ videos: [upcomingVideo("later")] }, async (_, { videoId }) => {
     calls++;
     if (calls === 2) throw new Error("upstream reset");
     return rawPlayerResponse(videoId);
@@ -249,7 +276,7 @@ test("a failed same-slot recheck stops reuse until the player confirms again", a
 test("without a lease slot time the helper neither reuses nor records schedules", async () => {
   const scheduleCache = new ScheduleLookupCache({ now: () => Date.parse("2026-09-01T01:00:00Z") });
   let calls = 0;
-  const innertube = stubChannel({ videos: [{ id: "later", is_upcoming: true }] }, async (_, { videoId }) => {
+  const innertube = stubChannel({ videos: [upcomingVideo("later")] }, async (_, { videoId }) => {
     calls++;
     return rawPlayerResponse(videoId);
   });
@@ -265,13 +292,13 @@ test("restricted filtering never hides a conflicting duplicate or foreign channe
   t.mock.method(process.stderr, "write", () => true);
   const conflicts = [
     { id: "restricted-fixture", badges: liveBadges },
-    { id: "restricted-fixture", is_upcoming: true, scheduled: "2026-09-11T03:00:00Z" },
-    { id: "restricted-fixture", is_upcoming: true, author: { id: "UC_OTHER" } },
+    upcomingVideo("restricted-fixture", { scheduledAt: "2026-09-11T03:00:00Z" }),
+    upcomingVideo("restricted-fixture", { ownerText: { runs: [{ text: "Other", navigationEndpoint: { browseEndpoint: { browseId: "UC_OTHER" } } }] } }),
   ];
   for (const conflict of conflicts) {
     const innertube = stubChannel({ videos: [
       conflict,
-      { id: "restricted-fixture", is_upcoming: true },
+      upcomingVideo("restricted-fixture"),
     ] }, async () => ({ success: true, status_code: 200, data: restrictedFixture }));
     await assert.rejects(
       () => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube }),
@@ -280,14 +307,14 @@ test("restricted filtering never hides a conflicting duplicate or foreign channe
   }
 });
 
-test("liveSessionRows fail-closes on unknown statuses", () => {
+test("liveSessionRows fail-closes on rows without a status marker", () => {
   assert.throws(
     () =>
       Array.from(liveSessionRows(
         {
           videos: [
             { id: "live-1", badges: liveBadges },
-            { id: "mystery", status: "unknown" },
+            unmarkedVideo("mystery"),
           ],
         },
         "UC_TEST",
@@ -296,39 +323,42 @@ test("liveSessionRows fail-closes on unknown statuses", () => {
   );
 });
 
-test("liveSessionRows maps current YouTube.js LockupView rows", () => {
+// 원시 lockupViewModel을 SDK가 파싱한 실제 LockupView입니다. 썸네일은 ThumbnailView.image 또는
+// CollectionThumbnailView.primary_thumbnail.image에만 있습니다.
+function lockupView(id, title, badges, { collection = false } = {}) {
+  const thumbnailViewModel = {
+    image: { sources: [{ url: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, width: 1280, height: 720 }] },
+    overlays: [{ thumbnailBottomOverlayViewModel: { badges: badges.map(([text, badgeStyle]) => ({ thumbnailBadgeViewModel: { text, badgeStyle } })) } }],
+  };
+  return new YTNodes.LockupView({
+    contentId: id,
+    contentType: "LOCKUP_CONTENT_TYPE_VIDEO",
+    contentImage: collection ? { collectionThumbnailViewModel: { primaryThumbnail: { thumbnailViewModel } } } : { thumbnailViewModel },
+    metadata: { lockupMetadataViewModel: { title: { content: title } } },
+  });
+}
+
+test("liveSessionRows maps current YouTube.js LockupView rows with their thumbnails", () => {
   const sessions = Array.from(liveSessionRows(
     {
       videos: [
-        {
-          type: "LockupView",
-          content_type: "VIDEO",
-          content_id: "upcoming-1",
-          metadata: { title: "Upcoming title" },
-          content_image: {
-            sources: [{ url: "https://i.ytimg.com/vi/upcoming-1/maxresdefault.jpg", width: 1280, height: 720 }],
-            overlays: [{ badges: [{ text: "Upcoming" }] }],
-          },
-        },
-        { type: "LockupView", content_type: "VIDEO", content_id: "ended-1", metadata: { title: "Ended title" },
-          content_image: { overlays: [{ badges: [{ text: "1:23:45", badge_style: "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT" }] }] } },
+        lockupView("upcoming-1", "Upcoming title", [["Upcoming", "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT"]]),
+        lockupView("ended-1", "Ended title", [["1:23:45", "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT"]], { collection: true }),
       ],
     },
     "UC_TEST",
   ));
-  assert.deepEqual(sessions.map((item) => [item.video_id, item.status]), [
-    ["upcoming-1", "UPCOMING"],
-    ["ended-1", "ENDED"],
+  assert.deepEqual(sessions.map((item) => [item.video_id, item.status, item.title, item.thumbnail_url]), [
+    ["upcoming-1", "UPCOMING", "Upcoming title", "https://i.ytimg.com/vi/upcoming-1/maxresdefault.jpg"],
+    ["ended-1", "ENDED", "Ended title", "https://i.ytimg.com/vi/ended-1/maxresdefault.jpg"],
   ]);
-  assert.equal(sessions[0].title, "Upcoming title");
-  assert.equal(sessions[0].thumbnail_url, "https://i.ytimg.com/vi/upcoming-1/maxresdefault.jpg");
 });
 
 test("fetchChannelFeed fail-closes when live rows lack status", async () => {
   const innertube = {
     getChannel: async () => channelFixture({
       getAbout: async () => ({}),
-      getLiveStreams: async () => channelFixture({ videos: [{ id: "mystery", status: "unknown" }] }),
+      getLiveStreams: async () => channelFixture({ videos: [unmarkedVideo("mystery")] }),
     }),
   };
   await assert.rejects(
@@ -400,19 +430,10 @@ test("mapProfile keeps empty fields as null", () => {
   assert.equal(mapProfile({}, {}).handle, null);
 });
 
-test("mapPhoto maps avatar and banner variants", () => {
-  const variants = mapPhoto(
-    { author: { thumbnails: [{ url: "https://img.test/a.jpg", width: 88, height: 88 }] } },
-    { banner: [{ url: "https://img.test/b.jpg", width: 100, height: 20 }] },
-  );
-  assert.equal(variants[0].kind, "avatar");
-  assert.equal(variants[1].kind, "banner");
-});
-
 test("metadata collection returns channel fields without requesting streams or player", async () => {
   const innertube = {
     getChannel: async () => channelFixture({
-      getAbout: async () => ({ subscriber_count: 12, handle: "@test", description: "hi" }),
+      getAbout: async () => new YTNodes.AboutChannel({ metadata: { aboutChannelViewModel: { description: "hi" } } }),
       getLiveStreams: async () => { throw new Error("metadata requested streams"); },
     }),
     actions: {
@@ -421,7 +442,7 @@ test("metadata collection returns channel fields without requesting streams or p
   };
   const result = await fetchChannelFeed({ kind: "metadata", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
-  assert.equal(result.profile.handle, "@test");
+  assert.equal(result.profile.description, "hi");
   assert.equal(result.exhausted, true);
 });
 
@@ -464,7 +485,7 @@ test("fetchChannelFeed recovers a schedule from the raw player offline slate", a
   const result = await fetchChannelFeed({
     kind: "live",
     channelId: "UC_TEST",
-    innertube: stubChannel({ videos: [{ id: "offline-slate", is_upcoming: true }] }, async () => response),
+    innertube: stubChannel({ videos: [upcomingVideo("offline-slate")] }, async () => response),
   });
 
   assert.equal(result.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
@@ -474,10 +495,9 @@ test("fetchChannelFeed preserves live states and schedules regardless of raw vie
   let calls = 0;
   const feed = {
     videos: [
-      { id: "scheduled", is_upcoming: true, scheduled: new Date("2026-09-01T20:00:00+09:00"), viewer_count: "hidden" },
+      upcomingVideo("scheduled", { scheduledAt: "2026-09-01T11:00:00Z", viewCountText: { simpleText: "hidden" } }),
       { id: "live", badges: liveBadges, viewer_count: -1, view_count: { unexpected: true } },
-      { id: "ended", status: "ENDED" },
-      { id: "canceled", status: "CANCELLED" },
+      endedVideo("ended"),
     ],
   };
   const result = await fetchChannelFeed({
@@ -492,7 +512,7 @@ test("fetchChannelFeed preserves live states and schedules regardless of raw vie
   assert.equal(calls, 0);
   assert.equal(result.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
   assert.deepEqual(result.live_sessions.map((item) => [item.video_id, item.status]), [
-    ["scheduled", "UPCOMING"], ["live", "LIVE"], ["ended", "ENDED"], ["canceled", "CANCELLED"],
+    ["scheduled", "UPCOMING"], ["live", "LIVE"], ["ended", "ENDED"],
   ]);
   for (const session of result.live_sessions) {
     assert.equal(Object.hasOwn(session, "viewer_count"), false);
@@ -505,7 +525,7 @@ test("fetchChannelFeed never accepts localized list text as a schedule", async (
     kind: "live",
     channelId: "UC_TEST",
     innertube: stubChannel({
-      videos: [{ id: "localized", is_upcoming: true, scheduled: "September 1, 2026 8:00 PM" }],
+      videos: [upcomingVideo("localized", { publishedTimeText: { simpleText: "Scheduled for September 1, 2026 8:00 PM" } })],
     }, async (_endpoint, payload) => {
       calls += 1;
       return rawPlayerResponse(payload.videoId);
@@ -520,9 +540,9 @@ test("fetchChannelFeed deduplicates missing schedules and preserves request orde
   const requested = [];
   const feed = {
     videos: [
-      { id: "first", is_upcoming: true },
-      { id: "first", is_upcoming: true },
-      { id: "second", is_upcoming: true },
+      upcomingVideo("first"),
+      upcomingVideo("first"),
+      upcomingVideo("second"),
     ],
   };
   const result = await fetchChannelFeed({
@@ -544,7 +564,7 @@ test("fetchChannelFeed deduplicates missing schedules and preserves request orde
 
 test("fetchChannelFeed permits exactly 32 metadata lookups", async () => {
   const requested = [];
-  const feed = { videos: Array.from({ length: 32 }, (_, index) => ({ id: `video-${index}`, is_upcoming: true })) };
+  const feed = { videos: Array.from({ length: 32 }, (_, index) => upcomingVideo(`video-${index}`)) };
   await fetchChannelFeed({
     kind: "live",
     channelId: "UC_TEST",
@@ -560,7 +580,7 @@ test("fetchChannelFeed rejects candidates beyond the lookup budget as a resource
   // 조회 상한은 collector 호출 예산이므로 응답 형상 오류(parser_drift)가 아니라 자원 한도입니다.
   for (const [count, maxScheduleLookups] of [[33, undefined], [2, 1], [1, 0]]) {
     let calls = 0;
-    const feed = { videos: Array.from({ length: count }, (_, index) => ({ id: `video-${index}`, is_upcoming: true })) };
+    const feed = { videos: Array.from({ length: count }, (_, index) => upcomingVideo(`video-${index}`)) };
     await assert.rejects(
       () => fetchChannelFeed({
         kind: "live",
@@ -580,10 +600,10 @@ test("fetchChannelFeed rejects candidates beyond the lookup budget as a resource
 test("live snapshots report the player lookups they performed", async () => {
   const feed = {
     videos: [
-      { id: "first", is_upcoming: true },
-      { id: "first", is_upcoming: true },
-      { id: "second", is_upcoming: true },
-      { id: "scheduled", is_upcoming: true, scheduled: new Date("2026-09-01T20:00:00+09:00") },
+      upcomingVideo("first"),
+      upcomingVideo("first"),
+      upcomingVideo("second"),
+      upcomingVideo("scheduled", { scheduledAt: "2026-09-01T11:00:00Z" }),
     ],
   };
   const result = await fetchChannelFeed({
@@ -596,7 +616,7 @@ test("live snapshots report the player lookups they performed", async () => {
 });
 
 test("a failed live RPC reports the player lookups sent before the failure", async () => {
-  const feed = { videos: [{ id: "first", is_upcoming: true }, { id: "second", is_upcoming: true }] };
+  const feed = { videos: [upcomingVideo("first"), upcomingVideo("second")] };
   let calls = 0;
   const innertube = stubChannel(feed, async (_endpoint, payload) => {
     calls += 1;
@@ -639,7 +659,7 @@ test("fetchChannelFeed keeps a list-to-player LIVE transition catch-up eligible"
   const result = await fetchChannelFeed({
     kind: "live",
     channelId: "UC_TEST",
-    innertube: stubChannel({ videos: [{ id: "transitioned", is_upcoming: true }] }, async () => response),
+    innertube: stubChannel({ videos: [upcomingVideo("transitioned")] }, async () => response),
   });
 
   assert.equal(result.live_sessions[0].status, "LIVE");
@@ -649,7 +669,7 @@ test("fetchChannelFeed keeps a list-to-player LIVE transition catch-up eligible"
 
 test("incomplete UPCOMING becomes a typed 422 RPC failure", async () => {
   const innertube = stubChannel(
-    { videos: [{ id: "unresolved", is_upcoming: true }] },
+    { videos: [upcomingVideo("unresolved")] },
     async () => rawPlayerResponse("unresolved", { startTimestamp: undefined }),
   );
   const result = await handleChannelRequest(
@@ -665,7 +685,7 @@ test("fetchChannelFeed cancellation remains a typed canceled RPC failure", async
   const controller = new AbortController();
   controller.abort(new DOMException("aborted", "AbortError"));
   const innertube = stubChannel(
-    { videos: [{ id: "canceled", is_upcoming: true }] },
+    { videos: [upcomingVideo("canceled")] },
     async () => { throw controller.signal.reason; },
   );
   const result = await runWithRequestContext(
@@ -718,7 +738,7 @@ function rawPlayerResponse(videoId, options = {}) {
 test("oversized channel snapshot rejects before upcoming metadata hydration", async () => {
   let calls = 0;
   const innertube = stubChannel({ videos: [
-    { id: "upcoming", is_upcoming: true },
+    upcomingVideo("upcoming"),
     { id: "large-live", badges: liveBadges, title: "x".repeat(2000) },
   ] }, async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
   const result = await handleChannelRequest(
@@ -732,9 +752,8 @@ test("oversized channel snapshot rejects before upcoming metadata hydration", as
 test("restricted bulky duplicate rows may shrink below the channel budget", async (t) => {
   t.mock.method(process.stderr, "write", () => true);
   let calls = 0;
-  const innertube = stubChannel({ videos: Array.from({ length: 10 }, () => ({
-    id: "restricted-fixture", is_upcoming: true, title: "x".repeat(2000),
-  })) }, async () => { calls++; return { success: true, status_code: 200, data: restrictedFixture }; });
+  const innertube = stubChannel({ videos: Array.from({ length: 10 }, () => upcomingVideo("restricted-fixture", { title: "x".repeat(2000) })) },
+    async () => { calls++; return { success: true, status_code: 200, data: restrictedFixture }; });
   const result = await handleChannelRequest(
     JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1000 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
@@ -748,9 +767,7 @@ for (const resolution of ["restricted", "scheduled", "LIVE"]) {
   test(`${resolution} hydration stops player requests as soon as the response cannot fit`, async (t) => {
     t.mock.method(process.stderr, "write", () => true);
     const calls = [];
-    const innertube = stubChannel({ videos: ["first", "second", "third"].map((id) => ({
-      id, is_upcoming: true,
-    })) }, async (_, { videoId }) => {
+    const innertube = stubChannel({ videos: ["first", "second", "third"].map((id) => upcomingVideo(id)) }, async (_, { videoId }) => {
       calls.push(videoId);
       if (resolution === "restricted") {
         const data = structuredClone(restrictedFixture);
@@ -775,9 +792,7 @@ for (const resolution of ["restricted", "scheduled", "LIVE"]) {
   test(`${resolution} hydration preserves duplicate rows at the exact response budget`, async (t) => {
     t.mock.method(process.stderr, "write", () => true);
     let calls = 0;
-    const innertube = stubChannel({ videos: ["first", "first", "second"].map((id) => ({
-      id, is_upcoming: true, title: "한글",
-    })) }, async (_, { videoId }) => {
+    const innertube = stubChannel({ videos: ["first", "first", "second"].map((id) => upcomingVideo(id, { title: "한글" })) }, async (_, { videoId }) => {
       calls++;
       if (resolution === "restricted") {
         const data = structuredClone(restrictedFixture);
@@ -804,8 +819,8 @@ test("resolved rows leave only identities for pending bulky restricted duplicate
   const calls = [];
   const innertube = stubChannel({ videos: [
     { id: "already-live", badges: liveBadges },
-    { id: "scheduled", is_upcoming: true },
-    ...Array.from({ length: 10 }, () => ({ id: "restricted-fixture", is_upcoming: true, title: "x".repeat(2000) })),
+    upcomingVideo("scheduled"),
+    ...Array.from({ length: 10 }, () => upcomingVideo("restricted-fixture", { title: "x".repeat(2000) })),
   ] }, async (_, { videoId }) => {
     calls.push(videoId);
     return videoId === "restricted-fixture"
@@ -823,7 +838,7 @@ test("resolved rows leave only identities for pending bulky restricted duplicate
 });
 
 test("streams scope is independent of ended-only and empty results", async () => {
-  for (const videos of [[], [{ id: "ended-only", status: "ENDED" }]]) {
+  for (const videos of [[], [endedVideo("ended-only")]]) {
     const innertube = stubChannel({ videos, has_continuation: false });
     const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
     assert.equal(result.exhausted, true);
@@ -844,9 +859,8 @@ test("remaining or unproven continuation cannot give complete streams coverage",
 
 test("unique unresolved identities alone can exceed the channel budget before hydration", async () => {
   let calls = 0;
-  const innertube = stubChannel({ videos: Array.from({ length: 32 }, (_, index) => ({
-    id: `upcoming-${index}`, is_upcoming: true,
-  })) }, async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
+  const innertube = stubChannel({ videos: Array.from({ length: 32 }, (_, index) => upcomingVideo(`upcoming-${index}`)) },
+    async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
   const result = await handleChannelRequest(
     JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_schedule_lookups: 32, max_success_response_bytes: 1000 }),
     (options) => fetchChannelFeed({ ...options, innertube }),

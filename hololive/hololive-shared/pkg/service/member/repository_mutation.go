@@ -109,17 +109,9 @@ func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name st
 // ErrCreateConflict는 같은 slug의 저장 내용이 생성 요청과 다름을 나타낸다.
 var ErrCreateConflict = errors.New("member already exists with different values")
 
-// 캐시 갱신은 호출자가 수행한다.
-func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) error {
-	_, err := r.createMember(ctx, member, false)
-	return err
-}
-
+// CreateMemberOrMatch는 멤버와 채널·기수·공식 링크·날짜를 저장하며 캐시 갱신은 호출자 몫이다. Slug 충돌에서 저장 필드가
+// 모두 같은 정본이 있으면 재삽입하지 않고 그 ID와 replayed=true를 돌려준다.
 func (r *Repository) CreateMemberOrMatch(ctx context.Context, member *domain.Member) (bool, error) {
-	return r.createMember(ctx, member, true)
-}
-
-func (r *Repository) createMember(ctx context.Context, member *domain.Member, allowReplay bool) (bool, error) {
 	if member == nil {
 		return false, errors.New("member is required")
 	}
@@ -142,7 +134,7 @@ func (r *Repository) createMember(ctx context.Context, member *domain.Member, al
 	}
 
 	pgErr, unique := errors.AsType[*pgconn.PgError](err)
-	if !allowReplay || !unique || pgErr.Code != "23505" || pgErr.ConstraintName != "idx_members_slug" {
+	if !unique || pgErr.Code != "23505" || pgErr.ConstraintName != "idx_members_slug" {
 		return false, fmt.Errorf("create member: %w", err)
 	}
 

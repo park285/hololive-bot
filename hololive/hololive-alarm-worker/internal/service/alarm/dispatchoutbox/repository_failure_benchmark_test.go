@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func BenchmarkFailureRoutingPolicy(b *testing.B) {
@@ -56,10 +55,10 @@ func prepareFailureRoutingBenchmark(b *testing.B, size int) (*pgxpool.Pool, *Pgx
 	pool := dbtest.NewPool(b)
 	repo := newTestRepository(b, pool)
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	envelopes := make([]domain.AlarmQueueEnvelope, size)
+	envelopes := make([]AlarmQueueEnvelope, size)
 
 	for i := range envelopes {
-		envelopes[i] = domain.AlarmQueueEnvelope{Notification: *candidateNotification(fmt.Sprintf("bench-room-%d", i), now.Add(time.Hour)), Version: 1}
+		envelopes[i] = AlarmQueueEnvelope{Notification: *candidateNotification(fmt.Sprintf("bench-room-%d", i), now.Add(time.Hour)), Version: 1}
 	}
 
 	if _, err := repo.InsertBatch(b.Context(), PublishBatchInput{Envelopes: envelopes}); err != nil {

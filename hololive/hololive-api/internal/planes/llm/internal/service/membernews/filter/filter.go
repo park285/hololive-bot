@@ -23,14 +23,14 @@ package filter
 import (
 	"time"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 var kst = timeutil.KSTZone
 
 type datedCandidate struct {
-	candidate model.Candidate
+	candidate newsmodel.Candidate
 	date      time.Time
 }
 

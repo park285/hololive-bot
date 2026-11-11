@@ -46,7 +46,7 @@ func (c *APIClient) handleRateLimitedResponse(status int, reqURL string, attempt
 		return false, nil
 	}
 
-	return true, NewKeyRotationError(reqURL, status)
+	return true, NewAPIError(reqURL, status)
 }
 
 func (c *APIClient) handleForbiddenResponse(status int, body []byte, reqURL string, attempt int) error {

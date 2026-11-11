@@ -1,7 +1,8 @@
 // @ts-check
 
+import { maxPagesLimit, maxResultsLimit, validatedPagination } from "./pagination.mjs";
 import { isCalendarRFC3339 } from "./rfc3339.mjs";
-import { RpcRequestError, RpcResponseError, RpcProtocolError } from "./rpc-errors.mjs";
+import { RpcRequestError, RpcResponseError } from "./rpc-errors.mjs";
 import {
   arrayField,
   assertRequestKeys,
@@ -18,16 +19,16 @@ import {
   positiveInteger,
   protocolVersion,
   recordField,
+  requestIdentifier,
   requestRecord,
   requiredResponseBoolean,
-  requiredString,
   responseIdentifier,
   responseProtocolVersion,
   responseRecord,
   stringField,
 } from "./rpc-validation-primitives.mjs";
 
-const communityRequestKeys = keySchema(["protocol_version", "channel_id", "max_success_response_bytes"], ["max_results", "max_pages"]);
+const communityRequestKeys = keySchema(["protocol_version", "channel_id", "max_results", "max_pages", "max_success_response_bytes"]);
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").CommunityRequest} */
 function validateCommunityRequest(value) {
@@ -35,41 +36,41 @@ function validateCommunityRequest(value) {
   assertRequestKeys(record, communityRequestKeys);
   return {
     protocol_version: protocolVersion(record),
-    channel_id: requiredString(record, "channel_id"),
-    ...optionalPositiveIntegers(record, ["max_results", "max_pages"]),
+    channel_id: requestIdentifier(record, "channel_id", maxChannelIdentifierBytes),
+    ...pageLimits(record),
     max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
   };
 }
 
-const contentRequestKeys = keySchema(["protocol_version", "channel_id", "kind", "max_success_response_bytes"], ["max_results", "max_pages"]);
+const contentRequestKeys = keySchema(["protocol_version", "channel_id", "kind", "max_results", "max_pages", "max_success_response_bytes"]);
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").ContentRequest} */
 function validateContentRequest(value) {
   const record = requestRecord(value);
   assertRequestKeys(record, contentRequestKeys);
-  const kind = requiredString(record, "kind");
+  const kind = record.kind;
   if (kind !== "videos" && kind !== "shorts") {
     throw new RpcRequestError("kind must be videos or shorts");
   }
   return {
     protocol_version: protocolVersion(record),
-    channel_id: requiredString(record, "channel_id"),
+    channel_id: requestIdentifier(record, "channel_id", maxChannelIdentifierBytes),
     kind,
-    ...optionalPositiveIntegers(record, ["max_results", "max_pages"]),
+    ...pageLimits(record),
     max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
   };
 }
 
 const channelRequestKeys = keySchema(
   ["protocol_version", "channel_id", "kind", "max_success_response_bytes"],
-  ["max_pages", "max_schedule_lookups", "scheduled_for"],
+  ["max_schedule_lookups", "scheduled_for"],
 );
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelRequest} */
 function validateChannelRequest(value) {
   const record = requestRecord(value);
   assertRequestKeys(record, channelRequestKeys);
-  const kind = requiredString(record, "kind");
+  const kind = record.kind;
   if (kind !== "live" && kind !== "metadata") {
     throw new RpcRequestError("kind must be live or metadata");
   }
@@ -89,9 +90,8 @@ function validateChannelRequest(value) {
   }
   return {
     protocol_version: protocolVersion(record),
-    channel_id: requiredString(record, "channel_id"),
+    channel_id: requestIdentifier(record, "channel_id", maxChannelIdentifierBytes),
     kind,
-    ...optionalPositiveIntegers(record, ["max_pages"]),
     ...(lookups === undefined ? {} : { max_schedule_lookups: Number(lookups) }),
     ...(scheduledFor === undefined ? {} : { scheduled_for: scheduledFor }),
     max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
@@ -149,7 +149,7 @@ export function validateChannelResponse(value) {
     ? arrayField(record, "unavailable_live_sessions").map(validateUnavailableLiveSession)
     : undefined;
   if (unavailable != null) {
-    if (unavailable.length > 32 || (record.missing_tab === true && unavailable.length > 0)) {
+    if (unavailable.length > maxScheduleMetadataLookups || (record.missing_tab === true && unavailable.length > 0)) {
       throw new RpcResponseError("unavailable live sessions are outside the collection scope");
     }
     const seen = new Set(liveSessions.map((item) => item.video_id));
@@ -280,7 +280,7 @@ const communityPostKeys = keySchema(
   ["upstreamPostId", "publishedAt", "images", "videoId"],
 );
 const thumbnailKeys = keySchema(["url", "width", "height"]);
-const contentItemKeys = keySchema(["video_id", "channel_id", "title"], ["published_at", "scheduled_for", "is_upcoming"]);
+const contentItemKeys = keySchema(["video_id", "channel_id", "title"], ["is_upcoming"]);
 const liveSessionKeys = keySchema(["video_id", "channel_id", "status"], ["title", "thumbnail_url", "scheduled_at", "schedule_observed_at", "started_at", "ended_at"]);
 const photoKeys = keySchema(["kind", "url", "width", "height"]);
 
@@ -326,8 +326,6 @@ function validateContentItem(value) {
     video_id: nonemptyStringField(record, "video_id"),
     channel_id: nonemptyStringField(record, "channel_id"),
     title: stringField(record, "title"),
-    ...optionalRFC3339(record, "published_at"),
-    ...optionalRFC3339(record, "scheduled_for"),
     ...(record.is_upcoming === true ? { is_upcoming: true } : {}),
   };
 }
@@ -366,82 +364,29 @@ function validatePhoto(value) {
   };
 }
 
-/** @param {Record<string, unknown>} record @param {string[]} fields */
-function optionalPositiveIntegers(record, fields) {
-  /** @type {Record<string, number>} */
-  const result = {};
-  for (const field of fields) {
-    const value = record[field];
-    if (value === undefined) continue;
-    if (!Number.isSafeInteger(value) || Number(value) <= 0) {
-      throw new RpcRequestError(`${field} must be a positive integer`);
-    }
-    if (field === "max_pages" && Number(value) > 100) {
-      throw new RpcRequestError("max_pages must not exceed 100");
-    }
-    if (field === "max_results" && Number(value) > 10_000) {
-      throw new RpcRequestError("max_results must not exceed 10000");
-    }
-    result[field] = Number(value);
+/** @param {Record<string, unknown>} record */
+function pageLimits(record) {
+  const maxResults = positiveInteger(record, "max_results");
+  if (maxResults > maxResultsLimit) {
+    throw new RpcRequestError(`max_results must not exceed ${maxResultsLimit}`);
   }
-  return result;
+  const maxPages = positiveInteger(record, "max_pages");
+  if (maxPages > maxPagesLimit) {
+    throw new RpcRequestError(`max_pages must not exceed ${maxPagesLimit}`);
+  }
+  return { max_results: maxResults, max_pages: maxPages };
 }
 
 /** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").Pagination} */
 function validatePagination(record) {
-  const pageCount = nonnegativeIntegerField(record, "page_count");
-  if (pageCount < 1 || pageCount > 100) {
-    throw new RpcProtocolError("page_count is outside the pagination contract");
-  }
-  if (typeof record.exhausted !== "boolean") throw new RpcResponseError("exhausted must be boolean");
-  const continuity = validateContinuity(record);
-  const terminationReason = nonemptyStringField(record, "termination_reason");
-  if (
-    terminationReason !== "exhausted" &&
-    terminationReason !== "max_pages" &&
-    terminationReason !== "max_results" &&
-    terminationReason !== "max_success_response_bytes" &&
-    terminationReason !== "cursor_loop" &&
-    terminationReason !== "continuation_transient"
-  ) {
-    throw new RpcProtocolError("termination_reason is invalid");
-  }
-  if ((terminationReason === "exhausted") !== record.exhausted) {
-    throw new RpcProtocolError("termination_reason and exhausted are inconsistent");
-  }
-  if (
-    (terminationReason === "cursor_loop" || terminationReason === "continuation_transient") &&
-    continuity !== "GAP_UNRESOLVED"
-  ) {
-    throw new RpcProtocolError("termination_reason and continuity are inconsistent");
-  }
-  if (terminationReason === "exhausted" && continuity === "GAP_UNRESOLVED") {
-    throw new RpcProtocolError("exhausted pagination cannot have unresolved continuity");
-  }
-  if (terminationReason !== "exhausted" && continuity === "CONTIGUOUS") {
-    throw new RpcProtocolError("partial pagination cannot be contiguous");
-  }
-  return {
-    page_count: pageCount,
-    exhausted: record.exhausted,
-    continuity,
-    termination_reason: terminationReason,
-  };
-}
-
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").Continuity} */
-function validateContinuity(record) {
-  const value = nonemptyStringField(record, "continuity");
-  if (value === "CONTIGUOUS" || value === "GAP_UNRESOLVED" || value === "NOT_APPLICABLE") {
-    return value;
-  }
-  throw new RpcResponseError("continuity is invalid");
+  const { page_count, exhausted, continuity, termination_reason } = record;
+  return validatedPagination({ page_count, exhausted, continuity, termination_reason });
 }
 
 /** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").LiveStatus} */
 function validateLiveStatus(record) {
   const value = nonemptyStringField(record, "status");
-  if (value === "LIVE" || value === "UPCOMING" || value === "ENDED" || value === "CANCELLED") {
+  if (value === "LIVE" || value === "UPCOMING" || value === "ENDED") {
     return value;
   }
   throw new RpcResponseError("live session status is invalid");

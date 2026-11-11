@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -128,25 +126,5 @@ func TestPartialCooldownCancellationRollsBackTerminalAndObservations(t *testing.
 	got := readLeaseTerminal(t.Context(), t, pool, proof.JobKey)
 	if got.state != testSlotStateActive || got.retryAt != nil || got.failureCode != "" || !got.scheduledFor.Equal(proof.ScheduledFor) {
 		t.Fatalf("canceled partial cooldown committed: %+v", got)
-	}
-}
-
-func TestPartialDeferSQLRejectsNonCooldownNotBefore(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
-
-	var jobKey string
-
-	err := pool.QueryRow(t.Context(), deferCollectionJobSQL,
-		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
-		string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "failure", time.Now().Add(10*time.Minute), int64(100), int64(1000), true,
-	).Scan(&jobKey)
-
-	if !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("non-cooldown partial not-before SQL = %v, want no rows", err)
-	}
-
-	if got := readLeaseTerminal(t.Context(), t, pool, proof.JobKey); got.state != testSlotStateActive || got.failureCode != "" {
-		t.Fatalf("rejected partial SQL mutated lease: %+v", got)
 	}
 }

@@ -26,7 +26,7 @@ var canonicalJobContracts = collection.InitialJobContracts()
 type Repository struct {
 	pool      *pgxpool.Pool
 	config    Config
-	contracts collection.JobContractSet
+	contracts collection.StaticJobContracts
 }
 
 func NewRepository(pool *pgxpool.Pool, config *Config) (*Repository, error) {
@@ -111,9 +111,14 @@ func (r *Repository) acquireTx(
 // lockProjectionGuard는 API refresh와 공유하는 guard를 share 잠금하고 잠금 이후 snapshot의 CURRENT를 읽는다.
 // CURRENT가 없어도 guard는 잠기며 current=false를 반환한다. 소유 손실 판정을 앞세울 호출자가 이어서 lease를 확인한다.
 func lockProjectionGuard(ctx context.Context, tx dbx.Tx) (int64, bool, error) {
+	return scanProjectionGuard(tx.QueryRow(ctx, lockProjectionGuardShareSQL))
+}
+
+// scanProjectionGuard는 lockProjectionGuardShareSQL 결과 한 행을 읽으며, 단독 문장과 pipeline batch가 같은 판정을 쓴다.
+func scanProjectionGuard(row pgx.Row) (int64, bool, error) {
 	var generation int64
 
-	err := tx.QueryRow(ctx, lockProjectionGuardShareSQL).Scan(&generation)
+	err := row.Scan(&generation)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil
@@ -304,7 +309,7 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 		return fmt.Errorf("lock active lease: %w", err)
 	}
 
-	if err := collection.VerifyLeaseMembership(ctx, tx, &l.proof, l.scope); err != nil {
+	if err := verifyLeaseMembership(ctx, tx, &l.proof, l.scope); err != nil {
 		return fmt.Errorf("verify lease membership: %w", err)
 	}
 
@@ -324,14 +329,31 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 	return nil
 }
 
-// 공개 진단 생성자는 redaction하지 않으므로 adapter 경계에서 detail을 한 번 더 정제하고, retry_not_before는 DB 시계의 최소 대기를 적용하며 일반 backoff에만 최대 대기를
-// 적용합니다.
+// Defer는 executor가 만든 typed 재시도 입력으로 이 lease를 DeferLease 규칙에 따라 DEFERRED로 전환합니다.
 func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionInput) error {
+	var (
+		q     dbx.Querier
+		proof *contract.LeaseProof
+	)
+
+	if l != nil && l.repository != nil {
+		q, proof = l.repository.pool, &l.proof
+	}
+
+	return DeferLease(ctx, q, proof, input)
+}
+
+// DeferLease는 ACTIVE lease를 typed 재시도 입력으로 DEFERRED로 전환합니다. 직접 실패는 pool에서 단독 문장으로,
+// PARTIAL 발행은 발행 트랜잭션 안에서 같은 문장을 실행하며, 발행 트랜잭션이 이미 잡은 lease 행 잠금은 대기 없이 다시 얻습니다.
+// 공개 진단 생성자는 redaction하지 않으므로 adapter 경계에서 detail을 한 번 더 정제하고,
+// retry_not_before는 행 잠금 이후 DB 시각에 최소 대기를 적용하며 일반 backoff에만 최대 대기를 적용합니다.
+// 입력이 무효면 ErrInvalidJob, q·proof가 없거나 소유를 잃었으면 ErrFenceLost를 반환합니다.
+func DeferLease(ctx context.Context, q dbx.Querier, proof *contract.LeaseProof, input collection.DeferCollectionInput) error {
 	if err := input.Validate(); err != nil {
 		return fmt.Errorf("defer collection job lease: %w: %w", ErrInvalidJob, err)
 	}
 
-	if l == nil || l.repository == nil {
+	if q == nil || proof == nil {
 		return fmt.Errorf("defer collection job lease: %w", collection.ErrFenceLost)
 	}
 
@@ -347,8 +369,8 @@ func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionIn
 
 	var jobKey string
 
-	err := l.repository.pool.QueryRow(ctx, deferSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
-		l.proof.ProjectionGeneration, l.proof.ScheduledFor, input.Schedule().At(), code, string(diagnostic.Class()), detail,
+	err := q.QueryRow(ctx, deferSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
+		proof.ProjectionGeneration, proof.ScheduledFor, input.Schedule().At(), code, string(diagnostic.Class()), detail,
 		bounds.Minimum.Milliseconds(), bounds.Maximum.Milliseconds(), input.Schedule().IsNotBefore()).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -29,10 +29,6 @@ type RPC struct {
 }
 
 func NewRPC(httpClient *http.Client, endpoint string, limiter *RateLimiter) *RPC {
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: defaultHelperTimeout}
-	}
-
 	return &RPC{
 		http:      httpClient,
 		endpoint:  strings.TrimRight(endpoint, "/"),

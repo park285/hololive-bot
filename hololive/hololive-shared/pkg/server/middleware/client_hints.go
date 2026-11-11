@@ -191,29 +191,4 @@ func formatArchitecture(arch, bitness string) string {
 	return arch + bitness
 }
 
-// Accept-CH 헤더에 포함되어 브라우저가 High Entropy 값을 전송하도록 요청합니다.
-const clientHintsToRequest = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, " +
-	"Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, " +
-	"Sec-CH-UA-Full-Version-List"
-
 const clientHintArchX86 = "x86"
-
-// 브라우저에게 Client Hints를 요청하는 미들웨어입니다.
-//
-// 브라우저는 이 헤더를 받은 후 다음 요청부터 Sec-CH-UA-* 헤더를 전송합니다.
-// 첫 요청에서는 Client Hints가 없을 수 있으므로 폴백 처리가 필요합니다.
-func ClientHintsMiddleware() func(c *gin.Context) {
-	return func(c *gin.Context) {
-		// Accept-CH: 브라우저에게 다음 요청에서 이 Client Hints를 보내달라고 요청
-		c.Header("Accept-CH", clientHintsToRequest)
-
-		// Critical-CH: 중요한 Client Hints (첫 요청에서도 필요)
-		// 브라우저가 지원하면 페이지 재로드를 트리거할 수 있음
-		c.Header("Critical-CH", "Sec-CH-UA-Platform, Sec-CH-UA-Mobile")
-
-		// Permissions-Policy: Client Hints 수신 허용
-		c.Header("Permissions-Policy", "ch-ua-platform-version=*, ch-ua-model=*, ch-ua-arch=*")
-
-		c.Next()
-	}
-}

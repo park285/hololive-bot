@@ -21,13 +21,15 @@
 package formatter
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestFormatMemberNewsSubscriptionMessages(t *testing.T) {
@@ -53,21 +55,37 @@ func TestFormatMemberNewsSubscriptionMessages(t *testing.T) {
 	assert.Equal(t, "STATUS OFF ?", formatter.FormatMemberNewsStatus(ctx, false))
 }
 
-func TestFormatMemberNewsSubscriptionMessages_Fallback(t *testing.T) {
+func TestFormatMemberNewsSubscriptionMessages_RenderFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	store := setupFormatterTestStore(t)
-	formatter := NewResponseFormatter("!", nil, WithMessageStrings(store))
 
-	noMembers := store.Text(messagestrings.NotifyMemberNewsNoMembers)
-	require.NotEmpty(t, noMembers)
+	var logs bytes.Buffer
 
-	assert.Equal(t, noMembers, formatter.FormatMemberNewsNoMembers(ctx))
-	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsSubscribed), formatter.FormatMemberNewsSubscribed(ctx))
-	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsAlreadySubscribed), formatter.FormatMemberNewsAlreadySubscribed(ctx))
-	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsUnsubscribed), formatter.FormatMemberNewsUnsubscribed(ctx))
-	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsNotSubscribed), formatter.FormatMemberNewsNotSubscribed(ctx))
-	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsStatusOn), formatter.FormatMemberNewsStatus(ctx, true))
-	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsStatusOff), formatter.FormatMemberNewsStatus(ctx, false))
+	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}),
+		WithMessageStrings(setupFormatterTestStore(t)), WithLogger(slog.New(slog.NewTextHandler(&logs, nil))))
+
+	assert.Equal(t, renderFailureMessage, formatter.FormatMemberNewsNoMembers(ctx))
+	assert.Equal(t, renderFailureMessage, formatter.FormatMemberNewsSubscribed(ctx))
+	assert.Equal(t, renderFailureMessage, formatter.FormatMemberNewsAlreadySubscribed(ctx))
+	assert.Equal(t, renderFailureMessage, formatter.FormatMemberNewsUnsubscribed(ctx))
+	assert.Equal(t, renderFailureMessage, formatter.FormatMemberNewsNotSubscribed(ctx))
+	assert.Equal(t, renderFailureMessage, formatter.FormatMemberNewsStatus(ctx, true))
+	assert.Equal(t, renderFailureMessage, formatter.FormatMemberNewsStatus(ctx, false))
+
+	wantKeys := []domain.TemplateKey{
+		domain.TemplateKeyCmdMemberNewsNoMembers,
+		domain.TemplateKeyCmdMemberNewsSubscribed,
+		domain.TemplateKeyCmdMemberNewsAlreadySub,
+		domain.TemplateKeyCmdMemberNewsUnsubscribed,
+		domain.TemplateKeyCmdMemberNewsNotSub,
+		domain.TemplateKeyCmdMemberNewsStatus,
+		domain.TemplateKeyCmdMemberNewsStatus,
+	}
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	require.Len(t, lines, len(wantKeys))
+
+	for i, key := range wantKeys {
+		assert.Contains(t, lines[i], `level=ERROR msg="template render failed" template_key=`+string(key)+" error=")
+	}
 }

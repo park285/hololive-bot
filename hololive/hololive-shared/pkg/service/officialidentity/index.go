@@ -56,21 +56,8 @@ func (index Index) Resolve(name string) string {
 	return channelIDs[0]
 }
 
-// DisplayNames는 공식 표기명 목록을 표시명으로 바꾼다. 이름이 없으면 멤버를 적재하지 않는다. 색인의 채널이 멤버 조회에서
-// 없다고 확인되면 공식 표기명을 그대로 쓰지만, 조회 실패는 표시명을 추측하지 않고 오류로 돌려준다.
-func DisplayNames(ctx context.Context, membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) ([]string, error) {
-	if len(officialNames) == 0 {
-		return nil, nil
-	}
-
-	index, err := Build(ctx, membersData)
-	if err != nil {
-		return nil, fmt.Errorf("display names: %w", err)
-	}
-
-	return index.DisplayNames(ctx, membersData, officialNames, hostChannelID)
-}
-
+// DisplayNames는 이미 만든 색인으로 공식 표기명 목록을 표시명으로 바꾼다. 색인의 채널이 멤버 조회에서 없다고 확인되면
+// 공식 표기명을 그대로 쓰지만, 조회 실패는 표시명을 추측하지 않고 오류로 돌려준다.
 func (index Index) DisplayNames(ctx context.Context, membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) ([]string, error) {
 	hostChannelID = strings.TrimSpace(hostChannelID)
 

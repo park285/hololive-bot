@@ -31,7 +31,7 @@ func TestUpcomingCandidatesRecoverFrozenPartialPublishAfterRestart(t *testing.T)
 
 	// 첫 방 commit 뒤 publish 응답 소실: 수용 receipt를 못 받아도 ledger가 증거다.
 	repository := newTestRepository(t, pool)
-	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *first, Version: 1}}})
+	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{{Notification: *first, Version: 1}}})
 	require.NoError(t, err)
 
 	first.Stream.Title, second.Stream.Title = "Changed title", "Changed title"
@@ -121,7 +121,7 @@ func TestUpcomingCandidatesRejectCollision(t *testing.T) {
 	n.Stream.Title = "Conflicting event"
 
 	repository := newTestRepository(t, pool)
-	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
+	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
 	require.NoError(t, err)
 
 	pending, err := store.Pending(t.Context(), now.Add(time.Second))
@@ -166,7 +166,7 @@ func TestUpcomingCandidatesLargeFanoutAtomicAndBoundedRecovery(t *testing.T) {
 	seen := make(map[string]bool)
 
 	for _, c := range first {
-		require.Equal(t, c.DedupeKey, BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: c.Notification, Version: 1}),
+		require.Equal(t, c.DedupeKey, ledgerDedupeKey(t, &AlarmQueueEnvelope{Notification: c.Notification, Version: 1}),
 			"commit 뒤 해독해도 payload가 해당 방의 후보와 일치해야 한다")
 
 		seen[c.DedupeKey] = true
@@ -186,7 +186,7 @@ func TestUpcomingCandidatesCleanupPreservesPending(t *testing.T) {
 	notifications := []*domain.AlarmNotification{candidateNotification("cleanup-done", now.Add(5*time.Minute)), candidateNotification("cleanup-pending", now.Add(5*time.Minute))}
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now.Add(-72*time.Hour), notifications))
 
-	key := BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: *notifications[0]})
+	key := ledgerDedupeKey(t, &AlarmQueueEnvelope{Notification: *notifications[0], Version: 1})
 	require.NoError(t, store.Finish(t.Context(), map[string][]string{"subscription_removed": {key}}, now.Add(-48*time.Hour)))
 
 	deleted, err := store.Cleanup(t.Context(), 1, 1)
@@ -207,7 +207,7 @@ func TestUpcomingCandidatesDoNotReopenUnknownDeliveryAtExpiry(t *testing.T) {
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{n}))
 
 	repository := newTestRepository(t, pool)
-	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
+	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{{Notification: *n, Version: 1}}})
 	require.NoError(t, err)
 
 	claimed, err := repository.ClaimDue(t.Context(), "unknown-worker", 1, time.Minute)

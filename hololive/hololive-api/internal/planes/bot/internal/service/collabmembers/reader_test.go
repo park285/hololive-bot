@@ -50,14 +50,7 @@ func (membersFake) FindMemberByAlias(context.Context, string) (*domain.Member, e
 	return nil, domain.ErrMemberNotFound
 }
 
-func (membersFake) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
-}
-
-func (membersFake) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
-}
-
+// 공식 스케줄의 최신 행만 읽고, 다른 출처와 출연자 없는 행은 무시하며, 호스트는 빼고 표시명으로 바꾼다.
 func TestReaderDisplayNamesReadsLatestOfficialScheduleRow(t *testing.T) {
 	t.Parallel()
 

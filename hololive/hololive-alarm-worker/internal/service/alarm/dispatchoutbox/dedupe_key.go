@@ -26,10 +26,6 @@ type DedupeInput struct {
 	SourceIdentity              string
 }
 
-func BuildDedupeKey(input *DedupeInput) string {
-	return buildDedupeKey(input.RoomID, BuildEventKey(input))
-}
-
 func buildDedupeKey(roomID, eventKey string) string {
 	dedupeKey := fmt.Sprintf("v2:room:%s:event:%s", roomID, eventKey)
 	if len(dedupeKey) <= 768 {
@@ -61,10 +57,6 @@ func buildRawEventKey(input *DedupeInput) string {
 
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return "celebration:" + input.SourceIdentity
-	}
-
-	if input.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest {
-		return "delivery-digest:" + input.SourceIdentity
 	}
 
 	alarmType := input.AlarmType
@@ -101,7 +93,7 @@ func buildRawEventKey(input *DedupeInput) string {
 	)
 }
 
-func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
+func EnvelopeDedupeInput(envelope *AlarmQueueEnvelope) DedupeInput {
 	input := envelopeNotificationDedupeInput(&envelope.Notification)
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
 		input.SourceKind = envelope.SourceKind
@@ -112,20 +104,8 @@ func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
 	}
 
 	applyCelebrationDedupeSource(&input, envelope)
-	applyDeliveryDigestDedupeSource(&input, envelope)
 
 	return input
-}
-
-func applyDeliveryDigestDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) {
-	if envelope.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest || envelope.DeliveryDigest == nil {
-		return
-	}
-
-	input.SourceKind = envelope.SourceKind
-	input.SourceIdentity = envelope.DeliveryDigest.ContentIdentity()
-	input.AlarmType = envelope.Notification.AlarmType
-	input.Category = string(envelope.SourceKind)
 }
 
 func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) DedupeInput {
@@ -172,7 +152,7 @@ func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) Ded
 	}
 }
 
-func applyCelebrationDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) {
+func applyCelebrationDedupeSource(input *DedupeInput, envelope *AlarmQueueEnvelope) {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		input.SourceKind = envelope.SourceKind
 		input.SourceIdentity = envelope.Celebration.Identity()
@@ -180,9 +160,4 @@ func applyCelebrationDedupeSource(input *DedupeInput, envelope *domain.AlarmQueu
 		input.AlarmType = envelope.Notification.AlarmType
 		input.Category = string(envelope.SourceKind)
 	}
-}
-
-func BuildDedupeKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) string {
-	input := EnvelopeDedupeInput(envelope)
-	return BuildDedupeKey(&input)
 }

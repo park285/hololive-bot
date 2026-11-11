@@ -1,114 +1,29 @@
 package workerapp
 
 import (
-	"strings"
+	"log/slog"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
+
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-func TestBackgroundRunnerSwitchRejectsInvalidValue(t *testing.T) {
-	for _, tc := range []struct {
-		key   string
-		build func() optionalRuntimeSchedulerResult
-	}{
-		{
-			key: "CELEBRATION_RUNNER_ENABLED",
-			build: func() optionalRuntimeSchedulerResult {
-				return buildCelebrationRunnerScheduler(nil, nil, queue.PublishConfig{}, nil)
-			},
-		},
-		{
-			key: "BIRTHDAY_STREAM_RUNNER_ENABLED",
-			build: func() optionalRuntimeSchedulerResult {
-				return buildBirthdayStreamRunnerScheduler(nil, nil, queue.PublishConfig{}, nil)
-			},
-		},
-	} {
-		t.Run(tc.key+"=maybe", func(t *testing.T) {
-			t.Setenv(tc.key, "maybe")
+// PostgreSQL이 없는 infra에서 켜진 runner를 조용히 끄지 않고 조립 오류로 드러낸다.
+func TestBackgroundRunnersRequirePostgres(t *testing.T) {
+	t.Parallel()
 
-			result := tc.build()
-			if result.err == nil || !strings.Contains(result.err.Error(), tc.key) {
-				t.Fatalf("build error = %v, want invalid %s rejection", result.err, tc.key)
-			}
-
-			if result.scheduler != nil {
-				t.Fatalf("scheduler = %T, want nil on invalid switch", result.scheduler)
-			}
-		})
-
-		t.Run(tc.key+"=false", func(t *testing.T) {
-			t.Setenv(tc.key, "false")
-
-			result := tc.build()
-			if result.err != nil || result.scheduler != nil {
-				t.Fatalf("build = (%T, %v), want disabled runner without error", result.scheduler, result.err)
-			}
-		})
+	appConfig := &workerconfig.RuntimeConfig{
+		Celebration: workerconfig.CelebrationRunnerConfig{Enabled: true, RunInterval: time.Hour},
 	}
-}
 
-func TestBackgroundRunnerConfigRejectsInvalidValues(t *testing.T) {
-	for _, tc := range []struct {
-		switchKey string
-		key       string
-		value     string
-		build     func() optionalRuntimeSchedulerResult
-	}{
-		{
-			switchKey: "CELEBRATION_RUNNER_ENABLED",
-			key:       "CELEBRATION_CHECK_HOUR_KST",
-			value:     "noon",
-			build: func() optionalRuntimeSchedulerResult {
-				return buildCelebrationRunnerScheduler(nil, nil, queue.PublishConfig{}, nil)
-			},
-		},
-		{
-			switchKey: "CELEBRATION_RUNNER_ENABLED",
-			key:       "CELEBRATION_CHECK_HOUR_KST",
-			value:     "24",
-			build: func() optionalRuntimeSchedulerResult {
-				return buildCelebrationRunnerScheduler(nil, nil, queue.PublishConfig{}, nil)
-			},
-		},
-		{
-			switchKey: "CELEBRATION_RUNNER_ENABLED",
-			key:       "CELEBRATION_RUN_INTERVAL_MS",
-			value:     "0",
-			build: func() optionalRuntimeSchedulerResult {
-				return buildCelebrationRunnerScheduler(nil, nil, queue.PublishConfig{}, nil)
-			},
-		},
-		{
-			switchKey: "BIRTHDAY_STREAM_RUNNER_ENABLED",
-			key:       "BIRTHDAY_STREAM_POLL_INTERVAL_MS",
-			value:     "30m",
-			build: func() optionalRuntimeSchedulerResult {
-				return buildBirthdayStreamRunnerScheduler(nil, nil, queue.PublishConfig{}, nil)
-			},
-		},
-		{
-			switchKey: "BIRTHDAY_STREAM_RUNNER_ENABLED",
-			key:       "BIRTHDAY_STREAM_SESSION_FRESHNESS_MS",
-			value:     "-1",
-			build: func() optionalRuntimeSchedulerResult {
-				return buildBirthdayStreamRunnerScheduler(nil, nil, queue.PublishConfig{}, nil)
-			},
-		},
-	} {
-		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
-			t.Setenv(tc.switchKey, "true")
-			t.Setenv(tc.key, tc.value)
-
-			result := tc.build()
-			if result.err == nil || !strings.Contains(result.err.Error(), tc.key) {
-				t.Fatalf("build error = %v, want invalid %s rejection", result.err, tc.key)
-			}
-
-			if result.scheduler != nil {
-				t.Fatalf("scheduler = %T, want nil on invalid config", result.scheduler)
-			}
-		})
-	}
+	runners, stage, err := buildAlarmWorkerBackgroundRunners(
+		appConfig, &sharedmodules.InfraModule{}, &alarmFoundation{}, queue.PublishConfig{}, slog.New(slog.DiscardHandler),
+	)
+	require.EqualError(t, err, "postgres is required")
+	require.Equal(t, "background runners", stage)
+	require.Equal(t, alarmWorkerBackgroundRunners{}, runners)
 }

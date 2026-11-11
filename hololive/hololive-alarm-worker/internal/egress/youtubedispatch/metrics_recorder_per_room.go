@@ -17,14 +17,14 @@ func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 ) {
 	failedAt := time.Now()
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "format message")
-	mr.recordDeliveryFailure(result, "format message", row.ID, row.OutboxID)
+	mr.recordDeliveryFailure(result, row.OutboxID)
 }
 
 func (mr *MetricsRecorder) recordPerRoomMissingMessage(
 	row *domain.YouTubeNotificationDelivery,
 	result *deliveryDispatchResult,
 ) {
-	mr.recordDeliveryFailure(result, "outbox row not found", row.ID, row.OutboxID)
+	mr.recordDeliveryFailure(result, row.OutboxID)
 }
 
 func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
@@ -44,7 +44,7 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 		dedupeKeyLogAttrForOutboxes([]domain.YouTubeNotificationOutbox{*outbox}),
 		slog.Any("error", err))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "dedupe key")
-	mr.recordDeliveryFailure(result, "dedupe key", row.ID, row.OutboxID)
+	mr.recordDeliveryFailure(result, row.OutboxID)
 }
 
 func (mr *MetricsRecorder) recordPerRoomSendFailure(
@@ -64,7 +64,7 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", reason)
-	mr.recordDeliveryFailureWithRetryAfter(result, reason, row.ID, row.OutboxID, deliveryRetryAfter(sendErr))
+	mr.recordDeliveryFailure(result, row.OutboxID)
 }
 
 func (mr *MetricsRecorder) recordPerRoomSuccess(

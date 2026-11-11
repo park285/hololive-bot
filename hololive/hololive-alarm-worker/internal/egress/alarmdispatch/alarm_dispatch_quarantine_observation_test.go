@@ -33,23 +33,23 @@ func TestQuarantineObservationPreservesValuesOnFailureAndClearsOnEmptySuccess(t 
 		},
 	}))
 	requireQuarantineGauges(t, 55, 86400, 3, 3600)
-	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess), 0.000001)
+	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotSuccess), 0.000001)
 
-	lastSuccess := testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess)
+	lastSuccess := testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotLastSuccess)
 	require.GreaterOrEqual(t, lastSuccess, float64(before))
 	require.LessOrEqual(t, lastSuccess, float64(time.Now().Unix()))
 
 	// 실패는 마지막 성공 시각을 갱신하지 않으므로 경과 시간으로 현재 관측이 아님을 드러낸다.
-	alarmDispatchPGBacklogSnapshotLastSuccess.Set(float64(before - 600))
+	alarmDispatchRunnerMetrics().backlogSnapshotLastSuccess.Set(float64(before - 600))
 	require.Error(t, observeQuarantineSnapshot(t.Context(), quarantineSnapshotObserver{err: errors.New("read failed")}))
 	requireQuarantineGauges(t, 55, 86400, 3, 3600)
-	require.Zero(t, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess))
-	require.InDelta(t, float64(before-600), testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess), 0.000001)
+	require.Zero(t, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotSuccess))
+	require.InDelta(t, float64(before-600), testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotLastSuccess), 0.000001)
 
 	require.NoError(t, observeQuarantineSnapshot(t.Context(), quarantineSnapshotObserver{}))
 	requireQuarantineGauges(t, 0, 0, 0, 0)
-	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess), 0.000001)
-	require.GreaterOrEqual(t, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess), float64(before))
+	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotSuccess), 0.000001)
+	require.GreaterOrEqual(t, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotLastSuccess), float64(before))
 }
 
 func TestBacklogSnapshotCountsRetainedQuarantineWithoutChangingActiveBacklog(t *testing.T) {
@@ -158,7 +158,7 @@ func TestBacklogSnapshotReceiptFailureKeepsPreviousQuarantineValues(t *testing.T
 
 	require.Error(t, observeQuarantineSnapshot(ctx, store))
 	requireQuarantineGaugeCounts(t, 1, 1)
-	require.Zero(t, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess))
+	require.Zero(t, testutil.ToFloat64(alarmDispatchRunnerMetrics().backlogSnapshotSuccess))
 }
 
 func observeQuarantineSnapshot(ctx context.Context, store alarmDispatchBacklogSnapshotStore) error {
@@ -216,12 +216,12 @@ func recordQuarantineCloseout(t *testing.T, conn *pgxpool.Conn, sendUnitID int64
 func requireQuarantineGauges(t *testing.T, rows, age, unreviewed, unreviewedAge float64) {
 	t.Helper()
 	requireQuarantineGaugeCounts(t, rows, unreviewed)
-	require.InDelta(t, age, testutil.ToFloat64(alarmDispatchPGOldestQuarantinedAgeSeconds), 0.000001)
-	require.InDelta(t, unreviewedAge, testutil.ToFloat64(alarmDispatchPGOldestUnreviewedAgeSeconds), 0.000001)
+	require.InDelta(t, age, testutil.ToFloat64(alarmDispatchRunnerMetrics().oldestQuarantinedAgeSeconds), 0.000001)
+	require.InDelta(t, unreviewedAge, testutil.ToFloat64(alarmDispatchRunnerMetrics().oldestUnreviewedAgeSeconds), 0.000001)
 }
 
 func requireQuarantineGaugeCounts(t *testing.T, rows, unreviewed float64) {
 	t.Helper()
-	require.InDelta(t, rows, testutil.ToFloat64(alarmDispatchPGQuarantinedRows), 0.000001)
-	require.InDelta(t, unreviewed, testutil.ToFloat64(alarmDispatchPGUnreviewedQuarantinedRows), 0.000001)
+	require.InDelta(t, rows, testutil.ToFloat64(alarmDispatchRunnerMetrics().quarantinedRows), 0.000001)
+	require.InDelta(t, unreviewed, testutil.ToFloat64(alarmDispatchRunnerMetrics().unreviewedQuarantinedRows), 0.000001)
 }

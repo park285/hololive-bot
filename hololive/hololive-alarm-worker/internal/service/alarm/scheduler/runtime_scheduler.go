@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
-	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -53,10 +52,7 @@ type targetMinutesSource interface {
 	GetTargetMinutes() []int
 }
 
-type targetMinutesUpdater interface {
-	UpdateTargetMinutes([]int)
-}
-
+// recoveryCache는 scheduler의 subscriber cache 복구 판단이 요구하는 작업이다(marker Exists, 연결 WaitUntilReady).
 type recoveryCache interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	WaitUntilReady(ctx context.Context, timeout time.Duration) error
@@ -68,10 +64,8 @@ type RuntimeScheduler struct {
 	notifier       checking.Sender
 	cacheClient    recoveryCache
 
-	youtubeTargetUpdater targetMinutesUpdater
-	dedupTargetUpdater   targetMinutesUpdater
-	targetMinutesSource  targetMinutesSource
-	alarmCacheWarmer     alarmCacheWarmer
+	targetMinutesSource targetMinutesSource
+	alarmCacheWarmer    alarmCacheWarmer
 
 	youtubeInterval time.Duration
 
@@ -115,10 +109,9 @@ func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 
 	logger := runtimeSchedulerLogger(deps.Logger)
 
-	targetMinutes := targetpolicy.NormalizeTargetMinutes(deps.AlarmState.GetTargetMinutes())
 	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(deps.Notification.CheckInterval)
 	tierScheduler := tier.NewTieredScheduler(logger)
-	dedupService := dedup.NewService(deps.Cache, targetMinutes, logger)
+	dedupService := dedup.NewService(deps.Cache, logger)
 
 	queuePublisher, err := queue.NewPublisher(deps.Cache, deps.Outbox, deps.Publish, logger)
 	if err != nil {
@@ -130,7 +123,6 @@ func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 		deps.HolodexService,
 		tierScheduler,
 		dedupService,
-		targetMinutes,
 		youtubeEvaluationWindowCap,
 		checking.NewPgYouTubeLiveSessionSource(deps.Postgres),
 		deps.Postgres,
@@ -140,12 +132,12 @@ func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 		return nil, fmt.Errorf("runtime scheduler youtube checker: %w", err)
 	}
 
-	notifierService, err := checknotifier.NewNotifier(dedupService, queuePublisher, tierScheduler, logger)
+	notifierService, err := checknotifier.NewNotifier(dedupService, queuePublisher, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
 
-	return newRuntimeSchedulerInstance(deps.Cache, deps.AlarmState, youtubeChecker, notifierService, dedupService, youtubeInterval, logger), nil
+	return newRuntimeSchedulerInstance(deps.Cache, deps.AlarmState, youtubeChecker, notifierService, youtubeInterval, logger), nil
 }
 
 func newRuntimeSchedulerYouTubeChecker(
@@ -153,7 +145,6 @@ func newRuntimeSchedulerYouTubeChecker(
 	holodexService *holodexprovider.Service,
 	tierScheduler *tier.TieredScheduler,
 	dedupService *dedup.Service,
-	targetMinutes []int,
 	evaluationWindowCap time.Duration,
 	persistedLiveSource checking.YouTubeLiveSessionSource,
 	postgres database.Client,
@@ -170,7 +161,6 @@ func newRuntimeSchedulerYouTubeChecker(
 		holodexService,
 		tierScheduler,
 		dedupService,
-		targetMinutes,
 		evaluationWindowCap,
 		persistedLiveSource,
 		subscriptionDB,
@@ -223,9 +213,8 @@ func runtimeSchedulerYouTubeTiming(checkInterval time.Duration) (initialDelay, i
 func newRuntimeSchedulerInstance(
 	cacheClient recoveryCache,
 	alarmState AlarmState,
-	youtubeChecker *checking.YouTubeChecker,
+	youtubeChecker checking.Runner,
 	notifierService checking.Sender,
-	dedupService targetMinutesUpdater,
 	youtubeInterval time.Duration,
 	logger *slog.Logger,
 ) *RuntimeScheduler {
@@ -234,10 +223,8 @@ func newRuntimeSchedulerInstance(
 		notifier:       notifierService,
 		cacheClient:    cacheClient,
 
-		youtubeTargetUpdater: youtubeChecker,
-		dedupTargetUpdater:   dedupService,
-		targetMinutesSource:  alarmState,
-		alarmCacheWarmer:     alarmState,
+		targetMinutesSource: alarmState,
+		alarmCacheWarmer:    alarmState,
 
 		youtubeInterval: youtubeInterval,
 

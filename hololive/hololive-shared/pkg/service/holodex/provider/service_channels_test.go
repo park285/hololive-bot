@@ -57,6 +57,37 @@ func TestFetchHololiveChannelList_PaginatesOnceAndServesListCache(t *testing.T) 
 	}
 }
 
+// 사진이 없거나 빈 문자열인 채널은 사진 맵에 넣지 않는다.
+func TestHololiveChannelPhotos_SkipsChannelsWithoutPhoto(t *testing.T) {
+	t.Parallel()
+
+	photo := "https://example.com/aqua=s88"
+	empty := ""
+	page := []streammapping.ChannelRaw{
+		{ID: "with-photo", Name: "With Photo", Photo: &photo},
+		{ID: "nil-photo", Name: "Nil Photo"},
+		{ID: "empty-photo", Name: "Empty Photo", Photo: &empty},
+	}
+	requester := &MockRequester{
+		DoRequestFunc: func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
+			if err := verifyChannelListRequest(method, path, constants.HolodexAPIParams.OrgHololive, params); err != nil {
+				return nil, fmt.Errorf("verify channel list request: %w", err)
+			}
+
+			return mustMarshalChannelRawList(t, page), nil
+		},
+	}
+
+	photos, err := newServiceForFallbackTest(requester).HololiveChannelPhotos(t.Context())
+	if err != nil {
+		t.Fatalf("HololiveChannelPhotos() error = %v", err)
+	}
+
+	if want := map[string]string{"with-photo": photo}; !reflect.DeepEqual(photos, want) {
+		t.Fatalf("HololiveChannelPhotos() = %v, want %v", photos, want)
+	}
+}
+
 type channelListOffsetRecorder struct {
 	mu      sync.Mutex
 	offsets []string

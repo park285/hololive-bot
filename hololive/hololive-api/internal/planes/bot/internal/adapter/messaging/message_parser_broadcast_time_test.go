@@ -12,7 +12,7 @@ import (
 func TestParseMessage_BroadcastTime(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 
 	for msg, want := range map[string]map[string]any{
 		"!방송시간 사쿠라 미코":     {paramMember: "사쿠라 미코"},

@@ -26,7 +26,7 @@ func TestNewMemberCacheWarmUpLoadsPostgresMembers(t *testing.T) {
 
 	repository := membersvc.NewMemberRepository(&databasemocks.Client{
 		GetPoolFunc: func() *pgxpool.Pool { return pool },
-	}, logger)
+	})
 
 	memberCache, err := membersvc.NewMemberCache(ctx, repository, cacheService, logger, membersvc.CacheConfig{WarmUp: true})
 	if err != nil {

@@ -26,6 +26,24 @@ func TestRepositoryQueriesPreserveMemberMetadata(t *testing.T) {
 		channelID, name, photo)
 	require.NoError(t, err)
 
+	members, err := repository.GetAllMembers(ctx)
+	require.NoError(t, err)
+
+	var snapshot *domain.Member
+
+	for _, member := range members {
+		if member.ChannelID == channelID {
+			snapshot = member
+
+			break
+		}
+	}
+
+	require.NotNil(t, snapshot, "GetAllMembers omitted the metadata fixture")
+	assertMemberRepositoryMetadata(t, snapshot)
+	require.Equal(t, photo, snapshot.Photo)
+
+	// 단건 조회는 snapshot 적재와 같은 열을 읽으므로 snapshot과 같은 멤버를 돌려준다.
 	singleQueries := []struct {
 		name  string
 		query func() (*domain.Member, error)
@@ -38,25 +56,9 @@ func TestRepositoryQueriesPreserveMemberMetadata(t *testing.T) {
 		t.Run(query.name, func(t *testing.T) {
 			got, queryErr := query.query()
 			require.NoError(t, queryErr)
-			assertMemberRepositoryMetadata(t, got)
+			require.Equal(t, snapshot, got)
 		})
 	}
-
-	t.Run("GetAllMembers", func(t *testing.T) {
-		members, queryErr := repository.GetAllMembers(ctx)
-		require.NoError(t, queryErr)
-
-		for _, got := range members {
-			if got.ChannelID == channelID {
-				assertMemberRepositoryMetadata(t, got)
-				require.Equal(t, photo, got.Photo)
-
-				return
-			}
-		}
-
-		t.Fatal("GetAllMembers omitted the metadata fixture")
-	})
 }
 
 func assertMemberRepositoryMetadata(t *testing.T, got *domain.Member) {

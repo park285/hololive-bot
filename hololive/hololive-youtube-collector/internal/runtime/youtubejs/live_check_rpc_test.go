@@ -105,13 +105,14 @@ func TestNoveltyFieldsCrossTheHelperBoundaryExactly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(upcoming.Items) != 2 || !upcoming.Items[0].IsUpcoming || upcoming.Items[1].IsUpcoming ||
-		upcoming.Items[0].PublishedAt != nil || upcoming.Items[0].ScheduledFor != nil {
+	if len(upcoming.Items) != 2 || !upcoming.Items[0].IsUpcoming || upcoming.Items[1].IsUpcoming {
 		t.Fatalf("content items = %#v", upcoming.Items)
 	}
 
-	assertProtocolMismatch(t, decodeTestResponse(t, http.StatusOK,
-		fmt.Sprintf(content, `{"video_id":"p","channel_id":"UC_TEST","title":"P","is_premiere":true}`), 1<<20, &ContentResult{}))
+	for _, retired := range []string{`"is_premiere":true`, `"published_at":"2026-09-20T17:00:00.000Z"`, `"scheduled_for":"2026-09-20T17:00:00.000Z"`} {
+		assertProtocolMismatch(t, decodeTestResponse(t, http.StatusOK,
+			fmt.Sprintf(content, `{"video_id":"p","channel_id":"UC_TEST","title":"P",`+retired+`}`), 1<<20, &ContentResult{}))
+	}
 }
 
 func TestLiveCheckRPCRejectsResultContractViolations(t *testing.T) {

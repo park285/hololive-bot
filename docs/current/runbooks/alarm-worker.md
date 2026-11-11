@@ -40,7 +40,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
-`ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`·`BIRTHDAY_STREAM_*_MS`(양의 밀리초)는 키가 없으면 기본값을 씁니다. 키가 있는데 비어 있거나 공백뿐이면, 또는 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. `ALARM_DISPATCH_RETENTION_*` 키와 같은 규칙입니다. 배포 전에 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다. celebration·birthday stream 키는 해당 runner가 켜졌을 때만 읽습니다.
+`ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`·`BIRTHDAY_STREAM_*_MS`(양의 밀리초)는 키가 없으면 기본값을 씁니다. 키가 있는데 비어 있거나 공백뿐이면, 또는 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. `ALARM_DISPATCH_RETENTION_*` 키와 같은 규칙입니다. 다만 `ALARM_DISPATCH_RETENTION_LIMIT`은 10000을 넘어도 기동에 실패하지 않고 10000으로 줄여 씁니다. 배포 전에 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다. celebration·birthday stream 키는 해당 runner가 켜졌을 때만 읽습니다.
 
 ## Notification egress
 
@@ -52,19 +52,19 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=true` | `richtext` 템플릿 변형을 `SendRichText`로 전달하고 Iris가 본문·네이티브 서식으로 변환 |
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=false` | `plain` 변형, 일반 텍스트 |
 | 방 유형 미확인 | `plain` 변형, 일반 텍스트 |
-| celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
+| celebration, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
 
-워커는 두 변형을 모두 렌더하고 발송 요청을 고정할 때(`PrepareMessageRequest`) 방 유형을 한 번 판정해 하나를 고릅니다. 고정한 요청의 본문·route는 재시도와 재시작에서 그대로 재사용합니다. generic notification delivery는 producer가 적재한 `message`(plain)와 `rich_text_message`(richtext)를 쓰며, `rich_text_message`가 없는 변형 도입 전 행과 저장된 delivery digest는 한 본문을 두 경로에 씁니다.
+워커는 두 변형을 모두 렌더하고 발송 요청을 고정할 때(`PrepareMessageRequest`) 방 유형을 한 번 판정해 하나를 고릅니다. 고정한 요청의 본문·route는 재시도와 재시작에서 그대로 재사용합니다. generic notification delivery는 producer가 적재한 `message`(plain)와 `rich_text_message`(richtext)를 쓰며, `rich_text_message`가 없는 행은 발송하지 않고 준비 실패로 기록합니다.
 
-일반 텍스트는 `kakaoformat.Render`를 거칩니다. 방 resolver는 오픈채팅 여부만 제공합니다. 텍스트·RichText sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·notification·youtube handoff reconciler만 합니다. 기존 frozen `markdown`·`text`는 저장한 형식 그대로 재생합니다.
+일반 텍스트는 `kakaoformat.Render`를 거칩니다. 방 resolver는 오픈채팅 여부만 제공합니다. 텍스트·RichText sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·notification·youtube handoff reconciler만 합니다. 저장된 `text`·`richtext` 고정 요청은 저장한 형식 그대로 재생합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절됩니다.
 
 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
-기본 본문은 migration `353`~`358`이 방 유형별 두 변형으로 나눕니다. 347 표준 본문과 일치하는 전역 기본값은 `plain`을 347 이전 본문으로 되돌리고 `richtext`에 새 RichText 본문을 넣습니다. 사용자 지정 기본값과 채널 override는 같은 본문을 `richtext` 행으로 복사해 지금 표시를 유지하고, 이미 저장된 요청은 변경하지 않습니다. 렌더러가 변형을 골라 조회하므로 `358` 적용 직후 API·워커를 같은 창에서 교체합니다. 교체 전 이미지는 두 변형 중 하나를 임의로 읽을 수 있고(표시만 다르며 실패하지 않음), API만 먼저 바뀌면 구 워커가 `rich_text_message`를 무시해 오픈채팅 예약 알림이 `plain` 본문으로 나갑니다. 설정 마스터 변경·좁은 동기화는 `stack-platform-ops`, 이미지·프로필 쌍과 no-build 재생성은 `hololive-bot-ops` 절차를 사용합니다.
+기본 본문은 방 유형별 `plain`·`richtext` 두 변형이며 epoch-3 baseline(`001_schema_epoch3_baseline.sql`)에 들어 있습니다. 표준 전역 기본값은 `plain`에 평문 본문, `richtext`에 RichText 본문을 둡니다. 사용자 지정 기본값과 채널 override는 두 변형에 같은 본문을 두어 표시를 유지하고, 이미 저장된 요청은 변경하지 않습니다. 렌더러가 변형을 골라 조회하므로 API·워커는 같은 창에서 교체합니다. API만 먼저 바뀌면 구 워커가 `rich_text_message`를 무시해 오픈채팅 예약 알림이 `plain` 본문으로 나갑니다. 설정 마스터 변경·좁은 동기화는 `stack-platform-ops`, 이미지·프로필 쌍과 no-build 재생성은 `hololive-bot-ops` 절차를 사용합니다.
 
 이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다. T18(2026-09-26)에서 v1·v3 원장의 Karing 비종단 행이 0건임을 확인했습니다.
 
-`YOUTUBE_OUTBOX_KARING_ENABLED`와 `ALARM_DISPATCH_KARING_ENABLED`는 퇴역했습니다. 값이 비어 있어도 runtime file에 key가 존재하면 startup이 실패합니다. `ALARM_SHORT_LINK_BASE_URL`은 기존 grouped message path를 위해 유지되며, `hololive-api`의 `127.0.0.1:30101` listener와 중앙·Seoul ingress도 계속 유지합니다.
+`YOUTUBE_OUTBOX_KARING_ENABLED`와 `ALARM_DISPATCH_KARING_ENABLED`는 퇴역했습니다. 코드가 두 key를 읽지 않으므로 runtime file에 남아 있어도 무시되며, 남은 key는 운영 env 정리 때 지웁니다. `ALARM_SHORT_LINK_BASE_URL`은 기존 grouped message path를 위해 유지되며, `hololive-api`의 `127.0.0.1:30101` listener와 중앙·Seoul ingress도 계속 유지합니다.
 
 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 사용하면 두 개 이상의 message-path 방송 알림에서 YouTube URL만 `/l/<videoID>`로 바뀝니다. Provider-first로 listener, 중앙 ingress, Seoul public route와 `scripts/deploy/shortlink-smoke.sh`를 검증한 뒤 consumer를 재기동합니다.
 

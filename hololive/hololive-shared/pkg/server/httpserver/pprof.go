@@ -13,9 +13,7 @@ import (
 
 func NewPprofServer(ctx context.Context, addr, apiKey string) *http.Server {
 	router := newReleaseModeEngine()
-	ApplyBaseMiddleware(ctx, router, nil, BaseMiddlewareOptions{
-		SkipLogPaths: []string{"/debug/pprof*"},
-	})
+	applyBaseMiddleware(ctx, router, nil, "/debug/pprof*")
 
 	group := router.Group("/debug/pprof")
 	group.Use(loopbackAwareAuthMiddleware(addr, apiKey))

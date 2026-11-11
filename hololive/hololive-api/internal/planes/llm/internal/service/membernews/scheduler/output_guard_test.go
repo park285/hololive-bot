@@ -27,6 +27,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -93,7 +94,7 @@ func TestProcessDigestForRoomRejectsInvalidRendering(t *testing.T) {
 	for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly} {
 		for _, tc := range []struct {
 			name      string
-			formatter model.DigestFormatter
+			formatter newsmodel.DigestFormatter
 			digest    *model.Digest
 		}{
 			{name: "missing formatter", digest: &model.Digest{Headline: "ニュース"}},

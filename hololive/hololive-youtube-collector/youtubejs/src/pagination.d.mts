@@ -1,8 +1,10 @@
-import type { Continuity, TerminationReason } from "./contracts.d.ts";
+import type { Continuity, Pagination, TerminationReason } from "./contracts.d.ts";
 
 export const continuityContiguous: "CONTIGUOUS";
 export const continuityGap: "GAP_UNRESOLVED";
 export const continuityNotApplicable: "NOT_APPLICABLE";
+export const maxPagesLimit: 100;
+export const maxResultsLimit: 10_000;
 
 export class EncodedArrayBudget<T = unknown> {
   constructor(limitBytes: number, reservedEnvelopeBytes: number);
@@ -21,12 +23,13 @@ export function paginationResult(options: {
   pageCount: number;
   reason: TerminationReason;
   continuity?: Continuity;
-}): {
-  page_count: number;
-  exhausted: boolean;
-  continuity: Continuity;
-  termination_reason: TerminationReason;
-};
+}): Pagination;
+export function validatedPagination(value: {
+  page_count: unknown;
+  exhausted: unknown;
+  continuity: unknown;
+  termination_reason: unknown;
+}): Pagination;
 
 export function paginate<T, R>(options: {
   firstPage: unknown;
@@ -34,9 +37,9 @@ export function paginate<T, R>(options: {
   mapPage: (feed: any) =>
     | { recognized_shape: true; items: Iterable<T> | AsyncIterable<T> }
     | Promise<{ recognized_shape: true; items: Iterable<T> | AsyncIterable<T> }>;
-  maxPages?: number;
-  maxResults?: number;
+  maxPages: number;
+  maxResults: number;
   maxSuccessResponseBytes?: number;
   reservedEnvelopeBytes: number;
-  buildResult?: (items: T[], pagination: ReturnType<typeof paginationResult>) => R;
+  buildResult?: (items: T[], pagination: Pagination) => R;
 }): Promise<R>;

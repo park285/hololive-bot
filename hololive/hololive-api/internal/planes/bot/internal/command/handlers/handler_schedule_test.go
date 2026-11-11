@@ -21,20 +21,12 @@ type scheduleStreamProviderStub struct {
 	scheduleErr     error
 }
 
-func (s *scheduleStreamProviderStub) GetLiveStreams(_ context.Context) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
 func (s *scheduleStreamProviderStub) GetUpcomingStreams(_ context.Context, _ int) ([]*domain.Stream, error) {
 	return nil, nil
 }
 
 func (s *scheduleStreamProviderStub) GetChannelSchedule(_ context.Context, _ string, _ int, _ bool) ([]*domain.Stream, error) {
 	return s.scheduleStreams, s.scheduleErr
-}
-
-func (s *scheduleStreamProviderStub) GetChannel(_ context.Context, _ string) (*domain.Channel, error) {
-	return nil, errTestStubNoChannel
 }
 
 func setupScheduleTestRenderer(t *testing.T) *serviceTemplate.Renderer {
@@ -88,7 +80,7 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       holodex,
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -189,7 +181,7 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       holodex,
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
@@ -223,7 +215,7 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       &scheduleStreamProviderStub{},
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true
@@ -264,7 +256,7 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		CollabMembers: collabMembersStub{},
 		Holodex:       holodex,
-		Matcher:       matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
+		Matcher:       matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
 		Formatter:     formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message

@@ -23,6 +23,7 @@ package formatter
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
@@ -38,6 +39,7 @@ type ResponseFormatter struct {
 	prefix         string
 	renderer       *template.Renderer
 	messageStrings *messagestrings.Store
+	logger         *slog.Logger
 	seeMoreFold    bool
 }
 
@@ -45,6 +47,11 @@ type Option func(*ResponseFormatter)
 
 func WithMessageStrings(store *messagestrings.Store) Option {
 	return func(f *ResponseFormatter) { f.messageStrings = store }
+}
+
+// WithLogger는 템플릿 렌더 오류를 기록할 logger를 주입한다. 주입하지 않으면 렌더 오류를 기록하지 않는다.
+func WithLogger(logger *slog.Logger) Option {
+	return func(f *ResponseFormatter) { f.logger = logger }
 }
 
 func WithSeeMoreFold(enabled bool) Option {
@@ -76,6 +83,11 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 
 	rendered, err := f.renderer.Render(ctx, key, "", replyFormat(ctx), data)
 	if err != nil {
+		// 호출자 대부분은 이 오류를 실패 문구로 바꾸고 버리므로 원인은 여기서 기록한다.
+		if f.logger != nil {
+			f.logger.ErrorContext(ctx, "template render failed", slog.String("template_key", string(key)), slog.Any("error", err))
+		}
+
 		return "", fmt.Errorf("render template %s: %w", key, err)
 	}
 

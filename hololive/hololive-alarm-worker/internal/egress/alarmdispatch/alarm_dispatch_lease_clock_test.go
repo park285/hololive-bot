@@ -16,7 +16,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -44,7 +43,7 @@ func (c *alarmLeaseClockConsumer) awaitPhase(ctx context.Context, phase string) 
 	}
 }
 
-func (c *alarmLeaseClockConsumer) LoadSendRequest(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
+func (c *alarmLeaseClockConsumer) LoadSendRequest(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
 	if err := c.awaitPhase(ctx, "load"); err != nil {
 		return nil, err
 	}
@@ -61,7 +60,7 @@ func (c *alarmLeaseClockConsumer) LoadSendRequest(ctx context.Context, envelopes
 	return request, nil
 }
 
-func (c *alarmLeaseClockConsumer) PinSendRequest(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, candidate dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error) {
+func (c *alarmLeaseClockConsumer) PinSendRequest(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, candidate dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error) {
 	if err := c.awaitPhase(ctx, "pin"); err != nil {
 		return nil, err
 	}
@@ -78,7 +77,7 @@ func (c *alarmLeaseClockConsumer) PinSendRequest(ctx context.Context, envelopes 
 	return request, nil
 }
 
-func (c *alarmLeaseClockConsumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *alarmLeaseClockConsumer) MarkSending(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	if err := c.awaitPhase(ctx, "begin"); err != nil {
 		return err
 	}
@@ -119,7 +118,9 @@ func runAlarmLeaseClockScenario(t *testing.T, phase string) {
 
 	var workers sync.WaitGroup
 
-	workers.Go(func() { done <- runner.dispatchMessageGroup(ctx, group) })
+	workers.Go(func() {
+		done <- runner.dispatchMessageGroup(ctx, group, &alarmDispatchMembers{provider: runner.members})
+	})
 
 	defer func() {
 		cancel()
@@ -146,7 +147,7 @@ func runAlarmLeaseClockScenario(t *testing.T, phase string) {
 	assertAlarmLeaseClockRouting(ctx, t, pool, &envelopes[0])
 }
 
-func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpool.Pool, phase string) (*alarmLeaseClockConsumer, []domain.AlarmQueueEnvelope) {
+func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpool.Pool, phase string) (*alarmLeaseClockConsumer, []dispatchoutbox.AlarmQueueEnvelope) {
 	t.Helper()
 
 	repo := newOutboxRepository(t, pool)
@@ -154,7 +155,7 @@ func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpoo
 
 	envelope.Notification.Channel.ID = "lease-clock-channel"
 
-	_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET attempt_count=2`)
@@ -180,7 +181,7 @@ func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpoo
 	return consumer, envelopes
 }
 
-func expireAlarmLeaseDuringUnitWait(ctx context.Context, t *testing.T, pool *pgxpool.Pool, envelope *domain.AlarmQueueEnvelope, consumer *alarmLeaseClockConsumer, done <-chan error) {
+func expireAlarmLeaseDuringUnitWait(ctx context.Context, t *testing.T, pool *pgxpool.Pool, envelope *dispatchoutbox.AlarmQueueEnvelope, consumer *alarmLeaseClockConsumer, done <-chan error) {
 	t.Helper()
 
 	var expires time.Time
@@ -210,7 +211,8 @@ func expireAlarmLeaseDuringUnitWait(ctx context.Context, t *testing.T, pool *pgx
 	require.NoError(t, blocker.Commit(ctx))
 }
 
-func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpool.Pool, envelope *domain.AlarmQueueEnvelope) {
+// lease가 만료된 미발송 claim은 Load·Pin·Begin 어느 단계에서 막혀도 행을 바꾸지 않고 만료 lease 회수에 맡긴다.
+func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpool.Pool, envelope *dispatchoutbox.AlarmQueueEnvelope) {
 	t.Helper()
 
 	var (

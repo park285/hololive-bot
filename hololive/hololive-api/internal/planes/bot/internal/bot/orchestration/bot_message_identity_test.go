@@ -21,35 +21,15 @@
 package orchestration
 
 import (
-	"bytes"
-	"context"
-	"log/slog"
-	"sync/atomic"
 	"testing"
 
 	"github.com/park285/iris-client-go/v5/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
-	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
-
-type replyIdentityProbeCommand struct {
-	calls atomic.Int64
-}
-
-func (c *replyIdentityProbeCommand) Name() string        { return testHelpCommandName }
-func (c *replyIdentityProbeCommand) Description() string { return testHelpCommandName }
-
-func (c *replyIdentityProbeCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
-	c.calls.Add(1)
-
-	return nil
-}
 
 func TestCanonicalReplyIdentityHasNoFallbackChain(t *testing.T) {
 	t.Parallel()
@@ -83,34 +63,6 @@ func TestCanonicalReplyIdentityHasNoFallbackChain(t *testing.T) {
 			assert.Equal(t, tc.want, canonicalReplyIdentity(tc.message))
 		})
 	}
-}
-
-func TestProcessMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
-	t.Parallel()
-
-	executed := &replyIdentityProbeCommand{}
-	registry := command.NewRegistry()
-	registry.Register(executed)
-
-	var logs bytes.Buffer
-
-	bot := &Bot{
-		logger:          slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		commandRegistry: registry,
-		messageAdapter:  messaging.NewMessageAdapter("!", ""),
-		formatter:       formatter.NewResponseFormatter("!", nil),
-	}
-
-	sender := testSenderName
-	require.NoError(t, bot.ProcessMessage(t.Context(), &webhook.Message{
-		Msg:    "!help",
-		Room:   "12345",
-		Sender: &sender,
-		JSON:   &webhook.MessageJSON{UserID: testUserID, ChatLogID: "c-1"},
-	}))
-
-	assert.Zero(t, executed.calls.Load(), "command must not run without a canonical message id")
-	assert.Contains(t, logs.String(), EventBotReplyIdentityMissing)
 }
 
 func TestCommandRequestContextUsesTheCommandContextMessageID(t *testing.T) {

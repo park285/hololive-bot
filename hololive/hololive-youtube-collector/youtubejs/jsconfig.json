@@ -11,7 +11,7 @@
     "types": ["node"],
     "maxNodeModuleJsDepth": 0
   },
-  "include": ["src/**/*.mjs", "src/**/*.d.ts"],
+  "include": ["src/**/*.mjs", "src/**/*.d.ts", "test-fixtures/**/*.mjs"],
   "exclude": [
     "src/**/*.test.mjs",
     "src/server.mjs",

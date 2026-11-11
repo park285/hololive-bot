@@ -61,7 +61,7 @@ func (failedCandidateStore) Finish(context.Context, map[string][]string, time.Ti
 func TestYouTubeCandidateStagingFailureDoesNotAdvanceEvaluation(t *testing.T) {
 	scheduler := tier.NewTieredScheduler(newCheckerTestLogger())
 	checker := &YouTubeChecker{tierScheduler: scheduler, upcomingCandidates: failedCandidateStore{}, logger: newCheckerTestLogger()}
-	_, err := checker.collectDueYouTubeNotifications(t.Context(), []string{"staging-channel"}, nil, nil, map[string][]string{"staging-channel": {"room"}}, nil, time.Now())
+	_, err := checker.collectDueYouTubeNotifications(t.Context(), testTargetPolicy(), []string{"staging-channel"}, nil, nil, map[string][]string{"staging-channel": {"room"}}, nil, time.Now())
 	require.ErrorContains(t, err, "staging unavailable")
 	require.True(t, scheduler.LastCheckedAt("staging-channel").IsZero())
 }

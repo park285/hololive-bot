@@ -9,7 +9,7 @@ import (
 func TestTryCelebrationCalendarCommand(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 
 	tests := []struct {
 		name    string

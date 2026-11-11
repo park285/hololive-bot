@@ -5,32 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
-	"github.com/park285/shared-go/v2/pkg/retry"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffloop"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/panicscope"
-)
-
-// 시간 예산: claim은 요청의 다음 확인을 soft claim(15s) 뒤로 미루고, 요청마다 상태 조회(최대 5s)와 정산(최대
-// deliveryStateTimeout 5s, 정산 슬롯 대기·연결 획득·부모 outbox 집계를 포함한 트랜잭션)을 차례로 끝낸다. 조회와 정산
-// 예산의 합 10s가 soft claim보다 짧으므로 같은 요청을 다른 확인이 고르기 전에 이 확인의 적용이 끝나거나 포기된다.
-// 예산을 넘긴 정산은 적용하지 않고, soft claim 뒤 다음 확인이 토큰 CAS로 다시 판정한다.
-const (
-	// 한 batch의 상태 조회는 모두 병렬로 돈다. 동시 외부 조회 수의 상한이다.
-	youtubeHandoffBatchSize     = 32
-	youtubeHandoffSoftClaim     = 15 * time.Second
-	youtubeHandoffStatusTimeout = 5 * time.Second
-	// 정산은 일반 연결 획득으로 요청 하나의 트랜잭션 하나씩이다. 동시에 쓰는 연결을 이 수로 묶어 batch 정산이
-	// alarm_worker 풀의 일반 용량을 독점하지 않게 한다.
-	youtubeHandoffSettleConcurrency = 2
 )
 
 type handoffStore interface {
@@ -61,18 +43,9 @@ type handoffReconcilerConfig struct {
 	MaxRetries   int
 }
 
-// HandoffReconciler는 Iris admission을 마친 youtube 고정 요청의 /reply-status를 확인 시각마다 조회해 정산한다. 외부
-// 조회는 트랜잭션 밖에서 하고, 정산은 claim 토큰·requestId·요청 세대·본문 해시·고정 멤버와 멤버 행 버전이 그대로일
-// 때만 요청 하나의 트랜잭션으로 적용한다. 판정 규칙과 확인 간격은 notification·alarm dispatch와 같은 handoffcheck다.
-type HandoffReconciler struct {
-	store        handoffStore
-	client       handoffcheck.ReplyStatusClient
-	horizon      time.Duration
-	pollInterval time.Duration
-	maxRetries   int
-	settleSlots  chan struct{}
-	logger       *slog.Logger
-}
+// HandoffReconciler는 Iris admission을 마친 youtube 고정 요청의 handoff 확인 loop다. 정산은 claim 토큰·requestId·요청
+// 세대·본문 해시·고정 멤버와 멤버 행 버전이 그대로일 때만 요청 하나의 트랜잭션으로 적용한다.
+type HandoffReconciler = handoffloop.Reconciler[store.HandoffClaim]
 
 // NewHandoffReconciler는 youtube_delivery dispatcher와 같은 설정으로 전이 저장소를 만든다. 지평은 HandoffHorizon이다.
 func NewHandoffReconciler(
@@ -119,169 +92,98 @@ func newHandoffReconciler(
 	config handoffReconcilerConfig,
 	logger *slog.Logger,
 ) (*HandoffReconciler, error) {
-	if handoffs == nil || client == nil || reflectutil.IsNil(client) {
-		return nil, errors.New("new youtube handoff reconciler: store and reply status client are required")
-	}
-
-	if config.Horizon < time.Millisecond || config.PollInterval < time.Millisecond {
-		return nil, fmt.Errorf("new youtube handoff reconciler: horizon %s and poll interval %s must be at least 1ms",
-			config.Horizon, config.PollInterval)
+	if handoffs == nil {
+		return nil, errors.New("new youtube handoff reconciler: store is required")
 	}
 
 	if config.MaxRetries <= 0 {
 		return nil, fmt.Errorf("new youtube handoff reconciler: max retries %d must be positive", config.MaxRetries)
 	}
 
-	return &HandoffReconciler{
-		store:        handoffs,
-		client:       client,
-		horizon:      config.Horizon,
-		pollInterval: config.PollInterval,
-		maxRetries:   config.MaxRetries,
-		settleSlots:  make(chan struct{}, youtubeHandoffSettleConcurrency),
-		logger:       dispatcherLogger(logger),
-	}, nil
-}
-
-// 확인 실패는 Start 오류가 아니다. 첫 오류가 나면 runNamedSchedulers가 형제 egress runner를 모두 취소한다.
-func (r *HandoffReconciler) Start(ctx context.Context) error {
-	for {
-		claimed, err := r.RunOnce(ctx)
-
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-		}
-
-		if err != nil {
-			r.logger.Warn("youtube delivery handoff claim failed", slog.Any("error", err))
-		}
-
-		if err == nil && claimed == youtubeHandoffBatchSize {
-			continue
-		}
-
-		if !retry.Sleep(ctx, r.pollInterval) {
-			return nil
-		}
-	}
-}
-
-// 확인 claim은 batch 조회라 일반 연결 획득을 쓴다.
-func (r *HandoffReconciler) RunOnce(ctx context.Context) (int, error) {
-	claimCtx, cancel := context.WithTimeout(ctx, deliveryStateTimeout)
-	claims, err := r.store.ClaimHandoffDue(claimCtx, youtubeHandoffBatchSize, youtubeHandoffSoftClaim)
-
-	cancel()
-
+	reconciler, err := handoffloop.New[store.HandoffClaim](handoffLedger{handoffStore: handoffs, maxRetries: config.MaxRetries}, client, handoffloop.Config{
+		Name:               "youtube delivery",
+		Horizon:            config.Horizon,
+		PollInterval:       config.PollInterval,
+		FenceMissMessage:   "youtube delivery handoff check lost its claim or logical group changed; not applied",
+		CheckClosed:        store.ErrHandoffCheckClosed,
+		CheckClosedMessage: "youtube delivery handoff check closed; frozen members changed since admission",
+	}, logger)
 	if err != nil {
-		return 0, fmt.Errorf("claim youtube delivery handoff checks: %w", err)
+		return nil, fmt.Errorf("new youtube handoff reconciler: %w", err)
 	}
 
-	var wg sync.WaitGroup
-
-	for i := range claims {
-		wg.Go(func() {
-			panicguard.Run(r.logger, panicscope.BackgroundTask, "youtube-delivery-handoff-check", func() {
-				r.reconcile(ctx, &claims[i])
-			})
-		})
-	}
-
-	wg.Wait()
-
-	return len(claims), nil
+	return reconciler, nil
 }
 
-func (r *HandoffReconciler) reconcile(ctx context.Context, claim *store.HandoffClaim) {
-	statusCtx, cancel := context.WithTimeout(ctx, youtubeHandoffStatusTimeout)
-	snapshot, queryErr := r.client.GetReplyStatus(statusCtx, claim.IrisRequestID)
+// handoffLedger는 고정 요청 확인을 handoffloop에 잇는다. 정산마다 lifecycle 지표를 남기고, 적용되지 않은 결과는 오류로
+// 돌려주며, 적용된 실패 정산이 바꾼 원장 수를 남긴다.
+type handoffLedger struct {
+	handoffStore
 
-	cancel()
+	maxRetries int
+}
 
-	// 종료 중 끊긴 조회는 관측이 아니다. soft claim이 끝나면 다음 확인이 다시 판정한다.
-	if ctx.Err() != nil {
-		return
-	}
-
-	decision := handoffcheck.Decide(handoffcheck.Input{
-		RequestID:       claim.IrisRequestID,
-		Snapshot:        snapshot,
-		QueryErr:        queryErr,
+func (l handoffLedger) Check(claim *store.HandoffClaim) handoffloop.Check {
+	return handoffloop.Check{
+		IrisRequestID:   claim.IrisRequestID,
 		Elapsed:         claim.Elapsed,
-		Horizon:         r.horizon,
 		Generation:      claim.Generation,
-		RetryBudgetLeft: claim.AttemptCount+1 < r.maxRetries,
-	})
-
-	// 관측을 얻은 뒤의 정산은 종료 취소와 분리하되, 정산 슬롯 대기까지 포함한 예산 안에서만 한다. 연결은 일반
-	// 획득이다(control 예약분을 쓰지 않는다).
-	stateCtx, cancelState := context.WithTimeout(context.WithoutCancel(ctx), deliveryStateTimeout)
-	defer cancelState()
-
-	err := r.settle(stateCtx, claim, decision, queryErr)
-
-	r.logOutcome(claim, decision, err)
+		RetryBudgetLeft: claim.AttemptCount+1 < l.maxRetries,
+		Subject:         slog.Any("delivery_ids", claim.MemberIDs),
+	}
 }
 
-func (r *HandoffReconciler) settle(ctx context.Context, claim *store.HandoffClaim, decision handoffcheck.Decision, queryErr error) error {
-	select {
-	case r.settleSlots <- struct{}{}:
-	case <-ctx.Done():
-		return fmt.Errorf("wait youtube delivery handoff settlement slot: %w", ctx.Err())
-	}
+func (l handoffLedger) Complete(ctx context.Context, claim *store.HandoffClaim) error {
+	result, err := l.CompleteHandoff(ctx, claim)
 
-	defer func() { <-r.settleSlots }()
-
-	return r.apply(ctx, claim, decision, queryErr)
+	return settledHandoff(handoffcheck.ActionComplete, claim, result, err)
 }
 
-func (r *HandoffReconciler) apply(ctx context.Context, claim *store.HandoffClaim, decision handoffcheck.Decision, queryErr error) error {
-	var (
-		result store.ApplyResult
-		err    error
-	)
+func (l handoffLedger) Reschedule(ctx context.Context, claim *store.HandoffClaim, step, horizon time.Duration) error {
+	result, err := l.RescheduleHandoff(ctx, claim, step, horizon)
 
-	switch decision.Action {
-	case handoffcheck.ActionComplete:
-		result, err = r.store.CompleteHandoff(ctx, claim)
-	case handoffcheck.ActionReschedule:
-		if queryErr != nil {
-			// SDK 오류 원문은 /reply-status/{requestId} 경로를 담으므로 HTTP 상태만 남긴다.
-			r.logger.Warn("youtube delivery handoff status query deferred",
-				slog.Any("delivery_ids", claim.MemberIDs),
-				slog.String("error", handoffcheck.QueryErrorDetail(queryErr)))
-		}
+	return settledHandoff(handoffcheck.ActionReschedule, claim, result, err)
+}
 
-		result, err = r.store.RescheduleHandoff(ctx, claim, handoffcheck.NextStep(claim.Elapsed), r.horizon)
-	case handoffcheck.ActionReissue:
-		result, err = r.store.ReissueAfterHandoff(ctx, claim, decision.Code, decision.Detail)
-	case handoffcheck.ActionExhausted:
-		result, err = r.store.ExhaustAfterHandoff(ctx, claim, decision.Code, decision.Detail)
-	case handoffcheck.ActionQuarantine:
-		result, err = r.store.QuarantineAfterHandoff(ctx, claim, decision.Code, decision.Detail)
-	default:
-		return fmt.Errorf("apply youtube delivery handoff: unsupported action %d", decision.Action)
-	}
+func (l handoffLedger) Reissue(ctx context.Context, claim *store.HandoffClaim, code, detail string) error {
+	result, err := l.ReissueAfterHandoff(ctx, claim, code, detail)
 
-	observeLifecycleApply("handoff_"+decision.Action.String(), result, err, len(claim.MemberIDs))
+	return settledHandoff(handoffcheck.ActionReissue, claim, result, err)
+}
+
+func (l handoffLedger) Exhaust(ctx context.Context, claim *store.HandoffClaim, code, detail string) error {
+	result, err := l.ExhaustAfterHandoff(ctx, claim, code, detail)
+
+	return settledHandoff(handoffcheck.ActionExhausted, claim, result, err)
+}
+
+func (l handoffLedger) Quarantine(ctx context.Context, claim *store.HandoffClaim, code, detail string) error {
+	result, err := l.QuarantineAfterHandoff(ctx, claim, code, detail)
+
+	return settledHandoff(handoffcheck.ActionQuarantine, claim, result, err)
+}
+
+func settledHandoff(action handoffcheck.Action, claim *store.HandoffClaim, result store.ApplyResult, err error) error {
+	units := len(claim.MemberIDs)
+
+	observeLifecycleApply("handoff_"+action.String(), result, err, units)
 
 	if err != nil {
-		return fmt.Errorf("apply youtube delivery handoff: %w", err)
+		return err
 	}
 
 	if result.Outcome != store.ApplyApplied {
-		return fmt.Errorf("apply youtube delivery handoff: outcome %s", result.Outcome)
+		return fmt.Errorf("outcome %s", result.Outcome)
 	}
 
-	r.observeLedger(decision.Action, result, len(claim.MemberIDs))
+	observeHandoffLedger(action, result, units)
 
 	return nil
 }
 
-// 적용된 정산은 고정 멤버 하나당 논리 키 하나를 바꾼다.
-func (r *HandoffReconciler) observeLedger(action handoffcheck.Action, result store.ApplyResult, units int) {
+// observeHandoffLedger는 실패 정산이 지운 SENT 원장과 격리가 기록한 QUARANTINED 원장 수를 남긴다. 적용된 정산은 고정
+// 멤버 하나당 논리 키 하나를 바꾼다.
+func observeHandoffLedger(action handoffcheck.Action, result store.ApplyResult, units int) {
 	switch action {
 	case handoffcheck.ActionReissue, handoffcheck.ActionExhausted:
 		observeLedgerOperation("handoff_delete_sent", result, units)
@@ -290,50 +192,4 @@ func (r *HandoffReconciler) observeLedger(action handoffcheck.Action, result sto
 		observeLedgerOperation("record_quarantined", result, units)
 	case handoffcheck.ActionComplete, handoffcheck.ActionReschedule:
 	}
-}
-
-// 로그에는 고정 멤버 delivery id와 요청 세대만 남기고 Iris requestId는 남기지 않는다. 확인을 닫지 않은 fence 미스(소유 상실, 정산 중 논리 그룹에 새 follower·outbox가
-// 들어옴)는 다른 정산이나 soft claim 뒤 다음 확인이 이어받으므로 경고다. 멤버 변경으로 확인을 닫은 종료는 다음 확인이 없으므로 오류다. 예산을 넘긴 정산은 soft claim 뒤 다음 확인이 토큰
-// CAS로 다시 판정하므로 경고다.
-func (r *HandoffReconciler) logOutcome(claim *store.HandoffClaim, decision handoffcheck.Decision, err error) {
-	attrs := []any{
-		slog.Any("delivery_ids", claim.MemberIDs),
-		slog.Int("generation", claim.Generation),
-		slog.String("observed_action", decision.Action.String()),
-		slog.String("reason", decision.Code),
-	}
-
-	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrHandoffCheckClosed):
-			r.logger.Error("youtube delivery handoff check closed; frozen members changed since admission",
-				append(attrs, slog.Any("error", err))...)
-		case isFenceMiss(err):
-			r.logger.Warn("youtube delivery handoff check lost its claim or logical group changed; not applied",
-				append(attrs, slog.Any("error", err))...)
-		case errors.Is(err, context.DeadlineExceeded):
-			r.logger.Warn("youtube delivery handoff settlement exceeded its budget; the next check decides again",
-				append(attrs, slog.Any("error", err))...)
-		default:
-			r.logger.Error("youtube delivery handoff check failed", append(attrs, slog.Any("error", err))...)
-		}
-
-		return
-	}
-
-	switch decision.Action {
-	case handoffcheck.ActionReissue:
-		r.logger.Warn("youtube delivery handoff failed; requeued with the next request generation", attrs...)
-	case handoffcheck.ActionExhausted:
-		r.logger.Error("youtube delivery handoff failed; reissue budget exhausted", attrs...)
-	case handoffcheck.ActionQuarantine:
-		r.logger.Error("youtube delivery handoff outcome unknown; quarantined", attrs...)
-	case handoffcheck.ActionComplete, handoffcheck.ActionReschedule:
-	}
-}
-
-func isFenceMiss(err error) bool {
-	_, ok := errors.AsType[*sendfence.MissError](err)
-
-	return ok
 }

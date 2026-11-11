@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"sync"
@@ -11,10 +13,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/apifoundation"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
 	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
@@ -23,6 +24,11 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
@@ -62,8 +68,8 @@ func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
 			Postgres: postgres, Valkey: valkey, Kakao: settings.KakaoConfig{ACLEnabled: true, ACLMode: "whitelist"},
 			Holodex: holodex, OfficialSchedule: officialSchedule,
 		},
-		Admin: &apiconfig.AdminPlaneConfig{Postgres: postgres, Valkey: valkey},
-		LLM:   &apiconfig.LLMSchedulerConfig{Postgres: postgres, Valkey: valkey},
+		Admin: &apiconfig.AdminPlaneConfig{Postgres: postgres},
+		LLM:   &apiconfig.LLMSchedulerConfig{Postgres: postgres},
 	}
 }
 
@@ -180,7 +186,7 @@ func TestSharedInfrastructureWaitsForBorrowerAfterCallerDeadline(t *testing.T) {
 
 	runtime := &Runtime{closeSteps: apiPlaneCloseSteps(apiPlanes{
 		admin: admin,
-		infra: &apiInfrastructure{closeResources: func() { close(closed) }},
+		infra: &apiInfrastructure{closeBot: func() { close(closed) }},
 	})}
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -213,21 +219,19 @@ func TestSharedInfrastructureWaitsForBorrowerAfterCallerDeadline(t *testing.T) {
 func TestSharedInfrastructureClosesAfterUnstartedBorrowers(t *testing.T) {
 	var calls []string
 
-	admin := &adminruntime.AdminAPIRuntime{
-		Managed: lifecycle.NewManaged(func() { calls = append(calls, "admin") }),
-	}
+	admin := &adminruntime.AdminAPIRuntime{}
 	runtime := &Runtime{closeSteps: apiPlaneCloseSteps(apiPlanes{
 		admin: admin,
-		infra: &apiInfrastructure{closeResources: func() { calls = append(calls, "infrastructure") }},
+		infra: &apiInfrastructure{closeBot: func() { calls = append(calls, "infrastructure") }},
 	})}
 	require.NoError(t, runtime.CloseContext(t.Context()))
 	require.NoError(t, runtime.CloseContext(t.Context()))
 	require.True(t, admin.ResourceUsersJoined())
-	require.Equal(t, []string{"admin", "infrastructure"}, calls)
+	require.Equal(t, []string{"infrastructure"}, calls)
 }
 
 func TestPlaneDependenciesBorrowProcessHolodex(t *testing.T) {
-	infra := &apiInfrastructure{holodex: &apifoundation.ScraperHolodexFoundation{}, acl: &acl.Service{}}
+	infra := &apiInfrastructure{holodex: &holodexprovider.Service{}, acl: &acl.Service{}}
 
 	bot := botPlaneDependencies(infra, &llmruntime.LLMSchedulerRuntime{})
 	admin := adminPlaneDependencies(infra, &botruntime2.BotRuntime{})
@@ -244,5 +248,89 @@ func TestAPIInfrastructureOwnsOneHolodexService(t *testing.T) {
 
 	t.Cleanup(func() { require.NoError(t, infra.CloseContext(context.WithoutCancel(t.Context()))) })
 
-	require.NotNil(t, infra.holodex.HolodexService)
+	require.NotNil(t, infra.holodex)
+}
+
+// --rerun-notification이 쓰는 llm 전용 조립은 admin pool·ACL·Holodex를 만들지 않는다. 그래서 admin 설정과 Holodex
+// 키가 없어도 조립되고, ACL 첫 초기화가 쓰는 설정 행도 남기지 않는다.
+func TestLLMInfrastructureOmitsServeOnlyResources(t *testing.T) {
+	config := infrastructureConfig(t)
+
+	config.Admin = nil
+	config.Bot.Holodex = settings.HolodexConfig{}
+
+	infra, err := buildLLMInfrastructure(t.Context(), config, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	t.Cleanup(func() { require.NoError(t, infra.CloseContext(context.WithoutCancel(t.Context()))) })
+
+	require.NotNil(t, infra.llm)
+	require.Same(t, infra.bot.Cache, infra.llm.Cache)
+	require.Same(t, infra.bot.MemberCache, infra.llm.MemberCache)
+	require.Nil(t, infra.admin)
+	require.Nil(t, infra.acl)
+	require.Nil(t, infra.holodex)
+
+	var aclSettings int
+
+	require.NoError(t, infra.bot.Postgres.GetPool().QueryRow(t.Context(), "SELECT count(*) FROM acl_settings").Scan(&aclSettings))
+	require.Zero(t, aclSettings)
+}
+
+// process 하나의 Holodex 서비스는 bot plane 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.
+func TestBuildHolodexServiceUsesBotPlaneHolodexConfig(t *testing.T) {
+	t.Parallel()
+
+	type holodexRequest struct{ apiKey, path string }
+
+	seen := make(chan holodexRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case seen <- holodexRequest{apiKey: r.Header.Get("X-APIKEY"), path: r.URL.Path}:
+		default:
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if _, err := w.Write([]byte(`[]`)); err != nil {
+			t.Errorf("write holodex probe response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	botConfig := &apiconfig.BotPlaneConfig{Holodex: settings.DefaultHolodexOperationalConfig()}
+
+	botConfig.Holodex.BaseURL = server.URL + "/configured"
+	botConfig.Holodex.APIKey = "configured-key"
+	botConfig.Holodex.DistributedRateLimit.Enabled = false
+
+	holodex, err := buildHolodexService(t.Context(), botConfig, newHolodexTestMemberCache(t), cachemocks.NewLenientClient(), slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	t.Cleanup(holodex.Stop)
+
+	_, err = holodex.GetChannelSchedule(t.Context(), "UC1", 24, false)
+	require.NoError(t, err)
+
+	select {
+	case got := <-seen:
+		assert.Equal(t, "configured-key", got.apiKey)
+		assert.Equal(t, "/configured/live", got.path)
+	default:
+		t.Fatal("holodex probe received no request")
+	}
+}
+
+// newHolodexTestMemberCache는 migration 시드 DB를 읽는 member cache다. 공식 일정 식별 색인은 멤버 적재에 실패하면
+// 기동 오류이므로 Holodex 서비스 시험도 실제 멤버 원천을 준다.
+func newHolodexTestMemberCache(t *testing.T) *member.Cache {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+	repository := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
+
+	memberCache, err := member.NewMemberCache(t.Context(), repository, sharedtestutil.NewTestCacheService(t.Context(), t), slog.New(slog.DiscardHandler), member.CacheConfig{})
+	require.NoError(t, err)
+	t.Cleanup(memberCache.Close)
+
+	return memberCache
 }

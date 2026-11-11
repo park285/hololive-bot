@@ -33,14 +33,11 @@ func internalResponse(ctx context.Context, probe *sharedreadiness.Probe) (status
 		return http.StatusServiceUnavailable, runtimePayload(base, "not_ready", "")
 	}
 
-	ready, groups := probe.Evaluate(ctx)
+	ready, dependencies := probe.Evaluate(ctx)
 	statusCode, status := sharedreadiness.HTTPStatus(ready)
 
 	payload = runtimePayload(base, status, probe.Name())
-
-	for group, checks := range groups {
-		payload[group] = checks
-	}
+	payload["dependencies"] = dependencies
 
 	return statusCode, payload
 }

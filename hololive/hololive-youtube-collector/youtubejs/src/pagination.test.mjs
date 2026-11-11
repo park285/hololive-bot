@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { Mixins, Parser } from "youtubei.js";
 
 import {
   EncodedArrayBudget,
@@ -16,8 +17,17 @@ const tupleFixture = JSON.parse(
   readFileSync(new URL("../testdata/pagination-tuples.json", import.meta.url), "utf8"),
 );
 
+// continuation이 있는 페이지는 본문 ContinuationItem 토큰을 가진 실제 SDK Feed입니다. items는 테스트 mapper가 읽는 행입니다.
 function page(id, continuation) {
-  return { id, continuation, items: [{ id }] };
+  const items = [{ id }];
+  if (continuation === undefined) {
+    return { items };
+  }
+  const raw = { onResponseReceivedActions: [{ appendContinuationItemsAction: { continuationItems: [{ continuationItemRenderer: {
+    trigger: "CONTINUATION_TRIGGER_ON_ITEM_SHOWN",
+    continuationEndpoint: { continuationCommand: { token: continuation, request: "CONTINUATION_REQUEST_TYPE_BROWSE" } },
+  } }] } }] };
+  return Object.assign(new Mixins.Feed({}, Parser.parseResponse(raw), true), { items });
 }
 
 function mapped(current) {
@@ -220,7 +230,7 @@ test("PAG-007 page and result caps retain exact reason", async () => {
 
   let continued = 0;
   const exactFill = await paginate(options({
-    firstPage: { items: [{ id: "a" }], continuation: "next" },
+    firstPage: page("a", "next"),
     maxResults: 1,
     getContinuation: async () => {
       continued += 1;
@@ -346,7 +356,7 @@ test("PAG-013 paginationResult rejects impossible tuples", () => {
       });
       assert.notEqual(result.exhausted, item.exhausted);
     } catch (error) {
-      assert.equal(error.code, "helper_protocol_mismatch");
+      assert.equal(error.code, "helper_internal_invariant");
     }
   }
 });

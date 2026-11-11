@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	// TemplateOutputMaxBytes는 렌더 결과의 상한이자 파생 값 불변식의 기준 크기입니다. 알림 digest payload가 받는 메시지
-	// 상한(domain.maxDeliveryDigestMessageBytes, 64KiB)과 같아 이보다 큰 결과는 어느 발송 경로에서도 전달될 수 없습니다.
+	// TemplateOutputMaxBytes는 렌더 결과의 상한이자 파생 값 불변식의 기준 크기입니다.
 	templateOutputMaxBytes = 64 * 1024
 	// TemplateSourceMaxBytes는 template 본문 상한입니다. 한 action 안의 함수 호출 수는 본문 길이에 비례하므로
 	// 단계 확인 없이 실행되는 action 하나의 작업량을 이 상한 × 호출당 상한으로 묶습니다.

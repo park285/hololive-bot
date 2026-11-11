@@ -32,6 +32,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
@@ -67,7 +68,7 @@ type fakeSummarizer struct {
 	err    error
 }
 
-func (f *fakeSummarizer) Summarize(_ context.Context, _ *model.SummarizeInput) (*model.Digest, error) {
+func (f *fakeSummarizer) Summarize(_ context.Context, _ *newsmodel.SummarizeInput) (*model.Digest, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -83,8 +84,8 @@ func defaultConsensusConfig() consensus.Config {
 	}
 }
 
-func defaultTestInput() *model.SummarizeInput {
-	return &model.SummarizeInput{
+func defaultTestInput() *newsmodel.SummarizeInput {
+	return &newsmodel.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko},
@@ -443,33 +444,6 @@ func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 	// validator가 bad URL 항목을 제거해야 함
 	if len(digest.TopItems) >= 2 {
 		t.Errorf("expected validator to drop bad URL item, got %d items", len(digest.TopItems))
-	}
-}
-
-func TestConsensus_PrimaryEmpty_ReturnsFallback(t *testing.T) {
-	emptyDigest := &model.Digest{
-		Period:   model.PeriodWeekly,
-		Headline: "🗞️ 이번주 구독 멤버 뉴스",
-		TopItems: []model.SummaryItem{},
-	}
-	reviewer := &fakeLLMWithCounter{}
-
-	cs := NewConsensusSummarizer(
-		&fakeSummarizer{digest: emptyDigest},
-		reviewer, nil, nil, defaultConsensusConfig(), nil,
-	)
-
-	digest, err := cs.Summarize(t.Context(), defaultTestInput())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(digest.TopItems) != 0 {
-		t.Errorf("expected empty items from primary empty, got %d", len(digest.TopItems))
-	}
-
-	if reviewer.callCount.Load() != 0 {
-		t.Errorf("reviewer should not be called when primary is empty, got %d", reviewer.callCount.Load())
 	}
 }
 

@@ -36,7 +36,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	appErrors "github.com/kapu/hololive-api/internal/planes/bot/internal/apperrors"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	bottransport "github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
@@ -74,6 +74,14 @@ func (o dispatchingReplyOutbox) RecordReply(ctx context.Context, entry *bottrans
 
 func newDispatchingTransport(client bottransport.ReplyClient, responseFormatter *messageformatter.ResponseFormatter, opts ...bottransport.Option) *bottransport.CommandTransport {
 	return bottransport.NewCommandTransport(dispatchingReplyOutbox{client: client}, responseFormatter, opts...)
+}
+
+// withMessagePath는 NewBot 없이 필드로 조립한 시험용 Bot에 그 필드와 registry로 만든 ingress와 명령 실행기를 붙인다.
+func withMessagePath(b *Bot, registry *command.Registry) *Bot {
+	b.ingress = ingress.NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender)
+	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage, b.messageStrings, b.cache)
+
+	return b
 }
 
 type testIrisClient struct {
@@ -221,7 +229,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cmdCtx := botcommand.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
+	cmdCtx := botcommand.NewCommandContext(testRoomID, testUserID, testSenderName, "!help")
 
 	t.Run("nil registry", func(t *testing.T) {
 		t.Parallel()
@@ -264,7 +272,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 	t.Parallel()
 
-	cmdCtx := botcommand.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
+	cmdCtx := botcommand.NewCommandContext(testRoomID, testUserID, testSenderName, "!help")
 
 	t.Run("unknown command sends seeded message", func(t *testing.T) {
 		t.Parallel()
@@ -433,30 +441,21 @@ func TestCommandTransportSendErrorMethods(t *testing.T) {
 	})
 }
 
-func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
+func TestBotProcessMessageRepliesUnknownCommand(t *testing.T) {
 	t.Parallel()
 
 	logger := newBotTestLogger()
 	msgCh := make(chan sentMessage, 1)
 	irisClient := &testIrisClient{messageCh: msgCh}
 	messageStrings := loadSeededBotMessageStrings(t)
-	b := &Bot{
-		logger:          logger,
-		commandRegistry: command.NewRegistry(),
-		messageAdapter:  messaging.NewMessageAdapter("!", ""),
-		irisClient:      irisClient,
-		formatter:       messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(messageStrings)),
-		transport:       newDispatchingTransport(irisClient, messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(messageStrings))),
-		messageStrings:  messageStrings,
-	}
-
-	commandExecutor := b.ensureCommandExecutor()
-	require.NotNil(t, commandExecutor)
-	assert.Same(t, commandExecutor, b.ensureCommandExecutor())
-
-	ingress := b.ensureIngress()
-	require.NotNil(t, ingress)
-	assert.Same(t, ingress, b.ensureIngress())
+	b := withMessagePath(&Bot{
+		logger:         logger,
+		messageAdapter: messaging.NewMessageAdapter("!"),
+		irisClient:     irisClient,
+		formatter:      messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(messageStrings)),
+		transport:      newDispatchingTransport(irisClient, messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(messageStrings))),
+		messageStrings: messageStrings,
+	}, command.NewRegistry())
 
 	// 알 수 없는 command 경로: message_strings의 unknown_command 문구가 전송돼야 한다
 	sender := testSenderName
@@ -479,7 +478,7 @@ func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 	}
 }
 
-func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
+func TestBotProcessMessageCommandFailureRepliesProcessingFailed(t *testing.T) {
 	t.Parallel()
 
 	logger := newBotTestLogger()
@@ -494,14 +493,13 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		},
 	})
 
-	b := &Bot{
-		logger:          logger,
-		commandRegistry: registry,
-		messageAdapter:  messaging.NewMessageAdapter("!", ""),
-		irisClient:      irisClient,
-		formatter:       messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t))),
-		transport:       newDispatchingTransport(irisClient, messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t)))),
-	}
+	b := withMessagePath(&Bot{
+		logger:         logger,
+		messageAdapter: messaging.NewMessageAdapter("!"),
+		irisClient:     irisClient,
+		formatter:      messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t))),
+		transport:      newDispatchingTransport(irisClient, messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t)))),
+	}, registry)
 
 	sender := testSenderName
 	err := b.ProcessMessage(t.Context(), &webhook.Message{
@@ -522,15 +520,4 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive message in time")
 	}
-
-	t.Run("getErrorMessage mappings", func(t *testing.T) {
-		t.Parallel()
-
-		assert.Empty(t, b.getErrorMessage(nil))
-
-		irisServiceErr := appErrors.NewServiceError("msg", serviceNameIris, "send_message", errors.New("down"))
-		assert.Equal(t, messaging.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr))
-
-		assert.Equal(t, messaging.ErrCommandProcessingFailed, b.getErrorMessage(errors.New("generic error")))
-	})
 }

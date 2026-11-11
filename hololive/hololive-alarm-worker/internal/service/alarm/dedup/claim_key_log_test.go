@@ -58,7 +58,7 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 			return false, errors.New("valkey unreachable")
 		}
 
-		service := NewService(client, []int{10}, logger)
+		service := NewService(client, logger)
 		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, time.Minute)
 		require.Error(t, err)
 		require.False(t, acquired)
@@ -78,7 +78,7 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 			return true, nil
 		}
 
-		service := NewService(client, []int{10}, logger)
+		service := NewService(client, logger)
 		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, time.Minute)
 		require.NoError(t, err)
 		require.True(t, acquired)
@@ -113,7 +113,7 @@ func TestTryClaimKeyDebugRecordFollowsLoggerLevel(t *testing.T) {
 				return tc.acquired, nil
 			}
 
-			acquired, err := NewService(client, []int{10}, logger).tryClaimKey(t.Context(), key, time.Minute)
+			acquired, err := NewService(client, logger).tryClaimKey(t.Context(), key, time.Minute)
 			require.NoError(t, err)
 			assert.Equal(t, tc.acquired, acquired)
 
@@ -154,7 +154,7 @@ func TestTryClaimKeySetNXErrorCarriesTokenAtEveryLevel(t *testing.T) {
 				return false, errUnreachable
 			}
 
-			acquired, err := NewService(client, []int{10}, logger).tryClaimKey(t.Context(), key, time.Minute)
+			acquired, err := NewService(client, logger).tryClaimKey(t.Context(), key, time.Minute)
 			require.ErrorIs(t, err, errUnreachable)
 			assert.False(t, acquired)
 			assert.Contains(t, err.Error(), "dedup claim setnx: claim_key_token="+privacylog.Pseudonym(key)+": ")

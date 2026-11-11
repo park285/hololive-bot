@@ -57,7 +57,6 @@ func TestFollowerCannotUseIndependentAttemptBudget(t *testing.T) {
 	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{follower, owner}, nil, nil)
 	require.Equal(t, LogicalOwnerPendingElsewhere, result[0].Kind())
 	require.Equal(t, int64(1), result[0].Owner().DeliveryID)
-	require.False(t, result[0].ProviderAllowed())
 }
 
 func TestPendingOwnerDefersFollowerToOwnerDue(t *testing.T) {
@@ -83,7 +82,6 @@ func TestFailedOwnerMirrorsFollowerFailed(t *testing.T) {
 	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{owner, follower}, nil, nil)
 	require.Equal(t, LogicalFailed, result[0].Kind())
 	require.Equal(t, int64(1), result[0].Owner().DeliveryID)
-	require.False(t, result[0].ProviderAllowed())
 }
 
 func TestSentEvidenceReconcilesFailedAndQuarantinedFollowers(t *testing.T) {
@@ -113,7 +111,6 @@ func TestQuarantinedEvidenceBlocksProviderCall(t *testing.T) {
 		nil,
 	)
 	require.Equal(t, LogicalUnresolved, result[0].Kind())
-	require.False(t, result[0].ProviderAllowed())
 }
 
 func TestQuarantinedEvidenceAcceptsRetainedQuarantinedRow(t *testing.T) {
@@ -127,7 +124,6 @@ func TestQuarantinedEvidenceAcceptsRetainedQuarantinedRow(t *testing.T) {
 		nil,
 	)
 	require.Equal(t, LogicalUnresolved, result[0].Kind())
-	require.False(t, result[0].ProviderAllowed())
 }
 
 func TestSendingEvidenceDefersProviderCall(t *testing.T) {
@@ -142,7 +138,6 @@ func TestSendingEvidenceDefersProviderCall(t *testing.T) {
 	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{sending, pending}, nil, nil)
 	require.Equal(t, LogicalInFlight, result[0].Kind())
 	require.Equal(t, sending.LockedAt.Add(2*time.Minute), result[0].DueFloor(), "in-flight floor is the sending lease expiry")
-	require.False(t, result[0].ProviderAllowed())
 }
 
 func TestQuarantineAndSendingMixedStateIsBreach(t *testing.T) {
@@ -190,7 +185,6 @@ func TestInvalidLogicalIdentityFailsBeforeProviderCall(t *testing.T) {
 	result := testResolver(t, 10).ResolveGroups([]DeliverySnapshot{row}, nil, nil)
 	require.Equal(t, LogicalInvariantBreach, result[0].Kind())
 	require.Equal(t, InvariantInvalidLogicalIdentity, result[0].InvariantReason())
-	require.False(t, result[0].ProviderAllowed())
 }
 
 func TestLedgerSentEvidenceReconcilesCleanedPhysicalRows(t *testing.T) {
@@ -220,7 +214,6 @@ func TestLedgerQuarantineEvidenceBlocksProviderCall(t *testing.T) {
 		[]ytcontentid.LogicalKey{key},
 	)
 	require.Equal(t, LogicalUnresolved, result[0].Kind())
-	require.False(t, result[0].ProviderAllowed())
 }
 
 func testResolver(t *testing.T, limit int) Resolver {
@@ -229,7 +222,6 @@ func testResolver(t *testing.T, limit int) Resolver {
 	resolver, err := NewResolver(ResolverConfig{
 		LogicalGroupScanLimit: limit,
 		LockTimeout:           2 * time.Minute,
-		RequireTerminalLedger: true,
 	})
 	require.NoError(t, err)
 

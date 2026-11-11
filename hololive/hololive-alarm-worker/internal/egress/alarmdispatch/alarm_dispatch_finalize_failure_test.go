@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
 const (
@@ -25,9 +25,9 @@ const (
 
 type finalizeFailureCall struct {
 	op        string
-	retry     []domain.AlarmQueueEnvelope
-	dlq       []domain.AlarmQueueEnvelope
-	envelopes []domain.AlarmQueueEnvelope
+	retry     []dispatchoutbox.AlarmQueueEnvelope
+	dlq       []dispatchoutbox.AlarmQueueEnvelope
+	envelopes []dispatchoutbox.AlarmQueueEnvelope
 	claimKeys []string
 }
 
@@ -42,15 +42,15 @@ type finalizeFailureRecordingConsumer struct {
 	requeueErr               error
 }
 
-func (c *finalizeFailureRecordingConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
+func (c *finalizeFailureRecordingConsumer) DrainBatch(context.Context, int) ([]dispatchoutbox.AlarmQueueEnvelope, error) {
 	return nil, nil
 }
 
-func (c *finalizeFailureRecordingConsumer) MarkSending(context.Context, []domain.AlarmQueueEnvelope) error {
+func (c *finalizeFailureRecordingConsumer) MarkSending(context.Context, []dispatchoutbox.AlarmQueueEnvelope) error {
 	return nil
 }
 
-func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []domain.AlarmQueueEnvelope, string, time.Duration) error {
+func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []dispatchoutbox.AlarmQueueEnvelope, string, time.Duration) error {
 	return nil
 }
 
@@ -59,27 +59,27 @@ func (c *finalizeFailureRecordingConsumer) ReleaseClaimKeys(_ context.Context, c
 	return c.releaseClaimErr
 }
 
-func (c *finalizeFailureRecordingConsumer) ReleaseLeased(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *finalizeFailureRecordingConsumer) ReleaseLeased(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpReleaseLeased, envelopes: envelopes})
 	return nil
 }
 
-func (c *finalizeFailureRecordingConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+func (c *finalizeFailureRecordingConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRouteFailures, retry: retryEnvelopes, dlq: dlqEnvelopes})
 	return c.routeFailuresErr
 }
 
-func (c *finalizeFailureRecordingConsumer) Requeue(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *finalizeFailureRecordingConsumer) Requeue(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRequeue, envelopes: envelopes})
 	return c.requeueErr
 }
 
-func (c *finalizeFailureRecordingConsumer) RequeuePreSend(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+func (c *finalizeFailureRecordingConsumer) RequeuePreSend(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRequeuePreSend, envelopes: envelopes})
 	return c.requeueErr
 }
 
-func (c *finalizeFailureRecordingConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+func (c *finalizeFailureRecordingConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []dispatchoutbox.AlarmQueueEnvelope) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRouteSendingFailures, retry: retryEnvelopes, dlq: dlqEnvelopes})
 	if len(c.routeSendingFailuresErrs) == 0 {
 		return nil
@@ -92,7 +92,7 @@ func (c *finalizeFailureRecordingConsumer) RouteSendingFailures(_ context.Contex
 	return err
 }
 
-func (c *finalizeFailureRecordingConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, _ error) error {
+func (c *finalizeFailureRecordingConsumer) Quarantine(_ context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, _ error) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpQuarantine, envelopes: envelopes})
 	return nil
 }
@@ -111,7 +111,7 @@ const (
 	finalizeFailureDLQDeliveryID   = int64(22)
 )
 
-func finalizeFailureRetryEnvelope() domain.AlarmQueueEnvelope {
+func finalizeFailureRetryEnvelope() dispatchoutbox.AlarmQueueEnvelope {
 	roomID := testAlarmRoomID
 	env := alarmDispatchRunnerTestEnvelope(roomID, nil)
 
@@ -121,9 +121,9 @@ func finalizeFailureRetryEnvelope() domain.AlarmQueueEnvelope {
 	return env
 }
 
-func finalizeFailureDLQEnvelope() domain.AlarmQueueEnvelope {
+func finalizeFailureDLQEnvelope() dispatchoutbox.AlarmQueueEnvelope {
 	roomID := "room-2"
-	env := alarmDispatchRunnerTestEnvelope(roomID, &domain.AlarmQueueRetryMetadata{Attempt: 2})
+	env := alarmDispatchRunnerTestEnvelope(roomID, &dispatchoutbox.AlarmQueueRetryMetadata{Attempt: 2})
 
 	env.DispatchOutboxID = finalizeFailureDLQDeliveryID
 	env.ClaimKeys = []string{"claim:" + roomID}
@@ -134,7 +134,7 @@ func finalizeFailureDLQEnvelope() domain.AlarmQueueEnvelope {
 func TestPersistPreSendFailureCallSequenceHappyPath(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
@@ -153,7 +153,7 @@ func TestPersistPreSendFailureRouteFailureFallsBackToRequeue(t *testing.T) {
 	routeErr := errors.New("route down")
 	consumer := &finalizeFailureRecordingConsumer{routeFailuresErr: routeErr}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
@@ -169,7 +169,7 @@ func TestPersistPreSendFailureRouteFailureFallsBackToRequeue(t *testing.T) {
 func TestPersistSendingRetryCallSequenceHappyPath(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -186,7 +186,7 @@ func TestPersistSendingRetryInfraFailureFallsBackToSendingFenceRequeue(t *testin
 	routeErr := errors.New("sending route down")
 	consumer := &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{routeErr}}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -212,7 +212,7 @@ func TestPersistSendingRetryFallbackRequeueFailureWrapPinned(t *testing.T) {
 	requeueErr := errors.New("sending requeue down")
 	consumer := &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{routeErr, requeueErr}}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -232,7 +232,7 @@ func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *t
 	}
 	consumer := &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{partialErr}}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -246,7 +246,7 @@ func TestPersistSendingRetryReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 	releaseErr := errors.New("release down")
 	consumer := &finalizeFailureRecordingConsumer{releaseClaimErr: releaseErr}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -259,7 +259,7 @@ func TestPersistSendingRetryReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 func TestPersistSendingRetryNeverFallsBackToLeasedOnlyRouteFailures(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+	envelopes := []dispatchoutbox.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 

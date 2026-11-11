@@ -15,7 +15,6 @@ var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
 // 고정 SQL은 패키지 초기화 때 한 번만 읽는다. 없는 자산은 그 경로의 첫 호출이 아니라 기동에서 드러난다.
 var (
 	ensureSendUnitsSQL           = mustSQL("ensure_send_units.sql")
-	findByDedupeKeySQL           = mustSQL("find_by_dedupe_key.sql")
 	insertDeliveryBatchSQL       = mustSQL("insert_delivery_batch.sql")
 	insertEventBatchSQL          = mustSQL("insert_event_batch.sql")
 	loadEventsByIDSQL            = mustSQL("load_events_by_id.sql")

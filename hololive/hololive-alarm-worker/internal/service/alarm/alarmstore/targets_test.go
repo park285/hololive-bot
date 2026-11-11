@@ -203,20 +203,17 @@ func TestResolveChannelSubscribersByTypeReturnsAuthoritativeEmptyOnlyAfterDBFall
 	}
 }
 
-func TestResolveChannelSubscribersByTypeUsesExplicitNegativeCache(t *testing.T) {
+// 빈 set은 eviction과 구분되지 않으므로 DB 없는 resolver는 구독 0으로 확정하지 않고 오류를 돌려준다.
+// 엄격한 mock은 SMembers 밖의 cache 호출에서 panic하므로 다른 cache 확인이 없음을 함께 고정한다.
+func TestResolveChannelSubscribersByTypeEmptySetWithoutDatabaseFails(t *testing.T) {
 	t.Parallel()
 
-	cache := cachemocks.NewLenientClient()
+	cache := cachemocks.NewStrictClient()
 
-	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-		require.Equal(t, alarmkeys.BuildChannelSubscriberEmptyKey("UC_empty", domain.AlarmTypeLive), key)
+	cache.SMembersFunc = func(context.Context, string) ([]string, error) { return nil, nil }
 
-		return true, nil
-	}
-
-	got, err := NewSubscriberResolver(cache, nil).ResolveChannelSubscribersByType(t.Context(), "UC_empty", domain.AlarmTypeLive)
-	require.NoError(t, err)
-	require.Empty(t, got)
+	_, err := NewSubscriberResolver(cache, nil).ResolveChannelSubscribersByType(t.Context(), "UC_empty", domain.AlarmTypeLive)
+	require.ErrorContains(t, err, "database is nil")
 }
 
 func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFallback(t *testing.T) {
@@ -558,7 +555,7 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 		return testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues(result))
 	}
 
-	// 빈 cache는 구독 set도 empty marker도 없어 확정하지 못하므로 DB를 읽고, 그 결과를 센다.
+	// 빈 cache는 구독 set이 없어 확정하지 못하므로 DB를 읽고, 그 결과를 센다.
 	resolver := NewSubscriberResolver(newMemoryCacheClient(t), db)
 
 	hitBefore := fallback("hit")

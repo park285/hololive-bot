@@ -21,7 +21,6 @@ var (
 	findByChannelSQL                         = mustSQL("find_by_channel.sql")
 	findByRoomSQL                            = mustSQL("find_by_room.sql")
 	getAllDistinctRoomIDsSQL                 = mustSQL("get_all_distinct_room_ids.sql")
-	getAllMemberNamesSQL                     = mustSQL("get_all_member_names.sql")
 	getMemberNameSQL                         = mustSQL("get_member_name.sql")
 	listAlarmEntriesSQL                      = mustSQL("list_alarm_entries.sql")
 	loadAllSQL                               = mustSQL("load_all.sql")

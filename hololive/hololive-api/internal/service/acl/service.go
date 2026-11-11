@@ -151,7 +151,6 @@ const (
 )
 
 type Room struct {
-	ID       uint   `db:"id"`
 	RoomID   string `db:"room_id"`
 	ListType string `db:"list_type"`
 }

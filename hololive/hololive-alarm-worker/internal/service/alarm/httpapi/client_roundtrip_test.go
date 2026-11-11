@@ -46,12 +46,9 @@ func newRoundTripAlarmMock(t *testing.T) *mockAlarmCRUD {
 
 		return true, nil
 	}
-	mock.getRoomAlarmsWithTypesFn = func(_ context.Context, roomID string) ([]*domain.Alarm, error) {
+	mock.listRoomAlarmsViewFn = func(_ context.Context, roomID string) ([]domain.AlarmListView, error) {
 		assert.Equal(t, testRoomID, roomID)
 
-		return []*domain.Alarm{{RoomID: roomID, ChannelID: testClientChannelID}}, nil
-	}
-	mock.listRoomAlarmsViewFn = func(_ context.Context, _ string) ([]domain.AlarmListView, error) {
 		return []domain.AlarmListView{{
 			ChannelID:  testClientChannelID,
 			MemberName: "Miko",
@@ -95,18 +92,10 @@ func TestClientRoundTripWithRealHandlerEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, removed)
 
-	alarms, err := client.GetRoomAlarmsWithTypes(t.Context(), testRoomID)
-	require.NoError(t, err)
-	require.Len(t, alarms, 1)
-	assert.Equal(t, testClientChannelID, alarms[0].ChannelID)
-
-	channelIDs, err := client.GetRoomAlarms(t.Context(), testRoomID)
-	require.NoError(t, err)
-	assert.Equal(t, []string{testClientChannelID}, channelIDs)
-
 	views, err := client.ListRoomAlarmsView(t.Context(), testRoomID)
 	require.NoError(t, err)
 	require.Len(t, views, 1)
+	assert.Equal(t, testClientChannelID, views[0].ChannelID)
 	assert.Equal(t, domain.AlarmTypes{domain.AlarmTypeLive}, views[0].AlarmTypes)
 
 	deleted, err := client.ClearRoomAlarms(t.Context(), testRoomID)
@@ -154,7 +143,6 @@ func completeAlarmMock() *mockAlarmCRUD {
 	return &mockAlarmCRUD{
 		addAlarmFn:                  func(context.Context, domain.AddAlarmRequest) (bool, error) { return false, nil },
 		removeAlarmFn:               func(context.Context, string, string, domain.AlarmTypes) (bool, error) { return false, nil },
-		getRoomAlarmsWithTypesFn:    func(context.Context, string) ([]*domain.Alarm, error) { return nil, nil },
 		listRoomAlarmsViewFn:        func(context.Context, string) ([]domain.AlarmListView, error) { return nil, nil },
 		clearRoomAlarmsFn:           func(context.Context, string) (int, error) { return 0, nil },
 		updateAlarmAdvanceMinutesFn: func(int) (domain.AdvanceMinutesResult, error) { return domain.AdvanceMinutesResult{}, nil },

@@ -46,10 +46,6 @@ type alarmDeleteResponse struct {
 }
 
 func (h *AlarmHandler) GetAlarms(c *gin.Context) {
-	if !h.requireAlarm(c) {
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -74,10 +70,6 @@ func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
-		return
-	}
-
-	if !h.requireAlarm(c) {
 		return
 	}
 

@@ -78,12 +78,6 @@ func TestAlarmDispatchMaintenanceDoesNotDeleteActiveStatuses(t *testing.T) {
 	assert.True(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusSent))
 }
 
-func TestAlarmDispatchMaintenanceClampsRetentionLimit(t *testing.T) {
-	assert.Equal(t, 1000, clampAlarmDispatchRetentionLimit(0))
-	assert.Equal(t, alarmDispatchRetentionMaxLimit, clampAlarmDispatchRetentionLimit(alarmDispatchRetentionMaxLimit+1))
-	assert.Equal(t, 500, clampAlarmDispatchRetentionLimit(500))
-}
-
 func TestAlarmDispatchMaintenanceUsesQueryTimeout(t *testing.T) {
 	store := &alarmDispatchMaintenanceTestStore{locked: true}
 	runner := &alarmDispatchMaintenanceRunner{

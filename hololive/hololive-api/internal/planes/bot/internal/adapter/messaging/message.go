@@ -31,9 +31,8 @@ import (
 )
 
 type MessageAdapter struct {
-	prefix        string
-	mentionPrefix string
-	parsers       []CommandParser
+	prefix  string
+	parsers []CommandParser
 }
 
 const (
@@ -100,10 +99,9 @@ func (ma *MessageAdapter) extractCommandText(raw string) (normalized, commandTex
 	return text, cmd, true
 }
 
-func NewMessageAdapter(prefix, mentionPrefix string) *MessageAdapter {
+func NewMessageAdapter(prefix string) *MessageAdapter {
 	adapter := &MessageAdapter{
-		prefix:        normalizeCommandPrefix(prefix),
-		mentionPrefix: mentionPrefix,
+		prefix: normalizeCommandPrefix(prefix),
 	}
 
 	adapter.parsers = defaultCommandParsers(adapter)

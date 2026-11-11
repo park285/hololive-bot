@@ -76,13 +76,13 @@ and single-primary fence.
 
 | Owner | Current source paths | Responsibility |
 |---|---|---|
-| API composition | `hololive/hololive-api/internal/config`, `internal/apifoundation` | API plane 설정·profile, plane별 DB pool·transport 수명, process-owned Valkey/member cache의 생성·borrower join·최종 close |
+| API composition | `hololive/hololive-api/internal/config` | API plane 설정·profile 적재와 검증 |
 | API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
-| API plane 조립 | `hololive/hololive-api/internal/app` | process 자원(bot pool, Valkey, member cache, 단일 ACL Service)과 plane 사이 in-process 주입(bot→llm 구독·digest, admin→bot Iris 방 목록), 운영 CLI `--rerun-notification` |
+| API plane 조립 | `hololive/hololive-api/internal/app` | process 자원(`bot` pool, Valkey client 1개, `bot` pool을 backing으로 쓰는 member cache 1개, `admin`·`llm_scheduler` pool, bot·admin plane이 빌려 쓰는 단일 ACL Service·Holodex·공식 일정 서비스)의 생성·borrower join·최종 close, plane 사이 in-process 주입(bot→llm 구독·digest, admin→bot Iris 방 목록), 운영 CLI `--rerun-notification`(llm plane이 쓰는 `bot`·`llm_scheduler` pool과 Valkey client·member cache만 조립). `youtube_plane` pool은 `internal/planes/youtube/runtime`이 생성 |
 | API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/canonicalwrite`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, transaction 전용 canonical persist, replay·retention 및 private reducer |
 | Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,httpapi,dedup,dispatchoutbox,queue}`, `internal/egress/{alarmdispatch,notificationdelivery,sendoutcome}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache, `/internal/alarm/*` HTTP handler·route registrar·요청 필수 값 검사(wire 타입은 shared `pkg/contracts/alarm`), dispatch 저장/발행·runner, 범용 notification delivery dispatcher·store·SQL, Iris 발송 결과 분류, 실제 formatter |
 | Collector | `hololive/hololive-youtube-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |
-| Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{database,holodex,iris,modules}` | strict 환경 파싱, 여러 runtime이 읽는 설정 구획 타입·loader·순수 검증, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계와 단일 runtime 전용 구획(hololive-api의 LLM·CLIProxy·Gemini·Exa)은 각 module `internal/config`가 소유 |
+| Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{database,holodex,iris,modules}` | strict 환경 파싱, 여러 runtime이 읽는 설정 구획 타입·loader·순수 검증, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계와 단일 runtime 전용 구획(hololive-api의 LLM·CLIProxy·Gemini·Exa·`PHOTO_SYNC_ENABLED`·내부 H3 client 옵션)은 각 module `internal/config`가, 한 plane만 쓰는 상수(major event 일정·출처 목록, LLM HTTP timeout, `/api/holo` rate limit, bot 기동 시 Iris 대기, 방송 제목 길이)는 그 plane 패키지가 소유 |
 
 `hololive-shared/pkg/contracts/notificationdelivery` owns only the persisted
 `notification_delivery_outbox` JSON envelope and immutable request snapshot.
@@ -102,8 +102,9 @@ not a parallel MQ configuration type.
 
 ## Maintenance
 
-- Non-secret host addresses are owned by `deploy/topology/hosts.conf`. Explicit AP, Compose, Nginx,
-  nftables, and PostgreSQL HBA consumers are checked by `scripts/architecture/check-topology-parity.sh`;
+- Non-secret host addresses are owned by `deploy/topology/hosts.conf`. Explicit AP host conf, central Quadlet unit
+  (`deploy/quadlet/*/*.container`), collector b·d Podman Quadlet unit (`deploy/podman/*/*.container`), Nginx, nftables,
+  and PostgreSQL HBA consumers are checked by `scripts/architecture/check-topology-parity.sh`;
   update the owner and every affected consumer in one change.
 - Keep Go module entries aligned with `go.work`.
 - Keep runtime binary and central unit entries aligned with `deploy/quadlet/hololive-bot/`.

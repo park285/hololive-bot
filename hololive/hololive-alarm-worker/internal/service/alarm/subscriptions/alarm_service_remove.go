@@ -150,7 +150,7 @@ func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomI
 }
 
 func (as *AlarmService) updateAlarmTypesBeforeCacheRemoval(ctx context.Context, updated *domain.Alarm) error {
-	if err := as.updateAlarmTypes(ctx, updated); err != nil {
+	if err := as.persistAlarm(ctx, updated); err != nil {
 		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm type update before cache removal", err)
 	}
 

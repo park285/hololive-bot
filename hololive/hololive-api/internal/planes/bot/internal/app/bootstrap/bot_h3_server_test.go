@@ -19,6 +19,7 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
 const testLoopbackAddr = "127.0.0.1:0"
@@ -40,6 +41,7 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
 		buildCtx, appConfig, nil, nil,
 		sharedh3.CertificateReloaderOptions{ReloadInterval: 10 * time.Millisecond},
+		sharedreadiness.NewProbe("bot"),
 	)
 	if err != nil {
 		t.Fatalf("buildBotHTTP3ServerWithReloaderOptions() error = %v", err)
@@ -104,7 +106,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 		},
 	}
 
-	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, sharedreadiness.NewProbe("bot"))
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}
@@ -150,7 +152,7 @@ func TestBuildBotHTTP3ServerServesCachedCertificateFiles(t *testing.T) {
 		},
 	}
 
-	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, sharedreadiness.NewProbe("bot"))
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}
@@ -192,7 +194,7 @@ func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T
 		},
 	}
 
-	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, sharedreadiness.NewProbe("bot"))
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}

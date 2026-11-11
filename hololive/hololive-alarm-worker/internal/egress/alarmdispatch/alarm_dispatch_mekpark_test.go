@@ -44,7 +44,7 @@ func TestMekParkLiveAndUpcomingRendering(t *testing.T) {
 			},
 			MinutesUntil: minutes,
 		}
-		message, err := renderAlarmDispatchNotification(t.Context(), renderer, store, mekparkTestMembers{}, notification)
+		message, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &alarmDispatchMembers{provider: mekparkTestMembers{}}, notification)
 		require.NoError(t, err)
 		require.Contains(t, message.Plain, "유닛 B · 미라")
 		require.Contains(t, message.RichText, "유닛 B · 미라")
@@ -69,7 +69,7 @@ func TestMekParkSeriesHostRendering(t *testing.T) {
 			Title: "【#由比河ひなみ】#あさやなストレッチ夏 #墨汐さやな", Status: domain.StreamStatusLive,
 		},
 	}
-	message, err := renderAlarmDispatchNotification(t.Context(), renderer, store, mekparkTestMembers{}, notification)
+	message, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &alarmDispatchMembers{provider: mekparkTestMembers{}}, notification)
 	require.NoError(t, err)
 	require.Contains(t, message.Plain, "아크로라 · 사야나 (게스트: 히나미)")
 	require.Contains(t, message.RichText, "아크로라 · 사야나 (게스트: 히나미)")
@@ -93,9 +93,9 @@ func TestAlarmDispatchMemberNameLookupFailureFailsRender(t *testing.T) {
 		Stream:  &domain.Stream{ID: "video123", ChannelID: mekparkAcroraChannel, Title: "방송", Status: domain.StreamStatusLive},
 	}
 
-	_, err := renderAlarmDispatchNotification(t.Context(), renderer, store, failingDispatchMembers{err: lookupErr}, notification)
+	_, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &alarmDispatchMembers{provider: failingDispatchMembers{err: lookupErr}}, notification)
 	require.ErrorIs(t, err, lookupErr)
 
-	_, err = renderAlarmDispatchNotification(t.Context(), renderer, store, nil, notification)
+	_, err = renderAlarmDispatchNotification(t.Context(), renderer, store, &alarmDispatchMembers{}, notification)
 	require.Error(t, err)
 }

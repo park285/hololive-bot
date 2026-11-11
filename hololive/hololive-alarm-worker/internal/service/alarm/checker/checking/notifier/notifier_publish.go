@@ -59,10 +59,6 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 
 			n.markUpcomingEventBestEffort(ctx, item.payload)
 
-			if n.tierScheduler != nil {
-				n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
-			}
-
 			published++
 		} else if !terminal[i] {
 			// 비성공 terminal의 기존 claim은 보존하고, 충돌·미확정 입력만 재평가 가능하게 한다.

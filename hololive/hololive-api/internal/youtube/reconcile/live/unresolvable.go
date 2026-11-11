@@ -16,16 +16,6 @@ func anyPositiveAtOrAfter(clock *LiveEvidenceClock, at time.Time) bool {
 	return false
 }
 
-// ActiveUnresolvableSince는 모든 positive보다 늦게 시작된 해소 불가 추적만 돌려준다. 추적은 관측 시각 이후의 positive가 없을 때만 시작되고 그 뒤의 positive가 지우므로,
-// 저장값이 어떤 positive보다 이르면 positive가 추적을 지우지 못한 이전 바이너리 기간의 잔여값이다. 이런 값은 지속 시간·종료 하한의 근거가 아니므로 추적 없음으로 본다.
-func (c *LiveEvidenceClock) ActiveUnresolvableSince() *time.Time {
-	if c.UnresolvableSince == nil || anyPositiveAtOrAfter(c, *c.UnresolvableSince) {
-		return nil
-	}
-
-	return c.UnresolvableSince
-}
-
 // clearUnresolvableTracking은 추적 시작 이후에 관측된 positive만 해소 불가 추적을 지우게 한다. 그런 positive는
 // 공급자가 영상을 아직 해석한다는 뜻이다. 추적 시작보다 이른 관측이 늦게 도착한 경우는 그 뒤의 해석 불가를
 // 반박하지 못하므로 추적을 유지한다.
@@ -68,9 +58,8 @@ func applyUnresolvableVideo(session *reduceSession, fact *SessionFact) {
 		return
 	}
 
-	since := existing.Clock.ActiveUnresolvableSince()
+	since := existing.Clock.UnresolvableSince
 	if since == nil {
-		// 추적이 없거나 positive보다 이른 잔여값이면 이번 관측부터 새로 추적한다.
 		existing.Clock.UnresolvableSince = copyTime(session.evidence.EffectiveAt)
 		storeSessionDecision(session, &existing, "UNRESOLVABLE_TRACKED")
 

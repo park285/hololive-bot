@@ -31,91 +31,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestAlarmHandler_GetAlarmsRequiresAlarmDependency(t *testing.T) {
+func TestAlarmHandler_DeleteAlarmRejectsMissingChannelID(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		handler *AlarmHandler
-	}{
-		{
-			name:    "nil receiver",
-			handler: nil,
-		},
-		{
-			name:    "nil embedded handler",
-			handler: &AlarmHandler{},
-		},
-		{
-			name: "nil alarm service",
-			handler: (&Handler{
-				logger: newDiscardLogger(),
-			}).DomainHandlers().Alarm,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/alarms", nil)
-			tt.handler.GetAlarms(ctx)
-
-			assertErrorResponse(t, rec, http.StatusServiceUnavailable, "alarm service not available")
-		})
-	}
-}
-
-func TestAlarmHandler_DeleteAlarmValidationRunsBeforeDependencyCheck(t *testing.T) {
-	t.Parallel()
-
-	handler := (&Handler{
+	handler := &AlarmHandler{
 		logger: newDiscardLogger(),
-	}).DomainHandlers().Alarm
+	}
 
 	ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/alarm", []byte(`{"roomId":"room-1"}`))
 	handler.DeleteAlarm(ctx)
 
 	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
-}
-
-func TestAlarmHandler_DeleteAlarmRequiresAlarmDependency(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		handler *AlarmHandler
-	}{
-		{
-			name:    "nil receiver",
-			handler: nil,
-		},
-		{
-			name:    "nil embedded handler",
-			handler: &AlarmHandler{},
-		},
-		{
-			name: "nil alarm service",
-			handler: (&Handler{
-				logger: newDiscardLogger(),
-			}).DomainHandlers().Alarm,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx, rec := newAPITestContext(
-				http.MethodDelete,
-				"/api/holo/alarm",
-				[]byte(`{"roomId":"room-1","channelId":"channel-1"}`),
-			)
-			tt.handler.DeleteAlarm(ctx)
-
-			assertErrorResponse(t, rec, http.StatusServiceUnavailable, "alarm service not available")
-		})
-	}
 }
 
 func TestAlarmHandler_DeleteAlarmReturnsRemovedFalse(t *testing.T) {
@@ -127,7 +53,7 @@ func TestAlarmHandler_DeleteAlarmReturnsRemovedFalse(t *testing.T) {
 		gotAlarmTypes domain.AlarmTypes
 	)
 
-	handler := (&Handler{
+	handler := &AlarmHandler{
 		alarm: &stubAlarmCRUDForServer{
 			removeAlarm: func(
 				_ context.Context,
@@ -143,7 +69,7 @@ func TestAlarmHandler_DeleteAlarmReturnsRemovedFalse(t *testing.T) {
 			},
 		},
 		logger: newDiscardLogger(),
-	}).DomainHandlers().Alarm
+	}
 
 	ctx, rec := newAPITestContext(
 		http.MethodDelete,

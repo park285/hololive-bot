@@ -12,15 +12,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/health"
 )
 
-const (
-	defaultProbeTimeout = 2 * time.Second
-
-	GroupDependencies = "dependencies"
-)
+const defaultProbeTimeout = 2 * time.Second
 
 type Check struct {
 	Name  string
-	Group string
 	Probe func(context.Context) error
 }
 
@@ -36,8 +31,7 @@ type ConnectionChecker interface {
 
 func PostgresCheck(db Pinger) Check {
 	return Check{
-		Name:  "postgres",
-		Group: GroupDependencies,
+		Name: "postgres",
 		Probe: func(ctx context.Context) error {
 			if db == nil {
 				return errors.New("postgres client not configured")
@@ -50,8 +44,7 @@ func PostgresCheck(db Pinger) Check {
 
 func ValkeyCheck(client ConnectionChecker) Check {
 	return Check{
-		Name:  "valkey",
-		Group: GroupDependencies,
+		Name: "valkey",
 		Probe: func(ctx context.Context) error {
 			if client == nil {
 				return errors.New("valkey client not configured")
@@ -84,7 +77,6 @@ func NewProbe(name string, checks ...Check) *Probe {
 			continue
 		}
 
-		check.Group = normalizeGroup(check.Group)
 		filtered = append(filtered, check)
 	}
 
@@ -101,28 +93,22 @@ func (p *Probe) Name() string {
 
 // 동기 순차 실행은 의도적이다: gin RecoveryMiddleware 경계 안에서 돌려 probe
 // panic이 프로세스를 죽이지 않게 하고, per-check fresh timeout으로 한 dependency
-// 의 hang이 다른 dependency 판정을 오염시키지 않게 한다.
-func (p *Probe) Evaluate(ctx context.Context) (ready bool, groups map[string]map[string]bool) {
-	groups = map[string]map[string]bool{GroupDependencies: {}}
+// 의 hang이 다른 dependency 판정을 오염시키지 않게 한다. 결과 map은 check가 없어도 nil이 아니라서
+// 응답 JSON에서 빈 객체로 나간다.
+func (p *Probe) Evaluate(ctx context.Context) (ready bool, dependencies map[string]bool) {
+	dependencies = make(map[string]bool, len(p.checks))
 	ready = true
 
 	for _, check := range p.checks {
 		ok := p.runCheck(ctx, check) == nil
-		// NewProbe의 normalizeGroup 때문에 nil bucket은 실제로 나오지 않지만,
-		// NilAway는 그 원거리 불변식을 증명하지 못해 이 지역 guard가 필요하다.
-		groupChecks := groups[check.Group]
-		if groupChecks == nil {
-			groupChecks = map[string]bool{}
-			groups[check.Group] = groupChecks
-		}
 
-		groupChecks[check.Name] = ok
+		dependencies[check.Name] = ok
 		if !ok {
 			ready = false
 		}
 	}
 
-	return ready, groups
+	return ready, dependencies
 }
 
 func (p *Probe) runCheck(ctx context.Context, check Check) error {
@@ -134,10 +120,6 @@ func (p *Probe) runCheck(ctx context.Context, check Check) error {
 	}
 
 	return nil
-}
-
-func normalizeGroup(_ string) string {
-	return GroupDependencies
 }
 
 func HTTPStatus(ready bool) (statusCode int, status string) {

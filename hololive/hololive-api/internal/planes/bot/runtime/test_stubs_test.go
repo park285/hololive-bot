@@ -64,14 +64,6 @@ func (s *stubMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Memb
 	return nil, nil
 }
 
-func (s *stubMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
-}
-
-func (s *stubMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return nil, nil
-}
-
 type testAlarmCRUD struct{}
 
 func (testAlarmCRUD) AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error) {
@@ -84,14 +76,6 @@ func (testAlarmCRUD) RemoveAlarm(context.Context, string, string, domain.AlarmTy
 
 func (testAlarmCRUD) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
 	return true, nil
-}
-
-func (testAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) {
-	return []string{}, nil
-}
-
-func (testAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
-	return []*domain.Alarm{}, nil
 }
 
 func (testAlarmCRUD) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {

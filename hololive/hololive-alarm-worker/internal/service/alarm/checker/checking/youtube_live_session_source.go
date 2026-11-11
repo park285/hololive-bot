@@ -17,31 +17,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
+// 저장 세션 조회 창은 contracts/alarm.md persisted live session 예외의 한도(15분·30분)와 같아야 한다.
 const (
-	defaultPersistedLiveSessionRecentWindow  = 15 * time.Minute
-	defaultPersistedUpcomingSessionLookahead = 30 * time.Minute
-	persistedAlarmDispatchEventLiveType      = string(domain.AlarmTypeLive)
+	persistedLiveSessionRecentWindow    = 15 * time.Minute
+	persistedUpcomingSessionLookahead   = 30 * time.Minute
+	persistedAlarmDispatchEventLiveType = string(domain.AlarmTypeLive)
 )
 
-type PgYouTubeLiveSessionSourceOptions struct {
-	LiveRecentWindow  time.Duration
-	UpcomingLookahead time.Duration
-}
-
 type PgYouTubeLiveSessionSource struct {
-	pool              *pgxpool.Pool
-	liveRecentWindow  time.Duration
-	upcomingLookahead time.Duration
+	pool *pgxpool.Pool
 }
 
 func NewPgYouTubeLiveSessionSource(postgres database.Client) YouTubeLiveSessionSource {
-	return NewPgYouTubeLiveSessionSourceWithOptions(postgres, PgYouTubeLiveSessionSourceOptions{})
-}
-
-func NewPgYouTubeLiveSessionSourceWithOptions(
-	postgres database.Client,
-	options PgYouTubeLiveSessionSourceOptions,
-) YouTubeLiveSessionSource {
 	if postgres == nil {
 		return nil
 	}
@@ -51,26 +38,7 @@ func NewPgYouTubeLiveSessionSourceWithOptions(
 		return nil
 	}
 
-	return newPgYouTubeLiveSessionSource(pool, options)
-}
-
-func newPgYouTubeLiveSessionSource(
-	pool *pgxpool.Pool,
-	options PgYouTubeLiveSessionSourceOptions,
-) *PgYouTubeLiveSessionSource {
-	if options.LiveRecentWindow <= 0 {
-		options.LiveRecentWindow = defaultPersistedLiveSessionRecentWindow
-	}
-
-	if options.UpcomingLookahead <= 0 {
-		options.UpcomingLookahead = defaultPersistedUpcomingSessionLookahead
-	}
-
-	return &PgYouTubeLiveSessionSource{
-		pool:              pool,
-		liveRecentWindow:  options.LiveRecentWindow,
-		upcomingLookahead: options.UpcomingLookahead,
-	}
+	return &PgYouTubeLiveSessionSource{pool: pool}
 }
 
 func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
@@ -104,8 +72,8 @@ func (s *PgYouTubeLiveSessionSource) queryPersistedRecentSessions(
 	channelIDs []string,
 	now time.Time,
 ) ([]PersistedYouTubeLiveSession, error) {
-	liveSince := now.UTC().Add(-s.effectiveLiveRecentWindow())
-	upcomingUntil := now.UTC().Add(s.effectiveUpcomingLookahead())
+	liveSince := now.UTC().Add(-persistedLiveSessionRecentWindow)
+	upcomingUntil := now.UTC().Add(persistedUpcomingSessionLookahead)
 
 	var rows []domain.YouTubeLiveSession
 
@@ -155,7 +123,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 		return nil, nil
 	}
 
-	liveSince := now.UTC().Add(-s.effectiveLiveRecentWindow())
+	liveSince := now.UTC().Add(-persistedLiveSessionRecentWindow)
 
 	var rows []string
 
@@ -164,22 +132,6 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 	}
 
 	return UniqueStrings(rows), nil
-}
-
-func (s *PgYouTubeLiveSessionSource) effectiveLiveRecentWindow() time.Duration {
-	if s.liveRecentWindow > 0 {
-		return s.liveRecentWindow
-	}
-
-	return defaultPersistedLiveSessionRecentWindow
-}
-
-func (s *PgYouTubeLiveSessionSource) effectiveUpcomingLookahead() time.Duration {
-	if s.upcomingLookahead > 0 {
-		return s.upcomingLookahead
-	}
-
-	return defaultPersistedUpcomingSessionLookahead
 }
 
 func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(

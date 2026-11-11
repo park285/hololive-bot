@@ -82,24 +82,6 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 	}
 }
 
-func (d *Dispatcher) Start(ctx context.Context) {
-	if d == nil {
-		return
-	}
-
-	if !d.started.CompareAndSwap(false, true) {
-		d.logger.Warn("Outbox dispatcher already started")
-
-		return
-	}
-
-	go panicguard.Run(d.logger, panicscope.BackgroundTask, "youtube-outbox-dispatcher", func() {
-		defer d.started.Store(false)
-
-		d.runJoined(ctx)
-	})
-}
-
 func (d *Dispatcher) startBackgroundLoopsWithWait(ctx context.Context, waitGroup *sync.WaitGroup) {
 	if d.claim != nil && d.claim.delivery != nil {
 		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-aggregate-sync", func(ctx context.Context) {
@@ -132,12 +114,6 @@ func (d *Dispatcher) startBackgroundLoop(
 	name string,
 	loop func(context.Context),
 ) {
-	if waitGroup == nil {
-		go panicguard.Run(d.logger, panicscope.BackgroundTask, name, func() { loop(ctx) })
-
-		return
-	}
-
 	waitGroup.Go(func() {
 		panicguard.Run(d.logger, panicscope.BackgroundTask, name, func() { loop(ctx) })
 	})
@@ -171,7 +147,7 @@ func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 }
 
 func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
-	d.claim.quarantineStaleSendingDeliveries(ctx)
+	d.claim.quarantineStaleLogicalGroups(ctx)
 	d.claim.reconcileTerminalOutboxStatuses(ctx)
 	d.testHooks.fireAggregateSync()
 }

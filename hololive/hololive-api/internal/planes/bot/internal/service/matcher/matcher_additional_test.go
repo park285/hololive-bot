@@ -41,7 +41,7 @@ func TestNewMatcher_Defaults(t *testing.T) {
 
 	provider := newStubMemberProvider([]*domain.Member{{ChannelID: testChannelID1, Name: "m1"}})
 
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	require.NotNil(t, matcher)
 	assert.Equal(t, provider, matcher.membersData)
@@ -111,18 +111,6 @@ func (p *trackingMemberProvider) LoadAllMembers(ctx context.Context) ([]*domain.
 	return p.members, nil
 }
 
-func (p *trackingMemberProvider) FindMembersByName(ctx context.Context, _ string) ([]*domain.Member, error) {
-	p.record(ctx)
-
-	return []*domain.Member{}, nil
-}
-
-func (p *trackingMemberProvider) FindMembersByAlias(ctx context.Context, _ string) ([]*domain.Member, error) {
-	p.record(ctx)
-
-	return []*domain.Member{}, nil
-}
-
 type errorAwareMemberProvider struct {
 	*stubMemberProvider
 
@@ -155,7 +143,7 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 
 	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: testChannelID1, Name: "m1"}})
 
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 	reqCtx := context.WithValue(t.Context(), matcherTestContextKey{}, "request")
 
 	member, err := matcher.GetMemberByChannelID(reqCtx, testChannelID1)
@@ -168,14 +156,14 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 func TestGetMemberByChannelID_SeparatesNotFoundFromFailure(t *testing.T) {
 	t.Parallel()
 
-	matcher := NewMatcher(newStubMemberProvider(nil), nil, newMatcherTestLogger())
+	matcher := NewMatcher(newStubMemberProvider(nil), newMatcherTestLogger())
 
 	if _, err := matcher.GetMemberByChannelID(t.Context(), "missing"); !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Fatalf("missing channel error = %v, want domain.ErrMemberNotFound", err)
 	}
 
 	cause := errors.New("member cache unavailable")
-	failing := NewMatcher(&channelFailureProvider{stubMemberProvider: newStubMemberProvider(nil), err: cause}, nil, newMatcherTestLogger())
+	failing := NewMatcher(&channelFailureProvider{stubMemberProvider: newStubMemberProvider(nil), err: cause}, newMatcherTestLogger())
 
 	_, err := failing.GetMemberByChannelID(t.Context(), "any")
 	if !errors.Is(err, cause) || errors.Is(err, domain.ErrMemberNotFound) {
@@ -212,7 +200,7 @@ func TestFindBestMatch_PrefersHololiveOnDuplicateExactName(t *testing.T) {
 		{ChannelID: "ch-niji", Name: testMemberAqua, Org: "Nijisanji"},
 		{ChannelID: testChannelHolo, Name: testMemberAqua, Org: orgHololive},
 	})
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.NoError(t, err)
@@ -229,7 +217,7 @@ func TestFindBestMatch_CachesResultWithoutReloadingProvider(t *testing.T) {
 	provider := newErrorAwareMemberProvider([]*domain.Member{
 		{ChannelID: "ch-aqua", Name: testMemberAqua, Org: orgHololive},
 	}, 0, nil)
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	first, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.NoError(t, err)
@@ -253,7 +241,7 @@ func TestFindBestMatch_UsesSnapshotAcrossDifferentQueries(t *testing.T) {
 		{ChannelID: "ch-aqua", Name: testMemberAqua, Org: orgHololive},
 		{ChannelID: "ch-marine", Name: "Marine", Org: orgHololive},
 	}, 0, nil)
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	first, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.NoError(t, err)
@@ -277,7 +265,7 @@ func TestFindBestMatch_ProviderLoadErrorIsNotCached(t *testing.T) {
 	provider := newErrorAwareMemberProvider([]*domain.Member{
 		{ChannelID: "ch-aqua", Name: testMemberAqua},
 	}, 1, loadErr)
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.ErrorIs(t, err, loadErr)
@@ -302,7 +290,7 @@ func TestFindBestMatch_UsesSnapshotAliasIndex(t *testing.T) {
 		NameKo:    "토키노 소라",
 		Aliases:   &domain.Aliases{Ja: []string{"そらちゃん"}},
 	}})
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), "そらちゃん")
 	require.NoError(t, err)
@@ -331,13 +319,42 @@ func TestFindBestMatch_PrefersAliasExactBeforeNameExact(t *testing.T) {
 			Aliases:   &domain.Aliases{Ja: []string{"Suisei"}},
 		},
 	})
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), "Suisei")
 	require.NoError(t, err)
 	require.True(t, found)
 	require.NotNil(t, channel)
 	assert.Equal(t, "ch-alias", channel.ID)
+}
+
+// 부분 일치는 roster 전체를 순서대로 훑고, 이름 부분 일치가 앞선 멤버의 별명 부분 일치보다 먼저다.
+func TestFindBestMatch_PartialMatchScansWholeRosterInOrder(t *testing.T) {
+	t.Parallel()
+
+	matcher := NewMatcher(newStubMemberProvider([]*domain.Member{
+		{ChannelID: "ch-aqua", Name: "Minato Aqua", Aliases: &domain.Aliases{Ja: []string{"aqua marine"}}},
+		{ChannelID: "ch-fubuki", Name: "Shirakami Fubuki"},
+		{ChannelID: "ch-marine", Name: "Houshou Marine"},
+		{ChannelID: "ch-noel", Name: "Shirogane Noel", NameKo: "시로가네 노엘"},
+	}), newMatcherTestLogger())
+
+	for _, tc := range []struct{ query, channelID string }{
+		{query: "marine", channelID: "ch-marine"},
+		{query: "houshou marine ch", channelID: "ch-marine"},
+		{query: "shir", channelID: "ch-fubuki"},
+		{query: "노엘", channelID: "ch-noel"},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			t.Parallel()
+
+			channel, found, err := matcher.FindBestMatch(t.Context(), tc.query)
+			require.NoError(t, err)
+			require.True(t, found)
+			require.NotNil(t, channel)
+			assert.Equal(t, tc.channelID, channel.ID)
+		})
+	}
 }
 
 func TestFindBestMatchWithCandidates_ProviderLoadErrorIsNotSticky(t *testing.T) {
@@ -347,7 +364,7 @@ func TestFindBestMatchWithCandidates_ProviderLoadErrorIsNotSticky(t *testing.T) 
 	provider := newErrorAwareMemberProvider([]*domain.Member{
 		{ChannelID: testChannelHolo, Name: testMemberAqua, Org: orgHololive},
 	}, 1, loadErr)
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), testMemberAqua)
 	require.ErrorIs(t, err, loadErr)
@@ -368,7 +385,7 @@ func TestFindBestMatchWithCandidates_AmbiguousAndOrgFilter(t *testing.T) {
 		{ChannelID: testChannelHolo, Name: testMemberAqua, Org: orgHololive},
 		{ChannelID: "ch-niji", Name: testMemberAqua, Org: "Nijisanji"},
 	})
-	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), testMemberAqua)
 	require.Error(t, err)
@@ -423,7 +440,7 @@ func TestFindBestMatchWithCandidates_FallbackAndErrors(t *testing.T) {
 		t.Parallel()
 
 		loadErr := errors.New("member repo error")
-		matcher := NewMatcher(newErrorAwareMemberProvider(nil, 1, loadErr), nil, newMatcherTestLogger())
+		matcher := NewMatcher(newErrorAwareMemberProvider(nil, 1, loadErr), newMatcherTestLogger())
 
 		channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), "Sora")
 		require.ErrorIs(t, err, loadErr)
@@ -434,7 +451,7 @@ func TestFindBestMatchWithCandidates_FallbackAndErrors(t *testing.T) {
 	t.Run("fallback to FindBestMatch", func(t *testing.T) {
 		t.Parallel()
 
-		matcher := NewMatcher(provider, nil, newMatcherTestLogger())
+		matcher := NewMatcher(provider, newMatcherTestLogger())
 
 		channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), "Sora")
 		require.NoError(t, err)

@@ -634,7 +634,7 @@ func TestRealManifestBaselineWithoutChecksumRefuses(t *testing.T) {
 	}
 
 	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
-	if err == nil || !strings.Contains(err.Error(), "epoch baseline "+epoch3Baseline+" is recorded without its checksum") {
+	if err == nil || !strings.Contains(err.Error(), "migration "+epoch3Baseline+" is recorded in schema_migrations but its checksum is missing") {
 		t.Fatalf("Run() error = %v, want pre-R2 baseline without checksum to be refused now that backfill is retired", err)
 	}
 
@@ -668,7 +668,7 @@ func TestRealManifestPrefilledLedgerWithoutChecksumsRefuses(t *testing.T) {
 	prefillLedger(t, pool, entries)
 
 	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
-	if err == nil || !strings.Contains(err.Error(), "recorded without its checksum") {
+	if err == nil || !strings.Contains(err.Error(), "migration "+epoch3Baseline+" is recorded in schema_migrations but its checksum is missing") {
 		t.Fatalf("Run() error = %v, want unproven epoch marker refusal", err)
 	}
 

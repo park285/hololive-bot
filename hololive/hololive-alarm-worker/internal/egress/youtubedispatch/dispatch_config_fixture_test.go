@@ -64,6 +64,7 @@ func withTestDispatchConfigDefaults(config *Config) *Config {
 	}
 
 	out.ClaimFreshnessWindow = max(out.ClaimFreshnessWindow, out.ReviveFreshnessWindow+out.ReviveInterval)
+	out.LockTimeout = max(out.LockTimeout, out.sendLeaseBudget())
 
 	return &out
 }

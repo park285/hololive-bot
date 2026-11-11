@@ -100,6 +100,21 @@ func TestHTTP002HolodexRejectsDirtyPaths(t *testing.T) {
 	}
 }
 
+func TestHolodexClientRejectsNonPositiveBodyLimit(t *testing.T) {
+	t.Parallel()
+
+	wrapped, err := providerhttp.WrapProviderHTTPDoer(&http.Client{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, maxBody := range []int64{0, -1} {
+		if _, err := NewClient(wrapped, "https://holodex.net/api/v2", "key", maxBody); err == nil || collecterr.ClassOf(err) != contract.ClassConfiguration {
+			t.Fatalf("maxBody=%d error = %v, want configuration error", maxBody, err)
+		}
+	}
+}
+
 func TestHTTP005HolodexUserinfoIsRedacted(t *testing.T) {
 	t.Parallel()
 

@@ -52,7 +52,6 @@ type providerClientSpec struct {
 	temperature     float64
 	webSearch       bool
 	chatCompletions bool
-	preset          bool
 }
 
 type consensusClientSpec struct {
@@ -62,7 +61,6 @@ type consensusClientSpec struct {
 	temperature    float64
 	chatCompletion bool
 	successMessage string
-	preset         bool
 }
 
 // ProvideLLMCostTracker는 토큰 사용량을 항상 메트릭으로 기록하는 recorder를 돌려준다.
@@ -83,7 +81,7 @@ func ProvideMajorEventLLMClient(provider apiconfig.LLMProviderConfig, tracker ll
 	}
 
 	logger.Info("Event summary LLM enabled",
-		slog.String("provider", normalizedProviderName(provider.Name)),
+		slog.String("provider", provider.Name),
 		slog.String("model", model),
 		slog.String("reasoning_level", selectedProviderReasoningLevel(provider)),
 		slog.Bool("web_search", true),
@@ -104,7 +102,6 @@ func ProvideMemberNewsLLMClient(provider apiconfig.LLMProviderConfig, llmConfig 
 		schemaName:      "member_news_summary",
 		temperature:     llmConfig.MemberNewsTemperature,
 		chatCompletions: true,
-		preset:          true,
 	})
 	if errors.Is(err, errSelectedLLMProviderDisabled) {
 		logger.Info("Member news LLM disabled")
@@ -115,7 +112,7 @@ func ProvideMemberNewsLLMClient(provider apiconfig.LLMProviderConfig, llmConfig 
 	}
 
 	logger.Info("Member news LLM enabled",
-		slog.String("provider", normalizedProviderName(provider.Name)),
+		slog.String("provider", provider.Name),
 		slog.String("model", model),
 		slog.Bool("temperature_applied", temperatureApplied),
 		slog.Float64("temperature", llmConfig.MemberNewsTemperature),
@@ -140,7 +137,6 @@ func ProvideMemberNewsReviewerClient(provider apiconfig.LLMProviderConfig, llmCo
 		temperature:    0.1,
 		chatCompletion: true,
 		successMessage: "Consensus reviewer LLM enabled",
-		preset:         true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize member news consensus reviewer: %w", err)
@@ -159,7 +155,6 @@ func ProvideMajorEventReviewerClient(provider apiconfig.LLMProviderConfig, llmCo
 		model:          llmConfig.MajorEvent.ReviewerModel,
 		schemaName:     "event_summary_review",
 		successMessage: "Major event consensus reviewer LLM enabled",
-		preset:         true,
 	})
 	if err != nil {
 		logConsensusInitializationWarning(logger, "Major event consensus reviewer LLM configuration incomplete, skipping", provider, err)
@@ -206,7 +201,6 @@ func ProvideMemberNewsAdjudicatorClient(provider apiconfig.LLMProviderConfig, ll
 		temperature:    llmConfig.MemberNewsTemperature,
 		chatCompletion: true,
 		successMessage: "Consensus adjudicator LLM enabled",
-		preset:         true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize member news consensus adjudicator: %w", err)
@@ -228,14 +222,13 @@ func buildConsensusLLMClient(provider apiconfig.LLMProviderConfig, tracker llm.C
 		temperature:     spec.temperature,
 		webSearch:       false,
 		chatCompletions: spec.chatCompletion,
-		preset:          spec.preset,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build consensus provider client: %w", err)
 	}
 
 	logger.Info(spec.successMessage,
-		slog.String("provider", normalizedProviderName(provider.Name)),
+		slog.String("provider", provider.Name),
 		slog.String("model", model),
 	)
 
@@ -253,7 +246,7 @@ func logConsensusInitializationWarning(logger *slog.Logger, message string, prov
 	}
 
 	logger.Warn(message,
-		slog.String("provider", normalizedProviderName(provider.Name)),
+		slog.String("provider", provider.Name),
 		slog.Any("error", err),
 	)
 }
@@ -308,14 +301,6 @@ func buildCliproxyProviderClient(selected selectedLLMProvider, model string, log
 	}
 
 	opts, temperatureApplied := appendSupportedTemperature(opts, model, spec.temperature)
-	if spec.preset {
-		client, err := llm.NewPresetClient(selected.baseURL, selected.apiKey, model, logger, opts...)
-		if err != nil {
-			return nil, "", false, fmt.Errorf("initialize cliproxy preset LLM client: %w", err)
-		}
-
-		return client, model, temperatureApplied, nil
-	}
 
 	client, err := llm.NewClient(selected.baseURL, selected.apiKey, model, logger, opts...)
 	if err != nil {
@@ -325,8 +310,9 @@ func buildCliproxyProviderClient(selected selectedLLMProvider, model string, log
 	return client, model, temperatureApplied, nil
 }
 
+// selectLLMProvider는 config 적재 단계가 정규화한 provider 이름만 받는다. 빈 이름은 지원하지 않는 provider로 거절한다.
 func selectLLMProvider(config apiconfig.LLMProviderConfig) (selectedLLMProvider, error) {
-	switch normalizedProviderName(config.Name) {
+	switch config.Name {
 	case apiconfig.LLMProviderGemini:
 		provider, err := selectGeminiProvider(config.Gemini)
 		if err != nil {
@@ -392,18 +378,15 @@ func logProviderInitializationError(logger *slog.Logger, name string, err error)
 	logger.Error(name+" initialization failed", slog.Any("error", err))
 }
 
-func normalizedProviderName(name string) string {
-	return cmp.Or(strings.ToLower(strings.TrimSpace(name)), apiconfig.LLMProviderCliproxy)
-}
-
 func selectedProviderReasoningLevel(config apiconfig.LLMProviderConfig) string {
-	if normalizedProviderName(config.Name) == apiconfig.LLMProviderGemini {
+	if config.Name == apiconfig.LLMProviderGemini {
 		return config.Gemini.ThinkingLevel
 	}
 
 	return config.Cliproxy.ReasoningEffort
 }
 
+// Gemini 3.x API는 temperature를 폐기해 무시하고 이후 세대에서는 오류로 거절하므로 cliproxy 경유 gemini-3.7-flash에는 보내지 않는다.
 func appendSupportedTemperature(opts []llm.Option, model string, temperature float64) ([]llm.Option, bool) {
 	if temperature <= 0 || strings.Contains(strings.ToLower(strings.TrimSpace(model)), "gemini-3.7-flash") {
 		return opts, false

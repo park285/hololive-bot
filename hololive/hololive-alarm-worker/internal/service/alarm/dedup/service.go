@@ -24,10 +24,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -48,36 +46,27 @@ type LogicalScheduleNotifiedData struct {
 }
 
 // Cache는 dedup 선점·기록이 요구하는 cache 작업이다. 선점 key(SetNX·Del·DelMany·Expire), JSON 기록(Get·Set),
-// 예정 알림 hash(HGetAll·HMSet)를 쓴다.
+// 예정 알림 hash(HGetAll·HMSet), 여러 key의 묶음 조회(B·DoMulti)를 쓴다.
 type Cache interface {
 	cache.KeyValueCache
 	cache.HashCache
+	cache.LowLevelCache
 }
 
 type Service struct {
-	cache           Cache
-	targetPolicy    targetpolicy.TargetMinutePolicy
-	targetMinutesMu sync.RWMutex
-	logger          *slog.Logger
+	cache  Cache
+	logger *slog.Logger
 }
 
-func NewService(c Cache, targetMinutes []int, logger *slog.Logger) *Service {
+func NewService(c Cache, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	return &Service{
-		cache:        c,
-		targetPolicy: targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes)),
-		logger:       logger,
+		cache:  c,
+		logger: logger,
 	}
-}
-
-func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
-	s.targetMinutesMu.Lock()
-	defer s.targetMinutesMu.Unlock()
-
-	s.targetPolicy = targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes))
 }
 
 // SETNX 기반 키 선점. 저장소 오류는 "이미 선점됨"(false, nil)과 구분해 오류로 돌려준다.
@@ -100,15 +89,4 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 	}
 
 	return acquired, nil
-}
-
-func (s *Service) TargetMinutesSnapshot() []int {
-	return s.targetPolicySnapshot().Clone()
-}
-
-func (s *Service) targetPolicySnapshot() targetpolicy.TargetMinutePolicy {
-	s.targetMinutesMu.RLock()
-	defer s.targetMinutesMu.RUnlock()
-
-	return s.targetPolicy
 }

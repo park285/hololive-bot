@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 const holodexUserAgent = "hololive-bot (Linux; Holodex API client; +https://github.com/park285/hololive-bot)"
@@ -19,10 +17,6 @@ const holodexUserAgent = "hololive-bot (Linux; Holodex API client; +https://gith
 func (c *APIClient) DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
 	if err := c.rejectIfCircuitOpen(ctx); err != nil {
 		return nil, fmt.Errorf("reject if circuit open: %w", err)
-	}
-
-	if c.apiKey == "" {
-		return nil, errNoAPIKeys
 	}
 
 	state := holodexRequestRetryState{
@@ -116,7 +110,7 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 	reqURL := c.buildRequestURL(path, params)
 
-	req, err := c.newRequest(attemptCtx, method, reqURL, c.getNextAPIKey())
+	req, err := c.newRequest(attemptCtx, method, reqURL, c.apiKey)
 	if err != nil {
 		return nil, true, fmt.Errorf("request: %w", err)
 	}
@@ -142,12 +136,7 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 	defer c.closeHolodexResponse(resp)
 
-	maxBody := c.maxResponseBodyBytes
-	if maxBody <= 0 {
-		maxBody = settings.DefaultMaxResponseBodyBytes
-	}
-
-	body, readErr := httputil.ReadAllLimited(resp.Body, maxBody)
+	body, readErr := httputil.ReadAllLimited(resp.Body, c.maxResponseBodyBytes)
 	if readErr != nil {
 		return nil, false, fmt.Errorf("read response: %w", readErr)
 	}

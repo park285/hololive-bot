@@ -10,28 +10,27 @@ import (
 )
 
 const (
-	resultSuccess       = "success"
-	resultTimeout       = "timeout"
-	resultCanceled      = "canceled"
-	resultParserDrift   = "parser_drift"
-	resultPaginationGap = "pagination_gap"
-	resultFailed        = "failed"
-	resultSuperseded    = "superseded"
-	resultNotAcquired   = "not_acquired"
-	resultError         = "error"
-	resultAcquired      = "acquired"
-	phaseRenew          = "renew"
-	phasePublish        = "publish"
-	phaseCollect        = "collect"
-	outcomeInserted     = "inserted"
-	outcomeDuplicate    = "duplicate"
-	outcomeCollision    = "collision"
-	outcomeRejected     = "rejected"
-	outcomeSuperseded   = "superseded"
-	outcomeEmpty        = "empty"
-	labelProvider       = "provider"
-	labelKind           = "kind"
-	labelResult         = "result"
+	resultSuccess     = "success"
+	resultTimeout     = "timeout"
+	resultCanceled    = "canceled"
+	resultParserDrift = "parser_drift"
+	resultFailed      = "failed"
+	resultSuperseded  = "superseded"
+	resultNotAcquired = "not_acquired"
+	resultError       = "error"
+	resultAcquired    = "acquired"
+	phaseRenew        = "renew"
+	phasePublish      = "publish"
+	phaseCollect      = "collect"
+	outcomeInserted   = "inserted"
+	outcomeDuplicate  = "duplicate"
+	outcomeCollision  = "collision"
+	outcomeRejected   = "rejected"
+	outcomeSuperseded = "superseded"
+	outcomeEmpty      = "empty"
+	labelProvider     = "provider"
+	labelKind         = "kind"
+	labelResult       = "result"
 
 	discoveryCycleOK                  = "ok"
 	discoveryCycleCandidateLoadFailed = "candidate_load_failed"
@@ -293,7 +292,7 @@ func (m *Metrics) ObserveDiscoveryCycle(failed bool) {
 
 func boundedResult(value string) string {
 	switch value {
-	case resultSuccess, resultTimeout, resultCanceled, resultParserDrift, resultPaginationGap, resultFailed, resultSuperseded:
+	case resultSuccess, resultTimeout, resultCanceled, resultParserDrift, resultFailed, resultSuperseded:
 		return value
 	default:
 		return resultFailed

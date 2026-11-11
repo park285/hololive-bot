@@ -14,7 +14,7 @@ func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
 	t.Parallel()
 
 	start := time.Date(2026, time.May, 12, 3, 0, 0, 0, time.UTC)
-	base := domain.AlarmQueueEnvelope{
+	base := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -59,7 +59,7 @@ func TestBuildLedgerRows_RejectsEmptyAlarmType(t *testing.T) {
 	t.Parallel()
 
 	start := time.Date(2026, time.May, 12, 3, 0, 0, 0, time.UTC)
-	envelope := domain.AlarmQueueEnvelope{
+	envelope := AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			RoomID:  testRoomID,
 			Channel: &domain.Channel{ID: testChannelID},
@@ -76,7 +76,7 @@ func TestBuildLedgerRows_RejectsEmptyAlarmType(t *testing.T) {
 func TestMarshalEventPayload_RemainsRoomAgnostic(t *testing.T) {
 	t.Parallel()
 
-	payload, err := marshalEventPayload(&domain.AlarmQueueEnvelope{
+	payload, err := marshalEventPayload(&AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    testRoomID,
@@ -90,11 +90,16 @@ func TestMarshalEventPayload_RemainsRoomAgnostic(t *testing.T) {
 		t.Fatalf("marshalEventPayload() error = %v", err)
 	}
 
-	if err := validateEventPayloadRoomAgnostic(payload); err != nil {
-		t.Fatalf("validateEventPayloadRoomAgnostic() error = %v", err)
-	}
+	assertEventPayloadRoomAgnostic(t, payload)
+}
+
+// assertEventPayloadRoomAgnostic는 alarm_dispatch_events의 방 무관성 CHECK가 막는 키가 payload 최상위와
+// notification에 없는지 확인한다.
+func assertEventPayloadRoomAgnostic(t *testing.T, payload []byte) {
+	t.Helper()
 
 	var decoded struct {
+		Top          map[string]jsontext.Value `json:",inline"`
 		Notification map[string]jsontext.Value `json:"notification"`
 	}
 
@@ -103,21 +108,17 @@ func TestMarshalEventPayload_RemainsRoomAgnostic(t *testing.T) {
 	}
 
 	for _, key := range []string{"room_id", "roomId", "room", "users"} {
+		if _, ok := decoded.Top[key]; ok {
+			t.Fatalf("payload contains delivery-specific key %q: %s", key, string(payload))
+		}
+
 		if _, ok := decoded.Notification[key]; ok {
 			t.Fatalf("payload notification contains delivery-specific key %q: %s", key, string(payload))
 		}
 	}
 }
 
-func TestValidateEventPayloadRoomAgnosticRejectsNestedDeliveryFields(t *testing.T) {
-	t.Parallel()
-
-	err := validateEventPayloadRoomAgnostic([]byte(`{"notification":{"room_id":"room-1","users":["alice"]},"version":1}`))
-	if err == nil {
-		t.Fatal("validateEventPayloadRoomAgnostic() error = nil, want nested delivery field error")
-	}
-}
-
+// postgres 없이 조립하면 pool 없는 저장소를 돌려주지 않고 생성 시점에 거절한다.
 func TestNewPgxRepositoryRejectsMissingPostgres(t *testing.T) {
 	t.Parallel()
 

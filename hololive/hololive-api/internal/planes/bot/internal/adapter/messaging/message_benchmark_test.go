@@ -9,7 +9,7 @@ import (
 var benchmarkParsedCommandSink *ParsedCommand
 
 func BenchmarkParseMessage(b *testing.B) {
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 
 	for _, benchmark := range []struct {
 		name    string

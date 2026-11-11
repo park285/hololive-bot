@@ -4,7 +4,6 @@ import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
-import { emptyCommunityPage } from "./fetch-community.mjs";
 import { createHelperRuntime, RuntimeState } from "./helper-runtime.mjs";
 import { createRealFetchers } from "./real-fetchers.mjs";
 import {
@@ -17,15 +16,6 @@ import {
 import { rpcErrorResult, rpcErrorResultFor } from "./rpc-execution.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { encodeResponseBody } from "./response-encoding.mjs";
-
-export {
-  handleChannelLiveCheckRequest,
-  handleChannelRequest,
-  handleCommunityRequest,
-  handleContentRequest,
-  handleVideoLiveCheckRequest,
-  RuntimeState,
-};
 
 /** @typedef {import("node:http").IncomingMessage} IncomingMessage */
 /** @typedef {import("node:http").ServerResponse} ServerResponse */
@@ -45,25 +35,25 @@ class RequestTimeoutError extends Error {}
 
 const jsonContentTypePattern = /^application\/json(?:\s*;|$)/i;
 const contentLengthPattern = /^(0|[1-9][0-9]*)$/;
+const positiveIntegerArgPattern = /^[1-9][0-9]*$/;
 
 /**
  * @param {string} socketPath
- * @param {{ requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
+ * @param {{ requestReadTimeoutMs: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
  * @returns {Promise<import("node:http").Server>}
  */
-export async function listenUnix(socketPath, options = {}) {
+export async function listenUnix(socketPath, options) {
   if (!socketPath) {
     throw new Error("unix socket path is required");
   }
-  process.umask(0o077);
   const opts = normalizeListenOptions(options);
+  process.umask(0o077);
   const runtime = createHelperRuntime({
     createFetchers: (fetchImpl, singleAttemptFetchImpl) => (
       { ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }), ...opts.fetchers }
     ),
   });
   const server = attachHelperServer(runtime, opts.requestReadTimeoutMs);
-  applyServerLimits(server, opts.requestReadTimeoutMs, 0);
   if (opts.manageProcess) {
     runtime.onStopped = () => process.exit(0);
     runtime.onFaulted = () => {
@@ -228,11 +218,10 @@ function writeJSON(res, status, body) {
 
 /**
  * @param {IncomingMessage} req
- * @param {number} limit
+ * @param {number} maxBytes
  * @returns {Promise<string>}
  */
-function readBody(req, limit) {
-  const maxBytes = limit > 0 ? limit : defaultRequestBodyBytes();
+function readBody(req, maxBytes) {
   const contentType = req.headers["content-type"];
   if (typeof contentType !== "string" || !jsonContentTypePattern.test(contentType)) {
     return Promise.reject(new InvalidRequestError("content-type must be application/json"));
@@ -306,19 +295,14 @@ function readBody(req, limit) {
   });
 }
 
-function defaultRequestBodyBytes() {
-  return 64 * 1024;
-}
-
 /**
  * @param {import("node:http").Server} server
  * @param {number} requestReadTimeoutMs
  * @param {number} maxInflight
  */
 function applyServerLimits(server, requestReadTimeoutMs, maxInflight) {
-  const timeout = requestReadTimeoutMs > 0 ? requestReadTimeoutMs : 30_000;
-  server.requestTimeout = timeout;
-  server.headersTimeout = Math.min(timeout, 2_000);
+  server.requestTimeout = requestReadTimeoutMs;
+  server.headersTimeout = Math.min(requestReadTimeoutMs, 2_000);
   server.keepAliveTimeout = 2_000;
   server.maxRequestsPerSocket = 1_000;
   if (maxInflight > 0) {
@@ -369,59 +353,82 @@ function disarmPipeUnlink(server) {
 }
 
 /**
- * @param {{ requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
+ * @param {{ requestReadTimeoutMs: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
  */
 function normalizeListenOptions(options) {
-  const record = options && typeof options === "object" ? options : {};
+  if (!Number.isSafeInteger(options.requestReadTimeoutMs) || options.requestReadTimeoutMs <= 0) {
+    throw new Error("requestReadTimeoutMs must be a positive integer");
+  }
   return {
-    requestReadTimeoutMs: "requestReadTimeoutMs" in record && typeof record.requestReadTimeoutMs === "number"
-      ? record.requestReadTimeoutMs
-      : 30_000,
-    fetchers: "fetchers" in record && record.fetchers ? record.fetchers : {},
-    manageProcess: Boolean("manageProcess" in record && record.manageProcess),
+    requestReadTimeoutMs: options.requestReadTimeoutMs,
+    fetchers: options.fetchers ?? {},
+    manageProcess: Boolean(options.manageProcess),
   };
 }
 
-/** @param {string[]} argv */
+/**
+ * Go helper.go가 세 인자를 항상 넘기므로, 빠지거나 형식이 틀린 인자는 대체값 없이 기동 실패로 드러냅니다.
+ * @param {string[]} argv
+ */
 function parseArgs(argv) {
-  const args = {
-    socket: "",
-    protocolVersion: 1,
-    requestReadTimeoutMs: 30_000,
-  };
+  let socket = "";
+  let protocolVersion = "";
+  let requestReadTimeoutMs = "";
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--socket") {
-      args.socket = String(argv[i + 1] ?? "");
+      socket = String(argv[i + 1] ?? "");
       i += 1;
       continue;
     }
     if (arg === "--protocol-version") {
-      args.protocolVersion = Number(argv[i + 1] ?? 1);
+      protocolVersion = String(argv[i + 1] ?? "");
       i += 1;
       continue;
     }
     if (arg === "--request-read-timeout-ms") {
-      args.requestReadTimeoutMs = Number(argv[i + 1] ?? 30_000);
+      requestReadTimeoutMs = String(argv[i + 1] ?? "");
       i += 1;
       continue;
     }
   }
-  return args;
+  if (socket === "") {
+    throw new Error("--socket is required");
+  }
+  return {
+    socket,
+    protocolVersion: positiveIntegerArg("--protocol-version", protocolVersion),
+    requestReadTimeoutMs: positiveIntegerArg("--request-read-timeout-ms", requestReadTimeoutMs),
+  };
+}
+
+/**
+ * @param {string} name
+ * @param {string} raw
+ */
+function positiveIntegerArg(name, raw) {
+  const value = Number(raw);
+  if (!positiveIntegerArgPattern.test(raw) || !Number.isSafeInteger(value)) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return value;
 }
 
 const isMain = process.argv[1] != null && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
-  const args = parseArgs(process.argv.slice(2));
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  }
   if (args.protocolVersion !== 1) {
     process.stderr.write("unsupported protocol version\n");
     process.exit(1);
   }
-  process.umask(0o077);
   await listenUnix(args.socket, {
     requestReadTimeoutMs: args.requestReadTimeoutMs,
     manageProcess: true,
   });
 }
-
-export { emptyCommunityPage };

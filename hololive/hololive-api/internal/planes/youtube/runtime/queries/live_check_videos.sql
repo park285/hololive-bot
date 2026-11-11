@@ -6,10 +6,8 @@ SELECT video_id,channel_id,session_status='UPCOMING' AS is_upcoming,statement_ti
        CASE WHEN session_status='LIVE' THEN last_live_positive_seen_at ELSE last_upcoming_positive_seen_at END AS positive_seen_at,
        CASE WHEN session_status='UPCOMING' THEN availability_at END AS availability_at,
        CASE WHEN session_status='UPCOMING' THEN availability_seen_at END AS availability_seen_at,
-       -- LIVE는 재확인 주기를 늦추지 않는다. UPCOMING도 모든 positive보다 늦게 시작한 추적만 쓴다.
-       CASE WHEN session_status='UPCOMING'
-                 AND unresolvable_since>COALESCE(GREATEST(last_upcoming_positive_at,last_live_positive_at),'-infinity')
-            THEN unresolvable_since END AS unresolvable_since
+       -- LIVE는 재확인 주기를 늦추지 않는다.
+       CASE WHEN session_status='UPCOMING' THEN unresolvable_since END AS unresolvable_since
 FROM youtube_live_runtime_state
 WHERE session_status IN ('LIVE','UPCOMING')
   AND (channel_id IN (SELECT unnest($1::text[]))) IS TRUE

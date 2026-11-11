@@ -79,19 +79,18 @@ func literalTitleData(title, url string) map[string]any {
 	}
 }
 
-func TestSeedTemplates_WorkerCompositeURLsAndScheduleLines(t *testing.T) {
+func TestSeedTemplates_WorkerURLAndScheduleLines(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
 	for _, format := range templateFormats {
 		t.Run(string(format), func(t *testing.T) {
 			const (
-				primary   = "https://short.holoshi.com/l/CtQ_15HfY_M"
-				secondary = "https://chzzk.naver.com/live/channel"
-				collab    = "미코, 스이세이"
-				schedule  = "변경 안내\r\n- 다음 시간에 시작"
+				url      = "https://short.holoshi.com/l/CtQ_15HfY_M"
+				collab   = "미코, 스이세이"
+				schedule = "변경 안내\r\n- 다음 시간에 시작"
 			)
 
-			data := literalTitleData("방송 제목", primary+" | "+secondary)
+			data := literalTitleData("방송 제목", url)
 
 			data["CollabMembers"] = collab
 			data[fieldScheduleMessage] = schedule
@@ -100,10 +99,10 @@ func TestSeedTemplates_WorkerCompositeURLsAndScheduleLines(t *testing.T) {
 				seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotification, format), data))
 			visible := strings.ReplaceAll(out, kakaotext.ZeroWidthSpace, "")
 
-			if !hasSeedLine(out, primary) || !hasSeedLine(out, secondary) ||
+			if !hasSeedLine(out, url) ||
 				!strings.Contains(visible, collab) ||
 				!strings.Contains(visible, strings.ReplaceAll(schedule, "\r\n", "\n")) {
-				t.Errorf("composite URL, collab, or schedule text changed: %q", out)
+				t.Errorf("URL, collab, or schedule text changed: %q", out)
 			}
 		})
 	}

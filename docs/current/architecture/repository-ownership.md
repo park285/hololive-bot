@@ -2,15 +2,15 @@
 
 ## Scope
 
-이 문서는 shared repository/helper가 runtime ownership을 우회하지 않도록 data owner와 direct import 제한을 고정합니다. Cross-runtime 호출은 HTTP JSON, Valkey queue, Valkey Pub/Sub, Docker Compose 구조를 유지합니다.
+이 문서는 shared repository/helper가 runtime ownership을 우회하지 않도록 data owner와 direct import 제한을 고정합니다. Cross-runtime 호출은 HTTP JSON, PostgreSQL outbox, payload 없는 Valkey wakeup·Pub/Sub을 쓰고, 같은 process 안의 plane 사이는 in-process 주입 계약을 씁니다.
 
 ## Data Ownership Matrix
 
 | Data area | Owner | Direct writers | Allowed readers | Required access path |
 |---|---|---|---|---|
-| `major_event_subscriptions` | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (admin/bot planes) | internal HTTP contract `majorevent.subscription` |
-| `membernews` state | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | internal HTTP contracts `membernews.subscription`, `membernews.digest` |
-| alarm queue state | `alarm-worker` | `alarm-worker` | `alarm-worker`, observability consumers | queue contract `alarm.dispatch` or documented API |
+| `major_event_subscriptions` | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | in-process 주입 계약 `majorevent.subscription`(bot `handlercore.MajorEventRepository`) |
+| `membernews` state | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | in-process 주입 계약 `membernews.subscription`, `membernews.digest`(bot `handlercore.MemberNewsService`) |
+| alarm dispatch outbox (`alarm_dispatch_events`, `alarm_dispatch_deliveries`) | `alarm-worker` | `alarm-worker`; `hololive-api` admin plane은 운영자 조치(requeue·settle)로 격리·DLQ 행의 상태만 바꾸고 `alarm_dispatch_admin_actions`에 기록 | `alarm-worker`, `hololive-api` admin plane(`dispatchops` 조회), `hololive-api` bot plane(방송 이력이 세션에 없는 topic·thumbnail을 최신 LIVE event payload에서 보충), observability consumers | `alarm.dispatch` 계약(PostgreSQL dispatch outbox + payload 없는 Valkey wakeup `alarm:dispatch:wakeup`). admin 직접 접근은 `runbooks/admin-dispatch-operations.md` 절차로 한정 |
 | `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `alarm.state.read`: YouTube plane `notification_channel_ids.sql`, llm plane membernews read SQL. bot/admin plane은 필수 `ALARM_INTERNAL_URL`의 `alarm.http`를 사용하며 in-process 주입 분기는 정상 기동에서 도달 불가 |
 | YouTube outbox/tracking | `hololive-api` YouTube plane production, `alarm-worker` egress | `hololive-api` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `hololive-api` writes notification intent, `alarm-worker` owns final send state |
 
@@ -20,14 +20,13 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 
 - Runtime bootstrap owns env loading and passes typed config into shared infra helpers.
 - `pkg/providers/modules.BuildInfraModule(ctx, InfraOptions{Valkey, Postgres}, logger)` accepts typed cache/DB config and cleanup ownership remains with the returned module.
-- Iris SDK env fallback in `pkg/providers/iris.ProvideIrisClient` is a documented compatibility exception for runtime Iris configuration; it must not be used as a pattern for database/cache ownership.
 - Shared helpers must not silently override typed database, cache, or repository config from process env.
 
 ## Import Boundary Rules
 
 - The `hololive-api` bot plane must not import `hololive-alarm-worker/internal`; cross-runtime access uses documented internal HTTP/queue contracts.
 - `shared-go` must not import any `hololive/*` module.
-- The `hololive-api` bot and admin planes must not import major event repository/storage internals directly; they use documented internal HTTP contracts.
+- major event 저장소는 `hololive-api/internal/planes/llm/internal/service/majorevent`에 있어 Go `internal` 가시성 규칙상 다른 plane이 import할 수 없습니다. bot plane은 `internal/app`이 주입한 `handlercore.MajorEventRepository`로만 접근하며 admin plane은 major event를 읽지 않습니다.
 - alarms 저장소 `alarmstore.Repository`(`Add`/`Remove`/`ClearByRoom` write 메서드 포함)는 `hololive-alarm-worker/internal/service/alarm/alarmstore`에 있어 Go `internal` 가시성 규칙상 다른 module이 import할 수 없다. alarms를 읽어야 하는 read 전용 경로는 소유 plane의 SQL asset으로 직접 읽는다(예: YouTube plane `notification_channel_ids.sql`).
 - Shared data ownership changes must update `repository-ownership.allowlist`.
 
@@ -42,7 +41,7 @@ Duplicated polling prevention is enforced by PostgreSQL collection leases. Each 
 중복 발송은 dispatch 원장의 claim·fence·정산 동작으로 제어하며, Iris proactive sender는 `hololive-alarm-worker/internal/egress`가 소유합니다.
 Canonical 저장 함수는 `hololive-api/internal/youtube/canonicalwrite`에 있으므로 collector에서 import할 수 없습니다.
 
-YouTube outbox dispatcher와 범용 notification delivery dispatcher도 각각 `hololive-alarm-worker/internal/egress/{youtubedispatch,notificationdelivery}`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. `pkg/service/delivery`의 producer enqueue 저장소·sender interface·Iris transport는 API llm plane producer와 worker consumer가 함께 씁니다.
+YouTube outbox dispatcher와 범용 notification delivery dispatcher도 각각 `hololive-alarm-worker/internal/egress/{youtubedispatch,notificationdelivery}`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. `pkg/service/delivery`의 요청·결과 타입(`MessageVariants`, `SendResult`)과 Iris transport(`NewRuntimeIrisClient`)는 API와 worker가 함께 쓰고, sender interface(`PreparedMessageSender`)는 worker가 씁니다. producer enqueue 저장소(`OutboxRepository`)를 운영에서 쓰는 곳은 API llm plane 하나이며, 같은 payload를 소비하는 worker 쪽 저장소는 `internal/egress/notificationdelivery`의 `Store`입니다.
 
 ## Compiler and Gate Guarantees
 

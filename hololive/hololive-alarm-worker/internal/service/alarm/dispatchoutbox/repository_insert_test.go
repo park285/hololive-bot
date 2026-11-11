@@ -103,19 +103,6 @@ func TestAddPreparedEvent_DetectsSameBatchHashConflict(t *testing.T) {
 	require.Len(t, events2, 1)
 }
 
-func TestBuildEventBatchRows_ReturnsExpectedHashes(t *testing.T) {
-	t.Parallel()
-
-	events := []eventInsert{
-		{EventKey: testEventKey, PayloadHash: "hash1", AlarmType: "LIVE", Payload: []byte(`{}`)},
-		{EventKey: "key2", PayloadHash: "hash2", AlarmType: "LIVE", Payload: []byte(`{}`)},
-	}
-	rows, hashes := buildEventBatchRows(events)
-	require.Len(t, rows, 2)
-	require.Equal(t, "hash1", hashes[testEventKey])
-	require.Equal(t, "hash2", hashes["key2"])
-}
-
 func TestClassifyEventPreflight_SplitsNewDuplicateAndConflict(t *testing.T) {
 	t.Parallel()
 

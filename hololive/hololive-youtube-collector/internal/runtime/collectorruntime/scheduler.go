@@ -37,20 +37,13 @@ const (
 )
 
 type SchedulerSnapshot struct {
-	State                  SchedulerState
-	QueueDepth             int
-	QueueCapacity          int
-	Discovered             int
-	Enqueued               int
-	Deduped                int
-	QueueFull              bool
-	DiscoveryTruncated     bool
-	Projection             int64
-	RotationCursor         int
-	CycleStartedAt         time.Time
-	LastCycleCompletedAt   time.Time
-	LastCycleOperationCode collecterr.OperationCode
-	OldestQueueAge         time.Duration
+	State              SchedulerState
+	QueueDepth         int
+	QueueCapacity      int
+	Discovered         int
+	QueueFull          bool
+	DiscoveryTruncated bool
+	OldestQueueAge     time.Duration
 }
 
 type projectionCandidateSource interface {
@@ -83,28 +76,23 @@ type leaseScheduler struct {
 	workerTracker *workercontract.ExecutorTracker
 	workerTotals  *workercontract.Counters
 
-	lifecycleMu            sync.Mutex
-	queueMu                sync.Mutex
-	cycleMu                sync.Mutex
-	state                  SchedulerState
-	queued                 map[string]struct{}
-	queuedAt               map[string]time.Time
-	queue                  chan queuedJob
-	cancel                 context.CancelFunc
-	done                   chan struct{}
-	fatal                  chan error
-	fatalOnce              sync.Once
-	wg                     sync.WaitGroup
-	rotationCursor         int
-	discovered             int
-	enqueued               int
-	deduped                int
-	queueFull              bool
-	discoveryTruncated     bool
-	projection             int64
-	cycleStartedAt         time.Time
-	lastCycleCompletedAt   time.Time
-	lastCycleOperationCode collecterr.OperationCode
+	lifecycleMu        sync.Mutex
+	queueMu            sync.Mutex
+	cycleMu            sync.Mutex
+	state              SchedulerState
+	queued             map[string]struct{}
+	queuedAt           map[string]time.Time
+	queue              chan queuedJob
+	cancel             context.CancelFunc
+	done               chan struct{}
+	fatal              chan error
+	fatalOnce          sync.Once
+	wg                 sync.WaitGroup
+	rotationCursor     int
+	discovered         int
+	queueFull          bool
+	discoveryTruncated bool
+	projection         int64
 	// discoveryFailures는 cycleMu가 보호하는 후보 탐색 연속 실패 상태다. 키는 전역 실패(globalDiscoveryKey)나 runner ID다.
 	discoveryFailures map[string]*discoveryFailureStreak
 	candidatePolls    map[collection.JobID]candidatePollState
@@ -394,20 +382,13 @@ func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
 	defer s.cycleMu.Unlock()
 
 	return SchedulerSnapshot{
-		State:                  state,
-		QueueDepth:             depth,
-		QueueCapacity:          s.queueCapacity,
-		Discovered:             s.discovered,
-		Enqueued:               s.enqueued,
-		Deduped:                s.deduped,
-		QueueFull:              s.queueFull,
-		DiscoveryTruncated:     s.discoveryTruncated,
-		Projection:             s.projection,
-		RotationCursor:         s.rotationCursor,
-		CycleStartedAt:         s.cycleStartedAt,
-		LastCycleCompletedAt:   s.lastCycleCompletedAt,
-		LastCycleOperationCode: s.lastCycleOperationCode,
-		OldestQueueAge:         oldestQueueAge,
+		State:              state,
+		QueueDepth:         depth,
+		QueueCapacity:      s.queueCapacity,
+		Discovered:         s.discovered,
+		QueueFull:          s.queueFull,
+		DiscoveryTruncated: s.discoveryTruncated,
+		OldestQueueAge:     oldestQueueAge,
 	}
 }
 

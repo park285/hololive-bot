@@ -58,11 +58,3 @@ func (testScraperMembers) FindMemberByAlias(context.Context, string) (*domain.Me
 }
 
 func (testScraperMembers) GetChannelIDs(context.Context) ([]string, error) { return []string{}, nil }
-
-func (testScraperMembers) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func (testScraperMembers) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}

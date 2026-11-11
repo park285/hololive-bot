@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 var _ Repository = (*PgxRepository)(nil)
@@ -121,11 +120,9 @@ func fencedTargetIDs[T fencedTarget](targets []T) []int64 {
 
 func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 	var (
-		record           Record
-		status           string
-		lockedBy         *string
-		dispatchGroupKey *string
-		sendUnitID       *int64
+		record   Record
+		status   string
+		lockedBy *string
 	)
 
 	err := row.Scan(
@@ -135,8 +132,8 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 		&record.DedupeKey,
 		&record.ClaimKeys,
 		&record.DeliveryContext,
-		&dispatchGroupKey,
-		&sendUnitID,
+		&record.DispatchGroupKey,
+		&record.SendUnitID,
 		&record.ClientRequestID,
 		&record.RequestUnpinned,
 		&status,
@@ -163,21 +160,14 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 		record.LockedBy = *lockedBy
 	}
 
-	if dispatchGroupKey != nil {
-		record.DispatchGroupKey = *dispatchGroupKey
-	}
-
-	if sendUnitID != nil {
-		record.SendUnitID = *sendUnitID
-	}
-
 	record.Status = Status(status)
 
 	return &record, nil
 }
 
-// 각 attempt는 claim 시 행의 attempt_count이며 attachRecordMetadata가 0보다 클 때만 Retry로 옮겨 둔다.
-func claimsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []DeliveryClaim {
+// claimsFromEnvelopes는 drain이 복원한 envelope의 claim을 돌려준다. 각 attempt는 claim 시 행의 attempt_count이며
+// attachRecordMetadata가 0보다 클 때만 Retry로 옮겨 둔다.
+func claimsFromEnvelopes(envelopes []AlarmQueueEnvelope) []DeliveryClaim {
 	claims := make([]DeliveryClaim, 0, len(envelopes))
 	for i := range envelopes {
 		if envelopes[i].DispatchOutboxID > 0 {
@@ -188,7 +178,7 @@ func claimsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []DeliveryClaim 
 	return claims
 }
 
-func envelopeAttempt(envelope *domain.AlarmQueueEnvelope) int {
+func envelopeAttempt(envelope *AlarmQueueEnvelope) int {
 	if envelope.Retry == nil {
 		return 0
 	}

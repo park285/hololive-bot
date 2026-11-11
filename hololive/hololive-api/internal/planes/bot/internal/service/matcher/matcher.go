@@ -21,7 +21,6 @@
 package matcher
 
 import (
-	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -63,7 +62,6 @@ type matcherSnapshot struct {
 	builtAt      time.Time
 	exactNames   map[string][]*snapshotEntry
 	exactAliases map[string][]*snapshotEntry
-	tokenIndex   map[string][]*snapshotEntry
 	byChannel    map[string]*snapshotEntry
 	entries      []*snapshotEntry
 }
@@ -73,14 +71,9 @@ type snapshotMatchStrategy struct {
 	find func(*matcherSnapshot, string) *matchCandidate
 }
 
-type ChannelSelector interface {
-	SelectBestChannel(ctx context.Context, query string, candidates []*domain.Channel) (*domain.Channel, error)
-}
-
 // 다양한 매칭 전략(정확 일치, 부분 일치, 별명 검색 등)을 순차적으로 시도한다.
 type Matcher struct {
 	membersData           domain.MemberDataProvider
-	selector              ChannelSelector
 	logger                *slog.Logger
 	matchCache            map[string]*MatchCacheEntry
 	matchCacheMu          sync.RWMutex
@@ -94,12 +87,10 @@ type Matcher struct {
 
 func NewMatcher(
 	membersData domain.MemberDataProvider,
-	selector ChannelSelector,
 	logger *slog.Logger,
 ) *Matcher {
 	mm := &Matcher{
 		membersData:           membersData,
-		selector:              selector,
 		logger:                logger,
 		matchCache:            make(map[string]*MatchCacheEntry),
 		matchCacheTTL:         1 * time.Minute,

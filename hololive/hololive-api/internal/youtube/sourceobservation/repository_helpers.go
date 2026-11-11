@@ -20,7 +20,8 @@ func newLeaseToken() (string, error) {
 	return hex.EncodeToString(token[:]), nil
 }
 
-func boundedErrorDetail(value string) string {
+// BoundedErrorDetail는 value를 Retry·DeadLetter 입력 검증이 허용하는 오류 상세 길이 안으로 자르되 UTF-8 문자 중간에서 자르지 않는다.
+func BoundedErrorDetail(value string) string {
 	if len(value) <= maxErrorTextBytes {
 		return value
 	}

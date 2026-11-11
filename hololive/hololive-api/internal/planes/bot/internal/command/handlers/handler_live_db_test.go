@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,15 +17,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
+// forbiddenLiveProvider는 nil StreamProvider만 품어 명령이 provider를 부르면 panic으로 시험이 실패한다.
 type forbiddenLiveProvider struct {
 	domain.StreamProvider
-
-	calls int
-}
-
-func (p *forbiddenLiveProvider) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
-	p.calls++
-	return nil, errors.New("live command must not call a YouTube provider")
 }
 
 func TestLiveCommandDatabaseSmoke(t *testing.T) {
@@ -53,9 +46,7 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 	deps.LiveQuery = livequery.New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
 	deps.CollabMembers = collabmembers.New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, nil)
 
-	provider := &forbiddenLiveProvider{}
-
-	deps.Holodex = provider
+	deps.Holodex = &forbiddenLiveProvider{}
 
 	errorsSent := 0
 
@@ -69,7 +60,6 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 			require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil))
 		}
 
-		require.Zero(t, provider.calls)
 		require.Zero(t, errorsSent)
 	}
 	execute()
@@ -97,6 +87,5 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 	pool.Close()
 	require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil))
 	require.Equal(t, 1, errorsSent)
-	require.Zero(t, provider.calls)
 	t.Log("actual command/repository/template: cold/warm upstream=0; unknown, partial without diagnostics, confirmed-empty, cancellation and DB error preserved")
 }

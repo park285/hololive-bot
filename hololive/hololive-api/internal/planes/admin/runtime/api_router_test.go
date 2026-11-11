@@ -34,16 +34,28 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 const testAPIKey = "test-key"
 
+// testAdminDomainHandlers는 route 등록과 인증만 검사하는 시험용이다. 각 handler의 의존성이 비어 있어 본문은 호출할 수 없다.
+func testAdminDomainHandlers() *server.DomainHandlers {
+	return &server.DomainHandlers{
+		Member:   &server.MemberHandler{},
+		Alarm:    &server.AlarmHandler{},
+		Room:     &server.RoomHandler{},
+		Stream:   &server.StreamHandler{},
+		Stats:    &server.StatsHandler{},
+		Settings: &server.SettingsHandler{},
+	}
+}
+
 func TestFailClosedAuth(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
+	domainHandlers := testAdminDomainHandlers()
 
 	tests := []struct {
 		name        string
@@ -72,7 +84,7 @@ func TestFailClosedAuth(t *testing.T) {
 				},
 			}
 
-			router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
+			router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 
 			if tt.wantErr {
 				assertAPIRouterError(t, router, err, tt.expectedErr)
@@ -117,8 +129,7 @@ func assertAPIRouterSuccess(t *testing.T, router *gin.Engine, err error) {
 func TestAPIRouter_IgnoresOriginWithoutCORSHeaders(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
+	domainHandlers := testAdminDomainHandlers()
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -127,7 +138,7 @@ func TestAPIRouter_IgnoresOriginWithoutCORSHeaders(t *testing.T) {
 		Environment: "production",
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -157,7 +168,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, nil, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, nil, sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error for nil domain handlers")
 	}
@@ -174,8 +185,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
+	domainHandlers := testAdminDomainHandlers()
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -183,7 +193,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -222,8 +232,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
+	domainHandlers := testAdminDomainHandlers()
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -231,7 +240,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -249,8 +258,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.Handler{}
-	domainHandlers := apiHandler.DomainHandlers()
+	domainHandlers := testAdminDomainHandlers()
 
 	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
@@ -258,7 +266,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t))
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -17,7 +18,7 @@ type preparedCandidate struct {
 	item     datedCandidate
 	tokens   map[string]struct{}
 	body     func() string
-	category model.Category
+	category newsmodel.Category
 }
 
 // PreparedCandidates는 한 실행의 후보를 소유합니다. 방별 멤버·alias와 URL 검증은 각 방 처리 때 관측합니다.
@@ -26,7 +27,7 @@ type PreparedCandidates struct {
 	candidates []preparedCandidate
 }
 
-func PrepareCandidates(candidates []model.Candidate, period model.Period, now time.Time) *PreparedCandidates {
+func PrepareCandidates(candidates []newsmodel.Candidate, period model.Period, now time.Time) *PreparedCandidates {
 	dated := applyPeriodFilter(candidates, period, now)
 	prepared := &PreparedCandidates{candidates: make([]preparedCandidate, 0, len(dated))}
 
@@ -48,14 +49,14 @@ func PrepareCandidates(candidates []model.Candidate, period model.Period, now ti
 	return prepared
 }
 
-// 멤버 데이터 조회 실패는 빈 결과가 아니라 오류다.
-func (p *PreparedCandidates) Filter(ctx context.Context, roomMembers []string, membersData domain.MemberDataProvider, sourceValidator model.SourceURLValidator) ([]model.FilteredCandidate, error) {
+// Filter는 방 멤버 profile로 후보를 고른다. 멤버 데이터 조회 실패는 빈 결과가 아니라 오류다.
+func (p *PreparedCandidates) Filter(ctx context.Context, roomMembers []string, membersData domain.MemberDataProvider, sourceValidator newsmodel.SourceURLValidator) ([]newsmodel.FilteredCandidate, error) {
 	profiles, err := buildMemberProfiles(ctx, roomMembers, membersData)
 	if err != nil {
 		return nil, fmt.Errorf("build member profiles: %w", err)
 	}
 
-	result := make([]model.FilteredCandidate, 0, len(p.candidates))
+	result := make([]newsmodel.FilteredCandidate, 0, len(p.candidates))
 
 	for i := range p.candidates {
 		prepared := &p.candidates[i]
@@ -70,7 +71,7 @@ func (p *PreparedCandidates) Filter(ctx context.Context, roomMembers []string, m
 			continue
 		}
 
-		result = append(result, model.FilteredCandidate{
+		result = append(result, newsmodel.FilteredCandidate{
 			Candidate:      cloneCandidate(prepared.item.candidate),
 			EffectiveDate:  prepared.item.date,
 			MatchedMembers: matched,
@@ -86,7 +87,7 @@ func (p *PreparedCandidates) Filter(ctx context.Context, roomMembers []string, m
 	return result, nil
 }
 
-func cloneCandidate(candidate model.Candidate) model.Candidate {
+func cloneCandidate(candidate newsmodel.Candidate) newsmodel.Candidate {
 	candidate.Members = slices.Clone(candidate.Members)
 	if candidate.PubDate != nil {
 		candidate.PubDate = new(*candidate.PubDate)

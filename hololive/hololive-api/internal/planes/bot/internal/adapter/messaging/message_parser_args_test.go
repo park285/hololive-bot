@@ -28,7 +28,7 @@ import (
 func TestParseUpcomingArgs(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	tests := []struct {
 		name string
 		args []string
@@ -76,7 +76,7 @@ func TestParseUpcomingArgs(t *testing.T) {
 func TestParseScheduleArgs(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	tests := []struct {
 		name string
 		args []string
@@ -166,7 +166,7 @@ func TestNormalizeCompactAlarmTokens(t *testing.T) {
 func TestExtractMemberAndType(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!", "")
+	adapter := NewMessageAdapter("!")
 	tests := []struct {
 		name       string
 		args       []string

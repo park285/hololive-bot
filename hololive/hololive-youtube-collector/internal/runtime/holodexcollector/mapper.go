@@ -14,8 +14,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-const officialScheduleSubject = "global:hololive-schedule"
-
 type liveRow struct {
 	ID             string      `json:"id"`
 	Title          string      `json:"title"`
@@ -188,10 +186,6 @@ func parseOptionalTime(raw string) (*time.Time, error) {
 
 	parsed, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil {
-		parsed, err = time.Parse(time.RFC3339, value)
-	}
-
-	if err != nil {
 		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("parse holodex timestamp: %w", err))
 	}
 
@@ -310,9 +304,9 @@ func schedulePayload(rows []parsedLive, allowed map[string]struct{}) contract.Sc
 	}
 
 	return contract.ScheduleSnapshotV1{
-		GroupKey: officialScheduleSubject,
+		GroupKey: collection.ScheduleSubject,
 		Items:    items,
-		Coverage: contract.ScheduleCoverageV1{GroupKey: officialScheduleSubject},
+		Coverage: contract.ScheduleCoverageV1{GroupKey: collection.ScheduleSubject},
 	}
 }
 

@@ -108,14 +108,6 @@ func (p *stubMemberProvider) LoadAllMembers(context.Context) ([]*domain.Member, 
 	return p.members, nil
 }
 
-func (p *stubMemberProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
-func (p *stubMemberProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
-	return []*domain.Member{}, nil
-}
-
 func TestCandidateFromMember(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	mm := &Matcher{logger: logger}

@@ -261,28 +261,6 @@ func TestEventSummarizer_Summarize_StructuredOutput(t *testing.T) {
 	assertContains(t, result, "[기간 행사]")
 }
 
-func TestEventSummarizer_SummarizeResult_Primary(t *testing.T) {
-	llmJSON := `{"highlights":[{"name":"hololive fes","date":"2/15(토)","members":"","note":"최대 규모 페스티벌","link":"https://example.com/fes"}],"ongoing_events":[],"discovered_events":[]}`
-
-	mock := &mockSummarizer{jsonResponse: llmJSON}
-	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
-
-	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: testLinkFes}}
-
-	result, err := summarizer.SummarizeResult(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
-	if err != nil {
-		t.Fatalf("SummarizeResult() error = %v", err)
-	}
-
-	if result.ResultType != sharedmodel.SummaryResultPrimary {
-		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultPrimary)
-	}
-
-	if result.Text == "" {
-		t.Fatal("expected non-empty result text")
-	}
-}
-
 func TestEventSummarizer_Summarize_FinalOutputReviewApplied(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Hoshimachi Suisei Live \"SuperNova: REBOOT\"","date":"2/20(금)","members":"星街すいせい","note":"솔로 라이브 공연","link":"https://hololive.hololivepro.com/events/supernova-reboot/"}],"ongoing_events":[{"name":"카페","date":"2/1(토)~2/28(금)","note":"카페 운영 중","link":""}],"discovered_events":[]}`
 
@@ -322,17 +300,13 @@ func TestEventSummarizer_Summarize_CacheHitSkipsSearchAndLLM(t *testing.T) {
 	}
 	summarizer := NewEventSummarizer(llm, cache, searcher, testLogger())
 
-	result, err := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "cached"}}, SummaryTypeWeekly, "2026-03-02")
+	result, err := summarizer.Summarize(t.Context(), []domain.MajorEvent{{ID: 1, Title: "cached"}}, SummaryTypeWeekly, "2026-03-02")
 	if err != nil {
-		t.Fatalf("SummarizeResult() error = %v", err)
+		t.Fatalf("Summarize() error = %v", err)
 	}
 
-	if result.Text != "cached summary" {
-		t.Fatalf("Text = %q, want cached summary", result.Text)
-	}
-
-	if result.ResultType != sharedmodel.SummaryResultPrimary {
-		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultPrimary)
+	if result != "cached summary" {
+		t.Fatalf("Summarize() = %q, want cached summary", result)
 	}
 
 	if llm.callCount != 0 {
@@ -391,20 +365,6 @@ func TestEventSummarizer_Summarize_InvalidJSON_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestEventSummarizer_SummarizeResult_InvalidJSON_ReturnsError(t *testing.T) {
-	mock := &mockSummarizer{jsonResponse: "not json"}
-	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
-
-	result, err := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "test"}}, SummaryTypeWeekly, "2026-02-15")
-	if err == nil {
-		t.Fatalf("SummarizeResult() = %#v, nil error; want invalid JSON error", result)
-	}
-
-	if result.Text != "" {
-		t.Fatalf("Text = %q, want empty", result.Text)
-	}
-}
-
 func TestEventSummarizer_Summarize_EmptyHighlights_ReturnsError(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: `{"highlights":[]}`}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
@@ -429,19 +389,6 @@ func TestEventSummarizer_Summarize_NilLLM_ReturnsEmpty(t *testing.T) {
 
 	if result != "" {
 		t.Errorf("expected empty for nil LLM, got %q", result)
-	}
-}
-
-func TestEventSummarizer_SummarizeResult_NilLLM_IsEmpty(t *testing.T) {
-	summarizer := NewEventSummarizer(nil, nil, nil, testLogger())
-
-	result, err := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1}}, SummaryTypeWeekly, "key")
-	if err != nil {
-		t.Fatalf("SummarizeResult() error = %v", err)
-	}
-
-	if result.ResultType != sharedmodel.SummaryResultEmpty {
-		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultEmpty)
 	}
 }
 

@@ -12,15 +12,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// 호출자는 mutation mutex를 보유한다. 빈 구독 표식을 먼저 지워 positive 삭제 뒤
-// 기존 DB read-through가 가려지지 않게 하고, 모두 성공한 뒤에만 DB 변경을 시작한다.
+// 호출자는 mutation mutex를 보유한다. 종류별 positive set을 모두 지운 뒤에만 DB 변경을 시작하므로
+// 변경 뒤 조회는 오래된 set 대신 DB read-through로 확정된다.
 func (as *AlarmService) invalidateChannelSubscribers(ctx context.Context, channelID string, alarmTypes domain.AlarmTypes) error {
-	for _, alarmType := range alarmTypes {
-		if err := as.cache.Del(ctx, alarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {
-			return fmt.Errorf("invalidate subscriber empty marker: type %s: %w", alarmType, err)
-		}
-	}
-
 	for _, alarmType := range alarmTypes {
 		if err := as.cache.Del(ctx, as.channelSubscribersKeyByType(channelID, alarmType)); err != nil {
 			return fmt.Errorf("invalidate subscriber set: type %s: %w", alarmType, err)

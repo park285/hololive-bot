@@ -21,26 +21,22 @@
 package config
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"strings"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+// LLMSchedulerConfig는 llm plane(정기 알림 scheduler·member news·major event)이 소비하는 설정만 담는다.
+// LLM plane은 compose 보안 계약상 nonEgress라 Iris egress 입력을 갖지 않는다.
 type LLMSchedulerConfig struct {
 	Server                   settings.ServerConfig
-	Iris                     settings.IrisConfig
-	InternalH3               sharedh3.ClientOptions
-	Valkey                   settings.ValkeyConfig
 	Postgres                 settings.PostgresConfig
-	Logging                  settings.LoggingConfig
 	Bot                      settings.BotConfig
 	Environment              string
 	LLMProvider              string
@@ -48,66 +44,26 @@ type LLMSchedulerConfig struct {
 	Gemini                   GeminiConfig
 	LLM                      LLMConfig
 	Exa                      ExaConfig
-	Version                  string
 	MemberNewsXAllowlistPath string
 }
 
-// LoadLLMSchedulerRuntime: llm-scheduler는 compose 보안 계약상 nonEgress라
-// Iris egress 토큰을 받을 수 없으므로 Iris 입력 필수 검증을 면제합니다.
-func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
-	if err := envload.DotEnv(); err != nil {
-		return nil, fmt.Errorf("load dot env: %w", err)
-	}
-
-	config, err := buildLLMSchedulerConfig()
-	if err != nil {
-		return nil, fmt.Errorf("build llm scheduler config: %w", err)
-	}
-
-	if err := config.validateRuntime(); err != nil {
-		return nil, fmt.Errorf("llm scheduler config validation failed: %w", err)
-	}
-
-	return config, nil
-}
-
+// buildLLMSchedulerConfig는 모든 구획을 읽은 뒤 오류를 합쳐 돌려준다. 오류가 하나라도 있으면 만든 설정은 버린다.
+// Listener·pool 값은 configurePlanes가 채우고, 역할 검증은 RuntimeConfig.Validate가 한 번 한다.
 func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
-	webhookToken, botToken := settings.LoadIrisTokens()
-
-	port, portErr := sharedenv.IntE("LLM_SCHEDULER_PORT", defaultLLMPort)
-	valkey, valkeyErr := settings.LoadValkeyConfig()
 	postgres, postgresErr := settings.LoadPostgresEndpointConfig()
-	logging, loggingErr := settings.LoadLoggingConfig()
 	cliproxy, cliproxyErr := LoadCliproxyConfig()
 	gemini, geminiErr := LoadGeminiConfig()
 	llm, llmErr := LoadLLMConfig()
 	exa, exaErr := LoadExaConfig()
 	seeMoreFold, seeMoreFoldErr := settings.LoadSeeMoreFold()
 
-	if err := errors.Join(portErr, valkeyErr, postgresErr, loggingErr, cliproxyErr, geminiErr, llmErr, exaErr, seeMoreFoldErr); err != nil {
+	if err := errors.Join(postgresErr, cliproxyErr, geminiErr, llmErr, exaErr, seeMoreFoldErr); err != nil {
 		return nil, fmt.Errorf("load llm scheduler env: %w", err)
 	}
 
 	return &LLMSchedulerConfig{
-		InternalH3: settings.LoadInternalH3ClientOptions(),
-		Server: settings.ServerConfig{
-			Port:           port,
-			APIKey:         sharedenv.String("API_SECRET_KEY", ""),
-			HTTPTransports: envload.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
-			H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
-			H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
-			H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
-			MetricsAddr:    strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
-		},
-		Iris: settings.IrisConfig{
-			BaseURL:      sharedenv.String("IRIS_BASE_URL", ""),
-			BaseURLFile:  sharedenv.String("IRIS_BASE_URL_FILE", ""),
-			WebhookToken: webhookToken,
-			BotToken:     botToken,
-		},
-		Valkey:   valkey,
+		Server:   settings.ServerConfig{APIKey: sharedenv.String("API_SECRET_KEY", "")},
 		Postgres: postgres,
-		Logging:  logging,
 		Bot: settings.BotConfig{
 			Prefix:      sharedenv.String("BOT_PREFIX", "!"),
 			SelfUser:    sharedenv.String("BOT_SELF_USER", "iris"),
@@ -119,7 +75,6 @@ func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
 		Gemini:                   gemini,
 		LLM:                      llm,
 		Exa:                      exa,
-		Version:                  sharedenv.String("APP_VERSION", "1.0.0-llm-scheduler"),
 		MemberNewsXAllowlistPath: strings.TrimSpace(sharedenv.StringRaw("MEMBER_NEWS_X_ALLOWLIST_PATH", "")),
 	}, nil
 }
@@ -156,10 +111,10 @@ func (c *LLMSchedulerConfig) SelectedLLMProvider() LLMProviderConfig {
 	}
 }
 
+// validateLLMProvider는 buildLLMSchedulerConfig가 LLM_PROVIDER 기본값과 소문자화를 적용한 이름만 받는다.
+// 이름 정규화는 그 적재 단계 한 곳에서만 하므로 빈 이름도 거절한다.
 func validateLLMProvider(config LLMProviderConfig) error {
-	provider := cmp.Or(strings.ToLower(strings.TrimSpace(config.Name)), LLMProviderCliproxy)
-
-	switch provider {
+	switch config.Name {
 	case LLMProviderCliproxy:
 		if err := validateCliproxyProvider(config.Cliproxy); err != nil {
 			return fmt.Errorf("validate cliproxy provider: %w", err)

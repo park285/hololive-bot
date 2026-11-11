@@ -18,7 +18,7 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 	ctx, rpc := startRealDataHelper(t)
 
 	channel, err := rpc.FetchChannel(ctx, ChannelRequest{
-		ChannelID: channelID, Kind: "live", MaxPages: 1, MaxSuccessResponseBytes: 1 << 20,
+		ChannelID: channelID, Kind: "live", MaxSuccessResponseBytes: 1 << 20,
 	})
 	if err != nil {
 		t.Fatalf("fetch real channel: %v", err)
@@ -43,11 +43,8 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 		t.Fatal("real channel returned no video items")
 	}
 
-	// videos 탭 항목은 시각을 싣지 않고, 공개 시각은 영상별 확인 응답에서만 옵니다. 응답에 시각이 없을 수도 있으므로 존재는 요구하지 않습니다.
+	// 공개 시각은 영상별 확인 응답에서만 옵니다. 응답에 시각이 없을 수도 있으므로 존재는 요구하지 않습니다.
 	first := content.Items[0]
-	if first.PublishedAt != nil || first.ScheduledFor != nil {
-		t.Fatalf("videos item carried list-derived times: %#v", first)
-	}
 
 	check, err := rpc.FetchVideoLiveCheck(ctx, VideoLiveCheckRequest{VideoID: first.VideoID, MaxSuccessResponseBytes: MaxLiveCheckResponseBytes})
 	if err != nil {
@@ -76,7 +73,9 @@ func startRealDataHelper(t *testing.T) (context.Context, *RPC) {
 
 	helper, rpc, err := Start(ctx, &Config{
 		NodePath: nodePath, ScriptPath: scriptPath,
-		RuntimeBaseDir: t.TempDir(), RequestTimeout: 45 * time.Second,
+		RuntimeBaseDir: shortRuntimeBase(t), StartupTimeout: 45 * time.Second, RequestTimeout: 45 * time.Second,
+		HealthTimeout: time.Second, ShutdownTimeout: 3 * time.Second,
+		RequestBodyLimit: DefaultRequestBodyLimit, ResponseBodyLimit: DefaultResponseBodyLimit,
 		MaxInflight: DefaultMaxInflight,
 	})
 	if err != nil {

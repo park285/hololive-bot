@@ -31,11 +31,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
+)
+
+const (
+	apiRateLimitPerWindow = 60
+	apiRateLimitWindow    = time.Minute
 )
 
 type apiRateLimitHandler struct {
@@ -68,14 +72,12 @@ func registerAPIRoutes(
 
 	holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
-	if constants.APIRateLimitConfig.Enabled {
-		rateLimit, err := apiRateLimitMiddleware(cacheClient, logger)
-		if err != nil {
-			return fmt.Errorf("register /api/holo rate limit: %w", err)
-		}
-
-		holoAPI.Use(rateLimit)
+	rateLimit, err := apiRateLimitMiddleware(cacheClient, logger)
+	if err != nil {
+		return fmt.Errorf("register /api/holo rate limit: %w", err)
 	}
+
+	holoAPI.Use(rateLimit)
 
 	registerMemberRoutes(holoAPI, domains.Member)
 	registerAlarmRoutes(holoAPI, domains.Alarm)
@@ -87,7 +89,8 @@ func registerAPIRoutes(
 	return nil
 }
 
-// 활성 상태의 cache·limiter 초기화 실패는 기동 오류, 요청 판정 실패는 503이다.
+// apiRateLimitMiddleware는 /api/holo의 IP rate limit을 적용한다.
+// 기동 시 cache·limiter 초기화 실패는 오류로 돌려주고, 요청 판정 실패는 503이다.
 func apiRateLimitMiddleware(cacheClient cache.LowLevelCache, logger *slog.Logger) (gin.HandlerFunc, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -102,13 +105,10 @@ func apiRateLimitMiddleware(cacheClient cache.LowLevelCache, logger *slog.Logger
 		return nil, fmt.Errorf("init api rate limiter: %w", err)
 	}
 
-	limit := constants.APIRateLimitConfig.Limit
-	window := constants.APIRateLimitConfig.Window
-
 	handler := apiRateLimitHandler{
 		limiter: limiter,
-		limit:   limit,
-		window:  window,
+		limit:   apiRateLimitPerWindow,
+		window:  apiRateLimitWindow,
 		logger:  logger,
 	}
 

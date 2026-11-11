@@ -23,7 +23,8 @@ package member
 import (
 	"context"
 	"fmt"
-	"log/slog"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -70,22 +71,14 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	}
 	defer rows.Close()
 
-	channelIDs := make([]string, 0, 256)
+	return collectChannelIDs(rows)
+}
 
-	for rows.Next() {
-		var channelID string
-
-		if err := rows.Scan(&channelID); err != nil {
-			r.logger.Warn("Failed to scan channel ID", slog.Any("error", err))
-
-			continue
-		}
-
-		channelIDs = append(channelIDs, channelID)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
+// collectChannelIDs는 행 하나라도 읽지 못하면 부분 목록 없이 오류를 돌려준다.
+func collectChannelIDs(rows pgx.Rows) ([]string, error) {
+	channelIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("collect channel ids: %w", err)
 	}
 
 	return channelIDs, nil
@@ -100,7 +93,7 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 	}
 	defer rows.Close()
 
-	out, err := r.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
+	out, err := collectMembersFromRows(rows, memberIterLabel, "member")
 	if err != nil {
 		return out, fmt.Errorf("collect all members from rows: %w", err)
 	}

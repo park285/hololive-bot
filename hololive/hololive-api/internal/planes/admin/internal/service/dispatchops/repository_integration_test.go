@@ -5,6 +5,7 @@ package dispatchops
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -293,6 +294,66 @@ func TestOpsIntegrationActionPaginationUsesNumericOrder(t *testing.T) {
 	}
 	if len(second.Items) != 1 || second.Items[0].ID != "1" || second.NextBeforeID != "" {
 		t.Fatalf("second: %+v", second)
+	}
+}
+
+// 목록·상세·묶음·잠금 묶음 조회는 같은 행을 scanDelivery 열 순서대로 읽고 오류 원문 대신 분류 코드만 공개한다.
+func TestOpsIntegrationDeliveryReadsShareProjection(t *testing.T) {
+	repo, pool := setupOpsIntegration(t)
+	ctx := t.Context()
+	ids := seedOpsGroup(t, pool, 2, true)
+	base := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `UPDATE alarm_dispatch_events SET channel_id='UC-projection',stream_id='stream-projection'
+ WHERE event_key='test-event'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries
+ SET last_error_code='private error payload',next_attempt_at=$2::timestamptz,
+ lock_expires_at=$2::timestamptz+interval '1 minute',sending_started_at=$2::timestamptz+interval '2 minutes',
+ sent_at=$2::timestamptz+interval '3 minutes',dlq_at=$2::timestamptz+interval '4 minutes',
+ quarantined_at=$2::timestamptz+interval '5 minutes',cancelled_at=$2::timestamptz+interval '6 minutes'
+ WHERE id::text=$1`, ids[0], base); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := repo.Detail(ctx, ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := detail.Delivery
+	if got.ID != ids[0] || got.RoomID != "9007199254740993" || got.AlarmType != "LIVE" || got.ChannelID != "UC-projection" ||
+		got.StreamID != "stream-projection" || got.Status != "dlq" || got.AttemptCount != 4 || got.ErrorCode != "unclassified" ||
+		!got.NextAttemptAt.Equal(base) || got.CreatedAt.IsZero() || got.UpdatedAt.IsZero() {
+		t.Fatalf("detail delivery: %+v", got)
+	}
+	for offset, stamp := range []*time.Time{got.LockExpiresAt, got.SendingAt, got.SentAt, got.DLQAt, got.QuarantinedAt, got.CancelledAt} {
+		if stamp == nil || !stamp.Equal(base.Add(time.Duration(offset+1)*time.Minute)) {
+			t.Fatalf("timestamp %d: %v", offset, stamp)
+		}
+	}
+	if len(detail.Group) != 2 || !reflect.DeepEqual(detail.Group[0], got) ||
+		detail.Group[1].EventID != got.EventID || detail.Group[1].SendUnitID != got.SendUnitID || detail.Group[1].ErrorCode != "SEND_FAILED" {
+		t.Fatalf("detail group: %+v", detail.Group)
+	}
+	page, err := repo.List(ctx, Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := slices.IndexFunc(page.Items, func(item Delivery) bool { return item.ID == ids[0] })
+	if listed < 0 || !reflect.DeepEqual(page.Items[listed], got) {
+		t.Fatalf("listed: %+v", page.Items)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollback(ctx, tx)
+	numericID, err := ParseID(ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked, err := loadGroup(ctx, tx, numericID, true)
+	if err != nil || !reflect.DeepEqual(locked, detail.Group) {
+		t.Fatalf("locked group: %+v %v", locked, err)
 	}
 }
 

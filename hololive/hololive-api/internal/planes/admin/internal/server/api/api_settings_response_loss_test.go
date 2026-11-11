@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -20,13 +20,13 @@ func TestSettingsAPIHandlerAppliedThenResponseLostPreservesSavedSettings(t *test
 	server, targetMinutes, puts := newSettingsResponseLossWorker(t)
 
 	settingsPath := filepath.Join(t.TempDir(), "settings.json")
-	writer := &countingSettingsWriter{ReadWriter: mustNewTestSettingsService(t, settingsPath, settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())}
-	handler := (&Handler{
-		logger:          newDiscardLogger(),
-		activity:        newActivityLoggerForTest(t),
-		settings:        writer,
-		settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, server.URL)),
-	}).DomainHandlers().Settings
+	writer := &countingSettingsWriter{ReadWriter: mustNewTestSettingsService(t, settingsPath, settingssvc.Settings{AlarmAdvanceMinutes: 5})}
+	handler := newSettingsHandler(Deps{
+		Logger:   newDiscardLogger(),
+		Activity: newActivityLoggerForTest(t),
+		Settings: writer,
+		Applier:  adminsettings.NewSettingsApplier(newTestAlarmClient(t, server.URL)),
+	})
 
 	firstCtx, firstRec := newAPITestContext(http.MethodPost, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":10}`))
 	handler.UpdateSettings(firstCtx)
@@ -48,7 +48,7 @@ func TestSettingsAPIHandlerAppliedThenResponseLostPreservesSavedSettings(t *test
 	assert.Equal(t, int32(2), writer.updates.Load())
 	assert.Equal(t, int32(2), puts.Load())
 
-	reloaded, err := settingssvc.NewSettingsService(settingsPath, settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())
+	reloaded, err := adminsettings.NewSettingsService(settingsPath, settingssvc.Settings{AlarmAdvanceMinutes: 5})
 	require.NoError(t, err)
 	assert.Equal(t, 7, reloaded.Get().AlarmAdvanceMinutes)
 	assert.Equal(t, []int{7, 3, 1}, reloaded.Get().TargetMinutes)

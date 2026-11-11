@@ -6,50 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgconn"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-// ErrEventPayloadConflict는 같은 event key에 다른 payload가 들어와 delivery를 거부했음을 나타낸다.
-var ErrEventPayloadConflict = errors.New("dispatch event payload conflict")
-
-// Payload 충돌은 audit만 기록하고 기존 record를 반환하지 않는다.
-func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
-	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}})
-	if err != nil {
-		return nil, "", fmt.Errorf("insert batch: %w", err)
-	}
-
-	if result.HashConflictEvents > 0 {
-		return nil, "", ErrEventPayloadConflict
-	}
-
-	record, err := r.findByDedupeKey(ctx, BuildDedupeKeyFromEnvelope(envelope))
-	if err != nil {
-		return nil, "", fmt.Errorf("find by dedupe key: %w", err)
-	}
-
-	if result.InsertedDeliveries > 0 {
-		return record, Inserted, nil
-	}
-
-	return record, insertDuplicateResult(record.Status), nil
-}
-
-var insertDuplicateTerminalStatuses = map[Status]struct{}{
-	StatusSent:        {},
-	StatusDLQ:         {},
-	StatusQuarantined: {},
-	StatusCancelled:   {},
-}
-
-func insertDuplicateResult(status Status) InsertResult {
-	if _, ok := insertDuplicateTerminalStatuses[status]; ok {
-		return DuplicateTerminal
-	}
-
-	return DuplicateActive
-}
 
 // InsertBatch는 정상 entry와 collision audit을 함께 commit한다. 충돌 entry는 delivery를 만들지 않으며
 // 호출자는 error가 nil이어도 입력별 Receipts의 수용 여부를 확인해야 한다.

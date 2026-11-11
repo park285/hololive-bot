@@ -28,7 +28,7 @@ func newMemberBoundaryHarness(t *testing.T) (*MemberHandler, *pgxpool.Pool, *min
 
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
-	repo := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	repo := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
 	mini := miniredis.RunT(t)
 	// Miniredis의 Pub/Sub는 RESP2 제약을 따르므로 valkey-go의 별도 구독 연결을 사용한다.
 	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{mini.Addr()}, DisableCache: true, AlwaysRESP2: true})

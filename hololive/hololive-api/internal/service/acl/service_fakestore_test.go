@@ -156,18 +156,24 @@ func (f *fakeACLStore) CreateRoom(_ context.Context, roomID, listType string) (b
 	return true, nil
 }
 
-func (f *fakeACLStore) DeleteRoom(_ context.Context, roomID, listType string) error {
+func (f *fakeACLStore) DeleteRoom(_ context.Context, roomID, listType string) (bool, error) {
 	if f.deleteRoomHook != nil {
 		if err := f.deleteRoomHook(roomID, listType); err != nil {
-			return fmt.Errorf("delete room hook: %w", err)
+			return false, fmt.Errorf("delete room hook: %w", err)
 		}
 	}
 
 	f.mu.Lock()
-	delete(f.rooms, roomKey{roomID: roomID, listType: listType})
-	f.mu.Unlock()
+	defer f.mu.Unlock()
 
-	return nil
+	key := roomKey{roomID: roomID, listType: listType}
+	if _, exists := f.rooms[key]; !exists {
+		return false, nil
+	}
+
+	delete(f.rooms, key)
+
+	return true, nil
 }
 
 func (f *fakeACLStore) settingValue(key string) string {

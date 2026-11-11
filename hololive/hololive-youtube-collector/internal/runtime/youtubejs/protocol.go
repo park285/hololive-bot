@@ -228,15 +228,13 @@ type ContentRequest struct {
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
-// ContentItem은 목록 lockup 항목입니다. 시각은 videos 탭 항목에 실리지 않으며, 공개 근거는 영상별 FetchVideoLiveCheck로만 얻습니다.
+// ContentItem은 목록 lockup 항목입니다. 목록 항목은 시각을 싣지 않으며, 공개 근거는 영상별 FetchVideoLiveCheck로만 얻습니다.
 // IsUpcoming은 lockup의 구조화된 예정 표시이며 시각 근거가 아니라 저장된 근거의 현재 일치 여부 판단에만 씁니다.
 type ContentItem struct {
-	VideoID      string     `json:"video_id"`
-	ChannelID    string     `json:"channel_id"`
-	Title        string     `json:"title"`
-	PublishedAt  *time.Time `json:"published_at,omitempty"`
-	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
-	IsUpcoming   bool       `json:"is_upcoming,omitzero"`
+	VideoID    string `json:"video_id"`
+	ChannelID  string `json:"channel_id"`
+	Title      string `json:"title"`
+	IsUpcoming bool   `json:"is_upcoming,omitzero"`
 }
 
 type ContentResult struct {
@@ -260,7 +258,6 @@ type ChannelRequest struct {
 	ProtocolVersion int16  `json:"protocol_version"`
 	ChannelID       string `json:"channel_id"`
 	Kind            string `json:"kind"`
-	MaxPages        int    `json:"max_pages"`
 	// MaxScheduleLookups는 FetchChannel이 live 요청에만 채웁니다. helper는 live 요청에서 이 값이 없으면 거부합니다.
 	MaxScheduleLookups      int `json:"max_schedule_lookups,omitzero"`
 	MaxSuccessResponseBytes int `json:"max_success_response_bytes"`

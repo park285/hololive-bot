@@ -32,8 +32,8 @@ import (
 	llmclient "github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/newsmodel"
 	mnsummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
-	"github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
@@ -78,7 +78,7 @@ func initMemberNewsService(
 
 	// 요약 LLM이 꺼져 있으면 summarizer를 두지 않는다. 그때 결정적 digest는 membernews.Service가
 	// llm_disabled 사유로 만든다.
-	var summarizer model.Summarizer
+	var summarizer newsmodel.Summarizer
 
 	if llmClient != nil {
 		baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger, mnsummarizer.WithPromptGuard(promptGuard))

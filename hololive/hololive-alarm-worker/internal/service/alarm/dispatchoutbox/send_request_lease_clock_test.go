@@ -14,7 +14,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const (
@@ -166,7 +165,7 @@ func seedRequestClockUnit(t *testing.T, repo *PgxRepository) (int64, []int64, st
 
 	second.Notification.Stream.ID = "clock-second-video"
 
-	_, err := repo.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}})
+	_, err := repo.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{first, second}})
 	require.NoError(t, err)
 
 	claimed, err := repo.ClaimDue(t.Context(), requestClockOwner, 10, time.Minute)

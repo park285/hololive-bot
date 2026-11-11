@@ -2,8 +2,8 @@ package subscriptions
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"maps"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -36,13 +36,7 @@ func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) (
 		channelIDs = append(channelIDs, alarm.ChannelID)
 	}
 
-	memberNames, err := as.getMemberNamesBatch(ctx, channelIDs)
-	if err != nil {
-		opErr = fmt.Errorf("list room alarms view: get member names batch: %w", err)
-		return nil, opErr
-	}
-
-	memberNames, err = as.resolveMissingMemberNames(ctx, alarms, memberNames)
+	memberNames, err := as.memberDisplayNames(ctx, channelIDs)
 	if err != nil {
 		opErr = fmt.Errorf("list room alarms view: %w", err)
 		return nil, opErr
@@ -51,28 +45,34 @@ func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) (
 	return buildAlarmListViews(alarms, memberNames), nil
 }
 
-// resolveMissingMemberNames는 이름 캐시에 없는 채널을 members 정본(short_korean_name→korean_name→english_name)으로 채운다.
-// 조회 오류는 다른 이름으로 덮지 않고 돌려준다. 멤버 데이터에도 이름이 없는 채널만 목록에 채널 ID로 남는다.
-func (as *AlarmService) resolveMissingMemberNames(ctx context.Context, alarms []*domain.Alarm, cached map[string]string) (map[string]string, error) {
-	resolved := maps.Clone(cached)
-	if resolved == nil {
-		resolved = make(map[string]string, len(alarms))
+// memberDisplayNames는 채널별 멤버 표시명을 members 정본에서 domain.Member.DisplayName 순서
+// (short_korean_name→korean_name→english_name)로 읽는다. 멤버 정본에 없는 채널은 빈 이름이다. 조회 오류는 다른 이름으로
+// 덮지 않고 돌려준다. 같은 채널은 한 번만 조회한다.
+func (as *AlarmService) memberDisplayNames(ctx context.Context, channelIDs []string) (map[string]string, error) {
+	if as.memberData == nil {
+		return nil, errors.New("member display names: member data provider is nil")
 	}
 
-	for _, alarm := range alarms {
-		if stringutil.TrimSpace(resolved[alarm.ChannelID]) != "" {
+	names := make(map[string]string, len(channelIDs))
+
+	for _, channelID := range channelIDs {
+		if _, resolved := names[channelID]; resolved {
 			continue
 		}
 
-		name, err := as.resolveCacheMemberName(ctx, alarm.ChannelID)
-		if err != nil {
-			return nil, fmt.Errorf("resolve member name: %w", err)
-		}
+		member, err := as.memberData.FindMemberByChannelID(ctx, channelID)
 
-		resolved[alarm.ChannelID] = name
+		switch {
+		case errors.Is(err, domain.ErrMemberNotFound):
+			names[channelID] = ""
+		case err != nil:
+			return nil, fmt.Errorf("member display names: find member by channel: %w", err)
+		default:
+			names[channelID] = member.DisplayName()
+		}
 	}
 
-	return resolved, nil
+	return names, nil
 }
 
 func buildAlarmListViews(alarms []*domain.Alarm, memberNames map[string]string) []domain.AlarmListView {
@@ -96,13 +96,4 @@ func buildAlarmListViews(alarms []*domain.Alarm, memberNames map[string]string) 
 	}
 
 	return entries
-}
-
-func (as *AlarmService) getMemberNamesBatch(ctx context.Context, channelIDs []string) (map[string]string, error) {
-	out, err := as.cacheState.GetMemberNamesBatch(ctx, channelIDs)
-	if err != nil {
-		return nil, fmt.Errorf("get member names batch: %w", err)
-	}
-
-	return out, nil
 }

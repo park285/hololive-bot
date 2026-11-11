@@ -50,7 +50,7 @@ func runDisplayNameCommand(t *testing.T, deps *handlercore.Dependencies, execute
 
 	deps.Matcher = matcher.NewMatcher(newContextAwareMemberProvider([]*domain.Member{{
 		ChannelID: testChannelSora, Name: displayNameQuery, NameKo: "토키노 소라", ShortKoreanName: canonicalDisplayName, Org: "Hololive",
-	}}), nil, slog.New(slog.DiscardHandler))
+	}}), slog.New(slog.DiscardHandler))
 	deps.Formatter = responseformatter.NewResponseFormatter("!", serviceTemplate.NewRenderer(pool, slog.New(slog.DiscardHandler)), responseformatter.WithMessageStrings(store))
 	deps.SendMessage = func(_ context.Context, _, message string) error {
 		sent = append(sent, message)
