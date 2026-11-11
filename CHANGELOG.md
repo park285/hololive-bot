@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v16.0.0 - 2026-11-11
+
 - **Go 1.27.4 갱신:** 모듈·빌드 이미지·분석 도구의 Go 고정 버전을 올립니다(1.27.3 → 1.27.4).
 - **collector CA bundle 파생 단계 제거:** Go 1.27.4 builder(Alpine `ca-certificates-bundle` 20261020)에는 `ca-distrust.sha256`의 차단 루트(emSign ECC Root CA - G3, AAA Certificate Services)가 없어, 지울 루트가 없는 `ca-distrust.sh`가 collector 이미지 빌드를 멈췄습니다. collector는 이제 builder의 bundle을 그대로 씁니다. 이 bundle은 이전 파생 bundle에서 emSign 루트 두 개(Root CA - C1, ECC Root CA - C3)가 더 빠진 부분집합이며 새로 신뢰하는 루트는 없습니다. 마지막 사용처가 사라져 `scripts/build/ca-distrust.sh`와 차단 목록을 지웠습니다.
 - **구조·계약 정리와 호환 잔재 fadeout:** [리팩토링안](docs/current/plans/2026-11-11-hololive-structure-fadeout-refactor.md)의 실행 WP 60개 가운데 59개를 반영했습니다(WP-55는 측정 결과 이득이 작아 진행하지 않았습니다). 정본 문서를 코드 사실에 맞추고 `docs/current/CONTRACT_MANIFEST.txt`와 bridge 문서를 지웠습니다. 호출자·생산자가 없는 호환 경로, 시험에서만 쓰던 운영 코드, 읽지 않는 설정을 삭제하고 중복 구현을 합쳤습니다.
