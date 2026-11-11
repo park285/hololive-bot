@@ -40,7 +40,7 @@ func readClaimBudgetQueueRow(ctx context.Context, t *testing.T, pool *pgxpool.Po
 	return row
 }
 
-// setClaimLeaseRemaining은 DB 시계 기준으로 남은 lease를 맞춘다. 예산 경계 판정이 DB NOW()를 쓰기 때문이다.
+// 예산 경계 판정이 DB NOW()를 쓰기 때문이다.
 func setClaimLeaseRemaining(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, remaining time.Duration) {
 	t.Helper()
 

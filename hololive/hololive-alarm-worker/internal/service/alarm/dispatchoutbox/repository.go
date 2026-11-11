@@ -58,9 +58,8 @@ func NewPgxRepository(postgres PoolSource, logger *slog.Logger) (*PgxRepository,
 	return &PgxRepository{pool: postgres.GetPool(), now: time.Now, logger: logger}, nil
 }
 
-// applyFenced는 sendfence 관측 열을 돌려주는 전이 문장을 실행하고 want 대상 전원이 적용됐는지 확인한다. 미스는
-// 대상별 원인을 지표·로그로 남기고 *sendfence.MissError를 그대로 돌려준다. 적용되지 않은 대상은 이 문장이 바꾸지
-// 않았으므로 호출자는 소유권이 남은 원인(sendfence.Reason.OwnershipHeld)일 때만 그 행에 후속 전이를 쓸 수 있다.
+// 미스는 대상별 원인을 지표·로그로 남기고 *sendfence.MissError를 그대로 돌려준다. 적용되지 않은 대상은 이 문장이 바꾸지 않았으므로 호출자는 소유권이 남은
+// 원인(sendfence.Reason.OwnershipHeld)일 때만 그 행에 후속 전이를 쓸 수 있다.
 func (r *PgxRepository) applyFenced(ctx context.Context, querier fencedQuerier, action, query string, want []int64, args ...any) error {
 	observed, err := queryFenceObservations(ctx, querier, action, query, args...)
 	if err != nil {
@@ -70,7 +69,6 @@ func (r *PgxRepository) applyFenced(ctx context.Context, querier fencedQuerier, 
 	return r.checkFenced(action, want, observed)
 }
 
-// queryFenceObservations는 sendfence 관측 열을 돌려주는 전이 문장을 실행하고 관측 행을 읽는다.
 func queryFenceObservations(ctx context.Context, querier fencedQuerier, action, query string, args ...any) ([]sendfence.Observation, error) {
 	rows, err := querier.Query(ctx, query, args...)
 	if err != nil {
@@ -85,7 +83,6 @@ func queryFenceObservations(ctx context.Context, querier fencedQuerier, action, 
 	return observed, nil
 }
 
-// checkFenced는 want 대상 전원이 적용됐는지 확인하고, 미스면 대상별 원인을 지표·로그로 남긴다.
 func (r *PgxRepository) checkFenced(action string, want []int64, observed []sendfence.Observation) error {
 	checkErr := sendfence.Check(action, want, observed)
 	if checkErr == nil {
@@ -113,7 +110,6 @@ func (c DeliveryClaim) deliveryID() int64  { return c.ID }
 func (u FailureUpdate) deliveryID() int64  { return u.ID }
 func (u TerminalUpdate) deliveryID() int64 { return u.ID }
 
-// fencedTargetIDs는 전이 입력의 delivery ID를 입력 순서로 돌려준다.
 func fencedTargetIDs[T fencedTarget](targets []T) []int64 {
 	ids := make([]int64, 0, len(targets))
 	for i := range targets {
@@ -180,8 +176,7 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 	return &record, nil
 }
 
-// claimsFromEnvelopes는 drain이 복원한 envelope의 claim을 돌려준다. 각 attempt는 claim 시 행의 attempt_count이며
-// attachRecordMetadata가 0보다 클 때만 Retry로 옮겨 둔다.
+// 각 attempt는 claim 시 행의 attempt_count이며 attachRecordMetadata가 0보다 클 때만 Retry로 옮겨 둔다.
 func claimsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []DeliveryClaim {
 	claims := make([]DeliveryClaim, 0, len(envelopes))
 	for i := range envelopes {

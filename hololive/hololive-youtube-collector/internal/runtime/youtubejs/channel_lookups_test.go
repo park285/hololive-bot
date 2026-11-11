@@ -24,7 +24,6 @@ const liveChannelBody = `{"protocol_version":1,"live_sessions":[],"profile":{},"
 	`"continuity":"NOT_APPLICABLE","termination_reason":"exhausted","schedule_lookups":%d,` +
 	`"live_query":{"channel_id":"UC_TEST","source":"streams","statuses":["ENDED","LIVE","UPCOMING"],"exhausted":true,"access_restricted":false,"page_count":1}}`
 
-// channelLookupRPC는 helper 응답 하나를 돌려주고 받은 요청의 예정 영상 조회 상한을 기록합니다.
 func channelLookupRPC(t *testing.T, limiter *RateLimiter, status int, body string, requested *int) *RPC {
 	t.Helper()
 
@@ -46,7 +45,6 @@ func channelLookupRPC(t *testing.T, limiter *RateLimiter, status int, body strin
 	})}, "http://helper", limiter)
 }
 
-// 한 RPC 안의 예정 영상 player 조회도 limiter 예약 하나씩으로 지불해 다른 RPC와 같은 간격을 따른다.
 func TestFetchChannelPaysScheduleLookupsThroughLimiter(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		limiter := NewRateLimiter(2 * time.Second)
@@ -131,7 +129,6 @@ func TestScheduleLookupsOutsideChannelEndpointAreProtocolMismatch(t *testing.T) 
 	}
 }
 
-// traceRPC는 응답 전에 요청 전송 완료를 trace로 알리거나(wrote) 알리지 않는 helper transport입니다.
 func traceRPC(limiter *RateLimiter, wrote bool, respond func() (*http.Response, error)) *RPC {
 	return NewRPC(&http.Client{Transport: metricsTransport(func(req *http.Request) (*http.Response, error) {
 		if trace := httptrace.ContextClientTrace(req.Context()); wrote && trace != nil && trace.WroteRequest != nil {
@@ -154,7 +151,6 @@ func nextLimiterWait(t *testing.T, limiter *RateLimiter) time.Duration {
 	return time.Since(started)
 }
 
-// 지불을 기다리는 중 수집이 끝나도 이미 보낸 조회는 대기 없이 예약으로 남아 다음 RPC가 그만큼 기다린다.
 func TestFetchChannelReservesUnpaidLookupsWhenPaymentIsCanceled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		limiter := NewRateLimiter(2 * time.Second)
@@ -177,8 +173,6 @@ func TestFetchChannelReservesUnpaidLookupsWhenPaymentIsCanceled(t *testing.T) {
 	})
 }
 
-// helper에 전송한 요청이 검증된 본문 없이 끝나면 보낸 조회 수를 알 수 없으므로 요청한 상한만큼 예약한다.
-// 전송 전에 실패했거나 helper 오류 본문이 조회를 보고하지 않았으면 예약하지 않는다.
 func TestFetchChannelReservesLookupBudgetOnlyWhenTheCountIsLost(t *testing.T) {
 	cases := []struct {
 		name    string

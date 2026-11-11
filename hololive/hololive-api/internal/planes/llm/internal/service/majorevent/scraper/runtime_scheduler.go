@@ -77,7 +77,6 @@ func NewRuntimeScheduler(repository *majorevent.Repository, logger *slog.Logger)
 	}, nil
 }
 
-// Start는 통합 스케줄러를 시작한다.
 func (r *RuntimeScheduler) Start(ctx context.Context) {
 	if r == nil {
 		return
@@ -92,7 +91,6 @@ func (r *RuntimeScheduler) Start(ctx context.Context) {
 	}
 }
 
-// Stop은 통합 스케줄러를 종료한다.
 func (r *RuntimeScheduler) Stop() {
 	if r == nil {
 		return

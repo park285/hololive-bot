@@ -11,8 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Tier1 채널은 정렬 tick의 깨어남 지연이 줄어도 다음 tick에 다시 due가 되고,
-// 직전 점검 시각이 iteration 시각이라 평가 창이 75초 cap에 걸리지 않아야 한다.
 func TestYouTubeCheckerTier1ChannelEvaluatedEveryTickWithUncappedWindow(t *testing.T) {
 	t.Parallel()
 

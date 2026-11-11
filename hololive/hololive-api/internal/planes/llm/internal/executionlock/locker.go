@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// lockCache: *cache.Service가 만족하는 최소 인터페이스.
 type lockCache interface {
 	SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error)
@@ -53,9 +52,8 @@ func New(cache lockCache, logger *slog.Logger) (Locker, error) {
 	return &valkeyNotificationLocker{cache: cache, logger: logger}, nil
 }
 
-// valkeyNotificationLocker: Valkey 기반 Locker 구현.
-// Valkey 오류는 모두 호출자에게 돌려주며, 경고만 남기고 lock·claim 없이 진행하지 않는다. 획득에 실패하면 digest 실행
-// 실패로 남아 다음 주기에 다시 시도되고, 해제 실패는 lock이 TTL로 만료될 때까지 같은 작업을 막는다.
+// Valkey 오류는 모두 호출자에게 돌려주며, 경고만 남기고 lock·claim 없이 진행하지 않는다. 획득에 실패하면 digest 실행 실패로 남아 다음 주기에 다시 시도되고, 해제 실패는 lock이 TTL로
+// 만료될 때까지 같은 작업을 막는다.
 type valkeyNotificationLocker struct {
 	cache  lockCache
 	logger *slog.Logger

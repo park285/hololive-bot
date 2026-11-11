@@ -60,7 +60,6 @@ func TestPublishReceiptsDistinguishMixedCommittedInputs(t *testing.T) {
 	require.Zero(t, count)
 }
 
-// 시청자 수만 다른 재발행은 이미 보낸 방에는 중복 발송으로, 나중에 합류한 방에는 새 delivery로 수용한다.
 func TestPublishIgnoresViewerCountInSharedEventIdentity(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)

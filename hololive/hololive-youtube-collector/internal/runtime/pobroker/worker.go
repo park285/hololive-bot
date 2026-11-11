@@ -17,7 +17,6 @@ const maxWorkerFrame = 64 << 10
 
 var errWorker = errors.New("worker failed")
 
-// errBeforeDispatch는 취소된 요청이 워커 I/O를 시작하지 않았음을 나타낸다.
 var errBeforeDispatch = errors.New("request canceled before worker dispatch")
 
 type worker struct {
@@ -211,7 +210,6 @@ func (w *worker) readFrame() ([]byte, error) {
 	}
 }
 
-// stop은 VM 프로세스 그룹을 종료하고 제한된 시간 동안 리더 회수를 기다린다.
 // 수행·확인하지 못한 정리만 오류로 보고하며 워커 출력은 포함하지 않는다.
 func (w *worker) stop() error {
 	if w == nil {

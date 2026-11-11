@@ -54,7 +54,7 @@ func TestLoadLLMSchedulerRuntimeAllowsMissingIrisInputs(t *testing.T) {
 	}
 }
 
-// 아래 세 테스트는 llm scheduler runtime 로더의 설정 검증을 확인한다. 이 로더는 Iris 입력을 받지 않으므로 Iris env를 비운다.
+// 이 로더는 Iris 입력을 받지 않으므로 Iris env를 비운다.
 func TestLoadLLMSchedulerRuntimeProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	settingstest.ClearIrisAndRoomEnv(t)
 	settingstest.SetRuntimeH3ServerEnv(t)
@@ -101,7 +101,6 @@ func TestLoadLLMSchedulerRuntimeEnvApplied(t *testing.T) {
 	}
 }
 
-// 모든 plane의 내부 client 설정과 LLM allowlist 경로는 기동 config가 보관한다.
 func TestLoadRuntimeCapturesInternalClientAndMemberNewsInputs(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 	configtest.SetRequiredLoadEnv(t)

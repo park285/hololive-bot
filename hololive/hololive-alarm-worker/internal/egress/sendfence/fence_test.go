@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// matched는 조건이 모두 맞지만 적용되지 않은 관측이다. 각 시험은 필요한 조건만 거짓으로 바꾼다.
+// 각 시험은 필요한 조건만 거짓으로 바꾼다.
 func matched(id int64) Observation {
 	return Observation{
 		ID: id, Status: "SENDING",

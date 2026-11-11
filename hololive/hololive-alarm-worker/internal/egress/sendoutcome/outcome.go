@@ -72,7 +72,6 @@ func Classify(err error) Kind {
 	return Failed
 }
 
-// TransportError 자체의 결합 원인은 모든 분기가 전달 전 실패를 증명해야 한다.
 func transportCauseKnownUnsent(err error) bool {
 	if joined, ok := errors.AsType[interface {
 		error

@@ -140,7 +140,6 @@ func startupDatabaseConfig(pool *pgxpool.Pool) *collectorconfig.RuntimeConfig {
 	}}
 }
 
-// 첫 실패를 관측한 뒤에만 격리 DB로 전달해 실제 연결 deadline과 다음 pool의 복구를 검증한다.
 type startupDatabaseLogHandler struct {
 	slog.Handler
 

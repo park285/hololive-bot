@@ -74,12 +74,10 @@ func validateYouTubeOriginSuffix(parsed *url.URL) error {
 	return nil
 }
 
-// Enabled는 단축 링크 origin이 설정되었는지 반환합니다.
 func (b YouTubeBuilder) Enabled() bool {
 	return b.origin != ""
 }
 
-// URL은 유효한 YouTube video ID에 대해서만 고정 목적지 단축 링크를 반환합니다.
 func (b YouTubeBuilder) URL(videoID string) (string, bool) {
 	videoID = strings.TrimSpace(videoID)
 	if !b.Enabled() || !ValidYouTubeVideoID(videoID) {

@@ -173,7 +173,6 @@ func newNotifierPublishTestItem(
 	}
 }
 
-// 같은 stream을 여러 방에 발행해도 stream 단위 notified hash는 한 번만 쓰고, 방별 upcoming 표식은 방마다 남긴다.
 func TestNotifierPublishBatchAndMarkWritesStreamMarkOncePerSchedule(t *testing.T) {
 	t.Parallel()
 
@@ -207,8 +206,6 @@ func TestNotifierPublishBatchAndMarkWritesStreamMarkOncePerSchedule(t *testing.T
 	}
 }
 
-// 같은 stream에 다른 예정 시각이 끼면 MarkAsNotified가 hash를 비우므로, 앞서 기록한 예정 시각도 다시 써서 마지막
-// 발행 순서의 예정 시각이 남아야 한다.
 func TestNotifierPublishBatchAndMarkRewritesStreamMarkAfterScheduleChange(t *testing.T) {
 	t.Parallel()
 

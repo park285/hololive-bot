@@ -77,8 +77,6 @@ func DefaultConfig() Config {
 	}
 }
 
-// Validate는 기본값을 보충하지 않고 런타임 설정과 provider timeout을 검증합니다.
-// 프로필 소유 값은 LoadWorkerProfile preflight와 같은 validateProfilePolicy로 검증합니다.
 func (c *Config) Validate(holodexTimeout, officialTimeout time.Duration) error {
 	if err := c.validateInstanceID(); err != nil {
 		return fmt.Errorf("validate instance ID: %w", err)
@@ -163,8 +161,6 @@ func (c *Config) validateLeaseTiming() error {
 	return nil
 }
 
-// validateProfilePhaseTimeouts는 profile이 소유한 단계별 예산을 검사 순서대로 확인하고, 처음 벗어난 필드의
-// profile 키와 허용 범위를 오류에 남긴다.
 func (c *Config) validateProfilePhaseTimeouts() error {
 	if err := validatePhaseTimeout("collection.settings.db_timeout_ms", c.DBTimeout, time.Minute); err != nil {
 		return err
@@ -199,8 +195,6 @@ func (c *Config) validateEnvPhaseTimeouts() error {
 	return nil
 }
 
-// validatePhaseTimeout은 단계 예산이 [minCollectorPhaseTimeout, maximum] 안에 있는지 확인하고, 벗어나면 설정 이름과
-// 허용 범위를 담은 오류를 돌려준다.
 func validatePhaseTimeout(name string, value, maximum time.Duration) error {
 	if value < minCollectorPhaseTimeout || value > maximum {
 		return fmt.Errorf("%s must be between %s and %s", name, minCollectorPhaseTimeout, maximum)

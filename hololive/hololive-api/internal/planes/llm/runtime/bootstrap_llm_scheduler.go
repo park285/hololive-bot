@@ -178,8 +178,8 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LL
 	return runtime, nil
 }
 
-// llmSchedulerCache는 LLM scheduler 조립이 cache에 요구하는 작업의 합집합이다. 행사 요약 cache(Get·Set),
-// digest 실행 lock(SetNX·CompareAndDelete), readiness(IsConnected), 적재 뒤 alarm-worker wakeup 신호(LowLevelCache)를 쓴다.
+// 행사 요약 cache(Get·Set), digest 실행 lock(SetNX·CompareAndDelete), readiness(IsConnected), 적재 뒤 alarm-worker wakeup
+// 신호(LowLevelCache)를 쓴다.
 type llmSchedulerCache interface {
 	cache.KeyValueReader
 	cache.KeyValueWriter
@@ -362,8 +362,6 @@ func buildLLMSchedulerHTTPServers(
 	return out, nil
 }
 
-// loadLLMMessageStrings는 llm plane formatter가 쓰는 message_strings를 기동 때 적재하고 뉴스 분류 namespace를
-// 검증한다. 실패하면 기동을 실패시킨다.
 func loadLLMMessageStrings(ctx context.Context, postgresService database.Client, logger *slog.Logger) (*messagestrings.Store, error) {
 	store := messagestrings.NewStore(postgresService.GetPool(), logger)
 	if err := store.Load(ctx); err != nil {

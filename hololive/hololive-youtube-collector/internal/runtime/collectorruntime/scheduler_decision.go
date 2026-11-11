@@ -25,8 +25,6 @@ type runFailureDecision struct {
 	fatal  *FatalRuntimeError
 }
 
-// decideRunFailure는 join된 callback 오류만 판정한다. 검증 실패는 소유권·취소 오류보다 먼저
-// terminal 처리하고, 그 밖의 fatal 보고 여부는 release·defer 여부와 독립적으로 보존한다.
 func decideRunFailure(err error) runFailureDecision {
 	if failure, ok := errors.AsType[*FatalRuntimeError](err); ok && failure.Phase == "result_validation" {
 		return runFailureDecision{action: runFailureDeferInvariant, fatal: failure}
@@ -54,7 +52,6 @@ type leaseRunDecision struct {
 	supervisionPhase string
 }
 
-// decideLeaseRunOutcome는 repository가 확정한 join·release 결과를 오류 내용보다 우선한다.
 // Cleanup timeout에는 callback이 아직 실행 중일 수 있으므로 callback 실패 처리로 되돌리지 않는다.
 func decideLeaseRunOutcome(result joblease.LeaseRunResult) leaseRunDecision {
 	decision := leaseRunDecision{handled: true}

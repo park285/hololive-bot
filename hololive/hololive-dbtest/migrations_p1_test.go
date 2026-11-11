@@ -451,10 +451,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 }
 
-// runObservationRoleQueries는 쿼리 자산을 모두 읽은 뒤 role 하나로 SET LOCAL ROLE한 트랜잭션에서
-// 차례로 실행하고 항상 롤백한다. 검사 목적이 권한이므로 어떤 행도 남기지 않는다. 파일 읽기는 Begin 앞에
-// 둔다. 트랜잭션을 연 채 Fatalf로 빠져나가면 연결이 pool에 돌아가지 않아 cleanup의 pool.Close가
-// go test timeout까지 멈추기 때문이다.
+// 파일 읽기는 Begin 앞에 둔다. 트랜잭션을 연 채 Fatalf로 빠져나가면 연결이 pool에 돌아가지 않아 cleanup의 pool.Close가 go test timeout까지 멈추기 때문이다.
 func runObservationRoleQueries(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -675,9 +672,8 @@ const (
 	membershipGrantOwner   = "grant-check-collector"
 )
 
-// assertCollectionMembershipAPIAccess는 259의 guard·membership 경로를 실제 collector·API 쿼리로 실행한다.
-// 이때 scraper는 guard 테이블 권한 없이 SECURITY DEFINER lock 함수로만 공유 잠금하고 membership을 판정하며,
-// runtime은 refresh의 guard FOR UPDATE만 할 수 있고 guard row 변경이나 collector 함수 실행은 거부돼야 한다.
+// 이때 scraper는 guard 테이블 권한 없이 SECURITY DEFINER lock 함수로만 공유 잠금하고 membership을 판정하며, runtime은 refresh의 guard FOR UPDATE만
+// 할 수 있고 guard row 변경이나 collector 함수 실행은 거부돼야 한다.
 func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
 	t.Helper()
 
@@ -713,8 +709,6 @@ func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 	assertRuntimeProjectionGuardAccess(t, pool, roles.runtime, roleSQLPath, refreshQueryDir)
 }
 
-// assertScraperCollectionMembership은 acquire가 기록하는 범위·수를 가진 ACTIVE lease를 소유자 권한으로
-// 시드한 뒤 scraper로 실제 lock·membership 쿼리를 실행한다. 시드는 같은 트랜잭션과 함께 롤백된다.
 func assertScraperCollectionMembership(t *testing.T, pool *pgxpool.Pool, role, roleSQLPath, queryDir, membershipQueryDir string) {
 	t.Helper()
 
@@ -766,8 +760,6 @@ func assertScraperCollectionMembership(t *testing.T, pool *pgxpool.Pool, role, r
 	}
 }
 
-// seedScraperCollectionMembership은 소유자 권한으로 CURRENT projection, 두 kind의 target, acquire와 같은
-// 범위·수를 기록한 ACTIVE lease를 시드하고 CURRENT generation을 돌려준다.
 func seedScraperCollectionMembership(t *testing.T, tx pgx.Tx, role, jobKey string, kinds []string, scheduledFor time.Time) int64 {
 	t.Helper()
 
@@ -803,9 +795,7 @@ func seedScraperCollectionMembership(t *testing.T, tx pgx.Tx, role, jobKey strin
 	return generation
 }
 
-// assertScraperProjectionGuardDenied는 scraper 역할이 guard row를 직접 잠그거나 지우지 못하는지 확인한다.
-// 이 guard row는 lock 함수로만 공유 잠금한다. 직접 잠금·삭제 권한이 있으면 refresh의 배타 잠금을 막거나
-// guard를 지워 collector 전체를 멈출 수 있다.
+// 이 guard row는 lock 함수로만 공유 잠금한다. 직접 잠금·삭제 권한이 있으면 refresh의 배타 잠금을 막거나 guard를 지워 collector 전체를 멈출 수 있다.
 func assertScraperProjectionGuardDenied(t *testing.T, tx pgx.Tx, role string) {
 	t.Helper()
 
@@ -819,8 +809,6 @@ func assertScraperProjectionGuardDenied(t *testing.T, tx pgx.Tx, role string) {
 	}
 }
 
-// assertRuntimeProjectionGuardAccess는 API refresh의 실제 guard 잠금 쿼리가 runtime으로 성공하고,
-// guard row 추가·삭제와 collector 전용 함수 실행은 권한 오류로 거부되는지 확인한다.
 func assertRuntimeProjectionGuardAccess(t *testing.T, pool *pgxpool.Pool, role, roleSQLPath, queryDir string) {
 	t.Helper()
 
@@ -870,8 +858,7 @@ func assertRuntimeProjectionGuardAccess(t *testing.T, pool *pgxpool.Pool, role, 
 	}
 }
 
-// expectObservationPermissionDenied는 savepoint 안에서 query를 실행해 insufficient_privilege(42501)만
-// 성공으로 본다. 다른 오류나 성공은 권한 경계가 아니라 다른 원인이므로 실패로 돌려준다.
+// 다른 오류나 성공은 권한 경계가 아니라 다른 원인이므로 실패로 돌려준다.
 func expectObservationPermissionDenied(ctx context.Context, tx pgx.Tx, query string) error {
 	if _, err := tx.Exec(ctx, "SAVEPOINT observation_permission_check"); err != nil {
 		return fmt.Errorf("open permission savepoint: %w", err)
@@ -894,7 +881,6 @@ func expectObservationPermissionDenied(ctx context.Context, tx pgx.Tx, query str
 	return nil
 }
 
-// failObservationRoleTx는 열린 트랜잭션을 먼저 롤백해 연결을 pool에 돌려준 뒤 테스트를 멈춘다.
 func failObservationRoleTx(t *testing.T, tx pgx.Tx, role, format string, args ...any) {
 	t.Helper()
 	rollbackObservationRoleTx(t, tx, role, "failure")

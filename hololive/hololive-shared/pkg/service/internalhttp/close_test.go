@@ -33,7 +33,6 @@ func (t *closableTransport) Close() error {
 	return t.err
 }
 
-// writePeerCertificate는 127.0.0.1용 자체 서명 인증서를 만들고 client가 신뢰할 PEM 파일 경로와 함께 돌려준다.
 func writePeerCertificate(t *testing.T) (tls.Certificate, string) {
 	t.Helper()
 
@@ -65,8 +64,6 @@ func writePeerCertificate(t *testing.T) (tls.Certificate, string) {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, caFile
 }
 
-// startPeerH3Server는 127.0.0.1 인증서로 HTTP/3 서버를 띄우고, 서버가 받은 QUIC 연결을 돌려주는 channel과
-// client가 신뢰할 인증서 파일을 돌려준다.
 func startPeerH3Server(t *testing.T) (addr, caFile string, conns <-chan *quic.Conn) {
 	t.Helper()
 
@@ -121,9 +118,8 @@ func startPeerH3Server(t *testing.T) (addr, caFile string, conns <-chan *quic.Co
 	return localAddr.String(), caFile, accepted
 }
 
-// API가 종료 때 내부 H3 client를 닫지 않으면 peer(alarm-worker 등)는 CONNECTION_CLOSE를 받지 못하고, 그 연결이 QUIC
-// idle timeout까지 남아 peer의 graceful shutdown이 종료 시한을 넘긴다. CloseClient는 peer가 원격 application close를 바로
-// 받게 해야 한다(idle timeout·stateless reset이 아니라 client가 보낸 CONNECTION_CLOSE).
+// API가 종료 때 내부 H3 client를 닫지 않으면 peer(alarm-worker 등)는 CONNECTION_CLOSE를 받지 못하고, 그 연결이 QUIC idle timeout까지 남아 peer의
+// graceful shutdown이 종료 시한을 넘긴다.
 func TestCloseClientSendsCleanConnectionCloseToPeer(t *testing.T) {
 	addr, caFile, conns := startPeerH3Server(t)
 

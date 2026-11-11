@@ -12,7 +12,6 @@ const (
 	unresolvableBackoffThirdStep  = 24 * time.Hour
 )
 
-// unresolvablePollInterval은 identity를 확인할 수 없는 기간에 따라 기본 주기의 1·5·15·30배(2분이면 2·10·30·60분)를 돌려준다.
 func unresolvablePollInterval(base, unresolvedFor time.Duration) time.Duration {
 	switch {
 	case unresolvedFor < unresolvableBackoffFirstStep:

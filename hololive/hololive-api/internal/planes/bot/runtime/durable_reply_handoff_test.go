@@ -82,7 +82,6 @@ func TestDecideReplyHandoff(t *testing.T) {
 	}
 }
 
-// 확인 간격은 250ms에서 시작해 60s까지 늘고, 늦게 돈 확인은 이미 지난 간격을 다시 쓰지 않는다.
 func TestReplyHandoffNextStep(t *testing.T) {
 	t.Parallel()
 
@@ -108,9 +107,6 @@ func TestReplyHandoffNextStep(t *testing.T) {
 	assert.Equal(t, 250*time.Millisecond, replyHandoffFirstCheck())
 }
 
-// handoffIrisClient는 clientRequestId별 admission 상태와 requestId별 handoff 상태를 가진 가짜 Iris다.
-// Failed로 표시한 요청의 같은 ID 재전송은 409 CLIENT_REQUEST_ID_FAILED, 수리된 ID의 재전송은 같은
-// requestId의 duplicate 202다.
 type handoffIrisClient struct {
 	stubIrisClient
 
@@ -164,7 +160,6 @@ func (c *handoffIrisClient) GetReplyStatus(_ context.Context, requestID string) 
 	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: cmp.Or(c.states[requestID], "queued")}, nil
 }
 
-// failRequest는 Iris가 pre-dispatch에서 포기한 요청을 흉내 낸다. 상태 조회는 failed이고 같은 ID 재전송은 409다.
 func (c *handoffIrisClient) failRequest(clientRequestID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -187,7 +182,6 @@ func (c *handoffIrisClient) sentIDs() []string {
 	return append([]string(nil), c.sent...)
 }
 
-// sentClientRequestID는 SDK의 비공개 send option 구조체에 option을 적용해 실제로 보낸 clientRequestId를 읽는다.
 func sentClientRequestID(opts []iris.SendOption) string {
 	box := reflect.New(reflect.TypeFor[iris.SendOption]().In(0).Elem())
 
@@ -227,7 +221,6 @@ func insertHandoffReply(t *testing.T, r *durableRuntime, messageID string) strin
 	return clientRequestID
 }
 
-// dispatchNext는 발송 큐에서 한 행을 claim해 admission과 정산까지 진행한다. 재발송 backoff가 남아 있으면 기다린다.
 func dispatchNext(t *testing.T, r *durableRuntime) {
 	t.Helper()
 
@@ -239,7 +232,6 @@ func dispatchNext(t *testing.T, r *durableRuntime) {
 	}
 }
 
-// reconcileDue는 확인 시각이 된 accepted 행이 생길 때까지 기다려 handoff 확인 한 batch를 돌린다.
 func reconcileDue(t *testing.T, r *durableRuntime) {
 	t.Helper()
 
@@ -270,8 +262,6 @@ func readHandoffRow(t *testing.T, pool *pgxpool.Pool, clientRequestID string) ha
 	return row
 }
 
-// Iris failed는 같은 행을 재발송 큐로 되돌리고, 다음 발송의 reissue ladder가 409 FAILED를 지나 다음 세대로
-// 보낸다. :r2까지 실패하면 다음 발송은 세 세대 모두 409를 받고 :r3 없이 permanent_conflict로 끝난다.
 func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	client := newHandoffIrisClient(t)
@@ -368,8 +358,6 @@ func TestReplyHandoffObservationOutcomes(t *testing.T) {
 	}
 }
 
-// 지평(bot_reply_outbox attempt timeout) 안에서는 진행 중 상태를 다시 확인하고, 지평에 닿으면 handoff 미확인으로
-// payload를 보존한 manual_review가 된다.
 func TestReplyHandoffUnconfirmedAtTheHorizonNeedsReview(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	client := newHandoffIrisClient(t)
@@ -395,8 +383,6 @@ func TestReplyHandoffUnconfirmedAtTheHorizonNeedsReview(t *testing.T) {
 	assert.Equal(t, []string{base}, client.sentIDs())
 }
 
-// admission 뒤 accepted 정산이 기록되지 않으면 행은 submitting lease로 남는다. Lease reclaim이 같은 ID 재발송으로
-// 되돌리고 Iris의 duplicate 202가 같은 requestId로 accepted를 만든다.
 func TestAcceptedSettlementLossResendsTheSameRequest(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	client := newHandoffIrisClient(t)

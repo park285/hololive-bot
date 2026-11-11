@@ -71,8 +71,7 @@ func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]do
 	return withAlarmDispatchTestSendUnitIdentity(batch), nil
 }
 
-// 운영 claim은 send unit이 저장된 delivery만 돌려주고, dispatchoutbox는 dispatch group마다 client_request_id를
-// 저장한다. 식별자를 직접 지정하지 않은 테스트 봉투에는 같은 그룹 키로 결정적인 ID를 붙여 그 계약을 흉내 낸다.
+// 운영 claim은 send unit이 저장된 delivery만 돌려주고, dispatchoutbox는 dispatch group마다 client_request_id를 저장한다.
 func withAlarmDispatchTestSendUnitIdentity(batch []domain.AlarmQueueEnvelope) []domain.AlarmQueueEnvelope {
 	out := make([]domain.AlarmQueueEnvelope, len(batch))
 	for i := range batch {
@@ -304,7 +303,6 @@ func TestAlarmDispatchRunnerConsumesAttemptForRenderFailureBeforeMarkSending(t *
 	assert.Empty(t, sender.messages)
 }
 
-// 퇴역한 youtube_outbox 출처의 행은 발송 경로가 없어 렌더 전에 발송 전 실패로 넘어가야 한다.
 func TestAlarmDispatchRunnerRoutesRetiredSourceKindBeforeMarkSending(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
@@ -393,8 +391,6 @@ func TestAlarmDispatchRunnerKeepsRetryingRetryableCauseBeyondBaseAttemptCap(t *t
 	assert.Empty(t, consumer.releasedClaims, "claim keys stay held while the envelope is still retryable")
 }
 
-// Karing 경로가 없어져 방송 알림 그룹도 방 유형과 무관하게 같은 Text 경로와 저장된 send-unit ID로 다시 나간다.
-// 그래서 ambiguous 실패는 다른 source와 같은 규칙으로 재시도하고, 재시도 요청은 같은 ID로 admission 중복 제거에 접힌다.
 func TestAlarmDispatchRunnerRetriesPersistedStreamGroupDeadline(t *testing.T) {
 	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
@@ -990,7 +986,6 @@ func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {
 	assert.True(t, consumer.quarantineDeadline, "취소를 끊은 정리 컨텍스트에도 시간 상한이 있어야 한다")
 }
 
-// alarmGroupRenderEnvelope는 members 정본 이름이 memberName인 채널의 방송 알림 envelope를 만든다.
 func alarmGroupRenderEnvelope(minutesUntil int, memberName, streamID, title string) domain.AlarmQueueEnvelope {
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
@@ -1003,7 +998,6 @@ func alarmGroupRenderEnvelope(minutesUntil int, memberName, streamID, title stri
 	return envelope
 }
 
-// 저장된 send unit의 room이 claim한 group과 다르면 그 group만 발송 전 실패로 기록하고, 같은 batch의 다른 group은 계속 보낸다.
 func TestAlarmDispatchRunnerRoutesRoomMismatchedGroupAndSendsRemainingGroups(t *testing.T) {
 	const otherRoomID = "9876543210"
 

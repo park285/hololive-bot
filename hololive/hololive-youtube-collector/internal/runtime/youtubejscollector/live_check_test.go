@@ -15,7 +15,6 @@ import (
 
 const liveCheckTestVideoID = "video-live-a"
 
-// 방송 탭 job과 채널 확인 job은 서로의 RPC를 보내지 않고 자기 kind만 방출한다.
 func TestChannelLiveJobsEmitOnlyOwnKind(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +56,6 @@ func TestChannelLiveJobsEmitOnlyOwnKind(t *testing.T) {
 	}
 }
 
-// 방송 탭 실패는 빈 snapshot이나 부분 결과로 바꾸지 않고 job 실패로 남아 해당 슬롯만 재시도한다.
 func TestChannelLiveRunnerDoesNotPublishFailedSnapshot(t *testing.T) {
 	t.Parallel()
 

@@ -93,7 +93,6 @@ func TestRetentionTickBoundsLiveAbsenceSlots(t *testing.T) {
 	}
 }
 
-// tick 하나가 감사 이력 세 표의 기간 지난 행과 참조 없는 출처 사전 행을 함께 정리한다.
 func TestRetentionTickBoundsAuditTables(t *testing.T) {
 	t.Parallel()
 
@@ -175,7 +174,6 @@ func TestDeleteRetentionBatchesRunsEveryTable(t *testing.T) {
 	}
 }
 
-// 원본 단계가 앞 창을 커밋한 뒤 실패하면 그 계수를 실패 대상과 함께 보고하고 뒤 단계는 실행하지 않는다.
 func TestDeleteRetentionBatchesKeepsCommittedWindowsOfFailedStep(t *testing.T) {
 	t.Parallel()
 

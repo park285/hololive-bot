@@ -33,7 +33,6 @@ const (
 
 var errSubscriberDBUnavailable = errors.New("subscriber db unavailable")
 
-// failingSubscriberDB는 조회가 일어나면 실패하므로, 조회 여부와 오류 전파를 함께 확인한다.
 type failingSubscriberDB struct{}
 
 func (failingSubscriberDB) Begin(context.Context) (pgx.Tx, error) {
@@ -52,7 +51,6 @@ func (failingSubscriberDB) QueryRow(context.Context, string, ...any) pgx.Row {
 	return failingSubscriberRow{}
 }
 
-// failingSubscriberRow는 nil 대신 반환되어 Scan에서 같은 조회 실패를 돌려준다.
 type failingSubscriberRow struct{}
 
 func (failingSubscriberRow) Scan(...any) error {

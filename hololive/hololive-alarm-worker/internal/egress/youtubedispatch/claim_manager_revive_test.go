@@ -34,7 +34,6 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-// reviveTestClaimManager는 정규화된 canonical lifecycle 구성을 사용합니다.
 func reviveTestClaimManager(t *testing.T, db *pgxpool.Pool) *ClaimManager {
 	t.Helper()
 
@@ -186,9 +185,6 @@ func assertReviveOutboxStillFailed(t *testing.T, db *pgxpool.Pool, id int64, lab
 	assert.Equal(t, domain.OutboxStatusFailed, row.Status, label+" → FAILED 유지")
 }
 
-// TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered는 revive가 "theater"가 아님을 증명한다:
-// revive 전에는 dispatcher가 FAILED 행을 재전달하지 않지만, revive 후 ProcessOnce가 실제로 실패했던
-// room에 메시지를 발송하고 delivery 행이 SENT로 전이된다(end-to-end revive→dispatch 경로 검증).
 func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 	db := newDeliveryPool(t)
 	ctx := t.Context()

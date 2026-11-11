@@ -56,8 +56,6 @@ func newNotificationHandoffReconciler(t *testing.T, store HandoffStore, client h
 	return reconciler
 }
 
-// sentWithLaterRow는 testRoomA에 확인 대기 SENT 행과 그 뒤에 적재된 같은 방 PENDING 행을 만들고, 확인 대기 행이 후행
-// 행을 막는지 확인한다. 확인 대기 행은 admission을 age만큼 과거로 옮기고 다음 확인 시각을 DB 시각 직전으로 당긴다.
 func sentWithLaterRow(t *testing.T, repo *outboxFixture, age time.Duration) int64 {
 	t.Helper()
 
@@ -74,7 +72,6 @@ func sentWithLaterRow(t *testing.T, repo *outboxFixture, age time.Duration) int6
 	return id
 }
 
-// readyPeriods는 다른 worker가 지금 claim할 수 있는 행의 기간 키다.
 func readyPeriods(t *testing.T, repo *outboxFixture) []string {
 	t.Helper()
 
@@ -90,10 +87,6 @@ func readyPeriods(t *testing.T, repo *outboxFixture) []string {
 	return periods
 }
 
-// 실제 원장에서 확인 결과가 같은 방 순서에 남기는 효과다. 지평 전의 미확인(queued)은 행을 확인 대기 SENT로 두어 후행
-// 행을 계속 막고, 다음 확인을 admission + 지평 안에 둔다. 지평에 닿은 미확인은 격리로 확인을 끝내 후행 행을 푼다. Iris
-// failed 재발급은 행을 DB 시각 + retry backoff의 PENDING으로 되돌린다. 방 순서는 생성 순서가 아니라 기존
-// next_attempt_at 순서라 이미 due인 후행 행이 먼저 나간다.
 func TestNotificationHandoffReconcilerSettlesRoomOrderOnLedger(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -154,8 +147,6 @@ func TestNotificationHandoffReconcilerSettlesRoomOrderOnLedger(t *testing.T) {
 	}
 }
 
-// 종료로 끊긴 상태 조회는 관측이 아니므로 정산하지 않는다. 행은 soft claim만 잡힌 확인 대기 SENT로 남아 같은 방 후행
-// 행을 계속 막고, soft claim이 끝나기 전에는 다른 확인도 고르지 않는다.
 func TestNotificationHandoffReconcilerCanceledQueryLeavesLedgerUnsettled(t *testing.T) {
 	repo := testRepository(t)
 	id := sentWithLaterRow(t, repo, 0)

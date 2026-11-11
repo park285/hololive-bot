@@ -247,7 +247,6 @@ func (h *Service) scheduleStreamRetryIfNeeded(
 	})
 }
 
-// runOfficialScheduleFallback은 조건이 맞을 때 공식 일정 fallback을 한 번 실행하고 결과를 skipped·error·hit·miss로 기록한다.
 func (h *Service) runOfficialScheduleFallback(
 	ctx context.Context,
 	plan *streamFetchPlan,
@@ -278,7 +277,6 @@ func (h *Service) runOfficialScheduleFallback(
 	return outcome, nil
 }
 
-// shouldRunOfficialScheduleFallback은 계약의 trigger로, primary가 stream을 하나도 얻지 못했고 실패한 org가 있을 때만 참이다.
 func (h *Service) shouldRunOfficialScheduleFallback(
 	plan *streamFetchPlan,
 	primary orgFetchResult,

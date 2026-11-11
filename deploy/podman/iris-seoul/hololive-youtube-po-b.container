@@ -1,4 +1,3 @@
-# youtube-collector-b의 PO issuer(2026-11-06 iris-seoul Docker Compose에서 전환). 격리 조건은 compose po-b와 같다.
 [Unit]
 Description=hololive YouTube PO issuer for collector b
 StartLimitIntervalSec=0

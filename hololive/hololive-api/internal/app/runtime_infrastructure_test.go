@@ -226,7 +226,6 @@ func TestSharedInfrastructureClosesAfterUnstartedBorrowers(t *testing.T) {
 	require.Equal(t, []string{"admin", "infrastructure"}, calls)
 }
 
-// bot·admin plane 조립은 process infra가 소유한 같은 Holodex·ACL 인스턴스를 받는다.
 func TestPlaneDependenciesBorrowProcessHolodex(t *testing.T) {
 	infra := &apiInfrastructure{holodex: &apifoundation.ScraperHolodexFoundation{}, acl: &acl.Service{}}
 
@@ -239,7 +238,6 @@ func TestPlaneDependenciesBorrowProcessHolodex(t *testing.T) {
 	require.Same(t, infra.acl, admin.ACL)
 }
 
-// process infra는 Holodex 서비스를 한 번 만들어 소유한다.
 func TestAPIInfrastructureOwnsOneHolodexService(t *testing.T) {
 	infra, err := buildAPIInfrastructure(t.Context(), infrastructureConfig(t), slog.New(slog.DiscardHandler))
 	require.NoError(t, err)

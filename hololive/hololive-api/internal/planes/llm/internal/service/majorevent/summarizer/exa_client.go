@@ -173,7 +173,6 @@ func (c *ExaMCPClient) logSearchResults(query string, resultCount int) {
 	}
 }
 
-// parseExaResponse: JSON-RPC 응답을 파싱하여 검색 결과를 추출합니다.
 func parseExaResponse(respBody []byte) ([]model.SearchResult, error) {
 	var rpcResp exaRPCResponse
 

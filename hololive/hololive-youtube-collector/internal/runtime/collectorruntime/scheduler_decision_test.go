@@ -43,7 +43,6 @@ func TestRunFailureDecisionCancellationEvidence(t *testing.T) {
 	}
 }
 
-// 같은 joined error라도 repository가 확정한 소유권·join 결과에 따른다.
 // Cleanup timeout에서 callback terminal 처리로 돌아가거나 renew/publish 손실을 중복 집계하지 않는다.
 func TestLeaseRunDecisionUsesSupervisionEvidence(t *testing.T) {
 	t.Parallel()

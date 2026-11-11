@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 기존 판정·최신 일치 시각·원본 영수증은 재적용과 집합 호출에서도 그대로다.
 func TestLiveReviewSetMigrationPreservesDecisions(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
@@ -171,7 +170,6 @@ func seedLiveReviewTypedFacts(t *testing.T, pool *pgxpool.Pool) {
 	require.NoError(t, err)
 }
 
-// 새 집합 함수도 runtime 조회 권한만으로 실행되며 PUBLIC/scraper에는 열리지 않는다.
 func TestLiveReviewSetMigrationPrivileges(t *testing.T) {
 	t.Parallel()
 

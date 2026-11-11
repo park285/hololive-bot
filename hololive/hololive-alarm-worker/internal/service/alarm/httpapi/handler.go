@@ -65,7 +65,7 @@ type Handler struct {
 	logger *slog.Logger
 }
 
-// decodeAlarmRequest는 wire 요청을 읽고 경로별 필수 값 검사를 적용한다. 요청 타입은 client와 공유하므로 검사는 여기서만 한다.
+// 요청 타입은 client와 공유하므로 검사는 여기서만 한다.
 func decodeAlarmRequest[T any](c *gin.Context, destination *T, validate func(*T) error) error {
 	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
 		return fmt.Errorf("unmarshal read: %w", err)
@@ -170,7 +170,6 @@ func (h *Handler) CountAlarmEntries(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.EntryCount{Count: new(count)}})
 }
 
-// AddAlarm은 선택적인 host_id로 채팅방의 채널 또는 멤버 구독을 등록한다.
 func (h *Handler) AddAlarm(c *gin.Context) {
 	var req contractsalarm.AddRequest
 
@@ -214,7 +213,6 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.AddResponse{Added: added}})
 }
 
-// RemoveAlarm은 host_id가 있으면 해당 멤버만, 없으면 전체 채널 구독만 해지한다.
 func (h *Handler) RemoveAlarm(c *gin.Context) {
 	var req contractsalarm.RemoveRequest
 
@@ -340,7 +338,6 @@ func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.MinutesResponse{TargetMinutes: result.TargetMinutes}})
 }
 
-// validAdvanceTargets는 적용 확정 응답에 실을 target_minutes가 비어 있지 않은 양수 목록인지 본다.
 // 응답을 받는 alarmhttp client도 같은 규칙으로 검증하므로, 서버가 그 규칙을 어기는 결과를 확정으로 응답하지 않게 한다.
 func validAdvanceTargets(targets []int) bool {
 	if len(targets) == 0 {

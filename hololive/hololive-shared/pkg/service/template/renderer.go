@@ -59,11 +59,8 @@ func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
 	}
 }
 
-// Render는 DB에서 현재 버전을 확인한 뒤 파싱 결과를 재사용합니다.
-// 저장 완료 후 시작한 호출은 새 버전을 사용하며, 저장과 겹친 호출은 이전 버전을 사용할 수 있습니다.
-// 템플릿 획득 대기는 최대 5초이며 더 짧은 호출자 deadline을 보존합니다.
-// 실행은 호출자 취소와 출력·단계·시간 예산을 따르며 실패하면 부분 결과 없이 오류를 돌려줍니다.
-// 본문 변형은 발송 경로가 정하며, 그 변형의 행이 없으면 다른 변형으로 대체하지 않고 ErrTemplateNotFound입니다.
+// 저장 완료 후 시작한 호출은 새 버전을 사용하며, 저장과 겹친 호출은 이전 버전을 사용할 수 있습니다. 템플릿 획득 대기는 최대 5초이며 더 짧은 호출자 deadline을 보존합니다. 실행은 호출자 취소와
+// 출력·단계·시간 예산을 따르며 실패하면 부분 결과 없이 오류를 돌려줍니다. 본문 변형은 발송 경로가 정하며, 그 변형의 행이 없으면 다른 변형으로 대체하지 않고 ErrTemplateNotFound입니다.
 func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID string, format domain.TemplateFormat, data any) (string, error) {
 	tmpl, err := r.getTemplate(ctx, key, channelID, format)
 	if err != nil {
@@ -111,8 +108,6 @@ var templateFuncs = template.FuncMap{
 	"dict":     boundedDict,
 }
 
-// toInt64는 다양한 타입의 값을 int64로 변환합니다.
-// 값이 nil이거나 변환할 수 없는 타입이면 (0, false)를 반환합니다.
 func toInt64(v any) (int64, bool) {
 	rv, ok := dereferenceValue(v)
 	if !ok {
@@ -184,7 +179,7 @@ func uintToInt64(u uint64) (int64, bool) {
 	return int64(u), true
 }
 
-// NaN, ±Inf, int64 범위 밖 값은 정수로 바꾸지 않습니다. 호출자는 이 값을 기존과 같이 %v 표기로 출력합니다.
+// 호출자는 이 값을 기존과 같이 %v 표기로 출력합니다.
 func floatToInt64(f float64) (int64, bool) {
 	if math.IsNaN(f) || f >= 0x1p63 || f < -0x1p63 {
 		return 0, false
@@ -206,7 +201,7 @@ func formatNumber(v any) string {
 	return formatNumberInt64(n)
 }
 
-// formatNumberInt64는 세 자리마다 쉼표를 넣습니다. 부호를 문자열에서 분리해 MinInt64도 재귀 없이 처리합니다.
+// 부호를 문자열에서 분리해 MinInt64도 재귀 없이 처리합니다.
 func formatNumberInt64(n int64) string {
 	digits := strconv.FormatInt(n, 10)
 	sign := ""
@@ -252,8 +247,7 @@ func formatNumberKR(v any) string {
 	return formatNumberKRInt64(n)
 }
 
-// formatNumberKRInt64는 1000 미만은 정수로, 그 이상은 크기를 float64로 나눠 표기합니다. 부호를 float64에서 뒤집어
-// MinInt64의 크기(2^63)도 overflow 없이 다룹니다.
+// 부호를 float64에서 뒤집어 MinInt64의 크기(2^63)도 overflow 없이 다룹니다.
 func formatNumberKRInt64(n int64) string {
 	if n > -1000 && n < 1000 {
 		return strconv.FormatInt(n, 10)

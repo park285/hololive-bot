@@ -317,8 +317,6 @@ func TestNewClient_WithReasoningEffort_EmptyIgnored(t *testing.T) {
 }
 
 func TestOpenAIClient_ImplementsClient(t *testing.T) {
-	// compile-time 검증 (var _ Client = (*OpenAIClient)(nil))은 openai_client.go에 존재
-	// 런타임에서도 인터페이스 할당 가능 확인
 	var _ Client = mustNewClient(t, "https://example.com/v1", "key", "model", nil)
 }
 

@@ -146,7 +146,7 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 	}
 }
 
-// 계약 밖 failure tuple은 기본 class로 수리하지 않는다. 미분류 Internal로 지연 처리하고 위반 counter로만 드러낸다.
+// 계약 밖 failure tuple은 기본 class로 수리하지 않는다.
 func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 	var fatal []error
 

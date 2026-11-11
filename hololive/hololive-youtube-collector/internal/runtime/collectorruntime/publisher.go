@@ -190,7 +190,6 @@ func validatePartialPublishInput(
 	return partial, nil
 }
 
-// publishBatchInput은 수집 결과 하나의 복사본으로 발행 입력을 만듭니다.
 // Checkpoint는 관측과 1:1로 같은 순서이며, runner가 관측과 함께 넘긴 cursor(video_list 공개 근거 이력)만 싣습니다.
 func publishBatchInput(lease *contract.LeaseProof, output collection.RunOutput) *sourceobservation.PublishBatchInput {
 	observations := output.Observations()

@@ -108,8 +108,6 @@ func photoSyncRetryOptions() retry.RetryOptions {
 	}
 }
 
-// syncWithRetry는 중간 실패를 재시도 직전에 Warn으로 남기고, 시도를 모두 쓴 최종 실패만 Error로 한 번 남긴다.
-// 호출자 context가 취소돼 끝난 경우는 종료 경로이므로 Error를 남기지 않는다.
 func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, options retry.RetryOptions) {
 	options.OnRetry = func(attempt int, err error, _ time.Duration) {
 		ps.logger.Warn("Photo sync failed, will retry",

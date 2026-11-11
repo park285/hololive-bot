@@ -30,7 +30,6 @@ func testDispatcherConfig() DispatcherConfig {
 	}
 }
 
-// withTestDispatcherDefaults는 테스트가 관심 있는 필드만 지정할 수 있도록 0인 숫자 필드를 테스트 기준값으로 채운다.
 // CleanupEnabled는 지정한 값을 그대로 쓰므로 nil이면 cleanup이 꺼진다.
 func withTestDispatcherDefaults(config *DispatcherConfig) *DispatcherConfig {
 	base := testDispatcherConfig()

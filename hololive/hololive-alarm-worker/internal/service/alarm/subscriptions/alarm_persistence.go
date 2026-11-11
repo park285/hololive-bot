@@ -188,7 +188,6 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 	return mutationErr
 }
 
-// 구독 변경과 직렬화해 DB 정본으로 캐시 전체를 재구성한다.
 func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 	startedAt := as.lockCacheMutation("warm")
 	defer as.cacheMutationMu.Unlock()

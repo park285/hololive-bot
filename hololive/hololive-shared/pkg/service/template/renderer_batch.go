@@ -34,10 +34,8 @@ type templateLookup struct {
 	err  error
 }
 
-// RenderBatch는 모든 항목의 현재 template 버전을 한 SQL 문장으로 확인한 뒤 파싱 결과를 재사용해 렌더링합니다.
-// 호출 시작 전에 끝난 저장은 모든 항목에 보이며 저장과 겹친 호출은 이전 버전을 쓸 수 있습니다(Render와 같은 경계).
-// 결과는 요청과 같은 순서·길이입니다. Template 부재와 실행 실패는 항목별 Err이며, 버전 조회 실패와 취소는
-// 결과 없이 오류를 돌려줍니다. 템플릿 획득 대기는 호출 전체에 최대 5초입니다.
+// 호출 시작 전에 끝난 저장은 모든 항목에 보이며 저장과 겹친 호출은 이전 버전을 쓸 수 있습니다(Render와 같은 경계). 결과는 요청과 같은 순서·길이입니다. Template 부재와 실행 실패는 항목별
+// Err이며, 버전 조회 실패와 취소는 결과 없이 오류를 돌려줍니다. 템플릿 획득 대기는 호출 전체에 최대 5초입니다.
 func (r *Renderer) RenderBatch(ctx context.Context, requests []RenderRequest) ([]RenderResult, error) {
 	if len(requests) == 0 {
 		return []RenderResult{}, nil

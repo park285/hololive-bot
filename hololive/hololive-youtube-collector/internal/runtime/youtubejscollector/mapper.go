@@ -37,8 +37,7 @@ func communityPayload(channelID string, posts []*youtubejs.CommunityPost, maxRes
 	}
 }
 
-// videoListPayload는 generation 2 video_list를 만듭니다. 항목 시각·Premiere 표시는 같은 위치의 player 공개 근거에서만 채우고,
-// 근거가 없는 항목은 시각 없이 둡니다. 목록 lockup의 시각은 싣지 않습니다.
+// 항목 시각·Premiere 표시는 같은 위치의 player 공개 근거에서만 채우고, 근거가 없는 항목은 시각 없이 둡니다. 목록 lockup의 시각은 싣지 않습니다.
 func videoListPayload(
 	channelID string,
 	items []youtubejs.ContentItem,

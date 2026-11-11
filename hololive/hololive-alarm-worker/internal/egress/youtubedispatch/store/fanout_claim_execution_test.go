@@ -90,7 +90,6 @@ func TestFanoutSQLSkipsLockedRowAndReclaimsAfterRollback(t *testing.T) {
 	require.Equal(t, firstID, claimed[0].ID)
 }
 
-// preparePlanModeSQLTest는 plan_cache_mode를 고정한 tx에서 SQL 자산을 named prepared statement로 준비합니다.
 // 운영 기본 exec mode(cache_statement)의 generic/custom plan 양쪽에서 상태 가드를 검증하는 데 씁니다.
 func preparePlanModeSQLTest(t *testing.T, pool *pgxpool.Pool, mode, name, query string) pgx.Tx {
 	t.Helper()

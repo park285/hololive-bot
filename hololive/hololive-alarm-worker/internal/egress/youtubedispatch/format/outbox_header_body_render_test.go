@@ -15,7 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 실제 기본 템플릿과 생산자를 거쳐도 동적 기호와 복사 가능한 URL이 보존된다.
 func TestOutboxProducersPreserveLiteralFields(t *testing.T) {
 	pool := dbtest.NewPool(t)
 

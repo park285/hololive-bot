@@ -57,7 +57,6 @@ func boundedTruncate(maxLen int, s string) (string, error) {
 	return out, nil
 }
 
-// boundedDate는 layout 길이에 비례하는 날짜 표기를 layout 크기 기준으로 제한합니다.
 func boundedDate(layout string, t time.Time) (string, error) {
 	out := formatDate(layout, t)
 	if err := checkDerivedLen("date", len(out), len(layout)); err != nil {
@@ -67,7 +66,6 @@ func boundedDate(layout string, t time.Time) (string, error) {
 	return out, nil
 }
 
-// boundedReplace는 치환 결과 크기를 할당 전에 계산해 상한을 넘으면 실패합니다.
 func boundedReplace(s, old, replacement string) (string, error) {
 	if growth := len(replacement) - len(old); growth > 0 {
 		limit := derivedLimit(max(len(s), len(old), len(replacement)))
@@ -80,8 +78,7 @@ func boundedReplace(s, old, replacement string) (string, error) {
 	return strings.ReplaceAll(s, old, replacement), nil
 }
 
-// boundedSplit는 결과 slice의 출력 크기(원소 + 구분자 + 타입 이름)를 할당 전에 계산합니다. 원소 수도 이 크기로
-// 제한되어 slice header 할당이 입력 크기의 상수배를 넘지 않습니다.
+// 원소 수도 이 크기로 제한되어 slice header 할당이 입력 크기의 상수배를 넘지 않습니다.
 func boundedSplit(s, sep string) ([]string, error) {
 	// sep가 비어 있으면 strings.Count는 rune 수 + 1을 돌려주며 실제 원소 수보다 하나 많게 계산합니다.
 	elements := strings.Count(s, sep) + 1
@@ -92,7 +89,7 @@ func boundedSplit(s, sep string) ([]string, error) {
 	return strings.Split(s, sep), nil
 }
 
-// boundedJoin은 결합 결과 크기를 할당 전에 계산해 상한을 넘으면 실패합니다. 입력 크기는 slice 출력 크기입니다.
+// 입력 크기는 slice 출력 크기입니다.
 func boundedJoin(elems []string, sep string) (string, error) {
 	total := 0
 
@@ -110,7 +107,6 @@ func boundedJoin(elems []string, sep string) (string, error) {
 	return strings.Join(elems, sep), nil
 }
 
-// measureTemplateArgs는 인자별 출력 크기 상한의 합·최댓값과 최대 leaf 수를 돌려줍니다.
 func measureTemplateArgs(name string, args []any) (total, largest, leaves int, err error) {
 	for _, arg := range args {
 		size, argLeaves, ok := measureTemplateValue(arg, templateMeasureCeiling)
@@ -127,8 +123,7 @@ func measureTemplateArgs(name string, args []any) (total, largest, leaves int, e
 	return total, largest, leaves, nil
 }
 
-// boundedConcat는 print·println·html·js·urlquery처럼 인자를 이어 붙이는 함수의 결과 크기를 인자 측정으로 할당 전에
-// 제한하고, escape로 늘어난 결과(최대 6배)도 같은 상한으로 확인합니다. Separators는 인자 사이·끝에 붙는 최대 바이트 수입니다.
+// Separators는 인자 사이·끝에 붙는 최대 바이트 수입니다.
 func boundedConcat(name string, separators func(args int) int, fn func(...any) string) func(...any) (string, error) {
 	return func(args ...any) (string, error) {
 		total, largest, _, err := measureTemplateArgs(name, args)
@@ -154,8 +149,7 @@ func betweenArgs(args int) int { return max(args-1, 0) }
 
 func afterEachArg(args int) int { return args }
 
-// boundedDict는 dict 값의 출력 크기 합을 할당 전에 제한합니다. Dict 안에 dict를 거듭 넣어 출력 크기를 두 배씩
-// 키우는 구성도 이 상한에서 멈춥니다.
+// Dict 안에 dict를 거듭 넣어 출력 크기를 두 배씩 키우는 구성도 이 상한에서 멈춥니다.
 func boundedDict(values ...any) (map[string]any, error) {
 	if len(values)%2 != 0 {
 		return nil, errors.New("dict requires even number of arguments")
@@ -193,9 +187,6 @@ func boundedDict(values ...any) (map[string]any, error) {
 	return dict, nil
 }
 
-// boundedSprintf는 fmt.Sprintf와 같은 결과를 내되, 형식의 verb마다 가장 큰 인자 크기(인자 재사용 %[n] 포함)와
-// leaf마다 붙는 width·precision, 쓰이지 않은 인자의 "%!(EXTRA ...)" 표기로 결과 크기 상한을 먼저 계산해 넘으면
-// 할당 전에 실패합니다.
 func boundedSprintf(format string, args ...any) (string, error) {
 	verbs := fmtVerbBound{
 		args:      args,
@@ -233,9 +224,7 @@ func boundedSprintf(format string, args ...any) (string, error) {
 	return out, nil
 }
 
-// fmtVerbBound는 verb 하나의 출력 상한을 verb 배수 × 인자 크기 + (width + precision + 따옴표) × leaf 수 +
-// 오류 표기 여유로 계산합니다. Fmt는 slice·map의 원소마다 width를 적용하므로 leaf 수를 곱합니다. 인자 번호가 없는
-// 형식은 fmt와 같은 순서로 인자를 배정하고, 있으면 가장 큰 인자를 씁니다.
+// Fmt는 slice·map의 원소마다 width를 적용하므로 leaf 수를 곱합니다. 인자 번호가 없는 형식은 fmt와 같은 순서로 인자를 배정하고, 있으면 가장 큰 인자를 씁니다.
 type fmtVerbBound struct {
 	args       []any
 	sizes      []int
@@ -250,7 +239,7 @@ type fmtVerbBound struct {
 	indexed    bool
 }
 
-// total은 모든 verb와 쓰이지 않은 인자 표기 상한의 합을 돌려줍니다. 합이 budget을 넘으면 그 즉시 budget+1을 돌려줍니다.
+// 합이 budget을 넘으면 그 즉시 budget+1을 돌려줍니다.
 func (b *fmtVerbBound) total(format string) int {
 	total := 0
 
@@ -279,7 +268,7 @@ func (b *fmtVerbBound) total(format string) int {
 	return b.addExtraArgs(total)
 }
 
-// verbArg는 verb가 출력할 인자의 크기와 leaf 수입니다. 없는 인자는 "%!d(MISSING)"이며 오류 표기 여유에 포함됩니다.
+// 없는 인자는 "%!d(MISSING)"이며 오류 표기 여유에 포함됩니다.
 func (b *fmtVerbBound) verbArg(consumes bool) (size, leaves int) {
 	if b.reordered {
 		return b.maxArgSize, b.maxLeaves
@@ -292,9 +281,7 @@ func (b *fmtVerbBound) verbArg(consumes bool) (size, leaves int) {
 	return b.sizes[b.consumed], b.leaves[b.consumed]
 }
 
-// addExtraArgs는 fmt가 순서대로 쓰고 남은 인자를 "%!(EXTRA type=value, ...)"로 덧붙이는 크기를 더합니다.
-// Verb 안에 인자 번호를 쓴 형식에는 fmt가 EXTRA를 붙이지 않습니다. 남은 인자만 세므로 정상 형식은 인자 크기를
-// 두 번 세지 않습니다.
+// Verb 안에 인자 번호를 쓴 형식에는 fmt가 EXTRA를 붙이지 않습니다. 남은 인자만 세므로 정상 형식은 인자 크기를 두 번 세지 않습니다.
 func (b *fmtVerbBound) addExtraArgs(total int) int {
 	if b.indexed || b.consumed >= len(b.args) {
 		return total
@@ -342,7 +329,6 @@ func (b *fmtVerbBound) scanVerb(format string, i int) (padding, verb int) {
 	return padding, i
 }
 
-// widthOrPrecision은 '*'(인자 하나를 씀) 또는 숫자를 읽습니다.
 func (b *fmtVerbBound) widthOrPrecision(format string, i int, afterIndex bool) (value, next int, stillAfterIndex bool) {
 	if i < len(format) && format[i] == '*' {
 		value = b.starArg()
@@ -421,7 +407,6 @@ func (b *fmtVerbBound) verbSize(format string, verb, padding, argSize, argLeaves
 	return factor*argSize + (padding+2)*argLeaves + fmtVerbOverhead
 }
 
-// star는 '*' width·precision이 받을 수 있는 가장 큰 정수 인자입니다.
 func (b *fmtVerbBound) star() int {
 	if b.starKnown {
 		return b.starBound

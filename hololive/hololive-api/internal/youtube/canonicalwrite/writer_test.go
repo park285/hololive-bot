@@ -438,7 +438,6 @@ type communityPostRowVersion struct {
 
 const reobservedCommunityPostID = "post-reobserved"
 
-// 불변 재관측은 기존 행 버전을 그대로 두고, 카운터 변화나 published_at 보강이 있을 때만 새 행 버전을 쓴다.
 func TestPersistCommunityPostsTxSkipsUnchangedReobservation(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

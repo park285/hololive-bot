@@ -256,9 +256,8 @@ func (b *policyTargetBuilder) appendSubjectKinds(subject string, kinds []contrac
 	return nil
 }
 
-// appendLiveCheckVideos는 운영 roster 채널의 영상별 수명 확인 target을 만듭니다.
-// 근거 key는 영상이 속한 canonical 채널이며, roster 밖 채널의 영상은 입력 오류로 거부합니다.
-// 신선도 근거는 NotBefore로만 전달해 확인 직후의 출입이 projection identity를 바꾸지 않게 합니다.
+// 근거 key는 영상이 속한 canonical 채널이며, roster 밖 채널의 영상은 입력 오류로 거부합니다. 신선도 근거는 NotBefore로만 전달해 확인 직후의 출입이 projection identity를
+// 바꾸지 않게 합니다.
 func (b *policyTargetBuilder) appendLiveCheckVideos(videos []LiveCheckVideo, operationalChannelIDs []string) error {
 	if len(videos) == 0 {
 		return nil

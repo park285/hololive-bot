@@ -12,8 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// delivery telemetry는 lifecycle 전이 트랜잭션 안에서 owner 시도 하나당 한 행만 기록한다.
-// 팔로워(follower)는 시도가 아니라 기록하지 않는다.
 type transitionTelemetryRow struct {
 	DeliveryID     int64
 	AttemptOrdinal int
@@ -48,8 +46,6 @@ func TestTransitionApplyPreparedFailureRecordsOwnerAttemptTelemetry(t *testing.T
 	}}, loadTransitionTelemetryRows(t, pool))
 }
 
-// revive는 attempt_count를 0으로 되돌린다. 순번을 attempt_count에서 만들면 이전 시도와 겹쳐 새 시도가 사라지므로,
-// 이미 기록된 최대 순번 다음 값을 써야 한다.
 func TestTransitionAttemptTelemetryOrdinalContinuesAfterRevive(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -74,9 +70,6 @@ func TestTransitionAttemptTelemetryOrdinalContinuesAfterRevive(t *testing.T) {
 	require.Equal(t, "pre_send_claim", rows[2].FailureReason)
 }
 
-// telemetry processor는 방출한 행을 retention(기본 24h)이 지나면 지운다. 그 뒤 재시도나 재개된 발송이 순번을
-// 1부터 다시 쓰면 감사 로그에 같은 (delivery_id, attempt_ordinal)이 두 번 나오므로, revive 전까지 누적되는
-// attempt_count를 하한으로 쓴다.
 func TestTransitionAttemptTelemetryOrdinalKeepsAttemptCountAfterRetention(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -101,7 +94,6 @@ func TestTransitionAttemptTelemetryOrdinalKeepsAttemptCountAfterRetention(t *tes
 	require.Equal(t, 4, rows[0].AttemptOrdinal)
 }
 
-// 결과 불명 시도는 공백으로 두지 않는다. 격리 sweep의 트랜잭션이 owner 시도를 outcome_unknown으로 기록한다.
 func TestTransitionQuarantineRecordsOutcomeUnknownAttempt(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -129,7 +121,6 @@ func TestTransitionQuarantineRecordsOutcomeUnknownAttempt(t *testing.T) {
 	}}, loadTransitionTelemetryRows(t, pool))
 }
 
-// 호출자가 넘기는 발송 방식은 per_room·grouped뿐이다. 잘못된 값은 DB를 건드리기 전에 거절한다.
 func TestTransitionRejectsInvalidCallerDeliveryMode(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

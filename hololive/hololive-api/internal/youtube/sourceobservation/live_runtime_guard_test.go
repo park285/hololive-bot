@@ -16,8 +16,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-// 배제 경로가 exclusive 전역 잠금을 쥔 동안 관측 writer는 claim보다 먼저 shared 잠금에서 기다리고,
-// 원본과 수명 모델 갱신은 함께 커밋되거나 함께 되돌려진다.
 func TestFinalizeRuntimeGuardPrecedesClaimAndRollsBackProjection(t *testing.T) {
 	for _, rollback := range []bool{false, true} {
 		t.Run(fmt.Sprintf("rollback=%t", rollback), func(t *testing.T) {

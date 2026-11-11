@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// Start는 background 작업을 등록한 뒤 ingress를 연다. Shutdown 이후 다시 시작하지 않는다.
+// Shutdown 이후 다시 시작하지 않는다.
 func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return

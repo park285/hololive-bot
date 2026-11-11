@@ -59,7 +59,6 @@ func TestCacheAlarmDistinguishesMissingMemberFromLookupFailure(t *testing.T) {
 	}
 }
 
-// 알람 목록은 이름 캐시에 없는 채널을 members 정본으로 채운다. 조회 실패는 채널 ID 등 다른 이름으로 덮지 않는다.
 func TestListRoomAlarmsViewResolvesCacheMissFromMembers(t *testing.T) {
 	lookupErr := errors.New("member database unavailable")
 

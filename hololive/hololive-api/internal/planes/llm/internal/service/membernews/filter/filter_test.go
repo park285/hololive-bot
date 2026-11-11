@@ -141,7 +141,6 @@ func (m *mockMemberDataForFilter) FindMembersByAlias(context.Context, string) ([
 	return []*domain.Member{}, nil
 }
 
-// mustFilterCandidates는 멤버 데이터 없이 주간 기간으로 후보를 고른다.
 func mustFilterCandidates(t *testing.T, candidates []model.Candidate, now time.Time, roomMembers []string, validator model.SourceURLValidator) []model.FilteredCandidate {
 	t.Helper()
 
@@ -164,7 +163,6 @@ func mustBuildMemberProfiles(t *testing.T, roomMembers []string, membersData dom
 	return profiles
 }
 
-// 이름 조회 실패는 별칭으로 넘기거나 원래 표기로 진행하지 않고, 후보 선별 전체를 오류로 끝낸다.
 func TestFilterCandidates_MemberLookupFailureIsError(t *testing.T) {
 	cause := errors.New("member cache unavailable")
 	mock := &mockMemberDataForFilter{nameErr: cause}

@@ -242,7 +242,6 @@ func TestLiveAbsenceEvidenceVideoAvailabilityShape(t *testing.T) {
 	}
 }
 
-// 원시 evidence retention이 canonical 최신값을 지우거나 막지 않고 hash와 시각을 남기는지 확인한다.
 func TestLiveAbsenceEvidenceCanonicalRowsSurviveEvidenceRetention(t *testing.T) {
 	pool := NewPool(t)
 	ctx := t.Context()

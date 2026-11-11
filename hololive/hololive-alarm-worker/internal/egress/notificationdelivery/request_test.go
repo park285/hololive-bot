@@ -57,7 +57,6 @@ func (s *preparedSenderSpy) recordPrepared(message delivery.MessageVariants) {
 	s.prepared = append(s.prepared, message)
 }
 
-// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
 func (s *preparedSenderSpy) SendPreparedMessage(_ context.Context, _, body, route, id string) (string, error) {
 	s.recordSent(id, body, route)
 
@@ -85,8 +84,7 @@ func preparedSpyIrisRequestID(clientRequestID string) string {
 	return "iris-" + clientRequestID
 }
 
-// 생산자가 적재한 두 본문이 준비 단계까지 그대로 가야 발송기가 방 유형에 맞는 본문을 고른다. RichText 본문이 없는
-// 변형 도입 전 행은 한 본문을 두 경로에 쓴다.
+// RichText 본문이 없는 변형 도입 전 행은 한 본문을 두 경로에 쓴다.
 func TestGenericRequestPassesStoredVariantsToPreparation(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
@@ -245,7 +243,6 @@ func TestGenericPayloadMismatchDoesNotReissue(t *testing.T) {
 	require.Len(t, sender.ids, 1)
 }
 
-// 다른 writer가 세대를 먼저 기록했으면 이전 세대를 기대한 재발급은 행을 바꾸지 않고 request_changed가 된다.
 func TestGenericRequestGenerationFenceRejectsStaleGeneration(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
@@ -396,8 +393,7 @@ func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 	}
 }
 
-// pinForeignRequest는 다른 writer가 이 worker보다 먼저 요청을 고정한 상태를 만든다. 소유자·상태·시도 횟수는 그대로라
-// dispatcher가 아직 행을 소유한다.
+// 소유자·상태·시도 횟수는 그대로라 dispatcher가 아직 행을 소유한다.
 func pinForeignRequest(ctx context.Context, t *testing.T, repo *outboxFixture, periodKey string) {
 	t.Helper()
 
@@ -412,8 +408,6 @@ func fenceMissCount(action string, reason sendfence.Reason, result string) float
 	return promtestutil.ToFloat64(notificationDeliveryFenceMissTotal.WithLabelValues(action, string(reason), result))
 }
 
-// 발송 중 다른 writer가 세대를 앞서 기록했으면 409 재발급은 새 세대를 쓰지 못한다. 소유권은 남았으므로 같은 ID 반복
-// 충돌을 피하려고 저장된 요청을 소진으로 표시한 종료 FAILED로 끝내며 SENDING을 남기지 않는다.
 func TestGenericReissueFenceMissWithHeldOwnershipFailsWithoutSendingResidue(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
@@ -543,8 +537,6 @@ func TestGenericReissueFenceMissLeavesForeignTakeoverUntouched(t *testing.T) {
 	}
 }
 
-// 요청을 고정하기 전 fence 미스는 발송하지 않는다. 소유권이 남았으면 일반 실패로 claim을 반납하고, 다른 worker가
-// 재claim한 행은 그대로 둔다.
 func TestGenericSaveRequestFenceMissNeverSendsAndRespectsForeignClaim(t *testing.T) {
 	for _, tc := range []struct {
 		name      string

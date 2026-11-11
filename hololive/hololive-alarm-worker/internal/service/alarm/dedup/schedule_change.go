@@ -60,8 +60,6 @@ func (s *Service) DetectScheduleChange(ctx context.Context, streamID string, cur
 	return change.Message, nil
 }
 
-// DetectNotificationScheduleChanges는 방별 일정 변경을 찾는다. 방과 무관한 stream 단위 notified hash는 한 번만 읽고,
-// 거기서 변경이 확정되지 않을 때만 방별 logical schedule index를 읽는다.
 func (s *Service) DetectNotificationScheduleChanges(ctx context.Context, roomIDs []string, channelID string, stream *domain.Stream) (map[string]*ScheduleChange, error) {
 	changes := make(map[string]*ScheduleChange)
 

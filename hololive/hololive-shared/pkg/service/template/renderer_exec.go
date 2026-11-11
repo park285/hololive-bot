@@ -40,8 +40,7 @@ var (
 	templateExitMark  = make([]byte, 0, 1)
 )
 
-// parseTemplateBody는 공용 함수로 본문을 파싱한 뒤 모든 정의 template에 실행 예산 계측 지점을 넣습니다.
-// Strict이면 없는 map key를 오류로 다룹니다. 반환된 template은 실행 중 변경되지 않아 동시 실행에 공유할 수 있습니다.
+// 반환된 template은 실행 중 변경되지 않아 동시 실행에 공유할 수 있습니다.
 func parseTemplateBody(name, body string, strict bool) (*template.Template, error) {
 	if len(body) > templateSourceMaxBytes {
 		return nil, fmt.Errorf("parse template: %w: body %d bytes exceeds %d", ErrTemplateExecutionLimit, len(body), templateSourceMaxBytes)
@@ -125,10 +124,8 @@ func isTemplateMark(p, mark []byte) bool {
 	return cap(p) > 0 && &p[:1][0] == &mark[:1][0]
 }
 
-// boundedTemplateWriter는 실행 단계마다 취소·단계·시간 예산을 확인하고 출력 상한을 넘는 쓰기를 거절합니다.
-// 쓰기 오류는 text/template이 즉시 실행을 중단하고 그대로 돌려줍니다. Action 출력은 fmt가 값 전체를 버퍼에 만든 뒤
-// 한 번에 쓰므로 이 writer는 그 버퍼를 제한하지 않습니다. Template이 만든 값은 파생 값 불변식으로, 호출자 데이터는
-// 호출자가 크기를 제한합니다.
+// 쓰기 오류는 text/template이 즉시 실행을 중단하고 그대로 돌려줍니다. Action 출력은 fmt가 값 전체를 버퍼에 만든 뒤 한 번에 쓰므로 이 writer는 그 버퍼를 제한하지 않습니다.
+// Template이 만든 값은 파생 값 불변식으로, 호출자 데이터는 호출자가 크기를 제한합니다.
 type boundedTemplateWriter struct {
 	buf      bytes.Buffer
 	done     <-chan struct{}
@@ -192,7 +189,6 @@ func (w *boundedTemplateWriter) trackCallDepth(p []byte) error {
 	return nil
 }
 
-// executeTemplate는 parseTemplateBody로 만든 template을 호출 goroutine에서 예산 안에 실행합니다.
 // 취소, 예산 초과, 실행 오류는 부분 출력 없이 실패하며 별도 goroutine을 남기지 않습니다.
 func executeTemplate(ctx context.Context, tmpl *template.Template, data any) (string, error) {
 	if err := ctx.Err(); err != nil {

@@ -180,7 +180,6 @@ func NewResolver(config ResolverConfig) (Resolver, error) {
 	return Resolver{config: config}, nil
 }
 
-// ResolveGroups는 ledger를 우선해 제한된 범위에서 논리 상태를 확인한다.
 // 호출자가 일괄 조회한 ledger와 보존 행을 전달하며 함수 자체는 I/O와 시계 읽기를 수행하지 않는다.
 func (r Resolver) ResolveGroups(
 	rows []DeliverySnapshot,

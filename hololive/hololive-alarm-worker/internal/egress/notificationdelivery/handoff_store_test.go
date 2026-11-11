@@ -17,8 +17,6 @@ import (
 
 const testHandoffSoftClaim = 15 * time.Second
 
-// sendForHandoff는 testRoomA의 행 하나를 운영 경로대로 요청 고정·발송 진입·발송 완료까지 옮겨 확인 대기 SENT 행으로
-// 만든다.
 func sendForHandoff(t *testing.T, repo *outboxFixture) int64 {
 	t.Helper()
 
@@ -37,7 +35,6 @@ func sendForHandoff(t *testing.T, repo *outboxFixture) int64 {
 	return items[0].ID
 }
 
-// claimDueHandoff는 행의 다음 확인 시각을 DB 시각 직전으로 당긴 뒤 handoff 확인 claim이 그 행 하나를 고르는지 확인한다.
 func claimDueHandoff(t *testing.T, repo *outboxFixture, id int64) HandoffClaim {
 	t.Helper()
 
@@ -80,8 +77,6 @@ func loadHandoffRow(t *testing.T, repo *outboxFixture, id int64) handoffRowState
 	return state
 }
 
-// 지평이 첫 확인 간격보다 길면 발송 완료는 같은 문장의 DB 시각으로 admission 5초 뒤 첫 확인을 예약하고, 그 전에는 확인
-// claim이 행을 고르지 않는다. 확인할 requestId 없는 발송 완료는 전이하지 않는다.
 func TestNotificationHandoffMarkSentSchedulesFirstCheck(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
@@ -112,8 +107,6 @@ func TestNotificationHandoffMarkSentSchedulesFirstCheck(t *testing.T) {
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, deliveryStatusSending))
 }
 
-// 확인을 끝내는 세 결과는 확인 시각을 지우고 같은 방의 후행 행을 풀어 준다. 종료 실패는 저장된 요청을 소진으로 표시해
-// producer rearm이 되살리지 않고, 격리는 자동 재발송 가능한 FAILED가 아니다.
 func TestNotificationHandoffClosingOutcomesReleaseRoom(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -181,8 +174,6 @@ func TestNotificationHandoffClosingOutcomesReleaseRoom(t *testing.T) {
 	}
 }
 
-// Iris failed 재발급은 행을 다음 세대의 PENDING으로 되돌리고 handoff 확인 상태를 비운다. 다음 claim은 같은 고정 본문을
-// 새 세대 ID(:r1)로 보내고 그 발송의 requestId로 다시 확인을 예약한다.
 func TestNotificationHandoffReissueResendsPinnedBodyWithNextGeneration(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
@@ -226,8 +217,6 @@ func TestNotificationHandoffReissueResendsPinnedBodyWithNextGeneration(t *testin
 	require.NotNil(t, state.nextCheck)
 }
 
-// soft claim 토큰이 바뀐 이전 확인과 재발급 뒤의 늦은 확인은 행을 바꾸지 않는 fence 미스다. 새 토큰의 확인은 그대로
-// 적용된다.
 func TestNotificationHandoffStaleClaimCannotApply(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
@@ -254,7 +243,6 @@ func TestNotificationHandoffStaleClaimCannotApply(t *testing.T) {
 	require.False(t, state.checked)
 }
 
-// 다음 확인은 DB 시계로 잰 admission + 지평을 넘기지 않는다. 확인 claim이 돌려준 경과도 같은 DB 시계다.
 func TestNotificationHandoffRescheduleNeverPassesHorizon(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()

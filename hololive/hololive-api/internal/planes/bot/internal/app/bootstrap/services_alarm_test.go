@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )
 
-// alarm provider URL이 없으면 in-process AlarmService로 대신하지 않고 기동을 실패시킨다.
 func TestInitAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
 	t.Parallel()
 

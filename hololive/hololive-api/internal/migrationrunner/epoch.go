@@ -14,9 +14,7 @@ import (
 
 const epoch3Baseline = "001_schema_epoch3_baseline.sql"
 
-// reconcileBaseline은 삭제된 셸 러너 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
-// 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직
-// 미적용인 마이그레이션이 조용히 skip되는 사고(073 DB에 074-082 유실)가 나므로 거부한다.
+// 핵심 제약: 기존 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직 미적용인 마이그레이션이 조용히 skip되는 사고가 나므로 거부한다.
 func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
 	count, err := ledgerCount(ctx, conn)
 	if err != nil {

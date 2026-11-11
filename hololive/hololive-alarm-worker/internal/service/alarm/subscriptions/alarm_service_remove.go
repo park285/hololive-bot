@@ -14,12 +14,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// RemoveAlarm은 전체 채널 구독의 알림 종류를 해지하고 멤버별 구독을 보존한다.
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
 	return as.removeAlarm(ctx, roomID, channelID, "", alarmTypes)
 }
 
-// RemoveHostAlarm은 해당 채팅방의 지정한 UNIT B 멤버 구독에서 알림 종류를 해지한다.
 func (as *AlarmService) RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
 	channelID, hostID = strings.TrimSpace(channelID), strings.TrimSpace(hostID)
 	if _, ok := mekparkhost.SubscriptionMember(channelID, hostID); !ok {

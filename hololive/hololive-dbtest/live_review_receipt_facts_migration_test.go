@@ -18,7 +18,6 @@ const liveReviewReceiptSideFactsSQL = `public.youtube_live_review_semantic_facts
 
 // 기존 246·262 형식 영수증의 판정은 저장 사실로 바꾼 뒤에도 같고, 저장 사실은 270 영수증 쪽 식과 같다.
 
-// 기록 함수와 직접 INSERT 모두 같은 트랜잭션에서 사실을 저장하고, 저장 사실은 영수증처럼 변경·삭제를 거부한다.
 func TestLiveReviewReceiptFactsStoredOnRecordAndImmutable(t *testing.T) {
 	t.Parallel()
 
@@ -44,7 +43,6 @@ func TestLiveReviewReceiptFactsStoredOnRecordAndImmutable(t *testing.T) {
 	assertLiveReviewReceiptFactsMatchReceipts(t, pool)
 }
 
-// 기본 ACL이 새 표에 줄 수 있는 넓은 권한을 걷어 runtime은 조회만, scraper는 권한 없음으로 남긴다.
 func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 	t.Parallel()
 
@@ -108,9 +106,7 @@ func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 	require.True(t, reviewed, "runtime은 저장 사실을 읽어 기존 판정을 계산해야 합니다")
 }
 
-// seedRecordedLiveReviews는 기록 함수로 262 형식(무시한 부재 slot 요약·가용성 전체 행) 영수증을 남긴다.
-// 서울 시간대 세션에서 기록하고 pending end를 포함해 시간대·pending 사실도 저장 사실 비교에 넣는다.
-// 기록 뒤 제목이 바뀐 reopened는 더 이상 면제되지 않는다.
+// 서울 시간대 세션에서 기록하고 pending end를 포함해 시간대·pending 사실도 저장 사실 비교에 넣는다. 기록 뒤 제목이 바뀐 reopened는 더 이상 면제되지 않는다.
 func seedRecordedLiveReviews(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -160,7 +156,6 @@ func recordLiveReviewInSeoul(t *testing.T, pool *pgxpool.Pool, receiptID, videoI
 	require.NoError(t, tx.Commit(ctx))
 }
 
-// assertLiveReviewReceiptFactsMatchReceipts는 영수증마다 저장 사실이 하나 있고 270 영수증 쪽 식과 같은지 확인한다.
 // 비교 세션은 UTC라 서울 시간대에서 기록한 사실이 시간대와 무관한지도 함께 확인한다.
 func assertLiveReviewReceiptFactsMatchReceipts(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()

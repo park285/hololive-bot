@@ -79,7 +79,6 @@ type collectionGuardSample struct {
 	err        error
 }
 
-// collector가 호출하는 실제 DB 함수를 통해 공유 guard와 현재 header를 확인합니다.
 // 전체 acquisition/provider/consume 지연을 측정하는 함수가 아닙니다.
 func readCollectionSharedGuard(ctx context.Context, pool *pgxpool.Pool) (sample collectionGuardSample) {
 	started := time.Now()
@@ -115,7 +114,6 @@ func readCollectionSharedGuard(ctx context.Context, pool *pgxpool.Pool) (sample 
 	return sample
 }
 
-// 실제 최대 입력 Build를 마친 writer가 취소될 때 대기 reader와 만료 header가 회복되는지 확인합니다.
 // 채널 장벽은 잠금 상태를 재현하기 위한 것이며 성능 수치에 포함하지 않습니다.
 func TestCollectionRealPolicyGuardCancellationAndExpiry(t *testing.T) {
 	pool, refresher, builder, readers := newCollectionGuardLoad(t)
@@ -306,8 +304,7 @@ func awaitCollectionGuardSample(ctx context.Context, t *testing.T, done <-chan c
 	}
 }
 
-// 고정 30회(공유 reader 120회) 동시 부하의 지연 분포를 기록합니다. 벽시계 임계값은 합격 조건이 아닙니다.
-// 측정 범위는 최대 입력의 실제 Refresh와 공유 guard SQL/조회 transaction이며 수집→intent가 아닙니다.
+// 벽시계 임계값은 합격 조건이 아닙니다. 측정 범위는 최대 입력의 실제 Refresh와 공유 guard SQL/조회 transaction이며 수집→intent가 아닙니다.
 func TestCollectionRealPolicySharedGuardLoad(t *testing.T) {
 	_, refresher, builder, readers := newCollectionGuardLoad(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -386,7 +383,6 @@ func collectionGuardPercentile(sorted []time.Duration, percent int) time.Duratio
 
 var _ targetprojection.Builder = collectionPausedPolicy{}
 
-// guard 획득 직후 실제 Build가 시작되면 reader를 풀어 입력 조회 전체와 경합시킵니다.
 // Reader를 기다리거나 Build 종료를 늦추지 않으므로 인위적인 장벽 지연을 측정하지 않습니다.
 type collectionObservedPolicy struct {
 	builder targetprojection.PolicyBuilder

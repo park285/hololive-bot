@@ -9,8 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 읽기 모델은 PendingEnds 존재만으로 현재 미해결 종료를 판정하면 안 된다. 비ENDED 세션에서
-// positive에 밀린 종료 증거는 보존하고, 이미 ENDED가 된 세션의 반복 종료는 다시 보관하지 않는다.
+// 읽기 모델은 PendingEnds 존재만으로 현재 미해결 종료를 판정하면 안 된다.
 func TestReduceRetainsSupersededEndEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -37,7 +36,7 @@ func TestReduceRetainsSupersededEndEvidence(t *testing.T) {
 	}
 }
 
-// storedEndedSession은 DB에서 읽은 ENDED 세션이다. ENDED 세션은 무시한 부재 이력을 적재하지 않는다.
+// ENDED 세션은 무시한 부재 이력을 적재하지 않는다.
 func storedEndedSession() SessionState {
 	started := liveA().EffectiveAt
 	ended := endA().EffectiveAt
@@ -63,8 +62,6 @@ func pendingByVideo(items []PendingEnd) map[string]PendingEnd {
 	return pending
 }
 
-// 저장된 ENDED 세션은 되살아나지 않으므로 반복 종료·취소를 pending으로 다시 쓰지 않는다.
-// 이미 있는 pending(D2 진단)은 지우지도 새 관측으로 바꾸지도 않는다.
 func TestReduceSkipsRepeatedEndForStoredEndedSession(t *testing.T) {
 	t.Parallel()
 
@@ -108,7 +105,6 @@ func TestReduceSkipsRepeatedEndForStoredEndedSession(t *testing.T) {
 	}
 }
 
-// 세션 행이 없는 영상의 종료는 늦게 도착할 positive를 위해 최신 관측으로 계속 보관한다.
 func TestReduceKeepsNewestEndForVideoWithoutSession(t *testing.T) {
 	t.Parallel()
 
@@ -145,7 +141,6 @@ func TestReduceKeepsNewestEndForVideoWithoutSession(t *testing.T) {
 	}
 }
 
-// session 행 없이 head만 남은 ENDED 영상은 저장된 ENDED 세션이 아니므로 종료를 지금처럼 기록한다.
 func TestReduceRecordsEndForHeadOnlyEndedVideo(t *testing.T) {
 	t.Parallel()
 

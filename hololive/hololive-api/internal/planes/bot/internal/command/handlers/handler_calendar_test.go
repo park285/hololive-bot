@@ -300,7 +300,6 @@ func TestCachedCelebrationCalendarFinder_RefreshesExpiredSnapshot(t *testing.T) 
 	}
 }
 
-// cache는 정본이 아니므로 Valkey 오류는 PostgreSQL 조회로 진행하고 달력 명령 실패로 올리지 않는다.
 func TestCachedCelebrationCalendarFinder_ValkeyErrorFallsThroughToRepository(t *testing.T) {
 	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 	repo := &calendarRepoStub{

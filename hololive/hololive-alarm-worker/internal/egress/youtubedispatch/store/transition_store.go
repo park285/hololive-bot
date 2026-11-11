@@ -135,8 +135,7 @@ type resolvedLogicalGroups struct {
 	ledgerByKey map[ytcontentid.LogicalKey]DeliveryLedgerRecord
 }
 
-// resolveClaimedGroups는 호출자 claim 행의 논리 그룹을 같은 트랜잭션에서 잠가 다시 읽고 해석한다. 다시 읽은 행이 호출자
-// claim과 다르면 해석 전에 operation 이름의 *sendfence.MissError를 돌려준다.
+// 다시 읽은 행이 호출자 claim과 다르면 해석 전에 operation 이름의 *sendfence.MissError를 돌려준다.
 func (s *TransitionStore) resolveClaimedGroups(
 	ctx context.Context,
 	db dbx.Querier,
@@ -265,9 +264,8 @@ func claimedResolutionSnapshot(
 	return key, row.snapshot(current), true, nil
 }
 
-// checkClaimFence는 잠가 다시 읽은 행이 호출자 claim과 같은 세대인지 본다. 상태를 PENDING으로 둔 채 소유자와 row_version을
-// 바꾸는 것이 claim이므로 셋이 모두 같아야 호출자가 아직 그 행을 소유한다. 하나라도 어긋나면 대상 전원을 미적용으로 담은
-// 미스를 돌려주며, 호출자는 이 트랜잭션에서 아무 행도 바꾸지 않는다.
+// 상태를 PENDING으로 둔 채 소유자와 row_version을 바꾸는 것이 claim이므로 셋이 모두 같아야 호출자가 아직 그 행을 소유한다. 하나라도 어긋나면 대상 전원을 미적용으로 담은 미스를 돌려주며,
+// 호출자는 이 트랜잭션에서 아무 행도 바꾸지 않는다.
 func checkClaimFence(operation string, claimed []domain.YouTubeNotificationDelivery, rows []transitionRow) error {
 	loaded := make(map[int64]transitionRow, len(rows))
 	for i := range rows {
@@ -379,7 +377,6 @@ func (s *TransitionStore) loadLogicalGroupRows(
 	return queryLogicalGroupRows(ctx, db, s.logicalGroupArgs(requested))
 }
 
-// queryLogicalGroupRows는 logicalGroupArgs로 만든 인자로 논리 그룹 delivery를 transition_group_rows.sql 순서로 잠근다.
 func queryLogicalGroupRows(ctx context.Context, db dbx.Querier, args []any) ([]transitionRow, error) {
 	var rows []transitionRow
 
@@ -418,7 +415,6 @@ func (s *TransitionStore) logicalGroupWindowLimit(requestedCount int) int {
 	return requestedCount * (s.config.LogicalGroupLimit + 2)
 }
 
-// logicalGroupWindowComplete는 다른 키의 별칭까지 포함한 조회 창이 잘리지 않았음을 확인한다.
 // 한도에 닿으면 창 밖 형제의 유무를 증명할 수 없으므로 불완전하며, 빈 요청은 완전한 빈 집합이다.
 func (s *TransitionStore) logicalGroupWindowComplete(requestedCount, observedCount int) bool {
 	return requestedCount == 0 || observedCount < s.logicalGroupWindowLimit(requestedCount)
@@ -505,8 +501,7 @@ type transitionVectors struct {
 	nextErrors       []string
 }
 
-// applyRowTransitions는 before의 (status, locked_by, row_version) fence로 대상 전원을 함께 전이한다. 한 대상이라도
-// fence가 어긋나면 아무 행도 바꾸지 않고 *sendfence.MissError를 돌려준다. 성공하면 전이 시각(DB 시계)을 함께 돌려준다.
+// 한 대상이라도 fence가 어긋나면 아무 행도 바꾸지 않고 *sendfence.MissError를 돌려준다. 성공하면 전이 시각(DB 시계)을 함께 돌려준다.
 func applyRowTransitions(
 	ctx context.Context,
 	db dbx.Querier,
@@ -516,8 +511,7 @@ func applyRowTransitions(
 	return applyFencedRowTransitions(ctx, db, operation, transitions, nil)
 }
 
-// applySendingTransitions는 외부 발송 권한을 만드는 전이를 적용한다. 정지했던 소유자가 lease 밖에서 발송을 시작하지
-// 않도록 행 fence에 더해 claim lease(locked_at + lease)가 DB 시계 기준으로 살아 있어야 한다.
+// 정지했던 소유자가 lease 밖에서 발송을 시작하지 않도록 행 fence에 더해 claim lease(locked_at + lease)가 DB 시계 기준으로 살아 있어야 한다.
 func applySendingTransitions(
 	ctx context.Context,
 	db dbx.Querier,
@@ -585,7 +579,6 @@ func applyFencedRowTransitions(
 	return transitionOutboxIDs(transitions), scanned[0].transitionedAt.UTC(), nil
 }
 
-// transitionObservation은 전이 SQL 한 행의 sendfence 관측 열과 그 뒤에 붙은 전이 시각이다.
 type transitionObservation struct {
 	observation    sendfence.Observation
 	transitionedAt time.Time
@@ -655,7 +648,7 @@ func (v *transitionVectors) appendTransition(transition rowTransition, nextAttem
 	v.nextErrors = append(v.nextErrors, deliverysql.TruncateString(transition.after.Error, 500))
 }
 
-// dueVectorValues는 DueSpec을 전이 SQL의 (지연 ms, 하한) 쌍으로 바꾼다. 유지는 지연 NULL, 하한이 없으면 하한 NULL이다.
+// 유지는 지연 NULL, 하한이 없으면 하한 NULL이다.
 func dueVectorValues(due lifecycle.DueSpec) (*int64, *time.Time) {
 	if due.Mode != lifecycle.DueDelay {
 		return nil, nil

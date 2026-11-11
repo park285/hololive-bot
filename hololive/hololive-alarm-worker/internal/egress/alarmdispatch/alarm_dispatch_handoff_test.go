@@ -118,7 +118,6 @@ func newHandoffTestReconciler(t *testing.T, consumer *handoffTestConsumer, clien
 	return reconciler
 }
 
-// 관측 하나가 원장 정산 하나로 이어지고, 재발급은 다음 시도의 백오프로, 진행 중은 경과에 맞는 다음 간격으로 예약한다.
 func TestHandoffReconcilerRoutesObservationToLedgerAction(t *testing.T) {
 	t.Parallel()
 
@@ -168,7 +167,6 @@ func TestHandoffReconcilerRoutesObservationToLedgerAction(t *testing.T) {
 	}
 }
 
-// 종료로 끊긴 상태 조회는 관측이 아니므로 어떤 정산도 하지 않고 soft claim 만료 뒤 다음 확인에 맡긴다.
 func TestHandoffReconcilerSkipsLedgerWhenStatusQueryIsCanceled(t *testing.T) {
 	t.Parallel()
 
@@ -188,7 +186,6 @@ func TestHandoffReconcilerSkipsLedgerWhenStatusQueryIsCanceled(t *testing.T) {
 	require.Empty(t, consumer.calls)
 }
 
-// handoffOutcomeLevels는 reconciler가 단위별 정산 결과로 남긴 로그 수준을 send_unit_id별로 모은다.
 type handoffOutcomeLevels struct {
 	mu     sync.Mutex
 	levels map[int64]slog.Level
@@ -228,7 +225,6 @@ func (h *handoffOutcomeLevels) snapshot() map[int64]slog.Level {
 	return maps.Clone(h.levels)
 }
 
-// gatedHandoffConsumer의 완료 정산은 release가 닫힐 때까지 연결을 쥔 것처럼 머문다.
 type gatedHandoffConsumer struct {
 	handoffTestConsumer
 
@@ -253,8 +249,6 @@ type gatedHandoffRun struct {
 	done     chan int
 }
 
-// startGatedHandoffRun은 synctest bubble 안에서 완료 관측 handoffGatedUnits건의 RunOnce를 시작하고, 상태 조회가
-// 모두 끝나 정산 슬롯이 가득 찬 시점까지 진행한다.
 func startGatedHandoffRun(t *testing.T) gatedHandoffRun {
 	t.Helper()
 
@@ -293,9 +287,6 @@ func startGatedHandoffRun(t *testing.T) gatedHandoffRun {
 	return run
 }
 
-// batch의 상태 조회는 모두 병렬로 끝나도 DB 정산은 동시에 alarmDispatchHandoffSettleConcurrency건까지만 돈다. 앞
-// 정산이 예산 안에 끝나면 남은 정산이 모두 적용되고, 슬롯 대기가 정산 예산을 넘긴 정산은 적용하지 않고 다음 확인에
-// 맡기는 경고로 남는다.
 func TestHandoffReconcilerBoundsConcurrentSettlements(t *testing.T) {
 	t.Run("queued settlements apply once slots free within budget", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
@@ -335,7 +326,6 @@ func TestHandoffReconcilerBoundsConcurrentSettlements(t *testing.T) {
 	})
 }
 
-// failingHandoffConsumer의 완료·dlq 정산은 err를 돌려준다.
 type failingHandoffConsumer struct {
 	handoffTestConsumer
 
@@ -350,8 +340,6 @@ func (c *failingHandoffConsumer) DLQAfterHandoff(context.Context, *dispatchoutbo
 	return c.err
 }
 
-// 정산 실패는 다음 확인이 이어받는지로 나뉜다. 확인이 닫힌 미스와 DLQ commit 뒤 claim 키 해제 실패는 다시 판정할
-// 확인이 없으므로 오류이고, 소유 상실 미스와 예산 초과는 다음 확인이 다시 판정하므로 경고다.
 func TestHandoffReconcilerClassifiesSettlementFailures(t *testing.T) {
 	t.Parallel()
 

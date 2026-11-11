@@ -39,7 +39,6 @@ func TestFailureRecordingControlsWorkerExit(t *testing.T) {
 	}
 }
 
-// testFailureRecordingWorkerExit는 일시 오류로 기록에 실패하면 다음 작업을 계속하고, 그 밖의 실패는 worker를 종료하는지 확인한다.
 func testFailureRecordingWorkerExit(t *testing.T, operation string, tc failureRecordingCase) {
 	t.Helper()
 

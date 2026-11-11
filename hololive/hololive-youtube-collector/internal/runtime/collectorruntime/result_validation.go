@@ -154,8 +154,7 @@ func validateEnvelopeContract(job collection.JobContract, envelope *collection.O
 	return nil
 }
 
-// validateEnvelopeLease는 관측 lease가 입력 lease와 같은지 확인합니다. 입력 lease의 job key·kind 결합은
-// target snapshot 적재와 실행 입력 생성이 이미 검증했습니다.
+// 입력 lease의 job key·kind 결합은 target snapshot 적재와 실행 입력 생성이 이미 검증했습니다.
 func validateEnvelopeLease(lease *contract.LeaseProof, envelope *collection.ObservationMetadata) error {
 	if envelope.Lease != *lease {
 		return invariantError("observation lease or contract binding is invalid")
@@ -180,7 +179,6 @@ func validateEnvelopeSubject(subject string, job collection.JobContract, envelop
 	return nil
 }
 
-// recordCheckpointBinding은 관측에서 파생될 체크포인트 바인딩이 배치 안에서 유일한지 확인합니다.
 func recordCheckpointBinding(envelope *collection.ObservationMetadata, seen map[string]struct{}) error {
 	key := string(envelope.Provider) + "\x00" + string(envelope.ObservationKind) + "\x00" + envelope.SubjectKey
 	if _, ok := seen[key]; ok {

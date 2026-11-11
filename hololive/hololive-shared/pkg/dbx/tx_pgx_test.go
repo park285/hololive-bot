@@ -57,7 +57,6 @@ func TestPgxTxRollsBackOnError(t *testing.T) {
 	require.Zero(t, count)
 }
 
-// 결과형 helper도 같은 트랜잭션 실패를 한 단계로만 감싸야 호출자가 붙인 동작 접두 뒤에 원인이 바로 보인다.
 func TestPgxTxWithResultRollsBackWithSingleTransactionPrefix(t *testing.T) {
 	ctx := t.Context()
 	pool := newTxTestPool(t)

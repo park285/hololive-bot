@@ -19,8 +19,6 @@ var (
 	testPremiereAt  = time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC)
 )
 
-// 첫 실행은 목록 순서로 상한만큼만 영상별 확인을 보내고, 다음 실행은 저장된 cursor 근거를 재사용해 남은 항목만 조회합니다.
-// Premiere가 공개로 바뀌면 바뀐 항목으로 다시 조회하고, 시각이 없던 항목은 그 뒤에 재조회합니다.
 func TestContentRunnerEnrichesBoundedCandidatesAndReusesDurableCursor(t *testing.T) {
 	t.Parallel()
 
@@ -77,8 +75,6 @@ func TestContentRunnerEnrichesBoundedCandidatesAndReusesDurableCursor(t *testing
 	requirePublished(t, payload, "old-c", testPublishedAt)
 }
 
-// 근거 조회 실패는 그 항목만 근거 미수집으로 남기고 같은 job의 추가 조회를 멈춥니다. 목록·Shorts 관측은 그대로 발행되며,
-// 다음 실행은 처음 보는 항목을 먼저 조회한 뒤 실패한 항목을 다시 조회합니다.
 func TestContentRunnerKeepsListAndShortsWhenEnrichmentFails(t *testing.T) {
 	t.Parallel()
 
@@ -178,8 +174,6 @@ func TestContentRunnerRequiresPublicationContractGeneration(t *testing.T) {
 	}
 }
 
-// 직전 video_list cursor를 해석할 수 없으면 조회 이력을 잃은 것처럼 다시 조회하지 않고 job을 실패시킵니다.
-// 이전 cursor가 없는(NULL) 경우만 이력 없음이며, 다른 형식·버전·근거 규칙을 어긴 항목은 RPC 전에 거부합니다.
 func TestContentRunnerFailsClosedOnUnreadableCursor(t *testing.T) {
 	t.Parallel()
 
@@ -217,7 +211,6 @@ func TestContentRunnerFailsClosedOnUnreadableCursor(t *testing.T) {
 	}
 }
 
-// helper가 다른 영상의 응답을 돌려주면 그 시각을 요청 영상의 근거로 쓰지 않고 실패한 시도로 남기며 같은 job의 조회를 멈춥니다.
 func TestContentRunnerNeverAttributesAnotherVideosEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -248,7 +241,6 @@ func TestContentRunnerNeverAttributesAnotherVideosEvidence(t *testing.T) {
 	}
 }
 
-// helper 목록 항목에 시각이 실려 와도 video_list 항목 시각은 영상별 근거에서만 나옵니다. 근거가 시각을 주지 않으면 시각 없이 남습니다.
 func TestContentRunnerNeverCarriesListItemTimes(t *testing.T) {
 	t.Parallel()
 
@@ -268,7 +260,6 @@ func TestContentRunnerNeverCarriesListItemTimes(t *testing.T) {
 	}
 }
 
-// cache보다 큰 목록도 순환 위치를 따라 모두 조회하며, 직렬화된 이력은 매번 durable 상한 안에 머뭅니다.
 func TestContentPublicationCursorDoesNotStarveBeyondCache(t *testing.T) {
 	t.Parallel()
 
@@ -425,7 +416,6 @@ func classifyPublicationCases(checkedAt time.Time) []classifyPublicationCase {
 	}
 }
 
-// requireClassifiedTimes는 분류 상태에 맞는 시각만 player 응답 그대로 실렸는지 확인합니다.
 func requireClassifiedTimes(t *testing.T, got *contract.VideoPublicationV1, result *youtubejs.VideoLiveCheckResult) {
 	t.Helper()
 
@@ -445,7 +435,7 @@ func requireClassifiedTimes(t *testing.T, got *contract.VideoPublicationV1, resu
 	}
 }
 
-// earlierSlot은 cursor를 직전 slot에서 수락된 것으로 바꿉니다. 테스트 입력은 모두 같은 slot을 쓰므로, 다음 poll을 흉내 낼 때 씁니다.
+// 테스트 입력은 모두 같은 slot을 쓰므로, 다음 poll을 흉내 낼 때 씁니다.
 func earlierSlot(t *testing.T, raw []byte) []byte {
 	t.Helper()
 
@@ -588,8 +578,6 @@ func requireNoPublication(t *testing.T, payload contract.VideoListV1, videoID st
 	}
 }
 
-// 앞쪽 후보가 계속 실패하거나 시각이 없어도 처음 보는 항목이 먼저 조회되고, 근거를 받은 항목은 다음 poll에서 다시 조회하지 않습니다.
-// 상한 2의 bounded 조회가 bootstrap 목록에서도 poll마다 전진하고, 실패한 항목은 가장 오래된 시도 순서로 다시 돌아옵니다.
 func TestContentRunnerProgressesFairlyAcrossPolls(t *testing.T) {
 	t.Parallel()
 
@@ -632,8 +620,6 @@ func TestContentRunnerProgressesFairlyAcrossPolls(t *testing.T) {
 	}
 }
 
-// shorts 실패로 video_list만 PARTIAL로 수락된 slot을 같은 slot에서 재시도하면 video_list 목록·근거를 다시 조회하지 않습니다.
-// 같은 관측 identity에 다른 payload를 만들어 collision을 내거나 cursor 전진을 잃지 않고, 실패한 shorts만 다시 수집합니다.
 func TestContentRunnerSameSlotRetryCollectsOnlyUnacceptedKinds(t *testing.T) {
 	t.Parallel()
 
@@ -678,8 +664,6 @@ func TestContentRunnerSameSlotRetryCollectsOnlyUnacceptedKinds(t *testing.T) {
 	}
 }
 
-// 근거 조회는 수집 기한에서 예약분을 뺀 기한 안에서만 합니다. 조회가 그 기한에 끊기면 그 항목을 실패한 시도로 남기고
-// 더 조회하지 않으며, 이미 받은 목록·Shorts는 수집 기한 안에 그대로 발행합니다.
 func TestContentRunnerPublicationDeadlineKeepsListsAndCursorProgress(t *testing.T) {
 	t.Parallel()
 

@@ -30,7 +30,6 @@ type alarmDispatchBacklogSnapshotStore interface {
 	BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error)
 }
 
-// alarmDispatchBacklogObserver는 발송 backlog·격리 집계를 읽기만 하는 관측 runner다.
 // 관측 실패는 Start 오류가 아니다. 첫 오류가 나면 runNamedSchedulers가 형제 egress runner를 모두 취소한다.
 type alarmDispatchBacklogObserver struct {
 	store        alarmDispatchBacklogSnapshotStore
@@ -57,7 +56,6 @@ func NewBacklogObserver(infra *sharedmodules.InfraModule, logger *slog.Logger) S
 	}
 }
 
-// Start는 ctx가 끝날 때만 반환한다.
 func (o *alarmDispatchBacklogObserver) Start(ctx context.Context) error {
 	for {
 		o.observeOnce(ctx)
@@ -68,7 +66,6 @@ func (o *alarmDispatchBacklogObserver) Start(ctx context.Context) error {
 	}
 }
 
-// observeOnce는 부모 ctx 취소로 끝난 조회를 관측 실패로 세지 않는다.
 func (o *alarmDispatchBacklogObserver) observeOnce(ctx context.Context) {
 	observeCtx, cancelObserve := context.WithTimeout(ctx, o.queryTimeout)
 	err := o.observeBacklog(observeCtx)

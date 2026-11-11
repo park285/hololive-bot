@@ -75,7 +75,7 @@ func (r *Repository) ListAlarmEntries(ctx context.Context) ([]*domain.AlarmEntry
 	return entries, nil
 }
 
-// SetRoomDisplayName은 관리자 지정 방 이름을 저장한다. 알림 행과 독립이라 알림 재등록·전체 해지 뒤에도 남는다.
+// 알림 행과 독립이라 알림 재등록·전체 해지 뒤에도 남는다.
 func (r *Repository) SetRoomDisplayName(ctx context.Context, roomID, displayName string) error {
 	if _, err := r.pool.Exec(ctx, setRoomDisplayNameSQL, roomID, displayName); err != nil {
 		return fmt.Errorf("upsert room display name: %w", err)
@@ -84,7 +84,6 @@ func (r *Repository) SetRoomDisplayName(ctx context.Context, roomID, displayName
 	return nil
 }
 
-// DeleteRoomDisplayName은 관리자 지정 방 이름을 지워 관리 목록이 Kakao 방 이름으로 돌아가게 한다.
 func (r *Repository) DeleteRoomDisplayName(ctx context.Context, roomID string) error {
 	if _, err := r.pool.Exec(ctx, deleteRoomDisplayNameSQL, roomID); err != nil {
 		return fmt.Errorf("delete room display name: %w", err)

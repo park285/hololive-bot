@@ -31,7 +31,6 @@ type wireEndpointFixture struct {
 	} `json:"invalid"`
 }
 
-// loadWireEndpointFixture는 youtubejs/testdata/wire-contract.json의 endpoint 본문을 읽습니다.
 // JS 검증기 테스트와 같은 본문을 실제 RPC decode와 envelope 생성·분류에 통과시킵니다.
 func loadWireEndpointFixture(t *testing.T, path string) wireEndpointFixture {
 	t.Helper()
@@ -109,7 +108,6 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 	}
 }
 
-// JS 검증기가 거부하는 본문 중 Go가 envelope 단계에서 거부하는 사례는 출력 없이 parser drift여야 합니다.
 func TestChannelLiveRunnerRejectsWireFixtureContradictions(t *testing.T) {
 	t.Parallel()
 
@@ -125,7 +123,6 @@ func TestChannelLiveRunnerRejectsWireFixtureContradictions(t *testing.T) {
 	}
 }
 
-// 영상 확인 본문은 실제 RPC decode 뒤 공개 근거 분류에서 helper와 같은 대기 상태 규칙을 따라야 합니다.
 func TestClassifyPublicationFollowsWireFixture(t *testing.T) {
 	t.Parallel()
 
@@ -171,7 +168,6 @@ func channelLiveFixtureInput(t *testing.T, subject string) *collection.RunInput 
 		contract.LiveSnapshotQueryContractGeneration, contract.KindLiveSnapshot)
 }
 
-// fixtureRPC는 helper 응답 본문 하나를 돌려주는 HTTP 서버에 실제 youtubejs.RPC를 연결합니다.
 func fixtureRPC(t *testing.T, body jsontext.Value) *youtubejs.RPC {
 	t.Helper()
 

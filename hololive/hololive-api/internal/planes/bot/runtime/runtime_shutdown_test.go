@@ -121,8 +121,7 @@ func TestBotRuntimeShutdown_ClosesWebhookHandler(t *testing.T) {
 	}
 }
 
-// shutdownOrderLog는 종료 단계가 남기는 로그 메시지를 기록 순서대로 모은다. BotRuntime의 단계와 실제 Bot lifecycle이
-// 같은 logger를 쓰므로 세 단계의 실행 순서를 한 줄로 확인할 수 있다.
+// BotRuntime의 단계와 실제 Bot lifecycle이 같은 logger를 쓰므로 세 단계의 실행 순서를 한 줄로 확인할 수 있다.
 type shutdownOrderLog struct {
 	mu       sync.Mutex
 	messages []string
@@ -194,7 +193,6 @@ func TestBotRuntimeShutdownRunsHTTPWebhookBotInOrderAndContinuesAfterErrors(t *t
 	}
 }
 
-// newShutdownOrderBot은 종료 로그를 logger로 남기는 실제 orchestration.Bot을 만든다.
 func newShutdownOrderBot(t *testing.T, logger *slog.Logger) *orchestration.Bot {
 	t.Helper()
 
@@ -210,8 +208,6 @@ func newShutdownOrderBot(t *testing.T, logger *slog.Logger) *orchestration.Bot {
 	return bot
 }
 
-// startBlockedShortLinkRequest는 runtime의 ShortLinkServer에 처리 중인 요청 하나를 남긴다. 반환한 finish가 handler를
-// 풀고, responseDone이 그 요청의 결과를 전달한다.
 func startBlockedShortLinkRequest(t *testing.T, runtime *BotRuntime) (finish func(), responseDone <-chan error) {
 	t.Helper()
 

@@ -16,7 +16,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// renderTemplateVariants는 같은 자료로 두 본문 변형을 렌더한다. 어느 변형을 보낼지는 발송기가 방 유형으로 한 번 정한다.
+// 어느 변형을 보낼지는 발송기가 방 유형으로 한 번 정한다.
 func renderTemplateVariants(ctx context.Context, renderer *template.Renderer, key domain.TemplateKey, data any) (delivery.MessageVariants, error) {
 	plain, err := renderer.Render(ctx, key, "", domain.TemplateFormatPlain, data)
 	if err != nil {
@@ -259,14 +259,13 @@ func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Ren
 	return message, nil
 }
 
-// xSpaceStartView는 X_SPACE_STARTED 템플릿 자료다. 멤버 이름은 저장된 payload가 아니라 렌더 때 members에서 정한다.
+// 멤버 이름은 저장된 payload가 아니라 렌더 때 members에서 정한다.
 type xSpaceStartView struct {
 	MemberName string
 	Title      string
 	URL        string
 }
 
-// resolveAlarmDispatchMemberName은 방송 알림의 멤버 이름에 호스트 표기를 붙인다. 원천 채널 제목은 쓰지 않는다.
 func resolveAlarmDispatchMemberName(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification) (string, error) {
 	channelID := alarmNotificationChannelID(notification)
 
@@ -294,8 +293,7 @@ func alarmNotificationChannelID(notification *domain.AlarmNotification) string {
 	return ""
 }
 
-// alarmContractMemberName은 멤버 표시명 예외 계약(members short_korean_name→korean_name→misc/vtuber_fallback)을 따른다.
-// 조회 오류는 다른 이름으로 덮지 않고 렌더 실패(발송 전 재시도)로 돌려준다.
+// 멤버 표시명 예외 계약(members short_korean_name→korean_name→misc/vtuber_fallback)을 따른다.
 func alarmContractMemberName(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, channelID string) (string, error) {
 	name, err := alarmDispatchMemberDisplayName(ctx, members, channelID)
 	if err != nil {
@@ -311,7 +309,6 @@ func alarmContractMemberName(ctx context.Context, store *messagestrings.Store, m
 	return store.Text(messagestrings.MiscVTuberFallback), nil
 }
 
-// alarmDispatchMemberDisplayName은 members에 행이 없거나 한국어 표시명이 모두 비면 빈 문자열을 돌려준다.
 func alarmDispatchMemberDisplayName(ctx context.Context, members domain.MemberDataProvider, channelID string) (string, error) {
 	if members == nil {
 		return "", errors.New("member data provider is not configured")

@@ -13,7 +13,6 @@ import (
 )
 
 // 만료된 SENDING owner를 잠근 sweep과 보존 정리가 서로 다른 형제를 쥐고 상대 행을 기다리면 교착한다.
-// 정리는 경쟁 중인 논리 그룹의 증거를 보존하면서, 관계없는 종단 그룹은 같은 배치에서 삭제해야 한다.
 func TestTransitionCleanupDoesNotWaitForStaleSweepOwnedLogicalGroup(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -71,8 +70,6 @@ func TestTransitionCleanupDoesNotWaitForStaleSweepOwnedLogicalGroup(t *testing.T
 	require.Equal(t, 2, countCleanupTestDeliveries(t, pool, ownerID, followerID))
 }
 
-// 같은 논리 키 행이 LogicalGroupLimit를 넘으면 sibling 조회가 완전하다고 증명할 수 없으므로, 모두 FAILED인 그룹도
-// 지우지 않는다.
 func TestTransitionCleanupGuardsLogicalGroupBeyondScanLimit(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -106,7 +103,6 @@ func countCleanupTestDeliveries(t *testing.T, pool *pgxpool.Pool, ids ...int64) 
 	return count
 }
 
-// 오래된 과대 그룹이 전체 조회 창을 채워도, 같은 배치의 다른 완전한 논리 키는 정리되어야 한다.
 func TestTransitionCleanupOversizedGroupDoesNotStarveOtherKeys(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)

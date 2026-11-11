@@ -40,7 +40,6 @@ func testRepository(t *testing.T) *OutboxRepository {
 	return NewOutboxRepositoryFromPool(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 }
 
-// testMessage는 형식 분기와 무관한 저장소 테스트에서 두 변형에 같은 본문을 쓴다.
 func testMessage(text string) MessageVariants {
 	return MessageVariants{Plain: text, RichText: text}
 }
@@ -225,7 +224,6 @@ func TestEnqueueBatch(t *testing.T) {
 	}
 }
 
-// 새 행과 FAILED rearm처럼 commit된 변경이 있을 때만 consumer를 깨우고, PENDING 충돌 no-op은 깨우지 않는다.
 func TestEnqueueSignalsWakeupOnlyForChangedRows(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()

@@ -53,8 +53,6 @@ func reduceStep(t *testing.T, state *State, evidence Evidence) (*Decision, State
 	return &decision, stateFromDecision(state, &decision, &evidence)
 }
 
-// complete 근거가 없는 채널은 첫 비어 있지 않은 부분 목록을 무알림 기준으로 삼고, 그 뒤 처음 본 영상 중 기준 이후 공개된
-// 근거가 있는 영상만 알립니다. 부분 목록은 complete 근거를 만들지 않습니다.
 func TestNoveltyFirstPartialListIsSilentBaseline(t *testing.T) {
 	t.Parallel()
 
@@ -96,8 +94,6 @@ func TestNoveltyEmptyPartialDoesNotSetBaselineButCompleteEmptyDoes(t *testing.T)
 	assertNotifications(t, upload, "upload")
 }
 
-// 기준 이전 공개 시각을 가진 처음 보는 영상(삭제·비공개 해제·수집 창 밖에서 밀려 들어온 오래된 영상)은 알리지 않고 판정을 끝냅니다.
-// 이 보수 정책은 complete 근거가 있는 채널에도 같게 적용합니다.
 func TestNoveltyOldNeverSeenVideoStaysSilent(t *testing.T) {
 	t.Parallel()
 
@@ -110,8 +106,6 @@ func TestNoveltyOldNeverSeenVideoStaysSilent(t *testing.T) {
 	}
 }
 
-// 근거가 없거나 미래 공개 시각이면 보류합니다. 나중에 결정적 근거가 오면 처음 본 시각과 기준으로 한 번만 판정하고,
-// 이후 같은 영상의 관측은 다시 알리지 않습니다.
 func TestNoveltyLateEvidenceDecidesPendingCandidateOnce(t *testing.T) {
 	t.Parallel()
 
@@ -139,7 +133,6 @@ func TestNoveltyLateEvidenceDecidesPendingCandidateOnce(t *testing.T) {
 	assertNotifications(t, again)
 }
 
-// 처음 본 시각이 기준 이전으로 내려가는 늦은 관측은 보류 후보를 알리지 않고 종료합니다.
 func TestNoveltyPendingCandidateSeenBeforeBaselineResolvesSilently(t *testing.T) {
 	t.Parallel()
 
@@ -159,8 +152,6 @@ func TestNoveltyPendingCandidateSeenBeforeBaselineResolvesSilently(t *testing.T)
 	}
 }
 
-// 기준 이후 처음 본 예정 Premiere는 신규성을 판정하되 발견 시 알리지 않고, 공개 전환 뒤 공개 근거가 와도 알리지 않습니다.
-// 같은 시점에 들어온 일반 업로드는 그대로 알립니다.
 func TestNoveltyUpcomingPremiereStaysSilentThroughRelease(t *testing.T) {
 	t.Parallel()
 
@@ -179,7 +170,6 @@ func TestNoveltyUpcomingPremiereStaysSilentThroughRelease(t *testing.T) {
 	assertNotifications(t, released)
 }
 
-// 기준 목록에 있던 예정 Premiere는 보수적으로 알리지 않고, 공개 전환 뒤에도 알리지 않습니다.
 func TestNoveltyBaselinePremiereStaysSilentThroughRelease(t *testing.T) {
 	t.Parallel()
 
@@ -191,7 +181,6 @@ func TestNoveltyBaselinePremiereStaysSilentThroughRelease(t *testing.T) {
 	assertNotifications(t, released)
 }
 
-// 다른 채널이나 Shorts로 이미 저장된 영상, clock 없는 레거시 저장 영상은 기준 이후 공개 근거가 있어도 NEW_VIDEO가 아닙니다.
 func TestNoveltyKnownElsewhereAndLegacyVideosStaySilent(t *testing.T) {
 	t.Parallel()
 
@@ -209,7 +198,6 @@ func TestNoveltyKnownElsewhereAndLegacyVideosStaySilent(t *testing.T) {
 	}
 }
 
-// generation 1 관측처럼 공개 근거가 없는 목록만으로는 complete 근거가 있는 채널에서도 새 알림을 만들지 않습니다.
 func TestNoveltyListWithoutPublicationNeverNotifiesAlone(t *testing.T) {
 	t.Parallel()
 
@@ -222,7 +210,6 @@ func TestNoveltyListWithoutPublicationNeverNotifiesAlone(t *testing.T) {
 	}
 }
 
-// 같은 시각 재생은 REPLAY이며 알림을 다시 만들지 않습니다.
 func TestNoveltyEqualTimeReplayIsSilent(t *testing.T) {
 	t.Parallel()
 

@@ -21,7 +21,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// seeMoreFoldEgressClient는 실제 egress.IrisMessageSender가 Kakao 텍스트 lane에 넘긴 최종 payload만 기록한다.
 type seeMoreFoldEgressClient struct {
 	texts []string
 }
@@ -36,7 +35,6 @@ func (*seeMoreFoldEgressClient) SendRichText(context.Context, string, string, ..
 	return nil, errors.New("richtext lane is not configured")
 }
 
-// 사용자 첨부 화면처럼 한 방에 쇼츠 10개가 한 번에 묶여 나가는 v1 직접 발송 경로다.
 func runDirectGroupedShortsFinalPayload(t *testing.T, count int, renderer *template.Renderer) string {
 	t.Helper()
 

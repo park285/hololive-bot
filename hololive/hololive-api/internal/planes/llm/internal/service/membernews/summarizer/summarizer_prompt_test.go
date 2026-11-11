@@ -121,7 +121,6 @@ func TestBuildMemberNewsUserPrompt_CandidatesMatchBuildPromptCandidates(t *testi
 	}
 }
 
-// 직렬화할 수 없는 후보를 빈 목록으로 바꿔 LLM에 넘기지 않고 오류로 돌려준다.
 func TestBuildMemberNewsUserPrompt_RejectsUnencodableCandidate(t *testing.T) {
 	input := promptFixtureInput()
 

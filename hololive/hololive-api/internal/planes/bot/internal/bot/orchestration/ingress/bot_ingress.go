@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-api/internal/service/acl"
 )
 
-// irisMessageTypeText: Iris 프로토콜에서 일반 텍스트 메시지를 나타내는 타입 값.
 const irisMessageTypeText = "1"
 
 type Envelope struct {

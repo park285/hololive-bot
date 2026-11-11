@@ -277,7 +277,6 @@ func (c *GeminiClient) GenerateJSON(ctx context.Context, prompts openaipreset.Pr
 	return text, nil
 }
 
-// geminiSystemInstruction은 shared-go의 순서·라벨·검증에 따라 invariant·developer를 묶는다.
 func geminiSystemInstruction(prompts openaipreset.PromptLayers) (string, error) {
 	messages, err := sharedllm.AdaptInstructionMessages([]sharedllm.Message{
 		{Role: "system", Content: prompts.Invariant},

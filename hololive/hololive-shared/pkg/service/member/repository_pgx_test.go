@@ -37,7 +37,6 @@ func TestRepositoryPGXMutationsPreserveMemberSemantics(t *testing.T) {
 	assertMutationErrorsOnMissingTargets(t, repository, memberID)
 }
 
-// 별명 없이 만든 멤버도 ko·ja 배열 객체로 저장되어 별명 추가·삭제와 별명 조회가 그대로 동작한다.
 func TestRepositoryPGXCreateMemberWithoutAliasesAcceptsAliasMutations(t *testing.T) {
 	repository, pool := newPGXRepository(t)
 	ctx := t.Context()

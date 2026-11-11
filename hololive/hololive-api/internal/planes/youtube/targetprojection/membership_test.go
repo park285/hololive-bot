@@ -17,7 +17,6 @@ type membershipRow struct {
 	notBefore   pgtype.Timestamptz
 }
 
-// projectionFixture는 실제 Refresher로 기준 시각에서 offset만큼 지난 refresh를 반복하는 테스트 묶음이다.
 type projectionFixture struct {
 	t         *testing.T
 	pool      *pgxpool.Pool
@@ -38,14 +37,12 @@ func newProjectionFixture(t *testing.T, base time.Time) *projectionFixture {
 	return &projectionFixture{t: t, pool: pool, refresher: refresher, base: base}
 }
 
-// refresh는 기준 시각에서 offset만큼 지난 시각에 targets만으로 projection을 갱신한다.
 func (f *projectionFixture) refresh(offset time.Duration, label string, targets ...TargetSpec) Result {
 	f.t.Helper()
 
 	return mustRefresh(f.t, f.refresher, staticBuilder{targets: targets}, f.base.Add(offset), label)
 }
 
-// requireMemberSince는 generation의 target membership이 want generation에서 시작했는지 확인하고 row를 돌려준다.
 func (f *projectionFixture) requireMemberSince(label string, generation int64, target TargetSpec, want int64) membershipRow {
 	f.t.Helper()
 
@@ -57,8 +54,6 @@ func (f *projectionFixture) requireMemberSince(label string, generation int64, t
 	return row
 }
 
-// TestRefreshCarriesMembershipOnlyForUnchangedTargets는 무관한 target 변경과 신선도 변화가 기존 target의
-// membership 시작 generation·created_at을 유지하고, 자신의 scheduling 변경·재등록(ABA)만 새로 시작하는지 확인한다.
 func TestRefreshCarriesMembershipOnlyForUnchangedTargets(t *testing.T) {
 	f := newProjectionFixture(t, projectionNow)
 
@@ -106,8 +101,6 @@ func TestRefreshCarriesMembershipOnlyForUnchangedTargets(t *testing.T) {
 	}
 }
 
-// assertUnrelatedAddCarriesMembership은 무관한 target 추가가 generation을 바꾸면서 기존 row의 membership·created_at·
-// not_before를 보존하고, 추가된 target만 그 generation에서 NULL not_before로 membership을 시작하는지 확인한다.
 func (f *projectionFixture) assertUnrelatedAddCarriesMembership(
 	firstGeneration int64, second Result, initialCommunity membershipRow, community, video, added TargetSpec,
 ) {
@@ -131,7 +124,6 @@ func (f *projectionFixture) assertUnrelatedAddCarriesMembership(
 	}
 }
 
-// TestRefreshFailsClosedWithoutProjectionGuard는 guard row가 없으면 CURRENT를 바꾸지 않고 실패하는지 확인한다.
 func TestRefreshFailsClosedWithoutProjectionGuard(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
@@ -156,7 +148,6 @@ func TestRefreshFailsClosedWithoutProjectionGuard(t *testing.T) {
 	assertGenerationStatus(t, pool, current.Generation, "CURRENT")
 }
 
-// membershipValidity는 collector가 호출하는 단일 유효성 함수를 proof generation으로 부른다.
 type membershipValidity struct {
 	t     *testing.T
 	pool  *pgxpool.Pool
@@ -178,8 +169,6 @@ func (v *membershipValidity) require(label string, kinds []string, exact bool, s
 	}
 }
 
-// TestMembershipValidityFollowsJobScope는 collector가 호출하는 단일 유효성 함수가 무관한 변경에는 유지되고
-// 자신의 범위 제거·disable·cadence 변경·ABA·유효 CURRENT 부재에는 거부되는지 실제 refresh 경로로 확인한다.
 func TestMembershipValidityFollowsJobScope(t *testing.T) {
 	// 유효성 함수는 DB statement 시각으로 validity를 보므로 실제 시각으로 refresh한다.
 	f := newProjectionFixture(t, time.Now())

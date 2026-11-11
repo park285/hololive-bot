@@ -1,4 +1,4 @@
-# iris-seoul의 youtube-collector-b(2026-11-06 Docker Compose `oracle` profile에서 전환).
+# iris-seoul의 youtube-collector-b.
 # 비밀은 /etc/stack-secrets/hololive-bot(master hosts/iris-seoul)에서 읽는다. compose 보간이 없어 env 파일에 POSTGRES_PASSWORD를 둔다.
 # 호스트 uid·gid(1000)와 보조 그룹 1002로 실행한다(UserNS 없음, AppArmor 호스트).
 # 실행 image와 release profile은 worker-profile-pair.py가 만드는 drop-in(50-worker-profile.conf)이 고정한다.

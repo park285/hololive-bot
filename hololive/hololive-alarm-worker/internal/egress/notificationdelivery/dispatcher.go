@@ -106,7 +106,7 @@ type DispatcherConfig struct {
 	HandoffHorizon time.Duration
 }
 
-// idleWaiter는 빈 조회 뒤 다음 조회까지 기다린다. Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
+// Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
 type idleWaiter interface {
 	Wait(ctx context.Context) bool
 	Reset()
@@ -166,7 +166,7 @@ func NewDispatcher(repository deliveryRepository, sender delivery.PreparedMessag
 	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: workerID, idle: idle}, nil
 }
 
-// SetWakeupCache는 hololive-api 적재 신호로 빈 대기를 깨운다. 신호를 놓쳐도 poll_interval_ms 안에 다시 조회한다.
+// 신호를 놓쳐도 poll_interval_ms 안에 다시 조회한다.
 func (d *Dispatcher) SetWakeupCache(c cache.LowLevelCache) error {
 	idle, err := wakeup.NewWaiter(c, wakeup.NotificationDelivery, d.config.PollInterval, d.logger)
 	if err != nil {
@@ -248,8 +248,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	return nil
 }
 
-// runGuardedLoop은 어느 loop든 끝나면 다른 loop도 멈추게 한다. 한쪽만 남아 발송 없이 유지보수만 하거나
-// 유지보수 없이 발송만 계속하는 반쪽 실행을 남기지 않기 위해서다.
+// 한쪽만 남아 발송 없이 유지보수만 하거나 유지보수 없이 발송만 계속하는 반쪽 실행을 남기지 않기 위해서다.
 func (d *Dispatcher) runGuardedLoop(ctx context.Context, cancel context.CancelCauseFunc, name string, loop func(context.Context)) error {
 	err := panicguard.RunE(d.logger, panicscope.BackgroundTask, name, func() error {
 		loop(ctx)
@@ -318,7 +317,6 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	d.finishSend(ctx, item, request, irisRequestID, err)
 }
 
-// attemptSend는 외부 발송 한 번을 attempt로 기록하고, 성공이면 Iris가 admission을 증명한 requestId를 돌려준다.
 func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) (string, error) {
 	attemptCtx, cancel := context.WithTimeout(ctx, d.config.AttemptTimeout)
 
@@ -398,8 +396,7 @@ func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
 	return workercontract.AttemptFailed
 }
 
-// markItemSending은 발송 전 claim을 SENDING으로 옮기고 외부 발송을 시작해도 되는지 보고한다. 미스가 난 행은 현재
-// 소유자·회수 경로의 것이므로 발송하지 않는다.
+// 미스가 난 행은 현재 소유자·회수 경로의 것이므로 발송하지 않는다.
 func (d *Dispatcher) markItemSending(ctx context.Context, item *domain.NotificationDeliveryOutbox) bool {
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), workerconfig.NotificationDeliveryFinalizeTimeout)
 	defer cancel()
@@ -413,8 +410,7 @@ func (d *Dispatcher) markItemSending(ctx context.Context, item *domain.Notificat
 	return true
 }
 
-// markItemSent는 발송 성공과 Iris requestId를 함께 기록해 handoff 확인을 예약한다. 지평은 handoff reconciler와 같은
-// HandoffHorizon이다.
+// 지평은 handoff reconciler와 같은 HandoffHorizon이다.
 func (d *Dispatcher) markItemSent(ctx context.Context, item *domain.NotificationDeliveryOutbox, irisRequestID string) {
 	if err := d.repository.MarkSent(ctx, item.ID, d.workerID, item.AttemptCount, irisRequestID, d.config.HandoffHorizon); err != nil {
 		d.reportTransitionError(item.ID, err, "Failed to mark outbox item as sent")
@@ -430,8 +426,6 @@ func (d *Dispatcher) markItemFailed(ctx context.Context, item *domain.Notificati
 	}
 }
 
-// reportTransitionError는 소유자 전이 오류를 남긴다. 미스가 난 행은 현재 소유자·회수 경로에 맡기고 지표와 로그만
-// 남기며, 그 밖의 오류는 commit 여부를 모르는 DB 오류로 기록한다.
 func (d *Dispatcher) reportTransitionError(id int64, err error, message string) {
 	if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
 		d.recordFenceMiss(id, miss, fenceMissResultFenceLost, nil)
@@ -442,8 +436,7 @@ func (d *Dispatcher) reportTransitionError(id int64, err error, message string) 
 	d.logger.Error(message, slog.Int64("id", id), slog.Any("error", err))
 }
 
-// recordFenceMiss는 미스 행마다 지표를 올리고 로그를 남긴다. 발송 성공을 기록하지 못한 mark_sent 미스는 외부 결과가
-// 원장에 남지 않으므로 오류로, 그 밖의 미스는 경고로 남긴다.
+// 발송 성공을 기록하지 못한 mark_sent 미스는 외부 결과가 원장에 남지 않으므로 오류로, 그 밖의 미스는 경고로 남긴다.
 func (d *Dispatcher) recordFenceMiss(id int64, miss *sendfence.MissError, result string, transitionErr error) {
 	for _, row := range miss.Rows {
 		notificationDeliveryFenceMissTotal.WithLabelValues(miss.Action, string(row.Reason), result).Inc()

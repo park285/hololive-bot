@@ -32,7 +32,7 @@ type ServerConfig struct {
 	ShortLinkAddr  string
 
 	// MetricsAddr: Prometheus scrape용 평문 HTTP/1.1 /metrics 전용 리스너 주소.
-	// 운영 표면이 H3 전용이라 Prometheus가 직접 scrape하지 못해 분리한다(PR-P6-01 0단계).
+	// 운영 표면이 H3 전용이라 Prometheus가 직접 scrape하지 못해 분리한다.
 	// 빈 값이면 비활성. compose에서 127.0.0.1(또는 Tailscale IP)로만 publish한다.
 	MetricsAddr string
 

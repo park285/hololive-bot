@@ -53,7 +53,6 @@ func (renderFailureLocker) TryAcquire(context.Context, string, time.Duration) (s
 }
 func (renderFailureLocker) Release(context.Context, string, string) error { return nil }
 
-// 실제 템플릿의 공백 렌더가 오류로 이어져 enqueue와 알림 완료 표시를 막는지 검증한다.
 func TestWhitespaceEventTemplatesDoNotEnqueueOrMark(t *testing.T) {
 	for _, key := range []domain.TemplateKey{domain.TemplateKeyCmdMajorEventWeeklySummary, domain.TemplateKeyCmdMajorEventMonthlySummary} {
 		t.Run(string(key), func(t *testing.T) {

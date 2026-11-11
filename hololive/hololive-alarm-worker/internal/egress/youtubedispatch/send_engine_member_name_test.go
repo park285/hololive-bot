@@ -80,7 +80,6 @@ func TestDispatchDeliveryRows_GroupedFormatFailureRetriesWholeGroup(t *testing.T
 	}
 }
 
-// dispatchOnePerRoomShort는 표시명 원천만 바꿔 쇼츠 한 건을 한 방에 개별 발송하고, 보낸 메시지와 결과를 돌려준다.
 func dispatchOnePerRoomShort(t *testing.T, memberNames format.MemberNameSource) (*Dispatcher, []string, DispatchResult) {
 	t.Helper()
 
@@ -134,7 +133,6 @@ func TestDispatchDeliveryRows_PerRoomMemberNameComesFromCanonicalSource(t *testi
 	}
 }
 
-// 표시명 정본 조회가 실패하면 대체 문구로 보내지 않고 재시도 가능한 포맷 실패로 전이한다.
 func TestDispatchDeliveryRows_PerRoomMemberNameLookupFailureRetriesWithoutSending(t *testing.T) {
 	t.Parallel()
 

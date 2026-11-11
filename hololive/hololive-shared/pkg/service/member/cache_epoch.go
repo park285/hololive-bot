@@ -322,8 +322,6 @@ func (c *Cache) markEpochUncertain(reason string, err error) {
 	}
 }
 
-// Epoch 조정 구성에서 authority가 불확실하면 PostgreSQL을 직접 읽는다. Epoch authority가 없는 프로세스 로컬 구성
-// (epochStore 없이 만든 Cache)에는 조정할 authority가 없으므로 우회하지 않는다.
 func (c *Cache) cacheBypassRequired(operation string) bool {
 	if !c.epochCoordinated() || c.authorityHealthy.Load() {
 		return false

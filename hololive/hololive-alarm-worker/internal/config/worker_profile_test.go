@@ -111,8 +111,6 @@ func TestValidateWorkerProfileAlarmAttemptLeaseBoundary(t *testing.T) {
 	}
 }
 
-// 최소 회수 지연(lease_ms+recovery_interval_ms)이 Iris 자동 재발송 지평에 닿으면 기동을 거부한다.
-// 지평과 같은 값은 거부하고 1ms 안쪽은 허용하며, lease와 recovery 어느 쪽이 늘어도 같은 경계를 쓴다.
 func TestValidateWorkerProfileAlarmRecoveryDelayWithinReplayHorizon(t *testing.T) {
 	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
@@ -153,8 +151,6 @@ func TestValidateWorkerProfileAlarmRecoveryDelayWithinReplayHorizon(t *testing.T
 	}
 }
 
-// 격리 기준이 lease보다 짧으면 기동을 거부한다. 기준이 lease와 같은 값이면 허용하며, 기준이나 lease 어느 쪽이
-// 바뀌어도 같은 경계를 쓴다.
 func TestValidateWorkerProfileAlarmQuarantineThresholdCoversLease(t *testing.T) {
 	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
@@ -292,7 +288,6 @@ func TestLoadWorkerProfileNotificationDeliveryTimingBoundaries(t *testing.T) {
 }
 
 // Iris는 발송을 최소 2.5초 간격으로 처리하므로 일괄 발송의 handoff 완료가 발송 attempt_timeout보다 늦을 수 있다.
-// 확인 기한은 별도 설정으로 요구하고, 발송 시도 시간보다 짧은 값은 기동 전에 거부한다.
 func TestValidateWorkerProfileAlarmHandoffHorizonCoversAttemptTimeout(t *testing.T) {
 	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 

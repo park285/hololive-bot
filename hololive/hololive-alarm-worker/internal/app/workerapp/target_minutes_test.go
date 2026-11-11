@@ -42,8 +42,6 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitMultiTargetWhenSettingsM
 	}
 }
 
-// targetMinutes 없이 alarmAdvanceMinutes만 있던 구형 형식을 runtime 기본 목록으로 해석하던 분기와, 잘못된 파일을
-// 설정값으로 대신하던 경로를 지웠다. 저장 파일이 있는데 읽을 수 없으면 기동 오류로 드러나야 한다.
 func TestResolvePersistedTargetMinutes_RejectsUnsupportedPersistedSettings(t *testing.T) {
 	for name, content := range map[string]string{
 		"legacy advance-only format": `{"alarmAdvanceMinutes":1}`,

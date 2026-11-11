@@ -7,7 +7,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// templateCacheMaxEntries는 채널 override와 이전 버전의 파싱 결과를 함께 제한합니다.
 const templateCacheMaxEntries = 256
 
 type cacheKey struct {

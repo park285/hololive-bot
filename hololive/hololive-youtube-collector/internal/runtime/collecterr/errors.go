@@ -211,8 +211,6 @@ func FromContext(err error) error {
 	return unclassifiedError(err)
 }
 
-// unclassifiedError는 collecterr가 원인을 인식하지 못해 기본 버킷으로 떨어뜨린 오류를 만든다.
-// 진단 tuple은 Internal/ClassInternal 그대로지만, 호출자가 명시적으로 붙인 것과 구별된다.
 func unclassifiedError(err error) error {
 	typed := newError(contract.ErrorInternalInvariant, contract.ClassInternal, defaultRetryHint(), err)
 
@@ -295,9 +293,7 @@ func recognizedTransportTimeout(err error) bool {
 	return ok && opErr != nil && opErr.Op == "dial" && opErr.Timeout()
 }
 
-// recognizedTransientNetwork는 상대 쪽 연결 종료·거부·경로 없음과 PostgreSQL의 연결 예외·관리자 종료를 일시 장애로
-// 알린다. 연결 실패(pgconn.ConnectError) 전체를 일시 장애로 보지는 않는다. 인증 실패(28P01) 같은 설정 결함은
-// 미분류로 남겨 장애 집계에 섞이지 않게 한다.
+// 연결 실패(pgconn.ConnectError) 전체를 일시 장애로 보지는 않는다. 인증 실패(28P01) 같은 설정 결함은 미분류로 남겨 장애 집계에 섞이지 않게 한다.
 func recognizedTransientNetwork(err error) bool {
 	if err == nil {
 		return false
@@ -323,8 +319,7 @@ func recognizedTransientNetwork(err error) bool {
 		errors.Is(err, syscall.ENETUNREACH)
 }
 
-// transientPostgresError는 SQLSTATE class 08(connection exception)과 57P01·57P02·57P03(관리자 종료·crash 종료·
-// 기동 또는 종료 중 연결 거부)을 알린다. 이 코드들은 DB 재시작·장애 조치 동안 나타나고 연결을 다시 맺으면 해소된다.
+// 이 코드들은 DB 재시작·장애 조치 동안 나타나고 연결을 다시 맺으면 해소된다.
 func transientPostgresError(err error) bool {
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
 	if !ok || pgErr == nil {

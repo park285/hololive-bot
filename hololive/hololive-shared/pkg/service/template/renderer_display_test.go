@@ -26,7 +26,6 @@ func TestDisplayLinePreservesWhitespaceContract(t *testing.T) {
 	}
 }
 
-// 최적화 전 truncate 구현을 독립 비교 기준으로 유지합니다.
 func legacyTemplateTruncate(maxLen int, s string) string {
 	runes := []rune(s)
 	if len(runes) <= maxLen {

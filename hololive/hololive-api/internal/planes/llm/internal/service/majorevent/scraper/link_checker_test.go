@@ -369,7 +369,6 @@ func (e timeoutNetError) Error() string   { return "i/o deadline" }
 func (e timeoutNetError) Timeout() bool   { return e.timeout }
 func (e timeoutNetError) Temporary() bool { return false }
 
-// HEAD 전송 실패는 오류 문자열이 아니라 타입으로 분류한다.
 func TestShouldFallbackToGETClassifiesTransportErrorsByType(t *testing.T) {
 	t.Parallel()
 

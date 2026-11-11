@@ -107,7 +107,6 @@ type notifiedSchedule struct {
 	minutes        map[int]struct{}
 }
 
-// claim은 이 기록이 hash를 바꿀 수 있으면 기록한 것으로 세고 true를 돌려준다.
 func (w notifiedWrites) claim(streamID string, startScheduled time.Time, minutesUntil int) bool {
 	schedule, ok := w[streamID]
 	if !ok || !schedule.startScheduled.Equal(startScheduled) {

@@ -65,8 +65,7 @@ func (d *SendEngine) dispatchRowsIndividually(
 	}
 }
 
-// formatGroupedMessage는 묶음 메시지를 만든다. 이름 조회나 렌더링이 실패하면 개별 발송으로 바꾸지 않고 오류를 돌려주며,
-// 호출자가 그룹 전체를 재시도 가능한 포맷 실패로 전이한다. 표시명이 없는 채널만 예외 계약의 종단 문구를 쓴다.
+// 이름 조회나 렌더링이 실패하면 개별 발송으로 바꾸지 않고 오류를 돌려주며, 호출자가 그룹 전체를 재시도 가능한 포맷 실패로 전이한다. 표시명이 없는 채널만 예외 계약의 종단 문구를 쓴다.
 func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
 	group *deliveryGroup,
@@ -89,7 +88,6 @@ func (d *SendEngine) formatGroupedMessage(
 	return message, nil
 }
 
-// preFormatMessages: outbox_id별 메시지를 FormatMessages 한 번으로 포맷하여 캐싱한다.
 // 전체 오류는 모든 outbox를 포맷 실패로 표시하고 한 번만 기록한다. 항목별 오류는 그 outbox만 실패로 남긴다.
 func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]messagedelivery.MessageVariants, failures map[int64]bool) {
 	messages = make(map[int64]messagedelivery.MessageVariants, len(outboxByID))
@@ -137,7 +135,6 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	return messages, failures
 }
 
-// sendDeliveryMessage는 고정 요청을 보내고 202가 증명한 Iris requestId를 돌려준다.
 func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) (irisRequestID string, sendErr error) {
 	if err := validateDeliverySendRequest(req); err != nil {
 		return "", fmt.Errorf("validate delivery send request: %w", err)

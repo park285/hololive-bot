@@ -84,7 +84,6 @@ func NewFeedScheduler(service *Service, config FeedScheduleConfig, logger *slog.
 	}, nil
 }
 
-// Start는 스케줄러를 시작한다.
 func (s *FeedScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
@@ -97,7 +96,6 @@ func (s *FeedScheduler) Start(ctx context.Context) {
 	})
 }
 
-// Stop은 스케줄러를 종료한다.
 func (s *FeedScheduler) Stop() {
 	if s == nil {
 		return

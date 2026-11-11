@@ -32,7 +32,6 @@ func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 0)
 }
 
-// 채널 /live 확인은 최신값만 남기고 live reducer·pending·absence slot을 건드리지 않는다.
 func TestChannelLiveCheckStoresLatestWithoutLiveLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -137,7 +136,6 @@ func TestChannelLiveCheckSameEffectiveTimeOrdering(t *testing.T) {
 	assertApplicationDecision(t, pool, retainedID, channelLiveCheckEntityKind, liveCheckDecisionNotNewer)
 }
 
-// 검증된 upstream 종료 시각만 추적 LIVE를 끝내며 ended_at은 관측 슬롯이 아니라 그 시각이다.
 func TestVideoLiveCheckVerifiedEndUsesUpstreamEndedAt(t *testing.T) {
 	for _, missingStart := range []bool{false, true} {
 		t.Run(fmt.Sprintf("missing_start=%t", missingStart), func(t *testing.T) {
@@ -281,7 +279,6 @@ func TestVideoLiveCheckWithoutTrustedLifecycleKeepsLive(t *testing.T) {
 	}
 }
 
-// 재확인 실패는 이전 공개 불가 판정을 계속 쓰지 않도록 최신 UNKNOWN으로 대체한다.
 func TestVideoLiveCheckRequestFailureReplacesUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -315,7 +312,6 @@ func TestVideoLiveCheckRequestFailureReplacesUnavailable(t *testing.T) {
 	}
 }
 
-// 영상 확인은 grace 안의 기존 pending을 지우지 않고, 검증된 종료만 같은 pending·finalizer 규칙을 따른다.
 func TestVideoLiveCheckPreservesPendingPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -419,7 +415,6 @@ func startVideoLiveCheck(t *testing.T) (*pgxpool.Pool, *Consumer, contract.Lease
 	return pool, consumer, started, videoProof
 }
 
-// seedChannelLiveCheckLease는 같은 채널의 채널 확인 target과 별도 exact-subject job lease를 만든다.
 func seedChannelLiveCheckLease(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) contract.LeaseProof {
 	t.Helper()
 
@@ -555,7 +550,6 @@ func consumeLiveChecks(ctx context.Context, t *testing.T, consumer *Consumer) {
 	}
 }
 
-// 같은 시각 순서를 만들기 위해 저장된 최신값의 시각을 다음 관측 슬롯으로 옮긴다.
 // 관측 ID 제거는 retention의 ON DELETE SET NULL 결과를 재현한다.
 func moveChannelLiveCheckClock(t *testing.T, pool *pgxpool.Pool, at time.Time, clearObservation bool) {
 	t.Helper()
@@ -617,7 +611,6 @@ func loadVideoAvailability(t *testing.T, pool *pgxpool.Pool) videoAvailabilityRo
 	return row
 }
 
-// nil 시각은 zero, nil 사유는 빈 문자열로 담아 전후 동일성을 == 로 확인한다.
 type videoLifecycleRow struct {
 	status         string
 	headStatus     string

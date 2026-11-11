@@ -20,7 +20,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// canonicalJobContracts는 패키지 초기화 때 한 번 검증된 계약 집합이다. 패키지 안에서 변경하지 않는다.
+// 패키지 안에서 변경하지 않는다.
 var canonicalJobContracts = collection.InitialJobContracts()
 
 type Repository struct {
@@ -162,14 +162,12 @@ func acquireCadenceMismatch(spec *JobSpec, minIntervalMS, maxIntervalMS int64) b
 	return minIntervalMS <= 0 || minIntervalMS != maxIntervalMS || minIntervalMS != spec.PollInterval.Milliseconds()
 }
 
-// acquiredJobIdentity는 획득 문장이 갱신·생성한 행 버전의 식별자를 RETURNING으로 받은 값이다.
 type acquiredJobIdentity struct {
 	provider   string
 	class      string
 	subjectKey string
 }
 
-// 같은 트랜잭션이 방금 갱신·잠근 행 버전을 다시 읽지 않고 RETURNING 값으로 식별자를 비교한다.
 // 이 job_key가 다른 identity에 묶여 있으면 ErrInvalidJob을 반환해 epoch 증가를 포함한 트랜잭션 전체를 되돌린다.
 func verifyAcquireJobIdentity(spec *JobSpec, proof *contract.LeaseProof, identity acquiredJobIdentity) error {
 	if identity.provider != string(spec.Provider) || identity.class != spec.Class ||
@@ -180,7 +178,6 @@ func verifyAcquireJobIdentity(spec *JobSpec, proof *contract.LeaseProof, identit
 	return nil
 }
 
-// acquireLeaseProof는 guard 이후 새 snapshot에서 입장 조건과 선점을 한 번에 판정한다.
 // 거절된 bundle도 반환하므로 빈 선점 결과와 target·cadence·membership 오류를 구분한다.
 func acquireLeaseProof(
 	ctx context.Context,
@@ -327,9 +324,8 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 	return nil
 }
 
-// Defer는 executor가 만든 typed 재시도 입력으로 lease를 DEFERRED로 전환합니다.
-// 공개 진단 생성자는 redaction하지 않으므로 adapter 경계에서 detail을 한 번 더 정제하고,
-// retry_not_before는 DB 시계의 최소 대기를 적용하며 일반 backoff에만 최대 대기를 적용합니다.
+// 공개 진단 생성자는 redaction하지 않으므로 adapter 경계에서 detail을 한 번 더 정제하고, retry_not_before는 DB 시계의 최소 대기를 적용하며 일반 backoff에만 최대 대기를
+// 적용합니다.
 func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionInput) error {
 	if err := input.Validate(); err != nil {
 		return fmt.Errorf("defer collection job lease: %w: %w", ErrInvalidJob, err)

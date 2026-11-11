@@ -252,7 +252,6 @@ func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyColle
 	})
 }
 
-// periodNotification은 주간·월간 주요 일정 알림이 공유하는 실행 흐름(메시지 생성, 방별 enqueue, 이벤트 표시)의 차이점이다.
 type periodNotification struct {
 	outboxRepository outboxEnqueuer
 	outputGuard      *outputguard.Guard

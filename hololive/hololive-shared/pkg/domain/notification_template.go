@@ -90,7 +90,6 @@ const (
 	TemplateFormatRichText TemplateFormat = "richtext"
 )
 
-// IsValid는 저장소가 받는 변형인지 확인합니다.
 func (f TemplateFormat) IsValid() bool {
 	return f == TemplateFormatPlain || f == TemplateFormatRichText
 }

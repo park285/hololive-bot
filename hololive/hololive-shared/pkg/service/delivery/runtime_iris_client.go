@@ -42,7 +42,7 @@ type RuntimeIrisClient struct {
 	closed            bool
 }
 
-// runtimeIrisBinding은 한 Base URL에 묶인 client와 참조 수다. 참조 수는 mu 아래에서만 바꾼다.
+// 참조 수는 mu 아래에서만 바꾼다.
 type runtimeIrisBinding struct {
 	baseURL string
 	client  *iris.APIClient
@@ -103,8 +103,6 @@ func NewRuntimeIrisClient(ctx context.Context, config settings.IrisConfig, logge
 	return c, nil
 }
 
-// acquire는 현재 binding의 참조를 하나 늘려 반환한다. 해석 snapshot이 만료됐으면 single-flight로
-// refresh한다. 다른 호출이 refresh 중이면 끝날 때까지 기다린 뒤 다시 확인한다.
 func (c *RuntimeIrisClient) acquire(ctx context.Context) (*runtimeIrisBinding, error) {
 	for {
 		c.mu.Lock()
@@ -160,8 +158,7 @@ func (c *RuntimeIrisClient) snapshotFreshLocked() bool {
 	return !c.resolveValidUntil.IsZero() && c.now().Before(c.resolveValidUntil) && (c.resolveErr != nil || c.current != nil)
 }
 
-// refresh는 호출 goroutine에서 Base URL을 해석하고 필요하면 client를 교체한다. Defer는 대기자를 깨우기만
-// 하고 panic을 복구하지 않으므로, resolver나 client 생성의 panic은 refresh를 시작한 호출자에게 전파된다.
+// Defer는 대기자를 깨우기만 하고 panic을 복구하지 않으므로, resolver나 client 생성의 panic은 refresh를 시작한 호출자에게 전파된다.
 func (c *RuntimeIrisClient) refresh(done chan struct{}) {
 	var (
 		baseURL string
@@ -241,7 +238,6 @@ func (c *RuntimeIrisClient) markSnapshotLocked(err error) {
 	c.resolveErr = err
 }
 
-// dropRefLocked는 참조 하나를 내리고, 마지막 참조였으면 true를 반환한다.
 func (c *RuntimeIrisClient) dropRefLocked(binding *runtimeIrisBinding) bool {
 	if binding == nil {
 		return false

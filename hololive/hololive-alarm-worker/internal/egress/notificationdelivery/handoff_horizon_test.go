@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 첫 확인 간격보다 짧은 지평도 허용되므로 admission 정산은 첫 확인부터 지평을 넘기면 안 된다.
 func TestNotificationHandoffFirstCheckClipsShortHorizon(t *testing.T) {
 	repo := testRepository(t)
 	require.NoError(t, repo.Enqueue(t.Context(), domain.DeliveryKindMemberNewsWeekly, "short-horizon", testRoomA, testDeliveryMessage("message")))

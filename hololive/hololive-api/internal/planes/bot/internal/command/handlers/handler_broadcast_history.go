@@ -364,7 +364,6 @@ const maxBroadcastEndUncertainty = 5 * time.Minute
 // 아니라 origin으로 한다.
 const legacyLifecycleOrigin = "legacy_unknown"
 
-// trustedBroadcastStartedAt은 provider 시각을 우선하고, 관측 시각은 옛 기록이 아니어야 시작 시각으로 표시한다.
 func trustedBroadcastStartedAt(entry *handlercore.BroadcastHistoryEntry) *time.Time {
 	if entry.TimesSource != "provider" && entry.LifecycleOrigin == legacyLifecycleOrigin {
 		return nil
@@ -382,7 +381,6 @@ func broadcastHistoryStartedAt(entry *handlercore.BroadcastHistoryEntry) time.Ti
 	return *startedAt
 }
 
-// verifiedBroadcastEndedAt은 provider 시각을 우선하고, 관측 시각은 신 lifecycle의 종료 오차가 상한 안이어야 반환한다.
 // 시작이 없으면 길이를 계산하지 않고 저장 종료 시각만 표시한다.
 func verifiedBroadcastEndedAt(entry *handlercore.BroadcastHistoryEntry) time.Time {
 	startedAt := trustedBroadcastStartedAt(entry)
@@ -410,9 +408,7 @@ func verifiedBroadcastEndedAt(entry *handlercore.BroadcastHistoryEntry) time.Tim
 	return *entry.EndedAt
 }
 
-// broadcastHistoryFallbackTime은 표시할 시작 시각이 없는 세션에 표시할 시각과 그 의미를 정렬 우선순위대로 고른다.
-// 시작 시각이 있으면 formatter가 시작 시각을 표시하므로 이 값을 쓰지 않는다. 검증되지 않은 종료 시각도 표시하지만
-// "종료"로 표기해 시작 시각과 구분한다.
+// 시작 시각이 있으면 formatter가 시작 시각을 표시하므로 이 값을 쓰지 않는다.
 func broadcastHistoryFallbackTime(entry *handlercore.BroadcastHistoryEntry) (time.Time, string) {
 	for _, candidate := range []struct {
 		at    *time.Time

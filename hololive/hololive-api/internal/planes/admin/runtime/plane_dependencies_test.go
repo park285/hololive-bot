@@ -24,7 +24,6 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-// recordingIrisRooms는 bot plane이 넘기는 Iris client 방 목록 조회 자리에 들어가 호출 횟수를 센다.
 type recordingIrisRooms struct{ calls atomic.Int32 }
 
 func (r *recordingIrisRooms) GetRooms(context.Context) (*iris.RoomListResponse, error) {
@@ -33,9 +32,6 @@ func (r *recordingIrisRooms) GetRooms(context.Context) (*iris.RoomListResponse, 
 	return &iris.RoomListResponse{Rooms: []iris.RoomSummary{{ChatID: 3001}}}, nil
 }
 
-// admin plane은 process 조립이 넘긴 Iris 방 목록 조회와 ACL Service를 HTTP 경로에서 그대로 쓴다.
-// 방 목록 조회(joined-rooms)는 주입된 bot 소유 client를 호출하고, 방 추가는 bot ingress가 판정에 쓰는 같은 ACL 인스턴스를
-// 응답 전에 바꾼다.
 func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
 	rooms := &recordingIrisRooms{}
 	serve, aclService := newAdminTestRouter(t, rooms)
@@ -57,11 +53,8 @@ func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
 	}
 }
 
-// adminTestServe는 API key를 붙여 admin router에 요청 하나를 보낸다.
 type adminTestServe func(method, path, body string) *httptest.ResponseRecorder
 
-// newAdminTestRouter는 process 조립과 같은 buildAdminHandler·ProvideAPIRouter 경로로 admin router를 만든다.
-// ACL Service는 시험 DB를 쓰는 실제 인스턴스다.
 func newAdminTestRouter(t *testing.T, rooms *recordingIrisRooms) (adminTestServe, *acl.Service) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

@@ -152,7 +152,6 @@ func TestYouTubeCheckerBuildUpcomingNotificationsReportsPremiereScheduleChange(t
 	assert.NotEmpty(t, notifications[0].ScheduleChangeMessage)
 }
 
-// 분 전 target을 모두 지난 뒤 발견된 Premiere는 발견 시 알림이 없으므로 일반 방송처럼 시작 알림을 받는다.
 func TestYouTubeCheckerBuildLiveCatchupNotificationsIncludesPremiere(t *testing.T) {
 	t.Parallel()
 

@@ -47,7 +47,6 @@ const (
 	testFirstMessage = "first"
 )
 
-// mockDeliveryRepository: deliveryRepository mock 구현.
 type mockDeliveryRepository struct {
 	saveRequestFn            func(ctx context.Context, id int64, workerID string, attemptCount int, request *deliverypayload.Request) error
 	reissueFn                func(ctx context.Context, id int64, workerID string, attemptCount, generation int, exhaust bool) error
@@ -62,7 +61,6 @@ type mockDeliveryRepository struct {
 	claimedIDs               map[int64]struct{}
 }
 
-// fenceMiss는 Store가 단일 행 전이에서 돌려주는 것과 같은 모양의 fence 미스다.
 func fenceMiss(action string, id int64, reason sendfence.Reason, status domain.DeliveryOutboxStatus) error {
 	return &sendfence.MissError{Action: action, Expected: 1, Rows: []sendfence.RowMiss{{ID: id, Reason: reason, Status: string(status)}}}
 }
@@ -215,7 +213,6 @@ func (m *mockDeliveryRepository) Cleanup(ctx context.Context, olderThan time.Dur
 	return 0, nil
 }
 
-// mockSender: MessageSender mock 구현.
 type mockSender struct {
 	sendFn                func(ctx context.Context, roomID, message string) error
 	sendWithClientRequest func(ctx context.Context, roomID, message, clientRequestID string) error
@@ -809,7 +806,6 @@ func (m *mockSender) PrepareMessageRequest(_ context.Context, _ string, body del
 	return body.Plain, "text", nil
 }
 
-// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
 func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	if err := m.SendMessageWithClientRequestID(ctx, room, body, id); err != nil {
 		return "", err
@@ -818,7 +814,6 @@ func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id 
 	return "iris-" + id, nil
 }
 
-// scriptedIdleWaiter는 send 루프가 빈 조회 뒤에만 기다리고 처리 뒤에는 대기를 짧게 되돌리는지 기록한다.
 type scriptedIdleWaiter struct {
 	waits     []bool
 	waitCalls int

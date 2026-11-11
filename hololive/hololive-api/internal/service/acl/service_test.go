@@ -27,7 +27,6 @@ import (
 	"testing"
 )
 
-// newTestService: 테스트용 Service 직접 초기화 (DB/캐시 없음).
 func newTestService(enabled bool, mode ACLMode, whitelistRooms, blacklistRooms []string) *Service {
 	wl := make(map[string]struct{}, len(whitelistRooms))
 	for _, room := range whitelistRooms {
@@ -176,7 +175,6 @@ func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 	}
 }
 
-// 방 이름으로 등록된 과거 값은 다른 chatID의 방을 허용하거나 차단하지 않는다.
 func TestIsRoomAllowed_RoomNameEntryDoesNotMatchChatID(t *testing.T) {
 	t.Parallel()
 
@@ -218,7 +216,6 @@ func TestIsRoomAllowed_EmptyBlacklist(t *testing.T) {
 func TestIsRoomAllowed_DualLists_Independent(t *testing.T) {
 	t.Parallel()
 
-	// 화이트리스트와 블랙리스트에 각각 다른 방이 있을 때 현재 모드만 참조하는지 검증
 	service := newTestService(true, ACLModeWhitelist, []string{"allowed-only"}, []string{"blocked-only"})
 
 	// 화이트리스트 모드: allowed-only만 허용, blocked-only는 화이트리스트에 없으므로 거부

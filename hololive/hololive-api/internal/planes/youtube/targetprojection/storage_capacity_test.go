@@ -232,8 +232,7 @@ func measureCapacityArchive(b *testing.B, pool *pgxpool.Pool) int64 {
 	return archiveBytes
 }
 
-// measureCapacityCompaction은 원문 일치가 확인된 합성 RETIRED 행만 관계형 표현에서 지우고
-// 같은 격리 DB에서 물리 재작성한다. 운영 lease 경쟁·cutover·복구를 검증하는 구현은 아니다.
+// 운영 lease 경쟁·cutover·복구를 검증하는 구현은 아니다.
 func measureCapacityCompaction(b *testing.B, pool *pgxpool.Pool, archiveBytes int64, targetCount int) {
 	b.Helper()
 

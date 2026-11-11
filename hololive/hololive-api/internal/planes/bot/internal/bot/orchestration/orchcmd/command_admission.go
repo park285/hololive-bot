@@ -278,8 +278,7 @@ func parseCommandAdmissionResult(result valkey.ValkeyResult) (commandAdmissionDe
 	return commandAdmissionDecision{Allowed: allowed == 1, RetryAfter: time.Duration(retryAfterMS) * time.Millisecond}, nil
 }
 
-// expensiveCommandAdmissionScope는 저장소 조회 비용이 큰 명령의 rate limit 버킷 이름을 돌려준다. 빈 값이면 제한하지 않는다.
-// !라이브는 보존된 pending-end 이력을 훑는 PG 질의를 실행하므로 이력 명령과 같은 한도를 쓰되 버킷은 분리한다.
+// 빈 값이면 제한하지 않는다. !라이브는 보존된 pending-end 이력을 훑는 PG 질의를 실행하므로 이력 명령과 같은 한도를 쓰되 버킷은 분리한다.
 func expensiveCommandAdmissionScope(commandKey string) string {
 	switch commandKey {
 	case "broadcast_history", "broadcast_thumbnail", "broadcast_time":

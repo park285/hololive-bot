@@ -69,7 +69,6 @@ func TestCacheAllMembers_InvalidateDuringFailedReloadDoesNotReturnOldSnapshot(t 
 	}
 }
 
-// snapshot을 교체하면 이전 snapshot의 이름·별칭은 더 이상 메모리에서 응답하지 않고, 채널은 새 대표를 가리킨다.
 func TestCachePointLookup_SnapshotReplacementDropsPriorEntries(t *testing.T) {
 	stale := &domain.Member{
 		ID:        1,

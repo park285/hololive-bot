@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 )
 
-// recordClaims는 ClaimDue가 돌려준 행의 claim(ID, claim 당시 attempt)이다.
 func recordClaims(records ...*Record) []DeliveryClaim {
 	claims := make([]DeliveryClaim, 0, len(records))
 	for _, record := range records {
@@ -20,7 +19,6 @@ func recordClaims(records ...*Record) []DeliveryClaim {
 	return claims
 }
 
-// attemptClaims는 같은 attempt의 claim 목록이다.
 func attemptClaims(attempt int, ids ...int64) []DeliveryClaim {
 	claims := make([]DeliveryClaim, 0, len(ids))
 	for _, id := range ids {
@@ -30,8 +28,7 @@ func attemptClaims(attempt int, ids ...int64) []DeliveryClaim {
 	return claims
 }
 
-// beginSendingFixture는 claim한 행을 send unit별로 실제 고정·발송 진입 경로를 거쳐 sending에 넣는다. 각 unit의 멤버
-// 전원이 records에 있어야 한다.
+// 각 unit의 멤버 전원이 records에 있어야 한다.
 func beginSendingFixture(tb testing.TB, repository *PgxRepository, owner string, records ...*Record) {
 	tb.Helper()
 
@@ -58,7 +55,6 @@ func beginSendingFixture(tb testing.TB, repository *PgxRepository, owner string,
 	}
 }
 
-// requireFenceMiss는 err가 reason을 포함한 send fence 미스인지 확인하고 그 미스를 돌려준다.
 func requireFenceMiss(tb testing.TB, err error, reason sendfence.Reason) *sendfence.MissError {
 	tb.Helper()
 

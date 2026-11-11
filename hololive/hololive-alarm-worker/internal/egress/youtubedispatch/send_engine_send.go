@@ -112,7 +112,6 @@ func (d *SendEngine) dispatchGroup(
 	validRows, validOutboxes, invalidRows := partitionGroupedDeliveries(group)
 	d.dispatchRowsIndividually(ctx, invalidRows, groupOutboxByID, formattedMessages, formatFailures, result)
 
-	// 검증 후 1건 이하 -> 개별 dispatch
 	if len(validRows) <= 1 {
 		d.dispatchRowsIndividually(ctx, validRows, groupOutboxByID, formattedMessages, formatFailures, result)
 

@@ -158,7 +158,6 @@ func TestFormatMajorEventWeeklySummary_UsesLLMSummaryWithoutFallbackList(t *test
 	assert.NotContains(t, got, "1. A")
 }
 
-// 예약 알림 렌더 실패는 코드 대체 문구를 구독 방에 보내지 않고 오류로 돌려준다.
 func TestFormatMajorEventMonthlySummary_RenderFailReturnsError(t *testing.T) {
 	t.Parallel()
 

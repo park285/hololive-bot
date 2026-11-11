@@ -49,7 +49,6 @@ func waitLLMRuntimeDone(ctx context.Context, done <-chan struct{}) error {
 	}
 }
 
-// Shutdown은 HTTP·scheduler의 단일 stop 작업을 caller의 종료 예산 안에서 기다린다.
 // HTTP handler나 Stop이 취소를 무시해도 timeout은 반환하며 최초 종료 오류를 보존한다.
 func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	if r == nil {
@@ -200,7 +199,7 @@ func (r *LLMSchedulerRuntime) CloseContext(ctx context.Context) error {
 	return errors.Join(drainErr, r.resourcesErr)
 }
 
-// Close는 기존 내부 caller에도 유한 종료 예산을 제공한다. 통합 runtime은 공유 예산의 CloseContext를 사용한다.
+// 통합 runtime은 공유 예산의 CloseContext를 사용한다.
 func (r *LLMSchedulerRuntime) Close() {
 	if r == nil {
 		return

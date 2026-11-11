@@ -66,8 +66,7 @@ func NewNotifier(
 	}, nil
 }
 
-// Send는 알림 목록을 독립 처리한다. 단일 큐 발행 실패가 전체 배치를 중단하지 않도록
-// 실패는 집계하고 나머지 알림은 계속 처리한다.
+// 단일 큐 발행 실패가 전체 배치를 중단하지 않도록 실패는 집계하고 나머지 알림은 계속 처리한다.
 func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error) {
 	result, prepared, errs := n.prepareSendBatch(ctx, notifications)
 
@@ -123,7 +122,6 @@ type claimedSend struct {
 	claimKeys []string
 }
 
-// preparedSend: prepareOne 의 3-way 결과(sent/skipped/failed)를 한 값으로 묶는다.
 // 이 중 skipped 는 payload 가 없는 정상 결과라서 (nil, nil) 로는 실패와 구분되지 않는다.
 type preparedSend struct {
 	payload   *sendInput

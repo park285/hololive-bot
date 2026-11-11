@@ -48,7 +48,6 @@ const (
 	testPinnedBody                 = "pinned body"
 )
 
-// outboxFixture는 운영과 같은 두 저장소(shared producer 적재 + worker Store)를 한 DB에 묶어 경계 계약을 검증한다.
 const deliveryStatusQuarantined domain.DeliveryOutboxStatus = "QUARANTINED"
 
 type outboxFixture struct {
@@ -67,7 +66,6 @@ func testRepository(t *testing.T) *outboxFixture {
 	}
 }
 
-// testDeliveryMessage는 형식 분기와 무관한 저장소 테스트에서 두 변형에 같은 본문을 쓴다.
 func testDeliveryMessage(text string) delivery.MessageVariants {
 	return delivery.MessageVariants{Plain: text, RichText: text}
 }
@@ -111,7 +109,6 @@ func markOutboxSending(ctx context.Context, t *testing.T, repository *outboxFixt
 	}
 }
 
-// requireFenceMiss는 err가 action 전이의 단일 행 fence 미스이고 관측 원인이 reason인지 확인한다.
 func requireFenceMiss(t *testing.T, err error, action string, reason sendfence.Reason) {
 	t.Helper()
 
@@ -153,7 +150,6 @@ func TestFetchReadyAndLockClaimsDistinctRooms(t *testing.T) {
 		t.Fatalf("expected 2 items, got %d", len(items))
 	}
 
-	// locked_at이 설정되어야 함
 	for _, item := range items {
 		if !item.LockedAt.Valid {
 			t.Fatalf("expected locked_at to be set for item %d", item.ID)
@@ -681,8 +677,7 @@ func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 	}
 }
 
-// TestMarkSending_Fenced는 발송 전이의 각 fence 조건을 하나씩 어긋나게 하고 관측 원인을 확인한다. 각 경우의 mutate는
-// claim한 행에 적용하는 SQL이며 빈 값이면 행을 그대로 둔다.
+// 각 경우의 mutate는 claim한 행에 적용하는 SQL이며 빈 값이면 행을 그대로 둔다.
 func TestMarkSending_Fenced(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -806,7 +801,6 @@ func readOwnerRow(ctx context.Context, t *testing.T, repository *outboxFixture, 
 	return row
 }
 
-// 같은 worker 이름이 재시도 뒤 다시 claim한 행에서 이전 claim 세대(attempt_count)의 전이는 소유자가 같아도 적용되지 않는다.
 func TestPreviousAttemptTransitionsRejectedAfterSameOwnerReclaim(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()

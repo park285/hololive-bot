@@ -55,7 +55,6 @@ func TestDatabaseConnectFailuresClassification(t *testing.T) {
 	}
 }
 
-// connectRefusedError는 닫힌 포트로 pgconn 연결을 시도해 실제 ConnectError를 얻는다.
 func connectRefusedError(t *testing.T) error {
 	t.Helper()
 
@@ -72,7 +71,6 @@ func connectRefusedError(t *testing.T) error {
 	return connectError(t, addr)
 }
 
-// connectRejectedError는 startup 직후 code SQLSTATE의 FATAL 오류를 돌려주는 PostgreSQL 대역 서버에 연결한다.
 func connectRejectedError(t *testing.T, code string) error {
 	t.Helper()
 

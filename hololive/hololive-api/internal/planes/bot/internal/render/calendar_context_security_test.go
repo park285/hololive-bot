@@ -76,7 +76,6 @@ func TestCalendarCardRendererCancelledRenderDoesNotFetchOrPoisonCache(t *testing
 	}
 }
 
-// 예산이 끝나기 전에 받은 사진은 남기고, 예산 만료로 실패한 사진이 있으면 결과 전체를 캐시하지 않는다.
 func TestFetchMemberPhotosBudgetExpiryReturnsPartialPhotos(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		parent := t.Context()
@@ -128,7 +127,7 @@ func TestFetchMemberPhotosBudgetExpiryReturnsPartialPhotos(t *testing.T) {
 	})
 }
 
-// 고유 사진은 calendarPhotoFetchWorkers개까지 동시에 받는다. 콜드 렌더 시간이 사진 수만큼의 왕복 합이 되지 않게 한다.
+// 콜드 렌더 시간이 사진 수만큼의 왕복 합이 되지 않게 한다.
 func TestFetchMemberPhotosDownloadsConcurrentlyWithinWorkerLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const requestLatency = time.Second

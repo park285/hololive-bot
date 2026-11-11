@@ -108,7 +108,6 @@ func TestRunnerIgnoresViewerCountsForLiveAndSchedule(t *testing.T) {
 	}
 }
 
-// Holodex는 metadata generation 2를 유지하며 다른 세대의 payload로 발행하지 않습니다.
 func TestRunnerRejectsUnsupportedLiveGenerations(t *testing.T) {
 	t.Parallel()
 

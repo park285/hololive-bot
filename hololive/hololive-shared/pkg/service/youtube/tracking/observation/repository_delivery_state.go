@@ -63,7 +63,6 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 	return nil
 }
 
-// normalizeAlarmSentMarks는 같은 정본 식별자의 표시를 하나로 합치고 가장 이른 발송 시각을 남긴다.
 func normalizeAlarmSentMarks(marks []AlarmSentMark) ([]AlarmSentMark, error) {
 	normalized := make([]AlarmSentMark, 0, len(marks))
 	indexByIdentity := make(map[string]int, len(marks))

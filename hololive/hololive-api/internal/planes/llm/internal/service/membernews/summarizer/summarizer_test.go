@@ -182,7 +182,6 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
 	}
 }
 
-// LLM 실패는 오류로만 알린다. 결정적 fallback digest는 membernews.Service가 한 곳에서 만든다.
 func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)

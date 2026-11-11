@@ -54,7 +54,7 @@ ReadOnly=true
 ReadOnlyTmpfs=false
 NoNewPrivileges=true
 DropCapability=all
-# 2026-11-06 hololive-seoul 실측: 30일 최대 RSS 308MiB, 컨테이너 working set 최대 216MiB(7일).
+# hololive-seoul 실측: 30일 최대 RSS 308MiB, 컨테이너 working set 최대 216MiB(7일).
 # 2.5배 여유를 둔 768m로 줄여 호스트(11.65GiB)의 컨테이너 한도 합계 여유를 늘린다. GOMEMLIMIT은 한도의 약 80%다.
 Memory=768m
 PidsLimit=512

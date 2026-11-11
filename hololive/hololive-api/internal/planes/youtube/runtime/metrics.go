@@ -87,7 +87,6 @@ const (
 	retentionUnknownTable = "none"
 )
 
-// youtubeRetentionTables는 source 보존 단계(sourceobservation.RetentionTables)와 projection 보존 단계의 table 라벨 값이다.
 var youtubeRetentionTables = slices.Concat(sourceobservation.RetentionTables(), []string{
 	projectionRetentionLeasesTable,
 	projectionRetentionReasonsTable,
@@ -128,7 +127,6 @@ var youtubeRetentionTickSeconds = precreateObserverVec(promauto.NewHistogramVec(
 	Help: "Wall time of one YouTube plane retention phase after its DB slot is acquired; slot wait is in hololive_youtube_plane_db_slot_wait_seconds.",
 }, []string{"phase"}), []string{retentionPhaseSource, retentionPhaseProjection})
 
-// dbOperation은 DB 슬롯을 잡는 작업 종류이며 슬롯 대기·보유 히스토그램의 operation 라벨 값이다.
 type dbOperation string
 
 const (
@@ -178,7 +176,6 @@ func observeSeconds(vec *prometheus.HistogramVec, label string, started time.Tim
 	vec.WithLabelValues(label).Observe(time.Since(started).Seconds())
 }
 
-// precreateCounterVec는 알려진 라벨 값의 0 시리즈를 등록 시점에 만든다.
 // 첫 증가에 시리즈가 생기면 Prometheus가 그 샘플을 기준점으로 삼아 첫 사건을 0으로 센다.
 func precreateCounterVec(vec *prometheus.CounterVec, values []string) *prometheus.CounterVec {
 	for _, value := range values {
@@ -188,7 +185,6 @@ func precreateCounterVec(vec *prometheus.CounterVec, values []string) *prometheu
 	return vec
 }
 
-// precreateObserverVec는 히스토그램의 알려진 라벨 값 시리즈를 등록 시점에 만든다. 이유는 precreateCounterVec와 같다.
 func precreateObserverVec(vec *prometheus.HistogramVec, values []string) *prometheus.HistogramVec {
 	for _, value := range values {
 		vec.WithLabelValues(value)

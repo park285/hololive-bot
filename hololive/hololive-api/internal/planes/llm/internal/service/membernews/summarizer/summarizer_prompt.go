@@ -160,8 +160,7 @@ candidate_events=%s`,
 	return base + "\nexa_search_context=" + searchContext + "\nReturn only schema JSON.", nil
 }
 
-// marshalPromptJSON은 prompt에 넣을 값을 직렬화한다. 실패를 빈 목록·null로 바꾸면 LLM이 입력 없이 요약하므로
-// 오류를 그대로 돌려준다. 외부에서 수집한 제목의 잘못된 UTF-8이 대표적인 실패 원인이다.
+// 실패를 빈 목록·null로 바꾸면 LLM이 입력 없이 요약하므로 오류를 그대로 돌려준다. 외부에서 수집한 제목의 잘못된 UTF-8이 대표적인 실패 원인이다.
 func marshalPromptJSON(field string, value any) ([]byte, error) {
 	data, err := jsonv2.Marshal(value)
 	if err != nil {

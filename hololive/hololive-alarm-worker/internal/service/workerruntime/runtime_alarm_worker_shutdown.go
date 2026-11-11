@@ -28,9 +28,7 @@ import (
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
-// Shutdown은 설정 구독을 포함한 백그라운드 작업 종료를 ctx로 기다린 뒤 HTTP 서버와 알람 서비스를 정리합니다.
-// Scheduler 대기 또는 cleanup 중 발생한 오류는 모두 결합해 반환합니다.
-// 종료 context가 만료되어도 각 cleanup을 생략하지 않고 같은 context로 호출합니다.
+// Scheduler 대기 또는 cleanup 중 발생한 오류는 모두 결합해 반환합니다. 종료 context가 만료되어도 각 cleanup을 생략하지 않고 같은 context로 호출합니다.
 func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) error {
 	if r == nil {
 		return nil

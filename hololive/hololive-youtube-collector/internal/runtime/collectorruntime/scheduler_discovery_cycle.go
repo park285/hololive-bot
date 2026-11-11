@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
-// capacityCycleRequest는 runnerCount개의 런너를 start부터 순환 조회합니다.
 // 조회와 실패 결과의 runner 값은 호출자가 넘긴 런너 목록의 위치입니다.
 type capacityCycleRequest struct {
 	runnerCount int
@@ -247,7 +246,7 @@ func discoveryLimit(remaining, remainingRunners, acquisitionBatch int) int {
 	return limit
 }
 
-// addExcludedKey는 중복 없이 키를 추가합니다. 정렬·정규화는 저장소의 normalizeExcludedJobKeys가 소유합니다.
+// 정렬·정규화는 저장소의 normalizeExcludedJobKeys가 소유합니다.
 func addExcludedKey(excluded []string, key string) []string {
 	if key == "" || slices.Contains(excluded, key) {
 		return excluded

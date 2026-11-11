@@ -27,7 +27,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetRoomAlarms는 방이 구독한 채널 ID를 중복 없이 돌려준다. 같은 채널의 UNIT B 멤버 구독 행은 채널 하나로 합친다.
 func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
 	alarms, err := as.GetRoomAlarmsWithTypes(ctx, roomID)
 	if err != nil {

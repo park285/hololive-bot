@@ -36,7 +36,6 @@ var bannedLogAttrKeys = map[string]string{
 	"sub_command": "사용자 입력 원문",
 }
 
-// 이 key의 값은 privacylog 헬퍼를 통해서만 기록한다.
 var privacylogOnlyAttrKeys = map[string]string{
 	sharedprivacylog.KeyRoomID:     "privacylog.RoomIDAttr/RoomAttr",
 	sharedprivacylog.KeyChatID:     "privacylog.ChatIDAttr/ChatAttr",

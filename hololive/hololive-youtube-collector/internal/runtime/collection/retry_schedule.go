@@ -83,13 +83,11 @@ func NewDeferCollectionInput(
 	return input, nil
 }
 
-// At은 저장소에 전달할 UTC 재시도 시각을 반환합니다.
 func (s RetrySchedule) At() time.Time { return s.at }
 
 // IsNotBefore는 명시적 cooldown의 하한을 로컬 최대 대기로 줄이지 않아야 함을 알립니다.
 func (s RetrySchedule) IsNotBefore() bool { return s.kind == retryNotBefore }
 
-// Validate는 빈 값, 알 수 없는 종류와 UTC가 아닌 시각을 거부합니다.
 func (s RetrySchedule) Validate() error {
 	if s.at.IsZero() || s.at.Location() != time.UTC {
 		return errors.New("validate retry schedule: requires a nonzero UTC timestamp")

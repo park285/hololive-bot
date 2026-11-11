@@ -21,8 +21,7 @@ import (
 
 const channelLiveSlotRounds = 3
 
-// 방송 탭 snapshot이 같은 슬롯에서 계속 실패·DEFERRED여도 채널 확인 job은 cadence마다 자기 슬롯을 완료하고
-// 새 scheduled_for·observation key로 발행한다. 발행된 확인의 canonical 반영은 API consumer 테스트가 검증한다.
+// 발행된 확인의 canonical 반영은 API consumer 테스트가 검증한다.
 func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 	ctx := t.Context()
 	pool, executor, client := newChannelLiveSlotFixture(t)
@@ -145,7 +144,6 @@ func channelLiveSlotSpec(jobKind string) joblease.JobSpec {
 	}
 }
 
-// waitLeaseDue는 lease가 없거나 다음 슬롯·재시도 시각이 DB 기준으로 도래할 때까지 기다린다.
 func waitLeaseDue(t *testing.T, pool *pgxpool.Pool, jobKey string) {
 	t.Helper()
 
@@ -234,7 +232,6 @@ func loadLatestChannelLiveCheckObservation(t *testing.T, pool *pgxpool.Pool) cha
 	return observation
 }
 
-// splitChannelLiveClient는 방송 탭 조회를 항상 실패시키고 채널 /live 확인은 요청 채널의 채널 페이지로 응답한다.
 type splitChannelLiveClient struct {
 	channelCalls atomic.Int64
 	checkCalls   atomic.Int64

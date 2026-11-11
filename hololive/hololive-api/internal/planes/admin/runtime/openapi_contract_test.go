@@ -17,7 +17,6 @@ import (
 	"unicode/utf8"
 )
 
-// roomsPath는 방 목록·변경 operation 경로다.
 const roomsPath = "/api/holo/rooms"
 
 // adminOpenAPI는 admin plane /api/holo/* 생산자 계약(docs/current/contracts/admin-api.openapi.json)이다.
@@ -74,7 +73,6 @@ func loadAdminOpenAPI(t *testing.T) *adminOpenAPI {
 	return &spec
 }
 
-// 계약의 operation·status 응답 schema로 handler 응답 본문을 검사한다.
 // 해당 status 응답이 없으면 default(ProducerError)를 쓴다.
 func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, status int, body []byte) {
 	t.Helper()
@@ -335,8 +333,6 @@ func (s *adminOpenAPI) checkObject(schema *jsonSchema, value map[string]any, at 
 	return nil
 }
 
-// room·ACL 관리 operation의 실제 handler 요청 수락 여부와 응답은 생산자 계약 schema를 지킨다. 조립은 process와 같은
-// buildAdminHandler·ProvideAPIRouter 경로이고 ACL Service는 시험 DB를 쓰는 실제 인스턴스다.
 func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 	spec := loadAdminOpenAPI(t)
 	serve, _ := newAdminTestRouter(t, &recordingIrisRooms{})

@@ -13,7 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 같은 fixture를 새 DB에서 실행해 실패 정산 한 번의 전체 호출 비용(직렬화·전송·관측 수집)을 잰다.
 func BenchmarkFailureRoutingPolicy(b *testing.B) {
 	for _, size := range []int{1, 64, 512} {
 		b.Run(fmt.Sprintf("rows_%d", size), func(b *testing.B) {

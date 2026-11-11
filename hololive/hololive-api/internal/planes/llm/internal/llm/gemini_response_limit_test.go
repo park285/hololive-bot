@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// Gemini 응답은 상한 바이트까지 받아들이고 1바이트라도 넘으면 크기 초과 오류로 거부한다.
 func TestReadGeminiResponseEnforcesSizeLimit(t *testing.T) {
 	t.Parallel()
 

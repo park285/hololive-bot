@@ -38,8 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-// initMemberNewsService는 member news runtime을 조립한다. 활성인 LLM client나 설정된 X allowlist를 초기화하지
-// 못하면 조용히 기능을 줄이지 않고 오류를 돌려 기동을 실패시킨다.
+// 활성인 LLM client나 설정된 X allowlist를 초기화하지 못하면 조용히 기능을 줄이지 않고 오류를 돌려 기동을 실패시킨다.
 func initMemberNewsService(
 	ctx context.Context,
 	provider apiconfig.LLMProviderConfig,
@@ -113,7 +112,7 @@ func initMemberNewsService(
 	return service, nil
 }
 
-// memberNewsLLMClients는 member news가 쓰는 LLM client 묶음이다. 설정으로 꺼진 기능의 필드는 nil이다.
+// 설정으로 꺼진 기능의 필드는 nil이다.
 type memberNewsLLMClients struct {
 	summary     llmclient.Client
 	reviewer    llmclient.Client
@@ -159,9 +158,7 @@ func guardLLMClient(client llmclient.Client, guards *llmGuards) llmclient.Client
 	return llmclient.NewGuardedClient(client, guards.output)
 }
 
-// initMemberNewsSourceValidator는 runtime config가 적재한 X allowlist 경로를 받는다. 값이 없으면
-// X allowlist 없이(공식 도메인·YouTube 채널만) 검증한다. 값이 있는데 읽지 못하면 빈 allowlist로 내려가지 않고
-// 오류를 돌려 기동을 실패시킨다. 작업 디렉터리 기준 후보 경로 탐색은 두지 않는다.
+// 값이 없으면 X allowlist 없이(공식 도메인·YouTube 채널만) 검증한다. 값이 있는데 읽지 못하면 빈 allowlist로 내려가지 않고 오류를 돌려 기동을 실패시킨다.
 func initMemberNewsSourceValidator(ctx context.Context, allowlistPath string, membersData domain.MemberDataProvider, logger *slog.Logger) (*membernews.SourceValidator, error) {
 	validator, err := membernews.NewSourceValidator(ctx, allowlistPath, membersData, logger)
 	if err != nil {

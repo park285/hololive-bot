@@ -72,7 +72,6 @@ class PairToolTest(unittest.TestCase):
 
 
     def test_backup_pair_is_refused_before_publication(self):
-        # 2026-10-26 중앙·서울 AP: 수용 후 백업 정리가 활성 pair를 지워 collector 재생성이 실패했다.
         directory = self.root.parent / "backups/po-c-20261027T000000Z/worker-profile-candidate"
         write_pair(directory)
         result = self.activate(directory)

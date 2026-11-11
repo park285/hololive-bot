@@ -142,10 +142,8 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 	return *result, nil
 }
 
-// payFailedScheduleLookups는 실패한 RPC가 그 전까지 보낸 예정 영상 조회를 지불하고 RPC 오류를 그대로 돌려줍니다.
-// 검증된 helper 오류 본문은 조회 수를 싣습니다(생략은 0). 요청을 helper에 보냈는데 그런 본문을 받지 못하면
-// 시한 초과·취소·연결 끊김 전까지 보낸 조회 수를 알 수 없으므로, 요청한 상한만큼 기다리지 않고 예약합니다.
-// 요청이 끊기면 helper가 진행 중인 조회를 중단하므로 상한은 실제 조회 수의 상한입니다.
+// 검증된 helper 오류 본문은 조회 수를 싣습니다(생략은 0). 요청을 helper에 보냈는데 그런 본문을 받지 못하면 시한 초과·취소·연결 끊김 전까지 보낸 조회 수를 알 수 없으므로, 요청한 상한만큼
+// 기다리지 않고 예약합니다. 요청이 끊기면 helper가 진행 중인 조회를 중단하므로 상한은 실제 조회 수의 상한입니다.
 func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget int, sent bool) error {
 	failure, ok := errors.AsType[*scheduleLookupError](err)
 	if !ok {
@@ -169,10 +167,8 @@ func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget in
 	return err
 }
 
-// payScheduleLookups는 helper가 RPC 안에서 보낸 예정 영상 player 조회를 limiter 예약 하나씩으로 지불합니다.
-// 다음 RPC가 이 조회들과 같은 간격을 두게 하며, 예약을 한 번에 하나씩 기다리므로 대기 예약 수가 inflight를 넘지 않아
-// 실행 프로필의 limiter 예산(호출 수 x inflight x 간격)과 맞습니다. 기다리는 중 수집이 끝나면 조회는 이미
-// 일어났으므로 남은 몫을 기다리지 않고 예약해 다음 RPC가 대신 기다리게 합니다.
+// 다음 RPC가 이 조회들과 같은 간격을 두게 하며, 예약을 한 번에 하나씩 기다리므로 대기 예약 수가 inflight를 넘지 않아 실행 프로필의 limiter 예산(호출 수 x inflight x 간격)과
+// 맞습니다. 기다리는 중 수집이 끝나면 조회는 이미 일어났으므로 남은 몫을 기다리지 않고 예약해 다음 RPC가 대신 기다리게 합니다.
 func (c *RPC) payScheduleLookups(ctx context.Context, lookups int) error {
 	for paid := range lookups {
 		if err := c.observeLimiterWait(ctx, "/v1/channel"); err != nil {
@@ -191,8 +187,7 @@ func (c *RPC) reserveLimiter(calls int) {
 	}
 }
 
-// FetchChannelLiveCheck는 채널 /live 확인을 한 번 요청합니다. 응답 예산은 MaxLiveCheckResponseBytes 이하로 제한하며
-// 반환 channel_id와 요청 subject의 대조는 호출자가 소유합니다.
+// 응답 예산은 MaxLiveCheckResponseBytes 이하로 제한하며 반환 channel_id와 요청 subject의 대조는 호출자가 소유합니다.
 func (c *RPC) FetchChannelLiveCheck(ctx context.Context, request ChannelLiveCheckRequest) (ChannelLiveCheckResult, error) {
 	request.ProtocolVersion = ProtocolVersion
 
@@ -211,7 +206,7 @@ func (c *RPC) FetchChannelLiveCheck(ctx context.Context, request ChannelLiveChec
 	return *result, nil
 }
 
-// FetchVideoLiveCheck는 영상 player 확인을 한 번 요청합니다. 반환 video_id와 요청 subject의 대조는 호출자가 소유합니다.
+// 반환 video_id와 요청 subject의 대조는 호출자가 소유합니다.
 func (c *RPC) FetchVideoLiveCheck(ctx context.Context, request VideoLiveCheckRequest) (VideoLiveCheckResult, error) {
 	request.ProtocolVersion = ProtocolVersion
 
@@ -326,11 +321,9 @@ func minimumSuccessResponseBytes(path string) int64 {
 	return 1
 }
 
-// minimumSuccessBytes는 helper가 돌려줄 수 있는 가장 작은 성공 본문의 크기입니다. 같은 DTO를 marshal해
-// 필드 이름과 선택 필드 생략을 wire와 함께 따라가며, 식별자는 비워 하한만 셉니다.
-// 이 값이 helper 하한보다 크면 helper가 처리할 요청을 Go가 먼저 거부하므로 helper 하한을 넘지 않아야 합니다.
-// 확인된 MEMBERS_ONLY의 필수 channel_id는 빈 값이면 생략되어 helper 하한보다 작게 계산되며,
-// 그 사이의 요청은 helper가 같은 RESOURCE_LIMIT로 거부합니다.
+// 같은 DTO를 marshal해 필드 이름과 선택 필드 생략을 wire와 함께 따라가며, 식별자는 비워 하한만 셉니다. 이 값이 helper 하한보다 크면 helper가 처리할 요청을 Go가 먼저 거부하므로
+// helper 하한을 넘지 않아야 합니다. 확인된 MEMBERS_ONLY의 필수 channel_id는 빈 값이면 생략되어 helper 하한보다 작게 계산되며, 그 사이의 요청은 helper가 같은
+// RESOURCE_LIMIT로 거부합니다.
 var minimumSuccessBytes = map[string]int64{
 	"/v1/community": encodedSize(&CommunityResult{
 		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
@@ -447,8 +440,6 @@ func oversizedHelperResponse(status int) error {
 	return protocolMismatch(errors.New("youtube.js helper error response exceeds body limit"))
 }
 
-// helperSuccess는 성공 응답 유형마다 자신의 결과 계약을 검증하게 합니다.
-// 목록 RPC는 pagination을, 확인 RPC는 평탄한 판정 어휘를 검증합니다.
 type helperSuccess interface {
 	protocolMetadata() ProtocolMeta
 	validateSuccess() error

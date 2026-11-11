@@ -11,7 +11,6 @@ import (
 
 const retiredScrubPayload = `{"body":"retained"}`
 
-// 현재 네 writer가 terminal 전이에서 직접 비우고 retry에서는 원본을 보존한다.
 func TestInboxCompleteScrubsWithoutCompatibilityTrigger(t *testing.T) {
 	pool, repo := claimedInboxForScrubRetirement(t)
 

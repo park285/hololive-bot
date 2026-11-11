@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// alarmDispatchOrderConsumer는 claim과 정산 호출 순서를 기록한다.
 type alarmDispatchOrderConsumer struct {
 	*alarmDispatchRunnerTestConsumer
 
@@ -35,8 +34,7 @@ func (c *alarmDispatchOrderConsumer) MarkDispatched(ctx context.Context, envelop
 	return c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes, irisRequestID, handoffHorizon)
 }
 
-// 같은 worker ID가 같은 attempt의 행을 다시 claim하지 않는 근거는 직렬 루프다. 한 배치의 모든 그룹이 정산된 뒤에만
-// 다음 claim을 한다.
+// 같은 worker ID가 같은 attempt의 행을 다시 claim하지 않는 근거는 직렬 루프다.
 func TestAlarmDispatchRunnerClaimsNextBatchOnlyAfterSettlingPrevious(t *testing.T) {
 	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 	second := alarmDispatchRunnerTestEnvelope("room-2", nil)

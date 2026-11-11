@@ -32,8 +32,7 @@ type HandoffClaim struct {
 	Elapsed       time.Duration
 }
 
-// ClaimHandoffDue는 확인 시각이 된 확인 대기 행을 limit개까지 고르고 softClaim 뒤로 다음 확인을 미룬다. 확인 도중
-// 프로세스가 멈추면 행은 softClaim 뒤에 다시 고를 수 있다.
+// 확인 도중 프로세스가 멈추면 행은 softClaim 뒤에 다시 고를 수 있다.
 func (r *Store) ClaimHandoffDue(ctx context.Context, limit int, softClaim time.Duration) ([]HandoffClaim, error) {
 	if err := r.ensurePool(); err != nil {
 		return nil, fmt.Errorf("claim notification handoff checks: %w", err)
@@ -61,8 +60,7 @@ func (r *Store) ClaimHandoffDue(ctx context.Context, limit int, softClaim time.D
 	return claims, nil
 }
 
-// scanHandoffClaim은 claim 결과 한 행을 읽는다. 확인 대기 행은 Iris requestId와 고정 요청 세대를 항상 가지므로 둘이
-// NULL이면 문장 계약 위반이라 오류다.
+// 확인 대기 행은 Iris requestId와 고정 요청 세대를 항상 가지므로 둘이 NULL이면 문장 계약 위반이라 오류다.
 func scanHandoffClaim(row pgx.CollectableRow) (HandoffClaim, error) {
 	var (
 		claim     HandoffClaim
@@ -80,7 +78,7 @@ func scanHandoffClaim(row pgx.CollectableRow) (HandoffClaim, error) {
 	return claim, nil
 }
 
-// CompleteHandoff는 handoff 완료를 확인으로 기록한다. 행은 SENT 그대로다.
+// 행은 SENT 그대로다.
 func (r *Store) CompleteHandoff(ctx context.Context, claim *HandoffClaim) error {
 	return r.applyHandoff(ctx, actionHandoffComplete, handoffCompleteSQL, claim)
 }
@@ -100,9 +98,7 @@ func (r *Store) RescheduleHandoff(ctx context.Context, claim *HandoffClaim, step
 	return r.applyHandoff(ctx, actionHandoffReschedule, handoffRescheduleSQL, claim, stepMS, horizonMS)
 }
 
-// ReissueAfterHandoff는 Iris failed를 다음 요청 세대의 PENDING(attempt + 1, DB 시계 + retryAfter)으로 한 문장에
-// 기록한다. 다음 claim은 같은 본문을 새 세대 ID로 보낸다. 세대를 모두 썼으면 sendfence.ErrGenerationExhausted이고 행은
-// 그대로다. 시도 예산은 호출자가 판정한다.
+// 다음 claim은 같은 본문을 새 세대 ID로 보낸다. 세대를 모두 썼으면 sendfence.ErrGenerationExhausted이고 행은 그대로다. 시도 예산은 호출자가 판정한다.
 func (r *Store) ReissueAfterHandoff(ctx context.Context, claim *HandoffClaim, retryAfter time.Duration, code, detail string) error {
 	if claim == nil {
 		return fmt.Errorf("%s: claim is required", actionHandoffReissue)
@@ -120,18 +116,15 @@ func (r *Store) ReissueAfterHandoff(ctx context.Context, claim *HandoffClaim, re
 		durationMilliseconds(retryAfter), handoffErrorText(code, detail))
 }
 
-// ExhaustAfterHandoff는 세대나 시도 예산이 없는 Iris failed를 저장된 요청에 exhausted를 세운 종료 FAILED(attempt + 1)로
-// 끝낸다. 그래서 producer rearm이 이 행을 되살리지 않는다.
+// 그래서 producer rearm이 이 행을 되살리지 않는다.
 func (r *Store) ExhaustAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
 	return r.applyHandoff(ctx, actionHandoffExhaust, handoffExhaustSQL, claim, handoffErrorText(code, detail))
 }
 
-// QuarantineAfterHandoff는 handoff 결과 불명을 QUARANTINED로 끝낸다.
 func (r *Store) QuarantineAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
 	return r.applyHandoff(ctx, actionHandoffQuarantine, handoffQuarantineSQL, claim, handoffErrorText(code, detail))
 }
 
-// applyHandoff는 handoff fence 인자(행·토큰·Iris requestId·요청 세대) 뒤에 전이별 인자를 붙여 단일 문장으로 적용한다.
 // 적용되지 않았으면 행을 바꾸지 않은 *sendfence.MissError다.
 func (r *Store) applyHandoff(ctx context.Context, action, query string, claim *HandoffClaim, extra ...any) error {
 	if claim == nil {
@@ -143,8 +136,7 @@ func (r *Store) applyHandoff(ctx context.Context, action, query string, claim *H
 	return r.applyFenced(ctx, action, claim.ID, query, args...)
 }
 
-// handoffErrorText는 handoff 결과 코드를 error 열 앞에 붙인다. 이 원장에는 last_error_code 열이 없으므로 운영자는
-// 접두어로 alarm dispatch와 같은 코드 어휘를 읽는다.
+// 이 원장에는 last_error_code 열이 없으므로 운영자는 접두어로 alarm dispatch와 같은 코드 어휘를 읽는다.
 func handoffErrorText(code, detail string) string {
 	return code + ": " + detail
 }

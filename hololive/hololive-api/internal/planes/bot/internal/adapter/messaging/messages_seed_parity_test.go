@@ -159,7 +159,6 @@ func TestNotifySeedHasNoOrphanKeys(t *testing.T) {
 	}
 }
 
-// formatter의 렌더 실패 문구 key는 SendError의 명령 실패 key와 같은 행이어야 한다.
 func TestRenderFailureMessageKeyMatchesCommandProcessingFailed(t *testing.T) {
 	if formatter.RenderFailureMessageKey.Namespace != messagestrings.NamespaceError ||
 		formatter.RenderFailureMessageKey.Name != messaging.ErrCommandProcessingFailed {

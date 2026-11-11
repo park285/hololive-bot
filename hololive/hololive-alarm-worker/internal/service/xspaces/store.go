@@ -47,7 +47,6 @@ func (s StartStore) Remember(ctx context.Context, payload domain.XSpaceDispatchP
 	return stored, nil
 }
 
-// Prune는 30일이 지난 시작 스냅샷을 최대 100개 정리한다. 입장 freshness는 15분이다.
 func (s StartStore) Prune(ctx context.Context) error {
 	_, err := s.Pool.Exec(ctx, pruneStartsSQL)
 	if err != nil {

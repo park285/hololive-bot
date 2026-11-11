@@ -12,9 +12,7 @@ import (
 
 const MaxRetentionBatchSize = 1000
 
-// sourceRetentionMaxWindows는 원본 정리가 한 tick에 처리하는 창 수의 상한이다. 운영 창 하나는 평균 약 0.7초
-// (2026-10-25 pg_stat_statements, 2026-08-23 이후 29,269회)라 보통 아래 시간 예산이 먼저 멈추고, 창이 빠를 때도
-// 한 tick의 원본 삭제를 창 상한 × 배치 크기로 제한한다.
+// 운영 창 하나는 평균 약 0.7초라 보통 아래 시간 예산이 먼저 멈추고, 창이 빠를 때도 한 tick의 원본 삭제를 창 상한 × 배치 크기로 제한한다.
 const sourceRetentionMaxWindows = 8
 
 type RetentionConfig struct {
@@ -184,8 +182,7 @@ func (r *Repository) retentionSteps(
 	}, r.auditRetentionSteps(ctx, cfg, now)...)
 }
 
-// auditRetentionSteps는 원본 정리 뒤에 도는 감사 이력·출처 사전 정리 단계다. 출처 사전을 마지막에 두어
-// 같은 tick에서 원본 삭제로 참조가 사라진 사전 행까지 정리한다.
+// 출처 사전을 마지막에 두어 같은 tick에서 원본 삭제로 참조가 사라진 사전 행까지 정리한다.
 func (r *Repository) auditRetentionSteps(
 	ctx context.Context,
 	cfg RetentionConfig,
@@ -231,7 +228,6 @@ type retentionStep struct {
 	run   func() (RetentionResult, error)
 }
 
-// countOnly는 삭제 수만 보고하는 단계의 결과를 RetentionResult로 옮긴다.
 func countOnly(deleted int64, err error) (RetentionResult, error) {
 	return RetentionResult{Deleted: deleted}, err
 }
@@ -307,9 +303,8 @@ func (r *Repository) deleteAgedBatch(
 	return out, nil
 }
 
-// deleteEvidenceWindows는 tick 시작의 cutoff로 원본 창을 이어서 처리한다. 삭제 0건이어도 커서가 전진하면 다음
-// 창으로 넘어가 보호된 앞쪽 때문에 삭제 가능한 뒤쪽이 밀리지 않게 하고, 순회 완료·진척 없음·창 상한·시간 예산·
-// 오류에서 멈춘다. 순회 완료에서 멈추므로 한 tick이 같은 보호 순회를 다시 돌지 않는다.
+// 삭제 0건이어도 커서가 전진하면 다음 창으로 넘어가 보호된 앞쪽 때문에 삭제 가능한 뒤쪽이 밀리지 않게 하고, 순회 완료·진척 없음·창 상한·시간 예산· 오류에서 멈춘다. 순회 완료에서 멈추므로 한 tick이
+// 같은 보호 순회를 다시 돌지 않는다.
 func (r *Repository) deleteEvidenceWindows(ctx context.Context, cfg RetentionConfig, now time.Time) (RetentionResult, error) {
 	kinds, cutoffs := evidencePolicies(cfg.EvidenceAgeByKind, now)
 	if len(kinds) == 0 {
@@ -404,7 +399,6 @@ func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg Ret
 	return removed, nil
 }
 
-// deleteUnreferencedProvenanceBatch는 어떤 원본도 참조하지 않는 출처 사전 행을 id 순 창 하나만큼 지운다.
 // 사전 행에는 시각 열이 없어 기간 대신 참조 여부로 판정하며, 원본 보존이 꺼져 있으면 실행하지 않는다.
 func (r *Repository) deleteUnreferencedProvenanceBatch(ctx context.Context, cfg RetentionConfig) (int64, error) {
 	if minEvidenceAge(cfg.EvidenceAgeByKind) == 0 {

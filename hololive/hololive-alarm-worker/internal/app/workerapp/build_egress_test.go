@@ -24,7 +24,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// Runtime client와 alarm-worker sender 사이의 typed compile-time 계약을 고정한다.
 var _ egress.IrisClient = (*delivery.RuntimeIrisClient)(nil)
 
 const workerappTestOpenRoom = "open"
@@ -228,7 +227,6 @@ func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 	assert.Equal(t, 3, runnerConfig.MaxBatchesPerWake)
 }
 
-// handoff 확인 기한은 발송 attempt_timeout이 아니라 profile의 handoff_horizon_ms를 따른다.
 func TestAlarmDispatchHandoffHorizonFollowsProfileSetting(t *testing.T) {
 	config, _ := alarmWorkerTestConfig(t)
 
@@ -255,7 +253,6 @@ func TestDeliveryHandoffHorizonsFollowProfileSettings(t *testing.T) {
 	assert.Less(t, youtube.DeliverySendTimeout, youtube.HandoffHorizon)
 }
 
-// dispatcher가 기본값을 채우지 않으므로, 운영 profile 형상이 두 dispatcher의 생성 검증을 통과하는지 확인한다.
 func TestProfileShapedDispatcherConfigsPassValidation(t *testing.T) {
 	config, _ := alarmWorkerTestConfig(t)
 

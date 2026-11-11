@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// testOfficialMiko는 공식 일정이 쓰는 미코의 공식 표기다.
 const testOfficialMiko = "さくらみこ"
 
 func TestBuildRequiresOneDistinctChannel(t *testing.T) {
@@ -65,7 +64,6 @@ type testMembers struct {
 	lookupErr error
 }
 
-// 멤버 적재 실패는 빈 색인이나 원문 표기로 바꾸지 않고 오류다.
 func TestDisplayNamesReturnsMemberLoadError(t *testing.T) {
 	t.Parallel()
 
@@ -80,7 +78,6 @@ func TestDisplayNamesReturnsMemberLoadError(t *testing.T) {
 	}
 }
 
-// 색인된 채널의 대표 조회가 실패하면 공식 표기로 추측하지 않고 오류다. 미존재만 공식 표기를 쓴다.
 func TestDisplayNamesSeparatesLookupFailureFromNotFound(t *testing.T) {
 	t.Parallel()
 

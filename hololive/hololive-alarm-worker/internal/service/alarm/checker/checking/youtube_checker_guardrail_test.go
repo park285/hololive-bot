@@ -248,7 +248,6 @@ func TestMissingLiveDeliveryRooms(t *testing.T) {
 	}
 }
 
-// 근거 하한은 과거의 실제 시작 시각, 없으면 과거의 첫 관측 시각에 고정하고, 같은 stream이 여러 번 보이면 가장 이른 하한을 쓴다.
 func TestCurrentLiveDispatchEvidenceWindowsAnchorsOnActualStart(t *testing.T) {
 	t.Parallel()
 
@@ -288,7 +287,6 @@ func TestCurrentLiveDispatchEvidenceWindowsAnchorsOnActualStart(t *testing.T) {
 	}, windows)
 }
 
-// 실패 종료로 끝난 방은 ledger와 DLQ 지표가 이미 드러내므로 guardrail이 매분 경고하지 않는다. 결과가 없는 방만 경고한다.
 func TestObservePersistedLiveGuardrailMetaAccountsTerminalFailedRooms(t *testing.T) {
 	t.Parallel()
 

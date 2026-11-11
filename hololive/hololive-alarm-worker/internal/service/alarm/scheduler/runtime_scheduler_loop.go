@@ -15,7 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// Start는 YouTube 조회와 캐시 복구 루프를 실행하고 context 취소 시 종료한다.
 func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	if s == nil {
 		return errors.New("runtime scheduler is nil")

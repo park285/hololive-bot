@@ -50,7 +50,6 @@ func TestCollectionOutputDiagnosticBoundary(t *testing.T) {
 	}
 }
 
-// 2026-09-24 요청 ID 초기화 장애는 모든 예외가 같은 collector_failed로 보여 로그만으로 단계를 알 수 없었다.
 func TestUnclassifiedHelperFailureKeepsStageAndErrorKind(t *testing.T) {
 	_, err := decodeCollectionOutput([]byte(`{"error":"collector_failed","stage":"app_shell","error_name":"TypeError","error_code":"ENOTFOUND","cooldown_seconds":0,"http_status":0,"api_codes":[]}`), errors.New("exit status 1"))
 	failure, ok := errors.AsType[*CollectionError](err)

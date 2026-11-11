@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// acceptReply는 행을 stage·claim한 뒤 Iris admission 정산까지 진행해 1ms 뒤 확인 예정인 lease 없는 accepted로 만든다.
 func acceptReply(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, entry *ReplyOutboxEntry, irisRequestID string) int64 {
 	t.Helper()
 
@@ -28,7 +27,6 @@ func acceptReply(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository,
 	return claim.ID
 }
 
-// claimOneHandoffDue는 첫 확인 시각이 DB 시계로 지나기를 기다려 handoff 확인 하나를 claim한다.
 func claimOneHandoffDue(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) ReplyHandoffClaim {
 	t.Helper()
 
@@ -48,7 +46,6 @@ func claimOneHandoffDue(ctx context.Context, t *testing.T, repo *ReplyOutboxRepo
 	}
 }
 
-// completeReplyHandoff는 발송 claim을 admission 정산한 뒤 reconciler 경로로 handoff 완료까지 진행한다.
 func completeReplyHandoff(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, claim *ReplyOutboxClaim) {
 	t.Helper()
 
@@ -187,8 +184,7 @@ func TestReplyHandoffSettlementsShapeTheRow(t *testing.T) {
 	}
 }
 
-// failed 재발송은 같은 행을 재발송 큐로 되돌리고, 다음 발송 claim이 저장 payload와 base clientRequestId로
-// 시작하게 한다. 세대는 그 claim의 reissue ladder가 409 FAILED를 보고 올린다.
+// 세대는 그 claim의 reissue ladder가 409 FAILED를 보고 올린다.
 func TestReplyHandoffFailedReturnsTheStoredReplyToTheClaimQueue(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := newTestReplyOutboxRepository(pool)
@@ -241,7 +237,6 @@ func TestReplyHandoffRescheduleNeverPassesTheHorizon(t *testing.T) {
 	assert.Equal(t, ReplyOutboxAccepted, status, "재예약은 상태를 바꾸지 않는다")
 }
 
-// 같은 방의 accepted 선행 행은 handoff 확인이 끝날 때까지 후행 응답의 admission을 보류한다.
 func TestReplyHandoffAcceptedPredecessorHoldsTheRoomUntilConfirmed(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := newTestReplyOutboxRepository(pool)

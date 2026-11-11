@@ -82,8 +82,7 @@ func DecodeWorkerProfile(loaded workercontract.LoadedProfile) (*WorkerProfile, e
 	return profile, nil
 }
 
-// validateWorkerProfile은 shape와 원시 밀리초 범위를 검증한다. 통과한 profile만 applyWorkerProfile이
-// time.Duration으로 바꾸므로 PositiveValueProblems의 30일 상한이 변환 overflow를 막는다.
+// 통과한 profile만 applyWorkerProfile이 time.Duration으로 바꾸므로 PositiveValueProblems의 30일 상한이 변환 overflow를 막는다.
 func validateWorkerProfile(profile *WorkerProfile) error {
 	if profile == nil {
 		return errors.New("youtube collector worker profile is nil")
@@ -136,7 +135,7 @@ func capacityProblems(profile *WorkerProfile, worker *workercontract.WorkerProfi
 	return nil
 }
 
-// Config는 검증된 profile 정책에 환경 기본값을 결합한다. 인스턴스 ID는 환경 소유다.
+// 인스턴스 ID는 환경 소유다.
 func (profile *WorkerProfile) Config() Config {
 	config := DefaultConfig()
 	config.applyWorkerProfile(profile)
@@ -144,7 +143,6 @@ func (profile *WorkerProfile) Config() Config {
 	return config
 }
 
-// applyWorkerProfile은 validateWorkerProfile을 통과한 profile의 정책 값을 Config로 옮긴다.
 // 형태 검증이 bounded capacity와 fixed max_age를 보장하므로 두 포인터는 nil이 아니다.
 func (c *Config) applyWorkerProfile(profile *WorkerProfile) {
 	worker := profile.Loaded.Profile.Workers[WorkerCollection]

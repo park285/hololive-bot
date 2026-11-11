@@ -77,7 +77,6 @@ func TestPayloadsKeepStoredJSONShape(t *testing.T) {
 	}
 }
 
-// 소비자는 저장된 payload를 같은 타입으로 읽으므로, 읽은 값을 다시 직렬화하면 원래 JSON과 같아야 한다.
 func TestStoredPayloadsDecodeIntoContractTypes(t *testing.T) {
 	t.Parallel()
 

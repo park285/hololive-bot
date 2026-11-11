@@ -9,8 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 발송 진입 미스는 외부 호출 없이 원인으로만 갈린다. 멤버 종단만 격리하고, 멤버십 변경은 반환하며, 소유권을 잃은
-// 미스는 행을 현재 소유자와 회수 경로에 남긴다.
 func TestAlarmDispatchRunnerRoutesPreSendMissByReason(t *testing.T) {
 	cases := []struct {
 		name           string

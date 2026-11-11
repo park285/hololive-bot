@@ -36,7 +36,6 @@ func (s *liveQueryRequestRecorder) Query(_ context.Context, request livequery.Re
 	return livequery.Result{}, nil
 }
 
-// runDisplayNameCommand는 운영 seed 템플릿과 message_strings로 명령을 실행해 실제 응답 문구를 돌려준다.
 func runDisplayNameCommand(t *testing.T, deps *handlercore.Dependencies, execute func(*handlercore.Dependencies) error) string {
 	t.Helper()
 

@@ -156,7 +156,6 @@ func validateRunInputIdentity(
 	return nil
 }
 
-// subjectMismatch는 GLOBAL job의 고정 lease subject와 EXACT_SUBJECT 시야의 subject를 실행 subject와 대조합니다.
 func subjectMismatch(job JobContract, subject string, targets *TargetSnapshot) bool {
 	if job.Class() == JobClassGlobal && subject != job.LeaseSubject() {
 		return true
@@ -169,7 +168,7 @@ func invalidRunInputError() error {
 	return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is invalid")
 }
 
-// Subject는 lease가 고정한 job subject입니다. GLOBAL job은 계약의 lease subject입니다.
+// GLOBAL job은 계약의 lease subject입니다.
 func (i *RunInput) Subject() string {
 	if i == nil {
 		return ""
@@ -207,8 +206,6 @@ func (i *RunInput) Generation(kind contract.ObservationKind) (int64, error) {
 	return out, nil
 }
 
-// RequireLiveSnapshotMetadataGeneration은 provider별 발행 세대를 검증합니다.
-// YouTube.js의 streams 조회 증명은 generation 3이며 Holodex metadata는 generation 2를 유지합니다.
 func (i *RunInput) RequireLiveSnapshotMetadataGeneration() error {
 	generation, err := i.Generation(contract.KindLiveSnapshot)
 	if err != nil {

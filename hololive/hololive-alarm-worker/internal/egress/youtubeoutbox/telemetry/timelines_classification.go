@@ -39,9 +39,8 @@ func (r *Repository) PersistPostLatencyClassificationsByIdentities(
 	return nil
 }
 
-// persistPostLatencyClassifications는 분류 결과를 한 UPDATE 문장으로 반영한다. 호출자가 transaction Querier를
-// 넘기면 그 transaction 안에서 실행되어, 같은 transaction이 앞서 쓴 tracking·telemetry 행을 보고 함께 rollback된다.
-// 같은 (kind, content_id)가 여러 행이면 처음 행의 분류만 쓴다.
+// 호출자가 transaction Querier를 넘기면 그 transaction 안에서 실행되어, 같은 transaction이 앞서 쓴 tracking·telemetry 행을 보고 함께 rollback된다. 같은
+// (kind, content_id)가 여러 행이면 처음 행의 분류만 쓴다.
 func (r *Repository) persistPostLatencyClassifications(ctx context.Context, rows []timeline.PostDeliveryTimeline) error {
 	batch := newPostLatencyClassificationBatch(len(rows))
 	seen := make(map[string]struct{}, len(rows))
@@ -68,7 +67,6 @@ func (r *Repository) persistPostLatencyClassifications(ctx context.Context, rows
 	return nil
 }
 
-// postLatencyClassificationBatch는 UPDATE ... FROM unnest에 넘길 같은 길이의 열 배열이다.
 type postLatencyClassificationBatch struct {
 	kinds               []string
 	contentIDs          []string

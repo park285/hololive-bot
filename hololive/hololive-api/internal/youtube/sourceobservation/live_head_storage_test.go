@@ -52,7 +52,6 @@ func TestLiveHeadPreservesUnchangedToastArray(t *testing.T) {
 	require.True(t, storedIgnoredEquals(t, pool, state.VideoID, []time.Time{}), "loaded empty history must clear the array")
 }
 
-// 활성 세션의 미적재 이력은 보존하고 새 head의 미적재 이력은 빈 배열로 시작한다.
 func TestLiveHeadOmittedHistoryKeepsStoredArray(t *testing.T) {
 	t.Parallel()
 

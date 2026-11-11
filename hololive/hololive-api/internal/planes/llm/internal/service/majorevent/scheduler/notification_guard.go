@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도).
 type outboxEnqueuer interface {
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID string, message delivery.MessageVariants) error
 }
@@ -145,7 +144,6 @@ func enqueueToRooms(
 	return result
 }
 
-// roomTarget: enqueueToRooms에 전달할 room 정보.
 type roomTarget struct {
 	roomID string
 }

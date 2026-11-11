@@ -105,7 +105,7 @@ func (deliveryTelemetryTestAlarmTrackingModel) TableName() string {
 	return testTableContentAlarmTracking
 }
 
-// 시도 식별자 중복은 조용히 건너뛰지 않고 오류다. TransitionStore가 전이 트랜잭션 안에서 순번을 매겨 한 번만 기록한다.
+// TransitionStore가 전이 트랜잭션 안에서 순번을 매겨 한 번만 기록한다.
 func TestDeliveryTelemetryRepository_EnqueueRejectsDuplicateDeliveryAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -253,8 +253,6 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 	require.Contains(t, logBuffer.String(), "\"delay_source\":")
 }
 
-// enqueueEmittedShortAttempt는 TransitionStore가 CompleteSent 트랜잭션 안에서 기록하는 성공 시도 행을 넣는다.
-// 이제 delivery 테이블을 역산하던 backfill은 없으므로 flush 대상은 명시적으로 기록된 시도 행뿐이다.
 func enqueueEmittedShortAttempt(
 	t *testing.T,
 	db *pgxpool.Pool,

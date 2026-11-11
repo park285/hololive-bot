@@ -12,7 +12,7 @@ if (( $# > 0 )); then
   exit 2
 fi
 
-# 게이트(특히 NilAway)가 호스트 램을 전역 고갈시킨 2026-07-04 OOM의 재발 방지.
+# 게이트(특히 NilAway)의 호스트 메모리 고갈을 막는다.
 # 준비 단계를 두 번 실행하지 않도록 다른 작업보다 먼저 scope로 다시 실행한다.
 if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
   && command -v systemd-run >/dev/null 2>&1 \
@@ -164,7 +164,7 @@ run_content_gates() {
   # 중앙 Quadlet 원본이 systemd unit으로 생성되지 않으면 해당 서비스가 기동되지 않는다.
   if echo "$changed_files" | grep -q '^deploy/quadlet/'; then
     for quadlet_dir in deploy/quadlet/hololive-bot deploy/quadlet/hololive-bot-standby; do
-      # 상대 경로를 주면 quadlet은 unit을 하나도 읽지 않고 rc=0으로 끝난다(2026-11-04 실측).
+      # 상대 경로를 주면 quadlet은 unit을 하나도 읽지 않고 rc=0으로 끝난다.
       QUADLET_UNIT_DIRS="${ROOT_DIR}/${quadlet_dir}" /usr/libexec/podman/quadlet -dryrun >/dev/null
     done
   fi

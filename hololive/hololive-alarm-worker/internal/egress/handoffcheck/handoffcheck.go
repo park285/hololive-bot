@@ -62,7 +62,6 @@ const (
 	ActionQuarantine
 )
 
-// String은 로그에 남기는 행동 이름이다.
 func (a Action) String() string {
 	switch a {
 	case ActionReschedule:

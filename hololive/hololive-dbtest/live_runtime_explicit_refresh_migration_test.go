@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 기본 권한이 넓어도 runtime과 별도 기록 역할만 refresh를 실행할 수 있습니다.
 func TestLiveRuntimeRefreshPrivileges(t *testing.T) {
 	t.Parallel()
 
@@ -55,7 +54,6 @@ func assertLiveRuntimeRefreshPrivileges(t *testing.T, pool *pgxpool.Pool, roles 
 	}
 }
 
-// runtime 역할은 수명 모델 표를 직접 쓰지 않고도 shared 잠금 뒤 refresh로 자기 원본 쓰기를 반영한다.
 func assertRuntimeRoleRefreshesLiveRuntimeState(t *testing.T, pool *pgxpool.Pool, runtime string) {
 	t.Helper()
 
@@ -82,7 +80,6 @@ func assertRuntimeRoleRefreshesLiveRuntimeState(t *testing.T, pool *pgxpool.Pool
 	assertLiveRuntimeState(t, tx)
 }
 
-// shared 보유자끼리는 서로 기다리지 않고, exclusive 요청은 shared 보유자가 끝날 때까지 기다린다.
 func TestLiveRuntimeGlobalLockSharedAndExclusive(t *testing.T) {
 	t.Parallel()
 

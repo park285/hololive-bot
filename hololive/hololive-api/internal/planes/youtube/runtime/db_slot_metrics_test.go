@@ -15,7 +15,6 @@ import (
 )
 
 // 드문 사건의 시리즈가 첫 증가 때 생기면 Prometheus increase()가 그 사건을 0으로 센다.
-// 사건이 한 번도 없던 프로세스에서도 알려진 라벨 값이 0으로 노출되는지 확인한다.
 func TestRareOutcomeSeriesAreExportedBeforeFirstEvent(t *testing.T) {
 	require.Subset(t, gatheredLabelValues(t, "hololive_youtube_plane_consume_total", "result"), []string{
 		consumeResultSuccess, consumeResultRetry, consumeResultRetryError, consumeResultClaimLost,
@@ -85,7 +84,6 @@ func (blockingRefresher) Refresh(ctx context.Context, _ targetprojection.Builder
 	return targetprojection.Result{}, ctx.Err()
 }
 
-// 멈춘 projection refresh는 슬롯을 무기한 붙들지 않고 TransactionTimeout 뒤 오류로 드러나야 한다.
 func TestRefreshProjectionReleasesSlotAfterTransactionTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
@@ -105,7 +103,6 @@ func TestRefreshProjectionReleasesSlotAfterTransactionTimeout(t *testing.T) {
 	})
 }
 
-// retention tick 히스토그램은 슬롯 획득 뒤 실행분만 재고, 슬롯을 얻지 못한 phase는 오류로만 센다.
 func TestRetentionTickExcludesSlotWaitAndSkipsUnacquiredPhase(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
@@ -150,7 +147,6 @@ func TestRetentionTickExcludesSlotWaitAndSkipsUnacquiredPhase(t *testing.T) {
 	})
 }
 
-// gatheredSeries는 기본 registry가 실제로 노출하는 시리즈 하나의 라벨과 히스토그램 표본이다.
 type gatheredSeries struct {
 	labels map[string]string
 	count  uint64

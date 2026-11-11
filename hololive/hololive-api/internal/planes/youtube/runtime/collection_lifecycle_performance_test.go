@@ -60,8 +60,6 @@ func TestCollectionLifecycleSnapshotWithinRuntimeBudget(t *testing.T) {
 	}
 }
 
-// TestLiveCheckVideosExcludeOnlyMatchedReviews는 현재 원본에 적용되는 검토 영수증만 UPCOMING을
-// 구조 membership에서 빼고, 검토 뒤 의미 사실이 바뀐 영상과 LIVE는 남기는지 확인한다.
 func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -141,8 +139,6 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 	require.Equal(t, []string{"live", "review-changed", "stale-tracking", "unreviewed"}, ids)
 }
 
-// TestLiveCheckOverflowPreservesLastGoodProjection은 구조 membership이 상한을 넘으면 일부를 고정 순서로
-// 잘라 쓰지 않고 refresh를 실패시켜 직전 CURRENT를 그대로 유지하는지 실제 Refresh 경로로 확인한다.
 func TestLiveCheckOverflowPreservesLastGoodProjection(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

@@ -107,7 +107,6 @@ func mar2026Events() []domain.MajorEvent {
 }
 
 func TestIntegration_BuildUserPrompt_Output(t *testing.T) {
-	// API 호출 없이 프롬프트 생성 검증 (INTEGRATION_TEST 불필요)
 	events := feb2026Events()
 
 	prompt, err := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
@@ -125,10 +124,8 @@ func TestIntegration_BuildUserPrompt_Output(t *testing.T) {
 		t.Error("periodKey가 프롬프트에 없음")
 	}
 
-	// JSON 배열 형식 검증
 	var promptEvents []eventForPrompt
 
-	// 프롬프트에서 JSON 부분 추출
 	idx := strings.Index(prompt, "[")
 	if idx == -1 {
 		t.Fatal("프롬프트에 JSON 배열이 없음")
@@ -143,7 +140,6 @@ func TestIntegration_BuildUserPrompt_Output(t *testing.T) {
 		t.Errorf("expected 4 events in prompt, got %d", len(promptEvents))
 	}
 
-	// 날짜 형식 검증 (eventForPrompt.DateStr)
 	for _, pe := range promptEvents {
 		if pe.DateStr == "" || pe.DateStr == "TBA" {
 			t.Errorf("event %q has no date", pe.Title)

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GO_VERSION=1.27.3
+ARG GO_VERSION=1.27.4
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=26.13.0
 
@@ -31,7 +31,7 @@ RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
 FROM --platform=$TARGETPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 AS xspaces-runtime
 
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS builder
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown

@@ -38,8 +38,6 @@ func newBoundTestMatcher() *Matcher {
 	}
 }
 
-// storeMatch 가 cap 을 초과해 무한정 자라지 않도록 size-bound 를 검증한다.
-// 외부 입력(임의 query)이 키이므로 burst 시 unbounded 성장 위험이 있다.
 func TestStoreMatch_EnforcesSizeBound(t *testing.T) {
 	mm := newBoundTestMatcher()
 
@@ -58,7 +56,6 @@ func TestStoreMatch_EnforcesSizeBound(t *testing.T) {
 	}
 }
 
-// cap 도달 후 새 엔트리 삽입 시 가장 오래된 엔트리가 evict 되어야 한다.
 func TestStoreMatch_EvictsOldestWhenFull(t *testing.T) {
 	mm := newBoundTestMatcher()
 	base := time.Now()
@@ -93,7 +90,6 @@ func TestStoreMatch_EvictsOldestWhenFull(t *testing.T) {
 	}
 }
 
-// 만료된 엔트리가 oldest 보다 우선 evict 되어야 한다.
 func TestStoreMatch_PrefersExpiredEviction(t *testing.T) {
 	mm := newBoundTestMatcher()
 	base := time.Now()

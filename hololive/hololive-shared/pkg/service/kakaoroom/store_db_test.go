@@ -30,7 +30,6 @@ func readKakaoRoomRowVersion(t *testing.T, pool *pgxpool.Pool, roomID string) ka
 	return version
 }
 
-// 같은 방 사실을 다시 관측하면 행을 잠그지도 새 버전을 만들지도 않고, 값이 바뀔 때만 갱신한다.
 // 테스트 풀은 운영과 같은 cache_statement 모드라 명시 캐스트 SQL의 prepare 경로도 함께 검증한다.
 func TestStoreUpsertLeavesUnchangedRoomUntouched(t *testing.T) {
 	t.Parallel()

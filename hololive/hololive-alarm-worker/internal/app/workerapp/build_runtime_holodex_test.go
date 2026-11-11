@@ -19,8 +19,7 @@ type stopFunc func()
 
 func (f stopFunc) Stop() { f() }
 
-// runtime 종료는 Holodex 재시도를 infra 정리보다 먼저 멈춰야 한다. 재시도는 요청 ctx 취소와 분리되어
-// scheduler Stop 외에는 끝낼 신호가 없고, infra를 먼저 닫으면 재시도가 닫힌 Valkey·PG client를 쓴다.
+// 재시도는 요청 ctx 취소와 분리되어 scheduler Stop 외에는 끝낼 신호가 없고, infra를 먼저 닫으면 재시도가 닫힌 Valkey·PG client를 쓴다.
 func TestStopHolodexRetriesBeforeCleanupStopsRetriesFirst(t *testing.T) {
 	t.Parallel()
 
@@ -36,7 +35,6 @@ func TestStopHolodexRetriesBeforeCleanupStopsRetriesFirst(t *testing.T) {
 	assert.Equal(t, []string{"holodex stop", "infra cleanup"}, calls)
 }
 
-// alarm-worker의 Holodex 서비스는 runtime 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.
 func TestBuildAlarmHolodexServiceUsesRuntimeHolodexConfig(t *testing.T) {
 	t.Parallel()
 

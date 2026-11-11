@@ -95,7 +95,6 @@ func TestOutboxMemberSubscriptionFailuresAreNotUnknownTitles(t *testing.T) {
 	}
 }
 
-// UNIT B는 진행자 조합마다 조회 대상이 생기지만, 같은 채널·알림 종류의 구독 목록은 한 번만 읽고 제목별로 나눈다.
 func TestOutboxMemberSubscriptionsLoadEachChannelKindOnce(t *testing.T) {
 	type lookupCall struct {
 		channelID string

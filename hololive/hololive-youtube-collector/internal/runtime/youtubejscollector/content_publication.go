@@ -33,9 +33,8 @@ type ContentCursorReader interface {
 	LatestCheckpointCursor(ctx context.Context, provider contract.Provider, kind contract.ObservationKind, subjectKey string) (jsontext.Value, error)
 }
 
-// publicationCursor는 video_list checkpoint에 함께 저장하는 영상별 공개 근거 조회 이력입니다.
-// 관측·checkpoint와 같은 publish tx로 저장되므로 수락된 관측과 어긋나지 않으며, collector 재시작·다른 인스턴스도 이어 씁니다.
-// ScheduledFor는 이 cursor와 함께 수락된 video_list 관측의 slot입니다. 같은 slot 재시도는 이미 수락된 관측을 다시 만들지 않습니다.
+// 관측·checkpoint와 같은 publish tx로 저장되므로 수락된 관측과 어긋나지 않으며, collector 재시작·다른 인스턴스도 이어 씁니다. ScheduledFor는 이 cursor와 함께 수락된
+// video_list 관측의 slot입니다. 같은 slot 재시도는 이미 수락된 관측을 다시 만들지 않습니다.
 type publicationCursor struct {
 	Version      int                      `json:"version"`
 	ScheduledFor time.Time                `json:"scheduled_for"`
@@ -44,7 +43,7 @@ type publicationCursor struct {
 	Entries      []publicationCursorEntry `json:"entries"`
 }
 
-// publicationCursorEntry는 영상 하나의 마지막 조회 시도입니다. Publication이 nil이면 응답을 얻지 못한 시도라 근거가 아닙니다.
+// Publication이 nil이면 응답을 얻지 못한 시도라 근거가 아닙니다.
 type publicationCursorEntry struct {
 	VideoID     string                       `json:"video_id"`
 	AttemptedAt time.Time                    `json:"attempted_at"`
@@ -134,8 +133,6 @@ func startPublicationCursor(items []youtubejs.ContentItem, prior *storedPublicat
 	return cursor, 0
 }
 
-// publicationCandidates는 재사용할 수 있는 저장 근거를 publications에 채우고 나머지 항목을 조회 후보로 반환합니다.
-// 저장된 이력이 있는 항목은 entries에 옮겨 담아 조회 결과가 같은 자리를 갱신하게 합니다.
 func publicationCandidates(
 	items []youtubejs.ContentItem,
 	prior *storedPublicationCursor,
@@ -177,8 +174,7 @@ func publicationCandidates(
 	return candidates, entries
 }
 
-// attemptPublication은 후보 하나를 조회해 cursor 이력 항목을 만듭니다. 응답을 얻지 못한 시도는 Publication이 nil인
-// 항목으로 기록해 순환 위치를 전진시킵니다. 부모 문맥이 끝났거나 근거 조회 실패로 강등할 수 없는 오류만 반환합니다.
+// 응답을 얻지 못한 시도는 Publication이 nil인 항목으로 기록해 순환 위치를 전진시킵니다. 부모 문맥이 끝났거나 근거 조회 실패로 강등할 수 없는 오류만 반환합니다.
 func (r *ContentRunner) attemptPublication(
 	enrichCtx context.Context,
 	ctx context.Context,
@@ -203,8 +199,6 @@ func (r *ContentRunner) attemptPublication(
 	return publicationCursorEntry{VideoID: videoID, AttemptedAt: time.Now().UTC()}, nil
 }
 
-// reusablePublication은 저장된 결정적 근거가 현재 목록의 구조화된 예정 표시와 맞을 때만 재사용합니다.
-// 예정 Premiere가 공개된 뒤나 공개 근거가 있던 항목이 예정 표시로 바뀌면 상태가 바뀐 항목으로 다시 조회합니다.
 func reusablePublication(publication *contract.VideoPublicationV1, item *youtubejs.ContentItem) bool {
 	if publication == nil {
 		return false
@@ -222,7 +216,6 @@ func reusablePublication(publication *contract.VideoPublicationV1, item *youtube
 	return false
 }
 
-// comparePublicationCandidates는 새 head 구간, 미조회·상태 변경, 이전 실패 순서로 처리합니다.
 // 같은 우선순위에서는 순환 위치를 사용해 작은 cache가 큰 목록의 앞부분만 반복하지 않게 합니다.
 func comparePublicationCandidates(left, right publicationCandidate) int {
 	if left.newHead != right.newHead {
@@ -265,7 +258,6 @@ func trimPublicationEntries(entries []publicationCursorEntry) []publicationCurso
 	return entries[:min(len(entries), maxPublicationCursorEntries)]
 }
 
-// fetchPublication은 영상 하나의 player 확인 RPC를 한 번 보내고 결과를 공개 근거로 분류합니다.
 func (r *ContentRunner) fetchPublication(ctx context.Context, channelID, videoID string, maxSuccessResponseBytes int) (contract.VideoPublicationV1, error) {
 	result, err := r.client.FetchVideoLiveCheck(ctx, youtubejs.VideoLiveCheckRequest{
 		VideoID:                 videoID,
@@ -282,9 +274,6 @@ func (r *ContentRunner) fetchPublication(ctx context.Context, channelID, videoID
 	return classifyPublication(&result, channelID, time.Now().UTC()), nil
 }
 
-// classifyPublication은 player 사실만으로 공개 근거를 만듭니다. 이 채널로 identity가 확인되지 않거나 가용성을 판정하지 못했거나
-// 비공개인 응답, 대기 상태가 확인되지 않은 예정 영상, 예정 live 방송, 정확한 publishDate가 없거나 확인 시각보다 늦은 응답은
-// UNRESOLVED입니다. 목록 문자열·관측 순서·처음 본 시각으로 시각을 추정하지 않습니다.
 func classifyPublication(result *youtubejs.VideoLiveCheckResult, channelID string, checkedAt time.Time) contract.VideoPublicationV1 {
 	unresolved := contract.VideoPublicationV1{Status: contract.VideoPublicationUnresolved, CheckedAt: checkedAt}
 
@@ -317,7 +306,6 @@ func classifyPublication(result *youtubejs.VideoLiveCheckResult, channelID strin
 	}
 }
 
-// storedPublicationCursor는 직전에 수락된 video_list checkpoint cursor를 영상별로 푼 결과입니다.
 type storedPublicationCursor struct {
 	scheduledFor time.Time
 	entries      map[string]publicationCursorEntry
@@ -358,14 +346,12 @@ func (r *ContentRunner) loadPublicationCursor(ctx context.Context, channelID str
 	}, nil
 }
 
-// validPublicationCursorShape는 저장 크기·version·slot·순환 위치·head·이력 수가 현재 cursor 계약 안에 있는지 확인합니다.
 func validPublicationCursorShape(rawSize int, cursor *publicationCursor) bool {
 	return rawSize <= maxPublicationCursorBytes && cursor.Version == publicationCursorVersion &&
 		!cursor.ScheduledFor.IsZero() && cursor.NextPosition >= 0 &&
 		len(cursor.HeadVideoID) <= 128 && len(cursor.Entries) <= maxPublicationCursorEntries
 }
 
-// publicationCursorEntries는 저장된 조회 이력을 영상별로 풀고, 잘못되었거나 중복된 이력과 검증되지 않는 근거를 거부합니다.
 func publicationCursorEntries(stored []publicationCursorEntry, now time.Time) (map[string]publicationCursorEntry, error) {
 	entries := make(map[string]publicationCursorEntry, len(stored))
 

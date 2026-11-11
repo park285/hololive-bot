@@ -141,7 +141,6 @@ func TestRuntimeRunPreservesFatalDrainAndCloseErrors(t *testing.T) {
 	}
 }
 
-// bootstrap은 Run 뒤 Close를 항상 호출하므로 완료된 회수를 다시 실행하지 않아야 한다.
 func TestRuntimeCloseAfterRunDoesNotRepeatCleanup(t *testing.T) {
 	closeCalls := 0
 	group := &runtimeGroupStub{start: func(_ context.Context, errCh chan<- error) { errCh <- nil }}

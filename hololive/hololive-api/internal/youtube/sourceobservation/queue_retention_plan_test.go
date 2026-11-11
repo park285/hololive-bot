@@ -14,8 +14,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// planCacheModes는 plan 시험이 고정하는 PostgreSQL plan_cache_mode다. 운영 풀은 prepared statement를 쓰므로
-// 같은 연결에서 반복되면 generic plan으로 바뀔 수 있다.
+// 운영 풀은 prepared statement를 쓰므로 같은 연결에서 반복되면 generic plan으로 바뀔 수 있다.
 var planCacheModes = []string{"force_custom_plan", "force_generic_plan"}
 
 type queueRetentionPlanNode struct {
@@ -51,8 +50,6 @@ func (s *queueRetentionPlanStats) collect(node *queueRetentionPlanNode) {
 	}
 }
 
-// queue 보존 삭제는 만료된 PROCESSED·DEAD_LETTER 행만 처리·dead-letter 시각 부분 인덱스(302·303)로 찾아야 한다.
-// 인덱스가 없으면 PROCESSED 이력 전체를 읽고 updated_at으로 정렬했다(운영 2026-10-12: 약 22만 행, 평균 166 ms).
 // 후보 CTE와 바깥 DELETE가 만료 행을 한 번씩 읽으므로 상한은 만료 행의 두 배다.
 func TestQueueRetentionDeleteReadsOnlyExpiredRows(t *testing.T) {
 	pool := dbtest.NewPool(t)
@@ -92,7 +89,6 @@ func TestQueueRetentionDeleteReadsOnlyExpiredRows(t *testing.T) {
 	}
 }
 
-// explainQueueRetentionDelete는 운영처럼 이름 있는 prepared statement로 실행하고, 실제로 지운 행은 롤백한다.
 func explainQueueRetentionDelete(t *testing.T, pool *pgxpool.Pool, mode string, before time.Time, limit int) queueRetentionPlanStats {
 	t.Helper()
 

@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
-// ListRoomAlarmsView는 채널·멤버별 구독을 독립적으로 표시한다.
 func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
 	startedAt := time.Now()
 

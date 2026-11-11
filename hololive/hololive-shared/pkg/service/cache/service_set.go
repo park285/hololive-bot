@@ -25,7 +25,6 @@ func (c *Service) SRem(ctx context.Context, key string, members []string) (int64
 	return c.setMembersMutation(ctx, "srem", key, c.client.B().Srem().Key(key).Member(members...).Build())
 }
 
-// setMembersMutation은 SADD·SREM처럼 바뀐 원소 수를 돌려주는 집합 명령을 실행한다.
 func (c *Service) setMembersMutation(ctx context.Context, op, key string, cmd valkey.Completed) (int64, error) {
 	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {

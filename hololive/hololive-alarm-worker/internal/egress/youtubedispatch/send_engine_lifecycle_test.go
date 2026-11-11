@@ -41,7 +41,6 @@ type lifecycleTransitionSpy struct {
 	preparedFailures   []string
 }
 
-// recordMode는 전이 호출이 TransitionStore에 넘긴 발송 방식을 "operation:mode" 형태로 모은다.
 func (s *lifecycleTransitionSpy) recordMode(operation string, mode store.DeliveryMode) {
 	s.modesMu.Lock()
 	defer s.modesMu.Unlock()
@@ -238,7 +237,6 @@ func (s *lifecycleTransitionSpy) FreezeFallbackRequests(_ context.Context, _ sto
 	return requests, nil
 }
 
-// recordPreparedFailure는 준비 단계 실패 전이를 "kind/reason/mode" 형태로 모은다.
 func (s *lifecycleTransitionSpy) recordPreparedFailure(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, mode store.DeliveryMode) {
 	s.preparedFailuresMu.Lock()
 	defer s.preparedFailuresMu.Unlock()

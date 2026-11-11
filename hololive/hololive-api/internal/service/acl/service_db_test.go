@@ -75,7 +75,6 @@ func TestNewACLService_FirstInitBlacklistMode(t *testing.T) {
 		t.Fatalf("unexpected rooms: %v", rooms)
 	}
 
-	// DB에 mode=blacklist로 저장되었는지 확인
 	assertACLSettingValue(t, pool, dbKeyMode, "blacklist")
 
 	// list_type이 blacklist인지 확인
@@ -177,8 +176,6 @@ func TestACLService_SetEnabledAddRemoveRoom(t *testing.T) {
 	assertACLRoomRemovedFromDB(t, pool, testRoomX)
 }
 
-// INSERT는 커밋됐지만 응답을 잃은 AddRoom을 재시도하면 메모리에는 방이 없고 PG에는 행이 있다.
-// 재시도는 23505 오류를 반복하지 않고 changed:false로 수렴해 메모리도 PG 상태에 맞춰야 한다.
 func TestACLService_AddRoomRetryAfterCommittedInsertConverges(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	service := newACLServiceFromPool(t, pool, true, nil)
@@ -215,8 +212,6 @@ func newACLServiceFromPool(
 	return service
 }
 
-// newACLServiceFromFakeStore는 fake store를 주입한 Service를 직접 구성한다.
-// DB fault-injection이 필요한 테스트에 쓴다.
 func newACLServiceFromFakeStore(t *testing.T, store aclStore, enabled bool) *Service {
 	t.Helper()
 
@@ -363,7 +358,6 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	service := newACLServiceFromPool(t, pool, true, nil)
 
-	// 화이트리스트 모드에서 방 추가
 	if added, addErr := service.AddRoom(t.Context(), currentACLMode(service), "2003"); addErr != nil || !added {
 		t.Fatalf("AddRoom whitelist: added=%v err=%v", added, addErr)
 	}

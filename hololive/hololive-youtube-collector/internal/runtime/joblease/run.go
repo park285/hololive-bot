@@ -219,7 +219,6 @@ func supersededRenewError(err error) bool {
 	return errors.Is(err, collection.ErrProjectionStale) || errors.Is(err, collection.ErrTargetDisabled)
 }
 
-// finishSuperseded는 callback을 먼저 취소·join하고, join이 끝난 경우에만 자기 증명으로 fenced release한다.
 // Join 기한을 넘기면 callback이 아직 lease를 쓰고 있을 수 있으므로 해제하지 않고 만료에 맡긴다.
 func (r *Repository) finishSuperseded(
 	runCtx context.Context,

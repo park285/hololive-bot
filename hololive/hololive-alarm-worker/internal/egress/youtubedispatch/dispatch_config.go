@@ -51,8 +51,7 @@ type Config struct {
 	HandoffHorizon              time.Duration // Iris handoff 확인 기한. Iris 큐 대기 때문에 DeliverySendTimeout보다 길 수 있다.
 }
 
-// Validate는 dispatcher가 쓰는 주기·한도·병렬성이 양수인지와, claim 신선도 기간이 revive 기간과 주기의 합 이상인지
-// 확인한다. 그보다 claim 기간이 짧으면 되살린 PENDING이 primary claim에서 탈락한다.
+// 그보다 claim 기간이 짧으면 되살린 PENDING이 primary claim에서 탈락한다.
 func (c *Config) Validate() error {
 	required := []struct {
 		name  string

@@ -7,7 +7,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// refreshNotifications는 Shorts는 처음 본 영상과 저장된 기준 목록으로, 일반 영상은 신규성 판정 결과로 알림을 만듭니다.
 func refreshNotifications(session *reduceSession) {
 	session.notifications = session.notifications[:0]
 

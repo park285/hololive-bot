@@ -26,9 +26,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// canonicalizeShortContentIDs는 NEW_SHORT outbox·tracking 행의 content_id를 'short:' canonical 형식으로 맞춘다.
-// 접두사 없는 raw 형식의 기존 행을 찾아 재사용하지 않는다. 정규화할 수 없는 값은 공백만 걷어 두고, 판정은 저장 전
-// 검증과 DB 제약이 맡는다.
+// 접두사 없는 raw 형식의 기존 행을 찾아 재사용하지 않는다. 정규화할 수 없는 값은 공백만 걷어 두고, 판정은 저장 전 검증과 DB 제약이 맡는다.
 func canonicalizeShortContentIDs(
 	notifications []*domain.YouTubeNotificationOutbox,
 	trackingRows []*domain.YouTubeContentAlarmTracking,

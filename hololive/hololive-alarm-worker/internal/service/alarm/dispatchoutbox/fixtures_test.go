@@ -21,7 +21,6 @@ const (
 	testEventKey           = "key1"
 )
 
-// newTestRepository는 production 생성자에 테스트 pool을 dbtest.WrapPool로 감싸 넘긴다.
 func newTestRepository(tb testing.TB, pool *pgxpool.Pool) *PgxRepository {
 	tb.Helper()
 

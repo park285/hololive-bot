@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// 실제 projection을 사용하되 DB 연결이나 쿼리 계획 검증을 대신하지 않습니다.
 var testListProjection = listSQL
 
 var listPlaceholderPattern = regexp.MustCompile(`\$(\d+)`)

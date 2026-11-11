@@ -74,7 +74,6 @@ func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
 	}
 }
 
-// finishPgxTx는 fn 실행 결과에 따라 트랜잭션을 커밋하거나 롤백한다.
 func finishPgxTx(ctx context.Context, tx Tx, fnErr error) error {
 	if fnErr != nil {
 		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {

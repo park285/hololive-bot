@@ -92,7 +92,6 @@ type startupOptions struct {
 	waitForDatabase bool
 }
 
-// parseStartupOptions는 native의 명시적 준비 정책만 허용하며 다른 실행 방식의 기본값은 유지합니다.
 func parseStartupOptions(args []string) (startupOptions, bool) {
 	options := startupOptions{timeout: constants.AppTimeout.Build}
 	flags := flag.NewFlagSet("youtube-collector", flag.ContinueOnError)

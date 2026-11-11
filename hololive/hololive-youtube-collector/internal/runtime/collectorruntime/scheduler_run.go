@@ -74,7 +74,6 @@ func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.Jo
 	return lease, nil
 }
 
-// observeAcquireError는 획득 시점 membership·projection 무효를 오류가 아닌 superseded로 센다.
 func (e *collectionExecutor) observeAcquireError(ctx context.Context, spec *joblease.JobSpec, err error) {
 	if supersededError(err) {
 		e.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultSuperseded)
@@ -208,7 +207,7 @@ func (e *collectionExecutor) observeFenceLost(spec *joblease.JobSpec, err error)
 	}
 }
 
-// leasePhaseError는 오류가 생긴 lease 단계를 표시한다. 분류·errors.Is는 감싼 오류를 그대로 따른다.
+// 분류·errors.Is는 감싼 오류를 그대로 따른다.
 type leasePhaseError struct {
 	phase string
 	err   error
@@ -257,7 +256,6 @@ func (e *collectionExecutor) deferFailedRun(
 	e.logFailure(ctx, "collect", code, class, detail, spec, proof)
 }
 
-// deferLease는 executor가 소유한 재시도 범위로 typed defer 입력을 한 번 만들어 lease에 넘깁니다.
 // 입력을 만들 수 없는 진단(예: defer할 수 없는 code)도 lease 거절과 같은 비치명 defer 실패로 돌려줍니다.
 func (e *collectionExecutor) deferLease(
 	ctx context.Context,
@@ -305,10 +303,8 @@ func (e *collectionExecutor) collectAndPublish(
 	return nil
 }
 
-// collectWithAdmission은 provider gate를 얻은 뒤 실행 입력 적재와 수집만 gate 안에서 수행합니다.
-// Collector가 반환하면 이 함수가 끝나면서 gate를 정확히 한 번 반환하므로 결과 검증과 발행은 gate 밖에서 진행합니다.
-// Collector가 반환하지 않으면 upstream 호출이 남아 있을 수 있어 gate를 계속 점유합니다.
-// 반환값 setupErr는 수집 전에 끝난 실패이고, fatal은 검증 대상인 수집 실패입니다.
+// Collector가 반환하면 이 함수가 끝나면서 gate를 정확히 한 번 반환하므로 결과 검증과 발행은 gate 밖에서 진행합니다. Collector가 반환하지 않으면 upstream 호출이 남아 있을 수 있어
+// gate를 계속 점유합니다. 반환값 setupErr는 수집 전에 끝난 실패이고, fatal은 검증 대상인 수집 실패입니다.
 func (e *collectionExecutor) collectWithAdmission(
 	ctx context.Context,
 	registration RegisteredRunner,

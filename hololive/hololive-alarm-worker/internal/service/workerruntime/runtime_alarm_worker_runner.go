@@ -39,7 +39,6 @@ func (r *AlarmWorkerRuntime) Run() error {
 	return nil
 }
 
-// Start는 스케줄러, egress와 설정 구독의 실행을 시작합니다.
 // 시작한 백그라운드 작업의 취소와 종료 대기는 Shutdown이 소유합니다.
 func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {

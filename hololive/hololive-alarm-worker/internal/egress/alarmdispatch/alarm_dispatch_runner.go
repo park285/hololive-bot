@@ -176,8 +176,6 @@ func (r *Runner) withStateContext(ctx context.Context, fn func(context.Context) 
 	return fn(stateCtx)
 }
 
-// markSending은 그룹을 발송 상태에 넣는다. 미스는 routePreSendMiss가 처리하고, 그 밖의 실패는 같은 attempt로
-// 재대기시킨다. 반환값 proceed가 참일 때만 외부 호출을 한다.
 func (r *Runner) markSending(ctx context.Context, group alarmDispatchGroup) (proceed bool, err error) {
 	markErr := r.withStateContext(ctx, func(stateCtx context.Context) error {
 		return r.consumer.MarkSending(stateCtx, group.envelopes)
@@ -199,12 +197,10 @@ func (r *Runner) markSending(ctx context.Context, group alarmDispatchGroup) (pro
 	return false, nil
 }
 
-// routePreSendMiss는 외부 호출 전(Load·Pin·Begin) fence 미스를 처리한다. 이 문장들은 단위 전원이 함께 전이하므로 미스면
-// 그룹의 어떤 행도 바뀌지 않았다. 모든 원인이 소유권을 남길 때만 이 claim의 행에 후속 전이를 쓴다.
-//   - member_terminal: 미고정 단위까지 포함해 현재 멤버가 종료됐거나 고정 멤버가 사라져 단위를 다시 모을 수 없으므로
-//     격리한다. 고정 요청은 이미 발송됐을 수도 있어 운영 검토 대상이다. 반환하면 claim과 반환이 끝없이 반복된다.
-//   - membership_changed: 미발송 claim이므로 격리하지 않고 반환해 다음 claim이 단위 전원을 다시 모으게 한다.
-//   - 그 밖(lease 만료, 상태·소유자·attempt 변경, 요청 변경): 회수 경로나 현재 소유자의 몫이므로 손대지 않는다.
+// 이 문장들은 단위 전원이 함께 전이하므로 미스면 그룹의 어떤 행도 바뀌지 않았다. 모든 원인이 소유권을 남길 때만 이 claim의 행에 후속 전이를 쓴다. - member_terminal: 미고정 단위까지
+// 포함해 현재 멤버가 종료됐거나 고정 멤버가 사라져 단위를 다시 모을 수 없으므로 격리한다. 고정 요청은 이미 발송됐을 수도 있어 운영 검토 대상이다. 반환하면 claim과 반환이 끝없이 반복된다. -
+// membership_changed: 미발송 claim이므로 격리하지 않고 반환해 다음 claim이 단위 전원을 다시 모으게 한다. - 그 밖(lease 만료, 상태·소유자·attempt 변경, 요청 변경):
+// 회수 경로나 현재 소유자의 몫이므로 손대지 않는다.
 func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup, miss *sendfence.MissError) error {
 	ownershipHeld := true
 
@@ -241,7 +237,7 @@ func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup,
 	}
 }
 
-// markDispatched는 발송 성공을 정산한다. 정산의 handoff 지평은 handoff reconciler와 같은 profile handoff_horizon_ms다.
+// 정산의 handoff 지평은 handoff reconciler와 같은 profile handoff_horizon_ms다.
 func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, irisRequestID string) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
 		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID, r.handoffHorizon); err != nil {
@@ -384,8 +380,7 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 	return r.markDispatched(ctx, group.envelopes, irisRequestID)
 }
 
-// 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다. 성공이면 Iris가
-// admission을 증명한 requestId를 돌려준다.
+// DB 상태 반영 결과는 발송 결론을 바꾸지 않는다.
 func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (irisRequestID string, err error) {
 	if r.attemptTimeout > 0 {
 		var cancel context.CancelFunc

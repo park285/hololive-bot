@@ -138,7 +138,6 @@ func (k ObservationKind) isLiveCheck() bool {
 	return k == KindChannelLiveCheck || k == KindVideoLiveCheck
 }
 
-// validateLiveCheckEnvelope은 라이브 확인 kind의 provider·continuity 계약을 검사한다.
 // 두 kind는 YouTube.js 단독 관측이며 연속성 개념이 없다.
 func validateLiveCheckEnvelope(provider Provider, kind ObservationKind, continuity Continuity) error {
 	if !kind.isLiveCheck() {
@@ -189,26 +188,22 @@ func (a VideoAvailability) method() VideoAvailabilityMethod {
 	}
 }
 
-// NegativeLiveEvidence는 요청 채널 identity가 확인된 예정 영상·채널 페이지 연결만 공개 실시간 방송 음성으로 인정한다.
 func (p *ChannelLiveCheckV1) NegativeLiveEvidence() bool {
 	return p.ChannelIdentityConfirmed &&
 		(p.Outcome == ChannelLiveCheckUpcomingVideo || p.Outcome == ChannelLiveCheckChannelPage)
 }
 
-// LifecycleFactsTrusted는 identity가 확인되고 수명 사실 판정 단계가 성공한 관측인지 보고한다.
 // 가용성만 불명확한 availability_unclassified 외의 UNKNOWN 사유는 수명 사실을 무효화한다.
 func (p *VideoLiveCheckV1) LifecycleFactsTrusted() bool {
 	return p.IdentityConfirmed &&
 		(p.UnknownReason == "" || p.UnknownReason == LiveCheckReasonAvailabilityUnclassified)
 }
 
-// CurrentlyLive는 신뢰 가능한 관측의 isLive=true 또는 isLiveNow=true를 현재 LIVE 사실로 본다.
 func (p *VideoLiveCheckV1) CurrentlyLive() bool {
 	return p.LifecycleFactsTrusted() && (isTrue(p.IsLive) || isTrue(p.IsLiveNow))
 }
 
-// VerifiedEndedAt은 identity가 맞고 현재 LIVE가 아니며 isLiveNow=false와 검증된 ended_at이 함께 있을 때만
-// 종료 시각을 돌려준다. 현재 LIVE가 아닌 조건은 isLive 생략과 명시적 false 모두를 포함한다.
+// 현재 LIVE가 아닌 조건은 isLive 생략과 명시적 false 모두를 포함한다.
 func (p *VideoLiveCheckV1) VerifiedEndedAt() (time.Time, bool) {
 	if !p.LifecycleFactsTrusted() || p.EndedAt == nil || isTrue(p.IsLive) || p.IsLiveNow == nil || *p.IsLiveNow {
 		return time.Time{}, false
@@ -433,7 +428,6 @@ func (p *VideoLiveCheckV1) hasResponseFacts() bool {
 		p.StartedAt != nil || p.EndedAt != nil || p.ScheduledAt != nil || p.WaitingStateConfirmed != nil
 }
 
-// validateLifecycleFacts는 신뢰 가능한 수명 사실이 서로 모순되지 않음을 강제한다.
 // 모순된 원시 사실은 contradictory_fields UNKNOWN으로만 보존한다.
 func (p *VideoLiveCheckV1) validateLifecycleFacts(observedAt time.Time) error {
 	if p.IsLive != nil && p.IsLiveNow != nil && *p.IsLive != *p.IsLiveNow {

@@ -144,7 +144,6 @@ func postDeliveryTimelineTrackGroupColumns() []string {
 	}
 }
 
-// postTrackingIdentityArrays는 identity 목록을 같은 index끼리 짝지은 kind/content_id 배열로 나눈다.
 func postTrackingIdentityArrays(identities []timeline.PostTrackingIdentity) (kinds, contentIDs []string) {
 	kinds = make([]string, len(identities))
 	contentIDs = make([]string, len(identities))

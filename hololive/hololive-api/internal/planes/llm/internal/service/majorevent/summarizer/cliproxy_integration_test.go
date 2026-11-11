@@ -330,7 +330,6 @@ func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 
 	assertContainsFesKeyword(t, result, "월간 요약에 hololive fes/EXPO 관련 키워드가 없음")
 
-	// 졸업 멤버 필터링 검증
 	if strings.Contains(result, "天音かなた") {
 		t.Error("월간 요약에 졸업 멤버 天音かなた 포함")
 	}
@@ -387,7 +386,6 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 
 	assertContainsFesKeyword(t, result, "월간 요약에 hololive fes/EXPO 관련 키워드가 없음")
 
-	// 졸업 멤버 필터링 검증
 	if strings.Contains(result, "天音かなた") {
 		t.Error("월간 요약에 졸업 멤버 天音かなた 포함")
 	}
@@ -404,8 +402,6 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 	}
 }
 
-// exaSearchContext: Exa MCP 검색 결과를 시뮬레이션한 참고 자료
-// 실제 운영에서는 Exa MCP 또는 REST API를 통해 동적으로 수집한다.
 const exaFeb2026Context = `[1] Tokyo Station x Narita Airport 포스트카드 캠페인
 출처: https://hololive.hololivepro.com/en/news/20260206-02-79/
 기간: 2026-02-13 ~ 2026-03-09
@@ -504,7 +500,6 @@ func TestIntegration_Summarize_Monthly_ExaPlusWebSearch(t *testing.T) {
 	}
 }
 
-// exaFeb2026WithANIPLUS: 기존 exaFeb2026Context + ANIPLUS 한국 파트너 이벤트 추가.
 const exaFeb2026WithANIPLUS = exaFeb2026Context + `
 
 [6] ANIPLUS x hololive 라이브 뷰잉 — Hoshimachi Suisei Live "SuperNova: REBOOT"
@@ -566,7 +561,6 @@ func TestIntegration_Summarize_ANIPLUSDiscovery(t *testing.T) {
 	assertANIPLUSDiscovered(t, resp.DiscoveredEvents)
 	assertDiscoveredSourcesTrusted(t, resp.DiscoveredEvents)
 
-	// 날짜 정확도도 함께 검증
 	for _, h := range resp.Highlights {
 		if strings.Contains(h.Name, "SuperNova") && !strings.Contains(h.Date, "2/21") {
 			t.Errorf("SuperNova 날짜 오류: got %q, want 2/21 포함", h.Date)

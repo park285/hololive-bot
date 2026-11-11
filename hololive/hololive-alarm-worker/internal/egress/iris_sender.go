@@ -61,8 +61,8 @@ func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *I
 	return sender
 }
 
-// sendText는 텍스트 202의 requestId를 돌려준다. 운영 중인 bot plane 텍스트 경로(acceptStoredReply)와 같이 응답과
-// requestId만 요구하고 success·delivery 값은 보지 않는다. Iris 계약은 텍스트 202의 delivery 값을 정하지 않는다.
+// 운영 중인 bot plane 텍스트 경로(acceptStoredReply)와 같이 응답과 requestId만 요구하고 success·delivery 값은 보지 않는다. Iris 계약은 텍스트 202의
+// delivery 값을 정하지 않는다.
 func (s *IrisMessageSender) sendText(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
 	accepted, err := s.client.SendMessageAccepted(ctx, roomID, message, opts...)
 	if err != nil {
@@ -81,8 +81,6 @@ func (s *IrisMessageSender) sendText(ctx context.Context, roomID, message string
 	return requestID, nil
 }
 
-// sendRichText는 RichText 응답의 202가 성공·queued·requestId를 모두 갖추면 handoff를 기다리지 않고 그
-// requestId를 돌려준다.
 func (s *IrisMessageSender) sendRichText(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
 	accepted, err := s.client.SendRichText(ctx, roomID, message, opts...)
 	if err != nil {
@@ -113,7 +111,7 @@ func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string
 	return admissionRequestID(rawRequestID)
 }
 
-// admissionRequestID는 202의 requestId를 공백을 걷어 돌려준다. 비어 있으면 확인할 대상이 없어 결과 불명이다.
+// 비어 있으면 확인할 대상이 없어 결과 불명이다.
 func admissionRequestID(rawRequestID string) (string, error) {
 	requestID := strings.TrimSpace(rawRequestID)
 	if requestID == "" {

@@ -16,7 +16,6 @@ type liveReviewTypedCase struct {
 	wantClosed int64
 }
 
-// NULL 행과 object·key 집합의 차이는 형변환 뒤에도 남아야 합니다.
 func liveReviewTypedShapeCases() []liveReviewTypedCase {
 	return []liveReviewTypedCase{
 		{
@@ -47,7 +46,6 @@ func liveReviewTypedShapeCases() []liveReviewTypedCase {
 	}
 }
 
-// 변환 가능한 JSON scalar라도 원래 타입이 다르면 같은 사실이 아닙니다.
 func liveReviewTypedCoercionCases() []liveReviewTypedCase {
 	return []liveReviewTypedCase{
 		{
@@ -66,7 +64,6 @@ func liveReviewTypedCoercionCases() []liveReviewTypedCase {
 	}
 }
 
-// 손상된 문서는 현재 의미 사실과 불일치할 뿐 조회 전체의 오류가 되지 않습니다.
 func liveReviewTypedMalformedCases() []liveReviewTypedCase {
 	return []liveReviewTypedCase{
 		{
@@ -104,7 +101,6 @@ func liveReviewTypedMalformedCases() []liveReviewTypedCase {
 	}
 }
 
-// JSON 숫자의 scale·범위·무한대·정밀도는 원래 JSONB 비교와 같습니다.
 func liveReviewTypedNumericCases() []liveReviewTypedCase {
 	return []liveReviewTypedCase{
 		{
@@ -136,7 +132,6 @@ func liveReviewTypedNumericCases() []liveReviewTypedCase {
 	}
 }
 
-// typed 영수증 비교는 JSONB의 숫자 동등성과 구조 차이를 그대로 보존해야 합니다.
 func TestLiveReviewTypedReceiptsPreserveJSONBConsumerSemantics(t *testing.T) {
 	pool := seedLiveReviewSourceSharing(t)
 	insertLegacyFormatReceipt(t, pool, "50000000-0000-0000-0000-000000000001", "shared-review")

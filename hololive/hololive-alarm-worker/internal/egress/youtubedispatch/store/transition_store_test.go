@@ -64,7 +64,6 @@ func TestTransitionLogicalGroupCompleteSentIsVersionFencedAndAtomic(t *testing.T
 	require.Equal(t, olderID, sourceDeliveryID)
 }
 
-// freezeTestAdmission은 준비된 행을 새 고정 요청에 묶고, 그 요청을 202로 보낸 것처럼 handoff admission을 돌려준다.
 func freezeTestAdmission(
 	t *testing.T,
 	transition *TransitionStore,
@@ -563,9 +562,8 @@ func TestTransitionCleanupMixedFailedOutboxRequiresSentChildLedger(t *testing.T)
 	}
 }
 
-// seedTransitionMixedFailedOutbox는 FAILED 자식과 SENT 자식을 함께 가진 FAILED terminal outbox를 만듭니다.
-// 집계 규칙상 활성 자식이 없고 FAILED 자식이 하나라도 있으면 outbox는 FAILED입니다.
-// FAILED 자식을 먼저 넣어 guard가 FAILED 자식을 처리한 뒤에도 SENT 자식의 ledger 증거를 검사하는지 드러냅니다.
+// 집계 규칙상 활성 자식이 없고 FAILED 자식이 하나라도 있으면 outbox는 FAILED입니다. FAILED 자식을 먼저 넣어 guard가 FAILED 자식을 처리한 뒤에도 SENT 자식의 ledger
+// 증거를 검사하는지 드러냅니다.
 func seedTransitionMixedFailedOutbox(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -638,8 +636,7 @@ func TestTransitionCleanupGuardsFailedChildWithActiveLogicalSibling(t *testing.T
 	require.Equal(t, 1, activeDeliveryCount)
 }
 
-// markTransitionDeliveriesTerminalFailed는 delivery와 부모 outbox를 retry 소진 FAILED terminal로 만듭니다.
-// FAILED는 ledger에 기록되지 않으므로 ledger 행은 만들지 않습니다(L-001).
+// FAILED는 ledger에 기록되지 않으므로 ledger 행은 만들지 않습니다.
 func markTransitionDeliveriesTerminalFailed(
 	t *testing.T,
 	pool *pgxpool.Pool,

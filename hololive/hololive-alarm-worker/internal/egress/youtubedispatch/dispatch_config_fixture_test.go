@@ -32,7 +32,6 @@ func testDispatchConfig() Config {
 	}
 }
 
-// withTestDispatchConfigDefaults는 테스트가 관심 있는 필드만 지정할 수 있도록 0인 숫자·기간 필드를 기준값으로 채운다.
 // 지정한 bool 필드는 그대로 쓰고, claim 신선도 기간은 지정한 revive 기간과 주기의 합 이상으로 맞춘다.
 func withTestDispatchConfigDefaults(config *Config) *Config {
 	base := testDispatchConfig()

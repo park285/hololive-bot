@@ -260,7 +260,6 @@ func TestAcquireSkipsLockedExpiredLease(t *testing.T) {
 	}
 }
 
-// 최초 행 생성의 유일 키 대기가 TTL보다 길어도 rollback 후 얻은 lease에는 온전한 새 TTL이 있어야 한다.
 func TestAcquireCreationTTLStartsAfterConflictingCreatorRollback(t *testing.T) {
 	t.Parallel()
 

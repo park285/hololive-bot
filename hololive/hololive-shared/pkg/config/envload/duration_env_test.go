@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// 필수 양수 기간 helper는 파싱 실패를 helper 이름 없이 한 번만 감싸, 오류가 키 이름과 원인에서 바로 시작하게 한다.
 func TestRequiredDurationEnvReportsParseFailureOnce(t *testing.T) {
 	const key = "ENVLOAD_TEST_REQUIRED_DURATION"
 

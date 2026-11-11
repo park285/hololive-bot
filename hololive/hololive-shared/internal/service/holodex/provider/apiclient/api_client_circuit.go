@@ -39,7 +39,6 @@ func (c *APIClient) IsCircuitOpen() bool {
 	return c.breaker.IsOpen()
 }
 
-// openCircuit은 실패를 기록하고, open 전이 시 Error 레벨 로그를 방출합니다.
 func (c *APIClient) openCircuit(ctx context.Context) {
 	if opened := c.breaker.RecordFailure(); opened {
 		c.logger.Error("Holodex circuit breaker opened",

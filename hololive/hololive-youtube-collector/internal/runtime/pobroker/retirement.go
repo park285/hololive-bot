@@ -34,8 +34,7 @@ const (
 	ExitSignal ExitReason = "signal"
 )
 
-// ExitReason은 처음 기록된 퇴역 원인을 돌려줍니다. Serve가 반환한 뒤에는
-// 항상 비어 있지 않습니다.
+// Serve가 반환한 뒤에는 항상 비어 있지 않습니다.
 func (b *Broker) ExitReason() ExitReason {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -67,8 +66,7 @@ func (b *Broker) retire(reason ExitReason) {
 	})
 }
 
-// markRetiringLocked는 generation을 퇴역 중으로 표시합니다. 퇴역 원인은 처음
-// 표시한 호출의 것만 남습니다. 호출자는 b.mu를 소유해야 합니다.
+// 퇴역 원인은 처음 표시한 호출의 것만 남습니다.
 func (b *Broker) markRetiringLocked(reason ExitReason) {
 	b.retiring = true
 	if b.exitReason == "" {
@@ -77,7 +75,6 @@ func (b *Broker) markRetiringLocked(reason ExitReason) {
 }
 
 // lease는 요청이 끊겨도 비신뢰 VM을 무기한 유지하지 않도록 broker 수명에 묶습니다.
-// 호출자는 b.mu를 소유해야 합니다.
 func (b *Broker) setLeaseLocked(state State, deadline time.Time) {
 	b.state, b.expires = state, deadline
 	if b.leaseTimer == nil {

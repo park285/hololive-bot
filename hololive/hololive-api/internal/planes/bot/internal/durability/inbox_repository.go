@@ -220,7 +220,6 @@ func (r *InboxRepository) Complete(ctx context.Context, messageID, claimToken st
 	return out, nil
 }
 
-// Release는 claim 당시 횟수로 재시도·종료를 선택하고 같은 횟수와 token을 가진 행만 정산합니다.
 // 종료 시 payload 삭제와 다음 ordering head 이동을 동일 트랜잭션에 저장합니다.
 func (r *InboxRepository) Release(
 	ctx context.Context,

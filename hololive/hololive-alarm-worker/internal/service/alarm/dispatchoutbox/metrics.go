@@ -174,7 +174,6 @@ func observePGRetryScheduled(rows int) {
 	alarmDispatchPGRetryScheduledTotal.Add(float64(rows))
 }
 
-// observePGFenceMiss는 한 전이 문장의 미스를 원인마다 한 번 센다.
 func observePGFenceMiss(miss *sendfence.MissError) {
 	if alarmDispatchPGTransitionPartialTotal == nil {
 		return

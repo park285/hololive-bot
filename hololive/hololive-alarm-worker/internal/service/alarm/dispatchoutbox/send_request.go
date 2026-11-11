@@ -125,7 +125,6 @@ func (r *PgxRepository) prepareSendRequest(
 	return request, nil
 }
 
-// fillPinnedRequest는 잠근 미고정 요청에 candidate 본문·경로와 멤버 ID, 첫 세대 요청 ID를 채운다.
 // 새 요청은 text/richtext만 허용한다. 기존 markdown은 prepareSendRequest의 고정 스냅샷 반환 경로로 읽는다.
 func fillPinnedRequest(request, candidate *SendRequest, ids []int64) error {
 	if candidate.Route != SendRouteText && candidate.Route != SendRouteRichText {
@@ -155,8 +154,7 @@ func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest
 	return &request, nil
 }
 
-// pinSendRequest는 잠근 단위의 요청이 아직 비어 있을 때만 고정한다. 고정하지 못하면 다른 고정이 앞선 것이므로
-// 단위 전원을 request_changed 미스로 보고한다.
+// 고정하지 못하면 다른 고정이 앞선 것이므로 단위 전원을 request_changed 미스로 보고한다.
 func pinSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, request *SendRequest, claims []DeliveryClaim) error {
 	rows, err := tx.Query(ctx, sendRequestPinSQL, unitID, request.Body, request.Route, request.BodyHash, request.DeliveryIDs, request.BaseClientRequestID)
 	if err != nil {

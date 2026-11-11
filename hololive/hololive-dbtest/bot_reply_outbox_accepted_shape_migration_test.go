@@ -13,7 +13,6 @@ const (
 	leasedAcceptedShape = `status = 'accepted', iris_request_id = 'iris-1', claim_token = 'owner', lease_until = now(), first_attempt_at = now()`
 )
 
-// insertBotReplyOutboxShape는 pending 행을 만든 뒤 주어진 열 값으로 갱신하고 그 갱신의 오류를 돌려준다.
 func insertBotReplyOutboxShape(ctx context.Context, t *testing.T, pool *pgxpool.Pool, messageID, set string) error {
 	t.Helper()
 
@@ -27,7 +26,6 @@ func insertBotReplyOutboxShape(ctx context.Context, t *testing.T, pool *pgxpool.
 	return err
 }
 
-// accepted는 lease 없이 handoff 확인을 기다리는 모양만 허용합니다.
 func TestBotReplyOutboxAcceptedShape(t *testing.T) {
 	t.Parallel()
 

@@ -20,8 +20,7 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
-// bot은 방 이름을 모르므로(Iris webhook에 방 제목 없음) 빈 이름으로 구독한다. 모르는 이름은 NULL로 저장하고, 재구독이
-// 저장된 이름을 지우거나 방 ID로 덮어쓰지 않아야 한다.
+// bot은 방 이름을 모르므로(Iris webhook에 방 제목 없음) 빈 이름으로 구독한다.
 func TestRepositoryPostgres_SubscribeKeepsKnownRoomNameWhenNameUnknown(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := majorevent.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, nil)

@@ -49,7 +49,7 @@ type profileSocialLink struct {
 	URL   string
 }
 
-// FormatMemberInfo는 DB에 등록된 기본 정보만 표시한다. 미등록 날짜·링크는 생략하며 외부 조회를 수행하지 않는다.
+// 미등록 날짜·링크는 생략하며 외부 조회를 수행하지 않는다.
 func (f *ResponseFormatter) FormatMemberInfo(ctx context.Context, member *domain.Member) string {
 	if member == nil {
 		return f.renderFailureText()

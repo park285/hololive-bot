@@ -65,7 +65,7 @@ ap_host_load() {
         echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must have matching lengths in $conf" >&2
         return 2
     fi
-    # 2026-11-06 Seoul b가 iris-seoul Podman Quadlet(po-central-cutover.sh b)으로 옮겨 AP host는 모두 native다.
+    # AP host는 모두 native이며 Seoul b는 iris-seoul Podman Quadlet(po-central-cutover.sh b)이다.
     case "${AP_RUNTIME_MODE}" in
         native) ;;
         *)

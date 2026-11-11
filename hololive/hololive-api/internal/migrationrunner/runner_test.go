@@ -708,7 +708,6 @@ func TestLedgerResidueWithoutEpochBaselineRefuses(t *testing.T) {
 	assertTableAbsent(t, pool, "epoch3_baseline_ran")
 }
 
-// epoch-1 checkpoint가 baseline을 미리 기록한 DB도 manifest 밖 잔재가 있으면 거부한다(checkpoint 경로 종료).
 func TestLedgerResidueWithChecksummedEpochBaselineRefuses(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 

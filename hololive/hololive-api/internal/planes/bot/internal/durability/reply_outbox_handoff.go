@@ -39,7 +39,6 @@ type ReplyHandoffSettlement struct {
 	RetryAfter time.Duration
 }
 
-// SettleAccepted는 Iris durable admission을 확인한 submitting 행을 lease 없는 accepted로 정산한다.
 // 첫 handoff 확인 시각은 DB 시계 기준 firstCheck 뒤다.
 func (r *ReplyOutboxRepository) SettleAccepted(ctx context.Context, id int64, claimToken, irisRequestID string, firstCheck time.Duration) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
@@ -69,8 +68,7 @@ func (r *ReplyOutboxRepository) SettleAccepted(ctx context.Context, id int64, cl
 	return tag.RowsAffected() == 1, nil
 }
 
-// ClaimHandoffDue는 확인 시각이 된 accepted 행을 SKIP LOCKED로 batchSize개까지 고르고 softClaim만큼
-// 다음 확인을 미룬다. 프로세스가 확인 도중 멈추면 행은 softClaim 뒤에 다시 고를 수 있다.
+// 프로세스가 확인 도중 멈추면 행은 softClaim 뒤에 다시 고를 수 있다.
 func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize int32, softClaim time.Duration) ([]ReplyHandoffClaim, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return nil, err
@@ -115,8 +113,7 @@ func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize i
 	return claims, nil
 }
 
-// SettleHandoff는 soft claim 토큰과 관측한 Iris requestId가 그대로인 accepted 행만 전이한다. 토큰이
-// 바뀐 행은 다른 확인이 이미 처리했으므로 false를 돌려준다.
+// 토큰이 바뀐 행은 다른 확인이 이미 처리했으므로 false를 돌려준다.
 func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement ReplyHandoffSettlement) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return false, err
@@ -150,7 +147,6 @@ func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement Re
 	return tag.RowsAffected() == 1, nil
 }
 
-// RescheduleHandoff는 전이 없이 다음 확인을 now+step으로 잡되 accepted_at+horizon을 넘기지 않는다.
 // 반환값은 DB 시계로 잰 다음 확인까지의 대기다.
 func (r *ReplyOutboxRepository) RescheduleHandoff(ctx context.Context, claim ReplyHandoffClaim, step, horizon time.Duration) (time.Duration, bool, error) {
 	if err := ensurePool(r.pool); err != nil {

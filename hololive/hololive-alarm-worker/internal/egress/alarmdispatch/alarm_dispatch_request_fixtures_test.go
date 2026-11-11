@@ -35,7 +35,6 @@ func (c *alarmRequestTestStore) PinSendRequest(_ context.Context, envelopes []do
 	return &request, nil
 }
 
-// ReissueSendRequest는 재발급 세대가 남지 않은 저장소처럼 동작해 실패 경로가 격리로 끝나게 한다.
 func (c *alarmRequestTestStore) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
 	c.reissueCalls++
 	return sendfence.ErrGenerationExhausted
@@ -57,7 +56,6 @@ func (s *alarmDispatchRunnerBlockingSender) SendPreparedMessage(ctx context.Cont
 	return alarmTestAdmission(id, s.SendMessage(ctx, room, body))
 }
 
-// alarmTestAdmission은 가짜 Iris가 발송 성공 때 202로 돌려주는 requestId다.
 func alarmTestAdmission(clientRequestID string, err error) (string, error) {
 	if err != nil {
 		return "", err
@@ -66,7 +64,7 @@ func alarmTestAdmission(clientRequestID string, err error) (string, error) {
 	return "iris:" + clientRequestID, nil
 }
 
-// messageTexts는 두 본문 변형을 차례로 돌려준다. 내용 계약은 방 유형과 무관하게 두 변형 모두 지켜야 한다.
+// 내용 계약은 방 유형과 무관하게 두 변형 모두 지켜야 한다.
 func messageTexts(message delivery.MessageVariants) []string {
 	return []string{message.Plain, message.RichText}
 }

@@ -46,7 +46,6 @@ const (
 	testSourceURLField   = "source_url"
 )
 
-// fakeLLMWithCounter: 호출 횟수를 추적하는 LLM 모의 클라이언트.
 type fakeLLMWithCounter struct {
 	response  string
 	err       error
@@ -63,7 +62,6 @@ func (f *fakeLLMWithCounter) GenerateJSON(_ context.Context, _ openaipreset.Prom
 	return f.response, nil
 }
 
-// fakeSummarizer: primary Summarizer 모의 구현.
 type fakeSummarizer struct {
 	digest *model.Digest
 	err    error
@@ -411,7 +409,6 @@ func TestConsensus_OnlyWarnings_NoAdjudication(t *testing.T) {
 }
 
 func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
-	// adjudicator가 잘못된 URL이 포함된 2개 항목 반환
 	badResponse := summaryResponse{
 		Period:   string(model.PeriodWeekly),
 		Headline: "수정됨",
@@ -450,7 +447,6 @@ func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 }
 
 func TestConsensus_PrimaryEmpty_ReturnsFallback(t *testing.T) {
-	// primary가 빈 digest 반환 (fallback 포함)
 	emptyDigest := &model.Digest{
 		Period:   model.PeriodWeekly,
 		Headline: "🗞️ 이번주 구독 멤버 뉴스",
@@ -610,7 +606,6 @@ func TestConsensus_AdjudicatorMalformedJSON_ReturnsPrimary(t *testing.T) {
 }
 
 func TestConsensus_ValidationDropsAllAdjudicatorItems_ReturnsPrimary(t *testing.T) {
-	// adjudicator가 모두 잘못된 URL인 항목만 반환
 	allBadResponse := summaryResponse{
 		Period:   string(model.PeriodWeekly),
 		Headline: "수정됨",

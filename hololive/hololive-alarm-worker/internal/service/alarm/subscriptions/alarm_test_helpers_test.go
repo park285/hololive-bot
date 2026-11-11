@@ -56,7 +56,6 @@ const (
 	testFallbackChannelID    = "default"
 )
 
-// mockMemberDataProvider: 테스트용 멤버 데이터 프로바이더.
 type mockMemberDataProvider struct {
 	members []*domain.Member
 }
@@ -95,7 +94,6 @@ func (m *mockMemberDataProvider) FindMembersByAlias(context.Context, string) ([]
 	return []*domain.Member{}, nil
 }
 
-// newTestAlarmService는 격리된 PG(dbtest)와 miniredis를 쓰는 서비스를 만든다. PG가 구독·방 이름의 원천이다.
 func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 

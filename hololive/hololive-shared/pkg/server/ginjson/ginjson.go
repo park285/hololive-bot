@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// jsonRender는 gin render.Render 계약을 구현한다. Respond만 만들므로 공개하지 않는다.
 type jsonRender struct {
 	Data any
 }

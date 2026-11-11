@@ -92,7 +92,6 @@ func NewLinkChecker(client *http.Client, config LinkCheckerConfig, logger *slog.
 	}
 }
 
-// CheckEvents는 이벤트 링크를 병렬 검증한다.
 func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEvent) (LinkCheckResult, error) {
 	result := LinkCheckResult{}
 
@@ -177,7 +176,6 @@ func (c *LinkChecker) logEventLinkCheckFailure(ctx context.Context, check eventL
 	)
 }
 
-// CheckLink는 단일 링크를 검증한다.
 func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.MajorEventLinkStatus, error) {
 	parsed, err := parseAndValidateLink(rawURL)
 	if err != nil {
@@ -304,7 +302,6 @@ func isSuccessStatus(code int) bool {
 	return code >= http.StatusOK && code < http.StatusMultipleChoices
 }
 
-// shouldFallbackToGET은 HEAD를 거절하거나 처리하지 못하는 서버를 GET 한 번으로 다시 확인할지 정한다.
 // 예외 계약은 docs/current/contracts/majorevent.md의 링크 검사 HEAD→GET 절이다.
 func shouldFallbackToGET(statusCode int, probeErr error) bool {
 	if probeErr != nil {
@@ -319,8 +316,7 @@ func shouldFallbackToGET(statusCode int, probeErr error) bool {
 	}
 }
 
-// isHeadTransportFailure는 HEAD 요청이 시간 제한에 걸렸거나 연결이 재설정된 경우만 참이다. HEAD를 끊는 서버가 GET에는
-// 정상 응답하는 경우를 놓치지 않기 위한 것이다. 호출자 취소와 그 밖의 전송 오류는 GET으로 다시 시도하지 않는다.
+// HEAD를 끊는 서버가 GET에는 정상 응답하는 경우를 놓치지 않기 위한 것이다. 호출자 취소와 그 밖의 전송 오류는 GET으로 다시 시도하지 않는다.
 func isHeadTransportFailure(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, syscall.ECONNRESET) {
 		return true

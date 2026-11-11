@@ -79,8 +79,6 @@ func lockAdmissionRequest(ctx context.Context, tx dbx.Querier, operation Started
 	return nil
 }
 
-// recordAdmission은 SENT 전이 문장의 DB 시계(sentAt)를 admission으로 삼아 Iris requestId와 첫 handoff 확인 시각을
-// 기록한다.
 func recordAdmission(ctx context.Context, tx dbx.Querier, admission HandoffAdmission, sentAt time.Time) error {
 	firstCheck := min(handoffcheck.FirstCheckDelay, admission.Horizon)
 
@@ -97,8 +95,7 @@ func recordAdmission(ctx context.Context, tx dbx.Querier, admission HandoffAdmis
 	return nil
 }
 
-// validateAdmissionPostState는 commit 응답 유실 뒤 요청에 이번 admission의 requestId와 handoff 확인 상태가 남았는지
-// 읽는다. 없으면 같은 트랜잭션이 기록했어야 할 결과가 빠진 것이다.
+// 없으면 같은 트랜잭션이 기록했어야 할 결과가 빠진 것이다.
 func validateAdmissionPostState(ctx context.Context, db dbx.Querier, admission HandoffAdmission) error {
 	state, found, err := loadHandoffRequestState(ctx, db, admission.RequestBaseID)
 	if err != nil {
@@ -140,7 +137,7 @@ func (s handoffRequestState) requestIs(id string) bool {
 	return s.IrisRequestID != nil && *s.IrisRequestID == id
 }
 
-// admitted는 admission 기록이 남았는지다. 이미 reconciler가 확인을 닫았어도 같은 requestId·세대면 기록된 것이다.
+// 이미 reconciler가 확인을 닫았어도 같은 requestId·세대면 기록된 것이다.
 func (s handoffRequestState) admitted(admission HandoffAdmission) bool {
 	return s.requestIs(admission.IrisRequestID) && s.Generation == admission.RequestGeneration &&
 		(s.NextCheckAt != nil || s.CheckedAt != nil)
@@ -158,7 +155,6 @@ func (s handoffRequestState) closedBy(claim *HandoffClaim) bool {
 		s.NextCheckAt == nil && s.CheckedAt != nil
 }
 
-// reissuedFrom은 claim 세대 다음 세대로 재발급되어 handoff 상태가 비었다는 뜻이다.
 func (s handoffRequestState) reissuedFrom(claim *HandoffClaim) bool {
 	return s.IrisRequestID == nil && s.Generation == claim.Generation+1 && s.NextCheckAt == nil && s.CheckedAt == nil
 }
@@ -198,7 +194,6 @@ func (c *HandoffClaim) fenceArgs() []any {
 	return []any{c.RequestBaseID, c.CheckToken, c.IrisRequestID, c.Generation, c.MessageHash, c.MemberIDs}
 }
 
-// sentMemberVectors는 claim 때 SENT였던 멤버 id와 row_version을 id 순서의 두 배열로 돌려준다.
 func (c *HandoffClaim) sentMemberVectors() ([]int64, []int64) {
 	ids := slices.Sorted(maps.Keys(c.SentMembers))
 	versions := make([]int64, 0, len(ids))
@@ -210,8 +205,7 @@ func (c *HandoffClaim) sentMemberVectors() ([]int64, []int64) {
 	return ids, versions
 }
 
-// ClaimHandoffDue는 확인 시각이 된 확인 대기 고정 요청을 limit개까지 고르고 softClaim 뒤로 다음 확인을 미룬다. 확인
-// 도중 프로세스가 멈추면 요청은 softClaim 뒤에 다시 고를 수 있다. 멤버 delivery는 잠그지 않는다.
+// 확인 도중 프로세스가 멈추면 요청은 softClaim 뒤에 다시 고를 수 있다. 멤버 delivery는 잠그지 않는다.
 func (s *TransitionStore) ClaimHandoffDue(ctx context.Context, limit int, softClaim time.Duration) ([]HandoffClaim, error) {
 	if limit <= 0 {
 		return nil, fmt.Errorf("claim youtube handoff checks: limit must be positive: %d", limit)
@@ -262,7 +256,7 @@ func scanHandoffClaim(row pgx.CollectableRow) (HandoffClaim, error) {
 	return claim, nil
 }
 
-// CompleteHandoff는 handoff 완료를 확인으로 기록한다. 멤버 delivery와 SENT 원장은 그대로다.
+// 멤버 delivery와 SENT 원장은 그대로다.
 func (s *TransitionStore) CompleteHandoff(ctx context.Context, claim *HandoffClaim) (ApplyResult, error) {
 	return s.applyHandoffRequest(ctx, handoffActionComplete, handoffCompleteSQL, claim)
 }
@@ -285,11 +279,9 @@ func (s *TransitionStore) RescheduleHandoff(ctx context.Context, claim *HandoffC
 		ids, versions, step.Milliseconds(), horizon.Milliseconds())
 }
 
-// ReissueAfterHandoff는 Iris failed를 다음 요청 세대의 재시도로 되돌린다. 한 트랜잭션에서 고정 멤버와 그 논리 그룹의
-// SENT delivery 전원을 PENDING(DB 시계 + retry backoff, owner attempt + 1)으로, 이 발송이 남긴 SENT 원장을 삭제로,
-// 요청을 세대 + 1과 빈 handoff 상태로 기록하고 바뀐 delivery의 부모 outbox 집계를 다시 계산한다. 다음 claim은 같은
-// 본문을 새 세대 ID로 보낸다. 세대를 모두 썼으면 sendfence.ErrGenerationExhausted이고 아무것도 바꾸지 않는다. 시도
-// 예산은 호출자가 판정한다.
+// 한 트랜잭션에서 고정 멤버와 그 논리 그룹의 SENT delivery 전원을 PENDING(DB 시계 + retry backoff, owner attempt + 1)으로, 이 발송이 남긴 SENT 원장을
+// 삭제로, 요청을 세대 + 1과 빈 handoff 상태로 기록하고 바뀐 delivery의 부모 outbox 집계를 다시 계산한다. 다음 claim은 같은 본문을 새 세대 ID로 보낸다. 세대를 모두 썼으면
+// sendfence.ErrGenerationExhausted이고 아무것도 바꾸지 않는다. 시도 예산은 호출자가 판정한다.
 func (s *TransitionStore) ReissueAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) (ApplyResult, error) {
 	if claim != nil && claim.Generation >= iris.ReplyReissueMaxGenerations {
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("%s: %w", handoffActionReissue, sendfence.ErrGenerationExhausted)
@@ -301,8 +293,7 @@ func (s *TransitionStore) ReissueAfterHandoff(ctx context.Context, claim *Handof
 	}, handoffErrorText(code, detail))
 }
 
-// ExhaustAfterHandoff는 세대나 시도 예산이 없는 Iris failed를 끝낸다. 한 트랜잭션에서 고정 멤버와 그 논리 그룹의 SENT
-// delivery 전원을 FAILED(owner attempt + 1)로, 이 발송이 남긴 SENT 원장을 삭제로 기록하고 확인을 닫은 뒤 부모 outbox
+// 한 트랜잭션에서 고정 멤버와 그 논리 그룹의 SENT delivery 전원을 FAILED(owner attempt + 1)로, 이 발송이 남긴 SENT 원장을 삭제로 기록하고 확인을 닫은 뒤 부모 outbox
 // 집계를 다시 계산한다. FAILED는 provider 미전달 확정이라 원장에 남기지 않는다.
 func (s *TransitionStore) ExhaustAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) (ApplyResult, error) {
 	return s.settleHandoffFailure(ctx, claim, handoffFailure{
@@ -319,8 +310,7 @@ func (s *TransitionStore) QuarantineAfterHandoff(ctx context.Context, claim *Han
 	}, handoffErrorText(code, detail))
 }
 
-// handoffErrorText는 handoff 결과 코드를 error 열 앞에 붙인다. 이 원장에는 last_error_code 열이 없으므로 운영자는
-// 접두어로 alarm dispatch와 같은 코드 어휘를 읽는다.
+// 이 원장에는 last_error_code 열이 없으므로 운영자는 접두어로 alarm dispatch와 같은 코드 어휘를 읽는다.
 func handoffErrorText(code, detail string) string {
 	return code + ": " + detail
 }

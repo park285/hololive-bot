@@ -205,9 +205,7 @@ func (s *TransitionStore) completeSentOnce(
 	return touched, nil
 }
 
-// recordSentTrackingAndTelemetry는 CompleteSent 트랜잭션 안에서 tracking 발송 표시, 성공 시도 telemetry, 지연 분류를
-// 차례로 저장한다. 성공 시도 telemetry는 tracking의 alarm_sent_at을 반영한 뒤, 분류 저장보다 먼저 기록해 분류가 이 시도를
-// 포함하게 한다.
+// 성공 시도 telemetry는 tracking의 alarm_sent_at을 반영한 뒤, 분류 저장보다 먼저 기록해 분류가 이 시도를 포함하게 한다.
 func recordSentTrackingAndTelemetry(
 	ctx context.Context,
 	tx dbx.Querier,

@@ -51,7 +51,6 @@ func fetchedTelemetryIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []i
 	return ids
 }
 
-// 한 문장 lease 획득이 기존 적격 조건(미기록·재시도 시각 도래·lease 만료)과 (event_at, id) 순서, 배치 한도를 지키는지 확인한다.
 func TestFetchAndLockPendingLeasesEligibleRowsInEventOrder(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -107,7 +106,6 @@ func TestFetchAndLockPendingLeasesEligibleRowsInEventOrder(t *testing.T) {
 	}
 }
 
-// 다른 트랜잭션이 행 잠금을 쥔 행은 기다리지 않고 건너뛰고, 잠금이 풀리면 다음 호출에서 획득한다.
 func TestFetchAndLockPendingSkipsRowsLockedByAnotherTransaction(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

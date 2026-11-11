@@ -29,7 +29,6 @@ const (
 	testAlarmChannelID = "UCtest"
 )
 
-// seeMoreFoldConsumer는 한 배치 뒤 idle에서 끝내며 예상하지 않은 실패 경로는 기록하고 중단한다.
 type seeMoreFoldConsumer struct {
 	batch      []domain.AlarmQueueEnvelope
 	dispatched int
@@ -93,7 +92,7 @@ func (*seeMoreFoldConsumer) Wait(context.Context) bool { return false }
 
 func (*seeMoreFoldConsumer) Reset() {}
 
-// unregisteredMembers는 모든 채널을 members 미등록으로 답한다. 알림 이름은 종단 문구가 되며 접기 판단과 무관하다.
+// 알림 이름은 종단 문구가 되며 접기 판단과 무관하다.
 type unregisteredMembers struct {
 	domain.MemberDataProvider
 }
@@ -116,7 +115,6 @@ func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetr
 	}
 }
 
-// seeMoreFoldIrisClient는 실제 egress.IrisMessageSender 뒤의 Kakao 텍스트 lane 최종 payload만 기록한다.
 type seeMoreFoldIrisClient struct {
 	texts []string
 }
@@ -151,7 +149,6 @@ func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]stri
 	return template.NewRenderer(pool, logger), store
 }
 
-// runSeeMoreFoldFinalPayload는 실제 DB template와 Runner 렌더링을 거쳐 Iris 텍스트 lane에 넘어간 최종 문자열을 반환한다.
 func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store *messagestrings.Store, envelopes ...domain.AlarmQueueEnvelope) string {
 	t.Helper()
 
@@ -171,7 +168,6 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 	return client.texts[0]
 }
 
-// requireNoAutoPadding은 접기 패딩 판정과 같은 기준(연속 ZWSP)으로 확인해, 길이가 다른 패딩이 다시 생겨도 잡는다.
 // 사용자 지정 본문의 단발 ZWSP는 접기 패딩으로 보지 않는다.
 func requireNoAutoPadding(t *testing.T, final string) {
 	t.Helper()

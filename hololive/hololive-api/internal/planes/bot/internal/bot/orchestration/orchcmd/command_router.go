@@ -164,7 +164,6 @@ func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *botcom
 	return nil
 }
 
-// NormalizeCommand 명령어 타입과 파라미터를 정규화합니다.
 func (r *CommandRouter) NormalizeCommand(cmdType botcommand.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
 	return NormalizeCommandKey(cmdType, params)
 }

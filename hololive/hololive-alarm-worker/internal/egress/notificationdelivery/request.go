@@ -65,7 +65,6 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 	return request, true
 }
 
-// sendPrepared는 고정 요청을 세대에 맞는 client request ID로 보내고, 성공이면 Iris requestId를 돌려준다.
 func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) (string, error) {
 	requestID := request.BaseID
 	if request.Generation > 0 {
@@ -122,10 +121,8 @@ func (r *Store) reissueFailedRequest(ctx context.Context, id int64, workerID str
 	)
 }
 
-// settleRequestFenceMiss는 요청 고정 fence 미스를 지표와 로그로 남기고 처리한다. 소유권이 남은 미스는 소유자·시도
-// 횟수 fence가 걸린 실패 전이로 바로 끝낸다. 요청을 소진으로 표시하는 경우(exhaustRequest)는 rearm되지 않는 종료
-// 실패이고, 아니면 일반 재시도 정책을 따른다. 소유권을 잃었거나 실패 전이마저 fence에 막히면 새 소유자나 sweep이
-// 만든 상태를 덮어쓰지 않도록 행을 건드리지 않는다.
+// 소유권이 남은 미스는 소유자·시도 횟수 fence가 걸린 실패 전이로 바로 끝낸다. 요청을 소진으로 표시하는 경우(exhaustRequest)는 rearm되지 않는 종료 실패이고, 아니면 일반 재시도 정책을
+// 따른다. 소유권을 잃었거나 실패 전이마저 fence에 막히면 새 소유자나 sweep이 만든 상태를 덮어쓰지 않도록 행을 건드리지 않는다.
 func (d *Dispatcher) settleRequestFenceMiss(ctx context.Context, item *domain.NotificationDeliveryOutbox, miss *sendfence.MissError, exhaustRequest bool, reason string) {
 	result := fenceMissResultFenceLost
 

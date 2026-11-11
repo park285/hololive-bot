@@ -71,7 +71,6 @@ func TestRunOrgFetchesCollectsFailuresInOriginalOrder(t *testing.T) {
 	}
 }
 
-// 호출자 취소는 org 실패가 아니다. 실패로 세면 취소된 요청이 공식 일정 fallback·재시도·실패 metric을 일으킨다.
 func TestRunOrgFetchesDoesNotCountCancellationAsFailure(t *testing.T) {
 	t.Parallel()
 

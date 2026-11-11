@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// members 표시명이 있으면 그대로 쓰고, 비어 있을 때만 종단 문구 경로로 가서 누락 횟수를 센다.
 func TestDisplayMemberNameCountsOnlyMissingNames(t *testing.T) {
 	formatter := &MessageFormatter{}
 	before := testutil.ToFloat64(memberNameMissingTotal())

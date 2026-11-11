@@ -318,7 +318,6 @@ type ChannelResult struct {
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 
-// validateSuccess는 예정 영상 조회 수가 live_query와 함께만 있고 protocol 상한 안인지도 확인합니다.
 // 값이 없을 때 0으로 받아들이면 helper가 보낸 조회의 limiter 지불이 빠지므로 존재 여부를 따로 봅니다.
 func (r *ChannelResult) validateSuccess() error {
 	if err := r.Validate(); err != nil {
@@ -360,7 +359,6 @@ type ChannelLiveCheckResult struct {
 
 func (r *ChannelLiveCheckResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 
-// validateSuccess는 결과 어휘와 UNKNOWN 사유의 존재 조건만 검사합니다.
 // 요청 subject 대조와 세부 판정 모순은 호출자와 공유 envelope 계약이 소유합니다.
 func (r *ChannelLiveCheckResult) validateSuccess() error {
 	if strings.TrimSpace(r.ChannelID) == "" {
@@ -415,8 +413,6 @@ type VideoLiveCheckResult struct {
 
 func (r *VideoLiveCheckResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 
-// validateSuccess는 가용성·판정 방법·UNKNOWN 사유의 어휘와 대응만 검사합니다.
-// 판정 방법은 availability가 UNKNOWN일 때만 unknown이며 UNKNOWN 사유도 그때만 존재합니다.
 func (r *VideoLiveCheckResult) validateSuccess() error {
 	if strings.TrimSpace(r.VideoID) == "" {
 		return errors.New("validate video live check: video_id is empty")

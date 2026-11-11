@@ -15,7 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 세 방송 목록 응답은 뷰의 CollabMembers를 seed 템플릿의 "콜라보:" 줄로 렌더하고, 출연자가 없는 방송에는 줄을 만들지 않는다.
 func TestStreamListsRenderCollabMembers(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	f := NewResponseFormatter("!", template.NewRenderer(pool, slog.Default()),

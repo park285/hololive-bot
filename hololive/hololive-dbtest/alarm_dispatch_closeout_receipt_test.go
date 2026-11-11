@@ -24,7 +24,6 @@ type closeoutReceiptFixture struct {
 	digest       string
 }
 
-// 격리 묶음의 모든 원본 행은 그대로 두고, 보존 기간 뒤에도 검증 가능한 결정 영수증만 남긴다.
 func TestAlarmDispatchCloseoutReceiptPreservesOriginalAndSurvivesRetention(t *testing.T) {
 	t.Parallel()
 
@@ -37,8 +36,6 @@ func TestAlarmDispatchCloseoutReceiptPreservesOriginalAndSurvivesRetention(t *te
 	assertCloseoutReceiptAppendOnlyAndRetentionUnchanged(t, pool, fixture)
 }
 
-// handoff 결과 불명 격리는 Iris에 넘긴 시각(sent_at)이 남아도 재발송 없이 종료로 기록할 수 있어야 한다.
-// 같은 handoff 오류라도 격리되지 않은 행은 여전히 거부한다.
 func TestAlarmDispatchCloseoutReceiptAcceptsHandoffUnconfirmedQuarantine(t *testing.T) {
 	t.Parallel()
 

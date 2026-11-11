@@ -266,9 +266,6 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 	}
 }
 
-// newTestClient: Mock 서버 테스트용 APIClient 생성
-// baseURL 오버라이드가 불가하므로, buildRequestURL을 우회하는 대신
-// 실제 요청 URL을 인터셉트하는 RoundTripper를 사용.
 func newTestClientWithHandler(handler http.HandlerFunc, apiKey string) (*APIClient, *httptest.Server) {
 	server := httptest.NewServer(handler)
 	client := &APIClient{
@@ -323,7 +320,6 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 		t.Fatal("expected circuit to be open after openCircuit()")
 	}
 
-	// openedAt을 과거로 설정하여 reset 트리거
 	client.breaker.SetOpenedAtForTest(time.Now().Add(-circuitResetTimeout - time.Second))
 
 	if client.IsCircuitOpen() {
@@ -741,7 +737,6 @@ func TestParentContextCancel(t *testing.T) {
 	}
 }
 
-// mockTimeoutError: net.Error 인터페이스를 구현하는 mock timeout 에러.
 type mockTimeoutError struct {
 	msg     string
 	timeout bool
@@ -805,7 +800,6 @@ func TestIsTimeoutError(t *testing.T) {
 	}
 }
 
-// 요청 실패 오류는 채널 목록 query를 싣지 않지만, *url.Error 타입과 timeout 분류는 유지해야 한다.
 func TestDoRequestTimeoutErrorOmitsQueryAndKeepsTimeoutClassification(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()

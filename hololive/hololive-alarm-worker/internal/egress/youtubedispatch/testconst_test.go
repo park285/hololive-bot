@@ -43,7 +43,6 @@ const (
 	testPayloadShortTwo = `{"canonical_post_id":"short:short-2","video_id":"s2","title":"쇼츠2"}`
 )
 
-// testMessage는 형식 분기와 무관한 발송 테스트에서 두 변형에 같은 본문을 쓴다.
 func testMessage(text string) messagedelivery.MessageVariants {
 	return messagedelivery.MessageVariants{Plain: text, RichText: text}
 }

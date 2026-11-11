@@ -267,7 +267,7 @@ func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness
 	)
 }
 
-// alarmSchedulerEnabled는 값이 없거나 worker일 때만 이 worker가 scheduler를 소유한다고 본다. 허용값 검증은 config가 기동 때 한다.
+// 허용값 검증은 config가 기동 때 한다.
 func alarmSchedulerEnabled(configuredRole string) bool {
 	role := strings.ToLower(strings.TrimSpace(configuredRole))
 
@@ -329,8 +329,7 @@ func buildAlarmFoundation(
 	}, nil
 }
 
-// buildAlarmHolodexService는 채널 live 상태 조회용 Holodex client를 만든다. 공식 일정 폴백을 쓰지 않으므로 멤버
-// identity 색인을 적재하는 scraper 없이 만든다.
+// 공식 일정 폴백을 쓰지 않으므로 멤버 identity 색인을 적재하는 scraper 없이 만든다.
 func buildAlarmHolodexService(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
@@ -352,7 +351,6 @@ func warmAlarmService(ctx context.Context, alarmService *subscriptions.AlarmServ
 	}
 }
 
-// alarmDispatchPublishConfig는 검증을 마친 runtime 설정의 batch 한도와 profile의 wakeup 여부를 발행 설정으로 묶는다.
 func alarmDispatchPublishConfig(appConfig *workerconfig.RuntimeConfig) queue.PublishConfig {
 	return queue.PublishConfig{
 		WakeupEnabled:         appConfig.AlarmWorkerProfile.AlarmDispatch.WakeupEnabled,

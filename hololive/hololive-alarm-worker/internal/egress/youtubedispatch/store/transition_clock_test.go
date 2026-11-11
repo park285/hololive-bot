@@ -11,8 +11,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 발송 시작 lease는 호출자가 시각을 잰 때가 아니라 전이가 행을 잠근 뒤의 DB 시계에서 시작해야 한다.
-// 잠금 대기가 길어도 새 locked_at이 대기 이전 시각으로 남아 lease가 일찍 끝나면 안 된다.
 func TestBeginSendingLeaseStartsAtDatabaseClockAfterLockWait(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-begin", "room-clock-begin")
@@ -35,8 +33,6 @@ func TestBeginSendingLeaseStartsAtDatabaseClockAfterLockWait(t *testing.T) {
 	require.False(t, lockedAt.Before(releasedAt), "locked_at %s precedes lock release %s", lockedAt, releasedAt)
 }
 
-// 발송 뒤 재시도 시각은 전이 시점 DB 시계 + max(backoff, retryAfter)다. 잠금 대기 앞에서 잰 시각을 쓰면 재시도가
-// 대기만큼 앞당겨진다.
 func TestRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-retry", "room-clock-retry")
@@ -71,8 +67,6 @@ func TestRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T) {
 		"next_attempt_at %s exceeds transition end %s + retry-after", nextAttemptAt, upper)
 }
 
-// fanout 실패의 재시도 시각은 outbox 행을 잠근 뒤의 DB 시계 + RetryBackoff × 다음 시도 횟수다. 잠금 대기 앞에서
-// 잰 시각을 쓰면 재시도가 대기만큼 앞당겨진다.
 func TestFanoutFailureRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	outboxID := seedTransitionFanoutOutbox(t, pool, "video-clock-fanout-retry")
@@ -105,8 +99,6 @@ func TestFanoutFailureRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T)
 		"next_attempt_at %s exceeds transition end %s + backoff", nextAttemptAt, upper)
 }
 
-// follower 보류 시각은 GREATEST(DB 시계 + RetryBackoff, owner의 next_attempt_at)이다. 소유자의 다음 시도 시각이 더
-// 늦으면 그 값을, 이미 지났으면 DB 시계 + backoff를 쓴다.
 func TestFollowerDeferDueRespectsOwnerFloor(t *testing.T) {
 	t.Run("owner due later than backoff", func(t *testing.T) {
 		pool := dbtest.NewPool(t)
@@ -157,7 +149,6 @@ func TestFollowerDeferDueRespectsOwnerFloor(t *testing.T) {
 	})
 }
 
-// claim lease 만료는 DB에 기록된 locked_at과 DB 시계로만 판정한다.
 func TestClaimPendingLeaseUsesDatabaseClock(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-claim", "room-clock-claim")
@@ -180,7 +171,6 @@ func TestClaimPendingLeaseUsesDatabaseClock(t *testing.T) {
 	require.False(t, claimed[0].LockedAt.Before(before), "new lease must start at the database clock")
 }
 
-// stale SENDING 격리는 DB의 발송 시작 시각과 DB 시계로 lease 만료를 판정한다.
 func TestStaleSendingQuarantineUsesDatabaseClock(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-stale", "room-clock-stale")
@@ -210,8 +200,7 @@ const (
 	lockOutboxRowSQL   = `SELECT id FROM youtube_notification_outbox WHERE id = $1 FOR UPDATE`
 )
 
-// holdRowLock은 다른 트랜잭션이 lockQuery로 행을 잠근 상태를 만든다. 반환한 release는 전이가 그 잠금에서
-// 기다리기 시작한 것을 확인하고 잠시 더 머문 뒤 잠금을 풀며, 푼 직전의 DB 시계를 돌려준다.
+// 반환한 release는 전이가 그 잠금에서 기다리기 시작한 것을 확인하고 잠시 더 머문 뒤 잠금을 풀며, 푼 직전의 DB 시계를 돌려준다.
 func holdRowLock(t *testing.T, pool *pgxpool.Pool, lockQuery string, id int64) func() time.Time {
 	t.Helper()
 
@@ -247,7 +236,6 @@ func holdRowLock(t *testing.T, pool *pgxpool.Pool, lockQuery string, id int64) f
 	}
 }
 
-// setTransitionLockAge는 버전을 바꾸지 않고 locked_at을 DB 시계 기준 age 전으로 옮긴다.
 func setTransitionLockAge(t *testing.T, pool *pgxpool.Pool, deliveryID int64, age time.Duration) {
 	t.Helper()
 

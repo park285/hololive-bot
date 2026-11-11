@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 별도 invoker 기록 역할이 실제 upgrade 뒤에도 영수증·사실·runtime 판정을 함께 커밋해야 한다.
 func TestLiveReviewRecorderDecoderMigrationPreservesRestrictedRecording(t *testing.T) {
 	t.Parallel()
 

@@ -18,7 +18,6 @@ const (
 	displayTestIndependentOrg = "Independents"
 )
 
-// 명령 응답의 멤버 이름은 matcher 결과 하나에서 나오므로, 검색 경로마다 같은 정본 표시명을 돌려줘야 한다.
 func newDisplayNameTestMatcher() *Matcher {
 	return NewMatcher(newStubMemberProvider([]*domain.Member{
 		{ChannelID: displayTestSoraChannel, Name: "Tokino Sora", NameKo: "토키노 소라", ShortKoreanName: "소라", NameJa: "ときのそら", Org: orgHololive},
@@ -63,7 +62,6 @@ func TestMatcherLookupReturnsCanonicalDisplayName(t *testing.T) {
 	}
 }
 
-// 후보의 검색 키는 english_name으로 남아야 동명이인 안내의 복사 예시가 같은 후보로 해석된다.
 func TestMatcherAmbiguousCandidatesKeepSearchKey(t *testing.T) {
 	t.Parallel()
 

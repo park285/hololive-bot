@@ -66,7 +66,6 @@ type AdminAPIRuntime struct {
 	cleanupErr    error
 }
 
-// Close는 nil outer runtime에서도 안전하며 등록된 자원 정리를 한 번만 실행한다.
 func (r *AdminAPIRuntime) Close() {
 	if r == nil {
 		return
@@ -80,7 +79,7 @@ func (r *AdminAPIRuntime) Close() {
 	}
 }
 
-// CloseContext는 live 작업을 cancel/join한 뒤 같은 자원 owner를 한 번 실행한다. Join 실패에서 DB·cache를 닫지 않는다.
+// Join 실패에서 DB·cache를 닫지 않는다.
 func (r *AdminAPIRuntime) CloseContext(ctx context.Context) error {
 	if r == nil {
 		return nil

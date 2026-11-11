@@ -165,7 +165,6 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 	assert.Equal(t, reqCtx, (*provider.ctxCalls)[len(*provider.ctxCalls)-1])
 }
 
-// 채널 대표 조회는 미존재와 원천 실패를 구분해 돌려준다.
 func TestGetMemberByChannelID_SeparatesNotFoundFromFailure(t *testing.T) {
 	t.Parallel()
 

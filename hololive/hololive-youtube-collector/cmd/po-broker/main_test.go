@@ -30,7 +30,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// runSignalHelper는 main과 같은 signal 감시만 설치하고 준비를 알린 뒤 signal을 기다립니다.
 // 감시가 signal을 삼키면 테스트 시간 안에 끝나지 않고, 제한 시간 뒤 SIGKILL을 받습니다.
 func runSignalHelper() {
 	watchTermination(exitReporter(os.Stderr, "generation"), func() pobroker.ExitReason { return "" })

@@ -111,8 +111,7 @@ func (s *TransitionStore) quarantineStaleOnce(
 	return result, transitions, writes, nil
 }
 
-// quarantineStaleTx는 lease가 끝난 SENDING 그룹을 격리한다. 만료 판정은 후보 SQL의 DB 시계(checked_at)로, ledger
-// 관측 시각과 결과 불명 시도의 종료 시각은 격리 전이 문장의 DB 시계로 기록한다.
+// 만료 판정은 후보 SQL의 DB 시계(checked_at)로, ledger 관측 시각과 결과 불명 시도의 종료 시각은 격리 전이 문장의 DB 시계로 기록한다.
 func (s *TransitionStore) quarantineStaleTx(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -314,7 +313,6 @@ func quarantineFulfilledResolution(
 	return transitions, nil
 }
 
-// loadStaleSendingCandidates는 lease가 끝난 SENDING 행을 잠그고, 판정에 쓴 DB 시계를 함께 돌려준다.
 func loadStaleSendingCandidates(
 	ctx context.Context,
 	db dbx.Querier,

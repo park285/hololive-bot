@@ -57,7 +57,6 @@ type targetMinutesUpdater interface {
 	UpdateTargetMinutes([]int)
 }
 
-// recoveryCache는 scheduler의 subscriber cache 복구 판단이 요구하는 작업이다(marker Exists, 연결 WaitUntilReady).
 type recoveryCache interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	WaitUntilReady(ctx context.Context, timeout time.Duration) error

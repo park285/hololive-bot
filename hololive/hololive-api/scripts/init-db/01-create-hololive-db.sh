@@ -42,7 +42,7 @@ HOLOLIVE_DB_NAME="${HOLOLIVE_DB_NAME:-hololive}"
 HOLOLIVE_MIGRATOR_USER="${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}"
 
 # 역할별 비밀번호는 모두 필수다. 비어 있을 때 admin DB_PASSWORD로 역할을 만들던 폴백은 역할 분리를 깨므로
-# 두지 않는다(stack audit 2026-09-26, T18에서 중앙 compose.env에 세 키 확인).
+# 두지 않는다.
 HOLOLIVE_DB_PASSWORD="${HOLOLIVE_DB_PASSWORD:-}"
 HOLOLIVE_MIGRATOR_PASSWORD="${HOLOLIVE_MIGRATOR_PASSWORD:-}"
 HOLOLIVE_SCRAPER_PASSWORD="${HOLOLIVE_SCRAPER_PASSWORD:-}"

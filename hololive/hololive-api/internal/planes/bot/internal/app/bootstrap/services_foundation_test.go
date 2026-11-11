@@ -19,7 +19,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// bot plane의 Holodex 서비스는 runtime 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.
 func TestInitScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	t.Parallel()
 
@@ -69,8 +68,7 @@ func TestInitScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	}
 }
 
-// newFoundationTestMemberCache는 migration 시드 DB를 읽는 member cache다. 공식 일정 식별 색인은 멤버 적재에 실패하면
-// 기동 오류이므로 foundation 테스트도 실제 멤버 원천을 준다.
+// 공식 일정 식별 색인은 멤버 적재에 실패하면 기동 오류이므로 foundation 테스트도 실제 멤버 원천을 준다.
 func newFoundationTestMemberCache(t *testing.T) *member.Cache {
 	t.Helper()
 

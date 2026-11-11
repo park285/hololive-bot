@@ -38,7 +38,6 @@ func reachedWithSlack(now, at time.Time) bool {
 	return !now.Add(dueCheckSlack).Before(at)
 }
 
-// 채널별 Tier 스케줄 상태.
 type channelScheduleState struct {
 	nextCheckAt      time.Time
 	lastCheckedAt    time.Time
@@ -67,8 +66,7 @@ func NewTieredScheduler(logger *slog.Logger) *TieredScheduler {
 	}
 }
 
-// SelectDueChannels는 호출자의 iteration 시각 now로 due를 판정한다. UpdateChannelState도 같은 now를 받아야
-// 다음 점검 시각이 처리 시간만큼 밀리지 않는다. 전체 갱신 시각(fullRefreshAt)이 지나면 모든 채널을 반환하고 타이머를 재설정한다.
+// UpdateChannelState도 같은 now를 받아야 다음 점검 시각이 처리 시간만큼 밀리지 않는다.
 func (ts *TieredScheduler) SelectDueChannels(now time.Time, channelIDs []string) []string {
 	ts.mu.Lock()
 

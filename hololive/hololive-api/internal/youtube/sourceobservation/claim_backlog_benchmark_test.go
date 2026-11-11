@@ -10,10 +10,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// BenchmarkClaimBacklog는 활성 backlog와 PROCESSED 이력 규모별 claim 1회 실행 시간과 CTE별 읽은 행을 재는 수동 측정
-// 도구이며 gate가 아니다. 결과는 db-hotpath 계획(docs/current/plans/2026-10-05-db-hotpath-optimization.md)에 남긴다.
-//
-//	go test -run '^$' -bench BenchmarkClaimBacklog -benchtime 3x ./internal/youtube/sourceobservation
+// BenchmarkClaimBacklog는 활성 backlog와 PROCESSED 이력 규모별 claim 1회 실행 시간과 CTE별 읽은 행을 재는 수동 측정 도구이며 gate가 아니다.
 func BenchmarkClaimBacklog(b *testing.B) {
 	kinds := []string{"video_list", "shorts_list"}
 	ctes := map[string]map[string]bool{

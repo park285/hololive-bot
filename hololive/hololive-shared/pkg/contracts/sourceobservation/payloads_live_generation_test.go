@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// live_snapshot generation 1 관측은 조용히 받아들이지 않고 unsupported로 드러나야 하며, generation 2는 그대로 받는다.
 func TestLiveSnapshotRejectsRetiredGenerationOne(t *testing.T) {
 	payload := mustMarshalPayload(t, LiveSnapshotV1{
 		Sessions: []LiveSessionV1{{VideoID: testVideoID, ChannelID: testChannelID, Status: testStatusLive}},

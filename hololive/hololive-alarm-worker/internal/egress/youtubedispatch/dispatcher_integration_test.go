@@ -646,8 +646,6 @@ func runConcurrentAlarmCase(t *testing.T, tc concurrentAlarmCase) {
 	assertConcurrentAlarmSentOnce(t, dbPrimary, tc, item, contentID, postID)
 }
 
-// seedConcurrentAlarmRows는 API canonicalwrite와 같은 저장소 호출로 outbox·delivery와 함께
-// 미발송 tracking 행과 DETECTED 알람 상태 행(post 단위)을 만든다.
 func seedConcurrentAlarmRows(
 	t *testing.T,
 	db *pgxpool.Pool,
@@ -963,7 +961,6 @@ func (f *fakeSender) PrepareMessageRequest(_ context.Context, _ string, body mes
 	return body.Plain, "text", nil
 }
 
-// SendPreparedMessage는 성공이면 client request ID에서 만든 Iris requestId를 돌려준다.
 func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) (string, error) {
 	if err := f.SendMessage(ctx, room, body); err != nil {
 		return "", err

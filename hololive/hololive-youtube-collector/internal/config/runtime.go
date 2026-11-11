@@ -351,7 +351,6 @@ func validateReadablePostgresSSLRootCert(path string) error {
 	return nil
 }
 
-// validatePostgresUser: collector는 scraper 역할 DB 사용자로만 접속한다.
 func validatePostgresUser(user string) error {
 	want := runtimepolicy.PostgresScraperRoleUser
 	if strings.TrimSpace(user) != want {

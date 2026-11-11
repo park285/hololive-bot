@@ -21,8 +21,7 @@ const (
 	fenceActionHandoffQuarantine = "handoff_quarantine"
 )
 
-// handoffClaimKeyReleaseTimeout은 dlq commit 뒤 dedup claim 키 해제의 예산이다. 정산 예산과 따로 두며 runner 상태
-// 기록 예산(5s)과 같다.
+// 정산 예산과 따로 두며 runner 상태 기록 예산(5s)과 같다.
 const handoffClaimKeyReleaseTimeout = 5 * time.Second
 
 // HandoffClaim은 handoff 확인을 위해 soft claim한 send unit이다. CheckToken은 claim이 밀어 둔
@@ -75,8 +74,7 @@ var ErrHandoffCheckClosed = errors.New("handoff check closed without transition"
 // 해제가 실패했다는 뜻이다. 확인이 닫혀 해제를 다시 시도할 경로가 없으므로 키는 TTL까지 남는다.
 var ErrHandoffClaimKeysNotReleased = errors.New("handoff dlq committed but claim keys not released")
 
-// ClaimHandoffDue는 확인 시각이 된 send unit을 limit개까지 고르고 softClaim 뒤로 다음 확인을 미룬다. 확인 도중
-// 프로세스가 멈추면 단위는 softClaim 뒤에 다시 고를 수 있다.
+// 확인 도중 프로세스가 멈추면 단위는 softClaim 뒤에 다시 고를 수 있다.
 func (r *PgxRepository) ClaimHandoffDue(ctx context.Context, limit int, softClaim time.Duration) ([]HandoffClaim, error) {
 	if limit <= 0 {
 		return nil, fmt.Errorf("claim handoff checks: limit must be positive: %d", limit)
@@ -123,7 +121,7 @@ func scanHandoffClaim(row pgx.CollectableRow) (HandoffClaim, error) {
 	return claim, nil
 }
 
-// CompleteHandoff는 handoff 완료를 확인으로 기록한다. 멤버는 sent 그대로다.
+// 멤버는 sent 그대로다.
 func (r *PgxRepository) CompleteHandoff(ctx context.Context, claim *HandoffClaim) error {
 	return r.applyHandoff(ctx, fenceActionHandoffComplete, handoffCompleteSQL, claim)
 }
@@ -163,19 +161,16 @@ func (r *PgxRepository) ReissueAfterHandoff(ctx context.Context, claim *HandoffC
 		retryAfter.Milliseconds(), sanitizeStoredError(detail), code, nextID)
 }
 
-// DLQAfterHandoff는 재발급 예산이 없는 Iris failed를 멤버 전원의 dlq(attempt + 1)로 끝낸다.
 func (r *PgxRepository) DLQAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
 	return r.applyHandoff(ctx, fenceActionHandoffDLQ, handoffDLQSQL, claim, sanitizeStoredError(detail), code)
 }
 
-// QuarantineAfterHandoff는 handoff 결과 불명을 멤버 전원의 quarantined로 끝낸다.
 func (r *PgxRepository) QuarantineAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
 	return r.applyHandoff(ctx, fenceActionHandoffQuarantine, handoffQuarantineSQL, claim, sanitizeStoredError(detail), code)
 }
 
-// applyHandoff는 handoff fence 인자(단위·토큰·요청 ID·Iris requestId) 뒤에 전이별 인자를 붙여 적용한다. 대상은 claim
-// 때의 고정 멤버 전원이다. 미스인데 확인 소유가 남았으면 같은 문장이 확인을 닫았으므로 ErrHandoffCheckClosed를 함께
-// 감싼다. 잠근 멤버가 없어 관측 행이 없는 미스도 문장이 돌려준 확인 소유로 판별한다.
+// 대상은 claim 때의 고정 멤버 전원이다. 미스인데 확인 소유가 남았으면 같은 문장이 확인을 닫았으므로 ErrHandoffCheckClosed를 함께 감싼다. 잠근 멤버가 없어 관측 행이 없는 미스도 문장이
+// 돌려준 확인 소유로 판별한다.
 func (r *PgxRepository) applyHandoff(ctx context.Context, action, query string, claim *HandoffClaim, extra ...any) error {
 	if claim == nil || len(claim.DeliveryIDs) == 0 {
 		return fmt.Errorf("%s: claim has no pinned deliveries", action)
@@ -212,8 +207,7 @@ func (r *PgxRepository) applyHandoff(ctx context.Context, action, query string, 
 	return err
 }
 
-// handoffRow는 handoff 적용 문장의 결과 한 행이다. 문장은 단위의 확인 소유(토큰·요청 일치) check_held를 모든 행에
-// 싣고, 잠근 멤버가 없으면 관측 열이 NULL인 행 하나로 확인 소유만 돌려준다. 그 행이 멤버 관측일 때만 member가 참이다.
+// 문장은 단위의 확인 소유(토큰·요청 일치) check_held를 모든 행에 싣고, 잠근 멤버가 없으면 관측 열이 NULL인 행 하나로 확인 소유만 돌려준다. 그 행이 멤버 관측일 때만 member가 참이다.
 type handoffRow struct {
 	observation sendfence.Observation
 	member      bool
@@ -270,7 +264,6 @@ func NewHandoffConsumer(repository HandoffRepository, claimReleaser ClaimKeyRele
 	return &HandoffConsumer{repository: repository, claimReleaser: claimReleaser}, nil
 }
 
-// ClaimHandoffDue는 확인 시각이 된 send unit을 soft claim한다.
 func (c *HandoffConsumer) ClaimHandoffDue(ctx context.Context, limit int, softClaim time.Duration) ([]HandoffClaim, error) {
 	claims, err := c.repository.ClaimHandoffDue(ctx, limit, softClaim)
 	if err != nil {
@@ -280,7 +273,6 @@ func (c *HandoffConsumer) ClaimHandoffDue(ctx context.Context, limit int, softCl
 	return claims, nil
 }
 
-// CompleteHandoff는 handoff 완료를 확인으로 기록한다.
 func (c *HandoffConsumer) CompleteHandoff(ctx context.Context, claim *HandoffClaim) error {
 	if err := c.repository.CompleteHandoff(ctx, claim); err != nil {
 		return fmt.Errorf("complete alarm handoff check: %w", err)
@@ -289,7 +281,6 @@ func (c *HandoffConsumer) CompleteHandoff(ctx context.Context, claim *HandoffCla
 	return nil
 }
 
-// RescheduleHandoff는 전이 없이 다음 확인을 예약한다.
 func (c *HandoffConsumer) RescheduleHandoff(ctx context.Context, claim *HandoffClaim, step, horizon time.Duration) error {
 	if err := c.repository.RescheduleHandoff(ctx, claim, step, horizon); err != nil {
 		return fmt.Errorf("reschedule alarm handoff check: %w", err)
@@ -298,8 +289,7 @@ func (c *HandoffConsumer) RescheduleHandoff(ctx context.Context, claim *HandoffC
 	return nil
 }
 
-// ReissueAfterHandoff는 Iris failed를 다음 요청 세대의 retry로 되돌린다. 세대를 모두 썼으면
-// sendfence.ErrGenerationExhausted, fence 미스는 *sendfence.MissError다.
+// 세대를 모두 썼으면 sendfence.ErrGenerationExhausted, fence 미스는 *sendfence.MissError다.
 func (c *HandoffConsumer) ReissueAfterHandoff(ctx context.Context, claim *HandoffClaim, retryAfter time.Duration, code, detail string) error {
 	if err := c.repository.ReissueAfterHandoff(ctx, claim, retryAfter, code, detail); err != nil {
 		return fmt.Errorf("reissue alarm request after handoff failure: %w", err)
@@ -330,7 +320,6 @@ func (c *HandoffConsumer) DLQAfterHandoff(ctx context.Context, claim *HandoffCla
 	return nil
 }
 
-// QuarantineAfterHandoff는 handoff 결과 불명을 격리한다.
 func (c *HandoffConsumer) QuarantineAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
 	if err := c.repository.QuarantineAfterHandoff(ctx, claim, code, detail); err != nil {
 		return fmt.Errorf("quarantine alarm handoff outcome: %w", err)

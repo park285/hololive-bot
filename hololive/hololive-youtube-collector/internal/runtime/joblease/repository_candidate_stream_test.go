@@ -10,7 +10,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// 실제 scan을 한 번 성공시킨 다음 스트림 오류를 주입한다.
 type interruptedCandidateRows struct {
 	pgx.Rows
 

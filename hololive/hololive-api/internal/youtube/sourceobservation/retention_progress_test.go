@@ -16,7 +16,6 @@ var protectedPrefixRetention = RetentionConfig{
 	BatchSize:         1000,
 }
 
-// seedProtectedPrefix는 queue가 보호하는 만료 원본 protected건 뒤에 삭제 가능한 만료 원본 하나를 둔다.
 func seedProtectedPrefix(t *testing.T, pool *pgxpool.Pool, protected int) {
 	t.Helper()
 
@@ -45,7 +44,6 @@ func seedProtectedPrefix(t *testing.T, pool *pgxpool.Pool, protected int) {
 	require.NoError(t, err)
 }
 
-// 삭제 0건인 보호 창을 지나 같은 tick에서 뒤쪽 삭제 가능 원본을 지우고, 순회를 마치면 멈춰 후속 정리를 실행한다.
 func TestRetentionPassesProtectedWindowAndContinuesLaterSteps(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -97,7 +95,6 @@ func TestRetentionPassesProtectedWindowAndContinuesLaterSteps(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 1000)
 }
 
-// 창 상한에서 멈춘 순회는 프로세스 메모리가 아니라 DB 커서로 다음 tick에 이어진다.
 func TestRetentionStopsAtWindowLimitAndResumesFromCursor(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

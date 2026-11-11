@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 서로 다른 출처와 보존 보호 조건을 가진 원본 세 건을 만듭니다.
 func seedProvenanceCutoverRows(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 

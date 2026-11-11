@@ -116,7 +116,6 @@ func TestStore_GetMap(t *testing.T) {
 	}
 }
 
-// 운영 runtime 계약(alarm-worker egress)은 실제 적재된 시드로 검증을 통과해야 한다.
 func TestStore_SeedSatisfiesAlarmWorkerEgressRequirements(t *testing.T) {
 	store := loadSeededStore(t)
 

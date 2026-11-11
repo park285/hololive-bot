@@ -523,7 +523,6 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
 }
 
-// 24시간 넘게 이어지는 방송은 평가 시각 기준 24시간 창 밖으로 최초 발송이 밀려나도 같은 방에 다시 catch-up하지 않는다.
 func TestYouTubeCheckerCheck_DoesNotRepeatLiveCatchupForLongRunningStream(t *testing.T) {
 	t.Parallel()
 
@@ -588,7 +587,6 @@ func TestYouTubeCheckerCheck_DoesNotRepeatLiveCatchupForLongRunningStream(t *tes
 	assert.Equal(t, startActual.Add(-liveDispatchEvidenceLookback), persistedSource.sentRoomsSince[streamID])
 }
 
-// persistedLiveCatchupCheck는 Holodex가 비어 있을 때 저장 세션만으로 한 번 평가한 결과를 돌려준다.
 func persistedLiveCatchupCheck(t *testing.T, channelID string, source *fakeYouTubeLiveSessionSource) []*domain.AlarmNotification {
 	t.Helper()
 
@@ -627,7 +625,6 @@ func persistedLiveCatchupCheck(t *testing.T, channelID string, source *fakeYouTu
 	return notifications
 }
 
-// DLQ·격리·취소로 끝난 방은 ledger가 재발행을 rejected_terminal로 거절하므로 catchup을 매분 다시 만들지 않는다.
 func TestYouTubeCheckerCheck_SkipsLiveCatchupForTerminalFailedRoom(t *testing.T) {
 	t.Parallel()
 
@@ -662,7 +659,6 @@ func TestYouTubeCheckerCheck_SkipsLiveCatchupForTerminalFailedRoom(t *testing.T)
 	assert.Empty(t, notifications)
 }
 
-// 실제 시작 시각이 없으면 처음 LIVE로 관측한 시각을 근거 하한으로 써서 24시간을 넘긴 방송에 다시 catchup하지 않는다.
 func TestYouTubeCheckerCheck_AnchorsEvidenceOnFirstSeenWithoutActualStart(t *testing.T) {
 	t.Parallel()
 
@@ -1456,7 +1452,6 @@ func TestResolveLiveStart(t *testing.T) {
 	}
 }
 
-// Holodex가 응답하지 않아도 Holodex 한도가 주기 예산을 다 쓰지 않으므로 저장된 live session으로 이번 주기를 끝낸다.
 func TestYouTubeCheckerCheck_HolodexHangLeavesBudgetForPersistedSessions(t *testing.T) {
 	t.Parallel()
 

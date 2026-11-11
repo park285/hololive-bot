@@ -50,7 +50,6 @@ func (c *LiveCommand) Description() string {
 	return "현재 방송 중인 스트림 목록"
 }
 
-// 특정 멤버 이름이 파라미터로 주어진 경우, 해당 멤버의 방송만 필터링한다.
 func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)

@@ -30,7 +30,6 @@ type VideoPublicationV1 struct {
 	CheckedAt    time.Time              `json:"checked_at"`
 }
 
-// Validate는 공개 근거를 바꾸지 않고 상태별 필수·금지 시각과 확인 시각을 검사합니다.
 // 이 검사는 durable cursor와 envelope가 같은 규칙으로 근거를 검사하도록 경계를 공유합니다.
 func (p VideoPublicationV1) Validate(observedAt time.Time) error {
 	if p.CheckedAt.IsZero() {
@@ -69,7 +68,6 @@ func (p VideoPublicationV1) Validate(observedAt time.Time) error {
 	return nil
 }
 
-// normalizeVideoPublication은 공개 근거를 검사한 뒤 시각을 UTC로 정규화합니다.
 func normalizeVideoPublication(p *VideoPublicationV1, observedAt time.Time) error {
 	if err := p.Validate(observedAt); err != nil {
 		return err

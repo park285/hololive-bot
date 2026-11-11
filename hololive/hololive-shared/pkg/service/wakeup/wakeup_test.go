@@ -108,7 +108,6 @@ func TestWaiterConsumesSignalAndBacksOffOnTimeout(t *testing.T) {
 	}
 }
 
-// Valkey가 없거나 실패하면 poll 주기만큼 잠들어 wakeup 이전과 같은 주기로 조회한다.
 func TestWaiterFallsBackToPollInterval(t *testing.T) {
 	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 

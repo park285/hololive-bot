@@ -250,7 +250,6 @@ func TestCleanupConcurrentTerminalTimestampRefresh(t *testing.T) {
 	}
 }
 
-// 보존 기간 경계의 직전·직후에 둔 종료 행 중 기한을 넘긴 행만 지운다.
 func TestCleanupRetentionBoundaryDeletesOnlyExpiredRows(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()

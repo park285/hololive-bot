@@ -57,8 +57,7 @@ func (c *Consumer) PinSendRequest(ctx context.Context, envelopes []domain.AlarmQ
 	return pinned, nil
 }
 
-// ReissueSendRequest는 retry 예산이 남은 전체 그룹의 generation과 상태를 함께 확정한다. 인자 request는 이 claim에서
-// 읽은 고정 요청이다. 세대를 모두 썼으면 sendfence.ErrGenerationExhausted, fence 미스는 *sendfence.MissError다.
+// 인자 request는 이 claim에서 읽은 고정 요청이다. 세대를 모두 썼으면 sendfence.ErrGenerationExhausted, fence 미스는 *sendfence.MissError다.
 func (c *Consumer) ReissueSendRequest(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, request *SendRequest) error {
 	repository, err := c.sendRequestRepository()
 	if err != nil {

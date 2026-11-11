@@ -47,7 +47,6 @@ func newAmbiguousMatcher() *matcher.Matcher {
 	return matcher.NewMatcher(provider, nil, slog.New(slog.DiscardHandler))
 }
 
-// alarm은 이미 동명이인 응답을 보내므로 목표 메시지의 기준점이다.
 func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) string {
 	t.Helper()
 

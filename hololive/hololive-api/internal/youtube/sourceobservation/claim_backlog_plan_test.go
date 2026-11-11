@@ -34,11 +34,8 @@ var claimBacklogActiveCTEs = map[string]bool{
 	"CTE active_backlog": true,
 }
 
-// claimBacklogDeadLetterCTEs는 attempts exhausted·replay epoch 만료 분류 CTE다. 시도 소진 분류(exhausted_candidates)는
-// materialized 활성 backlog에서 due 행을 골라 queue PK로만 잠그므로 queue를 따로 읽지 않는다. 이전 SQL은 queue를 다시
-// 읽어 이 fixture(PG 18.6)에서 활성 행 50,001개를, 활성 20만·PROCESSED 이력 20만 행에서는 이력까지 40만 행을
-// 읽었다(BenchmarkClaimBacklog). 활성 epoch가 없으면 replay_expired_candidates도 행을 읽지 않는다. 그래서 두 CTE에
-// 후보 잠금 상한을 적용한다.
+// 시도 소진 분류(exhausted_candidates)는 materialized 활성 backlog에서 due 행을 골라 queue PK로만 잠그므로 queue를 따로 읽지 않는다. … 활성 epoch가 없으면
+// replay_expired_candidates도 행을 읽지 않는다. 그래서 두 CTE에 후보 잠금 상한을 적용한다.
 var claimBacklogDeadLetterCTEs = map[string]bool{
 	"CTE exhausted_candidates":      true,
 	"CTE replay_expired_candidates": true,
@@ -56,7 +53,6 @@ type claimBacklogPlanNode struct {
 	Plans            []claimBacklogPlanNode `json:"Plans"`
 }
 
-// claimBacklogVisits는 지정한 CTE의 테이블 조회 또는 materialized CTE 재조회에서 반환·폐기한 행을 더한다.
 func claimBacklogVisits(node *claimBacklogPlanNode, ctes map[string]bool, inScope bool) float64 {
 	inScope = inScope || ctes[node.Subplan]
 
@@ -73,15 +69,13 @@ func claimBacklogVisits(node *claimBacklogPlanNode, ctes map[string]bool, inScop
 	return visits
 }
 
-// seedClaimBacklog는 API가 오래 멈춘 뒤의 활성 backlog를 만든다: PENDING 5만 행, 그중 shorts 2천 행(채널 200개).
 func seedClaimBacklog(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
 	seedClaimBacklogRows(t, pool, 50000, 0)
 }
 
-// seedClaimBacklogRows는 PENDING 활성 행 active개(앞 4%는 shorts, 채널 200개)와 이미 처리된 PROCESSED 이력
-// history개(4%는 shorts)를 만든다. 이력은 같은 kind·채널의 과거 관측이라 kind 조건으로는 걸러지지 않는다.
+// 이력은 같은 kind·채널의 과거 관측이라 kind 조건으로는 걸러지지 않는다.
 func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int) {
 	tb.Helper()
 

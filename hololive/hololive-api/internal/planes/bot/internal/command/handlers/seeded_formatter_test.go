@@ -9,8 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
-// newSeededTestFormatter는 시드 message_strings를 적재한 formatter를 만든다. 코드 대체 문구가 없으므로
-// renderer가 없는 formatter의 응답도 DB 정본 문구(command_processing_failed)에서만 나온다.
+// 코드 대체 문구가 없으므로 renderer가 없는 formatter의 응답도 DB 정본 문구(command_processing_failed)에서만 나온다.
 func newSeededTestFormatter(t *testing.T) *formatter.ResponseFormatter {
 	t.Helper()
 

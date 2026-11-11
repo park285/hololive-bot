@@ -29,7 +29,6 @@ func newLiveCatchupSuppressionItem(t *testing.T) (domain.YouTubeNotificationOutb
 	}, scheduledAt
 }
 
-// newLiveCatchupSuppressionGrouper는 roomID별 upcoming marker 원문을 miniredis에 넣은 grouper를 만든다.
 func newLiveCatchupSuppressionGrouper(t *testing.T, item *domain.YouTubeNotificationOutbox, scheduledAt time.Time, markers map[string]string) *OutboxGrouper {
 	t.Helper()
 

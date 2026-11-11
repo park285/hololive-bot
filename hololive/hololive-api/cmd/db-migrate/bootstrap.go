@@ -14,14 +14,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-// bootstrapScraperRole은 migration과 collector가 공유하는 고정 scraper 역할을 준비한다.
-//
-// POSTGRES_ADMIN_PASSWORD가 명시되지 않으면 순수 migrate(롤백) 경로로 보고 bootstrap을
-// 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로 admin 접속을 시도해 순수
-// migrate가 깨지기 때문이다. 참고로 compose는 POSTGRES_ADMIN_PASSWORD를 항상 설정한다.
-//
-// 역할 bootstrap을 할 때 HOLOLIVE_SCRAPER_PASSWORD는 필수다. 비어 있을 때 admin 비밀번호로 scraper role을 ALTER하면
-// 역할 분리가 깨지므로, 대신할 값을 찾지 않고 실패한다.
+// POSTGRES_ADMIN_PASSWORD가 명시되지 않으면 순수 migrate(롤백) 경로로 보고 bootstrap을 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로
+// admin 접속을 시도해 순수 migrate가 깨지기 때문이다. … 역할 bootstrap을 할 때 HOLOLIVE_SCRAPER_PASSWORD는 필수다. 비어 있을 때 admin 비밀번호로 scraper
+// role을 ALTER하면 역할 분리가 깨지므로, 대신할 값을 찾지 않고 실패한다.
 func bootstrapScraperRole(ctx context.Context) error {
 	adminPassword := os.Getenv("POSTGRES_ADMIN_PASSWORD")
 	if strings.TrimSpace(adminPassword) == "" {

@@ -23,8 +23,6 @@ func TestFailureRecordingTimeoutRecoversExpiredLease(t *testing.T) {
 	}
 }
 
-// testFailureRecordingTimeoutRecovery는 기록 실패 뒤 다음 claim이 처리되고, 실패한 행은 PROCESSING으로 남았다가
-// lease 만료 뒤 기존 claim 경로로 회수되는지 확인한다.
 func testFailureRecordingTimeoutRecovery(t *testing.T, operation string) {
 	t.Helper()
 

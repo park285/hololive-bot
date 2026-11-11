@@ -32,8 +32,6 @@ func TestAlarmDispatchRunnerMultiEnvelope503StillRetries(t *testing.T) {
 	require.Len(t, consumer.scheduledSendingRetry, 2, "definitive not-admitted status keeps group-size-independent retry")
 }
 
-// 방송 알림 그룹도 저장된 send-unit ID로 보내므로 ambiguous 실패를 같은 ID로 재시도한다. Karing과 Text 사이의 경로 전환이
-// 없어져 방 기준 그룹을 따로 quarantine할 이유가 없다.
 func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousStreamFailure(t *testing.T) {
 	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
 	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
@@ -101,8 +99,6 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailur
 	assert.Equal(t, first.ClientRequestID, retryID)
 }
 
-// migration 141 이전 delivery를 claim하던 legacy_head와 그룹 구성에서 ID를 파생하던 폴백을 지웠다. 저장된
-// send-unit client_request_id가 없는 그룹은 파생 ID로 보내지 않고 발송 전 실패로 드러낸다.
 func TestAlarmDispatchRunnerRefusesGroupWithoutPersistedSendUnitIdentity(t *testing.T) {
 	t.Parallel()
 

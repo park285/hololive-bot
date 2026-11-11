@@ -160,7 +160,7 @@ func outboxKind(kind contract.ObservationKind) domain.OutboxKind {
 	return domain.OutboxKindNewVideo
 }
 
-// notificationContentID는 알림 content ID를 정규화한다. 정규화할 수 없는 ID는 빈 문자열이다.
+// 정규화할 수 없는 ID는 빈 문자열이다.
 func notificationContentID(kind contract.ObservationKind, videoID string) string {
 	contentID, err := ytcontentid.ForOutboxKind(outboxKind(kind), videoID)
 	if err != nil {

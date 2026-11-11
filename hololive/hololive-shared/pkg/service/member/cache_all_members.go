@@ -53,7 +53,6 @@ type allMembersState struct {
 	hasSuccessful bool
 }
 
-// newAllMembersState는 적재 결과로 성공 상태를 만든다. Nil 멤버는 snapshot에서 뺀다.
 func newAllMembersState(members []*domain.Member, generation uint64, loadedAt time.Time) *allMembersState {
 	snapshot, index := newMemberSnapshotIndex(members)
 
@@ -68,8 +67,7 @@ func newAllMembersState(members []*domain.Member, generation uint64, loadedAt ti
 
 var errAllMembersGenerationChanged = errors.New("member snapshot generation changed")
 
-// LoadAllMembers는 전체 멤버 목록을 돌려준다. 돌려준 slice는 호출자 소유다. 공유 적재는 호출자 취소와 분리된 상한 안에서
-// 끝까지 진행하고, 기다리던 호출자만 자기 ctx가 끝나면 즉시 ctx 오류로 빠진다.
+// 돌려준 slice는 호출자 소유다. 공유 적재는 호출자 취소와 분리된 상한 안에서 끝까지 진행하고, 기다리던 호출자만 자기 ctx가 끝나면 즉시 ctx 오류로 빠진다.
 func (c *Cache) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	snap, err := c.membersSnapshot(ctx, "all_members")
 	if err != nil {
@@ -79,8 +77,7 @@ func (c *Cache) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	return cloneMemberSlice(snap.members), nil
 }
 
-// membersSnapshot은 전체 멤버 조회와 다건 조회가 함께 쓰는 snapshot을 돌려준다. Epoch이 불확실하면 게시하지 않는 일회용
-// 상태를 PostgreSQL에서 만들어 같은 색인 규칙으로 답한다.
+// Epoch이 불확실하면 게시하지 않는 일회용 상태를 PostgreSQL에서 만들어 같은 색인 규칙으로 답한다.
 func (c *Cache) membersSnapshot(ctx context.Context, operation string) (*allMembersState, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")
@@ -149,8 +146,6 @@ func (c *Cache) loadAllMembersResult(
 	return c.staleAllMembersResult(snap, generation, err)
 }
 
-// staleAllMembersResult는 generation이 그대로이고 직전 성공 snapshot이 있으면 그것을, generation이 바뀌었으면
-// errAllMembersGenerationChanged를, 아니면 적재 오류를 돌려준다.
 func (c *Cache) staleAllMembersResult(snap *allMembersState, generation uint64, loadErr error) (*allMembersState, error) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
@@ -166,7 +161,6 @@ func (c *Cache) staleAllMembersResult(snap *allMembersState, generation uint64, 
 	return snap, nil
 }
 
-// snapshotOutcome은 적재 없이 낼 수 있는 응답이다. 성공 snapshot 또는 재시도 대기 중인 적재 오류 중 하나다.
 type snapshotOutcome struct {
 	snap *allMembersState
 	err  error
@@ -184,8 +178,6 @@ func (o snapshotOutcome) result() (*allMembersState, error) {
 	return o.snap, nil
 }
 
-// cachedSnapshotAt은 적재 없이 답할 수 있으면 ok=true와 응답을 돌려준다. 신선한 snapshot, 재시도 대기 중인 stale
-// snapshot, 재시도 대기 중인 cold 적재 오류가 여기에 해당한다.
 func (c *Cache) cachedSnapshotAt(snap *allMembersState, now time.Time) (snapshotOutcome, bool) {
 	if c.snapshotFreshAt(snap, now) {
 		return snapshotOutcome{snap: snap}, true
@@ -218,9 +210,8 @@ func (*Cache) snapshotReloadDeferred(snap *allMembersState, now time.Time) bool 
 	return snap != nil && !snap.retryAfter.IsZero() && now.Before(snap.retryAfter)
 }
 
-// loadAllMembersSnapshot은 generation별 공유 적재를 시작하거나 합류해 결과를 기다린다. 공유 적재는 첫 호출자 ctx의 값만
-// 물려받고 취소와는 분리되며 allMembersSnapshotLoadTimeout 상한을 갖는다. 기다리는 호출자는 각자 ctx가 끝나면 다른
-// 대기자와 공유 적재에 영향 없이 빠진다.
+// 공유 적재는 첫 호출자 ctx의 값만 물려받고 취소와는 분리되며 allMembersSnapshotLoadTimeout 상한을 갖는다. 기다리는 호출자는 각자 ctx가 끝나면 다른 대기자와 공유 적재에 영향 없이
+// 빠진다.
 func (c *Cache) loadAllMembersSnapshot(ctx context.Context, generation uint64) (*allMembersState, error) {
 	loader, err := c.allMembersLoader()
 	if err != nil {
@@ -255,12 +246,11 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context, generation uint64) (
 	}
 }
 
-// errAllMembersLoadPanicked는 공유 적재가 panic으로 끝났다는 실패다. Stale snapshot으로 대체하지 않는다.
+// Stale snapshot으로 대체하지 않는다.
 var errAllMembersLoadPanicked = errors.New("member snapshot load panicked")
 
-// guardedReloadAllMembersSnapshot은 공유 적재를 panic 경계 안에서 실행한다. Singleflight.DoChan은 fn panic을 새
-// goroutine에서 다시 던져 어떤 호출자도 복구할 수 없게 하므로(프로세스 종료), 여기서 복구해 명시적 오류로 바꾼다.
-// Panic은 snapshot 상태를 바꾸지 않으므로 다음 조회가 다시 적재를 시도한다.
+// Singleflight.DoChan은 fn panic을 새 goroutine에서 다시 던져 어떤 호출자도 복구할 수 없게 하므로(프로세스 종료), 여기서 복구해 명시적 오류로 바꾼다. Panic은
+// snapshot 상태를 바꾸지 않으므로 다음 조회가 다시 적재를 시도한다.
 func (c *Cache) guardedReloadAllMembersSnapshot(
 	ctx context.Context,
 	loader func(context.Context) ([]*domain.Member, error),
@@ -334,8 +324,6 @@ func (c *Cache) reloadAllMembersSnapshot(
 	return published, nil
 }
 
-// handleAllMembersLoadFailure는 항상 오류를 돌려준다. 같은 generation이면 재시도 대기 상태를 게시하고 적재 오류를,
-// 그 사이 generation이 바뀌었으면 재시도 신호를 돌려준다.
 func (c *Cache) handleAllMembersLoadFailure(
 	ctx context.Context,
 	current *allMembersState,

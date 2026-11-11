@@ -86,7 +86,6 @@ func (c *KakaoConfig) RemoveRoom(room string) bool {
 	return removed
 }
 
-// ACL이 비활성화되어 있으면 모든 방을 허용한다.
 func (c *KakaoConfig) IsRoomAllowed(_, chatID string) bool {
 	chatID = stringutil.TrimSpace(chatID)
 

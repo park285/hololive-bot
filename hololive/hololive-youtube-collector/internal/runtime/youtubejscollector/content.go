@@ -31,13 +31,12 @@ type contentKind struct {
 	tab  string
 }
 
-// contentObservation은 kind 하나의 관측과 그 checkpoint cursor입니다. 공개 근거 cursor는 video_list 관측만 싣습니다.
+// 공개 근거 cursor는 video_list 관측만 싣습니다.
 type contentObservation struct {
 	envelope contract.Envelope
 	cursor   jsontext.Value
 }
 
-// contentListFetch는 목록 RPC 결과와 envelope에 필요한 계약 세대·완결성입니다.
 type contentListFetch struct {
 	result       youtubejs.ContentResult
 	generation   int64
@@ -80,12 +79,9 @@ func (r *ContentRunner) Collect(ctx context.Context, input *collection.RunInput)
 	return out, nil
 }
 
-// collectAllowedKinds는 두 목록 RPC를 먼저 마친 뒤 video_list 공개 근거를 조회합니다. 근거 조회가 목록 RPC의 수집 기한을
-// 먼저 쓰지 않게 하려는 순서입니다. 부분 결과는 기존 정책대로 video_list 관측만 싣습니다. 근거 조회 단계의 오류는
-// 근거 조회 실패로 강등할 수 없는 오류뿐이라 job 전체를 실패시킵니다.
-//
-// 같은 slot의 video_list가 이미 수락됐으면(DEFERRED 재시도) 목록과 근거를 다시 조회하지 않습니다. 같은 slot은 같은 관측
-// identity이므로 다시 만든 payload가 달라지면 collision이 되고 cursor 전진도 저장되지 않기 때문입니다.
+// 근거 조회가 목록 RPC의 수집 기한을 먼저 쓰지 않게 하려는 순서입니다. 부분 결과는 기존 정책대로 video_list 관측만 싣습니다. 근거 조회 단계의 오류는 근거 조회 실패로 강등할 수 없는 오류뿐이라
+// job 전체를 실패시킵니다. 같은 slot의 video_list가 이미 수락됐으면(DEFERRED 재시도) 목록과 근거를 다시 조회하지 않습니다. 같은 slot은 같은 관측 identity이므로 다시 만든
+// payload가 달라지면 collision이 되고 cursor 전진도 저장되지 않기 때문입니다.
 func (r *ContentRunner) collectAllowedKinds(
 	ctx context.Context,
 	input *collection.RunInput,
@@ -148,14 +144,12 @@ func (r *ContentRunner) collectAllowedKinds(
 	return collection.NewCompleteResult(output), nil
 }
 
-// videoListFetch는 이 slot에서 받은 video_list 목록과 직전에 수락된 공개 근거 cursor입니다.
 // List가 nil이면 video_list가 수집 대상이 아니거나, 이 slot에서 이미 수락됐거나, 탭이 없어 방출할 관측이 없습니다.
 type videoListFetch struct {
 	list  *contentListFetch
 	prior storedPublicationCursor
 }
 
-// collectVideoList는 video_list가 수집 대상이고 이 slot에서 아직 수락되지 않았을 때만 목록 RPC를 보냅니다.
 // 직전 cursor의 slot이 현재 lease slot과 같다는 것은 같은 publish tx로 이 slot의 video_list가 수락됐다는 뜻입니다.
 func (r *ContentRunner) collectVideoList(ctx context.Context, input *collection.RunInput) (videoListFetch, error) {
 	subject := input.Subject()
@@ -186,7 +180,6 @@ func (r *ContentRunner) collectVideoList(ctx context.Context, input *collection.
 	return videoListFetch{list: fetched, prior: prior}, nil
 }
 
-// videoListObservations는 받은 video_list 목록이 있으면 근거를 붙인 관측 하나를, 없으면 빈 목록을 반환합니다.
 func (r *ContentRunner) videoListObservations(
 	ctx context.Context,
 	input *collection.RunInput,
@@ -339,9 +332,8 @@ func shortsObservation(input *collection.RunInput, fetched *contentListFetch) (c
 	return contentObservation{envelope: envelope}, nil
 }
 
-// videoListObservation은 목록 항목에 영상별 공개 근거를 붙이고, 근거 조회 이력을 같은 checkpoint cursor로 남깁니다.
-// 근거 조회는 수집 기한에서 publicationReserve를 남긴 하위 기한 안에서만 하므로, 근거 조회가 끊겨도 그때까지 받은 근거와
-// 목록 관측을 발행합니다. 근거 조회 실패는 해당 항목을 근거 미수집으로 남길 뿐 목록 관측 자체를 버리지 않습니다.
+// 근거 조회는 수집 기한에서 publicationReserve를 남긴 하위 기한 안에서만 하므로, 근거 조회가 끊겨도 그때까지 받은 근거와 목록 관측을 발행합니다. 근거 조회 실패는 해당 항목을 근거 미수집으로
+// 남길 뿐 목록 관측 자체를 버리지 않습니다.
 func (r *ContentRunner) videoListObservation(
 	ctx context.Context,
 	input *collection.RunInput,
@@ -376,7 +368,6 @@ func (r *ContentRunner) videoListObservation(
 	return contentObservation{envelope: envelope, cursor: rawCursor}, nil
 }
 
-// publicationContext는 수집 기한에서 publicationReserve만큼 앞당긴 근거 조회 기한입니다. 수집 기한이 없으면 부모 문맥을 그대로 씁니다.
 func (r *ContentRunner) publicationContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	deadline, ok := ctx.Deadline()
 	if !ok {

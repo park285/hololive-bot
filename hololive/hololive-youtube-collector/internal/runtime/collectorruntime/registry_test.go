@@ -136,7 +136,6 @@ func TestChannelLiveProfileCoversScheduleLookupPayments(t *testing.T) {
 	}
 }
 
-// newTestRegistry는 모든 runner에 1초 실행 프로필을 붙여 운영 registry 생성 경로를 그대로 거칩니다.
 func newTestRegistry(runners ...collection.JobRunner) (*Registry, error) {
 	profiles := make(map[collection.JobID]ExecutionProfile, len(runners))
 	for _, runner := range runners {

@@ -124,8 +124,7 @@ func LoadedIgnoredAbsences(slots []time.Time) IgnoredAbsenceHistory {
 	return IgnoredAbsenceHistory{slots: slots, loaded: true}
 }
 
-// Slots는 이력과 적재 여부를 반환한다. 적재하지 않은 이력(false)을 빈 이력으로 해석하지 않는다.
-// 반환 slice는 읽기 전용이다.
+// 적재하지 않은 이력(false)을 빈 이력으로 해석하지 않는다. 반환 slice는 읽기 전용이다.
 func (h *IgnoredAbsenceHistory) Slots() ([]time.Time, bool) {
 	return slices.Clip(h.slots), h.loaded
 }

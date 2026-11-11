@@ -105,7 +105,6 @@ func TestCacheAllMembers_InvalidateSeparatesInFlightGeneration(t *testing.T) {
 	}
 }
 
-// 새 snapshot 게시는 generation을 올려 이전 generation의 point overlay를 통째로 무효화하고, 새 snapshot 색인만 응답한다.
 func TestCacheAllMembers_PublishSupersedesPointOverlay(t *testing.T) {
 	c := &Cache{logger: slog.New(slog.DiscardHandler)}
 	_, generation := c.allMembersView()
@@ -225,7 +224,6 @@ func TestCacheWarmUp_UsesBoundedCanonicalSnapshotOnce(t *testing.T) {
 	}
 }
 
-// PostgreSQL point 조회는 잠금 밖에서 끝나므로, 그 사이 snapshot이 교체되면 이전 generation 결과를 메모리에 넣지 않는다.
 func TestCachePointLookup_PriorGenerationResultIsNotCached(t *testing.T) {
 	c := withTestEpochAuthority(&Cache{logger: slog.New(slog.DiscardHandler)})
 
@@ -322,8 +320,7 @@ func TestCacheAllMembers_ReloadsAfterRetryBoundaryAndClearsBackoff(t *testing.T)
 	}
 }
 
-// singleflight.DoChan은 공유 적재 panic을 새 goroutine에서 다시 던져 프로세스를 끝낸다. 공유 적재 panic은 모든 대기자에게
-// 명시적 실패로 돌아오고, 만료된 성공 snapshot으로 가려지지 않으며, snapshot 상태를 바꾸지 않아 다음 적재가 복구한다.
+// singleflight.DoChan은 공유 적재 panic을 새 goroutine에서 다시 던져 프로세스를 끝낸다.
 func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 	var (
 		healthy     atomic.Bool
@@ -399,7 +396,6 @@ func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 	}
 }
 
-// PostgreSQL pool 없는 repository는 첫 조회 panic 대신 구성 오류로 거절한다.
 func TestNewMemberCacheRejectsRepositoryWithoutPool(t *testing.T) {
 	cache, err := NewMemberCache(t.Context(), &Repository{}, nil, slog.New(slog.DiscardHandler), CacheConfig{WarmUp: true})
 	if err == nil || cache != nil {

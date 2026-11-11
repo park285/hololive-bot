@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// codeTransportError는 응답을 받지 못한 요청(연결 거부·timeout·취소 등)의 code 라벨이다.
 // Prometheus의 promhttp 계측기는 이런 요청을 세지 않아 오류율의 분모와 분자가 모두 빠지므로 직접 기록한다.
 const codeTransportError = "error"
 

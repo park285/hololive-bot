@@ -55,8 +55,8 @@ func NewMessageFormatter(renderer *template.Renderer, memberNames MemberNameSour
 	return &MessageFormatter{Renderer: renderer, MemberNames: memberNames, MessageStrings: messageStrings}
 }
 
-// DisplayMemberName은 알림에 쓸 멤버 표시명을 돌려준다. 멤버 데이터(members)에 한국어 표시명이 없으면 멤버 표시명 예외 계약의
-// 종단 문구(misc/vtuber_fallback)를 쓰고 hololive_youtube_outbox_member_name_missing_total로 센다.
+// 멤버 데이터(members)에 한국어 표시명이 없으면 멤버 표시명 예외 계약의 종단 문구(misc/vtuber_fallback)를 쓰고
+// hololive_youtube_outbox_member_name_missing_total로 센다.
 func (mf *MessageFormatter) DisplayMemberName(name string) string {
 	if name = strings.TrimSpace(name); name != "" {
 		return name
@@ -73,11 +73,9 @@ type FormattedMessage struct {
 	Err     error
 }
 
-// FormatMessages는 outbox 항목을 각 항목의 template과 채널 override로 렌더링한다. Template 버전 확인은 표시명 조회가
-// 끝난 뒤 호출당 한 SQL 문장이며, 호출 시작 전에 끝난 template 저장은 모든 항목에 보인다.
-// 한 outbox를 여러 방이 받으므로 두 본문 변형을 모두 렌더하고, 방마다 발송기가 변형 하나를 고른다.
-// 결과는 items와 같은 순서·길이다. 표시명 조회·payload·template 부재·렌더 실패는 항목별 Err이고(대체 문구 없음),
-// renderer 부재·template 버전 조회 실패·취소는 결과 없이 오류다. 호출자는 오류를 모든 항목의 포맷 실패로 다룬다.
+// Template 버전 확인은 표시명 조회가 끝난 뒤 호출당 한 SQL 문장이며, 호출 시작 전에 끝난 template 저장은 모든 항목에 보인다. 한 outbox를 여러 방이 받으므로 두 본문 변형을 모두
+// 렌더하고, 방마다 발송기가 변형 하나를 고른다. 결과는 items와 같은 순서·길이다. 표시명 조회·payload·template 부재·렌더 실패는 항목별 Err이고(대체 문구 없음), renderer
+// 부재·template 버전 조회 실패·취소는 결과 없이 오류다. 호출자는 오류를 모든 항목의 포맷 실패로 다룬다.
 func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.YouTubeNotificationOutbox) ([]FormattedMessage, error) {
 	results := make([]FormattedMessage, len(items))
 	requests := make([]template.RenderRequest, 0, 2*len(items))
@@ -133,7 +131,7 @@ func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.Y
 	return results, nil
 }
 
-// messageTemplateData는 단일 항목 template 입력을 만든다. 조회 오류는 대체 문구로 바꾸지 않고 포맷 실패로 돌려준다.
+// 조회 오류는 대체 문구로 바꾸지 않고 포맷 실패로 돌려준다.
 func (mf *MessageFormatter) messageTemplateData(ctx context.Context, item *domain.YouTubeNotificationOutbox) (TemplateData, error) {
 	memberName, err := mf.GetMemberName(ctx, item.ChannelID)
 	if err != nil {
@@ -148,7 +146,7 @@ func (mf *MessageFormatter) messageTemplateData(ctx context.Context, item *domai
 	return data, nil
 }
 
-// renderTemplate는 같은 자료로 두 본문 변형을 렌더한다. 어느 변형을 보낼지는 발송기가 방 유형으로 정한다.
+// 어느 변형을 보낼지는 발송기가 방 유형으로 정한다.
 func (mf *MessageFormatter) renderTemplate(ctx context.Context, templateKey domain.TemplateKey, channelID string, data any) (delivery.MessageVariants, error) {
 	if mf.Renderer == nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render template %s: renderer is nil", templateKey)
@@ -327,8 +325,7 @@ func groupedTemplateKey(kind domain.OutboxKind) (domain.TemplateKey, error) {
 	}
 }
 
-// BuildGroupedTemplateData는 묶음 template 입력을 만든다. 항목 하나라도 payload를 읽지 못하면 빈 항목으로
-// 보내지 않고 오류를 돌려주며, 호출자는 묶음 전체를 재시도 가능한 포맷 실패로 처리한다.
+// 항목 하나라도 payload를 읽지 못하면 빈 항목으로 보내지 않고 오류를 돌려주며, 호출자는 묶음 전체를 재시도 가능한 포맷 실패로 처리한다.
 func (mf *MessageFormatter) BuildGroupedTemplateData(memberName string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) (GroupedTemplateData, error) {
 	data := GroupedTemplateData{
 		MemberName: memberName,

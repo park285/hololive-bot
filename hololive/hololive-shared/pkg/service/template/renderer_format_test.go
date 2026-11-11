@@ -9,8 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 변형 선택은 채널 override 우선순위보다 먼저 적용됩니다. 채널에 plain override만 있으면 richtext 요청은 그 override가
-// 아니라 richtext 기본값을 받고, 정의되지 않은 변형은 조회 없이 거절합니다. 단건과 배치가 같은 규칙을 씁니다.
 func TestRenderSelectsFormatBeforeChannelOverride(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	key, channel := domain.TemplateKeyCmdHelp, "channel-a"

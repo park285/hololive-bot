@@ -22,7 +22,6 @@ func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (in
 	return int(tag.RowsAffected()), nil
 }
 
-// QuarantineStaleSending은 sending_started_at이 olderThan보다 오래된 sending을 결과 불명으로 격리한다.
 func (r *PgxRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int, error) {
 	olderThanMS, err := leaseMilliseconds(olderThan)
 	if err != nil {

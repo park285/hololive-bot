@@ -28,8 +28,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// alarmMetricSet은 alarm service가 기록하는 Prometheus 수집기 묶음이다. 수집기는 alarmMetrics의 첫 호출에서만
-// 만들어지고 등록되므로, 초기화되지 않은 수집기를 읽는 경로가 없다.
 type alarmMetricSet struct {
 	serviceOperationDuration *prometheus.HistogramVec
 	cacheRebuildTotal        *prometheus.CounterVec
@@ -42,7 +40,6 @@ type alarmMetricSet struct {
 // panic하므로, 반쯤 초기화된 수집기가 관측 경로에 노출되지 않는다.
 var alarmMetrics = sync.OnceValue(newAlarmMetricSet)
 
-// metricLabelOperation은 alarm service 수집기가 공통으로 쓰는 작업 이름 label이다.
 const metricLabelOperation = "operation"
 
 func newAlarmMetricSet() *alarmMetricSet {

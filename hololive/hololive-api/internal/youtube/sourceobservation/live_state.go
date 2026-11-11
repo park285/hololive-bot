@@ -59,9 +59,8 @@ func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string
 	return state, nil
 }
 
-// pendingLoadIDs는 pending을 읽고 잠글 영상만 남긴다. 동결된 D2 pending은 어떤 판정도 읽거나 바꾸지
-// 않으므로 잠그지도 읽지도 않는다. 읽지 않은 행은 Decision에 없어 다시 쓰이지 않고, pending 삭제는 dirty
-// 세션으로 한정되는데 동결 세션은 dirty가 되지 않으므로 지워지지도 않는다.
+// 동결된 D2 pending은 어떤 판정도 읽거나 바꾸지 않으므로 잠그지도 읽지도 않는다. 읽지 않은 행은 Decision에 없어 다시 쓰이지 않고, pending 삭제는 dirty 세션으로 한정되는데 동결
+// 세션은 dirty가 되지 않으므로 지워지지도 않는다.
 func pendingLoadIDs(state *live.State, ids []string) []string {
 	return slices.DeleteFunc(ids, func(videoID string) bool {
 		session, ok := state.Sessions[videoID]
@@ -130,7 +129,6 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 	return session, nil
 }
 
-// markHeadlessHistoriesLoaded는 head 행이 없는 세션의 이력을 적재된 빈 이력으로 둔다.
 // 저장된 head가 없으면 저장된 이력도 없다. 미적재로 남기면 reducer가 부재 적용에서 실패한다.
 func markHeadlessHistoriesLoaded(state *live.State) {
 	for videoID := range state.Sessions {

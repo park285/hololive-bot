@@ -63,7 +63,6 @@ func upcomingDeliveryOutcome(status Status) string {
 	}
 }
 
-// Pending은 잠근 후보의 원장·관측 snapshot으로 판정하고 같은 트랜잭션에서 일괄 저장한다.
 // Accepted는 발행 수용을 뜻하며 provider 성공이나 재발송 허가를 뜻하지 않는다.
 func (s *UpcomingCandidates) Pending(ctx context.Context, now time.Time) (_ []UpcomingCandidate, resultErr error) {
 	beginner, ok := s.db.(interface {

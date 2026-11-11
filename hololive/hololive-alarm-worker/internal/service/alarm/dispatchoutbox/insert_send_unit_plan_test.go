@@ -22,9 +22,8 @@ const (
 	insertPlanInputRows    = 10
 )
 
-// 전달 행 적재는 입력 행마다 send unit 하나를 unique(unit_key)로 찾아야 한다. 입력 recordset 열 형식이 unit_key의
-// character(64)와 다르면 비교가 text로 바뀌어 인덱스를 못 쓰고 보존 기간 안의 send unit 전체를 읽는다.
-// 운영 풀은 prepared statement를 재사용하므로 custom plan과 generic plan을 모두 확인한다.
+// 입력 recordset 열 형식이 unit_key의 character(64)와 다르면 비교가 text로 바뀌어 인덱스를 못 쓰고 보존 기간 안의 send unit 전체를 읽는다. 운영 풀은 prepared
+// statement를 재사용하므로 custom plan과 generic plan을 모두 확인한다.
 func TestInsertDeliveryBatchLooksUpSendUnitsByUnitKey(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -47,7 +46,6 @@ func TestInsertDeliveryBatchLooksUpSendUnitsByUnitKey(t *testing.T) {
 	}
 }
 
-// seedInsertPlanSendUnits는 delivery가 참조할 event 하나와 보존 기간 안의 send unit 이력을 만든다.
 func seedInsertPlanSendUnits(ctx context.Context, t *testing.T, pool *pgxpool.Pool) int64 {
 	t.Helper()
 
@@ -69,7 +67,6 @@ func seedInsertPlanSendUnits(ctx context.Context, t *testing.T, pool *pgxpool.Po
 	return eventID
 }
 
-// insertPlanInput은 운영 적재와 같은 deliveryBatchRow JSON으로 가장 최근 send unit들을 참조한다.
 func insertPlanInput(t *testing.T, eventID int64) string {
 	t.Helper()
 

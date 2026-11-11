@@ -87,7 +87,6 @@ func collabFailureCases() []collabFailureCase {
 	}
 }
 
-// collabFailureDeps는 목록 발송을 금지하고 오류 응답을 sentError에 기록하는 의존성이다.
 func collabFailureDeps(t *testing.T, tc collabFailureCase, reader collabMembersStub, sentError *string) *handlercore.Dependencies {
 	t.Helper()
 
@@ -111,7 +110,6 @@ func collabFailureDeps(t *testing.T, tc collabFailureCase, reader collabMembersS
 	}
 }
 
-// 콜라보 출연자 조회가 실패하면 출연자를 뺀 목록을 보내지 않고 각 명령의 조회 실패로 알린다.
 func TestStreamListCommandsReportCollabMemberFailure(t *testing.T) {
 	for _, tc := range collabFailureCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,7 +128,6 @@ func TestStreamListCommandsReportCollabMemberFailure(t *testing.T) {
 	}
 }
 
-// 요청 취소로 콜라보 조회가 실패하면 오류 응답 없이 취소를 돌려준다.
 func TestStreamListCommandsReturnCollabMemberCancellation(t *testing.T) {
 	for _, tc := range collabFailureCases() {
 		t.Run(tc.name, func(t *testing.T) {

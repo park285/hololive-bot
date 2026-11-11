@@ -36,7 +36,6 @@ func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string
 	return nil
 }
 
-// staleThreshold: 이 기간보다 오래된 photo는 재동기화 대상.
 func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error) {
 	staleTime := time.Now().Add(-staleThreshold)
 
@@ -65,7 +64,6 @@ func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThresh
 	return channelIDs, nil
 }
 
-// photoSizeSuffixes는 고해상도로 바꿀 YouTube 썸네일 크기 표기를 찾는 순서대로 둔다.
 var photoSizeSuffixes = []string{"=s88", "=s240", "=s800", "=s176", "=s68"}
 
 func UpgradePhotoResolution(photoURL string) string {

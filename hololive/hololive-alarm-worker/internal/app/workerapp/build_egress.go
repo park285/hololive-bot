@@ -110,8 +110,6 @@ func buildEgressRunners(
 	return runners, nil
 }
 
-// appendYouTubeDeliveryRunner는 youtube_delivery가 활성일 때 발송 runner와 고정 요청 Iris handoff reconciler를 함께
-// 등록한다.
 func appendYouTubeDeliveryRunner(
 	runners []workerruntime.NamedScheduler,
 	appConfig *workerconfig.RuntimeConfig,
@@ -152,7 +150,6 @@ func appendYouTubeDeliveryRunner(
 	), nil
 }
 
-// appendAlarmDispatchRunner는 alarm-dispatch가 활성일 때 발송 runner와 Iris handoff reconciler를 함께 등록한다.
 func appendAlarmDispatchRunner(
 	runners []workerruntime.NamedScheduler,
 	appConfig *workerconfig.RuntimeConfig,
@@ -191,8 +188,6 @@ func appendAlarmDispatchRunner(
 	), nil
 }
 
-// buildAlarmDispatchHandoffReconciler의 지평은 alarm_dispatch executor attempt timeout이고 idle 주기는 alarm_dispatch
-// poll 주기다. DLQ 뒤 dedup claim 키는 발송 runner와 같은 cache로 해제한다.
 func buildAlarmDispatchHandoffReconciler(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
@@ -220,8 +215,6 @@ func buildAlarmDispatchHandoffReconciler(
 	return reconciler, nil
 }
 
-// appendNotificationDeliveryRunner는 notification delivery가 활성일 때 발송 dispatcher와 Iris handoff reconciler를 함께
-// 등록한다.
 func appendNotificationDeliveryRunner(
 	runners []workerruntime.NamedScheduler,
 	appConfig *workerconfig.RuntimeConfig,
@@ -259,9 +252,7 @@ func appendNotificationDeliveryRunner(
 	), nil
 }
 
-// buildNotificationDeliveryHandoffReconciler의 지평은 notification_delivery profile handoff_horizon_ms이고, idle 주기와
-// failed 재발급의 시도 예산·지연은 dispatcher와 같은 notification_delivery profile 값이다. PostgreSQL 확인은 먼저 만든
-// dispatcher가 한다.
+// PostgreSQL 확인은 먼저 만든 dispatcher가 한다.
 func buildNotificationDeliveryHandoffReconciler(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
@@ -330,8 +321,7 @@ func buildDeliveryOutboxDispatcher(
 	return workerruntime.NewDeliveryOutboxDispatcherRunner(dispatcher, logger), nil
 }
 
-// notificationDeliveryDispatcherConfig는 worker profile의 notification_delivery 항목을 그대로 옮긴다. 시도 시간은
-// executor의 fixed attempt_timeout이며, profile 스키마가 fixed 모드와 값을 요구하므로 dispatcher 기본값을 쓰지 않는다.
+// 시도 시간은 executor의 fixed attempt_timeout이며, profile 스키마가 fixed 모드와 값을 요구하므로 dispatcher 기본값을 쓰지 않는다.
 func notificationDeliveryDispatcherConfig(appConfig *workerconfig.RuntimeConfig) notificationdelivery.DispatcherConfig {
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerNotificationDelivery]
 	profile := appConfig.AlarmWorkerProfile.NotificationDelivery
@@ -446,13 +436,10 @@ func alarmDispatchRunnerConfig(appConfig *workerconfig.RuntimeConfig) alarmdispa
 	}
 }
 
-// alarmDispatchHandoffHorizon은 발송 정산과 handoff reconciler가 함께 쓰는 Iris handoff 확인 기한이다.
 func alarmDispatchHandoffHorizon(appConfig *workerconfig.RuntimeConfig) time.Duration {
 	return workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.HandoffHorizonMS)
 }
 
-// loadEgressMessageStrings는 알림 발송 runner들이 함께 쓰는 message_strings를 기동 때 한 번 적재하고
-// 발송 계약 key를 검증한다. 실패하면 기동을 실패시킨다.
 func loadEgressMessageStrings(ctx context.Context, infra *sharedmodules.InfraModule, logger *slog.Logger) (*messagestrings.Store, error) {
 	if infra == nil || infra.Postgres == nil {
 		return nil, errors.New("postgres is required")
@@ -530,8 +517,7 @@ func newYouTubeOutboxDispatcher(
 	return dispatcher, nil
 }
 
-// youtubeDispatchConfig는 worker profile의 youtube_delivery 항목을 그대로 옮긴다. 생성자가 기본값을 채우지 않으므로
-// 모든 필드를 profile에서 받는다.
+// 생성자가 기본값을 채우지 않으므로 모든 필드를 profile에서 받는다.
 func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) youtubedispatch.Config {
 	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerYouTubeDelivery]

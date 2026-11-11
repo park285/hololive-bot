@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// 재사용 일정의 원래 관측 시각은 같은 lease 슬롯 시계에서 이번 슬롯보다 앞서고, 재사용 폭 안에 있어야 한다.
 func TestLiveScheduleObservationTimeMustPrecedeTheSlot(t *testing.T) {
 	statuses := slices.Clone(liveSnapshotQueryStatuses)
 	scheduled := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)

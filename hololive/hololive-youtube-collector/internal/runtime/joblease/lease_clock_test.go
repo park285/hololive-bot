@@ -10,8 +10,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// 한 전이 문장이 기록하는 시각 열은 DB 시각 하나에서 나온다. 열마다 clock_timestamp()를 부르면
-// lease_expires_at과 updated_at이 TTL보다 마이크로초 단위로 어긋난다.
+// 열마다 clock_timestamp()를 부르면 lease_expires_at과 updated_at이 TTL보다 마이크로초 단위로 어긋난다.
 func TestLeaseTransitionsStampOneDBInstant(t *testing.T) {
 	t.Parallel()
 

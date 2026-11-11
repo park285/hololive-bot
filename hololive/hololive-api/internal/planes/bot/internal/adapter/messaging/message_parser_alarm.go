@@ -166,7 +166,6 @@ func (ma *MessageAdapter) extractMemberAndType(args []string) (member, alarmType
 	return strings.Join(args, " "), ""
 }
 
-// 알람 명령 정규화.
 func normalizeCompactAlarmTokens(command string, args []string) (normalizedCommand string, normalizedArgs []string, ok bool) {
 	subCmd, ok := compactAlarmCommandMapping[command]
 	if !ok {

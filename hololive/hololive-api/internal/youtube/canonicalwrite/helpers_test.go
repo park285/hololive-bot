@@ -45,7 +45,6 @@ const (
 	alarmStateColumns = "kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status"
 )
 
-// commitVideos는 source observation Finalize처럼 트랜잭션 하나에서 PersistVideosTx를 실행하고, 오류면 롤백한다.
 func commitVideos(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -63,7 +62,6 @@ func commitVideos(
 	return nil
 }
 
-// commitCommunityPosts는 source observation Finalize처럼 트랜잭션 하나에서 PersistCommunityPostsTx를 실행하고, 오류면 롤백한다.
 func commitCommunityPosts(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -81,7 +79,6 @@ func commitCommunityPosts(
 	return nil
 }
 
-// shortPayload는 운영 producer와 같은 youtubeoutbox.Short 계약으로 payload를 만든다.
 func shortPayload(t *testing.T, video *domain.YouTubeVideo, canonicalPostID string) string {
 	t.Helper()
 
@@ -94,7 +91,6 @@ func shortPayload(t *testing.T, video *domain.YouTubeVideo, canonicalPostID stri
 	return string(data)
 }
 
-// communityPayload는 운영 producer와 같은 youtubeoutbox.Community 계약으로 payload를 만든다.
 func communityPayload(t *testing.T, post *domain.YouTubeCommunityPost, resourceID, canonicalPostID string) string {
 	t.Helper()
 
@@ -165,7 +161,6 @@ func seedDelivery(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeNotificat
 	require.NoError(t, err)
 }
 
-// seedAlarmState는 row의 알람 상태와 발송 시각으로 post 단위 알람 상태 행을 만든다.
 func seedAlarmState(t *testing.T, pool *pgxpool.Pool, row *domain.YouTubeCommunityShortsAlarmState) {
 	t.Helper()
 

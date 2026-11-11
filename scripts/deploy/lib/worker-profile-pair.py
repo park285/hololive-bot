@@ -21,7 +21,7 @@ PROFILES = {
     "youtube-collector-b": "youtube-collector-b.json",
 }
 # 모든 pair 서비스는 rootful Podman Quadlet이다. 중앙(hololive-seoul)은 API·worker·collector c, iris-seoul은
-# collector b다(2026-11-06 Docker Compose에서 전환). release 고정은 이 unit의 drop-in(DROPIN)이다.
+# collector b다. release 고정은 이 unit의 drop-in(DROPIN)이다.
 CLI = "podman"
 QUADLET_UNITS = {
     "hololive-api": "hololive-api.container",

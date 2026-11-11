@@ -11,9 +11,7 @@ import (
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
-// alarmSettingsWorker는 worker 알림 HTTP API의 PUT settings route만 흉내 낸다. 응답은 worker handler와 같은
-// {"success":..,"error":..,"message":..,"data":{"target_minutes":[..]}} envelope이다. 실제 worker handler와
-// alarmhttp client의 왕복은 alarm-worker httpapi·subscriptions 테스트가 검증하고, 여기서는 API의 설정 저장·적용 순서만 본다.
+// 실제 worker handler와 alarmhttp client의 왕복은 alarm-worker httpapi·subscriptions 테스트가 검증하고, 여기서는 API의 설정 저장·적용 순서만 본다.
 type alarmSettingsWorker struct {
 	mu      sync.Mutex
 	targets []int

@@ -108,7 +108,6 @@ func NewHandoffReconciler(store HandoffStore, client handoffcheck.ReplyStatusCli
 	}, nil
 }
 
-// Start는 ctx가 끝날 때만 반환한다. 가득 찬 batch 뒤에는 바로 다음 batch를 고르고, 그 밖에는 poll 주기만큼 쉰다.
 // 확인 실패는 Start 오류가 아니다. 첫 오류가 나면 runNamedSchedulers가 형제 egress runner를 모두 취소한다.
 func (r *HandoffReconciler) Start(ctx context.Context) error {
 	for {
@@ -134,8 +133,7 @@ func (r *HandoffReconciler) Start(ctx context.Context) error {
 	}
 }
 
-// RunOnce는 확인 시각이 된 행을 한 batch 고르고, 행마다 상태 조회와 정산을 병렬로 끝낸 뒤 고른 수를 돌려준다. 확인
-// claim은 batch 조회라 일반 연결 획득을 쓴다.
+// 확인 claim은 batch 조회라 일반 연결 획득을 쓴다.
 func (r *HandoffReconciler) RunOnce(ctx context.Context) (int, error) {
 	claimCtx, cancel := context.WithTimeout(ctx, workerconfig.NotificationDeliveryFinalizeTimeout)
 	claims, err := r.store.ClaimHandoffDue(claimCtx, notificationHandoffBatchSize, notificationHandoffSoftClaim)
@@ -191,7 +189,6 @@ func (r *HandoffReconciler) reconcile(ctx context.Context, claim *HandoffClaim) 
 	r.logOutcome(claim, decision, err)
 }
 
-// settle은 정산 슬롯을 얻어 관측을 적용한다. 예산 안에 슬롯을 얻지 못하면 적용하지 않는다.
 func (r *HandoffReconciler) settle(ctx context.Context, claim *HandoffClaim, decision handoffcheck.Decision, queryErr error) error {
 	select {
 	case r.settleSlots <- struct{}{}:
@@ -236,8 +233,7 @@ func (r *HandoffReconciler) apply(ctx context.Context, claim *HandoffClaim, deci
 	return nil
 }
 
-// logOutcome은 정산 결과를 남긴다. 적용 fence 미스는 토큰이 바뀐 소유 상실이라 다음 확인이나 다른 정산이 이어받으므로
-// 지표와 경고다. 이 원장은 다음 확인 시각이 확인 대기 SENT 행에만 있어 토큰이 남은 채 확인만 닫히는 미스가 없다.
+// 적용 fence 미스는 토큰이 바뀐 소유 상실이라 다음 확인이나 다른 정산이 이어받으므로 지표와 경고다. 이 원장은 다음 확인 시각이 확인 대기 SENT 행에만 있어 토큰이 남은 채 확인만 닫히는 미스가 없다.
 // 예산을 넘긴 정산은 soft claim 뒤 다음 확인이 토큰 CAS로 다시 판정하므로 경고다.
 func (r *HandoffReconciler) logOutcome(claim *HandoffClaim, decision handoffcheck.Decision, err error) {
 	attrs := []any{

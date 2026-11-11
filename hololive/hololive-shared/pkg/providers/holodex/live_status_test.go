@@ -11,10 +11,8 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-// officialScheduleAPIPath는 공식 일정 서비스가 요청하는 유일한 경로다.
 const officialScheduleAPIPath = "/api/list/2"
 
-// 조립된 Holodex 서비스는 /users/live 실패를 그대로 돌려주고 공식 일정 서비스로 live-status를 채우지 않는다.
 func TestProvideHolodexServiceHasNoLiveStatusScraperFallback(t *testing.T) {
 	t.Parallel()
 

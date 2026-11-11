@@ -38,7 +38,6 @@ type testActivityLogger struct{}
 
 func (testActivityLogger) Log(string, string, map[string]any) {}
 
-// roomNameRecordingAlarm은 관리자 방 이름 요청이 알림 서비스에 넘긴 이름을 기록한다.
 type roomNameRecordingAlarm struct {
 	stubAlarmCRUDForServer
 
@@ -102,8 +101,6 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 	}
 }
 
-// roomName 필드는 필수지만 공백뿐인 값은 관리자 지정 이름 해제 요청이다. 저장 폭(room_id 100자, 이름 255자)을
-// 넘는 요청은 worker를 부르지 않고 400으로 거절한다.
 func TestSettingsHandler_SetRoomName_BlankNameClearsBoundsAndMissingNameIsRejected(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -154,7 +151,6 @@ func TestSettingsHandler_SetRoomName_BlankNameClearsBoundsAndMissingNameIsReject
 	}
 }
 
-// 관리자 방 이름 로그는 room_id를 privacylog 규칙으로 기록한다. 숫자가 아닌 방 ID는 원문 대신 가명으로 남는다.
 func TestSettingsHandler_SetRoomName_LogsMaskedRoomID(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)

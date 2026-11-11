@@ -25,7 +25,6 @@ import (
 	"testing"
 )
 
-// Holodex 설정이 없으면 코드 기본값으로 대신하지 않고 오류를 돌려준다.
 func TestProvideHolodexServiceRejectsNilConfig(t *testing.T) {
 	t.Parallel()
 

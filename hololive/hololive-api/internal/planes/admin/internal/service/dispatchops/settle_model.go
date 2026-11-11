@@ -11,7 +11,6 @@ type SettleRequest struct {
 	Targets    []Revision `json:"targets"`
 }
 
-// Validate는 감사 정보와 명시적인 처리 종류·리비전을 검사합니다.
 func (r SettleRequest) Validate(id string) error {
 	if _, err := ParseID(id); err != nil {
 		return err

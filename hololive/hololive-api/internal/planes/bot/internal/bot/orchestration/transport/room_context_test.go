@@ -44,9 +44,6 @@ func TestMarkdownForRoom(t *testing.T) {
 	}
 }
 
-// formatter는 요청에 고정한 판정으로 템플릿 변형을 고르므로, SendMessage가 방 유형을 다시 판정하면 일반채팅에
-// RichText 본문이 나가거나 오픈채팅에 경로와 다른 본문이 나갈 수 있다. 판정 뒤 방 정보가 바뀌어도 경로는 고정한
-// 판정을 따라야 한다.
 func TestReplyFormatDecisionFixesRouteForRequest(t *testing.T) {
 	t.Parallel()
 

@@ -219,7 +219,6 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 		t.Errorf("ongoing event link mismatch: %q", parsed.OngoingEvents[0].Link)
 	}
 
-	// 텍스트 조립까지 검증
 	text := assembleSummaryText(&parsed)
 	assertContains(t, text, "fes 2026")
 	assertContains(t, text, "(전원)")
@@ -376,7 +375,6 @@ func TestEventSummarizer_Summarize_SingleHighlightRunsFinalReview(t *testing.T) 
 	assertContains(t, result, "Simple Event")
 }
 
-// 요약 실패는 빈 요약이 아니라 오류다.
 func TestEventSummarizer_Summarize_InvalidJSON_ReturnsError(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "not json"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
@@ -685,7 +683,6 @@ func searchStr(s, substr string) bool {
 	return false
 }
 
-// mockCache: 캐시 키 캡처용 mock (캐시 키 버전 포함 여부 검증).
 type mockCache struct {
 	getKey  string
 	setKey  string
@@ -738,7 +735,6 @@ func TestSystemPrompt_NoRealEventNamesInExample(t *testing.T) {
 				t.Fatalf("getSystemPrompt 실패: %v", err)
 			}
 
-			// <example> 블록만 추출
 			exampleStart := strings.Index(prompt, "<example>")
 			exampleEnd := strings.Index(prompt, "</example>")
 
@@ -828,7 +824,6 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 			t.Error("expected non-empty result from LLM when cache misses")
 		}
 
-		// set key에 version 포함 확인
 		expectedPrefix := fmt.Sprintf("majorevent:summary:%s:", promptVersion)
 		if !strings.HasPrefix(cache.setKey, expectedPrefix) {
 			t.Errorf("cache set key %q should start with %q", cache.setKey, expectedPrefix)
@@ -933,7 +928,6 @@ type mockSearcher struct {
 	err       error
 	mu        sync.Mutex
 	callCount int
-	// KR 쿼리("ANIPLUS" 포함) 시 다른 결과 반환
 	krResults []sharedmodel.SearchResult
 	krErr     error
 }
@@ -1304,7 +1298,6 @@ func TestNoteTruncation(t *testing.T) {
 	}
 }
 
-// 직렬화할 수 없는 행사를 빈 목록으로 바꿔 LLM에 넘기지 않고 오류로 돌려준다.
 func TestBuildUserPrompt_RejectsUnencodableEvent(t *testing.T) {
 	events := []domain.MajorEvent{{Title: "\xff"}}
 

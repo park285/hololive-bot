@@ -41,7 +41,6 @@ func runDurableWorker(
 	}
 }
 
-// newDurablePollSlot은 큐마다 하나뿐인 polling 권한이다. 토큰을 가진 유휴 worker만 timer를 돌린다.
 func newDurablePollSlot() chan struct{} {
 	slot := make(chan struct{}, 1)
 	slot <- struct{}{}
@@ -49,7 +48,6 @@ func newDurablePollSlot() chan struct{} {
 	return slot
 }
 
-// waitDurableIdle은 pollSlot을 잡은 worker만 delay timer를 돌리고, 못 잡은 worker는 wake만 기다린다.
 // 반환값 polled는 timer를 돌렸는지(backoff를 늘릴지), ok는 ctx가 살아 있는지다.
 func waitDurableIdle(ctx context.Context, delay time.Duration, wake <-chan struct{}, pollSlot chan struct{}) (polled, ok bool) {
 	select {

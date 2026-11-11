@@ -60,7 +60,6 @@ func Envelope(
 	return out, nil
 }
 
-// payloadFailure는 저장 크기 초과를 parser drift와 구별해 기존 bounded DEFER 정책으로 보낸다.
 func payloadFailure(err error) error {
 	if errors.Is(err, contract.ErrPayloadTooLarge) {
 		return collecterr.Wrap(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, err)

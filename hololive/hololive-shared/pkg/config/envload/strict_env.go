@@ -39,7 +39,6 @@ func (e *StrictEnv) Millis(key string, def time.Duration) time.Duration {
 	return e.keep(StrictDurationUnitEnv(key, def, time.Millisecond))
 }
 
-// Err는 지금까지 모은 파싱 오류를 합쳐 돌려준다. 오류가 없으면 nil이다.
 func (e *StrictEnv) Err() error {
 	return errors.Join(e.errs...)
 }

@@ -60,7 +60,6 @@ func TestConfigValidateRejectsNonPositiveSettings(t *testing.T) {
 	}
 }
 
-// claim 신선도 기간이 revive 기간과 주기의 합보다 짧으면 끌어올리지 않고 거절한다.
 func TestConfigValidateRejectsClaimWindowBelowReviveWindowPlusInterval(t *testing.T) {
 	t.Parallel()
 

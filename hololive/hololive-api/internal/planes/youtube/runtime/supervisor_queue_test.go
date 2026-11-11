@@ -78,7 +78,6 @@ func TestQueueObservationThrottleAdmitsOneConcurrentObserver(t *testing.T) {
 	}
 }
 
-// 조회 실패는 마지막 깊이·경과를 현재 값처럼 갱신하지 않고 success만 내린다. 마지막 성공 시각은 유지한다.
 func TestQueueObservationFailureKeepsLastValuesAndLowersSuccess(t *testing.T) {
 	observedAt := time.Date(2026, time.October, 14, 0, 0, 0, 0, time.UTC)
 

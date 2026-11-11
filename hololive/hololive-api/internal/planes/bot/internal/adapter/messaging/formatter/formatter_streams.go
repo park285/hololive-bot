@@ -127,9 +127,8 @@ func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.S
 	}
 }
 
-// liveElapsed는 조회 시각 asOf까지의 방송 경과를 "1시간 23분째"처럼 표기하고, 1분 미만은 "방금 시작"이다.
-// 현재 시각 대신 asOf를 써야 함께 표시하는 방송 상태와 같은 시점의 경과가 된다. 시작 시각이나 asOf가 없으면
-// 기준이 없고, 시작이 asOf보다 늦으면 시계가 어긋난 근거라서 빈 문자열을 돌려 경과를 표시하지 않는다.
+// 현재 시각 대신 asOf를 써야 함께 표시하는 방송 상태와 같은 시점의 경과가 된다. 시작 시각이나 asOf가 없으면 기준이 없고, 시작이 asOf보다 늦으면 시계가 어긋난 근거라서 빈 문자열을 돌려 경과를
+// 표시하지 않는다.
 func liveElapsed(startedAt *time.Time, asOf time.Time) string {
 	if startedAt == nil || asOf.IsZero() || startedAt.After(asOf) {
 		return ""
@@ -172,7 +171,6 @@ func limitedStreamList(streams []*domain.Stream) []*domain.Stream {
 	return streams[:streamListDisplayLimit]
 }
 
-// foldStreamList는 표시 한도를 적용한 뒤 실제로 보이는 방송 수로 접기 여부를 정한다.
 func (f *ResponseFormatter) foldStreamList(rendered string, streams []*domain.Stream) string {
 	return f.foldSeeMore(rendered, templateview.ShouldFoldItems(len(limitedStreamList(streams))))
 }

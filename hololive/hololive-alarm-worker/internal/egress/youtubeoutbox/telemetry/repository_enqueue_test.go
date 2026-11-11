@@ -193,7 +193,6 @@ func TestEnqueuePreparedChunkBoundaries(t *testing.T) {
 	}
 }
 
-// 시도 식별자 중복은 lifecycle 전이 트랜잭션 전체를 rollback해야 한다.
 func TestEnqueuePreparedRejectsDuplicateAttemptWithinBatch(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()
@@ -248,8 +247,6 @@ func TestTelemetrySurvivesOutboxRetentionDelete(t *testing.T) {
 	}
 }
 
-// chunk 단위 원자성은 의도된 계약이다: chunk 내 비-conflict 오류는 해당 chunk를
-// 통째로 롤백하고(이미 영속된 이전 chunk는 유지) 즉시 반환한다.
 func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()

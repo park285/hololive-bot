@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-// settings 파일 정본은 admin plane이 소유하므로 읽을 수 없는 파일은 admin plane 기동에서 실패해야 한다.
 func TestBuildAdminAPISettingsRejectsMalformedSettingsFile(t *testing.T) {
 	t.Parallel()
 

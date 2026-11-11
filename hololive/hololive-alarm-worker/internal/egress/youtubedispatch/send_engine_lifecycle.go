@@ -116,9 +116,8 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 	return true
 }
 
-// completeLifecycleSent는 202로 성공한 발송을 SENT로 정산하면서 같은 트랜잭션에 handoff admission을 남긴다. 첫
-// handoff 확인은 admission에서 min(5s, HandoffHorizon) 뒤다. 고정 요청이 없거나 requestId가 비었으면 CompleteSent가
-// 거절하고 행은 SENDING으로 남아 stale sweep이 격리한다.
+// 첫 handoff 확인은 admission에서 min(5s, HandoffHorizon) 뒤다. 고정 요청이 없거나 requestId가 비었으면 CompleteSent가 거절하고 행은 SENDING으로 남아
+// stale sweep이 격리한다.
 func (d *SendEngine) completeLifecycleSent(
 	ctx context.Context,
 	attempt *deliveryAttempt,
@@ -151,7 +150,6 @@ func (d *SendEngine) completeLifecycleSent(
 	return true
 }
 
-// selectDeliverableMembers는 claim된 행을 outbox와 짝지어 발송 대상으로 돌려준다.
 // 논리 식별자를 해석할 수 없는 행은 발송하지 않고 시도를 쓰는 재시도 실패로 전이한다.
 func (d *SendEngine) selectDeliverableMembers(
 	ctx context.Context,
@@ -238,7 +236,6 @@ func deliveryLogAttrs(
 	return append(baseAttrs, attrs...)
 }
 
-// lifecycleProviderFailure는 발송 오류를 lifecycle 실패 종류와 사유로 나눈다. 기본 사유는 provider_outcome_unknown이다.
 func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
 	const defaultReason = lifecycleReasonUnknownError
 

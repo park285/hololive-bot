@@ -116,7 +116,6 @@ func TestMarkSendingCannotUsePreviousOwnerAfterConcurrentReclaim(t *testing.T) {
 	require.Equal(t, testWorkerB, owner)
 }
 
-// lease를 넘겨 멈췄던 이전 소유자의 늦은 전이는 다른 worker가 재claim해 발송 중인 행을 바꾸지 않는다.
 func TestStaleOwnerTransitionsLeaveReclaimedSendingRowUntouched(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()

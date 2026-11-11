@@ -67,8 +67,6 @@ func (k pointLookupKind) operation() string {
 	return "unknown"
 }
 
-// lookupPoint는 epoch이 불확실하면 PostgreSQL을 직접 읽고, 아니면 메모리 miss에서만 PostgreSQL을 읽어 조회 시점
-// generation이 그대로일 때만 overlay에 게시한다. 미존재는 캐시하지 않는다.
 func (c *Cache) lookupPoint(ctx context.Context, kind pointLookupKind, key string) (*domain.Member, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")
@@ -93,8 +91,6 @@ func (c *Cache) lookupPoint(ctx context.Context, kind pointLookupKind, key strin
 	return dbMember, nil
 }
 
-// lookupPointInMemory는 같은 잠금 안에서 게시된 snapshot, point overlay 순으로 찾고, miss면 PostgreSQL 결과를 게시할 때
-// 쓸 generation을 함께 돌려준다. 별칭은 snapshot 규칙만 쓰고 overlay를 보지 않는다.
 func (c *Cache) lookupPointInMemory(kind pointLookupKind, key string) (*domain.Member, uint64) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
@@ -197,7 +193,7 @@ func (c *Cache) searchMembers(
 	return cloneMemberSlice(lookup(snap.index, key)), nil
 }
 
-// GetChannelIDs는 snapshot의 채널 ID 목록을, snapshot이 없으면 PostgreSQL 목록을 돌려준다. 돌려준 slice는 호출자 소유다.
+// 돌려준 slice는 호출자 소유다.
 func (c *Cache) GetChannelIDs(ctx context.Context) ([]string, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")
@@ -252,7 +248,6 @@ func (c *Cache) channelIDsFromRepository(ctx context.Context) ([]string, error) 
 	return channelIDs, nil
 }
 
-// currentSnapshotLocked는 현재 generation에 게시된 성공 snapshot을 돌려준다. 호출자가 snapshotMu를 쥔다.
 func (c *Cache) currentSnapshotLocked(generation uint64) *allMembersState {
 	snap := c.allMembersSnapshot.Load()
 	if !snapshotSuccessful(snap) || snap.generation != generation {

@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// compareAndDeleteScript: 원자적 compare-and-delete Lua 스크립트.
 const compareAndDeleteScript = `
 if redis.call('GET', KEYS[1]) == ARGV[1] then
   return redis.call('DEL', KEYS[1])
@@ -20,7 +19,6 @@ end`
 // compareAndDeleteLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
 var compareAndDeleteLua = valkey.NewLuaScript(compareAndDeleteScript)
 
-// 분산 락의 안전한 해제에 사용됩니다.
 func (c *Service) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {
 	resp := compareAndDeleteLua.Exec(ctx, c.client, []string{key}, []string{expectedValue})
 

@@ -27,7 +27,6 @@ import (
 	"log/slog"
 )
 
-// WarmUpCache는 전체 멤버 snapshot을 적재해 채널·이름·별칭 point 조회가 PostgreSQL 없이 응답하도록 한다.
 func (c *Cache) WarmUpCache(ctx context.Context) error {
 	if c == nil {
 		return errors.New("member cache is nil")

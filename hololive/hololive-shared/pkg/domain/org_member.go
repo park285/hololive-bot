@@ -74,8 +74,7 @@ func (m *Member) GetOrg() string {
 	return m.Org
 }
 
-// DisplayName은 명령 응답에 쓰는 멤버 표시명을 돌려준다. 순서는 members 정본의 short_korean_name→korean_name→english_name이며,
-// 방송기록 SQL과 같다. 표시 전용이므로 식별·검색 키로 쓰지 않는다.
+// 순서는 members 정본의 short_korean_name→korean_name→english_name이며, 방송기록 SQL과 같다. 표시 전용이므로 식별·검색 키로 쓰지 않는다.
 func (m *Member) DisplayName() string {
 	return cmp.Or(m.ShortKoreanName, m.NameKo, m.Name)
 }

@@ -159,7 +159,6 @@ func newShortClaimGateFixture(now time.Time, suffix string) (domain.YouTubeNotif
 	return delivery, outbox, postID
 }
 
-// newPendingClaimGateDispatcher는 운영과 같은 TransitionStore로 claim·prepare·발송 전이를 실행한다.
 func newPendingClaimGateDispatcher(t *testing.T, sender *claimGateTestSender) (*Dispatcher, *pgxpool.Pool) {
 	t.Helper()
 
@@ -170,7 +169,6 @@ func newPendingClaimGateDispatcher(t *testing.T, sender *claimGateTestSender) (*
 	return dispatcher, db
 }
 
-// seedPendingClaimGateDelivery는 fanout이 끝난 PENDING outbox와 testRoomCommunity의 delivery 행을 만든다.
 func seedPendingClaimGateDelivery(
 	t *testing.T,
 	db *pgxpool.Pool,
@@ -197,8 +195,7 @@ func seedPendingClaimGateDelivery(
 	return delivery
 }
 
-// recordServedClaimGateDelivery는 같은 logical ID의 재등록 outbox가 roomID에 이미 발송되어
-// SENT 행과 SENT 원장을 남긴 상태를 만든다. (kind, content_id) 유니크 때문에 content_id는 canonical 표기를 쓴다.
+// (kind, content_id) 유니크 때문에 content_id는 canonical 표기를 쓴다.
 func recordServedClaimGateDelivery(
 	t *testing.T,
 	db *pgxpool.Pool,
@@ -272,7 +269,6 @@ func requireClaimGateDeliverySent(t *testing.T, db *pgxpool.Pool, id int64) {
 	require.Nil(t, row.LockedAt, row.RoomID)
 }
 
-// 같은 room에 SENT 원장이 있으면 post 단위 상태와 무관하게 prepare 단계에서 발송 없이 SENT로 수렴한다.
 func TestProcessPendingDeliveriesSkipsRoomWithSentLedger(t *testing.T) {
 	t.Parallel()
 
@@ -344,7 +340,6 @@ func TestProcessPendingDeliveriesSkipsRoomWithSentLedger(t *testing.T) {
 	}
 }
 
-// 묶음 발송 후보 중 이 room에 SENT 원장이 있는 post만 빠지고 나머지 post는 발송된다.
 func TestProcessPendingDeliveriesFiltersSentLedgerPostOutOfGroup(t *testing.T) {
 	t.Parallel()
 
@@ -370,7 +365,6 @@ func TestProcessPendingDeliveriesFiltersSentLedgerPostOutOfGroup(t *testing.T) {
 	requireClaimGateDeliverySent(t, db, secondRow.ID)
 }
 
-// 이미 발송된 post라도 다른 room만 받았다면 이 room에도 발송하고 원장을 남긴다. 이때 post 단위 발송 시각은 가장 이른 값을 유지한다.
 func TestProcessPendingDeliveriesSendsSentPostToRoomWithoutLedger(t *testing.T) {
 	t.Parallel()
 
@@ -405,8 +399,6 @@ func TestProcessPendingDeliveriesSendsSentPostToRoomWithoutLedger(t *testing.T) 
 	require.Equal(t, alarmSentAt, state.AlarmSentAt.UTC())
 }
 
-// prepare 뒤 다른 실행이 같은 키를 SENT로 기록하면 BeginSending이 원장을 잠가 발송을 막고,
-// 잠금이 만료된 뒤 다시 claim·prepare할 때 행이 SENT로 수렴한다.
 func TestProcessPendingDeliveriesSentLedgerAfterPrepareBlocksSend(t *testing.T) {
 	t.Parallel()
 
@@ -542,7 +534,6 @@ func TestProcessPendingDeliveriesSendsPostToEveryRoomAcrossBatches(t *testing.T)
 	require.Equal(t, 2, sender.messageCount())
 }
 
-// 한 방의 발송 결과가 불명이어도 같은 post의 다른 방은 다음 라운드에서 미뤄지지 않고 바로 발송된다.
 func TestOutcomeUnknownInOneRoomDoesNotDeferOtherRoomOfSamePost(t *testing.T) {
 	t.Parallel()
 

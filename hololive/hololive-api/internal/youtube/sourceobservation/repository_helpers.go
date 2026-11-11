@@ -44,7 +44,6 @@ func lockLiveRuntimeState(ctx context.Context, tx dbx.Tx) error {
 	return nil
 }
 
-// refreshLiveRuntimeState는 이 트랜잭션이 바꿨을 수 있는 영상 key로 youtube_live_runtime_state를 한 번 재계산한다.
 // 원본 쓰기를 모두 마친 뒤 호출한다. 고정 snapshot 트랜잭션의 호출은 DB 함수가 거부하며, 빈 key는 왕복하지 않는다.
 func refreshLiveRuntimeState(ctx context.Context, tx dbx.Tx, videoIDs []string) error {
 	if len(videoIDs) == 0 {

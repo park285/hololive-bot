@@ -66,7 +66,6 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 	}
 }
 
-// auditSeedFormat은 한 변형의 기본 행이 키 목록과 정확히 같고 모든 키가 샘플 데이터로 렌더되는지 확인합니다.
 func auditSeedFormat(t *testing.T, pool *pgxpool.Pool, format domain.TemplateFormat) {
 	t.Helper()
 
@@ -123,7 +122,6 @@ func auditSeedFormat(t *testing.T, pool *pgxpool.Pool, format domain.TemplateFor
 	}
 }
 
-// auditSeedRender는 표준 실행으로 seed를 렌더링해 감사 로그를 남기고, 제한 실행 결과가 한 바이트도 다르지 않은지 확인합니다.
 func auditSeedRender(t *testing.T, key domain.TemplateKey, body string, data any) {
 	t.Helper()
 
@@ -237,7 +235,6 @@ func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
 	}
 }
 
-// 방송 목록 세 명령은 알림과 같은 "콜라보: …" 줄을 해당 방송 제목 아래에만 두고, 출연자가 없으면 줄을 만들지 않는다.
 func TestSeedTemplates_StreamListsShowCollabMembersUnderTitle(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
@@ -424,7 +421,7 @@ func hasSeedLine(out, want string) bool {
 	return false
 }
 
-// templateFormats는 두 본문 변형이다. 변형은 발송 경로의 표현만 다르고 동적 문자 보호·독립 URL 줄·빈 상태 계약은 같다.
+// 변형은 발송 경로의 표현만 다르고 동적 문자 보호·독립 URL 줄·빈 상태 계약은 같다.
 var templateFormats = []domain.TemplateFormat{domain.TemplateFormatPlain, domain.TemplateFormatRichText}
 
 func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey, format domain.TemplateFormat) string {

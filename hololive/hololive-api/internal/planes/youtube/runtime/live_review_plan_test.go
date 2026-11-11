@@ -13,7 +13,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 운영 규모의 종료 이력과 영수증이 custom/generic 어느 쪽에서도 활성 집합 비용을 지배하지 않는다.
 func TestLiveReviewQueriesBoundedPlans(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedLiveReviewPlanPopulation(t, pool)

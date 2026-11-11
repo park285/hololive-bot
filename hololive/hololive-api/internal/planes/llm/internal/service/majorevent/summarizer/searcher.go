@@ -61,7 +61,6 @@ func buildORScope(prefix string, items []string) string {
 	return "(" + strings.Join(filtered, " OR ") + ")"
 }
 
-// buildKRPartnerSearchQuery: 한국 파트너 이벤트 전용 검색 쿼리.
 func buildKRPartnerSearchQuery(periodKey string) string {
 	return fmt.Sprintf(
 		"ANIPLUS hololive live viewing %s (site:aniplus.co.kr OR ANIPLUS_SHOP OR v_square_kr OR AGF_KOREA)",
@@ -71,7 +70,6 @@ func buildKRPartnerSearchQuery(periodKey string) string {
 
 const maxSearchResults = 10
 
-// capSearchResults: 검색 결과를 최대 개수로 제한.
 func capSearchResults(results []model.SearchResult, limit int) []model.SearchResult {
 	if len(results) <= limit {
 		return results
@@ -80,7 +78,6 @@ func capSearchResults(results []model.SearchResult, limit int) []model.SearchRes
 	return results[:limit]
 }
 
-// dedupeSearchResults: URL 기반 중복 제거 (URL 없으면 Title+PublishedDate 복합키).
 func dedupeSearchResults(results []model.SearchResult) []model.SearchResult {
 	seen := make(map[string]struct{}, len(results))
 	deduped := make([]model.SearchResult, 0, len(results))

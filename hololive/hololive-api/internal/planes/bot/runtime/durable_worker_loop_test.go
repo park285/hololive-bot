@@ -21,7 +21,6 @@ func waitIdleInBackground(ctx context.Context, wake, slot chan struct{}, results
 	}()
 }
 
-// 유휴 worker 중 pollSlot을 쥔 하나만 timer를 돌린다. 나머지는 wake가 올 때까지 DB를 다시 보지 않는다.
 func TestWaitDurableIdleOnlyPollSlotHolderRunsTimer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		wake := make(chan struct{}, 1)
@@ -90,9 +89,6 @@ func TestWaitDurableIdleStopsOnCancel(t *testing.T) {
 	})
 }
 
-// 폴링 담당 worker가 행 A를 잡아 오래 처리하는 동안에도, 시간이 지나 claimable해진 행 B는 다른 worker가
-// 폴링 주기 안에 잡아야 한다. 행을 잡은 직후 보낸 wake가 다른 worker를 깨우고, 그 worker가 비어 있는 pollSlot을
-// 이어 받아 폴링을 계속하는 것이 이 안전망의 계약이다.
 func TestRunDurableWorkerKeepsPollingWhileClaimIsProcessed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const (

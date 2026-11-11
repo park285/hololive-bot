@@ -238,7 +238,6 @@ func (c deadLetterClaimer) DeadLetter(ctx context.Context, input sourceobservati
 	return nil
 }
 
-// projection refresh 성공은 DEAD_LETTER backlog 원인을 지우지 않고, queue 관측이 backlog 해소를 볼 때만 풀린다.
 func TestDeadLetterDegradationOutlivesProjectionRefresh(t *testing.T) {
 	runtime := newTestRuntime(t, fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {

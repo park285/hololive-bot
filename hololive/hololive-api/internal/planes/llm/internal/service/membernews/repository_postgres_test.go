@@ -135,7 +135,6 @@ func TestRepositoryPostgres_SubscriptionLifecycle(t *testing.T) {
 
 	assertSubscribedRooms(t, repository, []subscribedRoomView{{subRoomC, ""}, {subRoomA, "Alpha"}, {subRoomB, "Bravo"}})
 
-	// 아는 이름은 저장된 이름을 바꾸고, 모르던 이름을 채운다.
 	for _, room := range []subscribedRoomView{{subRoomA, "Alpha 2"}, {subRoomC, "Charlie"}} {
 		if err := repository.Subscribe(ctx, room.id, room.name); err != nil {
 			t.Fatalf("resubscribe %q with %q: %v", room.id, room.name, err)

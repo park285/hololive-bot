@@ -13,8 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 여러 outbox 항목을 한 번에 포맷해도 채널별 override와 기본 template 선택이 항목·변형마다 유지되고,
-// payload를 읽지 못한 항목만 실패하며 다른 항목은 정상 본문을 받는다.
 func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 	t.Parallel()
 

@@ -29,7 +29,6 @@ const (
 	subjectUCB            = "UC_B"
 )
 
-// testRetryBounds는 executor가 internal/config에서 만드는 재시도 범위를 시험용으로 고정한 값입니다.
 var testRetryBounds = collection.RetryBounds{Minimum: 100 * time.Millisecond, Maximum: time.Second}
 
 func testConfig() Config {
@@ -499,8 +498,6 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 	}
 }
 
-// changedCadenceLease는 completedInterval로 완료한 IDLE lease의 직전 slot을 slotAge 전으로 옮기고(next_due_at은
-// 그 slot + completedInterval), target 주기만 currentInterval로 바꾼 새 projection을 활성화한다.
 func changedCadenceLease(
 	t *testing.T,
 	completedInterval, currentInterval, slotAge time.Duration,
@@ -544,8 +541,6 @@ func changedCadenceLease(
 	return pool, repository, changed, previousSlot
 }
 
-// target 주기가 줄면 IDLE lease는 이전 긴 주기의 next_due_at을 기다리지 않고 현재 주기의 다음 slot에서 다시 후보가 되고
-// 획득된다. 새 slot은 직전 slot보다 늦고 현재 시각 이하이며, 현재 주기 경계에 맞는다.
 func TestShortenedCadenceReacquiresIdleLeaseBeforeOldDue(t *testing.T) {
 	t.Parallel()
 
@@ -575,7 +570,6 @@ func TestShortenedCadenceReacquiresIdleLeaseBeforeOldDue(t *testing.T) {
 	}
 }
 
-// 주기가 같거나 늘면 기존 next_due_at이 그대로 due다. 그 전에는 후보도 아니고 획득되지도 않는다.
 func TestUnchangedOrLongerCadenceKeepsIdleLeaseUntilNextDue(t *testing.T) {
 	for _, tc := range []struct {
 		name                       string
@@ -768,7 +762,6 @@ func assertRetainedDiagnostics(t *testing.T, row, deferred leaseDiagnostics) {
 	}
 }
 
-// typed failure 없이 DEFERRED로 바꾸는 이전 collector 형태의 갱신은 진단을 합성하지 않고 기존 typed 진단을 그대로 둔다.
 func TestLegacyShapedDeferNoLongerSynthesizesDiagnostics(t *testing.T) {
 	t.Parallel()
 
@@ -994,7 +987,6 @@ func assertFailureDiagnostics(t *testing.T, pool *pgxpool.Pool, jobKey, wantCode
 	}
 }
 
-// 비정상 진단·tuple은 typed 입력 생성에서 거절되고, 생성자를 거치지 않은 입력은 lease 갱신 없이 ErrInvalidJob이다.
 func TestDeferRejectsInvalidDiagnosticBounds(t *testing.T) {
 	t.Parallel()
 
@@ -1191,7 +1183,6 @@ func TestCompleteCurrentFailsClosedAfterTargetDisabledOrProjectionStale(t *testi
 	}
 }
 
-// seedSnapshotLease는 획득을 거치지 않고 snapshotProof와 같은 소유 증명의 ACTIVE lease와 membership 범위를 기록한다.
 // 인자 count는 범위 안의 활성 target 행 수이며 acquire가 기록하는 값과 같은 의미다.
 func seedSnapshotLease(t *testing.T, pool *pgxpool.Pool, spec *JobSpec, job collection.JobContract, generation int64, count int32) contract.LeaseProof {
 	t.Helper()
@@ -1465,7 +1456,6 @@ func newTestRepository(t *testing.T, pool *pgxpool.Pool) *Repository {
 	return repository
 }
 
-// Complete는 target 재검증 없이 같은 0144_11 SQL로 lease를 완료하는 시험 전용 경로입니다.
 // 운영 완료는 현재 projection과 활성 target을 확인하는 CompleteCurrent만 씁니다.
 func (l *JobLease) Complete(ctx context.Context) error {
 	if l == nil || l.repository == nil {

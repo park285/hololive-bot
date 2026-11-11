@@ -63,7 +63,6 @@ func contentClockUnchanged(t *testing.T, stored, next *content.EntityState) bool
 	return unchanged
 }
 
-// 0037이 저장하는 값 열 15개 중 하나라도 바뀌면 persist 대상이어야 한다. 비교에서 열이 빠지면 변경이 유실된다.
 func TestSameStoredContentClockDetectsEveryPersistedColumn(t *testing.T) {
 	t.Parallel()
 
@@ -192,7 +191,6 @@ func TestContentClockUpsertGuardSkipsIdenticalValues(t *testing.T) {
 	}
 }
 
-// 이번 관측에 없고 부재 판정도 없는(PARTIAL) clock은 Decision.Clocks 스냅샷에 남아도 다시 쓰지 않는다.
 func TestContentConsumerPersistsOnlyChangedClocks(t *testing.T) {
 	t.Parallel()
 

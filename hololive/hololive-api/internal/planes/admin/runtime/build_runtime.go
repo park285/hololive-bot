@@ -23,7 +23,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
-// alarmProvider는 관리 plane의 실제 consumer ports와 transport 소유권만 결합한다.
 type alarmProvider interface {
 	server.AlarmManager
 	server.RoomNameSetter

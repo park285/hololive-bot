@@ -109,14 +109,12 @@ func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name st
 // ErrCreateConflict는 같은 slug의 저장 내용이 생성 요청과 다름을 나타낸다.
 var ErrCreateConflict = errors.New("member already exists with different values")
 
-// CreateMember는 멤버 기본 정보와 채널·기수·공식 링크·날짜를 저장한다. 캐시 갱신은 호출자가 수행한다.
+// 캐시 갱신은 호출자가 수행한다.
 func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) error {
 	_, err := r.createMember(ctx, member, false)
 	return err
 }
 
-// CreateMemberOrMatch는 slug 유일성 충돌일 때만 모든 저장 필드가 같은 정본을 확인한다.
-// 일치하면 삽입을 재시도하지 않고 기존 ID와 replayed=true를 반환한다.
 func (r *Repository) CreateMemberOrMatch(ctx context.Context, member *domain.Member) (bool, error) {
 	return r.createMember(ctx, member, true)
 }

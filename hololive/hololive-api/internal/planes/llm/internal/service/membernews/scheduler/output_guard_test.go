@@ -68,7 +68,6 @@ func (failingDigestFormatter) FormatMemberNewsDigest(context.Context, *model.Dig
 	return delivery.MessageVariants{}, errors.New("template render failed")
 }
 
-// digest 렌더 실패는 대체 문구 없이 그 방의 실패로 센다.
 func TestProcessDigestForRoomCountsFormatFailureWithoutEnqueue(t *testing.T) {
 	service := &mockDigestService{digests: map[string]*model.Digest{testRoomID: {Headline: "정상 알림"}}}
 	outbox := newMockOutboxRepository()

@@ -161,7 +161,6 @@ func TestMaybeCleanupMatchCache(t *testing.T) {
 	}
 }
 
-// roster 후보가 채널명 정본이다. 후보명을 EnglishName으로 복제하던 표시 폴백은 없다.
 func TestFinalizeCandidateBuildsRosterChannel(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	mm := &Matcher{logger: logger}

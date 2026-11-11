@@ -140,7 +140,6 @@ func (r *Runner) quarantinePostSendingFailure(ctx context.Context, envelopes []d
 	return nil
 }
 
-// 재시도 허가는 Text 경로가 실제로 보낸 ID(alarmDispatchClientRequestID)가 저장된 send-unit ID일 때만 참이다.
 func hasPersistedClientRequestID(envelopes []domain.AlarmQueueEnvelope) bool {
 	return persistedAlarmDispatchClientRequestIDFromEnvelopes(envelopes) != ""
 }
@@ -166,7 +165,6 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 	return nil
 }
 
-// Transport ambiguity는 고정된 request를 재사용할 때만 허용되며 횟수 예산은 현행 값을 따른다.
 func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
 	return isAlarmDispatchNotAdmittedRetryableFailure(cause) || isAlarmDispatchAmbiguousPostSendFailure(cause)
 }
@@ -209,8 +207,7 @@ func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) [
 	return claimKeys
 }
 
-// unappliedFailureRoutingIDs는 fence 미스로 바뀌지 않은 대상을 돌려준다. 이 행들은 현재 소유자·회수 경로의 것이므로
-// 재시도하거나 claim key를 해제하지 않는다.
+// 이 행들은 현재 소유자·회수 경로의 것이므로 재시도하거나 claim key를 해제하지 않는다.
 func unappliedFailureRoutingIDs(err error) ([]int64, bool) {
 	miss, ok := errors.AsType[*sendfence.MissError](err)
 	if !ok {
@@ -265,7 +262,6 @@ func alarmDispatchMaxAttemptsForCause(cause error) int {
 	return alarmDispatchMaxAttempts
 }
 
-// alarmDispatchRetryBackoff는 attempt번째 시도 뒤 다음 시도까지의 선형 backoff(attempt*5s)다.
 func alarmDispatchRetryBackoff(attempt int) time.Duration {
 	return time.Duration(attempt) * 5 * time.Second
 }
@@ -350,8 +346,7 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 	return retry
 }
 
-// reissueFailedRequest는 pre-handoff 실패를 새 요청 세대로 다시 대기시킨다. 세대를 모두 썼거나 예산이 끝난 멤버가
-// 있으면 결과 검토를 위해 격리한다. 그 밖의 미스는 외부 호출 뒤라 행을 되돌리지 않고 오류로 보고한다.
+// 그 밖의 미스는 외부 호출 뒤라 행을 되돌리지 않고 오류로 보고한다.
 func (r *Runner) reissueFailedRequest(ctx context.Context, group alarmDispatchGroup, cause error) error {
 	retry, terminal := prepareDispatchFailure(group.envelopes, cause)
 	if len(terminal) == 0 {

@@ -101,7 +101,6 @@ func NewMaintenanceScheduler(
 	}, nil
 }
 
-// Start는 유지보수 스케줄러를 시작한다.
 func (s *MaintenanceScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
@@ -114,7 +113,6 @@ func (s *MaintenanceScheduler) Start(ctx context.Context) {
 	})
 }
 
-// Stop은 유지보수 스케줄러를 종료한다.
 func (s *MaintenanceScheduler) Stop() {
 	if s == nil {
 		return

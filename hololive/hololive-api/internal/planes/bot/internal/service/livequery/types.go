@@ -76,7 +76,6 @@ type Result struct {
 	Truncated bool
 }
 
-// ReasonCounts는 채널별 조회 사유를 운영 진단용 개수로 모은다.
 func (r Result) ReasonCounts() map[Reason]int {
 	counts := make(map[Reason]int, len(r.Channels))
 	for _, channel := range r.Channels {
@@ -86,7 +85,6 @@ func (r Result) ReasonCounts() map[Reason]int {
 	return counts
 }
 
-// DiagnosticCounts는 완전성 판정을 바꾸지 않는 보존 증거를 채널 간 합산한다.
 // 채널이 어긋난 ENDED pending은 두 관련 채널에 각각 남으므로 합계는 고유 DB 행 수가 아니다.
 func (r Result) DiagnosticCounts() Diagnostics {
 	var counts Diagnostics

@@ -284,7 +284,6 @@ func TestChannelLiveRunnerPublishesMetadataWithGenerationThree(t *testing.T) {
 	}
 }
 
-// DB current generation이 1이면 live_snapshot을 다른 형식으로 내보내지 않고 구성 오류로 끝난다.
 func TestChannelLiveRunnerRejectsRetiredLiveGenerationOne(t *testing.T) {
 	t.Parallel()
 
@@ -634,7 +633,6 @@ func exactTargets(
 	return targets
 }
 
-// channelLiveInput은 collector가 유일하게 만드는 live_snapshot generation 2 입력이다.
 func channelLiveInput(tb testing.TB) *collection.RunInput {
 	tb.Helper()
 
@@ -727,7 +725,6 @@ func (f *contentFake) FetchContent(_ context.Context, request youtubejs.ContentR
 	return f.results[request.Kind], nil
 }
 
-// FetchVideoLiveCheck는 등록되지 않은 영상에 identity 미확인 UNKNOWN 응답을 돌려줍니다.
 func (f *contentFake) FetchVideoLiveCheck(ctx context.Context, request youtubejs.VideoLiveCheckRequest) (youtubejs.VideoLiveCheckResult, error) {
 	f.videoCalls = append(f.videoCalls, request.VideoID)
 	if f.videoBlock[request.VideoID] {
@@ -754,7 +751,7 @@ func (f *contentFake) FetchVideoLiveCheck(ctx context.Context, request youtubejs
 	}, nil
 }
 
-// cursorFake는 직전 checkpoint cursor 저장소를 대신합니다. 실제 저장소 경로는 sourceobservation 저장소 테스트가 다룹니다.
+// 실제 저장소 경로는 sourceobservation 저장소 테스트가 다룹니다.
 type cursorFake struct {
 	cursor []byte
 	err    error

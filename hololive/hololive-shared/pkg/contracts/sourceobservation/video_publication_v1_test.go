@@ -49,8 +49,6 @@ func videoListGenerationEnvelope(t *testing.T, generation int64, items ...VideoL
 	return envelope
 }
 
-// generation 2는 player 단건 근거가 있는 항목, 근거 없이 시각도 없는 항목, 시각 없는 UNRESOLVED 근거를 받습니다.
-// 확인 시각이 관측 시각과 같거나 공개 시각이 확인 시각과 같은 경계도 유효합니다.
 func TestVideoListPublicationGenerationAcceptsTrustedEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -74,8 +72,6 @@ func TestVideoListPublicationGenerationAcceptsTrustedEvidence(t *testing.T) {
 	}
 }
 
-// generation 2 항목의 시각·Premiere 표시는 근거와 정확히 같아야 하고, 근거는 상태별 시각 규칙과 확인 시각 상한을 지켜야 합니다.
-// 목록 문자열에서 만든 시각을 근거 없이 싣거나 미래 공개 시각·관측 뒤의 확인 시각을 신규성 근거로 쓰지 못합니다.
 func TestVideoListPublicationGenerationRejectsUntrustedOrInconsistentEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -96,7 +92,6 @@ func TestVideoListPublicationGenerationRejectsUntrustedOrInconsistentEvidence(t 
 	}
 }
 
-// itemTimesWithoutEvidenceCases는 목록 lockup에서 얻은 시각·Premiere 표시를 근거 없이 실은 항목들입니다.
 func itemTimesWithoutEvidenceCases() map[string]func() VideoListItemV1 {
 	return map[string]func() VideoListItemV1{
 		"lockup published time without evidence": func() VideoListItemV1 {
@@ -111,7 +106,6 @@ func itemTimesWithoutEvidenceCases() map[string]func() VideoListItemV1 {
 	}
 }
 
-// itemDiffersFromEvidenceCases는 근거 자체는 유효하지만 항목 시각·Premiere 표시가 근거와 다른 항목들입니다.
 func itemDiffersFromEvidenceCases() map[string]func() VideoListItemV1 {
 	return map[string]func() VideoListItemV1{
 		"item time differs from evidence": func() VideoListItemV1 {
@@ -159,7 +153,6 @@ func itemDiffersFromEvidenceCases() map[string]func() VideoListItemV1 {
 	}
 }
 
-// invalidEvidenceCases는 항목과 근거가 같더라도 근거가 상태별 시각 규칙이나 확인 시각 상한을 어기는 항목들입니다.
 func invalidEvidenceCases() map[string]func() VideoListItemV1 {
 	return map[string]func() VideoListItemV1{
 		"unresolved evidence carrying a time": func() VideoListItemV1 {
@@ -210,7 +203,6 @@ func invalidEvidenceCases() map[string]func() VideoListItemV1 {
 	}
 }
 
-// 근거 시각은 UTC로 정규화되어 canonical payload에 남고, 저장된 payload를 다시 준비해도 같은 identity가 됩니다.
 func TestVideoListPublicationGenerationCanonicalizesAndReplays(t *testing.T) {
 	t.Parallel()
 
@@ -229,7 +221,6 @@ func TestVideoListPublicationGenerationCanonicalizesAndReplays(t *testing.T) {
 	requireReplayIdentity(t, prepared)
 }
 
-// 알 수 없는 video_list 세대는 항목이 없어도 거부합니다.
 func TestVideoListRejectsUnsupportedGeneration(t *testing.T) {
 	t.Parallel()
 
@@ -240,7 +231,6 @@ func TestVideoListRejectsUnsupportedGeneration(t *testing.T) {
 	}
 }
 
-// Shorts는 신규 영상 근거의 대상이 아니므로 Publication을 실을 수 없고, 기존 목록 시각은 그대로 받습니다.
 func TestShortsListRejectsPublication(t *testing.T) {
 	t.Parallel()
 
@@ -261,7 +251,6 @@ func TestShortsListRejectsPublication(t *testing.T) {
 	}
 }
 
-// requireReplayIdentity는 저장된 canonical payload를 다시 준비해도 payload·관측 identity가 바뀌지 않는지 확인합니다.
 func requireReplayIdentity(t *testing.T, prepared Envelope) {
 	t.Helper()
 

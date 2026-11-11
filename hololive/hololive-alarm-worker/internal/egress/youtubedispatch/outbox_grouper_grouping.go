@@ -108,8 +108,7 @@ func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domai
 	return result
 }
 
-// subscriberLookupGroup은 같은 채널·알림 종류의 조회 항목을 묶는다. UNIT B 채널은 진행자 조합마다 항목이 생기지만
-// 구독 목록은 채널·종류 단위로 같으므로 한 번만 읽는다.
+// UNIT B 채널은 진행자 조합마다 항목이 생기지만 구독 목록은 채널·종류 단위로 같으므로 한 번만 읽는다.
 type subscriberLookupGroup struct {
 	channelID string
 	alarmType domain.AlarmType
@@ -160,8 +159,7 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 	return results
 }
 
-// resolveSubscriberGroup은 묶음의 조회 결과를 각 항목 위치에 기록한다. 조회가 실패하면 묶음의 모든 항목을 실패로
-// 남겨, 항목마다 따로 조회하던 때와 같이 해당 대상의 발송을 만들지 않는다.
+// 조회가 실패하면 묶음의 모든 항목을 실패로 남겨, 항목마다 따로 조회하던 때와 같이 해당 대상의 발송을 만들지 않는다.
 func (g *OutboxGrouper) resolveSubscriberGroup(ctx context.Context, entries []channelAlarmEntry, group subscriberLookupGroup, results []subscriberLookupResult) {
 	titles := make([]string, 0, len(group.entries))
 	for _, entryIndex := range group.entries {

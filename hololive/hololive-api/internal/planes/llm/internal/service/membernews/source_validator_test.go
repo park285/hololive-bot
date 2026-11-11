@@ -68,7 +68,6 @@ func (s *stubMemberDataProvider) FindMembersByAlias(context.Context, string) ([]
 	return []*domain.Member{}, nil
 }
 
-// 공식 채널 목록을 적재하지 못하면 빈 허용 목록으로 기동하지 않고 오류다.
 func TestSourceValidator_ChannelIDLoadFailureFailsConstruction(t *testing.T) {
 	cause := errors.New("member cache unavailable")
 

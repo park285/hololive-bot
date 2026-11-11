@@ -21,8 +21,8 @@ check_nilaway() {
     nilaway_bin="$(ensure_nilaway)" || return 1
 
     # 같은 고정 바이너리의 unitchecker 경로로 의존성 fact를 Go 캐시에 재사용한다.
-    # 2026-07-04 OOM 뒤 제한한 분석 프로세스 상한(1/2)을 -p로 유지한다.
-    # vet는 패키지별 cwd로 실행하므로 진단 범위를 저장소 루트로 고정해야 한다.
+    # 메모리 고갈을 막도록 분석 프로세스 상한(1/2)을 -p로 유지한다.
+    # vet는 패키지별 cwd로 실행하므로 진단 범위를 저장소 루트로 고정한다.
     echo "[LOCAL CI] NilAway: go vet -p ${nilaway_parallel} (${#GO_PACKAGES[@]} package patterns)"
     env GOMEMLIMIT="${nilaway_gomemlimit}" GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
         go vet -p "${nilaway_parallel}" -vettool="${nilaway_bin}" -pretty-print \

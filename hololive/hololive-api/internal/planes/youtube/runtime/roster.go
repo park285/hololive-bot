@@ -131,7 +131,7 @@ func (r rosterReader) TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]
 	return videos, nil
 }
 
-// unresolvableFor는 identity를 확인할 수 없는 확인이 이어진 기간이다. 미래 시각은 추적 없음과 같다.
+// 미래 시각은 추적 없음과 같다.
 func unresolvableFor(asOf time.Time, since pgtype.Timestamptz) time.Duration {
 	if !since.Valid || !since.Time.Before(asOf) {
 		return 0
@@ -140,8 +140,7 @@ func unresolvableFor(asOf time.Time, since pgtype.Timestamptz) time.Duration {
 	return asOf.Sub(since.Time)
 }
 
-// liveCheckFreshness는 LIVE positive 또는 UPCOMING positive와 UNKNOWN을 포함한 가용성
-// 사실이다. SQL은 LIVE의 가용성을 제외하며, 미래 또는 NULL 시각은 신선도 근거가 아니다.
+// SQL은 LIVE의 가용성을 제외하며, 미래 또는 NULL 시각은 신선도 근거가 아니다.
 type liveCheckFreshness struct {
 	asOf               time.Time
 	positiveAt         pgtype.Timestamptz

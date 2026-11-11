@@ -56,7 +56,6 @@ type baseProvider struct {
 
 var sharedBase baseProvider
 
-// dbSeq는 격리 데이터베이스 이름 충돌 방지용 카운터다.
 var dbSeq atomic.Uint64
 
 func NewReplayPool(tb testing.TB) *pgxpool.Pool {
@@ -106,9 +105,7 @@ func newIsolatedPool(tb testing.TB, baseDSN, templateName string) *pgxpool.Pool 
 	return pool
 }
 
-// createIsolatedDatabase는 base DSN의 기본 데이터베이스에 admin pool로 연결해
-// 격리 DB(dbName)를 생성한다. 식별자는 내부 생성(time+seq)이라 인젝션 위험이 없으나
-// quote로 안전하게 감싼다.
+// 식별자는 내부 생성(time+seq)이라 인젝션 위험이 없으나 quote로 안전하게 감싼다.
 func createIsolatedDatabase(ctx context.Context, baseDSN, dbName, templateName string) error {
 	adminPool, err := poolForDatabase(ctx, baseDSN, "")
 	if err != nil {
@@ -129,8 +126,6 @@ func createIsolatedDatabase(ctx context.Context, baseDSN, dbName, templateName s
 	return nil
 }
 
-// openTestPool은 격리 DB에 연결된 pool을 반환한다. 연결 실패 시 best-effort로
-// 해당 DB를 drop한 뒤 원인 오류를 반환한다.
 func openTestPool(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool, error) {
 	pool, err := poolForDatabase(ctx, baseDSN, dbName)
 	if err == nil {
@@ -146,7 +141,6 @@ func openTestPool(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool, e
 	return nil, connectErr
 }
 
-// acquireBaseDSN은 공유 base DSN을 반환한다(최초 1회 확보).
 func acquireBaseDSN(tb testing.TB) string {
 	tb.Helper()
 
@@ -161,7 +155,6 @@ func acquireBaseDSN(tb testing.TB) string {
 	return sharedBase.dsn
 }
 
-// provisionBaseDSN은 외부 DB(TEST_DATABASE_URL) 또는 testcontainers ephemeral PG의 DSN을 만든다.
 // 컨테이너는 프로세스 종료 시 testcontainers reaper(Ryuk)가 회수하므로 명시적 종료를 등록하지 않는다.
 func provisionBaseDSN() (_ string, err error) {
 	if dsn := os.Getenv(testDatabaseURLEnv); dsn != "" {
@@ -323,11 +316,7 @@ func lockSessionProvisioning() (func() error, error) {
 	}, nil
 }
 
-// dropDatabase는 격리 데이터베이스를 제거한다(cleanup 경로). 실패해도 진행하는 best-effort
-// 경로지만, 에러를 반환하여 호출자가 visible하게 보고할 수 있게 한다.
-//
-// 테스트 서버는 PostgreSQL 18이므로 WITH (FORCE)만 사용하고 원래 오류를 보존한다.
-// PG<13용 재시도는 같은 만료 context를 사용해 최초 실패를 가릴 수 있다.
+// 테스트 서버는 PostgreSQL 18이므로 WITH (FORCE)만 사용하고 원래 오류를 보존한다. PG<13용 재시도는 같은 만료 context를 사용해 최초 실패를 가릴 수 있다.
 func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -345,12 +334,8 @@ func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 	return nil
 }
 
-// poolForDatabase는 base DSN을 파싱해 데이터베이스명만 교체한 *pgxpool.Pool을 만든다.
-// 빈 dbName은 base DSN의 데이터베이스를 그대로 쓴다는 뜻이다.
-//
-// URL 형식과 libpq keyword 형식(host=, dbname=)을 모두 받아야 하므로 url.Parse가 아니라
-// ParseConfig를 쓴다. TEST_DATABASE_URL이 keyword DSN으로 오면 url.Parse는 이를 깨뜨리지만,
-// ParseConfig는 두 형식을 모두 처리한다.
+// 빈 dbName은 base DSN의 데이터베이스를 그대로 쓴다는 뜻이다. … URL 형식과 libpq keyword 형식(host=, dbname=)을 모두 받아야 하므로 url.Parse가 아니라
+// ParseConfig를 쓴다. TEST_DATABASE_URL이 keyword DSN으로 오면 url.Parse는 이를 깨뜨리지만, ParseConfig는 두 형식을 모두 처리한다.
 func poolForDatabase(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(baseDSN)
 	if err != nil {
@@ -371,7 +356,6 @@ func poolForDatabase(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool
 	return pool, nil
 }
 
-// quoteIdent는 SQL 식별자를 큰따옴표로 감싸 안전하게 인용한다.
 func quoteIdent(ident string) string {
 	return `"` + strings.ReplaceAll(ident, `"`, `""`) + `"`
 }

@@ -532,7 +532,6 @@ func newMajorEventPromptGuardForSchedulerTest() *promptguard.Guard {
 	return guard
 }
 
-// 본문 렌더에 실패하면 구독 방에 대체 문구를 보내지 않고 이벤트도 표시하지 않아 다음 주기에 다시 시도한다.
 func TestSendWeeklyNotification_FormatFailure_DoesNotEnqueueOrMark(t *testing.T) {
 	repository := &mockEventRepository{
 		rooms:  testRooms(testRoomID1, testRoomID2),

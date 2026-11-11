@@ -350,7 +350,6 @@ func transitionRowKeySet(rows []transitionRow) (map[ytcontentid.LogicalKey]struc
 	return keys, nil
 }
 
-// loadReviveCandidates는 lease가 끝났고 신선한 FAILED 행을 잠그고, 판정에 쓴 DB 시계를 함께 돌려준다.
 func loadReviveCandidates(
 	ctx context.Context,
 	db dbx.Querier,

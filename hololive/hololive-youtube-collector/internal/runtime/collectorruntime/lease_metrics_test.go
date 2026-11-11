@@ -50,7 +50,6 @@ func gaugeValue(t *testing.T, registerer prometheus.Gatherer, name string, label
 	return 0, false
 }
 
-// publish terminal에서 생긴 fence 손실은 callback join 뒤 phase=publish로 한 번만 센다(collect 중복 없음).
 func TestPublishFenceLossIsCountedOnceAsPublish(t *testing.T) {
 	t.Parallel()
 
@@ -81,7 +80,6 @@ func TestPublishFenceLossIsCountedOnceAsPublish(t *testing.T) {
 	}
 }
 
-// renew가 확인한 실제 소유 손실은 phase=renew다.
 func TestRenewFenceLossIsCountedAsRenew(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +104,6 @@ func TestRenewFenceLossIsCountedAsRenew(t *testing.T) {
 	}
 }
 
-// membership 무효로 join 뒤 superseded release까지 끝난 renew는 lease 손실이 아니며 executor가 다시 해제하지 않는다.
 func TestRenewSupersededIsHandledWithoutLeaseLossOrSecondRelease(t *testing.T) {
 	t.Parallel()
 
@@ -135,7 +132,6 @@ func TestRenewSupersededIsHandledWithoutLeaseLossOrSecondRelease(t *testing.T) {
 	}
 }
 
-// 획득 시점의 membership·projection 무효는 acquire 오류가 아니라 superseded로 센다.
 func TestAcquireSupersededIsLabeled(t *testing.T) {
 	t.Parallel()
 
@@ -159,7 +155,6 @@ func TestAcquireSupersededIsLabeled(t *testing.T) {
 	}
 }
 
-// Commit된 inserted·duplicate만 수락으로 기록하고, checkpoint가 전진한 관측만 간격을 남긴다. Collision은 수락이 아니다.
 func TestObservePublishedRecordsDurableAcceptanceOnly(t *testing.T) {
 	t.Parallel()
 

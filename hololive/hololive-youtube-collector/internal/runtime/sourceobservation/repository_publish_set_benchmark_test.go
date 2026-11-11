@@ -17,12 +17,9 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// BenchmarkPublishSetLargeBatch는 배치 상한 근처(1,024행, 인코딩 약 7.8 MiB)에서 발행 SQL 한 번의 시간과
-// Go 쪽 할당을 재는 수동 측정 도구다. 절반은 이미 저장된 관측(중복), 절반은 신규다. 측정 대상이 아닌 fence 확인과
-// lease 종료는 빼고 발행 SQL만 트랜잭션에서 실행한 뒤 매번 되돌린다. 결과는 db-hotpath 계획
-// (docs/current/plans/2026-10-05-db-hotpath-optimization.md)에 남긴다.
-//
-//	go test -run '^$' -bench BenchmarkPublishSetLargeBatch -benchtime 10x ./internal/runtime/sourceobservation
+// BenchmarkPublishSetLargeBatch는 배치 상한 근처(1,024행, 인코딩 약 7.8 MiB)에서 발행 SQL 한 번의 시간과 Go 쪽 할당을 재는 수동 측정 도구다. 절반은 이미 저장된
+// 관측(중복), 절반은 신규다. 측정 대상이 아닌 fence 확인과 lease 종료는 빼고 발행 SQL만 트랜잭션에서 실행한 뒤 매번 되돌린다. … go test -run '^$' -bench
+// BenchmarkPublishSetLargeBatch -benchtime 10x ./internal/runtime/sourceobservation
 func BenchmarkPublishSetLargeBatch(b *testing.B) {
 	ctx := b.Context()
 	pool := dbtest.NewPool(b)
@@ -123,7 +120,6 @@ func (n *publishSetPlanNode) storageKB() float64 {
 	return total
 }
 
-// largePublishEnvelope는 subject마다 다른 약 7 KB community 관측을 만든다.
 func largePublishEnvelope(tb testing.TB, proof *contract.LeaseProof, ordinal int) contract.Envelope {
 	tb.Helper()
 

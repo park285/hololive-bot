@@ -242,9 +242,8 @@ func (r *BirthdayStreamRunner) publishCandidates(
 	return nil
 }
 
-// findSentRoomsForPublishedStreams는 이미 발행한 생일 방송 event가 sent로 끝난 방을 돌려준다.
-// 재평가는 늦게 생일축하를 받은 방을 찾기 위한 것이므로, 이미 받은 방은 envelope에서 빼서
-// 매 실행마다 dedupe로 버려질 delivery를 만들지 않는다. 상태가 pending·failed인 방은 envelope을 다시 만들어 dedupe에 맡긴다.
+// 재평가는 늦게 생일축하를 받은 방을 찾기 위한 것이므로, 이미 받은 방은 envelope에서 빼서 매 실행마다 dedupe로 버려질 delivery를 만들지 않는다. 상태가 pending·failed인 방은
+// envelope을 다시 만들어 dedupe에 맡긴다.
 func (r *BirthdayStreamRunner) findSentRoomsForPublishedStreams(
 	ctx context.Context,
 	candidates []birthdayStreamCandidate,
@@ -305,7 +304,6 @@ type birthdayStreamCandidate struct {
 	session BirthdayStreamSession
 }
 
-// selectPublishableSessions는 후보와 함께 후보 멤버들의 기발행 event payload를 돌려준다.
 // 재발행은 이 payload를 그대로 써야 같은 event key의 hash 충돌 없이 새 방 delivery만 추가된다.
 func (r *BirthdayStreamRunner) selectPublishableSessions(
 	ctx context.Context,

@@ -166,7 +166,6 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 	})
 }
 
-// 같은 예약 알림을 여러 방에 enqueue하고 발송기가 방마다 변형을 고르므로, 두 변형을 각자의 템플릿으로 렌더해야 한다.
 func TestRenderNotificationRendersBothTemplateVariants(t *testing.T) {
 	t.Parallel()
 

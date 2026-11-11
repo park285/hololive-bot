@@ -89,7 +89,6 @@ func tlsClientForServers(t *testing.T, servers ...*httptest.Server) *http.Client
 	return &http.Client{Transport: transport}
 }
 
-// expireRuntimeIrisSnapshot은 해석 snapshot 만료를 기다리지 않고 다음 호출이 refresh하게 한다.
 func expireRuntimeIrisSnapshot(client *RuntimeIrisClient) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
@@ -227,7 +226,6 @@ func TestRuntimeIrisClientDefaultsToReplyRetry(t *testing.T) {
 	require.Equal(t, int32(2), attempts.Load())
 }
 
-// 회전으로 교체된 client는 진행 중인 호출이 끝날 때까지 참조를 유지하고, 마지막 release에서만 닫힌다.
 func TestRuntimeIrisClientKeepsRotatedClientUntilInFlightCallReleases(t *testing.T) {
 	ctx := t.Context()
 	entered := make(chan struct{})
@@ -281,7 +279,6 @@ func TestRuntimeIrisClientKeepsRotatedClientUntilInFlightCallReleases(t *testing
 	require.Zero(t, runtimeIrisBindingRefs(client, rotatedOut), "last release must drop the rotated client")
 }
 
-// refresh는 호출 goroutine에서 실행하므로 resolver panic이 호출자에게 그대로 전파되고, 다음 호출을 막지 않는다.
 func TestRuntimeIrisClientPropagatesResolverPanic(t *testing.T) {
 	server := newRuntimeIrisReplyCounter(t, httptest.NewServer)
 	client := newTestRuntimeIrisClient(t, settings.IrisConfig{BaseURL: server.server.URL}, iris.WithHTTPClient(server.server.Client()))
@@ -575,7 +572,6 @@ func TestRuntimeIrisBaseURLResolverRejectsUncleanSymlinkTraversalInProductionStr
 	require.ErrorContains(t, err, "clean")
 }
 
-// resolver는 생성 시 받은 정책만 쓰므로 실행 중 env를 바꿔도 허용 집합이 달라지지 않는다.
 func TestRuntimeIrisBaseURLResolverIgnoresRuntimeEnvChanges(t *testing.T) {
 	baseURLFilePath := writeRuntimeIrisBaseURLFile(t, testIrisBaseURLWithSlash)
 
@@ -652,7 +648,6 @@ func writeRuntimeIrisBaseURLFile(t *testing.T, content string) string {
 	return baseURLFilePath
 }
 
-// 일반 텍스트와 RichText 위임이 각자의 wire type으로 보내고 admission requestId를 돌려준다.
 func TestRuntimeIrisClientSendMessageAcceptedReturnsRequestID(t *testing.T) {
 	for _, tc := range []struct {
 		wantType string

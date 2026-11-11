@@ -116,7 +116,7 @@ func countDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, dest *int64, wher
 	return deliveryTestSQLResult{Error: err}
 }
 
-// updateDeliveryTestRowByID는 id가 일치하는 행의 컬럼을 갱신한다. SET 값은 $2부터 컬럼 이름 순서로 붙는다.
+// SET 값은 $2부터 컬럼 이름 순서로 붙는다.
 func updateDeliveryTestRowByID(pool *pgxpool.Pool, model any, values map[string]any, id int64) deliveryTestSQLResult {
 	table := deliveryTestTableForModel(model)
 	if table == "" {

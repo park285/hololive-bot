@@ -11,8 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// PrepareMessageRequest는 설정과 방 유형을 외부 발송 전 최종 본문·경로로 고정한다. 판정은 여기서 한 번만 하며
-// 고른 경로의 변형만 쓴다.
+// 판정은 여기서 한 번만 하며 고른 경로의 변형만 쓴다.
 func (s *IrisMessageSender) PrepareMessageRequest(ctx context.Context, roomID string, message delivery.MessageVariants) (body, route string, err error) {
 	if s == nil || s.client == nil {
 		return "", "", errors.New("iris message sender: client is nil")

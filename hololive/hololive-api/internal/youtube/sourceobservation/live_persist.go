@@ -31,7 +31,6 @@ func (e *LiveSessionConflictError) Error() string {
 	return fmt.Sprintf("%s %s: row changed after locked read", e.Operation, e.VideoID)
 }
 
-// persistLiveDecision은 stored(이 트랜잭션이 잠그고 읽은 세션 행)를 기준으로 decision을 저장한다.
 func persistLiveDecision(ctx context.Context, tx dbx.Tx, stored map[string]live.SessionState, decision *live.Decision) error {
 	// 신규 행과 기존 행 모두 기존 consumer의 잠금 획득 순서를 유지한다.
 	slices.SortFunc(decision.Sessions, func(a, b live.SessionState) int { return strings.Compare(a.VideoID, b.VideoID) })
@@ -48,8 +47,7 @@ func persistLiveDecision(ctx context.Context, tx dbx.Tx, stored map[string]live.
 	return nil
 }
 
-// liveDecisionRuntimeVideoIDs는 persistLiveDecision이 수명 모델 입력을 바꿀 수 있는 영상 key를 돌려준다. 세션·head
-// 저장과 pending 삭제는 decision.Sessions, pending 저장은 decision.PendingEnds 안에 있다. 쓰지 않은 행의 key도 포함한다.
+// 쓰지 않은 행의 key도 포함한다.
 func liveDecisionRuntimeVideoIDs(decision *live.Decision) []string {
 	videoIDs := make([]string, 0, len(decision.Sessions)+len(decision.PendingEnds))
 	for i := range decision.Sessions {
@@ -81,7 +79,6 @@ func persistLiveSessions(ctx context.Context, tx dbx.Tx, stored map[string]live.
 	return nil
 }
 
-// execLiveSessionStatements는 조건부 세션 저장의 0행 적용을 영상 단위 충돌로 보고한다.
 // RequireRow를 켠 문장은 세션 저장뿐이며 첫 인자가 video_id다.
 func execLiveSessionStatements(ctx context.Context, tx dbx.Tx, statements []dbx.Statement) error {
 	err := dbx.ExecStatements(ctx, tx, statements)
@@ -117,8 +114,6 @@ func liveDecisionStatements(stored map[string]live.SessionState, sessions []live
 	return statements
 }
 
-// liveSessionWrite는 next를 저장할 문장을 만든다. 잠금 안에서 읽은 행이 없으면 새 행을, 있으면 그 행이
-// 그대로일 때만 적용되는 갱신을 만들며, 둘 다 0행 적용을 충돌로 본다. 열 값이 읽은 행과 같으면 쓰지 않는다.
 func liveSessionWrite(stored map[string]live.SessionState, next *live.SessionState) (dbx.Statement, bool) {
 	prior, ok := stored[next.VideoID]
 	if !ok || !prior.Present {
@@ -163,7 +158,6 @@ func appendLiveSessionArgs(args []any, session *live.SessionState, title any) []
 	)
 }
 
-// sameLiveSessionRow는 youtube_live_sessions에 저장되는 열만 비교한다.
 func sameLiveSessionRow(a, b *live.SessionState) bool {
 	return a.ChannelID == b.ChannelID && a.Status == b.Status && a.Title == b.Title &&
 		a.TopicID == b.TopicID && a.ThumbnailURL == b.ThumbnailURL &&

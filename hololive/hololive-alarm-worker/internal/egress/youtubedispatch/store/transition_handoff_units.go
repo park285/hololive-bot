@@ -221,8 +221,7 @@ func handoffGroupGrewMiss(action string, claim *HandoffClaim, members handoffMem
 	return nil
 }
 
-// observeHandoffUnits는 고정 멤버마다 논리 단위와 원장 출처를 뺀 sendfence 관측을 같은 순서로 만든다. 두 결과의 i번째는
-// 같은 멤버이고, 잠근 행도 읽은 행도 없는 멤버는 둘 다에서 빠진다.
+// 두 결과의 i번째는 같은 멤버이고, 잠근 행도 읽은 행도 없는 멤버는 둘 다에서 빠진다.
 func (s *TransitionStore) observeHandoffUnits(
 	claim *HandoffClaim,
 	members handoffMembers,
@@ -262,7 +261,6 @@ func (s *TransitionStore) observeHandoffUnits(
 	return units, observed
 }
 
-// indexHandoffGroupRows는 잠근 그룹 행을 id별로, 그리고 고정 멤버가 가진 논리 키별로 모은다.
 func indexHandoffGroupRows(
 	locked []transitionRow,
 	ownersByKey map[ytcontentid.LogicalKey]int,
@@ -286,7 +284,6 @@ func indexHandoffGroupRows(
 	return rowsByID, rowsByKey
 }
 
-// handoffObservationsMatch는 고정 멤버 전원이 관측됐고 그 상태·행 버전·membership이 모두 맞는지다.
 func handoffObservationsMatch(claim *HandoffClaim, observed []sendfence.Observation) bool {
 	return len(observed) == len(claim.MemberIDs) && !slices.ContainsFunc(observed, func(o sendfence.Observation) bool {
 		return !o.StatusMatches || !o.VersionMatches || !o.MembershipMatches

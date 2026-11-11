@@ -10,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-// 응답 상태 코드별 요청 수와, 응답을 받지 못한 요청의 "error" 분류가 client 라벨 아래에 함께 남아야 오류율을 계산할 수 있다.
 // 실패한 전송도 지연 분포에 들어가야 timeout이 지연 꼬리로 드러난다.
 func TestInstrumentCountsStatusCodesAndTransportErrors(t *testing.T) {
 	t.Parallel()

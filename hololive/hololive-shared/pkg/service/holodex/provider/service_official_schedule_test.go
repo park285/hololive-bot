@@ -205,7 +205,6 @@ func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
 	}
 }
 
-// Holodex /users/live 실패는 호출자가 저장된 live session으로 판정하도록 반환한다.
 func TestGetChannelsLiveStatusDoesNotUseAnySecondarySource(t *testing.T) {
 	var officialRequests atomic.Int32
 

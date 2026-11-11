@@ -9,7 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-// Provider 호출 하나를 추적한다. Grouped의 방별 결과 및 DB finalization과 분리한다.
+// Grouped의 방별 결과 및 DB finalization과 분리한다.
 func (d *SendEngine) beginProviderAttempt() func(error, bool) {
 	id := d.workerTracker.BeginAttempt(time.Now())
 

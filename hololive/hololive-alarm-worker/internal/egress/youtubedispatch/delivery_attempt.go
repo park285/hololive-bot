@@ -7,7 +7,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// claimedDelivery는 claim된 발송 행과 해당 outbox를 함께 유지한다.
 type claimedDelivery struct {
 	row    domain.YouTubeNotificationDelivery
 	outbox domain.YouTubeNotificationOutbox

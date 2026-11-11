@@ -20,8 +20,7 @@ const (
 	retentionPlanLimit         = 100
 )
 
-// 보존 삭제는 상태별 보존 부분 인덱스로 만료 행을 오래된 순서대로 limit만큼만 읽어야 한다. 같은 연결에서
-// maintenance가 같은 SQL을 반복 실행하므로 custom plan과 generic plan을 모두 확인한다.
+// 같은 연결에서 maintenance가 같은 SQL을 반복 실행하므로 custom plan과 generic plan을 모두 확인한다.
 func TestAlarmDispatchRetentionDeleteReadsOnlyExpiredRowsPerStatus(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -46,7 +45,6 @@ func TestAlarmDispatchRetentionDeleteReadsOnlyExpiredRowsPerStatus(t *testing.T)
 	}
 }
 
-// seedAlarmDispatchRetentionPlanHistory는 종료 상태마다 만료된 행과 보존 기간 안의 행을 반씩 만든다.
 func seedAlarmDispatchRetentionPlanHistory(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 

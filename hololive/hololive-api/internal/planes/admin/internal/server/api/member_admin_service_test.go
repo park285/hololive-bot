@@ -87,7 +87,6 @@ func createMemberHTTP(t *testing.T, h *MemberHandler, request CreateMemberReques
 	return response.MemberMutationResult
 }
 
-// recordingActivity는 member 경계가 남긴 activity 기록 수를 센다.
 type recordingActivity struct {
 	mu      sync.Mutex
 	entries []map[string]any

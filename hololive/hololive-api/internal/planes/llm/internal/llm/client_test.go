@@ -37,7 +37,6 @@ func testObjectSchema() map[string]any {
 	return map[string]any{"type": "object"}
 }
 
-// testPromptLayers는 계층 지시 경로의 최소 입력(developer 지시와 user 입력)이다.
 func testPromptLayers() openaipreset.PromptLayers {
 	return openaipreset.PromptLayers{Developer: "developer instructions", User: "user request"}
 }

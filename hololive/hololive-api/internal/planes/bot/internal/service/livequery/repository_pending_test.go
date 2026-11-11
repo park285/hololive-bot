@@ -8,7 +8,6 @@ import (
 
 const pendingAfterPositive = "1 second"
 
-// reducer는 종결됐거나 positive가 이긴 종료 증거도 보존할 수 있다.
 func TestRepositoryRetainedPendingEvidence(t *testing.T) {
 	for _, tc := range []struct {
 		name, stateSQL, offset, kind, channel string
@@ -122,7 +121,6 @@ func endedPendingDiagnosticCases() []endedPendingDiagnosticCase {
 	}
 }
 
-// 종결 session에 남은 pending은 pending 채널과 canonical 채널 어느 조회에서도 진단으로 남고 후보는 막지 않는다.
 func TestRepositoryEndedPendingDiagnosticsFollowBothChannels(t *testing.T) {
 	for _, tc := range endedPendingDiagnosticCases() {
 		t.Run(tc.name, func(t *testing.T) {

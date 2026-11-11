@@ -48,7 +48,7 @@ func PrepareCandidates(candidates []model.Candidate, period model.Period, now ti
 	return prepared
 }
 
-// Filter는 방 멤버 profile로 후보를 고른다. 멤버 데이터 조회 실패는 빈 결과가 아니라 오류다.
+// 멤버 데이터 조회 실패는 빈 결과가 아니라 오류다.
 func (p *PreparedCandidates) Filter(ctx context.Context, roomMembers []string, membersData domain.MemberDataProvider, sourceValidator model.SourceURLValidator) ([]model.FilteredCandidate, error) {
 	profiles, err := buildMemberProfiles(ctx, roomMembers, membersData)
 	if err != nil {

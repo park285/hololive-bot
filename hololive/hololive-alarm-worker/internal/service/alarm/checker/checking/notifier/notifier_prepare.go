@@ -15,11 +15,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// prepareBatchConcurrency: prepare 단계 per-item claimDedup(Valkey round-trip)의 보수적 동시성 한도.
 // 이 dedup claim 은 키별 멱등이라 병렬 안전하며, Valkey 부하 제어를 위해 낮게 잡는다.
 const prepareBatchConcurrency = 8
 
-// prepareOutcome: prepareOne 결과의 인덱스 보존 슬롯. 입력 순서대로 집계해 발행 순서를 결정적으로 유지한다.
+// 입력 순서대로 집계해 발행 순서를 결정적으로 유지한다.
 type prepareOutcome struct {
 	notification *domain.AlarmNotification
 	payload      *sendInput
@@ -33,8 +32,6 @@ func (n *Notifier) prepareSendBatch(ctx context.Context, notifications []*domain
 	return assemblePrepared(outcomes, ctxErr, n)
 }
 
-// prepareOutcomes: notification 별 prepareOne 을 bounded 병렬로 수행하되, 결과는 입력 인덱스 슬롯에 기록해 순서를 보존한다.
-// 여기서 ctx 취소가 발생하면 errgroup 의 context-done error 를 함께 반환한다(직렬 base 와 동등한 error 전파를 위해).
 func (n *Notifier) prepareOutcomes(ctx context.Context, notifications []*domain.AlarmNotification) ([]prepareOutcome, error) {
 	outcomes := make([]prepareOutcome, len(notifications))
 
@@ -74,8 +71,6 @@ func (n *Notifier) prepareOutcomes(ctx context.Context, notifications []*domain.
 	return outcomes, nil
 }
 
-// assemblePrepared: 인덱스 순서대로 결과를 결정적으로 집계한다(단일 goroutine, race 없음).
-// 인자로 받은 ctxErr 가 있으면 직렬 base 와 동등하게 context-done error 를 errs 에 정확히 1건 반영한다(취소 항목은 카운터 미반영 유지).
 func assemblePrepared(outcomes []prepareOutcome, ctxErr error, n *Notifier) (delivery.SendResult, []claimedSend, []error) {
 	result := delivery.SendResult{}
 

@@ -345,7 +345,6 @@ func duplicatePollShortCase() duplicatePollCase {
 	}
 }
 
-// 중복 poll의 upsert는 outbox와 post 단위 알람 상태를 하나로 유지하고, 최초 감지 시각과 미발송 상태를 보존한다.
 func TestPersistCommunityShortsDuplicatePollKeepsSinglePostState(t *testing.T) {
 	for _, tc := range []duplicatePollCase{duplicatePollCommunityPostCase(), duplicatePollShortCase()} {
 		t.Run(tc.name, func(t *testing.T) {

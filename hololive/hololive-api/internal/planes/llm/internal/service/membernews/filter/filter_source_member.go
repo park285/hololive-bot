@@ -40,8 +40,7 @@ func formatMemberText(matchedMembers []string) string {
 	return strings.Join(matchedMembers, ", ")
 }
 
-// buildMemberProfiles는 방 구독 멤버 표기를 멤버 데이터로 보강한다. 이름·별칭 미존재는 원래 표기만 쓰고, 조회 실패는
-// 보강 없이 진행하지 않고 오류로 돌려준다.
+// 이름·별칭 미존재는 원래 표기만 쓰고, 조회 실패는 보강 없이 진행하지 않고 오류로 돌려준다.
 func buildMemberProfiles(ctx context.Context, roomMembers []string, membersData domain.MemberDataProvider) ([]memberProfile, error) {
 	profiles := make([]memberProfile, 0, len(roomMembers))
 	for _, raw := range roomMembers {

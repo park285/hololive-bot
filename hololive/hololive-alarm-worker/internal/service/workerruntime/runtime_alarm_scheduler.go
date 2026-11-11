@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// alarmSchedulerHooks는 alarm-worker background scheduler 묶음의 시작 함수와 취소 함수 등록이다.
 // 취소·종료 대기는 AlarmWorkerRuntime(schedulerCancel·schedulerDone)이 소유한다.
 type alarmSchedulerHooks struct {
 	Logger    *slog.Logger

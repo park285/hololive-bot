@@ -7,7 +7,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// acquire는 0144_08 RETURNING 식별자를 spec과 비교하므로, 네 식별자 중 하나라도 다르면 ErrInvalidJob이어야 한다.
 func TestVerifyAcquireJobIdentityRejectsEachMismatchedField(t *testing.T) {
 	t.Parallel()
 

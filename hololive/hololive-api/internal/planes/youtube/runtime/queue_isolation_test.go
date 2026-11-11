@@ -11,7 +11,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 통계 쿼리가 DB에서 기다려도 이미 선점한 작업은 전달되고 관측 작업은 자신의 예산으로 종료한다.
 func TestClaimDeliveryDoesNotWaitForQueueMetrics(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -65,7 +64,6 @@ func TestClaimDeliveryDoesNotWaitForQueueMetrics(t *testing.T) {
 	}
 }
 
-// DEAD_LETTER 행이 없는 queue를 관측하면 dead letter 원인의 degraded가 풀린다.
 func TestQueueObservationClearsResolvedDeadLetterBacklog(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
@@ -80,7 +78,6 @@ func TestQueueObservationClearsResolvedDeadLetterBacklog(t *testing.T) {
 	}
 }
 
-// 재시작 뒤처럼 이 process가 dead letter를 기록하지 않았어도, queue 관측이 남은 DEAD_LETTER 행을 보면 degraded가 켜진다.
 func TestQueueObservationRaisesDegradedForStoredDeadLetter(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})

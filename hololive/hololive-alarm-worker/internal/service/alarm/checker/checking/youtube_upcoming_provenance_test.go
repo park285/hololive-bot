@@ -40,7 +40,6 @@ func TestUpcomingRecoverySeparatesCurrentProviderFromStaleCanonical(t *testing.T
 	}
 }
 
-// 선정 뒤 확정된 Premiere 분류는 후보를 종료하지 않는다. 발견 시 알림이 없으므로 분 전 알림을 그대로 복구한다.
 func TestUpcomingRecoveryKeepsStagedPremiereCandidate(t *testing.T) {
 	result := runStagedUpcomingCandidateCheck(t, func(pool *pgxpool.Pool, stream *domain.Stream, _ time.Time) (string, time.Duration) {
 		_, err := pool.Exec(t.Context(), `UPDATE youtube_live_sessions SET scheduled_start_time=$1,is_premiere=true WHERE video_id=$2`, stream.StartScheduled, stream.ID)
@@ -60,8 +59,6 @@ type stagedUpcomingCandidateResult struct {
 	selectedStart time.Time
 }
 
-// runStagedUpcomingCandidateCheck는 5분 전 후보를 staging하고 canonical 세션을 10분 뒤로 기록한 다음 Check 한 번의 결과를 돌려준다.
-// 응답 시나리오와 provider 예정 시각(now 기준)은 prepare가 고른다.
 func runStagedUpcomingCandidateCheck(
 	t *testing.T,
 	prepare func(pool *pgxpool.Pool, stream *domain.Stream, now time.Time) (providerScenario string, providerOffset time.Duration),

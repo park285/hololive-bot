@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// ClearRoomAlarms는 채팅방의 모든 채널·멤버별 구독을 해지하고 해지한 구독 수를 반환한다.
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	startedAt := as.lockCacheMutation("clear")
 	defer as.cacheMutationMu.Unlock()

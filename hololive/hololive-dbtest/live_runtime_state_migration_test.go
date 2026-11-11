@@ -41,7 +41,6 @@ func TestLiveRuntimeStateDriftCountsEachMismatch(t *testing.T) {
 	require.Equal(t, [3]int64{1, 1, 1}, LiveRuntimeStateDrift(t, tx), "누락·잉여·값 변경")
 }
 
-// 원본 변경마다 바뀐 이전·새 key로 갱신하면 같은 트랜잭션에서 오라클과 일치하고, rollback은 갱신도 함께 되돌린다.
 func TestLiveRuntimeStateRefreshAppliesSourceChangesAndRollsBack(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)
@@ -130,7 +129,6 @@ func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
 	require.False(t, reviewed)
 }
 
-// 소비자 의미가 같은 기술적 쓰기 뒤 갱신은 행 버전을 새로 만들지 않아 읽기 모델의 불필요한 쓰기를 늘리지 않는다.
 func TestLiveRuntimeStateRefreshKeepsUnchangedRow(t *testing.T) {
 	t.Parallel()
 

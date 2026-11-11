@@ -603,8 +603,7 @@ func TestStaleHolderCannotCompleteDuplicateOrCollision(t *testing.T) {
 	}
 }
 
-// targetQueryCounter는 문장 수와 왕복 수를 따로 센다. 파이프라인 문장은 QueryTracer에 보이지 않으므로
-// BatchTracer로 배치 1회를 왕복 1회, 배치 안 문장을 각각 문장으로 센다.
+// 파이프라인 문장은 QueryTracer에 보이지 않으므로 BatchTracer로 배치 1회를 왕복 1회, 배치 안 문장을 각각 문장으로 센다.
 type targetQueryCounter struct {
 	queries    atomic.Int32
 	roundTrips atomic.Int32
@@ -783,8 +782,6 @@ func seedPublishLease(
 	return proof
 }
 
-// publishFixtureScope는 시드 lease에 acquire와 같은 membership 범위를 기록한다.
-// 계약이 없는 job은 빈 범위로 남겨 fail closed한다.
 func publishFixtureScope(tb testing.TB, provider contract.Provider, jobKind string) collection.MembershipScope {
 	tb.Helper()
 
@@ -796,8 +793,6 @@ func publishFixtureScope(tb testing.TB, provider contract.Provider, jobKind stri
 	return collection.MembershipScopeFor(definition)
 }
 
-// insertPublishTarget은 이 generation부터 이어지는 활성/비활성 대상을 넣고, 획득 시점 roster로 보고 ACTIVE lease의
-// membership 행 수를 다시 맞춘다.
 func insertPublishTarget(
 	ctx context.Context,
 	tb testing.TB,
@@ -854,7 +849,6 @@ func reactivateLease(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProo
 	}
 }
 
-// advanceLease는 fence epoch를 올리고 lease를 1분 뒤 다음 slot으로 옮겨 다시 ACTIVE로 만든다.
 func advanceLease(
 	ctx context.Context,
 	tb testing.TB,

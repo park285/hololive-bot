@@ -89,7 +89,6 @@ func loadStoredClassifications(
 	return out
 }
 
-// expectedClassificationFor는 timeline 조회가 identity의 첫 행에 매긴 분류를 저장 형태로 돌려준다.
 func expectedClassificationFor(
 	t *testing.T,
 	rows []timeline.PostDeliveryTimeline,

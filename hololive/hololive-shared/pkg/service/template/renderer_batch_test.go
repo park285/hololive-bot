@@ -32,8 +32,6 @@ func (c *resolveStatementCounter) TraceQueryStart(ctx context.Context, _ *pgx.Co
 
 func (*resolveStatementCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
-// 배치 렌더는 항목 수와 무관하게 호출당 버전 확인 한 문장만 쓰고, 항목별 override 선택·부재·실행 실패를 분리하며,
-// 호출 전에 끝난 저장을 다음 호출의 모든 항목이 봅니다.
 func TestRenderBatchResolvesOncePerCallWithOverridesAndFreshness(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)
@@ -89,7 +87,6 @@ func TestRenderBatchResolvesOncePerCallWithOverridesAndFreshness(t *testing.T) {
 	}
 }
 
-// 실행 중 취소된 배치는 앞서 렌더된 항목을 포함한 어떤 결과도 돌려주지 않습니다.
 func TestRenderBatchCancellationReturnsNoPartialResults(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.DiscardHandler)

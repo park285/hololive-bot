@@ -17,7 +17,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// requireLiveRuntimeRefreshed는 step의 writer 트랜잭션이 커밋된 뒤 수명 모델이 원본 재계산 오라클과 일치하는지 확인한다.
 // 원본 트리거가 없으므로 writer가 바꾼 key를 빠뜨리면 누락·값 변경 행으로 드러난다.
 func requireLiveRuntimeRefreshed(t *testing.T, pool *pgxpool.Pool, step func()) {
 	t.Helper()
@@ -66,8 +65,6 @@ func requireLiveRuntimeSession(t *testing.T, pool *pgxpool.Pool, want string) {
 	require.Equal(t, want, *row.sessionStatus)
 }
 
-// Finalize는 writer가 보고한 key로만 갱신하고 갱신은 원본과 같은 커밋 경계를 따른다.
-// 보고하지 않은 영상은 오라클이 누락으로 세므로, 경로별 drift 0이 key 수집을 증명한다.
 func TestFinalizeRefreshesReportedLiveRuntimeKeys(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -98,7 +95,6 @@ func TestFinalizeRefreshesReportedLiveRuntimeKeys(t *testing.T) {
 	}
 }
 
-// reportedLiveWrite는 두 영상을 쓰고 key를 중복·미작성 영상과 함께 보고한다. 모두 보고하지 않는 경우(reportAll=false)에는 한 영상을 빠뜨린다.
 // 커밋 실패 사례는 커밋 때 검사되는 deferred FK를 어기는 head를 함께 써서 갱신 뒤 커밋을 실패시킨다.
 func reportedLiveWrite(reportAll, failCommit bool) ReconcileWrite {
 	return func(ctx context.Context, tx dbx.Tx, _ *Observation) (ReconcileResult, error) {

@@ -35,8 +35,6 @@ func TestQuoteSQLLiteral(t *testing.T) {
 	}
 }
 
-// admin bootstrap이 켜진 실행에서 scraper 비밀번호가 없으면 admin 비밀번호로 scraper role을 재설정하지 않고
-// 접속 전에 실패한다.
 func TestBootstrapScraperRoleRequiresScraperPassword(t *testing.T) {
 	t.Setenv("POSTGRES_ADMIN_PASSWORD", "admin-secret")
 	t.Setenv("HOLOLIVE_SCRAPER_PASSWORD", "")

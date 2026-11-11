@@ -44,7 +44,6 @@ func (q *failingQuerier) Query(context.Context, string, ...any) (pgx.Rows, error
 	return nil, q.err
 }
 
-// valueRows는 (namespace, key, value) 행을 순서대로 돌려주는 pgx.Rows 대역이다.
 type valueRows struct {
 	rows [][3]string
 	next int
@@ -58,7 +57,6 @@ func (r *valueRows) Values() ([]any, error)                       { return nil, 
 func (r *valueRows) RawValues() [][]byte                          { return nil }
 func (r *valueRows) Conn() *pgx.Conn                              { return nil }
 
-// TypeMap은 값이 없는 Rows의 pgx 계약에 따라 nil을 반환한다.
 func (r *valueRows) TypeMap() *pgtype.Map { return nil }
 
 func (r *valueRows) Next() bool {
@@ -119,7 +117,6 @@ func assertLookupDelta(t *testing.T, before, after, want lookupCounts) {
 	}
 }
 
-// 조회는 DB를 다시 읽지 않는다. Load를 부르지 않은 store는 빈 값과 unloaded metric만 남기고 query를 하지 않는다.
 func TestTextOnUnloadedStoreDoesNotLazyLoad(t *testing.T) {
 	q := &failingQuerier{err: errors.New("connection refused")}
 	store := &Store{pool: q, logger: slog.Default()}
@@ -192,7 +189,6 @@ func TestLookupDoesNotCountHit(t *testing.T) {
 	assertLookupDelta(t, before, snapshotLookupCounts(NamespaceOrg), lookupCounts{})
 }
 
-// 기동 검증은 빈 값·없는 key·빈 namespace를 모두 모아 한 번에 실패시킨다.
 func TestValidateReportsEveryMissingEntry(t *testing.T) {
 	store := &Store{pool: valueQuerier{rows: [][3]string{
 		{NamespaceMisc, "vtuber_fallback", "VTuber"},

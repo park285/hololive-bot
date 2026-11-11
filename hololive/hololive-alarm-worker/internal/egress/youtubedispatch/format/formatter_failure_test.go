@@ -26,7 +26,6 @@ func TestFormatMessagesPreservesMemberNameLookupError(t *testing.T) {
 	}
 }
 
-// 템플릿 조회를 할 수 없는 배치 실패는 항목 일부만 성공한 결과를 남기지 않는다.
 func TestFormatMessagesFailsWholeBatchWithoutRenderer(t *testing.T) {
 	t.Parallel()
 

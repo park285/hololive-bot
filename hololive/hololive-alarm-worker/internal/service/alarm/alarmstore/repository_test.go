@@ -61,7 +61,6 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 	requireAlarmRoomIDs(t, subscribers, []string{"room-live", "room-empty"})
 }
 
-// 표시명은 members 정본만 쓴다. 멤버 데이터에 한국어 표시명이 없는 채널은 빈 값이고 전체 목록에서 빠진다.
 func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 	t.Parallel()
 
@@ -120,8 +119,6 @@ func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 	}
 }
 
-// 방 이름 대표값은 created_at이 아니라 room_name이 마지막으로 바뀐 행을 따른다. 먼저 만든 구독에 upsert로 새 이름이
-// 들어오면 나중에 만든 구독의 옛 이름에 가려지면 안 되고, 같은 이름으로 재등록한 구독이 대표값을 되가져가도 안 된다.
 func TestListAlarmEntriesUsesMostRecentlyChangedKakaoRoomName(t *testing.T) {
 	t.Parallel()
 
@@ -171,10 +168,6 @@ func TestListAlarmEntriesUsesMostRecentlyChangedKakaoRoomName(t *testing.T) {
 	requireRoomName("새 방")
 }
 
-// Iris webhook에는 방 제목이 없다. 옛 bot(v7.0.0까지)은 방 ID를 RoomName으로 넘겼고, 지금 bot(v7.0.1)은 빈 이름을
-// 넘긴다. 운영 alarms에는 room_name = room_id인 행이 실제 Kakao 이름 행보다 나중에 바뀐 것으로 섞여 있다. 대표값은
-// 관리자 이름 → Kakao 이름 → 방 ID이고, 방 ID 자리표시자는 Kakao 이름을 가리지 못하며 재등록 upsert는 방 ID든 빈
-// 이름이든 저장된 Kakao 이름을 덮어쓰지 못한다. 먼저 배포한 worker는 옛 API가 보내는 방 ID도 받는다.
 func TestListAlarmEntriesPrefersKakaoRoomNameOverRoomIDPlaceholder(t *testing.T) {
 	t.Parallel()
 
@@ -231,8 +224,6 @@ func TestListAlarmEntriesPrefersKakaoRoomNameOverRoomIDPlaceholder(t *testing.T)
 	})
 }
 
-// requireStoredRoomName은 room-mixed 방의 채널 행에 저장된 room_name을 확인한다. 기대 시각이 0이 아니면
-// room_name_updated_at도 그대로여야 한다.
 func requireStoredRoomName(t *testing.T, pool *pgxpool.Pool, channelID, wantName string, wantUpdatedAt time.Time) {
 	t.Helper()
 

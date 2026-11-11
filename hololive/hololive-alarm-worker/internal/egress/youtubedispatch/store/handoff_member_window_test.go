@@ -19,7 +19,6 @@ func TestHandoffSettlementClosesWhenFollowerFallsOutsideLockedWindow(t *testing.
 	requireHandoffWindowRejection(t, 11)
 }
 
-// 후보 별칭이 조회 창을 채우면 owner가 잠겼더라도 전체 논리 그룹의 정산을 허용하면 안 된다.
 func requireHandoffWindowRejection(t *testing.T, aliasRows int) {
 	t.Helper()
 

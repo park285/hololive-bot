@@ -18,8 +18,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Schedule이 행이 없다고 읽은 영상을 다른 writer가 먼저 만들면, schedule은 그 행을 덮어쓰거나 병합하지 않고
-// 충돌로 보고한다. 다른 writer의 행은 그대로 남는다.
 func TestScheduleReportsConflictWithConcurrentLiveInsertion(t *testing.T) {
 	for _, status := range []domain.LiveStatus{domain.LiveStatusLive, domain.LiveStatusEnded} {
 		t.Run(string(status), func(t *testing.T) {
