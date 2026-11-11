@@ -101,5 +101,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("claim freshness window %s must be at least revive freshness window plus revive interval (%s)", c.ClaimFreshnessWindow, minimum)
 	}
 
+	if budget := c.sendLeaseBudget(); c.LockTimeout < budget {
+		return fmt.Errorf("lock timeout %s must be at least the send lease budget (%s)", c.LockTimeout, budget)
+	}
+
 	return nil
 }

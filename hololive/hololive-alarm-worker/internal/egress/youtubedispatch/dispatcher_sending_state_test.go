@@ -45,7 +45,7 @@ func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:      10,
 		LockTimeout:    time.Minute,
-		PollInterval:   time.Hour,
+		PollInterval:   time.Second,
 		MaxRetries:     3,
 		RetryBackoff:   time.Minute,
 		CleanupAfter:   time.Hour,
