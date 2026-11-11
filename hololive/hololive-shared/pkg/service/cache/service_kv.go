@@ -170,7 +170,7 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 	return totalDeleted, nil
 }
 
-// KEYS와 달리 Redis를 블로킹하지 않지만 비원자적이므로 scan 중 바뀐 key는 누락·중복될 수 있다. … Visit에 넘긴 slice는 호출 뒤 재사용하지 않는다.
+// KEYS와 달리 Redis를 블로킹하지 않지만 비원자적이므로 scan 중 바뀐 key는 누락·중복될 수 있다. Visit에 넘긴 slice는 호출 뒤 재사용하지 않는다.
 func (c *Service) ScanKeyPages(ctx context.Context, pattern string, batchSize int64, visit func(keys []string) error) error {
 	if batchSize <= 0 {
 		batchSize = 100

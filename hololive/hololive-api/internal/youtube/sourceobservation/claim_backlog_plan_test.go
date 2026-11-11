@@ -34,7 +34,7 @@ var claimBacklogActiveCTEs = map[string]bool{
 	"CTE active_backlog": true,
 }
 
-// 시도 소진 분류(exhausted_candidates)는 materialized 활성 backlog에서 due 행을 골라 queue PK로만 잠그므로 queue를 따로 읽지 않는다. … 활성 epoch가 없으면
+// 시도 소진 분류(exhausted_candidates)는 materialized 활성 backlog에서 due 행을 골라 queue PK로만 잠그므로 queue를 따로 읽지 않는다. 활성 epoch가 없으면
 // replay_expired_candidates도 행을 읽지 않는다. 그래서 두 CTE에 후보 잠금 상한을 적용한다.
 var claimBacklogDeadLetterCTEs = map[string]bool{
 	"CTE exhausted_candidates":      true,

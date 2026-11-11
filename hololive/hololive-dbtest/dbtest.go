@@ -334,7 +334,7 @@ func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 	return nil
 }
 
-// 빈 dbName은 base DSN의 데이터베이스를 그대로 쓴다는 뜻이다. … URL 형식과 libpq keyword 형식(host=, dbname=)을 모두 받아야 하므로 url.Parse가 아니라
+// 빈 dbName은 base DSN의 데이터베이스를 그대로 쓴다는 뜻이다. URL 형식과 libpq keyword 형식(host=, dbname=)을 모두 받아야 하므로 url.Parse가 아니라
 // ParseConfig를 쓴다. TEST_DATABASE_URL이 keyword DSN으로 오면 url.Parse는 이를 깨뜨리지만, ParseConfig는 두 형식을 모두 처리한다.
 func poolForDatabase(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(baseDSN)
