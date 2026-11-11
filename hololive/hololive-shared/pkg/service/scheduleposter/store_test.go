@@ -56,7 +56,7 @@ func confirmedPending(t *testing.T, store *scheduleposter.Store) scheduleposter.
 
 	pending, err := store.PendingTranslations(ctx, 10)
 	require.NoError(t, err)
-	require.Equal(t, []scheduleposter.PendingTranslation{{ID: 101, ImageURL: candidate(101, testPostedAt).ImageURL, Revision: revision}}, pending)
+	require.Equal(t, []scheduleposter.PendingTranslation{{ID: 101, ChannelID: sophiaChannel, ImageURL: candidate(101, testPostedAt).ImageURL, Revision: revision}}, pending)
 
 	return pending[0]
 }

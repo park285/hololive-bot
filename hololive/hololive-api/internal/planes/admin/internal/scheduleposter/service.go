@@ -29,6 +29,12 @@ const (
 	initialTranslate   = 15 * time.Second
 )
 
+// 실패 사유는 관리자 화면에 그대로 보이는 분류다.
+const (
+	reasonSourceUnavailable = "source_unavailable"
+	reasonTranslationFailed = "translation_failed"
+)
+
 var posterTextPattern = regexp.MustCompile(`(?i)週間スケジュール|スケジュール|schedule|予定|weekly`)
 
 type candidateStore interface {
@@ -48,8 +54,9 @@ type sourceClient interface {
 	image(ctx context.Context, rawURL string) (source, error)
 }
 
-type imageTranslator interface {
-	translate(ctx context.Context, src source) (source, error)
+type posterTranslator interface {
+	translateText(ctx context.Context, src source, prompt string) (textTranslation, error)
+	renderImage(ctx context.Context, src source, prompt string) (source, error)
 }
 
 type Service struct {
@@ -57,15 +64,16 @@ type Service struct {
 	candidates   candidateStore
 	translations translationStore
 	sources      sourceClient
-	translator   imageTranslator
+	translator   posterTranslator
+	members      memberSource
 	logger       *slog.Logger
 	now          func() time.Time
 	retry        retry.RetryOptions
 }
 
-func New(ctx context.Context, config *Config, store *posterstore.Store, logger *slog.Logger) (*Service, error) {
-	if config == nil || store == nil || logger == nil {
-		return nil, errors.New("schedule poster service requires config, store and logger")
+func New(ctx context.Context, config *Config, store *posterstore.Store, members memberSource, logger *slog.Logger) (*Service, error) {
+	if config == nil || store == nil || members == nil || logger == nil {
+		return nil, errors.New("schedule poster service requires config, store, members and logger")
 	}
 
 	translator, err := newVertexTranslator(ctx, config.Translation)
@@ -73,7 +81,7 @@ func New(ctx context.Context, config *Config, store *posterstore.Store, logger *
 		return nil, err
 	}
 
-	return newService(*config, store, store, newFXClient(), translator, logger), nil
+	return newService(*config, store, store, newFXClient(), translator, members, logger), nil
 }
 
 func newService(
@@ -81,7 +89,8 @@ func newService(
 	candidates candidateStore,
 	translations translationStore,
 	sources sourceClient,
-	translator imageTranslator,
+	translator posterTranslator,
+	members memberSource,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
@@ -90,6 +99,7 @@ func newService(
 		translations: translations,
 		sources:      sources,
 		translator:   translator,
+		members:      members,
 		logger:       logger.With(slog.String("service", "schedule_poster")),
 		now:          time.Now,
 		retry:        translationRetryOptions(),
@@ -260,10 +270,22 @@ func (s *Service) translatePending(ctx context.Context) error {
 		return fmt.Errorf("load pending translations: %w", err)
 	}
 
+	if len(pending) == 0 {
+		return nil
+	}
+
+	// 대응표 없이 번역하면 이름이 뜻풀이로 바뀌므로, 멤버를 못 읽으면 행을 대기 상태로 두고 다음 tick에 다시 본다.
+	members, err := s.members.GetAllMembers(ctx)
+	if err != nil {
+		return fmt.Errorf("load members for translation glossary: %w", err)
+	}
+
 	var errs []error
 
 	for _, item := range pending {
-		image, reason, err := s.translateOne(ctx, item)
+		prompt := buildTextPrompt(item.ChannelID, members, s.config.Translation.Glossary)
+
+		image, reason, err := s.translateOne(ctx, item, prompt)
 		if ctx.Err() != nil {
 			return errors.Join(append(errs, ctx.Err())...)
 		}
@@ -293,24 +315,36 @@ func (s *Service) translatePending(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// translateOne의 reason은 관리자 화면에 그대로 보이는 실패 분류다.
-func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTranslation) (posterstore.Image, string, error) {
+func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTranslation, textPrompt string) (posterstore.Image, string, error) {
 	original, sourceErr := s.sources.image(ctx, item.ImageURL)
 	if sourceErr != nil {
-		return posterstore.Image{}, "source_unavailable", sourceErr
+		return posterstore.Image{}, reasonSourceUnavailable, sourceErr
 	}
 
-	options := s.retry
+	var translation textTranslation
 
-	options.OnRetry = func(attempt int, err error, _ time.Duration) {
-		s.logger.Warn("Schedule poster translation attempt failed, will retry",
-			slog.Int64("poster_id", item.ID), slog.Int("attempt", attempt), slog.Any("error", err))
+	textErr := retry.WithRetry(ctx, s.retryOptions(item.ID, "text"), func(ctx context.Context) error {
+		var err error
+
+		translation, err = s.translator.translateText(ctx, original, textPrompt)
+
+		return err
+	})
+	if textErr != nil {
+		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("translate poster text: %w", textErr)
 	}
+
+	s.logger.Info("Schedule poster text translated",
+		slog.Int64("poster_id", item.ID),
+		slog.Int("web_search_queries", translation.webSearchQueries),
+		slog.String("table", translation.table))
+
+	imagePrompt := buildImagePrompt(translation.table)
 
 	var image posterstore.Image
 
-	retryErr := retry.WithRetry(ctx, options, func(ctx context.Context) error {
-		translated, err := s.translator.translate(ctx, original)
+	imageErr := retry.WithRetry(ctx, s.retryOptions(item.ID, "image"), func(ctx context.Context) error {
+		translated, err := s.translator.renderImage(ctx, original, imagePrompt)
 		if err != nil {
 			return err
 		}
@@ -324,9 +358,20 @@ func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTran
 
 		return nil
 	})
-	if retryErr != nil {
-		return posterstore.Image{}, "translation_failed", fmt.Errorf("translate poster: %w", retryErr)
+	if imageErr != nil {
+		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("render translated poster: %w", imageErr)
 	}
 
 	return image, "", nil
+}
+
+func (s *Service) retryOptions(posterID int64, stage string) retry.RetryOptions {
+	options := s.retry
+
+	options.OnRetry = func(attempt int, err error, _ time.Duration) {
+		s.logger.Warn("Schedule poster translation attempt failed, will retry",
+			slog.Int64("poster_id", posterID), slog.String("stage", stage), slog.Int("attempt", attempt), slog.Any("error", err))
+	}
+
+	return options
 }

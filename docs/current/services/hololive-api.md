@@ -124,29 +124,29 @@ admin plane PhotoSync는 `PHOTO_SYNC_ENABLED`(admin plane 기본 true)가 켜져
 |---|---|
 | Trigger | 한 주기의 실패입니다. 갱신 대상(`channel_id`가 있고 `photo`나 `photo_updated_at`이 NULL이거나 7일보다 오래된 멤버) 조회 실패, 또는 대상이 있을 때의 Holodex 채널 목록 조회 실패가 해당합니다. 채널별 `members.photo` 저장 실패는 실패 수로만 세고 재시도하지 않습니다. 호출자 취소로 끝난 시도도 해당하지 않습니다. |
 | 한도 | 주기마다 최대 3번 시도합니다. 재시도 전 대기는 5초와 10초이며 각각 0~2초 jitter를 더합니다. 각 시도의 Holodex 호출은 Holodex client의 자체 재시도와 circuit breaker를 그대로 거칩니다. |
-| 종단 | 3번 모두 실패하면 그 주기를 포기합니다. 다음 시도는 다음 7일 주기이거나 재기동 뒤 첫 동기화입니다. |
+| 종단 | 어느 단계든 3번 모두 실패하면 그 주기를 포기합니다. 다음 시도는 다음 7일 주기이거나 재기동 뒤 첫 동기화입니다. |
 | Telemetry | 재시도 직전 Warn 로그 `Photo sync failed, will retry`(`attempt`, `max_attempts`), 최종 실패 Error 로그 `Photo sync failed after all retries`, 완료 Info 로그 `Photo sync completed`(`success`, `failed`, `total`)입니다. 전용 metric은 없습니다. |
 | Owner | `hololive-api` admin plane의 PhotoSync(`internal/planes/admin/internal/photosync`) |
 | 제거 조건 | 90일 동안 `Photo sync failed, will retry` 뒤 같은 주기가 `Photo sync completed`로 끝난 기록이 없으면 재시도를 지웁니다. 지우면 Holodex 일시 장애 때 다음 시도가 7일 주기 뒤로 밀리므로, 그 동작 변경을 CHANGELOG에 남깁니다. |
 
 ## 주간 일정 포스터
 
-admin plane은 `SCHEDULE_POSTER_CONFIG_FILE`이 있으면 X의 멤버 주간 일정 포스터를 수집하고 번역합니다. 파일이 없으면 수집·번역만 꺼지고, 관리 API(`/api/holo/schedule-posters*`)와 `!일정` 표시는 그대로 동작합니다. 잘못된 설정 파일이나 Vertex client 생성 실패는 기동 오류입니다.
+admin plane은 `SCHEDULE_POSTER_CONFIG_FILE`이 있으면 X의 멤버 주간 일정 포스터를 수집하고 번역합니다. 파일이 없으면 수집·번역만 꺼지고, 관리 API(`/api/holo/schedule-posters*`)와 `!스케쥴` 표시는 그대로 동작합니다. 잘못된 설정 파일이나 Vertex client 생성 실패는 기동 오류입니다.
 
-- 설정 파일(64KiB 이하, 모르는 키 거부): `{"poll_seconds":3600,"targets":[{"x_user_id":"<X 사용자 ID>","channel_id":"<YouTube 채널 ID>"}],"translation":{"project":"<GCP 프로젝트>","location":"global","model":"gemini-nano-banana-2.1"}}`. `poll_seconds`는 600~86400이고 기본 3600, `location`·`model`은 생략하면 위 기본값입니다. Vertex 인증은 `GOOGLE_APPLICATION_CREDENTIALS`(서비스 계정 ADC)로 공급합니다. Quadlet은 `HOLOLIVE_SCHEDULE_POSTER_ENABLED=1`일 때 `optional/schedule-poster` drop-in으로 두 파일을 mount합니다.
+- 설정 파일(64KiB 이하, 모르는 키 거부): `{"poll_seconds":3600,"targets":[{"x_user_id":"<X 사용자 ID>","channel_id":"<YouTube 채널 ID>"}],"translation":{"project":"<GCP 프로젝트>","location":"global","model":"gemini-nano-banana-2.1","text_model":"gemini-4-argon","glossary":{"ホロドリ":"홀로도리"}}}`. `poll_seconds`는 600~86400이고 기본 3600, `location`·`model`·`text_model`은 생략하면 위 기본값입니다. `glossary`(선택, 200개 이하, 원문·번역 각 1~80자, 제어 문자 불가)는 멤버 이름 밖의 용어 표기입니다. Vertex 인증은 `GOOGLE_APPLICATION_CREDENTIALS`(서비스 계정 ADC)로 공급합니다. Quadlet은 `HOLOLIVE_SCHEDULE_POSTER_ENABLED=1`일 때 `optional/schedule-poster` drop-in으로 두 파일을 mount합니다.
 - 수집: `poll_seconds`마다 대상별로 FxTwitter(`api.fxtwitter.com`)의 게시물 목록을 최대 5페이지 읽습니다. 응답은 시간순이 아니고 리포스트가 섞이므로 본인 원글만 보고, 지난 8일 안의 원글 가운데 사진과 일정 문구(`週間スケジュール|スケジュール|schedule|予定|weekly`)가 함께 있는 글을 검토 대기 후보(`schedule_posters`)로 넣습니다. 본인 원글이 모두 8일보다 오래된 페이지에서 멈춥니다. 같은 tick에 8일 넘게 검토되지 않은 후보는 `expired`로, 주 종료일(없으면 생성일)이 60일 지난 검토 완료 행은 100건씩 지웁니다.
 - 검토: 관리자가 Iris Console에서 원본을 보고 주 범위(7일 이하, 게시일과 7일 이내)를 입력해 확정하거나 거절합니다. 확정만 번역을 예약하며, 모든 변경은 `expectedRevision` 조건이고 충돌은 409 `revision_conflict`입니다.
-- 번역: 1분마다 확정된 번역 대기 행을 5개까지 처리합니다. 원본(`pbs.twimg.com`, 8MiB 이하)을 받아 Vertex 이미지 모델로 한국어 포스터 이미지를 만들고 JPEG(4MiB 이하)로 저장합니다. 번역본은 관리자가 다시 검토하지 않고 바로 `!일정`에 붙습니다. 재번역을 예약하면 이전 번역본을 지웁니다.
-- 표시: `!일정 <멤버>`는 Holodex 일정 뒤에, 오늘(JST)이 주 범위에 드는 번역 완료 확정본 가운데 가장 최근 것을 이미지로 보냅니다. Holodex 조회가 실패해도 확정본이 있으면 포스터만 보냅니다. 포스터 조회·발송 실패는 Warn 로그만 남기고, Iris 전달 결과 불명은 명령 오류로 올립니다.
+- 번역: 1분마다 확정된 번역 대기 행을 5개까지 처리합니다. 원본(`pbs.twimg.com`, 8MiB 이하)을 받아 두 단계로 번역합니다. 1단계는 텍스트 모델(`text_model`)이 Google 검색 grounding(웹 검색만)과 thinking level `HIGH`로 포스터의 일본어를 `원문 ⇒ 번역` 줄의 번역표로 만듭니다. 프롬프트에는 포스터 주인 멤버와 현역 Hololive 멤버의 일본어(로마자)→한국어 이름 대응표(`members` 표), 설정 `glossary`가 들어갑니다. 응답에서 이 형식의 줄만 받으며(80줄·줄당 200자 이하), 맞는 줄이 없거나 상한을 넘으면 실패입니다. 2단계는 이미지 모델(`model`)이 도구 없이 thinking level `HIGH`, 2K로 원본의 글자를 번역표대로 바꿔 그립니다. 결과는 JPEG(4MiB 이하)로 저장합니다. 멤버 목록을 읽지 못하면 그 tick은 번역하지 않고 행을 대기 상태로 둡니다. Info 로그 `Schedule poster text translated`에 번역표(`table`)와 실제 검색 횟수(`web_search_queries`)가 남습니다. 번역본은 관리자가 다시 검토하지 않고 바로 `!스케쥴`로 보입니다. 재번역을 예약하면 이전 번역본을 지웁니다.
+- 표시: `!스케쥴 <멤버>`는 오늘(JST)이 주 범위에 드는 번역 완료 확정본 가운데 가장 최근 것을 이미지로 보냅니다. 없으면 안내 문구를, 조회 실패면 오류 문구를 보내고 발송 실패는 명령 오류로 올립니다. `!일정`·`!스케줄`(Holodex 일정)과는 다른 명령이며 Iris `commandRoutePrefixes.hololive`에 `!스케쥴`이 있어야 전달됩니다.
 
 ## 일정 포스터 번역 재시도 예외 계약
 
 | 항목 | 계약 |
 |---|---|
-| Trigger | 번역 대기 행 하나의 Vertex 이미지 생성 실패, 응답에 이미지가 없음, 또는 결과 이미지의 디코드(PNG·JPEG만 받습니다)·JPEG 변환 실패입니다. 원본 이미지 내려받기 실패는 재시도하지 않고 바로 `source_unavailable`로 기록합니다. 호출자 취소로 끝난 시도는 기록하지 않고 다음 tick이 다시 처리합니다. |
-| 한도 | 행마다 최대 3번 시도합니다. 재시도 전 대기는 5초와 10초이며 각각 0~2초 jitter를 더합니다. 시도 하나의 상한은 3분이고, genai SDK 자체 재시도는 1회로 고정합니다. |
+| Trigger | 번역 대기 행 하나의 번역표 단계 실패(Vertex 텍스트 생성 실패, 형식에 맞는 줄이 없거나 상한 초과) 또는 이미지 단계 실패(Vertex 이미지 생성 실패, 응답에 이미지가 없음, 결과 이미지의 디코드(PNG·JPEG만 받습니다)·JPEG 변환 실패)입니다. 원본 이미지 내려받기 실패는 재시도하지 않고 바로 `source_unavailable`로 기록합니다. 호출자 취소로 끝난 시도는 기록하지 않고 다음 tick이 다시 처리합니다. |
+| 한도 | 행마다 단계별로 최대 3번 시도합니다. 번역표가 나온 뒤 이미지 단계를 다시 시도할 때는 번역표를 다시 만들지 않습니다. 재시도 전 대기는 5초와 10초이며 각각 0~2초 jitter를 더합니다. 시도 하나의 상한은 단계마다 3분이고, genai SDK 자체 재시도는 1회로 고정합니다. 행 하나는 최악 약 18분을 쓰며 그동안 같은 tick의 다음 행은 기다립니다. |
 | 종단 | 3번 모두 실패하면 `translation_status=failed`, `translation_error=translation_failed`로 기록합니다. 다시 시도하려면 관리자가 Console에서 재번역을 예약합니다. |
-| Telemetry | 재시도 직전 Warn 로그 `Schedule poster translation attempt failed, will retry`(`poster_id`, `attempt`), 최종 실패 Warn 로그 `Schedule poster translation failed`(`poster_id`, `reason`), 성공 Info 로그 `Schedule poster translated`(`poster_id`, `bytes`)입니다. 전용 metric은 없습니다. |
+| Telemetry | 재시도 직전 Warn 로그 `Schedule poster translation attempt failed, will retry`(`poster_id`, `stage`=`text`|`image`, `attempt`), 최종 실패 Warn 로그 `Schedule poster translation failed`(`poster_id`, `reason`), 성공 Info 로그 `Schedule poster translated`(`poster_id`, `bytes`)입니다. 전용 metric은 없습니다. |
 | Owner | `hololive-api` admin plane의 일정 포스터 서비스(`internal/planes/admin/internal/scheduleposter`) |
 | 제거 조건 | 90일 동안 재시도 뒤 같은 행이 `Schedule poster translated`로 끝난 기록이 없으면 재시도를 지웁니다. 지우면 일시 장애마다 관리자가 재번역을 눌러야 하므로 그 동작 변경을 CHANGELOG에 남깁니다. |
 

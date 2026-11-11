@@ -91,6 +91,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 		"live",
 		"upcoming",
 		"schedule",
+		"schedule_poster",
 		"alarm",
 		"member_info",
 		"broadcast_history",

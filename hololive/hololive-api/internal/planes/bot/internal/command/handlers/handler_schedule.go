@@ -26,20 +26,12 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-)
-
-// 포스터의 주 범위는 일본 방송 기준이라 오늘 날짜를 JST로 정한다.
-var (
-	scheduleZone = time.FixedZone("JST", 9*60*60)
-	scheduleNow  = time.Now
 )
 
 type ScheduleCommand struct {
@@ -105,11 +97,6 @@ func (c *ScheduleCommand) executeMemberSchedule(ctx context.Context, room, membe
 
 	streams, err := c.Deps().Holodex.GetChannelSchedule(ctx, channel.ID, hours, true)
 	if err != nil {
-		sent, posterErr := c.sendSchedulePoster(ctx, room, channel.ID)
-		if posterErr != nil || sent {
-			return posterErr
-		}
-
 		if sendErr := c.Deps().SendError(ctx, room, messaging.ErrScheduleQueryFailed); sendErr != nil {
 			return fmt.Errorf("send error: %w", sendErr)
 		}
@@ -135,49 +122,11 @@ func (c *ScheduleCommand) executeMemberSchedule(ctx context.Context, room, membe
 
 	message := c.Deps().Formatter.ChannelSchedule(ctx, channel, streams, days)
 
-	if sendErr := c.Deps().SendMessage(ctx, room, message); sendErr != nil {
-		return fmt.Errorf("send message: %w", sendErr)
+	if err := c.Deps().SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
 	}
 
-	_, err = c.sendSchedulePoster(ctx, room, channel.ID)
-
-	return err
-}
-
-// sendSchedulePoster는 포스터 조회·발송 실패를 일정 응답 실패로 만들지 않는다.
-// 다만 Iris 전달 결과 불명은 재시도가 중복 발송이 될 수 있어 호출자에게 그대로 올린다.
-func (c *ScheduleCommand) sendSchedulePoster(ctx context.Context, room, channelID string) (bool, error) {
-	reader := c.Deps().SchedulePosters
-	if reader == nil {
-		return false, nil
-	}
-
-	now := scheduleNow().In(scheduleZone)
-	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-
-	image, found, err := reader.PublishedImage(ctx, channelID, day)
-	if err != nil {
-		c.Deps().Logger.Warn("Failed to load schedule poster", slog.String("channel_id", channelID), slog.Any("error", err))
-
-		return false, nil
-	}
-
-	if !found {
-		return false, nil
-	}
-
-	err = c.Deps().SendImage(transport.WithImageContentType(ctx, image.MIME), room, image.Data)
-	if transport.IsReplyOutcomeUnknown(err) {
-		return false, fmt.Errorf("send schedule poster: %w", err)
-	}
-
-	if err != nil {
-		c.Deps().Logger.Warn("Failed to send schedule poster", slog.String("channel_id", channelID), slog.Any("error", err))
-
-		return false, nil
-	}
-
-	return true, nil
+	return nil
 }
 
 func popRawScheduleCommandToken(params map[string]any) string {

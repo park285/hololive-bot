@@ -160,6 +160,23 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 
 var scheduleCommandAliases = []string{"일정", "스케줄", "schedule", "멤버", "member"}
 
+// schedulePosterCommandAliases의 "스케쥴"은 일정 명령 별칭 "스케줄"과 한 글자 다른 별도 명령이다.
+var schedulePosterCommandAliases = []string{"스케쥴"}
+
+func (ma *MessageAdapter) trySchedulePosterCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
+	if !stringutil.ContainsString(schedulePosterCommandAliases, command) {
+		return nil, false
+	}
+
+	params := make(map[string]any)
+
+	if member := stringutil.TrimSpace(strings.Join(args, " ")); member != "" {
+		params[paramMember] = member
+	}
+
+	return &ParsedCommand{Type: botcommand.CommandSchedulePoster, Params: params, RawMessage: raw}, true
+}
+
 func (ma *MessageAdapter) isScheduleCommand(cmd string) bool {
 	return stringutil.ContainsString(scheduleCommandAliases, cmd)
 }

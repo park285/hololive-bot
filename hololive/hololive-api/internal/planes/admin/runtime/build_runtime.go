@@ -20,6 +20,7 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
@@ -96,7 +97,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, fmt.Errorf("build admin schedule poster store: %w", err)
 	}
 
-	schedulePosterService, err := buildSchedulePosterService(ctx, appConfig.SchedulePosterConfigFile, schedulePosters, logger)
+	schedulePosterService, err := buildSchedulePosterService(ctx, appConfig.SchedulePosterConfigFile, schedulePosters, infra.MemberRepository, logger)
 	if err != nil && !errors.Is(err, posterservice.ErrDisabled) {
 		return nil, fmt.Errorf("build admin schedule poster service: %w", err)
 	}
@@ -140,6 +141,7 @@ func buildSchedulePosterService(
 	ctx context.Context,
 	configFile string,
 	store *scheduleposter.Store,
+	members *member.Repository,
 	logger *slog.Logger,
 ) (*posterservice.Service, error) {
 	config, err := posterservice.LoadConfig(configFile)
@@ -147,7 +149,7 @@ func buildSchedulePosterService(
 		return nil, fmt.Errorf("load schedule poster config: %w", err)
 	}
 
-	service, err := posterservice.New(ctx, config, store, logger)
+	service, err := posterservice.New(ctx, config, store, members, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create schedule poster service: %w", err)
 	}

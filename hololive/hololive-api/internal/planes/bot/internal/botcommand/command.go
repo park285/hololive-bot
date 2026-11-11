@@ -26,6 +26,7 @@ const (
 	CommandLive               CommandType = "live"
 	CommandUpcoming           CommandType = "upcoming"
 	CommandSchedule           CommandType = "schedule"
+	CommandSchedulePoster     CommandType = "schedule_poster"
 	CommandHelp               CommandType = "help"
 	CommandAlarmAdd           CommandType = "alarm_add"
 	CommandAlarmRemove        CommandType = "alarm_remove"

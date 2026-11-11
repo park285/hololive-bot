@@ -85,9 +85,10 @@ type Image struct {
 
 // PendingTranslation의 Revision이 그 사이 바뀌면 번역 결과를 기록하지 않는다.
 type PendingTranslation struct {
-	ID       int64
-	ImageURL string
-	Revision int64
+	ID        int64
+	ChannelID string
+	ImageURL  string
+	Revision  int64
 }
 
 type Summary struct {
@@ -323,7 +324,7 @@ func (s *Store) PendingTranslations(ctx context.Context, limit int) ([]PendingTr
 	pending, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (PendingTranslation, error) {
 		var item PendingTranslation
 
-		return item, row.Scan(&item.ID, &item.ImageURL, &item.Revision)
+		return item, row.Scan(&item.ID, &item.ChannelID, &item.ImageURL, &item.Revision)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list pending schedule poster translations: %w", err)

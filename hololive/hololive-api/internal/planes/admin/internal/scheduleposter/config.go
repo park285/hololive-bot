@@ -9,14 +9,20 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
 	defaultPollSeconds = 3600
 	defaultLocation    = "global"
 	defaultModel       = "gemini-nano-banana-2.1"
+	defaultTextModel   = "gemini-4-argon"
 	maxConfigBytes     = 64 << 10
+	maxGlossaryTerms   = 200
+	maxGlossaryRunes   = 80
 )
 
 var ErrDisabled = errors.New("schedule poster collection disabled")
@@ -39,6 +45,10 @@ type TranslationConfig struct {
 	Project  string `json:"project"`
 	Location string `json:"location"`
 	Model    string `json:"model"`
+	// TextModel은 포스터 글자를 읽어 번역표를 만드는 모델이고, Model은 그 표대로 이미지를 다시 그린다.
+	TextModel string `json:"text_model"`
+	// Glossary는 멤버 이름(members 표에서 채움) 밖의 용어 표기다.
+	Glossary map[string]string `json:"glossary"`
 }
 
 type Config struct {
@@ -86,7 +96,7 @@ func LoadConfig(path string) (result *Config, retErr error) {
 
 	config := Config{
 		PollSeconds: defaultPollSeconds,
-		Translation: TranslationConfig{Location: defaultLocation, Model: defaultModel},
+		Translation: TranslationConfig{Location: defaultLocation, Model: defaultModel, TextModel: defaultTextModel},
 	}
 	if err := jsonv2.Unmarshal(raw, &config, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return nil, errors.New("invalid schedule poster config JSON")
@@ -115,9 +125,26 @@ func (c Config) Validate() error {
 
 	translation := c.Translation
 	if !projectPattern.MatchString(translation.Project) || !locationPattern.MatchString(translation.Location) ||
-		!modelPattern.MatchString(translation.Model) {
-		return errors.New("schedule poster translation requires project, location and model")
+		!modelPattern.MatchString(translation.Model) || !modelPattern.MatchString(translation.TextModel) {
+		return errors.New("schedule poster translation requires project, location, model and text_model")
+	}
+
+	if len(translation.Glossary) > maxGlossaryTerms {
+		return fmt.Errorf("schedule poster glossary allows at most %d terms", maxGlossaryTerms)
+	}
+
+	for term, translated := range translation.Glossary {
+		if !glossaryText(term) || !glossaryText(translated) {
+			return errors.New("schedule poster glossary terms must be 1-80 characters without control characters")
+		}
 	}
 
 	return nil
+}
+
+// glossaryText는 줄바꿈 같은 제어 문자를 막아 한 항목이 프롬프트의 한 줄을 넘지 않게 한다.
+func glossaryText(text string) bool {
+	count := utf8.RuneCountInString(strings.TrimSpace(text))
+
+	return count > 0 && count <= maxGlossaryRunes && !strings.ContainsFunc(text, unicode.IsControl)
 }

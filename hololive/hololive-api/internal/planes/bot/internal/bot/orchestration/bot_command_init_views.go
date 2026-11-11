@@ -102,6 +102,7 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 		handlers.NewLiveCommand(deps),
 		handlers.NewUpcomingCommand(deps),
 		handlers.NewScheduleCommand(deps),
+		handlers.NewSchedulePosterCommand(deps),
 		alarmcmd.NewAlarmCommand(deps),
 		info.NewMemberInfoCommand(deps),
 		handlers.NewBroadcastHistoryCommand(deps),
