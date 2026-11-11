@@ -110,9 +110,6 @@ sudo -n -u hololive env \
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
 [[ "$(systemctl show "$unit" -p NRestarts --value)" == 0 ]]
-if [[ "$po_expected_presence" == present ]]; then
-  [[ "$(systemctl show hololive-youtube-po.service -p NRestarts --value)" == 0 ]]
-fi
 
 if [[ -n "$change_started_at" ]]; then
   journal_since="${change_started_at/T/ }"
@@ -126,6 +123,18 @@ if ! journal_output="$(journalctl -u "$unit" --since "$journal_since" --no-pager
 fi
 if grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output"; then
   exit 1
+fi
+# issuer는 generation이 퇴역할 때마다 exit 0으로 재기동하므로 NRestarts가 아니라 종료 결과로 판정한다.
+if [[ "$po_expected_presence" == present ]]; then
+  [[ "$(systemctl show hololive-youtube-po.service -p Result --value)" == success ]]
+  [[ "$(systemctl show hololive-youtube-po.service -p ExecMainStatus --value)" == 0 ]]
+  if ! po_journal="$(journalctl -u hololive-youtube-po.service --since "$journal_since" --no-pager)"; then
+    echo "failed to read completion logs for hololive-youtube-po.service" >&2
+    exit 1
+  fi
+  if grep -F 'Failed with result' <<<"$po_journal"; then
+    exit 1
+  fi
 fi
 
 echo 'collector AP completion check passed'

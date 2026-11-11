@@ -230,10 +230,11 @@ sudo podman exec holo-postgres psql -U postgres_admin -d hololive -c \
 ### Valkey latency / slowlog
 
 중앙 `valkey-cache`는 Valkey HA hololive 그룹 노드라 unix socket 없이 TLS `16379`만 열고, 운영 명령은 `operator` ACL 사용자로 인증합니다.
-비밀번호는 argv·호스트 process list에 남지 않도록 컨테이너 안의 마운트 파일(`/run/valkey/operator-password`)에서 읽습니다.
+비밀번호는 argv·호스트 process list에 남지 않도록 호스트의 원본 파일(`/etc/stack-secrets/valkey/hololive/operator-password`)을 stdin으로 넘깁니다.
+컨테이너 안의 마운트(`/run/valkey/operator-password`)는 root 0600이어서 컨테이너 사용자 `valkey`도, capability가 없는 컨테이너 root도 읽지 못합니다.
 
 ```bash
-vk() { sudo podman exec -i valkey-cache sh -c 'VALKEYCLI_AUTH="$(cat /run/valkey/operator-password)" exec valkey-cli --no-auth-warning --tls --cacert /run/valkey-certs/ca.pem --user operator -h 127.0.0.1 -p 16379 "$@"' vk "$@"; }
+vk() { sudo cat /etc/stack-secrets/valkey/hololive/operator-password | sudo podman exec -i valkey-cache sh -c 'IFS= read -r p; VALKEYCLI_AUTH="$p" exec valkey-cli --no-auth-warning --tls --cacert /run/valkey-certs/ca.pem --user operator -h 127.0.0.1 -p 16379 "$@"' vk "$@"; }
 vk slowlog get 25
 vk --latency   # Ctrl-C로 종료
 vk info commandstats
