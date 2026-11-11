@@ -8,3 +8,4 @@
 008 008_youtubejs_live_contract_generation.sql
 009 009_drop_llm_feature_storage.sql
 010 010_member_schedule_posters.sql
+011 011_help_schedule_poster.sql
