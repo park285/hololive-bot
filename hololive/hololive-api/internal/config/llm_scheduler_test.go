@@ -39,7 +39,7 @@ func TestLoadLLMProviderConfigDefaultsToCliproxy(t *testing.T) {
 		t.Fatalf("Gemini.BaseURL = %q", cfg.Gemini.BaseURL)
 	}
 
-	if cfg.Gemini.Model != "gemini-3.7-flash" || cfg.Gemini.ThinkingLevel != "high" {
+	if cfg.Gemini.Model != "gemini-4-argon" || cfg.Gemini.ThinkingLevel != "high" {
 		t.Fatalf("Gemini defaults = model %q thinking %q", cfg.Gemini.Model, cfg.Gemini.ThinkingLevel)
 	}
 }

@@ -386,6 +386,7 @@ func selectedProviderReasoningLevel(config apiconfig.LLMProviderConfig) string {
 	return config.Cliproxy.ReasoningEffort
 }
 
+// Gemini 3.x API는 temperature를 폐기해 무시하고 이후 세대에서는 오류로 거절하므로 cliproxy 경유 gemini-3.7-flash에는 보내지 않는다.
 func appendSupportedTemperature(opts []llm.Option, model string, temperature float64) ([]llm.Option, bool) {
 	if temperature <= 0 || strings.Contains(strings.ToLower(strings.TrimSpace(model)), "gemini-3.7-flash") {
 		return opts, false

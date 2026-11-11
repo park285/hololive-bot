@@ -105,7 +105,7 @@ func LoadGeminiConfig() (GeminiConfig, error) {
 	return GeminiConfig{
 		BaseURL:       sharedenv.String("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com"),
 		APIKey:        sharedenv.String("GEMINI_API_KEY", ""),
-		Model:         sharedenv.String("GEMINI_MODEL", "gemini-3.7-flash"),
+		Model:         sharedenv.String("GEMINI_MODEL", "gemini-4-argon"),
 		Enabled:       enabled,
 		ThinkingLevel: sharedenv.String("GEMINI_THINKING_LEVEL", "high"),
 	}, nil

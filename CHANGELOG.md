@@ -27,6 +27,7 @@
 - **migration 008:** baseline이 시드한 YouTube.js `live_snapshot` 1/2·`video_live_check` 1/1 세대를 현행 1/3·2/2로 올립니다. 이미 전환된 운영 DB에서는 바뀌는 행이 없고, 수동 `manual/youtube_live_lifecycle_cutover.sql`은 지웠습니다.
 - **해소 불가 추적:** positive보다 이른 `unresolvable_since`를 이전 바이너리 잔여값으로 보고 무시하던 필터를 지웠습니다. 운영에 그런 행이 없음을 확인했습니다.
 - **major event 만료·기간 기준:** 날짜 없는 RSS 행은 주간·월간 조회와 같은 KST 게시일을 행사일로 보고 지난 날짜면 만료합니다. 운영 활성 117행이 모두 날짜 없이 2026-01-25부터 쌓여 링크 점검 대상이 계속 늘던 문제가 첫 만료 실행에서 정리됩니다. 주간·월간 조회의 게시일 비교도 UTC가 아니라 KST 날짜로 합니다.
+- **기본 LLM 모델:** `GEMINI_MODEL` 기본값을 `gemini-4-argon`으로 바꿉니다. 운영 `compose.env`도 같은 값으로 전환합니다. Gemini Interactions API 지원 모델이며 thinking level은 기존 `high`를 유지합니다. 단가는 Gemini API Standard 기준 입력 $2·출력 $10 / 1M tokens이고 2026-12-01부터 두 배가 됩니다.
 - **빌드·게이트:** `build-all.sh`는 runtime VERSION이 없거나 `MAJOR.MINOR.PATCH` 형식이 아니면 빌드 전에 실패합니다. 도구 버전 핀을 한 곳으로 모았습니다. SQL 안전 게이트의 `COUNT(*)` 금지 규칙을 지웠고, migration manifest 검사는 Python 재구현 대신 dbmigrate 파서를 씁니다.
 
 ## v15.0.0 - 2026-11-10
