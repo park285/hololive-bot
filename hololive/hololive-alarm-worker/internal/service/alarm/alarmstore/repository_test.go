@@ -22,6 +22,7 @@ package alarmstore
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,7 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
+func TestAlarmTypeQueriesUseContainment(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -40,7 +41,6 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 	baseTime := time.Date(2026, time.July, 3, 10, 0, 0, 0, time.UTC)
 
 	insertAlarmForTypeQuery(t, pool, "room-live", channelID, domain.AlarmTypes{domain.AlarmTypeLive}, baseTime)
-	insertAlarmForTypeQuery(t, pool, "room-empty", channelID, domain.AlarmTypes{}, baseTime.Add(time.Second))
 	insertAlarmForTypeQuery(t, pool, testCommunityRoomID, channelID, domain.AlarmTypes{domain.AlarmTypeCommunity}, baseTime.Add(2*time.Second))
 	insertAlarmForTypeQuery(t, pool, "room-other-channel", "UC_other_channel", domain.AlarmTypes{domain.AlarmTypeLive}, baseTime.Add(3*time.Second))
 
@@ -51,14 +51,29 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 		t.Fatalf("FindByChannelAndType() error = %v", err)
 	}
 
-	requireAlarmRoomIDs(t, got, []string{"room-live", "room-empty"})
+	requireAlarmRoomIDs(t, got, []string{"room-live"})
 
 	subscribers, err := NewSubscriberResolver(nil, pool).loadChannelSubscriberAlarms(ctx, channelID, domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("loadChannelSubscriberAlarms() error = %v", err)
 	}
 
-	requireAlarmRoomIDs(t, subscribers, []string{"room-live", "room-empty"})
+	requireAlarmRoomIDs(t, subscribers, []string{"room-live"})
+}
+
+// 읽기 쪽은 빈 alarm_types를 기본 종류로 해석하지 않으므로, 빈 배열 행은 DB가 저장 시점에 거절해야 한다.
+func TestAlarmsRejectEmptyAlarmTypes(t *testing.T) {
+	t.Parallel()
+
+	pool := dbtest.NewPool(t)
+
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO alarms (room_id, user_id, channel_id, alarm_types)
+		VALUES ('room-empty', 'user-empty', 'UC_empty_types', ARRAY[]::alarm_type[])
+	`)
+	if err == nil || !strings.Contains(err.Error(), "chk_alarms_alarm_types_nonempty") {
+		t.Fatalf("insert empty alarm_types error = %v, want chk_alarms_alarm_types_nonempty violation", err)
+	}
 }
 
 // 표시명은 members 정본만 쓴다. 멤버 데이터에 한국어 표시명이 없는 채널은 빈 값이다.

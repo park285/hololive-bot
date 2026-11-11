@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -113,10 +112,6 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 			action: "render celebration message",
 			run:    func() (delivery.MessageVariants, error) { return renderCelebrationMessage(ctx, renderer, envelope) },
 		},
-		domain.AlarmDispatchSourceKindDeliveryDigest: {
-			action: "render delivery digest dispatch",
-			run:    func() (delivery.MessageVariants, error) { return renderAlarmDispatchDeliveryDigest(envelope) },
-		},
 	}
 
 	selected, ok := renderers[envelope.SourceKind]
@@ -130,18 +125,6 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 	}
 
 	return message, true, nil
-}
-
-// 저장된 digest envelope는 변형 도입 전에 한 본문만 담았으므로 그 본문을 두 경로에 그대로 쓴다. 이 저장소에는 새 digest
-// 생산자가 없으므로 남은 envelope가 모두 처리되면 이 분기와 함께 지울 수 있다.
-func renderAlarmDispatchDeliveryDigest(envelope *dispatchoutbox.AlarmQueueEnvelope) (delivery.MessageVariants, error) {
-	if envelope.DeliveryDigest == nil {
-		return delivery.MessageVariants{}, errors.New("payload is nil")
-	}
-
-	message := envelope.DeliveryDigest.PreRenderedMessage
-
-	return delivery.MessageVariants{Plain: message, RichText: message}, nil
 }
 
 type alarmDispatchItemView struct {

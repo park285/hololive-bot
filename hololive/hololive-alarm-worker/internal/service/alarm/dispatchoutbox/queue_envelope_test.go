@@ -372,39 +372,6 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_BirthdayStream(t *testing.
 	}
 }
 
-func TestAlarmQueueEnvelopeRoundTripsDeliveryDigest(t *testing.T) {
-	t.Parallel()
-
-	envelope := AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: testRoomID},
-		SourceKind:   domain.AlarmDispatchSourceKindDeliveryDigest,
-		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{
-			Kind:               domain.DeliveryKindMemberNewsMonthly,
-			PeriodKey:          "2026-08",
-			PreRenderedMessage: "8월 멤버 뉴스",
-		},
-		Version: 1,
-	}
-	if err := envelope.ValidateCanonicalDispatch(); err != nil {
-		t.Fatalf("ValidateCanonicalDispatch() error = %v", err)
-	}
-
-	raw, err := jsonv2.Marshal(envelope)
-	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
-	}
-
-	var decoded AlarmQueueEnvelope
-
-	if err := jsonv2.Unmarshal(raw, &decoded); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
-
-	if decoded.DeliveryDigest == nil || decoded.DeliveryDigest.PreRenderedMessage != "8월 멤버 뉴스" {
-		t.Fatalf("DeliveryDigest = %#v", decoded.DeliveryDigest)
-	}
-}
-
 func decodeAlarmQueueEnvelopeFixture(t *testing.T) AlarmQueueEnvelope {
 	t.Helper()
 
@@ -443,16 +410,12 @@ func TestAlarmQueueEnvelopeV1FixtureFields(t *testing.T) {
 		t.Fatalf("dispatch_outbox_id = %d, want 42", envelope.DispatchOutboxID)
 	}
 
-	if envelope.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest {
-		t.Fatalf("source_kind = %q, want %q", envelope.SourceKind, domain.AlarmDispatchSourceKindDeliveryDigest)
+	if envelope.SourceKind != domain.AlarmDispatchSourceKindXSpace {
+		t.Fatalf("source_kind = %q, want %q", envelope.SourceKind, domain.AlarmDispatchSourceKindXSpace)
 	}
 
-	if envelope.DeliveryDigest == nil {
-		t.Fatal("delivery_digest should be non-nil")
-	}
-
-	if envelope.DeliveryDigest.PeriodKey != "2026-W09" {
-		t.Fatalf("delivery_digest.period_key = %q, want 2026-W09", envelope.DeliveryDigest.PeriodKey)
+	if envelope.XSpace == nil || envelope.XSpace.SpaceID != "1fixture" {
+		t.Fatalf("x_space = %+v, want space_id 1fixture", envelope.XSpace)
 	}
 
 	if envelope.SourcePayload() != `{"version":1}` {
@@ -492,8 +455,8 @@ func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
 		t.Fatalf("roundTrip source_kind = %q, want %q", roundTrip.SourceKind, envelope.SourceKind)
 	}
 
-	if roundTrip.DeliveryDigest == nil || *roundTrip.DeliveryDigest != *envelope.DeliveryDigest {
-		t.Fatal("roundTrip delivery_digest mismatch")
+	if roundTrip.XSpace == nil || *roundTrip.XSpace != *envelope.XSpace {
+		t.Fatal("roundTrip x_space mismatch")
 	}
 
 	if roundTrip.SourcePayload() != envelope.SourcePayload() {

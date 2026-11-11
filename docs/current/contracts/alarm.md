@@ -271,7 +271,6 @@ type AlarmQueueEnvelope struct {
     Notification     domain.AlarmNotification              `json:"notification"`
     SourceKind       domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
     Celebration      *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
-    DeliveryDigest   *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
     XSpace           *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
     ClaimKeys        []string                              `json:"claim_keys"`
     EnqueuedAt       string                                `json:"enqueued_at"`

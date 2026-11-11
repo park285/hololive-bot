@@ -287,8 +287,8 @@ func TestAlarmDispatchRunnerReturnsErrorWhenPostSendQuarantineFails(t *testing.T
 func TestAlarmDispatchRunnerConsumesAttemptForRenderFailureBeforeMarkSending(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
-	envelope.SourceKind = domain.AlarmDispatchSourceKindDeliveryDigest
-	envelope.DeliveryDigest = nil
+	envelope.SourceKind = domain.AlarmDispatchSourceKindCelebration
+	envelope.Celebration = nil
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]dispatchoutbox.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
@@ -859,19 +859,23 @@ type alarmDispatchRunnerBlockingSender struct {
 }
 
 func alarmDispatchRunnerIntrinsicTextEnvelope() dispatchoutbox.AlarmQueueEnvelope {
-	return alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID)
+	return alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 }
 
-// attempt deadline 검증은 렌더러의 실제 DB I/O와 분리한다.
-func alarmDispatchRunnerPreRenderedTextEnvelope(roomID string) dispatchoutbox.AlarmQueueEnvelope {
+// alarmDispatchRunnerPinnedEnvelope는 요청을 미리 고정해 attempt deadline 검증을 렌더러의 실제 DB I/O와 분리한다.
+func alarmDispatchRunnerPinnedEnvelope(store *alarmRequestTestStore, roomID string) dispatchoutbox.AlarmQueueEnvelope {
 	envelope := alarmDispatchRunnerTestEnvelope(roomID, nil)
 
-	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
-	envelope.SourceKind = domain.AlarmDispatchSourceKindDeliveryDigest
-	envelope.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{
-		Kind:               domain.DeliveryKindMemberNewsWeekly,
-		PeriodKey:          "2026-W32",
-		PreRenderedMessage: "주간 멤버 뉴스",
+	if store.requests == nil {
+		store.requests = make(map[string]*dispatchoutbox.SendRequest)
+	}
+
+	envelope.SendUnitID = int64(len(store.requests) + 1)
+	envelope.ClientRequestID = "pinned-" + roomID
+
+	store.requests[envelope.ClientRequestID] = &dispatchoutbox.SendRequest{
+		Body: "고정 본문", Route: "text", RoomID: roomID,
+		BaseClientRequestID: envelope.ClientRequestID, ClientRequestID: envelope.ClientRequestID,
 	}
 
 	return envelope
@@ -908,7 +912,7 @@ func TestAlarmDispatchRunnerRoutesSendingRetryWithLiveContextAfterAttemptDeadlin
 	synctest.Test(t, func(t *testing.T) {
 		consumer := &alarmDispatchRunnerContextConsumer{}
 
-		consumer.batches = [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID)}}
+		consumer.batches = [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerPinnedEnvelope(&consumer.alarmRequestTestStore, testAlarmRoomID)}}
 
 		sender := &alarmDispatchRunnerBlockingSender{}
 		runner := Runner{
@@ -935,7 +939,7 @@ func TestAlarmDispatchRunnerMarksDispatchedAfterAttemptDeadlineExpires(t *testin
 	synctest.Test(t, func(t *testing.T) {
 		consumer := &alarmDispatchRunnerContextConsumer{}
 
-		consumer.batches = [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID)}}
+		consumer.batches = [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerPinnedEnvelope(&consumer.alarmRequestTestStore, testAlarmRoomID)}}
 
 		sender := &alarmDispatchRunnerBlockingSender{succeed: true}
 		runner := Runner{
@@ -962,8 +966,8 @@ func TestAlarmDispatchRunnerGivesEachGroupIndependentAttemptDeadline(t *testing.
 		consumer := &alarmDispatchRunnerContextConsumer{}
 
 		consumer.batches = [][]dispatchoutbox.AlarmQueueEnvelope{{
-			alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID),
-			alarmDispatchRunnerPreRenderedTextEnvelope("room-2"),
+			alarmDispatchRunnerPinnedEnvelope(&consumer.alarmRequestTestStore, testAlarmRoomID),
+			alarmDispatchRunnerPinnedEnvelope(&consumer.alarmRequestTestStore, "room-2"),
 		}}
 
 		sender := &alarmDispatchRunnerBlockingSender{}
@@ -994,7 +998,7 @@ func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerContextConsumer{}
 
-	consumer.batches = [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID)}}
+	consumer.batches = [][]dispatchoutbox.AlarmQueueEnvelope{{alarmDispatchRunnerPinnedEnvelope(&consumer.alarmRequestTestStore, testAlarmRoomID)}}
 
 	sender := &alarmDispatchRunnerBlockingSender{onSend: cancel}
 	runner := Runner{

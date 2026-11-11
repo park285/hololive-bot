@@ -12,12 +12,11 @@ import (
 )
 
 type eventPayloadEnvelope struct {
-	Notification   eventPayloadNotification              `json:"notification"`
-	SourceKind     domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	Celebration    *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
-	DeliveryDigest *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
-	XSpace         *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
-	Version        uint8                                 `json:"version"`
+	Notification eventPayloadNotification           `json:"notification"`
+	SourceKind   domain.AlarmDispatchSourceKind     `json:"source_kind,omitempty"`
+	Celebration  *domain.CelebrationDispatchPayload `json:"celebration,omitempty"`
+	XSpace       *domain.XSpaceDispatchPayload      `json:"x_space,omitempty"`
+	Version      uint8                              `json:"version"`
 }
 
 type eventPayloadNotification struct {
@@ -113,11 +112,10 @@ func marshalEventPayload(envelope *AlarmQueueEnvelope) ([]byte, error) {
 			ScheduleChangeMessage:       envelope.Notification.ScheduleChangeMessage,
 			ScheduleChangePreviousStart: envelope.Notification.ScheduleChangePreviousStart,
 		},
-		SourceKind:     envelope.SourceKind,
-		Celebration:    envelope.Celebration,
-		DeliveryDigest: envelope.DeliveryDigest,
-		XSpace:         envelope.XSpace,
-		Version:        envelope.Version,
+		SourceKind:  envelope.SourceKind,
+		Celebration: envelope.Celebration,
+		XSpace:      envelope.XSpace,
+		Version:     envelope.Version,
 	}
 
 	raw, err := jsonv2.Marshal(payload, jsonv2.Deterministic(true))

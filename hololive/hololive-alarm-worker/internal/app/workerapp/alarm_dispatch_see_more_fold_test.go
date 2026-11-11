@@ -8,10 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/park285/iris-client-go/v5/iris"
-	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
@@ -200,32 +198,6 @@ func TestAlarmDispatchRunnerKeepsLongAlarmNotificationGroupUnfoldedAtFinalPayloa
 	requireNoAutoPadding(t, final)
 
 	require.Equal(t, len(envelopes), strings.Count(final, "https://youtube.com/watch?v="))
-}
-
-func TestAlarmDispatchRunnerKeepsPreRenderedDigestUnpadded(t *testing.T) {
-	t.Parallel()
-
-	renderer, store := newSeeMoreFoldRendering(t, nil)
-
-	digest := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-
-	digest.Notification.AlarmType = domain.AlarmTypeCommunity
-	digest.SourceKind = domain.AlarmDispatchSourceKindDeliveryDigest
-	digest.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{
-		Kind:               domain.DeliveryKindMemberNewsWeekly,
-		PeriodKey:          "2026-W39",
-		PreRenderedMessage: "주간 멤버 뉴스\n\n" + strings.Repeat("- 멤버 소식 항목이 이어집니다\n", 20),
-	}
-
-	storedMessage := digest.DeliveryDigest.PreRenderedMessage
-
-	final := runSeeMoreFoldFinalPayload(t, renderer, store, digest)
-
-	require.Greater(t, utf8.RuneCountInString(final), 250, "exercise a long message")
-	requireNoAutoPadding(t, final)
-	// 저장 본문은 그대로 두고, 최종 text lane의 기존 Markdown 변환만 허용한다.
-	require.Equal(t, storedMessage, digest.DeliveryDigest.PreRenderedMessage)
-	require.Equal(t, kakaoformat.Render(storedMessage), final)
 }
 
 func (*seeMoreFoldConsumer) LoadSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {

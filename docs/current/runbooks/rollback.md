@@ -58,27 +58,9 @@ Collector Quadlet(c)·Compose(b)·native(a/d)는 [collector runbook](youtube-col
 binary/image·Node helper·issuer·프로필 짝을 사용합니다. PO issuer는
 [`RestartCount`가 아닌 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)으로 판정합니다.
 
-delivery digest의 content-sensitive identity를 도입한 revision은 기존 period-only identity와
-rollback 호환되지 않습니다. v3 handoff(`DELIVERY_OUTBOX_V3_HANDOFF_MODE`)는
-`DEC-20260926-hololive-outbox-v3-convergence`로 삭제되어 현재 `hololive-api`는 v3 digest row를
-만들지 않고 digest를 v2 `notification_delivery_outbox`에만 적재합니다. 그래도 rollback 전에는
-authoritative DB에서 아래 read-only preflight가 `0`인지 확인하고 `hololive-alarm-worker`를 먼저
-전환한 뒤 `hololive-api`를 전환합니다.
-
-```sql
-SELECT count(*)
-FROM alarm_dispatch_events
-WHERE category = 'delivery_digest'
-   OR payload ->> 'source_kind' = 'delivery_digest';
-```
-
-content-sensitive delivery digest row가 한 건이라도 생성된 뒤에는 구 period-only API 또는
-alarm-worker image로 되돌리지 않습니다. 구 producer는 같은 kind/period/room을 새 key로
-인식하지 못해 재발송할 수 있고, 구 worker는 메시지가 다른 row를 같은 group으로 합칠 수
-있습니다. 이 경우 API의 scheduler·run-now ingress를 중지하고 active send unit을 drain하며
-current revision을 fix-forward합니다. rollback image 사용은 최초 v3 digest 생성 전으로만
-제한합니다. handoff mode 키를 다시 넣어 v3 digest 생성을 켜는 절차는 없으며, 현재 revision은
-그 키가 있으면 기동을 거절합니다.
+migration 006(`idx_bot_reply_outbox_message` 삭제)과 007(발송 route CHECK를 `text`·`richtext`로 좁히고
+`alarms.alarm_types` 빈 배열 거절)은 v15.0.0 image와 함께 동작합니다. v15.0.0은 그 인덱스를 조회 계획에만 쓰고,
+`markdown`·`sender` route나 빈 `alarm_types`를 저장하지 않습니다. 이 두 migration은 image rollback 때 되돌리지 않습니다.
 
 Runtime service names:
 

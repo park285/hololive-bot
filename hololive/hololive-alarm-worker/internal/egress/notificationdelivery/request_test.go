@@ -84,20 +84,38 @@ func preparedSpyIrisRequestID(clientRequestID string) string {
 	return "iris-" + clientRequestID
 }
 
-// RichText 본문이 없는 변형 도입 전 행은 한 본문을 두 경로에 쓴다.
 func TestGenericRequestPassesStoredVariantsToPreparation(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
 	current := delivery.MessageVariants{Plain: "일반 본문", RichText: "**리치 본문**"}
 
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "variants", "room-current", current))
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "variants", "room-legacy", delivery.MessageVariants{Plain: "이전 본문"}))
 
 	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText}
 	cfg := testDispatcherConfig()
 
 	mustNewDispatcher(t, repo, sender, dispatcherLogger(), &cfg).processReady(ctx)
-	require.ElementsMatch(t, []delivery.MessageVariants{current, {Plain: "이전 본문", RichText: "이전 본문"}}, sender.prepared)
+	require.Equal(t, []delivery.MessageVariants{current}, sender.prepared)
+}
+
+// rich_text_message가 빠진 행은 일반 본문을 대신 쓰지 않고, 준비 단계에서 실패로 남아 발송되지 않는다.
+func TestGenericRequestWithoutRichTextFailsPreparation(t *testing.T) {
+	repo := testRepository(t)
+	ctx := t.Context()
+
+	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "missing-rich", "room", delivery.MessageVariants{Plain: "일반 본문만"}))
+
+	sender := &preparedSenderSpy{body: testPinnedBody, route: testPreparedText}
+	cfg := testDispatcherConfig()
+
+	mustNewDispatcher(t, repo, sender, dispatcherLogger(), &cfg).processReady(ctx)
+	require.Empty(t, sender.prepared)
+	require.Empty(t, sender.ids)
+
+	var lastError string
+
+	require.NoError(t, repo.pool.QueryRow(ctx, `SELECT coalesce(error, '') FROM notification_delivery_outbox WHERE period_key = 'missing-rich'`).Scan(&lastError))
+	require.Contains(t, lastError, "rich_text_message is required")
 }
 
 func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {

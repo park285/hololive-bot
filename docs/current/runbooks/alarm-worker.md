@@ -52,9 +52,9 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=true` | `richtext` 템플릿 변형을 `SendRichText`로 전달하고 Iris가 본문·네이티브 서식으로 변환 |
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=false` | `plain` 변형, 일반 텍스트 |
 | 방 유형 미확인 | `plain` 변형, 일반 텍스트 |
-| celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
+| celebration, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
 
-워커는 두 변형을 모두 렌더하고 발송 요청을 고정할 때(`PrepareMessageRequest`) 방 유형을 한 번 판정해 하나를 고릅니다. 고정한 요청의 본문·route는 재시도와 재시작에서 그대로 재사용합니다. generic notification delivery는 producer가 적재한 `message`(plain)와 `rich_text_message`(richtext)를 쓰며, `rich_text_message`가 없는 변형 도입 전 행과 저장된 delivery digest는 한 본문을 두 경로에 씁니다.
+워커는 두 변형을 모두 렌더하고 발송 요청을 고정할 때(`PrepareMessageRequest`) 방 유형을 한 번 판정해 하나를 고릅니다. 고정한 요청의 본문·route는 재시도와 재시작에서 그대로 재사용합니다. generic notification delivery는 producer가 적재한 `message`(plain)와 `rich_text_message`(richtext)를 쓰며, `rich_text_message`가 없는 행은 발송하지 않고 준비 실패로 기록합니다.
 
 일반 텍스트는 `kakaoformat.Render`를 거칩니다. 방 resolver는 오픈채팅 여부만 제공합니다. 텍스트·RichText sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·notification·youtube handoff reconciler만 합니다. 저장된 `text`·`richtext` 고정 요청은 저장한 형식 그대로 재생합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절됩니다.
 

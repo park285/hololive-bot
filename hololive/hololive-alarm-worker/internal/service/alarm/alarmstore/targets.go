@@ -311,12 +311,7 @@ func alarmRecordMatchesType(alarmRecord *domain.Alarm, alarmType domain.AlarmTyp
 		return false
 	}
 
-	alarmTypes := alarmRecord.AlarmTypes
-	if len(alarmTypes) == 0 {
-		alarmTypes = domain.DefaultAlarmTypes
-	}
-
-	return alarmTypes.Contains(alarmType)
+	return alarmRecord.AlarmTypes.Contains(alarmType)
 }
 
 func normalizeSubscriberIDs(subscribers []string) []string {

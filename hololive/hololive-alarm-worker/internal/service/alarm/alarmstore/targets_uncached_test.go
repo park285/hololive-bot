@@ -26,7 +26,7 @@ func TestResolveUncachedChannelSubscribersByType_RecoversChannelsInOneQuery(t *t
 	cacheClient := testutil.NewTestCacheService(ctx, t)
 
 	requireAlarmRecord(t, db, &domain.Alarm{RoomID: "room-a-live", ChannelID: uncachedChannelA, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
-	requireAlarmRecord(t, db, &domain.Alarm{RoomID: "room-a-default", ChannelID: uncachedChannelA})
+	requireAlarmRecord(t, db, &domain.Alarm{RoomID: "room-a-default", ChannelID: uncachedChannelA, AlarmTypes: domain.DefaultAlarmTypes})
 	requireAlarmRecord(t, db, &domain.Alarm{RoomID: "room-a-community", ChannelID: uncachedChannelA, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity}})
 	requireAlarmRecord(t, db, &domain.Alarm{RoomID: "room-b-live", ChannelID: uncachedChannelB, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
 	requireAlarmRecord(t, db, &domain.Alarm{RoomID: "room-c-community", ChannelID: uncachedChannelC, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity}})

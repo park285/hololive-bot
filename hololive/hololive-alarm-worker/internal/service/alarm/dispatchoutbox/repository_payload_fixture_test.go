@@ -72,19 +72,6 @@ func ledgerPayloadFixtures() []ledgerPayloadFixture {
 			wantHash:    "35e9009c1c18493006f01c8e6388b6b0a43470131a942cc8f028a69d0fa20cdf",
 		},
 		{
-			name: "delivery digest",
-			envelope: AlarmQueueEnvelope{
-				Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: testRoomID},
-				SourceKind:   domain.AlarmDispatchSourceKindDeliveryDigest,
-				DeliveryDigest: &domain.DeliveryDigestDispatchPayload{
-					Kind: domain.DeliveryKindMajorEventMonthly, PeriodKey: testDigestPeriodKey, PreRenderedMessage: "8월 주요 이벤트",
-				},
-				Version: 1,
-			},
-			wantPayload: `{"notification":{"alarm_type":"COMMUNITY","channel":null,"stream":null,"minutes_until":0},"source_kind":"delivery_digest","delivery_digest":{"kind":"MAJOR_EVENT_MONTHLY","period_key":"2026-08","pre_rendered_message":"8월 주요 이벤트"},"version":1}`,
-			wantHash:    "1eb51f7d47f6eaed4c4c08af66951a4a4c4e5f288bda98698e5e2bdaee9a6e08",
-		},
-		{
 			name: "x space",
 			envelope: AlarmQueueEnvelope{
 				Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: testRoomID},

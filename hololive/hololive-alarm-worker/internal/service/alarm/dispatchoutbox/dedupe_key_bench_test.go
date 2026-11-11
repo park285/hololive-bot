@@ -8,25 +8,12 @@ import (
 )
 
 func benchPreparedDedupeInput() DedupeInput {
-	startScheduled := time.Date(2026, time.June, 12, 12, 0, 0, 0, time.UTC)
 	envelope := AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{
-			RoomID:    "1234567890123456789",
-			AlarmType: domain.AlarmTypeLive,
-			Channel:   &domain.Channel{ID: "UC1DCedRgGHBdm81E1llLhOQ"},
-			Stream: &domain.Stream{
-				ID:             "dQw4w9WgXcQ",
-				ChannelID:      "UC1DCedRgGHBdm81E1llLhOQ",
-				Title:          "【歌枠】こんやも うたう よ～！ SINGING STREAM",
-				StartScheduled: &startScheduled,
-			},
-			MinutesUntil: 10,
-		},
-		SourceKind: domain.AlarmDispatchSourceKindDeliveryDigest,
-		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{
-			Kind:               domain.DeliveryKindMajorEventWeekly,
-			PeriodKey:          "2026-W24",
-			PreRenderedMessage: "【歌枠】こんやも うたう よ～！ SINGING STREAM",
+		Notification: domain.AlarmNotification{RoomID: "1234567890123456789", AlarmType: domain.AlarmTypeLive},
+		SourceKind:   domain.AlarmDispatchSourceKindXSpace,
+		XSpace: &domain.XSpaceDispatchPayload{
+			SpaceID: "1YqKDqWqdPLGV", CreatorID: "1234567890", ChannelID: "UC1DCedRgGHBdm81E1llLhOQ",
+			Title: "【歌枠】こんやも うたう よ～！ SINGING STREAM", StartedAt: time.Date(2026, time.June, 12, 12, 0, 0, 0, time.UTC),
 		},
 	}
 

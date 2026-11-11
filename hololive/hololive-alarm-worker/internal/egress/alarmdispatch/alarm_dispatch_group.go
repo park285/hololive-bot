@@ -80,7 +80,7 @@ func alarmDispatchEnvelopeError(envelope *dispatchoutbox.AlarmQueueEnvelope) err
 	}
 
 	switch envelope.SourceKind {
-	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindDeliveryDigest, domain.AlarmDispatchSourceKindXSpace:
+	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindXSpace:
 		return nil
 	case "":
 		return alarmDispatchStreamEnvelopeError(envelope)

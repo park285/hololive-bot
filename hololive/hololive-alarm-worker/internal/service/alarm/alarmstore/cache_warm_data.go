@@ -38,10 +38,6 @@ func (data *subscriberCacheWarmData) addAlarm(alarmRecord *domain.Alarm) {
 }
 
 func (data *subscriberCacheWarmData) addChannelSubscribers(channelID, registryKey string, alarmTypes domain.AlarmTypes) {
-	if len(alarmTypes) == 0 {
-		alarmTypes = domain.DefaultAlarmTypes
-	}
-
 	for _, alarmType := range alarmTypes {
 		key := alarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
 

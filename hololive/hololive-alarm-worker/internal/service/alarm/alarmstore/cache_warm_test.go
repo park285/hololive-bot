@@ -44,11 +44,12 @@ func typeSpecificWarmAlarms() []*domain.Alarm {
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 		},
 		{
-			RoomID:    testDefaultRoomID,
-			UserID:    "user-default",
-			ChannelID: testWarmChannelB,
-			RoomName:  "Default Room",
-			UserName:  "Default User",
+			RoomID:     testDefaultRoomID,
+			UserID:     "user-default",
+			ChannelID:  testWarmChannelB,
+			RoomName:   "Default Room",
+			AlarmTypes: domain.DefaultAlarmTypes,
+			UserName:   "Default User",
 		},
 	}
 }
@@ -145,7 +146,7 @@ func TestRebuildSubscriberCacheFromRepository_ClearsEmptyCacheMarkerWhenAlarmsEx
 	cacheClient := newMemoryCacheClient(t)
 	require.NoError(t, cacheClient.Set(ctx, alarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
 
-	source := newStubWarmSource([]*domain.Alarm{{RoomID: "room-1", UserID: "user-1", ChannelID: "UC_ONE"}}, nil)
+	source := newStubWarmSource([]*domain.Alarm{{RoomID: "room-1", UserID: "user-1", ChannelID: "UC_ONE", AlarmTypes: domain.DefaultAlarmTypes}}, nil)
 
 	_, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
@@ -164,11 +165,12 @@ func TestRebuildSubscriberCacheFromRepository_UsesBatchedWrites(t *testing.T) {
 
 	for i := range 48 {
 		alarms = append(alarms, &domain.Alarm{
-			RoomID:    "room-" + strconv.Itoa(i),
-			UserID:    "user-" + strconv.Itoa(i),
-			ChannelID: "UC_BATCH",
-			RoomName:  "Room " + strconv.Itoa(i),
-			UserName:  "User " + strconv.Itoa(i),
+			RoomID:     "room-" + strconv.Itoa(i),
+			UserID:     "user-" + strconv.Itoa(i),
+			ChannelID:  "UC_BATCH",
+			RoomName:   "Room " + strconv.Itoa(i),
+			UserName:   "User " + strconv.Itoa(i),
+			AlarmTypes: domain.DefaultAlarmTypes,
 		})
 	}
 

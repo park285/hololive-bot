@@ -275,9 +275,5 @@ func applyAlarmTypes(alarm *domain.Alarm, alarmTypesStr *string) error {
 		}
 	}
 
-	if len(alarm.AlarmTypes) == 0 {
-		alarm.AlarmTypes = domain.DefaultAlarmTypes
-	}
-
 	return nil
 }

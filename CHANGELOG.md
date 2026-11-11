@@ -22,6 +22,8 @@
 - **Holodex:** 429 재시도를 소진한 오류는 `*KeyRotationError` 대신 `*APIError`입니다. PhotoSync 구현은 hololive-api admin plane으로 옮겼고 주기·재시도·SQL은 같습니다.
 - **조회 비용 감소:** 방송 이력 조회의 행 수, ACL `RemoveRoom`의 전체 재적재, webhook inbox 정산 왕복, checker·tier·dedup의 N+1 조회, video_list·shorts_list subject head 갱신, collector target snapshot 트랜잭션의 왕복 1회를 줄였습니다.
 - **migration 006:** UNIQUE(message_id, phase, ordinal)와 겹치고 운영 사용 횟수가 0인 `idx_bot_reply_outbox_message`를 `DROP INDEX CONCURRENTLY`로 지웁니다. bot 명령 실행 원장은 `result_summary`를 더 쓰지 않으며, 값은 기존 trigger가 terminal 전이 때 status로 채웁니다. 열과 member news 대체 문구 행 삭제는 이전 이미지 롤백을 깨므로 다음 릴리스에서 합니다.
+- **migration 007:** `alarm_dispatch_send_units.request_route`와 `youtube_notification_send_request.route` CHECK를 `text`·`richtext`로 좁히고, `alarms.alarm_types` 빈 배열을 `chk_alarms_alarm_types_nonempty`로 거절합니다. 운영에 해당 행이 없음을 적용 전에 확인했습니다. alarm-worker 구독 조회는 빈 `alarm_types`를 기본 종류로 해석하지 않습니다.
+- **알림 발송 호환 분기 삭제:** generic notification delivery는 `rich_text_message`가 없는 행을 일반 본문으로 대신 보내지 않고 준비 실패(`rich_text_message is required`)로 기록합니다. 생산자가 없는 alarm dispatch `delivery_digest` 출처의 decode·검증·렌더 경로를 지웠습니다. 남은 행이 있으면 `source_kind`에 발송 경로가 없다는 발송 전 실패로 처리됩니다.
 - **빌드·게이트:** `build-all.sh`는 runtime VERSION이 없거나 `MAJOR.MINOR.PATCH` 형식이 아니면 빌드 전에 실패합니다. 도구 버전 핀을 한 곳으로 모았습니다. SQL 안전 게이트의 `COUNT(*)` 금지 규칙을 지웠고, migration manifest 검사는 Python 재구현 대신 dbmigrate 파서를 씁니다.
 
 ## v15.0.0 - 2026-11-10

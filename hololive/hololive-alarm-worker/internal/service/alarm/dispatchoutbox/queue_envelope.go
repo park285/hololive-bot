@@ -11,20 +11,19 @@ import (
 
 // AlarmQueueEnvelope의 JSON 형식은 이미 저장된 dispatch event payload를 그대로 decode할 수 있어야 한다.
 type AlarmQueueEnvelope struct {
-	DispatchOutboxID int64                                 `json:"dispatch_outbox_id"`
-	DispatchGroupKey string                                `json:"dispatch_group_key,omitempty"`
-	SendUnitID       int64                                 `json:"send_unit_id"`
-	ClientRequestID  string                                `json:"client_request_id,omitempty"`
-	Notification     domain.AlarmNotification              `json:"notification"`
-	SourceKind       domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	Celebration      *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
-	DeliveryDigest   *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
-	XSpace           *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
-	ClaimKeys        []string                              `json:"claim_keys"`
-	EnqueuedAt       string                                `json:"enqueued_at"`
-	Version          uint8                                 `json:"version"`
-	Retry            *AlarmQueueRetryMetadata              `json:"retry,omitempty"`
-	SourcePayloadRaw string                                `json:"source_payload,omitempty"`
+	DispatchOutboxID int64                              `json:"dispatch_outbox_id"`
+	DispatchGroupKey string                             `json:"dispatch_group_key,omitempty"`
+	SendUnitID       int64                              `json:"send_unit_id"`
+	ClientRequestID  string                             `json:"client_request_id,omitempty"`
+	Notification     domain.AlarmNotification           `json:"notification"`
+	SourceKind       domain.AlarmDispatchSourceKind     `json:"source_kind,omitempty"`
+	Celebration      *domain.CelebrationDispatchPayload `json:"celebration,omitempty"`
+	XSpace           *domain.XSpaceDispatchPayload      `json:"x_space,omitempty"`
+	ClaimKeys        []string                           `json:"claim_keys"`
+	EnqueuedAt       string                             `json:"enqueued_at"`
+	Version          uint8                              `json:"version"`
+	Retry            *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
+	SourcePayloadRaw string                             `json:"source_payload,omitempty"`
 	// RequestUnpinned는 claim이 본 send unit 요청의 미고정 여부다. 큐 payload에는 싣지 않는다.
 	RequestUnpinned bool `json:"-"`
 }
@@ -37,23 +36,21 @@ type AlarmQueueRetryMetadata struct {
 }
 
 type alarmQueueEnvelopeWire struct {
-	DispatchOutboxID int64                                 `json:"dispatch_outbox_id"`
-	Notification     domain.AlarmNotification              `json:"notification"`
-	SourceKind       domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	Celebration      *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
-	DeliveryDigest   *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
-	XSpace           *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
-	ClaimKeys        []string                              `json:"claim_keys"`
-	EnqueuedAt       string                                `json:"enqueued_at"`
-	Version          uint8                                 `json:"version"`
-	Retry            *AlarmQueueRetryMetadata              `json:"retry,omitempty"`
-	SourcePayload    string                                `json:"source_payload,omitempty"`
+	DispatchOutboxID int64                              `json:"dispatch_outbox_id"`
+	Notification     domain.AlarmNotification           `json:"notification"`
+	SourceKind       domain.AlarmDispatchSourceKind     `json:"source_kind,omitempty"`
+	Celebration      *domain.CelebrationDispatchPayload `json:"celebration,omitempty"`
+	XSpace           *domain.XSpaceDispatchPayload      `json:"x_space,omitempty"`
+	ClaimKeys        []string                           `json:"claim_keys"`
+	EnqueuedAt       string                             `json:"enqueued_at"`
+	Version          uint8                              `json:"version"`
+	Retry            *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
+	SourcePayload    string                             `json:"source_payload,omitempty"`
 }
 
 var canonicalDispatchValidators = map[domain.AlarmDispatchSourceKind]func(*AlarmQueueEnvelope) error{
-	domain.AlarmDispatchSourceKindCelebration:    (*AlarmQueueEnvelope).validateCelebrationDispatch,
-	domain.AlarmDispatchSourceKindDeliveryDigest: (*AlarmQueueEnvelope).validateDeliveryDigestDispatch,
-	domain.AlarmDispatchSourceKindXSpace:         (*AlarmQueueEnvelope).validateXSpaceDispatch,
+	domain.AlarmDispatchSourceKindCelebration: (*AlarmQueueEnvelope).validateCelebrationDispatch,
+	domain.AlarmDispatchSourceKindXSpace:      (*AlarmQueueEnvelope).validateXSpaceDispatch,
 }
 
 func (e *AlarmQueueEnvelope) SourcePayload() string {
@@ -82,7 +79,6 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		Notification:     wire.Notification,
 		SourceKind:       wire.SourceKind,
 		Celebration:      wire.Celebration,
-		DeliveryDigest:   wire.DeliveryDigest,
 		XSpace:           wire.XSpace,
 		ClaimKeys:        wire.ClaimKeys,
 		EnqueuedAt:       wire.EnqueuedAt,
@@ -148,26 +144,6 @@ func (e *AlarmQueueEnvelope) validateCelebrationDispatch() error {
 	return nil
 }
 
-func (e *AlarmQueueEnvelope) validateDeliveryDigestDispatch() error {
-	if err := validateCanonicalNotification(&e.Notification); err != nil {
-		return fmt.Errorf("validate canonical notification: %w", err)
-	}
-
-	if e.Notification.AlarmType != domain.AlarmTypeCommunity {
-		return fmt.Errorf("canonical alarm dispatch: delivery digest storage alarm type %q is not community", e.Notification.AlarmType)
-	}
-
-	if e.DeliveryDigest == nil {
-		return errors.New("canonical alarm dispatch: delivery digest payload is nil")
-	}
-
-	if err := e.DeliveryDigest.Validate(); err != nil {
-		return fmt.Errorf("canonical alarm dispatch: %w", err)
-	}
-
-	return nil
-}
-
 func (e *AlarmQueueEnvelope) validateXSpaceDispatch() error {
 	if err := validateCanonicalNotification(&e.Notification); err != nil {
 		return fmt.Errorf("x space notification: %w", err)
@@ -177,7 +153,7 @@ func (e *AlarmQueueEnvelope) validateXSpaceDispatch() error {
 		return errors.New("x space dispatch requires LIVE subscription without a stream payload")
 	}
 
-	if e.Celebration != nil || e.DeliveryDigest != nil {
+	if e.Celebration != nil {
 		return errors.New("x space dispatch contains another source payload")
 	}
 

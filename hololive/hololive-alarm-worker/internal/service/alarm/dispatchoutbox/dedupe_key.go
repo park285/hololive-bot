@@ -59,10 +59,6 @@ func buildRawEventKey(input *DedupeInput) string {
 		return "celebration:" + input.SourceIdentity
 	}
 
-	if input.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest {
-		return "delivery-digest:" + input.SourceIdentity
-	}
-
 	alarmType := input.AlarmType
 
 	category := strings.TrimSpace(input.Category)
@@ -108,20 +104,8 @@ func EnvelopeDedupeInput(envelope *AlarmQueueEnvelope) DedupeInput {
 	}
 
 	applyCelebrationDedupeSource(&input, envelope)
-	applyDeliveryDigestDedupeSource(&input, envelope)
 
 	return input
-}
-
-func applyDeliveryDigestDedupeSource(input *DedupeInput, envelope *AlarmQueueEnvelope) {
-	if envelope.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest || envelope.DeliveryDigest == nil {
-		return
-	}
-
-	input.SourceKind = envelope.SourceKind
-	input.SourceIdentity = envelope.DeliveryDigest.ContentIdentity()
-	input.AlarmType = envelope.Notification.AlarmType
-	input.Category = string(envelope.SourceKind)
 }
 
 func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) DedupeInput {
