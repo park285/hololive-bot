@@ -253,7 +253,7 @@ the stored target list is absent/empty under the existing settings contract.
 
 | Field | Value |
 |---|---|
-| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/settings`, `/room-name`, `/keys`, `/count` |
+| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id/view`, `/clear`, `/settings`, `/room-name`, `/keys`, `/count` |
 | Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
 | Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
 | Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |

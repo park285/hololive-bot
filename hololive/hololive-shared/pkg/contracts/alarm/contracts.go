@@ -32,7 +32,6 @@ const (
 
 	AddRoute      = "/add"
 	RemoveRoute   = "/remove"
-	RoomRoute     = "/room/:id"
 	RoomViewRoute = "/room/:id/view"
 	ClearRoute    = "/clear"
 	SettingsRoute = "/settings"
@@ -87,10 +86,6 @@ func NormalizeRoomName(roomID, roomName string) (string, string, error) {
 	}
 
 	return roomID, roomName, nil
-}
-
-func RoomAlarmsPath(roomID string) string {
-	return BasePath + "/room/" + url.PathEscape(roomID)
 }
 
 func RoomAlarmsViewPath(roomID string) string {

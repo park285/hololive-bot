@@ -49,10 +49,6 @@ func TestAlarmHTTPRouteContracts(t *testing.T) {
 		t.Fatalf("RemovePath = %q, want /internal/alarm/remove", contractsalarm.RemovePath)
 	}
 
-	if got := contractsalarm.RoomAlarmsPath("room1"); got != "/internal/alarm/room/room1" {
-		t.Fatalf("RoomAlarmsPath() = %q, want /internal/alarm/room/room1", got)
-	}
-
 	if got := contractsalarm.RoomAlarmsViewPath("room1"); got != "/internal/alarm/room/room1/view" {
 		t.Fatalf("RoomAlarmsViewPath() = %q, want /internal/alarm/room/room1/view", got)
 	}
@@ -72,10 +68,6 @@ func TestAlarmHTTPRouteContracts(t *testing.T) {
 
 func TestAlarmHTTPRouteContractsEscapePathParams(t *testing.T) {
 	t.Parallel()
-
-	if got := contractsalarm.RoomAlarmsPath("room/a b"); got != "/internal/alarm/room/room%2Fa%20b" {
-		t.Fatalf("RoomAlarmsPath() = %q, want /internal/alarm/room/room%%2Fa%%20b", got)
-	}
 
 	if got := contractsalarm.RoomAlarmsViewPath("room/a b"); got != "/internal/alarm/room/room%2Fa%20b/view" {
 		t.Fatalf("RoomAlarmsViewPath() = %q, want /internal/alarm/room/room%%2Fa%%20b/view", got)

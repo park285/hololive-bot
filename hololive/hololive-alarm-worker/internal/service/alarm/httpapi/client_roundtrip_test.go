@@ -143,7 +143,6 @@ func completeAlarmMock() *mockAlarmCRUD {
 	return &mockAlarmCRUD{
 		addAlarmFn:                  func(context.Context, domain.AddAlarmRequest) (bool, error) { return false, nil },
 		removeAlarmFn:               func(context.Context, string, string, domain.AlarmTypes) (bool, error) { return false, nil },
-		getRoomAlarmsWithTypesFn:    func(context.Context, string) ([]*domain.Alarm, error) { return nil, nil },
 		listRoomAlarmsViewFn:        func(context.Context, string) ([]domain.AlarmListView, error) { return nil, nil },
 		clearRoomAlarmsFn:           func(context.Context, string) (int, error) { return 0, nil },
 		updateAlarmAdvanceMinutesFn: func(int) (domain.AdvanceMinutesResult, error) { return domain.AdvanceMinutesResult{}, nil },

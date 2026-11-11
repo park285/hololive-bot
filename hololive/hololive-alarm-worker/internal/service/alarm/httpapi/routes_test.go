@@ -24,7 +24,6 @@ func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
 	expected := []string{
 		"POST " + contractsalarm.BasePath + contractsalarm.AddRoute,
 		"POST " + contractsalarm.BasePath + contractsalarm.RemoveRoute,
-		"GET " + contractsalarm.BasePath + contractsalarm.RoomRoute,
 		"GET " + contractsalarm.BasePath + contractsalarm.RoomViewRoute,
 		"POST " + contractsalarm.BasePath + contractsalarm.ClearRoute,
 		"PUT " + contractsalarm.BasePath + contractsalarm.SettingsRoute,
@@ -77,10 +76,6 @@ func (fakeAlarmCRUD) RemoveAlarm(context.Context, string, string, domain.AlarmTy
 
 func (fakeAlarmCRUD) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
 	return false, nil
-}
-
-func (fakeAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
-	return nil, nil
 }
 
 func (fakeAlarmCRUD) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
