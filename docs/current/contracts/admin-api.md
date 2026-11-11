@@ -5,7 +5,7 @@
 hololive-api admin plane의 `/api/holo/*` 관리 HTTP API 요청·응답 schema는 생산자인 hololive-api가 소유합니다.
 정본은 [admin-api.openapi.json](admin-api.openapi.json)(OpenAPI 3.1)이고, 이 파일에는 생산자 시험이 실제 handler
 요청·응답으로 검증한 operation만 둡니다. 현재 범위는 방·ACL 관리(`GET/POST/DELETE /api/holo/rooms`,
-`GET /api/holo/rooms/joined`, `POST /api/holo/rooms/acl`)입니다. iris-console은 이 범위의 schema를 고정한
+`GET /api/holo/rooms/joined`, `POST /api/holo/rooms/acl`)와 주간 일정 포스터 검토(`/api/holo/schedule-posters*` 7개)입니다. iris-console은 이 범위의 schema를 고정한
 hololive-bot revision에서 가져와 gateway 검증용 생성 사본을 만들고, 자기 공개 경로(`/admin/api/holo/*`)와
 gateway 고유 header·오류 envelope를 소유합니다. 범위 밖 `/api/holo/*` operation의 schema는 생산자 시험이 붙기 전까지
 iris-console `contracts/hololive/openapi.json`이 소유합니다.

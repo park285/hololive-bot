@@ -85,6 +85,7 @@ func registerAPIRoutes(
 	registerStatsRoutes(holoAPI, domains.Stats)
 	registerStreamRoutes(holoAPI, domains.Stream)
 	registerSettingsRoutes(holoAPI, domains.Settings)
+	registerSchedulePosterRoutes(holoAPI, domains.SchedulePoster)
 
 	return nil
 }

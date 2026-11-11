@@ -29,6 +29,7 @@ import (
 	"github.com/kapu/hololive-api/internal/service/activity"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -84,15 +85,18 @@ type Deps struct {
 	Iris           IrisRoomLister
 	DispatchOps    DispatchOperations
 	XSpaceSessions *xspaces.Store
+	// SchedulePosters가 nil이면 일정 포스터 route는 503을 돌려준다.
+	SchedulePosters *scheduleposter.Store
 }
 
 type DomainHandlers struct {
-	Member   *MemberHandler
-	Alarm    *AlarmHandler
-	Room     *RoomHandler
-	Stream   *StreamHandler
-	Stats    *StatsHandler
-	Settings *SettingsHandler
+	Member         *MemberHandler
+	Alarm          *AlarmHandler
+	Room           *RoomHandler
+	Stream         *StreamHandler
+	Stats          *StatsHandler
+	Settings       *SettingsHandler
+	SchedulePoster *SchedulePosterHandler
 }
 
 // NewDomainHandlers는 admin route handler를 한 번 만든다. 필수 의존성이 없으면 조립 오류를 돌려준다.
@@ -102,12 +106,13 @@ func NewDomainHandlers(deps Deps) (*DomainHandlers, error) {
 	}
 
 	return &DomainHandlers{
-		Member:   newMemberHandler(deps),
-		Alarm:    &AlarmHandler{alarm: deps.Alarm, dispatchOps: deps.DispatchOps, activity: deps.Activity, logger: deps.Logger},
-		Room:     &RoomHandler{acl: deps.ACL, iris: deps.Iris, activity: deps.Activity, logger: deps.Logger},
-		Stream:   &StreamHandler{holodex: deps.Holodex, logger: deps.Logger},
-		Stats:    &StatsHandler{repository: deps.Repository, alarm: deps.Alarm, acl: deps.ACL, logger: deps.Logger},
-		Settings: newSettingsHandler(deps),
+		Member:         newMemberHandler(deps),
+		Alarm:          &AlarmHandler{alarm: deps.Alarm, dispatchOps: deps.DispatchOps, activity: deps.Activity, logger: deps.Logger},
+		Room:           &RoomHandler{acl: deps.ACL, iris: deps.Iris, activity: deps.Activity, logger: deps.Logger},
+		Stream:         &StreamHandler{holodex: deps.Holodex, logger: deps.Logger},
+		Stats:          &StatsHandler{repository: deps.Repository, alarm: deps.Alarm, acl: deps.ACL, logger: deps.Logger},
+		Settings:       newSettingsHandler(deps),
+		SchedulePoster: &SchedulePosterHandler{store: deps.SchedulePosters, logger: deps.Logger},
 	}, nil
 }
 

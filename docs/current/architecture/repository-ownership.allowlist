@@ -6,3 +6,4 @@ x_space_starts|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive
 alarm_dispatch|owner=alarm-worker|writers=hololive-alarm-worker,hololive-api|readers=hololive-alarm-worker,hololive-api
 alarm_state|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker,hololive-api
 youtube_outbox|owner=hololive-api|writers=hololive-api|readers=hololive-alarm-worker
+schedule_posters|owner=hololive-api|writers=hololive-api|readers=hololive-api

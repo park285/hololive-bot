@@ -14,7 +14,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
+
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 const roomsPath = "/api/holo/rooms"
@@ -335,7 +338,7 @@ func (s *adminOpenAPI) checkObject(schema *jsonSchema, value map[string]any, at 
 
 func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 	spec := loadAdminOpenAPI(t)
-	serve, _ := newAdminTestRouter(t, &recordingIrisRooms{})
+	serve, _, _ := newAdminTestRouter(t, &recordingIrisRooms{})
 
 	steps := []struct {
 		method, path, body string
@@ -370,5 +373,64 @@ func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 		}
 
 		spec.assertResponse(t, step.method, step.path, rec.Code, rec.Body.Bytes())
+	}
+}
+
+func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
+	spec := loadAdminOpenAPI(t)
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	store, err := scheduleposter.NewStore(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = store.InsertCandidates(t.Context(), []scheduleposter.Candidate{{
+		ID: 2119784604752343207, ChannelID: "UCROQtXcp2loQEmvpe5rhJzQ", XUserID: "2054825907916054528",
+		PostURL: "https://x.com/i/status/2119784604752343207", ImageURL: "https://pbs.twimg.com/media/a.jpg?name=orig",
+		TextExcerpt: "週間スケジュール", PostedAt: time.Date(2026, time.November, 9, 3, 0, 0, 0, time.UTC),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const (
+		base      = "/api/holo/schedule-posters"
+		poster    = base + "/2119784604752343207"
+		itemRoute = base + "/{id}"
+	)
+
+	steps := []struct {
+		method, path, route, body string
+		status                    int
+	}{
+		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK},
+		{http.MethodGet, base + "?status=pending_review", base, "", http.StatusOK},
+		{http.MethodGet, base + "?status=unknown", base, "", http.StatusBadRequest},
+		{http.MethodGet, poster, itemRoute, "", http.StatusOK},
+		{http.MethodGet, base + "/1", itemRoute, "", http.StatusNotFound},
+		{http.MethodGet, poster + "/translated", itemRoute + "/translated", "", http.StatusNotFound},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"2","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-12-07","weekEnd":"2026-12-13"}`, http.StatusConflict},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"11/9"}`, http.StatusBadRequest},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusOK},
+		{http.MethodPost, poster + "/translate", itemRoute + "/translate", `{"expectedRevision":"2"}`, http.StatusConflict},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"x"}`, http.StatusBadRequest},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"2","note":"x"}`, http.StatusBadRequest},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"2"}`, http.StatusOK},
+		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK},
+	}
+
+	for _, step := range steps {
+		rec := serve(step.method, step.path, step.body)
+		if rec.Code != step.status {
+			t.Fatalf("%s %s %s = %d %s, want %d", step.method, step.path, step.body, rec.Code, rec.Body.String(), step.status)
+		}
+
+		if step.body != "" {
+			spec.assertRequest(t, step.method, step.route, step.body, rec.Code != http.StatusBadRequest)
+		}
+
+		spec.assertResponse(t, step.method, step.route, rec.Code, rec.Body.Bytes())
 	}
 }

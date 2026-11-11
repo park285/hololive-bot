@@ -478,6 +478,37 @@ TABLE observation_contract_generations
   CONSTRAINT observation_contract_generations_current_schema_version_check CHECK ((current_schema_version > 0))
   CONSTRAINT observation_contract_generations_pkey PRIMARY KEY (provider, observation_kind)
 
+TABLE schedule_posters
+  COLUMN id bigint NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN x_user_id text NOT NULL
+  COLUMN post_url text NOT NULL
+  COLUMN image_url text NOT NULL
+  COLUMN posted_at timestamp with time zone NOT NULL
+  COLUMN text_excerpt text NOT NULL
+  COLUMN review_status text NOT NULL DEFAULT 'pending_review'::text
+  COLUMN week_start date
+  COLUMN week_end date
+  COLUMN reviewed_at timestamp with time zone
+  COLUMN translation_status text NOT NULL DEFAULT 'not_requested'::text
+  COLUMN translation_error text NOT NULL DEFAULT ''::text
+  COLUMN translated_image bytea
+  COLUMN translated_mime text
+  COLUMN translated_at timestamp with time zone
+  COLUMN revision bigint NOT NULL DEFAULT 1
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_schedule_posters_confirmed_week CHECK (((review_status <> 'confirmed'::text) OR (week_start IS NOT NULL)))
+  CONSTRAINT chk_schedule_posters_id_positive CHECK ((id > 0))
+  CONSTRAINT chk_schedule_posters_review_status_vocab CHECK ((review_status = ANY (ARRAY['pending_review'::text, 'confirmed'::text, 'rejected'::text, 'expired'::text])))
+  CONSTRAINT chk_schedule_posters_translated_image CHECK (((translation_status = 'succeeded'::text) = ((translated_image IS NOT NULL) AND (translated_mime IS NOT NULL) AND (translated_at IS NOT NULL))))
+  CONSTRAINT chk_schedule_posters_translated_image_size CHECK (((translated_image IS NULL) OR ((octet_length(translated_image) >= 1) AND (octet_length(translated_image) <= 4194304))))
+  CONSTRAINT chk_schedule_posters_translation_after_confirm CHECK (((translation_status = 'not_requested'::text) OR (week_start IS NOT NULL)))
+  CONSTRAINT chk_schedule_posters_translation_status_vocab CHECK ((translation_status = ANY (ARRAY['not_requested'::text, 'pending'::text, 'succeeded'::text, 'failed'::text])))
+  CONSTRAINT chk_schedule_posters_week_pair CHECK (((week_start IS NULL) = (week_end IS NULL)))
+  CONSTRAINT chk_schedule_posters_week_span CHECK (((week_start IS NULL) OR (((week_end - week_start) >= 0) AND ((week_end - week_start) <= 6))))
+  CONSTRAINT schedule_posters_pkey PRIMARY KEY (id)
+
 TABLE source_collection_checkpoints
   COLUMN provider text NOT NULL
   COLUMN observation_kind text NOT NULL

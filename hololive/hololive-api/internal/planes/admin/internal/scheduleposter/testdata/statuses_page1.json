@@ -1,0 +1,5 @@
+{"code":200,"cursor":{"top":"t1","bottom":"page2"},"results":[
+ {"id":"2120484919642312903","text":"#ホロゆび相撲","created_timestamp":1794397976,"author":{"id":"2054825907916054528"},"reposted_by":null,"replying_to":null,"media":[]},
+ {"id":"2120138618652303838","text":"週間スケジュール","created_timestamp":1794315411,"author":{"id":"1109751762733301760"},"reposted_by":{"id":"2054825907916054528","screen_name":"sorashina_sopia"},"replying_to":null,"media":{"all":[{"type":"photo","url":"https://pbs.twimg.com/media/repost.jpg?name=orig"}],"photos":[{"type":"photo","url":"https://pbs.twimg.com/media/repost.jpg?name=orig","width":1920,"height":1080}]}},
+ {"id":"2120075369168724189","text":"スケジュール補足","created_timestamp":1794300000,"author":{"id":"2054825907916054528"},"reposted_by":null,"replying_to":{"screen_name":"sorashina_sopia","status":"2120075240642625840"},"media":{"photos":[{"type":"photo","url":"https://pbs.twimg.com/media/reply.jpg?name=orig"}]}}
+]}

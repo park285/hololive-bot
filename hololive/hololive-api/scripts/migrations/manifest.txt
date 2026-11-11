@@ -7,3 +7,4 @@
 007 007_narrow_send_route_and_alarm_types_checks.sql
 008 008_youtubejs_live_contract_generation.sql
 009 009_drop_llm_feature_storage.sql
+010 010_member_schedule_posters.sql

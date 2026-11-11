@@ -22,7 +22,10 @@ package orchestration
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
@@ -35,6 +38,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type commandInitView struct {
@@ -83,6 +87,7 @@ func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 		MembersData:         v.membersData,
 		Formatter:           v.formatter,
 		HelpImageProvider:   render.NewHelpCardProvider(),
+		SchedulePosters:     schedulePosterReader{postgres: v.postgres},
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
 		SendImages:          v.sendImages,
@@ -109,4 +114,27 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 	}
 
 	return commands
+}
+
+// schedulePosterReader는 호출 시점의 pool로 읽어, pool이 없으면 조용히 끄지 않고 조회 오류로 드러낸다.
+type schedulePosterReader struct {
+	postgres database.Client
+}
+
+func (r schedulePosterReader) PublishedImage(ctx context.Context, channelID string, day time.Time) (scheduleposter.Image, bool, error) {
+	if r.postgres == nil {
+		return scheduleposter.Image{}, false, errors.New("schedule poster reader requires database client")
+	}
+
+	store, err := scheduleposter.NewStore(r.postgres.GetPool())
+	if err != nil {
+		return scheduleposter.Image{}, false, fmt.Errorf("open schedule poster store: %w", err)
+	}
+
+	image, found, err := store.PublishedImage(ctx, channelID, day)
+	if err != nil {
+		return scheduleposter.Image{}, false, fmt.Errorf("read schedule poster: %w", err)
+	}
+
+	return image, found, nil
 }

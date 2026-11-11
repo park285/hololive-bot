@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type Command interface {
@@ -50,6 +51,11 @@ type CalendarImageRenderer interface {
 
 type HelpImageProvider interface {
 	HelpImages(ctx context.Context) ([][]byte, error)
+}
+
+// SchedulePosterReader의 day는 JST 날짜다.
+type SchedulePosterReader interface {
+	PublishedImage(ctx context.Context, channelID string, day time.Time) (scheduleposter.Image, bool, error)
 }
 
 type BroadcastHistoryQuery struct {
@@ -128,6 +134,7 @@ type Dependencies struct {
 	MembersData         domain.MemberDataProvider
 	Formatter           *formatter.ResponseFormatter
 	HelpImageProvider   HelpImageProvider
+	SchedulePosters     SchedulePosterReader
 	SendMessage         func(ctx context.Context, room, message string) error
 	SendImage           func(ctx context.Context, room string, imageData []byte) error
 	SendImages          func(ctx context.Context, room string, images [][]byte) error

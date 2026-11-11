@@ -91,19 +91,30 @@ env_value() {
 # 중앙 unit은 Sentinel discovery를 쓰는 HA 구성만 정의한다. 다른 구성으로 조용히 기동하지 않는다.
 [[ "$(env_value HOLOLIVE_VALKEY_HA_ENABLED)" == 1 ]] || die "HOLOLIVE_VALKEY_HA_ENABLED=1 is required in $COMPOSE_ENV"
 [[ -n "$(env_value VALKEY_SENTINEL_ADDRS)" ]] || die "VALKEY_SENTINEL_ADDRS is required in $COMPOSE_ENV"
-x_spaces="$(env_value HOLOLIVE_X_SPACES_ENABLED)"
-case "${x_spaces:-0}" in
-  0|1) ;;
-  *) die "HOLOLIVE_X_SPACES_ENABLED must be 0 or 1" ;;
-esac
-X_SPACES_UNITS=(hololive-api hololive-alarm-worker)
+# 선택 기능 drop-in: 이름|compose.env 플래그(0 또는 1)|drop-in 파일|적용 unit 목록.
+OPTIONAL_FEATURES=(
+  "x-spaces|HOLOLIVE_X_SPACES_ENABLED|40-x-spaces.conf|hololive-api hololive-alarm-worker"
+  "schedule-poster|HOLOLIVE_SCHEDULE_POSTER_ENABLED|41-schedule-poster.conf|hololive-api"
+)
+declare -A feature_enabled=()
+feature_summary=""
+for feature in "${OPTIONAL_FEATURES[@]}"; do
+  IFS='|' read -r name flag _ _ <<<"$feature"
+  value="$(env_value "$flag")"
+  case "${value:-0}" in
+    0|1) ;;
+    *) die "$flag must be 0 or 1" ;;
+  esac
+  feature_enabled[$name]="${value:-0}"
+  feature_summary+="${feature_summary:+ }${name}=${value:-0}"
+done
 # 연결 예산 검사다. 호스트 compose.env의 pool 값이 max_connections 여유를
 # 넘으면 unit을 설치하지 않는다. 출력은 key 이름과 합계만 담는다.
 # shellcheck source=scripts/deploy/lib/postgres-capacity.sh
 . "$STAGING/scripts/deploy/lib/postgres-capacity.sh"
 postgres_capacity_assert_target "$STAGING" "$COMPOSE_ENV" || die "PostgreSQL connection budget check failed for $COMPOSE_ENV; nothing was installed"
 
-# 설치 뒤 $QUADLET_DIR 와 같은 구성(staged unit, x-spaces drop-in, 설치기가 건드리지 않는 기존 drop-in)을
+# 설치 뒤 $QUADLET_DIR 와 같은 구성(staged unit, 선택 기능 drop-in, 설치기가 건드리지 않는 기존 drop-in)을
 # 먼저 만들어 Quadlet 생성을 확인한다. 실패하면 /opt·prestart·unit 어느 것도 바꾸지 않는다.
 quadlet_check_dir="$QUADLET_CHECK/hololive-bot"
 mkdir -p "$quadlet_check_dir"
@@ -111,17 +122,19 @@ for dropin_dir in "$QUADLET_DIR"/*.d; do
   [[ -d "$dropin_dir" ]] || continue
   cp -a -- "$dropin_dir" "$quadlet_check_dir/"
 done
-rm -f -- "$quadlet_check_dir"/*.container.d/40-x-spaces.conf
 cp -- "$STAGING"/deploy/quadlet/hololive-bot/* "$quadlet_check_dir/"
-if [[ "${x_spaces:-0}" == 1 ]]; then
-  for unit in "${X_SPACES_UNITS[@]}"; do
+for feature in "${OPTIONAL_FEATURES[@]}"; do
+  IFS='|' read -r name _ file units <<<"$feature"
+  rm -f -- "$quadlet_check_dir"/*.container.d/"$file"
+  [[ "${feature_enabled[$name]}" == 1 ]] || continue
+  for unit in $units; do
     mkdir -p "$quadlet_check_dir/$unit.container.d"
-    cp -- "$STAGING/deploy/quadlet/optional/x-spaces/$unit.container.d/40-x-spaces.conf" "$quadlet_check_dir/$unit.container.d/"
+    cp -- "$STAGING/deploy/quadlet/optional/$name/$unit.container.d/$file" "$quadlet_check_dir/$unit.container.d/"
   done
-fi
+done
 QUADLET_UNIT_DIRS="$quadlet_check_dir" /usr/libexec/podman/quadlet -dryrun >/dev/null \
   || die "staged Quadlet units do not generate; nothing was installed"
-log "staged Quadlet units generate (x-spaces=${x_spaces:-0})"
+log "staged Quadlet units generate ($feature_summary)"
 
 # current 반영: tracked 트리만 교체하고 런타임 bind-mount 데이터는 보존한다. staging 에는
 # data/logs/backups 가 없으므로 --delete 가 OPT_CURRENT 의 기존 런타임 데이터를 지우지 않도록
@@ -174,16 +187,19 @@ for unit in "$QUADLET_DIR"/*.container "$QUADLET_DIR"/*.volume "$QUADLET_DIR"/*.
   [[ -e "$STAGING/deploy/quadlet/hololive-bot/${unit##*/}" ]] || rm -f -- "$unit"
 done
 install -m0644 -o root -g root "$STAGING"/deploy/quadlet/hololive-bot/* "$QUADLET_DIR/"
-for unit in "${X_SPACES_UNITS[@]}"; do
-  dropin="$QUADLET_DIR/$unit.container.d/40-x-spaces.conf"
-  if [[ "${x_spaces:-0}" == 1 ]]; then
-    install -d -m0755 -o root -g root "${dropin%/*}"
-    install -m0644 -o root -g root "$STAGING/deploy/quadlet/optional/x-spaces/$unit.container.d/40-x-spaces.conf" "$dropin"
-  else
-    rm -f -- "$dropin"
-  fi
+for feature in "${OPTIONAL_FEATURES[@]}"; do
+  IFS='|' read -r name _ file units <<<"$feature"
+  for unit in $units; do
+    dropin="$QUADLET_DIR/$unit.container.d/$file"
+    if [[ "${feature_enabled[$name]}" == 1 ]]; then
+      install -d -m0755 -o root -g root "${dropin%/*}"
+      install -m0644 -o root -g root "$STAGING/deploy/quadlet/optional/$name/$unit.container.d/$file" "$dropin"
+    else
+      rm -f -- "$dropin"
+    fi
+  done
 done
-log "Quadlet units installed -> $QUADLET_DIR (x-spaces=${x_spaces:-0})"
+log "Quadlet units installed -> $QUADLET_DIR ($feature_summary)"
 
 install -m0644 -o root -g root \
   "$STAGING/scripts/systemd/admin-dashboard-ingress-firewall.service" \

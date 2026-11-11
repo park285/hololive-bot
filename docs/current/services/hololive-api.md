@@ -129,6 +129,27 @@ admin plane PhotoSync는 `PHOTO_SYNC_ENABLED`(admin plane 기본 true)가 켜져
 | Owner | `hololive-api` admin plane의 PhotoSync(`internal/planes/admin/internal/photosync`) |
 | 제거 조건 | 90일 동안 `Photo sync failed, will retry` 뒤 같은 주기가 `Photo sync completed`로 끝난 기록이 없으면 재시도를 지웁니다. 지우면 Holodex 일시 장애 때 다음 시도가 7일 주기 뒤로 밀리므로, 그 동작 변경을 CHANGELOG에 남깁니다. |
 
+## 주간 일정 포스터
+
+admin plane은 `SCHEDULE_POSTER_CONFIG_FILE`이 있으면 X의 멤버 주간 일정 포스터를 수집하고 번역합니다. 파일이 없으면 수집·번역만 꺼지고, 관리 API(`/api/holo/schedule-posters*`)와 `!일정` 표시는 그대로 동작합니다. 잘못된 설정 파일이나 Vertex client 생성 실패는 기동 오류입니다.
+
+- 설정 파일(64KiB 이하, 모르는 키 거부): `{"poll_seconds":3600,"targets":[{"x_user_id":"<X 사용자 ID>","channel_id":"<YouTube 채널 ID>"}],"translation":{"project":"<GCP 프로젝트>","location":"global","model":"gemini-nano-banana-2.1"}}`. `poll_seconds`는 600~86400이고 기본 3600, `location`·`model`은 생략하면 위 기본값입니다. Vertex 인증은 `GOOGLE_APPLICATION_CREDENTIALS`(서비스 계정 ADC)로 공급합니다. Quadlet은 `HOLOLIVE_SCHEDULE_POSTER_ENABLED=1`일 때 `optional/schedule-poster` drop-in으로 두 파일을 mount합니다.
+- 수집: `poll_seconds`마다 대상별로 FxTwitter(`api.fxtwitter.com`)의 게시물 목록을 최대 5페이지 읽습니다. 응답은 시간순이 아니고 리포스트가 섞이므로 본인 원글만 보고, 지난 8일 안의 원글 가운데 사진과 일정 문구(`週間スケジュール|スケジュール|schedule|予定|weekly`)가 함께 있는 글을 검토 대기 후보(`schedule_posters`)로 넣습니다. 본인 원글이 모두 8일보다 오래된 페이지에서 멈춥니다. 같은 tick에 8일 넘게 검토되지 않은 후보는 `expired`로, 주 종료일(없으면 생성일)이 60일 지난 검토 완료 행은 100건씩 지웁니다.
+- 검토: 관리자가 Iris Console에서 원본을 보고 주 범위(7일 이하, 게시일과 7일 이내)를 입력해 확정하거나 거절합니다. 확정만 번역을 예약하며, 모든 변경은 `expectedRevision` 조건이고 충돌은 409 `revision_conflict`입니다.
+- 번역: 1분마다 확정된 번역 대기 행을 5개까지 처리합니다. 원본(`pbs.twimg.com`, 8MiB 이하)을 받아 Vertex 이미지 모델로 한국어 포스터 이미지를 만들고 JPEG(4MiB 이하)로 저장합니다. 번역본은 관리자가 다시 검토하지 않고 바로 `!일정`에 붙습니다. 재번역을 예약하면 이전 번역본을 지웁니다.
+- 표시: `!일정 <멤버>`는 Holodex 일정 뒤에, 오늘(JST)이 주 범위에 드는 번역 완료 확정본 가운데 가장 최근 것을 이미지로 보냅니다. Holodex 조회가 실패해도 확정본이 있으면 포스터만 보냅니다. 포스터 조회·발송 실패는 Warn 로그만 남기고, Iris 전달 결과 불명은 명령 오류로 올립니다.
+
+## 일정 포스터 번역 재시도 예외 계약
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | 번역 대기 행 하나의 Vertex 이미지 생성 실패, 응답에 이미지가 없음, 또는 결과 이미지의 디코드(PNG·JPEG만 받습니다)·JPEG 변환 실패입니다. 원본 이미지 내려받기 실패는 재시도하지 않고 바로 `source_unavailable`로 기록합니다. 호출자 취소로 끝난 시도는 기록하지 않고 다음 tick이 다시 처리합니다. |
+| 한도 | 행마다 최대 3번 시도합니다. 재시도 전 대기는 5초와 10초이며 각각 0~2초 jitter를 더합니다. 시도 하나의 상한은 3분이고, genai SDK 자체 재시도는 1회로 고정합니다. |
+| 종단 | 3번 모두 실패하면 `translation_status=failed`, `translation_error=translation_failed`로 기록합니다. 다시 시도하려면 관리자가 Console에서 재번역을 예약합니다. |
+| Telemetry | 재시도 직전 Warn 로그 `Schedule poster translation attempt failed, will retry`(`poster_id`, `attempt`), 최종 실패 Warn 로그 `Schedule poster translation failed`(`poster_id`, `reason`), 성공 Info 로그 `Schedule poster translated`(`poster_id`, `bytes`)입니다. 전용 metric은 없습니다. |
+| Owner | `hololive-api` admin plane의 일정 포스터 서비스(`internal/planes/admin/internal/scheduleposter`) |
+| 제거 조건 | 90일 동안 재시도 뒤 같은 행이 `Schedule poster translated`로 끝난 기록이 없으면 재시도를 지웁니다. 지우면 일시 장애마다 관리자가 재번역을 눌러야 하므로 그 동작 변경을 CHANGELOG에 남깁니다. |
+
 ## Plane별 공유 자원
 
 - `internal/app`의 `buildAPIInfrastructure`가 bot plane 설정으로 Valkey client 1개, `bot` PostgreSQL pool, 멤버 캐시 1개를 만들고(`BuildInfraModule`), admin plane용으로는 PostgreSQL pool(`admin`)만 따로 만듭니다. admin plane은 Valkey client와 멤버 캐시를 bot 것과 같은 인스턴스로 빌립니다. YouTube plane은 자기 `youtube_plane` pool을 만들고, 공유 Valkey client는 알림 행 commit 뒤 alarm-worker를 깨우는 신호에만 씁니다. 한 프로세스 안에 Valkey client 1개, 멤버 캐시 1개, PostgreSQL pool 3개(`bot`, `admin`, `youtube_plane`)가 있으며 `TestAPIInfrastructureSharesCacheButSeparatesRuntimePools`가 이 공유와 pool 분리를 검증합니다.
