@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// 성공한 발행은 job kind별 발행 트랜잭션 소요 시간과 SQL에 보낸 관측 JSON 크기를 한 번씩 남긴다.
 func TestCollectAndPublishRecordsPublishDurationAndEncodedBytes(t *testing.T) {
 	var fatal []error
 
@@ -68,7 +67,6 @@ func testCommunityPayload(t *testing.T) []byte {
 	return payload
 }
 
-// communityResultCollector는 실행 입력의 lease와 contract generation으로 community 관측 하나를 만든다.
 func communityResultCollector(payload []byte) func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
 	return func(_ context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 		generation, err := input.Generation(contract.KindCommunityPage)

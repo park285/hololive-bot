@@ -14,7 +14,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// fullLiveReviewSnapshotSQL은 가용성 전체 행까지 포함한 현재 원본이다. 기록 CAS가 모든 열을 보호한다.
+// 기록 CAS가 모든 열을 보호한다.
 const fullLiveReviewSnapshotSQL = `
 	SELECT jsonb_build_object('session',to_jsonb(session),'head',to_jsonb(head),
 	           'pending',to_jsonb(pending),'availability',to_jsonb(availability.*)) AS snapshot
@@ -52,7 +52,6 @@ func execLiveReviewStatements(t *testing.T, pool *pgxpool.Pool, videoID string, 
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
-// insertLegacyFormatReceipt는 운영의 기존 27건처럼 246 형식 전체 원본을 다른 시간대 세션에서 기록한다.
 func insertLegacyFormatReceipt(t *testing.T, pool *pgxpool.Pool, receiptID, videoID string) {
 	t.Helper()
 
@@ -112,8 +111,6 @@ func liveReviewClosed(ctx context.Context, t *testing.T, pool *pgxpool.Pool, vid
 	return closed
 }
 
-// 기존 형식 영수증은 형식 변환이나 재기록 없이 기술적 갱신 뒤에도 유효하고,
-// 일정·가용성·positive 사실이 바뀌면 다시 열린다.
 func TestLiveReviewSurvivesTechnicalRefreshAndReopensOnFacts(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -192,7 +189,6 @@ func TestLiveReviewSurvivesTechnicalRefreshAndReopensOnFacts(t *testing.T) {
 	}
 }
 
-// 무시한 부재 slot이 큰 원본도 요약 snapshot으로 기록할 수 있고, 기록 CAS는 전체 원본을 계속 덮는다.
 func TestLiveReviewRecordsOversizedHeadWithBoundedSnapshot(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -265,7 +261,6 @@ func TestLiveReviewRecordsOversizedHeadWithBoundedSnapshot(t *testing.T) {
 	require.True(t, liveReviewClosed(ctx, t, pool, videoID))
 }
 
-// 가용성 확인이 없는 미래 일정 legacy_unknown은 보존·미상 집계에 남지만 지난 미해결 검토 대상은 아니다.
 func TestFutureLegacyUpcomingStaysUnknownButNotActionable(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

@@ -220,7 +220,6 @@ func (h *RoomHandler) changeRoom(c *gin.Context, change roomChange) {
 	}
 }
 
-// respondACLMutationError는 ACL mutation 오류를 500으로 응답한다.
 func (h *RoomHandler) respondACLMutationError(ctx context.Context, c *gin.Context, err error, failMessage string, attrs ...slog.Attr) {
 	attrs = append(attrs, slog.Any("error", err))
 

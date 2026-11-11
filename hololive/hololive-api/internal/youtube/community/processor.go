@@ -64,7 +64,6 @@ func NormalizeWindow(payload *contract.CommunityPayloadV1) Window {
 	return Window{channelID: payload.ChannelID, posts: posts}
 }
 
-// CanonicalPostIDs는 known-ID 조회에 쓰는 canonical ID를 첫 등장 순서로 돌려준다.
 func (w Window) CanonicalPostIDs() []string {
 	ids := make([]string, len(w.posts))
 	for i := range w.posts {
@@ -74,8 +73,6 @@ func (w Window) CanonicalPostIDs() []string {
 	return ids
 }
 
-// Artifacts는 창 전체를 저장 행으로 돌려주고, notifyUnseen일 때 knownPostIDs에 없는 게시글에만 tracking과
-// 알림을 붙인다.
 func (w Window) Artifacts(notifyUnseen bool, knownPostIDs map[string]struct{}, detectedAt time.Time) Batch {
 	batch := Batch{Posts: w.posts, Watermark: w.watermark()}
 
@@ -172,7 +169,6 @@ func thumbnails(src []contract.Thumbnail) domain.ThumbnailsJSON {
 	return mapped
 }
 
-// notificationPayload는 payload post_id에 접두사 없는 게시글 ID를, canonical_post_id에 canonical ID를 싣는다.
 func notificationPayload(post *domain.YouTubeCommunityPost) string {
 	payloadPost := *post
 

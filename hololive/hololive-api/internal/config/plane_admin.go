@@ -56,7 +56,7 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 	return config, nil
 }
 
-// Validate는 admin plane 역할 조건을 검사한다. NonEgress라 Iris 입력 필수 검증은 면제하고 proactive notification egress 소유를 거절한다.
+// NonEgress라 Iris 입력 필수 검증은 면제하고 proactive notification egress 소유를 거절한다.
 func (c *AdminPlaneConfig) Validate() error {
 	if c == nil {
 		return errors.New("admin plane config is required")

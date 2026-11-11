@@ -38,8 +38,6 @@ func alarmDispatchPersistedTextSendUnitEnvelopes(count int, build func() domain.
 	return envelopes
 }
 
-// Text 경로는 send unit 전체를 한 메시지로 보내므로 저장된 send-unit client_request_id를 그대로 써야
-// 재드레인 뒤에도 admission dedup이 같은 ID로 접힌다.
 func TestAlarmDispatchTextPathSendsPersistedSendUnitClientRequestID(t *testing.T) {
 	t.Parallel()
 
@@ -67,7 +65,6 @@ func TestAlarmDispatchTextPathSendsPersistedSendUnitClientRequestID(t *testing.T
 	}
 }
 
-// 저장된 ID로 보낸 intrinsic text의 ambiguous 실패는 같은 ID로 재시도해야 한다(durable idempotency key).
 func TestAlarmDispatchRunnerPersistedTextSendUnitRetriesAmbiguousFailure(t *testing.T) {
 	t.Parallel()
 
@@ -93,7 +90,6 @@ func TestAlarmDispatchRunnerPersistedTextSendUnitRetriesAmbiguousFailure(t *test
 	assert.Equal(t, testRetryClientRequestID, retryID)
 }
 
-// 재시도 허가(hasPersistedClientRequestID)는 Text 경로가 실제로 보낸 ID가 저장된 send-unit ID일 때만 참이어야 한다.
 func TestHasPersistedClientRequestIDMatchesTextIDActuallySent(t *testing.T) {
 	t.Parallel()
 

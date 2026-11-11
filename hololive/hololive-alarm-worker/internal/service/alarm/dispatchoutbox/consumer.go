@@ -204,7 +204,7 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	}
 }
 
-// MarkSending은 그룹 전체 send unit을 고정 요청으로 발송 상태에 넣는다. 미스는 *sendfence.MissError로 돌려준다.
+// 미스는 *sendfence.MissError로 돌려준다.
 func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	claims := claimsFromEnvelopes(envelopes)
 	if len(claims) == 0 || len(envelopes) == 0 {
@@ -337,8 +337,7 @@ func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueue
 	return updates
 }
 
-// failureUpdateFromEnvelope은 runner가 정한 attempt·오류·지연을 옮긴다. 다음 시도 시각은 SQL이 잠금 뒤 채취한 clock에
-// RetryAfter를 더해 정하므로 한 문장에서 정산되는 멤버는 같은 기준 시각을 쓴다.
+// 다음 시도 시각은 SQL이 잠금 뒤 채취한 clock에 RetryAfter를 더해 정하므로 한 문장에서 정산되는 멤버는 같은 기준 시각을 쓴다.
 func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, target Status) (FailureUpdate, bool) {
 	if envelope.DispatchOutboxID <= 0 {
 		return FailureUpdate{}, false

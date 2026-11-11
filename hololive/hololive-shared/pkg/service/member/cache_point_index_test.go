@@ -36,8 +36,6 @@ func TestPointIndexKeepsSmallestIDChannelRepresentative(t *testing.T) {
 	}
 }
 
-// snapshot 별칭 조회는 find_by_alias.sql과 같은 규칙을 따른다: 공식 이름은 대소문자 무시, 명시 별칭은
-// 정확히 일치, 여러 명이 맞으면 가장 작은 ID.
 func TestSnapshotAliasLookupFollowsRepositoryRules(t *testing.T) {
 	sigma := &domain.Member{ID: 5, Name: "Sigma", NameJa: "Σ", Aliases: &domain.Aliases{Ko: []string{"ExactAlias", "공유"}}}
 	other := &domain.Member{ID: 3, Name: "Other", Aliases: &domain.Aliases{Ja: []string{"공유"}}}
@@ -66,7 +64,6 @@ func TestSnapshotAliasLookupFollowsRepositoryRules(t *testing.T) {
 	}
 }
 
-// 이름과 명시 별칭이 서로 다른 멤버를 가리키면 SQL처럼 둘 중 영속 ID가 작은 쪽이 이긴다.
 func TestSnapshotAliasOwnerComparesNameAndExplicitAlias(t *testing.T) {
 	named := &domain.Member{ID: 9, Name: testMemberPekora}
 	aliased := &domain.Member{ID: 4, Name: "Other", Aliases: &domain.Aliases{Ko: []string{testMemberPekora}}}
@@ -113,7 +110,7 @@ func TestDeferredSnapshotReusesPublishedIndex(t *testing.T) {
 	}
 }
 
-// foldKey는 strings.EqualFold와 같은 동치 관계여야 한다. ToLower로 바꾸면 Kelvin 기호·long s·그리스 시그마에서 갈라진다.
+// ToLower로 바꾸면 Kelvin 기호·long s·그리스 시그마에서 갈라진다.
 func TestFoldKeyMatchesEqualFold(t *testing.T) {
 	corpus := []string{
 		"", "a", "A", "k", "K", "\u212a", "s", "S", "\u017f", "σ", "Σ", "ς", "ß", "ẞ", "ǅ", "ǆ", "Ǆ",
@@ -131,7 +128,6 @@ func TestFoldKeyMatchesEqualFold(t *testing.T) {
 	}
 }
 
-// 다건 조회 색인은 예전 전체 순회(앞뒤 공백 제거 + EqualFold, snapshot 순서, 멤버당 한 번)와 같은 결과를 내야 한다.
 func TestSnapshotSearchIndexMatchesLinearScan(t *testing.T) {
 	members := []*domain.Member{
 		{ID: 1, Name: testMemberMiko, NameJa: "みこ", NameKo: "미코", Aliases: &domain.Aliases{Ko: []string{"미코", " 엘리트 "}, Ja: []string{"みこち"}}},

@@ -91,8 +91,6 @@ func addScopeActiveSessions(state *State) {
 	state.Sessions[scopeCountedID] = counted
 }
 
-// addScopeEndedSessions는 ENDED 세션을 채운다. 여기서 end-due만 due candidate를 가지고,
-// end-fut는 아직 due가 아닌 candidate를 가진다.
 func addScopeEndedSessions(state *State) {
 	for i, videoID := range []string{"end-1", "end-2", "end-3", "end-4", "end-5"} {
 		state.Sessions[videoID] = scopeEnded(videoID, 50*(i+1))
@@ -119,7 +117,6 @@ func addScopeEndedSessions(state *State) {
 	state.PendingEnds["end-1"] = scopePending("end-1", 800, scopeBase.Add(-time.Hour))
 }
 
-// scopeFullState는 채널 전체를 이력까지 적재한 상태다.
 func scopeFullState() State {
 	state := State{Sessions: map[string]SessionState{}, PendingEnds: map[string]PendingEnd{}}
 
@@ -137,9 +134,6 @@ func scopeFullState() State {
 	return state
 }
 
-// narrowScopeState는 축소 적재 결과를 흉내 낸다. 읽지 않는 행은 payload 밖의 ENDED 중 candidate가
-// 없는 세션과 그 pending이다(dueArm=false면 candidate가 있어도 뺀다). 남은 ENDED는 이력을 적재하지 않고,
-// payload에 오른 candidate 없는 ENDED는 pending도 읽지 않는다.
 func narrowScopeState(full *State, payload []string, dueArm bool) (State, map[string]struct{}) {
 	narrowed := full.clone()
 	omitted := map[string]struct{}{}
@@ -347,8 +341,6 @@ func checkScopeScenario(t *testing.T, scenario *scopeScenario) {
 	}
 }
 
-// 축소 적재(채널 범위 ENDED 제외, ENDED 이력 미적재)는 reducer 결정을 바꾸지 않는다.
-// 대조군으로, due candidate가 남은 ENDED를 함께 읽지 않으면 candidate 정리가 빠지는지도 확인한다.
 func TestReduceNarrowedLiveStateMatchesFullState(t *testing.T) {
 	t.Parallel()
 
@@ -361,7 +353,6 @@ func TestReduceNarrowedLiveStateMatchesFullState(t *testing.T) {
 	}
 }
 
-// 부재 적용에 필요한 이력을 적재하지 않았으면 부분 결정 없이 오류로 드러낸다. ENDED는 이력을 읽지 않는다.
 func TestReduceRequiresLoadedIgnoredAbsencesOnlyWhenRead(t *testing.T) {
 	t.Parallel()
 
@@ -432,7 +423,6 @@ func TestIgnoredAbsenceHistoryLoadedStateAndCloneIndependence(t *testing.T) {
 	}
 }
 
-// Reduce가 무시한 부재를 추가해도 호출자 상태의 여유 용량에 쓰지 않는다.
 func TestReduceDoesNotWriteCallerIgnoredAbsenceStorage(t *testing.T) {
 	t.Parallel()
 

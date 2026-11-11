@@ -84,7 +84,6 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 	return config, nil
 }
 
-// loadRuntimeSections는 alarm-worker가 보관하는 공통 구획을 읽고 오류를 모두 합쳐 돌려준다.
 func loadRuntimeSections() (*RuntimeConfig, error) {
 	server, serverErr := settings.LoadServerConfig()
 	holodex, holodexErr := settings.LoadHolodexConfig()
@@ -113,7 +112,6 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	}, nil
 }
 
-// loadRoleSections는 alarm-worker의 worker profile, dispatch retention, 발행 batch 한도를 채운다.
 func loadRoleSections(config *RuntimeConfig) error {
 	profile, err := LoadWorkerProfile()
 	if err != nil {

@@ -81,7 +81,6 @@ func TestResolveUncachedChannelSubscribersByType_KnownEmptyWithoutDatabase(t *te
 	require.ErrorContains(t, err, "database is nil")
 }
 
-// markerProbeCache는 empty marker 확인이 단건 EXISTS인지 pipeline인지 세고, 필요하면 pipeline 결과를 바꾼다.
 type markerProbeCache struct {
 	cache.Client
 
@@ -114,8 +113,6 @@ func (c *markerProbeCache) DoMulti(ctx context.Context, cmds ...valkey.Completed
 	return c.Client.DoMulti(ctx, cmds...)
 }
 
-// 100개 채널의 empty marker는 한 번의 pipeline으로 확인하고, 결과는 입력 채널 위치와 정확히 대응해야 한다.
-// 모든 채널에 DB 구독이 있으므로 marker가 다른 채널에 잘못 대응되면 결과 집합이 달라진다.
 func TestResolveUncachedChannelSubscribersByType_PipelinesEmptyMarkerProbes(t *testing.T) {
 	t.Parallel()
 
@@ -160,7 +157,6 @@ func TestResolveUncachedChannelSubscribersByType_PipelinesEmptyMarkerProbes(t *t
 	require.Equal(t, 1, queries)
 }
 
-// marker 확인이 실패하면 해당 채널을 구독 0으로 단정하지 않는다. DB가 있으면 DB로 확정하고, 없으면 오류를 반환한다.
 func TestResolveUncachedChannelSubscribersByType_MarkerProbeFailureIsNotKnownEmpty(t *testing.T) {
 	t.Parallel()
 

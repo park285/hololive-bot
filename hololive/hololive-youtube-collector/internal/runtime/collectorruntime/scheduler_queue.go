@@ -187,7 +187,6 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *queuedJob) {
 	}
 }
 
-// nextSpec는 lease 획득 전에 만료 항목을 버리고 실행할 다음 항목을 반환합니다.
 // 반환값 false는 취소 또는 불변식 위반으로 worker가 종료됨을 뜻합니다.
 func (s *leaseScheduler) nextSpec(ctx context.Context) (queuedJob, bool) {
 	for {
@@ -219,7 +218,6 @@ const (
 	dequeueStale
 )
 
-// acceptDequeued는 lease를 취득하지 않은 만료 항목을 DB terminal 없이 버립니다.
 func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *queuedJob) dequeueDecision {
 	if spec == nil {
 		return dequeueStop

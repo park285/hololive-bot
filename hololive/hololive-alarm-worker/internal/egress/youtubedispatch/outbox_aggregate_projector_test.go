@@ -167,13 +167,11 @@ func holdAggregateProjectionParent(ctx context.Context, t *testing.T, pool *pgxp
 	return parentTx
 }
 
-// aggregateProjectionTimes는 집계가 SENT로 확정하며 기록한 outbox 시각이다.
 type aggregateProjectionTimes struct {
 	sentAt     time.Time
 	terminalAt time.Time
 }
 
-// readAggregateProjectionTimes는 부모 잠금을 쥔 transaction 안에서 newer projection이 기록한 시각을 읽는다.
 func readAggregateProjectionTimes(ctx context.Context, t *testing.T, tx pgx.Tx, outboxID int64) aggregateProjectionTimes {
 	t.Helper()
 

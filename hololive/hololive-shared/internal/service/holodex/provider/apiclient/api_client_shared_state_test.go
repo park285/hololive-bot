@@ -16,8 +16,7 @@ import (
 	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
-// memorySharedState는 synctest bubble 안에서 두 client가 함께 쓰는 공유 상태다. 넘겨받은 ctx가 끝났으면
-// 실패해 호출자 취소와 분리된 기록인지 확인할 수 있다.
+// 넘겨받은 ctx가 끝났으면 실패해 호출자 취소와 분리된 기록인지 확인할 수 있다.
 type memorySharedState struct {
 	mu        sync.Mutex
 	deadlines map[string]time.Time
@@ -240,7 +239,6 @@ func TestAPIClientSharedStateFailureFallsBackToLocalCooldown(t *testing.T) {
 	})
 }
 
-// 진입 검사를 통과한 요청도 재시도 전에 다른 프로세스가 연 공유 circuit을 다시 읽어 HTTP 요청을 멈춘다.
 func TestAPIClientSharedCircuitOpenedDuringRetryStopsRequest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		shared := &memorySharedState{}
@@ -269,7 +267,6 @@ func TestAPIClientSharedCircuitOpenedDuringRetryStopsRequest(t *testing.T) {
 	})
 }
 
-// 분산 승인을 기다리는 동안 다른 프로세스가 받은 429는 승인 직후 다시 읽어 요청을 그 시각 뒤로 미룬다.
 func TestAPIClientMergesSharedCooldownAfterDistributedWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		shared := &memorySharedState{}
@@ -311,7 +308,6 @@ func TestAPIClientMergesSharedCooldownAfterDistributedWait(t *testing.T) {
 	})
 }
 
-// 호출자 취소는 Valkey 장애가 아니므로 공유 상태 실패 counter를 올리지 않는다.
 func TestAPIClientCanceledCallerDoesNotCountSharedStateFailure(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		shared := &memorySharedState{}

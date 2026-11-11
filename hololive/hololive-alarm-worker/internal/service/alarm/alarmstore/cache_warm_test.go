@@ -53,7 +53,6 @@ func typeSpecificWarmAlarms() []*domain.Alarm {
 	}
 }
 
-// stubWarmSource는 rebuild가 읽을 PG 스냅샷을 고정한다.
 type stubWarmSource struct {
 	loadAlarms  func(context.Context) ([]*domain.Alarm, error)
 	memberNames map[string]string
@@ -341,8 +340,6 @@ func TestRebuildSubscriberCacheFromRepository_PreservesNonSubscriberAlarmKeys(t 
 	assert.True(t, wakeupGuardExists)
 }
 
-// rebuild clear는 SCAN page마다 바로 지워 한 번에 붙드는 key가 page 크기를 넘지 않아야 한다. 모든 page를 지운 뒤에만
-// DB 스냅샷을 읽으므로 clear 도중 커밋된 해지는 되살아나지 않고 clear 도중 커밋된 구독은 남는다.
 func TestRebuildSubscriberCacheFromRepository_ClearsInBoundedPagesBeforeLoad(t *testing.T) {
 	ctx := t.Context()
 	cacheClient, ok := newMemoryCacheClient(t).(*cachemocks.Client)

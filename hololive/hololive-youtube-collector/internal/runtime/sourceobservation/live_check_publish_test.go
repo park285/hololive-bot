@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// 방송 탭 snapshot job은 채널 확인을 발행할 수 없다. 공유-job collector의 확인이 새 슬롯 계약을 우회하지 못한다.
+// 공유-job collector의 확인이 새 슬롯 계약을 우회하지 못한다.
 func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)

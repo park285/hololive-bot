@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// primary LLM이 실패하면 summarizer는 결정적 digest를 스스로 만들지 않고 오류를 돌려준다. 결정적 fallback은 service가
-// 한 곳에서 소유한다. 그렇지 않으면 consensus reviewer가 결정적 fallback digest를 LLM으로 다시 검토한다.
 func TestConsensusDoesNotReviewDeterministicFallbackAfterPrimaryLLMFailure(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	primary := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)

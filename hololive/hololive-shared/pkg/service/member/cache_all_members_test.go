@@ -256,8 +256,7 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 	}
 }
 
-// doneObservedContext는 Done을 처음 부를 때 알린다. AllMembers는 공유 적재 대기 select에서만 Done을 부르므로, 대기자가
-// 진행 중인 공유 적재에 합류했다는 시점을 sleep 없이 관측한다.
+// AllMembers는 공유 적재 대기 select에서만 Done을 부르므로, 대기자가 진행 중인 공유 적재에 합류했다는 시점을 sleep 없이 관측한다.
 type doneObservedContext struct {
 	context.Context //nolint:containedctx // 공유 적재 합류 시점을 관찰하는 Context wrapper이며 원래 취소·값 계약을 그대로 위임한다.
 
@@ -271,7 +270,6 @@ func (c *doneObservedContext) Done() <-chan struct{} {
 	return c.Context.Done()
 }
 
-// blockingSnapshotLoader는 release 전까지 공유 적재를 붙잡고, 적재 ctx가 취소된 채 끝났는지 기록한다.
 type blockingSnapshotLoader struct {
 	started       chan struct{}
 	release       chan struct{}
@@ -297,7 +295,6 @@ func (l *blockingSnapshotLoader) load(ctx context.Context) ([]*domain.Member, er
 	return testMembers(), nil
 }
 
-// startAllMembers는 AllMembers를 별도 goroutine에서 실행하고 결과 오류를 돌려준다. 성공했는데 snapshot이 불완전하면 오류다.
 func startAllMembers(ctx context.Context, c *Cache) <-chan error {
 	done := make(chan error, 1)
 
@@ -313,8 +310,6 @@ func startAllMembers(ctx context.Context, c *Cache) <-chan error {
 	return done
 }
 
-// 진행 중인 공유 적재에 합류한 대기자가 취소되면 자기만 즉시 빠지고, 공유 적재는 호출자 취소와 분리된 채 끝나 다른
-// 대기자와 snapshot을 채운다.
 func TestCacheAllMembers_CanceledWaiterLeavesSharedLoadRunning(t *testing.T) {
 	t.Parallel()
 
@@ -356,7 +351,6 @@ func TestCacheAllMembers_CanceledWaiterLeavesSharedLoadRunning(t *testing.T) {
 	}
 }
 
-// 이미 취소된 호출자는 공유 적재를 시작하지 않고 ctx 오류를 받는다.
 func TestCacheAllMembers_PreCanceledCallerDoesNotStartLoad(t *testing.T) {
 	t.Parallel()
 

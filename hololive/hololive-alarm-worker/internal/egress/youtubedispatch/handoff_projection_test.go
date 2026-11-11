@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 종단 handoff 정산의 부모 집계가 실패하면 자식·원장·확인 종료도 함께 롤백되어 다음 확인이 다시 정산할 수 있어야 한다.
 func TestYouTubeHandoffProjectionFailureRollsBackSettlement(t *testing.T) {
 	fixture := sendYouTubeHandoffFixture(t)
 	fixture.makeDue(t, 0)

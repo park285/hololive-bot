@@ -33,7 +33,6 @@ func NewBaseCommand(deps *Dependencies) BaseCommand {
 	return BaseCommand{deps: deps}
 }
 
-// 모든 커맨드에서 공통으로 필요한 SendMessage, SendError, Logger를 확인한다.
 func (b *BaseCommand) EnsureBaseDeps() error {
 	if b == nil || b.deps == nil {
 		return errors.New("command dependencies not configured")

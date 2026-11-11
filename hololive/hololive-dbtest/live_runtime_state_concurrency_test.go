@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 서로 다른 표를 쓰는 두 트랜잭션은 같은 영상 갱신에서 직렬화되고, 뒤 갱신이 앞 커밋을 읽어 합성 상태를 잃지 않는다.
 func TestLiveRuntimeStateConcurrentDistinctSourceWriters(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		name := "absent_upserts"

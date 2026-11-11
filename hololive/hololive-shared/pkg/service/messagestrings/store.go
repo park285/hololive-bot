@@ -67,7 +67,6 @@ func NewStore(pool *pgxpool.Pool, logger *slog.Logger) *Store {
 	return &Store{pool: pool, logger: logger}
 }
 
-// Load는 message_strings 전체를 적재한다. 실패하면 이전 적재 상태를 바꾸지 않고 오류를 돌려준다.
 func (s *Store) Load(ctx context.Context) error {
 	if s == nil {
 		return errors.New("message strings store is nil")
@@ -89,7 +88,6 @@ type Requirements struct {
 	Namespaces []string
 }
 
-// Validate는 적재된 값이 요구 key와 namespace를 모두 갖췄는지 확인한다. 누락을 모두 모아 한 오류로 돌려준다.
 func (s *Store) Validate(requirements Requirements) error {
 	if s == nil {
 		return errors.New("message strings store is nil")
@@ -123,7 +121,6 @@ func (s *Store) Validate(requirements Requirements) error {
 	return nil
 }
 
-// Text는 기동 검증을 거친 key의 값을 돌려준다. 값이 없으면 빈 문자열과 함께 lookup metric을 남긴다.
 // 검증된 key에서는 일어나지 않으므로 metric이 오르면 검증 목록 누락이나 Load 누락 같은 조립 결함이다.
 func (s *Store) Text(key Key) string {
 	value, _ := s.Lookup(key.Namespace, key.Name)
@@ -131,7 +128,7 @@ func (s *Store) Text(key Key) string {
 	return value
 }
 
-// Lookup은 동적 key(조직명, 뉴스 분류, 알람 종류 등)를 조회한다. 없으면 ("", false)이며 호출자가 원문을 쓴다.
+// 없으면 ("", false)이며 호출자가 원문을 쓴다.
 func (s *Store) Lookup(namespace, key string) (string, bool) {
 	if s == nil {
 		observeLookupMiss(lookupMissReasonUnloaded, namespace)

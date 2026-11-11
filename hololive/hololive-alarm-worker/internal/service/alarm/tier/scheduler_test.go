@@ -254,8 +254,6 @@ func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 	assert.Equal(t, now.Add(noUpcomingInterval), result)
 }
 
-// 정렬 tick이 깨어나는 지연이 줄어드는 경우에도 Tier1 채널은 매 tick due여야 한다.
-// 다음 점검 시각이 처리 완료 시각이나 이전 tick의 늦은 깨어남에 끌려가면 한 tick을 건너뛴다.
 func TestSelectDueChannels_Tier1DueEveryAlignedTickDespiteWakeJitter(t *testing.T) {
 	ts := newTestScheduler()
 	base := time.Date(2026, time.October, 14, 12, 0, 0, 0, time.UTC)
@@ -278,7 +276,6 @@ func TestSelectDueChannels_Tier1DueEveryAlignedTickDespiteWakeJitter(t *testing.
 	}
 }
 
-// 허용치는 깨어남 지연만 흡수하고, 3분 간격 채널을 한 tick 앞당겨 점검하지 않는다.
 func TestSelectDueChannels_SlackDoesNotAdvanceLongerTierByOneTick(t *testing.T) {
 	ts := newTestScheduler()
 	base := time.Date(2026, time.October, 14, 12, 0, 0, 0, time.UTC)

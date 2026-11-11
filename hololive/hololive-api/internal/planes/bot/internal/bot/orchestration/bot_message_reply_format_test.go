@@ -16,8 +16,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// handler가 요청 진입 때 고정한 방 유형 판정을 명령 ctx로 넘겨야 formatter의 템플릿 변형과 transport의 발송 경로가
-// 같은 값을 쓴다. 판정이 빠지면 오픈채팅 응답도 plain 본문과 일반 텍스트 경로로 나간다.
 func TestProcessMessageFixesReplyFormatForCommand(t *testing.T) {
 	t.Parallel()
 

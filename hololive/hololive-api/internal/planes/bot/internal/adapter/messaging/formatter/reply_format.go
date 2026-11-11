@@ -21,7 +21,7 @@ func ReplyFormatFromContext(ctx context.Context) (domain.TemplateFormat, bool) {
 	return format, ok
 }
 
-// replyFormat은 판정을 고정하지 않은 경로에서 일반 텍스트 변형을 쓴다. 일반 텍스트 본문은 어느 방에서도 읽을 수 있다.
+// 일반 텍스트 본문은 어느 방에서도 읽을 수 있다.
 func replyFormat(ctx context.Context) domain.TemplateFormat {
 	if format, ok := ReplyFormatFromContext(ctx); ok {
 		return format

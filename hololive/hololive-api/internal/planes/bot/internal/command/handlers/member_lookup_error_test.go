@@ -47,7 +47,6 @@ func TestMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing.T) {
 	}
 }
 
-// !알람도 matcher 원천 장애를 "멤버 없음" 응답으로 바꾸지 않고 원인 오류로 돌려준다.
 func TestAlarmMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing.T) {
 	cause := errors.New("member repository unavailable")
 
@@ -81,7 +80,6 @@ func TestAlarmMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing
 	}
 }
 
-// channelLookupFailureProvider는 매칭 snapshot은 적재하지만 채널 대표 조회가 실패하는 원천이다.
 type channelLookupFailureProvider struct {
 	*contextAwareMemberProvider
 
@@ -92,7 +90,6 @@ func (p *channelLookupFailureProvider) FindMemberByChannelID(context.Context, st
 	return nil, p.err
 }
 
-// 졸업 여부 확인의 조회 실패는 "졸업 아님"으로 추측해 진행하지 않고 오류로 돌려준다.
 func TestGraduationCheckPropagatesMemberLookupFailure(t *testing.T) {
 	cause := errors.New("member cache unavailable")
 	provider := &channelLookupFailureProvider{

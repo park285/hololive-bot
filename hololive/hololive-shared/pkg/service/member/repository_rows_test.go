@@ -78,7 +78,6 @@ func (r *fakeMemberRows) RawValues() [][]byte { return nil }
 
 func (r *fakeMemberRows) Conn() *pgx.Conn { return nil }
 
-// TypeMap은 별도 codec 등록이 없는 행 fixture의 기본 타입 매핑을 반환한다.
 func (r *fakeMemberRows) TypeMap() *pgtype.Map { return pgtype.NewMap() }
 
 func newTestMemberRepository() *Repository {

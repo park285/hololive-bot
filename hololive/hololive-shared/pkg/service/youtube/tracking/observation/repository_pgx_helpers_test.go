@@ -32,7 +32,6 @@ type queryOnlyTrackingDB struct {
 	trackingDB
 }
 
-// 호출자 트랜잭션에 합류할 때는 commit/rollback을 호출자에게 남기고 fn 오류만 감싸 돌려준다.
 func TestInPgxTxJoinsCallerTransaction(t *testing.T) {
 	tx := &recordingTrackingTx{}
 	fnErr := errors.New("apply marks failed")
@@ -51,7 +50,6 @@ func TestInPgxTxJoinsCallerTransaction(t *testing.T) {
 	require.Zero(t, tx.rollbacks)
 }
 
-// pgx.Tx도 *pgxpool.Pool도 아닌 DB는 트랜잭션 없이 fn을 실행하지 않는다.
 func TestInPgxTxRejectsUnsupportedDB(t *testing.T) {
 	called := false
 

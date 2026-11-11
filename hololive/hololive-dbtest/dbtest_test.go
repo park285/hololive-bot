@@ -62,9 +62,6 @@ func TestApplyMigrations_IsIdempotent(t *testing.T) {
 	}
 }
 
-// TestNewPool_RestoresBaseSchema는 epoch baseline과 이후 suffix의 ALTER까지 반영된 결과
-// (domain struct와 일치하는 컬럼)가 존재하는지 검증한다. 이 테스트가
-// 통과하면 base-schema gap이 없고 manifest 전체가 빈 DB에서 끝까지 적용됐음을 보장한다.
 func TestNewPool_RestoresBaseSchema(t *testing.T) {
 	t.Parallel()
 
@@ -131,7 +128,6 @@ func TestNewPool_RestoresBaseSchema(t *testing.T) {
 	}
 }
 
-// TestNewPool_IsolatesPerCall은 호출마다 격리된 데이터베이스를 받는지 검증한다.
 func TestNewPool_IsolatesPerCall(t *testing.T) {
 	t.Parallel()
 

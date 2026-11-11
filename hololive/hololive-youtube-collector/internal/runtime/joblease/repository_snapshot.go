@@ -14,10 +14,9 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// LoadTargetSnapshot은 이미 획득한 lease의 target roster를 읽는다. Guard를 share 잠금한 뒤 별도 문장으로 소유 증명과
-// job membership을 판정하므로, API 전환을 기다린 snapshot도 새 CURRENT에서 평가되고 무관한 target 변경으로
-// 거절되지 않는다. Membership이 유효하면 CURRENT의 범위는 획득 시점 범위와 같으므로 snapshot의 generation은
-// lease 증명의 획득 generation으로 표시한다. Not_before 같은 입장 조건은 적용하지 않는다.
+// Guard를 share 잠금한 뒤 별도 문장으로 소유 증명과 job membership을 판정하므로, API 전환을 기다린 snapshot도 새 CURRENT에서 평가되고 무관한 target 변경으로 거절되지
+// 않는다. Membership이 유효하면 CURRENT의 범위는 획득 시점 범위와 같으므로 snapshot의 generation은 lease 증명의 획득 generation으로 표시한다. Not_before 같은
+// 입장 조건은 적용하지 않는다.
 func (r *Repository) LoadTargetSnapshot(
 	ctx context.Context,
 	proof *contract.LeaseProof,

@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// 선점 SQL이 입장을 합쳐도 오류 우선순위와 상세 사유를 보존하고 거절한 작업 행을 생성하지 않는다.
 func TestAcquireAdmissionRejectsWithoutCreatingLease(t *testing.T) {
 	for _, exact := range []bool{true, false} {
 		t.Run(fmt.Sprintf("exact=%t", exact), func(t *testing.T) {

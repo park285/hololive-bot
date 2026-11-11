@@ -61,7 +61,6 @@ func NewFeedFetcher(client *http.Client, config FeedFetcherConfig) *FeedFetcher 
 	}
 }
 
-// Fetch는 지정 URL의 RSS 원문을 조회한다.
 func (f *FeedFetcher) Fetch(ctx context.Context, feedURL string) ([]byte, error) {
 	if f == nil || f.client == nil {
 		return nil, errors.New("fetch feed: fetcher is nil")

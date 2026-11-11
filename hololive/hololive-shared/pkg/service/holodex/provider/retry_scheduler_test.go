@@ -224,7 +224,6 @@ func TestRetryScheduler_SkipAfterStopped(t *testing.T) {
 	})
 }
 
-// 재시도는 예약한 요청이 끝난 뒤에 실행되므로 부모 ctx 취소가 재시도 ctx를 끝내면 안 된다.
 // 부모 ctx의 값(trace 등)은 그대로 전달되어야 한다.
 func TestRetryScheduler_ParentCancelDoesNotCancelRetry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -267,7 +266,6 @@ func TestRetryScheduler_ParentCancelDoesNotCancelRetry(t *testing.T) {
 	})
 }
 
-// stop()은 scheduler가 소유한 취소 수명(stopCh)을 닫아 실행 중인 재시도를 끝낸다.
 func TestRetryScheduler_Stop_CancelsExecutingContext(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		scheduler := newRetryScheduler(10*time.Millisecond, time.Hour, 10, slog.Default())

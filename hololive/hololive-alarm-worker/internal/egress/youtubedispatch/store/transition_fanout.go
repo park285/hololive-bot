@@ -169,8 +169,7 @@ func adjudicateFanoutPre(applyErr error, prior CommitAdjudication, attempt int) 
 	return fanoutAdjudication{result: FanoutResult{ApplyResult: result}, err: applyErr, prior: prior}
 }
 
-// ReviveFailedFanoutOutboxes는 신선한 FAILED outbox를 되살린다. 신선도·lease 만료 판정과 새 next_attempt_at은 DB
-// 시계로 정한다.
+// 신선도·lease 만료 판정과 새 next_attempt_at은 DB 시계로 정한다.
 func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 	ctx context.Context,
 	freshnessWindow time.Duration,
@@ -202,8 +201,7 @@ func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 	return newApplyResult(ApplyApplied, ids), len(ids), nil
 }
 
-// ApplyFanoutFailure는 정확한 claim을 fence로 fanout 실패를 기록한다. 다음 시도는 outbox 행을 잠근 뒤의 DB 시계에서
-// RetryBackoff × 다음 시도 횟수 뒤이고, 종결 실패의 terminal_at도 같은 DB 시계다.
+// 다음 시도는 outbox 행을 잠근 뒤의 DB 시계에서 RetryBackoff × 다음 시도 횟수 뒤이고, 종결 실패의 terminal_at도 같은 DB 시계다.
 func (s *TransitionStore) ApplyFanoutFailure(
 	ctx context.Context,
 	outbox domain.YouTubeNotificationOutbox,
@@ -340,8 +338,7 @@ func adjudicateFanoutFailure(
 	}
 }
 
-// materializeFanoutOnce는 claim한 outbox의 자식 delivery를 만들거나 대상 없음으로 완료한다. 자식의 첫 시도 시각과
-// 대상 없음 완료 시각은 DB 시계로 기록한다.
+// 자식의 첫 시도 시각과 대상 없음 완료 시각은 DB 시계로 기록한다.
 func (s *TransitionStore) materializeFanoutOnce(
 	ctx context.Context,
 	outbox domain.YouTubeNotificationOutbox,
@@ -512,8 +509,7 @@ func loadFanoutState(
 	return state, children, true, nil
 }
 
-// classifyFanoutFailureEnvelope은 실패 전이의 commit 결과를 판정한다. 시각 열은 DB 시계가 정해 호출자가 미리 알 수
-// 없으므로 종결 여부(terminal_at 유무)만 비교한다.
+// 시각 열은 DB 시계가 정해 호출자가 미리 알 수 없으므로 종결 여부(terminal_at 유무)만 비교한다.
 func classifyFanoutFailureEnvelope(
 	state fanoutOutboxState,
 	children []string,

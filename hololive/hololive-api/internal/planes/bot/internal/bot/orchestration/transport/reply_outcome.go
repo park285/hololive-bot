@@ -26,7 +26,6 @@ import (
 
 var ErrReplyOutcomeUnknown = errors.New("iris reply outcome unknown")
 
-// replyOutcomeUnknownError는 admission 응답이 유실됐거나 durable admission을 증명하지 못한 경우다.
 type replyOutcomeUnknownError struct {
 	reason string
 	cause  error

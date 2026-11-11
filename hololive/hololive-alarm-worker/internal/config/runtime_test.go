@@ -16,7 +16,6 @@ func setRuntimeEnv(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 }
 
-// setWorkerRequiredEnv는 alarm-worker LoadRuntime이 요구하는 egress·Iris·H3 입력만 세운다.
 func setWorkerRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOLODEX_API_KEY", "test-key")
@@ -51,7 +50,6 @@ func TestLoadRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	}
 }
 
-// alarm-worker가 읽는 bot 표시 구획의 잘못된 값은 기동 실패로 드러난다.
 // LLM·Exa·사진 동기화처럼 hololive-api만 읽는 env는 worker가 검사하지 않는다.
 func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	for key, value := range map[string]string{
@@ -68,7 +66,6 @@ func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	}
 }
 
-// alarm-worker는 Iris egress runtime이므로 room ACL seed와 Iris 토큰 입력을 bot plane과 같은 기준으로 요구한다.
 func TestLoadRuntimeRequiresEgressInputs(t *testing.T) {
 	for key, want := range map[string]string{
 		"KAKAO_ROOMS":                    "KAKAO_ROOMS is required",
@@ -125,7 +122,6 @@ func TestLoadRuntimeRequiresControlCapacityAndPreservesIdleZero(t *testing.T) {
 	}
 }
 
-// 발행 batch 한도는 config가 소유한다. 미설정은 1000이고, 잘못된 값은 기본값으로 바뀌지 않고 기동 오류다.
 func TestLoadRuntimeAlarmDispatchPublishBatchLimit(t *testing.T) {
 	setRuntimeEnv(t)
 	t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", "1000")

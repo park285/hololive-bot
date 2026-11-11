@@ -360,7 +360,6 @@ func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutPa
 	testChannelSubscriberQueryContext(t, "UC_fallback_timeout", false)
 }
 
-// 실제 조회 경로의 Query에 전달된 context를 제어하고, DB 왕복과 호스트 부하 없이 종료 경계를 검증한다.
 func testChannelSubscriberQueryContext(t *testing.T, channelID string, parentDeadline bool) {
 	t.Helper()
 
@@ -633,8 +632,6 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 	assert.Greater(t, after-before, float64(0))
 }
 
-// 서로 다른 DB(또는 트랜잭션)에 묶인 resolver는 같은 채널·종류를 동시에 조회해도 각자 조회하고 자기 결과만 받아야 한다.
-// 한 DB의 실패가 다른 DB 조회자에게 전달되거나 다른 DB 조회가 생략되면 안 된다.
 func TestSubscriberResolver_DistinctDatabasesNeverShareLoads(t *testing.T) {
 	t.Parallel()
 
@@ -681,7 +678,6 @@ func TestSubscriberResolver_DistinctDatabasesNeverShareLoads(t *testing.T) {
 	})
 }
 
-// releasedSubscriberQueryDB는 release가 닫힐 때까지 조회를 붙잡은 뒤 고유 오류를 돌려준다.
 type releasedSubscriberQueryDB struct {
 	err     error
 	release chan struct{}

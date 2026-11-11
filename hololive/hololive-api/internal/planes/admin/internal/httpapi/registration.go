@@ -87,7 +87,6 @@ func registerAPIRoutes(
 	return nil
 }
 
-// apiRateLimitMiddleware는 /api/holo의 IP rate limit을 적용한다.
 // 활성 상태의 cache·limiter 초기화 실패는 기동 오류, 요청 판정 실패는 503이다.
 func apiRateLimitMiddleware(cacheClient cache.LowLevelCache, logger *slog.Logger) (gin.HandlerFunc, error) {
 	if logger == nil {

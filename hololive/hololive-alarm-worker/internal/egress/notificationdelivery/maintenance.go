@@ -35,7 +35,6 @@ func (d *Dispatcher) maintenanceTasks() []*maintenanceTask {
 	return tasks
 }
 
-// runMaintenanceLoop은 시작 즉시 모든 작업을 한 번 실행하고, 이후 각 작업의 다음 예정 시각까지 기다린다.
 // 실패한 작업은 성공 주기보다 길지 않은 poll 주기 뒤에 다시 시도한다.
 func (d *Dispatcher) runMaintenanceLoop(ctx context.Context) {
 	tasks := d.maintenanceTasks()

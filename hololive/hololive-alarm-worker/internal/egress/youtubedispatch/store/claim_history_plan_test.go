@@ -47,11 +47,9 @@ var claimIndexPlanCases = []claimIndexPlanCase{
 	},
 }
 
-// terminal 이력이 많아도 claim SQL은 상태 조건을 담은 인덱스로 후보만 읽어야 한다. 운영 풀은 cache_statement로
-// 같은 prepared statement를 반복 실행하므로 custom plan과 기본 plan_cache_mode(auto)가 여러 번 실행된 뒤 고르는
-// 계획을 함께 고정한다. 강제 generic plan(force_generic_plan)도 상수 상태 조건 덕분에 같은 범위만 읽으므로 함께
-// 요구한다. 인덱스 이름은 고정하지 않는다. 예를 들어 created_at 하한을 아는 fanout custom plan은
-// idx_yno_status_created(status, created_at)를 고르지만, status 동등 조건으로 PENDING 행만 읽으므로 결과가 같다.
+// 운영 풀은 cache_statement로 같은 prepared statement를 반복 실행하므로 custom plan과 기본 plan_cache_mode(auto)가 여러 번 실행된 뒤 고르는 계획을 함께
+// 고정한다. 강제 generic plan(force_generic_plan)도 상수 상태 조건 덕분에 같은 범위만 읽으므로 함께 요구한다. 인덱스 이름은 고정하지 않는다. 예를 들어 created_at 하한을
+// 아는 fanout custom plan은 idx_yno_status_created(status, created_at)를 고르지만, status 동등 조건으로 PENDING 행만 읽으므로 결과가 같다.
 func TestClaimSQLReadsCandidatesWithoutScanningTerminalHistory(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -76,7 +74,6 @@ func TestClaimSQLReadsCandidatesWithoutScanningTerminalHistory(t *testing.T) {
 	}
 }
 
-// seedClaimPlanHistory는 terminal outbox·delivery 이력과 SQL별 후보 몇 행을 만든다.
 // PENDING outbox 후보는 delivery가 없고, delivery 후보의 parent outbox는 delivery가 있어 fanout 후보가 아니다.
 func seedClaimPlanHistory(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()

@@ -169,9 +169,6 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 	}
 }
 
-// 시작 미관측 종료는 ended_at 이후의 positive가 grace 안에서 관측된 동안만 미룬다. 1초 송출 뒤 공급자가 잠시
-// UPCOMING을 유지한 영상처럼, grace가 지나도록 더 새로운 positive가 없으면 공급자 지연으로 보고 upstream 종료
-// 시각으로 끝내며 시작·알림을 만들지 않는다.
 func TestVideoLifecycleUnobservedEndAcceptsLaggedPositiveAfterGrace(t *testing.T) {
 	t.Parallel()
 
@@ -209,9 +206,7 @@ func TestVideoLifecycleUnobservedEndAcceptsLaggedPositiveAfterGrace(t *testing.T
 	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
 }
 
-// startLiveWithLaggedPositive는 시작을 관측한 LIVE를 만들고, 그 마지막 positive보다 30초 이른 검증된
-// ended_at과 positive 다음 슬롯의 영상 확인 lease를 돌려준다. Holodex live_snapshot의 EffectiveAt은 수집 예정
-// 시각이라 positive 시각이 YouTube의 실제 종료보다 늦어지는 운영 순서를 재현한다.
+// Holodex live_snapshot의 EffectiveAt은 수집 예정 시각이라 positive 시각이 YouTube의 실제 종료보다 늦어지는 운영 순서를 재현한다.
 func startLiveWithLaggedPositive(t *testing.T, grace time.Duration) (*pgxpool.Pool, *Repository, *Consumer, contract.LeaseProof, time.Time) {
 	t.Helper()
 
@@ -263,7 +258,6 @@ func TestVideoLifecycleLiveEndAcceptsPositiveAfterEndedAt(t *testing.T) {
 	}
 }
 
-// grace 안에 받은 positive는 즉시 종료를 막고, 같은 pending을 기존 finalizer가 검증된 ended_at으로 정산한다.
 func TestVideoLifecycleLiveEndWaitsForGraceAfterLaggedPositive(t *testing.T) {
 	t.Parallel()
 

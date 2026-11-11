@@ -77,8 +77,6 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 	assertCollectionSnapshotMetrics(t, m, now)
 }
 
-// TestCollectionTargetSnapshotDefersSleepingTargets는 not_before가 미래인 영상 확인 target이 due·미완료·stale로
-// 보이지 않고 수요를 신선도 예산당 1회로 세며, 지난 not_before는 즉시 due로 돌아오는지 확인한다.
 func TestCollectionTargetSnapshotDefersSleepingTargets(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

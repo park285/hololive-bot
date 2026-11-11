@@ -19,13 +19,10 @@ const (
 	prunePlanBatchSize    = 100
 )
 
-// 보존 기간 안의 terminal 이력이 많아도 prune은 terminal 부분 인덱스로 만료 행만 읽어야 한다.
-// 운영 풀은 cache_statement로 같은 prepared statement를 15초마다 다시 실행하므로, custom plan과
-// 기본 plan_cache_mode(auto)가 여러 번 실행된 뒤 고르는 계획을 함께 고정한다. 기본 모드는 generic
-// plan 비용이 custom plan 평균보다 높으면 custom plan을 유지한다. 강제 generic plan(force_generic_plan)에서도
-// 세 candidate CTE는 cutoff Index Cond로 terminal 부분 인덱스를 쓴다. 다만 LIMIT $3 값을 모르는 플래너가
-// candidate를 수백 행(cutoff 선택도 1/3에 LIMIT 기본 10%)으로 추정해 DELETE ... USING 조인만 Hash Join과
-// seq scan을 고르므로, 그 모드는 여기서 요구하지 않는다.
+// 운영 풀은 cache_statement로 같은 prepared statement를 15초마다 다시 실행하므로, custom plan과 기본 plan_cache_mode(auto)가 여러 번 실행된 뒤 고르는
+// 계획을 함께 고정한다. 기본 모드는 generic plan 비용이 custom plan 평균보다 높으면 custom plan을 유지한다. 강제 generic plan(force_generic_plan)에서도 세
+// candidate CTE는 cutoff Index Cond로 terminal 부분 인덱스를 쓴다. 다만 LIMIT $3 값을 모르는 플래너가 candidate를 수백 행(cutoff 선택도 1/3에 LIMIT
+// 기본 10%)으로 추정해 DELETE ... USING 조인만 Hash Join과 seq scan을 고르므로, 그 모드는 여기서 요구하지 않는다.
 func TestDurablePruneUsesTerminalIndexesInsteadOfScanningRetainedHistory(t *testing.T) {
 	pool := newDurabilityPool(t)
 	ctx := t.Context()

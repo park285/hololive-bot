@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-// 한 프로세스의 여러 pool은 pool 라벨로 공존하고, 닫힌 pool의 이름은 해제 뒤 다시 쓸 수 있어야 한다.
 // 같은 이름을 동시에 쓰면 어느 pool의 통계인지 섞이므로 등록 오류로 드러낸다.
 func TestPoolStatsCoexistByPoolNameAndReleaseOnUnregister(t *testing.T) {
 	reg := prometheus.NewPedanticRegistry()
@@ -60,7 +59,7 @@ hololive_db_pool_max_conns{pool="bot"} 7
 `), "hololive_db_pool_max_conns"))
 }
 
-// lazyPool은 연결을 만들지 않는 pool이다. MinConns가 0인 pgxpool은 첫 Acquire 전까지 접속하지 않는다.
+// MinConns가 0인 pgxpool은 첫 Acquire 전까지 접속하지 않는다.
 func lazyPool(t *testing.T, maxConns int32) *pgxpool.Pool {
 	t.Helper()
 

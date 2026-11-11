@@ -468,8 +468,7 @@ func claimOne(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, en
 	return claim
 }
 
-// newTestReplyOutboxRepository는 운영 기본 정책(ReplyOutboxMaxAttempts, ReplyOutboxAutomaticReplayHorizon)으로
-// 저장소를 만든다. 두 상수는 NewReplyOutboxRepositoryWithPolicy 검증을 통과하는 값이다.
+// 두 상수는 NewReplyOutboxRepositoryWithPolicy 검증을 통과하는 값이다.
 func newTestReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
 	return &ReplyOutboxRepository{pool: pool, maxAttempts: ReplyOutboxMaxAttempts, automaticReplayHorizon: ReplyOutboxAutomaticReplayHorizon}
 }

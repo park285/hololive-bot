@@ -185,7 +185,6 @@ func (s *Store) open(raw []byte) (*Cookies, error) {
 	return &c, nil
 }
 
-// Status는 인증 값을 읽지 않고 공개할 수 있는 상태만 조회한다.
 func (s *Store) Status(ctx context.Context) (Status, error) {
 	status := Status{Available: s != nil, Revision: "0", State: "unconfigured", CandidateState: "idle"}
 	if s == nil {
@@ -206,7 +205,6 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 	return status, nil
 }
 
-// Submit은 기대한 세대가 현재와 일치할 때만 암호화한 후보를 저장한다.
 // False는 충돌을 뜻하며 기존 인증을 바꾸지 않는다. 저장 성공은 X 인증 검증 성공과 다르다.
 func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, error) {
 	revision, err := strconv.ParseInt(expected, 10, 64)
@@ -231,7 +229,7 @@ func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, e
 	return result.RowsAffected() == 1, nil
 }
 
-// Snapshot은 worker 내부에서 사용할 인증 값을 복호화한다. 호출자는 이를 로그·응답에 넣지 않는다.
+// 호출자는 이를 로그·응답에 넣지 않는다.
 func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 	var (
 		snapshot          Snapshot
@@ -286,8 +284,7 @@ func (s *Store) ResolveCandidate(ctx context.Context, revision int64, rejection 
 	return result.RowsAffected() == 1, nil
 }
 
-// Observe는 현재 활성 세대의 관측만 기록한다. 후보 검증 실패는 활성 세대를 무효화하지 않는다.
-// False이면 세대가 달라졌으므로 호출자는 해당 관측으로 발송하지 않는다.
+// 후보 검증 실패는 활성 세대를 무효화하지 않는다. False이면 세대가 달라졌으므로 호출자는 해당 관측으로 발송하지 않는다.
 func (s *Store) Observe(ctx context.Context, activeRevision int64, code string, next time.Time) (bool, error) {
 	state := "connected"
 
@@ -325,7 +322,6 @@ func ValidErrorCode(code string) bool {
 	}
 }
 
-// CandidateFailure는 일시 오류를 기록하고 같은 후보의 다음 검증을 제한한다.
 // 네트워크 장애는 인증 거부가 아니므로 후보와 활성 인증 모두 보존한다.
 func (s *Store) CandidateFailure(ctx context.Context, revision int64, code string, next time.Time) error {
 	if code == "" || !ValidErrorCode(code) {

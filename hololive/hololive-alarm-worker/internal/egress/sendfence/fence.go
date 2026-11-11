@@ -65,8 +65,7 @@ const (
 	ReasonPeerMissed Reason = "peer_missed"
 )
 
-// OwnershipHeld는 이 원인으로 적용되지 않은 뒤에도 호출자가 행을 소유하는지 보고한다. 상태·소유자·세대·lease가 모두
-// 맞은 미스만 참이며, 원장은 이 행에만 소유자 fence가 걸린 후속 전이(해제·실패·격리)를 쓸 수 있다.
+// 상태·소유자·세대·lease가 모두 맞은 미스만 참이며, 원장은 이 행에만 소유자 fence가 걸린 후속 전이(해제·실패·격리)를 쓸 수 있다.
 func (r Reason) OwnershipHeld() bool {
 	switch r {
 	case ReasonMemberTerminal, ReasonMembershipChanged, ReasonRequestChanged, ReasonPeerMissed:
@@ -109,7 +108,6 @@ func ScanObservation(row pgx.CollectableRow) (Observation, error) {
 	return o, nil
 }
 
-// reason은 적용되지 않은 관측의 첫 원인이다.
 func (o *Observation) reason() Reason {
 	switch {
 	case !o.StatusMatches:
@@ -166,7 +164,6 @@ func (m *MissError) Error() string {
 	return fmt.Sprintf("%s: send fence miss: applied %d of %d: %s", m.Action, m.Applied, m.Expected, rows.String())
 }
 
-// UnappliedDeliveryIDs는 이 문장이 바꾸지 않은 대상 ID를 요청 순서로 돌려준다.
 func (m *MissError) UnappliedDeliveryIDs() []int64 {
 	ids := make([]int64, 0, len(m.Rows))
 	for _, row := range m.Rows {
@@ -176,7 +173,6 @@ func (m *MissError) UnappliedDeliveryIDs() []int64 {
 	return ids
 }
 
-// Has는 적용되지 않은 대상 중 reason으로 분류된 것이 있는지 보고한다.
 func (m *MissError) Has(reason Reason) bool {
 	for _, row := range m.Rows {
 		if row.Reason == reason {

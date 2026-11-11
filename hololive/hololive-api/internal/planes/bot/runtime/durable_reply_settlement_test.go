@@ -23,8 +23,6 @@ import (
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
-// admission 정산은 shutdown 취소 뒤에도 끝나고, accepted는 lease를 놓되 handoff 확인 전까지 같은 방
-// 후행 응답을 보류한다. 결과 불명도 같은 방을 보류한 채 같은 ID 재확인을 기다린다.
 func TestReplySettlementAfterCancellationHoldsRoomOrder(t *testing.T) {
 	for _, testCase := range []struct {
 		name        string

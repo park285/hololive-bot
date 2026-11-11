@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-// leaseMilliseconds는 SQL에 넘길 밀리초 정수를 만든다. 1ms 미만은 설정 오류라 기본값으로 바꾸지 않고 오류로
-// 돌려준다. 모든 claim·발송 진입·stale 격리가 같은 단위를 쓰도록 이 변환을 함께 쓴다.
+// 1ms 미만은 설정 오류라 기본값으로 바꾸지 않고 오류로 돌려준다. 모든 claim·발송 진입·stale 격리가 같은 단위를 쓰도록 이 변환을 함께 쓴다.
 func leaseMilliseconds(d time.Duration) (int64, error) {
 	if d < time.Millisecond {
 		return 0, fmt.Errorf("duration must be at least 1ms: %s", d)
@@ -44,7 +43,6 @@ func (r *PgxRepository) MarkSent(ctx context.Context, unitID int64, claims []Del
 		jsonbRecordsetParam(raw), workerID, unitID, irisRequestID, firstCheckMS)
 }
 
-// ReleaseLeased는 발송 전 claim을 같은 attempt의 retry로 반환한다.
 func (r *PgxRepository) ReleaseLeased(ctx context.Context, claims []DeliveryClaim, workerID string) error {
 	return r.applyClaims(ctx, fenceActionReleaseLeased, releaseLeasedSQL, claims, workerID)
 }
@@ -62,7 +60,7 @@ func (r *PgxRepository) applyClaims(ctx context.Context, action, query string, c
 	return r.applyFenced(ctx, r.pool, action, query, fencedTargetIDs(claims), jsonbRecordsetParam(raw), workerID)
 }
 
-// RouteFailures는 발송 전 실패를 retry·dlq로 정산한다. 잠금 뒤 clock 기준으로 lease가 유효한 소유 claim만 바꾼다.
+// 잠금 뒤 clock 기준으로 lease가 유효한 소유 claim만 바꾼다.
 func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
 	return r.routeFailureUpdates(ctx, updates, workerID, routeFailuresSQL, fenceActionRouteFailures)
 }
@@ -73,7 +71,6 @@ func (r *PgxRepository) RouteSendingFailures(ctx context.Context, updates []Fail
 	return r.routeFailureUpdates(ctx, updates, workerID, routeSendingFailuresSQL, fenceActionRouteSendingFailures)
 }
 
-// RequeuePreSend는 외부 호출 전에 멈춘 claim을 같은 attempt의 retry로 되돌린다.
 func (r *PgxRepository) RequeuePreSend(ctx context.Context, updates []FailureUpdate, workerID string) error {
 	for i := range updates {
 		if updates[i].TargetStatus != StatusRetry {
@@ -145,12 +142,10 @@ func prepareFailureUpdates(updates []FailureUpdate) []failureRouteInput {
 	return inputs
 }
 
-// MoveToDLQ는 소유한 leased·sending claim을 같은 attempt에서 dlq로 끝낸다.
 func (r *PgxRepository) MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error {
 	return r.terminalUpdates(ctx, fenceActionMoveToDLQ, repositoryTerminalDLQSQL, updates, workerID)
 }
 
-// Quarantine은 소유한 leased·sending claim을 같은 attempt에서 quarantined로 끝낸다.
 func (r *PgxRepository) Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error {
 	return r.terminalUpdates(ctx, fenceActionQuarantine, repositoryTerminalQuarantineSQL, updates, workerID)
 }

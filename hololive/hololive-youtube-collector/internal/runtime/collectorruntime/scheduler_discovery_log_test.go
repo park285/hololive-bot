@@ -19,8 +19,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
-// DB 장애 동안 후보 탐색은 1초마다 실패한다. 실패 WARN은 첫 건과 1분 간격 요약만 남기고, 매 cycle 실패는 counter가
-// 센다. 복구되면 INFO 한 건으로 연속 실패 기간을 닫는다.
 func TestDiscoveryFailureLogIsThrottledWhileCounterCountsEveryCycle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		scheduler := newLifecycleScheduler(t)
@@ -86,8 +84,6 @@ func TestDiscoveryFailureLogIsThrottledWhileCounterCountsEveryCycle(t *testing.T
 	})
 }
 
-// 종료로 scheduler context가 취소된 뒤의 취소는 실패 WARN이 아니라 INFO다. 바깥 context가 살아 있는 취소(renew 실패 등)와
-// 취소가 아닌 실패는 그대로 WARN이다.
 func TestShutdownCancellationIsLoggedAsInfo(t *testing.T) {
 	t.Parallel()
 

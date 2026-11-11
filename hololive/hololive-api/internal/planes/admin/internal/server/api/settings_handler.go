@@ -54,8 +54,7 @@ type SettingsHandler struct {
 	operations    settingsOperationGate
 }
 
-// updateSettingsRequest는 alarmAdvanceMinutes만 받는다. 소비자인 iris-console은 scraperProxyEnabled를 보내지 않고
-// 요청에 들어오면 거절한다.
+// 소비자인 iris-console은 scraperProxyEnabled를 보내지 않고 요청에 들어오면 거절한다.
 type updateSettingsRequest struct {
 	AlarmAdvanceMinutes *int `json:"alarmAdvanceMinutes"`
 }
@@ -109,8 +108,8 @@ func (h *SettingsHandler) requireApplier(c *gin.Context) bool {
 	return true
 }
 
-// SetRoomName은 관리자 지정 방 이름을 저장한다. 요청 필드 roomName은 필수이고, 공백뿐인 값은 지정을 해제해 관리 목록이
-// Kakao 방 이름으로 돌아가게 한다. 저장 폭(room_id 100자, 이름 255자)을 넘으면 worker 호출 전에 400으로 거절한다.
+// 요청 필드 roomName은 필수이고, 공백뿐인 값은 지정을 해제해 관리 목록이 Kakao 방 이름으로 돌아가게 한다. 저장 폭(room_id 100자, 이름 255자)을 넘으면 worker 호출 전에
+// 400으로 거절한다.
 func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	var req struct {
 		RoomID   string  `json:"roomId" binding:"required"`

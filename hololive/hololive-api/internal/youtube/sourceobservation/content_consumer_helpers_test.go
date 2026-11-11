@@ -11,7 +11,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// videoListEnvelope는 각 영상에 기준(2026-08-01) 이후·확인 시각 이전의 player 공개 근거를 붙인 generation 2 목록입니다.
 // 신규성 근거 자체를 다루지 않는 부재·title·충돌 테스트용이며, 근거 유무를 다루는 테스트는 videoListItemsEnvelope로 항목을 직접 고릅니다.
 func videoListEnvelope(
 	t *testing.T,
@@ -29,7 +28,6 @@ func videoListEnvelope(
 	return videoListItemsEnvelope(t, proof, completeness, videos...)
 }
 
-// videoListItemsEnvelope는 항목을 그대로 담은 testChannelID의 generation 2 video_list 관측입니다.
 func videoListItemsEnvelope(
 	t *testing.T,
 	proof *contract.LeaseProof,
@@ -69,7 +67,7 @@ func channelVideoListEnvelope(
 	return prepareChannelListEnvelope(t, proof, channelID, contract.KindVideoList, generation, completeness, payload)
 }
 
-// trustedVideoItem은 player publishDate에서 확인한 공개 영상입니다. Generation 2 항목 시각은 근거와 같아야 합니다.
+// Generation 2 항목 시각은 근거와 같아야 합니다.
 func trustedVideoItem(videoID string, publishedAt, checkedAt time.Time) contract.VideoListItemV1 {
 	return contract.VideoListItemV1{
 		VideoID: videoID, ChannelID: testChannelID, Title: videoID, PublishedAt: new(publishedAt),
@@ -79,7 +77,6 @@ func trustedVideoItem(videoID string, publishedAt, checkedAt time.Time) contract
 	}
 }
 
-// premiereVideoItem은 live 콘텐츠가 아닌 대기 상태에서 예정 시각을 확인한 Premiere입니다.
 func premiereVideoItem(videoID string, scheduledFor, checkedAt time.Time) contract.VideoListItemV1 {
 	return contract.VideoListItemV1{
 		VideoID: videoID, ChannelID: testChannelID, Title: videoID, ScheduledFor: new(scheduledFor), IsPremiere: new(true),
@@ -89,7 +86,6 @@ func premiereVideoItem(videoID string, scheduledFor, checkedAt time.Time) contra
 	}
 }
 
-// unresolvedVideoItem은 이번 관측에 player 근거가 없는(조회하지 않은) 항목입니다.
 func unresolvedVideoItem(videoID string) contract.VideoListItemV1 {
 	return contract.VideoListItemV1{VideoID: videoID, ChannelID: testChannelID, Title: videoID}
 }
@@ -182,7 +178,6 @@ func prepareChannelListEnvelope(
 	return &envelope
 }
 
-// moveContentLease는 lease slot을 임의 시각으로 옮겨 이른 slot의 관측이 늦게 도착하는 순서를 만듭니다.
 func moveContentLease(
 	ctx context.Context,
 	t *testing.T,

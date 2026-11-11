@@ -283,7 +283,6 @@ func TestBreaker_AllowResetsOnTimeout(t *testing.T) {
 		// resetTimeout 경과
 		synctest.Sleep(20 * time.Millisecond)
 
-		// Allow()가 reset 트리거 후 true를 반환해야 함
 		if !b.Allow() {
 			t.Fatal("Allow() should return true after resetTimeout elapsed")
 		}
@@ -295,7 +294,6 @@ func TestBreaker_AllowResetsOnTimeout(t *testing.T) {
 	})
 }
 
-// SetOpenedAtForTest는 openedAt을 강제 설정합니다.
 func (b *circuitBreaker) SetOpenedAtForTest(t time.Time) {
 	b.openedAt.Store(t)
 }

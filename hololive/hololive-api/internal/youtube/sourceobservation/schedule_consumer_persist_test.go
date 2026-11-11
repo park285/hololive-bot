@@ -126,7 +126,6 @@ func TestScheduleConsumerPreservesPremiereAndDoesNotAdvanceLiveLastSeenAt(t *tes
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(true))
 }
 
-// schedule reducer는 누적 item을 읽지 않으므로 consume은 과거 item 행을 읽거나 잠그지 않아야 한다.
 // FOR UPDATE는 커밋 뒤에도 튜플 xmax에 잠금 트랜잭션을 남기므로 xmax=0이 잠금 부재의 증거다.
 func TestScheduleConsumerDoesNotLockRetainedItemHistory(t *testing.T) {
 	t.Parallel()

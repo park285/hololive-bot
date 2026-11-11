@@ -24,8 +24,7 @@ type ExpiryResult struct {
 	Blocked      []BlockedLogicalGroup
 }
 
-// ExpirePending은 claim 신선도를 지난 미발송 행을 기존 논리 증거와 fence로 종료한다. 신선도와 lease 만료는 후보 SQL의
-// DB 시계(checked_at)로 판정한다. Keyset cursor로 격리 대기 중인 오래된 그룹이 뒤의 만료 행을 가로막지 않는다.
+// 신선도와 lease 만료는 후보 SQL의 DB 시계(checked_at)로 판정한다. Keyset cursor로 격리 대기 중인 오래된 그룹이 뒤의 만료 행을 가로막지 않는다.
 func (s *TransitionStore) ExpirePending(ctx context.Context, afterID int64, limit int) (ExpiryResult, error) {
 	if limit <= 0 || afterID < 0 {
 		return ExpiryResult{}, errors.New("expire pending: invalid scan bounds")

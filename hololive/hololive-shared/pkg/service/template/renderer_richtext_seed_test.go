@@ -15,7 +15,6 @@ import (
 
 type templateSeedPair struct{ oldBody, newBody string }
 
-// loadTemplateFormatPairs는 현행 표준 본문을 oldBody=plain, newBody=richtext로 돌려준다.
 func loadTemplateFormatPairs(tb testing.TB) map[domain.TemplateKey]templateSeedPair {
 	tb.Helper()
 
@@ -53,7 +52,6 @@ func loadTemplateFormatPairs(tb testing.TB) map[domain.TemplateKey]templateSeedP
 	return pairs
 }
 
-// 실제 baseline의 본문을 strict parse와 제한 실행 경로에서 검증한다.
 func TestRichTextSeedsPreviewAllKeys(t *testing.T) {
 	pairs := loadTemplateFormatPairs(t)
 	keys := sampledata.GetAllTemplateKeys()
@@ -350,8 +348,7 @@ func TestRichTextSeedsMultilineLiteralsRemainVisible(t *testing.T) {
 	}
 }
 
-// 오픈채팅은 긴 RichText를 머리말 묶음만 남기고 접으므로, 목록형 본문은 머리말 바로 다음 줄에 요약을 두고
-// 그다음 줄을 비워 그 묶음을 끝낸다.
+// 오픈채팅은 긴 RichText를 머리말 묶음만 남기고 접으므로, 목록형 본문은 머리말 바로 다음 줄에 요약을 두고 그다음 줄을 비워 그 묶음을 끝낸다.
 func TestRichTextSeedsSummarizeCollapsedPreview(t *testing.T) {
 	pairs := loadTemplateFormatPairs(t)
 	secondLine := func(t *testing.T, key domain.TemplateKey, data any) string {

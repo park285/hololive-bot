@@ -45,7 +45,6 @@ type enqueueRecord struct {
 	Message   delivery.MessageVariants
 }
 
-// testMessage는 형식 분기와 무관한 테스트에서 두 변형에 같은 본문을 쓴다.
 func testMessage(text string) delivery.MessageVariants {
 	return delivery.MessageVariants{Plain: text, RichText: text}
 }

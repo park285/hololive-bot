@@ -170,8 +170,6 @@ func TestDispatchStoredReplyReissuesFailedConflictWithStoredPayload(t *testing.T
 	assert.Equal(t, "hololive:v1:message:m-1:reply:0:r1", second)
 }
 
-// ErrNotSent(전송 전 확정 실패)는 iris-client-go v4에서 ErrTransport가 아니므로 결과 불명으로 승격하지 않는다.
-// 응답 소실(ErrTransport)만 outcome_unknown이다.
 func TestDispatchStoredReplyKeepsNotSentOutOfOutcomeUnknown(t *testing.T) {
 	t.Parallel()
 

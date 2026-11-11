@@ -35,13 +35,11 @@ func TestMember_GetAllAliases(t *testing.T) {
 		want   []string
 	}{
 		{
-			// Aliases가 nil → 빈 슬라이스 반환
 			name:   "nil Aliases",
 			member: &domain.Member{Name: testNamePekora, Aliases: nil},
 			want:   []string{},
 		},
 		{
-			// Ko, Ja 별명 모두 있을 때 → 합산 반환 (Ko 먼저)
 			name: "Ko, Ja 별명 모두 있음",
 			member: &domain.Member{
 				Name: testNamePekora,
@@ -81,13 +79,11 @@ func TestMember_GetOrg(t *testing.T) {
 		want   string
 	}{
 		{
-			// Org 빈 문자열 → 기본값 "Hololive" 반환
 			name:   "빈 Org",
 			member: &domain.Member{Name: testName, Org: ""},
 			want:   "Hololive",
 		},
 		{
-			// Org에 값이 있으면 해당 값 반환
 			name:   "비어있지 않은 Org",
 			member: &domain.Member{Name: testName, Org: "Nijisanji"},
 			want:   "Nijisanji",
@@ -115,7 +111,6 @@ func TestMember_QualifiedName(t *testing.T) {
 		want   string
 	}{
 		{
-			// "이름 (그룹)" 형식 반환
 			name:   "Org가 있을 때",
 			member: &domain.Member{Name: "Usada Pekora", ShortKoreanName: "페코라", Org: "Hololive"},
 			want:   "Usada Pekora (Hololive)",

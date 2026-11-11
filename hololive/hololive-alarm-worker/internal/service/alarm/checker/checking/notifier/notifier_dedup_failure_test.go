@@ -11,8 +11,6 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-// dedup 저장소 오류는 "이미 선점됨"(skip)이 아니라 실패다. 이를 skip으로 세면 Valkey 장애 동안
-// 알림이 조용히 사라지고 재시도 대상에서도 빠진다.
 func TestPrepareOneReportsDedupStoreErrorAsFailed(t *testing.T) {
 	t.Parallel()
 

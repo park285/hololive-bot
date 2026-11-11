@@ -28,7 +28,6 @@ func TestProviderFailurePreservesUnknownBeforeKnownFailure(t *testing.T) {
 	}
 }
 
-// ErrNotSent는 iris-client-go v4에서 ErrTransport가 아니지만 전송 전 확정 실패이므로 결과 불명이 아니라 재시도 대상이다.
 func TestProviderFailureTreatsNotSentAsRetryableTransport(t *testing.T) {
 	err := fmt.Errorf("%w: h3 egress denied", iris.ErrNotSent)
 

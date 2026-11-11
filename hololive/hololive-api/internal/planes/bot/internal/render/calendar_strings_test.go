@@ -38,8 +38,6 @@ func calendarStringCases() []calendarStringCase {
 	}
 }
 
-// 코드 대체 문구는 없다. 문구 store가 없으면 문구는 비어 있고, 운영에서는 bot plane 기동 검증이 calendar key를
-// 보장한다.
 func TestCalendarStrings_NoCodeFallbackWithoutStore(t *testing.T) {
 	t.Parallel()
 

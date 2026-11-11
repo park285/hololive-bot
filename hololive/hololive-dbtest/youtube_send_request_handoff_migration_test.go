@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// youtube 고정 요청 handoff shape CHECK는 확인 대기·확인 완료 요청과 handoff가 없는 요청을 받고, 빈 requestId,
-// 제약을 바꾸지 않는다.
 func TestYouTubeSendRequestHandoffShape(t *testing.T) {
 	t.Parallel()
 

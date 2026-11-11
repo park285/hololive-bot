@@ -38,8 +38,7 @@ const (
 	replyPhaseReply      = "reply"
 )
 
-// replyReissueLadder는 스택 공통 bounded reissue 사다리다. 세대 상한과 :rN 규칙은 iris-client-go가
-// 소유하고, hololive는 base가 길이 제약으로 :rN을 못 붙일 때의 hashed base 파생만 더한다.
+// 세대 상한과 :rN 규칙은 iris-client-go가 소유하고, hololive는 base가 길이 제약으로 :rN을 못 붙일 때의 hashed base 파생만 더한다.
 var replyReissueLadder = irisdurable.ReissueLadder{
 	MaxGenerations: iris.ReplyReissueMaxGenerations,
 	Derive:         reissuedReplyClientRequestID,
@@ -69,8 +68,7 @@ func formatReplyClientRequestID(token string, ordinal uint64) string {
 	}, ":")
 }
 
-// reissuedReplyClientRequestID는 replyReissueLadder의 Derive다. 범위 밖 세대, 이미 재발급된 base,
-// 빈 base는 오류로 남겨 clientRequestId 없이 재전송되는 일이 없게 한다.
+// 범위 밖 세대, 이미 재발급된 base, 빈 base는 오류로 남겨 clientRequestId 없이 재전송되는 일이 없게 한다.
 func reissuedReplyClientRequestID(clientRequestID string, generation int) (string, error) {
 	clientRequestID = strings.TrimSpace(clientRequestID)
 

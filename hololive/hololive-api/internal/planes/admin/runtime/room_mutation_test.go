@@ -42,8 +42,6 @@ func assertRoomChange(t *testing.T, serve adminTestServe, method string, wantCha
 	}
 }
 
-// 이미 원하는 상태인 방 추가·제거는 거절(409·404)이 아니라 200 changed:false로 수렴한다. 응답을 잃은 뒤 같은
-// 요청을 다시 보낸 호출자가 실행 거절로 오인하지 않게 하기 위해서다.
 func TestRoomChangesConvergeWithChangedFlag(t *testing.T) {
 	serve, aclService := newAdminTestRouter(t, &recordingIrisRooms{})
 
@@ -62,7 +60,6 @@ func TestRoomChangesConvergeWithChangedFlag(t *testing.T) {
 	}
 }
 
-// 호출자가 본 모드와 현재 모드가 다르면 409 acl_mode_changed로 거절하고 어느 목록도 바꾸지 않는다.
 func TestRoomChangeRejectsStaleACLMode(t *testing.T) {
 	serve, aclService := newAdminTestRouter(t, &recordingIrisRooms{})
 

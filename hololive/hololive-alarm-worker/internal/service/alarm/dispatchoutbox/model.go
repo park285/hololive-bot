@@ -103,7 +103,6 @@ type PublishReceipt struct {
 	Status    Status
 }
 
-// Accepted는 pending 수용 또는 이미 성공한 동일 delivery만 인정한다.
 func (r PublishReceipt) Accepted() bool {
 	return r.Outcome == PublishInserted || r.Outcome == PublishDuplicateActive || r.Outcome == PublishDuplicateSent
 }

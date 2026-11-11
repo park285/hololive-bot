@@ -22,8 +22,6 @@ type frozenScenario struct {
 	dirty  []string
 }
 
-// frozenBaseState는 종료 후보 없는 저장된 ENDED 세션 하나와 대조군 두 개를 담는다. 대조군은 부재를
-// 셀 수 있는 LIVE 세션과, session은 ENDED인데 due 종료 후보가 남은 세션이다.
 func frozenBaseState(frozen SessionState, frozenPending *PendingEnd, slots []AbsenceSlot) State {
 	companion := scopeObserved(frozenCompanionID, domain.LiveStatusLive)
 
@@ -179,10 +177,8 @@ func checkFrozenScenario(t *testing.T, scenario *frozenScenario, frozen SessionS
 	}
 }
 
-// 종료 후보 없는 저장된 ENDED 세션은 어떤 사실·부재·due 정리로도 dirty가 되지 않고, 그 pending은 결정에
-// 영향을 주지 않는다. 그래서 sourceobservation loader는 그 pending을 읽거나 잠그지 않으며, pending 삭제는
-// dirty 세션으로 한정되므로 읽지 않은 행이 지워지지 않는다. 대조군 세션은 같은 호출에서 계속 부재를 세고
-// due 후보를 정리한다.
+// 종료 후보 없는 저장된 ENDED 세션은 어떤 사실·부재·due 정리로도 dirty가 되지 않고, 그 pending은 결정에 영향을 주지 않는다. 그래서 sourceobservation loader는 그
+// pending을 읽거나 잠그지 않으며, pending 삭제는 dirty 세션으로 한정되므로 읽지 않은 행이 지워지지 않는다.
 func TestReduceNeverDirtiesFrozenEndedSession(t *testing.T) {
 	t.Parallel()
 

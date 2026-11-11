@@ -219,7 +219,6 @@ func TestLoadBotPlaneRuntimeDevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	}
 }
 
-// bot plane이 읽는 공통 구획의 잘못된 값은 키 이름과 함께 기동 실패로 드러난다.
 // LLM·Exa 구획은 llm plane loader가, 사진 동기화는 admin plane loader가 검사한다.
 func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
 	for key, value := range map[string]string{

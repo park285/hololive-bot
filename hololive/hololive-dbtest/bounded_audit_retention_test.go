@@ -90,7 +90,6 @@ func TestChannelAuditRetentionDeletesOnlyAgedRows(t *testing.T) {
 	assertRowChannels(t, pool, `SELECT channel_id FROM public.youtube_channel_photo_variants`, "UC_audit_new")
 }
 
-// resolver가 재사용 중인 사전 행은 건너뛰고, 원본이 참조하는 행은 남기며, 참조 없는 행만 지운다.
 func TestProvenanceRetentionDeletesOnlyUnreferencedRows(t *testing.T) {
 	t.Parallel()
 
@@ -142,7 +141,6 @@ func TestProvenanceRetentionDeletesOnlyUnreferencedRows(t *testing.T) {
 	}
 }
 
-// 정리가 먼저 잠근 사전 행을 resolver가 기다리면, 정리 커밋 뒤 새 행을 만들어 원본 삽입이 FK 위반 없이 끝난다.
 func TestProvenanceResolverRecreatesRowDeletedByConcurrentRetention(t *testing.T) {
 	t.Parallel()
 
@@ -213,7 +211,6 @@ func TestProvenanceResolverRecreatesRowDeletedByConcurrentRetention(t *testing.T
 	}
 }
 
-// rollbackOnCleanup은 시험이 커밋하지 못하고 끝난 트랜잭션을 정리한다. 커밋한 트랜잭션에는 아무것도 하지 않는다.
 func rollbackOnCleanup(t *testing.T, tx pgx.Tx, name string) {
 	t.Helper()
 	t.Cleanup(func() {

@@ -38,7 +38,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// llmSchedulerFormatter는 llm-scheduler가 사용하는 최소 메시지 포맷터 구현이다.
 // 이 구현은 bot 전용 adapter에 의존하지 않고 template.Renderer만으로 필요한 formatter 계약만 맞춘다.
 type llmSchedulerFormatter struct {
 	prefix      string
@@ -78,9 +77,7 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-// renderNotification은 예약 알림을 방 유형별 두 본문으로 렌더한다. 같은 메시지를 여러 방에 enqueue하고 발송기가
-// 방마다 하나를 고르므로 두 변형이 모두 있어야 한다. 실패하면 호출자가 enqueue하지 않고 알림을 미표시로 남겨 다음
-// 주기에 다시 시도한다.
+// 같은 메시지를 여러 방에 enqueue하고 발송기가 방마다 하나를 고르므로 두 변형이 모두 있어야 한다. 실패하면 호출자가 enqueue하지 않고 알림을 미표시로 남겨 다음 주기에 다시 시도한다.
 func (f *llmSchedulerFormatter) renderNotification(ctx context.Context, key domain.TemplateKey, data any, failureMsg string, foldEligible bool) (delivery.MessageVariants, error) {
 	var message delivery.MessageVariants
 

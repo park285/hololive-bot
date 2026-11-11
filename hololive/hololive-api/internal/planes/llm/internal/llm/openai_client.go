@@ -94,9 +94,7 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 	}, nil
 }
 
-// llmMaxRetries는 LLM 요청의 SDK 재시도 수다. LLM 호출은 응답이 유실되면 과금과 웹 검색 tool 사용이 중복될 수 있는
-// 비멱등 비용 작업이고 재시도를 정당화할 계약·독립 근거가 없으므로(workspace 실패 경로 규칙) 재시도하지 않는다.
-// 실패는 그대로 호출자에게 드러난다. 이전 실효값(shared-go v2.18.0 전)은 SDK 기본 2회 재시도(최대 3요청)였다.
+// LLM 호출은 응답이 유실되면 과금과 웹 검색 tool 사용이 중복될 수 있는 비멱등 비용 작업이고 재시도를 정당화할 계약·독립 근거가 없으므로 재시도하지 않는다. 실패는 그대로 호출자에게 드러난다.
 const llmMaxRetries = 0
 
 func newLLMHTTPClient() *http.Client {
@@ -135,7 +133,6 @@ func (r costTrackerUsageReporter) RecordUsage(ctx context.Context, provider, mod
 	r.tracker.RecordUsage(ctx, provider, model, int64(usage.TotalTokens))
 }
 
-// chatCompletions=true이면 Chat Completions API, 아니면 Responses API를 사용합니다.
 // 지시는 InvariantPrompt/DeveloperPrompt 계층으로만 보내며 provider별 역할 매핑은 shared-go가 소유합니다.
 func (c *OpenAIClient) GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error) {
 	if c == nil {

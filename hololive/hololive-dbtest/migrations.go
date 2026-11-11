@@ -315,7 +315,6 @@ func rollbackMigrationTxOnError(ctx context.Context, tx pgx.Tx, err error) error
 	return err
 }
 
-// resolveMigrationsDir는 migration 디렉터리 절대 경로를 결정한다.
 func resolveMigrationsDir() (string, error) {
 	if env := strings.TrimSpace(os.Getenv(migrationsDirEnv)); env != "" {
 		return env, nil
@@ -329,7 +328,6 @@ func resolveMigrationsDir() (string, error) {
 	return filepath.Join(root, migrationsRelDir), nil
 }
 
-// findRepoRoot는 CWD에서 위로 올라가며 build-all.sh 마커를 가진 디렉터리를 찾는다.
 func findRepoRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {

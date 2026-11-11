@@ -23,8 +23,6 @@ func BenchmarkCanonicalizeJSON1MiB(b *testing.B) {
 	}
 }
 
-// BenchmarkCanonicalizeJSONVideoList는 정렬되지 않은 key, escape 문자열, 지수 숫자를 가진
-// 다수의 object 배열이라는 실제 수집 payload 형태를 측정한다.
 func BenchmarkCanonicalizeJSONVideoList(b *testing.B) {
 	raw := benchmarkVideoListJSON(b)
 

@@ -10,7 +10,6 @@ import (
 
 const replyOutboxStatusPending = "pending"
 
-// replyReclaimCandidate는 lease가 만료된 submitting 행이다.
 type replyReclaimCandidate struct {
 	ID                   int64
 	Attempts             int32

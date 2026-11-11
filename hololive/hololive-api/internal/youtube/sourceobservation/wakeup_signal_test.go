@@ -31,7 +31,6 @@ func (s finalizeResultStub) Finalize(context.Context, Claim, ReconcileWrite) (Re
 	return s.result, s.err
 }
 
-// 알림 행을 담은 트랜잭션이 commit된 뒤에만 깨운다. Finalize가 rollback되거나 알림 없는 관측이면 깨우지 않는다.
 func TestConsumeClaimSignalsOnlyAfterCommittedNotifications(t *testing.T) {
 	t.Parallel()
 

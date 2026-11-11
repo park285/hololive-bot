@@ -63,7 +63,6 @@ func TestBroadcastTimeSumsWeekInHeadAndListsPerVariant(t *testing.T) {
 11/05 22:13 시작 · 잡담`, f.BroadcastTime(WithReplyFormat(t.Context(), domain.TemplateFormatRichText), broadcastTimeTestSummary()))
 }
 
-// 머리 문단(기간·합계)만 접힌 화면에 보이고 목록은 전체보기 뒤에 있어야 한다. 한 건이어도 같다.
 func TestBroadcastTimeFoldsListBehindSeeMore(t *testing.T) {
 	t.Parallel()
 

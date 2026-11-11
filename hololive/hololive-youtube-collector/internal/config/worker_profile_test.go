@@ -31,8 +31,8 @@ func TestLoadWorkerProfileRejectsUnknownServiceSetting(t *testing.T) {
 	}
 }
 
-// --check-worker-profile은 LoadWorkerProfile만 호출하므로, 런타임 Config.Validate가 거절할 profile 값은
-// DB·provider env 없이 이 단계에서 먼저 거절되어야 한다.
+// --check-worker-profile은 LoadWorkerProfile만 호출하므로, 런타임 Config.Validate가 거절할 profile 값은 DB·provider env 없이 이 단계에서 먼저
+// 거절되어야 한다.
 func TestLoadWorkerProfileRejectsRuntimeInvalidPolicyWithoutRuntimeEnv(t *testing.T) {
 	for _, test := range []struct {
 		name             string

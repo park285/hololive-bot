@@ -45,7 +45,6 @@ type Client struct {
 	targetMinutes   []int
 }
 
-// AddAlarm은 채팅방의 채널·멤버별 구독을 알람 API에 등록한다.
 func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	if req == nil {
 		return false, errors.New("alarm-api: add alarm request must not be nil")
@@ -69,7 +68,6 @@ func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (boo
 	return resp.Added, nil
 }
 
-// RemoveAlarm은 채팅방의 전체 채널 구독에서 지정한 알림 종류를 해지한다.
 func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
 	return c.removeAlarm(ctx, contractsalarm.RemoveRequest{
 		RoomID:     roomID,
@@ -78,7 +76,6 @@ func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alar
 	})
 }
 
-// RemoveHostAlarm은 해당 채팅방에서 지정한 멤버의 알림 종류만 해지한다.
 func (c *Client) RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
 	if strings.TrimSpace(hostID) == "" {
 		return false, errors.New("alarm-api: host_id is required for member removal")
@@ -198,7 +195,7 @@ func (c *Client) CountAlarmEntries(ctx context.Context) (int, error) {
 	return *result.Count, nil
 }
 
-// alarmTypeStrings는 domain 알림 종류를 wire 문자열 배열로 바꾼다. 입력이 nil이면 nil로 두어 직렬화 결과를 바꾸지 않는다.
+// 입력이 nil이면 nil로 두어 직렬화 결과를 바꾸지 않는다.
 func alarmTypeStrings(types domain.AlarmTypes) []string {
 	if types == nil {
 		return nil

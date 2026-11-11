@@ -54,9 +54,7 @@ func pendingRowXmax(t *testing.T, pool *pgxpool.Pool, videoID string) string {
 	return xmax
 }
 
-// YouTube.js streams 탭은 이미 ENDED인 세션도 매번 ENDED로 싣는다. 저장된 ENDED 세션의 기존 pending(D2)은
-// 같은 tuple로 남고 행 잠금도 받지 않으며, pending이 없던 ENDED 세션에는 행이 생기지 않는다. 세션 없는 영상의
-// 종료는 새 관측으로 갱신한다.
+// YouTube.js streams 탭은 이미 ENDED인 세션도 매번 ENDED로 싣는다.
 func TestLiveConsumerFreezesPendingEndsOfEndedSessions(t *testing.T) {
 	t.Parallel()
 
@@ -105,9 +103,7 @@ func TestLiveConsumerFreezesPendingEndsOfEndedSessions(t *testing.T) {
 	require.Len(t, after, 2)
 }
 
-// session은 ENDED인데 head에 아직 due가 아닌 종료 후보가 남은 행(ended/head 불일치)도 반복 종료로 pending의
-// 관측 ID를 바꾸지 않는다. 바꾸면 head 후보 FK가 commit에서 깨져 관측을 처리하지 못한다. 후보가 남은 세션은
-// 동결 대상이 아니므로 pending을 계속 읽고 잠근다.
+// 바꾸면 head 후보 FK가 commit에서 깨져 관측을 처리하지 못한다.
 func TestLiveConsumerKeepsCandidatePendingOfEndedSession(t *testing.T) {
 	t.Parallel()
 

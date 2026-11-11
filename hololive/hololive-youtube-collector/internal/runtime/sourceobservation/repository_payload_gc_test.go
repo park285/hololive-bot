@@ -105,7 +105,6 @@ func TestPayloadConcurrentPublishSeesCommittedDictionaryAfterWaiting(t *testing.
 	require.Equal(t, 1, payloads)
 }
 
-// pausePayloadCommit은 첫 publisher의 미commit 사전을 다른 publisher가 기다리게 합니다.
 func pausePayloadCommit(repo *Repository) (<-chan struct{}, func()) {
 	written, unblock := make(chan struct{}), make(chan struct{})
 	release := sync.OnceFunc(func() { close(unblock) })

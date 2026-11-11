@@ -8,11 +8,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// storedSessionAt은 잠금 안에서 읽은 세션 행의 관측 시각이다. 저장 SQL은 reducer 결과를 그대로 쓰므로
-// 저장된 세션 행을 지키는 규칙은 모두 reducer 결과에서 확인한다.
+// 저장 SQL은 reducer 결과를 그대로 쓰므로 저장된 세션 행을 지키는 규칙은 모두 reducer 결과에서 확인한다.
 var storedSessionAt = time.Date(2026, time.August, 14, 1, 30, 0, 0, time.UTC)
 
-// stateWithSession은 잠금 안에서 읽은 세션 하나를 가진 상태를 만든다.
 func stateWithSession(session *SessionState) *State {
 	state := emptyState()
 
@@ -62,7 +60,6 @@ func TestReduceNeverReturnsLiveSessionToUpcoming(t *testing.T) {
 	}
 }
 
-// 저장된 세션의 채널은 바뀌지 않고, 세션 행 없이 head만 있는 영상은 관측한 채널을 받는다.
 func TestReduceKeepsStoredChannel(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +81,6 @@ func TestReduceKeepsStoredChannel(t *testing.T) {
 	}
 }
 
-// 종료는 저장된 세션의 ended_at을 유지하고 head에는 새 종료 시각을 기록한다.
 func TestReduceEndKeepsStoredSessionEndedAt(t *testing.T) {
 	t.Parallel()
 

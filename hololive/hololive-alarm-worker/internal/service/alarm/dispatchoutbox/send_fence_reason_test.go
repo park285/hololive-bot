@@ -10,7 +10,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 고정 멤버가 종단 상태가 되거나 보존 정리로 사라지면 Load·Begin은 단위를 다시 모을 수 없다는 member_terminal을 낸다.
 func TestSendRequestReportsMemberTerminalForTerminalOrDeletedPinnedMember(t *testing.T) {
 	for _, mutation := range []string{
 		`UPDATE alarm_dispatch_deliveries SET status='dlq', dlq_at=clock_timestamp(), locked_by=NULL, locked_at=NULL, lock_expires_at=NULL WHERE id=$1`,
@@ -36,7 +35,6 @@ func TestSendRequestReportsMemberTerminalForTerminalOrDeletedPinnedMember(t *tes
 	}
 }
 
-// claim에서 본 attempt와 행의 attempt가 다르면 MarkSent·DLQ·격리·반환은 version_changed로 행을 그대로 둔다.
 func TestOwnerTransitionsRejectAttemptMismatch(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)

@@ -160,7 +160,6 @@ func (c *AlarmCommand) ensureDeps() error {
 	return nil
 }
 
-// alarmMutation은 알람 추가·삭제 명령이 공유하는 흐름(멤버 이름 요구, 유형 파싱, 멤버 해석, 적용·응답)의 차이점이다.
 type alarmMutation struct {
 	needMemberNameMessage string
 	requestedLog          string
@@ -343,7 +342,7 @@ func (c *AlarmCommand) replyAlarmMemberNotFound(ctx context.Context, room, membe
 	return nil
 }
 
-// isGraduatedMember는 채널 대표가 졸업했는지 본다. 대표가 없으면 졸업이 아니고, 조회 실패는 추측하지 않고 오류다.
+// 대표가 없으면 졸업이 아니고, 조회 실패는 추측하지 않고 오류다.
 func (c *AlarmCommand) isGraduatedMember(ctx context.Context, channelID string) (bool, error) {
 	if c.Deps().Matcher == nil {
 		return false, nil

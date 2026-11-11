@@ -55,7 +55,7 @@ func (c *capturedLLMRequest) snapshot() (string, map[string]any) {
 	return c.path, c.body
 }
 
-// newCapturingLLMServer는 첫 요청 본문을 기록하고 status/response로 응답한다. 400은 SDK가 재시도하지 않는다.
+// 400은 SDK가 재시도하지 않는다.
 func newCapturingLLMServer(t *testing.T, status int, response string) (*httptest.Server, *capturedLLMRequest) {
 	t.Helper()
 

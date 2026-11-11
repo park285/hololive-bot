@@ -452,7 +452,6 @@ func runtimeLeaseConfig() joblease.Config {
 	}
 }
 
-// runtimeCollectorConfig는 runtime 테스트의 scheduler 정책을 lease 설정과 같은 작은 예산으로 맞춥니다.
 func runtimeCollectorConfig(t *testing.T) collectorconfig.Config {
 	t.Helper()
 

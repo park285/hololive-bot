@@ -114,7 +114,6 @@ func (w *canonicalJSONWriter) appendScalar(destination []byte) ([]byte, error) {
 	return nil, fmt.Errorf("canonical JSON scalar: unexpected json value %q", value.Kind())
 }
 
-// appendString은 escape가 없는 문자열을 원문 그대로 복사한다.
 // Decoder가 검증한 escape 없는 JSON 문자열에는 따옴표, 역슬래시, 제어 문자가 없으므로 원문이 곧 정규형이다.
 func (w *canonicalJSONWriter) appendString(destination []byte, quoted jsontext.Value) ([]byte, error) {
 	if bytes.IndexByte(quoted, '\\') < 0 {
@@ -162,8 +161,6 @@ func (w *canonicalJSONWriter) appendArray(destination []byte, depth int) ([]byte
 	return append(destination, ']'), nil
 }
 
-// appendObject는 member를 입력 순서대로 출력 버퍼에 먼저 쓰고,
-// 입력 순서가 UTF-16 정렬과 다를 때만 해당 object 구간을 재배치한다.
 // 재배치는 구간 길이를 바꾸지 않으므로 바깥 object가 기록한 범위는 계속 유효하다.
 func (w *canonicalJSONWriter) appendObject(destination []byte, depth int) ([]byte, error) {
 	if depth >= MaxCanonicalJSONDepth {
@@ -280,7 +277,6 @@ func (w *canonicalJSONWriter) sortObjectMembers(
 	return append(destination, '}')
 }
 
-// compareJSONNamesUTF16은 유효한 UTF-8 이름을 UTF-16 code unit 사전순으로 비교한다.
 // 첫 번째로 다른 code point의 UTF-16 순서가 전체 순서를 결정하므로 변환 버퍼 없이 비교한다.
 func compareJSONNamesUTF16(left, right []byte) int {
 	for len(left) > 0 && len(right) > 0 {
@@ -297,7 +293,6 @@ func compareJSONNamesUTF16(left, right []byte) int {
 	return cmp.Compare(len(left), len(right))
 }
 
-// utf16CodeUnitOrder는 code point를 UTF-16 code unit 순서와 같은 크기 순서의 키로 바꾼다.
 // U+E000..U+FFFF는 보조 평면의 상위 surrogate(0xD800..0xDBFF)보다 뒤에 정렬되어야 한다.
 func utf16CodeUnitOrder(character rune) rune {
 	if character >= 0xE000 && character <= 0xFFFF {
@@ -352,7 +347,6 @@ func appendEscapedJSONByte(destination []byte, character byte) []byte {
 	}
 }
 
-// appendCanonicalJSONNumber는 decoder가 검증한 JSON number를 안전 정수 정규형으로 붙인다.
 // 소수점/지수가 없는 정수 표기는 문법상 선행 0이 없으므로 -0과 범위만 확인하고 그대로 복사한다.
 func appendCanonicalJSONNumber(destination []byte, raw jsontext.Value) ([]byte, error) {
 	if len(raw) == 0 {

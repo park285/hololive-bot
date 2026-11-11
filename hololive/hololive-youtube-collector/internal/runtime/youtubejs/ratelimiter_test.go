@@ -67,7 +67,6 @@ func TestRateLimiterRejectsCanceledContextWithoutReserving(t *testing.T) {
 	})
 }
 
-// 기다리다 취소된 호출의 예약은 되돌려져 다음 호출이 원래 간격에 시작한다.
 func TestRateLimiterCanceledWaitReleasesReservation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		limiter := NewRateLimiter(2 * time.Second)
@@ -94,7 +93,7 @@ func TestRateLimiterCanceledWaitReleasesReservation(t *testing.T) {
 	})
 }
 
-// 취소된 호출 뒤에 이미 다른 예약이 있으면 되돌리지 않는다. 되돌리면 뒤 예약의 간격이 사라진다.
+// 되돌리면 뒤 예약의 간격이 사라진다.
 func TestRateLimiterCanceledWaitKeepsLaterReservation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		limiter := NewRateLimiter(2 * time.Second)

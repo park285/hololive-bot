@@ -23,9 +23,8 @@ const publishPlanCheckpointSeedSQL = `
 	FROM pg_catalog.generate_series(1, 12000) AS series
 `
 
-// 식별 잠금 함수 lock_source_observation_identity는 uq_source_observation_identity로 최대 1행을 돌려준다. 이를
-// planner가 SETOF 기본값 1000행으로 보면 existing CTE가 입력 100행 × 1000으로 과대 추정되어, checkpoint 조인이
-// 표 전체 seq scan + 다중 batch hash join으로 풀리고 발행마다 임시 파일이 생긴다(운영 2026-10-24 관측).
+// 식별 잠금 함수 lock_source_observation_identity는 uq_source_observation_identity로 최대 1행을 돌려준다. 이를 planner가 SETOF 기본값 1000행으로
+// 보면 existing CTE가 입력 100행 × 1000으로 과대 추정되어, checkpoint 조인이 표 전체 seq scan + 다중 batch hash join으로 풀리고 발행마다 임시 파일이 생긴다.
 func TestPublishSetPlanEstimatesSingleIdentityRowAndProbesCheckpointsByKey(t *testing.T) {
 	t.Parallel()
 

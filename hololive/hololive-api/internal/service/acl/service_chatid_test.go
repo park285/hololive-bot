@@ -11,8 +11,7 @@ import (
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
-// 새 ACL 등록값은 정확한 signed i64 chatID 문자열만 받는다. 방 이름 등은 IsRoomAllowed(chatID)가
-// 보지 않아 조용히 무효가 되므로(blacklist라면 fail-open) 등록 단계에서 거절한다.
+// 방 이름 등은 IsRoomAllowed(chatID)가 보지 않아 조용히 무효가 되므로(blacklist라면 fail-open) 등록 단계에서 거절한다.
 func TestAddRoomRejectsNonChatIDRegistration(t *testing.T) {
 	t.Parallel()
 
@@ -49,8 +48,6 @@ func TestAddRoomAcceptsCanonicalChatID(t *testing.T) {
 	}
 }
 
-// KAKAO_ROOMS seed도 같은 계약이다. 방 이름이 들어 있으면 첫 초기화 전에 기동을 거절하고
-// acl_settings·acl_rooms에 아무것도 쓰지 않는다.
 func TestNewACLServiceRejectsNonChatIDDefaultRooms(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
@@ -87,7 +84,6 @@ func fakeStoreRoomCount(t *testing.T, store *fakeACLStore) int {
 	return len(rooms)
 }
 
-// 제거도 등록과 같은 chatID 규칙을 따른다. 저장 행이 모두 chatID이므로 비정규 값은 PG에 닿기 전에 입력 오류다.
 func TestRemoveRoomRejectsNonChatID(t *testing.T) {
 	t.Parallel()
 
@@ -99,7 +95,6 @@ func TestRemoveRoomRejectsNonChatID(t *testing.T) {
 	}
 }
 
-// migration 349 CHECK를 벗어난 저장 행은 판정에 쓰이지 않는 죽은 등록이므로 snapshot 적재를 실패시킨다.
 func TestLoadRejectsStoredNonChatIDRoom(t *testing.T) {
 	t.Parallel()
 
@@ -115,14 +110,12 @@ func TestLoadRejectsStoredNonChatIDRoom(t *testing.T) {
 	}
 }
 
-// currentACLMode는 방 변경 시험이 호출자가 본 모드로 현재 모드를 넘기게 한다.
 func currentACLMode(service *Service) ACLMode {
 	_, mode, _ := service.GetACLStatus()
 
 	return mode
 }
 
-// 호출자가 본 모드가 현재 모드와 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다.
 func TestRoomChangeWithStaleModeDoesNotWrite(t *testing.T) {
 	t.Parallel()
 

@@ -13,7 +13,6 @@ type rpcMetrics struct {
 	inFlight *prometheus.GaugeVec
 }
 
-// EnableMetrics는 요청을 시작하기 전에 호출 제한 대기와 helper 수행의 관측을 등록합니다.
 // 호출 간격 interval은 프로세스 전체가 공유하며 외부 HTTP 요청 수의 상한은 아닙니다.
 func (c *RPC) EnableMetrics(registerer prometheus.Registerer, interval time.Duration) {
 	if registerer == nil {

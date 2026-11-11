@@ -28,8 +28,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// pgUniqueViolation은 acl_settings.key의 UNIQUE 제약
-// 위반을 실 PG와 동일하게(SQLSTATE 23505, *pgconn.PgError) 모사한다.
 func pgUniqueViolation(constraint string) error {
 	return &pgconn.PgError{
 		Code:           "23505",
@@ -39,11 +37,7 @@ func pgUniqueViolation(constraint string) error {
 	}
 }
 
-// fakeACLStore는 aclStore 인메모리 구현체다.
-//
-// 실제 pgx에는 저장소 콜백 훅이 없으므로, 기존 fault-injection 테스트를
-// 이 fake의 메서드별 hook으로 동등 재현한다. 각 hook은 연산 직전에 호출되며
-// 에러를 반환하면 해당 store 연산이 실패한다. 지정한 hook이 nil이면 정상 동작한다.
+// 실제 pgx에는 저장소 콜백 훅이 없으므로, 기존 fault-injection 테스트를 이 fake의 메서드별 hook으로 동등 재현한다.
 type fakeACLStore struct {
 	mu       sync.Mutex
 	settings map[string]string

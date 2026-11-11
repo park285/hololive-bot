@@ -8,7 +8,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// poolStatsCollector는 scrape마다 한 Stat을 공유 pgxdb 지표로 변환한다.
 type poolStatsCollector struct {
 	pool        *pgxpool.Pool
 	descriptors map[string]*prometheus.Desc
@@ -58,7 +57,6 @@ func (c *poolStatsCollector) Collect(ch chan<- prometheus.Metric) {
 	})
 }
 
-// registerPoolStats는 pool 종료 전에 collector를 해제하는 정리 함수를 반환한다.
 func registerPoolStats(reg prometheus.Registerer, pool *pgxpool.Pool, poolName string) (func(), error) {
 	if poolName == "" {
 		return func() {}, nil

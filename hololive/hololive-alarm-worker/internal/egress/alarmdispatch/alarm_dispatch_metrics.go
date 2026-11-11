@@ -266,7 +266,6 @@ func observeAlarmDispatchBacklogSnapshotSucceeded(observedAt time.Time) {
 	alarmDispatchPGBacklogSnapshotSuccess.Set(1)
 }
 
-// 실패 시 이전 관측값과 마지막 성공 시각을 덮지 않고 유효성만 내린다.
 func observeAlarmDispatchBacklogSnapshotFailed() {
 	initAlarmDispatchRunnerMetrics()
 
@@ -291,8 +290,7 @@ func observeAlarmDispatchOldestAges(pending, retry, sending float64) {
 	alarmDispatchPGOldestSendingAgeSeconds.Set(sending)
 }
 
-// alarmDispatchMemberNameMissingTotal은 members에 한국어 표시명이 없어 misc/vtuber_fallback 문구로 방송 알림을 만든 횟수다.
-// 멤버 표시명 예외 계약(contracts/alarm.md)의 telemetry이며 첫 호출에서 기본 registerer에 등록한다.
+// members에 한국어 표시명이 없어 misc/vtuber_fallback 문구로 방송 알림을 만든 횟수다.
 var alarmDispatchMemberNameMissingTotal = sync.OnceValue(func() prometheus.Counter {
 	return promauto.NewCounter(prometheus.CounterOpts{
 		Name: "hololive_alarm_dispatch_member_name_missing_total",

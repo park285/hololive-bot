@@ -944,7 +944,6 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsDedupeKey(t *testing.T) {
 	assertLogRoomIDPseudonymized(t, entry)
 }
 
-// 숫자 canonical ID가 아닌 방 식별자(testRoom1)는 로그에 원문으로 남지 않고 가명으로 바뀌어야 한다.
 func assertLogRoomIDPseudonymized(t *testing.T, entry map[string]any) {
 	t.Helper()
 
@@ -1236,8 +1235,6 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsResult(t *testing.T)
 	}
 }
 
-// 시도 telemetry는 TransitionStore가 전이 트랜잭션 안에서 한 번 기록한다.
-// 발송 경로는 발송 방식만 넘기고, commit 뒤 직접 audit 로그나 telemetry enqueue를 남기지 않는다.
 func TestDispatchDeliveryRows_PerRoomSuccessPassesPerRoomModeToTransition(t *testing.T) {
 	t.Parallel()
 

@@ -66,7 +66,6 @@ func LoadIrisConfig() (IrisConfig, error) {
 	return config, nil
 }
 
-// parseIrisTransport는 IRIS_TRANSPORT를 SDK 어휘(h3, http1)로 해석한다. 빈 값은 SDK 기본 h3이고,
 // quic·http3 같은 옛 별칭은 기동 시 거절한다.
 func parseIrisTransport(raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
@@ -81,7 +80,6 @@ func parseIrisTransport(raw string) (string, error) {
 	return transport, nil
 }
 
-// splitIrisAllowedHosts는 쉼표 구분 allowlist에서 빈 항목을 버린다. 빈 항목만 있으면 미설정과 같다.
 func splitIrisAllowedHosts(raw string) []string {
 	var hosts []string
 

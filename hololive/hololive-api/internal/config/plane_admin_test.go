@@ -24,7 +24,6 @@ func setAdminPlaneEnv(t *testing.T) {
 	t.Setenv("IRIS_BASE_URL_FILE", "")
 }
 
-// loadAdminPlaneRuntime은 LoadRuntime이 admin plane에 적용하는 공통 env 단계와 역할 검증을 그대로 거친다.
 func loadAdminPlaneRuntime(t *testing.T) error {
 	t.Helper()
 
@@ -60,7 +59,6 @@ func TestAdminPlaneBootsWithoutIrisEgressTokens(t *testing.T) {
 	}
 }
 
-// admin plane은 nonEgress라 Iris 토큰이 실수로 주입돼도 worker profile을 읽거나 Iris에 접속하지 않는다.
 func TestAdminPlaneIgnoresAccidentalIrisEgressInputs(t *testing.T) {
 	setAdminPlaneEnv(t)
 	settingstest.UnsetEnv(t, "STACK_WORKER_PROFILE_FILE")
@@ -72,7 +70,6 @@ func TestAdminPlaneIgnoresAccidentalIrisEgressInputs(t *testing.T) {
 	}
 }
 
-// bot·admin plane 로더는 youtube-collector 전용 env를 읽지 않는다.
 func TestPlaneLoadersIgnoreInvalidYouTubeCollectorEnv(t *testing.T) {
 	t.Run("admin", func(t *testing.T) {
 		setAdminPlaneEnv(t)

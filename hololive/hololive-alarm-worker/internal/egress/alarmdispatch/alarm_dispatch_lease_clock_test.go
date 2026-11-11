@@ -20,7 +20,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 실제 consumer 호출 직전에만 멈춰 DB 잠금 대기를 구성하며 저장소 결과는 대체하지 않는다.
 type alarmLeaseClockConsumer struct {
 	*dispatchoutbox.Consumer
 
@@ -211,7 +210,6 @@ func expireAlarmLeaseDuringUnitWait(ctx context.Context, t *testing.T, pool *pgx
 	require.NoError(t, blocker.Commit(ctx))
 }
 
-// lease가 만료된 미발송 claim은 Load·Pin·Begin 어느 단계에서 막혀도 행을 바꾸지 않고 만료 lease 회수에 맡긴다.
 func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpool.Pool, envelope *domain.AlarmQueueEnvelope) {
 	t.Helper()
 

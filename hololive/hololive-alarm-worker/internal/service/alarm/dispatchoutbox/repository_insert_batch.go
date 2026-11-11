@@ -13,7 +13,7 @@ import (
 // ErrEventPayloadConflict는 같은 event key에 다른 payload가 들어와 delivery를 거부했음을 나타낸다.
 var ErrEventPayloadConflict = errors.New("dispatch event payload conflict")
 
-// InsertPending은 pending delivery를 저장한다. Payload 충돌은 audit만 기록하고 기존 record를 반환하지 않는다.
+// Payload 충돌은 audit만 기록하고 기존 record를 반환하지 않는다.
 func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
 	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}})
 	if err != nil {

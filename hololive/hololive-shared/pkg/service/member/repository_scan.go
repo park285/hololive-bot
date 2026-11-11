@@ -180,8 +180,6 @@ const (
 	celebrationMemberIterLabel = "celebration member rows iteration"
 )
 
-// collectMembersFromRows는 rowLabel로 행 단위 scan/parse 오류를, iterLabel로 rows.Err 오류를 구분해 감쌉니다.
-// 한 행이 실패해도 나머지 행은 계속 수집하고, 오류는 errors.Join으로 함께 반환합니다.
 func (r *Repository) collectMembersFromRows(
 	rows pgx.Rows,
 	iterLabel string,
@@ -208,7 +206,6 @@ func (r *Repository) collectMembersFromRows(
 	return out, nil
 }
 
-// scanMember: DB 조회 결과를 domain.Member로 변환함.
 func (r *Repository) scanMember(
 	id int,
 	_ string,

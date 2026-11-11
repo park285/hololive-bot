@@ -51,14 +51,12 @@ func jobContractFor(t *testing.T, spec *JobSpec) collection.JobContract {
 	return job
 }
 
-// projectionChange는 API refresh 한 번의 대상 변화다. 필드 dropped는 이어받지 않고, added는 새 generation부터의
-// 대상으로 넣는다(재등록·cadence 변경 포함).
+// 필드 dropped는 이어받지 않고, added는 새 generation부터의 대상으로 넣는다(재등록·cadence 변경 포함).
 type projectionChange struct {
 	dropped []leaseTarget
 	added   []leaseTarget
 }
 
-// transitionProjection은 API refresh처럼 guard를 먼저 잡고 이전 CURRENT를 RETIRED로 바꾼 뒤 새 CURRENT를 만든다.
 // 같은 의미로 이어진 대상은 member_since_generation을 그대로 이어받는다. 이전 generation 행의 valid_until은 남긴다.
 func transitionProjection(t *testing.T, pool *pgxpool.Pool, previous int64, change projectionChange) int64 {
 	t.Helper()
@@ -139,8 +137,6 @@ func contentTargets(subject string) []leaseTarget {
 	}
 }
 
-// 불변식 1·7: 같은 kind의 다른 subject, 다른 kind, 영상 생존 확인 대상이 바뀌어도 이미 획득한 content 작업의
-// renew·snapshot·empty complete가 유지된다. Proof의 획득 generation은 바뀌지 않는다.
 func TestUnrelatedTargetChurnKeepsAdmittedContentJob(t *testing.T) {
 	t.Parallel()
 
@@ -192,8 +188,6 @@ func TestUnrelatedTargetChurnKeepsAdmittedContentJob(t *testing.T) {
 	}
 }
 
-// 불변식 2·5: 자기 범위의 제거·비활성·cadence 변경·추가는 소유를 잃지 않은 채 superseded로 거절되고,
-// 자기 증명으로 fenced superseded release할 수 있다. RETIRED 행의 valid_until이 남아 있어도 허용하지 않는다.
 func TestOwnMembershipChangeSupersedesWithoutOwnerLoss(t *testing.T) {
 	for _, testCase := range []struct {
 		name    string
@@ -268,8 +262,7 @@ func assertSuperseded(t *testing.T, repository *Repository, lease *JobLease, spe
 	}
 }
 
-// 불변식 3: 제거 후 같은 속성으로 재등록(ABA)해도 새 generation부터의 대상이므로 과거 lease를 허용하지 않는다.
-// 새로 획득한 lease는 재등록 이후 범위로 정상 동작한다.
+// 제거 후 같은 속성으로 재등록(ABA)해도 새 generation부터의 대상이므로 과거 lease를 허용하지 않는다.
 func TestRemovedAndReaddedTargetDoesNotRevalidateOldLease(t *testing.T) {
 	t.Parallel()
 
@@ -300,7 +293,6 @@ func TestRemovedAndReaddedTargetDoesNotRevalidateOldLease(t *testing.T) {
 	}
 }
 
-// 불변식 4: owner·epoch·scheduled_for·ACTIVE·만료와 유효 CURRENT 존재 검사는 membership 판정보다 우선해 유지된다.
 func TestOwnershipAndProjectionChecksRemainAuthoritative(t *testing.T) {
 	t.Run("expired lease is owner loss", testExpiredLeaseIsOwnerLoss)
 	t.Run("owner loss outranks stale projection", testOwnerLossOutranksStaleProjection)
@@ -395,9 +387,8 @@ func testUnprovenMembershipIsNotAdmitted(t *testing.T) {
 	}
 }
 
-// 불변식 6: retention이 lease 행을 지우고 다시 만들면 fence_epoch가 1부터 재시작한다. 과거 증명은 같은 owner·epoch여도
-// scheduled_for 등 증명 전체가 달라 renew·complete·release가 모두 소유 손실로 거절되며, 유효성은 lease 이력이 아니라
-// 재사용되지 않는 projection generation에 묶인다.
+// retention이 lease 행을 지우고 다시 만들면 fence_epoch가 1부터 재시작한다. 과거 증명은 같은 owner·epoch여도 scheduled_for 등 증명 전체가 달라
+// renew·complete·release가 모두 소유 손실로 거절되며, 유효성은 lease 이력이 아니라 재사용되지 않는 projection generation에 묶인다.
 func TestLeaseRecreatedAfterRetentionDoesNotReviveOldProof(t *testing.T) {
 	t.Parallel()
 
@@ -435,7 +426,6 @@ func TestLeaseRecreatedAfterRetentionDoesNotReviveOldProof(t *testing.T) {
 	}
 }
 
-// not_before는 신규 후보·acquire에만 적용된다. 이미 획득한 작업의 renew·snapshot·complete는 영향을 받지 않는다.
 func TestNotBeforeChangesOnlyGateNewAdmission(t *testing.T) {
 	t.Parallel()
 
@@ -490,8 +480,6 @@ func TestNotBeforeChangesOnlyGateNewAdmission(t *testing.T) {
 	mustAcquireLease(t, repository, spec, "collector-b")
 }
 
-// API 전환 중 guard를 기다린 snapshot·acquire는 잠금 이후 새 snapshot에서 평가되어 사라진 generation 때문에
-// 거절되지 않는다(false stale 없음, 재시도 없음).
 func TestGuardWaitersEvaluateFreshSnapshotAfterTransition(t *testing.T) {
 	t.Parallel()
 
@@ -564,8 +552,6 @@ func TestGuardWaitersEvaluateFreshSnapshotAfterTransition(t *testing.T) {
 	}
 }
 
-// 전역 CURRENT_PROJECTION 작업은 자기 roster kind 전체가 범위다. 다른 kind 변경은 무관하고, 같은 kind의 subject 추가는
-// roster를 바꾸므로 superseded다.
 func TestGlobalProjectionJobScopeCoversRosterKinds(t *testing.T) {
 	t.Parallel()
 
@@ -593,7 +579,6 @@ func TestGlobalProjectionJobScopeCoversRosterKinds(t *testing.T) {
 	assertSuperseded(t, repository, lease, spec)
 }
 
-// 소유는 유지됐지만 membership이 무효가 된 renew는 callback을 취소·join한 뒤에만 superseded로 fenced release한다.
 func TestSupersededRenewReleasesOnlyAfterCallbackJoin(t *testing.T) {
 	t.Parallel()
 

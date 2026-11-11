@@ -206,7 +206,6 @@ func TestUpcomingCandidatesCommitResponseLossReturnsNoCandidates(t *testing.T) {
 	require.Len(t, pending, 1)
 }
 
-// batch 시작 전에도 같은 fault를 주입하여 SELECT부터 저장까지의 잠금을 확인한다.
 func (tx candidateApplyTx) SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults {
 	if err := tx.beforeApply(ctx); err != nil {
 		return pgx.FailedBatchResults(batch, err)

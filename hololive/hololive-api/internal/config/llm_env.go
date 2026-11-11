@@ -111,7 +111,6 @@ func LoadGeminiConfig() (GeminiConfig, error) {
 	}, nil
 }
 
-// loadConsensusLLMConfig: prefix 기반 환경변수에서 ConsensusLLMConfig를 로드한다.
 func loadConsensusLLMConfig(env *envload.StrictEnv, prefix string) ConsensusLLMConfig {
 	reviewTimeout := env.Int(prefix+"_REVIEW_TIMEOUT_SEC", 30)
 	if reviewTimeout < 5 {
@@ -163,8 +162,6 @@ func LoadExaConfig() (ExaConfig, error) {
 	}, nil
 }
 
-// clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.
-// NaN/Inf 입력 시 기본값(0.85)을 반환한다.
 func clampConfidence(v float64) float64 {
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return 0.85

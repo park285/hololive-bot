@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// members에 표시명이 없으면 빈 표시명을 캐시한다. 알림 표시 단계가 종단 문구를 쓴다.
 func TestAddAlarm_CacheWrite(t *testing.T) {
 	t.Parallel()
 

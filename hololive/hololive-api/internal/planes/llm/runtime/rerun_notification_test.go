@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// 알 수 없는 kind와 구성되지 않은 scheduler는 아무것도 적재하지 않고 오류로 끝난다.
 func TestRerunNotificationRejectsUnknownAndUnconfigured(t *testing.T) {
 	t.Parallel()
 

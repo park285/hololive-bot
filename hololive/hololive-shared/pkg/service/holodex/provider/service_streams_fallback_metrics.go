@@ -44,7 +44,7 @@ var streamFallbackMetricsFor = sync.OnceValue(func() *streamFallbackMetrics {
 	}
 })
 
-// observeStreamPrimary는 primary 단계 결과를 한 번 기록한다. 호출자 취소는 실패가 아니라 canceled로 센다.
+// 호출자 취소는 실패가 아니라 canceled로 센다.
 func observeStreamPrimary(operation string, result orgFetchResult) {
 	streamFallbackMetricsFor().primaryTotal.WithLabelValues(streamFallbackServiceLabel, operation, streamPrimaryOutcome(result)).Inc()
 }

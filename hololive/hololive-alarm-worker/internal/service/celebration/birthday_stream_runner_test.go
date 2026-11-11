@@ -35,7 +35,6 @@ const (
 	testBirthdayTitle  = "【#生誕祭2026】Birthday Live"
 )
 
-// testPublishedBirthdayStreams는 videoID별 저장 제목으로 기발행 birthday stream event를 만든다.
 func testPublishedBirthdayStreams(titlesByVideoID map[string]string) map[string]domain.AlarmQueueEnvelope {
 	events := make(map[string]domain.AlarmQueueEnvelope, len(titlesByVideoID))
 	for videoID, title := range titlesByVideoID {
@@ -325,7 +324,6 @@ func TestBirthdayStreamRunOnceMidnightCatchesLateFrameWithYesterdayDate(t *testi
 	assert.Equal(t, "vid-late", envelopes[0].Celebration.VideoID)
 }
 
-// WIB 생일 저녁 방송은 KST 다음 날 새벽에 시작하므로 다음 날 tick에서 생일 날짜로 발행하고 날짜를 붙여 표시한다.
 func TestBirthdayStreamRunOnceTrailingWindowPublishesNextKSTDayStreamWithDate(t *testing.T) {
 	t.Parallel()
 
@@ -439,7 +437,6 @@ func TestBirthdayStreamRunOnceLiveSessionIncluded(t *testing.T) {
 	assert.Equal(t, "21:00", payload.ScheduledStartKST)
 }
 
-// 생일 전날 KST 23시에 시작해 생일축하 발송 뒤에도 진행 중인 카운트다운은 앞쪽 창에서 날짜를 붙여 알린다.
 func TestBirthdayStreamRunOnceLeadingWindowCountdownShowsPreviousDate(t *testing.T) {
 	t.Parallel()
 
@@ -763,7 +760,6 @@ func TestBirthdayStreamRunOnceRepublishesKnownEventForLateSentRoom(t *testing.T)
 	assert.Equal(t, []string{prefix, prefix}, store.listCalls)
 }
 
-// 기발행 생일 방송의 재평가는 이미 sent로 받은 방을 다시 envelope으로 만들지 않고, 늦게 축하받은 방만 보낸다.
 func TestBirthdayStreamRunOnceRepublishSkipsRoomsAlreadySentStream(t *testing.T) {
 	t.Parallel()
 
@@ -794,7 +790,6 @@ func TestBirthdayStreamRunOnceRepublishSkipsRoomsAlreadySentStream(t *testing.T)
 	assert.Equal(t, testVideoA, envelopes[0].Celebration.VideoID)
 }
 
-// 모든 audience 방이 이미 생일 방송을 받았으면 발행 tx를 열지 않는다.
 func TestBirthdayStreamRunOnceRepublishAllRoomsSentSkipsPublish(t *testing.T) {
 	t.Parallel()
 
@@ -818,7 +813,6 @@ func TestBirthdayStreamRunOnceRepublishAllRoomsSentSkipsPublish(t *testing.T) {
 	assert.Empty(t, publisher.batches)
 }
 
-// 기발행 생일 방송의 sent 방 조회가 실패하면 audience 전체로 재발행하지 않고 오류로 끝낸다.
 func TestBirthdayStreamRunOnceSentStreamRoomLookupFailureFailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -843,7 +837,6 @@ func TestBirthdayStreamRunOnceSentStreamRoomLookupFailureFailsClosed(t *testing.
 	assert.Empty(t, publisher.batches)
 }
 
-// birthdayStreamFailingStreamLookupStore는 생일 방송 event_key 조회만 실패시킨다.
 type birthdayStreamFailingStreamLookupStore struct {
 	birthdayStreamTestStore
 
@@ -858,7 +851,6 @@ func (s *birthdayStreamFailingStreamLookupStore) FindSentRoomsByEventKeys(ctx co
 	return s.birthdayStreamTestStore.FindSentRoomsByEventKeys(ctx, eventKeys)
 }
 
-// 모든 envelope이 dedupe로 끝난 실행은 운영 INFO에 남기지 않고, 실제로 delivery를 추가한 실행만 INFO로 남긴다.
 func TestBirthdayStreamRunOncePublishLogLevelFollowsInsertedRows(t *testing.T) {
 	t.Parallel()
 
@@ -926,7 +918,6 @@ func TestBirthdayStreamRunOnceSkipsNonBirthdayTitles(t *testing.T) {
 	assert.Empty(t, publisher.batches)
 }
 
-// 저장 제목이 생일과 무관한 기발행 event는 상한을 차지하지 않고 다시 발행되지도 않는다.
 func TestBirthdayStreamRunOnceUnclassifiedPublishedEventsDoNotConsumeCap(t *testing.T) {
 	t.Parallel()
 

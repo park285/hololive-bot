@@ -28,8 +28,7 @@ func decodeStrictJSON(raw []byte, destination any) error {
 	return nil
 }
 
-// validateJSONStructure는 token 한 번의 순회로 단일 최상위 값, 중첩 깊이, 문법,
-// 중복 이름, UTF-8 유효성을 검증한다. 미지 member 거부는 뒤따르는 jsonv2.Unmarshal이 맡는다.
+// 미지 member 거부는 뒤따르는 jsonv2.Unmarshal이 맡는다.
 func validateJSONStructure(raw []byte) error {
 	// bytes.Buffer 입력은 decoder가 복사 없이 raw를 직접 읽게 한다. decoder는 입력을 쓰지 않는다.
 	decoder := jsontext.NewDecoder(bytes.NewBuffer(raw))

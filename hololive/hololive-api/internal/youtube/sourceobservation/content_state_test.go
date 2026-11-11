@@ -25,7 +25,6 @@ type contentLoadStep struct {
 	videoIDs     []string
 }
 
-// publishConsumeContentAt은 lease slot을 임의 시각으로 옮겨 관측을 발행하고 바로 소비한다.
 // 관측의 received_at을 slot 시각에 맞춰 도착 순서와 무관하게 grace 판정이 관측 시각을 따르게 한다.
 func publishConsumeContentAt(
 	ctx context.Context,
@@ -115,8 +114,6 @@ func contentStepLabels(steps []contentLoadStep) []string {
 	return labels
 }
 
-// 로더는 현재 slot과 이번 관측보다 늦은 slot, 관측·clock 보유 영상만 적재한다. 늦게 도착한 positive가
-// 먼저 저장된 부재 slot을 scheduled_for 순으로 재적용해야 하므로 모든 도착 순서가 같은 상태로 수렴해야 한다.
 func TestContentLoaderScopePermutationsConverge(t *testing.T) {
 	base := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
 	cases := []struct {
@@ -166,7 +163,6 @@ func TestContentLoaderScopePermutationsConverge(t *testing.T) {
 	}
 }
 
-// heap 삽입 순서와 index 순서에 기대지 않고, 늦은 positive가 부재 slot을 시간순으로 재적용해야 한다.
 func TestContentLoaderReplaysAbsenceSlotsInScheduledOrder(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -226,11 +222,9 @@ func TestContentLoaderReplaysAbsenceSlotsInScheduledOrder(t *testing.T) {
 	require.Equal(t, second, clock.WithdrawnAt.UTC())
 }
 
-// 부재 판정에 쓰이지 않는 이력(clock 없는 레거시 영상, 이번 관측보다 이른 slot)은 적재하거나 잠그지 않는다.
-// FOR UPDATE는 커밋 뒤에도 튜플 xmax에 잠금 트랜잭션을 남기므로 xmax=0이 잠금 부재의 증거다.
-// 방문 행 plan 테스트는 두지 않는다. PK(channel_id, observation_kind, scheduled_for)에 effective_at이 없어
-// 0038은 PK prefix로 채널·종류의 slot 이력을 모두 읽은 뒤 조건으로 거르므로 heap 방문은 여전히 이력에 비례한다.
-// 0038 변경이 줄이는 것은 잠금·적재 범위이므로 그 범위를 xmax로 고정한다.
+// FOR UPDATE는 커밋 뒤에도 튜플 xmax에 잠금 트랜잭션을 남기므로 xmax=0이 잠금 부재의 증거다. 방문 행 plan 테스트는 두지 않는다. PK(channel_id, observation_kind,
+// scheduled_for)에 effective_at이 없어 0038은 PK prefix로 채널·종류의 slot 이력을 모두 읽은 뒤 조건으로 거르므로 heap 방문은 여전히 이력에 비례한다. 0038 변경이
+// 줄이는 것은 잠금·적재 범위이므로 그 범위를 xmax로 고정한다.
 func TestContentLoaderLeavesUnusedHistoryUnlocked(t *testing.T) {
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
@@ -275,7 +269,6 @@ func TestContentLoaderLeavesUnusedHistoryUnlocked(t *testing.T) {
 	assertContentMissing(t, pool, testVideoID, false)
 }
 
-// 로더가 clock 없는 레거시 shorts를 싣지 않아도 initialized watermark는 기준 목록으로 유지돼 새 shorts를 알린다.
 func TestContentLoaderKeepsShortsBaselineWithLegacyCatalogOnly(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

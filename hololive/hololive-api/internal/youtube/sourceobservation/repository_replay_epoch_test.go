@@ -88,7 +88,6 @@ func TestReplayEpochDeadLettersPreEpochAutomaticClaim(t *testing.T) {
 	assertReplayEpochDeadLetter(t, pool, secondObservationID)
 }
 
-// 시도를 모두 쓴 epoch 이전 자동 claim은 replay epoch 사유로 끝나고, claim 트랜잭션 시각에 lease 없이 기록된다.
 func TestReplayEpochDeadLetterTakesPrecedenceOverExhaustedAttempts(t *testing.T) {
 	t.Parallel()
 

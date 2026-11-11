@@ -65,7 +65,6 @@ func (s *trackedContextState) snapshot() []context.Context {
 	return slices.Clone(s.seen)
 }
 
-// reset은 생성 단계의 기록을 지워 이후 요청 구간만 보게 한다.
 func (s *trackedContextState) reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

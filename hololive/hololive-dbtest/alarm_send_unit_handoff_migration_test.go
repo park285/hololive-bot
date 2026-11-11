@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// handoff shape CHECK는 고정 요청이 있는 단위의 확인 대기·확인 완료와 handoff가 없는 단위를 받고, 고정 요청 없는
-// 않는다.
 func TestAlarmSendUnitHandoffShape(t *testing.T) {
 	t.Parallel()
 

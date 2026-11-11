@@ -30,7 +30,6 @@ func wideCoverage() CoverageValue {
 	})
 }
 
-// videoA는 complete 기준(8월 1일) 이후 공개됐다는 player 공개 근거를 가진 영상입니다.
 func videoA() Entity {
 	published := time.Date(2026, time.August, 5, 0, 0, 0, 0, time.UTC)
 

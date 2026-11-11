@@ -199,8 +199,6 @@ func TestWireMinimumSuccessBytesDoNotExceedHelperMinimum(t *testing.T) {
 	}
 }
 
-// 실제 server.mjs의 bootstrap·RPC 처리·응답 검증·인코딩을 거친 결과가 fixture 본문과 같아야 한다.
-// 왕복 helper는 upstream fetcher만 fixture로 바꾸며 네트워크에 접속하지 않는다.
 // 테스트 이름은 t.TempDir 아래 UDS 경로가 100 byte를 넘지 않게 짧게 둔다.
 func TestWireRPC(t *testing.T) {
 	fixture := loadWireFixture(t)
@@ -258,7 +256,6 @@ func TestWireRPC(t *testing.T) {
 	assertWireRoundtripFailures(ctx, t, rpc, limiter, &fixture)
 }
 
-// assertWireRoundtripFailures는 실패 tuple·retry hint 매핑과, 실패 전 예정 영상 조회의 limiter 지불을 확인한다.
 // 왕복 helper는 subject로 실패를 고르므로 모든 사례를 조회 수를 보고할 수 있는 /v1/channel live로 보낸다.
 func assertWireRoundtripFailures(ctx context.Context, t *testing.T, rpc *RPC, limiter *RateLimiter, fixture *wireFixture) {
 	t.Helper()
@@ -313,7 +310,6 @@ func fetchWire(ctx context.Context, rpc *RPC, path, subject, kind string, limit 
 	}
 }
 
-// wireResult는 decode 결과를 fixture 본문 decode와 같은 포인터 형식으로 맞춥니다.
 func wireResult[T any](result T, err error) (any, error) {
 	if err != nil {
 		return nil, err

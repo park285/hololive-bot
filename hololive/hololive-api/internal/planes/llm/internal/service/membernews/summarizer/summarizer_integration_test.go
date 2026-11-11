@@ -248,7 +248,6 @@ func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 		}
 	}
 
-	// JSON 직렬화 검증
 	raw, err := jsonv2.Marshal(digest)
 	if err != nil {
 		t.Fatalf("digest JSON 직렬화 실패: %v", err)
@@ -288,7 +287,6 @@ func TestIntegration_MemberNewsSummarize_Monthly(t *testing.T) {
 			i, item.Member, item.Category, item.Title, item.SourceURL)
 	}
 
-	// 월간 period 반환 검증
 	if digest.Period != model.PeriodMonthly {
 		t.Errorf("expected period %q, got %q", model.PeriodMonthly, digest.Period)
 	}
@@ -313,12 +311,10 @@ func TestIntegration_MemberNewsSummarize_SchemaCompliance(t *testing.T) {
 		t.Fatalf("summarize error: %v", err)
 	}
 
-	// period enum 검증
 	if digest.Period != model.PeriodWeekly && digest.Period != model.PeriodMonthly {
 		t.Errorf("unexpected period enum: %q", digest.Period)
 	}
 
-	// required fields 검증
 	if strings.TrimSpace(digest.Headline) == "" {
 		t.Error("headline이 비어있음")
 	}

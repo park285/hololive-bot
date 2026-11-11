@@ -31,7 +31,6 @@ func (*acceptingIrisClient) SendMessageAccepted(context.Context, string, string,
 	return &iris.ReplyAcceptedResponse{Success: true, RequestID: "reply-1"}, nil
 }
 
-// recordingMemberNews는 llm plane이 넘기는 membernews.Service 자리에 들어가 bot 명령이 실제로 호출한 방을 기록한다.
 type recordingMemberNews struct {
 	mu         sync.Mutex
 	subscribed []string
@@ -87,7 +86,6 @@ func (r *recordingMajorEvent) Subscribe(_ context.Context, roomID, _ string) err
 
 func (*recordingMajorEvent) Unsubscribe(context.Context, string) error { return nil }
 
-// newInjectedDependencyBot은 process 조립과 같은 방식으로 ACL·구독·digest 인스턴스를 넘겨 bot을 만든다.
 func newInjectedDependencyBot(t *testing.T, memberNews *recordingMemberNews, majorEvent *recordingMajorEvent) (*orchestration.Bot, *acl.Service) {
 	t.Helper()
 
@@ -123,7 +121,6 @@ func newInjectedDependencyBot(t *testing.T, memberNews *recordingMemberNews, maj
 	return bot, aclService
 }
 
-// dispatchingReplyOutbox는 기록한 응답을 outbox dispatcher와 같은 DispatchStoredReply로 바로 보낸다.
 type dispatchingReplyOutbox struct {
 	client transport.ReplyClient
 }
@@ -154,9 +151,6 @@ func sendInjectedTestMessage(t *testing.T, bot *orchestration.Bot, id, text stri
 	}
 }
 
-// process 조립은 llm plane의 구독·digest 서비스와 process 하나뿐인 ACL Service를 bot에 직접 넘긴다.
-// 봇 명령은 loopback HTTP 없이 주입된 인스턴스를 호출하고, 같은 ACL 인스턴스에 대한 관리 변경은
-// 다음 메시지의 ingress 판정에 바로 보여야 한다.
 func TestBotUsesInjectedPlaneDependencies(t *testing.T) {
 	memberNews := &recordingMemberNews{}
 	majorEvent := &recordingMajorEvent{}

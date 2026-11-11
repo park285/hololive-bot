@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-// resolvePersistedTargetMinutes는 API admin이 저장한 settings 파일의 target을 우선하고, 파일이 없을 때만 설정값을 쓴다.
 func resolvePersistedTargetMinutes(settingsPath string, targetMinutes []int, logger *slog.Logger) ([]int, error) {
 	stored, found, err := settings.ReadFile(settingsPath)
 	if err != nil {

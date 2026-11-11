@@ -50,9 +50,6 @@ type ClientHints struct {
 	FullVersionList string `json:"fullVersionList,omitempty"`
 }
 
-// 표준 Sec-CH-UA-* 헤더를 읽어 ClientHints 구조체로 반환합니다.
-//
-// 참고: 브라우저가 Client Hints를 지원하지 않거나 헤더가 없으면 빈 값이 반환됩니다.
 func parseClientHints(c *gin.Context) ClientHints {
 	return ClientHints{
 		Brands:          c.GetHeader("Sec-CH-UA"),
@@ -66,8 +63,6 @@ func parseClientHints(c *gin.Context) ClientHints {
 	}
 }
 
-// unquote: Sec-CH-UA 헤더 값에서 따옴표를 제거합니다.
-// 예: `"Android"` → `Android`.
 func unquote(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
@@ -85,7 +80,6 @@ func (ch *ClientHints) HasClientHints() bool {
 	return ch.Platform != "" || ch.Model != "" || ch.PlatformVersion != ""
 }
 
-// 로그 표시용 문자열을 반환하며 Windows 버전은 Client Hints의 마케팅 버전으로 변환한다.
 func (ch *ClientHints) Summary() string {
 	if !ch.HasClientHints() {
 		return ""
@@ -144,7 +138,6 @@ func clientHintMajorVersion(version string) string {
 	return version
 }
 
-// translateWindowsVersion은 Client Hints의 platformVersion을 Windows 제품 버전으로 변환한다.
 func translateWindowsVersion(majorVersion string) string {
 	major := parseLeadingInt(majorVersion)
 
@@ -174,13 +167,6 @@ func parseLeadingInt(value string) int {
 	return parsed
 }
 
-// formatArchitecture: 아키텍처와 비트 수를 사용자 친화적인 형식으로 변환합니다.
-//
-// 변환 예시:
-//   - x86 + 64 → x64
-//   - arm + 64 → arm64
-//   - x86 + 32 → x86
-//   - arm + "" → arm
 func formatArchitecture(arch, bitness string) string {
 	if bitness == "" {
 		return arch
@@ -205,7 +191,6 @@ func formatArchitecture(arch, bitness string) string {
 	return arch + bitness
 }
 
-// clientHintsToRequest: 서버가 브라우저에게 요청할 Client Hints 목록입니다.
 // Accept-CH 헤더에 포함되어 브라우저가 High Entropy 값을 전송하도록 요청합니다.
 const clientHintsToRequest = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, " +
 	"Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, " +

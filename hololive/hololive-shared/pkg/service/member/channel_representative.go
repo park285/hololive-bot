@@ -26,7 +26,6 @@ func preferChannelMember(current, candidate *domain.Member) bool {
 	return candidate != nil && (current == nil || candidate.ID < current.ID)
 }
 
-// channelMemberForPointLocked는 point 결과로 채울 채널 키의 주인을 고른다. 호출자가 snapshotMu를 쥔다.
 func (c *Cache) channelMemberForPointLocked(member *domain.Member, generation uint64, channelLookup bool) *domain.Member {
 	if snap := c.currentSnapshotLocked(generation); snap != nil {
 		return snap.index.channelRepresentatives[member.ChannelID]

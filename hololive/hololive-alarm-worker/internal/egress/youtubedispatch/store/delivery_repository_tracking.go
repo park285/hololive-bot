@@ -108,7 +108,6 @@ func markSentDeliveryTracking(
 	return nil
 }
 
-// persistSentTrackingLatencyClassifications는 같은 CompleteSent 트랜잭션의 성공 시도 telemetry까지 분류해 저장한다.
 func persistSentTrackingLatencyClassifications(
 	ctx context.Context,
 	tx dbx.Querier,

@@ -33,13 +33,11 @@ const (
 	youtubeHandoffSettleConcurrency = 2
 )
 
-// handoffStore는 youtube 고정 요청 handoff 확인의 claim과 정산이다.
 type handoffStore interface {
 	handoffClaimer
 	handoffSettler
 }
 
-// handoffClaimer는 확인 시각이 된 확인 대기 고정 요청을 soft claim한다.
 type handoffClaimer interface {
 	ClaimHandoffDue(ctx context.Context, limit int, softClaim time.Duration) ([]store.HandoffClaim, error)
 }
@@ -145,7 +143,6 @@ func newHandoffReconciler(
 	}, nil
 }
 
-// Start는 ctx가 끝날 때만 반환한다. 가득 찬 batch 뒤에는 바로 다음 batch를 고르고, 그 밖에는 poll 주기만큼 쉰다.
 // 확인 실패는 Start 오류가 아니다. 첫 오류가 나면 runNamedSchedulers가 형제 egress runner를 모두 취소한다.
 func (r *HandoffReconciler) Start(ctx context.Context) error {
 	for {
@@ -171,8 +168,7 @@ func (r *HandoffReconciler) Start(ctx context.Context) error {
 	}
 }
 
-// RunOnce는 확인 시각이 된 고정 요청을 한 batch 고르고, 요청마다 상태 조회와 정산을 병렬로 끝낸 뒤 고른 수를
-// 돌려준다. 확인 claim은 batch 조회라 일반 연결 획득을 쓴다.
+// 확인 claim은 batch 조회라 일반 연결 획득을 쓴다.
 func (r *HandoffReconciler) RunOnce(ctx context.Context) (int, error) {
 	claimCtx, cancel := context.WithTimeout(ctx, deliveryStateTimeout)
 	claims, err := r.store.ClaimHandoffDue(claimCtx, youtubeHandoffBatchSize, youtubeHandoffSoftClaim)
@@ -229,7 +225,6 @@ func (r *HandoffReconciler) reconcile(ctx context.Context, claim *store.HandoffC
 	r.logOutcome(claim, decision, err)
 }
 
-// settle은 정산 슬롯을 얻어 관측을 적용한다. 예산 안에 슬롯을 얻지 못하면 적용하지 않는다.
 func (r *HandoffReconciler) settle(ctx context.Context, claim *store.HandoffClaim, decision handoffcheck.Decision, queryErr error) error {
 	select {
 	case r.settleSlots <- struct{}{}:
@@ -285,8 +280,7 @@ func (r *HandoffReconciler) apply(ctx context.Context, claim *store.HandoffClaim
 	return nil
 }
 
-// observeLedger는 실패 정산이 지운 SENT 원장과 격리가 기록한 QUARANTINED 원장 수를 남긴다. 적용된 정산은 고정 멤버
-// 하나당 논리 키 하나를 바꾼다.
+// 적용된 정산은 고정 멤버 하나당 논리 키 하나를 바꾼다.
 func (r *HandoffReconciler) observeLedger(action handoffcheck.Action, result store.ApplyResult, units int) {
 	switch action {
 	case handoffcheck.ActionReissue, handoffcheck.ActionExhausted:
@@ -298,10 +292,9 @@ func (r *HandoffReconciler) observeLedger(action handoffcheck.Action, result sto
 	}
 }
 
-// logOutcome은 정산 결과를 남긴다. 로그에는 고정 멤버 delivery id와 요청 세대만 남기고 Iris requestId는 남기지 않는다.
-// 확인을 닫지 않은 fence 미스(소유 상실, 정산 중 논리 그룹에 새 follower·outbox가 들어옴)는 다른 정산이나 soft claim 뒤
-// 다음 확인이 이어받으므로 경고다. 멤버 변경으로 확인을 닫은 종료는 다음 확인이 없으므로 오류다. 예산을 넘긴 정산은
-// soft claim 뒤 다음 확인이 토큰 CAS로 다시 판정하므로 경고다.
+// 로그에는 고정 멤버 delivery id와 요청 세대만 남기고 Iris requestId는 남기지 않는다. 확인을 닫지 않은 fence 미스(소유 상실, 정산 중 논리 그룹에 새 follower·outbox가
+// 들어옴)는 다른 정산이나 soft claim 뒤 다음 확인이 이어받으므로 경고다. 멤버 변경으로 확인을 닫은 종료는 다음 확인이 없으므로 오류다. 예산을 넘긴 정산은 soft claim 뒤 다음 확인이 토큰
+// CAS로 다시 판정하므로 경고다.
 func (r *HandoffReconciler) logOutcome(claim *store.HandoffClaim, decision handoffcheck.Decision, err error) {
 	attrs := []any{
 		slog.Any("delivery_ids", claim.MemberIDs),

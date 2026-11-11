@@ -360,7 +360,6 @@ func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name str
 	})
 }
 
-// finishStart는 등록이 끝난 task들의 종료를 반복해서 대기할 수 있는 닫힌 채널로 보존한다.
 func (r *Runtime) finishStart() {
 	if r.Config.Enabled {
 		r.tasks.Go(func() {
@@ -498,7 +497,6 @@ func (r *Runtime) releaseClaims(ctx context.Context) error {
 	return err
 }
 
-// CloseContext는 남은 종료 예산으로 sampler를 포함한 task를 join한 뒤 pool을 한 번 해제한다.
 // 종료 대기가 끝나지 않으면 pool 소유권을 유지하여 후속 close가 다시 기다릴 수 있다.
 func (r *Runtime) CloseContext(ctx context.Context) error {
 	if r == nil {
@@ -583,8 +581,7 @@ func (r *Runtime) Degraded() bool {
 	return r != nil && (r.projectionDegraded.Load() || r.deadLetterBacklog.Load())
 }
 
-// withDB는 DBOperationConcurrency 슬롯 하나를 잡고 fn을 실행한다. 슬롯 대기는 획득에 실패해도,
-// 보유는 획득부터 반환까지 operation별 히스토그램에 남긴다.
+// 슬롯 대기는 획득에 실패해도, 보유는 획득부터 반환까지 operation별 히스토그램에 남긴다.
 func (r *Runtime) withDB(ctx context.Context, operation dbOperation, fn func(context.Context) error) error {
 	waitStarted := time.Now()
 

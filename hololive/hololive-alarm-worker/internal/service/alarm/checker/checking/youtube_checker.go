@@ -45,11 +45,9 @@ import (
 const (
 	channelProcessingConcurrency = 16
 
-	// Holodex live 조회가 check 주기(scheduler 45초) 안에서 쓸 수 있는 최대 시간이다.
-	// Holodex client는 시도당 20초로 최대 4회 시도하므로 한도가 없으면 주기 예산을 모두 쓰고, 그 뒤의 저장 세션 조회와
-	// 구독·이름 조회가 기한 초과로 실패한다. 실제로 2026-09-30 Holodex 장애에서 108회 중 101회가 주기 실패였고 그중 54회가
-	// 저장 세션 조회 기한 초과였다. 시도 1회는 끝나게 두고 나머지 20초를 persisted live session 예외 계약
-	// (contracts/alarm.md) 경로에 남긴다.
+	// Holodex live 조회가 scheduler의 45초 주기 안에서 쓸 수 있는 최대 시간이다.
+	// 시도당 20초·최대 4회인 client가 주기 예산을 모두 쓰지 않도록 시도 한 번만 끝나게 두고, 나머지 20초는
+	// persisted live session 예외 계약(contracts/alarm.md)에 따른 저장 세션·구독·이름 조회에 남긴다.
 	youtubeHolodexLiveStatusBudget = 25 * time.Second
 )
 
@@ -133,7 +131,6 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	return checker, nil
 }
 
-// UpdateTargetMinutes는 runtime 설정 변경 시 target minute 정책을 갱신한다.
 func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 	c.targetMinutesMu.Lock()
 	defer c.targetMinutesMu.Unlock()
@@ -141,7 +138,6 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 	c.targetPolicy = targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes))
 }
 
-// Check는 upcoming/live-catchup 알림 후보를 생성한다.
 func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
 	now := time.Now().UTC()
 

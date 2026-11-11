@@ -175,7 +175,6 @@ func TestMustReaderConcurrentFirstCalls(t *testing.T) {
 	}
 }
 
-// countingFS는 MustReader가 자산을 실제로 다시 읽었는지 확인하려고 Open 횟수를 센다.
 type countingFS struct {
 	fsys  fs.FS
 	opens atomic.Int64

@@ -13,8 +13,7 @@ import (
 
 const preparedTestRequestID = "prepared:request"
 
-// 방 유형 판정은 준비 단계에서 한 번만 하며 고른 경로의 변형만 최종 본문이 된다. 일반채팅은 RichText 서식을
-// 표시하지 않으므로 오픈채팅 본문이 text 경로로 새면 안 된다.
+// 일반채팅은 RichText 서식을 표시하지 않으므로 오픈채팅 본문이 text 경로로 새면 안 된다.
 func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing.T) {
 	message := delivery.MessageVariants{Plain: "일반 _본문_", RichText: "**fixed**"}
 	client := &irisSenderTestClient{}
@@ -43,8 +42,7 @@ func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing
 	require.Equal(t, plain, client.textCalls[0].message)
 }
 
-// 모든 경로는 202가 증명한 Iris requestId를 handoff 결과와 무관하게 바로 돌려준다. 이 값이 reconciler의 handoff
-// 확인 대상이다.
+// 이 값이 reconciler의 handoff 확인 대상이다.
 func TestPreparedMessageReturnsAdmittedRequestIDOnAllRoutes(t *testing.T) {
 	for _, route := range []string{"text", "richtext"} {
 		t.Run(route, func(t *testing.T) {
@@ -61,7 +59,6 @@ func TestPreparedMessageReturnsAdmittedRequestIDOnAllRoutes(t *testing.T) {
 	}
 }
 
-// RichText의 202가 durable admission을 증명하지 못하면 결과 불명이다.
 func TestPreparedFormattedMalformedAdmissionIsOutcomeUnknown(t *testing.T) {
 	for _, route := range []string{"richtext"} {
 		t.Run(route, func(t *testing.T) {
@@ -81,8 +78,6 @@ func TestPreparedFormattedMalformedAdmissionIsOutcomeUnknown(t *testing.T) {
 	}
 }
 
-// 텍스트 202는 bot plane 텍스트 경로와 같이 requestId만 요구한다. Iris 계약이 정하지 않은 delivery·success 값은
-// 결과를 바꾸지 않고, requestId가 없으면 확인할 대상이 없어 결과 불명이다.
 func TestPreparedTextAdmissionRequiresOnlyRequestID(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

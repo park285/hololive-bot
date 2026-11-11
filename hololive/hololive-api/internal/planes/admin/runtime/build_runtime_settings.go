@@ -9,8 +9,7 @@ import (
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-// adminAPISettings는 admin plane의 settings 저장소와 적용기를 묶는다. 저장소는 settings.json을 기동 때 한 번 읽으며
-// 읽을 수 없는 파일은 기동 실패다(settings.ReadFile).
+// 저장소는 settings.json을 기동 때 한 번 읽으며 읽을 수 없는 파일은 기동 실패다(settings.ReadFile).
 type adminAPISettings struct {
 	service settingssvc.ReadWriter
 	applier sharedsettings.SettingsApplier

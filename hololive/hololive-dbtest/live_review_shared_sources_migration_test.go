@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 타입 투영은 기존의 모든 필드·시간대·재적용에서도 판단과 원본을 보존한다.
 func TestLiveReviewSharedSourcesPreservesStoredDecisions(t *testing.T) {
 	pool := NewPool(t)
 	seedLiveReviewComparison(t, pool)

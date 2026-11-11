@@ -28,8 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// memberSnapshotIndex는 snapshot 멤버 목록에서 한 번 만들어 snapshot과 함께 불변으로 게시하는 조회 색인이다. 게시 뒤에는
-// 읽기만 하므로 잠금 없이 공유한다. 각 색인이 맞추는 PostgreSQL 조회 규칙은 필드 주석에 적는다.
+// 게시 뒤에는 읽기만 하므로 잠금 없이 공유한다.
 type memberSnapshotIndex struct {
 	// channelRepresentatives는 채널별 가장 작은 영속 ID 멤버다(find_by_channel_id.sql의 ORDER BY id).
 	channelRepresentatives map[string]*domain.Member
@@ -47,7 +46,6 @@ type memberSnapshotIndex struct {
 	channelIDs   []string
 }
 
-// newMemberSnapshotIndex는 nil 멤버를 뺀 snapshot 목록과 그 색인을 만든다.
 func newMemberSnapshotIndex(members []*domain.Member) ([]*domain.Member, *memberSnapshotIndex) {
 	snapshot := make([]*domain.Member, 0, len(members))
 	index := &memberSnapshotIndex{
@@ -110,7 +108,7 @@ func keepSmallestID(index map[string]*domain.Member, key string, member *domain.
 	}
 }
 
-// appendDistinct는 값들의 검색 키마다 멤버를 한 번만 붙인다. 공백뿐인 값은 공백 아닌 질의와 일치할 수 없으므로 뺀다.
+// 공백뿐인 값은 공백 아닌 질의와 일치할 수 없으므로 뺀다.
 func appendDistinct(index map[string][]*domain.Member, member *domain.Member, values ...string) {
 	for _, value := range values {
 		key, ok := searchKey(value)
@@ -150,7 +148,6 @@ func (index *memberSnapshotIndex) membersByAlias(key string) []*domain.Member {
 	return index.aliasesByKey[key]
 }
 
-// searchKey는 다건 조회 질의와 색인 값을 같은 키로 바꾼다. 앞뒤 공백을 지운 값이 비면 false다.
 func searchKey(value string) (string, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -179,7 +176,6 @@ func foldKey(value string) string {
 	return builder.String()
 }
 
-// foldKeyStable은 모든 rune이 이미 대표형인 유효 UTF-8 문자열인지 본다. 대표형이면 할당 없이 그대로 쓴다.
 func foldKeyStable(value string) bool {
 	for index, r := range value {
 		if r == utf8.RuneError {

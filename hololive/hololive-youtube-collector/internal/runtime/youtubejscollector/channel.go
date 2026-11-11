@@ -34,7 +34,6 @@ func (r *ChannelRunner) JobID() collection.JobID {
 	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_" + channelKindMetadata}
 }
 
-// Collect는 수집 범위에 맞는 observation과 checkpoint를 구성하며 실제 DB 저장은 publisher에 맡깁니다.
 func (r *ChannelRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
 		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js channel client is not configured")
@@ -184,7 +183,6 @@ func appendBuiltEnvelope(
 	return nil
 }
 
-// subjectEnvelope은 lease가 배정한 수집 슬롯과 요청 subject로 envelope 하나를 만듭니다.
 // 공유 계약이 payload를 거부하면 원천 응답과 계약의 불일치로 분류합니다.
 func subjectEnvelope(
 	input *collection.RunInput,
@@ -201,7 +199,6 @@ func subjectEnvelope(
 	return generationEnvelope(input, kind, generation, completeness, continuity, payload)
 }
 
-// generationEnvelope은 호출자가 먼저 확인한 generation으로 subject envelope 하나를 만듭니다.
 // 세대 오류를 응답 pagination 검증보다 먼저 보고해야 하는 수집기가 사용합니다.
 func generationEnvelope(
 	input *collection.RunInput,

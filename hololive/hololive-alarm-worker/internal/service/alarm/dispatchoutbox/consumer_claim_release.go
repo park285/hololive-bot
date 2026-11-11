@@ -9,9 +9,7 @@ import (
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 )
 
-// claimKeyPrefixes는 dispatch envelope에 보존되는 알림 및 일정 변경 dedup 마커의 SSOT prefix다.
-// 이 prefix만 삭제 대상으로 허용해, dispatch claim 등
-// 다른 키가 잘못 해제되는 것을 막는다.
+// 이 prefix만 삭제 대상으로 허용해, dispatch claim 등 다른 키가 잘못 해제되는 것을 막는다.
 var claimKeyPrefixes = [...]string{
 	alarmkeys.NotifyClaimKeyPrefix,
 	alarmkeys.RoomScheduleTransitionKeyPrefix,
@@ -34,7 +32,6 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 	return releaseClaimKeys(ctx, c.claimReleaser, claimKeys)
 }
 
-// releaseClaimKeys는 허용 prefix의 dedup claim 키만 releaser로 삭제한다. 삭제를 맡을 releaser가 없으면 오류다.
 func releaseClaimKeys(ctx context.Context, releaser ClaimKeyReleaser, claimKeys []string) error {
 	if releaser == nil {
 		return errors.New("release claim keys: claim key releaser is not configured")

@@ -106,8 +106,6 @@ func TestApplyMigrationsCanRerunAfterTrailingAutocommitFailure(t *testing.T) {
 	assertMigrationTablePresent(ctx, t, pool, "dbtest_tail_ran")
 }
 
-// dbtest는 러너와 같은 manifest 파서를 써야 한다. 예전 자체 파서는 마지막 필드만 파일명으로 읽어
-// 러너가 거부하는 manifest도 적용 목록으로 받아들였다.
 func TestMigrationFingerprintRejectsManifestTheRunnerRejects(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

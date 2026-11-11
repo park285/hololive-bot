@@ -328,7 +328,6 @@ func TestRendererConcurrentLoadsAndCancellation(t *testing.T) {
 	t.Logf("%d callers: %d version queries, %d body query, one shared AST; canceled leader isolated", readers+1, tr.versions.Load(), tr.bodies.Load())
 }
 
-// cancelSharedLoadLeader는 공유 본문 조회를 시작한 첫 호출을 취소하고 그 호출만 취소 오류로 끝나는지 확인한다.
 func cancelSharedLoadLeader(ctx context.Context, t *testing.T, cancel context.CancelFunc, first <-chan error) {
 	t.Helper()
 	cancel()

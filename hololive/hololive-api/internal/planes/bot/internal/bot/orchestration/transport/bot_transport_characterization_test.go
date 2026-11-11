@@ -197,7 +197,6 @@ func (c *stubBotClient) SendRichText(_ context.Context, room, markdown string, o
 	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
 }
 
-// GetReplyStatus는 직접 발송 경로가 handoff 상태를 조회하지 않는다는 것을 세기 위해서만 둔다.
 func (c *stubBotClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
 	c.statusCalls++
 

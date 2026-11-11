@@ -45,10 +45,8 @@ func (h handoffSettlement) result(adjudication CommitAdjudication) (ApplyResult,
 	return result, nil
 }
 
-// settleHandoffFailure는 재발급·소진·격리를 요청 하나의 트랜잭션으로 적용한다. 정산 commit 응답을 잃으면 고정 요청을
-// primary에서 다시 읽어, claim 토큰이 그대로면 commit되지 않은 것(pre)이라 한 번 다시 적용하고, 기대한 정산 결과면
-// 적용된 것(post)으로 본다. 요청 갱신은 delivery·원장 전이와 부모 outbox 집계와 같은 트랜잭션이므로 요청의
-// post-state가 전체 commit의 증거다.
+// 정산 commit 응답을 잃으면 고정 요청을 primary에서 다시 읽어, claim 토큰이 그대로면 commit되지 않은 것(pre)이라 한 번 다시 적용하고, 기대한 정산 결과면 적용된 것(post)으로
+// 본다. 요청 갱신은 delivery·원장 전이와 부모 outbox 집계와 같은 트랜잭션이므로 요청의 post-state가 전체 commit의 증거다.
 func (s *TransitionStore) settleHandoffFailure(ctx context.Context, claim *HandoffClaim, failure handoffFailure, errorText string) (ApplyResult, error) {
 	if err := claim.validate(); err != nil {
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("%s: %w", failure.action, err)
@@ -153,9 +151,8 @@ func (s *TransitionStore) settleHandoffFailureTx(
 	return handoffSettlement{touched: touched}, nil
 }
 
-// applyHandoffFailure는 fence가 맞은 논리 단위에 failure를 적용하고 집계를 다시 계산한 부모 outbox를 돌려준다. 순서는
-// delivery 전이 → owner를 출처로 한 SENT 원장 삭제 → (격리면) QUARANTINED 원장 기록 → 요청 재발급 또는 확인 종료 →
-// 바뀐 delivery의 부모 집계이며 모두 호출자의 트랜잭션 하나다.
+// 순서는 delivery 전이 → owner를 출처로 한 SENT 원장 삭제 → (격리면) QUARANTINED 원장 기록 → 요청 재발급 또는 확인 종료 → 바뀐 delivery의 부모 집계이며 모두 호출자의
+// 트랜잭션 하나다.
 func applyHandoffFailure(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -196,10 +193,8 @@ func applyHandoffFailure(
 	return touched, nil
 }
 
-// handoffFailureTransitions는 각 논리 단위의 SENT delivery 전원(owner와 고정 멤버 밖 follower)을 failure.status로
-// 옮긴다. 시도는 owner만 하나 쓰고 follower는 시도 수를 유지하며, 모두 같은 due를 쓴다(lifecycle.EvaluateFailure와 같은
-// 규칙). PENDING·FAILED 등 SENT가 아닌 행은 이 발송의 결과가 아니므로 두고, post 단위 tracking·알람 발송 표시는 다른
-// 방 발송의 결과일 수 있으므로 되돌리지 않는다.
+// 시도는 owner만 하나 쓰고 follower는 시도 수를 유지하며, 모두 같은 due를 쓴다(lifecycle.EvaluateFailure와 같은 규칙). PENDING·FAILED 등 SENT가 아닌 행은
+// 이 발송의 결과가 아니므로 두고, post 단위 tracking·알람 발송 표시는 다른 방 발송의 결과일 수 있으므로 되돌리지 않는다.
 func handoffFailureTransitions(units []handoffUnit, failure handoffFailure, errorText string) []rowTransition {
 	var transitions []rowTransition
 
@@ -259,8 +254,6 @@ func deleteHandoffSentLedger(ctx context.Context, tx dbx.Querier, units []handof
 	return nil
 }
 
-// recordHandoffQuarantinedLedger는 지운 SENT 원장 자리에 같은 owner를 출처로 한 QUARANTINED 원장을 전이 시각(DB 시계)으로
-// 기록한다.
 func recordHandoffQuarantinedLedger(ctx context.Context, tx dbx.Querier, units []handoffUnit, transitionedAt time.Time) error {
 	writes := make([]LedgerWrite, 0, len(units))
 	for i := range units {

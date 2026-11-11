@@ -36,7 +36,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// outboxCleanupLoopInterval은 운영 dispatcher의 완료 알림 정리 주기다.
 const outboxCleanupLoopInterval = 1 * time.Hour
 
 type Dispatcher struct {
@@ -59,7 +58,7 @@ type Dispatcher struct {
 	testHooks dispatcherTestHooks
 }
 
-// idleWaiter는 빈 조회 뒤 다음 조회까지 기다린다. Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
+// Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
 type idleWaiter interface {
 	Wait(ctx context.Context) bool
 	Reset()
@@ -177,7 +176,6 @@ func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
 	d.testHooks.fireAggregateSync()
 }
 
-// run: 메인 폴링 루프
 func (d *Dispatcher) run(ctx context.Context) {
 	d.logger.Info("Outbox dispatcher started",
 		slog.Duration("poll_interval", d.config.PollInterval),
@@ -200,7 +198,6 @@ func (d *Dispatcher) run(ctx context.Context) {
 	d.logger.Info("Outbox dispatcher stopped")
 }
 
-// processOnce: 한 번의 폴링 사이클. 처리한 항목이 있었는지 반환한다.
 func (d *Dispatcher) processOnce(ctx context.Context) bool {
 	processed := d.processAvailable(ctx, 4)
 	d.testHooks.fireProcessOnce()
@@ -257,7 +254,6 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 	return processed
 }
 
-// reviveLoop: 전송 실패로 영구 FAILED된 미발송 알람을 주기적으로 PENDING으로 되살리는 루프.
 func (d *Dispatcher) reviveLoop(ctx context.Context) {
 	if err := lifecycle.RunTickerLoop(ctx, d.config.ReviveInterval, func(context.Context) error {
 		d.reviveOnce(ctx)
@@ -284,7 +280,6 @@ func (d *Dispatcher) reviveOnce(ctx context.Context) {
 	}
 }
 
-// cleanupLoop: 오래된 완료 알림 정리 루프.
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 	if err := lifecycle.RunTickerLoop(ctx, d.cleanupInterval, func(context.Context) error {
 		d.cleanup(ctx)
@@ -296,7 +291,6 @@ func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 	}
 }
 
-// cleanup: 오래된 완료 알림 삭제
 func (d *Dispatcher) cleanup(ctx context.Context) {
 	if d == nil {
 		return

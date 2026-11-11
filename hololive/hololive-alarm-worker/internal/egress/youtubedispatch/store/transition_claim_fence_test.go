@@ -115,7 +115,6 @@ func TestBeginSendingRejectsExpiredClaimLease(t *testing.T) {
 	assertTransitionClaimRow(t, pool, deliveryID, domain.OutboxStatusPending, claim.rows[0].RowVersion)
 }
 
-// 발송 뒤 정산은 외부 결과를 lease 만료로 되돌리지 않으므로 Send fence만 보고 lease를 보지 않는다.
 func TestSettlementAfterSendingIgnoresExpiredLease(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -197,7 +196,6 @@ func claimAndPrepare(t *testing.T, pool *pgxpool.Pool, transition *TransitionSto
 	return transitionTestClaim{rows: prepared.ActiveRows, outboxes: outboxes}
 }
 
-// expireTransitionClaimLease는 버전을 바꾸지 않고 claim 시각만 lease 밖으로 옮겨 정지했던 소유자를 재현한다.
 func expireTransitionClaimLease(t *testing.T, pool *pgxpool.Pool, ids ...int64) {
 	t.Helper()
 

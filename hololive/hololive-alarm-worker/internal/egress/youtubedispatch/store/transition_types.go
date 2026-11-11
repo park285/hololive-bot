@@ -224,8 +224,7 @@ type checkedTransitionRow struct {
 	CheckedAt time.Time
 }
 
-// splitCheckedTransitionRows는 후보 행과 판정 시계를 나눈다. 한 문장의 clock은 한 번만 채취하므로 모든 행의
-// checked_at이 같고, 행이 없으면 0 값 시계를 돌려준다.
+// 한 문장의 clock은 한 번만 채취하므로 모든 행의 checked_at이 같고, 행이 없으면 0 값 시계를 돌려준다.
 func splitCheckedTransitionRows(checked []checkedTransitionRow) ([]transitionRow, time.Time) {
 	if len(checked) == 0 {
 		return nil, time.Time{}
@@ -317,7 +316,6 @@ func uniqueSortedInt64s(values []int64) []int64 {
 	return result
 }
 
-// AttemptCount는 묶음 owner 중 가장 많이 소비한 재시도 횟수다.
 func (o StartedOperation) AttemptCount() int {
 	count := 0
 

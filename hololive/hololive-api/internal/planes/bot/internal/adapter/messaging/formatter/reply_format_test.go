@@ -13,7 +13,6 @@ import (
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 요청에 고정한 판정으로 템플릿 변형을 고른다. 판정을 고정하지 않은 경로는 어느 방에서도 읽히는 일반 텍스트를 쓴다.
 func TestRenderSelectsTemplateVariantFromReplyFormat(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
@@ -28,7 +27,6 @@ WHERE template_key = $1 AND channel_id IS NULL`, domain.TemplateKeyCmdMemberNotF
 	require.Equal(t, "richtext 미코", f.MemberNotFound(WithReplyFormat(t.Context(), domain.TemplateFormatRichText), "미코"))
 }
 
-// 방송 이력은 일반 텍스트에서 항목 번호로, RichText에서 굵은 이름으로 항목 머리를 구분하고 두 변형 모두 구분선을 둔다.
 func TestBroadcastHistoryEntryHeadFollowsReplyFormat(t *testing.T) {
 	t.Parallel()
 

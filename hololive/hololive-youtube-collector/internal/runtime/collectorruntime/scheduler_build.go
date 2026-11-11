@@ -36,7 +36,6 @@ func leaseConfigFrom(cfg *collectorconfig.Config) (joblease.Config, error) {
 	return lease, nil
 }
 
-// retryBoundsFrom은 직접 defer와 partial publish가 함께 쓰는 재시도 범위를 구성 시 한 번 검증합니다.
 func retryBoundsFrom(cfg *collectorconfig.Config) (collection.RetryBounds, error) {
 	bounds := collection.RetryBounds{Minimum: cfg.RetryMin, Maximum: cfg.RetryMax}
 	if err := bounds.Validate(); err != nil {
@@ -133,7 +132,6 @@ func newLeaseScheduler(
 	return newScheduler(executor, repository, collector), nil
 }
 
-// newScheduler는 worker·queue·discovery 정책을 구성에서 한 번 복사하고, executor와 같은 관측 인스턴스를 공유합니다.
 func newScheduler(executor *collectionExecutor, candidates projectionCandidateSource, cfg *collectorconfig.Config) *leaseScheduler {
 	scheduler := &leaseScheduler{
 		executor:         executor,
@@ -160,10 +158,9 @@ func newScheduler(executor *collectionExecutor, candidates projectionCandidateSo
 	return scheduler
 }
 
-// jobMaxUpstreamCalls는 job 실행 한 번이 보내는 upstream 호출 수의 상한입니다.
-// Content는 목록 두 종류 RPC에 더해 신규 영상의 공개 시각 근거 확인 RPC(youtubejscollector.ContentPublicationMaxCalls)를
-// 같은 예산 안에서 보냅니다. 방송 탭 snapshot은 RPC 1회 안에서 시각 없는 예정 영상마다 player를 조회하고
-// 그 수만큼 limiter를 지불하므로 youtubejs.ChannelLiveMaxScheduleLookups를 더합니다. 채널 확인·영상 확인은 각자 RPC 1회입니다.
+// Content는 목록 두 종류 RPC에 더해 신규 영상의 공개 시각 근거 확인 RPC(youtubejscollector.ContentPublicationMaxCalls)를 같은 예산 안에서 보냅니다. 방송 탭
+// snapshot은 RPC 1회 안에서 시각 없는 예정 영상마다 player를 조회하고 그 수만큼 limiter를 지불하므로 youtubejs.ChannelLiveMaxScheduleLookups를 더합니다.
+// 채널 확인·영상 확인은 각자 RPC 1회입니다.
 func jobMaxUpstreamCalls(id collection.JobID) int {
 	switch string(id.Kind) {
 	case "youtubejs_content":
@@ -196,9 +193,8 @@ func newCollectorRegistry(
 	return registry, nil
 }
 
-// collectorRunners는 provider runner를 만든다. Content runner의 신규성 판정은 마지막 durable checkpoint cursor를
-// 읽어야 하므로 발행과 같은 source observation 저장소를 cursor 조회자로 받는다. 공개 근거 조회는 수집 deadline에서
-// 기존 비-RPC 여유(collectionOverhead)를 남기고 끝나야 목록 관측과 cursor가 같은 수집에서 발행된다.
+// Content runner의 신규성 판정은 마지막 durable checkpoint cursor를 읽어야 하므로 발행과 같은 source observation 저장소를 cursor 조회자로 받는다. 공개 근거
+// 조회는 수집 deadline에서 기존 비-RPC 여유(collectionOverhead)를 남기고 끝나야 목록 관측과 cursor가 같은 수집에서 발행된다.
 func collectorRunners(infra *collectorInfrastructure, collectionOverhead time.Duration) []collection.JobRunner {
 	cursors := sourceobservation.NewRepository(infra.postgres.GetPool())
 

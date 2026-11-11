@@ -61,8 +61,6 @@ func TestCacheInvalidateAll_WithoutValkeyStillClearsMemory(t *testing.T) {
 	}
 }
 
-// snapshot 다건 조회, point overlay 기록, 무효화가 겹쳐도 데이터 경쟁 없이 각 generation 경계를 지킨다. 무효화 뒤에
-// 이전 generation으로 기록한 point 결과는 응답하지 않는다.
 func TestCacheSearchOverlayAndInvalidationRace(t *testing.T) {
 	members := []*domain.Member{
 		{ID: 1, Name: testMemberMiko, ChannelID: "UC_miko", Aliases: &domain.Aliases{Ko: []string{"엘리트"}}},

@@ -2,8 +2,6 @@ package observation
 
 import "fmt"
 
-// normalizeBatchRecords는 batch upsert 입력을 정규화하고 같은 identity key의 레코드를 첫 등장 순서대로 하나로 합친다.
-// 한 레코드라도 정규화에 실패하면 op와 위치를 담은 오류를 돌려준다.
 func normalizeBatchRecords[T any](
 	records []T,
 	op string,

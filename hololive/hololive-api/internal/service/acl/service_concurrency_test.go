@@ -13,7 +13,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// PG 대기 중에도 접근 판정은 확정된 상태를 유지하고 반대 mutation은 같은 순서로 커밋한다.
 func TestConcurrentRoomMutationsPreserveCommittedACL(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeACLStore()
@@ -103,7 +102,6 @@ func TestFailedRoomDeletionKeepsCommittedACLVisible(t *testing.T) {
 	})
 }
 
-// 기존 경합이 남긴 메모리/PG 불일치에서도 명시적인 철회는 실제 저장된 권한을 제거한다.
 func TestRemoveRoomRevokesPersistedRoomMissingFromMemory(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	store := newPgxACLStore(pool)
@@ -128,7 +126,6 @@ func TestRemoveRoomRevokesPersistedRoomMissingFromMemory(t *testing.T) {
 	require.False(t, admin.IsRoomAllowed("3001"))
 }
 
-// newLoadedTestService는 production 기동(NewACLService)과 같은 loadFromDatabase로 저장 상태를 snapshot에 적재한다.
 func newLoadedTestService(t *testing.T, store aclStore) *Service {
 	t.Helper()
 

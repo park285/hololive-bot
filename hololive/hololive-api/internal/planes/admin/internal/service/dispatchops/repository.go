@@ -60,7 +60,6 @@ func (r *Repository) Summary(ctx context.Context) (Summary, error) {
 	return result, nil
 }
 
-// Failures는 실패 보관·격리 항목의 전체 건수와 상위 분포를 한 SQL로 조회합니다.
 func (r *Repository) Failures(ctx context.Context) (FailureBreakdown, error) {
 	result := FailureBreakdown{
 		Total: "0", ErrorCodes: []FailureCount{}, AlarmTypes: []FailureCount{},

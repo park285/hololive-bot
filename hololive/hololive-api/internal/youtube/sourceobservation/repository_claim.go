@@ -75,8 +75,7 @@ func (r *Repository) ProbeClaim(ctx context.Context, options ClaimOptions) error
 	return nil
 }
 
-// claimObservations는 due 행을 선점하고, 같은 문장이 잠근 종료 후보를 재시도 정책에 따라 같은 트랜잭션에서
-// DEAD_LETTER로 끝낸다. 종료 후보가 없으면 문장 하나, 있으면 집합 갱신 하나가 더해진다.
+// 종료 후보가 없으면 문장 하나, 있으면 집합 갱신 하나가 더해진다.
 func claimObservations(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -173,7 +172,6 @@ func scanClaimRow(row pgx.Row) (claimRow, error) {
 	return out, nil
 }
 
-// claimTerminalSet은 claim이 잠갔지만 선점하지 않은 행과 재시도 정책이 정한 종료 사유를 모은다.
 type claimTerminalSet struct {
 	ids   []int64
 	codes []string
@@ -209,7 +207,6 @@ func (s *claimTerminalSet) deadLetter(ctx context.Context, tx dbx.Tx) error {
 	return nil
 }
 
-// ReadySnapshot은 replay epoch와 목록 선두를 포함한 durable claim 후보를 관찰한다.
 // 다른 트랜잭션의 순간적인 행 잠금은 읽기 전용 snapshot에서 관찰하지 않는다.
 func (r *Repository) ReadySnapshot(ctx context.Context, kinds []contract.ObservationKind, maxAttempts int) (workercontract.QueueValues, error) {
 	if err := r.validate(); err != nil {

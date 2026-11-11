@@ -93,7 +93,6 @@ func dispatchError(c *gin.Context, err error) {
 	sharedserver.RespondError(c, status, message, nil)
 }
 
-// GetDispatchSummary는 보존 중인 전체 원장의 상태별 건수와 가장 오래된 생성 시각을 조회합니다.
 func (h *AlarmHandler) GetDispatchSummary(c *gin.Context) {
 	if !h.dispatchReady(c) {
 		return
@@ -117,7 +116,6 @@ func (h *AlarmHandler) GetDispatchSummary(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, result)
 }
 
-// GetDispatchFailures는 실패 보관·격리 원장의 상위 원인 분포를 조회합니다.
 func (h *AlarmHandler) GetDispatchFailures(c *gin.Context) {
 	if !h.dispatchReady(c) {
 		return
@@ -141,7 +139,6 @@ func (h *AlarmHandler) GetDispatchFailures(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, result)
 }
 
-// GetDispatchDeliveries는 상태·채팅방·채널·알림 유형·오류 코드와 ID 커서로 최대 50건을 조회합니다.
 func (h *AlarmHandler) GetDispatchDeliveries(c *gin.Context) {
 	if !h.dispatchReady(c) {
 		return
@@ -176,7 +173,6 @@ func (h *AlarmHandler) GetDispatchDeliveries(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, result)
 }
 
-// GetDispatchDelivery는 본문 없이 상태와 재처리 묶음 전체의 리비전을 반환합니다.
 func (h *AlarmHandler) GetDispatchDelivery(c *gin.Context) {
 	if !h.dispatchReady(c) {
 		return
@@ -207,7 +203,6 @@ func (h *AlarmHandler) GetDispatchDelivery(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, result)
 }
 
-// GetDispatchActions는 해당 발송 항목의 감사 이력을 최대 50건 반환합니다.
 func (h *AlarmHandler) GetDispatchActions(c *gin.Context) {
 	if !h.dispatchReady(c) {
 		return
@@ -248,7 +243,6 @@ func (h *AlarmHandler) GetDispatchActions(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, result)
 }
 
-// decodeDispatchMutation은 변경 입력의 크기·필드·감사 정보·리비전을 실행 전에 검증합니다.
 func (h *AlarmHandler) decodeDispatchMutation(c *gin.Context, request interface{ Validate(string) error }) bool {
 	if !h.dispatchReady(c) {
 		return false
@@ -293,7 +287,6 @@ func (h *AlarmHandler) decodeDispatchMutation(c *gin.Context, request interface{
 	return true
 }
 
-// RequeueDispatchDelivery는 명시적인 중복 위험 확인과 운영 사유를 받아 묶음 전체를 재처리합니다.
 func (h *AlarmHandler) RequeueDispatchDelivery(c *gin.Context) {
 	var request dispatchops.RequeueRequest
 
@@ -315,7 +308,6 @@ func (h *AlarmHandler) RequeueDispatchDelivery(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, result)
 }
 
-// SettleDispatchDelivery는 사유와 리비전을 검증한 뒤 외부 발송 없이 실패 묶음을 처리합니다.
 func (h *AlarmHandler) SettleDispatchDelivery(c *gin.Context) {
 	var request dispatchops.SettleRequest
 

@@ -168,7 +168,6 @@ func extendUnchangedGeneration(
 	return Result{Generation: current.generation, RowCount: len(targets), SHA256: hash}, nil
 }
 
-// extendTargets는 실제 not_before가 바뀐 row만 갱신하고 변경 여부를 돌려줍니다.
 // NULL membership은 heartbeat로 복구하지 않으며, migration 또는 새 generation에서만 부여합니다.
 func extendTargets(ctx context.Context, tx dbx.Tx, generation int64, targets []TargetSpec) (bool, error) {
 	if len(targets) == 0 {

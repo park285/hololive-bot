@@ -43,7 +43,6 @@ func seedLiveCheckProjectionMembers(t *testing.T, pool *pgxpool.Pool) {
 	}
 }
 
-// seedLiveCheckVideoFixtures는 운영·졸업·roster 밖 채널의 LIVE/UPCOMING/ENDED 영상과 DB 시각 기준 positive·UNKNOWN 근거를 둔다.
 func seedLiveCheckVideoFixtures(t *testing.T, pool *pgxpool.Pool, budget time.Duration) {
 	t.Helper()
 
@@ -108,7 +107,6 @@ func seedLiveCheckVideoFixtures(t *testing.T, pool *pgxpool.Pool, budget time.Du
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
-// classifyLiveCheckVideos는 운영 roster 채널만 담겼는지 확인하고 영상별 not_before를 queried 기준으로 분류한다.
 func classifyLiveCheckVideos(t *testing.T, videos []targetprojection.LiveCheckVideo, queried time.Time) map[string]string {
 	t.Helper()
 
@@ -132,9 +130,6 @@ func classifyLiveCheckVideos(t *testing.T, videos []targetprojection.LiveCheckVi
 	return got
 }
 
-// TestLiveCheckVideoInputKeepsStructuralMembershipWithNotBefore는 신선도가 membership을 바꾸지 않고
-// not_before로만 표현되는지 확인한다. 미래·NULL 근거 시각은 받아들이지 않고, UNKNOWN 확인도
-// UPCOMING의 다음 확인만 미룰 뿐 대상에서 빼지 않는다.
 func TestLiveCheckVideoInputKeepsStructuralMembershipWithNotBefore(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -196,8 +191,6 @@ func TestLiveCheckVideoInputKeepsStructuralMembershipWithNotBefore(t *testing.T)
 
 type projectionRefresh func(at time.Time, label string) targetprojection.Result
 
-// newLatencyProjection은 운영 roster 채널의 LIVE 영상 tp-latency와 방금 기록된 positive를 두고,
-// 실제 Refresher·PolicyBuilder·rosterReader 경로로 projection을 갱신하는 함수를 돌려준다.
 func newLatencyProjection(t *testing.T) (*pgxpool.Pool, projectionRefresh) {
 	t.Helper()
 
@@ -237,7 +230,6 @@ func newLatencyProjection(t *testing.T) (*pgxpool.Pool, projectionRefresh) {
 	return pool, refresh
 }
 
-// setLatencyPositiveAge는 tp-latency의 두 positive 시각을 기록 statement의 DB 시각보다 age만큼 과거로 둔다.
 func setLatencyPositiveAge(t *testing.T, pool *pgxpool.Pool, age time.Duration) {
 	t.Helper()
 
@@ -253,8 +245,6 @@ func setLatencyPositiveAge(t *testing.T, pool *pgxpool.Pool, age time.Duration) 
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
-// TestProjectionRefreshKeepsLiveVideoMembershipAcrossFreshness는 positive 신선도의 출입이
-// generation·membership을 바꾸지 않고 not_before만 갱신하며, 실제 종료만 대상을 빼는지 확인한다.
 func TestProjectionRefreshKeepsLiveVideoMembershipAcrossFreshness(t *testing.T) {
 	pool, refresh := newLatencyProjection(t)
 	budget := defaultLiveFreshnessBudget()
@@ -298,7 +288,6 @@ func TestProjectionRefreshKeepsLiveVideoMembershipAcrossFreshness(t *testing.T) 
 	}
 }
 
-// endLatencySession은 tp-latency 방송을 DB 시각으로 종료한다.
 func endLatencySession(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -311,7 +300,6 @@ func endLatencySession(t *testing.T, pool *pgxpool.Pool) {
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 }
 
-// liveSnapshotMemberSince는 generation의 운영 채널 live_snapshot target membership 시작 generation을 돌려준다.
 func liveSnapshotMemberSince(t *testing.T, pool *pgxpool.Pool, generation int64) int64 {
 	t.Helper()
 
@@ -327,8 +315,6 @@ func liveSnapshotMemberSince(t *testing.T, pool *pgxpool.Pool, generation int64)
 	return memberSince
 }
 
-// TestProjectionRefreshJudgesPositiveCommittedAfterRefreshClock는 refresh 시각을 잡은 뒤 DB에 커밋된
-// 신선한 positive가 조회 statement 시각 기준으로 받아들여져 다음 확인을 미루는지 실제 Refresh 경로로 확인한다.
 // 캡처한 refresh 시각으로 판정하면 새 positive는 미래로 보여 근거에서 빠진다.
 func TestProjectionRefreshJudgesPositiveCommittedAfterRefreshClock(t *testing.T) {
 	pool, refresh := newLatencyProjection(t)
@@ -374,12 +360,10 @@ type liveCheckTargetState struct {
 	sleeping    bool
 }
 
-// heldSince는 target이 존재하고 generation에서 membership을 시작했는지 확인한다.
 func (s liveCheckTargetState) heldSince(generation int64) bool {
 	return s.found && s.memberSince == generation
 }
 
-// currentVideoTarget은 현재 generation의 tp-latency 영상 확인 target 상태를 DB 시각 기준으로 돌려준다.
 func currentVideoTarget(t *testing.T, pool *pgxpool.Pool) liveCheckTargetState {
 	t.Helper()
 

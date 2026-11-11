@@ -283,7 +283,6 @@ func writeDissolvedBranches(sb *strings.Builder) {
 	}
 }
 
-// getInvariantPrompt는 요약 생성 요청의 invariant 계층(신뢰 경계)을 돌려준다.
 func getInvariantPrompt() (string, error) {
 	r := initPrompts()
 	if r.err != nil {

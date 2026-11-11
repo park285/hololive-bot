@@ -123,7 +123,7 @@ func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 	require.Empty(t, message)
 }
 
-// xSpaceTestMembers는 채널 ID별 짧은 한국어 표시명을 돌려준다. X 스페이스 알림 이름은 payload가 아니라 members에서 온다.
+// X 스페이스 알림 이름은 payload가 아니라 members에서 온다.
 type xSpaceTestMembers map[string]string
 
 func (m xSpaceTestMembers) FindMemberByChannelID(_ context.Context, channelID string) (*domain.Member, error) {

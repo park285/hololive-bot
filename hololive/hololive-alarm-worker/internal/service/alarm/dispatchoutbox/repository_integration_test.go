@@ -18,7 +18,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// setupDispatchOutboxIntegration은 production과 같은 전체 migration 사슬을 적용한 격리 DB를 쓴다.
 func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool) {
 	t.Helper()
 
@@ -829,8 +828,6 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 	require.Equal(t, string(StatusQuarantined), quarantinedStatus, "quarantined row must remain quarantined")
 }
 
-// lock_expires_at이 과거인 'sending' row에 대해서도 소유 worker의 RouteSendingFailures가
-// retry로 전환해야 한다. 만료돼도 locked_by=$workerID이 소유권을 보장하므로 double-send 위험이 없다.
 func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseStillTransitions(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()

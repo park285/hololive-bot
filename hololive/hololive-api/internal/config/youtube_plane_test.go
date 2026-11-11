@@ -599,7 +599,6 @@ func TestLoadYouTubePlaneConfigPreservesExplicitInvalidBounds(t *testing.T) {
 	}
 }
 
-// 잘못된 env 값은 기동 오류에 설정 단계·설정값·env 키를 한 번씩만 남긴다.
 func TestLoadYouTubePlaneConfigNamesInvalidEnvSetting(t *testing.T) {
 	tests := []struct {
 		key     string

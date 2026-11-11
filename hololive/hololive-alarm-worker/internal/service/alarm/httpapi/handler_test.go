@@ -40,7 +40,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 실제 HTTP route의 알림 포트 mock.
 type mockAlarmCRUD struct {
 	countAlarmEntriesFn         func(context.Context) (int, error)
 	addAlarmFn                  func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
@@ -137,7 +136,6 @@ func (m *mockAlarmCRUD) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	return out, nil
 }
 
-// newTestHandler: 테스트용 핸들러와 gin.Engine을 생성합니다.
 func newTestHandler(t *testing.T, mock *mockAlarmCRUD) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -151,7 +149,6 @@ func newTestHandler(t *testing.T, mock *mockAlarmCRUD) *gin.Engine {
 	return r
 }
 
-// jsonBody: 구조체를 JSON 바이트 버퍼로 변환합니다.
 func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	t.Helper()
 
@@ -161,7 +158,6 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	return bytes.NewBuffer(b)
 }
 
-// decodeResponse: 응답 바디를 contractsalarm.Envelope로 디코딩합니다.
 func decodeResponse(t *testing.T, body *bytes.Buffer) contractsalarm.Envelope[any] {
 	t.Helper()
 
@@ -499,8 +495,6 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	}
 }
 
-// room_name 필드는 필수지만 빈 값은 관리자 지정 이름 해제 요청이라 서비스까지 그대로 전달해야 한다.
-// 앞뒤 공백은 제거해 넘기고, PG 저장 폭(room_id 100자, 이름 255자)을 넘는 요청은 서비스 호출 없이 400으로 거절한다.
 func TestSetRoomNameNormalizesBoundsAndForwardsBlankNameAsClear(t *testing.T) {
 	maxRoomID := strings.Repeat("r", contractsalarm.MaxRoomIDLength)
 	maxRoomName := strings.Repeat("가", contractsalarm.MaxRoomNameLength)

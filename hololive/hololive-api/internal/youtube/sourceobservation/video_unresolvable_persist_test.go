@@ -30,7 +30,6 @@ func loadUnresolvableSince(t *testing.T, pool *pgxpool.Pool) *time.Time {
 	return since
 }
 
-// unresolvableFixture는 시작을 관측한 LIVE 세션과 영상 확인 lease, 해소 불가 grace 10분의 consumer다.
 type unresolvableFixture struct {
 	pool       *pgxpool.Pool
 	publisher  *publishkit.Publisher
@@ -58,7 +57,6 @@ func startUnresolvable(t *testing.T) *unresolvableFixture {
 	}
 }
 
-// checkVideo는 영상 확인 lease를 delta만큼 진행한 뒤 주어진 사유의 확인을 게시·소비하고 결정을 단언한다.
 func (f *unresolvableFixture) checkVideo(t *testing.T, delta time.Duration, reason contract.LiveCheckUnknownReason, decision string) {
 	t.Helper()
 
@@ -71,14 +69,12 @@ func (f *unresolvableFixture) checkVideo(t *testing.T, delta time.Duration, reas
 	assertApplicationDecision(t, f.pool, id, liveSessionEntityKind, decision)
 }
 
-// channelNegative는 현재 영상 확인 예정 시각 기준의 identity 확인 채널 페이지 음성을 저장한다.
 func (f *unresolvableFixture) channelNegative(t *testing.T) {
 	t.Helper()
 
 	f.channelCheck(t, contract.ChannelLiveCheckV1{Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true})
 }
 
-// channelCheck는 현재 영상 확인 예정 시각 기준의 채널 /live 확인 최신값을 저장한다.
 func (f *unresolvableFixture) channelCheck(t *testing.T, payload contract.ChannelLiveCheckV1) {
 	t.Helper()
 
@@ -87,8 +83,6 @@ func (f *unresolvableFixture) channelCheck(t *testing.T, payload contract.Channe
 	consumeLiveChecks(t.Context(), t, f.consumer)
 }
 
-// 시작을 관측한 LIVE가 비공개·삭제로 바뀌어 identity_missing만 이어지면 첫 관측 시각을 head에 두고, 지속 시간 안이거나
-// 채널 음성이 영상 확인 시각 기준 5분 밖이면 LIVE로 남긴다.
 func TestVideoLifecycleUnresolvableVideoRetainsInsideGraceOrWithoutFreshChannelNegative(t *testing.T) {
 	t.Parallel()
 
@@ -110,8 +104,6 @@ func TestVideoLifecycleUnresolvableVideoRetainsInsideGraceOrWithoutFreshChannelN
 	}
 }
 
-// 지속 시간이 지나고 같은 채널의 신선한 /live 음성이 있으면 UNRESOLVABLE_VIDEO로 끝낸다. 종료 시각은 첫 identity_missing
-// 시각이며 시작·positive clock·알림은 그대로다.
 func TestVideoLifecycleUnresolvableVideoEndsAfterSustainedIdentityMissingAndChannelNegative(t *testing.T) {
 	t.Parallel()
 
@@ -143,7 +135,6 @@ func TestVideoLifecycleUnresolvableVideoEndsAfterSustainedIdentityMissingAndChan
 	assertTableCount(t, f.pool, "youtube_live_pending_ends", 0)
 }
 
-// 다른 UNKNOWN 사유는 기존처럼 수명을 바꾸지 않고, 추적 중 positive가 오면 추적을 지운다.
 func TestVideoLifecycleUnresolvableVideoRequiresIdentityMissingAndClearsOnPositive(t *testing.T) {
 	t.Parallel()
 
@@ -169,7 +160,6 @@ func TestVideoLifecycleUnresolvableVideoRequiresIdentityMissingAndClearsOnPositi
 	}
 }
 
-// startUnresolvableUpcoming은 지난 일정의 UPCOMING 세션과 영상 확인 lease, 해소 불가 grace 0의 consumer다.
 func startUnresolvableUpcoming(t *testing.T) *unresolvableFixture {
 	t.Helper()
 
@@ -184,7 +174,6 @@ func startUnresolvableUpcoming(t *testing.T) *unresolvableFixture {
 	}
 }
 
-// UPCOMING의 identity_missing은 추적만 하고, grace가 지나고 채널 음성이 있어도 끝내지 않는다. 이후 positive는 추적을 지운다.
 func TestVideoLifecycleUnresolvableUpcomingTracksWithoutEnding(t *testing.T) {
 	t.Parallel()
 
@@ -215,7 +204,6 @@ func TestVideoLifecycleUnresolvableUpcomingTracksWithoutEnding(t *testing.T) {
 	}
 }
 
-// UPCOMING의 채널 불일치 확인도 추적하며, 다른 UNKNOWN 사유는 추적하지 않는다.
 func TestVideoLifecycleUnresolvableUpcomingTracksIdentityMismatchOnly(t *testing.T) {
 	t.Parallel()
 
@@ -246,8 +234,6 @@ func TestVideoLifecycleUnresolvableUpcomingTracksIdentityMismatchOnly(t *testing
 	}
 }
 
-// 채널 /live 최신값이 신선해도 identity 미확인 UNKNOWN이나 다른 영상의 LIVE면 음성이 아니므로 끝내지 않는다.
-// 로봇 확인이 /live를 함께 막거나 채널이 다른 영상으로 방송 중인 경우다.
 func TestVideoLifecycleUnresolvableVideoRequiresConfirmedChannelNegative(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -276,7 +262,6 @@ func TestVideoLifecycleUnresolvableVideoRequiresConfirmedChannelNegative(t *test
 }
 
 // 7.2.7 롤백 창처럼 positive가 지우지 못한 잔여 추적값(마지막 positive보다 이른 값)은 지속 시간의 근거가 아니다.
-// 채널 음성과 grace가 갖춰져도 끝내지 않고 이번 관측부터 다시 추적한다.
 func TestVideoLifecycleUnresolvableVideoRestartsStaleTracking(t *testing.T) {
 	t.Parallel()
 
@@ -297,7 +282,6 @@ func TestVideoLifecycleUnresolvableVideoRestartsStaleTracking(t *testing.T) {
 	}
 }
 
-// head 없는 metadata_only UPCOMING은 미확정 메타데이터가 head의 근거가 아니므로 추적하지 않고 기존 결정을 남긴다.
 func TestVideoLifecycleHeadlessMetadataUpcomingKeepsIdentityDecision(t *testing.T) {
 	t.Parallel()
 

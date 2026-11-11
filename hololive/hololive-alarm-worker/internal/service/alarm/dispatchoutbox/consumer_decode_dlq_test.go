@@ -10,8 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 재시도 중(attempt > 0)인 행의 payload를 해석하지 못하면 claim attempt 그대로 DLQ로 끝나야 한다. 이 attempt가 어긋나면
-// DLQ 전이가 fence에 막혀 배치 반환과 재claim이 반복된다.
+// 이 attempt가 어긋나면 DLQ 전이가 fence에 막혀 배치 반환과 재claim이 반복된다.
 func TestConsumerDrainMovesUndecodableRetriedRowToDLQ(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)

@@ -122,8 +122,7 @@ func loadContentVideos(ctx context.Context, tx dbx.Tx, state *content.State, evi
 	return nil
 }
 
-// loadKnownElsewhere는 이번 video_list 영상 중 다른 채널이나 Shorts로 이미 저장된 ID를 읽습니다. 이런 영상은 이 채널 목록에서
-// 처음 보여도 새 업로드 근거가 아니므로 NEW_VIDEO 후보에서 뺍니다. 행을 잠그지 않으며 결과는 이번 관측 영상 수로 제한됩니다.
+// 이런 영상은 이 채널 목록에서 처음 보여도 새 업로드 근거가 아니므로 NEW_VIDEO 후보에서 뺍니다. 행을 잠그지 않으며 결과는 이번 관측 영상 수로 제한됩니다.
 func loadKnownElsewhere(ctx context.Context, tx dbx.Tx, state *content.State, evidenceIDs []string) error {
 	if len(evidenceIDs) == 0 {
 		return nil

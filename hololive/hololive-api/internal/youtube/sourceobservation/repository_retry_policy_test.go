@@ -77,8 +77,6 @@ func TestRetryRejectsMismatchedAttemptWithoutChangingClaim(t *testing.T) {
 	require.ErrorIs(t, err, ErrClaimLost)
 }
 
-// claim은 시도를 소진한 due 행을 queue 순서대로 LIMIT만큼 DEAD_LETTER로 분류하고, 다른 실행이 잠근 행과
-// 아직 due가 아닌 행은 남긴다. 분류는 같은 claim의 정상 후보 선점과 독립이다.
 func TestClaimDeadLettersDueExhaustedRowsInQueueOrderSkippingLocked(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -134,7 +132,6 @@ func TestClaimDeadLettersDueExhaustedRowsInQueueOrderSkippingLocked(t *testing.T
 		"exhausted rows that are not due or still leased must stay active")
 }
 
-// exhaustQueueRow는 queue 행을 시도 소진 상태로 만든다. PROCESSING이면 다른 API의 lease를 붙인다.
 func exhaustQueueRow(t *testing.T, pool *pgxpool.Pool, id int64, status, availableAt, leaseExpiresAt string) {
 	t.Helper()
 
@@ -149,7 +146,6 @@ func exhaustQueueRow(t *testing.T, pool *pgxpool.Pool, id int64, status, availab
 	require.NoError(t, err)
 }
 
-// attemptsExhaustedRows는 claim이 시도 소진으로 DEAD_LETTER 처리하고 lease를 비운 행을 돌려준다.
 func attemptsExhaustedRows(t *testing.T, pool *pgxpool.Pool) []int64 {
 	t.Helper()
 

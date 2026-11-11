@@ -35,7 +35,6 @@ func newBroadcastTimeTestDeps(repo *stubBroadcastHistoryRepository, sent *[]stri
 	}
 }
 
-// 기간을 주지 않으면 최근 7일, "N일"을 주면 그 기간의 방송을 합산 상한까지 조회한다.
 func TestBroadcastTimeCommandQueriesMemberPeriod(t *testing.T) {
 	t.Parallel()
 
@@ -68,7 +67,6 @@ func TestBroadcastTimeCommandQueriesMemberPeriod(t *testing.T) {
 	}
 }
 
-// 합산 상한만큼 모이면 기간 안에 더 있을 수 있으므로 일부만 합산했다고 밝힌다.
 func TestBroadcastTimeCommandMarksPartialAtCap(t *testing.T) {
 	t.Parallel()
 

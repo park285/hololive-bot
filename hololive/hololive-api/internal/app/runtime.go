@@ -135,8 +135,7 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	return planes, nil
 }
 
-// 두 plane은 process infra가 소유한 ACL·Holodex 인스턴스를 그대로 빌린다. Holodex를 plane마다 따로 만들면
-// Holodex 호출·공식 일정 캐시가 process 안에서 두 벌이 된다.
+// Holodex를 plane마다 따로 만들면 Holodex 호출·공식 일정 캐시가 process 안에서 두 벌이 된다.
 func botPlaneDependencies(infra *apiInfrastructure, llm *llmruntime.LLMSchedulerRuntime) botruntime2.Dependencies {
 	return botruntime2.Dependencies{
 		ACL:        infra.acl,
@@ -446,8 +445,6 @@ func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig
 	}, nil
 }
 
-// buildSharedPlaneServices는 bot·admin plane이 빌려 쓰는 process 하나의 ACL Service와 Holodex 서비스를 만든다.
-// 둘 다 bot pool·cache와 bot plane 설정(KAKAO_ROOMS·KAKAO_ACL_*, HOLODEX_*·공식 일정)을 쓴다.
 func buildSharedPlaneServices(
 	ctx context.Context,
 	botConfig *apiconfig.BotPlaneConfig,

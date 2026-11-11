@@ -265,7 +265,6 @@ func containsStructuredToken(title, token string, allowPossessiveSuffix bool, al
 	}
 }
 
-// hasLeftBoundary는 토큰 앞이 단어 경계인지 확인한다.
 // 허용 접두어는 접두어 앞이 경계일 때만 인정해 「カメラのミラの枠」 같은 단어 중간 일치를 계속 제외한다.
 func hasLeftBoundary(before string, allowedPrefixes []string) bool {
 	left, _ := utf8.DecodeLastRuneInString(before)

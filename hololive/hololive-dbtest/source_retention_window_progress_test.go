@@ -27,7 +27,6 @@ func deleteRetentionWindow(t *testing.T, pool *pgxpool.Pool, cutoff time.Time, l
 	return window
 }
 
-// 창 결과는 삭제 0건인 보호 창의 진척, 삭제 상한을 채운 창의 재개 위치, 순회 완료를 구분한다.
 func TestSourceRetentionWindowReportsProgressAndTraversal(t *testing.T) {
 	t.Parallel()
 
@@ -46,7 +45,6 @@ func TestSourceRetentionWindowReportsProgressAndTraversal(t *testing.T) {
 	requireRetentionCount(t, pool, 500)
 }
 
-// runtime만 새 창 함수를 실행할 수 있고(PUBLIC 회수는 scraper 거부로 확인), 재적용해도 이전 image가 쓰는 공개 함수의 권한이 그대로다.
 func TestSourceRetentionWindowMigrationGrantsRuntimeOnly(t *testing.T) {
 	t.Parallel()
 

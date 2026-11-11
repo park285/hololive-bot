@@ -45,7 +45,6 @@ func (unusedLowLevelCache) DoMulti(context.Context, ...valkey.Completed) []valke
 
 func (unusedLowLevelCache) B() valkey.Builder { return valkey.Builder{} }
 
-// rate limit이 켜져 있는데 cache가 없으면 통과시키는 대신 기동 오류다.
 func TestAPIRateLimitMiddlewareRejectsMissingCache(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

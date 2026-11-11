@@ -45,7 +45,6 @@ func TestDeliveryFailureUsesClaimedAttemptAndPreservesTerminalSchedule(t *testin
 	require.Equal(t, nextAttemptAt, scheduled)
 }
 
-// attempt_count가 bigint이므로 int4 상한에 도달한 claim도 거부하지 않고 종료 상태로 정산합니다.
 func TestDeliveryFailureSettlesAttemptCountBeyondInt4Range(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()

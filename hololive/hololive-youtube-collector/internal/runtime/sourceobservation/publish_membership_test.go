@@ -17,14 +17,11 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// projectionWriter는 pool과 트랜잭션 모두에서 projection 전환 fixture를 실행하기 위한 최소 능력이다.
 type projectionWriter interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// transitionPublishProjection은 API refresh처럼 기존 CURRENT를 RETIRED로 바꾸고(유효 시각은 남긴다) 새 CURRENT에
-// target을 옮긴다. 인자 readd가 참이면 같은 target을 새 generation부터 다시 추가된 것으로(ABA) 기록한다.
 func transitionPublishProjection(ctx context.Context, t *testing.T, q projectionWriter, previous int64, readd bool) int64 {
 	t.Helper()
 
@@ -63,7 +60,6 @@ func transitionPublishProjection(ctx context.Context, t *testing.T, q projection
 	return current
 }
 
-// 다른 subject만 바뀐 projection 전환은 이 job의 발행을 막지 않는다(handoff 불변식 1).
 func TestPublishAcceptsUnrelatedProjectionChange(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -100,7 +96,7 @@ func TestPublishRejectsReaddedOwnTarget(t *testing.T) {
 	assertPublishSideEffects(t, pool, 0, 0, 0)
 }
 
-// RETIRED generation의 남은 valid_until은 발행 근거가 아니다. 유효 CURRENT가 없으면 projection stale이다.
+// RETIRED generation의 남은 valid_until은 발행 근거가 아니다.
 func TestPublishRejectsRetiredGenerationWithoutCurrent(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -120,7 +116,6 @@ func TestPublishRejectsRetiredGenerationWithoutCurrent(t *testing.T) {
 	assertPublishSideEffects(t, pool, 0, 0, 0)
 }
 
-// API 전환이 guard를 잡은 동안 대기한 발행은 commit 뒤 새 CURRENT snapshot으로 판정되어, 이어받은 target이면 수락된다.
 func TestPublishWaitsForProjectionGuardAndSeesCarriedMembership(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -177,7 +172,6 @@ func TestPublishWaitsForProjectionGuardAndSeesCarriedMembership(t *testing.T) {
 	assertPublishSideEffects(t, pool, 1, 1, 1)
 }
 
-// guard를 기다리는 사이 header가 만료되면 새 snapshot으로 거절하고 발행·checkpoint·terminal을 모두 보존한다.
 func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -247,7 +241,6 @@ func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *te
 	require.Equal(t, beforeLease, readCollectionJobLeaseState(ctx, t, pool, proof.JobKey))
 }
 
-// 수락 간격은 checkpoint가 실제로 전진한 발행에서만 나온다. 첫 수락·같은 slot 재생·충돌은 간격이 없다.
 func TestPublishAcceptedIntervalOnlyForAdvancingCheckpoint(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -267,7 +260,6 @@ func TestPublishAcceptedIntervalOnlyForAdvancingCheckpoint(t *testing.T) {
 	assertAcceptedInterval(t, mustPublishOne(t, repo, communityEnvelope(t, &next, "post-2")), PublishCollision, false)
 }
 
-// 아직 수락이 없는 subject는 cursor가 없고, 수락 뒤에는 마지막 durable cursor를 돌려준다.
 func TestLatestCheckpointCursorReturnsDurableCursor(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

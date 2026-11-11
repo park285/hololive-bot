@@ -108,7 +108,6 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 	return f.foldSeeMore(strings.TrimRight(b.String(), "\n"), templateview.ShouldFoldItems(len(entries)))
 }
 
-// writeBroadcastHistoryEntry는 일반 텍스트에서 항목 번호로, RichText에서 굵은 이름으로 항목 머리를 구분한다.
 func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, richText bool, entry *BroadcastHistoryEntry) {
 	typeLabel, memberName := broadcastHistoryDisplayLine(entry.TypeLabel), broadcastHistoryDisplayLine(entry.MemberName)
 
@@ -263,8 +262,6 @@ func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {
 
 const broadcastHistoryTimeLayout = "2006/01/02 15:04"
 
-// broadcastHistoryTimeSpan은 "2026/10/17 20:59~22:29 · 1시간 30분"처럼 시작·종료와 길이를 표시한다.
-// 종료가 확인되지 않았으면 "2026/10/17 20:59 시작"만 표시한다.
 func broadcastHistoryTimeSpan(ctx context.Context, f *ResponseFormatter, entry *BroadcastHistoryEntry) string {
 	if entry.StartedAt.IsZero() {
 		text := broadcastHistoryTime(ctx, f, entry.Time)
@@ -283,7 +280,6 @@ func broadcastHistoryTimeSpan(ctx context.Context, f *ResponseFormatter, entry *
 	return start + "~" + broadcastHistoryEndTime(entry.StartedAt, entry.EndedAt) + " · " + formatBroadcastDuration(entry.EndedAt.Sub(entry.StartedAt))
 }
 
-// broadcastHistoryEndTime은 KST 기준으로 시작과 같은 날짜면 시각만, 같은 해면 월/일부터 표시한다.
 func broadcastHistoryEndTime(startedAt, endedAt time.Time) string {
 	start, end := timeutil.ToKST(startedAt), timeutil.ToKST(endedAt)
 

@@ -41,8 +41,6 @@ func TestConsumerDrainBatch_QuarantinesStaleSendingBeforeClaiming(t *testing.T) 
 	}
 }
 
-// 격리 기준은 lease 이상이어야 한다. 생략·0·음수도 기본값으로 바꾸지 않고 거부하며,
-// option 순서와 무관하게 모든 option을 적용한 뒤 판정한다.
 func TestNewConsumerRequiresQuarantineThresholdAtLeastLease(t *testing.T) {
 	t.Parallel()
 

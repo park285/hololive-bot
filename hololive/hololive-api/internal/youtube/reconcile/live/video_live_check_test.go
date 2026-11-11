@@ -17,7 +17,6 @@ func videoCheckEvidence(id int64, at time.Time, facts ...SessionFact) Evidence {
 	return evidence
 }
 
-// 영상 확인의 종료는 관측 슬롯이 아니라 upstream 종료 시각으로 기록되고 absence slot을 만들지 않는다.
 func TestReduceVideoLiveCheckEndUsesUpstreamEndedAt(t *testing.T) {
 	endedAt := time.Date(2026, time.August, 14, 2, 30, 0, 0, time.UTC)
 	checkAt := time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC)
@@ -43,7 +42,6 @@ func TestReduceVideoLiveCheckEndUsesUpstreamEndedAt(t *testing.T) {
 	}
 }
 
-// 사실 없는 영상 확인은 부재가 아니므로 LIVE를 끝내거나 absence 수를 세지 않는다.
 func TestReduceVideoLiveCheckWithoutFactsIsNotAbsence(t *testing.T) {
 	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), liveA()))
 
@@ -89,8 +87,6 @@ func mustReduce(t *testing.T, state *State, evidence Evidence) *Decision {
 	return &decision
 }
 
-// 시작 미관측 종료는 ended_at 이후의 positive가 grace 안에서 관측된 동안만 막히고, grace가 지나도록
-// 더 새로운 positive가 없으면 공급자 지연으로 보고 upstream 종료 시각으로 끝난다.
 func TestReduceVerifiedTerminalEndWaitsForGraceAfterLaggedPositive(t *testing.T) {
 	// upcomingA의 positive(01:00)보다 1분 이른 종료다. 수집 예정 시각을 EffectiveAt으로 쓰는 positive가 늦은 경우다.
 	endedAt := time.Date(2026, time.August, 14, 0, 59, 0, 0, time.UTC)

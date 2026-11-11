@@ -6,8 +6,7 @@ import (
 	texttemplate "text/template"
 )
 
-// Migration 370 이전 알림 템플릿이 URL마다 인라인으로 계산하던 신뢰 링크 판정이다. 이 판정과 trustedlink의 결과가 같아야 표준 본문을
-// 바꿔도 알림의 링크 표시가 달라지지 않는다.
+// 이 판정과 trustedlink의 결과가 같아야 표준 본문을 바꿔도 알림의 링크 표시가 달라지지 않는다.
 const legacyAlarmURLBlock = `{{- $url := .URL}}
 {{- $parts := split $url " | "}}
 {{- $shortLinkURL := hasPrefix $url "https://short.holoshi.com/l/"}}

@@ -70,8 +70,6 @@ func (s *PgxStore) FindBirthdaySessions(
 
 var birthdayStreamLikeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// ListPublishedBirthdayStreamEvents는 멤버·일자 prefix로 이미 발행된 생일 방송 event의 저장 payload를 돌려준다.
-// 생일 방송 runner는 저장 제목으로 상한 집계와 재평가 대상을 정하고, 재발행 시 이 payload를 그대로 재사용한다.
 func (s *PgxStore) ListPublishedBirthdayStreamEvents(
 	ctx context.Context,
 	keyPrefix string,

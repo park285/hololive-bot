@@ -16,17 +16,14 @@ type sqlPublishFenceVerifier struct {
 	jobs collection.JobContractSet
 }
 
-// publishVerificationBatchSender는 pgx 트랜잭션의 파이프라인 전송 능력이다. 발행 트랜잭션은 항상
-// pgxpool에서 시작하므로 이 능력이 없으면 순차 경로로 바꾸지 않고 오류로 드러낸다.
+// 발행 트랜잭션은 항상 pgxpool에서 시작하므로 이 능력이 없으면 순차 경로로 바꾸지 않고 오류로 드러낸다.
 type publishVerificationBatchSender interface {
 	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
 }
 
-// Verify는 guard·fence·membership·target·contract 조회를 한 번의 왕복으로 보냅니다.
-// 서버 실행과 결과 판정 순서는 projection guard(share) → lease(FOR UPDATE) → job membership → target →
-// contract이며, collector의 acquire·CompleteCurrent와 같은 잠금 순서다. Guard 대기 뒤의 문장은 새 snapshot에서
-// 평가되므로 API 전환 중 기다린 publish가 사라진 generation을 보고 거절되지 않는다. 앞선 판정이 실패하면
-// 이미 획득한 뒤쪽 잠금도 트랜잭션과 함께 롤백됩니다.
+// 서버 실행과 결과 판정 순서는 projection guard(share) → lease(FOR UPDATE) → job membership → target → contract이며, collector의
+// acquire·CompleteCurrent와 같은 잠금 순서다. Guard 대기 뒤의 문장은 새 snapshot에서 평가되므로 API 전환 중 기다린 publish가 사라진 generation을 보고 거절되지
+// 않는다. 앞선 판정이 실패하면 이미 획득한 뒤쪽 잠금도 트랜잭션과 함께 롤백됩니다.
 func (v sqlPublishFenceVerifier) Verify(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -59,7 +56,6 @@ func (v sqlPublishFenceVerifier) Verify(
 	return v.verifyPublishResults(results, proof, observations)
 }
 
-// publishVerificationBatch는 Verify의 판정 순서대로 guard·fence·membership·target·contract 조회를 한 batch에 쌓는다.
 func publishVerificationBatch(
 	proof *contract.LeaseProof,
 	scope collection.MembershipScope,
@@ -86,7 +82,6 @@ func publishVerificationBatch(
 	return batch
 }
 
-// verifyPublishResults는 publishVerificationBatch가 쌓은 순서대로 응답을 읽어 판정한다.
 func (v sqlPublishFenceVerifier) verifyPublishResults(
 	results pgx.BatchResults,
 	proof *contract.LeaseProof,
@@ -123,7 +118,6 @@ func (v sqlPublishFenceVerifier) verifyPublishResults(
 	return nil
 }
 
-// publishMembershipScope는 lease 행을 읽기 전에 같은 batch로 보낼 membership 범위를 컴파일된 계약에서 만든다.
 // Provider는 관측에서 가져오며, 실제 lease 행의 provider·job 종류와 다르면 loadPublishFence가 fence 손실로 거절한다.
 func (v sqlPublishFenceVerifier) publishMembershipScope(proof *contract.LeaseProof, observations []contract.Envelope) (collection.MembershipScope, error) {
 	if len(observations) == 0 {
@@ -178,7 +172,6 @@ func (v sqlPublishFenceVerifier) loadPublishFence(
 	return job, nil
 }
 
-// leaseSubjectMismatch는 고정 lease subject를 가진 EXACT_SUBJECT job의 lease 행 subject가 계약과 다른지 확인합니다.
 func leaseSubjectMismatch(job collection.JobContract, subject string) bool {
 	return job.Membership() == collection.JobMembershipExactSubject && job.LeaseSubject() != "" && job.LeaseSubject() != subject
 }

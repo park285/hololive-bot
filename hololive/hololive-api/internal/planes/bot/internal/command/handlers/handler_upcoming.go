@@ -235,8 +235,7 @@ func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string,
 	return nil
 }
 
-// withMemberDisplayNames는 members에 등록된 채널의 스트림 이름을 명령 응답 표시명으로 바꾸고 콜라보 출연자 표시명을 붙인
-// 사본을 돌려준다. Holodex 응답은 캐시와 공유될 수 있어 원본을 고치지 않는다. 등록되지 않은 채널은 기존처럼 응답 이름을 그대로 둔다.
+// Holodex 응답은 캐시와 공유될 수 있어 원본을 고치지 않는다. 등록되지 않은 채널은 기존처럼 응답 이름을 그대로 둔다.
 func (c *UpcomingCommand) withMemberDisplayNames(ctx context.Context, streams []*domain.Stream) ([]*domain.Stream, error) {
 	channelIDs := make([]string, 0, len(streams))
 	for _, stream := range streams {

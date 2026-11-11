@@ -76,7 +76,6 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 	}
 }
 
-// assertLiveLongTitleRendering은 긴 제목·빈 필드에서도 항목·독립 URL을 보존하고 긴 제목만 잘라내는지 확인한다.
 func assertLiveLongTitleRendering(t *testing.T, rendered, title, url string) {
 	t.Helper()
 

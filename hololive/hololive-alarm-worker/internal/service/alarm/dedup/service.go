@@ -73,7 +73,6 @@ func NewService(c Cache, targetMinutes []int, logger *slog.Logger) *Service {
 	}
 }
 
-// UpdateTargetMinutes는 runtime target minute 정책을 원자적으로 교체한다.
 func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
 	s.targetMinutesMu.Lock()
 	defer s.targetMinutesMu.Unlock()

@@ -149,7 +149,7 @@ func characterizationCases() []characterizationCase {
 	}
 }
 
-// aliasWindowPayload는 검증 전 원본 순서의 창이다. 정렬하지 않고 첫 등장 순서를 유지해야 한다.
+// 정렬하지 않고 첫 등장 순서를 유지해야 한다.
 func aliasWindowPayload() contract.CommunityPayloadV1 {
 	return contract.CommunityPayloadV1{
 		ChannelID: testChannelID,
@@ -281,7 +281,6 @@ func marshalPayload(t *testing.T, payload contract.CommunityPayloadV1) []byte {
 	return data
 }
 
-// requireNilEmptyThumbnails는 빈 썸네일 목록이 빈 배열이 아니라 nil(NULL·생략)로 남는지 확인한다.
 func requireNilEmptyThumbnails(t *testing.T, posts []*domain.YouTubeCommunityPost) {
 	t.Helper()
 
@@ -296,7 +295,6 @@ func requireNilEmptyThumbnails(t *testing.T, posts []*domain.YouTubeCommunityPos
 	}
 }
 
-// requirePublishedAtNotAliased는 저장 행의 published_at이 payload 포인터를 공유하지 않는지 확인한다.
 func requirePublishedAtNotAliased(t *testing.T, posts []*domain.YouTubeCommunityPost, sources []contract.CommunityPostV1) {
 	t.Helper()
 

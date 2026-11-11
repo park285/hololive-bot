@@ -6,7 +6,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// initialJobContracts는 검증을 마친 불변 계약 handle 집합이다. 패키지 밖으로는 map 복제본만 노출한다.
+// 패키지 밖으로는 map 복제본만 노출한다.
 var initialJobContracts = buildInitialJobContracts()
 
 // InitialJobContracts는 호출자가 확장할 수 있는 새 map을 반환합니다. 불변 계약 handle만 공유합니다.

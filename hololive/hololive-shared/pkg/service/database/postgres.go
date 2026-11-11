@@ -112,10 +112,8 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 	}, nil
 }
 
-// resolvePoolConns는 pgxdb에 넘길 풀 크기를 정한다.
-// MinConns=0은 plane 검증(validatePlanePool·validatePool)이 허용하는 "idle 연결 없음" 선택이고
-// pgxdb도 0을 그대로 pgx에 넘기는 계약이므로 기본값으로 바꾸지 않는다. 미설정 기본값은
-// LoadPostgresConfig가 이미 채운다. 잘못된 범위는 연결 전에 거부한다.
+// MinConns=0은 plane 검증(validatePlanePool·validatePool)이 허용하는 "idle 연결 없음" 선택이고 pgxdb도 0을 그대로 pgx에 넘기는 계약이므로 기본값으로 바꾸지
+// 않는다. 미설정 기본값은 LoadPostgresConfig가 이미 채운다.
 func resolvePoolConns(config *PostgresConfig) (minConns, maxConns int, err error) {
 	if config.PoolMinConns < 0 {
 		return 0, 0, fmt.Errorf("postgres pool min conns must not be negative: %d", config.PoolMinConns)

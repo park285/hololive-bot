@@ -178,7 +178,6 @@ func candidateQueryIteration(ctx context.Context, repository *Repository, now ti
 	return candidateQueryCost{rows: len(candidates), bytes: candidateStringsSize(candidates), final: len(filtered), err: err}
 }
 
-// filterMikoCandidates와 filterPreparedMiko는 멤버 데이터 없이 "미코" 방 기준으로 후보를 고른다.
 func filterMikoCandidates(tb testing.TB, candidates []model.Candidate, period model.Period, now time.Time) []model.FilteredCandidate {
 	tb.Helper()
 
@@ -327,7 +326,7 @@ func benchmarkCandidateQueryVariant(b *testing.B, repository *Repository, pool *
 	b.ReportMetric(float64(pool.Stat().EmptyAcquireCount()-waitBefore)/float64(b.N), "pool-waits/op")
 }
 
-// 합성 후보만 사용한다. LLM/운영 처리량을 측정하지 않고 실제 병렬5·선택률·pool 대기를 함께 기록한다.
+// LLM/운영 처리량을 측정하지 않고 실제 병렬5·선택률·pool 대기를 함께 기록한다.
 func BenchmarkMemberNewsCandidateQueries(b *testing.B) {
 	repository, pool := newPeriodCandidatePool(b)
 	now := time.Date(2026, time.October, 2, 12, 0, 0, 0, time.FixedZone("KST", 9*3600))

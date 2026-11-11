@@ -23,7 +23,6 @@ func unavailableHolodexError(operation string) error {
 	}
 }
 
-// org=all에서 일부 org만 성공하면 결과를 성공으로 숨기지 않고 부분 실패로 돌려주며 캐시하지 않는다.
 func TestGetLiveStreamsByOrgAllReportsPartialFailureWithoutCaching(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +56,6 @@ func TestGetLiveStreamsByOrgAllReportsPartialFailureWithoutCaching(t *testing.T)
 	}
 }
 
-// primary 전체 실패 뒤 공식 일정 fallback이 빈 결과를 주면 빈 성공으로 캐시하지 않고 primary 오류를 유지한다.
 func TestGetUpcomingStreamsByOrgEmptyOfficialFallbackReturnsErrorWithoutCaching(t *testing.T) {
 	t.Parallel()
 
@@ -87,7 +85,6 @@ func TestGetUpcomingStreamsByOrgEmptyOfficialFallbackReturnsErrorWithoutCaching(
 	}
 }
 
-// primary 도중 호출자 context가 끝나면 fallback을 실행하지 않고 취소를 그대로 돌려준다.
 func TestGetUpcomingStreamsByOrgCanceledPrimarySkipsOfficialFallback(t *testing.T) {
 	t.Parallel()
 

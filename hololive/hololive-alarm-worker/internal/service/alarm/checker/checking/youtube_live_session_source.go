@@ -228,7 +228,6 @@ func (s *PgYouTubeLiveSessionSource) RecentlySettledLiveStreamRooms(
 	return settledLiveStreamRooms(rows), nil
 }
 
-// liveDispatchWindows는 stream별 하한을 SQL unnest에 넘길 같은 길이의 배열로 바꾼다.
 func (s *PgYouTubeLiveSessionSource) liveDispatchWindows(sinceByStreamID map[string]time.Time) ([]string, []time.Time, bool) {
 	if s == nil || s.pool == nil || len(sinceByStreamID) == 0 {
 		return nil, nil, false

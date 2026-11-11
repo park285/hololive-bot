@@ -99,7 +99,6 @@ func (unexpectedStageDB) Query(context.Context, string, ...any) (pgx.Rows, error
 	return nil, errors.New("unexpected query")
 }
 
-// 알림이 없는 채널 평가는 매 cycle 반복되므로 DB 왕복 없이 끝나야 한다.
 func TestUpcomingCandidatesStageWithoutUpcomingCandidatesSkipsDatabase(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	live := candidateNotification("stage-live", now.Add(5*time.Minute))

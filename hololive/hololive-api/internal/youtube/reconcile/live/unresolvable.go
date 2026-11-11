@@ -6,7 +6,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// anyPositiveAtOrAfter는 관측 시각 이후의 positive가 있어 종료 근거가 더 오래된 사실인지 판정한다.
 func anyPositiveAtOrAfter(clock *LiveEvidenceClock, at time.Time) bool {
 	for _, positive := range []*time.Time{clock.LastUpcomingPositiveAt, clock.LastLivePositiveAt} {
 		if positive != nil && !positive.Before(at) {
@@ -17,9 +16,8 @@ func anyPositiveAtOrAfter(clock *LiveEvidenceClock, at time.Time) bool {
 	return false
 }
 
-// ActiveUnresolvableSince는 모든 positive보다 늦게 시작된 해소 불가 추적만 돌려준다. 추적은 관측 시각 이후의
-// positive가 없을 때만 시작되고 그 뒤의 positive가 지우므로, 저장값이 어떤 positive보다 이르면 positive가 추적을
-// 지우지 못한 이전 바이너리(7.2.7) 기간의 잔여값이다. 이런 값은 지속 시간·종료 하한의 근거가 아니므로 추적 없음으로 본다.
+// ActiveUnresolvableSince는 모든 positive보다 늦게 시작된 해소 불가 추적만 돌려준다. 추적은 관측 시각 이후의 positive가 없을 때만 시작되고 그 뒤의 positive가 지우므로,
+// 저장값이 어떤 positive보다 이르면 positive가 추적을 지우지 못한 이전 바이너리 기간의 잔여값이다. 이런 값은 지속 시간·종료 하한의 근거가 아니므로 추적 없음으로 본다.
 func (c *LiveEvidenceClock) ActiveUnresolvableSince() *time.Time {
 	if c.UnresolvableSince == nil || anyPositiveAtOrAfter(c, *c.UnresolvableSince) {
 		return nil
@@ -53,12 +51,9 @@ func UnresolvableTrackable(existing *SessionState) bool {
 	}
 }
 
-// applyUnresolvableVideo는 익명 수집이 identity를 확인할 수 없게 된 영상의 추적과 종료를 정산한다.
-// 첫 관측 시각을 head에 두고, 시작을 관측한 LIVE는 consumer가 지속 시간과 같은 채널의 /live 음성까지
-// 검증한 사실(VerifiedTerminal)만 마지막 positive의 grace가 지난 뒤 UNRESOLVABLE_VIDEO로 끝낸다.
-// 종료 시각은 실제 종료의 하한인 첫 identity_missing 시각이며 시작·알림은 만들지 않는다.
-// UPCOMING은 추적만 한다. 비공개 예약이 공개로 돌아오면 시작 알림이 필요하고 시작 감지는 채널 스냅샷
-// positive가 맡으므로, 추적 기간은 projection이 영상 확인 재확인 주기를 늦추는 근거로만 쓴다.
+// 첫 관측 시각을 head에 두고, 시작을 관측한 LIVE는 consumer가 지속 시간과 같은 채널의 /live 음성까지 검증한 사실(VerifiedTerminal)만 마지막 positive의 grace가 지난
+// 뒤 UNRESOLVABLE_VIDEO로 끝낸다. 종료 시각은 실제 종료의 하한인 첫 identity_missing 시각이며 시작·알림은 만들지 않는다. UPCOMING은 추적만 한다. 비공개 예약이 공개로
+// 돌아오면 시작 알림이 필요하고 시작 감지는 채널 스냅샷 positive가 맡으므로, 추적 기간은 projection이 영상 확인 재확인 주기를 늦추는 근거로만 쓴다.
 func applyUnresolvableVideo(session *reduceSession, fact *SessionFact) {
 	existing, ok := session.state.Sessions[fact.VideoID]
 	if !ok || !existing.Present || fact.ChannelID != existing.ChannelID || !UnresolvableTrackable(&existing) {

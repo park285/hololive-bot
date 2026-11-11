@@ -51,7 +51,6 @@ func (mm *Matcher) maybeCleanupMatchCache() {
 	mm.matchCacheLastCleanup = time.Now()
 }
 
-// 캐시된 결과가 있으면 반환하고, 없으면 여러 매칭 전략을 시도한다.
 // 매칭에 실패하면 (nil, false, nil)을 반환하며, 이 미발견 결과도 캐시에 저장한다.
 func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, bool, error) {
 	snapshot, err := mm.getSnapshot(ctx)
@@ -86,8 +85,6 @@ func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Cha
 	return channel, found, nil
 }
 
-// storeMatch 는 matchCache 에 결과를 저장하되, matchCacheMaxEntries 상한을 강제한다.
-// 상한 도달 시 만료 엔트리를 먼저, 없으면 가장 오래된 엔트리를 evict 한다.
 func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel, snapshot *matcherSnapshot) {
 	now := time.Now()
 
@@ -110,8 +107,6 @@ func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel, snapshot
 }
 
 // evictOneMatchLocked 는 matchCacheMu 보유 상태에서 한 엔트리를 제거한다.
-// 만료 엔트리가 있으면 그것을, 없으면 Timestamp 가 가장 오래된 엔트리를 제거한다.
-// 제거 성공 시 true 를 반환한다.
 func (mm *Matcher) evictOneMatchLocked(now time.Time) bool {
 	cutoff := now.Add(-mm.matchCacheTTL)
 
@@ -159,8 +154,7 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, snapshot *matcherSnaps
 	return channel, channel != nil
 }
 
-// GetMemberByChannelID는 채널 대표 멤버를 돌려준다. 멤버 데이터 없이 구성한 Matcher는 snapshot과 같이 빈 데이터로 보고
-// domain.ErrMemberNotFound를, 조회 실패는 그 오류를 돌려준다.
+// 멤버 데이터 없이 구성한 Matcher는 snapshot과 같이 빈 데이터로 보고 domain.ErrMemberNotFound를, 조회 실패는 그 오류를 돌려준다.
 func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	if mm == nil || mm.membersData == nil {
 		return nil, domain.ErrMemberNotFound
@@ -218,8 +212,7 @@ func (mm *Matcher) memberToChannel(m *domain.Member) *domain.Channel {
 	}
 }
 
-// MemberDisplayNames는 channelIDs 중 members에 등록된 채널의 명령 응답 표시명을 돌려준다. 등록되지 않은 채널은 결과에 넣지 않으므로
-// 호출자가 원천 응답의 이름을 그대로 쓴다. 멤버 snapshot을 만들지 못하면 오류다.
+// 등록되지 않은 채널은 결과에 넣지 않으므로 호출자가 원천 응답의 이름을 그대로 쓴다. 멤버 snapshot을 만들지 못하면 오류다.
 func (mm *Matcher) MemberDisplayNames(ctx context.Context, channelIDs []string) (map[string]string, error) {
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {

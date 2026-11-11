@@ -13,8 +13,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// 예열 후 후보 2회와 일반 획득 4회(BEGIN/guard/선점/종료)만 허용한다. 최초 생성 승자만 시각 확정 1회가 추가된다.
-// 네 collector가 같은 후보를 읽어도 최초 생성·만료 인계·IDLE·DEFERRED마다 소유자는 하나여야 한다.
 func TestFourCollectorsCandidateAcquireTraffic(t *testing.T) {
 	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
 		for _, exact := range []bool{true, false} {

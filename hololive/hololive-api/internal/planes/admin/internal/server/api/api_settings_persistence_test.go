@@ -15,7 +15,6 @@ import (
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-// 파일 저장 실패는 기존 설정을 보존하고 worker 적용이나 성공 활동 기록 전에 요청을 끝낸다.
 func TestSettingsAPIHandler_UpdateSettings_PersistenceFailurePreservesStateAndSkipsWorker(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses directory write permissions")

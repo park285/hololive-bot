@@ -20,9 +20,7 @@ const (
 
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
-// sharedCachedImage는 같은 달·같은 항목 해시로 렌더한 PNG를 공유 cache에서 읽는다. 값은 항목 해시 뒤에 PNG를
-// 붙인 형태라 해시가 다르면(같은 달 이전 항목) miss로 보고 다시 렌더한다. 읽기 중 cache 오류는 miss로 보고
-// 렌더 실패로 올리지 않는다.
+// 값은 항목 해시 뒤에 PNG를 붙인 형태라 해시가 다르면(같은 달 이전 항목) miss로 보고 다시 렌더한다. 읽기 중 cache 오류는 miss로 보고 렌더 실패로 올리지 않는다.
 func (r *CalendarCardRenderer) sharedCachedImage(ctx context.Context, key calendarCacheKey) ([]byte, bool) {
 	if r == nil || r.sharedCache == nil {
 		return nil, false
@@ -49,7 +47,6 @@ func (r *CalendarCardRenderer) sharedCachedImage(ctx context.Context, key calend
 	return image, true
 }
 
-// storeSharedCachedImage는 같은 달 key를 덮어써 이전 항목 해시의 이미지를 대체한다.
 func (r *CalendarCardRenderer) storeSharedCachedImage(ctx context.Context, key calendarCacheKey, data []byte) {
 	if r == nil || r.sharedCache == nil || !isPNGData(data) || len(data) > calendarImageCacheMaxBytes {
 		return

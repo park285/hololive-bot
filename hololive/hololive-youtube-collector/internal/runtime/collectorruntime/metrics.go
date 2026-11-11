@@ -129,9 +129,8 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	return metrics
 }
 
-// newDiscoveryCycleCounter는 후보 탐색 cycle 결과 counter를 만든다. 실패 로그는 연속 실패 동안 주기적으로만 남기므로
-// 매 cycle의 실패는 이 counter가 드러낸다. 두 결과 시리즈를 미리 만들어 첫 실패가 increase()에서 사라지지 않게 한다.
-// 투영 세대 교체(superseded)만 있는 cycle은 정상 종료라 ok로 센다.
+// 실패 로그는 연속 실패 동안 주기적으로만 남기므로 매 cycle의 실패는 이 counter가 드러낸다. 두 결과 시리즈를 미리 만들어 첫 실패가 increase()에서 사라지지 않게 한다. 투영 세대
+// 교체(superseded)만 있는 cycle은 정상 종료라 ok로 센다.
 func newDiscoveryCycleCounter() *prometheus.CounterVec {
 	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_discovery_cycles_total",
@@ -143,7 +142,6 @@ func newDiscoveryCycleCounter() *prometheus.CounterVec {
 	return counter
 }
 
-// newPublishHistograms는 job kind별 발행 트랜잭션 소요 시간과 인코딩 크기 histogram을 만든다.
 func newPublishHistograms() (duration, encodedBytes *prometheus.HistogramVec) {
 	// 발행 트랜잭션(fence 확인·관측 저장·lease 종료) 한 번의 소요 시간이다. 결과와 무관하게 모든 발행 시도를 기록한다.
 	duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
@@ -232,7 +230,6 @@ func (m *Metrics) ObservePublish(provider contract.Provider, kind, outcome strin
 	m.publish.WithLabelValues(string(provider), kind, boundedOutcome(outcome)).Inc()
 }
 
-// ObservePublishDuration은 job kind별 발행 트랜잭션 한 번의 소요 시간을 기록한다.
 func (m *Metrics) ObservePublishDuration(provider contract.Provider, kind string, duration time.Duration) {
 	if m == nil {
 		return
@@ -263,8 +260,7 @@ func (m *Metrics) ObserveAccepted(provider contract.Provider, kind contract.Obse
 	}
 }
 
-// ObserveInvalidFailureTuple은 호출 코드가 계약 밖 failure tuple을 만든 시도를 센다. 오류 자체는 미분류 Internal로
-// 지연 처리되므로 이 counter가 위반 추세를 드러내는 유일한 신호다.
+// 오류 자체는 미분류 Internal로 지연 처리되므로 이 counter가 위반 추세를 드러내는 유일한 신호다.
 func (m *Metrics) ObserveInvalidFailureTuple(provider contract.Provider, kind string) {
 	if m == nil {
 		return
@@ -281,7 +277,6 @@ func (m *Metrics) ObserveEnqueue(result EnqueueResult) {
 	m.enqueue.WithLabelValues(boundedEnqueue(string(result))).Inc()
 }
 
-// ObserveDiscoveryCycle은 끝난 후보 탐색 cycle 하나의 결과를 센다.
 func (m *Metrics) ObserveDiscoveryCycle(failed bool) {
 	if m == nil {
 		return

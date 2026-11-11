@@ -92,7 +92,6 @@ func sanitizedRequestID(raw string) string {
 	return raw
 }
 
-// defaultMaxBodyBytes는 호출자가 본문 한도를 지정하지 않았을 때 쓰는 요청 본문 최대 크기입니다.
 const defaultMaxBodyBytes int64 = 1 << 20 // 1MiB
 
 // MaxBodySizeMiddleware 요청 본문 크기를 제한하는 미들웨어.

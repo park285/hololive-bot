@@ -31,7 +31,6 @@ type sqlHelperRow struct {
 	Value string `db:"value"`
 }
 
-// jsonb ? 연산자와 문자열 리터럴 안의 '?'가 native placeholder와 함께 그대로 서버에 도달해야 한다.
 func TestSelectSQLKeepsQuestionMarkOperatorsWithNativePlaceholders(t *testing.T) {
 	ctx := t.Context()
 	pool := newTxTestPool(t)

@@ -115,7 +115,6 @@ func applyResultWithRules(outcome ApplyOutcome, outboxIDs []int64, rules []lifec
 	return newApplyResultWithRules(outcome, outboxIDs, rules)
 }
 
-// fenceMissOutcome은 대상이 모두 사라진 미스만 ApplyMissing으로, 나머지는 ApplyConflict로 보고한다.
 func fenceMissOutcome(miss *sendfence.MissError) ApplyOutcome {
 	for _, row := range miss.Rows {
 		if row.Reason != sendfence.ReasonMissing {

@@ -65,7 +65,6 @@ type Cache struct {
 	epochRuntimeDone       <-chan struct{}
 }
 
-// defaultEpochReconcileInterval은 CacheConfig.EpochReconcileInterval이 0일 때 쓰는 authority epoch 재확인 주기입니다.
 const defaultEpochReconcileInterval = 15 * time.Second
 
 type CacheConfig struct {
@@ -73,8 +72,7 @@ type CacheConfig struct {
 	WarmUp                 bool // 시작 시 전체 멤버를 메모리에 로드
 }
 
-// resetMemoryLocked는 snapshot과 point overlay를 버리고 generation을 올린다. 진행 중인 적재·point 조회는 이전
-// generation을 들고 있으므로 결과를 게시하지 못한다. 호출자가 snapshotMu 쓰기 잠금을 쥔다.
+// 진행 중인 적재·point 조회는 이전 generation을 들고 있으므로 결과를 게시하지 못한다. 호출자가 snapshotMu 쓰기 잠금을 쥔다.
 func (c *Cache) resetMemoryLocked() {
 	c.snapshotGeneration.Add(1)
 
@@ -159,7 +157,6 @@ func (c *Cache) startEpochReconciliation(ctx context.Context) {
 	})
 }
 
-// Close는 epoch 구독과 재조회 작업을 취소하고 둘 다 끝날 때까지 기다린다.
 // Valkey 자원을 닫기 전에 호출하며, nil 캐시와 반복 호출도 안전하다.
 func (c *Cache) Close() {
 	if c == nil || c.epochRuntimeCancel == nil {
@@ -176,7 +173,6 @@ func (c *Cache) warmUpAtStartup(ctx context.Context) {
 	}
 }
 
-// epochCoordinated는 epoch authority로 다른 프로세스와 무효화를 조정하는 구성인지 알려 준다.
 func (c *Cache) epochCoordinated() bool {
 	return c != nil && c.epoch != nil
 }

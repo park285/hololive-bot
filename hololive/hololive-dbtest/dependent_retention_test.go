@@ -77,9 +77,6 @@ const checkpointRetentionExplainSQL = `
 		FOR UPDATE OF checkpoint SKIP LOCKED
 	`
 
-// scope가 한 subject에 몰린 폭증 분포(오래된 scope 2.2만 개)에서도 보존 후보 선택은 후보마다 checkpoint를 다시
-// 순차 스캔하면 안 된다. 267이 updated_at 인덱스를 지운 뒤 PG 18.6은 두 테이블을 한 번씩 읽는 hash semi join을
-// 고르고(약 30 ms), 후보마다 seq scan을 반복하는 계획은 행 수의 제곱 비용이 된다.
 func TestCheckpointRetentionCandidatePlanReadsCheckpointsOnce(t *testing.T) {
 	t.Parallel()
 

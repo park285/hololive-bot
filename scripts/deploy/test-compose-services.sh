@@ -81,7 +81,7 @@ expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
 expect_fail "ap-host loader rejects unknown host" ap_host_load "${ROOT_DIR}" nonexistent-host
-# Seoul b는 2026-11-06 iris-seoul Podman Quadlet(po-central-cutover.sh b)으로 옮겨 AP host가 아니다.
+# Seoul b는 iris-seoul Podman Quadlet(po-central-cutover.sh b)이며 AP host가 아니다.
 expect_fail "ap-host loader has no seoul host" ap_host_load "${ROOT_DIR}" seoul
 ap_udp_lib="scripts/deploy/lib/require-quic-udp-buffer.sh"
 

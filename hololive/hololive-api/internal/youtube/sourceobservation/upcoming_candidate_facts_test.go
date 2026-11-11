@@ -14,7 +14,6 @@ import (
 // alarm-worker의 분 전 알림 후보(alarm_upcoming_candidates)는 이 consumer가 쓴 youtube_live_sessions 사실을 읽어
 // 후보 유지 여부를 판정한다. worker 시험은 아래 canonical 상태를 SQL로 세우므로, consumer 쪽 의미는 여기서 고정한다.
 
-// 예정 Premiere 분류는 기존 행의 last_seen_at을 바꾸지 않고 is_premiere만 세우며, 발견 시 NEW_VIDEO outbox를 만들지 않는다.
 func TestPremiereClassificationKeepsCandidateFacts(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -50,7 +49,6 @@ func TestPremiereClassificationKeepsCandidateFacts(t *testing.T) {
 	require.Zero(t, notices)
 }
 
-// schedule metadata는 관측 시각(scheduled_for)을 schedule_observed_at으로 남기고 liveness 관측 시각은 비워 둔다.
 func TestScheduleMetadataRecordsObservationClockOnly(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

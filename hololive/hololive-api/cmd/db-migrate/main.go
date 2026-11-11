@@ -22,8 +22,7 @@ import (
 
 const commandTimeout = 15 * time.Minute
 
-// migrationPoolOptions는 migration 풀 옵션이다. 시작 Ping 기한이 shared-go v2.18.0부터 필수라
-// 이전 라이브러리 숨은 값(5초)을 명시한다.
+// 시작 Ping 기한이 shared-go v2.18.0부터 필수라 이전 라이브러리 숨은 값(5초)을 명시한다.
 func migrationPoolOptions() pgxdb.Options {
 	return pgxdb.Options{Ping: pgxdb.PingConfig{PingTimeout: 5 * time.Second}}
 }
@@ -97,8 +96,8 @@ func run() error {
 	return nil
 }
 
-// postgresConnString은 migrator 접속 문자열을 만든다. PGPASSWORD(compose의 HOLOLIVE_MIGRATOR_PASSWORD)는 필수다.
-// 비어 있으면 admin DB_PASSWORD로 대신하거나 비밀번호 없는 접속을 시도하지 않고, 원인을 알 수 있게 바로 실패한다.
+// PGPASSWORD(compose의 HOLOLIVE_MIGRATOR_PASSWORD)는 필수다. 비어 있으면 admin DB_PASSWORD로 대신하거나 비밀번호 없는 접속을 시도하지 않고, 원인을 알 수 있게
+// 바로 실패한다.
 func postgresConnString() (string, error) {
 	password := os.Getenv("PGPASSWORD")
 	if strings.TrimSpace(password) == "" {

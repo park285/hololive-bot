@@ -104,7 +104,6 @@ func TestDispatcher_ProcessAvailableWithoutWorkerInstrumentation(t *testing.T) {
 	dispatcher.processClaimedOrPendingDeliveries(t.Context(), nil, 0)
 }
 
-// scriptedIdleWaiter는 run 루프가 빈 조회 뒤에만 기다리고 처리 뒤에는 대기를 짧게 되돌리는지 기록한다.
 type scriptedIdleWaiter struct {
 	waits     []bool
 	waitCalls int

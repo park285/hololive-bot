@@ -113,8 +113,7 @@ func assertAPIRouterSuccess(t *testing.T, router *gin.Engine, err error) {
 	}
 }
 
-// admin API는 Iris Console gateway가 서버 대 서버로 호출하므로 CORS 표면이 없다. Origin 헤더는 판정에 쓰지 않고
-// 브라우저 허용 헤더도 내지 않는다.
+// admin API는 Iris Console gateway가 서버 대 서버로 호출하므로 CORS 표면이 없다.
 func TestAPIRouter_IgnoresOriginWithoutCORSHeaders(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)

@@ -210,7 +210,6 @@ func (r collectionResult) failure() error {
 	}
 }
 
-// validErrorKind는 분류되지 않은 예외(collector_failed)에만 오류 종류를 허용한다.
 func (r collectionResult) validErrorKind() bool {
 	if r.Error != collectorFailedCode {
 		return r.ErrorName == "" && r.ErrorCode == ""

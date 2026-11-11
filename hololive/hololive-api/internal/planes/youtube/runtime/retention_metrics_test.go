@@ -46,7 +46,6 @@ func TestRetentionBacklogMetricClearsZeroAndOmitsUnknown(t *testing.T) {
 	require.False(t, youtubeRetentionBacklogAgeSeconds.DeleteLabelValues(table), "unknown backlog must not retain a stale or false-zero sample")
 }
 
-// 원본 단계가 앞 창을 커밋한 뒤 실패해도 그 창들의 삭제·검사·순회 완료를 센다.
 func TestRetentionMetricsCountCommittedSourceWindowsOfFailedTick(t *testing.T) {
 	const table = "source_observations"
 

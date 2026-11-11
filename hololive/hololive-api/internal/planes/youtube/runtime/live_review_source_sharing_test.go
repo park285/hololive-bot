@@ -143,7 +143,6 @@ func TestLiveReviewQueriesShareSourcesWithoutSemanticDrift(t *testing.T) {
 	}
 }
 
-// 같은 영상의 여러 영수증은 한 번만 집계하고 일치하는 영수증 중 최신 시각을 사용합니다.
 const liveReviewMatchingDuplicateSQL = `
 	UPDATE youtube_live_sessions SET last_seen_at=coalesce(last_seen_at,now())+interval '1 microsecond'
 	WHERE video_id='shared-review';

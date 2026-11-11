@@ -58,8 +58,7 @@ type ambiguousMembersTemplateData struct {
 	Candidates     []ambiguousMemberCandidate
 }
 
-// FormatAmbiguousMembers는 후보를 명령 응답 표시명과 그룹으로 보여 준다. 복사 예시(FirstName)는 matcher가 다시 같은 후보로
-// 해석하는 검색 키 형식(QualifiedName)을 쓴다.
+// 복사 예시(FirstName)는 matcher가 다시 같은 후보로 해석하는 검색 키 형식(QualifiedName)을 쓴다.
 func (f *ResponseFormatter) FormatAmbiguousMembers(ctx context.Context, candidates []*domain.Member, commandExample string) string {
 	shaped := make([]ambiguousMemberCandidate, len(candidates))
 	for i, m := range candidates {

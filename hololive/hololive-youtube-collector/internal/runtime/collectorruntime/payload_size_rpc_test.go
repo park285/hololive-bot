@@ -98,8 +98,8 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 	}
 }
 
-// newPayloadBoundaryRepository는 운영 기본 lease 예산을 쓴다. 시험용 runtimeLeaseConfig의 50ms renew timeout은 느린
-// runner에서 1MiB JSONB 저장 중 갱신을 실패시켜 lease를 잃게 하며, 이 시험은 lease 시간이 아니라 저장 경계를 검사한다.
+// 시험용 runtimeLeaseConfig의 50ms renew timeout은 느린 runner에서 1MiB JSONB 저장 중 갱신을 실패시켜 lease를 잃게 하며, 이 시험은 lease 시간이 아니라 저장
+// 경계를 검사한다.
 func newPayloadBoundaryRepository(t *testing.T, pool *pgxpool.Pool) *joblease.Repository {
 	t.Helper()
 

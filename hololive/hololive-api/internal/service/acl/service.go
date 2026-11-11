@@ -142,7 +142,6 @@ func normalizeRoomList(input []string) []string {
 }
 
 const (
-	// DB 설정 키.
 	dbKeyEnabled = "enabled"
 	dbKeyMode    = "mode"
 
@@ -256,7 +255,6 @@ func (s *Service) roomsMapForMode(mode ACLMode) map[string]struct{} {
 	return s.whitelistRooms
 }
 
-// IsRoomAllowed는 chatID로 방 접근 허용 여부를 메모리에서 판정한다.
 func (s *Service) IsRoomAllowed(chatID string) bool {
 	chatID = stringutil.TrimSpace(chatID)
 
@@ -279,7 +277,6 @@ func (s *Service) IsRoomAllowed(chatID string) bool {
 	}
 }
 
-// isInRoomSet: 주어진 방 목록에 chatID가 존재하는지 확인한다.
 func isInRoomSet(rooms map[string]struct{}, chatID string) bool {
 	if chatID == "" {
 		return false

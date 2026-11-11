@@ -38,8 +38,6 @@ func TestLiveDecisionStatementsPreserveSessionHeadOrder(t *testing.T) {
 	}
 }
 
-// 세션 저장은 잠금 안에서 읽은 행과 reducer 결과를 비교해 바뀐 행만 reducer 값 그대로 쓴다.
-// 최초공개 분류 저장은 분류만 보완하고 수명·메타데이터를 바꾸지 않는다.
 func TestLiveSessionWriteFollowsLockedRow(t *testing.T) {
 	t.Parallel()
 
@@ -95,7 +93,6 @@ func TestLiveSessionWriteFollowsLockedRow(t *testing.T) {
 	require.True(t, premiere)
 }
 
-// persistLockedLiveSession은 consumer처럼 세션 행을 잠그고 읽은 뒤 next를 저장한다.
 func persistLockedLiveSession(t *testing.T, pool *pgxpool.Pool, next *live.SessionState) {
 	t.Helper()
 
@@ -109,7 +106,7 @@ func persistLockedLiveSession(t *testing.T, pool *pgxpool.Pool, next *live.Sessi
 	}))
 }
 
-// liveSessionXmin은 세션 행을 마지막으로 쓴 트랜잭션 id다. 값이 그대로면 행을 다시 쓰지 않은 것이다.
+// 값이 그대로면 행을 다시 쓰지 않은 것이다.
 func liveSessionXmin(t *testing.T, pool *pgxpool.Pool, videoID string) string {
 	t.Helper()
 
@@ -120,14 +117,12 @@ func liveSessionXmin(t *testing.T, pool *pgxpool.Pool, videoID string) string {
 	return xmin
 }
 
-// insertLiveSessionRow는 head 없이 세션 행만 새로 저장한다.
 func insertLiveSessionRow(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
 	statement, _ := liveSessionWrite(nil, session)
 
 	return execLiveSessionStatements(ctx, tx, []dbx.Statement{statement})
 }
 
-// 같은 근거를 다시 저장해 검토 snapshot을 무효화하지 않으며 새 사실 시각은 반드시 저장한다.
 func TestLiveHeadNoopPreservesReviewSnapshotButNewEvidenceInvalidatesIt(t *testing.T) {
 	t.Parallel()
 
@@ -234,8 +229,6 @@ func liveHeadReviewSnapshot(t *testing.T, pool *pgxpool.Pool, videoID string) (s
 	return tuple, hash
 }
 
-// 읽은 행과 지금 행이 다르면 저장은 어떤 행에도 적용되지 않고 영상 단위 충돌로 보고된다.
-// 행이 없다고 읽은 영상을 다른 writer가 먼저 만든 경우도 같다. 바뀌지 않은 NULL 제목은 그대로 둔다.
 func TestLiveSessionWriteReportsRowChangedAfterRead(t *testing.T) {
 	const videoID = "changed-after-read"
 

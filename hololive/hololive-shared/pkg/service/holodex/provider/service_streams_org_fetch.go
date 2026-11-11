@@ -9,8 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// orgFetchResult는 org별 Holodex primary 조회 결과다. 호출자 취소로 끝난 org는 원천 실패가 아니므로
-// Failed가 아니라 Canceled에 담는다. 실패로 세면 취소된 요청이 공식 일정 fallback·재시도·실패 metric을 일으킨다.
+// 호출자 취소로 끝난 org는 원천 실패가 아니므로 Failed가 아니라 Canceled에 담는다. 실패로 세면 취소된 요청이 공식 일정 fallback·재시도·실패 metric을 일으킨다.
 type orgFetchResult struct {
 	Attempted int
 	Succeeded int
@@ -34,7 +33,6 @@ const (
 	orgFetchCanceled
 )
 
-// runOrgFetches는 org마다 run을 최대 parallelism개씩 동시에 실행하고 결과를 입력 순서대로 모은다.
 func runOrgFetches(ctx context.Context, parallelism int, orgs []string, run func(context.Context, string) error) orgFetchResult {
 	outcomes := make([]orgFetchOutcome, len(orgs))
 

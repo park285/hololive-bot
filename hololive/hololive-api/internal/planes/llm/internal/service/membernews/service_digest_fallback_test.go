@@ -28,7 +28,6 @@ func digestFallbackCandidates() []model.FilteredCandidate {
 	}}
 }
 
-// 요약 실패의 결정적 digest는 service 한 곳에서만 만들고 result_type과 사유를 metric으로 남긴다.
 func TestSummarizeRoomDigestOwnsFallbackAndRecordsReason(t *testing.T) {
 	service := NewService(nil, failingDigestSummarizer{err: errors.New("llm down")}, nil, nil, nil)
 	before := memberNewsDigestResultCount(t, "fallback", "summarizer_error")
@@ -76,7 +75,6 @@ func memberNewsDigestResultCount(t *testing.T, resultType, reason string) float6
 	return 0
 }
 
-// 호출자 취소는 fallback digest로 숨기지 않는다.
 func TestSummarizeRoomDigestPropagatesCallerCancellation(t *testing.T) {
 	service := NewService(nil, failingDigestSummarizer{err: context.Canceled}, nil, nil, nil)
 

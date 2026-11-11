@@ -25,7 +25,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// apiRateLimitCheckFailuresTotal은 rate limit 판정 실패로 요청을 503으로 거절한 횟수다(fail-closed).
 var apiRateLimitCheckFailuresTotal = promauto.NewCounter(
 	prometheus.CounterOpts{
 		Name: "hololive_admin_rate_limit_check_failures_total",

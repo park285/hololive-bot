@@ -57,7 +57,6 @@ func NewRunner(config Config, store sessionStore, starts startStore, collector C
 	return &Runner{config: config, sessions: store, starts: starts, collector: collector, publisher: pub, rooms: rooms, logger: logger, now: time.Now}, nil
 }
 
-// Start는 DB의 다음 조회 시각을 존중하면서 새 후보를 15초마다 확인한다.
 // 조회는 겹치지 않으며 취소 시 helper 회수가 끝난 뒤 반환한다.
 func (r *Runner) Start(ctx context.Context) error {
 	for ctx.Err() == nil {

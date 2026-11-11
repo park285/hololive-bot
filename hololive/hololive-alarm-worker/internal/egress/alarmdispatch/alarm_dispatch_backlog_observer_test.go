@@ -19,7 +19,6 @@ import (
 
 const alarmDispatchBacklogObservationFailedMetric = "alarm_dispatch_pg_backlog_observation_failed_total"
 
-// 관측 실패가 Start 오류가 되면 형제 egress runner가 취소되므로, 실패해도 다음 주기에 다시 조회해야 한다.
 func TestAlarmDispatchBacklogObserverKeepsObservingAfterFailuresUntilCancelled(t *testing.T) {
 	store := &alarmDispatchBacklogObserverTestStore{err: errors.New("read failed")}
 	observer := &alarmDispatchBacklogObserver{

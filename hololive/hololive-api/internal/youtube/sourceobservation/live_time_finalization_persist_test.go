@@ -15,7 +15,7 @@ import (
 
 const providerTimesSource = "provider"
 
-// endedFixture는 종료 관측(detectedAt) 뒤 확정을 기다리는 ENDED 세션이다. 종료 사유(endReason)가 비면 head가 없다.
+// 종료 사유(endReason)가 비면 head가 없다.
 type endedFixture struct {
 	origin     string
 	endReason  string
@@ -32,7 +32,6 @@ type finalizationHarness struct {
 	proof    contract.LeaseProof
 }
 
-// defaultEndedFixture는 S(첫 확인 예정 시각) 20분 전에 끝나 3분 전에 EXPLICIT_END 종료를 관측한 신 lifecycle 세션이다.
 func defaultEndedFixture(slot time.Time) endedFixture {
 	return endedFixture{
 		origin: string(live.OriginObserved), endReason: string(live.EndReasonExplicitEnd), timesSrc: timesSourceObserved,
@@ -73,7 +72,6 @@ func startFinalization(t *testing.T, edit func(*endedFixture)) *finalizationHarn
 	}
 }
 
-// observe는 현재 lease slot에서 영상 확인을 발행·정산하고 관측 ID를 돌려준다.
 func (h *finalizationHarness) observe(t *testing.T, payload contract.VideoLiveCheckV1) int64 {
 	t.Helper()
 
@@ -83,7 +81,6 @@ func (h *finalizationHarness) observe(t *testing.T, payload contract.VideoLiveCh
 	return id
 }
 
-// observeAt은 lease slot을 at - 1초로 옮긴 뒤 관측한다(관측 시각 = slot + 1초).
 func (h *finalizationHarness) observeAt(t *testing.T, at time.Time, payload contract.VideoLiveCheckV1) int64 {
 	t.Helper()
 
@@ -188,7 +185,6 @@ func TestTimeFinalizationReplacesObservedTimesWithArchiveTimes(t *testing.T) {
 	}
 }
 
-// persistLateLivePositive는 consumer처럼 세션을 잠그고 읽은 뒤 늦은 LIVE positive를 reducer로 판정해 저장한다.
 func persistLateLivePositive(t *testing.T, tx dbx.Tx, observationID int64, at time.Time) error {
 	t.Helper()
 
@@ -220,7 +216,6 @@ type storedTimeBoundScenario struct {
 	reason  string
 }
 
-// archiveAt은 기본 저장 시각(S-2시간 시작, S-20분 종료)에서 어긋난 아카이브 시각을 만든다.
 func archiveAt(startOffset, endOffset time.Duration) func(time.Time) contract.VideoLiveCheckV1 {
 	return func(slot time.Time) contract.VideoLiveCheckV1 {
 		return archiveVideoCheck(slot.Add(-2*time.Hour+startOffset), slot.Add(-20*time.Minute+endOffset))

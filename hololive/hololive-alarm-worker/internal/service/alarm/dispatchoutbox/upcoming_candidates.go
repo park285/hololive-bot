@@ -139,8 +139,7 @@ func (s *UpcomingCandidates) stageChunks(ctx context.Context, channelID string, 
 	return nil
 }
 
-// Finish는 outcome별 key 묶음을 한 UPDATE씩 종료한다. 상태가 pending인 행만 바꾸며 기존 delivery·claim·불명 전송
-// 증거를 수정하지 않는다.
+// 상태가 pending인 행만 바꾸며 기존 delivery·claim·불명 전송 증거를 수정하지 않는다.
 func (s *UpcomingCandidates) Finish(ctx context.Context, keysByOutcome map[string][]string, now time.Time) error {
 	for outcome, keys := range keysByOutcome {
 		if len(keys) == 0 {
@@ -155,7 +154,6 @@ func (s *UpcomingCandidates) Finish(ctx context.Context, keysByOutcome map[strin
 	return nil
 }
 
-// Cleanup은 기존 dispatch event 보존 기간·배치 상한으로 종료 후보만 제거한다.
 func (s *UpcomingCandidates) Cleanup(ctx context.Context, retentionDays, limit int) (int64, error) {
 	if retentionDays <= 0 || limit <= 0 {
 		return 0, errors.New("cleanup upcoming candidates: retention and limit must be positive")

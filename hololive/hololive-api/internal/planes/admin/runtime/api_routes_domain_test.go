@@ -63,7 +63,6 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	}
 }
 
-// 사용자 이름 지정 API는 alarm:user_names hash와 함께 삭제했다. 인증을 통과한 요청도 등록된 경로가 없어 404가 된다.
 func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 	ctx := t.Context()
 	apiHandler := &server.Handler{}

@@ -6,7 +6,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// noveltyVerdict는 video_list 영상 하나의 NEW_VIDEO 적격성입니다.
 type noveltyVerdict int
 
 const (
@@ -18,7 +17,6 @@ const (
 	noveltyEligible
 )
 
-// setEarliestBaseline은 비어 있지 않거나 COMPLETE인 video_list의 effective 시각을 채널 기준으로 남깁니다.
 // 빈 부분 목록은 기준이 아닙니다. 더 이른 관측이 늦게 처리되면 더 이른 시각으로 내려갑니다.
 func setEarliestBaseline(state *State, evidence *Evidence) {
 	if evidence.Kind != contract.KindVideoList || (len(evidence.Videos) == 0 && !completeEligible(evidence)) {

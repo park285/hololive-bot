@@ -51,7 +51,6 @@ func (c *MemberInfoCommand) Description() string {
 	return "등록된 멤버 기본 정보"
 }
 
-// 쿼리가 없으면 멤버 디렉터리를, 있으면 개별 기본 정보를 표시합니다.
 func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("ensure dependencies: %w", err)

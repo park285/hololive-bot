@@ -9,7 +9,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
-// GetACLStatus 현재 ACL 상태 반환.
 func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -27,7 +26,7 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 	return s.enabled, s.mode, rooms
 }
 
-// SetEnabled ACL 활성화/비활성화. 같은 값이면 PG에 쓰지 않는다.
+// 같은 값이면 PG에 쓰지 않는다.
 func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -57,7 +56,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	return nil
 }
 
-// SetMode ACL 모드 변경 (whitelist ↔ blacklist). 같은 값이면 PG에 쓰지 않는다.
+// 같은 값이면 PG에 쓰지 않는다.
 func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()

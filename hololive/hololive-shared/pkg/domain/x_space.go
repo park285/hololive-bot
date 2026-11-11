@@ -26,7 +26,6 @@ type XSpaceDispatchPayload struct {
 	StartedAt time.Time `json:"started_at"`
 }
 
-// Validate는 발송과 URL 구성에 필요한 식별자·표시 문자열·시각을 검사한다.
 func (p *XSpaceDispatchPayload) Validate() error {
 	if p == nil {
 		return errors.New("x space payload is nil")

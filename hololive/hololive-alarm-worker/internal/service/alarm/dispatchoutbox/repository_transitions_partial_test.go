@@ -33,7 +33,6 @@ func TestRouteFailures_ValidatesTargetStatusBeforeSQL(t *testing.T) {
 	requireNoError(t, repository.RouteSendingFailures(t.Context(), nil, "worker-1"))
 }
 
-// 미스 지표는 전이(action)와 원인(reason)별로 한 문장에 한 번 센다. 같은 원인의 여러 행은 한 번이다.
 func TestFenceMissMetricCountsEachReasonOncePerTransition(t *testing.T) {
 	statusLabel := alarmDispatchPGTransitionPartialTotal.WithLabelValues(fenceActionMarkSent, string(sendfence.ReasonStatusChanged))
 	ownerLabel := alarmDispatchPGTransitionPartialTotal.WithLabelValues(fenceActionMarkSent, string(sendfence.ReasonOwnerChanged))

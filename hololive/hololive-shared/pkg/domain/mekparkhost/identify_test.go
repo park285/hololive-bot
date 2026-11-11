@@ -141,7 +141,7 @@ func TestIdentifyTitleEvidence(t *testing.T) {
 func TestIdentifyMembershipPrefixedRole(t *testing.T) {
 	t.Parallel()
 
-	// 앞의 네 건은 2026-09-16·26 ACHRORA 운영 제목이다. 「メン限」은 앞이 경계이고 뒤에 이름+역할이 올 때만 인정한다.
+	// 「メン限」은 앞이 경계이고 뒤에 이름+역할이 올 때만 인정한다.
 	cases := []struct {
 		name, title, display string
 		hosts                []string

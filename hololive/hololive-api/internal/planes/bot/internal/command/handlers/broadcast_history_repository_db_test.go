@@ -20,8 +20,7 @@ const (
 	historyOtherChannel  = "history-other-channel"
 )
 
-// 커서는 Go의 broadcastHistorySortTime으로 만들고 SQL은 history_sort_at으로 정렬한다. 두 우선순위
-// (ended → started → scheduled → last_seen)와 같은 시각의 video_id 역순이 어긋나면 페이지 경계에서 행이 겹치거나 빠진다.
+// 두 우선순위 (ended → started → scheduled → last_seen)와 같은 시각의 video_id 역순이 어긋나면 페이지 경계에서 행이 겹치거나 빠진다.
 func TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
@@ -98,10 +97,8 @@ type historyPlanNode struct {
 	Plans         []historyPlanNode `json:"Plans"`
 }
 
-// 방송 이력 페이지는 종료 세션 전체를 정렬하지 않고 history_sort_at 정렬 인덱스에서 한 페이지만 읽어야 한다.
-// 종료 세션은 보존 삭제가 없어 계속 늘어난다. 운영 풀은 prepared statement를 쓰므로 같은 연결에서 반복되면
-// generic plan으로 바뀔 수 있다. 커서·since·채널 조건이 매개변수 값과 무관하게 인덱스 범위가 되어야 다음 페이지가
-// 커서보다 새 행이나 다른 채널 행을 건너뛰며 읽지 않는다.
+// 종료 세션은 보존 삭제가 없어 계속 늘어난다. 운영 풀은 prepared statement를 쓰므로 같은 연결에서 반복되면 generic plan으로 바뀔 수 있다. 커서·since·채널 조건이 매개변수 값과
+// 무관하게 인덱스 범위가 되어야 다음 페이지가 커서보다 새 행이나 다른 채널 행을 건너뛰며 읽지 않는다.
 func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -144,8 +141,7 @@ func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 	}
 }
 
-// explainHistoryPage는 운영 풀처럼 이름 있는 prepared statement로 실행한다. 매개변수를 EXPLAIN에 바로 넘기면
-// 값을 아는 상태로 계획해 plan_cache_mode가 generic plan을 강제하지 못한다.
+// 매개변수를 EXPLAIN에 바로 넘기면 값을 아는 상태로 계획해 plan_cache_mode가 generic plan을 강제하지 못한다.
 func explainHistoryPage(t *testing.T, pool *pgxpool.Pool, mode, channelID string, since time.Time, cursorAt *time.Time) historyPlanStats {
 	t.Helper()
 
@@ -242,7 +238,6 @@ func seedHistorySessions(t *testing.T, pool *pgxpool.Pool, sessions []historySes
 	}
 }
 
-// 목록과 단건 조회는 lifecycle 출처와 확정 근거를 함께 읽는다. 확정 행이 없는 세션도 빠지지 않고 NULL을 유지한다.
 func TestPgBroadcastHistoryRepositoryReadsTimeEvidence(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 17, 12, 0, 0, 0, time.UTC)

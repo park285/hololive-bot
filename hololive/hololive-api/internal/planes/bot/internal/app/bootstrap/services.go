@@ -99,7 +99,6 @@ func buildBotInfrastructureServices(
 	}, nil
 }
 
-// loadBotMessageStrings는 기동 시 message_strings를 적재하고 formatter·오류·기념일 key를 검증한다.
 // 검증 실패는 기동 오류이며 운영 중 재적재는 지원하지 않는다.
 func loadBotMessageStrings(ctx context.Context, infra *sharedmodules.InfraModule, logger *slog.Logger) (*messagestrings.Store, error) {
 	messageStrings := messagestrings.NewStore(infra.Postgres.GetPool(), logger)

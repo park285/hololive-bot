@@ -8,15 +8,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// proofStates는 helper 발급 controller가 보고하는 상태입니다. NONE은 아직 controller가 없는 상태입니다.
+// NONE은 아직 controller가 없는 상태입니다.
 var proofStates = []string{"NONE", "COLD", "WARMING", "READY", "UNAVAILABLE", "EXPIRED", "STOPPED"}
 
 // proofErrorCode는 helper가 last_error에 싣는 유한한 오류 코드 형식입니다. 다른 문자열은 label로 쓰지 않습니다.
 var proofErrorCode = regexp.MustCompile(`^[a-z_]{1,64}$`)
 
-// EnableMetrics는 scrape마다 helper /health를 읽어 PO 발급 상태를 노출합니다.
-// 발급 실패는 helper readiness를 바꾸지 않으므로 /ready 대신 이 메트릭으로 무토큰 저하를 드러냅니다.
-// /ready를 주기적으로 호출하지 않는 배포에서도 scrape 시점 값이 되도록 health 결과를 저장하지 않습니다.
+// 발급 실패는 helper readiness를 바꾸지 않으므로 /ready 대신 이 메트릭으로 무토큰 저하를 드러냅니다. /ready를 주기적으로 호출하지 않는 배포에서도 scrape 시점 값이 되도록
+// health 결과를 저장하지 않습니다.
 func (h *Helper) EnableMetrics(registerer prometheus.Registerer) {
 	if registerer == nil {
 		registerer = prometheus.DefaultRegisterer
@@ -63,7 +62,6 @@ func (c *proofCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 }
 
-// Collect는 health 읽기에 실패하면 발급 상태를 추정하지 않고 scrape 실패만 내보냅니다.
 func (c *proofCollector) Collect(ch chan<- prometheus.Metric) {
 	// scrape에는 요청 context가 없으므로 helper health 제한 시간만 적용합니다.
 	body, err := c.helper.readHealth(context.Background())

@@ -106,7 +106,6 @@ type timeFinalizationWrite struct {
 	ExpectObservation *int64
 }
 
-// reconcileEndedVideoTimes는 가용성 결정 뒤에 ENDED 세션의 시각 확정 결정을 붙인다.
 func reconcileEndedVideoTimes(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -125,7 +124,6 @@ func reconcileEndedVideoTimes(
 	})}, nil
 }
 
-// finalizeEndedSessionTimes는 ENDED 세션의 영상 확인을 확정 대기열에 반영하고 결정값을 돌려준다.
 // 대기열 후보가 아니거나 반영할 결과가 없으면 기존 KEEP_ENDED다.
 func finalizeEndedSessionTimes(
 	ctx context.Context,
@@ -187,8 +185,7 @@ func loadTimeFinalizationState(ctx context.Context, tx dbx.Tx, videoID string) (
 	return state, nil
 }
 
-// timeFinalizationCandidate는 대기열 후보 조건이다. 시작 전 취소와 시작·LIVE 확인이 모두 없는 종료는 확정할
-// 시각이 없다. 진행 행이 없으면 종료 관측이 신규 창 안일 때만, 행이 있으면 pending일 때만 후보다.
+// 시작 전 취소와 시작·LIVE 확인이 모두 없는 종료는 확정할 시각이 없다.
 func timeFinalizationCandidate(session *live.SessionState, state *timeFinalizationState, observedAt time.Time) bool {
 	if state.TimesSource != timesSourceObserved {
 		return false
@@ -209,7 +206,6 @@ func timeFinalizationCandidate(session *live.SessionState, state *timeFinalizati
 	return session.StatusObservedAt != nil && !session.StatusObservedAt.Before(observedAt.Add(-finalizationNewWindow))
 }
 
-// evaluateTimeFinalization은 관측을 확정·충돌·멤버십·UNKNOWN·요청 실패 중 하나로 판정한다.
 func evaluateTimeFinalization(payload *contract.VideoLiveCheckV1, session *live.SessionState) finalizationVerdict {
 	switch {
 	case payload.UnknownReason == contract.LiveCheckReasonRequestFailed:
@@ -246,10 +242,8 @@ func evaluateTimeFinalization(payload *contract.VideoLiveCheckV1, session *live.
 	return finalizationVerdict{kind: verdictFinalize, startedAt: *payload.StartedAt, endedAt: endedAt}
 }
 
-// storedTimeConflict는 저장 시각과 아카이브 시각의 경계 규칙 위반을 돌려준다. 옛 기록(legacy_unknown)의 저장
-// 시각은 신뢰할 의미가 없어 검사하지 않는다. UNRESOLVABLE_VIDEO 종료의 저장값은 실제 종료의 하한이라 상한이 없다.
-// 저장 시작은 시작 시각 없는 첫 LIVE 관측이면 감지 시각이라 실제 시작보다 늦을 수만 있으므로, 아카이브 시작이
-// 저장 시작보다 늦을 때만 허용폭을 적용한다.
+// 옛 기록(legacy_unknown)의 저장 시각은 신뢰할 의미가 없어 검사하지 않는다. UNRESOLVABLE_VIDEO 종료의 저장값은 실제 종료의 하한이라 상한이 없다. 저장 시작은 시작 시각 없는 첫
+// LIVE 관측이면 감지 시각이라 실제 시작보다 늦을 수만 있으므로, 아카이브 시작이 저장 시작보다 늦을 때만 허용폭을 적용한다.
 func storedTimeConflict(session *live.SessionState, startedAt, endedAt time.Time) string {
 	if session.LifecycleOrigin == live.OriginLegacyUnknown {
 		return ""
@@ -272,8 +266,7 @@ func storedTimeConflict(session *live.SessionState, startedAt, endedAt time.Time
 	return ""
 }
 
-// planTimeFinalization은 판정을 진행 행 갱신으로 바꾼다. 다음 시도 시각 전에 온 관측은 확정만 반영한다.
-// 이른 관측은 종료 전 LIVE 상태를 보고했을 수 있기 때문이다. 같은 관측의 재정산은 가용성 upsert가 먼저 거른다.
+// 다음 시도 시각 전에 온 관측은 확정만 반영한다. 이른 관측은 종료 전 LIVE 상태를 보고했을 수 있기 때문이다. 같은 관측의 재정산은 가용성 upsert가 먼저 거른다.
 func planTimeFinalization(
 	session *live.SessionState,
 	state *timeFinalizationState,
@@ -324,8 +317,7 @@ func planTimeFinalization(
 	return write, videoTimeAttempted, true
 }
 
-// timeFinalizationDue는 관측이 예정된 시도 시각 이후에 이뤄졌는지 본다. 진행 행이 없으면 첫 시도는 종료 관측
-// 3분 뒤, 한 번도 결과가 없는 backlog 행은 투입 뒤 어느 관측이든 첫 시도다.
+// 진행 행이 없으면 첫 시도는 종료 관측 3분 뒤, 한 번도 결과가 없는 backlog 행은 투입 뒤 어느 관측이든 첫 시도다.
 func timeFinalizationDue(session *live.SessionState, row *timeFinalizationRow, observedAt time.Time) bool {
 	switch {
 	case row == nil:
@@ -337,8 +329,7 @@ func timeFinalizationDue(session *live.SessionState, row *timeFinalizationRow, o
 	}
 }
 
-// newTimeFinalizationWrite는 잠근 진행 상태에서 시작하는 pending 갱신이다. 신규의 재시도 기준은 종료 관측
-// 시각이고, backlog는 첫 결과를 기록한 관측 시각이다.
+// 신규의 재시도 기준은 종료 관측 시각이고, backlog는 첫 결과를 기록한 관측 시각이다.
 func newTimeFinalizationWrite(session *live.SessionState, row *timeFinalizationRow, claimed *Observation) timeFinalizationWrite {
 	write := timeFinalizationWrite{
 		VideoID: session.VideoID, Queue: finalizationQueueNew, Outcome: finalizationPending,

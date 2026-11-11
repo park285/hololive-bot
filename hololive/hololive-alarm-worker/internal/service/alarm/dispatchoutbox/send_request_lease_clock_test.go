@@ -158,7 +158,6 @@ func assertRequestClockOutcome(t *testing.T, operation string, expired bool, cal
 	}
 }
 
-// seedRequestClockUnit은 두 멤버 send unit을 claim하고 unit ID, 정렬한 멤버 ID, claim에서 본 요청 ID를 돌려준다.
 func seedRequestClockUnit(t *testing.T, repo *PgxRepository) (int64, []int64, string) {
 	t.Helper()
 
@@ -272,8 +271,6 @@ func assertRequestClockSending(ctx context.Context, t *testing.T, pool *pgxpool.
 	}
 }
 
-// BeginSendRequest는 한 문장에서 단위 전원의 fence를 확인하므로, 어느 조건이 어긋나도 아무 멤버도 바꾸지 않고
-// 대상마다 원인을 돌려준다.
 func TestBeginSendRequestRejectsChangedFencesAtomically(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)

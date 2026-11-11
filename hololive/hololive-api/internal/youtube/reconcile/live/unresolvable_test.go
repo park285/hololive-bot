@@ -36,7 +36,6 @@ var (
 	unresolvableLaterAt = time.Date(2026, time.August, 14, 3, 10, 0, 0, time.UTC)
 )
 
-// trackedUnresolvableState는 시작을 관측한 LIVE가 첫 identity_missing 확인으로 추적된 상태다.
 func trackedUnresolvableState(t *testing.T) State {
 	t.Helper()
 
@@ -51,7 +50,6 @@ func trackedUnresolvableState(t *testing.T) State {
 	return state
 }
 
-// 추적된 세션은 검증되지 않은 사실이나 마지막 positive의 grace 안에서는 LIVE로 남고 첫 관측 시각을 유지한다.
 func TestReduceUnresolvableVideoRetainsUntilVerifiedAfterGrace(t *testing.T) {
 	state := trackedUnresolvableState(t)
 	verified := sessionFact(StatusUnresolvable)
@@ -74,8 +72,6 @@ func TestReduceUnresolvableVideoRetainsUntilVerifiedAfterGrace(t *testing.T) {
 	}
 }
 
-// consumer가 검증한 사실은 마지막 positive의 grace가 지나면 UNRESOLVABLE_VIDEO로 끝낸다. 종료 시각은 첫
-// identity_missing 시각이고 시작 시각·positive clock은 유지하며 pending·absence slot을 만들지 않는다.
 func TestReduceUnresolvableVideoEndsAfterGrace(t *testing.T) {
 	state := trackedUnresolvableState(t)
 	verified := sessionFact(StatusUnresolvable)
@@ -96,7 +92,6 @@ func TestReduceUnresolvableVideoEndsAfterGrace(t *testing.T) {
 	}
 }
 
-// positive는 영상이 아직 해석됨을 뜻하므로 추적을 지운다.
 func TestReduceUnresolvableVideoClearedByPositive(t *testing.T) {
 	state := trackedUnresolvableState(t)
 
@@ -106,7 +101,6 @@ func TestReduceUnresolvableVideoClearedByPositive(t *testing.T) {
 	}
 }
 
-// 시작을 관측하지 못한 UPCOMING은 첫 관측 시각을 추적만 하고, 검증된 사실이 grace 뒤에 와도 끝내지 않는다.
 func TestReduceUnresolvableVideoTracksUpcomingWithoutEnding(t *testing.T) {
 	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), upcomingA()))
 	verified := sessionFact(StatusUnresolvable)
@@ -134,7 +128,6 @@ func TestReduceUnresolvableVideoTracksUpcomingWithoutEnding(t *testing.T) {
 	}
 }
 
-// 관측 시각 이후 positive가 있으면 그 identity_missing은 더 오래된 사실이므로 추적을 시작하지 않는다.
 func TestReduceUnresolvableVideoRetainsNewerPositive(t *testing.T) {
 	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), liveA()))
 
@@ -150,7 +143,6 @@ func TestReduceUnresolvableVideoRetainsNewerPositive(t *testing.T) {
 	}
 }
 
-// 추적 시작보다 이른 관측이 늦게 도착한 positive·시작 미확정 LIVE는 추적을 지우지 않는다.
 func TestReduceUnresolvableVideoKeepsTrackingForOlderPositive(t *testing.T) {
 	state := trackedUnresolvableState(t)
 	olderLive := liveEvidence(41, time.Date(2026, time.August, 14, 2, 5, 0, 0, time.UTC),
@@ -171,8 +163,6 @@ func TestReduceUnresolvableVideoKeepsTrackingForOlderPositive(t *testing.T) {
 	}
 }
 
-// 이전 바이너리 기간에 positive가 지우지 못한 잔여값(positive보다 이른 추적)은 종료 근거가 아니다. 검증된 사실이
-// grace 뒤에 와도 끝내지 않고 이번 관측부터 다시 추적한다.
 func TestReduceUnresolvableVideoRestartsStaleTracking(t *testing.T) {
 	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), liveA()))
 	session := state.Sessions[testVideoID]
@@ -192,7 +182,6 @@ func TestReduceUnresolvableVideoRestartsStaleTracking(t *testing.T) {
 	}
 }
 
-// head 없는 metadata_only UPCOMING은 head를 만들 근거가 없으므로 추적을 기록하지 않는다.
 func TestReduceUnresolvableVideoIgnoresHeadlessMetadataUpcoming(t *testing.T) {
 	state := emptyState()
 

@@ -16,8 +16,7 @@ func lockScheduleSubject(ctx context.Context, tx dbx.Tx, groupKey string) error 
 	return lockLiveSubject(ctx, tx, "schedule:"+groupKey)
 }
 
-// loadScheduleState는 reducer가 읽는 live session만 잠그고 적재한다. 함께 돌려주는 저장 행 map은 같은 행의
-// 저장 열 전체이며 저장 시 조건부 갱신의 기준이다. 누적 schedule item은 reducer가 읽지 않고, youtube_schedule_items의 유일한
+// 함께 돌려주는 저장 행 map은 같은 행의 저장 열 전체이며 저장 시 조건부 갱신의 기준이다. 누적 schedule item은 reducer가 읽지 않고, youtube_schedule_items의 유일한
 // writer인 schedule consumer는 lockScheduleSubject advisory lock으로 이미 직렬화되므로 item 행을 읽거나 잠그지 않는다.
 func loadScheduleState(ctx context.Context, tx dbx.Tx, items []schedule.Item) (schedule.State, map[string]live.SessionState, error) {
 	state := schedule.State{Sessions: map[string]schedule.Session{}}
@@ -122,7 +121,6 @@ func scheduleVideoIDs(items []schedule.Item) []string {
 	return videoIDs
 }
 
-// persistScheduleDecision은 stored(loadScheduleState가 잠그고 읽은 세션 행)를 기준으로 decision을 저장한다.
 func persistScheduleDecision(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -166,7 +164,6 @@ func persistScheduleDecision(
 	return nil
 }
 
-// scheduleDecisionRuntimeVideoIDs는 persistScheduleDecision이 수명 모델 입력을 바꿀 수 있는 영상 key를 돌려준다.
 // 수명 모델 입력이 아닌 schedule item 표는 빼고 세션 저장 대상만 포함한다.
 func scheduleDecisionRuntimeVideoIDs(decision *schedule.Decision) []string {
 	videoIDs := make([]string, len(decision.Sessions))

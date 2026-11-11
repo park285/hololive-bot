@@ -16,7 +16,6 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-// TestRespond는 Respond가 올바른 상태코드와 JSON 바디를 기록하는지 검증한다.
 func TestRespond(t *testing.T) {
 	t.Parallel()
 
@@ -46,7 +45,6 @@ func TestRespond(t *testing.T) {
 	}
 }
 
-// TestJSON_Render는 Render가 Content-Type을 설정하고 유효한 JSON을 출력하는지 검증한다.
 func TestJSON_Render(t *testing.T) {
 	t.Parallel()
 
@@ -124,8 +122,6 @@ func TestJSONRenderRejectsInvalidUTF8(t *testing.T) {
 	}
 }
 
-// TestJSON_WriteContentType는 WriteContentType이 헤더를 설정하며
-// 이미 설정된 경우 덮어쓰지 않음을 검증한다.
 func TestJSON_WriteContentType(t *testing.T) {
 	t.Parallel()
 
@@ -167,7 +163,6 @@ func TestJSON_WriteContentType(t *testing.T) {
 	}
 }
 
-// TestRespond_DifferentStatusCodes는 Respond가 다양한 HTTP 상태코드를 올바르게 기록하는지 검증한다.
 func TestRespond_DifferentStatusCodes(t *testing.T) {
 	t.Parallel()
 

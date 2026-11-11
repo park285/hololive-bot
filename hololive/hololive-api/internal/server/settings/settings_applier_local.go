@@ -29,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// localSettingsApplier: admin plane 프로세스 내 직접 설정 적용 (in-process).
 type localSettingsApplier struct {
 	alarm AlarmAdvanceService
 }

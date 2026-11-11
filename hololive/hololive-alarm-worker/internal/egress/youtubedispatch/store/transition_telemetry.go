@@ -44,7 +44,6 @@ const (
 	attemptResultOutcomeUnknown = "outcome_unknown"
 )
 
-// staleSendingOutcomeUnknownReason은 stale sweep이 격리한 시도의 failure_reason이다(lifecycle Reason 어휘).
 const staleSendingOutcomeUnknownReason lifecycle.Reason = "stale_sending_outcome_unknown"
 
 // 시도 하나는 logical group owner의 provider 시도다. 따라서 follower·fulfilled·전파 전이는 기록하지 않는다.
@@ -63,12 +62,10 @@ func ownerAttempts(groups []startedLogicalGroup, result string, reason lifecycle
 	return attempts
 }
 
-// recordAttemptTelemetry는 전이 트랜잭션 tx 안에서 owner 시도를 telemetry 버퍼에 한 행씩 넣는다.
-// 순번(attempt_ordinal)은 두 값 중 큰 쪽이다. 하나는 버퍼에 남은 delivery별 최대 순번 다음 값이라 revive가 attempt_count를 0으로
-// 되돌려도 버퍼에 남은 행과 겹치지 않는다. 다른 하나는 claim 시점 attempt_count + 1(attempt started 로그와 같은 값)이라 telemetry
-// processor가 retention(기본 24h)이 지난 방출 행을 지운 뒤에도 순번이 되돌아가지 않는다. 버퍼 행이 지워지고 revive로
-// attempt_count도 0이 된 delivery만 1부터 다시 세며, 이 한계는 runbook YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md에 적었다.
-// 같은 트랜잭션이 delivery 행을 CAS로 갱신해 잠그므로 같은 delivery의 다른 전이와 순번을 다투지 않는다.
+// 순번(attempt_ordinal)은 두 값 중 큰 쪽이다. 하나는 버퍼에 남은 delivery별 최대 순번 다음 값이라 revive가 attempt_count를 0으로 되돌려도 버퍼에 남은 행과 겹치지
+// 않는다. 다른 하나는 claim 시점 attempt_count + 1(attempt started 로그와 같은 값)이라 telemetry processor가 retention(기본 24h)이 지난 방출 행을
+// 지운 뒤에도 순번이 되돌아가지 않는다. 버퍼 행이 지워지고 revive로 attempt_count도 0이 된 delivery만 1부터 다시 세며, 이 한계는 runbook
+// YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md에 적었다. 같은 트랜잭션이 delivery 행을 CAS로 갱신해 잠그므로 같은 delivery의 다른 전이와 순번을 다투지 않는다.
 func recordAttemptTelemetry(
 	ctx context.Context,
 	tx dbx.Querier,

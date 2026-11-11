@@ -138,7 +138,6 @@ func TestClientAdvanceAppliedThenResponseLostIsUnknown(t *testing.T) {
 	assert.Equal(t, int32(1), calls.Load())
 }
 
-// newStrictAlarmClient는 admin·bot plane과 같은 운영 생성자로 httptest worker client를 만든다.
 func newStrictAlarmClient(t *testing.T, baseURL, apiKey string) *alarmhttp.Client {
 	t.Helper()
 

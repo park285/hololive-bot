@@ -108,7 +108,6 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 	return out, nil
 }
 
-// CountMembers는 졸업 여부와 무관하게 관리 목록에 포함되는 멤버 전체를 센다.
 func (r *Repository) CountMembers(ctx context.Context) (int, error) {
 	var count int
 

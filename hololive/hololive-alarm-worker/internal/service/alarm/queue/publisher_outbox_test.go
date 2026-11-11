@@ -192,7 +192,6 @@ func newTestPublisher(t *testing.T, c WakeupCache, outbox dispatchoutbox.Writer,
 	return publisher
 }
 
-// outbox가 없거나 batch 한도가 양수가 아니면 기본값으로 바꾸지 않고 생성 오류로 드러낸다.
 func TestNewPublisherRejectsMissingOutboxAndNonPositiveBatchLimit(t *testing.T) {
 	t.Parallel()
 

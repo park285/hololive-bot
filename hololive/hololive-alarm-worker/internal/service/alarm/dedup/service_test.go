@@ -269,7 +269,6 @@ func (s *mockDedupCacheState) setRawString(key, value string) {
 	s.strings[key] = value
 }
 
-// notificationPairKeys는 alarm-worker notifier와 같은 규칙으로 notify/logical claim key를 만든다.
 func notificationPairKeys(service *Service, roomID, channelID string, stream *domain.Stream, minutesUntil int) (notifyKey, logicalKey string) {
 	category := keys.NotificationCategory(service.TargetMinutesSnapshot(), minutesUntil)
 
@@ -315,7 +314,6 @@ func TestService_TryClaimPair_NotificationKeyCategoryAndSchedulePolicy(t *testin
 	assert.NotEqual(t, keyTarget, keyDifferentSchedule)
 }
 
-// 같은 채널·제목·일정의 방송이 다른 video ID로 다시 올라오면 notify key는 새로 잡혀도 logical key가 중복을 막는다.
 func TestService_TryClaimPair_LogicalEventBlocksReuploadedStream(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())

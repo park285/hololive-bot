@@ -18,8 +18,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// 깨어난 직후 첫 재조회 간격이다. 이 값은 alarm dispatch 프로필의 idle_backoff_min_ms와 같고, guard(3s)가 억제한 행을
-// 250ms·500ms·1s·2s 재조회가 guard 창 안에 잡는다.
+// 이 값은 alarm dispatch 프로필의 idle_backoff_min_ms와 같고, guard(3s)가 억제한 행을 250ms·500ms·1s·2s 재조회가 guard 창 안에 잡는다.
 const initialBackoff = 250 * time.Millisecond
 
 var waitResults = sync.OnceValue(func() *prometheus.CounterVec {
@@ -69,7 +68,6 @@ func NewWaiter(c cache.LowLevelCache, channel Channel, pollInterval time.Duratio
 	}, nil
 }
 
-// Wait는 다음 조회 시점까지 기다리고, ctx가 끝나지 않았으면 true를 돌려준다.
 func (w *Waiter) Wait(ctx context.Context) bool {
 	if ctx.Err() != nil {
 		return false

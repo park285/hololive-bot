@@ -44,7 +44,7 @@ func (c *APIClient) sharedCircuitKey() string {
 	return c.distributedRLCfg.BucketBase + ":circuit_open"
 }
 
-// publishCooldown은 받은 429 대기 시각을 다른 프로세스에 알린다. 호출자가 취소해도 대기 시각을 지우지 않는 계약을 따른다.
+// 호출자가 취소해도 대기 시각을 지우지 않는 계약을 따른다.
 func (c *APIClient) publishCooldown(ctx context.Context, until time.Time) {
 	if c.shared == nil {
 		return
@@ -58,7 +58,6 @@ func (c *APIClient) publishCooldown(ctx context.Context, until time.Time) {
 	}
 }
 
-// mergeSharedCooldown은 다른 프로세스가 받은 더 늦은 429 대기 시각을 로컬 cooldown에 합친다.
 func (c *APIClient) mergeSharedCooldown(ctx context.Context) {
 	if c.shared == nil {
 		return
@@ -74,7 +73,7 @@ func (c *APIClient) mergeSharedCooldown(ctx context.Context) {
 	c.extendLocalCooldown(until)
 }
 
-// sharedCircuitRemaining은 다른 프로세스가 연 circuit의 남은 시간을 돌려준다. 열려 있지 않거나 읽지 못하면 0이다.
+// 열려 있지 않거나 읽지 못하면 0이다.
 func (c *APIClient) sharedCircuitRemaining(ctx context.Context) time.Duration {
 	if c.shared == nil {
 		return 0
@@ -110,8 +109,7 @@ func (c *APIClient) publishCircuitOpen(ctx context.Context) bool {
 	return opened
 }
 
-// recordSharedStateReadFailure는 호출자 ctx로 읽다 실패한 경우를 기록한다. 호출자 취소·기한 만료는 Valkey 장애가
-// 아니므로 counter와 Warn에 넣지 않고, 요청은 뒤따르는 ctx 검사에서 끝난다.
+// 호출자 취소·기한 만료는 Valkey 장애가 아니므로 counter와 Warn에 넣지 않고, 요청은 뒤따르는 ctx 검사에서 끝난다.
 func (c *APIClient) recordSharedStateReadFailure(ctx context.Context, operation string, err error) {
 	if ctx.Err() != nil {
 		return

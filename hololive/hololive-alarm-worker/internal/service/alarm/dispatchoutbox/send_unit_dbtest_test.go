@@ -124,8 +124,6 @@ func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 	require.Len(t, claimed, 3)
 }
 
-// 같은 unit 멤버의 next_attempt_at이 1µs 갈리고 DB 시각이 그 사이에 있어도 claim은 unit 전체를 가져가고 발송
-// fence를 통과해야 한다. 일부만 leased되면 fence가 unit을 격리한다.
 func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -171,7 +169,6 @@ func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 	require.Equal(t, 2, sending)
 }
 
-// ready 멤버가 끌어오는 대상은 대기 멤버뿐이다. 종단 멤버는 claim으로 되살아나지 않는다.
 func TestAlarmDispatchClaimLeavesTerminalUnitMembers(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -217,8 +214,7 @@ func TestAlarmDispatchClaimLeavesTerminalUnitMembers(t *testing.T) {
 	require.Equal(t, "dlq", status)
 }
 
-// fixedNowPool은 now()와 clock_timestamp()가 모두 at을 돌려주는 연결 pool을 만든다. 검색 경로에서 pg_catalog보다
-// 앞선 schema의 함수가 내장 함수를 가리므로 claim의 ready 판정과 fence 시각을 µs 단위로 결정할 수 있다.
+// 검색 경로에서 pg_catalog보다 앞선 schema의 함수가 내장 함수를 가리므로 claim의 ready 판정과 fence 시각을 µs 단위로 결정할 수 있다.
 func fixedNowPool(t *testing.T, pool *pgxpool.Pool, at time.Time) *pgxpool.Pool {
 	t.Helper()
 
@@ -275,7 +271,6 @@ func sendUnitTestEnvelope(roomID, streamID string) domain.AlarmQueueEnvelope {
 	}
 }
 
-// newOutboxRepository는 production 생성자에 테스트 pool을 dbtest.WrapPool로 감싸 넘긴다.
 func newOutboxRepository(tb testing.TB, pool *pgxpool.Pool) *dispatchoutbox.PgxRepository {
 	tb.Helper()
 

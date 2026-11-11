@@ -14,8 +14,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// 기준은 처음 수락한 video_list 관측 시각이며 과거 catalog·0001년 레거시 clock에서 소급하지 않습니다. 더 이른 slot이 늦게
-// 처리되면 기준은 더 이른 시각으로만 내려가고, 기준 목록에 있던 영상은 공개 근거가 있어도 알리지 않습니다.
 func TestContentNoveltyBaselineTakesEarliestAcceptedListWithoutLegacyBackfill(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -69,8 +67,6 @@ func TestContentNoveltyBaselineTakesEarliestAcceptedListWithoutLegacyBackfill(t 
 	assertNewVideoOutboxes(t, pool, "late-upload")
 }
 
-// 신뢰 근거가 없는 신규 후보도 canonical·clock은 저장하되 알림 의도는 만들지 않고 novelty_pending으로 남깁니다. Player가 응답했지만
-// 시각을 확정하지 못한 관측은 계속 보류하고, 결정적 근거가 오면 정확히 한 번 알립니다. 이후 관측과 replay는 다시 알리지 않습니다.
 func TestContentNoveltyPendingCandidateNotifiesOnceWhenTrustedEvidenceArrives(t *testing.T) {
 	t.Parallel()
 
@@ -112,7 +108,6 @@ func TestContentNoveltyPendingCandidateNotifiesOnceWhenTrustedEvidenceArrives(t 
 	assertNewVideoOutboxes(t, pool, "late")
 }
 
-// 다른 채널이나 Shorts로 이미 저장된 영상은 이 채널 video_list에서 처음 보여도 새 업로드 근거가 아닙니다.
 func TestContentNoveltyVideosKnownElsewhereStaySilent(t *testing.T) {
 	t.Parallel()
 
@@ -135,8 +130,7 @@ func TestContentNoveltyVideosKnownElsewhereStaySilent(t *testing.T) {
 	assertNewVideoOutboxes(t, pool, "fresh")
 }
 
-// 같은 채널의 뒤 video_list는 앞선 목록이 끝나기 전에 claim되지 않습니다. 기준을 늦은 목록으로 세우면 그 사이 업로드가
-// 기준 목록으로 묻히기 때문입니다. 같은 채널 shorts_list와 다른 채널 목록은 이 순서에 묶이지 않습니다.
+// 기준을 늦은 목록으로 세우면 그 사이 업로드가 기준 목록으로 묻히기 때문입니다.
 func TestContentVideoListClaimsKeepSameChannelOrder(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -209,7 +203,6 @@ func TestContentVideoListClaimsKeepSameChannelOrder(t *testing.T) {
 	require.Equal(t, second, batch.Claims[0].ObservationID)
 }
 
-// 기준 이후 발견한 예정 Premiere는 live 투영만 하고 발견 때 알리지 않으며, 공개 전환 관측과 발견 관측 replay에서도 알리지 않습니다.
 func TestContentNoveltyPremiereStaysSilentFromDiscoveryThroughRelease(t *testing.T) {
 	t.Parallel()
 
@@ -228,7 +221,6 @@ func TestContentNoveltyPremiereStaysSilentFromDiscoveryThroughRelease(t *testing
 	assertNewVideoOutboxes(t, pool)
 }
 
-// 첫 기준 목록에 있던 예정 Premiere는 live 투영은 하되 알리지 않고, 공개 전환 뒤에도 알리지 않습니다.
 func TestContentNoveltyBaselinePremiereStaysSilentThroughRelease(t *testing.T) {
 	t.Parallel()
 

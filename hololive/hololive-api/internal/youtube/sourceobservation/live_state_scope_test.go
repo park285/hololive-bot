@@ -283,7 +283,6 @@ func liveScopeScenarios(base time.Time) []liveScopeScenario {
 	}
 }
 
-// requireNarrowedLiveScope는 축소 적재가 읽은 행과 이력 적재 여부를 확인하고, 이력을 생략한 영상 ID를 돌려준다.
 func requireNarrowedLiveScope(t *testing.T, narrowed, full *live.State, payload []string, scenario *liveScopeScenario) map[string]struct{} {
 	t.Helper()
 
@@ -402,10 +401,6 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, channelVideoIDs []
 	require.True(t, dueHistoryCleared, "saving an ENDED session must clear its unused history")
 }
 
-// 채널 범위 적재는 payload 밖의 candidate 없는 ENDED를 읽지 않고, payload ENDED와 due candidate가
-// 남은 ENDED는 이력 없이 읽는다. 이때 payload에 오른 candidate 없는 ENDED의 pending은 읽지 않지만
-// candidate가 남은 ENDED·head만 남은 영상·session 없는 영상의 pending은 읽는다. 전체 적재 oracle과 같은 결정을 내고,
-// 활성 이력은 보존하고 저장되는 ENDED 이력은 비운다.
 func TestLiveStateLoadSkipsUnmentionedEndedSessions(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
@@ -463,8 +458,6 @@ func seedEndedHistoryFixture(t *testing.T, pool *pgxpool.Pool, base time.Time, h
 		VALUES ('up-hist', 'UPCOMING', $1, $1, $2)`, base, activeHistory)
 }
 
-// 이력 없이 읽은 ENDED의 due candidate를 정리할 때 큰 배열도 비운다.
-// 적재한 활성 세션의 이력은 계속 늘어난다.
 func TestLiveEndedSessionSaveClearsIgnoredHistory(t *testing.T) {
 	t.Parallel()
 
@@ -516,7 +509,6 @@ func liveHeadCandidateCleared(t *testing.T, pool *pgxpool.Pool, videoID string) 
 	return cleared
 }
 
-// 신규·첫 positive는 PARTIAL이어도 과거 부재를 복원하고, positive 없는 메타데이터는 그대로 둔다.
 func TestLivePartialFirstPositiveReplaysAbsences(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
@@ -740,8 +732,6 @@ func fullyLoadedPartialDecision(t *testing.T, pool *pgxpool.Pool, evidence *live
 	return want, decision
 }
 
-// 다른 kind의 늦은 LIVE 뒤 같은 slot의 PARTIAL은 이미 저장된 COMPLETE 부재만 재적용한다.
-// 새 부재를 만들지 않으며 이미 센 slot과 UPCOMING 때 무시한 slot은 재계산하지 않는다.
 func TestLivePartialCurrentSlotReplaysAfterDelayedVideoCheck(t *testing.T) {
 	for _, grace := range []time.Duration{0, time.Hour} {
 		t.Run(grace.String(), func(t *testing.T) {

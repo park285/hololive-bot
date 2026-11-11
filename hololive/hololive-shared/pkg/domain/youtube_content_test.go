@@ -191,13 +191,11 @@ func TestThumbnailsJSON_Value(t *testing.T) {
 		wantNil    bool
 	}{
 		{
-			// nil 슬라이스 → (nil, nil) 반환
 			name:       "nil 슬라이스",
 			thumbnails: nil,
 			wantNil:    true,
 		},
 		{
-			// 유효한 항목 → JSON 문자열 반환
 			name: "유효한 썸네일",
 			thumbnails: domain.ThumbnailsJSON{
 				{URL: "https://i.ytimg.com/vi/abc/hqdefault.jpg", Width: 480, Height: 360},
@@ -253,14 +251,12 @@ func TestThumbnailsJSON_Scan(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// 유효한 JSON 바이트 → 파싱 성공
 			name:    "유효한 JSON 바이트",
 			input:   []byte(`[{"url":"https://i.ytimg.com/vi/abc/hqdefault.jpg","width":480,"height":360}]`),
 			wantNil: false,
 			wantErr: false,
 		},
 		{
-			// 잘못된 타입 (string) → 오류 반환
 			name:    "잘못된 타입",
 			input:   "문자열은 지원 안 함",
 			wantNil: false,

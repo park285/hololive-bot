@@ -119,7 +119,6 @@ func sendYouTubeHandoffFixture(t *testing.T) youtubeHandoffFixture {
 	}
 }
 
-// makeDue는 고정 요청의 다음 확인을 DB 시각 직전으로 당기고, age만큼 admission(sent_at)을 과거로 옮긴다.
 func (f youtubeHandoffFixture) makeDue(t *testing.T, age time.Duration) {
 	t.Helper()
 
@@ -178,10 +177,6 @@ func (f youtubeHandoffFixture) load(t *testing.T) youtubeHandoffState {
 	return state
 }
 
-// send engine의 202 성공은 SENT 정산과 함께 requestId·첫 확인을 남기고, reconciler는 그 requestId로 조회한 결과를
-// 고정 요청·delivery·SENT였던 부모 outbox 집계에 한 트랜잭션으로 정산한다. 지평 전 미확인은 SENT 확인 대기로 두되 다음
-// 확인을 admission + 지평 안에 둔다. 지평에 닿은 미확인과 결과 불명은 격리, 예산이 남은 failed는 다음 세대 PENDING,
-// 예산이 없는 failed는 FAILED다.
 func TestYouTubeHandoffReconcilerSettlesFrozenRequest(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -239,8 +234,6 @@ func TestYouTubeHandoffReconcilerSettlesFrozenRequest(t *testing.T) {
 	}
 }
 
-// 종료로 끊긴 상태 조회는 관측이 아니므로 정산하지 않는다. 요청은 soft claim만 잡힌 확인 대기로 남고 soft claim이
-// 끝나기 전에는 다른 확인도 고르지 않는다.
 func TestYouTubeHandoffReconcilerCanceledQueryLeavesRequestUnsettled(t *testing.T) {
 	fixture := sendYouTubeHandoffFixture(t)
 	fixture.makeDue(t, 0)

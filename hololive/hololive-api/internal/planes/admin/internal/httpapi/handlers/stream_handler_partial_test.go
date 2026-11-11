@@ -20,8 +20,6 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
-// org=all에서 일부 org만 실패하면 provider는 PartialStreamsError를 돌려주고 캐시하지 않는다.
-// HTTP 경계는 새 응답 필드 없이 기존 오류 매핑(500)을 유지하고 성공한 org의 부분 목록을 200으로 내보내지 않는다.
 // 부분 응답을 드러내는 필드가 필요하면 공개 계약 변경이므로 별도 결정이 먼저다.
 func TestGetStreamsOrgAllPartialFailureRespondsInternalErrorWithoutPartialBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -49,7 +47,6 @@ func TestGetStreamsOrgAllPartialFailureRespondsInternalErrorWithoutPartialBody(t
 	}
 }
 
-// newPartialOrgUpstream은 Hololive org만 성공하고 나머지 org는 404로 실패하는 Holodex 대역이다.
 func newPartialOrgUpstream(t *testing.T) *httptest.Server {
 	t.Helper()
 

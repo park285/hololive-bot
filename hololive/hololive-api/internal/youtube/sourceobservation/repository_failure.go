@@ -14,13 +14,11 @@ import (
 
 const attemptsExhaustedCode = "attempts_exhausted"
 
-// attemptsExhausted는 재시도 정책의 소진 판정이다. 소진한 관측은 다시 선점하지 않고 DEAD_LETTER로 끝낸다.
+// 소진한 관측은 다시 선점하지 않고 DEAD_LETTER로 끝낸다.
 func attemptsExhausted(attemptCount int) bool {
 	return attemptCount >= MaxAttempts
 }
 
-// claimDeadLetterCode는 claim이 잠갔지만 선점하지 않은 due 행의 종료 사유를 정한다. Replay epoch 이전 관측은
-// 시도 횟수와 무관하게 replay_epoch_expired이고, 그 밖에는 시도를 소진한 행만 attempts_exhausted로 끝낸다.
 func claimDeadLetterCode(replayEpochRejected bool, attemptCount int) (string, bool) {
 	if replayEpochRejected {
 		return replayEpochExpiredCode, true

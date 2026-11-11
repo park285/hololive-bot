@@ -34,7 +34,6 @@ import (
 
 const healthPath = "/health"
 
-// LoggerMiddleware가 쓰는 패턴 문법(정확 일치, "prefix*", "*suffix")을 파싱한 결과로 판정한다.
 func TestSkipPathMatcher_PatternKinds(t *testing.T) {
 	t.Parallel()
 
@@ -63,7 +62,6 @@ func TestSkipPathMatcher_PatternKinds(t *testing.T) {
 	}
 }
 
-// 멀티바이트 User-Agent는 바이트 중간이 아니라 rune 경계에서 잘려 로그에 대체 문자가 남지 않아야 한다.
 func TestLoggerMiddleware_TruncatesMultibyteUserAgentAtRuneBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -206,7 +204,6 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 	}
 }
 
-// pprof 라우터가 넘기는 "/debug/pprof*" 패턴이 하위 경로까지 스킵하는지 고정한다.
 func TestSkipPathMatcher_WildcardSuffixPatternCoversSubpaths(t *testing.T) {
 	t.Parallel()
 

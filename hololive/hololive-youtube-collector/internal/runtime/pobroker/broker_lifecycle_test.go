@@ -151,8 +151,6 @@ func TestSessionCloseRecordsExitReason(t *testing.T) {
 	}
 }
 
-// 응답 뒤 비동기 retire, worker 종료 감시, lease 타이머가 동시에 퇴역을 요청해도
-// 먼저 퇴역을 표시한 원인만 남아야 합니다.
 func TestFirstRetirementReasonWinsUnderConcurrentRetire(t *testing.T) {
 	broker := New("revision", "unused", "unused")
 	// 만료된 lease를 타이머 없이 둡니다. setLeaseLocked는 지난 deadline이면 곧바로 발화하는 타이머를 걸어,

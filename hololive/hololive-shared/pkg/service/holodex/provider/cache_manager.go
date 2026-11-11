@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// cacheManagerStore는 CacheManager가 응답 cache에 쓰는 Get·Set 작업이다.
 type cacheManagerStore interface {
 	cache.KeyValueReader
 	cache.KeyValueWriter

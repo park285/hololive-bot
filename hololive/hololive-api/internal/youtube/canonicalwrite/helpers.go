@@ -26,7 +26,6 @@ func normalizeShortVideoResourceID(id string) string {
 	return normalized
 }
 
-// writeRowPlaceholders는 batch VALUES의 rowIndex번째 행 ($k+1, ..., $k+columns)를 쓴다. K = rowIndex*columns.
 func writeRowPlaceholders(sb *strings.Builder, rowIndex, columns int) {
 	base := rowIndex * columns
 

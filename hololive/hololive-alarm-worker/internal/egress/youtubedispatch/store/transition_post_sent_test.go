@@ -11,8 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// community·shorts 첫 성공은 사전 표시 없이 CompleteSent 한 트랜잭션에서 tracking과 post 단위 알람 상태를 SENT로 만든다.
-// 같은 post의 다른 room이 뒤에 성공해도 post 단위 발송 시각은 가장 이른 값을 유지한다.
 func TestCompleteSentMarksPostSentWithoutClaim(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -51,7 +49,6 @@ func TestCompleteSentMarksPostSentWithoutClaim(t *testing.T) {
 	requireTransitionPostSent(t, pool, postID, firstSentAt)
 }
 
-// seedTransitionPostSentRows는 API가 outbox와 함께 만드는 미발송 tracking 행과 두 room의 delivery를 만든다.
 // 알람 상태 행(post 단위)은 만들지 않는다.
 func seedTransitionPostSentRows(t *testing.T, pool *pgxpool.Pool, videoID, postID string, roomIDs ...string) {
 	t.Helper()

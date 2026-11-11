@@ -15,8 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )
 
-// newRoundTripClient는 운영 생성자로 httptest handler를 가리키는 alarmhttp client를 만든다.
-// 서버가 worker로 옮겨왔으므로 실제 handler와 client의 envelope 왕복은 이 패키지가 검증한다.
 func newRoundTripClient(t *testing.T, baseURL string) *alarmhttp.Client {
 	t.Helper()
 

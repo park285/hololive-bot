@@ -19,7 +19,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// alarm provider URL이 없으면 in-process AlarmService로 대신하지 않고 기동을 실패시킨다.
 func TestBuildAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
 	t.Parallel()
 
@@ -29,7 +28,6 @@ func TestBuildAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
 	require.Error(t, err)
 }
 
-// process 하나의 Holodex 서비스는 runtime 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.
 func TestBuildScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	t.Parallel()
 
@@ -76,8 +74,7 @@ func TestBuildScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	}
 }
 
-// newFoundationTestMemberCache는 migration 시드 DB를 읽는 member cache다. 공식 일정 식별 색인은 멤버 적재에 실패하면
-// 기동 오류이므로 foundation 테스트도 실제 멤버 원천을 준다.
+// 공식 일정 식별 색인은 멤버 적재에 실패하면 기동 오류이므로 foundation 테스트도 실제 멤버 원천을 준다.
 func newFoundationTestMemberCache(t *testing.T) *member.Cache {
 	t.Helper()
 

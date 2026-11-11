@@ -90,7 +90,6 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 		return primaryDigest, nil
 	}
 
-	// reviewer nil → consensus 비활성 상태로 primary 직접 반환
 	if c.reviewer == nil {
 		return primaryDigest, nil
 	}
@@ -123,7 +122,7 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 	return primaryDigest, nil
 }
 
-// runReview: Stage 2 reviewer 호출 및 결과 평가. 반환값이 nil이면 primary를 사용한다.
+// 반환값이 nil이면 primary를 사용한다.
 func (c *ConsensusSummarizer) runReview(
 	ctx context.Context,
 	input *model.SummarizeInput,
@@ -172,7 +171,7 @@ func (c *ConsensusSummarizer) runReview(
 	return verdict
 }
 
-// runAdjudication: Stage 3 adjudicator 호출. 반환값이 nil이면 primary를 사용한다.
+// 반환값이 nil이면 primary를 사용한다.
 func (c *ConsensusSummarizer) runAdjudication(
 	ctx context.Context, input *model.SummarizeInput,
 	primaryDigest *model.Digest, verdict *consensus.ReviewVerdict,
@@ -240,7 +239,6 @@ func adjudicationTriggerReason(verdict *consensus.ReviewVerdict) string {
 	return "low_confidence"
 }
 
-// review: reviewer LLM 호출. verdict 파싱 실패 시 errReviewVerdictParse 반환.
 func (c *ConsensusSummarizer) review(
 	ctx context.Context,
 	input *model.SummarizeInput,
@@ -281,7 +279,6 @@ func (c *ConsensusSummarizer) review(
 	return &verdict, nil
 }
 
-// adjudicate: adjudicator LLM 호출. 파싱 실패 시 errAdjudicatorResponseParse 반환.
 func (c *ConsensusSummarizer) adjudicate(
 	ctx context.Context,
 	input *model.SummarizeInput,

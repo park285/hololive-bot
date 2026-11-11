@@ -39,9 +39,8 @@ func NewSubscriberResolver(cacheClient SubscriberCache, db dbx.Querier) *Subscri
 	return &SubscriberResolver{cache: cacheClient, db: db}
 }
 
-// ResolveChannelSubscribersByType는 채널·알림 종류의 구독 방을 cache에서 찾고, cache로 확정되지 않으면 resolver의
-// DB에서 읽는다. DB 결과는 이번 호출에만 쓰고 cache를 다시 채우지 않는다. 구독 cache가 있는데 확정하지 못해 DB를
-// 읽은 경우만 fallback 카운터로 센다. 구독 cache 없이 만든 resolver는 DB가 기본 경로라 세지 않는다.
+// DB 결과는 이번 호출에만 쓰고 cache를 다시 채우지 않는다. 구독 cache가 있는데 확정하지 못해 DB를 읽은 경우만 fallback 카운터로 센다. 구독 cache 없이 만든 resolver는 DB가
+// 기본 경로라 세지 않는다.
 func (r *SubscriberResolver) ResolveChannelSubscribersByType(
 	ctx context.Context,
 	channelID string,
@@ -202,8 +201,6 @@ func (r *SubscriberResolver) ResolveUncachedChannelSubscribersByType(
 	return result, nil
 }
 
-// filterKnownEmptySubscriberChannels는 empty marker로 구독 0이 확정된 채널을 빼고 DB 확인이 필요한 채널만 남긴다.
-// 정규화·중복 제거한 채널의 marker 확인은 한 번의 pipeline으로 보낸다.
 func filterKnownEmptySubscriberChannels(
 	ctx context.Context,
 	cacheClient cache.LowLevelCache,
@@ -248,9 +245,7 @@ func filterKnownEmptySubscriberChannels(
 	return pending, nil
 }
 
-// resolveKnownEmptySubscriberChannels는 채널마다 empty marker EXISTS를 한 번의 DoMulti pipeline으로 보내고 입력과
-// 같은 위치에 marker 존재 여부를 돌려준다. 확인에 실패한 채널은 구독 0으로 단정하지 않는다. DB가 없어 cache 결과만
-// 믿어야 하면(requireCacheSuccess) 실패를 오류로 반환한다.
+// 확인에 실패한 채널은 구독 0으로 단정하지 않는다. DB가 없어 cache 결과만 믿어야 하면(requireCacheSuccess) 실패를 오류로 반환한다.
 func resolveKnownEmptySubscriberChannels(
 	ctx context.Context,
 	cacheClient cache.LowLevelCache,

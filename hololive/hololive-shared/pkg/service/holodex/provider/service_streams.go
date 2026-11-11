@@ -224,7 +224,6 @@ func resolveStreamOrg(org string) (string, error) {
 	return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, stringutil.TrimSpace(org))
 }
 
-// streamOrgAliases는 읽기 전용이라 요청마다 만들지 않는다.
 var streamOrgAliases = map[string]string{
 	"":     constants.HolodexAPIParams.OrgHololive,
 	"holo": constants.HolodexAPIParams.OrgHololive,
@@ -309,8 +308,6 @@ func normalizeStreamOrg(org string) string {
 	return strings.TrimSuffix(normalized, "!")
 }
 
-// fetchIndieStreams: 개인세 VTuber 채널의 라이브 스트림을 조회합니다.
-// Holodex /users/live API를 사용하여 채널 ID 기반으로 조회합니다.
 func (h *Service) fetchIndieStreams(ctx context.Context) ([]*domain.Stream, error) {
 	if len(constants.IndieChannelIDs) == 0 {
 		return nil, nil

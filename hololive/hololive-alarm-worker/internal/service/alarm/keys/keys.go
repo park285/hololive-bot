@@ -102,8 +102,6 @@ func normalizedScheduledUnix(t time.Time) int64 {
 	return NormalizeScheduledMinute(t).Unix()
 }
 
-// normalizeTitleForFingerprint: alarm dedup 전용 title 정규화.
-// NormalizeKey 기반에 CJK full-width 구두점을 추가로 제거한다.
 // NormalizeKey 전역 수정 시 멤버 검색/LLM 필터 side effect 발생하므로 분리.
 func normalizeTitleForFingerprint(title string) string {
 	base := stringutil.NormalizeKey(title)

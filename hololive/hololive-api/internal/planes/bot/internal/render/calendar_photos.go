@@ -40,8 +40,7 @@ type calendarPhotoFetchResult struct {
 	cachePolicy calendarCachePolicy
 }
 
-// calendarPhotoFetchSlot은 사진 하나의 다운로드 결과다. 각 goroutine은 자기 index의 slot에만 쓰고, 쓰지 못한 slot의
-// zero value는 실패로 집계된다.
+// 각 goroutine은 자기 index의 slot에만 쓰고, 쓰지 못한 slot의 zero value는 실패로 집계된다.
 type calendarPhotoFetchSlot struct {
 	image         image.Image
 	ok            bool
@@ -61,9 +60,7 @@ func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (
 	return out, nil
 }
 
-// fetchMemberPhotosWithinBudget은 entries의 고유 사진을 최대 calendarPhotoMaxFetches장까지 calendarPhotoFetchWorkers개씩
-// 동시에 받는다. 캐시 정책은 다음과 같다. 상한을 넘는 사진이 있거나 예산이 끝난 뒤 실패한 사진이 있으면 메모리·디스크
-// 캐시를 모두 막고, 그 밖의 개별 실패는 디스크 캐시만 막는다. 부모 ctx 취소는 오류로 돌려준다.
+// 캐시 정책은 다음과 같다. 상한을 넘는 사진이 있거나 예산이 끝난 뒤 실패한 사진이 있으면 메모리·디스크 캐시를 모두 막고, 그 밖의 개별 실패는 디스크 캐시만 막는다. 부모 ctx 취소는 오류로 돌려준다.
 func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
 	result := calendarPhotoFetchResult{
 		photos: make(map[string]image.Image),
@@ -127,8 +124,7 @@ func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []
 	return result, nil
 }
 
-// uniqueCalendarPhotoURLs는 entries 순서대로 고유 사진 URL을 limit개까지 모은다. 상한 limit을 넘는 고유 URL이 있으면
-// truncated가 참이다. 이미 모은 URL의 중복과 사진 없는 항목은 상한을 넘긴 것으로 보지 않는다.
+// 상한 limit을 넘는 고유 URL이 있으면 truncated가 참이다. 이미 모은 URL의 중복과 사진 없는 항목은 상한을 넘긴 것으로 보지 않는다.
 func uniqueCalendarPhotoURLs(entries []domain.CalendarEntry, limit int) (photoURLs []string, truncated bool) {
 	seen := make(map[string]struct{}, min(len(entries), limit))
 
@@ -179,8 +175,7 @@ func (p *calendarCachePolicy) markUncacheable() {
 	p.diskCacheable = false
 }
 
-// fetchMemberPhoto는 사진 URL의 고해상도 썸네일을 받아 디코드한다. 실패는 calendar에서 사진 없이 그리는 정상 경로라
-// Debug로만 남긴다.
+// 실패는 calendar에서 사진 없이 그리는 정상 경로라 Debug로만 남긴다.
 func fetchMemberPhoto(ctx context.Context, photoURL string) (image.Image, bool) {
 	url := thumbnailURL(photoURL, calendarPhotoThumbnailSize)
 

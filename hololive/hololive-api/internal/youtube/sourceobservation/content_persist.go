@@ -111,8 +111,7 @@ func domainNotification(intent *content.NotificationIntent) *domain.YouTubeNotif
 	}
 }
 
-// shortCanonicalPostID는 쇼츠 payload의 canonical_post_id를 만든다. 정규화할 수 없는 값은 빈 문자열로 싣고
-// canonical 저장 전 검증이 그 행을 거부한다.
+// 정규화할 수 없는 값은 빈 문자열로 싣고 canonical 저장 전 검증이 그 행을 거부한다.
 func shortCanonicalPostID(contentID string) string {
 	canonicalID, err := ytcontentid.ForShort(contentID)
 	if err != nil {
@@ -122,8 +121,6 @@ func shortCanonicalPostID(contentID string) string {
 	return canonicalID
 }
 
-// mustMarshalPayload는 outbox payload 계약 값을 JSON 문자열로 만든다. 계약 타입은 항상 직렬화할 수 있어야 하므로
-// 실패는 프로그래밍 오류로 보고 panic한다.
 func mustMarshalPayload(v any) string {
 	data, err := jsonv2.Marshal(v)
 	if err != nil {

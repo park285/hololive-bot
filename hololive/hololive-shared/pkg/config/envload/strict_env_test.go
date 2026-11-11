@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// 값이 없거나 공백뿐이면 기본값이고, 파싱 오류가 없으면 Err는 nil이다.
 func TestStrictEnvUsesDefaultsForUnsetOrBlank(t *testing.T) {
 	t.Setenv("STRICT_ENV_TEST_INT", "  ")
 
@@ -29,7 +28,6 @@ func TestStrictEnvUsesDefaultsForUnsetOrBlank(t *testing.T) {
 	}
 }
 
-// 잘못된 키를 모두 모아 한 번에 보이고, 오류 문구에 입력 값은 넣지 않는다.
 func TestStrictEnvCollectsEveryInvalidKeyWithoutValues(t *testing.T) {
 	const secretLike = "s3cr3t-value"
 

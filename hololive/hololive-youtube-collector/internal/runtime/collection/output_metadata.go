@@ -19,7 +19,6 @@ type ObservationMetadata struct {
 	Lease              contract.LeaseProof
 }
 
-// ObservationCount는 payload 복사 없이 관측 수를 반환합니다.
 func (o RunOutput) ObservationCount() int {
 	return len(o.observations)
 }

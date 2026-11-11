@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// LLM 호출은 비멱등 비용 작업이라 SDK가 재시도하지 않는다. 재시도 대상 상태(503)에도 요청은 한 번만 나가야 한다.
 func TestLLMClientsDoNotRetryRetryableStatus(t *testing.T) {
 	newUnavailableServer := func(t *testing.T) (*httptest.Server, *atomic.Int32) {
 		t.Helper()

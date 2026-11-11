@@ -12,8 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// extendDeadlineScript는 저장된 시각보다 늦을 때만 값을 바꾼다. 여러 프로세스가 동시에 기록해도 대기 시각은 뒤로만 밀린다.
-// 본문은 hololive-api·hololive-worker ACL이 허용하는 GET과 SET만 쓴다.
+// 여러 프로세스가 동시에 기록해도 대기 시각은 뒤로만 밀린다. 본문은 hololive-api·hololive-worker ACL이 허용하는 GET과 SET만 쓴다.
 const extendDeadlineScript = `
 local current = tonumber(redis.call('GET', KEYS[1]) or '') or 0
 local candidate = tonumber(ARGV[1])
@@ -41,7 +40,6 @@ func NewSharedDeadline(cacheClient cache.LowLevelCache) (*SharedDeadline, error)
 	return &SharedDeadline{cacheClient: cacheClient, now: time.Now}, nil
 }
 
-// Extend는 key의 대기 시각을 until로 늦춘다. 이미 더 늦은 시각이 있으면 그대로 둔다.
 func (d *SharedDeadline) Extend(ctx context.Context, key string, until time.Time) error {
 	ttl, ok := d.remaining(until)
 	if !ok {
@@ -59,7 +57,6 @@ func (d *SharedDeadline) Extend(ctx context.Context, key string, until time.Time
 	return nil
 }
 
-// OpenOnce는 key가 비어 있을 때만 until까지 연다. 이미 열려 있으면 false를 돌려주고 만료 시각을 늘리지 않는다.
 func (d *SharedDeadline) OpenOnce(ctx context.Context, key string, until time.Time) (bool, error) {
 	ttl, ok := d.remaining(until)
 	if !ok {
@@ -80,7 +77,6 @@ func (d *SharedDeadline) OpenOnce(ctx context.Context, key string, until time.Ti
 	return true, nil
 }
 
-// Deadline은 key의 대기 시각을 읽는다. 값이 없으면 zero time을, 숫자가 아닌 값이면 오류를 돌려준다.
 func (d *SharedDeadline) Deadline(ctx context.Context, key string) (time.Time, error) {
 	raw, err := d.cacheClient.GetClient().Do(ctx, d.cacheClient.B().Get().Key(key).Build()).ToString()
 	if valkeygo.IsValkeyNil(err) {
@@ -99,7 +95,6 @@ func (d *SharedDeadline) Deadline(ctx context.Context, key string) (time.Time, e
 	return time.UnixMilli(unixMilli), nil
 }
 
-// remaining은 until까지 남은 시간을 1ms 이상으로 올린다. 이미 지난 시각은 기록할 것이 없다.
 func (d *SharedDeadline) remaining(until time.Time) (time.Duration, bool) {
 	ttl := until.Sub(d.now())
 	if ttl <= 0 {

@@ -185,8 +185,7 @@ func (s *Service) Update(newSettings Settings) error {
 	return nil
 }
 
-// 같은 디렉터리의 temp 파일에 전량 기록한 뒤 rename으로 교체한다. 제자리 truncate+write는
-// 중간에 실패하면 잘린 settings 파일을 남겨 다음 기동의 읽기 계약을 깨뜨린다.
+// 제자리 truncate+write는 중간에 실패하면 잘린 settings 파일을 남겨 다음 기동의 읽기 계약을 깨뜨린다.
 func (s *Service) persistSettings(candidate Settings) (err error) {
 	tempPath, writeErr := s.writeSettingsTempFile(candidate)
 

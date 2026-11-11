@@ -36,7 +36,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 병렬 prepare 가 보수적 동시성 한도로 묶여 있어야 한다(Valkey 부하 제어).
 func TestPrepareSendBatch_BoundedConcurrency(t *testing.T) {
 	t.Parallel()
 
@@ -49,7 +48,6 @@ func TestPrepareSendBatch_BoundedConcurrency(t *testing.T) {
 	}
 }
 
-// 다수 항목을 병렬 prepare 해도 publish envelope 순서가 입력 순서대로 보존돼야 한다(누락 금지·순서 안정성).
 func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +104,6 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 	assert.Equal(t, wantRoomOrder, gotRoomOrder, "publish order must match input order")
 }
 
-// 동일 (room, stream) 중복 항목은 병렬 claim 경합에서도 정확히 1회만 통과해야 한다(중복 발송 금지).
 func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 	t.Parallel()
 

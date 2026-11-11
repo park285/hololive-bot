@@ -6,8 +6,7 @@ import (
 	"time"
 )
 
-// Validate는 환경 변수와 plane 정책을 검증한다. 워커 수·claim·timeout 관계는
-// LoadAPIWorkerProfile이 인프라 구성 전에 검증한다.
+// 워커 수·claim·timeout 관계는 LoadAPIWorkerProfile이 인프라 구성 전에 검증한다.
 func (c *YouTubePlaneConfig) Validate() error {
 	if err := c.validatePool(); err != nil {
 		return fmt.Errorf("validate pool: %w", err)

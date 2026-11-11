@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// payloadDecodeInput은 kind별 decoder가 payload를 검증할 때 쓰는 envelope 문맥이다.
 type payloadDecodeInput struct {
 	subjectKey         string
 	completeness       Completeness
@@ -151,7 +150,6 @@ func decodeShortsListPayload(raw []byte, input payloadDecodeInput) (payload, cov
 }
 
 // generation 2는 과거 coverage 의미를 보존하고 generation 3는 streams 조회 증명을 요구한다.
-// 퇴역 generation 1 decoder는 기존 제거 조건을 충족해 삭제된 상태를 유지한다.
 func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
 	if input.contractGeneration != LiveSnapshotMetadataContractGeneration && input.contractGeneration != LiveSnapshotQueryContractGeneration {
 		return nil, nil, fmt.Errorf("unsupported live snapshot contract generation %d", input.contractGeneration)
@@ -177,8 +175,7 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 	return value, value.Coverage, nil
 }
 
-// validateLiveScheduleObservations는 재사용 일정의 원래 관측 시각이 effective time과 같은 lease 슬롯 시계에서
-// 이번 슬롯보다 앞서는지 확인한다. 같거나 늦은 값은 재사용 일정이 더 새 관측을 덮어쓰게 하므로 거부한다.
+// 같거나 늦은 값은 재사용 일정이 더 새 관측을 덮어쓰게 하므로 거부한다.
 func validateLiveScheduleObservations(value *LiveSnapshotV1, input payloadDecodeInput) error {
 	for i := range value.Sessions {
 		observed := value.Sessions[i].ScheduleObservedAt

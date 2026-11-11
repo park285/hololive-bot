@@ -11,8 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 1ms 미만 lease·quarantine 기준은 기본값으로 바꾸지 않고 DB 전이 전에 오류로 드러나야 한다.
-// 저장소에 pool을 주지 않아 오류가 DB 접근보다 먼저 나는지도 함께 확인한다.
 func TestPgxRepositoryRejectsSubMillisecondDurationsBeforeDatabase(t *testing.T) {
 	t.Parallel()
 
@@ -39,7 +37,6 @@ func TestPgxRepositoryRejectsSubMillisecondDurationsBeforeDatabase(t *testing.T)
 	}
 }
 
-// 격리 기준은 유효하게 두어 lease 하한만으로 거부되는지 본다. 1ms 이상이면 초 단위가 아니어도 허용한다.
 func TestNewConsumerRejectsSubMillisecondLease(t *testing.T) {
 	t.Parallel()
 
@@ -50,7 +47,6 @@ func TestNewConsumerRejectsSubMillisecondLease(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// claim과 발송 진입 lease, stale 격리 기준은 초로 절사하지 않고 밀리초 그대로 DB 시각에 적용된다.
 func TestPgxRepositoryKeepsMillisecondLeasesAndThresholds(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)

@@ -35,7 +35,6 @@ type memberPointOverlay struct {
 	hasChannelIDs bool
 }
 
-// currentOverlayLocked는 현재 generation의 overlay를 돌려준다. 호출자가 snapshotMu를 쥔다.
 func (c *Cache) currentOverlayLocked(generation uint64) *memberPointOverlay {
 	if c.pointOverlay == nil || c.pointOverlay.generation != generation {
 		return nil
@@ -44,8 +43,6 @@ func (c *Cache) currentOverlayLocked(generation uint64) *memberPointOverlay {
 	return c.pointOverlay
 }
 
-// overlayForWriteLocked는 generation이 현재 값과 같을 때만 쓸 overlay를 돌려준다. 늦게 끝난 이전 generation 조회는
-// nil을 받아 아무것도 게시하지 못한다. 호출자가 snapshotMu 쓰기 잠금을 쥔다.
 func (c *Cache) overlayForWriteLocked(generation uint64) *memberPointOverlay {
 	if c.snapshotGeneration.Load() != generation {
 		return nil
@@ -64,8 +61,7 @@ func (c *Cache) overlayForWriteLocked(generation uint64) *memberPointOverlay {
 	return c.pointOverlay
 }
 
-// cacheMember는 PostgreSQL point 조회 결과를 조회 시점 generation의 overlay에만 넣는다. 채널 키는 같은 generation의
-// snapshot 대표를 따르고, snapshot이 없으면 SQL 채널 대표 조회 결과만 채널 키를 채울 수 있다.
+// 채널 키는 같은 generation의 snapshot 대표를 따르고, snapshot이 없으면 SQL 채널 대표 조회 결과만 채널 키를 채울 수 있다.
 func (c *Cache) cacheMember(member *domain.Member, generation uint64, channelLookup bool) {
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
@@ -83,7 +79,6 @@ func (c *Cache) cacheMember(member *domain.Member, generation uint64, channelLoo
 	}
 }
 
-// cacheChannelIDs는 snapshot이 없을 때 PostgreSQL 채널 ID 목록을 조회 시점 generation의 overlay에 넣는다.
 func (c *Cache) cacheChannelIDs(channelIDs []string, generation uint64) {
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()

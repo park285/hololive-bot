@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetExistingExternalIDs는 현재 피드의 ID 중 같은 유형으로 저장된 항목을 반환한다.
 func (r *Repository) GetExistingExternalIDs(ctx context.Context, eventType domain.MajorEventType, externalIDs []string) ([]string, error) {
 	if len(externalIDs) == 0 {
 		return nil, nil

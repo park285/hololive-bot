@@ -37,7 +37,6 @@ const (
 	statusCanceled    = "cancelled" //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
 )
 
-// statuses는 조회 필터로 받는 상태입니다.
 var statuses = [...]string{"pending", "retry", "leased", "sending", "sent", "dlq", statusQuarantined, statusCanceled}
 
 var errorCodeFilter = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
@@ -164,7 +163,6 @@ func ParseID(value string) (int64, error) {
 	return id, nil
 }
 
-// Validate는 허용 목록 밖의 상태와 제어 문자가 섞인 필터를 거부합니다.
 func (f Filter) Validate() error {
 	if f.Status != "" && !knownStatus(f.Status) {
 		return fmt.Errorf("status: %w", ErrInvalidInput)
@@ -202,7 +200,6 @@ func validText(value string, maxRunes int) bool {
 		strings.TrimSpace(value) == value && strings.IndexFunc(value, unicode.IsControl) < 0
 }
 
-// Validate는 필수 확인, 감사 정보, 대상 수, 중복 ID와 리비전을 변경 전에 검사합니다.
 func (r RequeueRequest) Validate(id string) error {
 	if _, err := ParseID(id); err != nil {
 		return err

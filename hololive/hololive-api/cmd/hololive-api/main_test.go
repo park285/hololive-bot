@@ -83,7 +83,6 @@ func TestRunWorkerProfileCheck(t *testing.T) {
 	}
 }
 
-// 수동 재실행은 kind를 그대로 넘기고, 실행 중 충돌(exit 2)과 그 밖의 실패(exit 1)를 구분하며 결과를 stdout에 남긴다.
 func TestRunNotificationRerunMapsOutcomes(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -128,7 +127,6 @@ func TestRunNotificationRerunMapsOutcomes(t *testing.T) {
 	}
 }
 
-// 운영 CLI logger는 LOG_DIR가 있어도 서버 회전 파일을 만들지 않고 stderr에만 쓴다. 표준 출력에는 Result JSON 한 줄만 남는다.
 func TestRunNotificationRerunKeepsStdoutForResult(t *testing.T) {
 	stdoutFile, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {

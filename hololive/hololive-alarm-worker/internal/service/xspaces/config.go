@@ -76,7 +76,6 @@ func LoadConfig() (result *Config, retErr error) {
 
 var targetChannelIDPattern = regexp.MustCompile(`^UC[a-zA-Z0-9_-]{22}$`)
 
-// Validate는 계정 범위와 호출 주기를 제한하고 모호한 멤버 매핑을 거부한다.
 func (c Config) Validate() error {
 	if len(c.Targets) == 0 || len(c.Targets) > 100 || c.PollSeconds < 120 || c.PollSeconds > 3600 {
 		return errors.New("x spaces requires 1-100 targets and a 120-3600 second interval")

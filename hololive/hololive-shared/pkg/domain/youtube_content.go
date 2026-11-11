@@ -232,7 +232,6 @@ func BuildYouTubeNotificationDedupeKey(kind OutboxKind, contentID string) (strin
 	return fmt.Sprintf("%s:%s:%s", youtubeNotificationDedupeKeyPrefix, normalizedKind, normalizedContentID), nil
 }
 
-// DedupeKey는 outbox row의 dedupe key를 반환한다.
 func (o *YouTubeNotificationOutbox) DedupeKey() (string, error) {
 	if o == nil {
 		return "", errors.New("build youtube notification dedupe key: outbox is nil")

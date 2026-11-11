@@ -116,7 +116,6 @@ func (r *Runtime) retainProjections(ctx context.Context) error {
 	return nil
 }
 
-// withBudgetDB는 슬롯 대기와 fn 실행을 합쳐 TransactionTimeout 안에 끝내도록 묶는다.
 // 멈춘 문장이 슬롯을 무기한 보유하지 않고 DeadlineExceeded로 드러나며, 호출 loop의 기존 오류 분류가 처리한다.
 func (r *Runtime) withBudgetDB(ctx context.Context, operation dbOperation, fn func(context.Context) error) error {
 	if r.Config.TransactionTimeout <= 0 {

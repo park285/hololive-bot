@@ -129,8 +129,7 @@ func (f *fakeMemberEpochAuthority) setCurrentError(err error) {
 	f.mu.Unlock()
 }
 
-// withTestEpochAuthority는 분산 캐시를 쓰는 테스트 Cache에 건강한 fake epoch authority를 주입한다. 분산 캐시가 있으면
-// epoch authority가 필수라는 불변식(configureEpoch)을 직접 구성한 테스트 Cache에서도 지킨다.
+// 분산 캐시가 있으면 epoch authority가 필수라는 불변식(configureEpoch)을 직접 구성한 테스트 Cache에서도 지킨다.
 func withTestEpochAuthority(c *Cache) *Cache {
 	c.epoch = &fakeMemberEpochAuthority{epoch: 1}
 	c.authorityEpoch.Store(1)
@@ -139,7 +138,6 @@ func withTestEpochAuthority(c *Cache) *Cache {
 	return c
 }
 
-// newEpochTestCache는 epoch 조정 경로를 검증한다.
 func newEpochTestCache(authority memberEpochAuthority) *Cache {
 	c := &Cache{
 		epoch:                  authority,
@@ -381,8 +379,6 @@ func TestCacheEpoch_UnavailableBypassesStaleSnapshot(t *testing.T) {
 	}
 }
 
-// Valkey 재시작으로 epoch key가 1로 다시 만들어지면 값이 작아져도 변경으로 받아들인다. Snapshot은 버리지만 cache는
-// 계속 켜져 있어 다음 조회가 새 snapshot을 적재한다(PostgreSQL 영구 우회 없음).
 func TestCacheEpoch_RegressionInvalidatesAndKeepsCacheEnabled(t *testing.T) {
 	authority := &fakeMemberEpochAuthority{epoch: 1}
 	c := newEpochTestCache(authority)
@@ -431,7 +427,6 @@ func TestCacheEpoch_CorruptNotificationUsesAuthority(t *testing.T) {
 	}
 }
 
-// epochTestDatabase는 여러 테스트 프로세스가 공유하는 PostgreSQL members 역할을 한다.
 type epochTestDatabase struct {
 	name atomic.Value
 }
@@ -452,9 +447,8 @@ type epochTestTopology struct {
 	publisher *Cache
 }
 
-// newEpochTestTopology는 같은 Valkey를 보는 두 member cache 프로세스와, mutation만 발행하는 별도 command client를 만든다.
-// Miniredis의 RESP2 Pub/Sub 연결 제약이 subscriber 자신의 mutation 명령을 간헐적으로 오염시키므로 실제 multi-process
-// topology처럼 별도 client에서 mutation을 발행한다.
+// Miniredis의 RESP2 Pub/Sub 연결 제약이 subscriber 자신의 mutation 명령을 간헐적으로 오염시키므로 실제 multi-process topology처럼 별도 client에서
+// mutation을 발행한다.
 func newEpochTestTopology(t *testing.T) *epochTestTopology {
 	t.Helper()
 
@@ -538,7 +532,6 @@ func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
 	}
 }
 
-// warmup, 채널·이름·별칭 조회, 무효화 전체에서 Valkey에 쓰이는 것은 epoch authority key 하나뿐이다.
 func TestCacheEpoch_MemberDataNeverWrittenToValkey(t *testing.T) {
 	service, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 	c := newEpochTestCache(newValkeyMemberEpochAuthority(service.GetClient()))
@@ -572,9 +565,6 @@ func TestCacheEpoch_MemberDataNeverWrittenToValkey(t *testing.T) {
 	}
 }
 
-// Valkey 재시작으로 epoch key가 사라져 1로 다시 만들어져도(값 회귀) 장수 프로세스는 epoch 1을 건강한 authority로
-// 받아들이고 새 snapshot으로 수렴한다. 예전 크기 비교는 여기서 authority를 영구 불확실로 두어 재시작 전까지 PostgreSQL을
-// 직접 읽게 했다.
 func TestCacheEpoch_RecreatedEpochAfterValkeyRestartConverges(t *testing.T) {
 	topology := newEpochTestTopology(t)
 

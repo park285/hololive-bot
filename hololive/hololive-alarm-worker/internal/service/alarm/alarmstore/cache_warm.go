@@ -17,7 +17,6 @@ type CacheWarmSummary struct {
 	ChannelCount int
 }
 
-// subscriberCacheWarmSource는 rebuild가 읽는 정본 구독·멤버 표시명 스냅샷이다. *Repository가 구현한다.
 type subscriberCacheWarmSource interface {
 	LoadAll(ctx context.Context) ([]*domain.Alarm, error)
 	GetAllMemberNames(ctx context.Context) (map[string]string, error)
@@ -25,15 +24,13 @@ type subscriberCacheWarmSource interface {
 
 const cacheScanBatchSize int64 = 100
 
-// subscriberCacheStaticKeys는 rebuild가 지우고 다시 채우는 고정 이름 key다. 방 목록·방 이름·사용자 이름은 PG가
-// 원천이라 subscriber cache에 두지 않는다.
+// 방 목록·방 이름·사용자 이름은 PG가 원천이라 subscriber cache에 두지 않는다.
 var subscriberCacheStaticKeys = []string{
 	alarmkeys.AlarmChannelRegistryKey,
 	alarmkeys.AlarmSubscriberCacheEmptyKey,
 	alarmkeys.MemberNameKey,
 }
 
-// subscriberCacheKeyPatterns는 rebuild가 SCAN으로 지우는 채널별 subscriber key 이름공간이다.
 var subscriberCacheKeyPatterns = []string{
 	alarmkeys.ChannelSubscribersKeyPrefix + "*",
 	alarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",

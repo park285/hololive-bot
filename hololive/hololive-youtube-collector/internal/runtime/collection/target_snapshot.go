@@ -179,7 +179,6 @@ func validateSnapshotKinds(kinds []contract.ObservationKind) error {
 	return nil
 }
 
-// invalidSubject는 공백으로 둘러싸였거나 비었거나 maxSubjectBytes를 넘는 subject를 거부합니다.
 func invalidSubject(value string) bool {
 	return strings.TrimSpace(value) != value || value == "" || len(value) > maxSubjectBytes
 }

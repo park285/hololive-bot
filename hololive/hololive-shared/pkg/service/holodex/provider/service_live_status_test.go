@@ -217,7 +217,6 @@ func TestGetChannelsLiveStatus_AppliesIndieOrgOverride(t *testing.T) {
 	}
 }
 
-// live status는 요청 채널 집합별로 캐시하지 않으므로 같은 채널을 연달아 조회해도 매번 upstream 상태를 반영한다.
 func TestGetChannelsLiveStatus_ReflectsUpstreamChangeOnConsecutiveCalls(t *testing.T) {
 	t.Parallel()
 

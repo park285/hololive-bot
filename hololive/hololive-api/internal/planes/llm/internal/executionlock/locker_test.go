@@ -29,7 +29,6 @@ import (
 	"time"
 )
 
-// mockLockCache: lockCache mock 구현.
 type mockLockCache struct {
 	setNXFn            func(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	compareAndDeleteFn func(ctx context.Context, key, expectedValue string) (bool, error)
@@ -65,7 +64,6 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-// cache가 없을 때 dedup을 끈 noop locker로 내려가던 폴백을 지웠다. 생성 오류로 드러나야 한다.
 func TestNewLocker_NilCache_ReturnsError(t *testing.T) {
 	locker, err := New(nil, testLogger())
 	if err == nil {
@@ -117,7 +115,6 @@ func TestTryAcquire_AlreadyHeld(t *testing.T) {
 	}
 }
 
-// Valkey 오류는 경고 뒤 lock 없이 진행하지 않는다. 오류가 호출자에게 돌아가 digest 실행이 실패로 남아야 한다.
 var errLockCacheDown = errors.New("connection refused")
 
 func TestTryAcquire_ValkeyError_ReturnsError(t *testing.T) {

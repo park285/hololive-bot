@@ -78,7 +78,6 @@ func TestFormatNumberIntegerAndFloatEdges(t *testing.T) {
 	}
 }
 
-// 정수·실수 경계 literal은 프로세스를 끝내지 않고 결정적으로 렌더링되어야 합니다.
 func TestNumericEdgeLiteralsTerminate(t *testing.T) {
 	t.Parallel()
 
@@ -181,8 +180,7 @@ func TestExecuteTemplateBudgetsFailWithoutPartialOutput(t *testing.T) {
 	}
 }
 
-// 증폭 template은 큰 버퍼를 만들기 전에 거절되어야 합니다. 병렬 테스트와 겹치지 않도록 순차 실행해 TotalAlloc 증가량을
-// 잽니다. 수정 전 같은 본문은 22–42MB를 할당하거나(UTF-8 보정 반복은 531441바이트 결과로) 성공했습니다.
+// 병렬 테스트와 겹치지 않도록 순차 실행해 TotalAlloc 증가량을 잽니다.
 func TestTemplateAmplificationRejectedBeforeLargeAllocation(t *testing.T) {
 	const allocationBudget = 2 << 20
 
@@ -233,7 +231,6 @@ func TestTemplateSourceOverLimitRejected(t *testing.T) {
 	}
 }
 
-// 계측 지점과 제한판 builtin은 정상 template의 출력 바이트를 바꾸지 않아야 합니다.
 func TestBoundedExecutionPreservesValidConstructs(t *testing.T) {
 	t.Parallel()
 
@@ -277,7 +274,6 @@ func TestBoundedExecutionPreservesValidConstructs(t *testing.T) {
 	}
 }
 
-// 출력 한도 가까운 정상 printf·print는 사전 상한 계산 때문에 거절되지 않아야 합니다.
 func TestBoundedExecutionAllowsNearLimitFormatting(t *testing.T) {
 	t.Parallel()
 
@@ -293,7 +289,6 @@ func TestBoundedExecutionAllowsNearLimitFormatting(t *testing.T) {
 	}
 }
 
-// 출력 한도보다 긴 데이터도 줄이는 처리 뒤 짧게 출력하면 기존처럼 성공해야 합니다.
 func TestBoundedExecutionAllowsShrinkingLargeData(t *testing.T) {
 	t.Parallel()
 

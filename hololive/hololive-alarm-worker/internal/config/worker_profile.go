@@ -161,18 +161,12 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 	return problems
 }
 
-// alarmDispatchRecoveryExceedsReplayHorizon은 lease 회수 지연이 Iris 자동 재발송 지평에 닿는지 판정한다.
-//
-// 결과 불명(transport ambiguity) 발송 뒤 alarm_dispatch는 send unit에 고정한 client request ID로
-// 다시 보내고, 중복 송출 방지를 Iris reply admission dedup에 맡긴다. 그 행을 claim한 worker가
-// 발송 전에 멈추면 행은 lease_ms 만료 뒤 다음 recovery tick(recovery_interval_ms)에서야 재발송
-// 대상이 된다. 이 합은 재발송까지의 최소 회수 지연일 뿐이며, 실제 창에는 첫 admission 뒤의 retry
-// backoff·attempt timeout·DrainBatch 주기가 더해진다. 따라서 이 검사는 필요조건이다. 기준은 Iris
-// admission 보존 기간에서 그 차이를 흡수할 여유를 뺀 iris.ReplyAutomaticReplayHorizon(iris-client-go 공개 상수)이며,
-// 지평과 같은 값도 여유를 잠식하므로 거부한다.
-//
-// 다른 두 경로의 lease는 이 지평과 묶이지 않는다. 발송 전 claim만 회수하는 notification_delivery의
-// lease는 profile 값이 아니며, youtube_delivery의 lock_timeout_ms가 만료한 SENDING 행은 격리된다.
+// 결과 불명(transport ambiguity) 발송 뒤 alarm_dispatch는 send unit에 고정한 client request ID로 다시 보내고, 중복 송출 방지를 Iris reply
+// admission dedup에 맡긴다. 그 행을 claim한 worker가 발송 전에 멈추면 행은 lease_ms 만료 뒤 다음 recovery tick(recovery_interval_ms)에서야 재발송
+// 대상이 된다. 이 합은 재발송까지의 최소 회수 지연일 뿐이며, 실제 창에는 첫 admission 뒤의 retry backoff·attempt timeout·DrainBatch 주기가 더해진다. 따라서 이 검사는
+// 필요조건이다. 기준은 Iris admission 보존 기간에서 그 차이를 흡수할 여유를 뺀 iris.ReplyAutomaticReplayHorizon(iris-client-go 공개 상수)이며, 지평과 같은
+// 값도 여유를 잠식하므로 거부한다. 다른 두 경로의 lease는 이 지평과 묶이지 않는다. 발송 전 claim만 회수하는 notification_delivery의 lease는 profile 값이 아니며,
+// youtube_delivery의 lock_timeout_ms가 만료한 SENDING 행은 격리된다.
 func alarmDispatchRecoveryExceedsReplayHorizon(settings AlarmDispatchWorkerSettings) bool {
 	horizon := iris.ReplyAutomaticReplayHorizon.Milliseconds()
 	lease, recovery := settings.LeaseMS, settings.RecoveryIntervalMS

@@ -16,7 +16,7 @@ const (
 	mekparkUnitBShortName = "유닛 B"
 )
 
-// mekparkTestMembers는 호스트 채널의 members 정본 표시명을 돌려준다. 알림은 원천 채널 제목 대신 이 이름에 호스트 표기를 붙인다.
+// 알림은 원천 채널 제목 대신 이 이름에 호스트 표기를 붙인다.
 type mekparkTestMembers struct {
 	collabTestMembers
 }
@@ -85,7 +85,6 @@ func (m failingDispatchMembers) FindMemberByChannelID(context.Context, string) (
 	return nil, m.err
 }
 
-// members 조회 실패는 원천 채널 제목이나 종단 문구로 덮지 않고 렌더 실패(발송 전 재시도)로 돌려준다.
 func TestAlarmDispatchMemberNameLookupFailureFailsRender(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
 	lookupErr := errors.New("member cache unavailable")

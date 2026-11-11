@@ -32,8 +32,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-// buildLLMSchedulerRouter는 llm plane의 health·ready 응답만 연다. 구독·digest·trigger는 같은 프로세스의 bot plane과
-// 운영 CLI(--rerun-notification)가 직접 호출하므로 HTTP 경로가 없다.
+// 구독·digest·trigger는 같은 프로세스의 bot plane과 운영 CLI(--rerun-notification)가 직접 호출하므로 HTTP 경로가 없다.
 func buildLLMSchedulerRouter(
 	ctx context.Context,
 	logger *slog.Logger,

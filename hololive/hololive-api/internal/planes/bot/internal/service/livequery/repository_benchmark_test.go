@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 명시적인 -bench 실행에서만 장기 이력과 최근 coverage의 비용을 측정한다.
 func BenchmarkRepositoryLongHistory(b *testing.B) {
 	for _, allLive := range []bool{false, true} {
 		name := "sparse-live"

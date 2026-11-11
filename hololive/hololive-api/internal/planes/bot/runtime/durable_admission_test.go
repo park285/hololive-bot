@@ -33,8 +33,7 @@ const (
 	testOrderingKey = "room:" + testRoomID
 )
 
-// 저장 형식: iris-client-go v4부터 inbox는 Iris 원본 본문을 저장한다. 구 v3 binary가 저장한 Message JSON 형식은 claim에서 복원할 수 없으므로
-// 전환 전 active inbox 드레인이 필요하다.
+// 구 v3 binary가 저장한 Message JSON 형식은 claim에서 복원할 수 없으므로 전환 전 active inbox 드레인이 필요하다.
 func TestStoredWebhookPayloadV4RequiresRawBodyAndActiveInboxDrain(t *testing.T) {
 	legacy := []byte(`{"msg":"!help","room":"room-1","json":{"message_id":"m-1"}}`)
 	if _, err := webhook.DecodeMessage(legacy); err == nil {
@@ -51,7 +50,6 @@ func TestStoredWebhookPayloadV4RequiresRawBodyAndActiveInboxDrain(t *testing.T) 
 	}
 }
 
-// testWebhookBody는 Iris가 보내는 webhook 원본 본문이다. 이 본문이 inbox에 그대로 저장된다.
 func testWebhookBody(t *testing.T, messageID, text string) []byte {
 	t.Helper()
 
@@ -173,7 +171,6 @@ func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
 	}
 }
 
-// 조회 실패는 마지막 건수·경과를 0으로 덮지 않고 success만 내린다. 마지막 성공 시각도 유지한다.
 func TestManualReviewObservationFailureKeepsLastValues(t *testing.T) {
 	const lastSuccess = 1_800_000_000
 

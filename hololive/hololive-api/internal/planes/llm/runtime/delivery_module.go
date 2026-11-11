@@ -36,8 +36,7 @@ type DeliveryModule struct {
 	Repository *delivery.OutboxRepository
 }
 
-// deliveryLockCache는 delivery module이 쓰는 cache 작업이다. 실행 lock(SetNX, CompareAndDelete)과 적재 뒤
-// alarm-worker wakeup 신호(SET NX EX, LPUSH, EXPIRE)를 쓴다.
+// 실행 lock(SetNX, CompareAndDelete)과 적재 뒤 alarm-worker wakeup 신호(SET NX EX, LPUSH, EXPIRE)를 쓴다.
 type deliveryLockCache interface {
 	cache.KeyValueWriter
 	cache.ScriptCache

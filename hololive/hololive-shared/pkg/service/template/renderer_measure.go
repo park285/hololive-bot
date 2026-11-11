@@ -28,10 +28,8 @@ type valueMeasure struct {
 	size, leaves, limit int
 }
 
-// measureTemplateValue는 v의 fmt 출력 크기 상한과 leaf 수를 돌려줍니다. 상한이 limit을 넘으면 ok가 false입니다.
-// 문자열 길이, 숫자 최대 표기, 컨테이너 구분자·타입 이름, String/Error 메서드 결과를 더하며
-// %v·%s 출력의 상한이며, %#v의 문자열 escape나 잘못된 verb 표기는 이 값의 상수배(최대 약 4배)까지 커질 수 있습니다.
-// 그런 초과분은 각 함수의 결과 크기 검사가 상수배 할당 뒤 거절합니다.
+// 문자열 길이, 숫자 최대 표기, 컨테이너 구분자·타입 이름, String/Error 메서드 결과를 더하며 %v·%s 출력의 상한이며, %#v의 문자열 escape나 잘못된 verb 표기는 이 값의 상수배(최대
+// 약 4배)까지 커질 수 있습니다. 그런 초과분은 각 함수의 결과 크기 검사가 상수배 할당 뒤 거절합니다.
 func measureTemplateValue(v any, limit int) (size, leaves int, ok bool) {
 	if s, isString := v.(string); isString {
 		return len(s), 1, len(s) <= limit
@@ -181,8 +179,7 @@ func (m *valueMeasure) walkStruct(v reflect.Value, depth int) bool {
 	return true
 }
 
-// methodOutputSize는 fmt가 호출할 Formatter·error·Stringer 메서드의 출력 길이를 잽니다. 메서드는 호출자 데이터가
-// 제공하며 template은 이런 값을 만들 수 없습니다. 숫자 verb로 출력될 수도 있어 숫자 상한을 더합니다.
+// 메서드는 호출자 데이터가 제공하며 template은 이런 값을 만들 수 없습니다. 숫자 verb로 출력될 수도 있어 숫자 상한을 더합니다.
 func methodOutputSize(v reflect.Value) (size int, ok bool) {
 	if !v.CanInterface() {
 		return 0, false

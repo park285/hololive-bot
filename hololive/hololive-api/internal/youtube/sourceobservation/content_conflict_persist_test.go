@@ -11,9 +11,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// 같은 시각의 content positive가 저장 값과 다른 값을 가져오면 기존 값을 유지하고, 충돌은 공용 reconcile 충돌 SQL(0061)로
-// youtube_video·KEEP_EXISTING 행 하나로 남는다. 0042에서 상수였던 entity_kind·decision이 이제 인자이므로 인자 순서가
-// 어긋나면 이 행의 식별 열과 effective_at이 달라진다. 같은 관측을 replay해도 행은 늘지 않는다.
 func TestContentConsumerRecordsEqualTimeConflictOnce(t *testing.T) {
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()

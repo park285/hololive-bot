@@ -176,8 +176,7 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 	}, nil
 }
 
-// errEmptyMajorEventSummary는 LLM이 응답했지만 조립할 요약 본문이 없는 경우다. 빈 요약은 이벤트 목록 대체 경로로
-// 흘리지 않고 요약 실패로 드러낸다.
+// 빈 요약은 이벤트 목록 대체 경로로 흘리지 않고 요약 실패로 드러낸다.
 var errEmptyMajorEventSummary = errors.New("llm summary is empty")
 
 func (s *EventSummarizer) summaryCacheKey(events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
@@ -304,7 +303,6 @@ func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query, warnMess
 	return results, true
 }
 
-// runDualSearch: 1차 범용 + 2차 KR 파트너 검색을 병렬 실행하고 병합된 결과를 포맷팅합니다.
 func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType SummaryType, periodKey string) (string, error) {
 	if s.searcher == nil {
 		return "", nil

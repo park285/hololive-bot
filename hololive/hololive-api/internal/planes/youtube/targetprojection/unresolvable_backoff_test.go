@@ -7,7 +7,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// 추적 기간에 따라 기본 주기의 1·5·15·30배로 늦추고, 경계는 다음 단계에 속한다.
 func TestUnresolvablePollIntervalSteps(t *testing.T) {
 	t.Parallel()
 
@@ -30,7 +29,6 @@ func TestUnresolvablePollIntervalSteps(t *testing.T) {
 	}
 }
 
-// 추적 기간은 UPCOMING 영상 확인의 재확인 주기만 늦추고 LIVE·membership·우선순위·NotBefore는 그대로다.
 func TestBuildPolicyTargetsSlowsOnlyUnresolvableUpcomingVideoChecks(t *testing.T) {
 	t.Parallel()
 

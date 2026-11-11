@@ -60,8 +60,6 @@ func (c *testCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandCon
 	return c.execute(ctx, cmdCtx, params)
 }
 
-// dispatchingReplyOutbox는 transport가 기록한 응답을 outbox dispatcher와 같은 DispatchStoredReply로 바로 보낸다.
-// 시험이 Iris client 관측으로 응답을 확인하면서도 production 발송 경로(원장 기록 → 저장 payload 발송)를 탄다.
 type dispatchingReplyOutbox struct {
 	client bottransport.ReplyClient
 }
@@ -263,8 +261,6 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	})
 }
 
-// 알 수 없는 명령 응답은 message_strings(DB 정본)의 unknown_command 문구다. 코드 대체 문구가 없으므로
-// 문구를 적재하지 않은 router는 빈 메시지를 보내지 않고 실패한다.
 func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 	t.Parallel()
 

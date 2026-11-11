@@ -12,10 +12,8 @@ import (
 	"time"
 )
 
-// silentNode는 응답하지 않으므로 이후 진행은 종료 처리로만 가능하다.
 const silentNode = "#!/bin/sh\nsleep 30\n"
 
-// fakeNode는 테스트 전용 디렉터리에 Node 대체 실행 파일을 만들고 경로를 반환한다.
 func fakeNode(t *testing.T, name, script string) string {
 	t.Helper()
 
@@ -38,7 +36,6 @@ func initializeTestWorker(t *testing.T, broker *Broker) {
 	}
 }
 
-// errorCode는 브로커 오류 코드를 반환하며, 오류 본문이 아니면 빈 문자열을 반환한다.
 func errorCode(body map[string]any) string {
 	envelope, ok := body["error"].(map[string]any)
 	if !ok {
@@ -426,7 +423,6 @@ func TestLoadedWorkerExitRecordsWorkerExited(t *testing.T) {
 	}
 }
 
-// 요청의 worker IO 중 종료는 감시 goroutine과 요청 경로가 경합해도 같은 원인으로 기록됩니다.
 func TestWorkerExitDuringRequestRecordsWorkerFailed(t *testing.T) {
 	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nIFS= read -r request\nexit 3\n"
 

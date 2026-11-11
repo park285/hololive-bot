@@ -11,8 +11,7 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-// TestTryClaimKeyInfoLevelAllocationBudget는 운영 레벨(Info)에서 Debug 기록용 가명을 계산하지 않아
-// claim 경로가 할당하지 않음을 지킨다. 할당 수가 race 빌드에서도 같아 build tag를 두지 않는다.
+// 할당 수가 race 빌드에서도 같아 build tag를 두지 않는다.
 func TestTryClaimKeyInfoLevelAllocationBudget(t *testing.T) {
 	key := keys.BuildNotifyClaimKey("18412345678901234", "stream-1", time.Unix(1785499200, 0).UTC(), "target")
 	client := cachemocks.NewStrictClient()
@@ -38,8 +37,6 @@ func TestTryClaimKeyInfoLevelAllocationBudget(t *testing.T) {
 	}
 }
 
-// BenchmarkTryClaimKey는 Valkey 왕복을 뺀 claim 1건의 로그 인자 비용을 운영 레벨(Info)과
-// Debug 레벨에서 각각 잰다.
 func BenchmarkTryClaimKey(b *testing.B) {
 	key := keys.BuildNotifyClaimKey("18412345678901234", "stream-1", time.Unix(1785499200, 0).UTC(), "target")
 

@@ -39,8 +39,7 @@ type durableAdmitter struct {
 	totals *workercontract.Counters
 }
 
-// AdmitMessage는 Iris 원본 본문(body)을 inbox에 저장한다. 같은 Message는 claim 때 webhook.DecodeMessage로 복원하므로
-// SDK Message의 Go 표현을 저장 형식으로 삼지 않는다.
+// 같은 Message는 claim 때 webhook.DecodeMessage로 복원하므로 SDK Message의 Go 표현을 저장 형식으로 삼지 않는다.
 func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message, body []byte) error {
 	if err := a.admit(ctx, msg, body); err != nil {
 		logDurableError(a.logger, "admit durable webhook", err)
@@ -197,8 +196,7 @@ type durableMessageProcessor interface {
 	ProcessMessage(context.Context, *webhook.Message) error
 }
 
-// durableReplyOutbox는 bot이 응답을 기록할 reply outbox와 그 dispatcher 깨움·계수기다. Bot이 생성 시점에 writer를
-// 받아야 하므로 inbox 처리기(bot을 소유)보다 먼저 만든다.
+// Bot이 생성 시점에 writer를 받아야 하므로 inbox 처리기(bot을 소유)보다 먼저 만든다.
 type durableReplyOutbox struct {
 	repository *durability.ReplyOutboxRepository
 	wake       chan struct{}
@@ -222,7 +220,6 @@ func newDurableReplyOutbox(pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerPro
 	return durableReplyOutbox{repository: repository, wake: make(chan struct{}, 1), totals: &workercontract.Counters{}}, nil
 }
 
-// writer는 bot transport가 응답을 기록하는 ReplyOutboxWriter를 만든다.
 func (o durableReplyOutbox) writer(logger *slog.Logger) durableReplyWriter {
 	return durableReplyWriter{
 		outbox: o.repository,

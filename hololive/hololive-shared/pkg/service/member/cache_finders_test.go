@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 전체 멤버 적재 실패는 빈 결과가 아니라 오류다.
 func TestCache_LoadAllMembers_ReturnsError(t *testing.T) {
 	finder := &Cache{}
 
@@ -45,7 +44,6 @@ func TestCache_LoadAllMembers_ReturnsError(t *testing.T) {
 	}
 }
 
-// 캐시 없이 만든 어댑터는 어떤 조회도 미존재로 꾸미지 않고 구성 오류를 돌려준다.
 func TestCache_FindMembersByName_MatchesLocalizedNames(t *testing.T) {
 	cache := newAdapterTestCache(
 		&domain.Member{ID: 1, ChannelID: "suisei", Name: "Suisei", NameKo: "별빛"},
@@ -124,7 +122,6 @@ func TestCache_FindMembersByAlias_ReturnsAllAliasMatches(t *testing.T) {
 	}
 }
 
-// 다건 조회는 snapshot 적재 실패를 빈 결과로 바꾸지 않는다. 공백뿐인 질의만 적재 없이 빈 결과다.
 func TestCache_MultiFinderPropagatesLoadFailure(t *testing.T) {
 	wantErr := errors.New("members table unavailable")
 
@@ -189,7 +186,6 @@ func TestCache_BypassHonorsCallerCancellation(t *testing.T) {
 	}
 }
 
-// 우회 경로의 다건 조회도 snapshot 색인과 같은 규칙으로 답하고, 결과를 게시하지 않는다.
 func TestCache_BypassUsesSameSearchRules(t *testing.T) {
 	cache := newEpochTestCache(&fakeMemberEpochAuthority{epoch: 1})
 	cache.authorityHealthy.Store(false)

@@ -12,7 +12,6 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-// alarm state upsert의 병합 식은 상수 조각만으로 정해지므로 호출마다 조립하지 않고 초기화 때 한 번 만든다.
 const alarmStateFinalAlarmSentExpr = `CASE
                 WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
                 WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_community_shorts_alarm_states.alarm_sent_at
@@ -188,7 +187,6 @@ func earliestAlarmStateTimestamp(existing, next *time.Time) *time.Time {
 	return existing
 }
 
-// buildAlarmStateDeliveryStatusExpr는 병합된 alarm_sent_at 하나로 delivery_status를 계산하는 SQL 식을 만든다.
 func buildAlarmStateDeliveryStatusExpr(alarmSentExpr string) string {
 	return fmt.Sprintf(`CASE
                 WHEN (%s) IS NOT NULL THEN '%s'

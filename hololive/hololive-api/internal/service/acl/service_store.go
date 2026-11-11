@@ -48,16 +48,11 @@ type aclRoomStore interface {
 	DeleteRoom(ctx context.Context, roomID, listType string) error
 }
 
-// aclStore는 ACL 영속 저장소 연산을 추상화한다.
-//
-// 직접 DB 호출을 메서드로 추출하여
-// Service가 구현체(pgx)에 의존하지 않고 인터페이스에 의존하도록 한다.
 type aclStore interface {
 	aclSettingStore
 	aclRoomStore
 }
 
-// pgxACLStore는 *pgxpool.Pool + pgxscan 기반 aclStore 구현체다.
 type pgxACLStore struct {
 	pool *pgxpool.Pool
 }

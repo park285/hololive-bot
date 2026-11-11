@@ -85,7 +85,6 @@ func TestMarshalPayloadV1RejectsInvalidGoString(t *testing.T) {
 	}
 }
 
-// 사전 reflect 순회를 없앤 뒤에도 map key·중첩 문자열의 잘못된 UTF-8이 인코더에서 거부되는지 확인한다.
 func TestCanonicalJSONRejectsInvalidUTF8InKeysAndNestedValues(t *testing.T) {
 	invalid := string([]byte{0xff})
 
@@ -100,8 +99,6 @@ func TestCanonicalJSONRejectsInvalidUTF8InKeysAndNestedValues(t *testing.T) {
 	}
 }
 
-// 출력 버퍼 안에서 member 구간을 재배치하는 정규화가 여러 중첩 단계에서 겹쳐도
-// 정확한 바이트를 만들고 호출자 입력을 변경하지 않는지 확인한다.
 func TestCanonicalizeJSONOrdersMembersAcrossNestedLevels(t *testing.T) {
 	tests := []struct {
 		name  string

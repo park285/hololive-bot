@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-// helper가 재사용한 일정은 이번 lease 슬롯보다 앞선 슬롯의 관측이어야 발행한다.
 func TestValidateLiveSchedulesBoundsReusedObservationTime(t *testing.T) {
 	t.Parallel()
 

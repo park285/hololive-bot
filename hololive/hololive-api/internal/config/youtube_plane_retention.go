@@ -68,13 +68,12 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 	return nil
 }
 
-// youtubePlaneRetentionAgeEnv는 일 단위 보존 기간 env 하나와 그 값을 담는 필드를 잇는다.
 type youtubePlaneRetentionAgeEnv struct {
 	key string
 	age *time.Duration
 }
 
-// youtubePlaneRetentionAgeEnvs는 보존 기간 env와 필드의 대응을 한 곳에서 정한다. 적재 함수와 production 검증이 같은 표를 쓴다.
+// 적재 함수와 production 검증이 같은 표를 쓴다.
 func youtubePlaneRetentionAgeEnvs(retention *YouTubePlaneRetentionConfig) []youtubePlaneRetentionAgeEnv {
 	return []youtubePlaneRetentionAgeEnv{
 		{"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS", &retention.QueueProcessedAge},

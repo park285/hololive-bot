@@ -35,8 +35,6 @@ const (
 	settlementPathPerRoom       = "per_room"
 )
 
-// 실제 provider 반환 뒤 engine이 저장소에 진입하는 경계에서만 parent를 취소한다.
-// 저장 결과는 모두 실제 PostgreSQL 전이·재조회가 결정한다.
 type settlementTransition struct {
 	*store.TransitionStore
 
@@ -769,8 +767,6 @@ func TestSendEngineCanceledParentPreservesExhaustedReissueBudget(t *testing.T) {
 	require.Equal(t, store.ApplyApplied, f.transition.results[0].Outcome)
 }
 
-// Fallback의 준비·고정 실패는 기존 계약상 SENDING을 보존한다. Grouped 거절을
-// 새 terminal/retry 정책으로 바꾸거나 취소된 parent에서 singleton을 보내지 않는다.
 func TestSendEngineCanceledGroupedRejectionPreservesFallbackPreparationHold(t *testing.T) {
 	for _, prepareFailure := range []bool{true, false} {
 		name, message, prepareCalls := "freeze_failed", "Failed to freeze grouped fallback", 3

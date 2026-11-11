@@ -50,7 +50,7 @@ func (mm *Matcher) candidateFromMember(member *domain.Member, source string) *ma
 	}
 }
 
-// member는 후보를 표시·동명이인 안내용 Member로 되돌린다. Name은 검색 키라서 동명이인 안내의 복사 예시가 다시 같은 후보로 해석된다.
+// Name은 검색 키라서 동명이인 안내의 복사 예시가 다시 같은 후보로 해석된다.
 func (c *matchCandidate) member() *domain.Member {
 	return &domain.Member{
 		Name:            c.memberName,
@@ -61,7 +61,6 @@ func (c *matchCandidate) member() *domain.Member {
 	}
 }
 
-// finalizeCandidate는 roster snapshot의 후보와 채널명을 반환한다.
 func (mm *Matcher) finalizeCandidate(candidate *matchCandidate) *domain.Channel {
 	if candidate == nil {
 		return nil

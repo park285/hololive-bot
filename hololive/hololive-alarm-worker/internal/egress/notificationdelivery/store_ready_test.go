@@ -83,7 +83,6 @@ func TestFetchReadyAndLockPreservesRoomOrderAcrossWorkers(t *testing.T) {
 	require.Equal(t, "second", next[0].PeriodKey)
 }
 
-// 발송 중이거나 handoff 확인 대기인 선행 행은 ready 관측과 실제 claim 양쪽에서 같은 방을 막는다.
 func requireNotificationRoomHeld(t *testing.T, repo *outboxFixture) {
 	t.Helper()
 
@@ -121,7 +120,6 @@ func TestFetchReadyAndLockDoesNotSkipLockedPredecessor(t *testing.T) {
 	require.Equal(t, "room-b", claimed[0].RoomID)
 }
 
-// 짧은 backoff로 같은 poll 안에서 다시 due가 된 행은 이미 처리한 ID로 넘겨 재claim하지 않는다.
 func TestFetchReadyAndLockSkipsAlreadyProcessedIDs(t *testing.T) {
 	r := testRepository(t)
 	ctx := t.Context()

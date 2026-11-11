@@ -69,7 +69,6 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 	return evidence
 }
 
-// 같은 stream이 여러 번 보이면 가장 이른 하한을 써서 근거를 좁히지 않는다.
 func currentLiveDispatchEvidenceWindows(
 	streamsByChannel map[string][]*domain.Stream,
 	liveFirstSeenAtByStreamID map[string]time.Time,
@@ -93,7 +92,6 @@ func currentLiveDispatchEvidenceWindows(
 	return sinceByStreamID
 }
 
-// 같은 방송의 저장 세션이 여럿이면 가장 이른 첫 관측 시각을 쓴다.
 func liveFirstSeenAtByStreamID(sessions []PersistedYouTubeLiveSession) map[string]time.Time {
 	firstSeen := make(map[string]time.Time)
 
@@ -224,7 +222,6 @@ type recentLiveDispatchEvidence struct {
 	deliveryCheckFailed           bool
 }
 
-// settledRoomsByStreamID는 catchup을 다시 만들지 않을 방이다. 발송을 마친 방과 ledger가 재발행을 거절하는 실패 종료 방을 합친다.
 func (e recentLiveDispatchEvidence) settledRoomsByStreamID() map[string]map[string]struct{} {
 	settled := make(map[string]map[string]struct{}, len(e.sentRoomsByStreamID)+len(e.terminalFailedRoomsByStreamID))
 
@@ -417,7 +414,6 @@ func persistedLiveGuardrailObservedAt(session PersistedYouTubeLiveSession) time.
 	return time.Time{}
 }
 
-// missingLiveDeliveryRooms는 주어진 어느 방 집합에도 없는 구독 방을 돌려준다.
 func missingLiveDeliveryRooms(rooms []string, accountedRooms ...map[string]struct{}) []string {
 	uniqueRooms := UniqueStrings(rooms)
 	if len(uniqueRooms) == 0 {

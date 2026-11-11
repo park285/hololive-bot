@@ -190,15 +190,11 @@ func newEmptyDigest(period model.Period, totalCount int) *model.Digest {
 	}
 }
 
-// validateAndBuildDigest: LLM 출력을 재검증합니다.
-// FilterCandidates에서 입력 후보를 사전 검증하지만, LLM이 source_url을 변형하거나
-// 허용 범위 외 항목을 생성할 수 있으므로 출력에 대한 이중 검증이 의도적으로 적용됩니다.
+// FilterCandidates에서 입력 후보를 사전 검증하지만, LLM이 source_url을 변형하거나 허용 범위 외 항목을 생성할 수 있으므로 출력에 대한 이중 검증이 의도적으로 적용됩니다.
 func (s *SummarizerImpl) validateAndBuildDigest(input *model.SummarizeInput, response *summaryResponse) *model.Digest {
 	return validateAndBuildDigestFromResponse(input, response, s.validator)
 }
 
-// validateAndBuildDigestFromResponse: summaryResponse를 검증하여 Digest를 생성한다.
-// SummarizerImpl.validateAndBuildDigest와 ConsensusSummarizer 양쪽에서 재사용.
 func validateAndBuildDigestFromResponse(
 	input *model.SummarizeInput,
 	response *summaryResponse,
@@ -344,7 +340,6 @@ func validateSummaryResponseItemSource(item *summaryResponseItem, validator mode
 	return sourceURL, true
 }
 
-// categoryLabel: Category를 한국어 레이블로 변환.
 func categoryLabel(cat model.Category) string {
 	if label, ok := categoryLabels[cat]; ok {
 		return label

@@ -1,5 +1,4 @@
-# kapu의 youtube-collector-d. 2026-11-04 osaka2를 공개 진입점으로 바꾸면서 slot b를 iris-seoul로 되돌리고 kapu는 d를 맡는다.
-# 비밀은 /etc/stack-secrets/hololive-bot/collector-d(master hosts/kapu)에서 읽는다.
+# kapu의 youtube-collector-d. 비밀은 /etc/stack-secrets/hololive-bot/collector-d에서 읽는다.
 [Unit]
 Description=hololive YouTube collector d
 Requires=hololive-youtube-po-d.service

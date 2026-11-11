@@ -245,7 +245,6 @@ func (s *leaseScheduler) logRunnerDiscoveryFailure(ctx context.Context, failure 
 	}, failure.err)
 }
 
-// succeededRunnerKeys는 이번 cycle에서 실제로 조회했고 실패하지 않은 runner의 ID를 돌려준다.
 func succeededRunnerKeys(runners []RegisteredRunner, outcome *capacityCycleResult) []string {
 	if len(runners) == 0 || outcome.queried == 0 {
 		return nil

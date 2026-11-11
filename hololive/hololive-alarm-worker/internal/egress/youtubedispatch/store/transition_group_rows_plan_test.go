@@ -38,8 +38,6 @@ func TestTransitionLogicalGroupRowsPreparedPlanBoundsRequestScans(t *testing.T) 
 	}
 }
 
-// handoff 부모 사전 조회는 그룹 잠금과 같은 후보 조각이라 요청 관계를 한 번만 평가하고, 그룹 행의 부모 집합을 그대로
-// 돌려줘야 한다.
 func TestHandoffGroupParentsPreparedPlanBoundsRequestScans(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedGroupQueryPlanRows(t, pool)
@@ -53,7 +51,6 @@ func TestHandoffGroupParentsPreparedPlanBoundsRequestScans(t *testing.T) {
 	}
 }
 
-// assertGroupRowsResult는 계획의 row 수만으로 동등성을 주장하지 않고 실제 정렬된 ID 전체를 확인한다.
 func assertGroupRowsResult(t *testing.T, tx pgx.Tx, execute string, wanted []int64) {
 	t.Helper()
 
@@ -63,7 +60,6 @@ func assertGroupRowsResult(t *testing.T, tx pgx.Tx, execute string, wanted []int
 	require.Equal(t, wanted, groupQueryRowIDs(rows))
 }
 
-// assertGroupParentsResult는 부모 사전 조회가 기대 그룹 행의 부모 id 집합을 오름차순으로 돌려주는지 확인한다.
 func assertGroupParentsResult(t *testing.T, tx pgx.Tx, execute string, wanted []int64) {
 	t.Helper()
 

@@ -100,7 +100,6 @@ func TestBotProcessMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T
 		"a redelivered inbound message must reuse the same clientRequestId so iris can dedup it")
 }
 
-// capturedReplyRequest는 Iris /reply 요청 본문 가운데 이 테스트가 검사하는 필드다. SDK v4가 ReplyRequest alias를 삭제했다.
 type capturedReplyRequest struct {
 	ClientRequestID *string `json:"clientRequestId,omitempty"`
 	Type            string  `json:"type"`

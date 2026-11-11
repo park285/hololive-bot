@@ -58,7 +58,7 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	return config, nil
 }
 
-// loadProcessEnv는 .env를 읽는다. 환경 값 형식은 각 plane config가 자기 구획 loader로 검사한다.
+// 환경 값 형식은 각 plane config가 자기 구획 loader로 검사한다.
 func loadProcessEnv() error {
 	if err := envload.DotEnv(); err != nil {
 		return fmt.Errorf("load dot env: %w", err)
@@ -125,8 +125,6 @@ func webhookConfigFromProfile(profile *APIWorkerProfile) WebhookConfig {
 	}
 }
 
-// Validate는 bot plane 역할 조건을 검사한다. Bot plane은 Iris egress runtime이므로 room ACL seed, Iris 토큰·base URL,
-// Holodex API 키를 모두 요구하고, proactive notification egress 소유를 거절한다.
 func (c *BotPlaneConfig) Validate() error {
 	if c == nil {
 		return errors.New("bot plane config is required")

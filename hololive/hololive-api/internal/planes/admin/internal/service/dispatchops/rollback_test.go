@@ -39,7 +39,6 @@ func captureDefaultLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// 취소된 요청에서도 rollback은 취소와 분리된 제한 시간 안에서 실행되고, 실패 원인을 로그에 남긴다.
 func TestRollbackRunsDetachedFromCanceledRequestAndLogsCause(t *testing.T) {
 	logs := captureDefaultLog(t)
 

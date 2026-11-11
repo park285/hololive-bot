@@ -135,7 +135,6 @@ func seedFinalizationBacklog(t *testing.T, pool *pgxpool.Pool, count int) {
 	require.NoError(t, err)
 }
 
-// backlogWaiting은 차례를 기다리는 backlog 행의 NotBefore다.
 func backlogWaiting(t *testing.T, pool *pgxpool.Pool, videoID string) time.Time {
 	t.Helper()
 
@@ -147,7 +146,6 @@ func backlogWaiting(t *testing.T, pool *pgxpool.Pool, videoID string) time.Time 
 	return waiting
 }
 
-// lastBacklogTurn은 마지막 backlog 결과(없으면 투입) 6초 뒤, 즉 다음 첫 시도 시각이다.
 func lastBacklogTurn(t *testing.T, pool *pgxpool.Pool, videoID string) time.Time {
 	t.Helper()
 
@@ -251,7 +249,6 @@ func assertBacklogRetryMembership(t *testing.T, pool *pgxpool.Pool, refresher *t
 	require.Empty(t, finalizationVideos(t, pool, 0))
 }
 
-// 재시도 중인 행이 예산을 채우면 다음 묶음을 열지 않고, 최종 결과로 자리가 나면 다음 첫 시도 하나만 연다.
 func TestTimeFinalizationBacklogOpensNextBatchOnlyWithinBudget(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedFinalizationBacklog(t, pool, 2002)

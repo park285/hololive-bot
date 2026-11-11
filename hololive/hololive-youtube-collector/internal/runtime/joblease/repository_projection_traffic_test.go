@@ -131,10 +131,7 @@ func measuredCandidatePool(t *testing.T, base *pgxpool.Pool) (*pgxpool.Pool, *ca
 	return pool, traffic
 }
 
-// TestProjectionCandidateTraffic는 epoch-3 baseline과 현행 후보 함수의 결과·제한된 전송을 비교합니다.
-// Baseline에도 같은 production header 조회와 네 열을 명시한 후보 reader를 사용합니다.
-// 각 AP는 독립 pool을 사용합니다. 다음 due 힌트 추가 이후 wire byte는 측정값이지 비증가 계약이 아닙니다.
-// 지연과 EXPLAIN 실행시간은 측정값이며 CPU 사용률 또는 운영 환경 성능을 뜻하지 않습니다.
+// 다음 due 힌트 추가 이후 wire byte는 측정값이지 비증가 계약이 아닙니다. 지연과 EXPLAIN 실행시간은 측정값이며 CPU 사용률 또는 운영 환경 성능을 뜻하지 않습니다.
 func TestProjectionCandidateTraffic(t *testing.T) {
 	for _, count := range []int{620, 1240, contract.MaxProjectionTargetCount} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
@@ -200,7 +197,6 @@ type candidateTrafficFleet struct {
 	job          collection.JobContract
 }
 
-// 모든 연결을 같은 횟수 예열하며 statement cache와 plan 준비를 측정에서 뺍니다.
 func (f *candidateTrafficFleet) warm(t *testing.T) {
 	t.Helper()
 
@@ -240,7 +236,6 @@ func newCandidateTrafficFleet(t *testing.T, pool *pgxpool.Pool, count int, legac
 	return fleet
 }
 
-// 현재 manifest의 첫 baseline만 재생해 힌트 도입 전 정본 함수와 비교한다.
 func candidateBaselinePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
@@ -376,7 +371,6 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 	return collectCandidatePage(baselineCandidateRows{rows}, f.job, 10)
 }
 
-// 이전 SQL의 네 열 wire를 그대로 측정하고, 당시 없던 힌트는 zero 값으로 둡니다.
 type baselineCandidateRows struct{ pgx.Rows }
 
 func (r baselineCandidateRows) Scan(dest ...any) error {

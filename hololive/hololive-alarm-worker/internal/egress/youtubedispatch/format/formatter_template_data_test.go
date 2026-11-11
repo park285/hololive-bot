@@ -121,7 +121,6 @@ func TestBuildGroupedTemplateData(t *testing.T) {
 	}
 }
 
-// 묶음 안의 항목 하나라도 읽지 못하면 빈 항목으로 보내지 않고 묶음 전체를 포맷 실패로 돌려준다.
 func TestBuildGroupedTemplateDataRejectsUnreadableItems(t *testing.T) {
 	t.Parallel()
 

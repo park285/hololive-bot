@@ -156,7 +156,6 @@ func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input
 	return envelope, err
 }
 
-// channelLiveCheckEnvelope은 채널 /live 확인 envelope을 만듭니다. 요청 실패와 응답 계약 오류는 UNKNOWN으로 남깁니다.
 func channelLiveCheckEnvelope(ctx context.Context, client ChannelLiveCheckClient, input *collection.RunInput) (contract.Envelope, error) {
 	subject := input.Subject()
 
@@ -191,9 +190,8 @@ func channelLiveCheckEnvelope(ctx context.Context, client ChannelLiveCheckClient
 	return envelope, err
 }
 
-// liveCheckRequestFailed는 확인 요청의 실패를 해당 subject의 UNKNOWN(request_failed) 관측으로 남길지 판정합니다.
-// 응답 계약 오류도 이전 음성·공개 불가 판정을 유지할 근거가 아니므로 UNKNOWN으로 대체한다.
-// 수집 context 종료(취소·lease 기한)와 취소·대체·설정·불변식 오류는 반환해 publish fence를 유지한다.
+// 응답 계약 오류도 이전 음성·공개 불가 판정을 유지할 근거가 아니므로 UNKNOWN으로 대체한다. 수집 context 종료(취소·lease 기한)와 취소·대체·설정·불변식 오류는 반환해 publish
+// fence를 유지한다.
 func liveCheckRequestFailed(ctx context.Context, err error) bool {
 	if ctx.Err() != nil {
 		return false
@@ -215,7 +213,6 @@ func liveCheckRequestFailed(ctx context.Context, err error) bool {
 	}
 }
 
-// validateLiveCheckSubject는 helper가 돌려준 subject가 요청 subject와 같은지 확인합니다.
 // 판정이 UNKNOWN이어도 다른 subject의 응답은 이 subject의 관측이 아닙니다.
 func validateLiveCheckSubject(field, requested, returned string) error {
 	if returned != requested {
@@ -237,7 +234,6 @@ func channelLiveCheckPayload(subject string, result *youtubejs.ChannelLiveCheckR
 	}
 }
 
-// failedChannelLiveCheck는 응답을 얻지 못한 확인을 identity 미확인 UNKNOWN으로 기록합니다.
 func failedChannelLiveCheck(subject string) contract.ChannelLiveCheckV1 {
 	return contract.ChannelLiveCheckV1{
 		ChannelID:     subject,
@@ -269,7 +265,7 @@ func videoLiveCheckPayload(subject string, result *youtubejs.VideoLiveCheckResul
 	}
 }
 
-// failedVideoLiveCheck는 응답을 얻지 못한 확인을 사실 없는 UNKNOWN으로 기록합니다. 채널을 추정해 채우지 않습니다.
+// 채널을 추정해 채우지 않습니다.
 func failedVideoLiveCheck(subject string) contract.VideoLiveCheckV1 {
 	return contract.VideoLiveCheckV1{
 		VideoID:       subject,

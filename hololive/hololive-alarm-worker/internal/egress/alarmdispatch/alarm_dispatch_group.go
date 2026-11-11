@@ -66,8 +66,8 @@ func alarmDispatchDeliveryGroupKey(envelope *domain.AlarmQueueEnvelope, envelope
 	return alarmDispatchGroupKey(envelope)
 }
 
-// 저장된 send unit이 발송 경계다. 저장된 send unit이 없는 봉투는 keyFunc로 묶이지만 Text 경로는 저장된 client_request_id가
-// 없으면 발송하지 않는다(errAlarmDispatchSendUnitIdentityMissing).
+// 저장된 send unit이 없는 봉투는 keyFunc로 묶이지만 Text 경로는 저장된 client_request_id가 없으면 발송하지
+// 않는다(errAlarmDispatchSendUnitIdentityMissing).
 func alarmDispatchRegroupKey(envelope *domain.AlarmQueueEnvelope, keyFunc func(*domain.AlarmQueueEnvelope) string) string {
 	if envelope != nil && envelope.SendUnitID > 0 {
 		return fmt.Sprintf("send-unit|%d", envelope.SendUnitID)

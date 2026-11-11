@@ -73,7 +73,6 @@ type LogicalKey struct {
 	RoomID    string
 }
 
-// Hash는 로그·메트릭에 사용할 고정 길이 단방향 키를 반환한다.
 func (k LogicalKey) Hash() string {
 	sum := sha256.Sum256([]byte(string(k.Kind) + "\x00" + k.LogicalID + "\x00" + k.RoomID))
 

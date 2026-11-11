@@ -28,7 +28,6 @@ func (r *Repository) loadChannelSubscriberAlarms(
 	return out, nil
 }
 
-// loadChannelSubscriberAlarmsByChannels는 여러 채널의 알림 종류별 구독 레코드를 한 번의 조회로 읽어 채널별로 묶는다.
 func (r *Repository) loadChannelSubscriberAlarmsByChannels(
 	ctx context.Context,
 	channelIDs []string,

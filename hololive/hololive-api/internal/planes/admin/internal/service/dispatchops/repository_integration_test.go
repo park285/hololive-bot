@@ -16,7 +16,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// setupOpsIntegration은 현재 전체 production migration을 적용한 격리 DB를 사용한다.
 func setupOpsIntegration(t *testing.T) (*Repository, *pgxpool.Pool) {
 	t.Helper()
 	pool := dbtest.NewPool(t)

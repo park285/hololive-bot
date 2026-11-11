@@ -54,7 +54,7 @@ func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
 	}
 }
 
-// 알림 종류가 비어 있으면 Live로 추정하지 않고 적재를 거절한다. 다른 종류의 알림을 Live 문구로 보내지 않기 위해서다.
+// 다른 종류의 알림을 Live 문구로 보내지 않기 위해서다.
 func TestBuildLedgerRows_RejectsEmptyAlarmType(t *testing.T) {
 	t.Parallel()
 
@@ -118,7 +118,6 @@ func TestValidateEventPayloadRoomAgnosticRejectsNestedDeliveryFields(t *testing.
 	}
 }
 
-// postgres 없이 조립하면 pool 없는 저장소를 돌려주지 않고 생성 시점에 거절한다.
 func TestNewPgxRepositoryRejectsMissingPostgres(t *testing.T) {
 	t.Parallel()
 

@@ -96,7 +96,6 @@ func seedExpiredPinnedRecoveryUnits(t *testing.T, pool *pgxpool.Pool, repo *disp
 	require.NoError(t, err)
 }
 
-// newOutboxRepository는 production 생성자에 테스트 pool을 dbtest.WrapPool로 감싸 넘긴다.
 func newOutboxRepository(tb testing.TB, pool *pgxpool.Pool) *dispatchoutbox.PgxRepository {
 	tb.Helper()
 

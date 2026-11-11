@@ -51,8 +51,7 @@ func New(db database.Client, members domain.MemberDataProvider) *Reader {
 	return reader
 }
 
-// DisplayNames는 영상 ID별 콜라보 출연자 표시명을 돌려준다. 출연자가 없는 영상은 결과에 넣지 않는다.
-// 공식 스케줄 조회나 멤버 적재가 실패하면 출연자를 뺀 결과로 바꾸지 않고 오류로 돌려준다.
+// 출연자가 없는 영상은 결과에 넣지 않는다. 공식 스케줄 조회나 멤버 적재가 실패하면 출연자를 뺀 결과로 바꾸지 않고 오류로 돌려준다.
 func (r *Reader) DisplayNames(ctx context.Context, videos []Video) (map[string][]string, error) {
 	hosts := make(map[string]string, len(videos))
 	for _, video := range videos {

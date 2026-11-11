@@ -221,7 +221,6 @@ func TestReissueRequestRollsBackWholeUnitWhenMemberAttemptFenceFails(t *testing.
 	require.Zero(t, generation)
 }
 
-// 같은 send unit의 재시도 전이는 한 문장 clock을 공유해 멤버 전원의 다음 시도 시각이 같다.
 func TestFailureTransitionsShareOneClockAcrossUnitMembers(t *testing.T) {
 	cases := map[string]func(t *testing.T, repository *PgxRepository, unit int64, records []*Record, request *SendRequest){
 		"route-failures": func(t *testing.T, repository *PgxRepository, _ int64, records []*Record, _ *SendRequest) {

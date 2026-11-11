@@ -19,7 +19,6 @@ func (f calendarFinderFunc) FindMembersWithCelebrationsInMonth(ctx context.Conte
 	return f(ctx, month, year)
 }
 
-// memoryCalendarCache는 synctest bubble 안에서 쓰는 메모리 공유 cache다. 만료는 bubble의 가짜 시간을 따른다.
 type memoryCalendarCache struct {
 	mu     sync.Mutex
 	values map[string]memoryCalendarCacheValue

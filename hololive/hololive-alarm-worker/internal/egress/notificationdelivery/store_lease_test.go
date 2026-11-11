@@ -200,7 +200,6 @@ func TestFetchReadyAndLockRoundsPositiveSubMillisecondLeaseUp(t *testing.T) {
 	}
 }
 
-// lease·보존·격리 임계값은 설정 검증이 양수를 보장하므로 저장소는 0 이하를 기본값으로 바꾸지 않고 오류로 거절한다.
 func TestStoreRejectsNonPositiveDurationsWithoutTouchingRows(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()

@@ -35,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// includeLive가 true이면 현재 진행 중인 방송도 포함한다.
 func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, error) {
 	if cached, found := h.cacheManager.GetChannelSchedule(ctx, channelID, hours, includeLive); found {
 		return h.channelScheduleFromCache(cached, includeLive), nil

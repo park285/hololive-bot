@@ -26,7 +26,6 @@ const (
 	gateSecondSubject   = "UC_TEST_SECOND"
 )
 
-// Provider gate는 수집 동안만 점유한다. 발행이 lease 행 잠금에 막혀 있어도 같은 provider의 다음 job은 수집·발행을 마칠 수 있어야 한다.
 func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
 	ctx := t.Context()
 
@@ -75,7 +74,6 @@ func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
 	assertSubjectObservations(t, pool, gateSecondSubject, 2)
 }
 
-// heldLeaseRow는 별도 트랜잭션이 FOR UPDATE로 잡은 lease 행과 그 backend pid입니다.
 type heldLeaseRow struct {
 	pool *pgxpool.Pool
 	tx   pgx.Tx
@@ -113,7 +111,6 @@ func lockLeaseRow(t *testing.T, pool *pgxpool.Pool, jobKey string) *heldLeaseRow
 	return &heldLeaseRow{pool: pool, tx: tx, pid: pid}
 }
 
-// waitForBlockedWriter는 다른 backend가 이 행 잠금 때문에 실제로 대기할 때까지 기다립니다.
 func (h *heldLeaseRow) waitForBlockedWriter(t *testing.T) {
 	t.Helper()
 
@@ -193,7 +190,6 @@ type gateReleaseCase struct {
 	wantCollect bool
 }
 
-// 다른 job이 slot 하나를 점유한 상태에서 성공·조기 실패 어느 경로든 자기 slot만 정확히 한 번 반환해야 한다.
 func TestProviderGateReleasesOwnSlotExactlyOnce(t *testing.T) {
 	for _, test := range []gateReleaseCase{
 		{
@@ -297,7 +293,6 @@ func checkGateRelease(t *testing.T, test gateReleaseCase) {
 	}
 }
 
-// 직접 defer 입력을 만들 수 없는 진단은 비치명 defer 실패로만 기록하고 lease 행을 바꾸지 않습니다.
 func TestDeferFailedRunKeepsLeaseActiveForNonDeferableDiagnostic(t *testing.T) {
 	ctx := t.Context()
 

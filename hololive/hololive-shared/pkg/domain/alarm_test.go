@@ -267,7 +267,6 @@ func TestAlarmTypesValueStaysString(t *testing.T) {
 	}
 }
 
-// 저장 payload의 notification.alarm_type 누락은 Live로 채우지 않고 decode 오류다.
 func TestAlarmQueueEnvelope_UnmarshalRejectsMissingAlarmType(t *testing.T) {
 	t.Parallel()
 

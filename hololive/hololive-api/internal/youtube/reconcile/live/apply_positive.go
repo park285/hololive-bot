@@ -184,7 +184,6 @@ func applyLateSchedule(session *reduceSession, existing *SessionState, fact *Ses
 	recordApplication(session, fact.VideoID, "APPLIED")
 }
 
-// newerScheduleObservation은 사실의 일정 확인 시각과, 그 일정이 저장된 일정보다 나중에 확인한 값인지를 돌려준다.
 func newerScheduleObservation(existing *SessionState, fact *SessionFact, evidence *Evidence) (time.Time, bool) {
 	observed := scheduleObservedAt(fact, evidence)
 

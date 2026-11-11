@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 보존 정리는 부모를 먼저 잠그므로 handoff도 부모를 기다리는 동안 자식 잠금을 쥐면 안 된다.
 func TestHandoffSettlementWaitsForParentBeforeLockingChildren(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -55,8 +54,6 @@ func TestHandoffSettlementWaitsForParentBeforeLockingChildren(t *testing.T) {
 	require.NoError(t, <-done)
 }
 
-// 정산이 부모 집합을 미리 읽어 잠그는 사이 같은 논리 키의 새 follower·outbox가 들어오면, 자식 잠금을 쥔 채 새 부모를
-// 잠그지 않고 아무것도 바꾸지 않은 membership 미스로 끝나며 확인을 닫지 않는다. 다음 확인은 늘어난 집합으로 정산한다.
 func TestHandoffSettlementDefersWhenLogicalGroupGainsParent(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -147,7 +144,6 @@ func requireHandoffGroupGrowthDeferred(t *testing.T, pool *pgxpool.Pool, unit ha
 	require.Nil(t, open.CheckedAt)
 }
 
-// waitHandoffBlockedBy는 blocker 트랜잭션의 잠금을 기다리는 backend가 생길 때까지 기다린다.
 func waitHandoffBlockedBy(ctx context.Context, t *testing.T, pool *pgxpool.Pool, blocker pgx.Tx) {
 	t.Helper()
 
@@ -170,7 +166,6 @@ func waitHandoffBlockedBy(ctx context.Context, t *testing.T, pool *pgxpool.Pool,
 	}
 }
 
-// insertSentHandoffFollower는 공백 정규화 뒤 단위와 같은 논리 키가 되는 새 SENT outbox와 SENT follower를 commit한다.
 func insertSentHandoffFollower(ctx context.Context, t *testing.T, pool *pgxpool.Pool, unit handoffTestUnit) (int64, int64) {
 	t.Helper()
 
@@ -193,7 +188,6 @@ func insertSentHandoffFollower(ctx context.Context, t *testing.T, pool *pgxpool.
 	return outboxID, deliveryID
 }
 
-// 행 한도 초과는 원장 값과 무관하게 확인을 닫으므로 원장 잠금 대기로 정산이 막히면 안 된다.
 func TestHandoffInvalidLocalMembershipClosesWithoutLedgerLock(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)

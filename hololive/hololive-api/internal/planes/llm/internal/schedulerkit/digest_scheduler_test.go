@@ -273,7 +273,6 @@ func TestRunDigest_LockReleasedOnExecuteError(t *testing.T) {
 	}
 }
 
-// locker 없이 NewDigestScheduler를 만들면 noop locker를 끼워 넣던 폴백을 지웠다. 실행은 lock 없이 진행하지 않고 실패한다.
 func TestDigestScheduler_RunDigestWithoutLockerFailsClosed(t *testing.T) {
 	ds := NewDigestScheduler(nil, discardLogger())
 	collected := false

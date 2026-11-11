@@ -45,7 +45,6 @@ func NewRSSParser() *RSSParser {
 	}
 }
 
-// Parse는 raw feed 바이트를 MajorEvent 목록으로 파싱한다.
 func (p *RSSParser) Parse(data []byte, eventType domain.MajorEventType) ([]*domain.MajorEvent, error) {
 	if p == nil || p.parser == nil {
 		return nil, errors.New("parse rss: parser is nil")

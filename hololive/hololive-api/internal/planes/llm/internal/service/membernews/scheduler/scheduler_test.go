@@ -97,7 +97,6 @@ func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Dig
 	return delivery.MessageVariants{Plain: digest.Headline, RichText: digest.Headline}, nil
 }
 
-// mockNotificationLocker: executionlock.Locker 구현.
 type mockNotificationLocker struct {
 	acquireToken    string
 	acquireAcquired bool
@@ -120,7 +119,6 @@ func (m *mockNotificationLocker) Release(_ context.Context, lockKey, _ string) e
 	return nil
 }
 
-// mockOutboxRepository: outboxEnqueuer 구현.
 type mockOutboxRepository struct {
 	mu            sync.Mutex
 	enqueuedItems []enqueueRecord

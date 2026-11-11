@@ -51,8 +51,7 @@ func replyHandoffFirstCheck() time.Duration {
 	return replyHandoffCheckSteps[0]
 }
 
-// replyHandoffNextStep은 예정 확인 시각(간격의 누적합) 가운데 elapsed가 아직 닿지 않은 첫 시각의 간격을
-// 돌려준다. 확인이 늦게 돌았으면 건너뛴 간격은 다시 쓰지 않는다.
+// 확인이 늦게 돌았으면 건너뛴 간격은 다시 쓰지 않는다.
 func replyHandoffNextStep(elapsed time.Duration) time.Duration {
 	var offset time.Duration
 
@@ -133,8 +132,7 @@ func (r *durableRuntime) runReplyHandoffReconciler(ctx context.Context) {
 	runDurableWorker(ctx, "reply_handoff", r.reconcileReplyHandoffBatch, r.handoffWake, r.handoffPollSlot, r.outboxPollEvery)
 }
 
-// reconcileReplyHandoffBatch는 확인 시각이 된 accepted 행을 한 batch 고르고, 행마다 Iris 조회와 CAS 정산을
-// 병렬로 끝낸 뒤 돌아온다. 고른 행이 없으면 false다.
+// 고른 행이 없으면 false다.
 func (r *durableRuntime) reconcileReplyHandoffBatch(ctx context.Context, _ func()) bool {
 	claimCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
 	claims, err := r.outbox.ClaimHandoffDue(claimCtx, replyHandoffBatchSize, replyHandoffSoftClaim)

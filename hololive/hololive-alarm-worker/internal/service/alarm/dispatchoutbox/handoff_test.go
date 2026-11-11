@@ -46,8 +46,6 @@ func handoffTestIrisRequestID(unit int64, generation int) string {
 	return fmt.Sprintf("iris-%d-g%d", unit, generation)
 }
 
-// claimSendingUnits는 방마다 두 멤버 send unit을 실제 claim·고정·발송 진입 경로로 sending에 넣고 방 순서의 claim 행을
-// 돌려준다.
 func claimSendingUnits(t *testing.T, repo *PgxRepository, rooms ...string) [][]*Record {
 	t.Helper()
 
@@ -79,7 +77,6 @@ func claimSendingUnits(t *testing.T, repo *PgxRepository, rooms ...string) [][]*
 	return byRoom
 }
 
-// seedSentHandoffUnits는 방마다 두 멤버 send unit을 Iris requestId와 함께 sent로 기록하고 확인 시각이 바로 오게 한다.
 func seedSentHandoffUnits(t *testing.T, pool *pgxpool.Pool, repo *PgxRepository, rooms ...string) []handoffTestUnit {
 	t.Helper()
 
@@ -148,7 +145,6 @@ func claimOneHandoff(t *testing.T, repo *PgxRepository) HandoffClaim {
 	return claims[0]
 }
 
-// sent 기록은 같은 문장 clock에서 첫 확인 시각과 Iris requestId를 단위에 남긴다.
 func TestHandoffMarkSentRecordsCheckOnUnit(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -170,8 +166,6 @@ func TestHandoffMarkSentRecordsCheckOnUnit(t *testing.T) {
 	require.Equal(t, []string{string(StatusSent), string(StatusSent)}, memberStatuses(t, pool, unit))
 }
 
-// 첫 확인 간격보다 짧은 지평도 허용되므로 발송 성공 정산은 첫 확인을 admission + 지평에서 자른다. 지평이 더 길면 첫
-// 확인은 handoffcheck.FirstCheckDelay 뒤다.
 func TestConsumerMarkDispatchedClipsFirstCheckToHorizon(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -209,7 +203,6 @@ func TestConsumerMarkDispatchedClipsFirstCheckToHorizon(t *testing.T) {
 	}
 }
 
-// 멤버 일부만 sent가 된 기록은 미스이며 단위에 handoff 확인을 남기지 않는다.
 func TestHandoffPartialMarkSentRecordsNoCheck(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -226,7 +219,6 @@ func TestHandoffPartialMarkSentRecordsNoCheck(t *testing.T) {
 	require.False(t, state.checked)
 }
 
-// 확인 claim은 다른 트랜잭션이 잠근 단위를 건너뛰고, soft claim한 단위는 만료 전까지 다시 고르지 않는다.
 func TestHandoffClaimSkipsLockedAndSoftClaimedUnits(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -272,7 +264,6 @@ func TestHandoffClaimSkipsLockedAndSoftClaimedUnits(t *testing.T) {
 	require.Equal(t, []int64{units[0].id}, handoffClaimUnits(released))
 }
 
-// 동시에 도는 확인 claim은 같은 단위를 두 번 고르지 않는다.
 func TestHandoffConcurrentClaimsAreExclusive(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -317,8 +308,6 @@ func TestHandoffConcurrentClaimsAreExclusive(t *testing.T) {
 	require.Equal(t, want, claimed, "every due unit must be claimed exactly once")
 }
 
-// 다시 claim돼 토큰이 바뀐 확인의 이전 관측은 version_changed 미스로 아무것도 바꾸지 않고, 확인 소유를 잃었으므로
-// 확인을 닫은 미스로 보고하지 않는다.
 func TestHandoffApplyRejectsReplacedClaimToken(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -347,8 +336,6 @@ func TestHandoffApplyRejectsReplacedClaimToken(t *testing.T) {
 	require.Equal(t, []string{string(StatusSent), string(StatusSent)}, memberStatuses(t, pool, unit.id))
 }
 
-// Iris failed는 멤버 retry·새 세대 ID·빈 확인을 한 문장에 남기고 다음 claim이 새 ID로 고정 본문을 다시 보낸다. 마지막
-// 세대의 failed는 재발급하지 않고 dlq로 끝내며 dedup claim 키를 해제한다.
 func TestHandoffFailedReissuesUntilGenerationsRunOut(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -410,7 +397,6 @@ func assertHandoffReissuedMembers(t *testing.T, pool *pgxpool.Pool, unit handoff
 	require.Equal(t, 5*time.Second, delay)
 }
 
-// resendHandoffUnit은 재발급된 단위를 실제 claim·고정 요청 읽기·발송 진입·sent 경로로 다시 보낸다.
 func resendHandoffUnit(t *testing.T, pool *pgxpool.Pool, repo *PgxRepository, unit handoffTestUnit, clientRequestID string, generation int) {
 	t.Helper()
 
@@ -435,8 +421,6 @@ func resendHandoffUnit(t *testing.T, pool *pgxpool.Pool, repo *PgxRepository, un
 	makeHandoffDue(t, pool, unit.id)
 }
 
-// 확인 소유는 남았지만 멤버가 더 이상 모두 sent가 아니면 멤버를 바꾸지 않고 확인을 닫으며, 소유 상실 미스와 구분되게
-// ErrHandoffCheckClosed로 보고한다.
 func TestHandoffMemberMismatchClosesCheckWithoutTransition(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -464,8 +448,6 @@ func TestHandoffMemberMismatchClosesCheckWithoutTransition(t *testing.T) {
 	require.Empty(t, again, "a closed check must not be claimed again")
 }
 
-// 멤버가 모두 지워진 단위는 관측 행이 없어도 문장이 돌려준 확인 소유로 판별한다. 소유를 잃은 이전 확인은 확인을 그대로
-// 두고 소유 상실 미스로, 소유한 확인은 확인을 닫고 ErrHandoffCheckClosed로 보고한다.
 func TestHandoffClosesCheckWhenAllMembersAreGone(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -501,7 +483,6 @@ func TestHandoffClosesCheckWhenAllMembersAreGone(t *testing.T) {
 	require.Empty(t, again, "a closed check must not be claimed again")
 }
 
-// 진행 중 재예약은 admission + 지평에서 잘리고, 지평을 넘긴 확인은 handoff 미확인으로 격리된다.
 func TestHandoffRescheduleStopsAtHorizonThenQuarantines(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
@@ -540,7 +521,6 @@ func TestHandoffRescheduleStopsAtHorizonThenQuarantines(t *testing.T) {
 	require.True(t, loadHandoffUnit(t, pool, unit.id).checked)
 }
 
-// budgetEndingHandoffRepository의 dlq는 호출자 예산이 끝나는 순간 commit된 것처럼 성공을 돌려준다.
 type budgetEndingHandoffRepository struct {
 	HandoffRepository
 }
@@ -551,7 +531,6 @@ func (budgetEndingHandoffRepository) DLQAfterHandoff(ctx context.Context, _ *Han
 	return nil
 }
 
-// liveContextReleaser는 해제 context가 살아 있을 때만 키를 지우고, err가 있으면 그것을 돌려준다.
 type liveContextReleaser struct {
 	released []string
 	err      error
@@ -571,8 +550,6 @@ func (r *liveContextReleaser) DelMany(ctx context.Context, keys []string) (int64
 	return int64(len(keys)), nil
 }
 
-// dlq commit 뒤 claim 키 해제는 정산 예산과 별도 예산이라, 정산 예산이 commit과 함께 끝나도 키를 해제한다. 해제가
-// 실패하면 dlq는 기록된 채 ErrHandoffClaimKeysNotReleased로 원인과 함께 보고한다.
 func TestHandoffDLQReleasesClaimKeysOutsideSettlementBudget(t *testing.T) {
 	claim := func() *HandoffClaim {
 		return &HandoffClaim{UnitID: 1, DeliveryIDs: []int64{1}, ClaimKeys: []string{"notified:claim:handoff-dlq:stream-1:100:live"}}

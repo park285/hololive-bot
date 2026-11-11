@@ -122,8 +122,6 @@ func validateShortPublishedAtPayload(video *domain.YouTubeVideo, payload *youtub
 	return validatePublishedAtPayload("video", video.VideoID, video.PublishedAt, payload.PublishedAt)
 }
 
-// validatePublishedAtPayload는 canonical 레코드와 outbox payload의 published_at이 같은 canonical 표기인지 확인한다.
-// 레코드에 값이 없으면 payload에도 없어야 하고, 있으면 payload가 같은 시각을 담아야 한다.
 func validatePublishedAtPayload(label, id string, recordPublishedAt, payloadPublishedAt *time.Time) error {
 	if recordPublishedAt == nil {
 		if payloadPublishedAt != nil {

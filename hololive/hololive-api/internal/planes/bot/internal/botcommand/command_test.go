@@ -86,7 +86,6 @@ func TestCommandType_IsValid(t *testing.T) {
 func TestCommandType_String(t *testing.T) {
 	t.Parallel()
 
-	// CommandLive → "live" 검증
 	got := botcommand.CommandLive.String()
 	if got != "live" {
 		t.Errorf("CommandLive.String() = %q, want %q", got, "live")

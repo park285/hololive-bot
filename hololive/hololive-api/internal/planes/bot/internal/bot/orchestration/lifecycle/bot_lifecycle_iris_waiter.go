@@ -86,7 +86,7 @@ func (l *BotLifecycle) runIrisReadyWaitLoop(
 	}
 }
 
-// pingIrisReady는 GET /ready를 한 번 확인한다. SDK Ping은 단일 시도이므로 재시도 간격과 로그는 이 waiter가 소유한다.
+// SDK Ping은 단일 시도이므로 재시도 간격과 로그는 이 waiter가 소유한다.
 func (l *BotLifecycle) pingIrisReady(ctx context.Context, pingTimeout time.Duration) error {
 	pingCtx, pingCancel := context.WithTimeout(ctx, pingTimeout)
 	defer pingCancel()

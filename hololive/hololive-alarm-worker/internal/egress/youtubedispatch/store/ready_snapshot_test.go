@@ -15,8 +15,7 @@ const (
 	readyTestFreshness = 2 * time.Hour
 )
 
-// ReadySnapshot과 ClaimPending은 같은 predicate와 DB 시계로 claim 가능성을 판정한다. 각 경계는 DB 시계 기준
-// 상대값으로 seed한다.
+// 각 경계는 DB 시계 기준 상대값으로 seed한다.
 func TestReadySnapshotAndClaimShareThresholds(t *testing.T) {
 	for _, tc := range []struct {
 		name                          string
@@ -72,7 +71,6 @@ func TestReadySnapshotAndClaimShareThresholds(t *testing.T) {
 	}
 }
 
-// 만료된 lease 행의 대기 시간은 next_attempt_at이 아니라 lease 만료(locked_at + lease)부터 센다.
 func TestReadySnapshotUsesExpiredLockAge(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

@@ -68,7 +68,6 @@ func sendHandoffTestUnit(
 	return handoffTestUnit{contentID: contentID, roomID: roomID, ownerID: ownerID, followerID: followerID, admission: admission}
 }
 
-// claimDueHandoff는 요청의 다음 확인을 지금 이전으로 당긴 뒤 확인 claim으로 고른다.
 func claimDueHandoff(t *testing.T, pool *pgxpool.Pool, transition *TransitionStore, baseID string) HandoffClaim {
 	t.Helper()
 
@@ -124,7 +123,6 @@ func loadHandoffTestDelivery(t *testing.T, pool *pgxpool.Pool, deliveryID int64)
 	return row
 }
 
-// loadHandoffTestLedger는 단위 논리 키의 원장 상태와 출처를 읽는다. 행이 없으면 빈 상태다.
 func loadHandoffTestLedger(t *testing.T, pool *pgxpool.Pool, unit handoffTestUnit) (LedgerStatus, int64) {
 	t.Helper()
 
@@ -147,8 +145,6 @@ func loadHandoffTestLedger(t *testing.T, pool *pgxpool.Pool, unit handoffTestUni
 	return status, source
 }
 
-// CompleteSent는 SENT 전이와 같은 트랜잭션에서 Iris requestId와 admission(owner sent_at) + min(5s, 지평)의 첫 확인
-// 시각을 고정 요청에 남긴다.
 func TestCompleteSentRecordsHandoffAdmission(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -184,7 +180,6 @@ func TestCompleteSentRecordsHandoffAdmission(t *testing.T) {
 	}
 }
 
-// 고정 요청의 세대가 이번 발송과 다르면 admission을 남길 수 없으므로 SENT 전이도 원장도 남기지 않는다.
 func TestCompleteSentRejectsAdmissionForAnotherGeneration(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -218,7 +213,6 @@ func TestCompleteSentRejectsAdmissionForAnotherGeneration(t *testing.T) {
 	require.Empty(t, status)
 }
 
-// handoff_completed는 확인을 닫고 delivery·원장의 SENT를 그대로 둔다.
 func TestHandoffCompleteClosesCheckAndKeepsSent(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -240,8 +234,6 @@ func TestHandoffCompleteClosesCheckAndKeepsSent(t *testing.T) {
 	require.Equal(t, unit.ownerID, source)
 }
 
-// 재예약은 다음 확인을 admission + 지평 이후로 미루지 않는다. 고정 멤버가 claim 뒤 바뀌었으면 멤버를 바꾸지 않고
-// 확인을 닫는다.
 func TestHandoffRescheduleClampsToHorizonAndClosesChangedMembers(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -277,9 +269,6 @@ func TestHandoffRescheduleClampsToHorizonAndClosesChangedMembers(t *testing.T) {
 	require.Equal(t, domain.OutboxStatusSent, loadHandoffTestDelivery(t, pool, unit.ownerID).status)
 }
 
-// Iris failed 재발급은 고정 멤버 밖 follower까지 논리 단위를 PENDING으로 되돌리고 이 발송의 SENT 원장을 지우며, 같은
-// 트랜잭션에서 SENT였던 부모 outbox 집계를 PENDING으로 되돌린다. 다음 claim은 같은 고정 본문을 다음 세대 ID로 다시
-// 보내고, 원장과 outbox 집계는 SENT로 수렴한다.
 func TestHandoffReissueRevertsLogicalUnitAndResendsFrozenBody(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -371,7 +360,6 @@ func resendHandoffTestUnit(t *testing.T, pool *pgxpool.Pool, transition *Transit
 	requireHandoffOutboxStatuses(t, pool, outboxIDs, domain.OutboxStatusSent)
 }
 
-// 예산이 없는 Iris failed는 논리 단위를 FAILED로 끝내고 원장을 남기지 않는다.
 func TestHandoffExhaustFailsLogicalUnitWithoutLedger(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -407,7 +395,6 @@ func TestHandoffExhaustFailsLogicalUnitWithoutLedger(t *testing.T) {
 	require.NotNil(t, state.CheckedAt)
 }
 
-// 결과 불명은 논리 단위를 QUARANTINED로 끝내고 이 발송의 SENT 원장을 같은 출처의 QUARANTINED 원장으로 바꾼다.
 func TestHandoffQuarantineReplacesSentLedger(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -431,7 +418,6 @@ func TestHandoffQuarantineReplacesSentLedger(t *testing.T) {
 	require.NotNil(t, state.CheckedAt)
 }
 
-// 다른 확인이 claim 토큰을 가져간 뒤의 정산은 아무것도 바꾸지 않은 fence 미스다.
 func TestHandoffSettlementRejectsStaleClaimToken(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -451,7 +437,6 @@ func TestHandoffSettlementRejectsStaleClaimToken(t *testing.T) {
 	require.Equal(t, LedgerStatusSent, status)
 }
 
-// 논리 키의 원장이 다른 출처로 바뀌었으면 이 발송의 결과가 아니므로 멤버·원장을 바꾸지 않고 확인을 닫는다.
 func TestHandoffSettlementClosesCheckWhenLedgerSourceChanged(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -486,7 +471,6 @@ func TestHandoffSettlementClosesCheckWhenLedgerSourceChanged(t *testing.T) {
 	require.NotNil(t, state.CheckedAt)
 }
 
-// 같은 claim으로 동시에 들어온 정산은 하나만 적용되고 나머지는 fence 미스다.
 func TestHandoffConcurrentSettlementsApplyOnce(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -529,7 +513,6 @@ func TestHandoffConcurrentSettlementsApplyOnce(t *testing.T) {
 	require.Equal(t, 1, applied)
 }
 
-// 정산 commit 응답을 잃어도 고정 요청의 post-state가 기대한 재발급이면 적용으로 확인한다.
 func TestHandoffReissueConfirmsLostCommitResponse(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)

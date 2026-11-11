@@ -63,7 +63,6 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 	}
 }
 
-// snapshot 없이 개인 멤버를 이름·별칭으로 먼저 조회해도 공유 채널 index는 SQL 채널 대표만 채운다.
 func TestColdIndividualLookupsDoNotClaimSharedChannel(t *testing.T) {
 	repo, owner := seedSharedReviewMembers(t)
 	ctx := t.Context()
@@ -88,7 +87,6 @@ func TestColdIndividualLookupsDoNotClaimSharedChannel(t *testing.T) {
 	}
 }
 
-// pointLookupExpectations는 repository가 돌려준 조회 결과를 cache 조회와 비교할 기준으로 담는다.
 type pointLookupExpectations struct {
 	aliases     []string
 	channels    []string
@@ -157,8 +155,7 @@ func (e *pointLookupExpectations) assert(t *testing.T, label string, cache *Cach
 	}
 }
 
-// 채널·이름·별칭 조회는 snapshot 적재 전(PostgreSQL)과 적재 후(프로세스 snapshot)에 같은 멤버를 돌려준다. Warm 조회는
-// members 행을 지운 뒤에 수행해 snapshot에서 응답했음을 확인한다.
+// Warm 조회는 members 행을 지운 뒤에 수행해 snapshot에서 응답했음을 확인한다.
 func TestPointLookupsMatchRepositoryWithAndWithoutSnapshot(t *testing.T) {
 	repo, _ := seedSharedReviewMembers(t)
 	ctx := t.Context()
@@ -193,8 +190,6 @@ func TestPointLookupsMatchRepositoryWithAndWithoutSnapshot(t *testing.T) {
 	expectations.assert(t, "warm", warm)
 }
 
-// Cache 단건 조회는 미존재를 domain.ErrMemberNotFound로, PostgreSQL 실패를 그와 다른 오류로 돌려준다. 미존재는
-// 캐시하지 않으므로 나중에 생긴 행은 곧바로 보인다.
 func TestCacheFindersSeparateNotFoundFromRepositoryFailure(t *testing.T) {
 	repo, pool := newPGXRepository(t)
 	ctx := t.Context()
@@ -227,8 +222,7 @@ func TestCacheFindersSeparateNotFoundFromRepositoryFailure(t *testing.T) {
 	}
 }
 
-// 같은 english_name이 여럿이면 repository(SQL ORDER BY id), cold cache, epoch 우회, warm snapshot 모두 가장 작은 영속 ID를
-// 돌려준다. 먼저 넣은 행을 갱신해 heap 순서가 ID 순서와 달라지게 만든다.
+// 먼저 넣은 행을 갱신해 heap 순서가 ID 순서와 달라지게 만든다.
 func TestDuplicateNameLookupsAgreeOnSmallestID(t *testing.T) {
 	repo, pool := newPGXRepository(t)
 	ctx := t.Context()

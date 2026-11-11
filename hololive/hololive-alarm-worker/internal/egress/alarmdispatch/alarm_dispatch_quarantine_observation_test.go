@@ -87,7 +87,6 @@ func TestBacklogSnapshotCountsRetainedQuarantineWithoutChangingActiveBacklog(t *
 	require.Zero(t, snapshot.OldestUnreviewedQuarantinedAgeSeconds)
 }
 
-// 같은 행 revision의 closeout receipt만 검토 대상에서 빼고, 보존 총량·경과는 유지한다.
 func TestBacklogSnapshotExcludesOnlyRowsMatchingCloseoutReceipt(t *testing.T) {
 	store, conn := newQuarantineReviewStore(t)
 	ctx := t.Context()
@@ -143,7 +142,6 @@ func TestBacklogSnapshotExcludesOnlyRowsMatchingCloseoutReceipt(t *testing.T) {
 	require.InDelta(t, 7*86400, snapshot.OldestUnreviewedQuarantinedAgeSeconds, 5)
 }
 
-// receipt 조회 실패를 검토 완료 0건으로 덮지 않는다.
 func TestBacklogSnapshotReceiptFailureKeepsPreviousQuarantineValues(t *testing.T) {
 	store, conn := newQuarantineReviewStore(t)
 	ctx := t.Context()

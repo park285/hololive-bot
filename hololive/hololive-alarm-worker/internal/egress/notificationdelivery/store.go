@@ -43,9 +43,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-// fetchReadyAndLock은 lease가 없거나 만료된 PENDING 행 중 활성 방을 제외하고 각 방의 첫 due 항목만 임대합니다.
-// 다른 worker가 선행 항목을 처리 중이어도 후행 항목이 앞서 발송되지 않습니다. 현재 writer는 locked_at·locked_by·
-// lock_expires_at을 항상 함께 쓰고 함께 비운다.
+// 다른 worker가 선행 항목을 처리 중이어도 후행 항목이 앞서 발송되지 않습니다. 현재 writer는 locked_at·locked_by· lock_expires_at을 항상 함께 쓰고 함께 비운다.
 func (r *Store) fetchReadyAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration, activeRooms []string, processedIDs []int64) ([]domain.NotificationDeliveryOutbox, error) {
 	if err := r.ensurePool(); err != nil {
 		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
@@ -95,9 +93,7 @@ const (
 	actionReissueRequest       = "reissue_request"
 )
 
-// applyFenced는 sendfence 규약의 단일 행 전이 SQL을 실행하고, 같은 문장이 잠근 행의 관측값으로 적용 여부를 판정한다.
-// 인자 args는 SQL 인자 전체이며 $1은 대상 행 id다. 적용되지 않았으면 *sendfence.MissError이며 그 행은 이 문장이
-// 바꾸지 않았다.
+// 인자 args는 SQL 인자 전체이며 $1은 대상 행 id다. 적용되지 않았으면 *sendfence.MissError이며 그 행은 이 문장이 바꾸지 않았다.
 func (r *Store) applyFenced(ctx context.Context, action string, id int64, query string, args ...any) error {
 	if err := r.ensurePool(); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
@@ -180,8 +176,7 @@ func (r *Store) markFailed(ctx context.Context, action string, id int64, workerI
 	)
 }
 
-// Cleanup은 보존 기간이 지난 SENT·FAILED·QUARANTINED 행을 배치로 지운다. FAILED/QUARANTINED 항목은 sent_at이 NULL이므로
-// created_at을 fallback으로 사용한다. 보존 기한은 각 배치 문장의 DB 시각에서 olderThan을 뺀 값이다.
+// FAILED/QUARANTINED 항목은 sent_at이 NULL이므로 created_at을 fallback으로 사용한다. 보존 기한은 각 배치 문장의 DB 시각에서 olderThan을 뺀 값이다.
 func (r *Store) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
 	olderThanMS, err := positiveMilliseconds("cleanup retention", olderThan)
 	if err != nil {
@@ -234,7 +229,6 @@ func yieldBetweenCleanupBatches(ctx context.Context) error {
 	return nil
 }
 
-// QuarantineStaleSending은 sending이 olderThan보다 오래된 SENDING 행을 최대 limit개 결과 불명으로 격리한다.
 func (r *Store) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error) {
 	if err := r.ensurePool(); err != nil {
 		return 0, err
@@ -283,7 +277,6 @@ func durationMilliseconds(value time.Duration) int64 {
 	return 1
 }
 
-// positiveMilliseconds는 양수여야 하는 기간을 SQL 밀리초 인자로 바꾼다. 0 이하는 설정 오류다.
 func positiveMilliseconds(name string, value time.Duration) (int64, error) {
 	if value <= 0 {
 		return 0, fmt.Errorf("%s must be positive: %s", name, value)

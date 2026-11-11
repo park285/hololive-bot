@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 다른 변경이 lock을 쥐고 있으면 대기 시간이 lock 대기 지표에 남고, 작업 시간 지표의 시작 시각은 대기 전이다.
 func TestLockCacheMutationRecordsContendedWait(t *testing.T) {
 	const (
 		operation = "lock-wait-test"

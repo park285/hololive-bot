@@ -83,8 +83,6 @@ func TestOpsIntegrationSettlement(t *testing.T) {
 	}
 }
 
-// 재시도 뒤 다시 격리한 행의 보존 기간은 새 격리부터 시작하며,
-// 묶음 안에서 이미 격리 중인 행의 시각을 임의로 연장하지 않습니다.
 func TestOpsIntegrationRequarantineStartsNewRetention(t *testing.T) {
 	repo, pool := setupOpsIntegration(t)
 	ids := seedOpsGroup(t, pool, 2, true)

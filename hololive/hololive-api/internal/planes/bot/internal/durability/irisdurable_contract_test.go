@@ -49,9 +49,8 @@ var (
 	contractCounter             atomic.Uint64
 )
 
-// TestIrisDurableContract는 hololive의 PostgreSQL inbox·reply outbox 원장이 스택 공통 irisdurable
-// 계약을 지키는지 검증한다. NonceStore는 nil이다 — hololive의 HMAC nonce store는 iris-client-go의
-// Valkey valkeydedup.NewNonceStore(internal/app/bootstrap/bot_webhook.go)라 PostgreSQL 원장이 아니다.
+// NonceStore는 nil이다 — hololive의 HMAC nonce store는 iris-client-go의 Valkey
+// valkeydedup.NewNonceStore(internal/app/bootstrap/bot_webhook.go)라 PostgreSQL 원장이 아니다.
 func TestIrisDurableContract(t *testing.T) {
 	terminalRetention := contractTerminalRetention(t)
 
@@ -87,9 +86,7 @@ func TestIrisDurableContract(t *testing.T) {
 	})
 }
 
-// contractTerminalRetention은 runtime이 bot_webhook_inbox.terminal_retention_ms로 받는 종단 보존을
-// API worker profile fixture에서 역할 소유 loader를 거쳐 읽는다. DurableLedgerRepository.Maintain은
-// inbox·command·reply outbox 종단 행을 같은 terminalRetention으로 정리한다.
+// DurableLedgerRepository.Maintain은 inbox·command·reply outbox 종단 행을 같은 terminalRetention으로 정리한다.
 func contractTerminalRetention(t *testing.T) time.Duration {
 	t.Helper()
 

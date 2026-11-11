@@ -115,8 +115,6 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 	}
 }
 
-// generation 2에서 Premiere 표시는 player 대기 상태 근거(UPCOMING_PREMIERE)에서만 옵니다. 근거가 없거나 미확정이거나
-// 공개 영상이면 live session을 만들지 않습니다.
 func TestContentConsumerPremiereIgnoresNonPremiereEvidence(t *testing.T) {
 	tests := []struct {
 		name string
@@ -382,7 +380,6 @@ func premiereVideoListEnvelope(t *testing.T, proof *contract.LeaseProof, schedul
 	return videoListItemsEnvelope(t, proof, contract.CompletenessComplete, item)
 }
 
-// largePremiereVideoListEnvelope는 첫 항목만 확인된 Premiere이고 나머지는 player 근거가 없는 목록입니다.
 func largePremiereVideoListEnvelope(
 	t *testing.T,
 	proof *contract.LeaseProof,

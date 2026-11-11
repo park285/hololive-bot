@@ -222,7 +222,6 @@ type alarmDispatchRetentionTarget struct {
 	retentionDays int
 }
 
-// WithAdvisoryLock은 트랜잭션 advisory lock을 얻은 경우에만 fn을 같은 트랜잭션에서 실행한다.
 // 다른 인스턴스가 lock을 잡고 있으면 fn 없이 성공으로 끝난다.
 func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 	ctx context.Context,

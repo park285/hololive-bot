@@ -39,7 +39,7 @@ func (r *payloadCleanupRecorder) DelMany(_ context.Context, keys []string) (int6
 	return int64(len(keys)), nil
 }
 
-// minimalEnvelopePayload는 decode를 통과하는 가장 작은 저장 payload다. 저장 payload의 notification.alarm_type은 필수다.
+// 저장 payload의 notification.alarm_type은 필수다.
 const minimalEnvelopePayload = `{"notification":{"alarm_type":"LIVE"}}`
 
 func TestConsumerRejectsPayloadBeforeReleasingClaims(t *testing.T) {

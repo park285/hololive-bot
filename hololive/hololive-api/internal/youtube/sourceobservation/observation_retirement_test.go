@@ -12,8 +12,7 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// 원본 관측의 수명과 신규성 판단의 수명은 다릅니다. 원본을 지운 뒤 같은 slot과 다음 slot을 다시 받아도
-// 기존 영상·clock·기준점·알림 종단 상태가 유지되어 새 알림을 만들거나 기존 알림을 재활성화하지 않아야 합니다.
+// 원본 관측의 수명과 신규성 판단의 수명은 다릅니다.
 func TestContentObservationDeletionDoesNotRenotify(t *testing.T) {
 	for _, status := range []string{"baseline", "SENT", "FAILED"} {
 		t.Run(status, func(t *testing.T) {
@@ -89,7 +88,6 @@ func retirementContentIdentity(t *testing.T, pool *pgxpool.Pool) string {
 	return identity
 }
 
-// 관측 원본을 지워도 라이브 세션의 최초 감지·방송 식별·종단 판단은 초기화하지 않습니다.
 func TestLiveObservationDeletionPreservesNotificationIdentity(t *testing.T) {
 	for _, status := range []string{testStatusLive, testStatusEnded} {
 		t.Run(status, func(t *testing.T) {
@@ -131,7 +129,6 @@ func retirementLiveIdentity(t *testing.T, pool *pgxpool.Pool) string {
 	return identity
 }
 
-// 복구는 payload·원본·감사를 함께 되돌린다. 발송 상태·신규성 판단은 건드리지 않는다.
 func TestObservationRetirementRestorePreservesNotificationState(t *testing.T) {
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()

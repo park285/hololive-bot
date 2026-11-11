@@ -58,7 +58,6 @@ func TestReduceYouTubeVideoIDIsCanonicalIdentity(t *testing.T) {
 	}
 }
 
-// 같은 영상의 항목이 여럿이어도 저장할 세션은 모든 항목을 반영한 최종 상태 하나다.
 func TestReduceEmitsOneFinalSessionPerVideo(t *testing.T) {
 	t.Parallel()
 

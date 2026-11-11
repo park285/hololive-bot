@@ -98,7 +98,6 @@ func TestReleaseClaimKeysSkipsNonPrefixedKeys(t *testing.T) {
 	}
 }
 
-// releaser가 없으면 no-op로 TTL 만료에 기대지 않는다. 구성 누락은 해제 실패로 드러나야 한다.
 func TestReleaseClaimKeysRejectsMissingReleaser(t *testing.T) {
 	t.Parallel()
 

@@ -17,7 +17,6 @@ import (
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-// countingSettingsWriter는 settings.json 기록 횟수를 센다.
 type countingSettingsWriter struct {
 	settingssvc.ReadWriter
 
@@ -34,7 +33,6 @@ func (w *countingSettingsWriter) Update(next settingssvc.Settings) error {
 	return nil
 }
 
-// newAlarmWorkerStub은 alarm-worker의 advance minutes PUT을 흉내 내고 받은 요청 수를 센다.
 func newAlarmWorkerStub(t *testing.T, status int) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 
@@ -111,7 +109,6 @@ func decodeUpdateSettingsRuntime(t *testing.T, rec *httptest.ResponseRecorder) m
 	return runtime
 }
 
-// alarm_advance 변경의 적용 경로는 admin UpdateSettings 하나다: settings.json 1회 기록 + worker PUT 1회.
 func TestSettingsAPIHandler_UpdateSettings_AppliesAlarmAdvanceOnceAndWritesOnce(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -141,8 +138,7 @@ func TestSettingsAPIHandler_UpdateSettings_AppliesAlarmAdvanceOnceAndWritesOnce(
 	}
 }
 
-// worker 적용 실패는 응답에 드러나야 한다. 다른 적용 경로(Pub/Sub 재적용)가 없으므로 성공으로 보고하면
-// 운영자가 worker가 옛 값으로 도는 걸 알 수 없다.
+// 다른 적용 경로(Pub/Sub 재적용)가 없으므로 성공으로 보고하면 운영자가 worker가 옛 값으로 도는 걸 알 수 없다.
 func TestSettingsAPIHandler_UpdateSettings_ReportsWorkerApplyFailure(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -168,7 +164,6 @@ func TestSettingsAPIHandler_UpdateSettings_ReportsWorkerApplyFailure(t *testing.
 	}
 }
 
-// 0분은 저장이나 worker 적용 전에 거절하여 기존 양수 설정과 런타임을 보존한다.
 func TestSettingsAPIHandler_UpdateSettings_RejectsZeroBeforeStoreAndWorker(t *testing.T) {
 	t.Parallel()
 

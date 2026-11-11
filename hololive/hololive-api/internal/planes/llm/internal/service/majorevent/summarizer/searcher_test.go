@@ -109,7 +109,6 @@ func TestDedupeSearchResults(t *testing.T) {
 }
 
 func TestDedupeSearchResults_MaxCap(t *testing.T) {
-	// 15건 입력 → maxSearchResults(10) 이하 반환
 	input := make([]model.SearchResult, 15)
 	for i := range input {
 		input[i] = model.SearchResult{

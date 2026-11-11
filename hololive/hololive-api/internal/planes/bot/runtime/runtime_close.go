@@ -106,7 +106,6 @@ func (r *BotRuntime) CloseContext(ctx context.Context) error {
 	return errors.Join(shutdownErr, r.resourcesErr)
 }
 
-// ResourceUsersJoined는 process 자원을 닫아도 되는 실제 작업 join 상태다.
 func (r *BotRuntime) ResourceUsersJoined() bool {
 	return r == nil || r.quiesced.Load()
 }

@@ -80,9 +80,8 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 	return nil
 }
 
-// lockOutboxAggregateParents는 호출자의 READ COMMITTED 트랜잭션에서 중복 없는 부모 outbox를 ID 순서로 FOR NO KEY
-// UPDATE 잠근다. 이미 지워진 부모는 잠금 결과에 없다. 집계는 같은 트랜잭션의 뒤 statement(syncOutboxAggregates)가
-// 하므로, 자식을 함께 바꾸는 호출자는 이 잠금을 자식 잠금보다 먼저 건다(보존 정리·fanout과 같은 부모 → 자식 순서).
+// 이미 지워진 부모는 잠금 결과에 없다. 집계는 같은 트랜잭션의 뒤 statement(syncOutboxAggregates)가 하므로, 자식을 함께 바꾸는 호출자는 이 잠금을 자식 잠금보다 먼저 건다(보존
+// 정리·fanout과 같은 부모 → 자식 순서).
 func lockOutboxAggregateParents(ctx context.Context, tx dbx.Querier, outboxIDs []int64) error {
 	if len(outboxIDs) == 0 {
 		return nil
@@ -95,10 +94,8 @@ func lockOutboxAggregateParents(ctx context.Context, tx dbx.Querier, outboxIDs [
 	return nil
 }
 
-// syncOutboxAggregates는 lockOutboxAggregateParents로 이미 잠근 중복 없는 부모의 집계를 canonical 집계 문장으로 다시
-// 계산하며 부모를 다시 잠그지 않는다. 부모 잠금 뒤의 statement라 잠금 대기 전 snapshot으로 더 늦게 확정된 SENT를
-// 덮어쓰지 않는다. 같은 트랜잭션이 앞서 바꾼 자식도 집계에 들어가므로 자식 전이와 함께 쓰면 부모 집계가 그 전이와 함께
-// commit되거나 함께 되돌아간다. 새로 기록하는 outbox sent_at·terminal_at은 집계 문장이 채취한 DB 시계다.
+// 부모 잠금 뒤의 statement라 잠금 대기 전 snapshot으로 더 늦게 확정된 SENT를 덮어쓰지 않는다. 같은 트랜잭션이 앞서 바꾼 자식도 집계에 들어가므로 자식 전이와 함께 쓰면 부모 집계가 그
+// 전이와 함께 commit되거나 함께 되돌아간다. 새로 기록하는 outbox sent_at·terminal_at은 집계 문장이 채취한 DB 시계다.
 func syncOutboxAggregates(ctx context.Context, tx dbx.Querier, outboxIDs []int64) error {
 	if len(outboxIDs) == 0 {
 		return nil
