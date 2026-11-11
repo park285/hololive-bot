@@ -34,17 +34,14 @@ import (
 )
 
 const (
-	NamespaceOrg         = "org"
-	NamespaceAlarmType   = "alarmtype"
-	NamespaceNewsCat     = "newscat"
-	NamespaceSocial      = "social"
-	NamespaceMisc        = "misc"
-	NamespaceError       = "error"
-	NamespaceNotify      = "notify"
-	NamespaceCalendar    = "calendar"
-	NamespaceLiveCard    = "livecard"
-	NamespaceProfileCard = "profilecard"
-	NamespaceTimeFmt     = "timefmt"
+	NamespaceOrg       = "org"
+	NamespaceAlarmType = "alarmtype"
+	NamespaceNewsCat   = "newscat"
+	NamespaceMisc      = "misc"
+	NamespaceError     = "error"
+	NamespaceNotify    = "notify"
+	NamespaceCalendar  = "calendar"
+	NamespaceTimeFmt   = "timefmt"
 )
 
 type queryRunner interface {

@@ -11,7 +11,6 @@ WITH candidate AS MATERIALIZED (
 )
 UPDATE bot_command_executions AS executions
 SET status = 'outcome_unknown',
-    result_summary = 'outcome_unknown',
     completed_at = clock_timestamp(),
     updated_at = clock_timestamp()
 FROM candidate

@@ -16,13 +16,10 @@ var knownNamespaces = []string{
 	NamespaceOrg,
 	NamespaceAlarmType,
 	NamespaceNewsCat,
-	NamespaceSocial,
 	NamespaceMisc,
 	NamespaceError,
 	NamespaceNotify,
 	NamespaceCalendar,
-	NamespaceLiveCard,
-	NamespaceProfileCard,
 	NamespaceTimeFmt,
 }
 

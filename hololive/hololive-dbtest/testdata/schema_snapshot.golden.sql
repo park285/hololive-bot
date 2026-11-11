@@ -300,7 +300,6 @@ TABLE bot_reply_outbox
   INDEX CREATE INDEX idx_bot_reply_outbox_due_available ON public.bot_reply_outbox USING btree (available_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
   INDEX CREATE INDEX idx_bot_reply_outbox_handoff_due ON public.bot_reply_outbox USING btree (handoff_next_check_at, id) WHERE ((status = 'accepted'::text) AND (claim_token IS NULL))
   INDEX CREATE INDEX idx_bot_reply_outbox_manual_review_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = 'manual_review'::text)
-  INDEX CREATE INDEX idx_bot_reply_outbox_message ON public.bot_reply_outbox USING btree (message_id, ordinal)
   INDEX CREATE INDEX idx_bot_reply_outbox_room_active ON public.bot_reply_outbox USING btree (room_id, id) WHERE (status = ANY (ARRAY['pending'::text, 'submitting'::text, 'accepted'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
   INDEX CREATE INDEX idx_bot_reply_outbox_submitting_lease_expiry ON public.bot_reply_outbox USING btree (lease_until, id) WHERE (status = 'submitting'::text)
   INDEX CREATE INDEX idx_bot_reply_outbox_terminal_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['handoff_completed'::text, 'dead'::text, 'permanent_conflict'::text]))

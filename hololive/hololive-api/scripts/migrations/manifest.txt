@@ -3,3 +3,4 @@
 003 003_source_retention_protected_set.sql
 004 004_source_application_natural_key.sql
 005 005_youtube_collection_candidate_next_due.sql
+006 006_drop_bot_reply_outbox_message_index.sql

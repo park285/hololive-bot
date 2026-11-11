@@ -9,7 +9,7 @@
 ## 미출시
 
 - **Go 1.27.4 갱신:** 모듈·빌드 이미지·분석 도구의 Go 고정 버전을 올립니다(1.27.3 → 1.27.4).
-- **구조·계약 정리와 호환 잔재 fadeout:** [리팩토링안](docs/current/plans/2026-11-11-hololive-structure-fadeout-refactor.md)의 실행 WP 60개 가운데 59개를 반영했습니다(WP-55는 측정 결과 이득이 작아 진행하지 않았습니다). 정본 문서를 코드 사실에 맞추고 `docs/current/CONTRACT_MANIFEST.txt`와 bridge 문서를 지웠습니다. 호출자·생산자가 없는 호환 경로, 시험에서만 쓰던 운영 코드, 읽지 않는 설정을 삭제하고 중복 구현을 합쳤습니다. DB schema와 migration은 바뀌지 않습니다.
+- **구조·계약 정리와 호환 잔재 fadeout:** [리팩토링안](docs/current/plans/2026-11-11-hololive-structure-fadeout-refactor.md)의 실행 WP 60개 가운데 59개를 반영했습니다(WP-55는 측정 결과 이득이 작아 진행하지 않았습니다). 정본 문서를 코드 사실에 맞추고 `docs/current/CONTRACT_MANIFEST.txt`와 bridge 문서를 지웠습니다. 호출자·생산자가 없는 호환 경로, 시험에서만 쓰던 운영 코드, 읽지 않는 설정을 삭제하고 중복 구현을 합쳤습니다.
 - **youtubejs helper와 collector 짝 배포:** helper의 `/v1/channel`은 `max_pages`를 unknown field로 거절하고, collector는 content 항목의 `published_at`·`scheduled_for`를 protocol mismatch로 거절합니다. 두 구성 요소는 같은 이미지로 함께 교체해야 합니다. helper는 `--socket`·`--protocol-version`·`--request-read-timeout-ms`가 없거나 양의 정수가 아니면 exit 1로 끝납니다. live 확인 초기화 실패는 RPC마다 재시도되지 않고 bootstrap 500으로 helper를 FAULTED로 끝내며, `youtubejs_po_proof_state`는 첫 live 확인 전에도 `COLD`를 보고합니다. 운영 이미지에서 테스트 대역과 성능 벤치 파일을 뺐습니다.
 - **YouTube 수집 결과:** streams lockup 행이 `thumbnail_url`을 싣습니다. 예정 시각이 지났지만 예정 표시가 남은 videos 행은 `is_upcoming=true`로 나가고, shorts_list 항목은 `published_at`·`scheduled_for`를 싣지 않습니다. PARTIAL defer의 `last_failure_detail`에도 secret 마스킹과 2048바이트 상한을 적용합니다. `YOUTUBE_COLLECTOR_LOG_FILE_NAME`에 `/`나 `\`가 있으면 기본 파일명으로 대체하지 않고 기동에 실패합니다.
 - **YouTube 발송:** url 대체 키만 있는 행과 계약 타입으로 디코드되지 않는 행은 묶음 발송에서 빠져 개별 발송됩니다. grouped fallback의 개별 발송은 남은 lease가 `DeliverySendTimeout + max(2×PollInterval, 5s)`보다 짧으면 provider를 부르지 않고 retryable `send_lease_budget`으로 미룹니다. provider 호출 전 검증 오류는 outcome_unknown 뒤 격리되지 않고 permanent `invalid_send_request`로 FAILED가 됩니다. 이 FAILED 행은 revive 창 안에서 다시 살아나 같은 검증 실패를 반복할 수 있습니다. 실패 전이는 그룹 재조회·fence 확인·전이·telemetry 기록을 한 트랜잭션에서 처리합니다.
@@ -21,6 +21,7 @@
 - **LLM:** cliproxy를 쓰는 major event 요약·adjudicator 클라이언트를 member news와 같은 OpenAI 호환 클라이언트로 합쳐 로그 이벤트가 `llm.request.*`로 바뀝니다. member news에서 검증된 후보가 0건이면 `hololive_member_news_digest_result_total{result_type="empty"}`가 늘어납니다. Exa 응답의 빈 `results`는 실패가 아니라 0건으로 처리합니다. major event 적재 로그의 attr `sent`는 `queued`로 바뀌었습니다.
 - **Holodex:** 429 재시도를 소진한 오류는 `*KeyRotationError` 대신 `*APIError`입니다. PhotoSync 구현은 hololive-api admin plane으로 옮겼고 주기·재시도·SQL은 같습니다.
 - **조회 비용 감소:** 방송 이력 조회의 행 수, ACL `RemoveRoom`의 전체 재적재, webhook inbox 정산 왕복, checker·tier·dedup의 N+1 조회, video_list·shorts_list subject head 갱신, collector target snapshot 트랜잭션의 왕복 1회를 줄였습니다.
+- **migration 006:** UNIQUE(message_id, phase, ordinal)와 겹치고 운영 사용 횟수가 0인 `idx_bot_reply_outbox_message`를 `DROP INDEX CONCURRENTLY`로 지웁니다. bot 명령 실행 원장은 `result_summary`를 더 쓰지 않으며, 값은 기존 trigger가 terminal 전이 때 status로 채웁니다. 열과 member news 대체 문구 행 삭제는 이전 이미지 롤백을 깨므로 다음 릴리스에서 합니다.
 - **빌드·게이트:** `build-all.sh`는 runtime VERSION이 없거나 `MAJOR.MINOR.PATCH` 형식이 아니면 빌드 전에 실패합니다. 도구 버전 핀을 한 곳으로 모았습니다. SQL 안전 게이트의 `COUNT(*)` 금지 규칙을 지웠고, migration manifest 검사는 Python 재구현 대신 dbmigrate 파서를 씁니다.
 
 ## v15.0.0 - 2026-11-10
