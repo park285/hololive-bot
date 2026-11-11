@@ -1,6 +1,6 @@
 # hololive-bot 구조·성능·계약 정리와 호환 잔재 fadeout 리팩토링안
 
-**상태: 실행 WP 구현과 로컬 검증 완료(2026-11-11). 작업 브랜치 `refactor/hololive-structure-fadeout`, 미커밋·미배포. 승인 대기 WP-62~74와 보류 항목은 남아 있습니다.**
+**상태: 실행 WP와 승인 대기 WP-62~74 처리 완료(2026-11-11). 작업 브랜치 `refactor/hololive-structure-fadeout`, 미배포. 각 승인 대기 항목의 결정과 근거는 "승인 대기 항목 처리 결과"에 있습니다.**
 
 ## 목표
 
@@ -159,6 +159,32 @@
 | WP-72 | 문서 동기화·manifest 게이트 퇴역과 보안 스캔 근본 조치 | release runbook 계약 확인, 대체 수단 결정 |
 | WP-73 | 90일 검토 조건 예외 경로 판정 | 2026-12-31 이후 운영 지표 |
 | WP-74 | admin plane의 alarm-worker 발송 원장 직접 접근 소유권 | 내부 계약 확장 또는 소유권 문서 변경 승인 |
+
+## 승인 대기 항목 처리 결과
+
+사용자 승인(2026-11-11)에 따라 운영 DB·profile·env·ACL을 읽기 전용으로 확인하고, 근거가 있는 항목은 구현했으며 근거가 없거나 계약 결정이 필요한 항목은 현행을 유지했습니다. 운영 값은 확인 당시 수치입니다.
+
+| 항목 | 결정 | 근거 |
+|---|---|---|
+| WP-62 | 이번 릴리스는 `result_summary` 쓰기 중단, 미사용 namespace 상수 제거, migration 006(`idx_bot_reply_outbox_message` 삭제). 행·열 삭제는 다음 릴리스 contract migration | 운영 인덱스 사용 0회. v15 image가 NotifyKeys 필수 문구를 기동 시 검증하고 `result_summary`를 써서 즉시 삭제하면 rollback이 깨짐 |
+| WP-63 | 7.2.7 잔여 `unresolvable_since` 필터 삭제, migration 008로 새 DB의 YouTube.js live 관측 세대를 현행 값으로 올리고 수동 cutover SQL 삭제. 나머지 유지 | 잔여값 0/107행, 운영 세대 1/3·2/2. `legacy_unknown` 5,604행, absence 보정 대상 64행, 시각 확정 backlog pending 63행이 남음. replay epoch fence가 남는 동안 활성화 경로가 유일한 writer. epoch-2 전환 코드는 2026-11-09 이전 백업 복원 경로로, 그 백업이 보존 기간을 벗어나면 제거 |
+| WP-64 | 방송 이력의 dispatch event 보충 읽기를 소유권 문서에 기록. 이미지 저장 형식 유지 | 최근 14일 종료 1,012행 중 thumbnail 235행·topic 17행을 event payload가 채움. reply outbox 56행·528kB |
+| WP-65 | 유지 | clock 1,016행·920kB, conflicts 0행, schedule_items 9,326행으로 인덱스·보존 도입 이득이 작음. offset 표 제거는 계약 변경 대비 이득이 작음 |
+| WP-66 | LLM-1·LLM-7 반영(날짜 없는 행을 KST 게시일로 만료, 기간 조회를 KST 날짜로 비교). 나머지 유지 | 활성 117행이 모두 날짜 없이 2026-01-25부터 남음. Exa·consensus·X allowlist 키가 운영 env에 없어 해당 경로 미실행. 7일 로그에 초기화 실패 0건. cliproxy `gemini-3.7-flash` temperature 생략은 Gemini 3.x temperature 폐기 안내가 근거 |
+| WP-67 | 호출자 없는 worker `/internal/alarm/room/:id` route와 계약 상수 삭제. 나머지 유지 | iris-console·ChatBotGo·TwentyQ 호출자 없음. success envelope 제거는 두 릴리스 절차, `org=indie`는 접근 로그 근거 없음 |
+| WP-68 | 유지 | helper·collector 짝 계약 결정과 shared 계약 필드 변경이 필요하고 운영 빈도 근거가 없음 |
+| WP-69 | migration 007(route CHECK를 `text`·`richtext`로, `alarm_types` 빈 배열 거절), 빈 배열 해석·`rich_text_message` 대체·`delivery_digest` 소비 경로 삭제. 보존 처리량·빈 제목 대체 문구 유지 | markdown·sender route, 빈 `alarm_types`, rich text 없는 미발송 행, digest dispatch 행 모두 0건. dispatch 원장 1,706행으로 backlog 없음. 빈 제목 UPCOMING 1행 존재 |
+| WP-70 | 유지 | 90일 fallback hit 지표를 확보하지 못함 |
+| WP-71 | 유지 | Quadlet 전송 기본값이 모두 `h3`, 운영 env에 해당 키 없음, 컨테이너에 `.env` 경로 없음. 별칭 축소·로더 삭제는 runbook 계약 표 변경을 동반 |
+| WP-72 | XGATE-1(보안 스캔 형제 모듈 SHA)은 rebase 뒤 반영. XGATE-5·6 유지 | release runbook 절차와 함께 바꿔야 함 |
+| WP-73 | 판단 불가 | 2026-12-31 이후 지표가 필요 |
+| WP-74 | 소유권 문서·allowlist에 admin plane을 제한된 reader·writer로 기록 | 내부 계약 확장(A안)은 provider 선배포가 필요해 이득에 비해 비용이 큼 |
+| WP-53 | 유지 | 진입점 통합에 제품 결정이 필요 |
+| 잔존 N01 | `LockTimeout ≥ DeliverySendTimeout + max(2×poll, 5s)` 기동 검증 추가 | 운영 profile 300초 대 예산 15초 |
+| 잔존 N02 | 유지 | revive 제외 규칙은 YouTube egress lifecycle 계약 변경 |
+| 잔존 N13 | 변경 불필요 | 운영 ACL이 `~*`와 `+set`·`+lpush`·`+expire`를 허용하고 guard는 `SET NX EX`로 보냄 |
+
+추가로 사용자 요청에 따라 `GEMINI_MODEL` 기본값을 `gemini-4-argon`으로 바꿨습니다. Gemini Interactions API 지원 모델 목록에 있으며, 운영 `compose.env` 값은 배포 때 함께 바꿉니다.
 
 ## 검증 결과
 
