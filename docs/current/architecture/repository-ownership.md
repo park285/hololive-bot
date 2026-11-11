@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | `major_event_subscriptions` | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | in-process 주입 계약 `majorevent.subscription`(bot `handlercore.MajorEventRepository`) |
 | `membernews` state | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | in-process 주입 계약 `membernews.subscription`, `membernews.digest`(bot `handlercore.MemberNewsService`) |
-| alarm dispatch outbox (`alarm_dispatch_events`, `alarm_dispatch_deliveries`) | `alarm-worker` | `alarm-worker` | `alarm-worker`, observability consumers | `alarm.dispatch` 계약(PostgreSQL dispatch outbox + payload 없는 Valkey wakeup `alarm:dispatch:wakeup`) or documented API |
+| alarm dispatch outbox (`alarm_dispatch_events`, `alarm_dispatch_deliveries`) | `alarm-worker` | `alarm-worker`; `hololive-api` admin plane은 운영자 조치(requeue·settle)로 격리·DLQ 행의 상태만 바꾸고 `alarm_dispatch_admin_actions`에 기록 | `alarm-worker`, `hololive-api` admin plane(`dispatchops` 조회), observability consumers | `alarm.dispatch` 계약(PostgreSQL dispatch outbox + payload 없는 Valkey wakeup `alarm:dispatch:wakeup`). admin 직접 접근은 `runbooks/admin-dispatch-operations.md` 절차로 한정 |
 | `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `alarm.state.read`: YouTube plane `notification_channel_ids.sql`, llm plane membernews read SQL. bot/admin plane은 필수 `ALARM_INTERNAL_URL`의 `alarm.http`를 사용하며 in-process 주입 분기는 정상 기동에서 도달 불가 |
 | YouTube outbox/tracking | `hololive-api` YouTube plane production, `alarm-worker` egress | `hololive-api` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `hololive-api` writes notification intent, `alarm-worker` owns final send state |
 
