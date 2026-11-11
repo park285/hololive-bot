@@ -261,7 +261,7 @@ func TestHelperExitStateBecomesObservable(t *testing.T) {
 }
 
 func TestHLP001(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -295,7 +295,7 @@ func TestHLP001(t *testing.T) {
 }
 
 func TestHLP002(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	regular := filepath.Join(base, "regular")
 
 	if err := os.WriteFile(regular, []byte("keep"), 0o600); err != nil {
@@ -359,7 +359,7 @@ func TestHLP002(t *testing.T) {
 }
 
 func TestHLP003(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	cfg := fixtureConfig(t, base, "insecure")
 
 	_, _, err := Start(t.Context(), cfg)
@@ -375,7 +375,7 @@ func TestHLP003(t *testing.T) {
 }
 
 func TestHLP004(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	long := filepath.Join(base, strings.Repeat("a", 80))
 
 	if err := os.Mkdir(long, 0o700); err != nil {
@@ -397,7 +397,7 @@ func TestHLP004(t *testing.T) {
 }
 
 func TestHLP005(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 
 	_, _, err := Start(t.Context(), fixtureConfig(t, base, "reject-bootstrap"))
 	if err == nil {
@@ -412,7 +412,7 @@ func TestHLP005(t *testing.T) {
 }
 
 func TestHLP006(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -446,7 +446,7 @@ func TestHLP006(t *testing.T) {
 }
 
 func TestHLP007(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -476,7 +476,7 @@ func TestHLP007(t *testing.T) {
 }
 
 func TestHLP008(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -515,7 +515,7 @@ func TestHLP008(t *testing.T) {
 }
 
 func TestHLP009(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -546,7 +546,7 @@ func TestHLP009(t *testing.T) {
 }
 
 func TestHLP010(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	cfg := fixtureConfig(t, base, "ignore-term")
 
 	cfg.ShutdownTimeout = 200 * time.Millisecond
@@ -576,7 +576,7 @@ func TestHLP010(t *testing.T) {
 }
 
 func TestWaitErr(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -598,7 +598,7 @@ func TestWaitErr(t *testing.T) {
 }
 
 func TestHLP011(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -635,7 +635,7 @@ func TestHLP011(t *testing.T) {
 
 // collector가 spawn한 Node helper의 V8 heap 한도가 Node 몫으로 제한되는지 실제 프로세스로 확인한다.
 func TestHLP013(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
@@ -661,7 +661,7 @@ func TestHLP012(t *testing.T) {
 }
 
 func testHLP012MissingBin(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 
 	_, _, err := Start(t.Context(), &Config{
 		NodePath: "/no/such/node", ScriptPath: "/no/such/server.mjs", RuntimeBaseDir: base,
@@ -674,7 +674,7 @@ func testHLP012MissingBin(t *testing.T) {
 }
 
 func testHLP012ChildExit(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 
 	_, _, err := Start(t.Context(), fixtureConfig(t, base, "exit-now"))
 	if err == nil {
@@ -689,7 +689,7 @@ func testHLP012ChildExit(t *testing.T) {
 }
 
 func testHLP012InsecureSocket(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 
 	_, _, err := Start(t.Context(), fixtureConfig(t, base, "insecure"))
 	if err == nil {
@@ -700,7 +700,7 @@ func testHLP012InsecureSocket(t *testing.T) {
 }
 
 func testHLP012NoChild(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 
 	dir, socketPath, err := createRuntimeDir(base)
 	if err != nil {
@@ -728,7 +728,7 @@ func testHLP012NoChild(t *testing.T) {
 }
 
 func testHLP012SpawnFail(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	node := filepath.Join(base, "not-node")
 
 	if err := os.WriteFile(node, []byte("#!not-a-binary\n"), 0o600); err != nil {
@@ -818,6 +818,23 @@ func assertPrivateRuntime(t *testing.T, helper *Helper) {
 	if socket.Mode().Type() != os.ModeSocket || socket.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("socket mode = %v", socket.Mode())
 	}
+}
+
+func shortRuntimeBaseDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "yjs") //nolint:usetesting // t.TempDir는 테스트 이름을 경로에 넣어 TMPDIR가 조금만 길어도 socket 경로가 100바이트 한도를 넘는다.
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Error(err)
+		}
+	})
+
+	return dir
 }
 
 func assertNoResidue(t *testing.T, base string) {

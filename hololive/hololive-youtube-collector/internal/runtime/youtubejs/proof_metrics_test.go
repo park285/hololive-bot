@@ -12,7 +12,7 @@ import (
 
 // 발급이 계속 실패해도 helper는 READY이므로 /ready 대신 scrape 시점의 PO 상태 메트릭으로 드러나야 한다.
 func TestHLP014(t *testing.T) {
-	base := t.TempDir()
+	base := shortRuntimeBaseDir(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 
 	defer cancel()
