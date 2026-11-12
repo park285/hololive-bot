@@ -50,7 +50,16 @@ How to write the Korean line, in priority order
 - Do not add any text or decoration.
 
 Replacements (original → Korean):`
-	transcribePrompt = `Transcribe every piece of text visible in this image, one line at a time, exactly as it appears.
+	fixPromptHeader = `This is a Korean translation of a VTuber weekly schedule poster. A check of this image found the problems listed below. Edit this image to fix only these problems and change nothing else.
+- Write the Korean text of each reference line exactly, and keep its times, numbers, Latin letters, and symbols unchanged.
+- Replace any remaining Japanese text with the Korean text of its reference line.
+- Keep all other text, the layout, character art, background, colors, decorations, icons, and aspect ratio unchanged.
+- Do not add any text or decoration.
+
+Problems to fix:`
+	keepProblemsHeader   = "\n\nThese problems appeared in earlier attempts but not in this image. Do not introduce them:"
+	referenceLinesHeader = "\n\nReference lines (original → Korean):"
+	transcribePrompt     = `Transcribe every piece of text visible in this image, one line at a time, exactly as it appears.
 - Prefix every line with "TEXT: " and output nothing else.
 - Do not correct, translate, or guess at text you cannot see. Write Korean, Japanese, digits, Latin letters, and symbols exactly as shown.
 - Go top to bottom, left to right, and write the same text every time it appears.
@@ -113,7 +122,7 @@ func memberLine(member *domain.Member) string {
 }
 
 // buildImagePrompt가 바뀌는 줄만 넘기는 것은 나머지 줄이 원본 그대로 남아 지시만 길게 만들기 때문이다.
-func buildImagePrompt(table translationTable, problems []string) string {
+func buildImagePrompt(table translationTable) string {
 	var replacements strings.Builder
 
 	count := 0
@@ -128,7 +137,44 @@ func buildImagePrompt(table translationTable, problems []string) string {
 		fmt.Fprintf(&replacements, "\n%d. %q → %q", count, row.original, row.korean)
 	}
 
-	return withProblems(fmt.Sprintf(imagePromptHeader, count)+replacements.String(), problems)
+	return fmt.Sprintf(imagePromptHeader, count) + replacements.String()
+}
+
+// buildFixPrompt는 고칠 문제와 관계된 번역표 줄만 넘겨, 이미 맞게 그린 곳을 다시 그리게 하지 않는다.
+func buildFixPrompt(table translationTable, fix, keep []renderProblem) string {
+	var prompt strings.Builder
+
+	prompt.WriteString(fixPromptHeader)
+	writeProblems(&prompt, fix)
+
+	if len(keep) > 0 {
+		prompt.WriteString(keepProblemsHeader)
+		writeProblems(&prompt, keep)
+	}
+
+	var related []tableRow
+
+	for _, row := range table {
+		if !slices.Contains(related, row) && slices.ContainsFunc(fix, func(problem renderProblem) bool { return problem.related(row) }) {
+			related = append(related, row)
+		}
+	}
+
+	if len(related) > 0 {
+		prompt.WriteString(referenceLinesHeader)
+
+		for i, row := range related {
+			fmt.Fprintf(&prompt, "\n%d. %q → %q", i+1, row.original, row.korean)
+		}
+	}
+
+	return prompt.String()
+}
+
+func writeProblems(prompt *strings.Builder, problems []renderProblem) {
+	for _, problem := range problems {
+		prompt.WriteString("\n- " + problem.String())
+	}
 }
 
 // parseTranslationTable은 형식에 맞는 줄만 이미지 프롬프트로 넘긴다. 검색 결과에서 온 설명문이 이미지 지시로 섞이지 않게 한다.
