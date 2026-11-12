@@ -109,15 +109,15 @@ func (f *fakeStore) RecordTranslationFailure(_ context.Context, _ posterstore.Pe
 
 const sampleTable = "宙科そぴあ ⇒ 소라시나 소피아\nホロドリ配信 ⇒ 홀로도리 방송"
 
-var sampleOriginalText = []string{"ホロドリ配信", "宙科そぴあ"}
+var sampleOriginalText = transcript{content: []string{"ホロドリ配信", "宙科そぴあ"}}
 
 type fakeTranslator struct {
 	tables       []string
 	textErr      error
 	output       source
 	imageErr     error
-	originalText []string
-	renders      [][]string
+	originalText transcript
+	renders      []transcript
 	textPrompts  []string
 	imagePrompts []string
 	checks       int
@@ -136,7 +136,7 @@ func (f *fakeTranslator) translateText(_ context.Context, _ source, prompt strin
 	return textTranslation{table: table, webSearchQueries: 2}, err
 }
 
-func (f *fakeTranslator) transcribe(_ context.Context, src source) ([]string, error) {
+func (f *fakeTranslator) transcribe(_ context.Context, src source) (transcript, error) {
 	if string(src.Data) == "original" {
 		return f.originalText, nil
 	}
@@ -222,7 +222,7 @@ func TestTranslatePendingStoresJPEG(t *testing.T) {
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
 	translator := &fakeTranslator{
 		tables: []string{sampleTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
-		originalText: sampleOriginalText, renders: [][]string{{"소라시나 소피아", "홀로도리 방송"}},
+		originalText: sampleOriginalText, renders: []transcript{{content: []string{"소라시나 소피아", "홀로도리 방송"}}},
 	}
 	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
 
@@ -274,8 +274,8 @@ func TestTranslatePendingRedrawsUntilTheCheckPasses(t *testing.T) {
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
 	translator := &fakeTranslator{
 		tables: []string{tsuzuriTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
-		originalText: strings.Split(tsuzuriOriginal, "\n"),
-		renders:      [][]string{strings.Split(tsuzuriBrokenRender, "\n"), strings.Split(tsuzuriGoodRender, "\n")},
+		originalText: readTranscript(t, tsuzuriOriginal),
+		renders:      []transcript{readTranscript(t, tsuzuriBrokenRender), readTranscript(t, tsuzuriGoodRender)},
 	}
 	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
 
@@ -294,8 +294,8 @@ func TestTranslatePendingNeverStoresARenderThatFailsTheCheck(t *testing.T) {
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
 	translator := &fakeTranslator{
 		tables: []string{tsuzuriTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
-		originalText: strings.Split(tsuzuriOriginal, "\n"),
-		renders:      [][]string{strings.Split(tsuzuriBrokenRender, "\n")},
+		originalText: readTranscript(t, tsuzuriOriginal),
+		renders:      []transcript{readTranscript(t, tsuzuriBrokenRender)},
 	}
 	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
 
@@ -314,7 +314,7 @@ func TestTranslatePendingRebuildsATableThatMissesOriginalText(t *testing.T) {
 	translator := &fakeTranslator{
 		tables:       []string{"ホロドリ配信 ⇒ 홀로도리 방송", sampleTable},
 		output:       source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
-		originalText: sampleOriginalText, renders: [][]string{{"소라시나 소피아", "홀로도리 방송"}},
+		originalText: sampleOriginalText, renders: []transcript{{content: []string{"소라시나 소피아", "홀로도리 방송"}}},
 	}
 	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
 
@@ -328,10 +328,10 @@ func TestTranslatePendingRebuildsATableThatMissesOriginalText(t *testing.T) {
 
 type stalledTranslator struct{ fakeTranslator }
 
-func (*stalledTranslator) transcribe(ctx context.Context, _ source) ([]string, error) {
+func (*stalledTranslator) transcribe(ctx context.Context, _ source) (transcript, error) {
 	<-ctx.Done()
 
-	return nil, ctx.Err()
+	return transcript{}, ctx.Err()
 }
 
 func TestTranslatePendingRecordsRowsThatOutliveTheirBudget(t *testing.T) {

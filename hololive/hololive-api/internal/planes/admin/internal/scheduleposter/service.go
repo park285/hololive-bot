@@ -67,7 +67,7 @@ type sourceClient interface {
 type posterTranslator interface {
 	translateText(ctx context.Context, src source, prompt string) (textTranslation, error)
 	renderImage(ctx context.Context, src source, prompt string) (source, error)
-	transcribe(ctx context.Context, src source) ([]string, error)
+	transcribe(ctx context.Context, src source) (transcript, error)
 }
 
 // errCheckUnavailable은 번역본을 판독하지 못한 경우다. 검사 없이 다시 그려도 통과를 판단할 수 없어 그리기를 재시도하지 않는다.
@@ -372,7 +372,9 @@ func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTran
 	}
 
 	s.logger.Info("Schedule poster original transcribed",
-		slog.Int64("poster_id", item.ID), slog.String("transcript", strings.Join(originalText, " / ")))
+		slog.Int64("poster_id", item.ID),
+		slog.String("transcript", strings.Join(originalText.content, " / ")),
+		slog.String("decoration", strings.Join(originalText.decoration, " / ")))
 
 	table, err := s.checkedTable(ctx, item.ID, original, originalText, textPrompt)
 	if err != nil {
@@ -387,8 +389,8 @@ func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTran
 	return image, "", nil
 }
 
-func (s *Service) transcribe(ctx context.Context, posterID int64, stage string, src source) ([]string, error) {
-	var lines []string
+func (s *Service) transcribe(ctx context.Context, posterID int64, stage string, src source) (transcript, error) {
+	var lines transcript
 
 	err := retry.WithRetry(ctx, s.retryOptions(posterID, stage), func(ctx context.Context) error {
 		var err error
@@ -398,14 +400,14 @@ func (s *Service) transcribe(ctx context.Context, posterID int64, stage string, 
 		return err
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%s transcript: %w", stage, err)
+		return transcript{}, fmt.Errorf("%s transcript: %w", stage, err)
 	}
 
 	return lines, nil
 }
 
 // checkedTable은 원본 판독과 어긋난 번역표를 받지 않고, 찾은 문제를 붙여 다시 만든다.
-func (s *Service) checkedTable(ctx context.Context, posterID int64, original source, originalText []string, prompt string) (translationTable, error) {
+func (s *Service) checkedTable(ctx context.Context, posterID int64, original source, originalText transcript, prompt string) (translationTable, error) {
 	var (
 		translation textTranslation
 		problems    []string
@@ -443,7 +445,7 @@ func (s *Service) checkedTable(ctx context.Context, posterID int64, original sou
 }
 
 // checkedRender는 저장할 JPEG를 판독해 검사를 통과한 번역본만 돌려준다. 다시 그릴 때도 원본에서 시작해 이전 결과의 손상이 쌓이지 않게 한다.
-func (s *Service) checkedRender(ctx context.Context, posterID int64, original source, originalText []string, table translationTable) (posterstore.Image, error) {
+func (s *Service) checkedRender(ctx context.Context, posterID int64, original source, originalText transcript, table translationTable) (posterstore.Image, error) {
 	var (
 		image    posterstore.Image
 		problems []string
@@ -477,7 +479,7 @@ func (s *Service) checkedRender(ctx context.Context, posterID int64, original so
 			s.logger.Warn("Schedule poster render check failed",
 				slog.Int64("poster_id", posterID),
 				slog.Any("problems", found),
-				slog.String("transcript", strings.Join(renderedText, " / ")))
+				slog.String("transcript", strings.Join(renderedText.lines(), " / ")))
 
 			return fmt.Errorf("render check failed: %s", strings.Join(found, "; "))
 		}

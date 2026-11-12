@@ -27,10 +27,40 @@ func (t translationTable) String() string {
 	return strings.Join(lines, "\n")
 }
 
+func (t translationTable) originalLines() []string {
+	lines := make([]string, 0, len(t))
+
+	for _, row := range t {
+		lines = append(lines, row.original)
+	}
+
+	return lines
+}
+
+func (t translationTable) koreanLines() []string {
+	lines := make([]string, 0, len(t))
+
+	for _, row := range t {
+		lines = append(lines, row.korean)
+	}
+
+	return lines
+}
+
+// transcript의 장식 줄은 로마자만 있으면 번역표에 넣지 않아도 되는 로고·서명 같은 글자라, 영어 낱말 대조에서만 뺀다.
+type transcript struct {
+	content    []string
+	decoration []string
+}
+
+func (t transcript) lines() []string {
+	return slices.Concat(t.content, t.decoration)
+}
+
 var (
 	spacedColon  = regexp.MustCompile(`(\d)\s*:\s*(\d)`)
 	tokenPattern = regexp.MustCompile(`\d+(?::\d+)*|[A-Z]+`)
-	weekdays     = map[string]rune{"MON": '월', "TUE": '화', "WED": '수', "THU": '목', "FRI": '금', "SAT": '토', "SUN": '일'}
+	weekdays     = []string{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
 )
 
 const unmatchedOriginalAllowance = 2
@@ -62,11 +92,33 @@ func tokens(text string) []string {
 
 // significant에서 영어 요일을 빼는 것은 번역표가 요일을 한글로 바꾸기 때문이다.
 func significant(token string) bool {
-	if _, weekday := weekdays[token]; weekday {
-		return false
+	return !slices.Contains(weekdays, token) && (len(token) >= 3 || isNumber(token))
+}
+
+func isNumber(token string) bool {
+	return strings.ContainsAny(token, "0123456789")
+}
+
+func isWord(token string) bool {
+	return !isNumber(token)
+}
+
+func anyToken(string) bool {
+	return true
+}
+
+func countTokens(lines []string, keep func(string) bool) map[string]int {
+	counts := map[string]int{}
+
+	for _, line := range lines {
+		for _, token := range tokens(line) {
+			if significant(token) && keep(token) {
+				counts[token]++
+			}
+		}
 	}
 
-	return len(token) >= 3 || strings.ContainsAny(token, "0123456789")
+	return counts
 }
 
 func isHangul(r rune) bool {
@@ -105,97 +157,51 @@ func countRunes(lines []string, keep func(rune) bool) map[rune]int {
 	return counts
 }
 
-// originalTokens가 로마자만 있는 줄을 빼는 것은 서명·로고처럼 판독마다 넣고 빼는 장식이 많아서다.
-func originalTokens(lines []string) map[string]int {
-	counts := map[string]int{}
-
-	for _, line := range lines {
-		if !strings.ContainsFunc(line, isJapanese) && !strings.ContainsAny(normalize(line), "0123456789") {
-			continue
-		}
-
-		for _, token := range tokens(line) {
-			if significant(token) {
-				counts[token]++
-			}
-		}
-	}
-
-	return counts
-}
-
-func significantTokens(lines []string) map[string]int {
-	counts := map[string]int{}
-
-	for _, line := range lines {
-		for _, token := range tokens(line) {
-			if significant(token) {
-				counts[token]++
-			}
-		}
-	}
-
-	return counts
-}
-
-func (t translationTable) originalLines() []string {
-	lines := make([]string, 0, len(t))
-
-	for _, row := range t {
-		lines = append(lines, row.original)
-	}
-
-	return lines
-}
-
-func (t translationTable) koreanLines() []string {
-	lines := make([]string, 0, len(t))
-
-	for _, row := range t {
-		lines = append(lines, row.korean)
-	}
-
-	return lines
-}
-
-func checkTable(table translationTable, original []string) []string {
+// checkTable에서 숫자와 일본어는 장식 줄까지 대조한다. 판독이 일정 줄을 장식으로 잘못 나눠도 시각이 빠진 번역표를 받지 않기 위해서다.
+func checkTable(table translationTable, original transcript) []string {
 	var problems []string
 
 	for _, row := range table {
 		problems = append(problems, checkRow(row)...)
 	}
 
-	tableTokens := significantTokens(table.koreanLines())
+	seenNumbers, keptNumbers := countTokens(original.lines(), isNumber), countTokens(table.koreanLines(), isNumber)
 
-	for _, token := range sortedKeys(originalTokens(original)) {
-		if want, got := originalTokens(original)[token], tableTokens[token]; got < want {
-			problems = append(problems, fmt.Sprintf("원본에 %d번 있는 ‘%s’가 번역표의 한국어 줄에는 %d번만 있다", want, token, got))
+	for _, token := range sortedKeys(seenNumbers) {
+		if keptNumbers[token] < seenNumbers[token] {
+			problems = append(problems, fmt.Sprintf("원본에 %d번 있는 ‘%s’가 번역표의 한국어 줄에는 %d번만 있다", seenNumbers[token], token, keptNumbers[token]))
 		}
 	}
 
-	for _, run := range missingOriginalRuns(original, table) {
+	seenWords, listedWords := countTokens(original.content, isWord), countTokens(table.originalLines(), isWord)
+
+	for _, word := range sortedKeys(shortfall(seenWords, listedWords)) {
+		problems = append(problems, fmt.Sprintf("원본에 %d번 있는 ‘%s’가 번역표의 원문 줄에는 %d번만 있다", seenWords[word], word, listedWords[word]))
+	}
+
+	short := shortfall(countRunes(original.lines(), isJapanese), countRunes(table.originalLines(), isJapanese))
+
+	for _, run := range runsWithShortfall(original.lines(), short) {
 		problems = append(problems, fmt.Sprintf("원본의 ‘%s’ 부분이 번역표에 빠졌다", run))
 	}
 
 	return problems
 }
 
+// checkRow는 숫자만 줄마다 대조한다. 영어는 일반 낱말이면 옮기고 고유 명사면 그대로 두므로, 어느 쪽인지는 번역표 지시가 정한다.
 func checkRow(row tableRow) []string {
 	var problems []string
 
-	korean := map[string]int{}
-	for _, token := range tokens(row.korean) {
-		korean[token]++
-	}
+	kept := countTokens([]string{row.korean}, isNumber)
 
 	for _, token := range tokens(row.original) {
-		if korean[token] > 0 {
-			korean[token]--
-
+		if !isNumber(token) {
 			continue
 		}
 
-		if day, weekday := weekdays[token]; weekday && strings.ContainsRune(row.korean, day) {
+		if kept[token] > 0 {
+			kept[token]--
+
 			continue
 		}
 
@@ -209,34 +215,36 @@ func checkRow(row tableRow) []string {
 	return problems
 }
 
-// missingOriginalRuns는 줄 나눔·순서·한 글자 빠짐이 판독마다 달라 글자 수로 센다. 모자란 글자는 번역표 쪽에 대신 읽은 글자가 있을 때만 다르게 읽은 것으로 넘겨, 실제로 빠진 글자는 번역본 검사까지 가지 않고 여기서 걸린다.
-func missingOriginalRuns(original []string, table translationTable) []string {
-	seen := countRunes(original, isJapanese)
-	have := countRunes(table.originalLines(), isJapanese)
-	deficit := map[rune]int{}
+// shortfall은 줄 나눔·순서·한 글자 빠짐이 판독마다 달라 단위 개수로 센다. 모자란 만큼 번역표 쪽에 대신 읽은 단위가 있을 때만 2개까지 다르게 읽은 것으로 넘겨, 실제로 빠진 것은 걸린다.
+func shortfall[K comparable](seen, have map[K]int) map[K]int {
+	short := map[K]int{}
 	missing, substitutes := 0, 0
 
-	for r, count := range seen {
-		if count > have[r] {
-			deficit[r] = count - have[r]
+	for unit, count := range seen {
+		if count > have[unit] {
+			short[unit] = count - have[unit]
 
-			missing += count - have[r]
+			missing += count - have[unit]
 		}
 	}
 
-	for r, count := range have {
-		substitutes += max(0, count-seen[r])
+	for unit, count := range have {
+		substitutes += max(0, count-seen[unit])
 	}
 
 	if missing <= min(unmatchedOriginalAllowance, substitutes) {
 		return nil
 	}
 
-	return runsWithDeficit(original, deficit)
+	return short
 }
 
-// runsWithDeficit은 모자란 글자를 원본 덩어리에 돌려 붙인다. 글자가 모두 모자란 덩어리를 먼저 골라야 흔한 글자(の 등)가 엉뚱한 덩어리를 지목하지 않는다.
-func runsWithDeficit(original []string, deficit map[rune]int) []string {
+// runsWithShortfall은 모자란 글자를 원본 덩어리에 돌려 붙인다. 글자가 모두 모자란 덩어리를 먼저 골라야 흔한 글자(の 등)가 엉뚱한 덩어리를 지목하지 않는다.
+func runsWithShortfall(original []string, short map[rune]int) []string {
+	if len(short) == 0 {
+		return nil
+	}
+
 	runs := japaneseRuns(strings.Join(original, "\n"))
 	slices.SortStableFunc(runs, func(a, b string) int { return len([]rune(b)) - len([]rune(a)) })
 
@@ -250,9 +258,9 @@ func runsWithDeficit(original []string, deficit map[rune]int) []string {
 
 			for r, count := range need {
 				if whole {
-					matched = matched && deficit[r] >= count
+					matched = matched && short[r] >= count
 				} else {
-					matched = matched || deficit[r] > 0
+					matched = matched || short[r] > 0
 				}
 			}
 
@@ -261,7 +269,7 @@ func runsWithDeficit(original []string, deficit map[rune]int) []string {
 			}
 
 			for r, count := range need {
-				deficit[r] -= min(count, deficit[r])
+				short[r] -= min(count, short[r])
 			}
 
 			if !slices.Contains(found, run) {
@@ -273,17 +281,19 @@ func runsWithDeficit(original []string, deficit map[rune]int) []string {
 	return found
 }
 
-func checkRender(table translationTable, original, rendered []string) []string {
+// checkRender에서 원본의 영어 낱말은 번역됐을 수 있어 요구하지 않는다. 그대로 둘 영어는 번역표 한국어 줄에 있으므로 그쪽으로 요구된다.
+func checkRender(table translationTable, original, rendered transcript) []string {
 	var problems []string
 
 	expected := table.koreanLines()
-	want := originalTokens(original)
+	drawn := rendered.lines()
+	want := countTokens(original.lines(), isNumber)
 
-	for token, count := range significantTokens(expected) {
+	for token, count := range countTokens(expected, anyToken) {
 		want[token] = max(want[token], count)
 	}
 
-	got := significantTokens(rendered)
+	got := countTokens(drawn, anyToken)
 
 	for _, token := range sortedKeys(want) {
 		if got[token] < want[token] {
@@ -291,16 +301,16 @@ func checkRender(table translationTable, original, rendered []string) []string {
 		}
 	}
 
-	problems = append(problems, hangulProblems(table, rendered)...)
+	problems = append(problems, hangulProblems(table, drawn)...)
 
-	leftover := countRunes(rendered, isJapanese)
+	leftover := countRunes(drawn, isJapanese)
 	for r, count := range countRunes(expected, isJapanese) {
 		leftover[r] -= count
 	}
 
 	var untranslated []string
 
-	for _, line := range rendered {
+	for _, line := range drawn {
 		for _, run := range japaneseRuns(line) {
 			if strings.ContainsFunc(run, func(r rune) bool { return leftover[r] > 0 }) && !slices.Contains(untranslated, run) {
 				untranslated = append(untranslated, run)

@@ -73,7 +73,7 @@ func (t *vertexTranslator) translateText(ctx context.Context, src source, prompt
 	return textTranslation{table: table, webSearchQueries: webSearchQueries(response)}, nil
 }
 
-func (t *vertexTranslator) transcribe(ctx context.Context, src source) ([]string, error) {
+func (t *vertexTranslator) transcribe(ctx context.Context, src source) (transcript, error) {
 	ctx, cancel := context.WithTimeout(ctx, textTimeout)
 	defer cancel()
 
@@ -81,7 +81,7 @@ func (t *vertexTranslator) transcribe(ctx context.Context, src source) ([]string
 
 	response, err := t.client.Models.GenerateContent(ctx, t.textModel, contents, config)
 	if err != nil {
-		return nil, fmt.Errorf("transcribe poster text: %w", err)
+		return transcript{}, fmt.Errorf("transcribe poster text: %w", err)
 	}
 
 	return parseTranscript(response.Text())
