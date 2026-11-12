@@ -157,7 +157,10 @@ func TestStoreRetranslationFailureAndReject(t *testing.T) {
 	store := newStore(t)
 	pending := confirmedPending(t, store)
 
-	recorded, err := store.RecordTranslation(ctx, pending, scheduleposter.Image{MIME: "image/jpeg", Data: []byte{0xff, 0xd8, 0xff}})
+	image := scheduleposter.Image{MIME: "image/jpeg", Data: []byte{0xff, 0xd8, 0xff}}
+	day := date(t, "2026-11-11")
+
+	recorded, err := store.RecordTranslation(ctx, pending, image)
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -168,7 +171,16 @@ func TestStoreRetranslationFailureAndReject(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = store.TranslatedImage(ctx, 101)
-	require.ErrorIs(t, err, scheduleposter.ErrNotFound, "재번역 중에는 이전 번역본을 내보내지 않는다")
+	require.ErrorIs(t, err, scheduleposter.ErrNotFound, "Console 번역본 조회는 번역 성공 상태만 본다")
+
+	poster, err = store.Get(ctx, 101)
+	require.NoError(t, err)
+	require.Nil(t, poster.TranslatedAt, "번역 대기 행의 translatedAt은 비워 Console 응답 형식을 유지한다")
+
+	published, found, err := store.PublishedImage(ctx, sophiaChannel, day)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, image, published, "재번역 중에도 이전 번역본을 게시한다")
 
 	recorded, err = store.RecordTranslationFailure(ctx, scheduleposter.PendingTranslation{ID: 101, Revision: revision}, "translation_failed")
 	require.NoError(t, err)
@@ -179,8 +191,16 @@ func TestStoreRetranslationFailureAndReject(t *testing.T) {
 	require.Equal(t, scheduleposter.TranslationFailed, poster.TranslationStatus)
 	require.Equal(t, "translation_failed", poster.TranslationError)
 
+	_, found, err = store.PublishedImage(ctx, sophiaChannel, day)
+	require.NoError(t, err)
+	require.True(t, found, "재번역이 실패해도 이전 번역본은 남는다")
+
 	_, err = store.Reject(ctx, 101, poster.Revision)
 	require.NoError(t, err)
+
+	_, found, err = store.PublishedImage(ctx, sophiaChannel, day)
+	require.NoError(t, err)
+	require.False(t, found, "거절하면 게시를 내린다")
 
 	poster, err = store.Get(ctx, 101)
 	require.NoError(t, err)
