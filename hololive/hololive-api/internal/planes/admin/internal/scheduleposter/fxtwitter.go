@@ -137,8 +137,11 @@ func (c *fxClient) image(ctx context.Context, rawURL string) (source, error) {
 // posterImageURL은 수집과 번역이 함께 쓰는 원본 URL 조건이다. Iris Console도 이 호스트의 원본만 표시하고, 다른 행이 섞이면 목록 전체를 거부한다.
 func posterImageURL(raw string) bool {
 	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
 
-	return err == nil && parsed.Scheme == "https" && parsed.Host == imageHost && parsed.User == nil
+	return parsed.Scheme == "https" && parsed.Host == imageHost && parsed.User == nil
 }
 
 // sniffSource는 응답 헤더 대신 내용으로 형식을 정해, Vertex에 보내는 MIME이 실제 바이트와 어긋나지 않게 한다.
