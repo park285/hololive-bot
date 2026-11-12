@@ -10,9 +10,11 @@ import (
 	"google.golang.org/genai"
 )
 
+// genai SDK가 context의 남은 시간을 x-server-timeout으로 보내므로 이 값이 곧 Vertex의 처리 제한이고, 넘으면 504 DEADLINE_EXCEEDED가 된다.
+// 텍스트 단계(검색 grounding·thinking HIGH)는 운영에서 1.5분에서 3분 넘게까지 걸렸다.
 const (
-	textTimeout     = 3 * time.Minute
-	imageTimeout    = 3 * time.Minute
+	textTimeout     = 15 * time.Minute
+	imageTimeout    = 15 * time.Minute
 	outputImageSize = "2K"
 )
 
