@@ -61,19 +61,17 @@ type Dependencies struct {
 	Logger                *slog.Logger
 	Client                BotIrisClient
 	// ReplyOutbox는 모든 명령 응답을 기록하는 durable reply 원장이다. Iris 발송은 outbox dispatcher만 한다.
-	ReplyOutbox          transport.ReplyOutboxWriter
-	MessageAdapter       *messaging.MessageAdapter
-	Formatter            *formatter.ResponseFormatter
-	MessageStrings       *messagestrings.Store
-	MarkdownReplies      bool
-	Cache                BotCache
-	Postgres             database.Client
-	MemberRepository     *member.Repository
-	Holodex              domain.StreamProvider
-	Alarm                handlercore.AlarmService
-	Matcher              *matcher.Matcher
-	MembersData          domain.MemberDataProvider
-	ACL                  *acl.Service
-	MajorEventRepository handlercore.MajorEventRepository
-	MemberNews           handlercore.MemberNewsService
+	ReplyOutbox      transport.ReplyOutboxWriter
+	MessageAdapter   *messaging.MessageAdapter
+	Formatter        *formatter.ResponseFormatter
+	MessageStrings   *messagestrings.Store
+	MarkdownReplies  bool
+	Cache            BotCache
+	Postgres         database.Client
+	MemberRepository *member.Repository
+	Holodex          domain.StreamProvider
+	Alarm            handlercore.AlarmService
+	Matcher          *matcher.Matcher
+	MembersData      domain.MemberDataProvider
+	ACL              *acl.Service
 }

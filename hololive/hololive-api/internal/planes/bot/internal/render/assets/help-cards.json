@@ -5,7 +5,7 @@
       "id": "broadcast",
       "title": "방송 · 일정",
       "asset": "help-broadcast.png",
-      "sha256": "dc9563ca1f2e14cfcb9d400ed57d5d24daf0a609a63532309a75ead68cfc799a",
+      "sha256": "9b46187b7cb07ca6fb77a5a5702653fb81def6328d0100e904609a055a9f4de6",
       "entries": [
         {"syntax": "!라이브 [멤버명]", "description": "현재 방송 · 멤버 방송"},
         {"syntax": "!예정 [멤버명]", "description": "예정 방송 · 멤버 예정"},
@@ -13,33 +13,30 @@
         {"syntax": "!방송시간 [멤버명] [N일]", "description": "방송 시간 합계 (기본 7일)"},
         {"syntax": "!방송이력 [멤버명] [타입]", "description": "종료된 방송 이력"},
         {"syntax": "!방송이력 카테고리:<타입>", "description": "기간 · 개수 상세 필터"},
-        {"syntax": "!방송이력 썸네일 <video_id>", "description": "종료 방송 썸네일"}
+        {"syntax": "!방송이력 썸네일 <video_id>", "description": "종료 방송 썸네일"},
+        {"syntax": "!스케쥴 [멤버명]", "description": "이번 주 일정 포스터"}
       ]
     },
     {
-      "id": "member-alarm-news",
-      "title": "멤버 · 알람 · 뉴스",
-      "asset": "help-member-alarm-news.png",
-      "sha256": "2ec2be240d1a72e44d25f0b28b7a5c5a45882f7a7696dd3217c296ec810d998b",
+      "id": "member-alarm",
+      "title": "멤버 · 알람",
+      "asset": "help-member-alarm.png",
+      "sha256": "2f2ed9cc2147bd09b4d75dd9e0f36e0b04ef7502b1f87d4dfed17bb5a21f9ba2",
       "entries": [
         {"syntax": "!멤버", "description": "전체 멤버 목록"},
         {"syntax": "!정보 [멤버명]", "description": "멤버 기본 정보 조회"},
         {"syntax": "!알람 추가 [멤버명]", "description": "방송 알람 추가"},
         {"syntax": "!알람 제거 [멤버명]", "description": "방송 알람 제거"},
         {"syntax": "!알람 목록", "description": "내 알람 목록"},
-        {"syntax": "!알람 초기화", "description": "모든 알람 삭제"},
-        {"syntax": "!뉴스", "description": "주간 뉴스 요약"},
-        {"syntax": "!뉴스알림 켜기 · 끄기 · 상태", "description": "뉴스 알림 설정"}
+        {"syntax": "!알람 초기화", "description": "모든 알람 삭제"}
       ]
     },
     {
-      "id": "events-more",
-      "title": "행사 · 기념일 · 기타",
-      "asset": "help-events-more.png",
-      "sha256": "02c1e9daad244c42471e0c0cdacd96d612d8d94430c2655d223835f509cf7461",
+      "id": "anniversary-more",
+      "title": "기념일 · 기타",
+      "asset": "help-anniversary-more.png",
+      "sha256": "43d1e0454e8e37f6b82018a9e21f8ec214cc8080aa93af64e204e172ab885117",
       "entries": [
-        {"syntax": "!행사", "description": "행사 알림 상태"},
-        {"syntax": "!행사 켜기 · 끄기", "description": "행사 알림 설정"},
         {"syntax": "!기념일", "description": "이번 달 생일 · 주년"},
         {"syntax": "!기념일 다음달 · 저번달", "description": "월별 기념일 조회"},
         {"syntax": "!도움말", "description": "전체 명령어 안내"}

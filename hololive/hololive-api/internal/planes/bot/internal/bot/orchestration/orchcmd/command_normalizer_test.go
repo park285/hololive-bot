@@ -89,20 +89,6 @@ func normalizeCommandKeyTestCases() []normalizeCommandKeyTestCase {
 			wantParamsKept: true,
 		},
 		{
-			name:       "news_subscription(action 없음) → news_subscription 키 + 기본 action=status",
-			cmdType:    botcommand.CommandMemberNewsSubscription,
-			params:     map[string]any{},
-			wantKey:    CommandKeyNewsSubscription,
-			wantAction: "status",
-		},
-		{
-			name:       "news_subscription_toggle → news_subscription 키 + action=toggle",
-			cmdType:    botcommand.CommandType("news_subscription_toggle"),
-			params:     map[string]any{},
-			wantKey:    CommandKeyNewsSubscription,
-			wantAction: "toggle",
-		},
-		{
 			name:    "live → 변환 없이 live 키 반환",
 			cmdType: botcommand.CommandLive,
 			params:  map[string]any{"foo": "bar"},

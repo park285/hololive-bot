@@ -4,14 +4,14 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙은 rootful Podman Quadlet, Seoul collector `b`와 kapu collector `d`도 rootful Podman Quadlet, Osaka collector `a`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙은 rootful Podman Quadlet, Seoul collector `b`와 kapu collector `d`도 rootful Podman Quadlet, Osaka collector `a`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
 
 ## 큰 구조
 
 ```text
 .
 ├── hololive/
-│   ├── hololive-api/               # Unified bot/admin/llm/YouTube consume runtime
+│   ├── hololive-api/               # Unified bot/admin/YouTube consume runtime
 │   ├── hololive-alarm-worker/      # Alarm checker, dispatch queue, proactive egress
 │   ├── hololive-youtube-collector/  # AP-fleet YouTube collector module
 │   ├── hololive-shared/            # shared domain, config, providers, contracts, services
@@ -20,7 +20,8 @@
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
 ├── deploy/quadlet/                 # central Podman Quadlet units
 │   ├── hololive-bot/               # installed to /etc/containers/systemd/hololive-bot/
-│   └── optional/x-spaces/          # drop-ins installed only when HOLOLIVE_X_SPACES_ENABLED=1
+│   ├── optional/x-spaces/          # drop-ins installed only when HOLOLIVE_X_SPACES_ENABLED=1
+│   └── optional/schedule-poster/   # drop-in installed only when HOLOLIVE_SCHEDULE_POSTER_ENABLED=1
 ├── deploy/podman/iris-seoul/       # iris-seoul collector b + issuer b Quadlet units
 └── deploy/compose/                 # shared runtime contracts (README only)
 ```
@@ -33,7 +34,7 @@ The current production runtime set is three Go binaries:
 
 | Runtime | Path | Main responsibility | Typical port |
 |---|---|---|---:|
-| `hololive-api` | `hololive/hololive-api/` | Bot/admin/llm planes plus YouTube consume/canonical persist | 30001/30003/30006 |
+| `hololive-api` | `hololive/hololive-api/` | Bot/admin planes plus YouTube consume/canonical persist | 30001/30006 |
 | `alarm-worker` | `hololive/hololive-alarm-worker/` | Alarm checks, queue consumption, proactive notification egress | 30007 |
 | `youtube-collector` | `hololive/hololive-youtube-collector/` | AP fleet fetch/normalize/lease/Publish (`a`/`b`/`c`/`d`) | 30005/30015/30025/30015(kapu) |
 
@@ -50,11 +51,10 @@ The current production runtime set is three Go binaries:
 
 실행 구현의 조립은 각 module이 소유합니다. API는 설정 적재의 `internal/config`, process 자원과 plane 조립의
 `internal/app`(bot·admin이 빌려 쓰는 ACL·Holodex 서비스 생성 포함), plane별 `internal/planes/*/runtime`을
-사용합니다. admin router는 `internal/planes/admin/internal/httpapi`, 수동 재실행 CLI는 `internal/app`과 llm plane `runtime`에 있습니다.
+사용합니다. admin router는 `internal/planes/admin/internal/httpapi`에 있습니다.
 Observation publish는 collector `internal/runtime/sourceobservation`, consume와 private reducer는 API
 `internal/youtube/{sourceobservation,reconcile,community}`에 있습니다. Worker의 구독 서비스·private cache,
-dedup·queue·dispatchoutbox, alarm dispatch runner·formatter와 범용 notification delivery dispatcher·store·SQL
-(`internal/egress/notificationdelivery`)은 worker의 `internal/`이 소유합니다.
+dedup·queue·dispatchoutbox, alarm dispatch runner·formatter는 worker의 `internal/`이 소유합니다.
 공용 strict 환경 파싱과 순수 정책은 shared `pkg/config/{envload,runtimepolicy}`, 설정 구획 타입·loader·순수 검증은
 `pkg/config/settings`, 시간과 target-minute 계산은 `pkg/timeutil`·`pkg/alarmtiming/targetpolicy`, DB 구성은
 `pkg/providers/database`가 담당합니다. API `BotPlaneConfig`/`AdminPlaneConfig`/`APIWorkerProfile`과 worker
@@ -70,11 +70,11 @@ Sibling `../shared-go/` holds lower-level utilities shared outside the Hololive-
 Kakao / Iris
   -> hololive-api (bot plane)
   -> command router / service clients
-  -> PostgreSQL / Valkey / hololive-api llm plane / alarm APIs as needed
+  -> PostgreSQL / Valkey / alarm APIs as needed
   -> Kakao / Iris response
 ```
 
-The `hololive-api` bot plane owns webhook ingress and user-facing command routing. It must not take over alarm scheduling loops, proactive dispatch consumption, or shift admin/llm responsibilities outside their planes.
+The `hololive-api` bot plane owns webhook ingress and user-facing command routing. It must not take over alarm scheduling loops, proactive dispatch consumption, or shift admin responsibilities outside its plane.
 
 ### YouTube Collection Flow
 
@@ -90,17 +90,6 @@ hololive-api YouTube plane
 ```
 
 YouTube notifications require the collector fleet and the `hololive-api` YouTube plane consumer. `alarm-worker` owns final delivery. Duplicate suppression depends on observation identity, PostgreSQL collection fences, and the dispatch worker's delivery claims.
-
-### LLM Work Flow
-
-```text
-hololive-api bot/admin planes / scheduled runtime
-  -> hololive-api llm plane internal contracts
-  -> PostgreSQL / Valkey / cliproxy or LLM provider
-  -> summarized result or scheduled delivery
-```
-
-The `hololive-api` llm plane owns major event and member-news scheduling. Other runtimes and planes should call documented contracts instead of importing internal packages.
 
 ### Config / Queue / Coordination Flow
 

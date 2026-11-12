@@ -100,8 +100,6 @@ func TestRichTextSeedsPreserveCopyableCommands(t *testing.T) {
 
 	for _, key := range []domain.TemplateKey{
 		domain.TemplateKeyCmdHelp, domain.TemplateKeyCmdAmbiguousMember, domain.TemplateKeyCmdAlarmList,
-		domain.TemplateKeyCmdMajorEventStatus, domain.TemplateKeyCmdMajorEventUsage,
-		domain.TemplateKeyCmdMemberNewsNoMembers, domain.TemplateKeyCmdMemberNewsStatus,
 	} {
 		pair := pairs[key]
 		src, ok := sampledata.GetTemplateSampleData(key).(map[string]any)
@@ -177,38 +175,12 @@ func TestRichTextSeedsOutboxLiteralBoundaries(t *testing.T) {
 	}
 }
 
-func TestRichTextSeedsPreserveProtectedSummaryAndPadding(t *testing.T) {
-	pairs := loadTemplateFormatPairs(t)
-	// 호출자 경계에서 이미 보호된 요약과 접기 패딩을 템플릿이 다시 중화하지 않아야 한다.
-	summary := `\*\*원제\*\*` + "\n" + strings.Repeat(kakaotext.ZeroWidthSpace, 500) + "\nhttps://example.invalid/a_b"
-
-	for _, key := range []domain.TemplateKey{domain.TemplateKeyCmdMajorEventWeeklySummary, domain.TemplateKeyCmdMajorEventMonthlySummary} {
-		t.Run(string(key), func(t *testing.T) {
-			data := literalTitleData("행사 제목", "https://example.invalid/event")
-
-			data["LLMSummary"] = summary
-
-			out := renderSeedBody(t, key, pairs[key].newBody, data)
-
-			if !strings.Contains(out, summary) {
-				t.Fatalf("보호된 요약 또는 접기 패딩이 변형됨: %q", out)
-			}
-
-			if !hasSeedLine(kakaoformat.Render(out), "https://example.invalid/a_b") {
-				t.Fatal("요약의 독립 URL 소실")
-			}
-		})
-	}
-}
-
-func TestRichTextSeedsDistinguishSubscriptionAndAlarmStates(t *testing.T) {
+func TestRichTextSeedsDistinguishAlarmStates(t *testing.T) {
 	pairs := loadTemplateFormatPairs(t)
 
 	for key, field := range map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdAlarmAdded:       "Added",
-		domain.TemplateKeyCmdAlarmRemoved:     "Removed",
-		domain.TemplateKeyCmdMajorEventStatus: "IsSubscribed",
-		domain.TemplateKeyCmdMemberNewsStatus: "IsSubscribed",
+		domain.TemplateKeyCmdAlarmAdded:   "Added",
+		domain.TemplateKeyCmdAlarmRemoved: "Removed",
 	} {
 		t.Run(string(key), func(t *testing.T) {
 			sample, ok := sampledata.GetTemplateSampleData(key).(map[string]any)
@@ -322,7 +294,6 @@ func TestRichTextSeedsMultilineLiteralsRemainVisible(t *testing.T) {
 
 	for key, field := range map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdProfile:                     "Summary",
-		domain.TemplateKeyCmdMemberNewsDigest:            "MoreSummary",
 		domain.TemplateKeyAlarmDispatchNotification:      fieldScheduleMessage,
 		domain.TemplateKeyAlarmDispatchNotificationGroup: fieldScheduleMessage,
 	} {
@@ -383,15 +354,6 @@ func TestRichTextSeedsSummarizeCollapsedPreview(t *testing.T) {
 
 		if got := secondLine(t, domain.TemplateKeyCmdLiveStreams, data); got != "페코라 · 미코" {
 			t.Fatalf("요약 줄 = %q", got)
-		}
-	})
-
-	t.Run("뉴스 제목의 이모지를 겹치지 않는다", func(t *testing.T) {
-		key := domain.TemplateKeyCmdMemberNewsDigest
-		out := renderSeedBody(t, key, pairs[key].newBody, sampledata.GetTemplateSampleData(key))
-
-		if first, _, _ := strings.Cut(out, "\n"); first != "**🗞️ 이번주 구독 멤버 뉴스**" {
-			t.Fatalf("머리말 = %q", first)
 		}
 	})
 }

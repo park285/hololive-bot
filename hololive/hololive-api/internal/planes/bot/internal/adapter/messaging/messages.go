@@ -44,15 +44,6 @@ const (
 
 	ErrCalendarQueryFailed = "calendar_query_failed"
 
-	ErrMajorEventServiceNotInitialized = "major_event_service_not_initialized"
-	ErrMajorEventStatusCheckFailed     = "major_event_status_check_failed"
-	ErrMajorEventSubscribeFailed       = "major_event_subscribe_failed"
-	ErrMajorEventUnsubscribeFailed     = "major_event_unsubscribe_failed"
-
-	ErrMemberNewsServiceNotInitialized = "member_news_service_not_initialized"
-	ErrMemberNewsQueryFailed           = "member_news_query_failed"
-	ErrMemberNewsSubscriptionFailed    = "member_news_subscription_failed"
-
 	ErrUnknownCommand          = "unknown_command"
 	ErrIrisConnectionFailed    = "iris_connection_failed"
 	ErrCommandProcessingFailed = "command_processing_failed"
@@ -67,9 +58,6 @@ func ErrorMessageKeys() []string {
 		ErrAlarmNeedMemberNameAdd, ErrAlarmNeedMemberNameRemove, ErrInvalidAlarmUsage,
 		ErrLiveStreamQueryFailed, ErrUpcomingStreamQueryFailed, ErrScheduleQueryFailed, ErrScheduleNeedMemberName,
 		ErrCalendarQueryFailed,
-		ErrMajorEventServiceNotInitialized, ErrMajorEventStatusCheckFailed, ErrMajorEventSubscribeFailed,
-		ErrMajorEventUnsubscribeFailed,
-		ErrMemberNewsServiceNotInitialized, ErrMemberNewsQueryFailed, ErrMemberNewsSubscriptionFailed,
 		ErrUnknownCommand, ErrIrisConnectionFailed,
 		ErrCommandProcessingFailed,
 	}

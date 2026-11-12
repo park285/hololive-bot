@@ -37,23 +37,23 @@ func (r *AdminAPIRuntime) Shutdown(ctx context.Context) error {
 
 	r.closing = true
 
-	photoCancel, photoDone := r.photoCancel, r.photoDone
+	backgroundCancel, backgroundDone := r.backgroundCancel, r.backgroundDone
 	r.stateMu.Unlock()
 
-	if photoCancel != nil {
-		photoCancel()
+	if backgroundCancel != nil {
+		backgroundCancel()
 	}
 
 	httpErr := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:             r.Logger,
 		ShutdownHTTPServer: r.ShutdownHTTPServer,
 	})
-	photoErr := waitAdminPhotoSync(ctx, photoDone)
+	backgroundErr := waitAdminBackground(ctx, backgroundDone)
 
 	r.stateMu.Lock()
 
 	if r.drainErr == nil {
-		r.drainErr = errors.Join(httpErr, photoErr)
+		r.drainErr = errors.Join(httpErr, backgroundErr)
 	}
 
 	if r.httpStopErr != nil && !errors.Is(r.drainErr, r.httpStopErr) {
@@ -138,7 +138,7 @@ func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	}
 }
 
-func waitAdminPhotoSync(ctx context.Context, done <-chan struct{}) error {
+func waitAdminBackground(ctx context.Context, done <-chan struct{}) error {
 	if done == nil {
 		return nil
 	}
@@ -153,7 +153,7 @@ func waitAdminPhotoSync(ctx context.Context, done <-chan struct{}) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("join admin photo sync: %w", ctx.Err())
+		return fmt.Errorf("join admin background tasks: %w", ctx.Err())
 	}
 }
 

@@ -218,6 +218,27 @@ func TestCommandAdmissionLimitsLiveQueriesInSeparateBucket(t *testing.T) {
 	}
 }
 
+func TestCommandAdmissionLimitsSchedulePostersInSeparateBucket(t *testing.T) {
+	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
+	ctx := t.Context()
+	cmdCtx := &botcommand.CommandContext{Room: testRoomID, UserID: testUserID}
+	commandKey, _ := NormalizeCommandKey(botcommand.CommandSchedulePoster, nil)
+
+	for index := range expensiveHistoryUserLimit {
+		cmdCtx.MessageID = messageIDForIndex(index)
+		if err := policy.Admit(ctx, cmdCtx, commandKey); err != nil {
+			t.Fatalf("schedule poster admission %d error = %v", index, err)
+		}
+	}
+
+	cmdCtx.MessageID = messageIDForIndex(expensiveHistoryUserLimit)
+	if err := policy.Admit(ctx, cmdCtx, commandKey); !errors.Is(err, errCommandRateLimited) {
+		t.Fatalf("schedule poster over-limit error = %v, want rate limit", err)
+	}
+
+	assertSortedSetSize(t, mini, limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID)), 0)
+}
+
 func TestCommandAdmissionRoomDenialDoesNotConsumeUserQuota(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	ctx := t.Context()

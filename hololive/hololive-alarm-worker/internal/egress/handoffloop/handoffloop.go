@@ -1,4 +1,4 @@
-// Package handoffloop는 발송 원장(alarm dispatch·notification delivery·youtube delivery)의 Iris handoff 확인 실행
+// Package handoffloop는 발송 원장(alarm dispatch·youtube delivery)의 Iris handoff 확인 실행
 // 루프다. 확인 claim, 트랜잭션 밖 상태 조회, 정산 슬롯과 예산, 정산 결과의 로그 수준을 한 곳에서 정한다. 판정 규칙과
 // 확인 간격은 handoffcheck가, 원장 상태 어휘·전이 SQL·시도 예산·원장 지표는 각 원장 어댑터가 소유한다.
 package handoffloop

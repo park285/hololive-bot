@@ -1,15 +1,12 @@
 package config
 
 import (
-	"time"
-
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 const (
-	WorkerAlarmDispatch        = "alarm_dispatch"
-	WorkerNotificationDelivery = "notification_delivery"
-	WorkerYouTubeDelivery      = "youtube_delivery"
+	WorkerAlarmDispatch   = "alarm_dispatch"
+	WorkerYouTubeDelivery = "youtube_delivery"
 )
 
 // WorkerIdentity: hololive-alarm-worker가 소유한 worker profile identity다.
@@ -18,15 +15,9 @@ func WorkerIdentity() workercontract.Identity {
 	return workercontract.Identity{
 		Service:   "hololive",
 		Role:      "alarm-worker",
-		WorkerIDs: []string{WorkerAlarmDispatch, WorkerNotificationDelivery, WorkerYouTubeDelivery},
+		WorkerIDs: []string{WorkerAlarmDispatch, WorkerYouTubeDelivery},
 	}
 }
-
-// NotificationDeliveryLease는 claim과 SENDING 전이에 사용하는 소유권 예산이다.
-const NotificationDeliveryLease = 60 * time.Second
-
-// NotificationDeliveryFinalizeTimeout은 발송 결과 저장에 예약하는 독립 예산이다.
-const NotificationDeliveryFinalizeTimeout = 5 * time.Second
 
 type AlarmDispatchWorkerSettings struct {
 	LeaseMS               int64 `json:"lease_ms"`
@@ -40,20 +31,6 @@ type AlarmDispatchWorkerSettings struct {
 	IdleBackoffMinMS      int64 `json:"idle_backoff_min_ms"`
 	IdleBackoffMaxMS      int64 `json:"idle_backoff_max_ms"`
 	WakeupEnabled         bool  `json:"wakeup_enabled"`
-}
-
-type NotificationDeliveryWorkerSettings struct {
-	BatchSize                   int   `json:"batch_size"`
-	MaxRetries                  int   `json:"max_retries"`
-	PollIntervalMS              int64 `json:"poll_interval_ms"`
-	RetryBackoffMS              int64 `json:"retry_backoff_ms"`
-	CleanupAfterMS              int64 `json:"cleanup_after_ms"`
-	CleanupIntervalMS           int64 `json:"cleanup_interval_ms"`
-	CleanupEnabled              bool  `json:"cleanup_enabled"`
-	StaleSendingAfterMS         int64 `json:"stale_sending_after_ms"`
-	StaleSendingSweepIntervalMS int64 `json:"stale_sending_sweep_interval_ms"`
-	StaleSendingSweepLimit      int   `json:"stale_sending_sweep_limit"`
-	HandoffHorizonMS            int64 `json:"handoff_horizon_ms"`
 }
 
 type YouTubeDeliveryWorkerSettings struct {
@@ -77,8 +54,7 @@ type YouTubeDeliveryWorkerSettings struct {
 }
 
 type AlarmWorkerProfile struct {
-	Loaded               workercontract.LoadedProfile
-	AlarmDispatch        AlarmDispatchWorkerSettings
-	NotificationDelivery NotificationDeliveryWorkerSettings
-	YouTubeDelivery      YouTubeDeliveryWorkerSettings
+	Loaded          workercontract.LoadedProfile
+	AlarmDispatch   AlarmDispatchWorkerSettings
+	YouTubeDelivery YouTubeDeliveryWorkerSettings
 }

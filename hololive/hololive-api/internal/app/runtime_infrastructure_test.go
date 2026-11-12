@@ -19,7 +19,6 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
 	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
-	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -69,7 +68,6 @@ func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
 			Holodex: holodex, OfficialSchedule: officialSchedule,
 		},
 		Admin: &apiconfig.AdminPlaneConfig{Postgres: postgres},
-		LLM:   &apiconfig.LLMSchedulerConfig{Postgres: postgres},
 	}
 }
 
@@ -91,21 +89,16 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 	cancel()
 	require.True(t, infra.bot.Cache.IsConnected(t.Context()))
 	require.Same(t, infra.bot.Cache, infra.admin.Cache)
-	require.Same(t, infra.bot.Cache, infra.llm.Cache)
 	require.Same(t, infra.bot.MemberCache, infra.admin.MemberCache)
-	require.Same(t, infra.bot.MemberCache, infra.llm.MemberCache)
 	require.Nil(t, infra.bot.Cleanup)
 	require.Nil(t, infra.admin.Cleanup)
-	require.Nil(t, infra.llm.Cleanup)
 	require.Nil(t, infra.bot.StopMemberCache)
 	require.Nil(t, infra.admin.StopMemberCache)
-	require.Nil(t, infra.llm.StopMemberCache)
 
-	pools := []*pgxpool.Pool{infra.bot.Postgres.GetPool(), infra.admin.Postgres.GetPool(), infra.llm.Postgres.GetPool()}
+	pools := []*pgxpool.Pool{infra.bot.Postgres.GetPool(), infra.admin.Postgres.GetPool()}
 	require.NotSame(t, pools[0], pools[1])
-	require.NotSame(t, pools[0], pools[2])
 
-	for i, name := range []string{"bot", "admin", "llm_scheduler"} {
+	for i, name := range []string{"bot", "admin"} {
 		var timeout, application string
 
 		require.NoError(t, pools[i].QueryRow(t.Context(), "SELECT current_setting('statement_timeout'), current_setting('application_name')").Scan(&timeout, &application))
@@ -124,7 +117,7 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 	require.True(t, added)
 	require.True(t, infra.acl.IsRoomAllowed("3001"))
 
-	_, err = infra.llm.MemberCache.LoadAllMembers(t.Context())
+	_, err = infra.admin.MemberCache.LoadAllMembers(t.Context())
 	require.NoError(t, err)
 
 	maintenance, cleanup, err := databaseproviders.ProvideMaintenanceDatabaseResources(t.Context(), &config.Bot.Postgres, slog.New(slog.DiscardHandler))
@@ -148,23 +141,16 @@ func TestAPIInfrastructureFailureUnwindsRegistrations(t *testing.T) {
 	config := infrastructureConfig(t)
 	logger := slog.New(slog.DiscardHandler)
 
-	for _, failAdmin := range []bool{true, false} {
-		if failAdmin {
-			config.Admin.Postgres.PoolMaxConns = 0
-		} else {
-			config.LLM.Postgres.PoolMaxConns = 0
-		}
+	config.Admin.Postgres.PoolMaxConns = 0
 
-		infra, err := buildAPIInfrastructure(t.Context(), config, logger)
-		require.Error(t, err)
-		require.Nil(t, infra)
+	infra, err := buildAPIInfrastructure(t.Context(), config, logger)
+	require.Error(t, err)
+	require.Nil(t, infra)
 
-		config.Admin.Postgres.PoolMaxConns = 2
-		config.LLM.Postgres.PoolMaxConns = 2
-		infra, err = buildAPIInfrastructure(t.Context(), config, logger)
-		require.NoError(t, err)
-		require.NoError(t, infra.CloseContext(t.Context()))
-	}
+	config.Admin.Postgres.PoolMaxConns = 2
+	infra, err = buildAPIInfrastructure(t.Context(), config, logger)
+	require.NoError(t, err)
+	require.NoError(t, infra.CloseContext(t.Context()))
 }
 
 func TestSharedInfrastructureWaitsForBorrowerAfterCallerDeadline(t *testing.T) {
@@ -233,7 +219,7 @@ func TestSharedInfrastructureClosesAfterUnstartedBorrowers(t *testing.T) {
 func TestPlaneDependenciesBorrowProcessHolodex(t *testing.T) {
 	infra := &apiInfrastructure{holodex: &holodexprovider.Service{}, acl: &acl.Service{}}
 
-	bot := botPlaneDependencies(infra, &llmruntime.LLMSchedulerRuntime{})
+	bot := botPlaneDependencies(infra)
 	admin := adminPlaneDependencies(infra, &botruntime2.BotRuntime{})
 
 	require.Same(t, infra.holodex, bot.Holodex)
@@ -249,32 +235,6 @@ func TestAPIInfrastructureOwnsOneHolodexService(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, infra.CloseContext(context.WithoutCancel(t.Context()))) })
 
 	require.NotNil(t, infra.holodex)
-}
-
-// --rerun-notification이 쓰는 llm 전용 조립은 admin pool·ACL·Holodex를 만들지 않는다. 그래서 admin 설정과 Holodex
-// 키가 없어도 조립되고, ACL 첫 초기화가 쓰는 설정 행도 남기지 않는다.
-func TestLLMInfrastructureOmitsServeOnlyResources(t *testing.T) {
-	config := infrastructureConfig(t)
-
-	config.Admin = nil
-	config.Bot.Holodex = settings.HolodexConfig{}
-
-	infra, err := buildLLMInfrastructure(t.Context(), config, slog.New(slog.DiscardHandler))
-	require.NoError(t, err)
-
-	t.Cleanup(func() { require.NoError(t, infra.CloseContext(context.WithoutCancel(t.Context()))) })
-
-	require.NotNil(t, infra.llm)
-	require.Same(t, infra.bot.Cache, infra.llm.Cache)
-	require.Same(t, infra.bot.MemberCache, infra.llm.MemberCache)
-	require.Nil(t, infra.admin)
-	require.Nil(t, infra.acl)
-	require.Nil(t, infra.holodex)
-
-	var aclSettings int
-
-	require.NoError(t, infra.bot.Postgres.GetPool().QueryRow(t.Context(), "SELECT count(*) FROM acl_settings").Scan(&aclSettings))
-	require.Zero(t, aclSettings)
 }
 
 // process 하나의 Holodex 서비스는 bot plane 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.

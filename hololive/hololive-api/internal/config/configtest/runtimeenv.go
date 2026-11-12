@@ -43,7 +43,7 @@ func APIProfileFixture(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "testdata", "stack-worker-profile-api.json")
 }
 
-// SetRequiredLoadEnv: bot/admin/llm 런타임 로더가 성공하는 최소 환경을 세운다.
+// SetRequiredLoadEnv: bot/admin 런타임 로더가 성공하는 최소 환경을 세운다.
 func SetRequiredLoadEnv(t *testing.T) {
 	t.Helper()
 	settingstest.UseProfileFixture(t, APIProfileFixture(t))

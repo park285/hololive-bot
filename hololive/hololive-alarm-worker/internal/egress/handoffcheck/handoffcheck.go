@@ -1,5 +1,5 @@
 // Package handoffcheck는 Iris 202 admission 뒤 /reply-status 관측을 발송 원장의 다음 행동으로 바꾸는 순수 판정과
-// 확인 간격이다. alarm-dispatch·notification·youtube reconciler가 함께 쓰며, 원장 상태 어휘·전이 SQL·시도 예산은
+// 확인 간격이다. alarm-dispatch·youtube reconciler가 함께 쓰며, 원장 상태 어휘·전이 SQL·시도 예산은
 // 각 원장이 소유한다. 시각은 원장 DB 시계로 잰 경과만 받고 이 패키지는 현재 시각을 읽지 않는다.
 package handoffcheck
 
@@ -167,7 +167,7 @@ func QueryErrorDetail(err error) string {
 	return "iris reply status query failed"
 }
 
-// ReplyStatusClient는 세 원장의 handoff 확인이 함께 쓰는 Iris /reply-status 조회다.
+// ReplyStatusClient는 두 원장의 handoff 확인이 함께 쓰는 Iris /reply-status 조회다.
 type ReplyStatusClient interface {
 	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
 }

@@ -1,4 +1,4 @@
-// Package sendfence는 외부 발송 원장(alarm-dispatch, notification-delivery, youtube)의 소유자 전이가 함께 쓰는 fence
+// Package sendfence는 외부 발송 원장(alarm-dispatch, youtube)의 소유자 전이가 함께 쓰는 fence
 // 규약이다. 전이 SQL이 대상 행을 잠근 같은 문장에서 계산한 조건값(Observation)을 받아 미스 원인(Reason)을 분류하고,
 // 적용되지 않은 대상이 하나라도 있으면 *MissError를 돌려준다. 테이블별 SQL·재시도·미스 라우팅은 각 원장이 소유한다.
 //
@@ -19,7 +19,7 @@
 //
 // 열 의미:
 //
-//   - version_matches는 원장의 claim 세대 열 등가다. alarm-dispatch·notification은 attempt_count, youtube는
+//   - version_matches는 원장의 claim 세대 열 등가다. alarm-dispatch는 attempt_count, youtube는
 //     row_version이다. attempt_count처럼 claim에서 바뀌지 않는 열이면 같은 소유자 이름의 재claim을 구분하지 못하므로,
 //     그 원장이 재claim 직렬성을 따로 보장한다.
 //   - lease_valid는 원장이 만료를 계산한다(lock_expires_at > clock 또는 locked_at + lease_ms > clock). 외부 발송 뒤

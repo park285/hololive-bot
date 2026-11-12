@@ -12,9 +12,6 @@ var configurePlanesIntEnvKeys = []string{
 	"HOLOLIVE_ADMIN_API_PORT",
 	"ADMIN_API_POSTGRES_POOL_MIN_CONNS",
 	"ADMIN_API_POSTGRES_POOL_MAX_CONNS",
-	"LLM_SCHEDULER_PORT",
-	"LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS",
-	"LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS",
 	"SERVER_PORT",
 	"BOT_POSTGRES_POOL_MIN_CONNS",
 	"BOT_POSTGRES_POOL_MAX_CONNS",
@@ -36,9 +33,8 @@ func TestConfigurePlanesRejectsInvalidEnvValues(t *testing.T) {
 
 			botConfig := &BotPlaneConfig{}
 			adminConfig := &AdminPlaneConfig{}
-			llmConfig := &LLMSchedulerConfig{}
 
-			err := configurePlanes(botConfig, adminConfig, llmConfig)
+			err := configurePlanes(botConfig, adminConfig)
 			if err == nil {
 				t.Fatalf("configurePlanes() accepted invalid %s; want a startup error", key)
 			}
@@ -57,9 +53,6 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 		"HOLOLIVE_ADMIN_API_PORT",
 		"ADMIN_API_POSTGRES_POOL_MIN_CONNS",
 		"ADMIN_API_POSTGRES_POOL_MAX_CONNS",
-		"LLM_SCHEDULER_PORT",
-		"LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS",
-		"LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS",
 		"BOT_POSTGRES_POOL_MIN_CONNS",
 		"BOT_POSTGRES_POOL_MAX_CONNS",
 	} {
@@ -98,7 +91,7 @@ func TestLoadRuntimeIgnoresGenericPoolKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if config.Bot.Postgres.PoolMinConns != 0 || config.Bot.Postgres.PoolMaxConns != 4 || config.Admin.Postgres.PoolMaxConns != 4 || config.LLM.Postgres.PoolMaxConns != 4 {
+	if config.Bot.Postgres.PoolMinConns != 0 || config.Bot.Postgres.PoolMaxConns != 4 || config.Admin.Postgres.PoolMaxConns != 4 {
 		t.Fatal("API plane pools did not use their own keys")
 	}
 }

@@ -31,7 +31,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-type photoSyncTask interface {
+type backgroundTask interface {
 	Start(ctx context.Context)
 }
 
@@ -39,15 +39,16 @@ type AdminAPIRuntime struct {
 	Config *apiconfig.AdminPlaneConfig
 	Logger *slog.Logger
 
-	ServerAddr  string
-	HTTPServers *sharedserver.RuntimeHTTPServers
-	PhotoSync   photoSyncTask
+	ServerAddr     string
+	HTTPServers    *sharedserver.RuntimeHTTPServers
+	PhotoSync      backgroundTask
+	SchedulePoster backgroundTask
 
-	stateMu     sync.Mutex
-	started     bool
-	closing     bool
-	photoCancel context.CancelFunc
-	photoDone   chan struct{}
+	stateMu          sync.Mutex
+	started          bool
+	closing          bool
+	backgroundCancel context.CancelFunc
+	backgroundDone   chan struct{}
 
 	httpStopInit  sync.Once
 	httpStopGate  chan struct{}
@@ -112,11 +113,11 @@ func (r *AdminAPIRuntime) CloseContext(ctx context.Context) error {
 func (r *AdminAPIRuntime) quiesced() bool {
 	r.stateMu.Lock()
 
-	httpQuiesced, photoDone := r.httpQuiesced, r.photoDone
+	httpQuiesced, backgroundDone := r.httpQuiesced, r.backgroundDone
 	closedBeforeStart := r.closing && !r.started
 	r.stateMu.Unlock()
 
-	// Start 진입을 닫은 미기동 runtime에는 join할 HTTP·photo 작업이 없다.
+	// Start 진입을 닫은 미기동 runtime에는 join할 HTTP·background 작업이 없다.
 	if closedBeforeStart {
 		return true
 	}
@@ -125,12 +126,12 @@ func (r *AdminAPIRuntime) quiesced() bool {
 		return false
 	}
 
-	if photoDone == nil {
+	if backgroundDone == nil {
 		return true
 	}
 
 	select {
-	case <-photoDone:
+	case <-backgroundDone:
 		return true
 	default:
 		return false

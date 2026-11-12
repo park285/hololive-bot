@@ -36,7 +36,6 @@ import (
 const (
 	NamespaceOrg       = "org"
 	NamespaceAlarmType = "alarmtype"
-	NamespaceNewsCat   = "newscat"
 	NamespaceMisc      = "misc"
 	NamespaceError     = "error"
 	NamespaceNotify    = "notify"

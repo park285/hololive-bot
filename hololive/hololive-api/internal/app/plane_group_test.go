@@ -33,7 +33,7 @@ func TestPlaneGroupShutdownUsesReverseOrderAndJoinsErrors(t *testing.T) {
 	t.Parallel()
 
 	botErr := errors.New("bot stopped dirty")
-	llmErr := errors.New("llm stopped dirty")
+	youtubeErr := errors.New("youtube stopped dirty")
 
 	var got []string
 
@@ -46,9 +46,9 @@ func TestPlaneGroupShutdownUsesReverseOrderAndJoinsErrors(t *testing.T) {
 			got = append(got, lifecycleAdminName)
 			return nil
 		}},
-		planeComponent{Name: lifecycleLLMName, Shutdown: func(context.Context) error {
-			got = append(got, lifecycleLLMName)
-			return llmErr
+		planeComponent{Name: lifecycleYouTubeName, Shutdown: func(context.Context) error {
+			got = append(got, lifecycleYouTubeName)
+			return youtubeErr
 		}},
 	)
 
@@ -57,7 +57,7 @@ func TestPlaneGroupShutdownUsesReverseOrderAndJoinsErrors(t *testing.T) {
 		t.Fatal("shutdown returned nil error, want joined component errors")
 	}
 
-	wantOrder := []string{lifecycleLLMName, lifecycleAdminName, lifecycleBotName}
+	wantOrder := []string{lifecycleYouTubeName, lifecycleAdminName, lifecycleBotName}
 	if !reflect.DeepEqual(got, wantOrder) {
 		t.Fatalf("shutdown order = %v, want %v", got, wantOrder)
 	}
@@ -66,11 +66,11 @@ func TestPlaneGroupShutdownUsesReverseOrderAndJoinsErrors(t *testing.T) {
 		t.Fatalf("joined error does not contain bot error: %v", err)
 	}
 
-	if !errors.Is(err, llmErr) {
-		t.Fatalf("joined error does not contain llm error: %v", err)
+	if !errors.Is(err, youtubeErr) {
+		t.Fatalf("joined error does not contain youtube error: %v", err)
 	}
 
-	if !strings.Contains(err.Error(), "shutdown bot") || !strings.Contains(err.Error(), "shutdown llm") {
+	if !strings.Contains(err.Error(), "shutdown bot") || !strings.Contains(err.Error(), "shutdown youtube") {
 		t.Fatalf("joined error lacks component context: %v", err)
 	}
 }

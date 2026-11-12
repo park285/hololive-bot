@@ -191,6 +191,285 @@
           }
         }
       }
+    },
+    "/api/holo/schedule-posters": {
+      "get": {
+        "operationId": "holoListSchedulePosters",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterReviewStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/summary": {
+      "get": {
+        "operationId": "holoGetSchedulePosterSummary",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterSummary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}": {
+      "get": {
+        "operationId": "holoGetSchedulePoster",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePoster"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/confirm": {
+      "post": {
+        "operationId": "holoConfirmSchedulePoster",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSchedulePosterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterChangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/reject": {
+      "post": {
+        "operationId": "holoRejectSchedulePoster",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterChangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/translate": {
+      "post": {
+        "operationId": "holoRetranslateSchedulePoster",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterChangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/translated": {
+      "get": {
+        "operationId": "holoGetTranslatedSchedulePoster",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslatedSchedulePoster"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -412,6 +691,233 @@
           }
         },
         "additionalProperties": false
+      },
+      "ConfirmSchedulePosterRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "weekStart",
+          "weekEnd"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "weekStart": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "weekEnd": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          }
+        },
+        "description": "주 범위는 7일 이하이고 게시일(JST)과 7일 이내여야 하며, 어기면 409 code=invalid_week입니다."
+      },
+      "SchedulePoster": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "channelId",
+          "postUrl",
+          "imageUrl",
+          "postedAt",
+          "textExcerpt",
+          "reviewStatus",
+          "weekStart",
+          "weekEnd",
+          "reviewedAt",
+          "translationStatus",
+          "translationError",
+          "translatedAt",
+          "revision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SchedulePosterId"
+          },
+          "channelId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "postUrl": {
+            "type": "string",
+            "pattern": "^https://x\\.com/i/status/[1-9][0-9]*$"
+          },
+          "imageUrl": {
+            "type": "string",
+            "pattern": "^https://pbs\\.twimg\\.com/"
+          },
+          "postedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "textExcerpt": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "reviewStatus": {
+            "$ref": "#/components/schemas/SchedulePosterReviewStatus"
+          },
+          "weekStart": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "weekEnd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "reviewedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "translationStatus": {
+            "type": "string",
+            "enum": [
+              "not_requested",
+              "pending",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "translationError": {
+            "type": "string",
+            "description": "번역 실패 분류입니다(source_unavailable, translation_failed). 실패가 아니면 빈 문자열입니다."
+          },
+          "translatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "updatedAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "SchedulePosterChangeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SchedulePosterId"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          }
+        }
+      },
+      "SchedulePosterId": {
+        "type": "string",
+        "pattern": "^[1-9][0-9]{0,18}$"
+      },
+      "SchedulePosterList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "posters"
+        ],
+        "properties": {
+          "posters": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/SchedulePoster"
+            }
+          }
+        }
+      },
+      "SchedulePosterReviewStatus": {
+        "type": "string",
+        "enum": [
+          "pending_review",
+          "confirmed",
+          "rejected",
+          "expired"
+        ]
+      },
+      "SchedulePosterRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          }
+        }
+      },
+      "SchedulePosterSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pendingCount",
+          "latestCandidateId"
+        ],
+        "properties": {
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "latestCandidateId": {
+            "type": "string",
+            "pattern": "^([1-9][0-9]{0,18})?$",
+            "description": "가장 늦게 들어온 후보 ID입니다. 확정·거절해도 뒤로 가지 않으며 후보가 없으면 빈 문자열입니다."
+          }
+        }
+      },
+      "TranslatedSchedulePoster": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "mimeType",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SchedulePosterId"
+          },
+          "mimeType": {
+            "type": "string",
+            "const": "image/jpeg"
+          },
+          "data": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5592408,
+            "description": "JPEG 바이트의 표준 base64입니다. 원본은 4MiB 이하입니다."
+          }
+        }
       }
     }
   }

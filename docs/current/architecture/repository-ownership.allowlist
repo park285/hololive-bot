@@ -3,9 +3,7 @@
 # data_area|owner|writers|readers
 x_space_session|owner=hololive-api|writers=hololive-api,hololive-alarm-worker|readers=hololive-api,hololive-alarm-worker
 x_space_starts|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker
-major_event_subscriptions|owner=llm-scheduler|writers=hololive-api|readers=hololive-api
-membernews_digest|owner=llm-scheduler|writers=hololive-api|readers=hololive-api
-membernews_subscription|owner=llm-scheduler|writers=hololive-api|readers=hololive-api
 alarm_dispatch|owner=alarm-worker|writers=hololive-alarm-worker,hololive-api|readers=hololive-alarm-worker,hololive-api
 alarm_state|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker,hololive-api
 youtube_outbox|owner=hololive-api|writers=hololive-api|readers=hololive-alarm-worker
+schedule_posters|owner=hololive-api|writers=hololive-api|readers=hololive-api

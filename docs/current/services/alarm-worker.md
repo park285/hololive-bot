@@ -13,7 +13,7 @@
 
 ## Role
 
-Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/consumption, generic notification delivery outbox consumption, YouTube outbox dispatch, proactive notification egress를 담당합니다.
+Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/consumption, YouTube outbox dispatch, proactive notification egress를 담당합니다.
 
 ## Owns
 
@@ -21,7 +21,6 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - YouTube alarm checking and scheduling loops
 - Dispatch queue publish path
 - Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Quadlet instance
-- Generic `notification_delivery_outbox` consume/send path for major event/member news notification rows
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send under the `youtube_delivery` profile executor
 - v1 YouTube outbox는 v3 ledger로 넘기지 않고 `youtube_delivery` dispatcher가 direct egress까지 소유 (`DEC-20260926-hololive-outbox-v3-convergence`로 `shadow|cutover` handoff 삭제)
@@ -35,7 +34,6 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 |---|---|---|---|
 | Alarm HTTP provider | internal HTTP JSON | `/internal/alarm/*` | `hololive-api` bot/admin clients |
 | Alarm dispatch egress | PostgreSQL table | `alarm_dispatch_deliveries` | Iris/Kakao via alarm-worker egress |
-| Notification delivery outbox | PostgreSQL table | `notification_delivery_outbox` | Iris/Kakao via alarm-worker egress |
 | YouTube outbox dispatch | PostgreSQL table | `youtube_notification_outbox` | Iris/Kakao via alarm-worker egress |
 | Alarm service state | in-process subscription service | `internal/service/alarm/subscriptions` | scheduler `AlarmState` target/cache-warm port and alarm HTTP route-specific ports use the same service instance |
 
@@ -53,7 +51,7 @@ YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim �
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | alarm/member/channel state and notification delivery outbox | alarm evaluation, alarm HTTP CRUD/query, or generic notification delivery fails |
+| PostgreSQL | alarm/member/channel state and delivery outboxes | alarm evaluation, alarm HTTP CRUD/query, or proactive delivery fails |
 | PostgreSQL YouTube outbox | claim, render, per-room delivery, and final send state | YouTube notification dispatch pauses |
 | Valkey | dispatch wakeup, cache, member epoch Pub/Sub | dispatch wakeup and cache coordination degrade |
 | `settings.json` + `PUT /internal/alarm/settings` | alarm advance minutes restore at startup and runtime apply from `hololive-api` | a failed apply keeps the previous target minutes until re-apply or restart |
@@ -63,17 +61,16 @@ YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim �
 - YouTube collection, owned by `youtube-collector`
 - YouTube canonical persist and notification intent, owned by `hololive-api` YouTube plane
 - Kakao command parsing, owned by the `hololive-api` bot plane
-- LLM summary generation, owned by the `hololive-api` LLM plane
 
 ## Startup requirements
 
-`DEC-20260926-youtube-only-stream-providers`에 따라 Chzzk·Twitch client와 조회 루프, platform mapping 동기화는 제거했습니다. 관련 자격 증명과 `ALARM_TWITCH_ENABLED`를 소비하지 않습니다. 보관된 비유튜브 방송 envelope는 전송 전에 기존 실패 경로로 거부하며 YouTube URL로 바꾸지 않습니다. 기존 retry 상한과 DLQ 전이는 유지합니다. X Spaces·celebration·digest 알림과 YouTube 상태 소유권은 별도 계약대로 유지합니다.
+`DEC-20260926-youtube-only-stream-providers`에 따라 Chzzk·Twitch client와 조회 루프, platform mapping 동기화는 제거했습니다. 관련 자격 증명과 `ALARM_TWITCH_ENABLED`를 소비하지 않습니다. 보관된 비유튜브 방송 envelope는 전송 전에 기존 실패 경로로 거부하며 YouTube URL로 바꾸지 않습니다. 기존 retry 상한과 DLQ 전이는 유지합니다. X Spaces·celebration 알림과 YouTube 상태 소유권은 별도 계약대로 유지합니다.
 
 - PostgreSQL and Valkey availability
 - `NOTIFICATION_SCHEDULER_ROLE=worker` in the current deployment; the production validator accepts `worker|off`, and the Quadlet unit pins `worker` so the single instance always runs the alarm checker/scheduler
 - A single running instance: proactive egress exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims plus the Quadlet `ContainerName=`/fixed host port, not from a Valkey lease
 - `STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profiles/alarm-worker.json`
-- production profile executors `alarm_dispatch`, `notification_delivery`, and `youtube_delivery` enabled; v1 `youtube_delivery` and v2 `notification_delivery` are canonical direct-egress pipelines, not v3 handoff sources (`DEC-20260926-hololive-outbox-v3-convergence`)
+- production profile executors `alarm_dispatch` and `youtube_delivery` enabled; v1 `youtube_delivery` is a canonical direct-egress pipeline, not a v3 handoff source (`DEC-20260926-hololive-outbox-v3-convergence`)
 - Alarm timing/config env
 - `BIRTHDAY_STREAM_RUNNER_ENABLED=true` only after the birthday stream template is present and full-roster producer discovery has been verified
 
@@ -87,7 +84,7 @@ Runtime은 scheduler·egress·celebration·birthday stream·X Spaces runner를 �
 
 부모 종료에 따른 순수 context 오류만 정상 종료로 처리합니다. 취소와 실제 오류가 함께 반환되면 오류 채널 또는 ERROR 로그에 원인을 남기며, 종료 중 소비되지 않는 오류 채널 때문에 작업이 멈추지 않도록 합니다.
 
-Alarm-worker는 Karing template을 보내지 않습니다(`DEC-20260926-hololive-karing-egress-disposition`). Karing 전역 전송 슬롯과 chunk planner는 Karing 경로와 함께 삭제했습니다. admission을 증명하지 못한 202 결과 불명은 SENDING(YouTube outbox), quarantine(alarm dispatch), `QUARANTINED`(notification)로 보존하고, handoff 결과 불명은 세 handoff reconciler가 격리합니다.
+Alarm-worker는 Karing template을 보내지 않습니다(`DEC-20260926-hololive-karing-egress-disposition`). Karing 전역 전송 슬롯과 chunk planner는 Karing 경로와 함께 삭제했습니다. admission을 증명하지 못한 202 결과 불명은 SENDING(YouTube outbox), quarantine(alarm dispatch)으로 보존하고, handoff 결과 불명은 두 handoff reconciler가 격리합니다.
 
 Alarm dispatch payload/전달 문맥 복원 실패와 event 누락은 PostgreSQL worker fence 및 rows-affected 검증으로 DLQ 전이가 확인된 뒤 해당 delivery의 dedup 키를 해제합니다. 전이 실패·정상 전달·retry·결과 불명에서는 이 해제를 수행하지 않습니다.
 
@@ -124,29 +121,17 @@ N분 전·일정 변경 알림은 key가 달라 실패해도 catchup을 막지 �
 
 DB subscriber fallback은 이번 조회 결과만 반환하고 positive set을 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. set이 빈 채널은 eviction과 구분되지 않으므로 해당 채널을 DB에서 다시 확인합니다. 구독자 조회는 cache·DB 쌍마다 하나인 `alarmstore.SubscriberResolver`가 담당하며, 여러 채널의 빈 set은 한 번의 batch DB 조회로 확정합니다. 전체 rebuild는 단일 worker의 구독 mutation mutex 아래에서 `ScanKeyPages`로 page마다 subscriber key를 지운 뒤 DB snapshot을 읽어 다시 씁니다.
 
-범용 delivery dispatcher·consumer store·maintenance·SQL은 `internal/egress/notificationdelivery`가 소유하며, shared `pkg/service/delivery`에는 producer enqueue 저장소·sender interface·Iris transport만 남습니다. 발송 attempt는 `notification_delivery.executor.attempt_timeout`(기본 10초)을 따르며 더 짧은 부모 deadline을 적용합니다. dispatcher는 profile 값을 기본값으로 바꾸지 않고, 잘못된 설정이면 기동에 실패합니다. stale SENDING 임계값은 60초 sending lease 이상이어야 합니다. 실행 가능한 슬롯 수만큼 방별 첫 due 항목을 claim하고, 실행 중인 방과 다른 owner가 처리 중인 방의 후행 항목은 claim하지 않습니다. 따라서 슬롯·방별 순서를 기다리는 항목의 60초 lease를 미리 소비하지 않습니다. `OUTCOME_UNKNOWN`·admission 결과 불명·호출 이후 timeout/cancel은 상태·소유자·시도 횟수 fence로 QUARANTINED 전이를 시도합니다. 저장 실패 시 SENDING 증거를 유지하여 stale sweep이 처리하며, 확정 성공 후 DB 반영 실패도 일반 미발송 실패로 바꾸지 않습니다. `Dispatcher.Run(ctx)`은 claim·발송 loop와 bounded maintenance loop(stale SENDING 격리, FAILED 집계, 보존 정리)를 따로 실행하므로 maintenance가 느려도 claim·poll을 막지 않습니다. 한 loop가 panic으로 끝나면 다른 loop도 취소하고 둘 다 join한 뒤 오류를 lifecycle owner에 반환합니다.
-
-notification 소비자의 모든 소유자 전이(발송 전이·요청 고정·발송 완료·실패·격리·409 `CLIENT_REQUEST_ID_FAILED` 세대 재발급)는 공통 `internal/egress/sendfence` 규약을 따릅니다. 각 SQL 문장은 대상 행을 잠근 뒤 채취한 `clock_timestamp()` 하나로 상태·소유자(`locked_by`)·claim 당시 시도 횟수(`attempt_count`)·발송 전 lease를 계산해 모두 맞을 때만 갱신하고, 같은 문장에서 관측값을 돌려줍니다. 요청 조건은 저장 JSON 전체 등가가 아니라 최초 고정이면 미고정(`request IS NULL`), 재발급이면 기대 세대 등가와 미소진입니다. 고정된 본문·경로·base ID는 바뀌지 않으며 재발급은 세대 또는 `exhausted`만 바꿉니다. 갱신되지 않으면 bool 대신 `*sendfence.MissError`를 돌려주고, 원인은 처음 어긋난 조건(`missing`·`status_changed`·`owner_changed`·`version_changed`·`lease_expired`·`request_changed`)입니다. 같은 worker 이름이 재시도 뒤 다시 claim한 행에서 이전 claim의 늦은 전이는 `version_changed`로 거절됩니다. producer rearm은 `attempt_count`를 0으로 되돌리므로, 같은 worker의 다음 claim은 `processReady`가 한 poll의 모든 항목 처리를 join한 뒤에만 일어난다는 직렬성이 rearm 뒤 이전 claim의 늦은 전이를 막는 불변식입니다. 소유권이 그대로인 `request_changed`만 소유자·시도 횟수 fence가 걸린 실패 전이로 즉시 끝냅니다. 재발급이면 같은 문장에서 저장된 요청에 `exhausted`를 세운 종료 FAILED라 producer rearm이 되살리지 않고, 발송 전 고정이면 일반 재시도 정책을 따릅니다. 발송 전 미스는 발송하지 않고 끝내며, 발송 후 미스는 외부 결과를 되돌리지 않고 로그·지표만 남깁니다. 소유권을 잃은 미스는 sweep이나 새 소유자가 만든 상태를 덮어쓰지 않도록 행을 건드리지 않습니다. 따라서 확정된 pre-handoff 충돌은 SENDING에 남아 결과 불명으로 격리되지 않습니다. 미스가 아닌 DB 오류는 commit 여부를 모르므로 SENDING을 유지해 stale sweep이 처리합니다. 저장소도 0 이하의 claim·sending lease, stale 임계값·격리 상한, 보존 기간을 기본값으로 바꾸지 않고 오류로 거절합니다.
-
 YouTube 전송은 `youtube_delivery.executor.attempt_timeout`을 실제 전송 예산으로 사용합니다. dispatcher의 발송 컨텍스트 timeout(`DeliverySendTimeout`)이 이 값이며 별도 설정 키는 없습니다. `youtube_delivery.delivery_send_timeout_ms`는 11.0.0에서 제거되었고, worker settings는 모르는 키를 거부합니다.
 
 발송 후 `CompleteSent`·`ApplyStartedFailure`·request generation 전이는 caller 취소와 분리된 하나의 5초 예산을 사용합니다. 기존 transaction 재시도와 primary read-back도 같은 deadline 안에서 수행하며 provider 호출은 원래 취소 가능한 context를 유지합니다. 결과 불명을 미발송으로 바꾸거나 새 발송·재발급 예산을 만들지 않습니다. fallback singleton의 request 준비·고정 실패는 기존 SENDING 보류와 stale quarantine 경로를 유지합니다.
 
-한 poll에서 같은 notification outbox ID는 한 번만 처리합니다. 처리한 ID 목록은 batch 크기 이내로 유지하고 다음 poll에 초기화하여 짧은 backoff나 재발급이 같은 poll에서 재시도 예산을 연속 소비하지 않게 합니다.
+두 발송 경로는 최초 외부 발송 전에 최종 본문·경로·요청 ID 관계를 저장하고 재시도에서 재사용합니다. alarm과 YouTube의 묶음은 membership도 고정합니다. `CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패와 alarm dispatch·YouTube handoff reconciler가 확인한 `failed`만 SDK의 결정적 r1/r2 generation을 허용하며, 기존 attempt·시간 상한을 유지합니다. unknown·payload mismatch·already exists·code 없는 409·transport 오류에는 새 ID를 발급하지 않습니다.
 
-범용 notification cleanup은 후보 선정과 최종 DELETE 양쪽에서 `SENT/FAILED/QUARANTINED` 및 `COALESCE(sent_at,created_at) < cutoff`를 검사합니다. cutoff는 각 배치 문장의 DB `statement_timestamp()`에서 보존 기간을 뺀 값이며 worker 시계를 쓰지 않습니다. producer의 재활성화나 terminal 시각 갱신을 기다렸다면 최신 행으로 재검사하여 PENDING 또는 기한 내 행을 보존합니다. immutable request payload·exhausted 재발급 제한은 바꾸지 않습니다.
+새 Markdown lane은 `SendRichText`와 저장 route `richtext`를 사용하며 기존 `BOT_MARKDOWN_REPLIES`·오픈채팅 판정을 유지합니다. 두 발송 경로는 템플릿의 `plain`·`richtext` 변형을 모두 렌더하고 `PrepareMessageRequest`가 방 유형으로 하나를 골라 고정합니다(richtext 경로는 `richtext` 변형, text 경로는 `plain` 변형의 `kakaoformat.Render`). 저장된 고정 요청은 `text`·`richtext` route만 발송합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절됩니다. 아래 서식 admission·handoff 규칙은 RichText에 적용됩니다. 저장 경로 제약은 epoch-3 baseline에 포함되어 있으며, 새 RichText 요청 저장 후 구형 writer 롤백은 하지 않습니다.
 
-cleanup의 반복 종료는 실제 삭제 수가 아니라 해당 statement에서 선정한 후보 수로 판정합니다. 후보 창이 가득 찼다면 rearm/cutoff 재검사로 삭제가 0개여도 다음 창을 처리합니다. 반환 수량은 실제 확정 삭제만 합산하며, 뒤 배치가 실패해도 앞 배치의 commit 수량은 보존합니다. 기존 배치 한도·yield·호출자 context는 유지합니다.
-
-세 발송 경로는 최초 외부 발송 전에 최종 본문·경로·요청 ID 관계를 저장하고 재시도에서 재사용합니다. alarm과 YouTube의 묶음은 membership도 고정합니다. `CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패와 alarm dispatch·notification·YouTube handoff reconciler가 확인한 `failed`만 SDK의 결정적 r1/r2 generation을 허용하며, 기존 attempt·시간 상한을 유지합니다. unknown·payload mismatch·already exists·code 없는 409·transport 오류에는 새 ID를 발급하지 않습니다.
-
-새 Markdown lane은 `SendRichText`와 저장 route `richtext`를 사용하며 기존 `BOT_MARKDOWN_REPLIES`·오픈채팅 판정을 유지합니다. 세 발송 경로는 템플릿의 `plain`·`richtext` 변형을 모두 렌더하고 `PrepareMessageRequest`가 방 유형으로 하나를 골라 고정합니다(richtext 경로는 `richtext` 변형, text 경로는 `plain` 변형의 `kakaoformat.Render`). 저장된 고정 요청은 `text`·`richtext` route만 발송합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절됩니다. 아래 서식 admission·handoff 규칙은 RichText에 적용됩니다. 저장 경로 제약은 epoch-3 baseline에 포함되어 있으며, 새 RichText 요청 저장 후 구형 writer 롤백은 하지 않습니다.
-
-텍스트 lane은 `SendMessageAccepted`로 202를 받고 requestId만 요구합니다. 운영 중인 bot plane 텍스트 경로와 같은 규칙이며, Iris 계약이 텍스트 202의 `delivery` 값을 정하지 않으므로 `delivery`·`success`는 보지 않습니다. 같은 `IrisMessageSender`를 쓰는 alarm dispatch·youtube·notification 텍스트 발송 모두에 적용되어, requestId 없는 텍스트 202는 성공이 아니라 결과 불명입니다(alarm dispatch 격리, youtube 결과 불명 실패, notification `QUARANTINED`). Markdown lane은 `success`·`delivery=queued`·requestId를 모두 요구합니다. 두 lane 모두 202가 admission을 증명하면 `/reply-status`를 조회하지 않고 requestId를 바로 돌려주므로, sender 성공은 durable admission만 뜻합니다. admission을 증명하지 못한 202는 `sendoutcome.ErrAdmissionOutcomeUnknown`(`OutcomeUnknown`)입니다. handoff 확인은 아래 세 reconciler(alarm dispatch·notification·youtube)만 각자의 원장에서 하며, 각 executor `attempt_timeout`은 admission 호출에만 걸립니다. handoff 확인 지평은 원장별 worker settings `handoff_horizon_ms`(`alarm_dispatch`·`notification_delivery`·`youtube_delivery`)입니다.
+텍스트 lane은 `SendMessageAccepted`로 202를 받고 requestId만 요구합니다. 운영 중인 bot plane 텍스트 경로와 같은 규칙이며, Iris 계약이 텍스트 202의 `delivery` 값을 정하지 않으므로 `delivery`·`success`는 보지 않습니다. 같은 `IrisMessageSender`를 쓰는 alarm dispatch·youtube 텍스트 발송 모두에 적용되어, requestId 없는 텍스트 202는 성공이 아니라 결과 불명입니다(alarm dispatch 격리, youtube 결과 불명 실패). Markdown lane은 `success`·`delivery=queued`·requestId를 모두 요구합니다. 두 lane 모두 202가 admission을 증명하면 `/reply-status`를 조회하지 않고 requestId를 바로 돌려주므로, sender 성공은 durable admission만 뜻합니다. admission을 증명하지 못한 202는 `sendoutcome.ErrAdmissionOutcomeUnknown`(`OutcomeUnknown`)입니다. handoff 확인은 아래 두 reconciler(alarm dispatch·youtube)만 각자의 원장에서 하며, 각 executor `attempt_timeout`은 admission 호출에만 걸립니다. handoff 확인 지평은 원장별 worker settings `handoff_horizon_ms`(`alarm_dispatch`·`youtube_delivery`)입니다.
 
 Alarm dispatch는 텍스트·Markdown 모두 202의 Iris requestId를 `MarkSent`와 같은 문장에서 send unit에 저장하고, `alarm-dispatch-handoff-reconciler`가 admission 뒤 min(5s, `handoff_horizon_ms`)에 첫 확인을 하고 이어 15s·60s·5분 간격으로 지평(`alarm_dispatch` `handoff_horizon_ms`)까지 `/reply-status`를 확인합니다. 첫 확인도 지평에서 잘리므로 5s보다 짧은 지평을 넘기지 않습니다. 조회는 트랜잭션 밖에서 병렬로 하고, 정산은 soft claim 토큰·요청 ID·멤버 전원 `sent`를 다시 확인하는 단일 문장을 일반 연결 획득으로 동시 2건까지만 실행합니다. 조회 5s와 정산 5s 예산의 합이 soft claim 15s보다 짧아 같은 단위의 확인이 겹치지 않습니다. 정산 예산을 넘긴 정산은 포기하고 다음 확인이 다시 판정하므로 경고로 남깁니다. 완료는 확인 종료, `failed`는 재발급 또는 DLQ, 결과 불명·404·지평 미확인은 격리입니다. DLQ commit 뒤 claim 키 해제는 정산 예산과 별도인 5s 예산을 씁니다. 토큰·요청은 맞지만 멤버가 더 이상 모두 `sent`가 아니면(멤버가 모두 지워진 단위 포함) 전이 없이 확인을 닫고 `check closed without transition` 오류 로그를 남깁니다.
-
-Notification delivery는 자체 원장(`notification_delivery_outbox`)에 같은 확인을 둡니다(migration 330·338). 발송 완료(`MarkSent`)는 같은 문장에서 202의 Iris requestId를 `handoff_request_id`에, 첫 확인 시각(DB 시각 + min(5s, `handoff_horizon_ms`))을 `handoff_next_check_at`에 기록합니다. `notification_delivery` executor가 켜져 있을 때만 등록되는 `notification-delivery-handoff-reconciler`가 alarm dispatch reconciler와 같은 soft claim·트랜잭션 밖 조회·예산(조회 5s, 정산 5s, 정산 동시 2건)·간격으로 지평(`notification_delivery` `handoff_horizon_ms`)까지 확인합니다. 정산 예산을 넘긴 정산은 적용하지 않고 다음 확인이 다시 판정합니다. 정산 문장은 행을 잠근 뒤 soft claim 토큰·`handoff_request_id`·고정 요청 세대를 다시 확인하며 소유자·lease는 보지 않습니다. 완료는 확인 종료(SENT 유지), `failed`는 요청 세대 < 2이고 발송 실패와 같은 `max_retries` 예산이 남으면 `PENDING`·attempt + 1·`retry_backoff_ms` 뒤 다음 시도·요청 세대 + 1(다음 claim이 같은 본문을 `:r1`/`:r2`로 발송), 아니면 저장된 요청에 `exhausted`를 세운 종료 `FAILED`(producer rearm 대상 아님), 결과 불명·404·지평 미확인은 `QUARANTINED`입니다. 이 원장에는 `last_error_code`가 없어 `error`가 같은 handoff 코드(`handoff_failed: …` 등)로 시작합니다. 방 순서: handoff 확인이 끝나지 않은 SENT 행(`handoff_request_id`가 있고 `handoff_checked_at`이 없는 행, migration 330 CHECK상 `handoff_next_check_at`이 있는 행과 같음)은 SENDING 행처럼 같은 방 후행 행의 claim을 막습니다. claim 술어는 이 행을 `handoff_next_check_at IS NOT NULL`로 고르며 migration 338 부분 index와 같은 조건입니다. Markdown·텍스트 발송 모두 handoff 확인이 끝날 때까지(지평 이내) 같은 방 후행 발송을 보류합니다. 재발급된 행은 일반 실패 재시도처럼 새 `next_attempt_at`으로 기존 `(next_attempt_at, created_at, id)` 방 순서에 다시 들어가므로, 이미 due인 같은 방 후행 행이 먼저 나갈 수 있습니다. 엄격한 생성 순서는 보장하지 않습니다.
 
 YouTube delivery는 고정 요청(`youtube_notification_send_request`)에 같은 확인을 둡니다(migration 336·339). `CompleteSent`는 고정 요청을 멤버 delivery보다 먼저 잠그고, SENT 전이·tracking·telemetry·SENT 원장과 같은 트랜잭션에서 202의 Iris requestId와 첫 확인 시각(SENT 전이의 DB 시각 + min(5s, `youtube_delivery` `handoff_horizon_ms`))을 기록합니다. 요청 세대·고정 멤버가 이번 발송과 다르거나 requestId가 비면 전이하지 않고 SENDING으로 남겨 stale sweep에 맡깁니다. `youtube_delivery` executor가 켜져 있을 때만 등록되는 `youtube-delivery-handoff-reconciler`가 같은 soft claim(15s)·트랜잭션 밖 조회(5s)·정산 예산(5s, 슬롯 대기 포함, 일반 연결 획득)·batch 32·정산 동시 2건·간격으로 지평까지 확인합니다. 정산은 고정 요청 → 영향 부모 outbox(id 순서) → 논리 그룹 delivery → 원장 순서로 잠근 한 트랜잭션입니다. 부모 id는 그룹 잠금과 같은 후보 조건으로 미리 읽어 잠그므로 보존 정리·fanout과 같은 부모 → 자식 순서이며, 그 사이 같은 논리 키의 follower·outbox가 들어와 부모 집합이 늘었으면 새 부모를 더 잠그지 않고 아무것도 바꾸지 않은 fence 미스로 끝냅니다. 이 미스는 확인을 닫지 않으므로 soft claim 뒤 다음 확인이 늘어난 집합으로 정산합니다. `failed` 재발급·소진·결과 불명 격리는 고정 멤버 밖 중복 물리행까지 논리 그룹의 SENT 행을 함께 PENDING·FAILED·QUARANTINED로 옮기고, 그 owner를 출처로 한 SENT 원장만 지우며(격리는 같은 출처의 QUARANTINED 원장으로 교체), 재발급은 요청 세대를 올려 같은 고정 본문을 `:r1`/`:r2`로 다시 보냅니다. 바뀐 delivery의 부모 outbox 집계도 아래 부모 집계와 같은 문장으로 그 트랜잭션 끝에서 다시 계산하므로, 집계가 실패하면 delivery·원장·요청 갱신이 함께 되돌아가고 claim 토큰이 남아 soft claim 뒤 다음 확인이 다시 정산합니다. 정산 뒤 별도 집계나 보정 scan은 없습니다. 집계는 outbox `sent_at`을 지우지 않으므로 SENT였던 부모는 FAILED·PENDING이 되어도 처음 SENT 시각을 유지합니다. post 단위 tracking·알람 발송 표시는 되돌리지 않습니다.
 
@@ -169,13 +154,12 @@ request snapshot/generation을 보존하지 못하는 구버전 바이너리로 
 - Logs: `sudo journalctl -u hololive-alarm-worker.service -f`
 - Health: `https://127.0.0.1:30007/health`
 - Ready: `https://127.0.0.1:30007/ready`; authenticated `/diagnostics/workers` reports profile match, executors, and real queue snapshots.
-- Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority. `notification_delivery`·`youtube_delivery` executor는 `notification:delivery:wakeup`·`youtube:delivery:wakeup`을 `BRPOP`으로 기다리고 Valkey 오류 때 `poll_interval_ms`로 조회합니다. 대기 결과는 `hololive_delivery_wakeup_waits_total{channel,result}`입니다. `alarm_dispatch` executor는 같은 대기 구현(`internal/egress/wakeupwait`)으로 `alarm:dispatch:wakeup`을 기다리되 `BRPOP` 상한이 `idle_backoff_max_ms`이고, wakeup을 끄거나 Valkey 오류 때 `poll_interval_ms`로 조회합니다. 대기 결과는 `alarm_dispatch_runner_wakeup_*_total`과 `alarm_dispatch_runner_idle_wait_seconds{wait_mode}`입니다.
+- Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority. `youtube_delivery` executor는 `youtube:delivery:wakeup`을 `BRPOP`으로 기다리고 Valkey 오류 때 `poll_interval_ms`로 조회합니다. 대기 결과는 `hololive_delivery_wakeup_waits_total{channel,result}`입니다. `alarm_dispatch` executor는 같은 대기 구현(`internal/egress/wakeupwait`)으로 `alarm:dispatch:wakeup`을 기다리되 `BRPOP` 상한이 `idle_backoff_max_ms`이고, wakeup을 끄거나 Valkey 오류 때 `poll_interval_ms`로 조회합니다. 대기 결과는 `alarm_dispatch_runner_wakeup_*_total`과 `alarm_dispatch_runner_idle_wait_seconds{wait_mode}`입니다.
 - Metrics: alarm-dispatch backlog/retention metrics (the v3 handoff metrics were removed with the handoff)
 - YouTube 공통 attempt counter는 실제 provider operation을 집계하며 grouped 호출 1회와 방별 delivery 결과를 구분합니다. 준비·claim·이미 충족된 행은 provider success로 세지 않습니다. provider 성공과 DB finalization 실패도 별도로 유지합니다.
-- alarm dispatch·notification·YouTube 발송기의 attempt outcome(`/diagnostics/workers`의 attempt 집계와 `iris_stack_worker_attempts_total{outcome}`)은 `sendoutcome.AttemptOutcome` 하나가 정합니다. Iris의 명시적 결과 불명 증거(409 `CLIENT_REQUEST_ID_OUTCOME_UNKNOWN`, admission을 증명하지 못한 202)는 함께 결합된 deadline·취소보다 우선해 `outcome_unknown`입니다. 그 밖에는 deadline이 `timeout`, 취소가 `canceled`, 응답 소실 가능 transport 오류가 `outcome_unknown`, 확정 실패가 `failed`입니다. YouTube는 발송 예산(`DeliverySendTimeout`) 초과도 `timeout`으로 세고, Iris 실패 sentinel(`ErrPermanent`·`ErrAuthFailed`·`ErrRateLimited`·`ErrTransport`·`ErrNotSent`)이 없는 오류(5xx 포함)를 lifecycle과 같이 `outcome_unknown`으로 셉니다. alarm dispatch·notification은 이런 미분류 오류를 `failed`로 셉니다. provider 호출 중 panic은 `panic`입니다.
+- alarm dispatch·YouTube 발송기의 attempt outcome(`/diagnostics/workers`의 attempt 집계와 `iris_stack_worker_attempts_total{outcome}`)은 `sendoutcome.AttemptOutcome` 하나가 정합니다. Iris의 명시적 결과 불명 증거(409 `CLIENT_REQUEST_ID_OUTCOME_UNKNOWN`, admission을 증명하지 못한 202)는 함께 결합된 deadline·취소보다 우선해 `outcome_unknown`입니다. 그 밖에는 deadline이 `timeout`, 취소가 `canceled`, 응답 소실 가능 transport 오류가 `outcome_unknown`, 확정 실패가 `failed`입니다. YouTube는 발송 예산(`DeliverySendTimeout`) 초과도 `timeout`으로 세고, Iris 실패 sentinel(`ErrPermanent`·`ErrAuthFailed`·`ErrRateLimited`·`ErrTransport`·`ErrNotSent`)이 없는 오류(5xx 포함)를 lifecycle과 같이 `outcome_unknown`으로 셉니다. alarm dispatch는 이런 미분류 오류를 `failed`로 셉니다. provider 호출 중 panic은 `panic`입니다.
 - Alarm retention의 기존 7개 status label은 advisory lock 안의 삭제 transaction이 commit된 뒤 계상합니다. rollback·lock 미획득·commit 응답 불명은 계상하지 않으며, commit 직후 process 종료까지 보장하는 감사 원장은 아닙니다. `alarm_dispatch_pg_mark_sending_failed_total`은 발송 진입(Begin) 실패당 한 번 증가하고 빈 입력·성공에는 증가하지 않습니다. `alarm_dispatch_pg_transition_partial_total{action,reason}`은 소유자 전이 미스마다 원인별로 한 번 증가합니다.
 - YouTube ready snapshot은 부모 created_at freshness·due·lock 조건을 실제 claim과 맞춥니다. `hololive_youtube_delivery_expired_pending_bounded`는 만료 대기 PENDING 수를 기존 batch size까지만 보여 주므로 전체 backlog 총수가 아닙니다.
-- `hololive_notification_delivery_fence_miss_total{action,reason,result}`는 notification 소유자 전이와 handoff 확인 정산의 fence 미스 행마다 한 번 증가합니다. `action`은 `mark_sending`·`save_request`·`mark_sent`·`mark_failed`·`mark_quarantined`·`reissue_request`와 handoff 정산의 `handoff_complete`·`handoff_reschedule`·`handoff_reissue`·`handoff_exhaust`·`handoff_quarantine`, `reason`은 위 미스 원인, `result`는 소유권이 남은 요청 미스에 실패 전이가 적용된 `failed`, 행을 건드리지 않은 `fence_lost`(handoff 정산 미스는 항상 이 값), 그 실패 전이가 DB 오류로 끝난 `transition_error`입니다. 외부 성공을 원장에 기록하지 못한 `mark_sent` 미스는 오류 로그로, 그 밖의 미스는 경고 로그로 남습니다.
 
 ## Related documents
 

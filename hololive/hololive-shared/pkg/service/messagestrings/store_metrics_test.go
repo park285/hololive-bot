@@ -200,13 +200,13 @@ func TestValidateReportsEveryMissingEntry(t *testing.T) {
 
 	err := store.Validate(Requirements{
 		Keys:       []Key{MiscVTuberFallback, MiscTimeUnknown, MiscAlarmNoTitle},
-		Namespaces: []string{NamespaceNewsCat},
+		Namespaces: []string{NamespaceCalendar},
 	})
 	if err == nil {
 		t.Fatal("Validate() error = nil, want missing entries")
 	}
 
-	for _, want := range []string{"misc/time_unknown", "misc/alarm_no_title", "newscat/*"} {
+	for _, want := range []string{"misc/time_unknown", "misc/alarm_no_title", "calendar/*"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Validate() error = %v, want mention of %s", err, want)
 		}

@@ -1,4 +1,4 @@
-// Package config: 단일 hololive-api 프로세스가 호스팅하는 bot·admin·llm plane과
+// Package config: 단일 hololive-api 프로세스가 호스팅하는 bot·admin plane과
 // YouTube background plane의 설정을 소유한다.
 package config
 
@@ -20,17 +20,15 @@ import (
 
 const (
 	defaultBotPort      = 30001
-	defaultLLMPort      = 30003
 	defaultAdminAPIPort = 30006
 )
 
-// RuntimeConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin/llm HTTP plane과
+// RuntimeConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin HTTP plane과
 // YouTube background plane을 담는다. 각 plane은 자체 bounded DB pool을 explicit bulkhead로
 // 유지하고, 프로세스 전역의 logging·GC·signal 처리는 부모 runtime이 소유한다.
 type RuntimeConfig struct {
 	Bot     *BotPlaneConfig
 	Admin   *AdminPlaneConfig
-	LLM     *LLMSchedulerConfig
 	YouTube YouTubePlaneConfig
 	Logging settings.LoggingConfig
 }
@@ -55,12 +53,7 @@ func LoadRuntime() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load hololive-api admin plane: %w", err)
 	}
 
-	llmConfig, err := buildLLMSchedulerConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load hololive-api llm plane: %w", err)
-	}
-
-	if err = configurePlanes(botConfig, adminConfig, llmConfig); err != nil {
+	if err = configurePlanes(botConfig, adminConfig); err != nil {
 		return nil, fmt.Errorf("configure hololive-api planes: %w", err)
 	}
 
@@ -74,7 +67,6 @@ func LoadRuntime() (*RuntimeConfig, error) {
 	config := &RuntimeConfig{
 		Bot:     botConfig,
 		Admin:   adminConfig,
-		LLM:     llmConfig,
 		YouTube: youtubeConfig,
 		Logging: logging,
 	}
@@ -99,7 +91,7 @@ func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *AP
 	config.ShutdownTimeout = workercontract.Milliseconds(observation.ShutdownTimeoutMS)
 }
 
-func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig, llmConfig *LLMSchedulerConfig) error {
+func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig) error {
 	var env envload.StrictEnv
 
 	adminPort := env.Int("HOLOLIVE_ADMIN_API_PORT", defaultAdminAPIPort)
@@ -114,18 +106,6 @@ func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig, l
 	adminConfig.AlarmServiceURL = botConfig.AlarmServiceURL
 	adminConfig.Postgres.PoolMinConns = env.Int("ADMIN_API_POSTGRES_POOL_MIN_CONNS", 1)
 	adminConfig.Postgres.PoolMaxConns = env.Int("ADMIN_API_POSTGRES_POOL_MAX_CONNS", 4)
-
-	llmPort := env.Int("LLM_SCHEDULER_PORT", defaultLLMPort)
-
-	llmConfig.Server.Port = llmPort
-	llmConfig.Server.HTTPTransports = envload.CommaSeparated(sharedenv.String("HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS", "h3"))
-	llmConfig.Server.H3Addr = sharedenv.String("HOLOLIVE_LLM_SCHEDULER_H3_ADDR", fmt.Sprintf(":%d", llmPort))
-	llmConfig.Server.H3CertFile = botConfig.Server.H3CertFile
-	llmConfig.Server.H3KeyFile = botConfig.Server.H3KeyFile
-	llmConfig.Server.MetricsAddr = ""
-	llmConfig.Server.PprofAddr = ""
-	llmConfig.Postgres.PoolMinConns = env.Int("LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS", 1)
-	llmConfig.Postgres.PoolMaxConns = env.Int("LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS", 4)
 
 	botPort := env.Int("SERVER_PORT", defaultBotPort)
 
@@ -146,8 +126,8 @@ func (c *RuntimeConfig) Validate() error {
 		return errors.New("config must not be nil")
 	}
 
-	if c.Bot == nil || c.Admin == nil || c.LLM == nil {
-		return errors.New("bot, admin and llm plane configs are required")
+	if c.Bot == nil || c.Admin == nil {
+		return errors.New("bot and admin plane configs are required")
 	}
 
 	if err := c.validateSharedPlanes(); err != nil {
@@ -206,10 +186,6 @@ func (c *RuntimeConfig) validatePlaneRuntimes() error {
 		return fmt.Errorf("admin plane: %w", err)
 	}
 
-	if err := c.LLM.validateRuntime(); err != nil {
-		return fmt.Errorf("llm plane: %w", err)
-	}
-
 	return nil
 }
 
@@ -227,10 +203,6 @@ func (c *RuntimeConfig) validatePlanePools() error {
 	}
 
 	if err := validatePlanePool("admin", &c.Admin.Postgres); err != nil {
-		return fmt.Errorf("validate plane pool: %w", err)
-	}
-
-	if err := validatePlanePool("llm", &c.LLM.Postgres); err != nil {
 		return fmt.Errorf("validate plane pool: %w", err)
 	}
 
@@ -282,11 +254,8 @@ func validateYouTubePlaneDatabaseRole(user string) error {
 func validatePlanePool(plane string, config *settings.PostgresConfig) error {
 	prefix := "BOT"
 
-	switch plane {
-	case "admin":
+	if plane == "admin" {
 		prefix = "ADMIN_API"
-	case "llm":
-		prefix = "LLM_SCHEDULER"
 	}
 
 	if config.PoolMinConns < 0 {
@@ -312,7 +281,6 @@ func validateListenerPorts(config *RuntimeConfig) error {
 	listeners := []listenerEndpoint{
 		{owner: "bot-h3", network: "udp", addr: config.Bot.Server.H3Addr, expectedPort: config.Bot.Server.Port, requirePortMatch: true},
 		{owner: "admin-h3", network: "udp", addr: config.Admin.Server.H3Addr, expectedPort: config.Admin.Server.Port, requirePortMatch: true},
-		{owner: "llm-h3", network: "udp", addr: config.LLM.Server.H3Addr, expectedPort: config.LLM.Server.Port, requirePortMatch: true},
 		{owner: "short-link", network: "tcp", addr: config.Bot.Server.ShortLinkAddr},
 		{owner: "metrics", network: "tcp", addr: config.Bot.Server.MetricsAddr},
 		{owner: "pprof", network: "tcp", addr: config.Bot.Server.PprofAddr},

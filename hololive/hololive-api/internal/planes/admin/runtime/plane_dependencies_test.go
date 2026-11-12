@@ -28,6 +28,7 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -74,10 +75,19 @@ func buildTestAdminHandlers(t *testing.T, infra *sharedmodules.InfraModule, deps
 		deps.Holodex = &holodexprovider.Service{}
 	}
 
+	var schedulePosters *scheduleposter.Store
+
+	if infra.Postgres != nil && infra.Postgres.GetPool() != nil {
+		schedulePosters, err = scheduleposter.NewStore(infra.Postgres.GetPool())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	domains, err := buildAdminHandlers(infra, deps, unusedAlarmProvider{}, adminAPISettings{
 		service: settingsService,
 		applier: adminsettings.NewSettingsApplier(unusedAlarmProvider{}),
-	}, nil, logger)
+	}, nil, schedulePosters, logger)
 	if err != nil {
 		t.Fatalf("buildAdminHandlers() error = %v", err)
 	}
@@ -96,7 +106,7 @@ func (r *recordingIrisRooms) GetRooms(context.Context) (*iris.RoomListResponse, 
 
 func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
 	rooms := &recordingIrisRooms{}
-	serve, aclService := newAdminTestRouter(t, rooms)
+	serve, aclService, _ := newAdminTestRouter(t, rooms)
 
 	if rec := serve(http.MethodGet, "/api/holo/rooms/joined", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "3001") || rooms.calls.Load() != 1 {
 		t.Fatalf("joined rooms = %d %s, iris calls %d; want 200 from injected lister", rec.Code, rec.Body.String(), rooms.calls.Load())
@@ -119,7 +129,7 @@ type adminTestServe func(method, path, body string) *httptest.ResponseRecorder
 
 // newAdminTestRouter는 process 조립과 같은 buildAdminHandlers·ProvideAPIRouter 경로로 admin router를 만든다.
 // ACL Service는 시험 DB를 쓰는 실제 인스턴스다.
-func newAdminTestRouter(t *testing.T, rooms *recordingIrisRooms) (adminTestServe, *acl.Service) {
+func newAdminTestRouter(t *testing.T, rooms *recordingIrisRooms) (adminTestServe, *acl.Service, *pgxpool.Pool) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -132,7 +142,7 @@ func newAdminTestRouter(t *testing.T, rooms *recordingIrisRooms) (adminTestServe
 		t.Fatal(err)
 	}
 
-	domains := buildTestAdminHandlers(t, &sharedmodules.InfraModule{MemberRepository: member.NewMemberRepository(postgres)},
+	domains := buildTestAdminHandlers(t, &sharedmodules.InfraModule{Postgres: postgres, MemberRepository: member.NewMemberRepository(postgres)},
 		Dependencies{ACL: aclService, IrisRooms: rooms}, logger)
 
 	appConfig := &apiconfig.AdminPlaneConfig{Server: settings.ServerConfig{APIKey: testAPIKey}}
@@ -155,5 +165,5 @@ func newAdminTestRouter(t *testing.T, rooms *recordingIrisRooms) (adminTestServe
 		return rec
 	}
 
-	return serve, aclService
+	return serve, aclService, pool
 }

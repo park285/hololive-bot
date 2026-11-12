@@ -26,9 +26,6 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 	t.Setenv("PHOTO_SYNC_ENABLED", "false")
 	useCollectorProfileFixture(t)
 	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
-	t.Setenv("LLM_MODEL", "")
-	t.Setenv("CLIPROXY_API_KEY", "")
-	t.Setenv("EXA_API_KEY", "")
 
 	for _, key := range []string{
 		"CACHE_HOST",
@@ -39,9 +36,6 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 		settingstest.IrisWebhookTokenEnv,
 		settingstest.IrisBotTokenEnv,
 		"KAKAO_ROOMS",
-		"LLM_MODEL",
-		"CLIPROXY_API_KEY",
-		"EXA_API_KEY",
 	} {
 		t.Setenv(key, "")
 

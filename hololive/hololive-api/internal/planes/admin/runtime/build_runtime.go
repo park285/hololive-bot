@@ -13,12 +13,15 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/photosync"
+	posterservice "github.com/kapu/hololive-api/internal/planes/admin/internal/scheduleposter"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -89,7 +92,17 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, fmt.Errorf("build admin X session store: %w", err)
 	}
 
-	domains, err := buildAdminHandlers(infra, deps, alarmClient, adminSettings, xSpaceSessions, logger)
+	schedulePosters, err := scheduleposter.NewStore(infra.Postgres.GetPool())
+	if err != nil {
+		return nil, fmt.Errorf("build admin schedule poster store: %w", err)
+	}
+
+	schedulePosterService, err := buildSchedulePosterService(ctx, appConfig.SchedulePosterConfigFile, schedulePosters, infra.MemberRepository, logger)
+	if err != nil && !errors.Is(err, posterservice.ErrDisabled) {
+		return nil, fmt.Errorf("build admin schedule poster service: %w", err)
+	}
+
+	domains, err := buildAdminHandlers(infra, deps, alarmClient, adminSettings, xSpaceSessions, schedulePosters, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin api runtime: %w", err)
 	}
@@ -99,11 +112,49 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, fmt.Errorf("build admin APIHTTP runtime: %w", err)
 	}
 
-	if appConfig.Ingestion.PhotoSyncEnabled {
-		runtime.PhotoSync = photosync.New(deps.Holodex, infra.Postgres.GetPool(), logger)
-	}
+	attachAdminBackgroundTasks(runtime, appConfig.Ingestion.PhotoSyncEnabled, deps.Holodex, infra, schedulePosterService, logger)
 
 	return runtime, nil
+}
+
+// attachAdminBackgroundTasks는 nil 서비스를 interface 필드에 넣지 않는다. 넣으면 backgroundTasks의 nil 검사를 통과한다.
+func attachAdminBackgroundTasks(
+	runtime *AdminAPIRuntime,
+	photoSyncEnabled bool,
+	holodex *holodexprovider.Service,
+	infra *sharedmodules.InfraModule,
+	schedulePoster *posterservice.Service,
+	logger *slog.Logger,
+) {
+	if photoSyncEnabled {
+		runtime.PhotoSync = photosync.New(holodex, infra.Postgres.GetPool(), logger)
+	}
+
+	if schedulePoster != nil {
+		runtime.SchedulePoster = schedulePoster
+	}
+}
+
+// buildSchedulePosterService는 설정 파일 경로가 비어 있으면 posterservice.ErrDisabled를 감싸 돌려준다.
+// 설정이 있는데 잘못되었으면 기동을 막는다.
+func buildSchedulePosterService(
+	ctx context.Context,
+	configFile string,
+	store *scheduleposter.Store,
+	members *member.Repository,
+	logger *slog.Logger,
+) (*posterservice.Service, error) {
+	config, err := posterservice.LoadConfig(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("load schedule poster config: %w", err)
+	}
+
+	service, err := posterservice.New(ctx, config, store, members, logger)
+	if err != nil {
+		return nil, fmt.Errorf("create schedule poster service: %w", err)
+	}
+
+	return service, nil
 }
 
 func normalizeAdminAPIRuntimeInputs(

@@ -31,27 +31,14 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/collabmembers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type Command interface {
 	Name() string
 	Description() string
 	Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error
-}
-
-type MemberNewsService interface {
-	GenerateRoomDigest(ctx context.Context, roomID string, period membernewsmodel.Period) (*membernewsmodel.Digest, error)
-	SubscribeRoom(ctx context.Context, roomID, roomName string) error
-	UnsubscribeRoom(ctx context.Context, roomID string) error
-	IsRoomSubscribed(ctx context.Context, roomID string) (bool, error)
-}
-
-type MajorEventRepository interface {
-	IsSubscribed(ctx context.Context, roomID string) (bool, error)
-	Subscribe(ctx context.Context, roomID, roomName string) error
-	Unsubscribe(ctx context.Context, roomID string) error
 }
 
 type CelebrationCalendarFinder interface {
@@ -64,6 +51,11 @@ type CalendarImageRenderer interface {
 
 type HelpImageProvider interface {
 	HelpImages(ctx context.Context) ([][]byte, error)
+}
+
+// SchedulePosterReader의 day는 JST 날짜다.
+type SchedulePosterReader interface {
+	PublishedImage(ctx context.Context, channelID string, day time.Time) (scheduleposter.Image, bool, error)
 }
 
 type BroadcastHistoryQuery struct {
@@ -137,12 +129,12 @@ type Dependencies struct {
 	CollabMembers       CollabMemberReader
 	Alarm               AlarmService
 	Matcher             *matcher.Matcher
-	MemberNews          MemberNewsService
 	BroadcastHistory    BroadcastHistoryRepository
 	ThumbnailDownloader BroadcastThumbnailDownloader
 	MembersData         domain.MemberDataProvider
 	Formatter           *formatter.ResponseFormatter
 	HelpImageProvider   HelpImageProvider
+	SchedulePosters     SchedulePosterReader
 	SendMessage         func(ctx context.Context, room, message string) error
 	SendImage           func(ctx context.Context, room string, imageData []byte) error
 	SendImages          func(ctx context.Context, room string, images [][]byte) error

@@ -10,6 +10,7 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 | --- | --- |
 | `hololive-bot/` | 중앙 운영 unit. 호스트의 `/etc/containers/systemd/hololive-bot/`에 설치합니다 |
 | `optional/x-spaces/` | `HOLOLIVE_X_SPACES_ENABLED=1`일 때만 설치하는 drop-in(`40-x-spaces.conf`) |
+| `optional/schedule-poster/` | `HOLOLIVE_SCHEDULE_POSTER_ENABLED=1`일 때만 설치하는 hololive-api drop-in(`41-schedule-poster.conf`) |
 | `hololive-bot-standby/` | 비활성 PostgreSQL 대기 서버 참고 unit. 중앙 설치 대상이 아니며 `[Install]`이 없습니다 |
 
 `optional/`은 설치 트리 밖에 둡니다. Quadlet은 같은 검색 루트 아래 형제 디렉터리의
@@ -21,7 +22,7 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 | `valkey-cache.container` | `valkey-cache` | Valkey HA hololive 그룹 노드. 역할은 `/data/valkey.conf`가 소유 |
 | `hololive-db-migrate.container` | `hololive-db-migrate` | one-shot. `[Install]` 없음 |
 | `hololive-alarm-worker.container` | `hololive-alarm-worker` | 알림 dispatcher(단일 인스턴스) |
-| `hololive-api.container` | `hololive-api` | bot/admin/llm plane |
+| `hololive-api.container` | `hololive-api` | bot/admin/YouTube plane |
 | `hololive-youtube-po-c.container` | `hololive-youtube-po-c` | collector c의 격리 PO issuer |
 | `hololive-youtube-collector-c.container` | `hololive-youtube-collector-c` | collector fleet c. network alias `youtube-collector` |
 | `admin-dashboard-ingress.container` | `admin-dashboard-ingress` | host network shortlink ingress |
@@ -47,9 +48,9 @@ sudo ./scripts/deploy/sync-opt-current.sh
 
 - hostname이 `kapu`이면 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1` 없이 거부합니다(두 번째 dispatcher 방지).
 - `compose.env`에 `HOLOLIVE_VALKEY_HA_ENABLED=1`과 비어 있지 않은 `VALKEY_SENTINEL_ADDRS`가 있어야 합니다.
-- `HOLOLIVE_X_SPACES_ENABLED`는 `0` 또는 `1`이며, 그 값에 따라 x-spaces drop-in을 설치하거나 지웁니다.
+- `HOLOLIVE_X_SPACES_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_ENABLED`는 `0` 또는 `1`이며, 그 값에 따라 각 선택 기능 drop-in을 설치하거나 지웁니다.
 - `compose.env`의 PostgreSQL pool 값이 연결 예산(`scripts/deploy/lib/postgres-capacity.sh`)을 넘으면 거부합니다.
-- 설치 전에 설치 뒤와 같은 구성(staged unit, 켜진 x-spaces drop-in, 설치 도구가 건드리지 않는 기존 drop-in)이
+- 설치 전에 설치 뒤와 같은 구성(staged unit, 켜진 선택 기능 drop-in, 설치 도구가 건드리지 않는 기존 drop-in)이
   `quadlet -dryrun`을 통과해야 합니다. 실패하면 `/opt`·prestart·unit을 바꾸지 않습니다.
 - 설치 뒤 실행 트리가 root 소유여야 합니다.
 

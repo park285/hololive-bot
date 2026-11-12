@@ -11,9 +11,3 @@ const (
 	testParamLimit  = "limit"
 	testParamAll    = "all"
 )
-
-const (
-	testActionOn     = "on"
-	testActionOff    = "off"
-	testActionStatus = "status"
-)

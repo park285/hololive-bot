@@ -22,7 +22,6 @@ package formatter
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -30,10 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
-	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
-	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 func TestFormatHelp_SeeMoreFoldToggle(t *testing.T) {
@@ -70,7 +66,6 @@ func TestListFoldingUsesDisplayedCountRegardlessOfLength(t *testing.T) {
 			domain.TemplateKeyCmdLiveStreams: body, domain.TemplateKeyCmdUpcomingStreams: body,
 			domain.TemplateKeyCmdChannelSchedule: body, domain.TemplateKeyCmdAlarmList: body,
 			domain.TemplateKeyCmdMemberDirectory: body, domain.TemplateKeyCmdCalendar: body,
-			domain.TemplateKeyCmdMemberNewsDigest: body,
 		})
 
 		for _, tc := range []struct {
@@ -112,9 +107,6 @@ func TestListFoldingUsesDisplayedCountRegardlessOfLength(t *testing.T) {
 				"history": func(f *ResponseFormatter) string {
 					return f.BroadcastHistory(t.Context(), BroadcastHistoryFilter{MemberName: strings.Repeat("긴 필터", 100)}, history)
 				},
-				"news": func(f *ResponseFormatter) string {
-					return f.FormatMemberNewsDigest(t.Context(), &membernewsmodel.Digest{TopItems: make([]membernewsmodel.SummaryItem, tc.count), TotalCount: 100})
-				},
 			}
 			for name, call := range calls {
 				t.Run(fmt.Sprintf("%s/%d/%d", name, tc.count, len(body)), func(t *testing.T) {
@@ -154,24 +146,16 @@ func TestFilteredEmptyAndUnknownResultsStayUnfolded(t *testing.T) {
 	assert.Equal(t, "현재 방송 상태를 확인할 수 없습니다.", f.LiveQuery(t.Context(), livequery.Result{Status: livequery.Partial}, "", nil))
 }
 
-func TestDetailAndNewsSummaryFolding(t *testing.T) {
+func TestDetailFolding(t *testing.T) {
 	for _, body := range []string{"머리\n\n본문", "머리\n\n" + strings.Repeat("본문", 300)} {
-		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{domain.TemplateKeyCmdHelp: body, domain.TemplateKeyCmdProfile: body, domain.TemplateKeyCmdMemberNewsDigest: body})
+		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{domain.TemplateKeyCmdHelp: body, domain.TemplateKeyCmdProfile: body})
 		f := NewResponseFormatter("!", renderer, WithSeeMoreFold(true))
 		assertFoldedBody(t, f.FormatHelp(t.Context()), body, true)
 		assertFoldedBody(t, f.FormatMemberInfo(t.Context(), &domain.Member{Name: "멤버"}), body, true)
-		assertFoldedBody(t, f.FormatMemberNewsDigest(t.Context(), &membernewsmodel.Digest{TopItems: []membernewsmodel.SummaryItem{{Title: "항목"}}, MoreSummary: "추가 소식"}), body, true)
 	}
 }
 
 func TestRenderFailureStaysUnfolded(t *testing.T) {
 	f := NewResponseFormatter("!", nil, WithSeeMoreFold(true), WithMessageStrings(setupFormatterTestStore(t)))
 	assert.Equal(t, renderFailureMessage, f.FormatAlarmList(t.Context(), []AlarmListEntry{{}, {}}))
-}
-
-func TestNormalEmptyNewsUsesUnfoldedTemplateNotice(t *testing.T) {
-	f := NewResponseFormatter("!", template.NewRenderer(dbtest.NewPool(t), slog.New(slog.DiscardHandler)), WithSeeMoreFold(true))
-	got := f.FormatMemberNewsDigest(t.Context(), &membernewsmodel.Digest{Headline: "뉴스"})
-	assert.NotEmpty(t, got)
-	assert.NotContains(t, got, strings.Repeat("\u200b", 500))
 }

@@ -78,9 +78,7 @@ func buildBotInfrastructureServices(
 	owner.internalClients = append(owner.internalClients, alarmClient)
 
 	integrationServices := &CoreIntegrationServices{
-		ACLService:           planeDeps.ACL,
-		MajorEventRepository: planeDeps.MajorEvent,
-		MemberNewsService:    planeDeps.MemberNews,
+		ACLService: planeDeps.ACL,
 	}
 
 	deps := BuildBotDependencies(

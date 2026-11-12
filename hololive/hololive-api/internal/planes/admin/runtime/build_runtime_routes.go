@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-api/internal/service/activity"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -23,6 +24,7 @@ func buildAdminHandlers(
 	alarmClient alarmProvider,
 	adminSettings adminAPISettings,
 	xSpaceSessions *xspaces.Store,
+	schedulePosters *scheduleposter.Store,
 	logger *slog.Logger,
 ) (*server.DomainHandlers, error) {
 	var dispatchOps server.DispatchOperations
@@ -32,19 +34,20 @@ func buildAdminHandlers(
 	}
 
 	domains, err := server.NewDomainHandlers(server.Deps{
-		Logger:         logger,
-		Activity:       activity.NewActivityLogger(logger),
-		Repository:     infra.MemberRepository,
-		MemberCache:    infra.MemberCache,
-		Holodex:        deps.Holodex,
-		Alarm:          alarmClient,
-		RoomNames:      alarmClient,
-		ACL:            deps.ACL,
-		Settings:       adminSettings.service,
-		Applier:        adminSettings.applier,
-		Iris:           deps.IrisRooms,
-		DispatchOps:    dispatchOps,
-		XSpaceSessions: xSpaceSessions,
+		Logger:          logger,
+		Activity:        activity.NewActivityLogger(logger),
+		Repository:      infra.MemberRepository,
+		MemberCache:     infra.MemberCache,
+		Holodex:         deps.Holodex,
+		Alarm:           alarmClient,
+		RoomNames:       alarmClient,
+		ACL:             deps.ACL,
+		Settings:        adminSettings.service,
+		Applier:         adminSettings.applier,
+		Iris:            deps.IrisRooms,
+		DispatchOps:     dispatchOps,
+		XSpaceSessions:  xSpaceSessions,
+		SchedulePosters: schedulePosters,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build admin domain handlers: %w", err)

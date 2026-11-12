@@ -168,14 +168,12 @@ func createObservationGrantRoles(t *testing.T, pool *pgxpool.Pool) observationGr
 }
 
 var preexistingScraperTables = []string{
-	"major_events",
-	"major_event_subscriptions",
 	"alarms",
 	"youtube_notification_outbox",
 }
 
 var preexistingScraperSequences = []string{
-	"major_events_id_seq",
+	"source_reconciliation_conflicts_id_seq",
 }
 
 func assertPreexistingScraperPrivilegesRevoked(t *testing.T, pool *pgxpool.Pool, role string) {

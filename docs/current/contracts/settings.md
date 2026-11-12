@@ -21,7 +21,6 @@ pass, 2026-09-28).
   the requested state (adding a listed room, removing an unlisted one) returns `200 {"status":"ok","message":...,
   "changed":false}` without a write; an applied change returns `changed:true`. A non-chatID or empty `room` and a
   missing or unknown `mode` return 400. Room changes no longer answer 404 or 409 for the no-op case.
-- Member news run-now moved to the operator CLI (`trigger.manual`, `hololive-api --rerun-notification=membernews-weekly`).
 
 ## Contract ID
 

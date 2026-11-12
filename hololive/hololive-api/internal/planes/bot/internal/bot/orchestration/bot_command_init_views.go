@@ -22,20 +22,23 @@ package orchestration
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/collabmembers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type commandInitView struct {
@@ -43,7 +46,6 @@ type commandInitView struct {
 	postgres              database.Client
 	alarm                 handlercore.AlarmService
 	matcher               *matcher.Matcher
-	memberNews            handlercore.MemberNewsService
 	membersData           domain.MemberDataProvider
 	formatter             *formatter.ResponseFormatter
 	sendMessage           func(ctx context.Context, room, message string) error
@@ -51,7 +53,6 @@ type commandInitView struct {
 	sendImages            func(ctx context.Context, room string, images [][]byte) error
 	sendError             func(ctx context.Context, room, message string) error
 	logger                *slog.Logger
-	majorEventRepository  handlercore.MajorEventRepository
 	memberRepository      handlercore.CelebrationCalendarFinder
 	calendarImageRenderer handlercore.CalendarImageRenderer
 }
@@ -62,7 +63,6 @@ func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.Cel
 		postgres:              b.postgres,
 		alarm:                 deps.Alarm,
 		matcher:               deps.Matcher,
-		memberNews:            deps.MemberNews,
 		membersData:           deps.MembersData,
 		formatter:             b.formatter,
 		sendMessage:           b.sendMessage,
@@ -70,7 +70,6 @@ func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.Cel
 		sendImages:            b.sendImages,
 		sendError:             b.sendError,
 		logger:                b.logger,
-		majorEventRepository:  deps.MajorEventRepository,
 		memberRepository:      calendarFinder,
 		calendarImageRenderer: b.calendarImageRenderer,
 	}
@@ -83,12 +82,12 @@ func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 		CollabMembers:       collabmembers.New(v.postgres, v.membersData),
 		Alarm:               v.alarm,
 		Matcher:             v.matcher,
-		MemberNews:          v.memberNews,
 		BroadcastHistory:    handlers.NewPgBroadcastHistoryRepository(v.postgres),
 		ThumbnailDownloader: handlers.NewYouTubeThumbnailDownloader(nil),
 		MembersData:         v.membersData,
 		Formatter:           v.formatter,
 		HelpImageProvider:   render.NewHelpCardProvider(),
+		SchedulePosters:     schedulePosterReader{postgres: v.postgres},
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
 		SendImages:          v.sendImages,
@@ -103,6 +102,7 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 		handlers.NewLiveCommand(deps),
 		handlers.NewUpcomingCommand(deps),
 		handlers.NewScheduleCommand(deps),
+		handlers.NewSchedulePosterCommand(deps),
 		alarmcmd.NewAlarmCommand(deps),
 		info.NewMemberInfoCommand(deps),
 		handlers.NewBroadcastHistoryCommand(deps),
@@ -114,28 +114,28 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 		commands = append(commands, handlers.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer))
 	}
 
-	if v.majorEventRepository != nil {
-		v.logInfo("MajorEvent command enabled")
-
-		commands = append(commands, handlers.NewMajorEventCommand(deps, v.majorEventRepository))
-	}
-
-	if v.memberNews != nil {
-		v.logInfo("MemberNews commands enabled")
-
-		commands = append(commands,
-			news.NewMemberNewsCommand(deps),
-			news.NewMemberNewsSubscriptionCommand(deps),
-		)
-	}
-
 	return commands
 }
 
-func (v *commandInitView) logInfo(msg string, args ...any) {
-	if v.logger == nil {
-		return
+// schedulePosterReader는 호출 시점의 pool로 읽어, pool이 없으면 조용히 끄지 않고 조회 오류로 드러낸다.
+type schedulePosterReader struct {
+	postgres database.Client
+}
+
+func (r schedulePosterReader) PublishedImage(ctx context.Context, channelID string, day time.Time) (scheduleposter.Image, bool, error) {
+	if r.postgres == nil {
+		return scheduleposter.Image{}, false, errors.New("schedule poster reader requires database client")
 	}
 
-	v.logger.Info(msg, args...)
+	store, err := scheduleposter.NewStore(r.postgres.GetPool())
+	if err != nil {
+		return scheduleposter.Image{}, false, fmt.Errorf("open schedule poster store: %w", err)
+	}
+
+	image, found, err := store.PublishedImage(ctx, channelID, day)
+	if err != nil {
+		return scheduleposter.Image{}, false, fmt.Errorf("read schedule poster: %w", err)
+	}
+
+	return image, found, nil
 }

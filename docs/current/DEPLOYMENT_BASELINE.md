@@ -75,10 +75,9 @@ schema migration은 실행하지 않았습니다. 새 호스트의 `hololive-com
 복구할 수 없습니다. Osaka 보존 디스크와 기존 별도 백업은 변경하지 않았으며 정기 백업은 재개하지 않았습니다.
 새 호스트의 Docker socket GID는 `987`이며 secret master와 운영 mirror의 비밀 아닌 값도 일치합니다.
 
-`<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, CLIProxy와 observability
+`<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, observability
 스택(Prometheus, Loki, Alertmanager, exporter)이 중앙 데이터 평면 이전 때
-의도적으로 남았습니다 — `CLIPROXY_BASE_URL`이
-`<build-control-host>`를 가리키는 것은 이전 누락이 아니라 named exception입니다.
+의도적으로 남았습니다.
 둘째, 원격 primary의 일일 암호화 논리 백업과 주간 격리 복원을 소유합니다.
 과거 로컬 `holo-postgres` container·volume과 시간별 dump/restore는 복구하지 않습니다.
 2026-10-07 전체 DB 복원·Drive 전송 검증 이후 사용자 요청으로 자동·수동 백업과 정기 복원
@@ -122,7 +121,7 @@ timeline을 그대로 재기동하지 않습니다.
 
 | Runtime | 실행 대상 | Port | Env groups | 자산 | 기동 의존성 |
 |---|---|---:|---|---|---|
-| `hololive-api` | 중앙 Quadlet `hololive-api.service` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey, `hololive-alarm-worker`(`Wants=`). migration은 배포 helper가 활성화 전에 실행합니다. |
+| `hololive-api` | 중앙 Quadlet `hololive-api.service` | 30001/30006 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey, `hololive-alarm-worker`(`Wants=`). migration은 배포 helper가 활성화 전에 실행합니다. |
 | `alarm-worker` | 중앙 Quadlet `hololive-alarm-worker.service` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey |
 | `youtube-collector` | 중앙 Quadlet `hololive-youtube-collector-c` (`c`), iris-seoul Quadlet `hololive-youtube-collector-b` (`b`), Osaka native `a`, kapu Quadlet `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30015(kapu loopback) | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 DB 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
 
@@ -146,8 +145,7 @@ timeline을 그대로 재기동하지 않습니다.
 |---|---|---|
 | Iris / Redroid KakaoTalk automation | `hololive-api`, `alarm-worker` | `contracts/iris-boundary.md` |
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-api/scripts/migrations` |
-| Valkey | cache, rate limit, alarm dispatch and delivery outbox wakeup, member epoch Pub/Sub, job locks (no settings/ACL Pub/Sub) | `contracts/valkey_ephemeral_contract.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md` |
-| CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api` where configured | 별도 계약 문서 없음; 의존과 장애 영향은 `services/hololive-api.md`의 Dependency 표 |
+| Valkey | cache, rate limit, alarm dispatch and YouTube delivery outbox wakeup, member epoch Pub/Sub, job locks (no settings/ACL Pub/Sub) | `contracts/valkey_ephemeral_contract.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md` |
 
 ## PostgreSQL Observability
 

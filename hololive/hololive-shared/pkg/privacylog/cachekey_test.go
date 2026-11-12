@@ -123,7 +123,6 @@ func TestRedactCacheKeyLeavesIdentifierFreeKeysIntact(t *testing.T) {
 		"holodex:api",
 		"member:name:" + channelID,
 		"lock:ingestion:runtime",
-		"majorevent:lock:weekly:2026-W31",
 		"{alarm:twitch_logins}:tmp:1",
 		"",
 	}

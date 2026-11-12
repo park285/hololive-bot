@@ -219,7 +219,7 @@ func TestLoadBotPlaneRuntimeDevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	}
 }
 
-// LLM·Exa 구획은 llm plane loader가, 사진 동기화는 admin plane loader가 검사한다.
+// 사진 동기화는 admin plane loader가 검사한다.
 func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
 	for key, value := range map[string]string{
 		"POSTGRES_PORT": "not-a-number",

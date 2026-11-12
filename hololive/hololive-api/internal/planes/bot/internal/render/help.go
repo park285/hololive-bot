@@ -24,11 +24,11 @@ var helpCatalogJSON []byte
 //go:embed assets/help-broadcast.png
 var helpBroadcastPNG []byte
 
-//go:embed assets/help-member-alarm-news.png
-var helpMemberAlarmNewsPNG []byte
+//go:embed assets/help-member-alarm.png
+var helpMemberAlarmPNG []byte
 
-//go:embed assets/help-events-more.png
-var helpEventsMorePNG []byte
+//go:embed assets/help-anniversary-more.png
+var helpAnniversaryMorePNG []byte
 
 type helpCatalog struct {
 	SchemaVersion int               `json:"schema_version"`
@@ -58,9 +58,9 @@ type helpCard struct {
 type HelpCardProvider struct{}
 
 var embeddedHelpAssets = map[string][]byte{
-	"help-broadcast.png":         helpBroadcastPNG,
-	"help-member-alarm-news.png": helpMemberAlarmNewsPNG,
-	"help-events-more.png":       helpEventsMorePNG,
+	"help-broadcast.png":        helpBroadcastPNG,
+	"help-member-alarm.png":     helpMemberAlarmPNG,
+	"help-anniversary-more.png": helpAnniversaryMorePNG,
 }
 
 var approvedHelpCards = mustLoadHelpCards(helpCatalogJSON, embeddedHelpAssets)

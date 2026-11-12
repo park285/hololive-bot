@@ -1,9 +1,6 @@
 package config
 
 import (
-	jsonv2 "encoding/json/v2"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,43 +28,6 @@ func TestLoadWorkerProfileRejectsWrongRole(t *testing.T) {
 
 	if _, err := LoadWorkerProfile(); err == nil || !strings.Contains(err.Error(), "got hololive/api, want hololive/alarm-worker") {
 		t.Fatalf("LoadWorkerProfile() error = %v", err)
-	}
-}
-
-func TestLoadWorkerProfileRejectsRetiredNotificationLockTimeout(t *testing.T) {
-	raw, err := os.ReadFile("testdata/stack-worker-profile-alarm-worker.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const existing = `"max_retries": 3,
-        "poll_interval_ms": 30000`
-
-	const retired = `"max_retries": 3,
-        "lock_timeout_ms": 300000,
-        "poll_interval_ms": 30000`
-
-	if strings.Count(string(raw), existing) != 1 {
-		t.Fatal("notification_delivery fixture settings changed")
-	}
-
-	profileFile, err := os.CreateTemp(t.TempDir(), "alarm-worker-*.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := profileFile.WriteString(strings.Replace(string(raw), existing, retired, 1)); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := profileFile.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv(workercontract.ProfileFileEnv, profileFile.Name())
-
-	if _, err := LoadWorkerProfile(); err == nil || !strings.Contains(err.Error(), "notification_delivery") || !strings.Contains(err.Error(), "lock_timeout_ms") {
-		t.Fatalf("LoadWorkerProfile() error = %v, want retired notification_delivery.lock_timeout_ms rejected", err)
 	}
 }
 
@@ -196,10 +156,8 @@ func TestWorkerProfileDeclaresDomainAgePolicies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, id := range []string{WorkerAlarmDispatch, WorkerNotificationDelivery} {
-		if got := profile.Loaded.Profile.Workers[id].Queue.MaxAge; got.Mode != workercontract.DurationModeNone || got.Milliseconds != nil {
-			t.Fatalf("%s max_age = %+v, want none", id, got)
-		}
+	if got := profile.Loaded.Profile.Workers[WorkerAlarmDispatch].Queue.MaxAge; got.Mode != workercontract.DurationModeNone || got.Milliseconds != nil {
+		t.Fatalf("alarm_dispatch max_age = %+v, want none", got)
 	}
 
 	worker := profile.Loaded.Profile.Workers[WorkerYouTubeDelivery]
@@ -221,69 +179,6 @@ func TestWorkerProfileDeclaresDomainAgePolicies(t *testing.T) {
 
 	if err := validateWorkerProfile(profile); err == nil {
 		t.Fatal("max_age shorter than revive freshness plus interval must fail")
-	}
-}
-
-func TestLoadWorkerProfileNotificationDeliveryTimingBoundaries(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		attemptMS int64
-		staleMS   int64
-		valid     bool
-	}{
-		{name: "audit attempt and stale", attemptMS: 60000, staleMS: 1000},
-		{name: "zero attempt", attemptMS: 0, staleMS: 60000},
-		{name: "minimum attempt", attemptMS: 1, staleMS: 60000, valid: true},
-		{name: "below finalization boundary", attemptMS: 54999, staleMS: 60000, valid: true},
-		{name: "at finalization boundary", attemptMS: 55000, staleMS: 60000},
-		{name: "above finalization boundary", attemptMS: 55001, staleMS: 60000},
-		{name: "stale below sending lease", attemptMS: 10000, staleMS: 59999},
-		{name: "stale at sending lease", attemptMS: 10000, staleMS: 60000, valid: true},
-		{name: "stale above sending lease", attemptMS: 10000, staleMS: 60001, valid: true},
-		{name: "stale covers attempt but not lease", attemptMS: 10000, staleMS: 15000},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, enabled := range []bool{true, false} {
-				loaded := settingstest.LoadProfileFixture(t, WorkerIdentity(), "testdata/stack-worker-profile-alarm-worker.json")
-
-				var settings NotificationDeliveryWorkerSettings
-
-				if err := jsonv2.Unmarshal(loaded.Profile.Workers["notification_delivery"].Settings, &settings); err != nil {
-					t.Fatal(err)
-				}
-
-				settings.StaleSendingAfterMS = tc.staleMS
-
-				contents, err := jsonv2.Marshal(settings)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				worker := loaded.Profile.Workers["notification_delivery"]
-
-				worker.Executor.Enabled = enabled
-				worker.Executor.AttemptTimeout.Milliseconds = new(tc.attemptMS)
-				worker.Settings = contents
-				loaded.Profile.Workers["notification_delivery"] = worker
-
-				contents, err = jsonv2.Marshal(loaded.Profile)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				path := filepath.Join(t.TempDir(), "notification-delivery.json")
-				if writeErr := os.WriteFile(path, contents, 0o600); writeErr != nil {
-					t.Fatal(writeErr)
-				}
-
-				t.Setenv(workercontract.ProfileFileEnv, path)
-
-				_, err = LoadWorkerProfile()
-				if (err == nil) != tc.valid {
-					t.Fatalf("LoadWorkerProfile() enabled=%v error=%v, want valid=%v", enabled, err, tc.valid)
-				}
-			}
-		})
 	}
 }
 
@@ -323,7 +218,7 @@ func TestValidateWorkerProfileAlarmHandoffHorizonCoversAttemptTimeout(t *testing
 	}
 }
 
-// notification_delivery·youtube_delivery도 같은 Iris 발송 큐를 거치므로 handoff 확인 기한을 발송 시도 시간과 따로 둔다.
+// youtube_delivery도 같은 Iris 발송 큐를 거치므로 handoff 확인 기한을 발송 시도 시간과 따로 둔다.
 func TestValidateWorkerProfileDeliveryHandoffHorizonCoversAttemptTimeout(t *testing.T) {
 	for _, worker := range []struct {
 		name    string
@@ -331,10 +226,6 @@ func TestValidateWorkerProfileDeliveryHandoffHorizonCoversAttemptTimeout(t *test
 		id      string
 		horizon func(*AlarmWorkerProfile) *int64
 	}{
-		{
-			name: "notification_delivery", key: "notification_delivery handoff_horizon_ms", id: WorkerNotificationDelivery,
-			horizon: func(p *AlarmWorkerProfile) *int64 { return &p.NotificationDelivery.HandoffHorizonMS },
-		},
 		{
 			name: "youtube_delivery", key: "youtube_delivery handoff_horizon_ms", id: WorkerYouTubeDelivery,
 			horizon: func(p *AlarmWorkerProfile) *int64 { return &p.YouTubeDelivery.HandoffHorizonMS },

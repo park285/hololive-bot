@@ -27,7 +27,6 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	membernewsmodel "github.com/kapu/hololive-api/internal/planes/llm/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -43,42 +42,10 @@ func (s *stubCommandInitStreamProvider) GetChannelSchedule(context.Context, stri
 
 func (s *stubCommandInitStreamProvider) Stop() {}
 
-type stubCommandInitMajorEventRepository struct{}
-
-func (s *stubCommandInitMajorEventRepository) IsSubscribed(context.Context, string) (bool, error) {
-	return false, nil
-}
-
-func (s *stubCommandInitMajorEventRepository) Subscribe(context.Context, string, string) error {
-	return nil
-}
-
-func (s *stubCommandInitMajorEventRepository) Unsubscribe(context.Context, string) error {
-	return nil
-}
-
 type stubCommandInitCalendarFinder struct{}
 
 func (s *stubCommandInitCalendarFinder) FindMembersWithCelebrationsInMonth(context.Context, int, int) ([]domain.CalendarEntry, error) {
 	return nil, nil
-}
-
-type stubCommandInitMemberNewsService struct{}
-
-func (s *stubCommandInitMemberNewsService) GenerateRoomDigest(context.Context, string, membernewsmodel.Period) (*membernewsmodel.Digest, error) {
-	return &membernewsmodel.Digest{}, nil
-}
-
-func (s *stubCommandInitMemberNewsService) SubscribeRoom(context.Context, string, string) error {
-	return nil
-}
-
-func (s *stubCommandInitMemberNewsService) UnsubscribeRoom(context.Context, string) error {
-	return nil
-}
-
-func (s *stubCommandInitMemberNewsService) IsRoomSubscribed(context.Context, string) (bool, error) {
-	return false, nil
 }
 
 func TestCommandInitView_ToCommandDependencies(t *testing.T) {
@@ -86,8 +53,7 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 	b := &Bot{logger: slog.New(slog.DiscardHandler)}
 
 	view := b.commandInitView(&Dependencies{
-		Holodex:    streamProvider,
-		MemberNews: &stubCommandInitMemberNewsService{},
+		Holodex: streamProvider,
 	}, nil)
 
 	deps := view.toCommandDependencies()
@@ -99,10 +65,6 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 		t.Fatal("holodex mapping mismatch")
 	}
 
-	if deps.MemberNews == nil {
-		t.Fatal("memberNews mapping mismatch")
-	}
-
 	if deps.SendMessage == nil || deps.SendImage == nil || deps.SendImages == nil || deps.SendError == nil {
 		t.Fatal("send function mappings must not be nil")
 	}
@@ -110,10 +72,7 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 
 func TestCommandInitView_AssemblesCommands(t *testing.T) {
 	b := &Bot{logger: slog.New(slog.DiscardHandler)}
-	view := b.commandInitView(&Dependencies{
-		MajorEventRepository: &stubCommandInitMajorEventRepository{},
-		MemberNews:           &stubCommandInitMemberNewsService{},
-	}, &stubCommandInitCalendarFinder{})
+	view := b.commandInitView(&Dependencies{}, &stubCommandInitCalendarFinder{})
 
 	deps := view.toCommandDependencies()
 	commands := view.buildCommands(deps)
@@ -132,15 +91,13 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 		"live",
 		"upcoming",
 		"schedule",
+		"schedule_poster",
 		"alarm",
 		"member_info",
 		"broadcast_history",
 		"broadcast_thumbnail",
 		"broadcast_time",
 		"calendar",
-		"major_event",
-		"member_news",
-		"news_subscription",
 	}
 	if !slices.Equal(gotNames, wantNames) {
 		t.Fatalf("command names = %v, want %v", gotNames, wantNames)
@@ -150,6 +107,4 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 var (
 	_ domain.StreamProvider                 = (*stubCommandInitStreamProvider)(nil)
 	_ handlercore.CelebrationCalendarFinder = (*stubCommandInitCalendarFinder)(nil)
-	_ handlercore.MajorEventRepository      = (*stubCommandInitMajorEventRepository)(nil)
-	_ handlercore.MemberNewsService         = (*stubCommandInitMemberNewsService)(nil)
 )

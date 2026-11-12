@@ -48,7 +48,7 @@ func newMemberBoundaryHarness(t *testing.T) (*MemberHandler, *pgxpool.Pool, *min
 	audit := &recordingActivity{}
 
 	service := NewMemberAdminService(repo, cache, audit, logger)
-	// 멤버 경계는 ACL·Iris·LLM 의존성 없이 실제 DB와 캐시만으로 구성한다.
+	// 멤버 경계는 ACL·Iris 의존성 없이 실제 DB와 캐시만으로 구성한다.
 	return NewMemberHandler(repo, service, logger), pool, mini, audit
 }
 

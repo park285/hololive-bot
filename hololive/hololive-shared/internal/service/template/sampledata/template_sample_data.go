@@ -29,8 +29,6 @@ import (
 
 var templateSampleData = mergeTemplateSampleData(
 	templateSampleCoreData(),
-	templateSampleMajorEventData(),
-	templateSampleMemberNewsData(),
 )
 
 func mergeTemplateSampleData(groups ...map[domain.TemplateKey]any) map[domain.TemplateKey]any {
@@ -90,21 +88,6 @@ var allTemplateKeys = []domain.TemplateKey{
 	domain.TemplateKeyAlarmDispatchNotification,
 	domain.TemplateKeyAlarmDispatchNotificationGroup,
 	domain.TemplateKeyXSpaceStarted,
-	domain.TemplateKeyCmdMajorEventWeeklySummary,
-	domain.TemplateKeyCmdMajorEventMonthlySummary,
-	domain.TemplateKeyCmdMajorEventSubscribed,
-	domain.TemplateKeyCmdMajorEventUnsubscribed,
-	domain.TemplateKeyCmdMajorEventAlreadySub,
-	domain.TemplateKeyCmdMajorEventNotSub,
-	domain.TemplateKeyCmdMajorEventStatus,
-	domain.TemplateKeyCmdMajorEventUsage,
-	domain.TemplateKeyCmdMemberNewsDigest,
-	domain.TemplateKeyCmdMemberNewsNoMembers,
-	domain.TemplateKeyCmdMemberNewsSubscribed,
-	domain.TemplateKeyCmdMemberNewsUnsubscribed,
-	domain.TemplateKeyCmdMemberNewsAlreadySub,
-	domain.TemplateKeyCmdMemberNewsNotSub,
-	domain.TemplateKeyCmdMemberNewsStatus,
 }
 
 func IsValidTemplateKey(key domain.TemplateKey) bool {

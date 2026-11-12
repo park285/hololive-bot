@@ -43,7 +43,7 @@ func assertRoomChange(t *testing.T, serve adminTestServe, method string, wantCha
 }
 
 func TestRoomChangesConvergeWithChangedFlag(t *testing.T) {
-	serve, aclService := newAdminTestRouter(t, &recordingIrisRooms{})
+	serve, aclService, _ := newAdminTestRouter(t, &recordingIrisRooms{})
 
 	assertRoomChange(t, serve, http.MethodPost, true)
 	assertRoomChange(t, serve, http.MethodPost, false)
@@ -61,7 +61,7 @@ func TestRoomChangesConvergeWithChangedFlag(t *testing.T) {
 }
 
 func TestRoomChangeRejectsStaleACLMode(t *testing.T) {
-	serve, aclService := newAdminTestRouter(t, &recordingIrisRooms{})
+	serve, aclService, _ := newAdminTestRouter(t, &recordingIrisRooms{})
 
 	for _, method := range []string{http.MethodPost, http.MethodDelete} {
 		rec := serve(method, roomsPath, `{"room":"3003","mode":"blacklist"}`)

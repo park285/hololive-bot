@@ -13,25 +13,17 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-func TestDeliveryBuildersApplyProfileAttemptTimeout(t *testing.T) {
-	cfg, state := alarmWorkerTestConfig(t)
+func TestYouTubeDeliveryBuilderAppliesProfileAttemptTimeout(t *testing.T) {
+	cfg, _ := alarmWorkerTestConfig(t)
 
-	for _, workerID := range []string{"notification_delivery", "youtube_delivery"} {
-		worker := cfg.AlarmWorkerProfile.Loaded.Profile.Workers[workerID]
+	worker := cfg.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
 
-		worker.Executor.AttemptTimeout.Milliseconds = new(int64(1500))
-		cfg.AlarmWorkerProfile.Loaded.Profile.Workers[workerID] = worker
-	}
+	worker.Executor.AttemptTimeout.Milliseconds = new(int64(1500))
+	cfg.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"] = worker
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: new(pgxpool.Pool)}}
 	logger := slog.New(slog.DiscardHandler)
 	sender := egress.NewIrisMessageSender(nil)
-	notification, err := buildDeliveryOutboxDispatcher(cfg, infra, sender, logger, state)
-	require.NoError(t, err)
-
-	// builder가 반환한 실제 runner의 dispatcher 설정을 확인합니다. 외부 전송이나 DB 쿼리는 실행하지 않습니다.
-	assembled := reflect.ValueOf(notification).FieldByName("dispatcher").Elem().Elem()
-	require.Equal(t, 1500*time.Millisecond, time.Duration(assembled.FieldByName("config").FieldByName("AttemptTimeout").Int()))
 
 	youtube, err := newYouTubeOutboxDispatcher(cfg, infra, sender, nil, logger)
 	require.NoError(t, err)

@@ -63,6 +63,7 @@
   대상 없는 `ON CONFLICT DO NOTHING`은 금지합니다. members의 slug arbiter는 `idx_members_slug`입니다.
 - 템플릿 개정은 `channel_id IS NULL AND body = old`의 CAS UPDATE로 사용자 본문을 보존합니다.
   운영에 한 번도 기록되지 않은 같은 key의 연속 개정만 병합 전에 합칠 수 있습니다. 배포된 checksum은 고치지 않습니다.
+  폐기한 명령의 안내 구획만 지울 때는 표준 구획 문자열이 정확히 들어 있는 행(채널 행 포함)에서 그 구획만 `replace`로 지웁니다.
 - 대량 보존 삭제는 배치 또는 파티셔닝을 사용합니다. 인덱스 수에 비례하는 쓰기 비용·WAL·vacuum도 고려합니다.
 - 라이브 원본 행 변경은 원본 잠금 전에 `SELECT public.lock_youtube_live_runtime_state();`를 실행하고,
   같은 READ COMMITTED 트랜잭션 끝에서 변경 전후 video_id를 모두 넣어 `refresh_youtube_live_runtime_state(ARRAY[...])`를

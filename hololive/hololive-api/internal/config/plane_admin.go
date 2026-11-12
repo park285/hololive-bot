@@ -28,6 +28,8 @@ type AdminPlaneConfig struct {
 	AlarmServiceURL string
 	// XSpacesKeyFile: X_SPACES_KEY_FILE. 비어 있으면 X 세션 연결 제출이 꺼진다. 키 파일 검증은 xspaces.LoadStore가 한다.
 	XSpacesKeyFile string
+	// SchedulePosterConfigFile이 비어 있으면 일정 포스터 수집·번역을 끈다. 관리 API는 켜진 채로 둔다.
+	SchedulePosterConfigFile string
 }
 
 func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
@@ -43,14 +45,15 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 	}
 
 	config := &AdminPlaneConfig{
-		Environment:      envload.AppEnvironment(),
-		Server:           server,
-		InternalH3:       loadInternalH3ClientOptions(),
-		Postgres:         postgres,
-		Notification:     notification,
-		Ingestion:        ingestion,
-		SettingsFilePath: settings.LoadSettingsFilePath(),
-		XSpacesKeyFile:   sharedenv.StringRaw("X_SPACES_KEY_FILE", ""),
+		Environment:              envload.AppEnvironment(),
+		Server:                   server,
+		InternalH3:               loadInternalH3ClientOptions(),
+		Postgres:                 postgres,
+		Notification:             notification,
+		Ingestion:                ingestion,
+		SettingsFilePath:         settings.LoadSettingsFilePath(),
+		XSpacesKeyFile:           sharedenv.StringRaw("X_SPACES_KEY_FILE", ""),
+		SchedulePosterConfigFile: sharedenv.StringRaw("SCHEDULE_POSTER_CONFIG_FILE", ""),
 	}
 
 	return config, nil

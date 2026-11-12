@@ -32,6 +32,8 @@ const (
 	testBareIPBaseURL        = "https://100.100.1.5:3001"
 )
 
+const testRoomID = "room-1"
+
 func newTestRuntimeIrisClient(t *testing.T, config settings.IrisConfig, opts ...iris.ClientOption) *RuntimeIrisClient {
 	t.Helper()
 

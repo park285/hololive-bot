@@ -393,49 +393,6 @@ TABLE kakao_rooms
   CONSTRAINT kakao_rooms_room_type_len CHECK ((length((room_type)::text) <= 64))
   CONSTRAINT kakao_rooms_pkey PRIMARY KEY (room_id)
 
-TABLE major_event_subscriptions
-  COLUMN id integer NOT NULL DEFAULT nextval('major_event_subscriptions_id_seq'::regclass)
-  COLUMN room_id character varying(100) NOT NULL
-  COLUMN room_name character varying(255)
-  COLUMN created_at timestamp with time zone DEFAULT now()
-  CONSTRAINT major_event_subscriptions_pkey PRIMARY KEY (id)
-  CONSTRAINT major_event_subscriptions_room_id_key UNIQUE (room_id)
-
-TABLE major_events
-  COLUMN id integer NOT NULL DEFAULT nextval('major_events_id_seq'::regclass)
-  COLUMN external_id character varying(500) NOT NULL
-  COLUMN type character varying(20) NOT NULL DEFAULT 'event'::character varying
-  COLUMN title character varying(500) NOT NULL
-  COLUMN link character varying(1000) NOT NULL
-  COLUMN description text
-  COLUMN members text[]
-  COLUMN pub_date timestamp with time zone
-  COLUMN event_start_date date
-  COLUMN event_end_date date
-  COLUMN status text NOT NULL DEFAULT 'active'::character varying
-  COLUMN notified_at timestamp with time zone
-  COLUMN notified_week character varying(10)
-  COLUMN created_at timestamp with time zone DEFAULT now()
-  COLUMN updated_at timestamp with time zone DEFAULT now()
-  COLUMN notified_month character varying(10)
-  COLUMN link_status character varying(20) NOT NULL DEFAULT 'unchecked'::character varying
-  COLUMN link_checked_at timestamp with time zone
-  CONSTRAINT chk_major_events_status_vocab CHECK ((status = ANY (ARRAY['active'::text, 'ended'::text, 'canceled'::text])))
-  CONSTRAINT major_events_pkey PRIMARY KEY (id)
-  CONSTRAINT major_events_external_id_key UNIQUE (external_id)
-  INDEX CREATE INDEX idx_major_events_start_date ON public.major_events USING btree (event_start_date)
-  INDEX CREATE INDEX idx_major_events_status_type_start ON public.major_events USING btree (status, type, event_start_date)
-
-TABLE member_news_subscriptions
-  COLUMN id integer NOT NULL DEFAULT nextval('member_news_subscriptions_id_seq'::regclass)
-  COLUMN room_id character varying(100) NOT NULL
-  COLUMN room_name character varying(255)
-  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
-  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT member_news_subscriptions_pkey PRIMARY KEY (id)
-  CONSTRAINT member_news_subscriptions_room_id_key UNIQUE (room_id)
-  INDEX CREATE INDEX idx_member_news_subscriptions_created_at ON public.member_news_subscriptions USING btree (created_at)
-
 TABLE members
   COLUMN id integer NOT NULL DEFAULT nextval('members_id_seq'::regclass)
   COLUMN slug character varying(100) NOT NULL
@@ -483,37 +440,6 @@ TABLE message_strings
   CONSTRAINT message_strings_pkey PRIMARY KEY (id)
   CONSTRAINT ux_message_strings UNIQUE (namespace, key)
 
-TABLE notification_delivery_outbox
-  OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
-  COLUMN id bigint NOT NULL DEFAULT nextval('notification_delivery_outbox_id_seq'::regclass)
-  COLUMN kind text NOT NULL
-  COLUMN period_key character varying(20) NOT NULL
-  COLUMN room_id character varying(100) NOT NULL
-  COLUMN content_id character varying(200) NOT NULL
-  COLUMN payload jsonb NOT NULL DEFAULT '{}'::jsonb
-  COLUMN status text NOT NULL DEFAULT 'PENDING'::character varying
-  COLUMN attempt_count bigint NOT NULL DEFAULT 0
-  COLUMN next_attempt_at timestamp with time zone NOT NULL DEFAULT now()
-  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
-  COLUMN locked_at timestamp with time zone
-  COLUMN sent_at timestamp with time zone
-  COLUMN error text
-  COLUMN locked_by text
-  COLUMN lock_expires_at timestamp with time zone
-  COLUMN sending_started_at timestamp with time zone
-  COLUMN handoff_request_id text
-  COLUMN handoff_next_check_at timestamp with time zone
-  COLUMN handoff_checked_at timestamp with time zone
-  CONSTRAINT chk_notification_delivery_outbox_handoff_shape CHECK ((((handoff_request_id IS NULL) OR ((length(handoff_request_id) >= 1) AND (length(handoff_request_id) <= 256))) AND ((handoff_next_check_at IS NULL) OR ((status = 'SENT'::text) AND (handoff_request_id IS NOT NULL) AND (handoff_checked_at IS NULL))) AND ((handoff_checked_at IS NULL) OR (handoff_request_id IS NOT NULL)) AND ((status <> 'SENT'::text) OR (handoff_request_id IS NULL) OR (handoff_checked_at IS NOT NULL) OR (handoff_next_check_at IS NOT NULL))))
-  CONSTRAINT chk_notification_delivery_outbox_kind_vocab CHECK ((kind = ANY (ARRAY['MAJOR_EVENT_WEEKLY'::text, 'MAJOR_EVENT_MONTHLY'::text, 'MEMBER_NEWS_WEEKLY'::text, 'MEMBER_NEWS_MONTHLY'::text])))
-  CONSTRAINT chk_notification_delivery_outbox_status_vocab CHECK ((status = ANY (ARRAY['PENDING'::text, 'SENDING'::text, 'SENT'::text, 'FAILED'::text, 'QUARANTINED'::text])))
-  CONSTRAINT notification_delivery_outbox_pkey PRIMARY KEY (id)
-  INDEX CREATE INDEX idx_ndo_handoff_due ON public.notification_delivery_outbox USING btree (handoff_next_check_at, id) WHERE (handoff_next_check_at IS NOT NULL)
-  INDEX CREATE UNIQUE INDEX idx_ndo_kind_content ON public.notification_delivery_outbox USING btree (kind, content_id)
-  INDEX CREATE INDEX idx_ndo_pending_due_created_id ON public.notification_delivery_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
-  INDEX CREATE INDEX idx_ndo_sending_stale ON public.notification_delivery_outbox USING btree (sending_started_at, id) WHERE (status = 'SENDING'::text)
-  INDEX CREATE INDEX idx_ndo_terminal_cleanup ON public.notification_delivery_outbox USING btree (COALESCE(sent_at, created_at)) WHERE (status = ANY (ARRAY['SENT'::text, 'FAILED'::text, 'QUARANTINED'::text]))
-
 TABLE notification_template_revisions
   COLUMN id bigint NOT NULL DEFAULT nextval('notification_template_revisions_id_seq'::regclass)
   COLUMN template_id bigint NOT NULL
@@ -551,6 +477,40 @@ TABLE observation_contract_generations
   CONSTRAINT observation_contract_generations_current_generation_check CHECK ((current_generation > 0))
   CONSTRAINT observation_contract_generations_current_schema_version_check CHECK ((current_schema_version > 0))
   CONSTRAINT observation_contract_generations_pkey PRIMARY KEY (provider, observation_kind)
+
+TABLE schedule_posters
+  COLUMN id bigint NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN x_user_id text NOT NULL
+  COLUMN post_url text NOT NULL
+  COLUMN image_url text NOT NULL
+  COLUMN posted_at timestamp with time zone NOT NULL
+  COLUMN text_excerpt text NOT NULL
+  COLUMN review_status text NOT NULL DEFAULT 'pending_review'::text
+  COLUMN week_start date
+  COLUMN week_end date
+  COLUMN reviewed_at timestamp with time zone
+  COLUMN translation_status text NOT NULL DEFAULT 'not_requested'::text
+  COLUMN translation_error text NOT NULL DEFAULT ''::text
+  COLUMN translated_image bytea
+  COLUMN translated_mime text
+  COLUMN translated_at timestamp with time zone
+  COLUMN revision bigint NOT NULL DEFAULT 1
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN source text NOT NULL DEFAULT 'x'::text
+  CONSTRAINT chk_schedule_posters_confirmed_week CHECK (((review_status <> 'confirmed'::text) OR (week_start IS NOT NULL)))
+  CONSTRAINT chk_schedule_posters_id_positive CHECK ((id > 0))
+  CONSTRAINT chk_schedule_posters_review_status_vocab CHECK ((review_status = ANY (ARRAY['pending_review'::text, 'confirmed'::text, 'rejected'::text, 'expired'::text])))
+  CONSTRAINT chk_schedule_posters_source CHECK ((((source = 'x'::text) AND (x_user_id <> ''::text) AND (post_url ~ '^https://x\.com/i/status/[1-9][0-9]*$'::text) AND (image_url ~~ 'https://pbs.twimg.com/%'::text)) OR ((source = 'youtube_community'::text) AND (x_user_id = ''::text) AND (post_url ~ '^https://www\.youtube\.com/post/[A-Za-z0-9_-]+$'::text) AND (image_url ~~ 'https://yt3.ggpht.com/%'::text))))
+  CONSTRAINT chk_schedule_posters_translated_image CHECK ((((translated_image IS NULL) = (translated_mime IS NULL)) AND ((translated_image IS NULL) = (translated_at IS NULL)) AND ((translation_status <> 'succeeded'::text) OR (translated_image IS NOT NULL)) AND ((translation_status <> 'not_requested'::text) OR (translated_image IS NULL))))
+  CONSTRAINT chk_schedule_posters_translated_image_size CHECK (((translated_image IS NULL) OR ((octet_length(translated_image) >= 1) AND (octet_length(translated_image) <= 4194304))))
+  CONSTRAINT chk_schedule_posters_translated_mime CHECK (((translated_mime IS NULL) OR (translated_mime = 'image/jpeg'::text)))
+  CONSTRAINT chk_schedule_posters_translation_after_confirm CHECK (((translation_status = 'not_requested'::text) OR (week_start IS NOT NULL)))
+  CONSTRAINT chk_schedule_posters_translation_status_vocab CHECK ((translation_status = ANY (ARRAY['not_requested'::text, 'pending'::text, 'succeeded'::text, 'failed'::text])))
+  CONSTRAINT chk_schedule_posters_week_pair CHECK (((week_start IS NULL) = (week_end IS NULL)))
+  CONSTRAINT chk_schedule_posters_week_span CHECK (((week_start IS NULL) OR (((week_end - week_start) >= 0) AND ((week_end - week_start) <= 6))))
+  CONSTRAINT schedule_posters_pkey PRIMARY KEY (id)
 
 TABLE source_collection_checkpoints
   COLUMN provider text NOT NULL
@@ -1595,17 +1555,9 @@ SEQUENCE bot_reply_outbox_resolution_audit_id_seq AS bigint START 1 INCREMENT 1 
 
 SEQUENCE bot_webhook_inbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY bot_webhook_inbox.id
 
-SEQUENCE major_event_subscriptions_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY major_event_subscriptions.id
-
-SEQUENCE major_events_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY major_events.id
-
-SEQUENCE member_news_subscriptions_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY member_news_subscriptions.id
-
 SEQUENCE members_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY members.id
 
 SEQUENCE message_strings_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY message_strings.id
-
-SEQUENCE notification_delivery_outbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY notification_delivery_outbox.id
 
 SEQUENCE notification_template_revisions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY notification_template_revisions.id
 

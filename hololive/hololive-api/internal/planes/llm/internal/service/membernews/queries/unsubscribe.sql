@@ -1,1 +1,0 @@
-DELETE FROM member_news_subscriptions WHERE room_id = $1

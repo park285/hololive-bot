@@ -22,6 +22,7 @@ package adminruntime
 
 import (
 	"context"
+	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
@@ -44,22 +45,31 @@ func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
 
 	r.started = true
 
-	photoCtx := ctx
+	tasks := r.backgroundTasks()
+	backgroundCtx := ctx
 
-	if r.PhotoSync != nil {
-		photoCtx, r.photoCancel = context.WithCancel(ctx)
-		r.photoDone = make(chan struct{})
+	if len(tasks) > 0 {
+		backgroundCtx, r.backgroundCancel = context.WithCancel(ctx)
+		r.backgroundDone = make(chan struct{})
 	}
 
-	photoDone := r.photoDone
+	backgroundDone := r.backgroundDone
 	r.stateMu.Unlock()
 
-	if photoDone != nil {
-		go panicguard.Run(r.Logger, panicscope.BackgroundTask, "admin-photo-sync", func() {
-			defer close(photoDone)
+	if backgroundDone != nil {
+		go func() {
+			defer close(backgroundDone)
 
-			r.PhotoSync.Start(photoCtx)
-		})
+			var wg sync.WaitGroup
+
+			for name, task := range tasks {
+				wg.Go(func() {
+					panicguard.Run(r.Logger, panicscope.BackgroundTask, name, func() { task.Start(backgroundCtx) })
+				})
+			}
+
+			wg.Wait()
+		}()
 	}
 
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
@@ -86,4 +96,18 @@ func (r *AdminAPIRuntime) StartHTTPServer(errCh chan<- error) {
 	}
 
 	r.httpStartOnce.Do(func() { r.HTTPServers.Start(r.Logger, errCh) })
+}
+
+func (r *AdminAPIRuntime) backgroundTasks() map[string]backgroundTask {
+	tasks := make(map[string]backgroundTask, 2)
+
+	if r.PhotoSync != nil {
+		tasks["admin-photo-sync"] = r.PhotoSync
+	}
+
+	if r.SchedulePoster != nil {
+		tasks["admin-schedule-poster"] = r.SchedulePoster
+	}
+
+	return tasks
 }
