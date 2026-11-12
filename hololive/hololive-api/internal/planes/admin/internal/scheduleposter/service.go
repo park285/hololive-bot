@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,14 +22,16 @@ import (
 const (
 	maxPages = 5
 	// FxTwitter 응답은 시간순이 아니고 오래된 리포스트가 섞이므로, 본인 원글로만 수집 범위와 멈춤을 판단한다.
-	lookback           = 8 * 24 * time.Hour
-	retention          = 60 * 24 * time.Hour
-	purgeBatch         = 100
-	excerptRunes       = 500
-	translateInterval  = time.Minute
-	translateBatch     = 5
-	initialCollectWait = 30 * time.Second
-	initialTranslate   = 15 * time.Second
+	lookback          = 8 * 24 * time.Hour
+	retention         = 60 * 24 * time.Hour
+	purgeBatch        = 100
+	excerptRunes      = 500
+	translateInterval = time.Minute
+	translateBatch    = 5
+	// 행 하나의 상한은 판독·번역표·그리기 재시도를 모두 합친 시간이다. 넘으면 그 행은 실패로 기록되고 다음 행으로 넘어간다.
+	translationRowBudget = time.Hour
+	initialCollectWait   = 30 * time.Second
+	initialTranslate     = 15 * time.Second
 )
 
 // 실패 사유는 관리자 화면에 그대로 보이는 분류다.
@@ -64,7 +67,11 @@ type sourceClient interface {
 type posterTranslator interface {
 	translateText(ctx context.Context, src source, prompt string) (textTranslation, error)
 	renderImage(ctx context.Context, src source, prompt string) (source, error)
+	transcribe(ctx context.Context, src source) ([]string, error)
 }
+
+// errCheckUnavailable은 번역본을 판독하지 못한 경우다. 검사 없이 다시 그려도 통과를 판단할 수 없어 그리기를 재시도하지 않는다.
+var errCheckUnavailable = errors.New("translated poster check unavailable")
 
 type Service struct {
 	config       Config
@@ -76,6 +83,7 @@ type Service struct {
 	logger       *slog.Logger
 	now          func() time.Time
 	retry        retry.RetryOptions
+	rowBudget    time.Duration
 }
 
 func New(ctx context.Context, config *Config, store *posterstore.Store, members memberSource, logger *slog.Logger) (*Service, error) {
@@ -110,6 +118,7 @@ func newService(
 		logger:       logger.With(slog.String("service", "schedule_poster")),
 		now:          time.Now,
 		retry:        translationRetryOptions(),
+		rowBudget:    translationRowBudget,
 	}
 }
 
@@ -317,7 +326,11 @@ func (s *Service) translatePending(ctx context.Context) error {
 	for _, item := range pending {
 		prompt := buildTextPrompt(item.ChannelID, members, s.config.Translation.Glossary)
 
-		image, reason, err := s.translateOne(ctx, item, prompt)
+		rowCtx, cancel := context.WithTimeout(ctx, s.rowBudget)
+		image, reason, err := s.translateOne(rowCtx, item, prompt)
+
+		cancel()
+
 		if ctx.Err() != nil {
 			return errors.Join(append(errs, ctx.Err())...)
 		}
@@ -353,30 +366,97 @@ func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTran
 		return posterstore.Image{}, reasonSourceUnavailable, sourceErr
 	}
 
-	var translation textTranslation
+	originalText, err := s.transcribe(ctx, item.ID, "original", original)
+	if err != nil {
+		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("transcribe original poster: %w", err)
+	}
 
-	textErr := retry.WithRetry(ctx, s.retryOptions(item.ID, "text"), func(ctx context.Context) error {
+	s.logger.Info("Schedule poster original transcribed",
+		slog.Int64("poster_id", item.ID), slog.String("transcript", strings.Join(originalText, " / ")))
+
+	table, err := s.checkedTable(ctx, item.ID, original, originalText, textPrompt)
+	if err != nil {
+		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("translate poster text: %w", err)
+	}
+
+	image, err := s.checkedRender(ctx, item.ID, original, originalText, table)
+	if err != nil {
+		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("render translated poster: %w", err)
+	}
+
+	return image, "", nil
+}
+
+func (s *Service) transcribe(ctx context.Context, posterID int64, stage string, src source) ([]string, error) {
+	var lines []string
+
+	err := retry.WithRetry(ctx, s.retryOptions(posterID, stage), func(ctx context.Context) error {
 		var err error
 
-		translation, err = s.translator.translateText(ctx, original, textPrompt)
+		lines, err = s.translator.transcribe(ctx, src)
 
 		return err
 	})
-	if textErr != nil {
-		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("translate poster text: %w", textErr)
+	if err != nil {
+		return nil, fmt.Errorf("%s transcript: %w", stage, err)
+	}
+
+	return lines, nil
+}
+
+// checkedTable은 원본 판독과 어긋난 번역표를 받지 않고, 찾은 문제를 붙여 다시 만든다.
+func (s *Service) checkedTable(ctx context.Context, posterID int64, original source, originalText []string, prompt string) (translationTable, error) {
+	var (
+		translation textTranslation
+		problems    []string
+	)
+
+	err := retry.WithRetry(ctx, s.retryOptions(posterID, "text"), func(ctx context.Context) error {
+		var err error
+
+		translation, err = s.translator.translateText(ctx, original, withProblems(prompt, problems))
+		if err != nil {
+			return err
+		}
+
+		if problems = checkTable(translation.table, originalText); len(problems) > 0 {
+			s.logger.Warn("Schedule poster table check failed",
+				slog.Int64("poster_id", posterID),
+				slog.Any("problems", problems),
+				slog.String("table", translation.table.String()))
+
+			return fmt.Errorf("translation table check failed: %s", strings.Join(problems, "; "))
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build checked translation table: %w", err)
 	}
 
 	s.logger.Info("Schedule poster text translated",
-		slog.Int64("poster_id", item.ID),
+		slog.Int64("poster_id", posterID),
 		slog.Int("web_search_queries", translation.webSearchQueries),
-		slog.String("table", translation.table))
+		slog.String("table", translation.table.String()))
 
-	imagePrompt := buildImagePrompt(translation.table)
+	return translation.table, nil
+}
 
-	var image posterstore.Image
+// checkedRender는 저장할 JPEG를 판독해 검사를 통과한 번역본만 돌려준다. 다시 그릴 때도 원본에서 시작해 이전 결과의 손상이 쌓이지 않게 한다.
+func (s *Service) checkedRender(ctx context.Context, posterID int64, original source, originalText []string, table translationTable) (posterstore.Image, error) {
+	var (
+		image    posterstore.Image
+		problems []string
+	)
 
-	imageErr := retry.WithRetry(ctx, s.retryOptions(item.ID, "image"), func(ctx context.Context) error {
-		translated, err := s.translator.renderImage(ctx, original, imagePrompt)
+	options := s.retryOptions(posterID, "image")
+
+	options.ShouldRetry = func(err error) bool {
+		return !errors.Is(err, errCheckUnavailable) && retryableTranslationError(err)
+	}
+
+	err := retry.WithRetry(ctx, options, func(ctx context.Context) error {
+		translated, err := s.translator.renderImage(ctx, original, buildImagePrompt(table, problems))
 		if err != nil {
 			return err
 		}
@@ -386,15 +466,31 @@ func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTran
 			return err
 		}
 
+		renderedText, err := s.transcribe(ctx, posterID, "check", source{MIME: "image/jpeg", Data: data})
+		if err != nil {
+			return fmt.Errorf("%w: %w", errCheckUnavailable, err)
+		}
+
+		if found := checkRender(table, originalText, renderedText); len(found) > 0 {
+			problems = found
+
+			s.logger.Warn("Schedule poster render check failed",
+				slog.Int64("poster_id", posterID),
+				slog.Any("problems", found),
+				slog.String("transcript", strings.Join(renderedText, " / ")))
+
+			return fmt.Errorf("render check failed: %s", strings.Join(found, "; "))
+		}
+
 		image = posterstore.Image{MIME: "image/jpeg", Data: data}
 
 		return nil
 	})
-	if imageErr != nil {
-		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("render translated poster: %w", imageErr)
+	if err != nil {
+		return posterstore.Image{}, fmt.Errorf("draw checked poster: %w", err)
 	}
 
-	return image, "", nil
+	return image, nil
 }
 
 func (s *Service) retryOptions(posterID int64, stage string) retry.RetryOptions {
