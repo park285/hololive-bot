@@ -524,7 +524,7 @@ func lines(text string) []string {
 func TestCheckRenderCatchesDroppedTimesAndLeftoverOriginal(t *testing.T) {
 	t.Parallel()
 
-	problems := checkRender(mustTable(t, tsuzuriTable), lines(tsuzuriOriginal), lines(tsuzuriBrokenRender))
+	problems := problemTexts(checkRender(mustTable(t, tsuzuriTable), lines(tsuzuriOriginal), lines(tsuzuriBrokenRender)))
 
 	for _, want := range []string{
 		`"21:00" must appear 3 times in the translated poster but was found fewer times`,
@@ -564,9 +564,9 @@ func TestCheckRenderCatchesChangedDatesAndTranslatedProperNouns(t *testing.T) {
 	table := mustTable(t, kyokoTable)
 	original := lines(kyokoOriginal)
 
-	require.Contains(t, checkRender(table, original, lines(strings.Replace(kyokoRender, "2026/11/09", "2026/11/08", 1))),
+	require.Contains(t, problemTexts(checkRender(table, original, lines(strings.Replace(kyokoRender, "2026/11/09", "2026/11/08", 1)))),
 		`"09" must appear 1 times in the translated poster but was found fewer times`)
-	require.Contains(t, checkRender(table, original, lines(strings.Replace(kyokoRender, "Cuphead", "컵헤드", 1))),
+	require.Contains(t, problemTexts(checkRender(table, original, lines(strings.Replace(kyokoRender, "Cuphead", "컵헤드", 1)))),
 		`"CUPHEAD" must appear 1 times in the translated poster but was found fewer times`)
 }
 

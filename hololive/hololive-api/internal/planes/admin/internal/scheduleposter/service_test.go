@@ -116,11 +116,13 @@ type fakeTranslator struct {
 	tables       []string
 	textErr      error
 	output       source
+	outputs      []source
 	imageErr     error
 	originalText []string
 	renders      [][]string
 	textPrompts  []string
 	imagePrompts []string
+	imageInputs  []source
 	checks       int
 }
 
@@ -147,8 +149,14 @@ func (f *fakeTranslator) transcribe(_ context.Context, src source) ([]string, er
 	return f.renders[min(f.checks, len(f.renders))-1], nil
 }
 
-func (f *fakeTranslator) renderImage(_ context.Context, _ source, prompt string) (source, error) {
+// renderImage는 outputs가 있으면 차례로 내고 마지막 것을 되풀이한다.
+func (f *fakeTranslator) renderImage(_ context.Context, src source, prompt string) (source, error) {
 	f.imagePrompts = append(f.imagePrompts, prompt)
+	f.imageInputs = append(f.imageInputs, src)
+
+	if len(f.outputs) > 0 {
+		return f.outputs[min(len(f.imagePrompts), len(f.outputs))-1], f.imageErr
+	}
 
 	return f.output, f.imageErr
 }
@@ -232,7 +240,7 @@ func TestTranslatePendingStoresJPEG(t *testing.T) {
 	require.Len(t, translator.textPrompts, 1)
 	require.Contains(t, translator.textPrompts[0], "Poster owner: 宙科そぴあ (Sorashina Sopia) → 소라시나 소피아")
 	require.Contains(t, translator.textPrompts[0], "熱千めら (Achichi Mela) → 아치치 메라")
-	require.Equal(t, []string{buildImagePrompt(mustTable(t, sampleTable), nil)}, translator.imagePrompts, "이미지 단계는 번역표대로만 그린다")
+	require.Equal(t, []string{buildImagePrompt(mustTable(t, sampleTable))}, translator.imagePrompts, "이미지 단계는 번역표대로만 그린다")
 	require.Equal(t, 1, translator.checks, "저장할 JPEG를 판독해 검사한다")
 
 	require.Len(t, store.recorded, 1)
@@ -283,36 +291,66 @@ func TestTranslatePendingRedrawsUntilTheCheckPasses(t *testing.T) {
 	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
 
 	require.Len(t, translator.imagePrompts, 2)
-	require.Contains(t, translator.imagePrompts[1], "Earlier attempts were rejected for these problems. Make sure none of them occurs in this result:")
+	require.Contains(t, translator.imagePrompts[1], fixPromptHeader)
 	require.Contains(t, translator.imagePrompts[1], `- "21:00" must appear 3 times in the translated poster but was found fewer times`)
 	require.Len(t, store.recorded, 1)
 	require.Empty(t, store.failures)
 }
 
-func TestTranslatePendingCarriesEveryEarlierProblemIntoTheNextDraw(t *testing.T) {
+func TestTranslatePendingEditsTheBestDraftUntilTheCheckPasses(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
+	outputs := []source{
+		{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
+		{MIME: mimePNG, Data: pngBytes(t, 65, 36)},
+		{MIME: mimePNG, Data: pngBytes(t, 66, 36)},
+		{MIME: mimePNG, Data: pngBytes(t, 67, 36)},
+	}
 	secondRender := strings.ReplaceAll(strings.Replace(tsuzuriGoodRender, "@shusuchii\n", "", 1), "21:00", "")
 	translator := &fakeTranslator{
-		tables: []string{tsuzuriTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
+		tables: []string{tsuzuriTable}, outputs: outputs,
 		originalText: lines(tsuzuriOriginal),
-		renders:      [][]string{lines(tsuzuriBrokenRender), lines(secondRender), lines(tsuzuriGoodRender)},
+		renders:      [][]string{lines(tsuzuriBrokenRender), lines(secondRender), lines(tsuzuriBrokenRender), lines(tsuzuriGoodRender)},
 	}
 	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
+	service := testService(store, sources, translator)
 
-	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
+	service.retry.MaxAttempts = 4
 
-	firstOnly := `- "18:00" must appear 2 times in the translated poster but was found fewer times`
-	secondOnly := `- "SHUSUCHII" must appear 1 times in the translated poster but was found fewer times`
+	require.NoError(t, service.translatePending(t.Context()))
 
-	require.Len(t, translator.imagePrompts, 3)
-	require.Contains(t, translator.imagePrompts[1], firstOnly)
-	require.NotContains(t, translator.imagePrompts[1], secondOnly)
-	require.Contains(t, translator.imagePrompts[2], firstOnly, "직전 시도에서 사라진 문제도 다음 요청에 남긴다")
-	require.Contains(t, translator.imagePrompts[2], secondOnly)
-	require.Equal(t, 1, strings.Count(translator.imagePrompts[2], `- "21:00" `), "두 시도에서 모두 모자란 낱말은 한 줄만 남긴다")
+	firstDraft, secondDraft := mustJPEG(t, outputs[0]), mustJPEG(t, outputs[1])
+	inputs := make([][]byte, 0, len(translator.imageInputs))
+
+	for _, input := range translator.imageInputs {
+		inputs = append(inputs, input.Data)
+	}
+
+	require.Equal(t, [][]byte{[]byte("original"), firstDraft, secondDraft, secondDraft}, inputs, "검사에 걸린 번역본 가운데 문제가 가장 적은 것을 이어 고친다")
+	require.NotContains(t, translator.imagePrompts[1], keepProblemsHeader)
+
+	fix, keep, ok := strings.Cut(translator.imagePrompts[3], keepProblemsHeader)
+	require.True(t, ok)
+	require.True(t, strings.HasPrefix(fix, fixPromptHeader))
+	require.Contains(t, fix, `- "21:00" must appear 3 times in the translated poster but was found fewer times`)
+	require.Contains(t, fix, `- "SHUSUCHII" must appear 1 times in the translated poster but was found fewer times`)
+	require.NotContains(t, fix, `"18:00"`, "기준 이미지에서 이미 맞은 문제는 고칠 목록에 넣지 않는다")
+	require.Contains(t, keep, `- "18:00" must appear 2 times in the translated poster but was found fewer times`)
+	require.Contains(t, keep, `"@shusuchii" → "@shusuchii"`)
+	require.Contains(t, keep, `"21:00〜 OVERWATCH @キョーコ" → "21:00~ OVERWATCH @햐쿠토 쿄코"`)
+	require.NotContains(t, keep, `"雑談" → "잡담"`, "고칠 문제와 관계없는 줄은 넘기지 않는다")
 	require.Len(t, store.recorded, 1)
+	require.Equal(t, mustJPEG(t, outputs[3]), store.recorded[0].Data)
+}
+
+func mustJPEG(t *testing.T, src source) []byte {
+	t.Helper()
+
+	data, err := toJPEG(src)
+	require.NoError(t, err)
+
+	return data
 }
 
 func TestTranslatePendingNeverStoresARenderThatFailsTheCheck(t *testing.T) {
@@ -351,7 +389,7 @@ func TestTranslatePendingRebuildsATableThatMissesATime(t *testing.T) {
 
 	require.Len(t, translator.textPrompts, 2)
 	require.Contains(t, translator.textPrompts[1], `- "20:00" appears 1 times in the original but only 0 times in the Korean lines of the table`)
-	require.Equal(t, []string{buildImagePrompt(mustTable(t, withTime), nil)}, translator.imagePrompts, "원본과 맞는 번역표로만 그린다")
+	require.Equal(t, []string{buildImagePrompt(mustTable(t, withTime))}, translator.imagePrompts, "원본과 맞는 번역표로만 그린다")
 	require.Len(t, store.recorded, 1)
 }
 
@@ -359,10 +397,10 @@ func TestBuildImagePromptListsOnlyChangedRows(t *testing.T) {
 	t.Parallel()
 
 	table := mustTable(t, "MON ⇒ 월\n12:00PM ⇒ 12:00PM\nCuphead ⇒ Cuphead\nwith めらち ⇒ 메라치와 함께")
-	prompt := buildImagePrompt(table, []string{`"CUPHEAD" must appear 1 times in the translated poster but was found fewer times`})
+	prompt := buildImagePrompt(table)
 
 	require.Contains(t, prompt, "All 2 replacements must appear")
-	require.Contains(t, prompt, "Replacements (original → Korean):\n1. \"MON\" → \"월\"\n2. \"with めらち\" → \"메라치와 함께\"\n\nEarlier attempts were rejected")
+	require.True(t, strings.HasSuffix(prompt, "Replacements (original → Korean):\n1. \"MON\" → \"월\"\n2. \"with めらち\" → \"메라치와 함께\""))
 	require.NotContains(t, prompt, `"12:00PM" →`, "바뀌지 않는 줄은 원본 그대로 남으므로 넘기지 않는다")
 }
 

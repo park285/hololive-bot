@@ -445,12 +445,43 @@ func (s *Service) checkedTable(ctx context.Context, posterID int64, original sou
 	return translation.table, nil
 }
 
-// checkedRender는 저장할 JPEG를 판독해 검사를 통과한 번역본만 돌려준다. 다시 그릴 때도 이전 대화 없이 원본에서 시작해 이전 결과의 손상이 쌓이지 않게 하고,
-// 앞선 시도들에서 찾은 문제를 모두 붙여 직전에 고친 문제가 다음 시도에서 되살아나지 않게 한다.
+// renderAttempts는 검사에 걸린 번역본 가운데 문제가 가장 적은 것(draft)과 그 문제, 지금까지 찾은 모든 문제를 기억한다.
+type renderAttempts struct {
+	draft    source
+	problems []renderProblem
+	seen     []renderProblem
+}
+
+// next는 첫 그리기면 원본을, 아니면 draft와 그 문제만 고칠 지시문을 고른다.
+func (a *renderAttempts) next(original source, table translationTable) (source, string) {
+	if len(a.problems) == 0 {
+		return original, buildImagePrompt(table)
+	}
+
+	keep := slices.DeleteFunc(slices.Clone(a.seen), func(problem renderProblem) bool { return slices.Contains(a.problems, problem) })
+
+	return a.draft, buildFixPrompt(table, a.problems, keep)
+}
+
+// reject에는 판독한 JPEG를 그대로 넘긴다. 다시 보내는 이미지가 문제 목록을 만든 이미지와 같아야 한다.
+func (a *renderAttempts) reject(rendered source, found []renderProblem) {
+	for _, problem := range found {
+		if !slices.Contains(a.seen, problem) {
+			a.seen = append(a.seen, problem)
+		}
+	}
+
+	if len(a.problems) == 0 || len(found) < len(a.problems) {
+		a.draft, a.problems = rendered, found
+	}
+}
+
+// checkedRender는 저장할 JPEG를 판독해 검사를 통과한 번역본만 돌려준다. 검사에 걸리면 가장 나은 번역본을 이전 대화 없이 다시 보내 그 문제만 고치게 하고,
+// 앞선 시도에서만 나온 문제는 다시 생기지 않게 함께 알린다.
 func (s *Service) checkedRender(ctx context.Context, posterID int64, original source, originalText []string, table translationTable) (posterstore.Image, error) {
 	var (
 		image    posterstore.Image
-		problems []string
+		attempts renderAttempts
 	)
 
 	options := s.retryOptions(posterID, "image")
@@ -460,7 +491,9 @@ func (s *Service) checkedRender(ctx context.Context, posterID int64, original so
 	}
 
 	err := retry.WithRetry(ctx, options, func(ctx context.Context) error {
-		translated, err := s.translator.renderImage(ctx, original, buildImagePrompt(table, problems))
+		input, prompt := attempts.next(original, table)
+
+		translated, err := s.translator.renderImage(ctx, input, prompt)
 		if err != nil {
 			return err
 		}
@@ -470,27 +503,27 @@ func (s *Service) checkedRender(ctx context.Context, posterID int64, original so
 			return err
 		}
 
-		renderedText, err := s.transcribe(ctx, posterID, "check", source{MIME: "image/jpeg", Data: data})
+		rendered := source{MIME: "image/jpeg", Data: data}
+
+		renderedText, err := s.transcribe(ctx, posterID, "check", rendered)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errCheckUnavailable, err)
 		}
 
 		if found := checkRender(table, originalText, renderedText); len(found) > 0 {
-			for _, problem := range found {
-				if !slices.Contains(problems, problem) {
-					problems = append(problems, problem)
-				}
-			}
+			attempts.reject(rendered, found)
+
+			texts := problemTexts(found)
 
 			s.logger.Warn("Schedule poster render check failed",
 				slog.Int64("poster_id", posterID),
-				slog.Any("problems", found),
+				slog.Any("problems", texts),
 				slog.String("transcript", strings.Join(renderedText, " / ")))
 
-			return fmt.Errorf("render check failed: %s", strings.Join(found, "; "))
+			return fmt.Errorf("render check failed: %s", strings.Join(texts, "; "))
 		}
 
-		image = posterstore.Image{MIME: "image/jpeg", Data: data}
+		image = posterstore.Image{MIME: rendered.MIME, Data: rendered.Data}
 
 		return nil
 	})

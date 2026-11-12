@@ -158,10 +158,42 @@ func checkRow(row tableRow) []string {
 	return problems
 }
 
+// renderProblem에는 그 시도의 판독 개수를 넣지 않는다. 시도마다 같은 문제가 같은 값이어야 앞선 시도의 문제와 견줄 수 있다.
+type renderProblem struct {
+	text         string
+	want         int
+	untranslated bool
+}
+
+func (p renderProblem) String() string {
+	if p.untranslated {
+		return fmt.Sprintf("untranslated original text %q remains in the translated poster", p.text)
+	}
+
+	return fmt.Sprintf("%q must appear %d times in the translated poster but was found fewer times", p.text, p.want)
+}
+
+func (p renderProblem) related(row tableRow) bool {
+	if p.untranslated {
+		return strings.Contains(row.original, p.text)
+	}
+
+	return slices.Contains(tokens(row.korean), p.text) || slices.Contains(tokens(row.original), p.text)
+}
+
+func problemTexts(problems []renderProblem) []string {
+	texts := make([]string, 0, len(problems))
+
+	for _, problem := range problems {
+		texts = append(texts, problem.String())
+	}
+
+	return texts
+}
+
 // checkRender는 판독 오차에 흔들리지 않는 사실만 본다. 한글은 판독이 글꼴에 따라 자주 잘못 읽어 대조하지 않는다.
-// 문제 문장에 이번 판독 개수를 넣지 않는다. 시도마다 같은 문장이 나와야 다시 그릴 때 누적 목록에서 한 줄로 합쳐진다.
-func checkRender(table translationTable, original, rendered []string) []string {
-	var problems []string
+func checkRender(table translationTable, original, rendered []string) []renderProblem {
+	var problems []renderProblem
 
 	want := countTokens(original, isNumber)
 
@@ -173,7 +205,7 @@ func checkRender(table translationTable, original, rendered []string) []string {
 
 	for _, token := range sortedKeys(want) {
 		if got[token] < want[token] {
-			problems = append(problems, fmt.Sprintf("%q must appear %d times in the translated poster but was found fewer times", token, want[token]))
+			problems = append(problems, renderProblem{text: token, want: want[token]})
 		}
 	}
 
@@ -188,7 +220,7 @@ func checkRender(table translationTable, original, rendered []string) []string {
 	}
 
 	for _, run := range untranslated {
-		problems = append(problems, fmt.Sprintf("untranslated original text %q remains in the translated poster", run))
+		problems = append(problems, renderProblem{text: run, untranslated: true})
 	}
 
 	return problems
