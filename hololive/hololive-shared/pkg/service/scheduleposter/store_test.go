@@ -174,7 +174,7 @@ func TestStoreInsertCommunityCandidates(t *testing.T) {
 	const (
 		melaChannel = "UC8eitCE9Z6EwUCs-VUi1blg"
 		pattern     = "週間スケジュール|スケジュール|schedule|予定|weekly"
-		thumbnail   = "https://yt3.ggpht.com/poster=s640-c"
+		thumbnail   = "https://yt3.ggpht.com/poster=s640-c-fcrop64=1,00000000ffffffff-rw-nd-v1"
 	)
 
 	jst := time.FixedZone("JST", 9*60*60)
