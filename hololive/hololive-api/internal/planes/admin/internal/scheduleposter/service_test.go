@@ -347,6 +347,28 @@ func TestFirstImageSkipsThoughtImages(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestFirstImageReportsWhyResponseIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		response *genai.GenerateContentResponse
+		want     string
+	}{
+		"blocked prompt": {
+			response: &genai.GenerateContentResponse{PromptFeedback: &genai.GenerateContentResponsePromptFeedback{BlockReason: genai.BlockedReasonProhibitedContent}},
+			want:     "block reason PROHIBITED_CONTENT",
+		},
+		"candidate without content": {
+			response: &genai.GenerateContentResponse{Candidates: []*genai.Candidate{{FinishReason: genai.FinishReasonImageSafety}}},
+			want:     "finish reason IMAGE_SAFETY",
+		},
+		"no reason": {response: &genai.GenerateContentResponse{}, want: "no reason given"},
+	} {
+		_, err := firstImage(tc.response)
+		require.ErrorContains(t, err, tc.want, name)
+	}
+}
+
 func TestToJPEGRejectsOversizedImages(t *testing.T) {
 	t.Parallel()
 

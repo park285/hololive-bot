@@ -115,8 +115,12 @@ func posterContents(src source, prompt string) []*genai.Content {
 }
 
 func firstImage(response *genai.GenerateContentResponse) (source, error) {
-	if response == nil || len(response.Candidates) == 0 || response.Candidates[0].Content == nil {
-		return source{}, errors.New("translated poster response has no candidate")
+	if response == nil {
+		return source{}, errors.New("translated poster response is empty")
+	}
+
+	if len(response.Candidates) == 0 || response.Candidates[0] == nil || response.Candidates[0].Content == nil {
+		return source{}, fmt.Errorf("translated poster response has no candidate (%s)", emptyResponseReason(response))
 	}
 
 	// thought 이미지는 생각 단계의 중간 결과라 최종 포스터가 아니다.
@@ -127,6 +131,27 @@ func firstImage(response *genai.GenerateContentResponse) (source, error) {
 	}
 
 	return source{}, fmt.Errorf("translated poster response has no image (finish reason %q)", response.Candidates[0].FinishReason)
+}
+
+// emptyResponseReason은 결과 없는 응답의 차단·종료 사유를 모은다. 같은 포스터가 매번 막히는지 이 사유로만 가릴 수 있다.
+func emptyResponseReason(response *genai.GenerateContentResponse) string {
+	var reasons []string
+
+	if feedback := response.PromptFeedback; feedback != nil && feedback.BlockReason != "" {
+		reasons = append(reasons, strings.TrimSpace("block reason "+string(feedback.BlockReason)+" "+feedback.BlockReasonMessage))
+	}
+
+	if len(response.Candidates) > 0 && response.Candidates[0] != nil && response.Candidates[0].FinishReason != "" {
+		candidate := response.Candidates[0]
+
+		reasons = append(reasons, strings.TrimSpace("finish reason "+string(candidate.FinishReason)+" "+candidate.FinishMessage))
+	}
+
+	if len(reasons) == 0 {
+		return "no reason given"
+	}
+
+	return strings.Join(reasons, "; ")
 }
 
 func webSearchQueries(response *genai.GenerateContentResponse) int {
