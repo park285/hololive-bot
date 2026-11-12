@@ -260,7 +260,7 @@ func socketListener(ctx context.Context, socket string) (net.Listener, error) {
 	}
 
 	// 전용 issuer UID 65532와 collector group 1000이 같은 AF_UNIX IPC를 공유하므로 group 쓰기가 필요하다.
-	if err = os.Chmod(socket, 0o660); err != nil { //nolint:gosec // G302: 교차 UID 소켓 IPC에 group 접근이 필수다
+	if err = os.Chmod(socket, 0o660); err != nil { // #nosec G302 -- 교차 UID 소켓 IPC에 group 접근이 필수다
 		return nil, fmt.Errorf("chmod socket: %w", errors.Join(err, listener.Close()))
 	}
 

@@ -159,6 +159,7 @@ func checkRow(row tableRow) []string {
 }
 
 // checkRender는 판독 오차에 흔들리지 않는 사실만 본다. 한글은 판독이 글꼴에 따라 자주 잘못 읽어 대조하지 않는다.
+// 문제 문장에 이번 판독 개수를 넣지 않는다. 시도마다 같은 문장이 나와야 다시 그릴 때 누적 목록에서 한 줄로 합쳐진다.
 func checkRender(table translationTable, original, rendered []string) []string {
 	var problems []string
 
@@ -172,7 +173,7 @@ func checkRender(table translationTable, original, rendered []string) []string {
 
 	for _, token := range sortedKeys(want) {
 		if got[token] < want[token] {
-			problems = append(problems, fmt.Sprintf("%q should appear %d times but appears %d times in the translated poster", token, want[token], got[token]))
+			problems = append(problems, fmt.Sprintf("%q must appear %d times in the translated poster but was found fewer times", token, want[token]))
 		}
 	}
 
@@ -203,5 +204,5 @@ func withProblems(prompt string, problems []string) string {
 		return prompt
 	}
 
-	return prompt + "\n\nProblems found by comparing the previous result. Fix all of them this time:\n- " + strings.Join(problems, "\n- ")
+	return prompt + "\n\nEarlier attempts were rejected for these problems. Make sure none of them occurs in this result:\n- " + strings.Join(problems, "\n- ")
 }

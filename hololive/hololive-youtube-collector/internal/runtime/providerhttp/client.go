@@ -82,6 +82,7 @@ func (c *ProviderHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider HTTP client is not configured")
 	}
 
+	// #nosec G704 -- 호출자는 운영 설정에서 검증한 HTTPS 기준 주소에 고정 경로만 붙여 요청하고, redirect는 따라가지 않는다.
 	out, err := c.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("do: %w", err)

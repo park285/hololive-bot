@@ -527,12 +527,12 @@ func TestCheckRenderCatchesDroppedTimesAndLeftoverOriginal(t *testing.T) {
 	problems := checkRender(mustTable(t, tsuzuriTable), lines(tsuzuriOriginal), lines(tsuzuriBrokenRender))
 
 	for _, want := range []string{
-		`"21:00" should appear 3 times but appears 1 times in the translated poster`,
-		`"18:00" should appear 2 times but appears 1 times in the translated poster`,
-		`"20:00" should appear 1 times but appears 0 times in the translated poster`,
-		`"19:00" should appear 1 times but appears 0 times in the translated poster`,
-		`"21:30" should appear 1 times but appears 0 times in the translated poster`,
-		`"VALORANT" should appear 3 times but appears 1 times in the translated poster`,
+		`"21:00" must appear 3 times in the translated poster but was found fewer times`,
+		`"18:00" must appear 2 times in the translated poster but was found fewer times`,
+		`"20:00" must appear 1 times in the translated poster but was found fewer times`,
+		`"19:00" must appear 1 times in the translated poster but was found fewer times`,
+		`"21:30" must appear 1 times in the translated poster but was found fewer times`,
+		`"VALORANT" must appear 3 times in the translated poster but was found fewer times`,
 		`untranslated original text "ざつだん" remains in the translated poster`,
 		`untranslated original text "まわり隊" remains in the translated poster`,
 	} {
@@ -565,9 +565,9 @@ func TestCheckRenderCatchesChangedDatesAndTranslatedProperNouns(t *testing.T) {
 	original := lines(kyokoOriginal)
 
 	require.Contains(t, checkRender(table, original, lines(strings.Replace(kyokoRender, "2026/11/09", "2026/11/08", 1))),
-		`"09" should appear 1 times but appears 0 times in the translated poster`)
+		`"09" must appear 1 times in the translated poster but was found fewer times`)
 	require.Contains(t, checkRender(table, original, lines(strings.Replace(kyokoRender, "Cuphead", "컵헤드", 1))),
-		`"CUPHEAD" should appear 1 times but appears 0 times in the translated poster`)
+		`"CUPHEAD" must appear 1 times in the translated poster but was found fewer times`)
 }
 
 func TestCheckTableRequiresEveryTime(t *testing.T) {

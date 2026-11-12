@@ -307,7 +307,7 @@ func removeRuntimeDir(dir string) error {
 }
 
 func finalizeRuntimeDir(dir string) error {
-	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // 비공개 디렉터리 탐색에는 소유자 실행 권한이 필요하다.
+	if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- 비공개 디렉터리 탐색에는 소유자 실행 권한이 필요하다.
 		return fmt.Errorf("chmod runtime dir: %w", err)
 	}
 

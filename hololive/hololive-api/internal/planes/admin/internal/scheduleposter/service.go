@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,7 +30,8 @@ const (
 	translateInterval = time.Minute
 	translateBatch    = 5
 	// 행 하나의 상한은 판독·번역표·그리기 재시도를 모두 합친 시간이다. 넘으면 그 행은 실패로 기록되고 다음 행으로 넘어간다.
-	translationRowBudget = time.Hour
+	// 행은 차례로 처리하므로 한 행이 이 시간만큼 같은 tick의 뒤 행을 기다리게 할 수 있다.
+	translationRowBudget = 3 * time.Hour
 	initialCollectWait   = 30 * time.Second
 	initialTranslate     = 15 * time.Second
 )
@@ -124,7 +126,7 @@ func newService(
 
 // translationRetryOptions는 번역 재시도 예외 계약(docs/current/services/hololive-api.md)의 한도다.
 func translationRetryOptions() retry.RetryOptions {
-	return retry.RetryOptions{MaxAttempts: 3, BaseDelay: 5 * time.Second, Jitter: 2 * time.Second}
+	return retry.RetryOptions{MaxAttempts: 10, BaseDelay: 5 * time.Second, MaxDelay: time.Minute, Jitter: 2 * time.Second}
 }
 
 // Start는 ctx가 끝날 때까지 돌아오지 않는다.
@@ -443,7 +445,8 @@ func (s *Service) checkedTable(ctx context.Context, posterID int64, original sou
 	return translation.table, nil
 }
 
-// checkedRender는 저장할 JPEG를 판독해 검사를 통과한 번역본만 돌려준다. 다시 그릴 때도 원본에서 시작해 이전 결과의 손상이 쌓이지 않게 한다.
+// checkedRender는 저장할 JPEG를 판독해 검사를 통과한 번역본만 돌려준다. 다시 그릴 때도 이전 대화 없이 원본에서 시작해 이전 결과의 손상이 쌓이지 않게 하고,
+// 앞선 시도들에서 찾은 문제를 모두 붙여 직전에 고친 문제가 다음 시도에서 되살아나지 않게 한다.
 func (s *Service) checkedRender(ctx context.Context, posterID int64, original source, originalText []string, table translationTable) (posterstore.Image, error) {
 	var (
 		image    posterstore.Image
@@ -473,7 +476,11 @@ func (s *Service) checkedRender(ctx context.Context, posterID int64, original so
 		}
 
 		if found := checkRender(table, originalText, renderedText); len(found) > 0 {
-			problems = found
+			for _, problem := range found {
+				if !slices.Contains(problems, problem) {
+					problems = append(problems, problem)
+				}
+			}
 
 			s.logger.Warn("Schedule poster render check failed",
 				slog.Int64("poster_id", posterID),

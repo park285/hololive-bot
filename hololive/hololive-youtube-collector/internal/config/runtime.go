@@ -339,7 +339,7 @@ func validateReadablePostgresSSLRootCert(path string) error {
 		return errors.New("POSTGRES_SSLROOTCERT is required in production")
 	}
 
-	file, err := os.Open(trimmed) //nolint:gosec // 운영자가 지정한 CA 경로의 읽기 가능성을 기동 시 검증해야 합니다.
+	file, err := os.Open(trimmed) // #nosec G304 -- 운영자가 지정한 CA 경로의 읽기 가능성을 기동 시 검증해야 합니다.
 	if err != nil {
 		return fmt.Errorf("POSTGRES_SSLROOTCERT is not readable: %w", err)
 	}
