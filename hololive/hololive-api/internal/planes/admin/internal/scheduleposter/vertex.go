@@ -18,6 +18,8 @@ const (
 	outputImageSize = "2K"
 	// 이미지 모델 문서의 최대 출력 토큰이다. 생각 토큰과 이미지 토큰(2K 1,680)이 이 한도를 나눠 쓰고, 넘으면 이미지 없이 MAX_TOKENS로 끝난다.
 	maxImageOutputTokens = 32768
+	// 이미지 모델의 기본 thinking level이다. HIGH에서는 줄 단위 번역표를 받은 포스터가 이미지 없이 MAX_TOKENS로 끝났다.
+	imageThinkingLevel = genai.ThinkingLevelMedium
 )
 
 const (
@@ -75,7 +77,7 @@ func (t *vertexTranslator) translateText(ctx context.Context, src source, prompt
 	return textTranslation{table: table, webSearchQueries: webSearchQueries(response)}, nil
 }
 
-func (t *vertexTranslator) transcribe(ctx context.Context, src source) (transcript, error) {
+func (t *vertexTranslator) transcribe(ctx context.Context, src source) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, textTimeout)
 	defer cancel()
 
@@ -83,7 +85,7 @@ func (t *vertexTranslator) transcribe(ctx context.Context, src source) (transcri
 
 	response, err := t.client.Models.GenerateContent(ctx, t.textModel, contents, config)
 	if err != nil {
-		return transcript{}, fmt.Errorf("transcribe poster text: %w", err)
+		return nil, fmt.Errorf("transcribe poster text: %w", err)
 	}
 
 	return parseTranscript(response.Text())
@@ -130,7 +132,7 @@ func imageRequest(src source, prompt string) ([]*genai.Content, *genai.GenerateC
 		CandidateCount:     1,
 		ImageConfig:        &genai.ImageConfig{ImageSize: outputImageSize},
 		MaxOutputTokens:    maxImageOutputTokens,
-		ThinkingConfig:     &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelHigh},
+		ThinkingConfig:     &genai.ThinkingConfig{ThinkingLevel: imageThinkingLevel},
 	}
 }
 

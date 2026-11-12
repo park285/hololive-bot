@@ -18,35 +18,40 @@ const glossaryOrg = "Hololive"
 
 const (
 	tableSeparator     = "⇒"
-	contentPrefix      = "TEXT:"
-	decorationPrefix   = "DECOR:"
+	transcriptPrefix   = "TEXT:"
 	maxTableLines      = 120
 	maxTableLineRunes  = 200
 	maxTranscriptLines = 200
-	// 판독과 번역표 지시는 같은 말로 장식을 가리켜야 둘의 판단이 어긋나지 않는다.
-	decorationText = "logos, signatures, small lettering inside stamps or badges, tape patterns, watermarks, and other decorative lettering that carries no content"
-	textPromptBase = `Read every line of text on this VTuber weekly schedule poster and build a translation table that pairs each line with the Korean line to draw back onto the poster.
-- Output only lines of the form "original line ⇒ Korean line", one per line, with no explanation, preamble, or closing remarks.
-- List lines top to bottom, left to right. If the same phrase appears in several places, list it every time it appears.
-- In the original line, copy everything in that line (or cell) of the poster exactly, including times, dates, numbers, Latin letters, and symbols. Skip only text too small to read.
-- Do not list ` + decorationText + ` (including member-name logos) when it contains only Latin letters; leave it as it is on the poster. If you are unsure whether something is decoration, list it unchanged as "X ⇒ X". Always list decoration that contains Japanese or digits.
-- In the Korean line, keep times, dates, numbers, symbols, AM/PM, abbreviations such as EN, JP, and JST, and @handles exactly as in the original. Write English weekdays (MON to SUN) as 월, 화, 수, 목, 금, 토, 일.
-- Translate Japanese and ordinary English (sentences, notices, headings, and words such as "with", "Collab", and "senpai") into Korean. The Korean line must contain no Japanese characters.
-- Terms in the glossary below take precedence over every other rule.
-- Write people's names, whether written in Japanese or English, with the Korean spelling from the name table below; if the poster shows only the given name or family name, use only that part. If a decorative font or mixed kana makes a name look one or two characters off from the table, use the closest entry. Never translate the meaning of the kanji in a name. Write names and nicknames that are not in the table by their Japanese reading in Hangul.
-- Keep English proper nouns (game, work, and brand names) in English.
-- Do not translate the meaning of Japanese proper nouns (game, work, project, segment, and unit names); write their Japanese reading in Hangul (地獄銭湯 → 지고쿠센토, 鬼武者 → 오니무샤). Write katakana loanwords with the Korean spelling of the source-language pronunciation (ダークソウル → 다크 소울). If you are unsure of a reading, confirm it with Google Search.
-- Translate stream titles and notices that are not proper nouns naturally, in the wording Korean VTuber fans use (콜라보, 멤버십 한정, 잡담, and so on), without adding or removing content.`
-	imagePromptBase = `Create the same poster image with the text of this VTuber weekly schedule poster replaced by the Korean lines of the translation table below.
-- For every row of the table, draw the Korean line where the original line was, without omission. Do not alter, drop, or add any character of the Korean line, and do not change a single character of times, numbers, Latin letters, or symbols.
-- Leave text that is not in the table exactly as it is on the original.
-- Keep the layout, character art, background, colors, decorations, icons, and aspect ratio unchanged. Draw the Korean text clearly with the same size, weight, color, and outline as the original text and a similar font style; if it overflows its box, reduce only the font size.
-- Do not add text or decorations that are not in the original.
+	textPromptBase     = `You are translating a VTuber weekly schedule poster into Korean. Read every line of text on the poster and output a translation table that pairs each line with the Korean line to draw in its place.
 
-Translation table:
-`
+Output format
+- One row per poster line: original line ⇒ Korean line
+- Output only these rows, with no explanation, preamble, numbering, or closing remarks.
+
+What to list
+- Go top to bottom, left to right. List a phrase every time it appears, even when it repeats.
+- Copy the original line exactly as printed, including times, dates, numbers, Latin letters, and symbols. Skip only text too small to read.
+- Do not list logos, signatures, small lettering inside stamps or badges, tape patterns, watermarks, or member-name logos when they contain only Latin letters; they stay as printed. If you are unsure whether something is decoration, list it unchanged as "X ⇒ X". Always list text that contains Japanese or digits.
+
+How to write the Korean line, in priority order
+1. Terms in the glossary below: use the glossary spelling.
+2. People's names, written in Japanese or English: use the Korean spelling from the name table below, and only the given or family name if that is all the poster shows. If a decorative font or mixed kana makes a name look one or two characters off, use the closest entry. Never translate the meaning of the kanji in a name. Write names and nicknames that are not in the table by their Japanese reading in Hangul.
+3. English proper nouns (game, work, and brand names): keep them in English.
+4. Japanese proper nouns (game, work, project, segment, and unit names): do not translate the meaning; write the Japanese reading in Hangul (地獄銭湯 → 지고쿠센토, 鬼武者 → 오니무샤). Write katakana loanwords with the Korean spelling of the source-language pronunciation (ダークソウル → 다크 소울). Confirm uncertain readings with Google Search.
+5. English weekdays MON to SUN: 월, 화, 수, 목, 금, 토, 일.
+6. Everything else in Japanese or ordinary English (sentences, notices, headings, and words such as "with", "Collab", and "senpai"): translate naturally into the wording Korean VTuber fans use (콜라보, 멤버십 한정, 잡담, and so on), without adding or removing content.
+- Keep times, dates, numbers, symbols, AM/PM, abbreviations such as EN, JP, and JST, and @handles exactly as in the original line.
+- The Korean line must contain no Japanese characters.`
+	imagePromptHeader = `Edit this VTuber weekly schedule poster. Replace each original text listed below with its Korean text and change nothing else.
+- All %d replacements must appear in the edited poster, each in the position of its original text.
+- Copy each Korean text exactly. Do not alter, drop, or add characters, and keep its times, numbers, Latin letters, and symbols unchanged.
+- Text that is not listed, including the times, dates, and numbers around replaced text, must stay exactly as printed.
+- Keep the layout, character art, background, colors, decorations, icons, and aspect ratio unchanged. Match the size, weight, color, and outline of the original text with a similar font style; if the Korean text does not fit, reduce only its font size.
+- Do not add any text or decoration.
+
+Replacements (original → Korean):`
 	transcribePrompt = `Transcribe every piece of text visible in this image, one line at a time, exactly as it appears.
-- Prefix lines of ` + decorationText + ` (including member-name logos) with "DECOR: " and every other line with "TEXT: ". Output nothing other than these two kinds of lines.
+- Prefix every line with "TEXT: " and output nothing else.
 - Do not correct, translate, or guess at text you cannot see. Write Korean, Japanese, digits, Latin letters, and symbols exactly as shown.
 - Go top to bottom, left to right, and write the same text every time it appears.
 - Skip only text too small to read.`
@@ -107,8 +112,23 @@ func memberLine(member *domain.Member) string {
 	return member.NameJa + " (" + member.Name + ") → " + member.NameKo
 }
 
+// buildImagePrompt가 바뀌는 줄만 넘기는 것은 나머지 줄이 원본 그대로 남아 지시만 길게 만들기 때문이다.
 func buildImagePrompt(table translationTable, problems []string) string {
-	return withProblems(imagePromptBase+table.String(), problems)
+	var replacements strings.Builder
+
+	count := 0
+
+	for _, row := range table {
+		if row.original == row.korean {
+			continue
+		}
+
+		count++
+
+		fmt.Fprintf(&replacements, "\n%d. %q → %q", count, row.original, row.korean)
+	}
+
+	return withProblems(fmt.Sprintf(imagePromptHeader, count)+replacements.String(), problems)
 }
 
 // parseTranslationTable은 형식에 맞는 줄만 이미지 프롬프트로 넘긴다. 검색 결과에서 온 설명문이 이미지 지시로 섞이지 않게 한다.
@@ -144,38 +164,30 @@ func parseTranslationTable(text string) (translationTable, error) {
 	return table, nil
 }
 
-// parseTranscript는 "TEXT:"와 "DECOR:"로 시작하는 줄만 판독으로 받는다. 머리말 같은 설명문이 대조에 섞이지 않게 한다.
-func parseTranscript(text string) (transcript, error) {
-	var read transcript
+// parseTranscript는 "TEXT:"로 시작하는 줄만 판독으로 받는다. 머리말 같은 설명문이 대조에 섞이지 않게 한다.
+func parseTranscript(text string) ([]string, error) {
+	var lines []string
 
 	for line := range strings.Lines(text) {
-		line = strings.TrimPrefix(strings.TrimSpace(line), "- ")
-
-		target := &read.content
-
-		body, ok := strings.CutPrefix(line, contentPrefix)
-		if !ok {
-			target = &read.decoration
-			body, ok = strings.CutPrefix(line, decorationPrefix)
-		}
-
-		if body = strings.TrimSpace(body); !ok || body == "" || strings.ContainsFunc(body, unicode.IsControl) {
+		read, ok := strings.CutPrefix(strings.TrimPrefix(strings.TrimSpace(line), "- "), transcriptPrefix)
+		if read = strings.TrimSpace(read); !ok || read == "" || strings.ContainsFunc(read, unicode.IsControl) {
 			continue
 		}
 
-		if utf8.RuneCountInString(body) > maxTableLineRunes {
-			return transcript{}, fmt.Errorf("poster transcript line exceeds %d characters", maxTableLineRunes)
+		if utf8.RuneCountInString(read) > maxTableLineRunes {
+			return nil, fmt.Errorf("poster transcript line exceeds %d characters", maxTableLineRunes)
 		}
 
-		*target = append(*target, body)
+		lines = append(lines, read)
 	}
 
-	switch total := len(read.content) + len(read.decoration); {
-	case total == 0:
-		return transcript{}, errors.New("poster transcript is empty")
-	case total > maxTranscriptLines:
-		return transcript{}, fmt.Errorf("poster transcript exceeds %d lines", maxTranscriptLines)
+	if len(lines) == 0 {
+		return nil, errors.New("poster transcript is empty")
 	}
 
-	return read, nil
+	if len(lines) > maxTranscriptLines {
+		return nil, fmt.Errorf("poster transcript exceeds %d lines", maxTranscriptLines)
+	}
+
+	return lines, nil
 }
