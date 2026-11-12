@@ -18,8 +18,8 @@ const (
 	HololiveH3KeyPath  = "/run/hololive-bot/certs/hololive-h3.key"
 
 	// 값의 소유자는 settings core의 runtime 입력 로더다. 여기서는 fixture 정리용으로만 쓴다.
-	IrisWebhookTokenEnv = "IRIS_WEBHOOK_TOKEN" //nolint:gosec // G101 오탐: 값은 자격증명이 아니라 환경변수 이름이다.
-	IrisBotTokenEnv     = "IRIS_BOT_TOKEN"     //nolint:gosec // G101 오탐: 값은 자격증명이 아니라 환경변수 이름이다.
+	IrisWebhookTokenEnv = "IRIS_WEBHOOK_TOKEN" // #nosec G101 -- 값은 자격증명이 아니라 환경변수 이름이다.
+	IrisBotTokenEnv     = "IRIS_BOT_TOKEN"     // #nosec G101 -- 값은 자격증명이 아니라 환경변수 이름이다.
 )
 
 // UseProfileFixture는 worker profile 파일 env를 fixture 경로로 세운다. 이 fixture는 identity를 소유한 runtime의

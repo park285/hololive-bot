@@ -21,5 +21,5 @@
 package common
 
 const (
-	APIKeyHeader = "X-API-Key" //nolint:gosec // G101: 헤더 이름일 뿐 실제 credentials가 아님
+	APIKeyHeader = "X-API-Key" // #nosec G101 -- 헤더 이름일 뿐 실제 credentials가 아님
 )

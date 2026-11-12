@@ -292,7 +292,7 @@ func sessionProvisionLockPath() string {
 func lockSessionProvisioning() (func() error, error) {
 	path := sessionProvisionLockPath()
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // TempDir와 parent pid로만 구성되는 test lock path입니다.
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- TempDir와 parent pid로만 구성되는 test lock path입니다.
 	if err != nil {
 		return nil, fmt.Errorf("open lock file %s: %w", path, err)
 	}

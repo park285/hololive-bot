@@ -80,7 +80,8 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 	}
 
 	// contextcheck: generation은 시작 RPC보다 오래 살며 stop이 종료하므로 요청 값도 보존하지 않습니다.
-	//nolint:contextcheck,gosec // generation 전용 수명; G204: 경로는 요청 데이터가 아닌 운영 시작 인수이며 rootfs로 제한됩니다.
+	//nolint:contextcheck // generation 전용 수명
+	// #nosec G204 -- 경로는 요청 데이터가 아닌 운영 시작 인수이며 rootfs로 제한됩니다.
 	cmd := exec.CommandContext(context.Background(), node, "--permission", "--allow-fs-read=/app/po-sandbox",
 		"--no-experimental-global-navigator", "--max-old-space-size=256", script)
 
