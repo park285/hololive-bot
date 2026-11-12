@@ -23,8 +23,8 @@ FPS
 メンバー限定
 配信スケジュール
 Weekly Schedule
-장식: MAIL
-장식: POST
+DECOR: MAIL
+DECOR: POST
 MON
 09
 21:00〜
@@ -282,9 +282,9 @@ Sorashina Sopia`
 const (
 	kyokoOriginal = `WEEKLY
 SCHEDULE
-장식: HYAKUTO
-장식: KYOKO
-장식: KEEP OUT
+DECOR: HYAKUTO
+DECOR: KYOKO
+DECOR: KEEP OUT
 2026/11/09 - 11/15
 *All times listed are in JST
 9
@@ -361,7 +361,7 @@ JP
 その他
 おやすみ
 ※ 配信時間や内容は諸事情で変更になる可能性があります。
-장식: HYAKUTO KYOKO`
+DECOR: HYAKUTO KYOKO`
 	kyokoTable = `WEEKLY SCHEDULE ⇒ 주간 스케줄
 2026/11/09 - 11/15 ⇒ 2026/11/09 - 11/15
 *All times listed are in JST ⇒ *모든 시간은 일본 시간(JST) 기준
@@ -431,8 +431,8 @@ JP ⇒ JP
 ※ 配信時間や内容は諸事情で変更になる可能性があります。 ⇒ ※ 방송 시간이나 내용은 사정에 따라 변경될 수 있습니다.`
 	kyokoRender = `주간
 스케줄
-장식: HYAKUTO
-장식: KYOKO
+DECOR: HYAKUTO
+DECOR: KYOKO
 2026/11/09 - 11/15
 *모든 시간은 일본 시간(JST) 기준
 9
@@ -506,7 +506,7 @@ JP
 기타
 휴방
 ※ 방송 시간이나 내용은 사정에 따라 변경될 수 있습니다.
-장식: HYAKUTO KYOKO`
+DECOR: HYAKUTO KYOKO`
 )
 
 func mustTable(t *testing.T, text string) translationTable {
@@ -541,16 +541,16 @@ func TestCheckRenderCatchesDroppedTimesAndLeftoverOriginal(t *testing.T) {
 	problems := checkRender(mustTable(t, tsuzuriTable), readTranscript(t, tsuzuriOriginal), readTranscript(t, tsuzuriBrokenRender))
 
 	for _, want := range []string{
-		"‘21:00’가 3번 있어야 하는데 번역본에는 1번 있다",
-		"‘18:00’가 2번 있어야 하는데 번역본에는 1번 있다",
-		"‘20:00’가 1번 있어야 하는데 번역본에는 0번 있다",
-		"‘19:00’가 1번 있어야 하는데 번역본에는 0번 있다",
-		"‘21:30’가 1번 있어야 하는데 번역본에는 0번 있다",
-		"‘VALORANT’가 3번 있어야 하는데 번역본에는 1번 있다",
-		"번역표 줄 ‘21:00~ 잡담 or VALORANT’이 번역본에 다 그려지지 않았다",
-		"번역표 줄 ‘목’이 번역본에 다 그려지지 않았다",
-		"번역되지 않은 원문 글자 ‘ざつだん’가 번역본에 남았다",
-		"번역되지 않은 원문 글자 ‘まわり隊’가 번역본에 남았다",
+		`"21:00" should appear 3 times but appears 1 times in the translated poster`,
+		`"18:00" should appear 2 times but appears 1 times in the translated poster`,
+		`"20:00" should appear 1 times but appears 0 times in the translated poster`,
+		`"19:00" should appear 1 times but appears 0 times in the translated poster`,
+		`"21:30" should appear 1 times but appears 0 times in the translated poster`,
+		`"VALORANT" should appear 3 times but appears 1 times in the translated poster`,
+		`table row "21:00~ 잡담 or VALORANT" is not fully drawn in the translated poster`,
+		`table row "목" is not fully drawn in the translated poster`,
+		`untranslated original text "ざつだん" remains in the translated poster`,
+		`untranslated original text "まわり隊" remains in the translated poster`,
 	} {
 		require.Contains(t, problems, want)
 	}
@@ -580,7 +580,7 @@ func TestCheckRenderRejectsTextOutsideTheTable(t *testing.T) {
 
 	rendered := readTranscript(t, strings.Replace(sophiaRender, "Sorashina Sopia\n소라시나", "Sorashina Sopia 생일 축하\n소라시나", 1))
 
-	require.Equal(t, []string{"번역표에 없는 한국어 글자 ‘생’, ‘일’, ‘축’, ‘하’가 번역본에 있다"},
+	require.Equal(t, []string{`the translated poster has Korean characters not in the table: "생", "일", "축", "하"`},
 		checkRender(mustTable(t, sophiaTable), readTranscript(t, sophiaOriginal), rendered))
 }
 
@@ -591,11 +591,11 @@ func TestCheckRenderRejectsEnglishLeftUntranslatedOrProperNounsTranslated(t *tes
 	original := readTranscript(t, kyokoOriginal)
 
 	untranslated := readTranscript(t, strings.Replace(kyokoRender, "Deadlock\n지지 선배와 함께", "Deadlock\nwith Gigi-senpai", 1))
-	require.Contains(t, checkRender(table, original, untranslated), "번역표 줄 ‘Deadlock 지지 선배와 함께’이 번역본에 다 그려지지 않았다")
+	require.Contains(t, checkRender(table, original, untranslated), `table row "Deadlock 지지 선배와 함께" is not fully drawn in the translated poster`)
 
 	transliterated := checkRender(table, original, readTranscript(t, strings.Replace(kyokoRender, "Cuphead", "컵헤드", 1)))
-	require.Contains(t, transliterated, "‘CUPHEAD’가 1번 있어야 하는데 번역본에는 0번 있다")
-	require.Contains(t, transliterated, "번역표에 없는 한국어 글자 ‘드’, ‘컵’, ‘헤’가 번역본에 있다")
+	require.Contains(t, transliterated, `"CUPHEAD" should appear 1 times but appears 0 times in the translated poster`)
+	require.Contains(t, transliterated, `the translated poster has Korean characters not in the table: "드", "컵", "헤"`)
 }
 
 func TestCheckTableRequiresEveryOriginalLine(t *testing.T) {
@@ -605,26 +605,26 @@ func TestCheckTableRequiresEveryOriginalLine(t *testing.T) {
 
 	dropped := mustTable(t, strings.Replace(tsuzuriTable, "21:00〜ざつだん or VALORANT ⇒ 21:00~ 잡담 or VALORANT\n", "", 1))
 	require.Equal(t, []string{
-		"원본에 3번 있는 ‘21:00’가 번역표의 한국어 줄에는 2번만 있다",
-		"원본에 3번 있는 ‘VALORANT’가 번역표의 원문 줄에는 2번만 있다",
-		"원본의 ‘ざつだん’ 부분이 번역표에 빠졌다",
+		`"21:00" appears 3 times in the original but only 2 times in the Korean lines of the table`,
+		`"VALORANT" appears 3 times in the original but only 2 times in the original lines of the table`,
+		`"ざつだん" from the original is missing from the table`,
 	}, checkTable(dropped, original))
 
 	repeated := mustTable(t, strings.Replace(tsuzuriTable, "21:30〜「時のオカリナ」 ⇒ 21:30~ 「시간의 오카리나」\n", "", 1))
 	require.Equal(t, []string{
-		"원본에 1번 있는 ‘21:30’가 번역표의 한국어 줄에는 0번만 있다",
-		"원본의 ‘時のオカリナ’ 부분이 번역표에 빠졌다",
+		`"21:30" appears 1 times in the original but only 0 times in the Korean lines of the table`,
+		`"時のオカリナ" from the original is missing from the table`,
 	}, checkTable(repeated, original), "같은 문구가 두 번 나오면 번역표에도 두 번 있어야 한다")
 
-	require.Equal(t, []string{"원본의 ‘完売’ 부분이 번역표에 빠졌다"}, checkTable(mustTable(t, sophiaTable), readTranscript(t, sophiaOriginal+"\n完売")),
+	require.Equal(t, []string{`"完売" from the original is missing from the table`}, checkTable(mustTable(t, sophiaTable), readTranscript(t, sophiaOriginal+"\n完売")),
 		"대신 읽은 글자 없이 빠진 원문은 두 글자라도 번역표에서 걸린다")
 
 	broken := mustTable(t, "21:00〜ざつだん or VALORANT ⇒ 잡담 또는 발로란트\nSUN ⇒ 일\nTHU ⇒ THU")
-	require.Equal(t, []string{"번역표 줄 ‘21:00〜ざつだん or VALORANT’의 한국어 줄에 원문의 ‘21:00’가 빠졌다"},
+	require.Equal(t, []string{`table row "21:00〜ざつだん or VALORANT": the Korean line is missing "21:00" from the original`},
 		checkTable(broken, transcript{content: []string{"SUN", "THU"}}), "영어는 옮길 수 있어도 숫자는 줄마다 그대로 있어야 한다")
 
 	leftover := mustTable(t, "21:00〜ざつだん ⇒ 21:00~ ざつだん")
-	require.Equal(t, []string{"번역표 줄 ‘21:00〜ざつだん’의 한국어 줄에 번역하지 않은 ‘ざつだん’가 남았다"},
+	require.Equal(t, []string{`table row "21:00〜ざつだん": the Korean line still has untranslated "ざつだん"`},
 		checkTable(leftover, transcript{content: []string{"21:00〜ざつだん"}}))
 }
 
@@ -635,10 +635,10 @@ func TestCheckTableRequiresEnglishContentButNotDecorations(t *testing.T) {
 
 	dropped := mustTable(t, strings.Replace(kyokoTable, "Deadlock with Gigi-senpai ⇒ Deadlock 지지 선배와 함께\n", "", 1))
 	require.Equal(t, []string{
-		"원본에 1번 있는 ‘DEADLOCK’가 번역표의 원문 줄에는 0번만 있다",
-		"원본에 1번 있는 ‘GIGI’가 번역표의 원문 줄에는 0번만 있다",
-		"원본에 3번 있는 ‘SENPAI’가 번역표의 원문 줄에는 2번만 있다",
-		"원본에 5번 있는 ‘WITH’가 번역표의 원문 줄에는 4번만 있다",
+		`"DEADLOCK" appears 1 times in the original but only 0 times in the original lines of the table`,
+		`"GIGI" appears 1 times in the original but only 0 times in the original lines of the table`,
+		`"SENPAI" appears 3 times in the original but only 2 times in the original lines of the table`,
+		`"WITH" appears 5 times in the original but only 4 times in the original lines of the table`,
 	}, checkTable(dropped, original))
 
 	corrected := mustTable(t, strings.Replace(kyokoTable, "Bijou-sepnai", "Bijou-senpai", 1))
@@ -646,8 +646,8 @@ func TestCheckTableRequiresEnglishContentButNotDecorations(t *testing.T) {
 
 	logoAsContent := transcript{content: append(slices.Clone(original.content), "HYAKUTO KYOKO"), decoration: original.decoration}
 	require.Equal(t, []string{
-		"원본에 1번 있는 ‘HYAKUTO’가 번역표의 원문 줄에는 0번만 있다",
-		"원본에 1번 있는 ‘KYOKO’가 번역표의 원문 줄에는 0번만 있다",
+		`"HYAKUTO" appears 1 times in the original but only 0 times in the original lines of the table`,
+		`"KYOKO" appears 1 times in the original but only 0 times in the original lines of the table`,
 	}, checkTable(mustTable(t, kyokoTable), logoAsContent))
 	require.Empty(t, checkTable(mustTable(t, kyokoTable+"\nHYAKUTO KYOKO ⇒ HYAKUTO KYOKO"), logoAsContent),
 		"판독이 로고를 내용으로 읽어도 번역표가 그대로 적으면 통과한다")
@@ -667,9 +667,9 @@ func TestCheckTableToleratesSmallReadingDifferences(t *testing.T) {
 	require.Empty(t, checkTable(mustTable(t, "@アソビ★まわり隊 めらch. ⇒ @아소비★마와리타이 메라 ch."), read("@アソビきまわり隊 めらch.")),
 		"판독이 ★를 가나로 읽어도 번역표의 ★를 대신 읽은 글자로 본다")
 	require.NotEmpty(t, checkTable(table, read("休みになる", "かのうせい大", "一致するまで終われまテン", "ざつだん")))
-	require.Equal(t, []string{"원본의 ‘月’ 부분이 번역표에 빠졌다", "원본의 ‘火’ 부분이 번역표에 빠졌다", "원본의 ‘水’ 부분이 번역표에 빠졌다"},
+	require.Equal(t, []string{`"月" from the original is missing from the table`, `"火" from the original is missing from the table`, `"水" from the original is missing from the table`},
 		checkTable(table, read("月", "火", "水", "休みになるかのうせい大", "一致するまで終われまテン")), "한 글자 요일 한자도 번역표에 있어야 한다")
-	require.Equal(t, []string{"원본의 ‘月’ 부분이 번역표에 빠졌다"},
+	require.Equal(t, []string{`"月" from the original is missing from the table`},
 		checkTable(table, transcript{content: read("休みになるかのうせい大", "一致するまで終われまテン").content, decoration: []string{"月"}}),
 		"일본어는 장식으로 읽혀도 번역표에 있어야 한다")
 }
@@ -677,7 +677,7 @@ func TestCheckTableToleratesSmallReadingDifferences(t *testing.T) {
 func TestParseTranscriptKeepsOnlyMarkedLines(t *testing.T) {
 	t.Parallel()
 
-	read, err := parseTranscript("이미지의 글자입니다.\n읽음: 21:00~ 잡담\n- 장식: HYAKUTO KYOKO\n- 읽음: or\n읽음:\n참고: 끝")
+	read, err := parseTranscript("Here is the text.\nTEXT: 21:00~ 잡담\n- DECOR: HYAKUTO KYOKO\n- TEXT: or\nTEXT:\nNote: done")
 	require.NoError(t, err)
 	require.Equal(t, transcript{content: []string{"21:00~ 잡담", "or"}, decoration: []string{"HYAKUTO KYOKO"}}, read)
 

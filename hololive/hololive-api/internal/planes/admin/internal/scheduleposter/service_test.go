@@ -229,7 +229,7 @@ func TestTranslatePendingStoresJPEG(t *testing.T) {
 	require.NoError(t, testService(store, sources, translator, mela, sophia).translatePending(t.Context()))
 
 	require.Len(t, translator.textPrompts, 1)
-	require.Contains(t, translator.textPrompts[0], "이 포스터의 멤버: 宙科そぴあ (Sorashina Sopia) → 소라시나 소피아")
+	require.Contains(t, translator.textPrompts[0], "Poster owner: 宙科そぴあ (Sorashina Sopia) → 소라시나 소피아")
 	require.Contains(t, translator.textPrompts[0], "熱千めら (Achichi Mela) → 아치치 메라")
 	require.Equal(t, []string{imagePromptBase + sampleTable}, translator.imagePrompts, "이미지 단계는 번역표대로만 그린다")
 	require.Equal(t, 1, translator.checks, "저장할 JPEG를 판독해 검사한다")
@@ -282,8 +282,8 @@ func TestTranslatePendingRedrawsUntilTheCheckPasses(t *testing.T) {
 	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
 
 	require.Len(t, translator.imagePrompts, 2)
-	require.Contains(t, translator.imagePrompts[1], "이전 결과에서 대조로 찾은 문제다. 이번에는 모두 고친다:")
-	require.Contains(t, translator.imagePrompts[1], "- ‘21:00’가 3번 있어야 하는데 번역본에는 1번 있다")
+	require.Contains(t, translator.imagePrompts[1], "Problems found by comparing the previous result. Fix all of them this time:")
+	require.Contains(t, translator.imagePrompts[1], `- "21:00" should appear 3 times but appears 1 times in the translated poster`)
 	require.Len(t, store.recorded, 1)
 	require.Empty(t, store.failures)
 }
@@ -321,7 +321,7 @@ func TestTranslatePendingRebuildsATableThatMissesOriginalText(t *testing.T) {
 	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
 
 	require.Len(t, translator.textPrompts, 2)
-	require.Contains(t, translator.textPrompts[1], "- 원본의 ‘宙科そぴあ’ 부분이 번역표에 빠졌다")
+	require.Contains(t, translator.textPrompts[1], `- "宙科そぴあ" from the original is missing from the table`)
 	require.Equal(t, []string{imagePromptBase + sampleTable}, translator.imagePrompts, "원본과 맞는 번역표로만 그린다")
 	require.Len(t, store.recorded, 1)
 }
@@ -388,8 +388,8 @@ func TestBuildTextPrompt(t *testing.T) {
 
 	require.True(t, strings.HasPrefix(prompt, textPromptBase))
 
-	owner := strings.Index(prompt, "이 포스터의 멤버: 宙科そぴあ (Sorashina Sopia) → 소라시나 소피아")
-	table := strings.Index(prompt, "이름 대응표 (일본어")
+	owner := strings.Index(prompt, "Poster owner: 宙科そぴあ (Sorashina Sopia) → 소라시나 소피아")
+	table := strings.Index(prompt, "Name table (Japanese")
 
 	require.Positive(t, owner)
 	require.Greater(t, table, owner, "포스터 주인을 대응표보다 먼저 적는다")
@@ -398,7 +398,7 @@ func TestBuildTextPrompt(t *testing.T) {
 	require.NotContains(t, prompt, "졸업 멤버")
 	require.NotContains(t, prompt, "타사 멤버")
 	require.NotContains(t, prompt, "일본어 없음")
-	require.Contains(t, prompt, "용어 대응표 (원문 → 한국어):\nコラボ → 콜라보\nホロドリ → 홀로도리")
+	require.Contains(t, prompt, "Glossary (original → Korean):\nコラボ → 콜라보\nホロドリ → 홀로도리")
 }
 
 func TestRequestsSearchOnlyForTheTranslationTable(t *testing.T) {

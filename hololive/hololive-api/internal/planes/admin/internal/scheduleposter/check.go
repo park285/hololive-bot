@@ -169,21 +169,21 @@ func checkTable(table translationTable, original transcript) []string {
 
 	for _, token := range sortedKeys(seenNumbers) {
 		if keptNumbers[token] < seenNumbers[token] {
-			problems = append(problems, fmt.Sprintf("원본에 %d번 있는 ‘%s’가 번역표의 한국어 줄에는 %d번만 있다", seenNumbers[token], token, keptNumbers[token]))
+			problems = append(problems, fmt.Sprintf("%q appears %d times in the original but only %d times in the Korean lines of the table", token, seenNumbers[token], keptNumbers[token]))
 		}
 	}
 
 	seenWords, listedWords := countTokens(original.content, isWord), countTokens(table.originalLines(), isWord)
 
 	for _, word := range sortedKeys(shortfall(seenWords, listedWords, excess(seenWords, listedWords))) {
-		problems = append(problems, fmt.Sprintf("원본에 %d번 있는 ‘%s’가 번역표의 원문 줄에는 %d번만 있다", seenWords[word], word, listedWords[word]))
+		problems = append(problems, fmt.Sprintf("%q appears %d times in the original but only %d times in the original lines of the table", word, seenWords[word], listedWords[word]))
 	}
 
 	short := shortfall(countRunes(original.lines(), isJapanese), countRunes(table.originalLines(), isJapanese),
 		excess(countRunes(original.lines(), isWideGlyph), countRunes(table.originalLines(), isWideGlyph)))
 
 	for _, run := range runsWithShortfall(original.lines(), short) {
-		problems = append(problems, fmt.Sprintf("원본의 ‘%s’ 부분이 번역표에 빠졌다", run))
+		problems = append(problems, fmt.Sprintf("%q from the original is missing from the table", run))
 	}
 
 	return problems
@@ -206,11 +206,11 @@ func checkRow(row tableRow) []string {
 			continue
 		}
 
-		problems = append(problems, fmt.Sprintf("번역표 줄 ‘%s’의 한국어 줄에 원문의 ‘%s’가 빠졌다", row.original, token))
+		problems = append(problems, fmt.Sprintf("table row %q: the Korean line is missing %q from the original", row.original, token))
 	}
 
 	for _, run := range japaneseRuns(row.korean) {
-		problems = append(problems, fmt.Sprintf("번역표 줄 ‘%s’의 한국어 줄에 번역하지 않은 ‘%s’가 남았다", row.original, run))
+		problems = append(problems, fmt.Sprintf("table row %q: the Korean line still has untranslated %q", row.original, run))
 	}
 
 	return problems
@@ -309,7 +309,7 @@ func checkRender(table translationTable, original, rendered transcript) []string
 
 	for _, token := range sortedKeys(want) {
 		if got[token] < want[token] {
-			problems = append(problems, fmt.Sprintf("‘%s’가 %d번 있어야 하는데 번역본에는 %d번 있다", token, want[token], got[token]))
+			problems = append(problems, fmt.Sprintf("%q should appear %d times but appears %d times in the translated poster", token, want[token], got[token]))
 		}
 	}
 
@@ -331,7 +331,7 @@ func checkRender(table translationTable, original, rendered transcript) []string
 	}
 
 	for _, run := range untranslated {
-		problems = append(problems, fmt.Sprintf("번역되지 않은 원문 글자 ‘%s’가 번역본에 남았다", run))
+		problems = append(problems, fmt.Sprintf("untranslated original text %q remains in the translated poster", run))
 	}
 
 	return problems
@@ -363,11 +363,11 @@ func hangulProblems(table translationTable, rendered []string) []string {
 	problems := undrawnRows(table, rendered)
 
 	if len(short) > 0 && len(problems) == 0 {
-		problems = append(problems, fmt.Sprintf("번역본에 한국어 글자 ‘%s’가 번역표보다 적다", strings.Join(short, "’, ‘")))
+		problems = append(problems, fmt.Sprintf("the translated poster has fewer of the Korean characters %s than the table", quoted(short)))
 	}
 
 	if len(extra) > 0 {
-		problems = append(problems, fmt.Sprintf("번역표에 없는 한국어 글자 ‘%s’가 번역본에 있다", strings.Join(extra, "’, ‘")))
+		problems = append(problems, fmt.Sprintf("the translated poster has Korean characters not in the table: %s", quoted(extra)))
 	}
 
 	return problems
@@ -408,7 +408,7 @@ func undrawnRows(table translationTable, rendered []string) []string {
 
 	for i, row := range table {
 		if missing[i] {
-			problems = append(problems, fmt.Sprintf("번역표 줄 ‘%s’이 번역본에 다 그려지지 않았다", row.korean))
+			problems = append(problems, fmt.Sprintf("table row %q is not fully drawn in the translated poster", row.korean))
 		}
 	}
 
@@ -425,6 +425,16 @@ func hangulOnly(text string) string {
 	}, text)
 }
 
+func quoted(texts []string) string {
+	quotedTexts := make([]string, 0, len(texts))
+
+	for _, text := range texts {
+		quotedTexts = append(quotedTexts, strconv.Quote(text))
+	}
+
+	return strings.Join(quotedTexts, ", ")
+}
+
 func sortedKeys[K string | rune, V any](m map[K]V) []K {
 	return slices.Sorted(maps.Keys(m))
 }
@@ -435,5 +445,5 @@ func withProblems(prompt string, problems []string) string {
 		return prompt
 	}
 
-	return prompt + "\n\n이전 결과에서 대조로 찾은 문제다. 이번에는 모두 고친다:\n- " + strings.Join(problems, "\n- ")
+	return prompt + "\n\nProblems found by comparing the previous result. Fix all of them this time:\n- " + strings.Join(problems, "\n- ")
 }
