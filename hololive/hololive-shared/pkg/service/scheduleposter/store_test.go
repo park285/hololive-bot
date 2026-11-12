@@ -163,6 +163,59 @@ func TestStoreConfirmedWeekClosesSameMemberCandidates(t *testing.T) {
 	require.Equal(t, scheduleposter.ReviewExpired, closed.ReviewStatus)
 }
 
+func TestStoreInsertCommunityCandidates(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	const (
+		melaChannel = "UC8eitCE9Z6EwUCs-VUi1blg"
+		pattern     = "週間スケジュール|スケジュール|schedule|予定|weekly"
+		thumbnail   = "https://yt3.ggpht.com/poster=s640-c"
+	)
+
+	jst := time.FixedZone("JST", 9*60*60)
+	seen := func(day int) time.Time { return time.Date(2026, time.November, day, 18, 0, 0, 0, jst) }
+
+	for _, post := range []struct {
+		id, channel, text, images string
+		at                        time.Time
+	}{
+		{"community:UgkxSchedule", melaChannel, "📅スケジュールのお知らせ📅 11/2(月)-11/8(日)までの予定", `[{"url":"` + thumbnail + `"}]`, seen(3)},
+		{"community:UgkxNoImage", melaChannel, "スケジュール", `[]`, seen(3)},
+		{"community:UgkxOtherText", melaChannel, "グッズ販売のお知らせ", `[{"url":"` + thumbnail + `"}]`, seen(3)},
+		{"community:UgkxOtherHost", melaChannel, "スケジュール", `[{"url":"https://example.com/a.jpg"}]`, seen(3)},
+		{"community:UgkxOld", melaChannel, "スケジュール", `[{"url":"` + thumbnail + `"}]`, seen(1).AddDate(0, 0, -20)},
+		{"community:UgkxOtherMember", sophiaChannel, "スケジュール", `[{"url":"` + thumbnail + `"}]`, seen(3)},
+	} {
+		_, insertErr := pool.Exec(ctx, `INSERT INTO youtube_community_posts (post_id, channel_id, content_text, images, first_seen_at)
+			VALUES ($1, $2, $3, $4::jsonb, $5)`, post.id, post.channel, post.text, post.images, post.at)
+		require.NoError(t, insertErr)
+	}
+
+	since := seen(3).AddDate(0, 0, -8)
+
+	inserted, err := store.InsertCommunityCandidates(ctx, []string{melaChannel}, since, pattern)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, inserted)
+
+	inserted, err = store.InsertCommunityCandidates(ctx, []string{melaChannel}, since, pattern)
+	require.NoError(t, err)
+	require.Zero(t, inserted, "같은 글은 같은 id라 다시 넣지 않는다")
+
+	listed, err := store.List(ctx, scheduleposter.ReviewPending, 10)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, melaChannel, listed[0].ChannelID)
+	require.Equal(t, "https://www.youtube.com/post/UgkxSchedule", listed[0].PostURL)
+	require.Equal(t, "https://yt3.ggpht.com/poster=s0", listed[0].ImageURL)
+	require.Less(t, listed[0].ID, int64(1)<<60+1, "X 게시물 번호와 겹치지 않는 범위다")
+	require.Positive(t, listed[0].ID)
+}
+
 func TestStoreRecordTranslationPublishesOnlyCurrentRevision(t *testing.T) {
 	t.Parallel()
 

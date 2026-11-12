@@ -18,6 +18,7 @@ import (
 const (
 	fxTwitterHost  = "api.fxtwitter.com"
 	imageHost      = "pbs.twimg.com"
+	communityHost  = "yt3.ggpht.com"
 	maxPageBytes   = 2 << 20
 	maxSourceBytes = 8 << 20
 	userAgent      = "hololive-bot-schedule-poster"
@@ -84,7 +85,7 @@ type fxClient struct {
 func newFXClient() *fxClient {
 	policy := netguard.Policy{
 		Timeout:      10 * time.Second,
-		AllowHost:    func(host string) bool { return host == fxTwitterHost || host == imageHost },
+		AllowHost:    func(host string) bool { return host == fxTwitterHost || host == imageHost || host == communityHost },
 		AllowedPorts: []string{"443"},
 		Schemes:      []string{"https"},
 	}
@@ -122,8 +123,8 @@ func decodeStatusPage(body []byte) (statusPage, error) {
 }
 
 func (c *fxClient) image(ctx context.Context, rawURL string) (source, error) {
-	if !posterImageURL(rawURL) {
-		return source{}, errors.New("poster image URL must be https://" + imageHost)
+	if host, ok := httpsHost(rawURL); !ok || host != imageHost && host != communityHost {
+		return source{}, errors.New("poster image URL must be https://" + imageHost + " or https://" + communityHost)
 	}
 
 	body, err := c.get(ctx, rawURL, maxSourceBytes)
@@ -134,14 +135,14 @@ func (c *fxClient) image(ctx context.Context, rawURL string) (source, error) {
 	return sniffSource(body)
 }
 
-// posterImageURL은 수집과 번역이 함께 쓰는 원본 URL 조건이다. Iris Console도 이 호스트의 원본만 표시하고, 다른 행이 섞이면 목록 전체를 거부한다.
-func posterImageURL(raw string) bool {
+// httpsHost는 자격정보 없는 https URL의 호스트를 돌려준다. 호스트 허용은 호출자가 출처별로 정한다.
+func httpsHost(raw string) (string, bool) {
 	parsed, err := url.Parse(raw)
-	if err != nil {
-		return false
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil {
+		return "", false
 	}
 
-	return parsed.Scheme == "https" && parsed.Host == imageHost && parsed.User == nil
+	return parsed.Host, true
 }
 
 // sniffSource는 응답 헤더 대신 내용으로 형식을 정해, Vertex에 보내는 MIME이 실제 바이트와 어긋나지 않게 한다.

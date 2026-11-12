@@ -37,10 +37,14 @@ const (
 	reasonTranslationFailed = "translation_failed"
 )
 
-var posterTextPattern = regexp.MustCompile(`(?i)週間スケジュール|スケジュール|schedule|予定|weekly`)
+// posterTextExpr는 X 글(Go regexp)과 커뮤니티 글(PostgreSQL ~*)에 같이 쓰므로 두 문법이 같게 읽는 형태만 쓴다.
+const posterTextExpr = `週間スケジュール|スケジュール|schedule|予定|weekly`
+
+var posterTextPattern = regexp.MustCompile(`(?i)` + posterTextExpr)
 
 type candidateStore interface {
 	InsertCandidates(ctx context.Context, candidates []posterstore.Candidate) (int64, error)
+	InsertCommunityCandidates(ctx context.Context, channelIDs []string, since time.Time, textPattern string) (int64, error)
 	ExpirePending(ctx context.Context, before time.Time) (int64, error)
 	Purge(ctx context.Context, before time.Time, limit int) (int64, error)
 }
@@ -158,7 +162,17 @@ func (s *Service) collect(ctx context.Context) error {
 
 	var errs []error
 
+	var communityChannels []string
+
 	for _, target := range s.config.Targets {
+		if target.YouTubeCommunity {
+			communityChannels = append(communityChannels, target.ChannelID)
+		}
+
+		if target.XUserID == "" {
+			continue
+		}
+
 		candidates, err := s.collectTarget(ctx, target, now)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("collect target %s: %w", target.XUserID, err))
@@ -175,6 +189,13 @@ func (s *Service) collect(ctx context.Context) error {
 			s.logger.Info("Schedule poster candidates found",
 				slog.String("channel_id", target.ChannelID), slog.Int64("inserted", inserted))
 		}
+	}
+
+	inserted, err := s.candidates.InsertCommunityCandidates(ctx, communityChannels, now.Add(-lookback), posterTextExpr)
+	if err != nil {
+		errs = append(errs, err)
+	} else if inserted > 0 {
+		s.logger.Info("Schedule poster community candidates found", slog.Int64("inserted", inserted))
 	}
 
 	if _, err := s.candidates.ExpirePending(ctx, now.Add(-lookback)); err != nil {
@@ -245,7 +266,8 @@ func (s *Service) candidateFrom(item *status, target Target, postedAt time.Time)
 		return posterstore.Candidate{}, false
 	}
 
-	if !posterImageURL(photo) {
+	// Iris Console과 DB 제약은 X 출처 행의 원본을 이 호스트로만 받으므로, 다른 사진 하나가 수집 묶음 전체를 실패시키지 않게 미리 뺀다.
+	if host, ok := httpsHost(photo); !ok || host != imageHost {
 		s.logger.Warn("Schedule poster photo skipped: unexpected image URL",
 			slog.String("post_id", item.ID), slog.String("image_url", photo))
 

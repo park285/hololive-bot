@@ -498,9 +498,11 @@ TABLE schedule_posters
   COLUMN revision bigint NOT NULL DEFAULT 1
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN source text NOT NULL DEFAULT 'x'::text
   CONSTRAINT chk_schedule_posters_confirmed_week CHECK (((review_status <> 'confirmed'::text) OR (week_start IS NOT NULL)))
   CONSTRAINT chk_schedule_posters_id_positive CHECK ((id > 0))
   CONSTRAINT chk_schedule_posters_review_status_vocab CHECK ((review_status = ANY (ARRAY['pending_review'::text, 'confirmed'::text, 'rejected'::text, 'expired'::text])))
+  CONSTRAINT chk_schedule_posters_source CHECK ((((source = 'x'::text) AND (x_user_id <> ''::text) AND (post_url ~ '^https://x\.com/i/status/[1-9][0-9]*$'::text) AND (image_url ~~ 'https://pbs.twimg.com/%'::text)) OR ((source = 'youtube_community'::text) AND (x_user_id = ''::text) AND (post_url ~ '^https://www\.youtube\.com/post/[A-Za-z0-9_-]+$'::text) AND (image_url ~~ 'https://yt3.ggpht.com/%'::text))))
   CONSTRAINT chk_schedule_posters_translated_image CHECK ((((translated_image IS NULL) = (translated_mime IS NULL)) AND ((translated_image IS NULL) = (translated_at IS NULL)) AND ((translation_status <> 'succeeded'::text) OR (translated_image IS NOT NULL)) AND ((translation_status <> 'not_requested'::text) OR (translated_image IS NULL))))
   CONSTRAINT chk_schedule_posters_translated_image_size CHECK (((translated_image IS NULL) OR ((octet_length(translated_image) >= 1) AND (octet_length(translated_image) <= 4194304))))
   CONSTRAINT chk_schedule_posters_translated_mime CHECK (((translated_mime IS NULL) OR (translated_mime = 'image/jpeg'::text)))

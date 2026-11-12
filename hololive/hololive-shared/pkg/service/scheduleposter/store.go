@@ -150,6 +150,21 @@ func (s *Store) InsertCandidates(ctx context.Context, candidates []Candidate) (i
 	return tag.RowsAffected(), nil
 }
 
+// InsertCommunityCandidates는 youtube-collector가 저장한 커뮤니티 글 가운데 since 이후에 올라오고 textPattern(대소문자 무시)에 맞으며
+// 이미지가 있는 글을 후보로 넣는다. 확정된 주 범위는 InsertCandidates와 같은 규칙으로 뺀다.
+func (s *Store) InsertCommunityCandidates(ctx context.Context, channelIDs []string, since time.Time, textPattern string) (int64, error) {
+	if len(channelIDs) == 0 {
+		return 0, nil
+	}
+
+	tag, err := s.pool.Exec(ctx, insertCommunityCandidatesSQL, channelIDs, since, textPattern)
+	if err != nil {
+		return 0, fmt.Errorf("insert schedule poster community candidates: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
 func (s *Store) ExpirePending(ctx context.Context, before time.Time) (int64, error) {
 	tag, err := s.pool.Exec(ctx, expirePendingSQL, before)
 	if err != nil {

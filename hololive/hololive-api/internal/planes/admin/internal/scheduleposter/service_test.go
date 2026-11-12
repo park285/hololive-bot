@@ -65,16 +65,25 @@ func (f *fakeSources) image(context.Context, string) (source, error) {
 }
 
 type fakeStore struct {
-	inserted []posterstore.Candidate
-	pending  []posterstore.PendingTranslation
-	recorded []posterstore.Image
-	failures []string
+	inserted          []posterstore.Candidate
+	communityChannels []string
+	communityPattern  string
+	pending           []posterstore.PendingTranslation
+	recorded          []posterstore.Image
+	failures          []string
 }
 
 func (f *fakeStore) InsertCandidates(_ context.Context, candidates []posterstore.Candidate) (int64, error) {
 	f.inserted = append(f.inserted, candidates...)
 
 	return int64(len(candidates)), nil
+}
+
+func (f *fakeStore) InsertCommunityCandidates(_ context.Context, channelIDs []string, _ time.Time, textPattern string) (int64, error) {
+	f.communityChannels = append(f.communityChannels, channelIDs...)
+	f.communityPattern = textPattern
+
+	return 0, nil
 }
 
 func (f *fakeStore) ExpirePending(context.Context, time.Time) (int64, error) { return 0, nil }
@@ -437,4 +446,26 @@ func TestLoadConfig(t *testing.T) {
 
 	_, err = LoadConfig(write(`{"targets":[],"translation":{"project":"example-project"}}`))
 	require.Error(t, err)
+
+	config, err = LoadConfig(write(`{"targets":[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg","youtube_community":true}],"translation":{"project":"example-project"}}`))
+	require.NoError(t, err, "커뮤니티만 보는 대상은 X 계정이 없어도 된다")
+	require.Equal(t, []Target{{ChannelID: "UC8eitCE9Z6EwUCs-VUi1blg", YouTubeCommunity: true}}, config.Targets)
+
+	_, err = LoadConfig(write(`{"targets":[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg"}],"translation":{"project":"example-project"}}`))
+	require.Error(t, err, "출처가 하나도 없는 대상은 거부한다")
+}
+
+func TestCollectReadsCommunityOnlyTargetsFromStore(t *testing.T) {
+	t.Parallel()
+
+	sources := &fakeSources{pages: map[string]string{"": "statuses_page1.json", "page2": "statuses_page2.json", "page3": "statuses_page3.json"}}
+	store := &fakeStore{}
+	service := testService(store, sources, &fakeTranslator{})
+
+	service.config.Targets = append(service.config.Targets, Target{ChannelID: "UC8eitCE9Z6EwUCs-VUi1blg", YouTubeCommunity: true})
+
+	require.NoError(t, service.collect(t.Context()))
+	require.Equal(t, []string{"", "page2", "page3"}, sources.cursors, "X 계정이 없는 대상은 FxTwitter를 부르지 않는다")
+	require.Equal(t, []string{"UC8eitCE9Z6EwUCs-VUi1blg"}, store.communityChannels)
+	require.Equal(t, posterTextExpr, store.communityPattern)
 }

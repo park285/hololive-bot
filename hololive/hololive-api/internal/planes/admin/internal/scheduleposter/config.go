@@ -35,9 +35,11 @@ var (
 	modelPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,79}$`)
 )
 
+// Target은 X 계정(XUserID)과 유튜브 커뮤니티(YouTubeCommunity) 가운데 하나 이상을 후보 출처로 둔다.
 type Target struct {
-	XUserID   string `json:"x_user_id"`
-	ChannelID string `json:"channel_id"`
+	XUserID          string `json:"x_user_id"`
+	ChannelID        string `json:"channel_id"`
+	YouTubeCommunity bool   `json:"youtube_community"`
 }
 
 // TranslationConfig의 인증은 GOOGLE_APPLICATION_CREDENTIALS(ADC)로 따로 공급한다. 파일에는 비밀을 넣지 않는다.
@@ -114,13 +116,8 @@ func (c Config) Validate() error {
 		return errors.New("schedule poster requires 1-20 targets and a 600-86400 second interval")
 	}
 
-	seenUsers := make(map[string]bool, len(c.Targets))
-	for _, target := range c.Targets {
-		if !xUserIDPattern.MatchString(target.XUserID) || !channelIDPattern.MatchString(target.ChannelID) || seenUsers[target.XUserID] {
-			return errors.New("invalid or duplicate schedule poster target")
-		}
-
-		seenUsers[target.XUserID] = true
+	if err := validateTargets(c.Targets); err != nil {
+		return err
 	}
 
 	translation := c.Translation
@@ -136,6 +133,22 @@ func (c Config) Validate() error {
 	for term, translated := range translation.Glossary {
 		if !glossaryText(term) || !glossaryText(translated) {
 			return errors.New("schedule poster glossary terms must be 1-80 characters without control characters")
+		}
+	}
+
+	return nil
+}
+
+func validateTargets(targets []Target) error {
+	seenUsers := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		validUser := target.XUserID == "" && target.YouTubeCommunity || xUserIDPattern.MatchString(target.XUserID) && !seenUsers[target.XUserID]
+		if !validUser || !channelIDPattern.MatchString(target.ChannelID) {
+			return errors.New("invalid or duplicate schedule poster target")
+		}
+
+		if target.XUserID != "" {
+			seenUsers[target.XUserID] = true
 		}
 	}
 
