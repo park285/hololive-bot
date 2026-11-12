@@ -380,6 +380,29 @@ func TestCandidateFromSkipsPhotosOutsideXMedia(t *testing.T) {
 	}
 }
 
+func TestCandidateFromKeepsWeeklyPostersOnly(t *testing.T) {
+	t.Parallel()
+
+	service := testService(&fakeStore{}, &fakeSources{}, &fakeTranslator{})
+	target := Target{XUserID: sophiaUserID, ChannelID: sophiaChannel}
+	item := &status{ID: "2119784604752343207", Media: jsontext.Value(`{"photos":[{"url":"https://pbs.twimg.com/media/a.jpg?name=orig"}]}`)}
+
+	for text, want := range map[string]bool{
+		"🌟週間スケジュール🌟 11/9(月) ～ 11/15(日)":      true,
+		"【11/09～11/15】 今週の予定となってます":          true,
+		"📅今週のスケジュール📢 おまたせー！":                 true,
+		"📅スケジュールのお知らせ📅 11/2(月)-11/8(日)までの予定": true,
+		"Weekly Schedule": true,
+		"📢今日の配信予定📅 ⏰１２時～":            false,
+		"ARKアプデ入ったので、配信予定ズラして15:30～": false,
+	} {
+		item.Text = text
+
+		_, ok := service.candidateFrom(item, target, time.Unix(1794231008, 0))
+		require.Equal(t, want, ok, text)
+	}
+}
+
 func TestSniffSourceUsesContentNotHeader(t *testing.T) {
 	t.Parallel()
 

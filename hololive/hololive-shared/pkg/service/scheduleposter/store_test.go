@@ -173,7 +173,7 @@ func TestStoreInsertCommunityCandidates(t *testing.T) {
 
 	const (
 		melaChannel = "UC8eitCE9Z6EwUCs-VUi1blg"
-		pattern     = "週間スケジュール|スケジュール|schedule|予定|weekly"
+		pattern     = "週間|今週|来週|スケジュール|schedule|weekly"
 		thumbnail   = "https://yt3.ggpht.com/poster=s640-c-fcrop64=1,00000000ffffffff-rw-nd-v1"
 	)
 

@@ -38,7 +38,8 @@ const (
 )
 
 // posterTextExpr는 X 글(Go regexp)과 커뮤니티 글(PostgreSQL ~*)에 같이 쓰므로 두 문법이 같게 읽는 형태만 쓴다.
-const posterTextExpr = `週間スケジュール|スケジュール|schedule|予定|weekly`
+// 予定만으로는 매일 올리는 「今日の配信予定」 공지까지 후보가 되므로 주 단위 문구만 받는다.
+const posterTextExpr = `週間|今週|来週|スケジュール|schedule|weekly`
 
 var posterTextPattern = regexp.MustCompile(`(?i)` + posterTextExpr)
 
