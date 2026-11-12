@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"strconv"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"google.golang.org/genai"
 
 	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
@@ -218,7 +220,7 @@ func (s *Service) collectTarget(ctx context.Context, target Target, now time.Tim
 
 			recent++
 
-			if candidate, ok := candidateFrom(item, target, postedAt); ok {
+			if candidate, ok := s.candidateFrom(item, target, postedAt); ok {
 				candidates = append(candidates, candidate)
 			}
 		}
@@ -233,13 +235,20 @@ func (s *Service) collectTarget(ctx context.Context, target Target, now time.Tim
 	return candidates, nil
 }
 
-func candidateFrom(item *status, target Target, postedAt time.Time) (posterstore.Candidate, bool) {
+func (s *Service) candidateFrom(item *status, target Target, postedAt time.Time) (posterstore.Candidate, bool) {
 	if !posterTextPattern.MatchString(item.Text) {
 		return posterstore.Candidate{}, false
 	}
 
 	photo, ok := item.firstPhoto()
 	if !ok {
+		return posterstore.Candidate{}, false
+	}
+
+	if !posterImageURL(photo) {
+		s.logger.Warn("Schedule poster photo skipped: unexpected image URL",
+			slog.String("post_id", item.ID), slog.String("image_url", photo))
+
 		return posterstore.Candidate{}, false
 	}
 
@@ -368,10 +377,26 @@ func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTran
 func (s *Service) retryOptions(posterID int64, stage string) retry.RetryOptions {
 	options := s.retry
 
+	options.ShouldRetry = retryableTranslationError
 	options.OnRetry = func(attempt int, err error, _ time.Duration) {
 		s.logger.Warn("Schedule poster translation attempt failed, will retry",
 			slog.Int64("poster_id", posterID), slog.String("stage", stage), slog.Int("attempt", attempt), slog.Any("error", err))
 	}
 
 	return options
+}
+
+// retryableTranslationError는 Vertex가 요청 자체를 거절한 오류(400·401·403·404)를 다시 보내도 같은 결과라 재시도에서 뺀다.
+func retryableTranslationError(err error) bool {
+	apiErr, ok := errors.AsType[genai.APIError](err)
+	if !ok {
+		return true
+	}
+
+	switch apiErr.Code {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+		return false
+	default:
+		return true
+	}
 }

@@ -7,10 +7,8 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"mime"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
@@ -105,7 +103,7 @@ func (c *fxClient) statuses(ctx context.Context, userID, cursor string) (statusP
 		endpoint += "?" + url.Values{"cursor": {cursor}}.Encode()
 	}
 
-	body, _, err := c.get(ctx, endpoint, maxPageBytes)
+	body, err := c.get(ctx, endpoint, maxPageBytes)
 	if err != nil {
 		return statusPage{}, fmt.Errorf("fetch X statuses: %w", err)
 	}
@@ -124,47 +122,58 @@ func decodeStatusPage(body []byte) (statusPage, error) {
 }
 
 func (c *fxClient) image(ctx context.Context, rawURL string) (source, error) {
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host != imageHost || parsed.User != nil {
+	if !posterImageURL(rawURL) {
 		return source{}, errors.New("poster image URL must be https://" + imageHost)
 	}
 
-	body, contentType, err := c.get(ctx, rawURL, maxSourceBytes)
+	body, err := c.get(ctx, rawURL, maxSourceBytes)
 	if err != nil {
 		return source{}, fmt.Errorf("fetch poster image: %w", err)
 	}
 
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil || (mediaType != "image/jpeg" && mediaType != "image/png" && mediaType != "image/webp") {
-		return source{}, fmt.Errorf("poster image content type %q is not allowed", contentType)
-	}
-
-	return source{MIME: mediaType, Data: body}, nil
+	return sniffSource(body)
 }
 
-func (c *fxClient) get(ctx context.Context, endpoint string, limit int64) (body []byte, contentType string, err error) {
+// posterImageURL은 수집과 번역이 함께 쓰는 원본 URL 조건이다. Iris Console도 이 호스트의 원본만 표시하고, 다른 행이 섞이면 목록 전체를 거부한다.
+func posterImageURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+
+	return err == nil && parsed.Scheme == "https" && parsed.Host == imageHost && parsed.User == nil
+}
+
+// sniffSource는 응답 헤더 대신 내용으로 형식을 정해, Vertex에 보내는 MIME이 실제 바이트와 어긋나지 않게 한다.
+func sniffSource(body []byte) (source, error) {
+	switch mediaType := http.DetectContentType(body); mediaType {
+	case "image/jpeg", "image/png", "image/webp":
+		return source{MIME: mediaType, Data: body}, nil
+	default:
+		return source{}, fmt.Errorf("poster image content type %q is not allowed", mediaType)
+	}
+}
+
+func (c *fxClient) get(ctx context.Context, endpoint string, limit int64) ([]byte, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
-		return nil, "", fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	request.Header.Set("User-Agent", userAgent)
 
 	response, err := c.client.Do(request)
 	if err != nil {
-		return nil, "", fmt.Errorf("send request: %w", err)
+		return nil, fmt.Errorf("send request: %w", err)
 	}
 
 	defer response.Body.Close()
 
-	body, err = httputil.ReadAllLimited(response.Body, limit)
-	if err != nil {
-		return nil, "", fmt.Errorf("read response: %w", err)
-	}
-
 	if response.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("unexpected status %d", response.StatusCode)
+		return nil, fmt.Errorf("unexpected status %d", response.StatusCode)
 	}
 
-	return body, strings.TrimSpace(response.Header.Get("Content-Type")), nil
+	body, err := httputil.ReadAllLimited(response.Body, limit)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	return body, nil
 }

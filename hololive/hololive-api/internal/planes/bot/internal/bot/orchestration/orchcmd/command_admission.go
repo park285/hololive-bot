@@ -285,6 +285,8 @@ func expensiveCommandAdmissionScope(commandKey string) string {
 		return "history"
 	case "live":
 		return "live"
+	case "schedule_poster":
+		return "poster"
 	default:
 		return ""
 	}

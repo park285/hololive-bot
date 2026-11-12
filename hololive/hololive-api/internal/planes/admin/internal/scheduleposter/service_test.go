@@ -3,6 +3,7 @@ package scheduleposter
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"image"
@@ -29,6 +30,7 @@ const (
 	sophiaUserID  = "2054825907916054528"
 	sophiaChannel = "UCROQtXcp2loQEmvpe5rhJzQ"
 	mimePNG       = "image/png"
+	mimeJPEG      = "image/jpeg"
 )
 
 type fakeSources struct {
@@ -187,7 +189,7 @@ func TestTranslatePendingStoresJPEG(t *testing.T) {
 
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: "https://pbs.twimg.com/media/a.jpg", Revision: 2}}}
 	translator := &fakeTranslator{table: sampleTable, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)}}
-	sources := &fakeSources{original: source{MIME: "image/jpeg", Data: []byte("original")}}
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
 
 	require.NoError(t, testService(store, sources, translator, mela, sophia).translatePending(t.Context()))
 
@@ -197,7 +199,7 @@ func TestTranslatePendingStoresJPEG(t *testing.T) {
 	require.Equal(t, []string{imagePromptBase + sampleTable}, translator.imagePrompts, "이미지 단계는 번역표대로만 그린다")
 
 	require.Len(t, store.recorded, 1)
-	require.Equal(t, "image/jpeg", store.recorded[0].MIME)
+	require.Equal(t, mimeJPEG, store.recorded[0].MIME)
 
 	decoded, err := jpeg.DecodeConfig(bytes.NewReader(store.recorded[0].Data))
 	require.NoError(t, err)
@@ -210,7 +212,7 @@ func TestTranslatePendingRecordsFailureAfterRetries(t *testing.T) {
 
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: "https://pbs.twimg.com/media/a.jpg", Revision: 2}}}
 	translator := &fakeTranslator{textErr: errors.New("text model unavailable")}
-	sources := &fakeSources{original: source{MIME: "image/jpeg", Data: []byte("original")}}
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
 
 	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
 
@@ -284,7 +286,7 @@ func TestBuildTextPrompt(t *testing.T) {
 func TestRequestsSearchOnlyForTheTranslationTable(t *testing.T) {
 	t.Parallel()
 
-	original := source{MIME: "image/jpeg", Data: []byte("original")}
+	original := source{MIME: mimeJPEG, Data: []byte("original")}
 	high := &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelHigh}
 
 	contents, text := textRequest(original, "text prompt")
@@ -347,6 +349,59 @@ func TestToJPEGRejectsOversizedImages(t *testing.T) {
 
 	_, err = toJPEG(source{MIME: "image/gif", Data: pngBytes(t, 8, 8)})
 	require.Error(t, err)
+}
+
+func TestCandidateFromSkipsPhotosOutsideXMedia(t *testing.T) {
+	t.Parallel()
+
+	service := testService(&fakeStore{}, &fakeSources{}, &fakeTranslator{})
+	target := Target{XUserID: sophiaUserID, ChannelID: sophiaChannel}
+	item := &status{ID: "2119784604752343207", Text: "週間スケジュール"}
+
+	for photo, want := range map[string]bool{
+		"https://pbs.twimg.com/media/a.jpg?name=orig": true,
+		"http://pbs.twimg.com/media/a.jpg":            false,
+		"https://video.twimg.com/a.mp4":               false,
+		"https://user@pbs.twimg.com/media/a.jpg":      false,
+	} {
+		item.Media = jsontext.Value(`{"photos":[{"url":"` + photo + `"}]}`)
+
+		_, ok := service.candidateFrom(item, target, time.Unix(1794231008, 0))
+		require.Equal(t, want, ok, photo)
+	}
+}
+
+func TestSniffSourceUsesContentNotHeader(t *testing.T) {
+	t.Parallel()
+
+	for body, want := range map[string]string{
+		"\xff\xd8\xff\xe0jpeg":             "image/jpeg",
+		"\x89PNG\r\n\x1a\npng":             "image/png",
+		"RIFF\x00\x00\x00\x00WEBPVP8 webp": "image/webp",
+	} {
+		got, err := sniffSource([]byte(body))
+		require.NoError(t, err)
+		require.Equal(t, want, got.MIME)
+	}
+
+	_, err := sniffSource([]byte("<!doctype html><title>blocked</title>"))
+	require.Error(t, err)
+}
+
+func TestTranslatePendingDoesNotRetryRejectedRequests(t *testing.T) {
+	t.Parallel()
+
+	pending := []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: "https://pbs.twimg.com/media/a.jpg", Revision: 2}}
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
+
+	for code, attempts := range map[int]int{400: 1, 403: 1, 429: 3, 503: 3} {
+		store := &fakeStore{pending: pending}
+		translator := &fakeTranslator{textErr: fmt.Errorf("generate poster translation table: %w", genai.APIError{Code: code})}
+
+		require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
+		require.Len(t, translator.textPrompts, attempts, "HTTP %d", code)
+		require.Equal(t, []string{reasonTranslationFailed}, store.failures)
+	}
 }
 
 func TestLoadConfig(t *testing.T) {
