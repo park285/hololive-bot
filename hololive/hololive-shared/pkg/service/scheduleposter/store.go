@@ -256,6 +256,8 @@ func (s *Store) image(ctx context.Context, action, query string, args ...any) (I
 	return image, nil
 }
 
+// Confirm은 같은 멤버의 대기 후보 가운데 확정한 주의 마지막 날 전에 올라온 글을 함께 expired로 닫는다.
+// 마지막 날은 다음 주 포스터를 미리 올리는 날이라 남긴다. InsertCandidates도 같은 범위의 새 후보를 받지 않는다.
 func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekStart, weekEnd time.Time) (int64, error) {
 	if err := ValidateWeek(weekStart, weekEnd); err != nil {
 		return 0, err
@@ -286,7 +288,7 @@ func (s *Store) Reject(ctx context.Context, id, expectedRevision int64) (int64, 
 	return s.mutate(ctx, "reject schedule poster", rejectSQL, id, expectedRevision)
 }
 
-// RequestTranslation은 이전 번역본을 지우므로 새 번역이 끝날 때까지 !일정에 포스터가 붙지 않는다.
+// RequestTranslation은 번역본을 지우지 않으므로 새 번역본이 저장될 때까지 이전 번역본이 !스케쥴로 게시된다.
 func (s *Store) RequestTranslation(ctx context.Context, id, expectedRevision int64) (int64, error) {
 	return s.mutate(ctx, "request schedule poster translation", requestTranslationSQL, id, expectedRevision)
 }

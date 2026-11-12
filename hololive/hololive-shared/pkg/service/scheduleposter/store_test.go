@@ -45,7 +45,7 @@ func confirmedPending(t *testing.T, store *scheduleposter.Store) scheduleposter.
 
 	ctx := t.Context()
 
-	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt), candidate(102, testPostedAt)})
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt), candidate(102, testPostedAt.AddDate(0, 0, -3))})
 	require.NoError(t, err)
 
 	poster, err := store.Get(ctx, 101)
@@ -119,6 +119,48 @@ func TestStoreConfirmChecksRevisionWeekAndState(t *testing.T) {
 
 	_, err = store.RequestTranslation(ctx, 101, revision)
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 대기 중에는 재번역을 예약하지 않는다")
+}
+
+func TestStoreConfirmedWeekClosesSameMemberCandidates(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store := newStore(t)
+	jst := time.FixedZone("JST", 9*60*60)
+	at := func(day int) time.Time { return time.Date(2026, time.November, day, 12, 0, 0, 0, jst) }
+
+	other := candidate(301, at(10))
+
+	other.ChannelID = "UCy9mgxB8pn2C4aNK_MPthDQ"
+
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{
+		candidate(101, at(10)), candidate(102, at(9)), candidate(103, at(15)), candidate(104, at(8)), other,
+	})
+	require.NoError(t, err)
+
+	poster, err := store.Get(ctx, 101)
+	require.NoError(t, err)
+
+	_, err = store.Confirm(ctx, 101, poster.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
+	require.NoError(t, err)
+
+	inserted, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(105, at(12)), candidate(106, at(15))})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, inserted, "확정한 주 안의 새 글은 받지 않고, 다음 주 포스터를 올리는 마지막 날 글은 받는다")
+
+	pending, err := store.List(ctx, scheduleposter.ReviewPending, 10)
+	require.NoError(t, err)
+
+	ids := make([]int64, 0, len(pending))
+	for i := range pending {
+		ids = append(ids, pending[i].ID)
+	}
+
+	require.ElementsMatch(t, []int64{103, 104, 106, 301}, ids, "같은 멤버의 그 주 대기 후보만 닫는다")
+
+	closed, err := store.Get(ctx, 102)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.ReviewExpired, closed.ReviewStatus)
 }
 
 func TestStoreRecordTranslationPublishesOnlyCurrentRevision(t *testing.T) {
