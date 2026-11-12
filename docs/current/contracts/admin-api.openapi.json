@@ -747,11 +747,11 @@
           },
           "postUrl": {
             "type": "string",
-            "pattern": "^https://x\\.com/i/status/[1-9][0-9]*$"
+            "pattern": "^https://(x\\.com/i/status/[1-9][0-9]*|www\\.youtube\\.com/post/[A-Za-z0-9_-]+|www\\.youtube\\.com/watch\\?v=[A-Za-z0-9_-]{11})$"
           },
           "imageUrl": {
             "type": "string",
-            "pattern": "^https://pbs\\.twimg\\.com/"
+            "pattern": "^https://(pbs\\.twimg\\.com|yt3\\.ggpht\\.com|i\\.ytimg\\.com)/"
           },
           "postedAt": {
             "type": "string",

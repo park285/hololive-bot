@@ -2,6 +2,8 @@ package scheduleposter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -51,6 +53,7 @@ var posterTextPattern = regexp.MustCompile(`(?i)` + posterTextExpr)
 type candidateStore interface {
 	InsertCandidates(ctx context.Context, candidates []posterstore.Candidate) (int64, error)
 	InsertCommunityCandidates(ctx context.Context, channelIDs []string, since time.Time, textPattern string) (int64, error)
+	InsertThumbnailCandidates(ctx context.Context, candidates []posterstore.ThumbnailCandidate) (int64, error)
 	ExpirePending(ctx context.Context, before time.Time) (int64, error)
 	Purge(ctx context.Context, before time.Time, limit int) (int64, error)
 }
@@ -210,6 +213,10 @@ func (s *Service) collect(ctx context.Context) error {
 		s.logger.Info("Schedule poster community candidates found", slog.Int64("inserted", inserted))
 	}
 
+	if err := s.collectThumbnails(ctx, now); err != nil {
+		errs = append(errs, err)
+	}
+
 	if _, err := s.candidates.ExpirePending(ctx, now.Add(-lookback)); err != nil {
 		errs = append(errs, err)
 	}
@@ -307,6 +314,44 @@ func (s *Service) candidateFrom(item *status, target Target, postedAt time.Time)
 	}, true
 }
 
+// collectThumbnails는 받지 못한 영상만 건너뛰고 나머지 썸네일은 후보로 넣는다. 번역은 여기서 남긴 해시와 같은 그림만 쓴다.
+func (s *Service) collectThumbnails(ctx context.Context, now time.Time) error {
+	var (
+		thumbnails []posterstore.ThumbnailCandidate
+		errs       []error
+	)
+
+	for _, target := range s.config.Targets {
+		for _, videoID := range target.YouTubeThumbnailVideoIDs {
+			thumbnail, err := s.sources.image(ctx, "https://"+thumbnailHost+"/vi/"+videoID+"/maxresdefault.jpg")
+			if err != nil {
+				errs = append(errs, fmt.Errorf("collect thumbnail %s: %w", videoID, err))
+
+				continue
+			}
+
+			thumbnails = append(thumbnails, posterstore.ThumbnailCandidate{
+				ChannelID: target.ChannelID, VideoID: videoID, ImageSHA256: imageSHA256(thumbnail.Data), PostedAt: now,
+			})
+		}
+	}
+
+	inserted, err := s.candidates.InsertThumbnailCandidates(ctx, thumbnails)
+	if err != nil {
+		errs = append(errs, err)
+	} else if inserted > 0 {
+		s.logger.Info("Schedule poster thumbnail candidates found", slog.Int64("inserted", inserted))
+	}
+
+	return errors.Join(errs...)
+}
+
+func imageSHA256(data []byte) string {
+	sum := sha256.Sum256(data)
+
+	return hex.EncodeToString(sum[:])
+}
+
 func (s *Service) translatePending(ctx context.Context) error {
 	pending, err := s.translations.PendingTranslations(ctx, translateBatch)
 	if err != nil {
@@ -366,6 +411,10 @@ func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTran
 	original, sourceErr := s.sources.image(ctx, item.ImageURL)
 	if sourceErr != nil {
 		return posterstore.Image{}, reasonSourceUnavailable, sourceErr
+	}
+
+	if item.ImageSHA256 != "" && imageSHA256(original.Data) != item.ImageSHA256 {
+		return posterstore.Image{}, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
 	}
 
 	originalText, err := s.transcribe(ctx, item.ID, "original", original)

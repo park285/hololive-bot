@@ -17,6 +17,7 @@ var (
 	getSQL                       = mustSQL("get.sql")
 	insertCandidatesSQL          = mustSQL("insert_candidates.sql")
 	insertCommunityCandidatesSQL = mustSQL("insert_community_candidates.sql")
+	insertThumbnailCandidatesSQL = mustSQL("insert_thumbnail_candidates.sql")
 	listSQL                      = mustSQL("list.sql")
 	pendingTranslationsSQL       = mustSQL("pending_translations.sql")
 	publishedImageSQL            = mustSQL("published_image.sql")

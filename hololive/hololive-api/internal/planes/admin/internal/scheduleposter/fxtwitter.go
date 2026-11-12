@@ -19,6 +19,7 @@ const (
 	fxTwitterHost  = "api.fxtwitter.com"
 	imageHost      = "pbs.twimg.com"
 	communityHost  = "yt3.ggpht.com"
+	thumbnailHost  = "i.ytimg.com"
 	maxPageBytes   = 2 << 20
 	maxSourceBytes = 8 << 20
 	userAgent      = "hololive-bot-schedule-poster"
@@ -84,8 +85,10 @@ type fxClient struct {
 
 func newFXClient() *fxClient {
 	policy := netguard.Policy{
-		Timeout:      10 * time.Second,
-		AllowHost:    func(host string) bool { return host == fxTwitterHost || host == imageHost || host == communityHost },
+		Timeout: 10 * time.Second,
+		AllowHost: func(host string) bool {
+			return host == fxTwitterHost || host == imageHost || host == communityHost || host == thumbnailHost
+		},
 		AllowedPorts: []string{"443"},
 		Schemes:      []string{"https"},
 	}
@@ -123,8 +126,8 @@ func decodeStatusPage(body []byte) (statusPage, error) {
 }
 
 func (c *fxClient) image(ctx context.Context, rawURL string) (source, error) {
-	if host, ok := httpsHost(rawURL); !ok || host != imageHost && host != communityHost {
-		return source{}, errors.New("poster image URL must be https://" + imageHost + " or https://" + communityHost)
+	if host, ok := httpsHost(rawURL); !ok || host != imageHost && host != communityHost && host != thumbnailHost {
+		return source{}, errors.New("poster image URL must be https://" + imageHost + ", https://" + communityHost + " or https://" + thumbnailHost)
 	}
 
 	body, err := c.get(ctx, rawURL, maxSourceBytes)
