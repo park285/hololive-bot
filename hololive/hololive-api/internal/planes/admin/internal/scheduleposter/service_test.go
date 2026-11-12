@@ -471,6 +471,13 @@ func TestFirstImageReportsWhyResponseIsEmpty(t *testing.T) {
 			response: &genai.GenerateContentResponse{Candidates: []*genai.Candidate{{FinishReason: genai.FinishReasonImageSafety}}},
 			want:     "finish reason IMAGE_SAFETY",
 		},
+		"output budget spent on thinking": {
+			response: &genai.GenerateContentResponse{
+				Candidates:    []*genai.Candidate{{FinishReason: genai.FinishReasonMaxTokens}},
+				UsageMetadata: &genai.GenerateContentResponseUsageMetadata{ThoughtsTokenCount: 32000, CandidatesTokenCount: 768},
+			},
+			want: "finish reason MAX_TOKENS; thoughts 32000 tokens, output 768 tokens",
+		},
 		"no reason": {response: &genai.GenerateContentResponse{}, want: "no reason given"},
 	} {
 		_, err := firstImage(tc.response)

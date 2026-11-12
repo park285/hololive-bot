@@ -16,6 +16,8 @@ const (
 	textTimeout     = 15 * time.Minute
 	imageTimeout    = 15 * time.Minute
 	outputImageSize = "2K"
+	// 이미지 모델 문서의 최대 출력 토큰이다. 생각 토큰과 이미지 토큰(2K 1,680)이 이 한도를 나눠 쓰고, 넘으면 이미지 없이 MAX_TOKENS로 끝난다.
+	maxImageOutputTokens = 32768
 )
 
 const (
@@ -127,6 +129,7 @@ func imageRequest(src source, prompt string) ([]*genai.Content, *genai.GenerateC
 		ResponseModalities: []string{string(genai.ModalityImage)},
 		CandidateCount:     1,
 		ImageConfig:        &genai.ImageConfig{ImageSize: outputImageSize},
+		MaxOutputTokens:    maxImageOutputTokens,
 		ThinkingConfig:     &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelHigh},
 	}
 }
@@ -154,7 +157,7 @@ func firstImage(response *genai.GenerateContentResponse) (source, error) {
 		}
 	}
 
-	return source{}, fmt.Errorf("translated poster response has no image (finish reason %q)", response.Candidates[0].FinishReason)
+	return source{}, fmt.Errorf("translated poster response has no image (%s)", emptyResponseReason(response))
 }
 
 // emptyResponseReason은 결과 없는 응답의 차단·종료 사유를 모은다. 같은 포스터가 매번 막히는지 이 사유로만 가릴 수 있다.
@@ -169,6 +172,10 @@ func emptyResponseReason(response *genai.GenerateContentResponse) string {
 		candidate := response.Candidates[0]
 
 		reasons = append(reasons, strings.TrimSpace("finish reason "+string(candidate.FinishReason)+" "+candidate.FinishMessage))
+	}
+
+	if usage := response.UsageMetadata; usage != nil {
+		reasons = append(reasons, fmt.Sprintf("thoughts %d tokens, output %d tokens", usage.ThoughtsTokenCount, usage.CandidatesTokenCount))
 	}
 
 	if len(reasons) == 0 {

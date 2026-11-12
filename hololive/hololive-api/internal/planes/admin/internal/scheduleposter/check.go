@@ -175,11 +175,12 @@ func checkTable(table translationTable, original transcript) []string {
 
 	seenWords, listedWords := countTokens(original.content, isWord), countTokens(table.originalLines(), isWord)
 
-	for _, word := range sortedKeys(shortfall(seenWords, listedWords)) {
+	for _, word := range sortedKeys(shortfall(seenWords, listedWords, excess(seenWords, listedWords))) {
 		problems = append(problems, fmt.Sprintf("원본에 %d번 있는 ‘%s’가 번역표의 원문 줄에는 %d번만 있다", seenWords[word], word, listedWords[word]))
 	}
 
-	short := shortfall(countRunes(original.lines(), isJapanese), countRunes(table.originalLines(), isJapanese))
+	short := shortfall(countRunes(original.lines(), isJapanese), countRunes(table.originalLines(), isJapanese),
+		excess(countRunes(original.lines(), isWideGlyph), countRunes(table.originalLines(), isWideGlyph)))
 
 	for _, run := range runsWithShortfall(original.lines(), short) {
 		problems = append(problems, fmt.Sprintf("원본의 ‘%s’ 부분이 번역표에 빠졌다", run))
@@ -216,9 +217,9 @@ func checkRow(row tableRow) []string {
 }
 
 // shortfall은 줄 나눔·순서·한 글자 빠짐이 판독마다 달라 단위 개수로 센다. 모자란 만큼 번역표 쪽에 대신 읽은 단위가 있을 때만 2개까지 다르게 읽은 것으로 넘겨, 실제로 빠진 것은 걸린다.
-func shortfall[K comparable](seen, have map[K]int) map[K]int {
+func shortfall[K comparable](seen, have map[K]int, substitutes int) map[K]int {
 	short := map[K]int{}
-	missing, substitutes := 0, 0
+	missing := 0
 
 	for unit, count := range seen {
 		if count > have[unit] {
@@ -228,15 +229,26 @@ func shortfall[K comparable](seen, have map[K]int) map[K]int {
 		}
 	}
 
-	for unit, count := range have {
-		substitutes += max(0, count-seen[unit])
-	}
-
 	if missing <= min(unmatchedOriginalAllowance, substitutes) {
 		return nil
 	}
 
 	return short
+}
+
+func excess[K comparable](seen, have map[K]int) int {
+	total := 0
+
+	for unit, count := range have {
+		total += max(0, count-seen[unit])
+	}
+
+	return total
+}
+
+// isWideGlyph는 일본어를 대신 읽었을 수 있는 글자다. 판독이 ★ 같은 기호를 가나로 읽기도 해서 일본어 밖의 비ASCII 글자도 센다.
+func isWideGlyph(r rune) bool {
+	return r > unicode.MaxASCII && !unicode.IsSpace(r)
 }
 
 // runsWithShortfall은 모자란 글자를 원본 덩어리에 돌려 붙인다. 글자가 모두 모자란 덩어리를 먼저 골라야 흔한 글자(の 등)가 엉뚱한 덩어리를 지목하지 않는다.

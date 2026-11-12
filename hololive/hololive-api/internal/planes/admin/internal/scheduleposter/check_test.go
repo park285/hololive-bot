@@ -664,6 +664,8 @@ func TestCheckTableToleratesSmallReadingDifferences(t *testing.T) {
 	require.Empty(t, checkTable(mustTable(t, "休みになる ⇒ 휴방이 될\nかのうせい大 ⇒ 가능성 큼"), read("休みになるかのうせい大")),
 		"판독이 한 줄로 읽은 것을 번역표가 두 줄로 나눠도 같은 원문으로 본다")
 	require.Empty(t, checkTable(table, read("休みになるかのうせい大", "一致するまで終われテン")), "판독이 글자 하나를 빠뜨려도 같은 원문으로 본다")
+	require.Empty(t, checkTable(mustTable(t, "@アソビ★まわり隊 めらch. ⇒ @아소비★마와리타이 메라 ch."), read("@アソビきまわり隊 めらch.")),
+		"판독이 ★를 가나로 읽어도 번역표의 ★를 대신 읽은 글자로 본다")
 	require.NotEmpty(t, checkTable(table, read("休みになる", "かのうせい大", "一致するまで終われまテン", "ざつだん")))
 	require.Equal(t, []string{"원본의 ‘月’ 부분이 번역표에 빠졌다", "원본의 ‘火’ 부분이 번역표에 빠졌다", "원본의 ‘水’ 부분이 번역표에 빠졌다"},
 		checkTable(table, read("月", "火", "水", "休みになるかのうせい大", "一致するまで終われまテン")), "한 글자 요일 한자도 번역표에 있어야 한다")
