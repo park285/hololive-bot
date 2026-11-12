@@ -88,7 +88,9 @@ type PendingTranslation struct {
 	ID        int64
 	ChannelID string
 	ImageURL  string
-	Revision  int64
+	// ImageSHA256은 썸네일 후보를 만들 때 받은 그림의 해시다. 같은 주소의 그림이 바뀔 수 있는 출처만 채운다.
+	ImageSHA256 string
+	Revision    int64
 }
 
 type Summary struct {
@@ -160,6 +162,40 @@ func (s *Store) InsertCommunityCandidates(ctx context.Context, channelIDs []stri
 	tag, err := s.pool.Exec(ctx, insertCommunityCandidatesSQL, channelIDs, since, textPattern)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster community candidates: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// ThumbnailCandidate의 ImageSHA256은 수집 때 받은 그림의 sha256(소문자 16진수)이다.
+type ThumbnailCandidate struct {
+	ChannelID   string
+	VideoID     string
+	ImageSHA256 string
+	PostedAt    time.Time
+}
+
+// InsertThumbnailCandidates는 유튜브 영상 썸네일을 후보로 넣는다. 확정된 주 범위는 InsertCandidates와 같은 규칙으로 뺀다.
+func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []ThumbnailCandidate) (int64, error) {
+	if len(candidates) == 0 {
+		return 0, nil
+	}
+
+	channels := make([]string, len(candidates))
+	videos := make([]string, len(candidates))
+	hashes := make([]string, len(candidates))
+	postedAt := make([]time.Time, len(candidates))
+
+	for i, candidate := range candidates {
+		channels[i] = candidate.ChannelID
+		videos[i] = candidate.VideoID
+		hashes[i] = candidate.ImageSHA256
+		postedAt[i] = candidate.PostedAt
+	}
+
+	tag, err := s.pool.Exec(ctx, insertThumbnailCandidatesSQL, channels, videos, hashes, postedAt)
+	if err != nil {
+		return 0, fmt.Errorf("insert schedule poster thumbnail candidates: %w", err)
 	}
 
 	return tag.RowsAffected(), nil
@@ -341,7 +377,7 @@ func (s *Store) PendingTranslations(ctx context.Context, limit int) ([]PendingTr
 	pending, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (PendingTranslation, error) {
 		var item PendingTranslation
 
-		return item, row.Scan(&item.ID, &item.ChannelID, &item.ImageURL, &item.Revision)
+		return item, row.Scan(&item.ID, &item.ChannelID, &item.ImageURL, &item.ImageSHA256, &item.Revision)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list pending schedule poster translations: %w", err)

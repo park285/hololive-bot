@@ -1,6 +1,7 @@
 package scheduleposter_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -214,6 +215,71 @@ func TestStoreInsertCommunityCandidates(t *testing.T) {
 	require.Equal(t, "https://yt3.ggpht.com/poster=s0", listed[0].ImageURL)
 	require.Less(t, listed[0].ID, int64(1)<<60+1, "X 게시물 번호와 겹치지 않는 범위다")
 	require.Positive(t, listed[0].ID)
+}
+
+func TestStoreInsertThumbnailCandidates(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	const (
+		melaChannel = "UC8eitCE9Z6EwUCs-VUi1blg"
+		freeChat    = "4uuYjSf0rpU"
+		unknown     = "AAAAAAAAAAA"
+	)
+
+	thisWeek, nextWeek := strings.Repeat("a", 64), strings.Repeat("b", 64)
+
+	_, err = pool.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id, channel_id, status, lifecycle_origin, title)
+		VALUES ($1, $2, 'UPCOMING', 'observed', 'フリーチャット')`, freeChat, melaChannel)
+	require.NoError(t, err)
+
+	insert := func(video, hash string, at time.Time) int64 {
+		t.Helper()
+
+		inserted, insertErr := store.InsertThumbnailCandidates(ctx, []scheduleposter.ThumbnailCandidate{
+			{ChannelID: melaChannel, VideoID: video, ImageSHA256: hash, PostedAt: at},
+		})
+		require.NoError(t, insertErr)
+
+		return inserted
+	}
+
+	require.EqualValues(t, 1, insert(freeChat, thisWeek, testPostedAt))
+	require.Zero(t, insert(freeChat, thisWeek, testPostedAt.Add(time.Hour)), "같은 그림은 같은 id라 다시 넣지 않는다")
+	require.EqualValues(t, 1, insert(unknown, thisWeek, testPostedAt), "생방송 기록이 없는 영상도 후보가 된다")
+
+	listed, err := store.List(ctx, scheduleposter.ReviewPending, 10)
+	require.NoError(t, err)
+	require.Len(t, listed, 2)
+
+	posters := map[string]scheduleposter.Poster{}
+
+	for _, poster := range listed {
+		posters[poster.PostURL] = poster
+	}
+
+	poster := posters["https://www.youtube.com/watch?v="+freeChat]
+	require.Equal(t, "https://i.ytimg.com/vi/"+freeChat+"/maxresdefault.jpg", poster.ImageURL)
+	require.Equal(t, "フリーチャット", poster.TextExcerpt)
+	require.Empty(t, posters["https://www.youtube.com/watch?v="+unknown].TextExcerpt)
+	require.Less(t, poster.ID, int64(1)<<60+1, "X 게시물 번호와 겹치지 않는 범위다")
+	require.Positive(t, poster.ID)
+
+	revision, err := store.Confirm(ctx, poster.ID, poster.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
+	require.NoError(t, err)
+
+	pending, err := store.PendingTranslations(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, []scheduleposter.PendingTranslation{{
+		ID: poster.ID, ChannelID: melaChannel, ImageURL: poster.ImageURL, ImageSHA256: thisWeek, Revision: revision,
+	}}, pending)
+
+	require.Zero(t, insert(freeChat, nextWeek, testPostedAt.AddDate(0, 0, 3)), "확정된 주 안에 바뀐 그림은 후보가 되지 않는다")
+	require.EqualValues(t, 1, insert(freeChat, nextWeek, testPostedAt.AddDate(0, 0, 6)), "주 종료일부터 바뀐 그림은 다음 주 후보가 된다")
 }
 
 func TestStoreRecordTranslationPublishesOnlyCurrentRevision(t *testing.T) {

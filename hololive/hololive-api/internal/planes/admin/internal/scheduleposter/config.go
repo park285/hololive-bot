@@ -1,4 +1,4 @@
-// Package scheduleposter는 X의 멤버 주간 일정 포스터를 후보로 수집하고, 관리자가 확정한 포스터를 한국어 이미지로 번역한다.
+// Package scheduleposter는 X·유튜브의 멤버 주간 일정 포스터를 후보로 수집하고, 관리자가 확정한 포스터를 한국어 이미지로 번역한다.
 package scheduleposter
 
 import (
@@ -23,6 +23,7 @@ const (
 	maxConfigBytes     = 64 << 10
 	maxGlossaryTerms   = 200
 	maxGlossaryRunes   = 80
+	maxThumbnailVideos = 5
 )
 
 var ErrDisabled = errors.New("schedule poster collection disabled")
@@ -33,13 +34,16 @@ var (
 	projectPattern   = regexp.MustCompile(`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`)
 	locationPattern  = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 	modelPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,79}$`)
+	videoIDPattern   = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 )
 
-// Target은 X 계정(XUserID)과 유튜브 커뮤니티(YouTubeCommunity) 가운데 하나 이상을 후보 출처로 둔다.
+// Target은 X 계정(XUserID), 유튜브 커뮤니티(YouTubeCommunity), 영상 썸네일(YouTubeThumbnailVideoIDs) 가운데 하나 이상을 후보 출처로 둔다.
 type Target struct {
 	XUserID          string `json:"x_user_id"`
 	ChannelID        string `json:"channel_id"`
 	YouTubeCommunity bool   `json:"youtube_community"`
+	// YouTubeThumbnailVideoIDs는 멤버가 주간 일정을 썸네일로 바꿔 다는 영상(프리챗 등)이다. 그림이 바뀔 때마다 후보가 된다.
+	YouTubeThumbnailVideoIDs []string `json:"youtube_thumbnail_video_ids"`
 }
 
 // TranslationConfig의 인증은 GOOGLE_APPLICATION_CREDENTIALS(ADC)로 따로 공급한다. 파일에는 비밀을 넣지 않는다.
@@ -141,14 +145,30 @@ func (c Config) Validate() error {
 
 func validateTargets(targets []Target) error {
 	seenUsers := make(map[string]bool, len(targets))
+	seenVideos := map[string]bool{}
+
 	for _, target := range targets {
-		validUser := target.XUserID == "" && target.YouTubeCommunity || xUserIDPattern.MatchString(target.XUserID) && !seenUsers[target.XUserID]
+		youtube := target.YouTubeCommunity || len(target.YouTubeThumbnailVideoIDs) > 0
+		validUser := target.XUserID == "" && youtube || xUserIDPattern.MatchString(target.XUserID) && !seenUsers[target.XUserID]
+
 		if !validUser || !channelIDPattern.MatchString(target.ChannelID) {
 			return errors.New("invalid or duplicate schedule poster target")
 		}
 
 		if target.XUserID != "" {
 			seenUsers[target.XUserID] = true
+		}
+
+		if len(target.YouTubeThumbnailVideoIDs) > maxThumbnailVideos {
+			return fmt.Errorf("schedule poster target allows at most %d thumbnail videos", maxThumbnailVideos)
+		}
+
+		for _, videoID := range target.YouTubeThumbnailVideoIDs {
+			if !videoIDPattern.MatchString(videoID) || seenVideos[videoID] {
+				return errors.New("invalid or duplicate schedule poster thumbnail video ID")
+			}
+
+			seenVideos[videoID] = true
 		}
 	}
 

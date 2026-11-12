@@ -36,10 +36,11 @@ const (
 )
 
 type fakeSources struct {
-	pages    map[string]string
-	cursors  []string
-	original source
-	err      error
+	pages     map[string]string
+	cursors   []string
+	imageURLs []string
+	original  source
+	err       error
 }
 
 func (f *fakeSources) statuses(_ context.Context, userID, cursor string) (statusPage, error) {
@@ -62,7 +63,9 @@ func (f *fakeSources) statuses(_ context.Context, userID, cursor string) (status
 	return decodeStatusPage(raw)
 }
 
-func (f *fakeSources) image(context.Context, string) (source, error) {
+func (f *fakeSources) image(_ context.Context, rawURL string) (source, error) {
+	f.imageURLs = append(f.imageURLs, rawURL)
+
 	return f.original, f.err
 }
 
@@ -70,6 +73,7 @@ type fakeStore struct {
 	inserted          []posterstore.Candidate
 	communityChannels []string
 	communityPattern  string
+	thumbnails        []posterstore.ThumbnailCandidate
 	pending           []posterstore.PendingTranslation
 	recorded          []posterstore.Image
 	failures          []string
@@ -86,6 +90,12 @@ func (f *fakeStore) InsertCommunityCandidates(_ context.Context, channelIDs []st
 	f.communityPattern = textPattern
 
 	return 0, nil
+}
+
+func (f *fakeStore) InsertThumbnailCandidates(_ context.Context, candidates []posterstore.ThumbnailCandidate) (int64, error) {
+	f.thumbnails = append(f.thumbnails, candidates...)
+
+	return int64(len(candidates)), nil
 }
 
 func (f *fakeStore) ExpirePending(context.Context, time.Time) (int64, error) { return 0, nil }
@@ -275,6 +285,32 @@ func TestTranslatePendingRecordsFailureAfterRetries(t *testing.T) {
 	sources.err = errors.New("gone")
 	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
 	require.Equal(t, []string{reasonTranslationFailed, reasonTranslationFailed, reasonSourceUnavailable}, store.failures)
+}
+
+func TestTranslatePendingUsesOnlyTheCollectedThumbnail(t *testing.T) {
+	t.Parallel()
+
+	const collected = "0682c5f2076f099c34cfdd15a9e063849ed437a49677e6fcc5b4198c76575be5" // "original"의 sha256
+
+	thumbnail := posterstore.PendingTranslation{
+		ID: 1, ChannelID: sophiaChannel, ImageURL: "https://i.ytimg.com/vi/4uuYjSf0rpU/maxresdefault.jpg", ImageSHA256: collected, Revision: 2,
+	}
+	store := &fakeStore{pending: []posterstore.PendingTranslation{thumbnail}}
+	translator := &fakeTranslator{
+		tables: []string{tsuzuriTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
+		originalText: lines(tsuzuriOriginal), renders: [][]string{lines(tsuzuriGoodRender)},
+	}
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("next week")}}
+
+	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
+	require.Equal(t, []string{reasonSourceUnavailable}, store.failures, "수집 뒤 바뀐 썸네일을 옛 후보의 주로 번역하지 않는다")
+	require.Zero(t, translator.checks)
+	require.Empty(t, translator.textPrompts)
+
+	sources.original.Data = []byte("original")
+	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
+	require.Len(t, store.recorded, 1)
+	require.Equal(t, []string{reasonSourceUnavailable}, store.failures)
 }
 
 func TestTranslatePendingRedrawsUntilTheCheckPasses(t *testing.T) {
@@ -692,6 +728,45 @@ func TestLoadConfig(t *testing.T) {
 
 	_, err = LoadConfig(write(`{"targets":[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg"}],"translation":{"project":"example-project"}}`))
 	require.Error(t, err, "출처가 하나도 없는 대상은 거부한다")
+
+	config, err = LoadConfig(write(`{"targets":[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg","youtube_thumbnail_video_ids":["4uuYjSf0rpU"]}],"translation":{"project":"example-project"}}`))
+	require.NoError(t, err, "썸네일만 보는 대상도 X 계정이 없어도 된다")
+	require.Equal(t, []Target{{ChannelID: "UC8eitCE9Z6EwUCs-VUi1blg", YouTubeThumbnailVideoIDs: []string{"4uuYjSf0rpU"}}}, config.Targets)
+
+	for _, targets := range []string{
+		`[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg","youtube_thumbnail_video_ids":["4uuYjSf0rp"]}]`,
+		`[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg","youtube_thumbnail_video_ids":["4uuYjSf0rpU/../a"]}]`,
+		`[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg","youtube_thumbnail_video_ids":["4uuYjSf0rpU"]},{"channel_id":"UCROQtXcp2loQEmvpe5rhJzQ","youtube_thumbnail_video_ids":["4uuYjSf0rpU"]}]`,
+		`[{"channel_id":"UC8eitCE9Z6EwUCs-VUi1blg","youtube_thumbnail_video_ids":["AAAAAAAAAA1","AAAAAAAAAA2","AAAAAAAAAA3","AAAAAAAAAA4","AAAAAAAAAA5","AAAAAAAAAA6"]}]`,
+	} {
+		_, err = LoadConfig(write(`{"targets":` + targets + `,"translation":{"project":"example-project"}}`))
+		require.Error(t, err, targets)
+	}
+}
+
+func TestCollectFetchesThumbnailTargets(t *testing.T) {
+	t.Parallel()
+
+	const melaChannel = "UC8eitCE9Z6EwUCs-VUi1blg"
+
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("thumbnail")}}
+	store := &fakeStore{}
+	service := testService(store, sources, &fakeTranslator{})
+
+	service.config.Targets = []Target{{ChannelID: melaChannel, YouTubeThumbnailVideoIDs: []string{"4uuYjSf0rpU"}}}
+
+	require.NoError(t, service.collect(t.Context()))
+	require.Empty(t, sources.cursors, "X 계정이 없는 대상은 FxTwitter를 부르지 않는다")
+	require.Equal(t, []string{"https://i.ytimg.com/vi/4uuYjSf0rpU/maxresdefault.jpg"}, sources.imageURLs)
+	require.Equal(t, []posterstore.ThumbnailCandidate{{
+		ChannelID: melaChannel, VideoID: "4uuYjSf0rpU", PostedAt: service.now(),
+		ImageSHA256: "80f61f96184524ba54db767ed49487392430ad26bf5cf2ef689905f3400325d7", // "thumbnail"의 sha256
+	}}, store.thumbnails)
+
+	sources.err = errors.New("unexpected status 404")
+
+	require.ErrorContains(t, service.collect(t.Context()), "collect thumbnail 4uuYjSf0rpU: unexpected status 404")
+	require.Len(t, store.thumbnails, 1, "받지 못한 썸네일은 후보가 되지 않는다")
 }
 
 func TestCollectReadsCommunityOnlyTargetsFromStore(t *testing.T) {

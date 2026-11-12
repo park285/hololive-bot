@@ -17,6 +17,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
@@ -376,6 +378,36 @@ func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 	}
 }
 
+// seedSchedulePosterSources는 목록 응답이 세 출처의 게시물·원본 URL을 모두 담게 한다.
+func seedSchedulePosterSources(t *testing.T, pool *pgxpool.Pool, store *scheduleposter.Store) {
+	t.Helper()
+
+	_, err := store.InsertCandidates(t.Context(), []scheduleposter.Candidate{{
+		ID: 2119784604752343207, ChannelID: "UCROQtXcp2loQEmvpe5rhJzQ", XUserID: "2054825907916054528",
+		PostURL: "https://x.com/i/status/2119784604752343207", ImageURL: "https://pbs.twimg.com/media/a.jpg?name=orig",
+		TextExcerpt: "週間スケジュール", PostedAt: time.Date(2026, time.November, 9, 3, 0, 0, 0, time.UTC),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const melaChannel = "UC8eitCE9Z6EwUCs-VUi1blg"
+
+	_, err = pool.Exec(t.Context(), `INSERT INTO schedule_posters (id, source, channel_id, x_user_id, post_url, image_url, posted_at, text_excerpt)
+		VALUES (7, 'youtube_community', $1, '', 'https://www.youtube.com/post/UgkxSchedule', 'https://yt3.ggpht.com/poster=s0', now(), 'スケジュール')`,
+		melaChannel)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = store.InsertThumbnailCandidates(t.Context(), []scheduleposter.ThumbnailCandidate{{
+		ChannelID: melaChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: strings.Repeat("a", 64), PostedAt: time.Now(),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 	spec := loadAdminOpenAPI(t)
 	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
@@ -385,14 +417,7 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = store.InsertCandidates(t.Context(), []scheduleposter.Candidate{{
-		ID: 2119784604752343207, ChannelID: "UCROQtXcp2loQEmvpe5rhJzQ", XUserID: "2054825907916054528",
-		PostURL: "https://x.com/i/status/2119784604752343207", ImageURL: "https://pbs.twimg.com/media/a.jpg?name=orig",
-		TextExcerpt: "週間スケジュール", PostedAt: time.Date(2026, time.November, 9, 3, 0, 0, 0, time.UTC),
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	seedSchedulePosterSources(t, pool, store)
 
 	const (
 		base      = "/api/holo/schedule-posters"
