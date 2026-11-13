@@ -450,8 +450,9 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"3"}`, http.StatusOK},
 		{http.MethodGet, base + "?status=rejected", base, "", http.StatusOK},
 		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK},
-		{http.MethodPost, base + "/collect", base + "/collect", "", http.StatusOK},
-		{http.MethodPost, base + "/collect", base + "/collect", "", http.StatusOK},
+		{http.MethodPost, base + "/collect", base + "/collect", `{"now":true}`, http.StatusBadRequest},
+		{http.MethodPost, base + "/collect", base + "/collect", `{}`, http.StatusOK},
+		{http.MethodPost, base + "/collect", base + "/collect", `{}`, http.StatusOK},
 	}
 
 	for _, step := range steps {

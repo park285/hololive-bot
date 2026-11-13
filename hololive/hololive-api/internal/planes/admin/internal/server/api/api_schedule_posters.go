@@ -303,10 +303,15 @@ func (r *schedulePosterWeekRequest) week() (time.Time, time.Time, error) {
 }
 
 // CollectSchedulePosters는 수집을 예약만 하고 끝나기를 기다리지 않는다. 결과는 목록과 요약에 나타난다.
+// 다른 변경과 같이 JSON 본문을 받으며 빈 객체만 허용한다.
 func (h *SchedulePosterHandler) CollectSchedulePosters(c *gin.Context) {
 	if h == nil || h.collector == nil {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, "schedule poster collection unavailable", nil)
 
+		return
+	}
+
+	if !decodeSchedulePosterChange(c, &struct{}{}) {
 		return
 	}
 
