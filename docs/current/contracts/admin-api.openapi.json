@@ -886,12 +886,13 @@
         "properties": {
           "pendingCount": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "관리자 검토로 넘긴 검토 대기 후보 수입니다. 자동 검토를 기다리는 후보는 세지 않습니다."
           },
           "latestCandidateId": {
             "type": "string",
             "pattern": "^([1-9][0-9]{0,18})?$",
-            "description": "가장 늦게 들어온 후보 ID입니다. 확정·거절해도 뒤로 가지 않으며 후보가 없으면 빈 문자열입니다."
+            "description": "가장 늦게 관리자 검토로 넘긴 후보 ID입니다. 확정·거절해도 뒤로 가지 않으며 넘긴 후보가 없으면 빈 문자열입니다."
           }
         }
       },

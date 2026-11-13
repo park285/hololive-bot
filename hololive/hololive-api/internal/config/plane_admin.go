@@ -30,6 +30,8 @@ type AdminPlaneConfig struct {
 	XSpacesKeyFile string
 	// SchedulePosterConfigFile이 비어 있으면 일정 포스터 수집·번역을 끈다. 관리 API는 켜진 채로 둔다.
 	SchedulePosterConfigFile string
+	// SchedulePosterGeminiKeyFile이 비어 있으면 후보 자동 검토를 끄고 모든 후보를 관리자 검토로 넘긴다.
+	SchedulePosterGeminiKeyFile string
 }
 
 func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
@@ -45,15 +47,16 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 	}
 
 	config := &AdminPlaneConfig{
-		Environment:              envload.AppEnvironment(),
-		Server:                   server,
-		InternalH3:               loadInternalH3ClientOptions(),
-		Postgres:                 postgres,
-		Notification:             notification,
-		Ingestion:                ingestion,
-		SettingsFilePath:         settings.LoadSettingsFilePath(),
-		XSpacesKeyFile:           sharedenv.StringRaw("X_SPACES_KEY_FILE", ""),
-		SchedulePosterConfigFile: sharedenv.StringRaw("SCHEDULE_POSTER_CONFIG_FILE", ""),
+		Environment:                 envload.AppEnvironment(),
+		Server:                      server,
+		InternalH3:                  loadInternalH3ClientOptions(),
+		Postgres:                    postgres,
+		Notification:                notification,
+		Ingestion:                   ingestion,
+		SettingsFilePath:            settings.LoadSettingsFilePath(),
+		XSpacesKeyFile:              sharedenv.StringRaw("X_SPACES_KEY_FILE", ""),
+		SchedulePosterConfigFile:    sharedenv.StringRaw("SCHEDULE_POSTER_CONFIG_FILE", ""),
+		SchedulePosterGeminiKeyFile: sharedenv.StringRaw("SCHEDULE_POSTER_GEMINI_API_KEY_FILE", ""),
 	}
 
 	return config, nil

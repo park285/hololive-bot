@@ -97,7 +97,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, fmt.Errorf("build admin schedule poster store: %w", err)
 	}
 
-	schedulePosterService, err := buildSchedulePosterService(ctx, appConfig.SchedulePosterConfigFile, schedulePosters, infra.MemberRepository, logger)
+	schedulePosterService, err := buildSchedulePosterService(ctx, appConfig, schedulePosters, infra.MemberRepository, logger)
 	if err != nil && !errors.Is(err, posterservice.ErrDisabled) {
 		return nil, fmt.Errorf("build admin schedule poster service: %w", err)
 	}
@@ -139,17 +139,22 @@ func attachAdminBackgroundTasks(
 // 설정이 있는데 잘못되었으면 기동을 막는다.
 func buildSchedulePosterService(
 	ctx context.Context,
-	configFile string,
+	appConfig *apiconfig.AdminPlaneConfig,
 	store *scheduleposter.Store,
 	members *member.Repository,
 	logger *slog.Logger,
 ) (*posterservice.Service, error) {
-	config, err := posterservice.LoadConfig(configFile)
+	config, err := posterservice.LoadConfig(appConfig.SchedulePosterConfigFile)
 	if err != nil {
 		return nil, fmt.Errorf("load schedule poster config: %w", err)
 	}
 
-	service, err := posterservice.New(ctx, config, store, members, logger)
+	apiKey, err := posterservice.LoadAPIKey(appConfig.SchedulePosterGeminiKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load schedule poster gemini api key: %w", err)
+	}
+
+	service, err := posterservice.New(ctx, config, apiKey, store, members, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create schedule poster service: %w", err)
 	}

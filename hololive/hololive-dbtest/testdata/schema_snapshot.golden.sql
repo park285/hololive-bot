@@ -503,6 +503,7 @@ TABLE schedule_posters
   COLUMN translation_inputs_sha256 bytea
   COLUMN source_transcript text[]
   COLUMN translation_table text
+  COLUMN review_requested_at timestamp with time zone DEFAULT now()
   CONSTRAINT chk_schedule_posters_confirmed_week CHECK (((review_status <> 'confirmed'::text) OR (week_start IS NOT NULL)))
   CONSTRAINT chk_schedule_posters_id_positive CHECK ((id > 0))
   CONSTRAINT chk_schedule_posters_review_status_vocab CHECK ((review_status = ANY (ARRAY['pending_review'::text, 'confirmed'::text, 'rejected'::text, 'expired'::text])))
