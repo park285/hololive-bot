@@ -256,6 +256,33 @@
         }
       }
     },
+    "/api/holo/schedule-posters/collect": {
+      "post": {
+        "operationId": "holoCollectSchedulePosters",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterCollectResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/holo/schedule-posters/{id}": {
       "get": {
         "operationId": "holoGetSchedulePoster",
@@ -311,6 +338,53 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ConfirmSchedulePosterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterChangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/week": {
+      "post": {
+        "operationId": "holoUpdateSchedulePosterWeek",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSchedulePosterWeekRequest"
               }
             }
           },
@@ -716,6 +790,30 @@
         },
         "description": "주 범위는 7일 이하이고 게시일(JST)과 7일 이내여야 하며, 어기면 409 code=invalid_week입니다."
       },
+      "UpdateSchedulePosterWeekRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "weekStart",
+          "weekEnd"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "weekStart": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "weekEnd": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          }
+        },
+        "description": "확정본의 주 범위만 고치며 다시 번역하지 않습니다. 확정과 같이 7일 이하이고 게시일(JST)과 7일 이내여야 하며 어기면 409 code=invalid_week, 확정본이 아니면 409 code=invalid_state입니다."
+      },
       "SchedulePoster": {
         "type": "object",
         "additionalProperties": false,
@@ -730,6 +828,8 @@
           "weekStart",
           "weekEnd",
           "reviewedAt",
+          "reviewedBy",
+          "reviewRequestReason",
           "translationStatus",
           "translationError",
           "translatedAt",
@@ -784,6 +884,30 @@
               "null"
             ]
           },
+          "reviewedBy": {
+            "type": "string",
+            "enum": [
+              "",
+              "auto",
+              "admin"
+            ],
+            "description": "확정·거절을 누가 했는지입니다. auto는 관리자 검토로 넘기기 전에 자동 검토가 정한 것이고, 검토 대기·만료이거나 알 수 없으면 빈 문자열입니다."
+          },
+          "reviewRequestReason": {
+            "type": "string",
+            "enum": [
+              "",
+              "uncertain",
+              "unjudgeable",
+              "image_changed",
+              "period_unread",
+              "week_rejected",
+              "week_overlapping",
+              "stale",
+              "auto_review_off"
+            ],
+            "description": "자동 검토가 후보를 관리자 검토로 넘긴 이유입니다. uncertain(일정표·한 주·한 명 판정 중 하나가 불확실), unjudgeable(모델이 판정할 수 없는 그림), image_changed(수집 뒤 그림이 바뀜), period_unread(인쇄된 기간을 게시 주나 다음 주로 맞추지 못함), week_rejected(읽은 주가 게시일과 맞지 않음), week_overlapping(같은 멤버의 확정본과 주가 겹침), stale(6시간 안에 판정하지 못함), auto_review_off(자동 검토를 끈 뒤 남은 후보). 자동 검토 없이 들어왔으면 빈 문자열입니다."
+          },
           "translationStatus": {
             "type": "string",
             "enum": [
@@ -833,6 +957,20 @@
             "pattern": "^[1-9][0-9]{0,18}$"
           }
         }
+      },
+      "SchedulePosterCollectResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "queued"
+        ],
+        "properties": {
+          "queued": {
+            "type": "boolean",
+            "description": "false면 이미 기다리는 수집 요청이 있어 하나로 합쳤다는 뜻입니다."
+          }
+        },
+        "description": "수집 주기를 기다리지 않고 수집(자동 검토 포함)을 한 번 예약합니다. 끝나기를 기다리지 않으며 결과는 목록과 요약에 나타납니다. 일정 포스터 서비스를 끈 배포는 503입니다."
       },
       "SchedulePosterId": {
         "type": "string",

@@ -105,6 +105,7 @@ type Service struct {
 	now          func() time.Time
 	retry        retry.RetryOptions
 	rowBudget    time.Duration
+	collectNow   chan struct{}
 }
 
 // New의 apiKey가 비어 있으면 후보 자동 검토를 끈다(LoadAPIKey).
@@ -154,6 +155,7 @@ func newService(
 		now:          time.Now,
 		retry:        translationRetryOptions(),
 		rowBudget:    translationRowBudget,
+		collectNow:   make(chan struct{}, 1),
 	}
 }
 
@@ -173,10 +175,40 @@ func (s *Service) Start(ctx context.Context) {
 
 	var wg sync.WaitGroup
 
-	wg.Go(func() { s.runLoop(ctx, "collect", initialCollectWait, s.config.PollInterval(), s.collect) })
+	wg.Go(func() { s.runCollectLoop(ctx) })
 	wg.Go(func() { s.runLoop(ctx, "translate", initialTranslate, translateInterval, s.translatePending) })
 	wg.Wait()
 	s.logger.Info("Schedule poster service stopped")
+}
+
+// RequestCollect는 수집 주기를 기다리지 않고 수집을 한 번 더 돌리게 하며, 이미 요청이 대기 중이면 false다.
+// 수집은 Start의 수집 goroutine만 돌리므로 요청이 겹쳐도 두 수집이 동시에 돌지 않는다.
+func (s *Service) RequestCollect() bool {
+	select {
+	case s.collectNow <- struct{}{}:
+		s.logger.Info("Schedule poster collection requested")
+
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) runCollectLoop(ctx context.Context) {
+	timer := time.NewTimer(initialCollectWait)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		case <-s.collectNow:
+		}
+
+		s.runTask(ctx, "collect", s.collect)
+		timer.Reset(s.config.PollInterval())
+	}
 }
 
 func (s *Service) runLoop(ctx context.Context, task string, wait, interval time.Duration, fn func(context.Context) error) {
@@ -184,22 +216,22 @@ func (s *Service) runLoop(ctx context.Context, task string, wait, interval time.
 		return
 	}
 
-	run := func(ctx context.Context) {
-		if err := fn(ctx); err != nil && ctx.Err() == nil {
-			s.logger.Error("Schedule poster task failed", slog.String("task", task), slog.Any("error", err))
-		}
-	}
-
-	run(ctx)
+	s.runTask(ctx, task, fn)
 
 	tick := func(ctx context.Context) error {
-		run(ctx)
+		s.runTask(ctx, task, fn)
 
 		return nil
 	}
 
 	if err := lifecycle.RunTickerLoop(ctx, interval, tick); err != nil && ctx.Err() == nil {
 		s.logger.Error("Schedule poster loop stopped", slog.String("task", task), slog.Any("error", err))
+	}
+}
+
+func (s *Service) runTask(ctx context.Context, task string, fn func(context.Context) error) {
+	if err := fn(ctx); err != nil && ctx.Err() == nil {
+		s.logger.Error("Schedule poster task failed", slog.String("task", task), slog.Any("error", err))
 	}
 }
 
@@ -289,13 +321,13 @@ func (s *Service) collectCommunity(ctx context.Context, channelIDs []string, now
 
 // handOverUnreviewed는 자동 검토가 꺼졌으면 켜져 있던 동안 들어와 기다리던 후보가 목록·알림 없이 만료되지 않도록 바로 넘긴다.
 func (s *Service) handOverUnreviewed(ctx context.Context, now time.Time, autoReview bool) error {
-	before := now
+	before, reason := now, posterstore.ReviewReasonAutoReviewOff
 
 	if autoReview {
-		before = now.Add(-handOverAfter)
+		before, reason = now.Add(-handOverAfter), posterstore.ReviewReasonStale
 	}
 
-	handed, err := s.reviews.HandOverUnreviewed(ctx, before)
+	handed, err := s.reviews.HandOverUnreviewed(ctx, before, reason)
 	if err != nil {
 		return fmt.Errorf("hand over unreviewed schedule posters: %w", err)
 	}

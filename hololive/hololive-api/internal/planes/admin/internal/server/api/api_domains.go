@@ -87,6 +87,8 @@ type Deps struct {
 	XSpaceSessions *xspaces.Store
 	// SchedulePosters가 nil이면 일정 포스터 route는 503을 돌려준다.
 	SchedulePosters *scheduleposter.Store
+	// SchedulePosterCollector가 nil이면(일정 포스터 서비스를 끈 배포) 수집 요청 route만 503을 돌려준다.
+	SchedulePosterCollector SchedulePosterCollector
 }
 
 type DomainHandlers struct {
@@ -112,7 +114,7 @@ func NewDomainHandlers(deps Deps) (*DomainHandlers, error) {
 		Stream:         &StreamHandler{holodex: deps.Holodex, logger: deps.Logger},
 		Stats:          &StatsHandler{repository: deps.Repository, alarm: deps.Alarm, acl: deps.ACL, logger: deps.Logger},
 		Settings:       newSettingsHandler(deps),
-		SchedulePoster: &SchedulePosterHandler{store: deps.SchedulePosters, logger: deps.Logger},
+		SchedulePoster: &SchedulePosterHandler{store: deps.SchedulePosters, collector: deps.SchedulePosterCollector, logger: deps.Logger},
 	}, nil
 }
 

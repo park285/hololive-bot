@@ -67,10 +67,12 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsHandl
 
 func registerSchedulePosterRoutes(holoAPI *gin.RouterGroup, handler *api.SchedulePosterHandler) {
 	holoAPI.GET("/schedule-posters/summary", handler.GetSchedulePosterSummary)
+	holoAPI.POST("/schedule-posters/collect", handler.CollectSchedulePosters)
 	holoAPI.GET("/schedule-posters", handler.GetSchedulePosters)
 	holoAPI.GET("/schedule-posters/:id", handler.GetSchedulePoster)
 	holoAPI.GET("/schedule-posters/:id/translated", handler.GetTranslatedSchedulePoster)
 	holoAPI.POST("/schedule-posters/:id/confirm", handler.ConfirmSchedulePoster)
+	holoAPI.POST("/schedule-posters/:id/week", handler.UpdateSchedulePosterWeek)
 	holoAPI.POST("/schedule-posters/:id/reject", handler.RejectSchedulePoster)
 	holoAPI.POST("/schedule-posters/:id/translate", handler.RetranslateSchedulePoster)
 }

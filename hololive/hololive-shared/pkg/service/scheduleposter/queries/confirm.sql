@@ -5,7 +5,7 @@ WITH target AS (
     WHERE id = $1
 ), updated AS (
     UPDATE schedule_posters
-    SET review_status = 'confirmed', week_start = $3::date, week_end = $4::date, reviewed_at = now(),
+    SET review_status = 'confirmed', week_start = $3::date, week_end = $4::date, reviewed_at = now(), reviewed_by = $5,
         translation_status = 'pending', translation_error = '', revision = revision + 1, updated_at = now()
     WHERE id = $1 AND revision = $2 AND review_status = 'pending_review'
       AND abs($3::date - (posted_at AT TIME ZONE 'Asia/Tokyo')::date) <= 7

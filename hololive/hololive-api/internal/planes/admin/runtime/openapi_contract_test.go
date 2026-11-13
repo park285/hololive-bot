@@ -438,12 +438,20 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"2","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-12-07","weekEnd":"2026-12-13"}`, http.StatusConflict},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"11/9"}`, http.StatusBadRequest},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusOK},
+		{http.MethodGet, poster, itemRoute, "", http.StatusOK},
 		{http.MethodPost, poster + "/translate", itemRoute + "/translate", `{"expectedRevision":"2"}`, http.StatusConflict},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"11/16"}`, http.StatusBadRequest},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusOK},
 		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"x"}`, http.StatusBadRequest},
-		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"2","note":"x"}`, http.StatusBadRequest},
-		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"2"}`, http.StatusOK},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"3","note":"x"}`, http.StatusBadRequest},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"3"}`, http.StatusOK},
+		{http.MethodGet, base + "?status=rejected", base, "", http.StatusOK},
 		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK},
+		{http.MethodPost, base + "/collect", base + "/collect", "", http.StatusOK},
+		{http.MethodPost, base + "/collect", base + "/collect", "", http.StatusOK},
 	}
 
 	for _, step := range steps {

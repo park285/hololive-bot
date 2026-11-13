@@ -113,14 +113,15 @@ func TestCollectAutoReviewsEveryCandidate(t *testing.T) {
 	require.Empty(t, store.communityPattern, "문구 패턴이 놓친 일정표까지 판정하도록 이미지 글을 모두 넣는다")
 	require.Equal(t, []bool{true, true, true}, store.autoReviews, "X·커뮤니티·썸네일 후보 모두 자동 검토를 기다린다")
 	require.Equal(t, []time.Time{service.now().Add(-handOverAfter)}, store.handOverBefore, "판정하지 못한 채 오래된 후보는 판정 전에 넘긴다")
+	require.Equal(t, []posterstore.ReviewRequestReason{posterstore.ReviewReasonStale}, store.handOverReasons)
 	require.Equal(t, []string{
 		"confirm 1@1 2026-11-09..2026-11-15",
 		"reject 2@1",
-		"request 3",
-		"request 4",
-		"request 5",
-		"request 7",
-		"request 8",
+		"request 3 uncertain",
+		"request 4 period_unread",
+		"request 5 unjudgeable",
+		"request 7 image_changed",
+		"request 8 uncertain",
 	}, store.reviewed, "원본을 받지 못한 6은 다음 주기에 다시 본다")
 	require.Equal(t, []string{confirmName, "reject", "partial", "undated", "blocked", "group"}, judge.judged, "수집 뒤 바뀐 썸네일은 판정하지 않는다")
 	require.Equal(t, []string{confirmName, "undated"}, judge.read, "세 답이 모두 높은 후보만 날짜를 읽는다")
@@ -192,6 +193,7 @@ func TestCollectHandsOverWaitingCandidatesWhenAutoReviewIsOff(t *testing.T) {
 
 	require.NoError(t, service.collect(t.Context()))
 	require.Equal(t, []time.Time{service.now()}, store.handOverBefore, "자동 검토를 끄면 기다리던 후보를 모두 넘긴다")
+	require.Equal(t, []posterstore.ReviewRequestReason{posterstore.ReviewReasonAutoReviewOff}, store.handOverReasons)
 	require.Equal(t, []bool{false, false, false}, store.autoReviews)
 }
 
@@ -234,7 +236,7 @@ func TestAutoReviewKeepsOneConfirmationPerWeek(t *testing.T) {
 
 	for coverage, want := range map[posterstore.WeekCoverage][]string{
 		posterstore.WeekSame:        {"expire 1@1"},
-		posterstore.WeekOverlapping: {"request 1"},
+		posterstore.WeekOverlapping: {"request 1 week_overlapping"},
 	} {
 		store := &fakeStore{unreviewed: []posterstore.ReviewCandidate{reviewCandidate(1, "u/"+confirmName)}, coverage: coverage}
 		sources := &fakeSources{images: map[string]source{"u/" + confirmName: {MIME: mimeJPEG, Data: []byte(confirmName)}}}
@@ -252,7 +254,7 @@ func TestAutoReviewHandsAWeekTheStoreRefusesToAdmin(t *testing.T) {
 		confirmErr error
 		want       []string
 	}{
-		{confirmErr: posterstore.ErrInvalidWeek, want: []string{"confirm 1@1 2026-11-09..2026-11-15", "request 1"}},
+		{confirmErr: posterstore.ErrInvalidWeek, want: []string{"confirm 1@1 2026-11-09..2026-11-15", "request 1 week_rejected"}},
 		{confirmErr: posterstore.ErrRevisionConflict, want: []string{"confirm 1@1 2026-11-09..2026-11-15"}},
 	} {
 		store := &fakeStore{unreviewed: []posterstore.ReviewCandidate{reviewCandidate(1, "u/"+confirmName)}, confirmErr: tc.confirmErr}

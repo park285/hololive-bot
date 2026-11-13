@@ -2,6 +2,7 @@ package scheduleposter_test
 
 import (
 	"bytes"
+	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,7 +14,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
-const sophiaChannel = "UCROQtXcp2loQEmvpe5rhJzQ"
+const (
+	sophiaChannel = "UCROQtXcp2loQEmvpe5rhJzQ"
+	mimeJPEG      = "image/jpeg"
+)
 
 func date(t *testing.T, value string) time.Time {
 	t.Helper()
@@ -122,6 +126,67 @@ func TestStoreConfirmChecksRevisionWeekAndState(t *testing.T) {
 
 	_, err = store.RequestTranslation(ctx, 101, revision)
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 대기 중에는 재번역을 예약하지 않는다")
+}
+
+func TestStoreUpdateWeekMovesOnlyThePublishedWeek(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store := newStore(t)
+	image := scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}
+
+	recorded, err := store.RecordTranslation(ctx, confirmedPending(t, store), image)
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	poster, err := store.Get(ctx, 101)
+	require.NoError(t, err)
+
+	summary, err := store.Summary(ctx)
+	require.NoError(t, err)
+
+	nextWeek, nextEnd := date(t, "2026-11-16"), date(t, "2026-11-22")
+
+	_, err = store.UpdateWeek(ctx, 101, poster.Revision+1, nextWeek, nextEnd)
+	require.ErrorIs(t, err, scheduleposter.ErrRevisionConflict)
+
+	_, err = store.UpdateWeek(ctx, 101, poster.Revision, date(t, "2026-11-23"), date(t, "2026-11-29"))
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidWeek, "게시일과 7일 넘게 떨어진 주")
+
+	_, err = store.UpdateWeek(ctx, 101, poster.Revision, nextWeek, nextEnd.AddDate(0, 0, 1))
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidWeek, "7일을 넘는 범위")
+
+	_, err = store.UpdateWeek(ctx, 102, 1, nextWeek, nextEnd)
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "확정본만 고친다")
+
+	_, err = store.UpdateWeek(ctx, 999, 1, nextWeek, nextEnd)
+	require.ErrorIs(t, err, scheduleposter.ErrNotFound)
+
+	revision, err := store.UpdateWeek(ctx, 101, poster.Revision, nextWeek, nextEnd)
+	require.NoError(t, err)
+	require.Equal(t, poster.Revision+1, revision)
+
+	updated, err := store.Get(ctx, 101)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.TranslationSucceeded, updated.TranslationStatus, "번역본은 그대로 둔다")
+	require.Equal(t, scheduleposter.ReviewerAdmin, updated.ReviewedBy)
+
+	pending, err := store.PendingTranslations(ctx, 10)
+	require.NoError(t, err)
+	require.Empty(t, pending, "다시 번역하지 않는다")
+
+	after, err := store.Summary(ctx)
+	require.NoError(t, err)
+	require.Equal(t, summary, after, "주 수정은 Console 새 후보 알림을 바꾸지 않는다")
+
+	_, found, err := store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-11"))
+	require.NoError(t, err)
+	require.False(t, found)
+
+	published, found, err := store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-18"))
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, image, published)
 }
 
 func TestStoreConfirmedWeekClosesSameMemberCandidates(t *testing.T) {
@@ -273,14 +338,18 @@ func TestStoreAutoReviewCandidatesWaitUntilHandedToAdmin(t *testing.T) {
 	}, unreviewed[0])
 
 	for _, id := range []int64{103, 102} {
-		requested, requestErr := store.RequestReview(ctx, id)
+		requested, requestErr := store.RequestReview(ctx, id, scheduleposter.ReviewReasonUncertain)
 		require.NoError(t, requestErr)
 		require.True(t, requested)
 	}
 
-	requested, err := store.RequestReview(ctx, 103)
+	requested, err := store.RequestReview(ctx, 103, scheduleposter.ReviewReasonStale)
 	require.NoError(t, err)
 	require.False(t, requested, "이미 넘긴 후보는 다시 넘기지 않는다")
+
+	handed, err := store.Get(ctx, 103)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.ReviewReasonUncertain, handed.ReviewRequestReason, "처음 넘긴 이유를 남긴다")
 
 	summary, err = store.Summary(ctx)
 	require.NoError(t, err)
@@ -290,7 +359,7 @@ func TestStoreAutoReviewCandidatesWaitUntilHandedToAdmin(t *testing.T) {
 	_, err = store.Reject(ctx, 105, 1)
 	require.NoError(t, err)
 
-	requested, err = store.RequestReview(ctx, 105)
+	requested, err = store.RequestReview(ctx, 105, scheduleposter.ReviewReasonUncertain)
 	require.NoError(t, err)
 	require.False(t, requested, "검토 대기가 아닌 후보는 넘기지 않는다")
 }
@@ -321,13 +390,17 @@ func TestStoreHandOverUnreviewed(t *testing.T) {
 	_, err = store.Reject(ctx, 105, 1)
 	require.NoError(t, err)
 
-	handed, err := store.HandOverUnreviewed(ctx, time.Now().Add(-time.Hour))
+	handed, err := store.HandOverUnreviewed(ctx, time.Now().Add(-time.Hour), scheduleposter.ReviewReasonStale)
 	require.NoError(t, err)
 	require.Zero(t, handed, "기준 시각 뒤에 들어온 후보는 넘기지 않는다")
 
-	handed, err = store.HandOverUnreviewed(ctx, time.Now().Add(time.Hour))
+	handed, err = store.HandOverUnreviewed(ctx, time.Now().Add(time.Hour), scheduleposter.ReviewReasonStale)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, handed, "자동 거절한 105는 그대로 둔다")
+	require.EqualValues(t, 1, handed, "거절한 105는 그대로 둔다")
+
+	poster, err := store.Get(ctx, 104)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.ReviewReasonStale, poster.ReviewRequestReason)
 
 	summary, err := store.Summary(ctx)
 	require.NoError(t, err)
@@ -415,7 +488,7 @@ func TestStoreAutoConfirm(t *testing.T) {
 	_, _, err = store.AutoConfirm(ctx, 102, 1, start, end)
 	require.ErrorIs(t, err, scheduleposter.ErrRevisionConflict, "닫은 후보는 revision이 올라 다시 바꾸지 않는다")
 
-	requested, err := store.RequestReview(ctx, 103)
+	requested, err := store.RequestReview(ctx, 103, scheduleposter.ReviewReasonWeekOverlapping)
 	require.NoError(t, err)
 	require.True(t, requested)
 
@@ -431,6 +504,62 @@ func TestStoreAutoConfirm(t *testing.T) {
 
 	_, err = store.AutoReject(ctx, 999, 1)
 	require.ErrorIs(t, err, scheduleposter.ErrNotFound)
+}
+
+func TestStoreRecordsWhoReviewed(t *testing.T) {
+	t.Parallel()
+
+	start, end := date(t, "2026-11-09"), date(t, "2026-11-15")
+
+	type adminChange func(ctx context.Context, store *scheduleposter.Store) (int64, error)
+
+	for name, change := range map[string]adminChange{
+		"주 수정": func(ctx context.Context, store *scheduleposter.Store) (int64, error) {
+			return store.UpdateWeek(ctx, 104, 2, start, end)
+		},
+		"거절": func(ctx context.Context, store *scheduleposter.Store) (int64, error) {
+			return store.Reject(ctx, 104, 2)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			store := newStore(t)
+			thumbnails := autoConfirmCandidates(t, store)
+
+			_, err := store.Confirm(ctx, 101, 1, start, end)
+			require.NoError(t, err)
+
+			_, _, err = store.AutoConfirm(ctx, 104, 1, start, end)
+			require.NoError(t, err)
+
+			_, err = store.AutoReject(ctx, thumbnails[otherChannel], 1)
+			require.NoError(t, err)
+
+			reviewers := func() []scheduleposter.Reviewer {
+				ids := []int64{101, 104, thumbnails[otherChannel], 102}
+				found := make([]scheduleposter.Reviewer, 0, len(ids))
+
+				for _, id := range ids {
+					poster, getErr := store.Get(ctx, id)
+					require.NoError(t, getErr)
+
+					found = append(found, poster.ReviewedBy)
+				}
+
+				return found
+			}
+
+			require.Equal(t, []scheduleposter.Reviewer{
+				scheduleposter.ReviewerAdmin, scheduleposter.ReviewerAuto, scheduleposter.ReviewerAuto, "",
+			}, reviewers(), "검토 대기 후보는 판정 주체가 없다")
+
+			_, err = change(ctx, store)
+			require.NoError(t, err)
+			require.Equal(t, scheduleposter.ReviewerAdmin, reviewers()[1], "관리자가 자동 확정본을 바꾸면 관리자 판정이다")
+		})
+	}
 }
 
 func TestStoreInsertThumbnailCandidates(t *testing.T) {
@@ -504,7 +633,7 @@ func TestStoreRecordTranslationPublishesOnlyCurrentRevision(t *testing.T) {
 	ctx := t.Context()
 	store := newStore(t)
 	pending := confirmedPending(t, store)
-	image := scheduleposter.Image{MIME: "image/jpeg", Data: []byte{0xff, 0xd8, 0xff}}
+	image := scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}
 
 	stale := pending
 	stale.Revision--
@@ -548,7 +677,7 @@ func TestStorePublishesLatestPostedPosterOfTheWeek(t *testing.T) {
 	require.Len(t, pending, 2)
 
 	for _, item := range pending {
-		_, err = store.RecordTranslation(ctx, item, scheduleposter.Image{MIME: "image/jpeg", Data: []byte(strconv.FormatInt(item.ID, 10))})
+		_, err = store.RecordTranslation(ctx, item, scheduleposter.Image{MIME: mimeJPEG, Data: []byte(strconv.FormatInt(item.ID, 10))})
 		require.NoError(t, err)
 	}
 
@@ -565,7 +694,7 @@ func TestStoreRetranslationFailureAndReject(t *testing.T) {
 	store := newStore(t)
 	pending := confirmedPending(t, store)
 
-	image := scheduleposter.Image{MIME: "image/jpeg", Data: []byte{0xff, 0xd8, 0xff}}
+	image := scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}
 	day := date(t, "2026-11-11")
 
 	recorded, err := store.RecordTranslation(ctx, pending, image)
@@ -665,7 +794,7 @@ func TestStoreReplacesTheSavedTranslationInputsOnEveryRecord(t *testing.T) {
 
 	pending = retranslate()
 
-	recorded, err = store.RecordTranslation(ctx, pending, scheduleposter.Image{MIME: "image/jpeg", Data: []byte{0xff, 0xd8, 0xff}})
+	recorded, err = store.RecordTranslation(ctx, pending, scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}})
 	require.NoError(t, err)
 	require.True(t, recorded)
 	require.Empty(t, retranslate().Inputs, "성공한 번역은 판독·번역표를 남기지 않는다")

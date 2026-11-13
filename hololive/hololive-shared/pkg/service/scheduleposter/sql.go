@@ -34,5 +34,6 @@ var (
 	summarySQL                   = mustSQL("summary.sql")
 	translatedImageSQL           = mustSQL("translated_image.sql")
 	unreviewedCandidatesSQL      = mustSQL("unreviewed_candidates.sql")
+	updateWeekSQL                = mustSQL("update_week.sql")
 	weekCoverageSQL              = mustSQL("week_coverage.sql")
 )

@@ -96,6 +96,7 @@ type fakeStore struct {
 	coverage          posterstore.WeekCoverage
 	requestRefused    bool
 	handOverBefore    []time.Time
+	handOverReasons   []posterstore.ReviewRequestReason
 	reviewed          []string
 }
 
@@ -125,14 +126,15 @@ func (f *fakeStore) UnreviewedCandidates(context.Context, int) ([]posterstore.Re
 	return f.unreviewed, nil
 }
 
-func (f *fakeStore) HandOverUnreviewed(_ context.Context, createdBefore time.Time) (int64, error) {
+func (f *fakeStore) HandOverUnreviewed(_ context.Context, createdBefore time.Time, reason posterstore.ReviewRequestReason) (int64, error) {
 	f.handOverBefore = append(f.handOverBefore, createdBefore)
+	f.handOverReasons = append(f.handOverReasons, reason)
 
 	return 0, nil
 }
 
-func (f *fakeStore) RequestReview(_ context.Context, id int64) (bool, error) {
-	f.reviewed = append(f.reviewed, fmt.Sprintf("request %d", id))
+func (f *fakeStore) RequestReview(_ context.Context, id int64, reason posterstore.ReviewRequestReason) (bool, error) {
+	f.reviewed = append(f.reviewed, fmt.Sprintf("request %d %s", id, reason))
 
 	return !f.requestRefused, nil
 }
@@ -281,6 +283,52 @@ func pngBytes(t *testing.T, width, height int) []byte {
 }
 
 var xPages = map[string]string{"": "statuses_page1.json", "page2": "statuses_page2.json", "page3": "statuses_page3.json"}
+
+// collectEnd는 collect의 마지막 단계(ExpirePending)에서 수집이 끝났다고 알린다.
+type collectEnd struct {
+	*fakeStore
+
+	done chan struct{}
+}
+
+func (c collectEnd) ExpirePending(context.Context, time.Time) (int64, error) {
+	c.done <- struct{}{}
+
+	return 0, nil
+}
+
+func TestRequestCollectRunsWithoutWaitingForThePollInterval(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{}
+	ended := collectEnd{fakeStore: store, done: make(chan struct{}, 1)}
+	service := testService(store, &fakeSources{pages: xPages}, &fakeTranslator{})
+
+	service.candidates = ended
+
+	require.True(t, service.RequestCollect())
+	require.False(t, service.RequestCollect(), "기다리는 요청이 있으면 하나로 합친다")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	stopped := make(chan struct{})
+
+	go func() {
+		service.runCollectLoop(ctx)
+		close(stopped)
+	}()
+
+	select {
+	case <-ended.done:
+	case <-time.After(initialCollectWait / 2):
+		t.Fatal("requested collection waited for the initial delay")
+	}
+
+	cancel()
+	<-stopped
+
+	require.Equal(t, []bool{false, false, false}, store.autoReviews)
+	require.True(t, service.RequestCollect(), "수집을 시작한 뒤에는 다음 요청을 받는다")
+}
 
 func TestCollectKeepsOnlyRecentOwnPosterOriginals(t *testing.T) {
 	t.Parallel()

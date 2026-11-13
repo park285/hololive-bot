@@ -31,9 +31,15 @@ const (
 	schedulePosterListMax = 50
 )
 
+// SchedulePosterCollector는 수집을 수집 주기와 상관없이 바로 돌리게 예약하며, 이미 예약돼 있으면 false다.
+type SchedulePosterCollector interface {
+	RequestCollect() bool
+}
+
 type SchedulePosterHandler struct {
-	store  *scheduleposter.Store
-	logger *slog.Logger
+	store     *scheduleposter.Store
+	collector SchedulePosterCollector
+	logger    *slog.Logger
 }
 
 type schedulePosterResponse struct {
@@ -47,6 +53,8 @@ type schedulePosterResponse struct {
 	WeekStart         *string `json:"weekStart"`
 	WeekEnd           *string `json:"weekEnd"`
 	ReviewedAt        *string `json:"reviewedAt"`
+	ReviewedBy        string  `json:"reviewedBy"`
+	ReviewReason      string  `json:"reviewRequestReason"`
 	TranslationStatus string  `json:"translationStatus"`
 	TranslationError  string  `json:"translationError"`
 	TranslatedAt      *string `json:"translatedAt"`
@@ -59,7 +67,7 @@ type schedulePosterRevisionRequest struct {
 	ExpectedRevision string `json:"expectedRevision"`
 }
 
-type schedulePosterConfirmRequest struct {
+type schedulePosterWeekRequest struct {
 	ExpectedRevision string `json:"expectedRevision"`
 	WeekStart        string `json:"weekStart"`
 	WeekEnd          string `json:"weekEnd"`
@@ -77,6 +85,8 @@ func newSchedulePosterResponse(poster *scheduleposter.Poster) schedulePosterResp
 		WeekStart:         formatOptionalDate(poster.WeekStart),
 		WeekEnd:           formatOptionalDate(poster.WeekEnd),
 		ReviewedAt:        formatOptionalTimestamp(poster.ReviewedAt),
+		ReviewedBy:        string(poster.ReviewedBy),
+		ReviewReason:      string(poster.ReviewRequestReason),
 		TranslationStatus: string(poster.TranslationStatus),
 		TranslationError:  poster.TranslationError,
 		TranslatedAt:      formatOptionalTimestamp(poster.TranslatedAt),
@@ -251,22 +261,56 @@ func (h *SchedulePosterHandler) GetTranslatedSchedulePoster(c *gin.Context) {
 }
 
 func (h *SchedulePosterHandler) ConfirmSchedulePoster(c *gin.Context) {
-	var request schedulePosterConfirmRequest
+	var request schedulePosterWeekRequest
 
 	h.change(c, &request, &request.ExpectedRevision, func(ctx context.Context, id, revision int64) (int64, error) {
-		if !schedulePosterDatePattern.MatchString(request.WeekStart) || !schedulePosterDatePattern.MatchString(request.WeekEnd) {
-			return 0, errInvalidSchedulePosterRequest
-		}
-
-		weekStart, startErr := time.Parse(time.DateOnly, request.WeekStart)
-		weekEnd, endErr := time.Parse(time.DateOnly, request.WeekEnd)
-
-		if startErr != nil || endErr != nil {
-			return 0, scheduleposter.ErrInvalidWeek
+		weekStart, weekEnd, err := request.week()
+		if err != nil {
+			return 0, err
 		}
 
 		return h.store.Confirm(ctx, id, revision, weekStart, weekEnd)
 	})
+}
+
+// UpdateSchedulePosterWeek은 확정본의 주 범위만 고치고 다시 번역하지 않는다.
+func (h *SchedulePosterHandler) UpdateSchedulePosterWeek(c *gin.Context) {
+	var request schedulePosterWeekRequest
+
+	h.change(c, &request, &request.ExpectedRevision, func(ctx context.Context, id, revision int64) (int64, error) {
+		weekStart, weekEnd, err := request.week()
+		if err != nil {
+			return 0, err
+		}
+
+		return h.store.UpdateWeek(ctx, id, revision, weekStart, weekEnd)
+	})
+}
+
+func (r *schedulePosterWeekRequest) week() (time.Time, time.Time, error) {
+	if !schedulePosterDatePattern.MatchString(r.WeekStart) || !schedulePosterDatePattern.MatchString(r.WeekEnd) {
+		return time.Time{}, time.Time{}, errInvalidSchedulePosterRequest
+	}
+
+	weekStart, startErr := time.Parse(time.DateOnly, r.WeekStart)
+	weekEnd, endErr := time.Parse(time.DateOnly, r.WeekEnd)
+
+	if startErr != nil || endErr != nil {
+		return time.Time{}, time.Time{}, scheduleposter.ErrInvalidWeek
+	}
+
+	return weekStart, weekEnd, nil
+}
+
+// CollectSchedulePosters는 수집을 예약만 하고 끝나기를 기다리지 않는다. 결과는 목록과 요약에 나타난다.
+func (h *SchedulePosterHandler) CollectSchedulePosters(c *gin.Context) {
+	if h == nil || h.collector == nil {
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "schedule poster collection unavailable", nil)
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, gin.H{"queued": h.collector.RequestCollect()})
 }
 
 func (h *SchedulePosterHandler) RejectSchedulePoster(c *gin.Context) {
