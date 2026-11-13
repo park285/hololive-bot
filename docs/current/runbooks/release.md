@@ -170,10 +170,10 @@ Current Go runtime services:
 
 ## PostgreSQL hot path plan gate
 
-Before releasing PostgreSQL GUC, migration, alarm dispatch, or YouTube outbox claim changes, capture fresh plan snapshots from the target environment:
+Before releasing PostgreSQL GUC, migration, alarm dispatch, or YouTube outbox claim changes, capture fresh plan snapshots from the target environment. On production, run the script without `--analyze` in a read-only session: the two claim UPDATEs are only planned with `EXPLAIN (SETTINGS)`, never executed, and the server rejects `--analyze` there. `PGOPTIONS` makes the session read-only only when neither `DATABASE_URL` nor a connection service entry (`service` or `PGSERVICE`) sets `options`, because that value replaces `PGOPTIONS`; otherwise add `-c default_transaction_read_only=on` to that `options` value. The stack PostgreSQL rule (`.agents/skills/pg-optimization/references/diagnostics.md` in iris-stack) forbids `EXPLAIN ANALYZE` of writes, queue claims, and `FOR UPDATE` on production because `ROLLBACK` does not make external side effects or sequence use safe, and measures writes with `EXPLAIN` without `ANALYZE` or in a local fixture DB. The stats window statement holds a snapshot for the whole window, which delays vacuum cleanup, so keep the default 60 seconds on production.
 
 ```bash
-DATABASE_URL=... ./scripts/runtime/pg-hotpath-explain-snapshot.sh \
+PGOPTIONS='-c default_transaction_read_only=on' DATABASE_URL=... ./scripts/runtime/pg-hotpath-explain-snapshot.sh \
   --stats-window-seconds 60 \
   --output-dir artifacts/pg-hotpath-explain/$(date -u +%Y%m%dT%H%M%SZ)
 ```
@@ -182,6 +182,7 @@ The script accepts `DATABASE_URL` or standard `PG*` variables and does not embed
 
 - `invalid-indexes.txt`
 - `target-indexes.txt`
+- `mvcc-database-state.txt`
 - `dead-tuples-autovacuum.txt`
 - `claim-statement-window.txt`
 - `alarm-dispatch-claim-explain.txt`
@@ -198,7 +199,7 @@ The script requires the PostgreSQL 18 `pg_stat_statements` schema. It verifies t
 
 The artifact retains the complete whitespace-normalized `pg_stat_statements` representative SQL for those two static runtime claims and for `unmatched` records so the fingerprint can be revalidated; it does not truncate the query text. Bind values and constants remain parameter placeholders and the owned SQL contains no dynamic comments or identifiers, so application values and credentials are not expected in this artifact. An `unmatched` record can also be a manual statement, including its SQL comments. It still exposes internal table and column names: keep it as internal operational evidence, review it before external sharing, and never place secrets in SQL comments or identifiers.
 
-The stats window is fresh only when at least one `alarm_dispatch_deliveries` claim and one `youtube_notification_outbox` claim complete during the interval. No matching call for either required hot path, a global `pg_stat_statements` reset, entry deallocation, or a `stats_since` change or decreasing counter on a matching claim statement makes the result inconclusive and fails the gate. This also rejects a statement reset whose counters recover past the starting values before the second snapshot. Rerun during a representative active window instead of treating missing evidence as a pass. The script also fails when the fresh delta mean exceeds 5ms, any index contract is broken, any invalid index exists, or `Rows Removed by Filter` exceeds 1000. The dead-tuple snapshot records heap, TOAST, and index statistics for a fixed hot-path table list and remains review evidence rather than a fixed threshold. The EXPLAIN statements run in a transaction and end with `ROLLBACK`, but they still use `ANALYZE`; run them during a low-risk verification window.
+The stats window is fresh only when at least one `alarm_dispatch_deliveries` claim and one `youtube_notification_outbox` claim complete during the interval. No matching call for either required hot path, a global `pg_stat_statements` reset, entry deallocation, or a `stats_since` change or decreasing counter on a matching claim statement makes the result inconclusive and fails the gate. This also rejects a statement reset whose counters recover past the starting values before the second snapshot. Rerun during a representative active window instead of treating missing evidence as a pass. The script also fails when the fresh delta mean exceeds 5ms, any index contract is broken, or any invalid index exists. The dead-tuple snapshot records heap, TOAST, and index statistics for a fixed hot-path table list and remains review evidence rather than a fixed threshold. Executed claim plans are measured only with `--analyze` on a local fixture DB: a disposable PostgreSQL 18 with `pg_stat_statements` preloaded, the migrations applied, representative rows, and claim traffic during the stats window. There the claim UPDATEs run under `EXPLAIN (ANALYZE, BUFFERS)` inside a rolled-back transaction, and the script also fails when `Rows Removed by Filter` exceeds 1000. Without `--analyze` it prints `[SKIP]` for that check. The repository has no fixture with representative rows and claim traffic, and an `--analyze` run on empty tables passes that check trivially, so the production gate rests on the 5ms delta mean and the recorded plans.
 
 ## 계약 변경 릴리즈 규칙
 
