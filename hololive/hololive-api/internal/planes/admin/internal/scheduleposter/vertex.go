@@ -33,6 +33,31 @@ type textTranslation struct {
 	webSearchQueries int
 }
 
+// usage는 Vertex 응답 하나가 쓴 토큰이다. 응답을 받지 못한 호출은 zero value다.
+type usage struct {
+	model         string
+	prompt        int32
+	toolUsePrompt int32
+	thoughts      int32
+	output        int32
+}
+
+func responseUsage(model string, response *genai.GenerateContentResponse) usage {
+	if response == nil || response.UsageMetadata == nil {
+		return usage{model: model}
+	}
+
+	metadata := response.UsageMetadata
+
+	return usage{
+		model:         model,
+		prompt:        metadata.PromptTokenCount,
+		toolUsePrompt: metadata.ToolUsePromptTokenCount,
+		thoughts:      metadata.ThoughtsTokenCount,
+		output:        metadata.CandidatesTokenCount,
+	}
+}
+
 type vertexTranslator struct {
 	client     *genai.Client
 	textModel  string
@@ -58,7 +83,7 @@ func newVertexTranslator(ctx context.Context, config TranslationConfig) (posterT
 	return &vertexTranslator{client: client, textModel: config.TextModel, imageModel: config.Model}, nil
 }
 
-func (t *vertexTranslator) translateText(ctx context.Context, src source, prompt string) (textTranslation, error) {
+func (t *vertexTranslator) translateText(ctx context.Context, src source, prompt string) (textTranslation, usage, error) {
 	ctx, cancel := context.WithTimeout(ctx, textTimeout)
 	defer cancel()
 
@@ -66,18 +91,20 @@ func (t *vertexTranslator) translateText(ctx context.Context, src source, prompt
 
 	response, err := t.client.Models.GenerateContent(ctx, t.textModel, contents, config)
 	if err != nil {
-		return textTranslation{}, fmt.Errorf("generate poster translation table: %w", err)
+		return textTranslation{}, usage{}, fmt.Errorf("generate poster translation table: %w", err)
 	}
+
+	spent := responseUsage(t.textModel, response)
 
 	table, err := parseTranslationTable(response.Text())
 	if err != nil {
-		return textTranslation{}, err
+		return textTranslation{}, spent, err
 	}
 
-	return textTranslation{table: table, webSearchQueries: webSearchQueries(response)}, nil
+	return textTranslation{table: table, webSearchQueries: webSearchQueries(response)}, spent, nil
 }
 
-func (t *vertexTranslator) transcribe(ctx context.Context, src source) ([]string, error) {
+func (t *vertexTranslator) transcribe(ctx context.Context, src source) ([]string, usage, error) {
 	ctx, cancel := context.WithTimeout(ctx, textTimeout)
 	defer cancel()
 
@@ -85,13 +112,15 @@ func (t *vertexTranslator) transcribe(ctx context.Context, src source) ([]string
 
 	response, err := t.client.Models.GenerateContent(ctx, t.textModel, contents, config)
 	if err != nil {
-		return nil, fmt.Errorf("transcribe poster text: %w", err)
+		return nil, usage{}, fmt.Errorf("transcribe poster text: %w", err)
 	}
 
-	return parseTranscript(response.Text())
+	lines, err := parseTranscript(response.Text())
+
+	return lines, responseUsage(t.textModel, response), err
 }
 
-func (t *vertexTranslator) renderImage(ctx context.Context, src source, prompt string) (source, error) {
+func (t *vertexTranslator) renderImage(ctx context.Context, src source, prompt string) (source, usage, error) {
 	ctx, cancel := context.WithTimeout(ctx, imageTimeout)
 	defer cancel()
 
@@ -99,10 +128,12 @@ func (t *vertexTranslator) renderImage(ctx context.Context, src source, prompt s
 
 	response, err := t.client.Models.GenerateContent(ctx, t.imageModel, contents, config)
 	if err != nil {
-		return source{}, fmt.Errorf("generate translated poster: %w", err)
+		return source{}, usage{}, fmt.Errorf("generate translated poster: %w", err)
 	}
 
-	return firstImage(response)
+	translated, err := firstImage(response)
+
+	return translated, responseUsage(t.imageModel, response), err
 }
 
 // textRequest의 모델(gemini-4-argon)은 thinking level MINIMAL과 thinking budget을 400으로 거절한다.

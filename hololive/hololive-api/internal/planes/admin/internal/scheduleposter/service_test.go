@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"image"
@@ -136,39 +137,42 @@ type fakeTranslator struct {
 	checks       int
 }
 
+// fakeUsage는 fakeTranslator가 응답을 받은 호출마다 돌려주는 사용량이며, textErr는 응답을 받지 못한 호출로 본다.
+var fakeUsage = usage{model: "fake-model", prompt: 1, output: 1}
+
 // translateText는 tables를 차례로 내고 마지막 것을 되풀이한다.
-func (f *fakeTranslator) translateText(_ context.Context, _ source, prompt string) (textTranslation, error) {
+func (f *fakeTranslator) translateText(_ context.Context, _ source, prompt string) (textTranslation, usage, error) {
 	f.textPrompts = append(f.textPrompts, prompt)
 
 	if f.textErr != nil {
-		return textTranslation{}, f.textErr
+		return textTranslation{}, usage{}, f.textErr
 	}
 
 	table, err := parseTranslationTable(f.tables[min(len(f.textPrompts), len(f.tables))-1])
 
-	return textTranslation{table: table, webSearchQueries: 2}, err
+	return textTranslation{table: table, webSearchQueries: 2}, fakeUsage, err
 }
 
-func (f *fakeTranslator) transcribe(_ context.Context, src source) ([]string, error) {
+func (f *fakeTranslator) transcribe(_ context.Context, src source) ([]string, usage, error) {
 	if string(src.Data) == "original" {
-		return f.originalText, nil
+		return f.originalText, fakeUsage, nil
 	}
 
 	f.checks++
 
-	return f.renders[min(f.checks, len(f.renders))-1], nil
+	return f.renders[min(f.checks, len(f.renders))-1], fakeUsage, nil
 }
 
-// renderImage는 outputs가 있으면 차례로 내고 마지막 것을 되풀이한다.
-func (f *fakeTranslator) renderImage(_ context.Context, src source, prompt string) (source, error) {
+// renderImage는 outputs가 있으면 차례로 내고 마지막 것을 되풀이하며, imageErr는 이미지 없이 끝난 응답으로 본다.
+func (f *fakeTranslator) renderImage(_ context.Context, src source, prompt string) (source, usage, error) {
 	f.imagePrompts = append(f.imagePrompts, prompt)
 	f.imageInputs = append(f.imageInputs, src)
 
 	if len(f.outputs) > 0 {
-		return f.outputs[min(len(f.imagePrompts), len(f.outputs))-1], f.imageErr
+		return f.outputs[min(len(f.imagePrompts), len(f.outputs))-1], fakeUsage, f.imageErr
 	}
 
-	return f.output, f.imageErr
+	return f.output, fakeUsage, f.imageErr
 }
 
 type fakeMembers struct {
@@ -408,6 +412,90 @@ func TestTranslatePendingNeverStoresARenderThatFailsTheCheck(t *testing.T) {
 	require.Equal(t, []string{reasonTranslationFailed}, store.failures)
 }
 
+func TestTranslatePendingStopsRedrawingWhenTheBestDraftStopsImproving(t *testing.T) {
+	t.Parallel()
+
+	fewerProblems := strings.ReplaceAll(strings.Replace(tsuzuriGoodRender, "@shusuchii\n", "", 1), "21:00", "")
+
+	for name, test := range map[string]struct {
+		renders []string
+		draws   int
+	}{
+		"same problems":                    {renders: []string{tsuzuriBrokenRender}, draws: 3},
+		"an improvement restarts counting": {renders: []string{tsuzuriBrokenRender, tsuzuriBrokenRender, fewerProblems, tsuzuriBrokenRender}, draws: 5},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
+			translator := &fakeTranslator{
+				tables: []string{tsuzuriTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
+				originalText: lines(tsuzuriOriginal),
+			}
+
+			for _, render := range test.renders {
+				translator.renders = append(translator.renders, lines(render))
+			}
+
+			service := testService(store, &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}, translator)
+
+			service.retry.MaxAttempts = 10
+
+			require.NoError(t, service.translatePending(t.Context()))
+			require.Len(t, translator.imagePrompts, test.draws)
+			require.Empty(t, store.recorded)
+			require.Equal(t, []string{reasonTranslationFailed}, store.failures)
+		})
+	}
+}
+
+func TestTranslatePendingLogsTheUsageOfEveryModelResponse(t *testing.T) {
+	t.Parallel()
+
+	pending := []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
+	usageStages := func(translator *fakeTranslator) []string {
+		var logs bytes.Buffer
+
+		service := testService(&fakeStore{pending: pending}, sources, translator)
+
+		service.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+
+		require.NoError(t, service.translatePending(t.Context()))
+
+		var stages []string
+
+		for line := range bytes.Lines(logs.Bytes()) {
+			var record struct {
+				Msg   string `json:"msg"`
+				Stage string `json:"stage"`
+				Model string `json:"model"`
+			}
+
+			require.NoError(t, jsonv2.Unmarshal(line, &record))
+
+			if record.Msg == "Schedule poster model usage" {
+				require.Equal(t, fakeUsage.model, record.Model)
+
+				stages = append(stages, record.Stage)
+			}
+		}
+
+		return stages
+	}
+
+	require.Equal(t, []string{stageOriginal, stageText, stageImage, stageCheck, stageImage, stageCheck}, usageStages(&fakeTranslator{
+		tables: []string{tsuzuriTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
+		originalText: lines(tsuzuriOriginal), renders: [][]string{lines(tsuzuriBrokenRender), lines(tsuzuriGoodRender)},
+	}))
+	require.Equal(t, []string{stageOriginal, stageText, stageImage, stageImage, stageImage}, usageStages(&fakeTranslator{
+		tables: []string{tsuzuriTable}, imageErr: errors.New("no image"), originalText: lines(tsuzuriOriginal),
+	}), "이미지 없이 끝난 응답도 토큰을 쓰므로 남긴다")
+	require.Equal(t, []string{stageOriginal}, usageStages(&fakeTranslator{
+		textErr: errors.New("text model unavailable"), originalText: lines(tsuzuriOriginal),
+	}), "응답을 받지 못한 호출은 남기지 않는다")
+}
+
 func TestTranslatePendingRebuildsATableThatMissesATime(t *testing.T) {
 	t.Parallel()
 
@@ -442,10 +530,10 @@ func TestBuildImagePromptListsOnlyChangedRows(t *testing.T) {
 
 type stalledTranslator struct{ fakeTranslator }
 
-func (*stalledTranslator) transcribe(ctx context.Context, _ source) ([]string, error) {
+func (*stalledTranslator) transcribe(ctx context.Context, _ source) ([]string, usage, error) {
 	<-ctx.Done()
 
-	return nil, ctx.Err()
+	return nil, usage{}, ctx.Err()
 }
 
 func TestTranslatePendingRecordsRowsThatOutliveTheirBudget(t *testing.T) {
