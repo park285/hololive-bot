@@ -53,6 +53,7 @@ cleanup_integration_test_services() {
 }
 
 provision_integration_test_database() {
+    local platform
     local postgres_user="local_ci"
     local postgres_password="local_ci"
     local postgres_database="local_ci"
@@ -61,7 +62,11 @@ provision_integration_test_database() {
     local published_port
     local owner_token
 
+    # 같은 index digest의 다른 플랫폼 이미지(교차 빌드가 받은 것)가 로컬에 있으면 podman은 경고만 내고
+    # 에뮬레이션으로 실행해 시간 의존 시험이 깨진다. 호스트 플랫폼을 명시하면 맞는 이미지를 쓰거나 받는다.
+    platform="$(podman info --format '{{.Host.OS}}/{{.Host.Arch}}')"
     INTEGRATION_TEST_DB_CONTAINER="$(podman run --detach --rm \
+        --platform "${platform}" \
         --label io.iris.observability.logs=exclude \
         --publish 127.0.0.1::5432 \
         --env POSTGRES_USER="${postgres_user}" \
@@ -109,11 +114,14 @@ provision_integration_test_database() {
 }
 
 provision_integration_test_valkey() {
+    local platform
     local ready=false
     local published_address
     local published_port
 
+    platform="$(podman info --format '{{.Host.OS}}/{{.Host.Arch}}')"
     INTEGRATION_TEST_VALKEY_CONTAINER="$(podman run --detach --rm \
+        --platform "${platform}" \
         --label io.iris.observability.logs=exclude \
         --publish 127.0.0.1::6379 \
         "${INTEGRATION_VALKEY_IMAGE}")"
