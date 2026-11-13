@@ -63,6 +63,9 @@ sudo ./scripts/deploy/sync-opt-current.sh
 그래서 `sync-opt-current.sh`가 두 봇 DB unit(`chatbotgo-postgres`·`twentyq-postgres`)에 이 방화벽 unit을 `Requires=`·`After=`로 거는
 drop-in(`/etc/systemd/system/<unit>.service.d/50-admin-dashboard-ingress-firewall.conf`)을 설치합니다. 방화벽이 멈추면 두 DB도 멈추고,
 부팅 때 방화벽이 실패하면 두 DB는 시작하지 않습니다. 봇 저장소의 Quadlet 설치기는 이 경로를 건드리지 않으므로 봇 재배포 뒤에도 남습니다.
+방화벽을 `stop` 뒤 `start`로 되살리거나 부팅 실패를 고친 뒤에는 두 DB가 저절로 다시 뜨지 않으므로
+`sudo systemctl start chatbotgo-postgres.service twentyq-postgres.service`로 시작합니다. 중앙에서 방화벽 unit을 지울 때는
+이 drop-in도 함께 지웁니다. 남겨 두면 두 DB가 없는 unit을 요구해 다음 시작(재부팅 포함)에 실패합니다.
 
 prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)로 설치됩니다.
 
