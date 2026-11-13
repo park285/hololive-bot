@@ -112,6 +112,7 @@ HOLOLIVE_ADMIN_API_PORT_BIND_IP=0.0.0.0
 HOLOLIVE_H3_SERVER_NAME=100.100.1.8
 ENV
 run_prestart() {
+    # shellcheck source=/dev/null
     (set -a; . "$test_root/compose.env"; set +a
      PATH="$test_root/bin:$PATH" HOLOLIVE_QUADLET_TEST_ROOT="$test_root" \
         bash "${root}/scripts/deploy/quadlet-prestart.sh" hololive-api)
