@@ -481,7 +481,8 @@ func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekSta
 }
 
 // UpdateWeek은 확정본의 주 범위만 고친다. 번역본은 그대로 게시되고, Confirm과 달리 같은 멤버의 다른 후보를 닫지 않는다.
-// AutoConfirm이 확정본의 주를 읽고 판단하므로 같은 멤버 잠금 아래에서 바꾼다.
+// 번역 대기 중이면 진행 중인 번역 결과를 버리지 않도록 ErrInvalidState다. AutoConfirm이 확정본의 주를 읽고 판단하므로
+// 같은 멤버 잠금 아래에서 바꾼다.
 func (s *Store) UpdateWeek(ctx context.Context, id, expectedRevision int64, weekStart, weekEnd time.Time) (int64, error) {
 	if err := ValidateWeek(weekStart, weekEnd); err != nil {
 		return 0, err

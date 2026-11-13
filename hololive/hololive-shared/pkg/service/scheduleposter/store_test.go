@@ -3,6 +3,8 @@ package scheduleposter_test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -134,8 +136,12 @@ func TestStoreUpdateWeekMovesOnlyThePublishedWeek(t *testing.T) {
 	ctx := t.Context()
 	store := newStore(t)
 	image := scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}
+	pending := confirmedPending(t, store)
 
-	recorded, err := store.RecordTranslation(ctx, confirmedPending(t, store), image)
+	_, err := store.UpdateWeek(ctx, 101, pending.Revision, date(t, "2026-11-16"), date(t, "2026-11-22"))
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 중에는 바꾸지 않아 진행 중인 번역 결과가 그대로 기록된다")
+
+	recorded, err := store.RecordTranslation(ctx, pending, image)
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -171,9 +177,9 @@ func TestStoreUpdateWeekMovesOnlyThePublishedWeek(t *testing.T) {
 	require.Equal(t, scheduleposter.TranslationSucceeded, updated.TranslationStatus, "번역본은 그대로 둔다")
 	require.Equal(t, scheduleposter.ReviewerAdmin, updated.ReviewedBy)
 
-	pending, err := store.PendingTranslations(ctx, 10)
+	waiting, err := store.PendingTranslations(ctx, 10)
 	require.NoError(t, err)
-	require.Empty(t, pending, "다시 번역하지 않는다")
+	require.Empty(t, waiting, "다시 번역하지 않는다")
 
 	after, err := store.Summary(ctx)
 	require.NoError(t, err)
@@ -515,7 +521,18 @@ func TestStoreRecordsWhoReviewed(t *testing.T) {
 
 	for name, change := range map[string]adminChange{
 		"주 수정": func(ctx context.Context, store *scheduleposter.Store) (int64, error) {
-			return store.UpdateWeek(ctx, 104, 2, start, end)
+			pending, err := store.PendingTranslations(ctx, 10)
+			at := slices.IndexFunc(pending, func(item scheduleposter.PendingTranslation) bool { return item.ID == 104 })
+
+			if err != nil || at < 0 {
+				return 0, fmt.Errorf("find pending translation of 104 in %v: %w", pending, err)
+			}
+
+			if _, err = store.RecordTranslation(ctx, pending[at], scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}); err != nil {
+				return 0, fmt.Errorf("record translation of 104: %w", err)
+			}
+
+			return store.UpdateWeek(ctx, 104, pending[at].Revision+1, start, end)
 		},
 		"거절": func(ctx context.Context, store *scheduleposter.Store) (int64, error) {
 			return store.Reject(ctx, 104, 2)

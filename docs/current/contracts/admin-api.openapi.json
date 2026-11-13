@@ -822,7 +822,7 @@
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
           }
         },
-        "description": "확정본의 주 범위만 고치며 다시 번역하지 않습니다. 확정과 같이 7일 이하이고 게시일(JST)과 7일 이내여야 하며 어기면 409 code=invalid_week, 확정본이 아니면 409 code=invalid_state입니다."
+        "description": "확정본의 주 범위만 고치며 다시 번역하지 않습니다. 확정과 같이 7일 이하이고 게시일(JST)과 7일 이내여야 하며 어기면 409 code=invalid_week입니다. 확정본이 아니거나 번역 대기 중(진행 중인 번역 결과를 버리지 않기 위해)이면 409 code=invalid_state입니다."
       },
       "SchedulePoster": {
         "type": "object",

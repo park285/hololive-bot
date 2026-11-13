@@ -425,46 +425,79 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		itemRoute = base + "/{id}"
 	)
 
-	steps := []struct {
-		method, path, route, body string
-		status                    int
-	}{
-		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK},
-		{http.MethodGet, base + "?status=pending_review", base, "", http.StatusOK},
-		{http.MethodGet, base + "?status=unknown", base, "", http.StatusBadRequest},
-		{http.MethodGet, poster, itemRoute, "", http.StatusOK},
-		{http.MethodGet, base + "/1", itemRoute, "", http.StatusNotFound},
-		{http.MethodGet, poster + "/translated", itemRoute + "/translated", "", http.StatusNotFound},
-		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"2","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict},
-		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-12-07","weekEnd":"2026-12-13"}`, http.StatusConflict},
-		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"11/9"}`, http.StatusBadRequest},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict},
-		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusOK},
-		{http.MethodGet, poster, itemRoute, "", http.StatusOK},
-		{http.MethodPost, poster + "/translate", itemRoute + "/translate", `{"expectedRevision":"2"}`, http.StatusConflict},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"11/16"}`, http.StatusBadRequest},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusOK},
-		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"x"}`, http.StatusBadRequest},
-		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"3","note":"x"}`, http.StatusBadRequest},
-		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"3"}`, http.StatusOK},
-		{http.MethodGet, base + "?status=rejected", base, "", http.StatusOK},
-		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK},
-		{http.MethodPost, base + "/collect", base + "/collect", `{"now":true}`, http.StatusBadRequest},
-		{http.MethodPost, base + "/collect", base + "/collect", `{}`, http.StatusOK},
-		{http.MethodPost, base + "/collect", base + "/collect", `{}`, http.StatusOK},
+	const failTranslation = `UPDATE schedule_posters SET translation_status = 'failed', translation_error = 'translation_failed',
+		revision = revision + 1 WHERE id = 2119784604752343207`
+
+	steps := []schedulePosterStep{
+		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK, "", ""},
+		{http.MethodGet, base + "?status=pending_review", base, "", http.StatusOK, "", ""},
+		{http.MethodGet, base + "?status=unknown", base, "", http.StatusBadRequest, "", ""},
+		{http.MethodGet, poster, itemRoute, "", http.StatusOK, "", ""},
+		{http.MethodGet, base + "/1", itemRoute, "", http.StatusNotFound, "", ""},
+		{http.MethodGet, poster + "/translated", itemRoute + "/translated", "", http.StatusNotFound, "", ""},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"2","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict, "", ""},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-12-07","weekEnd":"2026-12-13"}`, http.StatusConflict, "", ""},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"11/9"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict, "", ""},
+		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusOK, "", ""},
+		{http.MethodGet, poster, itemRoute, "", http.StatusOK, "", ""},
+		{http.MethodPost, poster + "/translate", itemRoute + "/translate", `{"expectedRevision":"2"}`, http.StatusConflict, "", ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusConflict, "", ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict, failTranslation, ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"11/16"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusOK, "", ""},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"x"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"4","note":"x"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"4"}`, http.StatusOK, "", ""},
+		{http.MethodGet, base + "?status=rejected", base, "", http.StatusOK, "", ""},
+		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK, "", ""},
 	}
 
+	spec.runSteps(t, serve, pool, steps)
+}
+
+type schedulePosterStep struct {
+	method, path, route, body string
+	status                    int
+	prepare, response         string
+}
+
+func (s *adminOpenAPI) runSteps(t *testing.T, serve adminTestServe, pool *pgxpool.Pool, steps []schedulePosterStep) {
+	t.Helper()
+
 	for _, step := range steps {
+		if step.prepare != "" {
+			if _, err := pool.Exec(t.Context(), step.prepare); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		rec := serve(step.method, step.path, step.body)
 		if rec.Code != step.status {
 			t.Fatalf("%s %s %s = %d %s, want %d", step.method, step.path, step.body, rec.Code, rec.Body.String(), step.status)
 		}
 
-		if step.body != "" {
-			spec.assertRequest(t, step.method, step.route, step.body, rec.Code != http.StatusBadRequest)
+		if step.response != "" && strings.TrimSpace(rec.Body.String()) != step.response {
+			t.Fatalf("%s %s = %s, want %s", step.method, step.path, rec.Body.String(), step.response)
 		}
 
-		spec.assertResponse(t, step.method, step.route, rec.Code, rec.Body.Bytes())
+		if step.body != "" {
+			s.assertRequest(t, step.method, step.route, step.body, rec.Code != http.StatusBadRequest)
+		}
+
+		s.assertResponse(t, step.method, step.route, rec.Code, rec.Body.Bytes())
 	}
+}
+
+func TestSchedulePosterCollectMatchesAdminOpenAPI(t *testing.T) {
+	spec := loadAdminOpenAPI(t)
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	const collect = "/api/holo/schedule-posters/collect"
+
+	spec.runSteps(t, serve, pool, []schedulePosterStep{
+		{http.MethodPost, collect, collect, `{"now":true}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, collect, collect, `{}`, http.StatusOK, "", `{"queued":true}`},
+		{http.MethodPost, collect, collect, `{}`, http.StatusOK, "", `{"queued":false}`},
+	})
 }

@@ -61,8 +61,6 @@ func (unusedAlarmProvider) GetTargetMinutes() []int { return nil }
 
 func (unusedAlarmProvider) Close() error { return nil }
 
-// buildTestAdminHandlers는 process 조립과 같은 buildAdminHandlers 경로로 handler를 만든다. 이 시험 경로는
-// alarm-worker와 Holodex를 호출하지 않으므로 둘은 자리 채움이다.
 type onceCollector struct {
 	requested atomic.Bool
 }
@@ -71,6 +69,8 @@ func (c *onceCollector) RequestCollect() bool {
 	return c.requested.CompareAndSwap(false, true)
 }
 
+// buildTestAdminHandlers는 process 조립과 같은 buildAdminHandlers 경로로 handler를 만든다. 이 시험 경로는
+// alarm-worker와 Holodex를 호출하지 않으므로 둘은 자리 채움이다.
 func buildTestAdminHandlers(t *testing.T, infra *sharedmodules.InfraModule, deps Dependencies, logger *slog.Logger) *server.DomainHandlers {
 	t.Helper()
 
