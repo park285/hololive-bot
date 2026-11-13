@@ -48,8 +48,6 @@ LogDriver=journald
 EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env
 Environment=HOLOLIVE_H3_CERT_FILE=${HOLOLIVE_H3_CERT_FILE}
 Environment=HOLOLIVE_H3_KEY_FILE=${HOLOLIVE_H3_KEY_FILE}
-Environment=HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE}
-Environment=HOLOLIVE_INTERNAL_H3_SERVER_NAME=${HOLOLIVE_INTERNAL_H3_SERVER_NAME}
 Environment=HEALTHCHECK_CA_CERT_FILE=${HOLOLIVE_H3_CERT_FILE}
 Environment=HEALTHCHECK_SERVER_NAME=${HOLOLIVE_H3_SERVER_NAME}
 Environment=LOG_LEVEL=${LOG_LEVEL}
@@ -110,8 +108,6 @@ Environment=TAILSCALE_DNS_RESOLVER=100.100.100.100
 Environment=HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=
 Environment=HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
 Environment=HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key
-Environment=HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
-Environment=HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1
 Environment=HOLOLIVE_H3_SERVER_NAME=127.0.0.1
 Environment=LOG_LEVEL=info
 Environment=LOG_MAX_SIZE_MB=5

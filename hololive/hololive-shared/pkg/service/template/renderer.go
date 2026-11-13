@@ -247,28 +247,46 @@ func formatNumberKR(v any) string {
 	return formatNumberKRInt64(n)
 }
 
-// 부호를 float64에서 뒤집어 MinInt64의 크기(2^63)도 overflow 없이 다룹니다.
 func formatNumberKRInt64(n int64) string {
 	if n > -1000 && n < 1000 {
 		return strconv.FormatInt(n, 10)
 	}
 
+	sign := ""
+
 	if n < 0 {
-		return "-" + formatNumberKRScaled(-float64(n))
+		sign = "-"
 	}
 
-	return formatNumberKRScaled(float64(n))
+	if tenths := roundedTenths(n, 1000); tenths < 100 {
+		return sign + formatTenths(tenths, "천")
+	}
+
+	if tenths := roundedTenths(n, 10_000); tenths < 100_000 {
+		return sign + formatTenths(tenths, "만")
+	}
+
+	return sign + formatTenths(roundedTenths(n, 100_000_000), "억")
 }
 
-func formatNumberKRScaled(magnitude float64) string {
-	switch {
-	case magnitude >= 100_000_000:
-		return fmt.Sprintf("%.1f억", magnitude/100_000_000)
-	case magnitude >= 10_000:
-		return fmt.Sprintf("%.1f만", magnitude/10_000)
-	default:
-		return fmt.Sprintf("%.1f천", magnitude/1000)
+// 부호를 뒤집기 전에 몫과 나머지로 나누므로 MinInt64의 크기(2^63)도 overflow 없이 다룹니다.
+func roundedTenths(n, unit int64) int64 {
+	step := unit / 10
+	quotient, remainder := n/step, n%step
+
+	if n < 0 {
+		quotient, remainder = -quotient, -remainder
 	}
+
+	if remainder*2 >= step {
+		quotient++
+	}
+
+	return quotient
+}
+
+func formatTenths(tenths int64, suffix string) string {
+	return strconv.FormatInt(tenths/10, 10) + "." + strconv.FormatInt(tenths%10, 10) + suffix
 }
 
 func timeAgo(t time.Time) string {

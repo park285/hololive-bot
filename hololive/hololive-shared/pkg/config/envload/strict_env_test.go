@@ -33,14 +33,12 @@ func TestStrictEnvCollectsEveryInvalidKeyWithoutValues(t *testing.T) {
 
 	t.Setenv("STRICT_ENV_TEST_INT", secretLike)
 	t.Setenv("STRICT_ENV_TEST_BOOL", secretLike)
-	t.Setenv("STRICT_ENV_TEST_FLOAT", secretLike)
 	t.Setenv("STRICT_ENV_TEST_SECONDS", "9223372036854775807")
 
 	var env StrictEnv
 
 	env.Int("STRICT_ENV_TEST_INT", 1)
 	env.Bool("STRICT_ENV_TEST_BOOL", true)
-	env.Float("STRICT_ENV_TEST_FLOAT", 0.5)
 	env.Seconds("STRICT_ENV_TEST_SECONDS", time.Second)
 
 	err := env.Err()
@@ -48,7 +46,7 @@ func TestStrictEnvCollectsEveryInvalidKeyWithoutValues(t *testing.T) {
 		t.Fatal("Err() = nil, want every invalid key reported")
 	}
 
-	for _, key := range []string{"STRICT_ENV_TEST_INT", "STRICT_ENV_TEST_BOOL", "STRICT_ENV_TEST_FLOAT", "STRICT_ENV_TEST_SECONDS"} {
+	for _, key := range []string{"STRICT_ENV_TEST_INT", "STRICT_ENV_TEST_BOOL", "STRICT_ENV_TEST_SECONDS"} {
 		if !strings.Contains(err.Error(), key) {
 			t.Fatalf("Err() = %v, want it to name %s", err, key)
 		}

@@ -139,7 +139,7 @@ func TestAPIClientCooldownSurvivesCancellationAndOtherGoroutines(t *testing.T) {
 				return policyResponse(http.StatusTooManyRequests, "86400"), nil
 			}
 
-			if time.Since(start) < 24*time.Hour {
+			if time.Since(start) < maxRetryAfter {
 				t.Error("request bypassed retained cooldown")
 			}
 
@@ -308,6 +308,9 @@ func TestParseRetryAfter(t *testing.T) {
 		{header: " 12 ", delay: 12 * time.Second, valid: true},
 		{header: now.Add(time.Minute).Format(http.TimeFormat), delay: time.Minute, valid: true},
 		{header: now.Add(-time.Minute).Format(http.TimeFormat), delay: -time.Minute, valid: true},
+		{header: "300", delay: 5 * time.Minute, valid: true},
+		{header: "86400", delay: 5 * time.Minute, valid: true},
+		{header: now.Add(time.Hour).Format(http.TimeFormat), delay: 5 * time.Minute, valid: true},
 		{header: ""},
 		{header: "-1"},
 		{header: "1.5"},

@@ -69,8 +69,6 @@ Environment=CACHE_PORT=16379
 Environment=CACHE_PASSWORD=
 Environment=HOLOLIVE_H3_CERT_FILE=${HOLOLIVE_H3_CERT_FILE}
 Environment=HOLOLIVE_H3_KEY_FILE=${HOLOLIVE_H3_KEY_FILE}
-Environment=HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE}
-Environment=HOLOLIVE_INTERNAL_H3_SERVER_NAME=${HOLOLIVE_INTERNAL_H3_SERVER_NAME}
 Environment=HEALTHCHECK_CA_CERT_FILE=${HOLOLIVE_H3_CERT_FILE}
 Environment=HEALTHCHECK_SERVER_NAME=${HOLOLIVE_H3_SERVER_NAME}
 Environment=IRIS_BASE_URL=${IRIS_BASE_URL}
@@ -144,8 +142,6 @@ Environment=POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
 Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement
 Environment=HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
 Environment=HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key
-Environment=HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
-Environment=HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1
 Environment=HOLOLIVE_H3_SERVER_NAME=127.0.0.1
 Environment=IRIS_BASE_URL=
 Environment=IRIS_BASE_URL_FILE=/app/runtime-config/iris_base_url

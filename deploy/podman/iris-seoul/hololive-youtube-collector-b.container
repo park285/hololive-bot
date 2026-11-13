@@ -48,8 +48,6 @@ Environment=HOLOLIVE_H3_ADDR=:30015
 Environment=HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
 Environment=HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key
 Environment=HOLOLIVE_HTTP_TRANSPORTS=h3
-Environment=HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
-Environment=HOLOLIVE_INTERNAL_H3_SERVER_NAME=100.100.1.3
 Environment=HOLOLIVE_METRICS_ADDR=:30096
 Environment=LOG_COMPRESS=true
 Environment=LOG_DIR=/app/logs

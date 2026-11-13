@@ -123,8 +123,6 @@ podman build --platform linux/arm64 --format docker --build-arg REVISION=unknown
 Use the full committed image-source revision instead of `unknown` only after the
 source is committed. Other stack ingress consumers must load this same owned
 image rather than maintain a second recipe or pull the unpatched official tag.
-The existing ingress behavior checks build an isolated temporary tag from this
-context; `NGINX_TEST_PLATFORM` selects the architecture (default `linux/amd64`).
 
 `valkey-cache` also uses a local-only owned image:
 `localhost/iris-stack-valkey:9.1.3-zlib1.4-r0` applies the same zlib, musl and CA bundle pins to the pinned official

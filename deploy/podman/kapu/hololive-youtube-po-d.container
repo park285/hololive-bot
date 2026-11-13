@@ -1,4 +1,4 @@
-# youtube-collector-d의 PO issuer. iris-seoul compose youtube-po-b와 같은 격리 조건이다.
+# youtube-collector-d의 PO issuer. iris-seoul의 hololive-youtube-po-b와 같은 격리 조건이다.
 [Unit]
 Description=hololive YouTube PO issuer for collector d
 
