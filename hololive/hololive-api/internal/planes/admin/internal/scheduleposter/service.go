@@ -1,6 +1,7 @@
 package scheduleposter
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -60,8 +61,8 @@ type candidateStore interface {
 
 type translationStore interface {
 	PendingTranslations(ctx context.Context, limit int) ([]posterstore.PendingTranslation, error)
-	RecordTranslation(ctx context.Context, item posterstore.PendingTranslation, image posterstore.Image) (bool, error)
-	RecordTranslationFailure(ctx context.Context, item posterstore.PendingTranslation, reason string) (bool, error)
+	RecordTranslation(ctx context.Context, item posterstore.PendingTranslation, image posterstore.Image, inputs posterstore.TranslationInputs) (bool, error)
+	RecordTranslationFailure(ctx context.Context, item posterstore.PendingTranslation, reason string, inputs posterstore.TranslationInputs) (bool, error)
 }
 
 type sourceClient interface {
@@ -383,11 +384,12 @@ func (s *Service) translatePending(ctx context.Context) error {
 
 	var errs []error
 
-	for _, item := range pending {
+	for i := range pending {
+		item := &pending[i]
 		prompt := buildTextPrompt(item.ChannelID, members, s.config.Translation.Glossary)
 
 		rowCtx, cancel := context.WithTimeout(ctx, s.rowBudget)
-		image, reason, err := s.translateOne(rowCtx, item, prompt)
+		image, inputs, reason, err := s.translateOne(rowCtx, *item, prompt)
 
 		cancel()
 
@@ -399,14 +401,14 @@ func (s *Service) translatePending(ctx context.Context) error {
 			s.logger.Warn("Schedule poster translation failed",
 				slog.Int64("poster_id", item.ID), slog.String("reason", reason), slog.Any("error", err))
 
-			if _, recordErr := s.translations.RecordTranslationFailure(ctx, item, reason); recordErr != nil {
+			if _, recordErr := s.translations.RecordTranslationFailure(ctx, *item, reason, inputs); recordErr != nil {
 				errs = append(errs, recordErr)
 			}
 
 			continue
 		}
 
-		recorded, err := s.translations.RecordTranslation(ctx, item, image)
+		recorded, err := s.translations.RecordTranslation(ctx, *item, image, inputs)
 		if err != nil {
 			errs = append(errs, err)
 
@@ -420,36 +422,79 @@ func (s *Service) translatePending(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (s *Service) translateOne(ctx context.Context, item posterstore.PendingTranslation, textPrompt string) (posterstore.Image, string, error) {
+// translateOne은 실패해도 그때까지 만든 원본 판독과 번역표를 돌려주어, 재번역이 그것을 다시 쓸 수 있게 한다.
+func (s *Service) translateOne(
+	ctx context.Context, item posterstore.PendingTranslation, textPrompt string,
+) (posterstore.Image, posterstore.TranslationInputs, string, error) {
 	original, sourceErr := s.sources.image(ctx, item.ImageURL)
 	if sourceErr != nil {
-		return posterstore.Image{}, reasonSourceUnavailable, sourceErr
+		return posterstore.Image{}, posterstore.TranslationInputs{}, reasonSourceUnavailable, sourceErr
 	}
 
 	if item.ImageSHA256 != "" && imageSHA256(original.Data) != item.ImageSHA256 {
-		return posterstore.Image{}, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
+		return posterstore.Image{}, posterstore.TranslationInputs{}, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
 	}
 
-	originalText, err := s.transcribe(ctx, item.ID, stageOriginal, original)
+	inputs, table, err := s.translationInputs(ctx, item, original, textPrompt)
 	if err != nil {
-		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("transcribe original poster: %w", err)
+		return posterstore.Image{}, inputs, reasonTranslationFailed, err
 	}
 
-	s.logger.Info("Schedule poster original transcribed",
-		slog.Int64("poster_id", item.ID),
-		slog.String("transcript", strings.Join(originalText, " / ")))
-
-	table, err := s.checkedTable(ctx, item.ID, original, originalText, textPrompt)
+	image, err := s.checkedRender(ctx, item.ID, original, inputs.Transcript, table)
 	if err != nil {
-		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("translate poster text: %w", err)
+		return posterstore.Image{}, inputs, reasonTranslationFailed, fmt.Errorf("render translated poster: %w", err)
 	}
 
-	image, err := s.checkedRender(ctx, item.ID, original, originalText, table)
+	return image, inputs, "", nil
+}
+
+// translationInputs는 원본 판독과 번역표를 만든다. 이 행의 이전 시도가 같은 입력(translationInputsKey)으로 남긴 판독은 그대로 쓰고,
+// 남긴 번역표는 지금의 대조를 통과할 때만 쓴다. 번역표를 만들지 못해도 판독은 돌려준다.
+func (s *Service) translationInputs(
+	ctx context.Context, item posterstore.PendingTranslation, original source, textPrompt string,
+) (posterstore.TranslationInputs, translationTable, error) {
+	inputs := posterstore.TranslationInputs{SHA256: translationInputsKey(s.config.Translation, original, textPrompt)}
+	saved := item.Inputs
+	reuse := bytes.Equal(saved.SHA256, inputs.SHA256) && len(saved.Transcript) > 0
+
+	if reuse {
+		inputs.Transcript = saved.Transcript
+
+		s.logger.Info("Schedule poster original transcript reused", slog.Int64("poster_id", item.ID))
+	} else {
+		transcript, err := s.transcribe(ctx, item.ID, stageOriginal, original)
+		if err != nil {
+			return posterstore.TranslationInputs{}, nil, fmt.Errorf("transcribe original poster: %w", err)
+		}
+
+		inputs.Transcript = transcript
+
+		s.logger.Info("Schedule poster original transcribed",
+			slog.Int64("poster_id", item.ID),
+			slog.String("transcript", strings.Join(transcript, " / ")))
+	}
+
+	if reuse && saved.Table != "" {
+		table, err := parseTranslationTable(saved.Table)
+		if problems := checkTable(table, inputs.Transcript); err == nil && len(problems) == 0 {
+			inputs.Table = saved.Table
+
+			s.logger.Info("Schedule poster translation table reused", slog.Int64("poster_id", item.ID))
+
+			return inputs, table, nil
+		}
+
+		s.logger.Info("Schedule poster saved translation table rejected", slog.Int64("poster_id", item.ID))
+	}
+
+	table, err := s.checkedTable(ctx, item.ID, original, inputs.Transcript, textPrompt)
 	if err != nil {
-		return posterstore.Image{}, reasonTranslationFailed, fmt.Errorf("render translated poster: %w", err)
+		return inputs, nil, fmt.Errorf("translate poster text: %w", err)
 	}
 
-	return image, "", nil
+	inputs.Table = table.String()
+
+	return inputs, table, nil
 }
 
 func (s *Service) transcribe(ctx context.Context, posterID int64, stage string, src source) ([]string, error) {

@@ -91,6 +91,16 @@ type PendingTranslation struct {
 	// ImageSHA256은 썸네일 후보를 만들 때 받은 그림의 해시다. 같은 주소의 그림이 바뀔 수 있는 출처만 채운다.
 	ImageSHA256 string
 	Revision    int64
+	// Inputs는 이 행의 마지막 번역 시도가 남긴 원본 판독과 번역표다.
+	Inputs TranslationInputs
+}
+
+// TranslationInputs는 번역 시도 한 번이 만든 원본 판독(Transcript)과 번역표(Table), 그리고 둘을 만든 입력의 sha256이다.
+// SHA256이 비어 있으면 새로 기록할 판독이 없다는 뜻이고, Table이 비어 있으면 번역표를 만들지 못한 시도다.
+type TranslationInputs struct {
+	SHA256     []byte
+	Transcript []string
+	Table      string
 }
 
 type Summary struct {
@@ -377,7 +387,8 @@ func (s *Store) PendingTranslations(ctx context.Context, limit int) ([]PendingTr
 	pending, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (PendingTranslation, error) {
 		var item PendingTranslation
 
-		return item, row.Scan(&item.ID, &item.ChannelID, &item.ImageURL, &item.ImageSHA256, &item.Revision)
+		return item, row.Scan(&item.ID, &item.ChannelID, &item.ImageURL, &item.ImageSHA256, &item.Revision,
+			&item.Inputs.SHA256, &item.Inputs.Transcript, &item.Inputs.Table)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list pending schedule poster translations: %w", err)
@@ -387,12 +398,13 @@ func (s *Store) PendingTranslations(ctx context.Context, limit int) ([]PendingTr
 }
 
 // RecordTranslation은 그 사이 거절·재번역으로 revision이 바뀌었으면 false를 돌려준다.
-func (s *Store) RecordTranslation(ctx context.Context, item PendingTranslation, image Image) (bool, error) {
+func (s *Store) RecordTranslation(ctx context.Context, item PendingTranslation, image Image, inputs TranslationInputs) (bool, error) {
 	if len(image.Data) == 0 || len(image.Data) > MaxImageBytes || image.MIME == "" {
 		return false, fmt.Errorf("record schedule poster translation: image must be 1..%d bytes with a media type", MaxImageBytes)
 	}
 
-	tag, err := s.pool.Exec(ctx, recordTranslationSQL, item.ID, item.Revision, image.Data, image.MIME)
+	tag, err := s.pool.Exec(ctx, recordTranslationSQL, item.ID, item.Revision, image.Data, image.MIME,
+		inputs.SHA256, inputs.Transcript, inputs.Table)
 	if err != nil {
 		return false, fmt.Errorf("record schedule poster translation: %w", err)
 	}
@@ -400,8 +412,8 @@ func (s *Store) RecordTranslation(ctx context.Context, item PendingTranslation, 
 	return tag.RowsAffected() == 1, nil
 }
 
-func (s *Store) RecordTranslationFailure(ctx context.Context, item PendingTranslation, reason string) (bool, error) {
-	tag, err := s.pool.Exec(ctx, recordTranslationFailureSQL, item.ID, item.Revision, reason)
+func (s *Store) RecordTranslationFailure(ctx context.Context, item PendingTranslation, reason string, inputs TranslationInputs) (bool, error) {
+	tag, err := s.pool.Exec(ctx, recordTranslationFailureSQL, item.ID, item.Revision, reason, inputs.SHA256, inputs.Transcript, inputs.Table)
 	if err != nil {
 		return false, fmt.Errorf("record schedule poster translation failure: %w", err)
 	}

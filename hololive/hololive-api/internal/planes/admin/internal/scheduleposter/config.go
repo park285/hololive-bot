@@ -16,14 +16,15 @@ import (
 )
 
 const (
-	defaultPollSeconds = 3600
-	defaultLocation    = "global"
-	defaultModel       = "gemini-nano-banana-2.1"
-	defaultTextModel   = "gemini-4-argon"
-	maxConfigBytes     = 64 << 10
-	maxGlossaryTerms   = 200
-	maxGlossaryRunes   = 80
-	maxThumbnailVideos = 5
+	defaultPollSeconds     = 3600
+	defaultLocation        = "global"
+	defaultModel           = "gemini-nano-banana-2.1"
+	defaultTextModel       = "gemini-4-argon"
+	defaultTranscribeModel = "gemini-4-hydrogen"
+	maxConfigBytes         = 64 << 10
+	maxGlossaryTerms       = 200
+	maxGlossaryRunes       = 80
+	maxThumbnailVideos     = 5
 )
 
 var ErrDisabled = errors.New("schedule poster collection disabled")
@@ -53,6 +54,8 @@ type TranslationConfig struct {
 	Model    string `json:"model"`
 	// TextModel은 포스터 글자를 읽어 번역표를 만드는 모델이고, Model은 그 표대로 이미지를 다시 그린다.
 	TextModel string `json:"text_model"`
+	// TranscribeModel은 원본과 번역본의 글자를 대조용으로 판독한다.
+	TranscribeModel string `json:"transcribe_model"`
 	// Glossary는 멤버 이름(members 표에서 채움) 밖의 용어 표기다.
 	Glossary map[string]string `json:"glossary"`
 }
@@ -102,7 +105,9 @@ func LoadConfig(path string) (result *Config, retErr error) {
 
 	config := Config{
 		PollSeconds: defaultPollSeconds,
-		Translation: TranslationConfig{Location: defaultLocation, Model: defaultModel, TextModel: defaultTextModel},
+		Translation: TranslationConfig{
+			Location: defaultLocation, Model: defaultModel, TextModel: defaultTextModel, TranscribeModel: defaultTranscribeModel,
+		},
 	}
 	if err := jsonv2.Unmarshal(raw, &config, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return nil, errors.New("invalid schedule poster config JSON")
@@ -126,8 +131,9 @@ func (c Config) Validate() error {
 
 	translation := c.Translation
 	if !projectPattern.MatchString(translation.Project) || !locationPattern.MatchString(translation.Location) ||
-		!modelPattern.MatchString(translation.Model) || !modelPattern.MatchString(translation.TextModel) {
-		return errors.New("schedule poster translation requires project, location, model and text_model")
+		!modelPattern.MatchString(translation.Model) || !modelPattern.MatchString(translation.TextModel) ||
+		!modelPattern.MatchString(translation.TranscribeModel) {
+		return errors.New("schedule poster translation requires project, location, model, text_model and transcribe_model")
 	}
 
 	if len(translation.Glossary) > maxGlossaryTerms {

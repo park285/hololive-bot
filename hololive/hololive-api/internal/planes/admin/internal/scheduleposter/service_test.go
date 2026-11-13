@@ -78,6 +78,7 @@ type fakeStore struct {
 	pending           []posterstore.PendingTranslation
 	recorded          []posterstore.Image
 	failures          []string
+	inputs            []posterstore.TranslationInputs
 }
 
 func (f *fakeStore) InsertCandidates(_ context.Context, candidates []posterstore.Candidate) (int64, error) {
@@ -107,14 +108,16 @@ func (f *fakeStore) PendingTranslations(context.Context, int) ([]posterstore.Pen
 	return f.pending, nil
 }
 
-func (f *fakeStore) RecordTranslation(_ context.Context, _ posterstore.PendingTranslation, translated posterstore.Image) (bool, error) {
+func (f *fakeStore) RecordTranslation(_ context.Context, _ posterstore.PendingTranslation, translated posterstore.Image, inputs posterstore.TranslationInputs) (bool, error) {
 	f.recorded = append(f.recorded, translated)
+	f.inputs = append(f.inputs, inputs)
 
 	return true, nil
 }
 
-func (f *fakeStore) RecordTranslationFailure(_ context.Context, _ posterstore.PendingTranslation, reason string) (bool, error) {
+func (f *fakeStore) RecordTranslationFailure(_ context.Context, _ posterstore.PendingTranslation, reason string, inputs posterstore.TranslationInputs) (bool, error) {
 	f.failures = append(f.failures, reason)
+	f.inputs = append(f.inputs, inputs)
 
 	return true, nil
 }
@@ -134,6 +137,7 @@ type fakeTranslator struct {
 	textPrompts  []string
 	imagePrompts []string
 	imageInputs  []source
+	originals    int
 	checks       int
 }
 
@@ -153,8 +157,11 @@ func (f *fakeTranslator) translateText(_ context.Context, _ source, prompt strin
 	return textTranslation{table: table, webSearchQueries: 2}, fakeUsage, err
 }
 
+// transcribe는 "original"로 시작하는 그림을 원본으로 본다.
 func (f *fakeTranslator) transcribe(_ context.Context, src source) ([]string, usage, error) {
-	if string(src.Data) == "original" {
+	if strings.HasPrefix(string(src.Data), "original") {
+		f.originals++
+
 		return f.originalText, fakeUsage, nil
 	}
 
@@ -410,6 +417,8 @@ func TestTranslatePendingNeverStoresARenderThatFailsTheCheck(t *testing.T) {
 	require.Len(t, translator.textPrompts, 1, "번역표가 원본과 맞으면 다시 그릴 때 번역표를 다시 만들지 않는다")
 	require.Empty(t, store.recorded)
 	require.Equal(t, []string{reasonTranslationFailed}, store.failures)
+	require.Equal(t, lines(tsuzuriOriginal), store.inputs[0].Transcript, "그리기가 실패해도 재번역이 쓸 판독과 번역표를 남긴다")
+	require.Equal(t, mustTable(t, tsuzuriTable).String(), store.inputs[0].Table)
 }
 
 func TestTranslatePendingStopsRedrawingWhenTheBestDraftStopsImproving(t *testing.T) {
@@ -494,6 +503,86 @@ func TestTranslatePendingLogsTheUsageOfEveryModelResponse(t *testing.T) {
 	require.Equal(t, []string{stageOriginal}, usageStages(&fakeTranslator{
 		textErr: errors.New("text model unavailable"), originalText: lines(tsuzuriOriginal),
 	}), "응답을 받지 못한 호출은 남기지 않는다")
+}
+
+func TestTranslatePendingReusesTheTranscriptAndTableOfTheSameInputs(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
+	translator := &fakeTranslator{
+		tables: []string{sampleTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
+		originalText: sampleOriginalText, renders: [][]string{{sophia.NameKo, "홀로도리 방송"}},
+	}
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
+	service := testService(store, sources, translator, sophia)
+
+	require.NoError(t, service.translatePending(t.Context()))
+	require.Len(t, store.inputs, 1)
+
+	saved := store.inputs[0]
+	require.Len(t, saved.SHA256, 32)
+	require.Equal(t, sampleOriginalText, saved.Transcript)
+	require.Equal(t, mustTable(t, sampleTable).String(), saved.Table)
+
+	retranslate := func() {
+		t.Helper()
+
+		store.pending[0].Inputs = store.inputs[len(store.inputs)-1]
+
+		require.NoError(t, service.translatePending(t.Context()))
+	}
+
+	retranslate()
+	require.Equal(t, 1, translator.originals, "같은 그림·모델·지시문이면 원본을 다시 판독하지 않는다")
+	require.Len(t, translator.textPrompts, 1, "같은 그림·모델·지시문이면 번역표를 다시 만들지 않는다")
+	require.Len(t, translator.imagePrompts, 2)
+	require.Len(t, store.recorded, 2)
+	require.Equal(t, saved, store.inputs[1])
+
+	service.config.Translation.Glossary = map[string]string{"ホロドリ": "홀로도리"}
+
+	retranslate()
+	require.Equal(t, 2, translator.originals, "glossary가 바뀌면 판독부터 다시 한다")
+	require.Len(t, translator.textPrompts, 2)
+	require.NotEqual(t, saved.SHA256, store.inputs[2].SHA256)
+
+	sources.original.Data = []byte("original, redrawn")
+
+	retranslate()
+	require.Equal(t, 3, translator.originals, "그림이 바뀌면 판독부터 다시 한다")
+	require.Len(t, translator.textPrompts, 3)
+
+	service.config.Translation.TranscribeModel = "gemini-4-argon"
+
+	retranslate()
+	require.Equal(t, 4, translator.originals, "판독 모델이 바뀌면 판독부터 다시 한다")
+}
+
+func TestTranslatePendingRebuildsAStoredTableThatNoLongerPassesTheCheck(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
+	withTime := sampleTable + "\n20:00〜 ⇒ 20:00~"
+	translator := &fakeTranslator{
+		tables: []string{sampleTable, withTime}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
+		originalText: append(slices.Clone(sampleOriginalText), "20:00〜"), renders: [][]string{{sophia.NameKo, "20:00~ 홀로도리 방송"}},
+	}
+	service := testService(store, &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}, translator)
+
+	require.NoError(t, service.translatePending(t.Context()))
+	require.Len(t, store.inputs, 1)
+
+	stale := store.inputs[0]
+
+	stale.Table = sampleTable
+	store.pending[0].Inputs = stale
+	translator.tables = []string{withTime}
+	translator.textPrompts = nil
+
+	require.NoError(t, service.translatePending(t.Context()))
+	require.Equal(t, 1, translator.originals, "판독은 그대로 쓴다")
+	require.Len(t, translator.textPrompts, 1, "지금의 대조를 통과하지 못하는 저장된 번역표는 다시 만든다")
+	require.Equal(t, mustTable(t, withTime).String(), store.inputs[1].Table)
 }
 
 func TestTranslatePendingRebuildsATableThatMissesATime(t *testing.T) {
@@ -615,6 +704,10 @@ func TestRequestsSearchOnlyForTheTranslationTable(t *testing.T) {
 	require.Equal(t, []*genai.Tool{{GoogleSearch: &genai.GoogleSearch{}}}, text.Tools, "이미지 검색은 끄고 웹 검색만 켠다")
 	require.Equal(t, high, text.ThinkingConfig)
 	require.Empty(t, text.ResponseModalities)
+
+	_, transcribe := transcribeRequest(original)
+	require.Empty(t, transcribe.Tools)
+	require.Equal(t, &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow}, transcribe.ThinkingConfig)
 
 	_, render := imageRequest(original, "image prompt")
 	require.Empty(t, render.Tools)
@@ -795,7 +888,16 @@ func TestLoadConfig(t *testing.T) {
 	config, err := LoadConfig(write(`{"targets":[{"x_user_id":"2054825907916054528","channel_id":"UCROQtXcp2loQEmvpe5rhJzQ"}],"translation":{"project":"example-project"}}`))
 	require.NoError(t, err)
 	require.Equal(t, time.Hour, config.PollInterval())
-	require.Equal(t, TranslationConfig{Project: "example-project", Location: "global", Model: "gemini-nano-banana-2.1", TextModel: "gemini-4-argon"}, config.Translation)
+	require.Equal(t, TranslationConfig{
+		Project: "example-project", Location: "global", Model: "gemini-nano-banana-2.1", TextModel: "gemini-4-argon", TranscribeModel: "gemini-4-hydrogen",
+	}, config.Translation)
+
+	config, err = LoadConfig(write(`{"targets":[{"x_user_id":"2054825907916054528","channel_id":"UCROQtXcp2loQEmvpe5rhJzQ"}],"translation":{"project":"example-project","transcribe_model":"gemini-4-argon"}}`))
+	require.NoError(t, err)
+	require.Equal(t, "gemini-4-argon", config.Translation.TranscribeModel)
+
+	_, err = LoadConfig(write(`{"targets":[{"x_user_id":"2054825907916054528","channel_id":"UCROQtXcp2loQEmvpe5rhJzQ"}],"translation":{"project":"example-project","transcribe_model":"Gemini 4"}}`))
+	require.Error(t, err)
 
 	config, err = LoadConfig(write(`{"targets":[{"x_user_id":"2054825907916054528","channel_id":"UCROQtXcp2loQEmvpe5rhJzQ"}],"translation":{"project":"example-project","glossary":{"ホロドリ":"홀로도리"}}}`))
 	require.NoError(t, err)
