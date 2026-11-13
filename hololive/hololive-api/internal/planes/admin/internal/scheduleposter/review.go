@@ -29,8 +29,8 @@ const (
 
 type reviewStore interface {
 	UnreviewedCandidates(ctx context.Context, limit int) ([]posterstore.ReviewCandidate, error)
-	HandOverUnreviewed(ctx context.Context, createdBefore time.Time) (int64, error)
-	RequestReview(ctx context.Context, id int64) (bool, error)
+	HandOverUnreviewed(ctx context.Context, createdBefore time.Time, reason posterstore.ReviewRequestReason) (int64, error)
+	RequestReview(ctx context.Context, id int64, reason posterstore.ReviewRequestReason) (bool, error)
 	AutoConfirm(ctx context.Context, id, expectedRevision int64, weekStart, weekEnd time.Time) (posterstore.WeekCoverage, int64, error)
 	AutoReject(ctx context.Context, id, expectedRevision int64) (int64, error)
 }
@@ -68,37 +68,37 @@ func (s *Service) autoReview(ctx context.Context) error {
 func (s *Service) reviewOne(ctx context.Context, item posterstore.ReviewCandidate) error {
 	original, err := s.sources.image(ctx, item.ImageURL)
 	if err != nil {
-		return s.unjudged(ctx, item, posterScores{}, fmt.Errorf("fetch poster image: %w", err))
+		return s.unjudged(ctx, item, posterScores{}, posterstore.ReviewReasonUnjudgeable, fmt.Errorf("fetch poster image: %w", err))
 	}
 
 	if item.ImageSHA256 != "" && imageSHA256(original.Data) != item.ImageSHA256 {
-		return s.requestReview(ctx, item, posterScores{}, errors.New("poster image changed after it was collected"))
+		return s.requestReview(ctx, item, posterScores{}, posterstore.ReviewReasonImageChanged, errors.New("poster image changed after it was collected"))
 	}
 
 	scores, spent, err := s.judge.judge(ctx, original)
 	s.logUsage(item.ID, stageDecision, spent)
 
 	if err != nil {
-		return s.unjudged(ctx, item, scores, err)
+		return s.unjudged(ctx, item, scores, posterstore.ReviewReasonUnjudgeable, err)
 	}
 
 	switch {
 	case scores.schedule < rejectBelow:
 		return s.reject(ctx, item, scores)
 	case scores.lowest() < confirmFrom:
-		return s.requestReview(ctx, item, scores, nil)
+		return s.requestReview(ctx, item, scores, posterstore.ReviewReasonUncertain, nil)
 	}
 
 	period, spent, err := s.judge.readPeriod(ctx, original)
 	s.logUsage(item.ID, stagePeriod, spent)
 
 	if err != nil {
-		return s.unjudged(ctx, item, scores, err)
+		return s.unjudged(ctx, item, scores, posterstore.ReviewReasonPeriodUnread, err)
 	}
 
 	start, end, err := period.week(postedDate(item.PostedAt))
 	if err != nil {
-		return s.requestReview(ctx, item, scores, fmt.Errorf("printed period %+v: %w", period, err))
+		return s.requestReview(ctx, item, scores, posterstore.ReviewReasonPeriodUnread, fmt.Errorf("printed period %+v: %w", period, err))
 	}
 
 	return s.confirm(ctx, item, scores, start, end)
@@ -106,9 +106,11 @@ func (s *Service) reviewOne(ctx context.Context, item posterstore.ReviewCandidat
 
 // unjudged는 후보 때문에 판정할 수 없는 경우(errUnjudgeable)만 관리자 검토로 넘기고, 그 밖의 실패는 오류로 돌려
 // 다음 수집 주기에 다시 판정하게 둔다. 계속 실패하는 후보는 handOverAfter가 넘긴다.
-func (s *Service) unjudged(ctx context.Context, item posterstore.ReviewCandidate, scores posterScores, err error) error {
+func (s *Service) unjudged(
+	ctx context.Context, item posterstore.ReviewCandidate, scores posterScores, reason posterstore.ReviewRequestReason, err error,
+) error {
 	if errors.Is(err, errUnjudgeable) {
-		return s.requestReview(ctx, item, scores, err)
+		return s.requestReview(ctx, item, scores, reason, err)
 	}
 
 	return err
@@ -120,9 +122,10 @@ func (s *Service) confirm(ctx context.Context, item posterstore.ReviewCandidate,
 
 	switch {
 	case errors.Is(err, posterstore.ErrInvalidWeek):
-		return s.requestReview(ctx, item, scores, err)
+		return s.requestReview(ctx, item, scores, posterstore.ReviewReasonWeekRejected, err)
 	case err == nil && coverage == posterstore.WeekOverlapping:
-		return s.requestReview(ctx, item, scores, fmt.Errorf("a confirmed poster overlaps %s..%s", week[0].Value, week[1].Value))
+		return s.requestReview(ctx, item, scores, posterstore.ReviewReasonWeekOverlapping,
+			fmt.Errorf("a confirmed poster overlaps %s..%s", week[0].Value, week[1].Value))
 	case coverage == posterstore.WeekSame:
 		return s.settle(ctx, item, scores, outcomeDuplicate, "expire duplicate schedule poster", err, week...)
 	default:
@@ -154,8 +157,10 @@ func (s *Service) settle(
 	return nil
 }
 
-func (s *Service) requestReview(ctx context.Context, item posterstore.ReviewCandidate, scores posterScores, reason error) error {
-	requested, err := s.reviews.RequestReview(ctx, item.ID)
+func (s *Service) requestReview(
+	ctx context.Context, item posterstore.ReviewCandidate, scores posterScores, reason posterstore.ReviewRequestReason, cause error,
+) error {
+	requested, err := s.reviews.RequestReview(ctx, item.ID, reason)
 	if err != nil {
 		return fmt.Errorf("request schedule poster review: %w", err)
 	}
@@ -166,7 +171,7 @@ func (s *Service) requestReview(ctx context.Context, item posterstore.ReviewCand
 		outcome = outcomeSuperseded
 	}
 
-	s.logReview(ctx, item.ID, outcome, scores, reason)
+	s.logReview(ctx, item.ID, outcome, scores, cause, slog.String("request_reason", string(reason)))
 
 	return nil
 }

@@ -25,6 +25,7 @@ func buildAdminHandlers(
 	adminSettings adminAPISettings,
 	xSpaceSessions *xspaces.Store,
 	schedulePosters *scheduleposter.Store,
+	collector server.SchedulePosterCollector,
 	logger *slog.Logger,
 ) (*server.DomainHandlers, error) {
 	var dispatchOps server.DispatchOperations
@@ -48,6 +49,8 @@ func buildAdminHandlers(
 		DispatchOps:     dispatchOps,
 		XSpaceSessions:  xSpaceSessions,
 		SchedulePosters: schedulePosters,
+
+		SchedulePosterCollector: collector,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build admin domain handlers: %w", err)

@@ -92,17 +92,13 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, fmt.Errorf("build admin X session store: %w", err)
 	}
 
-	schedulePosters, err := scheduleposter.NewStore(infra.Postgres.GetPool())
+	schedulePosters, schedulePosterService, err := buildSchedulePosters(ctx, appConfig, infra, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build admin schedule poster store: %w", err)
+		return nil, err
 	}
 
-	schedulePosterService, err := buildSchedulePosterService(ctx, appConfig, schedulePosters, infra.MemberRepository, logger)
-	if err != nil && !errors.Is(err, posterservice.ErrDisabled) {
-		return nil, fmt.Errorf("build admin schedule poster service: %w", err)
-	}
-
-	domains, err := buildAdminHandlers(infra, deps, alarmClient, adminSettings, xSpaceSessions, schedulePosters, logger)
+	domains, err := buildAdminHandlers(infra, deps, alarmClient, adminSettings, xSpaceSessions, schedulePosters,
+		schedulePosterCollector(schedulePosterService), logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin api runtime: %w", err)
 	}
@@ -115,6 +111,15 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 	attachAdminBackgroundTasks(runtime, appConfig.Ingestion.PhotoSyncEnabled, deps.Holodex, infra, schedulePosterService, logger)
 
 	return runtime, nil
+}
+
+// schedulePosterCollector는 nil 서비스를 nil interface로 돌려준다. 그대로 넣은 typed nil은 handler의 nil 검사를 통과한다.
+func schedulePosterCollector(service *posterservice.Service) server.SchedulePosterCollector {
+	if service == nil {
+		return nil
+	}
+
+	return service
 }
 
 // attachAdminBackgroundTasks는 nil 서비스를 interface 필드에 넣지 않는다. 넣으면 backgroundTasks의 nil 검사를 통과한다.
@@ -133,6 +138,22 @@ func attachAdminBackgroundTasks(
 	if schedulePoster != nil {
 		runtime.SchedulePoster = schedulePoster
 	}
+}
+
+func buildSchedulePosters(
+	ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, infra *sharedmodules.InfraModule, logger *slog.Logger,
+) (*scheduleposter.Store, *posterservice.Service, error) {
+	store, err := scheduleposter.NewStore(infra.Postgres.GetPool())
+	if err != nil {
+		return nil, nil, fmt.Errorf("build admin schedule poster store: %w", err)
+	}
+
+	service, err := buildSchedulePosterService(ctx, appConfig, store, infra.MemberRepository, logger)
+	if err != nil && !errors.Is(err, posterservice.ErrDisabled) {
+		return nil, nil, fmt.Errorf("build admin schedule poster service: %w", err)
+	}
+
+	return store, service, nil
 }
 
 // buildSchedulePosterService는 설정 파일 경로가 비어 있으면 posterservice.ErrDisabled를 감싸 돌려준다.

@@ -63,7 +63,7 @@ func TestAutoConfirmWaitsForAConcurrentConfirm(t *testing.T) {
 	require.Eventually(t, func() bool { return lockWaiting(t, pool) }, 10*time.Second, 20*time.Millisecond,
 		"관리자 확정이 잠금을 쥔 동안 자동 확정은 기다린다")
 
-	_, err = confirm(ctx, admin, 101, 1, start, end)
+	_, err = changeWeek(ctx, admin, confirmSQL, 101, 1, start, end, ReviewerAdmin)
 	require.NoError(t, err)
 	require.NoError(t, admin.Commit(ctx))
 
@@ -176,7 +176,7 @@ func TestHandOverWaitsForAnAutoJudgmentInProgress(t *testing.T) {
 	handed := make(chan int64, 1)
 
 	go func() {
-		count, handErr := store.HandOverUnreviewed(ctx, time.Now().Add(time.Hour))
+		count, handErr := store.HandOverUnreviewed(ctx, time.Now().Add(time.Hour), ReviewReasonStale)
 		if handErr != nil {
 			count = -1
 		}
@@ -187,7 +187,7 @@ func TestHandOverWaitsForAnAutoJudgmentInProgress(t *testing.T) {
 	require.Eventually(t, func() bool { return lockWaiting(t, pool) }, 10*time.Second, 20*time.Millisecond,
 		"자동 판정이 후보 행을 잠근 동안 일괄 인계는 기다린다")
 
-	_, err = mutate(ctx, judging, "update schedule poster", rejectSQL, 101, 1)
+	_, err = mutate(ctx, judging, "update schedule poster", rejectSQL, 101, 1, ReviewerAuto)
 	require.NoError(t, err)
 	require.NoError(t, judging.Commit(ctx))
 

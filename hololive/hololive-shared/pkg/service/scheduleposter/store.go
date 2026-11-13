@@ -38,6 +38,28 @@ const (
 	TranslationFailed       TranslationStatus = "failed"
 )
 
+// Reviewer는 확정·거절을 누가 했는지다. 관리자 검토로 넘기기 전에 자동 검토가 정했으면 auto다.
+type Reviewer string
+
+const (
+	ReviewerAuto  Reviewer = "auto"
+	ReviewerAdmin Reviewer = "admin"
+)
+
+// ReviewRequestReason은 자동 검토가 후보를 관리자 검토로 넘긴 이유이며 migration 018의 CHECK와 같은 값이다.
+type ReviewRequestReason string
+
+const (
+	ReviewReasonUncertain       ReviewRequestReason = "uncertain"
+	ReviewReasonUnjudgeable     ReviewRequestReason = "unjudgeable"
+	ReviewReasonImageChanged    ReviewRequestReason = "image_changed"
+	ReviewReasonPeriodUnread    ReviewRequestReason = "period_unread"
+	ReviewReasonWeekRejected    ReviewRequestReason = "week_rejected"
+	ReviewReasonWeekOverlapping ReviewRequestReason = "week_overlapping"
+	ReviewReasonStale           ReviewRequestReason = "stale"
+	ReviewReasonAutoReviewOff   ReviewRequestReason = "auto_review_off"
+)
+
 const (
 	// MaxImageBytes는 migration 010의 translated_image 크기 CHECK와 같다.
 	MaxImageBytes = 4 << 20
@@ -66,16 +88,19 @@ type Candidate struct {
 type Poster struct {
 	Candidate
 
-	ReviewStatus      ReviewStatus
-	WeekStart         *time.Time
-	WeekEnd           *time.Time
-	ReviewedAt        *time.Time
-	TranslationStatus TranslationStatus
-	TranslationError  string
-	TranslatedAt      *time.Time
-	Revision          int64
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ReviewStatus ReviewStatus
+	WeekStart    *time.Time
+	WeekEnd      *time.Time
+	ReviewedAt   *time.Time
+	// ReviewedBy와 ReviewRequestReason은 값이 없으면 빈 문자열이다.
+	ReviewedBy          Reviewer
+	ReviewRequestReason ReviewRequestReason
+	TranslationStatus   TranslationStatus
+	TranslationError    string
+	TranslatedAt        *time.Time
+	Revision            int64
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type Image struct {
@@ -262,8 +287,8 @@ func (s *Store) UnreviewedCandidates(ctx context.Context, limit int) ([]ReviewCa
 
 // RequestReview는 자동 검토가 확정·거절하지 못한 후보를 관리자 검토로 넘기고, 이미 넘겼거나 검토 대기가 아니면 false를 돌려준다.
 // 관리자의 진행 중 처리와 겹쳐도 되도록 revision은 바꾸지 않는다.
-func (s *Store) RequestReview(ctx context.Context, id int64) (bool, error) {
-	tag, err := s.pool.Exec(ctx, requestReviewSQL, id)
+func (s *Store) RequestReview(ctx context.Context, id int64, reason ReviewRequestReason) (bool, error) {
+	tag, err := s.pool.Exec(ctx, requestReviewSQL, id, reason)
 	if err != nil {
 		return false, fmt.Errorf("request schedule poster review: %w", err)
 	}
@@ -272,8 +297,8 @@ func (s *Store) RequestReview(ctx context.Context, id int64) (bool, error) {
 }
 
 // HandOverUnreviewed는 createdBefore 전에 들어와 아직 관리자 검토로 넘기지 않은 검토 대기 후보를 모두 넘긴다.
-func (s *Store) HandOverUnreviewed(ctx context.Context, createdBefore time.Time) (int64, error) {
-	tag, err := s.pool.Exec(ctx, handOverUnreviewedSQL, createdBefore)
+func (s *Store) HandOverUnreviewed(ctx context.Context, createdBefore time.Time, reason ReviewRequestReason) (int64, error) {
+	tag, err := s.pool.Exec(ctx, handOverUnreviewedSQL, createdBefore, reason)
 	if err != nil {
 		return 0, fmt.Errorf("hand over unreviewed schedule posters: %w", err)
 	}
@@ -314,7 +339,7 @@ func (s *Store) AutoConfirm(ctx context.Context, id, expectedRevision int64, wee
 		case overlapping:
 			coverage = WeekOverlapping
 		default:
-			revision, err = confirm(ctx, tx, id, expectedRevision, weekStart, weekEnd)
+			revision, err = changeWeek(ctx, tx, confirmSQL, id, expectedRevision, weekStart, weekEnd, ReviewerAuto)
 		}
 
 		return err
@@ -444,12 +469,36 @@ func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekSta
 	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
 		var err error
 
-		revision, err = confirm(ctx, tx, id, expectedRevision, weekStart, weekEnd)
+		revision, err = changeWeek(ctx, tx, confirmSQL, id, expectedRevision, weekStart, weekEnd, ReviewerAdmin)
 
 		return err
 	})
 	if err != nil {
 		return 0, fmt.Errorf("confirm schedule poster: %w", err)
+	}
+
+	return revision, nil
+}
+
+// UpdateWeek은 확정본의 주 범위만 고친다. 번역본은 그대로 게시되고, Confirm과 달리 같은 멤버의 다른 후보를 닫지 않는다.
+// 번역 대기 중이면 진행 중인 번역 결과를 버리지 않도록 ErrInvalidState다. AutoConfirm이 확정본의 주를 읽고 판단하므로
+// 같은 멤버 잠금 아래에서 바꾼다.
+func (s *Store) UpdateWeek(ctx context.Context, id, expectedRevision int64, weekStart, weekEnd time.Time) (int64, error) {
+	if err := ValidateWeek(weekStart, weekEnd); err != nil {
+		return 0, err
+	}
+
+	var revision int64
+
+	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
+		var err error
+
+		revision, err = changeWeek(ctx, tx, updateWeekSQL, id, expectedRevision, weekStart, weekEnd)
+
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("update schedule poster week: %w", err)
 	}
 
 	return revision, nil
@@ -481,7 +530,7 @@ func (s *Store) AutoReject(ctx context.Context, id, expectedRevision int64) (int
 
 		var err error
 
-		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision)
+		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision, ReviewerAuto)
 
 		return err
 	})
@@ -518,21 +567,25 @@ func lockChannelConfirm(ctx context.Context, tx pgx.Tx, id int64) error {
 	return nil
 }
 
-func confirm(ctx context.Context, tx pgx.Tx, id, expectedRevision int64, weekStart, weekEnd time.Time) (int64, error) {
+// changeWeek의 query(confirm.sql, update_week.sql)는 변경 전 revision, 주 말고는 바꿀 수 있는 행인지, 게시일 7일 이내 여부와
+// 바뀐 revision을 이 순서로 돌려줘야 한다.
+func changeWeek(
+	ctx context.Context, tx pgx.Tx, query string, id, expectedRevision int64, weekStart, weekEnd time.Time, args ...any,
+) (int64, error) {
 	var (
-		current  *int64
-		status   *string
-		nearPost *bool
-		updated  *int64
+		current    *int64
+		changeable *bool
+		nearPost   *bool
+		updated    *int64
 	)
 
-	if err := tx.QueryRow(ctx, confirmSQL, id, expectedRevision, weekStart, weekEnd).
-		Scan(&current, &status, &nearPost, &updated); err != nil {
+	if err := tx.QueryRow(ctx, query, append([]any{id, expectedRevision, weekStart, weekEnd}, args...)...).
+		Scan(&current, &changeable, &nearPost, &updated); err != nil {
 		return 0, fmt.Errorf("update schedule poster: %w", err)
 	}
 
 	revision, err := mutationOutcome(current, updated, expectedRevision)
-	if errors.Is(err, ErrInvalidState) && status != nil && ReviewStatus(*status) == ReviewPending && nearPost != nil && !*nearPost {
+	if errors.Is(err, ErrInvalidState) && changeable != nil && *changeable && nearPost != nil && !*nearPost {
 		return 0, ErrInvalidWeek
 	}
 
@@ -546,7 +599,7 @@ func (s *Store) Reject(ctx context.Context, id, expectedRevision int64) (int64, 
 	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
 		var err error
 
-		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision)
+		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision, ReviewerAdmin)
 
 		return err
 	})
@@ -566,10 +619,10 @@ func (s *Store) mutate(ctx context.Context, action, query string, id, expectedRe
 	return mutate(ctx, s.pool, action, query, id, expectedRevision)
 }
 
-func mutate(ctx context.Context, db rowQuerier, action, query string, id, expectedRevision int64) (int64, error) {
+func mutate(ctx context.Context, db rowQuerier, action, query string, id, expectedRevision int64, args ...any) (int64, error) {
 	var current, updated *int64
 
-	if err := db.QueryRow(ctx, query, id, expectedRevision).Scan(&current, &updated); err != nil {
+	if err := db.QueryRow(ctx, query, append([]any{id, expectedRevision}, args...)...).Scan(&current, &updated); err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
 
@@ -638,17 +691,21 @@ func scanPoster(row pgx.CollectableRow) (Poster, error) {
 		poster            Poster
 		reviewStatus      string
 		translationStatus string
+		reviewedBy        string
+		requestReason     string
 	)
 
 	err := row.Scan(
 		&poster.ID, &poster.ChannelID, &poster.XUserID, &poster.PostURL, &poster.ImageURL, &poster.PostedAt,
 		&poster.TextExcerpt, &reviewStatus, &poster.WeekStart, &poster.WeekEnd, &poster.ReviewedAt,
 		&translationStatus, &poster.TranslationError, &poster.TranslatedAt, &poster.Revision,
-		&poster.CreatedAt, &poster.UpdatedAt,
+		&poster.CreatedAt, &poster.UpdatedAt, &reviewedBy, &requestReason,
 	)
 
 	poster.ReviewStatus = ReviewStatus(reviewStatus)
 	poster.TranslationStatus = TranslationStatus(translationStatus)
+	poster.ReviewedBy = Reviewer(reviewedBy)
+	poster.ReviewRequestReason = ReviewRequestReason(requestReason)
 
 	return poster, err
 }

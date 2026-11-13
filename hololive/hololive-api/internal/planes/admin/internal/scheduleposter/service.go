@@ -105,6 +105,7 @@ type Service struct {
 	now          func() time.Time
 	retry        retry.RetryOptions
 	rowBudget    time.Duration
+	collectNow   chan struct{}
 }
 
 // New의 apiKey가 비어 있으면 후보 자동 검토를 끈다(LoadAPIKey).
@@ -154,6 +155,7 @@ func newService(
 		now:          time.Now,
 		retry:        translationRetryOptions(),
 		rowBudget:    translationRowBudget,
+		collectNow:   make(chan struct{}, 1),
 	}
 }
 
@@ -173,7 +175,7 @@ func (s *Service) Start(ctx context.Context) {
 
 	var wg sync.WaitGroup
 
-	wg.Go(func() { s.runLoop(ctx, "collect", initialCollectWait, s.config.PollInterval(), s.collect) })
+	wg.Go(func() { s.runCollectLoop(ctx) })
 	wg.Go(func() { s.runLoop(ctx, "translate", initialTranslate, translateInterval, s.translatePending) })
 	wg.Wait()
 	s.logger.Info("Schedule poster service stopped")
@@ -184,22 +186,22 @@ func (s *Service) runLoop(ctx context.Context, task string, wait, interval time.
 		return
 	}
 
-	run := func(ctx context.Context) {
-		if err := fn(ctx); err != nil && ctx.Err() == nil {
-			s.logger.Error("Schedule poster task failed", slog.String("task", task), slog.Any("error", err))
-		}
-	}
-
-	run(ctx)
+	s.runTask(ctx, task, fn)
 
 	tick := func(ctx context.Context) error {
-		run(ctx)
+		s.runTask(ctx, task, fn)
 
 		return nil
 	}
 
 	if err := lifecycle.RunTickerLoop(ctx, interval, tick); err != nil && ctx.Err() == nil {
 		s.logger.Error("Schedule poster loop stopped", slog.String("task", task), slog.Any("error", err))
+	}
+}
+
+func (s *Service) runTask(ctx context.Context, task string, fn func(context.Context) error) {
+	if err := fn(ctx); err != nil && ctx.Err() == nil {
+		s.logger.Error("Schedule poster task failed", slog.String("task", task), slog.Any("error", err))
 	}
 }
 
@@ -289,13 +291,13 @@ func (s *Service) collectCommunity(ctx context.Context, channelIDs []string, now
 
 // handOverUnreviewed는 자동 검토가 꺼졌으면 켜져 있던 동안 들어와 기다리던 후보가 목록·알림 없이 만료되지 않도록 바로 넘긴다.
 func (s *Service) handOverUnreviewed(ctx context.Context, now time.Time, autoReview bool) error {
-	before := now
+	before, reason := now, posterstore.ReviewReasonAutoReviewOff
 
 	if autoReview {
-		before = now.Add(-handOverAfter)
+		before, reason = now.Add(-handOverAfter), posterstore.ReviewReasonStale
 	}
 
-	handed, err := s.reviews.HandOverUnreviewed(ctx, before)
+	handed, err := s.reviews.HandOverUnreviewed(ctx, before, reason)
 	if err != nil {
 		return fmt.Errorf("hand over unreviewed schedule posters: %w", err)
 	}
