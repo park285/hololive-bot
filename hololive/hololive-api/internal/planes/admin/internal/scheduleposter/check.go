@@ -17,11 +17,15 @@ type tableRow struct {
 
 type translationTable []tableRow
 
+func (r tableRow) String() string {
+	return r.original + " " + tableSeparator + " " + r.korean
+}
+
 func (t translationTable) String() string {
 	lines := make([]string, 0, len(t))
 
 	for _, row := range t {
-		lines = append(lines, row.original+" "+tableSeparator+" "+row.korean)
+		lines = append(lines, row.String())
 	}
 
 	return strings.Join(lines, "\n")
