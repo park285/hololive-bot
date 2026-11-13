@@ -44,12 +44,15 @@ cat > "$fixture/valid.json" <<'JSON'
   {"set":{"name":"postgres_sources","elem":["100.100.1.3","100.100.1.5","100.100.1.6","100.100.1.8"]}},
   {"chain":{"hook":"forward","name":"forward","prio":-20}},
   {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
-  {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}}
+  {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
+  {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
+  {"set":{"name":"bot_postgres_sources","elem":["100.100.1.3"]}}
 ]}
 JSON
 cp "$fixture/valid.json" "$fixture/firewall.json"
 admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
-for filter in '.nftables[0].set.elem = []' '.nftables[0].set.elem += ["0.0.0.0/0"]' 'del(.nftables[1])' 'del(.nftables[-1])'; do
+for filter in '.nftables[0].set.elem = []' '.nftables[0].set.elem += ["0.0.0.0/0"]' 'del(.nftables[1])' 'del(.nftables[2])' \
+    'del(.nftables[-1])' '.nftables[-1].set.elem += ["100.100.1.5"]'; do
     jq "$filter" "$fixture/valid.json" > "$fixture/firewall.json"
     if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then
         echo 'incomplete firewall accepted' >&2
