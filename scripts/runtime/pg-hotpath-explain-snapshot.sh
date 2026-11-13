@@ -51,7 +51,8 @@ Claim plans:
   the script writes nothing; the stats window statement still holds a snapshot for the
   whole window, so keep the window short on production. --analyze runs them with EXPLAIN (ANALYZE, BUFFERS)
   inside a rolled-back transaction and checks Rows Removed by Filter. Use it only on a
-  local fixture DB: ROLLBACK does not undo row locks held meanwhile, WAL, or dead tuples.
+  local fixture DB: ROLLBACK does not undo WAL, dead tuples, or workers skipping the rows
+  it locked meanwhile.
 
 Outputs:
   invalid-indexes.txt
