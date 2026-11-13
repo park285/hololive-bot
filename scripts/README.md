@@ -1,6 +1,6 @@
 # Scripts
 
-루트 `scripts/`는 현재 11개 영역을 운영합니다: `ci/`, `architecture/`, `deploy/`, `logs/`, `review/`, `runtime/`, `smoke/`, `maintenance/`, `ops/`, `refactor/`, `systemd/`.
+루트 `scripts/`는 현재 13개 영역을 운영합니다: `ci/`, `architecture/`, `build/`, `deploy/`, `experiments/`, `logs/`, `review/`, `runtime/`, `maintenance/`, `ops/`, `perf/`, `refactor/`, `systemd/`.
 
 GitHub Release 게시·본문 수정: `bash scripts/publish-release.sh <tag> <previous-tag> [preview|create|edit]`. 기본은 미리보기이며 [릴리즈 runbook](../docs/current/runbooks/release.md)의 승인·검증 절차를 따릅니다.
 
@@ -30,7 +30,6 @@ PR/릴리스 전 제품 결함 게이트와 운영 검증 기록 렌더링 도�
   - Osaka native: `./scripts/deploy/ap-host-native-deploy.sh osaka [--dry-run|--apply]`
   - `./scripts/deploy/ap-completion-check.sh <host>`
   - Osaka native rollback: `./scripts/deploy/ap-host-native-rollback.sh osaka [--dry-run|--apply]`
-  - `./scripts/deploy/ap-iris-h3-trust-preflight.sh <host>`
 - Quadlet collector b(iris-seoul)·c(중앙): `PO_<B|C>_SSH_TARGET=<host> APPROVE_PO_<B|C>_DEPLOY=true ./scripts/deploy/po-central-cutover.sh <b|c> deploy`, `check|rollback <backup>`
 
 ## 4. logs/
@@ -67,9 +66,10 @@ source exporter의 `hololive-review-bundle-v1`도 같은 verifier로 검증합�
 - `./scripts/runtime/set-iris-base-url.sh`
 
 ## 7. maintenance/
-수동 적용용 PostgreSQL 유지보수 SQL입니다.
+수동 적용용 PostgreSQL 유지보수 SQL과 정리 도구입니다.
 
 - `hololive_msa_hot_path_observability.sql`
+- `prune-ap-artifacts.sh` - `ap-host-native-deploy.sh`가 남긴 빌드 페이로드를 최신 N개만 남기는 수동 정리(기본 dry-run)
 
 ## 8. ops/
 PostgreSQL failover 운영 자산입니다.

@@ -104,8 +104,6 @@ write_host_env() {
     printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"
     printf 'HOLOLIVE_H3_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_H3_KEY_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.key\n'
-    printf 'HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
-    printf 'HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1\n'
     printf 'HOLOLIVE_METRICS_ADDR=%s:30096\n' "$AP_SSH_HOST"
     printf 'HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HEALTHCHECK_SERVER_NAME=127.0.0.1\n'

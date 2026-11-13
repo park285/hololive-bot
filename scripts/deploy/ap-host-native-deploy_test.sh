@@ -42,9 +42,6 @@ elif (
   elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
        ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
     record_fail "generated host env must use the current Seoul primary endpoint"
-  elif ! grep -Eq '^HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=.+' "${generated_env}" ||
-       ! grep -Eq '^HOLOLIVE_INTERNAL_H3_SERVER_NAME=.+' "${generated_env}"; then
-    record_fail "generated host env must emit both dedicated internal H3 client keys"
   else
     pass "generated host env contents have 0 CACHE lines"
     pass "generated host env contents have 0 SETTINGS_DIR lines"

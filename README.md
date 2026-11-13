@@ -46,7 +46,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 
 ## 모듈 경로 계약 (Module Path Contract)
 
-루트 `go.mod`와 `hololive/*`의 다섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 다섯 업무 모듈 분리는 루트 `go.work`의 `use` 목록이 소유하며, 이 목록에서 빠진 모듈은 아래 `go build`/`go test` 명령에서 바로 해석 실패한다. 외부 소비자가 없으므로 원격 경로와 맞추는 작업은 `hololive-shared`가 contracts·domain 수준으로 줄어든 뒤 모듈 수 축소와 함께 재검토한다(`DEC-20260902-hololive-module-layout-go-work-only`).
+`hololive/*`의 다섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 다섯 업무 모듈 분리는 루트 `go.work`의 `use` 목록이 소유하며, 이 목록에서 빠진 모듈은 아래 `go build`/`go test` 명령에서 바로 해석 실패한다. 외부 소비자가 없으므로 원격 경로와 맞추는 작업은 `hololive-shared`가 contracts·domain 수준으로 줄어든 뒤 모듈 수 축소와 함께 재검토한다(`DEC-20260902-hololive-module-layout-go-work-only`).
 
 ## 개발 및 검증 (Development & Test)
 

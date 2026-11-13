@@ -25,10 +25,6 @@ func (e *StrictEnv) Bool(key string, def bool) bool {
 	return e.keep(sharedenv.BoolE(key, def))
 }
 
-func (e *StrictEnv) Float(key string, def float64) float64 {
-	return e.keep(sharedenv.FloatE(key, def))
-}
-
 // Seconds는 정수 초 단위 env를 읽는다. 기본값은 초 미만을 버린 값이고, time.Duration 범위를 넘으면 오류다.
 func (e *StrictEnv) Seconds(key string, def time.Duration) time.Duration {
 	return e.keep(StrictDurationUnitEnv(key, def, time.Second))

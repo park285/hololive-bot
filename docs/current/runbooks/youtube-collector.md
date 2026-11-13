@@ -66,7 +66,6 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 
 - API는 generation `1` 관측을 unsupported contract로 거부합니다. generation `1` 제거 조건은 2026-09-26 T18에서 당시 current generation `2`와 미처리 generation `1` 관측 0건으로 확인했습니다.
 - collector는 DB current generation이 Holodex `2` 또는 YouTube.js `3`이라는 provider별 계약과 다르면 `configuration_error/CONFIGURATION`으로 수집을 끝내고 다른 형식을 내보내지 않습니다.
-- migration `225_live_snapshot_contract_generation_two.sql`은 빈 DB bootstrap과 dbtest의 시드(migration 144의 generation `1`)를 `2`로 맞춘 과거 전환입니다. 이 migration의 목표값을 현재 운영 generation으로 해석하지 않습니다.
 - 새 generation을 도입할 때는 API-first(API가 두 generation을 모두 지원) → DB generation 전환(별도 운영 승인) → collector 배포 순서를 지킵니다.
 
 ## Live absence evidence activation
