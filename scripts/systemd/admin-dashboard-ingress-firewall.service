@@ -10,8 +10,9 @@ RemainAfterExit=yes
 ExecStartPre=-/usr/sbin/nft delete table inet admin_dashboard_ingress
 ExecStart=/usr/sbin/nft -f /etc/nftables.d/admin-dashboard-ingress.nft
 # 규칙 갱신은 restart가 아니라 reload로 한다. restart·stop은 Requires=로 묶인 holo-postgres·hololive-api·
-# admin-dashboard-ingress로 전파되지만 reload는 전파되지 않는다. table 선언·삭제·재정의를 한 nft
-# transaction으로 적용하므로 규칙이 빈 순간이 없고, 새 파일이 거부되면 기존 table이 그대로 남는다.
+# admin-dashboard-ingress와 두 봇의 chatbotgo-postgres·twentyq-postgres로 전파되지만 reload는 전파되지 않는다.
+# table 선언·삭제·재정의를 한 nft transaction으로 적용하므로 규칙이 빈 순간이 없고, 새 파일이 거부되면
+# 기존 table이 그대로 남는다.
 ExecReload=/bin/sh -c '{ printf "table inet admin_dashboard_ingress\\ndelete table inet admin_dashboard_ingress\\n"; cat /etc/nftables.d/admin-dashboard-ingress.nft; } | /usr/sbin/nft -f -'
 ExecStop=-/usr/sbin/nft delete table inet admin_dashboard_ingress
 
