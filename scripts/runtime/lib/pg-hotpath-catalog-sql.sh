@@ -324,7 +324,7 @@ alarm_claim_sql() {
 -- expected-index: idx_alarm_dispatch_deliveries_send_unit_due
 BEGIN;
 SET LOCAL statement_timeout = '5s';
-EXPLAIN (ANALYZE, BUFFERS)
+EXPLAIN :claim_explain_options
 WITH clock AS MATERIALIZED (
     SELECT clock_timestamp() AS now
 ), due_window AS MATERIALIZED (
@@ -399,7 +399,7 @@ youtube_outbox_claim_sql() {
 -- expected-index: idx_yno_pending_due_created_id
 BEGIN;
 SET LOCAL statement_timeout = '5s';
-EXPLAIN (ANALYZE, BUFFERS)
+EXPLAIN :claim_explain_options
 WITH clock AS MATERIALIZED (
     SELECT sampled.at,
            sampled.at - INTERVAL '5 minutes' AS lock_cutoff,

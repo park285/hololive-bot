@@ -35,7 +35,7 @@ done
 
 usage() {
   cat <<'EOF'
-usage: pg-hotpath-explain-snapshot.sh [--output-dir DIR] [--stats-window-seconds N] [--print-sql] [--no-index-check]
+usage: pg-hotpath-explain-snapshot.sh [--output-dir DIR] [--stats-window-seconds N] [--print-sql] [--no-index-check] [--analyze]
 
 Captures PostgreSQL EXPLAIN snapshots and MVCC evidence for Hololive alarm/youtube hot paths.
 
@@ -45,6 +45,13 @@ Connection:
   script's libpq allowlist; use PGPASSWORD or a password file.
   The script does not print secrets.
   Requires PostgreSQL 18 pg_stat_statements fields: toplevel and stats_since.
+
+Claim plans:
+  By default the claim UPDATEs are planned with EXPLAIN (SETTINGS) and not executed, so
+  the script writes nothing; the stats window statement still holds a snapshot for the
+  whole window, so keep the window short on production. --analyze runs them with EXPLAIN (ANALYZE, BUFFERS)
+  inside a rolled-back transaction and checks Rows Removed by Filter. Use it only on a
+  local fixture DB: ROLLBACK does not undo row locks held meanwhile, WAL, or dead tuples.
 
 Outputs:
   invalid-indexes.txt
@@ -64,6 +71,7 @@ EOF
 output_dir=""
 print_sql=false
 index_check=true
+analyze=false
 stats_window_seconds=60
 
 while [[ $# -gt 0 ]]; do
@@ -82,6 +90,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-index-check)
       index_check=false
+      shift
+      ;;
+    --analyze)
+      analyze=true
       shift
       ;;
     -h|--help)
@@ -179,8 +191,10 @@ mvcc_database_state_sql | run_psql mvcc-database-state.txt
 dead_tuples_sql | run_psql dead-tuples-autovacuum.txt
 claim_statement_window_sql | run_psql claim-statement-window.txt -qAt -F '|' \
   -v stats_window_seconds="${stats_window_seconds}"
-alarm_claim_sql | run_psql alarm-dispatch-claim-explain.txt
-youtube_outbox_claim_sql | run_psql youtube-outbox-claim-explain.txt
+claim_explain_options='(SETTINGS)'
+[[ "${analyze}" != true ]] || claim_explain_options='(ANALYZE, BUFFERS)'
+alarm_claim_sql | run_psql alarm-dispatch-claim-explain.txt -v claim_explain_options="${claim_explain_options}"
+youtube_outbox_claim_sql | run_psql youtube-outbox-claim-explain.txt -v claim_explain_options="${claim_explain_options}"
 
 if [[ -s "${output_dir}/invalid-indexes.txt" ]]; then
   echo "[FAIL] invalid or unready indexes detected; see ${output_dir}/invalid-indexes.txt" >&2
@@ -347,14 +361,18 @@ rows_removed_exceeds_limit() {
   ' "${plan_file}"
 }
 
-for plan_file in \
-  "${output_dir}/alarm-dispatch-claim-explain.txt" \
-  "${output_dir}/youtube-outbox-claim-explain.txt"; do
-  if rows_removed_exceeds_limit "${plan_file}"; then
-    echo "[FAIL] Rows Removed by Filter exceeds 1000; see ${plan_file}" >&2
-    exit 1
-  fi
-done
+if [[ "${analyze}" == true ]]; then
+  for plan_file in \
+    "${output_dir}/alarm-dispatch-claim-explain.txt" \
+    "${output_dir}/youtube-outbox-claim-explain.txt"; do
+    if rows_removed_exceeds_limit "${plan_file}"; then
+      echo "[FAIL] Rows Removed by Filter exceeds 1000; see ${plan_file}" >&2
+      exit 1
+    fi
+  done
+else
+  echo "[SKIP] Rows Removed by Filter needs --analyze on a local fixture DB"
+fi
 
 if [[ "${index_check}" == "true" ]]; then
   echo "[PASS] required claim indexes are ready, valid, and structurally correct"
