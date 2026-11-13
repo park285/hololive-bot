@@ -41,7 +41,9 @@ Captures PostgreSQL EXPLAIN snapshots and MVCC evidence for Hololive alarm/youtu
 
 Connection:
   Prefer DATABASE_URL, or standard PG* environment variables accepted by psql.
-  The script does not read or print secrets.
+  DATABASE_URL must be a postgres:// URI without a password, with query keys on the
+  script's libpq allowlist; use PGPASSWORD or a password file.
+  The script does not print secrets.
   Requires PostgreSQL 18 pg_stat_statements fields: toplevel and stats_since.
 
 Outputs:
@@ -118,6 +120,39 @@ if [[ "${print_sql}" == "true" ]]; then
   exit 0
 fi
 
+# database_url_without_secrets는 --dbname 인자(ps로 보임)로 넘길 URL에 비밀값이 들 수 없음을 확인한다. 대괄호 host 안의
+# '?' 때문에 질의 시작을 정확히 집을 수 없고 libpq는 키 둘레 공백을 버리고 decode하므로, 키는 허용 목록과 그대로 비교한다.
+database_url_without_secrets() {
+  local LC_ALL=C
+  local rest param
+  local -a params
+
+  [[ "$1" =~ ^postgres(ql)?:// && "$1" != *[[:cntrl:]]* ]] || return 1
+  rest="${1#*://}"
+  # 인코딩하지 않은 '/'가 든 비밀번호는 libpq가 user info로 읽지 않아도 인자에 남으므로 첫 '@' 앞의 ':'를 모두 막는다.
+  [[ "${rest}" != *@* || "${rest%%@*}" != *:* ]] || return 1
+  [[ "${rest%%/*}" != *@* ]] || rest="${rest#*@}"
+  [[ "${rest}" == *\?* ]] || return 0
+  IFS='?&' read -r -a params <<< "${rest#*\?}"
+  for param in "${params[@]}"; do
+    [[ "${param}" == *=* ]] || continue
+    case "${param%%=*}" in
+      host|hostaddr|port|dbname|user|passfile|service|connect_timeout|client_encoding|options \
+        |application_name|fallback_application_name|keepalives|keepalives_idle|keepalives_interval \
+        |keepalives_count|tcp_user_timeout|channel_binding|sslmode|sslnegotiation|sslcompression|sslcert \
+        |sslkey|sslcertmode|sslrootcert|sslcrl|sslcrldir|sslsni|requirepeer|require_auth \
+        |min_protocol_version|max_protocol_version|ssl_min_protocol_version|ssl_max_protocol_version \
+        |gssencmode|krbsrvname|gsslib|gssdelegation|target_session_attrs|load_balance_hosts) ;;
+      *) return 1 ;;
+    esac
+  done
+}
+
+if [[ -n "${DATABASE_URL:-}" ]] && ! database_url_without_secrets "${DATABASE_URL}"; then
+  echo "DATABASE_URL must be a postgres:// or postgresql:// URI without a password or control characters, whose query keys are on the script's libpq allowlist; supply the password through PGPASSWORD or a password file" >&2
+  exit 2
+fi
+
 if [[ -z "${output_dir}" ]]; then
   output_dir="artifacts/pg-hotpath-explain/$(date -u +%Y%m%dT%H%M%SZ)"
 fi
@@ -130,7 +165,8 @@ run_psql() {
   shift
 
   if [[ -n "${DATABASE_URL:-}" ]]; then
-    PGSERVICEFILE=/dev/null PGDATABASE="${DATABASE_URL}" psql -X -v ON_ERROR_STOP=1 -o "${out_file}" "$@"
+    # libpq는 PGDATABASE 환경변수의 URL을 접속 문자열로 풀지 않으므로 --dbname으로 넘긴다.
+    PGSERVICEFILE=/dev/null psql -X -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -o "${out_file}" "$@"
   else
     psql -X -v ON_ERROR_STOP=1 -o "${out_file}" "$@"
   fi
@@ -182,6 +218,8 @@ validate_claim_statement_window() {
   local alarm_claim_count=0
   local youtube_claim_count=0
   local slow_claim_count=0
+  local unmatched_alarm_count=0
+  local unmatched_youtube_count=0
   local record_type status started_at finished_at requested_seconds
   local start_dealloc finish_dealloc claim_target dbid userid queryid toplevel
   local start_stats_since finish_stats_since delta_calls
@@ -236,6 +274,18 @@ validate_claim_statement_window() {
           slow_claim_count=$((slow_claim_count + 1))
         fi
         ;;
+      unmatched)
+        if [[ ! "${claim_target}" =~ ^(alarm_dispatch|youtube_outbox)$ \
+          || ! "${delta_calls}" =~ ^[1-9][0-9]*$ \
+          || -z "${query}" ]]; then
+          echo "[FAIL] malformed unmatched claim-shaped statement record" >&2
+          return 1
+        fi
+        case "${claim_target}" in
+          alarm_dispatch) unmatched_alarm_count=$((unmatched_alarm_count + 1)) ;;
+          youtube_outbox) unmatched_youtube_count=$((unmatched_youtube_count + 1)) ;;
+        esac
+        ;;
       "")
         ;;
       *)
@@ -257,12 +307,22 @@ validate_claim_statement_window() {
     echo "[FAIL] claim statement window duration does not match the requested interval; see ${output_dir}/claim-statement-window.txt" >&2
     return 1
   fi
+  local stale_hint=""
+  if (( alarm_claim_count == 0 && unmatched_alarm_count > 0 )); then
+    stale_hint+="; alarm_dispatch ran ${unmatched_alarm_count} unmatched UPDATE ... SKIP LOCKED statement(s)"
+  fi
+  if (( youtube_claim_count == 0 && unmatched_youtube_count > 0 )); then
+    stale_hint+="; youtube_outbox ran ${unmatched_youtube_count} unmatched UPDATE ... SKIP LOCKED statement(s)"
+  fi
+  if [[ -n "${stale_hint}" ]]; then
+    stale_hint+=" (if one is the current claim SQL, the claim fingerprint is stale)"
+  fi
   if [[ "${claim_count}" -eq 0 ]]; then
-    echo "[FAIL] no fresh claim executions observed in the bounded stats window; see ${output_dir}/claim-statement-window.txt" >&2
+    echo "[FAIL] no fresh claim executions observed in the bounded stats window${stale_hint}; see ${output_dir}/claim-statement-window.txt" >&2
     return 1
   fi
   if [[ "${alarm_claim_count}" -eq 0 || "${youtube_claim_count}" -eq 0 ]]; then
-    echo "[FAIL] one or more required hot paths have no fresh claim execution; see ${output_dir}/claim-statement-window.txt" >&2
+    echo "[FAIL] one or more required hot paths have no fresh claim execution${stale_hint}; see ${output_dir}/claim-statement-window.txt" >&2
     return 1
   fi
   if [[ "${slow_claim_count}" -ne 0 ]]; then

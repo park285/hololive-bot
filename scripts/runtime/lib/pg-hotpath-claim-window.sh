@@ -25,8 +25,11 @@ start_claims AS MATERIALIZED (
         statements.calls,
         statements.total_exec_time,
         statements.query,
+        fingerprint.is_alarm <> fingerprint.is_youtube AS matched,
         CASE
             WHEN fingerprint.is_alarm THEN 'alarm_dispatch'
+            WHEN fingerprint.is_youtube THEN 'youtube_outbox'
+            WHEN fingerprint.alarm_shaped THEN 'alarm_dispatch'
             ELSE 'youtube_outbox'
         END AS claim_target
     FROM start_info
@@ -56,7 +59,11 @@ start_claims AS MATERIALIZED (
             AND statements.query ~* 'RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id'
             AND statements.query ~* 'outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload'
             AND statements.query ~* 'FROM[[:space:]]+updated'
-            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube,
+            statements.query ~* 'UPDATE[[:space:]]+alarm_dispatch_deliveries[[:space:]]'
+            AND statements.query ~* 'SKIP[[:space:]]+LOCKED' AS alarm_shaped,
+            statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]'
+            AND statements.query ~* 'SKIP[[:space:]]+LOCKED' AS youtube_shaped
     ) AS fingerprint
     WHERE start_info.stats_reset IS NOT NULL
       AND statements.dbid = (
@@ -69,7 +76,14 @@ start_claims AS MATERIALIZED (
       AND statements.query !~* '(^|[^[:alnum:]_])EXPLAIN([^[:alnum:]_]|$)'
       AND statements.query NOT ILIKE '%pg_stat_statements%'
       AND statements.query NOT LIKE '%hololive-pg-hotpath-stats-observer%'
-      AND fingerprint.is_alarm <> fingerprint.is_youtube
+      AND (
+          fingerprint.is_alarm <> fingerprint.is_youtube
+          OR (
+              NOT fingerprint.is_alarm
+              AND NOT fingerprint.is_youtube
+              AND fingerprint.alarm_shaped <> fingerprint.youtube_shaped
+          )
+      )
 ),
 wait_for_window AS MATERIALIZED (
     SELECT
@@ -94,8 +108,11 @@ finish_claims AS MATERIALIZED (
         statements.calls,
         statements.total_exec_time,
         statements.query,
+        fingerprint.is_alarm <> fingerprint.is_youtube AS matched,
         CASE
             WHEN fingerprint.is_alarm THEN 'alarm_dispatch'
+            WHEN fingerprint.is_youtube THEN 'youtube_outbox'
+            WHEN fingerprint.alarm_shaped THEN 'alarm_dispatch'
             ELSE 'youtube_outbox'
         END AS claim_target
     FROM wait_for_window
@@ -125,7 +142,11 @@ finish_claims AS MATERIALIZED (
             AND statements.query ~* 'RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id'
             AND statements.query ~* 'outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload'
             AND statements.query ~* 'FROM[[:space:]]+updated'
-            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube,
+            statements.query ~* 'UPDATE[[:space:]]+alarm_dispatch_deliveries[[:space:]]'
+            AND statements.query ~* 'SKIP[[:space:]]+LOCKED' AS alarm_shaped,
+            statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]'
+            AND statements.query ~* 'SKIP[[:space:]]+LOCKED' AS youtube_shaped
     ) AS fingerprint
     WHERE wait_for_window.claim_count >= 0
       AND statements.dbid = (
@@ -138,7 +159,14 @@ finish_claims AS MATERIALIZED (
       AND statements.query !~* '(^|[^[:alnum:]_])EXPLAIN([^[:alnum:]_]|$)'
       AND statements.query NOT ILIKE '%pg_stat_statements%'
       AND statements.query NOT LIKE '%hololive-pg-hotpath-stats-observer%'
-      AND fingerprint.is_alarm <> fingerprint.is_youtube
+      AND (
+          fingerprint.is_alarm <> fingerprint.is_youtube
+          OR (
+              NOT fingerprint.is_alarm
+              AND NOT fingerprint.is_youtube
+              AND fingerprint.alarm_shaped <> fingerprint.youtube_shaped
+          )
+      )
 ),
 finish_info AS MATERIALIZED (
     SELECT
@@ -163,6 +191,7 @@ paired_claims AS (
         start.claim_target AS start_claim_target,
         finish.claim_target AS finish_claim_target,
         COALESCE(finish.claim_target, start.claim_target) AS claim_target,
+        COALESCE(finish.matched, start.matched) AS matched,
         start.calls AS start_calls,
         finish.calls AS finish_calls,
         start.total_exec_time AS start_total_exec_time,
@@ -191,23 +220,28 @@ window_state AS (
             WHEN EXISTS (
                 SELECT 1
                 FROM paired_claims
-                WHERE start_stats_since IS NOT NULL
+                WHERE matched
+                  AND start_stats_since IS NOT NULL
                   AND finish_stats_since IS NOT NULL
                   AND start_stats_since IS DISTINCT FROM finish_stats_since
             ) THEN 'statement_stats_reset'
             WHEN EXISTS (
                 SELECT 1
                 FROM paired_claims
-                WHERE start_claim_target IS DISTINCT FROM finish_claim_target
+                WHERE matched
+                  AND start_claim_target IS DISTINCT FROM finish_claim_target
                   AND start_claim_target IS NOT NULL
                   AND finish_claim_target IS NOT NULL
             ) THEN 'fingerprint_changed'
             WHEN EXISTS (
                 SELECT 1
                 FROM paired_claims
-                WHERE finish_calls IS NULL
-                   OR finish_calls < COALESCE(start_calls, 0)
-                   OR finish_total_exec_time < COALESCE(start_total_exec_time, 0)
+                WHERE matched
+                  AND (
+                      finish_calls IS NULL
+                      OR finish_calls < COALESCE(start_calls, 0)
+                      OR finish_total_exec_time < COALESCE(start_total_exec_time, 0)
+                  )
             ) THEN 'counter_discontinuity'
             ELSE 'ok'
         END AS status
@@ -241,7 +275,7 @@ output_rows AS (
 
     SELECT
         1 AS sort_order,
-        'claim'::text AS record_type,
+        CASE WHEN paired_claims.matched THEN 'claim' ELSE 'unmatched' END::text AS record_type,
         ''::text AS status,
         ''::text AS started_at,
         ''::text AS finished_at,
@@ -266,6 +300,11 @@ output_rows AS (
     CROSS JOIN window_state
     WHERE window_state.status = 'ok'
       AND paired_claims.delta_calls > 0
+      AND (
+          paired_claims.matched
+          OR paired_claims.start_stats_since IS NULL
+          OR paired_claims.start_stats_since = paired_claims.finish_stats_since
+      )
 )
 SELECT
     record_type,
