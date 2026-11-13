@@ -1,6 +1,7 @@
 package scheduleposter_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -343,7 +344,7 @@ func TestStoreRetranslationFailureAndReject(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, image, published, "재번역 중에도 이전 번역본을 게시한다")
 
-	recorded, err = store.RecordTranslationFailure(ctx, scheduleposter.PendingTranslation{ID: 101, Revision: revision}, "translation_failed")
+	recorded, err = store.RecordTranslationFailure(ctx, scheduleposter.PendingTranslation{ID: 101, Revision: revision}, "translation_failed", scheduleposter.TranslationInputs{})
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -371,6 +372,57 @@ func TestStoreRetranslationFailureAndReject(t *testing.T) {
 	summary, err := store.Summary(ctx)
 	require.NoError(t, err)
 	require.Equal(t, scheduleposter.Summary{PendingCount: 1, LatestCandidateID: 102}, summary)
+}
+
+func TestStoreReplacesTheSavedTranslationInputsOnEveryRecord(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store := newStore(t)
+	pending := confirmedPending(t, store)
+
+	retranslate := func() scheduleposter.PendingTranslation {
+		t.Helper()
+
+		poster, err := store.Get(ctx, 101)
+		require.NoError(t, err)
+
+		_, err = store.RequestTranslation(ctx, 101, poster.Revision)
+		require.NoError(t, err)
+
+		pending, err := store.PendingTranslations(ctx, 10)
+		require.NoError(t, err)
+		require.Len(t, pending, 1)
+
+		return pending[0]
+	}
+
+	saved := scheduleposter.TranslationInputs{SHA256: bytes.Repeat([]byte{1}, 32), Transcript: []string{"週間スケジュール", "21:00〜"}, Table: "週間スケジュール ⇒ 주간 스케줄"}
+
+	recorded, err := store.RecordTranslationFailure(ctx, pending, "translation_failed", saved)
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	pending = retranslate()
+	require.Equal(t, saved, pending.Inputs)
+
+	recorded, err = store.RecordTranslationFailure(ctx, pending, "translation_failed", scheduleposter.TranslationInputs{})
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	pending = retranslate()
+	require.Empty(t, pending.Inputs, "빈 입력으로 기록하면 남긴 판독·번역표를 지운다")
+
+	recorded, err = store.RecordTranslationFailure(ctx, pending, "translation_failed", saved)
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	pending = retranslate()
+
+	recorded, err = store.RecordTranslation(ctx, pending, scheduleposter.Image{MIME: "image/jpeg", Data: []byte{0xff, 0xd8, 0xff}})
+	require.NoError(t, err)
+	require.True(t, recorded)
+	require.Empty(t, retranslate().Inputs, "성공한 번역은 판독·번역표를 남기지 않는다")
 }
 
 func TestStoreRetention(t *testing.T) {
