@@ -126,6 +126,9 @@ func TestStoreConfirmChecksRevisionWeekAndState(t *testing.T) {
 	_, err = store.Confirm(ctx, 101, revision, weekStart, weekEnd)
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidState)
 
+	_, err = store.Confirm(ctx, 101, revision, date(t, "2026-12-01"), date(t, "2026-12-07"))
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "검토 대기가 아니면 주가 멀어도 상태 오류다")
+
 	_, err = store.RequestTranslation(ctx, 101, revision)
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 대기 중에는 재번역을 예약하지 않는다")
 }
