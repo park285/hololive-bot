@@ -49,6 +49,15 @@ podman_rootless="$("${PODMAN_PATH}" info --format '{{.Host.Security.Rootless}}' 
   printf '%s\n' 'refusing rootful Podman; run the harness as an unprivileged user' >&2
   exit 2
 }
+# --pull=never에서는 --platform이 효과가 없어, 같은 digest의 다른 플랫폼 이미지가 로컬에 있으면 podman은
+# 경고만 내고 에뮬레이션으로 실행한다. 내려받지 않는 계약을 지키려고 실행 전에 플랫폼을 비교해 멈춘다.
+host_platform="$("${PODMAN_PATH}" info --format '{{.Host.OS}}/{{.Host.Arch}}')"
+image_platform="$("${PODMAN_PATH}" image inspect --format '{{.Os}}/{{.Architecture}}' "${POSTGRES_IMAGE}")"
+[[ "${image_platform}" == "${host_platform}" ]] || {
+  printf 'refusing %s test image on %s host; run: podman pull --platform %s %s\n' \
+    "${image_platform}" "${host_platform}" "${host_platform}" "${POSTGRES_IMAGE}" >&2
+  exit 2
+}
 
 RUN_ID="$(date +%s)-${BASHPID}-${RANDOM}"
 BASE_NAME="hololive-pg-failover-it-${RUN_ID}"

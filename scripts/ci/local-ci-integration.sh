@@ -13,8 +13,6 @@ INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-docker.io/valkey/valkey:9.
 INTEGRATION_TEST_DB_CONTAINER=""
 INTEGRATION_TEST_VALKEY_CONTAINER=""
 # 일회용 PostgreSQL·Valkey는 rootless Podman으로 띄운다. short-name 해석에 기대지 않도록 image는 전체 이름이다.
-# 같은 index digest의 다른 플랫폼 이미지(교차 빌드가 받은 것)가 로컬에 있으면 podman은 경고만 내고
-# 에뮬레이션으로 실행해 시간 의존 시험이 깨진다. 호스트 플랫폼을 명시하면 맞는 이미지를 쓰거나 받는다.
 
 check_integration_tag_compilation() {
     run_step "Integration-tag vet" \
@@ -64,6 +62,8 @@ provision_integration_test_database() {
     local published_port
     local owner_token
 
+    # 같은 index digest의 다른 플랫폼 이미지(교차 빌드가 받은 것)가 로컬에 있으면 podman은 경고만 내고
+    # 에뮬레이션으로 실행해 시간 의존 시험이 깨진다. 호스트 플랫폼을 명시하면 맞는 이미지를 쓰거나 받는다.
     platform="$(podman info --format '{{.Host.OS}}/{{.Host.Arch}}')"
     INTEGRATION_TEST_DB_CONTAINER="$(podman run --detach --rm \
         --platform "${platform}" \

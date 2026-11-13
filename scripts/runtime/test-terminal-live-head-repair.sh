@@ -8,6 +8,14 @@ name="iris-terminal-head-test-$$"
 # kapu rootless Podman에 이미 있는 고정 image만 쓴다(local CI 통합 DB와 같은 참조).
 image=docker.io/library/postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
 cid=
+# --pull=never에서는 --platform이 효과가 없어, 같은 digest의 다른 플랫폼 이미지가 로컬에 있으면 podman은
+# 경고만 내고 에뮬레이션으로 실행한다. 내려받지 않는 계약을 지키려고 실행 전에 플랫폼을 비교해 멈춘다.
+host_platform=$(podman info --format '{{.Host.OS}}/{{.Host.Arch}}')
+image_platform=$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$image")
+if [[ "$image_platform" != "$host_platform" ]]; then
+  echo "test image is $image_platform but host is $host_platform; run: podman pull --platform $host_platform $image" >&2
+  exit 1
+fi
 cleanup() {
   if [[ -n "$cid" ]]; then podman rm -f -v "$cid" >/dev/null; fi
   rm -rf "$work"
