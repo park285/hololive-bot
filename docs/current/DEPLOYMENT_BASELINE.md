@@ -57,11 +57,9 @@ Seoul `b`는 `deploy/podman/iris-seoul/`의 Quadlet unit을 사용하고 `po-cen
 주소 계약은 그대로입니다. AP `a/b/d`는 기존 호스트에 남고, 새 중앙 `c`만 이전했습니다.
 동일 ARM64 운영 이미지와 전체 PostgreSQL cold copy를 사용했으며 추가 schema migration은 없었습니다.
 이관 검증 후 사용자 승인으로 옛 중앙 VM을 삭제하여 `TERMINATED`를 확인했습니다.
-100GB 부트 볼륨은 분리된 `AVAILABLE` 상태로 디스크·이미지·배포 파일을 보존합니다.
-복구에는 새 VM 생성이 필요하며, 옛 관리 주소 `100.100.1.9`는 현재 접속 가능한 서버가 아닙니다.
-보존 볼륨의 부팅 unit은 disabled이고, 종료 전에 container restart policy를 `no`로 설정했습니다.
-`fence.intent`가 자동 primary 재기동을 막습니다. 서울 쓰기 재개 이후에는 최신 데이터를
-역이관하지 않고 옛 DB를 다시 primary로 켜면 안 됩니다.
+분리 보존하던 100GB 부트 볼륨은 미연결을 확인한 뒤 2026-11-13에 사용자 승인으로 삭제했습니다.
+이관 이전 시점의 DB·이미지·배포 파일로 돌아갈 경로는 없으며, 옛 관리 주소 `100.100.1.9`는
+현재 접속 가능한 서버가 아닙니다.
 
 2026-10-08 서울 중앙을 같은 A1 2 OCPU·12GB·50GB 규격의 새 Ubuntu 26.04.1 LTS VM으로
 교체했습니다. 격리된 DB·앱 시험과 재부팅 검증 후 기존 `hololive-seoul` 이름과 `.8`을
@@ -72,7 +70,7 @@ schema migration은 실행하지 않았습니다. 새 호스트의 `hololive-com
 운영 재부팅 후 중앙·AP `a/b/c/d` readiness, 관리 gateway, 실제 DB TLS, metrics·로그 전달을 확인했습니다.
 옛 24.04 서울 인스턴스는 `TERMINATED`입니다. 초기 보존했던 50GB 부트 볼륨도 같은 날
 사용자의 추가 삭제 승인으로 `TERMINATED`를 확인했습니다. 이 서울 사본에서는 더 이상
-복구할 수 없습니다. Osaka 보존 디스크와 기존 별도 백업은 변경하지 않았으며 정기 백업은 재개하지 않았습니다.
+복구할 수 없습니다. 당시 Osaka 보존 디스크(2026-11-13 삭제)와 기존 별도 백업은 변경하지 않았으며 정기 백업은 재개하지 않았습니다.
 새 호스트의 Docker socket GID는 `987`이며 secret master와 운영 mirror의 비밀 아닌 값도 일치합니다.
 
 `<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, observability
@@ -133,7 +131,7 @@ timeline을 그대로 재기동하지 않습니다.
 |---|---|---|
 | `holo-postgres` | Primary PostgreSQL | Bridge-networked; unit `PublishPort=${POSTGRES_PORT_BIND_IP}:5433:5432` publishes `<tailnet-central>:5433`; TLS `ssl=on`; server certificate mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` |
 | `holo-postgres-standby` | 재활성화 참고용 Quadlet 대상(`deploy/quadlet/hololive-bot-standby/`) | Production에서 제거했습니다. 재도입하려면 새 base backup과 명시적 승인이 필요합니다. |
-| `postgres-failover.service` | 재활성화 참고용 fail-closed controller | Production unit과 timer는 제거했습니다. 저장소의 코드·unit template과 기존 원격 helper·정적 설정은 재구축 참고용으로 보존하며 자동 실행하지 않습니다. |
+| `postgres-failover.service` | 재활성화 참고용 fail-closed controller | Production unit과 timer는 제거했습니다. 저장소의 코드·unit template은 재구축 참고용으로 보존하며 자동 실행하지 않습니다. iris-seoul에 남아 있던 route 계정·sudoers·sshd Match·helper·설정은 2026-11-13에 제거했습니다. |
 | `hololive-db-migrate` | Migration job | `[Install]`이 없어 부팅 때 실행하지 않고 배포 helper가 app 활성화 전에 실행합니다; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, outbox wakeup 신호, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard-ingress` | 중앙 shortlink ingress | `admin-dashboard-ingress.container`가 정의합니다. 30192의 source-restricted shortlink와 loopback 30193의 health를 제공하며 관리자 웹을 호스팅하지 않습니다. |

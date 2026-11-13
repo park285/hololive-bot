@@ -179,6 +179,10 @@ set postgres_sources {
 type ipv4_addr
 elements = { $postgres_sources }
 }
+set bot_postgres_sources {
+type ipv4_addr
+elements = { $workstation }
+}
 chain input {
 type filter hook input priority -20; policy accept;
 iifname "lo" tcp dport 30192 accept
@@ -190,6 +194,9 @@ udp dport 30006 reject
 iifname "lo" tcp dport 5433 accept
 iifname "tailscale0" ip saddr @postgres_sources tcp dport 5433 accept
 tcp dport 5433 reject with tcp reset
+iifname "lo" tcp dport { 5432, 5458 } accept
+iifname "tailscale0" ip saddr @bot_postgres_sources tcp dport { 5432, 5458 } accept
+tcp dport { 5432, 5458 } reject with tcp reset
 }
 chain forward {
 type filter hook forward priority -20; policy accept;
@@ -197,6 +204,8 @@ ct status dnat ct original proto-dst 30006 udp dport 30006 iifname "tailscale0" 
 ct status dnat ct original proto-dst 30006 udp dport 30006 reject
 ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources accept
 ct status dnat ct original proto-dst 5433 tcp dport 5432 reject with tcp reset
+ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 iifname "tailscale0" ip saddr @bot_postgres_sources accept
+ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 reject with tcp reset
 }
 }
 EOF

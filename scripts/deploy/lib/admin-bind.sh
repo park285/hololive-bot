@@ -44,8 +44,10 @@ admin_network_assert_firewall() {
         [.nftables[] | .set // empty | select(.name == "postgres_sources")] as $sources |
         ($sources | length == 1) and
         ($sources[0].elem | sort == ["100.100.1.3", "100.100.1.5", "100.100.1.6", "100.100.1.8"]) and
+        ([.nftables[] | .set // empty | select(.name == "bot_postgres_sources")] as $bot |
+            ($bot | length == 1) and ($bot[0].elem == ["100.100.1.3"])) and
         any(.nftables[]; .chain.hook == "forward" and .chain.name == "forward" and .chain.prio == -20) and
-        ([.nftables[] | .rule // empty | select(.chain == "forward")] | length == 4)
+        ([.nftables[] | .rule // empty | select(.chain == "forward")] | length == 6)
     ' <<<"${rules}" >/dev/null; then
         echo '[ERROR] Active firewall is missing the approved DB source set or DNAT forward boundary' >&2
         return 1
