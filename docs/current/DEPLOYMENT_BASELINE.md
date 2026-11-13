@@ -179,7 +179,7 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 | `shared_buffers` | 1GB | `holo-postgres.container` 시작 인자; 컨테이너 한도의 25%를 배정하고 프로세스·파일 캐시 여유 유지 |
 | `wal_buffers` | 64MB | `holo-postgres.container` 시작 인자; 피크의 WAL 버퍼 포화에 대비 |
 | `effective_cache_size` | 3GB | `holo-postgres.container` 시작 인자; 공유 버퍼와 파일 캐시를 고려한 planner 추정치이며 별도 메모리 할당 아님 |
-| `random_page_cost` / `jit` | 1.1 / off (운영 미적용: 4 / on) | `holo-postgres.container`·`holo-postgres-standby.container` 시작 인자; NVMe SSD 기반 OCI Block Volume과 짧은 OLTP 쿼리 기준. unit 설치 뒤 첫 재시작부터 적용되므로 설치와 재시작을 함께 승인받음 |
+| `random_page_cost` / `jit` | 1.1 / off | `holo-postgres.container` 시작 인자(운영에 없는 참고용 `holo-postgres-standby.container`도 같은 값); NVMe SSD 기반 OCI Block Volume과 짧은 OLTP 쿼리 기준. 2026-11-13 02:36 UTC `holo-postgres` 재시작부터 운영에 적용됐고 이전 값은 4 / on(기본값)입니다. unit 설치 뒤 첫 재시작부터 적용되므로 설치와 재시작을 같은 창에서 합니다 |
 | `work_mem` / `maintenance_work_mem` | 4MB / 128MB | `holo-postgres.container` 시작 인자; 동시 쿼리·autovacuum의 메모리 배수를 고려 |
 | `max_wal_size` | 2GB | 기존 `holo-pg-data`의 `pgdata/postgresql.auto.conf`; `ALTER SYSTEM`과 설정 reload로 적용 |
 | `checkpoint_timeout` / `checkpoint_completion_target` | 15min / 0.9 | 기존 `postgresql.auto.conf` / PostgreSQL 기본값 유지 |
@@ -192,13 +192,18 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 승인된 초기 구성에서 위 운영 값을 별도로 적용해야 합니다.
 
 재기동 로그의 clean shutdown·ready, 실제 API·worker·collector `a/b/c/d` health/readiness와
-원격 AP의 DB TLSv1.3 재연결을 확인했습니다. DB 시작 시각은 `2026-10-14T12:33:12Z`이며
+원격 AP의 DB TLSv1.3 재연결을 확인했습니다. 당시 DB 시작 시각은 `2026-10-14T12:33:12Z`였고
 이미지 revision `af9b2b57cbf2e18b34f9ccecc46b28396e054ba3`는 유지했습니다.
 재기동 후 확인한 조정값과 `max_connections`의 `pending_restart`는 모두 false였습니다.
-파일 기본값과 Compose 시작 인자가 다른 항목은 이후 reload에서 다시 재시작 필요 표시가
+파일 기본값과 Quadlet 시작 인자가 다른 항목은 이후 reload에서 다시 재시작 필요 표시가
 나타날 수 있으므로 실제 값과 `source=command line`을 함께 확인합니다.
 
-재기동 뒤 239초 구간에서 DB commit 16,636건이 진행됐고 WAL 버퍼 포화·cgroup 메모리 상한
+2026-11-13에는 `random_page_cost`·`jit` 적용을 위해 Quadlet unit을 설치하고 `holo-postgres.service`를 다시
+재시작했습니다. 현재 DB 시작 시각은 `2026-11-13T02:36:50Z`이고 PostgreSQL 이미지 revision
+`4a64b7bc340e17e828288d2dcefb7f6dd0ffdc8b`는 유지했으며, `pending_restart`인 설정은 없습니다. API·alarm-worker·
+collector `a/b/c/d`·exporter가 다시 연결했고 API·alarm-worker·collector c의 unit `NRestarts`는 0이었습니다.
+
+2026-10-14 재기동 뒤 239초 구간에서 DB commit 16,636건이 진행됐고 WAL 버퍼 포화·cgroup 메모리 상한
 도달·OOM 증가량은 모두 0이었습니다. 별도 120초 디스크 관측의 평균 CPU I/O 대기는 0.35%였습니다.
 재기동 구간에는 종료·기동 중 DB 접속 오류가 일시적으로 발생했습니다. healthy 이후 30초부터
 확인한 중앙 DB·API·worker·collector와 AP a/b/d 로그에서는 추가 오류를 관측하지 않았습니다.
