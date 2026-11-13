@@ -93,8 +93,13 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   보안 전제인 `admin-dashboard-ingress-firewall.service`와 migration의 PostgreSQL 의존만 `Requires=`입니다.
 - 방화벽 규칙 갱신은 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로만 합니다. reload는 table
   선언·삭제·재정의를 한 nft transaction으로 적용해 규칙이 빈 순간이 없고, 새 파일이 거부되면 기존 table이 남습니다.
-  `restart`·`stop`은 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·`admin-dashboard-ingress`를 함께
-  재시작·정지합니다. reload는 전파되지 않습니다(systemd 257 user unit으로 실측).
+  `restart`·`stop`은 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·`admin-dashboard-ingress`와 두 봇의
+  `chatbotgo-postgres`·`twentyq-postgres`를 함께 재시작·정지합니다. reload는 전파되지 않습니다(systemd 257 user unit으로 실측).
+- `stop` 뒤 방화벽 unit을 다시 `start`해도 함께 멈춘 unit은 다시 뜨지 않습니다. 방화벽 unit이 active인지 확인한 뒤
+  `sudo systemctl start holo-postgres.service hololive-api.service admin-dashboard-ingress.service chatbotgo-postgres.service twentyq-postgres.service`로
+  직접 기동하고 각 unit 상태를 확인합니다.
+- 방화벽 unit을 없애려면 먼저 이 저장소와 두 봇 저장소 unit의 `Requires=`·`After=` 의존을 지우고 반영합니다.
+  의존이 남은 채 unit만 지우면 다음 기동이 실패합니다.
 - `hololive-api`를 시작하면 `hololive-alarm-worker`도 함께 시작됩니다(Wants).
 - collector c는 compose.env의 `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1`이면 `ExecCondition`으로 건너뜁니다.
 
