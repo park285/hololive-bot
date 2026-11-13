@@ -103,14 +103,42 @@ type TranslationInputs struct {
 	Table      string
 }
 
+// ReviewCandidate는 자동 검토를 기다리는 검토 대기 후보다.
+type ReviewCandidate struct {
+	ID        int64
+	ChannelID string
+	ImageURL  string
+	// ImageSHA256은 썸네일 후보만 채운다(PendingTranslation과 같다).
+	ImageSHA256 string
+	PostedAt    time.Time
+	Revision    int64
+}
+
+// WeekCoverage는 같은 멤버의 확정본이 후보의 주 범위를 얼마나 덮는지다.
+type WeekCoverage int
+
+const (
+	WeekUncovered WeekCoverage = iota
+	// WeekSame은 관리자가 확정한 같은 주 범위의 확정본이 있고 후보가 그 수정본일 수 없다는 뜻이다(다른 출처의 같은 일정, 확정본보다 먼저 올린 글).
+	WeekSame
+	// WeekOverlapping은 겹치는 확정본이 있지만 후보를 닫을 근거가 없다는 뜻이다. 범위가 다르거나, 덮는 확정본이 자동 확정본이거나,
+	// 후보가 같은 출처에서 확정본보다 늦게 올린 수정본일 수 있는 경우다.
+	WeekOverlapping
+)
+
+// Summary는 관리자 검토로 넘긴 후보만 센다. 자동 검토를 기다리거나 자동 확정·거절한 후보는 Console 알림을 바꾸지 않는다.
 type Summary struct {
 	PendingCount int64
-	// LatestCandidateID는 상태와 무관하게 가장 늦게 들어온 후보이므로 처리 뒤에도 뒤로 가지 않는다.
+	// LatestCandidateID는 상태와 무관하게 가장 늦게 관리자 검토로 넘긴 후보이므로 처리 뒤에도 뒤로 가지 않는다.
 	LatestCandidateID int64
 }
 
 type Store struct {
 	pool *pgxpool.Pool
+}
+
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 func NewStore(pool *pgxpool.Pool) (*Store, error) {
@@ -131,7 +159,9 @@ func ValidateWeek(start, end time.Time) error {
 	return nil
 }
 
-func (s *Store) InsertCandidates(ctx context.Context, candidates []Candidate) (int64, error) {
+// InsertCandidates의 autoReview가 true면 넣은 후보를 관리자 검토로 넘기지 않고 자동 검토(UnreviewedCandidates)를 기다리게 둔다.
+// 다른 Insert*Candidates도 같다.
+func (s *Store) InsertCandidates(ctx context.Context, candidates []Candidate, autoReview bool) (int64, error) {
 	if len(candidates) == 0 {
 		return 0, nil
 	}
@@ -154,7 +184,7 @@ func (s *Store) InsertCandidates(ctx context.Context, candidates []Candidate) (i
 		excerpts[i] = candidate.TextExcerpt
 	}
 
-	tag, err := s.pool.Exec(ctx, insertCandidatesSQL, ids, channels, users, posts, images, postedAt, excerpts)
+	tag, err := s.pool.Exec(ctx, insertCandidatesSQL, ids, channels, users, posts, images, postedAt, excerpts, autoReview)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster candidates: %w", err)
 	}
@@ -163,13 +193,13 @@ func (s *Store) InsertCandidates(ctx context.Context, candidates []Candidate) (i
 }
 
 // InsertCommunityCandidates는 youtube-collector가 저장한 커뮤니티 글 가운데 since 이후에 올라오고 textPattern(대소문자 무시)에 맞으며
-// 이미지가 있는 글을 후보로 넣는다. 확정된 주 범위는 InsertCandidates와 같은 규칙으로 뺀다.
-func (s *Store) InsertCommunityCandidates(ctx context.Context, channelIDs []string, since time.Time, textPattern string) (int64, error) {
+// 이미지가 있는 글을 후보로 넣는다. 빈 textPattern은 본문과 상관없이 받는다. 확정된 주 범위는 InsertCandidates와 같은 규칙으로 뺀다.
+func (s *Store) InsertCommunityCandidates(ctx context.Context, channelIDs []string, since time.Time, textPattern string, autoReview bool) (int64, error) {
 	if len(channelIDs) == 0 {
 		return 0, nil
 	}
 
-	tag, err := s.pool.Exec(ctx, insertCommunityCandidatesSQL, channelIDs, since, textPattern)
+	tag, err := s.pool.Exec(ctx, insertCommunityCandidatesSQL, channelIDs, since, textPattern, autoReview)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster community candidates: %w", err)
 	}
@@ -186,7 +216,7 @@ type ThumbnailCandidate struct {
 }
 
 // InsertThumbnailCandidates는 유튜브 영상 썸네일을 후보로 넣는다. 확정된 주 범위는 InsertCandidates와 같은 규칙으로 뺀다.
-func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []ThumbnailCandidate) (int64, error) {
+func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []ThumbnailCandidate, autoReview bool) (int64, error) {
 	if len(candidates) == 0 {
 		return 0, nil
 	}
@@ -203,12 +233,97 @@ func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []Thum
 		postedAt[i] = candidate.PostedAt
 	}
 
-	tag, err := s.pool.Exec(ctx, insertThumbnailCandidatesSQL, channels, videos, hashes, postedAt)
+	tag, err := s.pool.Exec(ctx, insertThumbnailCandidatesSQL, channels, videos, hashes, postedAt, autoReview)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster thumbnail candidates: %w", err)
 	}
 
 	return tag.RowsAffected(), nil
+}
+
+// UnreviewedCandidates는 관리자 검토로 넘기지 않은 검토 대기 후보를 최근 게시물부터 돌려준다.
+func (s *Store) UnreviewedCandidates(ctx context.Context, limit int) ([]ReviewCandidate, error) {
+	rows, err := s.pool.Query(ctx, unreviewedCandidatesSQL, min(max(limit, 1), maxListLimit))
+	if err != nil {
+		return nil, fmt.Errorf("list unreviewed schedule poster candidates: %w", err)
+	}
+
+	candidates, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ReviewCandidate, error) {
+		var item ReviewCandidate
+
+		return item, row.Scan(&item.ID, &item.ChannelID, &item.ImageURL, &item.ImageSHA256, &item.PostedAt, &item.Revision)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list unreviewed schedule poster candidates: %w", err)
+	}
+
+	return candidates, nil
+}
+
+// RequestReview는 자동 검토가 확정·거절하지 못한 후보를 관리자 검토로 넘기고, 이미 넘겼거나 검토 대기가 아니면 false를 돌려준다.
+// 관리자의 진행 중 처리와 겹쳐도 되도록 revision은 바꾸지 않는다.
+func (s *Store) RequestReview(ctx context.Context, id int64) (bool, error) {
+	tag, err := s.pool.Exec(ctx, requestReviewSQL, id)
+	if err != nil {
+		return false, fmt.Errorf("request schedule poster review: %w", err)
+	}
+
+	return tag.RowsAffected() == 1, nil
+}
+
+// HandOverUnreviewed는 createdBefore 전에 들어와 아직 관리자 검토로 넘기지 않은 검토 대기 후보를 모두 넘긴다.
+func (s *Store) HandOverUnreviewed(ctx context.Context, createdBefore time.Time) (int64, error) {
+	tag, err := s.pool.Exec(ctx, handOverUnreviewedSQL, createdBefore)
+	if err != nil {
+		return 0, fmt.Errorf("hand over unreviewed schedule posters: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// AutoConfirm은 자동 검토가 읽은 주를 확정한다. 같은 멤버의 확정본이 그 주를 덮으면 확정하지 않고 덮는 정도를 돌려주며,
+// WeekSame이면 후보를 expired로 닫는다. Confirm·Reject와 같은 멤버 잠금 아래에서 확인하고 바꾸므로 그 사이 다른 확정·거절이 끼지 않는다.
+// 그 사이 관리자 검토로 넘어간 후보는 관리자가 정하므로 바꾸지 않고 ErrInvalidState다.
+func (s *Store) AutoConfirm(ctx context.Context, id, expectedRevision int64, weekStart, weekEnd time.Time) (WeekCoverage, int64, error) {
+	if err := ValidateWeek(weekStart, weekEnd); err != nil {
+		return WeekUncovered, 0, err
+	}
+
+	var (
+		coverage WeekCoverage
+		revision int64
+	)
+
+	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
+		if err := lockUnreviewed(ctx, tx, id); err != nil {
+			return err
+		}
+
+		var same, overlapping bool
+
+		if err := tx.QueryRow(ctx, weekCoverageSQL, id, weekStart, weekEnd).Scan(&same, &overlapping); err != nil {
+			return fmt.Errorf("load confirmed schedule poster weeks: %w", err)
+		}
+
+		var err error
+
+		switch {
+		case same:
+			coverage = WeekSame
+			revision, err = mutate(ctx, tx, "expire schedule poster", expireCandidateSQL, id, expectedRevision)
+		case overlapping:
+			coverage = WeekOverlapping
+		default:
+			revision, err = confirm(ctx, tx, id, expectedRevision, weekStart, weekEnd)
+		}
+
+		return err
+	})
+	if err != nil {
+		return coverage, 0, fmt.Errorf("auto confirm schedule poster: %w", err)
+	}
+
+	return coverage, revision, nil
 }
 
 func (s *Store) ExpirePending(ctx context.Context, before time.Time) (int64, error) {
@@ -324,6 +439,86 @@ func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekSta
 		return 0, err
 	}
 
+	var revision int64
+
+	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
+		var err error
+
+		revision, err = confirm(ctx, tx, id, expectedRevision, weekStart, weekEnd)
+
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("confirm schedule poster: %w", err)
+	}
+
+	return revision, nil
+}
+
+func (s *Store) withChannelLock(ctx context.Context, id int64, fn func(tx pgx.Tx) error) error {
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := lockChannelConfirm(ctx, tx, id); err != nil {
+			return err
+		}
+
+		return fn(tx)
+	})
+	if err != nil {
+		return fmt.Errorf("run under schedule poster channel lock: %w", err)
+	}
+
+	return nil
+}
+
+// AutoReject는 자동 검토의 거절이다. AutoConfirm처럼 그 사이 관리자 검토로 넘어간 후보는 바꾸지 않고 ErrInvalidState다.
+func (s *Store) AutoReject(ctx context.Context, id, expectedRevision int64) (int64, error) {
+	var revision int64
+
+	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
+		if err := lockUnreviewed(ctx, tx, id); err != nil {
+			return err
+		}
+
+		var err error
+
+		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision)
+
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("auto reject schedule poster: %w", err)
+	}
+
+	return revision, nil
+}
+
+// lockUnreviewed는 없는 후보를 통과시켜 이어지는 변경이 ErrNotFound를 내게 한다.
+func lockUnreviewed(ctx context.Context, tx pgx.Tx, id int64) error {
+	var unreviewed bool
+
+	err := tx.QueryRow(ctx, lockUnreviewedCandidateSQL, id).Scan(&unreviewed)
+
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("lock schedule poster candidate: %w", err)
+	case !unreviewed:
+		return ErrInvalidState
+	default:
+		return nil
+	}
+}
+
+func lockChannelConfirm(ctx context.Context, tx pgx.Tx, id int64) error {
+	if _, err := tx.Exec(ctx, lockChannelConfirmSQL, id); err != nil {
+		return fmt.Errorf("lock schedule poster channel: %w", err)
+	}
+
+	return nil
+}
+
+func confirm(ctx context.Context, tx pgx.Tx, id, expectedRevision int64, weekStart, weekEnd time.Time) (int64, error) {
 	var (
 		current  *int64
 		status   *string
@@ -331,9 +526,9 @@ func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekSta
 		updated  *int64
 	)
 
-	if err := s.pool.QueryRow(ctx, confirmSQL, id, expectedRevision, weekStart, weekEnd).
+	if err := tx.QueryRow(ctx, confirmSQL, id, expectedRevision, weekStart, weekEnd).
 		Scan(&current, &status, &nearPost, &updated); err != nil {
-		return 0, fmt.Errorf("confirm schedule poster: %w", err)
+		return 0, fmt.Errorf("update schedule poster: %w", err)
 	}
 
 	revision, err := mutationOutcome(current, updated, expectedRevision)
@@ -344,9 +539,22 @@ func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekSta
 	return revision, err
 }
 
-// Reject는 확정본의 취소에도 쓰며 번역 결과를 함께 지운다.
+// Reject는 확정본의 취소에도 쓰며 번역 결과를 함께 지운다. 확정본 취소가 AutoConfirm의 판단 근거를 바꾸므로 Confirm과 같은 멤버 잠금 아래에서 한다.
 func (s *Store) Reject(ctx context.Context, id, expectedRevision int64) (int64, error) {
-	return s.mutate(ctx, "reject schedule poster", rejectSQL, id, expectedRevision)
+	var revision int64
+
+	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
+		var err error
+
+		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision)
+
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("reject schedule poster: %w", err)
+	}
+
+	return revision, nil
 }
 
 // RequestTranslation은 번역본을 지우지 않으므로 새 번역본이 저장될 때까지 이전 번역본이 !스케쥴로 게시된다.
@@ -355,9 +563,13 @@ func (s *Store) RequestTranslation(ctx context.Context, id, expectedRevision int
 }
 
 func (s *Store) mutate(ctx context.Context, action, query string, id, expectedRevision int64) (int64, error) {
+	return mutate(ctx, s.pool, action, query, id, expectedRevision)
+}
+
+func mutate(ctx context.Context, db rowQuerier, action, query string, id, expectedRevision int64) (int64, error) {
 	var current, updated *int64
 
-	if err := s.pool.QueryRow(ctx, query, id, expectedRevision).Scan(&current, &updated); err != nil {
+	if err := db.QueryRow(ctx, query, id, expectedRevision).Scan(&current, &updated); err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
 

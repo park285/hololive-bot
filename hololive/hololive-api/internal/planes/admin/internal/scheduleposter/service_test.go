@@ -41,6 +41,7 @@ type fakeSources struct {
 	cursors   []string
 	imageURLs []string
 	original  source
+	images    map[string]source
 	err       error
 }
 
@@ -67,6 +68,15 @@ func (f *fakeSources) statuses(_ context.Context, userID, cursor string) (status
 func (f *fakeSources) image(_ context.Context, rawURL string) (source, error) {
 	f.imageURLs = append(f.imageURLs, rawURL)
 
+	if f.images != nil {
+		found, ok := f.images[rawURL]
+		if !ok {
+			return source{}, errors.New("unexpected status 404")
+		}
+
+		return found, nil
+	}
+
 	return f.original, f.err
 }
 
@@ -75,29 +85,78 @@ type fakeStore struct {
 	communityChannels []string
 	communityPattern  string
 	thumbnails        []posterstore.ThumbnailCandidate
+	autoReviews       []bool
 	pending           []posterstore.PendingTranslation
 	recorded          []posterstore.Image
 	failures          []string
 	inputs            []posterstore.TranslationInputs
+	unreviewed        []posterstore.ReviewCandidate
+	confirmErr        error
+	rejectErr         error
+	coverage          posterstore.WeekCoverage
+	requestRefused    bool
+	handOverBefore    []time.Time
+	reviewed          []string
 }
 
-func (f *fakeStore) InsertCandidates(_ context.Context, candidates []posterstore.Candidate) (int64, error) {
+func (f *fakeStore) InsertCandidates(_ context.Context, candidates []posterstore.Candidate, autoReview bool) (int64, error) {
 	f.inserted = append(f.inserted, candidates...)
+	f.autoReviews = append(f.autoReviews, autoReview)
 
 	return int64(len(candidates)), nil
 }
 
-func (f *fakeStore) InsertCommunityCandidates(_ context.Context, channelIDs []string, _ time.Time, textPattern string) (int64, error) {
+func (f *fakeStore) InsertCommunityCandidates(_ context.Context, channelIDs []string, _ time.Time, textPattern string, autoReview bool) (int64, error) {
 	f.communityChannels = append(f.communityChannels, channelIDs...)
 	f.communityPattern = textPattern
+	f.autoReviews = append(f.autoReviews, autoReview)
 
 	return 0, nil
 }
 
-func (f *fakeStore) InsertThumbnailCandidates(_ context.Context, candidates []posterstore.ThumbnailCandidate) (int64, error) {
+func (f *fakeStore) InsertThumbnailCandidates(_ context.Context, candidates []posterstore.ThumbnailCandidate, autoReview bool) (int64, error) {
 	f.thumbnails = append(f.thumbnails, candidates...)
+	f.autoReviews = append(f.autoReviews, autoReview)
 
 	return int64(len(candidates)), nil
+}
+
+func (f *fakeStore) UnreviewedCandidates(context.Context, int) ([]posterstore.ReviewCandidate, error) {
+	return f.unreviewed, nil
+}
+
+func (f *fakeStore) HandOverUnreviewed(_ context.Context, createdBefore time.Time) (int64, error) {
+	f.handOverBefore = append(f.handOverBefore, createdBefore)
+
+	return 0, nil
+}
+
+func (f *fakeStore) RequestReview(_ context.Context, id int64) (bool, error) {
+	f.reviewed = append(f.reviewed, fmt.Sprintf("request %d", id))
+
+	return !f.requestRefused, nil
+}
+
+func (f *fakeStore) AutoConfirm(_ context.Context, id, revision int64, start, end time.Time) (posterstore.WeekCoverage, int64, error) {
+	switch f.coverage {
+	case posterstore.WeekSame:
+		f.reviewed = append(f.reviewed, fmt.Sprintf("expire %d@%d", id, revision))
+
+		return f.coverage, revision + 1, nil
+	case posterstore.WeekOverlapping:
+		return f.coverage, 0, nil
+	case posterstore.WeekUncovered:
+	}
+
+	f.reviewed = append(f.reviewed, fmt.Sprintf("confirm %d@%d %s..%s", id, revision, start.Format(time.DateOnly), end.Format(time.DateOnly)))
+
+	return f.coverage, revision + 1, f.confirmErr
+}
+
+func (f *fakeStore) AutoReject(_ context.Context, id, revision int64) (int64, error) {
+	f.reviewed = append(f.reviewed, fmt.Sprintf("reject %d@%d", id, revision))
+
+	return revision + 1, f.rejectErr
 }
 
 func (f *fakeStore) ExpirePending(context.Context, time.Time) (int64, error) { return 0, nil }
@@ -200,7 +259,7 @@ var (
 
 func testService(store *fakeStore, sources sourceClient, translator posterTranslator, members ...*domain.Member) *Service {
 	config := Config{PollSeconds: 3600, Targets: []Target{{XUserID: sophiaUserID, ChannelID: sophiaChannel}}}
-	service := newService(config, store, store, sources, translator, &fakeMembers{members: members}, slog.New(slog.DiscardHandler))
+	service := newService(config, store, store, store, sources, translator, &fakeMembers{members: members}, slog.New(slog.DiscardHandler))
 
 	service.now = func() time.Time { return time.Date(2026, time.November, 11, 12, 0, 0, 0, time.UTC) }
 	service.retry = retry.RetryOptions{MaxAttempts: 3, Sleep: func(context.Context, time.Duration) bool { return true }}
@@ -221,14 +280,12 @@ func pngBytes(t *testing.T, width, height int) []byte {
 	return buffer.Bytes()
 }
 
+var xPages = map[string]string{"": "statuses_page1.json", "page2": "statuses_page2.json", "page3": "statuses_page3.json"}
+
 func TestCollectKeepsOnlyRecentOwnPosterOriginals(t *testing.T) {
 	t.Parallel()
 
-	sources := &fakeSources{pages: map[string]string{
-		"":      "statuses_page1.json",
-		"page2": "statuses_page2.json",
-		"page3": "statuses_page3.json",
-	}}
+	sources := &fakeSources{pages: xPages}
 	store := &fakeStore{}
 
 	require.NoError(t, testService(store, sources, &fakeTranslator{}).collect(t.Context()))
@@ -995,4 +1052,6 @@ func TestCollectReadsCommunityOnlyTargetsFromStore(t *testing.T) {
 	require.Equal(t, []string{"", "page2", "page3"}, sources.cursors, "X 계정이 없는 대상은 FxTwitter를 부르지 않는다")
 	require.Equal(t, []string{"UC8eitCE9Z6EwUCs-VUi1blg"}, store.communityChannels)
 	require.Equal(t, posterTextExpr, store.communityPattern)
+	require.Equal(t, []bool{false, false, false}, store.autoReviews, "자동 검토가 꺼져 있으면 후보를 바로 관리자에게 넘긴다")
+	require.Empty(t, store.reviewed)
 }

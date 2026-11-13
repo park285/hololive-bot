@@ -2,6 +2,7 @@ package scheduleposter_test
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func confirmedPending(t *testing.T, store *scheduleposter.Store) scheduleposter.
 
 	ctx := t.Context()
 
-	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt), candidate(102, testPostedAt.AddDate(0, 0, -3))})
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt), candidate(102, testPostedAt.AddDate(0, 0, -3))}, false)
 	require.NoError(t, err)
 
 	poster, err := store.Get(ctx, 101)
@@ -69,11 +70,11 @@ func TestStoreInsertCandidatesIgnoresDuplicates(t *testing.T) {
 	ctx := t.Context()
 	store := newStore(t)
 
-	inserted, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt), candidate(102, testPostedAt)})
+	inserted, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt), candidate(102, testPostedAt)}, false)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, inserted)
 
-	inserted, err = store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt)})
+	inserted, err = store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt)}, false)
 	require.NoError(t, err)
 	require.Zero(t, inserted)
 
@@ -93,7 +94,7 @@ func TestStoreConfirmChecksRevisionWeekAndState(t *testing.T) {
 	ctx := t.Context()
 	store := newStore(t)
 
-	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt)})
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt)}, false)
 	require.NoError(t, err)
 
 	poster, err := store.Get(ctx, 101)
@@ -137,7 +138,7 @@ func TestStoreConfirmedWeekClosesSameMemberCandidates(t *testing.T) {
 
 	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{
 		candidate(101, at(10)), candidate(102, at(9)), candidate(103, at(15)), candidate(104, at(8)), other,
-	})
+	}, false)
 	require.NoError(t, err)
 
 	poster, err := store.Get(ctx, 101)
@@ -146,7 +147,7 @@ func TestStoreConfirmedWeekClosesSameMemberCandidates(t *testing.T) {
 	_, err = store.Confirm(ctx, 101, poster.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
 	require.NoError(t, err)
 
-	inserted, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(105, at(12)), candidate(106, at(15))})
+	inserted, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(105, at(12)), candidate(106, at(15))}, false)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, inserted, "확정한 주 안의 새 글은 받지 않고, 다음 주 포스터를 올리는 마지막 날 글은 받는다")
 
@@ -200,11 +201,11 @@ func TestStoreInsertCommunityCandidates(t *testing.T) {
 
 	since := seen(3).AddDate(0, 0, -8)
 
-	inserted, err := store.InsertCommunityCandidates(ctx, []string{melaChannel}, since, pattern)
+	inserted, err := store.InsertCommunityCandidates(ctx, []string{melaChannel}, since, pattern, false)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, inserted)
 
-	inserted, err = store.InsertCommunityCandidates(ctx, []string{melaChannel}, since, pattern)
+	inserted, err = store.InsertCommunityCandidates(ctx, []string{melaChannel}, since, pattern, false)
 	require.NoError(t, err)
 	require.Zero(t, inserted, "같은 글은 같은 id라 다시 넣지 않는다")
 
@@ -216,6 +217,220 @@ func TestStoreInsertCommunityCandidates(t *testing.T) {
 	require.Equal(t, "https://yt3.ggpht.com/poster=s0", listed[0].ImageURL)
 	require.Less(t, listed[0].ID, int64(1)<<60+1, "X 게시물 번호와 겹치지 않는 범위다")
 	require.Positive(t, listed[0].ID)
+
+	_, err = pool.Exec(ctx, `INSERT INTO youtube_community_posts (post_id, channel_id, content_text, images, first_seen_at)
+		VALUES ('community:UgkxNoText', $1, NULL, $2::jsonb, $3)`, melaChannel, `[{"url":"`+thumbnail+`"}]`, seen(3))
+	require.NoError(t, err)
+
+	inserted, err = store.InsertCommunityCandidates(ctx, []string{melaChannel}, since, "", true)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, inserted, "빈 문구 패턴은 본문과 상관없이 이미지 글을 모두 넣는다")
+
+	unreviewed, err := store.UnreviewedCandidates(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, unreviewed, 2)
+
+	for _, item := range unreviewed {
+		poster, getErr := store.Get(ctx, item.ID)
+		require.NoError(t, getErr)
+		require.Contains(t, []string{"グッズ販売のお知らせ", ""}, poster.TextExcerpt)
+	}
+}
+
+func TestStoreAutoReviewCandidatesWaitUntilHandedToAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store := newStore(t)
+
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt)}, false)
+	require.NoError(t, err)
+
+	revision, err := store.Reject(ctx, 101, 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, revision)
+
+	inserted, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{
+		candidate(102, testPostedAt.Add(-time.Hour)), candidate(103, testPostedAt), candidate(105, testPostedAt.Add(-3*time.Hour)),
+	}, true)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, inserted)
+
+	summary, err := store.Summary(ctx)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.Summary{PendingCount: 0, LatestCandidateID: 101}, summary,
+		"자동 검토를 기다리는 후보는 대기 수도 최신 후보도 바꾸지 않아 Console 알림이 가지 않는다")
+	require.Empty(t, pendingIDs(t, store), "검토 대기 목록도 넘긴 후보만 보여 준다")
+
+	unreviewed, err := store.UnreviewedCandidates(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, unreviewed, 3)
+	require.Equal(t, []int64{103, 102, 105}, []int64{unreviewed[0].ID, unreviewed[1].ID, unreviewed[2].ID}, "최근 게시물부터 판정한다")
+
+	unreviewed[0].PostedAt = unreviewed[0].PostedAt.UTC()
+	require.Equal(t, scheduleposter.ReviewCandidate{
+		ID: 103, ChannelID: sophiaChannel, ImageURL: candidate(103, testPostedAt).ImageURL, PostedAt: testPostedAt, Revision: 1,
+	}, unreviewed[0])
+
+	for _, id := range []int64{103, 102} {
+		requested, requestErr := store.RequestReview(ctx, id)
+		require.NoError(t, requestErr)
+		require.True(t, requested)
+	}
+
+	requested, err := store.RequestReview(ctx, 103)
+	require.NoError(t, err)
+	require.False(t, requested, "이미 넘긴 후보는 다시 넘기지 않는다")
+
+	summary, err = store.Summary(ctx)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.Summary{PendingCount: 2, LatestCandidateID: 102}, summary, "id가 작아도 나중에 넘긴 후보가 최신이다")
+	require.ElementsMatch(t, []int64{102, 103}, pendingIDs(t, store))
+
+	_, err = store.Reject(ctx, 105, 1)
+	require.NoError(t, err)
+
+	requested, err = store.RequestReview(ctx, 105)
+	require.NoError(t, err)
+	require.False(t, requested, "검토 대기가 아닌 후보는 넘기지 않는다")
+}
+
+func pendingIDs(t *testing.T, store *scheduleposter.Store) []int64 {
+	t.Helper()
+
+	listed, err := store.List(t.Context(), scheduleposter.ReviewPending, 10)
+	require.NoError(t, err)
+
+	ids := make([]int64, 0, len(listed))
+	for i := range listed {
+		ids = append(ids, listed[i].ID)
+	}
+
+	return ids
+}
+
+func TestStoreHandOverUnreviewed(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store := newStore(t)
+
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(104, testPostedAt), candidate(105, testPostedAt)}, true)
+	require.NoError(t, err)
+
+	_, err = store.Reject(ctx, 105, 1)
+	require.NoError(t, err)
+
+	handed, err := store.HandOverUnreviewed(ctx, time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	require.Zero(t, handed, "기준 시각 뒤에 들어온 후보는 넘기지 않는다")
+
+	handed, err = store.HandOverUnreviewed(ctx, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, handed, "자동 거절한 105는 그대로 둔다")
+
+	summary, err := store.Summary(ctx)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.Summary{PendingCount: 1, LatestCandidateID: 104}, summary)
+	require.Equal(t, []int64{104}, pendingIDs(t, store))
+}
+
+const otherChannel = "UCy9mgxB8pn2C4aNK_MPthDQ"
+
+func autoConfirmCandidates(t *testing.T, store *scheduleposter.Store) map[string]int64 {
+	t.Helper()
+
+	ctx := t.Context()
+	other := candidate(104, testPostedAt.AddDate(0, 0, -3))
+
+	other.ChannelID = otherChannel
+
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt.AddDate(0, 0, -2))}, false)
+	require.NoError(t, err)
+
+	_, err = store.InsertCandidates(ctx, []scheduleposter.Candidate{
+		candidate(102, testPostedAt.AddDate(0, 0, -3)), candidate(103, testPostedAt.AddDate(0, 0, -1)), other,
+	}, true)
+	require.NoError(t, err)
+
+	_, err = store.InsertThumbnailCandidates(ctx, []scheduleposter.ThumbnailCandidate{
+		{ChannelID: sophiaChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: strings.Repeat("a", 64), PostedAt: testPostedAt.AddDate(0, 0, -1)},
+		{ChannelID: otherChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: strings.Repeat("b", 64), PostedAt: testPostedAt.AddDate(0, 0, -1)},
+	}, true)
+	require.NoError(t, err)
+
+	unreviewed, err := store.UnreviewedCandidates(ctx, 10)
+	require.NoError(t, err)
+
+	thumbnails := map[string]int64{}
+
+	for _, item := range unreviewed {
+		if strings.HasPrefix(item.ImageURL, "https://i.ytimg.com/") {
+			thumbnails[item.ChannelID] = item.ID
+		}
+	}
+
+	require.Len(t, thumbnails, 2)
+
+	return thumbnails
+}
+
+func TestStoreAutoConfirm(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store := newStore(t)
+	thumbnails := autoConfirmCandidates(t, store)
+	start, end := date(t, "2026-11-09"), date(t, "2026-11-15")
+
+	_, err := store.Confirm(ctx, 101, 1, start, end)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name       string
+		id         int64
+		start, end time.Time
+		coverage   scheduleposter.WeekCoverage
+		status     scheduleposter.ReviewStatus
+	}{
+		{"같은 출처에서 늦게 올린 수정본은 닫지 않는다", 103, start, end, scheduleposter.WeekOverlapping, scheduleposter.ReviewPending},
+		{"겹치는 다른 주는 닫지 않는다", 103, end, end.AddDate(0, 0, 6), scheduleposter.WeekOverlapping, scheduleposter.ReviewPending},
+		{"다른 출처의 같은 일정은 닫는다", thumbnails[sophiaChannel], start, end, scheduleposter.WeekSame, scheduleposter.ReviewExpired},
+		{"먼저 올린 같은 출처 글은 닫는다", 102, start, end, scheduleposter.WeekSame, scheduleposter.ReviewExpired},
+		{"덮는 확정본이 없으면 확정한다", 104, start, end, scheduleposter.WeekUncovered, scheduleposter.ReviewConfirmed},
+		{"자동 확정본은 다른 출처라도 닫지 않는다", thumbnails[otherChannel], start, end, scheduleposter.WeekOverlapping, scheduleposter.ReviewPending},
+	} {
+		coverage, _, autoErr := store.AutoConfirm(ctx, tc.id, 1, tc.start, tc.end)
+		require.NoError(t, autoErr, tc.name)
+		require.Equal(t, tc.coverage, coverage, tc.name)
+
+		poster, getErr := store.Get(ctx, tc.id)
+		require.NoError(t, getErr)
+		require.Equal(t, tc.status, poster.ReviewStatus, tc.name)
+	}
+
+	_, _, err = store.AutoConfirm(ctx, 999, 1, start, end)
+	require.ErrorIs(t, err, scheduleposter.ErrNotFound)
+
+	_, _, err = store.AutoConfirm(ctx, 102, 1, start, end)
+	require.ErrorIs(t, err, scheduleposter.ErrRevisionConflict, "닫은 후보는 revision이 올라 다시 바꾸지 않는다")
+
+	requested, err := store.RequestReview(ctx, 103)
+	require.NoError(t, err)
+	require.True(t, requested)
+
+	_, _, err = store.AutoConfirm(ctx, 103, 1, start.AddDate(0, 0, 7), end.AddDate(0, 0, 7))
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "관리자 검토로 넘어간 후보는 자동 확정하지 않는다")
+
+	_, err = store.AutoReject(ctx, 103, 1)
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "관리자 검토로 넘어간 후보는 자동 거절하지 않는다")
+
+	revision, err := store.AutoReject(ctx, thumbnails[otherChannel], 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, revision)
+
+	_, err = store.AutoReject(ctx, 999, 1)
+	require.ErrorIs(t, err, scheduleposter.ErrNotFound)
 }
 
 func TestStoreInsertThumbnailCandidates(t *testing.T) {
@@ -243,7 +458,7 @@ func TestStoreInsertThumbnailCandidates(t *testing.T) {
 
 		inserted, insertErr := store.InsertThumbnailCandidates(ctx, []scheduleposter.ThumbnailCandidate{
 			{ChannelID: melaChannel, VideoID: video, ImageSHA256: hash, PostedAt: at},
-		})
+		}, false)
 		require.NoError(t, insertErr)
 
 		return inserted
@@ -310,6 +525,37 @@ func TestStoreRecordTranslationPublishesOnlyCurrentRevision(t *testing.T) {
 	_, found, err = store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-16"))
 	require.NoError(t, err)
 	require.False(t, found)
+}
+
+func TestStorePublishesLatestPostedPosterOfTheWeek(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store := newStore(t)
+
+	revised, original := candidate(201, testPostedAt.AddDate(0, 0, -1)), candidate(202, testPostedAt.AddDate(0, 0, -2))
+
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{revised, original}, false)
+	require.NoError(t, err)
+
+	for _, id := range []int64{202, 201} {
+		_, err = store.Confirm(ctx, id, 1, date(t, "2026-11-09"), date(t, "2026-11-15"))
+		require.NoError(t, err)
+	}
+
+	pending, err := store.PendingTranslations(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, pending, 2)
+
+	for _, item := range pending {
+		_, err = store.RecordTranslation(ctx, item, scheduleposter.Image{MIME: "image/jpeg", Data: []byte(strconv.FormatInt(item.ID, 10))})
+		require.NoError(t, err)
+	}
+
+	published, found, err := store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-11"))
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, []byte("201"), published.Data, "커뮤니티·썸네일 id는 게시 순서가 아니므로 늦게 올린 포스터를 고른다")
 }
 
 func TestStoreRetranslationFailureAndReject(t *testing.T) {
@@ -432,7 +678,7 @@ func TestStoreRetention(t *testing.T) {
 	store := newStore(t)
 	postedAt := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 
-	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(201, postedAt), candidate(202, postedAt)})
+	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(201, postedAt), candidate(202, postedAt)}, false)
 	require.NoError(t, err)
 
 	expired, err := store.ExpirePending(ctx, time.Now().Add(time.Hour))

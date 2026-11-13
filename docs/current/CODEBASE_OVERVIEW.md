@@ -21,7 +21,8 @@
 ├── deploy/quadlet/                 # central Podman Quadlet units
 │   ├── hololive-bot/               # installed to /etc/containers/systemd/hololive-bot/
 │   ├── optional/x-spaces/          # drop-ins installed only when HOLOLIVE_X_SPACES_ENABLED=1
-│   └── optional/schedule-poster/   # drop-in installed only when HOLOLIVE_SCHEDULE_POSTER_ENABLED=1
+│   ├── optional/schedule-poster/   # drop-in installed only when HOLOLIVE_SCHEDULE_POSTER_ENABLED=1
+│   └── optional/schedule-poster-review/  # drop-in installed only when HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED=1
 ├── deploy/podman/iris-seoul/       # iris-seoul collector b + issuer b Quadlet units
 └── deploy/compose/                 # shared runtime contracts (README only)
 ```

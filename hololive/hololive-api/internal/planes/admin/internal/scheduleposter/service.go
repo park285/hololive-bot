@@ -52,9 +52,9 @@ const posterTextExpr = `週間|今週|来週|スケジュール|schedule|weekly`
 var posterTextPattern = regexp.MustCompile(`(?i)` + posterTextExpr)
 
 type candidateStore interface {
-	InsertCandidates(ctx context.Context, candidates []posterstore.Candidate) (int64, error)
-	InsertCommunityCandidates(ctx context.Context, channelIDs []string, since time.Time, textPattern string) (int64, error)
-	InsertThumbnailCandidates(ctx context.Context, candidates []posterstore.ThumbnailCandidate) (int64, error)
+	InsertCandidates(ctx context.Context, candidates []posterstore.Candidate, autoReview bool) (int64, error)
+	InsertCommunityCandidates(ctx context.Context, channelIDs []string, since time.Time, textPattern string, autoReview bool) (int64, error)
+	InsertThumbnailCandidates(ctx context.Context, candidates []posterstore.ThumbnailCandidate, autoReview bool) (int64, error)
 	ExpirePending(ctx context.Context, before time.Time) (int64, error)
 	Purge(ctx context.Context, before time.Time, limit int) (int64, error)
 }
@@ -98,6 +98,8 @@ type Service struct {
 	translations translationStore
 	sources      sourceClient
 	translator   posterTranslator
+	reviews      reviewStore
+	judge        posterJudge
 	members      memberSource
 	logger       *slog.Logger
 	now          func() time.Time
@@ -105,7 +107,8 @@ type Service struct {
 	rowBudget    time.Duration
 }
 
-func New(ctx context.Context, config *Config, store *posterstore.Store, members memberSource, logger *slog.Logger) (*Service, error) {
+// New의 apiKey가 비어 있으면 후보 자동 검토를 끈다(LoadAPIKey).
+func New(ctx context.Context, config *Config, apiKey string, store *posterstore.Store, members memberSource, logger *slog.Logger) (*Service, error) {
 	if config == nil || store == nil || members == nil || logger == nil {
 		return nil, errors.New("schedule poster service requires config, store, members and logger")
 	}
@@ -115,13 +118,25 @@ func New(ctx context.Context, config *Config, store *posterstore.Store, members 
 		return nil, err
 	}
 
-	return newService(*config, store, store, newFXClient(), translator, members, logger), nil
+	service := newService(*config, store, store, store, newFXClient(), translator, members, logger)
+
+	if apiKey != "" {
+		judge, err := newGeminiJudge(ctx, apiKey)
+		if err != nil {
+			return nil, err
+		}
+
+		service.judge = judge
+	}
+
+	return service, nil
 }
 
 func newService(
 	config Config,
 	candidates candidateStore,
 	translations translationStore,
+	reviews reviewStore,
 	sources sourceClient,
 	translator posterTranslator,
 	members memberSource,
@@ -131,6 +146,7 @@ func newService(
 		config:       config,
 		candidates:   candidates,
 		translations: translations,
+		reviews:      reviews,
 		sources:      sources,
 		translator:   translator,
 		members:      members,
@@ -152,6 +168,7 @@ func (s *Service) Start(ctx context.Context) {
 		slog.Int("targets", len(s.config.Targets)),
 		slog.Duration("poll_interval", s.config.PollInterval()),
 		slog.String("model", s.config.Translation.Model),
+		slog.Bool("auto_review", s.judge != nil),
 	)
 
 	var wg sync.WaitGroup
@@ -188,6 +205,7 @@ func (s *Service) runLoop(ctx context.Context, task string, wait, interval time.
 
 func (s *Service) collect(ctx context.Context) error {
 	now := s.now()
+	autoReview := s.judge != nil
 
 	var errs []error
 
@@ -207,7 +225,7 @@ func (s *Service) collect(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("collect target %s: %w", target.XUserID, err))
 		}
 
-		inserted, err := s.candidates.InsertCandidates(ctx, candidates)
+		inserted, err := s.candidates.InsertCandidates(ctx, candidates, autoReview)
 		if err != nil {
 			errs = append(errs, err)
 
@@ -220,15 +238,22 @@ func (s *Service) collect(ctx context.Context) error {
 		}
 	}
 
-	inserted, err := s.candidates.InsertCommunityCandidates(ctx, communityChannels, now.Add(-lookback), posterTextExpr)
-	if err != nil {
+	if err := s.collectCommunity(ctx, communityChannels, now, autoReview); err != nil {
 		errs = append(errs, err)
-	} else if inserted > 0 {
-		s.logger.Info("Schedule poster community candidates found", slog.Int64("inserted", inserted))
 	}
 
-	if err := s.collectThumbnails(ctx, now); err != nil {
+	if err := s.collectThumbnails(ctx, now, autoReview); err != nil {
 		errs = append(errs, err)
+	}
+
+	if err := s.handOverUnreviewed(ctx, now, autoReview); err != nil {
+		errs = append(errs, err)
+	}
+
+	if autoReview {
+		if err := s.autoReview(ctx); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	if _, err := s.candidates.ExpirePending(ctx, now.Add(-lookback)); err != nil {
@@ -240,6 +265,46 @@ func (s *Service) collect(ctx context.Context) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// collectCommunity는 자동 검토가 켜져 있으면 문구 패턴이 놓친 일정표(영어 글 등)까지 판정하도록 커뮤니티의 이미지 글을 모두 후보로 넣는다.
+func (s *Service) collectCommunity(ctx context.Context, channelIDs []string, now time.Time, autoReview bool) error {
+	pattern := posterTextExpr
+
+	if autoReview {
+		pattern = ""
+	}
+
+	inserted, err := s.candidates.InsertCommunityCandidates(ctx, channelIDs, now.Add(-lookback), pattern, autoReview)
+	if err != nil {
+		return fmt.Errorf("collect community schedule posters: %w", err)
+	}
+
+	if inserted > 0 {
+		s.logger.Info("Schedule poster community candidates found", slog.Int64("inserted", inserted))
+	}
+
+	return nil
+}
+
+// handOverUnreviewed는 자동 검토가 꺼졌으면 켜져 있던 동안 들어와 기다리던 후보가 목록·알림 없이 만료되지 않도록 바로 넘긴다.
+func (s *Service) handOverUnreviewed(ctx context.Context, now time.Time, autoReview bool) error {
+	before := now
+
+	if autoReview {
+		before = now.Add(-handOverAfter)
+	}
+
+	handed, err := s.reviews.HandOverUnreviewed(ctx, before)
+	if err != nil {
+		return fmt.Errorf("hand over unreviewed schedule posters: %w", err)
+	}
+
+	if handed > 0 {
+		s.logger.Warn("Schedule poster unreviewed candidates handed over", slog.Int64("handed_over", handed), slog.Bool("auto_review", autoReview))
+	}
+
+	return nil
 }
 
 // collectTarget은 페이지 도중 실패해도 그때까지 찾은 후보를 함께 돌려준다.
@@ -329,7 +394,7 @@ func (s *Service) candidateFrom(item *status, target Target, postedAt time.Time)
 }
 
 // collectThumbnails는 받지 못한 영상만 건너뛰고 나머지 썸네일은 후보로 넣는다. 번역은 여기서 남긴 해시와 같은 그림만 쓴다.
-func (s *Service) collectThumbnails(ctx context.Context, now time.Time) error {
+func (s *Service) collectThumbnails(ctx context.Context, now time.Time, autoReview bool) error {
 	var (
 		thumbnails []posterstore.ThumbnailCandidate
 		errs       []error
@@ -350,7 +415,7 @@ func (s *Service) collectThumbnails(ctx context.Context, now time.Time) error {
 		}
 	}
 
-	inserted, err := s.candidates.InsertThumbnailCandidates(ctx, thumbnails)
+	inserted, err := s.candidates.InsertThumbnailCandidates(ctx, thumbnails, autoReview)
 	if err != nil {
 		errs = append(errs, err)
 	} else if inserted > 0 {

@@ -1,5 +1,5 @@
-INSERT INTO schedule_posters (id, channel_id, x_user_id, post_url, image_url, posted_at, text_excerpt)
-SELECT c.id, c.channel_id, c.x_user_id, c.post_url, c.image_url, c.posted_at, c.text_excerpt
+INSERT INTO schedule_posters (id, channel_id, x_user_id, post_url, image_url, posted_at, text_excerpt, review_requested_at)
+SELECT c.id, c.channel_id, c.x_user_id, c.post_url, c.image_url, c.posted_at, c.text_excerpt, CASE WHEN $8::boolean THEN NULL ELSE now() END
 FROM unnest($1::bigint[], $2::text[], $3::text[], $4::text[], $5::text[], $6::timestamptz[], $7::text[])
     AS c(id, channel_id, x_user_id, post_url, image_url, posted_at, text_excerpt)
 WHERE NOT EXISTS (

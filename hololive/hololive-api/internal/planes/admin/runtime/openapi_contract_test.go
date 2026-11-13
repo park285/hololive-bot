@@ -386,7 +386,7 @@ func seedSchedulePosterSources(t *testing.T, pool *pgxpool.Pool, store *schedule
 		ID: 2119784604752343207, ChannelID: "UCROQtXcp2loQEmvpe5rhJzQ", XUserID: "2054825907916054528",
 		PostURL: "https://x.com/i/status/2119784604752343207", ImageURL: "https://pbs.twimg.com/media/a.jpg?name=orig",
 		TextExcerpt: "週間スケジュール", PostedAt: time.Date(2026, time.November, 9, 3, 0, 0, 0, time.UTC),
-	}})
+	}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +402,7 @@ func seedSchedulePosterSources(t *testing.T, pool *pgxpool.Pool, store *schedule
 
 	_, err = store.InsertThumbnailCandidates(t.Context(), []scheduleposter.ThumbnailCandidate{{
 		ChannelID: melaChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: strings.Repeat("a", 64), PostedAt: time.Now(),
-	}})
+	}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
