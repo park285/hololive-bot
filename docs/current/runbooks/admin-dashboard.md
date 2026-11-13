@@ -23,7 +23,8 @@ Iris Console이 소유하며 이 저장소에는 독립 `admin-dashboard` 서비
 - source 제한은 `admin-dashboard-ingress-firewall.service`가 `/etc/nftables.d/admin-dashboard-ingress.nft`로 적용합니다.
   규칙 갱신은 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 합니다. reload는 table을 한 nft
   transaction으로 다시 적재하고, `restart`·`stop`과 달리 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·
-  `admin-dashboard-ingress`를 재시작하지 않습니다([중앙 Quadlet unit](../../../deploy/quadlet/README.md#기동정지의존)).
+  `admin-dashboard-ingress`와 두 봇 DB(`chatbotgo-postgres`·`twentyq-postgres`)를 재시작하지 않습니다
+  ([중앙 Quadlet unit](../../../deploy/quadlet/README.md#기동정지의존)).
 - 중앙에는 container runtime socket·proxy가 없습니다. 어떤 컨테이너도 Podman/Docker socket을 mount하지 않습니다. PostgreSQL·Valkey와 collector fleet은 각 runtime의 운영 경계를 따릅니다.
 
 공개 HTTPS와 Certbot 갱신은 스택 `deploy/holoshi-nginx`가, 내부 신뢰는 기존 공통 CA와 서비스별 leaf가 소유합니다.

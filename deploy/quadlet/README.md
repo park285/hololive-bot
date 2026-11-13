@@ -60,7 +60,9 @@ sudo ./scripts/deploy/sync-opt-current.sh
 방화벽 규칙(`scripts/systemd/admin-dashboard-ingress.nft`)이 바뀐 배포에서는 설치 뒤
 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다(아래 '기동·정지·의존').
 이 규칙은 같은 호스트의 ChatBotGo(5432)·TwentyQ(5458) PostgreSQL 게시 포트도 loopback과 kapu(`bot_postgres_sources`)에서만 받습니다.
-두 봇의 DB unit은 이 방화벽 unit에 의존하지 않으므로, 방화벽 unit이 멈추거나 시작에 실패하면 두 포트는 tailnet 전체에 다시 열립니다.
+그래서 `sync-opt-current.sh`가 두 봇 DB unit(`chatbotgo-postgres`·`twentyq-postgres`)에 이 방화벽 unit을 `Requires=`·`After=`로 거는
+drop-in(`/etc/systemd/system/<unit>.service.d/50-admin-dashboard-ingress-firewall.conf`)을 설치합니다. 방화벽이 멈추면 두 DB도 멈추고,
+부팅 때 방화벽이 실패하면 두 DB는 시작하지 않습니다. 봇 저장소의 Quadlet 설치기는 이 경로를 건드리지 않으므로 봇 재배포 뒤에도 남습니다.
 
 prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)로 설치됩니다.
 
@@ -93,8 +95,8 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   보안 전제인 `admin-dashboard-ingress-firewall.service`와 migration의 PostgreSQL 의존만 `Requires=`입니다.
 - 방화벽 규칙 갱신은 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로만 합니다. reload는 table
   선언·삭제·재정의를 한 nft transaction으로 적용해 규칙이 빈 순간이 없고, 새 파일이 거부되면 기존 table이 남습니다.
-  `restart`·`stop`은 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·`admin-dashboard-ingress`를 함께
-  재시작·정지합니다. reload는 전파되지 않습니다(systemd 257 user unit으로 실측).
+  `restart`·`stop`은 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·`admin-dashboard-ingress`와 두 봇 DB
+  (`chatbotgo-postgres`·`twentyq-postgres`)를 함께 재시작·정지합니다. reload는 전파되지 않습니다(systemd 257 user unit으로 실측).
 - `hololive-api`를 시작하면 `hololive-alarm-worker`도 함께 시작됩니다(Wants).
 - collector c는 compose.env의 `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1`이면 `ExecCondition`으로 건너뜁니다.
 

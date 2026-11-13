@@ -209,6 +209,12 @@ mkdir -p /etc/nftables.d
 install -m0644 -o root -g root \
   "$STAGING/scripts/systemd/admin-dashboard-ingress.nft" \
   /etc/nftables.d/admin-dashboard-ingress.nft
+for unit in chatbotgo-postgres twentyq-postgres; do
+  install -d -m0755 -o root -g root "/etc/systemd/system/${unit}.service.d"
+  install -m0644 -o root -g root \
+    "$STAGING/scripts/systemd/admin-dashboard-ingress-firewall-requires.conf" \
+    "/etc/systemd/system/${unit}.service.d/50-admin-dashboard-ingress-firewall.conf"
+done
 log "admin-dashboard ingress firewall installed"
 
 systemctl daemon-reload

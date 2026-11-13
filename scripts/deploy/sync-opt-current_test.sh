@@ -53,6 +53,7 @@ make_repo() {
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
+    scripts/systemd/admin-dashboard-ingress-firewall-requires.conf \
     deploy/postgres/pg_hba.conf deploy/nginx/admin-dashboard-ingress.conf.template \
     deploy/quadlet/hololive-bot deploy/quadlet/optional; do
     mkdir -p "${repo}/$(dirname "${path}")"
@@ -150,6 +151,11 @@ for unit in hololive-api hololive-alarm-worker; do
 done
 [[ -x "${host}/usr-local-libexec/hololive-bot/quadlet-prestart" ]] || fail "prestart helper not installed"
 [[ -f "${host}/etc-systemd-system/admin-dashboard-ingress-firewall.service" ]] || fail "firewall unit not installed"
+for unit in chatbotgo-postgres twentyq-postgres; do
+  cmp -s "${ROOT_DIR}/scripts/systemd/admin-dashboard-ingress-firewall-requires.conf" \
+    "${host}/etc-systemd-system/${unit}.service.d/50-admin-dashboard-ingress-firewall.conf" ||
+    fail "firewall dependency drop-in not installed for ${unit}"
+done
 [[ ! -e "${host}/opt/current/marker" && -f "${host}/opt/current/deploy/postgres/pg_hba.conf" ]] ||
   fail "current tree was not replaced by the staged tree"
 grep -qx 'systemctl daemon-reload' "${host}/events" || fail "daemon-reload did not run after installation"
