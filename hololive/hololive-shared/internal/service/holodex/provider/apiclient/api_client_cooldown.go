@@ -31,17 +31,19 @@ func (c *APIClient) extendLocalCooldown(until time.Time) {
 	}
 }
 
+const maxRetryAfter = 5 * time.Minute
+
 func parseRetryAfter(header string, now time.Time) (time.Time, bool) {
 	value := strings.TrimSpace(header)
 	if value == "" {
 		return time.Time{}, false
 	}
 
-	if seconds, err := strconv.ParseUint(value, 10, 63); err == nil {
-		const maxSeconds = uint64((1<<63 - 1) / time.Second)
+	limit := now.Add(maxRetryAfter)
 
-		if seconds > maxSeconds {
-			return time.Time{}, false
+	if seconds, err := strconv.ParseUint(value, 10, 63); err == nil {
+		if seconds > uint64(maxRetryAfter/time.Second) {
+			return limit, true
 		}
 
 		return now.Add(time.Duration(seconds) * time.Second), true
@@ -50,6 +52,10 @@ func parseRetryAfter(header string, now time.Time) (time.Time, bool) {
 	until, err := http.ParseTime(value)
 	if err != nil {
 		return time.Time{}, false
+	}
+
+	if until.After(limit) {
+		return limit, true
 	}
 
 	return until, true

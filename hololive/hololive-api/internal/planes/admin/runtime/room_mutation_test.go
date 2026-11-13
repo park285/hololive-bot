@@ -1,7 +1,7 @@
 package adminruntime
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"testing"
 )
@@ -17,7 +17,7 @@ func decodeRoomMutation(t *testing.T, body []byte) roomMutationBody {
 
 	var decoded roomMutationBody
 
-	if err := json.Unmarshal(body, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
 	}
 

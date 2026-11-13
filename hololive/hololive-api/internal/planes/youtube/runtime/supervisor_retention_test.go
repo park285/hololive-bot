@@ -42,6 +42,20 @@ func TestRetentionFailureKeepsRuntimeUnreadyOnlyUntilRetentionSucceeds(t *testin
 	}
 }
 
+func TestRetentionTimeoutDoesNotHideOtherRetentionFailure(t *testing.T) {
+	health.RemoveComponent(youtubeHealthComponent)
+	t.Cleanup(func() { health.RemoveComponent(youtubeHealthComponent) })
+
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
+	runtime.ready.Store(true)
+
+	runtime.stopAfterRetentionError(t.Context(), nil, errors.Join(errors.New("retention constraint violated"), context.DeadlineExceeded))
+
+	if runtime.Ready() {
+		t.Fatal("deadline in one retention phase hid the other phase's non-retryable failure")
+	}
+}
+
 func TestRetentionSuccessDoesNotRestoreReadinessLostElsewhere(t *testing.T) {
 	health.RemoveComponent(youtubeHealthComponent)
 	t.Cleanup(func() { health.RemoveComponent(youtubeHealthComponent) })

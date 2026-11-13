@@ -3,7 +3,7 @@ package collectorruntime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net"
@@ -157,7 +157,7 @@ func decodeLogRecords(t *testing.T, logged *bytes.Buffer) []map[string]any {
 	for line := range strings.Lines(logged.String()) {
 		var record map[string]any
 
-		if err := json.Unmarshal([]byte(line), &record); err != nil {
+		if err := jsonv2.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("decode log line %q: %v", line, err)
 		}
 

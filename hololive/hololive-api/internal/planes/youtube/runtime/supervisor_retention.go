@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
@@ -44,7 +45,7 @@ func (r *Runtime) stopAfterRetentionError(ctx context.Context, _ chan<- error, e
 		return true
 	}
 
-	if !retryableObservationError(err) {
+	if !retryableRetentionError(err) {
 		r.retentionFailed.Store(true)
 		r.publishHealth()
 	}
@@ -60,6 +61,20 @@ func (r *Runtime) retentionTick(ctx context.Context) error {
 	}
 
 	return errors.Join(r.retainProjections(ctx), r.retainSource(ctx))
+}
+
+func retryableRetentionError(err error) bool {
+	phases, ok := errors.AsType[interface {
+		error
+		Unwrap() []error
+	}](err)
+	if !ok {
+		return retryableObservationError(err)
+	}
+
+	return !slices.ContainsFunc(phases.Unwrap(), func(phaseErr error) bool {
+		return !retryableObservationError(phaseErr)
+	})
 }
 
 func (r *Runtime) retainSource(ctx context.Context) error {

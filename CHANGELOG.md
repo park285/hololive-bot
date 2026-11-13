@@ -8,6 +8,9 @@
 
 ## 미출시
 
+- **YouTube 보존 실패 분류:** 원본 관측과 projection 보존 가운데 한쪽이 `DeadlineExceeded`로 끝나면 다른 쪽의 재시도 불가 오류가 있어도 ready를 유지하던 결함을 고쳤습니다. 이제 두 오류가 모두 재시도 가능할 때만 ready를 유지합니다. Fallback delta: none.
+- **템플릿 `formatNumberKR` 단위 경계:** 반올림한 뒤의 값으로 단위를 골라 9,999가 `10.0천` 대신 `1.0만`, 99,999,999가 `10000.0만` 대신 `1.0억`이 됩니다. 반올림을 정수 연산의 사사오입으로 바꿨으므로 1,250처럼 정확히 반인 값은 `1.2천`에서 `1.3천`으로 바뀝니다.
+- **Holodex `Retry-After` 상한:** 429 응답의 `Retry-After`가 초 값이든 HTTP-date든 5분을 넘으면 5분으로 자릅니다. 이전에는 사실상 상한이 없어, 몇 시간이나 며칠짜리 값 하나로 Holodex 호출이 그만큼 멈출 수 있었습니다. 이미 Valkey에 저장된 더 긴 cooldown은 자르지 않고 만료를 기다립니다.
 - **명령 의존성 기동 검사:** 명령마다 실행 때 확인하던 필수 의존성을 명령 등록 전에 한 번 검사합니다. 빠진 의존성은 첫 사용자 명령의 실패가 아니라 bot plane 기동 실패(`initialize command <이름>: ...`)로 드러납니다. DB pool과 멤버 저장소도 필수로 바뀌어 없으면 `postgres pool is required`, `member repository dependency is required`로 기동이 멈추며, 달력 명령은 조건 없이 등록합니다. 그래서 명령별 DB 조회기의 pool 없음 분기와 `!스케쥴` 조회 때마다 store를 만들던 경로를 지웠습니다. 운영 조립은 모든 의존성을 연결하므로 응답은 바뀌지 않습니다.
 - **`!스케쥴` 문구 DB 이관(migration 016):** 멤버 이름 누락·조회 실패·이번 주 포스터 없음 문구를 `message_strings`의 `error/schedule_poster_need_member_name`, `error/schedule_poster_query_failed`, `misc/schedule_poster_not_found`에서 읽습니다. 문구는 그대로입니다. bot plane이 기동 때 세 key를 검증하므로 배포 helper의 기존 순서대로 migration을 API 교체 전에 적용합니다. 016 이전 상태의 DB로 복원하면 새 API는 이 검증에서 기동하지 못하므로 이전 이미지로 함께 되돌립니다.
 - **PostgreSQL planner 설정:** `holo-postgres`(와 운영에 없는 참고용 대기 unit) 시작 인자에 `random_page_cost=1.1`, `jit=off`를 더했습니다. 저장 장치는 NVMe SSD 기반 OCI Block Volume입니다. 로컬 일회용 DB에서 두 값을 함께 바꾸면 관측 큐 claim이 처리 완료 이력 20만 행을 읽지 않는 실행 계획을 골라 활성 5천 행 기준 49ms에서 17.5ms가 됐습니다. 운영 claim은 이미 평균 0.52ms라 이 수치는 실행 계획 선택의 근거이며 운영 개선 예상치가 아닙니다. unit에 `Restart=always`가 있어 바뀐 unit을 설치하면 이후의 어떤 재시작(장애·재부팅 포함)에서도 새 값이 적용되므로, unit 설치와 DB 재시작을 같은 창에서 합니다. 운영에는 2026-11-13 02:36 UTC `holo-postgres` 재시작부터 적용됐고, 이전 값은 기본값(4, on)입니다.
