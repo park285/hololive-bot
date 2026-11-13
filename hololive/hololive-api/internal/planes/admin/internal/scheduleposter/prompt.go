@@ -192,11 +192,14 @@ func parseTranslationTable(text string) (translationTable, error) {
 			continue
 		}
 
-		if utf8.RuneCountInString(line) > maxTableLineRunes {
+		row := tableRow{original: original, korean: translated}
+
+		// 저장한 번역표를 다시 읽을 수 있도록 한도는 String()이 쓰는 형태로 잰다.
+		if utf8.RuneCountInString(row.String()) > maxTableLineRunes {
 			return nil, fmt.Errorf("poster translation table line exceeds %d characters", maxTableLineRunes)
 		}
 
-		table = append(table, tableRow{original: original, korean: translated})
+		table = append(table, row)
 	}
 
 	if len(table) == 0 {

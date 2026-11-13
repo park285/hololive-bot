@@ -61,7 +61,7 @@ type candidateStore interface {
 
 type translationStore interface {
 	PendingTranslations(ctx context.Context, limit int) ([]posterstore.PendingTranslation, error)
-	RecordTranslation(ctx context.Context, item posterstore.PendingTranslation, image posterstore.Image, inputs posterstore.TranslationInputs) (bool, error)
+	RecordTranslation(ctx context.Context, item posterstore.PendingTranslation, image posterstore.Image) (bool, error)
 	RecordTranslationFailure(ctx context.Context, item posterstore.PendingTranslation, reason string, inputs posterstore.TranslationInputs) (bool, error)
 }
 
@@ -408,7 +408,7 @@ func (s *Service) translatePending(ctx context.Context) error {
 			continue
 		}
 
-		recorded, err := s.translations.RecordTranslation(ctx, *item, image, inputs)
+		recorded, err := s.translations.RecordTranslation(ctx, *item, image)
 		if err != nil {
 			errs = append(errs, err)
 
@@ -422,79 +422,75 @@ func (s *Service) translatePending(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// translateOne은 실패해도 그때까지 만든 원본 판독과 번역표를 돌려주어, 재번역이 그것을 다시 쓸 수 있게 한다.
+// translateOne이 돌려주는 TranslationInputs는 실패 기록에 그대로 남길 값이다. 판독 오독이 번역표 대조나 그리기 검사를 막았을 수 있으므로,
+// 다음 재번역 한 번만 다시 쓰도록 새로 만든 판독·번역표로 그리기에서 실패한 시도만 남기고, 원본을 받지 못한 시도는 이전 값을 그대로 둔다.
 func (s *Service) translateOne(
 	ctx context.Context, item posterstore.PendingTranslation, textPrompt string,
 ) (posterstore.Image, posterstore.TranslationInputs, string, error) {
 	original, sourceErr := s.sources.image(ctx, item.ImageURL)
 	if sourceErr != nil {
-		return posterstore.Image{}, posterstore.TranslationInputs{}, reasonSourceUnavailable, sourceErr
+		return posterstore.Image{}, item.Inputs, reasonSourceUnavailable, sourceErr
 	}
 
 	if item.ImageSHA256 != "" && imageSHA256(original.Data) != item.ImageSHA256 {
-		return posterstore.Image{}, posterstore.TranslationInputs{}, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
+		return posterstore.Image{}, item.Inputs, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
 	}
 
-	inputs, table, err := s.translationInputs(ctx, item, original, textPrompt)
-	if err != nil {
-		return posterstore.Image{}, inputs, reasonTranslationFailed, err
-	}
+	key := translationInputsKey(s.config.Translation, original, textPrompt)
 
-	image, err := s.checkedRender(ctx, item.ID, original, inputs.Transcript, table)
-	if err != nil {
-		return posterstore.Image{}, inputs, reasonTranslationFailed, fmt.Errorf("render translated poster: %w", err)
-	}
+	transcript, table, reused := s.savedInputs(item, key)
+	if !reused {
+		var err error
 
-	return image, inputs, "", nil
-}
-
-// translationInputs는 원본 판독과 번역표를 만든다. 이 행의 이전 시도가 같은 입력(translationInputsKey)으로 남긴 판독은 그대로 쓰고,
-// 남긴 번역표는 지금의 대조를 통과할 때만 쓴다. 번역표를 만들지 못해도 판독은 돌려준다.
-func (s *Service) translationInputs(
-	ctx context.Context, item posterstore.PendingTranslation, original source, textPrompt string,
-) (posterstore.TranslationInputs, translationTable, error) {
-	inputs := posterstore.TranslationInputs{SHA256: translationInputsKey(s.config.Translation, original, textPrompt)}
-	saved := item.Inputs
-	reuse := bytes.Equal(saved.SHA256, inputs.SHA256) && len(saved.Transcript) > 0
-
-	if reuse {
-		inputs.Transcript = saved.Transcript
-
-		s.logger.Info("Schedule poster original transcript reused", slog.Int64("poster_id", item.ID))
-	} else {
-		transcript, err := s.transcribe(ctx, item.ID, stageOriginal, original)
-		if err != nil {
-			return posterstore.TranslationInputs{}, nil, fmt.Errorf("transcribe original poster: %w", err)
+		if transcript, err = s.transcribe(ctx, item.ID, stageOriginal, original); err != nil {
+			return posterstore.Image{}, posterstore.TranslationInputs{}, reasonTranslationFailed, fmt.Errorf("transcribe original poster: %w", err)
 		}
-
-		inputs.Transcript = transcript
 
 		s.logger.Info("Schedule poster original transcribed",
 			slog.Int64("poster_id", item.ID),
 			slog.String("transcript", strings.Join(transcript, " / ")))
+
+		if table, err = s.checkedTable(ctx, item.ID, original, transcript, textPrompt); err != nil {
+			return posterstore.Image{}, posterstore.TranslationInputs{}, reasonTranslationFailed, fmt.Errorf("translate poster text: %w", err)
+		}
 	}
 
-	if reuse && saved.Table != "" {
-		table, err := parseTranslationTable(saved.Table)
-		if problems := checkTable(table, inputs.Transcript); err == nil && len(problems) == 0 {
-			inputs.Table = saved.Table
+	image, err := s.checkedRender(ctx, item.ID, original, transcript, table)
+	if err != nil {
+		var inputs posterstore.TranslationInputs
 
-			s.logger.Info("Schedule poster translation table reused", slog.Int64("poster_id", item.ID))
-
-			return inputs, table, nil
+		if !reused {
+			inputs = posterstore.TranslationInputs{SHA256: key, Transcript: transcript, Table: table.String()}
 		}
 
-		s.logger.Info("Schedule poster saved translation table rejected", slog.Int64("poster_id", item.ID))
+		return posterstore.Image{}, inputs, reasonTranslationFailed, fmt.Errorf("render translated poster: %w", err)
 	}
 
-	table, err := s.checkedTable(ctx, item.ID, original, inputs.Transcript, textPrompt)
+	return image, posterstore.TranslationInputs{}, "", nil
+}
+
+func (s *Service) savedInputs(item posterstore.PendingTranslation, key []byte) ([]string, translationTable, bool) {
+	saved := item.Inputs
+	if !bytes.Equal(saved.SHA256, key) {
+		return nil, nil, false
+	}
+
+	table, err := parseTranslationTable(saved.Table)
+	if err == nil {
+		if problems := checkTable(table, saved.Transcript); len(problems) > 0 {
+			err = fmt.Errorf("translation table check failed: %s", strings.Join(problems, "; "))
+		}
+	}
+
 	if err != nil {
-		return inputs, nil, fmt.Errorf("translate poster text: %w", err)
+		s.logger.Warn("Schedule poster saved translation inputs rejected", slog.Int64("poster_id", item.ID), slog.Any("error", err))
+
+		return nil, nil, false
 	}
 
-	inputs.Table = table.String()
+	s.logger.Info("Schedule poster saved translation inputs reused", slog.Int64("poster_id", item.ID))
 
-	return inputs, table, nil
+	return saved.Transcript, table, true
 }
 
 func (s *Service) transcribe(ctx context.Context, posterID int64, stage string, src source) ([]string, error) {

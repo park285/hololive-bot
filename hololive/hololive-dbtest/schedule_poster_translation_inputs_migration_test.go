@@ -20,6 +20,7 @@ func TestSchedulePosterTranslationInputsStayPairedAndBounded(t *testing.T) {
 
 	key := bytes.Repeat([]byte{1}, 32)
 	transcript := []string{"週間スケジュール"}
+	table := new("週間スケジュール ⇒ 주간 스케줄")
 
 	for index, row := range []struct {
 		key        []byte
@@ -27,8 +28,7 @@ func TestSchedulePosterTranslationInputsStayPairedAndBounded(t *testing.T) {
 		table      *string
 	}{
 		{key: nil, transcript: nil, table: nil},
-		{key: key, transcript: transcript, table: nil},
-		{key: key, transcript: transcript, table: new("週間スケジュール ⇒ 주간 스케줄")},
+		{key: key, transcript: transcript, table: table},
 	} {
 		_, err := pool.Exec(ctx, insert, index+1, row.key, row.transcript, row.table)
 		require.NoError(t, err, "%+v", row)
@@ -39,12 +39,13 @@ func TestSchedulePosterTranslationInputsStayPairedAndBounded(t *testing.T) {
 		transcript []string
 		table      *string
 	}{
-		{key: key, transcript: nil, table: nil},
-		{key: nil, transcript: transcript, table: nil},
-		{key: key[:31], transcript: transcript, table: nil},
-		{key: key, transcript: []string{}, table: nil},
-		{key: key, transcript: make([]string, 201), table: nil},
-		{key: nil, transcript: nil, table: new("週間スケジュール ⇒ 주간 스케줄")},
+		{key: key, transcript: nil, table: table},
+		{key: nil, transcript: transcript, table: table},
+		{key: key, transcript: transcript, table: nil},
+		{key: nil, transcript: nil, table: table},
+		{key: key[:31], transcript: transcript, table: table},
+		{key: key, transcript: []string{}, table: table},
+		{key: key, transcript: make([]string, 201), table: table},
 		{key: key, transcript: transcript, table: new("")},
 		{key: key, transcript: transcript, table: new(strings.Repeat("a", 262145))},
 	} {

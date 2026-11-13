@@ -108,9 +108,8 @@ func (f *fakeStore) PendingTranslations(context.Context, int) ([]posterstore.Pen
 	return f.pending, nil
 }
 
-func (f *fakeStore) RecordTranslation(_ context.Context, _ posterstore.PendingTranslation, translated posterstore.Image, inputs posterstore.TranslationInputs) (bool, error) {
+func (f *fakeStore) RecordTranslation(_ context.Context, _ posterstore.PendingTranslation, translated posterstore.Image) (bool, error) {
 	f.recorded = append(f.recorded, translated)
-	f.inputs = append(f.inputs, inputs)
 
 	return true, nil
 }
@@ -285,6 +284,7 @@ func TestTranslatePendingRecordsFailureAfterRetries(t *testing.T) {
 	require.Len(t, translator.textPrompts, 3)
 	require.Empty(t, translator.imagePrompts, "번역표가 없으면 이미지를 그리지 않는다")
 	require.Equal(t, []string{reasonTranslationFailed}, store.failures)
+	require.Equal(t, []posterstore.TranslationInputs{{}}, store.inputs, "번역표를 만들지 못한 시도는 판독을 남기지 않는다")
 
 	translator = &fakeTranslator{tables: []string{sampleTable}, imageErr: errors.New("image model unavailable"), originalText: sampleOriginalText}
 	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
@@ -293,9 +293,11 @@ func TestTranslatePendingRecordsFailureAfterRetries(t *testing.T) {
 	require.Equal(t, []string{reasonTranslationFailed, reasonTranslationFailed}, store.failures)
 	require.Empty(t, store.recorded)
 
+	store.pending[0].Inputs = store.inputs[1]
 	sources.err = errors.New("gone")
 	require.NoError(t, testService(store, sources, translator).translatePending(t.Context()))
 	require.Equal(t, []string{reasonTranslationFailed, reasonTranslationFailed, reasonSourceUnavailable}, store.failures)
+	require.Equal(t, store.inputs[1], store.inputs[2], "원본을 받지 못한 시도는 남긴 판독·번역표를 그대로 둔다")
 }
 
 func TestTranslatePendingUsesOnlyTheCollectedThumbnail(t *testing.T) {
@@ -505,67 +507,46 @@ func TestTranslatePendingLogsTheUsageOfEveryModelResponse(t *testing.T) {
 	}), "응답을 받지 못한 호출은 남기지 않는다")
 }
 
-func TestTranslatePendingReusesTheTranscriptAndTableOfTheSameInputs(t *testing.T) {
+func TestTranslatePendingReusesTheInputsOfAFailedRenderOnlyOnce(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
-	translator := &fakeTranslator{
-		tables: []string{sampleTable}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
-		originalText: sampleOriginalText, renders: [][]string{{sophia.NameKo, "홀로도리 방송"}},
+	translator := &fakeTranslator{tables: []string{sampleTable}, imageErr: errors.New("image model unavailable"), originalText: sampleOriginalText}
+	service := testService(store, &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}, translator, sophia)
+
+	retranslate := func() posterstore.TranslationInputs {
+		t.Helper()
+
+		require.NoError(t, service.translatePending(t.Context()))
+
+		store.pending[0].Inputs = store.inputs[len(store.inputs)-1]
+
+		return store.pending[0].Inputs
 	}
-	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
-	service := testService(store, sources, translator, sophia)
 
-	require.NoError(t, service.translatePending(t.Context()))
-	require.Len(t, store.inputs, 1)
-
-	saved := store.inputs[0]
+	saved := retranslate()
 	require.Len(t, saved.SHA256, 32)
 	require.Equal(t, sampleOriginalText, saved.Transcript)
 	require.Equal(t, mustTable(t, sampleTable).String(), saved.Table)
 
-	retranslate := func() {
-		t.Helper()
+	require.Empty(t, retranslate(), "다시 쓴 판독·번역표는 그 시도로 끝낸다")
+	require.Equal(t, 1, translator.originals, "그리기에 실패한 시도의 판독을 다음 재번역 한 번이 다시 쓴다")
+	require.Len(t, translator.textPrompts, 1)
+	require.Len(t, translator.imagePrompts, 6)
 
-		store.pending[0].Inputs = store.inputs[len(store.inputs)-1]
-
-		require.NoError(t, service.translatePending(t.Context()))
-	}
-
-	retranslate()
-	require.Equal(t, 1, translator.originals, "같은 그림·모델·지시문이면 원본을 다시 판독하지 않는다")
-	require.Len(t, translator.textPrompts, 1, "같은 그림·모델·지시문이면 번역표를 다시 만들지 않는다")
-	require.Len(t, translator.imagePrompts, 2)
-	require.Len(t, store.recorded, 2)
-	require.Equal(t, saved, store.inputs[1])
-
-	service.config.Translation.Glossary = map[string]string{"ホロドリ": "홀로도리"}
-
-	retranslate()
-	require.Equal(t, 2, translator.originals, "glossary가 바뀌면 판독부터 다시 한다")
+	require.Equal(t, saved, retranslate())
+	require.Equal(t, 2, translator.originals, "그다음 재번역은 판독부터 다시 한다")
 	require.Len(t, translator.textPrompts, 2)
-	require.NotEqual(t, saved.SHA256, store.inputs[2].SHA256)
-
-	sources.original.Data = []byte("original, redrawn")
-
-	retranslate()
-	require.Equal(t, 3, translator.originals, "그림이 바뀌면 판독부터 다시 한다")
-	require.Len(t, translator.textPrompts, 3)
-
-	service.config.Translation.TranscribeModel = "gemini-4-argon"
-
-	retranslate()
-	require.Equal(t, 4, translator.originals, "판독 모델이 바뀌면 판독부터 다시 한다")
 }
 
-func TestTranslatePendingRebuildsAStoredTableThatNoLongerPassesTheCheck(t *testing.T) {
+func TestTranslatePendingStartsOverWhenTheSavedTableNoLongerPassesTheCheck(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeStore{pending: []posterstore.PendingTranslation{{ID: 1, ChannelID: sophiaChannel, ImageURL: sampleImageURL, Revision: 2}}}
 	withTime := sampleTable + "\n20:00〜 ⇒ 20:00~"
 	translator := &fakeTranslator{
-		tables: []string{sampleTable, withTime}, output: source{MIME: mimePNG, Data: pngBytes(t, 64, 36)},
-		originalText: append(slices.Clone(sampleOriginalText), "20:00〜"), renders: [][]string{{sophia.NameKo, "20:00~ 홀로도리 방송"}},
+		tables: []string{withTime}, imageErr: errors.New("image model unavailable"),
+		originalText: append(slices.Clone(sampleOriginalText), "20:00〜"),
 	}
 	service := testService(store, &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}, translator)
 
@@ -576,13 +557,41 @@ func TestTranslatePendingRebuildsAStoredTableThatNoLongerPassesTheCheck(t *testi
 
 	stale.Table = sampleTable
 	store.pending[0].Inputs = stale
-	translator.tables = []string{withTime}
-	translator.textPrompts = nil
 
 	require.NoError(t, service.translatePending(t.Context()))
-	require.Equal(t, 1, translator.originals, "판독은 그대로 쓴다")
-	require.Len(t, translator.textPrompts, 1, "지금의 대조를 통과하지 못하는 저장된 번역표는 다시 만든다")
+	require.Equal(t, 2, translator.originals, "지금의 대조를 통과하지 못하는 번역표를 남긴 입력은 판독부터 다시 한다")
+	require.Len(t, translator.textPrompts, 2)
 	require.Equal(t, mustTable(t, withTime).String(), store.inputs[1].Table)
+}
+
+func TestTranslationInputsKeyCoversEveryInputOfTheTranscriptAndTable(t *testing.T) {
+	t.Parallel()
+
+	config := TranslationConfig{Model: defaultModel, TextModel: defaultTextModel, TranscribeModel: defaultTranscribeModel}
+	original := source{MIME: mimeJPEG, Data: []byte("original")}
+	prompt := buildTextPrompt(sophiaChannel, []*domain.Member{sophia}, nil)
+	base := translationInputsKey(config, original, prompt)
+
+	withConfig := func(edit func(*TranslationConfig)) []byte {
+		changed := config
+		edit(&changed)
+
+		return translationInputsKey(changed, original, prompt)
+	}
+
+	require.Equal(t, base, translationInputsKey(config, original, prompt))
+	require.Equal(t, base, withConfig(func(c *TranslationConfig) { c.Model = "gemini-nano-banana-pro" }), "그리기 모델은 판독·번역표를 바꾸지 않는다")
+
+	for name, key := range map[string][]byte{
+		"text_model":       withConfig(func(c *TranslationConfig) { c.TextModel = defaultTranscribeModel }),
+		"transcribe_model": withConfig(func(c *TranslationConfig) { c.TranscribeModel = defaultTextModel }),
+		"image bytes":      translationInputsKey(config, source{MIME: mimeJPEG, Data: []byte("original, redrawn")}, prompt),
+		"image type":       translationInputsKey(config, source{MIME: mimePNG, Data: original.Data}, prompt),
+		"members":          translationInputsKey(config, original, buildTextPrompt(sophiaChannel, []*domain.Member{sophia, mela}, nil)),
+		"glossary":         translationInputsKey(config, original, buildTextPrompt(sophiaChannel, []*domain.Member{sophia}, map[string]string{"ホロドリ": "홀로도리"})),
+	} {
+		require.NotEqual(t, base, key, name)
+	}
 }
 
 func TestTranslatePendingRebuildsATableThatMissesATime(t *testing.T) {
@@ -731,6 +740,20 @@ func TestParseTranslationTableKeepsOnlyTableLines(t *testing.T) {
 
 	_, err = parseTranslationTable("あ ⇒ " + strings.Repeat("아", maxTableLineRunes))
 	require.Error(t, err)
+}
+
+func TestParsedTranslationTablesParseAgainFromTheirString(t *testing.T) {
+	t.Parallel()
+
+	longest, err := parseTranslationTable(strings.Repeat("あ", 100) + tableSeparator + strings.Repeat("아", maxTableLineRunes-103))
+	require.NoError(t, err)
+
+	again, err := parseTranslationTable(longest.String())
+	require.NoError(t, err)
+	require.Equal(t, longest, again)
+
+	_, err = parseTranslationTable(strings.Repeat("あ", 100) + tableSeparator + strings.Repeat("아", maxTableLineRunes-102))
+	require.Error(t, err, "구분자 양쪽에 공백을 넣으면 한도를 넘는 줄은 처음부터 받지 않는다")
 }
 
 func TestFirstImageSkipsThoughtImages(t *testing.T) {
