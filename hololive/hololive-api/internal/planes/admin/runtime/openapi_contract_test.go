@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
@@ -428,6 +429,11 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 	const failTranslation = `UPDATE schedule_posters SET translation_status = 'failed', translation_error = 'translation_failed',
 		revision = revision + 1 WHERE id = 2119784604752343207`
 
+	const (
+		invalidState = `{"error":"schedule poster state does not allow this change","code":"invalid_state"}`
+		invalidWeek  = `{"error":"week must span at most 7 days within 7 days of the post","code":"invalid_week"}`
+	)
+
 	steps := []schedulePosterStep{
 		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK, "", ""},
 		{http.MethodGet, base + "?status=pending_review", base, "", http.StatusOK, "", ""},
@@ -443,7 +449,8 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		{http.MethodGet, poster, itemRoute, "", http.StatusOK, "", ""},
 		{http.MethodPost, poster + "/translate", itemRoute + "/translate", `{"expectedRevision":"2"}`, http.StatusConflict, "", ""},
 		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusConflict, "", ""},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict, failTranslation, ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict, "", invalidState},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict, failTranslation, invalidWeek},
 		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"11/16"}`, http.StatusBadRequest, "", ""},
 		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusOK, "", ""},
 		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"x"}`, http.StatusBadRequest, "", ""},
@@ -477,8 +484,8 @@ func (s *adminOpenAPI) runSteps(t *testing.T, serve adminTestServe, pool *pgxpoo
 			t.Fatalf("%s %s %s = %d %s, want %d", step.method, step.path, step.body, rec.Code, rec.Body.String(), step.status)
 		}
 
-		if step.response != "" && strings.TrimSpace(rec.Body.String()) != step.response {
-			t.Fatalf("%s %s = %s, want %s", step.method, step.path, rec.Body.String(), step.response)
+		if step.response != "" {
+			require.JSONEq(t, step.response, rec.Body.String(), "%s %s", step.method, step.path)
 		}
 
 		if step.body != "" {
@@ -497,6 +504,7 @@ func TestSchedulePosterCollectMatchesAdminOpenAPI(t *testing.T) {
 
 	spec.runSteps(t, serve, pool, []schedulePosterStep{
 		{http.MethodPost, collect, collect, `{"now":true}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, collect, collect, `null`, http.StatusBadRequest, "", ""},
 		{http.MethodPost, collect, collect, `{}`, http.StatusOK, "", `{"queued":true}`},
 		{http.MethodPost, collect, collect, `{}`, http.StatusOK, "", `{"queued":false}`},
 	})

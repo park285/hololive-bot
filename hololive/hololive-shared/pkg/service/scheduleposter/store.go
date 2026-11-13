@@ -339,7 +339,7 @@ func (s *Store) AutoConfirm(ctx context.Context, id, expectedRevision int64, wee
 		case overlapping:
 			coverage = WeekOverlapping
 		default:
-			revision, err = changeWeek(ctx, tx, confirmSQL, ReviewPending, id, expectedRevision, weekStart, weekEnd, ReviewerAuto)
+			revision, err = changeWeek(ctx, tx, confirmSQL, id, expectedRevision, weekStart, weekEnd, ReviewerAuto)
 		}
 
 		return err
@@ -469,7 +469,7 @@ func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekSta
 	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
 		var err error
 
-		revision, err = changeWeek(ctx, tx, confirmSQL, ReviewPending, id, expectedRevision, weekStart, weekEnd, ReviewerAdmin)
+		revision, err = changeWeek(ctx, tx, confirmSQL, id, expectedRevision, weekStart, weekEnd, ReviewerAdmin)
 
 		return err
 	})
@@ -493,7 +493,7 @@ func (s *Store) UpdateWeek(ctx context.Context, id, expectedRevision int64, week
 	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
 		var err error
 
-		revision, err = changeWeek(ctx, tx, updateWeekSQL, ReviewConfirmed, id, expectedRevision, weekStart, weekEnd)
+		revision, err = changeWeek(ctx, tx, updateWeekSQL, id, expectedRevision, weekStart, weekEnd)
 
 		return err
 	})
@@ -567,24 +567,25 @@ func lockChannelConfirm(ctx context.Context, tx pgx.Tx, id int64) error {
 	return nil
 }
 
-// changeWeek의 query(confirm.sql, update_week.sql)는 변경 전 revision·상태·게시일 7일 이내 여부와 바뀐 revision을 이 순서로 돌려줘야 한다.
+// changeWeek의 query(confirm.sql, update_week.sql)는 변경 전 revision, 주 말고는 바꿀 수 있는 행인지, 게시일 7일 이내 여부와
+// 바뀐 revision을 이 순서로 돌려줘야 한다.
 func changeWeek(
-	ctx context.Context, tx pgx.Tx, query string, from ReviewStatus, id, expectedRevision int64, weekStart, weekEnd time.Time, args ...any,
+	ctx context.Context, tx pgx.Tx, query string, id, expectedRevision int64, weekStart, weekEnd time.Time, args ...any,
 ) (int64, error) {
 	var (
-		current  *int64
-		status   *string
-		nearPost *bool
-		updated  *int64
+		current    *int64
+		changeable *bool
+		nearPost   *bool
+		updated    *int64
 	)
 
 	if err := tx.QueryRow(ctx, query, append([]any{id, expectedRevision, weekStart, weekEnd}, args...)...).
-		Scan(&current, &status, &nearPost, &updated); err != nil {
+		Scan(&current, &changeable, &nearPost, &updated); err != nil {
 		return 0, fmt.Errorf("update schedule poster: %w", err)
 	}
 
 	revision, err := mutationOutcome(current, updated, expectedRevision)
-	if errors.Is(err, ErrInvalidState) && status != nil && ReviewStatus(*status) == from && nearPost != nil && !*nearPost {
+	if errors.Is(err, ErrInvalidState) && changeable != nil && *changeable && nearPost != nil && !*nearPost {
 		return 0, ErrInvalidWeek
 	}
 

@@ -311,7 +311,15 @@ func (h *SchedulePosterHandler) CollectSchedulePosters(c *gin.Context) {
 		return
 	}
 
-	if !decodeSchedulePosterChange(c, &struct{}{}) {
+	var request *struct{}
+
+	if !decodeSchedulePosterChange(c, &request) {
+		return
+	}
+
+	if request == nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid schedule poster request body", nil)
+
 		return
 	}
 

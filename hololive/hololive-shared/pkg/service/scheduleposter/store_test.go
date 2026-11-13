@@ -141,6 +141,9 @@ func TestStoreUpdateWeekMovesOnlyThePublishedWeek(t *testing.T) {
 	_, err := store.UpdateWeek(ctx, 101, pending.Revision, date(t, "2026-11-16"), date(t, "2026-11-22"))
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 중에는 바꾸지 않아 진행 중인 번역 결과가 그대로 기록된다")
 
+	_, err = store.UpdateWeek(ctx, 101, pending.Revision, date(t, "2026-11-23"), date(t, "2026-11-29"))
+	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 중이면 주가 멀어도 주를 고칠 수 없는 상태로 알린다")
+
 	recorded, err := store.RecordTranslation(ctx, pending, image)
 	require.NoError(t, err)
 	require.True(t, recorded)

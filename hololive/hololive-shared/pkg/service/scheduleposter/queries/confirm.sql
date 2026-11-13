@@ -1,5 +1,5 @@
 WITH target AS (
-    SELECT revision, review_status,
+    SELECT revision, review_status = 'pending_review' AS changeable,
            abs($3::date - (posted_at AT TIME ZONE 'Asia/Tokyo')::date) <= 7 AS near_post
     FROM schedule_posters
     WHERE id = $1
@@ -18,5 +18,5 @@ WITH target AS (
       AND (other.posted_at AT TIME ZONE 'Asia/Tokyo')::date >= $3::date
       AND (other.posted_at AT TIME ZONE 'Asia/Tokyo')::date < $4::date
 )
-SELECT (SELECT revision FROM target), (SELECT review_status FROM target), (SELECT near_post FROM target),
+SELECT (SELECT revision FROM target), (SELECT changeable FROM target), (SELECT near_post FROM target),
        (SELECT revision FROM updated)

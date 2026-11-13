@@ -63,7 +63,7 @@ func TestAutoConfirmWaitsForAConcurrentConfirm(t *testing.T) {
 	require.Eventually(t, func() bool { return lockWaiting(t, pool) }, 10*time.Second, 20*time.Millisecond,
 		"관리자 확정이 잠금을 쥔 동안 자동 확정은 기다린다")
 
-	_, err = changeWeek(ctx, admin, confirmSQL, ReviewPending, 101, 1, start, end, ReviewerAdmin)
+	_, err = changeWeek(ctx, admin, confirmSQL, 101, 1, start, end, ReviewerAdmin)
 	require.NoError(t, err)
 	require.NoError(t, admin.Commit(ctx))
 
