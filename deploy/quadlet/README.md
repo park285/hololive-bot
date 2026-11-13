@@ -59,6 +59,8 @@ sudo ./scripts/deploy/sync-opt-current.sh
 
 방화벽 규칙(`scripts/systemd/admin-dashboard-ingress.nft`)이 바뀐 배포에서는 설치 뒤
 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다(아래 '기동·정지·의존').
+이 규칙은 같은 호스트의 ChatBotGo(5432)·TwentyQ(5458) PostgreSQL 게시 포트도 loopback과 kapu(`bot_postgres_sources`)에서만 받습니다.
+두 봇의 DB unit은 이 방화벽 unit에 의존하지 않으므로, 방화벽 unit이 멈추거나 시작에 실패하면 두 포트는 tailnet 전체에 다시 열립니다.
 
 prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)로 설치됩니다.
 
