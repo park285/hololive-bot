@@ -1,9 +1,13 @@
 package orchestration
 
-import "testing"
+import (
+	"testing"
+
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+)
 
 func TestCommandInitViewWiresHelpImageProvider(t *testing.T) {
-	view := (&Bot{}).commandInitView(&Dependencies{}, nil)
+	view := (&Bot{postgres: databasemocks.NewUnconnectedClient(t)}).commandInitView(&Dependencies{}, nil, nil)
 	deps := view.toCommandDependencies()
 
 	if deps.HelpImageProvider == nil {

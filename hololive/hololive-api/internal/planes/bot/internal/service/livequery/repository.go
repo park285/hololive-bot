@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -25,26 +24,13 @@ type snapshotDB interface {
 type Repository struct{ db snapshotDB }
 
 // New는 기존 bot-plane pool을 재사용하며 새 연결이나 수집 작업을 만들지 않는다.
-func New(db database.Client) *Repository {
-	if db == nil {
-		return &Repository{}
-	}
-
-	pool := db.GetPool()
-	if pool == nil {
-		return &Repository{}
-	}
-
+func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{db: pool}
 }
 
 func (r *Repository) Query(ctx context.Context, request Request) (Result, error) {
 	if err := validateRequest(request); err != nil {
 		return Result{}, fmt.Errorf("validate live query: %w", err)
-	}
-
-	if r == nil || r.db == nil {
-		return Result{}, errors.New("live query database is not configured")
 	}
 
 	queryCtx, cancel := context.WithTimeout(ctx, queryBudget)

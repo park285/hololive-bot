@@ -51,10 +51,6 @@ func (c *LiveCommand) Description() string {
 }
 
 func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	memberName, hasMember := params[paramMember].(string)
 	if hasMember && memberName != "" {
 		if err := c.executeMemberLive(ctx, cmdCtx, memberName); err != nil {
@@ -154,7 +150,7 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 	return nil
 }
 
-func (c *LiveCommand) ensureDeps() error {
+func (c *LiveCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}

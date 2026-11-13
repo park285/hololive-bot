@@ -40,10 +40,6 @@ func (c *CalendarCommand) Description() string {
 }
 
 func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("calendar command: ensure deps: %w", err)
-	}
-
 	month, year := c.targetMonthYear(params)
 
 	entries, err := c.memberRepo.FindMembersWithCelebrationsInMonth(ctx, month, year)
@@ -149,7 +145,7 @@ func (c *CalendarCommand) renderCalendarImage(ctx context.Context, month, year i
 	return out, nil
 }
 
-func (c *CalendarCommand) ensureDeps() error {
+func (c *CalendarCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("calendar command: ensure base deps: %w", err)
 	}

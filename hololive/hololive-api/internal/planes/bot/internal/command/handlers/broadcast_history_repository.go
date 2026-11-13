@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 type pgBroadcastHistoryRepository struct {
@@ -67,19 +67,11 @@ type broadcastHistoryDB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func NewPgBroadcastHistoryRepository(postgres database.Client) handlercore.BroadcastHistoryRepository {
-	if postgres == nil || postgres.GetPool() == nil {
-		return nil
-	}
-
-	return &pgBroadcastHistoryRepository{pool: postgres.GetPool()}
+func NewPgBroadcastHistoryRepository(pool *pgxpool.Pool) handlercore.BroadcastHistoryRepository {
+	return &pgBroadcastHistoryRepository{pool: pool}
 }
 
 func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, query *handlercore.BroadcastHistoryQuery) (handlercore.BroadcastHistoryResult, error) {
-	if r == nil || r.pool == nil {
-		return handlercore.BroadcastHistoryResult{}, errors.New("broadcast history repository not configured")
-	}
-
 	if query == nil {
 		return handlercore.BroadcastHistoryResult{}, errors.New("broadcast history query is required")
 	}
@@ -285,10 +277,6 @@ func broadcastHistorySQLTopicFilter(topicID string) string {
 }
 
 func (r *pgBroadcastHistoryRepository) GetEndedBroadcast(ctx context.Context, query handlercore.BroadcastThumbnailQuery) (*handlercore.BroadcastHistoryEntry, error) {
-	if r == nil || r.pool == nil {
-		return nil, errors.New("broadcast history repository not configured")
-	}
-
 	if query.VideoID == "" {
 		return nil, handlercore.ErrBroadcastNotFound
 	}

@@ -308,11 +308,11 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 	}
 }
 
-func TestUpcomingCommandEnsureDeps(t *testing.T) {
+func TestUpcomingCommandCheckDependencies(t *testing.T) {
 	t.Run("base dependency error", func(t *testing.T) {
 		cmd := NewUpcomingCommand(&handlercore.Dependencies{})
 
-		err := cmd.ensureDeps()
+		err := cmd.CheckDependencies()
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -329,7 +329,7 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 		}
 		cmd := NewUpcomingCommand(deps)
 
-		err := cmd.ensureDeps()
+		err := cmd.CheckDependencies()
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -354,7 +354,7 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 		}
 
 		cmd := NewUpcomingCommand(deps)
-		if err := cmd.ensureDeps(); err != nil {
+		if err := cmd.CheckDependencies(); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
 
@@ -364,11 +364,11 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 	})
 }
 
-func TestScheduleCommandEnsureDeps(t *testing.T) {
+func TestScheduleCommandCheckDependencies(t *testing.T) {
 	t.Run("base dependency error", func(t *testing.T) {
 		cmd := NewScheduleCommand(&handlercore.Dependencies{})
 
-		err := cmd.ensureDeps()
+		err := cmd.CheckDependencies()
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -385,7 +385,7 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 		}
 		cmd := NewScheduleCommand(deps)
 
-		err := cmd.ensureDeps()
+		err := cmd.CheckDependencies()
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -410,7 +410,7 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 		}
 
 		cmd := NewScheduleCommand(deps)
-		if err := cmd.ensureDeps(); err != nil {
+		if err := cmd.CheckDependencies(); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
 

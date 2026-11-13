@@ -24,10 +24,12 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 type stubCommandInitStreamProvider struct{}
@@ -50,11 +52,11 @@ func (s *stubCommandInitCalendarFinder) FindMembersWithCelebrationsInMonth(conte
 
 func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 	streamProvider := &stubCommandInitStreamProvider{}
-	b := &Bot{logger: slog.New(slog.DiscardHandler)}
+	b := &Bot{logger: slog.New(slog.DiscardHandler), postgres: databasemocks.NewUnconnectedClient(t)}
 
 	view := b.commandInitView(&Dependencies{
 		Holodex: streamProvider,
-	}, nil)
+	}, nil, nil)
 
 	deps := view.toCommandDependencies()
 	if deps == nil {
@@ -71,8 +73,8 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 }
 
 func TestCommandInitView_AssemblesCommands(t *testing.T) {
-	b := &Bot{logger: slog.New(slog.DiscardHandler)}
-	view := b.commandInitView(&Dependencies{}, &stubCommandInitCalendarFinder{})
+	b := &Bot{logger: slog.New(slog.DiscardHandler), postgres: databasemocks.NewUnconnectedClient(t)}
+	view := b.commandInitView(&Dependencies{}, &stubCommandInitCalendarFinder{}, nil)
 
 	deps := view.toCommandDependencies()
 	commands := view.buildCommands(deps)
@@ -101,6 +103,19 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 	}
 	if !slices.Equal(gotNames, wantNames) {
 		t.Fatalf("command names = %v, want %v", gotNames, wantNames)
+	}
+}
+
+func TestInitializeCommandsRejectsMissingCommandDependency(t *testing.T) {
+	b := &Bot{logger: slog.New(slog.DiscardHandler), postgres: databasemocks.NewUnconnectedClient(t)}
+
+	err := b.initializeCommands(&Dependencies{}, nil)
+	if err == nil || !strings.HasPrefix(err.Error(), "initialize command help: ") {
+		t.Fatalf("initializeCommands() error = %v, want help dependency error", err)
+	}
+
+	if b.commandExecutor != nil {
+		t.Fatal("command router must not be built when a command dependency is missing")
 	}
 }
 

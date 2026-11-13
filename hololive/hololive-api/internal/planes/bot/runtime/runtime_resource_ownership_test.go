@@ -19,6 +19,7 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 func TestBotRuntimeCloseContextWaitsForDurableSamplerBeforeFreeingResources(t *testing.T) {
@@ -183,6 +184,8 @@ func TestBotRuntimeClosePreservesFatalAndResourceErrorsAfterTasksJoin(t *testing
 	fatalErr := errors.New("fatal task failure")
 	closeErr := errors.New("resource close failure")
 
+	postgres := databasemocks.NewUnconnectedClient(t)
+
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
 		Logger:         slog.New(slog.DiscardHandler),
 		Client:         &stubIrisClient{},
@@ -190,7 +193,7 @@ func TestBotRuntimeClosePreservesFatalAndResourceErrorsAfterTasksJoin(t *testing
 		MessageAdapter: messaging.NewMessageAdapter("!"),
 		Formatter:      formatter.NewResponseFormatter("!", nil),
 		Cache:          &cachemocks.Client{WaitUntilReadyFunc: func(context.Context, time.Duration) error { return fatalErr }},
-		Postgres:       &databasemocks.Client{}, Holodex: &holodexprovider.Service{},
+		Postgres:       postgres, MemberRepository: member.NewMemberRepository(postgres), Holodex: &holodexprovider.Service{},
 		Alarm: testAlarmCRUD{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
 	})
 	if err != nil {

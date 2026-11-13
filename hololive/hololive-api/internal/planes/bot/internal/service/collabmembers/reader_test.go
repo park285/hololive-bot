@@ -4,12 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 const testHostChannel = "UC_miko"
@@ -69,7 +67,7 @@ INSERT INTO youtube_schedule_items(group_key, provider, external_id, video_id, c
 		{ChannelID: testHostChannel, NameJa: "さくらみこ", ShortKoreanName: "미코"},
 		{ChannelID: "UC_sui", NameJa: "星街すいせい", ShortKoreanName: "스이세이"},
 	}}
-	reader := New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, members)
+	reader := New(pool, members)
 
 	got, err := reader.DisplayNames(t.Context(), []Video{
 		{ID: "collab00001", HostChannelID: testHostChannel},

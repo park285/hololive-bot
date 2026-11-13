@@ -179,6 +179,7 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 | `shared_buffers` | 1GB | `holo-postgres.container` 시작 인자; 컨테이너 한도의 25%를 배정하고 프로세스·파일 캐시 여유 유지 |
 | `wal_buffers` | 64MB | `holo-postgres.container` 시작 인자; 피크의 WAL 버퍼 포화에 대비 |
 | `effective_cache_size` | 3GB | `holo-postgres.container` 시작 인자; 공유 버퍼와 파일 캐시를 고려한 planner 추정치이며 별도 메모리 할당 아님 |
+| `random_page_cost` / `jit` | 1.1 / off (운영 미적용: 4 / on) | `holo-postgres.container`·`holo-postgres-standby.container` 시작 인자; NVMe SSD 기반 OCI Block Volume과 짧은 OLTP 쿼리 기준. unit 설치 뒤 첫 재시작부터 적용되므로 설치와 재시작을 함께 승인받음 |
 | `work_mem` / `maintenance_work_mem` | 4MB / 128MB | `holo-postgres.container` 시작 인자; 동시 쿼리·autovacuum의 메모리 배수를 고려 |
 | `max_wal_size` | 2GB | 기존 `holo-pg-data`의 `pgdata/postgresql.auto.conf`; `ALTER SYSTEM`과 설정 reload로 적용 |
 | `checkpoint_timeout` / `checkpoint_completion_target` | 15min / 0.9 | 기존 `postgresql.auto.conf` / PostgreSQL 기본값 유지 |

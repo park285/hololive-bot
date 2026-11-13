@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -13,7 +12,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -43,8 +41,8 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 	deps, _, message := liveCardTestDeps(t, []*domain.Member{{ChannelID: "UC_command_query", Name: "Query Member"}})
 
 	deps.Formatter = formatter.NewResponseFormatter("!", template.NewRenderer(pool, deps.Logger))
-	deps.LiveQuery = livequery.New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
-	deps.CollabMembers = collabmembers.New(&dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, nil)
+	deps.LiveQuery = livequery.New(pool)
+	deps.CollabMembers = collabmembers.New(pool, nil)
 
 	deps.Holodex = &forbiddenLiveProvider{}
 

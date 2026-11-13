@@ -60,10 +60,6 @@ func (c *AlarmCommand) Description() string {
 }
 
 func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	if err := c.executeAction(ctx, cmdCtx, params, alarmAction(params)); err != nil {
 		return fmt.Errorf("execute action: %w", err)
 	}
@@ -139,12 +135,12 @@ func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *botcommand.Com
 	return nil
 }
 
-func (c *AlarmCommand) ensureDeps() error {
+func (c *AlarmCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().Formatter == nil {
+	if c.Deps().Alarm == nil || c.Deps().Matcher == nil || c.Deps().Formatter == nil {
 		return stdErrors.New("alarm command services not configured")
 	}
 

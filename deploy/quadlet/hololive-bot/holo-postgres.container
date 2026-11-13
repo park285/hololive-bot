@@ -71,6 +71,7 @@ Notify=healthy
 # 추가 계측은 승인된 재시작에서만 켠다. 절차: docs/current/runbooks/postgres-observability.md
 # auto_explain은 preload에 있을 때만 적용된다. ALTER SYSTEM으로 바꾸면 unit과 drift가 생기므로 여기서만 바꾼다.
 # 4GiB 한도에서 공유 버퍼는 25%만 사용하고 프로세스·파일 캐시 여유를 남긴다.
+# 데이터는 NVMe SSD 기반 OCI Block Volume이라 random_page_cost를 낮추고, 짧은 OLTP 쿼리 위주라 JIT은 끈다.
 Exec=postgres \
   -c shared_preload_libraries=${HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES} \
   -c pg_stat_kcache.track=top \
@@ -107,6 +108,8 @@ Exec=postgres \
   -c wal_compression=lz4 \
   -c shared_buffers=1GB \
   -c effective_cache_size=3GB \
+  -c random_page_cost=1.1 \
+  -c jit=off \
   -c wal_buffers=64MB \
   -c maintenance_work_mem=128MB \
   -c work_mem=4MB \

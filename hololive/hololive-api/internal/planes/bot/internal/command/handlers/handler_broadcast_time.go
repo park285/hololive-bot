@@ -37,10 +37,6 @@ func (c *BroadcastTimeCommand) Description() string {
 }
 
 func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	memberName := stringParam(params, paramMember)
 	if memberName == "" {
 		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.BroadcastTimeUsage()); err != nil {
@@ -92,7 +88,7 @@ func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.C
 	return nil
 }
 
-func (c *BroadcastTimeCommand) ensureDeps() error {
+func (c *BroadcastTimeCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}

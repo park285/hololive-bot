@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -39,6 +40,20 @@ type Client struct {
 }
 
 var _ database.Client = (*Client)(nil)
+
+// NewUnconnectedClient의 pool은 MinConns가 0이라 첫 Acquire 전까지 접속하지 않으며, 접속하면 실패한다.
+func NewUnconnectedClient(tb testing.TB) *Client {
+	tb.Helper()
+
+	pool, err := pgxpool.New(tb.Context(), "postgres://hololive_test@127.0.0.1:1/hololive_test?sslmode=disable")
+	if err != nil {
+		tb.Fatalf("create unconnected pool: %v", err)
+	}
+
+	tb.Cleanup(pool.Close)
+
+	return &Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
+}
 
 func (c *Client) GetPool() *pgxpool.Pool {
 	if c.GetPoolFunc != nil {
