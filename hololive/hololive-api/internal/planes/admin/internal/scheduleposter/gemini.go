@@ -76,7 +76,8 @@ var posterQuestions = map[string]decisionQuestion{
 	},
 }
 
-var apiKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{20,256}$`)
+// AI Studio가 새로 발급하는 인증 키는 표준 키(AIza…)와 달리 `AQ.` 접두사에 점이 들어간다.
+var apiKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{20,256}$`)
 
 // errUnjudgeable은 이 후보 때문에 판정할 수 없다는 뜻이다(400, 입력 차단, 빠진 답, 해석할 수 없는 응답).
 // 다시 보내도 같으므로 관리자 검토로 넘긴다.

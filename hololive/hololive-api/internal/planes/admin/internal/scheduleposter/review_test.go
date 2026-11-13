@@ -539,6 +539,12 @@ func TestLoadAPIKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, secret, key)
 
+	const authorizationKey = "AQ.test-key_0123456789abcdef0123456789abcdef01234567"
+
+	key, err = LoadAPIKey(write("authorization-key", authorizationKey+"\n"))
+	require.NoError(t, err, "AI Studio가 새로 발급하는 AQ. 접두사 키도 받는다")
+	require.Equal(t, authorizationKey, key)
+
 	for _, content := range []string{"GEMINI_API_KEY=" + secret, "short", secret + " " + secret} {
 		_, err = LoadAPIKey(write("bad", content))
 		require.Error(t, err)
