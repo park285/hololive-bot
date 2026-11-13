@@ -13,3 +13,4 @@
 013 013_schedule_poster_source.sql
 014 014_schedule_poster_thumbnail.sql
 015 015_schedule_poster_translation_inputs.sql
+016 016_schedule_poster_message_strings.sql

@@ -45,10 +45,6 @@ func New(pool *pgxpool.Pool, lister RoomLister, logger *slog.Logger) *Catalog {
 }
 
 func (c *Catalog) Observe(ctx context.Context, roomID, roomType, roomLinkID string) {
-	if c == nil {
-		return
-	}
-
 	facts := normalizeFacts(roomID, roomType, roomLinkID)
 	if facts.RoomID == "" || (facts.RoomType == "" && facts.RoomLinkID == "") {
 		return
@@ -59,10 +55,6 @@ func (c *Catalog) Observe(ctx context.Context, roomID, roomType, roomLinkID stri
 }
 
 func (c *Catalog) OpenChat(ctx context.Context, roomID string) bool {
-	if c == nil {
-		return false
-	}
-
 	facts, ok := c.lookup(ctx, roomID)
 
 	return ok && facts.OpenChat()

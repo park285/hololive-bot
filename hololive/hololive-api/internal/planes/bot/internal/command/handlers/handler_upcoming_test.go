@@ -370,11 +370,8 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 	}
 }
 
-func TestUpcomingCommand_Execute_NilDeps(t *testing.T) {
-	cmd := NewUpcomingCommand(nil)
-
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
-	if err == nil {
+func TestUpcomingCommand_CheckDependencies_NilDeps(t *testing.T) {
+	if err := NewUpcomingCommand(nil).CheckDependencies(); err == nil {
 		t.Fatal("expected error for nil deps")
 	}
 }

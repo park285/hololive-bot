@@ -22,10 +22,9 @@ package orchestration
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
-	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
@@ -37,13 +36,12 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type commandInitView struct {
 	holodex               domain.StreamProvider
-	postgres              database.Client
+	pool                  *pgxpool.Pool
+	schedulePosters       handlercore.SchedulePosterReader
 	alarm                 handlercore.AlarmService
 	matcher               *matcher.Matcher
 	membersData           domain.MemberDataProvider
@@ -57,10 +55,11 @@ type commandInitView struct {
 	calendarImageRenderer handlercore.CalendarImageRenderer
 }
 
-func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder) commandInitView {
+func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder, schedulePosters handlercore.SchedulePosterReader) commandInitView {
 	return commandInitView{
 		holodex:               deps.Holodex,
-		postgres:              b.postgres,
+		pool:                  b.postgres.GetPool(),
+		schedulePosters:       schedulePosters,
 		alarm:                 deps.Alarm,
 		matcher:               deps.Matcher,
 		membersData:           deps.MembersData,
@@ -78,16 +77,16 @@ func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.Cel
 func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 	return &handlercore.Dependencies{
 		Holodex:             v.holodex,
-		LiveQuery:           livequery.New(v.postgres),
-		CollabMembers:       collabmembers.New(v.postgres, v.membersData),
+		LiveQuery:           livequery.New(v.pool),
+		CollabMembers:       collabmembers.New(v.pool, v.membersData),
 		Alarm:               v.alarm,
 		Matcher:             v.matcher,
-		BroadcastHistory:    handlers.NewPgBroadcastHistoryRepository(v.postgres),
+		BroadcastHistory:    handlers.NewPgBroadcastHistoryRepository(v.pool),
 		ThumbnailDownloader: handlers.NewYouTubeThumbnailDownloader(nil),
 		MembersData:         v.membersData,
 		Formatter:           v.formatter,
 		HelpImageProvider:   render.NewHelpCardProvider(),
-		SchedulePosters:     schedulePosterReader{postgres: v.postgres},
+		SchedulePosters:     v.schedulePosters,
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
 		SendImages:          v.sendImages,
@@ -96,8 +95,13 @@ func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 	}
 }
 
-func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handlercore.Command {
-	commands := []handlercore.Command{
+type checkedCommand interface {
+	handlercore.Command
+	CheckDependencies() error
+}
+
+func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []checkedCommand {
+	return []checkedCommand{
 		handlers.NewHelpCommand(deps),
 		handlers.NewLiveCommand(deps),
 		handlers.NewUpcomingCommand(deps),
@@ -108,34 +112,6 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 		handlers.NewBroadcastHistoryCommand(deps),
 		handlers.NewBroadcastThumbnailCommand(deps),
 		handlers.NewBroadcastTimeCommand(deps),
+		handlers.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer),
 	}
-
-	if v.memberRepository != nil {
-		commands = append(commands, handlers.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer))
-	}
-
-	return commands
-}
-
-// schedulePosterReader는 호출 시점의 pool로 읽어, pool이 없으면 조용히 끄지 않고 조회 오류로 드러낸다.
-type schedulePosterReader struct {
-	postgres database.Client
-}
-
-func (r schedulePosterReader) PublishedImage(ctx context.Context, channelID string, day time.Time) (scheduleposter.Image, bool, error) {
-	if r.postgres == nil {
-		return scheduleposter.Image{}, false, errors.New("schedule poster reader requires database client")
-	}
-
-	store, err := scheduleposter.NewStore(r.postgres.GetPool())
-	if err != nil {
-		return scheduleposter.Image{}, false, fmt.Errorf("open schedule poster store: %w", err)
-	}
-
-	image, found, err := store.PublishedImage(ctx, channelID, day)
-	if err != nil {
-		return scheduleposter.Image{}, false, fmt.Errorf("read schedule poster: %w", err)
-	}
-
-	return image, found, nil
 }

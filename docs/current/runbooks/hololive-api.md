@@ -211,13 +211,13 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(sudo podman exec hololiv
 
 ```bash
 sudo podman exec holo-postgres psql -U postgres_admin -d hololive -c \
-  "SELECT usename, client_addr, state, count(*) \
+  "SELECT application_name, usename, state, count(*) \
      FROM pg_stat_activity WHERE datname='hololive' \
-    GROUP BY usename, client_addr, state ORDER BY usename, client_addr, state;"
+    GROUP BY application_name, usename, state ORDER BY application_name, usename, state;"
 ```
 
-- **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/YouTube plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin 각 max 4, YouTube max 2, 합 최대 10)으로 추적합니다.
-- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin 8 + YouTube plane 2 + `alarm-worker` 8 + collector 4×7=28 + migrator 1 + postgres_exporter 2 + nightly 2 = 51로 셉니다. reserve는 `max_connections=61`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 58 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 7이고 gate 하한은 3입니다. exporter 2는 postgres_exporter 0.20.x가 legacy 연결 1개를 유지한 채 scrape마다 collector 연결 1개를 더 여는 동작에 맞춘 값으로, 1이면 매 scrape가 `too many connections for role`로 끝나 pg_up만 남습니다(2026-10-19~24 실측). 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. `holo-postgres.container`가 `superuser_reserved_connections`를 바꾸면 `scripts/ci/check-postgres-capacity.sh`가 policy pin과 불일치로 거부합니다.
+- runtime pool은 `application_name`을 `<PGAPPNAME>/<pool>`로 설정합니다. 예: `hololive-api/bot`, `hololive-api/admin`, `hololive-api/youtube_plane`, `hololive-alarm-worker/alarm_worker`, `youtube-collector-a/collector`. 같은 process·usename·`client_addr`인 plane도 이 값으로 구분합니다. `postgres_exporter` 연결은 이름이 비어 있습니다. plane별 budget은 정의값(bot/admin 각 max 4, YouTube max 2, 합 최대 10)입니다. `hololive_db_pool_conns{pool,state}`는 scrape 시점의 순간값이라 `max_over_time`도 표본 사이의 최고치를 놓칩니다. `hololive_db_pool_empty_acquires_total`은 idle 연결이 없어 기다린 뒤 성공한 획득 수이며, 상한 아래에서 새 연결을 만드는 대기도 포함하고 취소된 획득(`hololive_db_pool_canceled_acquires_total`)은 제외합니다. control 예약 연결을 둔 pool(bot·YouTube plane·alarm-worker·collector, 예약 1)은 일반 작업이 pgx pool 앞에서 `MaxConns-1` 허가를 먼저 기다립니다. 이 대기가 성공하면 어느 pool 지표에도 남지 않고, acquire timeout(5초)으로 끝나면 호출자 취소와 구분 없이 `canceled_acquires_total`에 더해집니다. 따라서 이 지표만으로 포화 여부를 확정하지 않습니다.
+- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin 8 + YouTube plane 2 + `alarm-worker` 8 + collector 4×7=28 + migrator 1 + postgres_exporter 2 + nightly 2 = 51로 셉니다. reserve는 `max_connections=61`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 58 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 7이고 gate 하한은 3입니다. exporter 2는 postgres_exporter 0.20.x가 legacy 연결 1개를 유지한 채 scrape마다 collector 연결 1개를 더 여는 동작에 맞춘 값으로, 1이면 매 scrape가 `too many connections for role`로 끝나 pg_up만 남습니다(2026-10-19~24 실측). 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. 2026-11-13 측정(15초 scrape)에서 collector의 7일 최대 사용 연결은 a 5·b 6·d 4·c 2이고 30일 최대는 a 7(상한 도달)이어서 상한 축소만으로는 여유를 만들지 않았습니다. `holo-postgres.container`가 `superuser_reserved_connections`를 바꾸면 `scripts/ci/check-postgres-capacity.sh`가 policy pin과 불일치로 거부합니다.
 
 ### Valkey latency / slowlog
 

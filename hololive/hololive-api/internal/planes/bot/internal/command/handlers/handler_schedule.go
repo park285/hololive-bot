@@ -51,10 +51,6 @@ func (c *ScheduleCommand) Description() string {
 }
 
 func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	rawCommandToken := popRawScheduleCommandToken(params)
 	memberName, ok := scheduleMemberName(params)
 
@@ -177,7 +173,7 @@ func clampScheduleDays(days int) int {
 	return days
 }
 
-func (c *ScheduleCommand) ensureDeps() error {
+func (c *ScheduleCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}

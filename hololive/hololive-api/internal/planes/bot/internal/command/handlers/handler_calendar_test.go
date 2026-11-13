@@ -80,36 +80,18 @@ func TestCalendarCommand_Description(t *testing.T) {
 	}
 }
 
-func TestCalendarCommand_Execute_RequiresImageRenderer(t *testing.T) {
-	var sentMessage string
-
+func TestCalendarCommand_CheckDependencies_RequiresImageRenderer(t *testing.T) {
 	deps := &handlercore.Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
-		SendMessage: func(_ context.Context, _, msg string) error {
-			sentMessage = msg
-			return nil
-		},
-		SendError: func(context.Context, string, string) error { return nil },
-		Logger:    slog.Default(),
+		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
+		SendMessage: func(context.Context, string, string) error { return nil },
+		SendImage:   func(context.Context, string, []byte) error { return nil },
+		SendError:   func(context.Context, string, string) error { return nil },
+		Logger:      slog.Default(),
 	}
 
-	repo := &calendarRepoStub{
-		entries: []domain.CalendarEntry{
-			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: testMemberPekora}, Day: 15},
-		},
-	}
-
-	// 운영 조립은 renderer를 항상 연결하므로, 없으면 텍스트로 조용히 바꾸지 않고 설정 오류를 돌려준다.
-	cmd := NewCalendarCommand(deps, repo, nil)
-	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
-
-	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 6})
+	err := NewCalendarCommand(deps, &calendarRepoStub{}, nil).CheckDependencies()
 	if err == nil || !strings.Contains(err.Error(), "image renderer not configured") {
-		t.Fatalf("Execute() error = %v, want image renderer not configured", err)
-	}
-
-	if sentMessage != "" || repo.calls != 0 {
-		t.Fatalf("sentMessage = %q, repo calls = %d, want nothing sent or queried", sentMessage, repo.calls)
+		t.Fatalf("CheckDependencies() error = %v, want image renderer not configured", err)
 	}
 }
 
@@ -476,19 +458,17 @@ func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 	}
 }
 
-func TestCalendarCommand_EnsureDeps_NilRepo(t *testing.T) {
+func TestCalendarCommand_CheckDependencies_NilRepo(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
+		SendImage:   func(context.Context, string, []byte) error { return nil },
 		Logger:      slog.Default(),
 	}
 
-	cmd := NewCalendarCommand(deps, nil, nil)
-	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
-
-	err := cmd.Execute(t.Context(), cmdCtx, nil)
-	if err == nil {
-		t.Error("expected error for nil repository")
+	err := NewCalendarCommand(deps, nil, &calendarImageRendererStub{}).CheckDependencies()
+	if err == nil || err.Error() != "calendar command: member repository not configured" {
+		t.Errorf("CheckDependencies error = %v, want member repository not configured", err)
 	}
 }

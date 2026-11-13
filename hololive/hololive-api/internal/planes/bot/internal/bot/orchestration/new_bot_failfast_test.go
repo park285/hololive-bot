@@ -26,8 +26,12 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 func testBotLogger() *slog.Logger {
@@ -48,6 +52,8 @@ func callNewBotSafely(deps *Dependencies) (created *Bot, recovered any, err erro
 }
 
 func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
+	postgres := databasemocks.NewUnconnectedClient(t)
+
 	tests := []struct {
 		name    string
 		deps    *Dependencies
@@ -96,7 +102,7 @@ func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
 				MessageAdapter: &messaging.MessageAdapter{},
 				Formatter:      &formatter.ResponseFormatter{},
 				Cache:          &cache.Service{},
-				Postgres:       &database.PostgresService{},
+				Postgres:       postgres,
 			},
 			wantErr: "holodex dependency is required",
 		},
@@ -121,5 +127,39 @@ func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
 				t.Fatal("NewBot() result must be nil on fail-fast error")
 			}
 		})
+	}
+}
+
+func TestNewBot_FailFastOnPostgresWithoutPool(t *testing.T) {
+	created, err := NewBot(&Dependencies{
+		Logger:         testBotLogger(),
+		Client:         &fakeIrisClient{},
+		ReplyOutbox:    dispatchingReplyOutbox{},
+		MessageAdapter: &messaging.MessageAdapter{},
+		Formatter:      &formatter.ResponseFormatter{},
+		Cache:          &cache.Service{},
+		Postgres:       &database.PostgresService{},
+	})
+	if err == nil || err.Error() != "postgres pool is required" || created != nil {
+		t.Fatalf("NewBot() = %v, %v; want nil, postgres pool is required", created, err)
+	}
+}
+
+func TestNewBot_FailFastOnMissingMemberRepository(t *testing.T) {
+	created, err := NewBot(&Dependencies{
+		Logger:         testBotLogger(),
+		Client:         &fakeIrisClient{},
+		ReplyOutbox:    dispatchingReplyOutbox{},
+		MessageAdapter: &messaging.MessageAdapter{},
+		Formatter:      &formatter.ResponseFormatter{},
+		Cache:          &cache.Service{},
+		Postgres:       databasemocks.NewUnconnectedClient(t),
+		Holodex:        struct{ domain.StreamProvider }{},
+		Alarm:          struct{ handlercore.AlarmService }{},
+		Matcher:        &matcher.Matcher{},
+		MembersData:    struct{ domain.MemberDataProvider }{},
+	})
+	if err == nil || err.Error() != "member repository dependency is required" || created != nil {
+		t.Fatalf("NewBot() = %v, %v; want nil, member repository dependency is required", created, err)
 	}
 }

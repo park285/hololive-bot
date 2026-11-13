@@ -38,6 +38,7 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type testWebhookCloser struct {
@@ -196,9 +197,11 @@ func TestBotRuntimeShutdownRunsHTTPWebhookBotInOrderAndContinuesAfterErrors(t *t
 func newShutdownOrderBot(t *testing.T, logger *slog.Logger) *orchestration.Bot {
 	t.Helper()
 
+	postgres := databasemocks.NewUnconnectedClient(t)
+
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
 		Logger: logger, Client: &stubIrisClient{}, ReplyOutbox: dispatchingReplyOutbox{client: &stubIrisClient{}}, MessageAdapter: messaging.NewMessageAdapter("!"),
-		Formatter: formatter.NewResponseFormatter("!", nil), Cache: cachemocks.NewLenientClient(), Postgres: &databasemocks.Client{},
+		Formatter: formatter.NewResponseFormatter("!", nil), Cache: cachemocks.NewLenientClient(), Postgres: postgres, MemberRepository: member.NewMemberRepository(postgres),
 		Holodex: &holodexprovider.Service{}, Alarm: testAlarmCRUD{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
 	})
 	if err != nil {

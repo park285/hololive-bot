@@ -41,6 +41,8 @@ var (
 	CalendarUnknown          = key(NamespaceCalendar, "unknown", 0)
 )
 
+var MiscSchedulePosterNotFound = key(NamespaceMisc, "schedule_poster_not_found", 0)
+
 var NotifyGraduatedMemberWarning = key(NamespaceNotify, "graduated_member_warning", 0)
 
 // AlarmTypeAll은 모든 알람 종류를 뜻하는 표시값이다. 개별 종류는 domain.AlarmType 문자열로 동적 조회한다.

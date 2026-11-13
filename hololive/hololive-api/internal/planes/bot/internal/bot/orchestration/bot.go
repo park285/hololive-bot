@@ -41,6 +41,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type Bot struct {
@@ -68,13 +69,8 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		return nil, err
 	}
 
-	var calendarFinder handlercore.CelebrationCalendarFinder
-
 	calendarCache := sharedcache.NewValkeyStore(deps.Cache)
-
-	if deps.MemberRepository != nil {
-		calendarFinder = command.NewCachedCelebrationCalendarFinder(deps.MemberRepository, calendarCache, deps.CalendarEntryCacheTTL)
-	}
+	calendarFinder := command.NewCachedCelebrationCalendarFinder(deps.MemberRepository, calendarCache, deps.CalendarEntryCacheTTL)
 
 	bot := &Bot{
 		irisBaseURL:     deps.IrisBaseURL,
@@ -91,7 +87,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	}
 	bot.initImageRenderers(calendarCache, deps.MessageStrings)
 
-	bot.rooms = newRoomCatalog(bot.postgres, bot.irisClient, bot.logger)
+	bot.rooms = kakaoroom.New(bot.postgres.GetPool(), kakaoroom.NewIrisLister(bot.irisClient), bot.logger)
 
 	bot.transport = transport.NewCommandTransport(
 		deps.ReplyOutbox,
@@ -102,7 +98,9 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender, ingress.WithRoomObserver(bot.rooms))
 	bot.lifecycle = lifecycle.NewBotLifecycle(bot.logger, bot.cache, bot.irisClient, bot.irisBaseURL)
 
-	bot.initializeCommands(deps, calendarFinder)
+	if err := bot.initializeCommands(deps, calendarFinder); err != nil {
+		return nil, err
+	}
 
 	return bot, nil
 }
@@ -111,19 +109,29 @@ func (b *Bot) initImageRenderers(calendarCache sharedcache.Store, strings *messa
 	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarImageCache(calendarCache), render.WithCalendarStrings(strings))
 }
 
-func (b *Bot) initializeCommands(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder) {
+func (b *Bot) initializeCommands(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder) error {
 	registry := command.NewRegistry()
 
-	view := b.commandInitView(deps, calendarFinder)
+	schedulePosters, err := scheduleposter.NewStore(b.postgres.GetPool())
+	if err != nil {
+		return fmt.Errorf("initialize schedule poster store: %w", err)
+	}
+
+	view := b.commandInitView(deps, calendarFinder, schedulePosters)
 	commandDeps := view.toCommandDependencies()
 
-	commandsList := view.buildCommands(commandDeps)
-	for _, cmd := range commandsList {
+	for _, cmd := range view.buildCommands(commandDeps) {
+		if err := cmd.CheckDependencies(); err != nil {
+			return fmt.Errorf("initialize command %s: %w", cmd.Name(), err)
+		}
+
 		registry.Register(cmd)
 	}
 
 	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage, b.messageStrings, b.cache)
 	b.logger.Info("Commands initialized", slog.Int("count", registry.Count()))
+
+	return nil
 }
 
 func (b *Bot) Start(ctx context.Context) error {

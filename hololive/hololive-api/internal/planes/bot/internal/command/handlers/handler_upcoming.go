@@ -49,10 +49,6 @@ func (c *UpcomingCommand) Description() string {
 }
 
 func (c *UpcomingCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	options := parseUpcomingOptions(params)
 
 	memberName, hasMember := params[paramMember].(string)
@@ -267,7 +263,7 @@ func (c *UpcomingCommand) replyDisplayNameFailure(ctx context.Context, roomID st
 	return nil
 }
 
-func (c *UpcomingCommand) ensureDeps() error {
+func (c *UpcomingCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}

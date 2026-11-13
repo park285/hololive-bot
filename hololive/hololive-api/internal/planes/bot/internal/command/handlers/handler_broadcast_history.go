@@ -70,10 +70,6 @@ func (c *BroadcastHistoryCommand) Description() string {
 }
 
 func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	query, filter, err := c.buildQuery(ctx, cmdCtx, params)
 	if errors.Is(err, errBroadcastHistoryHandled) {
 		return nil
@@ -170,10 +166,6 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Contex
 		return nil
 	}
 
-	if c.Deps().Matcher == nil {
-		return errors.New("broadcast history matcher not configured")
-	}
-
 	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "방송 이력")
 	if memberLookupHandled(err) {
 		return errBroadcastHistoryHandled
@@ -193,12 +185,12 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Contex
 	return nil
 }
 
-func (c *BroadcastHistoryCommand) ensureDeps() error {
+func (c *BroadcastHistoryCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().BroadcastHistory == nil || c.Deps().Formatter == nil {
+	if c.Deps().BroadcastHistory == nil || c.Deps().Formatter == nil || c.Deps().Matcher == nil {
 		return errors.New("broadcast history services not configured")
 	}
 
@@ -214,10 +206,6 @@ func (c *BroadcastThumbnailCommand) Description() string {
 }
 
 func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	videoID := stringParam(params, "video_id")
 	if videoID == "" {
 		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, "사용법: 방송이력 썸네일 <video_id>"); err != nil {
@@ -306,7 +294,7 @@ func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Conte
 	return nil, "", errBroadcastHistoryHandled
 }
 
-func (c *BroadcastThumbnailCommand) ensureDeps() error {
+func (c *BroadcastThumbnailCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}

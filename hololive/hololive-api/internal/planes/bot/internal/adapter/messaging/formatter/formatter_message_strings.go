@@ -13,9 +13,9 @@ var RenderFailureMessageKey = messagestrings.Key{Namespace: messagestrings.Names
 func RequiredMessageStrings() messagestrings.Requirements {
 	timeFmtKeys := messagestrings.TimeFmtKeys()
 	notifyKeys := messagestrings.NotifyKeys()
-	keys := make([]messagestrings.Key, 0, 3+len(timeFmtKeys)+len(notifyKeys)+len(domain.AllAlarmTypes))
+	keys := make([]messagestrings.Key, 0, 4+len(timeFmtKeys)+len(notifyKeys)+len(domain.AllAlarmTypes))
 
-	keys = append(keys, RenderFailureMessageKey, messagestrings.MiscTimeUnknown, messagestrings.AlarmTypeAll)
+	keys = append(keys, RenderFailureMessageKey, messagestrings.MiscSchedulePosterNotFound, messagestrings.MiscTimeUnknown, messagestrings.AlarmTypeAll)
 	keys = append(keys, timeFmtKeys...)
 	keys = append(keys, notifyKeys...)
 
@@ -27,4 +27,8 @@ func RequiredMessageStrings() messagestrings.Requirements {
 		Keys:       keys,
 		Namespaces: []string{messagestrings.NamespaceOrg, messagestrings.NamespaceAlarmType},
 	}
+}
+
+func (f *ResponseFormatter) SchedulePosterNotFound() string {
+	return f.messageStrings.Text(messagestrings.MiscSchedulePosterNotFound)
 }

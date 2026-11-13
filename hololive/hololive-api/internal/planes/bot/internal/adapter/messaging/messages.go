@@ -42,6 +42,9 @@ const (
 	ErrScheduleQueryFailed       = "schedule_query_failed"
 	ErrScheduleNeedMemberName    = "schedule_need_member_name"
 
+	ErrSchedulePosterNeedMemberName = "schedule_poster_need_member_name"
+	ErrSchedulePosterQueryFailed    = "schedule_poster_query_failed"
+
 	ErrCalendarQueryFailed = "calendar_query_failed"
 
 	ErrUnknownCommand          = "unknown_command"
@@ -57,6 +60,7 @@ func ErrorMessageKeys() []string {
 		ErrAlarmServiceNotInitialized, ErrAlarmAddFailed, ErrAlarmRemoveFailed, ErrAlarmListFailed, ErrAlarmClearFailed,
 		ErrAlarmNeedMemberNameAdd, ErrAlarmNeedMemberNameRemove, ErrInvalidAlarmUsage,
 		ErrLiveStreamQueryFailed, ErrUpcomingStreamQueryFailed, ErrScheduleQueryFailed, ErrScheduleNeedMemberName,
+		ErrSchedulePosterNeedMemberName, ErrSchedulePosterQueryFailed,
 		ErrCalendarQueryFailed,
 		ErrUnknownCommand, ErrIrisConnectionFailed,
 		ErrCommandProcessingFailed,

@@ -48,16 +48,8 @@ func (c *HelpCommand) Description() string {
 }
 
 func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
-	if c == nil {
-		return errors.New("help command dependencies not configured")
-	}
-
 	if cmdCtx == nil {
 		return errors.New("help command context is nil")
-	}
-
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	// 도움말 내용을 만들지 못하면 코드 대체 문구를 보내지 않고 오류를 돌려준다. bot의 공통 오류 경로가
@@ -129,7 +121,7 @@ func (c *HelpCommand) logImageFallback(ctx context.Context, err error) {
 	c.deps.Logger.WarnContext(ctx, "help_image_fallback", slog.Any("error", err))
 }
 
-func (c *HelpCommand) ensureDeps() error {
+func (c *HelpCommand) CheckDependencies() error {
 	if c == nil || c.deps == nil {
 		return errors.New("help command dependencies not configured")
 	}

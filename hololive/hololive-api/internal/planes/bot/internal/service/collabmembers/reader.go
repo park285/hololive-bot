@@ -4,16 +4,15 @@ package collabmembers
 import (
 	"context"
 	"embed"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -39,16 +38,8 @@ type Reader struct {
 }
 
 // New는 기존 bot-plane pool과 멤버 데이터를 재사용하며 새 연결이나 수집 작업을 만들지 않는다.
-func New(db database.Client, members domain.MemberDataProvider) *Reader {
-	reader := &Reader{members: members}
-
-	if db != nil {
-		if pool := db.GetPool(); pool != nil {
-			reader.db = pool
-		}
-	}
-
-	return reader
+func New(pool *pgxpool.Pool, members domain.MemberDataProvider) *Reader {
+	return &Reader{db: pool, members: members}
 }
 
 // 출연자가 없는 영상은 결과에 넣지 않는다. 공식 스케줄 조회나 멤버 적재가 실패하면 출연자를 뺀 결과로 바꾸지 않고 오류로 돌려준다.
@@ -62,10 +53,6 @@ func (r *Reader) DisplayNames(ctx context.Context, videos []Video) (map[string][
 
 	if len(hosts) == 0 {
 		return map[string][]string{}, nil
-	}
-
-	if r == nil || r.db == nil {
-		return nil, errors.New("collab members database is not configured")
 	}
 
 	officialNames, err := r.officialNames(ctx, slices.Sorted(maps.Keys(hosts)))

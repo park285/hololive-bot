@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -70,16 +71,14 @@ func executeSchedulePoster(t *testing.T, deps *handlercore.Dependencies, params 
 }
 
 func TestSchedulePosterCommandSendsThisWeeksPoster(t *testing.T) {
-	previous := schedulePosterNow
-
-	t.Cleanup(func() { schedulePosterNow = previous })
-
-	schedulePosterNow = func() time.Time { return time.Date(2026, time.November, 10, 16, 30, 0, 0, time.UTC) }
-
 	posters := &schedulePosterStub{image: scheduleposter.Image{MIME: testContentTypeJPEG, Data: []byte("poster")}, found: true}
 	replies := &posterReplies{}
 
-	if err := executeSchedulePoster(t, schedulePosterDeps(t, posters, replies, nil), map[string]any{paramMember: "미코"}); err != nil {
+	cmd := NewSchedulePosterCommand(schedulePosterDeps(t, posters, replies, nil))
+
+	cmd.now = func() time.Time { return time.Date(2026, time.November, 10, 16, 30, 0, 0, time.UTC) }
+
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{paramMember: "미코"}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -92,25 +91,59 @@ func TestSchedulePosterCommandSendsThisWeeksPoster(t *testing.T) {
 	}
 }
 
-func TestSchedulePosterCommandExplainsMissingPoster(t *testing.T) {
+func TestSchedulePosterCommandReportsInputAndLookupErrorsWithSeededText(t *testing.T) {
+	seeded := newSeededTestFormatter(t)
+
 	for _, tc := range []struct {
 		name    string
 		params  map[string]any
 		posters *schedulePosterStub
 		want    string
 	}{
-		{name: "member omitted", params: map[string]any{}, posters: &schedulePosterStub{}, want: schedulePosterNeedMember},
-		{name: "no translated poster this week", params: map[string]any{paramMember: "미코"}, posters: &schedulePosterStub{}, want: schedulePosterNotFound},
-		{name: "lookup failed", params: map[string]any{paramMember: "미코"}, posters: &schedulePosterStub{err: errors.New("db down")}, want: schedulePosterQueryFailed},
+		{name: "member omitted", params: map[string]any{}, posters: &schedulePosterStub{}, want: "❌ 멤버 이름을 입력해주세요.\n예) !스케쥴 소피아"},
+		{name: "lookup failed", params: map[string]any{paramMember: "미코"}, posters: &schedulePosterStub{err: errors.New("db down")}, want: "❌ 일정 포스터 조회 중 오류가 발생했습니다."},
 	} {
 		replies := &posterReplies{}
-		if err := executeSchedulePoster(t, schedulePosterDeps(t, tc.posters, replies, nil), tc.params); err != nil {
+		deps := schedulePosterDeps(t, tc.posters, replies, nil)
+
+		deps.SendError = func(ctx context.Context, _, key string) error {
+			replies.messages = append(replies.messages, seeded.ResolveError(ctx, key))
+
+			return nil
+		}
+
+		if err := executeSchedulePoster(t, deps, tc.params); err != nil {
 			t.Fatalf("%s: Execute returned error: %v", tc.name, err)
 		}
 
-		if len(replies.images) != 0 || len(replies.messages) != 1 || replies.messages[0] != tc.want {
+		if len(replies.images) != 0 || !slices.Equal(replies.messages, []string{tc.want}) {
 			t.Fatalf("%s: replies = %+v, want %q", tc.name, replies, tc.want)
 		}
+	}
+}
+
+func TestSchedulePosterCommandRejectsEmptyNotFoundText(t *testing.T) {
+	replies := &posterReplies{}
+
+	err := executeSchedulePoster(t, schedulePosterDeps(t, &schedulePosterStub{}, replies, nil), map[string]any{paramMember: "미코"})
+	if err == nil || len(replies.messages) != 0 {
+		t.Fatalf("Execute = %v, messages = %q; want error and no message", err, replies.messages)
+	}
+}
+
+func TestSchedulePosterCommandExplainsMissingPosterFromSeededString(t *testing.T) {
+	replies := &posterReplies{}
+	deps := schedulePosterDeps(t, &schedulePosterStub{}, replies, nil)
+
+	deps.Formatter = newSeededTestFormatter(t)
+
+	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"}); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	want := "이번 주 번역된 일정 포스터가 아직 없습니다."
+	if len(replies.images) != 0 || !slices.Equal(replies.messages, []string{want}) {
+		t.Fatalf("replies = %+v, want %q", replies, want)
 	}
 }
 

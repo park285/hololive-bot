@@ -52,10 +52,6 @@ func (c *MemberInfoCommand) Description() string {
 }
 
 func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("ensure dependencies: %w", err)
-	}
-
 	rawQuery := getStringParam(params, "query")
 	englishCandidate := getStringParam(params, "member")
 	channelID := getStringParam(params, "channel_id")
@@ -154,7 +150,7 @@ func (c *MemberInfoCommand) sendMemberNotFound(ctx context.Context, room, englis
 	return nil
 }
 
-func (c *MemberInfoCommand) ensureDeps() error {
+func (c *MemberInfoCommand) CheckDependencies() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}

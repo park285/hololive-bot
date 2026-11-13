@@ -251,71 +251,53 @@ func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 	}
 }
 
-func TestHelpCommand_Execute_MissingImageCapabilityReturnsError(t *testing.T) {
-	var sentMessage string
-
+func TestHelpCommand_CheckDependencies_RequiresImageCapability(t *testing.T) {
 	deps := &handlercore.Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
-		SendMessage: func(_ context.Context, _, message string) error {
-			sentMessage = message
-			return nil
-		},
-		Logger: slog.New(slog.DiscardHandler),
+		Formatter:   formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+		SendMessage: func(context.Context, string, string) error { return nil },
+		Logger:      slog.New(slog.DiscardHandler),
 	}
 
-	// 운영 조립은 이미지 provider와 album 전송을 항상 연결하므로, 없으면 텍스트로 조용히 바꾸지 않고 설정 오류를 돌려준다.
-	err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
+	err := NewHelpCommand(deps).CheckDependencies()
 	if err == nil || !strings.Contains(err.Error(), "help image capability not configured") {
-		t.Fatalf("Execute error = %v, want help image capability not configured", err)
-	}
-
-	if sentMessage != "" {
-		t.Fatalf("sent message = %q, want none", sentMessage)
+		t.Fatalf("CheckDependencies error = %v, want help image capability not configured", err)
 	}
 }
 
-func TestHelpCommand_Execute_NilDependencies(t *testing.T) {
-	if err := NewHelpCommand(nil).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err == nil {
-		t.Fatal("expected error for nil deps")
+func TestHelpCommand_CheckDependencies_RejectsMissingDependencies(t *testing.T) {
+	if err := NewHelpCommand(nil).CheckDependencies(); err == nil || err.Error() != "help command dependencies not configured" {
+		t.Fatalf("nil deps: CheckDependencies error = %v", err)
+	}
+
+	for name, tc := range map[string]struct {
+		drop func(*handlercore.Dependencies)
+		want string
+	}{
+		"complete":         {drop: func(*handlercore.Dependencies) {}},
+		"nil send message": {drop: func(d *handlercore.Dependencies) { d.SendMessage = nil }, want: "message callback not configured"},
+		"nil formatter":    {drop: func(d *handlercore.Dependencies) { d.Formatter = nil }, want: "formatter not configured"},
+	} {
+		deps := &handlercore.Dependencies{
+			Formatter:         formatter.NewResponseFormatter("!", nil),
+			SendMessage:       func(context.Context, string, string) error { return nil },
+			HelpImageProvider: &stubHelpImageProvider{},
+			SendImages:        func(context.Context, string, [][]byte) error { return nil },
+		}
+		tc.drop(deps)
+
+		err := NewHelpCommand(deps).CheckDependencies()
+		if got := fmt.Sprint(err); (tc.want == "" && err != nil) || (tc.want != "" && got != tc.want) {
+			t.Fatalf("%s: CheckDependencies error = %v, want %q", name, err, tc.want)
+		}
 	}
 }
 
-func TestHelpCommand_Execute_NilSendMessage(t *testing.T) {
-	deps := &handlercore.Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", nil),
-	}
-	cmd := NewHelpCommand(deps)
-
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
-	if err == nil {
-		t.Fatal("expected error for nil SendMessage")
-	}
-}
-
-func TestHelpCommand_Execute_NilFormatter(t *testing.T) {
-	deps := &handlercore.Dependencies{
-		SendMessage: func(_ context.Context, _, _ string) error { return nil },
-	}
-	cmd := NewHelpCommand(deps)
-
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
-	if err == nil {
-		t.Fatal("expected error for nil Formatter")
-	}
-}
-
-func TestHelpCommand_Execute_NilContexts(t *testing.T) {
+func TestHelpCommand_Execute_NilCommandContext(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 	}
 	if err := NewHelpCommand(deps).Execute(t.Context(), nil, nil); err == nil {
 		t.Fatal("expected error for nil command context")
-	}
-
-	var cmd *HelpCommand
-
-	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err == nil {
-		t.Fatal("expected error for nil receiver")
 	}
 }

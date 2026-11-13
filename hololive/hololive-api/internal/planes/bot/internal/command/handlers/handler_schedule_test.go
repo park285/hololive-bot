@@ -281,11 +281,8 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 	}
 }
 
-func TestScheduleCommand_Execute_NilDeps(t *testing.T) {
-	cmd := NewScheduleCommand(nil)
-
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
-	if err == nil {
+func TestScheduleCommand_CheckDependencies_NilDeps(t *testing.T) {
+	if err := NewScheduleCommand(nil).CheckDependencies(); err == nil {
 		t.Fatal("expected error for nil deps")
 	}
 }

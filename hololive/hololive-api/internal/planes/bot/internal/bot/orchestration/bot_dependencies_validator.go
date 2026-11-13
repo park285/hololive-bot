@@ -57,6 +57,10 @@ func validateBotDependencies(deps *Dependencies) error {
 		return errors.New("postgres dependency is required")
 	}
 
+	if deps.Postgres.GetPool() == nil {
+		return errors.New("postgres pool is required")
+	}
+
 	if deps.Holodex == nil {
 		return errors.New("holodex dependency is required")
 	}
@@ -71,6 +75,10 @@ func validateBotDependencies(deps *Dependencies) error {
 
 	if deps.MembersData == nil {
 		return errors.New("member data dependency is required")
+	}
+
+	if deps.MemberRepository == nil {
+		return errors.New("member repository dependency is required")
 	}
 
 	return nil

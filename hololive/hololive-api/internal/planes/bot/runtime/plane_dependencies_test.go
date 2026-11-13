@@ -22,6 +22,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -68,18 +69,19 @@ func newInjectedDependencyBot(t *testing.T, alarm *recordingAlarm) (*orchestrati
 	}
 
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
-		Logger:         logger,
-		Client:         &acceptingIrisClient{},
-		ReplyOutbox:    dispatchingReplyOutbox{client: &acceptingIrisClient{}},
-		MessageAdapter: messaging.NewMessageAdapter("!"),
-		Formatter:      formatter.NewResponseFormatter("!", nil),
-		Cache:          sharedtestutil.NewTestCacheService(t.Context(), t),
-		Postgres:       postgres,
-		Holodex:        &holodexprovider.Service{},
-		Alarm:          alarm,
-		Matcher:        &matcher.Matcher{},
-		MembersData:    &stubMemberDataProvider{},
-		ACL:            aclService,
+		Logger:           logger,
+		Client:           &acceptingIrisClient{},
+		ReplyOutbox:      dispatchingReplyOutbox{client: &acceptingIrisClient{}},
+		MessageAdapter:   messaging.NewMessageAdapter("!"),
+		Formatter:        formatter.NewResponseFormatter("!", nil),
+		Cache:            sharedtestutil.NewTestCacheService(t.Context(), t),
+		Postgres:         postgres,
+		Holodex:          &holodexprovider.Service{},
+		Alarm:            alarm,
+		Matcher:          &matcher.Matcher{},
+		MembersData:      &stubMemberDataProvider{},
+		MemberRepository: member.NewMemberRepository(postgres),
+		ACL:              aclService,
 	})
 	if err != nil {
 		t.Fatal(err)

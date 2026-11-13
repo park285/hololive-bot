@@ -20,6 +20,7 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type observedBotReadinessCache struct {
@@ -196,10 +197,11 @@ func newBotReadinessRuntime(t *testing.T, client cache.Client) *BotRuntime {
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
+	postgres := databasemocks.NewUnconnectedClient(t)
 
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
 		Logger: logger, Client: &stubIrisClient{}, ReplyOutbox: dispatchingReplyOutbox{client: &stubIrisClient{}}, MessageAdapter: messaging.NewMessageAdapter("!"),
-		Formatter: formatter.NewResponseFormatter("!", nil), Cache: client, Postgres: &databasemocks.Client{},
+		Formatter: formatter.NewResponseFormatter("!", nil), Cache: client, Postgres: postgres, MemberRepository: member.NewMemberRepository(postgres),
 		Holodex: &holodexprovider.Service{}, Alarm: testAlarmCRUD{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
 	})
 	if err != nil {
