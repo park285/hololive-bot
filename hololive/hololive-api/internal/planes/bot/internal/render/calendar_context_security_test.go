@@ -104,9 +104,11 @@ func TestFetchMemberPhotosBudgetExpiryReturnsPartialPhotos(t *testing.T) {
 			return nil, req.Context().Err()
 		})))
 
-		result, err := fetchMemberPhotosWithinBudget(parent, budgetCtx, entries)
+		photoURLs, truncated := uniqueCalendarPhotoURLs(entries, calendarPhotoMaxFetches)
+
+		result, err := fetchPhotosWithinBudget(parent, budgetCtx, photoURLs, truncated)
 		if err != nil {
-			t.Fatalf("fetchMemberPhotosWithinBudget() error = %v", err)
+			t.Fatalf("fetchPhotosWithinBudget() error = %v", err)
 		}
 
 		if _, ok := result.photos[firstPhotoURL]; !ok {

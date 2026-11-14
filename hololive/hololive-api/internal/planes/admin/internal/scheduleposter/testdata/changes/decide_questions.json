@@ -1,0 +1,21 @@
+{
+ "schedule_info": {
+  "type": "noul",
+  "instructions": "The input is a social media post written by a VTuber. Does this post contain schedule information about an upcoming stream, collaboration, or event (such as its date, start time, planned content, time change, postponement, cancellation, day off, or undecided status)?",
+  "criteria": {
+   "true_description": "States a future or today's upcoming stream schedule, start time, planned topic, time change, postponement, cancellation, day off, or tentative plan.",
+   "false_description": "Greetings, thanks, already-started or going-live-right-now link drops without schedule info, merch or VOD/Shorts promotions, or casual chat."
+  }
+ },
+ "kind": {
+  "type": "choice",
+  "instructions": "The input is a social media post written by a VTuber. What kind of stream schedule message is this post?",
+  "criteria": {
+   "announce": "Announces the date, start time, or planned content of a specific upcoming stream or collaboration.",
+   "change": "Changes the start time, date, content, or tentative status of a previously planned stream.",
+   "cancel": "Cancels, postpones, or announces a day off from streaming.",
+   "weekly": "Presents a weekly schedule covering multiple days.",
+   "other": "Anything outside these categories, including greetings, going-live-now posts, merch or video promotions, and casual chat."
+  }
+ }
+}

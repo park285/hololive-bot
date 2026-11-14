@@ -189,9 +189,6 @@ func newGeminiJudge(ctx context.Context, key string) (*geminiJudge, error) {
 
 // TODO(kapu): google.golang.org/genai 릴리스에 Client.Decisions가 들어오면 이 REST 호출을 그 클라이언트로 바꾼다.
 func (j *geminiJudge) judge(ctx context.Context, src source) (posterScores, usage, error) {
-	ctx, cancel := context.WithTimeout(ctx, reviewTimeout)
-	defer cancel()
-
 	body, err := jsonv2.Marshal(decisionRequest{
 		Model:     decisionModel,
 		Input:     []decisionInput{{Type: "image", MIMEType: src.MIME, Data: src.Data}},
@@ -201,9 +198,21 @@ func (j *geminiJudge) judge(ctx context.Context, src source) (posterScores, usag
 		return posterScores{}, usage{}, fmt.Errorf("encode decision request: %w", err)
 	}
 
+	status, raw, err := j.decide(ctx, body)
+	if err != nil {
+		return posterScores{}, usage{}, err
+	}
+
+	return decodeDecision(status, raw)
+}
+
+func (j *geminiJudge) decide(ctx context.Context, body []byte) (int, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, reviewTimeout)
+	defer cancel()
+
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, j.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return posterScores{}, usage{}, fmt.Errorf("create decision request: %w", err)
+		return 0, nil, fmt.Errorf("create decision request: %w", err)
 	}
 
 	request.Header.Set("Content-Type", "application/json")
@@ -211,17 +220,17 @@ func (j *geminiJudge) judge(ctx context.Context, src source) (posterScores, usag
 
 	response, err := j.http.Do(request)
 	if err != nil {
-		return posterScores{}, usage{}, unreachable(fmt.Errorf("send decision request: %w", err))
+		return 0, nil, unreachable(fmt.Errorf("send decision request: %w", err))
 	}
 
 	defer response.Body.Close()
 
 	raw, err := httputil.ReadAllLimited(response.Body, maxDecisionResponseBytes)
 	if err != nil {
-		return posterScores{}, usage{}, fmt.Errorf("read decision response: %w", err)
+		return 0, nil, fmt.Errorf("read decision response: %w", err)
 	}
 
-	return decodeDecision(response.StatusCode, raw)
+	return response.StatusCode, raw, nil
 }
 
 func decodeDecision(status int, raw []byte) (posterScores, usage, error) {

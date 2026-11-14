@@ -87,6 +87,7 @@ func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 		Formatter:           v.formatter,
 		HelpImageProvider:   render.NewHelpCardProvider(),
 		SchedulePosters:     v.schedulePosters,
+		ScheduleCards:       render.NewScheduleCardRenderer(),
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
 		SendImages:          v.sendImages,

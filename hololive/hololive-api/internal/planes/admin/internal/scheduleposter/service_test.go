@@ -1018,6 +1018,7 @@ func TestLoadConfig(t *testing.T) {
 	require.Equal(t, time.Hour, config.PollInterval())
 	require.Equal(t, TranslationConfig{
 		Project: "example-project", Location: "global", Model: "gemini-nano-banana-2.1", TextModel: "gemini-4-argon", TranscribeModel: "gemini-4-hydrogen",
+		Rows: defaultRowsConfig(),
 	}, config.Translation)
 
 	config, err = LoadConfig(write(`{"targets":[{"x_user_id":"2054825907916054528","channel_id":"UCROQtXcp2loQEmvpe5rhJzQ"}],"translation":{"project":"example-project","transcribe_model":"gemini-4-argon"}}`))

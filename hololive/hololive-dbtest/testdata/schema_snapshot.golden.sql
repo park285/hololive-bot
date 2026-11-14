@@ -478,6 +478,85 @@ TABLE observation_contract_generations
   CONSTRAINT observation_contract_generations_current_schema_version_check CHECK ((current_schema_version > 0))
   CONSTRAINT observation_contract_generations_pkey PRIMARY KEY (provider, observation_kind)
 
+TABLE schedule_poster_changes
+  COLUMN post_id bigint NOT NULL
+  COLUMN item smallint NOT NULL
+  COLUMN kind text NOT NULL
+  COLUMN reason text NOT NULL DEFAULT ''::text
+  COLUMN slot smallint
+  COLUMN target_post_id bigint
+  COLUMN target_item smallint
+  COLUMN day date
+  COLUMN start_time text
+  COLUMN status text
+  COLUMN source_text text NOT NULL DEFAULT ''::text
+  COLUMN title_ko text
+  COLUMN with_ko text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN place_ko text NOT NULL DEFAULT ''::text
+  COLUMN tags_ko text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN note_ko text NOT NULL DEFAULT ''::text
+  COLUMN terms jsonb NOT NULL DEFAULT '[]'::jsonb
+  COLUMN doubt_ko text NOT NULL DEFAULT ''::text
+  COLUMN warnings text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_schedule_poster_changes_item CHECK (((item >= 1) AND (item <= 20)))
+  CONSTRAINT chk_schedule_poster_changes_kind_vocab CHECK ((kind = ANY (ARRAY['same'::text, 'time_changed'::text, 'confirmed'::text, 'tentative'::text, 'cancelled'::text, 'off'::text, 'added'::text, 'moved'::text, 'moved_out'::text, 'content_changed'::text, 'rejected'::text])))
+  CONSTRAINT chk_schedule_poster_changes_lists CHECK (((cardinality(with_ko) <= 40) AND (cardinality(tags_ko) <= 40) AND (cardinality(warnings) <= 40) AND (jsonb_typeof(terms) = 'array'::text)))
+  CONSTRAINT chk_schedule_poster_changes_reason CHECK ((((kind = 'rejected'::text) = (reason <> ''::text)) AND (char_length(reason) <= 40)))
+  CONSTRAINT chk_schedule_poster_changes_rejected CHECK (((kind <> 'rejected'::text) OR ((target_post_id IS NULL) AND (source_text = ''::text) AND (cardinality(with_ko) = 0) AND (place_ko = ''::text) AND (cardinality(tags_ko) = 0) AND (note_ko = ''::text) AND (terms = '[]'::jsonb) AND (doubt_ko = ''::text) AND (cardinality(warnings) = 0))))
+  CONSTRAINT chk_schedule_poster_changes_target CHECK ((((slot IS NULL) OR ((slot >= 1) AND (slot <= 100))) AND ((target_post_id IS NULL) = (target_item IS NULL)) AND ((target_post_id IS NULL) OR (target_post_id > 0)) AND ((target_item IS NULL) OR ((target_item >= 1) AND (target_item <= 20))) AND ((slot IS NULL) OR (target_post_id IS NULL)) AND ((kind = ANY (ARRAY['same'::text, 'rejected'::text, 'added'::text])) OR (slot IS NOT NULL) OR (target_post_id IS NOT NULL))))
+  CONSTRAINT chk_schedule_poster_changes_text CHECK (((char_length(source_text) <= 500) AND ((title_ko IS NULL) OR ((char_length(title_ko) >= 1) AND (char_length(title_ko) <= 1000))) AND (char_length(place_ko) <= 1000) AND (char_length(note_ko) <= 1000) AND (char_length(doubt_ko) <= 1000)))
+  CONSTRAINT chk_schedule_poster_changes_values CHECK ((((kind <> 'rejected'::text) OR ((day IS NULL) AND (start_time IS NULL) AND (status IS NULL) AND (title_ko IS NULL))) AND ((kind <> 'same'::text) OR ((title_ko IS NULL) AND (cardinality(with_ko) = 0) AND (place_ko = ''::text) AND (cardinality(tags_ko) = 0) AND (note_ko = ''::text))) AND ((kind <> ALL (ARRAY['moved'::text, 'moved_out'::text])) OR (day IS NOT NULL)) AND ((kind <> 'added'::text) OR (slot IS NOT NULL) OR (target_post_id IS NOT NULL) OR ((day IS NOT NULL) AND (start_time IS NOT NULL) AND (status IS NOT NULL))) AND ((start_time IS NULL) OR (start_time = ''::text) OR (start_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text)) AND ((status IS NULL) OR (status = ANY (ARRAY['planned'::text, 'tentative'::text, 'cancelled'::text, 'off'::text])))))
+  CONSTRAINT fk_schedule_poster_changes_post FOREIGN KEY (post_id) REFERENCES schedule_poster_posts(post_id) ON DELETE CASCADE
+  CONSTRAINT schedule_poster_changes_pkey PRIMARY KEY (post_id, item)
+
+TABLE schedule_poster_posts
+  COLUMN post_id bigint NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN posted_at timestamp with time zone NOT NULL
+  COLUMN body text NOT NULL
+  COLUMN status text NOT NULL DEFAULT 'unjudged'::text
+  COLUMN reason text NOT NULL DEFAULT ''::text
+  COLUMN schedule_info real
+  COLUMN kind text
+  COLUMN matched_poster_id bigint
+  COLUMN matched_rows_at timestamp with time zone
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_schedule_poster_posts_answer CHECK ((((schedule_info IS NULL) = (kind IS NULL)) AND ((schedule_info IS NULL) OR ((schedule_info >= (0)::double precision) AND (schedule_info <= (1)::double precision))) AND ((status <> ALL (ARRAY['not_relevant'::text, 'relevant'::text, 'matched'::text, 'match_failed'::text, 'revoked'::text])) OR (kind IS NOT NULL)) AND ((status <> 'unjudged'::text) OR (kind IS NULL))))
+  CONSTRAINT chk_schedule_poster_posts_body CHECK (((char_length(body) >= 1) AND (char_length(body) <= 4000)))
+  CONSTRAINT chk_schedule_poster_posts_id_positive CHECK ((post_id > 0))
+  CONSTRAINT chk_schedule_poster_posts_kind_vocab CHECK (((kind IS NULL) OR (kind = ANY (ARRAY['announce'::text, 'change'::text, 'cancel'::text, 'weekly'::text, 'other'::text]))))
+  CONSTRAINT chk_schedule_poster_posts_match CHECK ((((matched_poster_id IS NULL) = (matched_rows_at IS NULL)) AND ((status = ANY (ARRAY['matched'::text, 'match_failed'::text])) = (matched_poster_id IS NOT NULL))))
+  CONSTRAINT chk_schedule_poster_posts_reason CHECK ((((status = ANY (ARRAY['judge_failed'::text, 'match_failed'::text])) = (reason <> ''::text)) AND (char_length(reason) <= 40)))
+  CONSTRAINT chk_schedule_poster_posts_status_vocab CHECK ((status = ANY (ARRAY['unjudged'::text, 'not_relevant'::text, 'judge_failed'::text, 'relevant'::text, 'matched'::text, 'match_failed'::text, 'revoked'::text])))
+  CONSTRAINT schedule_poster_posts_pkey PRIMARY KEY (post_id)
+
+TABLE schedule_poster_rows
+  COLUMN poster_id bigint NOT NULL
+  COLUMN ordinal smallint NOT NULL
+  COLUMN day date NOT NULL
+  COLUMN start_time text
+  COLUMN end_time text
+  COLUMN tz text NOT NULL DEFAULT ''::text
+  COLUMN status text NOT NULL
+  COLUMN source_text text NOT NULL
+  COLUMN badges text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN title_ko text NOT NULL
+  COLUMN with_ko text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN place_ko text NOT NULL DEFAULT ''::text
+  COLUMN tags_ko text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN note_ko text NOT NULL DEFAULT ''::text
+  COLUMN terms jsonb NOT NULL DEFAULT '[]'::jsonb
+  COLUMN doubt_ko text NOT NULL DEFAULT ''::text
+  COLUMN warnings text[] NOT NULL DEFAULT '{}'::text[]
+  CONSTRAINT chk_schedule_poster_rows_lists CHECK (((cardinality(badges) <= 40) AND (cardinality(with_ko) <= 40) AND (cardinality(tags_ko) <= 40) AND (cardinality(warnings) <= 40) AND (jsonb_typeof(terms) = 'array'::text)))
+  CONSTRAINT chk_schedule_poster_rows_ordinal CHECK (((ordinal >= 1) AND (ordinal <= 100)))
+  CONSTRAINT chk_schedule_poster_rows_status_vocab CHECK ((status = ANY (ARRAY['planned'::text, 'tentative'::text, 'cancelled'::text, 'off'::text])))
+  CONSTRAINT chk_schedule_poster_rows_text CHECK ((((char_length(source_text) >= 1) AND (char_length(source_text) <= 1000)) AND ((char_length(title_ko) >= 1) AND (char_length(title_ko) <= 1000)) AND (char_length(place_ko) <= 1000) AND (char_length(note_ko) <= 1000) AND (char_length(doubt_ko) <= 1000) AND (char_length(tz) <= 40)))
+  CONSTRAINT chk_schedule_poster_rows_time CHECK ((((start_time IS NULL) OR (start_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text)) AND ((end_time IS NULL) OR (end_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text))))
+  CONSTRAINT fk_schedule_poster_rows_poster FOREIGN KEY (poster_id) REFERENCES schedule_posters(id) ON DELETE CASCADE
+  CONSTRAINT schedule_poster_rows_pkey PRIMARY KEY (poster_id, ordinal)
+
 TABLE schedule_posters
   COLUMN id bigint NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
@@ -506,11 +585,17 @@ TABLE schedule_posters
   COLUMN review_requested_at timestamp with time zone DEFAULT now()
   COLUMN review_request_reason text
   COLUMN reviewed_by text
+  COLUMN rows_status text NOT NULL DEFAULT 'pending'::text
+  COLUMN rows_error text NOT NULL DEFAULT ''::text
+  COLUMN rows_extracted_at timestamp with time zone
+  COLUMN rows_revision bigint NOT NULL DEFAULT 1
   CONSTRAINT chk_schedule_posters_confirmed_week CHECK (((review_status <> 'confirmed'::text) OR (week_start IS NOT NULL)))
   CONSTRAINT chk_schedule_posters_id_positive CHECK ((id > 0))
   CONSTRAINT chk_schedule_posters_review_request_reason CHECK (((review_request_reason IS NULL) OR ((review_requested_at IS NOT NULL) AND (review_request_reason = ANY (ARRAY['uncertain'::text, 'unjudgeable'::text, 'image_changed'::text, 'period_unread'::text, 'week_rejected'::text, 'week_overlapping'::text, 'stale'::text, 'auto_review_off'::text])))))
   CONSTRAINT chk_schedule_posters_review_status_vocab CHECK ((review_status = ANY (ARRAY['pending_review'::text, 'confirmed'::text, 'rejected'::text, 'expired'::text])))
   CONSTRAINT chk_schedule_posters_reviewed_by CHECK (((reviewed_by IS NULL) OR (reviewed_by = ANY (ARRAY['auto'::text, 'admin'::text]))))
+  CONSTRAINT chk_schedule_posters_rows_extracted CHECK (((rows_status <> 'succeeded'::text) OR (rows_extracted_at IS NOT NULL)))
+  CONSTRAINT chk_schedule_posters_rows_status_vocab CHECK ((rows_status = ANY (ARRAY['pending'::text, 'succeeded'::text, 'failed'::text])))
   CONSTRAINT chk_schedule_posters_source CHECK ((((source = 'x'::text) AND (x_user_id <> ''::text) AND (post_url ~ '^https://x\.com/i/status/[1-9][0-9]*$'::text) AND (image_url ~~ 'https://pbs.twimg.com/%'::text) AND (image_sha256 IS NULL)) OR ((source = 'youtube_community'::text) AND (x_user_id = ''::text) AND (post_url ~ '^https://www\.youtube\.com/post/[A-Za-z0-9_-]+$'::text) AND (image_url ~~ 'https://yt3.ggpht.com/%'::text) AND (image_sha256 IS NULL)) OR ((source = 'youtube_thumbnail'::text) AND (x_user_id = ''::text) AND (post_url ~ '^https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}$'::text) AND (image_url = (('https://i.ytimg.com/vi/'::text || substr(post_url, 33)) || '/maxresdefault.jpg'::text)) AND (image_sha256 IS NOT NULL) AND (image_sha256 ~ '^[0-9a-f]{64}$'::text))))
   CONSTRAINT chk_schedule_posters_translated_image CHECK ((((translated_image IS NULL) = (translated_mime IS NULL)) AND ((translated_image IS NULL) = (translated_at IS NULL)) AND ((translation_status <> 'succeeded'::text) OR (translated_image IS NOT NULL)) AND ((translation_status <> 'not_requested'::text) OR (translated_image IS NULL))))
   CONSTRAINT chk_schedule_posters_translated_image_size CHECK (((translated_image IS NULL) OR ((octet_length(translated_image) >= 1) AND (octet_length(translated_image) <= 4194304))))

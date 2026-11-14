@@ -55,7 +55,12 @@ type HelpImageProvider interface {
 
 // SchedulePosterReader의 day는 JST 날짜다.
 type SchedulePosterReader interface {
-	PublishedImage(ctx context.Context, channelID string, day time.Time) (scheduleposter.Image, bool, error)
+	PublishedRows(ctx context.Context, channelID string, day time.Time) (scheduleposter.PublishedSchedule, bool, error)
+}
+
+// ScheduleCardRenderer는 확정본 행 묶음을 member의 주간 일정 카드 PNG로 그린다.
+type ScheduleCardRenderer interface {
+	RenderScheduleCard(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule) ([]byte, error)
 }
 
 type BroadcastHistoryQuery struct {
@@ -135,6 +140,7 @@ type Dependencies struct {
 	Formatter           *formatter.ResponseFormatter
 	HelpImageProvider   HelpImageProvider
 	SchedulePosters     SchedulePosterReader
+	ScheduleCards       ScheduleCardRenderer
 	SendMessage         func(ctx context.Context, room, message string) error
 	SendImage           func(ctx context.Context, room string, imageData []byte) error
 	SendImages          func(ctx context.Context, room string, images [][]byte) error

@@ -14,9 +14,7 @@ import (
 )
 
 type CalendarCardRenderer struct {
-	cacheMu     sync.Mutex
-	cache       map[calendarCacheKey][]byte
-	cacheOrder  []calendarCacheKey
+	cache       *imageCache[calendarCacheKey]
 	renderMu    sync.Mutex
 	inflight    map[calendarCacheKey]*calendarRenderCall
 	sharedCache sharedcache.Store
@@ -52,7 +50,7 @@ func WithCalendarStrings(store *messagestrings.Store) CalendarCardRendererOption
 
 func NewCalendarCardRenderer(options ...CalendarCardRendererOption) *CalendarCardRenderer {
 	r := &CalendarCardRenderer{
-		cache: make(map[calendarCacheKey][]byte),
+		cache: newImageCache[calendarCacheKey](calendarImageCacheLimit),
 	}
 
 	for _, option := range options {

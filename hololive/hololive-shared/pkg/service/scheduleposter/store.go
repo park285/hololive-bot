@@ -85,6 +85,15 @@ type Candidate struct {
 	PostedAt    time.Time
 }
 
+// RowsStatus는 확정본의 일정표 행 추출 상태이며 migration 019의 CHECK와 같은 값이다. 확정본이 아니면 뜻이 없다.
+type RowsStatus string
+
+const (
+	RowsPending   RowsStatus = "pending"
+	RowsSucceeded RowsStatus = "succeeded"
+	RowsFailed    RowsStatus = "failed"
+)
+
 type Poster struct {
 	Candidate
 
@@ -101,6 +110,12 @@ type Poster struct {
 	Revision            int64
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+	RowsStatus          RowsStatus
+	// RowsError는 마지막 추출 실패의 사유 코드이며 없으면 빈 문자열이다.
+	RowsError string
+	// RowsExtractedAt은 행 묶음을 마지막으로 저장한 시각이며, 재추출을 기다리거나 실패해도 이전 묶음과 함께 남는다.
+	RowsExtractedAt *time.Time
+	RowsCount       int
 }
 
 type Image struct {
@@ -494,8 +509,11 @@ func (s *Store) UpdateWeek(ctx context.Context, id, expectedRevision int64, week
 		var err error
 
 		revision, err = changeWeek(ctx, tx, updateWeekSQL, id, expectedRevision, weekStart, weekEnd)
+		if err != nil {
+			return err
+		}
 
-		return err
+		return deleteRows(ctx, tx, id)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("update schedule poster week: %w", err)
@@ -530,7 +548,7 @@ func (s *Store) AutoReject(ctx context.Context, id, expectedRevision int64) (int
 
 		var err error
 
-		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision, ReviewerAuto)
+		revision, err = reject(ctx, tx, id, expectedRevision, ReviewerAuto)
 
 		return err
 	})
@@ -599,7 +617,7 @@ func (s *Store) Reject(ctx context.Context, id, expectedRevision int64) (int64, 
 	err := s.withChannelLock(ctx, id, func(tx pgx.Tx) error {
 		var err error
 
-		revision, err = mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision, ReviewerAdmin)
+		revision, err = reject(ctx, tx, id, expectedRevision, ReviewerAdmin)
 
 		return err
 	})
@@ -610,9 +628,36 @@ func (s *Store) Reject(ctx context.Context, id, expectedRevision int64) (int64, 
 	return revision, nil
 }
 
-// RequestTranslation은 번역본을 지우지 않으므로 새 번역본이 저장될 때까지 이전 번역본이 !스케쥴로 게시된다.
+func reject(ctx context.Context, tx pgx.Tx, id, expectedRevision int64, reviewer Reviewer) (int64, error) {
+	revision, err := mutate(ctx, tx, "update schedule poster", rejectSQL, id, expectedRevision, reviewer)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := deleteRows(ctx, tx, id); err != nil {
+		return 0, err
+	}
+
+	return revision, nil
+}
+
+func deleteRows(ctx context.Context, tx pgx.Tx, id int64) error {
+	if _, err := tx.Exec(ctx, deleteRowsSQL, id); err != nil {
+		return fmt.Errorf("delete schedule poster rows: %w", err)
+	}
+
+	return nil
+}
+
+// RequestTranslation은 번역본과 행 묶음을 지우지 않으므로 새 것이 저장될 때까지 이전 번역본과 이전 행이 게시된다. 행 추출도 함께 예약한다.
 func (s *Store) RequestTranslation(ctx context.Context, id, expectedRevision int64) (int64, error) {
 	return s.mutate(ctx, "request schedule poster translation", requestTranslationSQL, id, expectedRevision)
+}
+
+// RequestRows는 일정표 행만 다시 뽑게 예약한다. 번역과 revision은 그대로이고, 새 묶음이 저장될 때까지 이전 묶음이 게시된다.
+// 확정본이고 추출이 끝났으며(succeeded·failed) 주가 끝나지 않았을 때만 받고, 아니면 ErrInvalidState다.
+func (s *Store) RequestRows(ctx context.Context, id, expectedRevision int64) (int64, error) {
+	return s.mutate(ctx, "request schedule poster rows", requestRowsSQL, id, expectedRevision)
 }
 
 func (s *Store) mutate(ctx context.Context, action, query string, id, expectedRevision int64) (int64, error) {
@@ -693,6 +738,7 @@ func scanPoster(row pgx.CollectableRow) (Poster, error) {
 		translationStatus string
 		reviewedBy        string
 		requestReason     string
+		rowsStatus        string
 	)
 
 	err := row.Scan(
@@ -700,12 +746,14 @@ func scanPoster(row pgx.CollectableRow) (Poster, error) {
 		&poster.TextExcerpt, &reviewStatus, &poster.WeekStart, &poster.WeekEnd, &poster.ReviewedAt,
 		&translationStatus, &poster.TranslationError, &poster.TranslatedAt, &poster.Revision,
 		&poster.CreatedAt, &poster.UpdatedAt, &reviewedBy, &requestReason,
+		&rowsStatus, &poster.RowsError, &poster.RowsExtractedAt, &poster.RowsCount,
 	)
 
 	poster.ReviewStatus = ReviewStatus(reviewStatus)
 	poster.TranslationStatus = TranslationStatus(translationStatus)
 	poster.ReviewedBy = Reviewer(reviewedBy)
 	poster.ReviewRequestReason = ReviewRequestReason(requestReason)
+	poster.RowsStatus = RowsStatus(rowsStatus)
 
 	return poster, err
 }

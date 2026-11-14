@@ -7,3 +7,6 @@ alarm_dispatch|owner=alarm-worker|writers=hololive-alarm-worker,hololive-api|rea
 alarm_state|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker,hololive-api
 youtube_outbox|owner=hololive-api|writers=hololive-api|readers=hololive-alarm-worker
 schedule_posters|owner=hololive-api|writers=hololive-api|readers=hololive-api
+schedule_poster_rows|owner=hololive-api|writers=hololive-api|readers=hololive-api
+schedule_poster_posts|owner=hololive-api|writers=hololive-api|readers=hololive-api
+schedule_poster_changes|owner=hololive-api|writers=hololive-api|readers=hololive-api

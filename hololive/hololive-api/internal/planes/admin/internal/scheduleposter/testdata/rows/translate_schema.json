@@ -1,0 +1,107 @@
+{
+ "type": "OBJECT",
+ "description": "Korean card fields corresponding 1-to-1 with the numbered input schedule rows.",
+ "required": [
+  "rows"
+ ],
+ "properties": {
+  "rows": {
+   "type": "ARRAY",
+   "description": "One item per input row, in input order.",
+   "items": {
+    "type": "OBJECT",
+    "required": [
+     "index",
+     "title_ko",
+     "with_ko",
+     "place_ko",
+     "tags_ko",
+     "note_ko",
+     "terms",
+     "doubt_ko"
+    ],
+    "propertyOrdering": [
+     "index",
+     "title_ko",
+     "with_ko",
+     "place_ko",
+     "tags_ko",
+     "note_ko",
+     "terms",
+     "doubt_ko"
+    ],
+    "properties": {
+     "index": {
+      "type": "INTEGER",
+      "description": "1-based index matching the input row number."
+     },
+     "title_ko": {
+      "type": "STRING",
+      "description": "What the stream is, without participants, place, labels, or remarks."
+     },
+     "with_ko": {
+      "type": "ARRAY",
+      "description": "Participants besides the poster owner.",
+      "items": {
+       "type": "STRING"
+      }
+     },
+     "place_ko": {
+      "type": "STRING",
+      "description": "Where the stream airs or the event happens when it is not the poster owner's own channel; otherwise empty."
+     },
+     "tags_ko": {
+      "type": "ARRAY",
+      "description": "Fixed properties: stream language, platform, restricted access, sponsorship.",
+      "items": {
+       "type": "STRING"
+      }
+     },
+     "note_ko": {
+      "type": "STRING",
+      "description": "Remarks about the plan; otherwise empty."
+     },
+     "terms": {
+      "type": "ARRAY",
+      "description": "Names and stream jargon rendered into Korean without a Glossary, Earlier renderings, Name table, or standing vocabulary entry.",
+      "items": {
+       "type": "OBJECT",
+       "required": [
+        "source",
+        "ko",
+        "basis"
+       ],
+       "propertyOrdering": [
+        "source",
+        "ko",
+        "basis"
+       ],
+       "properties": {
+        "source": {
+         "type": "STRING",
+         "description": "The name as written in the row."
+        },
+        "ko": {
+         "type": "STRING",
+         "description": "The Korean written for it."
+        },
+        "basis": {
+         "type": "STRING",
+         "enum": [
+          "official_ko",
+          "translated",
+          "transliterated"
+         ]
+        }
+       }
+      }
+     },
+     "doubt_ko": {
+      "type": "STRING",
+      "description": "Open points the row left undetermined; otherwise empty."
+     }
+    }
+   }
+  }
+ }
+}

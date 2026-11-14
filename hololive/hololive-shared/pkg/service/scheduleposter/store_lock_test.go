@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
@@ -143,13 +144,145 @@ func TestAdminChangesWaitForTheChannelLock(t *testing.T) {
 func lockWaiting(t *testing.T, pool *pgxpool.Pool) bool {
 	t.Helper()
 
-	var waiting bool
+	return waitingSessions(t, pool) > 0
+}
 
-	err := pool.QueryRow(t.Context(), `SELECT count(*) > 0 FROM pg_locks AS waiting
+func waitingSessions(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+
+	var waiting int
+
+	err := pool.QueryRow(t.Context(), `SELECT count(DISTINCT waiting.pid) FROM pg_locks AS waiting
 		JOIN pg_stat_activity AS activity ON activity.pid = waiting.pid
 		WHERE NOT waiting.granted AND activity.datname = current_database()`).Scan(&waiting)
+	if err != nil {
+		return 0
+	}
 
-	return err == nil && waiting
+	return waiting
+}
+
+func TestRowsRemovalWaitsForAConcurrentRecordRows(t *testing.T) {
+	t.Parallel()
+
+	start, end := time.Date(2026, time.November, 9, 0, 0, 0, 0, time.UTC), time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC)
+
+	for name, change := range map[string]func(ctx context.Context, store *Store, revision int64) error{
+		"reject": func(ctx context.Context, store *Store, revision int64) error {
+			_, err := store.Reject(ctx, 101, revision)
+
+			return err
+		},
+		"update week": func(ctx context.Context, store *Store, revision int64) error {
+			_, err := store.UpdateWeek(ctx, 101, revision, start.AddDate(0, 0, 1), end.AddDate(0, 0, 1))
+
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			store, pool, pending, revision := translatedConfirmedPoster(t, start, end)
+			holder := holdRowsInsert(t, pool)
+
+			type recordOutcome struct {
+				recorded bool
+				err      error
+			}
+
+			recordedCh := make(chan recordOutcome, 1)
+
+			go func() {
+				recorded, recordErr := store.RecordRows(ctx, pending, []Row{{
+					Day: start.AddDate(0, 0, 1), Status: RowPlanned, SourceText: "雑談", TitleKo: "잡담",
+				}})
+				recordedCh <- recordOutcome{recorded, recordErr}
+			}()
+
+			require.Eventually(t, func() bool { return waitingSessions(t, pool) == 1 }, 10*time.Second, 20*time.Millisecond,
+				"행을 넣은 RecordRows가 커밋 전에 멈춘다")
+
+			changed := make(chan error, 1)
+
+			go func() { changed <- change(ctx, store, revision) }()
+
+			require.Eventually(t, func() bool { return waitingSessions(t, pool) == 2 }, 10*time.Second, 20*time.Millisecond,
+				"변경은 RecordRows가 잠근 포스터 행을 기다린다")
+			require.NoError(t, holder.Rollback(ctx))
+
+			select {
+			case result := <-recordedCh:
+				require.NoError(t, result.err)
+				require.True(t, result.recorded, "변경보다 먼저 포스터 행을 잠근 RecordRows는 기록한다")
+			case <-time.After(10 * time.Second):
+				t.Fatal("record rows did not finish after the hold was released")
+			}
+
+			select {
+			case err := <-changed:
+				require.NoError(t, err)
+			case <-time.After(10 * time.Second):
+				t.Fatal("change did not finish after record rows committed")
+			}
+
+			var remaining int
+
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM schedule_poster_rows WHERE poster_id = 101`).Scan(&remaining))
+			require.Zero(t, remaining, "커밋 전이던 RecordRows가 넣은 묶음도 지운다")
+		})
+	}
+}
+
+func translatedConfirmedPoster(t *testing.T, start, end time.Time) (*Store, *pgxpool.Pool, PendingRows, int64) {
+	t.Helper()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+
+	store, err := NewStore(pool)
+	require.NoError(t, err)
+
+	_, err = store.InsertCandidates(ctx, []Candidate{{
+		ID: 101, ChannelID: lockTestChannel, XUserID: "1", PostURL: "https://x.com/i/status/101",
+		ImageURL: "https://pbs.twimg.com/media/a.jpg?name=orig", PostedAt: start.Add(3 * time.Hour),
+	}}, false)
+	require.NoError(t, err)
+
+	revision, err := store.Confirm(ctx, 101, 1, start, end)
+	require.NoError(t, err)
+
+	translated, err := store.RecordTranslation(ctx, PendingTranslation{ID: 101, Revision: revision}, Image{MIME: "image/jpeg", Data: []byte{0xff}})
+	require.NoError(t, err)
+	require.True(t, translated)
+
+	pending, err := store.PendingRows(ctx, start, 10)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+
+	return store, pool, pending[0], revision + 1
+}
+
+func holdRowsInsert(t *testing.T, pool *pgxpool.Pool) pgx.Tx {
+	t.Helper()
+
+	ctx := t.Context()
+
+	_, err := pool.Exec(ctx, `CREATE FUNCTION hold_rows_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN PERFORM pg_advisory_xact_lock(7019); RETURN NULL; END $$;
+		CREATE TRIGGER hold_rows_insert AFTER INSERT ON schedule_poster_rows
+		FOR EACH STATEMENT EXECUTE FUNCTION hold_rows_insert()`)
+	require.NoError(t, err)
+
+	holder, err := pool.Begin(ctx)
+	require.NoError(t, err)
+
+	t.Cleanup(func() { require.NoError(t, pgxdb.Rollback(context.WithoutCancel(t.Context()), holder)) })
+
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_xact_lock(7019)`)
+	require.NoError(t, err)
+
+	return holder
 }
 
 func TestHandOverWaitsForAnAutoJudgmentInProgress(t *testing.T) {

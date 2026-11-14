@@ -9,10 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"google.golang.org/genai"
 )
 
 const (
@@ -25,6 +28,16 @@ const (
 	maxGlossaryTerms       = 200
 	maxGlossaryRunes       = 80
 	maxThumbnailVideos     = 5
+	defaultRowsModel       = "gemini-4-hydrogen"
+	defaultRowsTimeout     = 180
+	minRowsTimeout         = 30
+	maxRowsTimeout         = 900
+	maxRowsTemperature     = 2
+	minChangePollSeconds   = 300
+	maxChangePollSeconds   = 86400
+	defaultScheduleInfoMin = 0.7
+	minScheduleInfoMin     = 0.01
+	maxScheduleInfoMin     = 0.99
 )
 
 var ErrDisabled = errors.New("schedule poster collection disabled")
@@ -58,16 +71,96 @@ type TranslationConfig struct {
 	TranscribeModel string `json:"transcribe_model"`
 	// Glossary는 멤버 이름(members 표에서 채움) 밖의 용어 표기다.
 	Glossary map[string]string `json:"glossary"`
+	Rows     RowsConfig        `json:"rows"`
 }
 
+// RowsConfig는 일정표 행 추출과 번역 호출의 단계별 모델 파라미터다. Vertex 클라이언트는 TranslationConfig와 함께 쓴다.
+type RowsConfig struct {
+	Extract   RowStageConfig `json:"extract"`
+	Translate RowStageConfig `json:"translate"`
+	Match     RowStageConfig `json:"match"`
+	Decide    DecideConfig   `json:"decide"`
+}
+
+// DecideConfig의 ScheduleInfoMin을 바꿔도 이미 판별한 글은 다시 판별하지 않는다.
+type DecideConfig struct {
+	ScheduleInfoMin float64 `json:"schedule_info_min"`
+}
+
+// RowStageConfig의 Temperature가 nil이면 요청에 넣지 않아 모델 기본값을 쓴다. TimeoutSeconds는 Vertex 요청 하나의 상한이다.
+type RowStageConfig struct {
+	Model          string              `json:"model"`
+	ThinkingLevel  genai.ThinkingLevel `json:"thinking_level"`
+	Temperature    *float32            `json:"temperature"`
+	TimeoutSeconds int                 `json:"timeout_seconds"`
+}
+
+func defaultRowsConfig() RowsConfig {
+	return RowsConfig{
+		Extract:   RowStageConfig{Model: defaultRowsModel, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: defaultRowsTimeout},
+		Translate: RowStageConfig{Model: defaultRowsModel, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: defaultRowsTimeout},
+		Match:     RowStageConfig{Model: defaultRowsModel, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: defaultRowsTimeout},
+		Decide:    DecideConfig{ScheduleInfoMin: defaultScheduleInfoMin},
+	}
+}
+
+func (c RowStageConfig) timeout() time.Duration {
+	return time.Duration(c.TimeoutSeconds) * time.Second
+}
+
+func (c RowStageConfig) validate(stage string) error {
+	levels := []genai.ThinkingLevel{genai.ThinkingLevelMinimal, genai.ThinkingLevelLow, genai.ThinkingLevelMedium, genai.ThinkingLevelHigh}
+	if !slices.Contains(levels, c.ThinkingLevel) {
+		return fmt.Errorf("schedule poster rows.%s thinking_level must be MINIMAL, LOW, MEDIUM or HIGH", stage)
+	}
+
+	if !modelPattern.MatchString(c.Model) || c.TimeoutSeconds < minRowsTimeout || c.TimeoutSeconds > maxRowsTimeout ||
+		c.Temperature != nil && !(*c.Temperature >= 0 && *c.Temperature <= maxRowsTemperature) {
+		return fmt.Errorf("schedule poster rows.%s requires a model, a %d-%d second timeout and a 0-%d temperature",
+			stage, minRowsTimeout, maxRowsTimeout, maxRowsTemperature)
+	}
+
+	return nil
+}
+
+func validChangePoll(seconds int) bool {
+	return seconds == 0 || seconds >= minChangePollSeconds && seconds <= maxChangePollSeconds
+}
+
+func (c RowsConfig) validate() error {
+	if err := c.Extract.validate("extract"); err != nil {
+		return err
+	}
+
+	if err := c.Translate.validate("translate"); err != nil {
+		return err
+	}
+
+	if err := c.Match.validate("match"); err != nil {
+		return err
+	}
+
+	if minimum := c.Decide.ScheduleInfoMin; !(minimum >= minScheduleInfoMin && minimum <= maxScheduleInfoMin) {
+		return fmt.Errorf("schedule poster rows.decide.schedule_info_min must be %.2f-%.2f", minScheduleInfoMin, maxScheduleInfoMin)
+	}
+
+	return nil
+}
+
+// Config의 ChangePollSeconds가 0이면 변경 감지를 끈다. 키를 넣어야 새 외부 호출 루프가 켜진다.
 type Config struct {
-	PollSeconds int               `json:"poll_seconds"`
-	Targets     []Target          `json:"targets"`
-	Translation TranslationConfig `json:"translation"`
+	PollSeconds       int               `json:"poll_seconds"`
+	ChangePollSeconds int               `json:"change_poll_seconds"`
+	Targets           []Target          `json:"targets"`
+	Translation       TranslationConfig `json:"translation"`
 }
 
 func (c Config) PollInterval() time.Duration {
 	return time.Duration(c.PollSeconds) * time.Second
+}
+
+func (c Config) ChangePollInterval() time.Duration {
+	return time.Duration(c.ChangePollSeconds) * time.Second
 }
 
 // LoadConfig는 SCHEDULE_POSTER_CONFIG_FILE 경로가 비어 있으면 ErrDisabled를 돌려준다.
@@ -107,6 +200,7 @@ func LoadConfig(path string) (result *Config, retErr error) {
 		PollSeconds: defaultPollSeconds,
 		Translation: TranslationConfig{
 			Location: defaultLocation, Model: defaultModel, TextModel: defaultTextModel, TranscribeModel: defaultTranscribeModel,
+			Rows: defaultRowsConfig(),
 		},
 	}
 	if err := jsonv2.Unmarshal(raw, &config, jsonv2.RejectUnknownMembers(true)); err != nil {
@@ -125,6 +219,10 @@ func (c Config) Validate() error {
 		return errors.New("schedule poster requires 1-20 targets and a 600-86400 second interval")
 	}
 
+	if !validChangePoll(c.ChangePollSeconds) {
+		return fmt.Errorf("schedule poster change_poll_seconds must be 0 or %d-%d", minChangePollSeconds, maxChangePollSeconds)
+	}
+
 	if err := validateTargets(c.Targets); err != nil {
 		return err
 	}
@@ -134,6 +232,10 @@ func (c Config) Validate() error {
 		!modelPattern.MatchString(translation.Model) || !modelPattern.MatchString(translation.TextModel) ||
 		!modelPattern.MatchString(translation.TranscribeModel) {
 		return errors.New("schedule poster translation requires project, location, model, text_model and transcribe_model")
+	}
+
+	if err := translation.Rows.validate(); err != nil {
+		return err
 	}
 
 	if len(translation.Glossary) > maxGlossaryTerms {

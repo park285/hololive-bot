@@ -1,0 +1,1783 @@
+[
+ {
+  "slug": "tokino-sora",
+  "channel_id": "UCp6993wxpyDPHUpavwDFqgg",
+  "name": "Tokino Sora",
+  "name_ja": "ときのそら",
+  "name_ko": "토키노 소라",
+  "short_ko": "소라",
+  "aliases": {
+   "ja": [
+    "SoraCh. ときのそらチャンネル",
+    "Sora ときのそらチャンネル",
+    "ときのそら"
+   ],
+   "ko": [
+    "사단장",
+    "소라",
+    "소라토모",
+    "토키노소라"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 0기생"
+  ]
+ },
+ {
+  "slug": "roboco-san",
+  "channel_id": "UCDqI2jOz0weumE8s7paEk6g",
+  "name": "Robocosan",
+  "name_ja": "ロボ子さん",
+  "name_ko": "로보코상",
+  "short_ko": "로보코상",
+  "aliases": {
+   "ja": [],
+   "ko": [
+    "로보코",
+    "로보코상"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 0기생"
+  ]
+ },
+ {
+  "slug": "aki-rosenthal",
+  "channel_id": "UCFTLzh12_nrtzqBPsTCqenA",
+  "name": "Aki Rosenthal",
+  "name_ja": "アキ・ローゼンタール",
+  "name_ko": "아키 로젠탈",
+  "short_ko": "아키",
+  "aliases": {
+   "ja": [
+    "アキロゼCh。Vtuber/ホロライブ所属",
+    "アキロゼ"
+   ],
+   "ko": [
+    "아키로젠탈",
+    "아키",
+    "아키로제",
+    "아키아키"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 1기생"
+  ]
+ },
+ {
+  "slug": "akai-haato",
+  "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+  "name": "Akai Haato",
+  "name_ja": "赤井はあと",
+  "name_ko": "아카이 하아토",
+  "short_ko": "하아토",
+  "aliases": {
+   "ja": [
+    "HAACHAMA Ch 赤井はあと"
+   ],
+   "ko": [
+    "아카이하아토",
+    "하쨔마",
+    "하챠마"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 1기생"
+  ]
+ },
+ {
+  "slug": "shirakami-fubuki",
+  "channel_id": "UCdn5BQ06XqgXoAxIhbqw5Rg",
+  "name": "Shirakami Fubuki",
+  "name_ja": "白上フブキ",
+  "name_ko": "시라카미 후부키",
+  "short_ko": "후부키",
+  "aliases": {
+   "ja": [
+    "フブキCh。白上フブキ",
+    "白上フブキ"
+   ],
+   "ko": [
+    "쿠로카미_후부키",
+    "후부키",
+    "국왕님"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 1기생",
+   "홀로라이브 게이머즈"
+  ]
+ },
+ {
+  "slug": "natsuiro-matsuri",
+  "channel_id": "UCQ0UDLQCjY0rmuxCDE38FGg",
+  "name": "Natsuiro Matsuri",
+  "name_ja": "夏色まつり",
+  "name_ko": "나츠이로 마츠리",
+  "short_ko": "마츠리",
+  "aliases": {
+   "ja": [
+    "Matsuri Channel 夏色まつり",
+    "Matsuri 夏色まつり",
+    "夏色まつり"
+   ],
+   "ko": [
+    "마츠리",
+    "마츠리스"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 1기생"
+  ]
+ },
+ {
+  "slug": "nakiri-ayame",
+  "channel_id": "UC7fk0CB07ly8oSl0aqKkqFg",
+  "name": "Nakiri Ayame",
+  "name_ja": "百鬼あやめ",
+  "name_ko": "나키리 아야메",
+  "short_ko": "아야메",
+  "aliases": {
+   "ja": [
+    "Nakiri Ayame Ch. 百鬼あやめ",
+    "Nakiri Ayame 百鬼あやめ"
+   ],
+   "ko": [
+    "나키리아야메",
+    "나키리",
+    "아야메",
+    "오니"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 2기생"
+  ]
+ },
+ {
+  "slug": "yuzuki-choco",
+  "channel_id": "UC1suqwovbL1kzsoaZgFZLKg",
+  "name": "Yuzuki Choco",
+  "name_ja": "癒月ちょこ",
+  "name_ko": "유즈키 초코",
+  "short_ko": "초코",
+  "aliases": {
+   "ja": [
+    "Choco Ch. 癒月ちょこ",
+    "Choco 癒月ちょこ"
+   ],
+   "ko": [
+    "유즈키초코",
+    "유즈키",
+    "초코",
+    "초코선생",
+    "초코센"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 2기생"
+  ]
+ },
+ {
+  "slug": "oozora-subaru",
+  "channel_id": "UCvzGlP9oQwU--Y0r9id_jnA",
+  "name": "Oozora Subaru",
+  "name_ja": "大空スバル",
+  "name_ko": "오오조라 스바루",
+  "short_ko": "스바루",
+  "aliases": {
+   "ja": [
+    "Subaru Ch. 大空スバル",
+    "Subaru 大空スバル",
+    "大空スバル"
+   ],
+   "ko": [
+    "메스바루",
+    "스바루",
+    "오오조라스바루"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 2기생"
+  ]
+ },
+ {
+  "slug": "azki",
+  "channel_id": "UC0TXe_LYZ4scaW2XMyi5_kw",
+  "name": "AZKi",
+  "name_ja": "AZKi",
+  "name_ko": "아즈키",
+  "short_ko": "아즈키",
+  "aliases": {
+   "ja": [
+    "AZKi Channel",
+    "AZKi"
+   ],
+   "ko": [
+    "아즈짱",
+    "아즈키치",
+    "아즈키"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 0기생"
+  ]
+ },
+ {
+  "slug": "ookami-mio",
+  "channel_id": "UCp-5t9SrOQwXMU7iIjQfARg",
+  "name": "Ookami Mio",
+  "name_ja": "大神ミオ",
+  "name_ko": "오오카미 미오",
+  "short_ko": "미오",
+  "aliases": {
+   "ja": [
+    "Mio Channel 大神ミオ",
+    "Mio 大神ミオ"
+   ],
+   "ko": [
+    "미오",
+    "미오샤",
+    "미옹"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 게이머즈"
+  ]
+ },
+ {
+  "slug": "sakuramiko",
+  "channel_id": "UC-hM6YJuNYVAmUWxeIr9FeA",
+  "name": "Sakura Miko",
+  "name_ja": "さくらみこ",
+  "name_ko": "사쿠라 미코",
+  "short_ko": "미코",
+  "aliases": {
+   "ja": [
+    "Miko Ch. さくらみこ",
+    "Miko さくらみこ",
+    "さくらみこ"
+   ],
+   "ko": [
+    "미코",
+    "미코치",
+    "엘리트"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 0기생"
+  ]
+ },
+ {
+  "slug": "nekomata-okayu",
+  "channel_id": "UCvaTdHTWBGv3MKj3KVqJVCw",
+  "name": "Nekomata Okayu",
+  "name_ja": "猫又おかゆ",
+  "name_ko": "네코마타 오카유",
+  "short_ko": "오카유",
+  "aliases": {
+   "ja": [
+    "Okayu Ch. 猫又おかゆ",
+    "Okayu 猫又おかゆ"
+   ],
+   "ko": [
+    "오카융",
+    "오카유"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 게이머즈"
+  ]
+ },
+ {
+  "slug": "inugami-korone",
+  "channel_id": "UChAnqc_AY5_I3Px5dig3X1Q",
+  "name": "Inugami Korone",
+  "name_ja": "戌神ころね",
+  "name_ko": "이누가미 코로네",
+  "short_ko": "코로네",
+  "aliases": {
+   "ja": [
+    "Korone Ch. 戌神ころね",
+    "Korone 戌神ころね",
+    "戌神ころね"
+   ],
+   "ko": [
+    "개이모",
+    "코로네",
+    "코로네스키"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 게이머즈"
+  ]
+ },
+ {
+  "slug": "hoshimachi-suisei",
+  "channel_id": "UC5CwaMl1eIgY8h02uZw7u8A",
+  "name": "Hoshimachi Suisei",
+  "name_ja": "星街すいせい",
+  "name_ko": "호시마치 스이세이",
+  "short_ko": "스이세이",
+  "aliases": {
+   "ja": [
+    "Suisei Channel",
+    "Suisei"
+   ],
+   "ko": [
+    "스이짱",
+    "스이",
+    "스이세이",
+    "스이코패스"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 0기생"
+  ]
+ },
+ {
+  "slug": "usada-pekora",
+  "channel_id": "UC1DCedRgGHBdm81E1llLhOQ",
+  "name": "Usada Pekora",
+  "name_ja": "兎田ぺこら",
+  "name_ko": "우사다 페코라",
+  "short_ko": "페코라",
+  "aliases": {
+   "ja": [
+    "Pekora Ch. 兎田ぺこら",
+    "Pekora 兎田ぺこら",
+    "兎田ぺこら"
+   ],
+   "ko": [
+    "페코",
+    "아몬드",
+    "페코라"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 3기생"
+  ]
+ },
+ {
+  "slug": "shiranui-flare",
+  "channel_id": "UCvInZx9h3jC2JzsIzoOebWg",
+  "name": "Shiranui Flare",
+  "name_ja": "不知火フレア",
+  "name_ko": "시라누이 후레아",
+  "short_ko": "후레아",
+  "aliases": {
+   "ja": [
+    "Flare Ch. 不知火フレア",
+    "Flare 不知火フレア",
+    "不知火フレア"
+   ],
+   "ko": [
+    "플레어",
+    "후땅",
+    "후레아_쨩"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 3기생"
+  ]
+ },
+ {
+  "slug": "shirogane-noel",
+  "channel_id": "UCdyqAaZDKHXg4Ahi7VENThQ",
+  "name": "Shirogane Noel",
+  "name_ja": "白銀ノエル",
+  "name_ko": "시로가네 노엘",
+  "short_ko": "노엘",
+  "aliases": {
+   "ja": [
+    "Noel Ch. 白銀ノエル",
+    "Noel 白銀ノエル"
+   ],
+   "ko": [
+    "노엘",
+    "단장"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 3기생"
+  ]
+ },
+ {
+  "slug": "houshou-marine",
+  "channel_id": "UCCzUftO8KOVkV4wQG1vkUvg",
+  "name": "Houshou Marine",
+  "name_ja": "宝鐘マリン",
+  "name_ko": "호쇼 마린",
+  "short_ko": "마린",
+  "aliases": {
+   "ja": [
+    "Marine Ch. 宝鐘マリン",
+    "Marine 宝鐘マリン"
+   ],
+   "ko": [
+    "마리링",
+    "마린",
+    "아줌마",
+    "할망구"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 3기생"
+  ]
+ },
+ {
+  "slug": "tsunomaki-watame",
+  "channel_id": "UCqm3BQLlJfvkTsX_hvm0UmA",
+  "name": "Tsunomaki Watame",
+  "name_ja": "角巻わため",
+  "name_ko": "츠노마키 와타메",
+  "short_ko": "와타메",
+  "aliases": {
+   "ja": [
+    "Watame Ch. 角巻わため",
+    "Watame 角巻わため",
+    "角巻わため"
+   ],
+   "ko": [
+    "양이모",
+    "와타메",
+    "와타오지"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 4기생"
+  ]
+ },
+ {
+  "slug": "tokoyami-towa",
+  "channel_id": "UC1uv2Oq6kNxgATlCiez59hw",
+  "name": "Tokoyami Towa",
+  "name_ja": "常闇トワ",
+  "name_ko": "토코야미 토와",
+  "short_ko": "토와",
+  "aliases": {
+   "ja": [
+    "Towa Ch. 常闇トワ",
+    "Towa 常闇トワ",
+    "常闇トワ"
+   ],
+   "ko": [
+    "TMT",
+    "토와",
+    "토와마지텐시",
+    "tmt",
+    "토코야미",
+    "톼삼"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 4기생"
+  ]
+ },
+ {
+  "slug": "himemori-luna",
+  "channel_id": "UCa9Y57gfeY0Zro_noHRVrnw",
+  "name": "Himemori Luna",
+  "name_ja": "姫森ルーナ",
+  "name_ko": "히메모리 루나",
+  "short_ko": "루나",
+  "aliases": {
+   "ja": [
+    "Luna Ch. 姫森ルーナ",
+    "Luna 姫森ルーナ",
+    "姫森ルーナ"
+   ],
+   "ko": [
+    "루나",
+    "루나이트"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 4기생"
+  ]
+ },
+ {
+  "slug": "yukihana-lamy",
+  "channel_id": "UCFKOVgVbGmX65RxO3EtH3iw",
+  "name": "Yukihana Lamy",
+  "name_ja": "雪花ラミィ",
+  "name_ko": "유키하나 라미",
+  "short_ko": "라미",
+  "aliases": {
+   "ja": [
+    "Lamy Ch. 雪花ラミィ",
+    "Lamy 雪花ラミィ",
+    "雪花ラミィ"
+   ],
+   "ko": [
+    "유키하나라미",
+    "꽐라미",
+    "라미"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 5기생"
+  ]
+ },
+ {
+  "slug": "momosuzu-nene",
+  "channel_id": "UCAWSyEs_Io8MtpY3m-zqILA",
+  "name": "Momosuzu Nene",
+  "name_ja": "桃鈴ねね",
+  "name_ko": "모모스즈 네네",
+  "short_ko": "네네",
+  "aliases": {
+   "ja": [
+    "Nene Ch.桃鈴ねね",
+    "Nene 桃鈴ねね",
+    "桃鈴ねね"
+   ],
+   "ko": [
+    "네네",
+    "모모스즈네네"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 5기생"
+  ]
+ },
+ {
+  "slug": "shishiro-botan",
+  "channel_id": "UCUKD-uaobj9jiqB-VXt71mA",
+  "name": "Shishiro Botan",
+  "name_ja": "獅白ぼたん",
+  "name_ko": "시시로 보탄",
+  "short_ko": "보탄",
+  "aliases": {
+   "ja": [
+    "Botan Ch.獅白ぼたん",
+    "Botan 獅白ぼたん",
+    "獅白ぼたん"
+   ],
+   "ko": [
+    "라라이온",
+    "시시롱",
+    "보탄"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 5기생"
+  ]
+ },
+ {
+  "slug": "omaru-polka",
+  "channel_id": "UCK9V2B22uJYu3N7eR_BT9QA",
+  "name": "Omaru Polka",
+  "name_ja": "尾丸ポルカ",
+  "name_ko": "오마루 폴카",
+  "short_ko": "폴카",
+  "aliases": {
+   "ja": [
+    "Polka Ch. 尾丸ポルカ",
+    "Polka 尾丸ポルカ",
+    "尾丸ポルカ"
+   ],
+   "ko": [
+    "포루카_오루카",
+    "폴카"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "홀로라이브 5기생"
+  ]
+ },
+ {
+  "slug": "la-darknesss",
+  "channel_id": "UCENwRMx5Yh42zWpzURebzTw",
+  "name": "La+ Darknesss",
+  "name_ja": "ラプラス・ダークネス",
+  "name_ko": "라플라스 다크니스",
+  "short_ko": "라플라스",
+  "aliases": {
+   "ja": [
+    "Laplus ch. ラプラス・ダークネス - holoX -",
+    "Laplus ラプラス・ダークネス - holoX -",
+    "ラプラス"
+   ],
+   "ko": [
+    "동구리",
+    "라프",
+    "라플라스",
+    "다크니스",
+    "야마다",
+    "쿠소가키"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "비밀결사 holoX"
+  ]
+ },
+ {
+  "slug": "takane-lui",
+  "channel_id": "UCs9_O1tRPMQTHQ-N_L6FU2g",
+  "name": "Takane Lui",
+  "name_ja": "鷹嶺ルイ",
+  "name_ko": "타카네 루이",
+  "short_ko": "루이",
+  "aliases": {
+   "ja": [
+    "Lui ch. 鷹嶺ルイ - holoX -",
+    "Lui 鷹嶺ルイ - holoX -",
+    "鷹嶺ルイ"
+   ],
+   "ko": [
+    "루이",
+    "루이모"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "비밀결사 holoX"
+  ]
+ },
+ {
+  "slug": "hakui-koyori",
+  "channel_id": "UC6eWCld0KwmyHFbAqK3V-Rw",
+  "name": "Hakui Koyori",
+  "name_ja": "博衣こより",
+  "name_ko": "하쿠이 코요리",
+  "short_ko": "코요리",
+  "aliases": {
+   "ja": [
+    "Koyori ch. 博衣こより - holoX -",
+    "Koyori 博衣こより - holoX -",
+    "博衣こより"
+   ],
+   "ko": [
+    "방송_괴물",
+    "코요",
+    "코요리",
+    "코요링"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "비밀결사 holoX"
+  ]
+ },
+ {
+  "slug": "kazama-iroha",
+  "channel_id": "UC_vMYWcDjmfdpH6r4TTn1MQ",
+  "name": "Kazama Iroha",
+  "name_ja": "風真いろは",
+  "name_ko": "카자마 이로하",
+  "short_ko": "이로하",
+  "aliases": {
+   "ja": [
+    "Iroha ch. 風真いろは - holoX -",
+    "Iroha 風真いろは - holoX -",
+    "風真いろは"
+   ],
+   "ko": [
+    "고자루",
+    "닌자",
+    "이로하"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "비밀결사 holoX"
+  ]
+ },
+ {
+  "slug": "ayunda-risu",
+  "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+  "name": "Ayunda Risu",
+  "name_ja": "アユンダ・リス",
+  "name_ko": "아윤다 리스",
+  "short_ko": "리스",
+  "aliases": {
+   "ja": [
+    "Ayunda Risu Ch. hololive-ID",
+    "Ayunda Risu hololive-ID"
+   ],
+   "ko": [
+    "리스",
+    "아윤다리스",
+    "아윤다"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "AREA15"
+  ]
+ },
+ {
+  "slug": "moona-hoshinova",
+  "channel_id": "UCP0BspO_AMEe3aQqqpo89Dg",
+  "name": "Moona Hoshinova",
+  "name_ja": "ムーナ・ホシノヴァ",
+  "name_ko": "무나 호시노바",
+  "short_ko": "무나",
+  "aliases": {
+   "ja": [
+    "Moona Hoshinova hololive-ID"
+   ],
+   "ko": [
+    "건축왕",
+    "달토끼",
+    "무나"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "AREA15"
+  ]
+ },
+ {
+  "slug": "airani-iofifteen",
+  "channel_id": "UCAoy6rzhSf4ydcYjJw3WoVg",
+  "name": "Airani Iofifteen",
+  "name_ja": "アイラニ・イオフィフティーン",
+  "name_ko": "아이라니 이오피프틴",
+  "short_ko": "이오피",
+  "aliases": {
+   "ja": [
+    "Airani Iofifteen Channel hololive-ID",
+    "Airani Iofifteen hololive-ID"
+   ],
+   "ko": [
+    "이오피"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "AREA15"
+  ]
+ },
+ {
+  "slug": "kureiji-ollie",
+  "channel_id": "UCYz_5n-uDuChHtLo7My1HnQ",
+  "name": "Kureiji Ollie",
+  "name_ja": "クレイジー・オリー",
+  "name_ko": "쿠레이지 올리",
+  "short_ko": "올리",
+  "aliases": {
+   "ja": [
+    "Kureiji Ollie Ch. hololive-ID",
+    "Kureiji Ollie hololive-ID"
+   ],
+   "ko": [
+    "올리",
+    "쿠레이지올리"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoro"
+  ]
+ },
+ {
+  "slug": "anya-melfissa",
+  "channel_id": "UC727SQYUvx5pDDGQpTICNWg",
+  "name": "Anya Melfissa",
+  "name_ja": "アーニャ・メルフィッサ",
+  "name_ko": "아냐 멜피사",
+  "short_ko": "아냐",
+  "aliases": {
+   "ja": [
+    "Anya Melfissa Ch. hololive-ID",
+    "Anya Melfissa hololive-ID"
+   ],
+   "ko": [
+    "아냐",
+    "아냐멜피샤"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoro"
+  ]
+ },
+ {
+  "slug": "pavolia-reine",
+  "channel_id": "UChgTyjG-pdNvxxhdsXfHQ5Q",
+  "name": "Pavolia Reine",
+  "name_ja": "パヴォリア・レイネ",
+  "name_ko": "파볼리아 레이네",
+  "short_ko": "레이네",
+  "aliases": {
+   "ja": [
+    "Pavolia Reine Ch. hololive-ID",
+    "Pavolia Reine hololive-ID"
+   ],
+   "ko": [
+    "레이네"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoro"
+  ]
+ },
+ {
+  "slug": "vestia-zeta",
+  "channel_id": "UCTvHWSfBZgtxE4sILOaurIQ",
+  "name": "Vestia Zeta",
+  "name_ja": "ベスティア・ゼータ",
+  "name_ko": "베스티아 제타",
+  "short_ko": "제타",
+  "aliases": {
+   "ja": [
+    "Vestia Zeta Ch. hololive-ID",
+    "Vestia Zeta hololive-ID"
+   ],
+   "ko": [
+    "제타"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoh3ro"
+  ]
+ },
+ {
+  "slug": "kaela-kovalskia",
+  "channel_id": "UCZLZ8Jjx_RN2CXloOmgTHVg",
+  "name": "Kaela Kovalskia",
+  "name_ja": "カエラ・コヴァルスキア",
+  "name_ko": "카엘라 코발스키아",
+  "short_ko": "카엘라",
+  "aliases": {
+   "ja": [
+    "Kaela Kovalskia Ch. hololive-ID",
+    "Kaela Kovalskia hololive-ID"
+   ],
+   "ko": [
+    "카엘라"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoh3ro"
+  ]
+ },
+ {
+  "slug": "kobo-kanaeru",
+  "channel_id": "UCjLEmnpCNeisMxy134KPwWw",
+  "name": "Kobo Kanaeru",
+  "name_ja": "こぼ・かなえる",
+  "name_ko": "코보 카나에루",
+  "short_ko": "코보",
+  "aliases": {
+   "ja": [
+    "Kobo Kanaeru Ch. hololive-ID",
+    "Kobo Kanaeru hololive-ID"
+   ],
+   "ko": [
+    "코보",
+    "코보짱"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoh3ro"
+  ]
+ },
+ {
+  "slug": "mori-calliope",
+  "channel_id": "UCL_qhgtOy0dy1Agp8vkySQg",
+  "name": "Mori Calliope",
+  "name_ja": "森カリオペ",
+  "name_ko": "모리 칼리오페",
+  "short_ko": "칼리오페",
+  "aliases": {
+   "ja": [
+    "Mori Calliope Ch. hololive-EN",
+    "Mori Calliope hololive-EN"
+   ],
+   "ko": [
+    "칼버지",
+    "칼리"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Myth"
+  ]
+ },
+ {
+  "slug": "takanashi-kiara",
+  "channel_id": "UCHsx4Hqa-1ORjQTh9TYDhww",
+  "name": "Takanashi Kiara",
+  "name_ja": "小鳥遊キアラ",
+  "name_ko": "타카나시 키아라",
+  "short_ko": "키아라",
+  "aliases": {
+   "ja": [
+    "Takanashi Kiara Ch. hololive-EN",
+    "Takanashi Kiara hololive-EN"
+   ],
+   "ko": [
+    "새대가리",
+    "치킨",
+    "키아라",
+    "타카나시키아라"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Myth"
+  ]
+ },
+ {
+  "slug": "ninomae-inanis",
+  "channel_id": "UCMwGHR0BTZuLsmjY_NT5Pwg",
+  "name": "Ninomae Ina'nis",
+  "name_ja": "一伊那尓栖",
+  "name_ko": "니노마에 이나니스",
+  "short_ko": "이나니스",
+  "aliases": {
+   "ja": [
+    "Ninomae Ina'nis Ch. hololive-EN",
+    "Ninomae Ina'nis hololive-EN"
+   ],
+   "ko": [
+    "이나",
+    "타코다치",
+    "포옹_수집가"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Myth"
+  ]
+ },
+ {
+  "slug": "irys",
+  "channel_id": "UC8rcEBzJSleTkf_-agPM20g",
+  "name": "IRyS",
+  "name_ja": "IRyS",
+  "name_ko": "아이리스",
+  "short_ko": "아이리스",
+  "aliases": {
+   "ja": [],
+   "ko": [
+    "아이리스"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Promise"
+  ]
+ },
+ {
+  "slug": "ouro-kronii",
+  "channel_id": "UCmbs8T6MWqUHP1tIQvSgKrg",
+  "name": "Ouro Kronii",
+  "name_ja": "オーロ・クロニー",
+  "name_ko": "오로 크로니",
+  "short_ko": "크로니",
+  "aliases": {
+   "ja": [
+    "Ouro Kronii Ch. hololive-EN",
+    "Ouro Kronii hololive-EN"
+   ],
+   "ko": [
+    "곽로니",
+    "구론희",
+    "빙구",
+    "크로니",
+    "오노크로니"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Promise"
+  ]
+ },
+ {
+  "slug": "hakos-baelz",
+  "channel_id": "UCgmPnx-EEeOrZSg5Tiw7ZRQ",
+  "name": "Hakos Baelz",
+  "name_ja": "ハコス・ベールズ",
+  "name_ko": "하코스 벨즈",
+  "short_ko": "벨즈",
+  "aliases": {
+   "ja": [
+    "Hakos Baelz Ch. hololive-EN",
+    "Hakos Baelz hololive-EN"
+   ],
+   "ko": [
+    "벨즈",
+    "베이",
+    "땃쥐",
+    "카오스"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Promise"
+  ]
+ },
+ {
+  "slug": "shiori-novella",
+  "channel_id": "UCgnfPPb9JI3e9A4cXHnWbyg",
+  "name": "Shiori Novella",
+  "name_ja": "シオリ・ノヴェラ",
+  "name_ko": "시오리 노벨라",
+  "short_ko": "시오리",
+  "aliases": {
+   "ja": [
+    "Shiori Novella Ch. hololive-EN",
+    "Shiori Novella hololive-EN"
+   ],
+   "ko": [
+    "시오리",
+    "책벌레"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Advent"
+  ]
+ },
+ {
+  "slug": "koseki-bijou",
+  "channel_id": "UC9p_lqQ0FEDz327Vgf5JwqA",
+  "name": "Koseki Bijou",
+  "name_ja": "古石ビジュー",
+  "name_ko": "코세키 비쥬",
+  "short_ko": "비쥬",
+  "aliases": {
+   "ja": [
+    "Koseki Bijou Ch. hololive-EN",
+    "Koseki Bijou hololive-EN"
+   ],
+   "ko": [
+    "비주",
+    "비쥬"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Advent"
+  ]
+ },
+ {
+  "slug": "nerissa-ravencroft",
+  "channel_id": "UC_sFNM0z0MWm9A6WlKPuMMg",
+  "name": "Nerissa Ravencroft",
+  "name_ja": "ネリッサ・レイヴンクロフト",
+  "name_ko": "네리사 레이븐크로프트",
+  "short_ko": "네리사",
+  "aliases": {
+   "ja": [
+    "Nerissa Ravencroft Ch. hololive-EN",
+    "Nerissa Ravencroft hololive-EN"
+   ],
+   "ko": [
+    "네리사"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Advent"
+  ]
+ },
+ {
+  "slug": "fuwawa-abyssgard",
+  "channel_id": "UCt9H_RpQzhxzlyBxFqrdHqA",
+  "name": "Fuwawa Abyssgard",
+  "name_ja": "フワワ・アビスガード",
+  "name_ko": "후와와 어비스가드",
+  "short_ko": "후와와",
+  "aliases": {
+   "ja": [],
+   "ko": [
+    "바우바우",
+    "후와와",
+    "후와모코"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Advent"
+  ]
+ },
+ {
+  "slug": "mococo-abyssgard",
+  "channel_id": "UCt9H_RpQzhxzlyBxFqrdHqA",
+  "name": "Mococo Abyssgard",
+  "name_ja": "モココ・アビスガード",
+  "name_ko": "모코코 어비스가드",
+  "short_ko": "모코코",
+  "aliases": {
+   "ja": [],
+   "ko": [
+    "바우바우",
+    "모코코",
+    "후와모코"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Advent"
+  ]
+ },
+ {
+  "slug": "elizabeth-rose-bloodflame",
+  "channel_id": "UCW5uhrG1eCBYditmhL0Ykjw",
+  "name": "Elizabeth Rose Bloodflame",
+  "name_ja": "エリザベス・ローズ・ブラッドフレイム",
+  "name_ko": "엘리자베스 로즈 블러드플레임",
+  "short_ko": "엘리자베스",
+  "aliases": {
+   "ja": [
+    "Elizabeth Rose Bloodflame Ch. hololive-EN",
+    "Elizabeth Rose Bloodflame hololive-EN"
+   ],
+   "ko": [
+    "블러드플레임",
+    "엘리자베스",
+    "엘리",
+    "엘리자베스로즈블러드플레임"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Justice"
+  ]
+ },
+ {
+  "slug": "gigi-murin",
+  "channel_id": "UCDHABijvPBnJm7F-KlNME3w",
+  "name": "Gigi Murin",
+  "name_ja": "ジジ・ムリン",
+  "name_ko": "지지 무린",
+  "short_ko": "지지",
+  "aliases": {
+   "ja": [
+    "Gigi Murin Ch. hololive-EN",
+    "Gigi Murin hololive-EN"
+   ],
+   "ko": [
+    "지지"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Justice"
+  ]
+ },
+ {
+  "slug": "cecilia-immergreen",
+  "channel_id": "UCvN5h1ShZtc7nly3pezRayg",
+  "name": "Cecilia Immergreen",
+  "name_ja": "セシリア・イマーグリーン",
+  "name_ko": "세실리아 이머그린",
+  "short_ko": "세실리아",
+  "aliases": {
+   "ja": [
+    "Cecilia Immergreen Ch. hololive-EN",
+    "Cecilia Immergreen hololive-EN"
+   ],
+   "ko": []
+  },
+  "suborg": null,
+  "units": [
+   "Justice"
+  ]
+ },
+ {
+  "slug": "raora-panthera",
+  "channel_id": "UCl69AEx4MdqMZH7Jtsm7Tig",
+  "name": "Raora Panthera",
+  "name_ja": "ラオーラ・パンテーラ",
+  "name_ko": "라오라 판테라",
+  "short_ko": "라오라",
+  "aliases": {
+   "ja": [
+    "Raora Panthera Ch. hololive-EN",
+    "Raora Panthera hololive-EN"
+   ],
+   "ko": [
+    "라오라"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "Justice"
+  ]
+ },
+ {
+  "slug": "otonose-kanade",
+  "channel_id": "UCWQtYtq9EOB4-I5P-3fh8lA",
+  "name": "Otonose Kanade",
+  "name_ja": "音乃瀬奏",
+  "name_ko": "오토노세 카나데",
+  "short_ko": "카나데",
+  "aliases": {
+   "ja": [
+    "Kanade Ch. 音乃瀬奏 ‐ ReGLOSS",
+    "Kanade 音乃瀬奏 ‐ ReGLOSS"
+   ],
+   "ko": [
+    "조선우노",
+    "연주",
+    "카나데",
+    "오토노세",
+    "오토노세카나데",
+    "월요일",
+    "먼데이짱"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ReGLOSS"
+  ]
+ },
+ {
+  "slug": "ichijou-ririka",
+  "channel_id": "UCtyWhCj3AqKh2dXctLkDtng",
+  "name": "Ichijou Ririka",
+  "name_ja": "一条莉々華",
+  "name_ko": "이치죠 리리카",
+  "short_ko": "리리카",
+  "aliases": {
+   "ja": [
+    "Ririka Ch. 一条莉々華 ‐ ReGLOSS",
+    "Ririka 一条莉々華 ‐ ReGLOSS"
+   ],
+   "ko": [
+    "CEO",
+    "사장님",
+    "리리카",
+    "사업가"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ReGLOSS"
+  ]
+ },
+ {
+  "slug": "juufuutei-raden",
+  "channel_id": "UCdXAk5MpyLD8594lm_OvtGQ",
+  "name": "Juufuutei Raden",
+  "name_ja": "儒烏風亭らでん",
+  "name_ko": "주후테이 라덴",
+  "short_ko": "라덴",
+  "aliases": {
+   "ja": [
+    "Raden 儒烏風亭らでん ‐ ReGLOSS",
+    "儒烏風亭らでん",
+    "らでん"
+   ],
+   "ko": [
+    "라덴",
+    "쥬후테이라덴"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ReGLOSS"
+  ]
+ },
+ {
+  "slug": "todoroki-hajime",
+  "channel_id": "UC1iA6_NT4mtAcIII6ygrvCw",
+  "name": "Todoroki Hajime",
+  "name_ja": "轟はじめ",
+  "name_ko": "토도로키 하지메",
+  "short_ko": "하지메",
+  "aliases": {
+   "ja": [
+    "Hajime Ch. 轟はじめ ‐ ReGLOSS",
+    "Hajime 轟はじめ ‐ ReGLOSS"
+   ],
+   "ko": [
+    "하듸메",
+    "하지메"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ReGLOSS"
+  ]
+ },
+ {
+  "slug": "isaki-riona",
+  "channel_id": "UC9LSiN9hXI55svYEBrrK-tw",
+  "name": "Isaki Riona",
+  "name_ja": "響咲リオナ",
+  "name_ko": "이사키 리오나",
+  "short_ko": "리오나",
+  "aliases": {
+   "ja": [
+    "Riona Ch. 響咲リオナ - FLOW GLOW",
+    "Riona 響咲リオナ - FLOW GLOW"
+   ],
+   "ko": [
+    "리오나",
+    "이사키리오나"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "FLOW GLOW"
+  ]
+ },
+ {
+  "slug": "koganei-niko",
+  "channel_id": "UCuI_opAVX6qbxZY-a-AxFuQ",
+  "name": "Koganei Niko",
+  "name_ja": "虎金妃笑虎",
+  "name_ko": "코가네이 니코",
+  "short_ko": "니코",
+  "aliases": {
+   "ja": [
+    "Niko Ch. 虎金妃笑虎 - FLOW GLOW",
+    "Niko 虎金妃笑虎 - FLOW GLOW"
+   ],
+   "ko": [
+    "개그맨",
+    "니코",
+    "키다리",
+    "코가네니코"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "FLOW GLOW"
+  ]
+ },
+ {
+  "slug": "mizumiya-su",
+  "channel_id": "UCjk2nKmHzgH5Xy-C5qYRd5A",
+  "name": "Mizumiya Su",
+  "name_ja": "水宮枢",
+  "name_ko": "미즈미야 스우",
+  "short_ko": "스우",
+  "aliases": {
+   "ja": [
+    "Su Ch. 水宮枢 - FLOW GLOW",
+    "Su 水宮枢 - FLOW GLOW"
+   ],
+   "ko": [
+    "스우",
+    "미즈미야"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "FLOW GLOW"
+  ]
+ },
+ {
+  "slug": "rindo-chihaya",
+  "channel_id": "UCKMWFR6lAstLa7Vbf5dH7ig",
+  "name": "Rindo Chihaya",
+  "name_ja": "輪堂千速",
+  "name_ko": "린도 치하야",
+  "short_ko": "치하야",
+  "aliases": {
+   "ja": [
+    "Chihaya Ch. 輪堂 千速 - FLOW GLOW",
+    "Chihaya 輪堂 千速 - FLOW GLOW"
+   ],
+   "ko": [
+    "드라이버",
+    "치하야",
+    "린도 치하야"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "FLOW GLOW"
+  ]
+ },
+ {
+  "slug": "kikirara-vivi",
+  "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+  "name": "Kikirara Vivi",
+  "name_ja": "綺々羅々ヴィヴィ",
+  "name_ko": "키키라라 비비",
+  "short_ko": "비비",
+  "aliases": {
+   "ja": [
+    "Vivi Ch. 綺々羅々ヴィヴィ - FLOW GLOW",
+    "Vivi 綺々羅々ヴィヴィ - FLOW GLOW"
+   ],
+   "ko": [
+    "비비",
+    "키키라라비비"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "FLOW GLOW"
+  ]
+ },
+ {
+  "slug": "hololive-official",
+  "channel_id": "UCJFZiqLMntJufDCHc6bQixg",
+  "name": "Hololive Official",
+  "name_ja": "hololive ホロライブ",
+  "name_ko": "홀로라이브 공식",
+  "short_ko": "홀로라이브",
+  "aliases": {
+   "ja": [
+    "hololive ホロライブ - VTuber Group",
+    "ホロライブ公式"
+   ],
+   "ko": [
+    "홀로라이브",
+    "공식채널",
+    "홀로그라"
+   ]
+  },
+  "suborg": null,
+  "units": []
+ },
+ {
+  "slug": "holoan-room",
+  "channel_id": "UCozx5csNhCx1wsVq3SZVkBQ",
+  "name": "holoAN",
+  "name_ja": "holoAN room (ホロアナ)",
+  "name_ko": "호로아나",
+  "short_ko": "호로아나",
+  "aliases": {
+   "ja": [
+    "ホロアナ",
+    "holoAN"
+   ],
+   "ko": [
+    "호로아나",
+    "홀로아나",
+    "아나",
+    "이히히"
+   ]
+  },
+  "suborg": null,
+  "units": []
+ },
+ {
+  "slug": "hololive-en-official",
+  "channel_id": "UCotXwY6s8pWmuWd_snKYjhg",
+  "name": "Hololive EN Official",
+  "name_ja": "hololive English",
+  "name_ko": "홀로라이브 EN 공식",
+  "short_ko": "홀로EN",
+  "aliases": {
+   "ja": [
+    "hololive English"
+   ],
+   "ko": [
+    "홀로EN",
+    "홀로라이브영어",
+    "홀로EN공식"
+   ]
+  },
+  "suborg": null,
+  "units": []
+ },
+ {
+  "slug": "hololive-id-official",
+  "channel_id": "UCfrWoRGlawPQDQxxeIDRP0Q",
+  "name": "Hololive ID Official",
+  "name_ja": "hololive Indonesia",
+  "name_ko": "홀로라이브 ID 공식",
+  "short_ko": "홀로ID",
+  "aliases": {
+   "ja": [
+    "hololive Indonesia"
+   ],
+   "ko": [
+    "홀로ID",
+    "홀로인도네시아",
+    "홀로ID공식"
+   ]
+  },
+  "suborg": null,
+  "units": []
+ },
+ {
+  "slug": "devis-regloss",
+  "channel_id": "UC10wVt6hoQiwySRhz7RdOUA",
+  "name": "DEV_IS ReGLOSS",
+  "name_ja": "hololive DEV_IS ReGLOSS",
+  "name_ko": "리글로스 공식",
+  "short_ko": "리글로스",
+  "aliases": {
+   "ja": [
+    "hololive DEV_IS ReGLOSS",
+    "ReGLOSS"
+   ],
+   "ko": [
+    "리글로스",
+    "ReGLOSS",
+    "데비스리글로스",
+    "리글로스공식",
+    "데바이스"
+   ]
+  },
+  "suborg": null,
+  "units": []
+ },
+ {
+  "slug": "devis-flowglow",
+  "channel_id": "UCu2n3qHuOuQIygREMnWeQWg",
+  "name": "DEV_IS FLOW GLOW",
+  "name_ja": "hololive DEV_IS FLOW GLOW",
+  "name_ko": "플로우글로우 공식",
+  "short_ko": "플로우글로우",
+  "aliases": {
+   "ja": [
+    "hololive DEV_IS FLOW GLOW",
+    "FLOW GLOW"
+   ],
+   "ko": [
+    "플로우글로우",
+    "FLOW GLOW",
+    "데비스플로우글로우",
+    "플글",
+    "후로그로",
+    "플로글로"
+   ]
+  },
+  "suborg": null,
+  "units": []
+ },
+ {
+  "slug": "shigure-ui",
+  "channel_id": "UCt30jJgChL8qeT9VPadidSw",
+  "name": "Shigure Ui",
+  "name_ja": "しぐれうい",
+  "name_ko": "시구레 우이",
+  "short_ko": "우이",
+  "aliases": {
+   "ja": [
+    "しぐれうい",
+    "ういママ",
+    "うい"
+   ],
+   "ko": [
+    "시구레우이",
+    "시구레 우이",
+    "우이",
+    "우이마마"
+   ]
+  },
+  "suborg": null,
+  "units": []
+ },
+ {
+  "slug": "izuki-michiru",
+  "channel_id": "UCozx5csNhCx1wsVq3SZVkBQ",
+  "name": "Izuki Michiru",
+  "name_ja": "井月みちる",
+  "name_ko": "이즈키 미치루",
+  "short_ko": "미치루",
+  "aliases": {
+   "ja": [
+    "井月みちる",
+    "みちる"
+   ],
+   "ko": [
+    "이즈키 미치루",
+    "미치루"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoAN"
+  ]
+ },
+ {
+  "slug": "hanazono-sayaka",
+  "channel_id": "UCozx5csNhCx1wsVq3SZVkBQ",
+  "name": "Hanazono Sayaka",
+  "name_ja": "花園さやか",
+  "name_ko": "하나조노 사야카",
+  "short_ko": "사야카",
+  "aliases": {
+   "ja": [
+    "花園さやか",
+    "さやか"
+   ],
+   "ko": [
+    "하나조노 사야카",
+    "사야카"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoAN"
+  ]
+ },
+ {
+  "slug": "kazeshiro-yuki",
+  "channel_id": "UCozx5csNhCx1wsVq3SZVkBQ",
+  "name": "Kazeshiro Yuki",
+  "name_ja": "風白ゆき",
+  "name_ko": "카제시로 유키",
+  "short_ko": "유키",
+  "aliases": {
+   "ja": [
+    "風白ゆき",
+    "ゆき"
+   ],
+   "ko": [
+    "카제시로 유키",
+    "유키"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "holoAN"
+  ]
+ },
+ {
+  "slug": "hyakuto-kyoko",
+  "channel_id": "UCSjQDxud2HkAO2DVD3lwxmw",
+  "name": "Hyakuto Kyoko",
+  "name_ja": "百灯キョーコ",
+  "name_ko": "햐쿠토 쿄코",
+  "short_ko": "쿄코",
+  "aliases": {
+   "ja": [
+    "百灯キョーコ",
+    "キョーコ",
+    "ひゃくとうきょーこ"
+   ],
+   "ko": [
+    "햐쿠토 쿄코",
+    "햐쿠토쿄코",
+    "쿄코"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ASOBI★MAWARI-TAI!"
+  ]
+ },
+ {
+  "slug": "achichi-mela",
+  "channel_id": "UC8eitCE9Z6EwUCs-VUi1blg",
+  "name": "Achichi Mela",
+  "name_ja": "熱千めら",
+  "name_ko": "아치치 메라",
+  "short_ko": "메라",
+  "aliases": {
+   "ja": [
+    "熱千めら",
+    "めら",
+    "あちちめら"
+   ],
+   "ko": [
+    "아치치 메라",
+    "아치치메라",
+    "메라"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ASOBI★MAWARI-TAI!"
+  ]
+ },
+ {
+  "slug": "suzuna-tsuzuri",
+  "channel_id": "UCy9mgxB8pn2C4aNK_MPthDQ",
+  "name": "Suzuna Tsuzuri",
+  "name_ja": "鈴鳴つづり",
+  "name_ko": "스즈나 츠즈리",
+  "short_ko": "츠즈리",
+  "aliases": {
+   "ja": [
+    "鈴鳴つづり",
+    "つづり",
+    "すずなつづり"
+   ],
+   "ko": [
+    "스즈나 츠즈리",
+    "스즈나츠즈리",
+    "츠즈리"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ASOBI★MAWARI-TAI!"
+  ]
+ },
+ {
+  "slug": "sorashina-sopia",
+  "channel_id": "UCROQtXcp2loQEmvpe5rhJzQ",
+  "name": "Sorashina Sopia",
+  "name_ja": "宙科そぴあ",
+  "name_ko": "소라시나 소피아",
+  "short_ko": "소피아",
+  "aliases": {
+   "ja": [
+    "宙科そぴあ",
+    "そぴあ",
+    "そらしなそぴあ"
+   ],
+   "ko": [
+    "소라시나 소피아",
+    "소라시나소피아",
+    "소피아"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ASOBI★MAWARI-TAI!"
+  ]
+ },
+ {
+  "slug": "asobi-mawaritai",
+  "channel_id": "UCAHwWUotyS3l2qBetFDsjgQ",
+  "name": "ASOBI★MAWARI-TAI!",
+  "name_ja": "アソビ★まわり隊！",
+  "name_ko": "아소비★마와리타이!",
+  "short_ko": "아소비",
+  "aliases": {
+   "ja": [
+    "アソビ★まわり隊！",
+    "アソビまわり隊",
+    "アソビ隊"
+   ],
+   "ko": [
+    "아소비",
+    "아소비 마와리타이",
+    "아소비마와리타이",
+    "아소비★마와리타이!"
+   ]
+  },
+  "suborg": null,
+  "units": [
+   "ASOBI★MAWARI-TAI!"
+  ]
+ }
+]

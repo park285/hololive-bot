@@ -3,6 +3,7 @@ module github.com/kapu/hololive-api
 go 1.27.4
 
 require (
+	cloud.google.com/go/auth v0.18.2
 	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-gonic/gin v1.12.0
@@ -24,7 +25,6 @@ require (
 
 require (
 	cloud.google.com/go v0.116.0 // indirect
-	cloud.google.com/go/auth v0.18.2 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect
