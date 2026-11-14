@@ -168,7 +168,7 @@ func newService(
 		now:          time.Now,
 		retry:        translationRetryOptions(),
 		rowBudget:    translationRowBudget,
-		rowsLoop:     rowsLoopState{budget: rowsPosterBudget, done: map[rowsKey]rowsResult{}},
+		rowsLoop:     newRowsLoopState(config.Translation.Rows),
 		collectNow:   make(chan struct{}, 1),
 	}
 }

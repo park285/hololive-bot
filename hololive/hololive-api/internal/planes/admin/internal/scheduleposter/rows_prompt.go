@@ -178,8 +178,8 @@ func buildTranslatePrompt(
 	writePairs(&prompt, renderings)
 	prompt.WriteString("\n\nRows:")
 
-	for i, row := range rows {
-		prompt.WriteString("\n" + rowLine(i+1, row))
+	for i := range rows {
+		prompt.WriteString("\n" + rowLine(i+1, rows[i]))
 	}
 
 	return prompt.String()

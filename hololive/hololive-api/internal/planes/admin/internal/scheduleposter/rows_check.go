@@ -59,10 +59,6 @@ func validateExtracted(rows []extractedRow) ([]posterstore.Row, error) {
 			return nil, fmt.Errorf("extracted row %d: invalid status %q", i+1, clip(string(row.Status)))
 		}
 
-		if zone := optional(row.TZ); zone != "" && !strings.EqualFold(zone, "JST") {
-			return nil, fmt.Errorf("extracted row %d: zone %q: %w", i+1, clip(zone), errUnsupportedZone)
-		}
-
 		if strings.TrimSpace(row.Text) == "" {
 			return nil, fmt.Errorf("extracted row %d: text is empty", i+1)
 		}
@@ -92,6 +88,10 @@ func validateExtracted(rows []extractedRow) ([]posterstore.Row, error) {
 
 	if err := posterstore.ValidateRows(probe); err != nil {
 		return nil, fmt.Errorf("check extracted rows: %w", err)
+	}
+
+	if i := slices.IndexFunc(records, func(row posterstore.Row) bool { return row.TZ != "" && !strings.EqualFold(row.TZ, "JST") }); i >= 0 {
+		return nil, fmt.Errorf("extracted row %d: zone %q: %w", i+1, clip(records[i].TZ), errUnsupportedZone)
 	}
 
 	return records, nil
@@ -205,7 +205,7 @@ func extractWarnings(row *extractedRow, weekStart, weekEnd string) []string {
 		warnings = append(warnings, warning("E5 시각 중복", start))
 	}
 
-	return warnings
+	return append(warnings, row.Disagreements...)
 }
 
 // rowChecker의 경고는 모델 검증에 쓴 하니스 check_translate와 같아야 한다.

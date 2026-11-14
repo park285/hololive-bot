@@ -70,8 +70,10 @@ func (f *fakeRowStore) RecordRowsFailure(_ context.Context, _ posterstore.Pendin
 }
 
 type fakeRowModel struct {
+	mu             sync.Mutex
 	extracted      [][]extractedRow
 	extractErr     error
+	extractErrs    []error
 	translated     [][]translatedRow
 	extracts       int
 	extractPrompts []string
@@ -83,6 +85,9 @@ func (f *fakeRowModel) extractRows(ctx context.Context, _ source, prompt string)
 		return nil, usage{}, err
 	}
 
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.extracts++
 
 	f.extractPrompts = append(f.extractPrompts, prompt)
@@ -91,7 +96,12 @@ func (f *fakeRowModel) extractRows(ctx context.Context, _ source, prompt string)
 		return nil, fakeUsage, f.extractErr
 	}
 
-	return f.extracted[min(f.extracts, len(f.extracted))-1], fakeUsage, nil
+	at := min(f.extracts, len(f.extracted)) - 1
+	if at < len(f.extractErrs) && f.extractErrs[at] != nil {
+		return nil, fakeUsage, f.extractErrs[at]
+	}
+
+	return f.extracted[at], fakeUsage, nil
 }
 
 func (f *fakeRowModel) translateRows(_ context.Context, prompt string) ([]translatedRow, usage, error) {
@@ -113,6 +123,7 @@ func rowsService(store *fakeRowStore, model *fakeRowModel, members ...*domain.Me
 const (
 	slotDay         = "2026-11-10"
 	hydrogen        = "gemini-4-hydrogen"
+	carbon          = "gemini-4-carbon"
 	basisTranslated = "translated"
 )
 
@@ -159,7 +170,7 @@ func TestExtractPendingRowsRetriesRejectedResponses(t *testing.T) {
 		}
 
 		require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()), name)
-		require.Equal(t, 2, model.extracts, name)
+		require.Equal(t, 4, model.extracts, "%s: 세 실행 가운데 거부된 하나만 다시 요청한다", name)
 		require.Len(t, model.prompts, 3, name)
 		require.Empty(t, store.failures, name)
 		require.Len(t, store.recorded, 1, name)
@@ -286,7 +297,7 @@ func TestExtractPendingRowsRecordsExtractionFailures(t *testing.T) {
 	model := &fakeRowModel{extractErr: genai.APIError{Code: http.StatusBadRequest}}
 
 	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
-	require.Equal(t, 1, model.extracts, "400은 다시 보내지 않는다")
+	require.Equal(t, extractRuns, model.extracts, "400은 다시 보내지 않는다")
 }
 
 func TestExtractPendingRowsRecordsFailureWhenThePosterBudgetRunsOut(t *testing.T) {
@@ -346,18 +357,18 @@ func TestExtractPendingRowsRetriesOnlyTheRecordWhileTheStoreFails(t *testing.T) 
 		require.Error(t, service.extractPendingRows(t.Context()))
 	}
 
-	require.Equal(t, 1, model.extracts)
+	require.Equal(t, extractRuns, model.extracts)
 	require.Len(t, model.prompts, 1)
 
 	store.recordErr = nil
 
 	require.NoError(t, service.extractPendingRows(t.Context()))
-	require.Equal(t, 1, model.extracts)
+	require.Equal(t, extractRuns, model.extracts)
 	require.Len(t, store.recorded, 1)
 	require.Equal(t, "잡담", store.recorded[0][0].TitleKo)
 
 	require.NoError(t, service.extractPendingRows(t.Context()))
-	require.Equal(t, 2, model.extracts, "기록한 결과는 다시 쓰지 않는다")
+	require.Equal(t, 2*extractRuns, model.extracts, "기록한 결과는 다시 쓰지 않는다")
 }
 
 func TestExtractPendingRowsRecomputesWhenTheRowsRevisionChanges(t *testing.T) {
@@ -375,7 +386,7 @@ func TestExtractPendingRowsRecomputesWhenTheRowsRevisionChanges(t *testing.T) {
 	store.pending, store.recordErr = []posterstore.PendingRows{again}, nil
 
 	require.NoError(t, service.extractPendingRows(t.Context()))
-	require.Equal(t, 2, model.extracts)
+	require.Equal(t, 2*extractRuns, model.extracts)
 	require.Len(t, store.recorded, 1)
 }
 
@@ -392,7 +403,7 @@ func TestExtractPendingRowsRetriesOnlyTheFailureRecord(t *testing.T) {
 	store.recordErr = nil
 
 	require.NoError(t, service.extractPendingRows(t.Context()))
-	require.Equal(t, 1, model.extracts)
+	require.Equal(t, extractRuns, model.extracts)
 	require.Equal(t, []string{reasonNoRows}, store.failures)
 }
 
@@ -407,10 +418,26 @@ func TestExtractPendingRowsRejectsZonesOtherThanJST(t *testing.T) {
 	model := &fakeRowModel{extracted: [][]extractedRow{{plannedRow, pacific}}}
 
 	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
-	require.Equal(t, 3, model.extracts, "다른 시간대는 다시 뽑아 본다")
+	require.Equal(t, extractRuns, model.extracts, "포스터에 인쇄된 시간대는 다시 뽑아도 같다")
 	require.Empty(t, model.prompts)
 	require.Empty(t, store.recorded)
 	require.Equal(t, []string{reasonUnsupportedZone}, store.failures)
+
+	store = &fakeRowStore{pending: []posterstore.PendingRows{week}}
+	model = &fakeRowModel{extracted: [][]extractedRow{{pacific}, {plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
+
+	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.Equal(t, extractRuns, model.extracts)
+	require.Len(t, store.recorded, 1)
+	require.Empty(t, store.failures)
+
+	store = &fakeRowStore{pending: []posterstore.PendingRows{week}}
+	model = &fakeRowModel{extracted: [][]extractedRow{{pacific}, {plannedRow}, {plannedRow}}, extractErrs: []error{nil, errBadRequest}}
+
+	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.Equal(t, extractRuns, model.extracts)
+	require.Empty(t, store.recorded)
+	require.Equal(t, []string{reasonUnsupportedZone}, store.failures, "성공이 하나뿐이면 다른 실행 하나의 시간대 실패로 분류한다")
 
 	lower := plannedRow
 
@@ -654,7 +681,7 @@ func TestExtractPendingRowsMatchesTheHarness(t *testing.T) {
 
 		require.NoError(t, service.extractPendingRows(t.Context()), poster.Name)
 		require.Len(t, store.recorded, 1, poster.Name)
-		require.Equal(t, []string{string(wantExtract)}, model.extractPrompts, "%s 추출 지시문은 하니스와 바이트 단위로 같아야 한다", poster.Name)
+		require.Equal(t, slices.Repeat([]string{string(wantExtract)}, extractRuns), model.extractPrompts, "%s 추출 지시문은 하니스와 바이트 단위로 같아야 한다", poster.Name)
 
 		wantPrompt, err := fs.ReadFile(os.DirFS(filepath.Join("testdata", "rows")), "translate_prompt_"+poster.Name+".txt")
 		require.NoError(t, err)
@@ -747,7 +774,7 @@ func TestLoadConfigUsesStageDefaultsForRows(t *testing.T) {
 	config, err := LoadConfig(writeConfig(t, ""))
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
-		Extract:   RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
+		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
 		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: 180},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
@@ -760,15 +787,15 @@ func TestLoadConfigKeepsDefaultsForOmittedRowKeys(t *testing.T) {
 	config, err := LoadConfig(writeConfig(t, `,"rows":{"translate":{"temperature":0.5,"timeout_seconds":300}}`))
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
-		Extract:   RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
+		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
 		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
 	}, config.Translation.Rows)
 
-	config, err = LoadConfig(writeConfig(t, `,"rows":{"extract":{"model":"gemini-4-carbon","thinking_level":"MINIMAL","temperature":0}}`))
+	config, err = LoadConfig(writeConfig(t, `,"rows":{"extract":{"model":"gemini-4-hydrogen","thinking_level":"MINIMAL","temperature":0}}`))
 	require.NoError(t, err)
-	require.Equal(t, RowStageConfig{Model: "gemini-4-carbon", ThinkingLevel: genai.ThinkingLevelMinimal, Temperature: new(float32(0)), TimeoutSeconds: 180},
+	require.Equal(t, RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMinimal, Temperature: new(float32(0)), TimeoutSeconds: 900},
 		config.Translation.Rows.Extract)
 	require.Equal(t, genai.ThinkingLevelMedium, config.Translation.Rows.Translate.ThinkingLevel)
 }

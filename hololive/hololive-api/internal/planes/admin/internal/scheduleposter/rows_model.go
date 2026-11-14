@@ -28,7 +28,8 @@ type extractedRow struct {
 	Text   string                `json:"text"`
 	Badges []string              `json:"badges"`
 	// Updates는 변경 감지가 이 칸에 적용한 글 text다. 모델 응답에는 없는 칸이다.
-	Updates []string `json:"-"`
+	Updates       []string `json:"-"`
+	Disagreements []string `json:"-"`
 }
 
 type translatedRow struct {

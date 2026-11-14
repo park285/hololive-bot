@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/retry"
@@ -18,8 +19,17 @@ import (
 const (
 	stageRowsExtract   = "rows_extract"
 	stageRowsTranslate = "rows_translate"
-	rowsPosterBudget   = 30 * time.Minute
+	rowsStageBackoff   = 150 * time.Second
 )
+
+// extractBudget을 넘긴 추출 실행은 끊기고, 그때까지 성공한 실행들로 정한다.
+func (c RowsConfig) extractBudget() time.Duration {
+	return 2*c.Extract.timeout() + rowsStageBackoff
+}
+
+func (c RowsConfig) translateBudget() time.Duration {
+	return 2*c.Translate.timeout() + rowsStageBackoff
+}
 
 const (
 	reasonExtractionFailed = "extraction_failed"
@@ -41,8 +51,17 @@ type rowsKey struct {
 
 // rowsLoopState는 행 추출 goroutine만 만지므로 잠그지 않는다.
 type rowsLoopState struct {
-	budget time.Duration
-	done   map[rowsKey]rowsResult
+	budget          time.Duration
+	translateBudget time.Duration
+	done            map[rowsKey]rowsResult
+}
+
+func newRowsLoopState(config RowsConfig) rowsLoopState {
+	return rowsLoopState{
+		budget:          config.extractBudget() + config.translateBudget(),
+		translateBudget: config.translateBudget(),
+		done:            map[rowsKey]rowsResult{},
+	}
 }
 
 type rowsResult struct {
@@ -213,12 +232,59 @@ func (s *Service) extractOne(
 func (s *Service) extractRows(
 	ctx context.Context, item posterstore.PendingRows, original source, prompt string,
 ) ([]extractedRow, []posterstore.Row, error) {
-	var (
-		rows []extractedRow
-		base []posterstore.Row
-	)
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
 
-	err := retry.WithRetry(ctx, s.retryOptions(item.ID, stageRowsExtract), func(ctx context.Context) error {
+		ctx, cancel = context.WithDeadline(ctx, deadline.Add(-s.rowsLoop.translateBudget))
+		defer cancel()
+	}
+
+	runs := make([][]extractedRow, extractRuns)
+	errs := make([]error, extractRuns)
+
+	var wg sync.WaitGroup
+
+	for run := range extractRuns {
+		wg.Go(func() { runs[run], errs[run] = s.extractOnce(ctx, item, original, prompt) })
+	}
+
+	wg.Wait()
+
+	var succeeded [][]extractedRow
+
+	for run := range extractRuns {
+		if errs[run] == nil {
+			succeeded = append(succeeded, runs[run])
+		}
+	}
+
+	if len(succeeded) < extractQuorum {
+		return nil, nil, fmt.Errorf("extract checked poster rows: %d of %d runs succeeded: %w", len(succeeded), extractRuns, errors.Join(errs...))
+	}
+
+	rows, err := voteExtracted(succeeded)
+	if err != nil {
+		return nil, nil, fmt.Errorf("vote extracted poster rows: %w", err)
+	}
+
+	base, err := validateExtracted(rows)
+	if err != nil {
+		return nil, nil, fmt.Errorf("check voted poster rows: %w", err)
+	}
+
+	return rows, base, nil
+}
+
+func (s *Service) extractOnce(ctx context.Context, item posterstore.PendingRows, original source, prompt string) ([]extractedRow, error) {
+	var rows []extractedRow
+
+	options := s.retryOptions(item.ID, stageRowsExtract)
+	// JST가 아닌 시간대는 포스터에 인쇄된 값이라 다시 뽑아도 같게 나온다.
+	options.ShouldRetry = func(err error) bool {
+		return !errors.Is(err, errUnsupportedZone) && retryableTranslationError(err)
+	}
+
+	err := retry.WithRetry(ctx, options, func(ctx context.Context) error {
 		extracted, spent, err := s.rowModel.extractRows(ctx, original, prompt)
 		s.logUsage(item.ID, stageRowsExtract, spent)
 
@@ -226,20 +292,19 @@ func (s *Service) extractRows(
 			return err
 		}
 
-		parsed, err := validateExtracted(extracted)
-		if err != nil {
+		if _, err := validateExtracted(extracted); err != nil {
 			return err
 		}
 
-		rows, base = extracted, parsed
+		rows = extracted
 
 		return nil
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("extract checked poster rows: %w", err)
+		return nil, fmt.Errorf("extract poster rows run: %w", err)
 	}
 
-	return rows, base, nil
+	return rows, nil
 }
 
 func (s *Service) translateRows(
