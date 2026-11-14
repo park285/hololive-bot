@@ -1,8 +1,9 @@
 package adminruntime
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -29,19 +30,19 @@ const roomsPath = "/api/holo/rooms"
 type adminOpenAPI struct {
 	Paths      map[string]map[string]openAPIOperation `json:"paths"`
 	Components struct {
-		Schemas map[string]json.RawMessage `json:"schemas"`
+		Schemas map[string]jsontext.Value `json:"schemas"`
 	} `json:"components"`
 }
 
 type openAPIOperation struct {
 	RequestBody struct {
 		Content map[string]struct {
-			Schema json.RawMessage `json:"schema"`
+			Schema jsontext.Value `json:"schema"`
 		} `json:"content"`
 	} `json:"requestBody"`
 	Responses map[string]struct {
 		Content map[string]struct {
-			Schema json.RawMessage `json:"schema"`
+			Schema jsontext.Value `json:"schema"`
 		} `json:"content"`
 	} `json:"responses"`
 }
@@ -72,7 +73,7 @@ func loadAdminOpenAPI(t *testing.T) *adminOpenAPI {
 
 	var spec adminOpenAPI
 
-	if err := json.Unmarshal(raw, &spec); err != nil {
+	if err := jsonv2.Unmarshal(raw, &spec); err != nil {
 		t.Fatalf("decode admin OpenAPI: %v", err)
 	}
 
@@ -99,10 +100,7 @@ func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, status 
 
 	var value any
 
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.UseNumber()
-
-	if err := decoder.Decode(&value); err != nil {
+	if err := jsonv2.Unmarshal(body, &value, preserveNumbers); err != nil {
 		t.Fatalf("%s %s %d body is not JSON: %v: %s", method, path, status, err, body)
 	}
 
@@ -123,10 +121,7 @@ func (s *adminOpenAPI) assertRequest(t *testing.T, method, path, body string, ac
 
 	var value any
 
-	decoder := json.NewDecoder(strings.NewReader(body))
-	decoder.UseNumber()
-
-	if err := decoder.Decode(&value); err != nil {
+	if err := jsonv2.Unmarshal([]byte(body), &value, preserveNumbers); err != nil {
 		t.Fatalf("%s %s request is not JSON: %v: %s", method, path, err, body)
 	}
 
@@ -140,32 +135,47 @@ func (s *adminOpenAPI) assertRequest(t *testing.T, method, path, body string, ac
 	}
 }
 
+// jsonNumber는 숫자 리터럴을 그대로 보존한다. 1.0을 integer로 보지 않아야 정수 필드를 거절하는 생산자 디코더와 판정이 같다.
+type jsonNumber string
+
+var preserveNumbers = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, value *any) error {
+	if dec.PeekKind() != '0' {
+		return errors.ErrUnsupported
+	}
+
+	raw, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
+
+	*value = jsonNumber(raw)
+
+	return nil
+}))
+
 // 계약이 쓰는 JSON Schema 키워드만 담는다. 형식(format)·uniqueItems·description은 판정하지 않는다.
 type jsonSchema struct {
-	Ref                  string                     `json:"$ref"`
-	Type                 json.RawMessage            `json:"type"`
-	Properties           map[string]json.RawMessage `json:"properties"`
-	Required             []string                   `json:"required"`
-	AdditionalProperties json.RawMessage            `json:"additionalProperties"`
-	Items                json.RawMessage            `json:"items"`
-	Enum                 []any                      `json:"enum"`
-	Const                any                        `json:"const"`
-	Pattern              string                     `json:"pattern"`
-	MinLength            *int                       `json:"minLength"`
-	MaxLength            *int                       `json:"maxLength"`
-	Minimum              *float64                   `json:"minimum"`
-	Maximum              *float64                   `json:"maximum"`
-	MinItems             *int                       `json:"minItems"`
-	MaxItems             *int                       `json:"maxItems"`
+	Ref                  string                    `json:"$ref"`
+	Type                 jsontext.Value            `json:"type"`
+	Properties           map[string]jsontext.Value `json:"properties"`
+	Required             []string                  `json:"required"`
+	AdditionalProperties jsontext.Value            `json:"additionalProperties"`
+	Items                jsontext.Value            `json:"items"`
+	Enum                 []any                     `json:"enum"`
+	Const                any                       `json:"const"`
+	Pattern              string                    `json:"pattern"`
+	MinLength            *int                      `json:"minLength"`
+	MaxLength            *int                      `json:"maxLength"`
+	Minimum              *float64                  `json:"minimum"`
+	Maximum              *float64                  `json:"maximum"`
+	MinItems             *int                      `json:"minItems"`
+	MaxItems             *int                      `json:"maxItems"`
 }
 
-func (s *adminOpenAPI) check(raw json.RawMessage, value any, at string) error {
+func (s *adminOpenAPI) check(raw jsontext.Value, value any, at string) error {
 	var schema jsonSchema
 
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-
-	if err := decoder.Decode(&schema); err != nil {
+	if err := jsonv2.Unmarshal(raw, &schema, preserveNumbers); err != nil {
 		return fmt.Errorf("%s: decode schema: %w", at, err)
 	}
 
@@ -193,7 +203,7 @@ func (s *adminOpenAPI) check(raw json.RawMessage, value any, at string) error {
 	switch typed := value.(type) {
 	case string:
 		return checkString(&schema, typed, at)
-	case json.Number:
+	case jsonNumber:
 		return checkNumber(&schema, typed, at)
 	case []any:
 		return s.checkArray(&schema, typed, at)
@@ -204,17 +214,17 @@ func (s *adminOpenAPI) check(raw json.RawMessage, value any, at string) error {
 	return nil
 }
 
-func checkType(raw json.RawMessage, value any, at string) error {
+func checkType(raw jsontext.Value, value any, at string) error {
 	if len(raw) == 0 {
 		return nil
 	}
 
 	var types []string
 
-	if err := json.Unmarshal(raw, &types); err != nil {
+	if err := jsonv2.Unmarshal(raw, &types); err != nil {
 		var single string
 
-		if err := json.Unmarshal(raw, &single); err != nil {
+		if err := jsonv2.Unmarshal(raw, &single); err != nil {
 			return fmt.Errorf("%s: decode type: %w", at, err)
 		}
 
@@ -237,8 +247,8 @@ func jsonType(value any) string {
 		return "boolean"
 	case string:
 		return "string"
-	case json.Number:
-		if _, err := typed.Int64(); err == nil {
+	case jsonNumber:
+		if _, err := strconv.ParseInt(string(typed), 10, 64); err == nil {
 			return "integer"
 		}
 
@@ -269,8 +279,8 @@ func checkString(schema *jsonSchema, value, at string) error {
 	return nil
 }
 
-func checkNumber(schema *jsonSchema, value json.Number, at string) error {
-	number, err := value.Float64()
+func checkNumber(schema *jsonSchema, value jsonNumber, at string) error {
+	number, err := strconv.ParseFloat(string(value), 64)
 	if err != nil || math.IsInf(number, 0) {
 		return fmt.Errorf("%s: invalid number %s", at, value)
 	}
