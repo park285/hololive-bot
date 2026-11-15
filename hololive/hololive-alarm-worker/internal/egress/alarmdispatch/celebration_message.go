@@ -48,8 +48,6 @@ func celebrationTemplateKey(kind domain.CelebrationKind) (domain.TemplateKey, bo
 		return domain.TemplateKeyCelebrationBirthday, true
 	case domain.CelebrationKindAnniversary:
 		return domain.TemplateKeyCelebrationAnniversary, true
-	case domain.CelebrationKindBirthdayStream:
-		return domain.TemplateKeyCelebrationBirthdayStream, true
 	default:
 		return "", false
 	}

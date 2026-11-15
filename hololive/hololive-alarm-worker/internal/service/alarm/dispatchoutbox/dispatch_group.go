@@ -43,7 +43,7 @@ func dispatchGroupSourceParts(envelope *AlarmQueueEnvelope) []string {
 	}
 
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
-		return []string{"celebration", string(envelope.Celebration.Kind), strconv.Itoa(envelope.Celebration.MemberID), envelope.Celebration.VideoID}
+		return []string{"celebration", string(envelope.Celebration.Kind), strconv.Itoa(envelope.Celebration.MemberID)}
 	}
 
 	return notificationDispatchGroupParts(&envelope.Notification)

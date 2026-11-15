@@ -19,3 +19,4 @@
 019 019_schedule_poster_rows.sql
 020 020_schedule_poster_changes.sql
 021 021_youtube_broadcast_type_decisions.sql
+022 022_drop_birthday_stream_template.sql

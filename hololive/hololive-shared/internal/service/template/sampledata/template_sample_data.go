@@ -84,7 +84,6 @@ var allTemplateKeys = []domain.TemplateKey{
 	domain.TemplateKeyCmdAmbiguousMember,
 	domain.TemplateKeyCelebrationBirthday,
 	domain.TemplateKeyCelebrationAnniversary,
-	domain.TemplateKeyCelebrationBirthdayStream,
 	domain.TemplateKeyAlarmDispatchNotification,
 	domain.TemplateKeyAlarmDispatchNotificationGroup,
 	domain.TemplateKeyXSpaceStarted,

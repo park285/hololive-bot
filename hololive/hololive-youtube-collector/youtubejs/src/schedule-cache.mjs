@@ -4,8 +4,8 @@ const minute = 60_000;
 // 시작이 가까운 예정 영상은 조기 시작·LIVE 전환·일정 변경을 매 poll의 player로 확인합니다.
 export const scheduleReuseNearStartMs = 30 * minute;
 const scheduleReuseMinMs = 5 * minute;
-// 재사용 중에는 canonical schedule_observed_at이 나아가지 않습니다. 알람 checker(UPCOMING 관측 15분 이내)와
-// 생일 방송 조회(30분 이내)의 최신성 창 안에 fleet의 마지막 실제 확인이 남도록, poll 간격을 더해도 15분보다 짧게 둡니다.
+// 재사용 중에는 canonical schedule_observed_at이 나아가지 않습니다. 알람 checker(UPCOMING 관측 15분 이내)의
+// 최신성 창 안에 fleet의 마지막 실제 확인이 남도록, poll 간격을 더해도 15분보다 짧게 둡니다.
 // 앞당겨진 일정을 이 AP가 늦게 보는 최대 기간이기도 합니다. 다른 AP·provider의 새 관측은 원래 슬롯 비교로 되돌려지지 않습니다.
 export const scheduleReuseMaxMs = 10 * minute;
 const scheduleReuseDivisor = 6;

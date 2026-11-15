@@ -12,6 +12,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const (
+	testChannelA   = "UC_a"
+	testChannelB   = "UC_b"
+	testRoom1      = "room-1"
+	testRoom2      = "room-2"
+	testMemberName = "Test"
+)
+
 type celebrationTestMemberRepo struct {
 	birthday    []*domain.Member
 	anniversary []*domain.Member

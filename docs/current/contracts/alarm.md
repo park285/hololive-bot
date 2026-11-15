@@ -189,12 +189,12 @@ Canonical 상태·일정의 최신성은 실제 `status_observed_at`·`schedule_
 판정하며 과거에 예정 시각도 기록했던 `last_seen_at`은 사용하지 않습니다. 과거 관측 시각을
 추정 backfill하지 않습니다. 확정된 `is_premiere=true` 분류만으로는 후보를 종료하지 않습니다.
 
-방송 checker와 생일 방송 후보 조회도 LIVE에는 `status_observed_at`, UPCOMING에는
-`schedule_observed_at`을 사용합니다. 각 조회의 최신성 하한부터 현재 시각까지의 관측만
+방송 checker도 LIVE에는 `status_observed_at`, UPCOMING에는
+`schedule_observed_at`을 사용합니다. 조회의 최신성 하한부터 현재 시각까지의 관측만
 허용하며 NULL·미래 관측은 제외합니다. 예약 시각이나 오래된 `last_seen_at` 값으로
 관측 시각을 대신하지 않습니다.
-관측 조회의 현재 시각은 Holodex 응답이나 생일 멤버 조회를 기다린 뒤 DB 조회 직전에
-다시 측정합니다. 주기 시작 시각·생일 날짜·분 전 알림 판정 창은 별도로 유지하여,
+관측 조회의 현재 시각은 Holodex 응답을 기다린 뒤 DB 조회 직전에
+다시 측정합니다. 주기 시작 시각·분 전 알림 판정 창은 별도로 유지하여,
 대기 중 수신된 정상 관측을 미래 시각으로 제외하지 않습니다.
 
 제목과 예정 시각의 갱신 순서는 각각 `title_observed_at`·`schedule_observed_at`으로
@@ -258,10 +258,9 @@ type AlarmQueueRetryMetadata struct {
 ```
 
 Live alarm notifications keep using `Notification` and `ValidateLiveDispatchRoute`.
+Celebration notifications use `SourceKind=celebration` with `Celebration.Kind` `birthday` or `anniversary` only. Any other kind is rejected by `ValidateCanonicalDispatch` before publish and by the egress envelope check before send, including deliveries whose request body is already pinned, so it ends as a pre-send failure (retry, then DLQ) and is never sent.
 YouTube 예정 최초공개는 발견 시 알리지 않는다. hololive-api는 `UPCOMING_PREMIERE` 영상에 `NEW_VIDEO` outbox를 만들지 않으며, 공개 전환 뒤에도 만들지 않는다. 구독자 알림은 live 세션(`youtube_live_sessions.is_premiere=true`)이 일반 방송과 같은 규칙으로 소유한다: upcoming 분 전 알림(`선행공개 N분 전`)과 일정 변경 알림, 그리고 분 전 target을 모두 지난 뒤 발견돼 분 전 알림을 받지 못한 방의 live catchup 시작 알림(`선행공개 시작`)이다. 이 계약은 `DEC-20260830-hololive-premiere-content-owned-notifications`의 `NEW_VIDEO` 소유와 live 후보 제외를 대체한다.
 YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with `internal/egress/youtubedispatch/format`, sends through Iris/Kakao, and writes per-room delivery state. After committing rows `hololive-api` sends a payload-free Valkey wakeup (`youtube:delivery:wakeup`); polling still claims rows without it (`QUEUE_AND_PUBSUB_CONTRACTS.md`).
-
-Birthday stream notifications use `SourceKind=celebration`, `AlarmType=BIRTHDAY`, and `Celebration.Kind=birthday_stream`. Their recipient contract is the set of rooms whose matching `celebration:birthday:member-{memberID}:{date}` delivery is already `sent`; an audience lookup failure must not widen delivery to other rooms. Re-publishing a known birthday stream event is permitted so a newly eligible room can add its missing delivery through the existing event/delivery dedupe keys. The birthday window for a KST birthday date runs from 21:00 KST on the previous day to 17:00 KST on the following day so that members in time zones behind or ahead of KST keep their local birthday streams. The runner evaluates a date only from KST midnight and keeps evaluating the previous date until that window closes, so a session that started before midnight is announced only while it is still `UPCOMING` or `LIVE` after the greeting is sent. A stream starting on another KST date shows its start as `01/02 15:04`. A session on the birthday member's own channel inside that window becomes a birthday stream only when its NFKC-normalized, lower-cased title contains a birthday keyword (`birthday`, `bday`, `b-day`, `誕生日`, `誕生祭`, `誕生会`, `生誕`, `たんじょうび`, `バースデー`, `バースデイ`, `バースディ`, `생일`, `ulang tahun`, `ultah`); birthday streams without such a keyword are not announced. The per-member, per-day cap of three counts only published events whose stored title passes the same check, and only those events are re-evaluated after a later title change. A published event whose stored title fails the check is never re-sent, even if the current title later passes.
 
 HTTP 요청·응답 wire 타입은 패키지 `hololive/hololive-shared/pkg/contracts/alarm` 한 곳(`wire.go`, `/count` 응답 `EntryCount`는 `contracts.go`)에 있으며 worker handler와 `alarmhttp` client가 같은 타입을 씁니다. 필수 값 검사는 worker handler(`hololive/hololive-alarm-worker/internal/service/alarm/httpapi/handler.go`)가 합니다.
 

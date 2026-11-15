@@ -134,17 +134,16 @@ func newAlarmWorkerRuntime(
 	parts alarmWorkerRuntimeParts,
 ) *workerruntime.AlarmWorkerRuntime {
 	return &workerruntime.AlarmWorkerRuntime{
-		Config:               appConfig,
-		Logger:               logger,
-		Scheduler:            parts.scheduler,
-		NotificationEgress:   parts.notificationEgress,
-		CelebrationRunner:    parts.backgroundRunners.celebration,
-		BirthdayStreamRunner: parts.backgroundRunners.birthdayStream,
-		XSpacesRunner:        parts.backgroundRunners.xSpaces,
-		ServerAddr:           parts.servers.Addr(),
-		HTTPServers:          parts.servers,
-		WorkerObservability:  parts.workerState,
-		Managed:              lifecycle.NewManaged(stopHolodexRetriesBeforeCleanup(foundation.HolodexService, infra.Cleanup)),
+		Config:              appConfig,
+		Logger:              logger,
+		Scheduler:           parts.scheduler,
+		NotificationEgress:  parts.notificationEgress,
+		CelebrationRunner:   parts.backgroundRunners.celebration,
+		XSpacesRunner:       parts.backgroundRunners.xSpaces,
+		ServerAddr:          parts.servers.Addr(),
+		HTTPServers:         parts.servers,
+		WorkerObservability: parts.workerState,
+		Managed:             lifecycle.NewManaged(stopHolodexRetriesBeforeCleanup(foundation.HolodexService, infra.Cleanup)),
 	}
 }
 

@@ -15,13 +15,12 @@ import (
 )
 
 type alarmWorkerBackgroundRunners struct {
-	celebration    workerruntime.Scheduler
-	birthdayStream workerruntime.Scheduler
-	xSpaces        workerruntime.Scheduler
+	celebration workerruntime.Scheduler
+	xSpaces     workerruntime.Scheduler
 }
 
-// buildAlarmWorkerBackgroundRunners는 설정에서 켜진 X Spaces·celebration·birthday stream runner를 만든다.
-// 세 runner 모두 PostgreSQL을 쓰므로, PostgreSQL이 없는 infra는 runner를 끄고 넘어가지 않고 조립 오류로 돌려준다.
+// buildAlarmWorkerBackgroundRunners는 설정에서 켜진 X Spaces·celebration runner를 만든다.
+// 두 runner 모두 PostgreSQL을 쓰므로, PostgreSQL이 없는 infra는 runner를 끄고 넘어가지 않고 조립 오류로 돌려준다.
 func buildAlarmWorkerBackgroundRunners(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
@@ -43,15 +42,9 @@ func buildAlarmWorkerBackgroundRunners(
 		return alarmWorkerBackgroundRunners{}, "celebration runner", celebrationRunner.err
 	}
 
-	birthdayStreamRunner := buildBirthdayStreamRunnerScheduler(appConfig.BirthdayStream, infra, foundation, publishConfig, logger)
-	if birthdayStreamRunner.err != nil {
-		return alarmWorkerBackgroundRunners{}, "birthday stream runner", birthdayStreamRunner.err
-	}
-
 	return alarmWorkerBackgroundRunners{
-		celebration:    celebrationRunner.scheduler,
-		birthdayStream: birthdayStreamRunner.scheduler,
-		xSpaces:        xSpaces.scheduler,
+		celebration: celebrationRunner.scheduler,
+		xSpaces:     xSpaces.scheduler,
 	}, "", nil
 }
 
@@ -80,33 +73,4 @@ func buildCelebrationRunnerScheduler(
 		CheckHourKST: config.CheckHourKST,
 		RunInterval:  config.RunInterval,
 	})}
-}
-
-func buildBirthdayStreamRunnerScheduler(
-	config workerconfig.BirthdayStreamRunnerConfig,
-	infra *sharedmodules.InfraModule,
-	foundation *alarmFoundation,
-	publishConfig queue.PublishConfig,
-	logger *slog.Logger,
-) optionalRuntimeSchedulerResult {
-	if !config.Enabled {
-		logWorkerDisabled(logger, "Birthday stream runner disabled")
-
-		return optionalRuntimeSchedulerResult{}
-	}
-
-	memberRepo := member.NewMemberRepository(infra.Postgres)
-
-	publisher, err := queue.NewPublisher(infra.Cache, foundation.Outbox, publishConfig, logger)
-	if err != nil {
-		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build birthday stream publisher: %w", err)}
-	}
-
-	return optionalRuntimeSchedulerResult{scheduler: celebration.NewBirthdayStreamRunner(
-		memberRepo,
-		celebration.NewPgxStore(infra.Postgres.GetPool()),
-		publisher,
-		logger,
-		celebration.BirthdayStreamRunnerConfig{RunInterval: config.RunInterval, SessionFreshness: config.SessionFreshness},
-	)}
 }

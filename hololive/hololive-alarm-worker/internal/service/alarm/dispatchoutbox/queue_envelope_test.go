@@ -307,6 +307,19 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_Celebration(t *testing.T) 
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for nil celebration payload")
 	}
 
+	unknownKind := valid
+
+	unknownKind.Celebration = &domain.CelebrationDispatchPayload{
+		Kind:      "birthday_stream",
+		MemberID:  101,
+		ChannelID: testYouTubeChannelID,
+		Date:      fixtureCelebrationDate,
+	}
+
+	if err := unknownKind.ValidateCanonicalDispatch(); err == nil {
+		t.Fatal("ValidateCanonicalDispatch() = nil, want error for unsupported celebration kind")
+	}
+
 	noDate := valid
 
 	noDate.Celebration = &domain.CelebrationDispatchPayload{
@@ -327,48 +340,6 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_Celebration(t *testing.T) 
 
 	if err := noMember.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for missing member id")
-	}
-}
-
-func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_BirthdayStream(t *testing.T) {
-	t.Parallel()
-
-	valid := AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{
-			AlarmType: domain.AlarmTypeBirthday,
-			RoomID:    testRoomID,
-		},
-		SourceKind: domain.AlarmDispatchSourceKindCelebration,
-		Celebration: &domain.CelebrationDispatchPayload{
-			Kind:      domain.CelebrationKindBirthdayStream,
-			MemberID:  101,
-			ChannelID: testYouTubeChannelID,
-			Date:      "2026-07-10",
-			VideoID:   "vid123",
-		},
-	}
-	if err := valid.ValidateCanonicalDispatch(); err != nil {
-		t.Fatalf("ValidateCanonicalDispatch() = %v, want nil", err)
-	}
-
-	noVideoID := valid
-	payload := *valid.Celebration
-
-	payload.VideoID = ""
-	noVideoID.Celebration = &payload
-
-	if err := noVideoID.ValidateCanonicalDispatch(); err == nil {
-		t.Fatal("ValidateCanonicalDispatch() = nil, want error for empty birthday stream video id")
-	}
-
-	blankVideoID := valid
-	blankPayload := *valid.Celebration
-
-	blankPayload.VideoID = "   "
-	blankVideoID.Celebration = &blankPayload
-
-	if err := blankVideoID.ValidateCanonicalDispatch(); err == nil {
-		t.Fatal("ValidateCanonicalDispatch() = nil, want error for whitespace birthday stream video id")
 	}
 }
 

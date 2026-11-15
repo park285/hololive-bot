@@ -87,54 +87,6 @@ func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 	}
 }
 
-func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
-	t.Parallel()
-
-	renderer := newCelebrationTestRenderer(t)
-	envelope := dispatchoutbox.AlarmQueueEnvelope{
-		Celebration: &domain.CelebrationDispatchPayload{
-			Kind:              domain.CelebrationKindBirthdayStream,
-			MemberName:        "시라카미 후부키",
-			ChannelID:         "UCdn5BQ06XqgXoAxIhbqw5Rg",
-			VideoID:           "video-1",
-			StreamTitle:       "【생일 방송】후부키 생일 기념 라이브!",
-			StreamURL:         "https://www.youtube.com/watch?v=video-1",
-			ScheduledStartKST: "21:00",
-		},
-	}
-
-	variants, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
-	require.NoError(t, err)
-
-	for _, msg := range messageTexts(variants) {
-		for _, field := range []string{envelope.Celebration.MemberName, envelope.Celebration.ScheduledStartKST, envelope.Celebration.StreamTitle, envelope.Celebration.StreamURL} {
-			assert.Contains(t, kakaoformat.Render(msg), field)
-		}
-	}
-}
-
-func TestRenderCelebrationMessageBirthdayStreamWithoutOptionalFields(t *testing.T) {
-	t.Parallel()
-
-	renderer := newCelebrationTestRenderer(t)
-	envelope := dispatchoutbox.AlarmQueueEnvelope{
-		Celebration: &domain.CelebrationDispatchPayload{
-			Kind:       domain.CelebrationKindBirthdayStream,
-			MemberName: "시라카미 후부키",
-			ChannelID:  "UCdn5BQ06XqgXoAxIhbqw5Rg",
-			VideoID:    "video-1",
-		},
-	}
-
-	variants, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
-	require.NoError(t, err)
-
-	for _, msg := range messageTexts(variants) {
-		assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
-		assert.NotContains(t, msg, "https://")
-	}
-}
-
 func TestRenderCelebrationMessageNilPayload(t *testing.T) {
 	t.Parallel()
 
@@ -224,4 +176,18 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 		assert.Contains(t, kakaoformat.Render(msg), envelope.Celebration.MemberName)
 		assert.Contains(t, msg, "https://youtube.com/channel/"+envelope.Celebration.ChannelID)
 	}
+}
+
+func TestAlarmDispatchEnvelopeErrorRejectsUnsupportedCelebrationKind(t *testing.T) {
+	t.Parallel()
+
+	envelope := dispatchoutbox.AlarmQueueEnvelope{
+		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
+		Notification: domain.AlarmNotification{RoomID: "room-a", AlarmType: domain.AlarmTypeBirthday},
+		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: 1, Date: "2026-11-15"},
+	}
+	require.NoError(t, alarmDispatchEnvelopeError(&envelope))
+
+	envelope.Celebration.Kind = "birthday_stream"
+	require.ErrorContains(t, alarmDispatchEnvelopeError(&envelope), "birthday_stream")
 }

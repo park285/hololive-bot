@@ -23,7 +23,7 @@ func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
 			keys := []domain.TemplateKey{
 				domain.TemplateKeyCmdLiveStreams, domain.TemplateKeyCmdUpcomingStreams, domain.TemplateKeyCmdChannelSchedule,
 				domain.TemplateKeyOutboxVideo, domain.TemplateKeyOutboxShorts, domain.TemplateKeyOutboxVideoGroup,
-				domain.TemplateKeyOutboxShortsGroup, domain.TemplateKeyCelebrationBirthdayStream, domain.TemplateKeyXSpaceStarted,
+				domain.TemplateKeyOutboxShortsGroup, domain.TemplateKeyXSpaceStarted,
 				domain.TemplateKeyAlarmDispatchNotification, domain.TemplateKeyAlarmDispatchNotificationGroup,
 				domain.TemplateKeyOutboxCommunity, domain.TemplateKeyOutboxCommunityGroup,
 			}
