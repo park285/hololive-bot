@@ -110,6 +110,10 @@ type BroadcastHistoryRepository interface {
 	GetEndedBroadcast(ctx context.Context, query BroadcastThumbnailQuery) (*BroadcastHistoryEntry, error)
 }
 
+// ErrBroadcastThumbnailNotFound는 Download가 모든 후보 URL에서 HTTP 404를 받았을 때 감싸는 오류다.
+// 다른 실패가 하나라도 섞이면 감싸지 않는다.
+var ErrBroadcastThumbnailNotFound = errors.New("broadcast thumbnail not found")
+
 type BroadcastThumbnailDownloader interface {
 	Download(ctx context.Context, entry *BroadcastHistoryEntry) ([]byte, string, error)
 }

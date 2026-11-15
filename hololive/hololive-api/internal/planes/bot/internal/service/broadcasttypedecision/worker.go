@@ -154,6 +154,11 @@ func (w *Worker) decideSince(ctx context.Context, since time.Time) (bool, error)
 				failures = 0
 			case errors.Is(err, geminidecision.ErrUnavailable), ctx.Err() != nil:
 				return false, err
+			case errors.Is(err, handlercore.ErrBroadcastThumbnailNotFound):
+				// 삭제·비공개 영상의 썸네일 404는 그 영상만의 사유라 연속 실패에 넣지도, 그 수를 되돌리지도 않는다.
+				w.failed[c.VideoID] = struct{}{}
+
+				w.logger.Info("Broadcast type decision skipped missing thumbnail", slog.String("video_id", c.VideoID), slog.Any("error", err))
 			default:
 				failures++
 

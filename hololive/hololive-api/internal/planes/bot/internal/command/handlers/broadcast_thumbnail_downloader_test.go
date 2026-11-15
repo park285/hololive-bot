@@ -126,6 +126,40 @@ func TestYouTubeThumbnailDownloaderFallsBack(t *testing.T) {
 	}
 }
 
+func TestYouTubeThumbnailDownloaderReportsNotFoundOnlyWhenEveryCandidateIs404(t *testing.T) {
+	t.Parallel()
+
+	download := func(status func(path string) int) error {
+		client := &http.Client{Transport: thumbnailRoundTripper(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: status(req.URL.Path),
+				Header:     http.Header{"Content-Type": []string{"text/plain"}},
+				Body:       io.NopCloser(strings.NewReader("error")),
+			}, nil
+		})}
+
+		_, _, err := (&youTubeThumbnailDownloader{client: client}).Download(t.Context(), &handlercore.BroadcastHistoryEntry{VideoID: testVideoID})
+
+		return err
+	}
+
+	err := download(func(string) int { return http.StatusNotFound })
+	if !errors.Is(err, handlercore.ErrBroadcastThumbnailNotFound) || !strings.Contains(err.Error(), "thumbnail status 404") {
+		t.Fatalf("Download() error = %v, want ErrBroadcastThumbnailNotFound with status", err)
+	}
+
+	err = download(func(path string) int {
+		if strings.HasSuffix(path, "/sddefault.jpg") {
+			return http.StatusInternalServerError
+		}
+
+		return http.StatusNotFound
+	})
+	if err == nil || errors.Is(err, handlercore.ErrBroadcastThumbnailNotFound) {
+		t.Fatalf("Download() error = %v, want a failure that is not ErrBroadcastThumbnailNotFound", err)
+	}
+}
+
 func TestYouTubeThumbnailDownloaderRejectsNilEntry(t *testing.T) {
 	downloader := NewYouTubeThumbnailDownloader(&http.Client{})
 
