@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **의존성:** 5개 Go 모듈의 의존성을 최신 minor·patch로 올렸습니다. 주요 갱신은 shared-go v2.21.0, iris-client-go v5.1.0, pgx v5.13.0, quic-go v0.65.0, testcontainers-go v0.45.0, grpc v1.85.0, google.golang.org/api v0.315.0, cloud.google.com/go/auth v0.24.4, gin-contrib/gzip v1.2.10, goccy/go-json v0.12.0입니다. 코드 변경은 없습니다.
+
 ## v18.0.0 - 2026-11-15
 
 - **일정 포스터 이미지 번역 제거:** 확정(관리자·자동)은 이제 일정표 행 추출만 예약하고, Vertex 이미지·판독·텍스트 모델로 한국어 포스터 이미지를 만들던 번역 루프와 그 검사를 지웠습니다. 관리 API `POST /api/holo/schedule-posters/{id}/translate`(재번역)와 `GET /api/holo/schedule-posters/{id}/translated`(번역 이미지)를 지웠고, 포스터 응답(목록·상세)에서 필수 필드 `translationStatus`·`translationError`·`translatedAt`을 뺐습니다. 행만 다시 뽑기는 기존 `POST /{id}/rows`가 맡습니다. 번역 대기 중이라 409 `invalid_state`로 거절하던 주 범위 수정은 이제 확정본이면 받습니다. 설정 `translation.model`·`translation.text_model`·`translation.transcribe_model`을 지웠으며, 남아 있으면 모르는 키라 admin plane이 기동하지 않으므로 배포 전에 운영 설정에서 뺍니다(v17.0.0은 세 키가 없어도 기동합니다). DB의 번역 열과 CHECK는 이번 릴리스에서 읽지도 쓰지도 않고 남겨 v17.0.0으로 되돌릴 수 있게 두며, 다음 릴리스의 migration으로 지웁니다. 그래서 거절도 남은 번역 상태와 이미지를 지우지 않으며, v17.0.0으로 되돌리면 이번 image에서 거절한 번역 완료 포스터가 v17.0.0 관리 API에서 번역 성공으로 보이고 `/translated`가 이미지를 돌려줍니다(옛 Console 화면과 `!스케쥴`에는 나오지 않음). 공개 계약에서 operation과 필수 필드를 지우므로 이번 릴리스는 MAJOR입니다. 배포는 Iris Console 게이트웨이와 APK를 먼저, hololive-api를 나중에 합니다. 옛 게이트웨이는 필드가 빠진 새 응답을 502로 거절하기 때문입니다. Fallback delta: 일정 포스터 번역 재시도 예외 계약을 그 재시도와 함께 지웠습니다.
