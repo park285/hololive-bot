@@ -45,7 +45,7 @@ type BroadcastThumbnailCommand struct {
 
 const (
 	defaultBroadcastHistoryDays = 7
-	maxBroadcastHistoryDays     = 365
+	MaxBroadcastHistoryDays     = 365
 )
 
 const broadcastThumbnailNotFoundMessage = "종료된 방송 이력에서 해당 video_id를 찾지 못했습니다."
@@ -121,7 +121,7 @@ func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *botcom
 func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter formatter.BroadcastHistoryFilter) {
 	days := normalizeBroadcastHistoryDays(intParam(params, "days", defaultBroadcastHistoryDays))
 	if boolParam(params, "all") {
-		days = maxBroadcastHistoryDays
+		days = MaxBroadcastHistoryDays
 	}
 
 	limit := normalizeBroadcastHistoryLimit(intParam(params, "limit", defaultBroadcastHistoryLimit))
@@ -418,8 +418,8 @@ func normalizeBroadcastHistoryDays(days int) int {
 		return defaultBroadcastHistoryDays
 	}
 
-	if days > maxBroadcastHistoryDays {
-		return maxBroadcastHistoryDays
+	if days > MaxBroadcastHistoryDays {
+		return MaxBroadcastHistoryDays
 	}
 
 	return days

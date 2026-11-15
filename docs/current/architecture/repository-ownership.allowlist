@@ -10,3 +10,4 @@ schedule_posters|owner=hololive-api|writers=hololive-api|readers=hololive-api
 schedule_poster_rows|owner=hololive-api|writers=hololive-api|readers=hololive-api
 schedule_poster_posts|owner=hololive-api|writers=hololive-api|readers=hololive-api
 schedule_poster_changes|owner=hololive-api|writers=hololive-api|readers=hololive-api
+youtube_broadcast_type_decisions|owner=hololive-api|writers=hololive-api|readers=hololive-api

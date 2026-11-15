@@ -32,6 +32,8 @@ type BotPlaneConfig struct {
 	Webhook          WebhookConfig
 	APIWorkerProfile *APIWorkerProfile
 	AlarmServiceURL  string
+	// BroadcastTypeGeminiKeyFile이 비어 있으면 미분류 방송의 Gemini 판정을 끈다.
+	BroadcastTypeGeminiKeyFile string
 }
 
 // WebhookConfig는 bot webhook 수신 한도다. 값은 Stack Worker Profile의 bot_webhook_inbox에서만 온다.
@@ -119,6 +121,8 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 		Webhook:          webhookConfigFromProfile(profile),
 		APIWorkerProfile: profile,
 		AlarmServiceURL:  sharedenv.String("ALARM_INTERNAL_URL", ""),
+
+		BroadcastTypeGeminiKeyFile: sharedenv.StringRaw("BROADCAST_TYPE_GEMINI_API_KEY_FILE", ""),
 	}
 
 	return config, nil
