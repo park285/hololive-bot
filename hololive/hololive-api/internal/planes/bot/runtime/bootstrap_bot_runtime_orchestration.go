@@ -33,6 +33,8 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/broadcasttypedecision"
+	"github.com/kapu/hololive-api/internal/service/geminidecision"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -121,6 +123,19 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 	metricsServer, pprofServer := buildBotOptionalServers(ctx, appConfig)
 
 	return assembleBotRuntime(appConfig, logger, botBot, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
+}
+
+func newBroadcastTypeDecisionWorker(keyFile string, infra *appbootstrap.BotInfrastructure, logger *slog.Logger) (*broadcasttypedecision.Worker, error) {
+	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
+		return nil, errors.New("broadcast type decision postgres pool is nil")
+	}
+
+	key, err := geminidecision.LoadAPIKey(keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load broadcast type gemini api key: %w", err)
+	}
+
+	return broadcasttypedecision.New(infra.Postgres.GetPool(), key, logger), nil
 }
 
 func assembleBotRuntime(

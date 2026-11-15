@@ -890,6 +890,22 @@ TABLE x_space_starts
   CONSTRAINT x_space_starts_pkey PRIMARY KEY (space_id)
   INDEX CREATE INDEX idx_x_space_starts_first_seen ON public.x_space_starts USING btree (first_seen_at)
 
+TABLE youtube_broadcast_type_decisions
+  COLUMN video_id character varying(20) NOT NULL
+  COLUMN title character varying(500) NOT NULL
+  COLUMN outcome text NOT NULL
+  COLUMN broadcast_type text
+  COLUMN confidence double precision
+  COLUMN model text NOT NULL
+  COLUMN decided_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_broadcast_type_decisions_answer CHECK ((((outcome = 'decided'::text) = (broadcast_type IS NOT NULL)) AND ((broadcast_type IS NULL) = (confidence IS NULL))))
+  CONSTRAINT chk_youtube_broadcast_type_decisions_confidence CHECK (((confidence IS NULL) OR ((confidence >= (0)::double precision) AND (confidence <= (1)::double precision))))
+  CONSTRAINT chk_youtube_broadcast_type_decisions_model CHECK (((length(model) >= 1) AND (length(model) <= 64)))
+  CONSTRAINT chk_youtube_broadcast_type_decisions_outcome_vocab CHECK ((outcome = ANY (ARRAY['decided'::text, 'blocked'::text])))
+  CONSTRAINT chk_youtube_broadcast_type_decisions_type_vocab CHECK (((broadcast_type IS NULL) OR (broadcast_type = ANY (ARRAY['game'::text, 'talk'::text, 'singing'::text, 'asmr'::text, 'membership'::text, 'event'::text, 'horse_racing'::text, 'watchalong'::text, 'news'::text, 'other'::text]))))
+  CONSTRAINT youtube_broadcast_type_decisions_video_id_fkey FOREIGN KEY (video_id) REFERENCES youtube_live_sessions(video_id) ON DELETE CASCADE
+  CONSTRAINT youtube_broadcast_type_decisions_pkey PRIMARY KEY (video_id)
+
 TABLE youtube_channel_live_checks
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN provider text NOT NULL

@@ -26,6 +26,7 @@ bot/admin plane과 YouTube Community consume plane을 한 프로세스에서 호
 - Process-owned single ACL `Service` (bot pool, bot-plane `KAKAO_*` seed) shared by bot ingress and admin ACL routes
 - Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention (YouTube plane)
 - `members.photo` Holodex PhotoSync product path (admin plane). YouTube channel photos are the `channel_photo` reducer.
+- Gemini Decisions API broadcast type decisions for ended broadcasts the rules leave unclassified (`youtube_broadcast_type_decisions`, bot plane)
 
 ## Provides
 
@@ -235,6 +236,28 @@ admin plane은 `SCHEDULE_POSTER_CONFIG_FILE`이 있으면 X·유튜브의 멤버
 | Telemetry | 그 주기의 Error 로그 `Schedule poster task failed`(`task`=`collect`, `error`에 후보마다 `auto review schedule poster <id>: …`), 바로 넘긴 후보의 Info 로그 `Schedule poster auto reviewed`(`outcome`=`review_requested`, `reason`), 일괄 인계의 Warn 로그 `Schedule poster unreviewed candidates handed over`(`handed_over` 건수, `auto_review`)입니다. 전용 metric은 없습니다. |
 | Owner | `hololive-api` admin plane의 일정 포스터 서비스(`internal/planes/admin/internal/scheduleposter`) |
 | 제거 조건 | 90일 동안 다시 판정한 후보가 `confirmed`·`rejected`·`duplicate`로 끝난 기록이 없으면 재판정을 지우고 첫 오류에서 관리자 검토로 넘깁니다. 그 동작 변경을 CHANGELOG에 남깁니다. |
+
+## 미분류 방송 유형 판정
+
+bot plane은 `BROADCAST_TYPE_GEMINI_API_KEY_FILE`(Gemini Developer API 키 파일)이 있으면 제목·주제 규칙과 영상별 검토(`broadcast_type_rules.json`의 `reviewed_videos`)가 미분류로 남긴 종료 방송의 유형을 Gemini Decisions API에 물어 `youtube_broadcast_type_decisions`(migration 021)에 저장합니다. 경로가 비어 있으면 새 판정만 멈추고, 이미 저장된 판정은 방송 이력 분류에 계속 쓰입니다. 처음 켜기 전에는 표가 비어 있어 규칙과 검토로만 분류합니다. 잘못된 키 파일(절대 경로가 아님, 읽을 수 없음, 키 한 줄이 아님)은 bot plane 기동을 막습니다.
+
+- 대상: 방송 이력 조회와 같은 주제·썸네일 보완(최신 LIVE 알림 이벤트)으로 규칙과 검토를 적용했을 때 미분류인 `ENDED` 세션 가운데, 현재 제목으로 물은 답이 없는 것입니다. YouTube player가 멤버 전용이라고 확인한 방송(종료 시각 확정 결과 `members_only` 또는 시청 가능성 `MEMBERS_ONLY`)은 묻지 않습니다. 멤버 한정은 형식보다 앞서는 유형인데 제목·썸네일로는 알 수 없어 잡담·게임 같은 형식으로 잘못 저장되기 때문이며, 이런 방송은 표시할 때 멤버십으로 분류합니다. 종료 시각 확정이 멤버 전용을 기록할 시간(종료 관측 3분 뒤 첫 확인, 결과를 모르면 30분 뒤 재확인)을 두려고 종료 관측 뒤 1시간이 지난 방송만 묻습니다. 기동 직후와 24시간마다 방송 이력 기간 전체(365일)를, 그 밖에는 10분마다 최근 3일을 최신순으로 훑습니다. 전체 훑기가 회차 상한에 걸려 끝나지 못하면 다음 회차가 다시 전체를 훑습니다.
+- 질문: 방송마다 `POST v1beta/decisions`(`gemini-decision-1`) 요청 하나에 제목·주제를 담은 JSON 텍스트와 썸네일(`resolution` `medium`)을 공유 입력으로 넣고, `choice` 질문 하나로 10개 유형(`game`·`talk`·`singing`·`asmr`·`membership`·`event`·`horse_racing`·`watchalong`·`news`·`other`) 가운데 하나를 고르게 합니다. 공식 가이드 권고대로 선택지마다 설명을 달고 포괄 선택지 `other`를 두며, 제목·썸네일의 문구는 근거로만 다루라고 지시합니다. 여러 유형이 맞으면 `broadcast_type_rules.json`의 규칙 순서(멤버 한정 → 동시시청 → 노래 → ASMR·경마 → 이벤트 → 뉴스 → 일반 형식)대로 앞의 것을 고르게 해, 규칙이 분류한 방송과 기준을 맞춥니다. 질문과 선택지는 정렬해 직렬화하므로 같은 입력에는 매번 같은 요청을 보냅니다. 평가에서 같은 요청을 세 번씩 보낸 3건은 답과 확률이 모두 같았습니다. 썸네일을 내려받지 못한 방송은 제목만으로 묻지 않습니다.
+- 저장: 고른 유형과 그 확률(`confidence`)을 `decided`로, 입력 안전 차단(HTTP 400의 `safety`·`image_safety` 등)은 답 없이 `blocked`로 저장하며 둘 다 다시 묻지 않습니다. 행은 물을 때의 제목과 함께 저장하고, 세션 제목이 바뀌면 그 행은 쓰지 않고 다시 묻습니다.
+- 표시: `!방송이력`·`!방송시간`과 유형 필터는 규칙 → 영상별 검토 → player 멤버 전용 확인 → Gemini 판정 순으로 분류합니다. player 확인과 Gemini 판정은 규칙과 검토가 모두 미분류로 남긴 방송에만 씁니다. 규칙이나 검토가 정한 유형은 player가 멤버 전용이라고 확인해도 바꾸지 않습니다. player 확인은 방송이 끝난 뒤 다시보기의 접근 범위라, 공개로 방송한 뒤 다시보기만 멤버 전용으로 돌린 방송(예: 노래 방송)도 들어 있기 때문입니다. Gemini 판정은 `confidence`가 0.3 이상일 때만 씁니다. 0.3은 [표본 평가](../../review/broadcast-type-gemini-eval-20261115.md)로 정했습니다(holdout 정밀도 전체 0.933, 사람이 검토한 어려운 표본 0.810). 문턱은 읽을 때 적용하므로 바꿔도 다시 묻지 않습니다. 문턱 아래의 답과 차단된 방송은 미분류로 남습니다.
+- 한도: 요청 사이 3초(요청 하나의 입력이 실측 약 1,150토큰이라 분당 약 2만 3천 토큰으로, 무료 등급 분당 5만 토큰을 일정 포스터 자동 검토와 나눠 쓰는 값), 회차당 판정 100건, 요청 하나 2분입니다. genai Go SDK에 Decisions client가 없어 REST로 호출하며 자체 재시도는 없습니다.
+- 배포: Quadlet은 `HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED=1`일 때 `optional/broadcast-type-decision` drop-in(`43-broadcast-type-decision.conf`)으로 일정 포스터 자동 검토와 같은 키 파일 `/etc/stack-secrets/hololive-bot/gemini/api-key`를 다른 컨테이너 경로에 mount합니다. 파일이 없으면 hololive-api 컨테이너가 시작하지 않으므로 키를 등록하고 migration 021을 적용한 뒤 켭니다. 키 경로는 환경 변수라 이전 image는 무시합니다. 끄면 새 판정만 멈추므로, 저장된 판정까지 쓰지 않으려면 승인을 받아 `youtube_broadcast_type_decisions` 행을 지웁니다.
+
+## 미분류 방송 유형 재판정 예외 계약
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | 방송 하나의 판정 실패입니다. 썸네일 내려받기 실패, Decisions API의 안전 차단이 아닌 400, 500 같은 서버 오류, 연결 뒤 응답 시간 초과, 해석할 수 없는 응답, 선택지 밖이거나 범위를 벗어난 답, 저장 DB 오류가 해당합니다. 어느 방송도 판정할 수 없는 Gemini API 실패(이름 확인·연결 실패, HTTP 401·403·404·429·503, 400 가운데 잘못된 키 `API_KEY_INVALID`와 지원하지 않는 지역 `FAILED_PRECONDITION`)는 그 방송을 실패로 기억하지 않고 회차를 멈추며, 다음 회차가 이어서 묻습니다. |
+| 한도 | 호출 자체는 다시 보내지 않습니다. 실패한 방송은 그 회차에서 건너뛰고, 다음 전체 훑기 주기(24시간마다) 전까지는 최근 훑기에서도, 끝나지 않은 전체 훑기를 이어 가는 회차에서도 다시 묻지 않습니다. 연속 3건이 실패하면 그 회차를 멈춥니다. 실패 기억은 프로세스 메모리에만 있으므로 재기동 직후 전체 훑기에서 한 번 더 묻습니다. |
+| 종단 | 판정하지 못한 방송은 미분류로 남고, 방송 이력 기간(365일)을 벗어나면 더 묻지 않습니다. 계속 실패하는 방송은 하루 한 번(재기동 때 한 번 더) 다시 묻습니다. 안전 차단은 `blocked`로 저장해 다시 묻지 않습니다. |
+| Telemetry | 건너뛴 방송의 Warn 로그 `Broadcast type decision skipped`(`video_id`, `error`), 차단의 Warn 로그 `Broadcast type decision input blocked`(`video_id`, `error`), 멈춘 회차의 Error 로그 `Broadcast type decision pass failed`(`error`), 성공의 Info 로그 `Broadcast type decided`(`video_id`, `broadcast_type`, `confidence`, `input_tokens`)입니다. 전용 metric은 없습니다. |
+| Owner | `hololive-api` bot plane의 방송 유형 판정 작업(`internal/planes/bot/internal/service/broadcasttypedecision`) |
+| 제거 조건 | 90일 동안 한 번 실패한 방송이 뒤에 `Broadcast type decided`로 끝난 기록이 없으면 재시도를 지우고 첫 실패를 종단으로 기록합니다. 그 동작 변경을 CHANGELOG에 남깁니다. |
 
 ## Plane별 공유 자원
 

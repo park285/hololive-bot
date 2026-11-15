@@ -47,7 +47,7 @@ func TestClassifyBroadcastCorpus(t *testing.T) {
 		t.Run(tc.VideoID, func(t *testing.T) {
 			t.Parallel()
 
-			if got := ClassifyBroadcastVideo(tc.VideoID, tc.ChannelID, tc.TopicID, tc.Title); got.Type != tc.Type {
+			if got := ClassifyBroadcastVideo(tc.VideoID, tc.ChannelID, tc.TopicID, tc.Title, BroadcastTypeSignals{}); got.Type != tc.Type {
 				t.Errorf("ClassifyBroadcastVideo(%q, %q) = %q, want %q", tc.TopicID, tc.Title, got.Type, tc.Type)
 			}
 		})

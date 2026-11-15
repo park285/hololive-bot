@@ -102,7 +102,7 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 	}
 
 	cmd := NewBroadcastHistoryCommand(deps)
-	before := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(-2 * time.Second)
+	before := time.Now().AddDate(0, 0, -MaxBroadcastHistoryDays).Add(-2 * time.Second)
 
 	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
 		"type":         "게임",
@@ -118,7 +118,7 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 		t.Fatalf("ListEndedBroadcasts calls = %d, want 1", repo.listCalls)
 	}
 
-	after := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(2 * time.Second)
+	after := time.Now().AddDate(0, 0, -MaxBroadcastHistoryDays).Add(2 * time.Second)
 
 	if repo.listQuery.Type != string(broadcasttype.Game) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 {
 		t.Fatalf("query = %+v", repo.listQuery)

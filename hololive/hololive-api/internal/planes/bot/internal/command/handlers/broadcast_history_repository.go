@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
@@ -197,7 +198,7 @@ func (c *broadcastHistoryCollector) advanceCursor(page []handlercore.BroadcastHi
 
 func broadcastHistorySinceCursor(query *handlercore.BroadcastHistoryQuery) *time.Time {
 	if query.Since.IsZero() {
-		value := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).UTC()
+		value := time.Now().AddDate(0, 0, -MaxBroadcastHistoryDays).UTC()
 		return &value
 	}
 
@@ -308,7 +309,12 @@ type broadcastHistoryScanner interface {
 }
 
 func scanBroadcastHistoryRow(row broadcastHistoryScanner) (handlercore.BroadcastHistoryEntry, error) {
-	var entry handlercore.BroadcastHistoryEntry
+	var (
+		entry              handlercore.BroadcastHistoryEntry
+		decisionType       *string
+		decisionConfidence *float64
+		signals            BroadcastTypeSignals
+	)
 
 	if err := row.Scan(
 		&entry.VideoID,
@@ -326,11 +332,18 @@ func scanBroadcastHistoryRow(row broadcastHistoryScanner) (handlercore.Broadcast
 		&entry.TimesSource,
 		&entry.FinalizationOutcome,
 		&entry.FinalizationReason,
+		&decisionType,
+		&decisionConfidence,
+		&signals.PlayerMembersOnly,
 	); err != nil {
 		return handlercore.BroadcastHistoryEntry{}, fmt.Errorf("scan broadcast history row: %w", err)
 	}
 
-	classification := ClassifyBroadcastVideo(entry.VideoID, entry.ChannelID, entry.TopicID, entry.Title)
+	if decisionType != nil && decisionConfidence != nil {
+		signals.Decision = BroadcastTypeDecision{Type: broadcasttype.Type(*decisionType), Confidence: *decisionConfidence}
+	}
+
+	classification := ClassifyBroadcastVideo(entry.VideoID, entry.ChannelID, entry.TopicID, entry.Title, signals)
 
 	entry.BroadcastType = string(classification.Type)
 

@@ -80,6 +80,14 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 		})
 	}
 
+	if r.broadcastTypes != nil {
+		r.tasksWG.Go(func() {
+			panicguard.Run(r.Logger, panicscope.BackgroundTask, "bot-broadcast-type-decision", func() {
+				r.broadcastTypes.Start(runCtx)
+			})
+		})
+	}
+
 	go panicguard.Run(r.Logger, panicscope.BackgroundTask, "bot-runtime-task-join", func() {
 		r.tasksWG.Wait()
 		close(r.tasksDone)

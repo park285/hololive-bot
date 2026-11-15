@@ -127,7 +127,7 @@ func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 	_, err = pool.Exec(ctx, "ANALYZE youtube_live_sessions")
 	require.NoError(t, err)
 
-	since := now.Add(-maxBroadcastHistoryDays * 24 * time.Hour)
+	since := now.Add(-MaxBroadcastHistoryDays * 24 * time.Hour)
 	cursorAt := now.Add(-time.Hour)
 
 	for name, tc := range map[string]struct {

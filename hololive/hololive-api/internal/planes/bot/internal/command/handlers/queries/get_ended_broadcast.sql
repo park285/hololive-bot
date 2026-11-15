@@ -14,10 +14,17 @@
 		h.last_live_positive_at,
 		s.times_source,
 		f.outcome,
-		f.reason
+		f.reason,
+		d.broadcast_type,
+		d.confidence,
+		-- 종료 시각 확정이나 최신 시청 가능성 관측에서 YouTube player가 멤버 전용이라고 확인한 방송이다.
+		(f.outcome IS NOT DISTINCT FROM 'members_only' OR a.availability IS NOT DISTINCT FROM 'MEMBERS_ONLY') AS player_members_only
 	FROM youtube_live_sessions s
 	LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id = s.video_id
 	LEFT JOIN youtube_live_time_finalizations f ON f.video_id = s.video_id
+	LEFT JOIN youtube_video_availability a ON a.video_id = s.video_id
+	-- 판정은 물을 때의 제목에 대한 답이라 제목이 바뀐 방송에는 쓰지 않는다.
+	LEFT JOIN youtube_broadcast_type_decisions d ON d.video_id = s.video_id AND d.title = COALESCE(s.title, '')
 	LEFT JOIN LATERAL (
 		SELECT string_agg(
 			COALESCE(NULLIF(m.short_korean_name, ''), NULLIF(m.korean_name, ''), NULLIF(m.english_name, '')),

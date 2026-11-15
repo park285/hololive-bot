@@ -90,6 +90,7 @@ func (r *fakeHistoryRows) Scan(dest ...any) error {
 		entry.VideoID, entry.ChannelID, entry.MemberName, entry.Title, entry.TopicID, entry.ThumbnailURL,
 		entry.ScheduledStartTime, entry.StartedAt, entry.EndedAt, entry.LastSeenAt, entry.LifecycleOrigin,
 		entry.LastLivePositiveAt, entry.TimesSource, entry.FinalizationOutcome, entry.FinalizationReason,
+		(*string)(nil), (*float64)(nil), false,
 	}
 	if len(dest) != len(values) {
 		return fmt.Errorf("fake history scan: got %d destinations, want %d", len(dest), len(values))
