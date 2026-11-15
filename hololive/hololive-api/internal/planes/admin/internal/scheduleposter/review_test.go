@@ -7,6 +7,7 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net"
@@ -498,6 +499,35 @@ func TestGeminiJudgeSendsTheDecisionRequest(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, posterScores{schedule: 0.9, oneWeek: 0.8, oneStreamer: 0.7}, scores)
 	require.EqualValues(t, 1500, spent.prompt)
+}
+
+func TestGeminiJudgeSendsTheSameBytesForTheSameCandidate(t *testing.T) {
+	t.Parallel()
+
+	var bodies []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+
+		bodies = append(bodies, string(raw))
+
+		if _, err := w.Write([]byte(`{"answers":{"is_schedule":{"noul":0.9},"one_week":{"noul":0.8},"one_streamer":{"noul":0.7}}}`)); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	judge := &geminiJudge{http: server.Client(), endpoint: server.URL, key: "test-key-0123456789abcdef"}
+
+	for range 20 {
+		_, _, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+		require.NoError(t, err)
+	}
+
+	require.Len(t, slices.Compact(bodies), 1, "질문 순서가 요청마다 바뀌면 같은 후보의 답이 흔들린다")
 }
 
 func TestPeriodRequestAsksOnlyForPrintedDates(t *testing.T) {

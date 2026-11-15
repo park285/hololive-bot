@@ -74,6 +74,42 @@ func TestSchedulePosterRowsMigrationAddsTheAliasOnceAndPendsConfirmedPosters(t *
 	require.NoError(t, err, "행 열을 모르는 이전 image도 행을 저장한 확정본을 거절할 수 있다")
 }
 
+func TestSchedulePosterRowsMigrationAddsPosterNicknamesAsJapaneseAliasesOnce(t *testing.T) {
+	t.Parallel()
+
+	pool := NewPool(t)
+	ctx := t.Context()
+
+	_, err := pool.Exec(ctx, `INSERT INTO members (id, slug, english_name, short_korean_name, aliases, org, sync_source)
+		VALUES (9200, 'koseki-bijou', 'Koseki Bijou', '비쥬', '{"ja": [], "ko": ["비쥬"]}', 'Hololive', 'holodex'),
+		       (9201, 'nerissa-ravencroft', 'Nerissa Ravencroft', '네리사', '{"ja": ["Nerissa Ravencroft hololive-EN", "Rissa"], "ko": ["네리사"]}', 'Hololive', 'holodex')`)
+	require.NoError(t, err)
+
+	dir, err := resolveMigrationsDir()
+	require.NoError(t, err)
+
+	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterRowsMigration)
+	require.NoError(t, err)
+
+	for range 2 {
+		require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterRowsMigration, string(migration)))
+	}
+
+	jaAliases := func(slug string) []string {
+		var aliases []string
+
+		require.NoError(t, pool.QueryRow(ctx, `SELECT coalesce(array_agg(alias ORDER BY ord), '{}') FROM members,
+			jsonb_array_elements_text(aliases -> 'ja') WITH ORDINALITY AS a(alias, ord) WHERE slug = $1`, slug).Scan(&aliases))
+
+		return aliases
+	}
+
+	require.Equal(t, []string{"biboo", "Beebs"}, jaAliases("koseki-bijou"))
+	require.Equal(t, []string{"Nerissa Ravencroft hololive-EN", "Rissa"}, jaAliases("nerissa-ravencroft"), "이미 있는 별칭은 다시 넣지 않는다")
+	require.Equal(t, []string{"鈴鳴つづり", "つづり", "すずなつづり", "つーちゃん"}, jaAliases("suzuna-tsuzuri"))
+	require.Contains(t, jaAliases("asobi-mawaritai"), "アソビ隊")
+}
+
 func TestSchedulePosterRowsMigrationFillsOnlyAnEmptyKoreanNameOfIRyS(t *testing.T) {
 	t.Parallel()
 

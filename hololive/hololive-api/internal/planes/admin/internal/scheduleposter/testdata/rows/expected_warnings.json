@@ -1,20 +1,11 @@
 {
  "kyoko": [
   {
-   "row": 2,
-   "warning": "T12 이름표에 없는 표기로 정한 사람: 츠즈리 ← Overwatch / with つーちゃん"
-  },
-  {
    "row": 11,
    "warning": "T12 이름표에 없는 표기로 정한 사람: 아소비 ← 終われまテン！ / with アンビ隊"
   }
  ],
- "mela": [
-  {
-   "row": 1,
-   "warning": "T12 이름표에 없는 표기로 정한 사람: 비쥬 ← PEAK@めら視点 / (キョーコ、Kaela、biboo)"
-  }
- ],
+ "mela": [],
  "sopia": [],
  "tsuzuri": []
 }

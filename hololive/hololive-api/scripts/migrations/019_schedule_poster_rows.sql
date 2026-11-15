@@ -7,7 +7,8 @@
 -- start_time·end_time은 포스터에 적힌 24시 넘는 시각(25:00, 29:59까지)을 그대로 두려고 text다.
 -- JST가 아닌 포스터의 행은 day·start_time·end_time을 JST로 바꿔 tz를 'JST'로, source_zone을 포스터에 적힌 시간대로 저장한다.
 -- rows_day_shift(-1..1)는 그렇게 바꾼 행 묶음이 주 범위보다 며칠 밀렸는지이며 행 묶음과 같은 트랜잭션에서 쓰고, 묶음을 지우면 0으로 돌린다.
--- アソビ隊는 포스터가 쓰는 유닛 약칭이다. 번역 이름표가 별칭으로 읽는다.
+-- アソビ隊(유닛 약칭)와 つーちゃん·biboo·Beebs·Rissa(멤버 별명)는 포스터가 쓰는 표기라 번역 이름표가 별칭으로 읽는다.
+-- 별칭은 멤버 이름 검색에도 쓰이고, 이전 image로 돌아가도 남는다.
 -- IRyS의 비어 있던 korean_name을 짧은 이름과 같은 표기로 채운다. 번역 이름표는 한국어 이름이 빈 멤버를 빼고, 이미 값이 있으면 덮지 않는다.
 -- 이름이 앞에 오는 멤버 12명의 short_korean_name이 성으로 들어가 있어 이름으로 고친다. 지금 값이 그 옛 값일 때만 바꿔 운영자가 고친 값은 덮지 않는다.
 -- 이 열은 표시 전용이라 알림·봇 응답·방송 기록·달력 카드의 12명 표시도 함께 바뀌고, 이전 image로 돌아가도 값은 남는다.
@@ -70,9 +71,22 @@ CREATE TABLE IF NOT EXISTS public.schedule_poster_rows (
     )
 );
 
-UPDATE public.members
-SET aliases = jsonb_set(aliases, '{ja}', (aliases -> 'ja') || '["アソビ隊"]'::jsonb)
-WHERE slug = 'asobi-mawaritai' AND NOT (aliases -> 'ja') ? 'アソビ隊';
+UPDATE public.members AS m
+SET aliases = jsonb_set(m.aliases, '{ja}', (m.aliases -> 'ja') || added.aliases)
+FROM (
+    SELECT cur.slug, jsonb_agg(nick.alias ORDER BY nick.ord) AS aliases
+    FROM (VALUES
+        (1, 'asobi-mawaritai', 'アソビ隊'),
+        (2, 'suzuna-tsuzuri', 'つーちゃん'),
+        (3, 'koseki-bijou', 'biboo'),
+        (4, 'koseki-bijou', 'Beebs'),
+        (5, 'nerissa-ravencroft', 'Rissa')
+    ) AS nick(ord, slug, alias)
+    JOIN public.members AS cur ON cur.slug = nick.slug
+    WHERE NOT (cur.aliases -> 'ja') ? nick.alias
+    GROUP BY cur.slug
+) AS added
+WHERE m.slug = added.slug;
 
 UPDATE public.members
 SET korean_name = '아이리스'

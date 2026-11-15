@@ -193,7 +193,7 @@ func (j *geminiJudge) judge(ctx context.Context, src source) (posterScores, usag
 		Model:     decisionModel,
 		Input:     []decisionInput{{Type: "image", MIMEType: src.MIME, Data: src.Data}},
 		Questions: posterQuestions,
-	})
+	}, jsonv2.Deterministic(true))
 	if err != nil {
 		return posterScores{}, usage{}, fmt.Errorf("encode decision request: %w", err)
 	}

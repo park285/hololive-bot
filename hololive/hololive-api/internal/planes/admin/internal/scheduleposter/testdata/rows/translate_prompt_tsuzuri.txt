@@ -212,7 +212,7 @@ Output:
 
 Batch to convert (use the reference sections that follow, not those of the examples)
 
-Poster owner: 鈴鳴つづり, つづり, すずなつづり (Suzuna Tsuzuri) → 스즈나 츠즈리 / 츠즈리
+Poster owner: 鈴鳴つづり, つづり, すずなつづり, つーちゃん (Suzuna Tsuzuri) → 스즈나 츠즈리 / 츠즈리
 Poster time zone: (none)
 
 Name table (names and nicknames (romaji) → Korean full name / short name):
@@ -240,7 +240,7 @@ hololive ホロライブ, ホロライブ公式 (Hololive Official) → 홀로�
 シオリ・ノヴェラ (Shiori Novella) → 시오리 노벨라 / 시오리
 ジジ・ムリン (Gigi Murin) → 지지 무린 / 지지
 セシリア・イマーグリーン (Cecilia Immergreen) → 세실리아 이머그린 / 세실리아
-ネリッサ・レイヴンクロフト (Nerissa Ravencroft) → 네리사 레이븐크로프트 / 네리사
+ネリッサ・レイヴンクロフト, Rissa (Nerissa Ravencroft) → 네리사 레이븐크로프트 / 네리사
 ハコス・ベールズ (Hakos Baelz) → 하코스 벨즈 / 벨즈
 パヴォリア・レイネ (Pavolia Reine) → 파볼리아 레이네 / 레이네
 フワワ・アビスガード (Fuwawa Abyssgard) → 후와와 어비스가드 / 후와와
@@ -257,7 +257,7 @@ hololive ホロライブ, ホロライブ公式 (Hololive Official) → 홀로�
 儒烏風亭らでん, らでん (Juufuutei Raden) → 주후테이 라덴 / 라덴
 兎田ぺこら (Usada Pekora) → 우사다 페코라 / 페코라
 博衣こより (Hakui Koyori) → 하쿠이 코요리 / 코요리
-古石ビジュー (Koseki Bijou) → 코세키 비쥬 / 비쥬
+古石ビジュー, biboo, Beebs (Koseki Bijou) → 코세키 비쥬 / 비쥬
 夏色まつり (Natsuiro Matsuri) → 나츠이로 마츠리 / 마츠리
 大神ミオ (Ookami Mio) → 오오카미 미오 / 미오
 大空スバル (Oozora Subaru) → 오오조라 스바루 / 스바루
@@ -287,7 +287,7 @@ hololive ホロライブ, ホロライブ公式 (Hololive Official) → 홀로�
 赤井はあと (Akai Haato) → 아카이 하아토 / 하아토
 輪堂千速 (Rindo Chihaya) → 린도 치하야 / 치하야
 轟はじめ (Todoroki Hajime) → 토도로키 하지메 / 하지메
-鈴鳴つづり, つづり, すずなつづり (Suzuna Tsuzuri) → 스즈나 츠즈리 / 츠즈리
+鈴鳴つづり, つづり, すずなつづり, つーちゃん (Suzuna Tsuzuri) → 스즈나 츠즈리 / 츠즈리
 雪花ラミィ (Yukihana Lamy) → 유키하나 라미 / 라미
 音乃瀬奏 (Otonose Kanade) → 오토노세 카나데 / 카나데
 響咲リオナ (Isaki Riona) → 이사키 리오나 / 리오나
