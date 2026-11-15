@@ -21,3 +21,4 @@
 021 021_youtube_broadcast_type_decisions.sql
 022 022_drop_birthday_stream_template.sql
 023 023_schedule_poster_not_found_text.sql
+024 024_schedule_poster_image.sql

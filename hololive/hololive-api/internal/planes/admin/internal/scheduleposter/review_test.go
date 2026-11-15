@@ -81,10 +81,7 @@ func TestCollectAutoReviewsEveryCandidate(t *testing.T) {
 
 	image := func(name string) source { return source{MIME: mimeJPEG, Data: []byte(name)} }
 
-	thumbnail := posterstore.ReviewCandidate{
-		ID: 7, ChannelID: sophiaChannel, ImageURL: "https://i.ytimg.com/vi/4uuYjSf0rpU/maxresdefault.jpg",
-		ImageSHA256: imageSHA256([]byte("collected")), PostedAt: reviewPosts, Revision: 1,
-	}
+	thumbnail := thumbnailCandidate(7, "4uuYjSf0rpU", "collected")
 
 	store := &fakeStore{unreviewed: []posterstore.ReviewCandidate{
 		reviewCandidate(1, "u/"+confirmName), reviewCandidate(2, "u/reject"), reviewCandidate(3, "u/partial"),
@@ -109,7 +106,7 @@ func TestCollectAutoReviewsEveryCandidate(t *testing.T) {
 
 	service.config.Targets = []Target{{XUserID: sophiaUserID, ChannelID: sophiaChannel, YouTubeCommunity: true}}
 
-	require.ErrorContains(t, service.collect(t.Context()), "auto review schedule poster 6: fetch poster image")
+	require.ErrorContains(t, service.collect(t.Context()), "auto review schedule poster 6: poster image unavailable")
 
 	require.Empty(t, store.communityPattern, "문구 패턴이 놓친 일정표까지 판정하도록 이미지 글을 모두 넣는다")
 	require.Equal(t, []bool{true, true, true}, store.autoReviews, "X·커뮤니티·썸네일 후보 모두 자동 검토를 기다린다")
@@ -126,6 +123,70 @@ func TestCollectAutoReviewsEveryCandidate(t *testing.T) {
 	}, store.reviewed, "원본을 받지 못한 6은 다음 주기에 다시 본다")
 	require.Equal(t, []string{confirmName, "reject", "partial", "undated", "blocked", "group"}, judge.judged, "수집 뒤 바뀐 썸네일은 판정하지 않는다")
 	require.Equal(t, []string{confirmName, "undated"}, judge.read, "세 답이 모두 높은 후보만 날짜를 읽는다")
+	require.NotContains(t, store.stored, thumbnail.ID, "수집 뒤 바뀐 썸네일은 저장하지 않는다")
+}
+
+func thumbnailCandidate(id int64, videoID, collected string) posterstore.ReviewCandidate {
+	return posterstore.ReviewCandidate{
+		ID: id, ChannelID: sophiaChannel, ImageURL: "https://i.ytimg.com/vi/" + videoID + "/maxresdefault.jpg",
+		ImageSHA256: imageSHA256([]byte(collected)), PostedAt: reviewPosts, Revision: 1,
+	}
+}
+
+func TestAutoReviewJudgesTheStoredImageWhateverTheURLServesNow(t *testing.T) {
+	t.Parallel()
+
+	thumbnail := thumbnailCandidate(7, "4uuYjSf0rpU", confirmName)
+	store := &fakeStore{
+		unreviewed: []posterstore.ReviewCandidate{thumbnail},
+		stored:     map[int64]posterstore.Image{thumbnail.ID: {MIME: mimeJPEG, Data: []byte(confirmName)}},
+	}
+	sources := &fakeSources{images: map[string]source{thumbnail.ImageURL: {MIME: mimeJPEG, Data: []byte("next week")}}}
+	judge := &fakeJudge{scores: map[string]posterScores{confirmName: certain}, periods: map[string]printedPeriod{confirmName: thisWeek}}
+
+	require.NoError(t, reviewingService(store, sources, judge).autoReview(t.Context()))
+	require.Equal(t, []string{"confirm 7@1 2026-11-09..2026-11-15"}, store.reviewed)
+	require.Equal(t, []string{confirmName}, judge.judged)
+	require.Empty(t, sources.imageURLs, "저장된 그림이 있으면 바뀐 썸네일 주소를 다시 받지 않는다")
+}
+
+func TestAutoReviewSavesTheFetchedImageWhenItIsTheCollectedOne(t *testing.T) {
+	t.Parallel()
+
+	same, changed := thumbnailCandidate(7, "4uuYjSf0rpU", confirmName), thumbnailCandidate(9, "AAAAAAAAAAA", "collected")
+	poster, nextWeek := source{MIME: mimeJPEG, Data: []byte(confirmName)}, source{MIME: mimeJPEG, Data: []byte("next week")}
+	store := &fakeStore{unreviewed: []posterstore.ReviewCandidate{same, changed, reviewCandidate(1, "u/"+confirmName)}}
+	sources := &fakeSources{images: map[string]source{same.ImageURL: poster, changed.ImageURL: nextWeek, "u/" + confirmName: poster}}
+	judge := &fakeJudge{scores: map[string]posterScores{confirmName: certain}, periods: map[string]printedPeriod{confirmName: thisWeek}}
+
+	require.NoError(t, reviewingService(store, sources, judge).autoReview(t.Context()))
+	require.Equal(t, []string{
+		"confirm 7@1 2026-11-09..2026-11-15", "request 9 image_changed", "confirm 1@1 2026-11-09..2026-11-15",
+	}, store.reviewed)
+	require.Equal(t, map[int64]posterstore.Image{same.ID: posterstore.Image(poster), 1: posterstore.Image(poster)}, store.stored,
+		"수집 때와 같은 썸네일과 해시 없는 후보만 받은 그림을 저장한다")
+}
+
+func TestAutoReviewLeavesCandidatesForTheNextCycleWhileImagesCannotBeStored(t *testing.T) {
+	t.Parallel()
+
+	denied := errors.New("image store denied")
+
+	for name, images := range map[string]fakeImages{"load": {loadErr: denied}, "save": {saveErr: denied}} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			store := &fakeStore{fakeImages: images, unreviewed: []posterstore.ReviewCandidate{reviewCandidate(1, "u/"+confirmName)}}
+			sources := &fakeSources{images: map[string]source{"u/" + confirmName: {MIME: mimeJPEG, Data: []byte(confirmName)}}}
+			judge := &fakeJudge{scores: map[string]posterScores{confirmName: certain}, periods: map[string]printedPeriod{confirmName: thisWeek}}
+
+			err := reviewingService(store, sources, judge).autoReview(t.Context())
+			require.ErrorIs(t, err, denied)
+			require.ErrorContains(t, err, "auto review schedule poster 1")
+			require.Empty(t, store.reviewed, "판정하지도 관리자에게 넘기지도 않는다")
+			require.Empty(t, judge.judged)
+		})
+	}
 }
 
 func TestAutoReviewLeavesFailedCandidatesForTheNextCycle(t *testing.T) {

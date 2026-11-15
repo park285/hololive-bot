@@ -66,13 +66,13 @@ func (s *Service) autoReview(ctx context.Context) error {
 }
 
 func (s *Service) reviewOne(ctx context.Context, item posterstore.ReviewCandidate) error {
-	original, err := s.sources.image(ctx, item.ImageURL)
-	if err != nil {
-		return s.unjudged(ctx, item, posterScores{}, posterstore.ReviewReasonUnjudgeable, fmt.Errorf("fetch poster image: %w", err))
+	original, err := s.posterImage(ctx, item.ID, item.ImageURL, item.ImageSHA256)
+	if errors.Is(err, errImageChanged) {
+		return s.requestReview(ctx, item, posterScores{}, posterstore.ReviewReasonImageChanged, err)
 	}
 
-	if item.ImageSHA256 != "" && imageSHA256(original.Data) != item.ImageSHA256 {
-		return s.requestReview(ctx, item, posterScores{}, posterstore.ReviewReasonImageChanged, errors.New("poster image changed after it was collected"))
+	if err != nil {
+		return s.unjudged(ctx, item, posterScores{}, posterstore.ReviewReasonUnjudgeable, err)
 	}
 
 	scores, spent, err := s.judge.judge(ctx, original)

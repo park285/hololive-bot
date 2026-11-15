@@ -26,6 +26,8 @@ import (
 )
 
 type fakeRowStore struct {
+	fakeImages
+
 	pending   []posterstore.PendingRows
 	terms     []posterstore.Term
 	termsErr  error
@@ -79,10 +81,11 @@ type fakeRowModel struct {
 	translated     [][]translatedRow
 	extracts       int
 	extractPrompts []string
+	extractImages  []string
 	prompts        []string
 }
 
-func (f *fakeRowModel) extractRows(ctx context.Context, _ source, prompt string) ([]extractedRow, usage, error) {
+func (f *fakeRowModel) extractRows(ctx context.Context, src source, prompt string) ([]extractedRow, usage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, usage{}, err
 	}
@@ -93,6 +96,7 @@ func (f *fakeRowModel) extractRows(ctx context.Context, _ source, prompt string)
 	f.extracts++
 
 	f.extractPrompts = append(f.extractPrompts, prompt)
+	f.extractImages = append(f.extractImages, string(src.Data))
 
 	if f.extractErr != nil {
 		return nil, fakeUsage, f.extractErr
@@ -116,7 +120,7 @@ func rowsService(store *fakeRowStore, model *fakeRowModel, members ...*domain.Me
 	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
 	service := testService(&fakeStore{}, sources, members...)
 
-	service.rows = store
+	service.rows, service.images = store, store
 	service.rowModel = model
 
 	return service
@@ -252,6 +256,49 @@ func TestExtractPendingRowsUsesOnlyTheCollectedImage(t *testing.T) {
 	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
 	require.Equal(t, []string{reasonSourceUnavailable}, store.failures)
 	require.Zero(t, model.extracts)
+	require.Empty(t, store.stored, "수집 때와 다른 그림은 저장하지 않는다")
+}
+
+func TestExtractPendingRowsUsesTheStoredImageWhateverTheURLServesNow(t *testing.T) {
+	t.Parallel()
+
+	thumbnail := week
+
+	thumbnail.ImageURL, thumbnail.ImageSHA256 = "https://i.ytimg.com/vi/4uuYjSf0rpU/maxresdefault.jpg", imageSHA256([]byte("collected"))
+
+	store := &fakeRowStore{
+		pending: []posterstore.PendingRows{thumbnail},
+		stored:  map[int64]posterstore.Image{thumbnail.ID: {MIME: mimeJPEG, Data: []byte("collected")}},
+	}
+	model := &fakeRowModel{extracted: [][]extractedRow{{plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
+	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("next week")}}
+	service := rowsService(store, model, sophia)
+
+	service.sources = sources
+
+	require.NoError(t, service.extractPendingRows(t.Context()))
+	require.Empty(t, store.failures)
+	require.Len(t, store.recorded, 1)
+	require.Empty(t, sources.imageURLs, "저장된 그림이 있으면 바뀐 썸네일 주소를 다시 받지 않는다")
+	require.Equal(t, slices.Repeat([]string{"collected"}, extractRuns), model.extractImages)
+}
+
+func TestExtractPendingRowsSavesTheFetchedImageWhenItIsTheCollectedOne(t *testing.T) {
+	t.Parallel()
+
+	thumbnail := week
+
+	thumbnail.ID, thumbnail.ImageURL, thumbnail.ImageSHA256 = 8, "https://i.ytimg.com/vi/4uuYjSf0rpU/maxresdefault.jpg", imageSHA256([]byte("original"))
+
+	store := &fakeRowStore{pending: []posterstore.PendingRows{week, thumbnail}}
+	model := &fakeRowModel{extracted: [][]extractedRow{{plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
+
+	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.Empty(t, store.failures)
+	require.Len(t, store.recorded, 2)
+	require.Equal(t, map[int64]posterstore.Image{
+		week.ID: {MIME: mimeJPEG, Data: []byte("original")}, thumbnail.ID: {MIME: mimeJPEG, Data: []byte("original")},
+	}, store.stored, "그림을 저장하지 않은 X 포스터와 수집 때와 같은 썸네일은 받은 그림을 저장한다")
 }
 
 func TestExtractPendingRowsRecordsNothingAfterCancellation(t *testing.T) {
@@ -346,6 +393,18 @@ func TestExtractPendingRowsLeavesPostersPendingOnStoreErrors(t *testing.T) {
 	require.Error(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
 	require.Len(t, model.prompts, 1)
 	require.Empty(t, store.failures, "저장 오류는 실패로 기록하지 않고 다음 tick에 다시 본다")
+
+	denied := errors.New("image store denied")
+
+	for name, images := range map[string]fakeImages{"load": {loadErr: denied}, "save": {saveErr: denied}} {
+		store = &fakeRowStore{fakeImages: images, pending: []posterstore.PendingRows{week}}
+		model = &fakeRowModel{extracted: [][]extractedRow{{plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
+
+		require.ErrorIs(t, rowsService(store, model, sophia).extractPendingRows(t.Context()), denied, name)
+		require.Zero(t, model.extracts, name)
+		require.Empty(t, store.recorded, name)
+		require.Empty(t, store.failures, "%s: 그림 저장소 오류도 실패로 기록하지 않고 다음 tick에 다시 본다", name)
+	}
 }
 
 func TestExtractPendingRowsRetriesOnlyTheRecordWhileTheStoreFails(t *testing.T) {

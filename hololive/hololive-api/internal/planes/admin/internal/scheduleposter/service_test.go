@@ -70,7 +70,43 @@ func (f *fakeSources) image(_ context.Context, rawURL string) (source, error) {
 	return f.original, f.err
 }
 
+type fakeImages struct {
+	stored  map[int64]posterstore.Image
+	loadErr error
+	saveErr error
+}
+
+func (f *fakeImages) Image(_ context.Context, id int64) (posterstore.Image, bool, error) {
+	if f.loadErr != nil {
+		return posterstore.Image{}, false, f.loadErr
+	}
+
+	image, found := f.stored[id]
+
+	return image, found, nil
+}
+
+func (f *fakeImages) SaveImage(_ context.Context, id int64, image posterstore.Image) error {
+	if f.saveErr != nil {
+		return f.saveErr
+	}
+
+	if _, found := f.stored[id]; found {
+		return nil
+	}
+
+	if f.stored == nil {
+		f.stored = map[int64]posterstore.Image{}
+	}
+
+	f.stored[id] = image
+
+	return nil
+}
+
 type fakeStore struct {
+	fakeImages
+
 	inserted          []posterstore.Candidate
 	communityChannels []string
 	communityPattern  string
@@ -174,6 +210,7 @@ func testService(store *fakeStore, sources sourceClient, members ...*domain.Memb
 	config := Config{PollSeconds: 3600, Targets: []Target{{XUserID: sophiaUserID, ChannelID: sophiaChannel}}}
 	service := newService(config, store, store, sources, &fakeMembers{members: members}, slog.New(slog.DiscardHandler))
 
+	service.images = store
 	service.now = func() time.Time { return time.Date(2026, time.November, 11, 12, 0, 0, 0, time.UTC) }
 	service.retry = retry.RetryOptions{MaxAttempts: 3, Sleep: func(context.Context, time.Duration) bool { return true }}
 
@@ -383,8 +420,8 @@ func TestCollectFetchesThumbnailTargets(t *testing.T) {
 	require.Equal(t, []string{"https://i.ytimg.com/vi/4uuYjSf0rpU/maxresdefault.jpg"}, sources.imageURLs)
 	require.Equal(t, []posterstore.ThumbnailCandidate{{
 		ChannelID: melaChannel, VideoID: "4uuYjSf0rpU", PostedAt: service.now(),
-		ImageSHA256: "80f61f96184524ba54db767ed49487392430ad26bf5cf2ef689905f3400325d7", // "thumbnail"의 sha256
-	}}, store.thumbnails)
+		Image: posterstore.Image{MIME: mimeJPEG, Data: []byte("thumbnail")},
+	}}, store.thumbnails, "받은 그림을 후보와 함께 넘긴다")
 
 	sources.err = errors.New("unexpected status 404")
 

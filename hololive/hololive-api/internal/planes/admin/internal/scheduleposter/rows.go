@@ -184,13 +184,13 @@ func (s *Service) recordRows(ctx context.Context, item posterstore.PendingRows, 
 func (s *Service) extractOne(
 	ctx context.Context, item posterstore.PendingRows, members, named []*domain.Member,
 ) ([]posterstore.Row, int, string, error) {
-	original, err := s.sources.image(ctx, item.ImageURL)
-	if err != nil {
+	original, err := s.posterImage(ctx, item.ID, item.ImageURL, item.ImageSHA256)
+	if errors.Is(err, errImageUnavailable) {
 		return nil, 0, reasonSourceUnavailable, err
 	}
 
-	if item.ImageSHA256 != "" && imageSHA256(original.Data) != item.ImageSHA256 {
-		return nil, 0, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
+	if err != nil {
+		return nil, 0, "", err
 	}
 
 	owner, ok := posterOwner(item.ChannelID, members)

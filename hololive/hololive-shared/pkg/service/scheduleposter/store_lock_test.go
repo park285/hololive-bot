@@ -34,7 +34,7 @@ func TestAutoConfirmWaitsForAConcurrentConfirm(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = store.InsertThumbnailCandidates(ctx, []ThumbnailCandidate{{
-		ChannelID: lockTestChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", PostedAt: postedAt,
+		ChannelID: lockTestChannel, VideoID: "4uuYjSf0rpU", Image: Image{MIME: "image/jpeg", Data: []byte("thumbnail")}, PostedAt: postedAt,
 	}}, true)
 	require.NoError(t, err)
 

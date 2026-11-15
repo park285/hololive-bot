@@ -2,6 +2,8 @@ package scheduleposter_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
@@ -42,6 +44,10 @@ func candidate(id int64, postedAt time.Time) scheduleposter.Candidate {
 }
 
 var testPostedAt = time.Date(2026, time.November, 9, 3, 0, 0, 0, time.UTC)
+
+func thumbnailImage(data string) scheduleposter.Image {
+	return scheduleposter.Image{MIME: "image/jpeg", Data: []byte(data)}
+}
 
 func confirmPoster101(t *testing.T, store *scheduleposter.Store) int64 {
 	t.Helper()
@@ -471,8 +477,8 @@ func autoConfirmCandidates(t *testing.T, store *scheduleposter.Store) map[string
 	require.NoError(t, err)
 
 	_, err = store.InsertThumbnailCandidates(ctx, []scheduleposter.ThumbnailCandidate{
-		{ChannelID: sophiaChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: strings.Repeat("a", 64), PostedAt: testPostedAt.AddDate(0, 0, -1)},
-		{ChannelID: otherChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: strings.Repeat("b", 64), PostedAt: testPostedAt.AddDate(0, 0, -1)},
+		{ChannelID: sophiaChannel, VideoID: "4uuYjSf0rpU", Image: thumbnailImage("a"), PostedAt: testPostedAt.AddDate(0, 0, -1)},
+		{ChannelID: otherChannel, VideoID: "4uuYjSf0rpU", Image: thumbnailImage("b"), PostedAt: testPostedAt.AddDate(0, 0, -1)},
 	}, true)
 	require.NoError(t, err)
 
@@ -625,17 +631,18 @@ func TestStoreInsertThumbnailCandidates(t *testing.T) {
 		unknown     = "AAAAAAAAAAA"
 	)
 
-	thisWeek, nextWeek := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	thisWeek := thumbnailImage("this week")
+	nextWeek := scheduleposter.Image{MIME: "image/webp", Data: []byte("next week")}
 
 	_, err = pool.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id, channel_id, status, lifecycle_origin, title)
 		VALUES ($1, $2, 'UPCOMING', 'observed', 'フリーチャット')`, freeChat, melaChannel)
 	require.NoError(t, err)
 
-	insert := func(video, hash string, at time.Time) int64 {
+	insert := func(video string, image scheduleposter.Image, at time.Time) int64 {
 		t.Helper()
 
 		inserted, insertErr := store.InsertThumbnailCandidates(ctx, []scheduleposter.ThumbnailCandidate{
-			{ChannelID: melaChannel, VideoID: video, ImageSHA256: hash, PostedAt: at},
+			{ChannelID: melaChannel, VideoID: video, Image: image, PostedAt: at},
 		}, false)
 		require.NoError(t, insertErr)
 
@@ -663,18 +670,93 @@ func TestStoreInsertThumbnailCandidates(t *testing.T) {
 	require.Less(t, poster.ID, int64(1)<<60+1, "X 게시물 번호와 겹치지 않는 범위다")
 	require.Positive(t, poster.ID)
 
+	stored, found, err := store.Image(ctx, poster.ID)
+	require.NoError(t, err)
+	require.True(t, found, "수집 때 받은 그림을 후보와 함께 저장한다")
+	require.Equal(t, thisWeek, stored)
+
 	_, err = store.Confirm(ctx, poster.ID, poster.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
 	require.NoError(t, err)
+
+	sum := sha256.Sum256(thisWeek.Data)
 
 	pending, err := store.PendingRows(ctx, date(t, "2026-11-09"), 10)
 	require.NoError(t, err)
 	require.Equal(t, []scheduleposter.PendingRows{{
-		ID: poster.ID, ChannelID: melaChannel, ImageURL: poster.ImageURL, ImageSHA256: thisWeek,
+		ID: poster.ID, ChannelID: melaChannel, ImageURL: poster.ImageURL, ImageSHA256: hex.EncodeToString(sum[:]),
 		WeekStart: date(t, "2026-11-09"), WeekEnd: date(t, "2026-11-15"), RowsRevision: 1,
-	}}, pending)
+	}}, pending, "image_sha256은 저장한 그림의 sha256이다")
 
 	require.Zero(t, insert(freeChat, nextWeek, testPostedAt.AddDate(0, 0, 3)), "확정된 주 안에 바뀐 그림은 후보가 되지 않는다")
 	require.EqualValues(t, 1, insert(freeChat, nextWeek, testPostedAt.AddDate(0, 0, 6)), "주 종료일부터 바뀐 그림은 다음 주 후보가 된다")
+}
+
+func TestStoreInsertThumbnailCandidatesFillsTheImageOfTheSameThumbnail(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	const (
+		melaChannel = "UC8eitCE9Z6EwUCs-VUi1blg"
+		confirmed   = "4uuYjSf0rpU"
+		superseded  = "BBBBBBBBBBB"
+	)
+
+	thisWeek := thumbnailImage("this week")
+
+	insert := func(video string, image scheduleposter.Image, at time.Time) int64 {
+		t.Helper()
+
+		inserted, insertErr := store.InsertThumbnailCandidates(ctx, []scheduleposter.ThumbnailCandidate{
+			{ChannelID: melaChannel, VideoID: video, Image: image, PostedAt: at},
+		}, false)
+		require.NoError(t, insertErr)
+
+		return inserted
+	}
+
+	posterOf := func(video string) scheduleposter.Poster {
+		t.Helper()
+
+		var id int64
+
+		require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM schedule_posters WHERE post_url = $1`,
+			"https://www.youtube.com/watch?v="+video).Scan(&id))
+
+		poster, getErr := store.Get(ctx, id)
+		require.NoError(t, getErr)
+
+		return poster
+	}
+
+	require.EqualValues(t, 1, insert(confirmed, thisWeek, testPostedAt))
+	require.EqualValues(t, 1, insert(superseded, thisWeek, testPostedAt))
+
+	_, err = pool.Exec(ctx, `UPDATE schedule_posters SET image_data = NULL, image_mime = NULL`)
+	require.NoError(t, err)
+
+	before := posterOf(confirmed)
+	_, err = store.Confirm(ctx, before.ID, before.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
+	require.NoError(t, err)
+
+	before = posterOf(confirmed)
+	require.Equal(t, scheduleposter.ReviewExpired, posterOf(superseded).ReviewStatus, "같은 주 확정이 다른 후보를 만료시킨다")
+
+	require.Zero(t, insert(confirmed, thisWeek, testPostedAt.Add(time.Hour)), "확정된 주 안이라 새 후보는 넣지 않는다")
+	require.Zero(t, insert(superseded, thisWeek, testPostedAt.Add(time.Hour)))
+
+	stored, found, err := store.Image(ctx, before.ID)
+	require.NoError(t, err)
+	require.True(t, found, "그림이 없는 같은 썸네일 확정본은 수집한 그림으로 채운다")
+	require.Equal(t, thisWeek, stored)
+	require.Equal(t, before, posterOf(confirmed), "그림만 채우고 revision·상태는 바꾸지 않는다")
+
+	_, found, err = store.Image(ctx, posterOf(superseded).ID)
+	require.NoError(t, err)
+	require.False(t, found, "만료한 포스터는 채우지 않는다")
 }
 
 func TestStorePublishesLatestPostedPosterOfTheWeek(t *testing.T) {
