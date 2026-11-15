@@ -58,7 +58,7 @@ func onlyPendingRows(t *testing.T, store *scheduleposter.Store) scheduleposter.P
 func recordChat(t *testing.T, store *scheduleposter.Store, item scheduleposter.PendingRows) bool {
 	t.Helper()
 
-	recorded, err := store.RecordRows(t.Context(), item, []scheduleposter.Row{scheduleRow(t, "2026-11-10", "잡담")})
+	recorded, err := store.RecordRows(t.Context(), item, []scheduleposter.Row{scheduleRow(t, "2026-11-10", "잡담")}, 0)
 	require.NoError(t, err)
 
 	return recorded
@@ -126,7 +126,7 @@ func TestStoreRecordRowsStoresEveryColumn(t *testing.T) {
 		DoubtKo: "날짜 칸 겹침", Warnings: []string{"badge_shared", "title_guessed"},
 	}
 
-	recorded, err := store.RecordRows(ctx, item, []scheduleposter.Row{first, off})
+	recorded, err := store.RecordRows(ctx, item, []scheduleposter.Row{first, off}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -219,7 +219,7 @@ func TestStoreRecordRowsReplacesTheBundleWithoutTouchingRevision(t *testing.T) {
 	again := onlyPendingRows(t, store)
 	require.EqualValues(t, 2, again.RowsRevision)
 
-	recorded, err = store.RecordRows(ctx, again, []scheduleposter.Row{scheduleRow(t, "2026-11-13", "노래"), scheduleRow(t, "2026-11-14", "게임")})
+	recorded, err = store.RecordRows(ctx, again, []scheduleposter.Row{scheduleRow(t, "2026-11-13", "노래"), scheduleRow(t, "2026-11-14", "게임")}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -236,21 +236,28 @@ func TestStoreRecordRowsDiscardsResultsAfterWeekUpdate(t *testing.T) {
 	translation := confirmedPending(t, store)
 	item := onlyPendingRows(t, store)
 
-	require.True(t, recordChat(t, store, item))
+	recorded, err := store.RecordRows(ctx, item, []scheduleposter.Row{scheduleRow(t, "2026-11-10", "잡담")}, 1)
+	require.NoError(t, err)
+	require.True(t, recorded)
 
-	_, err := store.RecordTranslation(ctx, translation, testImage)
+	_, err = store.RecordTranslation(ctx, translation, testImage)
 	require.NoError(t, err)
 
 	_, err = store.UpdateWeek(ctx, 101, translation.Revision+1, date(t, "2026-11-16"), date(t, "2026-11-22"))
 	require.NoError(t, err)
 	require.Zero(t, poster101RowCount(t, pool), "틀린 주로 뽑은 날짜를 게시하지 않는다")
 
+	var shift int
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT rows_day_shift FROM schedule_posters WHERE id = 101`).Scan(&shift))
+	require.Zero(t, shift, "묶음을 지우면 하루 밀기 값도 되돌린다")
+
 	status, _, extractedAt := poster101RowsState(t, pool)
 	require.Equal(t, "pending", status)
 	require.Nil(t, extractedAt)
 	require.False(t, recordChat(t, store, item))
 
-	recorded, err := store.RecordRowsFailure(ctx, item, "translation_failed")
+	recorded, err = store.RecordRowsFailure(ctx, item, "translation_failed")
 	require.NoError(t, err)
 	require.False(t, recorded)
 
@@ -454,7 +461,7 @@ func TestStoreWeekTermsSkipsOwnPosterInSavedOrder(t *testing.T) {
 			rows = append(rows, row)
 		}
 
-		recorded, recordErr := store.RecordRows(ctx, byID[saved.id], rows)
+		recorded, recordErr := store.RecordRows(ctx, byID[saved.id], rows, 0)
 		require.NoError(t, recordErr)
 		require.True(t, recorded)
 	}
@@ -489,6 +496,8 @@ func TestValidateRowsRejectsWhatTheDatabaseRejects(t *testing.T) {
 		"장소 1001자":   func(r *scheduleposter.Row) { r.PlaceKo = strings.Repeat("a", 1001) },
 		"원문 1001자":   func(r *scheduleposter.Row) { r.SourceText = strings.Repeat("あ", 1001) },
 		"시간대 41자":    func(r *scheduleposter.Row) { r.TZ = strings.Repeat("a", 41) },
+		"원래 시간대 41자": func(r *scheduleposter.Row) { r.SourceZone = strings.Repeat("a", 41) },
+		"원래 시간대 NUL": func(r *scheduleposter.Row) { r.SourceZone = "P\x00T" },
 		"배지 41개":     func(r *scheduleposter.Row) { r.Badges = make([]string, 41) },
 		"참가자 41개":    func(r *scheduleposter.Row) { r.WithKo = make([]string, 41) },
 		"태그 41개":     func(r *scheduleposter.Row) { r.TagsKo = make([]string, 41) },
@@ -529,6 +538,7 @@ func TestStoreRecordRowsAcceptsTheDatabaseLimitsAndRejectsBeyondBeforeWriting(t 
 	edge.TitleKo = strings.Repeat("가", 1000)
 	edge.SourceText = strings.Repeat("あ", 1000)
 	edge.TZ = strings.Repeat("a", 40)
+	edge.SourceZone = strings.Repeat("a", 40)
 	edge.Badges = make([]string, 40)
 	edge.WithKo = make([]string, 40)
 	edge.TagsKo = make([]string, 40)
@@ -545,7 +555,7 @@ func TestStoreRecordRowsAcceptsTheDatabaseLimitsAndRejectsBeyondBeforeWriting(t 
 
 	over.TitleKo += "가"
 
-	recorded, err := store.RecordRows(ctx, item, append(rows[:scheduleposter.MaxRows-1:scheduleposter.MaxRows-1], over))
+	recorded, err := store.RecordRows(ctx, item, append(rows[:scheduleposter.MaxRows-1:scheduleposter.MaxRows-1], over), 0)
 	require.Error(t, err)
 	require.False(t, recorded)
 	require.Zero(t, poster101RowCount(t, pool))
@@ -553,7 +563,7 @@ func TestStoreRecordRowsAcceptsTheDatabaseLimitsAndRejectsBeyondBeforeWriting(t 
 	status, _, _ := poster101RowsState(t, pool)
 	require.Equal(t, "pending", status, "검증에 걸린 묶음은 상태도 바꾸지 않는다")
 
-	recorded, err = store.RecordRows(ctx, item, rows)
+	recorded, err = store.RecordRows(ctx, item, rows, 0)
 	require.NoError(t, err)
 	require.True(t, recorded, "DB는 Go 검증을 통과한 상한 값을 받는다")
 	require.Equal(t, scheduleposter.MaxRows, poster101RowCount(t, pool))
@@ -578,7 +588,7 @@ func TestStoreRecordRowsDateRangeMatchesTheDatabase(t *testing.T) {
 	first.Day = time.Date(1, time.January, 2, 0, 0, 0, 0, time.UTC)
 	last.Day = time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC)
 
-	recorded, err := store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{first, last})
+	recorded, err := store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{first, last}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded, "Go 검증이 받는 날짜 경계는 DB도 받는다")
 
@@ -609,7 +619,7 @@ func TestStoreRejectedPosterKeepsRowsHiddenAfterAnEarlierImageRejects(t *testing
 
 	row.Terms = []scheduleposter.Term{{Source: "ホロドリ", Ko: "홀로도리", Basis: "official_ko"}}
 
-	recorded, err := store.RecordRows(ctx, byID[101], []scheduleposter.Row{row})
+	recorded, err := store.RecordRows(ctx, byID[101], []scheduleposter.Row{row}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -664,4 +674,112 @@ func TestStorePublishedRowsFallsBackToAnOverlappingPosterWhileTheLatestHasNoRows
 
 	posterID, _ = publishedTitles(t, store, sophiaChannel, "2026-11-12")
 	require.Zero(t, posterID, "이전 확정본이 덮지 않는 날은 없음이다")
+}
+
+func TestStoreRecordRowsKeepsTheSourceZoneAndTheDayShift(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store, pool := newRowsStore(t)
+	translation := confirmedPending(t, store)
+	item := onlyPendingRows(t, store)
+	converted := scheduleRow(t, "2026-11-16", "잡담")
+
+	converted.SourceZone = "PT"
+
+	for _, shift := range []int{-2, 2} {
+		recorded, err := store.RecordRows(ctx, item, []scheduleposter.Row{converted}, shift)
+		require.Error(t, err, shift)
+		require.False(t, recorded)
+	}
+
+	recorded, err := store.RecordRows(ctx, item, []scheduleposter.Row{converted}, 1)
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	for day, want := range map[string]bool{"2026-11-09": false, "2026-11-10": true, "2026-11-16": true, "2026-11-17": false} {
+		schedule, found, publishedErr := store.PublishedRows(ctx, sophiaChannel, date(t, day))
+		require.NoError(t, publishedErr)
+		require.Equal(t, want, found, "!스케쥴은 하루 민 주 범위로 포스터를 고른다: %s", day)
+
+		if found {
+			require.Equal(t, 1, schedule.RowsDayShift)
+			require.Equal(t, "PT", schedule.Rows[0].SourceZone)
+			require.Equal(t, "JST", schedule.Rows[0].TZ)
+		}
+	}
+
+	_, err = store.RecordTranslation(ctx, translation, testImage)
+	require.NoError(t, err)
+
+	_, err = store.RequestTranslation(ctx, 101, translation.Revision+1)
+	require.NoError(t, err)
+
+	failed, err := store.RecordRowsFailure(ctx, onlyPendingRows(t, store), "extraction_failed")
+	require.NoError(t, err)
+	require.True(t, failed)
+
+	schedule, found, err := store.PublishedRows(ctx, sophiaChannel, date(t, "2026-11-16"))
+	require.NoError(t, err)
+	require.True(t, found, "실패 기록은 이전 묶음과 하루 밀기 값을 그대로 둔다")
+	require.Equal(t, 1, schedule.RowsDayShift)
+
+	poster, err := store.Get(ctx, 101)
+	require.NoError(t, err)
+
+	_, err = store.Reject(ctx, 101, poster.Revision)
+	require.NoError(t, err)
+
+	var shift int
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT rows_day_shift FROM schedule_posters WHERE id = 101`).Scan(&shift))
+	require.Zero(t, shift, "거절로 묶음을 지우면 하루 밀기 값도 되돌린다")
+}
+
+func TestStorePublishedRowsPrefersTheLaterPosterOfTheSameWeekWhateverTheDayShift(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store, pool := newRowsStore(t)
+
+	confirmedPending(t, store)
+
+	converted := scheduleRow(t, "2026-11-16", "원래 일정")
+
+	converted.SourceZone = "PT"
+
+	recorded, err := store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{converted}, 1)
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	insertConfirmed := func(id int64, start, end string, postedAt time.Time) {
+		_, execErr := pool.Exec(ctx, `INSERT INTO schedule_posters (id, channel_id, x_user_id, post_url, image_url, posted_at, text_excerpt,
+			review_status, week_start, week_end, reviewed_at, reviewed_by, translation_status)
+			VALUES ($1, $2, '1', 'https://x.com/i/status/1', 'https://pbs.twimg.com/media/b.jpg?name=orig', $3, '',
+			        'confirmed', $4, $5, now(), 'admin', 'pending')`, id, sophiaChannel, postedAt, start, end)
+		require.NoError(t, execErr)
+
+		pending, pendingErr := store.PendingRows(ctx, date(t, start), 10)
+		require.NoError(t, pendingErr)
+		require.Len(t, pending, 1)
+
+		recorded, recordErr := store.RecordRows(ctx, pending[0], []scheduleposter.Row{scheduleRow(t, start, strconv.FormatInt(id, 10))}, 0)
+		require.NoError(t, recordErr)
+		require.True(t, recorded)
+	}
+
+	insertConfirmed(501, "2026-11-09", "2026-11-15", testPostedAt.AddDate(0, 0, 1))
+	insertConfirmed(502, "2026-11-16", "2026-11-22", testPostedAt.AddDate(0, 0, 7))
+
+	for day, want := range map[string]int64{"2026-11-10": 501, "2026-11-15": 501, "2026-11-16": 502} {
+		posterID, _ := publishedTitles(t, store, sophiaChannel, day)
+		require.Equal(t, want, posterID, "같은 주의 늦게 올린 확정본과 다음 주 확정본이 하루 민 이전 확정본보다 앞선다: %s", day)
+	}
+
+	_, err = pool.Exec(ctx, `UPDATE schedule_posters SET review_status = 'rejected' WHERE id = 502`)
+	require.NoError(t, err)
+
+	posterID, titles := publishedTitles(t, store, sophiaChannel, "2026-11-16")
+	require.EqualValues(t, 101, posterID, "다음 주 확정본이 없으면 민 범위의 마지막 날은 하루 민 확정본이 덮는다")
+	require.Equal(t, []string{"원래 일정"}, titles)
 }

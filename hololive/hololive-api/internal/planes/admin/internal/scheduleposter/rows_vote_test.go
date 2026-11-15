@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -196,9 +197,11 @@ func TestExtractVotesCompareTimesAndZonesAsTheCardReadsThem(t *testing.T) {
 	t.Parallel()
 
 	early, padded, lower, bare := plannedRow, plannedRow, plannedRow, plannedRow
+	pacific, daylight, standard := plannedRow, plannedRow, plannedRow
 
 	early.Start, padded.Start, lower.Start, bare.Start = new("9:00"), new("09:00"), new("9:00"), new("9:00")
 	lower.TZ, bare.TZ = new("jst"), nil
+	pacific.TZ, daylight.TZ, standard.TZ = new("PT"), new("PDT"), new("pst")
 
 	for name, tc := range map[string]struct {
 		runs [][]extractedRow
@@ -206,12 +209,74 @@ func TestExtractVotesCompareTimesAndZonesAsTheCardReadsThem(t *testing.T) {
 	}{
 		"padded hour": {runs: [][]extractedRow{{early}, {padded}, {early}}, errs: []error{nil, nil, errBadRequest}},
 		"zone forms":  {runs: [][]extractedRow{{early}, {lower}, {bare}}},
+		"same place":  {runs: [][]extractedRow{{pacific}, {daylight}, {standard}}},
 	} {
 		model := &fakeRowModel{extracted: tc.runs, extractErrs: tc.errs, translated: [][]translatedRow{{chatRowKo}}}
 		store := recordVoted(t, model)
 
 		require.Len(t, store.recorded, 1, name)
 		require.Empty(t, store.recorded[0][0].Warnings, name)
+	}
+}
+
+func TestExtractVotesHoldARowWhoseRunsSplitOnTheZone(t *testing.T) {
+	t.Parallel()
+
+	pacific := plannedRow
+
+	pacific.TZ = new("PT")
+
+	store := recordVoted(t, &fakeRowModel{extracted: [][]extractedRow{{pacific}, {pacific}, {plannedRow}}, translated: [][]translatedRow{{chatRowKo}}})
+
+	require.Len(t, store.recorded, 1)
+	require.Equal(t, posterstore.RowTentative, store.recorded[0][0].Status)
+	require.Equal(t, "PT", store.recorded[0][0].SourceZone)
+	require.Equal(t, []string{"E10 실행 간 시간대 불일치: JST/PT/PT"}, store.recorded[0][0].Warnings)
+
+	store = recordVoted(t, &fakeRowModel{extracted: [][]extractedRow{{pacific}}, translated: [][]translatedRow{{chatRowKo}}})
+
+	require.Equal(t, posterstore.RowPlanned, store.recorded[0][0].Status)
+	require.Empty(t, store.recorded[0][0].Warnings)
+
+	untimed := plannedRow
+
+	untimed.Start = nil
+
+	untimedPacific := untimed
+
+	untimedPacific.TZ = new("PT")
+
+	store = recordVoted(t, &fakeRowModel{extracted: [][]extractedRow{{untimedPacific}, {untimedPacific}, {untimed}}, translated: [][]translatedRow{{chatRowKo}}})
+
+	require.Len(t, store.recorded, 1)
+	require.Equal(t, posterstore.RowPlanned, store.recorded[0][0].Status, "시각 없는 칸의 시간대는 저장 때 다른 칸을 따르므로 갈려도 단정을 풀지 않는다")
+	require.False(t, slices.ContainsFunc(store.recorded[0][0].Warnings, func(w string) bool { return strings.HasPrefix(w, "E10") }))
+}
+
+func TestExtractVotesKeepTheMostCommonZoneLabelOfTheAgreeingRuns(t *testing.T) {
+	t.Parallel()
+
+	korean, offset, bare := plannedRow, plannedRow, plannedRow
+
+	korean.TZ, offset.TZ, bare.TZ = new(koreanZoneLabel), new("UTC+9"), nil
+
+	for name, tc := range map[string]struct {
+		runs [][]extractedRow
+		want string
+	}{
+		"one korean":   {runs: [][]extractedRow{{korean}, {bare}, {plannedRow}}},
+		"one offset":   {runs: [][]extractedRow{{offset}, {bare}, {bare}}},
+		"tied":         {runs: [][]extractedRow{{korean}, {offset}, {bare}}},
+		"most korean":  {runs: [][]extractedRow{{bare}, {korean}, {korean}}, want: koreanZoneLabel},
+		"most offset":  {runs: [][]extractedRow{{offset}, {offset}, {plannedRow}}, want: "UTC+9"},
+		"only same in": {runs: [][]extractedRow{{korean}, {korean}, {korean}}, want: koreanZoneLabel},
+	} {
+		model := &fakeRowModel{extracted: tc.runs, translated: [][]translatedRow{{chatRowKo}}}
+		store := recordVoted(t, model)
+
+		require.Len(t, store.recorded, 1, name)
+		require.Equal(t, tc.want, store.recorded[0][0].SourceZone, name)
+		require.Equal(t, slotDay, store.recorded[0][0].Day.Format(time.DateOnly), name)
 	}
 }
 

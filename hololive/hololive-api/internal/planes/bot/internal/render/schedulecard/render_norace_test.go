@@ -74,6 +74,30 @@ func TestRenderChangeMarks(t *testing.T) {
 	}
 }
 
+func TestRenderFoldedConvertedItems(t *testing.T) {
+	items := append(sampleWeek(t),
+		Item{Day: date(t, "2026-11-08"), Start: "28:30", Status: StatusTentative, Title: "앞 주 심야", Converted: true},
+		Item{Day: date(t, "2026-11-16"), Start: "29:00", Status: StatusPlanned, Title: "다음 주 심야 콜라보", Converted: true},
+	)
+
+	for _, id := range themeChannels {
+		for _, f := range []Format{Format16x9, Format4x3, Format3x4} {
+			t.Run(id+"/"+string(f), func(t *testing.T) {
+				card := weekCard(t, items...)
+
+				card.ChannelID = id
+
+				raw, err := Render(card, f)
+				if err != nil {
+					t.Fatalf("Render() error = %v", err)
+				}
+
+				decodeCard(t, raw, f)
+			})
+		}
+	}
+}
+
 func hostileItems(t *testing.T) []Item {
 	t.Helper()
 

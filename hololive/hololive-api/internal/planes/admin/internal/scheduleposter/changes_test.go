@@ -491,8 +491,8 @@ func TestDetectChangesMakesNoModelCallsWithoutAMatchableSchedule(t *testing.T) {
 	t.Parallel()
 
 	for name, edit := range map[string]func(*fakeChangeStore){
-		"no schedule":  func(store *fakeChangeStore) { store.published = false },
-		"foreign zone": func(store *fakeChangeStore) { store.schedule.Rows[1].TZ = "PDT" },
+		"no schedule":    func(store *fakeChangeStore) { store.published = false },
+		"converted zone": func(store *fakeChangeStore) { store.schedule.Rows[1].SourceZone = "PDT" },
 	} {
 		f := newChangeFixture(postStatus(postA))
 

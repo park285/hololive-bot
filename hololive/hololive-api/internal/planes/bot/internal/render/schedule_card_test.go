@@ -99,7 +99,37 @@ func TestScheduleCardRendererCopiesRowsIntoCard(t *testing.T) {
 func scheduleItemEqual(a, b schedulecard.Item) bool {
 	return a.Day.Equal(b.Day) && a.Start == b.Start && a.End == b.End && a.Status == b.Status && a.Title == b.Title &&
 		slices.Equal(a.With, b.With) && a.Place == b.Place && slices.Equal(a.Tags, b.Tags) && a.Note == b.Note &&
-		a.PrevStart == b.PrevStart && a.MovedFrom.Equal(b.MovedFrom)
+		a.PrevStart == b.PrevStart && a.MovedFrom.Equal(b.MovedFrom) && a.Converted == b.Converted
+}
+
+func TestScheduleCardMovesTheWindowWithTheConvertedPoster(t *testing.T) {
+	schedule := scheduleposter.PublishedSchedule{
+		PosterID:     9,
+		WeekStart:    novemberDay(9),
+		WeekEnd:      novemberDay(15),
+		ExtractedAt:  novemberDay(9),
+		RowsDayShift: 1,
+		Rows: []scheduleposter.Row{
+			{Ordinal: 1, Day: novemberDay(10), Start: "12:00", TZ: "JST", SourceZone: "PT", Status: scheduleposter.RowPlanned, TitleKo: "잡담"},
+			{Ordinal: 2, Day: novemberDay(16), Start: "11:00", TZ: "JST", SourceZone: "PT", Status: scheduleposter.RowPlanned, TitleKo: "노래"},
+			{Ordinal: 3, Day: novemberDay(12), Start: "22:30", TZ: "JST", Status: scheduleposter.RowPlanned, TitleKo: "콜라보"},
+		},
+	}
+
+	card := newScheduleCard(scheduleCardMember(), schedule, nil)
+	if !card.WeekStart.Equal(novemberDay(10)) || !card.WeekEnd.Equal(novemberDay(16)) {
+		t.Fatalf("card week = %s..%s, want the poster week moved by one day", card.WeekStart, card.WeekEnd)
+	}
+
+	want := []schedulecard.Item{
+		{Day: novemberDay(10), Start: "12:00", Status: schedulecard.StatusPlanned, Title: "잡담", Converted: true},
+		{Day: novemberDay(16), Start: "11:00", Status: schedulecard.StatusPlanned, Title: "노래", Converted: true},
+		{Day: novemberDay(12), Start: "22:30", Status: schedulecard.StatusPlanned, Title: "콜라보"},
+	}
+
+	if !slices.EqualFunc(card.Items, want, scheduleItemEqual) {
+		t.Fatalf("card items = %+v, want %+v", card.Items, want)
+	}
 }
 
 func recordedChange(change scheduleposter.Change, recorded time.Time) scheduleposter.Change {

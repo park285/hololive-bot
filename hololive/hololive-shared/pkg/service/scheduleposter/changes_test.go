@@ -39,7 +39,7 @@ func newChangesStore(t *testing.T) (*scheduleposter.Store, *pgxpool.Pool, schedu
 
 	recorded, err := store.RecordRows(t.Context(), onlyPendingRows(t, store), []scheduleposter.Row{
 		scheduleRow(t, "2026-11-10", "잡담"), scheduleRow(t, "2026-11-11", "노래"), scheduleRow(t, "2026-11-12", "게임"),
-	})
+	}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -302,7 +302,7 @@ func TestStoreRecordMatchFollowsTheCurrentBundle(t *testing.T) {
 	require.Len(t, waiting.Changes, 2, "재추출을 기다리는 동안 이전 묶음과 그 변경을 게시한다")
 	require.Equal(t, []int64{15}, pendingPostIDs(t, store, waiting), "재추출을 기다리는 동안은 판별할 글만 고른다")
 
-	recorded, err = store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{scheduleRow(t, "2026-11-10", "잡담")})
+	recorded, err = store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{scheduleRow(t, "2026-11-10", "잡담")}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 
@@ -387,7 +387,7 @@ func TestStorePostsBeforeTheWeekStartDoNotMatchThePoster(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, recorded, "주 범위를 고친 뒤에는 옛 묶음으로 기록하지 않는다")
 
-	recorded, err = store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{scheduleRow(t, "2026-11-10", "잡담")})
+	recorded, err = store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{scheduleRow(t, "2026-11-10", "잡담")}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 

@@ -117,7 +117,7 @@ func voteRow(got []*extractedRow, runs int) extractedRow {
 		{"날짜", func(r *extractedRow) string { return r.Date }, func(from *extractedRow) { row.Date = from.Date }},
 		{"시작", func(r *extractedRow) string { return clockShown(r.Start) }, func(from *extractedRow) { row.Start = from.Start }},
 		{"끝", func(r *extractedRow) string { return clockShown(r.End) }, func(from *extractedRow) { row.End = from.End }},
-		{"시간대", func(r *extractedRow) string { return zoneKey(r.TZ) }, func(from *extractedRow) { row.TZ = from.TZ }},
+		{"시간대", func(r *extractedRow) string { return zoneKey(r.TZ) }, func(from *extractedRow) { row.TZ = votedZone(got, from) }},
 	}
 
 	for _, field := range fields {
@@ -129,6 +129,17 @@ func voteRow(got []*extractedRow, runs int) extractedRow {
 		}
 
 		field.set(got[slices.IndexFunc(got, func(r *extractedRow) bool { return field.value(r) == key })])
+	}
+
+	// 칸마다 고른 날짜·시작이 서로 다른 시간대로 읽은 실행에서 올 수 있어, 변환한 시각을 카드가 단정하지 않게 한다.
+	// 시각 없는 칸의 빈 시간대는 저장 때 시각 있는 칸을 따르므로 견주지 않는다.
+	timed := slices.DeleteFunc(slices.Clone(got), func(r *extractedRow) bool { return r.Start == nil })
+	if slices.ContainsFunc(timed, func(r *extractedRow) bool { return zoneKey(r.TZ) != zoneKey(timed[0].TZ) }) {
+		notes = append(notes, warning("E10 실행 간 시간대 불일치", shownValues(timed, func(r *extractedRow) string { return zoneKey(r.TZ) })))
+
+		if row.Status == posterstore.RowPlanned {
+			row.Status = posterstore.RowTentative
+		}
 	}
 
 	// 같은 조각(인원수 등)이 원문과 배지를 오가므로, 따로 고르면 조각이 양쪽에서 모두 사라질 수 있다.
@@ -234,13 +245,44 @@ func clockShown(clock *string) string {
 	return cmp.Or(clockKey(clock), "없음")
 }
 
-// zoneKey는 카드가 시간대가 없는 행도 JST로 읽으므로 없음과 JST 표기 차이를 같게 본다.
 func zoneKey(tz *string) string {
-	if zone := optional(tz); zone != "" && !strings.EqualFold(zone, "JST") {
-		return zone
+	zone, err := lookupZone(optional(tz))
+	if err != nil {
+		return optional(tz)
 	}
 
-	return "JST"
+	return zone.key
+}
+
+// key가 같아도 저장한 표기에 따라 바꾼 행인지와 변경 감지 건너뜀이 달라진다.
+func votedZone(got []*extractedRow, from *extractedRow) *string {
+	key := zoneKey(from.TZ)
+	best, bestCount, bestPlain := from, 0, false
+
+	for _, row := range got {
+		if zoneKey(row.TZ) != key {
+			continue
+		}
+
+		label := zoneLabel(row.TZ)
+		count := countFunc(got, func(other *extractedRow) bool { return zoneLabel(other.TZ) == label })
+
+		if plain := label == ""; count > bestCount || count == bestCount && plain && !bestPlain {
+			best, bestCount, bestPlain = row, count, plain
+		}
+	}
+
+	return best.TZ
+}
+
+func zoneLabel(tz *string) string {
+	label := strings.ToUpper(strings.TrimSpace(optional(tz)))
+
+	if zone, err := lookupZone(label); err == nil && !zone.converted {
+		return ""
+	}
+
+	return label
 }
 
 func mostCommon(got []*extractedRow, key func(*extractedRow) string) (*extractedRow, int) {

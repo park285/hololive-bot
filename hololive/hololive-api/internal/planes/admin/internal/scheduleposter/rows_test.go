@@ -32,6 +32,7 @@ type fakeRowStore struct {
 	recordErr error
 	today     []time.Time
 	recorded  [][]posterstore.Row
+	shifts    []int
 	failures  []string
 }
 
@@ -45,7 +46,7 @@ func (f *fakeRowStore) WeekTerms(context.Context, posterstore.PendingRows) ([]po
 	return f.terms, f.termsErr
 }
 
-func (f *fakeRowStore) RecordRows(_ context.Context, _ posterstore.PendingRows, rows []posterstore.Row) (bool, error) {
+func (f *fakeRowStore) RecordRows(_ context.Context, _ posterstore.PendingRows, rows []posterstore.Row, dayShift int) (bool, error) {
 	if f.recordErr != nil {
 		return false, f.recordErr
 	}
@@ -55,6 +56,7 @@ func (f *fakeRowStore) RecordRows(_ context.Context, _ posterstore.PendingRows, 
 	}
 
 	f.recorded = append(f.recorded, rows)
+	f.shifts = append(f.shifts, dayShift)
 
 	return true, nil
 }
@@ -407,15 +409,15 @@ func TestExtractPendingRowsRetriesOnlyTheFailureRecord(t *testing.T) {
 	require.Equal(t, []string{reasonNoRows}, store.failures)
 }
 
-func TestExtractPendingRowsRejectsZonesOtherThanJST(t *testing.T) {
+func TestExtractPendingRowsRejectsUnlistedZones(t *testing.T) {
 	t.Parallel()
 
-	pacific := plannedRow
+	india := plannedRow
 
-	pacific.TZ = new("PT")
+	india.TZ = new("IST")
 
 	store := &fakeRowStore{pending: []posterstore.PendingRows{week}}
-	model := &fakeRowModel{extracted: [][]extractedRow{{plannedRow, pacific}}}
+	model := &fakeRowModel{extracted: [][]extractedRow{{plannedRow, india}}}
 
 	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
 	require.Equal(t, extractRuns, model.extracts, "포스터에 인쇄된 시간대는 다시 뽑아도 같다")
@@ -424,7 +426,7 @@ func TestExtractPendingRowsRejectsZonesOtherThanJST(t *testing.T) {
 	require.Equal(t, []string{reasonUnsupportedZone}, store.failures)
 
 	store = &fakeRowStore{pending: []posterstore.PendingRows{week}}
-	model = &fakeRowModel{extracted: [][]extractedRow{{pacific}, {plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
+	model = &fakeRowModel{extracted: [][]extractedRow{{india}, {plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
 
 	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
 	require.Equal(t, extractRuns, model.extracts)
@@ -432,7 +434,7 @@ func TestExtractPendingRowsRejectsZonesOtherThanJST(t *testing.T) {
 	require.Empty(t, store.failures)
 
 	store = &fakeRowStore{pending: []posterstore.PendingRows{week}}
-	model = &fakeRowModel{extracted: [][]extractedRow{{pacific}, {plannedRow}, {plannedRow}}, extractErrs: []error{nil, errBadRequest}}
+	model = &fakeRowModel{extracted: [][]extractedRow{{india}, {plannedRow}, {plannedRow}}, extractErrs: []error{nil, errBadRequest}}
 
 	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
 	require.Equal(t, extractRuns, model.extracts)
@@ -448,6 +450,41 @@ func TestExtractPendingRowsRejectsZonesOtherThanJST(t *testing.T) {
 
 	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
 	require.Len(t, store.recorded, 1)
+	require.Equal(t, "jst", store.recorded[0][0].TZ, "JST 행은 추출한 값 그대로 저장한다")
+	require.Empty(t, store.recorded[0][0].SourceZone)
+	require.Equal(t, []int{0}, store.shifts)
+}
+
+func TestExtractPendingRowsConvertsListedZonesAfterTranslation(t *testing.T) {
+	t.Parallel()
+
+	pacific, off := plannedRow, offRow
+
+	pacific.TZ, off.TZ = new("PT"), new("PT")
+	off.Date = "2026-11-15"
+
+	store := &fakeRowStore{pending: []posterstore.PendingRows{week}}
+	model := &fakeRowModel{
+		extracted:  [][]extractedRow{{pacific, off}},
+		translated: [][]translatedRow{{chatRowKo, {Index: 2, TitleKo: "휴방"}}},
+	}
+
+	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.Empty(t, store.failures)
+	require.Len(t, model.prompts, 1)
+	require.Contains(t, model.prompts[0], "\nPoster time zone: PT\n", "번역은 포스터의 현지 값으로 한다")
+	require.Len(t, store.recorded, 1)
+
+	rows := store.recorded[0]
+
+	require.Equal(t, utcDate("2026-11-11"), rows[0].Day)
+	require.Equal(t, "14:00", rows[0].Start)
+	require.Equal(t, "JST", rows[0].TZ)
+	require.Equal(t, "PT", rows[0].SourceZone)
+	require.Empty(t, rows[0].Warnings)
+	require.Equal(t, utcDate("2026-11-16"), rows[1].Day, "시작 없는 행은 같은 포스터의 날짜 이동을 따른다")
+	require.Equal(t, "PT", rows[1].SourceZone)
+	require.Equal(t, []int{1}, store.shifts, "변환한 행이 가장 많이 드는 하루 민 창을 기록한다")
 }
 
 func TestExtractPendingRowsStoresOnlyVerifiedTerms(t *testing.T) {

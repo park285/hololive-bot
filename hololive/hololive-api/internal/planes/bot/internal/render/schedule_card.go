@@ -152,15 +152,16 @@ func newScheduleCard(member *domain.Member, schedule scheduleposter.PublishedSch
 		slot := &slots[i]
 
 		items[i] = schedulecard.Item{
-			Day:    slot.Day,
-			Start:  slot.Start,
-			End:    slot.End,
-			Status: schedulecard.Status(slot.Status),
-			Title:  slot.TitleKo,
-			With:   slot.WithKo,
-			Place:  slot.PlaceKo,
-			Tags:   slot.TagsKo,
-			Note:   slot.NoteKo,
+			Day:       slot.Day,
+			Start:     slot.Start,
+			End:       slot.End,
+			Converted: slot.SourceZone != "",
+			Status:    schedulecard.Status(slot.Status),
+			Title:     slot.TitleKo,
+			With:      slot.WithKo,
+			Place:     slot.PlaceKo,
+			Tags:      slot.TagsKo,
+			Note:      slot.NoteKo,
 		}
 
 		if slot.TimeChanged {
@@ -171,8 +172,8 @@ func newScheduleCard(member *domain.Member, schedule scheduleposter.PublishedSch
 	return schedulecard.Card{
 		ChannelID:   member.ChannelID,
 		MemberName:  member.DisplayName(),
-		WeekStart:   schedule.WeekStart,
-		WeekEnd:     schedule.WeekEnd,
+		WeekStart:   schedule.WeekStart.AddDate(0, 0, schedule.RowsDayShift),
+		WeekEnd:     schedule.WeekEnd.AddDate(0, 0, schedule.RowsDayShift),
 		ExtractedAt: schedule.UpdatedAt(),
 		Items:       items,
 		Photo:       photo,

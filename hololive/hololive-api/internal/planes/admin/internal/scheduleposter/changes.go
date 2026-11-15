@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/auth"
@@ -182,7 +181,8 @@ func (s *Service) detectTarget(ctx context.Context, target Target, today time.Ti
 		return "", nil
 	}
 
-	if slices.ContainsFunc(schedule.Rows, func(row posterstore.Row) bool { return row.TZ != "" && !strings.EqualFold(row.TZ, "JST") }) {
+	// JST로 바꾼 행은 글이 말하는 현지 시각과 대응할 수 없다.
+	if slices.ContainsFunc(schedule.Rows, func(row posterstore.Row) bool { return row.SourceZone != "" }) {
 		s.logger.Info("Schedule poster change detection skipped",
 			slog.String("channel_id", target.ChannelID), slog.String("reason", "unsupported_zone"))
 

@@ -196,7 +196,7 @@ func TestRowsRemovalWaitsForAConcurrentRecordRows(t *testing.T) {
 			go func() {
 				recorded, recordErr := store.RecordRows(ctx, pending, []Row{{
 					Day: start.AddDate(0, 0, 1), Status: RowPlanned, SourceText: "雑談", TitleKo: "잡담",
-				}})
+				}}, 0)
 				recordedCh <- recordOutcome{recorded, recordErr}
 			}()
 

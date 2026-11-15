@@ -178,6 +178,63 @@ func TestPrepareSkipsOutOfWeekRowsBeforeValidation(t *testing.T) {
 	}
 }
 
+func TestPrepareFoldsConvertedRowsOutsideTheWindowIntoTheEdgeDays(t *testing.T) {
+	converted := func(day, start, title string, status Status) Item {
+		return Item{Day: date(t, day), Start: start, Status: status, Title: title, Converted: true}
+	}
+
+	v, err := prepare(weekCard(t,
+		planned(t, "2026-11-09", "9:00", "첫날"),
+		converted("2026-11-08", "10:00", "앞 주", StatusPlanned),
+		converted("2026-11-07", "23:00", "앞앞 미정", StatusTentative),
+		converted("2026-11-07", "", "시각 없는 앞앞", StatusPlanned),
+		converted("2026-11-06", "10:00", "사흘 앞", StatusPlanned),
+		converted("2026-11-23", "10:00", "한 주 뒤", StatusPlanned),
+		converted("2026-11-10", at21, "안쪽", StatusPlanned),
+		planned(t, "2026-11-15", at22, "끝날"),
+		converted("2026-11-16", "25:00", "다음 주", StatusPlanned),
+		converted("2026-11-16", at20, "다음 주 취소", StatusCancelled),
+		converted("2026-11-16", "", "다음 주 휴방", StatusOff),
+		converted("2026-11-16", "21:00", "다음 주 휴방 시각", StatusOff),
+		planned(t, "2026-11-16", at20, "변환 안 한 다음 주"),
+	), everyRune)
+	if err != nil {
+		t.Fatalf("prepare() error = %v", err)
+	}
+
+	labels := func(d day) []string {
+		out := make([]string, 0, len(d.slots))
+
+		for _, s := range d.slots {
+			label, kind := timeLabel(s)
+
+			out = append(out, fmt.Sprintf("%s|%s|%d", s.main, label, kind))
+		}
+
+		return out
+	}
+
+	if got, want := labels(v.days[0]), []string{
+		fmt.Sprintf("앞앞 미정|토 23:00 ?|%d", timeUnsure),
+		fmt.Sprintf("앞 주|일 10:00|%d", timePlain),
+		fmt.Sprintf("첫날|09:00|%d", timePlain),
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("first day = %q, want %q (earlier rows first, each with its own weekday, untimed and far rows dropped)", got, want)
+	}
+
+	if got, want := labels(v.days[1]), []string{fmt.Sprintf("안쪽|21:00|%d", timePlain)}; !reflect.DeepEqual(got, want) {
+		t.Errorf("tuesday = %q, want %q (rows inside the window keep their day)", got, want)
+	}
+
+	if got, want := labels(v.days[6]), []string{
+		fmt.Sprintf("끝날|22:00|%d", timePlain),
+		fmt.Sprintf("다음 주 취소|월 20:00|%d", timeCancelled),
+		fmt.Sprintf("다음 주|월 25:00|%d", timePlain),
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("last day = %q, want %q (later rows last; unconverted, untimed, off and far rows dropped)", got, want)
+	}
+}
+
 func TestPrepareMergesOffOnlyDay(t *testing.T) {
 	off := Item{Day: date(t, "2026-11-10"), Status: StatusOff}
 

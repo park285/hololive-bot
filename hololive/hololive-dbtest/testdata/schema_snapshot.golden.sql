@@ -538,6 +538,7 @@ TABLE schedule_poster_rows
   COLUMN start_time text
   COLUMN end_time text
   COLUMN tz text NOT NULL DEFAULT ''::text
+  COLUMN source_zone text NOT NULL DEFAULT ''::text
   COLUMN status text NOT NULL
   COLUMN source_text text NOT NULL
   COLUMN badges text[] NOT NULL DEFAULT '{}'::text[]
@@ -552,7 +553,7 @@ TABLE schedule_poster_rows
   CONSTRAINT chk_schedule_poster_rows_lists CHECK (((cardinality(badges) <= 40) AND (cardinality(with_ko) <= 40) AND (cardinality(tags_ko) <= 40) AND (cardinality(warnings) <= 40) AND (jsonb_typeof(terms) = 'array'::text)))
   CONSTRAINT chk_schedule_poster_rows_ordinal CHECK (((ordinal >= 1) AND (ordinal <= 100)))
   CONSTRAINT chk_schedule_poster_rows_status_vocab CHECK ((status = ANY (ARRAY['planned'::text, 'tentative'::text, 'cancelled'::text, 'off'::text])))
-  CONSTRAINT chk_schedule_poster_rows_text CHECK ((((char_length(source_text) >= 1) AND (char_length(source_text) <= 1000)) AND ((char_length(title_ko) >= 1) AND (char_length(title_ko) <= 1000)) AND (char_length(place_ko) <= 1000) AND (char_length(note_ko) <= 1000) AND (char_length(doubt_ko) <= 1000) AND (char_length(tz) <= 40)))
+  CONSTRAINT chk_schedule_poster_rows_text CHECK ((((char_length(source_text) >= 1) AND (char_length(source_text) <= 1000)) AND ((char_length(title_ko) >= 1) AND (char_length(title_ko) <= 1000)) AND (char_length(place_ko) <= 1000) AND (char_length(note_ko) <= 1000) AND (char_length(doubt_ko) <= 1000) AND (char_length(tz) <= 40) AND (char_length(source_zone) <= 40)))
   CONSTRAINT chk_schedule_poster_rows_time CHECK ((((start_time IS NULL) OR (start_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text)) AND ((end_time IS NULL) OR (end_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text))))
   CONSTRAINT fk_schedule_poster_rows_poster FOREIGN KEY (poster_id) REFERENCES schedule_posters(id) ON DELETE CASCADE
   CONSTRAINT schedule_poster_rows_pkey PRIMARY KEY (poster_id, ordinal)
@@ -589,11 +590,13 @@ TABLE schedule_posters
   COLUMN rows_error text NOT NULL DEFAULT ''::text
   COLUMN rows_extracted_at timestamp with time zone
   COLUMN rows_revision bigint NOT NULL DEFAULT 1
+  COLUMN rows_day_shift smallint NOT NULL DEFAULT 0
   CONSTRAINT chk_schedule_posters_confirmed_week CHECK (((review_status <> 'confirmed'::text) OR (week_start IS NOT NULL)))
   CONSTRAINT chk_schedule_posters_id_positive CHECK ((id > 0))
   CONSTRAINT chk_schedule_posters_review_request_reason CHECK (((review_request_reason IS NULL) OR ((review_requested_at IS NOT NULL) AND (review_request_reason = ANY (ARRAY['uncertain'::text, 'unjudgeable'::text, 'image_changed'::text, 'period_unread'::text, 'week_rejected'::text, 'week_overlapping'::text, 'stale'::text, 'auto_review_off'::text])))))
   CONSTRAINT chk_schedule_posters_review_status_vocab CHECK ((review_status = ANY (ARRAY['pending_review'::text, 'confirmed'::text, 'rejected'::text, 'expired'::text])))
   CONSTRAINT chk_schedule_posters_reviewed_by CHECK (((reviewed_by IS NULL) OR (reviewed_by = ANY (ARRAY['auto'::text, 'admin'::text]))))
+  CONSTRAINT chk_schedule_posters_rows_day_shift CHECK (((rows_day_shift >= '-1'::integer) AND (rows_day_shift <= 1)))
   CONSTRAINT chk_schedule_posters_rows_extracted CHECK (((rows_status <> 'succeeded'::text) OR (rows_extracted_at IS NOT NULL)))
   CONSTRAINT chk_schedule_posters_rows_status_vocab CHECK ((rows_status = ANY (ARRAY['pending'::text, 'succeeded'::text, 'failed'::text])))
   CONSTRAINT chk_schedule_posters_source CHECK ((((source = 'x'::text) AND (x_user_id <> ''::text) AND (post_url ~ '^https://x\.com/i/status/[1-9][0-9]*$'::text) AND (image_url ~~ 'https://pbs.twimg.com/%'::text) AND (image_sha256 IS NULL)) OR ((source = 'youtube_community'::text) AND (x_user_id = ''::text) AND (post_url ~ '^https://www\.youtube\.com/post/[A-Za-z0-9_-]+$'::text) AND (image_url ~~ 'https://yt3.ggpht.com/%'::text) AND (image_sha256 IS NULL)) OR ((source = 'youtube_thumbnail'::text) AND (x_user_id = ''::text) AND (post_url ~ '^https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}$'::text) AND (image_url = (('https://i.ytimg.com/vi/'::text || substr(post_url, 33)) || '/maxresdefault.jpg'::text)) AND (image_sha256 IS NOT NULL) AND (image_sha256 ~ '^[0-9a-f]{64}$'::text))))

@@ -28,8 +28,8 @@ const (
 
 var termBases = []string{"official_ko", "translated", "transliterated"}
 
-// 카드는 시간대를 그리지 않고 시각을 JST로 읽는다.
-var errUnsupportedZone = errors.New("extracted row has a time zone other than JST")
+// 카드는 시간대를 그리지 않고 시각을 JST로 읽으므로, JST로 바꿀 수 없는 시간대의 행은 저장하지 않는다.
+var errUnsupportedZone = errors.New("extracted row has a time zone that cannot be converted to JST")
 
 var (
 	rowClockPattern = regexp.MustCompile(`^([012]?\d):([0-5]\d)$`)
@@ -90,8 +90,10 @@ func validateExtracted(rows []extractedRow) ([]posterstore.Row, error) {
 		return nil, fmt.Errorf("check extracted rows: %w", err)
 	}
 
-	if i := slices.IndexFunc(records, func(row posterstore.Row) bool { return row.TZ != "" && !strings.EqualFold(row.TZ, "JST") }); i >= 0 {
-		return nil, fmt.Errorf("extracted row %d: zone %q: %w", i+1, clip(records[i].TZ), errUnsupportedZone)
+	for i := range records {
+		if _, err := lookupZone(records[i].TZ); err != nil {
+			return nil, fmt.Errorf("extracted row %d: zone %q: %w", i+1, clip(records[i].TZ), err)
+		}
 	}
 
 	return records, nil

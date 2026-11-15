@@ -44,19 +44,24 @@ func TestSchedulePosterRowsMigrationAddsTheAliasOnceAndPendsConfirmedPosters(t *
 		aliases     int
 		status      string
 		rowRevision int64
+		dayShift    int
 	)
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM members, jsonb_array_elements_text(aliases -> 'ja') AS alias
 		WHERE slug = 'asobi-mawaritai' AND alias = 'アソビ隊'`).Scan(&aliases))
 	require.Equal(t, 1, aliases, "다시 적용해도 별칭을 두 번 넣지 않는다")
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT rows_status, rows_revision FROM schedule_posters WHERE id = 1`).Scan(&status, &rowRevision))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT rows_status, rows_revision, rows_day_shift FROM schedule_posters WHERE id = 1`).
+		Scan(&status, &rowRevision, &dayShift))
 	require.Equal(t, "pending", status, "이미 확정한 포스터도 추출 대상이 된다")
 	require.EqualValues(t, 1, rowRevision)
+	require.Zero(t, dayShift)
 
 	for name, update := range map[string]string{
 		"모르는 추출 상태":   `UPDATE schedule_posters SET rows_status = 'done' WHERE id = 1`,
 		"저장 시각 없는 성공": `UPDATE schedule_posters SET rows_status = 'succeeded' WHERE id = 1`,
+		"이틀 밀기":       `UPDATE schedule_posters SET rows_day_shift = 2 WHERE id = 1`,
+		"이틀 당기기":      `UPDATE schedule_posters SET rows_day_shift = -2 WHERE id = 1`,
 	} {
 		_, err := pool.Exec(ctx, update)
 		require.Error(t, err, name)
@@ -202,10 +207,11 @@ func TestSchedulePosterRowsMigrationRejectsRowsOutsideTheLimits(t *testing.T) {
 	pool := newSchedulePosterRowsPool(t)
 	ctx := t.Context()
 
-	const row = `INSERT INTO schedule_poster_rows (poster_id, ordinal, day, start_time, end_time, tz, status, source_text, title_ko, badges, terms)
-		VALUES ($1, $2, '2026-11-10', $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`
+	const row = `INSERT INTO schedule_poster_rows (poster_id, ordinal, day, start_time, end_time, tz, status, source_text, title_ko, badges, terms,
+		source_zone)
+		VALUES ($1, $2, '2026-11-10', $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)`
 
-	valid := []any{1, 1, "25:30", nil, "JST", "planned", "歌枠", "노래", []string{"コラボ"}, `[]`}
+	valid := []any{1, 1, "25:30", nil, "JST", "planned", "歌枠", "노래", []string{"コラボ"}, `[]`, "PDT"}
 
 	for name, change := range map[string]func(args []any){
 		"없는 포스터":       func(args []any) { args[0] = 99 },
@@ -221,6 +227,7 @@ func TestSchedulePosterRowsMigrationRejectsRowsOutsideTheLimits(t *testing.T) {
 		"제목 1001자":     func(args []any) { args[7] = strings.Repeat("가", 1001) },
 		"배지 41개":       func(args []any) { args[8] = make([]string, 41) },
 		"배열이 아닌 terms": func(args []any) { args[9] = `{}` },
+		"원래 시간대 41자":   func(args []any) { args[10] = strings.Repeat("a", 41) },
 	} {
 		args := append([]any(nil), valid...)
 		change(args)

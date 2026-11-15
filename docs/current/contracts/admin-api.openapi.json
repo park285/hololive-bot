@@ -1150,7 +1150,7 @@
               "no_rows",
               "unsupported_zone"
             ],
-            "description": "마지막 행 추출 실패 사유입니다. source_unavailable(원본을 받지 못했거나 썸네일 그림이 수집 때와 다름), extraction_failed, translation_failed, no_rows(일정 칸이 없는 그림), unsupported_zone(JST가 아닌 시간대의 행). 실패가 아니면 빈 문자열입니다. 확정본이 아니면 뜻이 없습니다."
+            "description": "마지막 행 추출 실패 사유입니다. source_unavailable(원본을 받지 못했거나 썸네일 그림이 수집 때와 다름), extraction_failed, translation_failed, no_rows(일정 칸이 없는 그림), unsupported_zone(JST로 바꿀 수 없는 시간대의 행). 실패가 아니면 빈 문자열입니다. 확정본이 아니면 뜻이 없습니다."
           },
           "rowsExtractedAt": {
             "type": [

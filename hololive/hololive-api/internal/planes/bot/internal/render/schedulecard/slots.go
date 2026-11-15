@@ -28,6 +28,7 @@ const (
 	maxTagsShown = 3
 
 	maxSlotsPerDay = 5
+	maxFoldDays    = 2
 
 	othersMarker = "그 외 참가자"
 
@@ -80,8 +81,8 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 	for i := range card.Items {
 		it := &card.Items[i]
 
-		d := civil(it.Day)
-		if d.Before(start) || d.After(end) {
+		edge, ok := cardDay(it, start, end)
+		if !ok {
 			continue
 		}
 
@@ -90,7 +91,13 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 			return view{}, fmt.Errorf("%w: item %d: %w", ErrInvalidCard, i+1, err)
 		}
 
-		idx := int(d.Sub(start).Hours() / 24)
+		if d := civil(it.Day); !d.Equal(edge) {
+			s.start = dowKO[weekday(d)] + " " + s.start
+
+			s.minutes += int(d.Sub(edge).Minutes())
+		}
+
+		idx := int(edge.Sub(start).Hours() / 24)
 
 		days[idx].slots = append(days[idx].slots, s)
 	}
@@ -106,6 +113,25 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 		days:    days,
 		photo:   usablePhoto(card.Photo),
 	}, nil
+}
+
+// cardDay는 주 범위 밖의 변환 항목을 가까운 끝 날 칸에 둔다. 요일을 붙일 시각이 없는 항목은 다른 날 칸에서 그날 일정으로 읽히므로 버린다.
+// 변환과 창 이동이 각각 하루씩 밀 수 있어 창에서 이틀 안의 항목만 접고, 더 먼 항목은 요일이 겹쳐 끝 날 일정으로 읽히므로 버린다.
+func cardDay(it *Item, start, end time.Time) (time.Time, bool) {
+	d := civil(it.Day)
+
+	switch {
+	case !d.Before(start) && !d.After(end):
+		return d, true
+	case !it.Converted || it.Start == "" || it.Status == StatusOff:
+		return time.Time{}, false
+	case d.Before(start) && !d.Before(start.AddDate(0, 0, -maxFoldDays)):
+		return start, true
+	case d.After(end) && !d.After(end.AddDate(0, 0, maxFoldDays)):
+		return end, true
+	default:
+		return time.Time{}, false
+	}
 }
 
 func civil(t time.Time) time.Time {

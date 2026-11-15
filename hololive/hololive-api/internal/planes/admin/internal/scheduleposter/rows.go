@@ -40,7 +40,7 @@ const (
 type rowStore interface {
 	PendingRows(ctx context.Context, today time.Time, limit int) ([]posterstore.PendingRows, error)
 	WeekTerms(ctx context.Context, item posterstore.PendingRows) ([]posterstore.Term, error)
-	RecordRows(ctx context.Context, item posterstore.PendingRows, rows []posterstore.Row) (bool, error)
+	RecordRows(ctx context.Context, item posterstore.PendingRows, rows []posterstore.Row, dayShift int) (bool, error)
 	RecordRowsFailure(ctx context.Context, item posterstore.PendingRows, reason string) (bool, error)
 }
 
@@ -65,8 +65,9 @@ func newRowsLoopState(config RowsConfig) rowsLoopState {
 }
 
 type rowsResult struct {
-	rows   []posterstore.Row
-	reason string
+	rows     []posterstore.Row
+	dayShift int
+	reason   string
 }
 
 func pendingRowsKey(item posterstore.PendingRows) rowsKey {
@@ -107,7 +108,7 @@ func (s *Service) extractPendingRows(ctx context.Context) error {
 		result, done := s.rowsLoop.done[key]
 		if !done {
 			posterCtx, cancel := context.WithTimeout(ctx, s.rowsLoop.budget)
-			rows, reason, err := s.extractOne(posterCtx, item, members, named)
+			rows, dayShift, reason, err := s.extractOne(posterCtx, item, members, named)
 
 			cancel()
 
@@ -128,7 +129,7 @@ func (s *Service) extractPendingRows(ctx context.Context) error {
 					slog.Int64("poster_id", item.ID), slog.String("reason", reason), slog.Any("error", err))
 			}
 
-			result = rowsResult{rows: rows, reason: reason}
+			result = rowsResult{rows: rows, dayShift: dayShift, reason: reason}
 			s.rowsLoop.done[key] = result
 		}
 
@@ -153,7 +154,7 @@ func (s *Service) recordRows(ctx context.Context, item posterstore.PendingRows, 
 	if result.reason != "" {
 		recorded, err = s.rows.RecordRowsFailure(ctx, item, result.reason)
 	} else {
-		recorded, err = s.rows.RecordRows(ctx, item, result.rows)
+		recorded, err = s.rows.RecordRows(ctx, item, result.rows, result.dayShift)
 	}
 
 	if err != nil {
@@ -179,39 +180,40 @@ func (s *Service) recordRows(ctx context.Context, item posterstore.PendingRows, 
 }
 
 // extractOne의 reason이 비어 있는 오류는 저장소 오류라 기록하지 않고 대기 상태로 둔다.
+// 추출 경고와 번역은 포스터의 현지 날짜·시각으로 하고, 저장할 행만 JST로 바꾼다. 검증 하니스와 같은 입력을 쓰기 위해서다.
 func (s *Service) extractOne(
 	ctx context.Context, item posterstore.PendingRows, members, named []*domain.Member,
-) ([]posterstore.Row, string, error) {
+) ([]posterstore.Row, int, string, error) {
 	original, err := s.sources.image(ctx, item.ImageURL)
 	if err != nil {
-		return nil, reasonSourceUnavailable, err
+		return nil, 0, reasonSourceUnavailable, err
 	}
 
 	if item.ImageSHA256 != "" && imageSHA256(original.Data) != item.ImageSHA256 {
-		return nil, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
+		return nil, 0, reasonSourceUnavailable, errors.New("poster image changed after it was collected")
 	}
 
 	owner, ok := posterOwner(item.ChannelID, members)
 	if !ok {
-		return nil, reasonTranslationFailed, errors.New("poster owner is not in members")
+		return nil, 0, reasonTranslationFailed, errors.New("poster owner is not in members")
 	}
 
 	terms, err := s.rows.WeekTerms(ctx, item)
 	if err != nil {
-		return nil, "", fmt.Errorf("load schedule poster week terms: %w", err)
+		return nil, 0, "", fmt.Errorf("load schedule poster week terms: %w", err)
 	}
 
 	extracted, base, err := s.extractRows(ctx, item, original, buildExtractPrompt(item.WeekStart, item.WeekEnd, named))
 	if errors.Is(err, errUnsupportedZone) {
-		return nil, reasonUnsupportedZone, err
+		return nil, 0, reasonUnsupportedZone, err
 	}
 
 	if err != nil {
-		return nil, reasonExtractionFailed, err
+		return nil, 0, reasonExtractionFailed, err
 	}
 
 	if len(extracted) == 0 {
-		return nil, reasonNoRows, errors.New("poster has no schedule rows")
+		return nil, 0, reasonNoRows, errors.New("poster has no schedule rows")
 	}
 
 	zones := make([]string, len(extracted))
@@ -223,10 +225,15 @@ func (s *Service) extractOne(
 
 	rows, err := s.translateRows(ctx, item, extracted, base, prompt, newRowChecker(owner, named))
 	if err != nil {
-		return nil, reasonTranslationFailed, err
+		return nil, 0, reasonTranslationFailed, err
 	}
 
-	return rows, "", nil
+	rows, posterShift, err := toJSTRows(rows)
+	if err != nil {
+		return nil, 0, reasonExtractionFailed, err
+	}
+
+	return rows, rowsDayShift(rows, item.WeekStart, item.WeekEnd, posterShift), "", nil
 }
 
 func (s *Service) extractRows(
@@ -279,7 +286,7 @@ func (s *Service) extractOnce(ctx context.Context, item posterstore.PendingRows,
 	var rows []extractedRow
 
 	options := s.retryOptions(item.ID, stageRowsExtract)
-	// JST가 아닌 시간대는 포스터에 인쇄된 값이라 다시 뽑아도 같게 나온다.
+	// 표에 없는 시간대는 포스터에 인쇄된 값이라 다시 뽑아도 같게 나온다.
 	options.ShouldRetry = func(err error) bool {
 		return !errors.Is(err, errUnsupportedZone) && retryableTranslationError(err)
 	}

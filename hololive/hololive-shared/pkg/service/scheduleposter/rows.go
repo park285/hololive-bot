@@ -39,6 +39,8 @@ const (
 	maxRowTextChars = 1000
 	maxRowTZChars   = 40
 	maxRowListItems = 40
+	// 하루 밀기 값의 상한이며 migration 019의 rows_day_shift CHECK와 같다.
+	maxRowsDayShift = 1
 )
 
 var rowTimePattern = regexp.MustCompile(`^([01]?\d|2\d):[0-5]\d$`)
@@ -50,7 +52,8 @@ type Term struct {
 	Basis  string `json:"basis"`
 }
 
-// Row는 포스터의 일정 한 칸이다. Start·End는 포스터에 적힌 "HH:MM"(심야 표기는 29:59까지)이고 없으면 빈 문자열이다.
+// Row는 포스터의 일정 한 칸이다. Day·Start·End는 JST 날짜와 "HH:MM"(심야 표기는 29:59까지)이고 시각이 없으면 빈 문자열이다.
+// JST가 아닌 포스터의 행은 JST로 바꿔 TZ를 "JST"로, SourceZone을 포스터에 적힌 시간대로 둔다. JST 행의 SourceZone은 비어 있다.
 // PublishedRows는 Terms, DoubtKo, Warnings를 비운다.
 type Row struct {
 	// Ordinal은 RecordRows가 묶음 안 순서대로 1부터 매긴다.
@@ -60,6 +63,7 @@ type Row struct {
 	Start      string    `json:"start_time"`
 	End        string    `json:"end_time"`
 	TZ         string    `json:"tz"`
+	SourceZone string    `json:"source_zone"`
 	Status     RowStatus `json:"status"`
 	SourceText string    `json:"source_text"`
 	Badges     []string  `json:"badges"`
@@ -95,7 +99,9 @@ type PublishedSchedule struct {
 	PostedAt    time.Time
 	// RowsPending은 재번역이 예약돼 행 묶음이 바뀔 예정이라는 뜻이다. 그동안 새 글을 대응하지 않는다.
 	RowsPending bool
-	Rows        []Row
+	// RowsDayShift는 행 묶음의 JST 날짜가 주 범위보다 며칠 밀렸는지(-1..1)다. 게시 범위와 카드 창은 주 범위를 이만큼 민다.
+	RowsDayShift int
+	Rows         []Row
 	// Changes는 현재 행 묶음에 대응한 글의 변경 가운데 거절(rejected)을 뺀 것이다. 같음(same)은 Applied가 아니다.
 	Changes []Change
 }
@@ -155,9 +161,13 @@ func (s *Store) WeekTerms(ctx context.Context, item PendingRows) ([]Term, error)
 	return terms, nil
 }
 
-// RecordRows는 이전 행 묶음을 새 묶음으로 바꾼다. 묶음이 ValidateRows를 통과하지 못하면 오류이고, 그 사이 거절·주 범위 수정·
-// 재추출 예약으로 대상이 달라졌으면 아무것도 바꾸지 않고 false를 돌려준다.
-func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row) (bool, error) {
+// RecordRows는 이전 행 묶음과 그 하루 밀기 값(PublishedSchedule.RowsDayShift)을 새 값으로 바꾼다. 묶음이 ValidateRows를 통과하지
+// 못하거나 dayShift가 -1..1 밖이면 오류이고, 그 사이 거절·주 범위 수정·재추출 예약으로 대상이 달라졌으면 아무것도 바꾸지 않고 false를 돌려준다.
+func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, dayShift int) (bool, error) {
+	if dayShift < -maxRowsDayShift || dayShift > maxRowsDayShift {
+		return false, fmt.Errorf("record schedule poster rows: day shift %d is outside -%d..%d", dayShift, maxRowsDayShift, maxRowsDayShift)
+	}
+
 	payload, err := encodeRows(rows)
 	if err != nil {
 		return false, fmt.Errorf("record schedule poster rows: %w", err)
@@ -166,7 +176,7 @@ func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row) (b
 	recorded := false
 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		tag, markErr := tx.Exec(ctx, recordRowsSQL, item.ID, item.RowsRevision)
+		tag, markErr := tx.Exec(ctx, recordRowsSQL, item.ID, item.RowsRevision, dayShift)
 		if markErr != nil {
 			return fmt.Errorf("mark rows extracted: %w", markErr)
 		}
@@ -236,6 +246,7 @@ func (r *Row) validate() error {
 		{"note_ko", r.NoteKo, 0, maxRowTextChars},
 		{"doubt_ko", r.DoubtKo, 0, maxRowTextChars},
 		{"tz", r.TZ, 0, maxRowTZChars},
+		{"source_zone", r.SourceZone, 0, maxRowTZChars},
 	} {
 		if n := utf8.RuneCountInString(field.value); n < field.min || n > field.max {
 			return fmt.Errorf("%s must be %d..%d characters, got %d", field.name, field.min, field.max, n)
@@ -256,7 +267,7 @@ func (r *Row) validate() error {
 }
 
 func (r *Row) storable() bool {
-	texts := []string{r.Start, r.End, r.TZ, r.SourceText, r.TitleKo, r.PlaceKo, r.NoteKo, r.DoubtKo}
+	texts := []string{r.Start, r.End, r.TZ, r.SourceZone, r.SourceText, r.TitleKo, r.PlaceKo, r.NoteKo, r.DoubtKo}
 	for _, list := range [][]string{r.Badges, r.WithKo, r.TagsKo, r.Warnings} {
 		texts = append(texts, list...)
 	}
@@ -310,7 +321,8 @@ func (s *Store) RecordRowsFailure(ctx context.Context, item PendingRows, reason 
 	return tag.RowsAffected() == 1, nil
 }
 
-// PublishedRows의 day는 JST 날짜다. PublishedImage와 같은 기준으로 확정본 하나를 고르고, 행을 저장한 적이 없으면 false다.
+// PublishedRows의 day는 JST 날짜다. 주 범위를 RowsDayShift만큼 민 범위로 PublishedImage와 같은 기준의 확정본 하나를 고르고,
+// 행을 저장한 적이 없으면 false다.
 // 행과 그 묶음의 반영 변경은 한 snapshot에서 읽어, 묶음이 바뀌는 중에도 다른 묶음의 변경이 섞이지 않는다.
 func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Time) (PublishedSchedule, bool, error) {
 	var schedule PublishedSchedule
@@ -325,8 +337,8 @@ func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Ti
 			var item Row
 
 			scanErr := row.Scan(&schedule.PosterID, &schedule.WeekStart, &schedule.WeekEnd, &schedule.ExtractedAt,
-				&schedule.PostedAt, &schedule.RowsPending,
-				&item.Ordinal, &item.Day, &item.Start, &item.End, &item.TZ, &item.Status, &item.SourceText, &item.Badges,
+				&schedule.PostedAt, &schedule.RowsPending, &schedule.RowsDayShift,
+				&item.Ordinal, &item.Day, &item.Start, &item.End, &item.TZ, &item.SourceZone, &item.Status, &item.SourceText, &item.Badges,
 				&item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo)
 
 			return item, scanErr

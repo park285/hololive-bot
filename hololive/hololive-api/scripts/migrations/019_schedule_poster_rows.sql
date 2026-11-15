@@ -5,6 +5,8 @@
 -- rows_revision은 재추출 예약·주 범위 수정·거절마다 오르고, 추출 결과는 읽었을 때와 같을 때만 기록한다.
 -- rows_extracted_at은 행 묶음을 마지막으로 저장한 시각이다. 재추출을 예약하거나 재추출이 실패해도 이전 묶음과 함께 남아 계속 게시된다.
 -- start_time·end_time은 포스터에 적힌 24시 넘는 시각(25:00, 29:59까지)을 그대로 두려고 text다.
+-- JST가 아닌 포스터의 행은 day·start_time·end_time을 JST로 바꿔 tz를 'JST'로, source_zone을 포스터에 적힌 시간대로 저장한다.
+-- rows_day_shift(-1..1)는 그렇게 바꾼 행 묶음이 주 범위보다 며칠 밀렸는지이며 행 묶음과 같은 트랜잭션에서 쓰고, 묶음을 지우면 0으로 돌린다.
 -- アソビ隊는 포스터가 쓰는 유닛 약칭이다. 번역 이름표가 별칭으로 읽는다.
 -- IRyS의 비어 있던 korean_name을 짧은 이름과 같은 표기로 채운다. 번역 이름표는 한국어 이름이 빈 멤버를 빼고, 이미 값이 있으면 덮지 않는다.
 -- 이름이 앞에 오는 멤버 12명의 short_korean_name이 성으로 들어가 있어 이름으로 고친다. 지금 값이 그 옛 값일 때만 바꿔 운영자가 고친 값은 덮지 않는다.
@@ -18,6 +20,7 @@ ALTER TABLE public.schedule_posters ADD COLUMN IF NOT EXISTS rows_status text DE
 ALTER TABLE public.schedule_posters ADD COLUMN IF NOT EXISTS rows_error text DEFAULT ''::text NOT NULL;
 ALTER TABLE public.schedule_posters ADD COLUMN IF NOT EXISTS rows_extracted_at timestamp with time zone;
 ALTER TABLE public.schedule_posters ADD COLUMN IF NOT EXISTS rows_revision bigint DEFAULT 1 NOT NULL;
+ALTER TABLE public.schedule_posters ADD COLUMN IF NOT EXISTS rows_day_shift smallint DEFAULT 0 NOT NULL;
 ALTER TABLE public.schedule_posters DROP CONSTRAINT IF EXISTS chk_schedule_posters_rows_status_vocab;
 ALTER TABLE public.schedule_posters ADD CONSTRAINT chk_schedule_posters_rows_status_vocab CHECK (
     rows_status IN ('pending', 'succeeded', 'failed')
@@ -26,6 +29,8 @@ ALTER TABLE public.schedule_posters DROP CONSTRAINT IF EXISTS chk_schedule_poste
 ALTER TABLE public.schedule_posters ADD CONSTRAINT chk_schedule_posters_rows_extracted CHECK (
     rows_status <> 'succeeded' OR rows_extracted_at IS NOT NULL
 );
+ALTER TABLE public.schedule_posters DROP CONSTRAINT IF EXISTS chk_schedule_posters_rows_day_shift;
+ALTER TABLE public.schedule_posters ADD CONSTRAINT chk_schedule_posters_rows_day_shift CHECK (rows_day_shift BETWEEN -1 AND 1);
 
 CREATE TABLE IF NOT EXISTS public.schedule_poster_rows (
     poster_id bigint NOT NULL,
@@ -34,6 +39,7 @@ CREATE TABLE IF NOT EXISTS public.schedule_poster_rows (
     start_time text,
     end_time text,
     tz text DEFAULT ''::text NOT NULL,
+    source_zone text DEFAULT ''::text NOT NULL,
     status text NOT NULL,
     source_text text NOT NULL,
     badges text[] DEFAULT '{}'::text[] NOT NULL,
@@ -56,7 +62,7 @@ CREATE TABLE IF NOT EXISTS public.schedule_poster_rows (
     CONSTRAINT chk_schedule_poster_rows_text CHECK (
         char_length(source_text) BETWEEN 1 AND 1000 AND char_length(title_ko) BETWEEN 1 AND 1000
         AND char_length(place_ko) <= 1000 AND char_length(note_ko) <= 1000 AND char_length(doubt_ko) <= 1000
-        AND char_length(tz) <= 40
+        AND char_length(tz) <= 40 AND char_length(source_zone) <= 40
     ),
     CONSTRAINT chk_schedule_poster_rows_lists CHECK (
         cardinality(badges) <= 40 AND cardinality(with_ko) <= 40 AND cardinality(tags_ko) <= 40 AND cardinality(warnings) <= 40

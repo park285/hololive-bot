@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	_ "time/tzdata"
 
 	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"

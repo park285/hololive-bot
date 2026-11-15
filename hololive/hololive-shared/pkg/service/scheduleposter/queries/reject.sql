@@ -5,7 +5,7 @@ WITH target AS (
     UPDATE schedule_posters
     SET review_status = 'rejected', reviewed_at = now(), reviewed_by = $3, translation_status = 'not_requested', translation_error = '',
         translated_image = NULL, translated_mime = NULL, translated_at = NULL,
-        rows_status = 'pending', rows_error = '', rows_extracted_at = NULL, rows_revision = rows_revision + 1, revision = revision + 1, updated_at = now()
+        rows_status = 'pending', rows_error = '', rows_extracted_at = NULL, rows_day_shift = 0, rows_revision = rows_revision + 1, revision = revision + 1, updated_at = now()
     WHERE id = $1 AND revision = $2 AND review_status IN ('pending_review', 'confirmed')
     RETURNING revision
 )

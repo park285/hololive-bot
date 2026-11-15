@@ -22,7 +22,7 @@ func recordRowsFor(t *testing.T, store *scheduleposter.Store, id int64, today st
 	i := slices.IndexFunc(pending, func(item scheduleposter.PendingRows) bool { return item.ID == id })
 	require.GreaterOrEqual(t, i, 0)
 
-	recorded, err := store.RecordRows(t.Context(), pending[i], []scheduleposter.Row{scheduleRow(t, today, "잡담")})
+	recorded, err := store.RecordRows(t.Context(), pending[i], []scheduleposter.Row{scheduleRow(t, today, "잡담")}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 }
@@ -801,4 +801,37 @@ func TestStorePosterPostsCapsActionablePostsAtTwoHundred(t *testing.T) {
 	require.Len(t, posts, 200)
 	require.EqualValues(t, 2200, posts[0].ID)
 	require.EqualValues(t, 2001, posts[199].ID)
+}
+
+func TestStoreRowExtractionFollowsTheDayShiftedWeekEnd(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store, pool := newRowsStore(t)
+	tokyo, err := time.LoadLocation("Asia/Tokyo")
+	require.NoError(t, err)
+
+	now := time.Now().In(tokyo)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	start, end := today.AddDate(0, 0, -7).Format(time.DateOnly), today.AddDate(0, 0, -1).Format(time.DateOnly)
+
+	confirmedPosterWithRows(t, store, 401, sophiaChannel, today.AddDate(0, 0, -7), start, end)
+
+	_, err = pool.Exec(ctx, `UPDATE schedule_posters SET rows_day_shift = 1 WHERE id = 401`)
+	require.NoError(t, err)
+
+	poster, err := store.Get(ctx, 401)
+	require.NoError(t, err)
+
+	_, err = store.RequestRows(ctx, 401, poster.Revision)
+	require.NoError(t, err, "하루 민 범위의 마지막 날에는 아직 !스케쥴에 보이므로 다시 뽑는다")
+
+	pending, err := store.PendingRows(ctx, today, 10)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.EqualValues(t, 401, pending[0].ID)
+
+	pending, err = store.PendingRows(ctx, today.AddDate(0, 0, 1), 10)
+	require.NoError(t, err)
+	require.Empty(t, pending, "민 범위도 끝나면 뽑지 않는다")
 }
