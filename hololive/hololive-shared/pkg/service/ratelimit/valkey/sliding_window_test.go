@@ -209,6 +209,10 @@ func TestAllowBucketIsolation(t *testing.T) {
 	limiter := newTestLimiter(t)
 	ctx := t.Context()
 
+	fixed := time.UnixMilli(1_700_000_000_000)
+
+	limiter.now = func() time.Time { return fixed }
+
 	window := 100 * time.Millisecond
 
 	firstA, err := limiter.Allow(ctx, "bucket:A", 1, window)
@@ -292,6 +296,10 @@ func TestAllowConcurrentLimit(t *testing.T) {
 		limit       = 3
 		concurrency = 10
 	)
+
+	fixed := time.UnixMilli(1_700_000_000_000)
+
+	limiter.now = func() time.Time { return fixed }
 
 	window := 250 * time.Millisecond
 
