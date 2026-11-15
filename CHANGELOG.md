@@ -8,6 +8,11 @@
 
 ## 미출시
 
+## v18.0.0 - 2026-11-15
+
+- **일정 포스터 이미지 번역 제거:** 확정(관리자·자동)은 이제 일정표 행 추출만 예약하고, Vertex 이미지·판독·텍스트 모델로 한국어 포스터 이미지를 만들던 번역 루프와 그 검사를 지웠습니다. 관리 API `POST /api/holo/schedule-posters/{id}/translate`(재번역)와 `GET /api/holo/schedule-posters/{id}/translated`(번역 이미지)를 지웠고, 포스터 응답(목록·상세)에서 필수 필드 `translationStatus`·`translationError`·`translatedAt`을 뺐습니다. 행만 다시 뽑기는 기존 `POST /{id}/rows`가 맡습니다. 번역 대기 중이라 409 `invalid_state`로 거절하던 주 범위 수정은 이제 확정본이면 받습니다. 설정 `translation.model`·`translation.text_model`·`translation.transcribe_model`을 지웠으며, 남아 있으면 모르는 키라 admin plane이 기동하지 않으므로 배포 전에 운영 설정에서 뺍니다(v17.0.0은 세 키가 없어도 기동합니다). DB의 번역 열과 CHECK는 이번 릴리스에서 읽지도 쓰지도 않고 남겨 v17.0.0으로 되돌릴 수 있게 두며, 다음 릴리스의 migration으로 지웁니다. 그래서 거절도 남은 번역 상태와 이미지를 지우지 않으며, v17.0.0으로 되돌리면 이번 image에서 거절한 번역 완료 포스터가 v17.0.0 관리 API에서 번역 성공으로 보이고 `/translated`가 이미지를 돌려줍니다(옛 Console 화면과 `!스케쥴`에는 나오지 않음). 공개 계약에서 operation과 필수 필드를 지우므로 이번 릴리스는 MAJOR입니다. 배포는 Iris Console 게이트웨이와 APK를 먼저, hololive-api를 나중에 합니다. 옛 게이트웨이는 필드가 빠진 새 응답을 502로 거절하기 때문입니다. Fallback delta: 일정 포스터 번역 재시도 예외 계약을 그 재시도와 함께 지웠습니다.
+- **일정 포스터 칸 읽기 API:** `GET /api/holo/schedule-posters/{id}/rows`가 포스터의 행 묶음에 반영 변경을 적용한 칸(`!스케쥴` 카드와 같은 결과, 행 경고 `warnings`와 `doubtKo` 포함)과, 오늘(JST) `!스케쥴`이 이 포스터를 보여 주는지(`publishedToday`), 오늘 같은 멤버로 게시되는 확정본(`todayPosterId`), 게시 범위를 돌려줍니다. 게시 대상 판정은 `!스케쥴`과 같은 쿼리 조각을 씁니다. 조회 전용이라 Console 조회 전용 계정도 읽을 수 있습니다.
+- **migration 023:** `!스케쥴` 없음 안내(`misc/schedule_poster_not_found`)가 migration 016의 기본 문구일 때만 `이번 주 일정표가 아직 없습니다.`로 바꾸고, 관리자가 고친 문구는 그대로 둡니다. 되돌리지 않으며 v17.0.0도 같은 key를 읽어 바뀐 문구를 보냅니다.
 - **방송 유형 판정의 썸네일 404 처리:** 썸네일의 모든 후보 URL이 HTTP 404인 방송(삭제·비공개 영상으로 봅니다)은 실패로 기억해 건너뛰되 연속 실패 3건 한도에 세지 않습니다. 이런 방송 셋이 이어져 재기동 뒤나 새 전체 훑기의 첫 회차가 멈추고 판정이 10분 늦어지던 문제를 고쳤습니다. 건너뜀은 Info 로그 `Broadcast type decision skipped missing thumbnail`로 남습니다.
 
 ## v17.0.0 - 2026-11-15

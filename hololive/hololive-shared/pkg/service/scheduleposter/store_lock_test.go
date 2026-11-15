@@ -183,7 +183,7 @@ func TestRowsRemovalWaitsForAConcurrentRecordRows(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			store, pool, pending, revision := translatedConfirmedPoster(t, start, end)
+			store, pool, pending, revision := confirmedPoster(t, start, end)
 			holder := holdRowsInsert(t, pool)
 
 			type recordOutcome struct {
@@ -234,7 +234,7 @@ func TestRowsRemovalWaitsForAConcurrentRecordRows(t *testing.T) {
 	}
 }
 
-func translatedConfirmedPoster(t *testing.T, start, end time.Time) (*Store, *pgxpool.Pool, PendingRows, int64) {
+func confirmedPoster(t *testing.T, start, end time.Time) (*Store, *pgxpool.Pool, PendingRows, int64) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -252,15 +252,11 @@ func translatedConfirmedPoster(t *testing.T, start, end time.Time) (*Store, *pgx
 	revision, err := store.Confirm(ctx, 101, 1, start, end)
 	require.NoError(t, err)
 
-	translated, err := store.RecordTranslation(ctx, PendingTranslation{ID: 101, Revision: revision}, Image{MIME: "image/jpeg", Data: []byte{0xff}})
-	require.NoError(t, err)
-	require.True(t, translated)
-
 	pending, err := store.PendingRows(ctx, start, 10)
 	require.NoError(t, err)
 	require.Len(t, pending, 1)
 
-	return store, pool, pending[0], revision + 1
+	return store, pool, pending[0], revision
 }
 
 func holdRowsInsert(t *testing.T, pool *pgxpool.Pool) pgx.Tx {

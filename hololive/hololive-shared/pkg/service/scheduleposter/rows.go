@@ -54,7 +54,7 @@ type Term struct {
 
 // Row는 포스터의 일정 한 칸이다. Day·Start·End는 JST 날짜와 "HH:MM"(심야 표기는 29:59까지)이고 시각이 없으면 빈 문자열이다.
 // JST가 아닌 포스터의 행은 JST로 바꿔 TZ를 "JST"로, SourceZone을 포스터에 적힌 시간대로 둔다. JST 행의 SourceZone은 비어 있다.
-// PublishedRows는 Terms, DoubtKo, Warnings를 비운다.
+// PublishedRows는 Terms, DoubtKo, Warnings를 비우고, PosterRows는 Terms만 비운다.
 type Row struct {
 	// Ordinal은 RecordRows가 묶음 안 순서대로 1부터 매긴다.
 	Ordinal int `json:"ordinal"`
@@ -83,7 +83,7 @@ type PendingRows struct {
 	ID        int64
 	ChannelID string
 	ImageURL  string
-	// ImageSHA256은 썸네일 후보만 채운다(PendingTranslation과 같다).
+	// ImageSHA256은 썸네일 후보만 채운다.
 	ImageSHA256  string
 	WeekStart    time.Time
 	WeekEnd      time.Time
@@ -97,7 +97,7 @@ type PublishedSchedule struct {
 	WeekEnd     time.Time
 	ExtractedAt time.Time
 	PostedAt    time.Time
-	// RowsPending은 재번역이 예약돼 행 묶음이 바뀔 예정이라는 뜻이다. 그동안 새 글을 대응하지 않는다.
+	// RowsPending은 재추출이 예약돼 행 묶음이 바뀔 예정이라는 뜻이다. 그동안 새 글을 대응하지 않는다.
 	RowsPending bool
 	// RowsDayShift는 행 묶음의 JST 날짜가 주 범위보다 며칠 밀렸는지(-1..1)다. 게시 범위와 카드 창은 주 범위를 이만큼 민다.
 	RowsDayShift int
@@ -321,7 +321,7 @@ func (s *Store) RecordRowsFailure(ctx context.Context, item PendingRows, reason 
 	return tag.RowsAffected() == 1, nil
 }
 
-// PublishedRows의 day는 JST 날짜다. 주 범위를 RowsDayShift만큼 민 범위로 PublishedImage와 같은 기준의 확정본 하나를 고르고,
+// PublishedRows의 day는 JST 날짜다. 주 범위를 RowsDayShift만큼 민 범위로 같은 멤버에서 같은 주 시작일의 늦게 올린 확정본 하나를 고르고,
 // 행을 저장한 적이 없으면 false다.
 // 행과 그 묶음의 반영 변경은 한 snapshot에서 읽어, 묶음이 바뀌는 중에도 다른 묶음의 변경이 섞이지 않는다.
 func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Time) (PublishedSchedule, bool, error) {
@@ -371,4 +371,89 @@ func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Ti
 	}
 
 	return schedule, true, nil
+}
+
+// PosterSchedule은 포스터 하나의 행 묶음과 그 포스터가 게시되는지다. 확정본이 아니거나 묶음을 저장한 적이 없으면
+// Rows와 Changes가 비고 ExtractedAt은 zero value다.
+type PosterSchedule struct {
+	PublishedSchedule
+
+	Confirmed bool
+	// TodayPosterID는 같은 멤버로 그 날짜에 PublishedRows가 고르는 확정본이며 없으면 0이다. 확정본이 아니면 0이다.
+	TodayPosterID int64
+}
+
+// PosterRows의 day는 JST 날짜다. 포스터가 없으면 ErrNotFound다. 포스터, 게시 대상, 행과 반영 변경은 한 snapshot에서 읽는다.
+func (s *Store) PosterRows(ctx context.Context, id int64, day time.Time) (PosterSchedule, error) {
+	var schedule PosterSchedule
+
+	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		var (
+			channelID          string
+			weekStart, weekEnd *time.Time
+			extractedAt        *time.Time
+		)
+
+		err := tx.QueryRow(ctx, posterScheduleSQL, id).Scan(&schedule.PosterID, &channelID, &schedule.Confirmed, &weekStart, &weekEnd,
+			&extractedAt, &schedule.PostedAt, &schedule.RowsPending, &schedule.RowsDayShift)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+
+		if err != nil {
+			return fmt.Errorf("load poster: %w", err)
+		}
+
+		if !schedule.Confirmed {
+			return nil
+		}
+
+		// 확정본은 migration 010의 CHECK가 주 범위를 요구한다.
+		if weekStart != nil && weekEnd != nil {
+			schedule.WeekStart, schedule.WeekEnd = *weekStart, *weekEnd
+		}
+
+		if err = tx.QueryRow(ctx, publishedPosterSQL, channelID, day).Scan(&schedule.TodayPosterID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("load published poster: %w", err)
+		}
+
+		if extractedAt == nil {
+			return nil
+		}
+
+		schedule.ExtractedAt = *extractedAt
+
+		return loadPosterRows(ctx, tx, &schedule.PublishedSchedule)
+	})
+	if err != nil {
+		return PosterSchedule{}, fmt.Errorf("load schedule poster rows: %w", err)
+	}
+
+	return schedule, nil
+}
+
+func loadPosterRows(ctx context.Context, tx pgx.Tx, schedule *PublishedSchedule) error {
+	rows, err := tx.Query(ctx, posterRowsSQL, schedule.PosterID)
+	if err != nil {
+		return fmt.Errorf("load rows: %w", err)
+	}
+
+	collected, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Row, error) {
+		var item Row
+
+		return item, row.Scan(&item.Ordinal, &item.Day, &item.Start, &item.End, &item.TZ, &item.SourceZone, &item.Status, &item.SourceText,
+			&item.Badges, &item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo, &item.DoubtKo, &item.Warnings)
+	})
+	if err != nil {
+		return fmt.Errorf("load rows: %w", err)
+	}
+
+	changes, err := publishedChanges(ctx, tx, schedule)
+	if err != nil {
+		return err
+	}
+
+	schedule.Rows, schedule.Changes = collected, changes
+
+	return nil
 }

@@ -436,9 +436,6 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		itemRoute = base + "/{id}"
 	)
 
-	const failTranslation = `UPDATE schedule_posters SET translation_status = 'failed', translation_error = 'translation_failed',
-		revision = revision + 1 WHERE id = 2119784604752343207`
-
 	const (
 		invalidState = `{"error":"schedule poster state does not allow this change","code":"invalid_state"}`
 		invalidWeek  = `{"error":"week must span at most 7 days within 7 days of the post","code":"invalid_week"}`
@@ -450,22 +447,20 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		{http.MethodGet, base + "?status=unknown", base, "", http.StatusBadRequest, "", ""},
 		{http.MethodGet, poster, itemRoute, "", http.StatusOK, "", ""},
 		{http.MethodGet, base + "/1", itemRoute, "", http.StatusNotFound, "", ""},
-		{http.MethodGet, poster + "/translated", itemRoute + "/translated", "", http.StatusNotFound, "", ""},
+		{http.MethodGet, poster + "/rows", itemRoute + "/rows", "", http.StatusOK, "", ""},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"2","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict, "", ""},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-12-07","weekEnd":"2026-12-13"}`, http.StatusConflict, "", ""},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"11/9"}`, http.StatusBadRequest, "", ""},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict, "", ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict, "", invalidState},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusOK, "", ""},
 		{http.MethodGet, poster, itemRoute, "", http.StatusOK, "", ""},
-		{http.MethodPost, poster + "/translate", itemRoute + "/translate", `{"expectedRevision":"2"}`, http.StatusConflict, "", ""},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusConflict, "", ""},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict, "", invalidState},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict, failTranslation, invalidWeek},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"11/16"}`, http.StatusBadRequest, "", ""},
-		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"3","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusOK, "", ""},
+		{http.MethodGet, poster + "/rows", itemRoute + "/rows", "", http.StatusOK, "", ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-23","weekEnd":"2026-11-29"}`, http.StatusConflict, "", invalidWeek},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"11/16"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/week", itemRoute + "/week", `{"expectedRevision":"2","weekStart":"2026-11-16","weekEnd":"2026-11-22"}`, http.StatusOK, "", ""},
 		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"x"}`, http.StatusBadRequest, "", ""},
-		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"4","note":"x"}`, http.StatusBadRequest, "", ""},
-		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"4"}`, http.StatusOK, "", ""},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"3","note":"x"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/reject", itemRoute + "/reject", `{"expectedRevision":"3"}`, http.StatusOK, "", ""},
 		{http.MethodGet, base + "?status=rejected", base, "", http.StatusOK, "", ""},
 		{http.MethodGet, base + "/summary", base + "/summary", "", http.StatusOK, "", ""},
 	}
@@ -510,8 +505,9 @@ type posterChangesFixture struct {
 	posterID, revision                         int64
 	matched, stale, unrelated, unjudged, early int64
 	judgeFailed, matchFailed, nextWeek         int64
+	movedOut                                   int64
 	weekStart                                  time.Time
-	rowsAt                                     time.Time
+	rowsAt, changesAt                          time.Time
 	postedAt                                   map[int64]time.Time
 }
 
@@ -868,6 +864,7 @@ func TestSchedulePosterRowsMatchAdminOpenAPI(t *testing.T) {
 	require.NoError(t, err)
 
 	fx := seedPosterChanges(t, pool, store)
+	fx.seedSlotDetails(t, pool)
 
 	const rows = schedulePosterRoute + "/rows"
 
@@ -876,9 +873,13 @@ func TestSchedulePosterRowsMatchAdminOpenAPI(t *testing.T) {
 	queued := mustJSON(t, map[string]string{"id": strconv.FormatInt(fx.posterID, 10), "revision": strconv.FormatInt(fx.revision, 10)})
 
 	requirePosterRows(t, serve, poster, "failed", "unsupported_zone", fx.rowsAt, 2)
+	fx.requireSlots(t, serve, poster)
 
 	spec.runSteps(t, serve, pool, []schedulePosterStep{
 		{http.MethodGet, poster, schedulePosterRoute, "", http.StatusOK, "", ""},
+		{http.MethodGet, poster + "/rows", rows, "", http.StatusOK, "", ""},
+		{http.MethodGet, schedulePosterNoSuch + "/rows", rows, "", http.StatusNotFound, "", ""},
+		{http.MethodGet, schedulePostersBase + "/07/rows", rows, "", http.StatusBadRequest, "", ""},
 		{http.MethodPost, poster + "/rows", rows, `{"expectedRevision":"x"}`, http.StatusBadRequest, "", ""},
 		{http.MethodPost, poster + "/rows", rows, `{"expectedRevision":"1","note":"x"}`, http.StatusBadRequest, "", ""},
 		{http.MethodPost, schedulePosterNoSuch + "/rows", rows, `{"expectedRevision":"1"}`, http.StatusNotFound, "", ""},
@@ -892,6 +893,151 @@ func TestSchedulePosterRowsMatchAdminOpenAPI(t *testing.T) {
 	})
 
 	requirePosterRows(t, serve, poster, "pending", "", fx.rowsAt, 2)
+	fx.requireSlots(t, serve, poster)
+}
+
+func (fx *posterChangesFixture) seedSlotDetails(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	fx.movedOut = 2119784604752343390
+	fx.postedAt[fx.movedOut] = fx.rowsAt.Add(55 * time.Minute)
+	fx.changesAt = fx.rowsAt.Add(80 * time.Minute)
+
+	seed := []struct {
+		sql  string
+		args []any
+	}{
+		{
+			`UPDATE schedule_poster_rows
+			SET end_time = '24:30', with_ko = '{"쿠로가네 노에루"}', place_ko = '공식 채널', tags_ko = '{"콜라보"}', note_ko = '노래 포함',
+			    doubt_ko = '장소가 흐림', warnings = '{"E1 날짜: 요일과 날짜가 다릅니다"}'
+			WHERE poster_id = $1 AND ordinal = 2`,
+			[]any{fx.posterID},
+		},
+		{
+			`INSERT INTO schedule_poster_posts (post_id, channel_id, posted_at, body, status, reason, schedule_info, kind, matched_poster_id, matched_rows_at)
+			SELECT $2, channel_id, $3, '雑談は来週に', 'matched', '', 0.9, 'change', id, rows_extracted_at FROM schedule_posters WHERE id = $1`,
+			[]any{fx.posterID, fx.movedOut, fx.postedAt[fx.movedOut]},
+		},
+		{
+			`INSERT INTO schedule_poster_changes (post_id, item, kind, slot, day, source_text) VALUES ($1, 1, 'moved_out', 2, $2, '雑談は来週に')`,
+			[]any{fx.movedOut, fx.weekStart.AddDate(0, 0, 8)},
+		},
+		{`UPDATE schedule_poster_changes SET created_at = $1`, []any{fx.changesAt}},
+	}
+
+	for _, step := range seed {
+		_, err := pool.Exec(t.Context(), step.sql, step.args...)
+		require.NoError(t, err)
+	}
+}
+
+type gotPosterSlot struct {
+	Number      int      `json:"number"`
+	Ordinal     *int     `json:"ordinal"`
+	AddedPostID *string  `json:"addedPostId"`
+	Day         string   `json:"day"`
+	Start       string   `json:"start"`
+	End         string   `json:"end"`
+	Status      string   `json:"status"`
+	TitleKo     string   `json:"titleKo"`
+	WithKo      []string `json:"withKo"`
+	PlaceKo     string   `json:"placeKo"`
+	TagsKo      []string `json:"tagsKo"`
+	NoteKo      string   `json:"noteKo"`
+	DoubtKo     string   `json:"doubtKo"`
+	Warnings    []string `json:"warnings"`
+	TimeChanged bool     `json:"timeChanged"`
+	OrigDay     *string  `json:"origDay"`
+	OrigStart   *string  `json:"origStart"`
+	MovedTo     *string  `json:"movedTo"`
+	Steps       []struct {
+		PostID string `json:"postId"`
+		Item   int    `json:"item"`
+		Kind   string `json:"kind"`
+	} `json:"steps"`
+}
+
+func (fx *posterChangesFixture) requireSlots(t *testing.T, serve adminTestServe, poster string) {
+	t.Helper()
+
+	rec := serve(http.MethodGet, poster+"/rows", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var got struct {
+		ID              string          `json:"id"`
+		RowsExtractedAt *string         `json:"rowsExtractedAt"`
+		PublishStart    *string         `json:"publishStart"`
+		PublishEnd      *string         `json:"publishEnd"`
+		PublishedToday  bool            `json:"publishedToday"`
+		TodayPosterID   *string         `json:"todayPosterId"`
+		UpdatedAt       *string         `json:"updatedAt"`
+		Slots           []gotPosterSlot `json:"slots"`
+	}
+
+	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &got))
+
+	id := strconv.FormatInt(fx.posterID, 10)
+	matched := strconv.FormatInt(fx.matched, 10)
+	day := fx.weekStart.Format(time.DateOnly)
+
+	require.Equal(t, id, got.ID)
+	require.Equal(t, new(fx.rowsAt.Format(time.RFC3339)), got.RowsExtractedAt)
+	require.Equal(t, new(day), got.PublishStart)
+	require.Equal(t, new(fx.weekStart.AddDate(0, 0, 6).Format(time.DateOnly)), got.PublishEnd)
+	require.Equal(t, new(fx.changesAt.Format(time.RFC3339)), got.UpdatedAt, "갱신 시각은 반영한 변경의 가장 늦은 기록 시각이다")
+	require.True(t, got.PublishedToday)
+	require.Equal(t, new(id), got.TodayPosterID)
+	require.Len(t, got.Slots, 3)
+
+	moved, kept, added := got.Slots[0], got.Slots[1], got.Slots[2]
+
+	require.Equal(t, new(1), moved.Ordinal)
+	require.Equal(t, "21:00", moved.Start)
+	require.True(t, moved.TimeChanged)
+	require.Equal(t, new(day), moved.OrigDay)
+	require.Equal(t, new("20:00"), moved.OrigStart)
+	require.Len(t, moved.Steps, 1)
+	require.Equal(t, matched, moved.Steps[0].PostID)
+	require.Equal(t, "time_changed", moved.Steps[0].Kind)
+
+	require.Empty(t, moved.End, "시각을 바꾸면 끝 시각을 지운다")
+	require.Empty(t, moved.DoubtKo)
+	require.Empty(t, moved.Warnings)
+	require.Nil(t, moved.MovedTo)
+
+	fx.requireMovedOutSlot(t, kept)
+
+	require.Equal(t, 3, added.Number)
+	require.Nil(t, added.Ordinal)
+	require.Equal(t, new(matched), added.AddedPostID)
+	require.Equal(t, fx.weekStart.AddDate(0, 0, 1).Format(time.DateOnly), added.Day)
+	require.Equal(t, "off", added.Status)
+	require.Equal(t, "휴방", added.TitleKo)
+	require.Nil(t, added.OrigDay)
+	require.Nil(t, added.OrigStart)
+	require.Len(t, added.Steps, 1)
+	require.Equal(t, 4, added.Steps[0].Item)
+}
+
+func (fx *posterChangesFixture) requireMovedOutSlot(t *testing.T, slot gotPosterSlot) {
+	t.Helper()
+
+	require.Equal(t, "23:00", slot.Start)
+	require.Equal(t, "24:30", slot.End)
+	require.False(t, slot.TimeChanged)
+	require.Equal(t, string(scheduleposter.RowCancelled), slot.Status)
+	require.Equal(t, new(fx.weekStart.AddDate(0, 0, 8).Format(time.DateOnly)), slot.MovedTo)
+	require.Equal(t, "잡담", slot.TitleKo)
+	require.Equal(t, []string{"쿠로가네 노에루"}, slot.WithKo)
+	require.Equal(t, "공식 채널", slot.PlaceKo)
+	require.Equal(t, []string{"콜라보"}, slot.TagsKo)
+	require.Equal(t, "노래 포함", slot.NoteKo)
+	require.Equal(t, "장소가 흐림", slot.DoubtKo)
+	require.Equal(t, []string{"E1 날짜: 요일과 날짜가 다릅니다"}, slot.Warnings)
+	require.Len(t, slot.Steps, 1)
+	require.Equal(t, strconv.FormatInt(fx.movedOut, 10), slot.Steps[0].PostID)
+	require.Equal(t, string(scheduleposter.ChangeMovedOut), slot.Steps[0].Kind)
 }
 
 func requirePosterRows(t *testing.T, serve adminTestServe, path, status, rowsError string, extractedAt time.Time, count int) {

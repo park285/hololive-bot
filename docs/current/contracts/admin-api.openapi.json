@@ -471,90 +471,6 @@
         }
       }
     },
-    "/api/holo/schedule-posters/{id}/translate": {
-      "post": {
-        "operationId": "holoRetranslateSchedulePoster",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/SchedulePosterId"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SchedulePosterRevisionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SchedulePosterChangeResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Producer error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProducerError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/holo/schedule-posters/{id}/translated": {
-      "get": {
-        "operationId": "holoGetTranslatedSchedulePoster",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/SchedulePosterId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TranslatedSchedulePoster"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Producer error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProducerError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/holo/schedule-posters/{id}/changes": {
       "get": {
         "operationId": "holoGetSchedulePosterChanges",
@@ -687,6 +603,41 @@
       }
     },
     "/api/holo/schedule-posters/{id}/rows": {
+      "get": {
+        "operationId": "holoGetSchedulePosterRows",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterRows"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "operationId": "holoRequestSchedulePosterRows",
         "parameters": [
@@ -1000,7 +951,7 @@
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
           }
         },
-        "description": "확정본의 주 범위만 고치며 다시 번역하지 않습니다. 확정과 같이 7일 이하이고 게시일(JST)과 7일 이내여야 하며 어기면 409 code=invalid_week입니다. 확정본이 아니거나 번역 대기 중(진행 중인 번역 결과를 버리지 않기 위해)이면 409 code=invalid_state입니다."
+        "description": "확정본의 주 범위를 고치고 일정표 행을 다시 뽑습니다. 새 행 묶음이 저장될 때까지 이 포스터의 일정표는 게시되지 않습니다. 확정과 같이 7일 이하이고 게시일(JST)과 7일 이내여야 하며 어기면 409 code=invalid_week입니다. 확정본이 아니면 409 code=invalid_state입니다."
       },
       "SchedulePoster": {
         "type": "object",
@@ -1018,9 +969,6 @@
           "reviewedAt",
           "reviewedBy",
           "reviewRequestReason",
-          "translationStatus",
-          "translationError",
-          "translatedAt",
           "revision",
           "createdAt",
           "updatedAt",
@@ -1099,25 +1047,6 @@
               "auto_review_off"
             ],
             "description": "자동 검토가 후보를 관리자 검토로 넘긴 이유입니다. uncertain(일정표·한 주·한 명 판정 중 하나가 불확실), unjudgeable(모델이 판정할 수 없는 그림), image_changed(수집 뒤 그림이 바뀜), period_unread(인쇄된 기간을 게시 주나 다음 주로 맞추지 못함), week_rejected(읽은 주가 게시일과 맞지 않음), week_overlapping(같은 멤버의 확정본과 주가 겹침), stale(6시간 안에 판정하지 못함), auto_review_off(자동 검토를 끈 뒤 남은 후보). 자동 검토 없이 들어왔으면 빈 문자열입니다."
-          },
-          "translationStatus": {
-            "type": "string",
-            "enum": [
-              "not_requested",
-              "pending",
-              "succeeded",
-              "failed"
-            ]
-          },
-          "translationError": {
-            "type": "string",
-            "description": "번역 실패 분류입니다(source_unavailable, translation_failed). 실패가 아니면 빈 문자열입니다."
-          },
-          "translatedAt": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "revision": {
             "type": "string",
@@ -1431,7 +1360,7 @@
             "pattern": "^[1-9][0-9]{0,18}$"
           }
         },
-        "description": "거절(/reject)·재번역(/translate)·행 재추출(/rows)이 함께 씁니다. 행 재추출은 일정표 행만 다시 뽑게 예약하고 이미지 번역과 revision은 그대로 두므로 응답 revision이 요청과 같으며, 새 행 묶음이 저장될 때까지 이전 묶음이 게시됩니다. 행 재추출은 확정본이고 행 추출이 succeeded·failed이며 주가 끝나지 않았을 때만 받고, 아니면 409 code=invalid_state입니다."
+        "description": "거절(/reject)·행 재추출(/rows)이 함께 씁니다. 행 재추출은 일정표 행만 다시 뽑게 예약하고 revision은 그대로 두므로 응답 revision이 요청과 같으며, 새 행 묶음이 저장될 때까지 이전 묶음이 게시됩니다. 행 재추출은 확정본이고 행 추출이 succeeded·failed이며 주가 끝나지 않았을 때만 받고, 아니면 409 code=invalid_state입니다."
       },
       "SchedulePosterRevokeRequest": {
         "type": "object",
@@ -1465,6 +1394,289 @@
           }
         }
       },
+      "SchedulePosterRows": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "today",
+          "rowsExtractedAt",
+          "rowsDayShift",
+          "publishStart",
+          "publishEnd",
+          "publishedToday",
+          "todayPosterId",
+          "updatedAt",
+          "slots"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SchedulePosterId"
+          },
+          "today": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "판정 기준인 오늘 JST 날짜입니다."
+          },
+          "rowsExtractedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "이 응답에 담은 행 묶음을 저장한 시각(RFC3339)입니다. 확정본이 아니거나 묶음을 저장한 적이 없으면 null입니다."
+          },
+          "rowsDayShift": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 1,
+            "description": "행 묶음의 JST 날짜가 주 범위보다 며칠 밀렸는지입니다. 게시 범위는 주 범위를 이만큼 민 것입니다."
+          },
+          "publishStart": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "weekStart + rowsDayShift입니다. 확정본이 아니면 null입니다."
+          },
+          "publishEnd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "weekEnd + rowsDayShift입니다. 확정본이 아니면 null입니다."
+          },
+          "publishedToday": {
+            "type": "boolean",
+            "description": "오늘 `!스케쥴 <멤버>`가 이 포스터를 보여 주는지입니다. 확정본이고 행 묶음이 있으며 게시 범위에 오늘이 드는 같은 멤버의 포스터 가운데 주 시작일, 게시 시각, ID 순으로 가장 늦은 하나만 게시됩니다."
+          },
+          "todayPosterId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "오늘 같은 멤버로 게시되는 확정본 ID입니다. 다른 포스터가 게시 중이면 그 ID이고, 게시되는 포스터가 없거나 이 포스터가 확정본이 아니면 null입니다."
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`!스케쥴` 카드에 찍히는 갱신 시각(RFC3339)으로, 행 묶음 저장 시각과 반영한 변경의 기록 시각 가운데 가장 늦은 값입니다. 행 묶음이 없으면 null입니다."
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SchedulePosterSlot"
+            },
+            "description": "행 묶음에 반영 변경을 적용한 최종 칸이며 `!스케쥴` 카드와 같은 결과입니다. 원래 행 뒤에 글이 더한 칸을 적용 순서로 잇습니다. 재추출을 기다리거나 실패해도 이전 묶음을 보여 주고, 확정본이 아니거나 묶음이 없으면 빈 배열입니다."
+          }
+        },
+        "description": "포스터 하나의 일정표 칸과 오늘 게시 여부입니다. 포스터가 없으면 404입니다."
+      },
+      "SchedulePosterSlot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "number",
+          "ordinal",
+          "addedPostId",
+          "day",
+          "start",
+          "end",
+          "status",
+          "sourceZone",
+          "sourceText",
+          "badges",
+          "titleKo",
+          "withKo",
+          "placeKo",
+          "tagsKo",
+          "noteKo",
+          "doubtKo",
+          "warnings",
+          "timeChanged",
+          "origDay",
+          "origStart",
+          "movedTo",
+          "steps"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "카드에 매기는 칸 순서입니다."
+          },
+          "ordinal": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "원래 행 번호입니다. 글이 더한 칸이면 null입니다."
+          },
+          "addedPostId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "칸을 더한 X 글 ID입니다. 원래 행이면 null입니다."
+          },
+          "day": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "최종 JST 날짜입니다."
+          },
+          "start": {
+            "type": "string",
+            "pattern": "^(([01]?[0-9]|2[0-9]):[0-5][0-9])?$",
+            "description": "최종 시작 시각이며 포스터식 24시 넘는 표기(29:59까지)를 그대로 둡니다. 빈 문자열은 시각 없음입니다."
+          },
+          "end": {
+            "type": "string",
+            "pattern": "^(([01]?[0-9]|2[0-9]):[0-5][0-9])?$",
+            "description": "끝 시각입니다. 시작 시각을 바꾼 칸과 끝 시각이 없는 칸은 빈 문자열입니다."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "tentative",
+              "cancelled",
+              "off"
+            ]
+          },
+          "sourceZone": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "JST로 바꾼 칸의 포스터 원래 시간대입니다. JST 칸은 빈 문자열입니다."
+          },
+          "sourceText": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "원문입니다."
+          },
+          "badges": {
+            "type": "array",
+            "maxItems": 40,
+            "items": {
+              "type": "string"
+            }
+          },
+          "titleKo": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "withKo": {
+            "type": "array",
+            "maxItems": 40,
+            "items": {
+              "type": "string"
+            }
+          },
+          "placeKo": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "tagsKo": {
+            "type": "array",
+            "maxItems": 40,
+            "items": {
+              "type": "string"
+            }
+          },
+          "noteKo": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "doubtKo": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "행 번역이 정하지 못한 점입니다. 없거나 글이 더한 칸이면 빈 문자열입니다."
+          },
+          "warnings": {
+            "type": "array",
+            "maxItems": 40,
+            "items": {
+              "type": "string"
+            },
+            "description": "구조 검사가 이 행에서 찾은 경고 문장입니다. 글이 더한 칸은 빈 배열입니다."
+          },
+          "timeChanged": {
+            "type": "boolean",
+            "description": "변경 글 때문에 날짜나 시각이 포스터 값과 달라졌는지입니다. 글이 더한 칸은 false입니다."
+          },
+          "origDay": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "포스터에 적힌 날짜입니다. 글이 더한 칸이면 null입니다."
+          },
+          "origStart": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^(([01]?[0-9]|2[0-9]):[0-5][0-9])?$",
+            "description": "포스터에 적힌 시작 시각입니다. 글이 더한 칸이면 null입니다."
+          },
+          "movedTo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "주 밖으로 옮긴 새 날짜입니다. 그 칸은 원래 날짜에 cancelled로 남습니다. 옮기지 않았으면 null입니다."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SchedulePosterSlotStep"
+            },
+            "description": "이 칸에 반영한 변경을 적용 순서로 담습니다. same과 rejected는 담지 않습니다."
+          }
+        }
+      },
+      "SchedulePosterSlotStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "postId",
+          "item",
+          "kind"
+        ],
+        "properties": {
+          "postId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "item": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "time_changed",
+              "confirmed",
+              "tentative",
+              "cancelled",
+              "off",
+              "added",
+              "moved",
+              "moved_out",
+              "content_changed"
+            ]
+          }
+        }
+      },
       "SchedulePosterSummary": {
         "type": "object",
         "additionalProperties": false,
@@ -1482,30 +1694,6 @@
             "type": "string",
             "pattern": "^([1-9][0-9]{0,18})?$",
             "description": "가장 늦게 관리자 검토로 넘긴 후보 ID입니다. 확정·거절해도 뒤로 가지 않으며 넘긴 후보가 없으면 빈 문자열입니다."
-          }
-        }
-      },
-      "TranslatedSchedulePoster": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "mimeType",
-          "data"
-        ],
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/SchedulePosterId"
-          },
-          "mimeType": {
-            "type": "string",
-            "const": "image/jpeg"
-          },
-          "data": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 5592408,
-            "description": "JPEG 바이트의 표준 base64입니다. 원본은 4MiB 이하입니다."
           }
         }
       }

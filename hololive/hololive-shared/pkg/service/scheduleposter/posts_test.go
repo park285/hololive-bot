@@ -60,9 +60,9 @@ func replacementPoster(t *testing.T, store *scheduleposter.Store, pool *pgxpool.
 	t.Helper()
 
 	_, err := pool.Exec(t.Context(), `INSERT INTO schedule_posters (id, channel_id, x_user_id, post_url, image_url, posted_at, text_excerpt,
-		review_status, week_start, week_end, reviewed_at, reviewed_by, translation_status)
+		review_status, week_start, week_end, reviewed_at, reviewed_by)
 		VALUES ($1, $2, '1', 'https://x.com/i/status/1', 'https://pbs.twimg.com/media/b.jpg?name=orig', $3, '',
-		        'confirmed', '2026-11-09', '2026-11-15', now(), 'admin', 'pending')`, id, sophiaChannel, postedAt)
+		        'confirmed', '2026-11-09', '2026-11-15', now(), 'admin')`, id, sophiaChannel, postedAt)
 	require.NoError(t, err)
 
 	recordRowsFor(t, store, id, "2026-11-09")
@@ -553,7 +553,7 @@ func TestStoreRequestRowsReschedulesOnlyRowExtraction(t *testing.T) {
 
 	revision, err := store.RequestRows(ctx, 401, before.Revision)
 	require.NoError(t, err)
-	require.Equal(t, before.Revision, revision, "번역 결과 기록의 revision 조건을 깨지 않는다")
+	require.Equal(t, before.Revision, revision, "Console의 revision 조건을 깨지 않는다")
 
 	after, err := store.Get(ctx, 401)
 	require.NoError(t, err)
@@ -561,7 +561,6 @@ func TestStoreRequestRowsReschedulesOnlyRowExtraction(t *testing.T) {
 	require.Equal(t, beforeRowsRevision+1, rowsRevision())
 	require.True(t, before.RowsExtractedAt.Equal(*after.RowsExtractedAt))
 	require.Equal(t, 1, after.RowsCount, "새 묶음이 저장될 때까지 이전 행을 게시한다")
-	require.Equal(t, before.TranslationStatus, after.TranslationStatus)
 	require.True(t, before.UpdatedAt.Equal(after.UpdatedAt))
 
 	_, err = store.RequestRows(ctx, 401, before.Revision)

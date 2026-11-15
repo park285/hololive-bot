@@ -399,7 +399,7 @@ func newChangeFixture(pages ...status) *changeFixture {
 		Targets:           []Target{{XUserID: changeUser, ChannelID: sophiaChannel}},
 		Translation:       TranslationConfig{Rows: RowsConfig{Decide: DecideConfig{ScheduleInfoMin: 0.7}}},
 	}
-	service := newService(config, &fakeStore{}, &fakeStore{}, &fakeStore{}, f.sources, &fakeTranslator{}, f.members, slog.New(slog.DiscardHandler))
+	service := newService(config, &fakeStore{}, &fakeStore{}, f.sources, f.members, slog.New(slog.DiscardHandler))
 
 	service.now = func() time.Time { return f.clock }
 	service.retry = retry.RetryOptions{MaxAttempts: 3, Sleep: func(context.Context, time.Duration) bool { return true }}
