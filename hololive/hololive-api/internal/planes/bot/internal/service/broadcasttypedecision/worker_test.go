@@ -97,6 +97,7 @@ func (j *fakeJudge) Decide(_ context.Context, request geminidecision.Request) (g
 
 type fakeThumbnails struct {
 	failing   map[string]bool
+	missing   map[string]bool
 	downloads map[string]int
 }
 
@@ -106,7 +107,11 @@ func (f fakeThumbnails) Download(_ context.Context, entry *handlercore.Broadcast
 	}
 
 	if f.failing[entry.VideoID] {
-		return nil, "", errors.New("thumbnail status 404")
+		return nil, "", errors.New("thumbnail status 503")
+	}
+
+	if f.missing[entry.VideoID] {
+		return nil, "", fmt.Errorf("%w: thumbnail status 404", handlercore.ErrBroadcastThumbnailNotFound)
 	}
 
 	return []byte(entry.VideoID), "image/jpeg", nil
@@ -199,6 +204,37 @@ func TestPassStopsWhenTheServiceIsUnavailableOrFailuresRepeat(t *testing.T) {
 
 	require.Error(t, testWorker(store, judge, thumbs).pass(t.Context()))
 	require.Empty(t, judge.asked, "연속 실패 한도에서 회차를 멈춘다")
+}
+
+func TestPassSkipsMissingThumbnailsWithoutStopping(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{rows: unknownRows(6)}
+	judge := &fakeJudge{}
+	worker := testWorker(store, judge, fakeThumbnails{missing: map[string]bool{
+		unknown0006: true, unknown0005: true, unknown0004: true, unknown0003: true,
+	}})
+
+	require.NoError(t, worker.pass(t.Context()))
+	require.Equal(t, []string{unknown0002, unknown0001}, judge.asked, "404 썸네일은 연속 실패로 세지 않는다")
+	require.Equal(t, []string{unknown0003, unknown0004, unknown0005, unknown0006}, slices.Sorted(maps.Keys(worker.failed)))
+	require.Equal(t, testNow, worker.lastFullScan)
+}
+
+func TestMissingThumbnailsDoNotResetConsecutiveFailures(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{rows: unknownRows(6)}
+	judge := &fakeJudge{}
+	thumbs := fakeThumbnails{
+		failing: map[string]bool{unknown0006: true, unknown0004: true, unknown0002: true},
+		missing: map[string]bool{unknown0005: true, unknown0003: true},
+	}
+
+	err := testWorker(store, judge, thumbs).pass(t.Context())
+	require.ErrorContains(t, err, "stop after 3 consecutive failures")
+	require.NotErrorIs(t, err, handlercore.ErrBroadcastThumbnailNotFound)
+	require.Empty(t, judge.asked, "404 사이의 일반 실패 셋은 회차를 멈춘다")
 }
 
 func TestPassScansFullHistoryUntilFinishedThenRecentWindow(t *testing.T) {

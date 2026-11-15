@@ -46,6 +46,8 @@ type youTubeThumbnailDownloader struct {
 
 const maxBroadcastThumbnailBytes = 12 << 20
 
+var errThumbnailStatusNotFound = errors.New("thumbnail status 404")
+
 var youtubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 func NewYouTubeThumbnailDownloader(client *http.Client) handlercore.BroadcastThumbnailDownloader {
@@ -83,6 +85,8 @@ func (d *youTubeThumbnailDownloader) Download(ctx context.Context, entry *handle
 
 	var lastErr error
 
+	allNotFound := true
+
 	for _, candidate := range broadcastThumbnailCandidates(&target) {
 		image, contentType, err := d.downloadCandidate(ctx, candidate)
 		if err == nil {
@@ -90,10 +94,15 @@ func (d *youTubeThumbnailDownloader) Download(ctx context.Context, entry *handle
 		}
 
 		lastErr = err
+		allNotFound = allNotFound && errors.Is(err, errThumbnailStatusNotFound)
 	}
 
 	if lastErr == nil {
-		lastErr = errors.New("no thumbnail candidates")
+		return nil, "", errors.New("no thumbnail candidates")
+	}
+
+	if allNotFound {
+		return nil, "", fmt.Errorf("%w: %w", handlercore.ErrBroadcastThumbnailNotFound, lastErr)
 	}
 
 	return nil, "", lastErr
@@ -171,6 +180,10 @@ func thumbnailResponseBody(resp *http.Response) (io.ReadCloser, error) {
 func validateThumbnailResponse(resp *http.Response) (string, error) {
 	if resp == nil {
 		return "", errors.New("thumbnail response is nil")
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", errThumbnailStatusNotFound
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {

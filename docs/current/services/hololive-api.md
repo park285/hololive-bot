@@ -253,9 +253,9 @@ bot plane은 `BROADCAST_TYPE_GEMINI_API_KEY_FILE`(Gemini Developer API 키 파�
 | 항목 | 계약 |
 |---|---|
 | Trigger | 방송 하나의 판정 실패입니다. 썸네일 내려받기 실패, Decisions API의 안전 차단이 아닌 400, 500 같은 서버 오류, 연결 뒤 응답 시간 초과, 해석할 수 없는 응답, 선택지 밖이거나 범위를 벗어난 답, 저장 DB 오류가 해당합니다. 어느 방송도 판정할 수 없는 Gemini API 실패(이름 확인·연결 실패, HTTP 401·403·404·429·503, 400 가운데 잘못된 키 `API_KEY_INVALID`와 지원하지 않는 지역 `FAILED_PRECONDITION`)는 그 방송을 실패로 기억하지 않고 회차를 멈추며, 다음 회차가 이어서 묻습니다. |
-| 한도 | 호출 자체는 다시 보내지 않습니다. 실패한 방송은 그 회차에서 건너뛰고, 다음 전체 훑기 주기(24시간마다) 전까지는 최근 훑기에서도, 끝나지 않은 전체 훑기를 이어 가는 회차에서도 다시 묻지 않습니다. 연속 3건이 실패하면 그 회차를 멈춥니다. 실패 기억은 프로세스 메모리에만 있으므로 재기동 직후 전체 훑기에서 한 번 더 묻습니다. |
+| 한도 | 호출 자체는 다시 보내지 않습니다. 실패한 방송은 그 회차에서 건너뛰고, 다음 전체 훑기 주기(24시간마다) 전까지는 최근 훑기에서도, 끝나지 않은 전체 훑기를 이어 가는 회차에서도 다시 묻지 않습니다. 연속 3건이 실패하면 그 회차를 멈춥니다. 썸네일의 모든 후보 URL이 HTTP 404인 방송(삭제·비공개 영상으로 봅니다)도 실패로 기억해 건너뛰지만, 연속 실패 수를 늘리지도 0으로 되돌리지도 않습니다. 실패 기억은 프로세스 메모리에만 있으므로 재기동 직후 전체 훑기에서 한 번 더 묻습니다. |
 | 종단 | 판정하지 못한 방송은 미분류로 남고, 방송 이력 기간(365일)을 벗어나면 더 묻지 않습니다. 계속 실패하는 방송은 하루 한 번(재기동 때 한 번 더) 다시 묻습니다. 안전 차단은 `blocked`로 저장해 다시 묻지 않습니다. |
-| Telemetry | 건너뛴 방송의 Warn 로그 `Broadcast type decision skipped`(`video_id`, `error`), 차단의 Warn 로그 `Broadcast type decision input blocked`(`video_id`, `error`), 멈춘 회차의 Error 로그 `Broadcast type decision pass failed`(`error`), 성공의 Info 로그 `Broadcast type decided`(`video_id`, `broadcast_type`, `confidence`, `input_tokens`)입니다. 전용 metric은 없습니다. |
+| Telemetry | 건너뛴 방송의 Warn 로그 `Broadcast type decision skipped`(`video_id`, `error`), 썸네일 404로 건너뛴 방송의 Info 로그 `Broadcast type decision skipped missing thumbnail`(`video_id`, `error`), 차단의 Warn 로그 `Broadcast type decision input blocked`(`video_id`, `error`), 멈춘 회차의 Error 로그 `Broadcast type decision pass failed`(`error`), 성공의 Info 로그 `Broadcast type decided`(`video_id`, `broadcast_type`, `confidence`, `input_tokens`)입니다. 전용 metric은 없습니다. |
 | Owner | `hololive-api` bot plane의 방송 유형 판정 작업(`internal/planes/bot/internal/service/broadcasttypedecision`) |
 | 제거 조건 | 90일 동안 한 번 실패한 방송이 뒤에 `Broadcast type decided`로 끝난 기록이 없으면 재시도를 지우고 첫 실패를 종단으로 기록합니다. 그 동작 변경을 CHANGELOG에 남깁니다. |
 
