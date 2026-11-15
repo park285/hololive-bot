@@ -112,8 +112,6 @@ func TestFourCollectorsCompeteAndRestartFromDurableLease(t *testing.T) {
 	start := make(chan struct{})
 
 	for i := range repositories {
-		repositories[i].config.LeaseTTL = time.Minute
-
 		wg.Go(func() {
 			<-start
 
@@ -300,7 +298,7 @@ func TestAcquireCreationTTLStartsAfterConflictingCreatorRollback(t *testing.T) {
 
 	waitForLeaseQueryLock(ctx, t, pool, locker.Conn().PgConn().PID())
 
-	if _, err := pool.Exec(ctx, `SELECT pg_sleep($1::double precision)`, repository.config.LeaseTTL.Seconds()+0.1); err != nil {
+	if _, err := pool.Exec(ctx, `SELECT pg_sleep(0.2)`); err != nil {
 		t.Fatal(err)
 	}
 

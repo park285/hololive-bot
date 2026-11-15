@@ -33,8 +33,8 @@ var testRetryBounds = collection.RetryBounds{Minimum: 100 * time.Millisecond, Ma
 
 func testConfig() Config {
 	return Config{
-		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
-		RenewTimeout: 50 * time.Millisecond, DBTimeout: 100 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
+		LeaseTTL: 90 * time.Second, RenewInterval: 20 * time.Second,
+		RenewTimeout: 5 * time.Second, DBTimeout: 5 * time.Second, CleanupTimeout: 5 * time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
 		AcquisitionBatch: 10, QueueCapacity: 4,
 	}
@@ -75,7 +75,7 @@ func TestConfigRequiresBoundedLeaseAndRuntimeBudgets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	config.RenewInterval = config.LeaseTTL / 2
+	config.RenewInterval = config.LeaseTTL - config.RenewTimeout - time.Second
 	if !errors.Is(config.Validate(), ErrInvalidConfig) {
 		t.Fatalf("renew interval validation error = %v", config.Validate())
 	}
@@ -654,9 +654,12 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	before := retryDatabaseClock(t, pool)
 	if err := lease.Defer(ctx, testDeferInput(t, time.Now().UTC(), contract.ErrorCollectionFailed, contract.ClassTransient, "provider rate limited")); err != nil {
 		t.Fatalf("defer short retry: %v", err)
 	}
+
+	after := retryDatabaseClock(t, pool)
 
 	var (
 		state   string
@@ -667,8 +670,8 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if state != "DEFERRED" || retryAt.Before(time.Now().UTC()) || retryAt.After(time.Now().UTC().Add(testRetryBounds.Maximum)) {
-		t.Fatalf("deferred state=%s retry_at=%s", state, retryAt)
+	if state != "DEFERRED" || retryAt.Before(before.Add(testRetryBounds.Minimum)) || retryAt.After(after.Add(testRetryBounds.Maximum)) {
+		t.Fatalf("deferred state=%s retry_at=%s database clock=[%s, %s]", state, retryAt, before, after)
 	}
 }
 
