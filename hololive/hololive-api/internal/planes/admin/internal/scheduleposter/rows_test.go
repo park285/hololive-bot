@@ -114,7 +114,7 @@ func (f *fakeRowModel) translateRows(_ context.Context, prompt string) ([]transl
 
 func rowsService(store *fakeRowStore, model *fakeRowModel, members ...*domain.Member) *Service {
 	sources := &fakeSources{original: source{MIME: mimeJPEG, Data: []byte("original")}}
-	service := testService(&fakeStore{}, sources, &fakeTranslator{}, members...)
+	service := testService(&fakeStore{}, sources, members...)
 
 	service.rows = store
 	service.rowModel = model

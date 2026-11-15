@@ -180,7 +180,7 @@ func TestSchedulePosterCommandExplainsMissingRowsFromSeededString(t *testing.T) 
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	want := "이번 주 번역된 일정 포스터가 아직 없습니다."
+	want := "이번 주 일정표가 아직 없습니다."
 	if len(replies.images) != 0 || cards.calls != 0 || !slices.Equal(replies.messages, []string{want}) {
 		t.Fatalf("replies = %+v, render calls = %d, want %q", replies, cards.calls, want)
 	}

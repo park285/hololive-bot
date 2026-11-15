@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
@@ -23,6 +22,7 @@ import (
 var (
 	errInvalidSchedulePosterRequest = errors.New("invalid schedule poster request body")
 	schedulePosterDatePattern       = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	schedulePosterZone              = time.FixedZone("JST", 9*60*60)
 )
 
 const (
@@ -40,31 +40,73 @@ type SchedulePosterHandler struct {
 	store     *scheduleposter.Store
 	collector SchedulePosterCollector
 	logger    *slog.Logger
+	now       func() time.Time
+}
+
+type schedulePosterRowsResponse struct {
+	ID              string                       `json:"id"`
+	Today           string                       `json:"today"`
+	RowsExtractedAt *string                      `json:"rowsExtractedAt"`
+	RowsDayShift    int                          `json:"rowsDayShift"`
+	PublishStart    *string                      `json:"publishStart"`
+	PublishEnd      *string                      `json:"publishEnd"`
+	PublishedToday  bool                         `json:"publishedToday"`
+	TodayPosterID   *string                      `json:"todayPosterId"`
+	UpdatedAt       *string                      `json:"updatedAt"`
+	Slots           []schedulePosterSlotResponse `json:"slots"`
+}
+
+type schedulePosterSlotResponse struct {
+	Number      int                          `json:"number"`
+	Ordinal     *int                         `json:"ordinal"`
+	AddedPostID *string                      `json:"addedPostId"`
+	Day         string                       `json:"day"`
+	Start       string                       `json:"start"`
+	End         string                       `json:"end"`
+	Status      string                       `json:"status"`
+	SourceZone  string                       `json:"sourceZone"`
+	SourceText  string                       `json:"sourceText"`
+	Badges      []string                     `json:"badges"`
+	TitleKo     string                       `json:"titleKo"`
+	WithKo      []string                     `json:"withKo"`
+	PlaceKo     string                       `json:"placeKo"`
+	TagsKo      []string                     `json:"tagsKo"`
+	NoteKo      string                       `json:"noteKo"`
+	DoubtKo     string                       `json:"doubtKo"`
+	Warnings    []string                     `json:"warnings"`
+	TimeChanged bool                         `json:"timeChanged"`
+	OrigDay     *string                      `json:"origDay"`
+	OrigStart   *string                      `json:"origStart"`
+	MovedTo     *string                      `json:"movedTo"`
+	Steps       []schedulePosterStepResponse `json:"steps"`
+}
+
+type schedulePosterStepResponse struct {
+	PostID string `json:"postId"`
+	Item   int    `json:"item"`
+	Kind   string `json:"kind"`
 }
 
 type schedulePosterResponse struct {
-	ID                string  `json:"id"`
-	ChannelID         string  `json:"channelId"`
-	PostURL           string  `json:"postUrl"`
-	ImageURL          string  `json:"imageUrl"`
-	PostedAt          string  `json:"postedAt"`
-	TextExcerpt       string  `json:"textExcerpt"`
-	ReviewStatus      string  `json:"reviewStatus"`
-	WeekStart         *string `json:"weekStart"`
-	WeekEnd           *string `json:"weekEnd"`
-	ReviewedAt        *string `json:"reviewedAt"`
-	ReviewedBy        string  `json:"reviewedBy"`
-	ReviewReason      string  `json:"reviewRequestReason"`
-	TranslationStatus string  `json:"translationStatus"`
-	TranslationError  string  `json:"translationError"`
-	TranslatedAt      *string `json:"translatedAt"`
-	Revision          string  `json:"revision"`
-	CreatedAt         string  `json:"createdAt"`
-	UpdatedAt         string  `json:"updatedAt"`
-	RowsStatus        string  `json:"rowsStatus"`
-	RowsError         string  `json:"rowsError"`
-	RowsExtractedAt   *string `json:"rowsExtractedAt"`
-	RowsCount         int     `json:"rowsCount"`
+	ID              string  `json:"id"`
+	ChannelID       string  `json:"channelId"`
+	PostURL         string  `json:"postUrl"`
+	ImageURL        string  `json:"imageUrl"`
+	PostedAt        string  `json:"postedAt"`
+	TextExcerpt     string  `json:"textExcerpt"`
+	ReviewStatus    string  `json:"reviewStatus"`
+	WeekStart       *string `json:"weekStart"`
+	WeekEnd         *string `json:"weekEnd"`
+	ReviewedAt      *string `json:"reviewedAt"`
+	ReviewedBy      string  `json:"reviewedBy"`
+	ReviewReason    string  `json:"reviewRequestReason"`
+	Revision        string  `json:"revision"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
+	RowsStatus      string  `json:"rowsStatus"`
+	RowsError       string  `json:"rowsError"`
+	RowsExtractedAt *string `json:"rowsExtractedAt"`
+	RowsCount       int     `json:"rowsCount"`
 }
 
 type schedulePosterPostsResponse struct {
@@ -112,28 +154,25 @@ type schedulePosterWeekRequest struct {
 
 func newSchedulePosterResponse(poster *scheduleposter.Poster) schedulePosterResponse {
 	return schedulePosterResponse{
-		ID:                strconv.FormatInt(poster.ID, 10),
-		ChannelID:         poster.ChannelID,
-		PostURL:           poster.PostURL,
-		ImageURL:          poster.ImageURL,
-		PostedAt:          formatTimestamp(poster.PostedAt),
-		TextExcerpt:       poster.TextExcerpt,
-		ReviewStatus:      string(poster.ReviewStatus),
-		WeekStart:         formatOptionalDate(poster.WeekStart),
-		WeekEnd:           formatOptionalDate(poster.WeekEnd),
-		ReviewedAt:        formatOptionalTimestamp(poster.ReviewedAt),
-		ReviewedBy:        string(poster.ReviewedBy),
-		ReviewReason:      string(poster.ReviewRequestReason),
-		TranslationStatus: string(poster.TranslationStatus),
-		TranslationError:  poster.TranslationError,
-		TranslatedAt:      formatOptionalTimestamp(poster.TranslatedAt),
-		Revision:          strconv.FormatInt(poster.Revision, 10),
-		CreatedAt:         formatTimestamp(poster.CreatedAt),
-		UpdatedAt:         formatTimestamp(poster.UpdatedAt),
-		RowsStatus:        string(poster.RowsStatus),
-		RowsError:         poster.RowsError,
-		RowsExtractedAt:   formatOptionalTimestamp(poster.RowsExtractedAt),
-		RowsCount:         poster.RowsCount,
+		ID:              strconv.FormatInt(poster.ID, 10),
+		ChannelID:       poster.ChannelID,
+		PostURL:         poster.PostURL,
+		ImageURL:        poster.ImageURL,
+		PostedAt:        formatTimestamp(poster.PostedAt),
+		TextExcerpt:     poster.TextExcerpt,
+		ReviewStatus:    string(poster.ReviewStatus),
+		WeekStart:       formatOptionalDate(poster.WeekStart),
+		WeekEnd:         formatOptionalDate(poster.WeekEnd),
+		ReviewedAt:      formatOptionalTimestamp(poster.ReviewedAt),
+		ReviewedBy:      string(poster.ReviewedBy),
+		ReviewReason:    string(poster.ReviewRequestReason),
+		Revision:        strconv.FormatInt(poster.Revision, 10),
+		CreatedAt:       formatTimestamp(poster.CreatedAt),
+		UpdatedAt:       formatTimestamp(poster.UpdatedAt),
+		RowsStatus:      string(poster.RowsStatus),
+		RowsError:       poster.RowsError,
+		RowsExtractedAt: formatOptionalTimestamp(poster.RowsExtractedAt),
+		RowsCount:       poster.RowsCount,
 	}
 }
 
@@ -175,6 +214,82 @@ func newSchedulePosterPostResponse(post *scheduleposter.PosterPost) schedulePost
 		Restorable:  post.Restorable,
 		Changes:     changes,
 	}
+}
+
+func newSchedulePosterRowsResponse(schedule *scheduleposter.PosterSchedule, today time.Time) schedulePosterRowsResponse {
+	slots := schedule.Slots()
+	items := make([]schedulePosterSlotResponse, 0, len(slots))
+
+	for i := range slots {
+		items = append(items, newSchedulePosterSlotResponse(&slots[i]))
+	}
+
+	response := schedulePosterRowsResponse{
+		ID:             strconv.FormatInt(schedule.PosterID, 10),
+		Today:          today.Format(time.DateOnly),
+		RowsDayShift:   schedule.RowsDayShift,
+		PublishedToday: schedule.TodayPosterID == schedule.PosterID,
+		Slots:          items,
+	}
+
+	if schedule.Confirmed {
+		response.PublishStart = new(schedule.WeekStart.AddDate(0, 0, schedule.RowsDayShift).Format(time.DateOnly))
+		response.PublishEnd = new(schedule.WeekEnd.AddDate(0, 0, schedule.RowsDayShift).Format(time.DateOnly))
+	}
+
+	if schedule.TodayPosterID != 0 {
+		response.TodayPosterID = new(strconv.FormatInt(schedule.TodayPosterID, 10))
+	}
+
+	if !schedule.ExtractedAt.IsZero() {
+		response.RowsExtractedAt = new(formatTimestamp(schedule.ExtractedAt))
+		response.UpdatedAt = new(formatTimestamp(schedule.UpdatedAt()))
+	}
+
+	return response
+}
+
+func newSchedulePosterSlotResponse(slot *scheduleposter.Slot) schedulePosterSlotResponse {
+	steps := make([]schedulePosterStepResponse, 0, len(slot.Steps))
+	for i := range slot.Steps {
+		step := &slot.Steps[i]
+
+		steps = append(steps, schedulePosterStepResponse{PostID: strconv.FormatInt(step.PostID, 10), Item: step.Item, Kind: string(step.Kind)})
+	}
+
+	item := schedulePosterSlotResponse{
+		Number:      slot.Number,
+		Day:         slot.Day.Format(time.DateOnly),
+		Start:       slot.Start,
+		End:         slot.End,
+		Status:      string(slot.Status),
+		SourceZone:  slot.SourceZone,
+		SourceText:  slot.SourceText,
+		Badges:      slot.Badges,
+		TitleKo:     slot.TitleKo,
+		WithKo:      slot.WithKo,
+		PlaceKo:     slot.PlaceKo,
+		TagsKo:      slot.TagsKo,
+		NoteKo:      slot.NoteKo,
+		DoubtKo:     slot.DoubtKo,
+		Warnings:    slot.Warnings,
+		TimeChanged: slot.TimeChanged,
+		Steps:       steps,
+	}
+
+	if slot.AddedPostID != 0 {
+		item.AddedPostID = new(strconv.FormatInt(slot.AddedPostID, 10))
+	} else {
+		item.Ordinal = new(slot.Ordinal)
+		item.OrigDay = new(slot.OrigDay.Format(time.DateOnly))
+		item.OrigStart = new(slot.OrigStart)
+	}
+
+	if !slot.MovedTo.IsZero() {
+		item.MovedTo = new(slot.MovedTo.Format(time.DateOnly))
+	}
+
+	return item
 }
 
 func formatTimestamp(value time.Time) string {
@@ -353,8 +468,8 @@ func (h *SchedulePosterHandler) GetSchedulePosterChanges(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, schedulePosterPostsResponse{Posts: items})
 }
 
-// GetTranslatedSchedulePoster는 Console gateway가 JSON 응답만 중계하므로 이미지를 base64로 담는다.
-func (h *SchedulePosterHandler) GetTranslatedSchedulePoster(c *gin.Context) {
+// GetSchedulePosterRows는 포스터의 행 묶음에 반영 변경을 적용한 칸과, 오늘(JST) !스케쥴이 이 포스터를 보여 주는지를 돌려준다.
+func (h *SchedulePosterHandler) GetSchedulePosterRows(c *gin.Context) {
 	if !h.ready(c) {
 		return
 	}
@@ -364,17 +479,20 @@ func (h *SchedulePosterHandler) GetTranslatedSchedulePoster(c *gin.Context) {
 		return
 	}
 
+	now := h.now().In(schedulePosterZone)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), schedulePosterTimeout)
 	defer cancel()
 
-	image, err := h.store.TranslatedImage(ctx, id)
+	schedule, err := h.store.PosterRows(ctx, id, today)
 	if err != nil {
-		h.respondStoreError(c, "load translated schedule poster", err)
+		h.respondStoreError(c, "load schedule poster rows", err)
 
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, gin.H{"id": strconv.FormatInt(id, 10), "mimeType": image.MIME, "data": base64.StdEncoding.EncodeToString(image.Data)})
+	ginjson.Respond(c, http.StatusOK, newSchedulePosterRowsResponse(&schedule, today))
 }
 
 func (h *SchedulePosterHandler) ConfirmSchedulePoster(c *gin.Context) {
@@ -390,7 +508,7 @@ func (h *SchedulePosterHandler) ConfirmSchedulePoster(c *gin.Context) {
 	})
 }
 
-// UpdateSchedulePosterWeek은 확정본의 주 범위만 고치고 다시 번역하지 않는다.
+// UpdateSchedulePosterWeek은 확정본의 주 범위를 고치고 일정표 행을 다시 뽑는다.
 func (h *SchedulePosterHandler) UpdateSchedulePosterWeek(c *gin.Context) {
 	var request schedulePosterWeekRequest
 
@@ -448,14 +566,6 @@ func (h *SchedulePosterHandler) RejectSchedulePoster(c *gin.Context) {
 
 	h.change(c, &request, &request.ExpectedRevision, func(ctx context.Context, id, revision int64) (int64, error) {
 		return h.store.Reject(ctx, id, revision)
-	})
-}
-
-func (h *SchedulePosterHandler) RetranslateSchedulePoster(c *gin.Context) {
-	var request schedulePosterRevisionRequest
-
-	h.change(c, &request, &request.ExpectedRevision, func(ctx context.Context, id, revision int64) (int64, error) {
-		return h.store.RequestTranslation(ctx, id, revision)
 	})
 }
 

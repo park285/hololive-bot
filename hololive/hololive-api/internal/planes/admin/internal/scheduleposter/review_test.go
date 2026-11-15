@@ -68,7 +68,7 @@ func reviewCandidate(id int64, imageURL string) posterstore.ReviewCandidate {
 }
 
 func reviewingService(store *fakeStore, sources *fakeSources, judge *fakeJudge) *Service {
-	service := testService(store, sources, &fakeTranslator{})
+	service := testService(store, sources)
 
 	service.config.Targets = []Target{{ChannelID: sophiaChannel, YouTubeCommunity: true}}
 	service.judge = judge
@@ -190,7 +190,7 @@ func TestCollectHandsOverWaitingCandidatesWhenAutoReviewIsOff(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeStore{}
-	service := testService(store, &fakeSources{pages: xPages}, &fakeTranslator{})
+	service := testService(store, &fakeSources{pages: xPages})
 
 	require.NoError(t, service.collect(t.Context()))
 	require.Equal(t, []time.Time{service.now()}, store.handOverBefore, "자동 검토를 끄면 기다리던 후보를 모두 넘긴다")

@@ -1,11 +1,8 @@
 package scheduleposter_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,10 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
-const (
-	sophiaChannel = "UCROQtXcp2loQEmvpe5rhJzQ"
-	mimeJPEG      = "image/jpeg"
-)
+const sophiaChannel = "UCROQtXcp2loQEmvpe5rhJzQ"
 
 func date(t *testing.T, value string) time.Time {
 	t.Helper()
@@ -49,7 +43,7 @@ func candidate(id int64, postedAt time.Time) scheduleposter.Candidate {
 
 var testPostedAt = time.Date(2026, time.November, 9, 3, 0, 0, 0, time.UTC)
 
-func confirmedPending(t *testing.T, store *scheduleposter.Store) scheduleposter.PendingTranslation {
+func confirmPoster101(t *testing.T, store *scheduleposter.Store) int64 {
 	t.Helper()
 
 	ctx := t.Context()
@@ -63,11 +57,7 @@ func confirmedPending(t *testing.T, store *scheduleposter.Store) scheduleposter.
 	revision, err := store.Confirm(ctx, 101, poster.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
 	require.NoError(t, err)
 
-	pending, err := store.PendingTranslations(ctx, 10)
-	require.NoError(t, err)
-	require.Equal(t, []scheduleposter.PendingTranslation{{ID: 101, ChannelID: sophiaChannel, ImageURL: candidate(101, testPostedAt).ImageURL, Revision: revision}}, pending)
-
-	return pending[0]
+	return revision
 }
 
 func TestStoreInsertCandidatesIgnoresDuplicates(t *testing.T) {
@@ -91,16 +81,20 @@ func TestStoreInsertCandidatesIgnoresDuplicates(t *testing.T) {
 	poster, err := store.Get(ctx, 101)
 	require.NoError(t, err)
 	require.Equal(t, scheduleposter.ReviewPending, poster.ReviewStatus)
-	require.Equal(t, scheduleposter.TranslationNotRequested, poster.TranslationStatus)
 }
 
 func TestStoreConfirmChecksRevisionWeekAndState(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	store := newStore(t)
+	pool := dbtest.NewPool(t)
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
 
-	_, err := store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt)}, false)
+	_, err = store.InsertCandidates(ctx, []scheduleposter.Candidate{candidate(101, testPostedAt)}, false)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `UPDATE schedule_posters SET rows_status = 'failed', rows_error = 'extraction_failed' WHERE id = 101`)
 	require.NoError(t, err)
 
 	poster, err := store.Get(ctx, 101)
@@ -123,49 +117,42 @@ func TestStoreConfirmChecksRevisionWeekAndState(t *testing.T) {
 	revision, err := store.Confirm(ctx, 101, poster.Revision, weekStart, weekEnd)
 	require.NoError(t, err)
 
+	confirmed, err := store.Get(ctx, 101)
+	require.NoError(t, err)
+	require.Equal(t, scheduleposter.RowsPending, confirmed.RowsStatus, "확정은 행 추출을 예약한다")
+	require.Empty(t, confirmed.RowsError)
+
+	pending, err := store.PendingRows(ctx, weekStart, 10)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.EqualValues(t, 101, pending[0].ID)
+
 	_, err = store.Confirm(ctx, 101, revision, weekStart, weekEnd)
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidState)
 
 	_, err = store.Confirm(ctx, 101, revision, date(t, "2026-12-01"), date(t, "2026-12-07"))
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "검토 대기가 아니면 주가 멀어도 상태 오류다")
-
-	_, err = store.RequestTranslation(ctx, 101, revision)
-	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 대기 중에는 재번역을 예약하지 않는다")
 }
 
-func TestStoreUpdateWeekMovesOnlyThePublishedWeek(t *testing.T) {
+func TestStoreUpdateWeekMovesTheWeekAndReextractsRows(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	store := newStore(t)
-	image := scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}
-	pending := confirmedPending(t, store)
-
-	_, err := store.UpdateWeek(ctx, 101, pending.Revision, date(t, "2026-11-16"), date(t, "2026-11-22"))
-	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 중에는 바꾸지 않아 진행 중인 번역 결과가 그대로 기록된다")
-
-	_, err = store.UpdateWeek(ctx, 101, pending.Revision, date(t, "2026-11-23"), date(t, "2026-11-29"))
-	require.ErrorIs(t, err, scheduleposter.ErrInvalidState, "번역 중이면 주가 멀어도 주를 고칠 수 없는 상태로 알린다")
-
-	recorded, err := store.RecordTranslation(ctx, pending, image)
-	require.NoError(t, err)
-	require.True(t, recorded)
-
-	poster, err := store.Get(ctx, 101)
-	require.NoError(t, err)
+	revision := confirmPoster101(t, store)
 
 	summary, err := store.Summary(ctx)
 	require.NoError(t, err)
 
 	nextWeek, nextEnd := date(t, "2026-11-16"), date(t, "2026-11-22")
 
-	_, err = store.UpdateWeek(ctx, 101, poster.Revision+1, nextWeek, nextEnd)
+	_, err = store.UpdateWeek(ctx, 101, revision+1, nextWeek, nextEnd)
 	require.ErrorIs(t, err, scheduleposter.ErrRevisionConflict)
 
-	_, err = store.UpdateWeek(ctx, 101, poster.Revision, date(t, "2026-11-23"), date(t, "2026-11-29"))
+	_, err = store.UpdateWeek(ctx, 101, revision, date(t, "2026-11-23"), date(t, "2026-11-29"))
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidWeek, "게시일과 7일 넘게 떨어진 주")
 
-	_, err = store.UpdateWeek(ctx, 101, poster.Revision, nextWeek, nextEnd.AddDate(0, 0, 1))
+	_, err = store.UpdateWeek(ctx, 101, revision, nextWeek, nextEnd.AddDate(0, 0, 1))
 	require.ErrorIs(t, err, scheduleposter.ErrInvalidWeek, "7일을 넘는 범위")
 
 	_, err = store.UpdateWeek(ctx, 102, 1, nextWeek, nextEnd)
@@ -174,31 +161,76 @@ func TestStoreUpdateWeekMovesOnlyThePublishedWeek(t *testing.T) {
 	_, err = store.UpdateWeek(ctx, 999, 1, nextWeek, nextEnd)
 	require.ErrorIs(t, err, scheduleposter.ErrNotFound)
 
-	revision, err := store.UpdateWeek(ctx, 101, poster.Revision, nextWeek, nextEnd)
-	require.NoError(t, err)
-	require.Equal(t, poster.Revision+1, revision)
+	updatedRevision, err := store.UpdateWeek(ctx, 101, revision, nextWeek, nextEnd)
+	require.NoError(t, err, "행 추출을 기다리는 확정본도 주를 고친다")
+	require.Equal(t, revision+1, updatedRevision)
 
 	updated, err := store.Get(ctx, 101)
 	require.NoError(t, err)
-	require.Equal(t, scheduleposter.TranslationSucceeded, updated.TranslationStatus, "번역본은 그대로 둔다")
 	require.Equal(t, scheduleposter.ReviewerAdmin, updated.ReviewedBy)
-
-	waiting, err := store.PendingTranslations(ctx, 10)
-	require.NoError(t, err)
-	require.Empty(t, waiting, "다시 번역하지 않는다")
+	require.Equal(t, scheduleposter.RowsPending, updated.RowsStatus)
 
 	after, err := store.Summary(ctx)
 	require.NoError(t, err)
 	require.Equal(t, summary, after, "주 수정은 Console 새 후보 알림을 바꾸지 않는다")
 
-	_, found, err := store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-11"))
-	require.NoError(t, err)
-	require.False(t, found)
+	moved := onlyPendingRows(t, store)
+	require.Equal(t, nextWeek, moved.WeekStart, "고친 주로 행을 다시 뽑는다")
+}
 
-	published, found, err := store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-18"))
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, image, published)
+func TestStoreWritesLeaveEarlierImageTranslationsAlone(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store, pool := newRowsStore(t)
+	postedAt := time.Date(2099, time.November, 9, 3, 0, 0, 0, time.UTC)
+
+	type translation struct {
+		Status, Error string
+		ImageBytes    *int
+		At            *time.Time
+	}
+
+	read := func(id int64) translation {
+		var got translation
+
+		require.NoError(t, pool.QueryRow(ctx, `SELECT translation_status, translation_error, octet_length(translated_image), translated_at
+			FROM schedule_posters WHERE id = $1`, id).Scan(&got.Status, &got.Error, &got.ImageBytes, &got.At))
+
+		return got
+	}
+
+	for _, poster := range []struct {
+		id            int64
+		channel, seed string
+	}{
+		{401, sophiaChannel, `UPDATE schedule_posters SET translation_status = 'pending' WHERE id = $1`},
+		{402, "UCy9mgxB8pn2C4aNK_MPthDQ", `UPDATE schedule_posters SET translation_status = 'succeeded', translated_image = '\xffd8ffd9'::bytea,
+			translated_mime = 'image/jpeg', translated_at = now() WHERE id = $1`},
+	} {
+		id := poster.id
+		confirmedPosterWithRows(t, store, id, poster.channel, postedAt, "2099-11-09", "2099-11-15")
+
+		_, err := pool.Exec(ctx, poster.seed, id)
+		require.NoError(t, err)
+
+		before := read(id)
+
+		current, err := store.Get(ctx, id)
+		require.NoError(t, err)
+
+		_, err = store.RequestRows(ctx, id, current.Revision)
+		require.NoError(t, err, "poster %d", id)
+		require.Equal(t, before, read(id), "poster %d", id)
+
+		revision, err := store.UpdateWeek(ctx, id, current.Revision, date(t, "2099-11-10"), date(t, "2099-11-16"))
+		require.NoError(t, err, "poster %d", id)
+		require.Equal(t, before, read(id), "poster %d", id)
+
+		_, err = store.Reject(ctx, id, revision)
+		require.NoError(t, err, "poster %d", id)
+		require.Equal(t, before, read(id), "poster %d", id)
+	}
 }
 
 func TestStoreConfirmedWeekClosesSameMemberCandidates(t *testing.T) {
@@ -527,18 +559,12 @@ func TestStoreRecordsWhoReviewed(t *testing.T) {
 
 	for name, change := range map[string]adminChange{
 		"주 수정": func(ctx context.Context, store *scheduleposter.Store) (int64, error) {
-			pending, err := store.PendingTranslations(ctx, 10)
-			at := slices.IndexFunc(pending, func(item scheduleposter.PendingTranslation) bool { return item.ID == 104 })
-
-			if err != nil || at < 0 {
-				return 0, fmt.Errorf("find pending translation of 104 in %v: %w", pending, err)
+			poster, err := store.Get(ctx, 104)
+			if err != nil {
+				return 0, fmt.Errorf("get poster 104: %w", err)
 			}
 
-			if _, err = store.RecordTranslation(ctx, pending[at], scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}); err != nil {
-				return 0, fmt.Errorf("record translation of 104: %w", err)
-			}
-
-			return store.UpdateWeek(ctx, 104, pending[at].Revision+1, start, end)
+			return store.UpdateWeek(ctx, 104, poster.Revision, start, end)
 		},
 		"거절": func(ctx context.Context, store *scheduleposter.Store) (int64, error) {
 			return store.Reject(ctx, 104, 2)
@@ -637,46 +663,18 @@ func TestStoreInsertThumbnailCandidates(t *testing.T) {
 	require.Less(t, poster.ID, int64(1)<<60+1, "X 게시물 번호와 겹치지 않는 범위다")
 	require.Positive(t, poster.ID)
 
-	revision, err := store.Confirm(ctx, poster.ID, poster.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
+	_, err = store.Confirm(ctx, poster.ID, poster.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
 	require.NoError(t, err)
 
-	pending, err := store.PendingTranslations(ctx, 10)
+	pending, err := store.PendingRows(ctx, date(t, "2026-11-09"), 10)
 	require.NoError(t, err)
-	require.Equal(t, []scheduleposter.PendingTranslation{{
-		ID: poster.ID, ChannelID: melaChannel, ImageURL: poster.ImageURL, ImageSHA256: thisWeek, Revision: revision,
+	require.Equal(t, []scheduleposter.PendingRows{{
+		ID: poster.ID, ChannelID: melaChannel, ImageURL: poster.ImageURL, ImageSHA256: thisWeek,
+		WeekStart: date(t, "2026-11-09"), WeekEnd: date(t, "2026-11-15"), RowsRevision: 1,
 	}}, pending)
 
 	require.Zero(t, insert(freeChat, nextWeek, testPostedAt.AddDate(0, 0, 3)), "확정된 주 안에 바뀐 그림은 후보가 되지 않는다")
 	require.EqualValues(t, 1, insert(freeChat, nextWeek, testPostedAt.AddDate(0, 0, 6)), "주 종료일부터 바뀐 그림은 다음 주 후보가 된다")
-}
-
-func TestStoreRecordTranslationPublishesOnlyCurrentRevision(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	store := newStore(t)
-	pending := confirmedPending(t, store)
-	image := scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}
-
-	stale := pending
-	stale.Revision--
-
-	recorded, err := store.RecordTranslation(ctx, stale, image)
-	require.NoError(t, err)
-	require.False(t, recorded)
-
-	recorded, err = store.RecordTranslation(ctx, pending, image)
-	require.NoError(t, err)
-	require.True(t, recorded)
-
-	published, found, err := store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-11"))
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, image, published)
-
-	_, found, err = store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-16"))
-	require.NoError(t, err)
-	require.False(t, found)
 }
 
 func TestStorePublishesLatestPostedPosterOfTheWeek(t *testing.T) {
@@ -695,132 +693,15 @@ func TestStorePublishesLatestPostedPosterOfTheWeek(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	pending, err := store.PendingTranslations(ctx, 10)
-	require.NoError(t, err)
+	pending := pendingRows(t, store)
 	require.Len(t, pending, 2)
 
 	for _, item := range pending {
-		_, err = store.RecordTranslation(ctx, item, scheduleposter.Image{MIME: mimeJPEG, Data: []byte(strconv.FormatInt(item.ID, 10))})
-		require.NoError(t, err)
+		require.True(t, recordChat(t, store, item))
 	}
 
-	published, found, err := store.PublishedImage(ctx, sophiaChannel, date(t, "2026-11-11"))
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, []byte("201"), published.Data, "커뮤니티·썸네일 id는 게시 순서가 아니므로 늦게 올린 포스터를 고른다")
-}
-
-func TestStoreRetranslationFailureAndReject(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	store := newStore(t)
-	pending := confirmedPending(t, store)
-
-	image := scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}}
-	day := date(t, "2026-11-11")
-
-	recorded, err := store.RecordTranslation(ctx, pending, image)
-	require.NoError(t, err)
-	require.True(t, recorded)
-
-	poster, err := store.Get(ctx, 101)
-	require.NoError(t, err)
-
-	revision, err := store.RequestTranslation(ctx, 101, poster.Revision)
-	require.NoError(t, err)
-
-	_, err = store.TranslatedImage(ctx, 101)
-	require.ErrorIs(t, err, scheduleposter.ErrNotFound, "Console 번역본 조회는 번역 성공 상태만 본다")
-
-	poster, err = store.Get(ctx, 101)
-	require.NoError(t, err)
-	require.Nil(t, poster.TranslatedAt, "번역 대기 행의 translatedAt은 비워 Console 응답 형식을 유지한다")
-
-	published, found, err := store.PublishedImage(ctx, sophiaChannel, day)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, image, published, "재번역 중에도 이전 번역본을 게시한다")
-
-	recorded, err = store.RecordTranslationFailure(ctx, scheduleposter.PendingTranslation{ID: 101, Revision: revision}, "translation_failed", scheduleposter.TranslationInputs{})
-	require.NoError(t, err)
-	require.True(t, recorded)
-
-	poster, err = store.Get(ctx, 101)
-	require.NoError(t, err)
-	require.Equal(t, scheduleposter.TranslationFailed, poster.TranslationStatus)
-	require.Equal(t, "translation_failed", poster.TranslationError)
-
-	_, found, err = store.PublishedImage(ctx, sophiaChannel, day)
-	require.NoError(t, err)
-	require.True(t, found, "재번역이 실패해도 이전 번역본은 남는다")
-
-	_, err = store.Reject(ctx, 101, poster.Revision)
-	require.NoError(t, err)
-
-	_, found, err = store.PublishedImage(ctx, sophiaChannel, day)
-	require.NoError(t, err)
-	require.False(t, found, "거절하면 게시를 내린다")
-
-	poster, err = store.Get(ctx, 101)
-	require.NoError(t, err)
-	require.Equal(t, scheduleposter.ReviewRejected, poster.ReviewStatus)
-	require.Equal(t, scheduleposter.TranslationNotRequested, poster.TranslationStatus)
-
-	summary, err := store.Summary(ctx)
-	require.NoError(t, err)
-	require.Equal(t, scheduleposter.Summary{PendingCount: 1, LatestCandidateID: 102}, summary)
-}
-
-func TestStoreReplacesTheSavedTranslationInputsOnEveryRecord(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	store := newStore(t)
-	pending := confirmedPending(t, store)
-
-	retranslate := func() scheduleposter.PendingTranslation {
-		t.Helper()
-
-		poster, err := store.Get(ctx, 101)
-		require.NoError(t, err)
-
-		_, err = store.RequestTranslation(ctx, 101, poster.Revision)
-		require.NoError(t, err)
-
-		pending, err := store.PendingTranslations(ctx, 10)
-		require.NoError(t, err)
-		require.Len(t, pending, 1)
-
-		return pending[0]
-	}
-
-	saved := scheduleposter.TranslationInputs{SHA256: bytes.Repeat([]byte{1}, 32), Transcript: []string{"週間スケジュール", "21:00〜"}, Table: "週間スケジュール ⇒ 주간 스케줄"}
-
-	recorded, err := store.RecordTranslationFailure(ctx, pending, "translation_failed", saved)
-	require.NoError(t, err)
-	require.True(t, recorded)
-
-	pending = retranslate()
-	require.Equal(t, saved, pending.Inputs)
-
-	recorded, err = store.RecordTranslationFailure(ctx, pending, "translation_failed", scheduleposter.TranslationInputs{})
-	require.NoError(t, err)
-	require.True(t, recorded)
-
-	pending = retranslate()
-	require.Empty(t, pending.Inputs, "빈 입력으로 기록하면 남긴 판독·번역표를 지운다")
-
-	recorded, err = store.RecordTranslationFailure(ctx, pending, "translation_failed", saved)
-	require.NoError(t, err)
-	require.True(t, recorded)
-
-	pending = retranslate()
-
-	recorded, err = store.RecordTranslation(ctx, pending, scheduleposter.Image{MIME: mimeJPEG, Data: []byte{0xff, 0xd8, 0xff}})
-	require.NoError(t, err)
-	require.True(t, recorded)
-	require.Empty(t, retranslate().Inputs, "성공한 번역은 판독·번역표를 남기지 않는다")
+	posterID, _ := publishedTitles(t, store, sophiaChannel, "2026-11-11")
+	require.EqualValues(t, 201, posterID, "커뮤니티·썸네일 id는 게시 순서가 아니므로 늦게 올린 포스터를 고른다")
 }
 
 func TestStoreRetention(t *testing.T) {

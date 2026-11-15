@@ -31,11 +31,11 @@ func publishedSophia(t *testing.T, store *scheduleposter.Store) scheduleposter.P
 	return schedule
 }
 
-func newChangesStore(t *testing.T) (*scheduleposter.Store, *pgxpool.Pool, scheduleposter.PendingTranslation, scheduleposter.PublishedSchedule) {
+func newChangesStore(t *testing.T) (*scheduleposter.Store, *pgxpool.Pool, int64, scheduleposter.PublishedSchedule) {
 	t.Helper()
 
 	store, pool := newRowsStore(t)
-	translation := confirmedPending(t, store)
+	revision := confirmPoster101(t, store)
 
 	recorded, err := store.RecordRows(t.Context(), onlyPendingRows(t, store), []scheduleposter.Row{
 		scheduleRow(t, "2026-11-10", "잡담"), scheduleRow(t, "2026-11-11", "노래"), scheduleRow(t, "2026-11-12", "게임"),
@@ -43,7 +43,7 @@ func newChangesStore(t *testing.T) (*scheduleposter.Store, *pgxpool.Pool, schedu
 	require.NoError(t, err)
 	require.True(t, recorded)
 
-	return store, pool, translation, publishedSophia(t, store)
+	return store, pool, revision, publishedSophia(t, store)
 }
 
 func pendingPostIDs(t *testing.T, store *scheduleposter.Store, schedule scheduleposter.PublishedSchedule) []int64 {
@@ -274,7 +274,7 @@ func TestStoreRecordMatchFollowsTheCurrentBundle(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	store, pool, translation, schedule := newChangesStore(t)
+	store, pool, revision, schedule := newChangesStore(t)
 
 	_, err := store.InsertPosts(ctx, 101, []scheduleposter.Post{post(13, jstAt(10, 18, 0)), post(14, jstAt(10, 19, 0))})
 	require.NoError(t, err)
@@ -288,11 +288,7 @@ func TestStoreRecordMatchFollowsTheCurrentBundle(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, recorded)
 
-	_, err = store.RecordTranslation(ctx, translation, testImage)
-	require.NoError(t, err)
-
-	revision, err := store.RequestTranslation(ctx, 101, translation.Revision+1)
-	require.NoError(t, err)
+	requeueRows(t, pool)
 
 	_, err = store.InsertPosts(ctx, 101, []scheduleposter.Post{post(15, jstAt(11, 9, 0))})
 	require.NoError(t, err)
@@ -341,13 +337,13 @@ func TestStoreRecordMatchWritesNothingAfterReject(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	store, pool, translation, schedule := newChangesStore(t)
+	store, pool, revision, schedule := newChangesStore(t)
 
 	_, err := store.InsertPosts(ctx, 101, []scheduleposter.Post{post(13, jstAt(10, 18, 0))})
 	require.NoError(t, err)
 	decide(t, store, 13, relevant)
 
-	_, err = store.Reject(ctx, 101, translation.Revision)
+	_, err = store.Reject(ctx, 101, revision)
 	require.NoError(t, err)
 
 	recorded, err := store.RecordMatch(ctx, schedule, storedPost(t, pool, 13), matched(
@@ -368,19 +364,13 @@ func TestStorePostsBeforeTheWeekStartDoNotMatchThePoster(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	store, pool, translation, schedule := newChangesStore(t)
+	store, pool, revision, schedule := newChangesStore(t)
 
 	_, err := store.InsertPosts(ctx, 101, []scheduleposter.Post{post(21, jstAt(9, 20, 0))})
 	require.NoError(t, err)
 	decide(t, store, 21, relevant)
 
-	_, err = store.RecordTranslation(ctx, translation, testImage)
-	require.NoError(t, err)
-
-	poster, err := store.Get(ctx, 101)
-	require.NoError(t, err)
-
-	_, err = store.UpdateWeek(ctx, 101, poster.Revision, date(t, "2026-11-10"), date(t, "2026-11-16"))
+	_, err = store.UpdateWeek(ctx, 101, revision, date(t, "2026-11-10"), date(t, "2026-11-16"))
 	require.NoError(t, err)
 
 	recorded, err := store.RecordMatch(ctx, schedule, storedPost(t, pool, 21), matched())

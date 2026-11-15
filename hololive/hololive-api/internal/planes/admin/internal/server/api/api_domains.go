@@ -23,6 +23,7 @@ package api
 import (
 	"errors"
 	"log/slog"
+	"time"
 
 	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
@@ -114,7 +115,7 @@ func NewDomainHandlers(deps Deps) (*DomainHandlers, error) {
 		Stream:         &StreamHandler{holodex: deps.Holodex, logger: deps.Logger},
 		Stats:          &StatsHandler{repository: deps.Repository, alarm: deps.Alarm, acl: deps.ACL, logger: deps.Logger},
 		Settings:       newSettingsHandler(deps),
-		SchedulePoster: &SchedulePosterHandler{store: deps.SchedulePosters, collector: deps.SchedulePosterCollector, logger: deps.Logger},
+		SchedulePoster: &SchedulePosterHandler{store: deps.SchedulePosters, collector: deps.SchedulePosterCollector, logger: deps.Logger, now: time.Now},
 	}, nil
 }
 

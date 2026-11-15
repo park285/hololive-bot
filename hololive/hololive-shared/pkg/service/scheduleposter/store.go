@@ -1,4 +1,4 @@
-// Package scheduleposter의 쓰기는 admin plane만 하고, bot plane은 번역까지 끝난 확정본만 읽는다.
+// Package scheduleposter의 쓰기는 admin plane만 하고, bot plane은 행 묶음을 저장한 확정본만 읽는다.
 package scheduleposter
 
 import (
@@ -29,15 +29,6 @@ func (s ReviewStatus) Valid() bool {
 	}
 }
 
-type TranslationStatus string
-
-const (
-	TranslationNotRequested TranslationStatus = "not_requested"
-	TranslationPending      TranslationStatus = "pending"
-	TranslationSucceeded    TranslationStatus = "succeeded"
-	TranslationFailed       TranslationStatus = "failed"
-)
-
 // Reviewer는 확정·거절을 누가 했는지다. 관리자 검토로 넘기기 전에 자동 검토가 정했으면 auto다.
 type Reviewer string
 
@@ -61,10 +52,8 @@ const (
 )
 
 const (
-	// MaxImageBytes는 migration 010의 translated_image 크기 CHECK와 같다.
-	MaxImageBytes = 4 << 20
-	maxListLimit  = 100
-	maxWeekDays   = 6
+	maxListLimit = 100
+	maxWeekDays  = 6
 )
 
 var (
@@ -104,9 +93,6 @@ type Poster struct {
 	// ReviewedBy와 ReviewRequestReason은 값이 없으면 빈 문자열이다.
 	ReviewedBy          Reviewer
 	ReviewRequestReason ReviewRequestReason
-	TranslationStatus   TranslationStatus
-	TranslationError    string
-	TranslatedAt        *time.Time
 	Revision            int64
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
@@ -118,37 +104,12 @@ type Poster struct {
 	RowsCount       int
 }
 
-type Image struct {
-	MIME string
-	Data []byte
-}
-
-// PendingTranslation의 Revision이 그 사이 바뀌면 번역 결과를 기록하지 않는다.
-type PendingTranslation struct {
-	ID        int64
-	ChannelID string
-	ImageURL  string
-	// ImageSHA256은 썸네일 후보를 만들 때 받은 그림의 해시다. 같은 주소의 그림이 바뀔 수 있는 출처만 채운다.
-	ImageSHA256 string
-	Revision    int64
-	// Inputs는 이 행의 지난 번역 시도가 다시 쓰라고 남긴 원본 판독과 번역표이며, 없으면 zero value다.
-	Inputs TranslationInputs
-}
-
-// TranslationInputs는 번역 시도 한 번이 만든 원본 판독(Transcript)과 번역표(Table), 그리고 둘을 만든 입력의 sha256이다.
-// 셋을 모두 채우거나 모두 비운다.
-type TranslationInputs struct {
-	SHA256     []byte
-	Transcript []string
-	Table      string
-}
-
 // ReviewCandidate는 자동 검토를 기다리는 검토 대기 후보다.
 type ReviewCandidate struct {
 	ID        int64
 	ChannelID string
 	ImageURL  string
-	// ImageSHA256은 썸네일 후보만 채운다(PendingTranslation과 같다).
+	// ImageSHA256은 썸네일 후보만 채운다.
 	ImageSHA256 string
 	PostedAt    time.Time
 	Revision    int64
@@ -438,40 +399,6 @@ func (s *Store) Get(ctx context.Context, id int64) (Poster, error) {
 	return poster, nil
 }
 
-// TranslatedImage는 번역 전이거나 실패한 행에도 ErrNotFound를 돌려준다.
-func (s *Store) TranslatedImage(ctx context.Context, id int64) (Image, error) {
-	return s.image(ctx, "load translated schedule poster", translatedImageSQL, id)
-}
-
-// PublishedImage의 day는 JST 날짜다.
-func (s *Store) PublishedImage(ctx context.Context, channelID string, day time.Time) (Image, bool, error) {
-	image, err := s.image(ctx, "load published schedule poster", publishedImageSQL, channelID, day)
-	if errors.Is(err, ErrNotFound) {
-		return Image{}, false, nil
-	}
-
-	if err != nil {
-		return Image{}, false, err
-	}
-
-	return image, true, nil
-}
-
-func (s *Store) image(ctx context.Context, action, query string, args ...any) (Image, error) {
-	var image Image
-
-	err := s.pool.QueryRow(ctx, query, args...).Scan(&image.MIME, &image.Data)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Image{}, ErrNotFound
-	}
-
-	if err != nil {
-		return Image{}, fmt.Errorf("%s: %w", action, err)
-	}
-
-	return image, nil
-}
-
 // Confirm은 같은 멤버의 대기 후보 가운데 확정한 주의 마지막 날 전에 올라온 글을 함께 expired로 닫는다.
 // 마지막 날은 다음 주 포스터를 미리 올리는 날이라 남긴다. InsertCandidates도 같은 범위의 새 후보를 받지 않는다.
 func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekStart, weekEnd time.Time) (int64, error) {
@@ -495,9 +422,8 @@ func (s *Store) Confirm(ctx context.Context, id, expectedRevision int64, weekSta
 	return revision, nil
 }
 
-// UpdateWeek은 확정본의 주 범위만 고친다. 번역본은 그대로 게시되고, Confirm과 달리 같은 멤버의 다른 후보를 닫지 않는다.
-// 번역 대기 중이면 진행 중인 번역 결과를 버리지 않도록 ErrInvalidState다. AutoConfirm이 확정본의 주를 읽고 판단하므로
-// 같은 멤버 잠금 아래에서 바꾼다.
+// UpdateWeek은 확정본의 주 범위를 고치고 행 묶음을 지워 다시 뽑게 한다. Confirm과 달리 같은 멤버의 다른 후보를 닫지 않는다.
+// AutoConfirm이 확정본의 주를 읽고 판단하므로 같은 멤버 잠금 아래에서 바꾼다.
 func (s *Store) UpdateWeek(ctx context.Context, id, expectedRevision int64, weekStart, weekEnd time.Time) (int64, error) {
 	if err := ValidateWeek(weekStart, weekEnd); err != nil {
 		return 0, err
@@ -610,7 +536,7 @@ func changeWeek(
 	return revision, err
 }
 
-// Reject는 확정본의 취소에도 쓰며 번역 결과를 함께 지운다. 확정본 취소가 AutoConfirm의 판단 근거를 바꾸므로 Confirm과 같은 멤버 잠금 아래에서 한다.
+// Reject는 확정본의 취소에도 쓰며 행 묶음을 함께 지운다. 확정본 취소가 AutoConfirm의 판단 근거를 바꾸므로 Confirm과 같은 멤버 잠금 아래에서 한다.
 func (s *Store) Reject(ctx context.Context, id, expectedRevision int64) (int64, error) {
 	var revision int64
 
@@ -649,12 +575,7 @@ func deleteRows(ctx context.Context, tx pgx.Tx, id int64) error {
 	return nil
 }
 
-// RequestTranslation은 번역본과 행 묶음을 지우지 않으므로 새 것이 저장될 때까지 이전 번역본과 이전 행이 게시된다. 행 추출도 함께 예약한다.
-func (s *Store) RequestTranslation(ctx context.Context, id, expectedRevision int64) (int64, error) {
-	return s.mutate(ctx, "request schedule poster translation", requestTranslationSQL, id, expectedRevision)
-}
-
-// RequestRows는 일정표 행만 다시 뽑게 예약한다. 번역과 revision은 그대로이고, 새 묶음이 저장될 때까지 이전 묶음이 게시된다.
+// RequestRows는 일정표 행만 다시 뽑게 예약하며 revision은 그대로 둔다. 새 묶음이 저장될 때까지 이전 묶음이 게시된다.
 // 확정본이고 추출이 끝났으며(succeeded·failed) 주가 끝나지 않았을 때만 받고, 아니면 ErrInvalidState다.
 func (s *Store) RequestRows(ctx context.Context, id, expectedRevision int64) (int64, error) {
 	return s.mutate(ctx, "request schedule poster rows", requestRowsSQL, id, expectedRevision)
@@ -688,69 +609,23 @@ func mutationOutcome(current, updated *int64, expectedRevision int64) (int64, er
 	}
 }
 
-func (s *Store) PendingTranslations(ctx context.Context, limit int) ([]PendingTranslation, error) {
-	rows, err := s.pool.Query(ctx, pendingTranslationsSQL, min(max(limit, 1), maxListLimit))
-	if err != nil {
-		return nil, fmt.Errorf("list pending schedule poster translations: %w", err)
-	}
-
-	pending, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (PendingTranslation, error) {
-		var item PendingTranslation
-
-		return item, row.Scan(&item.ID, &item.ChannelID, &item.ImageURL, &item.ImageSHA256, &item.Revision,
-			&item.Inputs.SHA256, &item.Inputs.Transcript, &item.Inputs.Table)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list pending schedule poster translations: %w", err)
-	}
-
-	return pending, nil
-}
-
-// RecordTranslation은 남긴 판독·번역표를 지우고, 그 사이 거절·재번역으로 revision이 바뀌었으면 false를 돌려준다.
-func (s *Store) RecordTranslation(ctx context.Context, item PendingTranslation, image Image) (bool, error) {
-	if len(image.Data) == 0 || len(image.Data) > MaxImageBytes || image.MIME == "" {
-		return false, fmt.Errorf("record schedule poster translation: image must be 1..%d bytes with a media type", MaxImageBytes)
-	}
-
-	tag, err := s.pool.Exec(ctx, recordTranslationSQL, item.ID, item.Revision, image.Data, image.MIME)
-	if err != nil {
-		return false, fmt.Errorf("record schedule poster translation: %w", err)
-	}
-
-	return tag.RowsAffected() == 1, nil
-}
-
-// RecordTranslationFailure는 남긴 판독·번역표를 inputs로 바꾸며, zero value면 지운다.
-func (s *Store) RecordTranslationFailure(ctx context.Context, item PendingTranslation, reason string, inputs TranslationInputs) (bool, error) {
-	tag, err := s.pool.Exec(ctx, recordTranslationFailureSQL, item.ID, item.Revision, reason, inputs.SHA256, inputs.Transcript, inputs.Table)
-	if err != nil {
-		return false, fmt.Errorf("record schedule poster translation failure: %w", err)
-	}
-
-	return tag.RowsAffected() == 1, nil
-}
-
 func scanPoster(row pgx.CollectableRow) (Poster, error) {
 	var (
-		poster            Poster
-		reviewStatus      string
-		translationStatus string
-		reviewedBy        string
-		requestReason     string
-		rowsStatus        string
+		poster        Poster
+		reviewStatus  string
+		reviewedBy    string
+		requestReason string
+		rowsStatus    string
 	)
 
 	err := row.Scan(
 		&poster.ID, &poster.ChannelID, &poster.XUserID, &poster.PostURL, &poster.ImageURL, &poster.PostedAt,
-		&poster.TextExcerpt, &reviewStatus, &poster.WeekStart, &poster.WeekEnd, &poster.ReviewedAt,
-		&translationStatus, &poster.TranslationError, &poster.TranslatedAt, &poster.Revision,
+		&poster.TextExcerpt, &reviewStatus, &poster.WeekStart, &poster.WeekEnd, &poster.ReviewedAt, &poster.Revision,
 		&poster.CreatedAt, &poster.UpdatedAt, &reviewedBy, &requestReason,
 		&rowsStatus, &poster.RowsError, &poster.RowsExtractedAt, &poster.RowsCount,
 	)
 
 	poster.ReviewStatus = ReviewStatus(reviewStatus)
-	poster.TranslationStatus = TranslationStatus(translationStatus)
 	poster.ReviewedBy = Reviewer(reviewedBy)
 	poster.ReviewRequestReason = ReviewRequestReason(requestReason)
 	poster.RowsStatus = RowsStatus(rowsStatus)
