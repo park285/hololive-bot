@@ -8,7 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const schedulePosterImageMigration = "024_schedule_poster_image.sql"
+const (
+	schedulePosterImageMigration = "024_schedule_poster_image.sql"
+	mimeJPEG                     = "image/jpeg"
+)
 
 func TestSchedulePosterImageMigrationKeepsBytesAndMIMETogether(t *testing.T) {
 	t.Parallel()
@@ -54,7 +57,7 @@ func TestSchedulePosterImageMigrationKeepsBytesAndMIMETogether(t *testing.T) {
 		require.ErrorContains(t, err, "chk_schedule_posters_image", name)
 	}
 
-	for _, mime := range []string{"image/jpeg", "image/png", "image/webp"} {
+	for _, mime := range []string{mimeJPEG, "image/png", "image/webp"} {
 		_, err := pool.Exec(ctx, `UPDATE schedule_posters SET image_data = '\x01'::bytea, image_mime = $1 WHERE id = 1`, mime)
 		require.NoError(t, err, mime)
 	}

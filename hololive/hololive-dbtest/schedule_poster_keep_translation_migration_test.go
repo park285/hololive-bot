@@ -35,9 +35,9 @@ func TestSchedulePosterKeepTranslationMigrationConstraints(t *testing.T) {
 		image  []byte
 		mime   any
 	}{
-		{status: "succeeded", image: jpeg, mime: "image/jpeg"},
-		{status: "pending", image: jpeg, mime: "image/jpeg"},
-		{status: "failed", image: jpeg, mime: "image/jpeg"},
+		{status: "succeeded", image: jpeg, mime: mimeJPEG},
+		{status: "pending", image: jpeg, mime: mimeJPEG},
+		{status: "failed", image: jpeg, mime: mimeJPEG},
 		{status: "pending", image: nil, mime: nil},
 	} {
 		_, err := pool.Exec(ctx, insert, index+1, row.status, row.image, row.mime)
@@ -51,7 +51,7 @@ func TestSchedulePosterKeepTranslationMigrationConstraints(t *testing.T) {
 		constraint string
 	}{
 		{status: "succeeded", image: nil, mime: nil, constraint: "chk_schedule_posters_translated_image"},
-		{status: "not_requested", image: jpeg, mime: "image/jpeg", constraint: "chk_schedule_posters_translated_image"},
+		{status: "not_requested", image: jpeg, mime: mimeJPEG, constraint: "chk_schedule_posters_translated_image"},
 		{status: "pending", image: jpeg, mime: nil, constraint: "chk_schedule_posters_translated_image"},
 		{status: "succeeded", image: jpeg, mime: "image/png", constraint: "chk_schedule_posters_translated_mime"},
 	} {
