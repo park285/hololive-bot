@@ -8,6 +8,9 @@
 
 ## 미출시
 
+## v18.1.0 - 2026-11-15
+
+- **`!스케쥴` 다가오는 주 대체:** 오늘(JST)을 덮는 행 있는 확정본이 없으면, 하루 밀기 값만큼 민 시작일이 내일부터 7일 뒤 사이인 행 있는 확정본 가운데 가장 가까운 주의 늦게 올린 것을 카드로 보냅니다. 주 마지막 날에 다음 주 포스터가 올라왔는데 이번 주 포스터에 행이 없어 "없음"으로 답하던 경우가 이제 다음 주 카드를 보냅니다. 오늘을 덮는 확정본이 있으면 이전과 같습니다. 같은 쿼리 조각을 쓰는 `GET /api/holo/schedule-posters/{id}/rows`의 `publishedToday`·`todayPosterId`도 대체된 포스터를 가리키며, 응답 모양은 그대로입니다.
 - **의존성:** 5개 Go 모듈의 의존성을 최신 minor·patch로 올렸습니다. 주요 갱신은 shared-go v2.21.0, iris-client-go v5.1.0, pgx v5.13.0, quic-go v0.65.0, testcontainers-go v0.45.0, grpc v1.85.0, google.golang.org/api v0.315.0, cloud.google.com/go/auth v0.24.4, gin-contrib/gzip v1.2.10, goccy/go-json v0.12.0입니다. 코드 변경은 없습니다.
 
 ## v18.0.0 - 2026-11-15
