@@ -686,7 +686,7 @@ func (fx *posterChangesFixture) posterPostsList(t *testing.T, matched wantPoster
 func mustJSON(t *testing.T, value any) string {
 	t.Helper()
 
-	raw, err := json.Marshal(value)
+	raw, err := jsonv2.Marshal(value, jsonv2.Deterministic(true))
 	require.NoError(t, err)
 
 	return string(raw)
@@ -796,7 +796,7 @@ func TestSchedulePosterPostReasonsMatchAdminOpenAPI(t *testing.T) {
 		} `json:"properties"`
 	}
 
-	require.NoError(t, json.Unmarshal(spec.Components.Schemas["SchedulePosterPost"], &post))
+	require.NoError(t, jsonv2.Unmarshal(spec.Components.Schemas["SchedulePosterPost"], &post))
 
 	reasons := []string{"", "unavailable", "blocked", "bad_answer", "invalid_changes"}
 	require.ElementsMatch(t, reasons, post.Properties.Reason.Enum)
@@ -846,7 +846,7 @@ func TestSchedulePosterChangesAtCapacityMatchAdminOpenAPI(t *testing.T) {
 		} `json:"posts"`
 	}
 
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &got))
 
 	actionable := 0
 
@@ -907,7 +907,7 @@ func requirePosterRows(t *testing.T, serve adminTestServe, path, status, rowsErr
 		RowsCount       int     `json:"rowsCount"`
 	}
 
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &got))
 	require.Equal(t, status, got.RowsStatus)
 	require.Equal(t, rowsError, got.RowsError)
 	require.Equal(t, new(extractedAt.Format(time.RFC3339)), got.RowsExtractedAt)
