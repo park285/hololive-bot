@@ -8,6 +8,10 @@
 
 ## 미출시
 
+## v18.1.0 - 2026-11-15
+
+- **`!스케쥴` 다가오는 주 대체:** 오늘(JST)을 덮는 행 있는 확정본이 없으면, 하루 밀기 값만큼 민 시작일이 내일부터 7일 뒤 사이인 행 있는 확정본 가운데 가장 가까운 주의 늦게 올린 것을 카드로 보냅니다. 주 마지막 날에 다음 주 포스터가 올라왔는데 이번 주 포스터에 행이 없어 "없음"으로 답하던 경우가 이제 다음 주 카드를 보냅니다. 오늘을 덮는 확정본이 있으면 이전과 같습니다. 같은 쿼리 조각을 쓰는 `GET /api/holo/schedule-posters/{id}/rows`의 `publishedToday`·`todayPosterId`도 대체된 포스터를 가리키며, 응답 모양은 그대로입니다.
+
 ## v18.0.0 - 2026-11-15
 
 - **일정 포스터 이미지 번역 제거:** 확정(관리자·자동)은 이제 일정표 행 추출만 예약하고, Vertex 이미지·판독·텍스트 모델로 한국어 포스터 이미지를 만들던 번역 루프와 그 검사를 지웠습니다. 관리 API `POST /api/holo/schedule-posters/{id}/translate`(재번역)와 `GET /api/holo/schedule-posters/{id}/translated`(번역 이미지)를 지웠고, 포스터 응답(목록·상세)에서 필수 필드 `translationStatus`·`translationError`·`translatedAt`을 뺐습니다. 행만 다시 뽑기는 기존 `POST /{id}/rows`가 맡습니다. 번역 대기 중이라 409 `invalid_state`로 거절하던 주 범위 수정은 이제 확정본이면 받습니다. 설정 `translation.model`·`translation.text_model`·`translation.transcribe_model`을 지웠으며, 남아 있으면 모르는 키라 admin plane이 기동하지 않으므로 배포 전에 운영 설정에서 뺍니다(v17.0.0은 세 키가 없어도 기동합니다). DB의 번역 열과 CHECK는 이번 릴리스에서 읽지도 쓰지도 않고 남겨 v17.0.0으로 되돌릴 수 있게 두며, 다음 릴리스의 migration으로 지웁니다. 그래서 거절도 남은 번역 상태와 이미지를 지우지 않으며, v17.0.0으로 되돌리면 이번 image에서 거절한 번역 완료 포스터가 v17.0.0 관리 API에서 번역 성공으로 보이고 `/translated`가 이미지를 돌려줍니다(옛 Console 화면과 `!스케쥴`에는 나오지 않음). 공개 계약에서 operation과 필수 필드를 지우므로 이번 릴리스는 MAJOR입니다. 배포는 Iris Console 게이트웨이와 APK를 먼저, hololive-api를 나중에 합니다. 옛 게이트웨이는 필드가 빠진 새 응답을 502로 거절하기 때문입니다. Fallback delta: 일정 포스터 번역 재시도 예외 계약을 그 재시도와 함께 지웠습니다.

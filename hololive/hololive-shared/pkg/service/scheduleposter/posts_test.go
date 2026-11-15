@@ -13,7 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
-func recordRowsFor(t *testing.T, store *scheduleposter.Store, id int64, today string) {
+func recordRowsFor(t *testing.T, store *scheduleposter.Store, id int64, today, title string) {
 	t.Helper()
 
 	pending, err := store.PendingRows(t.Context(), date(t, today), 10)
@@ -22,7 +22,7 @@ func recordRowsFor(t *testing.T, store *scheduleposter.Store, id int64, today st
 	i := slices.IndexFunc(pending, func(item scheduleposter.PendingRows) bool { return item.ID == id })
 	require.GreaterOrEqual(t, i, 0)
 
-	recorded, err := store.RecordRows(t.Context(), pending[i], []scheduleposter.Row{scheduleRow(t, today, "잡담")}, 0)
+	recorded, err := store.RecordRows(t.Context(), pending[i], []scheduleposter.Row{scheduleRow(t, today, title)}, 0)
 	require.NoError(t, err)
 	require.True(t, recorded)
 }
@@ -46,7 +46,7 @@ func confirmedPosterWithRows(
 	_, err = store.Confirm(ctx, id, poster.Revision, date(t, start), date(t, end))
 	require.NoError(t, err)
 
-	recordRowsFor(t, store, id, start)
+	recordRowsFor(t, store, id, start, "잡담")
 
 	schedule, found, err := store.PublishedRows(ctx, channelID, date(t, start))
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func replacementPoster(t *testing.T, store *scheduleposter.Store, pool *pgxpool.
 		        'confirmed', '2026-11-09', '2026-11-15', now(), 'admin')`, id, sophiaChannel, postedAt)
 	require.NoError(t, err)
 
-	recordRowsFor(t, store, id, "2026-11-09")
+	recordRowsFor(t, store, id, "2026-11-09", "잡담")
 
 	schedule := publishedSophia(t, store)
 	require.Equal(t, id, schedule.PosterID, "주중에 확정한 교체본이 게시된다")

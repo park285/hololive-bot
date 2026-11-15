@@ -321,8 +321,8 @@ func (s *Store) RecordRowsFailure(ctx context.Context, item PendingRows, reason 
 	return tag.RowsAffected() == 1, nil
 }
 
-// PublishedRows의 day는 JST 날짜다. 주 범위를 RowsDayShift만큼 민 범위로 같은 멤버에서 같은 주 시작일의 늦게 올린 확정본 하나를 고르고,
-// 행을 저장한 적이 없으면 false다.
+// PublishedRows의 day는 JST 날짜다. 같은 멤버에서 queries/published_poster.sql의 규칙(오늘을 덮는 주, 없으면 7일 안에 시작하는 주)으로
+// 확정본 하나를 고르고, 행을 저장한 적이 없으면 false다.
 // 행과 그 묶음의 반영 변경은 한 snapshot에서 읽어, 묶음이 바뀌는 중에도 다른 묶음의 변경이 섞이지 않는다.
 func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Time) (PublishedSchedule, bool, error) {
 	var schedule PublishedSchedule

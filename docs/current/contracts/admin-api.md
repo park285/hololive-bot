@@ -23,7 +23,8 @@ iris-console `contracts/hololive/openapi.json`이 소유합니다.
   200이고 경로 변수는 포스터 `{id}` 하나뿐이라 철회하거나 되살릴 글 ID는 본문 `postId`에 둡니다. 포스터 응답의
   `rowsStatus`·`rowsError`·`rowsExtractedAt`·`rowsCount`는 확정본에서만 뜻이 있습니다. 행 재추출은 revision을 올리지
   않습니다. 일정표 칸 읽기는 행 묶음에 반영 변경을 적용한 `!스케쥴` 카드와 같은 칸과, 오늘(JST) `!스케쥴`이 이 포스터를
-  보여 주는지(`publishedToday`)와 대신 게시 중인 확정본(`todayPosterId`)을 돌려줍니다. 글·변경 목록, 철회, 되살리기는 같은 글 범위(같은 멤버, 포스터 게시 뒤, 주 첫날 00:00 JST부터 주 마지막 날
+  보여 주는지(`publishedToday`)와 대신 게시 중인 확정본(`todayPosterId`)을 돌려줍니다. 오늘을 덮는 게시 대상이 없으면 게시
+  시작일이 7일 안에 오는 다가오는 주 확정본이 게시 대상입니다. 글·변경 목록, 철회, 되살리기는 같은 글 범위(같은 멤버, 포스터 게시 뒤, 주 첫날 00:00 JST부터 주 마지막 날
   다음 날 00:00 JST 전까지)를 다루고, 범위 밖 글의 철회·되살리기는 404입니다. 목록은 조치할 수 있는 상태의 글 최근
   200건과 나머지 상태의 글 최근 50건이라 최대 250건입니다. 철회와 되살리기는 확정본 포스터에만 되고(아니면 409
   `invalid_state`), 되살린 글은 다음 변경 감지 주기에 다시 대응합니다. 상태 조건과 409 `code`는 [admin-api.openapi.json](admin-api.openapi.json)의 schema 설명을 따릅니다.
