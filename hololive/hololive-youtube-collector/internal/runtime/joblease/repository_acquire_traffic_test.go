@@ -102,7 +102,6 @@ func warmAcquireTraffic(t *testing.T, pool *pgxpool.Pool, spec *JobSpec, mode st
 		}
 
 		repositories[i], traffic[i] = newTestRepository(t, measured), counters
-		repositories[i].config.LeaseTTL = time.Minute
 
 		prepareAcquireTrafficState(t, pool, spec.JobKey, "missing")
 		mustAcquireLease(t, repositories[i], spec, "warm-owner")

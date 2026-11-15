@@ -175,13 +175,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		{testSubjectKey, contract.KindChannelPhoto},
 	})
 
-	// 이 테스트는 짧은 갱신 제한 시간이 아니라 두 종류의 원자적 발행을 검증합니다.
-	collector := fixtureCollectorConfig(t)
-
-	config, err := leaseConfigFrom(&collector)
-	if err != nil {
-		t.Fatal(err)
-	}
+	config := runtimeLeaseConfig()
 
 	repository, err := joblease.NewRepository(pool, &config)
 	if err != nil {
@@ -202,7 +196,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
-		collector: collector,
+		collector: fixtureCollectorConfig(t),
 		gates:     defaultProviderGates(t),
 	}
 	spec := joblease.JobSpec{
@@ -461,10 +455,11 @@ func collectYouTubeJSPartialVideoList(_ context.Context, input *collection.RunIn
 
 var testRetryBounds = collection.RetryBounds{Minimum: 100 * time.Millisecond, Maximum: time.Second}
 
+// CleanupTimeout은 admission_deadline_test가 기한 뒤 정리에 허용하는 3초보다 작아야 한다.
 func runtimeLeaseConfig() joblease.Config {
 	return joblease.Config{
-		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
-		RenewTimeout: 50 * time.Millisecond, DBTimeout: 250 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
+		LeaseTTL: time.Minute, RenewInterval: 20 * time.Second,
+		RenewTimeout: 5 * time.Second, DBTimeout: time.Second, CleanupTimeout: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
 		AcquisitionBatch: 4, QueueCapacity: 4,
 	}

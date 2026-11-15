@@ -369,8 +369,6 @@ func newGateFixture(
 	executor.retryBounds = testRetryBounds
 
 	config := runtimeLeaseConfig()
-	// 이 fixture는 lease supervisor 없이 발행 잠금을 기다리므로 전체 대기 예산보다 긴 TTL을 둔다.
-	config.LeaseTTL = 30 * time.Second
 
 	var err error
 

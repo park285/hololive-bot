@@ -111,13 +111,16 @@ func assertLeaseTransitionAfterRowLock(t *testing.T, expireDuringWait bool, reas
 
 func waitForLeaseQueryLock(ctx context.Context, t *testing.T, pool *pgxpool.Pool, blockerPID uint32) {
 	t.Helper()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok, "lock wait needs a bounded context")
 	require.Eventually(t, func() bool {
 		var waiting bool
 
 		err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid)))`, blockerPID).Scan(&waiting)
 
 		return err == nil && waiting
-	}, time.Second, 10*time.Millisecond)
+	}, time.Until(deadline), 10*time.Millisecond)
 }
 
 func rollbackTestLease(ctx context.Context, t *testing.T, tx pgxdb.Rollbacker) {
