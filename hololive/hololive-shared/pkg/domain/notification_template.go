@@ -56,9 +56,8 @@ const (
 	TemplateKeyCmdMemberNotFound   TemplateKey = "CMD_MEMBER_NOT_FOUND"
 	TemplateKeyCmdAmbiguousMember  TemplateKey = "CMD_AMBIGUOUS_MEMBER"
 
-	TemplateKeyCelebrationBirthday       TemplateKey = "CELEBRATION_BIRTHDAY"
-	TemplateKeyCelebrationAnniversary    TemplateKey = "CELEBRATION_ANNIVERSARY"
-	TemplateKeyCelebrationBirthdayStream TemplateKey = "CELEBRATION_BIRTHDAY_STREAM"
+	TemplateKeyCelebrationBirthday    TemplateKey = "CELEBRATION_BIRTHDAY"
+	TemplateKeyCelebrationAnniversary TemplateKey = "CELEBRATION_ANNIVERSARY"
 )
 
 // TemplateFormat은 같은 템플릿 키의 방 유형별 본문 변형입니다. 카카오 일반채팅은 RichText 서식을 표시하지 않으므로

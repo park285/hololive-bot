@@ -74,7 +74,6 @@ func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) erro
 		{Name: "scheduler", Scheduler: r.Scheduler},
 		{Name: "notification-egress", Scheduler: r.NotificationEgress},
 		{Name: "celebration", Scheduler: r.CelebrationRunner},
-		{Name: "birthday-stream", Scheduler: r.BirthdayStreamRunner},
 		{Name: "x-spaces", Scheduler: r.XSpacesRunner},
 	}
 

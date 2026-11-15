@@ -82,27 +82,3 @@ func TestBuildDispatchGroupKeyCelebrationUsesMemberIDOnly(t *testing.T) {
 		t.Fatal("members sharing a channel must not share a celebration group")
 	}
 }
-
-func TestBuildDispatchGroupKeyBirthdayStreamSeparatesVideoIDs(t *testing.T) {
-	t.Parallel()
-
-	envelope := func(videoID string) *AlarmQueueEnvelope {
-		return &AlarmQueueEnvelope{
-			Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeBirthday},
-			SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-			Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthdayStream, MemberID: 101, ChannelID: "UC_member", Date: fixtureCelebrationDate, VideoID: videoID},
-		}
-	}
-
-	videoA := BuildDispatchGroupKeyFromEnvelope(envelope("video-a"))
-	sameVideoA := BuildDispatchGroupKeyFromEnvelope(envelope("video-a"))
-	videoB := BuildDispatchGroupKeyFromEnvelope(envelope("video-b"))
-
-	if videoA != sameVideoA {
-		t.Fatal("same birthday stream video must share a celebration group")
-	}
-
-	if videoA == videoB {
-		t.Fatal("different birthday stream videos of one member must not share a celebration group")
-	}
-}

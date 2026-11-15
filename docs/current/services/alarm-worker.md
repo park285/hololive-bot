@@ -24,9 +24,9 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send under the `youtube_delivery` profile executor
 - v1 YouTube outbox는 v3 ledger로 넘기지 않고 `youtube_delivery` dispatcher가 direct egress까지 소유 (`DEC-20260926-hololive-outbox-v3-convergence`로 `shadow|cutover` handoff 삭제)
-- Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room. Only sessions whose title contains a birthday keyword count as birthday streams.
+- Birthday and anniversary celebration production
 
-방송·콘텐츠·축하·생일 방송·X 스페이스 알림에는 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. worker의 렌더러와 dispatch 설정에는 접기 옵션이 없습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 표시를 제어하며, worker는 공통 설정 로딩에서 값 형식만 검증합니다. 사용자 template/채널 override의 직접 패딩, 기존 예약 본문과 pinned request의 본문·route·ID는 유지합니다.
+방송·콘텐츠·축하·X 스페이스 알림에는 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. worker의 렌더러와 dispatch 설정에는 접기 옵션이 없습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 표시를 제어하며, worker는 공통 설정 로딩에서 값 형식만 검증합니다. 사용자 template/채널 override의 직접 패딩, 기존 예약 본문과 pinned request의 본문·route·ID는 유지합니다.
 
 ## Provides
 
@@ -72,7 +72,6 @@ YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim �
 - `STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profiles/alarm-worker.json`
 - production profile executors `alarm_dispatch` and `youtube_delivery` enabled; v1 `youtube_delivery` is a canonical direct-egress pipeline, not a v3 handoff source (`DEC-20260926-hololive-outbox-v3-convergence`)
 - Alarm timing/config env
-- `BIRTHDAY_STREAM_RUNNER_ENABLED=true` only after the birthday stream template is present and full-roster producer discovery has been verified
 
 ## Shutdown behavior
 
@@ -80,7 +79,7 @@ YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim �
 - Stop scheduler/checker loops gracefully.
 - Stop dispatch queue and YouTube outbox consumers during shutdown.
 
-Runtime은 scheduler·egress·celebration·birthday stream·X Spaces runner를 같은 취소 및 종료 대기 경계에서 관리합니다. 부모가 살아 있을 때 자식의 자체 timeout은 runtime 오류로 전달합니다. 종료 기한을 넘겨도 HTTP cleanup은 호출하며, 작업 대기 실패와 cleanup 오류를 함께 반환합니다.
+Runtime은 scheduler·egress·celebration·X Spaces runner를 같은 취소 및 종료 대기 경계에서 관리합니다. 부모가 살아 있을 때 자식의 자체 timeout은 runtime 오류로 전달합니다. 종료 기한을 넘겨도 HTTP cleanup은 호출하며, 작업 대기 실패와 cleanup 오류를 함께 반환합니다.
 
 부모 종료에 따른 순수 context 오류만 정상 종료로 처리합니다. 취소와 실제 오류가 함께 반환되면 오류 채널 또는 ERROR 로그에 원인을 남기며, 종료 중 소비되지 않는 오류 채널 때문에 작업이 멈추지 않도록 합니다.
 
@@ -96,7 +95,7 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 
 선정된 upcoming 알람은 `alarm_upcoming_candidates`에 최초 category·본문 입력·방을 저장해 commit합니다. 저장할 후보가 없는 채널 평가는 DB에 쓰지 않습니다. 보장 시작점은 이 durable staging commit입니다. 기존 75초 조회 lookback 이후에도 미발행 후보를 복구하되 예정 시작 시각 이후에는 분 전 알람을 만료시킵니다. 확인된 일정 변경·방송 종료·구독 해제는 사유를 남겨 종료하며, 단순 조회 목록 누락만으로 취소하지 않습니다. 최신 provider 응답은 과거 canonical 보강과 분리하고 canonical 종료는 선정 이후의 실제 상태·일정 관측 시각(`status_observed_at`, `schedule_observed_at`)만 사용합니다. 확정된 최초공개도 일반 방송과 같은 분 전·시작 알림 후보입니다(`contracts/alarm.md`). 예정 시각도 저장되는 `last_seen_at`은 이 최신성의 증거가 아닙니다. 과거 행의 관측 시각은 추정하지 않습니다. Claim 대기 뒤 발행 직전에도 미발행 후보의 기한을 재검사하며, 이미 수용된 delivery의 현행 재시도 정책은 별도로 유지합니다. 제목 변경은 기존 event key/hash의 collision 거절 계약을 유지합니다. 시청자 수처럼 관측마다 바뀌고 본문에 쓰지 않는 값은 event payload identity에서 제외하므로, 같은 event에 나중에 합류한 방의 delivery는 그 값 차이만으로 거절되지 않습니다.
 
-방송 checker와 생일 방송 조회는 LIVE의 `status_observed_at`, UPCOMING의
+방송 checker는 LIVE의 `status_observed_at`, UPCOMING의
 `schedule_observed_at`을 각 최신성 창의 하한부터 현재까지로 제한합니다. 관측 시각이
 NULL이거나 미래이면 후보에서 제외합니다. LIVE guardrail 로그도 실제로 읽은 시각을
 `status_observed_at` 필드로 기록합니다.

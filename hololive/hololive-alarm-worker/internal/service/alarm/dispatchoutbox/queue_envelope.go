@@ -4,7 +4,6 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -129,16 +128,16 @@ func (e *AlarmQueueEnvelope) validateCelebrationDispatch() error {
 		return errors.New("canonical alarm dispatch: celebration payload is nil")
 	}
 
+	if !e.Celebration.Kind.IsValid() {
+		return fmt.Errorf("canonical alarm dispatch: celebration kind %q is not birthday or anniversary", e.Celebration.Kind)
+	}
+
 	if e.Celebration.MemberID <= 0 {
 		return fmt.Errorf("canonical alarm dispatch: celebration member id must be positive, got %d", e.Celebration.MemberID)
 	}
 
 	if e.Celebration.Date == "" {
 		return errors.New("canonical alarm dispatch: celebration date is empty")
-	}
-
-	if e.Celebration.Kind == domain.CelebrationKindBirthdayStream && strings.TrimSpace(e.Celebration.VideoID) == "" {
-		return errors.New("canonical alarm dispatch: celebration birthday stream video id is empty")
 	}
 
 	return nil

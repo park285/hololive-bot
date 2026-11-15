@@ -33,13 +33,10 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 카카오 네이티브 Markdown 전송 여부; 기본값 `false`. 명령 응답과 알림에 공통 적용 | no |
 | `BOT_SEE_MORE_FOLD` | worker 렌더에는 쓰지 않음. 공통 설정 로딩이 bool로 검증하므로 잘못된 값이면 worker도 기동 실패; 기본 `true` | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
-| `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
-| `BIRTHDAY_STREAM_POLL_INTERVAL_MS` | birthday stream session 평가 주기; 기본 30분 | no |
-| `BIRTHDAY_STREAM_SESSION_FRESHNESS_MS` | stale UPCOMING/LIVE 제외 창; 기본 30분 | no |
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
-`ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`·`BIRTHDAY_STREAM_*_MS`(양의 밀리초)는 키가 없으면 기본값을 씁니다. 키가 있는데 비어 있거나 공백뿐이면, 또는 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. `ALARM_DISPATCH_RETENTION_*` 키와 같은 규칙입니다. 다만 `ALARM_DISPATCH_RETENTION_LIMIT`은 10000을 넘어도 기동에 실패하지 않고 10000으로 줄여 씁니다. 배포 전에 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다. celebration·birthday stream 키는 해당 runner가 켜졌을 때만 읽습니다.
+`ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`(양의 밀리초)는 키가 없으면 기본값을 씁니다. 키가 있는데 비어 있거나 공백뿐이면, 또는 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. `ALARM_DISPATCH_RETENTION_*` 키와 같은 규칙입니다. 다만 `ALARM_DISPATCH_RETENTION_LIMIT`은 10000을 넘어도 기동에 실패하지 않고 10000으로 줄여 씁니다. 배포 전에 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다. celebration 키는 runner가 켜졌을 때만 읽습니다.
 
 ## Notification egress
 
@@ -57,7 +54,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 
 일반 텍스트는 `kakaoformat.Render`를 거칩니다. 방 resolver는 오픈채팅 여부만 제공합니다. 텍스트·RichText sender는 Iris `202` admission만 확인하고(증명하지 못하면 `sendoutcome.ErrAdmissionOutcomeUnknown`) `/reply-status`를 기다리지 않으므로, sender 성공은 durable admission만 뜻합니다. handoff 확인은 alarm dispatch·youtube handoff reconciler만 합니다. 저장된 `text`·`richtext` 고정 요청은 저장한 형식 그대로 재생합니다. `markdown` route는 퇴역했으며(#763), 남은 `markdown` 고정 요청은 Iris를 호출하지 않고 지원하지 않는 route로 거절됩니다.
 
-방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
+방송·선행공개·영상·쇼츠·커뮤니티·축하·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
 기본 본문은 방 유형별 `plain`·`richtext` 두 변형이며 epoch-3 baseline(`001_schema_epoch3_baseline.sql`)에 들어 있습니다. 표준 전역 기본값은 `plain`에 평문 본문, `richtext`에 RichText 본문을 둡니다. 사용자 지정 기본값과 채널 override는 두 변형에 같은 본문을 두어 표시를 유지하고, 이미 저장된 요청은 변경하지 않습니다. 렌더러가 변형을 골라 조회하므로 API·워커는 같은 창에서 교체합니다. API만 먼저 바뀌면 구 워커가 `rich_text_message`를 무시해 오픈채팅 예약 알림이 `plain` 본문으로 나갑니다. 설정 마스터 변경·좁은 동기화는 `stack-platform-ops`, 이미지·프로필 쌍과 no-build 재생성은 `hololive-bot-ops` 절차를 사용합니다.
 
@@ -303,23 +300,7 @@ Mitigation:
 Rollback:
 - Markdown post 뒤 결과가 불명확한 delivery가 있으면 이전 alarm-worker image를 시작하지 않습니다. Exact pending/sending 범위와 prior artifact의 egress 차이를 제시하고 별도 승인을 받습니다.
 
-### 5. 생일축하는 갔지만 생일 방송 알람이 생성되지 않음
-
-Diagnosis:
-- `celebration:birthday:member-{memberID}:{date}` event와 그 delivery의 `status`, `sent_at`을 확인합니다. `sent`가 아닌 방은 의도적으로 대상이 아닙니다.
-- 같은 `channelID`의 `youtube_live_sessions`가 판정 창(KST 생일 전날 21:00부터 다음 날 17:00 전까지) 안에서 `UPCOMING` 또는 `LIVE`인지 확인합니다. 생일 날짜는 KST 0시부터 평가하고 다음 날 17시까지 계속 평가하므로, 전날 시작한 방송은 생일축하 발송 뒤에도 예정·진행 상태여야 합니다. 다른 KST 날짜에 시작하는 방송은 `01/02 15:04`로 표시합니다. 제목에 생일 키워드(`birthday`·`bday`·`b-day`·`誕生日`·`誕生祭`·`誕生会`·`生誕`·`たんじょうび`·`バースデー`·`バースデイ`·`バースディ`·`생일`·`ulang tahun`·`ultah`, NFKC·대소문자 무시)가 없으면 생일 방송으로 보지 않습니다. UPCOMING은 `schedule_observed_at`, LIVE는 `status_observed_at`이 runner의 freshness 하한부터 현재 시각 사이에 있어야 합니다. NULL·미래 관측은 제외하며 `last_seen_at`이나 예정 시작 시각으로 최신성을 판단하지 않습니다.
-- `Birthday stream runner failed` 로그가 있으면 audience SQL 오류를 먼저 해결합니다. 이 경로는 실패 시 전체 방으로 fallback하지 않습니다. `list published birthday stream events` 오류는 그 멤버의 기발행 생일 방송 event payload가 decode·검증을 통과하지 못한 것이며, 같은 생일 날짜의 다른 멤버 처리도 멈추므로 해당 `event_key`의 payload를 먼저 확인합니다.
-- 이미 `celebration:birthday_stream:member-{memberID}:{date}:{videoID}` event가 있어도 현재 세션이면 다음 tick에서 재평가됩니다. 이때 최초 event의 canonical payload를 재사용하므로 이후 title·photo·schedule 표시값 변경은 event payload를 바꾸지 않습니다. 그 event를 이미 `sent`로 받은 방은 envelope에서 빼고, 늦게 생일축하를 받은 방(과 pending·failed 방)만 발행해 outbox dedupe에 맡깁니다. 이 조회가 실패하면 전체 방으로 재발행하지 않고 `Birthday stream runner failed`로 끝납니다. 새 event·delivery가 없는 실행의 `Birthday stream runner published`는 Debug 로그입니다. 멤버·일자 상한 3건과 이 재평가는 저장 제목이 생일 키워드를 포함하는 event만 셉니다. 저장 제목에 생일 키워드가 없는 기발행 event는 현재 제목이 바뀌어도 다시 보내지 않습니다.
-
-Mitigation:
-- producer의 full-roster LIVE discovery부터 복구한 뒤 runner를 재평가합니다.
-- birthday greeting delivery를 수동으로 sent 처리하거나 birthday stream을 전체 방에 재전송하지 않습니다.
-
-Rollback:
-- 생일축하 sent 방 audience 도입 전의 구 alarm-worker image는 전체 방 fan-out 의미를 가지므로 rollback 전에 `BIRTHDAY_STREAM_RUNNER_ENABLED=false`로 runner를 중지합니다.
-- 9.2.0 이하 worker로 되돌리면 제목 판정과 확장 판정 창이 사라집니다. 구 worker는 기발행 event 수로 상한을 세므로 저장 제목이 생일과 무관한 event가 그날의 상한과 재평가 자리를 다시 차지하고, 다음 KST 날짜로 넘어간 방송의 event는 더 이상 재평가되지 않습니다.
-
-### 6. 5분 전 알림 뒤에 종료 직후 `방송 시작`이 다시 나감
+### 5. 5분 전 알림 뒤에 종료 직후 `방송 시작`이 다시 나감
 
 Symptoms:
 - 예정 시각 기준 `방송 5분 전`은 나갔다.
@@ -339,7 +320,7 @@ Mitigation:
 Rollback:
 - 수정 전 image로 rollback하면 같은 증상이 다시 열리므로, 이 결함만으로는 rollback하지 않고 current revision을 fix-forward한다.
 
-### 7. 최초공개가 발견 시 알려지거나 공개 전 알림이 빠짐
+### 6. 최초공개가 발견 시 알려지거나 공개 전 알림이 빠짐
 
 Symptoms:
 - 공개 전에 발견된 최초공개에 `N분 후 공개 예정`(`NEW_VIDEO`)이 나갔다.

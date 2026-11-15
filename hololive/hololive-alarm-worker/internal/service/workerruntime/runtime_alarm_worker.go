@@ -43,14 +43,13 @@ type AlarmWorkerRuntime struct {
 	Config *workerconfig.RuntimeConfig
 	Logger *slog.Logger
 
-	Scheduler            Scheduler
-	NotificationEgress   Scheduler
-	CelebrationRunner    Scheduler
-	BirthdayStreamRunner Scheduler
-	XSpacesRunner        Scheduler
-	ServerAddr           string
-	HTTPServers          *sharedserver.RuntimeHTTPServers
-	WorkerObservability  interface{ Start(context.Context) }
+	Scheduler           Scheduler
+	NotificationEgress  Scheduler
+	CelebrationRunner   Scheduler
+	XSpacesRunner       Scheduler
+	ServerAddr          string
+	HTTPServers         *sharedserver.RuntimeHTTPServers
+	WorkerObservability interface{ Start(context.Context) }
 
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc

@@ -15,9 +15,6 @@ var backgroundRunnerEnvKeys = []string{
 	celebrationRunnerEnabledEnv,
 	"CELEBRATION_CHECK_HOUR_KST",
 	"CELEBRATION_RUN_INTERVAL_MS",
-	birthdayStreamRunnerEnabledEnv,
-	"BIRTHDAY_STREAM_POLL_INTERVAL_MS",
-	"BIRTHDAY_STREAM_SESSION_FRESHNESS_MS",
 	"X_SPACES_CONFIG_FILE",
 	"X_SPACES_KEY_FILE",
 }
@@ -63,15 +60,11 @@ func TestHourOfDayEnvRejectsInvalidValues(t *testing.T) {
 
 // runner 스위치의 잘못된 값은 "꺼짐"으로 읽히지 않고 기동 오류로 드러난다.
 func TestLoadRuntimeRejectsInvalidBackgroundRunnerSwitch(t *testing.T) {
-	for _, key := range []string{celebrationRunnerEnabledEnv, birthdayStreamRunnerEnabledEnv} {
-		t.Run(key, func(t *testing.T) {
-			setBackgroundRunnerRuntimeEnv(t)
-			t.Setenv(key, "maybe")
+	setBackgroundRunnerRuntimeEnv(t)
+	t.Setenv(celebrationRunnerEnabledEnv, "maybe")
 
-			if _, err := LoadRuntime(); err == nil || !strings.Contains(err.Error(), key) {
-				t.Fatalf("LoadRuntime() error = %v, want invalid %s rejection", err, key)
-			}
-		})
+	if _, err := LoadRuntime(); err == nil || !strings.Contains(err.Error(), celebrationRunnerEnabledEnv) {
+		t.Fatalf("LoadRuntime() error = %v, want invalid %s rejection", err, celebrationRunnerEnabledEnv)
 	}
 }
 
@@ -84,8 +77,6 @@ func TestLoadRuntimeValidatesBackgroundRunnerConfigOnlyWhenEnabled(t *testing.T)
 		{switchKey: celebrationRunnerEnabledEnv, key: "CELEBRATION_CHECK_HOUR_KST", value: "24"},
 		{switchKey: celebrationRunnerEnabledEnv, key: "CELEBRATION_RUN_INTERVAL_MS", value: "0"},
 		{switchKey: celebrationRunnerEnabledEnv, key: "CELEBRATION_RUN_INTERVAL_MS", value: " "},
-		{switchKey: birthdayStreamRunnerEnabledEnv, key: "BIRTHDAY_STREAM_POLL_INTERVAL_MS", value: "30m"},
-		{switchKey: birthdayStreamRunnerEnabledEnv, key: "BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", value: "-1"},
 	} {
 		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
 			setBackgroundRunnerRuntimeEnv(t)
@@ -96,7 +87,6 @@ func TestLoadRuntimeValidatesBackgroundRunnerConfigOnlyWhenEnabled(t *testing.T)
 			config, err := LoadRuntime()
 			require.NoError(t, err, "disabled runner must not read %s", tc.key)
 			assert.Equal(t, CelebrationRunnerConfig{}, config.Celebration)
-			assert.Equal(t, BirthdayStreamRunnerConfig{}, config.BirthdayStream)
 
 			t.Setenv(tc.switchKey, "true")
 
@@ -111,12 +101,10 @@ func TestLoadRuntimeReadsEnabledBackgroundRunnerConfig(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		setBackgroundRunnerRuntimeEnv(t)
 		t.Setenv(celebrationRunnerEnabledEnv, "true")
-		t.Setenv(birthdayStreamRunnerEnabledEnv, "true")
 
 		config, err := LoadRuntime()
 		require.NoError(t, err)
 		assert.Equal(t, CelebrationRunnerConfig{Enabled: true, CheckHourKST: 0, RunInterval: time.Hour}, config.Celebration)
-		assert.Equal(t, BirthdayStreamRunnerConfig{Enabled: true, RunInterval: 30 * time.Minute, SessionFreshness: 30 * time.Minute}, config.BirthdayStream)
 	})
 
 	t.Run("boundaries", func(t *testing.T) {
@@ -124,14 +112,10 @@ func TestLoadRuntimeReadsEnabledBackgroundRunnerConfig(t *testing.T) {
 		t.Setenv(celebrationRunnerEnabledEnv, "true")
 		t.Setenv("CELEBRATION_CHECK_HOUR_KST", "23")
 		t.Setenv("CELEBRATION_RUN_INTERVAL_MS", "1")
-		t.Setenv(birthdayStreamRunnerEnabledEnv, "true")
-		t.Setenv("BIRTHDAY_STREAM_POLL_INTERVAL_MS", "1")
-		t.Setenv("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", "1")
 
 		config, err := LoadRuntime()
 		require.NoError(t, err)
 		assert.Equal(t, CelebrationRunnerConfig{Enabled: true, CheckHourKST: 23, RunInterval: time.Millisecond}, config.Celebration)
-		assert.Equal(t, BirthdayStreamRunnerConfig{Enabled: true, RunInterval: time.Millisecond, SessionFreshness: time.Millisecond}, config.BirthdayStream)
 	})
 }
 

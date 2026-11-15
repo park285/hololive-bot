@@ -31,7 +31,6 @@ type RuntimeConfig struct {
 	AlarmDispatchPublish AlarmDispatchPublishConfig
 	NotificationRoles    NotificationRoles
 	Celebration          CelebrationRunnerConfig
-	BirthdayStream       BirthdayStreamRunnerConfig
 	XSpaces              XSpacesConfig
 }
 
@@ -133,17 +132,11 @@ func loadRoleSections(config *RuntimeConfig) error {
 		return fmt.Errorf("load celebration runner config: %w", err)
 	}
 
-	birthdayStream, err := loadBirthdayStreamRunnerConfig()
-	if err != nil {
-		return fmt.Errorf("load birthday stream runner config: %w", err)
-	}
-
 	config.AlarmWorkerProfile = profile
 	config.DispatchRetention = retention
 	config.AlarmDispatchPublish = AlarmDispatchPublishConfig{MaxDeliveriesPerBatch: maxDeliveries}
 	config.NotificationRoles = loadNotificationRoles()
 	config.Celebration = celebration
-	config.BirthdayStream = birthdayStream
 	config.XSpaces = loadXSpacesConfig()
 
 	return nil

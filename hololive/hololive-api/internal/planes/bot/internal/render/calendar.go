@@ -239,8 +239,6 @@ func resolveEntryStyle(ctx context.Context, m *calendarMetrics, entry domain.Cal
 		return entryStyle{colAmber600, colAmber50, m.badgeBirthday(ctx)}
 	case domain.CelebrationKindAnniversary:
 		return entryStyle{colEmerald600, colEmerald50, m.anniversaryBadge(ctx, entry.Ordinal)}
-	case domain.CelebrationKindBirthdayStream:
-		return entryStyle{colSlate500, colSlate100, ""}
 	default:
 		return entryStyle{colSlate500, colSlate100, ""}
 	}
@@ -310,7 +308,6 @@ func addKindCount(kind domain.CelebrationKind, birthday, anniversary *int) {
 		(*birthday)++
 	case domain.CelebrationKindAnniversary:
 		(*anniversary)++
-	case domain.CelebrationKindBirthdayStream:
 	}
 }
 

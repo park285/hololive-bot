@@ -12,10 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 )
 
-const (
-	celebrationRunnerEnabledEnv    = "CELEBRATION_RUNNER_ENABLED"
-	birthdayStreamRunnerEnabledEnv = "BIRTHDAY_STREAM_RUNNER_ENABLED"
-)
+const celebrationRunnerEnabledEnv = "CELEBRATION_RUNNER_ENABLED"
 
 // CelebrationRunnerConfig는 CELEBRATION_RUNNER_ENABLED와 켜진 runner의 확인 시각·주기다.
 // 꺼져 있으면 CELEBRATION_CHECK_HOUR_KST·CELEBRATION_RUN_INTERVAL_MS를 읽지 않고 나머지 필드는 0이다.
@@ -23,14 +20,6 @@ type CelebrationRunnerConfig struct {
 	Enabled      bool
 	CheckHourKST int
 	RunInterval  time.Duration
-}
-
-// BirthdayStreamRunnerConfig는 BIRTHDAY_STREAM_RUNNER_ENABLED와 켜진 runner의 평가 주기·세션 신선도 창이다.
-// 꺼져 있으면 BIRTHDAY_STREAM_*_MS를 읽지 않고 나머지 필드는 0이다.
-type BirthdayStreamRunnerConfig struct {
-	Enabled          bool
-	RunInterval      time.Duration
-	SessionFreshness time.Duration
 }
 
 // XSpacesConfig는 X_SPACES_CONFIG_FILE·X_SPACES_KEY_FILE 경로다. ConfigFile이 비어 있으면 수집이 꺼진다.
@@ -62,29 +51,6 @@ func loadCelebrationRunnerConfig() (CelebrationRunnerConfig, error) {
 	}
 
 	return CelebrationRunnerConfig{Enabled: true, CheckHourKST: checkHour, RunInterval: runInterval}, nil
-}
-
-func loadBirthdayStreamRunnerConfig() (BirthdayStreamRunnerConfig, error) {
-	enabled, err := sharedenv.BoolE(birthdayStreamRunnerEnabledEnv, false)
-	if err != nil {
-		return BirthdayStreamRunnerConfig{}, fmt.Errorf("birthday stream runner enabled: %w", err)
-	}
-
-	if !enabled {
-		return BirthdayStreamRunnerConfig{}, nil
-	}
-
-	runInterval, err := envload.RequiredMillisDurationEnv("BIRTHDAY_STREAM_POLL_INTERVAL_MS", 30*time.Minute)
-	if err != nil {
-		return BirthdayStreamRunnerConfig{}, fmt.Errorf("birthday stream runner config: %w", err)
-	}
-
-	sessionFreshness, err := envload.RequiredMillisDurationEnv("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", 30*time.Minute)
-	if err != nil {
-		return BirthdayStreamRunnerConfig{}, fmt.Errorf("birthday stream runner config: %w", err)
-	}
-
-	return BirthdayStreamRunnerConfig{Enabled: true, RunInterval: runInterval, SessionFreshness: sessionFreshness}, nil
 }
 
 func loadXSpacesConfig() XSpacesConfig {
