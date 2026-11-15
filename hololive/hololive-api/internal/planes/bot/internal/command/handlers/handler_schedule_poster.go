@@ -16,6 +16,8 @@ import (
 // 포스터의 주 범위는 일본 방송 기준이라 오늘 날짜를 JST로 정한다.
 var schedulePosterZone = time.FixedZone("JST", 9*60*60)
 
+const scheduleCardContentType = "image/png"
+
 type SchedulePosterCommand struct {
 	handlercore.BaseCommand
 
@@ -58,7 +60,7 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 	now := c.now().In(schedulePosterZone)
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	image, found, err := c.Deps().SchedulePosters.PublishedImage(ctx, channel.ID, day)
+	schedule, found, err := c.Deps().SchedulePosters.PublishedRows(ctx, channel.ID, day)
 	if err != nil {
 		c.Deps().Logger.Error("Failed to load schedule poster", slog.String("channel_id", channel.ID), slog.Any("error", err))
 
@@ -74,8 +76,18 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 		return c.reply(ctx, room, text)
 	}
 
-	if err := c.Deps().SendImage(transport.WithImageContentType(ctx, image.MIME), room, image.Data); err != nil {
-		return fmt.Errorf("send schedule poster: %w", err)
+	member, err := c.Deps().Matcher.GetMemberByChannelID(ctx, channel.ID)
+	if err != nil {
+		return fmt.Errorf("load schedule card member: %w", err)
+	}
+
+	card, err := c.Deps().ScheduleCards.RenderScheduleCard(ctx, member, schedule)
+	if err != nil {
+		return fmt.Errorf("render schedule card: %w", err)
+	}
+
+	if err := c.Deps().SendImage(transport.WithImageContentType(ctx, scheduleCardContentType), room, card); err != nil {
+		return fmt.Errorf("send schedule card: %w", err)
 	}
 
 	return nil
@@ -86,7 +98,7 @@ func (c *SchedulePosterCommand) CheckDependencies() error {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().SchedulePosters == nil || c.Deps().Formatter == nil || c.Deps().SendImage == nil {
+	if c.Deps().Matcher == nil || c.Deps().SchedulePosters == nil || c.Deps().ScheduleCards == nil || c.Deps().Formatter == nil || c.Deps().SendImage == nil {
 		return errors.New("schedule poster command services not configured")
 	}
 

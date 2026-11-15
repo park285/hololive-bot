@@ -67,10 +67,11 @@ type vertexTranslator struct {
 	textModel       string
 	transcribeModel string
 	imageModel      string
+	rows            RowsConfig
 }
 
 // newVertexTranslator의 인증은 GOOGLE_APPLICATION_CREDENTIALS(ADC)에서 SDK가 읽는다.
-func newVertexTranslator(ctx context.Context, config TranslationConfig) (posterTranslator, error) {
+func newVertexTranslator(ctx context.Context, config TranslationConfig) (*vertexTranslator, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		Backend:  genai.BackendVertexAI,
 		Project:  config.Project,
@@ -85,7 +86,9 @@ func newVertexTranslator(ctx context.Context, config TranslationConfig) (posterT
 		return nil, fmt.Errorf("create vertex ai client with ADC: %w", err)
 	}
 
-	return &vertexTranslator{client: client, textModel: config.TextModel, transcribeModel: config.TranscribeModel, imageModel: config.Model}, nil
+	return &vertexTranslator{
+		client: client, textModel: config.TextModel, transcribeModel: config.TranscribeModel, imageModel: config.Model, rows: config.Rows,
+	}, nil
 }
 
 func (t *vertexTranslator) translateText(ctx context.Context, src source, prompt string) (textTranslation, usage, error) {

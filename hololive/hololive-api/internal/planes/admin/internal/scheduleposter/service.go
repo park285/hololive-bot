@@ -98,13 +98,21 @@ type Service struct {
 	translations translationStore
 	sources      sourceClient
 	translator   posterTranslator
+	rows         rowStore
+	rowModel     rowModel
 	reviews      reviewStore
 	judge        posterJudge
+	changes      changeStore
+	ledger       postLedger
+	classifier   postClassifier
+	matcher      postMatcher
 	members      memberSource
 	logger       *slog.Logger
 	now          func() time.Time
 	retry        retry.RetryOptions
 	rowBudget    time.Duration
+	rowsLoop     rowsLoopState
+	changeLoop   changeLoopState
 	collectNow   chan struct{}
 }
 
@@ -121,6 +129,10 @@ func New(ctx context.Context, config *Config, apiKey string, store *posterstore.
 
 	service := newService(*config, store, store, store, newFXClient(), translator, members, logger)
 
+	service.rows = store
+	service.rowModel = translator
+	service.changes, service.ledger, service.matcher = store, store, translator
+
 	if apiKey != "" {
 		judge, err := newGeminiJudge(ctx, apiKey)
 		if err != nil {
@@ -128,6 +140,7 @@ func New(ctx context.Context, config *Config, apiKey string, store *posterstore.
 		}
 
 		service.judge = judge
+		service.classifier = judge
 	}
 
 	return service, nil
@@ -155,6 +168,7 @@ func newService(
 		now:          time.Now,
 		retry:        translationRetryOptions(),
 		rowBudget:    translationRowBudget,
+		rowsLoop:     newRowsLoopState(config.Translation.Rows),
 		collectNow:   make(chan struct{}, 1),
 	}
 }
@@ -171,12 +185,29 @@ func (s *Service) Start(ctx context.Context) {
 		slog.Duration("poll_interval", s.config.PollInterval()),
 		slog.String("model", s.config.Translation.Model),
 		slog.Bool("auto_review", s.judge != nil),
+		slog.String("rows_extract_model", s.config.Translation.Rows.Extract.Model),
+		slog.String("rows_extract_thinking_level", string(s.config.Translation.Rows.Extract.ThinkingLevel)),
+		slog.String("rows_translate_model", s.config.Translation.Rows.Translate.Model),
+		slog.String("rows_translate_thinking_level", string(s.config.Translation.Rows.Translate.ThinkingLevel)),
+		slog.Bool("change_detection", s.detectsChanges()),
+		slog.Duration("change_poll_interval", s.config.ChangePollInterval()),
+		slog.String("rows_match_model", s.config.Translation.Rows.Match.Model),
+		slog.String("rows_match_thinking_level", string(s.config.Translation.Rows.Match.ThinkingLevel)),
+		slog.Float64("schedule_info_min", s.config.Translation.Rows.Decide.ScheduleInfoMin),
 	)
 
 	var wg sync.WaitGroup
 
 	wg.Go(func() { s.runCollectLoop(ctx) })
 	wg.Go(func() { s.runLoop(ctx, "translate", initialTranslate, translateInterval, s.translatePending) })
+
+	// 행 추출을 이미지 번역과 다른 goroutine에 두어, 몇 시간 걸리는 이미지 번역 한 건이 행 추출을 막지 않게 한다.
+	wg.Go(func() { s.runLoop(ctx, "rows", initialTranslate, translateInterval, s.extractPendingRows) })
+
+	if s.detectsChanges() {
+		wg.Go(func() { s.runLoop(ctx, "changes", initialCollectWait, s.config.ChangePollInterval(), s.detectChanges) })
+	}
+
 	wg.Wait()
 	s.logger.Info("Schedule poster service stopped")
 }

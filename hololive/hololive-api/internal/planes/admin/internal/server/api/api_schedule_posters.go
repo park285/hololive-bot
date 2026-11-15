@@ -61,10 +61,47 @@ type schedulePosterResponse struct {
 	Revision          string  `json:"revision"`
 	CreatedAt         string  `json:"createdAt"`
 	UpdatedAt         string  `json:"updatedAt"`
+	RowsStatus        string  `json:"rowsStatus"`
+	RowsError         string  `json:"rowsError"`
+	RowsExtractedAt   *string `json:"rowsExtractedAt"`
+	RowsCount         int     `json:"rowsCount"`
+}
+
+type schedulePosterPostsResponse struct {
+	Posts []schedulePosterPostResponse `json:"posts"`
+}
+
+type schedulePosterPostResponse struct {
+	ID          string                         `json:"id"`
+	PostURL     string                         `json:"postUrl"`
+	PostedAt    string                         `json:"postedAt"`
+	TextExcerpt string                         `json:"textExcerpt"`
+	Status      string                         `json:"status"`
+	Reason      string                         `json:"reason"`
+	Current     bool                           `json:"current"`
+	Revocable   bool                           `json:"revocable"`
+	Restorable  bool                           `json:"restorable"`
+	Changes     []schedulePosterChangeResponse `json:"changes"`
+}
+
+type schedulePosterChangeResponse struct {
+	Item    int     `json:"item"`
+	Kind    string  `json:"kind"`
+	Reason  string  `json:"reason"`
+	Slot    *int    `json:"slot"`
+	Day     *string `json:"day"`
+	Start   *string `json:"start"`
+	Status  string  `json:"status"`
+	Text    string  `json:"text"`
+	TitleKo string  `json:"titleKo"`
 }
 
 type schedulePosterRevisionRequest struct {
 	ExpectedRevision string `json:"expectedRevision"`
+}
+
+type schedulePosterPostRequest struct {
+	PostID string `json:"postId"`
 }
 
 type schedulePosterWeekRequest struct {
@@ -93,6 +130,50 @@ func newSchedulePosterResponse(poster *scheduleposter.Poster) schedulePosterResp
 		Revision:          strconv.FormatInt(poster.Revision, 10),
 		CreatedAt:         formatTimestamp(poster.CreatedAt),
 		UpdatedAt:         formatTimestamp(poster.UpdatedAt),
+		RowsStatus:        string(poster.RowsStatus),
+		RowsError:         poster.RowsError,
+		RowsExtractedAt:   formatOptionalTimestamp(poster.RowsExtractedAt),
+		RowsCount:         poster.RowsCount,
+	}
+}
+
+func newSchedulePosterPostResponse(post *scheduleposter.PosterPost) schedulePosterPostResponse {
+	changes := make([]schedulePosterChangeResponse, 0, len(post.Changes))
+
+	for i := range post.Changes {
+		change := &post.Changes[i]
+		item := schedulePosterChangeResponse{
+			Item:    change.Item,
+			Kind:    string(change.Kind),
+			Reason:  change.Reason,
+			Start:   change.Start,
+			Status:  string(change.Status),
+			Text:    change.Text,
+			TitleKo: change.TitleKo,
+		}
+
+		if change.Slot > 0 {
+			item.Slot = new(change.Slot)
+		}
+
+		if !change.Day.IsZero() {
+			item.Day = new(change.Day.Format(time.DateOnly))
+		}
+
+		changes = append(changes, item)
+	}
+
+	return schedulePosterPostResponse{
+		ID:          strconv.FormatInt(post.ID, 10),
+		PostURL:     scheduleposter.PostURL(post.ID),
+		PostedAt:    formatTimestamp(post.PostedAt),
+		TextExcerpt: post.TextExcerpt,
+		Status:      string(post.Status),
+		Reason:      post.Reason,
+		Current:     post.Current,
+		Revocable:   post.Revocable,
+		Restorable:  post.Restorable,
+		Changes:     changes,
 	}
 }
 
@@ -127,12 +208,19 @@ func (h *SchedulePosterHandler) ready(c *gin.Context) bool {
 }
 
 func (h *SchedulePosterHandler) posterID(c *gin.Context) (int64, bool) {
-	raw := c.Param("id")
-
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != raw {
+	id, ok := parseSchedulePosterID(c.Param("id"))
+	if !ok {
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid schedule poster id", nil)
 
+		return 0, false
+	}
+
+	return id, true
+}
+
+func parseSchedulePosterID(raw string) (int64, bool) {
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != raw {
 		return 0, false
 	}
 
@@ -234,6 +322,35 @@ func (h *SchedulePosterHandler) GetSchedulePoster(c *gin.Context) {
 	}
 
 	ginjson.Respond(c, http.StatusOK, newSchedulePosterResponse(&poster))
+}
+
+// GetSchedulePosterChanges는 포스터의 수집 조건에 드는 글과, 지금 행 묶음에 대응한 글의 변경을 돌려준다.
+func (h *SchedulePosterHandler) GetSchedulePosterChanges(c *gin.Context) {
+	if !h.ready(c) {
+		return
+	}
+
+	id, ok := h.posterID(c)
+	if !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), schedulePosterTimeout)
+	defer cancel()
+
+	posts, err := h.store.PosterPosts(ctx, id)
+	if err != nil {
+		h.respondStoreError(c, "list schedule poster posts", err)
+
+		return
+	}
+
+	items := make([]schedulePosterPostResponse, 0, len(posts))
+	for i := range posts {
+		items = append(items, newSchedulePosterPostResponse(&posts[i]))
+	}
+
+	ginjson.Respond(c, http.StatusOK, schedulePosterPostsResponse{Posts: items})
 }
 
 // GetTranslatedSchedulePoster는 Console gateway가 JSON 응답만 중계하므로 이미지를 base64로 담는다.
@@ -340,6 +457,64 @@ func (h *SchedulePosterHandler) RetranslateSchedulePoster(c *gin.Context) {
 	h.change(c, &request, &request.ExpectedRevision, func(ctx context.Context, id, revision int64) (int64, error) {
 		return h.store.RequestTranslation(ctx, id, revision)
 	})
+}
+
+// RequestSchedulePosterRows는 일정표 행만 다시 뽑게 예약하며 revision을 올리지 않는다.
+func (h *SchedulePosterHandler) RequestSchedulePosterRows(c *gin.Context) {
+	var request schedulePosterRevisionRequest
+
+	h.change(c, &request, &request.ExpectedRevision, func(ctx context.Context, id, revision int64) (int64, error) {
+		return h.store.RequestRows(ctx, id, revision)
+	})
+}
+
+// RevokeSchedulePosterChange는 글 하나의 변경을 철회한다. Console gateway가 경로 변수로 {id}만 받으므로 글 id는 본문에 둔다.
+func (h *SchedulePosterHandler) RevokeSchedulePosterChange(c *gin.Context) {
+	h.changePost(c, "revoke schedule poster post", (*scheduleposter.Store).RevokePost)
+}
+
+// RestoreSchedulePosterChange는 철회한 글을 되살려 다음 주기에 다시 대응하게 한다.
+func (h *SchedulePosterHandler) RestoreSchedulePosterChange(c *gin.Context) {
+	h.changePost(c, "restore schedule poster post", (*scheduleposter.Store).RestorePost)
+}
+
+func (h *SchedulePosterHandler) changePost(
+	c *gin.Context,
+	action string,
+	apply func(store *scheduleposter.Store, ctx context.Context, posterID, postID int64) error,
+) {
+	if !h.ready(c) {
+		return
+	}
+
+	id, ok := h.posterID(c)
+	if !ok {
+		return
+	}
+
+	var request schedulePosterPostRequest
+
+	if !decodeSchedulePosterChange(c, &request) {
+		return
+	}
+
+	postID, ok := parseSchedulePosterID(request.PostID)
+	if !ok {
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid schedule poster request body", nil)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), schedulePosterTimeout)
+	defer cancel()
+
+	if err := apply(h.store, ctx, id, postID); err != nil {
+		h.respondStoreError(c, action, err)
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, gin.H{"id": strconv.FormatInt(id, 10), "postId": strconv.FormatInt(postID, 10)})
 }
 
 // change의 request와 expectedRevision은 같은 요청 구조체를 가리킨다. 본문을 디코드한 뒤에 revision을 읽는다.

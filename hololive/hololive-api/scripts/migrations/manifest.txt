@@ -16,3 +16,5 @@
 016 016_schedule_poster_message_strings.sql
 017 017_schedule_poster_review_request.sql
 018 018_schedule_poster_review_request_reason.sql
+019 019_schedule_poster_rows.sql
+020 020_schedule_poster_changes.sql

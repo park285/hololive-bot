@@ -1,0 +1,969 @@
+[
+ {
+  "name": "kyoko",
+  "owner": "hyakuto-kyoko",
+  "owner_channel": "UCSjQDxud2HkAO2DVD3lwxmw",
+  "week": [
+   "2026-11-09",
+   "2026-11-15"
+  ],
+  "rows": [
+   {
+    "date": "2026-11-09",
+    "start": "12:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "PEAK / FULL SQUAD!!",
+    "badges": [
+     "EN"
+    ]
+   },
+   {
+    "date": "2026-11-09",
+    "start": "21:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "Overwatch / with つーちゃん",
+    "badges": [
+     "JP"
+    ]
+   },
+   {
+    "date": "2026-11-10",
+    "start": "12:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "Soul Chained / with Bijou-sepnai / Chihaya-senpai",
+    "badges": [
+     "EN"
+    ]
+   },
+   {
+    "date": "2026-11-11",
+    "start": "11:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "Deadlock / with Gigi-senpai",
+    "badges": [
+     "EN"
+    ]
+   },
+   {
+    "date": "2026-11-11",
+    "start": "22:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "鬼武者 / Way of the Sword",
+    "badges": [
+     "JP"
+    ]
+   },
+   {
+    "date": "2026-11-12",
+    "start": "00:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "Cuphead",
+    "badges": [
+     "EN"
+    ]
+   },
+   {
+    "date": "2026-11-12",
+    "start": "22:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "デス桃太郎",
+    "badges": [
+     "JP"
+    ]
+   },
+   {
+    "date": "2026-11-13",
+    "start": "12:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "The Plant Shop",
+    "badges": [
+     "EN"
+    ]
+   },
+   {
+    "date": "2026-11-13",
+    "start": "22:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "Phasmophobia / with めらち",
+    "badges": [
+     "JP"
+    ]
+   },
+   {
+    "date": "2026-11-14",
+    "start": "12:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "FNAF 3",
+    "badges": [
+     "EN"
+    ]
+   },
+   {
+    "date": "2026-11-14",
+    "start": "20:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "終われまテン！ / with アンビ隊",
+    "badges": [
+     "JP"
+    ]
+   },
+   {
+    "date": "2026-11-14",
+    "start": "22:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "ダークソウル / SL 1 ノーデス",
+    "badges": [
+     "JP"
+    ]
+   },
+   {
+    "date": "2026-11-15",
+    "start": "12:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "Collab / Raora-senpai",
+    "badges": [
+     "EN"
+    ]
+   },
+   {
+    "date": "2026-11-15",
+    "start": "22:00",
+    "end": null,
+    "tz": "JST",
+    "status": "planned",
+    "text": "地獄銭湯",
+    "badges": [
+     "JP"
+    ]
+   }
+  ],
+  "out": [
+   {
+    "index": 1,
+    "title_ko": "PEAK 풀 스쿼드!!",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "EN"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 2,
+    "title_ko": "Overwatch",
+    "with_ko": [
+     "츠즈리"
+    ],
+    "place_ko": "",
+    "tags_ko": [
+     "JP"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 3,
+    "title_ko": "Soul Chained",
+    "with_ko": [
+     "비쥬 선배",
+     "치하야 선배"
+    ],
+    "place_ko": "",
+    "tags_ko": [
+     "EN"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 4,
+    "title_ko": "Deadlock",
+    "with_ko": [
+     "지지 선배"
+    ],
+    "place_ko": "",
+    "tags_ko": [
+     "EN"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 5,
+    "title_ko": "귀무자 Way of the Sword",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "JP"
+    ],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "鬼武者",
+      "ko": "귀무자",
+      "basis": "official_ko"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 6,
+    "title_ko": "Cuphead",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "EN"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 7,
+    "title_ko": "데스 모모타로",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "JP"
+    ],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "デス桃太郎",
+      "ko": "데스 모모타로",
+      "basis": "transliterated"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 8,
+    "title_ko": "The Plant Shop",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "EN"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 9,
+    "title_ko": "Phasmophobia",
+    "with_ko": [
+     "메라"
+    ],
+    "place_ko": "",
+    "tags_ko": [
+     "JP"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 10,
+    "title_ko": "FNAF 3",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "EN"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 11,
+    "title_ko": "일치할 때까지 못 끝내!",
+    "with_ko": [
+     "아소비"
+    ],
+    "place_ko": "",
+    "tags_ko": [
+     "JP"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": "アンビ隊: 아소비★마와리타이!(アソビ隊)의 오기로 보고 아소비로 적음"
+   },
+   {
+    "index": 12,
+    "title_ko": "다크 소울 SL 1 노데스",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "JP"
+    ],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "ダークソウル",
+      "ko": "다크 소울",
+      "basis": "official_ko"
+     },
+     {
+      "source": "ノーデス",
+      "ko": "노데스",
+      "basis": "transliterated"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 13,
+    "title_ko": "콜라보",
+    "with_ko": [
+     "라오라 선배"
+    ],
+    "place_ko": "",
+    "tags_ko": [
+     "EN"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 14,
+    "title_ko": "지옥 목욕탕",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "JP"
+    ],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "地獄銭湯",
+      "ko": "지옥 목욕탕",
+      "basis": "translated"
+     }
+    ],
+    "doubt_ko": ""
+   }
+  ]
+ },
+ {
+  "name": "mela",
+  "owner": "achichi-mela",
+  "owner_channel": "UC8eitCE9Z6EwUCs-VUi1blg",
+  "week": [
+   "2026-11-09",
+   "2026-11-15"
+  ],
+  "rows": [
+   {
+    "date": "2026-11-09",
+    "start": "12:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "PEAK@めら視点 / (キョーコ、Kaela、biboo)",
+    "badges": []
+   },
+   {
+    "date": "2026-11-09",
+    "start": "19:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "メン限お絵かき (まったり)",
+    "badges": []
+   },
+   {
+    "date": "2026-11-10",
+    "start": null,
+    "end": null,
+    "tz": null,
+    "status": "off",
+    "text": "お休み",
+    "badges": []
+   },
+   {
+    "date": "2026-11-11",
+    "start": "07:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "のじゃEnglish",
+    "badges": []
+   },
+   {
+    "date": "2026-11-11",
+    "start": "19:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "オフコラボ@AZKi先輩ch",
+    "badges": []
+   },
+   {
+    "date": "2026-11-12",
+    "start": "19:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "空気読み。3",
+    "badges": []
+   },
+   {
+    "date": "2026-11-13",
+    "start": "19:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "ホラゲ「Phasmophobia」キョーココラボ@めら視点",
+    "badges": []
+   },
+   {
+    "date": "2026-11-14",
+    "start": "20:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "「一致するまで終われまテン」アソビ隊コラボ @めらch",
+    "badges": []
+   },
+   {
+    "date": "2026-11-15",
+    "start": "19:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "ホロライブの音ゲー「ホロドリ」",
+    "badges": []
+   }
+  ],
+  "out": [
+   {
+    "index": 1,
+    "title_ko": "PEAK",
+    "with_ko": [
+     "쿄코",
+     "카엘라",
+     "비쥬"
+    ],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 2,
+    "title_ko": "그림 방송",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "멤버십 한정"
+    ],
+    "note_ko": "느긋하게 진행",
+    "terms": [
+     {
+      "source": "お絵かき",
+      "ko": "그림 방송",
+      "basis": "translated"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 3,
+    "title_ko": "휴방",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 4,
+    "title_ko": "노자 English",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "のじゃEnglish",
+      "ko": "노자 English",
+      "basis": "transliterated"
+     }
+    ],
+    "doubt_ko": "のじゃ: 어떤 의미나 기획인지 알 수 없어 읽는 대로 표기함"
+   },
+   {
+    "index": 5,
+    "title_ko": "오프 콜라보",
+    "with_ko": [],
+    "place_ko": "아즈키 선배 채널",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "オフコラボ",
+      "ko": "오프 콜라보",
+      "basis": "transliterated"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 6,
+    "title_ko": "분위기 파악 3",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "空気読み。3",
+      "ko": "분위기 파악 3",
+      "basis": "translated"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 7,
+    "title_ko": "공포 게임 Phasmophobia",
+    "with_ko": [
+     "쿄코"
+    ],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "ホラゲ",
+      "ko": "공포 게임",
+      "basis": "translated"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 8,
+    "title_ko": "일치할 때까지 못 끝내!",
+    "with_ko": [
+     "아소비"
+    ],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 9,
+    "title_ko": "홀로라이브 리듬 게임 홀로도리",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "音ゲー",
+      "ko": "리듬 게임",
+      "basis": "translated"
+     }
+    ],
+    "doubt_ko": ""
+   }
+  ]
+ },
+ {
+  "name": "sopia",
+  "owner": "sorashina-sopia",
+  "owner_channel": "UCROQtXcp2loQEmvpe5rhJzQ",
+  "week": [
+   "2026-11-09",
+   "2026-11-15"
+  ],
+  "rows": [
+   {
+    "date": "2026-11-09",
+    "start": "19:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "理系女子あるあるコラボ / @博衣こより先輩ch.",
+    "badges": []
+   },
+   {
+    "date": "2026-11-10",
+    "start": "20:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "ホロドリ配信",
+    "badges": []
+   },
+   {
+    "date": "2026-11-11",
+    "start": "20:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "コラボ配信",
+    "badges": []
+   },
+   {
+    "date": "2026-11-12",
+    "start": "22:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "酒を呑みながら語り合う / @儒烏風亭らでんch.",
+    "badges": []
+   },
+   {
+    "date": "2026-11-13",
+    "start": "22:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "コラボ配信",
+    "badges": []
+   },
+   {
+    "date": "2026-11-14",
+    "start": "20:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "一致するまで終われまテン!! / with アソビ★まわり隊! @熱干めらch.",
+    "badges": []
+   },
+   {
+    "date": "2026-11-15",
+    "start": "23:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "メン限配信",
+    "badges": []
+   }
+  ],
+  "out": [
+   {
+    "index": 1,
+    "title_ko": "이과 여자 공감 콜라보",
+    "with_ko": [],
+    "place_ko": "코요리 선배 채널",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 2,
+    "title_ko": "홀로도리 방송",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 3,
+    "title_ko": "콜라보 방송",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 4,
+    "title_ko": "술 마시며 이야기 나누기",
+    "with_ko": [],
+    "place_ko": "라덴 채널",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 5,
+    "title_ko": "콜라보 방송",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 6,
+    "title_ko": "일치할 때까지 못 끝내!!",
+    "with_ko": [
+     "아소비"
+    ],
+    "place_ko": "메라 채널",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": "熱干めら: 熱千めら(메라)의 오기로 보고 메라 채널로 표기함"
+   },
+   {
+    "index": 7,
+    "title_ko": "멤버십 한정 방송",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [
+     "멤버십 한정"
+    ],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   }
+  ]
+ },
+ {
+  "name": "tsuzuri",
+  "owner": "suzuna-tsuzuri",
+  "owner_channel": "UCy9mgxB8pn2C4aNK_MPthDQ",
+  "week": [
+   "2026-11-09",
+   "2026-11-15"
+  ],
+  "rows": [
+   {
+    "date": "2026-11-09",
+    "start": "21:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "OVERWATCH @キョーコ",
+    "badges": [
+     "コラボ",
+     "FPS"
+    ]
+   },
+   {
+    "date": "2026-11-10",
+    "start": "18:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "VALORANT ⑤ / @せんぱいコラボ",
+    "badges": [
+     "コラボ",
+     "FPS"
+    ]
+   },
+   {
+    "date": "2026-11-11",
+    "start": "20:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "コラボ(自枠ない) / ←たぶん",
+    "badges": [
+     "コラボ",
+     "ゲーム"
+    ]
+   },
+   {
+    "date": "2026-11-12",
+    "start": "21:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "VALORANT / ソロコンペ or 「時のオカリナ」",
+    "badges": [
+     "ゲーム",
+     "FPS"
+    ]
+   },
+   {
+    "date": "2026-11-13",
+    "start": "18:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "うた枠",
+    "badges": [
+     "歌枠"
+    ]
+   },
+   {
+    "date": "2026-11-14",
+    "start": "19:00",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "「一致するまで終われまテン」 / @アリビキまわり隊 めらch.",
+    "badges": [
+     "コラボ"
+    ]
+   },
+   {
+    "date": "2026-11-14",
+    "start": "21:30",
+    "end": null,
+    "tz": null,
+    "status": "planned",
+    "text": "「時のオカリナ」",
+    "badges": [
+     "ゲーム"
+    ]
+   },
+   {
+    "date": "2026-11-15",
+    "start": "21:00",
+    "end": null,
+    "tz": null,
+    "status": "tentative",
+    "text": "ざつだん / or / VALORANT / 休みになる / かのうせい大",
+    "badges": [
+     "雑談",
+     "お休み",
+     "FPS"
+    ]
+   }
+  ],
+  "out": [
+   {
+    "index": 1,
+    "title_ko": "OVERWATCH",
+    "with_ko": [
+     "쿄코"
+    ],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 2,
+    "title_ko": "VALORANT ⑤",
+    "with_ko": [
+     "선배"
+    ],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 3,
+    "title_ko": "콜라보",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "아마 다른 채널에서 진행",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 4,
+    "title_ko": "VALORANT 솔로 경쟁전 또는 시간의 오카리나",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "ソロコンペ",
+      "ko": "솔로 경쟁전",
+      "basis": "translated"
+     },
+     {
+      "source": "時のオカリナ",
+      "ko": "시간의 오카리나",
+      "basis": "official_ko"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 5,
+    "title_ko": "노래 방송",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": ""
+   },
+   {
+    "index": 6,
+    "title_ko": "일치할 때까지 못 끝내!",
+    "with_ko": [
+     "아소비"
+    ],
+    "place_ko": "메라 채널",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [],
+    "doubt_ko": "アリビキまわり隊: アソビまわり隊의 오기로 보고 표기함"
+   },
+   {
+    "index": 7,
+    "title_ko": "시간의 오카리나",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "",
+    "terms": [
+     {
+      "source": "時のオカリナ",
+      "ko": "시간의 오카리나",
+      "basis": "official_ko"
+     }
+    ],
+    "doubt_ko": ""
+   },
+   {
+    "index": 8,
+    "title_ko": "잡담 또는 VALORANT",
+    "with_ko": [],
+    "place_ko": "",
+    "tags_ko": [],
+    "note_ko": "휴방 가능성 높음",
+    "terms": [],
+    "doubt_ko": ""
+   }
+  ]
+ }
+]

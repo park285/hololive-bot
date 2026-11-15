@@ -48,11 +48,17 @@ type calendarPhotoFetchSlot struct {
 }
 
 func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
+	photoURLs, truncated := uniqueCalendarPhotoURLs(entries, calendarPhotoMaxFetches)
+
+	return fetchPhotos(parent, photoURLs, truncated)
+}
+
+func fetchPhotos(parent context.Context, photoURLs []string, truncated bool) (calendarPhotoFetchResult, error) {
 	budgetCtx, cancel := context.WithTimeout(parent, photoFetchBudget)
 
 	defer cancel()
 
-	out, err := fetchMemberPhotosWithinBudget(parent, budgetCtx, entries)
+	out, err := fetchPhotosWithinBudget(parent, budgetCtx, photoURLs, truncated)
 	if err != nil {
 		return out, fmt.Errorf("fetch member photos within budget: %w", err)
 	}
@@ -61,7 +67,7 @@ func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (
 }
 
 // 캐시 정책은 다음과 같다. 상한을 넘는 사진이 있거나 예산이 끝난 뒤 실패한 사진이 있으면 메모리·디스크 캐시를 모두 막고, 그 밖의 개별 실패는 디스크 캐시만 막는다. 부모 ctx 취소는 오류로 돌려준다.
-func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
+func fetchPhotosWithinBudget(parent, budgetCtx context.Context, photoURLs []string, truncated bool) (calendarPhotoFetchResult, error) {
 	result := calendarPhotoFetchResult{
 		photos: make(map[string]image.Image),
 		cachePolicy: calendarCachePolicy{
@@ -74,7 +80,6 @@ func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []
 		return result, fmt.Errorf("before member photo download: %w", err)
 	}
 
-	photoURLs, truncated := uniqueCalendarPhotoURLs(entries, calendarPhotoMaxFetches)
 	if truncated {
 		result.cachePolicy.markUncacheable()
 	}

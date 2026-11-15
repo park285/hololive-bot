@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"io"
+	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -18,15 +19,22 @@ type calendarCacheKey struct {
 	entriesHash string
 }
 
-func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) {
-	if r == nil {
-		return nil, false
-	}
+type imageCache[K comparable] struct {
+	mu    sync.Mutex
+	limit int
+	data  map[K][]byte
+	order []K
+}
 
-	r.cacheMu.Lock()
-	defer r.cacheMu.Unlock()
+func newImageCache[K comparable](limit int) *imageCache[K] {
+	return &imageCache[K]{limit: limit, data: make(map[K][]byte)}
+}
 
-	data, ok := r.cache[key]
+func (c *imageCache[K]) get(key K) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	data, ok := c.data[key]
 	if !ok {
 		return nil, false
 	}
@@ -34,29 +42,37 @@ func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) 
 	return bytes.Clone(data), true
 }
 
+func (c *imageCache[K]) put(key K, data []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, ok := c.data[key]; !ok {
+		c.order = append(c.order, key)
+	}
+
+	c.data[key] = bytes.Clone(data)
+	for len(c.order) > c.limit {
+		oldest := c.order[0]
+
+		c.order = c.order[1:]
+		delete(c.data, oldest)
+	}
+}
+
+func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) {
+	if r == nil {
+		return nil, false
+	}
+
+	return r.cache.get(key)
+}
+
 func (r *CalendarCardRenderer) storeCachedImage(key calendarCacheKey, data []byte) {
 	if r == nil {
 		return
 	}
 
-	r.cacheMu.Lock()
-	defer r.cacheMu.Unlock()
-
-	if r.cache == nil {
-		r.cache = make(map[calendarCacheKey][]byte)
-	}
-
-	if _, ok := r.cache[key]; !ok {
-		r.cacheOrder = append(r.cacheOrder, key)
-	}
-
-	r.cache[key] = bytes.Clone(data)
-	for len(r.cacheOrder) > calendarImageCacheLimit {
-		oldest := r.cacheOrder[0]
-
-		r.cacheOrder = r.cacheOrder[1:]
-		delete(r.cache, oldest)
-	}
+	r.cache.put(key, data)
 }
 
 func newCalendarCacheKey(month, year int, entries []domain.CalendarEntry) calendarCacheKey {

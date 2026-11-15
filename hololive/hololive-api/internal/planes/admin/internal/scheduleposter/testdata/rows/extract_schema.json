@@ -1,0 +1,75 @@
+{
+ "type": "OBJECT",
+ "description": "Dated schedule slots transcribed from a weekly schedule poster.",
+ "required": [
+  "rows"
+ ],
+ "properties": {
+  "rows": {
+   "type": "ARRAY",
+   "description": "Schedule slots in chronological order.",
+   "items": {
+    "type": "OBJECT",
+    "required": [
+     "date",
+     "start",
+     "end",
+     "tz",
+     "status",
+     "text",
+     "badges"
+    ],
+    "propertyOrdering": [
+     "date",
+     "start",
+     "end",
+     "tz",
+     "status",
+     "text",
+     "badges"
+    ],
+    "properties": {
+     "date": {
+      "type": "STRING",
+      "description": "Day cell of the slot as YYYY-MM-DD inside the poster week."
+     },
+     "start": {
+      "type": "STRING",
+      "nullable": true,
+      "description": "Printed start time as 24-hour HH:MM in the zone given in tz, or null."
+     },
+     "end": {
+      "type": "STRING",
+      "nullable": true,
+      "description": "Printed end time in the same format, or null."
+     },
+     "tz": {
+      "type": "STRING",
+      "nullable": true,
+      "description": "Time zone of start as printed, or null when the poster states none."
+     },
+     "status": {
+      "type": "STRING",
+      "enum": [
+       "planned",
+       "tentative",
+       "cancelled",
+       "off"
+      ]
+     },
+     "text": {
+      "type": "STRING",
+      "description": "Everything written in the slot except date, weekday, and its times in every zone, copied as printed."
+     },
+     "badges": {
+      "type": "ARRAY",
+      "description": "Badges attached to the slot: the printed text, or the legend's text for an icon.",
+      "items": {
+       "type": "STRING"
+      }
+     }
+    }
+   }
+  }
+ }
+}

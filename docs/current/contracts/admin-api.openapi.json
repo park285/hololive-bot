@@ -554,6 +554,184 @@
           }
         }
       }
+    },
+    "/api/holo/schedule-posters/{id}/changes": {
+      "get": {
+        "operationId": "holoGetSchedulePosterChanges",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterPosts"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/changes/revoke": {
+      "post": {
+        "operationId": "holoRevokeSchedulePosterChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterRevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterRevokeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/changes/restore": {
+      "post": {
+        "operationId": "holoRestoreSchedulePosterChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterRevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterRevokeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/rows": {
+      "post": {
+        "operationId": "holoRequestSchedulePosterRows",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterChangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -845,7 +1023,11 @@
           "translatedAt",
           "revision",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "rowsStatus",
+          "rowsError",
+          "rowsExtractedAt",
+          "rowsCount"
         ],
         "properties": {
           "id": {
@@ -948,6 +1130,40 @@
           "updatedAt": {
             "type": "string",
             "minLength": 1
+          },
+          "rowsStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "succeeded",
+              "failed"
+            ],
+            "description": "일정표 행 추출 상태입니다. 확정본이 아니면 뜻이 없습니다."
+          },
+          "rowsError": {
+            "type": "string",
+            "enum": [
+              "",
+              "source_unavailable",
+              "extraction_failed",
+              "translation_failed",
+              "no_rows",
+              "unsupported_zone"
+            ],
+            "description": "마지막 행 추출 실패 사유입니다. source_unavailable(원본을 받지 못했거나 썸네일 그림이 수집 때와 다름), extraction_failed, translation_failed, no_rows(일정 칸이 없는 그림), unsupported_zone(JST로 바꿀 수 없는 시간대의 행). 실패가 아니면 빈 문자열입니다. 확정본이 아니면 뜻이 없습니다."
+          },
+          "rowsExtractedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "행 묶음을 마지막으로 저장한 시각(RFC3339)입니다. 재추출을 기다리거나 실패해도 이전 묶음과 함께 남고, 저장한 적이 없으면 null입니다."
+          },
+          "rowsCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "저장된 행 수입니다. 확정본이 아니면 뜻이 없습니다."
           }
         }
       },
@@ -1008,6 +1224,192 @@
           }
         }
       },
+      "SchedulePosterPost": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "postUrl",
+          "postedAt",
+          "textExcerpt",
+          "status",
+          "reason",
+          "current",
+          "revocable",
+          "restorable",
+          "changes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "postUrl": {
+            "type": "string",
+            "pattern": "^https://x\\.com/i/status/[1-9][0-9]{0,18}$"
+          },
+          "postedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "textExcerpt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280,
+            "description": "본문 앞 280자입니다."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unjudged",
+              "not_relevant",
+              "judge_failed",
+              "relevant",
+              "matched",
+              "match_failed",
+              "revoked"
+            ],
+            "description": "unjudged(판별 전), not_relevant(일정 변경 글이 아님), judge_failed, relevant(대응 전), matched(행 묶음에 대응함), match_failed, revoked(관리자가 철회함)입니다."
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "",
+              "unavailable",
+              "blocked",
+              "bad_answer",
+              "invalid_changes"
+            ],
+            "description": "judge_failed·match_failed의 사유입니다. 그 밖의 상태는 빈 문자열입니다."
+          },
+          "current": {
+            "type": "boolean",
+            "description": "글의 대응이 포스터의 지금 행 묶음에 대한 것인지입니다. false인 글의 변경은 게시되지 않습니다."
+          },
+          "revocable": {
+            "type": "boolean",
+            "description": "포스터가 확정본이고 글이 철회할 수 있는 상태(relevant·matched·match_failed)인지입니다."
+          },
+          "restorable": {
+            "type": "boolean",
+            "description": "포스터가 확정본이고 글이 revoked라 되살릴 수 있는지입니다."
+          },
+          "changes": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/SchedulePosterPostChange"
+            },
+            "description": "current인 글의 변경을 항목 순서로 담습니다(same·rejected 포함). current가 아니면 빈 배열입니다."
+          }
+        }
+      },
+      "SchedulePosterPostChange": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "kind",
+          "reason",
+          "slot",
+          "day",
+          "start",
+          "status",
+          "text",
+          "titleKo"
+        ],
+        "properties": {
+          "item": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "same",
+              "time_changed",
+              "confirmed",
+              "tentative",
+              "cancelled",
+              "off",
+              "added",
+              "moved",
+              "moved_out",
+              "content_changed",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "pattern": "^([a-z][a-z_]{0,39})?$",
+            "description": "rejected의 거절 사유 코드입니다(예: evidence, past_time, time_collision). 그 밖의 종류는 빈 문자열입니다."
+          },
+          "slot": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "대상 행 번호입니다. 앞선 글이 더한 칸이 대상이거나 새 칸이면 null입니다."
+          },
+          "day": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "글이 말한 날짜입니다. null이면 날짜를 바꾸지 않습니다."
+          },
+          "start": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^(([01]?[0-9]|2[0-9]):[0-5][0-9])?$",
+            "description": "글이 말한 시작 시각이며 포스터식 24시 넘는 표기(29:59까지)를 그대로 둡니다. null이면 시각을 바꾸지 않고 빈 문자열이면 시각을 지웁니다."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "",
+              "planned",
+              "tentative",
+              "cancelled",
+              "off"
+            ],
+            "description": "글이 말한 방송 상태입니다. 빈 문자열이면 상태를 바꾸지 않습니다."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "변경의 근거 원문입니다."
+          },
+          "titleKo": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "바뀐 한국어 제목입니다. 제목을 바꾸지 않으면 빈 문자열입니다."
+          }
+        }
+      },
+      "SchedulePosterPosts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "posts"
+        ],
+        "properties": {
+          "posts": {
+            "type": "array",
+            "maxItems": 250,
+            "items": {
+              "$ref": "#/components/schemas/SchedulePosterPost"
+            }
+          }
+        },
+        "description": "포스터의 수집 조건(같은 멤버, 포스터 게시 뒤, 주 첫날 00:00 JST 이후, 주 마지막 날 다음 날 00:00 JST 전)에 드는 X 글을 돌려줍니다. 조치할 수 있는 상태(relevant·matched·match_failed·revoked)의 글은 최근 200건, 나머지 상태의 글은 최근 50건까지 싣고, 전체는 게시 시각 내림차순(같으면 글 ID 내림차순)입니다. 확정본이 아니어도 같은 조건으로 읽고, 주 범위가 없는 포스터는 빈 목록입니다. 포스터가 없으면 404입니다."
+      },
       "SchedulePosterReviewStatus": {
         "type": "string",
         "enum": [
@@ -1025,6 +1427,39 @@
         ],
         "properties": {
           "expectedRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          }
+        },
+        "description": "거절(/reject)·재번역(/translate)·행 재추출(/rows)이 함께 씁니다. 행 재추출은 일정표 행만 다시 뽑게 예약하고 이미지 번역과 revision은 그대로 두므로 응답 revision이 요청과 같으며, 새 행 묶음이 저장될 때까지 이전 묶음이 게시됩니다. 행 재추출은 확정본이고 행 추출이 succeeded·failed이며 주가 끝나지 않았을 때만 받고, 아니면 409 code=invalid_state입니다."
+      },
+      "SchedulePosterRevokeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "postId"
+        ],
+        "properties": {
+          "postId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "철회하거나 되살릴 X 글 ID입니다."
+          }
+        },
+        "description": "철회(/changes/revoke)와 되살리기(/changes/restore)가 함께 씁니다. 철회하면 글은 revoked가 되고 그 변경은 지워지며, 되살리기 전까지 다시 판별·대응하지 않습니다. 되살리면 글은 relevant로 돌아가 다음 변경 감지 주기에 다시 대응합니다(판별은 다시 하지 않습니다). 포스터나 글이 없거나 글이 포스터의 수집 조건에 들지 않으면 404입니다. 포스터가 확정본이 아니거나, 철회할 글이 relevant·matched·match_failed가 아니거나, 되살릴 글이 revoked가 아니면 409 code=invalid_state입니다."
+      },
+      "SchedulePosterRevokeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "postId"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SchedulePosterId"
+          },
+          "postId": {
             "type": "string",
             "pattern": "^[1-9][0-9]{0,18}$"
           }

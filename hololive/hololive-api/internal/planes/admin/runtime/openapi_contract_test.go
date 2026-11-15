@@ -506,6 +506,414 @@ func (s *adminOpenAPI) runSteps(t *testing.T, serve adminTestServe, pool *pgxpoo
 	}
 }
 
+type posterChangesFixture struct {
+	posterID, revision                         int64
+	matched, stale, unrelated, unjudged, early int64
+	judgeFailed, matchFailed, nextWeek         int64
+	weekStart                                  time.Time
+	rowsAt                                     time.Time
+	postedAt                                   map[int64]time.Time
+}
+
+func seedPosterChanges(t *testing.T, pool *pgxpool.Pool, store *scheduleposter.Store) posterChangesFixture {
+	t.Helper()
+
+	const channel = "UCROQtXcp2loQEmvpe5rhJzQ"
+
+	now := time.Now().UTC().Truncate(time.Second)
+	posterAt := now.Add(-2 * time.Hour)
+	jstDay := posterAt.In(time.FixedZone("JST", 9*60*60))
+	weekStart := time.Date(jstDay.Year(), jstDay.Month(), jstDay.Day(), 0, 0, 0, 0, time.UTC)
+
+	fx := posterChangesFixture{
+		posterID: 2119784604752343300, matched: 2119784604752343310, stale: 2119784604752343320,
+		unrelated: 2119784604752343330, unjudged: 2119784604752343340, early: 2119784604752343350,
+		weekStart: weekStart, rowsAt: now.Add(-90 * time.Minute),
+	}
+
+	fx.postedAt = map[int64]time.Time{
+		fx.unjudged: now.Add(-40 * time.Minute), fx.unrelated: now.Add(-50 * time.Minute),
+		fx.matched: now.Add(-60 * time.Minute), fx.stale: now.Add(-70 * time.Minute), fx.early: posterAt.Add(-time.Minute),
+	}
+
+	_, err := store.InsertCandidates(t.Context(), []scheduleposter.Candidate{{
+		ID: fx.posterID, ChannelID: channel, XUserID: "2054825907916054528",
+		PostURL: scheduleposter.PostURL(fx.posterID), ImageURL: "https://pbs.twimg.com/media/b.jpg?name=orig",
+		TextExcerpt: "週間スケジュール", PostedAt: posterAt,
+	}}, false)
+	require.NoError(t, err)
+
+	fx.revision, err = store.Confirm(t.Context(), fx.posterID, 1, weekStart, weekStart.AddDate(0, 0, 6))
+	require.NoError(t, err)
+
+	seed := []struct {
+		sql  string
+		args []any
+	}{
+		{
+			`UPDATE schedule_posters SET rows_status = 'failed', rows_error = 'unsupported_zone', rows_extracted_at = $2 WHERE id = $1`,
+			[]any{fx.posterID, fx.rowsAt},
+		},
+		{
+			`INSERT INTO schedule_poster_rows (poster_id, ordinal, day, start_time, status, source_text, title_ko)
+			VALUES ($1, 1, $2, '20:00', 'planned', 'Minecraft', '마인크래프트'), ($1, 2, $2, '23:00', 'planned', 'Talk', '잡담')`,
+			[]any{fx.posterID, weekStart},
+		},
+		{
+			`INSERT INTO schedule_poster_posts (post_id, channel_id, posted_at, body, status, reason, schedule_info, kind, matched_poster_id, matched_rows_at)
+			VALUES ($1, $6, $7, repeat('あ', 300), 'matched', '', 0.9, 'change', $11, $12),
+			       ($2, $6, $8, '昨日の配信ありがとう', 'matched', '', 0.9, 'change', $11, $13),
+			       ($3, $6, $9, 'おはよう', 'not_relevant', '', 0.1, 'other', NULL, NULL),
+			       ($4, $6, $10, '今日は20時から', 'unjudged', '', NULL, NULL, NULL, NULL),
+			       ($5, $6, $14, '前の週の話', 'relevant', '', 0.9, 'change', NULL, NULL)`,
+			[]any{
+				fx.matched, fx.stale, fx.unrelated, fx.unjudged, fx.early, channel,
+				fx.postedAt[fx.matched], fx.postedAt[fx.stale], fx.postedAt[fx.unrelated], fx.postedAt[fx.unjudged],
+				fx.posterID, fx.rowsAt, fx.rowsAt.Add(-time.Hour), fx.postedAt[fx.early],
+			},
+		},
+	}
+
+	for _, step := range seed {
+		_, err := pool.Exec(t.Context(), step.sql, step.args...)
+		require.NoError(t, err)
+	}
+
+	fx.seedChangesAndOtherPosts(t, pool, channel, now)
+
+	return fx
+}
+
+func (fx *posterChangesFixture) seedChangesAndOtherPosts(t *testing.T, pool *pgxpool.Pool, channel string, now time.Time) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(),
+		`INSERT INTO schedule_poster_changes (post_id, item, kind, reason, slot, day, start_time, status, source_text, title_ko)
+		VALUES ($1, 1, 'time_changed', '', 1, $3, '21:00', NULL, '21時から', NULL),
+		       ($1, 2, 'rejected', 'past_time', 2, NULL, NULL, NULL, '', NULL),
+		       ($1, 3, 'same', '', NULL, $3, '25:00', 'planned', '25時もいつも通り', NULL),
+		       ($1, 4, 'added', '', NULL, $4, '', 'off', '明日は休み', '휴방'),
+		       ($2, 1, 'cancelled', '', 2, NULL, NULL, 'cancelled', '雑談はなし', NULL)`,
+		fx.matched, fx.stale, fx.weekStart, fx.weekStart.AddDate(0, 0, 1))
+	require.NoError(t, err)
+
+	fx.judgeFailed, fx.matchFailed, fx.nextWeek = 2119784604752343360, 2119784604752343370, 2119784604752343380
+	fx.postedAt[fx.judgeFailed] = now.Add(-45 * time.Minute)
+	fx.postedAt[fx.matchFailed] = now.Add(-55 * time.Minute)
+	fx.postedAt[fx.nextWeek] = fx.weekStart.AddDate(0, 0, 7).Add(-9 * time.Hour)
+
+	_, err = pool.Exec(t.Context(),
+		`INSERT INTO schedule_poster_posts (post_id, channel_id, posted_at, body, status, reason, schedule_info, kind, matched_poster_id, matched_rows_at)
+		VALUES ($1, $4, $5, '配信予定', 'judge_failed', 'blocked', NULL, NULL, NULL, NULL),
+		       ($2, $4, $6, '時間変更', 'match_failed', 'invalid_changes', 0.9, 'change', $8, $9),
+		       ($3, $4, $7, '来週の話', 'relevant', '', 0.9, 'change', NULL, NULL)`,
+		fx.judgeFailed, fx.matchFailed, fx.nextWeek, channel,
+		fx.postedAt[fx.judgeFailed], fx.postedAt[fx.matchFailed], fx.postedAt[fx.nextWeek], fx.posterID, fx.rowsAt.Add(-time.Hour))
+	require.NoError(t, err)
+}
+
+type wantPosterPost struct {
+	ID          string             `json:"id"`
+	PostURL     string             `json:"postUrl"`
+	PostedAt    string             `json:"postedAt"`
+	TextExcerpt string             `json:"textExcerpt"`
+	Status      string             `json:"status"`
+	Reason      string             `json:"reason"`
+	Current     bool               `json:"current"`
+	Revocable   bool               `json:"revocable"`
+	Restorable  bool               `json:"restorable"`
+	Changes     []wantPosterChange `json:"changes"`
+}
+
+type wantPosterChange struct {
+	Item    int     `json:"item"`
+	Kind    string  `json:"kind"`
+	Reason  string  `json:"reason"`
+	Slot    *int    `json:"slot"`
+	Day     *string `json:"day"`
+	Start   *string `json:"start"`
+	Status  string  `json:"status"`
+	Text    string  `json:"text"`
+	TitleKo string  `json:"titleKo"`
+}
+
+func (fx *posterChangesFixture) post(id int64, status string, current, revocable, restorable bool, excerpt string, changes ...wantPosterChange) wantPosterPost {
+	return wantPosterPost{
+		ID: strconv.FormatInt(id, 10), PostURL: scheduleposter.PostURL(id), PostedAt: fx.postedAt[id].Format(time.RFC3339),
+		TextExcerpt: excerpt, Status: status, Current: current, Revocable: revocable, Restorable: restorable,
+		Changes: append([]wantPosterChange{}, changes...),
+	}
+}
+
+func (fx *posterChangesFixture) failedPost(id int64, status, reason string, revocable bool, excerpt string) wantPosterPost {
+	return wantPosterPost{
+		ID: strconv.FormatInt(id, 10), PostURL: scheduleposter.PostURL(id), PostedAt: fx.postedAt[id].Format(time.RFC3339),
+		TextExcerpt: excerpt, Status: status, Reason: reason, Revocable: revocable, Changes: []wantPosterChange{},
+	}
+}
+
+func (fx *posterChangesFixture) posterPostsJSON(t *testing.T) (before, after string) {
+	t.Helper()
+
+	day := fx.weekStart.Format(time.DateOnly)
+	matchedChanges := []wantPosterChange{
+		{Item: 1, Kind: "time_changed", Slot: new(1), Day: new(day), Start: new("21:00"), Text: "21時から"},
+		{Item: 2, Kind: "rejected", Reason: "past_time", Slot: new(2)},
+		{Item: 3, Kind: "same", Day: new(day), Start: new("25:00"), Status: "planned", Text: "25時もいつも通り"},
+		{Item: 4, Kind: "added", Day: new(fx.weekStart.AddDate(0, 0, 1).Format(time.DateOnly)), Start: new(""), Status: "off", Text: "明日は休み", TitleKo: "휴방"},
+	}
+	excerpt := strings.Repeat("あ", 280)
+
+	before = fx.posterPostsList(t, fx.post(fx.matched, "matched", true, true, false, excerpt, matchedChanges...), true)
+	after = fx.posterPostsList(t, fx.post(fx.matched, "revoked", false, false, true, excerpt), true)
+
+	return before, after
+}
+
+func (fx *posterChangesFixture) posterPostsList(t *testing.T, matched wantPosterPost, confirmed bool) string {
+	t.Helper()
+
+	return mustJSON(t, map[string]any{"posts": []wantPosterPost{
+		fx.post(fx.unjudged, "unjudged", false, false, false, "今日は20時から"),
+		fx.failedPost(fx.judgeFailed, "judge_failed", "blocked", false, "配信予定"),
+		fx.post(fx.unrelated, "not_relevant", false, false, false, "おはよう"),
+		fx.failedPost(fx.matchFailed, "match_failed", "invalid_changes", confirmed, "時間変更"),
+		matched,
+		fx.post(fx.stale, "matched", false, confirmed, false, "昨日の配信ありがとう"),
+	}})
+}
+
+func mustJSON(t *testing.T, value any) string {
+	t.Helper()
+
+	raw, err := jsonv2.Marshal(value, jsonv2.Deterministic(true))
+	require.NoError(t, err)
+
+	return string(raw)
+}
+
+const (
+	schedulePostersBase  = "/api/holo/schedule-posters"
+	schedulePosterRoute  = schedulePostersBase + "/{id}"
+	schedulePosterNoSuch = schedulePostersBase + "/1"
+	invalidStateResponse = `{"error":"schedule poster state does not allow this change","code":"invalid_state"}`
+)
+
+func TestSchedulePosterChangesMatchAdminOpenAPI(t *testing.T) {
+	spec := loadAdminOpenAPI(t)
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	fx := seedPosterChanges(t, pool, store)
+	before, after := fx.posterPostsJSON(t)
+
+	const (
+		changes = schedulePosterRoute + "/changes"
+		revoke  = schedulePosterRoute + "/changes/revoke"
+	)
+
+	poster := schedulePostersBase + "/" + strconv.FormatInt(fx.posterID, 10)
+	postID := func(id int64) string { return `{"postId":"` + strconv.FormatInt(id, 10) + `"}` }
+	revoked := mustJSON(t, map[string]string{"id": strconv.FormatInt(fx.posterID, 10), "postId": strconv.FormatInt(fx.matched, 10)})
+
+	spec.runSteps(t, serve, pool, []schedulePosterStep{
+		{http.MethodGet, poster + "/changes", changes, "", http.StatusOK, "", before},
+		{http.MethodGet, schedulePosterNoSuch + "/changes", changes, "", http.StatusNotFound, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.unrelated), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.unjudged), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.judgeFailed), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.early), http.StatusNotFound, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.nextWeek), http.StatusNotFound, "", ""},
+		{http.MethodPost, schedulePosterNoSuch + "/changes/revoke", revoke, postID(fx.matched), http.StatusNotFound, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, `{"postId":"0"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, `{"postId":"07"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, `{"postId":7}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, `{}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, `{"postId":"` + strconv.FormatInt(fx.matched, 10) + `","note":"x"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.matched), http.StatusOK, "", revoked},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.matched), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodGet, poster + "/changes", changes, "", http.StatusOK, "", after},
+	})
+}
+
+func TestSchedulePosterRestoreMatchesAdminOpenAPI(t *testing.T) {
+	spec := loadAdminOpenAPI(t)
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	fx := seedPosterChanges(t, pool, store)
+	_, revokedJSON := fx.posterPostsJSON(t)
+
+	const (
+		changes = schedulePosterRoute + "/changes"
+		revoke  = schedulePosterRoute + "/changes/revoke"
+		restore = schedulePosterRoute + "/changes/restore"
+		reject  = schedulePosterRoute + "/reject"
+	)
+
+	poster := schedulePostersBase + "/" + strconv.FormatInt(fx.posterID, 10)
+	postID := func(id int64) string { return `{"postId":"` + strconv.FormatInt(id, 10) + `"}` }
+	done := mustJSON(t, map[string]string{"id": strconv.FormatInt(fx.posterID, 10), "postId": strconv.FormatInt(fx.matched, 10)})
+	excerpt := strings.Repeat("あ", 280)
+	restored := fx.posterPostsList(t, fx.post(fx.matched, "relevant", false, true, false, excerpt), true)
+	rejected := fx.posterPostsList(t, fx.post(fx.matched, "revoked", false, false, false, excerpt), false)
+
+	spec.runSteps(t, serve, pool, []schedulePosterStep{
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.matched), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.matched), http.StatusOK, "", done},
+		{http.MethodGet, poster + "/changes", changes, "", http.StatusOK, "", revokedJSON},
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.stale), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.unjudged), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.early), http.StatusNotFound, "", ""},
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.nextWeek), http.StatusNotFound, "", ""},
+		{http.MethodPost, schedulePosterNoSuch + "/changes/restore", restore, postID(fx.matched), http.StatusNotFound, "", ""},
+		{http.MethodPost, poster + "/changes/restore", restore, `{"postId":"07"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/restore", restore, `{"postId":7}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/restore", restore, `{"postId":"` + strconv.FormatInt(fx.matched, 10) + `","note":"x"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.matched), http.StatusOK, "", done},
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.matched), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodGet, poster + "/changes", changes, "", http.StatusOK, "", restored},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.matched), http.StatusOK, "", done},
+		{http.MethodPost, poster + "/reject", reject, `{"expectedRevision":"` + strconv.FormatInt(fx.revision, 10) + `"}`, http.StatusOK, "", ""},
+		{http.MethodPost, poster + "/changes/revoke", revoke, postID(fx.stale), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodPost, poster + "/changes/restore", restore, postID(fx.matched), http.StatusConflict, "", invalidStateResponse},
+		{http.MethodGet, poster + "/changes", changes, "", http.StatusOK, "", rejected},
+	})
+}
+
+func TestSchedulePosterPostReasonsMatchAdminOpenAPI(t *testing.T) {
+	spec := loadAdminOpenAPI(t)
+
+	var post struct {
+		Properties struct {
+			Reason struct {
+				Enum []string `json:"enum"`
+			} `json:"reason"`
+		} `json:"properties"`
+	}
+
+	require.NoError(t, jsonv2.Unmarshal(spec.Components.Schemas["SchedulePosterPost"], &post))
+
+	reasons := []string{"", "unavailable", "blocked", "bad_answer", "invalid_changes"}
+	require.ElementsMatch(t, reasons, post.Properties.Reason.Enum)
+
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	fx := seedPosterChanges(t, pool, store)
+	poster := schedulePostersBase + "/" + strconv.FormatInt(fx.posterID, 10)
+
+	for _, reason := range reasons[1:] {
+		_, err := pool.Exec(t.Context(), `UPDATE schedule_poster_posts SET reason = $1 WHERE status IN ('judge_failed', 'match_failed')`, reason)
+		require.NoError(t, err)
+
+		spec.runSteps(t, serve, pool, []schedulePosterStep{
+			{http.MethodGet, poster + "/changes", schedulePosterRoute + "/changes", "", http.StatusOK, "", ""},
+		})
+	}
+}
+
+func TestSchedulePosterChangesAtCapacityMatchAdminOpenAPI(t *testing.T) {
+	spec := loadAdminOpenAPI(t)
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	fx := seedPosterChanges(t, pool, store)
+
+	_, err = pool.Exec(t.Context(), `INSERT INTO schedule_poster_posts (post_id, channel_id, posted_at, body, status, schedule_info, kind)
+		SELECT 3000000000000000000 + g, p.channel_id, p.posted_at + g * interval '1 second', '予定',
+		       CASE WHEN g <= 200 THEN 'relevant' ELSE 'not_relevant' END, 0.9, 'change'
+		FROM schedule_posters p, generate_series(1, 250) AS g
+		WHERE p.id = $1`, fx.posterID)
+	require.NoError(t, err)
+
+	path := schedulePostersBase + "/" + strconv.FormatInt(fx.posterID, 10) + "/changes"
+	rec := serve(http.MethodGet, path, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	spec.assertResponse(t, http.MethodGet, schedulePosterRoute+"/changes", rec.Code, rec.Body.Bytes())
+
+	var got struct {
+		Posts []struct {
+			Status string `json:"status"`
+		} `json:"posts"`
+	}
+
+	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &got))
+
+	actionable := 0
+
+	for _, post := range got.Posts {
+		if slices.Contains([]string{"relevant", "matched", "match_failed", "revoked"}, post.Status) {
+			actionable++
+		}
+	}
+
+	require.Equal(t, 200, actionable)
+	require.Len(t, got.Posts, 250)
+}
+
+func TestSchedulePosterRowsMatchAdminOpenAPI(t *testing.T) {
+	spec := loadAdminOpenAPI(t)
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	fx := seedPosterChanges(t, pool, store)
+
+	const rows = schedulePosterRoute + "/rows"
+
+	poster := schedulePostersBase + "/" + strconv.FormatInt(fx.posterID, 10)
+	revision := `{"expectedRevision":"` + strconv.FormatInt(fx.revision, 10) + `"}`
+	queued := mustJSON(t, map[string]string{"id": strconv.FormatInt(fx.posterID, 10), "revision": strconv.FormatInt(fx.revision, 10)})
+
+	requirePosterRows(t, serve, poster, "failed", "unsupported_zone", fx.rowsAt, 2)
+
+	spec.runSteps(t, serve, pool, []schedulePosterStep{
+		{http.MethodGet, poster, schedulePosterRoute, "", http.StatusOK, "", ""},
+		{http.MethodPost, poster + "/rows", rows, `{"expectedRevision":"x"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, poster + "/rows", rows, `{"expectedRevision":"1","note":"x"}`, http.StatusBadRequest, "", ""},
+		{http.MethodPost, schedulePosterNoSuch + "/rows", rows, `{"expectedRevision":"1"}`, http.StatusNotFound, "", ""},
+		{
+			http.MethodPost, poster + "/rows", rows, `{"expectedRevision":"` + strconv.FormatInt(fx.revision+1, 10) + `"}`,
+			http.StatusConflict, "", `{"error":"schedule poster changed; refresh before retrying","code":"revision_conflict"}`,
+		},
+		{http.MethodPost, poster + "/rows", rows, revision, http.StatusOK, "", queued},
+		{http.MethodPost, poster + "/rows", rows, revision, http.StatusConflict, "", invalidStateResponse},
+		{http.MethodGet, schedulePostersBase + "?status=confirmed", schedulePostersBase, "", http.StatusOK, "", ""},
+	})
+
+	requirePosterRows(t, serve, poster, "pending", "", fx.rowsAt, 2)
+}
+
+func requirePosterRows(t *testing.T, serve adminTestServe, path, status, rowsError string, extractedAt time.Time, count int) {
+	t.Helper()
+
+	rec := serve(http.MethodGet, path, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var got struct {
+		RowsStatus      string  `json:"rowsStatus"`
+		RowsError       string  `json:"rowsError"`
+		RowsExtractedAt *string `json:"rowsExtractedAt"`
+		RowsCount       int     `json:"rowsCount"`
+	}
+
+	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, status, got.RowsStatus)
+	require.Equal(t, rowsError, got.RowsError)
+	require.Equal(t, new(extractedAt.Format(time.RFC3339)), got.RowsExtractedAt)
+	require.Equal(t, count, got.RowsCount)
+}
+
 func TestSchedulePosterCollectMatchesAdminOpenAPI(t *testing.T) {
 	spec := loadAdminOpenAPI(t)
 	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})

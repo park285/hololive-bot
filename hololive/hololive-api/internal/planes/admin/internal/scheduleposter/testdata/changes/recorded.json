@@ -1,0 +1,3204 @@
+{
+ "week": [
+  "2026-11-09",
+  "2026-11-15"
+ ],
+ "posters": {
+  "tsuzuri": [
+   {
+    "date": "2026-11-09",
+    "start": "21:00",
+    "tz": "",
+    "status": "planned",
+    "text": "OVERWATCH @キョーコ"
+   },
+   {
+    "date": "2026-11-10",
+    "start": "18:00",
+    "tz": "",
+    "status": "planned",
+    "text": "VALORANT / ⑤ / @せんぱいコラボ"
+   },
+   {
+    "date": "2026-11-11",
+    "start": "20:00",
+    "tz": "",
+    "status": "planned",
+    "text": "コラボ(自枠ない) / ←たぶん"
+   },
+   {
+    "date": "2026-11-12",
+    "start": "21:00",
+    "tz": "",
+    "status": "planned",
+    "text": "VALORANT / ソロコンペ or 「時のオカリナ」"
+   },
+   {
+    "date": "2026-11-13",
+    "start": "18:00",
+    "tz": "",
+    "status": "planned",
+    "text": "うた枠"
+   },
+   {
+    "date": "2026-11-14",
+    "start": "19:00",
+    "tz": "",
+    "status": "planned",
+    "text": "「一致するまで終われまテン」 / @アリビキまわり隊 めらch."
+   },
+   {
+    "date": "2026-11-14",
+    "start": "21:30",
+    "tz": "",
+    "status": "planned",
+    "text": "「時のオカリナ」"
+   },
+   {
+    "date": "2026-11-15",
+    "start": "21:00",
+    "tz": "",
+    "status": "tentative",
+    "text": "ざつだん / or / VALORANT / 休みになる / かのうせい大"
+   }
+  ],
+  "kyoko": [
+   {
+    "date": "2026-11-09",
+    "start": "12:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "PEAK / FULL SQUAD!!"
+   },
+   {
+    "date": "2026-11-09",
+    "start": "21:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "Overwatch / with つーちゃん"
+   },
+   {
+    "date": "2026-11-10",
+    "start": "12:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "Soul Chained / with Bijou-sepnai / Chihaya-senpai"
+   },
+   {
+    "date": "2026-11-11",
+    "start": "11:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "Deadlock / with Gigi-senpai"
+   },
+   {
+    "date": "2026-11-11",
+    "start": "22:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "鬼武者 / Way of the Sword"
+   },
+   {
+    "date": "2026-11-12",
+    "start": "00:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "Cuphead"
+   },
+   {
+    "date": "2026-11-12",
+    "start": "22:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "デス桃太郎"
+   },
+   {
+    "date": "2026-11-13",
+    "start": "12:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "The Plant Shop"
+   },
+   {
+    "date": "2026-11-13",
+    "start": "22:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "Phasmophobia / with めらち"
+   },
+   {
+    "date": "2026-11-14",
+    "start": "12:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "FNAF 3"
+   },
+   {
+    "date": "2026-11-14",
+    "start": "20:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "終われまテン！ / with アンビ隊"
+   },
+   {
+    "date": "2026-11-14",
+    "start": "22:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "ダークソウル / SL1ノーデス"
+   },
+   {
+    "date": "2026-11-15",
+    "start": "12:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "Collab / Raora-senpai"
+   },
+   {
+    "date": "2026-11-15",
+    "start": "22:00",
+    "tz": "JST",
+    "status": "planned",
+    "text": "地獄銭湯"
+   }
+  ],
+  "sopia": [
+   {
+    "date": "2026-11-09",
+    "start": "19:00",
+    "tz": "",
+    "status": "planned",
+    "text": "理系女子あるあるコラボ / @博衣こより先輩ch."
+   },
+   {
+    "date": "2026-11-10",
+    "start": "20:00",
+    "tz": "",
+    "status": "planned",
+    "text": "ホロドリ配信"
+   },
+   {
+    "date": "2026-11-11",
+    "start": "20:00",
+    "tz": "",
+    "status": "planned",
+    "text": "コラボ配信"
+   },
+   {
+    "date": "2026-11-12",
+    "start": "22:00",
+    "tz": "",
+    "status": "planned",
+    "text": "酒を呑みながら語り合う / @儒烏風亭らでんch."
+   },
+   {
+    "date": "2026-11-13",
+    "start": "22:00",
+    "tz": "",
+    "status": "planned",
+    "text": "コラボ配信"
+   },
+   {
+    "date": "2026-11-14",
+    "start": "20:00",
+    "tz": "",
+    "status": "planned",
+    "text": "一致するまで終われまテン!! / with アソビ★まわり隊! @熱千めらch."
+   },
+   {
+    "date": "2026-11-15",
+    "start": "23:00",
+    "tz": "",
+    "status": "planned",
+    "text": "メン限配信"
+   }
+  ],
+  "mela": [
+   {
+    "date": "2026-11-09",
+    "start": "12:00",
+    "tz": "",
+    "status": "planned",
+    "text": "PEAK@めら視点 / (キョーコ、Kaela、biboo)"
+   },
+   {
+    "date": "2026-11-09",
+    "start": "19:00",
+    "tz": "",
+    "status": "planned",
+    "text": "メン限お絵かき (まったり)"
+   },
+   {
+    "date": "2026-11-10",
+    "start": "",
+    "tz": "",
+    "status": "off",
+    "text": "お休み"
+   },
+   {
+    "date": "2026-11-11",
+    "start": "07:00",
+    "tz": "",
+    "status": "planned",
+    "text": "のじゃEnglish"
+   },
+   {
+    "date": "2026-11-11",
+    "start": "19:00",
+    "tz": "",
+    "status": "planned",
+    "text": "オフコラボ@AZKi先輩ch"
+   },
+   {
+    "date": "2026-11-12",
+    "start": "19:00",
+    "tz": "",
+    "status": "planned",
+    "text": "空気読み。3"
+   },
+   {
+    "date": "2026-11-13",
+    "start": "19:00",
+    "tz": "",
+    "status": "planned",
+    "text": "ホラゲ「Phasmophobia」キョーココラボ@めら視点"
+   },
+   {
+    "date": "2026-11-14",
+    "start": "20:00",
+    "tz": "",
+    "status": "planned",
+    "text": "「一致するまで終われまテン」アソビ隊コラボ @めらch"
+   },
+   {
+    "date": "2026-11-15",
+    "start": "19:00",
+    "tz": "",
+    "status": "planned",
+    "text": "ホロライブの音ゲー「ホロドリ」"
+   }
+  ]
+ },
+ "runs": [
+  {
+   "name": "run1",
+   "posts": [
+    {
+     "id": 1,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-09 19:56",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:３０～【Overwatch】\n\n残り5勝!!!\n⚠︎︎時間変更してます!!!!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/Vh-YGhqy_Mo?si=HxR1ocO0S_8PS8E1",
+     "items": [
+      {
+       "row": 1,
+       "date": "2026-11-09",
+       "start": "21:30",
+       "tz": null,
+       "status": "planned",
+       "text": "残り5勝!!!",
+       "evidence": "⏰２１:３０～【Overwatch】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-09 19:56 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 21:00 [planned] OVERWATCH @キョーコ\n2. 2026-11-10 18:00 [planned] VALORANT / ⑤ / @せんぱいコラボ\n3. 2026-11-11 20:00 [planned] コラボ(自枠ない) / ←たぶん\n4. 2026-11-12 21:00 [planned] VALORANT / ソロコンペ or 「時のオカリナ」\n5. 2026-11-13 18:00 [planned] うた枠\n6. 2026-11-14 19:00 [planned] 「一致するまで終われまテン」 / @アリビキまわり隊 めらch.\n7. 2026-11-14 21:30 [planned] 「時のオカリナ」\n8. 2026-11-15 21:00 [tentative] ざつだん / or / VALORANT / 休みになる / かのうせい大\nPost text:\n୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:３０～【Overwatch】\n\n残り5勝!!!\n⚠︎︎時間変更してます!!!!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/Vh-YGhqy_Mo?si=HxR1ocO0S_8PS8E1"
+    },
+    {
+     "id": 2,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-10 13:15",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:００～【VALORANT】\n\nねね先輩・まつり先輩・いろは先輩\nラプラス先輩とアンレフルパです🔫⸒⸒\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・\nhttps://www.youtube.com/live/8OrDic721VM?si=8-CX1eG6JbE-4JHP",
+     "items": [
+      {
+       "row": 2,
+       "date": "2026-11-10",
+       "start": "18:00",
+       "tz": null,
+       "status": "planned",
+       "text": "ねね先輩・まつり先輩・いろは先輩 ラプラス先輩とアンレフルパ",
+       "evidence": "⏰１８:００～【VALORANT】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-10 13:15 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 21:30 [planned] OVERWATCH @キョーコ [update: start 21:00 -> 21:30; \"残り5勝!!!\"]\n2. 2026-11-10 18:00 [planned] VALORANT / ⑤ / @せんぱいコラボ\n3. 2026-11-11 20:00 [planned] コラボ(自枠ない) / ←たぶん\n4. 2026-11-12 21:00 [planned] VALORANT / ソロコンペ or 「時のオカリナ」\n5. 2026-11-13 18:00 [planned] うた枠\n6. 2026-11-14 19:00 [planned] 「一致するまで終われまテン」 / @アリビキまわり隊 めらch.\n7. 2026-11-14 21:30 [planned] 「時のオカリナ」\n8. 2026-11-15 21:00 [tentative] ざつだん / or / VALORANT / 休みになる / かのうせい大\nPost text:\n୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:００～【VALORANT】\n\nねね先輩・まつり先輩・いろは先輩\nラプラス先輩とアンレフルパです🔫⸒⸒\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・\nhttps://www.youtube.com/live/8OrDic721VM?si=8-CX1eG6JbE-4JHP"
+    },
+    {
+     "id": 3,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-11 15:57",
+     "body": "本日は\nおかゆ先輩の企画に参加させていただきます!!!!\n\n何やら一戦目はスバル先輩と...👀✨",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-11",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "おかゆ先輩の企画に参加させていただきます!!!!",
+       "evidence": "おかゆ先輩の企画に参加させていただきます!!!!"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-11 15:57 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 21:30 [planned] OVERWATCH @キョーコ [update: start 21:00 -> 21:30; \"残り5勝!!!\"]\n2. 2026-11-10 18:00 [planned] VALORANT / ⑤ / @せんぱいコラボ [update: \"ねね先輩・まつり先輩・いろは先輩 ラプラス先輩とアンレフルパ\"]\n3. 2026-11-11 20:00 [planned] コラボ(自枠ない) / ←たぶん\n4. 2026-11-12 21:00 [planned] VALORANT / ソロコンペ or 「時のオカリナ」\n5. 2026-11-13 18:00 [planned] うた枠\n6. 2026-11-14 19:00 [planned] 「一致するまで終われまテン」 / @アリビキまわり隊 めらch.\n7. 2026-11-14 21:30 [planned] 「時のオカリナ」\n8. 2026-11-15 21:00 [tentative] ざつだん / or / VALORANT / 休みになる / かのうせい大\nPost text:\n本日は\nおかゆ先輩の企画に参加させていただきます!!!!\n\n何やら一戦目はスバル先輩と...👀✨"
+    },
+    {
+     "id": 4,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-12 14:34",
+     "body": "【予定変更】\n11/13 18:00⇒18:30~\n11/14 19:00⇒20:00~\n          (時のオカリナも時間変更すると思う)\n11/15  当日次第",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "18:30",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/13 18:00⇒18:30~"
+      },
+      {
+       "row": 6,
+       "date": "2026-11-14",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/14 19:00⇒20:00~"
+      },
+      {
+       "row": 7,
+       "date": "2026-11-14",
+       "start": null,
+       "tz": null,
+       "status": "tentative",
+       "text": "",
+       "evidence": "時のオカリナも時間変更すると思う"
+      },
+      {
+       "row": 8,
+       "date": "2026-11-15",
+       "start": null,
+       "tz": null,
+       "status": "tentative",
+       "text": "",
+       "evidence": "11/15  当日次第"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      },
+      {
+       "kind": "time_changed"
+      },
+      {
+       "kind": "tentative"
+      },
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-12 14:34 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 21:30 [planned] OVERWATCH @キョーコ [update: start 21:00 -> 21:30; \"残り5勝!!!\"]\n2. 2026-11-10 18:00 [planned] VALORANT / ⑤ / @せんぱいコラボ [update: \"ねね先輩・まつり先輩・いろは先輩 ラプラス先輩とアンレフルパ\"]\n3. 2026-11-11 20:00 [planned] コラボ(自枠ない) / ←たぶん [update: \"おかゆ先輩の企画に参加させていただきます!!!!\"]\n4. 2026-11-12 21:00 [planned] VALORANT / ソロコンペ or 「時のオカリナ」\n5. 2026-11-13 18:00 [planned] うた枠\n6. 2026-11-14 19:00 [planned] 「一致するまで終われまテン」 / @アリビキまわり隊 めらch.\n7. 2026-11-14 21:30 [planned] 「時のオカリナ」\n8. 2026-11-15 21:00 [tentative] ざつだん / or / VALORANT / 休みになる / かのうせい大\nPost text:\n【予定変更】\n11/13 18:00⇒18:30~\n11/14 19:00⇒20:00~\n          (時のオカリナも時間変更すると思う)\n11/15  当日次第"
+    },
+    {
+     "id": 5,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-12 19:30",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:００～【時のオカリナ】\n\n探検と少しストーリーを進めるよ!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/9I6sokoCjhA?si=jSpac2WyYnEwa4MN",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-12",
+       "start": "21:00",
+       "tz": null,
+       "status": "planned",
+       "text": "探検と少しストーリーを進めるよ!!",
+       "evidence": "⏰２１:００～【時のオカリナ】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-12 19:30 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 21:30 [planned] OVERWATCH @キョーコ [update: start 21:00 -> 21:30; \"残り5勝!!!\"]\n2. 2026-11-10 18:00 [planned] VALORANT / ⑤ / @せんぱいコラボ [update: \"ねね先輩・まつり先輩・いろは先輩 ラプラス先輩とアンレフルパ\"]\n3. 2026-11-11 20:00 [planned] コラボ(自枠ない) / ←たぶん [update: \"おかゆ先輩の企画に参加させていただきます!!!!\"]\n4. 2026-11-12 21:00 [planned] VALORANT / ソロコンペ or 「時のオカリナ」\n5. 2026-11-13 18:30 [planned] うた枠 [update: start 18:00 -> 18:30]\n6. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」 / @アリビキまわり隊 めらch. [update: start 19:00 -> 20:00]\n7. 2026-11-14 21:30 [tentative] 「時のオカリナ」 [update: time undecided]\n8. 2026-11-15 21:00 [tentative] ざつだん / or / VALORANT / 休みになる / かのうせい大\nPost text:\n୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:００～【時のオカリナ】\n\n探検と少しストーリーを進めるよ!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/9I6sokoCjhA?si=jSpac2WyYnEwa4MN",
+     "tail_fix": [
+      {
+       "harness": "7. 2026-11-14 21:30 [tentative]",
+       "go": "7. 2026-11-14 [tentative]",
+       "why": "미정 전환(J7)은 글이 시각을 말하지 않으면 시각을 비운다. 하니스는 이전 시각을 남긴다."
+      }
+     ]
+    },
+    {
+     "id": 6,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-13 13:30",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:３０～【歌枠】\n\nメン限でリクエストいただいた曲を\n多めの歌枠だよ〜✨\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/5yuGK3loTws?si=GoCb1ht8prSj4RnS",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "18:30",
+       "tz": null,
+       "status": "planned",
+       "text": "メン限でリクエストいただいた曲を多めの歌枠",
+       "evidence": "⏰１８:３０～【歌枠】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-13 13:30 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 21:30 [planned] OVERWATCH @キョーコ [update: start 21:00 -> 21:30; \"残り5勝!!!\"]\n2. 2026-11-10 18:00 [planned] VALORANT / ⑤ / @せんぱいコラボ [update: \"ねね先輩・まつり先輩・いろは先輩 ラプラス先輩とアンレフルパ\"]\n3. 2026-11-11 20:00 [planned] コラボ(自枠ない) / ←たぶん [update: \"おかゆ先輩の企画に参加させていただきます!!!!\"]\n4. 2026-11-12 21:00 [planned] VALORANT / ソロコンペ or 「時のオカリナ」 [update: \"探検と少しストーリーを進めるよ!!\"]\n5. 2026-11-13 18:30 [planned] うた枠 [update: start 18:00 -> 18:30]\n6. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」 / @アリビキまわり隊 めらch. [update: start 19:00 -> 20:00]\n7. 2026-11-14 21:30 [tentative] 「時のオカリナ」 [update: time undecided]\n8. 2026-11-15 21:00 [tentative] ざつだん / or / VALORANT / 休みになる / かのうせい大\nPost text:\n୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:３０～【歌枠】\n\nメン限でリクエストいただいた曲を\n多めの歌枠だよ〜✨\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/5yuGK3loTws?si=GoCb1ht8prSj4RnS",
+     "tail_fix": [
+      {
+       "harness": "7. 2026-11-14 21:30 [tentative]",
+       "go": "7. 2026-11-14 [tentative]",
+       "why": "미정 전환(J7)은 글이 시각을 말하지 않으면 시각을 비운다. 하니스는 이전 시각을 남긴다."
+      }
+     ]
+    },
+    {
+     "id": 7,
+     "member": "kyoko",
+     "posted_at": "2026-11-11 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Deadlock \n       with Gigi-senpai👧\n⏰ 6PM PDT | 3AM CEST | 11AM JST\n\nI know when this stream starts, but I have no idea when it’ll end 😂😂😂\n\n📺WATCH HERE:https://www.youtube.com/live/FTSpHt8KL_Y?si=momXitszF65oQnRR",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "11:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 6PM PDT | 3AM CEST | 11AM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-11 08:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 00:00 JST [planned] Cuphead\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n🚨 STREAM ALERT 🚨\n\n🎮 Deadlock \n       with Gigi-senpai👧\n⏰ 6PM PDT | 3AM CEST | 11AM JST\n\nI know when this stream starts, but I have no idea when it’ll end 😂😂😂\n\n📺WATCH HERE:https://www.youtube.com/live/FTSpHt8KL_Y?si=momXitszF65oQnRR"
+    },
+    {
+     "id": 8,
+     "member": "kyoko",
+     "posted_at": "2026-11-11 19:16",
+     "body": "＼\\  📢このあと２２時から配信！！  /／          \n\n🎮鬼武者 Way of the Sword\n\n巌流との再戦も近いか…！？\n今日も強者を求めていけるとこまでいくよ～！！\n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM?si=KICIjh_TNBLRsS2p",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと２２時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-11 19:16 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 00:00 JST [planned] Cuphead\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２２時から配信！！  /／          \n\n🎮鬼武者 Way of the Sword\n\n巌流との再戦も近いか…！？\n今日も強者を求めていけるとこまでいくよ～！！\n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM?si=KICIjh_TNBLRsS2p"
+    },
+    {
+     "id": 9,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 00:24",
+     "body": "今日も配信を見てくれてありがとーーー！！！\n\n次回最終回！？！？\n次もドパちゃんに活躍する機会はあるのか！？\n期待してます！！！！\n\n来週のどこかでやる予定だよーー！！",
+     "items": [],
+     "expect": [],
+     "tail": "Post timestamp: 2026-11-12 00:24 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 00:00 JST [planned] Cuphead\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n今日も配信を見てくれてありがとーーー！！！\n\n次回最終回！？！？\n次もドパちゃんに活躍する機会はあるのか！？\n期待してます！！！！\n\n来週のどこかでやる予定だよーー！！"
+    },
+    {
+     "id": 10,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Cuphead\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nDEMON TIME!!!!!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/3IcHXdagtas?si=NlMKPmBdWhbUAjqS",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-12 08:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 00:00 JST [planned] Cuphead\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n🚨 STREAM ALERT 🚨\n\n🎮 Cuphead\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nDEMON TIME!!!!!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/3IcHXdagtas?si=NlMKPmBdWhbUAjqS"
+    },
+    {
+     "id": 11,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 17:34",
+     "body": "＼\\  📢このあと２２時から配信！！  /／          \n\n🎮デス桃太郎\n\nおもしろ神ゲーの匂いがすんごい！！\n鬼退治には…いくのかな？たのしみだ！！\n\n 配信ココ！➡️https://www.youtube.com/live/6_tVlAOOnxE?si=iolHlXYMQ8q2HKqg",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-12",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと２２時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-12 17:34 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２２時から配信！！  /／          \n\n🎮デス桃太郎\n\nおもしろ神ゲーの匂いがすんごい！！\n鬼退治には…いくのかな？たのしみだ！！\n\n 配信ココ！➡️https://www.youtube.com/live/6_tVlAOOnxE?si=iolHlXYMQ8q2HKqg"
+    },
+    {
+     "id": 12,
+     "member": "kyoko",
+     "posted_at": "2026-11-13 09:06",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 The Plant Shop\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nHorror game time!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/KnnG-0TPxj8?si=MyDetSr8UyEkSc9l",
+     "items": [
+      {
+       "row": 8,
+       "date": "2026-11-13",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-13 09:06 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n🚨 STREAM ALERT 🚨\n\n🎮 The Plant Shop\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nHorror game time!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/KnnG-0TPxj8?si=MyDetSr8UyEkSc9l"
+    },
+    {
+     "id": 13,
+     "member": "kyoko",
+     "posted_at": "2026-11-13 16:00",
+     "body": "＼\\  📢このあと１９時から配信！！  /／          \n\n🎮Phasmophobia\n      with めらち🧯\n\nルイ姉との研修の経験を活かして、\nバシーっと決めていいとこ見せたい！！\n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo?si=VjFbenhNXCcKQsXi",
+     "items": [
+      {
+       "row": 9,
+       "date": "2026-11-13",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと１９時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-13 16:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと１９時から配信！！  /／          \n\n🎮Phasmophobia\n      with めらち🧯\n\nルイ姉との研修の経験を活かして、\nバシーっと決めていいとこ見せたい！！\n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo?si=VjFbenhNXCcKQsXi"
+    },
+    {
+     "id": 14,
+     "member": "kyoko",
+     "posted_at": "2026-11-14 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Five Nights at Freddy's 3\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nI AM BACK!!! ...in the nightmare😨😨😨\n\n📺WATCH HERE:https://www.youtube.com/watch?v=7lj5BsrY_7s",
+     "items": [
+      {
+       "row": 10,
+       "date": "2026-11-14",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-14 08:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 19:00 JST [planned] Phasmophobia / with めらち [update: start 22:00 -> 19:00]\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n🚨 STREAM ALERT 🚨\n\n🎮 Five Nights at Freddy's 3\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nI AM BACK!!! ...in the nightmare😨😨😨\n\n📺WATCH HERE:https://www.youtube.com/watch?v=7lj5BsrY_7s"
+    },
+    {
+     "id": 15,
+     "member": "sopia",
+     "posted_at": "2026-11-10 17:45",
+     "body": "今日は昼からボイトレ頑張ってきたよーっ！✨\n\n20時からは、ホロドリ配信🎶\n\n音ゲーも ミニゲームも 楽しみだーっ！💞",
+     "items": [
+      {
+       "row": 2,
+       "date": "2026-11-10",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "20時からは、ホロドリ配信"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-10 17:45 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 19:00 [planned] 理系女子あるあるコラボ / @博衣こより先輩ch.\n2. 2026-11-10 20:00 [planned] ホロドリ配信\n3. 2026-11-11 20:00 [planned] コラボ配信\n4. 2026-11-12 22:00 [planned] 酒を呑みながら語り合う / @儒烏風亭らでんch.\n5. 2026-11-13 22:00 [planned] コラボ配信\n6. 2026-11-14 20:00 [planned] 一致するまで終われまテン!! / with アソビ★まわり隊! @熱千めらch.\n7. 2026-11-15 23:00 [planned] メン限配信\nPost text:\n今日は昼からボイトレ頑張ってきたよーっ！✨\n\n20時からは、ホロドリ配信🎶\n\n音ゲーも ミニゲームも 楽しみだーっ！💞"
+    },
+    {
+     "id": 16,
+     "member": "sopia",
+     "posted_at": "2026-11-11 13:41",
+     "body": "みんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩は20時から\nおかゆ先輩主催の\nゆび相撲最強決定戦に\n出場させていただきます👍\n\nゆび相撲にもサイエンスパワーは\n通じるのかっ！？！？！？",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-11",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "おかゆ先輩主催のゆび相撲最強決定戦",
+       "evidence": "今晩は20時から おかゆ先輩主催の ゆび相撲最強決定戦に 出場させていただきます"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-11 13:41 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 19:00 [planned] 理系女子あるあるコラボ / @博衣こより先輩ch.\n2. 2026-11-10 20:00 [planned] ホロドリ配信\n3. 2026-11-11 20:00 [planned] コラボ配信\n4. 2026-11-12 22:00 [planned] 酒を呑みながら語り合う / @儒烏風亭らでんch.\n5. 2026-11-13 22:00 [planned] コラボ配信\n6. 2026-11-14 20:00 [planned] 一致するまで終われまテン!! / with アソビ★まわり隊! @熱千めらch.\n7. 2026-11-15 23:00 [planned] メン限配信\nPost text:\nみんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩は20時から\nおかゆ先輩主催の\nゆび相撲最強決定戦に\n出場させていただきます👍\n\nゆび相撲にもサイエンスパワーは\n通じるのかっ！？！？！？"
+    },
+    {
+     "id": 17,
+     "member": "sopia",
+     "posted_at": "2026-11-12 19:14",
+     "body": "今晩は22時から\nらでんと呑むよーっ！🍶✨",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-12",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今晩は22時から"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-12 19:14 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 19:00 [planned] 理系女子あるあるコラボ / @博衣こより先輩ch.\n2. 2026-11-10 20:00 [planned] ホロドリ配信\n3. 2026-11-11 20:00 [planned] コラボ配信 [update: \"おかゆ先輩主催のゆび相撲最強決定戦\"]\n4. 2026-11-12 22:00 [planned] 酒を呑みながら語り合う / @儒烏風亭らでんch.\n5. 2026-11-13 22:00 [planned] コラボ配信\n6. 2026-11-14 20:00 [planned] 一致するまで終われまテン!! / with アソビ★まわり隊! @熱千めらch.\n7. 2026-11-15 23:00 [planned] メン限配信\nPost text:\n今晩は22時から\nらでんと呑むよーっ！🍶✨"
+    },
+    {
+     "id": 18,
+     "member": "sopia",
+     "posted_at": "2026-11-13 17:52",
+     "body": "🌟 配 信 告 知 🌟\n\n先輩方とめっちゃカメレオン🎨🖌\n\n📅 11/13(金) 22:00～\n🔗 https://youtu.be/y7XSwAlbWT0\n\nカモフラージュも科学っ！！✨✨",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "先輩方とめっちゃカメレオン",
+       "evidence": "11/13(金) 22:00～"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-13 17:52 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 19:00 [planned] 理系女子あるあるコラボ / @博衣こより先輩ch.\n2. 2026-11-10 20:00 [planned] ホロドリ配信\n3. 2026-11-11 20:00 [planned] コラボ配信 [update: \"おかゆ先輩主催のゆび相撲最強決定戦\"]\n4. 2026-11-12 22:00 [planned] 酒を呑みながら語り合う / @儒烏風亭らでんch.\n5. 2026-11-13 22:00 [planned] コラボ配信\n6. 2026-11-14 20:00 [planned] 一致するまで終われまテン!! / with アソビ★まわり隊! @熱千めらch.\n7. 2026-11-15 23:00 [planned] メン限配信\nPost text:\n🌟 配 信 告 知 🌟\n\n先輩方とめっちゃカメレオン🎨🖌\n\n📅 11/13(金) 22:00～\n🔗 https://youtu.be/y7XSwAlbWT0\n\nカモフラージュも科学っ！！✨✨"
+    },
+    {
+     "id": 19,
+     "member": "sopia",
+     "posted_at": "2026-11-14 13:24",
+     "body": "みんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩はアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\n果たして4人の答えは\nちゃんと一致するのかっ！？！？！？",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-14",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今晩はアソビ★まわり隊！で"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-14 13:24 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 19:00 [planned] 理系女子あるあるコラボ / @博衣こより先輩ch.\n2. 2026-11-10 20:00 [planned] ホロドリ配信\n3. 2026-11-11 20:00 [planned] コラボ配信 [update: \"おかゆ先輩主催のゆび相撲最強決定戦\"]\n4. 2026-11-12 22:00 [planned] 酒を呑みながら語り合う / @儒烏風亭らでんch.\n5. 2026-11-13 22:00 [planned] コラボ配信 [update: \"先輩方とめっちゃカメレオン\"]\n6. 2026-11-14 20:00 [planned] 一致するまで終われまテン!! / with アソビ★まわり隊! @熱千めらch.\n7. 2026-11-15 23:00 [planned] メン限配信\nPost text:\nみんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩はアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\n果たして4人の答えは\nちゃんと一致するのかっ！？！？！？"
+    },
+    {
+     "id": 20,
+     "member": "mela",
+     "posted_at": "2026-11-09 09:50",
+     "body": "🗓️今日の予定🗓️\n\n12時：PEAKコラボ配信\n(キョーコ、カエラ先輩、ビブー先輩)\n\n19時：メンバーシップ限定配信\n(日記見せながら作戦会議、お絵描き配信)\n\nなのじゃあああああああ！！！！！！",
+     "items": [
+      {
+       "row": 1,
+       "date": "2026-11-09",
+       "start": "12:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "12時：PEAKコラボ配信"
+      },
+      {
+       "row": 2,
+       "date": "2026-11-09",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "日記見せながら作戦会議",
+       "evidence": "日記見せながら作戦会議、お絵描き配信"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      },
+      {
+       "kind": "content_changed"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-09 09:50 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり)\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n🗓️今日の予定🗓️\n\n12時：PEAKコラボ配信\n(キョーコ、カエラ先輩、ビブー先輩)\n\n19時：メンバーシップ限定配信\n(日記見せながら作戦会議、お絵描き配信)\n\nなのじゃあああああああ！！！！！！"
+    },
+    {
+     "id": 21,
+     "member": "mela",
+     "posted_at": "2026-11-09 18:26",
+     "body": "今日メン限でやるやつ、今までだったらずっと一人で壁打ちしてきたことじゃから、人間に聞いてもらうのすこし恥ずかしーのじゃ…\n\n恥ずかしいけど、めら組に聞いてもらえるのはうれしーのじゃ。一蓮托生なのじゃ。",
+     "items": [],
+     "expect": [],
+     "tail": "Post timestamp: 2026-11-09 18:26 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n今日メン限でやるやつ、今までだったらずっと一人で壁打ちしてきたことじゃから、人間に聞いてもらうのすこし恥ずかしーのじゃ…\n\n恥ずかしいけど、めら組に聞いてもらえるのはうれしーのじゃ。一蓮托生なのじゃ。"
+    },
+    {
+     "id": 22,
+     "member": "mela",
+     "posted_at": "2026-11-10 12:25",
+     "body": "人間おはよーなのじゃ！\n\n今日はお仕事だから配信はおやすみ💤\nアーカイブ見て過ごしてほしーのじゃ！",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-10",
+       "start": null,
+       "tz": null,
+       "status": "off",
+       "text": "",
+       "evidence": "今日はお仕事だから配信はおやすみ💤"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-10 12:25 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n人間おはよーなのじゃ！\n\n今日はお仕事だから配信はおやすみ💤\nアーカイブ見て過ごしてほしーのじゃ！"
+    },
+    {
+     "id": 23,
+     "member": "mela",
+     "posted_at": "2026-11-10 20:45",
+     "body": "／\n✏️配信告知✏️\n＼\n\n11/11(水)朝7時は #のじゃEnglish\n\n英語のお勉強をしていきますのじゃー！\nこの前の英語でのコラボもいい感じにできたし、成果が少しずつあらわれていますのじゃ…\n\n早起きがんばるのじゃー！！！\nhttps://www.youtube.com/live/q3gGvOxaJ7o?si=EqThKFmlXS8RzeOB",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "07:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/11(水)朝7時は #のじゃEnglish"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-10 20:45 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n／\n✏️配信告知✏️\n＼\n\n11/11(水)朝7時は #のじゃEnglish\n\n英語のお勉強をしていきますのじゃー！\nこの前の英語でのコラボもいい感じにできたし、成果が少しずつあらわれていますのじゃ…\n\n早起きがんばるのじゃー！！！\nhttps://www.youtube.com/live/q3gGvOxaJ7o?si=EqThKFmlXS8RzeOB"
+    },
+    {
+     "id": 24,
+     "member": "mela",
+     "posted_at": "2026-11-11 06:31",
+     "body": "人間おはよーなのじゃ！\n\nこのあと7時からは朝活配信、\n夜はAZKi先輩とオフコラボなのじゃー！",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "07:00",
+       "tz": null,
+       "status": "planned",
+       "text": "朝活配信",
+       "evidence": "このあと7時からは朝活配信"
+      },
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "夜はAZKi先輩とオフコラボなのじゃー！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      },
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-11 06:31 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n人間おはよーなのじゃ！\n\nこのあと7時からは朝活配信、\n夜はAZKi先輩とオフコラボなのじゃー！"
+    },
+    {
+     "id": 25,
+     "member": "mela",
+     "posted_at": "2026-11-11 13:47",
+     "body": "本日19時からは #あずめら 初のオフコラボなのじゃ！！！！\n\n会うのはじめてで緊張するのじゃあ( ࠫ⸝⸝⸝ ╸▵╺⸝⸝⸝ ࠫ )",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "本日19時からは #あずめら 初のオフコラボなのじゃ！！！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-11 13:47 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish [update: \"朝活配信\"]\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n本日19時からは #あずめら 初のオフコラボなのじゃ！！！！\n\n会うのはじめてで緊張するのじゃあ( ࠫ⸝⸝⸝ ╸▵╺⸝⸝⸝ ࠫ )"
+    },
+    {
+     "id": 26,
+     "member": "mela",
+     "posted_at": "2026-11-11 23:17",
+     "body": "／\n🩵配信告知🩵\n＼\n\n11/12(木)19時からは「空気読み。3」\n\nサラマンダーの人間社会に対する認識を、おぬしらにお見せしちゃいますのじゃ！！！\nhttps://www.youtube.com/live/87_E4xb__H0?si=nPuSiLeTLpbimvEh",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/12(木)19時からは「空気読み。3」"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-11 23:17 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish [update: \"朝活配信\"]\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n／\n🩵配信告知🩵\n＼\n\n11/12(木)19時からは「空気読み。3」\n\nサラマンダーの人間社会に対する認識を、おぬしらにお見せしちゃいますのじゃ！！！\nhttps://www.youtube.com/live/87_E4xb__H0?si=nPuSiLeTLpbimvEh"
+    },
+    {
+     "id": 27,
+     "member": "mela",
+     "posted_at": "2026-11-12 12:58",
+     "body": "人間おはよーなのじゃ！\n\n今日は19時から空気読みなのじゃー！",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今日は19時から空気読みなのじゃー！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-12 12:58 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish [update: \"朝活配信\"]\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n人間おはよーなのじゃ！\n\n今日は19時から空気読みなのじゃー！"
+    },
+    {
+     "id": 28,
+     "member": "mela",
+     "posted_at": "2026-11-13 11:10",
+     "body": "人間おはよーなのじゃ！\n\n今日はキョーコとホラゲコラボなのじゃ👻",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-13",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今日はキョーコとホラゲコラボなのじゃ👻"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-13 11:10 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish [update: \"朝活配信\"]\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n人間おはよーなのじゃ！\n\n今日はキョーコとホラゲコラボなのじゃ👻"
+    },
+    {
+     "id": 29,
+     "member": "mela",
+     "posted_at": "2026-11-13 12:20",
+     "body": "／\n👻配信告知👻\n＼\n\nこのあと19時からはPhasmophobia🔦\n\nキョーコとホラゲコラボなのじゃー！\n\nホラゲコラボは初めてだから、意外といけちゃう可能性だってあるのじゃ！！！\nhttps://www.youtube.com/live/xebosvJFBR0?si=iF1_OJ7ybkL9JMoH",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-13",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと19時からはPhasmophobia🔦"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-13 12:20 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish [update: \"朝活配信\"]\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n／\n👻配信告知👻\n＼\n\nこのあと19時からはPhasmophobia🔦\n\nキョーコとホラゲコラボなのじゃー！\n\nホラゲコラボは初めてだから、意外といけちゃう可能性だってあるのじゃ！！！\nhttps://www.youtube.com/live/xebosvJFBR0?si=iF1_OJ7ybkL9JMoH"
+    },
+    {
+     "id": 30,
+     "member": "mela",
+     "posted_at": "2026-11-13 21:13",
+     "body": "／\n🌀配信告知🌀\n＼\n\n11/14(土)20時からはアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\nデビュー前の配信テストで遊んだんじゃが、なかなか、揃いそうにないのじゃ…\n\n熱千めらchで行いますのじゃー！！！！\nhttps://www.youtube.com/live/oRV2KMNdaIE?si=TIQfj_LOL4XuogjV",
+     "items": [
+      {
+       "row": 8,
+       "date": "2026-11-14",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/14(土)20時からはアソビ★まわり隊！で"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ],
+     "tail": "Post timestamp: 2026-11-13 21:13 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 [planned] PEAK@めら視点 / (キョーコ、Kaela、biboo)\n2. 2026-11-09 19:00 [planned] メン限お絵かき (まったり) [update: \"日記見せながら作戦会議\"]\n3. 2026-11-10 [off] お休み\n4. 2026-11-11 07:00 [planned] のじゃEnglish [update: \"朝活配信\"]\n5. 2026-11-11 19:00 [planned] オフコラボ@AZKi先輩ch\n6. 2026-11-12 19:00 [planned] 空気読み。3\n7. 2026-11-13 19:00 [planned] ホラゲ「Phasmophobia」キョーココラボ@めら視点\n8. 2026-11-14 20:00 [planned] 「一致するまで終われまテン」アソビ隊コラボ @めらch\n9. 2026-11-15 19:00 [planned] ホロライブの音ゲー「ホロドリ」\nPost text:\n／\n🌀配信告知🌀\n＼\n\n11/14(土)20時からはアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\nデビュー前の配信テストで遊んだんじゃが、なかなか、揃いそうにないのじゃ…\n\n熱千めらchで行いますのじゃー！！！！\nhttps://www.youtube.com/live/oRV2KMNdaIE?si=TIQfj_LOL4XuogjV"
+    }
+   ]
+  },
+  {
+   "name": "run2",
+   "posts": [
+    {
+     "id": 1,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-09 19:56",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:３０～【Overwatch】\n\n残り5勝!!!\n⚠︎︎時間変更してます!!!!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/Vh-YGhqy_Mo?si=HxR1ocO0S_8PS8E1",
+     "items": [
+      {
+       "row": 1,
+       "date": "2026-11-09",
+       "start": "21:30",
+       "tz": null,
+       "status": "planned",
+       "text": "残り5勝!!!",
+       "evidence": "⏰２１:３０～【Overwatch】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ]
+    },
+    {
+     "id": 2,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-10 13:15",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:００～【VALORANT】\n\nねね先輩・まつり先輩・いろは先輩\nラプラス先輩とアンレフルパです🔫⸒⸒\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・\nhttps://www.youtube.com/live/8OrDic721VM?si=8-CX1eG6JbE-4JHP",
+     "items": [
+      {
+       "row": 2,
+       "date": "2026-11-10",
+       "start": "18:00",
+       "tz": null,
+       "status": "planned",
+       "text": "ねね先輩・まつり先輩・いろは先輩 ラプラス先輩とアンレフルパ",
+       "evidence": "⏰１８:００～【VALORANT】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 3,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-11 15:57",
+     "body": "本日は\nおかゆ先輩の企画に参加させていただきます!!!!\n\n何やら一戦目はスバル先輩と...👀✨",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-11",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "おかゆ先輩の企画に参加させていただきます!!!! 何やら一戦目はスバル先輩と...👀✨",
+       "evidence": "おかゆ先輩の企画に参加させていただきます!!!!"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 4,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-12 14:34",
+     "body": "【予定変更】\n11/13 18:00⇒18:30~\n11/14 19:00⇒20:00~\n          (時のオカリナも時間変更すると思う)\n11/15  当日次第",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "18:30",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/13 18:00⇒18:30~"
+      },
+      {
+       "row": 6,
+       "date": "2026-11-14",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/14 19:00⇒20:00~"
+      },
+      {
+       "row": 7,
+       "date": "2026-11-14",
+       "start": null,
+       "tz": null,
+       "status": "tentative",
+       "text": "",
+       "evidence": "時のオカリナも時間変更すると思う"
+      },
+      {
+       "row": 8,
+       "date": "2026-11-15",
+       "start": null,
+       "tz": null,
+       "status": "tentative",
+       "text": "",
+       "evidence": "11/15  当日次第"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      },
+      {
+       "kind": "time_changed"
+      },
+      {
+       "kind": "tentative"
+      },
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 5,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-12 19:30",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:００～【時のオカリナ】\n\n探検と少しストーリーを進めるよ!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/9I6sokoCjhA?si=jSpac2WyYnEwa4MN",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-12",
+       "start": "21:00",
+       "tz": null,
+       "status": "planned",
+       "text": "探検と少しストーリーを進めるよ!!",
+       "evidence": "⏰２１:００～【時のオカリナ】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 6,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-13 13:30",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:３０～【歌枠】\n\nメン限でリクエストいただいた曲を\n多めの歌枠だよ〜✨\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/5yuGK3loTws?si=GoCb1ht8prSj4RnS",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "18:30",
+       "tz": null,
+       "status": "planned",
+       "text": "メン限でリクエストいただいた曲を",
+       "evidence": "⏰１８:３０～【歌枠】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 7,
+     "member": "kyoko",
+     "posted_at": "2026-11-11 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Deadlock \n       with Gigi-senpai👧\n⏰ 6PM PDT | 3AM CEST | 11AM JST\n\nI know when this stream starts, but I have no idea when it’ll end 😂😂😂\n\n📺WATCH HERE:https://www.youtube.com/live/FTSpHt8KL_Y?si=momXitszF65oQnRR",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "11:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 6PM PDT | 3AM CEST | 11AM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "member": "kyoko",
+     "posted_at": "2026-11-11 19:16",
+     "body": "＼\\  📢このあと２２時から配信！！  /／          \n\n🎮鬼武者 Way of the Sword\n\n巌流との再戦も近いか…！？\n今日も強者を求めていけるとこまでいくよ～！！\n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM?si=KICIjh_TNBLRsS2p",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと２２時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 00:24",
+     "body": "今日も配信を見てくれてありがとーーー！！！\n\n次回最終回！？！？\n次もドパちゃんに活躍する機会はあるのか！？\n期待してます！！！！\n\n来週のどこかでやる予定だよーー！！",
+     "items": [],
+     "expect": []
+    },
+    {
+     "id": 10,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Cuphead\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nDEMON TIME!!!!!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/3IcHXdagtas?si=NlMKPmBdWhbUAjqS",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ]
+    },
+    {
+     "id": 11,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 17:34",
+     "body": "＼\\  📢このあと２２時から配信！！  /／          \n\n🎮デス桃太郎\n\nおもしろ神ゲーの匂いがすんごい！！\n鬼退治には…いくのかな？たのしみだ！！\n\n 配信ココ！➡️https://www.youtube.com/live/6_tVlAOOnxE?si=iolHlXYMQ8q2HKqg",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-12",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと２２時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 12,
+     "member": "kyoko",
+     "posted_at": "2026-11-13 09:06",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 The Plant Shop\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nHorror game time!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/KnnG-0TPxj8?si=MyDetSr8UyEkSc9l",
+     "items": [
+      {
+       "row": 8,
+       "date": "2026-11-13",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 13,
+     "member": "kyoko",
+     "posted_at": "2026-11-13 16:00",
+     "body": "＼\\  📢このあと１９時から配信！！  /／          \n\n🎮Phasmophobia\n      with めらち🧯\n\nルイ姉との研修の経験を活かして、\nバシーっと決めていいとこ見せたい！！\n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo?si=VjFbenhNXCcKQsXi",
+     "items": [
+      {
+       "row": 9,
+       "date": "2026-11-13",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと１９時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ]
+    },
+    {
+     "id": 14,
+     "member": "kyoko",
+     "posted_at": "2026-11-14 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Five Nights at Freddy's 3\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nI AM BACK!!! ...in the nightmare😨😨😨\n\n📺WATCH HERE:https://www.youtube.com/watch?v=7lj5BsrY_7s",
+     "items": [
+      {
+       "row": 10,
+       "date": "2026-11-14",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 15,
+     "member": "sopia",
+     "posted_at": "2026-11-10 17:45",
+     "body": "今日は昼からボイトレ頑張ってきたよーっ！✨\n\n20時からは、ホロドリ配信🎶\n\n音ゲーも ミニゲームも 楽しみだーっ！💞",
+     "items": [
+      {
+       "row": 2,
+       "date": "2026-11-10",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "20時からは、ホロドリ配信"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 16,
+     "member": "sopia",
+     "posted_at": "2026-11-11 13:41",
+     "body": "みんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩は20時から\nおかゆ先輩主催の\nゆび相撲最強決定戦に\n出場させていただきます👍\n\nゆび相撲にもサイエンスパワーは\n通じるのかっ！？！？！？",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-11",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "おかゆ先輩主催の ゆび相撲最強決定戦",
+       "evidence": "今晩は20時から おかゆ先輩主催の ゆび相撲最強決定戦に 出場させていただきます"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 17,
+     "member": "sopia",
+     "posted_at": "2026-11-12 19:14",
+     "body": "今晩は22時から\nらでんと呑むよーっ！🍶✨",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-12",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今晩は22時から"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 18,
+     "member": "sopia",
+     "posted_at": "2026-11-13 17:52",
+     "body": "🌟 配 信 告 知 🌟\n\n先輩方とめっちゃカメレオン🎨🖌\n\n📅 11/13(金) 22:00～\n🔗 https://youtu.be/y7XSwAlbWT0\n\nカモフラージュも科学っ！！✨✨",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "先輩方とめっちゃカメレオン",
+       "evidence": "先輩方とめっちゃカメレオン🎨🖌"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 19,
+     "member": "sopia",
+     "posted_at": "2026-11-14 13:24",
+     "body": "みんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩はアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\n果たして4人の答えは\nちゃんと一致するのかっ！？！？！？",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-14",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今晩はアソビ★まわり隊！で"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 20,
+     "member": "mela",
+     "posted_at": "2026-11-09 09:50",
+     "body": "🗓️今日の予定🗓️\n\n12時：PEAKコラボ配信\n(キョーコ、カエラ先輩、ビブー先輩)\n\n19時：メンバーシップ限定配信\n(日記見せながら作戦会議、お絵描き配信)\n\nなのじゃあああああああ！！！！！！",
+     "items": [
+      {
+       "row": 1,
+       "date": "2026-11-09",
+       "start": "12:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "12時：PEAKコラボ配信"
+      },
+      {
+       "row": 2,
+       "date": "2026-11-09",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "日記見せながら作戦会議",
+       "evidence": "(日記見せながら作戦会議、お絵描き配信)"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      },
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 21,
+     "member": "mela",
+     "posted_at": "2026-11-09 18:26",
+     "body": "今日メン限でやるやつ、今までだったらずっと一人で壁打ちしてきたことじゃから、人間に聞いてもらうのすこし恥ずかしーのじゃ…\n\n恥ずかしいけど、めら組に聞いてもらえるのはうれしーのじゃ。一蓮托生なのじゃ。",
+     "items": [],
+     "expect": []
+    },
+    {
+     "id": 22,
+     "member": "mela",
+     "posted_at": "2026-11-10 12:25",
+     "body": "人間おはよーなのじゃ！\n\n今日はお仕事だから配信はおやすみ💤\nアーカイブ見て過ごしてほしーのじゃ！",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-10",
+       "start": null,
+       "tz": null,
+       "status": "off",
+       "text": "",
+       "evidence": "今日はお仕事だから配信はおやすみ"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 23,
+     "member": "mela",
+     "posted_at": "2026-11-10 20:45",
+     "body": "／\n✏️配信告知✏️\n＼\n\n11/11(水)朝7時は #のじゃEnglish\n\n英語のお勉強をしていきますのじゃー！\nこの前の英語でのコラボもいい感じにできたし、成果が少しずつあらわれていますのじゃ…\n\n早起きがんばるのじゃー！！！\nhttps://www.youtube.com/live/q3gGvOxaJ7o?si=EqThKFmlXS8RzeOB",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "07:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/11(水)朝7時は #のじゃEnglish"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 24,
+     "member": "mela",
+     "posted_at": "2026-11-11 06:31",
+     "body": "人間おはよーなのじゃ！\n\nこのあと7時からは朝活配信、\n夜はAZKi先輩とオフコラボなのじゃー！",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "07:00",
+       "tz": null,
+       "status": "planned",
+       "text": "朝活配信",
+       "evidence": "このあと7時からは朝活配信"
+      },
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "夜はAZKi先輩とオフコラボなのじゃー！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      },
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 25,
+     "member": "mela",
+     "posted_at": "2026-11-11 13:47",
+     "body": "本日19時からは #あずめら 初のオフコラボなのじゃ！！！！\n\n会うのはじめてで緊張するのじゃあ( ࠫ⸝⸝⸝ ╸▵╺⸝⸝⸝ ࠫ )",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "#あずめら 初のオフコラボ",
+       "evidence": "本日19時からは #あずめら 初のオフコラボなのじゃ！！！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 26,
+     "member": "mela",
+     "posted_at": "2026-11-11 23:17",
+     "body": "／\n🩵配信告知🩵\n＼\n\n11/12(木)19時からは「空気読み。3」\n\nサラマンダーの人間社会に対する認識を、おぬしらにお見せしちゃいますのじゃ！！！\nhttps://www.youtube.com/live/87_E4xb__H0?si=nPuSiLeTLpbimvEh",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/12(木)19時からは「空気読み。3」"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 27,
+     "member": "mela",
+     "posted_at": "2026-11-12 12:58",
+     "body": "人間おはよーなのじゃ！\n\n今日は19時から空気読みなのじゃー！",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今日は19時から空気読みなのじゃー！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 28,
+     "member": "mela",
+     "posted_at": "2026-11-13 11:10",
+     "body": "人間おはよーなのじゃ！\n\n今日はキョーコとホラゲコラボなのじゃ👻",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-13",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今日はキョーコとホラゲコラボなのじゃ👻"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 29,
+     "member": "mela",
+     "posted_at": "2026-11-13 12:20",
+     "body": "／\n👻配信告知👻\n＼\n\nこのあと19時からはPhasmophobia🔦\n\nキョーコとホラゲコラボなのじゃー！\n\nホラゲコラボは初めてだから、意外といけちゃう可能性だってあるのじゃ！！！\nhttps://www.youtube.com/live/xebosvJFBR0?si=iF1_OJ7ybkL9JMoH",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-13",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと19時からはPhasmophobia"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 30,
+     "member": "mela",
+     "posted_at": "2026-11-13 21:13",
+     "body": "／\n🌀配信告知🌀\n＼\n\n11/14(土)20時からはアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\nデビュー前の配信テストで遊んだんじゃが、なかなか、揃いそうにないのじゃ…\n\n熱千めらchで行いますのじゃー！！！！\nhttps://www.youtube.com/live/oRV2KMNdaIE?si=TIQfj_LOL4XuogjV",
+     "items": [
+      {
+       "row": 8,
+       "date": "2026-11-14",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/14(土)20時からはアソビ★まわり隊！で"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "c1",
+   "posts": [
+    {
+     "id": 1,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-09 19:56",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:３０～【Overwatch】\n\n残り5勝!!!\n⚠︎︎時間変更してます!!!!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/Vh-YGhqy_Mo?si=HxR1ocO0S_8PS8E1",
+     "items": [
+      {
+       "row": 1,
+       "date": "2026-11-09",
+       "start": "21:30",
+       "tz": null,
+       "status": "planned",
+       "text": "残り5勝!!!",
+       "evidence": "⏰２１:３０～【Overwatch】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ]
+    },
+    {
+     "id": 2,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-10 13:15",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:００～【VALORANT】\n\nねね先輩・まつり先輩・いろは先輩\nラプラス先輩とアンレフルパです🔫⸒⸒\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・\nhttps://www.youtube.com/live/8OrDic721VM?si=8-CX1eG6JbE-4JHP",
+     "items": [
+      {
+       "row": 2,
+       "date": "2026-11-10",
+       "start": "18:00",
+       "tz": null,
+       "status": "planned",
+       "text": "ねね先輩・まつり先輩・いろは先輩 ラプラス先輩とアンレフルパ",
+       "evidence": "⏰１８:００～【VALORANT】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 3,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-11 15:57",
+     "body": "本日は\nおかゆ先輩の企画に参加させていただきます!!!!\n\n何やら一戦目はスバル先輩と...👀✨",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-11",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "おかゆ先輩の企画に参加させていただきます!!!! 何やら一戦目はスバル先輩と...👀✨",
+       "evidence": "本日は おかゆ先輩の企画に参加させていただきます!!!!"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 4,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-12 14:34",
+     "body": "【予定変更】\n11/13 18:00⇒18:30~\n11/14 19:00⇒20:00~\n          (時のオカリナも時間変更すると思う)\n11/15  当日次第",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "18:30",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/13 18:00⇒18:30~"
+      },
+      {
+       "row": 6,
+       "date": "2026-11-14",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/14 19:00⇒20:00~"
+      },
+      {
+       "row": 7,
+       "date": "2026-11-14",
+       "start": null,
+       "tz": null,
+       "status": "tentative",
+       "text": "",
+       "evidence": "時のオカリナも時間変更すると思う"
+      },
+      {
+       "row": 8,
+       "date": "2026-11-15",
+       "start": null,
+       "tz": null,
+       "status": "tentative",
+       "text": "",
+       "evidence": "11/15  当日次第"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      },
+      {
+       "kind": "time_changed"
+      },
+      {
+       "kind": "tentative"
+      },
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 5,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-12 19:30",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰２１:００～【時のオカリナ】\n\n探検と少しストーリーを進めるよ!!\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/9I6sokoCjhA?si=jSpac2WyYnEwa4MN",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-12",
+       "start": "21:00",
+       "tz": null,
+       "status": "planned",
+       "text": "探検と少しストーリーを進めるよ!!",
+       "evidence": "⏰２１:００～【時のオカリナ】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 6,
+     "member": "tsuzuri",
+     "posted_at": "2026-11-13 13:30",
+     "body": "୨୧・゜・┈┈┈┈┈┈┈┈┈    \n\n本日配信お知らせ  \n⏰１８:３０～【歌枠】\n\nメン限でリクエストいただいた曲を\n多めの歌枠だよ〜✨\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈ ・゜・\nhttps://www.youtube.com/live/5yuGK3loTws?si=GoCb1ht8prSj4RnS",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "18:30",
+       "tz": null,
+       "status": "planned",
+       "text": "メン限でリクエストいただいた曲を 多めの歌枠",
+       "evidence": "⏰１８:３０～【歌枠】"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 7,
+     "member": "kyoko",
+     "posted_at": "2026-11-11 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Deadlock \n       with Gigi-senpai👧\n⏰ 6PM PDT | 3AM CEST | 11AM JST\n\nI know when this stream starts, but I have no idea when it’ll end 😂😂😂\n\n📺WATCH HERE:https://www.youtube.com/live/FTSpHt8KL_Y?si=momXitszF65oQnRR",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "11:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 6PM PDT | 3AM CEST | 11AM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "member": "kyoko",
+     "posted_at": "2026-11-11 19:16",
+     "body": "＼\\  📢このあと２２時から配信！！  /／          \n\n🎮鬼武者 Way of the Sword\n\n巌流との再戦も近いか…！？\n今日も強者を求めていけるとこまでいくよ～！！\n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM?si=KICIjh_TNBLRsS2p",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと２２時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 00:24",
+     "body": "今日も配信を見てくれてありがとーーー！！！\n\n次回最終回！？！？\n次もドパちゃんに活躍する機会はあるのか！？\n期待してます！！！！\n\n来週のどこかでやる予定だよーー！！",
+     "items": [],
+     "expect": []
+    },
+    {
+     "id": 10,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Cuphead\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nDEMON TIME!!!!!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/3IcHXdagtas?si=NlMKPmBdWhbUAjqS",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ]
+    },
+    {
+     "id": 11,
+     "member": "kyoko",
+     "posted_at": "2026-11-12 17:34",
+     "body": "＼\\  📢このあと２２時から配信！！  /／          \n\n🎮デス桃太郎\n\nおもしろ神ゲーの匂いがすんごい！！\n鬼退治には…いくのかな？たのしみだ！！\n\n 配信ココ！➡️https://www.youtube.com/live/6_tVlAOOnxE?si=iolHlXYMQ8q2HKqg",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-12",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと２２時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 12,
+     "member": "kyoko",
+     "posted_at": "2026-11-13 09:06",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 The Plant Shop\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nHorror game time!!!!\n\n📺WATCH HERE:https://www.youtube.com/live/KnnG-0TPxj8?si=MyDetSr8UyEkSc9l",
+     "items": [
+      {
+       "row": 8,
+       "date": "2026-11-13",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "⏰ 7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 13,
+     "member": "kyoko",
+     "posted_at": "2026-11-13 16:00",
+     "body": "＼\\  📢このあと１９時から配信！！  /／          \n\n🎮Phasmophobia\n      with めらち🧯\n\nルイ姉との研修の経験を活かして、\nバシーっと決めていいとこ見せたい！！\n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo?si=VjFbenhNXCcKQsXi",
+     "items": [
+      {
+       "row": 9,
+       "date": "2026-11-13",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと１９時から配信！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "time_changed"
+      }
+     ]
+    },
+    {
+     "id": 14,
+     "member": "kyoko",
+     "posted_at": "2026-11-14 08:00",
+     "body": "🚨 STREAM ALERT 🚨\n\n🎮 Five Nights at Freddy's 3\n⏰ 7PM PDT | 4AM CEST | 12PM JST\n\nI AM BACK!!! ...in the nightmare😨😨😨\n\n📺WATCH HERE:https://www.youtube.com/watch?v=7lj5BsrY_7s",
+     "items": [
+      {
+       "row": 10,
+       "date": "2026-11-14",
+       "start": "12:00",
+       "tz": "JST",
+       "status": "planned",
+       "text": "",
+       "evidence": "7PM PDT | 4AM CEST | 12PM JST"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 15,
+     "member": "sopia",
+     "posted_at": "2026-11-10 17:45",
+     "body": "今日は昼からボイトレ頑張ってきたよーっ！✨\n\n20時からは、ホロドリ配信🎶\n\n音ゲーも ミニゲームも 楽しみだーっ！💞",
+     "items": [
+      {
+       "row": 2,
+       "date": "2026-11-10",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "20時からは、ホロドリ配信🎶"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 16,
+     "member": "sopia",
+     "posted_at": "2026-11-11 13:41",
+     "body": "みんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩は20時から\nおかゆ先輩主催の\nゆび相撲最強決定戦に\n出場させていただきます👍\n\nゆび相撲にもサイエンスパワーは\n通じるのかっ！？！？！？",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-11",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "おかゆ先輩主催のゆび相撲最強決定戦",
+       "evidence": "今晩は20時から おかゆ先輩主催の ゆび相撲最強決定戦に 出場させていただきます👍"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 17,
+     "member": "sopia",
+     "posted_at": "2026-11-12 19:14",
+     "body": "今晩は22時から\nらでんと呑むよーっ！🍶✨",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-12",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今晩は22時から"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 18,
+     "member": "sopia",
+     "posted_at": "2026-11-13 17:52",
+     "body": "🌟 配 信 告 知 🌟\n\n先輩方とめっちゃカメレオン🎨🖌\n\n📅 11/13(金) 22:00～\n🔗 https://youtu.be/y7XSwAlbWT0\n\nカモフラージュも科学っ！！✨✨",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-13",
+       "start": "22:00",
+       "tz": null,
+       "status": "planned",
+       "text": "先輩方とめっちゃカメレオン🎨🖌",
+       "evidence": "先輩方とめっちゃカメレオン🎨🖌"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 19,
+     "member": "sopia",
+     "posted_at": "2026-11-14 13:24",
+     "body": "みんな、おはよ(?)ーーーーーっ！！！！☀☀\n\n今晩はアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\n果たして4人の答えは\nちゃんと一致するのかっ！？！？！？",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-14",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今晩はアソビ★まわり隊！で"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 20,
+     "member": "mela",
+     "posted_at": "2026-11-09 09:50",
+     "body": "🗓️今日の予定🗓️\n\n12時：PEAKコラボ配信\n(キョーコ、カエラ先輩、ビブー先輩)\n\n19時：メンバーシップ限定配信\n(日記見せながら作戦会議、お絵描き配信)\n\nなのじゃあああああああ！！！！！！",
+     "items": [
+      {
+       "row": 1,
+       "date": "2026-11-09",
+       "start": "12:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "12時：PEAKコラボ配信"
+      },
+      {
+       "row": 2,
+       "date": "2026-11-09",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "日記見せながら作戦会議",
+       "evidence": "日記見せながら作戦会議、お絵描き配信"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      },
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 21,
+     "member": "mela",
+     "posted_at": "2026-11-09 18:26",
+     "body": "今日メン限でやるやつ、今までだったらずっと一人で壁打ちしてきたことじゃから、人間に聞いてもらうのすこし恥ずかしーのじゃ…\n\n恥ずかしいけど、めら組に聞いてもらえるのはうれしーのじゃ。一蓮托生なのじゃ。",
+     "items": [],
+     "expect": []
+    },
+    {
+     "id": 22,
+     "member": "mela",
+     "posted_at": "2026-11-10 12:25",
+     "body": "人間おはよーなのじゃ！\n\n今日はお仕事だから配信はおやすみ💤\nアーカイブ見て過ごしてほしーのじゃ！",
+     "items": [
+      {
+       "row": 3,
+       "date": "2026-11-10",
+       "start": null,
+       "tz": null,
+       "status": "off",
+       "text": "",
+       "evidence": "今日はお仕事だから配信はおやすみ💤"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 23,
+     "member": "mela",
+     "posted_at": "2026-11-10 20:45",
+     "body": "／\n✏️配信告知✏️\n＼\n\n11/11(水)朝7時は #のじゃEnglish\n\n英語のお勉強をしていきますのじゃー！\nこの前の英語でのコラボもいい感じにできたし、成果が少しずつあらわれていますのじゃ…\n\n早起きがんばるのじゃー！！！\nhttps://www.youtube.com/live/q3gGvOxaJ7o?si=EqThKFmlXS8RzeOB",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "07:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/11(水)朝7時は #のじゃEnglish"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 24,
+     "member": "mela",
+     "posted_at": "2026-11-11 06:31",
+     "body": "人間おはよーなのじゃ！\n\nこのあと7時からは朝活配信、\n夜はAZKi先輩とオフコラボなのじゃー！",
+     "items": [
+      {
+       "row": 4,
+       "date": "2026-11-11",
+       "start": "07:00",
+       "tz": null,
+       "status": "planned",
+       "text": "朝活配信",
+       "evidence": "このあと7時からは朝活配信"
+      },
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "夜はAZKi先輩とオフコラボなのじゃー！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      },
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 25,
+     "member": "mela",
+     "posted_at": "2026-11-11 13:47",
+     "body": "本日19時からは #あずめら 初のオフコラボなのじゃ！！！！\n\n会うのはじめてで緊張するのじゃあ( ࠫ⸝⸝⸝ ╸▵╺⸝⸝⸝ ࠫ )",
+     "items": [
+      {
+       "row": 5,
+       "date": "2026-11-11",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "#あずめら 初のオフコラボ",
+       "evidence": "本日19時からは #あずめら 初のオフコラボなのじゃ！！！！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "content_changed"
+      }
+     ]
+    },
+    {
+     "id": 26,
+     "member": "mela",
+     "posted_at": "2026-11-11 23:17",
+     "body": "／\n🩵配信告知🩵\n＼\n\n11/12(木)19時からは「空気読み。3」\n\nサラマンダーの人間社会に対する認識を、おぬしらにお見せしちゃいますのじゃ！！！\nhttps://www.youtube.com/live/87_E4xb__H0?si=nPuSiLeTLpbimvEh",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/12(木)19時からは「空気読み。3」"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 27,
+     "member": "mela",
+     "posted_at": "2026-11-12 12:58",
+     "body": "人間おはよーなのじゃ！\n\n今日は19時から空気読みなのじゃー！",
+     "items": [
+      {
+       "row": 6,
+       "date": "2026-11-12",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今日は19時から空気読みなのじゃー！"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 28,
+     "member": "mela",
+     "posted_at": "2026-11-13 11:10",
+     "body": "人間おはよーなのじゃ！\n\n今日はキョーコとホラゲコラボなのじゃ👻",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-13",
+       "start": null,
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "今日はキョーコとホラゲコラボなのじゃ"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 29,
+     "member": "mela",
+     "posted_at": "2026-11-13 12:20",
+     "body": "／\n👻配信告知👻\n＼\n\nこのあと19時からはPhasmophobia🔦\n\nキョーコとホラゲコラボなのじゃー！\n\nホラゲコラボは初めてだから、意外といけちゃう可能性だってあるのじゃ！！！\nhttps://www.youtube.com/live/xebosvJFBR0?si=iF1_OJ7ybkL9JMoH",
+     "items": [
+      {
+       "row": 7,
+       "date": "2026-11-13",
+       "start": "19:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "このあと19時からはPhasmophobia🔦"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    },
+    {
+     "id": 30,
+     "member": "mela",
+     "posted_at": "2026-11-13 21:13",
+     "body": "／\n🌀配信告知🌀\n＼\n\n11/14(土)20時からはアソビ★まわり隊！で\n「一致するまで終われまテン!!」\n\nデビュー前の配信テストで遊んだんじゃが、なかなか、揃いそうにないのじゃ…\n\n熱千めらchで行いますのじゃー！！！！\nhttps://www.youtube.com/live/oRV2KMNdaIE?si=TIQfj_LOL4XuogjV",
+     "items": [
+      {
+       "row": 8,
+       "date": "2026-11-14",
+       "start": "20:00",
+       "tz": null,
+       "status": "planned",
+       "text": "",
+       "evidence": "11/14(土)20時からはアソビ★まわり隊！で"
+      }
+     ],
+     "expect": [
+      {
+       "kind": "same"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "probes": [
+  {
+   "name": "real-pdt-noon-a-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 PEAK\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nI used to be a solo PEAKer, but...\nNOW I’M CLIMBING WITH A FULL SQUAD!!!\n\n📺WATCH HERE:https://www.youtube.com/live/Rgqok3L-_Sw?si=SBWKy0fEhwY47rfP",
+   "items": [
+    {
+     "row": 1,
+     "date": "2026-11-09",
+     "start": "19:00",
+     "tz": "PDT",
+     "status": "planned",
+     "text": "",
+     "evidence": "7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "foreign_zone",
+     "why": "시간대는 JST 고정이다. 하니스는 PDT를 JST로 바꿔 판정했다(보정 A-2)."
+    }
+   ]
+  },
+  {
+   "name": "real-pdt-noon-a-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 PEAK\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nI used to be a solo PEAKer, but...\nNOW I’M CLIMBING WITH A FULL SQUAD!!!\n\n📺WATCH HERE:https://www.youtube.com/live/Rgqok3L-_Sw?si=SBWKy0fEhwY47rfP",
+   "items": [
+    {
+     "row": 1,
+     "date": "2026-11-08",
+     "start": "19:00",
+     "tz": "PDT",
+     "status": "planned",
+     "text": "",
+     "evidence": "⏰ 7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "foreign_zone",
+     "why": "시간대는 JST 고정이다. 하니스는 PDT를 JST로 바꿔 판정했다(보정 A-2)."
+    }
+   ]
+  },
+  {
+   "name": "real-start-change-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 20:29",
+   "body": "開始時間を【⏰２１時３０分】に変更するよー！！\nギリギリのお知らせでごめんねー🥲",
+   "items": [
+    {
+     "row": 2,
+     "date": "2026-11-09",
+     "start": "21:30",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "開始時間を【⏰２１時３０分】に変更するよー！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "time_changed"
+    }
+   ]
+  },
+  {
+   "name": "real-start-change-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 20:29",
+   "body": "開始時間を【⏰２１時３０分】に変更するよー！！\nギリギリのお知らせでごめんねー🥲",
+   "items": [
+    {
+     "row": 2,
+     "date": "2026-11-09",
+     "start": "21:30",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "開始時間を【⏰２１時３０分】に変更するよー！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "time_changed"
+    }
+   ]
+  },
+  {
+   "name": "real-pdt-noon-b-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-10 10:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 Soul Chained\nwith Bijou-senpai and Chihaya-senpai\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nPassion English & Passion Japanese go go!!\n日本語と英語の混成配信だー！！パッションを信じろ～！！\n\n📺WATCH HERE:https://www.youtube.com/live/vK_G9vi58ok?si=vPmECJce99dyTQQH",
+   "items": [
+    {
+     "row": 3,
+     "date": "2026-11-10",
+     "start": "19:00",
+     "tz": "PDT",
+     "status": "planned",
+     "text": "日本語と英語の混成配信だー！！",
+     "evidence": "⏰ 7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "foreign_zone",
+     "why": "시간대는 JST 고정이다. 하니스는 PDT를 JST로 바꿔 판정했다(보정 A-2)."
+    }
+   ]
+  },
+  {
+   "name": "real-pdt-noon-b-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-10 10:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 Soul Chained\nwith Bijou-senpai and Chihaya-senpai\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nPassion English & Passion Japanese go go!!\n日本語と英語の混成配信だー！！パッションを信じろ～！！\n\n📺WATCH HERE:https://www.youtube.com/live/vK_G9vi58ok?si=vPmECJce99dyTQQH",
+   "items": [
+    {
+     "row": 3,
+     "date": "2026-11-10",
+     "start": "19:00",
+     "tz": "PDT",
+     "status": "planned",
+     "text": "Passion English & Passion Japanese go go!! 日本語と英語の混成配信だー！！パッションを信じろ～！！",
+     "evidence": "⏰ 7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "foreign_zone",
+     "why": "시간대는 JST 고정이다. 하니스는 PDT를 JST로 바꿔 판정했다(보정 A-2)."
+    }
+   ]
+  },
+  {
+   "name": "synthetic-S1-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-13 16:00",
+   "body": "＼\\  📢このあと１９時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-13",
+     "start": "19:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと１９時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-13 16:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと１９時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo"
+  },
+  {
+   "name": "synthetic-S1-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-13 16:00",
+   "body": "＼\\  📢このあと１９時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-13",
+     "start": "19:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと１９時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-13 16:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと１９時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo"
+  },
+  {
+   "name": "synthetic-S2-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 16:00",
+   "body": "＼\\  📢このあと２１時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-14",
+     "start": "21:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２１時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-14 16:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 19:00 JST [planned] Phasmophobia / with めらち [update: start 22:00 -> 19:00]\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２１時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx"
+  },
+  {
+   "name": "synthetic-S2-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 16:00",
+   "body": "＼\\  📢このあと２１時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-14",
+     "start": "21:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２１時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-14 16:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 19:00 JST [planned] Phasmophobia / with めらち [update: start 22:00 -> 19:00]\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２１時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx"
+  },
+  {
+   "name": "synthetic-S3-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-11 19:16",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM",
+   "items": [
+    {
+     "row": 5,
+     "date": "2026-11-11",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-11 19:16 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 00:00 JST [planned] Cuphead\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM"
+  },
+  {
+   "name": "synthetic-S3-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-11 19:16",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM",
+   "items": [
+    {
+     "row": 5,
+     "date": "2026-11-11",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-11 19:16 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 00:00 JST [planned] Cuphead\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 22:00 JST [planned] Phasmophobia / with めらち\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM"
+  },
+  {
+   "name": "synthetic-S4-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 18:00",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": 12,
+     "date": "2026-11-14",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-14 18:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 19:00 JST [planned] Phasmophobia / with めらち [update: start 22:00 -> 19:00]\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx"
+  },
+  {
+   "name": "synthetic-S4-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 18:00",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": 12,
+     "date": "2026-11-14",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ],
+   "tail": "Post timestamp: 2026-11-14 18:00 JST\nCurrent week: 2026-11-09 to 2026-11-15\nCurrent schedule rows:\n1. 2026-11-09 12:00 JST [planned] PEAK / FULL SQUAD!!\n2. 2026-11-09 21:00 JST [planned] Overwatch / with つーちゃん\n3. 2026-11-10 12:00 JST [planned] Soul Chained / with Bijou-sepnai / Chihaya-senpai\n4. 2026-11-11 11:00 JST [planned] Deadlock / with Gigi-senpai\n5. 2026-11-11 22:00 JST [planned] 鬼武者 / Way of the Sword\n6. 2026-11-12 12:00 JST [planned] Cuphead [update: start 00:00 -> 12:00]\n7. 2026-11-12 22:00 JST [planned] デス桃太郎\n8. 2026-11-13 12:00 JST [planned] The Plant Shop\n9. 2026-11-13 19:00 JST [planned] Phasmophobia / with めらち [update: start 22:00 -> 19:00]\n10. 2026-11-14 12:00 JST [planned] FNAF 3\n11. 2026-11-14 20:00 JST [planned] 終われまテン！ / with アンビ隊\n12. 2026-11-14 22:00 JST [planned] ダークソウル / SL1ノーデス\n13. 2026-11-15 12:00 JST [planned] Collab / Raora-senpai\n14. 2026-11-15 22:00 JST [planned] 地獄銭湯\nPost text:\n＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx"
+  },
+  {
+   "name": "c1-pdt-noon-a-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 PEAK\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nI used to be a solo PEAKer, but...\nNOW I’M CLIMBING WITH A FULL SQUAD!!!\n\n📺WATCH HERE:https://www.youtube.com/live/Rgqok3L-_Sw?si=SBWKy0fEhwY47rfP",
+   "items": [
+    {
+     "row": 1,
+     "date": "2026-11-09",
+     "start": "12:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "",
+     "evidence": "7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ]
+  },
+  {
+   "name": "c1-pdt-noon-a-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 PEAK\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nI used to be a solo PEAKer, but...\nNOW I’M CLIMBING WITH A FULL SQUAD!!!\n\n📺WATCH HERE:https://www.youtube.com/live/Rgqok3L-_Sw?si=SBWKy0fEhwY47rfP",
+   "items": [
+    {
+     "row": 1,
+     "date": "2026-11-09",
+     "start": "12:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "",
+     "evidence": "7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ]
+  },
+  {
+   "name": "c1-pdt-noon-a-3",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 PEAK\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nI used to be a solo PEAKer, but...\nNOW I’M CLIMBING WITH A FULL SQUAD!!!\n\n📺WATCH HERE:https://www.youtube.com/live/Rgqok3L-_Sw?si=SBWKy0fEhwY47rfP",
+   "items": [
+    {
+     "row": 1,
+     "date": "2026-11-09",
+     "start": "12:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "",
+     "evidence": "7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ]
+  },
+  {
+   "name": "c1-pdt-noon-b-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-10 10:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 Soul Chained\nwith Bijou-senpai and Chihaya-senpai\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nPassion English & Passion Japanese go go!!\n日本語と英語の混成配信だー！！パッションを信じろ～！！\n\n📺WATCH HERE:https://www.youtube.com/live/vK_G9vi58ok?si=vPmECJce99dyTQQH",
+   "items": [
+    {
+     "row": 3,
+     "date": "2026-11-10",
+     "start": "12:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "日本語と英語の混成配信だー！！",
+     "evidence": "⏰ 7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "content_changed"
+    }
+   ]
+  },
+  {
+   "name": "c1-pdt-noon-b-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-10 10:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 Soul Chained\nwith Bijou-senpai and Chihaya-senpai\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nPassion English & Passion Japanese go go!!\n日本語と英語の混成配信だー！！パッションを信じろ～！！\n\n📺WATCH HERE:https://www.youtube.com/live/vK_G9vi58ok?si=vPmECJce99dyTQQH",
+   "items": [
+    {
+     "row": 3,
+     "date": "2026-11-10",
+     "start": "12:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "日本語と英語の混成配信",
+     "evidence": "12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "content_changed"
+    }
+   ]
+  },
+  {
+   "name": "c1-pdt-noon-b-3",
+   "member": "kyoko",
+   "posted_at": "2026-11-10 10:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 Soul Chained\nwith Bijou-senpai and Chihaya-senpai\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nPassion English & Passion Japanese go go!!\n日本語と英語の混成配信だー！！パッションを信じろ～！！\n\n📺WATCH HERE:https://www.youtube.com/live/vK_G9vi58ok?si=vPmECJce99dyTQQH",
+   "items": [
+    {
+     "row": 3,
+     "date": "2026-11-10",
+     "start": "12:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "日本語と英語の混成配信だー！！",
+     "evidence": "⏰ 7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "content_changed"
+    }
+   ]
+  },
+  {
+   "name": "c1-before-week-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-08 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 FATAL FRAME II: Crimson Butterfly REMAKE\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nSuuuuuuper excited to play Fatal Frame for the first time!! \n\n📺WATCH HERE: https://www.youtube.com/live/8m0PM8NAcRU?si=2GnsZRIWM7hqAlu7",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-09",
+     "start": "00:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "FATAL FRAME II: Crimson Butterfly REMAKE",
+     "evidence": "7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "added",
+     "why": "주 첫날 전 글은 수집과 PendingPosts 조건이 빼므로(보정 A-5) judgeItems까지 오지 않는다. 여기서는 하니스와 같다."
+    }
+   ]
+  },
+  {
+   "name": "c1-before-week-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-08 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 FATAL FRAME II: Crimson Butterfly REMAKE\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nSuuuuuuper excited to play Fatal Frame for the first time!! \n\n📺WATCH HERE: https://www.youtube.com/live/8m0PM8NAcRU?si=2GnsZRIWM7hqAlu7",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-09",
+     "start": "00:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "FATAL FRAME II: Crimson Butterfly REMAKE",
+     "evidence": "FATAL FRAME II: Crimson Butterfly REMAKE\n⏰ 7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "added",
+     "why": "주 첫날 전 글은 수집과 PendingPosts 조건이 빼므로(보정 A-5) judgeItems까지 오지 않는다. 여기서는 하니스와 같다."
+    }
+   ]
+  },
+  {
+   "name": "c1-before-week-3",
+   "member": "kyoko",
+   "posted_at": "2026-11-08 08:00",
+   "body": "🚨 STREAM ALERT 🚨\n\n🎮 FATAL FRAME II: Crimson Butterfly REMAKE\n⏰ 7PM PDT | 4AM CEST | 12AM JST\n\nSuuuuuuper excited to play Fatal Frame for the first time!! \n\n📺WATCH HERE: https://www.youtube.com/live/8m0PM8NAcRU?si=2GnsZRIWM7hqAlu7",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-09",
+     "start": "00:00",
+     "tz": "JST",
+     "status": "planned",
+     "text": "FATAL FRAME II: Crimson Butterfly REMAKE",
+     "evidence": "🎮 FATAL FRAME II: Crimson Butterfly REMAKE\n⏰ 7PM PDT | 4AM CEST | 12AM JST"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "added",
+     "why": "주 첫날 전 글은 수집과 PendingPosts 조건이 빼므로(보정 A-5) judgeItems까지 오지 않는다. 여기서는 하니스와 같다."
+    }
+   ]
+  },
+  {
+   "name": "c1-start-change-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 20:29",
+   "body": "開始時間を【⏰２１時３０分】に変更するよー！！\nギリギリのお知らせでごめんねー🥲",
+   "items": [
+    {
+     "row": 2,
+     "date": "2026-11-09",
+     "start": "21:30",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "開始時間を【⏰２１時３０分】に変更するよー！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "time_changed"
+    }
+   ]
+  },
+  {
+   "name": "c1-start-change-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 20:29",
+   "body": "開始時間を【⏰２１時３０分】に変更するよー！！\nギリギリのお知らせでごめんねー🥲",
+   "items": [
+    {
+     "row": 2,
+     "date": "2026-11-09",
+     "start": "21:30",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "開始時間を【⏰２１時３０分】に変更するよー！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "time_changed"
+    }
+   ]
+  },
+  {
+   "name": "c1-start-change-3",
+   "member": "kyoko",
+   "posted_at": "2026-11-09 20:29",
+   "body": "開始時間を【⏰２１時３０分】に変更するよー！！\nギリギリのお知らせでごめんねー🥲",
+   "items": [
+    {
+     "row": 2,
+     "date": "2026-11-09",
+     "start": "21:30",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "開始時間を【⏰２１時３０分】に変更するよー！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "time_changed"
+    }
+   ]
+  },
+  {
+   "name": "c1-S1-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-13 16:00",
+   "body": "＼\\  📢このあと１９時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-13",
+     "start": "19:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと１９時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ]
+  },
+  {
+   "name": "c1-S1-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-13 16:00",
+   "body": "＼\\  📢このあと１９時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/MwiemBxlBVo",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-13",
+     "start": "19:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと１９時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ]
+  },
+  {
+   "name": "c1-S2-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 16:00",
+   "body": "＼\\  📢このあと２１時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-14",
+     "start": "21:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２１時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ]
+  },
+  {
+   "name": "c1-S2-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 16:00",
+   "body": "＼\\  📢このあと２１時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": null,
+     "date": "2026-11-14",
+     "start": "21:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２１時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "rejected",
+     "reason": "no_content",
+     "why": "대상 칸 없이 text가 빈 새 방송은 거절한다. 하니스는 추가했다(보정 A-1)."
+    }
+   ]
+  },
+  {
+   "name": "c1-S3-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-11 19:16",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM",
+   "items": [
+    {
+     "row": 5,
+     "date": "2026-11-11",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ]
+  },
+  {
+   "name": "c1-S3-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-11 19:16",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/_hHR4qUU4rM",
+   "items": [
+    {
+     "row": 5,
+     "date": "2026-11-11",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ]
+  },
+  {
+   "name": "c1-S4-1",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 18:00",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": 12,
+     "date": "2026-11-14",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ]
+  },
+  {
+   "name": "c1-S4-2",
+   "member": "kyoko",
+   "posted_at": "2026-11-14 18:00",
+   "body": "＼\\  📢このあと２２時から配信！！  /／           \n\n 配信ココ！➡️https://www.youtube.com/live/xxxxxxxxxxx",
+   "items": [
+    {
+     "row": 12,
+     "date": "2026-11-14",
+     "start": "22:00",
+     "tz": null,
+     "status": "planned",
+     "text": "",
+     "evidence": "このあと２２時から配信！！"
+    }
+   ],
+   "expect": [
+    {
+     "kind": "same"
+    }
+   ]
+  }
+ ]
+}
