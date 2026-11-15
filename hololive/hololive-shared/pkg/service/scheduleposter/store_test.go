@@ -739,6 +739,7 @@ func TestStoreInsertThumbnailCandidatesFillsTheImageOfTheSameThumbnail(t *testin
 	require.NoError(t, err)
 
 	before := posterOf(confirmed)
+
 	_, err = store.Confirm(ctx, before.ID, before.Revision, date(t, "2026-11-09"), date(t, "2026-11-15"))
 	require.NoError(t, err)
 
