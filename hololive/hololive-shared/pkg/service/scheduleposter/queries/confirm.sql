@@ -12,7 +12,7 @@ WITH target AS (
     RETURNING revision, channel_id
 ), superseded AS (
     UPDATE schedule_posters AS other
-    SET review_status = 'expired', revision = other.revision + 1, updated_at = now()
+    SET review_status = 'expired', revision = other.revision + 1, updated_at = now(), image_data = NULL, image_mime = NULL
     FROM updated
     WHERE other.channel_id = updated.channel_id AND other.id <> $1 AND other.review_status = 'pending_review'
       AND (other.posted_at AT TIME ZONE 'Asia/Tokyo')::date >= $3::date

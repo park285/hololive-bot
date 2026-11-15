@@ -208,15 +208,16 @@ func (s *Store) InsertCommunityCandidates(ctx context.Context, channelIDs []stri
 	return tag.RowsAffected(), nil
 }
 
-// ThumbnailCandidate의 ImageSHA256은 수집 때 받은 그림의 sha256(소문자 16진수)이다.
+// ThumbnailCandidate의 Image는 수집 때 받은 그림이다.
 type ThumbnailCandidate struct {
-	ChannelID   string
-	VideoID     string
-	ImageSHA256 string
-	PostedAt    time.Time
+	ChannelID string
+	VideoID   string
+	Image     Image
+	PostedAt  time.Time
 }
 
-// InsertThumbnailCandidates는 유튜브 영상 썸네일을 후보로 넣는다. 확정된 주 범위는 InsertCandidates와 같은 규칙으로 뺀다.
+// InsertThumbnailCandidates는 유튜브 영상 썸네일을 그 그림과 그림의 sha256(image_sha256)과 함께 후보로 넣고 새로 넣은 수를 돌려준다.
+// 확정된 주 범위는 InsertCandidates와 같은 규칙으로 빼고, 그림 없이 들어온 같은 썸네일의 검토 대기·확정 행은 그림만 채운다.
 func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []ThumbnailCandidate, autoReview bool) (int64, error) {
 	if len(candidates) == 0 {
 		return 0, nil
@@ -224,17 +225,19 @@ func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []Thum
 
 	channels := make([]string, len(candidates))
 	videos := make([]string, len(candidates))
-	hashes := make([]string, len(candidates))
+	data := make([][]byte, len(candidates))
+	mimes := make([]string, len(candidates))
 	postedAt := make([]time.Time, len(candidates))
 
 	for i, candidate := range candidates {
 		channels[i] = candidate.ChannelID
 		videos[i] = candidate.VideoID
-		hashes[i] = candidate.ImageSHA256
+		data[i] = candidate.Image.Data
+		mimes[i] = candidate.Image.MIME
 		postedAt[i] = candidate.PostedAt
 	}
 
-	tag, err := s.pool.Exec(ctx, insertThumbnailCandidatesSQL, channels, videos, hashes, postedAt, autoReview)
+	tag, err := s.pool.Exec(ctx, insertThumbnailCandidatesSQL, channels, videos, data, mimes, postedAt, autoReview)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster thumbnail candidates: %w", err)
 	}

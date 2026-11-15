@@ -412,7 +412,7 @@ func seedSchedulePosterSources(t *testing.T, pool *pgxpool.Pool, store *schedule
 	}
 
 	_, err = store.InsertThumbnailCandidates(t.Context(), []scheduleposter.ThumbnailCandidate{{
-		ChannelID: melaChannel, VideoID: "4uuYjSf0rpU", ImageSHA256: strings.Repeat("a", 64), PostedAt: time.Now(),
+		ChannelID: melaChannel, VideoID: "4uuYjSf0rpU", Image: scheduleposter.Image{MIME: "image/jpeg", Data: []byte("thumbnail")}, PostedAt: time.Now(),
 	}}, false)
 	if err != nil {
 		t.Fatal(err)

@@ -591,8 +591,11 @@ TABLE schedule_posters
   COLUMN rows_extracted_at timestamp with time zone
   COLUMN rows_revision bigint NOT NULL DEFAULT 1
   COLUMN rows_day_shift smallint NOT NULL DEFAULT 0
+  COLUMN image_data bytea
+  COLUMN image_mime text
   CONSTRAINT chk_schedule_posters_confirmed_week CHECK (((review_status <> 'confirmed'::text) OR (week_start IS NOT NULL)))
   CONSTRAINT chk_schedule_posters_id_positive CHECK ((id > 0))
+  CONSTRAINT chk_schedule_posters_image CHECK ((((image_data IS NULL) AND (image_mime IS NULL)) OR ((image_data IS NOT NULL) AND (image_mime IS NOT NULL) AND (octet_length(image_data) >= 1) AND (image_mime = ANY (ARRAY['image/jpeg'::text, 'image/png'::text, 'image/webp'::text])))))
   CONSTRAINT chk_schedule_posters_review_request_reason CHECK (((review_request_reason IS NULL) OR ((review_requested_at IS NOT NULL) AND (review_request_reason = ANY (ARRAY['uncertain'::text, 'unjudgeable'::text, 'image_changed'::text, 'period_unread'::text, 'week_rejected'::text, 'week_overlapping'::text, 'stale'::text, 'auto_review_off'::text])))))
   CONSTRAINT chk_schedule_posters_review_status_vocab CHECK ((review_status = ANY (ARRAY['pending_review'::text, 'confirmed'::text, 'rejected'::text, 'expired'::text])))
   CONSTRAINT chk_schedule_posters_reviewed_by CHECK (((reviewed_by IS NULL) OR (reviewed_by = ANY (ARRAY['auto'::text, 'admin'::text]))))

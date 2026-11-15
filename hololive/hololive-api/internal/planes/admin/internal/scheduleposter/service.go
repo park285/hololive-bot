@@ -59,6 +59,11 @@ type sourceClient interface {
 	image(ctx context.Context, rawURL string) (source, error)
 }
 
+type imageStore interface {
+	Image(ctx context.Context, id int64) (posterstore.Image, bool, error)
+	SaveImage(ctx context.Context, id int64, image posterstore.Image) error
+}
+
 type memberSource interface {
 	GetAllMembers(ctx context.Context) ([]*domain.Member, error)
 }
@@ -67,6 +72,7 @@ type Service struct {
 	config     Config
 	candidates candidateStore
 	sources    sourceClient
+	images     imageStore
 	rows       rowStore
 	rowModel   rowModel
 	reviews    reviewStore
@@ -97,7 +103,7 @@ func New(ctx context.Context, config *Config, apiKey string, store *posterstore.
 
 	service := newService(*config, store, store, newFXClient(), members, logger)
 
-	service.rows = store
+	service.rows, service.images = store, store
 	service.rowModel = translator
 	service.changes, service.ledger, service.matcher = store, store, translator
 
@@ -385,7 +391,7 @@ func (s *Service) candidateFrom(item *status, target Target, postedAt time.Time)
 	}, true
 }
 
-// collectThumbnails는 받지 못한 영상만 건너뛰고 나머지 썸네일은 후보로 넣는다. 자동 검토와 행 추출은 여기서 남긴 해시와 같은 그림만 쓴다.
+// collectThumbnails는 받지 못한 영상만 건너뛰고 나머지 썸네일은 받은 그림과 함께 후보로 넣는다.
 func (s *Service) collectThumbnails(ctx context.Context, now time.Time, autoReview bool) error {
 	var (
 		thumbnails []posterstore.ThumbnailCandidate
@@ -402,7 +408,7 @@ func (s *Service) collectThumbnails(ctx context.Context, now time.Time, autoRevi
 			}
 
 			thumbnails = append(thumbnails, posterstore.ThumbnailCandidate{
-				ChannelID: target.ChannelID, VideoID: videoID, ImageSHA256: imageSHA256(thumbnail.Data), PostedAt: now,
+				ChannelID: target.ChannelID, VideoID: videoID, Image: posterstore.Image(thumbnail), PostedAt: now,
 			})
 		}
 	}
@@ -421,6 +427,39 @@ func imageSHA256(data []byte) string {
 	sum := sha256.Sum256(data)
 
 	return hex.EncodeToString(sum[:])
+}
+
+var (
+	// 원본 주소의 그림을 쓸 수 없다는 뜻이며 저장소 오류는 들지 않는다.
+	errImageUnavailable = errors.New("poster image unavailable")
+	errImageChanged     = fmt.Errorf("%w: it changed after it was collected", errImageUnavailable)
+)
+
+// posterImage는 저장한 그림이 있으면 원본 주소를 다시 받지 않는다. 썸네일은 같은 주소에서 그림이 바뀌기 때문이다.
+func (s *Service) posterImage(ctx context.Context, id int64, imageURL, collectedSHA256 string) (source, error) {
+	stored, found, err := s.images.Image(ctx, id)
+	if err != nil {
+		return source{}, fmt.Errorf("load stored poster image: %w", err)
+	}
+
+	if found {
+		return source(stored), nil
+	}
+
+	fetched, err := s.sources.image(ctx, imageURL)
+	if err != nil {
+		return source{}, fmt.Errorf("%w: %w", errImageUnavailable, err)
+	}
+
+	if collectedSHA256 != "" && imageSHA256(fetched.Data) != collectedSHA256 {
+		return source{}, errImageChanged
+	}
+
+	if err := s.images.SaveImage(ctx, id, posterstore.Image(fetched)); err != nil {
+		return source{}, fmt.Errorf("save poster image: %w", err)
+	}
+
+	return fetched, nil
 }
 
 func (s *Service) logUsage(posterID int64, stage string, spent usage) {
