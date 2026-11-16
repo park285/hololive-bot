@@ -3,6 +3,8 @@ package schedulecard
 import (
 	"image"
 	"image/color"
+	"math"
+	"slices"
 	"strconv"
 )
 
@@ -145,28 +147,128 @@ const melaPlateW = 124.0
 // melaMinCapH는 가장 작은 한 줄 제목(0.8배) 글자가 캡슐 흰 바탕 안에 드는 높이다.
 const melaMinCapH = 40.0
 
+const melaMinK = 0.8
+
+const melaFitRounds = 6
+
+// melaRows의 높이 단위는 줄 간격 pitch다. 제목이 기본 캡슐(capH)에 들지 않는 칸만 1보다 큰 단위를 받아 캡슐이 세로로 늘고,
+// 그만큼 나머지 칸의 줄 간격이 준다. 휴방·빈 날은 slotUnits가 nil이다.
 type melaRows struct {
-	days     []day
-	dayLines []int
-	pitch    float64
-	capH     float64
+	days      []day
+	dayUnits  []float64
+	slotUnits [][]float64
+	pitch     float64
+	capH      float64
 }
 
-func melaLines(days []day, t box) (melaRows, bool) {
-	r := melaRows{days: days, dayLines: make([]int, len(days))}
-	lines := 0
+func melaLines(f *fontSet, kMax float64, days []day, t box) (melaRows, bool) {
+	r := melaRows{days: days, dayUnits: make([]float64, len(days)), slotUnits: make([][]float64, len(days))}
 
 	for i, d := range days {
-		r.dayLines[i] = max(1, len(d.slots))
+		r.dayUnits[i] = float64(max(1, len(d.slots)))
 
-		lines += r.dayLines[i]
+		if !d.off() {
+			r.slotUnits[i] = slices.Repeat([]float64{1}, len(d.slots))
+		}
 	}
 
-	// 하루에 여러 건이면 캡슐을 세로로 쌓는다. 줄 수가 늘면 줄 간격과 캡슐 높이가 함께 준다.
-	r.pitch = t.H / float64(lines)
-	r.capH = min(104, r.pitch-16)
+	r.measure(t)
 
-	return r, r.capH >= melaMinCapH
+	if r.capH < melaMinCapH {
+		return r, false
+	}
+
+	for range melaFitRounds {
+		next := r.clone()
+		if !next.grow(f, kMax, t) {
+			break
+		}
+
+		next.measure(t)
+
+		if next.capH < melaMinCapH {
+			break
+		}
+
+		r = next
+	}
+
+	return r, true
+}
+
+func (r *melaRows) clone() melaRows {
+	c := *r
+
+	c.dayUnits = slices.Clone(r.dayUnits)
+	c.slotUnits = slices.Clone(r.slotUnits)
+
+	for i := range c.slotUnits {
+		c.slotUnits[i] = slices.Clone(c.slotUnits[i])
+	}
+
+	return c
+}
+
+func (r *melaRows) measure(t box) {
+	total := 0.0
+
+	for _, u := range r.dayUnits {
+		total += u
+	}
+
+	r.pitch = t.H / total
+	r.capH = min(104, r.pitch-16)
+}
+
+func (r *melaRows) grow(f *fontSet, kMax float64, t box) bool {
+	grew := false
+
+	for i, units := range r.slotUnits {
+		for j, s := range r.days[i].slots[:len(units)] {
+			if u := melaSlotUnits(f, kMax, s, t, r.pitch, r.capH); u > units[j] {
+				r.dayUnits[i] += u - units[j]
+
+				units[j] = u
+				grew = true
+			}
+		}
+	}
+
+	return grew
+}
+
+// melaSlotUnits는 기본 캡슐에 들지 않는 제목을 기본 글자 크기(1배) 이상으로 다 보이는 가장 낮은 캡슐 높이를 찾아 단위로 바꾼다.
+// 기본 캡슐의 세 배로도 들지 않으면 늘리지 않고 melaTitle이 줄여 그린다.
+func melaSlotUnits(f *fontSet, kMax float64, s slot, t box, pitch, capH float64) float64 {
+	kTop := min(kMax, max(1, capH/84))
+	if melaFits(f, s, t, capH, capH, kTop, melaMinK) {
+		return 1
+	}
+
+	for h := capH + 4; h <= 3*capH; h += 4 {
+		if melaFits(f, s, t, h, capH, kTop, min(1, kTop)) {
+			return 1 + math.Ceil((h-capH)/pitch*8)/8
+		}
+	}
+
+	return 1
+}
+
+func melaFits(f *fontSet, s slot, t box, h, capH, kTop, kMin float64) bool {
+	b := box{t.X + melaPlateW + 34, 0, melaCapsuleW(t), h}
+	w := b.right() - 66 - melaTitleX(f, b, capH, s)
+
+	if _, ok := melaFitTitle(f, s, w, h-16, kTop, kMin, true); ok {
+		return true
+	}
+
+	if len(s.tags) == 0 {
+		return false
+	}
+
+	_, ok := melaFitTitle(f, s, w, h-16, kTop, kMin, false)
+
+	return ok
 }
 
 func melaCapsuleW(t box) float64 { return t.right() - (t.X + melaPlateW + 34) }
@@ -174,17 +276,17 @@ func melaCapsuleW(t box) float64 { return t.right() - (t.X + melaPlateW + 34) }
 func melaTable(c *canvas, p melaPal, t box, all []day) {
 	const plateW = melaPlateW
 
-	rows, days := fitFolded(all, func(d []day) (melaRows, bool) { return melaLines(d, t) })
-	dayLines, pitch, capH := rows.dayLines, rows.pitch, rows.capH
+	rows, days := fitFolded(all, func(d []day) (melaRows, bool) { return melaLines(c.f, c.kMax(), d, t) })
+	pitch, capH := rows.pitch, rows.capH
 	pcx := t.X + plateW/2
 	x0, x1 := t.X+plateW+34, t.right()
 	cys := make([]float64, len(days))
 	rowY := t.Y
 
 	for i := range days {
-		cys[i] = rowY + pitch*float64(dayLines[i])/2
+		cys[i] = rowY + pitch*rows.dayUnits[i]/2
 
-		rowY += pitch * float64(dayLines[i])
+		rowY += pitch * rows.dayUnits[i]
 	}
 
 	c.Fill(rect(pcx-11, cys[0], 22, cys[len(days)-1]-cys[0]), p.navy)
@@ -192,7 +294,7 @@ func melaTable(c *canvas, p melaPal, t box, all []day) {
 
 	for i, d := range days {
 		cy := cys[i]
-		blockTop := cy - pitch*float64(dayLines[i])/2
+		blockTop := cy - pitch*rows.dayUnits[i]/2
 
 		switch {
 		case d.off():
@@ -201,8 +303,15 @@ func melaTable(c *canvas, p melaPal, t box, all []day) {
 			c.Fill(rrect(x0, cy-capH/2, x1-x0, capH, capH/2), rgba(0xFFFFFF, 0.35))
 			c.StrokeButt(dash(rrect(x0, cy-capH/2, x1-x0, capH, capH/2), 9, 7), 2.4, rgba(0x1B3D92, 0.45))
 		default:
+			before := 0.0
+
 			for j, s := range d.slots {
-				melaCapsule(c, p, box{x0, blockTop + pitch*(float64(j)+0.5) - capH/2, x1 - x0, capH}, s)
+				u := rows.slotUnits[i][j]
+				h := capH + pitch*(u-1)
+
+				melaCapsule(c, p, box{x0, blockTop + pitch*(before+u/2) - h/2, x1 - x0, h}, capH, s)
+
+				before += u
 			}
 		}
 
@@ -238,12 +347,12 @@ func melaStyle(k float64) (mainT, subT txt) {
 	return txt{Size: 37 * k, Face: faceSign}, txt{Size: 26 * k, Face: faceBold}
 }
 
-func melaFitTitle(f *fontSet, s slot, w, maxH, kTop float64, withTags bool) (titleBlock, bool) {
-	lim := titleLimits{maxW: w, maxMain: 2, maxSub: 1, withTags: withTags}
+func melaFitTitle(f *fontSet, s slot, w, maxH, kTop, kMin float64, withTags bool) (titleBlock, bool) {
+	lim := titleLimits{maxW: w, maxMain: 2, maxSub: 2, withTags: withTags}
 	baseMain, baseSub := melaStyle(1)
 	base := layoutTitle(f, s, baseMain, baseSub, lim)
 
-	for k := kTop; k >= 0.799; k -= 0.04 {
+	for k := kTop; k >= kMin-0.001; k -= 0.04 {
 		mainT, subT := melaStyle(k)
 		tb := layoutTitle(f, s, mainT, subT, lim)
 		grew := k > 1 && len(tb.main) > len(base.main)
@@ -257,17 +366,17 @@ func melaFitTitle(f *fontSet, s slot, w, maxH, kTop float64, withTags bool) (tit
 }
 
 func melaTitle(f *fontSet, s slot, w, maxH, kTop float64) titleBlock {
-	if tb, ok := melaFitTitle(f, s, w, maxH, kTop, true); ok {
+	if tb, ok := melaFitTitle(f, s, w, maxH, kTop, melaMinK, true); ok {
 		return tb
 	}
 
 	if len(s.tags) > 0 {
-		if tb, ok := melaFitTitle(f, s, w, maxH, kTop, false); ok {
+		if tb, ok := melaFitTitle(f, s, w, maxH, kTop, melaMinK, false); ok {
 			return tb
 		}
 	}
 
-	mainT, subT := melaStyle(0.8)
+	mainT, subT := melaStyle(melaMinK)
 	tb := newTitleBlock(s, mainT, subT)
 
 	tb.main = []string{f.clamp(mainT, s.main, w)}
@@ -287,20 +396,20 @@ func melaTitle(f *fontSet, s slot, w, maxH, kTop float64) titleBlock {
 	return tb
 }
 
-func melaCapsule(c *canvas, p melaPal, b box, s slot) {
+func melaCapsule(c *canvas, p melaPal, b box, capH float64, s slot) {
 	r := b.H / 2
 	c.Fill(rrect(b.X+5, b.Y+6, b.W, b.H, r), p.cyanD)
 	c.Fill(rrect(b.X, b.Y, b.W, b.H, r), p.navy)
 	c.Fill(rrect(b.X+3.5, b.Y+3.5, b.W-7, b.H-7, r-3.5), p.white)
 	c.Stroke(rrect(b.X+9.5, b.Y+9.5, b.W-19, b.H-19, r-9.5), 1.8, hex(0xBFE9F8))
-	drawFlame(c, b.right()-38, b.Y+3, min(46, b.H*0.58), deg(7), p.navy, 3)
+	drawFlame(c, b.right()-38, b.Y+3, min(46, capH*0.58), deg(7), p.navy, 3)
 
 	if label, kind := timeLabel(s); kind != timeNone {
-		melaTag(c, p, b, label, kind)
+		melaTag(c, p, b, capH, label, kind)
 	}
 
-	tx := melaTitleX(c.f, b, s)
-	tb := melaTitle(c.f, s, b.right()-66-tx, b.H-16, min(c.kMax(), max(1, b.H/84)))
+	tx := melaTitleX(c.f, b, capH, s)
+	tb := melaTitle(c.f, s, b.right()-66-tx, b.H-16, min(c.kMax(), max(1, capH/84)))
 	tb.draw(c, tx, b.cy()-tb.height()/2-1, p.navy, p.sub)
 }
 
@@ -310,19 +419,19 @@ func melaTagSize(f *fontSet, capH float64, label string) (tagT txt, tagW float64
 	return tagT, f.width(tagT, label) + tagT.Size*1.15
 }
 
-func melaTitleX(f *fontSet, b box, s slot) float64 {
+func melaTitleX(f *fontSet, b box, capH float64, s slot) float64 {
 	label, kind := timeLabel(s)
 	if kind == timeNone {
 		return b.X + b.H/2
 	}
 
-	_, tagW := melaTagSize(f, b.H, label)
+	_, tagW := melaTagSize(f, capH, label)
 
 	return b.X - 10 + tagW + 18
 }
 
-func melaTag(c *canvas, p melaPal, b box, label string, kind timeKind) {
-	tagT, tagW := melaTagSize(c.f, b.H, label)
+func melaTag(c *canvas, p melaPal, b box, capH float64, label string, kind timeKind) {
+	tagT, tagW := melaTagSize(c.f, capH, label)
 	th := tagT.Size * 1.56
 	tm := place(b.X-10+tagW/2, b.cy()-1, 1, deg(-3))
 	fill, ink := p.cream, p.navy

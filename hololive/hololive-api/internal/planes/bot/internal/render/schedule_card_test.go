@@ -1,6 +1,7 @@
 package render
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -18,8 +19,9 @@ import (
 )
 
 const (
-	late23 = "23:00"
-	late25 = "25:00"
+	late23        = "23:00"
+	late25        = "25:00"
+	kyokoPhotoURL = "https://yt3.googleusercontent.com/kyoko=s88-c"
 )
 
 type recordingCardDrawer struct {
@@ -532,6 +534,106 @@ func TestScheduleCardRendererEvictsOldestBeyondLimit(t *testing.T) {
 	}
 }
 
+func TestScheduleCardRendererKeepsRecentlyReadCard(t *testing.T) {
+	drawer := &recordingCardDrawer{}
+	member := scheduleCardMember()
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 2, drawer.draw)
+
+	for _, posterID := range []int64{1, 2, 1, 3, 1} {
+		if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(posterID)); err != nil {
+			t.Fatalf("RenderScheduleCard(%d) error = %v", posterID, err)
+		}
+	}
+
+	if len(drawer.cards) != 3 {
+		t.Fatalf("draws = %d, want 3 (poster 3 evicts poster 2, not the recently read poster 1)", len(drawer.cards))
+	}
+}
+
+func TestScheduleCardRendererRedrawsWhenMemberNameChanges(t *testing.T) {
+	drawer := &recordingCardDrawer{}
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+	member := scheduleCardMember()
+
+	if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
+		t.Fatalf("RenderScheduleCard() error = %v", err)
+	}
+
+	member.ShortKoreanName = "쿄코쨩"
+
+	if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
+		t.Fatalf("renamed RenderScheduleCard() error = %v", err)
+	}
+
+	if len(drawer.cards) != 2 || drawer.cards[1].MemberName != "쿄코쨩" {
+		t.Fatalf("draws = %d, want a redraw with the new member name", len(drawer.cards))
+	}
+}
+
+func TestScheduleCardRendererSharesCardsAcrossRenderers(t *testing.T) {
+	store := newTestCalendarImageCache(t)
+	drawer := &recordingCardDrawer{}
+	member := scheduleCardMember()
+
+	render := func(schedule scheduleposter.PublishedSchedule) []byte {
+		t.Helper()
+
+		renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+
+		renderer.shared = newScheduleCardSharedCache(store)
+
+		data, err := renderer.RenderScheduleCard(t.Context(), member, schedule)
+		if err != nil {
+			t.Fatalf("RenderScheduleCard() error = %v", err)
+		}
+
+		return data
+	}
+
+	first := render(scheduleCardSchedule(1))
+
+	if again := render(scheduleCardSchedule(1)); !bytes.Equal(again, first) || len(drawer.cards) != 1 {
+		t.Fatalf("second renderer draws = %d, same bytes = %v; want the shared card without a draw", len(drawer.cards), bytes.Equal(again, first))
+	}
+
+	changed := scheduleCardSchedule(1)
+
+	changed.ExtractedAt = changed.ExtractedAt.Add(time.Minute)
+
+	render(changed)
+
+	if len(drawer.cards) != 2 {
+		t.Fatalf("draws = %d, want a redraw after the rows changed", len(drawer.cards))
+	}
+}
+
+func TestScheduleCardRendererDoesNotShareCardWithoutPhoto(t *testing.T) {
+	member := scheduleCardMember()
+
+	member.Photo = kyokoPhotoURL
+
+	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, syscall.ECONNRESET
+	})))
+
+	store := newTestCalendarImageCache(t)
+	drawer := &recordingCardDrawer{}
+
+	for range 2 {
+		renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+
+		renderer.shared = newScheduleCardSharedCache(store)
+
+		if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
+			t.Fatalf("RenderScheduleCard() error = %v", err)
+		}
+	}
+
+	if len(drawer.cards) != 2 {
+		t.Fatalf("draws = %d, want each renderer to draw while the photo is missing", len(drawer.cards))
+	}
+}
+
 func TestScheduleCardRendererDoesNotCacheFailures(t *testing.T) {
 	drawer := &recordingCardDrawer{err: schedulecard.ErrInvalidCard}
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
@@ -551,7 +653,7 @@ func TestScheduleCardRendererUsesCalendarPhotoLoader(t *testing.T) {
 	pngData := tinyPNG(t)
 	member := scheduleCardMember()
 
-	member.Photo = "https://yt3.googleusercontent.com/kyoko=s88-c"
+	member.Photo = kyokoPhotoURL
 
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
@@ -572,7 +674,7 @@ func TestScheduleCardRendererUsesCalendarPhotoLoader(t *testing.T) {
 func TestScheduleCardRendererDrawsWithoutRejectedPhoto(t *testing.T) {
 	member := scheduleCardMember()
 
-	member.Photo = "https://yt3.googleusercontent.com/kyoko=s88-c"
+	member.Photo = kyokoPhotoURL
 
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return calendarPhotoTestResponse(req, "text/html", []byte("<html>")), nil
@@ -594,7 +696,7 @@ func TestScheduleCardRendererRedrawsAfterTransientPhotoFailure(t *testing.T) {
 	pngData := tinyPNG(t)
 	member := scheduleCardMember()
 
-	member.Photo = "https://yt3.googleusercontent.com/kyoko=s88-c"
+	member.Photo = kyokoPhotoURL
 
 	var calls atomic.Int32
 
@@ -623,7 +725,7 @@ func TestScheduleCardRendererRedrawsAfterTransientPhotoFailure(t *testing.T) {
 func TestScheduleCardRendererDoesNotCacheAfterPhotoBudget(t *testing.T) {
 	member := scheduleCardMember()
 
-	member.Photo = "https://yt3.googleusercontent.com/kyoko=s88-c"
+	member.Photo = kyokoPhotoURL
 
 	drawer := &recordingCardDrawer{}
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)

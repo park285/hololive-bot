@@ -3,28 +3,32 @@ package render
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
 const (
-	scheduleCardFormat     = schedulecard.Format3x4
-	scheduleCardCacheLimit = 16
+	scheduleCardFormat       = schedulecard.Format3x4
+	scheduleCardCacheLimit   = 16
+	scheduleCardCacheVersion = "v1"
+	scheduleCardCacheTTL     = 7 * 24 * time.Hour
 )
 
-// scheduleCardKey에는 멤버 이름·사진이 없어 그 변경은 캐시에서 밀려나거나, 행을 다시 뽑거나, 변경이 새로 기록될 때에야
-// 카드에 반영된다.
 type scheduleCardKey struct {
 	posterID      int64
 	extractedAtNS int64
@@ -32,14 +36,25 @@ type scheduleCardKey struct {
 	editedAtNS    int64
 	changes       int
 	format        schedulecard.Format
+	memberName    string
+	photo         string
 }
 
 func (k scheduleCardKey) String() string {
-	return fmt.Sprintf("%d:%d:%d:%d:%d:%s", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format)
+	return fmt.Sprintf("%d:%d:%d:%d:%d:%s:%q:%q", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format, k.memberName, k.photo)
 }
 
-func newScheduleCardKey(schedule *scheduleposter.PublishedSchedule, format schedulecard.Format) scheduleCardKey {
-	key := scheduleCardKey{posterID: schedule.PosterID, extractedAtNS: schedule.ExtractedAt.UnixNano(), changes: len(schedule.Changes), format: format}
+func (k scheduleCardKey) shared() (key, hash string) {
+	sum := sha256.Sum256([]byte(k.String()))
+
+	return fmt.Sprintf("bot:schedule:card:%s:%d:%s", scheduleCardCacheVersion, k.posterID, k.format), hex.EncodeToString(sum[:])
+}
+
+func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.PublishedSchedule, format schedulecard.Format) scheduleCardKey {
+	key := scheduleCardKey{
+		posterID: schedule.PosterID, extractedAtNS: schedule.ExtractedAt.UnixNano(), changes: len(schedule.Changes), format: format,
+		memberName: member.DisplayName(), photo: member.Photo,
+	}
 
 	for i := range schedule.Rows {
 		if edited := schedule.Rows[i].EditedAt; !edited.IsZero() {
@@ -58,16 +73,27 @@ func newScheduleCardKey(schedule *scheduleposter.PublishedSchedule, format sched
 	return key
 }
 
-// ScheduleCardRenderer는 !스케쥴 카드를 그리고 (포스터, 행 추출 시각, 게시되는 변경의 마지막 기록 시각과 개수, 마지막 윤문 시각, 판형)마다 한 번만 그린다.
+// ScheduleCardRenderer는 !스케쥴 카드를 그리고 (포스터, 행 추출 시각, 게시되는 변경의 마지막 기록 시각과 개수, 마지막 윤문 시각, 판형,
+// 멤버 표시 이름과 사진)마다 한 번만 그린다. 그린 카드는 프로세스 메모리와 공유 cache에 함께 둔다.
 type ScheduleCardRenderer struct {
 	format  schedulecard.Format
 	cache   *imageCache[scheduleCardKey]
+	shared  sharedPNGCache
 	flights singleflight.Group
 	draw    func(schedulecard.Card, schedulecard.Format) ([]byte, error)
 }
 
-func NewScheduleCardRenderer() *ScheduleCardRenderer {
-	return newScheduleCardRenderer(scheduleCardFormat, scheduleCardCacheLimit, schedulecard.Render)
+// NewScheduleCardRenderer의 store가 nil이면 카드를 프로세스 메모리에만 둔다.
+func NewScheduleCardRenderer(store sharedcache.Store) *ScheduleCardRenderer {
+	r := newScheduleCardRenderer(scheduleCardFormat, scheduleCardCacheLimit, schedulecard.Render)
+
+	r.shared = newScheduleCardSharedCache(store)
+
+	return r
+}
+
+func newScheduleCardSharedCache(store sharedcache.Store) sharedPNGCache {
+	return sharedPNGCache{store: store, ttl: scheduleCardCacheTTL, event: "schedule_card_cache_failed"}
 }
 
 func newScheduleCardRenderer(format schedulecard.Format, cacheLimit int, draw func(schedulecard.Card, schedulecard.Format) ([]byte, error)) *ScheduleCardRenderer {
@@ -79,7 +105,7 @@ func (r *ScheduleCardRenderer) RenderScheduleCard(ctx context.Context, member *d
 		return nil, errors.New("render schedule card: member is nil")
 	}
 
-	key := newScheduleCardKey(&schedule, r.format)
+	key := newScheduleCardKey(member, &schedule, r.format)
 	if data, ok := r.cache.get(key); ok {
 		return data, nil
 	}
@@ -130,6 +156,13 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 		return data, nil
 	}
 
+	sharedKey, hash := key.shared()
+	if data, ok := r.shared.get(ctx, sharedKey, hash); ok {
+		r.cache.put(key, data)
+
+		return data, nil
+	}
+
 	var photoURLs []string
 
 	if member.Photo != "" {
@@ -151,6 +184,7 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 	// 사진이 카드의 유일한 키비주얼이고 키가 한 주 내내 같으므로, 사진을 받지 못한 카드는 캐시하지 않고 다음 요청에서 다시 받는다.
 	if photos.cachePolicy.memoryCacheable && (member.Photo == "" || photo != nil) {
 		r.cache.put(key, data)
+		r.shared.put(ctx, sharedKey, hash, data)
 	}
 
 	return data, nil

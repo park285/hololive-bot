@@ -17,7 +17,7 @@ type CalendarCardRenderer struct {
 	cache       *imageCache[calendarCacheKey]
 	renderMu    sync.Mutex
 	inflight    map[calendarCacheKey]*calendarRenderCall
-	sharedCache sharedcache.Store
+	sharedCache sharedPNGCache
 	strings     *messagestrings.Store
 }
 
@@ -38,7 +38,7 @@ type CalendarCardRendererOption func(*CalendarCardRenderer)
 // WithCalendarImageCache는 렌더한 달력 PNG를 인스턴스와 재시작 사이에서 공유할 cache를 지정한다.
 func WithCalendarImageCache(store sharedcache.Store) CalendarCardRendererOption {
 	return func(r *CalendarCardRenderer) {
-		r.sharedCache = store
+		r.sharedCache = sharedPNGCache{store: store, ttl: calendarImageCacheTTL, event: "calendar_image_cache_failed"}
 	}
 }
 

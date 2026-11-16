@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"io"
+	"slices"
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -39,6 +40,8 @@ func (c *imageCache[K]) get(key K) ([]byte, bool) {
 		return nil, false
 	}
 
+	c.touch(key)
+
 	return bytes.Clone(data), true
 }
 
@@ -46,16 +49,23 @@ func (c *imageCache[K]) put(key K, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, ok := c.data[key]; !ok {
+	if _, ok := c.data[key]; ok {
+		c.touch(key)
+	} else {
 		c.order = append(c.order, key)
 	}
 
 	c.data[key] = bytes.Clone(data)
 	for len(c.order) > c.limit {
-		oldest := c.order[0]
+		delete(c.data, c.order[0])
 
-		c.order = c.order[1:]
-		delete(c.data, oldest)
+		c.order = slices.Delete(c.order, 0, 1)
+	}
+}
+
+func (c *imageCache[K]) touch(key K) {
+	if i := slices.Index(c.order, key); i >= 0 {
+		c.order = append(slices.Delete(c.order, i, i+1), key)
 	}
 }
 

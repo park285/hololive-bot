@@ -187,6 +187,7 @@ func mix(a, b color.RGBA, t float64) color.RGBA {
 
 type canvas struct {
 	img  *image.RGBA
+	z    *vector.Rasterizer
 	s    float64
 	f    *fontSet
 	w, h float64
@@ -195,6 +196,7 @@ type canvas struct {
 func newCanvas(w, h int, s float64, f *fontSet) *canvas {
 	return &canvas{
 		img: image.NewRGBA(image.Rect(0, 0, int(float64(w)*s), int(float64(h)*s))),
+		z:   &vector.Rasterizer{},
 		s:   s, f: f, w: float64(w), h: float64(h),
 	}
 }
@@ -214,9 +216,8 @@ func (c *canvas) devRect(s shape, pad float64) image.Rectangle {
 }
 
 func (c *canvas) raster(s shape, r image.Rectangle) *vector.Rasterizer {
-	z := vector.NewRasterizer(r.Dx(), r.Dy())
-
-	z.DrawOp = draw.Over
+	z := c.z
+	z.Reset(r.Dx(), r.Dy())
 
 	ox, oy := float64(r.Min.X), float64(r.Min.Y)
 
@@ -485,7 +486,7 @@ func (c *canvas) Clip(s shape, opacity float64, fn func(l *canvas)) {
 		return
 	}
 
-	l := &canvas{img: image.NewRGBA(r), s: c.s, f: c.f, w: c.w, h: c.h}
+	l := &canvas{img: image.NewRGBA(r), z: c.z, s: c.s, f: c.f, w: c.w, h: c.h}
 	fn(l)
 
 	if opacity < 1 {
