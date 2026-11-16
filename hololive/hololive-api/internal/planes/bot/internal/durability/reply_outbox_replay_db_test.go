@@ -107,7 +107,7 @@ func TestReplyOutboxConsecutiveOutcomeUnknownBacksOffThenRequiresManualReview(t 
 			status = ReplyOutboxManualReview
 		}
 
-		retryAfter := 10 * time.Millisecond * time.Duration(1<<(attempt-1))
+		retryAfter := time.Minute * time.Duration(1<<(attempt-1))
 		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
 			ID: claim.ID, ClaimToken: fmt.Sprintf("token-%d", attempt), Status: status,
 			LastError: "outcome remained unknown", RetryAfter: retryAfter,
@@ -130,7 +130,9 @@ func TestReplyOutboxConsecutiveOutcomeUnknownBacksOffThenRequiresManualReview(t 
 			immediate, claimErr := repo.Claim(ctx, "too-early", durabilityTestLease)
 			require.NoError(t, claimErr)
 			assert.Nil(t, immediate, "outcome_unknown retry must honor durable backoff")
-			time.Sleep(retryAfter + 5*time.Millisecond)
+
+			_, err = pool.Exec(ctx, "UPDATE bot_reply_outbox SET available_at = clock_timestamp() WHERE id = $1", claim.ID)
+			require.NoError(t, err)
 		}
 	}
 
