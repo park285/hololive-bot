@@ -11,8 +11,8 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/kapu/hololive-dbtest v0.0.0
-	github.com/park285/iris-client-go/v5 v5.1.0
-	github.com/park285/shared-go/v2 v2.21.0
+	github.com/park285/iris-client-go/v5 v5.2.0
+	github.com/park285/shared-go/v2 v2.22.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.65.0
 	github.com/stretchr/testify v1.12.1
