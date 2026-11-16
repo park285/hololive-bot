@@ -56,6 +56,7 @@ type Bot struct {
 	postgres              database.Client
 	acl                   *acl.Service
 	calendarImageRenderer handlercore.CalendarImageRenderer
+	scheduleCardRenderer  handlercore.ScheduleCardRenderer
 	selfSender            string
 	ingress               *ingress.MessageIngress
 	commandExecutor       *orchcmd.CommandRouter
@@ -69,8 +70,8 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		return nil, err
 	}
 
-	calendarCache := sharedcache.NewValkeyStore(deps.Cache)
-	calendarFinder := command.NewCachedCelebrationCalendarFinder(deps.MemberRepository, calendarCache, deps.CalendarEntryCacheTTL)
+	sharedCache := sharedcache.NewValkeyStore(deps.Cache)
+	calendarFinder := command.NewCachedCelebrationCalendarFinder(deps.MemberRepository, sharedCache, deps.CalendarEntryCacheTTL)
 
 	bot := &Bot{
 		irisBaseURL:     deps.IrisBaseURL,
@@ -85,7 +86,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		acl:             deps.ACL,
 		selfSender:      stringutil.Normalize(deps.BotSelfUser),
 	}
-	bot.initImageRenderers(calendarCache, deps.MessageStrings)
+	bot.initImageRenderers(sharedCache, deps.MessageStrings)
 
 	bot.rooms = kakaoroom.New(bot.postgres.GetPool(), kakaoroom.NewIrisLister(bot.irisClient), bot.logger)
 
@@ -105,8 +106,9 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	return bot, nil
 }
 
-func (b *Bot) initImageRenderers(calendarCache sharedcache.Store, strings *messagestrings.Store) {
-	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarImageCache(calendarCache), render.WithCalendarStrings(strings))
+func (b *Bot) initImageRenderers(sharedCache sharedcache.Store, strings *messagestrings.Store) {
+	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarImageCache(sharedCache), render.WithCalendarStrings(strings))
+	b.scheduleCardRenderer = render.NewScheduleCardRenderer(sharedCache)
 }
 
 func (b *Bot) initializeCommands(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder) error {

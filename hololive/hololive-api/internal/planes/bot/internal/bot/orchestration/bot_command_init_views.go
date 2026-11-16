@@ -53,6 +53,7 @@ type commandInitView struct {
 	logger                *slog.Logger
 	memberRepository      handlercore.CelebrationCalendarFinder
 	calendarImageRenderer handlercore.CalendarImageRenderer
+	scheduleCards         handlercore.ScheduleCardRenderer
 }
 
 func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.CelebrationCalendarFinder, schedulePosters handlercore.SchedulePosterReader) commandInitView {
@@ -71,6 +72,7 @@ func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.Cel
 		logger:                b.logger,
 		memberRepository:      calendarFinder,
 		calendarImageRenderer: b.calendarImageRenderer,
+		scheduleCards:         b.scheduleCardRenderer,
 	}
 }
 
@@ -87,7 +89,7 @@ func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 		Formatter:           v.formatter,
 		HelpImageProvider:   render.NewHelpCardProvider(),
 		SchedulePosters:     v.schedulePosters,
-		ScheduleCards:       render.NewScheduleCardRenderer(),
+		ScheduleCards:       v.scheduleCards,
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
 		SendImages:          v.sendImages,

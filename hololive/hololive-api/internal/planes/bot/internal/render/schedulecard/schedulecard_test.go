@@ -897,7 +897,7 @@ func checkMelaFit(t *testing.T, f *fontSet, c *canvas, days []day) {
 	t.Helper()
 
 	_, tb := melaBoxes(c)
-	rows, folded := fitFolded(days, func(d []day) (melaRows, bool) { return melaLines(d, tb) })
+	rows, folded := fitFolded(days, func(d []day) (melaRows, bool) { return melaLines(f, c.kMax(), d, tb) })
 
 	if rows.capH < melaMinCapH {
 		t.Fatalf("capsule height %.1f below %.1f", rows.capH, melaMinCapH)
@@ -907,21 +907,110 @@ func checkMelaFit(t *testing.T, f *fontSet, c *canvas, days []day) {
 		t.Errorf("shown + folded = %d, want %d", n, want)
 	}
 
-	b := box{tb.X + melaPlateW + 34, tb.Y, melaCapsuleW(tb), rows.capH}
+	for i, d := range folded {
+		for j, s := range d.slots {
+			h := rows.capH + rows.pitch*(rows.slotUnits[i][j]-1)
+			b := box{tb.X + melaPlateW + 34, tb.Y, melaCapsuleW(tb), h}
 
-	for _, d := range folded {
-		for _, s := range d.slots {
-			tw := b.right() - 66 - melaTitleX(f, b, s)
+			tw := b.right() - 66 - melaTitleX(f, b, rows.capH, s)
 			if tw <= 0 {
 				t.Fatalf("title %q width %.1f, want positive", s.main, tw)
 			}
 
-			title := melaTitle(f, s, tw, rows.capH-16, 1)
-			if title.height() > rows.capH-16 && (len(title.main) != 1 || title.mainT.Size > rows.capH-7) {
-				t.Errorf("title %q (%d lines, %.1fpx) does not fit capsule %.1f", s.main, len(title.main), title.mainT.Size, rows.capH)
+			title := melaTitle(f, s, tw, h-16, 1)
+			if title.height() > h-16 && (len(title.main) != 1 || title.mainT.Size > h-7) {
+				t.Errorf("title %q (%d lines, %.1fpx) does not fit capsule %.1f", s.main, len(title.main), title.mainT.Size, h)
 			}
 		}
 	}
+}
+
+func TestMelaGrowsCapsuleForLongTitle(t *testing.T) {
+	f := testFonts(t)
+	long := Item{
+		Day: date(t, "2026-11-10"), Start: "19:00", Status: StatusPlanned,
+		Title: "홀로 도도부현 쿠키 배틀 아치치 메라 VS 스즈나 츠즈리 오프 콜라보",
+		With:  []string{"이로하", "아즈키", "츠즈리"}, Place: "이로하 채널", Note: "정답을 맞히지 못하면 못 먹음",
+	}
+	card := weekCard(t,
+		Item{Day: date(t, "2026-11-09"), Status: StatusOff, Title: "휴방"},
+		long,
+		planned(t, "2026-11-11", "07:00", "노자 English"),
+		planned(t, "2026-11-11", at21, "음주 오프 콜라보"),
+		planned(t, "2026-11-12", "19:00", "노래 방송"),
+		planned(t, "2026-11-12", at22, "MIMESIS 4인 콜라보"),
+		Item{Day: date(t, "2026-11-13"), Status: StatusOff, Title: "휴방"},
+		planned(t, "2026-11-14", "13:00", "마인크래프트"),
+		planned(t, "2026-11-15", "18:00", "오프 콜라보"),
+	)
+
+	v, err := prepare(card, f.drawable())
+	if err != nil {
+		t.Fatalf("prepare() error = %v", err)
+	}
+
+	w, h, _ := Format3x4.size()
+	c := &canvas{w: float64(w), h: float64(h), f: f}
+	_, tb := melaBoxes(c)
+
+	rows, days := fitFolded(v.days, func(d []day) (melaRows, bool) { return melaLines(f, c.kMax(), d, tb) })
+	if len(days) != 7 || len(days[1].slots) != 1 {
+		t.Fatalf("days = %d, want the whole week without folding", len(days))
+	}
+
+	s := days[1].slots[0]
+	capH := rows.capH + rows.pitch*(rows.slotUnits[1][0]-1)
+	b := box{tb.X + melaPlateW + 34, tb.Y, melaCapsuleW(tb), capH}
+	title := melaTitle(f, s, b.right()-66-melaTitleX(f, b, rows.capH, s), capH-16, min(c.kMax(), max(1, rows.capH/84)))
+
+	if title.cut || len(title.sub) == 0 || title.mainT.Size < 37 || title.height() > capH-16 {
+		t.Fatalf("title = %d main + %d sub lines at %.1fpx in capsule %.1f, want the whole title and notes at base size", len(title.main), len(title.sub), title.mainT.Size, capH)
+	}
+
+	if rows.capH < melaMinCapH || rows.slotUnits[2][0] != 1 {
+		t.Fatalf("other capsules = %.1f px, units %v; want the other rows to keep one unit", rows.capH, rows.slotUnits[2])
+	}
+}
+
+func TestMelaLongTitleKeepsBusyWeekUnfolded(t *testing.T) {
+	f := testFonts(t)
+
+	for _, format := range []Format{Format16x9, Format4x3, Format3x4} {
+		w, h, _ := format.size()
+		c := &canvas{w: float64(w), h: float64(h), f: f}
+		_, tb := melaBoxes(c)
+
+		for perDay := 1; perDay <= maxSlotsPerDay; perDay++ {
+			lines := func(days []day) []day {
+				_, folded := fitFolded(days, func(d []day) (melaRows, bool) { return melaLines(f, c.kMax(), d, tb) })
+
+				return folded
+			}
+
+			want := shownSlots(lines(busyDays(perDay)))
+
+			for _, sub := range []string{"", "(이로하 · 아즈키 · 츠즈리와 함께 · 이로하 채널에서 · 정답을 맞히지 못하면 못 먹음)"} {
+				long := busyDays(perDay)
+
+				long[1].slots[0].main = "홀로 도도부현 쿠키 배틀 아치치 메라 VS 스즈나 츠즈리 오프 콜라보"
+				long[1].slots[0].sub = sub
+
+				if got := shownSlots(lines(long)); got != want {
+					t.Errorf("%s/%d per day/sub %q: %d capsules shown with a long title, want %d", format, perDay, sub, got, want)
+				}
+			}
+		}
+	}
+}
+
+func shownSlots(days []day) int {
+	n := 0
+
+	for _, d := range days {
+		n += len(d.slots)
+	}
+
+	return n
 }
 
 func TestThemeLayoutsFitBusyWeeks(t *testing.T) {
