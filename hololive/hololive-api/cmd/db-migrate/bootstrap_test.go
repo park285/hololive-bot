@@ -35,30 +35,81 @@ func TestQuoteSQLLiteral(t *testing.T) {
 	}
 }
 
-func TestBootstrapScraperRoleRequiresScraperPassword(t *testing.T) {
+func TestBootstrapRuntimeRolesRequireAllPasswords(t *testing.T) {
 	t.Setenv("POSTGRES_ADMIN_PASSWORD", "admin-secret")
-	t.Setenv("HOLOLIVE_SCRAPER_PASSWORD", "")
 	t.Setenv("PGHOST", t.TempDir())
 	t.Setenv("PGPORT", "1")
 	t.Setenv("PGSSLMODE", "disable")
 
-	err := bootstrapScraperRole(t.Context())
-	if err == nil {
-		t.Fatal("missing scraper password accepted")
+	for _, missing := range []string{"HOLOLIVE_DB_PASSWORD", "HOLOLIVE_SCRAPER_PASSWORD", "HOLOLIVE_ALARM_WORKER_PASSWORD"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Setenv("HOLOLIVE_DB_PASSWORD", "api-secret")
+			t.Setenv("HOLOLIVE_SCRAPER_PASSWORD", "scraper-secret")
+			t.Setenv("HOLOLIVE_ALARM_WORKER_PASSWORD", "worker-secret")
+			t.Setenv(missing, "")
+
+			err := bootstrapRuntimeRoles(t.Context())
+			if err == nil || !strings.Contains(err.Error(), missing) {
+				t.Fatalf("bootstrapRuntimeRoles() error = %v, want missing %s rejection", err, missing)
+			}
+
+			if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
+				t.Fatal("missing runtime password reached database connection")
+			}
+		})
+	}
+}
+
+func TestBootstrapRuntimeRolesRejectSharedPasswords(t *testing.T) {
+	t.Setenv("POSTGRES_ADMIN_PASSWORD", "admin-secret")
+	t.Setenv("HOLOLIVE_DB_PASSWORD", "api-secret")
+	t.Setenv("HOLOLIVE_SCRAPER_PASSWORD", "shared-secret")
+	t.Setenv("HOLOLIVE_ALARM_WORKER_PASSWORD", "shared-secret")
+	t.Setenv("PGHOST", t.TempDir())
+	t.Setenv("PGPORT", "1")
+	t.Setenv("PGSSLMODE", "disable")
+
+	err := bootstrapRuntimeRoles(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "distinct runtime role passwords") {
+		t.Fatalf("bootstrapRuntimeRoles() error = %v, want shared password rejection", err)
 	}
 
 	if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
-		t.Fatal("missing scraper password reached database connection")
+		t.Fatal("shared runtime password reached database connection")
+	}
+}
+
+func TestBootstrapRuntimeRolesValidateAllPasswordsBeforeDial(t *testing.T) {
+	t.Setenv("POSTGRES_ADMIN_PASSWORD", "admin-secret")
+	t.Setenv("HOLOLIVE_DB_PASSWORD", "api-secret")
+	t.Setenv("HOLOLIVE_SCRAPER_PASSWORD", "scraper-secret")
+	t.Setenv("HOLOLIVE_ALARM_WORKER_PASSWORD", "worker-Ｆ")
+	t.Setenv("PGHOST", t.TempDir())
+	t.Setenv("PGPORT", "1")
+	t.Setenv("PGSSLMODE", "disable")
+
+	err := bootstrapRuntimeRoles(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_ALARM_WORKER_PASSWORD") {
+		t.Fatalf("bootstrapRuntimeRoles() error = %v, want incompatible worker password rejection", err)
+	}
+	if strings.Contains(err.Error(), "worker-Ｆ") {
+		t.Fatal("incompatible runtime password rejection disclosed input")
+	}
+
+	if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
+		t.Fatal("incompatible runtime password reached database connection")
 	}
 }
 
 func TestBootstrapConnectionsRejectUnsafeConfigurationBeforeDial(t *testing.T) {
 	paths := map[string]func(context.Context, string) error{
 		"admin": func(ctx context.Context, dsn string) error {
-			return ensureScraperRole(ctx, dsn, "scraper", "scraper-password", "hololive")
+			return ensureRuntimeRole(ctx, dsn, runtimeRoleSpec{
+				user: "scraper", applicationName: "test-role-bootstrap", connectionLimit: 8,
+			}, "scraper-password", "hololive")
 		},
 		"database": func(ctx context.Context, dsn string) error {
-			return grantScraperSchemaUsage(ctx, dsn, "scraper")
+			return grantRuntimeSchemaUsage(ctx, dsn, "scraper")
 		},
 	}
 	for name, connect := range paths {
@@ -85,22 +136,22 @@ func TestBootstrapConnectionsRejectUnsafeConfigurationBeforeDial(t *testing.T) {
 	}
 }
 
-type scraperRoleRecorder struct {
+type runtimeRoleRecorder struct {
 	exists   bool
 	commands []string
 	fail     error
 }
 
-type scraperRoleRow bool
+type runtimeRoleRow bool
 
-func (r scraperRoleRow) Scan(dest ...any) error {
+func (r runtimeRoleRow) Scan(dest ...any) error {
 	if len(dest) != 1 {
-		return errors.New("scraper role row requires one destination")
+		return errors.New("runtime role row requires one destination")
 	}
 
 	exists, ok := dest[0].(*bool)
 	if !ok || exists == nil {
-		return errors.New("scraper role row requires a boolean destination")
+		return errors.New("runtime role row requires a boolean destination")
 	}
 
 	*exists = bool(r)
@@ -108,23 +159,24 @@ func (r scraperRoleRow) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *scraperRoleRecorder) QueryRow(context.Context, string, ...any) pgx.Row {
-	return scraperRoleRow(r.exists)
+func (r *runtimeRoleRecorder) QueryRow(context.Context, string, ...any) pgx.Row {
+	return runtimeRoleRow(r.exists)
 }
 
-func (r *scraperRoleRecorder) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+func (r *runtimeRoleRecorder) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
 	r.commands = append(r.commands, sql)
 	return pgconn.CommandTag{}, r.fail
 }
 
-func TestScraperRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
+func TestRuntimeRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
 	t.Parallel()
 
 	password := t.Name() + "'\\원문-" + t.TempDir()
+	role := runtimeRoleSpec{user: `worker"name`, connectionLimit: 8}
 
 	for _, exists := range []bool{false, true} {
-		recorder := &scraperRoleRecorder{exists: exists}
-		if err := upsertScraperRole(t.Context(), recorder, `scraper"name`, password); err != nil {
+		recorder := &runtimeRoleRecorder{exists: exists}
+		if err := upsertRuntimeRole(t.Context(), recorder, role, password); err != nil {
 			t.Fatal(err)
 		}
 
@@ -143,28 +195,33 @@ func TestScraperRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
 				t.Fatal("role SQL exposed plaintext password")
 			}
 
-			if !strings.Contains(command, `'SCRAM-SHA-256$4096:`) || !strings.Contains(command, `"scraper""name"`) {
+			if !strings.Contains(command, `'SCRAM-SHA-256$4096:`) || !strings.Contains(command, `"worker""name"`) {
 				t.Fatal("role SQL lost verifier or identifier quoting")
 			}
+		}
+
+		if !strings.Contains(recorder.commands[len(recorder.commands)-1], "CONNECTION LIMIT 8") {
+			t.Fatal("role SQL lost connection limit")
 		}
 	}
 
 	failure := errors.New("statement rejected")
-	recorder := &scraperRoleRecorder{fail: failure}
+	recorder := &runtimeRoleRecorder{fail: failure}
 
-	if err := upsertScraperRole(t.Context(), recorder, "scraper", password); err == nil || !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
+	if err := upsertRuntimeRole(t.Context(), recorder, role, password); err == nil || !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
 		t.Fatal("role failure lost cause or exposed password")
 	}
 }
 
-func TestScraperRoleRejectsIncompatiblePasswordsBeforeMutation(t *testing.T) {
+func TestRuntimeRoleRejectsIncompatiblePasswordsBeforeMutation(t *testing.T) {
 	t.Parallel()
+	role := runtimeRoleSpec{user: "worker", connectionLimit: 8}
 
 	for _, password := range []string{"", "sentinel-Ｆ", "sentinel-soft\u00adhyphen", "sentinel\x00suffix", "sentinel-\xff", "sentinel-\xff\a", "sentinel-\xff\ue000"} {
 		for _, exists := range []bool{false, true} {
-			recorder := &scraperRoleRecorder{exists: exists}
+			recorder := &runtimeRoleRecorder{exists: exists}
 
-			err := upsertScraperRole(t.Context(), recorder, "scraper", password)
+			err := upsertRuntimeRole(t.Context(), recorder, role, password)
 			if err == nil {
 				t.Fatal("expected password compatibility rejection")
 			}

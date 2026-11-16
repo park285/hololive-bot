@@ -165,8 +165,8 @@ func (c *RuntimeConfig) validate() error {
 		return errors.New("POSTGRES_POOL_MIN_CONNS must be nonnegative and not exceed POSTGRES_POOL_MAX_CONNS")
 	}
 
-	if strings.TrimSpace(c.Postgres.User) != runtimepolicy.PostgresRuntimeRoleUser {
-		return fmt.Errorf("alarm-worker requires POSTGRES_USER=%s", runtimepolicy.PostgresRuntimeRoleUser)
+	if strings.TrimSpace(c.Postgres.User) != runtimepolicy.PostgresAlarmWorkerRoleUser {
+		return fmt.Errorf("alarm-worker requires POSTGRES_USER=%s", runtimepolicy.PostgresAlarmWorkerRoleUser)
 	}
 
 	if err := settings.ValidateServerRuntime(c.Environment, &c.Server); err != nil {

@@ -19,8 +19,9 @@ const (
 	NotificationSchedulerRoleWorker = "worker"
 	NotificationSchedulerRoleOff    = "off"
 
-	PostgresScraperRoleUser = "hololive_scraper"
-	PostgresRuntimeRoleUser = "hololive_runtime"
+	PostgresAlarmWorkerRoleUser = "hololive_alarm_worker"
+	PostgresScraperRoleUser     = "hololive_scraper"
+	PostgresRuntimeRoleUser     = "hololive_runtime"
 )
 
 // ValidateNoNotificationEgressOwnership: alarm-worker가 아닌 runtime이 proactive egress를 소유하지 못하게 한다.

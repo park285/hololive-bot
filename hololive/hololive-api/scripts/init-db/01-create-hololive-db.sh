@@ -44,12 +44,13 @@ HOLOLIVE_MIGRATOR_USER="${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}"
 # 역할별 비밀번호는 모두 필수다. 비어 있을 때 admin DB_PASSWORD로 역할을 만들던 폴백은 역할 분리를 깨므로
 # 두지 않는다.
 HOLOLIVE_DB_PASSWORD="${HOLOLIVE_DB_PASSWORD:-}"
+HOLOLIVE_ALARM_WORKER_PASSWORD="${HOLOLIVE_ALARM_WORKER_PASSWORD:-}"
 HOLOLIVE_MIGRATOR_PASSWORD="${HOLOLIVE_MIGRATOR_PASSWORD:-}"
 HOLOLIVE_SCRAPER_PASSWORD="${HOLOLIVE_SCRAPER_PASSWORD:-}"
 
 HOLOLIVE_REPLICATOR_USER="${HOLOLIVE_REPLICATOR_USER:-hololive_replicator}"
 HOLOLIVE_REPLICATOR_PASSWORD="${HOLOLIVE_REPLICATOR_PASSWORD:-}"
-export POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
+export POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_ALARM_WORKER_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
 export HOLOLIVE_SCRAPER_PASSWORD HOLOLIVE_REPLICATOR_PASSWORD
 
 require_role_password() {
@@ -60,6 +61,7 @@ require_role_password() {
 }
 
 require_role_password HOLOLIVE_DB_PASSWORD "${HOLOLIVE_DB_PASSWORD}"
+require_role_password HOLOLIVE_ALARM_WORKER_PASSWORD "${HOLOLIVE_ALARM_WORKER_PASSWORD}"
 require_role_password HOLOLIVE_MIGRATOR_PASSWORD "${HOLOLIVE_MIGRATOR_PASSWORD}"
 require_role_password HOLOLIVE_SCRAPER_PASSWORD "${HOLOLIVE_SCRAPER_PASSWORD}"
 
@@ -67,6 +69,17 @@ if [ -z "${POSTGRES_ADMIN_PASSWORD}" ]; then
   echo "POSTGRES_ADMIN_PASSWORD is required." >&2
   exit 1
 fi
+
+role_password_names=(HOLOLIVE_DB_PASSWORD HOLOLIVE_ALARM_WORKER_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD HOLOLIVE_SCRAPER_PASSWORD)
+role_password_values=("${HOLOLIVE_DB_PASSWORD}" "${HOLOLIVE_ALARM_WORKER_PASSWORD}" "${HOLOLIVE_MIGRATOR_PASSWORD}" "${HOLOLIVE_SCRAPER_PASSWORD}")
+for ((i = 0; i < ${#role_password_values[@]}; i++)); do
+  for ((j = i + 1; j < ${#role_password_values[@]}; j++)); do
+    if [ "${role_password_values[i]}" = "${role_password_values[j]}" ]; then
+      echo "${role_password_names[i]} and ${role_password_names[j]} must be distinct" >&2
+      exit 1
+    fi
+  done
+done
 
 echo "Initializing hololive Postgres roles/databases with least privilege..."
 
@@ -76,10 +89,12 @@ psql -X -v ON_ERROR_STOP=1 -v ECHO=none -v ECHO_HIDDEN=off -v VERBOSITY=sqlstate
   --set=postgres_admin_user="${POSTGRES_ADMIN_USER}" \
   --set=hololive_db="${HOLOLIVE_DB_NAME}" \
   --set=hololive_user=hololive_runtime \
+  --set=hololive_alarm_worker=hololive_alarm_worker \
   --set=hololive_migrator="${HOLOLIVE_MIGRATOR_USER}" \
   --set=hololive_scraper=hololive_scraper <<'EOSQL'
 \getenv postgres_admin_password POSTGRES_ADMIN_PASSWORD
 \getenv hololive_user_password HOLOLIVE_DB_PASSWORD
+\getenv hololive_alarm_worker_password HOLOLIVE_ALARM_WORKER_PASSWORD
 \getenv hololive_migrator_password HOLOLIVE_MIGRATOR_PASSWORD
 \getenv hololive_scraper_password HOLOLIVE_SCRAPER_PASSWORD
 
@@ -99,6 +114,9 @@ SELECT format(
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_user', :'hololive_user_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_user') \gexec
 
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_alarm_worker', :'hololive_alarm_worker_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_alarm_worker') \gexec
+
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_migrator', :'hololive_migrator_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_migrator') \gexec
 
@@ -108,6 +126,11 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_scraper') \g
 SELECT format(
   'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
   :'hololive_user', :'hololive_user_password'
+) \gexec
+
+SELECT format(
+  'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
+  :'hololive_alarm_worker', :'hololive_alarm_worker_password'
 ) \gexec
 
 SELECT format(
@@ -123,6 +146,7 @@ SELECT format(
 -- Aggregate role limits, not per-process limits; runtime includes 3 control slots.
 -- Keep aligned with scripts/ci/postgres-capacity-policy.tsv and role-limits.sql.
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 25', :'hololive_user') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 8', :'hololive_alarm_worker') \gexec
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 1', :'hololive_migrator') \gexec
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 28', :'hololive_scraper') \gexec
 
@@ -134,16 +158,18 @@ SELECT format('ALTER DATABASE %I OWNER TO %I', :'hololive_db', :'hololive_migrat
 SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'hololive_db') \gexec
 
 SELECT format(
-  'GRANT CONNECT ON DATABASE %I TO %I, %I, %I',
-  :'hololive_db', :'hololive_user', :'hololive_migrator', :'hololive_scraper'
+  'GRANT CONNECT ON DATABASE %I TO %I, %I, %I, %I',
+  :'hololive_db', :'hololive_user', :'hololive_alarm_worker', :'hololive_migrator', :'hololive_scraper'
 ) \gexec
 
 \connect :hololive_db
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_user') \gexec
+SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_alarm_worker') \gexec
 SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_migrator') \gexec
 SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_scraper') \gexec
 SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'hololive_user') \gexec
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'hololive_alarm_worker') \gexec
 SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'hololive_migrator') \gexec
 SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'hololive_scraper') \gexec
 
@@ -166,6 +192,9 @@ WHERE n.nspname = 'public'
 SELECT format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I', :'hololive_user') \gexec
 SELECT format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I', :'hololive_user') \gexec
 SELECT format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM %I', :'hololive_user') \gexec
+SELECT format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I', :'hololive_alarm_worker') \gexec
+SELECT format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I', :'hololive_alarm_worker') \gexec
+SELECT format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM %I', :'hololive_alarm_worker') \gexec
 SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'hololive_user') \gexec
 SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'hololive_user') \gexec
 SELECT format('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO %I', :'hololive_user') \gexec
@@ -173,6 +202,9 @@ SELECT format('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO %I', :'hololiv
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC', :'hololive_migrator') \gexec
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC', :'hololive_migrator') \gexec
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC', :'hololive_migrator') \gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON TABLES FROM %I', :'hololive_migrator', :'hololive_alarm_worker') \gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON SEQUENCES FROM %I', :'hololive_migrator', :'hololive_alarm_worker') \gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM %I', :'hololive_migrator', :'hololive_alarm_worker') \gexec
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', :'hololive_migrator', :'hololive_user') \gexec
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', :'hololive_migrator', :'hololive_user') \gexec
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO %I', :'hololive_migrator', :'hololive_user') \gexec

@@ -74,6 +74,8 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   `/run/hololive-bot/quadlet-env/<container>.env`(디렉터리 0700, 파일 0600)에 써서 `EnvironmentFile=`로 넘깁니다.
   서비스별 env 파일(`bot.env`, `alarm-worker.env`, `youtube-collector.env`) 다음 순서라 compose의
   `environment` > `env_file` 우선순위를 유지합니다.
+- PostgreSQL 로그인 비밀번호는 API `HOLOLIVE_DB_PASSWORD`, alarm-worker `HOLOLIVE_ALARM_WORKER_PASSWORD`,
+  collector `HOLOLIVE_SCRAPER_PASSWORD`로 분리합니다. db-migrate는 admin socket에서 세 역할을 생성·회전한 뒤 ACL migration을 적용합니다.
 - compose에서 `:?`였던 필수 값(`VALKEY_SENTINEL_ADDRS`, `LIVE_LOGS_PATH`,
   `POSTGRES_PORT_BIND_IP`, `VALKEY_BIND_IP`, `HOLOLIVE_API_PORT_BIND_IP`, `HOLOLIVE_ADMIN_API_PORT_BIND_IP`,
   `HOLOLIVE_BOT_PORT_BIND_IP`)은 prestart가 확인합니다. tailnet publish 주소는 `tailscale0`에 붙을 때까지 90초 기다립니다.

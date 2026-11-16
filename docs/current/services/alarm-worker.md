@@ -7,6 +7,7 @@
 | Module | `hololive-alarm-worker` |
 | Binary | `alarm-worker` |
 | Quadlet unit | `hololive-alarm-worker.service` (container `hololive-alarm-worker`) |
+| PostgreSQL role | `hololive_alarm_worker` |
 | Port | `30007` |
 | Health endpoint | `https://127.0.0.1:30007/health` over H3 |
 | Ready endpoint | `https://127.0.0.1:30007/ready`; diagnostic `https://127.0.0.1:30007/internal/ready` with `X-API-Key` |
@@ -51,7 +52,7 @@ YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim �
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | alarm/member/channel state and delivery outboxes | alarm evaluation, alarm HTTP CRUD/query, or proactive delivery fails |
+| PostgreSQL (`hololive_alarm_worker`) | alarm/member/channel state and delivery outboxes | alarm evaluation, alarm HTTP CRUD/query, or proactive delivery fails |
 | PostgreSQL YouTube outbox | claim, render, per-room delivery, and final send state | YouTube notification dispatch pauses |
 | Valkey | dispatch wakeup, cache, member epoch Pub/Sub | dispatch wakeup and cache coordination degrade |
 | `settings.json` + `PUT /internal/alarm/settings` | alarm advance minutes restore at startup and runtime apply from `hololive-api` | a failed apply keeps the previous target minutes until re-apply or restart |

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -14,6 +15,7 @@ func setRuntimeEnv(t *testing.T) {
 	setWorkerRequiredEnv(t)
 	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 	t.Setenv("APP_ENV", "development")
+	t.Setenv("POSTGRES_USER", runtimepolicy.PostgresAlarmWorkerRoleUser)
 }
 
 func setWorkerRequiredEnv(t *testing.T) {
@@ -129,6 +131,20 @@ func TestLoadRuntimeRequiresControlCapacityAndPreservesIdleZero(t *testing.T) {
 
 	if config.Postgres.PoolMinConns != 0 || config.Postgres.PoolMaxConns != 2 {
 		t.Fatalf("pool bounds = %d/%d, want 0/2", config.Postgres.PoolMinConns, config.Postgres.PoolMaxConns)
+	}
+}
+
+func TestLoadRuntimeRequiresAlarmWorkerDatabaseRole(t *testing.T) {
+	for _, user := range []string{runtimepolicy.PostgresRuntimeRoleUser, runtimepolicy.PostgresScraperRoleUser, "postgres_admin", ""} {
+		t.Run(user, func(t *testing.T) {
+			setRuntimeEnv(t)
+			t.Setenv("POSTGRES_USER", user)
+
+			_, err := LoadRuntime()
+			if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER="+runtimepolicy.PostgresAlarmWorkerRoleUser) {
+				t.Fatalf("LoadRuntime() error = %v, want dedicated alarm-worker role rejection", err)
+			}
+		})
 	}
 }
 

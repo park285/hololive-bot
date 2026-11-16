@@ -34,9 +34,14 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `BOT_SEE_MORE_FOLD` | worker 렌더에는 쓰지 않음. 공통 설정 로딩이 bool로 검증하므로 잘못된 값이면 worker도 기동 실패; 기본 `true` | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
 | `CACHE_*` | Valkey connection | yes |
-| `POSTGRES_*` | DB connection | yes |
+| `POSTGRES_USER=hololive_alarm_worker` | API와 분리된 worker DB identity; 다른 role이면 기동 거부 | yes |
+| `POSTGRES_PASSWORD` | prestart가 `HOLOLIVE_ALARM_WORKER_PASSWORD`에서 만든 worker 전용 비밀번호 | yes |
 
 `ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`(양의 밀리초)는 키가 없으면 기본값을 씁니다. 키가 있는데 비어 있거나 공백뿐이면, 또는 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. `ALARM_DISPATCH_RETENTION_*` 키와 같은 규칙입니다. 다만 `ALARM_DISPATCH_RETENTION_LIMIT`은 10000을 넘어도 기동에 실패하지 않고 10000으로 줄여 씁니다. 배포 전에 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다. celebration 키는 runner가 켜졌을 때만 읽습니다.
+
+최초 role 분리 cutover에서는 stack-secrets master에 API·worker·collector별로 서로 다른 비밀번호를 두고 기존
+`HOLOLIVE_DB_PASSWORD`도 회전합니다. 같은 revision의 db-migrate가 세 runtime role을 먼저 생성·회전하고 ACL migration을 적용한 뒤
+API와 worker를 한 cutover에서 재시작해야 합니다. `alarm-worker.env`에는 API 또는 master DB 비밀번호를 복사하지 않습니다.
 
 ## Notification egress
 

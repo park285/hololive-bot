@@ -62,8 +62,8 @@ func run() error {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
-	if bootstrapErr := bootstrapScraperRole(ctx); bootstrapErr != nil {
-		return fmt.Errorf("bootstrap scraper role: %w", bootstrapErr)
+	if bootstrapErr := bootstrapRuntimeRoles(ctx); bootstrapErr != nil {
+		return fmt.Errorf("bootstrap runtime roles: %w", bootstrapErr)
 	}
 
 	connString, err := postgresConnString()

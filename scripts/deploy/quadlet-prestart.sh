@@ -167,6 +167,7 @@ case "$target" in
             'POSTGRES_PASSWORD=DB_PASSWORD!' \
             'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
             'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
+            'HOLOLIVE_ALARM_WORKER_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
             'HOLOLIVE_MIGRATOR_PASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
             'HOLOLIVE_SCRAPER_PASSWORD=HOLOLIVE_SCRAPER_PASSWORD!' \
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
@@ -181,6 +182,8 @@ case "$target" in
         write_secret_env hololive-db-migrate \
             'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
             'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
+            'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
+            'HOLOLIVE_ALARM_WORKER_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
             'HOLOLIVE_SCRAPER_PASSWORD=HOLOLIVE_SCRAPER_PASSWORD!'
         ;;
     hololive-alarm-worker)
@@ -189,7 +192,7 @@ case "$target" in
         validate_container_env_file "${secrets_dir}/alarm-worker.env"
         wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
         write_secret_env hololive-alarm-worker \
-            'POSTGRES_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
+            'POSTGRES_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-api)
