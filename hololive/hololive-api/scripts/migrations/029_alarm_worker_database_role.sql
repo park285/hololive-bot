@@ -1,5 +1,6 @@
 -- alarm-worker 전용 로그인(hololive_alarm_worker)은 worker 코드가 쓰는 표와 sequence만 가진다. 이 역할에는 미래 객체 기본 권한이 없으므로
 -- worker가 새 표를 써야 하면 그 migration이 직접 GRANT한다. 역할이 없는 환경(새 dbtest template 등)에서는 건너뛴다.
+-- 일괄 REVOKE는 쓰지 않는다. public의 확장 함수는 superuser 소유라 migrator가 REVOKE하면 42501로 실패한다.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 
@@ -9,11 +10,6 @@ BEGIN
         RAISE NOTICE 'hololive_alarm_worker role is absent; skipping alarm worker grants';
         RETURN;
     END IF;
-
-    REVOKE ALL ON SCHEMA public FROM hololive_alarm_worker;
-    REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM hololive_alarm_worker;
-    REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM hololive_alarm_worker;
-    REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM hololive_alarm_worker;
 
     GRANT USAGE ON SCHEMA public TO hololive_alarm_worker;
 
