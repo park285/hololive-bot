@@ -151,6 +151,90 @@ test("body ECONNRESET remains transient after headers without a second request",
   assert.equal(calls, 1);
 });
 
+test("declared oversized response is canceled before parsing and is never retried", async (t) => {
+  let calls = 0;
+  const events = [];
+  const upstream = new Response("oversized", { headers: { "content-length": "5" } });
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return upstream;
+  });
+  const transport = createFetchTransport({
+    currentSignal: () => undefined,
+    maxResponseBodyBytes: 4,
+    retryDelayMs: 0,
+    observeRetry: (event) => events.push(event),
+  });
+
+  await assert.rejects(
+    transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" }),
+    (error) => {
+      const result = rpcErrorResultFor(error);
+      assert.equal(result.status, 422);
+      assert.equal(result.body.error.code, "response_too_large");
+      assert.equal(result.body.error.class, "RESOURCE_LIMIT");
+      return true;
+    },
+  );
+  assert.equal(upstream.bodyUsed, true);
+  assert.equal(calls, 1);
+  assert.deepEqual(events, []);
+});
+
+test("decoded response overflow cancels its stream without another request", async (t) => {
+  let calls = 0;
+  let canceled = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array([3, 4, 5]));
+      },
+      cancel() { canceled += 1; },
+    }), {
+      headers: { "content-encoding": "gzip", "content-length": "2" },
+    });
+  });
+  const transport = createFetchTransport({
+    currentSignal: () => undefined,
+    maxResponseBodyBytes: 4,
+    retryDelayMs: 0,
+    observeRetry: () => assert.fail("body overflow must not schedule a retry"),
+  });
+
+  const response = await transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" });
+  await assert.rejects(response.arrayBuffer(), (error) => {
+    const result = rpcErrorResultFor(error);
+    assert.equal(result.status, 422);
+    assert.equal(result.body.error.code, "response_too_large");
+    assert.equal(result.body.error.class, "RESOURCE_LIMIT");
+    return true;
+  });
+  assert.equal(canceled, 1);
+  assert.equal(calls, 1);
+});
+
+test("response below the decoded body limit preserves response behavior", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response("abc", {
+    headers: { "content-length": "3", "x-upstream": "preserved" },
+    status: 201,
+    statusText: "Created",
+  }));
+  const transport = createFetchTransport({
+    currentSignal: () => undefined,
+    maxResponseBodyBytes: 4,
+  });
+
+  const response = await transport.singleAttemptFetch("https://www.youtube.com/youtubei/v1/player", { method: "POST" });
+  const cloned = response.clone();
+  assert.equal(response.status, 201);
+  assert.equal(response.statusText, "Created");
+  assert.equal(response.headers.get("x-upstream"), "preserved");
+  assert.equal(await response.text(), "abc");
+  assert.equal(await cloned.text(), "abc");
+});
+
 test("real undici body termination uses the same first-page and continuation classification", async (t) => {
   const nativeFetch = globalThis.fetch;
   let calls = 0;

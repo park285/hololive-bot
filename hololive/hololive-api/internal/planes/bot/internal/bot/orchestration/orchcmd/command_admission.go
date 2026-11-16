@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	expensiveHistoryUserLimit = 3
-	expensiveHistoryRoomLimit = 12
+	expensiveHistoryUserLimit = 10
+	expensiveHistoryRoomLimit = 40
 	expensiveHistoryWindow    = time.Minute
 	unstableCommandUserID     = "unknown"
 )
