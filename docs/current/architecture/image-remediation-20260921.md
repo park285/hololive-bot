@@ -14,7 +14,7 @@ scanner는 로컬 태그를 불변 image ID로 고정하고, Trivy가 보고한 
 
 - `deploy/images/nginx`는 공식 `1.31.8-alpine-slim`의 multi-arch index `f45171d36c76a8b2f5ef97108a3a8a2294248a6578a0a180edc2d78f7d2edc26`를 기반으로 Alpine 보안 패키지(`ca-certificates-bundle`·`musl`·`zlib`) 고정값만 더하고 공식 entrypoint·설정·UID를 보존한다.
 - `deploy/images/valkey`는 공식 `9.1.3-alpine3.24` index `bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b`를 기반으로 같은 보안 패키지 고정값과 `valkey-runtime.sh`를 더하고 공식 서버·UID를 유지한다.
-- `deploy/images/postgres`는 공식 PostgreSQL 18.6 index `77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873`를 기반으로 한다. gosu 1.19 source `40506998e34a7a679e6dae41374c1b7aa37eb73f`를 Go 1.27.2·x/sys v0.49.0·moby/sys/user v0.4.1로 재빌드해 `/usr/local/bin/gosu`만 교체한다. 기존 PostgreSQL entrypoint·PGDATA·사용자·initdb contract는 유지한다.
+- `deploy/images/postgres`는 공식 PostgreSQL 18.7 index `b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015`를 기반으로 한다. gosu 1.19 source `40506998e34a7a679e6dae41374c1b7aa37eb73f`를 Go 1.27.2·x/sys v0.49.0·moby/sys/user v0.4.1로 재빌드해 `/usr/local/bin/gosu`만 교체한다. 기존 PostgreSQL entrypoint·PGDATA·사용자·initdb contract는 유지한다.
 - 이 문서 작성 당시 쓰던 socket-proxy 공식 image와 `deploy/images/deunhealth` 재빌드 image는 2026-11-04 중앙 런타임의 Podman Quadlet 전환(#735)에서 제거했다.
 
 `dependencies.mod`·`dependencies.sum`은 재빌드의 module graph 정본이다. upstream module zip은 Go proxy에서 받고 Dockerfile의 SHA-256으로 검증한다. Docker build에서는 `GOTOOLCHAIN=local`, compiler identity 검사, `-mod=readonly`로 추가 버전 선택을 막는다. 업스트림 라이선스는 최종 이미지에 포함한다.

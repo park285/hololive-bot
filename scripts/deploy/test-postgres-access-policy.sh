@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 일회용 PG18.6 제품 검사. 포트 공개·운영 환경·운영 데이터를 사용하지 않는다.
+# 일회용 PG18.7 제품 검사. 포트 공개·운영 환경·운영 데이터를 사용하지 않는다.
 set -euo pipefail
 # kapu 사용자 계정의 rootless Podman에서만 실행한다. SELinux host에서 저장소 파일을 relabel하지 않도록
 # 일회용 검사 container는 label을 끈다. 원격 연결 설정이 있으면 거부한다.
@@ -55,7 +55,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -Atc \
-  "SELECT current_setting('server_version_num') = '180006'" | tr -d '\r' | grep -qx t
+  "SELECT current_setting('server_version_num') = '180007'" | tr -d '\r' | grep -qx t
 podman exec -i "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 CREATE ROLE hololive_migrator LOGIN PASSWORD 'fixture';
 CREATE ROLE hololive_runtime LOGIN PASSWORD 'fixture';
@@ -107,4 +107,4 @@ for role in postgres_admin hololive_migrator hololive_replicator; do
     echo "unapproved replication TCP unexpectedly accepted: $role" >&2; exit 1
   fi
 done
-printf 'PASS: PG18.6 isolated migration socket, runtime/exporter TLS, nightly socket and privileged TCP rejection\n'
+printf 'PASS: PG18.7 isolated migration socket, runtime/exporter TLS, nightly socket and privileged TCP rejection\n'

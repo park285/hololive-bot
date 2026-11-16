@@ -6,7 +6,7 @@ repo_root=$(cd "$script_dir/../.." && pwd)
 work=$(mktemp -d)
 name="iris-terminal-head-test-$$"
 # kapu rootless Podman에 이미 있는 고정 image만 쓴다(local CI 통합 DB와 같은 참조).
-image=docker.io/library/postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+image=docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
 cid=
 # --pull=never에서는 --platform이 효과가 없어, 같은 digest의 다른 플랫폼 이미지가 로컬에 있으면 podman은
 # 경고만 내고 에뮬레이션으로 실행한다. 내려받지 않는 계약을 지키려고 실행 전에 플랫폼을 비교해 멈춘다.

@@ -415,7 +415,7 @@ Go bootstrap sends client-generated SCRAM verifiers. Synthetic failure/log check
 
 Local acceptance (not run by this preparation): `bash scripts/ci/check-postgres-capacity.sh` and
 `bash scripts/deploy/test-postgres-access-policy.sh`. The latter requires the already-built
-repository PG18.6 image (`POSTGRES_POLICY_TEST_IMAGE` may select its tag), rootless Podman and OpenSSL;
+repository PG18.7 image (`POSTGRES_POLICY_TEST_IMAGE` may select its tag), rootless Podman and OpenSSL;
 it uses a disposable internal network, tmpfs database/socket and synthetic certificates only,
 publishes no ports, and proves HBA rejection, runtime/exporter TLS, migration/nightly socket
 access and aggregate role limits. It never reads runtime env files or pulls/builds images.
