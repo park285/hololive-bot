@@ -8,10 +8,10 @@
 
 | Host | Service | Runtime | Port | Ready | Env | DB role |
 |---|---|---|---:|---|---|---|
-| Osaka `a` | `youtube-collector-a` | host-native `hololive-youtube-collector@youtube-collector-a.service` | 30005 | `https://127.0.0.1:30005/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_scraper` |
-| Seoul `b` | `youtube-collector-b` | iris-seoul Podman Quadlet `hololive-youtube-collector-b.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_scraper` |
-| Central `c` | `youtube-collector` | Podman Quadlet `hololive-youtube-collector-c.service` | 30025 | `https://127.0.0.1:30025/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_scraper` |
-| kapu `d` | `youtube-collector-d` | kapu Podman Quadlet `hololive-youtube-collector-d.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/collector-d/youtube-collector.env` | `hololive_scraper` |
+| Osaka `a` | `youtube-collector-a` | host-native `hololive-youtube-collector@youtube-collector-a.service` | 30005 | `https://127.0.0.1:30005/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_collector_a` |
+| Seoul `b` | `youtube-collector-b` | iris-seoul Podman Quadlet `hololive-youtube-collector-b.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_collector_b` |
+| Central `c` | `youtube-collector` | Podman Quadlet `hololive-youtube-collector-c.service` | 30025 | `https://127.0.0.1:30025/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_collector_c` |
+| kapu `d` | `youtube-collector-d` | kapu Podman Quadlet `hololive-youtube-collector-d.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/collector-d/youtube-collector.env` | `hololive_collector_d` |
 
 Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs and `po-central-cutover.sh <c|b> check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for Quadlet `c`·`b`. kapu `d` is a manually installed Quadlet ([deploy/podman/kapu](../../../deploy/podman/kapu/README.md)); check `hololive-youtube-collector-d.service` health and `/ready`.
 
@@ -95,6 +95,21 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 
 이 경계에서는 이전 image만 복원하는 일반 rollback을 사용하지 않습니다. 새 발행을 멈춘 뒤 generation 2 backlog/replay가 남아 있으면 해당 API decoder를 유지해야 합니다. 구 lock 함수·계약 세대 복원은 별도 검증·승인된 DB 절차가 필요하며 관측 데이터를 버리는 방법으로 맞추지 않습니다. 중간 호환 artifact를 실제로 준비·검증하지 않은 상태에서 무중단 단계적 전환을 보장하지 않습니다.
 
+## Collector DB 계정 분리 컷오버
+
+수집기는 slot마다 `hololive_collector_a`~`d`로 접속하고, `hololive_scraper`는 migration grant를 담는 NOLOGIN 그룹으로만 남습니다. migration 028의 trigger는 수집기 세션(`session_user`)을 `youtube-collector-<slot>`에 묶어 다음을 SQLSTATE `42501`로 거부합니다: 만료 전인 다른 slot lease의 변경·인수, 다른 instance 이름의 lease·provenance·collision 기록, 자기 ACTIVE lease의 fence·projection generation과 맞지 않는 관측·queue 기록. `hololive_scraper` 로그인과 그 그룹에 속하지만 slot에 매핑되지 않은 로그인도 같은 표에 쓰지 못합니다. runtime·migrator·superuser 세션은 검사하지 않습니다.
+
+이 경계가 막지 않는 것도 있습니다. 한 slot의 계정을 가진 쪽은 자기 이름으로 새 lease 행(다른 `job_key`, 같은 subject 포함)을 만들고 그 lease로 target 관측을 쓸 수 있습니다. 관측의 subject·kind가 lease membership에 드는지는 앱만 확인합니다. owner가 없는 다른 lease(IDLE·DEFERRED)의 일정 열 변경, checkpoint와 payload 기록도 slot에 묶이지 않습니다.
+
+0. 운영 DB에서 `SELECT member::regrole FROM pg_auth_members WHERE roleid = 'hololive_scraper'::regrole`로 그룹 멤버를 확인합니다. 수집기 네 계정 말고 superuser가 아닌 멤버가 있으면, 그 계정은 028 이후 lease·관측 표에 쓰지 못하므로 먼저 정리합니다.
+1. stack-platform-ops로 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`HOLOLIVE_COLLECTOR_D_PASSWORD`를 준비합니다. 중앙 `quadlet-prestart`는 `holo-postgres`·`hololive-db-migrate`에 넷 모두를, collector c에 `C`를 필수로 요구합니다. 값 없이 새 unit을 설치하면 `holo-postgres` 재시작도 실패합니다. AP는 a(Osaka host-native), b(iris-seoul), d(kapu)에 자기 slot 값만 둡니다.
+2. 같은 release로 `sync-opt-current.sh`를 실행합니다. `pg_hba.conf`는 `holo-postgres`에 단일 파일 bind mount이므로 실행 중인 DB가 새 규칙을 읽었는지 `SELECT count(*) FROM pg_hba_file_rules WHERE 'hololive_collector_c' = ANY(user_name)`로 확인합니다. 0보다 크면 `SELECT pg_reload_conf()`로 적용하고, 0이면 `holo-postgres.service` 재시작(DB 중단을 포함한 별도 승인)이 필요합니다. 새 규칙에는 `hololive_scraper` 허용이 없으므로 이때부터 공용 계정의 새 연결은 거부됩니다.
+3. migrator image를 포함한 중앙 재배포로 `hololive-db-migrate`를 실행합니다. db-migrate는 migration 전에 네 계정의 LOGIN·SCRAM 비밀번호·연결 한도 7·그룹 멤버십을 맞추고, `hololive_scraper`를 `NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL`로 바꾼 뒤 남은 `hololive_scraper` 세션을 모두 끊습니다. 비밀번호가 하나라도 없으면 역할을 바꾸기 전에 실패합니다. 그다음 migration 028을 적용합니다.
+4. 이 시점부터 새 계정으로 다시 배포하기 전까지 모든 collector의 수집이 멈춥니다. c는 `po-central-cutover.sh c`, b는 같은 release의 c 다음, a는 host-native 배포, d는 kapu Quadlet 절차로 반영합니다.
+5. `SELECT usename, count(*) FROM pg_stat_activity WHERE usename IN ('hololive_scraper','hololive_collector_a','hololive_collector_b','hololive_collector_c','hololive_collector_d') GROUP BY 1`에서 `hololive_scraper`가 없고 반영한 slot마다 연결이 있는지, 각 `/ready`와 lease `owner_instance` 분포를 확인합니다.
+
+bootstrap은 migration보다 먼저 실행됩니다. 028 적용이 실패하면 공용 계정은 이미 막혔고 trigger는 없는 상태로 남으므로, 원인을 고쳐 db-migrate를 다시 실행합니다. 되돌리기는 fix-forward만 가능합니다. 이전 revision의 collector는 `hololive_scraper`로 접속하며, 028이 있는 DB에서는 그 세션이 lease와 관측을 쓰지 못합니다. 028은 되돌리지 않습니다.
+
 ## Key environment variables
 
 | Env | Purpose | Required |
@@ -104,7 +119,7 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 | `STACK_WORKER_PROFILE_FILE` | slot-specific strict `hololive/youtube-collector` profile; `collection.executor.enabled` owns worker enablement | yes |
 | `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true` | must be true only on collector hosts | yes |
 | `YOUTUBE_COLLECTOR_INSTANCE_ID` | fleet identity `youtube-collector-a/b/c/d` | yes |
-| `POSTGRES_USER=hololive_scraper` | lease/observation insert only | yes |
+| `POSTGRES_USER=hololive_collector_<slot>` | slot-bound lease/observation identity | yes |
 | `POSTGRES_SSLMODE=verify-full` | required client verification | yes |
 | `HOLODEX_TIMEOUT_SECONDS` | Holodex request ceiling; must be positive | yes |
 | `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS` | Official Schedule request ceiling; must be positive | yes |
@@ -296,7 +311,7 @@ Diagnosis:
 - 후보 탐색 실패 WARN은 같은 대상(projection 조회 또는 runner)의 연속 실패 동안 첫 건과 1분 간격 요약(`since`, `suppressed_cycles`)만 남습니다. cycle별 실패 빈도는 `youtube_collection_discovery_cycles_total`과 `/diagnostics/workers`로 보고, 복구는 `YouTube collection candidate discovery recovered` INFO(`failed_for`, `failed_cycles`)로 확인합니다.
 - DB 연결 거부·경로 없음과 PostgreSQL SQLSTATE class `08`·`57P01`~`57P03`은 `error_class=TRANSIENT`, 연결 dial 타임아웃은 `TIMEOUT`입니다. 인증 실패(`28P01`) 같은 다른 연결 오류는 `INTERNAL`로 남으므로 계정·grant 설정을 먼저 봅니다.
 - SSOT manifest의 migration `144`–`174` 적용 여부와 collection projection/target/lease 상태를 확인합니다.
-- `POSTGRES_USER=hololive_scraper` grant를 확인합니다.
+- instance와 같은 suffix의 `POSTGRES_USER=hololive_collector_<slot>` grant를 확인합니다.
 
 Mitigation:
 - fail-closed가 맞습니다. projection이나 lease 검증을 우회하지 않습니다.
@@ -305,10 +320,10 @@ Mitigation:
 
 Symptoms:
 - Publish errors
-- collector uses `hololive_runtime` instead of `hololive_scraper`
+- collector uses `hololive_runtime`, `hololive_scraper`, or another slot's collector role
 
 Diagnosis:
-- rendered `POSTGRES_USER` and `HOLOLIVE_SCRAPER_PASSWORD`를 확인합니다.
+- rendered `POSTGRES_USER` and the matching `HOLOLIVE_COLLECTOR_<slot>_PASSWORD`를 확인합니다.
 
 ### 4. Kernel Oops in `unix_fs_perm` on docker-default arm64 hosts
 

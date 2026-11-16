@@ -3,16 +3,21 @@
 @superuser-reserved|3
 # 런타임 한도에는 별도 앱 풀이 아닌 일반 제어 슬롯 셋이 포함된다.
 @role-limit|hololive_runtime|25
-@role-limit|hololive_alarm_worker|8
-@role-limit|hololive_scraper|28
+@role-limit|hololive_collector_a|7
+@role-limit|hololive_collector_b|7
+@role-limit|hololive_collector_c|7
+@role-limit|hololive_collector_d|7
 @role-limit|hololive_migrator|1
 @role-limit|postgres_exporter|2
 @role-limit|iris_db_nightly|2
 bot|hololive-api|BOT_POSTGRES_POOL_MAX_CONNS|BOT_POSTGRES_POOL_MAX_CONNS|1|4|hololive_runtime
 admin-api|hololive-api|ADMIN_API_POSTGRES_POOL_MAX_CONNS|ADMIN_API_POSTGRES_POOL_MAX_CONNS|1|4|hololive_runtime
 youtube-plane|hololive-api|YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS|YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS|1|2|hololive_runtime
-alarm-worker|hololive-alarm-worker|POSTGRES_POOL_MAX_CONNS|ALARM_WORKER_POSTGRES_POOL_MAX_CONNS|1|8|hololive_alarm_worker
-youtube-collector|hololive-youtube-collector-c|POSTGRES_POOL_MAX_CONNS|YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS|4|7|hololive_scraper
+alarm-worker|hololive-alarm-worker|POSTGRES_POOL_MAX_CONNS|ALARM_WORKER_POSTGRES_POOL_MAX_CONNS|1|8|hololive_runtime
+youtube-collector-a||||1|7|hololive_collector_a
+youtube-collector-b||||1|7|hololive_collector_b
+youtube-collector-c|hololive-youtube-collector-c|POSTGRES_POOL_MAX_CONNS|YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS|1|7|hololive_collector_c
+youtube-collector-d||||1|7|hololive_collector_d
 db-migrate|hololive-db-migrate|||1|1|hololive_migrator
 postgres-exporter||||1|2|postgres_exporter
 db-nightly||||1|2|iris_db_nightly

@@ -18,6 +18,7 @@ export interface FetchTransport {
 
 export function createFetchTransport(options: {
   currentSignal: () => AbortSignal | undefined;
+  maxResponseBodyBytes?: number;
   retryDelayMs?: number;
   observeRetry?: (event: {
     endpoint: "browse" | "next" | "player";

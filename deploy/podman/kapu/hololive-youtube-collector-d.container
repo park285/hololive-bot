@@ -37,7 +37,7 @@ Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement
 Environment=GIN_MODE=release
 Environment=LOG_LEVEL=info
 Environment=POSTGRES_DB=hololive
-Environment=POSTGRES_USER=hololive_scraper
+Environment=POSTGRES_USER=hololive_collector_d
 Environment=POSTGRES_PORT=5433
 Environment=HOLOLIVE_HTTP_TRANSPORTS=h3
 Environment=YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS=30

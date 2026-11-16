@@ -1,0 +1,1 @@
+GRANT %s TO %s

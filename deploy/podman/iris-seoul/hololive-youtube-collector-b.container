@@ -66,7 +66,7 @@ Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement
 Environment=POSTGRES_SOCKET_PATH=
 Environment=POSTGRES_SSLMODE=verify-full
 Environment=POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
-Environment=POSTGRES_USER=hololive_scraper
+Environment=POSTGRES_USER=hololive_collector_b
 Environment=SERVER_PORT=30015
 Environment=YOUTUBEJS_NODE=/usr/local/bin/node
 Environment=YOUTUBEJS_SCRIPT=/app/youtubejs/src/server.mjs

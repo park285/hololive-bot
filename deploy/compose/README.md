@@ -329,7 +329,7 @@ The local uniform collector maximum 7 (minimum 2 unchanged) gives runtime 22 + s
 + migrator 1 + exporter 1 + nightly 2 = 54, leaving **three ordinary control slots**.
 Both capacity readers account for external consumers and aggregate all pools by role;
 native max is emitted from the same policy. Role limits are runtime 25 (including bounded
-maintenance control work), scraper 28, migrator 1, exporter 1 and nightly 2.
+maintenance control work), each slot-bound collector 7, migrator 1, exporter 2 and nightly 2.
 One migration job at a time is supported. Multiple runtime maintenance commands must share
 the three-slot control allowance, not claim independent three-slot budgets.
 
@@ -357,10 +357,10 @@ admin/migrator SQL and replication TCP. Network clients retain verify-full; do n
 network TLS to repair a socket rollout. The central collector migration-ledger proof also
 uses this socket after proving the collector targets the local primary. Slot/process
 `PGAPPNAME` values are set by deployment; providers append pool identity for multi-pool API.
-Scraper identity is fixed to `hololive_scraper`, matching migration grants, the runtime
-role constant and HBA. The configurable scraper-name input is removed by the approved
-local contract cutover. A differently named existing login requires separately approved
-credential/ownership migration; there is no membership alias or automatic role rename.
+Collector identities are fixed to `hololive_collector_a` through `hololive_collector_d`,
+matching each runtime instance and HBA source. They inherit migration grants from the
+non-login `hololive_scraper` group. A differently named existing login requires separately
+approved credential migration; there is no membership alias or automatic role rename.
 There is no active replication TCP allow rule, including the retired `.5` standby route.
 Standby reactivation requires a separately approved standby definition and explicit TLS
 transport/address rule; the standby unit removed from the repository (still present at commit

@@ -68,7 +68,7 @@ Environment=STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profiles/youtube-
 Environment=YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true
 Environment=YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-c
 Environment=YOUTUBE_COLLECTOR_LOG_FILE_NAME=youtube-collector-c.log
-Environment=POSTGRES_USER=hololive_scraper
+Environment=POSTGRES_USER=hololive_collector_c
 Environment=SERVER_PORT=30025
 Environment=HOLOLIVE_HTTP_TRANSPORTS=${HOLOLIVE_YOUTUBE_COLLECTOR_HTTP_TRANSPORTS}
 Environment=HOLOLIVE_H3_ADDR=${HOLOLIVE_YOUTUBE_COLLECTOR_H3_ADDR}
