@@ -61,7 +61,7 @@ fi
 stop_server
 start_observability
 [ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SELECT current_user')" = postgres ]
-[ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SHOW server_version_num')" = 180006 ]
+[ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SHOW server_version_num')" = 180007 ]
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/enable-observability.sql
 # 재적용이 객체나 권한을 망가뜨리지 않아야 합니다.
